@@ -12,7 +12,8 @@ exists, or when [ci.zh.md](ci.zh.md) lists different jobs or steps. Change the p
 mirror) in the same pull request. The rules for the headings are at the end, under [Keeping this page true](#keeping-this-page-true).
 
 Durations are typical values on the GitHub-hosted `ubuntu-24.04` runner (2 cores); the run summary of each pull request
-shows the real numbers. Test counts are approximate and drift as the project grows.
+shows the real numbers. The page deliberately states no test counts and no action versions: they change with every pull
+request or Dependabot update, and the workflow file and the test folders are the source of truth.
 
 ## At a glance
 
@@ -20,19 +21,17 @@ shows the real numbers. Test counts are approximate and drift as the project gro
 flowchart LR
   PR([pull request / push to main / manual run]) --> changes
   PR --> ci-docs
-  changes -- code changed --> static
-  changes -- code changed --> unit
+  PR --> static
+  PR --> unit
   changes -- code changed --> integration
   changes -- code changed --> e2e
-  changes -- image inputs changed --> images
-  changes -- image inputs changed --> linux-smoke
+  changes -- code changed --> linux-smoke
   changes --> ci-ok
   ci-docs --> ci-ok
   static --> ci-ok
   unit --> ci-ok
   integration --> ci-ok
   e2e --> ci-ok
-  images --> ci-ok
   linux-smoke --> ci-ok
   ci-ok --> merge([the one required check])
 ```
@@ -45,14 +44,13 @@ Which jobs run depends on what the change touches (decided by the `changes` job)
 
 | Change | Jobs that run |
 |---|---|
-| Documentation only (`*.md`, `*.html`, images) | `changes` (with the documentation link check), `ci-docs`, `ci-ok` |
-| Anything else (code, scripts, config, fixtures, workflows, Dockerfiles) | the above plus `static`, `unit`, `integration`, `e2e` |
-| Also image inputs (`Dockerfile`, `.dockerignore`, `package.json`, lockfile, workspace file, `next.config.ts`, `tsconfig*.json`, `compose.yaml`, `jobspy/Dockerfile`, `jobspy/requirements.txt`, anything under `.github/`) | plus `images` and `linux-smoke` |
-| Push to `main` | like a pull request, and `integration` also runs the default file order |
-| Manual run (`workflow_dispatch`) | everything |
+| Pull request that changes only documentation (`*.md`, `*.html`, images; never anything under `tests/`) | `changes` (with the documentation link check), `ci-docs`, `static`, `unit`, `ci-ok`. Several unit tests read the documentation (link targets, picture sizes), so they run. |
+| Any other pull request (code, scripts, config, anything under `tests/`, workflows, Dockerfiles) | the above plus `integration`, `e2e` and `linux-smoke` |
+| Push to `main` | always everything, whatever the pushed commits touch; `integration` also runs the default file order |
+| Manual run (`workflow_dispatch`) | everything, like a push to `main` |
 
-A job the classifier did not select shows as "skipped" and `ci-ok` accepts exactly that; a selected job that was skipped,
-cancelled or failed makes `ci-ok` fail.
+A job the classifier did not select (`integration`, `e2e`, `linux-smoke` on a documentation-only pull request) shows as
+"skipped" and `ci-ok` accepts exactly that; a job that must run and was skipped, cancelled or failed makes `ci-ok` fail.
 
 Workflow-level settings: `permissions: contents: read` (no job can write to the repository; pull requests from forks run
 without secrets), a `concurrency` group per ref (a new push cancels the older run of a pull request, never a run on
@@ -63,8 +61,9 @@ without secrets), a `concurrency` group per ref (a new push cancels the older ru
 1. Open the pull request, look at the checks list: `ci-ok` is red whenever any job is red. The red job is the one to open.
 2. In the job, the red step is expanded. Pull-request annotations (`::error::` lines, Playwright's `github` reporter) also
    appear on the "Files changed" tab and in the run summary.
-3. For `e2e` the artifact `playwright-report` (kept 7 days) holds the HTML report and the traces of failed tests; open
-   it with `pnpm exec playwright show-report playwright-report`, or a single trace with
+3. For `e2e` the artifact `playwright-report` (kept 7 days) holds the HTML report and the traces of failed tests of the
+   main suite (`playwright-report/`) and of the setup wizard suite (`playwright-report-setup/`); open one with
+   `pnpm exec playwright show-report playwright-report` (or `playwright-report-setup`), or a single trace with
    `pnpm exec playwright show-trace <trace.zip>`.
 4. A test that passed only on its retry fails the job on purpose (`--fail-on-flaky-tests`): fix the flakiness, do not
    re-run until green.
@@ -82,21 +81,25 @@ Limit 5 minutes, typically under 20 seconds.
 
 #### Check out the repository
 
-`actions/checkout@v4` with `fetch-depth: 0` (the whole history, because the classifier diffs two commits). Fails only on
+`actions/checkout` with `fetch-depth: 0` (the whole history, because the classifier diffs two commits). Fails only on
 GitHub outages.
 
 #### Classify the change
 
-Computes the list of changed files and writes three outputs that the other jobs read:
+Only a pull request is classified; it writes two outputs that the other jobs read:
 
-- `code`: `true` unless every changed file is documentation (`*.md`, `*.html`, `png`, `jpg`, `svg`, `gif`). Tests read
-  fixtures, YAML and Dockerfiles, so those count as code.
-- `images`: `true` when an image input changed (listed above); it selects `images` and `linux-smoke`.
+- `code`: `true` unless every changed file is documentation (`*.md`, `*.html`, `png`, `jpg`, `svg`, `gif`). Anything
+  under `tests/` is code even when it is an HTML file or an image: the tests read their fixtures. Scripts, YAML,
+  Dockerfiles and workflows are code as well. `code` selects `integration`, `e2e` and `linux-smoke`; `static` and `unit`
+  run either way (the unit tests read the documentation, and no list of "which tests read which file" is kept that
+  could go stale).
 - `full`: `true` on pushes to `main` and manual runs; it adds the default-order integration run.
 
-The range is `base...head` for a pull request and `before..sha` for a push. A new branch, a first push or a manual run
-selects everything. If the diff cannot be computed the step fails (and so does `ci-ok`): there is no silent "nothing
-changed". Run it by hand: `git diff --name-only origin/main...HEAD`, then apply the two patterns above.
+A push to `main` and a manual run are not classified at all: both write `code=true` and `full=true`. The commits on `main`
+are what gets deployed, so a documentation-only push must not end in a run that checked nothing. The range of a pull
+request is `base...head`. If the diff cannot be computed the step fails (and so does `ci-ok`): there is no silent "nothing
+changed". Run it by hand: `git diff --name-only origin/main...HEAD`, then look for a path that is not `*.md`, `*.html` or
+an image, or that starts with `tests/`.
 
 #### Documentation links
 
@@ -113,15 +116,15 @@ the dependency install (cached).
 
 #### Check out the repository
 
-`actions/checkout@v4`.
+`actions/checkout`.
 
 #### Set up pnpm
 
-`pnpm/action-setup@v4`: installs the pnpm version pinned in `packageManager` of `package.json`.
+`pnpm/action-setup`: installs the pnpm version pinned in `packageManager` of `package.json`.
 
 #### Set up Node.js
 
-`actions/setup-node@v4`, Node 22 (the version in `engines`), with the pnpm store cached by the hash of `pnpm-lock.yaml`.
+`actions/setup-node`, Node 22 (the version in `engines`), with the pnpm store cached by the hash of `pnpm-lock.yaml`.
 
 #### Install dependencies
 
@@ -139,21 +142,21 @@ Run locally: `pnpm ci:docs-check` (a second or two).
 ### Job `static`
 
 The checks that need no database and no browser: generated files, lint, types, configuration, shell syntax, the runner
-bundle, migration drift and the Python sidecar tests. Runs only for code changes. Limit 15 minutes, typically 4 to 6
+bundle, migration drift and the Python sidecar tests. Runs for every change. Limit 15 minutes, typically 4 to 6
 minutes (install, lint and typecheck dominate). All of it except the runner bundle, migration drift and the sidecar
 tests is also in `scripts/validate.sh`.
 
 #### Check out the repository
 
-`actions/checkout@v4`.
+`actions/checkout`.
 
 #### Set up pnpm
 
-`pnpm/action-setup@v4`.
+`pnpm/action-setup`.
 
 #### Set up Node.js
 
-`actions/setup-node@v4`, Node 22, pnpm store cache.
+`actions/setup-node`, Node 22, pnpm store cache.
 
 #### Install dependencies
 
@@ -203,7 +206,7 @@ and the journal in `drizzle/meta`. Do not edit generated SQL by hand to silence 
 
 #### Set up Python
 
-`actions/setup-python@v5`, Python 3.12, with the pip cache keyed on `jobspy/requirements*.txt`.
+`actions/setup-python`, Python 3.12, with the pip cache keyed on `jobspy/requirements*.txt`.
 
 #### Install jobspy sidecar dependencies
 
@@ -212,16 +215,17 @@ Locally use a virtual environment: `python3.12 -m venv .venv && .venv/bin/pip in
 
 #### Jobspy sidecar tests
 
-`python -m pytest -q` in `jobspy/` (about 20 tests in `jobspy/tests/`, with the scraping library mocked: request
+`python -m pytest -q` in `jobspy/` (the tests in `jobspy/tests/`, with the scraping library mocked: request
 validation, result mapping and error handling of the small HTTP service in `jobspy/app.py`). Seconds. Typical cause: a
 change to `jobspy/app.py` without the matching test, or a dependency bump.
 
 ### Job `unit`
 
-The Vitest unit suite: about 4300 tests in about 330 files under `tests/**` (everything except `tests/integration/`),
-jsdom for components and the node environment for server code. The suite takes about 4 minutes in one piece, so it is
-split with Vitest's `--shard` into two jobs, `unit (1/2)` and `unit (2/2)`, that run in parallel (about 2 to 3 minutes
-each). `fail-fast` is off, so both shards always report. Runs only for code changes; limit 15 minutes.
+The Vitest unit suite: every test under `tests/**` except `tests/integration/`, jsdom for components and the node
+environment for server code. The suite takes about 4 minutes in one piece, so it is split with Vitest's `--shard` into
+two jobs, `unit (1/2)` and `unit (2/2)`, that run in parallel (about 2 to 3 minutes each). `fail-fast` is off, so both
+shards always report. Runs for every change, documentation-only pull requests included: some tests read the repository's
+documentation (the headings the in-app help links to, the pictures the README shows and their sizes). Limit 15 minutes.
 
 These tests need no database, no network and no real clock: time is injected or faked, config is built per test in a
 temporary directory, and the frozen fixture in `tests/fixtures/config/defaults/` replaces the shipped `config/` (tests never
@@ -229,15 +233,15 @@ assert values of the shipped defaults).
 
 #### Check out the repository
 
-`actions/checkout@v4`.
+`actions/checkout`.
 
 #### Set up pnpm
 
-`pnpm/action-setup@v4`.
+`pnpm/action-setup`.
 
 #### Set up Node.js
 
-`actions/setup-node@v4`, Node 22, pnpm store cache.
+`actions/setup-node`, Node 22, pnpm store cache.
 
 #### Install dependencies
 
@@ -254,26 +258,28 @@ time zone or on another test's leftovers (re-run the file alone to tell), a snap
 ### Job `integration`
 
 Tests that need a real PostgreSQL 17: repositories and migrations, the cycle and queues, the control requests, the
-ai-worker, the dashboard queries, backups with the real `pg_dump` / `pg_restore`. About 600 tests in about 60 files under
+ai-worker, the dashboard queries, backups with the real `pg_dump` / `pg_restore`. The files under
 `tests/integration/`, run through `vitest.integration.config.ts` (node environment, files one after another because they share one
 database that is emptied before and after every file). Limit 20 minutes, typically 3 to 4 minutes.
 
 The job has a `postgres:17` service container and the environment `DATABASE_URL=postgres://postgres:postgres@localhost:5432/postgres`.
 The role may create databases: every run creates a uniquely named database (`tests/integration/global-setup.ts`) and
-drops it at the end, so nothing else on the server is touched. `REQUIRE_PG_TOOLS=1` makes the backup tests fail instead
+drops it at the end, so nothing else on the server is touched. The tests have no default server: without
+`DATABASE_URL` the run stops at once and prints the command for a disposable container, so a local run can never end up
+in the database of your own installation. `REQUIRE_PG_TOOLS=1` makes the backup tests fail instead
 of skipping when the client tools are missing.
 
 #### Check out the repository
 
-`actions/checkout@v4`.
+`actions/checkout`.
 
 #### Set up pnpm
 
-`pnpm/action-setup@v4`.
+`pnpm/action-setup`.
 
 #### Set up Node.js
 
-`actions/setup-node@v4`, Node 22, pnpm store cache.
+`actions/setup-node`, Node 22, pnpm store cache.
 
 #### Install dependencies
 
@@ -307,12 +313,14 @@ another file's leftovers, which a fixed order hides. To reproduce a failure, run
 The Playwright browser suite against a production build (`pnpm build` then `pnpm start`), a throwaway PostgreSQL 17 service
 and a stand-in runner (`scripts/e2e-runner.ts`: heartbeat, config acknowledgement and control-request polling, so
 "run a cycle now" and "config saved" work without a real collector). No AI provider, no job channel and no network
-beyond localhost. About 240 tests in 35 spec files under `e2e/` plus 12 tests in `e2e-setup/`. Limit 20 minutes, typically
-10 to 12 minutes in total. The job runs in the runner host, not in the Playwright container image (measured: the image
+beyond localhost. The specs under `e2e/` plus the ones in `e2e-setup/`. Limit 20 minutes, typically 10 to 12 minutes in
+total. The job runs in the runner host, not in the Playwright container image (measured: the image
 was slower).
 
-What the environment looks like: `DATABASE_URL` points at the service; `scripts/e2e-prepare.ts` creates the database
-`jobradar_e2e_3100` (the name follows `E2E_PORT`), applies the migrations and loads the dashboard seed (about 20 fictional postings), and fills a fresh
+What the environment looks like: `DATABASE_URL` points at the service (a local run must set `DATABASE_URL` or
+`E2E_ADMIN_DATABASE_URL` itself: there is no default address); `scripts/e2e-prepare.ts`, which refuses any database whose
+name does not start with `jobradar_e2e`, creates the database
+`jobradar_e2e_3100` (the name follows `E2E_PORT`), applies the migrations and loads the dashboard seed (fictional postings), and fills a fresh
 config and profile directory from the frozen fixture in `tests/fixtures/config/defaults/`. `E2E_PORT=3100` is the server
 port; `E2E_SKIP_BUILD=1` tells the web server command not to build again.
 
@@ -357,15 +365,15 @@ stand-in runner (requested cycles stay queued). One worker, specs in order, beca
 
 #### Check out the repository
 
-`actions/checkout@v4`.
+`actions/checkout`.
 
 #### Set up pnpm
 
-`pnpm/action-setup@v4`.
+`pnpm/action-setup`.
 
 #### Set up Node.js
 
-`actions/setup-node@v4`, Node 22, pnpm store cache.
+`actions/setup-node`, Node 22, pnpm store cache.
 
 #### Install dependencies
 
@@ -373,7 +381,7 @@ stand-in runner (requested cycles stay queued). One worker, specs in order, beca
 
 #### Cache Playwright browsers
 
-`actions/cache@v4` on `~/.cache/ms-playwright`, keyed on the runner OS and `pnpm-lock.yaml` (the browser build follows the
+`actions/cache` on `~/.cache/ms-playwright`, keyed on the runner OS and `pnpm-lock.yaml` (the browser build follows the
 locked `@playwright/test` version). Sets `steps.playwright-cache.outputs.cache-hit`.
 
 #### Install Playwright browser and system libraries
@@ -388,7 +396,7 @@ libraries, so those are installed on every run.
 
 #### Cache the Next build cache
 
-`actions/cache@v4` on `.next/cache` (Next's incremental build cache only; the app is always built from the current source).
+`actions/cache` on `.next/cache` (Next's incremental build cache only; the app is always built from the current source).
 The key contains the lockfile and the hash of `src/`, `messages/`, `next.config.ts`, with the lockfile alone as the fallback.
 
 #### Build
@@ -401,8 +409,8 @@ catch (for instance a server/client boundary violation).
 
 `pnpm test:e2e --workers=2 --fail-on-flaky-tests`: all projects of the main suite as described above. The web server
 command first runs `scripts/e2e-prepare.ts`, then `pnpm start -p 3100 -H 127.0.0.1`. A test that only passed on its retry
-fails the job; the retry still records a trace for the report. Limit 12 minutes. Locally: start a database
-(`docker compose up -d db`, or the postgres container of the section below), `pnpm build`, then
+fails the job; the retry still records a trace for the report. Limit 12 minutes. Locally: start a disposable database (the
+postgres container of the section below), `pnpm build`, then
 `E2E_PORT=3100 E2E_SKIP_BUILD=1 pnpm test:e2e`; `E2E_PORT=<port>` gives a run its own database and directories so several
 checkouts can run side by side, but run **one full suite at a time per machine**: parallel full runs starve each other and
 produce timeouts that are not real failures. While developing run only the affected specs
@@ -419,44 +427,24 @@ directories (see above). Limit 6 minutes, typically 1 to 2. Report folder: `play
 
 #### Upload the Playwright report and traces
 
-Runs only when a step of the job failed (`if: failure()`): uploads `playwright-report/` and `test-results/` as the artifact
-`playwright-report`, kept 7 days. Download it from the run page and open it with `pnpm exec playwright show-report`.
-
-### Job `images`
-
-Builds the three production images without pushing them: `web` and `runner` (targets of the root `Dockerfile`) and the
-`jobspy` sidecar (`jobspy/Dockerfile`), as a matrix of three parallel jobs named `image (web)`, `image (runner)` and
-`image (jobspy)`. It catches broken `apt` / CLI installs, wrong `COPY` paths and build-stage breakage before a deploy does.
-Runs only when an image input changed (see the table at the top). Limit 30 minutes; a few minutes with a warm layer cache, longer cold.
-Layers are cached per image in the Actions cache.
-Locally: `docker build --target web .`, `docker build --target runner .`, `docker build jobspy`.
-
-#### Check out the repository
-
-`actions/checkout@v4`.
-
-#### Set up Docker Buildx
-
-`docker/setup-buildx-action@v3`: the builder that supports the Actions layer cache.
-
-#### Build
-
-`docker/build-push-action@v6` with `push: false`, `cache-from` / `cache-to` of type `gha` scoped per image. The log shows
-the failing Dockerfile line. Common causes: a package that moved in the base image's repositories, a path added to `COPY`
-but excluded by `.dockerignore`, a changed lockfile that no longer installs with `--frozen-lockfile` in the build stage.
+Runs only when a step of the job failed (`if: failure()`): uploads `playwright-report/` (main suite),
+`playwright-report-setup/` (setup wizard suite) and `test-results/` as the artifact `playwright-report`, kept 7 days.
+Download it from the run page and open a report with `pnpm exec playwright show-report <folder>`.
 
 ### Job `linux-smoke`
 
 The Linux first run from scratch: an empty checkout on the Ubuntu runner, `docker compose up --build` with the shipped
 defaults, and the dashboard must answer. It catches what Docker Desktop on macOS hides: file ownership of the bind
-mounts (`PUID` / `PGID`), config files written with mode 0600, folders the containers cannot write. Runs only when an
-image input changed, like `images`. Limit 45 minutes; about 10 to 15 minutes cold (it builds all four images without the
-layer cache). Locally on a Linux machine: the commands of the steps below in a fresh clone (never in a checkout whose
+mounts (`PUID` / `PGID`), config files written with mode 0600, folders the containers cannot write. Because it builds the
+web, runner and jobspy images from the Dockerfiles, it is also what catches a broken `apt` / CLI install, a wrong `COPY`
+path or a build-stage failure before a deploy does (there is no separate image-only build job). Runs for every pull
+request that is not documentation-only, and for every push to `main`. Limit 20 minutes, the build step 15; typically a
+few minutes (a cold build, without layer cache). Locally on a Linux machine: the commands of the steps below in a fresh clone (never in a checkout whose
 stack and database you want to keep: the last step removes the stack and its volume).
 
 #### Check out the repository
 
-`actions/checkout@v7`.
+`actions/checkout`.
 
 #### Prepare .env and the data folders as the host user
 
@@ -466,9 +454,12 @@ bind mounts are not created by Docker as root.
 
 #### Start the stack from scratch
 
-`docker compose up -d --build --wait --wait-timeout 600`: builds the four images and waits until every service reports
-healthy (the runner applies the migrations and starts its heartbeat). A failure here is a build error (see the `images`
-job) or a service that never became healthy: the "Container logs on failure" step prints why.
+`docker compose up -d --build --wait --wait-timeout 600`: builds the three images (web, runner, jobspy), pulls the
+database image and waits until every service reports healthy (the runner applies the migrations and starts its
+heartbeat). A failure here is a build error (the log shows the failing Dockerfile line; common causes: a package that
+moved in the base image's repositories, a path added to `COPY` but excluded by `.dockerignore`, a changed lockfile that
+no longer installs with `--frozen-lockfile` in the build stage) or a service that never became healthy: the "Container
+logs on failure" step prints why.
 
 #### Dashboard health check
 
@@ -495,9 +486,9 @@ skipped. Limit 5 minutes, a few seconds.
 
 #### All selected checks passed
 
-Reads the `needs` results (`jq`): `changes` and `ci-docs` must have succeeded; `static`, `unit`, `integration` and `e2e`
-must have succeeded when `changes` selected code and be skipped otherwise; `images` and `linux-smoke` likewise by the `images` output. Any
-other combination (including a selected job that was skipped or cancelled) prints the per-job results and
+Reads the `needs` results (`jq`): `changes`, `ci-docs`, `static` and `unit` must always have succeeded (a skipped one is a
+failure, not a pass); `integration`, `e2e` and `linux-smoke` must have succeeded when `changes` selected code and be
+skipped otherwise. Any other combination (including a job that must run and was skipped or cancelled) prints the per-job results and
 `::error::a selected check did not succeed`. When it is red, look at the per-job lines it prints first, then open that job.
 
 ## Dependabot
@@ -510,8 +501,9 @@ other combination (including a selected job that was skipped or cancelled) print
 | `pip` | `/jobspy` | at most 3 open PRs; the sidecar's Python dependencies |
 | `github-actions` | `/` | at most 3 open PRs; the action versions pinned in the workflows |
 
-Dependabot PRs run the same pipeline as any other. An action bump changes `.github/`, so it counts as code and as an image
-input and runs everything; if it renames a step, `ci-docs` fails until this page is updated.
+Dependabot PRs run the same pipeline as any other. An action bump changes `.github/`, so it counts as code and runs
+everything; if it renames a step, `ci-docs` fails until this page is updated. This page names no action versions, so a
+bump alone never needs a documentation change.
 
 ## Release check
 
@@ -531,7 +523,9 @@ Every job above is a few commands. This is the generic recipe (Docker, Node 22 w
 throwaway PostgreSQL on a port that is not your real database's.
 
 ```bash
-# a throwaway database (the role may create databases, like the CI service)
+# a throwaway database (the role may create databases, like the CI service). The database tests have no default
+# address: without DATABASE_URL (E2E_ADMIN_DATABASE_URL also works for e2e) they stop and print this recipe, and they
+# never connect to the database of your own installation.
 docker run -d --name jr-ci-pg -p 127.0.0.1:55432:5432 \
   -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=postgres postgres:17
 export DATABASE_URL=postgres://postgres:postgres@127.0.0.1:55432/postgres
@@ -555,10 +549,8 @@ pnpm build
 E2E_PORT=3100 E2E_SKIP_BUILD=1 pnpm test:e2e --workers=2 --fail-on-flaky-tests
 E2E_PORT=3100 E2E_SKIP_BUILD=1 pnpm test:e2e:setup --fail-on-flaky-tests
 
-# job: images
-docker build --target web . && docker build --target runner . && docker build jobspy
-
-# job: linux-smoke (Linux, in a fresh clone only: it ends with `docker compose down -v`)
+# job: linux-smoke (Linux, in a fresh clone only: it ends with `docker compose down -v`; it builds the web, runner
+# and jobspy images)
 printf 'PUID=%s\nPGID=%s\n' "$(id -u)" "$(id -g)" > .env && mkdir -p data/{config,profile,backups,exports,logs} .auth
 docker compose up -d --build --wait --wait-timeout 600 && curl -fsS http://127.0.0.1:3000/api/health
 docker compose down -v --remove-orphans
@@ -567,8 +559,8 @@ docker rm -f -v jr-ci-pg
 ```
 
 A local run differs from the hosted one in three ways: it tests your working tree rather than the merge of the pull
-request into `main`, it uses your Docker and Node versions, and it does not decide what to skip (a documentation-only
-change needs only `pnpm docs:check` and `pnpm ci:docs-check`).
+request into `main`, it uses your Docker and Node versions, and it does not decide what to skip (for a documentation-only
+change the hosted run does `pnpm docs:check`, `pnpm ci:docs-check`, the static checks and the unit tests).
 
 ## Keeping this page true
 
