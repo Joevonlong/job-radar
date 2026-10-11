@@ -362,7 +362,10 @@ The projects are planned in `e2e/projects.ts` (unit-tested by `tests/e2e-project
 **The setup wizard suite (`playwright.setup.config.ts`)** is a separate run because it needs a different world: a brand
 new install. Its own port (`E2E_SETUP_PORT`, default 3105), its own database (`jobradar_e2e_setup_<port>`, dropped,
 recreated and migrated without seed by `scripts/e2e-prepare.ts --fresh`), empty config and profile directories, and no
-stand-in runner (requested cycles stay queued). One worker, specs in order, because they walk one install through the wizard.
+stand-in runner (requested cycles stay queued). Unlike the main suite it does not use the frozen fixture: its defaults
+directory is the shipped `config/` (with its example profile), exactly what a first `docker compose up` starts from,
+so it is a product-contract test and fails when a change to the shipped defaults breaks the first-run experience. One
+worker, specs in order, because they walk one install through the wizard.
 
 #### Check out the repository
 

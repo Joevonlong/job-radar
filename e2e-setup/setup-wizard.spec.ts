@@ -9,15 +9,27 @@ import { parse } from "yaml";
  * The first-run setup on a brand-new install (playwright.setup.config.ts: empty config and profile directories,
  * an empty migrated database, no runner). One browser context walks the wizard in order, checking the files on disk
  * after every step; then skipping, the review mode from the settings page, and the phone width with the keyboard only.
+ *
+ * A product-contract test: the install starts from the SHIPPED defaults (`config/` and its example profile), the same
+ * files a first `docker compose up` copies, not a frozen fixture. What the example profile and the shipped configs say
+ * is read from those files (the defaults directory of the run, E2E_SETUP_DEFAULTS_DIR), so the spec follows a change of
+ * the defaults, while a change that breaks the first-run experience fails it; the one thing pinned is the example market
+ * itself (generic, US, USD), so a change of it makes whoever does it look at this walk-through. Market-specific
+ * behaviour is not walked here: what a country switch does to the currency and the cities, and what the user's own
+ * edits keep, is tested in tests/setup/step-market.test.tsx; the packs' own currencies, cities and languages in
+ * tests/market/ and tests/setup/steps.test.ts.
  */
 const CONFIG_DIR = process.env.E2E_SETUP_CONFIG_DIR ?? "";
 const PROFILE_DIR = process.env.E2E_SETUP_PROFILE_DIR ?? "";
 const DATABASE_URL = process.env.E2E_SETUP_DATABASE_URL ?? "";
+const DEFAULTS_DIR = process.env.E2E_SETUP_DEFAULTS_DIR ?? "";
 
 const configFile = (name: string): string => path.join(CONFIG_DIR, name);
 const yaml = (file: string): Record<string, unknown> => parse(fs.readFileSync(file, "utf8")) as Record<string, unknown>;
 const config = (name: string) => yaml(configFile(`${name}.yaml`));
 const profile = (name: string) => yaml(path.join(PROFILE_DIR, `${name}.yaml`));
+const shipped = (file: string): Record<string, unknown> => yaml(path.join(DEFAULTS_DIR, file));
+const examplePreferences = () => shipped("profile.example/preferences.yaml") as { market: { pack: string; country: string; currency: string }; locations: string[] };
 const setup = () => config("setup") as { completed_at: string | null; completed_by: string | null; steps?: Record<string, { status: string }> };
 
 async function query<T extends Record<string, unknown>>(text: string): Promise<T[]> {
@@ -35,7 +47,7 @@ let context: BrowserContext;
 let page: Page;
 
 test.beforeAll(async ({ browser }) => {
-  context = await browser.newContext({ viewport: { width: 1280, height: 900 }, locale: "en-US", timezoneId: "Europe/Amsterdam" });
+  context = await browser.newContext({ viewport: { width: 1280, height: 900 }, locale: "en-US", timezoneId: "America/Los_Angeles" });
   page = await context.newPage();
 });
 test.afterAll(async () => {
@@ -71,37 +83,55 @@ test("language: the browser's language is preselected, Chinese switches the page
   expect((config("language") as { ui: { default_locale: string } }).ui.default_locale).toBe("zh");
 });
 
-test("market: another country brings its currency and main city until the user sets them", async () => {
+// Hydration shows in the time zone: the server render has the shipped schedule's zone (America/New_York), the browser's own
+// zone replaces it on a new install only once the page is hydrated. Wait for it before touching the step's controls.
+// a city in the field is a chip with a remove button (the page is in Chinese since the language step)
+const cityChip = (city: string) => page.getByRole("button", { name: `移除 ${city}` });
+const hydrated = (): Promise<void> => expect(page.getByTestId("setup-timezone")).toHaveValue("America/Los_Angeles");
+
+test("market: the example's market is preselected; another country brings its currency and main city until the user sets them", async () => {
+  const { market, locations: cities } = examplePreferences();
+  // the contract: a fresh install starts as a generic-pack US install in USD; if this changes, so does this walk-through
+  expect(market).toMatchObject({ pack: "generic", country: "US", currency: "USD" });
   const country = page.getByTestId("market-country");
   const currency = page.getByTestId("market-currency");
-  await expect(currency).toHaveValue("EUR");
-  // a country without a currency in the tables: the field goes back to the pack's default
-  await country.selectOption("NL");
-  await expect(currency).toHaveValue("");
+  await hydrated();
+  await expect(page.getByTestId("market-pack")).toHaveValue(market.pack);
+  await expect(country).toHaveValue(market.country);
+  await expect(currency).toHaveValue(market.currency);
+  await expect(cityChip(cities[0] as string)).toBeVisible();
+  // another country brings the currency of the country table and its main city, in place of the example's
   await country.selectOption("DE");
   await expect(currency).toHaveValue("EUR");
+  await expect(cityChip("Berlin")).toBeVisible();
+  await expect(cityChip(cities[0] as string)).toHaveCount(0);
   // a currency chosen by hand stays
   await currency.selectOption("CHF");
   await country.selectOption("NL");
   await expect(currency).toHaveValue("CHF");
-  await currency.selectOption("EUR");
-  await country.selectOption("DE");
-  await expect(currency).toHaveValue("EUR");
+  // nothing was saved: reloading the step goes back to the shipped example
+  await page.reload();
+  await hydrated();
+  await expect(country).toHaveValue(market.country);
+  await expect(currency).toHaveValue(market.currency);
 });
 
-test("market: a city from the pack, the remote scope and the time zone land in preferences, search and schedule", async () => {
-  const suggestion = page.getByTestId("setup-city-suggestions").getByRole("button").first();
-  const city = (await suggestion.innerText()).trim();
-  await suggestion.click();
-  await page.getByTestId("setup-timezone").selectOption("Europe/Amsterdam");
+test("market: the example's city, one added by hand, the browser's time zone and a chosen one land in preferences, search and schedule", async () => {
+  const { market, locations: cities } = examplePreferences();
+  await hydrated();
+  // the example's city is in the field; add another by hand
+  await expect(cityChip(cities[0] as string)).toBeVisible();
+  await page.locator("#setup-market-cities").fill("Boston");
+  await page.locator("#setup-market-cities").press("Enter");
+  await expect(cityChip("Boston")).toBeVisible();
+  // a new install preselects the browser's time zone, not the shipped schedule's
+  await page.getByTestId("setup-timezone").selectOption("America/Chicago");
   await save("profile");
-  const prefs = profile("preferences") as { locations: string[] };
-  expect(prefs.locations).toContain(city);
-  // the cities followed the country (DE -> its main city), the example's second city went with the first switch
-  expect(prefs.locations[0]).toBe("Berlin");
-  expect(prefs.locations).not.toContain("München");
-  expect((config("search") as { locations: string[] }).locations).toContain(city);
-  expect(config("schedule").timezone).toBe("Europe/Amsterdam");
+  const prefs = profile("preferences") as { market: { pack: string; country: string; currency: string }; locations: string[] };
+  expect(prefs.market).toMatchObject({ pack: market.pack, country: market.country, currency: market.currency });
+  expect(prefs.locations).toEqual([...cities, "Boston"]);
+  expect((config("search") as { locations: string[] }).locations).toEqual([...cities, "Boston"]);
+  expect(config("schedule").timezone).toBe("America/Chicago");
   expect(setup().steps?.market?.status).toBe("done");
 });
 

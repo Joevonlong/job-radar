@@ -245,7 +245,7 @@ project 的规划在 `e2e/projects.ts`（由 `tests/e2e-projects.test.ts` 做单
 - 命令行上点名的 spec 文件（`pnpm test:e2e e2e/settings.spec.ts`）只跑它们自己：只有含匹配 spec 的 project 参与，每个都收窄到点名的 spec，顺序仍按上面。（Playwright 会完整运行依赖 project，没有这一步时，链上的 spec 会先把整个并行套件跑一遍。）带 `file:line` 时，选中的 project 不再串起来，只跑那几行的测试。`--project <名称>` 仍会先跑它的依赖；要单独跑加 `--no-deps`。
 - CI 里 `retries` 是 1，reporter 是 `github`、`list`、`html`；`forbidOnly` 拒绝提交 `test.only`。
 
-**设置向导测试集（`playwright.setup.config.ts`）** 单独运行，因为它需要另一个世界：全新安装。它有自己的端口（`E2E_SETUP_PORT`，默认 3105）、自己的数据库（`jobradar_e2e_setup_<port>`，由 `scripts/e2e-prepare.ts --fresh` 删除、重建并只迁移不灌种子）、空的配置和 profile 目录，且没有替身 runner（请求的周期保持排队）。1 个 worker、按顺序执行，因为这些 spec 在同一个安装上依次走完向导。
+**设置向导测试集（`playwright.setup.config.ts`）** 单独运行，因为它需要另一个世界：全新安装。它有自己的端口（`E2E_SETUP_PORT`，默认 3105）、自己的数据库（`jobradar_e2e_setup_<port>`，由 `scripts/e2e-prepare.ts --fresh` 删除、重建并只迁移不灌种子）、空的配置和 profile 目录，且没有替身 runner（请求的周期保持排队）。与主测试集不同，它不用冻结的 fixture：默认目录就是随包的 `config/`（含示例 profile），与首次 `docker compose up` 的起点完全一致，因此是产品契约测试，随包默认值的改动若破坏了首次运行体验，它会失败。1 个 worker、按顺序执行，因为这些 spec 在同一个安装上依次走完向导。
 
 #### Check out the repository
 
