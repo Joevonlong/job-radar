@@ -348,7 +348,7 @@ The projects are planned in `e2e/projects.ts` (unit-tested by `tests/e2e-project
   `interests.yaml`). Then `chromium-sources-registry` and `chromium-sources-discovery` (both rewrite `sources.yaml`), then
   `chromium-settings-advanced` and `chromium-settings-workflow` (the advanced editor and the workflow tab rewrite ui, notify,
   ai, sources and pipeline config), then `chromium-deal-breakers` (rewrites `deal_breakers` in `preferences.yaml` and one
-  job's filter result), and last `chromium-market` (switching the market changes every page and
+  job's filter result), then `chromium-visa` (rewrites `needs_visa_sponsorship` in `me.yaml`), and last `chromium-market` (switching the market changes every page and
   `preferences.yaml`). The chain is the reason the total is not `slowest spec / 2`: it is serial by design.
 - A new spec that writes any file of the config directory must be added to `SERIAL_CHAIN` in `e2e/projects.ts` (its
   own chained project); otherwise it will fail randomly in parallel with other specs. A new test that changes shared

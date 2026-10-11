@@ -127,6 +127,7 @@ export function ProfileEditor({ me, preferences, staleScores, dbAvailable, salar
               market={market}
               searchLocations={searchLocations}
               userLanguageLevel={userLanguageLevel}
+              needsVisaSponsorship={me.draft?.needs_visa_sponsorship ?? null}
             />
           ) : (
             <LoadError file="preferences.yaml" message={preferences.loadError ?? ""} />

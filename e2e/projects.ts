@@ -46,6 +46,8 @@ export const SERIAL_CHAIN: readonly ChainEntry[] = [
   { name: "chromium-settings-workflow", spec: "settings-workflow.spec.ts" },
   // preferences.yaml deal_breakers, and one job's filter result
   { name: "chromium-deal-breakers", spec: "deal-breakers.spec.ts" },
+  // me.yaml needs_visa_sponsorship (the visa badge and filter show only for a user who needs sponsorship)
+  { name: "chromium-visa", spec: "visa.spec.ts" },
   // the market changes every page and preferences.yaml: last, alone
   { name: "chromium-market", spec: "market.spec.ts" },
 ];

@@ -39,6 +39,7 @@ import { effectiveSeenUpTo } from "@/lib/jobs/visit";
 import { readProfileReadiness } from "@/lib/scoring/profile";
 import { VisibilityScope } from "@/components/applications/visibility-scope";
 import { localLanguageName } from "@/lib/market/view";
+import { visaFilterAvailable } from "@/lib/visa/filter";
 
 // `null` = not in the URL: an explicit value (also `false`) wins over the active saved view.
 const loadTodayParams = createLoader({
@@ -93,6 +94,8 @@ export default async function TodayPage({ searchParams }: { searchParams: Promis
   const db = getDb();
   // the city groups are only needed when the shown view or one of the tab counts filters by city
   const cityGroups = [filters, ...views.map((view) => view.filters)].some(needsCityGroups) ? await loadCityGroups(db) : null;
+  // a saved view's visa filter applies only while the filter shows (me.yaml / ui.yaml) and its table exists
+  const visa = await visaFilterAvailable(db);
   const notify = loadConfig("notify");
   // the same bar as the Telegram summary's "qualified"
   const qualifiedMinRank = notify.push_min_score;
@@ -117,7 +120,8 @@ export default async function TodayPage({ searchParams }: { searchParams: Promis
       hideGermanLevels: hideLang ? germanLevelsToHide() : [],
       highValueOnly: high,
       highValue,
-      extra: toJobFilters(filters, { cityGroups }),
+      extra: toJobFilters(filters, { cityGroups, visa }),
+      visa,
     }),
     getVisitState(db),
   ]);
@@ -128,7 +132,7 @@ export default async function TodayPage({ searchParams }: { searchParams: Promis
   const missingEnv = missingEnvOfEnabled(loadConfig("channels"), process.env, summary?.channels.map((c) => c.channelId) ?? []);
   const seenUpTo = effectiveSeenUpTo(visit, now);
   const filterFloors = await getFilterFloors(db, salaryFilteredIds(cards));
-  const items = await toListItems(cards, { now, timezone: schedule.timezone, filterFloors, seenUpTo, monthSalaries: { figures: salaryFigures, minSample: ui.salary_stats.min_sample } });
+  const items = await toListItems(cards, { now, timezone: schedule.timezone, filterFloors, seenUpTo, visa, monthSalaries: { figures: salaryFigures, minSample: ui.salary_stats.min_sample } });
   const kpiBlocks = buildKpiBlocks(cycleKpis, ui.trend_cycles);
   const cycleNewJobs = summary ? await listCycleNewJobs(db, summary, ui.ticker_max_items) : [];
   const cycleTime = summary ? format.dateTime(summary.startedAt, { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: schedule.timezone }) : "";
@@ -150,7 +154,7 @@ export default async function TodayPage({ searchParams }: { searchParams: Promis
         includeFiltered: view.filters.filtered === true,
         hideGermanLevels: view.filters.hideLang === true ? germanLevelsToHide() : [],
         highValueOnly: view.filters.high === true,
-        extra: toJobFilters(view.filters, { cityGroups }),
+        extra: toJobFilters(view.filters, { cityGroups, visa }),
       }),
     ),
   );

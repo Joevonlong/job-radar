@@ -5,6 +5,7 @@ import { isGermanRequirement } from "@/lib/domain/types";
 
 import { JobStatusChip } from "./status-chip";
 import { TrapBadge } from "./trap-badge";
+import { VisaBadge } from "./visa-badge";
 import type { JobListItem, JobListSignal } from "./types";
 import { useLocalLanguageName } from "@/components/base-currency";
 
@@ -29,6 +30,7 @@ export function JobTags({ job }: { job: JobListItem }) {
     <div className="jb-tags" data-slot="job-tags">
       {/* An AI trap comes first */}
       {job.trapCount && job.trapCount > 0 ? <TrapBadge count={job.trapCount} /> : null}
+      {job.visa ? <VisaBadge visa={job.visa} /> : null}
       {[...tags].map(([id, category]) => (
         <SignalTag key={id} code={category.code} icon={category.icon} color={category.color} title={category.label} data-tier={id}>
           {category.label}

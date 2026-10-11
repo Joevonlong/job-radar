@@ -174,6 +174,36 @@ describe("AI trap filter", () => {
     expect(viewFiltersToParams({}).trap).toBeNull();
   });
 
+});
+
+describe("visa filter", () => {
+  it("reads visa=offered|not_denied, ignores anything else, and counts as an active filter", () => {
+    expect(loadJobsSearchParams("?visa=offered").visa).toBe("offered");
+    expect(loadJobsSearchParams("?visa=not_denied").visa).toBe("not_denied");
+    expect(loadJobsSearchParams("?visa=yes").visa).toBeNull();
+    expect(countActiveFilters(loadJobsSearchParams("?visa=offered&minScore=70"))).toBe(2);
+    expect(hasActiveFilters(loadJobsSearchParams("?visa=not_denied"))).toBe(true);
+    expect(jobsListHref({ visa: "offered", page: 1 })).toBe("/jobs?visa=offered");
+  });
+
+  it("while hidden is ignored but kept: not counted, not active, still in the URL", () => {
+    const params = loadJobsSearchParams("?visa=offered&minScore=70");
+    const hidden = { ignore: ["visa"] as const };
+    expect(countActiveFilters(params, hidden)).toBe(1);
+    expect(hasActiveFilters(loadJobsSearchParams("?visa=offered"), hidden)).toBe(false);
+    expect(params.visa).toBe("offered");
+    expect(jobsListHref({ ...params, page: 1 })).toContain("visa=offered");
+  });
+
+  it("round-trips through a saved view", () => {
+    const filters = viewFiltersFromParams(loadJobsSearchParams("?visa=not_denied"));
+    expect(filters).toEqual({ visa: "not_denied" });
+    expect(viewFiltersToParams(filters).visa).toBe("not_denied");
+    expect(viewFiltersToParams({}).visa).toBeNull();
+  });
+});
+
+describe("jobs sort direction", () => {
   it("reads the sort direction: asc / desc, anything else is unset; it is not a filter", () => {
     expect(loadJobsSearchParams("?sort=salary&dir=asc")).toMatchObject({ sort: "salary", dir: "asc" });
     expect(loadJobsSearchParams("?sort=salary&dir=up").dir).toBeNull();

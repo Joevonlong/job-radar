@@ -4,6 +4,7 @@ import type { ApplicationStatus } from "../repos/applications";
 import type { FavoriteState } from "../repos/favorites";
 import type { Job, JobStatus } from "../repos/jobs";
 import type { ClosedReason } from "@/lib/jobs/closure";
+import type { VisaKind } from "@/lib/visa/types";
 import type { LinkCheckEvidence } from "@/lib/jobs/link-check-evidence";
 
 // Vocabulary of the `jobs` table is owned by the pipeline (`@/lib/domain/types`, `../repos/jobs`); the
@@ -92,6 +93,8 @@ export interface JobCard {
   signals: JobSignal[];
   /** AI traps found in the posting (`trap_scans` counts); null before the first trap scan. */
   traps?: { traps: number; suspicious: number } | null;
+  /** What the JD says about visa sponsorship, when it says something clear (`job_visa`: offered / not_offered); null otherwise or before the check. */
+  visa?: { status: "offered" | "not_offered"; kind: VisaKind } | null;
   /** The user has looked at the job (opened it, its posting, or acted on its row); unseen rows are bold with a dot. */
   seen: boolean;
 }

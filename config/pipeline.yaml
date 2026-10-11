@@ -488,3 +488,15 @@ filter:
   #   match_ms: 100                # a pattern slower than this on a test text (a long line without a match) is left out
   #   rule_budget_ms: 2000         # time one rule may take in one filter run; a rule that uses it up stops for that run
   #   preview_ms: 3000             # longest the /me preview may take before it shows what it counted so far
+
+# Checks of a job's JD that only mark it (they change no score and filter nothing). The values below are the defaults that apply
+# while the block is commented out; uncomment it to change one. The on/off switch is in ui.yaml job_checks; the patterns are in the
+# market packs (config/packs/<id>/rules.yaml, section visa).
+# job_checks:
+#   visa:
+#     per_cycle_limit: 2000   # jobs scanned per cycle at most (new and changed JDs first); pnpm visa:scan --write scans the rest
+#     max_quotes: 3           # quotes kept per job (at most 10)
+#     quote_max_chars: 280    # longest quote (40 to 2000)
+#     negation_words_before: 6  # words before a "support offered" phrase searched for a negation ("We do not offer …")
+#     negation_words_after: 5   # words after it, up to the end of its clause ("Relocation support is not available")
+#     heading_max_chars: 60     # a line this short without end punctuation (or ending in ":", or a "#" heading) is read with the next line

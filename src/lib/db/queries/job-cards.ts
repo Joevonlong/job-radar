@@ -7,6 +7,7 @@ import { seenSql } from "../repos/seen";
 import { parseLinkCheck } from "@/lib/jobs/link-check-evidence";
 import { closedReasonSql, effectiveStatusSql } from "./job-status";
 import { loadTrapCounts } from "../repos/traps";
+import { loadVisaStatuses } from "../repos/visa";
 import { channels, companies, jobSources, jobs, scores, signals } from "../schema";
 import { asContract, asGermanLevel, parseLocations, parseSalary } from "./parse";
 import type { JobCard, JobRank, JobSignal, JobSourceRef } from "./types";
@@ -233,10 +234,23 @@ export function toSummary(row: Pick<CardRow, "summaries" | "summaryZh" | "summar
   return Object.keys(texts).length === 0 ? null : { texts, outputLang: row.outputLang };
 }
 
+/** What `hydrateCards` attaches besides the always-needed parts. */
+export interface HydrateOptions {
+  /** Load the visa check results (the list badge); false when the badge is hidden, saving the query. Default true. */
+  visa?: boolean;
+}
+
 /** Turn card rows into cards by attaching sources, signals and the application status (3 queries for the whole page). */
-export async function hydrateCards(db: Db, rows: readonly CardRow[]): Promise<JobCard[]> {
+export async function hydrateCards(db: Db, rows: readonly CardRow[], options: HydrateOptions = {}): Promise<JobCard[]> {
   const ids = rows.map((r) => r.id);
-  const [sources, signalMap, statuses, favorites, traps] = await Promise.all([loadSources(db, ids), loadSignals(db, ids), getApplicationStatuses(db, ids), getFavoriteStates(db, ids), loadTrapCounts(db, ids)]);
+  const [sources, signalMap, statuses, favorites, traps, visa] = await Promise.all([
+    loadSources(db, ids),
+    loadSignals(db, ids),
+    getApplicationStatuses(db, ids),
+    getFavoriteStates(db, ids),
+    loadTrapCounts(db, ids),
+    options.visa === false ? new Map<number, never>() : loadVisaStatuses(db, ids),
+  ]);
   return rows.map((row) => ({
     id: row.id,
     title: row.title,
@@ -261,6 +275,7 @@ export async function hydrateCards(db: Db, rows: readonly CardRow[]): Promise<Jo
     summary: toSummary(row),
     signals: signalMap.get(row.id) ?? [],
     traps: traps.get(row.id) ?? null,
+    visa: visa.get(row.id) ?? null,
     seen: row.seen,
     closedReason: row.closedReason,
     linkCheck: parseLinkCheck(row.linkCheckJson),

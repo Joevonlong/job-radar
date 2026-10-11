@@ -13,9 +13,20 @@ import { jobsSearchParsers } from "@/lib/jobs/search-params";
  * phone the values can be seen and removed without opening the filter sheet. The × removes that one value. (The
  * application statuses are pills that already show their state.)
  */
-export function ActiveFilterChips({ choices, traps = false }: { choices: Record<SelectFilterKey, readonly MultiSelectOption[]>; /** show the "AI traps" chip. */ traps?: boolean }) {
+export function ActiveFilterChips({
+  choices,
+  traps = false,
+  visa = false,
+}: {
+  choices: Record<SelectFilterKey, readonly MultiSelectOption[]>;
+  /** show the "AI traps" chip. */
+  traps?: boolean;
+  /** show the "Visa" chip (hidden: a `visa=` in the URL is ignored and kept). */
+  visa?: boolean;
+}) {
   const t = useTranslations("dashboard.jobs.filters");
   const tTrap = useTranslations("aiTraps.filter");
+  const tVisa = useTranslations("visa.filter");
   // same URL state as the filter bar (nuqs keeps all hooks of a page in sync)
   const [params, setParams] = useQueryStates(jobsSearchParsers, { shallow: false, history: "replace" });
 
@@ -28,9 +39,10 @@ export function ActiveFilterChips({ choices, traps = false }: { choices: Record<
   };
 
   const trap = traps ? params.trap : null;
+  const visaValue = visa ? params.visa : null;
 
   // the slot keeps the height of one chip row whether or not there are chips, so ticking a filter never moves the list
-  if (chips.length === 0 && !trap) return <div className="min-h-[24.5px]" aria-hidden data-testid="filter-chips-slot" />;
+  if (chips.length === 0 && !trap && !visaValue) return <div className="min-h-[24.5px]" aria-hidden data-testid="filter-chips-slot" />;
 
   return (
     <ul className="flex min-h-[24.5px] flex-wrap gap-1.5" aria-label={t("chipsLabel")} data-testid="filter-chips">
@@ -45,6 +57,13 @@ export function ActiveFilterChips({ choices, traps = false }: { choices: Record<
         <li>
           <FilterChip removeLabel={tTrap("remove", { value: tTrap(trap) })} onRemove={() => void setParams({ trap: null, page: null })} data-testid="filter-chip" data-key="trap" data-value={trap} className="max-w-full">
             <span className="min-w-0 truncate">{tTrap("chip", { value: tTrap(trap) })}</span>
+          </FilterChip>
+        </li>
+      ) : null}
+      {visaValue ? (
+        <li>
+          <FilterChip removeLabel={tVisa("remove", { value: tVisa(visaValue) })} onRemove={() => void setParams({ visa: null, page: null })} data-testid="filter-chip" data-key="visa" data-value={visaValue} className="max-w-full">
+            <span className="min-w-0 truncate">{tVisa("chip", { value: tVisa(visaValue) })}</span>
           </FilterChip>
         </li>
       ) : null}

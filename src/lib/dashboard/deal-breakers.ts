@@ -5,6 +5,7 @@ import { explainDealBreaker, type DealBreakerExplanation } from "@/lib/filter/de
 import { vmTimeBox } from "@/lib/filter/time-box";
 import { dealBreakerIds } from "@/lib/filter/reasons";
 import { loadPipeline } from "@/lib/market";
+import { visaRulesFor } from "@/lib/visa/rules";
 
 /*
  * The profile files are read from disk on each call, not from the config cache: the user may edit deal_breakers or their
@@ -38,7 +39,7 @@ export function loadDealBreakerLabels(): Record<string, string> {
  * stored). A rule deleted or changed since the filter ran has no explanation; its reason still shows (by id when deleted).
  * Undefined when the reasons name none.
  */
-export function loadDealBreakerNotice(job: { title: string; description: string | null; germanLevelRule: GermanLevel }, reasons: readonly string[]): DealBreakerNotice | undefined {
+export function loadDealBreakerNotice(job: { title: string; description: string | null; germanLevelRule: GermanLevel; company?: { nameNorm: string } }, reasons: readonly string[]): DealBreakerNotice | undefined {
   const ids = dealBreakerIds(reasons);
   if (ids.length === 0) return undefined;
   const preferences = preferencesOrNull();
@@ -47,8 +48,8 @@ export function loadDealBreakerNotice(job: { title: string; description: string 
   const explanations: DealBreakerExplanation[] = [];
   try {
     const pipeline = loadPipeline();
-    const context = { language: pipeline.market.language?.code ?? null, me: meOrNull(), limits: pipeline.filter.deal_breakers };
-    const subject = { title: job.title, description: job.description, germanLevel: job.germanLevelRule };
+    const context = { language: pipeline.market.language?.code ?? null, me: meOrNull(), limits: pipeline.filter.deal_breakers, visa: visaRulesFor(pipeline) };
+    const subject = { title: job.title, description: job.description, germanLevel: job.germanLevelRule, companyNameNorm: job.company?.nameNorm ?? null };
     for (const id of ids) {
       const rule = rules.find((r) => r.id === id);
       // each pattern run is cut off at filter.deal_breakers.match_ms: a slow rule shows its name without the quote

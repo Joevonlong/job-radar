@@ -3,7 +3,7 @@ import { z } from "zod";
 import { CHANNEL_FAMILIES, SALARY_PERIODS } from "@/lib/channels/types";
 import { SENIORITIES } from "@/lib/domain/types";
 
-import { languageRequirementSchema, type LanguageRequirement } from "@/lib/market/schema";
+import { languageRequirementSchema, type LanguageRequirement, type VisaPack } from "@/lib/market/schema";
 import type { Market } from "@/lib/market/types";
 
 import { nonEmptyString, nonNegativeInt, nonNegativeNumber, positiveInt, regexString } from "./common";
@@ -25,6 +25,9 @@ const priority = z.number().int().min(1).max(100);
 const amountRange = z.strictObject({ min: nonNegativeNumber, max: nonNegativeNumber }).refine((r) => r.min < r.max, "min must be below max");
 
 const periodFactors = z.strictObject(Object.fromEntries(SALARY_PERIODS.map((p) => [p, z.number().positive()])) as Record<(typeof SALARY_PERIODS)[number], z.ZodNumber>);
+
+/** `job_checks.visa` when the file has none (the visa check of the `signals` step, docs/visa-sponsorship.md). */
+export const VISA_CHECK_DEFAULTS = { per_cycle_limit: 2000, max_quotes: 3, quote_max_chars: 280, negation_words_before: 6, negation_words_after: 5, heading_max_chars: 60 } as const;
 
 /**
  * config/pipeline.yaml — normalization, deduplication and job lifecycle. This is the FILE;
@@ -292,6 +295,28 @@ export const pipelineSchema = z.strictObject({
       })
       .default(DEAL_BREAKER_DEFAULTS),
   }),
+  /** Rule checks of the `signals` step that read the JD (no AI, no tokens); the user's switches are in ui.yaml `job_checks`. */
+  job_checks: z
+    .strictObject({
+      /** What the JD says about visa sponsorship / a work permit (patterns: the market packs' `rules.yaml` `visa`). */
+      visa: z
+        .strictObject({
+          /** Jobs checked per cycle at most (new and changed jobs first; `pnpm visa:scan --write` catches up on the rest). */
+          per_cycle_limit: positiveInt.default(VISA_CHECK_DEFAULTS.per_cycle_limit),
+          /** Quotes kept per job. */
+          max_quotes: positiveInt.max(10).default(VISA_CHECK_DEFAULTS.max_quotes),
+          /** Longest quote (characters); a longer sentence is cut around the phrase. */
+          quote_max_chars: positiveInt.min(40).max(2000).default(VISA_CHECK_DEFAULTS.quote_max_chars),
+          /** Words before an "offered" phrase searched for a negation cue (the packs' `negation_cues`). */
+          negation_words_before: z.number().int().min(0).max(20).default(VISA_CHECK_DEFAULTS.negation_words_before),
+          /** Words after an "offered" phrase, up to the end of its clause (the packs' `clause_breaks`), searched for a negation cue. */
+          negation_words_after: z.number().int().min(0).max(20).default(VISA_CHECK_DEFAULTS.negation_words_after),
+          /** Longest line (characters) that, as a heading ("Visa sponsorship", "## Visa sponsorship", "Visa sponsorship:"), is read together with the next line. */
+          heading_max_chars: z.number().int().min(10).max(200).default(VISA_CHECK_DEFAULTS.heading_max_chars),
+        })
+        .default(VISA_CHECK_DEFAULTS),
+    })
+    .default({ visa: VISA_CHECK_DEFAULTS }),
 });
 
 /** pipeline.yaml as written (what `loadConfig("pipeline")` returns; only the settings page and migrations read it). */
@@ -331,4 +356,6 @@ export interface PipelineConfig extends Omit<PipelineFileConfig, "language" | "f
   market: Market;
   /** "no longer accepting applications" phrases of the packs (generic + market), for the recheck of watched jobs. */
   closed_posting: { phrases: readonly string[] };
+  /** The visa patterns of the packs (generic + market, lists united). */
+  visa: VisaPack;
 }

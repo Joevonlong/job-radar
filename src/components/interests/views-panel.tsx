@@ -31,6 +31,7 @@ function FilterChips({ view }: { view: SavedView }) {
   const tc = useTranslations("dashboard");
   const tj = useTranslations("dashboard.jobs.filters");
   const tTrap = useTranslations("aiTraps.filter");
+  const tVisa = useTranslations("visa.filter");
   const currency = useBaseCurrency();
   const languageName = useLocalLanguageName();
   // The local-language filter names the market's language
@@ -71,6 +72,7 @@ function FilterChips({ view }: { view: SavedView }) {
     if (typeof raw === "boolean" || raw === undefined) return null;
     if (typeof raw === "number") return key === "minSalary" ? `≥ ${currencyPrefix(currency)}${raw / 1000}k` : `≥ ${raw}`;
     if (key === "trap") return raw === "only" || raw === "hide" ? tTrap(raw) : String(raw);
+    if (key === "visa") return raw === "offered" || raw === "not_denied" ? tVisa(raw) : String(raw);
     if (isMultiKey(key)) return format.list(filterValues(view.filters, key).map((v) => valueLabel(key, v)), { type: "disjunction" });
     return raw as string;
   };

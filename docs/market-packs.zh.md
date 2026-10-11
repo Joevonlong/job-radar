@@ -51,7 +51,7 @@ pnpm run doctor --only config.market
 | `pack.yaml` | `id`（= 目录名）、`name`，以及市场默认值：`country`、`currency`、`language`、`locale`（地名的大小写规则）、`region`（本国所在的命名区域）、`default_channels`（本市场的招聘渠道：向导里带"本地"标记列出，/me 上可以"开启它们"；StepStone、XING 这类抓取渠道不会未经你确认就被它打开，见 [sources.zh.md](sources.zh.md#抓取)；`de` 包列的是 arbeitsagentur、stepstone、xing 和 [arbeitnow](sources.zh.md#arbeitnow)）。 |
 | `geography.yaml` | `countries`（代码、英文名、可选的 `currency`（设置向导选这个国家时建议的货币）、`aliases`、`indeed` 名、可选 `pattern`、名字是常用词时 `match: false`）、`regions`（名称、国家、`patterns`）、`cities`（写法 → 规范名 + 国家）、`subdivision_codes`（`US: [TX, NY, …]`）、`non_city_labels`、`non_city_words`、`city_aliases`、`metro_areas`、`metro_regions`、`country_level_patterns`、`transliterations`。 |
 | `language.yaml` | 各语言的 `stopwords`（判断正文语言）和 `requirement`：读取要求等级的规则（`word_pattern`、`cefr_name_pattern`、`cefr_connectors`、`level_rules`、`optional_patterns`、`not_required_patterns` ……，以及给打分提示词的 `prompt_examples`）。 |
-| `rules.yaml` | pipeline.yaml 里和语言有关的部分：`company.legal_suffixes` / `agency_names`、`agency.*_patterns`、`contract.*`、`salary.currencies`（货币的写法）、`filter.generic_location_patterns`、`filter.remote.*`；`closed_posting.phrases`：原帖页面上表示"不再接收申请"的句子（正则，不区分大小写；只接受 configuration.zh.md"关注岗位复查"一节说的安全子集：不允许 `*`、`+`、`{n,}`），收藏 / 跟进岗位的复查用（见 usage.zh.md"已关闭的岗位"）。 |
+| `rules.yaml` | pipeline.yaml 里和语言有关的部分：`company.legal_suffixes` / `agency_names`、`agency.*_patterns`、`contract.*`、`salary.currencies`（货币的写法）、`filter.generic_location_patterns`、`filter.remote.*`；`closed_posting.phrases`：原帖页面上表示"不再接收申请"的句子（正则，不区分大小写；只接受 configuration.zh.md"关注岗位复查"一节说的安全子集：不允许 `*`、`+`、`{n,}`），收藏 / 跟进岗位的复查用（见 usage.zh.md"已关闭的岗位"）；`visa`：JD 里关于签证赞助的说法（见[签证说法](#签证说法)）。 |
 
 `generic` 包总是加载：世界国家表、区域 `eu`、`eea`、`europe`、`dach`、`nordics`、城市表、美国州代码和英文规则。市场自己的包叠加在它上面。
 
@@ -64,8 +64,37 @@ pnpm run doctor --only config.market
 - `language.requirement`：整块来自市场包（规则顺序有意义）；你在 pipeline.yaml 里写了 `language.requirement` 就用你的；
 - `salary.local_currencies`：不写 = 市场的货币；
 - `closed_posting.phrases`：generic 和市场包的列表合并；你自己的短语写在 `ui.yaml` 的 `job_checks.closed_recheck.extra_phrases`，不写在 pipeline.yaml。
+- `visa`：generic 和市场包的列表合并（generic 在前）；pipeline.yaml 里没有自己的签证说法。
 
 所以 pipeline.yaml 只需要放你自己加的内容。pipeline.yaml 的配置迁移已经删掉了现在由包提供的条目。
+
+## 签证说法
+
+`rules.yaml` 的 `visa` 一节是[签证检查](visa-sponsorship.zh.md)用的说法。`generic` 放英文，`de` 放德文；德国市场两者都用。
+
+| 键 | 是什么 |
+|---|---|
+| `offered` | 提到支持（"We offer visa sponsorship"、"Relocation-Support"） |
+| `not_offered.no_sponsorship` | 拒绝赞助（"We are unable to offer visa sponsorship"） |
+| `not_offered.permit_required` | 要求已经持有工作许可（"You must hold a valid work permit"） |
+| `permit_alternatives` | 紧跟在 `permit_required` 说法旁边的替代办法，让这句变成不明确（"…or are eligible for an EU Blue Card"） |
+| `mention_terms`、`mention_context` | 同一句里有签证词又有语境词，算一次不明确的提及 |
+| `negation_cues` | 让 `offered` 说法变成不明确的词（"not"、"kein…"）：出现在说法里面、说法前 `pipeline.yaml job_checks.visa.negation_words_before` 个词内，或说法后同一分句的 `negation_words_after` 个词内 |
+| `clause_breaks` | 上面那个分句在哪里结束（"; "、" but "、" aber "）：之后的否定词不算。逗号和冒号不结束分句（"Relocation support: No"） |
+| `exclude_context` | 匹配到的句子不是在讲求职者的签证（"sponsored events"、"Visa/Mastercard"、"our customers with visa applications"） |
+| `exclude_companies` | 本身就是签证词的公司名（规范化后）：对这些公司只算标了 `combo: true` 的说法 |
+| `abbreviations` | 点号不表示句子结束的缩写（"z.B"、"inkl"） |
+| `prefilter` | 快速初筛，见下 |
+
+`offered`、`not_offered.*` 和 `mention_terms` 的条目是 `{pattern, combo, list_item}`：`combo: true` 表示这个说法把签证词和语境连在一起，
+所以对名字是签证词的公司也算；`list_item: true` 表示只在它自己是一个列表项时才算（单独的名词 "- Visa sponsorship"），当标题时不算（"## Visa sponsorship" 下一行 "Not available"）。说法是带 `iu` 标志的正则；写错时 `pnpm config:check` 会指出路径（`visa.offered[3]`）。
+
+**`prefilter`**：签证一票否决每轮过滤都要读所有未关闭的岗位，所以一段文字或一句话如果不匹配任何 prefilter，就直接跳过，
+不再跑其他说法。前提是 **`offered`、`not_offered` 或 `mention_terms` 能匹配的每个说法里都含有一个 prefilter 匹配**：
+加了一个带新关键词的说法（"Aufenthaltstitel"），也要把这个词加进 `prefilter`，否则永远看不到。只有含 prefilter 匹配的行（连同它上面的标题）才切成句子。
+`pnpm config:check` 会对正则文本里没有 prefilter 匹配的说法给出警告（粗略检查：看的是正则本身，不是它能匹配的内容）。`prefilter` 留空就逐句读（更慢）。
+
+改了说法之后，`pnpm visa:scan` 预览会改什么，`pnpm visa:scan --write` 写入；规则是每个结果输入的一部分，所以每轮也会把所有岗位重新检查一遍。
 
 ## 写一个新包
 
@@ -75,6 +104,7 @@ pnpm run doctor --only config.market
 3. `language.yaml`：这门语言的停用词；想要本地语言步骤，再写 `requirement` 块，不写这一步就保持关闭。
 4. `rules.yaml`：公司法律形式后缀、中介和合同用语、货币写法，以及这门语言里"不再接收申请"的句子（`closed_posting.phrases`；
    写得具体些：命中会把岗位标为可能已关闭）。
+   这门语言的签证说法写在 `visa` 下（见[签证说法](#签证说法)）；没有的话只读英文说法。
 5. 把 `market.pack` 设成 `<id>`，运行 `pnpm config:check`、`pnpm market:show`，再 `pnpm reprocess`。
 6. 想看改了什么：之前运行 `pnpm market:regress snapshot --out before.json`，reprocess 之后同样存一份 `after.json`，
    再 `pnpm market:regress compare before.json after.json`。它只输出各字段的变化数量和代码值的变化（国家、等级、过滤原因），不输出岗位文字。

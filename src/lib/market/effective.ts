@@ -9,6 +9,7 @@ import type { PipelineConfig, PipelineFileConfig } from "@/lib/config/schemas/pi
 
 import { GENERIC_PACK_ID, loadPack, type Pack } from "./load";
 import { loadMarket } from "./resolve";
+import type { VisaPack, VisaPatternEntry } from "./schema";
 import type { Market } from "./types";
 
 const union = (...lists: ReadonlyArray<readonly string[]>): string[] => [...new Set(lists.flat())];
@@ -26,6 +27,40 @@ function deepFreeze<T>(value: T): T {
     for (const child of Object.values(value)) deepFreeze(child);
   }
   return value;
+}
+
+/** Visa pattern lists united: a pattern that is in several packs counts once (the first spelling, with or without `combo`, wins). */
+function unionPatterns(...lists: ReadonlyArray<readonly VisaPatternEntry[]>): VisaPatternEntry[] {
+  const seen = new Set<string>();
+  const out: VisaPatternEntry[] = [];
+  for (const entry of lists.flat()) {
+    const key = typeof entry === "string" ? entry : entry.pattern;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(entry);
+  }
+  return out;
+}
+
+/** The `visa` sections of the packs, united (generic first, then the market's). */
+export function mergeVisaPacks(packs: ReadonlyArray<{ rules: { visa: VisaPack } }>): VisaPack {
+  const visa = packs.map((p) => p.rules.visa);
+  return {
+    offered: unionPatterns(...visa.map((v) => v.offered)),
+    not_offered: {
+      no_sponsorship: unionPatterns(...visa.map((v) => v.not_offered.no_sponsorship)),
+      permit_required: unionPatterns(...visa.map((v) => v.not_offered.permit_required)),
+    },
+    permit_alternatives: union(...visa.map((v) => v.permit_alternatives)),
+    mention_terms: unionPatterns(...visa.map((v) => v.mention_terms)),
+    mention_context: union(...visa.map((v) => v.mention_context)),
+    negation_cues: union(...visa.map((v) => v.negation_cues)),
+    clause_breaks: union(...visa.map((v) => v.clause_breaks)),
+    exclude_context: union(...visa.map((v) => v.exclude_context)),
+    exclude_companies: union(...visa.map((v) => v.exclude_companies)),
+    abbreviations: union(...visa.map((v) => v.abbreviations)),
+    prefilter: union(...visa.map((v) => v.prefilter)),
+  };
 }
 
 /** The packs a market was built from (generic first). */
@@ -115,6 +150,7 @@ export function buildEffectivePipeline(file: PipelineFileConfig, market: Market,
     },
     market: withUserGeography(market, file),
     closed_posting: { phrases: union(...pick((r) => r.closed_posting.phrases)) },
+    visa: mergeVisaPacks(packs),
   });
 }
 

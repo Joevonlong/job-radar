@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { ConfigError, resetConfigCache } from "@/lib/config";
 import { buildEffectivePipeline, loadMarket, loadPack, loadPipeline, MarketUnresolvedError, marketSettingsProblems, resetPackCache, resolveMarket } from "@/lib/market";
 import type { Pack } from "@/lib/market/load";
+import { emptyVisaPack, visaPackSchema } from "@/lib/market/schema";
 
 import { makeTempConfig, type TempConfig } from "../config/helpers";
 import { fixtureMarket, fixturePack, shippedPipelineFile } from "../pipeline/helpers";
@@ -109,6 +110,25 @@ describe("the effective pipeline config", () => {
     expect(de.closed_posting.phrases).toEqual(["\\bno longer accepting applications\\b", "nicht mehr verfügbar"]);
     const generic = buildEffectivePipeline(shippedPipelineFile(), fixtureMarket({ pack: "generic", country: "US", currency: "USD", home_language: "en" }), withPhrases);
     expect(generic.closed_posting.phrases).toEqual(["\\bno longer accepting applications\\b"]);
+  });
+
+  it("unites the packs' visa patterns (generic first, duplicates dropped); a pack without a visa section adds nothing", () => {
+    const de = buildEffectivePipeline(shippedPipelineFile(), fixtureMarket({ pack: "de" }), fixturePack);
+    const generic = fixturePack("generic").rules.visa;
+    const german = fixturePack("de").rules.visa;
+    expect(de.visa.offered.slice(0, generic.offered.length)).toEqual(generic.offered);
+    expect(de.visa.offered).toHaveLength(generic.offered.length + german.offered.length);
+    expect(de.visa.prefilter.filter((term) => term === "visa")).toHaveLength(1);
+    expect(de.visa.prefilter).toEqual(expect.arrayContaining([...generic.prefilter, ...german.prefilter]));
+    expect(de.visa.clause_breaks).toEqual([...generic.clause_breaks, ...german.clause_breaks]);
+    expect(generic.clause_breaks.length).toBeGreaterThan(0);
+    const withoutVisa = (id: string): Pack => {
+      const pack = fixturePack(id);
+      if (id !== "de") return pack;
+      return { ...pack, rules: { ...pack.rules, visa: visaPackSchema.parse(undefined) } };
+    };
+    expect(visaPackSchema.parse(undefined)).toEqual(emptyVisaPack());
+    expect(buildEffectivePipeline(shippedPipelineFile(), fixtureMarket({ pack: "de" }), withoutVisa).visa).toEqual(buildEffectivePipeline(shippedPipelineFile(), fixtureMarket({ pack: "generic", country: "US", currency: "USD", home_language: "en" }), fixturePack).visa);
   });
 
   it("has no German rules under a market without them", () => {

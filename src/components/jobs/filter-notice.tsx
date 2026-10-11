@@ -44,6 +44,7 @@ function useLevelText(): (level: string) => string {
 /** Under the banner: each deal-breaker that applies, with the job's own words it rests on (verbatim) and, for a language gate, both levels. */
 function DealBreakerExplanations({ notice }: { notice: DealBreakerNotice }) {
   const t = useTranslations("dealBreakers.notice");
+  const tVisa = useTranslations("visa.badge");
   const level = useLevelText();
   if (notice.explanations.length === 0) return null;
   return (
@@ -58,6 +59,12 @@ function DealBreakerExplanations({ notice }: { notice: DealBreakerNotice }) {
                 {e.atLeast !== undefined
                   ? t("levelsThreshold", { required: e.required, threshold: e.atLeast })
                   : t("levels", { required: e.required, user: level(e.userLevel ?? "none") })}
+              </span>
+            ) : null}
+            {e.visaKind ? (
+              <span data-testid="deal-breaker-visa">
+                {" "}
+                {t("visa", { status: tVisa(e.visaKind) })}
               </span>
             ) : null}
           </span>

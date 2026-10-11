@@ -14,6 +14,7 @@ export interface FilterCandidate {
   locationsJson: unknown;
   salaryJson: unknown;
   companyName: string;
+  companyNameNorm: string | null;
   companyAliases: string[];
   companyBlacklisted: boolean;
   /** `jobs.german_level_required` (the pipeline's rule reading; what a language gate reads). */
@@ -33,6 +34,7 @@ export async function listFilterCandidates(db: Executor, input: { afterId: numbe
       locationsJson: jobs.locationsJson,
       salaryJson: jobs.salaryJson,
       companyName: companies.name,
+      companyNameNorm: companies.nameNorm,
       companyAliases: companies.aliases,
       companyBlacklisted: companies.blacklisted,
       germanLevel: jobs.germanLevelRequired,

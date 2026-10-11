@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { MAX_FILTER_VALUES, MIN_SALARY_MAX, MIN_SCORE_MAX, TRAP_FILTERS } from "@/lib/jobs/constants";
+import { MAX_FILTER_VALUES, MIN_SALARY_MAX, MIN_SCORE_MAX, TRAP_FILTERS, VISA_FILTERS } from "@/lib/jobs/constants";
 import { MULTI_VALUE_SCHEMAS } from "@/lib/jobs/filter-values";
 import { SIGNAL_COLORS } from "@/lib/signals/palette";
 
@@ -224,6 +224,8 @@ export const viewFiltersSchema = z.strictObject({
   high: z.boolean().optional(),
   /** Only jobs with an AI trap, or none of them. */
   trap: z.enum(TRAP_FILTERS).optional(),
+  /** The visa check: only jobs that mention visa support, or all but those that refuse; ignored (but kept) while the filter is hidden. */
+  visa: z.enum(VISA_FILTERS).optional(),
 });
 export type ViewFilters = z.infer<typeof viewFiltersSchema>;
 

@@ -38,6 +38,7 @@ describe("toJobFilters", () => {
       minAnnualSalary: 80000,
       salaryDisclosed: true,
       trap: null,
+      visa: null,
     });
   });
 

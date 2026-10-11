@@ -17,7 +17,7 @@ import { asGermanLevel, parseLocations, parseSalary } from "@/lib/db/queries/par
 import { snapshotForProfileText } from "@/lib/profile/snapshots";
 import type { ChannelLogger } from "@/lib/channels/types";
 
-import { dealBreakerVetoes, startDealBreakerRun, type DealBreakerRun, type DealBreakerWarning, type TimeBox } from "./deal-breakers";
+import { dealBreakerVetoes, startDealBreakerRun, type DealBreakerMe, type DealBreakerRun, type DealBreakerWarning, type TimeBox } from "./deal-breakers";
 import { dealBreakerIds } from "./reasons";
 import { compileFilter, evaluateJob, type CompiledFilter, type FilterJob, type FilterOverride, type FilterVerdict } from "./rules";
 import { vmTimeBox } from "./time-box";
@@ -56,7 +56,7 @@ export interface FilterOptions {
   snapshotId: number;
   pipeline: PipelineConfig;
   /** me.yaml for a language gate (`currentPreferences().me`); null when it cannot be read: a gate without `at_least` then does nothing and is reported. */
-  me: Pick<MeConfig, "languages"> | null;
+  me: DealBreakerMe | null;
   /** Only these jobs (the user changed the decision about one job); default: every job. */
   jobIds?: readonly number[];
   logger?: ChannelLogger;
@@ -71,6 +71,7 @@ export function toFilterJob(row: FilterCandidate): FilterJob {
     title: row.title,
     description: row.description,
     companyName: row.companyName,
+    companyNameNorm: row.companyNameNorm,
     companyAliases: row.companyAliases,
     companyBlacklisted: row.companyBlacklisted,
     locations: parseLocations(row.locationsJson),

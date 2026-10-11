@@ -77,7 +77,7 @@ function detail(): JobDetail {
   return {
     id: base.id,
     title: base.title,
-    company: { id: 3, name: "Acme", watched: false },
+    company: { id: 3, name: "Acme", nameNorm: "acme", watched: false },
     locations: base.locations,
     workplace: base.workplace,
     seniority: "senior",
@@ -127,6 +127,7 @@ function detail(): JobDetail {
     application: application(),
     favorite: { createdAt: NOW, note: SENTINEL.favoriteNote },
     applicationEvents: [{ id: 1, applicationId: 1, at: NOW, fromStatus: "interested", toStatus: "applied", note: SENTINEL.eventNote }],
+    visa: null,
   };
 }
 

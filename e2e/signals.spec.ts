@@ -111,7 +111,8 @@ test.describe("signals", () => {
     await expect(page.getByTestId("bonus-line")).toContainText("加分 18");
     await expect(page.getByTestId("bonus-line")).toContainText("封顶 15");
 
-    const marks = page.locator('[data-testid="jd-body"] mark');
+    // the signal quotes (the JD's visa sentence has its own mark, see visa.spec.ts)
+    const marks = page.locator('[data-testid="jd-body"] mark:not([data-tier="visa"])');
     await expect(marks).toHaveCount(2);
     // in the order the sentences appear in the JD
     expect(await marks.evaluateAll((els) => els.map((e) => e.getAttribute("data-tier")).sort())).toEqual(["T1", "T2"]);

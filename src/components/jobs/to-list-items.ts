@@ -15,6 +15,7 @@ import { loadBonusPolicy } from "@/lib/signals/floor";
 import { loadTargetPlaces } from "@/lib/dashboard/target-places";
 import { pickRowLocations } from "@/lib/dashboard/row-locations";
 import { trapsEnabled } from "@/lib/traps/settings";
+import { visaVisible } from "@/lib/visa/settings";
 
 import type { JobListItem } from "./types";
 
@@ -35,6 +36,8 @@ export async function toListItems(
     monthSalaries?: { figures: readonly MonthSalaryFigure[]; minSample: number };
     /** `getFilterFloors`: the floor each filtered job was judged under, for the "below the floor of the time" wording. */
     filterFloors?: ReadonlyMap<number, number | null>;
+    /** Whether the visa badge shows, when the page already knows (`visaVisible` / `visaFilterAvailable`); read here otherwise. */
+    visa?: boolean;
   },
 ): Promise<JobListItem[]> {
   const interests = loadConfig("interests");
@@ -47,6 +50,7 @@ export async function toListItems(
   const aliases = buildSkillAliasMap(loadPipeline().skills);
   const mySkills = profileSkillKeys(readProfileSkillNames(), aliases);
   const showTraps = trapsEnabled();
+  const showVisa = options.visa ?? visaVisible();
   return cards.map((card) => {
     const salary = listSalary(card.salary, locale, baseCurrency);
     const matches = matchSkills(card.skills, mySkills, aliases);
@@ -113,6 +117,7 @@ export async function toListItems(
         .sort((a, b) => catalog.order(a.tier) - catalog.order(b.tier)),
       amountMinAnnualEur: policy.minAnnualEur,
       ...(showTraps && (card.traps?.traps ?? 0) > 0 ? { trapCount: card.traps?.traps ?? 0 } : {}),
+      ...(showVisa && card.visa ? { visa: { status: card.visa.status, kind: card.visa.kind } } : {}),
       amountCurrency: baseCurrency,
       timeLabel: card.postedAt ? relative : t("time.seen", { time: relative }),
       timeTitle: format.dateTime(reference, { dateStyle: "medium", timeStyle: "short", timeZone: options.timezone }),

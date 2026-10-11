@@ -6,6 +6,7 @@ import { isGermanRequirement } from "@/lib/domain/types";
 
 import { FactBadge, SignalBadge, UnknownBadge } from "./signal-badge";
 import { TrapBadge } from "./trap-badge";
+import { VisaBadge } from "./visa-badge";
 import type { JobListItem } from "./types";
 
 /** An amount that is not a local high-pay signal (below the floor, or possibly another region's pay): muted. */
@@ -43,6 +44,7 @@ export function JobBadges({ job }: { job: JobListItem }) {
     <div className="flex flex-wrap gap-1.5" data-slot="job-badges">
       {/* An AI trap comes first, before the pay signals */}
       {job.trapCount && job.trapCount > 0 ? <TrapBadge count={job.trapCount} /> : null}
+      {job.visa ? <VisaBadge visa={job.visa} /> : null}
       {signals.map((signal, index) => {
         // the stated salary (normalized, EUR per year) is the one compensation text of a row; the amount signal only fills in when the job has no usable salary
         const label = (signal.category.kind === "amount" ? (job.salaryText ?? signalAmountLabel(signal.value, locale)) : null) ?? signal.category.label;

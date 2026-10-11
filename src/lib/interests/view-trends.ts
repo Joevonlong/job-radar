@@ -7,14 +7,15 @@ import { loadCityGroups } from "@/lib/jobs/cities";
 import type { CityGroup } from "@/lib/jobs/city-groups";
 import { toJobFilters } from "@/lib/jobs/job-filters";
 import { loadHighValuePolicy } from "@/lib/signals/floor";
+import { visaFilterAvailable } from "@/lib/visa/filter";
 
 /** A saved view's filters in the form the job queries take, the way Today applies them (the dates of a view are ignored there). */
-export function viewTrendInput(view: SavedView, context: { cityGroups: readonly CityGroup[] | null; hideGermanLevels: readonly string[]; highValue: HighValuePolicy }): ViewTrendInput {
+export function viewTrendInput(view: SavedView, context: { cityGroups: readonly CityGroup[] | null; hideGermanLevels: readonly string[]; highValue: HighValuePolicy; visa?: boolean }): ViewTrendInput {
   const f = view.filters;
   return {
     id: view.id,
     filters: {
-      ...toJobFilters(f, { cityGroups: context.cityGroups }),
+      ...toJobFilters(f, { cityGroups: context.cityGroups, visa: context.visa === true }),
       includeFiltered: f.filtered === true,
       hideGermanLevels: f.hideLang === true ? context.hideGermanLevels : null,
       // without any high-value category the toggle has nothing to keep (its button is hidden): it filters nothing
@@ -27,7 +28,7 @@ export function viewTrendInput(view: SavedView, context: { cityGroups: readonly 
 export async function loadViewTrends(db: Db, views: readonly SavedView[], options: { timezone: string; now: Date; days: number }): Promise<Map<string, number[]>> {
   if (views.length === 0) return new Map();
   try {
-    const context = { cityGroups: await loadCityGroups(db), hideGermanLevels: germanLevelsToHide(), highValue: loadHighValuePolicy() };
+    const context = { cityGroups: await loadCityGroups(db), hideGermanLevels: germanLevelsToHide(), highValue: loadHighValuePolicy(), visa: await visaFilterAvailable(db) };
     return await getViewDailyCounts(db, { views: views.map((view) => viewTrendInput(view, context)), timezone: options.timezone, now: options.now, days: options.days });
   } catch {
     return new Map();

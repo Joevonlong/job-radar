@@ -14,13 +14,17 @@ export const BREAKDOWN_MARK_CLASS = "underline decoration-dotted decoration-ink-
 /** An AI trap in the JD: a 2px dashed `--bad` frame on the soft fill, so it reads as "not meant for you" rather than as a signal. */
 export const TRAP_MARK_CLASS = "rounded-cell bg-soft text-inherit outline-[length:var(--bw)] outline-dashed outline-bad -outline-offset-1 px-0.5";
 
+/** A visa sponsorship quote: a dashed underline, no fill (the breakdown's is dotted, a trap's is a frame). */
+export const VISA_MARK_CLASS = "underline decoration-dashed decoration-ink-2 decoration-2 underline-offset-[3px]";
+
 /**
- * What the JD panel highlights: a signal category id, a quote of the job breakdown, or an AI trap (`breakdown` and `trap`
- * are reserved ids; a signal wins when both are the same text).
+ * What the JD panel highlights: a signal category id, a quote of the job breakdown, an AI trap or a visa quote (`breakdown`
+ * and `trap` are reserved ids; `:visa` cannot be a category id; a signal wins when both are the same text).
  */
 export type JdQuoteTier = string;
 export const BREAKDOWN_QUOTE = "breakdown";
 export const TRAP_QUOTE = "trap";
+export const VISA_QUOTE = ":visa";
 
 /** Id of the `mark` the JD shows for the signal quote with this index (position in the page's `quotes` list). */
 export function jdMarkId(index: number): string {

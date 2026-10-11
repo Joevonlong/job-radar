@@ -228,6 +228,27 @@ describe("the filter step applies deal-breakers", () => {
     expect(vetoedBy("onsite")).toBe(2);
   });
 
+  it("a visa rule vetoes refusals and required permits for a user who needs sponsorship, and says why it does nothing otherwise", async () => {
+    const VISA = { id: "visa", label: "No visa sponsorship", type: "visa_not_offered" };
+    const refused = await addJob({ description: "Great team. We are unable to offer visa sponsorship for this role." });
+    const permit = await addJob({ description: "You must hold a valid work permit for Germany." });
+    const offered = await addJob({ description: "We offer visa sponsorship and relocation support." });
+    const plain = await addJob();
+    editProfile("me", (raw) => void (raw.needs_visa_sponsorship = true));
+    setRules([VISA]);
+    const { preferences } = await currentPreferences(getDb());
+    const preview = await previewDealBreakers(getDb(), preferences.deal_breakers, { pipeline: loadPipeline(), me: currentMe(), sampleLimit: 10, explain: true });
+    expect(preview.rules.map((rule) => [rule.id, rule.status, rule.count])).toEqual([["visa", "ok", 2]]);
+    await runStep();
+    for (const job of [refused, permit]) expect(await rowsOf(job.id)).toMatchObject([{ filterResult: "filtered_out", filterReasons: ["deal_breaker:visa"] }]);
+    for (const job of [offered, plain]) expect(await rowsOf(job.id)).toMatchObject([{ filterResult: "passed" }]);
+
+    editProfile("me", (raw) => void (raw.needs_visa_sponsorship = false));
+    const result = await runStep();
+    expect(result.dealBreakerWarnings).toEqual([{ id: "visa", code: "visa_not_needed" }]);
+    expect(await rowsOf(refused.id)).toMatchObject([{ filterResult: "passed", filterReasons: [] }]);
+  });
+
   it("a gate in a market without a local-language step does nothing", async () => {
     editProfile("preferences", (raw) => {
       raw.market = { pack: "generic", country: "US", currency: "USD", home_language: "en" };

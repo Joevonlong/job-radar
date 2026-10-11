@@ -21,6 +21,13 @@ export const WEB_ACCESS_DEFAULTS = {
   min_password_length: 10,
 } as const;
 
+/** When the visa badge and filter show (ui.yaml `job_checks.visa.badges`). */
+export const VISA_BADGE_MODES = ["auto", "always", "never"] as const;
+export type VisaBadgeMode = (typeof VISA_BADGE_MODES)[number];
+
+/** `job_checks.visa` when ui.yaml has none. */
+export const VISA_UI_DEFAULTS: { enabled: boolean; badges: VisaBadgeMode } = { enabled: true, badges: "auto" };
+
 /** Most cycles / items any list in the interface can show (a longer strip is unreadable on a phone). */
 const MAX_CYCLES = 60;
 const MAX_TICKER_ITEMS = 50;
@@ -111,7 +118,10 @@ export const uiSchema = z
         min_password_length: positiveInt.min(6).max(128),
       })
       .default(WEB_ACCESS_DEFAULTS),
-    /** The recheck of watched jobs' postings (its rates and sizes are in pipeline.yaml `lifecycle.watch_recheck`). */
+    /**
+     * Checks of a job: the recheck of watched jobs' postings (its rates and sizes are in pipeline.yaml `lifecycle.watch_recheck`) and
+     * what the JD says about visa sponsorship (its limits are in pipeline.yaml `job_checks.visa`, its patterns in the market packs).
+     */
     job_checks: z
       .strictObject({
         closed_recheck: z
@@ -122,8 +132,20 @@ export const uiSchema = z
             extra_phrases: z.array(phraseRegexString).default([]),
           })
           .default({ enabled: true, extra_phrases: [] }),
+        /** The visa check (docs/visa-sponsorship.md). */
+        visa: z
+          .strictObject({
+            /** Off: nothing is scanned and no page shows it. */
+            enabled: z.boolean().default(VISA_UI_DEFAULTS.enabled),
+            /**
+             * The list badge and the /jobs filter: `auto` = only when me.yaml says `needs_visa_sponsorship: true`; `always`; `never`.
+             * The detail page shows its line whenever the check is on.
+             */
+            badges: z.enum(VISA_BADGE_MODES).default(VISA_UI_DEFAULTS.badges),
+          })
+          .default(VISA_UI_DEFAULTS),
       })
-      .default({ closed_recheck: { enabled: true, extra_phrases: [] } }),
+      .default({ closed_recheck: { enabled: true, extra_phrases: [] }, visa: VISA_UI_DEFAULTS }),
   });
 
 export type UiConfig = z.infer<typeof uiSchema>;

@@ -392,12 +392,12 @@ describe("ui ai_usage block", () => {
 });
 
 describe("ui job_checks block", () => {
-  it("is optional: a file without it gets the recheck on and no extra phrases", () => {
+  it("is optional: a file without it gets the recheck on, no extra phrases and the visa check on (auto)", () => {
     const ui = fixture("ui");
     delete ui.job_checks;
     expect(issuePaths("ui", ui)).toEqual([]);
     const parsed = configRegistry.ui.schema.parse(ui) as { job_checks: unknown };
-    expect(parsed.job_checks).toEqual({ closed_recheck: { enabled: true, extra_phrases: [] } });
+    expect(parsed.job_checks).toEqual({ closed_recheck: { enabled: true, extra_phrases: [] }, visa: { enabled: true, badges: "auto" } });
   });
   it("takes a switch and phrases, and names an invalid regex by its path", () => {
     const ui = fixture("ui");
@@ -410,6 +410,40 @@ describe("ui job_checks block", () => {
     const ui = fixture("ui");
     ui.job_checks = { closed_recheck: { enabled: true, extra_phrases: ["fine (phrase)?", "(a+)+b", "no.*longer", "x{2,}"] } };
     expect(issuePaths("ui", ui)).toEqual(["job_checks.closed_recheck.extra_phrases.1", "job_checks.closed_recheck.extra_phrases.2", "job_checks.closed_recheck.extra_phrases.3"]);
+  });
+});
+
+describe("visa check settings", () => {
+  it("ui.yaml job_checks.visa takes a switch and a badge mode, and rejects another mode", () => {
+    const ui = fixture("ui");
+    ui.job_checks = { visa: { enabled: false, badges: "always" } };
+    expect(issuePaths("ui", ui)).toEqual([]);
+    const parsed = configRegistry.ui.schema.parse(ui) as { job_checks: { visa: unknown } };
+    expect(parsed.job_checks.visa).toEqual({ enabled: false, badges: "always" });
+    ui.job_checks = { visa: { badges: "sometimes" } };
+    expect(issuePaths("ui", ui)).toEqual(["job_checks.visa.badges"]);
+  });
+
+  it("pipeline.yaml job_checks is optional and gets the limits; limits out of range are named", () => {
+    const pipeline = fixture("pipeline");
+    delete pipeline.config_version;
+    delete pipeline.job_checks;
+    const parsed = configRegistry.pipeline.schema.parse(pipeline) as { job_checks: { visa: Record<string, number> } };
+    expect(parsed.job_checks.visa).toEqual({ per_cycle_limit: 2000, max_quotes: 3, quote_max_chars: 280, negation_words_before: 6, negation_words_after: 5, heading_max_chars: 60 });
+    pipeline.job_checks = { visa: { per_cycle_limit: 0, max_quotes: 11, quote_max_chars: 10, negation_words_before: 21, negation_words_after: -1, heading_max_chars: 5 } };
+    expect(issuePaths("pipeline", pipeline).sort()).toEqual(
+      ["per_cycle_limit", "max_quotes", "quote_max_chars", "negation_words_before", "negation_words_after", "heading_max_chars"].map((key) => `job_checks.visa.${key}`).sort(),
+    );
+    pipeline.job_checks = { visa: { negation_words_before: 0, negation_words_after: 0 } };
+    expect(issuePaths("pipeline", pipeline)).toEqual([]);
+  });
+
+  it("a saved view keeps a visa filter and rejects an unknown one", () => {
+    const good = fixture("interests");
+    good.views = [{ id: "sponsor", name: "Sponsor", filters: { visa: "offered" } }];
+    expect(issuePaths("interests", good)).toEqual([]);
+    good.views = [{ id: "sponsor", name: "Sponsor", filters: { visa: "yes" } }];
+    expect(issuePaths("interests", good)).toEqual(["views.0.filters.visa"]);
   });
 });
 

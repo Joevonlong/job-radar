@@ -21,7 +21,7 @@ export interface PipelineEntry {
  * decision yet": a note, an attached resume, or a job set back to `new`), so it is a card in the board's
  * first column, not hidden; jobs without any application row are not on the board.
  */
-export async function listPipelineEntries(db: Db): Promise<PipelineEntry[]> {
+export async function listPipelineEntries(db: Db, options: { visa?: boolean } = {}): Promise<PipelineEntry[]> {
   const latest = latestScoreCte(db);
   const ux = await uxTablesReady(db);
   const rows = await db
@@ -33,7 +33,7 @@ export async function listPipelineEntries(db: Db): Promise<PipelineEntry[]> {
     .leftJoin(latest, eq(latest.jobId, jobs.id))
     .orderBy(sql`${latest.rankValue} desc nulls last`, desc(applications.statusChangedAt), asc(applications.id));
 
-  const cards = await hydrateCards(db, rows);
+  const cards = await hydrateCards(db, rows, { visa: options.visa ?? true });
   const events = await listEventsByApplication(
     db,
     rows.map((r) => r.application.id),

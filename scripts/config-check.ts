@@ -8,6 +8,7 @@
  *   - a user file older than the code is fine (it is migrated in memory) but listed: run pnpm config:migrate --write;
  *   - a user copy of a `shipped` file (models, pipeline) is listed as an override;
  *   - every market pack (shipped and user copies) must pass its schemas, and the market of preferences.yaml must resolve;
+ *   - the visa patterns of that market must compile; a phrase pattern without a prefilter word is only a warning;
  *   - the deal-breakers of preferences.yaml must keep to the limits of pipeline.yaml (a language gate in a market without a
  *     local-language step is only a warning: it does nothing).
  *
@@ -41,6 +42,7 @@ import {
 import { dealBreakerLimitProblems, slowPatternProblems } from "../src/lib/filter/deal-breakers";
 import { vmTimeBox } from "../src/lib/filter/time-box";
 import { listPackIds, loadMarket, loadPipeline, packDirs, readPackDir } from "../src/lib/market";
+import { compileVisaRules } from "../src/lib/visa/rules";
 
 const rel = displayConfigPath;
 let failures = 0;
@@ -164,6 +166,26 @@ report("preferences.yaml market", () => {
   return `${market.packId}: ${market.country}, ${market.currency}, local language ${market.homeLanguage}${market.language === null ? " (no requirement rules: the language step is off)" : ""}`;
 });
 
+// The visa patterns of the active market: valid, and each phrase contains a prefilter word (else it is skipped on texts without one)
+{
+  let pipeline: ReturnType<typeof loadPipeline> | null = null;
+  try {
+    pipeline = loadPipeline();
+  } catch {
+    // reported by the lines above
+  }
+  if (pipeline === null) {
+    console.log("- visa patterns (skipped: fix the files above first)");
+  } else {
+    const loaded = pipeline;
+    let violations: string[] = [];
+    report("visa patterns of the market packs", () => {
+      violations = compileVisaRules(loaded).prefilterViolations;
+    });
+    for (const where of violations) console.log(`    ! ${where}: has no word of visa.prefilter, so it is skipped on a text without one (add a prefilter word)`);
+  }
+}
+
 // preferences.yaml deal_breakers: the limits of pipeline.yaml filter.deal_breakers, and a language gate needs the language step
 // (nothing to check before the profile exists)
 if (fs.existsSync(path.join(getProfileDir(), "preferences.yaml"))) {
@@ -198,6 +220,21 @@ if (fs.existsSync(path.join(getProfileDir(), "preferences.yaml"))) {
       rules.forEach((rule, index) => {
         if (rule.type === "language_gate" && rule.enabled) console.log(`    ! deal_breakers.${index} (${rule.id}): a language gate does nothing, the market has no local-language step`);
       });
+    }
+    if (rules.some((rule) => rule.type === "visa_not_offered" && rule.enabled)) {
+      let needs: boolean | null = null;
+      try {
+        needs = parseConfigText("me", readConfigText("me")).needs_visa_sponsorship;
+      } catch {
+        // me.yaml is reported above; the filter then leaves the visa rule out
+      }
+      if (needs !== true) {
+        rules.forEach((rule, index) => {
+          if (rule.type === "visa_not_offered" && rule.enabled) {
+            console.log(`    ! deal_breakers.${index} (${rule.id}): a visa rule does nothing, ${needs === false ? "me.yaml needs_visa_sponsorship is false" : "me.yaml cannot be read"}`);
+          }
+        });
+      }
     }
   }
 }

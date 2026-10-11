@@ -211,6 +211,13 @@
       "when": 1791642798205,
       "tag": "0029_ux_seen_closed",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1791746089912,
+      "tag": "0030_job_visa",
+      "breakpoints": true
     }
   ]
 }

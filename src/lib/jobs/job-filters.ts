@@ -19,9 +19,10 @@ export function needsCityGroups(filters: ViewFilters): boolean {
 /**
  * The categorical and numeric part of a set of view filters as the job queries take it (what Today's `extra` takes).
  * Dates and toggles stay with the caller. A city may be a group (a metro area): the query gets the union of the members of
- * all picked cities. `cityGroups` may be null when no city is picked.
+ * all picked cities. `cityGroups` may be null when no city is picked. `visa`: the visa filter shows and its table exists
+ * (`visaFilterAvailable`); otherwise a saved `visa` value is ignored (and kept in the URL / view).
  */
-export function toJobFilters(filters: ViewFilters, context: { cityGroups: readonly CityGroup[] | null }): TodayExtraFilters {
+export function toJobFilters(filters: ViewFilters, context: { cityGroups: readonly CityGroup[] | null; visa?: boolean }): TodayExtraFilters {
   const cities = filterValues(filters, "city");
   const members = context.cityGroups ? [...new Set(cities.flatMap((city) => cityMembers(context.cityGroups ?? [], city)))] : [];
   return {
@@ -39,5 +40,6 @@ export function toJobFilters(filters: ViewFilters, context: { cityGroups: readon
     salaryDisclosed: filters.salary === true,
     // With traps.yaml off the pages show no trap, so a saved trap filter does nothing either
     trap: filters.trap !== undefined && trapsEnabled() ? filters.trap : null,
+    visa: filters.visa !== undefined && context.visa === true ? filters.visa : null,
   };
 }

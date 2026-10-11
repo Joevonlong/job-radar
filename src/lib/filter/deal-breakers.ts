@@ -13,6 +13,9 @@ import type { DealBreaker } from "@/lib/config/schemas/preferences";
 import { isGermanRequirement, type GermanLevel } from "@/lib/domain/types";
 import { requiredLevelSpan } from "@/lib/pipeline/language";
 import { sentenceAround } from "@/lib/signals/quote";
+import { detectVisa } from "@/lib/visa/detect";
+import type { CompiledVisaRules } from "@/lib/visa/rules";
+import type { VisaKind } from "@/lib/visa/types";
 
 import { wholeWordSource } from "./rules";
 
@@ -20,13 +23,18 @@ import { wholeWordSource } from "./rules";
 const CEFR: readonly string[] = ["A1", "A2", "B1", "B2", "C1", "C2"];
 const NATIVE_RANK = CEFR.length;
 
+/** What the rules read of me.yaml: the languages (a language gate) and whether the user needs sponsorship (a visa rule). */
+export type DealBreakerMe = Pick<MeConfig, "languages"> & Partial<Pick<MeConfig, "needs_visa_sponsorship">>;
+
 /** What the rules need besides the job: the limits and the language the gate compares. */
 export interface DealBreakerContext {
   /** The market's local language (`market.language.code`); null = the language step is off, a language gate does nothing. */
   language: string | null;
-  /** me.yaml, or null when it cannot be read (a gate without `at_least` then does nothing). */
-  me: Pick<MeConfig, "languages"> | null;
+  /** me.yaml, or null when it cannot be read (a gate without `at_least` and a visa rule then do nothing). */
+  me: DealBreakerMe | null;
   limits: DealBreakerLimits;
+  /** The visa patterns of the market packs (`compileVisaRules`); absent = none, a visa rule never vetoes. */
+  visa?: CompiledVisaRules | null;
 }
 
 /** The fields of a job the rules read. */
@@ -35,9 +43,11 @@ export interface DealBreakerJob {
   description: string | null;
   /** `jobs.german_level_required`: the pipeline's rule reading of the local language (never the AI's). */
   germanLevel: GermanLevel;
+  /** The company's `name_norm` (the visa rule: a company named like a visa word counts only combined visa phrases). */
+  companyNameNorm?: string | null;
 }
 
-export type DealBreakerWarningCode = "no_language_step" | "me_unreadable" | "too_many_rules" | "pattern_too_long" | "too_slow";
+export type DealBreakerWarningCode = "no_language_step" | "me_unreadable" | "visa_not_needed" | "too_many_rules" | "pattern_too_long" | "too_slow";
 
 export type DealBreakerLimits = PipelineConfig["filter"]["deal_breakers"];
 
@@ -66,7 +76,12 @@ interface CompiledPhrase {
   unless: RegExp[];
 }
 
-export type CompiledDealBreaker = CompiledGate | CompiledPhrase;
+interface CompiledVisa {
+  rule: Extract<DealBreaker, { type: "visa_not_offered" }>;
+  visa: CompiledVisaRules | null;
+}
+
+export type CompiledDealBreaker = CompiledGate | CompiledPhrase | CompiledVisa;
 
 export interface CompiledDealBreakers {
   rules: readonly CompiledDealBreaker[];
@@ -76,6 +91,8 @@ export interface CompiledDealBreakers {
 }
 
 const isGate = (rule: CompiledDealBreaker): rule is CompiledGate => rule.rule.type === "language_gate";
+const isVisa = (rule: CompiledDealBreaker): rule is CompiledVisa => rule.rule.type === "visa_not_offered";
+const isPhrase = (rule: CompiledDealBreaker): rule is CompiledPhrase => rule.rule.type === "phrase";
 
 /**
  * The user's rank of the local language (-1 = none listed, 0..5 = A1..C2, 6 = native): the same reading as
@@ -141,6 +158,18 @@ export function compileDealBreakers(rules: readonly DealBreaker[], context: Deal
         return;
       }
       compiled.push({ rule, threshold: userLocalRank(context.me, context.language) + 1 });
+      return;
+    }
+    if (rule.type === "visa_not_offered") {
+      if (context.me === null) {
+        warnings.push({ id: rule.id, code: "me_unreadable" });
+        return;
+      }
+      if (context.me.needs_visa_sponsorship !== true) {
+        warnings.push({ id: rule.id, code: "visa_not_needed" });
+        return;
+      }
+      compiled.push({ rule, visa: context.visa ?? null });
       return;
     }
     if ([...rule.terms, ...rule.patterns, ...rule.unless].some((text) => text.length > limits.max_pattern_chars)) {
@@ -226,6 +255,18 @@ function gateHits(job: DealBreakerJob, rule: CompiledGate): boolean {
   return isGermanRequirement(job.germanLevel) && CEFR.indexOf(job.germanLevel) >= rule.threshold;
 }
 
+/**
+ * The visa rule: the JD refuses sponsorship or asks for a permit (`not_offered`, computed on the spot from the packs' patterns,
+ * hidden text included: the stored check may differ, see docs/visa-sponsorship.md). The first quote of that verdict, or null.
+ */
+function visaRefusal(job: DealBreakerJob, rule: CompiledVisa): { quote: string; offset: number; kind: VisaKind } | null {
+  if (rule.visa === null || !job.description) return null;
+  const result = detectVisa(job.description, rule.visa, { companyNameNorm: job.companyNameNorm ?? null });
+  if (result.status !== "not_offered") return null;
+  const evidence = result.evidence.find((e) => e.status === "not_offered");
+  return evidence ? { quote: evidence.quote, offset: evidence.offset, kind: evidence.kind } : null;
+}
+
 /** Test texts as long as the text a pattern searches: a long line without a match is where backtracking shows. */
 function probeTexts(source: string, length: number): string[] {
   const filler = "Lorem ipsum 100 % vor Ort, dolor-sit_amet 42 Reisetätigkeit ";
@@ -306,15 +347,15 @@ export interface DealBreakerRun {
 export function startDealBreakerRun(compiled: CompiledDealBreakers, timeBox: TimeBox): DealBreakerRun {
   const run: DealBreakerRun = { timeBox, limits: compiled.limits, order: compiled.rules.map((rule) => rule.rule.id), active: [], warnings: [] };
   for (const rule of compiled.rules) {
-    if (!isGate(rule) && !ruleIsFast(rule, compiled.limits, timeBox)) run.warnings.push({ id: rule.rule.id, code: "too_slow" });
+    if (isPhrase(rule) && !ruleIsFast(rule, compiled.limits, timeBox)) run.warnings.push({ id: rule.rule.id, code: "too_slow" });
     else run.active.push({ rule, left: compiled.limits.rule_budget_ms });
   }
   return run;
 }
 
 /**
- * The ids of the rules that veto each job of `jobs`, in the order of the file. Each phrase rule runs over the whole batch in
- * one time box: a rule that uses up its budget is stopped where it is, keeps the vetoes it found, does nothing for the rest
+ * The ids of the rules that veto each job of `jobs`, in the order of the file. Each phrase rule, and the visa rule, runs over the
+ * whole batch in one time box: a rule that uses up its budget is stopped where it is, keeps the vetoes it found, does nothing for the rest
  * of the run, and is reported in `run.warnings` (`too_slow`). A rule that did not judge a job (left out as too slow, or
  * stopped before it reached the job) keeps the veto the job had from it before: `previous[i]` are the ids of the rules that
  * vetoed `jobs[i]` in the stored result, so a slow machine never turns a vetoed job into a passed one. With a `deadline` (a
@@ -345,6 +386,8 @@ export function dealBreakerVetoes(
       });
       continue;
     }
+    // a phrase rule and the visa rule (the packs' patterns read every open JD) share the time box and budget
+    const hitsJob = isVisa(rule) ? (job: DealBreakerJob): boolean => visaRefusal(job, rule) !== null : (job: DealBreakerJob): boolean => phraseHit(job, rule, maxChars) !== null;
     const untilDeadline = deadline === undefined ? Infinity : deadline - performance.now();
     if (untilDeadline <= 0) return { vetoes: [], complete: false };
     const box = Math.min(entry.left, untilDeadline);
@@ -355,7 +398,7 @@ export function dealBreakerVetoes(
     const finished = run.timeBox(() => {
       for (; done < jobs.length; done += 1) {
         const job = jobs[done];
-        if (job && phraseHit(job, rule, maxChars) !== null) hits.push(done);
+        if (job && hitsJob(job)) hits.push(done);
       }
     }, box);
     entry.left -= performance.now() - started;
@@ -385,6 +428,8 @@ export interface DealBreakerExplanation {
   offset: number | null;
   /** Language gate: the level the rules read in the posting, and the user's level (or the rule's `at_least`). */
   required?: GermanLevel;
+  /** Visa rule: why the JD counts as not offering sponsorship. */
+  visaKind?: VisaKind;
   userLevel?: string;
   atLeast?: string;
 }
@@ -412,6 +457,14 @@ export function explainDealBreaker(job: DealBreakerJob, rule: DealBreaker, conte
       return { ...base, quote, field: "description", offset };
     }
     return base;
+  }
+  if (isVisa(compiled)) {
+    // within `match_ms`, like a phrase rule
+    const visa: { refusal: ReturnType<typeof visaRefusal> } = { refusal: null };
+    if (!timeBox(() => void (visa.refusal = visaRefusal(job, compiled)), context.limits.match_ms)) return null;
+    const { refusal } = visa;
+    if (refusal === null) return null;
+    return { id: rule.id, type: rule.type, quote: refusal.quote, field: "description", offset: refusal.offset, visaKind: refusal.kind };
   }
   // one job, within `match_ms`: a page never waits longer for its explanation
   const found: { hit: Hit | null } = { hit: null };
