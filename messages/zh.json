@@ -630,6 +630,7 @@
       "atLeastOne": "至少需要一项",
       "duplicates": "有重复项",
       "tooLong": "最多 {max} 个字符",
+      "tooMany": "最多 {max} 项",
       "languageCode": "语言代码须是 2–3 位小写字母，并选择等级",
       "invalidChoice": "请选择有效的选项",
       "contractConflict": "同一合同类型不能同时接受和排除",
@@ -738,6 +739,7 @@
       "blacklist_company": "公司在黑名单中：{detail}",
       "blacklist_keyword": "命中黑名单关键词：{detail}",
       "seniority_mismatch": "级别不符：{detail}",
+      "deal_breaker": "一票否决：{detail}",
       "remote_scope_unknown": "远程岗位，但没写明可以在哪里雇佣",
       "location_unknown": "岗位没写明城市",
       "remote_scope_description": "远程岗位，地点在你的范围外（{detail}），但正文写明可以在本国或所在区域受雇",
@@ -1696,6 +1698,7 @@
       "atLeastOne": "至少需要一项",
       "duplicates": "有重复项",
       "tooLong": "最多 {max} 个字符",
+      "tooMany": "最多 {max} 项",
       "languageCode": "格式不对",
       "invalidChoice": "请选择有效的选项",
       "contractConflict": "选项冲突",
@@ -3595,6 +3598,7 @@
         "blacklist_company": "公司在黑名单中",
         "blacklist_keyword": "命中黑名单关键词",
         "seniority_mismatch": "级别不符",
+        "deal_breaker": "一票否决",
         "override_exclude": "你选择了排除这条"
       }
     },
@@ -6067,6 +6071,79 @@
       "jobId": "岗位 id（来自 search_jobs 或 list_applications）",
       "status": "要保留的申请状态",
       "staleOnly": "只要超过提醒阈值还没动静的申请"
+    }
+  },
+  "dealBreakers": {
+    "title": "一票否决项",
+    "description": "在任何 AI 调用之前否决岗位的规则。被否决的岗位不会删除：它出现在“显示已过滤”里并标明规则名，在岗位页点“仍然保留”即可恢复。",
+    "aiNote": "写不成规则的条件，放到 <criteria>设置 → AI → 评分标准</criteria> 的“不可接受”里：由 AI 判断，仍会花一次打分调用。",
+    "guide": "<doc>怎么写规则</doc>",
+    "empty": "还没有一票否决项。",
+    "addGate": "添加语言门槛",
+    "addPhrase": "添加短语规则",
+    "enabled": "启用：{name}",
+    "moveUp": "上移：{name}",
+    "moveDown": "下移：{name}",
+    "remove": "删除：{name}",
+    "previewOnly": "数字是按库里现有岗位的预览；保存后下一轮过滤才生效，旧分数仍然有效。",
+    "types": {
+      "language_gate": "语言门槛",
+      "phrase": "短语"
+    },
+    "scopes": {
+      "any": "标题或正文",
+      "title": "只看标题",
+      "description": "只看正文"
+    },
+    "defaults": {
+      "gate": "{language}要求高于我的水平",
+      "phrase": "新规则"
+    },
+    "levels": {
+      "none": "无",
+      "native": "母语"
+    },
+    "fields": {
+      "label": "名字",
+      "id": "标识",
+      "idHint": "记在每个被否决的岗位上；小写字母、数字、- 和 _。",
+      "atLeast": "岗位要求的{language}等级",
+      "terms": "词",
+      "termsHint": "整词匹配，不区分大小写和重音（“Rust”不会命中“trust”）。",
+      "patterns": "正则",
+      "patternsHint": "正则表达式，不区分大小写。重复的组里不能再有重复，例如 (a+)+。",
+      "scope": "查找范围",
+      "unless": "句子命中这些时不算",
+      "unlessHint": "正则表达式：命中所在的句子若匹配其中之一，这次命中不算（例如“no travel”）。"
+    },
+    "gate": {
+      "aboveMine": "高于我的水平（{level}）",
+      "atLeast": "{level} 及以上",
+      "yourLevel": "“关于我”里的{language}：{level}。",
+      "noLevel": "“关于我”没有写{language}：岗位写了任何等级都会否决。",
+      "fixed": "固定等级：不读“关于我”里的水平。",
+      "noLanguageStep": "这个市场没有本地语言步骤，这条规则不生效。"
+    },
+    "preview": {
+      "counting": "计算中…",
+      "count": "会否决 {total} 个未关闭岗位中的 {countText} 个",
+      "countOff": "已停用；启用后会否决 {total} 个未关闭岗位中的 {countText} 个",
+      "samples": "样例",
+      "invalid": "规则写完整后才会计算。",
+      "unavailable": "无法预览：读不到数据库或 pipeline 设置。",
+      "status": {
+        "no_language_step": "不生效：这个市场没有本地语言步骤。",
+        "me_unreadable": "不生效：读不到“关于我”。",
+        "too_many_rules": "不生效：规则条数超过 pipeline.yaml 的上限（filter.deal_breakers.max_rules）。",
+        "pattern_too_long": "不生效：有正则超过 pipeline.yaml 的长度上限（filter.deal_breakers.max_pattern_chars）。"
+      }
+    },
+    "notice": {
+      "rule": "一票否决“{label}”",
+      "levels": "规则读到：{required}；你的等级：{user}。",
+      "levelsThreshold": "规则读到：{required}；这条规则在 {threshold} 及以上时否决。",
+      "inTitle": "在标题里：",
+      "noQuote": "没有可引用的原句（要求写在标题里，或命中的短语已不在正文中）。"
     }
   }
 }

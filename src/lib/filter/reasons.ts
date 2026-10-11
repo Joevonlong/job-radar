@@ -17,6 +17,7 @@ export const EXCLUDE_REASON_CODES = [
   "blacklist_company",
   "blacklist_keyword",
   "seniority_mismatch",
+  "deal_breaker",
   "override_exclude",
 ] as const;
 export type ExcludeReasonCode = (typeof EXCLUDE_REASON_CODES)[number];
@@ -55,4 +56,27 @@ const NOTE_SET: ReadonlySet<string> = new Set(NOTE_CODES);
 export function isNoteReason(raw: string): boolean {
   const { code } = parseFilterReason(raw);
   return code !== null && NOTE_SET.has(code);
+}
+
+/**
+ * The reasons in the order they are shown: the user's own decision first, then the user's deal-breakers (the rules they
+ * wrote themselves), then the rest in the order the filter found them.
+ */
+export function orderedReasons(reasons: readonly string[]): string[] {
+  const rank = (raw: string): number => {
+    const { code } = parseFilterReason(raw);
+    return code === "override_keep" || code === "override_exclude" ? 0 : code === "deal_breaker" ? 1 : 2;
+  };
+  return reasons
+    .map((raw, index) => ({ raw, index }))
+    .sort((a, b) => rank(a.raw) - rank(b.raw) || a.index - b.index)
+    .map((entry) => entry.raw);
+}
+
+/** The ids of the deal-breakers among the reasons (`deal_breaker:<id>`). */
+export function dealBreakerIds(reasons: readonly string[]): string[] {
+  return reasons.flatMap((raw) => {
+    const { code, detail } = parseFilterReason(raw);
+    return code === "deal_breaker" && detail !== null ? [detail] : [];
+  });
 }

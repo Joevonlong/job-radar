@@ -25,6 +25,9 @@ AI 标签的打分区块里有**打分标准**（`ai.yaml: scoring.criteria`）�
 在接下来几轮里逐步重打。清空标准就回到 `score-v1`。AI 写作用的语言在 `language.yaml` 里设（见 [languages.zh.md](languages.zh.md)），
 改语言不会触发重打。
 
+能写成规则的“不能接受”（岗位要求的语言等级高于你、JD 里的某个短语），更省钱的做法是在 我的画像 → 我要什么 里写成**一票否决项**：
+它在硬过滤里、任何 AI 调用之前否决岗位，不花打分调用。见 [deal-breakers.zh.md](deal-breakers.zh.md)。
+
 ## AI 标签：下拉选择
 
 - **provider 顺序**（`order`、`api_order`、各任务的 `tasks.<任务>.order`）是有序列表：上移 / 下移 / 移除，用"添加"下拉补回。可选值只有 `config/ai-options.ts` 里定义的 provider，`ai.yaml` 的 schema 也从这里取，不会两处不一致。

@@ -630,6 +630,7 @@
       "atLeastOne": "At least one is required",
       "duplicates": "Contains duplicates",
       "tooLong": "At most {max} characters",
+      "tooMany": "At most {max} entries",
       "languageCode": "Language code must be 2–3 lowercase letters, with a level",
       "invalidChoice": "Choose a valid option",
       "contractConflict": "A contract type cannot be both allowed and excluded",
@@ -738,6 +739,7 @@
       "blacklist_company": "Company on your blacklist: {detail}",
       "blacklist_keyword": "Blacklisted keyword: {detail}",
       "seniority_mismatch": "Seniority does not match: {detail}",
+      "deal_breaker": "Deal-breaker: {detail}",
       "remote_scope_unknown": "Remote, but the posting does not say where it can hire",
       "location_unknown": "The posting does not name a city",
       "remote_scope_description": "Remote, located outside your scope ({detail}), but the description says it hires in your home country or region",
@@ -1696,6 +1698,7 @@
       "atLeastOne": "At least one is required",
       "duplicates": "Contains duplicates",
       "tooLong": "At most {max} characters",
+      "tooMany": "At most {max} entries",
       "languageCode": "Wrong format",
       "invalidChoice": "Choose a valid option",
       "contractConflict": "Conflicting options",
@@ -3595,6 +3598,7 @@
         "blacklist_company": "Company on your blacklist",
         "blacklist_keyword": "Blacklisted keyword",
         "seniority_mismatch": "Seniority does not match",
+        "deal_breaker": "Deal-breaker",
         "override_exclude": "You excluded this job"
       }
     },
@@ -6067,6 +6071,79 @@
       "jobId": "The job id (from search_jobs or list_applications)",
       "status": "Application statuses to keep",
       "staleOnly": "Only applications waiting longer than the reminder thresholds"
+    }
+  },
+  "dealBreakers": {
+    "title": "Deal-breakers",
+    "description": "Rules that veto a job before any AI call. A vetoed job is not deleted: it shows under \"Show filtered\" with the rule's name, and \"Keep anyway\" on its page brings it back.",
+    "aiNote": "A condition you cannot write as a rule belongs in <criteria>Settings → AI → scoring criteria</criteria> under \"unacceptable\": the AI judges it, which still costs one scoring call.",
+    "guide": "<doc>How to write rules</doc>",
+    "empty": "No deal-breakers yet.",
+    "addGate": "Add language gate",
+    "addPhrase": "Add phrase rule",
+    "enabled": "Rule on: {name}",
+    "moveUp": "Move up: {name}",
+    "moveDown": "Move down: {name}",
+    "remove": "Remove: {name}",
+    "previewOnly": "The counts are a preview over the jobs in the database now; saving applies the rules on the next filter run, and old scores stay valid.",
+    "types": {
+      "language_gate": "Language gate",
+      "phrase": "Phrase"
+    },
+    "scopes": {
+      "any": "Title or description",
+      "title": "Title only",
+      "description": "Description only"
+    },
+    "defaults": {
+      "gate": "{language} above my level",
+      "phrase": "New rule"
+    },
+    "levels": {
+      "none": "none",
+      "native": "native"
+    },
+    "fields": {
+      "label": "Name",
+      "id": "Id",
+      "idHint": "Recorded with each vetoed job; lower case, digits, - and _.",
+      "atLeast": "Veto when the posting requires {language}",
+      "terms": "Words",
+      "termsHint": "Whole words; case and accents are ignored (\"Rust\" does not match \"trust\").",
+      "patterns": "Patterns",
+      "patternsHint": "Regular expressions, case ignored. A repeated group must not repeat inside, like (a+)+.",
+      "scope": "Look in",
+      "unless": "Unless the sentence matches",
+      "unlessHint": "Regular expressions: a hit in a sentence that matches one of these does not count (\"no travel\")."
+    },
+    "gate": {
+      "aboveMine": "above my level ({level})",
+      "atLeast": "at {level} or above",
+      "yourLevel": "Your {language} in \"About me\": {level}.",
+      "noLevel": "\"About me\" lists no {language}: any stated level vetoes.",
+      "fixed": "A fixed level: your level in \"About me\" is not read.",
+      "noLanguageStep": "This market has no local-language step, so the rule does nothing."
+    },
+    "preview": {
+      "counting": "Counting…",
+      "count": "Would veto {countText} of {total} open jobs",
+      "countOff": "Switched off; would veto {countText} of {total} open jobs",
+      "samples": "Examples",
+      "invalid": "Not counted until the rule is complete.",
+      "unavailable": "No preview: the database or the pipeline settings cannot be read.",
+      "status": {
+        "no_language_step": "Does nothing: this market has no local-language step.",
+        "me_unreadable": "Does nothing: \"About me\" cannot be read.",
+        "too_many_rules": "Does nothing: more rules than pipeline.yaml allows (filter.deal_breakers.max_rules).",
+        "pattern_too_long": "Does nothing: a pattern is longer than pipeline.yaml allows (filter.deal_breakers.max_pattern_chars)."
+      }
+    },
+    "notice": {
+      "rule": "Deal-breaker \"{label}\"",
+      "levels": "The rules read: {required}; your level: {user}.",
+      "levelsThreshold": "The rules read: {required}; the rule vetoes {threshold} or above.",
+      "inTitle": "In the title:",
+      "noQuote": "No sentence to quote (the requirement is in the title, or the rule matched a phrase that is gone)."
     }
   }
 }

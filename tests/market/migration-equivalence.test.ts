@@ -172,8 +172,10 @@ describe.each([["preferences"], ["search"]] as const)("%s.yaml", (name) => {
     const original = legacyValue(name);
     const migrated = migrateText(name, legacyText(name) ?? "");
     expect(migrated.steps).toBe(1);
-    const { market, salary_floor_year: floor, ...rest } = migrated.value;
+    // `deal_breakers` came later with an empty default: the parsed value has it, the migrated file does not
+    const { market, salary_floor_year: floor, deal_breakers: dealBreakers, ...rest } = migrated.value;
     if (name === "preferences") expect(market).toEqual({ pack: "de", country: "DE", currency: "EUR", home_language: "de" });
+    if (name === "preferences") expect({ value: dealBreakers, inFile: /^deal_breakers:/m.test(migrated.text) }).toEqual({ value: [], inFile: false });
     const back = { ...rest, remote_scope: legacyScope(rest.remote_scope), ...(floor !== undefined ? { salary_floor_eur_year: floor } : {}) };
     expect(back).toEqual(original);
     expect(migrateText(name, migrated.text).steps).toBe(0);

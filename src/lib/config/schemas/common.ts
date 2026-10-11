@@ -78,6 +78,69 @@ export const phraseRegexString = regexString.superRefine((value, ctx) => {
   if (reason !== null) ctx.addIssue({ code: "custom", message: `must be a simple phrase pattern: ${reason}` });
 });
 
+/**
+ * Why a user pattern has a nested quantifier (`(a+)+`, `(\w*)*`, `(x|y+){2,}`), or null. JavaScript regular expressions
+ * have no time limit, and a repeated group that itself repeats is the usual cause of catastrophic backtracking. A simple
+ * static check, not a complete one: a group whose body holds `*`, `+` or a `{n,m}` that allows more than one repetition
+ * must not itself be followed by one of those. Escapes and character classes are skipped.
+ */
+export function nestedQuantifierReason(source: string): string | null {
+  // one entry per open group: whether its body (or a group inside it) repeats
+  const stack: boolean[] = [];
+  let lastGroupRepeats = false;
+  let afterGroup = false;
+  const quantifierAt = (i: number): { length: number; many: boolean } | null => {
+    const char = source[i];
+    if (char === "*" || char === "+") return { length: 1, many: true };
+    if (char === "{") {
+      const repeat = /^\{(\d+)(?:(,)(\d*))?\}/u.exec(source.slice(i));
+      if (!repeat) return null;
+      const max = repeat[2] ? (repeat[3] === "" ? Infinity : Number(repeat[3])) : Number(repeat[1]);
+      return { length: repeat[0].length, many: max > 1 };
+    }
+    return null;
+  };
+  for (let i = 0; i < source.length; i += 1) {
+    const char = source[i]!;
+    if (char === "\\") {
+      const next = source[i + 1] ?? "";
+      i += 1;
+      if (/[pPuk]/u.test(next) && (source[i + 1] === "{" || source[i + 1] === "<")) i = Math.max(i, source.indexOf(source[i + 1] === "{" ? "}" : ">", i));
+      afterGroup = false;
+      continue;
+    }
+    if (char === "[") {
+      for (i += 1; i < source.length && source[i] !== "]"; i += 1) if (source[i] === "\\") i += 1;
+      afterGroup = false;
+      continue;
+    }
+    if (char === "(") {
+      stack.push(false);
+      if (source[i + 1] === "?") i += 1; // (?: (?= (?<name> …: a group modifier, not a quantifier
+      afterGroup = false;
+      continue;
+    }
+    if (char === ")") {
+      lastGroupRepeats = stack.pop() ?? false;
+      // a group that repeats inside makes its parent's body repeat too
+      if (lastGroupRepeats && stack.length > 0) stack[stack.length - 1] = true;
+      afterGroup = true;
+      continue;
+    }
+    const quantifier = quantifierAt(i);
+    if (quantifier !== null) {
+      if (afterGroup && lastGroupRepeats && quantifier.many) return `nested quantifier near position ${i}: a repeated group must not repeat inside`;
+      if (quantifier.many && stack.length > 0) stack[stack.length - 1] = true;
+      i += quantifier.length - 1;
+      if (source[i + 1] === "?") i += 1; // lazy
+      afterGroup = false;
+      continue;
+    }
+    afterGroup = false;
+  }
+  return null;
+}
+
 /** A named region of the market packs ("eu", "dach") or an ISO 3166-1 alpha-2 country code ("DE"). */
 export const regionToken = z.union([
   z.string().regex(/^[a-z][a-z0-9_]{1,31}$/, "must be a region id (lower case)"),

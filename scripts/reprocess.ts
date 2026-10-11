@@ -70,8 +70,8 @@ async function main(): Promise<number> {
     const salaries = await refreshStoredSalaries(db, { config: pipelineConfig, registry: defaultRegistry, logger, force: true });
     console.log("salaries:", JSON.stringify(salaries));
 
-    const { preferences, snapshot } = await currentPreferences(db);
-    const filter = await runFilter(db, { preferences, snapshotId: snapshot.id, pipeline: pipelineConfig, logger });
+    const { preferences, snapshot, me } = await currentPreferences(db);
+    const filter = await runFilter(db, { preferences, snapshotId: snapshot.id, pipeline: pipelineConfig, me, logger });
     console.log("filter:", JSON.stringify({ evaluated: filter.evaluated, created: filter.created, updated: filter.updated, passed: filter.passed, filteredOut: filter.filteredOut, byReason: filter.byReason }));
 
     const revalued = await revalueSignals(db, { interests, pipeline: pipelineConfig, batchSize: pipelineConfig.batch_size, force: true });

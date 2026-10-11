@@ -238,6 +238,7 @@ project 的规划在 `e2e/projects.ts`（由 `tests/e2e-projects.test.ts` 做单
   - interests 链：`chromium-interests`、`chromium-interests-suggestions`、`chromium-multi-filters`（都会把视图或接受的建议存到唯一的 `interests.yaml`）。
   - sources 链：`chromium-sources-registry` 和 `chromium-sources-discovery`（都改写 `sources.yaml`）。
   - settings 链：`chromium-settings-advanced` 和 `chromium-settings-workflow`（高级编辑器和工作流标签页改写 ui、notify、ai、sources、pipeline 配置）。
+  - `chromium-deal-breakers`（改写 `preferences.yaml` 的 `deal_breakers` 和一个岗位的过滤结果）。
   - 最后是 `chromium-market`（切换市场会改变每个页面和 `preferences.yaml`）。
 
 所以总时长不是“最慢 spec 除以 2”：这条链是有意串行的。

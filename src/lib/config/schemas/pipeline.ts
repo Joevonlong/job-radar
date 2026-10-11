@@ -7,8 +7,12 @@ import { languageRequirementSchema, type LanguageRequirement } from "@/lib/marke
 import type { Market } from "@/lib/market/types";
 
 import { nonEmptyString, nonNegativeInt, nonNegativeNumber, positiveInt, regexString } from "./common";
+import { DEAL_BREAKER_HARD_LIMITS } from "./preferences";
 
 export { regexString } from "./common";
+
+/** `filter.deal_breakers` when the file has none. */
+export const DEAL_BREAKER_DEFAULTS = { max_rules: 20, max_pattern_chars: 200, match_text_max_chars: 20_000, rule_warn_ms: 200 } as const;
 
 const regexList = z.array(regexString);
 /** Lists the market packs also supply; the user file adds to them (union), so it may leave them out. */
@@ -265,6 +269,19 @@ export const pipelineSchema = z.strictObject({
       senior: z.array(z.enum(SENIORITIES)),
       lead: z.array(z.enum(SENIORITIES)),
     }),
+    /** Limits of preferences.yaml `deal_breakers` (the user's veto rules, run on every open job each cycle). */
+    deal_breakers: z
+      .strictObject({
+        /** Most rules preferences.yaml may hold. */
+        max_rules: positiveInt.max(DEAL_BREAKER_HARD_LIMITS.rules).default(DEAL_BREAKER_DEFAULTS.max_rules),
+        /** Longest term or pattern of a rule (characters). */
+        max_pattern_chars: positiveInt.max(DEAL_BREAKER_HARD_LIMITS.patternChars).default(DEAL_BREAKER_DEFAULTS.max_pattern_chars),
+        /** Only the first this many characters of a description are searched. */
+        match_text_max_chars: positiveInt.default(DEAL_BREAKER_DEFAULTS.match_text_max_chars),
+        /** `pnpm deal-breakers:check` warns about a rule that takes longer than this over all open jobs (ms). */
+        rule_warn_ms: positiveInt.default(DEAL_BREAKER_DEFAULTS.rule_warn_ms),
+      })
+      .default(DEAL_BREAKER_DEFAULTS),
   }),
 });
 

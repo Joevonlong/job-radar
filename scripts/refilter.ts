@@ -37,7 +37,7 @@ async function main(): Promise<void> {
   const { values } = parseArgs({ options: { "dry-run": { type: "boolean" }, job: { type: "string", multiple: true } }, strict: true });
   const db = getDb();
   const pipeline = loadPipeline();
-  const { preferences, snapshot } = await currentPreferences(db);
+  const { preferences, snapshot, me } = await currentPreferences(db);
   const jobIds = (values.job ?? []).map(Number).filter((n) => Number.isInteger(n) && n > 0);
 
   const stored = new Map<number, { result: string; reasons: string[] }>();
@@ -50,7 +50,7 @@ async function main(): Promise<void> {
   const now = new Map(stored);
   if (values["dry-run"]) {
     console.log("dry run: nothing written");
-    const compiled = compileFilter(preferences, pipeline);
+    const compiled = compileFilter(preferences, pipeline, { me });
     now.clear();
     for (let afterId = 0; ; ) {
       const batch = await listFilterCandidates(db, { afterId, limit: 200 });
@@ -63,7 +63,7 @@ async function main(): Promise<void> {
       }
     }
   } else {
-    const run = await runFilter(db, { preferences, snapshotId: snapshot.id, pipeline });
+    const run = await runFilter(db, { preferences, snapshotId: snapshot.id, pipeline, me });
     console.log(`updated ${run.updated}, created ${run.created}, unchanged ${run.unchanged}`);
     for (const row of await db.select().from(schema.scores).where(eq(schema.scores.profileSnapshotId, snapshot.id))) now.set(row.jobId, { result: row.filterResult, reasons: row.filterReasons });
   }

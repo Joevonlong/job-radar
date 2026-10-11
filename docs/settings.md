@@ -24,6 +24,10 @@ current scores will be re-scored before you save; after saving those scores are 
 next runs. Clearing the criteria returns to `score-v1`. The language the AI writes in is set in `language.yaml`
 ([languages.md](languages.md)) and does not re-score anything.
 
+A dealbreaker you can write as a rule (a required language level above yours, a phrase in the posting) is cheaper as a
+**deal-breaker** on My profile → What I want: it vetoes the job in the hard filter, before any AI call, and costs no
+scoring call. See [deal-breakers.md](deal-breakers.md).
+
 ## AI tab: dropdown selection
 
 - **Provider order** (`order`, `api_order`, and each task's `tasks.<task>.order`) is an ordered list: move up / move down / remove, and use the "Add" dropdown to put one back. The only selectable values are the providers defined in `config/ai-options.ts`, and the `ai.yaml` schema takes them from there too, so the two cannot disagree.

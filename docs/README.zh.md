@@ -27,6 +27,7 @@
 | [commercial-use.zh.md](commercial-use.zh.md) | 在公司或团队里使用 Job Radar：AGPL、共用实例、抓取和 AI 订阅条款 |
 | [ai-providers.zh.md](ai-providers.zh.md) | 订阅命令行、API key 或两者都用的 AI：谁在哪里跑什么、宿主机 ai-worker、`execution` / `host_worker` / `translation` 配置、排错 |
 | [ai-usage.zh.md](ai-usage.zh.md) | AI 用量和费用统计、模型目录（`models.yaml`） |
+| [deal-breakers.zh.md](deal-breakers.zh.md) | 自己写的一票否决规则（`preferences.yaml: deal_breakers`）：语言门槛、短语、被否决的岗位会怎样、`pnpm deal-breakers:check`、回滚前要做的事 |
 | [extraction.zh.md](extraction.zh.md) | 办公方式、德语等级、中介识别、描述整理的规则；`pnpm reprocess` |
 | [signals.zh.md](signals.zh.md) | 薪酬与福利信号：档位、词表、两步提取、看板 |
 | [salary.zh.md](salary.zh.md) | 岗位页的薪资水平（按你采集的岗位做的基准、薪资网站链接）和可选的 AI 查薪资（网页搜索），`salary.yaml` |

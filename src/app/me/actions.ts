@@ -3,7 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
-import { loadMarket } from "@/lib/market";
+import { getDb } from "@/lib/db";
+import { currentMe } from "@/lib/filter";
+import { loadMarket, loadPipeline } from "@/lib/market";
+import { previewDealBreakerDrafts, previewRequestSchema, type DraftPreviewRule } from "@/lib/profile/deal-breaker-preview";
 import { invalidProfileRequest, rollbackProfile, saveProfile } from "@/lib/profile/service";
 import { syncSearchLocations, type SyncSearchLocationsResult } from "@/lib/profile/search-locations";
 import { enableMarketChannels, type RegistryActionState } from "@/lib/sources/registry/service";
@@ -69,4 +72,22 @@ export async function syncSearchLocationsAction(locations: unknown): Promise<Syn
     revalidatePath("/settings");
   }
   return result;
+}
+
+/** Examples per rule in the form's preview. */
+const PREVIEW_SAMPLES = 3;
+
+export type DealBreakerPreviewResult = { status: "done"; total: number; rules: DraftPreviewRule[] } | { status: "error"; error: "invalid" | "unavailable" };
+
+/** What the form's deal-breakers (drafts, not saved) would veto among the jobs in the database now; nothing is written. */
+export async function previewDealBreakersAction(drafts: unknown): Promise<DealBreakerPreviewResult> {
+  const parsed = previewRequestSchema.safeParse(drafts);
+  if (!parsed.success) return { status: "error", error: "invalid" };
+  try {
+    const preview = await previewDealBreakerDrafts(getDb(), parsed.data, { pipeline: loadPipeline(), me: currentMe(), sampleLimit: PREVIEW_SAMPLES });
+    return { status: "done", ...preview };
+  } catch {
+    // no database, or pipeline.yaml / the market cannot be read: the card says the preview is unavailable
+    return { status: "error", error: "unavailable" };
+  }
 }

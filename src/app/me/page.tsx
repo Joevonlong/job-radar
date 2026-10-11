@@ -7,6 +7,7 @@ import { PageHeader } from "@/components/shell/page-header";
 import { salaryAxisScale, type SalaryAxisScale } from "@/components/viz";
 import { reloadConfig } from "@/lib/config";
 import { getSchedule } from "@/lib/dashboard/context";
+import { userGermanLabelOrNull } from "@/lib/dashboard/german";
 import { countUnscoredJobs, getDb, listMonthSalaryFigures, listMonthStatedSalaries } from "@/lib/db";
 import { summarizeMonthSalaries } from "@/lib/domain/salary";
 import { isTranslatedRegion, loadMarketView } from "@/lib/market/view";
@@ -67,7 +68,7 @@ export default async function Page() {
     <div className="flex flex-col gap-6">
       <PageHeader title={t("title")} description={t("description")} />
       <ProfileIncompleteBanner missing={profileMissing} waiting={waiting} showLink={false} />
-      <ProfileEditor me={data.me} preferences={data.preferences} staleScores={data.staleScores} dbAvailable={data.dbAvailable} salaries={salaries} axis={axis} salaryMedian={salaryMedian} market={market} searchLocations={searchLocations} />
+      <ProfileEditor me={data.me} preferences={data.preferences} staleScores={data.staleScores} dbAvailable={data.dbAvailable} salaries={salaries} axis={axis} salaryMedian={salaryMedian} market={market} searchLocations={searchLocations} userLanguageLevel={userGermanLabelOrNull()} />
     </div>
   );
 }

@@ -244,3 +244,17 @@ export function explicitRequiredGermanLevels(text: string, config: PipelineConfi
   }
   return found;
 }
+
+/**
+ * Where the text asks for `level` (a clause the rules of `extractGermanLevel` read as that required level): the first such
+ * clause's span in `text`, or null. Used to quote the sentence a veto on the level rests on.
+ */
+export function requiredLevelSpan(text: string, level: GermanLevel, config: PipelineConfig): { start: number; end: number } | null {
+  const lang = compileRules(config).language;
+  if (lang === null) return null;
+  for (const clause of clauses(text)) {
+    const reading = readClause(clause, text, lang);
+    if (reading?.kind === "level" && reading.level === level) return { start: clause.start, end: clause.start + clause.text.length };
+  }
+  return null;
+}

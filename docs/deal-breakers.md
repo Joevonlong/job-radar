@@ -1,0 +1,132 @@
+# Deal-breakers
+
+[English](deal-breakers.md) | [中文](deal-breakers.zh.md)
+
+A deal-breaker is a rule you write that vetoes a job before any AI call: "the posting requires German above my level",
+"the posting says 100% on-site". The rules live in `preferences.yaml` under `deal_breakers` and are edited on **My
+profile → What I want → Deal-breakers**, or by hand in `data/profile/preferences.yaml`.
+
+They run in the hard filter, next to the salary floor and the blacklist. A vetoed job costs no AI call, because only jobs
+that pass the hard filter are scored.
+
+## What happens to a vetoed job
+
+- The job is **not deleted**. It is hidden from the lists like any other filtered job, and **Show filtered** shows it with
+  the reason "Deal-breaker: <name>". Deal-breaker reasons are listed first.
+- The job page says which rule vetoed it and quotes the posting's own sentence the rule matched. For a language gate it
+  also shows both levels ("The rules read: C1; your level: B1"), so you can see when the rules misread the posting.
+- **Keep anyway** on the job page keeps the job: it is scored from then on, and the reason stays on record. The choice is
+  per job, not per rule.
+- A job scored before you added the rule keeps its score: the list still shows it under **Show filtered**. Changing only
+  the deal-breakers does not mark any score stale. The next filter run applies the new rules to every open job in
+  place, and removing a rule brings its jobs back without re-scoring them.
+- Vetoed jobs are not scored and not sent to Telegram.
+
+## Writing rules
+
+Each rule has an `id` (lower case letters, digits, `-` and `_`; it is what each vetoed job records), a `label` (the name
+shown in the lists, at most 60 characters), `enabled` (default `true`) and a `type`. There are two types.
+
+### Language gate
+
+```yaml
+deal_breakers:
+  - id: language-gate
+    label: German above my level
+    type: language_gate
+```
+
+The gate reads the level of the market's local language that the posting **requires**: the CEFR level the pipeline's
+own rules read from the text when the job was collected. It never uses the AI's reading, so a job gets the same result
+before and after it is scored.
+
+- Without `at_least` the threshold is your own level in **About me** (`me.yaml: languages`): a required level above
+  yours vetoes. When About me lists no level for that language, any stated level vetoes.
+- With `at_least: C1` the threshold is fixed: a required level of C1 or above vetoes, and About me is not read.
+- "Preferred", "not required" and "not stated" never veto: what a posting does not say never removes it.
+- The gate covers only the market's local language (German for the DE market). A market without a local-language step
+  has nothing to read: the rule does nothing, and `pnpm config:check` warns about it.
+
+When you change your level in About me, the next filter run updates every open job.
+
+### Phrase
+
+```yaml
+deal_breakers:
+  - id: onsite-only
+    label: 100% on-site
+    type: phrase
+    patterns: ['100\s?%\s*(?:on-?site|vor Ort)']
+    scope: description
+  - id: rust
+    label: Rust jobs
+    type: phrase
+    terms: [Rust]
+    scope: title
+```
+
+- `terms`: whole words or phrases. Case and accents are ignored (`Munchen` matches `München`, `ss` matches `ß`), and a
+  term matches only as a whole word: `Rust` does not match "trust".
+- `patterns`: regular expressions, case ignored. `\b` (word boundary) only knows the letters a-z, digits and `_`:
+  `\bÜberstunden` does not match "bezahlte Überstunden". For whole words, prefer `terms`, which know every letter.
+- `scope`: `title`, `description` or `any` (default).
+- `unless`: regular expressions; a hit inside a sentence that matches one of them does not count.
+
+```yaml
+  - id: travel
+    label: Lots of travel
+    type: phrase
+    terms: [travel]
+    unless: ['\bno travel\b', 'travel (?:is )?not required']
+```
+
+This vetoes "Frequent travel to clients" but not "No travel required".
+
+Business travel over 50% has no type of its own yet. This pattern comes close in German and English postings:
+
+```yaml
+  - id: travel-over-50
+    label: Travel over 50%
+    type: phrase
+    patterns:
+      - 'Reisetätigkeit.{0,30}(?:[5-9]\d|100)\s?%'
+      - 'travel.{0,30}(?:[5-9]\d|100)\s?%'
+```
+
+It matches "Reisetätigkeit von bis zu 60 %" and "travel up to 75%", but not "Reisetätigkeit ca. 20 %" or "travel 10% of
+the time".
+
+### Limits
+
+Your patterns run on every open job in every filter run, and JavaScript regular expressions have no time limit, so:
+
+- A pattern must not nest repetitions such as `(a+)+` or `(\w*)*`: saving refuses it.
+- `pipeline.yaml: filter.deal_breakers` sets how many rules count (`max_rules`, default 20), how long one pattern may be
+  (`max_pattern_chars`, default 200) and how much of a description is read (`match_text_max_chars`, default 20,000
+  characters). Saving refuses rules over these limits.
+
+## Checking rules
+
+Each rule on the card shows how many of the open jobs in the database it would veto, with three examples. The same count
+comes from the command line:
+
+```bash
+pnpm deal-breakers:check              # every rule: count, time, examples
+pnpm deal-breakers:check --id travel  # one rule
+pnpm deal-breakers:check --limit 50 --json
+```
+
+It writes nothing. For each rule it prints the time it took over all open jobs and warns when that is over
+`pipeline.yaml: filter.deal_breakers.rule_warn_ms` (default 200 ms): a slow pattern slows every filter run.
+
+## What a rule cannot say
+
+A condition that needs judgement ("a company culture I would not like") cannot be a rule. Put it in **Settings → AI →
+scoring criteria** under "unacceptable": the AI reads it when it scores a job and puts such a job in the 0-29 band (see
+[settings.md](settings.md#ai-tab-scoring-criteria)). That still costs one scoring call per job.
+
+## Before rolling back to an older version
+
+Versions before deal-breakers do not know the `deal_breakers` key and refuse a `preferences.yaml` that has it. **Delete
+the `deal_breakers` key before you roll back.** Nothing else needs undoing: there is no database change, and the reasons
+already stored on vetoed jobs are shown as they are.

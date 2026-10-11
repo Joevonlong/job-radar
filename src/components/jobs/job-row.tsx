@@ -41,6 +41,8 @@ export interface JobListViz {
   /** The server's clock when the page was made (ISO), so hours since first seen read the same on the server and in the browser. */
   nowIso: string;
   timezone: string;
+  /** The names of the user's deal-breakers by id (`preferences.yaml`), for the reasons of filtered rows; a rule since deleted shows its id. */
+  dealBreakerLabels?: Readonly<Record<string, string>>;
 }
 
 export type RowAction = "favorite" | "interested" | "ignore" | "close";
@@ -72,8 +74,9 @@ function usePlace(job: JobListItem): string {
 function ScoreCell({ job, pushLine }: { job: JobListItem; pushLine: number }) {
   const t = useTranslations("dashboard.rank");
   const rank = job.rank;
-  // not ranked at all: the hard filter removed it, so "waiting for AI" would be wrong
-  if (rank?.filterResult === "filtered_out") {
+  // not ranked at all: the hard filter removed it, so "waiting for AI" would be wrong; a job scored before a rule removed it
+  // (a deal-breaker added later keeps the old score) shows that score as it is
+  if (rank?.filterResult === "filtered_out" && rank.rankValue === null) {
     return (
       <div data-rank="not-ranked" className="flex flex-col gap-1">
         <span className="font-display text-num-m text-ink-3" aria-hidden>
@@ -167,7 +170,7 @@ function JobRowImpl({ job, favorite, seen, mode = "default", index, active, stag
   const router = useRouter();
   const showInterested = isStatusOffered("interested", useHiddenStatuses());
   const place = usePlace(job);
-  const reasonText = useFilterReasonText({ currency: viz.salaryAxis.currency ?? "" });
+  const reasonText = useFilterReasonText({ currency: viz.salaryAxis.currency ?? "", ...(viz.dealBreakerLabels ? { dealBreakerLabels: viz.dealBreakerLabels } : {}) });
   const status = effectiveStatus(job.applicationStatus);
   const filteredOut = job.rank?.filterResult === "filtered_out";
   const reasons = filteredOut ? (job.rank?.filterReasons ?? []) : [];
@@ -230,7 +233,7 @@ function JobRowImpl({ job, favorite, seen, mode = "default", index, active, stag
             ) : null}
             {reasons.length > 0 ? (
               <div className="jb-reasons" data-slot="filter-reasons">
-                <FilterReasonText reasons={reasons} floor={{ atFilter: job.filterFloorEur ?? null, current: viz.floor, currency: viz.salaryAxis.currency ?? "" }} />
+                <FilterReasonText reasons={reasons} floor={{ atFilter: job.filterFloorEur ?? null, current: viz.floor, currency: viz.salaryAxis.currency ?? "" }} {...(viz.dealBreakerLabels ? { dealBreakerLabels: viz.dealBreakerLabels } : {})} />
               </div>
             ) : null}
           </div>

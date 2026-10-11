@@ -49,6 +49,7 @@ export function job(over: Partial<FilterJob> = {}): FilterJob {
     seniority: "senior",
     contract: "permanent",
     salary: null,
+    germanLevel: "unknown",
     ...over,
   };
 }

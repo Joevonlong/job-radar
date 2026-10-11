@@ -1,6 +1,6 @@
 import type { CycleStepContext, StepResult } from "@/lib/cycle/steps";
 import { registerCycleStep } from "@/lib/cycle/steps";
-import { ensureProfileFiles, parseConfigText, readConfigText, type PipelineConfig, type PreferencesConfig } from "@/lib/config";
+import { ensureProfileFiles, parseConfigText, readConfigText, type MeConfig, type PipelineConfig, type PreferencesConfig } from "@/lib/config";
 import { loadPipeline } from "@/lib/market";
 import type { Db } from "@/lib/db/client";
 import {
@@ -13,14 +13,15 @@ import {
   type NewFilterResult,
   type ProfileSnapshot,
 } from "@/lib/db";
-import { parseLocations, parseSalary } from "@/lib/db/queries/parse";
+import { asGermanLevel, parseLocations, parseSalary } from "@/lib/db/queries/parse";
 import { snapshotForProfileText } from "@/lib/profile/snapshots";
 import type { ChannelLogger } from "@/lib/channels/types";
 
 import { compileFilter, evaluateJob, type CompiledFilter, type FilterJob } from "./rules";
 
-export { applyOverride, compileFilter, evaluateJob, foldText, wholeWordPattern, type CompiledFilter, type FilterJob, type FilterOverride, type FilterResult, type FilterVerdict } from "./rules";
+export { applyOverride, compileFilter, evaluateJob, foldText, wholeWordPattern, type CompiledFilter, type FilterContext, type FilterJob, type FilterOverride, type FilterResult, type FilterVerdict } from "./rules";
 export * from "./reasons";
+export { checkDealBreakers, compileDealBreakers, explainDealBreaker, type DealBreakerContext, type DealBreakerExplanation, type DealBreakerWarning } from "./deal-breakers";
 
 export interface FilterRunResult {
   /** The preferences snapshot the results belong to. */
@@ -45,6 +46,8 @@ export interface FilterOptions {
   /** The snapshot `preferences` was saved as. */
   snapshotId: number;
   pipeline: PipelineConfig;
+  /** me.yaml for a language gate (`currentPreferences().me`); absent or null: such a gate does nothing. */
+  me?: Pick<MeConfig, "languages"> | null;
   /** Only these jobs (the user changed the decision about one job); default: every job. */
   jobIds?: readonly number[];
   logger?: ChannelLogger;
@@ -64,6 +67,7 @@ export function toFilterJob(row: FilterCandidate): FilterJob {
     seniority: row.seniority,
     contract: row.contract,
     salary: parseSalary(row.salaryJson),
+    germanLevel: asGermanLevel(row.germanLevel),
   };
 }
 
@@ -76,7 +80,8 @@ const sameReasons = (a: readonly string[], b: readonly string[]): boolean => a.l
  * in place; when the preferences change the snapshot changes, so every job gets a new row.
  */
 export async function runFilter(db: Db, options: FilterOptions): Promise<FilterRunResult> {
-  const compiled: CompiledFilter = compileFilter(options.preferences, options.pipeline);
+  const compiled: CompiledFilter = compileFilter(options.preferences, options.pipeline, { me: options.me ?? null });
+  for (const warning of compiled.dealBreakers.warnings) options.logger?.warn("deal-breaker not applied", { id: warning.id, reason: warning.code });
   const result: FilterRunResult = {
     snapshotId: options.snapshotId,
     evaluated: 0,
@@ -132,6 +137,17 @@ export async function runFilter(db: Db, options: FilterOptions): Promise<FilterR
 export interface CurrentPreferences {
   preferences: PreferencesConfig;
   snapshot: ProfileSnapshot;
+  /** me.yaml as it is now (a language gate compares the user's level), or null when it cannot be read. Not part of the snapshot. */
+  me: MeConfig | null;
+}
+
+/** me.yaml as it is now, or null when it is missing or invalid (only a language gate needs it; the other rules go on). */
+export function currentMe(): MeConfig | null {
+  try {
+    return parseConfigText("me", readConfigText("me"));
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -144,7 +160,7 @@ export async function currentPreferences(db: Db): Promise<CurrentPreferences> {
   const text = readConfigText("preferences");
   const preferences = parseConfigText("preferences", text);
   const snapshot = await snapshotForProfileText(db, "preferences", text);
-  return { preferences, snapshot };
+  return { preferences, snapshot, me: currentMe() };
 }
 
 /**
@@ -153,8 +169,8 @@ export async function currentPreferences(db: Db): Promise<CurrentPreferences> {
  * waiting for the next cycle. Returns the new result, or null when the job is closed or unknown.
  */
 export async function refilterJob(db: Db, jobId: number, logger?: ChannelLogger): Promise<{ filterResult: "passed" | "filtered_out"; filterReasons: string[] } | null> {
-  const { preferences, snapshot } = await currentPreferences(db);
-  const result = await runFilter(db, { preferences, snapshotId: snapshot.id, pipeline: loadPipeline(), jobIds: [jobId], logger });
+  const { preferences, snapshot, me } = await currentPreferences(db);
+  const result = await runFilter(db, { preferences, snapshotId: snapshot.id, pipeline: loadPipeline(), me, jobIds: [jobId], logger });
   if (result.evaluated === 0) return null;
   const stored = await getFilterResults(db, snapshot.id, [jobId]);
   const row = stored.get(jobId);
@@ -169,8 +185,8 @@ function requireDb(ctx: CycleStepContext): Db {
 /** Cycle step `filter` (between `pipeline` and `signals`). */
 export async function filterStep(ctx: CycleStepContext): Promise<StepResult> {
   const db = requireDb(ctx);
-  const { preferences, snapshot } = await currentPreferences(db);
-  const result = await runFilter(db, { preferences, snapshotId: snapshot.id, pipeline: loadPipeline(), logger: ctx.logger, signal: ctx.signal });
+  const { preferences, snapshot, me } = await currentPreferences(db);
+  const result = await runFilter(db, { preferences, snapshotId: snapshot.id, pipeline: loadPipeline(), me, logger: ctx.logger, signal: ctx.signal });
   return { status: result.aborted ? "partial" : "ok", result };
 }
 

@@ -31,6 +31,8 @@ interface ProfileEditorProps {
   market: MarketView;
   /** search.yaml `locations`: the cities that are searched. */
   searchLocations: readonly string[];
+  /** The user's level of the market's local language in me.yaml, null = none listed (the deal-breakers' language gate). */
+  userLanguageLevel: string | null;
 }
 
 function LoadError({ file, message }: { file: string; message: string }) {
@@ -70,7 +72,7 @@ function StaleBanner({ count }: { count: number }) {
  * The /me page body. The three Server Actions live here (not in the forms) so their state survives
  * the remount that follows every save or rollback: a form is keyed by the hash of its file.
  */
-export function ProfileEditor({ me, preferences, staleScores, dbAvailable, salaries, axis, salaryMedian, market, searchLocations }: ProfileEditorProps) {
+export function ProfileEditor({ me, preferences, staleScores, dbAvailable, salaries, axis, salaryMedian, market, searchLocations, userLanguageLevel }: ProfileEditorProps) {
   const t = useTranslations("profile");
   const [meState, saveMe, mePending] = useActionState(saveMeAction, IDLE_ACTION_STATE);
   const [prefState, savePrefs, prefPending] = useActionState(savePreferencesAction, IDLE_ACTION_STATE);
@@ -124,6 +126,7 @@ export function ProfileEditor({ me, preferences, staleScores, dbAvailable, salar
               salaryMedian={salaryMedian}
               market={market}
               searchLocations={searchLocations}
+              userLanguageLevel={userLanguageLevel}
             />
           ) : (
             <LoadError file="preferences.yaml" message={preferences.loadError ?? ""} />

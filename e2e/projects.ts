@@ -44,6 +44,8 @@ export const SERIAL_CHAIN: readonly ChainEntry[] = [
   // ui / notify / ai / sources / pipeline
   { name: "chromium-settings-advanced", spec: "settings-advanced.spec.ts" },
   { name: "chromium-settings-workflow", spec: "settings-workflow.spec.ts" },
+  // preferences.yaml deal_breakers, and one job's filter result
+  { name: "chromium-deal-breakers", spec: "deal-breakers.spec.ts" },
   // the market changes every page and preferences.yaml: last, alone
   { name: "chromium-market", spec: "market.spec.ts" },
 ];

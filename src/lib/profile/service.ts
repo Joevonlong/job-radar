@@ -9,7 +9,8 @@ import { ConfigError, ensureProfileFiles, parseConfigText, readConfigText, write
 import { meSchema } from "@/lib/config/schemas/me";
 import { preferencesSchema } from "@/lib/config/schemas/preferences";
 import { getDb, getProfileSnapshot, hashProfileYaml } from "@/lib/db";
-import { marketSettingsProblems } from "@/lib/market";
+import { dealBreakerLimitProblems } from "@/lib/filter/deal-breakers";
+import { loadPipeline, marketSettingsProblems } from "@/lib/market";
 
 import {
   meDraftSchema,
@@ -29,6 +30,15 @@ function saved(kind: ProfileName): ProfileActionState {
 async function currentHash(kind: ProfileName): Promise<string> {
   await ensureProfileFiles();
   return hashProfileYaml(readConfigText(kind));
+}
+
+/** pipeline.yaml `filter.deal_breakers`, or null when pipeline.yaml cannot be read (its own settings tab reports that). */
+function dealBreakerLimits() {
+  try {
+    return loadPipeline().filter.deal_breakers;
+  } catch {
+    return null;
+  }
 }
 
 async function failed(kind: ProfileName, formError: FormErrorKey | null, fieldErrors: FieldError[] = []): Promise<ProfileActionState> {
@@ -59,6 +69,16 @@ async function write(kind: ProfileName, candidate: unknown, baseHash: string | u
           kind,
           null,
           problems.map((p): FieldError => ({ path: `market.${p.field}`, ...(p.problem === "missing" ? { key: "required" } : p.problem === "unknown" ? { key: "invalidChoice" } : { key: "invalid", params: { message: p.detail ?? "" } }) })),
+        );
+      }
+      // the limits of pipeline.yaml (`filter.deal_breakers`): more rules or longer patterns than it allows are not saved
+      const limits = dealBreakerLimits();
+      const tooBig = limits === null ? [] : dealBreakerLimitProblems(result.data.deal_breakers, limits);
+      if (tooBig.length > 0) {
+        return failed(
+          kind,
+          null,
+          tooBig.map((p): FieldError => ({ path: ["deal_breakers", ...p.path.slice(0, 2)].join("."), key: p.kind === "too_many_rules" ? "tooMany" : "tooLong", params: { max: p.max } })),
         );
       }
       await writeConfig("preferences", result.data, options);

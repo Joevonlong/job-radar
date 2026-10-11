@@ -13,6 +13,7 @@ import {
   preferencesConfigToDraft,
   preferencesDraftToCandidate,
   toFieldErrors,
+  type DealBreakerDraft,
   type MeDraft,
   type PreferencesDraft,
 } from "@/lib/profile/draft";
@@ -41,6 +42,7 @@ const PREFS: PreferencesDraft = {
   exclude_student_roles: true,
   exclude_companies: [],
   exclude_keywords: ["Werkstudent"],
+  deal_breakers: [],
 };
 
 function meErrors(draft: MeDraft) {
@@ -136,5 +138,39 @@ describe("preferences draft", () => {
     const by = Object.fromEntries(prefErrors({ ...PREFS, remote_scope: "mars", seniority: "god" }).map((e) => [e.path, e.key]));
     expect(by["remote_scope"]).toBe("invalidChoice");
     expect(by["seniority"]).toBe("invalidChoice");
+  });
+});
+
+describe("deal-breakers in the preferences draft", () => {
+  const blank: Omit<DealBreakerDraft, "id" | "label" | "type"> = { enabled: true, at_least: "", terms: [], patterns: [], scope: "any", unless: [] };
+  const gate: DealBreakerDraft = { ...blank, id: "language-gate", label: "German above my level", type: "language_gate" };
+  const phrase: DealBreakerDraft = { ...blank, id: "travel", label: "Lots of travel", type: "phrase", terms: ["travel"], unless: ["\\bno travel\\b"], scope: "description" };
+
+  it("round-trips both types, writing only the fields of the type and no defaults", () => {
+    const draft = { ...PREFS, deal_breakers: [gate, { ...phrase, enabled: false }, { ...gate, id: "c1", label: "C1", at_least: "C1" }] };
+    const candidate = preferencesDraftToCandidate(draft) as { deal_breakers: unknown[] };
+    expect(candidate.deal_breakers).toEqual([
+      { id: "language-gate", label: "German above my level", type: "language_gate" },
+      { id: "travel", label: "Lots of travel", type: "phrase", enabled: false, terms: ["travel"], scope: "description", unless: ["\\bno travel\\b"] },
+      { id: "c1", label: "C1", type: "language_gate", at_least: "C1" },
+    ]);
+    expect(preferencesConfigToDraft(preferencesSchema.parse(candidate))).toEqual(draft);
+  });
+
+  it("drops the fields of the other type when the type changes", () => {
+    const candidate = preferencesDraftToCandidate({ ...PREFS, deal_breakers: [{ ...phrase, type: "language_gate" }] }) as { deal_breakers: unknown[] };
+    expect(candidate.deal_breakers).toEqual([{ id: "travel", label: "Lots of travel", type: "language_gate" }]);
+  });
+
+  it("reports errors on the rule's field", () => {
+    const by = Object.fromEntries(
+      prefErrors({ ...PREFS, deal_breakers: [gate, { ...gate, label: "" }, { ...phrase, id: "p", terms: [], patterns: [] }, { ...phrase, id: "q", patterns: ["(a+)+"] }] }).map((e) => [e.path, e.key]),
+    );
+    expect(by).toEqual({ "deal_breakers.1.id": "duplicates", "deal_breakers.1.label": "required", "deal_breakers.2.terms": "atLeastOne", "deal_breakers.3.patterns": "invalid" });
+  });
+
+  it("reports too many rules on the list", () => {
+    const many = Array.from({ length: 51 }, (_, i) => ({ ...gate, id: `g${i}` }));
+    expect(prefErrors({ ...PREFS, deal_breakers: many })).toEqual([{ path: "deal_breakers", key: "tooMany", params: { max: 50 } }]);
   });
 });

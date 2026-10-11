@@ -1,0 +1,52 @@
+# Posting snippets for the deal-breaker tests (made-up text, no real company). `veto`: whether the rule of the group vetoes it.
+
+# The travel example of docs/deal-breakers.md: 'Reisetätigkeit.{0,30}(?:[5-9]\d|100)\s?%' and 'travel.{0,30}(?:[5-9]\d|100)\s?%'
+travel:
+  - lang: de
+    veto: true
+    text: "Ihre Aufgaben: Betreuung von Kunden in ganz Europa. Reisetätigkeit von bis zu 60 % ist Teil der Rolle."
+  - lang: de
+    veto: true
+    text: "Wir bieten ein starkes Team. Reisetätigkeit: ca. 100% beim Kunden vor Ort."
+  - lang: de
+    veto: false
+    text: "Reisetätigkeit ca. 20 % innerhalb Deutschlands. Homeoffice möglich."
+  - lang: de
+    veto: false
+    text: "Keine Reisetätigkeit. Dafür 30 Tage Urlaub im Jahr."
+  - lang: en
+    veto: true
+    text: "You will support customers on site. Expect travel up to 75% of the time."
+  - lang: en
+    veto: true
+    text: "Travel: 50% across the DACH region."
+  - lang: en
+    veto: false
+    text: "Occasional travel (10% of the time) to our Berlin office."
+  - lang: en
+    veto: false
+    text: "No travel required. 30 days of vacation a year."
+
+# 'phrase' with patterns ['100\s?%\s*(?:on-?site|vor Ort)'], scope description
+onsite:
+  - lang: en
+    veto: true
+    text: "This role is 100% on-site in our Munich office."
+  - lang: de
+    veto: true
+    text: "Die Stelle ist zu 100 % vor Ort in Hamburg."
+  - lang: en
+    veto: false
+    text: "Hybrid: two days on-site, the rest remote."
+  - lang: de
+    veto: false
+    text: "100 % Remote möglich, gelegentlich vor Ort."
+
+# The level the pipeline's rules read in the description (DE market of the test fixtures)
+german:
+  - level: C1
+    text: "We build things. Sehr gute Deutschkenntnisse (C1) sind erforderlich. Englisch ist ein Plus."
+  - level: B2
+    text: "German B2 is a must."
+  - level: preferred
+    text: "German (B1) is nice to have."

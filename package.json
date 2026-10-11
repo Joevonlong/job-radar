@@ -55,6 +55,7 @@
     "ops:drain": "node --env-file-if-exists=.env --import tsx scripts/ops-drain.ts",
     "cycle:run": "node --env-file-if-exists=.env --import tsx scripts/cycle-run.ts",
     "refilter": "node --env-file-if-exists=.env --import tsx scripts/refilter.ts",
+    "deal-breakers:check": "node --env-file-if-exists=.env --import tsx scripts/deal-breakers-check.ts",
     "reprocess": "node --env-file-if-exists=.env --import tsx scripts/reprocess.ts",
     "company-names": "node --env-file-if-exists=.env --import tsx scripts/company-names.ts",
     "telegram:test": "node --env-file-if-exists=.env --import tsx scripts/telegram-test.ts",
