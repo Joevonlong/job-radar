@@ -9,9 +9,10 @@
  *   it is in its final state at once. The CSS in viz.css keys on `data-played="false" | "true"`.
  * - `LayoutGroup` / `Presence` / `VizMotionConfig`: thin wrappers over Motion for layout animations (rows flying
  *   to their new place when the sort changes) and exit animations (filtered rows leave before the list closes up).
+ * - `useIsPresent`: false while a child of `Presence` plays its exit (it is still in the DOM, but no longer in the list).
  * (The steps() helpers `STEPS` / `stepStyle` live in util.ts: they run in server components too.)
  */
-import { AnimatePresence, LayoutGroup as MotionLayoutGroup, MotionConfig, motion } from "motion/react";
+import { AnimatePresence, LayoutGroup as MotionLayoutGroup, MotionConfig, motion, useIsPresent as useMotionIsPresent } from "motion/react";
 import { createElement, useCallback, useEffect, useRef, useState, useSyncExternalStore, type HTMLAttributes, type ReactNode } from "react";
 
 import { cx } from "./util";
@@ -143,6 +144,15 @@ export function LayoutGroup({ id, children }: { id?: string; children: ReactNode
 /** Children that leave the tree play their `exit` animation first. `initial={false}`: no entrance on first render. */
 export function Presence({ children }: { children: ReactNode }) {
   return <AnimatePresence initial={false}>{children}</AnimatePresence>;
+}
+
+/**
+ * Inside a direct child of `Presence`: true while it is in the tree, false while it plays its exit animation. A leaving
+ * element stays in the DOM until its exit has finished (a frame-driven animation, so it can take longer on a busy
+ * machine); use this to take it out of the list's semantics at once.
+ */
+export function useIsPresent(): boolean {
+  return useMotionIsPresent();
 }
 
 /** `motion.div` etc., re-exported so pages import Motion from this file only. */

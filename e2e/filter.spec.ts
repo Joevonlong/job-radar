@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
 import { EXCLUSIVE_TAG } from "./projects";
+import { listRows } from "./list-rows";
 
 /**
  * Hard filter in the dashboard, on the seeded e2e database. Fictional seed jobs used here:
@@ -22,14 +23,14 @@ test.describe("Today", () => {
 
     await page.getByTestId("toggle-filtered").click();
     await expect(page).toHaveURL(/[?&]filtered=true/);
-    const row = page.locator("[data-job-id]", { hasText: "Site Reliability Engineer" });
+    const row = listRows(page).filter({ hasText: "Site Reliability Engineer" });
     await expect(row).toBeVisible();
     await expect(row.locator('[data-slot="filter-reasons"]')).toContainText("写明的薪资上限 €58k 低于年薪底线");
     await expect(row).toContainText("已过滤");
 
     // a reload keeps the switch
     await page.reload();
-    await expect(page.locator("[data-job-id]", { hasText: "Site Reliability Engineer" })).toBeVisible();
+    await expect(listRows(page).filter({ hasText: "Site Reliability Engineer" })).toBeVisible();
 
     await page.getByTestId("toggle-filtered").click();
     await expect(page.getByRole("link", { name: /Site Reliability Engineer/ })).toHaveCount(0);
@@ -45,11 +46,11 @@ test.describe("/jobs", () => {
     await page.getByTestId("toggle-filtered").click();
     await expect(page).toHaveURL(/filtered=true/);
     await expect(page).toHaveURL(/q=Werkstudent/);
-    const row = page.locator("[data-job-id]", { hasText: "Werkstudent Data Science" });
+    const row = listRows(page).filter({ hasText: "Werkstudent Data Science" });
     await expect(row.locator('[data-slot="filter-reasons"]')).toHaveText("学生 / 实习岗位");
 
     await page.reload();
-    await expect(page.locator("[data-job-id]", { hasText: "Werkstudent Data Science" })).toBeVisible();
+    await expect(listRows(page).filter({ hasText: "Werkstudent Data Science" })).toBeVisible();
 
     await page.getByTestId("toggle-filtered").click();
     await expect(page.getByTestId("job-list-empty")).toBeVisible();

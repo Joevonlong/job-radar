@@ -2,6 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import postgres from "postgres";
 
 import { EXCLUSIVE_TAG } from "./projects";
+import { listRow, listRows } from "./list-rows";
 
 /**
  * On the seeded e2e database: Today lists every cycle of the day, and "new since my last
@@ -85,7 +86,7 @@ test("unseen rows are bold with a dot; opening one and going back shows it seen;
     await sql`delete from job_seen where via <> 'migration'`;
   });
   await open(page, "/");
-  const rows = page.locator("[data-job-id]");
+  const rows = listRows(page);
   const total = await rows.count();
   expect(total).toBeGreaterThan(0);
   // "new since your last visit" is the sentence next to the count (Today is sorted by score: no divider)
@@ -94,7 +95,7 @@ test("unseen rows are bold with a dot; opening one and going back shows it seen;
   await expect(page.getByTestId("new-since-divider")).toHaveCount(0);
   await expect(page.locator("[data-slot=new-dot]")).toHaveCount(0);
 
-  const unseen = page.locator('[data-job-id][data-seen="false"]');
+  const unseen = listRows(page, '[data-seen="false"]');
   const unseenBefore = await unseen.count();
   expect(unseenBefore).toBeGreaterThan(1);
   await expect(page.getByTestId("unseen-count")).toHaveAttribute("data-count", String(unseenBefore));
@@ -102,25 +103,25 @@ test("unseen rows are bold with a dot; opening one and going back shows it seen;
   // bold title on an unseen row, normal weight on a seen one
   const weight = (row: import("@playwright/test").Locator) => row.locator(".jb-title").evaluate((el) => Number(getComputedStyle(el).fontWeight));
   expect(await weight(unseen.first())).toBeGreaterThanOrEqual(700);
-  const seenRow = page.locator('[data-job-id][data-seen="true"]').first();
+  const seenRow = listRows(page, '[data-seen="true"]').first();
   if ((await seenRow.count()) > 0) expect(await weight(seenRow)).toBeLessThan(700);
 
   // open the first unseen job, then the browser's back button: the row is no longer bold
-  const openedId = await unseen.first().getAttribute("data-job-id");
+  const openedId = (await unseen.first().getAttribute("data-job-id")) ?? "";
   await unseen.first().locator(".jb-title a").click();
-  await expect(page.getByTestId("job-detail")).toHaveAttribute("data-job-id", openedId ?? "");
+  await expect(page.getByTestId("job-detail")).toHaveAttribute("data-job-id", openedId);
   await expect.poll(() => withDb(async (sql) => (await sql`select via from job_seen where job_id = ${Number(openedId)}`)[0]?.via ?? null)).toBe("detail");
   await page.goBack();
   // back on Today (the detail page also carries data-job-id on several panels: only list rows have data-seen)
   await expect(page).toHaveURL(/\/(\?.*)?$/);
   await expect(page.getByTestId("job-detail")).toHaveCount(0);
-  const opened = page.locator(`[data-job-id="${openedId}"][data-seen]`);
+  const opened = listRow(page, openedId);
   await expect(opened).toHaveAttribute("data-seen", "true");
   expect(await weight(opened)).toBeLessThan(700);
   await expect(unseen).toHaveCount(unseenBefore - 1);
   // and after a reload too (it is stored)
   await page.reload();
-  await expect(page.locator(`[data-job-id="${openedId}"][data-seen]`)).toHaveAttribute("data-seen", "true");
+  await expect(listRow(page, openedId)).toHaveAttribute("data-seen", "true");
 
   // mark all seen: every row of the view is seen; the toast's undo takes back only that batch
   await page.getByTestId("mark-all-seen").click();
@@ -128,11 +129,11 @@ test("unseen rows are bold with a dot; opening one and going back shows it seen;
   await expect(page.getByTestId("unseen-count")).toHaveCount(0);
   await page.getByRole("button", { name: "撤销" }).click();
   await expect(unseen).toHaveCount(unseenBefore - 1);
-  await expect(page.locator(`[data-job-id="${openedId}"][data-seen]`)).toHaveAttribute("data-seen", "true");
+  await expect(listRow(page, openedId)).toHaveAttribute("data-seen", "true");
 
   // /jobs shows the same state, with the unseen count of the whole filtered list
   await open(page, "/jobs");
-  await expect(page.locator(`[data-job-id="${openedId}"][data-seen]`)).toHaveAttribute("data-seen", "true");
+  await expect(listRow(page, openedId)).toHaveAttribute("data-seen", "true");
   await expect(page.getByTestId("unseen-count")).toBeVisible();
   await withDb((sql) => sql`delete from job_seen where via <> 'migration'`);
 });
@@ -148,7 +149,7 @@ test("fetching a job page without showing it (a prefetch, a bot) marks nothing",
   expect(await withDb(async (sql) => (await sql`select 1 from job_seen where job_id = ${id}`).length)).toBe(0);
   // hovering its link on the list (Next prefetches it) does not either
   await open(page, `/jobs?unseen=true`);
-  const link = page.locator(`[data-job-id="${id}"] .jb-title a`);
+  const link = listRow(page, id).locator(".jb-title a");
   if ((await link.count()) > 0) {
     await link.hover();
     await page.waitForTimeout(500);

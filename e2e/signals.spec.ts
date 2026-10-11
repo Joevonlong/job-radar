@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { listRows } from "./list-rows";
 
 /**
  * Pay and benefit signals on the seeded e2e database. Fictional seed job used here:
@@ -14,13 +15,13 @@ async function open(page: Page, path: string) {
 test.describe("signals", () => {
   test("rows carry category tags, and the high-value filter keeps only jobs with an amount or equity (the default high-value categories)", async ({ page }) => {
     await open(page, "/jobs");
-    const total = await page.locator("[data-job-id]").count();
+    const total = await listRows(page).count();
     expect(total).toBeGreaterThan(3);
 
     await page.getByTestId("filter-high").click();
     await expect(page).toHaveURL(/high=true/);
     await expect(page.getByTestId("filter-high")).toHaveAttribute("aria-pressed", "true");
-    const rows = page.locator("[data-job-id]");
+    const rows = listRows(page);
     // the server re-renders after the URL changes
     await expect.poll(() => rows.count()).toBeLessThan(total);
     const filtered = await rows.count();
@@ -36,17 +37,17 @@ test.describe("signals", () => {
     await expect(page.getByTestId("filter-high")).toHaveAttribute("aria-pressed", "true");
     await page.getByTestId("filter-clear").click();
     await expect(page).not.toHaveURL(/high=/);
-    await expect.poll(() => page.locator("[data-job-id]").count()).toBe(total);
+    await expect.poll(() => listRows(page).count()).toBe(total);
   });
 
   test("Today has the same quick filter", async ({ page }) => {
     await open(page, "/");
-    const total = await page.locator("[data-job-id]").count();
+    const total = await listRows(page).count();
     await page.getByTestId("toggle-high").click();
     await expect(page).toHaveURL(/high=true/);
-    await expect.poll(() => page.locator("[data-job-id]").count()).toBeLessThan(total);
-    expect(await page.locator("[data-job-id]").count()).toBeGreaterThan(0);
-    await expect(page.locator("[data-job-id]").first()).toContainText("Applied Scientist, Clinical NLP");
+    await expect.poll(() => listRows(page).count()).toBeLessThan(total);
+    expect(await listRows(page).count()).toBeGreaterThan(0);
+    await expect(listRows(page).first()).toContainText("Applied Scientist, Clinical NLP");
   });
 
   test("on Today the three toggles (filtered, hide German, high value) keep each other", async ({ page }) => {
@@ -77,7 +78,7 @@ test.describe("signals", () => {
   });
 
   test("old links: `?t12=true` gives the same list as `?high=true` on /jobs and Today, and the filter writes only `high`", async ({ page }) => {
-    const ids = () => page.locator("[data-job-id]").evaluateAll((els) => els.map((e) => e.getAttribute("data-job-id")));
+    const ids = () => listRows(page).evaluateAll((els) => els.map((e) => e.getAttribute("data-job-id")));
     for (const base of ["/jobs", "/"]) {
       await open(page, `${base}?high=true`);
       const high = await ids();

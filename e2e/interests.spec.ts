@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { expect, test, type Page } from "@playwright/test";
+import { listRows } from "./list-rows";
 
 /**
  * Interests v2 on the seeded e2e database. The run has its own config directory
@@ -23,7 +24,7 @@ async function open(page: Page, url: string) {
   await page.waitForLoadState("networkidle");
 }
 
-const rowCount = (page: Page) => page.locator("[data-job-id]").count();
+const rowCount = (page: Page) => listRows(page).count();
 
 // One config file and one database for all tests of this file: one after another.
 test.describe.configure({ mode: "serial" });
@@ -33,7 +34,7 @@ test.afterAll(() => fs.copyFileSync(SHIPPED_FILE, INTERESTS_FILE));
 
 test("save the /jobs filters as a view: a tab appears on Today and clicking it applies the filter", async ({ page }) => {
   await open(page, "/jobs?city=M%C3%BCnchen");
-  await expect(page.locator("[data-job-id]", { hasText: MUNICH_JOB })).toBeVisible();
+  await expect(listRows(page).filter({ hasText: MUNICH_JOB })).toBeVisible();
 
   // nothing to save without filters
   await open(page, "/jobs");
@@ -66,14 +67,14 @@ test("save the /jobs filters as a view: a tab appears on Today and clicking it a
   await tabs.getByRole("radio", { name: "München ohne Deutsch" }).click();
   await expect(page).toHaveURL(/view=munchen-ohne-deutsch/);
   await expect(page.getByTestId("view-tab-munchen-ohne-deutsch")).toHaveAttribute("data-active", "true");
-  await expect(page.locator("[data-job-id]")).toHaveCount(1);
-  await expect(page.locator("[data-job-id]", { hasText: MUNICH_JOB })).toBeVisible();
+  await expect(listRows(page)).toHaveCount(1);
+  await expect(listRows(page).filter({ hasText: MUNICH_JOB })).toBeVisible();
   // the "hide German" toggle that the view carries is on
   await expect(page.getByTestId("toggle-hide-german")).toHaveAttribute("data-active", "true");
 
   // a reload keeps the view; turning a toggle on top keeps it too; turning the view's own toggle off overrides it
   await page.reload();
-  await expect(page.locator("[data-job-id]")).toHaveCount(1);
+  await expect(listRows(page)).toHaveCount(1);
   await page.getByTestId("toggle-hide-german").click();
   await expect(page).toHaveURL(/hideLang=false/);
   await expect(page).toHaveURL(/view=munchen-ohne-deutsch/);
@@ -98,9 +99,9 @@ test("a default view is applied on Today without parameters, also after a reload
   await open(page, "/");
   await expect(page).toHaveURL(/\/$/);
   await expect(page.getByTestId("view-tab-munchen-ohne-deutsch")).toHaveAttribute("data-active", "true");
-  await expect(page.locator("[data-job-id]")).toHaveCount(1);
+  await expect(listRows(page)).toHaveCount(1);
   await page.reload();
-  await expect(page.locator("[data-job-id]")).toHaveCount(1);
+  await expect(listRows(page)).toHaveCount(1);
 
   // "all" is still reachable and stays all when a toggle is used
   await page.getByTestId("view-tab-all").click();
@@ -140,7 +141,7 @@ test("a default view is applied on Today without parameters, also after a reload
 test("edit a T2 keyword and its weight: the YAML changes and the rank values are recomputed", async ({ page }) => {
   const rank = async () => {
     await open(page, "/jobs?q=Clinical%20NLP");
-    const text = await page.locator("[data-job-id]", { hasText: "Applied Scientist, Clinical NLP" }).locator("[data-rank]").first().getAttribute("data-rank-value");
+    const text = await listRows(page).filter({ hasText: "Applied Scientist, Clinical NLP" }).locator("[data-rank]").first().getAttribute("data-rank-value");
     return Number(text);
   };
   const before = await rank();
@@ -386,7 +387,7 @@ test("a saved view keeps the application status, the minimum score and the minim
   // on Today the view applies the same filters: with ignored jobs allowed back in by status, and only ranked ones
   await open(page, "/?view=mein-funnel");
   await expect(page.getByTestId("view-tab-mein-funnel")).toHaveAttribute("data-active", "true");
-  for (const status of await page.locator("[data-job-id]").evaluateAll((els) => els.map((el) => el.getAttribute("data-status")))) {
+  for (const status of await listRows(page).evaluateAll((els) => els.map((el) => el.getAttribute("data-status")))) {
     expect(["interested", "applied", "archived"]).toContain(status);
   }
 

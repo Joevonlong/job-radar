@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import postgres from "postgres";
+import { listRow } from "./list-rows";
 
 /**
  * Job detail v3 on the seeded e2e database. "Applied Scientist, Clinical NLP": rank 106 = 91 + 15 (T1 salary
@@ -221,7 +222,7 @@ test.describe("job detail: seen state", () => {
     expect(await seenVia(jobId)).toBeNull();
     // back on the list it is bold again
     await page.goto("/jobs?q=Clinical+NLP");
-    await expect(page.locator(`[data-job-id="${jobId}"]`)).toHaveAttribute("data-seen", "false");
+    await expect(listRow(page, jobId)).toHaveAttribute("data-seen", "false");
 
     // following the posting link (a new tab) marks it seen, as "source", without opening the detail page
     await context.route(/\.example\//, (route) => route.fulfill({ status: 200, body: "posting" }));
@@ -277,9 +278,9 @@ test.describe("job detail: closing a job", () => {
       await expect.poll(() => override(id)).toBe("closed:");
 
       await page.goto("/jobs?q=Developer+Experience&filtered=true");
-      await expect(page.locator(`[data-job-id="${id}"]`)).toHaveCount(0);
+      await expect(listRow(page, id)).toHaveCount(0);
       await page.getByTestId("toggle-closed").click();
-      await expect(page.locator(`[data-job-id="${id}"]`)).toBeVisible();
+      await expect(listRow(page, id)).toBeVisible();
       await page.getByRole("link", { name: new RegExp(CLOSE_TITLE) }).first().click();
       await expect(page.getByTestId("job-title")).toContainText(CLOSE_TITLE);
       await page.getByTestId("detail-reopen").click();

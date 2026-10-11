@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { expect, test, type Page } from "@playwright/test";
+import { expectNoLeavingRows, listRows } from "./list-rows";
 
 /**
  * Multi-select filters of /jobs on the seeded e2e database. Seed facts: today's jobs are in Berlin (4) and
@@ -128,11 +129,13 @@ test("save a two-city view: the file holds a list, Today has a tab with the same
   const tab = page.getByTestId("view-tabs").getByRole("radio", { name: /两个城市/ });
   await tab.click();
   await expect(page).toHaveURL(/view=/);
-  const rows = page.locator("[data-job-id]");
+  const rows = listRows(page);
   // the tab's number and the list agree (Berlin 4 + München 1 in the seed)
   const shown = Number(((await tab.textContent()) ?? "").replace(/\D/g, ""));
   expect(shown).toBeGreaterThanOrEqual(5);
   await expect(rows).toHaveCount(shown);
+  // the rows of the other tab do finish leaving
+  await expectNoLeavingRows(page);
   expect(shown).toBeLessThanOrEqual(expected);
 
   await open(page, "/interests");
@@ -144,15 +147,16 @@ test("save a two-city view: the file holds a list, Today has a tab with the same
   // reopen it from Today after a reload
   await open(page, "/");
   await page.getByTestId("view-tabs").getByRole("radio", { name: /两个城市/ }).click();
-  await expect(page.locator("[data-job-id]")).toHaveCount(shown);
+  await expect(listRows(page)).toHaveCount(shown);
+  await expectNoLeavingRows(page);
 });
 
 test("a hand-written scalar view (city: München) still applies on Today", async ({ page }) => {
   const text = fs.readFileSync(SHIPPED_FILE, "utf8").replace("views: []", "views:\n  - id: muc\n    name: 慕尼黑手写\n    default: false\n    filters:\n      city: München\n");
   fs.writeFileSync(INTERESTS_FILE, text);
   await open(page, "/?view=muc");
-  await expect(page.locator("[data-job-id]", { hasText: "Machine Learning Engineer, Perception" })).toBeVisible();
-  await expect(page.locator("[data-job-id]")).toHaveCount(1);
+  await expect(listRows(page).filter({ hasText: "Machine Learning Engineer, Perception" })).toBeVisible();
+  await expect(listRows(page)).toHaveCount(1);
   await open(page, "/interests");
   await expect(page.getByTestId("view-row").first()).toContainText("München");
   fs.copyFileSync(SHIPPED_FILE, INTERESTS_FILE);

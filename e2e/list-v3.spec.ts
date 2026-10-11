@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import postgres from "postgres";
+import { listRow, listRows } from "./list-rows";
 
 /** The graphic columns of the job list, the hover actions, the summary blocks and the phone cards on the seeded e2e database. */
 
@@ -46,7 +47,7 @@ test.describe("Today and /jobs v3", () => {
     await page.setViewportSize({ width: 1280, height: 900 });
     await open(page, "/jobs");
     await expect(page.locator('[data-slot="list-head"]')).toBeVisible();
-    const row = page.locator("[data-job-id]", { hasText: "Applied Scientist, Clinical NLP" });
+    const row = listRows(page).filter({ hasText: "Applied Scientist, Clinical NLP" });
     await expect(row.getByRole("meter", { name: "排序值" })).toBeVisible();
     await expect(row.locator('[data-salary-state="stated"]')).toContainText("€90–110k");
     await expect(row.locator('[data-slot="signal-tag"]')).toHaveCount(1);
@@ -63,7 +64,7 @@ test.describe("Today and /jobs v3", () => {
 
   test("a job without skills shows — in the skill column, never 0/0", async ({ page }) => {
     await open(page, "/jobs?q=Data+Engineer");
-    const row = page.locator("[data-job-id]", { hasText: "Data Engineer" }).first();
+    const row = listRows(page).filter({ hasText: "Data Engineer" }).first();
     await expect(row.locator('[data-slot="skills-none"]')).toHaveText(/—/);
     await expect(row).not.toContainText("0/0");
   });
@@ -72,7 +73,7 @@ test.describe("Today and /jobs v3", () => {
     await page.setViewportSize({ width: 1280, height: 900 });
     await open(page, "/");
     // a job no other spec touches (the others run in parallel)
-    const row = page.locator("[data-job-id]", { hasText: "Orbitrail AG" });
+    const row = listRows(page).filter({ hasText: "Orbitrail AG" });
     const actions = row.locator('[data-slot="row-actions"]');
     await expect(actions).toHaveCSS("opacity", "0");
     await row.hover();
@@ -90,7 +91,7 @@ test.describe("Today and /jobs v3", () => {
     await page.setViewportSize({ width: 1280, height: 900 });
     await open(page, "/");
     await page.keyboard.press("j");
-    const row = page.locator("[data-job-id]").first();
+    const row = listRows(page).first();
     await expect(row).toBeFocused();
     await page.keyboard.press("Tab"); // the title link
     await page.keyboard.press("Tab"); // ★ favorite
@@ -104,11 +105,11 @@ test.describe("Today and /jobs v3", () => {
 
   test("a sort change reorders the rows and the URL keeps it", async ({ page }) => {
     await open(page, "/jobs");
-    const first = await page.locator("[data-job-id]").first().getAttribute("data-job-id");
+    const first = await listRows(page).first().getAttribute("data-job-id");
     await page.getByTestId("filter-sort").click();
     await page.locator('[data-testid="filter-sort-option"][data-value="first_seen"]').click();
     await expect(page).toHaveURL(/sort=first_seen/);
-    await expect.poll(async () => page.locator("[data-job-id]").first().getAttribute("data-job-id")).not.toBe(first);
+    await expect.poll(async () => listRows(page).first().getAttribute("data-job-id")).not.toBe(first);
   });
 
   test("the column heads sort; a second click flips the direction, missing salaries stay last, the URL keeps it", async ({ page }) => {
@@ -119,7 +120,7 @@ test.describe("Today and /jobs v3", () => {
     await expect(page).toHaveURL(/\/jobs\?sort=salary$/);
     await expect(page.getByTestId("sort-head-salary")).toHaveAttribute("data-sort-dir", "desc");
     await expect(page.getByTestId("sort-head-salary")).toHaveAccessibleName("年薪，当前降序，点击改为升序");
-    const rows = page.locator("[data-job-id]");
+    const rows = listRows(page);
     await expect(rows.first().locator('[data-salary-state="stated"]')).toBeVisible();
     const topDesc = await rows.first().getAttribute("data-job-id");
 
@@ -155,7 +156,7 @@ test.describe("seen state on /jobs", () => {
     });
     await page.setViewportSize({ width: 390, height: 844 });
     await open(page, LIST);
-    const row = page.locator(`[data-job-id="${id}"]`);
+    const row = listRow(page, id);
     await expect(row).toHaveAttribute("data-seen", "false");
     await expect(row.locator("[data-slot=unseen-dot]")).toBeVisible();
     await expect(row).toHaveAccessibleName(new RegExp(`^未看：${TITLE.replace(/[()]/g, "\\$&")}`));
@@ -174,11 +175,11 @@ test.describe("seen state on /jobs", () => {
     await expect.poll(() => withDb(async (sql) => (await sql`select via from job_seen where job_id = ${id}`)[0]?.via ?? null)).toBe("action");
     // seen, it leaves the "unseen only" list on the next load
     await page.reload();
-    await expect(page.locator(`[data-job-id="${id}"]`)).toHaveCount(0);
+    await expect(listRow(page, id)).toHaveCount(0);
     await expect(page.getByTestId("unseen-count")).toHaveCount(0);
     await page.getByTestId("toggle-unseen").click();
     await expect(page).not.toHaveURL(/unseen=/);
-    await expect(page.locator(`[data-job-id="${id}"]`)).toHaveAttribute("data-seen", "true");
+    await expect(listRow(page, id)).toHaveAttribute("data-seen", "true");
   });
 });
 
@@ -199,7 +200,7 @@ test.describe("closing jobs on /jobs", () => {
         await sql`delete from job_closure_overrides where job_id = ${row!.id}`;
         return Number(row!.id);
       });
-      const row = page.locator(`[data-job-id="${id}"]`);
+      const row = listRow(page, id);
 
       // 390px: the fourth button sits inside the card and the page does not scroll sideways
       await page.setViewportSize({ width: 390, height: 844 });
