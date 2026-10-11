@@ -4283,7 +4283,8 @@
       "lastSuccess": "Last success",
       "window": "{days}d fetch/new",
       "postings": "Postings",
-      "reason": "Reason"
+      "reason": "Reason",
+      "actions": "Actions"
     },
     "empty": "No source matches the filters.",
     "run": {

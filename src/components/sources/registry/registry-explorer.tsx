@@ -32,7 +32,8 @@ interface ExplorerProps {
   alertPercent: number;
 }
 
-function Header({ grid, labels }: { grid: string; labels: readonly string[] }) {
+/** `actionsLabel` names the last, unlabelled column for assistive technology only. */
+function Header({ grid, labels, actionsLabel }: { grid: string; labels: readonly string[]; actionsLabel: string }) {
   return (
     <div role="row" className={cn("text-cap-style bg-soft border-border hidden border-b-bw px-3 py-2 @4xl:grid", grid)}>
       {labels.map((label, index) => (
@@ -40,6 +41,9 @@ function Header({ grid, labels }: { grid: string; labels: readonly string[] }) {
           {label}
         </div>
       ))}
+      <div role="columnheader" className="min-w-0">
+        <span className="sr-only">{actionsLabel}</span>
+      </div>
     </div>
   );
 }
@@ -120,7 +124,7 @@ export function RegistryExplorer({ view, nowIso, timeZone, readOnly, alertPercen
             {t("channels.title")} · <span data-testid="channels-count">{channelCount}</span>
           </h2>
           <div role="table" aria-label={t("channels.title")} className="rounded-card border-border bg-card shadow-e3 overflow-hidden border-bw">
-            <Header grid={CHANNEL_GRID} labels={[t("cols.status"), t("cols.source"), t("cols.enabled"), t("cols.lastRun"), t("cols.lastSuccess"), t("cols.window", { days: view.windowDays }), t("cols.reason"), ""]} />
+            <Header grid={CHANNEL_GRID} labels={[t("cols.status"), t("cols.source"), t("cols.enabled"), t("cols.lastRun"), t("cols.lastSuccess"), t("cols.window", { days: view.windowDays }), t("cols.reason")]} actionsLabel={t("cols.actions")} />
             {channelGroups.length === 0 && otherMarketRows.length === 0 ? (
               <p className="text-ink-2 px-3 py-4 text-body-sm" data-testid="channels-empty">
                 {t("empty")}
@@ -190,7 +194,7 @@ export function RegistryExplorer({ view, nowIso, timeZone, readOnly, alertPercen
             </div>
           </div>
           <div role="table" aria-label={t("boards.title")} className="rounded-card border-border bg-card shadow-e3 overflow-hidden border-bw">
-            <Header grid={BOARD_GRID} labels={[t("cols.status"), t("cols.company"), t("cols.enabled"), t("cols.lastCheck"), t("cols.lastSuccess"), t("cols.postings"), t("cols.reason"), ""]} />
+            <Header grid={BOARD_GRID} labels={[t("cols.status"), t("cols.company"), t("cols.enabled"), t("cols.lastCheck"), t("cols.lastSuccess"), t("cols.postings"), t("cols.reason")]} actionsLabel={t("cols.actions")} />
             {shown.boards.length === 0 ? (
               <p className="text-ink-2 px-3 py-4 text-body-sm" data-testid="boards-empty">
                 {t("empty")}
