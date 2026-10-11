@@ -60,9 +60,10 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
   const now = new Date();
   const db = getDb();
   const cities = await loadCityGroups(db);
-  const filters = await jobsListFilters(db, params, cities);
-  // hidden, a `visa=` in the URL is ignored but kept (no control, no chip, not counted)
+  // hidden, a `visa=` in the URL is ignored but kept (no control, no chip, not counted); read once for the filter, the list
+  // query and the badges
   const visaFilter = await visaFilterAvailable(db);
+  const filters = await jobsListFilters(db, params, { cities, visa: visaFilter });
   const visibility: FilterVisibility = { ignore: visaFilter ? [] : ["visa"] };
   const visit = await getVisitState(db);
   const seenUpTo = effectiveSeenUpTo(visit, now);
@@ -76,6 +77,7 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
       page: params.page,
       pageSize: JOBS_PAGE_SIZE,
       timezone,
+      visa: visaFilter,
     }),
     getJobFilterOptions(db),
     countJobListSeen(db, { filters, timezone, since: seenUpTo }),
@@ -83,7 +85,7 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
     countJobList(db, { filters: { ...filters, statuses: CLOSED_VIEW }, timezone }),
   ]);
   const filterFloors = await getFilterFloors(db, salaryFilteredIds(result.jobs));
-  const items = await toListItems(result.jobs, { now, timezone, filterFloors, seenUpTo, monthSalaries: { figures: salaryFigures, minSample: loadConfig("ui").salary_stats.min_sample } });
+  const items = await toListItems(result.jobs, { now, timezone, filterFloors, seenUpTo, visa: visaFilter, monthSalaries: { figures: salaryFigures, minSample: loadConfig("ui").salary_stats.min_sample } });
   // The "new since your last visit" divider when the list runs newest first (it sits on the page of the boundary only);
   // any other order says it next to the count, with a link to that order
   const newestFirst = params.sort === "first_seen" && effectiveDir(params.sort, params.dir) === "desc";

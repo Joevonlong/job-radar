@@ -354,8 +354,8 @@ export function startDealBreakerRun(compiled: CompiledDealBreakers, timeBox: Tim
 }
 
 /**
- * The ids of the rules that veto each job of `jobs`, in the order of the file. Each phrase rule runs over the whole batch in
- * one time box: a rule that uses up its budget is stopped where it is, keeps the vetoes it found, does nothing for the rest
+ * The ids of the rules that veto each job of `jobs`, in the order of the file. Each phrase rule, and the visa rule, runs over the
+ * whole batch in one time box: a rule that uses up its budget is stopped where it is, keeps the vetoes it found, does nothing for the rest
  * of the run, and is reported in `run.warnings` (`too_slow`). A rule that did not judge a job (left out as too slow, or
  * stopped before it reached the job) keeps the veto the job had from it before: `previous[i]` are the ids of the rules that
  * vetoed `jobs[i]` in the stored result, so a slow machine never turns a vetoed job into a passed one. With a `deadline` (a
@@ -386,13 +386,8 @@ export function dealBreakerVetoes(
       });
       continue;
     }
-    // the shipped visa patterns run without a time box, like the gate (they are not the user's)
-    if (isVisa(rule)) {
-      jobs.forEach((job, i) => {
-        if (visaRefusal(job, rule) !== null) hitBy[i]?.add(id);
-      });
-      continue;
-    }
+    // a phrase rule and the visa rule (the packs' patterns read every open JD) share the time box and budget
+    const hitsJob = isVisa(rule) ? (job: DealBreakerJob): boolean => visaRefusal(job, rule) !== null : (job: DealBreakerJob): boolean => phraseHit(job, rule, maxChars) !== null;
     const untilDeadline = deadline === undefined ? Infinity : deadline - performance.now();
     if (untilDeadline <= 0) return { vetoes: [], complete: false };
     const box = Math.min(entry.left, untilDeadline);
@@ -403,7 +398,7 @@ export function dealBreakerVetoes(
     const finished = run.timeBox(() => {
       for (; done < jobs.length; done += 1) {
         const job = jobs[done];
-        if (job && phraseHit(job, rule, maxChars) !== null) hits.push(done);
+        if (job && hitsJob(job)) hits.push(done);
       }
     }, box);
     entry.left -= performance.now() - started;
@@ -464,7 +459,10 @@ export function explainDealBreaker(job: DealBreakerJob, rule: DealBreaker, conte
     return base;
   }
   if (isVisa(compiled)) {
-    const refusal = visaRefusal(job, compiled);
+    // within `match_ms`, like a phrase rule
+    const visa: { refusal: ReturnType<typeof visaRefusal> } = { refusal: null };
+    if (!timeBox(() => void (visa.refusal = visaRefusal(job, compiled)), context.limits.match_ms)) return null;
+    const { refusal } = visa;
     if (refusal === null) return null;
     return { id: rule.id, type: rule.type, quote: refusal.quote, field: "description", offset: refusal.offset, visaKind: refusal.kind };
   }

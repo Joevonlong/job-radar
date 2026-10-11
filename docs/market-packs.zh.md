@@ -79,18 +79,20 @@ pnpm run doctor --only config.market
 | `not_offered.permit_required` | 要求已经持有工作许可（"You must hold a valid work permit"） |
 | `permit_alternatives` | 紧跟在 `permit_required` 说法旁边的替代办法，让这句变成不明确（"…or are eligible for an EU Blue Card"） |
 | `mention_terms`、`mention_context` | 同一句里有签证词又有语境词，算一次不明确的提及 |
-| `negation_cues` | 在 `offered` 说法前六个词内或其中出现时让它变成不明确的词（"not"、"kein…"） |
-| `exclude_context` | 匹配到的句子不是在讲签证（"sponsored events"、"Visa/Mastercard"） |
+| `negation_cues` | 让 `offered` 说法变成不明确的词（"not"、"kein…"）：出现在说法里面、说法前 `pipeline.yaml job_checks.visa.negation_words_before` 个词内，或说法后同一分句的 `negation_words_after` 个词内 |
+| `clause_breaks` | 上面那个分句在哪里结束（"; "、" but "、" aber "）：之后的否定词不算。逗号和冒号不结束分句（"Relocation support: No"） |
+| `exclude_context` | 匹配到的句子不是在讲求职者的签证（"sponsored events"、"Visa/Mastercard"、"our customers with visa applications"） |
 | `exclude_companies` | 本身就是签证词的公司名（规范化后）：对这些公司只算标了 `combo: true` 的说法 |
 | `abbreviations` | 点号不表示句子结束的缩写（"z.B"、"inkl"） |
 | `prefilter` | 快速初筛，见下 |
 
-`offered`、`not_offered.*` 和 `mention_terms` 的条目是 `{pattern, combo}`：`combo: true` 表示这个说法把签证词和语境连在一起，
-所以对名字是签证词的公司也算。说法是带 `iu` 标志的正则；写错时 `pnpm config:check` 会指出路径（`visa.offered[3]`）。
+`offered`、`not_offered.*` 和 `mention_terms` 的条目是 `{pattern, combo, list_item}`：`combo: true` 表示这个说法把签证词和语境连在一起，
+所以对名字是签证词的公司也算；`list_item: true` 表示只在它自己是一个列表项时才算（单独的名词 "- Visa sponsorship"），当标题时不算（"## Visa sponsorship" 下一行 "Not available"）。说法是带 `iu` 标志的正则；写错时 `pnpm config:check` 会指出路径（`visa.offered[3]`）。
 
 **`prefilter`**：签证一票否决每轮过滤都要读所有未关闭的岗位，所以一段文字或一句话如果不匹配任何 prefilter，就直接跳过，
 不再跑其他说法。前提是 **`offered`、`not_offered` 或 `mention_terms` 能匹配的每个说法里都含有一个 prefilter 匹配**：
-加了一个带新关键词的说法（"Aufenthaltstitel"），也要把这个词加进 `prefilter`，否则永远看不到。`prefilter` 留空就逐句读（更慢）。
+加了一个带新关键词的说法（"Aufenthaltstitel"），也要把这个词加进 `prefilter`，否则永远看不到。只有含 prefilter 匹配的行（连同它上面的标题）才切成句子。
+`pnpm config:check` 会对正则文本里没有 prefilter 匹配的说法给出警告（粗略检查：看的是正则本身，不是它能匹配的内容）。`prefilter` 留空就逐句读（更慢）。
 
 改了说法之后，`pnpm visa:scan` 预览会改什么，`pnpm visa:scan --write` 写入；规则是每个结果输入的一部分，所以每轮也会把所有岗位重新检查一遍。
 

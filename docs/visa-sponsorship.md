@@ -53,17 +53,27 @@ or any other service.
 
 ## How a posting is read
 
-The description is cut into pieces: sentences, list items, and a short heading line ending in ":" joined with the line
-after it ("Visa sponsorship:" / "Not available"). Each piece is judged on its own:
+The description is cut into pieces: sentences, list items, and a short heading line joined with the line after it. A
+heading is a line of at most `heading_max_chars` characters that ends in ":", starts with "#" (markdown), or is a single
+phrase without end punctuation: "Visa sponsorship:" / "Not available", "## Visa sponsorship" / "Not available for this
+role.". A heading followed by a list stays on its own, and so does a heading followed by another heading. Each piece is
+judged on its own:
 
-1. A piece about something else (payment cards: "Visa/Mastercard"; "sponsored events"; "Sponsoring von
-   Veranstaltungen") is skipped.
-2. An "offered" phrase with a negation word ("not", "unable", "without", "nicht", "kein…", "leider", …) within the six
-   words before it is `unclear`, never `offered`.
-3. A "permit required" phrase next to an alternative ("…or are eligible for an EU Blue Card", "bei Bedarf unterstützen
+1. A piece about something else is skipped: payment cards ("Visa/Mastercard"), "sponsored events", "Sponsoring von
+   Veranstaltungen", and the employer's own product or customers ("We help our customers with visa applications", "You
+   will support our immigration team", "Wir unterstützen Unternehmen bei der Relocation").
+2. An "offered" phrase with a negation word ("not", "no", "unable", "without", "nicht", "kein…", "leider", …) is
+   `unclear`, never `offered`. The negation counts inside the phrase, within `negation_words_before` words before it
+   ("We do not offer relocation support"), and within `negation_words_after` words after it until the clause ends
+   ("Relocation support is not available", "Relocation support: No", "Relocation-Support bieten wir nicht an"). A clause
+   ends at ";", a dash, "but", "however", "aber", "jedoch" and the like, so "We offer visa sponsorship, but no signing
+   bonus" is still `offered`.
+3. A bare noun in a list ("- Visa sponsorship", "- Visa-Unterstützung") counts as `offered` only as a list item of its
+   own, never as a heading.
+4. A "permit required" phrase next to an alternative ("…or are eligible for an EU Blue Card", "bei Bedarf unterstützen
    wir") is `unclear`, not a refusal.
-4. A refusal and an offer in the same piece are `unclear`.
-5. A visa word together with a context word ("visa" + "relocation", "Visum" + "unterstützen") with nothing clearer is an
+5. A refusal and an offer in the same piece are `unclear`.
+6. A visa word together with a context word ("visa" + "relocation", "Visum" + "unterstützen") with nothing clearer is an
    unclear mention. The bare word "Visa" alone never counts.
 
 The job's result: `offered` and `not_offered` pieces together make it `unclear` (both quoted); otherwise the one clear
@@ -109,6 +119,9 @@ job_checks:
 | `job_checks.visa.per_cycle_limit` | 2000 | jobs checked per cycle at most |
 | `job_checks.visa.max_quotes` | 3 | quotes kept per job (at most 10) |
 | `job_checks.visa.quote_max_chars` | 280 | longest quote; a longer sentence is cut around the phrase |
+| `job_checks.visa.negation_words_before` | 6 | words before an "offered" phrase searched for a negation |
+| `job_checks.visa.negation_words_after` | 5 | words after it, within its clause, searched for a negation |
+| `job_checks.visa.heading_max_chars` | 60 | longest line that counts as a heading and is read with the next line |
 
 ## As a deal-breaker
 

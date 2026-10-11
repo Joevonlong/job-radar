@@ -120,6 +120,7 @@ closed_posting:
 # Was eine Stellenanzeige zu Visum / Arbeitserlaubnis sagt (German patterns of the visa check; docs/visa-sponsorship.md).
 # Regex, case-insensitive with Unicode: word boundaries are (?<![\p{L}\p{N}]) / (?![\p{L}\p{N}]); \b does not know umlauts.
 # Compounds are written as stems: Visa-?(?:sponsoring|unterstützung), Visums?unterstützung, \p{L}*visum\p{L}*.
+# Keys and `combo` / `list_item` as in the generic pack.
 visa:
   offered:
     # "Wir unterstützen dich beim Visumprozess", "Relocation-Support inkl. Visumprozess", "Hilfe bei der Blauen Karte EU"
@@ -128,11 +129,13 @@ visa:
     # "Visa-Sponsoring ist möglich", "Visumsunterstützung wird angeboten"
     - pattern: '(?<![\p{L}\p{N}])(?:visa|visum|visums)-?\s*(?:sponsoring|sponsorship|unterstützung)\s+(?:ist\s+|wird\s+)?(?:möglich|angeboten|vorhanden|inklusive|gegeben)(?![\p{L}\p{N}])'
       combo: true
-    - pattern: '(?<![\p{L}\p{N}])relocation[-\s]?(?:support|paket|package|unterstützung|service|budget|pauschale)(?![\p{L}\p{N}])'
+    # "Relocation-Paket", "Umzugskostenzuschuss", "Umzugspauschale"
+    - pattern: '(?<![\p{L}\p{N}])(?:relocation[-\s]?(?:support|paket|package|unterstützung|service|budget|pauschale)|umzugs-?(?:zuschuss|pauschale|kosten(?:übernahme|erstattung|zuschuss|pauschale)|hilfe|unterstützung|service|paket|budget|bonus))(?![\p{L}\p{N}])'
       combo: true
     # A list item that is only the noun: "- Visasponsoring", "- Visa-Unterstützung"
     - pattern: '^(?:visa|visum|visums)-?\s*(?:sponsoring|unterstützung)(?:\s+(?:und|&|\+)\s+relocation\p{L}*)?\s*[.!]?$'
       combo: true
+      list_item: true
   not_offered:
     no_sponsorship:
       # "Ein Visa-Sponsoring ist leider nicht möglich"
@@ -155,6 +158,9 @@ visa:
       # "Voraussetzung ist eine gültige Arbeitserlaubnis"
       - pattern: '(?<![\p{L}\p{N}])(?:voraussetzung|erforderlich)\s*(?:ist|sind|:)?\s*(?:eine\s+)?(?:gültige\s+)?(?:arbeitserlaubnis|arbeitsgenehmigung|aufenthaltstitel)(?![\p{L}\p{N}])'
         combo: true
+      # "Du benötigst eine gültige Arbeitserlaubnis", "Du brauchst eine Arbeitserlaubnis"
+      - pattern: '(?<![\p{L}\p{N}])(?:benötigst|brauchst|benötigen|brauchen)\s+(?:du\s+|sie\s+)?(?:bereits\s+)?(?:eine\s+)?(?:gültige\s+)?(?:arbeitserlaubnis|arbeitsgenehmigung|aufenthalts-?\s*(?:und\s+arbeitserlaubnis|titel|genehmigung))(?![\p{L}\p{N}])'
+        combo: true
       # "Du musst in Deutschland arbeitsberechtigt sein"
       - pattern: '(?<![\p{L}\p{N}])(?:musst|müssen|solltest|sollten)(?:\s+[\p{L}]+){0,3}?\s+arbeitsberechtigt(?![\p{L}\p{N}])'
         combo: true
@@ -176,9 +182,15 @@ visa:
     - 'kein\p{L}*'
     - leider
     - ohne
+  clause_breaks:
+    - '(?<![\p{L}\p{N}])(?:aber|jedoch|sondern|während|wobei|allerdings|außer)(?![\p{L}\p{N}])'
+    - '(?<![\p{L}\p{N}])und\s+(?:wir|du|sie|ihr|es|unser\p{L}*|dein\p{L}*|euer\p{L}*)(?![\p{L}\p{N}])'
   exclude_context:
     - '(?<![\p{L}\p{N}])sponsoring\s+von\s+(?:veranstaltungen|events?|konferenzen)(?![\p{L}\p{N}])'
     - '(?<![\p{L}\p{N}])visa\s*(?:/|,|&|und|oder)\s*(?:master\s*card|amex|american\s+express|maestro|girocard)(?![\p{L}\p{N}])'
+    # "Wir unterstützen Unternehmen bei der Relocation ihrer Fachkräfte", "Du unterstützt unser Immigration-Team"
+    - '(?<![\p{L}\p{N}])(?:kunden|kundinnen|mandanten|unternehmen|firmen|arbeitgeber|arbeitgebern)\s+(?:bei|mit|im|in)\s+(?:[\p{L}-]+\s+){0,3}?(?:\p{L}*visum|visa|aufenthalt|relocation|umzug|einwanderung|immigration)'
+    - '(?<![\p{L}\p{N}])(?:unterstützt|unterstützen|verstärkst|verstärken)\s+(?:unser|unsere|das)\s+\p{L}*(?:immigration|relocation|visa|mobility)\p{L}*[-\s]?team(?![\p{L}\p{N}])'
   abbreviations: [z.B, z, B, ca, inkl, bzw, usw, u.a, d.h, ggf, evtl, nr, z.T, bspw, max, min, std, gmbh, mio, tsd]
   # A quick first look (speed): a JD or sentence with none of these (or of the generic pack's) is skipped. Every phrase the
   # patterns above can match contains one of them; keep it so when you add a pattern.

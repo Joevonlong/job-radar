@@ -17,7 +17,13 @@ const unfiltered: CompiledVisaRules = { ...rules, prefilter: null };
 
 const FIXTURES = path.resolve(import.meta.dirname, "../fixtures/visa");
 
-const detect = (text: string, options: Parameters<typeof detectVisa>[2] = {}): VisaResult => detectVisa(text, rules, options);
+/** Reads a text three ways, which must agree: lines cut only after a prefilter match, every line cut, no prefilter at all. */
+const detect = (text: string, options: Parameters<typeof detectVisa>[2] = {}): VisaResult => {
+  const result = detectVisa(text, rules, options);
+  expect(detectVisa(text, rules, { ...options, unfiltered: true }), `every line: ${text}`).toEqual(result);
+  expect(detectVisa(text, unfiltered, options), `no prefilter: ${text}`).toEqual(result);
+  return result;
+};
 const status = (text: string, options: Parameters<typeof detectVisa>[2] = {}): string => detect(text, options).status;
 
 describe("detectVisa: the synthetic postings", () => {
@@ -36,7 +42,6 @@ describe("detectVisa: the synthetic postings", () => {
         else expect(result.evidence.length).toBeGreaterThan(0);
         if (file.includes("permit")) expect(visaKindOf(result)).toBe("permit_required");
         else if (expected === "not_offered") expect(visaKindOf(result)).toBe("no_sponsorship");
-        expect(detectVisa(text, unfiltered)).toEqual(result);
       });
     }
   }
@@ -71,7 +76,7 @@ describe("detectVisa: English phrases", () => {
     expect(visaKindOf(detect("You must be eligible to work in the EU without sponsorship."))).toBe("permit_required");
   });
 
-  it("never reads a negated offer as offered: six words of negation guard", () => {
+  it("never reads a negated offer as offered: negation before, inside or after the phrase", () => {
     for (const text of [
       "We do not offer visa sponsorship for this role.",
       "Unfortunately we are not able to provide relocation support.",
@@ -79,8 +84,41 @@ describe("detectVisa: English phrases", () => {
       "No relocation support is part of this role.",
       "This role comes without relocation support.",
       "We never include relocation support for interns.",
+      // after the phrase, in its clause
+      "Relocation support is not available for this role.",
+      "Relocation support: No",
+      "Relocation package: not included.",
+      "Unterstützung beim Umzug ist leider nicht möglich.",
+      "Hilfe beim Visum können wir leider nicht anbieten.",
+      "Relocation-Support bieten wir nicht an.",
+      // a heading without a colon, read with the next line
+      "## Visa sponsorship\nNot available for this role.",
+      "Visa sponsorship\nNot available.",
+      "## Relocation support\nNot available",
+      "Visa sponsorship\n\nNot available for this role.",
     ])
       expect(status(text), text).not.toBe("offered");
+  });
+
+  it("ends the clause after the phrase at a clause break: a negation beyond it does not count", () => {
+    expect(status("We offer visa sponsorship and relocation support, but no signing bonus.")).toBe("offered");
+    expect(status("Relocation support is available; no prior German needed.")).toBe("offered");
+    expect(status("Wir bieten Relocation-Support, aber keinen Firmenwagen.")).toBe("offered");
+  });
+
+  it("takes the negation window from pipeline.yaml", () => {
+    const pipeline = shippedPipeline();
+    const visa = pipeline.job_checks.visa;
+    const noAfter = compileVisaRules({ ...pipeline, job_checks: { ...pipeline.job_checks, visa: { ...visa, negation_words_after: 0 } } });
+    expect(detectVisa("Relocation support: No", noAfter).status).toBe("offered");
+    const noBefore = compileVisaRules({ ...pipeline, job_checks: { ...pipeline.job_checks, visa: { ...visa, negation_words_before: 0 } } });
+    expect(detectVisa("This role comes without relocation support.", noBefore).status).toBe("offered");
+  });
+
+  it("counts a bare noun only as a list item of its own", () => {
+    expect(status("Benefits:\n- Visa sponsorship\n- Gym")).toBe("offered");
+    expect(status("* Immigration support and relocation")).toBe("offered");
+    expect(status("## Visa sponsorship\nAsk us.")).not.toBe("offered");
   });
 
   it("never reads the six guard cases as offered", () => {
@@ -115,6 +153,11 @@ describe("detectVisa: English phrases", () => {
   it("reads a visa word with a context word as an unclear mention", () => {
     expect(status("Questions about visas and relocation? Ask us in the first call.")).toBe("unclear");
   });
+
+  it("reads relocation that is not offered as unclear, never as not mentioned", () => {
+    expect(status("Relocation is not offered.")).toBe("unclear");
+    expect(status("Relocation is covered.")).toBe("offered");
+  });
 });
 
 describe("detectVisa: German word forms", () => {
@@ -128,6 +171,16 @@ describe("detectVisa: German word forms", () => {
     expect(visaKindOf(detect("Eine Aufenthalts- und Arbeitserlaubnis ist Voraussetzung."))).toBe("permit_required");
     expect(status("Ein Visa-Sponsoring ist leider nicht möglich.")).toBe("not_offered");
     expect(status("Wir bieten keine Visumsunterstützung.")).toBe("not_offered");
+    expect(status("Wir zahlen einen Umzugszuschuss.")).toBe("offered");
+    expect(status("Umzugskostenpauschale für neue Kolleg:innen")).toBe("offered");
+  });
+
+  it("reads a permit the candidate needs as permit_required", () => {
+    for (const text of ["Du benötigst eine Arbeitserlaubnis für Deutschland.", "Du brauchst eine gültige Arbeitserlaubnis.", "Sie benötigen eine Arbeitsgenehmigung."]) {
+      const result = detect(text);
+      expect(result.status, text).toBe("not_offered");
+      expect(visaKindOf(result), text).toBe("permit_required");
+    }
   });
 
   it("reads a negated German offer as not offered", () => {
@@ -143,6 +196,17 @@ describe("detectVisa: what is not about visas", () => {
       "We accept Visa/Mastercard in our shop.",
       "Experience with Visa payments and card networks.",
       "Unsere Kunden zahlen per Visa oder Mastercard.",
+    ])
+      expect(status(text), text).toBe("not_mentioned");
+  });
+
+  it("ignores the employer's product and customers", () => {
+    for (const text of [
+      "We help our customers with visa applications and work permits across Europe.",
+      "You will support our immigration team and the relocation of client employees.",
+      "Our product helps companies with employee relocation and immigration compliance.",
+      "Wir unterstützen Unternehmen bei der Relocation ihrer Fachkräfte.",
+      "Du unterstützt unser Immigration-Team im Tagesgeschäft.",
     ])
       expect(status(text), text).toBe("not_mentioned");
   });
@@ -218,6 +282,19 @@ describe("compileVisaRules", () => {
   it("without a prefilter reads every sentence", () => {
     const pipeline = shippedPipeline();
     expect(compileVisaRules({ ...pipeline, visa: { ...pipeline.visa, prefilter: [] } }).prefilter).toBeNull();
+  });
+
+  it("lists the phrase patterns without a prefilter word (the shipped packs have none)", () => {
+    const pipeline = shippedPipeline();
+    expect(compileVisaRules(pipeline).prefilterViolations).toEqual([]);
+    const generic = shippedPipeline(fixtureMarket({ pack: "generic", country: "NL", currency: "EUR", home_language: "nl" }));
+    expect(compileVisaRules(generic).prefilterViolations).toEqual([]);
+    const offered = [...pipeline.visa.offered, "we pay for your move", { pattern: "moving\\s+bonus", combo: true, list_item: false }];
+    const mentionTerms = [...pipeline.visa.mention_terms, "umzugs?kisten", "moving\\s+boxes"];
+    const broken = compileVisaRules({ ...pipeline, visa: { ...pipeline.visa, offered, mention_terms: mentionTerms } });
+    const n = pipeline.visa.offered.length;
+    expect(broken.prefilterViolations).toEqual([`visa.offered[${n}]`, `visa.offered[${n + 1}]`, `visa.mention_terms[${mentionTerms.length - 1}]`]);
+    expect(compileVisaRules({ ...pipeline, visa: { ...pipeline.visa, prefilter: [] } }).prefilterViolations).toEqual([]);
   });
 
   it("a prefilter that misses a phrase hides it (the packs must keep the contract)", () => {

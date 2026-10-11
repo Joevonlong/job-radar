@@ -5,14 +5,13 @@
 import type { PipelineConfig } from "@/lib/config/schemas/pipeline";
 import type { VisaPatternEntry } from "@/lib/market/schema";
 
-/** Words before an "offered" phrase that are searched for a negation. */
-export const NEGATION_WINDOW_WORDS = 6;
-
 export interface CompiledVisaPattern {
   /** Flags `giu`: used with `matchAll` / `search` only (both ignore and keep `lastIndex`). */
   re: RegExp;
   /** Never matches the bare word "visa": the only kind that counts on postings of a company named like it. */
   combo: boolean;
+  /** Counts only in a segment of a list item ("- Visa sponsorship"). */
+  listItem: boolean;
 }
 
 export interface CompiledVisaRules {
@@ -24,11 +23,22 @@ export interface CompiledVisaRules {
   mentionContext: RegExp[];
   /** Anchored (`^(?:cue)$`): tested against one word. */
   negationCues: RegExp[];
+  /** Where the clause after an offered phrase ends for the negation search (flags `giu`, used with `search`). */
+  clauseBreaks: RegExp[];
+  negationWordsBefore: number;
+  negationWordsAfter: number;
+  headingMaxChars: number;
   excludeContext: RegExp[];
   excludeCompanies: RegExp[];
   abbreviations: string[];
   /** The packs' `prefilter` as one expression (flags `iu`, no state); null = none, every sentence is read. */
   prefilter: RegExp | null;
+  /**
+   * Phrase patterns (`offered`, `not_offered.*`, `mention_terms`) whose own source has no prefilter match, as `visa.offered[2]`
+   * paths. A heuristic for the packs' promise that every phrase contains a prefilter word (a pattern breaking it is silently skipped
+   * on texts without one); `pnpm config:check` lists them as warnings.
+   */
+  prefilterViolations: string[];
   maxQuotes: number;
   quoteMaxChars: number;
 }
@@ -46,7 +56,9 @@ function compile(source: string, path: string): RegExp {
 
 function compileEntries(entries: readonly VisaPatternEntry[], path: string): CompiledVisaPattern[] {
   return entries.map((entry, index) =>
-    typeof entry === "string" ? { re: compile(entry, `${path}[${index}]`), combo: false } : { re: compile(entry.pattern, `${path}[${index}]`), combo: entry.combo },
+    typeof entry === "string"
+      ? { re: compile(entry, `${path}[${index}]`), combo: false, listItem: false }
+      : { re: compile(entry.pattern, `${path}[${index}]`), combo: entry.combo, listItem: entry.list_item },
   );
 }
 
@@ -58,9 +70,27 @@ function compilePrefilter(sources: readonly string[]): RegExp | null {
   return new RegExp(sources.map((source) => `(?:${source})`).join("|"), "iu");
 }
 
+function prefilterViolations(pack: VisaRulesInput["visa"], prefilter: RegExp | null): string[] {
+  if (prefilter === null) return [];
+  const lists: Array<[string, readonly VisaPatternEntry[]]> = [
+    ["visa.offered", pack.offered],
+    ["visa.not_offered.no_sponsorship", pack.not_offered.no_sponsorship],
+    ["visa.not_offered.permit_required", pack.not_offered.permit_required],
+    ["visa.mention_terms", pack.mention_terms],
+  ];
+  const out: string[] = [];
+  for (const [path, entries] of lists) {
+    entries.forEach((entry, index) => {
+      if (!prefilter.test(typeof entry === "string" ? entry : entry.pattern)) out.push(`${path}[${index}]`);
+    });
+  }
+  return out;
+}
+
 export function compileVisaRules(config: VisaRulesInput): CompiledVisaRules {
   const pack = config.visa;
   const limits = config.job_checks.visa;
+  const prefilter = compilePrefilter(pack.prefilter);
   return {
     offered: compileEntries(pack.offered, "visa.offered"),
     noSponsorship: compileEntries(pack.not_offered.no_sponsorship, "visa.not_offered.no_sponsorship"),
@@ -72,10 +102,15 @@ export function compileVisaRules(config: VisaRulesInput): CompiledVisaRules {
       compile(cue, `visa.negation_cues[${index}]`);
       return new RegExp(`^(?:${cue})$`, "iu");
     }),
+    clauseBreaks: compileList(pack.clause_breaks, "visa.clause_breaks"),
+    negationWordsBefore: limits.negation_words_before,
+    negationWordsAfter: limits.negation_words_after,
+    headingMaxChars: limits.heading_max_chars,
     excludeContext: compileList(pack.exclude_context, "visa.exclude_context"),
     excludeCompanies: compileList(pack.exclude_companies, "visa.exclude_companies"),
     abbreviations: [...pack.abbreviations],
-    prefilter: compilePrefilter(pack.prefilter),
+    prefilter,
+    prefilterViolations: prefilterViolations(pack, prefilter),
     maxQuotes: limits.max_quotes,
     quoteMaxChars: limits.quote_max_chars,
   };

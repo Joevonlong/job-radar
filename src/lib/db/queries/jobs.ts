@@ -76,6 +76,8 @@ export interface ListJobsOptions {
   pageSize: number;
   /** IANA zone the date range is interpreted in (schedule.yaml `timezone`). */
   timezone: string;
+  /** Load the visa badge data (`hydrateCards`); false when the badge is hidden. Default true. */
+  visa?: boolean;
 }
 
 export interface JobPage {
@@ -276,7 +278,7 @@ export async function listJobs(db: Db, options: ListJobsOptions): Promise<JobPag
     .limit(pageSize)
     .offset((page - 1) * pageSize);
 
-  return { jobs: await hydrateCards(db, rows), total, page, pageCount, pageSize };
+  return { jobs: await hydrateCards(db, rows, { visa: options.visa ?? true }), total, page, pageCount, pageSize };
 }
 
 /** What the "seen" controls of /jobs need about the whole filtered list (every page): how many are unseen, and how many were first seen after `since`. */

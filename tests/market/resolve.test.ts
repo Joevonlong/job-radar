@@ -120,6 +120,8 @@ describe("the effective pipeline config", () => {
     expect(de.visa.offered).toHaveLength(generic.offered.length + german.offered.length);
     expect(de.visa.prefilter.filter((term) => term === "visa")).toHaveLength(1);
     expect(de.visa.prefilter).toEqual(expect.arrayContaining([...generic.prefilter, ...german.prefilter]));
+    expect(de.visa.clause_breaks).toEqual([...generic.clause_breaks, ...german.clause_breaks]);
+    expect(generic.clause_breaks.length).toBeGreaterThan(0);
     const withoutVisa = (id: string): Pack => {
       const pack = fixturePack(id);
       if (id !== "de") return pack;

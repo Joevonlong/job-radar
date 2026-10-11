@@ -1,5 +1,5 @@
 /** Shared pieces of the job checks (the visa check; later others of the same shape): segments, input hashes, the table probe, the loop. */
-export { DEFAULT_ABBREVIATIONS, HEADING_MAX_CHARS, segmentText, type TextSegment } from "./segment";
+export { DEFAULT_ABBREVIATIONS, segmentText, type SegmentOptions, type TextSegment } from "./segment";
 export { inputHash, textHash } from "./fingerprint";
 export { checkTableReady, resetCheckTablesCache, type JobCheckTable } from "./table";
 export {

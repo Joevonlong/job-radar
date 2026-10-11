@@ -497,3 +497,6 @@ filter:
 #     per_cycle_limit: 2000   # jobs scanned per cycle at most (new and changed JDs first); pnpm visa:scan --write scans the rest
 #     max_quotes: 3           # quotes kept per job (at most 10)
 #     quote_max_chars: 280    # longest quote (40 to 2000)
+#     negation_words_before: 6  # words before a "support offered" phrase searched for a negation ("We do not offer …")
+#     negation_words_after: 5   # words after it, up to the end of its clause ("Relocation support is not available")
+#     heading_max_chars: 60     # a line this short without end punctuation (or ending in ":", or a "#" heading) is read with the next line

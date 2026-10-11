@@ -21,6 +21,7 @@ import {
 } from "@/lib/filter/deal-breakers";
 import { vmTimeBox } from "@/lib/filter/time-box";
 import { issueKey } from "@/lib/profile/draft";
+import { compileVisaRules } from "@/lib/visa/rules";
 
 import { shippedPipeline } from "../pipeline/helpers";
 
@@ -174,6 +175,48 @@ describe("at run time", () => {
     expect(ms).toBeLessThan(1_000);
     expect(result).toMatchObject({ complete: false });
     expect(run.warnings).toEqual([]);
+  });
+
+  describe("the visa rule", () => {
+    /** The shipped packs plus one catastrophic `offered` pattern, as a hand-edited pack could have. */
+    const slowVisa = () => {
+      const pipeline = shippedPipeline();
+      return compileVisaRules({ ...pipeline, visa: { ...pipeline.visa, offered: [...pipeline.visa.offered, "visa(a|a)+$"] } });
+    };
+    const visaRule = dealBreakerSchema.parse({ id: "visa", label: "No visa sponsorship", type: "visa_not_offered" });
+    const visaContext = (over: Partial<DealBreakerLimits> = {}): DealBreakerContext => ({
+      ...context(over),
+      me: { languages: [{ de: "B1" }], needs_visa_sponsorship: true },
+      visa: slowVisa(),
+    });
+    const refusal = "We are unable to offer visa sponsorship.";
+    const slowText = `visa${"a".repeat(40)}!`;
+
+    it("runs under rule_budget_ms like a phrase rule: stopped, reported, earlier vetoes kept", () => {
+      const run = startDealBreakerRun(compileDealBreakers([visaRule], visaContext({ rule_budget_ms: 100 })), vmTimeBox);
+      expect(run.warnings).toEqual([]);
+      const jobs = [posting(refusal), posting(slowText), posting(refusal)];
+      let result: string[][] = [];
+      const ms = elapsed(() => void (result = dealBreakerVetoes(run, jobs, { previous: [[], [], ["visa"]] }).vetoes));
+      expect(ms).toBeLessThan(2_000);
+      expect(result).toEqual([["visa"], [], ["visa"]]);
+      expect(run.warnings).toEqual([{ id: "visa", code: "too_slow" }]);
+    });
+
+    it("stops at a deadline", () => {
+      const run = startDealBreakerRun(compileDealBreakers([visaRule], visaContext()), vmTimeBox);
+      let result: ReturnType<typeof dealBreakerVetoes> | null = null;
+      const ms = elapsed(() => void (result = dealBreakerVetoes(run, [posting(slowText)], { deadline: performance.now() + 50 })));
+      expect(ms).toBeLessThan(1_000);
+      expect(result).toMatchObject({ complete: false });
+    });
+
+    it("gives up explaining after match_ms", () => {
+      let explanation: ReturnType<typeof explainDealBreaker> = { id: "x", type: "phrase", quote: null, field: null, offset: null };
+      const ms = elapsed(() => void (explanation = explainDealBreaker(posting(slowText), visaRule, visaContext({ match_ms: 50 }), shippedPipeline(), vmTimeBox)));
+      expect(explanation).toBeNull();
+      expect(ms).toBeLessThan(1_000);
+    });
   });
 
   it("gives up explaining a veto after match_ms", () => {

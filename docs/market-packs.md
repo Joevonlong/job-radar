@@ -88,20 +88,25 @@ ones, `de` the German ones; both are always used in the German market.
 | `not_offered.permit_required` | A permit the candidate already holds is required ("You must hold a valid work permit") |
 | `permit_alternatives` | Next to a `permit_required` phrase, an alternative makes the sentence unclear ("…or are eligible for an EU Blue Card") |
 | `mention_terms`, `mention_context` | A visa word with a context word in the same sentence is an unclear mention |
-| `negation_cues` | Words that, within six words before an `offered` phrase or inside it, make it unclear ("not", "kein…") |
-| `exclude_context` | A sentence that matches is not about visas ("sponsored events", "Visa/Mastercard") |
+| `negation_cues` | Words that make an `offered` phrase unclear ("not", "kein…"): inside it, within `pipeline.yaml job_checks.visa.negation_words_before` words before it, or within `negation_words_after` words after it in the same clause |
+| `clause_breaks` | Where that clause ends ("; ", " but ", " aber "): a negation beyond it does not count. A comma or a colon does not end it ("Relocation support: No") |
+| `exclude_context` | A sentence that matches is not about the candidate's visa ("sponsored events", "Visa/Mastercard", "our customers with visa applications") |
 | `exclude_companies` | Company names (normalized) that are visa words: only patterns marked `combo: true` count for them |
 | `abbreviations` | Abbreviations whose dot does not end a sentence ("z.B", "inkl") |
 | `prefilter` | A quick first look, see below |
 
-`offered`, `not_offered.*` and `mention_terms` take `{pattern, combo}` entries: `combo: true` marks a pattern that joins
-the visa word with its context, so it still counts for a company named like a visa word. Patterns are regular
+`offered`, `not_offered.*` and `mention_terms` take `{pattern, combo, list_item}` entries: `combo: true` marks a pattern
+that joins the visa word with its context, so it still counts for a company named like a visa word; `list_item: true` one
+that counts only on a list item of its own (the bare noun "- Visa sponsorship"), never on a heading ("## Visa
+sponsorship" followed by "Not available"). Patterns are regular
 expressions with the flags `iu`; `pnpm config:check` names an invalid one by its path (`visa.offered[3]`).
 
 **`prefilter`**: the visa deal-breaker reads every open job in every filter run, so a text or sentence that matches none
 of the prefilter patterns is skipped without running the others. That works only when **every phrase `offered`,
 `not_offered` or `mention_terms` can match contains a prefilter match**: a phrase with a new key word ("Aufenthaltstitel")
-needs that word in `prefilter` too, or it is never seen. Leave `prefilter` empty to read every sentence (slower).
+needs that word in `prefilter` too, or it is never seen. Only the lines with a prefilter match (and the heading above
+them) are cut into sentences. `pnpm config:check` warns about a pattern whose text has no prefilter match (a rough check:
+it reads the pattern, not what it matches). Leave `prefilter` empty to read every sentence (slower).
 
 After changing the patterns, `pnpm visa:scan` previews what would change and `pnpm visa:scan --write` stores it; the
 cycle also rechecks every job, because the patterns are part of each result's input.

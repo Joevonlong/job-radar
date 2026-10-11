@@ -679,7 +679,6 @@ export const jobVisa = pgTable(
   (t) => [
     check("job_visa_status_check", sql`${t.status} in ('offered', 'not_offered', 'unclear', 'not_mentioned')`),
     check("job_visa_evidence_check", sql`${t.status} = 'not_mentioned' or jsonb_array_length(${t.evidence}) > 0`),
-    index("job_visa_status_idx").on(t.status).where(sql`${t.status} in ('offered', 'not_offered')`),
   ],
 );
 

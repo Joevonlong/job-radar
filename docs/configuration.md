@@ -302,6 +302,9 @@ the defaults below apply. The patterns live in the market packs (`rules.yaml` `v
 | `pipeline.yaml` (shipped) | `job_checks.visa.per_cycle_limit` | 2000 | Jobs checked per cycle at most |
 | | `job_checks.visa.max_quotes` | 3 | Quotes kept per job (1–10) |
 | | `job_checks.visa.quote_max_chars` | 280 | Longest quote (40–2000); a longer sentence is cut around the phrase |
+| | `job_checks.visa.negation_words_before` | 6 | Words before an "offered" phrase searched for a negation (0–20) |
+| | `job_checks.visa.negation_words_after` | 5 | Words after it, up to the end of its clause, searched for a negation (0–20) |
+| | `job_checks.visa.heading_max_chars` | 60 | Longest line read as a heading together with the next line (10–200) |
 | `ui.yaml` (user) | `job_checks.visa.enabled` | `true` | Off: nothing is checked and no page shows it |
 | | `job_checks.visa.badges` | `auto` | When the list badge and the /jobs filter show: `auto` (only when me.yaml `needs_visa_sponsorship` is true), `always`, `never` |
 

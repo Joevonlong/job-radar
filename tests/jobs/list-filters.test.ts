@@ -17,14 +17,14 @@ describe("jobsListFilters: base currency", () => {
   const db = {} as Db;
 
   it("carries the market's base currency for the salary sort and the minimum salary", async () => {
-    const filters = await jobsListFilters(db, params("sort=salary&minSalary=90000"), []);
+    const filters = await jobsListFilters(db, params("sort=salary&minSalary=90000"), { cities: [] });
     expect(filters.baseCurrency).toBe("CHF");
     expect(filters.minAnnualSalary).toBe(90000);
   });
 
   it("no resolvable market: null (nothing compares), never the EUR default", async () => {
     floor.currency = null;
-    const filters = await jobsListFilters(db, params("sort=salary"), []);
+    const filters = await jobsListFilters(db, params("sort=salary"), { cities: [] });
     expect(filters.baseCurrency).toBeNull();
     expect("baseCurrency" in filters).toBe(true);
   });

@@ -8,5 +8,4 @@ CREATE TABLE "job_visa" (
 	CONSTRAINT "job_visa_evidence_check" CHECK ("job_visa"."status" = 'not_mentioned' or jsonb_array_length("job_visa"."evidence") > 0)
 );
 --> statement-breakpoint
-ALTER TABLE "job_visa" ADD CONSTRAINT "job_visa_job_id_jobs_id_fk" FOREIGN KEY ("job_id") REFERENCES "public"."jobs"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-CREATE INDEX "job_visa_status_idx" ON "job_visa" USING btree ("status") WHERE "job_visa"."status" in ('offered', 'not_offered');
+ALTER TABLE "job_visa" ADD CONSTRAINT "job_visa_job_id_jobs_id_fk" FOREIGN KEY ("job_id") REFERENCES "public"."jobs"("id") ON DELETE cascade ON UPDATE no action;

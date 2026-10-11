@@ -217,6 +217,9 @@ JD 里关于签证赞助的说法（见 [visa-sponsorship.zh.md](visa-sponsorshi
 | `pipeline.yaml`（随产品提供） | `job_checks.visa.per_cycle_limit` | 2000 | 每轮最多检查的岗位数 |
 | | `job_checks.visa.max_quotes` | 3 | 每个岗位保留的引文数（1–10） |
 | | `job_checks.visa.quote_max_chars` | 280 | 引文最长字数（40–2000）；句子更长时围绕关键说法截取 |
+| | `job_checks.visa.negation_words_before` | 6 | "提供"类说法前面查否定词的词数（0–20） |
+| | `job_checks.visa.negation_words_after` | 5 | 说法后面、到分句结束为止查否定词的词数（0–20） |
+| | `job_checks.visa.heading_max_chars` | 60 | 当作标题、和下一行合读的最长行（10–200） |
 | `ui.yaml`（用户） | `job_checks.visa.enabled` | `true` | 关掉：什么都不检查，页面也不显示 |
 | | `job_checks.visa.badges` | `auto` | 列表徽标和 /jobs 筛选什么时候显示：`auto`（me.yaml `needs_visa_sponsorship` 为 true 时才显示）、`always`、`never` |
 

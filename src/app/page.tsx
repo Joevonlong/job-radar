@@ -121,6 +121,7 @@ export default async function TodayPage({ searchParams }: { searchParams: Promis
       highValueOnly: high,
       highValue,
       extra: toJobFilters(filters, { cityGroups, visa }),
+      visa,
     }),
     getVisitState(db),
   ]);
@@ -131,7 +132,7 @@ export default async function TodayPage({ searchParams }: { searchParams: Promis
   const missingEnv = missingEnvOfEnabled(loadConfig("channels"), process.env, summary?.channels.map((c) => c.channelId) ?? []);
   const seenUpTo = effectiveSeenUpTo(visit, now);
   const filterFloors = await getFilterFloors(db, salaryFilteredIds(cards));
-  const items = await toListItems(cards, { now, timezone: schedule.timezone, filterFloors, seenUpTo, monthSalaries: { figures: salaryFigures, minSample: ui.salary_stats.min_sample } });
+  const items = await toListItems(cards, { now, timezone: schedule.timezone, filterFloors, seenUpTo, visa, monthSalaries: { figures: salaryFigures, minSample: ui.salary_stats.min_sample } });
   const kpiBlocks = buildKpiBlocks(cycleKpis, ui.trend_cycles);
   const cycleNewJobs = summary ? await listCycleNewJobs(db, summary, ui.ticker_max_items) : [];
   const cycleTime = summary ? format.dateTime(summary.startedAt, { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: schedule.timezone }) : "";

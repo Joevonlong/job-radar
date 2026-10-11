@@ -1805,24 +1805,7 @@
           "default": "now()"
         }
       },
-      "indexes": {
-        "job_visa_status_idx": {
-          "name": "job_visa_status_idx",
-          "columns": [
-            {
-              "expression": "status",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"job_visa\".\"status\" in ('offered', 'not_offered')",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
+      "indexes": {},
       "foreignKeys": {
         "job_visa_job_id_jobs_id_fk": {
           "name": "job_visa_job_id_jobs_id_fk",

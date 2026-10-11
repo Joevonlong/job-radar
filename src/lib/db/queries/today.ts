@@ -245,6 +245,8 @@ export interface TodayOptions {
   /** The push lines the "high score" view means (notify.yaml `push_min_score` / `push_min_score_high_value`). */
   quickLines?: QuickLines;
   extra?: TodayExtraFilters;
+  /** Load the visa badge data (`hydrateCards`); false when the badge is hidden. Default true. */
+  visa?: boolean;
 }
 
 /**
@@ -266,7 +268,7 @@ export async function listTodayJobs(db: Db, options: TodayOptions): Promise<JobC
     .leftJoin(latest, eq(latest.jobId, jobs.id))
     .where(and(...conditions))
     .orderBy(sql`coalesce(${latest.filterResult} = 'filtered_out', false) asc`, sql`${latest.rankValue} desc nulls last`, sql`${jobs.postedAt} desc nulls last`, desc(jobs.firstSeenAt), desc(jobs.id));
-  return hydrateCards(db, rows);
+  return hydrateCards(db, rows, { visa: options.visa ?? true });
 }
 
 /** The conditions that select the Today list (the window, ignored / filtered-out jobs, the toggles and the saved view's filters); the quick view is added by the caller. */

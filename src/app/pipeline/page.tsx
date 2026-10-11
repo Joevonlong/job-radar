@@ -11,6 +11,7 @@ import { loadConfig } from "@/lib/config";
 import { countInPipeline, overdueThresholds } from "@/lib/dashboard/board";
 import { getSchedule } from "@/lib/dashboard/context";
 import { getDb, listPipelineEntries } from "@/lib/db";
+import { visaVisible } from "@/lib/visa/settings";
 
 // The board reads the database and notify.yaml on every request.
 export const dynamic = "force-dynamic";
@@ -28,8 +29,9 @@ export default async function PipelinePage() {
   const thresholds = overdueThresholds(notify);
 
   const hidden = readHiddenSettings().statuses;
-  const entries = await listPipelineEntries(getDb());
-  const cards = await toBoardCards(entries, { now: new Date(), timezone, thresholds });
+  const visa = visaVisible();
+  const entries = await listPipelineEntries(getDb(), { visa });
+  const cards = await toBoardCards(entries, { now: new Date(), timezone, thresholds, visa });
   const counts: Record<string, number> = {};
   for (const card of cards) counts[card.status] = (counts[card.status] ?? 0) + 1;
   const hiddenCards = boardLayout(hidden, counts).hiddenCards;

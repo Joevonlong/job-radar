@@ -116,6 +116,8 @@ alternative ("…or are eligible for an EU Blue Card") or says nothing passes.
   spot, hidden text included (the filter runs before the trap scan), so in rare cases the job page's visa line says
   "not mentioned" for a job the rule vetoed. See [visa-sponsorship.md](visa-sponsorship.md#as-a-deal-breaker).
 - The job page quotes the refusing sentence and says which kind it is.
+- It runs under the same time limits as your phrase rules (`rule_budget_ms` per filter run, `match_ms` for the job
+  page's explanation, see [Limits](#limits)): a market pack edited by hand cannot hold up the filter step either.
 
 ### Limits
 

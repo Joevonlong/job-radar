@@ -55,6 +55,7 @@ export function mergeVisaPacks(packs: ReadonlyArray<{ rules: { visa: VisaPack } 
     mention_terms: unionPatterns(...visa.map((v) => v.mention_terms)),
     mention_context: union(...visa.map((v) => v.mention_context)),
     negation_cues: union(...visa.map((v) => v.negation_cues)),
+    clause_breaks: union(...visa.map((v) => v.clause_breaks)),
     exclude_context: union(...visa.map((v) => v.exclude_context)),
     exclude_companies: union(...visa.map((v) => v.exclude_companies)),
     abbreviations: union(...visa.map((v) => v.abbreviations)),

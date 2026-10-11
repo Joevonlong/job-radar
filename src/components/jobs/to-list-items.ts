@@ -36,6 +36,8 @@ export async function toListItems(
     monthSalaries?: { figures: readonly MonthSalaryFigure[]; minSample: number };
     /** `getFilterFloors`: the floor each filtered job was judged under, for the "below the floor of the time" wording. */
     filterFloors?: ReadonlyMap<number, number | null>;
+    /** Whether the visa badge shows, when the page already knows (`visaVisible` / `visaFilterAvailable`); read here otherwise. */
+    visa?: boolean;
   },
 ): Promise<JobListItem[]> {
   const interests = loadConfig("interests");
@@ -48,7 +50,7 @@ export async function toListItems(
   const aliases = buildSkillAliasMap(loadPipeline().skills);
   const mySkills = profileSkillKeys(readProfileSkillNames(), aliases);
   const showTraps = trapsEnabled();
-  const showVisa = visaVisible();
+  const showVisa = options.visa ?? visaVisible();
   return cards.map((card) => {
     const salary = listSalary(card.salary, locale, baseCurrency);
     const matches = matchSkills(card.skills, mySkills, aliases);

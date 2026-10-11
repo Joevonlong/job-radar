@@ -13,10 +13,10 @@ import type { BoardCard } from "./types";
  */
 export async function toBoardCards(
   entries: readonly PipelineEntry[],
-  options: { now: Date; timezone: string; thresholds: OverdueThresholds },
+  options: { now: Date; timezone: string; thresholds: OverdueThresholds; visa?: boolean },
 ): Promise<BoardCard[]> {
   const { now, timezone, thresholds } = options;
-  const [items, format] = await Promise.all([toListItems(entries.map((e) => e.job), { now, timezone }), getFormatter()]);
+  const [items, format] = await Promise.all([toListItems(entries.map((e) => e.job), { now, timezone, ...(options.visa === undefined ? {} : { visa: options.visa }) }), getFormatter()]);
 
   return entries.map((entry, index) => {
     const { application } = entry;

@@ -11,7 +11,7 @@ import type { JobCard } from "./types";
  * Every starred job, with no filter at all: closed, possibly closed, hard-filtered and ignored jobs are listed too,
  * the list rows mark them. `starred`: newest star first; `rank`: filtered-out last, then the rank value.
  */
-export async function listFavoriteJobs(db: Db, options: { sort: FavoriteSort }): Promise<JobCard[]> {
+export async function listFavoriteJobs(db: Db, options: { sort: FavoriteSort; visa?: boolean }): Promise<JobCard[]> {
   const latest = latestScoreCte(db);
   const ux = await uxTablesReady(db);
   const orderBy =
@@ -26,5 +26,5 @@ export async function listFavoriteJobs(db: Db, options: { sort: FavoriteSort }):
     .innerJoin(companies, eq(companies.id, jobs.companyId))
     .leftJoin(latest, eq(latest.jobId, jobs.id))
     .orderBy(...orderBy);
-  return hydrateCards(db, rows);
+  return hydrateCards(db, rows, { visa: options.visa ?? true });
 }

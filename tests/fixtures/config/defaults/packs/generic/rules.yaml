@@ -115,7 +115,9 @@ filter:
 
 visa:
   # Support is mentioned: "We offer visa sponsorship and relocation support", "Visa sponsorship is available".
-  # A negation within six words before it ("We do not offer …") makes the sentence unclear, never "offered".
+  # A negation cue (negation_cues) inside it, a few words before it ("We do not offer …") or a few words after it in the same clause
+  # ("Relocation support is not available", "Relocation support: No") makes the sentence unclear, never "offered". The word counts
+  # are pipeline.yaml job_checks.visa.negation_words_before / _after; clause_breaks end the clause.
   offered:
     - pattern: '(?<![\p{L}\p{N}])(?:offer(?:s|ing)?|provid(?:e|es|ing)|sponsor(?:s|ing)?|support(?:s|ing)?|assist(?:s|ing)?|help(?:s|ing)?|cover(?:s|ing)?|includ(?:e|es|ing)|incl\.)(?:\s+[\p{L}\p{N}’''-]+){0,5}?\s+(?:visa\s+(?:sponsorship|support|process(?:es)?|applications?)|work\s+(?:permits?|visas?)|(?:eu\s+)?blue\s+card|relocation|immigration)(?![\p{L}\p{N}])'
       combo: true
@@ -125,11 +127,15 @@ visa:
       combo: true
     - pattern: '(?<![\p{L}\p{N}])relocation\s+(?:support|package|assistance|bonus|budget|allowance)(?![\p{L}\p{N}])'
       combo: true
+    # "Relocation is covered"; "Relocation is not offered" carries its negation inside and so counts as unclear
+    - pattern: '(?<![\p{L}\p{N}])relocation\s+(?:is|will\s+be)\s+(?:not\s+)?(?:available|provided|offered|included|possible|covered|supported)(?![\p{L}\p{N}])'
+      combo: true
     - pattern: '(?<![\p{L}\p{N}])(?:visa|immigration)\s+(?:sponsorship|support)\s*:\s*(?:yes|available|provided|offered)(?![\p{L}\p{N}])'
       combo: true
     # A list item that is only the noun: "- Visa sponsorship"
     - pattern: '^(?:visa|immigration)\s+(?:sponsorship|support|assistance)(?:\s+(?:and|&|\+)\s+relocation(?:\s+(?:support|package|assistance))?)?\s*[.!]?$'
       combo: true
+      list_item: true
   not_offered:
     # It says there is no sponsorship: "Visa sponsorship is not available", "We are unable to offer sponsorship".
     no_sponsorship:
@@ -184,11 +190,24 @@ visa:
     - 'doesn[''’]?t'
     - without
     - never
-  # Sentences about payment cards, not visas.
+  # Where the clause after an "offered" phrase ends for the negation search: "Visa sponsorship is available, but not for interns"
+  # still counts. A comma or colon does not end it ("Relocation support: No").
+  clause_breaks:
+    - '[;(]'
+    - '\s[–—]\s'
+    - '(?<![\p{L}\p{N}])(?:but|however|although|though|while|whereas|except)(?![\p{L}\p{N}])'
+    - '(?<![\p{L}\p{N}])and\s+(?:we|you|they|our|your|there)(?![\p{L}\p{N}])'
+  # Sentences about payment cards, or about the employer's product or customers, not the candidate's visa.
   exclude_context:
     - '(?<![\p{L}\p{N}])visa\s*(?:/|,|&|and|or)\s*(?:master\s*card|amex|american\s+express|maestro|discover)(?![\p{L}\p{N}])'
     - '(?<![\p{L}\p{N}])(?:master\s*card|amex|american\s+express|maestro)\s*(?:/|,|&|and|or)\s*visa(?![\p{L}\p{N}])'
     - '(?<![\p{L}\p{N}])visa\s+(?:cards?|payments?|network|direct|checkout|credentials?|transactions?)(?![\p{L}\p{N}])'
+    # "We help our customers with visa applications", "helps companies with employee relocation"
+    - '(?<![\p{L}\p{N}])(?:customers?|clients?|companies|employers|businesses|merchants?|users)\s+(?:with|in|on)\s+(?:[\p{L}-]+\s+){0,3}?(?:visa|immigration|relocation)'
+    # "You will support our immigration team", "the relocation of client employees", "immigration compliance"
+    - '(?<![\p{L}\p{N}])(?:support|join|work\s+with|lead|manage)\s+(?:our|the|a)\s+(?:[\p{L}-]+\s+)?(?:immigration|relocation|mobility|visa)\s+team(?![\p{L}\p{N}])'
+    - '(?<![\p{L}\p{N}])relocation\s+of\s+(?:[\p{L}-]+\s+){0,2}?(?:employees|staff|workers|people)(?![\p{L}\p{N}])'
+    - '(?<![\p{L}\p{N}])(?:immigration|visa|relocation)\s+(?:compliance|software|platform|services?\s+(?:provider|company|firm))(?![\p{L}\p{N}])'
   # A company whose name is a visa word (normalized name, as in companies.name_norm).
   exclude_companies:
     - '^visa(?:-|$)'

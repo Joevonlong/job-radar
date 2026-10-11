@@ -429,9 +429,13 @@ describe("visa check settings", () => {
     delete pipeline.config_version;
     delete pipeline.job_checks;
     const parsed = configRegistry.pipeline.schema.parse(pipeline) as { job_checks: { visa: Record<string, number> } };
-    expect(Object.keys(parsed.job_checks.visa).sort()).toEqual(["max_quotes", "per_cycle_limit", "quote_max_chars"]);
-    pipeline.job_checks = { visa: { per_cycle_limit: 0, max_quotes: 11, quote_max_chars: 10 } };
-    expect(issuePaths("pipeline", pipeline)).toEqual(expect.arrayContaining(["job_checks.visa.per_cycle_limit", "job_checks.visa.max_quotes", "job_checks.visa.quote_max_chars"]));
+    expect(parsed.job_checks.visa).toEqual({ per_cycle_limit: 2000, max_quotes: 3, quote_max_chars: 280, negation_words_before: 6, negation_words_after: 5, heading_max_chars: 60 });
+    pipeline.job_checks = { visa: { per_cycle_limit: 0, max_quotes: 11, quote_max_chars: 10, negation_words_before: 21, negation_words_after: -1, heading_max_chars: 5 } };
+    expect(issuePaths("pipeline", pipeline).sort()).toEqual(
+      ["per_cycle_limit", "max_quotes", "quote_max_chars", "negation_words_before", "negation_words_after", "heading_max_chars"].map((key) => `job_checks.visa.${key}`).sort(),
+    );
+    pipeline.job_checks = { visa: { negation_words_before: 0, negation_words_after: 0 } };
+    expect(issuePaths("pipeline", pipeline)).toEqual([]);
   });
 
   it("a saved view keeps a visa filter and rejects an unknown one", () => {

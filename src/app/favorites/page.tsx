@@ -15,6 +15,7 @@ import { salaryFilteredIds } from "@/lib/jobs/filter-floors";
 import { loadFavoritesSearchParams } from "@/lib/jobs/search-params";
 import { VisibilityScope } from "@/components/applications/visibility-scope";
 import { loadBaseCurrency } from "@/lib/signals/floor";
+import { visaVisible } from "@/lib/visa/settings";
 
 /** Every starred job, unfiltered: closed, filtered-out and ignored jobs stay here, marked on their rows. */
 export async function generateMetadata(): Promise<Metadata> {
@@ -28,9 +29,10 @@ export default async function FavoritesPage({ searchParams }: { searchParams: Pr
   const { timezone } = getSchedule();
   const now = new Date();
   const db = getDb();
-  const [cards, salaryFigures] = await Promise.all([listFavoriteJobs(db, { sort: params.sort }), listMonthSalaryFigures(db, { now, timeZone: timezone, currency: loadBaseCurrency() ?? "" })]);
+  const visa = visaVisible();
+  const [cards, salaryFigures] = await Promise.all([listFavoriteJobs(db, { sort: params.sort, visa }), listMonthSalaryFigures(db, { now, timeZone: timezone, currency: loadBaseCurrency() ?? "" })]);
   const filterFloors = await getFilterFloors(db, salaryFilteredIds(cards));
-  const items = await toListItems(cards, { now, timezone, filterFloors, monthSalaries: { figures: salaryFigures, minSample: loadConfig("ui").salary_stats.min_sample } });
+  const items = await toListItems(cards, { now, timezone, filterFloors, visa, monthSalaries: { figures: salaryFigures, minSample: loadConfig("ui").salary_stats.min_sample } });
   const closed = cards.filter((card) => card.status !== "active").length;
 
   return (

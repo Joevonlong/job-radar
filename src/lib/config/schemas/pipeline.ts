@@ -27,7 +27,7 @@ const amountRange = z.strictObject({ min: nonNegativeNumber, max: nonNegativeNum
 const periodFactors = z.strictObject(Object.fromEntries(SALARY_PERIODS.map((p) => [p, z.number().positive()])) as Record<(typeof SALARY_PERIODS)[number], z.ZodNumber>);
 
 /** `job_checks.visa` when the file has none (the visa check of the `signals` step, docs/visa-sponsorship.md). */
-export const VISA_CHECK_DEFAULTS = { per_cycle_limit: 2000, max_quotes: 3, quote_max_chars: 280 } as const;
+export const VISA_CHECK_DEFAULTS = { per_cycle_limit: 2000, max_quotes: 3, quote_max_chars: 280, negation_words_before: 6, negation_words_after: 5, heading_max_chars: 60 } as const;
 
 /**
  * config/pipeline.yaml — normalization, deduplication and job lifecycle. This is the FILE;
@@ -307,6 +307,12 @@ export const pipelineSchema = z.strictObject({
           max_quotes: positiveInt.max(10).default(VISA_CHECK_DEFAULTS.max_quotes),
           /** Longest quote (characters); a longer sentence is cut around the phrase. */
           quote_max_chars: positiveInt.min(40).max(2000).default(VISA_CHECK_DEFAULTS.quote_max_chars),
+          /** Words before an "offered" phrase searched for a negation cue (the packs' `negation_cues`). */
+          negation_words_before: z.number().int().min(0).max(20).default(VISA_CHECK_DEFAULTS.negation_words_before),
+          /** Words after an "offered" phrase, up to the end of its clause (the packs' `clause_breaks`), searched for a negation cue. */
+          negation_words_after: z.number().int().min(0).max(20).default(VISA_CHECK_DEFAULTS.negation_words_after),
+          /** Longest line (characters) that, as a heading ("Visa sponsorship", "## Visa sponsorship", "Visa sponsorship:"), is read together with the next line. */
+          heading_max_chars: z.number().int().min(10).max(200).default(VISA_CHECK_DEFAULTS.heading_max_chars),
         })
         .default(VISA_CHECK_DEFAULTS),
     })

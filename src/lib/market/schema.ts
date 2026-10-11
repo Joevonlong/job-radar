@@ -141,9 +141,18 @@ const optionalList = regexList.default([]);
 /**
  * A pattern of the visa check: a regular expression, or `{ pattern, combo: true }` for one that only matches a visa word together
  * with its context ("visa sponsorship", "Arbeitsvisum", "work permit") or names no visa at all. On postings of a company that
- * `exclude_companies` names (a company called Visa) only `combo` patterns count.
+ * `exclude_companies` names (a company called Visa) only `combo` patterns count. `list_item: true` marks a bare noun ("Visa sponsorship")
+ * that only counts as a list item of its own: as a heading ("## Visa sponsorship" / "Not available") it says nothing yet.
  */
-export const visaPatternSchema = z.union([regexString, z.strictObject({ pattern: regexString, combo: z.boolean().default(false) })]);
+export const visaPatternSchema = z.union([
+  regexString,
+  z.strictObject({
+    pattern: regexString,
+    combo: z.boolean().default(false),
+    /** Matches only a whole list item ("- Visa sponsorship"), never a heading line or a sentence. */
+    list_item: z.boolean().default(false),
+  }),
+]);
 export type VisaPatternEntry = z.infer<typeof visaPatternSchema>;
 const visaPatternList = z.array(visaPatternSchema).default([]);
 
@@ -155,6 +164,7 @@ export interface VisaPack {
   mention_terms: VisaPatternEntry[];
   mention_context: string[];
   negation_cues: string[];
+  clause_breaks: string[];
   exclude_context: string[];
   exclude_companies: string[];
   abbreviations: string[];
@@ -170,6 +180,7 @@ export function emptyVisaPack(): VisaPack {
     mention_terms: [],
     mention_context: [],
     negation_cues: [],
+    clause_breaks: [],
     exclude_context: [],
     exclude_companies: [],
     abbreviations: [],
@@ -199,8 +210,14 @@ export const visaPackSchema = z
     /** Visa words ("visa", "Visum") that, with a `mention_context` word in the same sentence, make a mention the rules cannot judge. */
     mention_terms: visaPatternList,
     mention_context: optionalList,
-    /** Words that negate an `offered` phrase when they stand within six words before it or inside it ("not", "kein…"); each must match a whole word. */
+    /**
+     * Words that negate an `offered` phrase ("not", "kein…"); each must match a whole word. They count inside the phrase, within
+     * `pipeline.yaml job_checks.visa.negation_words_before` words before it, and within `negation_words_after` words after it up to
+     * a `clause_breaks` match ("Relocation support is not available", "Relocation-Support bieten wir nicht an").
+     */
     negation_cues: optionalList,
+    /** Where the clause after an `offered` phrase ends for the negation search ("; ", " but ", " aber "): regular expressions. */
+    clause_breaks: optionalList,
     /** A sentence matching one of these is not about visas at all ("sponsored events", "Visa/Mastercard"). */
     exclude_context: optionalList,
     /** Company names (matched against the normalized name) whose own name is a visa word: only `combo` patterns count for them. */

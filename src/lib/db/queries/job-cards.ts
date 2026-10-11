@@ -234,8 +234,14 @@ export function toSummary(row: Pick<CardRow, "summaries" | "summaryZh" | "summar
   return Object.keys(texts).length === 0 ? null : { texts, outputLang: row.outputLang };
 }
 
+/** What `hydrateCards` attaches besides the always-needed parts. */
+export interface HydrateOptions {
+  /** Load the visa check results (the list badge); false when the badge is hidden, saving the query. Default true. */
+  visa?: boolean;
+}
+
 /** Turn card rows into cards by attaching sources, signals and the application status (3 queries for the whole page). */
-export async function hydrateCards(db: Db, rows: readonly CardRow[]): Promise<JobCard[]> {
+export async function hydrateCards(db: Db, rows: readonly CardRow[], options: HydrateOptions = {}): Promise<JobCard[]> {
   const ids = rows.map((r) => r.id);
   const [sources, signalMap, statuses, favorites, traps, visa] = await Promise.all([
     loadSources(db, ids),
@@ -243,7 +249,7 @@ export async function hydrateCards(db: Db, rows: readonly CardRow[]): Promise<Jo
     getApplicationStatuses(db, ids),
     getFavoriteStates(db, ids),
     loadTrapCounts(db, ids),
-    loadVisaStatuses(db, ids),
+    options.visa === false ? new Map<number, never>() : loadVisaStatuses(db, ids),
   ]);
   return rows.map((row) => ({
     id: row.id,
