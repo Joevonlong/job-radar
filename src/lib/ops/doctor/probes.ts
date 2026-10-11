@@ -1,5 +1,5 @@
 /** The real probes of `pnpm run doctor`: child processes, HTTP, the filesystem and the database. Host-side only. */
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { lstat, readdir, stat } from "node:fs/promises";
 import path from "node:path";
 
@@ -71,10 +71,22 @@ export async function scanOwnership(roots: readonly string[], uid: number, optio
   return result;
 }
 
+export interface RunCommandOptions {
+  /** The child's environment (default: this process's). */
+  env?: NodeJS.ProcessEnv;
+  /**
+   * Run the child in a process group of its own, so a Ctrl-C at the terminal (SIGINT to the foreground group) does not
+   * reach it and it runs to completion: for commands that must not be cut half-way (recreating containers).
+   */
+  detached?: boolean;
+}
+
 /** Run a command to completion (time-out in ms). `ENOENT` is "missing", a kill by the time-out is "timeout"; a non-zero exit is a normal outcome. */
-export function runCommand(command: string, args: readonly string[], timeoutMs: number): Promise<CommandOutcome> {
+export function runCommand(command: string, args: readonly string[], timeoutMs: number, options: RunCommandOptions = {}): Promise<CommandOutcome> {
+  if (options.detached) return runDetached(command, args, timeoutMs, options.env);
   return new Promise((resolve) => {
-    execFile(command, [...args], { timeout: timeoutMs, maxBuffer: MAX_OUTPUT_BYTES, encoding: "utf8", windowsHide: true }, (error, stdout, stderr) => {
+    const extra = options.env ? { env: options.env } : {};
+    execFile(command, [...args], { timeout: timeoutMs, maxBuffer: MAX_OUTPUT_BYTES, encoding: "utf8", windowsHide: true, ...extra }, (error, stdout, stderr) => {
       if (error === null) {
         resolve({ kind: "ran", exitCode: 0, stdout, stderr });
         return;
@@ -84,6 +96,35 @@ export function runCommand(command: string, args: readonly string[], timeoutMs: 
       else if (error.killed || code === "ETIMEDOUT") resolve({ kind: "timeout" });
       else resolve({ kind: "ran", exitCode: typeof code === "number" ? code : null, stdout, stderr });
     });
+  });
+}
+
+/** `runCommand` in a process group of its own (`execFile` has no `detached`): same outcomes, output cut at the same size. */
+function runDetached(command: string, args: readonly string[], timeoutMs: number, env: NodeJS.ProcessEnv | undefined): Promise<CommandOutcome> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const settle = (outcome: CommandOutcome): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(outcome);
+    };
+    const child = spawn(command, [...args], { detached: true, windowsHide: true, stdio: ["ignore", "pipe", "pipe"], ...(env ? { env } : {}) });
+    let stdout = "";
+    let stderr = "";
+    let timedOut = false;
+    child.stdout.setEncoding("utf8").on("data", (chunk: string) => {
+      if (stdout.length < MAX_OUTPUT_BYTES) stdout += chunk;
+    });
+    child.stderr.setEncoding("utf8").on("data", (chunk: string) => {
+      if (stderr.length < MAX_OUTPUT_BYTES) stderr += chunk;
+    });
+    const timer = setTimeout(() => {
+      timedOut = true;
+      child.kill("SIGTERM");
+    }, timeoutMs);
+    child.on("error", (error: NodeJS.ErrnoException) => settle(error.code === "ENOENT" ? { kind: "missing" } : { kind: "ran", exitCode: null, stdout, stderr: stderr || error.message }));
+    child.on("close", (code) => settle(timedOut ? { kind: "timeout" } : { kind: "ran", exitCode: code, stdout, stderr }));
   });
 }
 

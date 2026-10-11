@@ -22,6 +22,7 @@ import { sendTestMessage } from "@/lib/notify/test-message";
 
 import type { CliIo } from "./cli-io";
 import { updateEnvFile } from "./env-file";
+import { holdInterrupts } from "./interrupt-guard";
 import type { SetupTranslator } from "./text";
 import type { SetupStepResult } from "./types";
 
@@ -126,6 +127,17 @@ export async function runTelegramSetup(deps: TelegramSetupDeps): Promise<Telegra
   const telegram = deps.config.telegram;
   /** Set while this command has the runner stopped; cleared once it runs again. */
   let runnerStopped = false;
+  /** While the runner is stopped, a further Ctrl-C does not end the command (it would leave the runner down). */
+  let releaseRunnerHold: (() => void) | null = null;
+  const dropRunnerHold = (): void => {
+    releaseRunnerHold?.();
+    releaseRunnerHold = null;
+  };
+  const setRunnerStopped = (stopped: boolean): void => {
+    runnerStopped = stopped;
+    if (stopped && releaseRunnerHold === null) releaseRunnerHold = holdInterrupts(t("cli.telegram.servicesBusy"));
+    if (!stopped) dropRunnerHold();
+  };
   let envWritten = false;
 
   const say = (line: string) => io.out(line);
@@ -179,7 +191,7 @@ export async function runTelegramSetup(deps: TelegramSetupDeps): Promise<Telegra
     if (running === null || !running.includes("runner")) return;
     say(t("cli.telegram.runnerStopping"));
     const result = await deps.services.stop("runner");
-    if (result.ok) runnerStopped = true;
+    if (result.ok) setRunnerStopped(true);
     else warn(t("cli.telegram.runnerStopFailed", { reason: result.reason }));
   };
 
@@ -188,11 +200,13 @@ export async function runTelegramSetup(deps: TelegramSetupDeps): Promise<Telegra
     say(t("cli.telegram.runnerStarting"));
     const result = envWritten ? await deps.services.recreate(["runner"]) : await deps.services.start("runner");
     if (result.ok) {
-      runnerStopped = false;
+      setRunnerStopped(false);
       return;
     }
     warn(t("cli.telegram.runnerStartFailed", { reason: result.reason }));
     for (const command of deps.services.manualCommands(["runner"], null)) warn(`  ${command}`);
+    // the commands are printed: holding the terminal any longer does not bring it back
+    dropRunnerHold();
   };
 
   // ------------------------------------------------------------ steps
@@ -218,23 +232,45 @@ export async function runTelegramSetup(deps: TelegramSetupDeps): Promise<Telegra
     }
   };
 
-  /** Wait for the first message to the bot; null when none came in time. */
-  const waitForMessage = async (bot: TelegramClient): Promise<Message | null> => {
+  /**
+   * Wait for a message to the bot sent after the prompt; null when none came in time. Only messages are ever confirmed
+   * (`offset` moves past leading message updates only): a button press waiting for the stopped runner stays queued for
+   * it. When no new message came, the newest one that was already waiting is offered instead, marked `earlier`.
+   */
+  const waitForMessage = async (bot: TelegramClient): Promise<{ message: Message; earlier: boolean } | null> => {
     const deadline = now().getTime() + telegram.setup.wait_for_message_seconds * 1000;
-    // what is already waiting (e.g. the /start of creating the bot): only the newest one is offered
+    const fromPerson = (update: TelegramUpdate): Message | null => (update.message !== undefined && update.message.from?.is_bot !== true ? update.message : null);
     const backlog = await bot.getUpdates({ timeoutSeconds: 0, ...(signal ? { signal } : {}) });
-    let offset = backlog.lastUpdateId === null ? undefined : backlog.lastUpdateId + 1;
-    const pending = backlog.updates.map((update) => update.message).filter((message): message is Message => message !== undefined && message.from?.is_bot !== true);
-    const newest = pending[pending.length - 1];
-    if (newest !== undefined) return newest;
+    const promptAfter = backlog.lastUpdateId ?? -1;
+    let earlier: Message | null = null;
+    for (const update of backlog.updates) earlier = fromPerson(update) ?? earlier;
+    let offset: number | undefined;
+    /** True while the first unconfirmed update is not a message: a long poll would return it at once. */
+    let blocked = false;
+    const advance = (updates: readonly TelegramUpdate[]): void => {
+      blocked = false;
+      for (const update of updates) {
+        if (offset !== undefined && update.update_id < offset) continue;
+        if (update.message === undefined) {
+          blocked = true;
+          return;
+        }
+        offset = update.update_id + 1;
+      }
+    };
+    advance(backlog.updates);
     say(t("cli.telegram.waiting", { seconds: telegram.setup.wait_for_message_seconds }));
     for (;;) {
       const remaining = Math.ceil((deadline - now().getTime()) / 1000);
-      if (remaining <= 0) return null;
-      const batch = await bot.getUpdates({ ...(offset === undefined ? {} : { offset }), timeoutSeconds: Math.min(telegram.poll_timeout_seconds, remaining), ...(signal ? { signal } : {}) });
-      if (batch.lastUpdateId !== null) offset = batch.lastUpdateId + 1;
-      const message = batch.updates.map((update) => update.message).find((m): m is Message => m !== undefined && m.from?.is_bot !== true);
-      if (message !== undefined) return message;
+      if (remaining <= 0) return earlier === null ? null : { message: earlier, earlier: true };
+      if (blocked) {
+        await sleep(Math.min(telegram.setup.poll_interval_seconds, remaining) * 1000, signal);
+        if (signal?.aborted) throw new Stop();
+      }
+      const batch = await bot.getUpdates({ ...(offset === undefined ? {} : { offset }), timeoutSeconds: blocked ? 0 : Math.min(telegram.poll_timeout_seconds, remaining), ...(signal ? { signal } : {}) });
+      const fresh = batch.updates.filter((update) => update.update_id > promptAfter).map(fromPerson).find((m): m is Message => m !== null);
+      if (fresh !== undefined) return { message: fresh, earlier: false };
+      advance(batch.updates);
     }
   };
 
@@ -267,7 +303,7 @@ export async function runTelegramSetup(deps: TelegramSetupDeps): Promise<Telegra
       if (how === "manual") return askChatManually();
       await stopRunnerIfPolling(token);
       say(t("cli.telegram.sendNow", { bot: botName }));
-      let message: Message | null;
+      let message: { message: Message; earlier: boolean } | null;
       try {
         message = await waitForMessage(client(token));
       } catch (error) {
@@ -279,10 +315,17 @@ export async function runTelegramSetup(deps: TelegramSetupDeps): Promise<Telegra
         warn(t("cli.telegram.noMessage"));
         continue;
       }
-      say(t("cli.telegram.detected", { chat: describeChat(t, message), id: maskChatId(String(message.chat.id)) }));
-      if (!(await yes(t("cli.telegram.useChat"), true))) continue;
-      const chatId = String(message.chat.id);
-      return { chatId, allowed: chatId.startsWith("-") ? await askAllowed(message.from === undefined ? "" : String(message.from.id)) : "" };
+      const found = message.message;
+      if (message.earlier) {
+        // sent before the prompt: maybe old, maybe someone else's; never taken by default
+        warn(t("cli.telegram.detectedEarlier", { chat: describeChat(t, found), id: maskChatId(String(found.chat.id)), at: found.date === undefined ? "?" : `${new Date(found.date * 1000).toISOString().replace("T", " ").slice(0, 16)} UTC` }));
+        if (!(await yes(t("cli.telegram.useEarlierChat"), false))) continue;
+      } else {
+        say(t("cli.telegram.detected", { chat: describeChat(t, found), id: maskChatId(String(found.chat.id)) }));
+        if (!(await yes(t("cli.telegram.useChat"), true))) continue;
+      }
+      const chatId = String(found.chat.id);
+      return { chatId, allowed: chatId.startsWith("-") ? await askAllowed(found.from === undefined ? "" : String(found.from.id)) : "" };
     }
   };
 
@@ -307,6 +350,8 @@ export async function runTelegramSetup(deps: TelegramSetupDeps): Promise<Telegra
       const result = updateEnvFile({ file: deps.envFile, changes, now: now() });
       envWritten = true;
       say(result.created ? t("cli.telegram.envCreated", { file: result.file }) : t("cli.telegram.envWritten", { file: result.file, backup: result.backup ?? "" }));
+      // the copy keeps the previous values, the old token among them
+      if (result.backup !== null) warn(t("cli.telegram.backupHint", { backup: result.backup }));
       return true;
     } catch (error) {
       warn(t("cli.telegram.envFailed", { file: deps.envFile, reason: error instanceof Error ? error.message : "" }));
@@ -338,12 +383,23 @@ export async function runTelegramSetup(deps: TelegramSetupDeps): Promise<Telegra
         if (result.ok) {
           say(t("cli.telegram.recreated", { services: targets.join(", ") }));
           if (targets.includes("runner")) {
-            runnerStopped = false;
+            setRunnerStopped(false);
             runnerBack = true;
           }
         } else {
           warn(t("cli.telegram.recreateFailed", { reason: result.reason }));
           manual.compose = targets;
+          // a recreate cut short can leave a container removed: bring back what was running before
+          const after = await services.runningServices();
+          const down = after === null ? [] : targets.filter((service) => !after.includes(service));
+          if (down.length > 0) {
+            say(t("cli.telegram.restoring", { services: down.join(", ") }));
+            const restored = await services.ensureUp(down);
+            if (restored.ok) {
+              say(t("cli.telegram.restored", { services: down.join(", ") }));
+              if (down.includes("runner")) setRunnerStopped(false);
+            } else warn(t("cli.telegram.restoreFailed", { reason: restored.reason }));
+          }
         }
       }
     }
@@ -486,6 +542,7 @@ export async function runTelegramSetup(deps: TelegramSetupDeps): Promise<Telegra
     throw error;
   } finally {
     await bringBackRunner();
+    dropRunnerHold();
   }
 }
 

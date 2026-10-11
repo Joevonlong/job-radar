@@ -24,11 +24,13 @@ describe("createServiceControl", () => {
     await control.stop("runner");
     await control.start("runner");
     await control.recreate(["web", "runner"]);
+    await control.ensureUp(["web"]);
     expect(r.calls).toEqual([
       "docker compose -p radar-two ps --status running --services",
       "docker compose -p radar-two stop runner",
       "docker compose -p radar-two start runner",
       "docker compose -p radar-two up -d --no-deps --force-recreate --wait --wait-timeout 90 web runner",
+      "docker compose -p radar-two up -d --no-deps --wait --wait-timeout 90 web",
     ]);
   });
 

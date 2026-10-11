@@ -10,7 +10,7 @@
    pnpm run setup --step telegram
    ```
 3. 按提示粘贴 token（输入时不显示）。命令会向 Telegram 核对它，并显示 bot 的名字。
-4. 给你的 bot 随便发一句话（群聊的话，把 bot 拉进群，在群里发一句）。命令会找到这个聊天、显示名字并请你确认；如果在规定时间内（`notify.yaml` 的 `telegram.setup.wait_for_message_seconds`，180 秒）没等到消息，可以自己输入 chat id。
+4. 给你的 bot 随便发一句话（群聊的话，把 bot 拉进群，在群里发一句）。命令会找到这个聊天、显示名字并请你确认；如果在规定时间内（`notify.yaml` 的 `telegram.setup.wait_for_message_seconds`，180 秒）没等到消息，可以自己输入 chat id。默认只采用提示之后发来的消息：之前就在等待的消息（可能是旧的，也可能是别人发的）只在没有新消息时才会提出来，会明确标出，并且只有你回答“是”才会采用。
 5. 群聊时它会问谁可以按按钮，默认是刚才发消息的人（你）；见下面的“群聊”。
 6. 它发一条测试消息并问你有没有收到，再显示一份摘要（chat id 打码，token 从不显示），你确认后才写入 `.env`。
 7. 它会问要不要打开推送（`notify.yaml` 的 `telegram.enabled`），然后重启服务让它们读到新值，并检查结果（见下文）。
@@ -20,7 +20,9 @@
 ### 它写了什么
 
 - `.env` 里只改 `TELEGRAM_BOT_TOKEN`、`TELEGRAM_CHAT_ID` 和 `TELEGRAM_ALLOWED_USER_IDS`，其他行保持原样。
-- 改 `.env` 之前先在旁边存一份备份（`.env.backup-<时间>`，只有你能读，已 gitignore）；新文件一次性写入，权限 600。还没有 `.env` 时，从 `.env.example` 开始。
+- 改 `.env` 之前先在旁边存一份备份（`.env.backup-<时间>`，只有你能读，已 gitignore）；新文件一次性写入，权限 600。还没有 `.env` 时，从 `.env.example` 开始。`.env` 是符号链接时，改的是它指向的文件，链接本身保留。
+- 改动的那一行保留 `export ` 前缀和行尾的 ` # 注释`。
+- **备份里仍是之前的值，包括旧的 token。** 更换或移除 bot 后，确认一切正常就删掉它（`rm .env.backup-<时间>`，命令会打印确切的文件名）。否则旧 token 会一直留在磁盘上。
 - token 不会出现在屏幕、日志或 `pnpm run setup --answers` 的答案文件里。
 
 ### 已经配置过时
@@ -42,7 +44,9 @@ launchctl kickstart -k gui/$(id -u)/<ai-worker 标签>        # macOS
 systemctl --user restart job-radar-ai-worker.service          # Linux
 ```
 
-**一个 bot 只能有一个读取者。** runner 轮询 bot 来接收按钮，而 Telegram 每个 token 只允许一个轮询者。如果你用 runner 正在用的 token 重新配置，命令会在等你发消息期间停掉 runner，之后再启动它（按 Ctrl-C 取消时也会）。如果有别的程序在轮询同一个 bot，Telegram 会回“冲突”：这时自己输入 chat id。
+**一个 bot 只能有一个读取者。** runner 轮询 bot 来接收按钮，而 Telegram 每个 token 只允许一个轮询者。如果你用 runner 正在用的 token 重新配置，命令会在等你发消息期间停掉 runner，之后再启动它（按 Ctrl-C 取消时也会）。这期间按下的按钮不会丢：命令只取消息，按钮留在队列里等 runner 处理。如果有别的程序在轮询同一个 bot，Telegram 会回“冲突”：这时自己输入 chat id。
+
+按 Ctrl-C 会取消命令，命令随后把服务恢复原状。Docker 和 ai-worker 的命令在单独的进程组里运行，所以 Ctrl-C 不会把重建打断在半路；服务恢复期间再按 Ctrl-C 只会显示一句提示。如果重建失败、web 或 runner 停在那里，命令会把它们重新启动，并打印需要你手动收尾的命令。
 
 ### 手动配置
 

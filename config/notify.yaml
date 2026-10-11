@@ -23,6 +23,8 @@ telegram:
     restart_wait_seconds: 180
     # how long to look for "telegram poller started" in the runner log after the restart
     poller_check_seconds: 60
+    # while a button press for the runner is waiting (never confirmed by the setup), ask again every this many seconds
+    poll_interval_seconds: 3
 
 # Web dashboard address (e.g. a Tailscale address), used by the "Open details" link in job messages; null = attach only the original job link
 public_base_url: null

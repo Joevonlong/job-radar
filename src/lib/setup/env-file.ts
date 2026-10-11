@@ -16,6 +16,26 @@ function keyOf(line: string): string | null {
 const SAFE_VALUE = /^[A-Za-z0-9_:,\-]*$/;
 
 /**
+ * The parts of a `KEY=value` line kept when its value changes: what comes before the value (indent, `export `, the key,
+ * `=`) and a trailing inline comment (` # ...` after an unquoted value, or anything after the closing quote of a quoted one).
+ */
+function splitLine(line: string): { head: string; comment: string } {
+  const eq = line.indexOf("=");
+  const head = line.slice(0, eq + 1);
+  const rest = line.slice(eq + 1);
+  const quote = /^\s*(["'`])/.exec(rest);
+  if (quote !== null) {
+    const open = rest.indexOf(quote[1] as string);
+    const close = rest.indexOf(quote[1] as string, open + 1);
+    if (close < 0) return { head, comment: "" };
+    const after = rest.slice(close + 1);
+    return { head, comment: /^\s*#/.test(after) ? after : "" };
+  }
+  const hash = /\s+#/.exec(rest);
+  return { head, comment: hash === null ? "" : rest.slice(hash.index) };
+}
+
+/**
  * The new text: for each key in `changes`, the first line that sets it gets the new value (`null` removes the line), any
  * later line setting the same key is dropped (one value per key, whatever reader wins on duplicates); keys without a
  * line are appended at the end in the order given. Pure.
@@ -41,7 +61,9 @@ export function applyEnvChanges(text: string, changes: Readonly<Record<string, s
     if (done.has(key)) continue;
     done.add(key);
     const value = changes[key];
-    if (value !== null && value !== undefined) out.push(`${key}=${value}`);
+    if (value === null || value === undefined) continue;
+    const { head, comment } = splitLine(line);
+    out.push(`${head.replace(/\s*=$/, "=")}${value}${comment}`);
   }
   for (const [key, value] of Object.entries(changes)) if (!done.has(key) && value !== null) out.push(`${key}=${value}`);
   return out.length === 0 ? "" : `${out.join(eol)}${eol}`;
@@ -91,14 +113,31 @@ function writeAtomic(target: string, content: string): void {
   }
 }
 
-/** Back up, change and atomically replace `.env`. Throws (naming no value) when it cannot read or write. */
+/** The file a (possibly symlinked) `.env` stands for: the rename then replaces the target, not the link. */
+function realTarget(file: string): string {
+  try {
+    return fs.realpathSync(file);
+  } catch {
+    // missing, or a link to a file that does not exist yet: follow the link by hand
+    try {
+      if (fs.lstatSync(file).isSymbolicLink()) return path.resolve(path.dirname(file), fs.readlinkSync(file));
+    } catch {
+      // no file at all
+    }
+    return file;
+  }
+}
+
+/** Back up, change and atomically replace `.env` (through a symlink: its target). Throws (naming no value) when it cannot read or write. */
 export function updateEnvFile(options: UpdateEnvFileOptions): EnvFileUpdate {
-  const { file, changes } = options;
+  const { changes } = options;
+  const file = options.file;
+  const target = realTarget(file);
   const example = options.example ?? path.join(path.dirname(file), ".env.example");
   const now = options.now ?? new Date();
   let before: string | null = null;
   try {
-    before = fs.readFileSync(file, "utf8");
+    before = fs.readFileSync(target, "utf8");
   } catch (error) {
     if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw new Error(`cannot read ${file}`, { cause: error });
   }
@@ -116,6 +155,6 @@ export function updateEnvFile(options: UpdateEnvFileOptions): EnvFileUpdate {
       fs.closeSync(fd);
     }
   }
-  writeAtomic(file, next);
+  writeAtomic(target, next);
   return { file, backup, created: before === null };
 }

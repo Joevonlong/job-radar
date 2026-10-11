@@ -14,6 +14,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 
 import { reloadConfig, setOnProfileSaved } from "@/lib/config";
 import { runSetupCli, type CliIo } from "@/lib/setup/cli";
+import { heldInterruptNote } from "@/lib/setup/interrupt-guard";
 import { resetSetupStateCache, readSetupState } from "@/lib/setup/state";
 import type { DoctorLine } from "@/lib/setup/telegram-setup";
 import { maskChatId } from "@/lib/setup/telegram-setup";
@@ -36,13 +37,15 @@ interface FakeApi {
   calls: string[];
   /** Answer getUpdates with 409 (another poller) this many times. */
   conflicts: number;
+  /** The body of every getUpdates call (offset, timeout). */
+  polls: Array<Record<string, unknown>>;
   close: () => Promise<void>;
 }
 
 let api: FakeApi;
 
 async function startFakeApi(): Promise<FakeApi> {
-  const state: Omit<FakeApi, "url" | "close"> = { updates: [], sent: [], calls: [], conflicts: 0 };
+  const state: Omit<FakeApi, "url" | "close"> = { updates: [], sent: [], calls: [], conflicts: 0, polls: [] };
   const server = http.createServer((req, res) => {
     let body = "";
     req.on("data", (chunk: Buffer) => (body += chunk.toString()));
@@ -63,6 +66,7 @@ async function startFakeApi(): Promise<FakeApi> {
         return reply(200, { ok: true, result: { message_id: state.sent.length } });
       }
       if (method === "getUpdates") {
+        state.polls.push(payload);
         if (state.conflicts > 0) {
           state.conflicts -= 1;
           return reply(409, { ok: false, error_code: 409, description: "Conflict: terminated by other getUpdates request" });
@@ -87,15 +91,18 @@ async function startFakeApi(): Promise<FakeApi> {
 const privateMessage = (updateId: number) => ({ update_id: updateId, message: { message_id: 1, date: 1, chat: { id: 4242424242, type: "private", first_name: "Joe" }, from: { id: 4242424242, first_name: "Joe" }, text: "hi" } });
 const groupMessage = (updateId: number) => ({ update_id: updateId, message: { message_id: 2, date: 1, chat: { id: -1009876543210, type: "supergroup", title: "Job hunt" }, from: { id: 42, first_name: "Ann" }, text: "/start@radar_test_bot" } });
 
+const buttonPress = (updateId: number) => ({ update_id: updateId, callback_query: { id: "cb1", from: { id: 4242424242 }, data: "status:1:interested" } });
+const oldMessage = (updateId: number) => ({ update_id: updateId, message: { message_id: 9, date: 1_700_000_000, chat: { id: 31313131, type: "private", first_name: "Old" }, from: { id: 31313131, first_name: "Old" }, text: "/start" } });
+
 // ---------------------------------------------------------------- fakes
 
 interface FakeServices extends ServiceControl {
   calls: string[];
 }
 
-function fakeServices(options: { running?: string[] | null; recreate?: StepOutcome; aiWorker?: "launchd" | null; pollerLog?: boolean } = {}): FakeServices {
+function fakeServices(options: { running?: string[] | null; recreate?: StepOutcome; runningAfterFailedRecreate?: string[]; aiWorker?: "launchd" | null; pollerLog?: boolean } = {}): FakeServices {
   const calls: string[] = [];
-  const running = options.running === undefined ? ["db", "web", "runner", "jobspy"] : options.running;
+  let running = options.running === undefined ? ["db", "web", "runner", "jobspy"] : options.running;
   const settings = { project: "radar-test", platform: "darwin" as const, uid: 501, launchdLabel: "io.example.ai-worker", systemdUnit: "x.service", commandTimeoutMs: 1000, restartWaitSeconds: 5 };
   return {
     calls,
@@ -114,7 +121,12 @@ function fakeServices(options: { running?: string[] | null; recreate?: StepOutco
     },
     recreate: async (services: readonly EnvFileService[]) => {
       calls.push(`recreate ${services.join(",")}`);
+      if (options.recreate?.ok === false && options.runningAfterFailedRecreate) running = options.runningAfterFailedRecreate;
       return options.recreate ?? { ok: true, reason: "" };
+    },
+    ensureUp: async (services: readonly EnvFileService[]) => {
+      calls.push(`up ${services.join(",")}`);
+      return { ok: true, reason: "" };
     },
     aiWorker: async () => {
       calls.push("ai-worker?");
@@ -206,6 +218,7 @@ beforeEach(() => {
   api.sent = [];
   api.calls = [];
   api.conflicts = 0;
+  api.polls = [];
   resetSetupStateCache();
 });
 afterEach(() => {
@@ -221,7 +234,7 @@ const envText = () => fs.readFileSync(envFile, "utf8");
 
 describe("pnpm run setup --step telegram: a first setup", () => {
   it("token (wrong first), detected private chat, test message, .env written, push on, services restarted, nothing secret printed", async () => {
-    api.updates = [[privateMessage(10)]];
+    api.updates = [[], [privateMessage(10)]];
     const services = fakeServices();
     // y start | bad format | wrong token | y retry | good token | a detect | y use chat | y arrived | y write | y enable
     const run = io(["y", "not-a-token", WRONG_TOKEN, "y", GOOD_TOKEN, "a", "y", "y", "y", "y"]);
@@ -248,7 +261,7 @@ describe("pnpm run setup --step telegram: a first setup", () => {
   });
 
   it("a group chat asks for the allowed user ids and offers the sender", async () => {
-    api.updates = [[groupMessage(20)]];
+    api.updates = [[], [groupMessage(20)]];
     const run = io(["y", GOOD_TOKEN, "a", "y", "", "y", "y", "n"]);
     expect(await setup([], run, baseEnv(), fakeServices())).toBe(0);
     expect(run.lines.join("\n")).toContain('Received from group "Job hunt" (sent by Ann), chat id -•••3210.');
@@ -301,6 +314,17 @@ describe("pnpm run setup --step telegram: a first setup", () => {
     const errors = run.errors.join("\n");
     expect(errors).toContain("The restart failed: container runner is unhealthy");
     expect(errors).toContain("docker compose -p radar-test up -d --no-deps --force-recreate web runner");
+    // nothing went down: nothing to bring back
+    expect(services.calls.some((call) => call.startsWith("up "))).toBe(false);
+  });
+
+  it("a recreate cut short that left web removed brings web back (and the commands are still printed)", async () => {
+    const services = fakeServices({ recreate: { ok: false, reason: "docker compose up timed out" }, runningAfterFailedRecreate: ["db", "runner", "jobspy"] });
+    const run = io(["y", GOOD_TOKEN, "m", "12345", "y", "y", "y"]);
+    expect(await setup([], run, baseEnv(), services)).toBe(0);
+    expect(services.calls).toContain("up web");
+    expect(run.lines.join("\n")).toContain("web running again.");
+    expect(run.errors.join("\n")).toContain("docker compose -p radar-test up -d --no-deps --force-recreate web runner");
   });
 
   it("an existing .env keeps its other lines and order and gets a backup", async () => {
@@ -311,6 +335,8 @@ describe("pnpm run setup --step telegram: a first setup", () => {
     const backups = fs.readdirSync(tmp.root).filter((name) => name.startsWith(".env.backup-"));
     expect(backups).toHaveLength(1);
     expect(fs.readFileSync(path.join(tmp.root, backups[0] ?? ""), "utf8")).toBe("A=1\nTELEGRAM_CHAT_ID=1\n# comment\nB=2\n");
+    // the copy holds the old values: the command says to delete it
+    expect(run.errors.join("\n")).toContain(`The backup ${path.join(tmp.root, backups[0] ?? "")} still holds the previous values, the old token among them`);
   });
 });
 
@@ -318,7 +344,7 @@ describe("the runner and the first message", () => {
   const sameBot = () => baseEnv({ TELEGRAM_BOT_TOKEN: GOOD_TOKEN, TELEGRAM_CHAT_ID: "111" });
 
   it("the token the runner polls: the runner is stopped before detection and recreated with the new values", async () => {
-    api.updates = [[privateMessage(30)]];
+    api.updates = [[], [privateMessage(30)]];
     const services = fakeServices();
     // r replace | token | a detect | y use | y arrived | y write | y enable
     const run = io(["r", GOOD_TOKEN, "a", "y", "y", "y", "y"]);
@@ -347,14 +373,57 @@ describe("the runner and the first message", () => {
     const done = setup([], run, sameBot(), services);
     // abort once the wait has started
     for (let i = 0; i < 100 && !run.lines.some((line) => line.startsWith("Waiting up to")); i += 1) await new Promise((resolve) => setTimeout(resolve, 10));
+    // while the runner is down a further Ctrl-C must not end the command (scripts/setup.ts asks the guard)
+    expect(heldInterruptNote()).toContain("Still bringing the services back");
     controller.abort();
     expect(await done).toBe(0);
     expect(services.calls[services.calls.length - 1]).toBe("start runner");
+    expect(heldInterruptNote()).toBeNull();
     expect(fs.existsSync(envFile)).toBe(false);
   });
 
+  it("a button press waiting for the stopped runner is never confirmed; the message after it is used", async () => {
+    // already waiting: a button press (for the runner); then it is still there, and a new message follows it
+    api.updates = [[buttonPress(50)], [buttonPress(50), privateMessage(51)]];
+    const services = fakeServices();
+    const run = io(["r", GOOD_TOKEN, "a", "y", "y", "y", "y"]);
+    expect(await setup([], run, baseEnv({ TELEGRAM_BOT_TOKEN: GOOD_TOKEN, TELEGRAM_CHAT_ID: "111" }), services)).toBe(0);
+    expect(run.lines.join("\n")).toContain("Received from Joe (private chat), chat id •••4242.");
+    // no getUpdates ever confirmed update 50 (an offset above it would): the runner gets the press after its restart
+    expect(api.polls.every((poll) => poll.offset === undefined || Number(poll.offset) <= 50)).toBe(true);
+    // with the press at the head of the queue a long poll would return at once: it asks again without waiting
+    expect(api.polls[1]?.timeout).toBe(0);
+    expect(services.calls).toContain("stop runner");
+  });
+
+  it("messages ahead of a button press are confirmed, the press is not", async () => {
+    api.updates = [[oldMessage(60), buttonPress(61)], [buttonPress(61), privateMessage(62)]];
+    const run = io(["y", GOOD_TOKEN, "a", "y", "y", "y", "n"]);
+    expect(await setup([], run, baseEnv(), fakeServices())).toBe(0);
+    expect(api.polls[1]?.offset).toBe(61);
+    expect(api.polls.every((poll) => poll.offset === undefined || Number(poll.offset) <= 61)).toBe(true);
+    expect(envText()).toContain("TELEGRAM_CHAT_ID=4242424242\n");
+  });
+
+  it("a message sent before the prompt is only offered when no new one came, clearly marked, and not taken on Enter", async () => {
+    api.updates = [[oldMessage(70)]];
+    // y start | token | a detect | Enter (= no) on the earlier chat | m type it | id | y arrived | y write | n enable
+    const run = io(["y", GOOD_TOKEN, "a", "", "m", "12345", "y", "y", "n"]);
+    expect(await setup([], run, baseEnv(), fakeServices())).toBe(0);
+    expect(run.errors.join("\n")).toContain("No new message arrived. A message was already waiting from before you were asked (sent 2023-11-14 22:13 UTC): Old (private chat), chat id •••3131.");
+    expect(run.questions.some((q) => q.startsWith("Use this earlier chat anyway?") && q.includes("[n]"))).toBe(true);
+    expect(envText()).toContain("TELEGRAM_CHAT_ID=12345\n");
+  });
+
+  it("the earlier message can still be taken on purpose", async () => {
+    api.updates = [[oldMessage(71)]];
+    const run = io(["y", GOOD_TOKEN, "a", "y", "y", "y", "n"]);
+    expect(await setup([], run, baseEnv(), fakeServices())).toBe(0);
+    expect(envText()).toContain("TELEGRAM_CHAT_ID=31313131\n");
+  });
+
   it("another bot than the runner's: the runner keeps running", async () => {
-    api.updates = [[privateMessage(40)]];
+    api.updates = [[], [privateMessage(40)]];
     const services = fakeServices();
     const run = io(["r", GOOD_TOKEN, "a", "y", "y", "y", "y"]);
     expect(await setup([], run, baseEnv({ TELEGRAM_BOT_TOKEN: OLD_TOKEN, TELEGRAM_CHAT_ID: "111" }), services)).toBe(0);

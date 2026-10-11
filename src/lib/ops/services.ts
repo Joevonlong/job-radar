@@ -51,6 +51,8 @@ export interface ServiceControl {
   start(service: EnvFileService): Promise<StepOutcome>;
   /** Recreate these services (and wait until healthy) so they read `.env` again. */
   recreate(services: readonly EnvFileService[]): Promise<StepOutcome>;
+  /** Create / start these services when they are not running (no forced recreate): the way back after a failed recreate. */
+  ensureUp(services: readonly EnvFileService[]): Promise<StepOutcome>;
   /** How the ai-worker runs as a service of this user, when it is installed and running; null otherwise. */
   aiWorker(): Promise<AiWorkerManager | null>;
   restartAiWorker(manager: AiWorkerManager): Promise<StepOutcome>;
@@ -100,6 +102,12 @@ export function createServiceControl(settings: ServiceSettings, run: CommandRunn
       if (services.length === 0) return { ok: true, reason: "" };
       const wait = settings.restartWaitSeconds;
       const result = await compose(["up", "-d", "--no-deps", "--force-recreate", "--wait", "--wait-timeout", String(wait), ...services], (wait + 60) * 1000);
+      return outcomeOf(result, "docker compose up");
+    },
+    async ensureUp(services) {
+      if (services.length === 0) return { ok: true, reason: "" };
+      const wait = settings.restartWaitSeconds;
+      const result = await compose(["up", "-d", "--no-deps", "--wait", "--wait-timeout", String(wait), ...services], (wait + 60) * 1000);
       return outcomeOf(result, "docker compose up");
     },
     async aiWorker() {

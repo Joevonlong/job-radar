@@ -13,6 +13,7 @@ import { createInterface } from "node:readline";
 import { Writable } from "node:stream";
 
 import { runSetupCli, type CliIo } from "../src/lib/setup/cli";
+import { heldInterruptNote } from "../src/lib/setup/interrupt-guard";
 
 const lines: string[] = [];
 const waiting: Array<(line: string | null) => void> = [];
@@ -42,10 +43,17 @@ rl.on("close", () => {
   for (const next of waiting.splice(0)) next(null);
 });
 
-// Ctrl-C / SIGTERM: stop waiting and let the command clean up (it starts a runner it stopped); a second one exits at once.
+// Ctrl-C / SIGTERM: stop waiting and let the command clean up (it starts a runner it stopped). A further one exits at
+// once, except while services are being restarted or a stopped runner is not back yet: then it says so and goes on.
+// The service commands run in a process group of their own, so the terminal's Ctrl-C never reaches them.
 const controller = new AbortController();
 const interrupt = (): void => {
-  if (controller.signal.aborted) process.exit(130);
+  if (controller.signal.aborted) {
+    const note = heldInterruptNote();
+    if (note === null) process.exit(130);
+    process.stdout.write(`\n${note}\n`);
+    return;
+  }
   muted = false;
   process.stdout.write("\n");
   controller.abort();

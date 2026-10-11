@@ -10,7 +10,7 @@ After every cycle, the host `ai-worker` pushes qualifying new jobs to your Teleg
    pnpm run setup --step telegram
    ```
 3. Paste the token when asked (it is not shown while you type). The command checks it with Telegram and shows the bot's name.
-4. Send any message to your bot (or, for a group, add the bot to the group and send a message there). The command finds the chat, shows its name and asks you to confirm; if nothing arrives in time (`telegram.setup.wait_for_message_seconds` of `notify.yaml`, 180 s), you can type the chat id yourself.
+4. Send any message to your bot (or, for a group, add the bot to the group and send a message there). The command finds the chat, shows its name and asks you to confirm; if nothing arrives in time (`telegram.setup.wait_for_message_seconds` of `notify.yaml`, 180 s), you can type the chat id yourself. Only a message sent after the prompt is taken by default: a message that was already waiting (maybe old, maybe from someone else) is offered only when no new one came, marked as such, and only taken when you answer yes.
 5. For a group chat it asks who may press the buttons, defaulting to the person who just wrote (you); see "Group chats" below.
 6. It sends a test message and asks whether it arrived, shows a summary (the chat id is masked, the token never shown), and writes `.env` after you confirm.
 7. It offers to switch the push on (`telegram.enabled` in `notify.yaml`) and then restarts the services so they read the new values, and checks the result (see below).
@@ -20,7 +20,9 @@ You can also reach this step from the full `pnpm run setup` interview. Settings 
 ### What it writes
 
 - Only `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` and `TELEGRAM_ALLOWED_USER_IDS` in `.env`; every other line stays as it was.
-- Before changing `.env` it saves a copy next to it (`.env.backup-<time>`, readable only by you, gitignored); the new file is written in one step with mode 600. If there is no `.env` yet, it starts from `.env.example`.
+- Before changing `.env` it saves a copy next to it (`.env.backup-<time>`, readable only by you, gitignored); the new file is written in one step with mode 600. If there is no `.env` yet, it starts from `.env.example`. When `.env` is a symlink, the file it points to is changed and the link stays.
+- A changed line keeps its `export ` prefix and a trailing ` # comment`.
+- **The backup still holds the previous values, the old token among them.** After replacing or removing a bot, delete it once everything works (`rm .env.backup-<time>`; the command prints the exact name). Otherwise the old token stays on disk.
 - The token never appears on screen, in logs or in the answers file of `pnpm run setup --answers`.
 
 ### When a bot is already set up
@@ -42,7 +44,9 @@ launchctl kickstart -k gui/$(id -u)/<ai-worker label>        # macOS
 systemctl --user restart job-radar-ai-worker.service          # Linux
 ```
 
-**The bot can have only one reader.** The runner polls the bot for button presses, and Telegram allows one poller per token. When you set up again with the token the runner already uses, the command stops the runner while it waits for your message and starts it again afterwards (also when you cancel with Ctrl-C). If another program polls the same bot, Telegram answers "conflict": type the chat id yourself.
+**The bot can have only one reader.** The runner polls the bot for button presses, and Telegram allows one poller per token. When you set up again with the token the runner already uses, the command stops the runner while it waits for your message and starts it again afterwards (also when you cancel with Ctrl-C). Button presses made meanwhile are not lost: the command only takes messages and leaves the presses queued for the runner. If another program polls the same bot, Telegram answers "conflict": type the chat id yourself.
+
+Ctrl-C cancels the command, which then puts the services back as they were. The Docker and ai-worker commands run in a process group of their own, so a Ctrl-C never cuts a recreate half-way, and while the services are coming back a further Ctrl-C only prints a note. If a recreate fails and leaves web or runner stopped, the command starts them again and prints the commands to finish by hand.
 
 ### Doing it by hand
 

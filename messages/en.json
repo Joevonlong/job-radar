@@ -5758,7 +5758,14 @@
         "pollerMissing": "The runner has not logged \"telegram poller started\" yet. Check: {command}",
         "doctorTitle": "Doctor (Telegram checks):",
         "doctorFailed": "The doctor could not run; run pnpm run doctor yourself.",
-        "done": "Telegram is set up. Settings -> Notifications shows the state; the button there sends another test message."
+        "done": "Telegram is set up. Settings -> Notifications shows the state; the button there sends another test message.",
+        "detectedEarlier": "No new message arrived. A message was already waiting from before you were asked (sent {at}): {chat}, chat id {id}. It may be old or from someone else.",
+        "useEarlierChat": "Use this earlier chat anyway?",
+        "servicesBusy": "Still bringing the services back; please wait, the command ends on its own.",
+        "backupHint": "The backup {backup} still holds the previous values, the old token among them: delete it once everything works (rm {backup}).",
+        "restoring": "Bringing back what was running before: {services} …",
+        "restored": "{services} running again.",
+        "restoreFailed": "Could not bring them back ({reason}): run the commands below."
       }
     }
   },

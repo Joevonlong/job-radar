@@ -5758,7 +5758,14 @@
         "pollerMissing": "runner 日志里还没有出现 \"telegram poller started\"。请检查：{command}",
         "doctorTitle": "doctor（Telegram 检查）：",
         "doctorFailed": "doctor 没能运行；请自己运行 pnpm run doctor。",
-        "done": "Telegram 配置完成。设置 -> 推送 页显示状态；那里的按钮可以再发一条测试消息。"
+        "done": "Telegram 配置完成。设置 -> 推送 页显示状态；那里的按钮可以再发一条测试消息。",
+        "detectedEarlier": "没有收到新消息。在提示你之前已经有一条消息在等待（发送于 {at}）：{chat}，chat id {id}。它可能是旧消息，也可能是别人发的。",
+        "useEarlierChat": "仍然使用这个较早的聊天吗？",
+        "servicesBusy": "正在恢复服务，请稍候，命令完成后会自己结束。",
+        "backupHint": "备份 {backup} 里仍有之前的值，包括旧的 token：确认一切正常后删掉它（rm {backup}）。",
+        "restoring": "正在恢复之前在运行的服务：{services} ……",
+        "restored": "{services} 已重新运行。",
+        "restoreFailed": "没能恢复（{reason}）：请运行下面的命令。"
       }
     }
   },

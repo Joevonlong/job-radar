@@ -42,7 +42,8 @@ import { saveSourcesStep } from "./steps/sources";
 import { saveTargetsStep } from "./steps/targets";
 import { saveTelegramStep } from "./steps/telegram";
 import { readinessParams } from "./readiness";
-import { runTelegramSetup, type DoctorLine } from "./telegram-setup";
+import { withInterruptsHeld } from "./interrupt-guard";
+import { runTelegramSetup, TELEGRAM_KEYS, type DoctorLine } from "./telegram-setup";
 import { cliLocale, profileErrorsTranslator, profileFieldsTranslator, setupTranslator, type SetupTranslator } from "./text";
 import type { SetupStepResult } from "./types";
 import { heartbeats, loadSetupView, readinessOf, type SetupView } from "./view";
@@ -373,9 +374,20 @@ async function interactiveStep(ctx: Context, step: Exclude<SetupStepId, "review"
 
 const doctorJsonSchema = z.object({ results: z.array(z.object({ status: z.enum(["ok", "warn", "fail"]), title: z.string(), detail: z.string() })) });
 
+/**
+ * The doctor child's environment: this process's, without the Telegram keys. They were loaded from the old `.env` when
+ * `pnpm run setup` started, and `--env-file-if-exists` never overrides a variable that is already set (even to ""):
+ * without them the child reads the `.env` just written.
+ */
+export function doctorChildEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const child: NodeJS.ProcessEnv = { ...env };
+  for (const key of TELEGRAM_KEYS) delete child[key];
+  return child;
+}
+
 /** `pnpm run doctor --only telegram --json` as a child process: it reads the new `.env` itself. */
-async function telegramDoctor(locale: Locale, timeoutMs: number): Promise<DoctorLine[] | null> {
-  const out = await runCommand(process.execPath, ["--env-file-if-exists=.env", "--import", "tsx", "scripts/doctor.ts", "--only", "telegram", "--json", "--lang", locale], timeoutMs);
+export async function telegramDoctor(locale: Locale, timeoutMs: number, env: NodeJS.ProcessEnv = process.env, run: typeof runCommand = runCommand): Promise<DoctorLine[] | null> {
+  const out = await run(process.execPath, ["--env-file-if-exists=.env", "--import", "tsx", "scripts/doctor.ts", "--only", "telegram", "--json", "--lang", locale], timeoutMs, { env: doctorChildEnv(env) });
   if (out.kind !== "ran") return null;
   try {
     const parsed = doctorJsonSchema.safeParse(JSON.parse(out.stdout));
@@ -386,7 +398,7 @@ async function telegramDoctor(locale: Locale, timeoutMs: number): Promise<Doctor
 }
 
 /** Docker compose, launchd / systemd as the deploy script and the doctor find them; null when schedule.yaml cannot be read. */
-function hostServices(env: NodeJS.ProcessEnv, restartWaitSeconds: number): ServiceControl | null {
+function hostServices(env: NodeJS.ProcessEnv, restartWaitSeconds: number, busyNote: string): ServiceControl | null {
   try {
     const { doctor } = loadConfig("schedule");
     return createServiceControl(
@@ -399,7 +411,8 @@ function hostServices(env: NodeJS.ProcessEnv, restartWaitSeconds: number): Servi
         commandTimeoutMs: doctor.command_timeout_seconds * 1000,
         restartWaitSeconds,
       },
-      runCommand,
+      // own process group (a Ctrl-C cannot cut a recreate half-way) and no exit on a further Ctrl-C until it is done
+      (command, args, timeoutMs) => withInterruptsHeld(busyNote, () => runCommand(command, args, timeoutMs, { detached: true })),
     );
   } catch {
     return null;
@@ -419,7 +432,7 @@ async function telegramStep(ctx: Context): Promise<"next" | "stop"> {
     return "next";
   }
   const deps = ctx.deps.telegram ?? {};
-  const services = deps.services !== undefined ? deps.services : hostServices(ctx.env, config.telegram.setup.restart_wait_seconds);
+  const services = deps.services !== undefined ? deps.services : hostServices(ctx.env, config.telegram.setup.restart_wait_seconds, t("cli.telegram.servicesBusy"));
   const doctorTimeoutMs = (() => {
     try {
       const { doctor } = loadConfig("schedule");
@@ -436,7 +449,7 @@ async function telegramStep(ctx: Context): Promise<"next" | "stop"> {
     config,
     services,
     restart: ctx.restart,
-    doctor: deps.doctor ?? (() => telegramDoctor(ctx.locale, doctorTimeoutMs)),
+    doctor: deps.doctor ?? (() => telegramDoctor(ctx.locale, doctorTimeoutMs, ctx.env)),
     saveEnabled: (enabled) => saveTelegramStep({ enabled }),
     skip: () => skipSetupStep("telegram"),
     ...(deps.fetch ? { fetch: deps.fetch } : {}),
