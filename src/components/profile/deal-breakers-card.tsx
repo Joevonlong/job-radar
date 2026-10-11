@@ -94,6 +94,7 @@ function RulePreview({ preview, total, rule }: { preview: DraftPreviewRule | und
  */
 export function DealBreakersCard({ baseId, rules, onChange, errors, userLevel, languageName, languageStep }: DealBreakersCardProps) {
   const t = useTranslations("dealBreakers");
+  const locale = useAppLocale();
   const headingId = useId();
   const [preview, setPreview] = useState<DealBreakerPreviewResult | null>(null);
   const request = useRef(0);
@@ -154,6 +155,11 @@ export function DealBreakersCard({ baseId, rules, onChange, errors, userLevel, l
       {preview?.status === "error" ? (
         <p className="text-ink-3 font-mono text-data-sm" data-testid="deal-breakers-preview-unavailable">
           {t("preview.unavailable")}
+        </p>
+      ) : null}
+      {preview?.status === "done" && preview.partial ? (
+        <p className="text-ink-3 font-mono text-data-sm" data-testid="deal-breakers-preview-partial">
+          {t("preview.partial", { total: formatInteger(preview.total, locale) })}
         </p>
       ) : null}
 

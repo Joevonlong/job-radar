@@ -8,7 +8,8 @@ import { describe, expect, it } from "vitest";
 import { DEAL_BREAKER_DEFAULTS } from "@/lib/config/schemas/pipeline";
 import { dealBreakerSchema } from "@/lib/config/schemas/preferences";
 import type { GermanLevel } from "@/lib/domain/types";
-import { checkDealBreakers, compileDealBreakers, type DealBreakerJob } from "@/lib/filter/deal-breakers";
+import { compileDealBreakers, dealBreakerVetoes, startDealBreakerRun, type DealBreakerJob } from "@/lib/filter/deal-breakers";
+import { vmTimeBox } from "@/lib/filter/time-box";
 
 const JOBS = 20_000;
 const BUDGET_MS = process.env.CI ? 4_000 : 2_000;
@@ -54,14 +55,21 @@ describe("deal-breakers performance", () => {
   it(`checks ${JOBS} jobs against ${rules.length} rules within ${BUDGET_MS} ms`, () => {
     expect(rules).toHaveLength(20);
     const subjects = jobs();
-    const compiled = compileDealBreakers(rules, { language: "de", me: { languages: [{ de: "B1" }] }, limits: DEAL_BREAKER_DEFAULTS });
+    // the run's time budget is wall time and not what is measured here: a large one, so a busy machine stops no rule
+    const compiled = compileDealBreakers(rules, { language: "de", me: { languages: [{ de: "B1" }] }, limits: { ...DEAL_BREAKER_DEFAULTS, rule_budget_ms: 600_000 } });
     expect(compiled.rules).toHaveLength(20);
+    const run = startDealBreakerRun(compiled, vmTimeBox);
+    expect(run.warnings).toEqual([]);
     const started = process.cpuUsage();
     let vetoed = 0;
-    for (const subject of subjects) if (checkDealBreakers(subject, compiled).length > 0) vetoed += 1;
+    // in batches, as the filter step reads them
+    for (let from = 0; from < subjects.length; from += 200) {
+      for (const ids of dealBreakerVetoes(run, subjects.slice(from, from + 200)).vetoes) if (ids.length > 0) vetoed += 1;
+    }
     const used = process.cpuUsage(started);
     const elapsed = (used.user + used.system) / 1000;
     expect(vetoed).toBeGreaterThan(0);
     expect(elapsed).toBeLessThan(BUDGET_MS);
+    expect(run.warnings).toEqual([]);
   });
 });

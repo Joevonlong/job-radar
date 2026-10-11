@@ -141,6 +141,165 @@ export function nestedQuantifierReason(source: string): string | null {
   return null;
 }
 
+/** Which kind of slow pattern `slowPatternReason` found. */
+export type SlowPatternKind = "nested" | "unbounded" | "leading" | "alternation";
+
+export interface SlowPattern {
+  kind: SlowPatternKind;
+  detail: string;
+}
+
+/** Characters an atom can start a match with: a set of (lower-case) characters, or "any". */
+type FirstChars = "any" | string;
+
+interface Atom {
+  /** Can match many different characters (`.`, `\s`, `\w`, `\d`, a class, `\p{…}`): a run of it can be long on ordinary text. */
+  broad: boolean;
+  /** Matches almost anything (`.`, `\S`, `\W`, `\D`, a negated class). */
+  dotLike: boolean;
+  first: FirstChars;
+  /** Nothing can be matched before it (the start of the pattern or of an alternative). */
+  leading: boolean;
+}
+
+interface GroupFrame {
+  /** The first characters of each alternative; null while an alternative has no atom yet. */
+  firsts: Array<FirstChars | null>;
+  broad: boolean;
+}
+
+const overlaps = (a: FirstChars | null, b: FirstChars | null): boolean => a === null || b === null || a === "any" || b === "any" || [...a].some((char) => b.includes(char));
+
+function escapeAtom(next: string): Omit<Atom, "leading"> {
+  if (next === "d") return { broad: true, dotLike: false, first: "0123456789" };
+  if (next === "s") return { broad: true, dotLike: false, first: " \t\n\r\f\v" };
+  if (next === "w" || next === "p" || next === "P") return { broad: true, dotLike: false, first: "any" };
+  if (next === "D" || next === "S" || next === "W") return { broad: true, dotLike: true, first: "any" };
+  if (/[a-zA-Z0-9]/u.test(next)) return { broad: false, dotLike: false, first: "any" }; // \n, \t, \u…, \x…, \k<…>, \1
+  return { broad: false, dotLike: false, first: next.toLowerCase() };
+}
+
+/**
+ * Why a user pattern can be very slow on ordinary job text, or null. JavaScript regular expressions have no time limit, so the
+ * usual shapes of catastrophic or quadratic backtracking are refused before a rule is saved (the filter also limits the time a
+ * rule may take at run time, this is the early, readable answer):
+ * - nested: a repeated group that repeats inside (`(a+)+`, see `nestedQuantifierReason`);
+ * - unbounded: two or more unbounded runs of broad characters (`.*x.*y`, `\d+.*\d+`, `\w+\s*\w+`);
+ * - leading: the pattern starts with an unbounded run of almost anything (`.*100%`), which is retried from every position;
+ * - alternation: a repeated group whose alternatives can start with the same character (`(a|ab)+`, `(\w|-)+`).
+ * A heuristic over the pattern's text: escapes and classes are read roughly, and bounded runs (`.{0,30}`, `\s?`) are fine.
+ */
+export function slowPatternReason(source: string): SlowPattern | null {
+  const nested = nestedQuantifierReason(source);
+  if (nested !== null) return { kind: "nested", detail: nested };
+  const stack: GroupFrame[] = [{ firsts: [null], broad: false }];
+  const unbounded: number[] = [];
+  let last: (Atom & { group: GroupFrame | null }) | null = null;
+  const top = (): GroupFrame => stack[stack.length - 1]!;
+  const isLeading = (): boolean => stack.every((frame) => frame.firsts[frame.firsts.length - 1] === null);
+  const take = (atom: Omit<Atom, "leading">, group: GroupFrame | null = null): void => {
+    const leading = isLeading();
+    for (const frame of stack) {
+      const at = frame.firsts.length - 1;
+      if (frame.firsts[at] === null) frame.firsts[at] = atom.first;
+      if (atom.broad) frame.broad = true;
+    }
+    last = { ...atom, leading, group };
+  };
+  for (let i = 0; i < source.length; i += 1) {
+    const char = source[i]!;
+    if (char === "\\") {
+      const next = source[i + 1] ?? "";
+      i += 1;
+      if (next === "b" || next === "B") {
+        last = null;
+        continue;
+      }
+      if (/[pPuk]/u.test(next) && (source[i + 1] === "{" || source[i + 1] === "<")) i = Math.max(i, source.indexOf(source[i + 1] === "{" ? "}" : ">", i));
+      take(escapeAtom(next));
+      continue;
+    }
+    if (char === "[") {
+      const negated = source[i + 1] === "^";
+      for (i += 1; i < source.length && source[i] !== "]"; i += 1) if (source[i] === "\\") i += 1;
+      take({ broad: true, dotLike: negated, first: "any" });
+      continue;
+    }
+    if (char === ".") {
+      take({ broad: true, dotLike: true, first: "any" });
+      continue;
+    }
+    if (char === "(") {
+      // (?: (?= (?! (?<= (?<! (?<name>: the modifier is not an atom
+      if (source[i + 1] === "?") {
+        i += 1;
+        if (source[i + 1] === "<" && source[i + 2] !== "=" && source[i + 2] !== "!") i = Math.max(i, source.indexOf(">", i));
+        else i += source[i + 1] === "<" ? 2 : 1;
+      }
+      stack.push({ firsts: [null], broad: false });
+      last = null;
+      continue;
+    }
+    if (char === ")") {
+      const frame = stack.length > 1 ? stack.pop()! : null;
+      if (frame === null) continue;
+      const first = frame.firsts.some((value) => value === null || value === "any") ? "any" : [...new Set(frame.firsts.join(""))].join("");
+      // the group as one atom of its parent (its broad runs are already counted)
+      const leading = isLeading();
+      for (const parent of stack) {
+        const at = parent.firsts.length - 1;
+        if (parent.firsts[at] === null) parent.firsts[at] = first;
+        if (frame.broad) parent.broad = true;
+      }
+      last = { broad: frame.broad, dotLike: false, first, leading, group: frame };
+      continue;
+    }
+    if (char === "|") {
+      top().firsts.push(null);
+      last = null;
+      continue;
+    }
+    if (char === "^" || char === "$") {
+      last = null;
+      continue;
+    }
+    let max: number | null = null;
+    let length = 1;
+    if (char === "*" || char === "+") max = Infinity;
+    else if (char === "?") max = 1;
+    else if (char === "{") {
+      const repeat = /^\{(\d+)(?:(,)(\d*))?\}/u.exec(source.slice(i));
+      if (repeat) {
+        max = repeat[2] ? (repeat[3] === "" ? Infinity : Number(repeat[3])) : Number(repeat[1]);
+        length = repeat[0].length;
+      }
+    }
+    if (max === null) {
+      take({ broad: false, dotLike: false, first: char.toLowerCase() });
+      continue;
+    }
+    i += length - 1;
+    if (source[i + 1] === "?") i += 1; // lazy
+    const atom: (Atom & { group: GroupFrame | null }) | null = last;
+    last = null;
+    if (atom === null) continue;
+    if (atom.group !== null && max > 1) {
+      const { firsts } = atom.group;
+      for (let a = 0; a < firsts.length; a += 1) {
+        for (let b = a + 1; b < firsts.length; b += 1) {
+          if (overlaps(firsts[a] ?? null, firsts[b] ?? null)) return { kind: "alternation", detail: `the alternatives of the repeated group before position ${i} can start alike` };
+        }
+      }
+    }
+    if (max === Infinity && atom.broad) {
+      if (atom.leading && atom.dotLike) return { kind: "leading", detail: `starts with an unbounded run of any character (position ${i})` };
+      unbounded.push(i);
+    }
+  }
+  if (unbounded.length >= 2) return { kind: "unbounded", detail: `${unbounded.length} unbounded runs of broad characters (positions ${unbounded.join(", ")}); bound them, as in .{0,40}` };
+  return null;
+}
+
 /** A named region of the market packs ("eu", "dach") or an ISO 3166-1 alpha-2 country code ("DE"). */
 export const regionToken = z.union([
   z.string().regex(/^[a-z][a-z0-9_]{1,31}$/, "must be a region id (lower case)"),

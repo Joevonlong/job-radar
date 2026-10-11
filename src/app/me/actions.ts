@@ -77,7 +77,7 @@ export async function syncSearchLocationsAction(locations: unknown): Promise<Syn
 /** Examples per rule in the form's preview. */
 const PREVIEW_SAMPLES = 3;
 
-export type DealBreakerPreviewResult = { status: "done"; total: number; rules: DraftPreviewRule[] } | { status: "error"; error: "invalid" | "unavailable" };
+export type DealBreakerPreviewResult = { status: "done"; total: number; partial: boolean; rules: DraftPreviewRule[] } | { status: "error"; error: "invalid" | "unavailable" };
 
 /** What the form's deal-breakers (drafts, not saved) would veto among the jobs in the database now; nothing is written. */
 export async function previewDealBreakersAction(drafts: unknown): Promise<DealBreakerPreviewResult> {

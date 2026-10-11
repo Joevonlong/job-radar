@@ -634,7 +634,8 @@
       "languageCode": "Language code must be 2–3 lowercase letters, with a level",
       "invalidChoice": "Choose a valid option",
       "contractConflict": "A contract type cannot be both allowed and excluded",
-      "invalid": "{message}"
+      "invalid": "{message}",
+      "slowPattern": "{kind, select, nested {Too slow: a repeated group repeats inside} unbounded {Too slow: more than one open-ended run such as .* or \\s+; give them an upper limit} leading {Too slow: starts with an open-ended .* (leave it out, a pattern matches anywhere)} alternation {Too slow: the alternatives of a repeated group can start alike} other {Too slow on a long test text; make the pattern simpler}}"
     },
     "formErrors": {
       "invalidPayload": "The submitted data was malformed. Reload the page and try again.",
@@ -1703,6 +1704,7 @@
       "invalidChoice": "Choose a valid option",
       "contractConflict": "Conflicting options",
       "invalid": "{message}",
+      "slowPattern": "{kind, select, nested {Too slow: a repeated group repeats inside} unbounded {Too slow: more than one open-ended run such as .* or \\s+; give them an upper limit} leading {Too slow: starts with an open-ended .* (leave it out, a pattern matches anywhere)} alternation {Too slow: the alternatives of a repeated group can start alike} other {Too slow on a long test text; make the pattern simpler}}",
       "url": "Needs a URL starting with http:// or https://",
       "cron": "Invalid cron expression: {detail}",
       "timezone": "Not a valid IANA time zone (for example Europe/Berlin)",
@@ -6135,8 +6137,10 @@
         "no_language_step": "Does nothing: this market has no local-language step.",
         "me_unreadable": "Does nothing: \"About me\" cannot be read.",
         "too_many_rules": "Does nothing: more rules than pipeline.yaml allows (filter.deal_breakers.max_rules).",
-        "pattern_too_long": "Does nothing: a pattern is longer than pipeline.yaml allows (filter.deal_breakers.max_pattern_chars)."
-      }
+        "pattern_too_long": "Does nothing: a pattern is longer than pipeline.yaml allows (filter.deal_breakers.max_pattern_chars).",
+        "too_slow": "Too slow: a pattern takes too long on long texts, so the filter leaves this rule out or stops it. Make the pattern simpler."
+      },
+      "partial": "Counted the first {total} open jobs only: the preview stopped at its time limit (filter.deal_breakers.preview_ms)."
     },
     "notice": {
       "rule": "Deal-breaker \"{label}\"",

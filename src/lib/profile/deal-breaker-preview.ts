@@ -10,7 +10,8 @@ import { dealBreakerSchema, DEAL_BREAKER_HARD_LIMITS, type DealBreaker } from "@
 import type { Db } from "@/lib/db/client";
 import { listFilterCandidates } from "@/lib/db";
 import { asGermanLevel } from "@/lib/db/queries/parse";
-import { compileDealBreakers, dealBreakerHits, explainDealBreaker, type DealBreakerJob, type DealBreakerWarningCode, type CompiledDealBreaker } from "@/lib/filter/deal-breakers";
+import { compileDealBreakers, dealBreakerVetoes, explainDealBreaker, startDealBreakerRun, type DealBreakerJob, type DealBreakerRun, type DealBreakerWarningCode, type TimeBox } from "@/lib/filter/deal-breakers";
+import { vmTimeBox } from "@/lib/filter/time-box";
 
 import { dealBreakerDraftSchema, dealBreakerDraftToCandidate } from "./draft";
 
@@ -27,7 +28,10 @@ export interface DealBreakerSample {
 
 export interface DealBreakerRulePreview {
   id: string;
-  /** "ok": the rule runs; otherwise why it does nothing (it is still counted when it is only switched off). */
+  /**
+   * "ok": the rule runs; otherwise why it does nothing (it is still counted when it is only switched off). "too_slow": a
+   * pattern is too slow on the test texts, or the rule used up `rule_budget_ms` (its count is then what it found until then).
+   */
   status: "ok" | "disabled" | DealBreakerWarningCode;
   /** Jobs that are not closed that the rule vetoes (each rule on its own: a job vetoed by two rules counts for both). */
   count: number;
@@ -37,8 +41,10 @@ export interface DealBreakerRulePreview {
 }
 
 export interface DealBreakerPreview {
-  /** Jobs that are not closed: what the counts are out of. */
+  /** Jobs the counts are out of: every job that is not closed, or fewer when `partial`. */
   total: number;
+  /** The preview ran out of time (`preview_ms`, unless `deadlineMs` says otherwise): the counts cover only the first `total` jobs. */
+  partial: boolean;
   rules: DealBreakerRulePreview[];
 }
 
@@ -49,57 +55,85 @@ export interface PreviewOptions {
   sampleLimit: number;
   /** Quote the job's words for each example (`explainDealBreaker`). */
   explain?: boolean;
+  /** Longest the preview may take (ms); default `filter.deal_breakers.preview_ms`, Infinity for no limit (the CLI). */
+  deadlineMs?: number;
+  /** Where the patterns run (default `vmTimeBox`). */
+  timeBox?: TimeBox;
 }
 
 interface Prepared {
   rule: DealBreaker;
-  /** Null: the rule does nothing (see `status`). */
-  compiled: CompiledDealBreaker | null;
+  /** Null: the rule does nothing (see `result.status`). Each rule runs on its own, so each has its own budget. */
+  run: DealBreakerRun | null;
   result: DealBreakerRulePreview;
 }
 
-function prepare(rules: readonly DealBreaker[], options: PreviewOptions): Prepared[] {
+function prepare(rules: readonly DealBreaker[], options: PreviewOptions, timeBox: TimeBox): Prepared[] {
   const limits = options.pipeline.filter.deal_breakers;
   const context = { language: options.pipeline.market.language?.code ?? null, me: options.me, limits };
   return rules.map((rule, index) => {
     const result: DealBreakerRulePreview = { id: rule.id, status: "ok", count: 0, samples: [], ms: 0 };
-    if (index >= limits.max_rules) return { rule, compiled: null, result: { ...result, status: "too_many_rules" } };
+    if (index >= limits.max_rules) return { rule, run: null, result: { ...result, status: "too_many_rules" } };
     // a rule that is switched off is still counted: the preview is how the user decides to switch it on
     const compiled = compileDealBreakers([{ ...rule, enabled: true }], context);
     const warning = compiled.warnings[0];
-    if (warning) return { rule, compiled: null, result: { ...result, status: warning.code } };
-    return { rule, compiled: compiled.rules[0] ?? null, result: { ...result, status: rule.enabled ? "ok" : "disabled" } };
+    if (warning) return { rule, run: null, result: { ...result, status: warning.code } };
+    const run = startDealBreakerRun(compiled, timeBox);
+    if (run.warnings[0]) return { rule, run: null, result: { ...result, status: run.warnings[0].code } };
+    return { rule, run, result: { ...result, status: rule.enabled ? "ok" : "disabled" } };
   });
 }
 
-/** Count what each rule vetoes among the jobs that are not closed (the jobs the filter step evaluates). */
+/**
+ * Count what each rule vetoes among the jobs that are not closed (the jobs the filter step evaluates). Bounded in time: each
+ * rule has the filter run's budget, and the whole preview stops at its deadline with the batches it finished (`partial`).
+ */
 export async function previewDealBreakers(db: Db, rules: readonly DealBreaker[], options: PreviewOptions): Promise<DealBreakerPreview> {
-  const prepared = prepare(rules, options);
-  const maxChars = options.pipeline.filter.deal_breakers.match_text_max_chars;
+  const timeBox = options.timeBox ?? vmTimeBox;
+  const deadline = performance.now() + (options.deadlineMs ?? options.pipeline.filter.deal_breakers.preview_ms);
+  const prepared = prepare(rules, options, timeBox);
   const context = { language: options.pipeline.market.language?.code ?? null, me: options.me, limits: options.pipeline.filter.deal_breakers };
   let total = 0;
+  let partial = false;
   for (let afterId = 0; ; ) {
+    if (performance.now() >= deadline) {
+      partial = true;
+      break;
+    }
     const batch = await listFilterCandidates(db, { afterId, limit: BATCH });
     if (batch.length === 0) break;
     afterId = batch[batch.length - 1]?.id ?? afterId;
-    total += batch.length;
-    const jobs = batch.map((row) => ({ row, job: { title: row.title, description: row.description, germanLevel: asGermanLevel(row.germanLevel) } satisfies DealBreakerJob }));
+    const jobs = batch.map((row): DealBreakerJob => ({ title: row.title, description: row.description, germanLevel: asGermanLevel(row.germanLevel) }));
+    // a batch counts only when every rule finished it before the deadline
+    const found: Array<{ entry: Prepared; hits: number[]; ms: number }> = [];
     for (const entry of prepared) {
-      if (entry.compiled === null) continue;
+      if (entry.run === null) continue;
       const started = performance.now();
-      for (const { row, job } of jobs) {
-        if (!dealBreakerHits(job, entry.compiled, maxChars)) continue;
-        entry.result.count += 1;
-        if (entry.result.samples.length < options.sampleLimit) {
-          const sample: DealBreakerSample = { jobId: row.id, title: row.title, company: row.companyName };
-          if (options.explain) sample.quote = explainDealBreaker(job, entry.rule, context, options.pipeline)?.quote ?? null;
-          entry.result.samples.push(sample);
-        }
+      const { vetoes, complete } = dealBreakerVetoes(entry.run, jobs, deadline);
+      if (!complete) {
+        partial = true;
+        break;
       }
-      entry.result.ms += performance.now() - started;
+      found.push({ entry, hits: vetoes.flatMap((ids, i) => (ids.length > 0 ? [i] : [])), ms: performance.now() - started });
+    }
+    if (partial) break;
+    total += batch.length;
+    for (const { entry, hits, ms } of found) {
+      entry.result.count += hits.length;
+      entry.result.ms += ms;
+      if (entry.run?.warnings[0]) entry.result.status = entry.run.warnings[0].code;
+      for (const i of hits) {
+        if (entry.result.samples.length >= options.sampleLimit) break;
+        const row = batch[i];
+        const job = jobs[i];
+        if (!row || !job) continue;
+        const sample: DealBreakerSample = { jobId: row.id, title: row.title, company: row.companyName };
+        if (options.explain) sample.quote = explainDealBreaker(job, entry.rule, context, options.pipeline, timeBox)?.quote ?? null;
+        entry.result.samples.push(sample);
+      }
     }
   }
-  return { total, rules: prepared.map((entry) => ({ ...entry.result, ms: Math.round(entry.result.ms * 10) / 10 })) };
+  return { total, partial, rules: prepared.map((entry) => ({ ...entry.result, ms: Math.round(entry.result.ms * 10) / 10 })) };
 }
 
 /** The form's rules as sent by the browser: drafts, validated here (C6). */
@@ -112,7 +146,7 @@ export type DraftPreviewRule = DealBreakerRulePreview | { id: string; status: "i
  * Preview the form's rules (drafts): each row that is a valid rule is counted; the others say "invalid" (the save shows
  * why). Duplicate ids are counted on their own; saving refuses them.
  */
-export async function previewDealBreakerDrafts(db: Db, drafts: z.infer<typeof previewRequestSchema>, options: PreviewOptions): Promise<{ total: number; rules: DraftPreviewRule[] }> {
+export async function previewDealBreakerDrafts(db: Db, drafts: z.infer<typeof previewRequestSchema>, options: PreviewOptions): Promise<{ total: number; partial: boolean; rules: DraftPreviewRule[] }> {
   const parsed = drafts.map((draft) => dealBreakerSchema.safeParse(dealBreakerDraftToCandidate(draft)));
   const valid = parsed.flatMap((result) => (result.success ? [result.data] : []));
   const preview = await previewDealBreakers(db, valid, options);
@@ -123,5 +157,5 @@ export async function previewDealBreakerDrafts(db: Db, drafts: z.infer<typeof pr
     next += 1;
     return rule ?? { id: result.data.id, status: "invalid", count: 0, samples: [], ms: 0 };
   });
-  return { total: preview.total, rules };
+  return { total: preview.total, partial: preview.partial, rules };
 }

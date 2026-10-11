@@ -98,12 +98,34 @@ the time".
 
 ### Limits
 
-Your patterns run on every open job in every filter run, and JavaScript regular expressions have no time limit, so:
+Your patterns run on every open job in every filter run, and JavaScript regular expressions have no time limit of their
+own, so the time a pattern may take is limited in three places:
 
-- A pattern must not nest repetitions such as `(a+)+` or `(\w*)*`: saving refuses it.
-- `pipeline.yaml: filter.deal_breakers` sets how many rules count (`max_rules`, default 20), how long one pattern may be
-  (`max_pattern_chars`, default 200) and how much of a description is read (`match_text_max_chars`, default 20,000
-  characters). Saving refuses rules over these limits.
+- **When you save.** Shapes that backtrack badly are refused, with the reason: a repetition inside a repetition (`(a+)+`,
+  `(\w*)*`); two or more open-ended runs of broad characters (`.*x.*y`, `\d+.*\d+`, `\w+\s*\w+`; bound them instead,
+  as in `.{0,40}`); a pattern that starts with an open-ended `.*` (leave it out: a pattern matches anywhere already); a
+  repeated group whose alternatives can start alike (`(a|ab)+`). Each pattern is also tried on a few long test texts (a
+  line as long as `match_text_max_chars` without a match), and one that takes longer than `match_ms` on any of them is
+  refused as well. `pnpm config:check` runs the same checks on a file you edited by hand.
+- **When the filter runs.** A rule with a pattern that is too slow on the test texts is left out. Each rule may take
+  `rule_budget_ms` in one filter run; a rule that uses it up is stopped for the rest of that run (jobs it already vetoed
+  stay vetoed). Both show as `too_slow` in the filter step's result (`dealBreakerWarnings`) and in the runner log.
+- **On the pages.** The card's preview stops after `preview_ms` and then says how many jobs it counted; the job page gives
+  up explaining a veto after `match_ms`.
+
+`pipeline.yaml: filter.deal_breakers` sets these limits:
+
+| Key | Default | What it limits |
+| --- | --- | --- |
+| `max_rules` | 20 | rules that count (at most 50) |
+| `max_pattern_chars` | 200 | length of one term or pattern (at most 500) |
+| `match_text_max_chars` | 20,000 | characters of a description that are searched |
+| `rule_warn_ms` | 200 | `pnpm deal-breakers:check` warns about a rule slower than this over all open jobs |
+| `match_ms` | 100 | one pattern on one test text, and the explanation on a job page |
+| `rule_budget_ms` | 2,000 | one rule over all jobs in one filter run or one preview |
+| `preview_ms` | 3,000 | the whole preview on the card |
+
+Saving refuses rules over `max_rules` and `max_pattern_chars`.
 
 ## Checking rules
 

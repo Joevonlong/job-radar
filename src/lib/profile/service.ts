@@ -9,7 +9,8 @@ import { ConfigError, ensureProfileFiles, parseConfigText, readConfigText, write
 import { meSchema } from "@/lib/config/schemas/me";
 import { preferencesSchema } from "@/lib/config/schemas/preferences";
 import { getDb, getProfileSnapshot, hashProfileYaml } from "@/lib/db";
-import { dealBreakerLimitProblems } from "@/lib/filter/deal-breakers";
+import { dealBreakerLimitProblems, slowPatternProblems } from "@/lib/filter/deal-breakers";
+import { vmTimeBox } from "@/lib/filter/time-box";
 import { loadPipeline, marketSettingsProblems } from "@/lib/market";
 
 import {
@@ -79,6 +80,15 @@ async function write(kind: ProfileName, candidate: unknown, baseHash: string | u
           kind,
           null,
           tooBig.map((p): FieldError => ({ path: ["deal_breakers", ...p.path.slice(0, 2)].join("."), key: p.kind === "too_many_rules" ? "tooMany" : "tooLong", params: { max: p.max } })),
+        );
+      }
+      // a pattern that is too slow on the test texts would be left out of every filter run: not saved
+      const slow = limits === null ? [] : slowPatternProblems(result.data.deal_breakers, limits, vmTimeBox);
+      if (slow.length > 0) {
+        return failed(
+          kind,
+          null,
+          slow.map((p): FieldError => ({ path: ["deal_breakers", ...p.path.slice(0, 2)].join("."), key: "slowPattern", params: { kind: "probe" } })),
         );
       }
       await writeConfig("preferences", result.data, options);

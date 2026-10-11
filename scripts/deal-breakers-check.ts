@@ -33,7 +33,7 @@ async function main(): Promise<void> {
   if (args.id !== undefined && !rules.some((rule) => rule.id === args.id)) throw new Error(`no deal-breaker with id "${args.id}" in preferences.yaml`);
   const warnMs = pipeline.filter.deal_breakers.rule_warn_ms;
   // every rule is counted (its position decides whether it is within max_rules); --id only narrows what is printed
-  const all = await previewDealBreakers(getDb(), rules, { pipeline, me: currentMe(), sampleLimit: args.limit, explain: true });
+  const all = await previewDealBreakers(getDb(), rules, { pipeline, me: currentMe(), sampleLimit: args.limit, explain: true, deadlineMs: Infinity });
   const preview = { ...all, rules: args.id === undefined ? all.rules : all.rules.filter((rule) => rule.id === args.id) };
 
   if (args.json) {
@@ -43,7 +43,7 @@ async function main(): Promise<void> {
     console.log(`${preview.total} open job(s)`);
     for (const rule of preview.rules) {
       const label = rules.find((r) => r.id === rule.id)?.label ?? rule.id;
-      const state = rule.status === "ok" ? "" : rule.status === "disabled" ? " (switched off)" : ` (does nothing: ${rule.status})`;
+      const state = rule.status === "ok" ? "" : rule.status === "disabled" ? " (switched off)" : rule.status === "too_slow" ? " (too slow: left out or stopped, see filter.deal_breakers.match_ms / rule_budget_ms)" : ` (does nothing: ${rule.status})`;
       console.log(`\n${rule.id} "${label}"${state}: vetoes ${rule.count}  [${rule.ms} ms]`);
       if (rule.ms > warnMs) console.log(`  ! slower than filter.deal_breakers.rule_warn_ms (${warnMs} ms): every filter run pays this`);
       for (const sample of rule.samples) {

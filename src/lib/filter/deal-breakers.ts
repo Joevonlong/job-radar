@@ -2,6 +2,11 @@
  * Deal-breakers: the user's own veto rules (preferences.yaml `deal_breakers`), judged in the hard filter before any AI
  * call. Pure: no database, no file reads; the caller passes the market's local language and the user's level of it.
  * A vetoed job is kept (C1) with the reason `deal_breaker:<id>`; what a posting does not say never vetoes (C3).
+ *
+ * User patterns are regular expressions, and JavaScript has no time limit for them. So every pattern run happens inside a
+ * `TimeBox` the server passes in (`vmTimeBox`, which interrupts a running expression): before a run each pattern is tried on
+ * long test texts (`startDealBreakerRun`), and during it each rule has a time budget (`dealBreakerVetoes`). The schema
+ * refuses the usual slow shapes earlier (`slowPatternReason`).
  */
 import type { MeConfig, PipelineConfig } from "@/lib/config";
 import type { DealBreaker } from "@/lib/config/schemas/preferences";
@@ -21,7 +26,7 @@ export interface DealBreakerContext {
   language: string | null;
   /** me.yaml, or null when it cannot be read (a gate without `at_least` then does nothing). */
   me: Pick<MeConfig, "languages"> | null;
-  limits: PipelineConfig["filter"]["deal_breakers"];
+  limits: DealBreakerLimits;
 }
 
 /** The fields of a job the rules read. */
@@ -32,7 +37,16 @@ export interface DealBreakerJob {
   germanLevel: GermanLevel;
 }
 
-export type DealBreakerWarningCode = "no_language_step" | "me_unreadable" | "too_many_rules" | "pattern_too_long";
+export type DealBreakerWarningCode = "no_language_step" | "me_unreadable" | "too_many_rules" | "pattern_too_long" | "too_slow";
+
+export type DealBreakerLimits = PipelineConfig["filter"]["deal_breakers"];
+
+/**
+ * Runs `work` and stops it after `ms` milliseconds, even inside a regular expression: true when it finished, false when it
+ * was stopped. The server's is `vmTimeBox` (node:vm); this module only takes it as a parameter, because the job pages'
+ * client code reaches this file.
+ */
+export type TimeBox = (work: () => void, ms: number) => boolean;
 
 export interface DealBreakerWarning {
   id: string;
@@ -58,7 +72,7 @@ export interface CompiledDealBreakers {
   rules: readonly CompiledDealBreaker[];
   /** Rules that are written but do nothing (see `DealBreakerWarningCode`). */
   warnings: readonly DealBreakerWarning[];
-  matchTextMaxChars: number;
+  limits: DealBreakerLimits;
 }
 
 const isGate = (rule: CompiledDealBreaker): rule is CompiledGate => rule.rule.type === "language_gate";
@@ -84,9 +98,12 @@ export function rankLabel(rank: number): string {
 
 /**
  * A user pattern as a RegExp. V8 runs `\b` very slowly when the `i` and `u` flags are both set (no position can be skipped:
- * about 15 times slower over a description), and `\bno travel\b` is the usual way to write a pattern. A pattern that uses
- * nothing of the `u` flag (no `\p{…}`, no `\u{…}`) matches the same in job text without it, so a pattern with a word
- * boundary is compiled without `u` (the schema has already checked it with `u`, which is the stricter syntax).
+ * about 15 times slower over a description), and `\bno travel\b` is the usual way to write a pattern. So a pattern with a
+ * word boundary and nothing that needs `u` (no `\p{…}`, no `\u{…}`) is compiled without it; the schema has already checked
+ * it with `u`, the stricter syntax. That is not the same matching in every case: without `u` the pattern works on UTF-16
+ * code units, so `.` or `.{0,N}` counts an emoji as two characters, and case folding differs for a few letters (`ẞ`/`ß`,
+ * the Kelvin sign, the long s). `\b` sees ASCII word characters only either way (`\bMünchen\b` fails after "Mü"); the
+ * user guide says so.
  */
 function userRegExp(source: string, flags: "giu" | "iu"): RegExp {
   if (/\\[bB]/u.test(source) && !/\\(?:[pP]|u\{)/u.test(source)) {
@@ -135,7 +152,7 @@ export function compileDealBreakers(rules: readonly DealBreaker[], context: Deal
     for (const pattern of rule.patterns) matchers.push(userRegExp(pattern, "giu"));
     compiled.push({ rule, matchers, unless: rule.unless.map((pattern) => userRegExp(pattern, "iu")) });
   });
-  return { rules: compiled, warnings, matchTextMaxChars: limits.match_text_max_chars };
+  return { rules: compiled, warnings, limits };
 }
 
 interface Hit {
@@ -209,16 +226,127 @@ function gateHits(job: DealBreakerJob, rule: CompiledGate): boolean {
   return isGermanRequirement(job.germanLevel) && CEFR.indexOf(job.germanLevel) >= rule.threshold;
 }
 
-/** Whether one compiled rule vetoes the job. */
-export function dealBreakerHits(job: DealBreakerJob, rule: CompiledDealBreaker, maxChars: number): boolean {
-  return isGate(rule) ? gateHits(job, rule) : phraseHit(job, rule, maxChars) !== null;
+/** Test texts as long as the text a pattern searches: a long line without a match is where backtracking shows. */
+function probeTexts(source: string, length: number): string[] {
+  const filler = "Lorem ipsum 100 % vor Ort, dolor-sit_amet 42 Reisetätigkeit ";
+  const texts = ["a".repeat(Math.max(0, length - 1)) + "!", filler.repeat(Math.ceil(length / filler.length)).slice(0, length)];
+  // the letters and digits the pattern names, each repeated: `(a|a)+` and its kind fail on these
+  const chars = [...new Set(source.toLowerCase().replace(/\\./gu, "").match(/[\p{L}\p{N}]/gu) ?? [])].filter((char) => char !== "a").slice(0, 6);
+  for (const char of chars) texts.push(char.repeat(Math.max(0, length - 1)) + "!");
+  return texts;
 }
 
-/** The ids of the rules that veto the job, in the order of the file. */
-export function checkDealBreakers(job: DealBreakerJob, compiled: CompiledDealBreakers): string[] {
-  const out: string[] = [];
-  for (const rule of compiled.rules) if (dealBreakerHits(job, rule, compiled.matchTextMaxChars)) out.push(rule.rule.id);
-  return out;
+/** Results of the probe, by flags, length and pattern: a pattern is tried once per process (until the cache is full). */
+const probeCache = new Map<string, boolean>();
+const PROBE_CACHE_MAX = 512;
+
+/**
+ * Whether `pattern` finishes on every test text within `limits.match_ms` each: a pattern (flags "giu") is run the way a rule
+ * scans a text (every match), an `unless` pattern (flags "iu") the way it tests a sentence.
+ */
+export function patternIsFast(pattern: string, use: "pattern" | "unless", limits: DealBreakerLimits, timeBox: TimeBox): boolean {
+  const key = `${use}\u0000${limits.match_text_max_chars}\u0000${limits.match_ms}\u0000${pattern}`;
+  const known = probeCache.get(key);
+  if (known !== undefined) return known;
+  const regexp = userRegExp(pattern, use === "pattern" ? "giu" : "iu");
+  const fast = probeTexts(pattern, limits.match_text_max_chars).every((text) =>
+    timeBox(() => {
+      if (use === "unless") {
+        regexp.test(text);
+        return;
+      }
+      regexp.lastIndex = 0;
+      for (let m = regexp.exec(text); m !== null; m = regexp.exec(text)) if (m[0].length === 0) regexp.lastIndex += 1;
+    }, limits.match_ms),
+  );
+  if (probeCache.size >= PROBE_CACHE_MAX) probeCache.clear();
+  probeCache.set(key, fast);
+  return fast;
+}
+
+/** A pattern of `rules` that is too slow on the test texts (`patternIsFast`); `path` is inside preferences.yaml `deal_breakers`. */
+export interface SlowPatternProblem {
+  path: [number, "patterns" | "unless", number];
+}
+
+/** Every pattern of `rules` that is too slow; saving and `config:check` refuse these. */
+export function slowPatternProblems(rules: readonly DealBreaker[], limits: DealBreakerLimits, timeBox: TimeBox): SlowPatternProblem[] {
+  const problems: SlowPatternProblem[] = [];
+  rules.forEach((rule, index) => {
+    if (rule.type !== "phrase") return;
+    rule.patterns.forEach((pattern, at) => {
+      if (!patternIsFast(pattern, "pattern", limits, timeBox)) problems.push({ path: [index, "patterns", at] });
+    });
+    rule.unless.forEach((pattern, at) => {
+      if (!patternIsFast(pattern, "unless", limits, timeBox)) problems.push({ path: [index, "unless", at] });
+    });
+  });
+  return problems;
+}
+
+const ruleIsFast = (rule: CompiledPhrase, limits: DealBreakerLimits, timeBox: TimeBox): boolean =>
+  rule.rule.patterns.every((pattern) => patternIsFast(pattern, "pattern", limits, timeBox)) && rule.rule.unless.every((pattern) => patternIsFast(pattern, "unless", limits, timeBox));
+
+/** One filter run (or one preview) of the compiled rules: the rules still running, the time each may still take, what stopped. */
+export interface DealBreakerRun {
+  readonly timeBox: TimeBox;
+  readonly limits: DealBreakerLimits;
+  /** `left`: milliseconds of `limits.rule_budget_ms` the rule may still use; 0 = stopped as too slow. */
+  readonly active: Array<{ rule: CompiledDealBreaker; left: number }>;
+  /** Rules left out or stopped because they are too slow, in the order found. */
+  readonly warnings: DealBreakerWarning[];
+}
+
+/** Start a run: a phrase rule with a pattern that is too slow on the test texts is left out, with the warning `too_slow`. */
+export function startDealBreakerRun(compiled: CompiledDealBreakers, timeBox: TimeBox): DealBreakerRun {
+  const run: DealBreakerRun = { timeBox, limits: compiled.limits, active: [], warnings: [] };
+  for (const rule of compiled.rules) {
+    if (!isGate(rule) && !ruleIsFast(rule, compiled.limits, timeBox)) run.warnings.push({ id: rule.rule.id, code: "too_slow" });
+    else run.active.push({ rule, left: compiled.limits.rule_budget_ms });
+  }
+  return run;
+}
+
+/**
+ * The ids of the rules that veto each job of `jobs`, in the order of the file. Each phrase rule runs over the whole batch in
+ * one time box: a rule that uses up its budget is stopped where it is, keeps the vetoes it found, does nothing for the rest
+ * of the run, and is reported in `run.warnings` (`too_slow`). With a `deadline` (a `performance.now()` time) the batch stops
+ * there too: `complete` is then false and the vetoes are not usable.
+ */
+export function dealBreakerVetoes(run: DealBreakerRun, jobs: readonly DealBreakerJob[], deadline?: number): { vetoes: string[][]; complete: boolean } {
+  const vetoes = jobs.map((): string[] => []);
+  const maxChars = run.limits.match_text_max_chars;
+  for (const entry of run.active) {
+    if (entry.left <= 0) continue;
+    const { rule } = entry;
+    if (isGate(rule)) {
+      jobs.forEach((job, i) => {
+        if (gateHits(job, rule)) vetoes[i]?.push(rule.rule.id);
+      });
+      continue;
+    }
+    const untilDeadline = deadline === undefined ? Infinity : deadline - performance.now();
+    if (untilDeadline <= 0) return { vetoes, complete: false };
+    const box = Math.min(entry.left, untilDeadline);
+    const byDeadline = untilDeadline < entry.left;
+    const hits: number[] = [];
+    let done = 0;
+    const started = performance.now();
+    const finished = run.timeBox(() => {
+      for (; done < jobs.length; done += 1) {
+        const job = jobs[done];
+        if (job && phraseHit(job, rule, maxChars) !== null) hits.push(done);
+      }
+    }, box);
+    entry.left -= performance.now() - started;
+    if (!finished && byDeadline) return { vetoes, complete: false };
+    for (const i of hits) vetoes[i]?.push(rule.rule.id);
+    if (!finished) {
+      entry.left = 0;
+      run.warnings.push({ id: rule.rule.id, code: "too_slow" });
+    }
+  }
+  return { vetoes, complete: true };
 }
 
 /** Why a rule vetoes a job, for the detail page and `deal-breakers:check`; computed when shown, never stored. */
@@ -243,10 +371,11 @@ const QUOTE_MAX_CHARS = 280;
  * Explain a rule that vetoes `job` (null when it does not, or the rule is not active). A language gate quotes the sentence the
  * pipeline's rules read the level from (none when it is in the title or not found) and names both levels.
  */
-export function explainDealBreaker(job: DealBreakerJob, rule: DealBreaker, context: DealBreakerContext, pipeline: PipelineConfig): DealBreakerExplanation | null {
+export function explainDealBreaker(job: DealBreakerJob, rule: DealBreaker, context: DealBreakerContext, pipeline: PipelineConfig, timeBox: TimeBox): DealBreakerExplanation | null {
   const compiled = compileDealBreakers([{ ...rule, enabled: true }], context).rules[0];
-  if (!compiled || !dealBreakerHits(job, compiled, context.limits.match_text_max_chars)) return null;
+  if (!compiled) return null;
   if (isGate(compiled)) {
+    if (!gateHits(job, compiled)) return null;
     const level = job.germanLevel;
     const base: DealBreakerExplanation = { id: rule.id, type: rule.type, quote: null, field: null, offset: null, required: level };
     if (rule.type === "language_gate" && rule.at_least !== undefined) base.atLeast = rule.at_least;
@@ -259,7 +388,10 @@ export function explainDealBreaker(job: DealBreakerJob, rule: DealBreaker, conte
     }
     return base;
   }
-  const hit = phraseHit(job, compiled, context.limits.match_text_max_chars);
+  // one job, within `match_ms`: a page never waits longer for its explanation
+  const found: { hit: Hit | null } = { hit: null };
+  if (!timeBox(() => void (found.hit = phraseHit(job, compiled, context.limits.match_text_max_chars)), context.limits.match_ms)) return null;
+  const { hit } = found;
   if (hit === null) return null;
   const text = hit.field === "title" ? job.title : (job.description ?? "");
   const { quote, offset } = sentenceAround(text, hit, QUOTE_MAX_CHARS);
@@ -274,7 +406,7 @@ export interface DealBreakerLimitProblem {
 }
 
 /** Where `rules` break the limits of pipeline.yaml (the schema only knows the hard upper bounds). Saving and `config:check` refuse these. */
-export function dealBreakerLimitProblems(rules: readonly DealBreaker[], limits: PipelineConfig["filter"]["deal_breakers"]): DealBreakerLimitProblem[] {
+export function dealBreakerLimitProblems(rules: readonly DealBreaker[], limits: DealBreakerLimits): DealBreakerLimitProblem[] {
   const problems: DealBreakerLimitProblem[] = [];
   if (rules.length > limits.max_rules) problems.push({ path: [], kind: "too_many_rules", max: limits.max_rules });
   rules.forEach((rule, index) => {

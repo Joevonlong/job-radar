@@ -62,7 +62,7 @@ describe("preferences.yaml deal_breakers", () => {
   it.each(["(a+)+", "(\\w*)*", "(x+)*", "(x|y+)+", "((a+)b)+", "(?:a+){2,}", "(a{2,3}){2}"])("refuses the nested quantifier %s", (pattern) => {
     const found = issues([phrase({ patterns: [pattern] })]);
     expect(found).toHaveLength(1);
-    expect(found[0]?.message).toMatch(/^must not nest quantifiers/);
+    expect(found[0]?.message).toMatch(/^can be very slow \(nested\)/);
   });
 
   it.each(["(?:ab)+", "(a+)?", "[(a+)]+", "\\((a)\\)+", "(a{1}){3}", "(a+?)b+", "Reisetätigkeit.{0,30}(?:[5-9]\\d|100)\\s?%", "\\bno travel\\b"])("accepts %s", (pattern) => {

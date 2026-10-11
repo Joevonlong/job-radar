@@ -14,7 +14,8 @@ import { loadPipeline } from "../src/lib/market";
 import { eq } from "drizzle-orm";
 
 import { closeDb, getDb, getFilterOverrides, listFilterCandidates, schema } from "../src/lib/db";
-import { compileFilter, currentPreferences, evaluateJob, runFilter, toFilterJob } from "../src/lib/filter";
+import { compileFilter, currentPreferences, evaluateBatch, runFilter, vmTimeBox } from "../src/lib/filter";
+import { startDealBreakerRun } from "../src/lib/filter/deal-breakers";
 
 interface Tally {
   passed: number;
@@ -51,20 +52,24 @@ async function main(): Promise<void> {
   if (values["dry-run"]) {
     console.log("dry run: nothing written");
     const compiled = compileFilter(preferences, pipeline, { me });
+    const dealBreakers = startDealBreakerRun(compiled.dealBreakers, vmTimeBox);
     now.clear();
     for (let afterId = 0; ; ) {
       const batch = await listFilterCandidates(db, { afterId, limit: 200 });
       if (batch.length === 0) break;
       afterId = batch[batch.length - 1]?.id ?? afterId;
       const overrides = await getFilterOverrides(db, batch.map((j) => j.id));
-      for (const row of batch) {
-        const verdict = evaluateJob(toFilterJob(row), compiled, overrides.get(row.id) ?? null);
-        now.set(row.id, { result: verdict.result, reasons: verdict.reasons });
-      }
+      const verdicts = evaluateBatch(batch, compiled, dealBreakers, overrides);
+      batch.forEach((row, i) => {
+        const verdict = verdicts[i];
+        if (verdict) now.set(row.id, { result: verdict.result, reasons: verdict.reasons });
+      });
     }
+    for (const warning of [...compiled.dealBreakers.warnings, ...dealBreakers.warnings]) console.log(`deal-breaker ${warning.id} not applied: ${warning.code}`);
   } else {
     const run = await runFilter(db, { preferences, snapshotId: snapshot.id, pipeline, me });
     console.log(`updated ${run.updated}, created ${run.created}, unchanged ${run.unchanged}`);
+    for (const warning of run.dealBreakerWarnings) console.log(`deal-breaker ${warning.id} not applied: ${warning.code}`);
     for (const row of await db.select().from(schema.scores).where(eq(schema.scores.profileSnapshotId, snapshot.id))) now.set(row.jobId, { result: row.filterResult, reasons: row.filterReasons });
   }
   const after = emptyTally();

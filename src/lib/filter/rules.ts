@@ -4,7 +4,7 @@ import { scopeCountries, scopeWidePatterns } from "@/lib/market/remote-scope";
 import type { Market } from "@/lib/market/types";
 import { normalizeCompanyKey, resolveCompanyName } from "@/lib/pipeline/company";
 
-import { checkDealBreakers, compileDealBreakers, type CompiledDealBreakers } from "./deal-breakers";
+import { compileDealBreakers, type CompiledDealBreakers } from "./deal-breakers";
 import { encodeReason } from "./reasons";
 import { salaryBelowFloor } from "./salary";
 
@@ -413,9 +413,11 @@ function checkBlacklist(job: FilterJob, filter: CompiledFilter, out: PartialVerd
   }
 }
 
-function checkDealBreakerRules(job: FilterJob, filter: CompiledFilter, out: PartialVerdict): void {
+function checkDealBreakerRules(filter: CompiledFilter, vetoes: readonly string[] | undefined, out: PartialVerdict): void {
   if (filter.dealBreakers.rules.length === 0) return;
-  for (const id of checkDealBreakers(job, filter.dealBreakers)) out.excluded.push(encodeReason("deal_breaker", id));
+  // the user's patterns run only inside a time box (`dealBreakerVetoes`), never here without one
+  if (vetoes === undefined) throw new Error("evaluateJob: deal-breaker rules are compiled but no vetoes were passed (see dealBreakerVetoes)");
+  for (const id of vetoes) out.excluded.push(encodeReason("deal_breaker", id));
 }
 
 /** The user's decision about one job's filter result (`job_filter_overrides`): keep a filtered job, or exclude a passed one. */
@@ -429,8 +431,11 @@ export function applyOverride(verdict: FilterVerdict, override: FilterOverride |
   return { result: "filtered_out", reasons: [encodeReason("override_exclude"), ...(verdict.result === "filtered_out" ? verdict.reasons : [])] };
 }
 
-/** Evaluate one job. Excluded as soon as one rule says so; every rule that applies is listed. */
-export function evaluateJob(job: FilterJob, filter: CompiledFilter, override: FilterOverride | null = null): FilterVerdict {
+/**
+ * Evaluate one job. Excluded as soon as one rule says so; every rule that applies is listed. `dealBreakerVetoes`: the ids of
+ * the deal-breakers that veto the job, from `dealBreakerVetoes` over its batch (required when the filter has deal-breakers).
+ */
+export function evaluateJob(job: FilterJob, filter: CompiledFilter, override: FilterOverride | null = null, dealBreakerVetoes?: readonly string[]): FilterVerdict {
   const out: PartialVerdict = { excluded: [], notes: [] };
   checkLocation(job, filter, out);
   checkWorkplace(job, filter, out);
@@ -438,7 +443,7 @@ export function evaluateJob(job: FilterJob, filter: CompiledFilter, override: Fi
   checkSalary(job, filter, out);
   checkSeniority(job, filter, out);
   checkBlacklist(job, filter, out);
-  checkDealBreakerRules(job, filter, out);
+  checkDealBreakerRules(filter, dealBreakerVetoes, out);
   const verdict: FilterVerdict = out.excluded.length > 0 ? { result: "filtered_out", reasons: out.excluded } : { result: "passed", reasons: out.notes };
   return applyOverride(verdict, override);
 }

@@ -8,8 +8,18 @@ import type { MeConfig, PipelineConfig } from "@/lib/config";
 import { DEAL_BREAKER_DEFAULTS } from "@/lib/config/schemas/pipeline";
 import { dealBreakerSchema, type DealBreaker } from "@/lib/config/schemas/preferences";
 import type { GermanLevel } from "@/lib/domain/types";
-import { compileFilter, evaluateJob } from "@/lib/filter";
-import { checkDealBreakers, compileDealBreakers, dealBreakerLimitProblems, explainDealBreaker, userLocalRank, type DealBreakerContext, type DealBreakerJob } from "@/lib/filter/deal-breakers";
+import { compileFilter, evaluateJob, vmTimeBox, type CompiledFilter, type FilterJob, type FilterOverride } from "@/lib/filter";
+import {
+  compileDealBreakers,
+  dealBreakerLimitProblems,
+  dealBreakerVetoes,
+  explainDealBreaker as explainWith,
+  startDealBreakerRun,
+  userLocalRank,
+  type CompiledDealBreakers,
+  type DealBreakerContext,
+  type DealBreakerJob,
+} from "@/lib/filter/deal-breakers";
 import { orderedReasons } from "@/lib/filter/reasons";
 import { toFilterJob } from "@/lib/filter";
 import { extractGermanLevel } from "@/lib/pipeline/language";
@@ -38,7 +48,9 @@ const phrase = (extra: Record<string, unknown>): DealBreaker => rule({ id: "phra
 const me = (de?: Level): Pick<MeConfig, "languages"> => ({ languages: de === undefined ? [{ en: "C1" }] : [{ en: "C1" }, { de }] });
 const context = (over: Partial<DealBreakerContext> = {}): DealBreakerContext => ({ language: "de", me: me("B1"), limits: DEAL_BREAKER_DEFAULTS, ...over });
 const posting = (over: Partial<DealBreakerJob> = {}): DealBreakerJob => ({ title: "AI Engineer", description: "Build things.", germanLevel: "unknown", ...over });
-const vetoes = (rules: DealBreaker[], subject: DealBreakerJob, ctx: DealBreakerContext = context()): string[] => checkDealBreakers(subject, compileDealBreakers(rules, ctx));
+const check = (subject: DealBreakerJob, compiled: CompiledDealBreakers): string[] => dealBreakerVetoes(startDealBreakerRun(compiled, vmTimeBox), [subject]).vetoes[0] ?? [];
+const vetoes = (rules: DealBreaker[], subject: DealBreakerJob, ctx: DealBreakerContext = context()): string[] => check(subject, compileDealBreakers(rules, ctx));
+const explainDealBreaker = (subject: DealBreakerJob, r: DealBreaker, ctx: DealBreakerContext, p: PipelineConfig) => explainWith(subject, r, ctx, p, vmTimeBox);
 
 describe("language gate", () => {
   it("reads the user's level exactly as scoring does", () => {
@@ -80,14 +92,14 @@ describe("language gate", () => {
 
   it("does nothing, with a warning, when the market has no language step", () => {
     const compiled = compileDealBreakers([gate()], context({ language: null }));
-    expect(checkDealBreakers(posting({ germanLevel: "C2" }), compiled)).toEqual([]);
+    expect(check(posting({ germanLevel: "C2" }), compiled)).toEqual([]);
     expect(compiled.warnings).toEqual([{ id: "gate", code: "no_language_step" }]);
   });
 
   it("does nothing without at_least when me.yaml cannot be read; the other rules go on", () => {
     const compiled = compileDealBreakers([gate(), phrase({ terms: ["Rust"] })], context({ me: null }));
     expect(compiled.warnings).toEqual([{ id: "gate", code: "me_unreadable" }]);
-    expect(checkDealBreakers(posting({ title: "Rust Engineer", germanLevel: "C2" }), compiled)).toEqual(["phrase"]);
+    expect(check(posting({ title: "Rust Engineer", germanLevel: "C2" }), compiled)).toEqual(["phrase"]);
   });
 
   it("reads only the rule column: the filter job carries jobs.german_level_required, nothing of the AI", () => {
@@ -203,7 +215,7 @@ describe("limits of pipeline.yaml", () => {
     const limits = { ...DEAL_BREAKER_DEFAULTS, max_rules: 1 };
     const compiled = compileDealBreakers([phrase({ id: "one", terms: ["sales"] }), phrase({ id: "two", terms: ["java"] })], context({ limits }));
     expect(compiled.warnings).toEqual([{ id: "two", code: "too_many_rules" }]);
-    expect(checkDealBreakers(posting({ title: "Java Sales" }), compiled)).toEqual(["one"]);
+    expect(check(posting({ title: "Java Sales" }), compiled)).toEqual(["one"]);
     expect(dealBreakerLimitProblems([phrase({ id: "one", terms: ["a"] }), phrase({ id: "two", terms: ["b"] })], limits)).toEqual([{ path: [], kind: "too_many_rules", max: 1 }]);
   });
 
@@ -218,20 +230,26 @@ describe("limits of pipeline.yaml", () => {
 
 describe("in the hard filter", () => {
   const withRules = (rules: unknown[]) => compileFilter(prefs((raw) => void (raw.deal_breakers = rules)), pipeline, { me: me("B1") });
+  const judge = (subject: FilterJob, compiled: CompiledFilter, override: FilterOverride | null = null) =>
+    evaluateJob(subject, compiled, override, dealBreakerVetoes(startDealBreakerRun(compiled.dealBreakers, vmTimeBox), [subject]).vetoes[0]);
 
   it("filters the job out with deal_breaker:<id> after the other reasons", () => {
     const compiled = withRules([{ id: "gate", label: "German above my level", type: "language_gate" }]);
-    const verdict = evaluateJob(job({ germanLevel: "C1", companyBlacklisted: true }), compiled);
+    const verdict = judge(job({ germanLevel: "C1", companyBlacklisted: true }), compiled);
     expect(verdict.result).toBe("filtered_out");
     expect(verdict.reasons.at(-1)).toBe("deal_breaker:gate");
     // shown first: overrides, then deal-breakers, then the rest
     expect(orderedReasons(["override_keep", ...verdict.reasons])[1]).toBe("deal_breaker:gate");
-    expect(evaluateJob(job({ germanLevel: "B1" }), compiled).result).toBe("passed");
+    expect(judge(job({ germanLevel: "B1" }), compiled).result).toBe("passed");
   });
 
   it("keeps the reason under a keep override", () => {
-    const verdict = evaluateJob(job({ germanLevel: "C1" }), withRules([{ id: "gate", label: "Gate", type: "language_gate" }]), "keep");
+    const verdict = judge(job({ germanLevel: "C1" }), withRules([{ id: "gate", label: "Gate", type: "language_gate" }]), "keep");
     expect(verdict).toEqual({ result: "passed", reasons: ["override_keep", "deal_breaker:gate"] });
+  });
+
+  it("never runs the rules without a time box: vetoes must come from dealBreakerVetoes", () => {
+    expect(() => evaluateJob(job({ germanLevel: "C1" }), withRules([{ id: "gate", label: "Gate", type: "language_gate" }]))).toThrow(/dealBreakerVetoes/);
   });
 
   it("changes nothing without deal_breakers", () => {

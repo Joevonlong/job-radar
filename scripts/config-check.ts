@@ -38,7 +38,8 @@ import {
   type ConfigName,
   type ConfigValue,
 } from "../src/lib/config";
-import { dealBreakerLimitProblems } from "../src/lib/filter/deal-breakers";
+import { dealBreakerLimitProblems, slowPatternProblems } from "../src/lib/filter/deal-breakers";
+import { vmTimeBox } from "../src/lib/filter/time-box";
 import { listPackIds, loadMarket, loadPipeline, packDirs, readPackDir } from "../src/lib/market";
 
 const rel = displayConfigPath;
@@ -179,12 +180,16 @@ if (fs.existsSync(path.join(getProfileDir(), "preferences.yaml"))) {
     console.log(`- ${label} (skipped: fix the files above first)`);
   } else if (rules.length > 0) {
     const problems = dealBreakerLimitProblems(rules, pipeline.filter.deal_breakers);
-    if (problems.length > 0) {
+    const slow = slowPatternProblems(rules, pipeline.filter.deal_breakers, vmTimeBox);
+    if (problems.length > 0 || slow.length > 0) {
       failures += 1;
       console.log(`✗ ${label}`);
       for (const problem of problems) {
         const where = ["deal_breakers", ...problem.path].join(".");
         console.log(`    ${where}: ${problem.kind === "too_many_rules" ? `more than ${problem.max} rules (filter.deal_breakers.max_rules)` : `longer than ${problem.max} characters (filter.deal_breakers.max_pattern_chars)`}`);
+      }
+      for (const problem of slow) {
+        console.log(`    deal_breakers.${problem.path.join(".")}: too slow on a long test text (over ${pipeline.filter.deal_breakers.match_ms} ms, filter.deal_breakers.match_ms)`);
       }
     } else {
       console.log(`✓ ${label}  ${rules.length} rule(s)`);

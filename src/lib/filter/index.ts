@@ -17,11 +17,14 @@ import { asGermanLevel, parseLocations, parseSalary } from "@/lib/db/queries/par
 import { snapshotForProfileText } from "@/lib/profile/snapshots";
 import type { ChannelLogger } from "@/lib/channels/types";
 
-import { compileFilter, evaluateJob, type CompiledFilter, type FilterJob } from "./rules";
+import { dealBreakerVetoes, startDealBreakerRun, type DealBreakerRun, type DealBreakerWarning, type TimeBox } from "./deal-breakers";
+import { compileFilter, evaluateJob, type CompiledFilter, type FilterJob, type FilterOverride, type FilterVerdict } from "./rules";
+import { vmTimeBox } from "./time-box";
 
 export { applyOverride, compileFilter, evaluateJob, foldText, wholeWordPattern, type CompiledFilter, type FilterContext, type FilterJob, type FilterOverride, type FilterResult, type FilterVerdict } from "./rules";
 export * from "./reasons";
-export { checkDealBreakers, compileDealBreakers, explainDealBreaker, type DealBreakerContext, type DealBreakerExplanation, type DealBreakerWarning } from "./deal-breakers";
+export { compileDealBreakers, explainDealBreaker, type DealBreakerContext, type DealBreakerExplanation, type DealBreakerWarning } from "./deal-breakers";
+export { vmTimeBox } from "./time-box";
 
 export interface FilterRunResult {
   /** The preferences snapshot the results belong to. */
@@ -39,6 +42,11 @@ export interface FilterRunResult {
   /** How often each reason code applies over all evaluated jobs. */
   byReason: Record<string, number>;
   aborted: boolean;
+  /**
+   * Deal-breakers that did nothing in this run, or stopped part way: written but not applicable (no language step, me.yaml
+   * unreadable, over the limits) or too slow (on the test texts, or over `rule_budget_ms` during the run).
+   */
+  dealBreakerWarnings: DealBreakerWarning[];
 }
 
 export interface FilterOptions {
@@ -46,12 +54,14 @@ export interface FilterOptions {
   /** The snapshot `preferences` was saved as. */
   snapshotId: number;
   pipeline: PipelineConfig;
-  /** me.yaml for a language gate (`currentPreferences().me`); absent or null: such a gate does nothing. */
-  me?: Pick<MeConfig, "languages"> | null;
+  /** me.yaml for a language gate (`currentPreferences().me`); null when it cannot be read: a gate without `at_least` then does nothing and is reported. */
+  me: Pick<MeConfig, "languages"> | null;
   /** Only these jobs (the user changed the decision about one job); default: every job. */
   jobIds?: readonly number[];
   logger?: ChannelLogger;
   signal?: AbortSignal;
+  /** Where the user's patterns run (default `vmTimeBox`); tests pass their own. */
+  timeBox?: TimeBox;
 }
 
 /** `jobs` row -> the fields the rules read. */
@@ -71,6 +81,16 @@ export function toFilterJob(row: FilterCandidate): FilterJob {
   };
 }
 
+/**
+ * Evaluate one batch of jobs: the deal-breakers run over the whole batch first, each rule in its time box
+ * (`dealBreakerVetoes`), then the rules job by job.
+ */
+export function evaluateBatch(rows: readonly FilterCandidate[], compiled: CompiledFilter, run: DealBreakerRun, overrides: ReadonlyMap<number, FilterOverride>): FilterVerdict[] {
+  const jobs = rows.map(toFilterJob);
+  const { vetoes } = dealBreakerVetoes(run, jobs);
+  return jobs.map((job, i) => evaluateJob(job, compiled, overrides.get(rows[i]?.id ?? 0) ?? null, vetoes[i] ?? []));
+}
+
 const sameReasons = (a: readonly string[], b: readonly string[]): boolean => a.length === b.length && a.every((value, i) => value === b[i]);
 
 /**
@@ -80,8 +100,8 @@ const sameReasons = (a: readonly string[], b: readonly string[]): boolean => a.l
  * in place; when the preferences change the snapshot changes, so every job gets a new row.
  */
 export async function runFilter(db: Db, options: FilterOptions): Promise<FilterRunResult> {
-  const compiled: CompiledFilter = compileFilter(options.preferences, options.pipeline, { me: options.me ?? null });
-  for (const warning of compiled.dealBreakers.warnings) options.logger?.warn("deal-breaker not applied", { id: warning.id, reason: warning.code });
+  const compiled: CompiledFilter = compileFilter(options.preferences, options.pipeline, { me: options.me });
+  const dealBreakers = startDealBreakerRun(compiled.dealBreakers, options.timeBox ?? vmTimeBox);
   const result: FilterRunResult = {
     snapshotId: options.snapshotId,
     evaluated: 0,
@@ -92,6 +112,7 @@ export async function runFilter(db: Db, options: FilterOptions): Promise<FilterR
     filteredOut: 0,
     byReason: {},
     aborted: false,
+    dealBreakerWarnings: [],
   };
 
   let afterId = 0;
@@ -108,8 +129,10 @@ export async function runFilter(db: Db, options: FilterOptions): Promise<FilterR
     const stored = await getFilterResults(db, options.snapshotId, ids);
     const overrides = await getFilterOverrides(db, ids);
     const fresh: NewFilterResult[] = [];
-    for (const row of batch) {
-      const verdict = evaluateJob(toFilterJob(row), compiled, overrides.get(row.id) ?? null);
+    const verdicts = evaluateBatch(batch, compiled, dealBreakers, overrides);
+    for (const [i, row] of batch.entries()) {
+      const verdict = verdicts[i];
+      if (!verdict) continue;
       result.evaluated += 1;
       if (verdict.result === "passed") result.passed += 1;
       else result.filteredOut += 1;
@@ -130,6 +153,8 @@ export async function runFilter(db: Db, options: FilterOptions): Promise<FilterR
     }
     result.created += await insertFilterResults(db, options.snapshotId, fresh);
   }
+  result.dealBreakerWarnings = [...compiled.dealBreakers.warnings, ...dealBreakers.warnings];
+  for (const warning of result.dealBreakerWarnings) options.logger?.warn("deal-breaker not applied", { id: warning.id, reason: warning.code });
   options.logger?.info("hard filter done", { snapshotId: result.snapshotId, evaluated: result.evaluated, created: result.created, updated: result.updated, filteredOut: result.filteredOut });
   return result;
 }

@@ -2,7 +2,7 @@ import { z } from "zod";
 
 import { marketSettingsSchema } from "@/lib/market/schema";
 
-import { nestedQuantifierReason, nonEmptyString, nonNegativeInt, regexString, remoteScope, stringList } from "./common";
+import { nonEmptyString, nonNegativeInt, regexString, remoteScope, slowPatternReason, stringList } from "./common";
 
 const contractKind = z.enum(["permanent", "fixed_term", "freelance", "temp_agency"]);
 const workplace = z.enum(["onsite", "hybrid", "remote"]);
@@ -19,10 +19,15 @@ export const DEAL_BREAKER_HARD_LIMITS = { rules: 50, patternChars: 500, itemsPer
 /** CEFR levels a language gate can name as its threshold (`at_least`). */
 export const DEAL_BREAKER_LEVELS = ["A1", "A2", "B1", "B2", "C1", "C2"] as const;
 
-/** A user pattern: a valid regular expression (flags "iu"), not too long, without nested quantifiers. */
+/** The schema message of a slow pattern; the profile form reads the kind back out of it (`issueKey`). */
+export function slowPatternMessage(kind: string, detail: string): string {
+  return `can be very slow (${kind}): ${detail}`;
+}
+
+/** A user pattern: a valid regular expression (flags "iu"), not too long, without the usual shapes of slow backtracking. */
 const userPattern = regexString.max(DEAL_BREAKER_HARD_LIMITS.patternChars).superRefine((value, ctx) => {
-  const reason = nestedQuantifierReason(value);
-  if (reason !== null) ctx.addIssue({ code: "custom", message: `must not nest quantifiers: ${reason}` });
+  const slow = slowPatternReason(value);
+  if (slow !== null) ctx.addIssue({ code: "custom", message: slowPatternMessage(slow.kind, slow.detail) });
 });
 const userPatterns = z.array(userPattern).max(DEAL_BREAKER_HARD_LIMITS.itemsPerList).default([]);
 

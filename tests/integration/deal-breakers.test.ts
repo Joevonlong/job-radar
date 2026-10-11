@@ -291,3 +291,45 @@ describe("deal-breakers and profile snapshots", () => {
     expect(await rowsOf(job.id)).toMatchObject([{ stale: true }]);
   });
 });
+
+describe("slow patterns and unusable rules are bounded and reported", () => {
+  // passes the static check (only bounded runs) but takes far longer than match_ms on a long line of digits
+  const SLOW = { id: "slow", label: "Slow", type: "phrase", patterns: ["1\\d{0,20000}\\d{0,20000}%"] };
+
+  it("leaves a slow rule out of the filter step and reports it in the step result", async () => {
+    const job = await addJob({ description: "Travel 100% of the time, fully on-site." });
+    setRules([SLOW, { ...ONSITE, patterns: ["fully on-site"] }]);
+    const result = await runStep();
+    expect(result.dealBreakerWarnings).toEqual([{ id: "slow", code: "too_slow" }]);
+    expect((await rowsOf(job.id))[0]?.filterReasons).toEqual(["deal_breaker:onsite"]);
+  });
+
+  it("reports an unreadable me.yaml in the step result (the gate does nothing that cycle)", async () => {
+    const job = await addJob({ germanLevelRequired: "C1" });
+    setRules([GATE]);
+    fs.writeFileSync(getConfigPath("me"), "languages: [\n");
+    resetConfigCache();
+    const result = await runStep();
+    expect(result.dealBreakerWarnings).toEqual([{ id: "german-gate", code: "me_unreadable" }]);
+    expect((await rowsOf(job.id))[0]?.filterResult).toBe("passed");
+  });
+
+  it("refuses to save a slow pattern from the form, at its field", async () => {
+    const draft = preferencesConfigToDraft(reloadConfig("preferences"));
+    const result = await saveProfile("preferences", { ...draft, deal_breakers: draftRules([SLOW]) });
+    expect(result).toMatchObject({ status: "error", fieldErrors: [{ path: "deal_breakers.0.patterns", key: "slowPattern", params: { kind: "probe" } }] });
+  });
+
+  it("says too_slow in the preview, and stops the preview at its deadline", async () => {
+    await addJob({ description: "Fully on-site, 100 % vor Ort." });
+    const rules = [SLOW, ONSITE].map((rule) => dealBreakerSchema.parse(rule));
+    const options = { pipeline: loadPipeline(), me: currentMe(), sampleLimit: 3 };
+    const preview = await previewDealBreakers(getDb(), rules, options);
+    expect(preview.rules.map((rule) => [rule.status, rule.count])).toEqual([
+      ["too_slow", 0],
+      ["ok", 1],
+    ]);
+    expect(preview.partial).toBe(false);
+    expect(await previewDealBreakers(getDb(), rules, { ...options, deadlineMs: 0 })).toMatchObject({ total: 0, partial: true });
+  });
+});

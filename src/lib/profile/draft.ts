@@ -256,6 +256,7 @@ export type FieldErrorKey =
   | "languageCode"
   | "invalidChoice"
   | "contractConflict"
+  | "slowPattern"
   | "invalid";
 
 export interface FieldError {
@@ -307,6 +308,7 @@ export function issueKey(issue: Issue): Pick<FieldError, "key" | "params"> {
       if (issue.message.startsWith("each entry must have exactly one")) return { key: "languageCode" };
       if (issue.message.startsWith("duplicate id")) return { key: "duplicates" };
       if (issue.message === "needs at least one term or pattern") return { key: "atLeastOne" };
+      if (issue.message.startsWith("can be very slow (")) return { key: "slowPattern", params: { kind: /^can be very slow \((\w+)\)/u.exec(issue.message)?.[1] ?? "other" } };
       return { key: "invalid", params: { message: issue.message } };
     default:
       return { key: "invalid", params: { message: issue.message } };

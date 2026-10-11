@@ -166,7 +166,7 @@ describe("deal-breakers in the preferences draft", () => {
     const by = Object.fromEntries(
       prefErrors({ ...PREFS, deal_breakers: [gate, { ...gate, label: "" }, { ...phrase, id: "p", terms: [], patterns: [] }, { ...phrase, id: "q", patterns: ["(a+)+"] }] }).map((e) => [e.path, e.key]),
     );
-    expect(by).toEqual({ "deal_breakers.1.id": "duplicates", "deal_breakers.1.label": "required", "deal_breakers.2.terms": "atLeastOne", "deal_breakers.3.patterns": "invalid" });
+    expect(by).toEqual({ "deal_breakers.1.id": "duplicates", "deal_breakers.1.label": "required", "deal_breakers.2.terms": "atLeastOne", "deal_breakers.3.patterns": "slowPattern" });
   });
 
   it("reports too many rules on the list", () => {

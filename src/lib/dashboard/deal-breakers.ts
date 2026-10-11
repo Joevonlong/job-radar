@@ -2,6 +2,7 @@ import type { DealBreakerNotice } from "@/components/jobs/filter-notice";
 import { parseConfigText, readConfigText, type MeConfig, type PreferencesConfig } from "@/lib/config";
 import type { GermanLevel } from "@/lib/domain/types";
 import { explainDealBreaker, type DealBreakerExplanation } from "@/lib/filter/deal-breakers";
+import { vmTimeBox } from "@/lib/filter/time-box";
 import { dealBreakerIds } from "@/lib/filter/reasons";
 import { loadPipeline } from "@/lib/market";
 
@@ -50,7 +51,8 @@ export function loadDealBreakerNotice(job: { title: string; description: string 
     const subject = { title: job.title, description: job.description, germanLevel: job.germanLevelRule };
     for (const id of ids) {
       const rule = rules.find((r) => r.id === id);
-      const explanation = rule ? explainDealBreaker(subject, rule, context, pipeline) : null;
+      // each pattern run is cut off at filter.deal_breakers.match_ms: a slow rule shows its name without the quote
+      const explanation = rule ? explainDealBreaker(subject, rule, context, pipeline, vmTimeBox) : null;
       if (explanation) explanations.push(explanation);
     }
   } catch {
