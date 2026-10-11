@@ -44,6 +44,7 @@
 - **Filters** by your cities, salary floor, contract types and dealbreakers, written in your own words.
 - **Scores** every job 0–100 with your own AI (a `claude` / `codex` subscription or an API key), with reasons, gaps and the salary quoted from the ad.
 - **Pushes** the good ones to your own Telegram bot, with buttons that move them on your application board.
+- **Answers your AI client** (optional, off by default): Claude Desktop, Claude Code or another MCP client can search your jobs and applications through a local, read-only MCP server ([docs/mcp.md](docs/mcp.md)).
 - **Stays yours:** self-hosted, open source, no accounts, no telemetry. It does not apply for you.
 
 More: [features and screenshots](docs/features.md).

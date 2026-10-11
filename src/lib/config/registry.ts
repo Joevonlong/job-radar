@@ -6,6 +6,7 @@ import { channelsSchema } from "./schemas/channels";
 import { insightsSchema } from "./schemas/insights";
 import { interestsSchema } from "./schemas/interests";
 import { languageSchema } from "./schemas/language";
+import { mcpSchema } from "./schemas/mcp";
 import { meSchema } from "./schemas/me";
 import { modelsSchema } from "./schemas/models";
 import { notifySchema } from "./schemas/notify";
@@ -52,6 +53,8 @@ export const configRegistry = {
   salary: { file: "salary.yaml", location: "config", kind: "user", schema: salarySchema },
   /** Starting points of the "add a category" dialog on /interests (shipped: a user copy replaces it as a whole). */
   signalPresets: { file: "signal-presets.yaml", location: "config", kind: "shipped", schema: signalPresetsSchema },
+  /** The optional read-only MCP server (`pnpm mcp:serve`); off by default, every key has a default. */
+  mcp: { file: "mcp.yaml", location: "config", kind: "user", schema: mcpSchema },
   me: { file: "me.yaml", location: "profile", kind: "user", schema: meSchema },
   preferences: { file: "preferences.yaml", location: "profile", kind: "user", schema: preferencesSchema },
 } as const;

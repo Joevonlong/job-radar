@@ -5,11 +5,13 @@
  * tables are not migrated yet, a database hiccup, an unreadable traps.yaml) the JD goes out as before and a warning is logged.
  */
 import type { ChannelLogger } from "@/lib/channels/types";
+import { loadConfig } from "@/lib/config";
 import type { TrapsConfig } from "@/lib/config/schemas/traps";
 import type { Executor } from "@/lib/db/executor";
-import { loadTrapSpanRows } from "@/lib/db/repos/traps";
+import { loadTrapSpanRows, trapScanIsCurrent } from "@/lib/db/repos/traps";
 
 import { jdForAi, resolveSpans } from "./ai-input";
+import { rulesFingerprint } from "./fingerprint";
 import { readTrapsSettings } from "./settings";
 import type { TrapSpan } from "./types";
 
@@ -71,4 +73,53 @@ export async function cleanDescriptionsForAi(db: Executor, jobs: readonly JobTex
 /** One job's JD as an AI may read it. */
 export async function cleanDescriptionForAi(db: Executor, job: JobText, options: CleanOptions = {}): Promise<string | null> {
   return (await cleanDescriptionsForAi(db, [job], options)).get(job.jobId) ?? job.description;
+}
+
+/** Why `cleanDescriptionStrict` gives no JD: the check is off, traps.yaml cannot be read, the job's scan is missing or outdated, the findings cannot be read. */
+export type StrictCleanFailure = "traps_disabled" | "settings_unreadable" | "not_scanned" | "findings_unreadable";
+
+export type StrictCleanResult =
+  | {
+      ok: true;
+      /** The JD as an AI may read it (`jdForAi`); null when the job has none. */
+      text: string | null;
+      /** Pieces of the JD that were removed or replaced (0: the JD is the original). */
+      removed: number;
+      /** The findings' places in the original JD (for anything else quoted from it, e.g. signal quotes). */
+      spans: TrapSpan[];
+      markers: { hidden: string; instruction: string };
+    }
+  | { ok: false; reason: StrictCleanFailure };
+
+/**
+ * The fail-closed variant of `cleanDescriptionForAi`, for a reader that is itself an AI and gets the JD on demand (the MCP server):
+ * the JD is given only when trap detection is on, traps.yaml can be read, the job's scan is current under today's rules (same JD,
+ * same source payloads, same rule fingerprint) and its findings can be read. Anything else is a failure with its reason, never
+ * the uncleaned JD. `settings` is a loader for tests; it may throw.
+ */
+export async function cleanDescriptionStrict(db: Executor, job: JobText, options: { settings?: () => TrapsConfig } = {}): Promise<StrictCleanResult> {
+  let settings: TrapsConfig;
+  try {
+    settings = (options.settings ?? (() => loadConfig("traps")))();
+  } catch {
+    return { ok: false, reason: "settings_unreadable" };
+  }
+  if (!settings.enabled) return { ok: false, reason: "traps_disabled" };
+  let spans;
+  try {
+    if (!(await trapScanIsCurrent(db, job.jobId, rulesFingerprint(settings)))) return { ok: false, reason: "not_scanned" };
+    spans = await loadTrapSpansStrict(db, job);
+  } catch {
+    return { ok: false, reason: "findings_unreadable" };
+  }
+  const markers = { hidden: settings.ai_input.hidden_marker, instruction: settings.ai_input.instruction_marker };
+  if (job.description === null) return { ok: true, text: null, removed: 0, spans: [], markers };
+  return { ok: true, text: jdForAi(job.description, spans, markers), removed: spans.length, spans, markers };
+}
+
+/** The trap spans of one JD; unlike `loadTrapSpans` a read error is thrown, not swallowed. */
+export async function loadTrapSpansStrict(db: Executor, job: JobText): Promise<TrapSpan[]> {
+  if (job.description === null || job.description === "") return [];
+  const rows = await loadTrapSpanRows(db, [job.jobId]);
+  return resolveSpans(job.description, rows.get(job.jobId) ?? []);
 }

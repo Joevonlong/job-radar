@@ -5,6 +5,7 @@ export * from "./companies";
 export * from "./insights";
 export * from "./interests";
 export * from "./language";
+export * from "./mcp";
 export * from "./me";
 export * from "./models";
 export * from "./notify";

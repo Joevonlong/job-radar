@@ -1,0 +1,28 @@
+# Read-only MCP server (docs/mcp.md): lets an MCP client you configure yourself (Claude Desktop, Claude Code, ...) query your
+# jobs and applications. The client starts `pnpm mcp:serve` as a local child process and talks to it over stdio; no port is
+# opened, nothing can be written.
+# Privacy: whatever the tools return is handed by your client to the model provider it uses (Anthropic for Claude, ...).
+# What may be returned is fixed in code: job facts, source links, scores and ranks, signals with their JD quotes, the JD after
+# AI-trap cleaning, and the status, dates, next step and interview rounds of your applications. Never returned: your profile,
+# match reasons and gaps, filter reasons and your salary floor, notes, emails, local paths, keys.
+
+# Version of this file's structure; don't edit by hand (a migration script upgrades it when the structure changes)
+config_version: 1
+
+# Master switch. false: `pnpm mcp:serve` refuses to start and says why (your client shows the message)
+enabled: false
+
+# Each tool can be switched off on its own (it is then not offered to the client)
+tools:
+  # Search jobs by keyword, city, work mode, minimum rank, minimum salary, date and application status; ranked cards, no JD text
+  search_jobs: true
+  # One job in detail: facts, source links, score and rank, signals with quotes, trap counts, the cleaned JD
+  get_job: true
+  # Your applications by status; `stale_only` lists the ones waiting longer than the reminder thresholds of notify.yaml
+  list_applications: true
+
+limits:
+  # Most jobs or applications one call returns (1-100); the answer says when more matched
+  max_results: 20
+  # Most characters of a JD one get_job call returns (500-100000); a longer JD is cut and marked as cut
+  max_description_chars: 12000

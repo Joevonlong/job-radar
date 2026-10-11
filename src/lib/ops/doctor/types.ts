@@ -100,6 +100,8 @@ export interface DoctorProbes {
   configLayers(): Promise<ConfigLayersState>;
   /** traps.yaml and the trap counts (`stats` null when the tables are not migrated). Throws when the database cannot be read. */
   traps(now: Date): Promise<TrapsProbe>;
+  /** mcp.yaml: whether the MCP server is switched on and which tools (or why the file cannot be read). Never throws. */
+  mcp(): Promise<McpProbe>;
   /** The market of preferences.yaml and the packs (or why it cannot be resolved). Never throws. */
   market(): Promise<MarketSummaryResult>;
   /** The first-run setup state (setup.yaml). Never throws. */
@@ -128,6 +130,9 @@ export interface OwnershipScan {
 export type TrapsProbe =
   | { state: "ok"; enabled: boolean; backlogWarn: number; recentDays: number; stats: { jobsWithTraps: number; recentJobsWithTraps: number; backlog: number } | null }
   | { state: "config_error"; problem: string };
+
+/** What `data.mcp` reads: the switch and the switched-on tools of mcp.yaml, or why it cannot be read. */
+export type McpProbe = { state: "ok"; enabled: boolean; tools: string[] } | { state: "config_error"; problem: string };
 
 export interface DoctorContext {
   now: Date;

@@ -42,6 +42,7 @@ folders: it holds all of the above. Backup files and the exported JD files conta
 | Google (Gmail over IMAP) | login with your app password and reading one label | every cycle | switch the Gmail channel off; revoke the app password |
 | Telegram | job title, company, score, the one-line AI summary, reminders, health alerts and, with the "Tailor résumé" button, the command text | when something is pushed | Telegram is off by default (`notify.yaml`); leave it off |
 | `claude` in a terminal (resume-kit `/tailor`) | **your complete résumé** and the job description, when you run the command yourself | only when you run it | do not run it |
+| The model provider of an MCP client you configured yourself (Claude Desktop, Claude Code, ...; **off by default**) | what its tools return when you ask: job facts, source links, scores and ranks, signals with their JD quotes, the JD after AI-trap cleaning, the status, dates, next step and interview rounds of your applications. **Never:** your profile, match reasons and gaps, filter reasons, your salary floor, notes, emails, local paths, keys. See [mcp.md](mcp.md) | only when you ask your client | leave `mcp.yaml: enabled` at `false`, or remove the server from your client |
 
 Nothing is sent to the project's maintainers or to any analytics service.
 

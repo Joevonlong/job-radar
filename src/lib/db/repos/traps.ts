@@ -72,6 +72,20 @@ export async function listJobsToTrapScan(db: Executor, options: { rulesHash: str
   return Array.from(rows, (r) => ({ jobId: Number(r.id), descriptionHash: r.description_hash, sourcesHash: r.sources_hash, fresh: r.fresh }));
 }
 
+/**
+ * Whether a job's trap scan is current: there is one, and it was made with these rules for the JD and source payloads the job has
+ * now (the same test as `listJobsToTrapScan`). False when the tables are not there yet or the job does not exist. Throws when the
+ * database cannot be read: a caller that hands the JD to an AI only on "current" fails closed.
+ */
+export async function trapScanIsCurrent(db: Executor, jobId: number, rulesHash: string): Promise<boolean> {
+  if (!(await trapTablesReady(db))) return false;
+  const outdated = await listJobsToTrapScan(db, { rulesHash, limit: 1, jobIds: [jobId] });
+  if (outdated.length > 0) return false;
+  // a job that does not exist is not listed as outdated either
+  const [row] = await db.select({ jobId: trapScans.jobId }).from(trapScans).where(eq(trapScans.jobId, jobId)).limit(1);
+  return row !== undefined;
+}
+
 /** Every job id, oldest first (the `--all` run of `pnpm traps:scan` pages through it). */
 export async function listAllJobIds(db: Executor, options: { afterId: number; limit: number }): Promise<number[]> {
   const rows = await db.select({ id: jobs.id }).from(jobs).where(sql`${jobs.id} > ${options.afterId}`).orderBy(asc(jobs.id)).limit(options.limit);
