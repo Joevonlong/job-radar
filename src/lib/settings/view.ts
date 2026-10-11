@@ -7,6 +7,7 @@ import { scorePromptFor } from "@/lib/ai/prompts/score";
 import { getDb, getDbNow } from "@/lib/db";
 import { countScoresAtPromptVersion } from "@/lib/db/repos/scores";
 import { loadPipeline } from "@/lib/market";
+import { loadTelegramStatus, type TelegramStatusView } from "@/lib/notify/telegram-status";
 import { scoreLanguageOf } from "@/lib/scoring/score-task";
 import { loadAiProviderViews } from "@/lib/sources/load";
 
@@ -37,6 +38,8 @@ export interface SettingsPageData {
   criteriaImpact: number | null;
   /** Per AI task the providers that may receive job text, from the saved ai.yaml; null when ai.yaml cannot be read. */
   aiDisclosure: AiDisclosureRow[] | null;
+  /** Telegram on the Notifications tab: whether the bot is set up (names only, never a value), push on/off, last test. */
+  telegram: TelegramStatusView;
 }
 
 /** How many current scores carry the version the scoring prompt has now (all of them go stale when the criteria change). */
@@ -108,5 +111,18 @@ export async function loadSettingsPage(): Promise<SettingsPageData> {
   } catch {
     // an unreadable ai.yaml is reported by its tab
   }
-  return { sections, status, channelChoices, providerStates, catalog, catalogError, workflow: await loadWorkflowView(), criteriaImpact: await loadCriteriaImpact(), aiDisclosure: disclosure };
+  let telegramEnabled: boolean | null = null;
+  try {
+    telegramEnabled = reloadConfig("notify").telegram.enabled;
+  } catch {
+    // an unreadable notify.yaml is reported by its tab
+  }
+  let db: ReturnType<typeof getDb> | null = null;
+  try {
+    db = getDb();
+  } catch {
+    db = null;
+  }
+  const telegram = await loadTelegramStatus({ enabled: telegramEnabled, db });
+  return { sections, status, channelChoices, providerStates, catalog, catalogError, workflow: await loadWorkflowView(), criteriaImpact: await loadCriteriaImpact(), aiDisclosure: disclosure, telegram };
 }

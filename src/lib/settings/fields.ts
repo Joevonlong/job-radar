@@ -190,7 +190,8 @@ export const HIDDEN_PATHS: Record<SettingsForm, readonly string[]> = {
   // The role families, deep link templates, trusted domains and the sanity range are lists / tables: the advanced editor
   salary: ["role_families", "deep_links", "lookup.allowed_fetch_domains", "lookup.sanity_annual", "lookup.unconvertible_max_annual", "lookup.web_search_usd", "lookup.max_searches"],
   // The two reminder thresholds are edited in the "application workflow" tab, next to the statuses they belong to.
-  notify: ["reminders.interested_days", "reminders.applied_days"],
+  // telegram.setup: waits of the host command `pnpm run setup --step telegram`, edited in the YAML or the advanced editor.
+  notify: ["reminders.interested_days", "reminders.applied_days", "telegram.setup"],
   // The hidden statuses / categories are the workflow tab's status table; the editor's own limits are in the advanced editor.
   // web_access (the login limits) is a protected key: changed in the file only, never from the dashboard.
   // The recheck of watched jobs (switch and extra phrases) is edited in the YAML or the advanced editor.

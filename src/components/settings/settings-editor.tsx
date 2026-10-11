@@ -16,8 +16,10 @@ import type { QuietInput } from "@/lib/settings/timeline";
 import type { WorkflowView } from "@/lib/settings/workflow/types";
 import { IDLE_SETTINGS_STATE, type SaveSettingsRequest, type SettingsSection } from "@/lib/settings/types";
 
+import type { TelegramStatusView } from "@/lib/notify/telegram-status";
 import type { CatalogView } from "@/lib/settings/catalog-view";
 
+import { TelegramStatus } from "@/components/notify/telegram-status";
 import { SetupWizardCard } from "@/components/setup/setup-wizard-card";
 
 import { ActionsPanel } from "./actions-panel";
@@ -41,6 +43,8 @@ interface SettingsEditorProps {
   catalogError?: string | null;
   /** Data of the application workflow panel. */
   workflow: WorkflowView;
+  /** Telegram status and setup guidance on the Notifications tab (absent: not shown). */
+  telegram?: TelegramStatusView | null;
   timezone: string;
   /** Server time at render (ISO): the first paint of the timeline's "now" line. */
   now: string;
@@ -157,7 +161,7 @@ function savedQuietHours(sections: SettingsSection[]): QuietInput | null {
  * lives here (not in the forms) so its state survives the remount that follows every save: a form
  * is keyed by the hash of its file.
  */
-export function SettingsEditor({ sections, status: initialStatus, channelChoices, providerStates, criteriaImpact = null, aiDisclosure = null, catalog = null, catalogError = null, workflow, timezone, now }: SettingsEditorProps) {
+export function SettingsEditor({ sections, status: initialStatus, channelChoices, providerStates, criteriaImpact = null, aiDisclosure = null, catalog = null, catalogError = null, workflow, telegram = null, timezone, now }: SettingsEditorProps) {
   const t = useTranslations("settings");
   const [tab, setTab] = useQueryState("tab", tabParser);
   const [section] = useQueryState("section", parseAsString);
@@ -203,6 +207,7 @@ export function SettingsEditor({ sections, status: initialStatus, channelChoices
                 </Link>
               </p>
             ) : null}
+            {pageTab === "notify" && telegram !== null ? <TelegramStatus status={telegram} testDisabled={status === null} /> : null}
             {pageTab === "notify" ? (
               <p className="text-body-sm" data-testid="reminder-link">
                 <button type="button" onClick={() => void setTab("workflow")} className="font-bold underline underline-offset-4 hover:bg-hi hover:text-hi-ink">

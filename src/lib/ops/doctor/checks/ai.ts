@@ -20,6 +20,11 @@ const launchdSpec = { id: "aiworker.launchd", group: "processes" } as const;
 const LEGACY_LAUNCHD_LABEL = "de.jobradar.ai-worker";
 const LAUNCHD_LABEL = "io.jobradar.ai-worker";
 
+/** The launchd label of the ai-worker from schedule.yaml `doctor.ai_worker_launchd_label` (a copied legacy label means the new one). */
+export function aiWorkerLaunchdLabel(configured: string): string {
+  return configured === LEGACY_LAUNCHD_LABEL ? LAUNCHD_LABEL : configured;
+}
+
 /** The fields of `launchctl print` that matter: `state = running`, `pid = 123`, `last exit code = 0`, `stdout path = …`. */
 export function parseLaunchctlPrint(stdout: string): { state: string | null; pid: number | null; lastExitCode: string | null; stdoutPath: string | null } {
   const field = (name: string): string | null => {
@@ -84,8 +89,7 @@ export const aiWorkerLaunchdCheck: DoctorCheck = {
     if (ctx.platform === "linux") return systemdOutcome(ctx);
     if (ctx.platform !== "darwin" || ctx.uid === null) return warn(launchdSpec, t("checks.aiworker.launchd.notMacos"), t("checks.aiworker.launchd.notMacosHint"));
     // A user config copied from the old shipped defaults still names the legacy label; the install script now always uses the new one.
-    const configured = ctx.settings.ai_worker_launchd_label;
-    const label = configured === LEGACY_LAUNCHD_LABEL ? LAUNCHD_LABEL : configured;
+    const label = aiWorkerLaunchdLabel(ctx.settings.ai_worker_launchd_label);
     const out = await ctx.probes.run("launchctl", ["print", `gui/${ctx.uid}/${label}`]);
     const heartbeatAge = async (): Promise<number | null> => {
       const sources = await tryLoadSources(ctx);

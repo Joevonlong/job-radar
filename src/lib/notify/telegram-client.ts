@@ -63,12 +63,15 @@ const responseSchema = z.object({
 
 const sentMessageSchema = z.object({ message_id: z.number().int() });
 
-const chatSchema = z.object({ id: z.number() });
+/** Names are optional and only read by `pnpm run setup` to say which chat sent the first message. */
+const chatSchema = z.object({ id: z.number(), type: z.string().optional(), title: z.string().optional(), first_name: z.string().optional(), last_name: z.string().optional(), username: z.string().optional() });
+
+const senderSchema = z.object({ id: z.number(), is_bot: z.boolean().optional(), first_name: z.string().optional(), last_name: z.string().optional(), username: z.string().optional() });
 
 const updateSchema = z.object({
   update_id: z.number().int(),
   message: z
-    .object({ message_id: z.number().int(), chat: chatSchema, from: z.object({ id: z.number() }).optional(), text: z.string().optional() })
+    .object({ message_id: z.number().int(), date: z.number().int().optional(), chat: chatSchema, from: senderSchema.optional(), text: z.string().optional() })
     .optional(),
   callback_query: z
     .object({

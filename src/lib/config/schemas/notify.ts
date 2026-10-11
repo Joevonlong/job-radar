@@ -19,6 +19,22 @@ export const notifySchema = z.strictObject({
     message_gap_ms: nonNegativeInt,
     /** Retries after a 429 / 5xx answer before a send gives up. */
     max_retries: nonNegativeInt,
+    /** `pnpm run setup --step telegram` (the command-line Telegram setup); older files without the block get these defaults. */
+    setup: z
+      .strictObject({
+        /** How long the setup waits for the first message to the bot (to learn the chat id). */
+        wait_for_message_seconds: positiveInt,
+        /** How long the restart of web and runner may take before it counts as failed (`docker compose up --wait`). */
+        restart_wait_seconds: positiveInt,
+        /** How long the setup looks for "telegram poller started" in the runner's log after the restart. */
+        poller_check_seconds: positiveInt,
+        /**
+         * While an update the setup must not confirm (a button press for the runner) is waiting, it asks Telegram again
+         * every this many seconds instead of long-polling (a long poll would return that update at once).
+         */
+        poll_interval_seconds: positiveInt.default(3),
+      })
+      .default({ wait_for_message_seconds: 180, restart_wait_seconds: 180, poller_check_seconds: 60, poll_interval_seconds: 3 }),
   }),
   /**
    * Base URL of the web dashboard (e.g. the Tailscale address) used for the "open details" link of

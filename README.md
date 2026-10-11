@@ -289,7 +289,8 @@ pnpm run doctor                  # every check ✅ / ⚠️ / ❌, with what to 
 ```
 
 Sign in to your AI first if you haven't: `claude` then `/login`, or `codex login`. Keys and tokens go in `.env` only;
-the wizard never asks for them. Telegram stays off until you create your own bot. The full walkthrough, with Telegram,
+the wizard never asks for them. Telegram stays off until you create your own bot; then `pnpm run setup --step telegram`
+connects it. The full walkthrough, with Telegram,
 phone access and updates, is in **[docs/installation.md](docs/installation.md)**.
 
 ## Installation

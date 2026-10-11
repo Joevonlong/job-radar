@@ -3096,6 +3096,42 @@
       },
       "protectedNote": "{file} 中受保护的键（命令、API 地址、凭据路径）只能手动编辑文件来改：",
       "protectedUnlocked": "已设置 JOB_RADAR_ALLOW_WEB_EDIT_PROTECTED=1，{file} 中这些平时锁定的键可以在这里修改："
+    },
+    "telegramStatus": {
+      "title": "Telegram",
+      "state": {
+        "configured": "已连接",
+        "missing": "未连接",
+        "partial": "不完整",
+        "invalid": "值无效"
+      },
+      "enabledOn": "推送已打开（notify.yaml telegram.enabled）。",
+      "enabledOff": "推送是关闭的：用“发送 Telegram 消息”打开。",
+      "lastTest": {
+        "none": "还没有发过测试消息。",
+        "ok": "最近一次测试消息：{at} 已发送。",
+        "failed": "最近一次测试消息：{at} 失败（{reason}）。"
+      },
+      "testErrors": {
+        "telegram_not_configured": "runner 没有 bot token 和 chat id；配置后需要重启它",
+        "telegram_failed": "Telegram 没有接受这条消息",
+        "other": "见 runner 日志"
+      },
+      "problem": {
+        "partial": "TELEGRAM_BOT_TOKEN 和 TELEGRAM_CHAT_ID 只设置了一个：Telegram 两个都需要。",
+        "invalid": "TELEGRAM_BOT_TOKEN 或 TELEGRAM_CHAT_ID 的值无效（pnpm run doctor 会指出是哪个）。"
+      },
+      "guide": {
+        "botFather": "在 Telegram 里打开 @BotFather，发送 /newbot，它会给你一个 bot token。",
+        "run": "在运行 Job Radar 的电脑上、项目目录里运行：",
+        "paste": "粘贴 token（不显示），再给你的 bot 随便发一句话：命令会找到 chat id 并发一条测试消息。",
+        "restart": "它会写入 .env 并重启 web、runner 和 ai-worker。然后刷新本页。",
+        "manual": "想手动配置？把 <code>TELEGRAM_BOT_TOKEN</code> 和 <code>TELEGRAM_CHAT_ID</code> 写进 .env，然后重建容器并重启 ai-worker（见 <doc>Telegram 指南</doc>）。出于安全，本页从不显示或修改这些值。"
+      },
+      "changeHint": "要更换 bot 或聊天、重新测试或移除，在运行 Job Radar 的电脑上运行同一条命令：",
+      "copy": "复制",
+      "copied": "命令已复制。",
+      "copyFailed": "复制失败；请自己选中命令复制。"
     }
   },
   "sources": {
@@ -5513,8 +5549,6 @@
     },
     "telegram": {
       "enabled": "发送 Telegram 消息",
-      "howTo": "用 @BotFather 建一个 bot，把 TELEGRAM_BOT_TOKEN 和 TELEGRAM_CHAT_ID 写进 .env（见 docs/telegram.md），然后重启：docker compose up -d。",
-      "testHint": "由 runner 发一条测试消息（两个变量都要有）。",
       "locale": "消息的语言",
       "localeDefault": "和界面相同",
       "unreadable": "notify.yaml 读不了，请先到设置页修好。"
@@ -5558,7 +5592,7 @@
       }
     },
     "cli": {
-      "usage": "用法：pnpm run setup [--step STEP] [--answers FILE.yaml] [--status [--json]] [--complete] [--lang en|zh]",
+      "usage": "用法：pnpm run setup [--step STEP] [--answers FILE.yaml] [--status [--json]] [--complete] [--no-restart] [--lang en|zh]",
       "badArgs": "setup：{message}",
       "unknownStep": "没有 {step} 这一步。步骤：{steps}",
       "title": "Job Radar 设置",
@@ -5632,7 +5666,6 @@
         "boards": "要添加的公司招聘页，写成 ats:token:名称，用逗号分隔（留空 = 不加）",
         "aiOrder": "AI 顺序，用逗号分隔（{options}）",
         "aiEnabled": "要用的 AI 服务商，用逗号分隔（{options}）",
-        "telegram": "发送 Telegram 消息？（y/n）",
         "consent": "我已阅读并自行承担使用它们的责任 (y/n)"
       },
       "channelLine": "  {mark} {id}{env}",
@@ -5644,15 +5677,96 @@
       "aiLogin": "  {command}：{state, select, logged_in {已登录} logged_out {未登录} missing {未安装} other {状态不明}}",
       "aiKey": "  {name}：{state, select, set {已设置} other {未设置}}",
       "aiLoginHint": "在这台电脑上登录：claude（然后输入 /login）和 codex login。ai-worker 用的就是这些登录。",
-      "telegramEnv": "  {name}：{state, select, set {已设置} other {未设置}}",
-      "telegramHint": "TELEGRAM_BOT_TOKEN 和 TELEGRAM_CHAT_ID 放在 .env 里（见 docs/telegram.md）。",
       "by": {
         "wizard": "向导",
         "cli": "命令行",
         "skipped": "跳过了向导",
         "existing_install": "老安装"
       },
-      "consentNotice": "这些渠道会抓取服务条款限制自动化访问的网站，或操作你自己的账号：{channels}。见 docs/sources.md 的“Scraping”一节。"
+      "consentNotice": "这些渠道会抓取服务条款限制自动化访问的网站，或操作你自己的账号：{channels}。见 docs/sources.md 的“Scraping”一节。",
+      "telegram": {
+        "intro": "Job Radar 通过你自己的 Telegram bot 推送合适的岗位和告警。大约两分钟：\n  1. 在 Telegram 里打开 @BotFather，发送 /newbot，回答它的两个问题。它会回复一个 token，形如 123456789:AAE...\n  2. 把 token 粘贴到这里（粘贴时不显示）。\n  3. 给你的新 bot 随便发一句话，这个命令据此得到 chat id。\n  4. 收到测试消息后，这些值写进 .env，相关服务自动重启。",
+        "askStart": "现在配置 Telegram 吗？y = 是，s = 跳过这一步，n = 否",
+        "currentInvalid": ".env 里的 Telegram 值无效（doctor 会说明是哪一个）。重新配置：",
+        "current": "Telegram 已配置：bot {bot}，chat {id}。",
+        "askExisting": "k = 保留，r = 更换 bot 或聊天，t = 发一条测试消息，d = 从 .env 移除，s = 跳过",
+        "optKeep": "k",
+        "optReplace": "r",
+        "optTest": "t",
+        "optRemove": "d",
+        "optSkip": "s",
+        "askRemove": "从 .env 移除 bot token、chat id 和允许的用户 id 吗（会保留备份）？(y/n)",
+        "endpointRefused": "未配置：{reason}",
+        "askToken": "@BotFather 给的 bot token（输入不显示）：",
+        "tokenFormat": "这不是 bot token。格式形如 123456789:AAE...（数字、冒号，然后是字母、数字、- 和 _）。",
+        "checkingToken": "正在向 Telegram 验证 token ...",
+        "tokenOk": "token 有效：bot 是 @{bot}。",
+        "retryToken": "换一个 token 再试？(y/n)",
+        "errorRejected": "Telegram 拒绝了这个 token。请从 @BotFather 重新复制（/mybots -> 你的 bot -> API Token）。",
+        "errorConflict": "Telegram 说另一个程序正在读取这个 bot 的消息（另一个 Job Radar runner，或设置了 webhook）。",
+        "conflictHint": "先停掉那个程序，或者手动输入 chat id（m）。",
+        "errorNetwork": "连不上 {host}。请检查网络（或代理 / 防火墙）后重试。",
+        "errorApi": "Telegram 返回错误：{reason}",
+        "errorUnknown": "和 Telegram 通信时出现意外错误。",
+        "askChatHow": "chat id：a = 从你发给 bot 的消息里识别（推荐），m = 手动输入，q = 退出",
+        "optDetect": "a",
+        "optManual": "m",
+        "optQuit": "q",
+        "runnerStopping": "runner 也在读取这个 bot 的消息：识别 chat id 期间先停掉它（命令结束时会重新启动）...",
+        "runnerStopFailed": "停不了 runner（{reason}），消息可能被它先取走。如果识别不到，请手动输入 chat id。",
+        "runnerStarting": "正在重新启动 runner ...",
+        "runnerStartFailed": "没能重新启动 runner（{reason}）。请自己启动：",
+        "sendNow": "现在在 Telegram 里给 @{bot} 随便发一句话（比如 \"hi\"）。群聊：先把 bot 拉进群，再在群里发送 /start@{bot}。",
+        "waiting": "最多等待 {seconds} 秒（Ctrl-C 停止）...",
+        "noMessage": "在限定时间内没有收到消息。",
+        "detected": "收到来自 {chat} 的消息，chat id {id}。",
+        "chatPrivate": "{name}（私聊）",
+        "chatGroup": "群“{title}”（由 {name} 发送）",
+        "useChat": "推送到这个聊天？(y/n)",
+        "askChatId": "chat id（数字；群聊以 - 开头）：",
+        "chatFormat": "chat id 是整数，群或频道是负数（如 -1001234567890）。",
+        "groupHint": "这是群聊：群里任何人都能按按钮。只有这里列出的 Telegram 用户 id 才算数（逗号分隔；留空 = 群里所有人）。",
+        "askAllowed": "允许的用户 id",
+        "allowedFormat": "请填数字用户 id，用逗号分隔，如 12345678,23456789。",
+        "sendingTest": "正在给 chat {id} 发送测试消息 ...",
+        "retryTest": "再试一次？(y/n)",
+        "askArrived": "Telegram 里收到测试消息了吗？(y/n)",
+        "retryChat": "重新选择聊天？(y/n)",
+        "summary": "bot @{bot}，chat {id}，允许的用户 id：{allowed}。",
+        "askWrite": "把 token、chat id 和允许的用户 id 写入 {file}？(y/n)",
+        "nothingWritten": ".env 没有改动。",
+        "stoppedAfterWrite": "已停止。.env 已经写入；请自己重启服务（见 docs/telegram.md）。",
+        "envCreated": "已从 .env.example 生成 {file} 并写入 Telegram 值（只有你能读）。",
+        "envWritten": "已把 Telegram 值写入 {file}；原文件备份为 {backup}。",
+        "envFailed": "写不了 {file}：{reason}。没有做任何改动。",
+        "askEnable": "打开 Telegram 推送（notify.yaml telegram.enabled）？(y/n)",
+        "enabledOn": "Telegram 推送已打开。",
+        "enabledOff": "Telegram 推送是关闭的（以后可在 设置 -> 推送 里打开）。",
+        "restartSkipped": "--no-restart：没有重启任何服务。web 和 runner 只在容器创建时读取 .env，ai-worker 在启动时读取。请运行：",
+        "restartUnavailable": "无法从这里重启服务（schedule.yaml 读不了）。请运行：",
+        "restartManualGeneric": "  docker compose up -d --no-deps --force-recreate web runner，然后重启 ai-worker（scripts/ops/install-ai-worker.sh）。",
+        "dockerUnavailable": "Docker 没有响应：web 和 runner 没有重启。",
+        "stackDown": "web 和 runner 没有在运行；它们启动时会读取新值。",
+        "recreating": "正在重建 {services}，让它们重新读取 .env（最多等待 {seconds} 秒直到健康）...",
+        "recreated": "{services} 已用新值重启。",
+        "recreateFailed": "重启失败：{reason}",
+        "aiWorkerNotRunning": "这台机器上 ai-worker 没有作为服务运行；如果是你手动启动的，请重启它。",
+        "aiWorkerRestarted": "ai-worker 已用新值重启。",
+        "aiWorkerFailed": "没能重启 ai-worker：{reason}",
+        "manualTitle": "请自己运行以下命令完成：",
+        "pollerOk": "runner 日志：telegram poller started（轮询已启动）。",
+        "pollerMissing": "runner 日志里还没有出现 \"telegram poller started\"。请检查：{command}",
+        "doctorTitle": "doctor（Telegram 检查）：",
+        "doctorFailed": "doctor 没能运行；请自己运行 pnpm run doctor。",
+        "done": "Telegram 配置完成。设置 -> 推送 页显示状态；那里的按钮可以再发一条测试消息。",
+        "detectedEarlier": "没有收到新消息。在提示你之前已经有一条消息在等待（发送于 {at}）：{chat}，chat id {id}。它可能是旧消息，也可能是别人发的。",
+        "useEarlierChat": "仍然使用这个较早的聊天吗？",
+        "servicesBusy": "正在恢复服务，请稍候，命令完成后会自己结束。",
+        "backupHint": "备份 {backup} 里仍有之前的值，包括旧的 token：确认一切正常后删掉它（rm {backup}）。",
+        "restoring": "正在恢复之前在运行的服务：{services} ……",
+        "restored": "{services} 已重新运行。",
+        "restoreFailed": "没能恢复（{reason}）：请运行下面的命令。"
+      }
     }
   },
   "auth": {
