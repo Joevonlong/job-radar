@@ -68,20 +68,27 @@ interface Prepared {
   result: DealBreakerRulePreview;
 }
 
-function prepare(rules: readonly DealBreaker[], options: PreviewOptions, timeBox: TimeBox): Prepared[] {
+/** Compile and probe each rule on its own; null when the deadline passed first (probing a slow pattern takes up to `match_ms` per test text). */
+function prepare(rules: readonly DealBreaker[], options: PreviewOptions, timeBox: TimeBox, deadline: number): Prepared[] | null {
   const limits = options.pipeline.filter.deal_breakers;
   const context = { language: options.pipeline.market.language?.code ?? null, me: options.me, limits };
-  return rules.map((rule, index) => {
+  const prepared: Prepared[] = [];
+  for (const [index, rule] of rules.entries()) {
+    if (performance.now() >= deadline) return null;
     const result: DealBreakerRulePreview = { id: rule.id, status: "ok", count: 0, samples: [], ms: 0 };
-    if (index >= limits.max_rules) return { rule, run: null, result: { ...result, status: "too_many_rules" } };
+    if (index >= limits.max_rules) {
+      prepared.push({ rule, run: null, result: { ...result, status: "too_many_rules" } });
+      continue;
+    }
     // a rule that is switched off is still counted: the preview is how the user decides to switch it on
     const compiled = compileDealBreakers([{ ...rule, enabled: true }], context);
-    const warning = compiled.warnings[0];
-    if (warning) return { rule, run: null, result: { ...result, status: warning.code } };
-    const run = startDealBreakerRun(compiled, timeBox);
-    if (run.warnings[0]) return { rule, run: null, result: { ...result, status: run.warnings[0].code } };
-    return { rule, run, result: { ...result, status: rule.enabled ? "ok" : "disabled" } };
-  });
+    const warning = compiled.warnings[0] ?? null;
+    const run = warning === null ? startDealBreakerRun(compiled, timeBox) : null;
+    const problem = warning ?? run?.warnings[0] ?? null;
+    if (problem !== null) prepared.push({ rule, run: null, result: { ...result, status: problem.code } });
+    else prepared.push({ rule, run, result: { ...result, status: rule.enabled ? "ok" : "disabled" } });
+  }
+  return prepared;
 }
 
 /**
@@ -91,7 +98,10 @@ function prepare(rules: readonly DealBreaker[], options: PreviewOptions, timeBox
 export async function previewDealBreakers(db: Db, rules: readonly DealBreaker[], options: PreviewOptions): Promise<DealBreakerPreview> {
   const timeBox = options.timeBox ?? vmTimeBox;
   const deadline = performance.now() + (options.deadlineMs ?? options.pipeline.filter.deal_breakers.preview_ms);
-  const prepared = prepare(rules, options, timeBox);
+  const ready = prepare(rules, options, timeBox, deadline);
+  // out of time before every rule was probed: nothing counted
+  if (ready === null) return { total: 0, partial: true, rules: rules.map((rule) => ({ id: rule.id, status: rule.enabled ? "ok" : "disabled", count: 0, samples: [], ms: 0 })) };
+  const prepared = ready;
   const context = { language: options.pipeline.market.language?.code ?? null, me: options.me, limits: options.pipeline.filter.deal_breakers };
   let total = 0;
   let partial = false;
@@ -109,7 +119,7 @@ export async function previewDealBreakers(db: Db, rules: readonly DealBreaker[],
     for (const entry of prepared) {
       if (entry.run === null) continue;
       const started = performance.now();
-      const { vetoes, complete } = dealBreakerVetoes(entry.run, jobs, deadline);
+      const { vetoes, complete } = dealBreakerVetoes(entry.run, jobs, { deadline });
       if (!complete) {
         partial = true;
         break;

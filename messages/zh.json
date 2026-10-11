@@ -635,7 +635,7 @@
       "invalidChoice": "请选择有效的选项",
       "contractConflict": "同一合同类型不能同时接受和排除",
       "invalid": "{message}",
-      "slowPattern": "{kind, select, nested {太慢：重复的分组里面又有重复} unbounded {太慢：有不止一段不限长度的匹配（如 .* 或 \\s+），请给它们设上限} leading {太慢：开头是不限长度的 .*（去掉即可，模式本来就在任意位置匹配）} alternation {太慢：重复分组的几个分支开头可能相同} other {太慢：在长测试文本上超时，请把模式写简单些}}"
+      "slowPattern": "{kind, select, nested {太慢：重复的分组里面又有重复} unbounded {太慢：有不止一段不限长度的匹配（如 .* 或 \\s+），请给它们设上限} leading {太慢：开头是不限长度的 .*（去掉即可，模式本来就在任意位置匹配）} alternation {太慢：重复分组的几个分支开头可能相同} probe {太慢：在长测试文本上超时。请给每个 + 和 * 设上限，例如 [a-z]'{1,40}' 或 .'{0,40}'} other {太慢：在长测试文本上超时，请把模式写简单些}}"
     },
     "formErrors": {
       "invalidPayload": "提交的数据格式不对，请刷新页面后重试。",
@@ -1704,7 +1704,7 @@
       "invalidChoice": "请选择有效的选项",
       "contractConflict": "选项冲突",
       "invalid": "{message}",
-      "slowPattern": "{kind, select, nested {太慢：重复的分组里面又有重复} unbounded {太慢：有不止一段不限长度的匹配（如 .* 或 \\s+），请给它们设上限} leading {太慢：开头是不限长度的 .*（去掉即可，模式本来就在任意位置匹配）} alternation {太慢：重复分组的几个分支开头可能相同} other {太慢：在长测试文本上超时，请把模式写简单些}}",
+      "slowPattern": "{kind, select, nested {太慢：重复的分组里面又有重复} unbounded {太慢：有不止一段不限长度的匹配（如 .* 或 \\s+），请给它们设上限} leading {太慢：开头是不限长度的 .*（去掉即可，模式本来就在任意位置匹配）} alternation {太慢：重复分组的几个分支开头可能相同} probe {太慢：在长测试文本上超时。请给每个 + 和 * 设上限，例如 [a-z]'{1,40}' 或 .'{0,40}'} other {太慢：在长测试文本上超时，请把模式写简单些}}",
       "url": "需要 http:// 或 https:// 开头的网址",
       "cron": "Cron 表达式不合法：{detail}",
       "timezone": "不是有效的 IANA 时区（例如 Europe/Berlin）",

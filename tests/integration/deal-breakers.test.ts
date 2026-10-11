@@ -12,7 +12,8 @@ import { createLogger } from "@/lib/channels/logger";
 import { ensureProfileFiles, getConfigPath, reloadConfig, resetConfigCache, setOnProfileSaved } from "@/lib/config";
 import { closeDb, getDb, listProfileSnapshots, listScoreQueue, schema, setFilterOverride } from "@/lib/db";
 import { runMigrations } from "@/lib/db/migrate";
-import { currentMe, currentPreferences, filterStep, type FilterRunResult } from "@/lib/filter";
+import { currentMe, currentPreferences, filterStep, runFilter, vmTimeBox, type FilterRunResult } from "@/lib/filter";
+import type { TimeBox } from "@/lib/filter/deal-breakers";
 import { dealBreakerSchema } from "@/lib/config/schemas/preferences";
 import { loadPipeline } from "@/lib/market";
 import { previewDealBreakers } from "@/lib/profile/deal-breaker-preview";
@@ -299,9 +300,33 @@ describe("slow patterns and unusable rules are bounded and reported", () => {
   it("leaves a slow rule out of the filter step and reports it in the step result", async () => {
     const job = await addJob({ description: "Travel 100% of the time, fully on-site." });
     setRules([SLOW, { ...ONSITE, patterns: ["fully on-site"] }]);
-    const result = await runStep();
-    expect(result.dealBreakerWarnings).toEqual([{ id: "slow", code: "too_slow" }]);
+    const outcome = await filterStep({ db: getDb(), signal: new AbortController().signal, logger: silent } as unknown as Parameters<typeof filterStep>[0]);
+    // partial: the runs view shows that a rule did not judge every job
+    expect(outcome.status).toBe("partial");
+    expect((outcome.result as FilterRunResult).dealBreakerWarnings).toEqual([{ id: "slow", code: "too_slow" }]);
     expect((await rowsOf(job.id))[0]?.filterReasons).toEqual(["deal_breaker:onsite"]);
+  });
+
+  it.each([
+    ["left out as too slow on the test texts", (): TimeBox => () => false],
+    // the test texts pass (boxes of match_ms), the run's budget is gone at once (boxes of rule_budget_ms)
+    ["stopped over its budget", (): TimeBox => (work, ms) => (ms <= loadPipeline().filter.deal_breakers.match_ms ? vmTimeBox(work, ms) : false)],
+  ])("keeps a stored veto when the rule is %s in a later run", async (_case, timeBox) => {
+    const vetoed = await addJob({ description: "Fully on-site, 100 % vor Ort." });
+    const other = await addJob();
+    setRules([ONSITE]);
+    expect((await runStep()).dealBreakerWarnings).toEqual([]);
+    expect((await rowsOf(vetoed.id))[0]?.filterReasons).toEqual(["deal_breaker:onsite"]);
+
+    const { preferences, snapshot, me } = await currentPreferences(getDb());
+    const second = await runFilter(getDb(), { preferences, snapshotId: snapshot.id, pipeline: loadPipeline(), me, timeBox: timeBox() });
+    expect(second.dealBreakerWarnings).toEqual([{ id: "onsite", code: "too_slow" }]);
+    expect(second.updated).toBe(0);
+    const rows = await rowsOf(vetoed.id);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ filterResult: "filtered_out", filterReasons: ["deal_breaker:onsite"] });
+    expect((await rowsOf(other.id))[0]?.filterResult).toBe("passed");
+    expect((await listScoreQueue(getDb(), { snapshotId: snapshot.id })).map((item) => item.jobId)).not.toContain(vetoed.id);
   });
 
   it("reports an unreadable me.yaml in the step result (the gate does nothing that cycle)", async () => {

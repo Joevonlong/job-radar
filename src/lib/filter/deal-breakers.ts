@@ -236,8 +236,11 @@ function probeTexts(source: string, length: number): string[] {
   return texts;
 }
 
-/** Results of the probe, by flags, length and pattern: a pattern is tried once per process (until the cache is full). */
-const probeCache = new Map<string, boolean>();
+/**
+ * Patterns that passed the probe, by use, limits and pattern: a fast pattern is tried once per process (until the cache is
+ * full). A failure is not kept: a pattern that was slow on a busy machine is tried again in the next run.
+ */
+const probeCache = new Set<string>();
 const PROBE_CACHE_MAX = 512;
 
 /**
@@ -246,8 +249,7 @@ const PROBE_CACHE_MAX = 512;
  */
 export function patternIsFast(pattern: string, use: "pattern" | "unless", limits: DealBreakerLimits, timeBox: TimeBox): boolean {
   const key = `${use}\u0000${limits.match_text_max_chars}\u0000${limits.match_ms}\u0000${pattern}`;
-  const known = probeCache.get(key);
-  if (known !== undefined) return known;
+  if (probeCache.has(key)) return true;
   const regexp = userRegExp(pattern, use === "pattern" ? "giu" : "iu");
   const fast = probeTexts(pattern, limits.match_text_max_chars).every((text) =>
     timeBox(() => {
@@ -259,9 +261,10 @@ export function patternIsFast(pattern: string, use: "pattern" | "unless", limits
       for (let m = regexp.exec(text); m !== null; m = regexp.exec(text)) if (m[0].length === 0) regexp.lastIndex += 1;
     }, limits.match_ms),
   );
+  if (!fast) return false;
   if (probeCache.size >= PROBE_CACHE_MAX) probeCache.clear();
-  probeCache.set(key, fast);
-  return fast;
+  probeCache.add(key);
+  return true;
 }
 
 /** A pattern of `rules` that is too slow on the test texts (`patternIsFast`); `path` is inside preferences.yaml `deal_breakers`. */
@@ -291,6 +294,8 @@ const ruleIsFast = (rule: CompiledPhrase, limits: DealBreakerLimits, timeBox: Ti
 export interface DealBreakerRun {
   readonly timeBox: TimeBox;
   readonly limits: DealBreakerLimits;
+  /** The ids of every compiled rule, in the order of the file (also those left out as too slow). */
+  readonly order: readonly string[];
   /** `left`: milliseconds of `limits.rule_budget_ms` the rule may still use; 0 = stopped as too slow. */
   readonly active: Array<{ rule: CompiledDealBreaker; left: number }>;
   /** Rules left out or stopped because they are too slow, in the order found. */
@@ -299,7 +304,7 @@ export interface DealBreakerRun {
 
 /** Start a run: a phrase rule with a pattern that is too slow on the test texts is left out, with the warning `too_slow`. */
 export function startDealBreakerRun(compiled: CompiledDealBreakers, timeBox: TimeBox): DealBreakerRun {
-  const run: DealBreakerRun = { timeBox, limits: compiled.limits, active: [], warnings: [] };
+  const run: DealBreakerRun = { timeBox, limits: compiled.limits, order: compiled.rules.map((rule) => rule.rule.id), active: [], warnings: [] };
   for (const rule of compiled.rules) {
     if (!isGate(rule) && !ruleIsFast(rule, compiled.limits, timeBox)) run.warnings.push({ id: rule.rule.id, code: "too_slow" });
     else run.active.push({ rule, left: compiled.limits.rule_budget_ms });
@@ -310,23 +315,38 @@ export function startDealBreakerRun(compiled: CompiledDealBreakers, timeBox: Tim
 /**
  * The ids of the rules that veto each job of `jobs`, in the order of the file. Each phrase rule runs over the whole batch in
  * one time box: a rule that uses up its budget is stopped where it is, keeps the vetoes it found, does nothing for the rest
- * of the run, and is reported in `run.warnings` (`too_slow`). With a `deadline` (a `performance.now()` time) the batch stops
- * there too: `complete` is then false and the vetoes are not usable.
+ * of the run, and is reported in `run.warnings` (`too_slow`). A rule that did not judge a job (left out as too slow, or
+ * stopped before it reached the job) keeps the veto the job had from it before: `previous[i]` are the ids of the rules that
+ * vetoed `jobs[i]` in the stored result, so a slow machine never turns a vetoed job into a passed one. With a `deadline` (a
+ * `performance.now()` time) the batch stops there too: `complete` is then false and the vetoes are not usable.
  */
-export function dealBreakerVetoes(run: DealBreakerRun, jobs: readonly DealBreakerJob[], deadline?: number): { vetoes: string[][]; complete: boolean } {
-  const vetoes = jobs.map((): string[] => []);
+export function dealBreakerVetoes(
+  run: DealBreakerRun,
+  jobs: readonly DealBreakerJob[],
+  options: { deadline?: number; previous?: ReadonlyArray<readonly string[] | undefined> } = {},
+): { vetoes: string[][]; complete: boolean } {
+  const { deadline, previous } = options;
+  const hitBy = jobs.map(() => new Set<string>());
+  // rules that did not judge the job: those not running, and those stopped before they reached it
+  const undecided = jobs.map(() => new Set<string>());
+  const running = new Set(run.active.map((entry) => entry.rule.rule.id));
+  for (const id of run.order) if (!running.has(id)) for (const set of undecided) set.add(id);
   const maxChars = run.limits.match_text_max_chars;
   for (const entry of run.active) {
-    if (entry.left <= 0) continue;
     const { rule } = entry;
+    const id = rule.rule.id;
+    if (entry.left <= 0) {
+      for (const set of undecided) set.add(id);
+      continue;
+    }
     if (isGate(rule)) {
       jobs.forEach((job, i) => {
-        if (gateHits(job, rule)) vetoes[i]?.push(rule.rule.id);
+        if (gateHits(job, rule)) hitBy[i]?.add(id);
       });
       continue;
     }
     const untilDeadline = deadline === undefined ? Infinity : deadline - performance.now();
-    if (untilDeadline <= 0) return { vetoes, complete: false };
+    if (untilDeadline <= 0) return { vetoes: [], complete: false };
     const box = Math.min(entry.left, untilDeadline);
     const byDeadline = untilDeadline < entry.left;
     const hits: number[] = [];
@@ -339,14 +359,19 @@ export function dealBreakerVetoes(run: DealBreakerRun, jobs: readonly DealBreake
       }
     }, box);
     entry.left -= performance.now() - started;
-    if (!finished && byDeadline) return { vetoes, complete: false };
-    for (const i of hits) vetoes[i]?.push(rule.rule.id);
+    if (!finished && byDeadline) return { vetoes: [], complete: false };
+    for (const i of hits) hitBy[i]?.add(id);
     if (!finished) {
       entry.left = 0;
-      run.warnings.push({ id: rule.rule.id, code: "too_slow" });
+      run.warnings.push({ id, code: "too_slow" });
+      for (let i = done; i < jobs.length; i += 1) if (!hitBy[i]?.has(id)) undecided[i]?.add(id);
     }
   }
-  return { vetoes, complete: true };
+  const vetoes = jobs.map((_, i) => {
+    const before = previous?.[i] ?? [];
+    return run.order.filter((id) => hitBy[i]?.has(id) || (undecided[i]?.has(id) && before.includes(id)));
+  });
+  return { vetoes: vetoes.map((ids) => [...new Set(ids)]), complete: true };
 }
 
 /** Why a rule vetoes a job, for the detail page and `deal-breakers:check`; computed when shown, never stored. */

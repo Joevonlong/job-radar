@@ -74,6 +74,8 @@ describe("the schema refuses the slow shapes", () => {
     [".*100%\\s*on-?site", "leading"],
     ["(a+)+", "nested"],
     ["\\w+\\s*\\w+", "unbounded"],
+    ["\\w+\\d+", "unbounded"],
+    ["\\w+\\w+", "unbounded"],
     ["(a|ab)+", "alternation"],
   ])("%s (%s)", (pattern, kind) => {
     expect(slowPatternReason(pattern)?.kind).toBe(kind);
@@ -84,7 +86,7 @@ describe("the schema refuses the slow shapes", () => {
     if (issue) expect(issueKey(issue)).toEqual({ key: "slowPattern", params: { kind } });
   });
 
-  it.each([...GUIDE_PATTERNS, "\\d+\\s?%", "(?:\\s|-)+", "(?:on|off)-?site", "(?:ab)+"])("accepts %s", (pattern) => {
+  it.each([...GUIDE_PATTERNS, "\\d+\\s?%", "(?:\\s|-)+", "(?:on|off)-?site", "(?:ab)+", "\\s+\\w+", "\\w+\\s+\\w+", "\\d+\\s+\\d+"])("accepts %s", (pattern) => {
     expect(slowPatternReason(pattern)).toBeNull();
   });
 
@@ -114,6 +116,13 @@ describe("the test texts", () => {
     expect(patternIsFast(pattern, "unless", limits, vmTimeBox)).toBe(true);
   });
 
+  it("remember a fast pattern, never a slow verdict (a busy machine is not the pattern's fault)", () => {
+    const slowMachine = { ...limits, match_ms: 77 };
+    expect(patternIsFast("never cached", "pattern", slowMachine, () => false)).toBe(false);
+    expect(patternIsFast("never cached", "pattern", slowMachine, vmTimeBox)).toBe(true);
+    expect(patternIsFast("never cached", "pattern", slowMachine, () => false)).toBe(true);
+  });
+
   it("name the slow pattern's place, for the form and config:check", () => {
     const rules = [unchecked(["ok"]), unchecked(["fine", ".*.*.*x"], ["(a|a)+$"], "two")];
     expect(slowPatternProblems(rules, limits, vmTimeBox)).toEqual([{ path: [1, "patterns", 1] }, { path: [1, "unless", 0] }]);
@@ -124,6 +133,8 @@ describe("the test texts", () => {
     const run = startDealBreakerRun(compiled, vmTimeBox);
     expect(run.warnings).toEqual([{ id: "slow", code: "too_slow" }]);
     expect(dealBreakerVetoes(run, [posting("100% vor Ort")]).vetoes).toEqual([["fine"]]);
+    // left out, it keeps the veto a job had from it
+    expect(dealBreakerVetoes(run, [posting("nothing here")], { previous: [["slow", "gone"]] }).vetoes).toEqual([["slow"]]);
   });
 });
 
@@ -139,6 +150,9 @@ describe("at run time", () => {
     expect(ms).toBeLessThan(2_000);
     expect(first).toEqual([["fine"], [], ["fine"]]);
     expect(run.warnings).toEqual([{ id: "slow", code: "too_slow" }]);
+    // a job the stopped rule did not reach keeps the veto stored from an earlier run; a job it judged does not
+    const kept = unprobed([unchecked(["(a|a)+$"]), unchecked(["vor Ort"], [], "fine")], { rule_budget_ms: 100 });
+    expect(dealBreakerVetoes(kept, jobs, { previous: [["slow"], ["slow"], ["slow", "fine"]] }).vetoes).toEqual([["fine"], ["slow"], ["slow", "fine"]]);
     // the next batch does not try it again
     const again = elapsed(() => void dealBreakerVetoes(run, jobs));
     expect(again).toBeLessThan(50);
@@ -156,7 +170,7 @@ describe("at run time", () => {
   it("stops at a deadline without calling the rule too slow", () => {
     const run = unprobed([unchecked(["(a|a)+$"])]);
     let result: ReturnType<typeof dealBreakerVetoes> | null = null;
-    const ms = elapsed(() => void (result = dealBreakerVetoes(run, [posting(`${"a".repeat(40)}!`)], performance.now() + 50)));
+    const ms = elapsed(() => void (result = dealBreakerVetoes(run, [posting(`${"a".repeat(40)}!`)], { deadline: performance.now() + 50 })));
     expect(ms).toBeLessThan(1_000);
     expect(result).toMatchObject({ complete: false });
     expect(run.warnings).toEqual([]);

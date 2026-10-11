@@ -97,7 +97,8 @@ deal_breakers:
   任意位置匹配）；重复分组的几个分支开头可能相同（`(a|ab)+`）。每个正则还会在几段长测试文本上试跑（与 `match_text_max_chars`
   一样长、没有匹配的一行），任何一段超过 `match_ms` 也会被拒绝。手改文件后，`pnpm config:check` 做同样的检查。
 - **过滤时。** 在测试文本上太慢的规则不参与过滤。每条规则在一轮过滤里最多用 `rule_budget_ms`，用完后本轮剩下的岗位不再跑这条
-  规则（已经否决的岗位保持否决）。两种情况都会以 `too_slow` 出现在过滤步骤的结果（`dealBreakerWarnings`）和 runner 日志里。
+  规则。这条规则没判到的岗位保留它之前给出的否决，所以机器忙时被否决的岗位也不会放行。两种情况都会以 `too_slow` 出现在过滤步骤的
+  结果（`dealBreakerWarnings`）里，该步骤在运行记录里显示为部分完成，runner 日志会写出规则名。
 - **页面上。** 卡片上的预览最多跑 `preview_ms`，到时会说明只算了多少个岗位；岗位页解释否决原因最多用 `match_ms`，超时就不显示引文。
 
 `pipeline.yaml: filter.deal_breakers` 里的上限：

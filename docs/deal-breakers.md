@@ -108,8 +108,10 @@ own, so the time a pattern may take is limited in three places:
   line as long as `match_text_max_chars` without a match), and one that takes longer than `match_ms` on any of them is
   refused as well. `pnpm config:check` runs the same checks on a file you edited by hand.
 - **When the filter runs.** A rule with a pattern that is too slow on the test texts is left out. Each rule may take
-  `rule_budget_ms` in one filter run; a rule that uses it up is stopped for the rest of that run (jobs it already vetoed
-  stay vetoed). Both show as `too_slow` in the filter step's result (`dealBreakerWarnings`) and in the runner log.
+  `rule_budget_ms` in one filter run; a rule that uses it up is stopped for the rest of that run. A job such a rule did not
+  judge keeps the veto it had from the rule before, so a busy machine never lets a vetoed job through. Both cases show as
+  `too_slow` in the filter step's result (`dealBreakerWarnings`), the step counts as partial on the runs view, and the
+  runner log names the rule.
 - **On the pages.** The card's preview stops after `preview_ms` and then says how many jobs it counted; the job page gives
   up explaining a veto after `match_ms`.
 

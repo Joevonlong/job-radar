@@ -18,6 +18,7 @@ import { snapshotForProfileText } from "@/lib/profile/snapshots";
 import type { ChannelLogger } from "@/lib/channels/types";
 
 import { dealBreakerVetoes, startDealBreakerRun, type DealBreakerRun, type DealBreakerWarning, type TimeBox } from "./deal-breakers";
+import { dealBreakerIds } from "./reasons";
 import { compileFilter, evaluateJob, type CompiledFilter, type FilterJob, type FilterOverride, type FilterVerdict } from "./rules";
 import { vmTimeBox } from "./time-box";
 
@@ -83,11 +84,22 @@ export function toFilterJob(row: FilterCandidate): FilterJob {
 
 /**
  * Evaluate one batch of jobs: the deal-breakers run over the whole batch first, each rule in its time box
- * (`dealBreakerVetoes`), then the rules job by job.
+ * (`dealBreakerVetoes`), then the rules job by job. `stored`: the job's filter reasons stored for this snapshot, so a rule that
+ * is too slow to judge a job this time keeps the veto it gave before.
  */
-export function evaluateBatch(rows: readonly FilterCandidate[], compiled: CompiledFilter, run: DealBreakerRun, overrides: ReadonlyMap<number, FilterOverride>): FilterVerdict[] {
+export function evaluateBatch(
+  rows: readonly FilterCandidate[],
+  compiled: CompiledFilter,
+  run: DealBreakerRun,
+  overrides: ReadonlyMap<number, FilterOverride>,
+  stored?: ReadonlyMap<number, { filterReasons: readonly string[] }>,
+): FilterVerdict[] {
   const jobs = rows.map(toFilterJob);
-  const { vetoes } = dealBreakerVetoes(run, jobs);
+  const previous = rows.map((row) => {
+    const reasons = stored?.get(row.id)?.filterReasons;
+    return reasons === undefined ? undefined : dealBreakerIds(reasons);
+  });
+  const { vetoes } = dealBreakerVetoes(run, jobs, { previous });
   return jobs.map((job, i) => evaluateJob(job, compiled, overrides.get(rows[i]?.id ?? 0) ?? null, vetoes[i] ?? []));
 }
 
@@ -129,7 +141,7 @@ export async function runFilter(db: Db, options: FilterOptions): Promise<FilterR
     const stored = await getFilterResults(db, options.snapshotId, ids);
     const overrides = await getFilterOverrides(db, ids);
     const fresh: NewFilterResult[] = [];
-    const verdicts = evaluateBatch(batch, compiled, dealBreakers, overrides);
+    const verdicts = evaluateBatch(batch, compiled, dealBreakers, overrides, stored);
     for (const [i, row] of batch.entries()) {
       const verdict = verdicts[i];
       if (!verdict) continue;
@@ -212,7 +224,9 @@ export async function filterStep(ctx: CycleStepContext): Promise<StepResult> {
   const db = requireDb(ctx);
   const { preferences, snapshot, me } = await currentPreferences(db);
   const result = await runFilter(db, { preferences, snapshotId: snapshot.id, pipeline: loadPipeline(), me, logger: ctx.logger, signal: ctx.signal });
-  return { status: result.aborted ? "partial" : "ok", result };
+  // a deal-breaker too slow to judge every job is shown on the runs view (the jobs it did not reach keep their stored veto)
+  const tooSlow = result.dealBreakerWarnings.some((warning) => warning.code === "too_slow");
+  return { status: result.aborted || tooSlow ? "partial" : "ok", result };
 }
 
 /** Plug `filter` into the processing cycle (called once at start-up). */

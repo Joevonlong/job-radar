@@ -635,7 +635,7 @@
       "invalidChoice": "Choose a valid option",
       "contractConflict": "A contract type cannot be both allowed and excluded",
       "invalid": "{message}",
-      "slowPattern": "{kind, select, nested {Too slow: a repeated group repeats inside} unbounded {Too slow: more than one open-ended run such as .* or \\s+; give them an upper limit} leading {Too slow: starts with an open-ended .* (leave it out, a pattern matches anywhere)} alternation {Too slow: the alternatives of a repeated group can start alike} other {Too slow on a long test text; make the pattern simpler}}"
+      "slowPattern": "{kind, select, nested {Too slow: a repeated group repeats inside} unbounded {Too slow: more than one open-ended run such as .* or \\s+; give them an upper limit} leading {Too slow: starts with an open-ended .* (leave it out, a pattern matches anywhere)} alternation {Too slow: the alternatives of a repeated group can start alike} probe {Too slow on a long test text: give each + and * an upper limit, as in [a-z]'{1,40}' or .'{0,40}'} other {Too slow on a long test text; make the pattern simpler}}"
     },
     "formErrors": {
       "invalidPayload": "The submitted data was malformed. Reload the page and try again.",
@@ -1704,7 +1704,7 @@
       "invalidChoice": "Choose a valid option",
       "contractConflict": "Conflicting options",
       "invalid": "{message}",
-      "slowPattern": "{kind, select, nested {Too slow: a repeated group repeats inside} unbounded {Too slow: more than one open-ended run such as .* or \\s+; give them an upper limit} leading {Too slow: starts with an open-ended .* (leave it out, a pattern matches anywhere)} alternation {Too slow: the alternatives of a repeated group can start alike} other {Too slow on a long test text; make the pattern simpler}}",
+      "slowPattern": "{kind, select, nested {Too slow: a repeated group repeats inside} unbounded {Too slow: more than one open-ended run such as .* or \\s+; give them an upper limit} leading {Too slow: starts with an open-ended .* (leave it out, a pattern matches anywhere)} alternation {Too slow: the alternatives of a repeated group can start alike} probe {Too slow on a long test text: give each + and * an upper limit, as in [a-z]'{1,40}' or .'{0,40}'} other {Too slow on a long test text; make the pattern simpler}}",
       "url": "Needs a URL starting with http:// or https://",
       "cron": "Invalid cron expression: {detail}",
       "timezone": "Not a valid IANA time zone (for example Europe/Berlin)",

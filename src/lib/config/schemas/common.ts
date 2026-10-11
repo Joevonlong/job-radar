@@ -160,6 +160,10 @@ interface Atom {
   first: FirstChars;
   /** Nothing can be matched before it (the start of the pattern or of an alternative). */
   leading: boolean;
+  /** `\s`, `\w` or `\d`: whitespace never overlaps the other two, so runs of them side by side split the text one way only. */
+  cls?: "s" | "w" | "d";
+  /** Where the atom starts in the pattern. */
+  start?: number;
 }
 
 interface GroupFrame {
@@ -171,9 +175,10 @@ interface GroupFrame {
 const overlaps = (a: FirstChars | null, b: FirstChars | null): boolean => a === null || b === null || a === "any" || b === "any" || [...a].some((char) => b.includes(char));
 
 function escapeAtom(next: string): Omit<Atom, "leading"> {
-  if (next === "d") return { broad: true, dotLike: false, first: "0123456789" };
-  if (next === "s") return { broad: true, dotLike: false, first: " \t\n\r\f\v" };
-  if (next === "w" || next === "p" || next === "P") return { broad: true, dotLike: false, first: "any" };
+  if (next === "d") return { broad: true, dotLike: false, first: "0123456789", cls: "d" };
+  if (next === "s") return { broad: true, dotLike: false, first: " \t\n\r\f\v", cls: "s" };
+  if (next === "w") return { broad: true, dotLike: false, first: "any", cls: "w" };
+  if (next === "p" || next === "P") return { broad: true, dotLike: false, first: "any" };
   if (next === "D" || next === "S" || next === "W") return { broad: true, dotLike: true, first: "any" };
   if (/[a-zA-Z0-9]/u.test(next)) return { broad: false, dotLike: false, first: "any" }; // \n, \t, \u…, \x…, \k<…>, \1
   return { broad: false, dotLike: false, first: next.toLowerCase() };
@@ -184,7 +189,8 @@ function escapeAtom(next: string): Omit<Atom, "leading"> {
  * usual shapes of catastrophic or quadratic backtracking are refused before a rule is saved (the filter also limits the time a
  * rule may take at run time, this is the early, readable answer):
  * - nested: a repeated group that repeats inside (`(a+)+`, see `nestedQuantifierReason`);
- * - unbounded: two or more unbounded runs of broad characters (`.*x.*y`, `\d+.*\d+`, `\w+\s*\w+`);
+ * - unbounded: two or more unbounded runs of broad characters (`.*x.*y`, `\d+.*\d+`, `\w+\s*\w+`); a `+` run of `\s` right next
+ *   to a `+` run of `\w` or `\d` counts as one (`\w+\s+\w+` splits a text one way only);
  * - leading: the pattern starts with an unbounded run of almost anything (`.*100%`), which is retried from every position;
  * - alternation: a repeated group whose alternatives can start with the same character (`(a|ab)+`, `(\w|-)+`).
  * A heuristic over the pattern's text: escapes and classes are read roughly, and bounded runs (`.{0,30}`, `\s?`) are fine.
@@ -195,6 +201,9 @@ export function slowPatternReason(source: string): SlowPattern | null {
   const stack: GroupFrame[] = [{ firsts: [null], broad: false }];
   const unbounded: number[] = [];
   let last: (Atom & { group: GroupFrame | null }) | null = null;
+  // the last unbounded run: its class, where its quantifier ends, its least count
+  let lastRun: { cls: Atom["cls"]; end: number; min: number } | null = null;
+  let atomStart = 0;
   const top = (): GroupFrame => stack[stack.length - 1]!;
   const isLeading = (): boolean => stack.every((frame) => frame.firsts[frame.firsts.length - 1] === null);
   const take = (atom: Omit<Atom, "leading">, group: GroupFrame | null = null): void => {
@@ -204,10 +213,11 @@ export function slowPatternReason(source: string): SlowPattern | null {
       if (frame.firsts[at] === null) frame.firsts[at] = atom.first;
       if (atom.broad) frame.broad = true;
     }
-    last = { ...atom, leading, group };
+    last = { ...atom, leading, group, start: atomStart };
   };
   for (let i = 0; i < source.length; i += 1) {
     const char = source[i]!;
+    atomStart = i;
     if (char === "\\") {
       const next = source[i + 1] ?? "";
       i += 1;
@@ -264,13 +274,17 @@ export function slowPatternReason(source: string): SlowPattern | null {
       continue;
     }
     let max: number | null = null;
+    let min = 0;
     let length = 1;
-    if (char === "*" || char === "+") max = Infinity;
-    else if (char === "?") max = 1;
+    if (char === "*" || char === "+") {
+      max = Infinity;
+      min = char === "+" ? 1 : 0;
+    } else if (char === "?") max = 1;
     else if (char === "{") {
       const repeat = /^\{(\d+)(?:(,)(\d*))?\}/u.exec(source.slice(i));
       if (repeat) {
         max = repeat[2] ? (repeat[3] === "" ? Infinity : Number(repeat[3])) : Number(repeat[1]);
+        min = Number(repeat[1]);
         length = repeat[0].length;
       }
     }
@@ -293,7 +307,11 @@ export function slowPatternReason(source: string): SlowPattern | null {
     }
     if (max === Infinity && atom.broad) {
       if (atom.leading && atom.dotLike) return { kind: "leading", detail: `starts with an unbounded run of any character (position ${i})` };
-      unbounded.push(i);
+      const prior = lastRun;
+      const splitsOneWay =
+        prior !== null && atom.start === prior.end + 1 && prior.min >= 1 && min >= 1 && atom.cls !== undefined && prior.cls !== undefined && atom.cls !== prior.cls && (atom.cls === "s" || prior.cls === "s");
+      if (!splitsOneWay) unbounded.push(i);
+      lastRun = { cls: atom.cls, end: i, min };
     }
   }
   if (unbounded.length >= 2) return { kind: "unbounded", detail: `${unbounded.length} unbounded runs of broad characters (positions ${unbounded.join(", ")}); bound them, as in .{0,40}` };

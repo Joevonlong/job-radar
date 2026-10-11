@@ -59,7 +59,7 @@ async function main(): Promise<void> {
       if (batch.length === 0) break;
       afterId = batch[batch.length - 1]?.id ?? afterId;
       const overrides = await getFilterOverrides(db, batch.map((j) => j.id));
-      const verdicts = evaluateBatch(batch, compiled, dealBreakers, overrides);
+      const verdicts = evaluateBatch(batch, compiled, dealBreakers, overrides, new Map(batch.flatMap((row) => { const was = stored.get(row.id); return was ? [[row.id, { filterReasons: was.reasons }] as const] : []; })));
       batch.forEach((row, i) => {
         const verdict = verdicts[i];
         if (verdict) now.set(row.id, { result: verdict.result, reasons: verdict.reasons });
