@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { NextIntlClientProvider } from "next-intl";
 import { withNuqsTestingAdapter, type UrlUpdateEvent } from "nuqs/adapters/testing";
@@ -180,16 +180,33 @@ describe("FilterBar: multi-select filters", () => {
   };
 
   it("two picks in a row make one URL update with repeated keys, and the page goes back to 1", async () => {
-    const { onUrlUpdate, lastQuery } = renderBar("?page=3");
-    await pick("filter-city", "Berlin");
-    // MultiSelect computes the next list from the committed value: let the first pick commit before the second
-    await waitFor(() => expect(optionOf("filter-city", "Berlin")).toHaveAttribute("aria-checked", "true"));
-    await userEvent.click(optionOf("filter-city", "München"));
-    // the button already shows both; the URL waits for the quiet time
-    await waitFor(() => expect(screen.getByTestId("filter-city")).toHaveTextContent("Berlin +1"));
-    expect(onUrlUpdate).not.toHaveBeenCalled();
-    await waitFor(() => expect(lastQuery()).toBe("?city=Berlin&city=München"), { timeout: 2000 });
-    expect(onUrlUpdate).toHaveBeenCalledTimes(1);
+    // The quiet time is a real timer inside nuqs. On a loaded machine two picks can land more than that apart and
+    // make two updates, so the clock is faked: time only moves when the test moves it.
+    vi.useFakeTimers();
+    // Testing Library only drains its own timers under fake clocks when it sees a `jest` global
+    Object.assign(globalThis, { jest: { advanceTimersByTime: (ms: number) => vi.advanceTimersByTime(ms) } });
+    try {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      const { onUrlUpdate, lastQuery } = renderBar("?page=3");
+      const settle = () => act(() => vi.advanceTimersByTimeAsync(0));
+
+      await user.click(screen.getByTestId("filter-city"));
+      await user.click(optionOf("filter-city", "Berlin"));
+      // MultiSelect computes the next list from the committed value: let the first pick commit before the second
+      await settle();
+      expect(optionOf("filter-city", "Berlin")).toHaveAttribute("aria-checked", "true");
+      await user.click(optionOf("filter-city", "München"));
+      await settle();
+      // the button already shows both; the URL waits for the quiet time
+      expect(screen.getByTestId("filter-city")).toHaveTextContent("Berlin +1");
+      expect(onUrlUpdate).not.toHaveBeenCalled();
+      await act(() => vi.advanceTimersByTimeAsync(10_000));
+      expect(lastQuery()).toBe("?city=Berlin&city=München");
+      expect(onUrlUpdate).toHaveBeenCalledTimes(1);
+    } finally {
+      Reflect.deleteProperty(globalThis, "jest");
+      vi.useRealTimers();
+    }
   });
 
   it("closing the popover sends the pick at once", async () => {
