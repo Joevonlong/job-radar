@@ -10,6 +10,13 @@ Job Radar 的所有设置都是 YAML，分两层：
 
 相对路径按项目目录解析（不是当前目录）。Docker 里 web 和 runner 的挂载和变量写在 `compose.yaml`（web：`./config:/app/config:ro`、`./data/config:/app/data/config`；runner 两个都只读）；宿主机的 ai-worker 由 `scripts/ops/install-ai-worker.sh` 把三个目录显式写进 launchd 的 plist。
 
+`data/config/` 里的同名文件优先于默认配置，所以 `git pull` 永远不会动你的设置；几乎所有设置也都能在设置页上改。想快点上手，
+`pnpm config:example` 可以套用一份现成的示例配置。
+
+密钥（API key、Telegram token、Gmail 应用专用密码、网页口令的哈希）只放在 `.env`，不要写进 YAML。唯一要留意的例外：`sources.yaml`
+里的 `jobspy.proxies` 可能含代理凭据（`user:password@host`），而每次备份的配置压缩包都包含这个文件，所以备份压缩包要妥善保管。
+哪个来源要哪个 key：见 [installation.zh.md](installation.zh.md#2-可选创建-env)。
+
 ## 读哪一份
 
 - 用户目录里**有**这个文件就读它，**没有**就读默认目录的。两层不合并：用户目录里的文件是整份生效的。

@@ -1,6 +1,6 @@
 # 主机设置（Mac 无人值守运行）
 
-本页是 macOS 指南。Linux 或 Windows（WSL2）请看 [README](../README.zh.md#平台说明) 的平台说明；这里关于 Docker Desktop、电源设置、自动登录和 launchd 的各节在那里不适用。
+本页是 macOS 指南。Linux 或 Windows（WSL2）请看[平台说明](installation.zh.md#macoslinuxwindows)；这里关于 Docker Desktop、电源设置、自动登录和 launchd 的各节在那里不适用。
 
 目标：Mac 通电后自己登录、Docker 自己起来、四个服务（db / web / runner / jobspy）自己恢复，宿主机上的 AI worker 自己拉起，手机通过 Tailscale 看板。
 

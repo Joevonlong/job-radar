@@ -2,6 +2,17 @@
 
 AI runs through a subscription CLI (`claude`, `codex`), a pay-per-token API key, or both; you choose. Every AI call, whichever you use, is executed by the `ai-worker` on the host, and subscription logins and API keys are never put inside the containers. What each provider receives is listed in [privacy.md](privacy.md).
 
+## Subscription or API key
+
+| | How | Cost |
+|---|---|---|
+| **Subscription CLI** (default) | The ai-worker runs `codex` and `claude` with the logins you already have (`codex login`; `claude`, then `/login`). | Nothing per token. Daily caps (codex 200, claude 100 calls) protect your plan's quota. |
+| **API key** (optional) | Put `ANTHROPIC_API_KEY`, `DEEPSEEK_API_KEY` or `MIMO_API_KEY` in `.env`. DeepSeek and MiMo also need switching on in `ai.yaml`. | Pay per token, stopped by `monthly_api_budget_usd` in `ai.yaml`. |
+
+Use either or both; API providers are only tried after the CLIs. `pnpm ai:probe` shows which providers work right now.
+Consumer subscriptions are personal licences: read [commercial-use.md](commercial-use.md) before using them for anyone
+but yourself. Usage and cost: [ai-usage.md](ai-usage.md).
+
 ## What runs where
 
 | Process | Location | What it does |

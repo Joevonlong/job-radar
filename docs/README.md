@@ -12,7 +12,8 @@ mock-ups.
 
 | Guide | What it covers |
 |---|---|
-| [installation.md](installation.md) | **Install from scratch**: requirements, every step on macOS and Linux, the AI worker as a service, Telegram, phone access, updating, backups, uninstalling, troubleshooting |
+| [features.md](features.md) | **What it does**: the four ideas behind it, every feature, how the parts fit together, screenshots and clips |
+| [installation.md](installation.md) | **Install from scratch**: requirements, every step on macOS, Linux and Windows (WSL2), the AI worker as a service, Telegram, phone access, updating, backups, uninstalling, troubleshooting |
 | [faq.md](faq.md) | Short answers: cost, AI options, privacy, sources, markets, phone access, Windows |
 | [setup.md](setup.md) | **First start**: the setup wizard (`/setup`) and `pnpm run setup`, the answers file, `setup.yaml`, reopening the wizard |
 | [usage.md](usage.md) | **Start here for daily use**: opening the dashboard, health checks (doctor, Sources page, alerts, logs), the pages, reading a job description, querying jobs from a terminal |
@@ -43,4 +44,5 @@ mock-ups.
 | [linkedin-session.md](linkedin-session.md) | `pnpm auth:linkedin`, daily page limits, what to do on a verification page |
 | [jsearch.md](jsearch.md), [tavily.md](tavily.md), [apify.md](apify.md), [brightdata.md](brightdata.md) | Keys, quotas and budgets of the paid or keyed channels |
 | [development.md](development.md) | For contributors: code layout, tests, e2e, conventions |
+| [roadmap.md](roadmap.md) | What is planned for upcoming releases |
 | [ci.md](ci.md) | The CI pipeline explained job by job and step by step: what each runs and why, timings, running it locally, reading failures, e2e projects, Dependabot, release check |

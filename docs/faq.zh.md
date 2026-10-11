@@ -176,7 +176,7 @@ Job Radar 做的：所有抓取类来源一开始都是关的，打开前先让�
 
 能，在 WSL2 里跑。把仓库克隆到 Linux 文件系统里（比如 `~/job-radar`，不要放在 `/mnt/c` 下，那里绑定挂载慢、权限也不一样），
 在 Docker Desktop 里为这个发行版打开 WSL 集成，在 WSL 里装 Node、pnpm 和 `claude` / `codex` 命令行。之后按 Linux 的步骤走；
-AI worker 也在 WSL 里跑，看板在 Windows 浏览器里打开 <http://127.0.0.1:3000>。说明见 [README 的平台说明](../README.zh.md#平台说明)。
+AI worker 也在 WSL 里跑，看板在 Windows 浏览器里打开 <http://127.0.0.1:3000>。说明见 [平台说明](installation.zh.md#macoslinuxwindows)。
 Job Radar 日常在 macOS 和 Linux 上运行，WSL 上有哪里表现不一样，欢迎提 issue。
 
 ---

@@ -47,16 +47,32 @@ describe("docs:check images", () => {
   });
 });
 
-describe("README pictures", () => {
-  const images = (file: string) => [...fs.readFileSync(path.join(ROOT, file), "utf8").matchAll(/(?:src|srcset)="(docs\/images\/[^"\s]+)"/g)].map((m) => m[1] ?? "");
+describe("README and features pictures", () => {
+  const images = (file: string, prefix: string) =>
+    [...fs.readFileSync(path.join(ROOT, file), "utf8").matchAll(new RegExp(`(?:src|srcset)="(${prefix}images/[^"\\s]+)"`, "g"))].map((m) =>
+      path.join(path.dirname(file), m[1] ?? ""),
+    );
 
-  it("exist, and the Chinese README uses the Chinese screenshots", () => {
-    const en = images("README.md");
-    const zh = images("README.zh.md");
+  it("exist, and the README shows the demo clips from the repository", () => {
+    const en = images("README.md", "docs/");
+    const zh = images("README.zh.md", "docs/");
+    for (const image of [...en, ...zh]) expect(fs.existsSync(path.join(ROOT, image)), image).toBe(true);
+    expect(en).toEqual(expect.arrayContaining(["docs/images/demo/overview.webp"]));
+    expect(zh).toEqual(expect.arrayContaining(["docs/images/demo/overview.webp"]));
+  });
+
+  it("exist in the features page, and the Chinese one uses the Chinese screenshots", () => {
+    const en = images("docs/features.md", "");
+    const zh = images("docs/features.zh.md", "");
     expect(en.length).toBeGreaterThan(5);
     for (const image of [...en, ...zh]) expect(fs.existsSync(path.join(ROOT, image)), image).toBe(true);
     expect(zh).toEqual(expect.arrayContaining(["docs/images/today-zh.png", "docs/images/job-detail-zh.png"]));
     expect(zh).not.toContain("docs/images/today-light.png");
     expect(en).toEqual(expect.arrayContaining(["docs/images/today-light.png", "docs/images/today-dark.png", "docs/images/job-radar-demo.gif"]));
+  });
+
+  it("keeps the demo clips small enough for GitHub", () => {
+    const dir = path.join(ROOT, "docs/images/demo");
+    for (const name of fs.readdirSync(dir)) expect(fs.statSync(path.join(dir, name)).size, name).toBeLessThan(3.5 * 1024 * 1024);
   });
 });

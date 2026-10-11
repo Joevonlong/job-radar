@@ -1,6 +1,6 @@
 # 部署、升级、回滚和 7 天无人值守验收
 
-这份指南把 Job Radar 真正部署到一台主机上，并说明怎么确认它在无人值守地正常运行。与主机相关的步骤（Docker Desktop、电源设置、launchd）按 macOS 写；Linux 或 Windows（WSL2）请看 [README](../README.zh.md#平台说明) 的平台说明，并使用与平台无关的部分（部署脚本、doctor、升级和回滚）。
+这份指南把 Job Radar 真正部署到一台主机上，并说明怎么确认它在无人值守地正常运行。与主机相关的步骤（Docker Desktop、电源设置、launchd）按 macOS 写；Linux 或 Windows（WSL2）请看[平台说明](installation.zh.md#macoslinuxwindows)，并使用与平台无关的部分（部署脚本、doctor、升级和回滚）。
 
 - 第一次部署：先做第 1 节的清单，再运行第 2 节的 `scripts/ops/deploy.sh`。
 - 平时：用第 3 节的 `pnpm run doctor` 看一眼就知道"系统是不是健康、缺什么"。

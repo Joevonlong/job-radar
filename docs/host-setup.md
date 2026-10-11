@@ -1,6 +1,6 @@
 # Host setup (running unattended on a Mac)
 
-This page is the macOS guide. On Linux or Windows (WSL2) see the Platform notes of the [README](../README.md#platform-notes); the sections here about Docker Desktop, power settings, automatic login and launchd do not apply there.
+This page is the macOS guide. On Linux or Windows (WSL2) see the [platform notes](installation.md#macos-linux-windows); the sections here about Docker Desktop, power settings, automatic login and launchd do not apply there.
 
 Goal: after the Mac is powered on it logs in by itself, Docker starts by itself, the four services (db / web / runner / jobspy) recover by themselves, the AI worker on the host is started by itself, and your phone can view the dashboard over Tailscale.
 

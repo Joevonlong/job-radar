@@ -1,10 +1,14 @@
-# Images
+`brand/` holds the README header (light and dark, English and Chinese).
 
-`brand/` holds the README header (light and dark, English and Chinese). The feature clips (`.webp`) shown in the README
-are hosted on the project website (`https://joevonlong.github.io/job-radar-site/readme/`), so the repository stays
-small.
+`demo/` holds the animated clips shown at the top of the README and in [features.md](../features.md): `overview.webp`
+(the one-minute overview), `one-feed.webp`, `your-rules.webp`, `salary.webp`, `telegram.webp` and `breakdown.webp`. They
+are cut down from the website's feature videos (800 px wide, 8–10 frames per second, lossy WebP) and must stay under
+about 3 MB each: GitHub serves images up to 5 MB through its image proxy and a README with many large clips loads
+slowly. The other clips in [features.md](../features.md) are hosted on the project website
+(`https://joevonlong.github.io/job-radar-site/readme/`); keep any clip referenced from there under 5 MB too, or it
+shows as a broken image on GitHub.
 
-The static screenshots and the demo GIF here are generated, never edited by hand:
+The static screenshots and the demo GIF here (shown in [features.md](../features.md)) are generated, never edited by hand:
 
 | File | What it shows |
 | --- | --- |
