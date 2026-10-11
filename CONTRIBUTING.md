@@ -15,9 +15,11 @@ countries, translations, documentation.
 
 ```bash
 pnpm install
-docker compose up -d db
 scripts/validate.sh
 ```
+
+`pnpm test:integration` and `pnpm test:e2e` need a disposable Postgres of their own, never the database of a running
+installation: [docs/development.md](docs/development.md#checks) has the commands.
 
 ## Pull requests
 

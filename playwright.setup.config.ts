@@ -3,6 +3,8 @@ import path from "node:path";
 
 import { defineConfig, devices } from "@playwright/test";
 
+import { requireTestAdminDatabaseUrl } from "./scripts/test-database";
+
 /**
  * The first-run setup wizard on a brand-new install (`pnpm test:e2e:setup`). Its own port, database and
  * directories, so it never shares state with the main suite (playwright.config.ts): `scripts/e2e-prepare.ts --fresh`
@@ -14,7 +16,7 @@ const BASE_PORT = process.env.E2E_PORT ? Number(process.env.E2E_PORT) : null;
 const PORT = Number(process.env.E2E_SETUP_PORT ?? (BASE_PORT !== null ? BASE_PORT + 5 : 3105));
 const SUFFIX = `_${PORT}`;
 
-const ADMIN_DATABASE_URL = process.env.E2E_ADMIN_DATABASE_URL ?? process.env.DATABASE_URL ?? "postgres://jobradar:jobradar@127.0.0.1:5433/jobradar";
+const ADMIN_DATABASE_URL = requireTestAdminDatabaseUrl(process.env, ["E2E_ADMIN_DATABASE_URL", "DATABASE_URL"], "setup wizard e2e tests");
 const DATABASE_URL = (() => {
   const url = new URL(ADMIN_DATABASE_URL);
   url.pathname = `/jobradar_e2e_setup${SUFFIX}`;

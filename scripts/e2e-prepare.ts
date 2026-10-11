@@ -34,6 +34,22 @@ function required(name: string): string {
 
 const fresh = process.argv.includes("--fresh");
 
+// The database checks come first: nothing on disk or in a database is touched for a name that is refused.
+const adminUrl = required("E2E_ADMIN_DATABASE_URL");
+const targetUrl = new URL(required("DATABASE_URL"));
+const dbName = decodeURIComponent(targetUrl.pathname.slice(1));
+if (!/^[a-z0-9_]+$/.test(dbName)) {
+  console.error("e2e-prepare: database name must match [a-z0-9_]+");
+  process.exit(2);
+}
+
+// Truncating, seeding and dropping are only ever done to an e2e database, fresh or not: a name that does not start with
+// jobradar_e2e (for instance a typo in E2E_DB_NAME that lands on a real database) is refused before anything is touched.
+if (!dbName.startsWith("jobradar_e2e")) {
+  console.error(`e2e-prepare${fresh ? " --fresh" : ""}: the database name must start with jobradar_e2e (got "${dbName}")`);
+  process.exit(2);
+}
+
 // The settings page writes the user config directory: the run has its own, refilled from the defaults directory it
 // runs with (playwright.config.ts points JOB_RADAR_DEFAULTS_DIR at the test fixture snapshot). Never the real user directory.
 const configDir = getConfigDir();
@@ -69,19 +85,6 @@ if (fresh) {
   fs.writeFileSync(salaryFile, salaryText);
 }
 
-const adminUrl = required("E2E_ADMIN_DATABASE_URL");
-const targetUrl = new URL(required("DATABASE_URL"));
-const dbName = decodeURIComponent(targetUrl.pathname.slice(1));
-if (!/^[a-z0-9_]+$/.test(dbName)) {
-  console.error("e2e-prepare: database name must match [a-z0-9_]+");
-  process.exit(2);
-}
-
-// dropping is only ever done to an e2e database
-if (fresh && !dbName.startsWith("jobradar_e2e")) {
-  console.error("e2e-prepare --fresh: the database name must start with jobradar_e2e");
-  process.exit(2);
-}
 const admin = postgres(adminUrl, { max: 1, onnotice: () => {} });
 try {
   if (fresh) await admin.unsafe(`drop database if exists "${dbName}" with (force)`);

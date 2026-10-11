@@ -16,15 +16,16 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # The checks of scripts/validate.sh run as separate jobs side by side (static, unit test shards, integration, e2e,
-# images), so the run takes as long as the slowest job instead of the sum. `ci-ok` sums them up into one check.
+# linux-smoke), so the run takes as long as the slowest job instead of the sum. `ci-ok` sums them up into one check.
 # Runners are pinned to ubuntu-24.04 (ubuntu-latest moves to Ubuntu 26 from 2026-10-19); move deliberately, with the
 # Playwright system libraries and the pg client wrappers checked on the new image.
 #
-# What runs (gates add up for mixed changes; anything not recognised as documentation runs the full product checks):
-#   docs-only PR        changes (classification + documentation link check), ci-docs
-#   code PR             changes, ci-docs, static (+ jobspy), unit, integration (shuffled file order), e2e
-#   + image inputs      + images, linux-smoke (Dockerfiles, .dockerignore, package/lock/workspace, next.config, tsconfig, compose, CI)
-#   push to main        same selection over the pushed commits; integration runs in default and shuffled order
+# What runs (gates add up for mixed changes; anything not recognised as documentation, and everything under tests/,
+# src/ and public/, counts as code):
+#   docs-only PR        changes (classification + documentation link check), ci-docs, static (+ jobspy), unit
+#                       (the unit tests read the documentation and the fixtures)
+#   code PR             the above plus integration (shuffled file order), e2e, linux-smoke
+#   push to main        always everything, whatever the pushed commits touch; integration also runs in default order
 #   manual run          everything
 jobs:
   # Decides which checks run, and checks the relative links of the documentation for every change.
@@ -34,7 +35,6 @@ jobs:
     timeout-minutes: 5
     outputs:
       code: ${{ steps.diff.outputs.code }}
-      images: ${{ steps.diff.outputs.images }}
       full: ${{ steps.diff.outputs.full }}
     steps:
       - name: Check out the repository
@@ -48,30 +48,26 @@ jobs:
           EVENT: ${{ github.event_name }}
           PR_BASE: ${{ github.event.pull_request.base.sha }}
           PR_HEAD: ${{ github.event.pull_request.head.sha }}
-          PUSH_BEFORE: ${{ github.event.before }}
         run: |
-          image_re='^(Dockerfile|\.dockerignore|package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|next\.config\.ts|tsconfig[^/]*\.json|compose\.yaml|jobspy/(Dockerfile|requirements\.txt))$|^\.github/'
-          # Documentation: *.md / *.html / images (no test reads them). Everything else is code: tests read fixtures,
-          # YAML and Dockerfiles.
-          docs_re='\.(md|html|png|jpe?g|svg|gif)$'
-          case "$EVENT" in
-            pull_request) range="$PR_BASE...$PR_HEAD"; full=false ;;
-            push) range="$PUSH_BEFORE..$GITHUB_SHA"; full=true ;;
-            *) printf 'code=true\nimages=true\nfull=true\n' >> "$GITHUB_OUTPUT"; exit 0 ;;
-          esac
-          if [[ "$EVENT" == push && ( -z "$PUSH_BEFORE" || "$PUSH_BEFORE" =~ ^0+$ ) ]]; then
-            printf 'code=true\nimages=true\nfull=true\n' >> "$GITHUB_OUTPUT"; exit 0
+          # Only a pull request is classified. A push to main is always checked in full (the commits on main are what gets
+          # deployed, and a documentation commit must not leave a run that checked nothing), and so is a manual run.
+          if [[ "$EVENT" != pull_request ]]; then
+            printf 'code=true\nfull=true\n' >> "$GITHUB_OUTPUT"
+            echo "product checks: true, full: true"
+            exit 0
           fi
+          # Documentation: *.md / *.html / images, anywhere except under tests/, src/ and public/ (the tests read their
+          # fixtures, among them HTML files; the app ships its own HTML, SVG and images). Everything else is code:
+          # scripts, YAML, Dockerfiles, workflows.
+          docs_re='\.(md|html|png|jpe?g|svg|gif)$'
           # Fails the job (and with it ci-ok) when the diff cannot be computed: no silent "nothing changed".
-          changed=$(git diff --name-only "$range")
+          changed=$(git diff --name-only --no-renames "$PR_BASE...$PR_HEAD")
           echo "$changed"
           code=false
           if grep -vE "$docs_re" <<< "$changed" | grep -q .; then code=true; fi
-          # A docs-only push to main leaves the code that main was last checked with unchanged, so it is skipped as well.
-          images=false
-          if grep -qE "$image_re" <<< "$changed"; then images=true; fi
-          printf 'code=%s\nimages=%s\nfull=%s\n' "$code" "$images" "$full" >> "$GITHUB_OUTPUT"
-          echo "product checks: $code, images: $images, full: $full"
+          if grep -qE '^(tests|src|public)/' <<< "$changed"; then code=true; fi
+          printf 'code=%s\nfull=false\n' "$code" >> "$GITHUB_OUTPUT"
+          echo "product checks: $code, full: false"
       - name: Documentation links
         run: node scripts/check-doc-links.mjs
 
@@ -101,10 +97,9 @@ jobs:
         timeout-minutes: 2
         run: pnpm ci:docs-check
 
-  # Lint, typecheck, config check,  runner bundle, migration drift, and the jobspy sidecar tests (short ones share a job).
+  # Lint, typecheck, config check, runner bundle, migration drift, and the jobspy sidecar tests (short ones share a job).
+  # Runs for every change.
   static:
-    needs: changes
-    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -168,10 +163,9 @@ jobs:
         working-directory: jobspy
         run: python -m pytest -q
 
-  # The unit suite is the longest check (~4 min in one go): Vitest splits its files over the shards.
+  # The unit suite is the longest check (~4 min in one go): Vitest splits its files over the shards. Runs for every
+  # change: it reads the documentation (link targets, picture sizes) and the fixtures.
   unit:
-    needs: changes
-    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     strategy:
@@ -361,55 +355,19 @@ jobs:
           name: playwright-report
           path: |
             playwright-report/
+            playwright-report-setup/
             test-results/
           retention-days: 7
 
-  # Builds the production images (web and runner targets, jobspy sidecar) without pushing: catches apt / CLI installs,
-  # COPY paths and build-stage breakage before deploy. Layers are cached per image in the Actions cache.
-  images:
-    needs: changes
-    if: needs.changes.outputs.images == 'true'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: web
-            context: .
-            target: web
-          - name: runner
-            context: .
-            target: runner
-          - name: jobspy
-            context: jobspy
-            target: ""
-    name: image (${{ matrix.name }})
-    steps:
-      - name: Check out the repository
-        uses: actions/checkout@v7
-        timeout-minutes: 5
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-        timeout-minutes: 5
-      - name: Build
-        uses: docker/build-push-action@v7
-        timeout-minutes: 25
-        with:
-          context: ${{ matrix.context }}
-          target: ${{ matrix.target }}
-          push: false
-          cache-from: type=gha,scope=image-${{ matrix.name }}
-          cache-to: type=gha,mode=max,scope=image-${{ matrix.name }}
-
   # Linux first run from scratch: an empty checkout on Ubuntu, `docker compose up --build` with the defaults (only
   # PUID / PGID set to the runner's user, as docs/host-setup.md says), and the dashboard answers. Catches file ownership
-  # and permission problems that Docker Desktop on macOS hides.
+  # and permission problems that Docker Desktop on macOS hides, and, because it builds the three production images (web,
+  # runner, jobspy), a Dockerfile or COPY that no longer builds.
   linux-smoke:
     needs: changes
-    if: needs.changes.outputs.images == 'true'
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 20
     steps:
       - name: Check out the repository
         uses: actions/checkout@v7
@@ -420,7 +378,7 @@ jobs:
           printf 'PUID=%s\nPGID=%s\n' "$(id -u)" "$(id -g)" > .env
           mkdir -p data/config data/profile data/backups data/exports data/logs .auth
       - name: Start the stack from scratch
-        timeout-minutes: 35
+        timeout-minutes: 15
         run: docker compose up -d --build --wait --wait-timeout 600
       - name: Dashboard health check
         timeout-minutes: 2
@@ -448,9 +406,9 @@ jobs:
         run: docker compose down -v --remove-orphans
 
   # The single check to require: every job the classifier selected must have succeeded; only the jobs it deselected
-  # may be skipped.
+  # may be skipped. changes, ci-docs, static and unit run for every change.
   ci-ok:
-    needs: [changes, ci-docs, static, unit, integration, e2e, images, linux-smoke]
+    needs: [changes, ci-docs, static, unit, integration, e2e, linux-smoke]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -460,19 +418,14 @@ jobs:
           NEEDS: ${{ toJSON(needs) }}
         run: |
           code=$(jq -r '.changes.outputs.code // "unknown"' <<< "$NEEDS")
-          images=$(jq -r '.changes.outputs.images // "unknown"' <<< "$NEEDS")
           jq -r 'to_entries[] | "\(.key): \(.value.result)"' <<< "$NEEDS"
           fail=0
-          for job in changes ci-docs; do
+          for job in changes ci-docs static unit; do
             [[ $(jq -r ".\"$job\".result" <<< "$NEEDS") == success ]] || fail=1
           done
-          for job in static unit integration e2e; do
-            r=$(jq -r ".${job}.result" <<< "$NEEDS")
+          for job in integration e2e linux-smoke; do
+            r=$(jq -r ".\"$job\".result" <<< "$NEEDS")
             if [[ "$code" == true ]]; then [[ "$r" == success ]] || fail=1; else [[ "$r" == skipped ]] || fail=1; fi
           done
-          for job in images linux-smoke; do
-            r=$(jq -r ".\"$job\".result" <<< "$NEEDS")
-            if [[ "$images" == true ]]; then [[ "$r" == success ]] || fail=1; else [[ "$r" == skipped ]] || fail=1; fi
-          done
-          [[ $fail == 0 ]] || { echo "::error::a selected check did not succeed (product: $code, images: $images)"; exit 1; }
-          echo "all selected checks passed (product: $code, images: $images)"
+          [[ $fail == 0 ]] || { echo "::error::a selected check did not succeed (product: $code)"; exit 1; }
+          echo "all selected checks passed (product: $code)"

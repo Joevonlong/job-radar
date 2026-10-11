@@ -6,6 +6,7 @@ import { defineConfig, devices } from "@playwright/test";
 import { z } from "zod";
 
 import { planProjects, specFiltersFromArgv } from "./e2e/projects";
+import { requireTestAdminDatabaseUrl } from "./scripts/test-database";
 
 const PORT = Number(process.env.E2E_PORT ?? 3100);
 // With E2E_PORT set explicitly, the database and the two directories default to names derived from it, so runs on
@@ -15,9 +16,10 @@ const PORT_SUFFIX = process.env.E2E_PORT ? `_${PORT}` : "";
 // The web server runs against a disposable database and profile directory, never the real ones.
 // `scripts/e2e-prepare.ts` runs before the server starts: it creates the database when missing,
 // applies the migrations and loads the dashboard seed (`pnpm db:seed` data), so every run starts from
-// the same rows. Needs the db container: `docker compose up -d db`.
+// the same rows. Needs a Postgres server where the role may create databases: E2E_ADMIN_DATABASE_URL or DATABASE_URL
+// (there is no default: a run never falls back to the database of a local installation, see scripts/test-database.ts).
 // (Playwright re-evaluates this file in every worker, so the values must be deterministic.)
-const ADMIN_DATABASE_URL = process.env.E2E_ADMIN_DATABASE_URL ?? process.env.DATABASE_URL ?? "postgres://jobradar:jobradar@127.0.0.1:5433/jobradar";
+const ADMIN_DATABASE_URL = requireTestAdminDatabaseUrl(process.env, ["E2E_ADMIN_DATABASE_URL", "DATABASE_URL"], "e2e tests");
 const E2E_DATABASE_URL = (() => {
   const url = new URL(ADMIN_DATABASE_URL);
   url.pathname = `/${process.env.E2E_DB_NAME ?? `jobradar_e2e${PORT_SUFFIX}`}`;

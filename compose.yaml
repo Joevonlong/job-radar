@@ -37,8 +37,7 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-jobradar}
     volumes:
       - jobradar-pg:/var/lib/postgresql/data
-    # Published on loopback only so host-side tooling (pnpm db:*, pnpm test:integration,
-    # drizzle studio) can reach it. Containers talk to db:5432 on the compose network.
+    # Published on loopback only so host-side tooling (pnpm db:*, drizzle studio) can reach it. Containers talk to db:5432 on the compose network.
     ports:
       - "127.0.0.1:${DB_HOST_PORT:-5433}:5432"
     healthcheck:

@@ -4,6 +4,7 @@ import postgres from "postgres";
 import type { TestProject } from "vitest/node";
 
 import { runMigrations } from "../../src/lib/db/migrate";
+import { requireTestAdminDatabaseUrl } from "../../scripts/test-database";
 
 declare module "vitest" {
   export interface ProvidedContext {
@@ -11,11 +12,8 @@ declare module "vitest" {
   }
 }
 
-// Host-side address of the compose `db` service; override with DATABASE_URL (e.g. in CI).
-const DEFAULT_ADMIN_URL = "postgres://jobradar:jobradar@127.0.0.1:5433/jobradar";
-
 export default async function setup(project: TestProject): Promise<() => Promise<void>> {
-  const adminUrl = new URL(process.env.DATABASE_URL || DEFAULT_ADMIN_URL);
+  const adminUrl = new URL(requireTestAdminDatabaseUrl(process.env, ["DATABASE_URL"], "integration tests"));
   const dbName = `jobradar_test_${Date.now().toString(36)}_${randomBytes(4).toString("hex")}`;
 
   const admin = postgres(adminUrl.toString(), { max: 1, onnotice: () => {} });
@@ -25,7 +23,7 @@ export default async function setup(project: TestProject): Promise<() => Promise
     await admin.end({ timeout: 2 });
     const reason = error instanceof Error ? error.message : "unknown error";
     throw new Error(
-      `Cannot create a test database (is Postgres up and DATABASE_URL correct? e.g. \`pnpm stack:up\`): ${reason}`,
+      `Cannot create a test database (is Postgres up and DATABASE_URL correct?): ${reason}`,
     );
   }
 

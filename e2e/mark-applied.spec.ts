@@ -8,12 +8,8 @@ import postgres from "postgres";
  * is already applied (read only). Each test has its own job, the file runs in parallel.
  */
 
-const ADMIN_URL = process.env.E2E_ADMIN_DATABASE_URL ?? process.env.DATABASE_URL ?? "postgres://jobradar:jobradar@127.0.0.1:5433/jobradar";
-const E2E_URL = (() => {
-  const url = new URL(ADMIN_URL);
-  url.pathname = `/${process.env.E2E_DB_NAME ?? "jobradar_e2e"}`;
-  return url.toString();
-})();
+// the database of this run: playwright.config.ts exports its address (E2E_DATABASE_URL) to the workers
+const E2E_URL = process.env.E2E_DATABASE_URL ?? "";
 
 async function counts(jobId: number): Promise<{ applications: number; events: number; status: string | null }> {
   const sql = postgres(E2E_URL, { max: 1, onnotice: () => {} });

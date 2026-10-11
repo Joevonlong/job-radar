@@ -6,7 +6,7 @@
 
 **本页与流水线绑定。** `pnpm ci:docs-check`（包含在 `scripts/validate.sh` 里，也是流水线自己的 `ci-docs` 任务）会在下列情况下失败：workflow 里的某个任务或步骤在本页没有对应小节；本页写了已经不存在的任务或步骤；[ci.md](ci.md)（英文主版）和本页列出的任务、步骤不一致。改流水线，就要在同一个 PR 里同时改 `docs/ci.md` 和本页。标题的写法见末尾“让本页保持准确”。
 
-耗时是 GitHub 托管的 `ubuntu-24.04` runner（2 核）上的典型值，每个 PR 的运行摘要里有实际数字。测试数量是约数，会随项目增长变化。
+耗时是 GitHub 托管的 `ubuntu-24.04` runner（2 核）上的典型值，每个 PR 的运行摘要里有实际数字。本页有意不写测试数量和 action 版本号：它们随每个 PR 或 Dependabot 升级而变，以 workflow 文件和测试目录为准。
 
 ## 总览
 
@@ -14,19 +14,17 @@
 flowchart LR
   PR([pull request / 推送到 main / 手动运行]) --> changes
   PR --> ci-docs
-  changes -- 代码有改动 --> static
-  changes -- 代码有改动 --> unit
+  PR --> static
+  PR --> unit
   changes -- 代码有改动 --> integration
   changes -- 代码有改动 --> e2e
-  changes -- 镜像输入有改动 --> images
-  changes -- 镜像输入有改动 --> linux-smoke
+  changes -- 代码有改动 --> linux-smoke
   changes --> ci-ok
   ci-docs --> ci-ok
   static --> ci-ok
   unit --> ci-ok
   integration --> ci-ok
   e2e --> ci-ok
-  images --> ci-ok
   linux-smoke --> ci-ok
   ci-ok --> merge([唯一需要的必过检查])
 ```
@@ -37,13 +35,12 @@ flowchart LR
 
 | 改动 | 运行的任务 |
 |---|---|
-| 只改文档（`*.md`、`*.html`、图片） | `changes`（含文档链接检查）、`ci-docs`、`ci-ok` |
-| 其他（代码、脚本、配置、fixture、workflow、Dockerfile） | 上面的再加 `static`、`unit`、`integration`、`e2e` |
-| 同时改了镜像输入（`Dockerfile`、`.dockerignore`、`package.json`、lockfile、workspace 文件、`next.config.ts`、`tsconfig*.json`、`compose.yaml`、`jobspy/Dockerfile`、`jobspy/requirements.txt`、`.github/` 下任何文件） | 再加 `images` 和 `linux-smoke` |
-| 推送到 `main` | 同 PR；`integration` 还会按默认文件顺序再跑一遍 |
-| 手动运行（`workflow_dispatch`） | 全部 |
+| 只改文档的 PR（`*.md`、`*.html`、图片；`tests/`、`src/`、`public/` 下的文件不算文档） | `changes`（含文档链接检查）、`ci-docs`、`static`、`unit`、`ci-ok`。有些单元测试会读文档（链接目标、图片大小），所以 `unit` 要跑。 |
+| 其他 PR（代码、脚本、配置、`tests/`、`src/`、`public/` 下任何文件、workflow、Dockerfile） | 上面的再加 `integration`、`e2e`、`linux-smoke` |
+| 推送到 `main` | 无论改了什么，一律全部；`integration` 还会按默认文件顺序再跑一遍 |
+| 手动运行（`workflow_dispatch`） | 全部，同推送到 `main` |
 
-没被选中的任务显示为 skipped，`ci-ok` 只接受这种情况；被选中却被跳过、取消或失败的任务会让 `ci-ok` 失败。
+没被选中的任务（只改文档的 PR 上的 `integration`、`e2e`、`linux-smoke`）显示为 skipped，`ci-ok` 只接受这种情况；必须运行却被跳过、取消或失败的任务会让 `ci-ok` 失败。
 
 workflow 级设置：`permissions: contents: read`（任何任务都不能写仓库；来自 fork 的 PR 没有密钥）；每个 ref 一个 `concurrency` 组（新的推送会取消 PR 上较早的运行，但不会取消 `main` 上的运行）；每个任务和步骤都有 `timeout-minutes`，卡住的步骤会失败，而不是挂几个小时。
 
@@ -51,7 +48,7 @@ workflow 级设置：`permissions: contents: read`（任何任务都不能写仓
 
 1. 打开 PR 的检查列表：只要有任务是红的，`ci-ok` 就是红的。要打开的是红色的那个任务。
 2. 任务里红色的步骤默认展开。PR 注解（`::error::` 行、Playwright 的 `github` reporter）也出现在 “Files changed” 页和运行摘要里。
-3. `e2e` 失败时，产物 `playwright-report`（保留 7 天）里有 HTML 报告和失败测试的 trace：`pnpm exec playwright show-report playwright-report`，单个 trace 用 `pnpm exec playwright show-trace <trace.zip>`。
+3. `e2e` 失败时，产物 `playwright-report`（保留 7 天）里有主测试集（`playwright-report/`）和设置向导测试集（`playwright-report-setup/`）的 HTML 报告以及失败测试的 trace：`pnpm exec playwright show-report playwright-report`（或 `playwright-report-setup`），单个 trace 用 `pnpm exec playwright show-trace <trace.zip>`。
 4. 只有重试才通过的测试会让任务失败（`--fail-on-flaky-tests`），这是有意的：修掉不稳定的原因，不要重跑到变绿。
 5. 只有原因明显出在 runner 上（网络、缓存服务）时才点 “Re-run failed jobs”，不要用它绕过失败的测试。
 
@@ -65,17 +62,16 @@ workflow 级设置：`permissions: contents: read`（任何任务都不能写仓
 
 #### Check out the repository
 
-`actions/checkout@v4`，`fetch-depth: 0`（完整历史，因为分类器要对比两个提交）。只会因 GitHub 故障失败。
+`actions/checkout`，`fetch-depth: 0`（完整历史，因为分类器要对比两个提交）。只会因 GitHub 故障失败。
 
 #### Classify the change
 
-算出改动文件列表，写出其他任务读取的三个输出：
+只对 pull request 分类，写出其他任务读取的两个输出：
 
-- `code`：只要有一个改动文件不是文档（`*.md`、`*.html`、`png`、`jpg`、`svg`、`gif`）就是 `true`。测试会读 fixture、YAML 和 Dockerfile，所以它们算代码。
-- `images`：改了镜像输入（见上表）时为 `true`，选中 `images` 和 `linux-smoke`。
+- `code`：只要有一个改动文件不是文档（`*.md`、`*.html`、`png`、`jpg`、`svg`、`gif`）就是 `true`。`tests/`、`src/`、`public/` 下的任何文件都算代码，即使是 HTML、SVG 或图片：测试会读自己的 fixture，应用也自带图片和页面。脚本、YAML、Dockerfile、workflow 同样是代码。`code` 选中 `integration`、`e2e` 和 `linux-smoke`；`static` 和 `unit` 无论如何都跑（单元测试会读文档，这里也不维护“哪些测试读哪些文件”的清单，免得过时）。
 - `full`：推送到 `main` 和手动运行时为 `true`，会多跑一遍默认顺序的集成测试。
 
-PR 的对比范围是 `base...head`，推送是 `before..sha`。新分支、首次推送、手动运行都选中全部。算不出差异时这一步会失败（`ci-ok` 随之失败），不会悄悄当作“没改动”。手动复现：`git diff --name-only origin/main...HEAD`，再套用上面两条规则。
+推送到 `main` 和手动运行完全不分类：两者都写 `code=true`、`full=true`。`main` 上的提交就是要部署的内容，所以只改文档的推送不能留下一次什么都没检查的运行。PR 的对比范围是 `base...head`，不做改名检测，所以被移动的文件新旧路径都会计入。算不出差异时这一步会失败（`ci-ok` 随之失败），不会悄悄当作“没改动”。手动复现：`git diff --name-only --no-renames origin/main...HEAD`，再看有没有不是 `*.md`、`*.html` 或图片的路径，或以 `tests/`、`src/`、`public/` 开头的路径。
 
 #### Documentation links
 
@@ -87,15 +83,15 @@ PR 的对比范围是 `base...head`，推送是 `before..sha`。新分支、首�
 
 #### Check out the repository
 
-`actions/checkout@v4`。
+`actions/checkout`。
 
 #### Set up pnpm
 
-`pnpm/action-setup@v4`：安装 `package.json` 的 `packageManager` 固定的 pnpm 版本。
+`pnpm/action-setup`：安装 `package.json` 的 `packageManager` 固定的 pnpm 版本。
 
 #### Set up Node.js
 
-`actions/setup-node@v4`，Node 22（`engines` 里的版本），pnpm store 按 `pnpm-lock.yaml` 的哈希缓存。
+`actions/setup-node`，Node 22（`engines` 里的版本），pnpm store 按 `pnpm-lock.yaml` 的哈希缓存。
 
 #### Install dependencies
 
@@ -107,19 +103,19 @@ PR 的对比范围是 `base...head`，推送是 `before..sha`。新分支、首�
 
 ### Job `static`
 
-不需要数据库和浏览器的检查：生成文件、lint、类型、配置、shell 语法、runner 打包、迁移漂移、Python sidecar 测试。只在代码改动时运行。上限 15 分钟，通常 4 到 6 分钟（安装、lint、typecheck 占大头）。除 runner 打包、迁移漂移和 sidecar 测试外，其余都在 `scripts/validate.sh` 里。
+不需要数据库和浏览器的检查：生成文件、lint、类型、配置、shell 语法、runner 打包、迁移漂移、Python sidecar 测试。每次改动都会运行。上限 15 分钟，通常 4 到 6 分钟（安装、lint、typecheck 占大头）。除 runner 打包、迁移漂移和 sidecar 测试外，其余都在 `scripts/validate.sh` 里。
 
 #### Check out the repository
 
-`actions/checkout@v4`。
+`actions/checkout`。
 
 #### Set up pnpm
 
-`pnpm/action-setup@v4`。
+`pnpm/action-setup`。
 
 #### Set up Node.js
 
-`actions/setup-node@v4`，Node 22，pnpm store 缓存。
+`actions/setup-node`，Node 22，pnpm store 缓存。
 
 #### Install dependencies
 
@@ -155,7 +151,7 @@ PR 的对比范围是 `base...head`，推送是 `before..sha`。新分支、首�
 
 #### Set up Python
 
-`actions/setup-python@v5`，Python 3.12，pip 缓存以 `jobspy/requirements*.txt` 为键。
+`actions/setup-python`，Python 3.12，pip 缓存以 `jobspy/requirements*.txt` 为键。
 
 #### Install jobspy sidecar dependencies
 
@@ -163,25 +159,25 @@ PR 的对比范围是 `base...head`，推送是 `before..sha`。新分支、首�
 
 #### Jobspy sidecar tests
 
-在 `jobspy/` 里 `python -m pytest -q`（`jobspy/tests/` 里约 20 个测试，抓取库被 mock：请求校验、结果映射、`jobspy/app.py` 这个小 HTTP 服务的错误处理）。几秒钟。常见原因：改了 `jobspy/app.py` 没改测试，或依赖升级。
+在 `jobspy/` 里 `python -m pytest -q`（`jobspy/tests/` 里的测试，抓取库被 mock：请求校验、结果映射、`jobspy/app.py` 这个小 HTTP 服务的错误处理）。几秒钟。常见原因：改了 `jobspy/app.py` 没改测试，或依赖升级。
 
 ### Job `unit`
 
-Vitest 单元测试：`tests/**`（除 `tests/integration/`）下约 330 个文件、约 4300 个测试，组件用 jsdom，服务端代码用 node 环境。整套单跑约 4 分钟，所以用 Vitest 的 `--shard` 拆成两个并行任务 `unit (1/2)` 和 `unit (2/2)`（各约 2 到 3 分钟）。`fail-fast` 关闭，两个分片都会报告。只在代码改动时运行，上限 15 分钟。
+Vitest 单元测试：`tests/**`（除 `tests/integration/`）下的所有测试，组件用 jsdom，服务端代码用 node 环境。整套单跑约 4 分钟，所以用 Vitest 的 `--shard` 拆成两个并行任务 `unit (1/2)` 和 `unit (2/2)`（各约 2 到 3 分钟）。`fail-fast` 关闭，两个分片都会报告。每次改动都会运行，只改文档的 PR 也一样：有些测试会读仓库文档（界面帮助链接指向的标题、README 展示的图片及其大小）。上限 15 分钟。
 
 这些测试不需要数据库、网络和真实时钟：时间是注入或伪造的，配置在每个测试里用临时目录构造，冻结的 fixture `tests/fixtures/config/defaults/` 代替随包的 `config/`（测试从不断言随包默认值）。
 
 #### Check out the repository
 
-`actions/checkout@v4`。
+`actions/checkout`。
 
 #### Set up pnpm
 
-`pnpm/action-setup@v4`。
+`pnpm/action-setup`。
 
 #### Set up Node.js
 
-`actions/setup-node@v4`，Node 22，pnpm store 缓存。
+`actions/setup-node`，Node 22，pnpm store 缓存。
 
 #### Install dependencies
 
@@ -193,21 +189,21 @@ Vitest 单元测试：`tests/**`（除 `tests/integration/`）下约 330 个文�
 
 ### Job `integration`
 
-需要真实 PostgreSQL 17 的测试：仓库层与迁移、周期与队列、控制请求、ai-worker、仪表盘查询、用真实 `pg_dump` / `pg_restore` 的备份。`tests/integration/` 下约 60 个文件、约 600 个测试，通过 `vitest.integration.config.ts` 运行（node 环境，文件依次运行，因为共用一个在每个文件前后都被清空的数据库）。上限 20 分钟，通常 3 到 4 分钟。
+需要真实 PostgreSQL 17 的测试：仓库层与迁移、周期与队列、控制请求、ai-worker、仪表盘查询、用真实 `pg_dump` / `pg_restore` 的备份。`tests/integration/` 下的文件，通过 `vitest.integration.config.ts` 运行（node 环境，文件依次运行，因为共用一个在每个文件前后都被清空的数据库）。上限 20 分钟，通常 3 到 4 分钟。
 
-任务带一个 `postgres:17` service 容器，环境变量 `DATABASE_URL=postgres://postgres:postgres@localhost:5432/postgres`。该角色可以建库：每次运行创建一个唯一命名的数据库（`tests/integration/global-setup.ts`），结束时删除，服务器上其他东西不受影响。`REQUIRE_PG_TOOLS=1` 让备份测试在缺客户端工具时失败而不是跳过。
+任务带一个 `postgres:17` service 容器，环境变量 `DATABASE_URL=postgres://postgres:postgres@localhost:5432/postgres`。该角色可以建库：每次运行创建一个唯一命名的数据库（`tests/integration/global-setup.ts`），结束时删除，服务器上其他东西不受影响。这些测试没有默认服务器：没设 `DATABASE_URL` 时运行立即停止并打印一次性容器的命令，所以本地运行不可能连到你自己安装的数据库。`REQUIRE_PG_TOOLS=1` 让备份测试在缺客户端工具时失败而不是跳过。
 
 #### Check out the repository
 
-`actions/checkout@v4`。
+`actions/checkout`。
 
 #### Set up pnpm
 
-`pnpm/action-setup@v4`。
+`pnpm/action-setup`。
 
 #### Set up Node.js
 
-`actions/setup-node@v4`，Node 22，pnpm store 缓存。
+`actions/setup-node`，Node 22，pnpm store 缓存。
 
 #### Install dependencies
 
@@ -227,9 +223,9 @@ Vitest 单元测试：`tests/**`（除 `tests/integration/`）下约 330 个文�
 
 ### Job `e2e`
 
-Playwright 浏览器测试，对生产构建（`pnpm build` 再 `pnpm start`）、一次性的 PostgreSQL 17 service 和替身 runner（`scripts/e2e-runner.ts`：心跳、配置确认、控制请求轮询，使“立即运行一轮”和“配置已保存”无需真实采集器即可工作）运行。没有 AI 提供方，没有职位通道，除 localhost 外没有网络。`e2e/` 下约 240 个测试、35 个 spec 文件，另有 `e2e-setup/` 的 12 个测试。上限 20 分钟，总共通常 10 到 12 分钟。任务跑在 runner 主机上，不在 Playwright 容器镜像里（实测镜像更慢）。
+Playwright 浏览器测试，对生产构建（`pnpm build` 再 `pnpm start`）、一次性的 PostgreSQL 17 service 和替身 runner（`scripts/e2e-runner.ts`：心跳、配置确认、控制请求轮询，使“立即运行一轮”和“配置已保存”无需真实采集器即可工作）运行。没有 AI 提供方，没有职位通道，除 localhost 外没有网络。`e2e/` 下的 spec，另有 `e2e-setup/` 的 spec。上限 20 分钟，总共通常 10 到 12 分钟。任务跑在 runner 主机上，不在 Playwright 容器镜像里（实测镜像更慢）。
 
-环境：`DATABASE_URL` 指向 service；`scripts/e2e-prepare.ts` 创建数据库 `jobradar_e2e_3100`（名字随 `E2E_PORT`），应用迁移，加载仪表盘种子（约 20 条虚构职位），并用 `tests/fixtures/config/defaults/` 的冻结 fixture 填充全新的配置和 profile 目录。`E2E_PORT=3100` 是服务端口；`E2E_SKIP_BUILD=1` 告诉 web server 命令不要再构建。
+环境：`DATABASE_URL` 指向 service（本地运行必须自己设 `DATABASE_URL` 或 `E2E_ADMIN_DATABASE_URL`：没有默认地址）；`scripts/e2e-prepare.ts` 拒绝任何名字不以 `jobradar_e2e` 开头的数据库，它创建数据库 `jobradar_e2e_3100`（名字随 `E2E_PORT`），应用迁移，加载仪表盘种子（虚构职位），并用 `tests/fixtures/config/defaults/` 的冻结 fixture 填充全新的配置和 profile 目录。`E2E_PORT=3100` 是服务端口；`E2E_SKIP_BUILD=1` 告诉 web server 命令不要再构建。
 
 **主测试集的 project（`playwright.config.ts`）。** spec 并不都以同一种方式运行：
 
@@ -253,15 +249,15 @@ project 的规划在 `e2e/projects.ts`（由 `tests/e2e-projects.test.ts` 做单
 
 #### Check out the repository
 
-`actions/checkout@v4`。
+`actions/checkout`。
 
 #### Set up pnpm
 
-`pnpm/action-setup@v4`。
+`pnpm/action-setup`。
 
 #### Set up Node.js
 
-`actions/setup-node@v4`，Node 22，pnpm store 缓存。
+`actions/setup-node`，Node 22，pnpm store 缓存。
 
 #### Install dependencies
 
@@ -269,7 +265,7 @@ project 的规划在 `e2e/projects.ts`（由 `tests/e2e-projects.test.ts` 做单
 
 #### Cache Playwright browsers
 
-`actions/cache@v4`，缓存 `~/.cache/ms-playwright`，键为 runner 系统加 `pnpm-lock.yaml`（浏览器版本跟随锁定的 `@playwright/test`）。设置 `steps.playwright-cache.outputs.cache-hit`。
+`actions/cache`，缓存 `~/.cache/ms-playwright`，键为 runner 系统加 `pnpm-lock.yaml`（浏览器版本跟随锁定的 `@playwright/test`）。设置 `steps.playwright-cache.outputs.cache-hit`。
 
 #### Install Playwright browser and system libraries
 
@@ -281,7 +277,7 @@ project 的规划在 `e2e/projects.ts`（由 `tests/e2e-projects.test.ts` 做单
 
 #### Cache the Next build cache
 
-`actions/cache@v4`，缓存 `.next/cache`（只是 Next 的增量构建缓存；应用始终从当前源码构建）。键包含 lockfile 以及 `src/`、`messages/`、`next.config.ts` 的哈希，回退键只有 lockfile。
+`actions/cache`，缓存 `.next/cache`（只是 Next 的增量构建缓存；应用始终从当前源码构建）。键包含 lockfile 以及 `src/`、`messages/`、`next.config.ts` 的哈希，回退键只有 lockfile。
 
 #### Build
 
@@ -289,7 +285,7 @@ project 的规划在 `e2e/projects.ts`（由 `tests/e2e-projects.test.ts` 做单
 
 #### End-to-end tests
 
-`pnpm test:e2e --workers=2 --fail-on-flaky-tests`：如上所述的主测试集所有 project。web server 命令先运行 `scripts/e2e-prepare.ts`，再 `pnpm start -p 3100 -H 127.0.0.1`。只有重试才通过的测试会让任务失败；重试仍会为报告记录 trace。上限 12 分钟。本地：先起数据库（`docker compose up -d db`，或下文的 postgres 容器），`pnpm build`，然后 `E2E_PORT=3100 E2E_SKIP_BUILD=1 pnpm test:e2e`；`E2E_PORT=<端口>` 让一次运行有自己的数据库和目录，多个检出可以并排运行，但**同一台机器同一时间只跑一套完整 e2e**：并行的完整运行会互相抢资源，产生并非真实失败的超时。开发时只跑受影响的 spec（`pnpm test:e2e e2e/pipeline.spec.ts`、几个文件，或 `e2e/dashboard.spec.ts:206` 只跑一个测试；只跑这些，web server 和替身 runner 照常启动），完整套件留给 CI。常见失败原因：定位器随界面文案变了（spec 以英文运行）；写共享配置的 spec 没加进 `SERIAL_CHAIN`；计数整个列表或改共享数据的测试没加 `@exclusive` 标签；只有 2 个 worker 才暴露的竞态（trace 里能看到）。
+`pnpm test:e2e --workers=2 --fail-on-flaky-tests`：如上所述的主测试集所有 project。web server 命令先运行 `scripts/e2e-prepare.ts`，再 `pnpm start -p 3100 -H 127.0.0.1`。只有重试才通过的测试会让任务失败；重试仍会为报告记录 trace。上限 12 分钟。本地：先起一个一次性数据库（下文的 postgres 容器），`pnpm build`，然后 `E2E_PORT=3100 E2E_SKIP_BUILD=1 pnpm test:e2e`；`E2E_PORT=<端口>` 让一次运行有自己的数据库和目录，多个检出可以并排运行，但**同一台机器同一时间只跑一套完整 e2e**：并行的完整运行会互相抢资源，产生并非真实失败的超时。开发时只跑受影响的 spec（`pnpm test:e2e e2e/pipeline.spec.ts`、几个文件，或 `e2e/dashboard.spec.ts:206` 只跑一个测试；只跑这些，web server 和替身 runner 照常启动），完整套件留给 CI。常见失败原因：定位器随界面文案变了（spec 以英文运行）；写共享配置的 spec 没加进 `SERIAL_CHAIN`；计数整个列表或改共享数据的测试没加 `@exclusive` 标签；只有 2 个 worker 才暴露的竞态（trace 里能看到）。
 
 #### Setup wizard end-to-end tests
 
@@ -297,31 +293,15 @@ project 的规划在 `e2e/projects.ts`（由 `tests/e2e-projects.test.ts` 做单
 
 #### Upload the Playwright report and traces
 
-只在本任务有步骤失败时运行（`if: failure()`）：把 `playwright-report/` 和 `test-results/` 上传为产物 `playwright-report`，保留 7 天。从运行页下载，用 `pnpm exec playwright show-report` 打开。
-
-### Job `images`
-
-构建三个生产镜像但不推送：`web` 和 `runner`（根目录 `Dockerfile` 的目标）以及 `jobspy` sidecar（`jobspy/Dockerfile`），以三个并行任务的矩阵运行，名为 `image (web)`、`image (runner)`、`image (jobspy)`。它在部署之前发现 `apt` / CLI 安装失败、`COPY` 路径错误、构建阶段损坏。只在镜像输入有改动时运行（见开头的表）。上限 30 分钟；层缓存热时几分钟，冷构建更久。各镜像的层缓存在 Actions 缓存里。本地：`docker build --target web .`、`docker build --target runner .`、`docker build jobspy`。
-
-#### Check out the repository
-
-`actions/checkout@v4`。
-
-#### Set up Docker Buildx
-
-`docker/setup-buildx-action@v3`：支持 Actions 层缓存的构建器。
-
-#### Build
-
-`docker/build-push-action@v6`，`push: false`，`cache-from` / `cache-to` 为按镜像区分作用域的 `gha` 类型。日志会显示失败的 Dockerfile 行。常见原因：基础镜像仓库里的包移动了；`COPY` 的路径被 `.dockerignore` 排除；lockfile 变化后构建阶段 `--frozen-lockfile` 装不上。
+只在本任务有步骤失败时运行（`if: failure()`）：把 `playwright-report/`（主测试集）、`playwright-report-setup/`（设置向导测试集）和 `test-results/` 上传为产物 `playwright-report`，保留 7 天。从运行页下载，用 `pnpm exec playwright show-report <目录>` 打开报告。
 
 ### Job `linux-smoke`
 
-Linux 从零首次运行：在 Ubuntu runner 上用一份空的检出，按随附默认值 `docker compose up --build`，面板必须能应答。它能发现 macOS 上 Docker Desktop 掩盖的问题：bind mount 的文件属主（`PUID` / `PGID`）、以 0600 写入的配置文件、容器写不了的目录。和 `images` 一样，只在镜像输入有改动时运行。上限 45 分钟；冷构建约 10 到 15 分钟（四个镜像都在没有层缓存的情况下构建）。本地（Linux）：在一份新克隆里执行下面各步骤的命令（不要在你想保留其服务栈和数据库的检出里做：最后一步会删除服务栈和它的卷）。
+Linux 从零首次运行：在 Ubuntu runner 上用一份空的检出，按随附默认值 `docker compose up --build`，面板必须能应答。它能发现 macOS 上 Docker Desktop 掩盖的问题：bind mount 的文件属主（`PUID` / `PGID`）、以 0600 写入的配置文件、容器写不了的目录。它从 Dockerfile 构建 web、runner、jobspy 三个镜像，所以也是在部署之前发现 `apt` / CLI 安装失败、`COPY` 路径错误、构建阶段损坏的地方（不再有单独的只构建镜像的任务）。每个不是只改文档的 PR 和每次推送到 `main` 都会运行。上限 20 分钟，构建步骤 15 分钟；通常几分钟（冷构建，没有层缓存）。本地（Linux）：在一份新克隆里执行下面各步骤的命令（不要在你想保留其服务栈和数据库的检出里做：最后一步会删除服务栈和它的卷）。
 
 #### Check out the repository
 
-`actions/checkout@v7`。
+`actions/checkout`。
 
 #### Prepare .env and the data folders as the host user
 
@@ -329,7 +309,7 @@ Linux 从零首次运行：在 Ubuntu runner 上用一份空的检出，按随�
 
 #### Start the stack from scratch
 
-`docker compose up -d --build --wait --wait-timeout 600`：构建四个镜像，等到每个服务都报告健康（runner 会执行迁移并开始心跳）。这里失败要么是构建错误（见 `images` 任务），要么是某个服务一直没有变健康：“Container logs on failure”一步会打印原因。
+`docker compose up -d --build --wait --wait-timeout 600`：构建 web、runner、jobspy 三个镜像并拉取数据库镜像，等到每个服务都报告健康（runner 会执行迁移并开始心跳）。这里失败要么是构建错误（日志会显示失败的 Dockerfile 行；常见原因：基础镜像仓库里的包移动了；`COPY` 的路径被 `.dockerignore` 排除；lockfile 变化后构建阶段 `--frozen-lockfile` 装不上），要么是某个服务一直没有变健康：“Container logs on failure”一步会打印原因。
 
 #### Dashboard health check
 
@@ -353,7 +333,7 @@ Linux 从零首次运行：在 Ubuntu runner 上用一份空的检出，按随�
 
 #### All selected checks passed
 
-读取 `needs` 的结果（`jq`）：`changes` 和 `ci-docs` 必须成功；`static`、`unit`、`integration`、`e2e` 在 `changes` 选中代码时必须成功，否则必须是 skipped；`images` 和 `linux-smoke` 同理，由 `images` 输出决定。其他任何组合（包括被选中却被跳过或取消的任务）都会打印各任务结果和 `::error::a selected check did not succeed`。它变红时，先看它打印的各任务结果，再打开对应任务。
+读取 `needs` 的结果（`jq`）：`changes`、`ci-docs`、`static`、`unit` 必须始终成功（被跳过算失败，不算通过）；`integration`、`e2e`、`linux-smoke` 在 `changes` 选中代码时必须成功，否则必须是 skipped。其他任何组合（包括必须运行却被跳过或取消的任务）都会打印各任务结果和 `::error::a selected check did not succeed`。它变红时，先看它打印的各任务结果，再打开对应任务。
 
 ## Dependabot
 
@@ -365,7 +345,7 @@ Linux 从零首次运行：在 Ubuntu runner 上用一份空的检出，按随�
 | `pip` | `/jobspy` | 最多 3 个未关闭 PR；sidecar 的 Python 依赖 |
 | `github-actions` | `/` | 最多 3 个未关闭 PR；workflow 里固定的 action 版本 |
 
-Dependabot 的 PR 和其他 PR 跑同一条流水线。action 升级会改 `.github/`，因此算代码也算镜像输入，会跑全部任务；如果它改了步骤名，`ci-docs` 会失败，直到本页更新。
+Dependabot 的 PR 和其他 PR 跑同一条流水线。action 升级会改 `.github/`，因此算代码，会跑全部任务；如果它改了步骤名，`ci-docs` 会失败，直到本页更新。本页不写 action 版本号，所以单纯升级版本不需要改文档。
 
 ## 发布检查
 
@@ -376,7 +356,8 @@ Dependabot 的 PR 和其他 PR 跑同一条流水线。action 升级会改 `.git
 上面每个任务都只是几条命令。下面是通用做法（有 Docker、Node 22 加 pnpm、Python 3.12 就够），使用一个端口与你真实数据库不同的一次性 PostgreSQL。
 
 ```bash
-# 一次性数据库（角色可建库，与 CI 的 service 一样）
+# 一次性数据库（角色可建库，与 CI 的 service 一样）。数据库相关的测试没有默认地址：没设 DATABASE_URL（e2e 也可以设
+# E2E_ADMIN_DATABASE_URL）时它们会停下并打印这段做法，绝不会连到你自己安装的数据库。
 docker run -d --name jr-ci-pg -p 127.0.0.1:55432:5432 \
   -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=postgres postgres:17
 export DATABASE_URL=postgres://postgres:postgres@127.0.0.1:55432/postgres
@@ -400,10 +381,7 @@ pnpm build
 E2E_PORT=3100 E2E_SKIP_BUILD=1 pnpm test:e2e --workers=2 --fail-on-flaky-tests
 E2E_PORT=3100 E2E_SKIP_BUILD=1 pnpm test:e2e:setup --fail-on-flaky-tests
 
-# 任务：images
-docker build --target web . && docker build --target runner . && docker build jobspy
-
-# 任务：linux-smoke（Linux，只在新克隆里做：最后会 `docker compose down -v`）
+# 任务：linux-smoke（Linux，只在新克隆里做：最后会 `docker compose down -v`；它会构建 web、runner、jobspy 三个镜像）
 printf 'PUID=%s\nPGID=%s\n' "$(id -u)" "$(id -g)" > .env && mkdir -p data/{config,profile,backups,exports,logs} .auth
 docker compose up -d --build --wait --wait-timeout 600 && curl -fsS http://127.0.0.1:3000/api/health
 docker compose down -v --remove-orphans
@@ -411,7 +389,7 @@ docker compose down -v --remove-orphans
 docker rm -f -v jr-ci-pg
 ```
 
-本地运行与托管流水线有三点不同：测的是你的工作区，而不是 PR 与 `main` 合并后的结果；用的是你自己的 Docker 和 Node 版本；不会自己判断跳过什么（只改文档时只需 `pnpm docs:check` 和 `pnpm ci:docs-check`）。
+本地运行与托管流水线有三点不同：测的是你的工作区，而不是 PR 与 `main` 合并后的结果；用的是你自己的 Docker 和 Node 版本；不会自己判断跳过什么（只改文档时，托管流水线会做 `pnpm docs:check`、`pnpm ci:docs-check`、static 检查和单元测试）。
 
 ## 让本页保持准确
 
