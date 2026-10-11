@@ -26,3 +26,12 @@ describe("aiProviderState", () => {
     expect(aiProviderState({ ...base, lastErrorKind: "timeout", lastErrorAt: at(10) })).toBe("ready");
   });
 });
+
+describe("aiProviderState: usage cap", () => {
+  it("is guarded while Job Radar's usage cap holds it back, before cooling and the daily cap, after off", () => {
+    expect(aiProviderState({ ...base, guardedUntil: at(30) })).toBe("guarded");
+    expect(aiProviderState({ ...base, guardedUntil: at(30), coolingUntil: at(40), dailyCap: 1, requestsToday: 1 })).toBe("guarded");
+    expect(aiProviderState({ ...base, enabled: false, guardedUntil: at(30) })).toBe("off");
+    expect(aiProviderState({ ...base, guardedUntil: null })).toBe("ready");
+  });
+});

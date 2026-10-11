@@ -143,6 +143,7 @@ pnpm run doctor --lang zh    # 用另一种语言输出报告（默认：languag
 | `ai.profile` | `data/profile/me.yaml` 有简介（summary）或技能（skills），AI 打分才会开始 | ❌ 两项都空而且有岗位在等打分；⚠️ 两项都空但还没有岗位在等，或者 me.yaml 读不了。怎么办：打开 /me 至少填一项保存，下一轮开始打分。此时今日页和 /me 顶部有"画像不完整，AI 打分已暂停"横幅 |
 | `config.guards` | `ai.yaml` 里的 CLI 命令是 `claude` / `codex`，`codex_cli.config_overrides` 只有允许的键，接收 key 的服务都指向厂商自己的主机，没有设 `JOB_RADAR_ALLOW_CUSTOM_ENDPOINTS` | ❌ 某个 `command` 被拒绝（那个 CLI 不会运行）；⚠️ 有覆盖项被忽略、改过的 `base_url` / `api_base_url` 被拒绝或（放行后）被使用，或设了放行变量。见 [ai-providers.zh.md](ai-providers.zh.md#ai-worker-不从-aiyaml-接受的东西) |
 | `ai.backlog` | AI 请求队列、等打分的岗位数、最近一次 `run_ai` 的结果（因画像不完整没有打分时写明原因，不算成功） | ⚠️ 积压：ai-worker 在不在 |
+| `ai.quota` | Job Radar 自己对订阅 CLI 的用量上限（`ai.yaml: quota_guard`）：每个 CLI 在滚动窗口内的调用数对比 `hard_requests`。只统计 Job Radar 自己的调用，看不到账户的真实用量 | ⚠️ 某个 CLI 的窗口满了，或它报告了限制正在冷却：到显示的时间会自动恢复；如果碍事，在设置 → AI → 限额里调高（`pnpm ai:usage-stats` 打印你自己的数据） |
 | `config.layers` | 用户配置目录 `data/config` 存在且可写；列出覆盖了的 `shipped` 文件、版本落后（要迁移）的文件、还在读默认配置的 `user` 文件 | ❌ 目录不存在或不可写（`pnpm config:init`；查挂载）；❌ 某个文件的 `config_version` 比代码新（代码回退了：升级代码或从 `data/config/.backup/` 恢复）；⚠️ 覆盖了 `models.yaml` / `pipeline.yaml`：产品更新这些文件的内容不会生效，想跟随就删掉 `data/config` 里那份；⚠️ 版本落后：`pnpm config:migrate` 看改动，`--write` 写回 |
 | `host.power` | `pmset` 里 autorestart 是 1、sleep 是 0 | ⚠️ 没设置：host-setup 第 3 节 |
 

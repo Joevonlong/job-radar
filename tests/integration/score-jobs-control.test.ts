@@ -4,6 +4,7 @@ import { stringify } from "yaml";
 
 import { AiProviderError } from "@/lib/ai/errors";
 import { createProvider } from "@/lib/ai/provider";
+import { createMemoryQuotaStore } from "@/lib/ai/quota-guard";
 import { createAiRouter } from "@/lib/ai/router";
 import type { AiTransport, AiTransportRequest } from "@/lib/ai/types";
 import { processNextControlRequest, registerControlHandler, resetControlHandlers } from "@/lib/control";
@@ -14,6 +15,7 @@ import { runMigrations } from "@/lib/db/migrate";
 import { currentPreferencesSnapshotId, type ScoringDeps, type ScoringProfile } from "@/lib/scoring";
 import { loadControlStatus } from "@/lib/settings/status";
 
+import { usageEntry } from "../ai/helpers";
 import { quietLogger } from "../cycle/helpers";
 import { aiConfig, answer, examplePreferences, exampleMe } from "../scoring/helpers";
 
@@ -187,6 +189,26 @@ describe("the score_jobs control request", () => {
     await requestScoreJobs({ jobIds: [id] });
     const finished = await processNextControlRequest(pollOptions());
     expect(finished).toMatchObject({ status: "failed", result: { scored: 0, error: "score_ai_unavailable" } });
+    expect(await scoreOf(id)).toBeNull();
+  });
+
+  it("Job Radar's usage cap fails the request with its own code and the expected time", async () => {
+    const config = aiConfig((raw) => {
+      raw.quota_guard = { providers: { claude_cli: { hard_requests: 1, cycle_request_cap: 0 } } };
+    });
+    let calls = 0;
+    const quota = createMemoryQuotaStore([usageEntry({ provider: "claude-cli", task: "score", at: new Date(NOW.getTime() - 60_000) })]);
+    const transport: AiTransport = { id: "claude-cli", availability: () => ({ available: true }), call: async () => {
+      calls += 1;
+      return { text: answer({ score: 66 }), model: "m", usage: { tokensIn: 1, tokensOut: 1 } };
+    } };
+    const router = createAiRouter({ config, providers: [createProvider(transport)], usage: null, quota, origin: "control", now: () => NOW, timeZone: "UTC" });
+    registerControlHandler("score_jobs", createScoreJobsHandler({ createDeps: () => deps(router, config) }));
+    const id = await addJob("Waiting");
+    await requestScoreJobs({ jobIds: [id] });
+    const finished = await processNextControlRequest(pollOptions());
+    expect(finished).toMatchObject({ status: "failed", result: { scored: 0, error: "quota_guard", resumeAt: expect.any(String) } });
+    expect(calls).toBe(0);
     expect(await scoreOf(id)).toBeNull();
   });
 

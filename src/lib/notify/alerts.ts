@@ -1,7 +1,9 @@
 import { z } from "zod";
 
 import { monthKey } from "@/lib/channels/budget";
-import type { ChannelsConfig } from "@/lib/config";
+import type { AiConfig, ChannelsConfig } from "@/lib/config";
+import { listProviderHealth } from "@/lib/ai/health";
+import { createDbQuotaStore, readQuotaStatuses, type QuotaLevel, type QuotaReason } from "@/lib/ai/quota-guard";
 import type { Db } from "@/lib/db/client";
 import { getChannelRows, getMonthUsage } from "@/lib/db/repos/channels";
 import { sumAiCostForMonth } from "@/lib/db/repos/ai-usage";
@@ -18,7 +20,7 @@ import {
 import { formatAlert } from "./format";
 import { isTelegramError } from "./telegram-client";
 import { notifyText, type NotifyText } from "./text";
-import { isQuietHours } from "./time";
+import { formatLocalTime, isQuietHours } from "./time";
 import type { NotifyDeps } from "./types";
 
 /**
@@ -35,6 +37,8 @@ export interface AlertCandidate {
   detail: string;
   /** Set for alerts another feature queued as an unsent `notifications` row: that row is updated instead of a new one inserted. */
   notificationId?: number;
+  /** Set for the usage-cap alerts: the provider and the level the alert announces (stored as `notifiedLevel` once dealt with). */
+  quota?: { provider: string; level: QuotaLevel };
 }
 
 export interface AlertChannel {
@@ -61,7 +65,34 @@ export interface AlertInput {
   budgetThresholds: readonly number[];
   /** Whether every AI provider failed for some task in this cycle. */
   aiAllProvidersFailed: boolean;
+  /** Job Radar's AI usage cap per subscription CLI (absent / empty when the cap is off). */
+  aiQuota?: AlertQuotaInput;
 }
+
+/** One guarded provider's usage-cap state, as the alerts need it. */
+export interface AlertQuota {
+  provider: string;
+  level: QuotaLevel;
+  /** `window` = Job Radar's own window cap; `error` = a limit the provider reported (the cooldown). */
+  reason: QuotaReason | null;
+  resumeAt: Date | null;
+  windowRequests: number;
+  hardRequests: number;
+  windowHours: number;
+  /** The level the last usage-cap alert was about (null = none yet). */
+  notifiedLevel: QuotaLevel | null;
+}
+
+export interface AlertQuotaInput {
+  providers: readonly AlertQuota[];
+  /** `quota_guard.notify_recovery`. */
+  notifyRecovery: boolean;
+  now: Date;
+  timeZone: string;
+}
+
+/** The usage-cap alert kinds; their anti-flap window is `quota_guard.alert_dedupe_hours`, not `alerts.dedupe_hours`. */
+export const QUOTA_ALERT_KINDS = ["quota_hard", "quota_cooldown", "quota_recovered"] as const;
 
 /** Channel ids of the LinkedIn session channels: `linkedin-session` and `linkedin-session:recommended`. */
 const LINKEDIN_SESSION_PREFIX = "linkedin-session";
@@ -130,7 +161,54 @@ export function buildAlerts(input: AlertInput, text: NotifyText): AlertCandidate
   if (input.aiAllProvidersFailed) {
     alerts.push({ kind: "ai_failed", key: "all", title: t("alert.aiFailedTitle"), detail: t("alert.aiFailedDetail") });
   }
+  if (input.aiQuota) alerts.push(...quotaAlerts(input.aiQuota, text));
   return alerts;
+}
+
+/**
+ * Pure: the usage-cap alerts, on state changes only (`level` differs from `notifiedLevel`): entering a window cap or a
+ * provider-reported cooldown once, and back to usable once (when `notify_recovery` is on). A state that lasts never
+ * repeats its alert; the per-cycle cap never alerts (it resets every cycle).
+ */
+export function quotaAlerts(input: AlertQuotaInput, text: NotifyText): AlertCandidate[] {
+  const { t } = text;
+  const alerts: AlertCandidate[] = [];
+  for (const q of input.providers) {
+    if (q.level === q.notifiedLevel) continue;
+    const time = q.resumeAt ? formatLocalTime(q.resumeAt, input.timeZone, input.now) : "none";
+    if (q.level === "hard" && q.reason === "window") {
+      alerts.push({
+        kind: "quota_hard",
+        key: q.provider,
+        title: t("alert.quotaHardTitle", { provider: q.provider }),
+        detail: t("alert.quotaHardDetail", { count: q.windowRequests, hours: q.windowHours, cap: q.hardRequests, time }),
+        quota: { provider: q.provider, level: "hard" },
+      });
+    } else if (q.level === "hard" && q.reason === "error") {
+      alerts.push({
+        kind: "quota_cooldown",
+        key: q.provider,
+        title: t("alert.quotaCooldownTitle", { provider: q.provider }),
+        detail: t("alert.quotaCooldownDetail", { time }),
+        quota: { provider: q.provider, level: "hard" },
+      });
+    } else if (q.level === "ok" && q.notifiedLevel === "hard" && input.notifyRecovery) {
+      alerts.push({
+        kind: "quota_recovered",
+        key: q.provider,
+        title: t("alert.quotaRecoveredTitle", { provider: q.provider }),
+        detail: t("alert.quotaRecoveredDetail"),
+        quota: { provider: q.provider, level: "ok" },
+      });
+    }
+  }
+  return alerts;
+}
+
+/** Pure: providers back to usable while `notify_recovery` is off: nothing is sent, the state is only marked as dealt with. */
+export function silentQuotaRecoveries(input: AlertQuotaInput): Array<{ provider: string; level: QuotaLevel }> {
+  if (input.notifyRecovery) return [];
+  return input.providers.filter((q) => q.level === "ok" && q.notifiedLevel === "hard").map((q) => ({ provider: q.provider, level: "ok" as const }));
 }
 
 /**
@@ -186,10 +264,17 @@ export function queuedAlertToCandidate(row: QueuedAlert, text: NotifyText): Aler
   };
 }
 
-/** Pure: drop alerts already sent within `windowHours` (same kind + key) and duplicates inside `candidates`. */
-export function dedupeAlerts(candidates: readonly AlertCandidate[], sent: readonly SentAlert[], input: { now: Date; windowHours: number }): AlertCandidate[] {
-  const since = input.now.getTime() - input.windowHours * 3_600_000;
-  const seen = new Set(sent.filter((s) => s.sentAt.getTime() >= since).map((s) => `${s.kind}\u0000${s.key}`));
+/**
+ * Pure: drop alerts already sent within `windowHours` (same kind + key) and duplicates inside `candidates`. A kind listed
+ * in `windowHoursByKind` uses its own window instead.
+ */
+export function dedupeAlerts(
+  candidates: readonly AlertCandidate[],
+  sent: readonly SentAlert[],
+  input: { now: Date; windowHours: number; windowHoursByKind?: Readonly<Record<string, number>> },
+): AlertCandidate[] {
+  const windowOf = (kind: string): number => input.windowHoursByKind?.[kind] ?? input.windowHours;
+  const seen = new Set(sent.filter((s) => s.sentAt.getTime() >= input.now.getTime() - windowOf(s.kind) * 3_600_000).map((s) => `${s.kind}\u0000${s.key}`));
   const result: AlertCandidate[] = [];
   for (const candidate of candidates) {
     const id = `${candidate.kind}\u0000${candidate.key}`;
@@ -235,6 +320,8 @@ export interface GatherInput {
   budgetThresholds: readonly number[];
   collectResult: unknown;
   aiResult: unknown;
+  /** ai.yaml, for the usage-cap state (`quota_guard`); without it no usage-cap alert is raised. */
+  aiConfig?: Pick<AiConfig, "quota_guard" | "cooldown">;
 }
 
 /** Read the circuit / budget state from the database and assemble the `buildAlerts` input. */
@@ -255,6 +342,8 @@ export async function gatherAlertInput(input: GatherInput): Promise<AlertInput> 
   }
   budgets.push({ scope: "global", usedUsd: paidTotal, capUsd: input.channelsConfig.paid_total_monthly_budget_usd });
   budgets.push({ scope: "ai-api", usedUsd: aiSpent, capUsd: input.aiMonthlyBudgetUsd });
+  // the usage-cap state is read fail-open: a read error only leaves its alerts out
+  const aiQuota = input.aiConfig ? await gatherQuota(input.db, input.aiConfig, input.now, input.timeZone).catch(() => undefined) : undefined;
 
   return {
     channels: channelRows.map((c) => ({ id: c.id, family: c.family, enabled: c.enabled, circuitState: c.circuitState, lastErrorCode: c.lastErrorCode })),
@@ -262,6 +351,27 @@ export async function gatherAlertInput(input: GatherInput): Promise<AlertInput> 
     budgets,
     budgetThresholds: input.budgetThresholds,
     aiAllProvidersFailed: aiAllProvidersFailed(input.aiResult),
+    ...(aiQuota ? { aiQuota } : {}),
+  };
+}
+
+async function gatherQuota(db: Db, config: Pick<AiConfig, "quota_guard" | "cooldown">, now: Date, timeZone: string): Promise<AlertQuotaInput> {
+  const health = await listProviderHealth(db);
+  const statuses = await readQuotaStatuses(createDbQuotaStore(db), config, health, now);
+  return {
+    providers: [...statuses.values()].map((s) => ({
+      provider: s.provider,
+      level: s.level,
+      reason: s.reason,
+      resumeAt: s.resumeAt,
+      windowRequests: s.windowRequests,
+      hardRequests: s.hardRequests,
+      windowHours: s.windowHours,
+      notifiedLevel: s.notifiedLevel,
+    })),
+    notifyRecovery: config.quota_guard.notify_recovery,
+    now,
+    timeZone,
   };
 }
 
@@ -276,11 +386,18 @@ export interface AlertDelivery {
   quiet: boolean;
 }
 
+export interface DeliverAlertsOptions {
+  /** Anti-flap window per kind, overriding `alerts.dedupe_hours` (the usage-cap kinds). */
+  dedupeHoursByKind?: Readonly<Record<string, number>>;
+  /** Called for every alert that was sent or dropped by the dedupe window (not for a failed send or quiet hours). */
+  onHandled?: (alert: AlertCandidate) => Promise<void>;
+}
+
 /**
  * Send the alerts that are not deduped, recording each sent one (kind + key + time) in
  * `notifications`. A failed send is not recorded, so the next cycle retries it.
  */
-export async function deliverAlerts(deps: NotifyDeps, candidates: readonly AlertCandidate[], cycleId: number | null = null): Promise<AlertDelivery> {
+export async function deliverAlerts(deps: NotifyDeps, candidates: readonly AlertCandidate[], cycleId: number | null = null, options: DeliverAlertsOptions = {}): Promise<AlertDelivery> {
   const now = deps.now();
   if (candidates.length === 0) return { sent: 0, deduped: 0, failed: 0, quiet: false };
   if (!deps.config.quiet_hours.alerts_exempt && isQuietHours(now, deps.timeZone, deps.config.quiet_hours)) {
@@ -288,8 +405,10 @@ export async function deliverAlerts(deps: NotifyDeps, candidates: readonly Alert
     return { sent: 0, deduped: 0, failed: 0, quiet: true };
   }
   const windowHours = deps.config.alerts.dedupe_hours;
-  const sentBefore = await listAlertsSentSince(deps.db, new Date(now.getTime() - windowHours * 3_600_000));
-  const fresh = dedupeAlerts(candidates, sentBefore, { now, windowHours });
+  const windowHoursByKind = options.dedupeHoursByKind ?? {};
+  const longest = Math.max(windowHours, ...Object.values(windowHoursByKind));
+  const sentBefore = await listAlertsSentSince(deps.db, new Date(now.getTime() - longest * 3_600_000));
+  const fresh = dedupeAlerts(candidates, sentBefore, { now, windowHours, windowHoursByKind });
   const freshSet = new Set(fresh);
   const result: AlertDelivery = { sent: 0, deduped: candidates.length - fresh.length, failed: 0, quiet: false };
 
@@ -297,6 +416,7 @@ export async function deliverAlerts(deps: NotifyDeps, candidates: readonly Alert
   for (const dropped of candidates.filter((c) => !freshSet.has(c) && c.notificationId !== undefined)) {
     await markNotificationSent(deps.db, dropped.notificationId as number, { messageId: null, sentAt: now, deduped: true });
   }
+  for (const dropped of candidates.filter((c) => !freshSet.has(c))) await handled(deps, options, dropped);
 
   for (const alert of fresh) {
     try {
@@ -313,12 +433,22 @@ export async function deliverAlerts(deps: NotifyDeps, candidates: readonly Alert
         });
       }
       result.sent += 1;
+      await handled(deps, options, alert);
     } catch (error) {
       result.failed += 1;
       deps.logger.warn("alert could not be sent", { kind: alert.kind, key: alert.key, error: isTelegramError(error) ? error.message : "unexpected error" });
     }
   }
   return result;
+}
+
+async function handled(deps: NotifyDeps, options: DeliverAlertsOptions, alert: AlertCandidate): Promise<void> {
+  if (!options.onHandled) return;
+  try {
+    await options.onHandled(alert);
+  } catch (error) {
+    deps.logger.warn("alert follow-up failed", { kind: alert.kind, key: alert.key, error: error instanceof Error ? error.message.slice(0, 200) : "unexpected error" });
+  }
 }
 
 /** Alerts other features queued as unsent `alert.*` rows (e.g. a failed backup), as candidates. */

@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import type { ChannelLogger } from "@/lib/channels/types";
 import type { AiConfig } from "@/lib/config";
 
 import { AiProviderError, QUOTA_PATTERN, registerSecret } from "../errors";
@@ -7,6 +8,7 @@ import { createProvider } from "../provider";
 import type { AiAvailability, AiProvider, AiTokenUsage, AiTransport, AiTransportRequest, AiTransportResponse, JsonSchemaObject } from "../types";
 import { safeDomains, webAccessAllowed } from "../web-tasks";
 import { cliCommandProblem, cliModelProblem } from "./cli-guards";
+import { claudeOutputShape } from "./output-shape";
 import { childEnv, findExecutable, makeScratchDir, processFailure, runProcess, type ProcessRunner } from "./process";
 
 /**
@@ -48,6 +50,8 @@ export interface ClaudeCliOptions {
   findExecutable?: (command: string, env: Record<string, string | undefined>) => string | null;
   /** The installed version (the output of `claude --version`), read only before a web task; null = unknown. */
   readVersion?: (command: string, env: Record<string, string | undefined>) => Promise<string | null>;
+  /** Gets the key names of every reply envelope at debug level (passive check for a usage-limit field; no values). */
+  logger?: Pick<ChannelLogger, "debug">;
 }
 
 /** `2.1.296 (Claude Code)` -> `2.1.296`. */
@@ -243,6 +247,8 @@ export function createClaudeCliTransport(options: ClaudeCliOptions): AiTransport
         if (result.stdout.trim() === "") {
           throw new AiProviderError("claude-cli", "provider_error", `exit code ${result.exitCode ?? "signal"}: ${result.stderr || "no output"}`);
         }
+        const shape = options.logger ? claudeOutputShape(result.stdout) : null;
+        if (shape) options.logger?.debug("claude-cli output shape", { ...shape });
         const output = parseClaudeOutput(result.stdout);
         return { text: output.text, model: output.model ?? model, usage: output.usage };
       } finally {

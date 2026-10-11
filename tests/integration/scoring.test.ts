@@ -9,6 +9,7 @@ import { stringify } from "yaml";
 import { AiProviderError } from "@/lib/ai/errors";
 import { SCORE_PROMPT_VERSION } from "@/lib/ai/prompts/score";
 import { createProvider } from "@/lib/ai/provider";
+import { createMemoryQuotaStore } from "@/lib/ai/quota-guard";
 import { createAiRouter } from "@/lib/ai/router";
 import { createAiStep, registerAiSubtask, resetAiSubtasks } from "@/lib/ai/step";
 import type { AiTransport, AiTransportRequest } from "@/lib/ai/types";
@@ -20,6 +21,7 @@ import { countScoreBacklog, listScoreCandidates } from "@/lib/db/repos/scores";
 import { recordProfileSnapshot } from "@/lib/profile/snapshots";
 import { currentPreferencesSnapshotId, recheckGerman, registerScoringSubtask, rescoreStale, runScoring, scoreBacklog, scoreJobs, SCORE_SUBTASK_NAME, type ScoringDeps, type ScoringProfile } from "@/lib/scoring";
 
+import { usageEntry } from "../ai/helpers";
 import { config as cycleConfig, quietLogger } from "../cycle/helpers";
 import { shippedPipeline } from "../pipeline/helpers";
 import { aiConfig, answer, examplePreferences, exampleMe } from "../scoring/helpers";
@@ -443,6 +445,29 @@ describe("failures", () => {
     const result = await runScoring(deps(fake, { config }), { limit: 6 });
     expect(result).toMatchObject({ scored: 0, failed: 1, stopped: "ai_unavailable", backlog: { unscored: 6, stale: 0 } });
     expect(fake.calls).toHaveLength(1);
+  });
+
+  it("pauses at Job Radar's usage cap: nothing counts as failed, the rest waits, the resume time is kept", async () => {
+    for (let i = 0; i < 3; i += 1) await addJob({ title: `Job ${i}`, age: i + 1 });
+    const config = aiConfig((raw) => {
+      raw.quota_guard = { providers: { claude_cli: { hard_requests: 1, cycle_request_cap: 0 } } };
+    });
+    const calls: string[] = [];
+    const transport: AiTransport = {
+      id: "claude-cli",
+      availability: () => ({ available: true }),
+      async call(request: AiTransportRequest) {
+        calls.push(request.user);
+        return { text: answer(), model: "fake-model", usage: { tokensIn: 1, tokensOut: 1 } };
+      },
+    };
+    const quota = createMemoryQuotaStore([usageEntry({ provider: "claude-cli", task: "score", at: new Date(NOW.getTime() - 60_000) })]);
+    const router = createAiRouter({ config, providers: [createProvider(transport)], usage: null, quota, now: () => NOW, timeZone: "UTC" });
+    const result = await runScoring(deps({ calls: [], router, replies: new Map() }, { config }), { limit: 3 });
+    expect(result).toMatchObject({ scored: 0, failed: 0, stopped: "quota_guard", quotaResumeAt: expect.any(String), backlog: { unscored: 3, stale: 0 } });
+    expect(result.quotaHeldJobIds).toHaveLength(3);
+    expect(result.failures).toEqual([]);
+    expect(calls).toEqual([]);
   });
 
   it("stops at a cancelled cycle", async () => {

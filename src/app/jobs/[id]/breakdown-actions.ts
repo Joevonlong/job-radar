@@ -27,7 +27,7 @@ export type BreakdownActionResult =
 export type BreakdownStatusResult =
   | { ok: true; state: "waiting"; stage: "pending" | "running" }
   | { ok: true; state: "done" }
-  | { ok: false; error: BreakdownErrorKey; detail?: string | null };
+  | { ok: false; error: BreakdownErrorKey; detail?: string | null; resumeAt?: string | null };
 
 /** Break a job's JD down (the button on the breakdown card): queue the request, or report that a current result exists. */
 export async function breakdownJobAction(input: { jobId: number; force?: boolean }): Promise<BreakdownActionResult> {
@@ -51,7 +51,7 @@ export async function breakdownStatusAction(input: { jobId: number; requestId: n
     const state = await readBreakdownRequest(getDb(), parsed.data);
     if (state === null) return { ok: false, error: "not_found" };
     if (state.state === "waiting") return { ok: true, state: "waiting", stage: state.stage };
-    if (state.state === "failed") return { ok: false, error: state.error, detail: state.detail };
+    if (state.state === "failed") return { ok: false, error: state.error, detail: state.detail, resumeAt: state.resumeAt };
     revalidatePath(`/jobs/${parsed.data.jobId}`);
     return { ok: true, state: "done" };
   } catch {

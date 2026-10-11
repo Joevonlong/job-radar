@@ -1,8 +1,12 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
 
-import { aiBacklogCheck, aiWorkerHeartbeatCheck, aiWorkerLaunchdCheck, claudeLoginCheck, codexLoginCheck, configGuardsCheck, parseLaunchctlPrint, profileCheck } from "@/lib/ops/doctor/checks/ai";
+import { aiBacklogCheck, aiQuotaCheck, aiWorkerHeartbeatCheck, aiWorkerLaunchdCheck, claudeLoginCheck, codexLoginCheck, configGuardsCheck, parseLaunchctlPrint, profileCheck } from "@/lib/ops/doctor/checks/ai";
 
+import type { QuotaStatus } from "@/lib/ai/quota-guard";
+import type { AiProviderId } from "@/lib/ai/types";
+
+import { shippedAi } from "../../ai/helpers";
 import { ago, LAUNCHCTL_RUNNING, makeContext, only, ran, sourcesView } from "./helpers";
 
 const LAUNCHCTL = "launchctl print gui/501/io.jobradar.ai-worker";
@@ -278,5 +282,36 @@ describe("config.guards: codex version and Gmail", () => {
     const r = await only(configGuardsCheck, makeContext({ channels: (raw) => { Object.assign((raw.sources as Record<string, Record<string, unknown>>).gmail!, { secure: false, port: 143 }); } }));
     expect(r.status).toBe("warn");
     expect(r.detail).toContain("sources.yaml sources.gmail");
+  });
+});
+
+describe("ai.quota", () => {
+  const status = (provider: "codex-cli" | "claude-cli", over: Partial<QuotaStatus> = {}): [AiProviderId, QuotaStatus] => [
+    provider,
+    { provider, level: "ok", reason: null, resumeAt: null, windowRequests: 3, windowHours: 5, hardRequests: 10, cycleRequestCap: 5, notifiedLevel: null, ...over },
+  ];
+  const withQuota = (entries: Array<[AiProviderId, QuotaStatus]>) =>
+    makeContext({ probes: { sources: async () => sourcesView({ aiConfig: shippedAi(), aiQuota: new Map(entries) }) } });
+
+  it("ok with the window usage of each CLI", async () => {
+    const r = await only(aiQuotaCheck, withQuota([status("codex-cli"), status("claude-cli", { hardRequests: 0 })]));
+    expect(r.status).toBe("ok");
+    expect(r.detail).toContain("codex-cli");
+    expect(r.detail).toContain("3 / 10");
+  });
+
+  it("warns while a window is full or the provider reported a limit, with the time it is expected back", async () => {
+    const r = await only(aiQuotaCheck, withQuota([status("codex-cli", { level: "hard", reason: "window", windowRequests: 10, resumeAt: new Date("2026-10-07T13:30:00Z") }), status("claude-cli")]));
+    expect(r.status).toBe("warn");
+    expect(r.detail).toContain("15:30"); // Berlin
+    expect(r.hint).toBeTruthy();
+    const cooling = await only(aiQuotaCheck, withQuota([status("codex-cli", { level: "hard", reason: "error", resumeAt: null })]));
+    expect(cooling.status).toBe("warn");
+  });
+
+  it("ok and says so when the cap is off", async () => {
+    const r = await only(aiQuotaCheck, makeContext({ ai: (raw) => (raw.quota_guard = { enabled: false }) }));
+    expect(r.status).toBe("ok");
+    expect(r.detail).toBeTruthy();
   });
 });

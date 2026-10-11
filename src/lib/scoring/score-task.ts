@@ -1,7 +1,9 @@
-import { AiProviderError, AiUnavailableError, sanitize } from "@/lib/ai/errors";
+import { AiProviderError, AiUnavailableError, QUOTA_GUARD_CODE as QUOTA_GUARD, quotaGuardResume, sanitize } from "@/lib/ai/errors";
 import { buildScorePrompt, scoreOutputSchemaFor, scorePromptFor, summariesOfAnswer, type ScoreLanguage, type ScoreOutput, type ScoreOutputLanguages, type ScorePromptJob } from "@/lib/ai/prompts/score";
 import { aiOutputLanguages } from "@/lib/i18n/config";
 import { createDefaultProviders } from "@/lib/ai/providers";
+import { createDbHealthStore } from "@/lib/ai/health";
+import { createDbQuotaStore } from "@/lib/ai/quota-guard";
 import { createAiRouter, type AiRouter } from "@/lib/ai/router";
 import { registerAiSubtask, skipSubtask, type AiSubtaskContext, type SkippedSubtask } from "@/lib/ai/step";
 import { createDbUsageStore } from "@/lib/ai/usage";
@@ -91,8 +93,12 @@ export interface ScoringResult {
   backlog: { unscored: number; stale: number };
   /** Postings scored per provider. */
   providers: Record<string, number>;
-  /** Why the run stopped early or did not start: `profile_incomplete`, `market_unresolved`, `ai_unavailable`, `cancelled`. */
+  /** Why the run stopped early or did not start: `profile_incomplete`, `market_unresolved`, `ai_unavailable`, `quota_guard`, `cancelled`. */
   stopped?: string;
+  /** With `stopped: "quota_guard"`: when the usage cap is expected to let the AI work again (ISO; null = the next cycle). */
+  quotaResumeAt?: string | null;
+  /** With `stopped: "quota_guard"`: the picked jobs the cap left unscored (not every unscored job: `per_cycle_limit` leaves some too). */
+  quotaHeldJobIds?: number[];
   /** With `stopped: "profile_incomplete"`: the me.yaml fields to fill in (at least one of them). */
   profileMissing?: ProfileScoringField[];
   failures: ScoringFailure[];
@@ -317,12 +323,15 @@ export async function runScoring(deps: ScoringDeps, options: ScoringOptions): Pr
   const ctx = { profile, snapshotId, bonusCap, forAi, pipeline, language, promptVersion, output };
 
   let next = 0;
+  // the candidates that got an answer or a failure of their own (the rest is what the usage cap held back, if it stopped the run)
+  const tried = new Set<number>();
   const worker = async (): Promise<void> => {
     while (result.stopped === undefined && !deps.signal?.aborted) {
       const candidate = candidates[next++];
       if (candidate === undefined) return;
       try {
         const { provider, rankValue } = await scoreCandidate(deps, ctx, candidate);
+        tried.add(candidate.jobId);
         result.scored += 1;
         result.scoredJobs.push({ jobId: candidate.jobId, rankValue });
         result.providers[provider] = (result.providers[provider] ?? 0) + 1;
@@ -331,6 +340,15 @@ export async function runScoring(deps: ScoringDeps, options: ScoringOptions): Pr
           result.stopped = "cancelled";
           return;
         }
+        // Job Radar's usage cap held the AI back: not a failure of this posting; the rest waits for the next cycle
+        const capped = quotaGuardResume(error);
+        if (capped) {
+          result.stopped ??= QUOTA_GUARD;
+          if (result.stopped === QUOTA_GUARD) result.quotaResumeAt = capped.resumeAt;
+          deps.logger.warn("scoring paused: Job Radar's AI usage cap reached", { jobId: candidate.jobId, resumeAt: capped.resumeAt });
+          return;
+        }
+        tried.add(candidate.jobId);
         result.failed += 1;
         const reason = describe(error);
         if (result.failures.length < MAX_FAILURE_SAMPLES) result.failures.push({ jobId: candidate.jobId, reason });
@@ -341,6 +359,7 @@ export async function runScoring(deps: ScoringDeps, options: ScoringOptions): Pr
   };
   const workers = Math.max(1, Math.min(deps.config.scoring.concurrency, candidates.length));
   await Promise.all(Array.from({ length: workers }, worker));
+  if (result.stopped === QUOTA_GUARD) result.quotaHeldJobIds = candidates.filter((c) => !tried.has(c.jobId)).map((c) => c.jobId);
   if (result.stopped === undefined && deps.signal?.aborted) result.stopped = "cancelled";
   return finish();
 }
@@ -379,7 +398,18 @@ export function createScoringDeps(input: { db: Db; logger: ChannelLogger; timeZo
     logger: input.logger,
     now,
     ...(input.signal ? { signal: input.signal } : {}),
-    router: createAiRouter({ config, providers: createDefaultProviders(config), usage: createDbUsageStore(input.db), timeZone: input.timeZone, now, logger: input.logger }),
+    // a request the user made: the shared cooldowns and the usage cap's window apply, the per-cycle cap does not
+    router: createAiRouter({
+      config,
+      providers: createDefaultProviders(config, { logger: input.logger }),
+      usage: createDbUsageStore(input.db),
+      health: createDbHealthStore(input.db),
+      quota: createDbQuotaStore(input.db),
+      origin: "control",
+      timeZone: input.timeZone,
+      now,
+      logger: input.logger,
+    }),
   };
 }
 
@@ -399,6 +429,8 @@ export async function scoreSubtask(ctx: AiSubtaskContext): Promise<ScoringResult
   }
   // Nothing was scored because the profile is empty: the step records it as skipped with the reason, not as "ok".
   if (result.stopped === PROFILE_INCOMPLETE) return skipSubtask(PROFILE_INCOMPLETE, result);
+  // Nothing was scored because the usage cap holds the AI back: skipped with the reason (the push says how many wait).
+  if (result.stopped === QUOTA_GUARD && result.scored === 0) return skipSubtask(QUOTA_GUARD, result);
   return result;
 }
 

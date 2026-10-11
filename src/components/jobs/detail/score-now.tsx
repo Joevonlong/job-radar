@@ -1,7 +1,7 @@
 "use client";
 
 import { Loader2, Sparkles } from "lucide-react";
-import { useTranslations } from "next-intl";
+import { useFormatter, useTranslations } from "next-intl";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
@@ -10,19 +10,21 @@ import { scoreJobNowAction } from "@/app/jobs/[id]/actions";
 import { useControlStatus } from "@/components/settings/use-control-status";
 import { Button } from "@/components/ui/button";
 import { IDLE_CONTROL_STATE, type ControlActionState } from "@/lib/control/service-types";
+import { formatClock } from "@/lib/format/clock";
 import type { ProfileScoringField } from "@/lib/scoring/profile";
 import { INK_LINK } from "@/components/ui/ink-link";
 
-const ERROR_CODES = ["invalid_payload", "score_failed", "score_stopped", "score_profile_incomplete", "score_ai_unavailable", "handler_error", "no_handler"] as const;
+const ERROR_CODES = ["invalid_payload", "score_failed", "score_stopped", "score_profile_incomplete", "score_ai_unavailable", "quota_guard", "handler_error", "no_handler"] as const;
 
 /**
  * "Score now" for a job that waits for its AI score: asks the runner for a `score_jobs` request for this
  * job, polls the request like the settings controls do and refreshes the page when the score is there.
  * With an incomplete profile scoring cannot start: the button is off and says why, with a link to /me.
  */
-export function ScoreNowButton({ jobId, profileMissing = [] }: { jobId: number; profileMissing?: readonly ProfileScoringField[] }) {
+export function ScoreNowButton({ jobId, profileMissing = [], timeZone }: { jobId: number; profileMissing?: readonly ProfileScoringField[]; timeZone?: string }) {
   const t = useTranslations("dashboard.detail.scoreNow");
   const tProfile = useTranslations("profile.incomplete");
+  const format = useFormatter();
   const router = useRouter();
   const { status, refresh } = useControlStatus(null);
   const [state, setState] = useState<ControlActionState>(IDLE_CONTROL_STATE);
@@ -80,7 +82,7 @@ export function ScoreNowButton({ jobId, profileMissing = [] }: { jobId: number; 
       ) : null}
       {failed ? (
         <p role="alert" className="text-destructive text-xs">
-          {errorCode ? t(`failure.${errorCode}`) : t("failure.unknown")}
+          {errorCode ? t(`failure.${errorCode}`, { time: request?.resumeAt ? formatClock(format, request.resumeAt, timeZone) : "none" }) : t("failure.unknown")}
           {errorCode === "score_profile_incomplete" ? <> {profileLink}</> : null}
         </p>
       ) : null}

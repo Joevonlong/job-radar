@@ -1,3 +1,4 @@
+import { QUOTA_GUARD_CODE } from "@/lib/ai/errors";
 import { loadConfig } from "@/lib/config";
 import type { Db } from "@/lib/db/client";
 import { createScoringDeps, PROFILE_INCOMPLETE, scoreBacklog, scoreJobs, type ScoringDeps, type ScoringResult } from "@/lib/scoring";
@@ -57,6 +58,8 @@ export function createScoreJobsHandler(options: ScoreJobsHandlerOptions = {}): C
     // Nothing could be scored: say why. No AI provider could be used (then every tried posting failed too),
     // some postings failed, the profile is incomplete (which fields), or the run was cancelled.
     if (result.scored === 0 && result.stopped === "ai_unavailable") return { status: "failed", result: { ...summary, error: "score_ai_unavailable" } };
+    // Job Radar's AI usage cap (window, or a limit the provider reported) holds the AI back: say until when
+    if (result.scored === 0 && result.stopped === QUOTA_GUARD_CODE) return { status: "failed", result: { ...summary, error: QUOTA_GUARD_CODE, resumeAt: result.quotaResumeAt ?? null } };
     if (result.scored === 0 && result.failed > 0) return { status: "failed", result: { ...summary, error: "score_failed" } };
     if (result.stopped === PROFILE_INCOMPLETE) return { status: "failed", result: { ...summary, error: "score_profile_incomplete", profileMissing: result.profileMissing ?? [] } };
     if (result.scored === 0 && result.stopped !== undefined) return { status: "failed", result: { ...summary, error: "score_stopped" } };

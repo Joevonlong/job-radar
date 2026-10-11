@@ -32,7 +32,7 @@ export type SalaryLookupActionResult =
 export type SalaryLookupStatusResult =
   | { ok: true; state: "waiting"; stage: "pending" | "running" }
   | { ok: true; state: "done" }
-  | { ok: false; error: SalaryActionErrorKey; detail?: string | null };
+  | { ok: false; error: SalaryActionErrorKey; detail?: string | null; resumeAt?: string | null };
 
 function readAi(): AiConfig | null {
   try {
@@ -71,7 +71,7 @@ export async function salaryLookupStatusAction(input: { jobId: number; requestId
     const state = await readSalaryLookupRequest(db, { ...parsed.data, ...(lookupKey ? { lookupKey } : {}) });
     if (state === null) return { ok: false, error: "not_found" };
     if (state.state === "waiting") return { ok: true, state: "waiting", stage: state.stage };
-    if (state.state === "failed") return { ok: false, error: state.error, detail: state.detail };
+    if (state.state === "failed") return { ok: false, error: state.error, detail: state.detail, resumeAt: state.resumeAt };
     revalidatePath(`/jobs/${parsed.data.jobId}`);
     return { ok: true, state: "done" };
   } catch {

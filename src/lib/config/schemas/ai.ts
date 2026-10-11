@@ -217,6 +217,57 @@ const translation = z.strictObject({
   glossary: z.record(nonEmptyString, nonEmptyString),
 });
 
+/**
+ * The shipped `quota_guard` values, also the defaults of a file written before the block existed (an older user ai.yaml
+ * keeps parsing and gets the same caps as a new install). Defaults = 1.5 x the maximum seen in the maintainer's own usage
+ * (most calls in one window / one cycle); plans differ, so they are tuned in Settings (`pnpm ai:usage-stats` helps).
+ */
+export const QUOTA_GUARD_DEFAULTS = {
+  enabled: true,
+  fallthrough_to_api: false,
+  resume_ratio: 0.8,
+  alert_dedupe_hours: 6,
+  notify_recovery: true,
+  providers: {
+    codex_cli: { window_hours: 5, hard_requests: 861, cycle_request_cap: 554 },
+    claude_cli: { window_hours: 5, hard_requests: 399, cycle_request_cap: 399 },
+  },
+} as const;
+
+/** One subscription CLI's caps: calls (failed ones included) counted from `ai_usage`; 0 = that cap is off. */
+const quotaGuardProvider = (defaults: { window_hours: number; hard_requests: number; cycle_request_cap: number }) =>
+  z.strictObject({
+    /** Length of the rolling window the calls are counted in. */
+    window_hours: positiveInt.max(168).default(defaults.window_hours),
+    /** At this many calls inside the window the provider is paused for every task; 0 = no window cap. */
+    hard_requests: nonNegativeInt.default(defaults.hard_requests),
+    /** Most calls one processing cycle may make (counted from the cycle's start, main and late phase together); 0 = no cycle cap. */
+    cycle_request_cap: nonNegativeInt.default(defaults.cycle_request_cap),
+  });
+
+/**
+ * `quota_guard`: Job Radar's own cap on its use of the subscription CLIs (claude-cli, codex-cli). It counts only the calls
+ * Job Radar made (`ai_usage`); it knows nothing of the account's real remaining quota, so it can only trigger late, never early.
+ */
+const quotaGuard = z.strictObject({
+  /** false = no caps at all (behaviour as before the guard existed). */
+  enabled: z.boolean().default(QUOTA_GUARD_DEFAULTS.enabled),
+  /** false: a task whose subscription CLI was skipped by a cap never falls through to the paid API providers. */
+  fallthrough_to_api: z.boolean().default(QUOTA_GUARD_DEFAULTS.fallthrough_to_api),
+  /** After a window cap the provider resumes once its window count is below this share of `hard_requests` (hysteresis). */
+  resume_ratio: z.number().gt(0).max(1).default(QUOTA_GUARD_DEFAULTS.resume_ratio),
+  /** Alerts fire on state changes; the same alert is still never repeated within this many hours (anti-flap). */
+  alert_dedupe_hours: positiveInt.default(QUOTA_GUARD_DEFAULTS.alert_dedupe_hours),
+  /** Send one Telegram message when a capped or cooling provider is usable again. */
+  notify_recovery: z.boolean().default(QUOTA_GUARD_DEFAULTS.notify_recovery),
+  providers: z
+    .strictObject({
+      codex_cli: quotaGuardProvider(QUOTA_GUARD_DEFAULTS.providers.codex_cli).prefault({}),
+      claude_cli: quotaGuardProvider(QUOTA_GUARD_DEFAULTS.providers.claude_cli).prefault({}),
+    })
+    .prefault({}),
+});
+
 /** config/ai.yaml — provider order, models, limits. */
 export const aiSchema = z.strictObject({
   /**
@@ -322,6 +373,8 @@ export const aiSchema = z.strictObject({
    * it is skipped until the reset time the message names, else for `default_minutes`; never longer than `max_minutes`.
    */
   cooldown: z.strictObject({ default_minutes: positiveInt, max_minutes: positiveInt }),
+  /** Job Radar's own usage cap for the subscription CLIs; absent in a file written before it existed = the shipped defaults. */
+  quota_guard: quotaGuard.prefault({}),
   /** Wall-clock minutes of AI work (score, signals) one cycle may use before the rest waits for the next cycle; 0 = unlimited. */
   cycle_budget_minutes: nonNegativeInt,
   /** Same, for a cycle that found no new jobs (it only works off the backlog); 0 = unlimited. */

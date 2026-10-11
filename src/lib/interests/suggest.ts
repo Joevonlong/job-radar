@@ -15,6 +15,8 @@ import type { ScoreOutputLanguages } from "@/lib/ai/prompts/score";
 import { buildSuggestPrompt, cutDescription, suggestOutputSchemaFor, SUGGEST_PROMPT_VERSION, type SuggestCategory, type SuggestPromptJob } from "@/lib/ai/prompts/suggest";
 import { aiOutputLanguages } from "@/lib/i18n/config";
 import { createDefaultProviders } from "@/lib/ai/providers";
+import { createDbHealthStore } from "@/lib/ai/health";
+import { createDbQuotaStore } from "@/lib/ai/quota-guard";
 import { createAiRouter, type AiRouter } from "@/lib/ai/router";
 import { createDbUsageStore } from "@/lib/ai/usage";
 import type { ChannelLogger } from "@/lib/channels/types";
@@ -192,6 +194,17 @@ export function createSuggestDeps(input: { db: Db; logger: ChannelLogger; timeZo
     logger: input.logger,
     now,
     ...(input.signal ? { signal: input.signal } : {}),
-    router: createAiRouter({ config: aiConfig, providers: createDefaultProviders(aiConfig), usage: createDbUsageStore(input.db), timeZone: input.timeZone, now, logger: input.logger }),
+    // outside a cycle: the shared cooldowns and the usage cap's window apply, the per-cycle cap does not
+    router: createAiRouter({
+      config: aiConfig,
+      providers: createDefaultProviders(aiConfig, { logger: input.logger }),
+      usage: createDbUsageStore(input.db),
+      health: createDbHealthStore(input.db),
+      quota: createDbQuotaStore(input.db),
+      origin: "control",
+      timeZone: input.timeZone,
+      now,
+      logger: input.logger,
+    }),
   };
 }

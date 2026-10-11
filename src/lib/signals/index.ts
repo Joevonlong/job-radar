@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 
 import { AiUnavailableError, type AiRouter } from "@/lib/ai";
+import { QUOTA_GUARD_CODE, quotaGuardResume } from "@/lib/ai/errors";
 import { buildSignalsPrompt } from "@/lib/ai/prompts/signals";
 import { registerAiSubtask, type AiSubtaskContext } from "@/lib/ai/step";
 import type { ChannelLogger } from "@/lib/channels/types";
@@ -289,7 +290,7 @@ export interface AiReviewResult {
   /** The JD changed while the AI worked; the next cycle starts over for those. */
   skipped: number;
   /** Stopped early: cancelled, or too many failures in a row. */
-  stopped: "cancelled" | "failures" | null;
+  stopped: "cancelled" | "failures" | typeof QUOTA_GUARD_CODE | null;
   stats: ReviewStats;
   providers: Record<string, number>;
   jobs: Array<{ jobId: number; provider: string; model: string; stats: ReviewStats }>;
@@ -344,6 +345,11 @@ export async function runAiReview(db: Db, options: AiReviewOptions): Promise<AiR
         break;
       }
       if (!(error instanceof AiUnavailableError)) throw error;
+      // Job Radar's usage cap held the AI back: the remaining jobs wait for a later cycle, nothing failed
+      if (quotaGuardResume(error)) {
+        result.stopped = QUOTA_GUARD_CODE;
+        break;
+      }
       result.failed += 1;
       failuresInRow += 1;
       logger.warn("signals AI review failed for a job", { jobId: job.id, error: error.message });

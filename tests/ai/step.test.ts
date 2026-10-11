@@ -1,13 +1,15 @@
 // @vitest-environment node
 import { afterEach, describe, expect, it } from "vitest";
 
+import { AiUnavailableError } from "@/lib/ai/errors";
+import { createMemoryQuotaStore } from "@/lib/ai/quota-guard";
 import { createAiRouter } from "@/lib/ai/router";
 import { createAiStep, listAiSubtasks, registerAiSubtask, resetAiSubtasks, skipSubtask } from "@/lib/ai/step";
 import { listCycleSteps } from "@/lib/cycle/steps";
 import type { CycleStepContext } from "@/lib/cycle/steps";
 
 import { config as cycleConfig, quietLogger } from "../cycle/helpers";
-import { scriptedProvider, pinnedAi } from "./helpers";
+import { scriptedProvider, pinnedAi, usageEntry } from "./helpers";
 
 afterEach(() => resetAiSubtasks());
 
@@ -68,5 +70,44 @@ describe("ai cycle step frame", () => {
     registerAiSubtask({ name: "a", run: async () => 1 });
     registerAiSubtask({ name: "a", run: async () => 2 });
     expect(listAiSubtasks()).toHaveLength(1);
+  });
+});
+
+describe("ai cycle step: Job Radar's usage cap", () => {
+  const capped = (resumeAt: string | null) =>
+    new AiUnavailableError("score", [{ provider: "codex-cli", outcome: "skipped", kind: "budget", message: "cap", guard: { reason: resumeAt ? "window" : "cycle_cap", resumeAt } }]);
+
+  it("skips the whole step with the code and the earliest resume time when the cap holds every CLI back", async () => {
+    const now = new Date("2026-10-07T10:00:00Z");
+    const config = pinnedAi((raw) => {
+      raw.order = ["codex-cli"];
+      raw.quota_guard = { providers: { codex_cli: { hard_requests: 2, cycle_request_cap: 0 } } };
+    });
+    const entries = [1, 2].map((m) => usageEntry({ provider: "codex-cli", task: "score", at: new Date(now.getTime() - m * 60_000) }));
+    const ran: string[] = [];
+    registerAiSubtask({ name: "score", run: async () => { ran.push("score"); } });
+    const outcome = await createAiStep({
+      loadAiConfig: () => config,
+      createRouter: (_ctx, c) => createAiRouter({ config: c, providers: [scriptedProvider("codex-cli", ["{}"]).provider], usage: null, quota: createMemoryQuotaStore(entries), now: () => now, timeZone: "UTC" }),
+    })(ctx());
+    expect(ran).toEqual([]);
+    expect(outcome).toMatchObject({ result: { subtasks: [], skipped: "quota_guard", resumeAt: expect.any(String), guards: [{ provider: "codex-cli", reason: "window" }] } });
+  });
+
+  it("records a sub-task the cap stopped as skipped (not failed), with its resume time", async () => {
+    registerAiSubtask({ name: "translate", run: async () => { throw capped("2026-10-07T12:00:00.000Z"); } });
+    registerAiSubtask({ name: "summarize", run: async () => { throw capped(null); } });
+    registerAiSubtask({ name: "score", run: async () => skipSubtask("quota_guard", { scored: 0, stopped: "quota_guard", quotaResumeAt: "2026-10-07T13:00:00.000Z" }) });
+    const outcome = await createAiStep(deps)(ctx());
+    expect(outcome).toMatchObject({
+      status: "partial",
+      result: {
+        subtasks: [
+          { name: "translate", status: "skipped", reason: "quota_guard", resumeAt: "2026-10-07T12:00:00.000Z" },
+          { name: "summarize", status: "skipped", reason: "quota_guard", resumeAt: null },
+          { name: "score", status: "skipped", reason: "quota_guard", resumeAt: "2026-10-07T13:00:00.000Z" },
+        ],
+      },
+    });
   });
 });

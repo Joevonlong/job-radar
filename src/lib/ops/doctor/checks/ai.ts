@@ -8,7 +8,7 @@ import { isCodexOlderThan, parseCodexVersion } from "@/lib/ai/providers/codex-ve
 
 import { configGuardFindings } from "../../config-guards";
 import { AI_WORKER_LAUNCHD_LOG, AI_WORKER_LOG_DIR, AI_WORKER_LOG_NAMES } from "../../log-files";
-import { ageSeconds, cached, extractJson, fail, formatAgo, formatDuration, joinList, merge, ok, warn, type Piece, type Spec } from "../helpers";
+import { ageSeconds, cached, extractJson, fail, formatAgo, formatDuration, formatLocal, joinList, merge, ok, warn, type Piece, type Spec } from "../helpers";
 import { loadSources, tryLoadSources } from "../shared";
 import { type CheckOutcome, type DoctorCheck, type DoctorContext } from "../types";
 
@@ -275,6 +275,40 @@ export const aiBacklogCheck: DoctorCheck = {
   },
 };
 
+// ---------------------------------------------------------------- usage cap
+
+const quotaSpec = { id: "ai.quota", group: "ai" } as const;
+
+/**
+ * Job Radar's own AI usage cap of the subscription CLIs (ai.yaml `quota_guard`): ok while no CLI's rolling window is full;
+ * a full window (or a limit the provider reported) warns with the time the CLI is expected back. Only Job Radar's own
+ * calls are counted, so this says nothing about what is left of the account's quota.
+ */
+export const aiQuotaCheck: DoctorCheck = {
+  ...quotaSpec,
+  async run(ctx) {
+    const { t } = ctx;
+    if (!ctx.config.ai.quota_guard.enabled) return ok(quotaSpec, t("checks.ai.quota.off"));
+    const { ai } = await loadSources(ctx);
+    const zone = ctx.config.schedule.timezone;
+    const pieces: Piece[] = [];
+    for (const provider of ai.providers) {
+      const quota = provider.quota;
+      if (quota === null) continue;
+      const usage = quota.hardRequests > 0 ? t("checks.ai.quota.usage", { used: quota.windowRequests, cap: quota.hardRequests, hours: quota.windowHours }) : t("checks.ai.quota.usageOff", { used: quota.windowRequests, hours: quota.windowHours });
+      if (quota.level !== "hard") {
+        pieces.push({ status: "ok", detail: t("checks.ai.quota.ok", { provider: provider.id, usage }) });
+        continue;
+      }
+      const until = quota.resumeAt ? formatLocal(quota.resumeAt, zone) : t("checks.ai.quota.unknownTime");
+      const detail = quota.reason === "error" ? t("checks.ai.quota.cooling", { provider: provider.id, until }) : t("checks.ai.quota.hard", { provider: provider.id, until, usage });
+      pieces.push({ status: "warn", detail, hint: t("checks.ai.quota.hint") });
+    }
+    if (pieces.length === 0) return ok(quotaSpec, t("checks.ai.quota.none"));
+    return merge(ctx, quotaSpec, pieces);
+  },
+};
+
 // ---------------------------------------------------------------- config guards
 
 const guardsSpec = { id: "config.guards", group: "ai" } as const;
@@ -313,5 +347,5 @@ export const configGuardsCheck: DoctorCheck = {
   },
 };
 
-export const AI_CHECKS: readonly DoctorCheck[] = [aiWorkerLaunchdCheck, aiWorkerHeartbeatCheck, claudeLoginCheck, codexLoginCheck, profileCheck, configGuardsCheck];
+export const AI_CHECKS: readonly DoctorCheck[] = [aiWorkerLaunchdCheck, aiWorkerHeartbeatCheck, claudeLoginCheck, codexLoginCheck, profileCheck, aiQuotaCheck, configGuardsCheck];
 export const BACKLOG_CHECKS: readonly DoctorCheck[] = [aiBacklogCheck];

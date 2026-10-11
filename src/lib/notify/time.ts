@@ -42,6 +42,12 @@ export function formatLocalShort(date: Date, timeZone: string): string {
   return `${d.slice(5)} ${hh}:${mm}`;
 }
 
+/** `HH:mm` of `date` in `timeZone`; `MM-DD HH:mm` when it falls on another local day than `now`. */
+export function formatLocalTime(date: Date, timeZone: string, now: Date): string {
+  const short = formatLocalShort(date, timeZone);
+  return localDate(date, timeZone) === localDate(now, timeZone) ? short.slice(6) : short;
+}
+
 export interface QuietHours {
   enabled: boolean;
   start: string;

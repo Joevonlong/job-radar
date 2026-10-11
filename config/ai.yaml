@@ -137,6 +137,37 @@ cooldown:
   default_minutes: 60
   max_minutes: 360
 
+# Job Radar's own AI usage cap for the subscription CLIs, not your account's remaining quota.
+# The claude / codex subscription is shared with your own use, and Job Radar cannot see how much of it is left: it only counts
+# the calls it made itself (ai_usage, failed calls included). So the cap can only trigger later than the real limit, never earlier;
+# a real limit reached anyway is still caught by the cooldown above.
+#   hard_requests      calls within the last window_hours that pause the provider for every task (also your own clicks) until
+#                      the window has slid far enough; 0 = no window cap
+#   cycle_request_cap  calls one processing cycle may make; the rest of the cycle skips the provider, the next cycle counts anew.
+#                      Your own requests (translate, score now, test) are not held back by it; 0 = no cycle cap
+# Defaults = 1.5 x the maximum seen in the maintainer's own usage (most calls in one window / one cycle). Plans differ:
+# tune them in Settings (AI tab, "Limits"); `pnpm ai:usage-stats` prints your own numbers and suggested caps (read only).
+quota_guard:
+  # false = no usage cap at all
+  enabled: true
+  # false: when a cap skips a subscription CLI, the task never falls through to the paid API providers (no silent spending)
+  fallthrough_to_api: false
+  # after a window cap, resume once the window count is below this share of hard_requests
+  resume_ratio: 0.8
+  # alerts are sent when the state changes; the same alert is never repeated within this many hours (anti-flap)
+  alert_dedupe_hours: 6
+  # send one Telegram message when a provider is usable again
+  notify_recovery: true
+  providers:
+    codex_cli:
+      window_hours: 5
+      hard_requests: 861
+      cycle_request_cap: 554
+    claude_cli:
+      window_hours: 5
+      hard_requests: 399
+      cycle_request_cap: 399
+
 # Max minutes of AI work (scoring, signals) per run; the rest waits for the next run; 0 = unlimited. Push goes out right after scoring; translation comes after push.
 cycle_budget_minutes: 30
 # Budget for a run with no new jobs (only working through the backlog); 0 = unlimited

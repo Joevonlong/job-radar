@@ -14,6 +14,7 @@ import { SkillOverlap } from "@/components/viz/skill-overlap";
 import { REQUIREMENT_LEVELS, type RequirementLevel } from "@/lib/breakdown/constants";
 import type { InitialBreakdownRequest } from "@/lib/control/breakdown-request";
 import type { BreakdownQuote, BreakdownView, BreakdownViewItem, BreakdownViewTech } from "@/lib/breakdown/view";
+import { formatClock } from "@/lib/format/clock";
 import { BREAKDOWN_WAIT_MAX_MS, STATUS_POLL_MS } from "@/lib/settings/constants";
 import { toastTone } from "@/lib/toast";
 import { bcp47 } from "@/lib/i18n/languages";
@@ -56,8 +57,13 @@ function Cap({ children }: { children: ReactNode }) {
  */
 export function BreakdownPanel({ jobId, availability, hasDescription, view, initialRequest = null, timeZone }: BreakdownPanelProps) {
   const t = useTranslations("jdBreakdown");
+  const format = useFormatter();
   const router = useRouter();
-  const [error, setError] = useState<{ key: BreakdownErrorKey | "waitTimeout"; detail: string | null } | null>(initialRequest?.state === "failed" ? { key: initialRequest.error, detail: initialRequest.detail } : null);
+  const [error, setError] = useState<{ key: BreakdownErrorKey | "waitTimeout"; detail: string | null; resumeAt?: string | null } | null>(
+    initialRequest?.state === "failed" ? { key: initialRequest.error, detail: initialRequest.detail, resumeAt: initialRequest.resumeAt } : null,
+  );
+  // the time Job Radar's AI usage cap is expected to let the AI work again (a `quota_guard` failure); "none" = not known
+  const resumeTime = (resumeAt: string | null | undefined): string => (resumeAt ? formatClock(format, resumeAt, timeZone) : "none");
   const [pending, startTransition] = useTransition();
   const [waiting, setWaiting] = useState<WaitingRequest | null>(initialRequest?.state === "waiting" ? { requestId: initialRequest.requestId, stage: initialRequest.stage } : null);
   const requestId = waiting?.requestId ?? null;
@@ -71,9 +77,9 @@ export function BreakdownPanel({ jobId, availability, hasDescription, view, init
     setError(null);
   }
 
-  const fail = (key: BreakdownErrorKey | "waitTimeout", detail: string | null = null): void => {
-    setError({ key, detail });
-    toastTone("error", t(`error.${key}`));
+  const fail = (key: BreakdownErrorKey | "waitTimeout", detail: string | null = null, resumeAt: string | null = null): void => {
+    setError({ key, detail, resumeAt });
+    toastTone("error", t(`error.${key}`, { time: resumeTime(resumeAt) }));
   };
 
   // Poll the queued request until the ai-worker has finished it (or the wait limit is up).
@@ -99,7 +105,7 @@ export function BreakdownPanel({ jobId, availability, hasDescription, view, init
         return;
       } else if (result) {
         setWaiting(null);
-        fail(result.error, result.detail ?? null);
+        fail(result.error, result.detail ?? null, result.resumeAt ?? null);
         return;
       }
       if (Date.now() - startedAt >= BREAKDOWN_WAIT_MAX_MS) {
@@ -158,7 +164,7 @@ export function BreakdownPanel({ jobId, availability, hasDescription, view, init
   const errorBlock = error && !busy ? (
     <div role="alert" className="text-bad text-body-sm [overflow-wrap:anywhere]" data-testid="jd-breakdown-error">
       <p className="font-semibold">
-        {t(`error.${error.key}`)}
+        {t(`error.${error.key}`, { time: resumeTime(error.resumeAt) })}
         {error.key === "waitTimeout" ? (
           <>
             {" "}

@@ -1,6 +1,6 @@
 import { AiProviderError } from "@/lib/ai";
 import type { AiRouter } from "@/lib/ai/router";
-import { classifyTranslationFailure, TranslationIncompleteError } from "@/lib/translation/errors";
+import { classifyTranslationFailure, resumeOf, TranslationIncompleteError } from "@/lib/translation/errors";
 import { createRequestRouter } from "@/lib/translation/router";
 import { ensureTranslation, type TranslationSettings } from "@/lib/translation/service";
 
@@ -32,9 +32,12 @@ export function createTranslateJobHandler(options: TranslateJobHandlerOptions = 
     } catch (error) {
       if (error instanceof AiProviderError && error.kind === "aborted") return { status: "failed", result: { jobId, error: "aborted" } };
       // The pieces that were translated stay saved (`translation_progress`); the result names the real cause and how far it got.
-      if (error instanceof TranslationIncompleteError) return { status: "failed", result: { jobId, error: error.failure.code, detail: error.failure.message, done: error.done, total: error.total } };
+      if (error instanceof TranslationIncompleteError) {
+        const { failure } = error;
+        return { status: "failed", result: { jobId, error: failure.code, detail: failure.message, done: error.done, total: error.total, ...resumeOf(failure) } };
+      }
       const failure = classifyTranslationFailure(error);
-      return { status: "failed", result: { jobId, error: failure.code, detail: failure.message } };
+      return { status: "failed", result: { jobId, error: failure.code, detail: failure.message, ...resumeOf(failure) } };
     }
   };
 }

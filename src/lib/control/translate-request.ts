@@ -14,6 +14,7 @@ import { languageSettings, translationTarget } from "@/lib/i18n/config";
 /** The translation target as the web sees it now (no watcher in the web app: read the small file fresh). */
 const currentTarget = (): string => translationTarget(languageSettings({ fresh: true }));
 import { sameLanguage } from "@/lib/i18n/languages";
+import { resumeAtOf } from "./request-view-schema";
 
 /** Error codes the translation tab has labels for: the real cause of a failure (`TranslationFailureCode`) plus the request-level ones. */
 export type TranslateErrorCode = TranslationFailureCode | "not_found" | "no_description" | "same_language" | "aborted";
@@ -52,7 +53,8 @@ export type TranslateRequestState =
   /** `partial`: how far the translation is (pieces done / total) and the text so far; null before the first piece. */
   | { state: "waiting"; stage: "pending" | "running"; partial: PartialTranslation | null }
   | { state: "done"; translation: JobTranslation }
-  | { state: "failed"; error: TranslateErrorCode; detail: string | null; partial: PartialTranslation | null };
+  /** `resumeAt`: with `quota_guard`, when Job Radar's AI usage cap is expected to let the AI work again (ISO; null = not known). */
+  | { state: "failed"; error: TranslateErrorCode; detail: string | null; partial: PartialTranslation | null; resumeAt: string | null };
 
 /** Where a queued translation stands. `jobId` must be the request's job: a request id alone never reveals another job's translation. */
 export async function readTranslateRequest(db: Db, input: { requestId: number; jobId: number }): Promise<TranslateRequestState | null> {
@@ -61,17 +63,18 @@ export async function readTranslateRequest(db: Db, input: { requestId: number; j
   if (!request || request.kind !== "translate_job" || payload.jobId !== input.jobId) return null;
   if (request.status === "pending" || request.status === "running") return { state: "waiting", stage: request.status, partial: await readPartialTranslation(db, input.jobId) };
   if (request.status === "failed") {
-    const result = typeof request.result === "object" && request.result !== null ? (request.result as { error?: unknown; detail?: unknown }) : {};
+    const result = typeof request.result === "object" && request.result !== null ? (request.result as { error?: unknown; detail?: unknown; resumeAt?: unknown }) : {};
     return {
       state: "failed",
       error: ERROR_CODES.find((c) => c === result.error) ?? "failed",
       detail: typeof result.detail === "string" ? result.detail : null,
       partial: await readPartialTranslation(db, input.jobId),
+      resumeAt: resumeAtOf(result.resumeAt),
     };
   }
   const job = await getJobForTranslation(db, input.jobId);
   const stored = await getTranslation(db, input.jobId, currentTarget());
-  if (!job || !stored) return { state: "failed", error: "failed", detail: null, partial: null };
+  if (!job || !stored) return { state: "failed", error: "failed", detail: null, partial: null, resumeAt: null };
   return { state: "done", translation: toJobTranslation(stored, job.description) };
 }
 

@@ -232,6 +232,11 @@ export interface SummaryInput {
   overflow: number;
   failedSources: Array<{ channelId: string; reasons: string[] }>;
   publicBaseUrl: string | null;
+  /**
+   * New jobs of this cycle left unscored because Job Radar's AI usage cap held the AI back, and when it is expected to
+   * work again (local `HH:mm`, or "none" = the next cycle). The last line of the summary; no line when absent or 0.
+   */
+  quotaHeld?: { count: number; time: string };
 }
 
 export function formatSummary(input: SummaryInput, text: NotifyText): string {
@@ -248,6 +253,7 @@ export function formatSummary(input: SummaryInput, text: NotifyText): string {
     lines.push(escapeHtml(t("summary.failedSources", { sources })));
   }
   if (input.publicBaseUrl) lines.push(link(t("summary.openBoard"), input.publicBaseUrl));
+  if (input.quotaHeld && input.quotaHeld.count > 0) lines.push(escapeHtml(t("summary.quotaHeld", { count: input.quotaHeld.count, time: input.quotaHeld.time })));
   return lines.join("\n");
 }
 

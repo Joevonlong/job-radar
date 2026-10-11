@@ -6,8 +6,17 @@ import { type AiModelSource } from "@/lib/ai-usage/constants";
 import { cliDefaultModel, findCatalogModel, type AiConfig, type ModelsConfig } from "@/lib/config";
 
 import { loadModelCatalog } from "./catalog";
-import { AiProviderError, AiUnavailableError, sanitize, type AiAttempt } from "./errors";
+import { AiProviderError, AiUnavailableError, sanitize, type AiAttempt, type AiQuotaGuardMark } from "./errors";
 import { cooldownUntil, createMemoryHealthStore, healthDay, isCoolingDown, requestsOn, type AiHealthStore } from "./health";
+import {
+  evaluateQuota,
+  isQuotaGuarded,
+  nextQuotaState,
+  quotaPolicy,
+  quotaStateChanged,
+  type AiQuotaStore,
+  type AiRequestOrigin,
+} from "./quota-guard";
 import { toJsonSchema } from "./schema-to-json";
 import type { AiCallRecord, AiPrompt, AiProvider, AiProviderId, AiResult, AiRunOptions, AiTask } from "./types";
 import { CODEX_DEFAULT_MODEL } from "./providers/codex-cli";
@@ -49,9 +58,24 @@ export interface AiRouterOptions {
    * catalog); null: no catalog (API providers are skipped, the subscription CLIs are unaffected).
    */
   catalog?: ModelsConfig | null;
+  /**
+   * Job Radar's own usage cap for the subscription CLIs (ai.yaml `quota_guard`): where the calls are counted and the
+   * window state is kept. Omitted / null: no cap (an error cooldown still applies, as before).
+   */
+  quota?: AiQuotaStore | null;
+  /** Who asks: `cycle` (default) is held back by the per-cycle cap too; `control` (a request the user made) only by the window cap and a cooldown. */
+  origin?: AiRequestOrigin;
+  /** When the current cycle started: the per-cycle cap counts the calls since then. null / omitted: no per-cycle cap. */
+  cycleStartedAt?: Date | null;
 }
 
 const POLICY_KEY = { "claude-cli": "claude_cli", "codex-cli": "codex_cli", anthropic: "anthropic", deepseek: "deepseek", mimo: "mimo" } as const;
+
+interface GateBlock {
+  kind: AiProviderError["kind"];
+  message: string;
+  guard?: AiQuotaGuardMark;
+}
 
 const clock = (at: Date, timeZone: string): string => new Intl.DateTimeFormat("en-GB", { timeZone, hour: "2-digit", minute: "2-digit" }).format(at);
 
@@ -71,6 +95,9 @@ export function createAiRouter(options: AiRouterOptions): AiRouter {
   const logger = options.logger;
   const health = options.health === undefined ? createMemoryHealthStore() : options.health;
   const deadline = options.deadline ?? null;
+  const quota = options.quota && config.quota_guard.enabled ? options.quota : null;
+  const origin: AiRequestOrigin = options.origin ?? "cycle";
+  const cycleStartedAt = options.cycleStartedAt ?? null;
   const getCatalog = (): ModelsConfig | null => (options.catalog === undefined ? loadModelCatalog(logger) : options.catalog);
   /** A health store that is down must never take the AI layer down with it. */
   const safely = async <R>(what: string, fn: (store: AiHealthStore) => Promise<R>): Promise<R | undefined> => {
@@ -172,8 +199,57 @@ export function createAiRouter(options: AiRouterOptions): AiRouter {
     }
   };
 
+  /**
+   * The usage cap of a subscription CLI: the rolling window (every origin) and this cycle's cap (`cycle` origin only).
+   * Stores the window state when it changes. A count that cannot be read lets the call through (fail-open).
+   */
+  const quotaGate = async (id: AiProviderId): Promise<GateBlock | null> => {
+    if (!quota || !isQuotaGuarded(id)) return null;
+    const policy = quotaPolicy(config, id);
+    if (!policy) return null;
+    try {
+      const at = now();
+      const previous = await quota.getState(id);
+      const rows = policy.hardRequests > 0 ? await quota.usageSince(id, new Date(at.getTime() - policy.windowHours * 3_600_000)) : [];
+      const evaluation = evaluateQuota(rows, policy, at, previous);
+      const next = nextQuotaState(previous, evaluation, at);
+      if (quotaStateChanged(previous, next)) {
+        await quota.setState(id, next);
+        if (next.level !== (previous?.level ?? "ok")) {
+          logger?.warn(next.level === "hard" ? "ai usage cap reached, provider paused" : "ai usage cap cleared, provider resumed", {
+            provider: id,
+            windowRequests: evaluation.windowRequests,
+            hardRequests: policy.hardRequests,
+            resumeAt: evaluation.resumeAt?.toISOString() ?? null,
+          });
+        }
+      }
+      if (evaluation.level === "hard") {
+        const back = evaluation.resumeAt ? `; back around ${clock(evaluation.resumeAt, timeZone)}` : "";
+        return {
+          kind: "budget",
+          message: `Job Radar's own usage cap reached (${evaluation.windowRequests} calls in ${policy.windowHours}h, cap ${policy.hardRequests})${back}`,
+          guard: { reason: "window", resumeAt: evaluation.resumeAt?.toISOString() ?? null },
+        };
+      }
+      if (origin === "cycle" && cycleStartedAt && policy.cycleRequestCap > 0) {
+        const used = await quota.countSince(id, cycleStartedAt);
+        if (used >= policy.cycleRequestCap) {
+          return {
+            kind: "budget",
+            message: `Job Radar's per-cycle cap of ${policy.cycleRequestCap} calls reached (${used} this cycle); continues next cycle`,
+            guard: { reason: "cycle_cap", resumeAt: null },
+          };
+        }
+      }
+    } catch (error) {
+      logger?.warn("ai usage cap could not be checked, the call is allowed", { provider: id, error: error instanceof Error ? sanitize(error.message) : "unknown" });
+    }
+    return null;
+  };
+
   /** Why `id` cannot be tried right now (not installed, turned off, cooling down, over its cap, out of budget); null = go ahead. */
-  const gate = async (id: AiProviderId, task: AiTask): Promise<{ kind: AiProviderError["kind"]; message: string } | null> => {
+  const gate = async (id: AiProviderId, task: AiTask): Promise<GateBlock | null> => {
     const provider = providers.get(id);
     if (!provider) return { kind: "not_configured", message: "provider not available" };
     const disabledReason = disabled.get(id);
@@ -182,11 +258,19 @@ export function createAiRouter(options: AiRouterOptions): AiRouter {
     if (!policy.enabled) return { kind: "not_configured", message: "turned off in ai.yaml (enabled: false)" };
     const state = await safely("read", (store) => store.get(id));
     if (state && isCoolingDown(state, now())) {
-      return { kind: "rate_limited", message: `cooling down until ${clock(state.coolingUntil as Date, timeZone)} (${state.lastErrorMessage ?? "limit reached"})`.slice(0, 400) };
+      const until = state.coolingUntil as Date;
+      return {
+        kind: "rate_limited",
+        message: `cooling down until ${clock(until, timeZone)} (${state.lastErrorMessage ?? "limit reached"})`.slice(0, 400),
+        // a limit the provider reported is the usage cap's third reason (it shows and alerts as such)
+        ...(quota && isQuotaGuarded(id) ? { guard: { reason: "error", resumeAt: until.toISOString() } satisfies AiQuotaGuardMark } : {}),
+      };
     }
     if (state && policy.daily_request_cap > 0 && requestsOn(state, healthDay(now(), timeZone)) >= policy.daily_request_cap) {
       return { kind: "budget", message: `daily request cap of ${policy.daily_request_cap} reached` };
     }
+    const capped = await quotaGate(id);
+    if (capped) return capped;
     const availability = provider.availability();
     if (!availability.available) return { kind: "not_configured", message: availability.reason ?? "not configured" };
     if (provider.kind === "api") {
@@ -205,15 +289,31 @@ export function createAiRouter(options: AiRouterOptions): AiRouter {
     return null;
   };
 
+  /** After the usage cap held a subscription CLI back, the paid API tier is not tried (`fallthrough_to_api: false`). */
+  const apiClosed = (heldBack: boolean, id: AiProviderId): GateBlock | null =>
+    heldBack && !config.quota_guard.fallthrough_to_api && providers.get(id)?.kind === "api"
+      ? { kind: "budget", message: "not tried: Job Radar's usage cap held the subscription CLIs back and quota_guard.fallthrough_to_api is false" }
+      : null;
+  const holdsBack = (block: GateBlock | null): boolean => block?.guard?.reason === "window" || block?.guard?.reason === "cycle_cap";
+  const toAttempt = (id: AiProviderId, block: GateBlock): AiAttempt => ({
+    provider: id,
+    outcome: "skipped",
+    kind: block.kind,
+    message: block.message,
+    ...(block.guard ? { guard: block.guard } : {}),
+  });
+
   return {
     plan: (task) => resolveProviderOrder(config, task),
 
     async usable(task) {
       const blocked: AiAttempt[] = [];
+      let heldBack = false;
       for (const id of resolveProviderOrder(config, task)) {
-        const reason = await gate(id, task);
+        const reason = apiClosed(heldBack, id) ?? (await gate(id, task));
         if (!reason) return { usable: true, blocked };
-        blocked.push({ provider: id, outcome: "skipped", kind: reason.kind, message: reason.message });
+        heldBack ||= holdsBack(reason);
+        blocked.push(toAttempt(id, reason));
       }
       return { usable: false, blocked };
     },
@@ -229,6 +329,7 @@ export function createAiRouter(options: AiRouterOptions): AiRouter {
         }
         throw new AiUnavailableError(task, attempts);
       }
+      let heldBack = false;
       for (const id of resolveProviderOrder(config, task)) {
         const provider = providers.get(id);
         const noteAttempt = (attempt: AiAttempt): void => {
@@ -247,9 +348,13 @@ export function createAiRouter(options: AiRouterOptions): AiRouter {
           skip("not_configured", "cannot search the web (this task needs claude-cli, codex-cli or anthropic)");
           continue;
         }
-        const blocked = await gate(id, task);
+        const blocked = apiClosed(heldBack, id) ?? (await gate(id, task));
         if (blocked || !provider) {
-          if (blocked) skip(blocked.kind, blocked.message);
+          if (blocked) {
+            heldBack ||= holdsBack(blocked);
+            noteAttempt(toAttempt(id, blocked));
+            logger?.debug("ai provider skipped", { provider: id, task, kind: blocked.kind, ...(blocked.guard ? { guard: blocked.guard.reason } : {}) });
+          }
           continue;
         }
         const today = healthDay(now(), timeZone);
@@ -285,7 +390,13 @@ export function createAiRouter(options: AiRouterOptions): AiRouter {
           await safely("failure", (store) => store.noteFailure(id, now(), { kind: error.kind, message: error.message, coolingUntil }));
           if (coolingUntil) logger?.warn("ai provider cooling down", { provider: id, until: coolingUntil.toISOString() });
           if (error.kind === "auth" || error.kind === "not_configured") disabled.set(id, error.message);
-          noteAttempt({ provider: id, outcome: "failed", kind: error.kind, message: error.message });
+          noteAttempt({
+            provider: id,
+            outcome: "failed",
+            kind: error.kind,
+            message: error.message,
+            ...(coolingUntil && quota && isQuotaGuarded(id) ? { guard: { reason: "error", resumeAt: coolingUntil.toISOString() } satisfies AiQuotaGuardMark } : {}),
+          });
           logger?.warn("ai provider failed, trying the next one", { provider: id, task, kind: error.kind, error: error.message });
         }
       }

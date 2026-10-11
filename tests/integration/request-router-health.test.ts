@@ -9,6 +9,7 @@ import { createSalaryLookupHandler } from "@/lib/control/salary-lookup";
 import { createTranslateJobHandler } from "@/lib/control/translate-job";
 import { closeDb, getDb, schema } from "@/lib/db";
 import { runMigrations } from "@/lib/db/migrate";
+import { insertAiUsage } from "@/lib/db/repos/ai-usage";
 import { insertControlRequest } from "@/lib/db/repos/control-requests";
 import { createRequestRouter } from "@/lib/translation/router";
 
@@ -75,13 +76,35 @@ beforeAll(async () => {
 });
 beforeEach(async () => {
   await db().execute(sql`delete from runtime_state where key like 'ai_provider:%'`);
-  await db().execute(sql`truncate table jobs, companies, ai_usage, salary_lookups restart identity cascade`);
+  await db().execute(sql`truncate table jobs, companies, ai_usage, salary_lookups, cycles restart identity cascade`);
 });
 afterAll(async () => {
   await closeDb();
 });
 
 describe("on-demand AI requests share the provider health of the runner and the ai-worker", () => {
+  it("a translate request ignores a full per-cycle cap, and stops at a full window with quota_guard and the resume time", async () => {
+    await db().execute(sql`delete from runtime_state where key like 'ai_quota:%'`);
+    const config = pinnedAi((raw) => {
+      (raw.tasks as Record<string, unknown>).translate = { order: ["codex-cli"] };
+      raw.quota_guard = { providers: { codex_cli: { window_hours: 5, hard_requests: 5, cycle_request_cap: 2 }, claude_cli: { hard_requests: 0, cycle_request_cap: 0 } } };
+    });
+    // a cycle started 30 minutes ago and already made 3 codex calls: over its per-cycle cap of 2
+    await db().insert(schema.cycles).values({ kind: "weekday_morning", startedAt: new Date(NOW.getTime() - 30 * 60_000) });
+    const used = (count: number) => Promise.all(Array.from({ length: count }, (_, i) => insertAiUsage(db(), { provider: "codex-cli", task: "score", tokensIn: 1, tokensOut: 1, costEstimate: 0, at: new Date(NOW.getTime() - (i + 1) * 60_000) })));
+    await used(3);
+    const codex = scriptedProvider("codex-cli", [translated, translated]);
+    const handler = createTranslateJobHandler({ createRouter: (ctx) => createRequestRouter(ctx.db, ctx.logger, { config, providers: [codex.provider], timeZone: TZ, now: () => NOW }) });
+    const jobId = await addJob("ML Engineer");
+    expect(await handler(await insertControlRequest(db(), { kind: "translate_job", payload: { jobId, force: false } }), context())).toMatchObject({ status: "done", result: { provider: "codex-cli" } });
+
+    // 3 + the translation + 1 more = 5 calls in the window: the window cap holds every request back
+    await used(1);
+    const outcome = await handler(await insertControlRequest(db(), { kind: "translate_job", payload: { jobId, force: true } }), context());
+    expect(outcome).toMatchObject({ status: "failed", result: { error: "quota_guard", resumeAt: expect.any(String) } });
+    expect(codex.transport.calls).toHaveLength(1);
+  });
+
   it("a translate request skips a provider at its daily cap and counts the call against the one it used", async () => {
     // the runner already used codex's one request today
     await createDbHealthStore(db()).noteRequest("codex-cli", NOW, healthDay(NOW, TZ));

@@ -33,3 +33,17 @@ export async function listRuntimeState(db: Db, prefix: string): Promise<RuntimeS
     .from(runtimeState)
     .where(like(runtimeState.key, `${escaped}%`));
 }
+
+/**
+ * Writes part of a JSON object without a read: a new row gets `insert`, an existing one keeps its other keys and gets the
+ * keys of `patch` (a jsonb `||` merge in one statement, so two writers of different keys never undo each other).
+ */
+export async function mergeRuntimeState(db: Db, key: string, values: { insert: Record<string, unknown>; patch: Record<string, unknown> }): Promise<void> {
+  await db
+    .insert(runtimeState)
+    .values({ key, value: values.insert })
+    .onConflictDoUpdate({
+      target: runtimeState.key,
+      set: { value: sql`(case when jsonb_typeof(${runtimeState.value}) = 'object' then ${runtimeState.value} else '{}'::jsonb end) || ${JSON.stringify(values.patch)}::jsonb`, updatedAt: sql`now()` },
+    });
+}

@@ -7,8 +7,9 @@
  */
 import { z } from "zod";
 
-import { AiProviderError, AiUnavailableError } from "@/lib/ai/errors";
+import { AiProviderError, AiUnavailableError, QUOTA_GUARD_CODE, quotaGuardResume } from "@/lib/ai/errors";
 import { createDbHealthStore, type AiHealthStore } from "@/lib/ai/health";
+import { createDbQuotaStore, type AiQuotaStore } from "@/lib/ai/quota-guard";
 import { createDefaultProviders } from "@/lib/ai/providers";
 import { createAiRouter } from "@/lib/ai/router";
 import type { AiProvider, AiProviderId } from "@/lib/ai/types";
@@ -27,6 +28,7 @@ export interface TestAiDeps {
   providers?: (config: AiConfig) => readonly AiProvider[];
   usage?: (db: Db) => AiUsageStore;
   health?: (db: Db) => AiHealthStore;
+  quota?: (db: Db) => AiQuotaStore;
   now?: () => Date;
 }
 
@@ -51,6 +53,9 @@ export function createTestAiHandler(deps: TestAiDeps = {}): ControlHandler {
       usage: { record: (entry) => usage.record({ ...entry, task: AI_PROBE_TASK }), apiSpendUsd: (month, timeZone) => usage.apiSpendUsd(month, timeZone) },
       timeZone: deps.timeZone ?? loadConfig("schedule").timezone,
       health: (deps.health ?? createDbHealthStore)(context.db),
+      // the user pressed "test": the usage cap's window and a cooldown apply, the per-cycle cap does not
+      quota: (deps.quota ?? createDbQuotaStore)(context.db),
+      origin: "control",
       logger: context.logger,
       ...(deps.now ? { now: deps.now } : {}),
     });
@@ -68,6 +73,11 @@ export function createTestAiHandler(deps: TestAiDeps = {}): ControlHandler {
       };
     } catch (error) {
       if (context.signal.aborted) throw error;
+      const capped = quotaGuardResume(error);
+      if (capped) {
+        context.logger.warn("ai provider test held back by Job Radar's AI usage cap", { provider, resumeAt: capped.resumeAt });
+        return failed(QUOTA_GUARD_CODE, { provider, resumeAt: capped.resumeAt, latencyMs: now().getTime() - started });
+      }
       // only the kind goes into the result: provider messages may quote the CLI's output (C4: they stay in the log)
       const errorKind =
         error instanceof AiUnavailableError ? (error.attempts.find((a) => a.provider === provider)?.kind ?? "not_configured") : error instanceof AiProviderError ? error.kind : "provider_error";

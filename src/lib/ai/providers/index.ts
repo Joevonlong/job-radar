@@ -1,3 +1,4 @@
+import type { ChannelLogger } from "@/lib/channels/types";
 import type { AiConfig } from "@/lib/config";
 
 import type { AiProvider } from "../types";
@@ -12,6 +13,8 @@ export interface DefaultProviderDeps {
   env?: Record<string, string | undefined>;
   fetch?: typeof fetch;
   runProcess?: ProcessRunner;
+  /** The CLI providers log the shape (names only) of their output here at debug level. */
+  logger?: Pick<ChannelLogger, "debug">;
 }
 
 const nonEmpty = (value: string | undefined): string | undefined => (value !== undefined && value.trim() !== "" ? value.trim() : undefined);
@@ -21,8 +24,8 @@ export function createDefaultProviders(config: AiConfig, deps: DefaultProviderDe
   const env = deps.env ?? process.env;
   const timeoutMs = config.api_timeout_seconds * 1000;
   return [
-    createClaudeCliProvider({ config: config.providers.claude_cli, env, ...(deps.runProcess ? { runProcess: deps.runProcess } : {}) }),
-    createCodexCliProvider({ config: config.providers.codex_cli, env, ...(deps.runProcess ? { runProcess: deps.runProcess } : {}) }),
+    createClaudeCliProvider({ config: config.providers.claude_cli, env, ...(deps.runProcess ? { runProcess: deps.runProcess } : {}), ...(deps.logger ? { logger: deps.logger } : {}) }),
+    createCodexCliProvider({ config: config.providers.codex_cli, env, ...(deps.runProcess ? { runProcess: deps.runProcess } : {}), ...(deps.logger ? { logger: deps.logger } : {}) }),
     createAnthropicProvider({
       config: config.providers.anthropic,
       apiKey: nonEmpty(env.ANTHROPIC_API_KEY),

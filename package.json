@@ -46,6 +46,7 @@
     "runner": "node --env-file-if-exists=.env --import tsx src/runner/index.ts",
     "ai-worker": "node --env-file-if-exists=.env --import tsx src/ai-worker/index.ts",
     "simhash:analyze": "node --env-file-if-exists=.env --import tsx scripts/simhash-analyze.ts",
+    "ai:usage-stats": "node --env-file-if-exists=.env --import tsx scripts/ai-usage-stats.ts",
     "ai:probe": "node --env-file-if-exists=.env --import tsx scripts/ai-probe.ts",
     "doctor": "node --env-file-if-exists=.env --import tsx scripts/doctor.ts",
     "mcp:serve": "node --env-file-if-exists=.env --import tsx scripts/mcp-serve.ts",

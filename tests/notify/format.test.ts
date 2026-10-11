@@ -281,6 +281,14 @@ describe("formatSummary", () => {
   it("escapes channel ids", () => {
     expect(formatSummary({ ...input, failedSources: [{ channelId: "a<b>", reasons: ["x&y"] }] }, ZH)).toContain("a&lt;b&gt;（x&amp;y）");
   });
+
+  it("ends with the jobs the AI usage cap left unscored, with the expected time or the next cycle; no line for 0", () => {
+    expect(formatSummary({ ...input, quotaHeld: { count: 3, time: "14:30" } }, ZH).split("\n").at(-1)).toBe("另有 3 个新岗位因 AI 用量上限暂未打分，预计 14:30 后处理。");
+    expect(formatSummary({ ...input, quotaHeld: { count: 1, time: "none" } }, notifyText("en")).split("\n").at(-1)).toBe(
+      "1 more new job has no score yet: Job Radar's AI usage cap is reached. They are scored in the next cycle.",
+    );
+    expect(formatSummary({ ...input, quotaHeld: { count: 0, time: "14:30" } }, ZH)).toBe(formatSummary(input, ZH));
+  });
 });
 
 describe("formatAlert", () => {
