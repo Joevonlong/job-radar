@@ -18,7 +18,7 @@ export function CycleDisclosure({ line, header, label, children, className }: { 
         type="button"
         aria-expanded={open}
         aria-controls={bodyId}
-        aria-label={label}
+        title={label}
         data-testid="cycle-toggle"
         onClick={() => setOpen((value) => !value)}
         className="flex min-h-11 w-full min-w-0 items-center gap-sp-2 px-sp-3 py-sp-2 text-left text-body-sm md:hidden"

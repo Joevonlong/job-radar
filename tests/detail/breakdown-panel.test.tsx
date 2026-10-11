@@ -212,7 +212,7 @@ describe("BreakdownPanel result", () => {
     window.addEventListener(JD_JUMP_EVENT, (event) => jumps.push((event as CustomEvent<{ index: number }>).detail.index));
     render(wrap(<BreakdownPanel {...props({ view: view() })} />));
     const python = within(screen.getByTestId("jd-breakdown-tech")).getByText("Python").closest("button");
-    expect(python).toHaveAttribute("aria-label", "Show in the JD: Our stack: Python and Kubernetes");
+    expect(python).toHaveAttribute("title", "Show in the JD: Our stack: Python and Kubernetes");
     await userEvent.click(python!);
     expect(jumps).toEqual([0]);
     // AWS has no highlight: no button around it, the quote is its title

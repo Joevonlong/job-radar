@@ -15,9 +15,8 @@ export function JumpTag({ index, label, className, children }: { index: number; 
     <button
       type="button"
       onClick={() => requestJdJump(index)}
-      aria-label={label}
       title={label}
-      className={cn("press inline-flex max-w-full cursor-pointer items-center rounded-tag text-left", className)}
+      className={cn("press inline-flex min-h-sp-6 max-w-full cursor-pointer items-center rounded-tag text-left", className)}
       data-testid="jump-tag"
       data-quote-index={index}
     >
