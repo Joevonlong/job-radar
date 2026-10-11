@@ -1,0 +1,22 @@
+# About me (template). Copied to data/profile/me.yaml on first run; after that, edit only the copy in data/profile/.
+# This content is sent to the AI provider for scoring (as a summary and language levels); don't include your name, email, phone or ID numbers.
+
+# One line per language: language code → CEFR level (A1–C2) or native
+# e.g. add  - de: B1
+languages:
+  - en: native
+
+# Skills and years, e.g.:
+#   - name: Python
+#     years: 5
+skills: []
+
+# Years of work experience; leave null if unsure
+years_experience: null
+
+city: New York
+# Whether you need the employer to sponsor a visa
+needs_visa_sponsorship: false
+
+# Short introduction for the AI (a few sentences)
+summary: ""

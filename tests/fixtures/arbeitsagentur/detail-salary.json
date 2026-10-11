@@ -1,0 +1,52 @@
+{
+  "stellenangebotsart": "ARBEIT",
+  "stellenangebotsTitel": "Software Engineer (Founding Team)",
+  "quereinstiegGeeignet": false,
+  "stellenangebotsBeschreibung": "**Warum es Sehwerk gibt**\n\nFahrräder kauft man seit hundert Jahren auf die gleiche Art: einmal viel Geld auf den Tisch legen und dann mehrere Jahre mit dem Ergebnis leben. Das Fahrradabo ändert das. Kundinnen bekommen die Räder, die sie wirklich brauchen, flexibel und zu planbaren monatlichen Kosten. Dieser Text ist für ein Test-Fixture erfunden und beschreibt keine echte Stelle.\n\nWir bauen die Lösung, mit der jeder Händler ein Fahrradabo anbieten kann, von der Kette mit 200 Filialen bis zum Einzelhändler in der Fußgängerzone.\n\n**Wo wir stehen**\n\nDie Plattform ist entwickelt, die erste Händlerkette geht im Oktober live. Die Finanzierung steht. Der Schritt in weitere europäische Märkte ist für das nächste Jahr geplant.\n\n### Aufgaben\n\n**Die Rolle**\n\nDu bist der erste Engineer neben unserem CTO. Keine Legacy-Systeme, keine Prozesse, die dich bremsen.\n\n- **Production Readiness:** Gemeinsam mit dem CTO verantwortest Du die Plattform im Live-Betrieb.\n- **Produktverantwortung:** Du übernimmst ganze Bereiche der Plattform und entwickelst sie eigenständig weiter.\n- **Technische Entscheidungen:** Architektur, Stack, Build und Deploy. Du entscheidest mit.\n- **AI-first Engineering:** Du prägst, wie wir mit KI entwickeln, testen und ausliefern.\n\n**Unser Stack**\n\nKotlin und Java mit Spring Boot, React mit TypeScript, AWS mit RDS, GitHub Actions.\n\n### Qualifikation\n\n**Was du mitbringst**\n\n- **Zwei bis vier Jahre als Software Engineer** mit Schwerpunkt Backend. Idealerweise hast du Erfahrung mit Java/Kotlin und Spring Boot.\n- **Cloud:** Du hast Anwendungen nicht nur gebaut, sondern auch deployed und im Betrieb betreut.\n- **React:** weit genug, um ein Feature end-to-end zu liefern.\n- **Deutsch:** gut genug für ein Gespräch mit einem Händler. B2-Niveau oder besser.\n- **Low Ego**\n\n### Benefits\n\n**Wie wir arbeiten**\n\nWir sind ein kleines, motiviertes Team, das schnell skalieren will. Du arbeitest direkt mit [name removed] und [name removed]. Wir arbeiten onsite im Büro.\n\n**Was wir bieten**\n\n55.000 bis 70.000 Euro je nach Qualifikation und Erfahrung, je nach Profil und Seniorität zusätzlich eine Beteiligung über unser VSOP-Programm. Dazu 30 Urlaubstage, Hardware, Fitness-Mitgliedschaft und weitere Benefits.\n\n**So läuft die Bewerbung**\n\nBewerbung über unser Portal, dazu drei bis vier Sätze, was dich an der Aufgabe reizt. Rückmeldung innerhalb von 48 Stunden, danach ein bezahlter Trial Day und die finale Entscheidung wenige Tage später. Du erfüllst nicht jeden Punkt? Bewirb Dich trotzdem.\n",
+  "arbeitszeitSchichtNachtWochenende": false,
+  "arbeitszeitTeilzeitAbend": false,
+  "arbeitszeitTeilzeitNachmittag": false,
+  "arbeitszeitTeilzeitVormittag": false,
+  "arbeitszeitTeilzeitFlexibel": false,
+  "arbeitszeitVollzeit": true,
+  "eintrittszeitraum": {
+    "von": "2026-11-01"
+  },
+  "verguetungsangabe": "JAHRESGEHALT",
+  "artDerVerguetung": "GEHALTSSPANNE",
+  "gehaltsspanneVon": 55000.0,
+  "gehaltsspanneBis": 70000.0,
+  "vertragsdauer": "UNBEFRISTET",
+  "istGeringfuegigeBeschaeftigung": false,
+  "stellenlokationen": [
+    {
+      "adresse": {
+        "strasse": "Musterstr.",
+        "hausnummer": "1",
+        "plz": "10178",
+        "ort": "Berlin",
+        "region": "BERLIN",
+        "land": "DEUTSCHLAND"
+      },
+      "breite": 52.52,
+      "laenge": 13.4
+    }
+  ],
+  "homeofficemoeglich": false,
+  "istPrivateArbeitsvermittlung": false,
+  "istArbeitnehmerUeberlassung": false,
+  "veroeffentlichungszeitraum": {
+    "von": "2026-09-30"
+  },
+  "datumErsteVeroeffentlichung": "2026-09-30",
+  "aenderungsdatum": "2026-09-30T11:04:18.163",
+  "istBetreut": true,
+  "hauptberuf": "Softwareentwickler/in",
+  "alternativBeruf1": "Software-Architect",
+  "alternativBeruf2": "Data Engineer",
+  "firma": "Sehwerk GmbH",
+  "arbeitgeberKundennummerHash": "28iCtnFo8AsNLt6MXZUzuP2AA9AqI2FfbQ7Fbs4eftc=",
+  "allianzpartnerUrl": "http://www.arbeitsagentur.de",
+  "allianzpartnerName": "arbeitsagentur.de",
+  "referenznummer": "10000-0000000015-S"
+}

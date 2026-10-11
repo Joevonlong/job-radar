@@ -1,0 +1,175 @@
+# 德语：停用词和"本地语言要求"规则（原 pipeline.yaml language.german_*）。
+# requirement 是有顺序的整块：同距离时靠前的等级规则优先。
+
+stopwords:
+  de:
+    - der
+    - die
+    - das
+    - und
+    - von
+    - zu
+    - mit
+    - für
+    - ist
+    - sind
+    - sie
+    - wir
+    - unser
+    - unsere
+    - eine
+    - einen
+    - einer
+    - ein
+    - im
+    - in
+    - auf
+    - als
+    - bei
+    - oder
+    - dass
+    - aus
+    - den
+    - dem
+    - des
+    - werden
+    - wird
+    - sich
+    - nicht
+    - auch
+    - du
+    - dein
+    - deine
+    - bist
+    - haben
+    - über
+requirement:
+  word_pattern: \bgerman\b|\bdeutsch(?!land)(?!e[nrms]?\s+(?:bank|telekom|bahn|post|börse|boerse|lufthansa|welle))[\p{L}]*
+  cefr_name_pattern: german|deutsch(?!land)[\p{L}]*
+  cefr_connectors:
+    - at
+    - level
+    - niveau
+    - auf
+    - dem
+    - skills?
+    - language
+    - ab
+    - of
+    - minimum
+    - mindestens
+    - min\.?
+    - mind\.?
+  cefr_level_words: [level, niveau]
+  cefr_prepositions: [in, of]
+  level_max_distance: 40
+  level_rules:
+    - {pattern: "native[\\s-]+(?:level[\\s-]+)?(?:german|deutsch)|(?:german|deutsch)\\w*\\s+(?:as\\s+)?(?:a\\s+)?(?:native|mother[\\s-]tongue)|muttersprach|mother[\\s-]tongue", level: C2}
+    - {pattern: "fließend|fliessend|verhandlungssicher|business[\\s-]fluent|\\bfluent|sehr gute|very good|excellent|exzellent|ausgezeichnet|hervorragend|perfekt|perfect|\\bproficien", level: C1}
+    - {pattern: \bgut(?:e|en|er|es)?\b|\bgood\b|\bsolid|\bsolide|\bstrong\b|fundiert|working (?:knowledge|proficiency), level: B2}
+    - {pattern: conversational|konversation|intermediate|gewisse|\bsome\b, level: B1}
+    - {pattern: grundkenntnis|grundlagen|\bbasic|elementary|basiskenntnis, level: A2}
+  optional_max_distance: 60
+  optional_patterns:
+    - \bplus\b
+    - nice[- ]to[- ]have
+    - von vorteil
+    - wünschenswert
+    - \badvantag
+    - \bbonus\b
+    - \bideally\b
+    - idealerweise
+    - \basset\b
+    - \bbeneficial\b
+    - \bpreferred\b(?!\s+(?:qualifications?|skills?|requirements?|experience))
+    - \bpreferabl[ey]\b
+    - \bdesirable\b
+    - \bbevorzugt\b
+    - \bpluspunkt
+    - nicht zwingend
+    - gerne gesehen
+    - would be (?:a )?(?:great|nice|helpful)
+  list_languages:
+    - english
+    - spanish
+    - french
+    - italian
+    - dutch
+    - polish
+    - portuguese
+    - russian
+    - chinese
+    - japanese
+    - englisch
+    - spanisch
+    - französisch
+    - italienisch
+    - niederländisch
+    - polnisch
+    - portugiesisch
+    - russisch
+  ignore_patterns:
+    - \bgerman(?:y['’]s)?[\s-]+(?:citizen\w*|national\w*|passport|work permit)
+    - \bdeutsch\w*\s+(?:staatsbürger\w*|staatsangehörig\w*)
+    - \bgerman[\s-]+(?:market|customers?|clients?|compan(?:y|ies)|subsidiar\w+|entit(?:y|ies)|offices?|team|law|legal|legislation|tax|authorit\w+|regulations?|labou?r|defen[cs]e|automotive|industry|economy|government|bundeswehr|armed forces)\b
+  preferred_section_patterns:
+    - \bpreferred\s+(?:qualifications?|skills?|requirements?|experience)\b
+    - \bnice[- ]to[- ]haves?\b
+    - \bbonus\s+(?:points?|qualifications?|skills?)\b
+    - \b(?:desirable|desired)\s+(?:qualifications?|skills?|experience)\b
+    - "\\bwünschenswert\\s*:"
+    - "\\bvon vorteil\\s*:"
+    - \bextra points\b
+    - \bwhat would make you stand out\b
+  required_section_patterns:
+    - \b(?:minimum|basic|required|essential|must[- ]haves?)\b[\w\s]{0,30}?\b(?:qualifications?|requirements?|skills?|experience)\b
+    - \brequirements?\b
+    - \bqualifications?\b
+    - \bwhat you(?:['’]ll| will)? (?:bring|need|have)\b
+    - \bwho you are\b
+    - \bwhat we(?:['’]re| are) looking for\b
+    - \bdein profil\b
+    - \bihr profil\b
+    - \bdas bringst du mit\b
+    - \bwas du mitbringst\b
+    - \bwas sie mitbringen\b
+    - \banforderungen\b
+    - \bqualifikationen?\b
+    - \bvoraussetzungen\b
+    - \bresponsibilit\w+
+    - \bwhat we offer\b
+    - \bbenefits\b
+    - \bwir bieten\b
+    - \babout us\b
+    - \bdeine aufgaben\b
+    - \bihre aufgaben\b
+  required_patterns:
+    - \brequired\b
+    - \bmandatory\b
+    - \bmust\b
+    - \bessential\b
+    - \berforderlich\b
+    - \bzwingend\b
+    - \bvoraussetzung\b
+    - \bvorausgesetzt\b
+    - \bnotwendig\b
+    - \bunbedingt\b
+  section_max_distance: 300
+  not_required_patterns:
+    - no german (?:is )?(?:required|needed|necessary)
+    - german (?:is )?not (?:required|needed|necessary|mandatory)
+    - without (?:any )?german
+    - keine deutschkenntnisse
+    - ohne deutschkenntnisse
+    - deutschkenntnisse (?:sind )?nicht (?:erforderlich|notwendig|nötig)
+    - no knowledge of german
+  sufficient_patterns:
+    - \bausreichend\b
+    - \bgenügt\b
+    - \bgenuegt\b
+    - \breicht\b
+    - \bsufficient\b
+    - \benough\b
+    - \bis fine\b
+    - \bis ok(?:ay)?\b
+  prompt_examples: fluent / verhandlungssicher / native = C1; good German / gute Deutschkenntnisse = B2; basic German / Grundkenntnisse = A2

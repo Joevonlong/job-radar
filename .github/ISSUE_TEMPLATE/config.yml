@@ -1,0 +1,14 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/Joevonlong/job-radar/security/advisories/new
+    about: Please report vulnerabilities privately (see SECURITY.md), not as a public issue.
+  - name: Ask a question
+    url: https://github.com/Joevonlong/job-radar/discussions/categories/q-a
+    about: Setup help and "how do I…" questions go to Discussions.
+  - name: Share an idea
+    url: https://github.com/Joevonlong/job-radar/discussions/categories/ideas
+    about: Open-ended ideas are easier to shape in Discussions before they become an issue.
+  - name: Read the FAQ and the docs
+    url: https://github.com/Joevonlong/job-radar/blob/main/docs/faq.md
+    about: Cost, AI options, privacy, sources, markets, phone access and more.

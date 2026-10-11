@@ -1,0 +1,68 @@
+{
+  "id": "744000000000001",
+  "name": "AI Platform Engineer (m/f/x)",
+  "defaultJobAd": true,
+  "refNumber": "REF788I",
+  "company": {
+    "identifier": "ExampleLabs",
+    "name": "Example Labs"
+  },
+  "location": {
+    "city": "München",
+    "region": "BY",
+    "country": "de",
+    "remote": false,
+    "hybrid": true,
+    "fullLocation": "München, BY, Germany"
+  },
+  "releasedDate": "2026-10-01T08:52:15.935Z",
+  "postingUrl": "https://jobs.smartrecruiters.com/ExampleLabs/744000000000001-example",
+  "applyUrl": "https://jobs.smartrecruiters.com/ExampleLabs/744000000000001-example?oga=true",
+  "jobAd": {
+    "sections": {
+      "companyDescription": {
+        "title": "Company Description",
+        "text": "<p>We build <strong>AI</strong> products.</p>"
+      },
+      "jobDescription": {
+        "title": "Job Description",
+        "text": "<p>Build and run <strong>AI</strong> services &amp; platforms.</p><p>You will work with Python and cloud tooling.</p>"
+      },
+      "qualifications": {
+        "title": "Qualifications",
+        "text": "<ul><li>Degree in computer science or a related field.</li><li>Several years of experience in platform engineering or backend development.</li><li>Experience with cloud infrastructure and infrastructure as code.</li></ul>"
+      },
+      "additionalInformation": {
+        "title": "Additional Information",
+        "text": "<ul><li>Be part of a small example team building services for fictional customers</li><li>Work with an international and growing team</li><li>Use modern hardware and tools</li></ul>"
+      }
+    }
+  },
+  "active": true,
+  "visibility": "PUBLIC",
+  "industry": {
+    "id": "banking",
+    "label": "Banking"
+  },
+  "function": {
+    "id": "engineering",
+    "label": "Engineering"
+  },
+  "department": {
+    "id": 9019051,
+    "label": "Data"
+  },
+  "experienceLevel": {
+    "id": "mid_senior_level",
+    "label": "Mid-Senior Level"
+  },
+  "typeOfEmployment": {
+    "id": "permanent",
+    "label": "Full-time"
+  },
+  "language": {
+    "code": "en",
+    "label": "English",
+    "labelNative": "English (US)"
+  }
+}

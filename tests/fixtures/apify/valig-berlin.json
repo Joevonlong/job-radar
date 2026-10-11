@@ -1,0 +1,72 @@
+[
+  {
+    "id": "4385163817",
+    "url": "https://www.linkedin.com/jobs/view/senior-ml-engineer-at-example-gmbh-4385163817",
+    "title": "Senior ML Engineer",
+    "location": "Berlin, Berlin, Germany",
+    "companyName": "Example GmbH",
+    "companyUrl": "https://www.linkedin.com/company/example-gmbh",
+    "recruiterName": null,
+    "recruiterUrl": null,
+    "experienceLevel": "Mid-Senior level",
+    "contractType": "Full-time",
+    "workType": "Engineering and Information Technology",
+    "sector": "Software Development",
+    "salary": "€80,000.00/yr - €100,000.00/yr",
+    "applyType": "EASY_APPLY",
+    "postedTimeAgo": "3 hours ago",
+    "postedDate": "2026-10-07",
+    "applicationsCount": "12 applicants",
+    "description": "Build production machine-learning systems.Python & PyTorchGerman or English",
+    "descriptionHtml": "<p>Build production machine-learning systems.</p><ul><li>Python &amp; PyTorch</li><li>German or English</li></ul>"
+  },
+  {
+    "id": 4385163819,
+    "url": "https://www.linkedin.com/jobs/view/4385163819",
+    "title": "LLM Engineer",
+    "location": "Berlin, Germany",
+    "companyName": "No Salary AG",
+    "companyUrl": "https://www.linkedin.com/company/no-salary-ag",
+    "experienceLevel": null,
+    "contractType": "Full-time",
+    "salary": null,
+    "applyType": "OFFSITE",
+    "postedDate": "2026-10-06",
+    "description": "Work on large language model products."
+  },
+  {
+    "id": "4385163817",
+    "url": "https://www.linkedin.com/jobs/view/senior-ml-engineer-at-example-gmbh-4385163817?trackingId=other",
+    "title": "Senior ML Engineer",
+    "location": "Berlin, Berlin, Germany",
+    "companyName": "Example GmbH",
+    "postedDate": "2026-10-07",
+    "description": "Duplicate of the first record (the actor returned the same job for two keyword pieces)."
+  },
+  {
+    "url": "https://www.linkedin.com/jobs/view/ai-solutions-architect-at-acme-4385163821",
+    "title": "AI Solutions Architect",
+    "location": "Berlin, Germany",
+    "companyName": "Acme Cloud GmbH",
+    "postedDate": "2026-10-07",
+    "description": "Record without an id field: the job id is read from the URL."
+  },
+  {
+    "title": "Posting without any identity",
+    "location": "Berlin, Germany",
+    "companyName": "Ghost GmbH",
+    "postedDate": "2026-10-07"
+  },
+  {
+    "id": "4385100001",
+    "url": "https://www.linkedin.com/jobs/view/4385100001",
+    "title": "KI Engineer",
+    "location": "Berlin, Germany",
+    "companyName": "Old News GmbH",
+    "postedDate": "2026-10-05",
+    "description": "Posted two days before the cycle."
+  },
+  {
+    "error": "Request blocked by LinkedIn, page 3 skipped"
+  }
+]

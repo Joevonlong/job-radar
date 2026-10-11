@@ -1,0 +1,602 @@
+{
+  "ergebnisliste": [
+    {
+      "stellenangebotsart": "ARBEIT",
+      "stellenangebotsTitel": "KI-Engineer, KI-Spezialist, AI Engineer",
+      "arbeitszeitVollzeit": true,
+      "eintrittszeitraum": {
+        "von": "2026-10-04"
+      },
+      "verguetungsangabe": "JAHRESGEHALT",
+      "artDerVerguetung": "GEHALTSSPANNE",
+      "gehaltsspanneVon": 100000,
+      "gehaltsspanneBis": 125000,
+      "vertragsdauer": "UNBEFRISTET",
+      "stellenlokationen": [
+        {
+          "adresse": {
+            "land": "SCHWEIZ"
+          }
+        }
+      ],
+      "chiffrenummer": "EX-0001",
+      "veroeffentlichungszeitraum": {
+        "von": "2026-10-04"
+      },
+      "datumErsteVeroeffentlichung": "2026-10-04",
+      "aenderungsdatum": "2026-10-04T10:59:01.292",
+      "hauptberuf": "KI-Engineer",
+      "firma": "Brueckenbau Beratung Erika Muster Einzelunternehmen",
+      "arbeitgeberKundennummerHash": "cQ0hxnYgU7lTOlgBwqC3hbVlngfBFC7MGsRnymZdzy4=",
+      "referenznummer": "10001-0000000001-S",
+      "alleBerufe": [
+        "KI-Engineer"
+      ]
+    },
+    {
+      "stellenangebotsart": "ARBEIT",
+      "stellenangebotsTitel": "AI Engineer / KI-Entwicklerin (m/w/d)",
+      "quereinstiegGeeignet": false,
+      "arbeitszeitSchichtNachtWochenende": false,
+      "arbeitszeitTeilzeitAbend": false,
+      "arbeitszeitTeilzeitNachmittag": false,
+      "arbeitszeitTeilzeitVormittag": false,
+      "arbeitszeitTeilzeitFlexibel": false,
+      "arbeitszeitVollzeit": true,
+      "eintrittszeitraum": {
+        "von": "2026-10-02"
+      },
+      "verguetungsangabe": "KEINE_ANGABEN",
+      "vertragsdauer": "KEINE_ANGABE",
+      "istGeringfuegigeBeschaeftigung": false,
+      "stellenlokationen": [
+        {
+          "adresse": {
+            "strasse": "Beispielallee",
+            "hausnummer": "1",
+            "plz": "28215",
+            "ort": "Bremen",
+            "region": "BREMEN",
+            "land": "DEUTSCHLAND"
+          },
+          "breite": 53.09,
+          "laenge": 8.81
+        }
+      ],
+      "homeofficemoeglich": true,
+      "homeofficetyp": "NACH_VEREINBARUNG",
+      "chiffrenummer": "EX-0001",
+      "veroeffentlichungszeitraum": {
+        "von": "2026-09-30"
+      },
+      "datumErsteVeroeffentlichung": "2026-09-30",
+      "aenderungsdatum": "2026-10-02T10:26:53.910",
+      "hauptberuf": "KI-Engineer",
+      "firma": "Hafenwerke AG",
+      "arbeitgeberKundennummerHash": "or4rvXVy1v35956oUZVEZhZBnjGD3DHN4xV4z6RUAgE=",
+      "referenznummer": "18329-0000000002-S",
+      "alleBerufe": [
+        "KI-Engineer"
+      ]
+    },
+    {
+      "stellenangebotsart": "ARBEIT",
+      "stellenangebotsTitel": "Platform Engineer - KI und Developer Experience (m/w/d)",
+      "quereinstiegGeeignet": false,
+      "arbeitszeitSchichtNachtWochenende": false,
+      "arbeitszeitTeilzeitAbend": false,
+      "arbeitszeitTeilzeitNachmittag": false,
+      "arbeitszeitTeilzeitVormittag": false,
+      "arbeitszeitTeilzeitFlexibel": false,
+      "arbeitszeitVollzeit": true,
+      "eintrittszeitraum": {
+        "von": "2026-10-07"
+      },
+      "verguetungsangabe": "KEINE_ANGABEN",
+      "vertragsdauer": "UNBEFRISTET",
+      "istGeringfuegigeBeschaeftigung": false,
+      "stellenlokationen": [
+        {
+          "adresse": {
+            "plz": "48151",
+            "ort": "Münster, Westfalen",
+            "region": "NORDRHEIN_WESTFALEN",
+            "land": "DEUTSCHLAND"
+          },
+          "breite": 51.94,
+          "laenge": 7.61
+        }
+      ],
+      "homeofficemoeglich": false,
+      "chiffrenummer": "EX-0001",
+      "veroeffentlichungszeitraum": {
+        "von": "2026-10-06"
+      },
+      "datumErsteVeroeffentlichung": "2026-10-06",
+      "aenderungsdatum": "2026-10-06T18:06:57.895",
+      "externeURL": "https://jobs.example.test/3c849424?source=arbeitsagentur",
+      "hauptberuf": "KI-Engineer",
+      "firma": "Nordlicht Versicherung",
+      "referenznummer": "12288-0000000003-S",
+      "alleBerufe": [
+        "KI-Engineer"
+      ]
+    },
+    {
+      "stellenangebotsart": "ARBEIT",
+      "stellenangebotsTitel": "Cloud Platform Engineer KI & Simulation (m/w/d)",
+      "quereinstiegGeeignet": false,
+      "arbeitszeitVollzeit": true,
+      "eintrittszeitraum": {
+        "von": "2026-10-05"
+      },
+      "verguetungsangabe": "JAHRESGEHALT",
+      "artDerVerguetung": "GEHALTSSPANNE",
+      "gehaltsspanneVon": 70000.0,
+      "gehaltsspanneBis": 90000.0,
+      "vertragsdauer": "KEINE_ANGABE",
+      "istGeringfuegigeBeschaeftigung": false,
+      "stellenlokationen": [
+        {
+          "adresse": {
+            "plz": "88045",
+            "ort": "Friedrichshafen",
+            "region": "BADEN_WUERTTEMBERG",
+            "land": "DEUTSCHLAND"
+          },
+          "breite": 47.66,
+          "laenge": 9.46
+        }
+      ],
+      "chiffrenummer": "EX-0001",
+      "veroeffentlichungszeitraum": {
+        "von": "2026-10-05"
+      },
+      "datumErsteVeroeffentlichung": "2026-10-05",
+      "aenderungsdatum": "2026-10-05T07:46:32.434",
+      "hauptberuf": "Informatiker/in",
+      "alternativBeruf1": "KI-Engineer",
+      "firma": "Technikdienst GmbH Niederlassung Seestadt",
+      "arbeitgeberKundennummerHash": "NdnxhIt6tX7Dh98vwXQ54jtsGfmzpzTYiqB1NaWGd8Y=",
+      "referenznummer": "12265-0000000004-S",
+      "alleBerufe": [
+        "KI-Engineer",
+        "Informatiker/in"
+      ]
+    },
+    {
+      "stellenangebotsart": "ARBEIT",
+      "stellenangebotsTitel": "AI Engineer Electronics (m/w/d)",
+      "arbeitszeitSchichtNachtWochenende": false,
+      "arbeitszeitTeilzeitAbend": false,
+      "arbeitszeitTeilzeitNachmittag": false,
+      "arbeitszeitTeilzeitVormittag": false,
+      "arbeitszeitTeilzeitFlexibel": false,
+      "arbeitszeitVollzeit": true,
+      "eintrittszeitraum": {
+        "von": "2026-10-05"
+      },
+      "verguetungsangabe": "KEINE_ANGABEN",
+      "vertragsdauer": "UNBEFRISTET",
+      "stellenlokationen": [
+        {
+          "adresse": {
+            "strasse": "Musterring",
+            "hausnummer": "1",
+            "plz": "96052",
+            "ort": "Bamberg",
+            "region": "BAYERN",
+            "land": "DEUTSCHLAND"
+          },
+          "breite": 49.91,
+          "laenge": 10.91
+        }
+      ],
+      "chiffrenummer": "EX-0001",
+      "veroeffentlichungszeitraum": {
+        "von": "2026-10-05"
+      },
+      "datumErsteVeroeffentlichung": "2026-10-05",
+      "aenderungsdatum": "2026-10-05T14:35:14.752",
+      "hauptberuf": "KI-Engineer",
+      "firma": "Beispiel Fahrzeugteile SE & Co. KG",
+      "arbeitgeberKundennummerHash": "aXwuJooh1wtNJ93i4BekYmaadcjPjToR1fzslfW-7ig=",
+      "referenznummer": "10001-0000000005-S",
+      "alleBerufe": [
+        "KI-Engineer"
+      ]
+    },
+    {
+      "stellenangebotsart": "ARBEIT",
+      "stellenangebotsTitel": "AI Engineer / KI-Entwickler (m/w/d)",
+      "quereinstiegGeeignet": false,
+      "arbeitszeitSchichtNachtWochenende": false,
+      "arbeitszeitTeilzeitAbend": false,
+      "arbeitszeitTeilzeitNachmittag": false,
+      "arbeitszeitTeilzeitVormittag": false,
+      "arbeitszeitTeilzeitFlexibel": false,
+      "arbeitszeitVollzeit": true,
+      "eintrittszeitraum": {
+        "von": "2026-10-05"
+      },
+      "verguetungsangabe": "JAHRESGEHALT",
+      "artDerVerguetung": "GEHALTSSPANNE",
+      "gehaltsspanneVon": 59000.0,
+      "gehaltsspanneBis": 61000.0,
+      "vertragsdauer": "KEINE_ANGABE",
+      "istGeringfuegigeBeschaeftigung": false,
+      "stellenlokationen": [
+        {
+          "adresse": {
+            "plz": "48147",
+            "ort": "Münster, Westfalen",
+            "region": "NORDRHEIN_WESTFALEN",
+            "land": "DEUTSCHLAND"
+          },
+          "breite": 51.98,
+          "laenge": 7.63
+        },
+        {
+          "adresse": {
+            "plz": "60486",
+            "ort": "Frankfurt am Main",
+            "region": "HESSEN",
+            "land": "DEUTSCHLAND"
+          },
+          "breite": 50.11,
+          "laenge": 8.63
+        },
+        {
+          "adresse": {
+            "plz": "30539",
+            "ort": "Hannover",
+            "region": "NIEDERSACHSEN",
+            "land": "DEUTSCHLAND"
+          },
+          "breite": 52.33,
+          "laenge": 9.83
+        }
+      ],
+      "homeofficemoeglich": false,
+      "veroeffentlichungszeitraum": {
+        "von": "2026-10-05"
+      },
+      "datumErsteVeroeffentlichung": "2026-10-05",
+      "aenderungsdatum": "2026-10-05T10:21:08.837",
+      "externeURL": "https://jobs.example.test/b76d9364?source=arbeitsagentur",
+      "hauptberuf": "Wirtschaftsinformatiker/in (Hochschule)",
+      "firma": "Sparwerk Informatik GmbH & Co. KG",
+      "referenznummer": "13884-0000000006-S",
+      "alleBerufe": [
+        "Wirtschaftsinformatiker/in (Hochschule)"
+      ]
+    },
+    {
+      "stellenangebotsart": "ARBEIT",
+      "stellenangebotsTitel": "QA Automation Engineer (m/w/d) – Testautomatisierung mit KI",
+      "quereinstiegGeeignet": false,
+      "eintrittszeitraum": {
+        "von": "2026-10-06"
+      },
+      "verguetungsangabe": "KEINE_ANGABEN",
+      "vertragsdauer": "UNBEFRISTET",
+      "istGeringfuegigeBeschaeftigung": false,
+      "stellenlokationen": [
+        {
+          "adresse": {
+            "ort": "Hamburg",
+            "region": "HAMBURG",
+            "land": "DEUTSCHLAND"
+          },
+          "breite": 53.55,
+          "laenge": 10.04
+        }
+      ],
+      "veroeffentlichungszeitraum": {
+        "von": "2026-10-05"
+      },
+      "datumErsteVeroeffentlichung": "2026-10-05",
+      "aenderungsdatum": "2026-10-05T17:31:31.358",
+      "hauptberuf": "IT-Tester/in",
+      "alternativBeruf1": "Softwareentwickler/in",
+      "firma": "Plusdienst GmbH",
+      "arbeitgeberKundennummerHash": "MQ32Bhi6rEO4Ytok9md0svHo7hIic0Byywrw0yR8Mxw=",
+      "referenznummer": "14068-0000000007-S",
+      "alleBerufe": [
+        "IT-Tester/in",
+        "Softwareentwickler/in"
+      ]
+    },
+    {
+      "stellenangebotsart": "ARBEIT",
+      "stellenangebotsTitel": "Junior AI Engineer (m/w/d) Schwerpunkt KI und Digitalisierung",
+      "quereinstiegGeeignet": false,
+      "arbeitszeitSchichtNachtWochenende": false,
+      "arbeitszeitTeilzeitAbend": false,
+      "arbeitszeitTeilzeitNachmittag": false,
+      "arbeitszeitTeilzeitVormittag": false,
+      "arbeitszeitTeilzeitFlexibel": false,
+      "arbeitszeitVollzeit": true,
+      "eintrittszeitraum": {
+        "von": "2026-10-05"
+      },
+      "verguetungsangabe": "KEINE_ANGABEN",
+      "vertragsdauer": "UNBEFRISTET",
+      "istGeringfuegigeBeschaeftigung": false,
+      "stellenlokationen": [
+        {
+          "adresse": {
+            "plz": "32107",
+            "ort": "Bad Salzuflen",
+            "region": "NORDRHEIN_WESTFALEN",
+            "land": "DEUTSCHLAND"
+          },
+          "breite": 52.06,
+          "laenge": 8.72
+        }
+      ],
+      "homeofficemoeglich": false,
+      "chiffrenummer": "EX-0001",
+      "veroeffentlichungszeitraum": {
+        "von": "2026-10-05"
+      },
+      "datumErsteVeroeffentlichung": "2026-10-05",
+      "aenderungsdatum": "2026-10-05T14:15:36.828",
+      "externeURL": "https://jobs.example.test/3fc99d40?source=arbeitsagentur",
+      "hauptberuf": "Informatiker/in",
+      "firma": "Kassenwerk GmbH",
+      "referenznummer": "13635-0000000008-S",
+      "alleBerufe": [
+        "Informatiker/in"
+      ]
+    },
+    {
+      "stellenangebotsart": "ARBEIT",
+      "stellenangebotsTitel": "DevOps / KI-Ops Engineer (m/w/d), Bank Elf",
+      "quereinstiegGeeignet": false,
+      "arbeitszeitSchichtNachtWochenende": false,
+      "arbeitszeitTeilzeitAbend": false,
+      "arbeitszeitTeilzeitNachmittag": false,
+      "arbeitszeitTeilzeitVormittag": false,
+      "arbeitszeitTeilzeitFlexibel": false,
+      "arbeitszeitVollzeit": true,
+      "eintrittszeitraum": {
+        "von": "2026-10-01"
+      },
+      "verguetungsangabe": "KEINE_ANGABEN",
+      "vertragsdauer": "UNBEFRISTET",
+      "istGeringfuegigeBeschaeftigung": false,
+      "stellenlokationen": [
+        {
+          "adresse": {
+            "strasse": "Beispielstraße 1",
+            "plz": "41460",
+            "ort": "Neuss",
+            "region": "NORDRHEIN_WESTFALEN",
+            "land": "DEUTSCHLAND"
+          },
+          "breite": 51.2,
+          "laenge": 6.71
+        }
+      ],
+      "homeofficemoeglich": false,
+      "veroeffentlichungszeitraum": {
+        "von": "2026-10-01"
+      },
+      "datumErsteVeroeffentlichung": "2026-10-01",
+      "aenderungsdatum": "2026-10-01T12:33:38.088",
+      "externeURL": "https://jobs.example.test/39b50183?source=arbeitsagentur",
+      "hauptberuf": "Application-Engineer/-Manager/in",
+      "firma": "Bank Elf",
+      "referenznummer": "12811-0000000009-S",
+      "alleBerufe": [
+        "Application-Engineer/-Manager/in"
+      ]
+    },
+    {
+      "stellenangebotsart": "ARBEIT",
+      "stellenangebotsTitel": "25187: AI Engineer, GenAI Engineer, LLM Engineer (m/w/d)",
+      "arbeitszeitVollzeit": true,
+      "eintrittszeitraum": {
+        "von": "2026-10-05"
+      },
+      "verguetungsangabe": "KEINE_ANGABEN",
+      "vertragsdauer": "KEINE_ANGABE",
+      "stellenlokationen": [
+        {
+          "adresse": {
+            "ort": "Amberg, Oberpfalz",
+            "region": "BAYERN",
+            "land": "DEUTSCHLAND"
+          },
+          "breite": 49.45,
+          "laenge": 11.85
+        }
+      ],
+      "veroeffentlichungszeitraum": {
+        "von": "2026-10-05"
+      },
+      "datumErsteVeroeffentlichung": "2026-10-05",
+      "aenderungsdatum": "2026-10-05T09:59:23.285",
+      "hauptberuf": "KI-Engineer",
+      "firma": "Cs3 ITEC GmbH   Co. KG",
+      "arbeitgeberKundennummerHash": "tfeuhaQF2VEkxbvB6S9bMNYBl8MZBv4A8q5PqPJbAHs=",
+      "referenznummer": "10001-0000000010-S",
+      "alleBerufe": [
+        "KI-Engineer"
+      ]
+    },
+    {
+      "stellenangebotsart": "ARBEIT",
+      "stellenangebotsTitel": "KI Manager (m/w/d) – Automation, Agents & Enablement",
+      "quereinstiegGeeignet": false,
+      "arbeitszeitSchichtNachtWochenende": false,
+      "arbeitszeitTeilzeitAbend": false,
+      "arbeitszeitTeilzeitNachmittag": false,
+      "arbeitszeitTeilzeitVormittag": false,
+      "arbeitszeitTeilzeitFlexibel": false,
+      "arbeitszeitVollzeit": true,
+      "eintrittszeitraum": {
+        "von": "2026-09-30"
+      },
+      "verguetungsangabe": "KEINE_ANGABEN",
+      "vertragsdauer": "UNBEFRISTET",
+      "istGeringfuegigeBeschaeftigung": false,
+      "stellenlokationen": [
+        {
+          "adresse": {
+            "plz": "22143",
+            "ort": "Hamburg",
+            "region": "HAMBURG",
+            "land": "DEUTSCHLAND"
+          },
+          "breite": 53.61,
+          "laenge": 10.17
+        },
+        {
+          "adresse": {
+            "plz": "64283",
+            "ort": "Darmstadt",
+            "region": "HESSEN",
+            "land": "DEUTSCHLAND"
+          },
+          "breite": 49.87,
+          "laenge": 8.65
+        }
+      ],
+      "homeofficemoeglich": false,
+      "chiffrenummer": "EX-0001",
+      "veroeffentlichungszeitraum": {
+        "von": "2026-09-30"
+      },
+      "datumErsteVeroeffentlichung": "2026-09-30",
+      "aenderungsdatum": "2026-09-30T14:14:22.926",
+      "externeURL": "https://jobs.example.test/7be1e4fe?source=arbeitsagentur",
+      "hauptberuf": "KI-Engineer",
+      "firma": "Lernhaus Online-Weiterbildung GmbH & Co. KG",
+      "referenznummer": "13635-0000000011-S",
+      "alleBerufe": [
+        "KI-Engineer"
+      ]
+    },
+    {
+      "stellenangebotsart": "ARBEIT",
+      "stellenangebotsTitel": "BI Engineer (m/w/d) – Data Engineering & KI-Infrastruktur",
+      "arbeitszeitVollzeit": true,
+      "eintrittszeitraum": {
+        "von": "2026-10-05"
+      },
+      "verguetungsangabe": "KEINE_ANGABEN",
+      "vertragsdauer": "UNBEFRISTET",
+      "stellenlokationen": [
+        {
+          "adresse": {
+            "ort": "Hannover",
+            "region": "NIEDERSACHSEN",
+            "land": "DEUTSCHLAND"
+          },
+          "breite": 52.38,
+          "laenge": 9.75
+        },
+        {
+          "adresse": {
+            "ort": "Stuttgart",
+            "region": "BADEN_WUERTTEMBERG",
+            "land": "DEUTSCHLAND"
+          },
+          "breite": 48.77,
+          "laenge": 9.17
+        },
+        {
+          "adresse": {
+            "ort": "Hamburg",
+            "region": "HAMBURG",
+            "land": "DEUTSCHLAND"
+          },
+          "breite": 53.55,
+          "laenge": 10.04
+        },
+        {
+          "adresse": {
+            "ort": "Dresden",
+            "region": "SACHSEN",
+            "land": "DEUTSCHLAND"
+          },
+          "breite": 51.07,
+          "laenge": 13.77
+        },
+        {
+          "adresse": {
+            "ort": "Kassel, Hessen",
+            "region": "HESSEN",
+            "land": "DEUTSCHLAND"
+          },
+          "breite": 51.31,
+          "laenge": 9.47
+        },
+        {
+          "adresse": {
+            "ort": "Leipzig",
+            "region": "SACHSEN",
+            "land": "DEUTSCHLAND"
+          },
+          "breite": 51.34,
+          "laenge": 12.38
+        },
+        {
+          "adresse": {
+            "ort": "Düsseldorf",
+            "region": "NORDRHEIN_WESTFALEN",
+            "land": "DEUTSCHLAND"
+          },
+          "breite": 51.24,
+          "laenge": 6.82
+        },
+        {
+          "adresse": {
+            "ort": "Potsdam",
+            "region": "BRANDENBURG",
+            "land": "DEUTSCHLAND"
+          },
+          "breite": 52.43,
+          "laenge": 13.04
+        },
+        {
+          "adresse": {
+            "ort": "Berlin",
+            "region": "BERLIN",
+            "land": "DEUTSCHLAND"
+          },
+          "breite": 52.49,
+          "laenge": 13.4
+        },
+        {
+          "adresse": {
+            "ort": "Köln",
+            "region": "NORDRHEIN_WESTFALEN",
+            "land": "DEUTSCHLAND"
+          },
+          "breite": 50.95,
+          "laenge": 6.96
+        }
+      ],
+      "homeofficemoeglich": true,
+      "homeofficetyp": "NACH_VEREINBARUNG",
+      "veroeffentlichungszeitraum": {
+        "von": "2026-10-05"
+      },
+      "datumErsteVeroeffentlichung": "2026-10-05",
+      "aenderungsdatum": "2026-10-05T13:17:49.788",
+      "hauptberuf": "Softwareentwickler/in",
+      "firma": "Praxissoft Nord GmbH    ",
+      "arbeitgeberKundennummerHash": "aDA_rHexN1bKP8fXgE6Cb55oawiPB2BJkuJtjETD_go=",
+      "referenznummer": "10001-0000000012-S",
+      "alleBerufe": [
+        "Softwareentwickler/in"
+      ]
+    }
+  ],
+  "maxErgebnisse": 82,
+  "page": 1,
+  "size": 12
+}

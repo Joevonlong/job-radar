@@ -1,0 +1,37 @@
+# 我要什么（模板）。首次运行时会被复制到 data/profile/preferences.yaml，之后只改 data/profile/ 里的那份。
+
+config_version: 2
+market:
+  # 市场：pack = 市场包；country / currency / home_language 不写时取包的值
+  pack: de
+  country: DE
+  currency: EUR
+  home_language: de
+
+target_titles:
+  - AI Engineer
+  - Forward Deployed Engineer
+
+locations:
+  - Berlin
+  - München
+
+# onsite | hybrid | remote
+workplace: [onsite, hybrid, remote]
+# none | home_country | worldwide | {region: [eu, CH …]}
+remote_scope: home_country
+# all | entry | mid | senior | lead
+seniority: all
+
+# 年薪底线（EUR，税前）：写明的上限低于它的岗位会被过滤；没写薪资则保留
+salary_floor_year: 70000
+
+# 合同类型：permanent | fixed_term | freelance | temp_agency
+contracts:
+  allow: [permanent, fixed_term, freelance]
+  exclude: [temp_agency]
+
+# 排除 Werkstudent、Praktikum、Ausbildung、Thesis 等学生岗
+exclude_student_roles: true
+exclude_companies: []
+exclude_keywords: []

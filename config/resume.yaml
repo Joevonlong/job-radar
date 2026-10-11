@@ -1,0 +1,27 @@
+# resume-kit integration. "Tailor resume" on the detail page exports the JD as md and shows the command to run /tailor in resume-kit.
+# All paths point to your own files (the master resume lives outside this repo; the system never reads it). Paths must be absolute; ~ is not supported.
+
+# Local resume-kit directory; the command is `cd <this directory> && claude "/tailor <jd path>"`. null = show only the export path, no command
+resume_kit_path: null
+# Your master resume YAML; only written into the command, never read. null = not mentioned in the command
+master_resume_path: null
+# Directory of tailored PDFs; "Attach resume" accepts only files in this directory (prevents path traversal). null = attaching disabled
+pdf_dir: null
+
+# JD export directory (relative paths start at the project root): <company>-<title>-<yyyy-mm-dd>.md; exporting again on the same day overwrites the same file
+jd_export_dir: data/exports/jd
+# When running in Docker, the export directory as seen from the host (the command needs the host path); null = same as jd_export_dir
+jd_export_host_dir: null
+
+# Command that starts Claude Code in the terminal
+claude_command: claude
+# Options added after it. The exported job posting is untrusted text from a third party, and an interactive Claude Code session reads it with
+# the tools you allowed: the default turns the web tools off. Add Bash (--disallowed-tools=Bash,WebFetch,WebSearch) if /tailor can do without it.
+claude_args: --disallowed-tools=WebFetch,WebSearch
+
+# Max characters kept for the company name and for the job title in the file name
+filename_part_max_chars: 48
+# Max characters kept for each signal quote in the exported front matter
+signal_quote_max_chars: 240
+# Max PDFs listed in the "Attach resume" dropdown (newest first)
+pdf_list_limit: 50

@@ -1,0 +1,117 @@
+{
+  "stellenangebotsart": "ARBEIT",
+  "stellenangebotsTitel": "BI Engineer (m/w/d) – Data Engineering & KI-Infrastruktur",
+  "stellenangebotsBeschreibung": "Hast du Lust, in einem wachsenden Team zu arbeiten und eigene Ideen einzubringen? Wir sind der Anbieter der Praxissoftware Beispielmed für Mac, iPhone und iPad und haben große Ziele. Dieser Text ist für ein Test-Fixture erfunden und beschreibt keine echte Stelle.\n\n### Wo Du mit anpacken kannst\n\n- In dieser Rolle treibst Du den Auf- und Ausbau unseres Data Warehouse von der Kernmodellierung bis zur Backend-Anbindung voran.\n- Du entwickelst saubere APIs und führst Daten aus unterschiedlichen Quellen stabil zusammen.\n- Deine Pipelines bringst Du automatisiert via CI/CD in Produktion und gestaltest eine resiliente Cloud-Infrastruktur mittels Infrastructure as Code.\n- Neben verlässlicher Observability und Datensicherheit (DSGVO) gestaltest Du aktiv unsere GenAI- und RAG-Infrastruktur mit.\n\n### Was Du mitbringen solltest\n\n- Du hast bereits Data Warehouses aufgebaut und bringst Erfahrung mit Linux und Docker mit.\n- Verteilte Query-Engines und moderne Cloud-Architekturen sind für Dich vertrautes Terrain.\n- Du hast Lust auf Zukunftsthemen wie GenAI, RAG oder agentische KI.\n- Um bei uns Fuß fassen zu können, ist es zwingend notwendig, dass Du Deutsch mindestens auf C1-Niveau beherrschst.\n- Du genießt die Freiheit, zu 100 % im Homeoffice von Deinem Lieblingsort in Deutschland aus zu arbeiten. Auch Teilzeit ist möglich.\n\n### Warum wir?\n\nWir sind ein offenes Team, das Kundenorientierung lebt und gleichzeitig Spaß hat. Wir bieten flexible Arbeitszeiten, Homeoffice, Dienstrad-Leasing und Gesundheitskurse.\n\n**Deine Vorteile bei uns:**\n\n- Flache Hierarchien\n- Flexible Arbeitszeiten\n- Weiterentwicklung\n- Homeoffice/Mobiles Arbeiten\n- Team Events\n",
+  "arbeitszeitVollzeit": true,
+  "eintrittszeitraum": {
+    "von": "2026-10-05"
+  },
+  "verguetungsangabe": "KEINE_ANGABEN",
+  "vertragsdauer": "UNBEFRISTET",
+  "stellenlokationen": [
+    {
+      "adresse": {
+        "ort": "Hannover",
+        "region": "NIEDERSACHSEN",
+        "land": "DEUTSCHLAND"
+      },
+      "breite": 52.38,
+      "laenge": 9.75
+    },
+    {
+      "adresse": {
+        "ort": "Stuttgart",
+        "region": "BADEN_WUERTTEMBERG",
+        "land": "DEUTSCHLAND"
+      },
+      "breite": 48.77,
+      "laenge": 9.17
+    },
+    {
+      "adresse": {
+        "ort": "Hamburg",
+        "region": "HAMBURG",
+        "land": "DEUTSCHLAND"
+      },
+      "breite": 53.55,
+      "laenge": 10.04
+    },
+    {
+      "adresse": {
+        "ort": "Dresden",
+        "region": "SACHSEN",
+        "land": "DEUTSCHLAND"
+      },
+      "breite": 51.07,
+      "laenge": 13.77
+    },
+    {
+      "adresse": {
+        "ort": "Kassel, Hessen",
+        "region": "HESSEN",
+        "land": "DEUTSCHLAND"
+      },
+      "breite": 51.31,
+      "laenge": 9.47
+    },
+    {
+      "adresse": {
+        "ort": "Leipzig",
+        "region": "SACHSEN",
+        "land": "DEUTSCHLAND"
+      },
+      "breite": 51.34,
+      "laenge": 12.38
+    },
+    {
+      "adresse": {
+        "ort": "Düsseldorf",
+        "region": "NORDRHEIN_WESTFALEN",
+        "land": "DEUTSCHLAND"
+      },
+      "breite": 51.24,
+      "laenge": 6.82
+    },
+    {
+      "adresse": {
+        "ort": "Potsdam",
+        "region": "BRANDENBURG",
+        "land": "DEUTSCHLAND"
+      },
+      "breite": 52.43,
+      "laenge": 13.04
+    },
+    {
+      "adresse": {
+        "ort": "Berlin",
+        "region": "BERLIN",
+        "land": "DEUTSCHLAND"
+      },
+      "breite": 52.49,
+      "laenge": 13.4
+    },
+    {
+      "adresse": {
+        "ort": "Köln",
+        "region": "NORDRHEIN_WESTFALEN",
+        "land": "DEUTSCHLAND"
+      },
+      "breite": 50.95,
+      "laenge": 6.96
+    }
+  ],
+  "homeofficemoeglich": true,
+  "homeofficetyp": "NACH_VEREINBARUNG",
+  "veroeffentlichungszeitraum": {
+    "von": "2026-10-05"
+  },
+  "datumErsteVeroeffentlichung": "2026-10-05",
+  "aenderungsdatum": "2026-10-05T13:17:49.788",
+  "istBetreut": false,
+  "hauptberuf": "Softwareentwickler/in",
+  "firma": "Praxissoft Nord GmbH    ",
+  "arbeitgeberKundennummerHash": "aDA_rHexN1bKP8fXgE6Cb55oawiPB2BJkuJtjETD_go=",
+  "allianzpartnerUrl": "http://www.arbeitsagentur.de",
+  "allianzpartnerName": "arbeitsagentur.de",
+  "referenznummer": "10001-0000000012-S"
+}

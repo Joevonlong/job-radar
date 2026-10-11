@@ -1,0 +1,244 @@
+import { and, desc, eq, inArray, sql, type SQL } from "drizzle-orm";
+
+import type { Db } from "../client";
+import { controlRequests } from "../schema";
+
+export type ControlRequest = typeof controlRequests.$inferSelect;
+export type ControlRequestKind = ControlRequest["kind"];
+export type ControlRequestStatus = ControlRequest["status"];
+
+export const CONTROL_REQUEST_KINDS = ["run_cycle", "rescore_stale", "run_suggest", "run_ai", "translate_job", "breakdown_job", "score_jobs", "test_channel", "test_ai", "test_telegram", "salary_lookup"] as const satisfies readonly ControlRequestKind[];
+/** The requests the settings page offers and lists; the AI ones belong to the ai-worker and show on /sources. */
+export const SETTINGS_REQUEST_KINDS = ["run_cycle", "rescore_stale", "score_jobs"] as const satisfies readonly ControlRequestKind[];
+/**
+ * THE RULE: a request kind whose handler calls an AI provider is claimed only by the ai-worker on the
+ * host (the container runner takes it only with `ai.yaml: execution: container`). Every new such kind (`run_suggest`,
+ * `score_jobs`, ...) goes into this list, and into this list only: the claim lists of both
+ * processes (`src/lib/control/kinds.ts`) and the `/sources` queue count derive from it.
+ * `tests/ai-worker/units.test.ts` fails while a kind of the database enum is in neither list.
+ */
+export const AI_CONTROL_REQUEST_KINDS = ["run_ai", "translate_job", "breakdown_job", "rescore_stale", "run_suggest", "score_jobs", "test_ai", "salary_lookup"] as const satisfies readonly ControlRequestKind[];
+/** The kinds that call no AI: the container runner's own work (the channel test and the Telegram test message). */
+export const NON_AI_CONTROL_REQUEST_KINDS = ["run_cycle", "test_channel", "test_telegram"] as const satisfies readonly ControlRequestKind[];
+/** The test buttons of /sources and /settings; their result is shown next to the button, not in the request list. */
+export const TEST_CONTROL_REQUEST_KINDS = ["test_channel", "test_ai", "test_telegram"] as const satisfies readonly ControlRequestKind[];
+/**
+ * Kinds a restart does not put back in the queue. The test buttons: their result belongs next to a click, and a Telegram
+ * test message sent again minutes later would surprise. `run_cycle`: the runner's catch-up already runs again the slot of a cycle a
+ * restart cut off, and a queued manual cycle next to it would only collect twice; the "collect now" shows as failed and can be clicked again.
+ * `salary_lookup`: a paid web search the user clicked; a restart must not run it (and bill it) again unasked, the card offers "try again".
+ */
+export const NOT_REQUEUED_CONTROL_REQUEST_KINDS = [...TEST_CONTROL_REQUEST_KINDS, "run_cycle", "salary_lookup"] as const satisfies readonly ControlRequestKind[];
+/** Statuses in which a request still waits for, or is held by, the runner. */
+export const OPEN_CONTROL_STATUSES = ["pending", "running"] as const satisfies readonly ControlRequestStatus[];
+
+export async function insertControlRequest(db: Db, input: { kind: ControlRequestKind; payload?: unknown }): Promise<ControlRequest> {
+  const [row] = await db
+    .insert(controlRequests)
+    .values({ kind: input.kind, payload: input.payload ?? {} })
+    .returning();
+  if (!row) throw new Error("insertControlRequest: insert returned no row");
+  return row;
+}
+
+/** The oldest request of `kind` that is still pending or running, or null. */
+export async function findOpenControlRequest(db: Db, kind: ControlRequestKind): Promise<ControlRequest | null> {
+  const [row] = await db
+    .select()
+    .from(controlRequests)
+    .where(and(eq(controlRequests.kind, kind), inArray(controlRequests.status, [...OPEN_CONTROL_STATUSES])))
+    .orderBy(controlRequests.id)
+    .limit(1);
+  return row ?? null;
+}
+
+/** `('a'::control_request_kind, 'b'::control_request_kind)` for a `kind in (...)` test. */
+function kindList(kinds: readonly ControlRequestKind[]): SQL {
+  return sql.join(
+    kinds.map((kind) => sql`${kind}::control_request_kind`),
+    sql`, `,
+  );
+}
+
+/** Every request of `kind` that is still pending or running, oldest first. */
+export async function listOpenControlRequests(db: Db, kind: ControlRequestKind): Promise<ControlRequest[]> {
+  return db
+    .select()
+    .from(controlRequests)
+    .where(and(eq(controlRequests.kind, kind), inArray(controlRequests.status, [...OPEN_CONTROL_STATUSES])))
+    .orderBy(controlRequests.id);
+}
+
+/**
+ * Take the oldest pending request (of one of `kinds`, default every kind): it becomes `running` in the
+ * same statement, so two runners (or two polls) can never take the same one (`for update skip locked`).
+ * Null when nothing is pending. The runner and the ai-worker pass their own kinds, so neither takes
+ * the other's work. A `run_ai` request is only claimable once the cycle it names is no longer `running`.
+ */
+export async function claimNextControlRequest(db: Db, kinds?: readonly ControlRequestKind[]): Promise<ControlRequest | null> {
+  if (kinds !== undefined && kinds.length === 0) return null;
+  const kindFilter = kinds === undefined ? sql`` : sql`and kind in (${kindList(kinds)})`;
+  const rows = await db.execute<Record<string, unknown>>(sql`
+    update control_requests
+    set status = 'running', started_at = now()
+    where id = (
+      select id from control_requests
+      where status = 'pending' ${kindFilter}
+        -- a run_ai request waits until its cycle has finished: the cycle writes its own summary last
+        and not (
+          kind = 'run_ai'
+          and exists (select 1 from cycles c where c.id = nullif(payload ->> 'cycleId', '')::int and c.status = 'running')
+        )
+      order by id
+      for update skip locked
+      limit 1
+    )
+    returning id
+  `);
+  const id = rows[0]?.id;
+  if (id === undefined) return null;
+  const [row] = await db
+    .select()
+    .from(controlRequests)
+    .where(eq(controlRequests.id, Number(id)))
+    .limit(1);
+  return row ?? null;
+}
+
+export async function finishControlRequest(
+  db: Db,
+  id: number,
+  input: { status: Extract<ControlRequestStatus, "done" | "failed">; result?: unknown },
+): Promise<ControlRequest | null> {
+  const [row] = await db
+    .update(controlRequests)
+    .set({ status: input.status, result: input.result ?? null, finishedAt: sql`now()` })
+    .where(eq(controlRequests.id, id))
+    .returning();
+  return row ?? null;
+}
+
+export interface RequeueOutcome {
+  /** Put back to `pending`: the next start of the process takes them again. */
+  requeued: number;
+  /** Interrupted more often than allowed: failed with the reason. */
+  failed: number;
+}
+
+/**
+ * Requests still `running` whose process stopped under them (a deploy restarted it, it crashed) go back to
+ * `pending`, so the work is picked up again instead of being lost; `result` keeps `{ interruptions, interrupted }`
+ * meanwhile. A request interrupted `maxRequeues` times already fails with `reason` instead (a request that brings its
+ * process down must not loop forever). `NOT_REQUEUED_CONTROL_REQUEST_KINDS` always fail. Only `running` rows of `kinds` (default every kind) are touched, and with `id` only
+ * that one: a process passes its own kinds, so a restart of the runner never touches what the ai-worker is working on.
+ */
+export async function requeueInterruptedControlRequests(
+  db: Db,
+  input: { reason: string; maxRequeues: number; kinds?: readonly ControlRequestKind[]; id?: number },
+): Promise<RequeueOutcome> {
+  if (input.kinds !== undefined && input.kinds.length === 0) return { requeued: 0, failed: 0 };
+  const kindFilter = input.kinds === undefined ? sql`` : sql`and kind in (${kindList(input.kinds)})`;
+  const idFilter = input.id === undefined ? sql`` : sql`and id = ${input.id}`;
+  const count = sql`(case when jsonb_typeof(result -> 'interruptions') = 'number' then (result ->> 'interruptions')::int else 0 end)`;
+  const again = sql`(${count} < ${Math.max(0, input.maxRequeues)} and kind not in (${kindList(NOT_REQUEUED_CONTROL_REQUEST_KINDS)}))`;
+  const rows = await db.execute<{ status: string }>(sql`
+    update control_requests
+    set status = case when ${again} then 'pending'::control_request_status else 'failed'::control_request_status end,
+        started_at = case when ${again} then null else started_at end,
+        finished_at = case when ${again} then null else now() end,
+        result = case
+          when ${again} then jsonb_build_object('interruptions', ${count} + 1, 'interrupted', ${input.reason}::text)
+          else jsonb_build_object('error', ${input.reason}::text, 'interruptions', ${count})
+        end
+    where status = 'running' ${kindFilter} ${idFilter}
+    returning status
+  `);
+  const requeued = rows.filter((row) => row.status === "pending").length;
+  return { requeued, failed: rows.length - requeued };
+}
+
+export async function getControlRequest(db: Db, id: number): Promise<ControlRequest | null> {
+  const [row] = await db.select().from(controlRequests).where(eq(controlRequests.id, id)).limit(1);
+  return row ?? null;
+}
+
+/** Newest first; `kinds` limits the list to those kinds. */
+export async function listControlRequests(db: Db, limit: number, kinds?: readonly ControlRequestKind[]): Promise<ControlRequest[]> {
+  if (kinds !== undefined && kinds.length === 0) return [];
+  return db
+    .select()
+    .from(controlRequests)
+    .where(kinds === undefined ? undefined : inArray(controlRequests.kind, [...kinds]))
+    .orderBy(desc(controlRequests.id))
+    .limit(limit);
+}
+
+/** The oldest open `translate_job` request for one job, or null (a double click shares one request). */
+export async function findOpenTranslateRequest(db: Db, jobId: number): Promise<ControlRequest | null> {
+  return findOpenJobControlRequest(db, "translate_job", jobId);
+}
+
+/** The oldest open per-job request (`translate_job`, `breakdown_job`) for one job, or null. */
+export async function findOpenJobControlRequest(db: Db, kind: "translate_job" | "breakdown_job", jobId: number): Promise<ControlRequest | null> {
+  const [row] = await db
+    .select()
+    .from(controlRequests)
+    .where(and(eq(controlRequests.kind, kind), inArray(controlRequests.status, [...OPEN_CONTROL_STATUSES]), sql`${controlRequests.payload} ->> 'jobId' = ${String(jobId)}`))
+    .orderBy(controlRequests.id)
+    .limit(1);
+  return row ?? null;
+}
+
+/** The open (pending / running) per-job request of `kind` if there is one, else the newest finished one, or null: what the job page should show after a reload. */
+export async function findLatestJobControlRequest(db: Db, kind: "translate_job" | "breakdown_job", jobId: number): Promise<ControlRequest | null> {
+  const same = and(eq(controlRequests.kind, kind), sql`${controlRequests.payload} ->> 'jobId' = ${String(jobId)}`);
+  const [open] = await db
+    .select()
+    .from(controlRequests)
+    .where(and(same, inArray(controlRequests.status, [...OPEN_CONTROL_STATUSES])))
+    .orderBy(desc(controlRequests.id))
+    .limit(1);
+  if (open) return open;
+  const [latest] = await db.select().from(controlRequests).where(same).orderBy(desc(controlRequests.id)).limit(1);
+  return latest ?? null;
+}
+
+export interface OpenRequestStats {
+  pending: number;
+  running: number;
+  /** Request time of the oldest request that is still pending (nothing has picked it up yet), or null. */
+  oldestPendingAt: Date | null;
+}
+
+/** How many requests of `kinds` wait for, or are held by, their process. */
+export async function countOpenControlRequests(db: Db, kinds: readonly ControlRequestKind[]): Promise<OpenRequestStats> {
+  if (kinds.length === 0) return { pending: 0, running: 0, oldestPendingAt: null };
+  const [row] = await db
+    .select({
+      pending: sql<number>`count(*) filter (where ${controlRequests.status} = 'pending')::int`,
+      running: sql<number>`count(*) filter (where ${controlRequests.status} = 'running')::int`,
+      oldestPendingAt: sql<Date | null>`min(${controlRequests.requestedAt}) filter (where ${controlRequests.status} = 'pending')`,
+    })
+    .from(controlRequests)
+    // Compared as text: `pnpm ops:drain` and the doctor run the new code before the deploy migrates, and a kind the enum does not
+    // have yet (added by that migration) must match nothing instead of failing with "invalid input value for enum".
+    .where(inArray(sql<string>`${controlRequests.kind}::text`, [...kinds]));
+  return { pending: row?.pending ?? 0, running: row?.running ?? 0, oldestPendingAt: row?.oldestPendingAt ? new Date(row.oldestPendingAt) : null };
+}
+
+/** The newest request of `kind` that has finished (done or failed), or null. */
+export async function getLatestFinishedControlRequest(db: Db, kind: ControlRequestKind): Promise<ControlRequest | null> {
+  const [row] = await db
+    .select()
+    .from(controlRequests)
+    .where(and(eq(controlRequests.kind, kind), inArray(controlRequests.status, ["done", "failed"])))
+    .orderBy(desc(controlRequests.id))
+    .limit(1);
+  return row ?? null;
+}
+
+/** The newest request of `kind` (any status), or null: when the weekly suggestion was last asked for. */
+export async function findLatestControlRequest(db: Db, kind: ControlRequestKind): Promise<ControlRequest | null> {
+  const [row] = await db.select().from(controlRequests).where(eq(controlRequests.kind, kind)).orderBy(desc(controlRequests.id)).limit(1);
+  return row ?? null;
+}

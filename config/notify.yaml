@@ -1,0 +1,51 @@
+# Telegram push. Token and chat id go in .env: TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID.
+# Creating a bot and getting the chat id: see docs/telegram.md; once set up, send a test message with `pnpm telegram:test`.
+config_version: 2
+telegram:
+  enabled: false # off until you set up the bot (docs/telegram.md): switch it on in the setup wizard or under Settings once TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID are in .env
+  api_base_url: "https://api.telegram.org"
+  # long-polling: max wait per getUpdates (seconds, ≤ 50)
+  poll_timeout_seconds: 30
+  request_timeout_seconds: 15
+  # Backoff after a failed getUpdates: doubles from poll_backoff_seconds, up to poll_backoff_max_seconds
+  poll_backoff_seconds: 5
+  poll_backoff_max_seconds: 300
+  # Gap between messages in one batch (Telegram allows about 1 per second per chat)
+  message_gap_ms: 1100
+  # Retries on 429 / 5xx
+  max_retries: 2
+
+# Web dashboard address (e.g. a Tailscale address), used by the "Open details" link in job messages; null = attach only the original job link
+public_base_url: null
+
+# Push threshold (rank value) for regular jobs
+push_min_score: 70
+# Lower threshold for jobs with a high-value signal (signal categories marked high_value in interests.yaml)
+push_min_score_high_value: 60
+# Max pushes per run; see the rest on the dashboard
+max_per_cycle: 10
+# Hours after a job first appears during which it stays a push candidate (jobs scored late or held back by quiet hours are pushed by a later run)
+candidate_window_hours: 48
+
+# Quiet hours (in the schedule.yaml timezone); may cross midnight
+quiet_hours:
+  enabled: true
+  start: "22:00"
+  end: "07:00"
+  # Alerts (channel circuit breaker, budget, expired login, etc.) ignore quiet hours
+  alerts_exempt: true
+
+# Alerts
+alerts:
+  # Alerts of the same kind (type + target) are sent at most once within this many hours
+  dedupe_hours: 24
+  # Alert when this share of the monthly budget is used (80% and 100%)
+  budget_thresholds: [0.8, 1.0]
+
+# Application reminders: one daily summary
+reminders:
+  enabled: true
+  send_at: "09:00" # in the schedule.yaml timezone; if it falls in quiet hours, wait until they end
+  interested_days: 7 # "Interested" for more than N days without applying
+  applied_days: 14 # "Applied" for more than N days without a response
+  max_items: 10 # max items listed per category

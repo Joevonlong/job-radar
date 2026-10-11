@@ -1,0 +1,135 @@
+{
+  "status": "OK",
+  "request_id": "00000000-0000-4000-8000-000000000004",
+  "parameters": {
+    "query": "developer jobs in chicago",
+    "num_pages": 1,
+    "country": "us"
+  },
+  "data": {
+    "jobs": [
+      {
+        "job_id": "b1Y2R05LU3llZXhhbXBsZS1maWN0aW9uYWwtam9iLXNlYXJjaC12Mg==",
+        "job_uid": "ZXhhbXBsZUpvYkFBQUFBQQ==",
+        "job_title": "Solutions Engineer - (API & Payments Infrastructure)",
+        "employer_name": "Tafel Payments",
+        "employer_logo": "https://tafel-payments.example/logo.png",
+        "employer_website": "https://tafel-payments.example",
+        "job_publisher": "LinkedIn",
+        "job_employment_type": "Full-time",
+        "job_employment_types": [
+          "FULLTIME"
+        ],
+        "job_apply_link": "https://www.linkedin.com/jobs/view/solutions-engineer-api-payments-infrastructure-at-tafel-payments-1234567890?utm_campaign=google_jobs_apply&utm_source=google_jobs_apply&utm_medium=organic",
+        "job_apply_is_direct": false,
+        "apply_options": [
+          {
+            "apply_link": "https://www.linkedin.com/jobs/view/solutions-engineer-api-payments-infrastructure-at-tafel-payments-1234567890?utm_campaign=google_jobs_apply&utm_source=google_jobs_apply&utm_medium=organic",
+            "is_direct": false,
+            "publisher": "LinkedIn"
+          },
+          {
+            "apply_link": "https://exampleboard.example/jobs/solutions-engineer-1234567890?utm_campaign=google_jobs_apply&utm_source=google_jobs_apply&utm_medium=organic",
+            "is_direct": false,
+            "publisher": "ExampleBoard"
+          },
+          {
+            "apply_link": "https://examplejobs.example/jobs/solutions-engineer-1234567890?utm_campaign=google_jobs_apply&utm_source=google_jobs_apply&utm_medium=organic",
+            "is_direct": false,
+            "publisher": "ExampleJobs"
+          },
+          {
+            "apply_link": "https://samplecareers.example/jobs/solutions-engineer-1234567890?utm_campaign=google_jobs_apply&utm_source=google_jobs_apply&utm_medium=organic",
+            "is_direct": false,
+            "publisher": "SampleCareers"
+          },
+          {
+            "apply_link": "https://demoboard.example/jobs/solutions-engineer-1234567890?utm_campaign=google_jobs_apply&utm_source=google_jobs_apply&utm_medium=organic",
+            "is_direct": false,
+            "publisher": "DemoBoard"
+          },
+          {
+            "apply_link": "https://testboard.example/jobs/solutions-engineer-1234567890?utm_campaign=google_jobs_apply&utm_source=google_jobs_apply&utm_medium=organic",
+            "is_direct": false,
+            "publisher": "TestBoard"
+          }
+        ],
+        "job_description": "Solutions Engineer (API & Payments Infrastructure)\n\nLocation: Chicago, IL or Austin, TX (Hybrid 2x/week)\n\nCompensation: $150,000 - $200,000 Base | $210,000 - $280,000 OTE + Equity + Full Benefits\n\nIndustry: Payments / API Infrastructure / Enterprise SaaS\n\nCompany Stage: Series B (fictional)\n\nThe Opportunity\n\nAre you a Solutions Engineer who works at the intersection of API architecture and B2B sales?\n\nWe are partnering with a fictional payments platform, Tafel Payments, an API-native infrastructure provider for digital marketplaces. This text is invented for a test fixture.\n\nWhat You'll Do\n- Drive pre-sales strategy: partner with account executives on technical discovery and solution scoping.\n- Master the API suite: lead integration discussions covering REST APIs, JSON payloads, webhooks and data validation.\n- Deliver demos: craft and present tailored product demonstrations.\n\nWhat You'll Bring\n- 4-8 years of experience as a solutions engineer at a B2B SaaS or API-first company\n- Hands-on API integration expertise: REST, JSON, SQL\n- Ability to translate API workflows into business value\n",
+        "job_is_remote": false,
+        "job_posted_at": "6 days ago",
+        "job_posted_at_timestamp": 1789344000,
+        "job_posted_at_datetime_utc": "2026-09-14T00:00:00.000Z",
+        "job_location": "Chicago, IL",
+        "job_city": "Chicago",
+        "job_state": "IL",
+        "job_country": "US",
+        "job_latitude": null,
+        "job_longitude": null,
+        "job_benefits": null,
+        "job_benefits_strings": null,
+        "job_google_link": "https://www.google.com/search?q=jobs&gl=us&hl=en&udm=8#vhid=example",
+        "job_salary": null,
+        "job_salary_string": "150K–280K a year",
+        "job_min_salary": 150000,
+        "job_max_salary": 280000,
+        "job_salary_period": "YEAR",
+        "job_highlights": {
+          "Qualifications": [
+            "4-8 years of experience as a solutions engineer at a B2B SaaS or API-first company",
+            "Hands-on API integration expertise: REST APIs, JSON payloads, SQL",
+            "Ability to translate API workflows into business value",
+            "Education: Bachelor's degree in Computer Science or a related discipline",
+            "Travel: up to 20% for client engagements"
+          ],
+          "Benefits": [
+            "Compensation: $150,000 - $200,000 Base | $210,000 - $280,000 OTE + Equity + Full Benefits",
+            "Company Stage: Series B (fictional)"
+          ],
+          "Responsibilities": [
+            "Drive pre-sales strategy with account executives",
+            "Lead integration discussions covering REST APIs, JSON payloads and webhooks",
+            "Deliver tailored product demonstrations"
+          ]
+        },
+        "job_onet_soc": null,
+        "job_onet_job_zone": null,
+        "employer_reviews": null,
+        "work_arrangement": "hybrid",
+        "seniority_level": "mid",
+        "required_experience_years": 4,
+        "education_required": {
+          "level": "bachelor",
+          "field": "Computer Science or a related discipline"
+        },
+        "visa_sponsorship": null,
+        "relocation_required": null,
+        "relocation_assistance": null,
+        "contract_duration": null,
+        "start_date": null,
+        "required_technologies": [
+          "REST APIs",
+          "JSON",
+          "SQL",
+          "Webhooks"
+        ],
+        "preferred_technologies": [],
+        "methodologies": [],
+        "industry": "Payments / API Infrastructure / Enterprise SaaS",
+        "job_function": "other",
+        "has_management_responsibilities": false,
+        "ai_ml_involved": true,
+        "benefits_extended": [
+          "Equity",
+          "Full Benefits"
+        ],
+        "soft_skills": [
+          "Pre-Sales Strategy",
+          "Technical Discovery",
+          "Communication",
+          "Product Demonstrations"
+        ]
+      }
+    ],
+    "cursor": null
+  }
+}

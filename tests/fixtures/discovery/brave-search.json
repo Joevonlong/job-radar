@@ -1,0 +1,21 @@
+{
+  "type": "search",
+  "query": { "original": "site:jobs.ashbyhq.com (\"AI Engineer\") \"Berlin\"", "country": "de", "safesearch": "strict" },
+  "web": {
+    "type": "search",
+    "results": [
+      { "title": "Machine Learning Engineer - Example Labs", "url": "https://jobs.ashbyhq.com/examplelabs/0a1b2c3d-0000-4000-8000-000000000001", "description": "Berlin ..." },
+      { "title": "Jobs at Example Labs", "url": "https://jobs.ashbyhq.com/examplelabs", "description": "duplicate board" },
+      { "title": "AI Engineer - Beta GmbH", "url": "https://betagmbh.jobs.personio.de/job/123456?language=en", "description": "Munich ..." },
+      { "title": "KI Entwickler - Gamma", "url": "https://jobs.eu.lever.co/gamma/abcd-1234", "description": "EU lever" },
+      { "title": "AI Engineer - Delta", "url": "https://job-boards.greenhouse.io/delta/jobs/42", "description": "greenhouse" },
+      { "title": "Already known - Known Co", "url": "https://jobs.lever.co/pipewerk/xyz", "description": "in companies.yaml" },
+      { "title": "ML Engineer - Epsilon", "url": "https://jobs.smartrecruiters.com/EpsilonGroup/744000000000009-ml-engineer", "description": "case matters" },
+      { "title": "Fake board", "url": "https://jobs.lever.co.evil.example/fake/1", "description": "wrong host" },
+      { "title": "Fake board 2", "url": "https://evil.example/jobs.lever.co/fake2", "description": "wrong host" },
+      { "title": "Embed", "url": "https://boards.greenhouse.io/embed/job_app?token=1", "description": "not a board" },
+      { "title": "A blog", "url": "https://www.example.com/blog/ats", "description": "not an ats" },
+      { "title": "Nested personio", "url": "https://a.b.jobs.personio.de/job/1", "description": "not a company site" }
+    ]
+  }
+}

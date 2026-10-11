@@ -1,0 +1,25 @@
+# Job breakdown (docs/breakdown.md): AI splits a JD into duties, tech stack (by category), experience, projects / achievements, soft skills, languages and other requirements,
+# marking each as "required" or "nice to have", with a quote from the JD (items whose quote doesn't match the JD are dropped). Only the JD is sent, not your profile; "have / to improve" is compared locally.
+# Off by default: breakdown costs tokens and time; turn it on when needed.
+# Which AI to use and in what order: tasks.breakdown in ai.yaml (unset = global order); also editable under "Task overrides" in the AI tab of /settings.
+# Takes effect about 5 seconds after saving (runner / ai-worker hot-reload; the web app rereads this file each time a detail page opens).
+
+# Master switch. false: the detail page has no breakdown button and nothing is broken down automatically; existing results still show (read-only)
+enabled: false
+
+# manual: analyze only when "Break down this job" is clicked on the detail page.
+# auto: additionally break down high-scoring jobs automatically at the end of each run (after translation), within the auto threshold and cap below
+mode: manual
+
+auto:
+  # Only auto-break-down jobs whose rank value is at least this score (same scale as translate_auto_min_score in ai.yaml)
+  min_rank: 80
+  # Max automatic breakdowns per run, from the highest rank value down; the rest continue in the next run
+  per_cycle_limit: 5
+
+# Max JD characters sent to the AI; longer JDs keep only the start and the end (requirements are often at the end)
+jd_max_chars: 12000
+# When truncating, the share taken from the start; the rest comes from the end
+jd_head_share: 0.7
+# Max wait per breakdown (seconds); on timeout, switch to the next provider
+timeout_seconds: 240

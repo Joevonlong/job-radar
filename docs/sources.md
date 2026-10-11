@@ -1,0 +1,116 @@
+# Source registry: one file for every collection source
+
+What you want is to know exactly which sources exist, which are healthy and which are not, with no black box. All collection sources now live in one file: `data/config/sources.yaml`. The `/sources/registry` page and the `pnpm sources:list` command read it, plus the health records in the database.
+
+## 1. Three copies, which one wins
+
+| Copy | What it is | Who changes it |
+|---|---|---|
+| `data/config/sources.yaml` | **The truth.** Switches, parameters and budgets for every channel, plus the company ATS boards to collect | You, the web UI (the "Sources" tab of the settings page, the registry page), an agent |
+| DB table `source_registry` | A **mirror** of the file: one row per entry; entries deleted from the file stay, marked `in_config = false` | Runner start and config hot-reload, after every web write to the file, when the registry page finds it out of sync, `pnpm sources:list --sync` |
+| `/sources/registry` page | File + health data (`channels`, `runs`, `ats_boards`, `raw_postings`) | Read-only view; switches and edits are written back to the file |
+
+Every change made in the web UI is written back to `sources.yaml` (comments preserved) and then synced to the database immediately.
+
+## 2. File structure
+
+```
+top         total paid budget, circuit breaker, concurrency, HTTP, size of the "Test" button (shared by all channels)
+linkedin    LinkedIn cascade order and the four LinkedIn channels
+jobspy      jobspy sidecar (shared by linkedin-guest, indeed, jobspy-google); proxies may contain credentials
+sources     other channels: job boards, search APIs, company ATS, board discovery, Gmail alert emails
+ats_boards  company ATS boards to collect: name, ats, token, enabled, optional region
+registry    stats window, status thresholds, import size limit, "open board" URL templates for the registry page
+```
+
+Entry ids: a channel is its channel name (`greenhouse`, `gmail-alerts`, `linkedin-session:recommended`); a company is `board:<ats>:<token>` (`board:greenhouse:celonis`).
+
+Keys under `registry:` can only be changed in the YAML: `window_days` (stats window, 7 days), `board_failing_after` (how many consecutive failures count as failing, 2), `board_stale_hours` (how long without a check counts as degraded, 48), `import_max_bytes`, `board_page_urls`, and optionally `candidates_page_size` (how many "discovered boards" are listed at once; 10 if omitted; deliberately left out of the shipped file, because a default written there would be carried into the file on every save).
+
+## 3. How the seven statuses are decided
+
+| Status | Meaning |
+|---|---|
+| OK | The latest run succeeded; for a company, the latest check succeeded and was not long ago |
+| Degraded | Recent request failures, or probing after the circuit breaker opened; **the last several runs were all "skipped"** (no usable channel in the cascade, or budget used up; the reason reads "skipped in the last N cycles: <reason>", even if it succeeded earlier); for a company, the latest check failed (count below the threshold) or it has not been checked for too long |
+| Failing | The latest run failed or the circuit breaker is open; for a company, consecutive failures reached `board_failing_after` |
+| Disabled | The switch is off; for a company, its ATS channel is off |
+| Not configured | Enabled but missing a key / not logged in (the page shows only the variable name, never the value) |
+| Never run | The channel has no run records yet; the company has not been checked yet |
+| Standby | A later channel in the LinkedIn cascade: enabled, but a channel ahead of it is available so it never got its turn ("cascade fallback: does not run while earlier channels are available"); sorted after "OK" |
+
+A channel's status is the same result as the channel card on the `/sources` overview page. For companies the first match wins, in this order: disabled -> never run -> consecutive failures reached the threshold (failing) -> latest check failed (degraded) -> not checked for too long (degraded) -> OK. Every row has a one-line reason; hover for the full text.
+
+## 4. What you can do on the page
+
+- View: the summary bar (click a block to show only that status), type / status / search filters (all kept in the URL, so they survive a refresh); channels are grouped, companies show failing ones first by default.
+- Switch: the enable switch of channels and companies only changes the `enabled` line in the file. `linkedin-session:recommended` ("recommended for you", read once a day) requires `linkedin-session` to be enabled first: while it is off this switch is greyed out, with the reason on hover, and does not pretend to be enabled.
+- Edit parameters: "Edit parameters" on a channel row jumps to `/settings?tab=channels&section=<channel id>`.
+- Companies: add, edit, delete (confirmed before deleting; postings already collected are not affected); "Open board" shows the careers page in a new window.
+- Discovered boards: lower on the page, first one page is listed (10 by default) with the total count stated, "Show N more" expands; the search box and the ATS and type filters apply to it too, the status filter does not (the page says so). "Add" writes it into `ats_boards`; after "Ignore" it no longer appears.
+- Channel details: circuit-breaker state, consecutive failures, usage this month, and the "Collect now" and "Test" buttons.
+- On a phone (narrow screen) the two tables become cards, and "Details" expands the rest.
+
+### Import and export
+
+- Export YAML: the file as is (with comments), file name `sources-20261008-1402.yaml`. Export JSON: the validated values. Both replace the credentials in URLs under `jobspy.proxies` with `***`.
+- Import: upload or paste YAML / JSON, click "Preview" to see the diff (channels enabled / disabled, parameter changes, companies added / removed / modified, other settings), then "Apply". The server re-validates on apply; if the file was changed after the preview it refuses, so preview again.
+- Two modes: **replace the whole file** (must be a complete, valid sources.yaml) and **merge ATS companies only** (the file has an `ats_boards` list; adds or updates, never deletes).
+- `jobspy.proxies` always keeps its current value; import cannot change it. An exported JSON can be imported back whole as is, with no diff.
+- Export the current file before importing; if something goes wrong you can import it back.
+- When validation fails, errors are written in the UI language and name companies as "name (ats/token)", not by list index; a YAML syntax error reports the line and column once.
+- When "replace the whole file" removes a company, the group comments above the other companies stay where they are; the removed company's own group comment moves to the company after it.
+- When `sources.yaml` cannot be read: the table shows the database mirror (possibly stale), switches and editing are disabled, but export YAML and import still work; use import to replace the whole file and repair it.
+
+## 5. Command line
+
+```
+pnpm sources:list [--type channel|ats_board] [--status failing ...] [--all] [--json] [--sync] [--strict] [--lang en|zh]
+```
+
+Prints all sources, their status and the reason (the table language follows `cli.locale`; override it with `--lang en|zh`). `--json` outputs code values: `status` (`ok` / `degraded` / ...), `lastRunResult` (`succeeded` / `failed` / `skipped`; for companies `ok` / `not_modified` / `error`), `reasons` (`[{ key, values }]`); "last run" and "last success" are both finish times. `--status` can be repeated; `--all` includes entries that were removed from the file; `--sync` syncs the file into the database first; `--strict` exits with code 1 if any enabled source is "failing". When the database is unreachable it lists only the entries in the file (status "unknown").
+
+`sources.registry` in `pnpm run doctor`: warn when an enabled source is failing or the mirror is behind; fail when `sources.yaml` cannot be read.
+
+## 6. Handling common failures
+
+| You see | What to do |
+|---|---|
+| Company "N consecutive failures: board does not exist (404)" | The token is wrong or the company changed ATS: click "Open board" to look at the careers page, fix the token under "Edit", or "Delete" |
+| Company "not checked for N hours" | Its ATS channel is off or the breaker is open, or the runner is not running; look at the channel row |
+| Channel "breaker open until ..." | Consecutive failures reached `circuit_breaker.failures`; it tries once automatically when the cooldown expires; expand "Details" for the latest error code; being blocked usually means waiting or switching channels |
+| "Missing TAVILY_API_KEY" and similar | Put this variable in `.env` (the page only tells you the name), or turn the channel off |
+| "LinkedIn not logged in / login expired" | Log in again, see [LinkedIn session](linkedin-session.md) |
+| "Mirror out of sync" at the top of the page | The runner fixes it on start or config hot-reload; or run `pnpm sources:list --sync` |
+
+## Scraping
+
+Not every channel uses an official API. Some read public web pages or unofficial endpoints, and some act as your own
+logged-in account. The terms of service of most job sites forbid automated access, so these channels are **off by default
+for a new installation** and need your explicit consent to switch on.
+
+| Kind | Channels | Default | Risk |
+|---|---|---|---|
+| Scraping | LinkedIn guest search (`linkedin-guest`), Indeed (`indeed`), StepStone (`stepstone`), XING (`xing`), Google Jobs via the sidecar (`jobspy-google`) | off | the site's terms may forbid it; your IP address can be rate limited or blocked |
+| Account automation | LinkedIn logged-in session (`linkedin-session`, `linkedin-session:recommended`) | off | uses your own account; the account can be restricted or banned |
+| Official APIs and public company feeds | Arbeitsagentur, Greenhouse, Lever, Ashby, Personio, SmartRecruiters (on); JSearch, Gmail alerts, Tavily, Brave (need your key or account) | on, or off until you add a key | follow the provider's own terms and quotas |
+| Paid scraping services | Bright Data, Apify | on, but nothing happens without your token | a service scrapes for you; **this does not remove the terms-of-service risk**, which stays with you |
+
+How to switch one on:
+
+- **Setup wizard, Sources step.** Scraping and account channels are never pre-ticked, not even the ones your market pack lists
+  as local. Ticking one shows a notice and a confirmation box you must tick before the step can be saved. With `pnpm run setup
+  --answers`, set `sources.acknowledge_scraping: true` (see [setup.md](setup.md#the-answers-file)).
+- **`/sources/registry`.** Turning the switch of such a channel on opens a dialog with the same notice; the change is written only
+  after you confirm. Turning it off needs no confirmation. The server refuses to switch one on without the confirmation. An import file that switches such a channel on shows the same notice in its preview and needs a confirmation box ticked before it can be applied.
+- **Settings page or the YAML.** Setting `enabled: true` there is taken as an explicit decision: the settings form shows the
+  notice next to the switch but does not block you. The "Turn them on" button on `/me` (after changing the market) skips these
+  channels and tells you to do it on the Sources page.
+
+Existing installations keep their `data/config/sources.yaml` exactly as it is; only a new installation starts with these channels
+off. `jobspy.linkedin_fetch_description` (one more request per LinkedIn job to read the full description) is off by default as
+well.
+
+If you switch scraping channels on: read the terms of every site, keep volumes low (few keywords, few cities, the
+default schedule), do not republish collected data, and prefer official APIs, company career boards and your own job-alert
+emails. You are responsible for how you use them; see also the disclaimer in the [README](../README.md#scraping-and-terms-of-service).

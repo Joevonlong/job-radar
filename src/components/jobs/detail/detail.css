@@ -1,0 +1,26 @@
+/*
+ * Job detail page: the flash of a JD quote when its signal tag was clicked ("jump to the original").
+ * Colours and durations come from the v3 tokens. With reduced motion the mark gets a still ring instead
+ * (jd-panel.tsx removes it after FLASH_STILL_MS).
+ */
+.jr-flash {
+  animation: jr-mark-flash var(--dur-slow) steps(2) 3;
+}
+@keyframes jr-mark-flash {
+  50% {
+    box-shadow: 0 0 0 var(--space-1) var(--hi);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .jr-flash {
+    animation: none;
+    box-shadow: 0 0 0 var(--space-1) var(--hi);
+  }
+}
+
+/* The "suspicious" block of the AI trap panel: the warn colour always comes with a hatch (tokens.md). */
+.jr-trap-sus {
+  background-color: var(--warn);
+  background-image: repeating-linear-gradient(135deg, color-mix(in srgb, var(--ink) 30%, transparent) 0 1.5px, transparent 1.5px 5px);
+  color: var(--on-signal);
+}

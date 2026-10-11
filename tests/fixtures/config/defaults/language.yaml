@@ -1,0 +1,20 @@
+# Test fixture: the languages of an install from before the language settings (Chinese everywhere, English summaries next to the
+# Chinese ones), which the existing tests are written against. The shipped config/language.yaml is English.
+
+config_version: 1
+
+ui:
+  default_locale: zh
+
+ai:
+  output: zh
+  summary_also: [en]
+
+translation:
+  target: zh
+
+notify:
+  locale: null
+
+cli:
+  locale: null

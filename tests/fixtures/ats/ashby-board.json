@@ -1,0 +1,372 @@
+{
+  "apiVersion": "1",
+  "jobs": [
+    {
+      "id": "a1000000-0000-4000-8000-000000000001",
+      "title": "Account Executive - AI & Enterprise Solutions - m/f/d",
+      "department": "Business",
+      "team": "Sales",
+      "employmentType": "FullTime",
+      "location": "Berlin",
+      "shouldDisplayCompensationOnJobPostings": true,
+      "secondaryLocations": [],
+      "publishedAt": "2026-05-08T05:30:56.886+00:00",
+      "isListed": true,
+      "isRemote": null,
+      "workplaceType": null,
+      "address": {
+        "postalAddress": {
+          "addressCountry": "Germany"
+        }
+      },
+      "jobUrl": "https://jobs.ashbyhq.com/examplelabs/a1000000-0000-4000-8000-000000000001",
+      "applyUrl": "https://jobs.ashbyhq.com/examplelabs/a1000000-0000-4000-8000-000000000001/application",
+      "descriptionHtml": "<p>HELP US MAKE DATA USEFUL</p><p></p><p>\nBUILD SOMETHING PEOPLE USE.</p><p>Nordlicht Analytics exists to make data useful, bridging the gap between what software can do and what teams actually need. We bring every reporting tool into one simple,</p>",
+      "descriptionPlain": "HELP US MAKE DATA USEFUL\n\n\n\n\nBUILD SOMETHING PEOPLE USE.\n\nNordlicht Analytics exists to make data useful, bridging the gap between what software can do and what teams actually need. We bring every reporting tool into one simple,",
+      "compensation": {
+        "compensationTierSummary": "€77K – €90K • Offers Equity • €50K – €60K Bonus",
+        "scrapeableCompensationSalarySummary": "€77K - €90K",
+        "compensationTiers": [
+          {
+            "id": "1843eb66-ec0f-4552-8141-f336f6271f8d",
+            "tierSummary": "€77K – €90K • Offers Equity • €50K – €60K Bonus",
+            "title": null,
+            "additionalInformation": null,
+            "components": [
+              {
+                "id": "4abd10c0-8e4c-496d-ab47-f709f4019dd4",
+                "summary": "Offers Equity",
+                "compensationType": "EquityPercentage",
+                "interval": "NONE",
+                "currencyCode": null,
+                "minValue": null,
+                "maxValue": null
+              },
+              {
+                "id": "cd871b89-9cec-4769-a08e-4847bf5845e9",
+                "summary": "€77K – €90K",
+                "compensationType": "Salary",
+                "interval": "1 YEAR",
+                "currencyCode": "EUR",
+                "minValue": 77000,
+                "maxValue": 90000
+              },
+              {
+                "id": "e8c0907f-34c3-45d7-bca2-285087501327",
+                "summary": "€50K – €60K Bonus",
+                "compensationType": "Bonus",
+                "interval": "1 YEAR",
+                "currencyCode": "EUR",
+                "minValue": 50000,
+                "maxValue": 60000
+              }
+            ]
+          }
+        ],
+        "summaryComponents": [
+          {
+            "compensationType": "EquityPercentage",
+            "interval": "NONE",
+            "currencyCode": null,
+            "minValue": null,
+            "maxValue": null
+          },
+          {
+            "compensationType": "Salary",
+            "interval": "1 YEAR",
+            "currencyCode": "EUR",
+            "minValue": 77000,
+            "maxValue": 90000
+          },
+          {
+            "compensationType": "Bonus",
+            "interval": "1 YEAR",
+            "currencyCode": "EUR",
+            "minValue": 50000,
+            "maxValue": 60000
+          }
+        ]
+      }
+    },
+    {
+      "id": "a1000000-0000-4000-8000-000000000002",
+      "title": "Enterprise AI Adoption Manager - m/f/d",
+      "department": "Business",
+      "team": "Customer Success",
+      "employmentType": "FullTime",
+      "location": "Berlin",
+      "shouldDisplayCompensationOnJobPostings": true,
+      "secondaryLocations": [],
+      "publishedAt": "2026-04-30T08:19:11.526+00:00",
+      "isListed": true,
+      "isRemote": false,
+      "workplaceType": "OnSite",
+      "address": {
+        "postalAddress": {
+          "addressCountry": "Germany"
+        }
+      },
+      "jobUrl": "https://jobs.ashbyhq.com/examplelabs/a1000000-0000-4000-8000-000000000002",
+      "applyUrl": "https://jobs.ashbyhq.com/examplelabs/a1000000-0000-4000-8000-000000000002/application",
+      "descriptionHtml": "<p>HELP US MAKE DATA USEFUL</p><p></p><p>\nBUILD SOMETHING PEOPLE USE.</p><p>Nordlicht Analytics exists to make data useful, bridging the gap between what software can do and what teams actually need. We bring every reporting tool into one simple,</p>",
+      "descriptionPlain": "HELP US MAKE DATA USEFUL\n\n\n\n\nBUILD SOMETHING PEOPLE USE.\n\nNordlicht Analytics exists to make data useful, bridging the gap between what software can do and what teams actually need. We bring every reporting tool into one simple,",
+      "compensation": {
+        "compensationTierSummary": "€80K – €120K • Offers Equity",
+        "scrapeableCompensationSalarySummary": "€80K - €120K",
+        "compensationTiers": [
+          {
+            "id": "6e5fd0dd-ee49-4c0c-b177-46281ac13713",
+            "tierSummary": "€80K – €120K • Offers Equity",
+            "title": null,
+            "additionalInformation": null,
+            "components": [
+              {
+                "id": "959e3534-b705-42e1-ae61-a310e8a464ab",
+                "summary": "Offers Equity",
+                "compensationType": "EquityPercentage",
+                "interval": "NONE",
+                "currencyCode": null,
+                "minValue": null,
+                "maxValue": null
+              },
+              {
+                "id": "1060e564-52af-4adb-90ff-0e9a73582011",
+                "summary": "€80K – €120K",
+                "compensationType": "Salary",
+                "interval": "1 YEAR",
+                "currencyCode": "EUR",
+                "minValue": 80000,
+                "maxValue": 120000
+              }
+            ]
+          }
+        ],
+        "summaryComponents": [
+          {
+            "compensationType": "EquityPercentage",
+            "interval": "NONE",
+            "currencyCode": null,
+            "minValue": null,
+            "maxValue": null
+          },
+          {
+            "compensationType": "Salary",
+            "interval": "1 YEAR",
+            "currencyCode": "EUR",
+            "minValue": 80000,
+            "maxValue": 120000
+          }
+        ]
+      }
+    },
+    {
+      "id": "a1000000-0000-4000-8000-000000000003",
+      "title": "Senior Systems Software Engineer (Linux & HPC) - m/f/d",
+      "department": "Engineering",
+      "team": "Engineering",
+      "employmentType": "FullTime",
+      "location": "Berlin",
+      "shouldDisplayCompensationOnJobPostings": false,
+      "secondaryLocations": [],
+      "publishedAt": "2026-08-09T16:55:34.427+00:00",
+      "isListed": true,
+      "isRemote": true,
+      "workplaceType": "Hybrid",
+      "address": {
+        "postalAddress": {
+          "addressCountry": "Germany"
+        }
+      },
+      "jobUrl": "https://jobs.ashbyhq.com/examplelabs/a1000000-0000-4000-8000-000000000003",
+      "applyUrl": "https://jobs.ashbyhq.com/examplelabs/a1000000-0000-4000-8000-000000000003/application",
+      "descriptionHtml": "<p>WHERE TEAMS TURN DATA INTO DECISIONS</p><p>Nordlicht Analytics is an example platform used by many fictional companies to give employees access to dashboards, build reports, and automate workflows. We stay a small team. We’re</p>",
+      "descriptionPlain": "WHERE TEAMS TURN DATA INTO DECISIONS\n\nNordlicht Analytics is an example platform used by many fictional companies to give employees access to dashboards, build reports, and automate workflows. We stay a small team. We’re",
+      "compensation": {
+        "compensationTierSummary": null,
+        "scrapeableCompensationSalarySummary": null,
+        "compensationTiers": [],
+        "summaryComponents": []
+      }
+    },
+    {
+      "id": "a1000000-0000-4000-8000-000000000004",
+      "title": "Working Student / Internship – Office Operations (m/f/d)",
+      "department": "Business",
+      "team": "Business",
+      "employmentType": "FullTime",
+      "location": "Berlin",
+      "shouldDisplayCompensationOnJobPostings": true,
+      "secondaryLocations": [],
+      "publishedAt": "2026-10-01T10:02:36.312+00:00",
+      "isListed": true,
+      "isRemote": false,
+      "workplaceType": "OnSite",
+      "address": {
+        "postalAddress": {
+          "addressCountry": "Germany"
+        }
+      },
+      "jobUrl": "https://jobs.ashbyhq.com/examplelabs/a1000000-0000-4000-8000-000000000004",
+      "applyUrl": "https://jobs.ashbyhq.com/examplelabs/a1000000-0000-4000-8000-000000000004/application",
+      "descriptionHtml": "<p>HELP US MAKE DATA USEFUL</p><p> </p><p>\nBUILD SOMETHING PEOPLE USE.</p><p>Nordlicht Analytics exists to make data useful, bridging the gap between what software can do and what teams actually need. We bring every reporting tool into one simple,</p>",
+      "descriptionPlain": "HELP US MAKE DATA USEFUL\n\n \n\n\nBUILD SOMETHING PEOPLE USE.\n\nNordlicht Analytics exists to make data useful, bridging the gap between what software can do and what teams actually need. We bring every reporting tool into one simple,",
+      "compensation": {
+        "compensationTierSummary": "€20.8K",
+        "scrapeableCompensationSalarySummary": "€20.8K",
+        "compensationTiers": [
+          {
+            "id": "0dc1988c-9a5c-4792-be8b-2d1836abf45f",
+            "tierSummary": "€20.8K",
+            "title": null,
+            "additionalInformation": null,
+            "components": [
+              {
+                "id": "b89b41af-ddc1-4b4b-bd02-48a4dbf00696",
+                "summary": "€20.8K",
+                "compensationType": "Salary",
+                "interval": "1 YEAR",
+                "currencyCode": "EUR",
+                "minValue": 20800,
+                "maxValue": 20800
+              }
+            ]
+          }
+        ],
+        "summaryComponents": [
+          {
+            "compensationType": "Salary",
+            "interval": "1 YEAR",
+            "currencyCode": "EUR",
+            "minValue": 20800,
+            "maxValue": 20800
+          }
+        ]
+      }
+    },
+    {
+      "id": "a1000000-0000-4000-8000-000000000005",
+      "title": "Sales Enablement Manager (Remote)",
+      "department": "Operations",
+      "team": "Revenue Operations",
+      "employmentType": "FullTime",
+      "location": "Berlin Office",
+      "shouldDisplayCompensationOnJobPostings": false,
+      "secondaryLocations": [
+        {
+          "location": "Norway",
+          "address": {
+            "postalAddress": {
+              "addressCountry": "Norway"
+            }
+          }
+        },
+        {
+          "location": "Netherlands",
+          "address": {
+            "postalAddress": {
+              "addressCountry": "Netherlands"
+            }
+          }
+        },
+        {
+          "location": "Portugal",
+          "address": {
+            "postalAddress": {
+              "addressCountry": "Portugal"
+            }
+          }
+        },
+        {
+          "location": "Germany",
+          "address": {
+            "postalAddress": {
+              "addressCountry": "Germany"
+            }
+          }
+        },
+        {
+          "location": "Finland",
+          "address": {
+            "postalAddress": {
+              "addressCountry": "Finland"
+            }
+          }
+        },
+        {
+          "location": "Denmark",
+          "address": {
+            "postalAddress": {
+              "addressCountry": "Denmark"
+            }
+          }
+        },
+        {
+          "location": "United Kingdom",
+          "address": {
+            "postalAddress": {
+              "addressCountry": "United Kingdom"
+            }
+          }
+        },
+        {
+          "location": "Spain",
+          "address": {
+            "postalAddress": {
+              "addressCountry": "Spain"
+            }
+          }
+        }
+      ],
+      "publishedAt": "2026-08-19T13:25:18.860+00:00",
+      "isListed": true,
+      "isRemote": true,
+      "workplaceType": "Remote",
+      "address": {
+        "postalAddress": {
+          "addressRegion": "Berlin-Brandenburg",
+          "addressCountry": "Germany",
+          "addressLocality": "Berlin"
+        }
+      },
+      "jobUrl": "https://jobs.ashbyhq.com/examplelabs/a1000000-0000-4000-8000-000000000005",
+      "applyUrl": "https://jobs.ashbyhq.com/examplelabs/a1000000-0000-4000-8000-000000000005/application",
+      "descriptionHtml": "<p>Workflow automation for every team.</p><p>Obstgarten Analytics is an example workflow platform. We give technical teams the freedom of code with the speed of no-code, so they can automate faster and with fewer limits.</p>",
+      "descriptionPlain": "Workflow automation for every team.\n\nObstgarten Analytics is an example workflow platform. We give technical teams the freedom of code with the speed of no-code, so they can automate faster and with fewer limits.",
+      "compensation": {
+        "compensationTierSummary": null,
+        "scrapeableCompensationSalarySummary": null,
+        "compensationTiers": [],
+        "summaryComponents": []
+      }
+    },
+    {
+      "id": "a1000000-0000-4000-8000-000000000006",
+      "title": "Hidden Role (unlisted)",
+      "department": "Engineering",
+      "team": "Engineering",
+      "employmentType": "FullTime",
+      "location": "Berlin",
+      "shouldDisplayCompensationOnJobPostings": false,
+      "secondaryLocations": [],
+      "publishedAt": "2026-08-09T16:55:34.427+00:00",
+      "isListed": false,
+      "isRemote": true,
+      "workplaceType": "Hybrid",
+      "address": {
+        "postalAddress": {
+          "addressCountry": "Germany"
+        }
+      },
+      "jobUrl": "https://jobs.ashbyhq.com/examplelabs/a1000000-0000-4000-8000-000000000003",
+      "applyUrl": "https://jobs.ashbyhq.com/examplelabs/a1000000-0000-4000-8000-000000000003/application",
+      "descriptionHtml": "<p>WHERE TEAMS TURN DATA INTO DECISIONS</p><p>Nordlicht Analytics is an example platform used by many fictional companies to give employees access to dashboards, build reports, and automate workflows. We stay a small team. We’re</p>",
+      "descriptionPlain": "WHERE TEAMS TURN DATA INTO DECISIONS\n\nNordlicht Analytics is an example platform used by many fictional companies to give employees access to dashboards, build reports, and automate workflows. We stay a small team. We’re",
+      "compensation": {
+        "compensationTierSummary": null,
+        "scrapeableCompensationSalarySummary": null,
+        "compensationTiers": [],
+        "summaryComponents": []
+      }
+    }
+  ]
+}

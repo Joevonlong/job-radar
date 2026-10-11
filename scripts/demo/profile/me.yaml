@@ -1,0 +1,29 @@
+# Demo profile for the README screenshots (`pnpm demo:shots`). A fictional person that matches the seeded demo jobs:
+# Berlin, English C1 / German B2, machine learning and data engineering. Not anybody's real profile.
+
+languages:
+  - en: C1
+  - de: B2
+
+skills:
+  - name: Python
+    years: 6
+  - name: TypeScript
+    years: 3
+  - name: SQL
+    years: 6
+  - name: PyTorch
+    years: 4
+  - name: Retrieval-augmented generation (RAG)
+    years: 2
+  - name: Kubernetes
+    years: 2
+
+years_experience: 7
+
+city: Berlin
+needs_visa_sponsorship: false
+
+summary: >-
+  Machine learning engineer with a data engineering background. Builds retrieval and evaluation pipelines and runs
+  LLM features in production. Looking for an applied AI or ML platform role in Berlin, hybrid or remote.

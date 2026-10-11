@@ -1,0 +1,50 @@
+# Telegram 推送（docs/plan.md §9）。token 和 chat id 放在 .env：TELEGRAM_BOT_TOKEN、TELEGRAM_CHAT_ID。
+# 建 bot 和拿 chat id 见 spec/guides/telegram.md；配好后用 `pnpm telegram:test` 发一条测试消息。
+telegram:
+  enabled: true # M3 配好 bot 后再打开
+  api_base_url: "https://api.telegram.org"
+  # long-polling：一次 getUpdates 最长等多久（秒，≤ 50）
+  poll_timeout_seconds: 30
+  request_timeout_seconds: 15
+  # getUpdates 失败后的退避：从 poll_backoff_seconds 起翻倍，最长 poll_backoff_max_seconds
+  poll_backoff_seconds: 5
+  poll_backoff_max_seconds: 300
+  # 同一批消息之间的间隔（Telegram 对同一个聊天约每秒 1 条）
+  message_gap_ms: 1100
+  # 遇到 429 / 5xx 时的重试次数
+  max_retries: 2
+
+# 网页看板的地址（例如 Tailscale 地址），岗位消息里的"打开详情"链接用它；null = 只附原始岗位链接
+public_base_url: "https://jobradar.example.com" # e.g. tailscale serve --bg 3000 (tailnet only)
+
+# 普通岗位的推送门槛（排序值）
+push_min_score: 70
+# 带 T1/T2 薪酬信号的岗位门槛更低
+push_min_score_with_t1_t2: 60
+# 每轮最多推多少条，其余在看板里看
+max_per_cycle: 10
+# 岗位首次出现后多少小时内仍是推送候选（打分晚到、被静默时段延后的岗位由后面的一轮补推）
+candidate_window_hours: 48
+
+# 静默时段（按 schedule.yaml 的 timezone）；可跨午夜
+quiet_hours:
+  enabled: true
+  start: "22:00"
+  end: "07:00"
+  # 告警（通道熔断、预算、登录失效等）不受静默时段限制
+  alerts_exempt: true
+
+# 告警
+alerts:
+  # 同一类告警（类型 + 对象）在这么多小时内只发一次
+  dedupe_hours: 24
+  # 月预算用掉多少比例时告警（80% 和 100%）
+  budget_thresholds: [0.8, 1.0]
+
+# 申请提醒：每天一条汇总
+reminders:
+  enabled: true
+  send_at: "09:00" # 按 schedule.yaml 的 timezone；落在静默时段内就等静默结束
+  interested_days: 7 # "感兴趣"超过 N 天还没申请
+  applied_days: 14 # "已申请"超过 N 天没有回音
+  max_items: 10 # 每一类最多列出多少条

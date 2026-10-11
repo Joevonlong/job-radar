@@ -1,0 +1,37 @@
+{
+  "postings": [
+    {
+      "id": "fx-1001",
+      "title": "Applied AI Engineer",
+      "company": "Northwind Labs GmbH",
+      "city": "Berlin",
+      "country": "DE",
+      "remote": false,
+      "description": "Build LLM-powered features for our logistics platform. Salary range EUR 85,000 - 105,000 plus equity.",
+      "url": "https://jobs.example.test/northwind/1001",
+      "posted_at": "2026-10-06T08:00:00Z"
+    },
+    {
+      "id": "fx-1002",
+      "title": "Forward Deployed Engineer",
+      "company": "Contoso AI",
+      "city": "München",
+      "country": "DE",
+      "remote": false,
+      "description": "Work with enterprise customers to deploy agent systems. Hybrid, 3 days in the office.",
+      "url": "https://jobs.example.test/contoso/1002",
+      "posted_at": "2026-10-06T09:30:00Z"
+    },
+    {
+      "id": "fx-1003",
+      "title": "KI-Entwickler (m/w/d)",
+      "company": "Fabrikam Software AG",
+      "city": null,
+      "country": "DE",
+      "remote": true,
+      "description": "Entwicklung von KI-Anwendungen im Team. Deutsch und Englisch erforderlich.",
+      "url": "https://jobs.example.test/fabrikam/1003",
+      "posted_at": null
+    }
+  ]
+}

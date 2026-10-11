@@ -1,0 +1,70 @@
+{
+  "jobs": [
+    {
+      "id": 6186419001,
+      "internal_job_id": 5212455001,
+      "title": "Senior AI Engineer (m/f/d)",
+      "updated_at": "2026-09-29T06:25:56-04:00",
+      "first_published": "2026-09-14T10:42:28-04:00",
+      "requisition_id": "JR100001",
+      "company_name": "Example Labs",
+      "language": "en",
+      "absolute_url": "https://job-boards.greenhouse.io/examplelabs/jobs/6186419001",
+      "location": { "name": "Berlin, Germany; München, Germany" },
+      "content": "&lt;p&gt;Build &lt;strong&gt;LLM&lt;/strong&gt; products.&lt;/p&gt;&lt;ul&gt;&lt;li&gt;Python&lt;/li&gt;&lt;li&gt;RAG&lt;/li&gt;&lt;/ul&gt;&lt;p&gt;Salary: &amp;euro;85,000 &amp;ndash; &amp;euro;105,000 &amp;amp; equity.&lt;/p&gt;",
+      "departments": [{ "id": 1, "name": "Engineering", "child_ids": [], "parent_id": null }],
+      "offices": [{ "id": 7, "name": "Helsinki", "location": "Helsinki, Finland", "child_ids": [], "parent_id": null }],
+      "metadata": [{ "id": 4007830004, "name": "GHBGCheck", "value": null, "value_type": "single_select" }],
+      "data_compliance": [{ "type": "gdpr", "requires_consent": false }]
+    },
+    {
+      "id": 6186419002,
+      "title": "Machine Learning Engineer",
+      "updated_at": "2026-09-30T08:00:00-04:00",
+      "first_published": "2026-09-15T09:00:00-04:00",
+      "language": "en",
+      "absolute_url": "https://job-boards.greenhouse.io/examplelabs/jobs/6186419002",
+      "location": { "name": "Remote - Germany" },
+      "content": "&lt;p&gt;Train models.&lt;/p&gt;",
+      "departments": [],
+      "offices": []
+    },
+    {
+      "id": 6186419003,
+      "title": "KI-Entwickler (w/m/d)",
+      "updated_at": "2026-09-30T08:00:00-04:00",
+      "first_published": "2026-09-16T09:00:00-04:00",
+      "absolute_url": "https://job-boards.greenhouse.io/examplelabs/jobs/6186419003",
+      "location": { "name": "Berlin (Hybrid)" },
+      "content": "&lt;p&gt;Wir suchen Verst&amp;auml;rkung.&lt;/p&gt;"
+    },
+    {
+      "id": 6186419004,
+      "title": "Account Executive, DACH",
+      "updated_at": "2026-09-30T08:00:00-04:00",
+      "first_published": "2026-09-17T09:00:00-04:00",
+      "absolute_url": "https://job-boards.greenhouse.io/examplelabs/jobs/6186419004",
+      "location": { "name": "Berlin, Germany" },
+      "content": "&lt;p&gt;Sell things.&lt;/p&gt;"
+    },
+    {
+      "id": 6186419005,
+      "title": "Thai Engineer (Localization)",
+      "updated_at": "2026-09-30T08:00:00-04:00",
+      "first_published": "2026-09-18T09:00:00-04:00",
+      "absolute_url": "https://job-boards.greenhouse.io/examplelabs/jobs/6186419005",
+      "location": { "name": "Bangkok, Thailand" },
+      "content": ""
+    },
+    {
+      "id": 6186419006,
+      "title": "Machine Learning Engineer Intern",
+      "updated_at": "2026-09-30T08:00:00-04:00",
+      "first_published": "2026-09-19T09:00:00-04:00",
+      "absolute_url": "https://job-boards.greenhouse.io/examplelabs/jobs/6186419006",
+      "location": { "name": "Berlin, Germany" },
+      "content": "&lt;p&gt;Learn.&lt;/p&gt;"
+    }
+  ],
+  "meta": { "total": 6 }
+}

@@ -1,0 +1,147 @@
+{
+  "status": "OK",
+  "request_id": "00000000-0000-4000-8000-000000000001",
+  "parameters": {
+    "query": "AI Engineer in Berlin",
+    "page": 1,
+    "num_pages": 1,
+    "country": "de",
+    "date_posted": "today"
+  },
+  "data": [
+    {
+      "job_id": "Zml4dHVyZS0wMDAxLWNhcmVlcnM=",
+      "job_title": "Senior AI Engineer (m/w/d)",
+      "employer_name": "Beispiel Robotics GmbH",
+      "employer_logo": "https://example.com/logo.png",
+      "employer_website": "https://www.beispiel-robotics.example",
+      "job_publisher": "Beispiel Robotics Careers",
+      "job_employment_type": "Full-time",
+      "job_employment_types": [
+        "FULLTIME"
+      ],
+      "job_apply_link": "https://careers.beispiel-robotics.example/jobs/senior-ai-engineer?utm_campaign=google_jobs_apply&utm_source=google_jobs_apply&utm_medium=organic",
+      "job_apply_is_direct": false,
+      "apply_options": [
+        {
+          "publisher": "LinkedIn",
+          "apply_link": "https://www.linkedin.com/jobs/view/senior-ai-engineer-at-beispiel-robotics-1234567890?utm_campaign=google_jobs_apply&utm_source=google_jobs_apply&utm_medium=organic",
+          "is_direct": false
+        },
+        {
+          "publisher": "Beispiel Robotics Careers",
+          "apply_link": "https://careers.beispiel-robotics.example/jobs/senior-ai-engineer?utm_campaign=google_jobs_apply&utm_source=google_jobs_apply&utm_medium=organic",
+          "is_direct": false
+        }
+      ],
+      "job_description": "Wir bauen Agenten für Roboter.\n\nDeine Aufgaben:\n- LLM-Pipelines entwickeln\n- Evaluations aufbauen\n",
+      "job_is_remote": false,
+      "job_posted_at": "1 day ago",
+      "job_posted_at_timestamp": 1791244800,
+      "job_posted_at_datetime_utc": "2026-10-06T00:00:00.000Z",
+      "job_location": "Berlin, Germany",
+      "job_city": "Berlin",
+      "job_state": "Berlin",
+      "job_country": "DE",
+      "job_google_link": "https://www.google.com/search?q=jobs&gl=de&hl=de&udm=8#vhid=vt%3D20/docid%3DZml4dHVyZS0wMDAxLWNhcmVlcnM%3D",
+      "job_salary_string": "€80K–€110K a year",
+      "job_min_salary": 80000,
+      "job_max_salary": 110000,
+      "job_salary_period": "YEAR",
+      "job_highlights": {
+        "Qualifications": [
+          "3+ Jahre Erfahrung mit Python"
+        ]
+      }
+    },
+    {
+      "job_id": "Zml4dHVyZS0wMDAyLXJlbW90ZQ==",
+      "job_title": "LLM Engineer - Remote (EU)",
+      "employer_name": "Nordlicht Labs",
+      "employer_logo": null,
+      "employer_website": "https://nordlicht-labs.example",
+      "job_publisher": "BeBee",
+      "job_employment_type": "Full-time",
+      "job_employment_types": [
+        "FULLTIME",
+        "CONTRACTOR"
+      ],
+      "job_apply_link": "https://bebee.example/jobs/llm-engineer-remote-eu-abc?utm_campaign=google_jobs_apply&utm_source=google_jobs_apply&utm_medium=organic",
+      "job_apply_is_direct": false,
+      "apply_options": [
+        {
+          "publisher": "BeBee",
+          "apply_link": "https://bebee.example/jobs/llm-engineer-remote-eu-abc?utm_campaign=google_jobs_apply&utm_source=google_jobs_apply&utm_medium=organic",
+          "is_direct": false
+        },
+        {
+          "publisher": "Jobrapido",
+          "apply_link": "https://de.jobrapido.example/jobpreview/42?utm_campaign=google_jobs_apply&utm_source=google_jobs_apply&utm_medium=organic",
+          "is_direct": false
+        },
+        {
+          "publisher": "StepStone",
+          "apply_link": "https://www.stepstone.de/stellenangebote--LLM-Engineer--123-inline.html?utm_campaign=google_jobs_apply&utm_source=google_jobs_apply&utm_medium=organic",
+          "is_direct": false
+        },
+        {
+          "publisher": "LinkedIn",
+          "apply_link": "https://de.linkedin.com/jobs/view/llm-engineer-remote-9876543210?utm_campaign=google_jobs_apply&utm_source=google_jobs_apply&utm_medium=organic",
+          "is_direct": false
+        }
+      ],
+      "job_description": "Fully remote LLM engineering role.",
+      "job_is_remote": true,
+      "job_posted_at": "2 days ago",
+      "job_posted_at_timestamp": 1791158400,
+      "job_posted_at_datetime_utc": null,
+      "job_location": "Germany",
+      "job_city": null,
+      "job_state": null,
+      "job_country": "DE",
+      "job_min_salary": null,
+      "job_max_salary": null,
+      "job_salary_period": null
+    },
+    {
+      "job_id": "Zml4dHVyZS0wMDAzLWF0cw==",
+      "job_title": "Applied AI Engineer",
+      "employer_name": "Tafel AI",
+      "employer_website": "https://tafel.example",
+      "job_publisher": "LinkedIn",
+      "job_employment_type": null,
+      "job_employment_types": null,
+      "job_apply_link": "https://www.linkedin.com/jobs/view/applied-ai-engineer-at-tafel-555?utm_campaign=google_jobs_apply&utm_source=google_jobs_apply&utm_medium=organic",
+      "job_apply_is_direct": false,
+      "apply_options": [
+        {
+          "publisher": "LinkedIn",
+          "apply_link": "https://www.linkedin.com/jobs/view/applied-ai-engineer-at-tafel-555?utm_campaign=google_jobs_apply&utm_source=google_jobs_apply&utm_medium=organic",
+          "is_direct": false
+        }
+      ],
+      "job_description": null,
+      "job_is_remote": null,
+      "job_posted_at": "3 days ago",
+      "job_posted_at_timestamp": 1791072000,
+      "job_posted_at_datetime_utc": "2026-10-04T00:00:00.000Z",
+      "job_location": "München, Bayern, Germany",
+      "job_city": "München",
+      "job_state": "Bayern",
+      "job_country": "DE",
+      "job_min_salary": 45,
+      "job_max_salary": 60,
+      "job_salary_period": "HOUR"
+    },
+    {
+      "job_id": "Zml4dHVyZS0wMDA0LWJyb2tlbg==",
+      "job_title": null,
+      "employer_name": "Kaputt GmbH",
+      "job_apply_link": "https://example.com/x"
+    },
+    {
+      "job_title": "Record without id",
+      "employer_name": "Nirgendwo GmbH"
+    }
+  ]
+}

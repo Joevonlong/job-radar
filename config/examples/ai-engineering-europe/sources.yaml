@@ -1,0 +1,38 @@
+# Title words for AI roles, and a few example company career boards.
+# include_terms: board jobs whose title contains one of these words are kept even without a search.yaml keyword match.
+sources:
+  stepstone:
+    title_prefilter:
+      include_terms: [AI, ML, KI, LLM, GenAI, Machine Learning, Applied Scientist, Forward Deployed]
+  xing:
+    title_prefilter:
+      include_terms: [AI, ML, KI, LLM, GenAI, Machine Learning, Applied Scientist, Forward Deployed]
+  greenhouse:
+    title_prefilter:
+      include_terms: [AI, ML, KI, LLM, GenAI, Machine Learning, Applied Scientist, Forward Deployed]
+  lever:
+    title_prefilter:
+      include_terms: [AI, ML, KI, LLM, GenAI, Machine Learning, Applied Scientist, Forward Deployed]
+  ashby:
+    title_prefilter:
+      include_terms: [AI, ML, KI, LLM, GenAI, Machine Learning, Applied Scientist, Forward Deployed]
+  personio:
+    title_prefilter:
+      include_terms: [AI, ML, KI, LLM, GenAI, Machine Learning, Applied Scientist, Forward Deployed]
+  smartrecruiters:
+    title_prefilter:
+      include_terms: [AI, ML, KI, LLM, GenAI, Machine Learning, Applied Scientist, Forward Deployed]
+
+# Company career boards (ats: greenhouse | lever | ashby | personio | smartrecruiters; token = the board id in the public API).
+# A short list of well-known employers to show the format, one or two per board system: add your own in /sources/registry.
+ats_boards:
+  - { name: "Stripe", ats: greenhouse, token: "stripe", enabled: true }
+  - { name: "Databricks", ats: greenhouse, token: "databricks", enabled: true }
+  - { name: "Elastic", ats: greenhouse, token: "elastic", enabled: true }
+  - { name: "Spotify", ats: lever, token: "spotify", enabled: true }
+  - { name: "Aircall", ats: lever, token: "aircall", enabled: true }
+  - { name: "Wayve", ats: ashby, token: "wayve", enabled: true }
+  - { name: "DeepL", ats: ashby, token: "deepl", enabled: true }
+  - { name: "codecentric", ats: personio, token: "codecentric", enabled: true }
+  - { name: "Bosch", ats: smartrecruiters, token: "BoschGroup", enabled: true }
+  - { name: "Delivery Hero", ats: smartrecruiters, token: "DeliveryHero", enabled: true }

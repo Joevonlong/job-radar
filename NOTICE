@@ -1,0 +1,20 @@
+Job Radar
+Copyright (C) 2026 Zhou Long
+
+This program is free software: you can redistribute it and/or modify it under the terms of the GNU Affero General Public
+License, version 3 only (AGPL-3.0-only). See the file LICENSE for the full text. It is distributed WITHOUT ANY WARRANTY.
+
+Source code: https://github.com/Joevonlong/job-radar
+If you run a modified version for other people over a network, section 13 of the licence requires you to offer them the
+source of your version. The running version and a link to its source are shown at the foot of the sidebar; a fork changes
+`repository.url` in package.json so that the link points to the fork.
+
+Trademarks. LinkedIn, Indeed, StepStone, XING, Google, Anthropic, Claude, OpenAI, ChatGPT, Codex, Telegram, Greenhouse,
+Lever, Ashby, Personio, SmartRecruiters, DeepSeek, Xiaomi, Bright Data, Apify, RapidAPI, Tavily and Brave are the property
+of their respective owners. Job Radar is not affiliated with, endorsed by or sponsored by any of them; the names are used
+only to say which service a channel or provider talks to.
+
+Third-party software. Job Radar is built on open-source packages that keep their own licences and copyright notices
+(MIT, ISC, BSD, Apache-2.0 and others). The lock files (pnpm-lock.yaml, jobspy/requirements*.txt) list them exactly; the
+licence texts are included in the installed packages (node_modules/<package>/LICENSE).
+The scraping sidecar uses python-jobspy (MIT).

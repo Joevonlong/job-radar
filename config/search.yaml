@@ -1,0 +1,21 @@
+# Search criteria. Each keyword group is OR-joined into one query, which then runs once per city.
+config_version: 2
+# Replace them with the job titles you are looking for (the setup wizard does this from your target roles).
+keyword_groups:
+  targets:
+    - Software Engineer
+
+locations:
+  - New York
+
+# Remote job scope: none | home_country (hired in the home country) | worldwide | {region: [eu, CH …]} (hired within these regions or countries)
+remote_scope: home_country
+
+# Lookback window per run (hours). Keys map to schedule.yaml: weekday_morning → morning, weekday_evening → evening, weekend → weekend
+window_hours:
+  morning: 24
+  evening: 10
+  weekend: 24
+
+# Max results per keyword group per city
+max_per_group_per_location: 40

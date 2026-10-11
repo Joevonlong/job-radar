@@ -1,0 +1,85 @@
+# UI (docs/settings.md): scales and "how many runs" for graphical widgets. Only affects display, not collection or scoring.
+# The web app does not hot-reload config: this file is reread each time the page opens.
+
+config_version: 2
+
+# Salary axis (thousands of the market base currency per year): ends and tick interval. Stated ranges that don't fit are clipped at the ends; same for the red line (salary floor) and the dashed line (median)
+salary_axis:
+  min_k: 40
+  max_k: 200
+  tick_step_k: 20
+
+# Median line and "above X% of jobs with a stated salary" on the detail page: drawn only when at least this many jobs this month state a salary (too few samples mean nothing)
+salary_stats:
+  min_sample: 5
+
+# Freshness bar: hours after first seen until it decays to the minimum; turns yellow (hatched) after warn_hours
+freshness:
+  decay_hours: 72
+  warn_hours: 24
+
+# Trend line in the summary block uses the last N runs
+trend_cycles: 7
+# Health squares on the sources page use the last N runs
+health_cycles: 14
+# Max items scrolling in the top ticker
+ticker_max_items: 8
+
+# AI usage page (/sources/ai-usage): only affects this page's display
+ai_usage:
+  # Default time range when the page opens: today | 7d | 30d | month (this month)
+  default_range: 30d
+  # Max days in a custom range
+  custom_max_days: 366
+  # Rows per page in the call details
+  log_page_size: 50
+  # Max rows for "Export CSV" (beyond that, only the newest this many rows are exported)
+  csv_max_rows: 20000
+
+# Application workflow (Settings → Application workflow): hide unused application statuses. Display only: board columns, menus, filters, shortcuts and Telegram buttons stop listing them;
+# data and server behave as usual. "New" and "Dismissed" can't be hidden. Hideable: interested | preparing | applied | interviewing | offer | rejected | withdrawn
+# A hidden status that still has cards shows as a collapsed narrow column on the board; its cards can still be opened and moved to another status.
+applications:
+  hidden_statuses: []
+
+# Work modes / contract types not listed in the /jobs filters (onsite | hybrid | remote; permanent | fixed_term | freelance | temp_agency | student).
+# Values already selected in a link or saved view still apply.
+filters:
+  hidden_workplaces: []
+  hidden_contracts: []
+
+# Advanced config editor (Settings → Advanced)
+config_editor:
+  # Max bytes of text the editor accepts
+  max_bytes: 262144
+  # Max backups kept per file in <user dir>/.backup/editor/
+  backups_keep: 20
+
+# Optional web password (docs/configuration.md "Web access"). The password itself is only ever set in .env
+# (JOB_RADAR_WEB_PASSWORD_HASH from `pnpm web:password`); these are the limits around it. The web cannot change this block.
+web_access:
+  # Days a login stays valid
+  session_days: 30
+  # Failed logins from one address within login_window_minutes that lock that address out for login_lockout_minutes
+  login_max_failures: 5
+  login_window_minutes: 15
+  login_lockout_minutes: 15
+  # Failed logins from all addresses together within the window after which every login has to wait (a guessing spree
+  # that keeps changing its address). Browsers that are still signed in are not held up.
+  global_max_failures: 30
+  # The first wait in seconds; it doubles with each further failed login, at most login_lockout_minutes
+  global_delay_seconds: 2
+  # Password checks running at the same time at most (each needs 128 MiB of memory for a moment); more are told to retry
+  max_concurrent_logins: 4
+  # Shortest password `pnpm web:password` accepts
+  min_password_length: 10
+
+# Recheck of watched jobs (starred, or an application you follow): their posting page is fetched now and then (rates and sizes in
+# pipeline.yaml lifecycle.watch_recheck; robots.txt is obeyed). 404 / 410 → closed; a "no longer accepting" phrase → possibly closed,
+# with the phrase and a quote as evidence. Pages that need a login or that robots.txt forbids (LinkedIn, for one) can't be checked:
+# mark those closed yourself.
+job_checks:
+  closed_recheck:
+    enabled: true
+    # Extra phrases (regex, case-insensitive) on top of the market packs' closed_posting.phrases, e.g. "position (is )?filled"
+    extra_phrases: []

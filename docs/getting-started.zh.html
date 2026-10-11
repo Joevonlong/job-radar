@@ -1,0 +1,521 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Job Radar 调优指南</title>
+<style>
+:root {
+  --bg: #f6f5f1;
+  --surface: #ffffff;
+  --surface-2: #f0eee8;
+  --ink: #1d1d1b;
+  --ink-2: #55534d;
+  --ink-3: #8a877f;
+  --line: #e2dfd6;
+  --accent: #2f5bd3;
+  --accent-soft: #e6ecfb;
+  --ok: #1f8a4c;
+  --ok-soft: #e3f3e9;
+  --warn: #b86e00;
+  --warn-soft: #fbf0dc;
+  --bad: #c0392b;
+  --bad-soft: #fbe5e2;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Segoe UI", sans-serif;
+  --radius: 12px;
+  --shadow: 0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #141413; --surface: #1d1d1b; --surface-2: #262623; --ink: #ecebe6; --ink-2: #b4b1a8; --ink-3: #7f7c74;
+    --line: #34332f; --accent: #7f9ef0; --accent-soft: #23293a; --ok: #5cc48a; --ok-soft: #1c2c22;
+    --warn: #e0a543; --warn-soft: #30281a; --bad: #ec7b6e; --bad-soft: #34201d; --shadow: none;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #141413; --surface: #1d1d1b; --surface-2: #262623; --ink: #ecebe6; --ink-2: #b4b1a8; --ink-3: #7f7c74;
+  --line: #34332f; --accent: #7f9ef0; --accent-soft: #23293a; --ok: #5cc48a; --ok-soft: #1c2c22;
+  --warn: #e0a543; --warn-soft: #30281a; --bad: #ec7b6e; --bad-soft: #34201d; --shadow: none;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 16px; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.7 var(--sans); }
+a { color: var(--accent); }
+code, .mono { font-family: var(--mono); font-size: .88em; }
+code { background: var(--surface-2); padding: 1px 5px; border-radius: 5px; }
+.layout { max-width: 1180px; margin: 0 auto; padding: 32px 16px 80px; display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 40px; }
+nav.toc { position: sticky; top: 24px; align-self: start; font-size: 14px; }
+nav.toc .brand { font-weight: 700; font-size: 16px; margin-bottom: 14px; }
+nav.toc ol { list-style: none; padding: 0; margin: 0; }
+nav.toc li a { display: flex; gap: 10px; padding: 6px 8px; border-radius: 8px; color: var(--ink-2); text-decoration: none; }
+nav.toc li a:hover { background: var(--surface-2); color: var(--ink); }
+nav.toc .n { width: 20px; height: 20px; flex: none; border-radius: 50%; background: var(--surface-2); display: grid; place-items: center; font-size: 11px; font-weight: 700; margin-top: 2px; }
+.theme-btn { margin-top: 18px; border: 1px solid var(--line); background: var(--surface); color: var(--ink-2); border-radius: 8px; padding: 5px 10px; font: inherit; font-size: 13px; cursor: pointer; }
+main { min-width: 0; }
+header.hero h1 { font-size: 32px; line-height: 1.25; margin: 0 0 10px; letter-spacing: -.01em; }
+header.hero p.lead { color: var(--ink-2); font-size: 16px; margin: 0 0 6px; max-width: 720px; }
+.meta { color: var(--ink-3); font-size: 13px; }
+section { margin-top: 56px; }
+h2 { font-size: 23px; margin: 0 0 6px; display: flex; align-items: center; gap: 12px; }
+h2 .badge { width: 34px; height: 34px; border-radius: 50%; background: var(--accent); color: #fff; display: grid; place-items: center; font-size: 16px; flex: none; }
+h3 { font-size: 16px; margin: 26px 0 8px; }
+.where { display: inline-flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 14px; }
+.chip { display: inline-block; font-family: var(--mono); font-size: 12.5px; padding: 2px 9px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); }
+.chip.file { background: var(--surface-2); color: var(--ink-2); }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px 20px; box-shadow: var(--shadow); }
+.grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.callout { border-radius: var(--radius); padding: 14px 16px; margin: 16px 0; font-size: 14.5px; }
+.callout.tip { background: var(--ok-soft); }
+.callout.warn { background: var(--warn-soft); }
+.callout.info { background: var(--accent-soft); }
+.callout b:first-child { margin-right: 4px; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--ink-3); font-weight: 600; font-size: 12.5px; }
+.table-wrap { overflow-x: auto; }
+ol.steps { padding-left: 20px; margin: 8px 0; }
+ol.steps li { margin: 4px 0; }
+pre { background: var(--surface-2); border-radius: 10px; padding: 12px 14px; overflow-x: auto; font-size: 13px; line-height: 1.55; margin: 10px 0; }
+pre code { background: none; padding: 0; }
+
+/* pipeline diagram */
+.flow { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; margin: 22px 0 8px; }
+.flow a { text-decoration: none; color: inherit; }
+.flow .node { position: relative; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px 12px 10px; height: 100%; box-shadow: var(--shadow); transition: border-color .15s; }
+.flow a:hover .node { border-color: var(--accent); }
+.flow .node .ico { font-size: 20px; }
+.flow .node .t { font-weight: 700; font-size: 14px; margin: 2px 0; }
+.flow .node .d { color: var(--ink-2); font-size: 12.5px; line-height: 1.5; }
+.flow .node .s { margin-top: 6px; font-family: var(--mono); font-size: 11px; color: var(--accent); }
+.flow .node:not(.last)::after { content: "→"; position: absolute; right: -12px; top: 50%; transform: translateY(-50%); color: var(--ink-3); font-size: 14px; z-index: 1; }
+
+/* "where to set" map */
+.map { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 14px; }
+.map .card h4 { margin: 0 0 2px; font-size: 15px; }
+.map .card .q { color: var(--ink-2); font-size: 13.5px; margin-bottom: 8px; }
+.map ul { margin: 0; padding-left: 18px; font-size: 13.5px; color: var(--ink-2); }
+.map .card.primary { border: 2px solid var(--accent); }
+
+/* UI mockups */
+.mock { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--surface); box-shadow: var(--shadow); margin: 14px 0; }
+.mock .bar { display: flex; align-items: center; gap: 6px; padding: 8px 12px; background: var(--surface-2); border-bottom: 1px solid var(--line); }
+.mock .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--line); }
+.mock .url { margin-left: 8px; font-family: var(--mono); font-size: 12px; color: var(--ink-3); background: var(--surface); border-radius: 6px; padding: 2px 10px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mock .body { padding: 16px 18px; }
+.mock .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin: -4px 0 14px; overflow-x: auto; }
+.mock .tabs span { padding: 6px 12px; font-size: 13px; color: var(--ink-3); border-bottom: 2px solid transparent; white-space: nowrap; }
+.mock .tabs span.on { color: var(--ink); border-color: var(--accent); font-weight: 600; }
+.mock .sec { font-weight: 700; font-size: 14px; margin: 0 0 2px; }
+.mock .secd { font-size: 12.5px; color: var(--ink-3); margin-bottom: 12px; }
+.f { display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 4px 14px; align-items: start; padding: 8px 0; border-top: 1px dashed var(--line); position: relative; }
+.f:first-of-type { border-top: 0; }
+.f .l { font-size: 13px; font-weight: 600; padding-top: 3px; }
+.f .h { grid-column: 2; font-size: 12px; color: var(--ink-3); }
+.f .num { position: absolute; left: -28px; top: 9px; width: 19px; height: 19px; border-radius: 50%; background: var(--warn); color: #fff; font-size: 11px; font-weight: 700; display: grid; place-items: center; }
+.mock.annot .body { padding-left: 40px; }
+.tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.tag { font-size: 12.5px; padding: 2px 8px; border-radius: 6px; background: var(--surface-2); border: 1px solid var(--line); }
+.tag.in { border-style: dashed; color: var(--ink-3); background: transparent; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; font-size: 12.5px; }
+.seg span { padding: 3px 10px; border-left: 1px solid var(--line); }
+.seg span:first-child { border-left: 0; }
+.seg span.on { background: var(--accent); color: #fff; }
+.input { display: inline-block; min-width: 140px; border: 1px solid var(--line); border-radius: 7px; padding: 3px 10px; font-size: 13px; background: var(--surface); }
+.input.wide { display: block; min-height: 54px; color: var(--ink-2); }
+.check { font-size: 13px; }
+.check::before { content: "☑ "; color: var(--accent); }
+.toggle { display: inline-block; width: 32px; height: 18px; border-radius: 9px; background: var(--accent); position: relative; vertical-align: middle; }
+.toggle::after { content: ""; position: absolute; right: 2px; top: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; }
+.toggle.off { background: var(--line); }
+.toggle.off::after { right: auto; left: 2px; }
+.btn { display: inline-block; font-size: 13px; padding: 4px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); }
+.btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+.status { font-size: 12px; color: var(--ok); }
+.row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.chan { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 10px; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font-size: 13px; }
+.chan .name { font-weight: 700; }
+.chan .sub { color: var(--ink-3); font-size: 12px; grid-column: 1 / -1; }
+.pill { font-size: 11.5px; padding: 1px 8px; border-radius: 999px; }
+.pill.ok { background: var(--ok-soft); color: var(--ok); }
+.pill.warn { background: var(--warn-soft); color: var(--warn); }
+.pill.off { background: var(--surface-2); color: var(--ink-3); }
+.job { display: grid; grid-template-columns: 46px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); font-size: 13px; }
+.job:first-of-type { border-top: 0; }
+.score { width: 46px; height: 46px; border-radius: 10px; display: grid; place-items: center; font-weight: 800; font-size: 17px; background: var(--ok-soft); color: var(--ok); }
+.score.mid { background: var(--warn-soft); color: var(--warn); }
+.job .tt { font-weight: 700; font-size: 14px; }
+.job .co { color: var(--ink-3); }
+.sig { font-size: 11px; padding: 1px 6px; border-radius: 5px; background: var(--accent-soft); color: var(--accent); margin-right: 4px; }
+.kanban { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; font-size: 12px; }
+.kanban .col { background: var(--surface-2); border-radius: 8px; padding: 8px; min-height: 90px; }
+.kanban .col b { display: block; margin-bottom: 6px; color: var(--ink-2); }
+.kanban .k { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 5px 7px; margin-bottom: 5px; }
+.tg { max-width: 360px; background: var(--surface-2); border-radius: 14px; padding: 12px 14px; font-size: 13px; }
+.tg .bt { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 8px; }
+.tg .bt span { text-align: center; background: var(--surface); border-radius: 8px; padding: 4px; font-size: 12px; }
+.check-list { list-style: none; padding: 0; margin: 8px 0; }
+.check-list li { padding: 6px 0 6px 28px; position: relative; border-bottom: 1px dashed var(--line); }
+.check-list li::before { content: "✓"; position: absolute; left: 4px; color: var(--ok); font-weight: 700; }
+.cmp { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; margin: 14px 0; }
+.cmp > div { padding: 14px 16px; }
+.cmp > div + div { border-left: 1px solid var(--line); }
+.cmp h4 { margin: 0 0 6px; font-size: 14px; }
+.cmp p { margin: 0; font-size: 13.5px; color: var(--ink-2); }
+footer { margin-top: 64px; color: var(--ink-3); font-size: 13px; border-top: 1px solid var(--line); padding-top: 16px; }
+
+@media (max-width: 960px) {
+  .layout { grid-template-columns: minmax(0, 1fr); gap: 0; padding-top: 20px; }
+  nav.toc { position: static; margin-bottom: 18px; }
+  nav.toc ol { display: flex; flex-wrap: wrap; gap: 4px; }
+  nav.toc li a { padding: 4px 8px; background: var(--surface); border: 1px solid var(--line); }
+  .flow { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .flow .node::after { display: none; }
+  .grid3 { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 640px) {
+  header.hero h1 { font-size: 25px; }
+  .grid2, .map, .cmp { grid-template-columns: minmax(0, 1fr); }
+  .cmp > div + div { border-left: 0; border-top: 1px solid var(--line); }
+  .f { grid-template-columns: minmax(0, 1fr); }
+  .f .h { grid-column: 1; }
+  .kanban { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .mock .body { padding: 14px; }
+  .mock.annot .body { padding-left: 34px; }
+}
+</style>
+</head>
+<body>
+<div class="layout">
+  <nav class="toc" aria-label="目录">
+    <div class="brand">📡 Job Radar 调优指南</div>
+    <ol>
+      <li><a href="#overview"><span class="n">·</span>它怎么工作</a></li>
+      <li><a href="#where"><span class="n">?</span>条件在哪里设</a></li>
+      <li><a href="#s1"><span class="n">1</span>打开网页、看健康</a></li>
+      <li><a href="#s2"><span class="n">2</span>关于我（打分用）</a></li>
+      <li><a href="#s3"><span class="n">3</span>我要什么（筛选）</a></li>
+      <li><a href="#s4"><span class="n">4</span>搜索条件</a></li>
+      <li><a href="#s5"><span class="n">5</span>采集通道</a></li>
+      <li><a href="#s6"><span class="n">6</span>推送与 Telegram</a></li>
+      <li><a href="#s7"><span class="n">7</span>加分与关注公司</a></li>
+      <li><a href="#s8"><span class="n">8</span>跑一轮、看结果</a></li>
+      <li><a href="#daily"><span class="n">✓</span>之后每天</a></li>
+    </ol>
+    <button class="theme-btn" type="button" id="theme">切换深色 / 浅色</button>
+  </nav>
+
+  <main>
+    <header class="hero">
+      <h1>设置向导之后：调整你收到的内容</h1>
+      <p class="lead"><b>先从这里开始：</b>在项目目录运行 <code>docker compose up -d --build</code>，打开 <code>http://127.0.0.1:3000</code>；设置向导（<code>/setup</code>）会问你语言、市场、画像、目标、来源、AI 和 Telegram，并替你写好文件（见 <a href="setup.zh.md">setup.zh.md</a>）。这份指南用在向导<b>之后</b>：按页面讲同样的设置，方便你以后调整。每一步都写了在哪个页面、填什么、怎么确认生效。示意图用的是示例值（柏林 / 德国的设置）；你自己的会显示你的市场、城市和货币。</p>
+      <p class="meta">网页地址：本机 <code>http://127.0.0.1:3000</code>，手机 / 其他设备用 Tailscale 地址（<code>data/config/notify.yaml</code> 的 <code>public_base_url</code>）。页面上的改动都会写回项目目录下的 YAML 文件，注释保留；直接改 YAML 也可以，两种方式等价。（项目目录 = 含 <code>package.json</code>、<code>compose.yaml</code>、<code>config/</code>、<code>data/</code> 的那个目录。）</p>
+      <p class="meta"><a href="getting-started.html">English version</a></p>
+    </header>
+
+    <!-- ============ overview ============ -->
+    <section id="overview">
+      <h2>它怎么工作</h2>
+      <p>默认工作日 07:00、17:00，周末 09:00，按你配置的时区（<code>schedule.yaml</code>）自动跑一轮。每一轮依次经过 6 个环节，你设的每一项条件只作用在其中一个环节。点方块可以跳到对应的设置步骤。</p>
+      <div class="flow">
+        <a href="#s4"><div class="node"><div class="ico">🔎</div><div class="t">采集</div><div class="d">按关键词 × 城市去各个网站搜</div><div class="s">search.yaml · sources.yaml</div></div></a>
+        <a href="#s3"><div class="node"><div class="ico">🧹</div><div class="t">去重 + 硬过滤</div><div class="d">地点、合同、薪资底线、学生岗、黑名单</div><div class="s">preferences.yaml</div></div></a>
+        <a href="#s2"><div class="node"><div class="ico">🤖</div><div class="t">AI 打分</div><div class="d">对比你的画像，给 0–100 分和理由</div><div class="s">me.yaml + preferences.yaml</div></div></a>
+        <a href="#s7"><div class="node"><div class="ico">💶</div><div class="t">信号加分</div><div class="d">JD 里写明薪资、期权等加分</div><div class="s">interests.yaml</div></div></a>
+        <a href="#s6"><div class="node"><div class="ico">📨</div><div class="t">推送</div><div class="d">排序值够门槛的推到 Telegram</div><div class="s">notify.yaml</div></div></a>
+        <a href="#s8"><div class="node last"><div class="ico">🗂️</div><div class="t">你来处理</div><div class="d">看 JD、标感兴趣、拖进申请看板</div><div class="s">/ · /jobs · /pipeline</div></div></a>
+      </div>
+      <p class="meta">排序值 = AI 匹配分 + 信号加分（有封顶）。被硬过滤掉的岗位不打分、不推送，但仍在库里，可以随时查看并手动"仍然保留"。</p>
+    </section>
+
+    <!-- ============ where ============ -->
+    <section id="where">
+      <h2>职位需求和筛选条件在哪里设？</h2>
+      <p>分成两类，最容易搞混的是前两张卡片：<b>「搜什么」</b>决定去网站上抓哪些岗位；<b>「要什么」</b>决定抓回来以后哪些留下、怎么打分。</p>
+      <div class="map">
+        <div class="card primary">
+          <h4>我的画像 → 我要什么 <span class="chip">/me</span></h4>
+          <div class="q">抓回来的岗位，哪些留下、哪些过滤？</div>
+          <ul>
+            <li>目标职位（也用于打分）</li>
+            <li>地点、工作方式、Remote 范围、资历</li>
+            <li>年薪底线、合同类型</li>
+            <li>排除学生岗、排除公司、排除关键词</li>
+          </ul>
+          <p class="meta" style="margin:8px 0 0">文件 <code>data/profile/preferences.yaml</code> → <a href="#s3">第 3 步</a></p>
+        </div>
+        <div class="card primary">
+          <h4>设置 → 搜索 <span class="chip">/settings</span></h4>
+          <div class="q">去网站上用什么关键词、在哪些城市搜？</div>
+          <ul>
+            <li>关键词组（每组 OR 合并成一次查询）</li>
+            <li>城市（每组按城市各查一次）、远程范围</li>
+            <li>每轮回看多少小时、每组每城市最多几条</li>
+          </ul>
+          <p class="meta" style="margin:8px 0 0">文件 <code>data/config/search.yaml</code> → <a href="#s4">第 4 步</a></p>
+        </div>
+        <div class="card">
+          <h4>我的画像 → 关于我 <span class="chip">/me</span></h4>
+          <div class="q">AI 凭什么判断我合不合适？</div>
+          <ul>
+            <li>语言和等级、技能和年限、工作年限</li>
+            <li>所在城市、是否需要签证担保、给 AI 的简介</li>
+          </ul>
+          <p class="meta" style="margin:8px 0 0">文件 <code>data/profile/me.yaml</code> → <a href="#s2">第 2 步</a></p>
+        </div>
+        <div class="card">
+          <h4>感兴趣清单 + 推送 <span class="chip">/interests</span> <span class="chip">/settings</span></h4>
+          <div class="q">什么样的岗位排更前、推到手机？</div>
+          <ul>
+            <li>薪酬 / 福利信号词和加分权重、关注公司</li>
+            <li>推送门槛（默认 70，带薪资或股权信号 60）、静默时段</li>
+            <li>保存的筛选视图（今日页顶部切换）</li>
+          </ul>
+          <p class="meta" style="margin:8px 0 0">→ <a href="#s6">第 6 步</a>、<a href="#s7">第 7 步</a></p>
+        </div>
+      </div>
+      <div class="callout warn"><b>⚠️ 两边要对得上。</b>只在 /me 加了一个目标职位、没在 /settings 搜索里加对应关键词，系统根本不会去搜它；反过来，只加了搜索关键词、没写进目标职位，抓回来的岗位职位名匹配分会偏低。改一边时顺手改另一边。</div>
+    </section>
+
+    <!-- ============ step 1 ============ -->
+    <section id="s1">
+      <h2><span class="badge">1</span>打开网页，确认系统健康</h2>
+      <div class="where"><span class="chip">/sources</span><span class="chip file">pnpm run doctor</span></div>
+      <ol class="steps">
+        <li>浏览器打开 <code>http://127.0.0.1:3000</code>（手机先打开 Tailscale App 连上，再打开 Tailscale 地址）。左侧导航：今日、岗位、收藏、申请、来源、统计、设置、我的画像、感兴趣清单。</li>
+        <li>在项目目录下跑一次体检，看最后一行汇总：</li>
+      </ol>
+<pre><code>cd &lt;你的项目目录&gt;
+pnpm run doctor</code></pre>
+      <div class="grid3">
+        <div class="callout tip" style="margin:0"><b>全是 ✅</b> 一切正常，继续下一步。</div>
+        <div class="callout warn" style="margin:0"><b>有 ⚠️</b> 能用，但有要留意的（例如某通道缺 key）。每项下面有"怎么办"。</div>
+        <div class="callout" style="margin:0;background:var(--bad-soft)"><b>有 ❌</b> 有东西坏了，先按"怎么办"处理再往下。</div>
+      </div>
+      <p>注意要写 <code>pnpm run doctor</code>，不要只写 <code>pnpm doctor</code>（后者是 pnpm 自带的命令）。doctor 只读，不发消息、不调用 AI、不花钱。网页上的 <b>来源</b> 页能看到同样的信息：每个通道的状态、用量、最近运行，以及 runner 和 ai-worker 的心跳。</p>
+    </section>
+
+    <!-- ============ step 2 ============ -->
+    <section id="s2">
+      <h2><span class="badge">2</span>写「关于我」——AI 打分的依据</h2>
+      <div class="where"><span class="chip">/me → 关于我</span><span class="chip file">data/profile/me.yaml</span></div>
+      <p>这部分会以摘要形式发给 AI 打分。<b>至少要填技能或简介</b>，否则打分会暂停（今日页顶部会出现提示横幅）。</p>
+      <div class="mock annot">
+        <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="url">127.0.0.1:3000/me</span></div>
+        <div class="body">
+          <div class="sec">关于我</div>
+          <div class="secd">语言、技能和简介会以摘要形式发给 AI 打分，不要写姓名、联系方式或证件号。</div>
+          <div class="f"><span class="num">1</span><span class="l">语言</span><div class="tags"><span class="tag">zh · 母语</span><span class="tag">en · C1</span><span class="tag">de · A2</span><span class="tag in">＋ 添加语言</span></div><span class="h">语言代码（en、de、zh）+ CEFR 等级。德语等级会和 JD 的德语要求比对。</span></div>
+          <div class="f"><span class="num">2</span><span class="l">技能</span><div class="tags"><span class="tag">Python · 6 年</span><span class="tag">TypeScript · 4 年</span><span class="tag">LLM / RAG · 2 年</span><span class="tag in">＋ 添加技能</span></div><span class="h">名称 + 年限，写和目标岗位相关的。</span></div>
+          <div class="f"><span class="num">3</span><span class="l">工作年限 / 所在城市</span><div class="row"><span class="input">8</span><span class="input">Berlin</span></div></div>
+          <div class="f"><span class="num">4</span><span class="l">需要签证担保</span><div class="check">需要雇主提供签证担保</div></div>
+          <div class="f"><span class="num">5</span><span class="l">给 AI 的简介</span><span class="input wide">几句话：做过什么、擅长什么、下一份工作想做什么方向。</span><span class="h">AI 打分时最重要的一段文字。不要写姓名、邮箱、电话。</span></div>
+          <div class="row" style="margin-top:12px"><span class="btn primary">保存</span><span class="btn">还原</span><span class="status">已保存</span></div>
+        </div>
+      </div>
+      <div class="callout info"><b>改了画像以后：</b>旧分数会被标成"已过期"，后续处理轮自动重打；也可以在 /settings 点"重打过期分数"立刻处理。每次保存都会留一份历史快照，/me 页底部可以回滚。</div>
+    </section>
+
+    <!-- ============ step 3 ============ -->
+    <section id="s3">
+      <h2><span class="badge">3</span>写「我要什么」——职位需求和筛选条件</h2>
+      <div class="where"><span class="chip">/me → 我要什么</span><span class="chip file">data/profile/preferences.yaml</span></div>
+      <p>这里的条件决定<b>硬过滤</b>（不符合的直接过滤，不打分不推送），目标职位还占预打分的 40%。</p>
+      <div class="mock annot">
+        <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="url">127.0.0.1:3000/me</span></div>
+        <div class="body">
+          <div class="sec">我要什么</div>
+          <div class="secd">目标职位、地点、薪资底线和排除项，用于硬过滤和打分。</div>
+          <div class="f"><span class="num">1</span><span class="l">目标职位</span><div class="tags"><span class="tag">AI Engineer</span><span class="tag">LLM Engineer</span><span class="tag">Forward Deployed Engineer</span><span class="tag">AI Solutions Engineer</span><span class="tag in">输入后按 Enter 添加</span></div><span class="h">和岗位标题比对：整串出现 = 1，词都在但不相邻 = 0.8，命中一半以上 = 0.5。</span></div>
+          <div class="f"><span class="num">2</span><span class="l">地点</span><div class="tags"><span class="tag">Berlin</span><span class="tag">München</span><span class="tag in">＋</span></div><span class="h">不在这些城市的到岗 / 混合岗位会被过滤。</span></div>
+          <div class="f"><span class="num">3</span><span class="l">工作方式</span><div class="seg"><span class="on">现场</span><span class="on">混合</span><span class="on">远程</span></div></div>
+          <div class="f"><span class="num">4</span><span class="l">Remote 范围</span><div class="seg"><span>不接受</span><span class="on">欧盟内，可在德国雇佣</span><span>欧盟内任意</span><span>全球</span></div></div>
+          <div class="f"><span class="num">5</span><span class="l">资历</span><div class="seg"><span class="on">不限</span><span>入门</span><span>中级</span><span>资深</span><span>负责人</span></div></div>
+          <div class="f"><span class="num">6</span><span class="l">年薪底线（EUR，税前）</span><span class="input">70000</span><span class="h">写明的薪资上限低于它才过滤；没写薪资的岗位保留。</span></div>
+          <div class="f"><span class="num">7</span><span class="l">合同类型</span><div class="row" style="font-size:12.5px"><span>长期 <b style="color:var(--ok)">接受</b></span><span>定期 <b style="color:var(--ok)">接受</b></span><span>自由职业 <b style="color:var(--ok)">接受</b></span><span>中介派遣 <b style="color:var(--bad)">排除</b></span></div></div>
+          <div class="f"><span class="num">8</span><span class="l">排除</span><div><div class="check">排除学生岗（在校生兼职、实习、毕业论文等）</div><div class="row" style="margin-top:6px;font-size:12.5px"><span>公司：</span><span class="tag in">输入后按 Enter</span><span>关键词：</span><span class="tag">Sales</span><span class="tag in">＋</span></div></div></div>
+          <div class="row" style="margin-top:12px"><span class="btn primary">保存</span><span class="btn">还原</span></div>
+        </div>
+      </div>
+      <h3>每一项怎么起作用</h3>
+      <div class="table-wrap"><table>
+        <tr><th>#</th><th>条件</th><th>不符合时</th><th>建议</th></tr>
+        <tr><td>1</td><td>目标职位</td><td>不过滤，只影响分数</td><td>把同义的叫法都列上（AI Engineer / Applied AI Engineer…）</td></tr>
+        <tr><td>2–4</td><td>地点、工作方式、Remote 范围</td><td>过滤，原因如"地点不在目标范围内"</td><td>只想看远程就去掉"现场""混合"；完全不看远程选"不接受"</td></tr>
+        <tr><td>5</td><td>资历</td><td>过滤，原因"级别不符"</td><td>不确定就留"不限"，交给 AI 判断</td></tr>
+        <tr><td>6</td><td>年薪底线</td><td>只有写明上限且低于底线才过滤</td><td>德国大多数 JD 不写薪资，所以不会误杀</td></tr>
+        <tr><td>7</td><td>合同类型</td><td>"排除"的直接过滤；不在"接受"里的也过滤；JD 没写明合同类型的保留</td><td>对中介派遣（Temp agency）选"排除"</td></tr>
+        <tr><td>8</td><td>学生岗、公司、关键词黑名单</td><td>过滤</td><td>关键词按整词匹配职位名和正文，慎用太宽的词</td></tr>
+      </table></div>
+      <div class="callout tip"><b>新抓的岗位立刻按新条件过滤。</b>想让库里已有的岗位也按新条件重新过滤：在项目目录下运行 <code>pnpm refilter --dry-run</code> 先看前后对比，确认后去掉 <code>--dry-run</code> 再跑一次（不抓取、不调用 AI）。</div>
+    </section>
+
+    <!-- ============ step 4 ============ -->
+    <section id="s4">
+      <h2><span class="badge">4</span>设定搜索条件——去哪里、搜什么</h2>
+      <div class="where"><span class="chip">/settings → 搜索</span><span class="chip file">data/config/search.yaml</span></div>
+      <div class="mock annot">
+        <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="url">127.0.0.1:3000/settings</span></div>
+        <div class="body">
+          <div class="tabs"><span>处理时间</span><span class="on">搜索</span><span>通道</span><span>AI</span><span>推送</span></div>
+          <div class="sec">关键词组</div>
+          <div class="secd">每个关键词组用 OR 合并成一次查询，再按城市各查一次。</div>
+          <div class="f"><span class="num">1</span><span class="l mono">engineering</span><div class="tags"><span class="tag">AI Engineer</span><span class="tag">LLM Engineer</span><span class="tag">Machine Learning Engineer</span><span class="tag">…</span><span class="tag in">＋</span></div></div>
+          <div class="f"><span class="l mono">fde_solutions</span><div class="tags"><span class="tag">Forward Deployed Engineer</span><span class="tag">AI Solutions Engineer</span><span class="tag">…</span><span class="tag in">＋</span></div></div>
+          <div class="f"><span class="l mono">german</span><div class="tags"><span class="tag">KI Engineer</span><span class="tag">KI-Entwickler</span><span class="tag in">＋</span></div><span class="h">组 ID 用小写字母、数字和下划线。可以加新组。</span></div>
+          <div class="sec" style="margin-top:14px">地点与远程</div>
+          <div class="f"><span class="num">2</span><span class="l">城市</span><div class="tags"><span class="tag">Berlin</span><span class="tag">München</span><span class="tag in">＋</span></div><span class="h">每个关键词组按城市各查一次。</span></div>
+          <div class="f"><span class="l">远程范围</span><div class="seg"><span>无</span><span class="on">欧盟内可在德国雇佣</span><span>欧盟任意</span><span>全球</span></div></div>
+          <div class="sec" style="margin-top:14px">时间窗与上限</div>
+          <div class="f"><span class="num">3</span><span class="l">回看时间窗（小时）</span><div class="row" style="font-size:12.5px">早轮 <span class="input" style="min-width:50px">24</span> 晚轮 <span class="input" style="min-width:50px">10</span> 周末 <span class="input" style="min-width:50px">24</span></div></div>
+          <div class="f"><span class="l">每组每城市最多条数</span><span class="input" style="min-width:60px">40</span></div>
+          <div class="row" style="margin-top:12px"><span class="btn primary">保存</span><span class="status">runner 已加载（04:12）</span></div>
+        </div>
+      </div>
+      <div class="cmp">
+        <div><h4>查询次数怎么算</h4><p>每个通道每轮的查询数 ≈ 关键词组数 × 城市数（远程再加一次）。3 组 × 2 城 = 6 次。组越多越全，但付费通道花得越多、免费网站越容易限流。</p></div>
+        <div><h4>保存后什么时候生效</h4><p>保存时用和 runner 相同的规则校验；runner 几秒内热加载，按钮旁显示"runner 已加载"。下一轮采集用新条件，不需要重启。</p></div>
+      </div>
+      <div class="callout info"><b>顺便看一眼「处理时间」标签：</b>默认工作日 07:00 / 17:00、周末 09:00，按你在向导里选的时区（出厂默认是 America/New_York），宿主机关机错过的轮次开机后会补跑。</div>
+    </section>
+
+    <!-- ============ step 5 ============ -->
+    <section id="s5">
+      <h2><span class="badge">5</span>确认采集通道——从哪些网站抓</h2>
+      <div class="where"><span class="chip">/settings → 通道</span><span class="chip">/sources</span><span class="chip file">data/config/sources.yaml</span><span class="chip file">.env</span></div>
+      <p>通道就是数据来源。在 <b>/settings → 通道</b> 开关和设预算；在 <b>/sources</b> 看每个通道的状态并测试。</p>
+      <div class="mock">
+        <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="url">127.0.0.1:3000/sources</span></div>
+        <div class="body">
+          <div class="grid2">
+            <div class="chan"><span class="name">arbeitsagentur 劳工局</span><span class="pill ok">正常</span><span class="sub">免费 · 本月 40 条 · <span class="btn" style="padding:1px 8px">测试</span> <span class="btn" style="padding:1px 8px">立即采集</span></span></div>
+            <div class="chan"><span class="name">linkedin-brightdata</span><span class="pill ok">正常</span><span class="sub">付费 · $0.00 / $5.00 · 免费额度 225 / 5000</span></div>
+            <div class="chan"><span class="name">greenhouse · lever · ashby …</span><span class="pill ok">正常</span><span class="sub">公司招聘页（ATS），名单在 sources.yaml 的 ats_boards</span></div>
+            <div class="chan"><span class="name">tavily</span><span class="pill warn">缺 key</span><span class="sub">发现新公司的招聘页 · 需要 TAVILY_API_KEY</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="table-wrap"><table>
+        <tr><th>类型</th><th>通道</th><th>要准备什么</th></tr>
+        <tr><td>官方 API 和公开的公司数据源，默认开</td><td>Greenhouse、Lever、Ashby、Personio、SmartRecruiters；劳工局（仅德国市场）</td><td>不用做什么；把你关心的公司加到 <code>ats_boards</code></td></tr>
+        <tr><td>抓取类，<b>默认关</b></td><td>Indeed、StepStone（德国包）、LinkedIn guest、XING</td><td>它们的服务条款可能禁止自动访问。读过<a href="sources.zh.md#抓取">抓取</a>一节再打开；向导和 /sources/registry 会要你确认</td></tr>
+        <tr><td>付费（有月预算）</td><td>LinkedIn Bright Data、Apify、JSearch</td><td>把 key 写进项目目录下的 <code>.env</code>，在 /settings 设月预算；不想用就关掉</td></tr>
+        <tr><td>发现新公司</td><td>Tavily（默认）/ Brave</td><td><code>TAVILY_API_KEY</code>，每月免费 1000 次</td></tr>
+        <tr><td>需要登录</td><td>LinkedIn 登录态（默认关，使用你自己的账号）、Gmail 提醒邮件</td><td>见 <a href="linkedin-session.zh.md">LinkedIn 登录态</a>、<a href="gmail-alerts.zh.md">Gmail 提醒</a> 手册，可选</td></tr>
+      </table></div>
+      <div class="callout tip"><b>怎么确认通道能用：</b>/sources 通道卡片上点 <b>测试</b>：只跑第一个查询、最多取 5 条，在内存里解析，<b>不写库、不计预算</b>，结果直接显示在按钮下面。付费和登录态通道没有测试按钮，用"立即采集"。</div>
+      <div class="callout warn"><b>key 自己填：</b>用文本编辑器打开项目目录下的 <code>.env</code> 填上，保存后运行 <code>docker compose up -d runner</code> 让 runner 读到新值。<code>.env</code> 不进 git，不要把 key 发到聊天里。</div>
+    </section>
+
+    <!-- ============ step 6 ============ -->
+    <section id="s6">
+      <h2><span class="badge">6</span>设好推送——什么样的岗位推到手机</h2>
+      <div class="where"><span class="chip">/settings → 推送</span><span class="chip file">data/config/notify.yaml</span></div>
+      <div class="grid2">
+        <div class="mock" style="margin:0">
+          <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="url">/settings · 推送</span></div>
+          <div class="body">
+            <div class="f"><span class="l">推送门槛</span><span class="input" style="min-width:60px">70</span><span class="h">排序值达到它才推。</span></div>
+            <div class="f"><span class="l">带 T1 / T2 信号</span><span class="input" style="min-width:60px">60</span><span class="h">写明薪资或有股权的岗位门槛更低。</span></div>
+            <div class="f"><span class="l">每轮最多</span><span class="input" style="min-width:60px">10</span><span class="h">其余在网页看。</span></div>
+            <div class="f"><span class="l">静默时段</span><div class="row"><span class="toggle"></span><span class="input" style="min-width:60px">22:00</span>–<span class="input" style="min-width:60px">07:00</span></div><span class="h">告警不受静默限制。</span></div>
+          </div>
+        </div>
+        <div>
+          <p style="margin-top:0">推到 Telegram 的每条岗位长这样，按钮直接写进申请记录：</p>
+          <div class="tg">
+            <b>87 · AI Solutions Engineer</b><br>
+            Example GmbH · Berlin · 混合<br>
+            <span class="sig">T1 €85–100k</span><span class="sig">英语岗</span><br>
+            <span style="color:var(--ink-3)">匹配：LLM 应用经验、客户交付…</span>
+            <div class="bt"><span>👍 感兴趣</span><span>🚫 忽略</span><span>📄 定制简历</span></div>
+            <div class="bt"><span>⭐ 收藏</span></div>
+          </div>
+          <p class="meta">每轮结束还有一条汇总：新岗位数、通过过滤数、合格数、失败的来源。<b>收到汇总 = 那一轮跑完了。</b></p>
+        </div>
+      </div>
+      <div class="callout info"><b>第一次用 Telegram（默认是关的）：</b>按 <a href="telegram.zh.md">Telegram 手册</a>用 @BotFather 建 bot，把 <code>TELEGRAM_BOT_TOKEN</code> 和 <code>TELEGRAM_CHAT_ID</code> 填进 <code>.env</code>；然后在 <b>/settings → 手动操作</b> 点 <b>发送 Telegram 测试消息</b>，手机收到即配置成功。</div>
+    </section>
+
+    <!-- ============ step 7 ============ -->
+    <section id="s7">
+      <h2><span class="badge">7</span>调排序：信号加分、关注公司、视图</h2>
+      <div class="where"><span class="chip">/interests</span><span class="chip file">data/config/interests.yaml</span></div>
+      <div class="grid3">
+        <div class="card"><h4 style="margin:0 0 4px">💶 信号词表和权重</h4><p style="margin:0;font-size:13.5px;color:var(--ink-2)">JD 里出现这些说法就加分：T1 写明金额、T2 股权 / 期权、T3 薪资描述、T4 其他。可调每档权重和加分封顶，保存后排序值立刻重算，不调用 AI。</p></div>
+        <div class="card"><h4 style="margin:0 0 4px">👀 关注公司</h4><p style="margin:0;font-size:13.5px;color:var(--ink-2)">添加你特别想去的公司。它们一有新岗位就单独推送，<b>不受分数门槛和过滤限制</b>。还没出现在库里的公司也可以先加。</p></div>
+        <div class="card"><h4 style="margin:0 0 4px">👁️ 保存的视图</h4><p style="margin:0;font-size:13.5px;color:var(--ink-2)">在 <b>/jobs</b> 设好筛选（分数、城市、远程、德语要求…）后点"保存当前筛选为视图"，今日页顶部就能一键切换；可设一个默认视图。</p></div>
+      </div>
+      <div class="callout tip"><b>每周一 08:00</b> AI 会根据你的操作（标感兴趣 / 忽略）提出调整建议，出现在 /interests 页，<b>你批准才生效</b>。</div>
+    </section>
+
+    <!-- ============ step 8 ============ -->
+    <section id="s8">
+      <h2><span class="badge">8</span>手动跑一轮，看结果</h2>
+      <div class="where"><span class="chip">/settings → 手动操作</span><span class="chip">/</span><span class="chip">/jobs/&lt;id&gt;</span><span class="chip">/pipeline</span></div>
+      <ol class="steps">
+        <li>在 <b>/settings → 手动操作</b> 点 <b>立即跑一轮</b>（可以只勾几个通道）。按钮下面实时显示进度："第 N 轮：x / y 个查询已结束，抓取 z 条"。也可以在终端运行 <code>pnpm cycle:run</code>。</li>
+        <li>采集完以后 ai-worker 开始打分，一般几分钟内陆续出分。</li>
+        <li>打开 <b>今日</b>：新岗位按排序值排列，顶部是各来源条数。</li>
+        <li>点标题进 <b>详情</b>：JD 原文 / 中文翻译、AI 匹配理由和差距、薪酬信号、德语要求、“查看原帖”链接（想标记已申请时点“标为已申请”，打开原帖不会改状态）。</li>
+        <li>想投就点"感兴趣"，到 <b>申请</b> 看板里拖动状态。</li>
+      </ol>
+      <div class="mock">
+        <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="url">127.0.0.1:3000/</span></div>
+        <div class="body">
+          <div class="tabs"><span class="on">全部</span><span>默认视图</span><span>高薪 + Berlin</span></div>
+          <div class="job"><div class="score">87</div><div><div class="tt">AI Solutions Engineer</div><div class="co">Example GmbH · Berlin · 混合 · 2 小时前</div><div><span class="sig">T1 薪资</span><span class="sig">英语</span></div></div><span class="btn">👍</span></div>
+          <div class="job"><div class="score">74</div><div><div class="tt">Applied AI Engineer</div><div class="co">Sample AG · München · 远程（EU）</div><div><span class="sig">T2 期权</span></div></div><span class="btn">👍</span></div>
+          <div class="job"><div class="score mid">58</div><div><div class="tt">ML Engineer (m/w/d)</div><div class="co">Demo SE · Berlin · 现场 · 德语 B2</div></div><span class="btn">👍</span></div>
+        </div>
+      </div>
+      <div class="kanban" style="margin-top:12px">
+        <div class="col"><b>感兴趣</b><div class="k">AI Solutions Eng.</div><div class="k">Applied AI Eng.</div></div>
+        <div class="col"><b>准备中</b><div class="k">FDE · Example</div></div>
+        <div class="col"><b>已申请</b><div class="k">LLM Eng.</div></div>
+        <div class="col"><b>面试中</b></div>
+        <div class="col"><b>Offer / 已结束</b></div>
+      </div>
+      <h3>结果不对时怎么查</h3>
+      <div class="table-wrap"><table>
+        <tr><th>现象</th><th>先看哪里</th></tr>
+        <tr><td>某个想要的岗位没出现</td><td>/jobs 打开"显示已过滤"，搜它：详情页顶部写着过滤原因（例如"地点不在目标范围内"）。可以点"仍然保留"，或回到第 3 步放宽条件</td></tr>
+        <tr><td>压根没抓到这类岗位</td><td>第 4 步的关键词组里有没有这个叫法；第 5 步通道是否正常</td></tr>
+        <tr><td>分数一直是空的</td><td>/me 有没有填技能或简介；<code>pnpm run doctor</code> 的「AI 没有积压」「ai-worker 心跳新鲜」两项</td></tr>
+        <tr><td>分数都偏低</td><td>第 2 步的简介和技能写得够不够具体；第 3 步目标职位是否覆盖常见叫法</td></tr>
+        <tr><td>手机没收到推送</td><td>是否在静默时段；排序值是否够门槛；/settings 发一条 Telegram 测试消息</td></tr>
+      </table></div>
+    </section>
+
+    <!-- ============ daily ============ -->
+    <section id="daily">
+      <h2><span class="badge">✓</span>之后每天</h2>
+      <ul class="check-list">
+        <li>什么都不用启动：按部署指南配置好主机之后，Docker 和 ai-worker 会开机自动运行，每天 3 轮自动跑。</li>
+        <li>看 Telegram：合格的新岗位逐条推来，👍 / 🚫 直接处理；想先存着的点 ⭐ 收藏。</li>
+        <li>有空打开 <b>今日</b> 或 <b>岗位</b> 浏览没推送的；<b>申请</b> 看板跟进进度，超时没回复会提醒。</li>
+        <li>周一看看 /interests 里的 AI 调整建议，批准或拒绝。</li>
+        <li>觉得不对劲时跑 <code>pnpm run doctor</code>；出问题 Telegram 也会主动告警（通道熔断、预算到 80%、ai-worker 掉线等）。</li>
+      </ul>
+      <p class="meta">更多：日常使用 <a href="usage.zh.md">usage</a> · 设置页细节 <a href="settings.zh.md">settings</a> · 部署和体检项 <a href="deploy.zh.md">deploy</a> · 配置说明 <a href="configuration.zh.md">configuration</a></p>
+    </section>
+
+    <footer>Job Radar 新手指南 · 示例截图中的公司名和分数是虚构的，界面以实际页面为准。</footer>
+  </main>
+</div>
+<script>
+(function () {
+  var root = document.documentElement, btn = document.getElementById("theme");
+  try { var saved = localStorage.getItem("jr-guide-theme"); if (saved) root.setAttribute("data-theme", saved); } catch (e) {}
+  btn.addEventListener("click", function () {
+    var dark = root.getAttribute("data-theme") === "dark" ||
+      (!root.getAttribute("data-theme") && window.matchMedia("(prefers-color-scheme: dark)").matches);
+    var next = dark ? "light" : "dark";
+    root.setAttribute("data-theme", next);
+    try { localStorage.setItem("jr-guide-theme", next); } catch (e) {}
+  });
+})();
+</script>
+</body>
+</html>

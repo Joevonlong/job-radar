@@ -1,0 +1,15 @@
+{
+  "postings": [
+    {
+      "id": "st-5001",
+      "title": "Applied AI Engineer (f/m/x)",
+      "company": "NORTHWIND LABS GmbH",
+      "city": "Berlin",
+      "country": "DE",
+      "remote": false,
+      "description": "Applied AI Engineer gesucht. Northwind Labs entwickelt KI für die Logistik. Gute Deutschkenntnisse (B2) erforderlich. Gehalt: 90.000 - 100.000 € pro Jahr.",
+      "url": "https://www.stepstone.example.test/jobs/5001",
+      "posted_at": "2026-10-05T10:00:00Z"
+    }
+  ]
+}

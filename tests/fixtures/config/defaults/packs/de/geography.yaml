@@ -1,0 +1,74 @@
+# 德国地理：都市圈、州、只写国家的说法、非地名词、转写。
+# 内容从旧 pipeline.yaml 的 filter.* 原样搬来。
+
+city_aliases:
+  Berlin: []
+  München: [Munich, Muenchen]
+metro_areas:
+  Berlin:
+    - Potsdam
+    - Schönefeld
+    - Teltow
+    - Kleinmachnow
+    - Stahnsdorf
+    - Hennigsdorf
+    - Falkensee
+    - Oranienburg
+    - Bernau
+    - Ahrensfelde
+    - Hoppegarten
+    - Neuenhagen
+    - Blankenfelde-Mahlow
+    - Königs Wusterhausen
+    - Wildau
+    - Ludwigsfelde
+    - Großbeeren
+    - Brandenburg Metropolitan
+    - Greater Berlin
+    - Metropolregion Berlin
+  München:
+    - Garching
+    - Unterföhring
+    - Ismaning
+    - Oberhaching
+    - Unterschleißheim
+    - Planegg
+    - Martinsried
+    - Gräfelfing
+    - Freising
+    - Ottobrunn
+    - Taufkirchen
+    - Poing
+    - Haar
+    - Aschheim
+    - Feldkirchen
+    - Neubiberg
+    - Grasbrunn
+    - Hallbergmoos
+    - Eching
+    - Oberschleißheim
+    - Grünwald
+    - Pullach
+    - Putzbrunn
+    - Vaterstetten
+    - Parsdorf
+    - Kirchheim bei München
+    - Dachau
+    - Germering
+    - Puchheim
+    - Starnberg
+    - Erding
+    - Allershausen
+    - Greater Munich
+    - Metropolregion München
+metro_regions:
+  Berlin: [Brandenburg]
+  München: [Bavaria, Bayern, Upper Bavaria, Oberbayern]
+country_level_patterns:
+  - ^\W*(?:germany|deutschland|deutschlandweit|bundesweit|nationwide|german)\W*$
+  - ^\W*(?:germany|deutschland)\W*(?:\((?:remote|hybrid|onsite|on-site)\))?\W*$
+non_city_labels: [germany, deutschland, bundesweit]
+transliterations:
+  ä: ae
+  ö: oe
+  ü: ue

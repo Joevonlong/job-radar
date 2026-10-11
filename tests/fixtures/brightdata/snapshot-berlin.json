@@ -1,0 +1,65 @@
+[
+  {
+    "url": "https://www.linkedin.com/jobs/view/senior-ml-engineer-4385163817?_l=en",
+    "job_posting_id": "4385163817",
+    "job_title": "Senior ML Engineer",
+    "company_name": "Example GmbH",
+    "company_id": "12345",
+    "job_location": "Berlin, Berlin, Germany",
+    "job_summary": "<p>Build production machine-learning systems.</p><ul><li>Python &amp; PyTorch</li><li>German or English</li></ul>",
+    "job_seniority_level": "Mid-Senior level",
+    "job_employment_type": "Full-time",
+    "apply_link": "https://careers.example.com/jobs/4385163817",
+    "country_code": "DE",
+    "job_posted_date": "2026-10-07T06:30:00.000Z",
+    "job_base_pay_range": "€80,000.00/yr - €100,000.00/yr",
+    "base_salary": { "currency": "EUR", "min_amount": 80000, "max_amount": 100000, "payment_period": "year" },
+    "discovery_input": { "location": "Berlin", "keyword": "\"AI Engineer\" OR \"LLM Engineer\"", "country": "DE", "time_range": "Past 24 hours" }
+  },
+  {
+    "url": "https://www.linkedin.com/jobs/view/4385163819",
+    "job_posting_id": "4385163819",
+    "job_title": "LLM Engineer",
+    "company_name": "No Salary AG",
+    "company_id": null,
+    "job_location": "Berlin, Germany",
+    "job_summary": "Work on large language model products.",
+    "job_employment_type": "Full-time",
+    "apply_link": null,
+    "country_code": "DE",
+    "job_posted_date": "2026-10-07T01:00:00.000Z",
+    "job_base_pay_range": null,
+    "base_salary": {},
+    "discovery_input": { "location": "Berlin" }
+  },
+  {
+    "url": "https://www.linkedin.com/jobs/view/4385163820",
+    "job_posting_id": 4385163820,
+    "job_title": "AI Engineer (older posting)",
+    "company_name": "Old News KG",
+    "job_location": "Berlin, Germany",
+    "job_summary": "Posted yesterday afternoon.",
+    "country_code": "DE",
+    "job_posted_date": "2026-10-06T14:00:00.000Z"
+  },
+  {
+    "url": "https://www.linkedin.com/jobs/view/4385163821",
+    "job_posting_id": "4385163821",
+    "job_title": "Applied AI Engineer",
+    "company_name": "Unknown Date GmbH",
+    "job_location": "Berlin, Germany",
+    "job_summary": "No posting date delivered.",
+    "country_code": "DE",
+    "job_posted_date": null
+  },
+  {
+    "url": "https://www.linkedin.com/jobs/view/4385163817",
+    "job_posting_id": "4385163817",
+    "job_title": "Senior ML Engineer",
+    "company_name": "Example GmbH",
+    "job_location": "Berlin, Berlin, Germany",
+    "job_summary": "Duplicate delivered for a second input.",
+    "job_posted_date": "2026-10-07T06:30:00.000Z"
+  },
+  { "error": "Failed to collect record", "error_code": "dead_page", "input": { "location": "Berlin" } }
+]

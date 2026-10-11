@@ -1,0 +1,211 @@
+# Job Radar stack: db + web + runner + jobspy.  `docker compose up -d --build` (or `pnpm stack:up`).
+#
+# Works without a .env file: every variable below has a default. Copy .env.example to .env
+# to override. The default Postgres password is for local use only — the database port is
+# published on 127.0.0.1 only, never on the network.
+#
+# One person = one instance. A second instance (another person, or a trial of a new version) is a second checkout whose
+# .env sets its own COMPOSE_PROJECT_NAME (overrides `name:` below), JOBRADAR_PG_VOLUME, JOB_RADAR_WEB_PORT and DB_HOST_PORT
+# (docs/multiple-instances.md). The defaults are this installation's names: never change them for an existing install.
+name: job-radar
+
+# Log rotation for every service: json-file keeps LOG_MAX_FILE files of at most LOG_MAX_SIZE each, so a
+# long-running stack never fills the disk with container logs.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: ${LOG_MAX_SIZE:-10m}
+    max-file: "${LOG_MAX_FILE:-5}"
+
+# Container hardening for web, runner and jobspy (db keeps the capabilities its entrypoint needs to switch to postgres):
+# no privilege gain through setuid binaries, and no Linux capabilities at all (none of them binds a port below 1024,
+# changes file ownership or switches user at run time).
+x-hardening: &hardening
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+
+services:
+  db:
+    image: postgres:17
+    restart: unless-stopped
+    logging: *default-logging
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-jobradar}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-jobradar}
+      POSTGRES_DB: ${POSTGRES_DB:-jobradar}
+    volumes:
+      - jobradar-pg:/var/lib/postgresql/data
+    # Published on loopback only so host-side tooling (pnpm db:*, pnpm test:integration,
+    # drizzle studio) can reach it. Containers talk to db:5432 on the compose network.
+    ports:
+      - "127.0.0.1:${DB_HOST_PORT:-5433}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  web:
+    build:
+      context: .
+      target: web
+    restart: unless-stopped
+    # Linux: the uid:gid that owns data/ on the host (`id -u`, `id -g`), so the web can write data/config (docs/host-setup.md).
+    # The image's own user is 1000:1000; Docker Desktop (macOS) maps file ownership itself.
+    user: "${PUID:-1000}:${PGID:-1000}"
+    <<: *hardening
+    # Read-only image: Next writes only its cache (tmpfs) and /tmp; data/config, data/profile and data/exports are bind mounts.
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /app/.next/cache:mode=1777
+    logging: *default-logging
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-jobradar}:${POSTGRES_PASSWORD:-jobradar}@db:5432/${POSTGRES_DB:-jobradar}
+      # Docker sets HOSTNAME to the container id, which makes Next bind to one interface only.
+      HOSTNAME: 0.0.0.0
+      PORT: "3000"
+      # The host address the port is published on (below): with anything but loopback, local requests need the web
+      # password too, because a forged Host: localhost could then come from the network (docs/configuration.md "Web access").
+      JOB_RADAR_WEB_BIND: ${JOB_RADAR_WEB_BIND:-127.0.0.1}
+      # shipped defaults (read-only) and the user's config (every save lands here; a file there wins)
+      JOB_RADAR_DEFAULTS_DIR: /app/config
+      JOB_RADAR_CONFIG_DIR: /app/data/config
+      JOB_RADAR_PROFILE_DIR: /app/data/profile
+    # The settings pages write the user config (data/config) and the profile files back, so both are read-write;
+    # the shipped defaults (config/) are never written. At start-up the web copies the user files data/config lacks from config/.
+    volumes:
+      - ./config:/app/config:ro
+      - ./data/config:/app/data/config
+      - ./data/profile:/app/data/profile
+      # JDs exported for resume-kit. Set jd_export_host_dir to the
+      # host path of this folder so the command shown in the dashboard works in a host terminal.
+      - ./data/exports:/app/data/exports
+      # /sources shows whether the LinkedIn login exists / is still valid; read-only, the web never uses it to browse.
+      - ./.auth:/app/.auth:ro
+    # Loopback only by default (JOB_RADAR_WEB_BIND, JOB_RADAR_WEB_PORT in .env). Phones reach it through Tailscale
+    # (tailscale serve), not by opening this port. Binding 0.0.0.0 publishes it to the network: set a web password first.
+    ports:
+      - "${JOB_RADAR_WEB_BIND:-127.0.0.1}:${JOB_RADAR_WEB_PORT:-3000}:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/api/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  runner:
+    build:
+      context: .
+      target: runner
+    restart: unless-stopped
+    # The same uid:gid as the web: the runner reads the config files the web writes (mode 0600) and writes data/backups.
+    user: "${PUID:-1000}:${PGID:-1000}"
+    <<: *hardening
+    # Not read-only: Chromium (linkedin-session) writes a temporary profile and crash reports under /tmp, and its caches
+    # (fontconfig and the like) under $HOME, which depends on PUID (/home/ubuntu for 1000). It is launched with
+    # --disable-dev-shm-usage, so it does not need /dev/shm.
+    # A memory cap keeps a runaway browser from taking the whole host down (RUNNER_MEM_LIMIT in .env).
+    mem_limit: ${RUNNER_MEM_LIMIT:-2g}
+    logging: *default-logging
+    init: true
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-jobradar}:${POSTGRES_PASSWORD:-jobradar}@db:5432/${POSTGRES_DB:-jobradar}
+      RUNNER_HEARTBEAT_SECONDS: ${RUNNER_HEARTBEAT_SECONDS:-30}
+      RUNNER_HEARTBEAT_RETENTION_HOURS: ${RUNNER_HEARTBEAT_RETENTION_HOURS:-24}
+      # The healthcheck below turns unhealthy when the newest heartbeat is older than this.
+      RUNNER_HEALTH_MAX_AGE_SECONDS: ${RUNNER_HEALTH_MAX_AGE_SECONDS:-120}
+      # Daily pg_dump (schedule.yaml: backup) lands here; the host sees it in ./data/backups.
+      RUNNER_BACKUP_DIR: /app/data/backups
+      # The image ships postgresql-client-17; a host path from .env must not leak in.
+      PG_DUMP_PATH: pg_dump
+      PG_RESTORE_PATH: pg_restore
+      # The sidecar is only reachable on the compose network; this overrides sources.yaml: jobspy.url.
+      JOBSPY_URL: http://jobspy:8000
+      JOB_RADAR_DEFAULTS_DIR: /app/config
+      JOB_RADAR_CONFIG_DIR: /app/data/config
+      JOB_RADAR_PROFILE_DIR: /app/data/profile
+      # No AI credential in the container: with ai.yaml `execution: host` (default) the AI and the push run in
+      # the ai-worker on the host (scripts/ops/install-ai-worker.sh), with the local claude / codex subscription logins. The
+      # empty values below also keep keys that sit in .env (read by the ai-worker on the host) out of this container.
+      # Only for `execution: container`: put the real values back (compose.override.yaml) and mount ~/.codex/auth.json.
+      CLAUDE_CODE_OAUTH_TOKEN: ""
+      ANTHROPIC_API_KEY: ""
+      DEEPSEEK_API_KEY: ""
+      MIMO_API_KEY: ""
+      # The web password and the session signing key are the web's alone: blank here so the runner never holds them.
+      JOB_RADAR_WEB_PASSWORD: ""
+      JOB_RADAR_WEB_PASSWORD_HASH: ""
+      JOB_RADAR_SESSION_SECRET: ""
+    # Both config directories are read-only for the runner (it hot-reloads what the web writes into data/config). The
+    # profile directory is mounted read-write for one reason: at start-up the runner seeds missing me.yaml /
+    # preferences.yaml from config/profile.example (ensureProfileFiles). It never overwrites an existing file.
+    volumes:
+      - ./config:/app/config:ro
+      - ./data/config:/app/data/config:ro
+      - ./data/profile:/app/data/profile
+      - ./data/backups:/app/data/backups
+      # the Telegram 📄 button exports a JD like the dashboard does
+      - ./data/exports:/app/data/exports
+      # The LinkedIn login, written on the host by `pnpm auth:linkedin`: read-only here. Without it the linkedin-session channel
+      # is "not configured" and skipped. It holds session cookies: never commit it, never copy it into an image.
+      - ./.auth:/app/.auth:ro
+    depends_on:
+      db:
+        condition: service_healthy
+      jobspy:
+        condition: service_healthy
+    # Reads the newest runner heartbeat (the runner writes one every RUNNER_HEARTBEAT_SECONDS) and exits 1
+    # when it is older than RUNNER_HEALTH_MAX_AGE_SECONDS, i.e. when the runner hangs or cannot reach the db.
+    # Docker only marks the container `unhealthy` (see `docker compose ps`); `restart:` reacts to exits, not to this.
+    healthcheck:
+      test: ["CMD", "node", "dist/healthcheck.mjs"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # Python sidecar (FastAPI). Only reachable inside the compose network: no `ports:`. No env_file either: nothing from
+  # .env (API keys, the web password, the session key) reaches it.
+  jobspy:
+    build:
+      context: ./jobspy
+    restart: unless-stopped
+    <<: *hardening
+    read_only: true
+    tmpfs:
+      - /tmp
+    mem_limit: ${JOBSPY_MEM_LIMIT:-1g}
+    logging: *default-logging
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+volumes:
+  jobradar-pg:
+    # A fixed, global name (not prefixed with the project): `docker compose down -v` in any checkout with the same name
+    # deletes it. A second instance sets its own JOBRADAR_PG_VOLUME; never change it for an existing install (data loss).
+    name: ${JOBRADAR_PG_VOLUME:-jobradar-pg}

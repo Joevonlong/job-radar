@@ -1,0 +1,25 @@
+# /insights stats page: time ranges, cities listed separately, histogram buckets. Only affects the stats page, not collection.
+# The web app does not hot-reload config: this file is reread each time the page opens.
+
+config_version: 2
+
+# Time range options (days, short to long). "Today" follows the timezone in schedule.yaml; ranges include today
+ranges_days: [7, 30, 90]
+# Which one to use when the URL has no range (or a value not in the list above)
+default_range_days: 30
+
+# Cities listed separately on the city card, written like the /jobs city filter (canonical city names in locations_json).
+# A job counts if any of its locations matches; "Remote" is listed separately by the job's work mode; the rest are grouped as "Other".
+# Empty = the cities of locations in preferences.yaml (your target cities from the setup / the /me page)
+cities: []
+
+# Rows in the "Filter reasons" card
+top_filter_reasons: 8
+
+# Rank value histogram: bar width (points); everything from score_bucket_cap up goes into the last bar
+score_bucket_width: 5
+score_bucket_cap: 100
+
+# Annual salary histogram: bar width (market base currency/year, using the midpoint of the stated range); everything from salary_bucket_cap up goes into the last bar
+salary_bucket: 10000
+salary_bucket_cap: 150000

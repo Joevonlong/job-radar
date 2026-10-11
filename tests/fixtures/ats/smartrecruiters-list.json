@@ -1,0 +1,160 @@
+{
+  "offset": 0,
+  "limit": 100,
+  "totalFound": 3,
+  "content": [
+    {
+      "id": "744000000000001",
+      "name": "AI Platform Engineer (m/f/x)",
+      "defaultJobAd": true,
+      "refNumber": "REF788I",
+      "company": {
+        "identifier": "ExampleLabs",
+        "name": "Example Labs"
+      },
+      "releasedDate": "2026-10-01T08:52:15.935Z",
+      "location": {
+        "city": "München",
+        "region": "BY",
+        "country": "de",
+        "address": "Seitzstraße",
+        "postalCode": "80538",
+        "remote": false,
+        "hybrid": true,
+        "latitude": "48.1416886",
+        "longitude": "11.5847859",
+        "fullLocation": "München, BY, Germany"
+      },
+      "industry": {
+        "id": "banking",
+        "label": "Banking"
+      },
+      "department": {
+        "id": "9019051",
+        "label": "Data"
+      },
+      "function": {
+        "id": "engineering",
+        "label": "Engineering"
+      },
+      "typeOfEmployment": {
+        "id": "permanent",
+        "label": "Full-time"
+      },
+      "experienceLevel": {
+        "id": "mid_senior_level",
+        "label": "Mid-Senior Level"
+      },
+      "customField": [],
+      "visibility": "PUBLIC",
+      "ref": "https://api.smartrecruiters.com/v1/companies/ExampleLabs/postings/744000000000001",
+      "language": {
+        "code": "en",
+        "label": "English",
+        "labelNative": "English (US)"
+      }
+    },
+    {
+      "id": "744000000000002",
+      "name": "Sales Manager (m/f/x)",
+      "defaultJobAd": true,
+      "refNumber": "REF820K",
+      "company": {
+        "identifier": "ExampleLabs",
+        "name": "Example Labs"
+      },
+      "releasedDate": "2026-07-29T11:18:34.402Z",
+      "location": {
+        "city": "München",
+        "region": "BY",
+        "country": "de",
+        "address": "Seitzstraße 8e",
+        "postalCode": "80538",
+        "remote": false,
+        "hybrid": true,
+        "latitude": "48.14061239999999",
+        "longitude": "11.5850432",
+        "fullLocation": "München, BY, Germany"
+      },
+      "industry": {
+        "id": "banking",
+        "label": "Banking"
+      },
+      "department": {
+        "id": "9019051",
+        "label": "Data"
+      },
+      "function": {
+        "id": "human_resources",
+        "label": "Human Resources"
+      },
+      "typeOfEmployment": {
+        "id": "permanent",
+        "label": "Full-time"
+      },
+      "experienceLevel": {
+        "id": "mid_senior_level",
+        "label": "Mid-Senior Level"
+      },
+      "customField": [],
+      "visibility": "PUBLIC",
+      "ref": "https://api.smartrecruiters.com/v1/companies/ExampleLabs/postings/744000000000002",
+      "language": {
+        "code": "en",
+        "label": "English",
+        "labelNative": "English (US)"
+      }
+    },
+    {
+      "id": "744000000000003",
+      "name": "Engineering Manager - AI Engineering & AI Platform (m/f/x)",
+      "defaultJobAd": false,
+      "refNumber": "REF821R",
+      "company": {
+        "identifier": "ExampleLabs",
+        "name": "Example Labs"
+      },
+      "releasedDate": "2026-08-14T13:45:59.965Z",
+      "location": {
+        "city": "Berlin",
+        "region": "BE",
+        "country": "de",
+        "address": "Saarbrücker Straße 38",
+        "postalCode": "10405",
+        "remote": true,
+        "hybrid": true,
+        "latitude": "52.5285837",
+        "longitude": "13.4165592",
+        "fullLocation": "Berlin, BE, Germany"
+      },
+      "industry": {
+        "id": "banking",
+        "label": "Banking"
+      },
+      "department": {
+        "id": "9019051",
+        "label": "Data"
+      },
+      "function": {
+        "id": "engineering",
+        "label": "Engineering"
+      },
+      "typeOfEmployment": {
+        "id": "permanent",
+        "label": "Full-time"
+      },
+      "experienceLevel": {
+        "id": "mid_senior_level",
+        "label": "Mid-Senior Level"
+      },
+      "customField": [],
+      "visibility": "PUBLIC",
+      "ref": "https://api.smartrecruiters.com/v1/companies/ExampleLabs/postings/744000000000003",
+      "language": {
+        "code": "en",
+        "label": "English",
+        "labelNative": "English (US)"
+      }
+    }
+  ]
+}

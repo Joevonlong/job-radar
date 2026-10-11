@@ -1,0 +1,15 @@
+# Used by scripts/release-check.sh (gitleaks picks it up from the repository root).
+title = "Job Radar gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Obviously fake credentials in the AI provider unit tests (they test that real-looking secrets are redacted)"
+paths = [
+  '''(^|/)tests/ai/(usage|cli-providers|api-providers|router|web-tasks)\.test\.ts$''',
+  # a made-up database password the test writes into a temporary .env to check that it is masked / never printed
+  '''(^|/)tests/ops/db-password\.test\.ts$''',
+  # recorded job-description vocabulary (skill names such as "REST APIs"), not credentials
+  '''(^|/)tests/fixtures/market/golden-inputs\.json$''',
+]

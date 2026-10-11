@@ -1,0 +1,136 @@
+import { eq, sql } from "drizzle-orm";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, inject, it } from "vitest";
+import { stringify } from "yaml";
+
+import { AiProviderError } from "@/lib/ai/errors";
+import { createProvider } from "@/lib/ai/provider";
+import { createAiRouter } from "@/lib/ai/router";
+import type { AiTransport, AiTransportRequest } from "@/lib/ai/types";
+import { registerControlHandler, resetControlHandlers, processNextControlRequest } from "@/lib/control";
+import { createRescoreStaleHandler } from "@/lib/control/rescore";
+import { requestRescoreStale } from "@/lib/control/service";
+import { closeDb, countStaleScores, getDb, insertControlRequest, markScoresStaleExcept, schema } from "@/lib/db";
+import { runMigrations } from "@/lib/db/migrate";
+import { currentPreferencesSnapshotId, runScoring, type ScoringDeps, type ScoringProfile } from "@/lib/scoring";
+import { loadControlStatus } from "@/lib/settings/status";
+
+import { quietLogger } from "../cycle/helpers";
+import { aiConfig, answer, exampleMe, examplePreferences } from "../scoring/helpers";
+
+const url = inject("testDatabaseUrl");
+const NOW = new Date("2026-10-07T10:00:00Z");
+
+/** A fake provider: answers every posting with a valid score, or fails when told to. No real CLI or API is reachable. */
+function fakeAi(fail: Error | null = null) {
+  const calls: string[] = [];
+  const transport: AiTransport = {
+    id: "claude-cli",
+    availability: () => ({ available: true }),
+    async call(request: AiTransportRequest) {
+      calls.push(/^Title: (.*)$/m.exec(request.user)?.[1] ?? "?");
+      if (fail) throw fail;
+      return { text: answer({ score: 77 }), model: "fake-model", usage: { tokensIn: 100, tokensOut: 20 } };
+    },
+  };
+  return { calls, router: createAiRouter({ config: aiConfig(), providers: [createProvider(transport)], usage: null }) };
+}
+
+const profile = (): ScoringProfile => ({ me: exampleMe(), preferences: examplePreferences(), meYaml: stringify(exampleMe()), preferencesYaml: stringify(examplePreferences()) });
+
+function deps(router: ScoringDeps["router"], loadProfile: ScoringDeps["loadProfile"] = async () => profile()): ScoringDeps {
+  return { db: getDb(), router, config: aiConfig(), logger: quietLogger, now: () => NOW, loadProfile, loadBonusCap: () => 15 };
+}
+
+async function addScoredJob(title: string): Promise<number> {
+  const db = getDb();
+  const [company] = await db.insert(schema.companies).values({ name: `Co ${title}`, nameNorm: `co ${title.toLowerCase()}` }).returning();
+  const [job] = await db
+    .insert(schema.jobs)
+    .values({ companyId: company!.id, title, titleNorm: title.toLowerCase(), description: `About ${title}`, firstSeenAt: new Date(NOW.getTime() - 3_600_000) })
+    .returning();
+  const snapshotId = await currentPreferencesSnapshotId(db, profile());
+  await db.insert(schema.scores).values({ jobId: job!.id, profileSnapshotId: snapshotId, filterResult: "passed" });
+  return job!.id;
+}
+
+/** Two scored jobs whose scores are then marked stale, as a profile change would. */
+async function staleJobs(): Promise<number[]> {
+  const ids = [await addScoredJob("Alpha"), await addScoredJob("Beta")];
+  await runScoring(deps(fakeAi().router), { limit: 10 });
+  await markScoresStaleExcept(getDb(), 987654321);
+  expect(await countStaleScores(getDb())).toBe(2);
+  return ids;
+}
+
+const pollOptions = () => ({ db: getDb(), signal: new AbortController().signal, logger: quietLogger });
+
+beforeAll(async () => {
+  process.env.DATABASE_URL = url;
+  await runMigrations();
+});
+
+beforeEach(async () => {
+  await getDb().execute(sql`truncate table control_requests, scores, jobs, companies, profile_snapshots, ai_usage, applications restart identity cascade`);
+});
+
+afterEach(() => resetControlHandlers());
+
+afterAll(async () => {
+  await getDb().execute(sql`truncate table scores, jobs, companies, profile_snapshots, ai_usage, applications restart identity cascade`);
+  await closeDb();
+});
+
+describe("the rescore_stale control request", () => {
+  it("without the runner's handler nothing re-scores: the default only acknowledges", async () => {
+    await staleJobs();
+    await insertControlRequest(getDb(), { kind: "rescore_stale" });
+    expect(await processNextControlRequest(pollOptions())).toMatchObject({ status: "done", result: { scored: 0, failed: 0, placeholder: true } });
+    expect(await countStaleScores(getDb())).toBe(2);
+  });
+
+  it("re-scores the stale scores through rescoreStale and reports scored / failed", async () => {
+    const fake = fakeAi();
+    registerControlHandler("rescore_stale", createRescoreStaleHandler({ createDeps: () => deps(fake.router) }));
+    const ids = await staleJobs();
+
+    const queued = await requestRescoreStale();
+    expect(queued).toMatchObject({ status: "queued", kind: "rescore_stale", existing: false });
+    const finished = await processNextControlRequest(pollOptions());
+    expect(finished).toMatchObject({ status: "done", result: { scored: 2, failed: 0, remaining: 0, placeholder: false } });
+    expect(await countStaleScores(getDb())).toBe(0);
+    for (const id of ids) {
+      const rows = await getDb().select().from(schema.scores).where(eq(schema.scores.jobId, id));
+      expect(rows.every((r) => !r.stale && r.score === 77)).toBe(true);
+    }
+
+    // the settings page sees the outcome and the new stale count
+    const status = await loadControlStatus(getDb());
+    expect(status.staleScores).toBe(0);
+    expect(status.requests[0]).toMatchObject({ kind: "rescore_stale", status: "done", scored: 2, failed: 0, placeholder: false });
+  });
+
+  it("every posting failing fails the request with a code instead of a zero", async () => {
+    const fake = fakeAi(new AiProviderError("claude-cli", "auth", "login expired"));
+    registerControlHandler("rescore_stale", createRescoreStaleHandler({ createDeps: () => deps(fake.router) }));
+    await staleJobs();
+    await insertControlRequest(getDb(), { kind: "rescore_stale" });
+    const finished = await processNextControlRequest(pollOptions());
+    expect(finished).toMatchObject({ status: "failed", result: { scored: 0, error: "rescore_ai_unavailable" } });
+    expect((finished?.result as { failed: number }).failed).toBeGreaterThan(0);
+    expect(await countStaleScores(getDb())).toBe(2);
+    const status = await loadControlStatus(getDb());
+    expect(status.requests[0]).toMatchObject({ status: "failed", error: "rescore_ai_unavailable" });
+  });
+
+  it("an unusable profile stops the run: reported as not started", async () => {
+    const fake = fakeAi();
+    const empty = async (): Promise<ScoringProfile> => ({ ...profile(), me: exampleMe((raw) => { raw.summary = ""; raw.skills = []; }) });
+    registerControlHandler("rescore_stale", createRescoreStaleHandler({ createDeps: () => deps(fake.router, empty) }));
+    await staleJobs();
+    await insertControlRequest(getDb(), { kind: "rescore_stale" });
+    const finished = await processNextControlRequest(pollOptions());
+    expect(finished?.status).toBe("failed");
+    expect(finished?.result).toMatchObject({ scored: 0, error: "rescore_profile_incomplete", profileMissing: ["summary", "skills"] });
+    expect(fake.calls).toEqual([]);
+  });
+});

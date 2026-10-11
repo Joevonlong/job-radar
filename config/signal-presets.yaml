@@ -1,0 +1,61 @@
+# Presets of the "Add a category" dialog on /interests (docs/signals.md, "Add your own interest point").
+# Choosing a preset only fills in the form: the saved category lives in interests.yaml like any other, and you can change
+# every field before saving. Keywords and patterns are listed per language; the dialog takes English plus the local language
+# of your market (German for the Germany pack). The AI definition is English and decides what the AI review looks for.
+# Shipped with the app: a copy in your config directory replaces this file as a whole (product updates then no longer apply).
+config_version: 1
+
+presets:
+  - id: ai_tools_budget
+    label: { en: AI tools / token budget, zh: AI 工具 / token 预算 }
+    icon: 🤖
+    color: violet
+    weight: 4
+    high_value: false
+    ai_confirm_only: false
+    ai_definition: >-
+      The employer pays for AI tools for the employee: a large or unlimited AI / LLM token or usage budget, company-paid
+      licences or seats for AI assistants (GitHub Copilot, Cursor, Claude, ChatGPT, Gemini), or an explicit budget for AI
+      tools. Not: building AI products, AI as a research topic, or "experience with AI tools" asked of the candidate.
+    keywords:
+      en: [unlimited tokens, AI budget, AI tools budget, Copilot license, Copilot licence, Cursor license, ChatGPT Enterprise]
+      de: [KI-Budget, KI-Tools-Budget, unbegrenzte Tokens]
+    patterns:
+      en:
+        - '\b(?:unlimited|generous|large|uncapped)\s+(?:AI\s+|LLM\s+)?(?:token|usage|credits?)\b'
+        - '\b(?:access|licen[cs]es?|seats?|subscriptions?)\s+(?:to|for)\s+(?:[\w-]+\s+){0,3}?(?:Copilot|Cursor|Claude|ChatGPT|Gemini)\b'
+      de:
+        - '\b(?:Zugang|Zugriff|Lizenzen?)\s+(?:zu|für|auf)\s+(?:[\w-]+\s+){0,3}?(?:Copilot|Cursor|Claude|ChatGPT|Gemini)\b'
+        - '\bunbegrenzte[nrs]?\s+(?:KI-?\s*)?(?:Tokens?|Nutzung)\b'
+    exclude:
+      en:
+        - '\bexperience\s+(?:with|in|using)\s+(?:[\w-]+\s+){0,3}?(?:Copilot|Cursor|Claude|ChatGPT|Gemini)\b'
+      de:
+        - '\bErfahrung\s+(?:mit|in)\s+(?:[\w-]+\s+){0,3}?(?:Copilot|Cursor|Claude|ChatGPT|Gemini)\b'
+
+  - id: open_source_time
+    label: { en: Open-source time, zh: 开源时间 }
+    icon: 🌱
+    color: olive
+    weight: 3
+    high_value: false
+    ai_confirm_only: false
+    ai_definition: >-
+      The employee may contribute to open-source projects during paid working time: a share of working time for open
+      source, open-source Fridays, or explicit encouragement to contribute upstream on company time. Not: the product
+      merely uses or is built on open-source software, or "open-source contributions" asked of the candidate.
+    keywords:
+      en: [open source time, open-source time, open source Fridays, contribute upstream]
+      de: [Open-Source-Zeit, Open-Source-Freitag]
+    patterns:
+      en:
+        - '\b(?:\d{1,2}\s?%|time|days?|hours?|fridays?)\s+(?:of\s+(?:your\s+)?(?:working\s+)?time\s+)?(?:for|to work on|to contribute to|dedicated to)\s+open[- ]source\b'
+        - '\bcontribute\s+(?:back\s+)?to\s+open[- ]source\s+(?:projects?\s+)?(?:during|on|in)\s+(?:company|work(?:ing)?|paid)\s+(?:time|hours)\b'
+      de:
+        - '\b(?:Arbeitszeit|Zeit)\s+(?:für|um\s+an)\s+Open[- ]Source\b'
+        - '\bOpen[- ]Source[- ]Beiträge\s+(?:während|in)\s+der\s+Arbeitszeit\b'
+    exclude:
+      en:
+        - '\b(?:experience|track record)\s+(?:with|in|of)\s+(?:[\w-]+\s+){0,3}?open[- ]source\b'
+      de:
+        - '\bErfahrung\s+(?:mit|in)\s+(?:[\w-]+\s+){0,3}?Open[- ]Source\b'

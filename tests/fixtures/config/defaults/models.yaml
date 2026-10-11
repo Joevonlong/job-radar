@@ -1,0 +1,76 @@
+# AI 模型目录：每个服务商有哪些模型可选、单价多少。
+# 这里只放"有哪些"；"用哪个"在 ai.yaml（providers.<名字>.model / strong_model、tasks.<任务>.models）或 /settings 的 AI 标签里选。
+# 不要在这里写 API key 或任何密钥（密钥只放 .env）。
+#
+# 厂商出了新模型，怎么加（不需要重启，保存后约 5 秒生效）：
+#   1. 在对应服务商的 models 下加一条：id 写厂商文档里的模型名（传给 CLI / API 的就是它），label 写好认的显示名。
+#   2. API 服务商（anthropic / deepseek / mimo）必须写 price：美元 / 100 万 token 的输入价和输出价，以官网为准。
+#      订阅 CLI（claude-cli / codex-cli）不写 price（订阅费用按 0 计）。
+#   3. 在项目目录下运行 pnpm config:check，确认没有报错。
+#   4. 先试一次：pnpm ai:probe --provider <服务商> --model <id>
+#   5. 刷新 /settings，在 AI 标签对应服务商一节的"模型"下拉里选中它，保存。
+#
+# 旧模型下线：先在 /settings 换成别的模型，再给它加 deprecated: true（下拉不再列出；正在用的会标"已停用"）。
+# 确认没人用了再删掉这一条；正被 ai.yaml 选中的模型删掉后 config:check 会报"不在模型目录里"。
+#
+# 每个模型可写的键：
+#   id                 必填，同一服务商里不能重复
+#   label              显示名；不写就显示 id
+#   aliases            厂商在回复里报的其他名字（例如带日期的快照名），算费用时也认
+#   price              { input_per_mtok, output_per_mtok }，只有 API 服务商写，且必须写；
+#                      可加 cached_input_per_mtok（缓存命中的输入）、cache_write_per_mtok（写入缓存的输入），不写按 input_per_mtok 算
+#   equivalent_price   只有订阅 CLI（claude-cli / codex-cli）：同一个模型按官方 API 价格要付多少（只用于 /sources/ai-usage 的"折合 API 费用"，
+#                      不参与月预算）。键同 price，另外必须写 source（价格出处和日期）。改了以后只影响新的调用
+#   reasoning_efforts  只有 codex-cli：这个模型支持的推理强度（minimal / low / medium / high / xhigh / max）；不写 = 全部
+#   cli_default        只有 codex-cli，最多一个：ai.yaml 不写 codex 模型时 CLI 实际用的就是它
+#   deprecated         true = 停用
+#   notes              备注，设置页原样显示
+# 服务商这一层可写：label（必填）、docs_url（官方模型 / 价格页，设置页显示成链接）、notes。服务商不能增减（每个服务商的调用方式写在代码里）。
+
+providers:
+  claude-cli:
+    label: Claude Code CLI
+    models:
+      - id: claude-haiku-4-5
+        label: Claude Haiku 4.5
+        equivalent_price: { input_per_mtok: 1, output_per_mtok: 5, cached_input_per_mtok: 0.1, cache_write_per_mtok: 1.25, source: "Anthropic API pricing (5 min cache write), platform.claude.com, checked 2026-10-08" }
+      - id: claude-sonnet-5-5
+        label: Claude Sonnet 5.5
+        equivalent_price: { input_per_mtok: 2, output_per_mtok: 10, cached_input_per_mtok: 0.1, cache_write_per_mtok: 2.5, source: "Anthropic API pricing (5 min cache write), platform.claude.com, checked 2026-10-08" }
+      - id: claude-opus-5-5
+        label: Claude Opus 5.5
+        equivalent_price: { input_per_mtok: 4, output_per_mtok: 20, cached_input_per_mtok: 0.2, cache_write_per_mtok: 5, source: "Anthropic API pricing (5 min cache write), platform.claude.com, checked 2026-10-08" }
+  codex-cli:
+    label: Codex CLI
+    models:
+      - id: gpt-6.1-sol
+        label: GPT-6.1 Sol
+        # codex-cli 0.160.1 不传 -m 时用的就是它（ai.yaml 的 verified_version）
+        cli_default: true
+        equivalent_price: { input_per_mtok: 2, output_per_mtok: 10, cached_input_per_mtok: 0.1, cache_write_per_mtok: 2.5, source: "OpenAI API pricing, standard tier (prompts up to 272K), openai.com / developers.openai.com, checked 2026-10-08" }
+  anthropic:
+    label: Anthropic API
+    models:
+      - id: claude-haiku-4-5
+        label: Claude Haiku 4.5
+        price: { input_per_mtok: 1, output_per_mtok: 5 }
+      - id: claude-sonnet-5-5
+        label: Claude Sonnet 5.5
+        price: { input_per_mtok: 2, output_per_mtok: 10 }
+  # 单价偏保守：DeepSeek 取高峰价
+  deepseek:
+    label: DeepSeek API
+    models:
+      - id: deepseek-v4-flash
+        label: DeepSeek V4 Flash
+        price: { input_per_mtok: 0.3, output_per_mtok: 1.2 }
+      - id: deepseek-v4-pro
+        label: DeepSeek V4 Pro
+        price: { input_per_mtok: 1.32, output_per_mtok: 3.96 }
+  # 单价偏保守：MiMo 取旧价
+  mimo:
+    label: Xiaomi MiMo API
+    models:
+      - id: mimo-v2.5-pro
+        label: MiMo V2.5 Pro
+        price: { input_per_mtok: 1, output_per_mtok: 3 }

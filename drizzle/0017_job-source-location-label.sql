@@ -1,0 +1,1 @@
+ALTER TABLE "job_sources" ADD COLUMN "location_label" text;

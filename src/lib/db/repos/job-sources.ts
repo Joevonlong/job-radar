@@ -1,0 +1,76 @@
+import { and, asc, eq, gt, inArray, ne, sql } from "drizzle-orm";
+
+import type { Executor } from "../executor";
+import { jobSources, jobs, rawPostings } from "../schema";
+
+export type JobSource = typeof jobSources.$inferSelect;
+
+export async function getJobSourceByRawPosting(db: Executor, rawPostingId: number): Promise<JobSource | null> {
+  const [row] = await db.select().from(jobSources).where(eq(jobSources.rawPostingId, rawPostingId)).orderBy(asc(jobSources.id)).limit(1);
+  return row ?? null;
+}
+
+export interface JobSourceInput {
+  jobId: number;
+  rawPostingId: number;
+  channelId: string;
+  url: string | null;
+  applyUrl: string | null;
+  locationLabel: string | null;
+  priority: number;
+  firstSeenAt: Date;
+}
+
+/** One row per (job, raw posting); a re-parsed posting refreshes its links and priority. */
+export async function upsertJobSource(db: Executor, input: JobSourceInput): Promise<void> {
+  await db
+    .insert(jobSources)
+    .values(input)
+    .onConflictDoUpdate({
+      target: [jobSources.jobId, jobSources.rawPostingId],
+      set: { url: input.url, applyUrl: input.applyUrl, locationLabel: input.locationLabel, priority: input.priority, channelId: input.channelId },
+    });
+}
+
+/** All sources of a job, best apply-link priority first. */
+export async function listJobSources(db: Executor, jobId: number): Promise<JobSource[]> {
+  return db.select().from(jobSources).where(eq(jobSources.jobId, jobId)).orderBy(asc(jobSources.priority), asc(jobSources.id));
+}
+
+/** Best (lowest) priority among the job's sources other than `rawPostingId`; null when there is none. */
+export async function bestOtherPriority(db: Executor, jobId: number, rawPostingId: number): Promise<number | null> {
+  const [row] = await db
+    .select({ best: sql<number | null>`min(${jobSources.priority})` })
+    .from(jobSources)
+    .where(and(eq(jobSources.jobId, jobId), ne(jobSources.rawPostingId, rawPostingId)));
+  return row?.best ?? null;
+}
+
+export interface JobWithRawPostings {
+  jobId: number;
+  salaryJson: unknown;
+  /** The raw postings the job was built from (parsed ones), with the apply-link priority of each. */
+  sources: Array<{ priority: number; raw: typeof rawPostings.$inferSelect }>;
+}
+
+/** The next `limit` jobs with an id above `afterId`, each with its parsed raw postings (for re-reading them with new code). */
+export async function listJobsWithRawPostings(db: Executor, input: { afterId: number; limit: number }): Promise<JobWithRawPostings[]> {
+  const jobRows = await db
+    .select({ id: jobs.id, salaryJson: jobs.salaryJson })
+    .from(jobs)
+    .where(gt(jobs.id, input.afterId))
+    .orderBy(asc(jobs.id))
+    .limit(input.limit);
+  if (jobRows.length === 0) return [];
+  const sourceRows = await db
+    .select({ jobId: jobSources.jobId, priority: jobSources.priority, raw: rawPostings })
+    .from(jobSources)
+    .innerJoin(rawPostings, eq(rawPostings.id, jobSources.rawPostingId))
+    .where(and(inArray(jobSources.jobId, jobRows.map((j) => j.id)), eq(rawPostings.parseStatus, "parsed")))
+    .orderBy(asc(jobSources.priority), asc(rawPostings.id));
+  return jobRows.map((job) => ({
+    jobId: job.id,
+    salaryJson: job.salaryJson,
+    sources: sourceRows.filter((s) => s.jobId === job.id).map(({ priority, raw }) => ({ priority, raw })),
+  }));
+}

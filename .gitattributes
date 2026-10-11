@@ -1,0 +1,6 @@
+* text=auto eol=lf
+*.sh text eol=lf
+pnpm-lock.yaml linguist-generated
+src/i18n/*.generated.ts linguist-generated
+drizzle/meta/** linguist-generated
+tests/fixtures/** linguist-vendored

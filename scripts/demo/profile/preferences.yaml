@@ -1,0 +1,27 @@
+# Demo preferences for the README screenshots (`pnpm demo:shots`). Fictional, matching the seeded demo jobs.
+
+config_version: 2
+market:
+  pack: de
+
+target_titles:
+  - Machine Learning Engineer
+  - AI Engineer
+  - Forward Deployed Engineer
+
+locations:
+  - Berlin
+
+workplace: [onsite, hybrid, remote]
+remote_scope: home_country
+seniority: all
+
+salary_floor_year: 65000
+
+contracts:
+  allow: [permanent, fixed_term, freelance]
+  exclude: [temp_agency]
+
+exclude_student_roles: true
+exclude_companies: []
+exclude_keywords: []

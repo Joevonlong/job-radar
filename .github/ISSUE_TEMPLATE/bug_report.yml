@@ -1,0 +1,102 @@
+name: Bug report
+description: Something doesn't work as the docs say
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. Two things first:
+
+        - **Never paste secrets or personal data**: API keys, the Telegram token, cookies from `.auth/`, your `.env`, your profile, real job ads you collected. Redact before you paste.
+        - **Security problems** go through a private report (see SECURITY.md), not a public issue.
+
+        Running `pnpm run doctor` often points straight at the cause; its output helps us a lot.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you expect, and what did you see instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which part?
+      options:
+        - Installation or update
+        - Setup wizard
+        - Sources and collection
+        - AI scoring, translation or breakdown
+        - Telegram
+        - Dashboard (web pages)
+        - Backups, restore or deploy script
+        - Documentation
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Job Radar version
+      description: The release tag or commit, for example the output of `git describe --tags`.
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options: [macOS, Linux, Windows (WSL), Other]
+    validations:
+      required: true
+  - type: dropdown
+    id: ai-worker
+    attributes:
+      label: How does the AI worker run?
+      options:
+        - As a service (scripts/ops/install-ai-worker.sh, launchd or systemd)
+        - Another supervisor (tmux, my own systemd unit, ...)
+        - In a terminal (pnpm ai-worker)
+        - Not running / no AI connected
+        - Not sure
+  - type: dropdown
+    id: ai-provider
+    attributes:
+      label: Which AI providers are switched on?
+      multiple: true
+      options: [codex CLI, claude CLI, Anthropic API, DeepSeek API, MiMo API, None]
+  - type: input
+    id: platform
+    attributes:
+      label: Docker, Node and browser versions
+      placeholder: "docker compose version; node --version; browser"
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Output of `pnpm run doctor`
+      description: Redact host names, paths and anything personal.
+      render: shell
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: For example `docker compose logs --tail 100 runner`, or `data/logs/ai-worker.err.log`. Redact anything personal.
+      render: shell
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before you submit
+      options:
+        - label: I searched the existing issues and the FAQ (docs/faq.md).
+          required: true
+        - label: I removed secrets, tokens and personal data from everything above.
+          required: true

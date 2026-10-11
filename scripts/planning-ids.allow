@@ -1,0 +1,1 @@
+# Paths whose planning-id text is data, not a reference (one repository-relative `path`, or `path:line`, per line; matched exactly).

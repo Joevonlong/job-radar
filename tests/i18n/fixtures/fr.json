@@ -1,0 +1,7 @@
+{
+  "meta": { "name": "Français", "intl": "fr-FR", "promptName": "French", "wide": false },
+  "format": {
+    "relative": { "now": "à l’instant", "minutes": "il y a {n} min", "hours": "il y a {n} h", "yesterday": "hier" }
+  },
+  "shell": { "toggleLanguage": "Changer de langue", "languageMenu": "Langue" }
+}

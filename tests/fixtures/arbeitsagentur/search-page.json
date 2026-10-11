@@ -1,0 +1,246 @@
+{
+  "ergebnisliste": [
+    {
+      "stellenangebotsart": "ARBEIT",
+      "stellenangebotsTitel": "BI Engineer (m/w/d) – Data Engineering & KI-Infrastruktur",
+      "arbeitszeitVollzeit": true,
+      "eintrittszeitraum": {
+        "von": "2026-10-05"
+      },
+      "verguetungsangabe": "KEINE_ANGABEN",
+      "vertragsdauer": "UNBEFRISTET",
+      "stellenlokationen": [
+        {
+          "adresse": {
+            "ort": "Berlin",
+            "region": "BERLIN",
+            "land": "DEUTSCHLAND"
+          },
+          "breite": 52.49,
+          "laenge": 13.4
+        }
+      ],
+      "homeofficemoeglich": true,
+      "homeofficetyp": "NACH_VEREINBARUNG",
+      "veroeffentlichungszeitraum": {
+        "von": "2026-10-05"
+      },
+      "datumErsteVeroeffentlichung": "2026-10-05",
+      "aenderungsdatum": "2026-10-05T13:17:49.788",
+      "hauptberuf": "Softwareentwickler/in",
+      "firma": "Praxissoft Nord GmbH    ",
+      "arbeitgeberKundennummerHash": "aDA_rHexN1bKP8fXgE6Cb55oawiPB2BJkuJtjETD_go=",
+      "referenznummer": "10001-0000000012-S",
+      "entfernung": 3,
+      "alleBerufe": [
+        "Softwareentwickler/in"
+      ]
+    },
+    {
+      "stellenangebotsart": "ARBEIT",
+      "stellenangebotsTitel": "Senior AI Engineer - Agentic Software Development (w/m/d)",
+      "quereinstiegGeeignet": false,
+      "arbeitszeitSchichtNachtWochenende": false,
+      "arbeitszeitTeilzeitAbend": false,
+      "arbeitszeitTeilzeitNachmittag": false,
+      "arbeitszeitTeilzeitVormittag": false,
+      "arbeitszeitTeilzeitFlexibel": false,
+      "arbeitszeitVollzeit": true,
+      "eintrittszeitraum": {
+        "von": "2026-10-06"
+      },
+      "verguetungsangabe": "KEINE_ANGABEN",
+      "vertragsdauer": "KEINE_ANGABE",
+      "istGeringfuegigeBeschaeftigung": false,
+      "stellenlokationen": [
+        {
+          "adresse": {
+            "plz": "10115",
+            "ort": "Berlin",
+            "region": "BERLIN",
+            "land": "DEUTSCHLAND"
+          },
+          "breite": 52.53,
+          "laenge": 13.39
+        }
+      ],
+      "homeofficemoeglich": false,
+      "veroeffentlichungszeitraum": {
+        "von": "2026-10-06"
+      },
+      "datumErsteVeroeffentlichung": "2026-10-06",
+      "aenderungsdatum": "2026-10-06T07:01:12.751",
+      "externeURL": "https://jobs.example.test/8cacf1ba?source=arbeitsagentur",
+      "hauptberuf": "KI-Engineer",
+      "firma": "Beispiel Digital GmbH",
+      "referenznummer": "12336-0000000013-S",
+      "entfernung": 3,
+      "alleBerufe": [
+        "KI-Engineer"
+      ]
+    },
+    {
+      "stellenangebotsart": "ARBEIT",
+      "stellenangebotsTitel": "Muster Systems SE: Senior AI Engineer (w/m/x)",
+      "quereinstiegGeeignet": false,
+      "arbeitszeitSchichtNachtWochenende": false,
+      "arbeitszeitTeilzeitAbend": false,
+      "arbeitszeitTeilzeitNachmittag": false,
+      "arbeitszeitTeilzeitVormittag": false,
+      "arbeitszeitTeilzeitFlexibel": false,
+      "arbeitszeitVollzeit": true,
+      "eintrittszeitraum": {
+        "von": "2026-10-05"
+      },
+      "verguetungsangabe": "KEINE_ANGABEN",
+      "vertragsdauer": "KEINE_ANGABE",
+      "istGeringfuegigeBeschaeftigung": false,
+      "stellenlokationen": [
+        {
+          "adresse": {
+            "plz": "10117",
+            "ort": "Berlin",
+            "region": "BERLIN",
+            "land": "DEUTSCHLAND"
+          },
+          "breite": 52.52,
+          "laenge": 13.39
+        }
+      ],
+      "homeofficemoeglich": true,
+      "homeofficetyp": "ANGABE_IN_PROZENT",
+      "homeofficeprozent": 100,
+      "veroeffentlichungszeitraum": {
+        "von": "2026-10-04"
+      },
+      "datumErsteVeroeffentlichung": "2026-10-04",
+      "aenderungsdatum": "2026-10-05T13:27:06.449",
+      "hauptberuf": "KI-Engineer",
+      "alternativBeruf1": "Machine Learning Engineer",
+      "alternativBeruf2": "Berufsspezialist/in - Softwareentwicklung",
+      "firma": "Muster Systems SE",
+      "arbeitgeberKundennummerHash": "ahhXBqgU9F_BBboRRmQ_9ykgu4IeaS01K-AA3L2l7cY=",
+      "referenznummer": "19913-0000000014-S",
+      "entfernung": 3,
+      "alleBerufe": [
+        "KI-Engineer",
+        "Machine Learning Engineer",
+        "Berufsspezialist/in - Softwareentwicklung"
+      ]
+    },
+    {
+      "stellenangebotsart": "ARBEIT",
+      "stellenangebotsTitel": "Software Engineer (Founding Team)",
+      "quereinstiegGeeignet": false,
+      "arbeitszeitSchichtNachtWochenende": false,
+      "arbeitszeitTeilzeitAbend": false,
+      "arbeitszeitTeilzeitNachmittag": false,
+      "arbeitszeitTeilzeitVormittag": false,
+      "arbeitszeitTeilzeitFlexibel": false,
+      "arbeitszeitVollzeit": true,
+      "eintrittszeitraum": {
+        "von": "2026-11-01"
+      },
+      "verguetungsangabe": "JAHRESGEHALT",
+      "artDerVerguetung": "GEHALTSSPANNE",
+      "gehaltsspanneVon": 55000.0,
+      "gehaltsspanneBis": 70000.0,
+      "vertragsdauer": "UNBEFRISTET",
+      "istGeringfuegigeBeschaeftigung": false,
+      "stellenlokationen": [
+        {
+          "adresse": {
+            "strasse": "Musterstr.",
+            "hausnummer": "1",
+            "plz": "10178",
+            "ort": "Berlin",
+            "region": "BERLIN",
+            "land": "DEUTSCHLAND"
+          },
+          "breite": 52.52,
+          "laenge": 13.4
+        }
+      ],
+      "homeofficemoeglich": false,
+      "veroeffentlichungszeitraum": {
+        "von": "2026-09-30"
+      },
+      "datumErsteVeroeffentlichung": "2026-09-30",
+      "aenderungsdatum": "2026-09-30T11:04:18.163",
+      "hauptberuf": "Softwareentwickler/in",
+      "alternativBeruf1": "Software-Architect",
+      "alternativBeruf2": "Data Engineer",
+      "firma": "Sehwerk GmbH",
+      "arbeitgeberKundennummerHash": "28iCtnFo8AsNLt6MXZUzuP2AA9AqI2FfbQ7Fbs4eftc=",
+      "referenznummer": "10000-0000000015-S",
+      "entfernung": 2,
+      "alleBerufe": [
+        "Data Engineer",
+        "Softwareentwickler/in",
+        "Software-Architect"
+      ]
+    },
+    {
+      "stellenangebotsart": "ARBEIT",
+      "stellenangebotsTitel": "Muster Systems SE: Forward Deployed Engineer - FDE (w/m/x)",
+      "quereinstiegGeeignet": false,
+      "arbeitszeitSchichtNachtWochenende": false,
+      "arbeitszeitTeilzeitAbend": false,
+      "arbeitszeitTeilzeitNachmittag": false,
+      "arbeitszeitTeilzeitVormittag": false,
+      "arbeitszeitTeilzeitFlexibel": false,
+      "arbeitszeitVollzeit": true,
+      "eintrittszeitraum": {
+        "von": "2026-10-05"
+      },
+      "verguetungsangabe": "KEINE_ANGABEN",
+      "vertragsdauer": "KEINE_ANGABE",
+      "istGeringfuegigeBeschaeftigung": false,
+      "stellenlokationen": [
+        {
+          "adresse": {
+            "plz": "10117",
+            "ort": "Berlin",
+            "region": "BERLIN",
+            "land": "DEUTSCHLAND"
+          },
+          "breite": 52.52,
+          "laenge": 13.39
+        }
+      ],
+      "homeofficemoeglich": true,
+      "homeofficetyp": "ANGABE_IN_PROZENT",
+      "homeofficeprozent": 100,
+      "veroeffentlichungszeitraum": {
+        "von": "2026-10-05"
+      },
+      "datumErsteVeroeffentlichung": "2026-10-05",
+      "aenderungsdatum": "2026-10-05T13:25:42.910",
+      "hauptberuf": "KI-Manager/in",
+      "alternativBeruf1": "Berufsspezialist/in - Künstliche Intelligenz und Maschinelles Lernen",
+      "alternativBeruf2": "UX-Designer/in",
+      "firma": "Muster Systems SE",
+      "arbeitgeberKundennummerHash": "ahhXBqgU9F_BBboRRmQ_9ykgu4IeaS01K-AA3L2l7cY=",
+      "referenznummer": "19913-0000000016-S",
+      "entfernung": 3,
+      "alleBerufe": [
+        "KI-Manager/in",
+        "Berufsspezialist/in - Künstliche Intelligenz und Maschinelles Lernen",
+        "UX-Designer/in"
+      ]
+    }
+  ],
+  "maxErgebnisse": 11,
+  "page": 1,
+  "size": 5,
+  "woOutput": {
+    "bereinigterOrt": "Berlin",
+    "suchmodus": "UMKREISSUCHE",
+    "koordinaten": [
+      {
+        "lat": 52.51,
+        "lon": 13.43
+      }
+    ]
+  }
+}

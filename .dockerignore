@@ -1,0 +1,32 @@
+# Keep the build context small and keep secrets / personal data out of images (C4, C5).
+**/node_modules
+**/.next
+dist
+out
+coverage
+.git
+.gitignore
+.DS_Store
+._*
+*.log
+*.tsbuildinfo
+next-env.d.ts
+
+# Secrets and runtime data
+.env
+.env.*
+!.env.example
+.auth
+data
+
+# Not needed to build images
+e2e
+tests
+test-results
+playwright-report
+compose.yaml
+Dockerfile
+.dockerignore
+**/__pycache__
+**/.venv
+jobspy

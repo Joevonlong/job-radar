@@ -1,0 +1,49 @@
+name: Feature request
+description: Suggest an improvement, a new source or a market pack
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Job Radar is a self-hosted tool for one person. A few things are out of scope on purpose: applying to jobs automatically, user accounts or hosting it for other people, and getting past login walls or CAPTCHAs.
+
+        Open-ended ideas and questions fit better in Discussions; this form is for a concrete change.
+  - type: dropdown
+    id: area
+    attributes:
+      label: What kind of change?
+      options:
+        - A new source (job board, ATS, API)
+        - A market pack for a country
+        - Scoring, signals or filters
+        - AI providers
+        - Telegram
+        - Dashboard (web pages)
+        - Setup, install or operations
+        - Translation or documentation
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What are you trying to do, and what gets in the way?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: For a new source, say whether it has an official API, what its terms say about automated access, and which countries it covers.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+  - type: dropdown
+    id: contribute
+    attributes:
+      label: Would you like to work on this?
+      options: ["Yes", "Maybe, with guidance", "No"]

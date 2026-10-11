@@ -1,0 +1,5814 @@
+{
+  "meta": {
+    "name": "中文",
+    "intl": "zh-CN",
+    "promptName": "Simplified Chinese",
+    "wide": true
+  },
+  "format": {
+    "relative": {
+      "now": "刚刚",
+      "minutes": "{n} 分钟前",
+      "hours": "{n} 小时前",
+      "yesterday": "昨天"
+    },
+    "duration": {
+      "d": "天",
+      "h": "小时",
+      "m": "分钟",
+      "s": "秒",
+      "lessThanMinute": "<1 分钟"
+    },
+    "salaryPeriod": {
+      "year": "/年",
+      "month": "/月",
+      "week": "/周",
+      "day": "/天",
+      "hour": "/小时"
+    },
+    "salary": {
+      "upTo": "最高",
+      "from": "起"
+    },
+    "listSeparator": "、",
+    "shortDateMonth": "2-digit"
+  },
+  "app": {
+    "name": "Job Radar",
+    "tagline": "个人求职雷达"
+  },
+  "interests": {
+    "today": {
+      "label": "视图",
+      "all": "全部",
+      "default": "默认视图",
+      "empty": "这个视图在本轮和今天没有符合条件的新岗位。",
+      "quick": {
+        "all": "全部",
+        "high": "高分",
+        "salary": "有薪资",
+        "following": "跟进中"
+      },
+      "emptyQuick": "本轮和今天没有符合这个视图的新岗位。"
+    },
+    "saveView": {
+      "button": "保存当前筛选为视图",
+      "needFilters": "先设置至少一个筛选条件",
+      "title": "保存为视图",
+      "description": "把当前的筛选条件存成一个视图，可以在今日页顶部切换，也可以设为今日页默认视图。",
+      "name": "视图名称",
+      "namePlaceholder": "例如：高薪信号 + 英语岗 + Berlin",
+      "makeDefault": "设为今日页的默认视图",
+      "overwrite": "覆盖已有视图",
+      "saving": "保存中…",
+      "save": "保存视图",
+      "savedToast": "已保存视图「{name}」"
+    },
+    "formErrors": {
+      "invalidPayload": "提交的内容不正确，请刷新页面后再试。",
+      "unreadable": "interests.yaml 读取失败，请先修好文件再保存。",
+      "writeFailed": "写入失败，文件没有改动。",
+      "invalidName": "名称不能为空，也不能太长。",
+      "nameTaken": "已经有同名视图。换一个名字，或者覆盖它的筛选条件。",
+      "noFilters": "当前没有任何筛选条件可保存。",
+      "viewNotFound": "找不到这个视图，可能已被删除。",
+      "alreadyWatched": "这家公司已经在关注列表里。",
+      "watchedNotFound": "关注列表里没有这家公司，可能已被移除。",
+      "categoryMissing": "页面上的类别和文件不一致（文件可能刚被改过）。请刷新页面后再改。",
+      "unknownRetired": "要删除的类别在文件里不存在。请刷新页面后再改。"
+    },
+    "errors": {
+      "required": "必填",
+      "number": "要填数字",
+      "min": "不能小于 {min}",
+      "atLeastOne": "至少要有一项",
+      "duplicates": "有重复的项",
+      "regex": "不是有效的正则表达式",
+      "invalid": "无效：{message}",
+      "max": "不能大于 {max}",
+      "idFormat": "id 格式不对：字母开头，只能用字母、数字、_ 和 -，最多 24 个字符",
+      "idReserved": "这个 id 是保留字",
+      "amountTaken": "只能有一个金额类别",
+      "kindLocked": "已保存类别的类型不能改",
+      "tooMany": "最多 {max} 个类别",
+      "nameRequired": "至少填一种语言的名称",
+      "iconTooLong": "图标最多 2 个字",
+      "color": "颜色只能从调色板里选"
+    },
+    "list": {
+      "row": "{label} {n}",
+      "remove": "移除 {label} {n}"
+    },
+    "actions": {
+      "save": "保存",
+      "saving": "保存中…",
+      "reset": "还原",
+      "dirty": "有未保存的改动",
+      "dirtyCount": "{count} 处未保存",
+      "clean": "没有未保存的改动"
+    },
+    "loadError": {
+      "title": "interests.yaml 无法加载",
+      "hint": "修正文件后刷新页面；在文件修好之前这里不能编辑。"
+    },
+    "recompute": {
+      "done": "已保存。排序值已按新的权重重算（检查 {checked} 条评分，更新 {updated} 条），没有调用 AI。",
+      "failed": "已保存，但数据库暂时连不上，排序值没有重算。下一轮采集会自动补上。",
+      "rescan": "词或正则有改动：下一轮采集会重新扫描岗位 JD 里的信号，之后排序值再更新。",
+      "review": "AI 定义或 AI 类别有改动：在架岗位会在后面几轮按每轮上限重新复核。"
+    },
+    "vocabulary": {
+      "title": "信号类别和词表",
+      "description": "规则层在 JD 里找信号时用的类别、词和正则。改名称、颜色、权重或高价值后保存，排序值立刻重算，不需要 AI；改词表后下一轮会重新扫描。",
+      "counts": "{keywords} 个词 · {patterns} 条正则",
+      "countsPatterns": "{patterns} 条正则",
+      "countsBenefits": "{tags} 个标签 · {patterns} 条正则",
+      "fieldErrors": "有 {count} 处需要修改，没有保存。",
+      "savedToast": "词表已保存"
+    },
+    "weights": {
+      "title": "类别权重和封顶",
+      "hint": "每个岗位每个类别只算一次；排序值 = 匹配分 + min(信号加分合计, 封顶)。权重在各类别里改。",
+      "cap": "加分封顶",
+      "capHint": "各类别加分合计超过封顶的部分不再计入。",
+      "scale": "{tier} 权重 {value}（满格 {max}）",
+      "dec": "{tier} 权重 −1",
+      "inc": "{tier} 权重 +1",
+      "capBar": "全部类别命中 = {sum}",
+      "capValue": "最多计入 +{counted}",
+      "capOver": "超出封顶 {over} 不计入",
+      "capAria": "叠加条：全部类别命中 {sum}，计入 {counted}，封顶 {cap}",
+      "capHatch": "斜线部分超过封顶，不计入排序值",
+      "keywordsMore": "+{count}",
+      "capTip": "封顶 {cap}",
+      "cellScale": "每格 {perCell} 分，满格 {max} 分（各类别同一把尺）",
+      "capScale": "条的刻度：0 到 {scale} 分（取合计和封顶中较大的一个）。"
+    },
+    "fields": {
+      "patterns": "正则",
+      "patternsHint": "不区分大小写（iu 标志）。",
+      "addPattern": "添加正则",
+      "noPatterns": "还没有",
+      "exclude": "排除正则",
+      "excludeHint": "命中范围附近出现这些写法时，忽略这次命中。",
+      "keywords": "词",
+      "keywordsHint": "输入后按 Enter 添加。",
+      "benefitTags": "标签词",
+      "benefitPatterns": "正则标签",
+      "benefitPatternsHint": "左边是显示的标签名，右边是匹配它的正则。",
+      "benefitName": "标签名 {n}",
+      "benefitPattern": "正则 {n}",
+      "addBenefit": "添加正则标签"
+    },
+    "views": {
+      "title": "保存的视图",
+      "description": "视图 = 名称 + 筛选条件（和 /jobs 的筛选一样）。在 /jobs 上用“保存当前筛选为视图”新建；视图会显示在今日页顶部，默认视图在今日页没有指定条件时自动生效。",
+      "empty": "还没有视图。",
+      "emptyLink": "去岗位页设置筛选并保存",
+      "renameLabel": "视图名称",
+      "renameSave": "保存名称",
+      "cancel": "取消",
+      "defaultBadge": "默认",
+      "rename": "重命名 {name}",
+      "renameShort": "重命名",
+      "setDefault": "设为默认",
+      "unsetDefault": "取消默认",
+      "open": "在岗位页打开",
+      "openInJobs": "在岗位页打开 {name}",
+      "confirmDelete": "确认删除",
+      "delete": "删除 {name}",
+      "deleteShort": "删除",
+      "renamedToast": "已重命名",
+      "defaultOnToast": "「{name}」已设为默认视图",
+      "defaultOffToast": "「{name}」不再是默认视图",
+      "deletedToast": "已删除视图「{name}」",
+      "trendTip": "最近 {days} 天每天新增的岗位数",
+      "trendToday": "今天 {count} 条",
+      "trendTodayShort": "今天 {count}",
+      "trendTotal": "{days} 天 {count}"
+    },
+    "filters": {
+      "label": "筛选条件",
+      "none": "没有筛选条件",
+      "pair": "{key}：{value}",
+      "keys": {
+        "q": "搜索",
+        "source": "来源",
+        "city": "城市",
+        "workplace": "办公方式",
+        "contract": "合同",
+        "status": "岗位状态",
+        "app": "申请状态",
+        "minScore": "最低分",
+        "minSalary": "最低年薪",
+        "from": "首次出现起",
+        "to": "首次出现止",
+        "salary": "写明薪资",
+        "filtered": "含已过滤",
+        "hideLang": "隐藏需{language}的岗位",
+        "trap": "AI 陷阱",
+        "high": "只看高价值信号"
+      },
+      "localLanguage": "本地语言"
+    },
+    "watched": {
+      "title": "关注公司",
+      "description": "这些公司有新岗位就单独推送，不受分数门槛限制（排序值、过滤之外的岗位也会推）。",
+      "add": "添加公司",
+      "placeholder": "公司名，输入时会提示已有的公司",
+      "suggestions": "已有公司",
+      "addButton": "添加",
+      "hint": "名称不区分大小写，公司后缀（GmbH 等）和别名按 pipeline.yaml 的规则对齐。",
+      "empty": "还没有关注的公司。",
+      "matched": "匹配：{name} · {count, plural, other {# 个岗位}}",
+      "unmatched": "数据库里还没有这家公司的岗位，出现后自动生效",
+      "remove": "移除 {name}",
+      "addedToast": "已关注「{name}」",
+      "removedToast": "已取消关注「{name}」"
+    },
+    "categories": {
+      "title": "信号类别（{count}/{max}）",
+      "add": "新增类别",
+      "full": "最多 {max} 个类别；要新增，先删除一个。",
+      "addTitle": "新增信号类别",
+      "addDescription": "保存后 id 和类型都不能再改。下一轮会按新的词表重新扫描岗位。",
+      "addSubmit": "添加",
+      "cancel": "取消",
+      "id": "类别 id",
+      "idHint": "字母开头，只能用字母、数字、_ 和 -，最多 24 个字符。id 不超过 4 个字符时，标签上显示 id。",
+      "addErrors": {
+        "idFormat": "id 格式不对：字母开头，只能用字母、数字、_ 和 -，最多 24 个字符。",
+        "idReserved": "这个 id 是保留字，换一个。",
+        "idTaken": "这个 id 已经用过（包括已删除的类别），换一个。",
+        "nameRequired": "至少填一种语言的名称。"
+      },
+      "kind": "类型",
+      "kinds": {
+        "amount": "金额",
+        "keyword": "关键词",
+        "tag": "标签"
+      },
+      "kindHints": {
+        "amount": "写明的金额：按正则找金额，换算成年薪，和薪资底线比较。最多一个。",
+        "keyword": "关键词和正则，可加排除项；AI 会复核。",
+        "tag": "福利式标签：命中时显示标签名，不交给 AI 复核。"
+      },
+      "amountTaken": "已经有一个金额类别。",
+      "amountSettingsHint": "年薪门槛、默认币种、汇率等金额参数在 interests.yaml 里改。",
+      "labelZh": "中文名称",
+      "labelEn": "英文名称",
+      "icon": "图标",
+      "iconHint": "最多 {max} 个字，例如 💰。id 超过 {code} 个字符时，标签上显示图标。",
+      "color": "颜色",
+      "colors": {
+        "amber": "琥珀",
+        "teal": "青绿",
+        "coral": "珊瑚红",
+        "blue": "蓝",
+        "olive": "橄榄绿",
+        "violet": "紫",
+        "slate": "灰蓝",
+        "pink": "粉",
+        "neutral": "中性"
+      },
+      "weight": "权重",
+      "weightHint": "这个类别在一个岗位上命中时加的分（只算一次），受封顶限制。改了立刻重算，不需要 AI。",
+      "highValue": "高价值信号",
+      "highValueShort": "高价值",
+      "highValueHint": "命中时算高价值：出现在“只看高价值信号”里，推送用较低门槛，统计页单独计数。金额类还要达到薪资底线、并且是本地薪资。",
+      "aiConfirm": "要 AI 确认",
+      "aiConfirmHint": "词太宽时打开：规则命中只是候选，AI 确认后才算信号。",
+      "aiDefinition": "给 AI 的定义（英文）",
+      "aiDefinitionHint": "AI 复核信号时看这段说明。改了以后，在架岗位会在后面几轮按每轮上限重新复核。",
+      "aiDefinitionTagHint": "只用于每周的词表建议（标签不交给 AI 复核）。",
+      "unsaved": "未保存",
+      "expand": "展开",
+      "collapse": "收起",
+      "moveUp": "上移 {name}",
+      "moveDown": "下移 {name}",
+      "delete": "删除 {name}",
+      "deleteTitle": "删除类别“{name}”？",
+      "deleteBody": "数据库里已存这个类别的 {signals} 条信号，涉及 {jobs} 个岗位。删除后它们留在库里，但不再显示、不加分、不参与筛选和推送；以后可以在“已删除的类别”里恢复。保存后生效。",
+      "deleteUnknownCount": "数据库暂时读不到，无法统计已存的信号。删除后它们留在库里，但不再显示、不加分、不参与筛选和推送；以后可以恢复。保存后生效。",
+      "deleteNew": "这个类别还没保存，删除后直接消失。",
+      "deleteConfirm": "删除",
+      "retired": {
+        "title": "已删除的类别",
+        "hint": "它们的信号留在库里但不使用。恢复后，下一轮会重新提取这个类别的信号。id 不能给新类别用。",
+        "restore": "恢复 {name}",
+        "restoreShort": "恢复",
+        "blockedAmount": "已经有金额类别，不能恢复。",
+        "blockedFull": "已经有 {max} 个类别，先删除一个。"
+      }
+    },
+    "presets": {
+      "label": "从这里开始",
+      "blank": "空白类别",
+      "hint": "预设会填好名称、颜色、权重、AI 定义和词表（英文和你市场的本地语言）。保存前每一项都能改。",
+      "idAdjusted": "id“{id}”已被别的类别用过，这个类别改用“{next}”。可以再改。",
+      "semanticOnly": "只靠 AI：这个类别没有词和正则，AI 会在每个送审的 JD 里按上面的定义找它。下面的预览因此不会有规则命中。",
+      "semanticOnlyUnreachable": "这个类别永远不会命中：它没有词和正则，而没有规则候选的岗位不送 AI（interests.yaml 里 limits.ai_review_without_candidates 是关的）。请加上词或正则，或打开这个设置。",
+      "definitionTip": "用英文写，并写清什么算、什么不算，例如 \"Not: experience with these tools asked of the candidate.\""
+    },
+    "preview": {
+      "button": "在最近的岗位上试试",
+      "running": "检查中…",
+      "hint": "用这个类别的词和正则扫一遍最新的在架岗位。不调用 AI，不保存任何东西。",
+      "result": "最新的 {scanned} 个在架岗位里，{hits, plural, =0 {没有规则命中} other {有 # 个规则命中}}。",
+      "truncated": "部分结果：检查了 {scanned} 个岗位后到了时间上限，更早的岗位没有检查。",
+      "samplesHeading": "样例",
+      "noJobs": "还没有带 JD 的在架岗位。",
+      "reviewEstimate": "{jobs, plural, =0 {保存后 AI 要找的内容会变，但现在没有岗位需要重新审核} other {保存后约 # 个岗位会重新送 AI 审核}}{rounds, select, none {。} other {，按每轮上限约需 {rounds} 轮。}}",
+      "noReview": "保存不会改变 AI 要找的内容：没有岗位需要重新审核。",
+      "invalid": "先改好这个类别：{error}",
+      "invalidOther": "先改好表单里其他的错误（点保存会标出位置）。",
+      "unavailable": "预览需要数据库和可读的 interests.yaml，其中一个现在读不到。",
+      "failed": "预览失败，请重试。"
+    }
+  },
+  "nav": {
+    "today": "今日",
+    "jobs": "岗位",
+    "favorites": "收藏",
+    "pipeline": "申请",
+    "sources": "来源",
+    "insights": "统计",
+    "settings": "设置",
+    "me": "我的画像",
+    "interests": "感兴趣清单"
+  },
+  "shell": {
+    "mainNavigation": "主导航",
+    "skipToContent": "跳到主要内容",
+    "openMenu": "打开导航菜单",
+    "menuTitle": "导航",
+    "menuDescription": "选择要前往的页面",
+    "search": "搜索",
+    "close": "关闭",
+    "toggleTheme": "切换深浅主题",
+    "themePaper": "纸面",
+    "themeTerminal": "终端",
+    "toggleLanguage": "切换语言",
+    "toggleLanguageTo": "{name} · 切换语言",
+    "languageMenuNamed": "{name} · 语言",
+    "groupSettings": "// 设置",
+    "brand": "JOB_RADAR",
+    "sidebar": "侧栏",
+    "cycle": {
+      "label": "处理轮状态",
+      "idle": "IDLE",
+      "running": "RUNNING",
+      "failed": "FAILED",
+      "next": "下一轮 {when}",
+      "nextNone": "没有定时轮",
+      "sources": "{ok} 来源 ok · {broken} 熔断",
+      "sourcesFailed": "{count} 失败",
+      "fetch": "抓取",
+      "ai": "AI 打分",
+      "aiPending": "AI 排队中",
+      "progressLabel": "{phase}：{done} / {total}",
+      "failedHint": "上一轮失败",
+      "loading": "读取中…",
+      "offline": "OFFLINE",
+      "runnerStale": "runner 无心跳 {age}",
+      "runnerNever": "runner 还没有心跳",
+      "aiWorkerStale": "AI worker 无心跳 {age}",
+      "aiWorkerNever": "AI worker 还没有心跳",
+      "dot": {
+        "offline": "离线",
+        "failed": "失败",
+        "running": "运行",
+        "aiOffline": "AI 离线",
+        "partial": "部分失败"
+      },
+      "partial": "部分失败",
+      "stepsFailed": "失败",
+      "partialWhy": "查看原因"
+    },
+    "toast": {
+      "undo": "撤销",
+      "success": "成功",
+      "info": "信息",
+      "warning": "提醒",
+      "error": "错误"
+    },
+    "alertLabel": "来源页有 {count} 项需要处理",
+    "unsaved": {
+      "title": "有改动还没保存",
+      "description": "现在离开，这些改动会丢失。",
+      "stay": "留下",
+      "discard": "放弃改动"
+    },
+    "multiSelect": {
+      "search": "搜索…",
+      "noMatches": "没有匹配的选项",
+      "selected": "已选 {count} 项",
+      "clear": "清除",
+      "done": "完成",
+      "summaryMore": "{first} +{count}",
+      "ariaSummary": "{label}：{values}",
+      "stale": "当前没有岗位",
+      "expand": "展开 {label}"
+    },
+    "languageMenu": "语言",
+    "sourceLink": "源代码（AGPL-3.0）"
+  },
+  "commandPalette": {
+    "title": "命令面板",
+    "description": "搜索页面或岗位并跳转",
+    "placeholder": "输入页面名称，或搜索岗位…",
+    "empty": "没有匹配的页面或岗位",
+    "pagesGroup": "页面",
+    "jobsGroup": "岗位",
+    "score": "匹配分 {score} / 100",
+    "scoreUnknown": "未评分",
+    "hintsLabel": "面板快捷键",
+    "hintMove": "选择",
+    "hintOpen": "打开",
+    "hintClose": "关闭",
+    "hintToggle": "开关",
+    "rank": "排序值 {value} / 100",
+    "rankOver": "排序值 {value}：满分 100，另有 {over} 分来自薪资 / 股权信号加分"
+  },
+  "pages": {
+    "today": {
+      "title": "今日",
+      "description": "本轮和今天的新岗位，按排序值排列。"
+    },
+    "jobs": {
+      "title": "岗位",
+      "description": "全部岗位：全文搜索与组合筛选。"
+    },
+    "favorites": {
+      "title": "收藏",
+      "description": "你收藏的岗位，按收藏时间排列；已关闭和被过滤的也留在这里。"
+    },
+    "jobDetail": {
+      "title": "岗位详情",
+      "description": "JD 原文、薪酬与福利信号、匹配理由和状态操作。",
+      "idLabel": "岗位 ID：{id}"
+    },
+    "pipeline": {
+      "title": "申请",
+      "description": "申请看板：拖拽改变申请状态。"
+    },
+    "sources": {
+      "title": "来源",
+      "description": "各通道的运行记录、条数、错误和预算用量。"
+    },
+    "insights": {
+      "title": "统计",
+      "description": "每日新增、来源分布、城市、薪资披露率和信号分布。"
+    },
+    "settings": {
+      "title": "设置",
+      "description": "配置文件的表单编辑，手动触发一轮采集。"
+    },
+    "me": {
+      "title": "我的画像",
+      "description": "编辑个人画像与求职偏好，查看历史快照。"
+    },
+    "interests": {
+      "title": "感兴趣清单",
+      "description": "信号类别（词表和权重）、保存的筛选视图、关注公司。"
+    },
+    "comingSoon": {
+      "title": "即将推出",
+      "hint": "这个页面还在开发中，上线后内容会显示在这里。"
+    },
+    "aiUsage": {
+      "title": "AI 用量",
+      "description": "每次 AI 调用的模型、token、耗时和费用。折合费用 = 同样的 token 按 API 价目表要付多少；订阅调用的实际开支为 0。金额单位：美元。"
+    },
+    "sourcesRegistry": {
+      "title": "来源清单",
+      "description": "所有采集来源和它们现在的状态：哪些在工作，哪些出了问题。"
+    }
+  },
+  "profile": {
+    "sections": {
+      "me": {
+        "title": "关于我",
+        "description": "语言、技能和简介会以摘要形式发给 AI 打分，不要写姓名、联系方式或证件号。"
+      },
+      "preferences": {
+        "title": "我要什么",
+        "description": "目标职位、地点、薪资底线和排除项，用于硬过滤和打分。"
+      }
+    },
+    "fields": {
+      "languages": {
+        "label": "语言",
+        "hint": "语言代码（如 en、de、zh）和 CEFR 等级。",
+        "code": "语言代码",
+        "level": "等级",
+        "add": "添加语言",
+        "empty": "还没有添加语言"
+      },
+      "skills": {
+        "label": "技能",
+        "name": "技能名称",
+        "years": "年限",
+        "add": "添加技能",
+        "empty": "还没有添加技能"
+      },
+      "years_experience": {
+        "label": "工作年限",
+        "hint": "不确定可以留空。"
+      },
+      "city": {
+        "label": "所在城市"
+      },
+      "needs_visa_sponsorship": {
+        "label": "需要雇主提供签证担保"
+      },
+      "summary": {
+        "label": "给 AI 的简介",
+        "hint": "几句话介绍背景和方向，不要写姓名、邮箱、电话或证件号。"
+      },
+      "target_titles": {
+        "label": "目标职位",
+        "hint": "每个职位输入后按 Enter 添加。"
+      },
+      "locations": {
+        "label": "地点"
+      },
+      "searchCities": {
+        "differs": "实际搜索的城市（search.yaml）是单独一份，不会跟着这里改：{cities}。",
+        "sync": "同时用这些地点搜索",
+        "link": "修改搜索城市",
+        "done": "搜索城市已更新：之后的轮次会搜索这些地点。",
+        "failed": "没能更新搜索城市。"
+      },
+      "workplace": {
+        "label": "工作方式"
+      },
+      "remote_scope": {
+        "label": "Remote 范围"
+      },
+      "seniority": {
+        "label": "资历"
+      },
+      "salary_floor_year": {
+        "label": "年薪底线（{currency}，税前）",
+        "hint": "写明的薪资上限低于它的岗位会被过滤；没写薪资的岗位保留。"
+      },
+      "contracts": {
+        "label": "合同类型",
+        "hint": "每种合同类型选择接受、排除或不指定。"
+      },
+      "exclude_student_roles": {
+        "label": "排除学生岗（在校生兼职、实习、毕业论文等）"
+      },
+      "exclude_companies": {
+        "label": "排除的公司"
+      },
+      "exclude_keywords": {
+        "label": "排除的关键词"
+      }
+    },
+    "options": {
+      "level": {
+        "A1": "A1",
+        "A2": "A2",
+        "B1": "B1",
+        "B2": "B2",
+        "C1": "C1",
+        "C2": "C2",
+        "native": "母语"
+      },
+      "workplace": {
+        "onsite": "现场",
+        "hybrid": "混合",
+        "remote": "远程"
+      },
+      "remoteScope": {
+        "none": "不接受 remote",
+        "worldwide": "全球",
+        "home_country": "本国内（市场所在国家）",
+        "region": "指定区域内"
+      },
+      "seniority": {
+        "all": "不限",
+        "entry": "入门",
+        "mid": "中级",
+        "senior": "资深",
+        "lead": "负责人"
+      },
+      "contract": {
+        "permanent": "长期（Permanent）",
+        "fixed_term": "定期（Fixed-term）",
+        "freelance": "自由职业（Freelance）",
+        "temp_agency": "中介派遣（Temp agency）"
+      },
+      "contractMode": {
+        "none": "不指定",
+        "allow": "接受",
+        "exclude": "排除"
+      }
+    },
+    "tags": {
+      "placeholder": "输入后按 Enter 添加",
+      "remove": "移除 {value}"
+    },
+    "actions": {
+      "save": "保存",
+      "saving": "保存中…",
+      "reset": "还原",
+      "dirty": "有未保存的更改",
+      "savedToast": "已保存",
+      "rolledBackToast": "已回滚",
+      "removeRow": "删除这一行",
+      "dirtyCount": "{count} 处未保存",
+      "clean": "没有未保存的改动"
+    },
+    "errors": {
+      "required": "必填",
+      "number": "请输入数字",
+      "integer": "请输入整数",
+      "min": "不能小于 {min}",
+      "atLeastOne": "至少需要一项",
+      "duplicates": "有重复项",
+      "tooLong": "最多 {max} 个字符",
+      "languageCode": "语言代码须是 2–3 位小写字母，并选择等级",
+      "invalidChoice": "请选择有效的选项",
+      "contractConflict": "同一合同类型不能同时接受和排除",
+      "invalid": "{message}"
+    },
+    "formErrors": {
+      "invalidPayload": "提交的数据格式不对，请刷新页面后重试。",
+      "writeFailed": "保存失败，文件没有改动。",
+      "snapshotFailed": "文件已保存，但历史快照没有记录成功（数据库不可用？）。",
+      "snapshotNotFound": "找不到这个快照。",
+      "snapshotInvalid": "这个旧版本不符合当前的格式，无法回滚。",
+      "stale": "打开表单后，这个文件在别处被改过（另一个标签页或手工编辑）。表单已显示保存的值，你的修改没有保存。"
+    },
+    "loadError": {
+      "title": "无法读取 {file}",
+      "hint": "文件有语法或格式错误。可以在历史里回滚到正常的版本，或直接修改文件。"
+    },
+    "stale": {
+      "title": "有 {count} 条分数已过期",
+      "hint": "画像变化后，旧分数会被标为过期。",
+      "link": "去设置页重新打分"
+    },
+    "history": {
+      "title": "历史",
+      "description": "每次保存都会留下一个快照，可以查看差异并回滚。",
+      "empty": "还没有记录，保存一次后这里会出现快照。",
+      "current": "当前",
+      "rollback": "回滚到此版本",
+      "rollingBack": "回滚中…",
+      "initial": "最早的记录，没有可对比的旧版本",
+      "showChanges": "查看差异",
+      "hideChanges": "收起差异",
+      "dbUnavailable": "数据库暂时连不上：历史和过期分数不可用。",
+      "diffAdded": "新增",
+      "diffRemoved": "删除"
+    },
+    "incomplete": {
+      "title": "画像不完整，AI 打分已暂停",
+      "hint": "缺少：{fields}。填写简介或技能中的任意一项后才会开始打分。",
+      "waiting": "{count, plural, =0 {没有岗位在等打分。} other {# 条岗位在等 AI 打分。}}",
+      "link": "去填写画像",
+      "fields": {
+        "summary": "简介（summary）",
+        "skills": "技能（skills）"
+      },
+      "separator": "、"
+    },
+    "floorPreview": {
+      "slider": "拖动试试",
+      "noFloor": "填一个数字，就能看到会过滤掉多少岗位",
+      "noJobs": "本月还没有写明薪资的岗位，预览没有依据",
+      "drops": "会过滤掉 {filtered} / {total} 个本月写明薪资的岗位（{percent}）",
+      "dropsLead": "会过滤掉",
+      "dropsTail": "个本月写明薪资的岗位（{percent}）",
+      "strip": "本月已披露薪资的岗位，每个一格",
+      "stripNote": "每格一个本月写明薪资的岗位：红色 = 会被过滤，黄色 = 保留；只写了下限的岗位不会被过滤",
+      "previewOnly": "只是预览，不会写入配置；点保存才生效",
+      "axisAria": "本月写明的薪资范围 {range}",
+      "axisLegend": "黄块 = 本月已披露薪资的范围 {range}，不是某一个岗位的薪资；红线 = 底线；虚线 = 中位。",
+      "axisClipped": "超出 {max}k 的部分没有画出（虚边和 » 表示还在继续）。",
+      "median": "中位 · 本月 {count} 个：{amount}（不含其他地区和待复核的薪资）",
+      "medianFew": "中位 · 本月 {count} 个：不足 {min} 个，不显示",
+      "otherRegion": "其中 {count} 个可能是其他地区的薪资（格子带斜线）：过滤规则照样按它们的上限判断，所以算在会过滤的数里，但不进中位数"
+    },
+    "skillScale": {
+      "aria": "{name}：{years} 年"
+    },
+    "workplaceGroup": "工作方式",
+    "units": {
+      "perYear": "/年",
+      "years": "年"
+    }
+  },
+  "filter": {
+    "toggle": {
+      "show": "显示已过滤",
+      "hide": "隐藏已过滤",
+      "showing": "已显示被过滤",
+      "only": "只看被过滤的",
+      "onlyRemove": "回到通过过滤的岗位"
+    },
+    "banner": "该岗位被硬过滤：{reasons}。",
+    "floorChanged": "底线已改为 {floor}，下一轮重新过滤。",
+    "noReason": "未记录原因",
+    "noteBanner": "已保留，但请注意：{notes}。",
+    "override": {
+      "keep": "仍然保留",
+      "exclude": "过滤这条",
+      "clear": "改回按规则判断",
+      "keptBanner": "你选择了保留这条。按规则本来是：{reasons}。",
+      "keptBannerPlain": "你选择了保留这条。",
+      "excludedBanner": "你选择了过滤这条。",
+      "saved": "已保存",
+      "error": "保存失败，请重试"
+    },
+    "reasons": {
+      "location_not_allowed": "地点不在目标范围内：{detail}",
+      "remote_not_wanted": "不看远程岗位（远程范围设为“无”）",
+      "remote_out_of_scope": "远程岗位，但不在你的远程范围内：{detail}",
+      "workplace_not_wanted": "工作方式不在偏好内：{detail}",
+      "student_role": "学生 / 实习岗位",
+      "contract_excluded": "合同类型被排除：{detail}",
+      "contract_not_allowed": "合同类型不在允许范围内：{detail}",
+      "salary_below_floor": "写明的薪资上限 {detail} 低于年薪底线",
+      "salary_below_floor_at": "写明的薪资上限 {detail} 低于当时的年薪底线 {floor}",
+      "blacklist_company": "公司在黑名单中：{detail}",
+      "blacklist_keyword": "命中黑名单关键词：{detail}",
+      "seniority_mismatch": "级别不符：{detail}",
+      "remote_scope_unknown": "远程岗位，但没写明可以在哪里雇佣",
+      "location_unknown": "岗位没写明城市",
+      "remote_scope_description": "远程岗位，地点在你的范围外（{detail}），但正文写明可以在本国或所在区域受雇",
+      "location_country_level": "地点只写到国家或区域（{detail}），岗位可能在其中任何地方",
+      "override_keep": "你选择了保留这条",
+      "override_exclude": "你选择了排除这条"
+    }
+  },
+  "dashboard": {
+    "keys": {
+      "label": "键盘快捷键",
+      "move": "上下切换",
+      "open": "打开详情",
+      "interested": "感兴趣",
+      "ignore": "忽略",
+      "favorite": "收藏",
+      "palette": "命令面板",
+      "seen": "已看 / 未看",
+      "close": "关闭 / 重新打开"
+    },
+    "today": {
+      "subtitle": "{date} · 本轮和今天的新岗位",
+      "count": "共 {count} 条",
+      "listLabel": "今日新岗位",
+      "empty": "本轮和今天都还没有新岗位。处理轮结束后新发现的岗位会出现在这里。",
+      "hideGerman": "隐藏需{language}",
+      "showGerman": "显示需{language}",
+      "showFiltered": "显示已过滤",
+      "hideFiltered": "隐藏已过滤",
+      "hideGermanOn": "已隐藏需{language}",
+      "scope": "（本轮 {cycle} · 今天 {today}）",
+      "emptyUnprocessed": "本轮抓到 {fetched} 条，其中 {count} 条还没处理，下一轮会补处理。",
+      "emptyUnprocessedLink": "去岗位页看已有的全部岗位",
+      "highRemove": "取消只看高价值信号"
+    },
+    "cycle": {
+      "none": "还没有处理轮记录",
+      "noneHint": "运行 pnpm cycle:run，或等 runner 到点自动采集。",
+      "run": "{kind} {time}",
+      "next": "下一轮：{kind} {when}",
+      "kind": {
+        "weekday_morning": "早轮",
+        "weekday_evening": "晚轮",
+        "weekend": "周末轮",
+        "manual": "手动轮",
+        "catchup": "补跑轮"
+      },
+      "state": {
+        "running": "进行中",
+        "finished": "已完成 {time}",
+        "succeeded": "已完成",
+        "partial": "部分失败",
+        "failed": "失败",
+        "skipped": "已跳过",
+        "partialSteps": "部分失败：{steps}失败",
+        "partialSources": "部分失败：有来源没抓成功",
+        "failedSteps": "失败：{steps}失败"
+      },
+      "stat": {
+        "new": "新岗位",
+        "merged": "合并",
+        "fetched": "抓取条数",
+        "failed": "失败来源",
+        "passed": "通过过滤",
+        "qualified": "达标",
+        "waiting": "待处理"
+      },
+      "channelsLabel": "本轮各通道条数",
+      "channelTitle": "抓取 {fetched} 条，新增 {fresh} 条",
+      "missingEnv": "缺 {names}",
+      "missingEnvTitle": "缺少 {names}：已启用但没有填，这个通道什么也没抓",
+      "circuitOpen": "熔断中",
+      "circuitOpenUntil": "熔断中，{when} 后重试",
+      "outcome": {
+        "skipped": "已跳过",
+        "failed": "失败"
+      },
+      "error": {
+        "rate_limited": "被限流",
+        "blocked": "被网站拦截",
+        "auth_expired": "登录失效",
+        "budget_exceeded": "预算用完",
+        "network": "网络错误",
+        "parse": "解析失败",
+        "unknown": "未知错误"
+      },
+      "todayTitle": "今天的处理轮（{count}）",
+      "todayTotals": "合计：新 {fresh} · 通过 {passed}",
+      "failedNone": "无失败来源",
+      "failedSources": "失败来源",
+      "todayLabel": "今天各轮",
+      "step": {
+        "collect": "抓取",
+        "pipeline": "处理",
+        "filter": "过滤",
+        "signals": "薪资信号",
+        "ai": "打分",
+        "notify": "推送",
+        "maintenance": "维护"
+      },
+      "stepJoiner": " / ",
+      "stepHelp": {
+        "collect": "没有从任何来源抓到岗位。看「来源」页里每个通道的失败原因。",
+        "pipeline": "抓到的岗位还没整理成岗位卡片，所以下面的数字暂时不全。已抓到的都留着，下一轮会补处理。",
+        "filter": "岗位还没按你的底线过滤，「通过过滤」暂时没有数。下一轮会重新过滤。",
+        "signals": "信号还没识别，排序值可能偏低。下一轮会补识别。",
+        "ai": "岗位还没有 AI 打分。检查 AI worker 是否在运行（「来源」页有它的状态）；它恢复后会补打分。",
+        "notify": "Telegram 推送没有发出。检查「设置」里的推送配置和网络。",
+        "maintenance": "清理和过期检查没有完成，不影响今天的岗位。"
+      },
+      "stepHelpPartial": {
+        "collect": "只从部分来源抓到了岗位，失败的来源看下面的通道条。",
+        "pipeline": "只有一部分抓到的岗位整理成了岗位卡片，其余下一轮补处理。",
+        "filter": "只有一部分岗位按你的底线过滤过，其余下一轮补过滤。",
+        "signals": "只识别了一部分岗位的信号，其余下一轮补识别。",
+        "ai": "只有一部分岗位打了分，其余等 AI worker 补打分。",
+        "notify": "Telegram 推送只发出了一部分：没发出去的岗位，只要还在推送窗口内，下一轮会再试；如果还没配置 Telegram，去「设置」填好。",
+        "maintenance": "清理和过期检查只做了一部分，不影响今天的岗位。"
+      },
+      "problemTitle": "这一轮没有全部完成",
+      "problemLink": "去「来源」页看原因",
+      "unprocessed": "本轮抓到 {fetched} 条，其中 {count} 条还没处理，下一轮会补处理。",
+      "summaryToggle": "本轮详情"
+    },
+    "list": {
+      "rowLabel": "{title}，{company}",
+      "head": {
+        "job": "岗位",
+        "score": "排序值",
+        "salary": "年薪",
+        "signals": "信号 / 门槛",
+        "skills": "技能重合",
+        "fresh": "新鲜度",
+        "status": "状态"
+      },
+      "interestedLabel": "标为感兴趣：{title}",
+      "interestedTitle": "感兴趣 (s)",
+      "ignoreLabel": "忽略：{title}",
+      "ignoreTitle": "忽略 (x)",
+      "restoreLabel": "恢复已忽略的岗位：{title}",
+      "restoreTitle": "恢复 (x)",
+      "skillsNone": "岗位没有写技能",
+      "salaryNoAxis": "换算不了基准货币，没有画轴",
+      "salaryReview": "薪资待核对",
+      "filterOn": "（已开启）",
+      "sort": {
+        "headLabel": "列表排序",
+        "active": "{column}，当前{dir}，点击改为{next}",
+        "inactive": "{column}，点击按{next}排序",
+        "status": "已按{column}{dir}排序",
+        "dir": {
+          "asc": "升序",
+          "desc": "降序"
+        }
+      },
+      "rowLabelUnseen": "未看：{title}，{company}"
+    },
+    "rank": {
+      "pending": "等待 AI 打分",
+      "notRanked": "未参与排序",
+      "valueLabel": "排序值 {value}",
+      "breakdown": "= {match} + {bonus}",
+      "stale": "已过期",
+      "staleHint": "分数是在旧画像或旧 prompt 下算的，后续处理轮会重新打分。"
+    },
+    "source": {
+      "ats": "公司 ATS",
+      "linkedin": "LinkedIn",
+      "stepstone": "StepStone",
+      "xing": "XING",
+      "indeed": "Indeed",
+      "arbeitsagentur": "劳工局",
+      "google": "Google",
+      "email": "邮件提醒",
+      "manual": "手动添加"
+    },
+    "status": {
+      "new": "新",
+      "newFull": "新（未处理）",
+      "interested": "感兴趣",
+      "preparing": "准备中",
+      "applied": "已申请",
+      "interviewing": "面试中",
+      "offer": "Offer",
+      "rejected": "被拒",
+      "withdrawn": "我放弃",
+      "archived": "已忽略"
+    },
+    "jobStatus": {
+      "active": "在招",
+      "possibly_closed": "可能已关闭",
+      "closed": "已关闭"
+    },
+    "workplace": {
+      "onsite": "现场",
+      "hybrid": "混合",
+      "remote": "远程",
+      "unknown": "办公方式未知"
+    },
+    "contract": {
+      "permanent": "全职 · 无固定期限",
+      "fixed_term": "固定期限",
+      "freelance": "Freelance",
+      "temp_agency": "劳务派遣",
+      "student": "学生岗 / 实习",
+      "unknown": "合同未知"
+    },
+    "badge": {
+      "salaryUnknown": "薪资未披露",
+      "german": "{language} {level}",
+      "agency": "中介",
+      "freelance": "Freelance",
+      "filtered": "已过滤",
+      "student": "学生岗",
+      "fixed_term": "固定期限",
+      "salaryTitle": "写明的年薪（已换算成每年）"
+    },
+    "salary": {
+      "year": "年",
+      "month": "月",
+      "week": "周",
+      "day": "天",
+      "hour": "小时",
+      "upTo": "最高",
+      "from": "起"
+    },
+    "time": {
+      "seen": "发现于 {time}"
+    },
+    "toast": {
+      "ignored": "已忽略：{title}",
+      "ignoreBlocked": "{title} 已在申请流程中（{status}），请在看板上调整",
+      "undo": "撤销",
+      "interested": "已标记感兴趣：{title}",
+      "statusSet": "{title} → {status}",
+      "error": {
+        "invalid": "输入无效",
+        "not_found": "岗位不存在",
+        "failed": "保存失败，请重试"
+      }
+    },
+    "jobs": {
+      "count": "共 {count} 条",
+      "listLabel": "岗位列表",
+      "empty": "还没有岗位。运行一轮采集后会出现在这里。",
+      "emptyFiltered": "没有符合条件的岗位，试试放宽筛选。",
+      "filters": {
+        "label": "搜索和筛选",
+        "search": "搜索岗位",
+        "searchPlaceholder": "搜索职位、公司、JD 全文…",
+        "source": "来源",
+        "city": "城市",
+        "workplace": "办公方式",
+        "contract": "合同",
+        "status": "岗位状态",
+        "sort": "排序",
+        "sorts": {
+          "rank": "排序值",
+          "posted": "发布时间",
+          "first_seen": "首次发现时间",
+          "salary": "年薪"
+        },
+        "from": "首次发现自",
+        "to": "首次发现至",
+        "any": "全部",
+        "salaryDisclosed": "薪资已披露",
+        "clear": "清除筛选",
+        "hideGerman": "隐藏需{language}",
+        "toggle": "筛选",
+        "toggleCount": "筛选 ({count})",
+        "sheetTitle": "筛选",
+        "close": "关闭筛选",
+        "done": "完成",
+        "minScore": "最低分",
+        "minSalary": "最低年薪",
+        "minSalaryHint": "写明的年薪上限不低于该值（市场的基准货币，按年换算）。设置后，没有写明薪资的岗位不显示。",
+        "appStatus": "申请状态",
+        "appNew": "新（未处理）",
+        "cityTargets": "目标城市",
+        "cityOthers": "其他城市",
+        "anyOf": "满足任一即可",
+        "searchCities": "搜索城市…",
+        "searchSources": "搜索来源…",
+        "chipsLabel": "已选的筛选",
+        "chip": "{key} · {value}",
+        "removeChip": "移除筛选 {key}：{value}",
+        "dirAscLabel": "升序（低的在前），点击改为降序",
+        "dirDescLabel": "降序（高的在前），点击改为升序"
+      },
+      "pagination": {
+        "label": "分页",
+        "previous": "上一页",
+        "next": "下一页",
+        "position": "第 {page} / {pageCount} 页"
+      }
+    },
+    "detail": {
+      "back": "返回列表",
+      "sideLabel": "检查、来源与状态",
+      "watched": "关注公司",
+      "unknown": "未知",
+      "viewPosting": "查看原帖",
+      "noPostingLink": "没有原帖链接",
+      "markApplied": {
+        "label": "标为已申请",
+        "marked": "已标为已申请：{title}",
+        "already": "已经是“已申请”",
+        "undone": "已撤销，状态回到{status}",
+        "display": "已申请 · {date}",
+        "error": {
+          "invalid": "输入无效",
+          "not_found": "岗位不存在",
+          "not_allowed": "当前状态不能直接标为已申请",
+          "failed": "保存失败，请重试"
+        }
+      },
+      "notFound": {
+        "title": "找不到这个岗位",
+        "description": "它可能已被删除，或者链接有误。"
+      },
+      "meta": {
+        "location": "地点",
+        "contract": "合同",
+        "posted": "发布",
+        "firstSeen": "首次看到",
+        "lastSeen": "最后看到",
+        "status": "岗位状态"
+      },
+      "rank": {
+        "label": "排序值",
+        "match": "匹配分",
+        "bonus": "信号加分",
+        "unscored": "未打分",
+        "aiScore": "AI 评分",
+        "german": "{language}要求",
+        "staleNote": "已过期：后续处理轮会重新打分"
+      },
+      "comp": {
+        "title": "薪酬与福利",
+        "normalized": "归一值",
+        "original": "原文",
+        "unreadable": "已披露，但无法归一",
+        "none": "薪资未披露 · JD 没有写明薪资金额，不扣分也不加分。",
+        "signalsPending": "薪酬与福利信号等待 AI 处理（M2）。每个信号都会附上 JD 原文引用。",
+        "periodAssumed": "JD 没写周期，按年薪处理",
+        "jumpHint": "点标签跳到原文",
+        "capLabel": "加分 {total} · 封顶 {cap}",
+        "capLabelCapped": "加分 {total} → 封顶 {cap}",
+        "capAria": "加分合计 {total}，封顶 {cap}，计入排序值 {counted}"
+      },
+      "fit": {
+        "title": "匹配理由",
+        "pending": "AI 打分后会显示匹配理由。"
+      },
+      "gaps": {
+        "title": "差距",
+        "pending": "AI 打分后会显示差距分析。"
+      },
+      "jd": {
+        "title": "职位描述",
+        "tabsLabel": "JD 语言",
+        "original": "原文",
+        "originalIn": "原文 · {language}",
+        "translation": "{language}翻译",
+        "empty": "来源没有提供 JD 正文。",
+        "legend": "高亮 = 命中信号的原句",
+        "originalNote": "JD 保持原文，界面语言切换不影响这里。",
+        "translationPending": "{language}翻译等待 AI 处理（M2）。",
+        "legendBreakdown": "拆解引用",
+        "breakdownMark": "岗位拆解引用"
+      },
+      "sources": {
+        "title": "来源",
+        "none": "没有来源记录。",
+        "primary": "主要",
+        "noLink": "没有链接",
+        "open": "打开",
+        "order": "原帖链接优先级：公司 ATS > LinkedIn > StepStone / XING / Indeed > 聚合源"
+      },
+      "status": {
+        "title": "状态与备注",
+        "label": "申请状态",
+        "saved": "状态已改为 {status}",
+        "notes": "备注",
+        "notesPlaceholder": "联系人、要问的问题、面试记录…",
+        "saveNotes": "保存备注",
+        "saving": "保存中…",
+        "notesSaved": "备注已保存",
+        "unsaved": "有未保存的修改",
+        "history": "状态记录",
+        "error": {
+          "invalid": "输入无效",
+          "not_found": "岗位不存在",
+          "failed": "保存失败，请重试"
+        },
+        "firstSeen": "首次发现",
+        "hiddenStatus": "{status}（已隐藏）"
+      },
+      "skills": {
+        "title": "技能"
+      },
+      "filteredBanner": "该岗位被硬过滤：{reasons}。",
+      "filteredNoReason": "未记录原因",
+      "scoreNow": {
+        "button": "立即打分",
+        "requesting": "正在请求…",
+        "scoring": "打分中…",
+        "runnerDown": "runner 没有响应，请求会在它恢复后执行。",
+        "errors": {
+          "invalidPayload": "请求格式不对，请刷新页面。",
+          "nothingToScore": "这个岗位现在不需要打分。",
+          "databaseUnavailable": "数据库不可用，请求没有创建。",
+          "unknownChannel": "请求格式不对，请刷新页面。",
+          "nothingStale": "这个岗位现在不需要打分。",
+          "tooSoon": "刚刚请求过，请稍后再试。"
+        },
+        "failure": {
+          "invalid_payload": "请求格式不对",
+          "score_failed": "打分失败，详情见 ai-worker 日志",
+          "score_stopped": "打分没有完成（被取消或 AI 不可用），详情见 ai-worker 日志",
+          "handler_error": "执行出错，详情见 runner 日志",
+          "no_handler": "runner 不认识这个请求",
+          "unknown": "失败",
+          "score_profile_incomplete": "打分没有开始：画像不完整，缺少简介（summary）和技能（skills）。在“我的画像”里至少填一项后再打分",
+          "score_ai_unavailable": "打分没有开始：AI 不可用（provider 都在冷却、超额或没有登录），见 /sources 的 AI 卡片"
+        }
+      },
+      "actionBar": {
+        "label": "岗位操作",
+        "notes": "备注",
+        "viewPosting": "查看原帖",
+        "notesHint": "写下联系人、要问的问题或面试记录。"
+      },
+      "reasonsLanguageHint": "AI 的匹配理由和差距是用{language}写的，不做翻译。",
+      "summaryLanguage": {},
+      "summaryFallbackHint": "这条摘要没有当前界面语言的版本，显示的是另一种语言。",
+      "firstSeenVia": "首次发现 {when}",
+      "seniority": {
+        "entry": "初级",
+        "mid": "中级",
+        "senior": "资深",
+        "lead": "负责人"
+      },
+      "actions": {
+        "resume": "定制简历",
+        "status": "状态与备注",
+        "translate": "翻译成{language}",
+        "more": "更多操作"
+      },
+      "salary": {
+        "title": "年薪",
+        "perYear": "/年",
+        "undisclosed": "薪资未披露",
+        "unreadable": "已披露，但无法归一",
+        "noEur": "币种 {currency} 没有汇率，画不到年薪轴上。",
+        "belowFloor": "写明的上限低于你的薪资底线。",
+        "otherRegion": "可能是其他地区的薪资，不和本月的岗位比较。",
+        "median": "中位 · 本月 {count} 个：{amount}（虚线）",
+        "noSample": "本月只有 {count} 个岗位写明薪资，至少 {min} 个才比较中位数和百分位。"
+      },
+      "checks": {
+        "title": "条件核对",
+        "german": {
+          "title": "{language}",
+          "not_required": "✓ 岗位不要求{language}",
+          "preferred": "{language}是加分项，不是要求",
+          "unknown": "岗位没写{language}要求，不推测",
+          "met": "✓ 你的{language} {mine} 达到要求 {required}",
+          "gap": "✕ 差 {n} 级：要求 {required}，你 {mine}",
+          "no_german": "✕ 要求{language} {required}，画像里没有{language}",
+          "native": "母语",
+          "penalty": "匹配分扣 {points} 分"
+        },
+        "skills": {
+          "title": "技能重合",
+          "none": "未披露技能",
+          "noProfile": "画像里还没写技能，没法比较。",
+          "profileLink": "去填写",
+          "all": "岗位要求的全部技能"
+        },
+        "floor": {
+          "title": "薪资底线",
+          "fail": "低于你的底线",
+          "no_floor": "没有设置薪资底线",
+          "other_region": "可能是其他地区的薪资，不判断",
+          "no_salary": "薪资未披露，不判断"
+        }
+      }
+    },
+    "error": {
+      "title": "页面加载失败",
+      "description": "通常是数据库没有启动或连不上。确认 db 容器在运行（docker compose up -d db）后重试。",
+      "retry": "重试"
+    },
+    "kpi": {
+      "label": "本轮汇总",
+      "fetched": "抓取",
+      "passed": "通过过滤",
+      "qualified": "≥ {line} 分",
+      "salary": "写明薪资",
+      "pushed": "推送",
+      "ofFetched": "抓取",
+      "sources": "{count} 个来源 · 100%",
+      "cycles": "{count, plural, other {# 轮}}",
+      "unprocessed": "未处理",
+      "unscored": "未打分",
+      "unprocessedCount": "{fetched} 条里 {count} 条待处理",
+      "unprocessedNote": "上一步失败，数字未知",
+      "qualifiedShort": "≥ {line}",
+      "salaryShort": "薪资"
+    },
+    "ticker": {
+      "runCounts": "{fetched} 抓取 · {fresh} 新岗位",
+      "noSalary": "未披露",
+      "runCountsWaiting": "{fetched} 抓取 · {waiting} 待处理"
+    },
+    "seen": {
+      "dot": "未看",
+      "unseenCount": "{count} 条未看",
+      "markAll": "全部标为已看",
+      "markedToast": "已将 {count} 条标为已看",
+      "markFailed": "保存失败，请重试",
+      "markUnseen": "标为未看",
+      "markedUnseen": "已标为未看：再次打开前在列表里保持加粗",
+      "divider": "以上为上次访问后新增 · {count} 条",
+      "newSince": "上次访问后新增 {count} 条",
+      "newestFirst": "按新到旧查看",
+      "filterOff": "只看未看",
+      "filterOn": "只看未看",
+      "filterRemove": "也显示已看"
+    },
+    "closed": {
+      "reason": {
+        "manual": "你标记的已关闭",
+        "gone": "来源已下架",
+        "phrase": "来源写明不再接收",
+        "possibly": "可能已关闭"
+      },
+      "reasonHint": {
+        "manual": "你把这个岗位标记为已关闭。",
+        "gone": "{when}检查时原帖返回 {status}（已下架）。",
+        "phrase": "原帖写着“{quote}”（{when}检查）。",
+        "possibly": "有一段时间没有任何来源再列出这个岗位。"
+      },
+      "evidenceLink": "检查的页面",
+      "markClosed": "标记为已关闭",
+      "confirmClosed": "确认已关闭",
+      "reopen": "重新打开",
+      "keepOpen": "仍在招",
+      "noteLabel": "备注（可选）",
+      "notePlaceholder": "为什么关闭，最多 200 字",
+      "noteShown": "你的备注：{note}",
+      "submit": "标记为已关闭",
+      "cancel": "取消",
+      "closedToast": "已标记为已关闭：{title}",
+      "reopenedToast": "已重新打开：{title}",
+      "keptOpenToast": "已确认仍在招：{title}",
+      "failed": "保存失败，请重试",
+      "rowCloseLabel": "将 {title} 标记为已关闭",
+      "rowReopenLabel": "重新打开 {title}",
+      "rowCloseTitle": "标记为已关闭",
+      "rowReopenTitle": "重新打开",
+      "filter": "已关闭（{count}）",
+      "filterRemove": "显示在招岗位",
+      "stillListed": "来源在 {date} 仍列出此岗位。",
+      "checkedOn": "原帖最近检查于 {when}",
+      "srHint": "：{hint}",
+      "editNote": "编辑备注",
+      "addNote": "添加备注",
+      "saveNote": "保存备注"
+    }
+  },
+  "pipeline": {
+    "summary": "{count, plural, other {# 个岗位}}在流程中 · 感兴趣超过 {interested} 天、已申请超过 {applied} 天会标记超时",
+    "boardLabel": "申请看板",
+    "empty": "还没有岗位进入申请流程。在今日或岗位页把岗位标为感兴趣，它就会出现在这里。",
+    "emptyLink": "去看岗位",
+    "moved": "{company} → {status}",
+    "error": {
+      "invalid": "输入无效",
+      "not_found": "岗位不存在",
+      "failed": "保存失败，请重试"
+    },
+    "filters": {
+      "label": "筛选申请",
+      "search": "搜索公司或职位",
+      "searchPlaceholder": "搜索公司或职位…",
+      "overdueOnly": "只看超时",
+      "clear": "清除筛选",
+      "shown": "显示 {shown} / {count}"
+    },
+    "column": {
+      "empty": "暂无岗位",
+      "ended": "已结束",
+      "endedHint": "展开查看被拒、我放弃和已忽略的岗位",
+      "shareAria": "{name}占流程的比例",
+      "expand": "展开",
+      "collapse": "收起",
+      "endedBars": "已结束的构成",
+      "endedCount": "{status} {count} 个",
+      "hiddenSuffix": "{status} · 已隐藏"
+    },
+    "card": {
+      "next": "下一步",
+      "rounds": "面试 {count} 轮",
+      "moveFor": "移动到… · {company}",
+      "moveTo": "移动到…",
+      "dragFor": "拖动 {company}",
+      "hiddenStatus": "{status}（已隐藏）"
+    },
+    "nextDefault": {
+      "new": "决定是否感兴趣",
+      "interested": "决定是否申请",
+      "preparing": "完成定制简历并申请",
+      "applied": "等待回复，必要时跟进",
+      "interviewing": "准备下一轮",
+      "offer": "回复 Offer"
+    },
+    "overdue": {
+      "interested": "感兴趣 {days} 天未申请",
+      "applied": "已申请 {days} 天没有回音"
+    },
+    "drawer": {
+      "openJob": "打开岗位详情",
+      "status": "申请状态",
+      "nextAction": "下一步",
+      "nextActionPlaceholder": "例如：发跟进邮件",
+      "nextActionDate": "日期",
+      "saveNextAction": "保存下一步",
+      "nextActionSaved": "下一步已保存",
+      "rounds": "面试轮次",
+      "roundsAdd": "增加一轮",
+      "roundsRemove": "减少一轮",
+      "notes": "备注",
+      "notesPlaceholder": "联系人、要问的问题、面试记录…",
+      "saveNotes": "保存备注",
+      "notesSaved": "备注已保存",
+      "saving": "保存中…",
+      "unsaved": "有未保存的修改",
+      "timeline": "时间线",
+      "timelineEmpty": "还没有记录",
+      "stepsLabel": "申请进度",
+      "stepEnded": "已结束：{status}",
+      "nextShown": "下一步",
+      "roundsValue": "{count, plural, other {已面试 # 轮}}",
+      "timelineLog": "状态变更记录"
+    },
+    "undone": "已撤销：{company} → {status}",
+    "clock": {
+      "days": "{days, plural, other {# 天}}",
+      "limit": "阈值 {limit} 天",
+      "over": "{days, plural, other {超时 # 天}}",
+      "overNow": "刚超时",
+      "valueOver": "{days, plural, other {超时 # 天}}（阈值 {limit} 天）",
+      "valueOverNow": "刚超时（阈值 {limit} 天）",
+      "label": {
+        "interested": "感兴趣 {days} 天，{limit} 天内要决定是否申请",
+        "applied": "已申请 {days} 天，{limit} 天内等回复"
+      }
+    },
+    "event": {
+      "created": "创建 · {to}",
+      "moved": "{from} → {to}",
+      "stayed": "状态仍是 {to}",
+      "note": "备注：{text}",
+      "generic": "事件（{kind}）"
+    },
+    "dnd": {
+      "instructions": "用键盘移动申请：在拖动按钮上按空格或回车拿起卡片，用方向键换列，再按空格或回车放下，Esc 取消。",
+      "pickedUp": "已拿起 {company}，现在在“{status}”列。",
+      "over": "{company} 在“{status}”列上方。",
+      "overNone": "{company} 不在任何列上。",
+      "dropped": "已把 {company} 放到“{status}”列。",
+      "droppedNone": "{company} 已放回原位。",
+      "cancelled": "已取消，{company} 回到“{status}”列。"
+    },
+    "hiddenCards": "有 {count} 张卡片在隐藏的状态里",
+    "hiddenColumn": {
+      "label": "{status} · 已隐藏 · {count}",
+      "summary": "已隐藏 · {count}"
+    }
+  },
+  "translation": {
+    "none": "这条 JD 还没有翻译。排序值较高的岗位每轮会自动翻译，这条在你点击时翻译。",
+    "translate": "翻译成{language}",
+    "retranslate": "重新翻译",
+    "translating": "翻译中…",
+    "loading": "正在用 AI 翻译 JD，可能需要一分钟，期间可以先看原文。",
+    "queued": "请求已排队，这台 Mac 上的 AI worker 会在几秒内接手，期间可以先看原文。",
+    "done": "JD 已翻译",
+    "loadedFromCache": "翻译已经存在",
+    "stale": "这份翻译之后 JD 原文有更新，下面的内容可能已过期。",
+    "legend": "高亮 = 命中信号的原句的译文",
+    "note": "{language}翻译 · 由 {provider} 机器翻译，缓存于 {time}。",
+    "noDescription": "来源没有给出 JD 文本，没有可翻译的内容。",
+    "progress": "翻译中（{done}/{total}）…",
+    "partialNote": "上一次翻译只完成了 {done}/{total} 段；点“继续翻译”只补翻缺的那几段。",
+    "partialRunning": "正在翻译，已完成 {done}/{total} 段，先看已翻好的部分。",
+    "continue": "继续翻译",
+    "retry": "重试",
+    "error": {
+      "invalid": "请求无效",
+      "not_found": "找不到这个岗位",
+      "no_description": "来源没有给出 JD 文本，没有可翻译的内容。",
+      "unavailable": "现在没有可用的 AI provider。请检查 CLI 登录或 API key 后重试。",
+      "failed": "翻译失败，请重试。",
+      "auth": "AI provider 的登录已过期或被拒绝。请在这台 Mac 上重新登录（claude → /login，codex login），然后重试。",
+      "timeout": "某个 AI provider 没有在限定时间内回答。已经翻好的段落会保留，请重试。",
+      "rate_limited": "AI provider 现在被限流，请稍后再试。",
+      "invalid_output": "AI 返回的内容不能当作译文使用，请重试。",
+      "provider_error": "AI provider 报告了错误。请重试；如果一直失败，看 AI worker 的日志。",
+      "network": "连不上 AI provider，请重试。",
+      "budget": "本月 AI API 预算已用完。",
+      "aborted": "翻译时 AI worker 被停止了，请重试。",
+      "waitTimeout": "翻译在限定时间内没有完成。这台 Mac 上的 AI worker 可能没有运行：到「来源」页看 AI worker 卡片，然后重试。",
+      "same_language": "这份 JD 本来就是{language}，不需要翻译。"
+    }
+  },
+  "scoring": {
+    "german": {
+      "title": "{language}要求",
+      "required": "要求{language} {level}",
+      "none": "不要求{language}",
+      "preferred": "{language}是加分项，不是要求",
+      "unknown": "岗位没写{language}等级",
+      "yours": "你的{language}：{level}",
+      "yoursNone": "无",
+      "penalty": "匹配分扣 {points} 分",
+      "noPenalty": "不扣分",
+      "rule": "规则判断：{level}",
+      "ai": "AI 判断：{level}",
+      "level": {
+        "unknown": "未知",
+        "none": "不要求",
+        "preferred": "加分项"
+      },
+      "source": {
+        "agree": "规则和 AI 一致。",
+        "rule": "只有规则找到了等级。",
+        "ai": "只有 AI 找到了等级。",
+        "rule_explicit": "两者不一致；JD 原文明确写了规则判断的等级。",
+        "ai_explicit": "两者不一致；JD 原文明确写了 AI 判断的等级。",
+        "rule_preferred": "两者不一致；原文都不够明确，采用规则值。"
+      }
+    },
+    "meta": {
+      "by": "由 {provider} 打分",
+      "model": "{model}",
+      "prompt": "prompt {version}"
+    }
+  },
+  "signals": {
+    "filter": {
+      "high": "只看高价值信号",
+      "highTitle": "只看带高价值信号的岗位：{names}"
+    },
+    "comp": {
+      "normalized": "归一值",
+      "points": "加分 +{n}",
+      "pointsCounted": "同一类别只算一次",
+      "statedAs": "JD 原文：{amount}",
+      "currencyAssumed": "JD 没写币种，按 {currency} 处理",
+      "periodAssumed": "JD 没写周期，按年薪处理",
+      "bonusTitle": "加分合计",
+      "noBonus": "没有加分",
+      "benefits": "其他福利（不加分）",
+      "none": "这条 JD 里没有找到薪酬信号。不做推测：不加分，也不扣分。",
+      "pending": "薪酬与福利信号会在下一个处理轮里计算。每个信号都会附上 JD 原文引用。",
+      "aiPending": "目前只有规则提取的结果，AI 还没有复核这条 JD。",
+      "aiDone": "已由 AI 复核",
+      "foundBy": "来源：{who}",
+      "foundByStructured": "来源字段：岗位自带的薪资字段原文，不是 JD 正文",
+      "extractor": {
+        "rule": "规则",
+        "ai": "AI"
+      },
+      "period": {
+        "year": "年",
+        "month": "月",
+        "week": "周",
+        "day": "天",
+        "hour": "小时"
+      },
+      "belowFloor": "不加分：低于高薪信号要求的 {min}/年",
+      "belowFloorBadge": "写明了金额，但低于 {min}/年：不算高薪信号",
+      "belowFloorNote": "写明的金额低于 {min}/年，所以不加“{name}”的分。",
+      "otherRegionShort": "可能非本地",
+      "otherRegionBadge": "写明了金额，但可能是其他地区的薪资：不算高薪信号",
+      "includesVariable": "OTE（含浮动）：这个金额包含浮动部分，不只是底薪",
+      "otherRegionCurrency": "可能是其他地区的薪资：用 {currency} 写的，不是本地币种",
+      "otherRegionDescription": "可能是其他地区的薪资：JD 写明这个区间是别处的",
+      "otherRegionNoPoints": "不加分：可能是其他地区的薪资",
+      "otherRegionNote": "写明的金额可能是其他地区的薪资，所以{points, plural, =0 {不加“{name}”的分} other {“{name}”只加 # 分}}。",
+      "expand": "展开",
+      "collapse": "收起",
+      "jump": "跳到 JD 原文：{name}"
+    },
+    "jd": {
+      "legendLabel": "JD 里的薪酬信号引用："
+    }
+  },
+  "settings": {
+    "tabs": {
+      "label": "配置文件",
+      "schedule": "处理时间",
+      "search": "搜索",
+      "channels": "来源",
+      "ai": "AI",
+      "notify": "推送",
+      "ui": "界面",
+      "breakdown": "拆解",
+      "actions": "手动操作",
+      "workflow": "申请流程",
+      "advanced": "高级",
+      "salary": "薪资"
+    },
+    "ai": {
+      "block": {
+        "providers": {
+          "title": "服务商",
+          "hint": "每家厂商一张卡片：选订阅 CLI 还是 API（可以都开，按顺序当后备），再选默认模型。"
+        },
+        "routing": {
+          "title": "路由与任务分配",
+          "hint": "先定全局的“先试 → 再试”顺序，再按任务微调：用哪家、哪种方式、哪个模型。"
+        },
+        "limits": {
+          "title": "限额与预算",
+          "hint": "每轮做多少、冷却多久、每月最多花多少。"
+        },
+        "scoring": {
+          "title": "打分参数",
+          "hint": "JD 怎么截断、并发和批量多大、本地语言等级怎么扣分。"
+        }
+      },
+      "vendor": {
+        "anthropic": "Anthropic",
+        "openai": "OpenAI",
+        "deepseek": "DeepSeek",
+        "mimo": "Xiaomi MiMo"
+      },
+      "access": {
+        "cli": "订阅 CLI",
+        "api": "API"
+      },
+      "accessShort": {
+        "cli": "订阅",
+        "api": "API"
+      },
+      "node": "{vendor} · {access}",
+      "apiLayer": "API 层（按下面的顺序）",
+      "enableMode": "启用 {vendor} {access}",
+      "enabled": "已启用",
+      "disabled": "未启用",
+      "status": {
+        "ready": {
+          "cli": "可用",
+          "api": "key 已配置"
+        },
+        "unconfigured": {
+          "cli": "未配置",
+          "api": "未配置 key"
+        }
+      },
+      "using": "当前使用",
+      "notUsed": "未启用",
+      "more": "更多设置",
+      "catalogToggle": "模型目录（{count} 个模型）",
+      "taskCol": "任务",
+      "taskRouteCol": "顺序（失败依次尝试）和每个节点的模型",
+      "disclosure": {
+        "title": "哪些 provider 可能收到岗位文本",
+        "hint": "按任务列出可能收到岗位文本（评分时还有提示词用到的画像字段）的 provider，顺序就是尝试顺序：前面的不可用时，后面的才会收到。已关闭的 provider 不列出。数据读自磁盘上的 ai.yaml。<docs>哪些 provider 会收到岗位文本</docs>",
+        "none": "这个任务没有开启任何 provider，无法运行。",
+        "web": "还会联网搜索公开网页"
+      },
+      "edit": "编辑",
+      "done": "完成",
+      "followGlobal": "改为沿用全局",
+      "priority": {
+        "title": "预排序",
+        "sum": "权重之和 {sum}",
+        "hint": "AI 打分前的快速预排序：不调用 AI，只决定等待打分的岗位谁先排队。改动只影响顺序，不影响分数。权重之和仅供参考，不要求等于 100。"
+      },
+      "criteriaImpact": "保存改动后的标准会让 {count, plural, other {# 条}}当前分数重新打分：它们会标成过期，在接下来几轮里逐步重打。",
+      "criteriaImpactUnknown": "保存改动后的标准会让所有当前分数重新打分：它们会标成过期，在接下来几轮里逐步重打。"
+    },
+    "tabFile": "保存到 {file}，注释保留。",
+    "tabTitle": {
+      "schedule": "处理时间",
+      "search": "搜索条件",
+      "channels": "采集通道",
+      "ai": "AI 服务商",
+      "notify": "推送与提醒",
+      "ui": "界面",
+      "breakdown": "岗位拆解",
+      "insights": "统计页",
+      "resume": "简历工具",
+      "language": "语言",
+      "salary": "薪资基准与查询"
+    },
+    "tabDescription": {
+      "schedule": "每天几点跑哪几轮，错过了怎么办。",
+      "search": "搜什么、在哪搜、回看多久。",
+      "channels": "每个来源的开关、预算、节流和 LinkedIn 级联顺序。",
+      "ai": "按厂商设置 AI 服务商和模型，再给每个任务分配用哪家；下面是限额、预算和打分参数。",
+      "notify": "Telegram 推送的门槛、静默时段和申请提醒。",
+      "ui": "薪资轴刻度、新鲜度衰减、趋势线和健康方块各取几轮。只影响显示。",
+      "breakdown": "岗位拆解：把 JD 拆成工作内容、技术栈、经验和项目要求。默认关闭，按需分析。用哪个 AI 在「AI」标签的任务覆盖里设（任务“拆解”）。",
+      "insights": "统计页的时间范围、单列的城市和直方图分段。只影响显示。",
+      "resume": "详情页“定制简历”用到的路径和命令（resume-kit 联动）。路径指向你自己的文件，主简历不会被读取。",
+      "language": "新浏览器默认的界面语言、AI 写作用的语言、JD 翻译成什么语言，以及 Telegram 和命令行的语言。",
+      "salary": "岗位页的“薪资水平”卡片把岗位写明的薪资和库里同类岗位比较。可选的“查薪资”让 AI provider 去薪资网站搜这家公司和这个岗位。岗位族和外部搜索链接在 salary.yaml 里改。"
+    },
+    "actions": {
+      "save": "保存",
+      "saving": "保存中…",
+      "reset": "还原",
+      "dirty": "有未保存的更改",
+      "savedToast": "已保存",
+      "dirtyCount": "{count} 处未保存",
+      "clean": "没有未保存的改动"
+    },
+    "ack": {
+      "loaded": "runner 已加载（{time}）",
+      "waiting": "等待 runner 加载…",
+      "waitingHint": "runner 通常在几秒内加载；如果一直没有，文件可能不合法，请看 runner 日志。",
+      "unknown": "runner 还没有确认过这个文件",
+      "offline": "runner 没有运行：改动会在它下次启动时生效",
+      "web": "网页直接读取这个文件：保存后刷新页面就生效，不需要 runner。"
+    },
+    "formErrors": {
+      "invalidPayload": "提交的数据格式不对，请刷新页面后重试。",
+      "unreadable": "磁盘上的文件现在无法读取或不合法，请先直接修改 YAML 文件。",
+      "writeFailed": "保存失败，文件没有改动。",
+      "otherErrors": "还有这些问题没有对应的输入框：",
+      "catalogUnreadable": "模型目录读不了，先修好 models.yaml",
+      "protectedKeys": "这次修改涉及受保护的键（命令、API 地址或凭据路径）。受保护的键只能手动编辑配置文件来改。",
+      "stale": "打开表单后，这个文件在别处被改过（另一个标签页、高级编辑器或手工编辑）。表单已显示保存的值，你的修改没有保存。"
+    },
+    "loadError": {
+      "title": "无法读取 {file}",
+      "hint": "文件有语法或格式错误。请直接修改 YAML 文件，runner 会忽略无效内容并保留上一份有效配置。",
+      "repair": "在高级编辑器里修复 →"
+    },
+    "errors": {
+      "required": "必填",
+      "number": "请输入数字",
+      "integer": "请输入整数",
+      "min": "不能小于 {min}",
+      "max": "不能大于 {max}",
+      "greaterThan": "必须大于 {min}",
+      "atLeastOne": "至少需要一项",
+      "duplicates": "有重复项",
+      "tooLong": "最多 {max} 个字符",
+      "languageCode": "格式不对",
+      "invalidChoice": "请选择有效的选项",
+      "contractConflict": "选项冲突",
+      "invalid": "{message}",
+      "url": "需要 http:// 或 https:// 开头的网址",
+      "cron": "Cron 表达式不合法：{detail}",
+      "timezone": "不是有效的 IANA 时区（例如 Europe/Berlin）",
+      "clockTime": "格式为 HH:MM（24 小时制）",
+      "country": "两位大写国家代码，例如 DE",
+      "overBudgetCap": "不能超过付费通道月度总上限",
+      "delayOrder": "最短间隔不能大于最长间隔",
+      "pollOrder": "轮询间隔不能大于超时",
+      "groupId": "组 ID 须以小写字母开头，只含小写字母、数字和下划线",
+      "axisOrder": "最大值必须大于最小值",
+      "tickTooLarge": "刻度间隔必须小于整根轴（最大值 − 最小值）",
+      "warnOrder": "变黄线必须小于衰减小时数",
+      "modelNotInCatalog": "“{model}” 不在这个服务商的模型目录里（models.yaml）",
+      "effortUnsupported": "{model} 不支持推理强度 {effort}",
+      "taskModelsNeedOrder": "先给这个任务指定顺序，才能给服务商选模型",
+      "taskModelNotInOrder": "只能给这个任务顺序里直接列出的服务商选模型",
+      "absolutePath": "需要绝对路径（以 / 开头，不支持 ~）",
+      "sortedAsc": "要从短到长排列",
+      "notInRanges": "必须是上面时间范围里的一项",
+      "capOrder": "必须大于柱子宽度",
+      "languageTag": "语言代码，如 en、zh、de、pt-BR"
+    },
+    "sections": {
+      "schedule_general": "基本",
+      "cycle_weekday_morning": "工作日早轮",
+      "cycle_weekday_evening": "工作日晚轮",
+      "cycle_weekend": "周末轮",
+      "schedule_behaviour": "行为",
+      "search_keywords": "关键词组",
+      "search_where": "地点与远程",
+      "search_limits": "时间窗与上限",
+      "channels_budget": "预算与熔断",
+      "channels_http": "HTTP 默认值",
+      "channels_cascade": "LinkedIn 级联顺序",
+      "channels_jobspy": "jobspy 服务",
+      "ai_order": "全局顺序",
+      "ai_tasks": "任务分配",
+      "ai_limits_cycle": "每轮的工作量",
+      "ai_limits_cooldown": "冷却",
+      "ai_limits_api": "API 预算与请求",
+      "ai_scoring_jd": "JD 处理",
+      "ai_scoring_german": "本地语言等级扣分",
+      "notify_push": "推送门槛",
+      "notify_quiet": "静默时段",
+      "notify_reminders": "申请提醒",
+      "notify_alerts": "告警",
+      "notify_telegram": "Telegram 连接参数",
+      "schedule_backup": "数据库备份",
+      "ui_salary_axis": "薪资轴",
+      "ui_freshness": "新鲜度条",
+      "ui_lists": "轮数与条数",
+      "breakdown_general": "开关与方式",
+      "breakdown_auto": "自动拆解",
+      "breakdown_request": "请求",
+      "schedule_linkedin_rec": "LinkedIn 推荐页",
+      "schedule_suggest": "每周兴趣建议",
+      "schedule_manual": "手动按钮",
+      "ui_ai_usage": "AI 用量页",
+      "insights_page": "统计页",
+      "insights_histograms": "直方图分段",
+      "resume_paths": "路径",
+      "resume_export": "导出",
+      "ai_priority_weights": "权重",
+      "ai_priority_title": "标题匹配",
+      "ai_priority_seniority": "级别匹配",
+      "ai_priority_location": "地点与时效",
+      "language_ui": "界面",
+      "language_ai": "AI 与翻译",
+      "language_channels": "Telegram 与命令行",
+      "ai_scoring_criteria": "打分标准",
+      "salary_lookup": "查薪资（AI 网页搜索）",
+      "salary_benchmark": "薪资基准"
+    },
+    "sectionHints": {
+      "search_keywords": "每个关键词组用 OR 合并成一次查询，再按城市各查一次。",
+      "channels_http": "通道请求的默认超时、重试和指数退避。",
+      "channels_cascade": "主搜索每轮只用排在最前且可用（已启用、预算未用完、未熔断）的一个通道。",
+      "channels_jobspy": "linkedin-guest、indeed、jobspy-google 共用的 python-jobspy 服务。代理列表可能含账号密码，不在这里显示，请直接改 sources.yaml。",
+      "ai_order": "先试排在前面的；失败（额度用完、冷却、离线）就换下一个。节点显示为“厂商 · 方式”，API 层展开成下面“API 层内的顺序”。",
+      "ai_tasks": "每个任务一行：不改就沿用全局顺序和服务商的默认模型；要自定义，就给它单独排顺序，并可以给每个节点选一个模型。",
+      "ai_scoring_german": "岗位要求的本地语言（市场的语言）高于 me.yaml 里的等级时，从匹配分里扣下面的分数；留空的等级不扣。扣分由代码计算，不经过 prompt。",
+      "schedule_backup": "runner 按下面的 cron（用上面的时区）做 pg_dump，写到 data/backups/，同时把配置和画像（data/config、data/profile）打成 .config.tgz 放在旁边。要恢复时，运行 scripts/ops/restore.sh --latest（见备份指南）；它会选出最新的备份并先做检查。",
+      "notify_telegram": "一般不用改：Bot API 地址、long-polling 超时、退避和重试。",
+      "ui_salary_axis": "岗位详情页的薪资轴和表格里的迷你轴共用。单位是千（市场的基准货币）/ 年；写明的区间画不下时会被截在端点上。",
+      "ui_freshness": "岗位首次发现后，新鲜度条随时间缩短；超过变黄线后变黄并带斜线纹理。",
+      "breakdown_auto": "只在方式为“自动”时生效。",
+      "ai_priority_weights": "优先度 = 各项权重 × 得分（0 到 1）之和，再减去德语差距。只有先后顺序有意义，这个数不会显示成分数。",
+      "ai_priority_seniority": "0 到 1：标题里读出的级别对你有多合适。",
+      "ai_priority_location": "0 到 1：地点和你想去的地方有多吻合。",
+      "schedule_suggest": "每周一次，用 AI 看你标记过的岗位。只改开关、时间和主要上限；其余只影响 prompt 大小，在“高级”里改。",
+      "language_ai": "语言代码：en、zh、de、fr、pt-BR……改了 AI 语言以后，旧结果不会重写，保持原语言并带语言标记。",
+      "language_channels": "留空 = 跟上面的界面默认语言一致。pnpm run doctor 和 pnpm sources:list 也可以用 --lang 临时指定。",
+      "ai_scoring_criteria": "你自己的标准，每项一句话，任何语言都可以（每个列表最多 10 项，每项最多 300 字）。会和其他偏好一样随每个岗位发给 AI。分数仍是一个 0–100 的总分；命中\"不能接受\"的岗位压到 0–29 档。",
+      "salary_lookup": "默认关闭。每次查询把公司名、岗位标题、级别、城市和国家（不含你的画像和 JD）发给 AI provider，由它搜索网页。会消耗 token；用 Anthropic API 时每次搜索另外计费。用哪个 AI 在「AI」标签的任务覆盖里设（任务“查薪资”）。",
+      "salary_benchmark": "每轮运行后重算，只用时间窗内写明可比薪资（基准货币、年薪）的岗位。"
+    },
+    "options": {
+      "remoteScope": {
+        "none": "不接受 remote",
+        "worldwide": "全球",
+        "home_country": "本国内（市场所在国家）",
+        "region": "指定区域内"
+      },
+      "breakdownMode": {
+        "manual": "手动（只在详情页点按钮时拆解）",
+        "auto": "自动（每轮结束后给高分岗位拆解）"
+      },
+      "aiUsageRange": {
+        "today": "今天",
+        "7d": "最近 7 天",
+        "30d": "最近 30 天",
+        "month": "本月"
+      }
+    },
+    "controls": {
+      "channelEnabled": "已启用",
+      "channelDisabled": "已关闭",
+      "moveUp": "上移 {item}",
+      "moveDown": "下移 {item}",
+      "removeItem": "移除 {item}",
+      "addItem": "添加",
+      "addPlaceholder": "选择要添加的项",
+      "inherit": "沿用全局顺序",
+      "position": "第 {n} 位",
+      "groupId": "组 ID",
+      "groupKeywords": "关键词",
+      "addGroup": "添加关键词组",
+      "removeGroup": "删除关键词组 {id}",
+      "noGroups": "还没有关键词组",
+      "cliDefault": "CLI 默认",
+      "inheritEffort": "跟随默认",
+      "pickModel": "选择模型",
+      "changed": "已修改",
+      "notInCatalog": "{model}（不在模型目录里）",
+      "deprecatedOption": "（已停用）",
+      "cliDefaultWith": "CLI 默认（{model}）",
+      "effortUnsupported": "{effort}（这个模型不支持）",
+      "providerDefault": "默认 · {model}",
+      "apiLayerModels": "用各 API 服务商的默认模型",
+      "routeModel": "{provider} 的模型",
+      "modelDeprecated": "已停用",
+      "modelMissing": "不在目录",
+      "cliDefaultBadge": "CLI 默认",
+      "followUi": "跟界面默认语言一致",
+      "lockedHint": "已锁定：请手动编辑配置文件来修改。"
+    },
+    "fields": {
+      "timezone": {
+        "label": "时区",
+        "hint": "IANA 时区，下面的 cron 按它解释，例如 Europe/Berlin。"
+      },
+      "cron": {
+        "label": "Cron 表达式",
+        "hint": "5 段：分 时 日 月 周，例如 0 7 * * 1-5。"
+      },
+      "cycle_enabled": {
+        "label": "启用这一轮"
+      },
+      "catch_up": {
+        "label": "启动时补跑错过的一轮",
+        "hint": "runner 启动时如果错过了最近一轮，立即补跑一次。"
+      },
+      "skip_if_running": {
+        "label": "上一轮没跑完时跳过",
+        "hint": "关闭后新一轮会等上一轮结束再开始。"
+      },
+      "control_poll_seconds": {
+        "label": "请求轮询间隔（秒）",
+        "hint": "runner 每隔多少秒查看一次这个页面留下的请求。"
+      },
+      "keyword_groups": {
+        "label": "关键词组"
+      },
+      "locations": {
+        "label": "城市",
+        "hint": "每个关键词组按城市各查一次。"
+      },
+      "remote_scope": {
+        "label": "远程范围",
+        "hint": "远程岗位接受的范围。"
+      },
+      "window_morning": {
+        "label": "早轮回看时间窗（小时）",
+        "hint": "每一轮只看这么多小时内发布的岗位。"
+      },
+      "window_evening": {
+        "label": "晚轮回看时间窗（小时）"
+      },
+      "window_weekend": {
+        "label": "周末轮回看时间窗（小时）"
+      },
+      "max_per_group_per_location": {
+        "label": "每组每城市最多条数",
+        "hint": "每个关键词组、每个城市最多取多少条。"
+      },
+      "paid_total": {
+        "label": "付费通道月度总上限（美元）",
+        "hint": "所有付费通道每月合计可花的上限；单个通道的预算不能超过它。"
+      },
+      "breaker_failures": {
+        "label": "熔断：连续失败次数",
+        "hint": "连续失败这么多次后，通道标为不可用。"
+      },
+      "breaker_cooldown": {
+        "label": "熔断：冷却时间（小时）",
+        "hint": "冷却之后再试一次。"
+      },
+      "collect_concurrency": {
+        "label": "并行通道数",
+        "hint": "同时采集的通道数（LinkedIn 级联整体算一个）。"
+      },
+      "http_timeout": {
+        "label": "单次请求超时（毫秒）"
+      },
+      "http_retries": {
+        "label": "重试次数"
+      },
+      "http_backoff_base": {
+        "label": "退避起点（毫秒）"
+      },
+      "http_backoff_max": {
+        "label": "退避上限（毫秒）"
+      },
+      "cascade": {
+        "label": "级联顺序"
+      },
+      "enabled": {
+        "label": "启用"
+      },
+      "monthly_budget_usd": {
+        "label": "月预算（美元）"
+      },
+      "throttle_min": {
+        "label": "请求间隔下限（毫秒）"
+      },
+      "throttle_max": {
+        "label": "请求间隔上限（毫秒）"
+      },
+      "max_results": {
+        "label": "单次请求最多条数"
+      },
+      "free_records": {
+        "label": "每月免费条数",
+        "hint": "先用完免费额度，再产生费用。"
+      },
+      "dataset_id": {
+        "label": "数据集 ID"
+      },
+      "cost_per_1k": {
+        "label": "每千条价格（美元）",
+        "hint": "超出免费额度后每 1000 条的价格；0 表示按免费处理。"
+      },
+      "poll_interval": {
+        "label": "进度轮询间隔（毫秒）"
+      },
+      "snapshot_timeout": {
+        "label": "快照超时（毫秒）",
+        "hint": "从触发到下载完成的最长等待；超时记为可重试的失败。"
+      },
+      "country": {
+        "label": "国家代码",
+        "hint": "两位大写，例如 DE。"
+      },
+      "remote_worldwide": {
+        "label": "远程查询的地点：全球"
+      },
+      "actor_id": {
+        "label": "Apify actor",
+        "hint": "username/actor-name 或 actor ID。留空表示未配置，级联会跳过该通道；还需要 .env 里的 APIFY_TOKEN。"
+      },
+      "daily_request_limit": {
+        "label": "每天最多加载多少个页面",
+        "hint": "搜索页、详情页和推荐页合计；按自然日（schedule.yaml 的时区）计，用完后级联换下一个通道。"
+      },
+      "recommended_daily": {
+        "label": "每天跑一次“为你推荐”",
+        "hint": "旁路查询，不参与级联。"
+      },
+      "base_url": {
+        "label": "接口地址"
+      },
+      "api_key": {
+        "label": "公开客户端 key",
+        "hint": "官方文档里的公开值，不是机密。"
+      },
+      "radius_km": {
+        "label": "城市周边半径（公里）"
+      },
+      "page_size": {
+        "label": "每页条数"
+      },
+      "fetch_details": {
+        "label": "取岗位详情",
+        "hint": "JD 正文只在详情里。"
+      },
+      "max_details": {
+        "label": "每个查询最多取多少条详情",
+        "hint": "超出的岗位只保留列表数据。"
+      },
+      "reuse_known_details": {
+        "label": "沿用库里已有的详情",
+        "hint": "库里已有详情的岗位不再重复取详情。"
+      },
+      "remote_home_office": {
+        "label": "远程查询只保留可居家办公的",
+        "hint": "关闭则保留全部结果。"
+      },
+      "remote_max_pages": {
+        "label": "远程查询最多翻页数",
+        "hint": "大多数结果是到岗岗位，过滤时需要多翻几页。"
+      },
+      "user_agent": {
+        "label": "User-Agent",
+        "hint": "每次请求都带上它；写明是个人工具，不要伪装成浏览器。"
+      },
+      "max_pages": {
+        "label": "每个关键词最多翻页数",
+        "hint": "每页一次请求；翻得越多越容易被限流。"
+      },
+      "remote_option_id": {
+        "label": "“完全远程”筛选值",
+        "hint": "带哈希后缀（FULL_REMOTE.xxxx），XING 改了就要更新。"
+      },
+      "api_base_url": {
+        "label": "API 地址"
+      },
+      "eu_api_base_url": {
+        "label": "欧盟 API 地址",
+        "hint": "sources.yaml 里写了 region: eu 的 board 用这个地址。"
+      },
+      "prefilter_enabled": {
+        "label": "标题预筛",
+        "hint": "关闭则保存每个 board 的全部岗位。"
+      },
+      "prefilter_include": {
+        "label": "额外保留的标题词",
+        "hint": "除搜索关键词外，标题含这些词的岗位也保留（整词匹配，不区分大小写）。"
+      },
+      "prefilter_exclude": {
+        "label": "丢弃的标题词",
+        "hint": "标题含这些词的岗位一律丢弃，关注公司不受影响。"
+      },
+      "include_compensation": {
+        "label": "包含薪资区间",
+        "hint": "向 board 请求每个岗位的薪酬信息。"
+      },
+      "feed_language": {
+        "label": "岗位列表语言",
+        "hint": "公司没有该语言版本时，Personio 返回它的默认语言。"
+      },
+      "country_lower": {
+        "label": "国家过滤",
+        "hint": "两位小写字母，例如 de；留空 = 全部国家。"
+      },
+      "safesearch": {
+        "label": "安全搜索"
+      },
+      "discovery_interval": {
+        "label": "两次发现的最小间隔（小时）",
+        "hint": "距上次发现不足这么久时不再搜索。"
+      },
+      "max_queries": {
+        "label": "每次最多搜索次数",
+        "hint": "Brave 免费套餐每月 2000 次；Tavily 每次搜索花 1 个额度（免费 1000 个/月）。"
+      },
+      "tavily_search_depth": {
+        "label": "搜索深度",
+        "hint": "basic / fast / ultra-fast 每次花 1 个额度，advanced 花 2 个。"
+      },
+      "tavily_keywords": {
+        "label": "每个查询用几个关键词",
+        "hint": "每个关键词组取前几个词，用 OR 连成一个查询。"
+      },
+      "tavily_credit_limit": {
+        "label": "每月额度",
+        "hint": "Tavily 套餐每月包含的额度（免费档 1000）。用完后通道不再搜索。"
+      },
+      "tavily_credit_cost": {
+        "label": "超出后每个额度的价格（美元）",
+        "hint": "0 表示超出后不再搜索；按量付费约 0.008，填了之后在通道月预算内继续。"
+      },
+      "jsearch_country": {
+        "label": "国家",
+        "hint": "两位小写字母，例如 de；JSearch 只返回这个国家的岗位。"
+      },
+      "jsearch_language": {
+        "label": "语言",
+        "hint": "两位小写字母，例如 en；留空用该国的主要语言。"
+      },
+      "jsearch_pages": {
+        "label": "每次搜索的页数",
+        "hint": "每页 10 条，每页算一次请求。"
+      },
+      "jsearch_keywords": {
+        "label": "每组搜索的关键词数",
+        "hint": "每个搜索组的前 N 个关键词在每个城市各搜一次（每次 1 个请求）。"
+      },
+      "jsearch_request_limit": {
+        "label": "每月请求数",
+        "hint": "RapidAPI 套餐包含的请求数（免费档 200）。用完后通道不再发请求。"
+      },
+      "jsearch_overage_cost": {
+        "label": "超出后每次请求的价格（美元）",
+        "hint": "0 表示超出后不再发请求；填价格后在通道月预算内继续。"
+      },
+      "jsearch_pace": {
+        "label": "把请求按月均摊",
+        "hint": "避免月初几轮把整月额度用完。"
+      },
+      "jsearch_fetch_details": {
+        "label": "补取缺失的正文",
+        "hint": "搜索结果没有正文的岗位再查一次 /job-details（每条 1 个请求）。"
+      },
+      "jsearch_max_details": {
+        "label": "每次搜索最多补取几条"
+      },
+      "jsearch_apply_publishers": {
+        "label": "原帖链接偏好",
+        "hint": "没有直达雇主官网的链接时，按这个发布者顺序挑（LinkedIn、StepStone……）。"
+      },
+      "jsearch_rate_retries": {
+        "label": "限流后重试次数",
+        "hint": "每次重试前先等一个 throttle 间隔；月配额用完不重试。"
+      },
+      "jobspy_url": {
+        "label": "服务地址",
+        "hint": "环境变量 JOBSPY_URL 优先于这里。"
+      },
+      "jobspy_timeout": {
+        "label": "单次搜索超时（毫秒）"
+      },
+      "country_indeed": {
+        "label": "Indeed 国家"
+      },
+      "linkedin_fetch_description": {
+        "label": "逐条抓取 LinkedIn 描述",
+        "hint": "多一次请求，更容易被限流；关掉则 LinkedIn 岗位没有正文。"
+      },
+      "ai_order": {
+        "label": "全局 provider 顺序",
+        "hint": "api 代表 API 层，它内部的顺序见下一项。"
+      },
+      "api_order": {
+        "label": "API 层内的顺序",
+        "hint": "只有全局顺序里包含 api 才会用到。"
+      },
+      "task_score": {
+        "label": "打分"
+      },
+      "task_signals": {
+        "label": "信号提取"
+      },
+      "task_translate": {
+        "label": "翻译"
+      },
+      "task_summarize": {
+        "label": "摘要"
+      },
+      "task_suggest": {
+        "label": "建议"
+      },
+      "cli_command": {
+        "label": "命令"
+      },
+      "model": {
+        "label": "模型"
+      },
+      "strong_model": {
+        "label": "强模型"
+      },
+      "model_optional": {
+        "label": "模型",
+        "hint": "选“CLI 默认”则不写这一项，用 Codex 内置的默认模型（见模型目录里标“CLI 默认”的那个）。"
+      },
+      "timeout_seconds": {
+        "label": "超时（秒）"
+      },
+      "json_mode_only": {
+        "label": "只有 JSON mode",
+        "hint": "没有 json_schema，schema 写进 prompt。"
+      },
+      "per_cycle_limit": {
+        "label": "每轮最多处理条数",
+        "hint": "AI 层每轮最多处理多少条岗位。"
+      },
+      "monthly_api_budget": {
+        "label": "每月 API 费用上限（美元）",
+        "hint": "只计付费 API provider；订阅 CLI 按 0 计。"
+      },
+      "translate_min_score": {
+        "label": "自动翻译的分数门槛",
+        "hint": "分数不低于它的岗位会自动翻译成目标语言。"
+      },
+      "api_timeout": {
+        "label": "API 请求超时（秒）"
+      },
+      "max_output_tokens": {
+        "label": "单次最大输出 token"
+      },
+      "scoring_jd_max_chars": {
+        "label": "发给 AI 的 JD 最大字符数",
+        "hint": "更长的 JD 保留开头和结尾（语言要求常写在结尾）。"
+      },
+      "scoring_jd_head_share": {
+        "label": "截断时开头所占比例",
+        "hint": "0.1 到 0.9；其余取自结尾。"
+      },
+      "scoring_concurrency": {
+        "label": "同时打分的岗位数",
+        "hint": "订阅 CLI 不宜太高，最多 8。"
+      },
+      "german_penalty_A1": {
+        "label": "要求 A1 时扣分"
+      },
+      "german_penalty_A2": {
+        "label": "要求 A2 时扣分"
+      },
+      "german_penalty_B1": {
+        "label": "要求 B1 时扣分"
+      },
+      "german_penalty_B2": {
+        "label": "要求 B2 时扣分"
+      },
+      "german_penalty_C1": {
+        "label": "要求 C1 时扣分"
+      },
+      "german_penalty_C2": {
+        "label": "要求 C2 时扣分"
+      },
+      "backup_enabled": {
+        "label": "启用每日备份"
+      },
+      "backup_keep_daily": {
+        "label": "保留最近多少天（每天最新一份）"
+      },
+      "backup_keep_weekly": {
+        "label": "另外保留最近多少周",
+        "hint": "每个 ISO 周保留最新一份；0 = 不留周备份。"
+      },
+      "backup_timeout": {
+        "label": "pg_dump 超时（分钟）",
+        "hint": "超过就中止并算失败。"
+      },
+      "backup_config_archive": {
+        "label": "每天的备份里包含配置和画像",
+        "hint": "把 data/config 和 data/profile 打成 .config.tgz 放在备份文件旁边（不含 .env 和登录态）。"
+      },
+      "backup_pre_migrate": {
+        "label": "数据库迁移前先备份",
+        "hint": "runner 或 pnpm migrate:run 执行待迁移的数据库迁移之前先做一份备份；备份失败就不迁移。"
+      },
+      "backup_keep_system": {
+        "label": "安全备份保留份数（每种）",
+        "hint": "保留最新的 pre-deploy、pre-restore、premigrate 备份；你自己加标签的手动备份永不删除。"
+      },
+      "public_base_url": {
+        "label": "看板网址",
+        "hint": "岗位消息里“打开详情”链接用它（例如 Tailscale 地址）；留空 = 只附原始岗位链接。"
+      },
+      "candidate_window": {
+        "label": "推送候选窗口（小时）",
+        "hint": "岗位首次出现后这么多小时内仍是推送候选；打分晚到或被静默时段延后的岗位由后面的一轮补推。"
+      },
+      "alerts_dedupe": {
+        "label": "同类告警去重（小时）",
+        "hint": "同一类告警（类型 + 对象）在这么多小时内只发一次。"
+      },
+      "budget_thresholds": {
+        "label": "预算告警比例",
+        "hint": "月预算用掉多少比例时告警，例如 0.8 和 1。"
+      },
+      "reminders_enabled": {
+        "label": "启用申请提醒"
+      },
+      "reminders_send_at": {
+        "label": "提醒发送时间（HH:MM）",
+        "hint": "按 schedule 的时区；落在静默时段内就等静默结束。"
+      },
+      "reminders_max_items": {
+        "label": "每类最多列出条数"
+      },
+      "telegram_api_base_url": {
+        "label": "Bot API 地址"
+      },
+      "telegram_poll_timeout": {
+        "label": "long-polling 超时（秒）",
+        "hint": "一次 getUpdates 最长等待；最多 50。"
+      },
+      "telegram_request_timeout": {
+        "label": "请求超时（秒）"
+      },
+      "telegram_backoff": {
+        "label": "失败后退避起点（秒）"
+      },
+      "telegram_backoff_max": {
+        "label": "退避上限（秒）"
+      },
+      "telegram_message_gap": {
+        "label": "消息间隔（毫秒）",
+        "hint": "Telegram 对同一个聊天约每秒 1 条。"
+      },
+      "telegram_retries": {
+        "label": "429 / 5xx 重试次数"
+      },
+      "telegram_enabled": {
+        "label": "启用 Telegram 推送",
+        "hint": "bot token 和 chat id 放在 .env 里。"
+      },
+      "push_min_score": {
+        "label": "推送分数门槛",
+        "hint": "普通岗位的推送门槛。"
+      },
+      "max_per_cycle": {
+        "label": "每轮最多推送条数",
+        "hint": "其余的在看板里看。"
+      },
+      "quiet_enabled": {
+        "label": "启用静默时段"
+      },
+      "quiet_start": {
+        "label": "开始（HH:MM）",
+        "hint": "按 schedule 的时区解释，可以跨午夜。"
+      },
+      "quiet_end": {
+        "label": "结束（HH:MM）"
+      },
+      "alerts_exempt": {
+        "label": "告警不受静默时段限制",
+        "hint": "通道熔断、预算、登录失效等告警照常发送。"
+      },
+      "gmail_host": {
+        "label": "IMAP 服务器",
+        "hint": "Gmail 用 imap.gmail.com。"
+      },
+      "gmail_port": {
+        "label": "IMAP 端口"
+      },
+      "gmail_secure": {
+        "label": "使用 TLS",
+        "hint": "Gmail 保持开启；只有连本地测试服务器才关。"
+      },
+      "gmail_label": {
+        "label": "读取的 Gmail 标签",
+        "hint": "只读打开；不会标记、移动或删除邮箱里的任何邮件。"
+      },
+      "gmail_max_messages": {
+        "label": "每轮最多读多少封",
+        "hint": "新的优先，读不完的留到下一轮。"
+      },
+      "gmail_lookback_days": {
+        "label": "回溯天数",
+        "hint": "只读最近这么多天收到的邮件。"
+      },
+      "gmail_timeout": {
+        "label": "连接超时（毫秒）"
+      },
+      "gmail_senders_linkedin": {
+        "label": "LinkedIn 发件人域名",
+        "hint": "来自这些域名（含子域名）的邮件用 LinkedIn 解析器。"
+      },
+      "gmail_senders_stepstone": {
+        "label": "StepStone 发件人域名",
+        "hint": "来自这些域名（含子域名）的邮件用 StepStone 解析器。"
+      },
+      "gmail_senders_indeed": {
+        "label": "Indeed 发件人域名",
+        "hint": "来自这些域名（含子域名）的邮件用 Indeed 解析器。"
+      },
+      "gmail_senders_xing": {
+        "label": "XING 发件人域名",
+        "hint": "来自这些域名（含子域名）的邮件用 XING 解析器。"
+      },
+      "scoring_backlog_per_run": {
+        "label": "一次\"给未打分的岗位打分\"处理条数",
+        "hint": "/settings 里的按钮一次最多打多少条；每轮的上限另算。"
+      },
+      "apify_price_per_1k": {
+        "label": "每 1000 条结果的价格（美元）",
+        "hint": "以 actor 页面 Pricing 里你所在套餐的价格为准，用于预算记账。"
+      },
+      "apify_run_start": {
+        "label": "每次运行的启动费（美元）",
+        "hint": "每次 actor 运行收一次（actor-start 事件），0 表示没有。"
+      },
+      "apify_memory": {
+        "label": "单次运行内存（MB）",
+        "hint": "2 的幂，至少 128；启动费随它变化。"
+      },
+      "apify_timeout": {
+        "label": "运行超时（秒）",
+        "hint": "Apify 同步运行上限 300 秒；超时记为可重试的失败。"
+      },
+      "apify_country_name": {
+        "label": "国家名称",
+        "hint": "城市查询时附在城市后面，例如 Berlin, Germany；留空 = 市场国家的英文名。"
+      },
+      "provider_enabled": {
+        "label": "使用这个 provider",
+        "hint": "关闭后路由不会试它。"
+      },
+      "daily_request_cap": {
+        "label": "每日请求上限",
+        "hint": "每天最多多少次模型调用（失败的也算）；0 = 不限。和你自己交互使用共用的订阅，建议设个适中的上限。"
+      },
+      "cycle_budget_minutes": {
+        "label": "每轮 AI 时间（分钟）",
+        "hint": "打分和信号超过这个时间就不再发新请求，剩下的留到下一轮。0 = 不限。"
+      },
+      "idle_cycle_budget_minutes": {
+        "label": "没有新岗位时每轮 AI 时间（分钟）",
+        "hint": "同上，针对只在消化积压的那一轮。0 = 不限。"
+      },
+      "cooldown_default_minutes": {
+        "label": "撞上限后冷却（分钟）",
+        "hint": "错误信息里没写恢复时间时用。"
+      },
+      "cooldown_max_minutes": {
+        "label": "最长冷却（分钟）",
+        "hint": "恢复时间比这更远时按这个算。"
+      },
+      "reasoning_effort": {
+        "label": "推理强度",
+        "hint": "打分、信号、翻译用 low 足够，快很多。"
+      },
+      "reasoning_effort_score": {
+        "label": "推理强度：打分"
+      },
+      "reasoning_effort_signals": {
+        "label": "推理强度：信号"
+      },
+      "reasoning_effort_translate": {
+        "label": "推理强度：翻译"
+      },
+      "reasoning_effort_summarize": {
+        "label": "推理强度：摘要"
+      },
+      "reasoning_effort_suggest": {
+        "label": "推理强度：建议"
+      },
+      "ui_salary_min": {
+        "label": "薪资轴最小值（千，基准货币）",
+        "hint": "轴左端，例如 40 就是 40k。"
+      },
+      "ui_salary_max": {
+        "label": "薪资轴最大值（千，基准货币）",
+        "hint": "轴右端，必须大于最小值。"
+      },
+      "ui_salary_step": {
+        "label": "薪资轴刻度间隔（千，基准货币）",
+        "hint": "每隔多少画一个刻度，必须小于整根轴的长度。"
+      },
+      "ui_salary_sample": {
+        "label": "中位线和百分位的最少样本",
+        "hint": "本月写明薪资的岗位至少有这么多个，详情页才画中位线和“高于 X% 已披露岗位”。"
+      },
+      "ui_fresh_decay": {
+        "label": "新鲜度衰减（小时）",
+        "hint": "首次发现后这么多小时，新鲜度条缩到最短。"
+      },
+      "ui_fresh_warn": {
+        "label": "变黄线（小时）",
+        "hint": "超过这么多小时，新鲜度条变黄；必须小于衰减小时数。"
+      },
+      "ui_trend_cycles": {
+        "label": "趋势线取几轮",
+        "hint": "汇总块里趋势线用最近这么多轮的数据，至少 2。"
+      },
+      "ui_health_cycles": {
+        "label": "健康方块取几轮",
+        "hint": "来源页每个通道的连续方块用最近这么多轮。"
+      },
+      "ui_ticker_items": {
+        "label": "跑马灯最多几条",
+        "hint": "顶部跑马灯最多滚动这么多条。"
+      },
+      "breakdown_enabled": {
+        "label": "启用岗位拆解",
+        "hint": "关闭时详情页不提供拆解按钮，也不自动拆解；已有结果仍显示。"
+      },
+      "breakdown_mode": {
+        "label": "方式",
+        "hint": "手动：只在详情页点按钮时分析；自动：每轮处理的最后给高分岗位自动拆解。"
+      },
+      "breakdown_min_rank": {
+        "label": "最低排序值"
+      },
+      "breakdown_per_cycle_limit": {
+        "label": "每轮最多几条"
+      },
+      "breakdown_jd_max_chars": {
+        "label": "发给 AI 的 JD 最长字符数"
+      },
+      "breakdown_timeout": {
+        "label": "一次拆解最多等多久"
+      },
+      "task_breakdown": {
+        "label": "拆解"
+      },
+      "reasoning_effort_breakdown": {
+        "label": "推理强度：拆解"
+      },
+      "task_traps": {
+        "label": "AI 陷阱检查"
+      },
+      "reasoning_effort_traps": {
+        "label": "推理强度：AI 陷阱检查"
+      },
+      "backup_max_age": {
+        "label": "备份最长允许间隔（小时）",
+        "hint": "pnpm run doctor 在最近一份备份比这更旧时报错（备份 cron 每天一次，留一点余量）。"
+      },
+      "linkedin_rec_enabled": {
+        "label": "每天读一次 LinkedIn 推荐",
+        "hint": "linkedin-session 通道的“为你推荐”页。不是单独的任务：当天 cron 之后的第一轮处理会顺带读一次。"
+      },
+      "suggest_enabled": {
+        "label": "启用每周兴趣建议",
+        "hint": "AI 根据你标记过的岗位，每周提出新的信号词、关注公司和筛选建议（在“兴趣”页处理）。"
+      },
+      "suggest_notify": {
+        "label": "有新建议时发 Telegram"
+      },
+      "suggest_lookback_weeks": {
+        "label": "回看几周",
+        "hint": "只看这么多周内状态变过的岗位。"
+      },
+      "suggest_max": {
+        "label": "每次最多保存几条建议"
+      },
+      "suggest_min_confidence": {
+        "label": "最低把握（0 到 1）",
+        "hint": "AI 把握低于这个值的建议会被丢掉。"
+      },
+      "manual_min_interval": {
+        "label": "手动按钮的最短间隔（秒）",
+        "hint": "“手动操作”标签里的按钮：同一种操作两次之间至少隔这么久。"
+      },
+      "breakdown_jd_head_share": {
+        "label": "JD 截断时保留开头的比例",
+        "hint": "0.1 到 0.9。超长的 JD 保留开头这么多比例，其余从结尾取（德语要求常在结尾）。"
+      },
+      "ui_ai_range": {
+        "label": "默认时间范围",
+        "hint": "打开 AI 用量页时先显示哪个范围。"
+      },
+      "ui_ai_max_days": {
+        "label": "自定义范围最长天数"
+      },
+      "ui_ai_page_size": {
+        "label": "调用明细每页行数"
+      },
+      "ui_ai_csv_rows": {
+        "label": "导出 CSV 最多行数",
+        "hint": "超出时只导出最新的这么多行。"
+      },
+      "insights_ranges": {
+        "label": "可选的时间范围（天）",
+        "hint": "统计页的切换项，从短到长，例如 7、30、90。"
+      },
+      "insights_default_range": {
+        "label": "默认范围（天）",
+        "hint": "必须是上面列表里的一项。"
+      },
+      "insights_cities": {
+        "label": "单列的城市",
+        "hint": "城市卡片里单列的城市，写法同 /jobs 的城市筛选（München，不是 Munich）；剩下的合为“其他”。"
+      },
+      "insights_top_reasons": {
+        "label": "“被过滤的原因”列几行"
+      },
+      "insights_score_width": {
+        "label": "排序值直方图：每柱宽度（分）"
+      },
+      "insights_score_cap": {
+        "label": "排序值直方图：最后一柱从多少分起"
+      },
+      "insights_salary_width": {
+        "label": "年薪直方图：每柱宽度（欧元）",
+        "hint": "用披露区间的中点。"
+      },
+      "insights_salary_cap": {
+        "label": "年薪直方图：最后一柱从多少欧元起"
+      },
+      "resume_kit_path": {
+        "label": "resume-kit 目录",
+        "hint": "绝对路径，不支持 ~。留空 = 只显示导出路径，不给命令。"
+      },
+      "resume_master_path": {
+        "label": "主简历 YAML",
+        "hint": "只会写进命令里，不会被读取。留空 = 命令里不提。"
+      },
+      "resume_pdf_dir": {
+        "label": "定制 PDF 所在目录",
+        "hint": "“挂上简历”只接受这个目录里的文件。留空 = 不能挂简历。"
+      },
+      "resume_jd_dir": {
+        "label": "JD 导出目录",
+        "hint": "相对路径从 job-radar/ 算起。"
+      },
+      "resume_jd_host_dir": {
+        "label": "宿主机看到的导出目录",
+        "hint": "在 Docker 里运行时，命令里要用宿主机路径。留空 = 与上面相同。"
+      },
+      "resume_claude_command": {
+        "label": "启动 Claude Code 的命令"
+      },
+      "resume_filename_chars": {
+        "label": "文件名里公司、职位各保留几个字符"
+      },
+      "resume_quote_chars": {
+        "label": "每条信号原句最多保留几个字符"
+      },
+      "resume_pdf_limit": {
+        "label": "“挂上简历”下拉最多列几个 PDF",
+        "hint": "最新的在前。"
+      },
+      "priority_weight_title": {
+        "label": "权重 · 标题匹配"
+      },
+      "priority_weight_signals": {
+        "label": "权重 · 薪酬信号"
+      },
+      "priority_weight_location": {
+        "label": "权重 · 地点"
+      },
+      "priority_weight_seniority": {
+        "label": "权重 · 级别"
+      },
+      "priority_weight_recency": {
+        "label": "权重 · 时效"
+      },
+      "priority_weight_language_gap": {
+        "label": "权重 · 本地语言差距（扣分）"
+      },
+      "priority_keyword_group_factor": {
+        "label": "关键词组的标题匹配系数",
+        "hint": "search.yaml 关键词组里的词，相对目标职位的标题匹配系数（1 = 一样）。"
+      },
+      "priority_all_words_match": {
+        "label": "词都在标题里但不相邻的系数",
+        "hint": "例如 “Senior Android Engineer - AI Product” 对 “AI Product Engineer”。"
+      },
+      "priority_partial_match": {
+        "label": "部分匹配系数",
+        "hint": "至少一半的词在标题里：此系数 × 命中词的比例。"
+      },
+      "priority_generic_words": {
+        "label": "不单独计分的通用词",
+        "hint": "只共有这些词的标题不算部分匹配。比较时忽略大小写和重音。"
+      },
+      "priority_seniority_intern": {
+        "label": "级别匹配 · 实习"
+      },
+      "priority_seniority_junior": {
+        "label": "级别匹配 · 初级"
+      },
+      "priority_seniority_mid": {
+        "label": "级别匹配 · 中级"
+      },
+      "priority_seniority_senior": {
+        "label": "级别匹配 · 资深"
+      },
+      "priority_seniority_staff": {
+        "label": "级别匹配 · Staff"
+      },
+      "priority_seniority_principal": {
+        "label": "级别匹配 · Principal"
+      },
+      "priority_seniority_lead": {
+        "label": "级别匹配 · Lead"
+      },
+      "priority_seniority_manager": {
+        "label": "级别匹配 · 经理"
+      },
+      "priority_seniority_unknown": {
+        "label": "级别匹配 · 未识别"
+      },
+      "priority_location_exact": {
+        "label": "地点匹配 · 想去的城市",
+        "hint": "地点写的是 preferences.yaml 的城市。"
+      },
+      "priority_location_nearby": {
+        "label": "地点匹配 · 周边地点"
+      },
+      "priority_location_remote": {
+        "label": "地点匹配 · 远程且在范围内",
+        "hint": "含只写国家的 “Germany (Remote)”。"
+      },
+      "priority_location_country_level": {
+        "label": "地点匹配 · 只写到国家",
+        "hint": "非远程、地点只写到国家（“Germany”）。"
+      },
+      "priority_location_other": {
+        "label": "地点匹配 · 其他"
+      },
+      "priority_location_unclear": {
+        "label": "地点匹配 · 地点不明",
+        "hint": "过滤时标了“远程范围不明”或“地点不明”，多半不在德国。"
+      },
+      "priority_unclear_factor": {
+        "label": "地点不明的整体系数",
+        "hint": "地点不明的岗位整体优先度再乘这个系数。"
+      },
+      "priority_recency_days": {
+        "label": "时效天数",
+        "hint": "发布超过这么多天的岗位不再得时效分，之前线性衰减。"
+      },
+      "push_min_score_high_value": {
+        "label": "带高价值信号的门槛",
+        "hint": "带高价值信号（在“感兴趣”页勾选的信号类别）的岗位门槛更低。"
+      },
+      "remote_home_country": {
+        "label": "远程查询的地点：本国",
+        "hint": "留空 = 用市场国家的英文名。"
+      },
+      "remote_region": {
+        "label": "远程查询的地点：指定区域",
+        "hint": "留空 = 用区域的名称（例如 European Union）。"
+      },
+      "language_default_locale": {
+        "label": "默认界面语言",
+        "hint": "浏览器没选过语言时使用；语言菜单会按浏览器记住选择。"
+      },
+      "language_ai_output": {
+        "label": "AI 语言",
+        "hint": "匹配理由、差距、一句话摘要、JD 拆解和兴趣建议理由都用这种语言写。"
+      },
+      "language_summary_also": {
+        "label": "摘要另附",
+        "hint": "一句话摘要另外再写这些语言，切换界面语言时也有摘要可看。"
+      },
+      "language_translation_target": {
+        "label": "JD 翻译成",
+        "hint": "本来就是这种语言的岗位没有翻译按钮。"
+      },
+      "language_notify_locale": {
+        "label": "Telegram 语言",
+        "hint": "消息、按钮和告警。"
+      },
+      "language_cli_locale": {
+        "label": "命令行语言",
+        "hint": "pnpm run doctor 和 pnpm sources:list。"
+      },
+      "scoring_criteria_priorities": {
+        "label": "最看重",
+        "hint": "对你最重要的几点。"
+      },
+      "scoring_criteria_dealbreakers": {
+        "label": "不能接受",
+        "hint": "有就不考虑的情况。"
+      },
+      "scoring_criteria_nice": {
+        "label": "加分项",
+        "hint": "有了更好的小优点。"
+      },
+      "enabled_consent": {
+        "label": "启用",
+        "hint": "服务条款风险：这个渠道会抓取网站的公开页面或操作你自己的账号。开启前请阅读 docs/sources.md 的“Scraping”一节。"
+      },
+      "priority_seniority_follow": {
+        "label": "级别匹配跟随我的偏好",
+        "hint": "开：按你偏好里的级别算（级别越接近，匹配越高）。关：按下面的表原样使用。"
+      },
+      "priority_seniority_distance": {
+        "label": "按级别距离的匹配度",
+        "hint": "岗位与你想要的级别相差 0、1、2、3 级及以上时各自的 0 到 1 的值。上面的开关打开时使用。"
+      },
+      "resume_claude_args": {
+        "label": "附加在该命令后的选项",
+        "hint": "岗位文本来自第三方。默认关闭 Claude Code 的联网工具；想最严格就把 Bash 也加进列表。"
+      },
+      "task_salary_lookup": {
+        "label": "查薪资",
+        "hint": "只有 claude-cli、codex-cli 和 Anthropic API 能搜索网页，其他 provider 在这个任务里会被跳过。codex-cli 搜索时没有域名限制。"
+      },
+      "reasoning_effort_salary_lookup": {
+        "label": "推理强度：查薪资"
+      },
+      "salary_lookup_enabled": {
+        "label": "开启查薪资",
+        "hint": "岗位页显示“查薪资”按钮。不点就不会查。"
+      },
+      "salary_ttl_days": {
+        "label": "结果保留（天）",
+        "hint": "这段时间内，同一公司、同一地点的同一岗位直接显示已存结果，不重新搜索。"
+      },
+      "salary_max_per_day": {
+        "label": "每 24 小时最多查询",
+        "hint": "每次请求都算，失败的也算。"
+      },
+      "salary_timeout": {
+        "label": "超时（秒）",
+        "hint": "整个查询的时限，包括所有 provider 和重试。"
+      },
+      "salary_benchmark_enabled": {
+        "label": "重算基准",
+        "hint": "关闭后不再重算，卡片显示上次的结果。"
+      },
+      "salary_window_days": {
+        "label": "时间窗（天）",
+        "hint": "只算这么多天内首次见到的岗位。"
+      },
+      "salary_min_sample": {
+        "label": "最小样本",
+        "hint": "岗位数少于这个数的组不做比较，卡片会退到更宽的组。"
+      },
+      "salary_include_ai": {
+        "label": "AI 查询结果计入基准",
+        "hint": "查询里校验过的底薪数字（置信度中或高、有来源）会加入各组。卡片上分开显示其中有多少来自查询。"
+      }
+    },
+    "control": {
+      "title": "手动操作",
+      "description": "立即跑一轮、重打分数、给未打分岗位打分、测试 Telegram。请求交给 runner 执行，页面显示进度。",
+      "runner": {
+        "online": "runner 运行中（{age}前有心跳）",
+        "stale": "runner 没有响应（最后心跳在 {age}前）",
+        "never": "runner 还没有心跳",
+        "unavailable": "数据库不可用，无法联系 runner"
+      },
+      "age": {
+        "seconds": "{count} 秒",
+        "minutes": "{count} 分钟",
+        "hours": "{count} 小时",
+        "days": "{count} 天"
+      },
+      "run": {
+        "button": "立即跑一轮",
+        "requesting": "正在请求…",
+        "hint": "创建一个手动轮请求，runner 几秒内取走并执行。",
+        "only": "只跑指定通道",
+        "onlyHint": "不勾选 = 所有已启用的通道。"
+      },
+      "rescore": {
+        "button": "重打 {count} 条过期分数",
+        "none": "没有过期分数",
+        "hint": "画像改动后旧分数会被标为过期；由 ai-worker 重新打分。"
+      },
+      "queued": "已请求，等待 runner 取走。",
+      "existing": "已经有一个同样的请求在排队或执行，没有重复创建。",
+      "errors": {
+        "invalidPayload": "请求格式不对，请刷新页面。",
+        "unknownChannel": "包含不认识的通道。",
+        "nothingStale": "没有需要重打的分数。",
+        "databaseUnavailable": "数据库不可用，请求没有创建。",
+        "nothingToScore": "没有需要打分的岗位。",
+        "tooSoon": "刚刚请求过，请稍后再试。"
+      },
+      "requests": {
+        "title": "最近的请求",
+        "empty": "还没有请求。",
+        "kind": {
+          "run_cycle": "手动轮",
+          "rescore_stale": "重打过期分数",
+          "run_suggest": "兴趣建议",
+          "score_jobs": "给岗位打分"
+        },
+        "status": {
+          "pending": "排队中",
+          "running": "进行中",
+          "ai_running": "AI 处理中",
+          "done": "已完成",
+          "failed": "失败"
+        },
+        "at": "{time} 请求",
+        "channels": "通道：{channels}",
+        "progress": "第 {id} 轮：{finished} / {total} 个查询已结束，抓取 {fetched} 条",
+        "cycleResult": "第 {id} 轮：{state}，抓取 {fetched} 条，新增 {fresh} 条",
+        "viewSources": "查看来源",
+        "rescoreResult": "重打完成：{scored} 条成功，{failed} 条失败",
+        "placeholder": "已记录，但这个 runner 没有重新打分的能力，没有改动任何分数。",
+        "error": {
+          "invalid_payload": "请求格式不对",
+          "another_cycle_running": "另一轮正在运行，这次没有执行",
+          "cycle_failed": "这一轮失败了",
+          "handler_error": "执行出错，详情见 runner 日志",
+          "no_handler": "runner 不认识这个请求",
+          "rescore_failed": "全部重打失败，详情见 ai-worker 日志",
+          "rescore_stopped": "重打没有完成（被取消或 AI 不可用），详情见 ai-worker 日志",
+          "unknown": "失败",
+          "score_failed": "全部打分失败，详情见 ai-worker 日志",
+          "score_stopped": "打分没有完成（被取消或 AI 不可用），详情见 ai-worker 日志",
+          "rescore_profile_incomplete": "重打没有开始：画像不完整，缺少简介（summary）和技能（skills）。在“我的画像”里至少填一项",
+          "rescore_ai_unavailable": "重打没有开始：AI 不可用（provider 都在冷却、超额或没有登录），见 /sources 的 AI 卡片",
+          "score_profile_incomplete": "打分没有开始：画像不完整，缺少简介（summary）和技能（skills）。在“我的画像”里至少填一项",
+          "score_ai_unavailable": "打分没有开始：AI 不可用（provider 都在冷却、超额或没有登录），见 /sources 的 AI 卡片"
+        },
+        "scoreResult": "打分完成：{scored} 条成功，{failed} 条失败",
+        "jobs": "岗位：{jobs}"
+      },
+      "backlog": {
+        "button": "给未打分的 {count} 条打分",
+        "none": "没有未打分的岗位",
+        "hint": "按相关度从高到低，每次最多处理 ai.yaml 里 backlog_per_run 条；ai-worker 用 AI 打分，不受每轮上限限制。"
+      },
+      "telegramTest": {
+        "hint": "发一条测试消息到 notify.yaml 设置的 Telegram 对话，推送还没开启也会发；用来确认 bot token 和 chat id。由 runner 发送。"
+      },
+      "setupWizard": {
+        "title": "首次设置向导",
+        "description": "重新走一遍语言、市场、画像、目标、来源、AI 和 Telegram。修改立即生效。",
+        "open": "打开设置向导"
+      }
+    },
+    "providerState": {
+      "unconfigured": "未配置",
+      "off": "已关闭",
+      "auth": "登录失败",
+      "cooling": "冷却中",
+      "capped": "已达每日上限"
+    },
+    "timeline": {
+      "title": "一天的安排",
+      "now": "现在 {time}",
+      "nowLegend": "现在",
+      "kind": {
+        "weekday": "工作日",
+        "weekend": "周末",
+        "daily": "每天"
+      },
+      "cycle": {
+        "weekday_morning": "工作日早轮",
+        "weekday_evening": "工作日晚轮",
+        "weekend": "周末轮"
+      },
+      "quiet": "静默 {start}–{end}",
+      "quietNone": "没有静默时段",
+      "off": "已关闭",
+      "offLegend": "已关闭的轮次"
+    },
+    "units": {
+      "hours": "小时",
+      "minutes": "分钟",
+      "seconds": "秒",
+      "ms": "毫秒",
+      "days": "天",
+      "weeks": "周",
+      "mb": "MB",
+      "km": "公里",
+      "keur": "k"
+    },
+    "cron": {
+      "many": "{first} 起共 {count} 次",
+      "invalid": "看不懂这个 cron"
+    },
+    "catalog": {
+      "title": "模型目录 · {file}",
+      "hint": "新模型在 {file} 里添加（文件开头有步骤），保存后约 5 秒生效，刷新本页即可选择。",
+      "docs": "官方模型列表",
+      "col": {
+        "model": "模型",
+        "label": "显示名",
+        "price": "单价（$/百万 token）",
+        "efforts": "推理强度",
+        "flags": "标记",
+        "notes": "备注"
+      },
+      "subscription": "订阅",
+      "allEfforts": "全部",
+      "flag": {
+        "selected": "使用中",
+        "cliDefault": "CLI 默认",
+        "deprecated": "已停用"
+      },
+      "kind": {
+        "cli": "订阅 CLI",
+        "api": "按量 API"
+      },
+      "unreadable": "{file} 读不了：{detail}。模型下拉只显示当前值，修好文件前不能保存 AI 设置。",
+      "unreadableTitle": "模型目录",
+      "tableLabel": "{provider} 的模型目录",
+      "subscriptionEquivalent": "订阅 · 折合 ${input} / ${output}"
+    },
+    "registryLink": "公司清单和健康状态在「来源清单」 →",
+    "workflow": {
+      "title": "申请流程",
+      "description": "隐藏你不用的申请状态、调整提醒的超时天数。状态本身是固定的（不能新增或改名）；隐藏只影响显示。保存到 {ui} 和 {notify}。",
+      "statuses": {
+        "title": "申请状态",
+        "hint": "关掉“显示”后，这个状态不再出现在看板列、状态菜单、/jobs 筛选、快捷键和 Telegram 按钮里。已经在这个状态里的卡片不会丢：它们显示在看板上折叠的窄列里，随时可以改到别的状态。",
+        "name": "状态",
+        "column": "看板列",
+        "count": "申请数",
+        "show": "显示",
+        "timeout": "超时天数",
+        "showAria": "显示“{status}”",
+        "timeoutLabel": "“{status}”超时天数",
+        "whyNew": "不能隐藏：所有新岗位都从这里开始。",
+        "whyArchived": "不能隐藏：这是“忽略”岗位的去处。",
+        "folds": "有 {count} 张卡片：隐藏后它们显示在看板上折叠的窄列里。",
+        "reminderNote": "超时天数：卡片在“感兴趣”超过这么多天没申请，或“已申请”超过这么多天没回音，看板标红，Telegram 也会提醒（notify.yaml 的 reminders）。其他状态没有超时计时。"
+      },
+      "filters": {
+        "title": "列表筛选里的分类",
+        "hint": "关掉后，/jobs 的筛选里不再列出这个值。链接或保存的视图里已经选中的值照常生效。",
+        "workplaces": "工作方式",
+        "contracts": "合同类型",
+        "showAria": "在筛选里显示“{value}”"
+      },
+      "formErrors": {
+        "invalidPayload": "提交的数据格式不对，请刷新页面后重试。",
+        "unreadable": "ui.yaml 或 notify.yaml 现在无法读取：请先在高级编辑器里修好它。",
+        "writeFailed": "保存失败：{file} 没有改动，其他文件也没有写。",
+        "partial": "{saved} 已保存，但 {file} 没有写成功：它还是旧的。请再保存一次。"
+      }
+    },
+    "notifyReminderLink": "“感兴趣”和“已申请”的超时天数现在在「申请流程」标签里设置。",
+    "advanced": {
+      "title": "高级编辑器",
+      "description": "按原文编辑任何一份配置文件：边改边校验，保存前预览差异，保存的文本和你写的一字不差（注释和格式都在）。其他标签的表单读不了某个文件时，也在这里修。",
+      "loading": "读取中…",
+      "unknownFile": "没有这份配置文件。请从左边的列表里选一份。",
+      "unreadable": "这份文件现在读不了（权限或磁盘问题）。",
+      "editorLabel": "{file} 的内容",
+      "tabHint": "Tab 缩进两格；按 Esc 再按 Tab 可以离开输入框。",
+      "keysHint": "Tab 缩进 · Shift+Tab 反缩进 · Esc 再 Tab 离开输入框 · ⌘/Ctrl+S 预览并保存",
+      "secretsNote": "密钥（API key、token、密码）放 .env，不要写进配置文件。",
+      "versionNote": "这份文件的 config_version 比程序的旧：读取时会在内存里升级。要在编辑器里保存，先加上新的键并把 config_version 改成 {version}，或运行 pnpm config:migrate --write。",
+      "checking": "检查中…",
+      "noIssues": "没有问题，可以保存",
+      "issueCount": "{count, plural, other {# 个问题}}（修好才能保存）",
+      "wholeFile": "整份文件",
+      "nearest": "最近的上级位置",
+      "otherFile": "在 {file}",
+      "reason": {
+        "unknownKey": "未知的键（可能是拼写错了）",
+        "missing": "缺少这个键",
+        "protected": "受保护的键：请手动编辑 {file} 来修改"
+      },
+      "previewSave": "预览并保存",
+      "revert": "还原改动",
+      "unsaved": "有未保存的改动",
+      "clean": "没有未保存的改动",
+      "resetButton": "恢复默认",
+      "savedToast": "已保存 {file}（旧文本已备份）",
+      "resetToastShipped": "已恢复 {file} 的产品默认（覆盖文件已备份并删除）",
+      "resetToastUser": "已把 {file} 恢复成默认内容（旧文本已备份）",
+      "failure": {
+        "proxies_changed": "代理只能在文件里改：这里它们显示成 ***，不能增删或修改。",
+        "too_large": "文本太长（上限 {max} 字节，ui.yaml 的 config_editor.max_bytes）。",
+        "needs_confirm": "这是产品默认文件：第一次保存要先确认会生成整份覆盖文件。",
+        "failed": "保存失败，文件没有改动。",
+        "protected": "这段文本修改了受保护的键（命令、API 地址或凭据路径）。请手动编辑文件来改。"
+      },
+      "files": {
+        "label": "配置文件",
+        "group_user": "用户配置",
+        "group_shipped": "产品默认",
+        "valid": "合法",
+        "invalid": "不合法",
+        "source_user": "用户目录",
+        "source_default": "默认",
+        "source_overridden": "已覆盖默认",
+        "source_missing": "不存在",
+        "versionBehind": "版本落后"
+      },
+      "override": {
+        "text": "这是产品默认文件：保存会在用户目录生成整份覆盖文件，之后产品更新这个文件不会生效。「恢复默认」可以随时回到产品默认。",
+        "confirm": "我明白，生成覆盖文件"
+      },
+      "preview": {
+        "title": "预览并保存",
+        "description": "确认下面的改动后保存。保存前会重新校验，旧文本会备份到用户目录的 .backup/editor/。",
+        "against": "和谁比",
+        "against_saved": "和已保存的版本比",
+        "against_default": "和产品默认比",
+        "loading": "计算差异…",
+        "failed": "差异算不出来：文本现在不能预览。",
+        "noChanges": "没有改动",
+        "cancel": "取消",
+        "save": "保存",
+        "saving": "保存中…"
+      },
+      "diff": {
+        "added": "新增：",
+        "removed": "删除：",
+        "changedKeys": "{count, plural, other {改动了 # 个键：}}"
+      },
+      "conflict": {
+        "title": "你打开后文件被改过",
+        "hint": "设置表单、来源清单、别的标签或手工修改在你打开编辑器之后改了这份文件，所以这次保存没有写入。这里不会自动合并：载入最新文件（丢弃你的改动），或先复制你的文本再自己合并。",
+        "openedToNow": "打开时 → 现在",
+        "sameText": "文本一样（只有生效的层变了）。",
+        "loadLatest": "载入最新文件",
+        "copyMine": "复制我的文本",
+        "copied": "已复制你的文本",
+        "copyFailed": "复制失败，请手动选中文本复制"
+      },
+      "reset": {
+        "title": "恢复默认",
+        "descriptionShipped": "删除用户目录里的覆盖文件，之后重新读取产品默认（并能收到产品对它的更新）。当前文本会先备份。",
+        "descriptionUser": "用产品默认文件的内容替换当前文件。当前文本会先备份。",
+        "noChanges": "当前内容和默认一样。",
+        "cancel": "取消",
+        "confirm": "恢复默认",
+        "working": "处理中…"
+      },
+      "protectedNote": "{file} 中受保护的键（命令、API 地址、凭据路径）只能手动编辑文件来改：",
+      "protectedUnlocked": "已设置 JOB_RADAR_ALLOW_WEB_EDIT_PROTECTED=1，{file} 中这些平时锁定的键可以在这里修改："
+    }
+  },
+  "sources": {
+    "otherMarket": {
+      "title": "其他市场的来源 · {count}",
+      "hint": "这些来源只服务其他市场：在当前市场不运行，也不算失败。切换到对应的市场后才能打开。",
+      "badge": "只服务 {markets}"
+    },
+    "heartbeat": {
+      "runnerStale": "runner 已 {age}没有心跳：定时采集和处理轮停着，新岗位不会进来。先确认 Docker 在运行，再重新启动 runner。",
+      "runnerNever": "runner 还没有心跳：定时采集和处理轮不会开始。先确认 Docker 在运行，再启动 runner。",
+      "aiWorkerStale": "ai-worker 已 {age}没有心跳：打分、翻译和推送在等它，岗位暂时没有新的打分。在这台 Mac 上重新启动 ai-worker。",
+      "aiWorkerNever": "ai-worker 还没有心跳：打分、翻译和推送没有人做。在这台 Mac 上启动 ai-worker。"
+    },
+    "page": {
+      "unavailable": "无法读取运行数据：数据库没有响应。",
+      "month": "本月（{month}）",
+      "channels": "各通道"
+    },
+    "runner": {
+      "title": "Runner",
+      "online": "运行中",
+      "stale": "没有响应",
+      "never": "还没有心跳",
+      "heartbeat": "最近心跳：{age}前",
+      "interval": "每 {seconds} 秒一次"
+    },
+    "disk": {
+      "warn": "磁盘剩余空间不多：还有 {free} GB（{percent}%），低于 {limit} GB。该清理了：docker system df 看占用，docker builder prune 清构建缓存，删旧的手动备份和日志。",
+      "fail": "磁盘快满了：只剩 {free} GB（{percent}%），低于 {limit} GB。备份会写不进去，数据库也可能停；请先清理：docker builder prune、旧备份、data/logs/。",
+      "sourceHost": "来源：宿主机 ai-worker 测得（{path}，即 Docker 数据所在的卷）。",
+      "sourceLocal": "来源：容器内的测量，可能不是 Mac 真实的磁盘（宿主机 ai-worker 没有最近的测量，请确认它在运行）。",
+      "title": "磁盘",
+      "unknown": "还没有磁盘测量",
+      "usage": "已用 {used} · 剩 {free} GB"
+    },
+    "aiWorker": {
+      "title": "AI worker（这台 Mac）",
+      "container": "AI 在容器里执行（ai.yaml 的 execution 是 container）。",
+      "state": {
+        "online": "运行中",
+        "offline": "没有响应",
+        "never": "还没有心跳"
+      },
+      "heartbeat": "最近心跳：{age}前",
+      "queue": "排队 {pending} 个，处理中 {running} 个",
+      "queueEmpty": "没有排队的 AI 请求。",
+      "lastRun": {
+        "done": "最近一次 AI：第 {id} 轮，{time}：打分 {scored}、翻译 {translated}、推送 {pushed}",
+        "failed": "最近一次 AI 失败：第 {id} 轮，{time}：{error}"
+      },
+      "lastRunNone": "worker 还没有为任何一轮执行过 AI。",
+      "lastRunProcessing": "第一次 AI 正在处理中，完成后这里会显示结果。",
+      "profileSkipped": "第 {id} 轮（{time}）：画像不完整，打分已暂停。",
+      "profileSkippedLink": "去补全画像",
+      "queueShortEmpty": "排队 0",
+      "queueShort": "排队 {count}",
+      "error": {
+        "ai_failed": "这一轮没有可用的 AI provider，岗位暂时没有打分。看下面的 AI provider 表格。",
+        "cycle_not_found": "找不到这一轮的记录",
+        "aborted": "被中断了",
+        "unknown": "原因不明"
+      }
+    },
+    "cycle": {
+      "title": "最近一轮",
+      "none": "还没有处理轮记录。",
+      "line": "第 {id} 轮 · {kind} · {state} · {time}",
+      "stepFailed": "没有完成。",
+      "stepPartial": "只完成了一部分。",
+      "technical": "技术细节",
+      "nextCycle": "下一轮会再试一次。连续失败说明问题还在，要先解决。",
+      "settingsLink": "检查设置"
+    },
+    "budget": {
+      "title": "付费用量",
+      "global": "所有付费通道合计",
+      "usd": "{used} / {limit}",
+      "records": "{used} / {limit} 条",
+      "of": "{label}：{value}",
+      "freeAllowance": "免费额度",
+      "paid": "付费",
+      "noBudget": "没有付费额度，只用免费来源",
+      "overCap": "已超出上限",
+      "activity": "本月 {requests} 次请求 · {records} 条记录（新增 {fresh}）",
+      "noActivity": "本月还没有请求"
+    },
+    "card": {
+      "enabled": "已启用",
+      "disabled": "已关闭",
+      "notImplemented": "尚未实现",
+      "notImplementedHint": "这个通道还没有代码，runner 不会运行它。",
+      "notConfigured": "未配置",
+      "notConfiguredHint": "在 .env 里设置这个通道的搜索 API key（tavily 用 TAVILY_API_KEY，brave 用 BRAVE_SEARCH_API_KEY）；设置之前这个通道什么也不做。",
+      "notConfiguredHintGmail": "在 .env 里设置 GMAIL_USER 和 GMAIL_APP_PASSWORD；设置之前这个通道不读邮件。",
+      "notConfiguredHintShort": "未配置：这个通道暂时什么也不做。",
+      "missingEnvOff": "已关闭。要启用它，先把 {names} 写进 .env，再在设置里打开。",
+      "notConfiguredHintOff": "已关闭，也还没配置。要启用它，先填好密钥，再在设置里打开。",
+      "missingEnv": "已启用但缺 {names}：这个通道暂时什么也不做。把它写进 .env，或在设置里关掉这个通道。",
+      "notConfiguredHintJsearch": "在 .env 里设置 JSEARCH_API_KEY（RapidAPI 的 key）；设置之前这个通道不发任何请求。",
+      "circuit": {
+        "closed": "熔断：正常",
+        "open": "熔断中",
+        "half_open": "熔断：试探中"
+      },
+      "circuitUntil": "{when} 后允许试探一次",
+      "failures": "连续失败 {count} 次",
+      "lastSuccess": "最近成功：{when}",
+      "neverSucceeded": "还没有成功过",
+      "usage": "本月用量",
+      "runs": "最近 {count} 次运行",
+      "noRuns": "还没有运行记录。",
+      "col": {
+        "time": "时间",
+        "status": "结果",
+        "fetched": "条数",
+        "new": "新增",
+        "reason": "原因"
+      },
+      "okReason": "—",
+      "runCost": "费用 {cost}",
+      "notConfiguredHintApify": "在 .env 里设置 APIFY_TOKEN（并在 sources.yaml 填 linkedin.apify.actor_id）；在此之前级联会跳过这个通道。",
+      "login": {
+        "missing": "未登录",
+        "valid": "登录有效",
+        "expired": "登录已过期",
+        "hintMissing": "没有 LinkedIn 登录态：在宿主机运行 pnpm auth:linkedin 登录一次；在此之前级联会跳过这个通道。",
+        "hintValid": "登录文件在，最近一次读取没有被带到登录页或验证页。",
+        "hintExpired": "被带到了登录页或验证页（或登录 cookie 已到期），通道已停止并熔断。在宿主机运行 pnpm auth:linkedin 重新登录；验证页要你自己在浏览器里完成。"
+      },
+      "actions": {
+        "disabledHint": "通道已关闭（在 /settings 的采集通道里打开）。",
+        "testExcludedHint": "付费和登录态通道不提供测试（按条计费或有每日上限），请用“立即采集”。"
+      },
+      "thisCycle": "本轮抓取 · 新增 {fresh}",
+      "thisCycleNone": "本轮没有运行",
+      "trend": "最近几轮的抓取条数",
+      "details": "详情"
+    },
+    "cascade": {
+      "title": "LinkedIn 级联",
+      "hint": "主搜索每轮只用排在最前且可用的通道（已启用、预算未用完、未熔断）。",
+      "position": "#{n}",
+      "served": "最近一轮提供了 {count} 次查询",
+      "failed": "{count} 次失败",
+      "skipped": "{count} 次跳过",
+      "notUsed": "最近一轮没有使用",
+      "none": "最近一轮没有 LinkedIn 查询。",
+      "usedBadge": "最近一轮使用",
+      "mark": {
+        "on": "● 使用中",
+        "ko": "✕ 熔断",
+        "standby": "○ 待命"
+      },
+      "quota": {
+        "free": "免费额度",
+        "paid": "付费预算",
+        "none": "没有额度限制"
+      }
+    },
+    "ai": {
+      "title": "AI 用量",
+      "description": "本月各 provider 和任务的调用、token 与估算费用。",
+      "empty": "本月还没有 AI 调用。",
+      "apiBudget": "API 费用 / 月预算",
+      "subscription": "订阅，费用按 0 计",
+      "total": "合计",
+      "col": {
+        "provider": "provider",
+        "task": "任务",
+        "calls": "调用",
+        "tokens": "token 入 / 出",
+        "cost": "估算费用"
+      },
+      "task": {
+        "score": "打分",
+        "signals": "信号",
+        "translate": "翻译",
+        "summarize": "摘要",
+        "suggest": "建议",
+        "probe": "测试",
+        "breakdown": "拆解",
+        "traps": "AI 陷阱",
+        "salary_lookup": "查薪资"
+      },
+      "details": "详细统计 →"
+    },
+    "discovery": {
+      "title": "发现的 board",
+      "description": "搜索（Tavily 或 Brave）找到、但还不在 sources.yaml 的 ats_boards 里的公司招聘页。加入后从下一轮开始采集。",
+      "empty": "没有新的 board。设置了 TAVILY_API_KEY 后，大约每天搜索一次。",
+      "count": "共 {total} 个",
+      "countFiltered": "符合筛选的 {shown} 个，共 {total} 个",
+      "statusNotApplied": "状态筛选不作用于这里",
+      "noMatch": "没有符合筛选的 board。",
+      "more": "再显示 {count} 个（还有 {hidden} 个没显示）",
+      "unavailable": "无法读取列表：数据库或 sources.yaml 不可用。",
+      "seen": "出现 {count} 次，最近 {when}",
+      "add": "加入",
+      "dismiss": "忽略",
+      "open": "打开 board",
+      "region": "EU 域名",
+      "added": "已把 {name} 加入来源清单（sources.yaml）。",
+      "alreadyListed": "{name} 已经在来源清单里。",
+      "dismissed": "已忽略 {name}。",
+      "error": {
+        "invalid": "请求无效。",
+        "unknown_candidate": "这个 board 已不在列表里。",
+        "config_invalid": "sources.yaml 有错误，先修好再加入。",
+        "write_failed": "无法写入 sources.yaml。",
+        "database_unavailable": "数据库没有响应。"
+      }
+    },
+    "aiHealth": {
+      "title": "AI provider 健康度",
+      "description": "各 provider 今天的请求数（对比每日上限）、最近一次成功和失败。撞上会话 / 用量上限的 provider 会被跳过，直到下面显示的时间。",
+      "unlimited": "{count}（不限）",
+      "never": "从未",
+      "none": "无",
+      "col": {
+        "provider": "provider",
+        "state": "状态",
+        "today": "今日请求",
+        "lastSuccess": "最近成功",
+        "lastError": "最近失败",
+        "test": "测试"
+      },
+      "state": {
+        "unconfigured": "未配置",
+        "ready": "可用",
+        "off": "已关闭",
+        "capped": "已达每日上限",
+        "cooling": "冷却中，{until} 恢复",
+        "auth": "未登录或登录失效"
+      },
+      "cliDefault": "CLI 默认",
+      "modelDeprecated": "已停用",
+      "modelMissing": "不在目录"
+    },
+    "status": {
+      "ok": "正常",
+      "degraded": "不稳 · 最近有请求失败",
+      "failing": "最近一轮失败",
+      "open": "熔断中",
+      "half_open": "熔断后试探中",
+      "missing_credentials": "缺凭据",
+      "off": "已关闭",
+      "not_registered": "尚未接入",
+      "idle": "还没有运行记录",
+      "running": "运行中"
+    },
+    "pending": {
+      "title": "尚未实现的通道（{count}）"
+    },
+    "subnav": {
+      "label": "来源子页面",
+      "overview": "概览",
+      "registry": "来源清单",
+      "aiUsage": "AI 用量"
+    }
+  },
+  "insights": {
+    "unavailable": "读取不到统计数据，数据库是否已启动？",
+    "range": {
+      "label": "时间范围",
+      "days": "{count} 天"
+    },
+    "window": "{from} 至 {to}",
+    "empty": {
+      "title": "最近 {days} 天没有岗位",
+      "hint": "采集一轮之后，岗位会出现在这里。可以换更长的时间范围。",
+      "chart": "这个范围内没有可显示的数据。"
+    },
+    "kpi": {
+      "label": "关键数字",
+      "new": "新增岗位",
+      "newChange": "比前 {days} 天 {change}",
+      "newChangeNone": "前 {days} 天没有岗位",
+      "passed": "通过过滤",
+      "passedHint": "占新增岗位的 {rate}",
+      "salary": "披露薪资",
+      "salaryHint": "占通过过滤的岗位",
+      "rank": "平均排序值",
+      "rankHint": "已打分且通过过滤的岗位",
+      "applied": "已申请",
+      "appliedHint": "这段时间里转为已申请的",
+      "none": "暂无",
+      "passedCount": "{fraction} 个新增岗位通过过滤",
+      "trendNone": "数据不足 {count} 天",
+      "passedBar": "新增岗位里通过过滤的比例",
+      "rankBar": "平均排序值（满分 100），红线是推送线 {line}",
+      "appliedBar": "已申请占通过过滤岗位的比例"
+    },
+    "daily": {
+      "title": "每日新增岗位",
+      "description": "按岗位第一次被看到的日期统计。点一天可以在岗位页打开那天的岗位。",
+      "perDay": "平均每天 {count} 个",
+      "passed": "通过过滤",
+      "filtered": "被过滤",
+      "column": "{day}：通过 {passed}，被过滤 {filtered}",
+      "chart": "堆叠柱状图：每天新增岗位，分通过过滤和被过滤"
+    },
+    "sources": {
+      "title": "来源分布",
+      "description": "按送来岗位的来源类别统计，并显示其中通过过滤的比例。一个岗位出现在多个来源时，每个来源各算一次。",
+      "passRate": "{rate} 通过",
+      "row": "{source}：{total} 个岗位，{passed} 个通过过滤",
+      "empty": "这个范围内没有来源数据。",
+      "legendPassed": "通过过滤（实心）",
+      "legendRest": "其余（斜线）"
+    },
+    "cities": {
+      "title": "城市分布",
+      "description": "通过过滤的岗位按地点统计。岗位有多个地点时，在每个列出的城市里各算一次；远程按办公方式统计。",
+      "remote": "远程",
+      "other": "其他",
+      "row": "{place}：通过过滤的岗位 {fraction}",
+      "empty": "这个范围内没有通过过滤的岗位。",
+      "aux": "通过过滤的岗位"
+    },
+    "salary": {
+      "title": "薪资分布",
+      "description": "通过过滤的岗位里有多少写了薪资，以及写明的年薪（市场的基准货币；区间取中点，只写一端的取那一端；不含其他地区和待复核的薪资）怎么分布。",
+      "detail": "{fraction} 个岗位",
+      "comparable": "{count} 个有可比较的年薪",
+      "median": "中位 · 近 {days} 天 {count} 个：{amount}",
+      "bucketRange": "{from}–{to}k",
+      "bucketOpen": "{from}k 以上",
+      "bucket": "年薪 {label}（基准货币）：{count, plural, other {# 个岗位}}",
+      "chart": "柱状图：按年薪区间统计的岗位数",
+      "noRanges": "这个范围内没有岗位写明可比较的年薪区间。",
+      "empty": "这个范围内没有通过过滤的岗位。",
+      "disclosureTitle": "薪资披露",
+      "disclosureAria": "写明薪资的岗位占通过过滤岗位的比例",
+      "detailShort": "{disclosed}/{total}",
+      "open": "打开这些岗位",
+      "unit": "千 / 年",
+      "floorMark": "底线 {value}",
+      "medianMark": "中位 {value}",
+      "legendBars": "写明薪资的岗位数",
+      "legendBelow": "整段低于底线",
+      "medianFew": "中位 · 近 {days} 天 {count} 个：不足 {min} 个，不显示",
+      "medianLegend": "中位 · 近 {days} 天 {count} 个 · {value}"
+    },
+    "signals": {
+      "title": "信号",
+      "description": "通过过滤的岗位按信号类别统计（一个岗位可以有多个类别），并显示这些岗位的平均排序值。",
+      "jobs": "{count, plural, other {# 个岗位}}",
+      "avgRank": "平均排序值 {value}",
+      "none": "没有信号",
+      "highPay": "高价值信号（{names}）",
+      "mean": "通过过滤的全部岗位平均排序值：{value}",
+      "row": "{tier}：{fraction} 个岗位",
+      "empty": "这个范围内没有通过过滤的岗位。"
+    },
+    "scores": {
+      "title": "排序值分布",
+      "description": "通过过滤并且已经打过分的岗位，按排序值统计。",
+      "mean": "平均 {value}",
+      "pending": "{count} 个等待 AI 打分",
+      "bucket": "排序值 {label}：{count, plural, other {# 个岗位}}",
+      "range": "{from}–{to}",
+      "open": "{from} 以上",
+      "chart": "柱状图：按排序值统计的岗位数",
+      "empty": "这个范围内没有已打分的岗位。",
+      "pushLine": "推送线 {line}",
+      "legendPush": "≥ 推送线 {line}",
+      "legendBelow": "低于推送线"
+    },
+    "funnel": {
+      "title": "申请漏斗",
+      "description": "这段时间里出现并通过过滤的岗位，以及这段时间里进入各阶段的申请。",
+      "new": "新岗位",
+      "conversion": "占上一阶段的 {rate}",
+      "row": "{stage}：{count}",
+      "exitsLabel": "这段时间里退出漏斗的",
+      "rejected": "被拒",
+      "withdrawn": "已撤回",
+      "archived": "已忽略",
+      "open": "打开申请看板",
+      "empty": "这个范围内没有申请动作。"
+    },
+    "filters": {
+      "title": "被过滤的原因",
+      "description": "硬过滤在这段时间里淘汰了 {total} 个岗位，这是它给出的原因（一个岗位可以有多个）。可以据此调整偏好。",
+      "row": "{reason}：{count, plural, other {# 个岗位}}",
+      "open": "打开被过滤的岗位",
+      "empty": "这个范围内没有岗位被过滤。",
+      "code": {
+        "location_not_allowed": "地点不在目标范围内",
+        "remote_not_wanted": "不看远程岗位",
+        "remote_out_of_scope": "远程，但不在远程范围内",
+        "workplace_not_wanted": "工作方式不在偏好内",
+        "student_role": "学生 / 实习岗位",
+        "contract_excluded": "合同类型被排除",
+        "contract_not_allowed": "合同类型不在允许范围内",
+        "salary_below_floor": "薪资上限低于底线",
+        "blacklist_company": "公司在黑名单中",
+        "blacklist_keyword": "命中黑名单关键词",
+        "seniority_mismatch": "级别不符",
+        "override_exclude": "你选择了排除这条"
+      }
+    },
+    "conversion": {
+      "title": "一轮的转化",
+      "description": "这段时间里：抓取到的新岗位 → 通过过滤 → 排序值不低于推送线 {line} → 申请。每级下面写着占上一级的比例。",
+      "fetched": "抓取",
+      "passed": "通过过滤",
+      "pushable": "≥ {line} 分",
+      "applied": "已申请",
+      "empty": "这个范围内没有岗位。"
+    },
+    "passRate": {
+      "title": "通过率",
+      "caption": "通过过滤",
+      "detail": "{fraction} 个新增岗位",
+      "aria": "通过过滤的岗位占新增岗位的比例",
+      "empty": "这个范围内没有岗位。"
+    }
+  },
+  "resume": {
+    "title": "定制简历",
+    "chip": "简历：{name}",
+    "export": "定制简历",
+    "exporting": "导出中…",
+    "exportHint": "把 JD 导出成 md，状态改为“准备中”，然后给出在 resume-kit 里运行 /tailor 的命令。",
+    "exported": "JD 已导出",
+    "jdPath": "JD 文件",
+    "statusSet": "申请状态已改为「{status}」。",
+    "statusAlready": "申请状态已经是「{status}」。",
+    "statusKept": "申请状态保持「{status}」，不会倒退。",
+    "commandLabel": "在终端里运行：",
+    "copy": "复制命令",
+    "copied": "已复制",
+    "copyFailed": "复制失败，请手动选中命令",
+    "noKit": "还没有配置 resume-kit 目录：在 resume.yaml 里设置 resume_kit_path 后，这里会给出可以直接粘贴的命令。",
+    "attachTitle": "挂上简历",
+    "attachLabel": "PDF 文件名或路径（只接受 pdf_dir 里的文件）",
+    "attachPlaceholder": "Acme_AI-Engineer.pdf",
+    "attach": "挂上简历",
+    "attaching": "保存中…",
+    "attached": "已挂上 {name}",
+    "detach": "取消挂载",
+    "detached": "已取消挂载（PDF 文件没有动）",
+    "noPdfDir": "还没有配置 PDF 目录：在 resume.yaml 里设置 pdf_dir 后才能挂上简历。",
+    "error": {
+      "invalid": "路径无效",
+      "not_found": "找不到这个文件",
+      "not_pdf": "只能挂 .pdf 文件",
+      "outside": "只能挂 pdf_dir 目录里的文件",
+      "not_configured": "还没有配置 pdf_dir",
+      "config": "resume.yaml 有误，请先修正",
+      "write_failed": "写入导出目录失败，请检查 jd_export_dir",
+      "failed": "操作失败，请重试"
+    },
+    "untrustedHint": "岗位文本来自第三方。命令里已关闭联网工具，文件里也把这段文本标成了数据；Claude 请求执行什么，仍请看清再允许。"
+  },
+  "interestSuggestions": {
+    "title": "学习建议",
+    "description": "每周一次，AI 会看你标过感兴趣、申请过和忽略过的岗位，提出新的信号词、值得关注的公司和筛选条件。你批准之前不会有任何改动。为此，你标记过的岗位（含状态）和你的偏好会发送给你的 AI 提供方。",
+    "empty": "暂时没有待审批的建议。标记了足够多感兴趣的岗位后，每周的运行会生成新的建议。",
+    "loadError": "建议加载失败（数据库不可用）。",
+    "unreadable": "这条建议无法读取，可以直接拒绝。",
+    "kind": {
+      "signal_word": "信号词（{name}）",
+      "watched_company": "关注公司",
+      "filter": {
+        "exclude_keyword": "排除关键词",
+        "add_location": "增加城市",
+        "exclude_company": "排除公司"
+      }
+    },
+    "confidence": "把握 {percent}%",
+    "evidence": "{count} 个岗位的证据",
+    "approve": "批准",
+    "reject": "拒绝",
+    "toast": {
+      "approved": "已批准",
+      "rejected": "已拒绝"
+    },
+    "approvedAdded": "已加入你的清单。",
+    "approvedPresent": "清单里已经有了，没有改动。",
+    "recompute": {
+      "done": "排序值已重算：检查了 {checked} 条分数，更新 {updated} 条。",
+      "rescan": "下一轮会按新词重新扫描岗位描述。",
+      "rescore": "偏好已更改：相关分数标记为过期，会重新打分。"
+    },
+    "run": {
+      "button": "现在就找建议",
+      "requesting": "请求中…",
+      "queued": "已请求，跑 AI 的进程几秒内会接手。",
+      "existing": "已有一个请求在排队或运行。",
+      "hint": "每周自动跑一次（schedule.yaml 的 suggest）。"
+    },
+    "lastRun": {
+      "never": "还没有运行过。",
+      "line": "上次运行 {time}：{detail}",
+      "pending": "等待开始",
+      "running": "运行中",
+      "failed": "失败（见 /settings）",
+      "skippedFewJobs": "感兴趣的岗位太少，没有可学的",
+      "done": "新增 {count} 条建议"
+    },
+    "history": {
+      "title": "最近处理过的（{count}）",
+      "approved": "已批准",
+      "rejected": "已拒绝"
+    },
+    "errors": {
+      "invalidPayload": "请求格式不对，请刷新页面。",
+      "notFound": "这条建议已不存在。",
+      "alreadyDecided": "这条建议已经处理过，请刷新页面。",
+      "unreadableSuggestion": "这条建议无法读取，请直接拒绝。",
+      "unreadable": "配置文件无法读取或不合法，没有改动。请到 /settings 或直接改 YAML。",
+      "writeFailed": "配置文件写入失败，没有改动，建议仍在待审批。",
+      "databaseUnavailable": "数据库不可用。",
+      "categoryMissing": "这条建议要加入的信号类别已经删除，没有改动。可以先恢复这个类别，或者直接拒绝。"
+    }
+  },
+  "aiRun": {
+    "pending": "AI 排队中",
+    "running": "AI 处理中",
+    "cycle": "第 {id} 轮",
+    "progress": "已打分 {scored} 条 · 已翻译 {translated} 条",
+    "elapsed": "已用 {time}",
+    "waiting": "已等待 {time}",
+    "pendingHint": "等本机的 ai-worker 取走；它不在线时会一直排队。",
+    "viewWorker": "查看 ai-worker"
+  },
+  "trigger": {
+    "button": {
+      "runChannel": "立即采集",
+      "testChannel": "测试",
+      "testAi": "测试",
+      "testTelegram": "发送 Telegram 测试消息"
+    },
+    "confirm": {
+      "testTelegram": "确定发一条测试消息到 Telegram？",
+      "generic": "确定？",
+      "yes": "发送",
+      "no": "取消"
+    },
+    "refused": {
+      "invalidPayload": "请求格式不对，请刷新页面。",
+      "unknownChannel": "不认识这个通道。",
+      "nothingStale": "没有需要重打的分数。",
+      "nothingToScore": "没有需要打分的岗位。",
+      "databaseUnavailable": "数据库不可用，请求没有创建。",
+      "tooSoon": "刚刚请求过，{seconds} 秒后可以再试。"
+    },
+    "existing": "同样的请求已经在排队或执行，正在等它的结果。",
+    "pending": {
+      "runner": "已排队，等待 runner 取走…",
+      "aiWorker": "已排队，等待宿主机上的 ai-worker 取走…"
+    },
+    "stillWaiting": {
+      "runner": "等了 10 分钟还没有结果：runner 可能没在运行（见 /settings 顶部的 runner 状态）。",
+      "aiWorker": "等了 10 分钟还没有结果：ai-worker 可能离线（见 /sources 的 ai-worker 卡片）。"
+    },
+    "running": "进行中…",
+    "runningCycle": "第 {id} 轮：{finished} / {total} 个查询已结束，抓取 {fetched} 条",
+    "failed": {
+      "another_cycle_running": "有一轮正在运行，这次没有执行；等它结束后再试",
+      "cycle_failed": "这一轮失败了，见下面的运行记录",
+      "unknown_channel": "runner 里没有这个通道",
+      "channel_excluded": "这个通道不提供测试",
+      "channel_disabled": "通道已关闭",
+      "not_configured": "通道还没配置好（缺密钥或设置）",
+      "budget_exceeded": "本月预算已用完",
+      "channel_test_failed": "测试失败",
+      "ai_unavailable": "这个 provider 现在不能用（已关闭、冷却中、超出上限或缺密钥）",
+      "ai_test_failed": "调用失败",
+      "telegram_not_configured": "没有设置 TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID：把两个值写进 .env，重启 runner 后再测试",
+      "telegram_failed": "发送失败",
+      "no_handler": "没有进程能处理这个请求（重新部署后 runner / ai-worker 要重启）",
+      "handler_error": "执行出错，详情见日志",
+      "invalid_payload": "请求格式不对",
+      "unknown": "失败"
+    },
+    "done": {
+      "testChannel": "抓到 {fetched} 条，解析成功 {parsed} 条（{seconds} 秒，没有保存）",
+      "testAi": "可用：{model}，{seconds} 秒，token {tokensIn} / {tokensOut}",
+      "testTelegram": "已发送（消息 #{id}）",
+      "runChannel": "第 {id} 轮：{state}，抓取 {fetched} 条，新增 {fresh} 条",
+      "runChannelNoCycle": "已完成"
+    }
+  },
+  "viz": {
+    "undisclosed": "未披露",
+    "pending": "等待打分",
+    "score": {
+      "label": "排序值",
+      "pending": "等待打分",
+      "valueText": "{value}/100",
+      "pushLine": "推送线 {line}",
+      "tip": "排序值 {value} · 三角是推送线 {line}",
+      "tipPending": "排序值 等待打分 · 三角是推送线 {line}",
+      "breakdown": "{match} + {bonus}",
+      "aria": "排序值 {value}/100，{band}",
+      "ariaPending": "排序值 等待打分",
+      "valueTextSplit": "{value}/100，{band}（匹配 {match} + 加分 {bonus}）"
+    },
+    "band": {
+      "top": "顶部匹配",
+      "good": "值得看",
+      "mid": "一般",
+      "low": "偏弱",
+      "pending": "等待打分"
+    },
+    "composition": {
+      "pending": "AI 还没打分",
+      "match": "匹配 {value}",
+      "bonus": "+{value}",
+      "matchTip": "AI 匹配分 {value}",
+      "bonusTip": "信号加分 {value}（封顶 {cap}）",
+      "pushLine": "推送线 {value}",
+      "aria": "排序值构成：AI 匹配分 {match}，信号加分 {bonus}",
+      "ariaPending": "排序值构成：AI 还没打分"
+    },
+    "salary": {
+      "floor": "底线 {value}k",
+      "median": "中位 {value}k",
+      "floorTip": "你的薪资底线",
+      "medianTip": "写明薪资岗位的年薪中位数",
+      "none": "未披露 · 按规则保留",
+      "noneTip": "未披露 · 按规则保留：没写薪资不会让岗位被过滤",
+      "noneShort": "没写薪资",
+      "belowFloor": "低于底线 · 不加分",
+      "otherRegion": "{range} · 可能是其他地区的薪资",
+      "percentile": "高于 {value}% 已披露岗位",
+      "aria": "年薪 {range}",
+      "ariaNone": "年薪未披露",
+      "ariaFloor": "，底线 {value}k",
+      "ariaMedian": "，中位数 {value}k",
+      "ariaClipStart": "，下限低于坐标轴（{value}k 以下的部分没画）",
+      "ariaClipEnd": "，上限超出坐标轴（{value}k 以上的部分没画）",
+      "rangeTip": "{range}",
+      "approxTip": "{range}（{approx}）",
+      "miniTip": "红线是你的底线 {floor}"
+    },
+    "percentile": {
+      "above": "高于 {value}% 已披露岗位",
+      "aria": "高于 {value}% 的已披露岗位",
+      "none": "未披露"
+    },
+    "percent": {
+      "label": "占比"
+    },
+    "fraction": {
+      "aria": "{part} / {whole}，{percent}"
+    },
+    "level": {
+      "you": "你",
+      "required": "要求",
+      "gap": "差 {n} 级",
+      "tip": "你 {mine}",
+      "tipRequired": "你 {mine} · 要求 {required}",
+      "tipRequiredOnly": "要求 {required}",
+      "notSet": "未填写",
+      "aria": "语言等级：你 {mine}",
+      "ariaRequired": "语言等级：你 {mine}，要求 {required}",
+      "ariaGap": "，差 {n} 级",
+      "ariaNone": "语言等级：未填写"
+    },
+    "skills": {
+      "tip": "和画像技能重合 {hit}/{total}：{names}",
+      "tipNone": "和画像技能重合 {hit}/{total}",
+      "none": "未披露技能",
+      "aria": "技能重合 {hit}/{total}"
+    },
+    "fresh": {
+      "label": "新鲜度",
+      "tip": "首次发现 {time}（{hours} 小时后归零）",
+      "aria": "首次发现 {time}",
+      "stale": "已超过 {hours} 小时",
+      "unknown": "未知"
+    },
+    "funnel": {
+      "conversion": "↓ {value}",
+      "tip": "{label}：{value}",
+      "aria": "漏斗：{steps}"
+    },
+    "uptime": {
+      "ok": "正常",
+      "warn": "降级",
+      "fail": "失败",
+      "none": "无数据",
+      "tip": "倒数第 {n} 轮：{state}",
+      "summary": "{ok}/{total} 正常",
+      "aria": "最近 {total} 轮：{ok} 轮正常，{warn} 轮降级，{fail} 轮失败",
+      "noRecords": "无记录"
+    },
+    "battery": {
+      "tip": "{value} · 红线 {threshold} 时提醒",
+      "over": "已过提醒线",
+      "aria": "{value}，提醒线 {threshold}"
+    },
+    "delta": {
+      "up": "上升 {value}",
+      "down": "下降 {value}",
+      "flat": "持平",
+      "unknown": "变化未知"
+    },
+    "pair": {
+      "tip": "上一轮 {prev} → 本轮 {now}",
+      "prev": "上一轮",
+      "now": "本轮",
+      "aria": "上一轮 {prev}，本轮 {now}"
+    },
+    "spark": {
+      "aria": "最近 {count} 轮：{first} → {last}",
+      "point": "第 {i} 轮：{value}",
+      "unknown": "—",
+      "empty": "没有数据",
+      "current": "本轮 {value}",
+      "single": "{count} 轮"
+    },
+    "ticker": {
+      "live": "LIVE",
+      "aria": "本轮新岗位",
+      "empty": "暂无新动态"
+    },
+    "led": {
+      "good": "正常",
+      "warn": "降级",
+      "bad": "失败",
+      "idle": "待命"
+    },
+    "termlog": {
+      "aria": "运行日志"
+    },
+    "stacked": {
+      "empty": "没有数据",
+      "tip": "{label} {count}（{percent}）",
+      "aria": "构成：{parts}"
+    },
+    "replay": "重播"
+  },
+  "favorites": {
+    "toggle": {
+      "add": "收藏",
+      "remove": "已收藏",
+      "addLabel": "收藏：{title}",
+      "removeLabel": "取消收藏：{title}",
+      "title": "收藏 (f)"
+    },
+    "mark": "已收藏",
+    "starredAt": "收藏于 {time}",
+    "toast": {
+      "added": "已收藏：{title}",
+      "removed": "已取消收藏：{title}",
+      "undo": "撤销",
+      "error": {
+        "invalid": "输入无效",
+        "not_found": "岗位不存在",
+        "not_favorite": "这个岗位已不在收藏里",
+        "failed": "保存失败，请重试"
+      }
+    },
+    "note": {
+      "add": "添加备注",
+      "edit": "编辑备注：{title}",
+      "label": "收藏备注：{title}",
+      "placeholder": "一句话备注",
+      "saved": "备注已保存",
+      "tooLong": "备注最多 {max} 个字"
+    },
+    "page": {
+      "count": "共 {count} 个收藏",
+      "closed": " · 已关闭 {closed}/{count}",
+      "sortLabel": "排序",
+      "sort": {
+        "starred": "收藏时间",
+        "rank": "排序值"
+      },
+      "empty": "还没有收藏。在今日、岗位列表或详情页点 ☆（或按 f）把喜欢的岗位放进来。",
+      "emptyLink": "去岗位列表",
+      "filterLink": "在岗位列表里筛选收藏",
+      "listLabel": "收藏的岗位"
+    },
+    "filter": {
+      "off": "仅收藏",
+      "on": "仅收藏",
+      "remove": "显示全部岗位"
+    },
+    "saveViewHint": "「仅收藏」不会存进视图。"
+  },
+  "aiUsage": {
+    "unavailable": "读不了 AI 用量数据（数据库连不上？）",
+    "range": {
+      "label": "时间范围",
+      "today": "今天",
+      "d7": "7 天",
+      "d30": "30 天",
+      "month": "本月",
+      "custom": "自定义",
+      "from": "起",
+      "to": "止",
+      "apply": "应用",
+      "window": "{from} – {to} · {zone}",
+      "invalid": "日期范围无效，已显示默认范围"
+    },
+    "filter": {
+      "label": "当前筛选",
+      "provider": "服务商：{value}",
+      "model": "模型：{value}",
+      "task": "任务：{value}",
+      "remove": "移除筛选 {name}",
+      "clear": "清除全部"
+    },
+    "kpi": {
+      "label": "汇总",
+      "equivalent": "折合 API 费用",
+      "equivalentHint": "按 API 价目表",
+      "actual": "实际开支",
+      "actualHint": "订阅调用按 0 计；只有 API 调用花钱",
+      "actualShare": "占折合 {percent}",
+      "actualBar": "实际开支占折合费用的比例",
+      "savings": "节省",
+      "savingsHint": "订阅省下的钱",
+      "calls": "调用",
+      "callsHint": "每次请求模型算一次（含重试和失败）",
+      "callsSplit": "成功 {ok} · 不合格 {invalid} · 失败 {failed} · 旧记录 {legacy}",
+      "tokens": "Token",
+      "tokensSplit": "输入 {in}（缓存 {cached}）· 输出 {out}（推理 {reasoning}）",
+      "tokensHint": "输入 + 输出，只算有数的调用",
+      "unknownTokens": "{count, plural, other {# 次}}调用没有 token 数（CLI 没报告），未计入",
+      "missingEquivalent": "模型没有折合单价（{count, plural, other {# 次}}），未计入",
+      "unknownModelCalls": "模型未知（{count, plural, other {# 次}}），未计入",
+      "partSome": "{sum}，另 {count} 次未知",
+      "partAllUnknown": "未知",
+      "savingsNone": "没有可比较的调用"
+    },
+    "outcome": {
+      "ok": "成功",
+      "invalid_output": "输出不合格，已重试",
+      "failed": "失败",
+      "legacy": "—",
+      "okShort": "成功",
+      "invalidShort": "不合格",
+      "failedShort": "失败",
+      "legacyShort": "旧记录"
+    },
+    "errorKind": {
+      "not_configured": "未配置",
+      "auth": "登录失效",
+      "rate_limited": "被限流",
+      "timeout": "超时",
+      "network": "网络错误",
+      "provider_error": "服务商报错",
+      "invalid_output": "输出不合格",
+      "budget": "超出预算"
+    },
+    "daily": {
+      "title": "按天",
+      "description": "每天按服务商堆叠；悬停看数字。",
+      "chart": "每天的 AI 用量",
+      "metric": {
+        "label": "指标",
+        "tokens": "Token",
+        "equivalent": "折合费用",
+        "calls": "调用"
+      },
+      "column": "{day}：{parts}",
+      "none": "没有调用",
+      "unknownNote": "没有 token 数的调用不计入 token 和费用柱"
+    },
+    "breakdown": {
+      "byModel": "按模型",
+      "byProvider": "按服务商",
+      "byTask": "按任务",
+      "col": {
+        "name": "名称",
+        "calls": "调用",
+        "input": "输入 / 缓存",
+        "output": "输出 / 推理",
+        "duration": "平均耗时",
+        "equivalent": "折合费用",
+        "actual": "实际开支"
+      },
+      "failedSuffix": "· {count} 失败",
+      "unknownModel": "未知模型",
+      "cliDefault": "CLI 默认",
+      "assumed": "推定",
+      "filterBy": "只看 {name}"
+    },
+    "log": {
+      "title": "调用明细",
+      "col": {
+        "at": "时间",
+        "task": "任务",
+        "model": "服务商 · 模型",
+        "input": "输入 / 缓存",
+        "output": "输出 / 推理",
+        "duration": "耗时",
+        "outcome": "结果",
+        "equivalent": "折合",
+        "actual": "实际",
+        "job": "岗位"
+      },
+      "range": "第 {from}–{to} 条，共 {total} 条",
+      "prev": "上一页",
+      "next": "下一页",
+      "pages": "分页",
+      "export": "导出 CSV",
+      "exportCap": "最多导出最近 {count} 条",
+      "noJob": "—",
+      "legacyRow": "旧记录"
+    },
+    "unknown": "未知",
+    "partUnknown": "{count} 次未知",
+    "empty": "这段时间没有 AI 调用",
+    "notes": {
+      "prices": "折合单价来自 models.yaml 的 equivalent_price；改价格不影响已记录的调用。金额单位：美元。",
+      "legacy": "{count} 条旧记录（旧版本留下的）没有模型、耗时和结果。",
+      "missing": "在 models.yaml 给 {models} 补 equivalent_price；新的调用会按它折价。"
+    }
+  },
+  "jdBreakdown": {
+    "title": "岗位拆解",
+    "aside": "{n} 项 · 点标签跳到原文",
+    "disabled": "岗位拆解未开启。打开后可以把 JD 拆成工作内容、技术栈、经验和项目要求。默认关闭以节省 token。",
+    "settingsLink": "去设置打开",
+    "configError": "breakdown.yaml 无法读取，拆解暂不可用。运行 pnpm config:check 查看原因。",
+    "noDescription": "这个岗位没有 JD 正文，无法拆解。",
+    "readyHint": "用 AI 把这个 JD 拆成工作内容、技术栈、经验、项目等，每项附原文。会调用一次 AI。",
+    "button": "拆解这个岗位",
+    "requesting": "排队中…",
+    "running": "拆解中…",
+    "waitingHint": "AI 在宿主机上运行，通常 1–3 分钟。",
+    "rerun": "重新拆解",
+    "retry": "重试",
+    "readOnly": "拆解已关闭，结果只读",
+    "done": "拆解完成",
+    "empty": "AI 没在 JD 里找到可以拆解的内容。",
+    "outdated": "这份拆解是旧版本的格式，无法显示。",
+    "sourcesLink": "去来源页看看",
+    "stale": {
+      "jd": "JD 在拆解后改过",
+      "prompt": "用旧版提示词拆解",
+      "lang": "AI 语言已改，可重新拆解"
+    },
+    "meta": {
+      "dropped": "丢弃 {n} 项（引用对不上原文）",
+      "cliDefault": "CLI 默认"
+    },
+    "sections": {
+      "responsibilities": "工作内容",
+      "techStack": "技术栈",
+      "experience": "经验要求",
+      "projects": "项目 / 成果",
+      "softSkills": "软技能",
+      "languages": "语言",
+      "other": "其他"
+    },
+    "categories": {
+      "languages": "编程语言",
+      "frameworks": "框架与库",
+      "ml_ai": "机器学习 / AI",
+      "data": "数据与存储",
+      "cloud_infra": "云与基础设施",
+      "tools": "工具与平台",
+      "other": "其他"
+    },
+    "requirement": {
+      "must": "必须",
+      "nice": "加分"
+    },
+    "nice": "加分",
+    "level": {
+      "unspecified": "未写等级",
+      "native": "母语"
+    },
+    "yearsMin": "至少 {n} 年",
+    "match": {
+      "title": "对照你的画像",
+      "counts": "必须 {mh}/{mt} · 加分 {nh}/{nt}",
+      "missing": "待补强",
+      "niceSuffix": "加分",
+      "allHave": "技术栈都已具备 ✓",
+      "years": "经验：要求 ≥ {required} 年 · 你 {mine} 年",
+      "yearsUnknown": "经验：要求 ≥ {required} 年 · 画像没写年限",
+      "noProfile": "在我的画像里填技能后，这里会对照哪些已具备、哪些待补强",
+      "profileLink": "我的画像"
+    },
+    "jumpTo": "跳到原文：{quote}",
+    "quoteButton": "原文",
+    "footnote": "AI 拆解，仅供参考。每一项都附 JD 原文，点“原文”核对；JD 没写的不会推测。",
+    "error": {
+      "invalid": "请求无效",
+      "disabled": "岗位拆解已关闭。",
+      "config_error": "breakdown.yaml 无法读取。",
+      "not_found": "找不到这个岗位",
+      "no_description": "这个岗位没有 JD 正文，无法拆解。",
+      "no_verified_quotes": "AI 给出的引用都对不上 JD 原文，结果没有保存。请重试。",
+      "aborted": "拆解时 AI worker 被停止了，请重试。",
+      "auth": "AI provider 的登录已过期或被拒绝。请在这台 Mac 上重新登录（claude → /login，codex login），然后重试。",
+      "timeout": "某个 AI provider 没有在限定时间内回答，请重试。",
+      "rate_limited": "AI provider 现在被限流，请稍后再试。",
+      "invalid_output": "AI 返回的内容不符合拆解格式，请重试。",
+      "provider_error": "AI provider 报告了错误。请重试；如果一直失败，看 AI worker 的日志。",
+      "network": "连不上 AI provider，请重试。",
+      "budget": "本月 AI API 预算已用完。",
+      "unavailable": "现在没有可用的 AI provider。请检查 CLI 登录或 API key 后重试。",
+      "failed": "拆解失败，请重试。",
+      "invalid_payload": "请求内容不合法。",
+      "handler_error": "处理请求时出错，请重试。",
+      "no_handler": "没有进程处理拆解请求（ai-worker 没有运行？）。",
+      "waitTimeout": "ai-worker 一直没有响应，去来源页看看它是否在线。"
+    }
+  },
+  "sourcesRegistry": {
+    "header": {
+      "count": "{count} 个来源",
+      "mirrorSynced": "镜像已同步 {time}",
+      "mirrorNever": "镜像还没同步",
+      "mirrorStale": "镜像未同步",
+      "mirrorStaleHint": "数据库里的来源镜像和文件不一致；下一次页面加载或 runner 热加载配置时会补上。",
+      "fromMirror": "来自数据库镜像，可能过期"
+    },
+    "banner": {
+      "unavailable": "读不了来源清单：数据库或配置不可用。",
+      "invalid": "sources.yaml 读不了（下面是路径和原因）。表格来自数据库镜像，开关和编辑已禁用；可以先导出 YAML 手工修改，或用“导入”整份替换。",
+      "wholeFile": "（整个文件）"
+    },
+    "readOnly": {
+      "invalid": "sources.yaml 读不了，先修好它"
+    },
+    "summary": {
+      "label": "按状态统计"
+    },
+    "status": {
+      "ok": "正常",
+      "degraded": "不稳",
+      "failing": "异常",
+      "off": "停用",
+      "not_configured": "未配置",
+      "never_run": "从未运行",
+      "standby": "待命"
+    },
+    "filters": {
+      "label": "筛选来源",
+      "type": "来源类型",
+      "status": "状态",
+      "search": "搜索名称、id、token",
+      "clear": "清除筛选"
+    },
+    "type": {
+      "all": "全部",
+      "channel": "通道",
+      "ats_board": "ATS 公司"
+    },
+    "group": {
+      "linkedin": "LinkedIn",
+      "job_boards": "招聘网站",
+      "search_apis": "搜索 API",
+      "email": "邮件",
+      "ats": "公司 ATS",
+      "otherMarket": "其他市场",
+      "discovery": "发现"
+    },
+    "channels": {
+      "title": "通道"
+    },
+    "boards": {
+      "title": "ATS 公司",
+      "atsFilter": "按 ATS 筛选",
+      "allAts": "全部 ATS",
+      "add": "添加公司"
+    },
+    "cols": {
+      "status": "状态",
+      "source": "来源",
+      "company": "公司",
+      "enabled": "启用",
+      "lastRun": "最近运行",
+      "lastCheck": "最近检查",
+      "lastSuccess": "最近成功",
+      "window": "{days}天 抓/新",
+      "postings": "条数",
+      "reason": "原因"
+    },
+    "empty": "没有符合筛选的来源。",
+    "run": {
+      "succeeded": "成功",
+      "partial": "部分",
+      "failed": "失败",
+      "skipped": "跳过",
+      "running": "运行中"
+    },
+    "check": {
+      "ok": "有更新",
+      "not_modified": "未变",
+      "error": "失败"
+    },
+    "row": {
+      "otherMarket": "只服务其他市场（{markets}）：切换到那个市场后才能打开",
+      "showOtherMarkets": "显示其他市场的来源（{count}）",
+      "hideOtherMarkets": "收起其他市场的来源",
+      "boardsSummary": "{total} 家 · {failing} 异常/不稳 · {never} 从未检查",
+      "editParams": "编辑参数",
+      "details": "详情",
+      "eu": "EU",
+      "returnedKept": "返回 {total} · 保留 {kept}",
+      "seen": "近 {days} 天见到 {count} 条",
+      "openBoard": "打开 board",
+      "edit": "编辑",
+      "delete": "删除",
+      "editBoard": "编辑 {name}",
+      "deleteBoard": "删除 {name}",
+      "switchLabel": "启用 {name}",
+      "needsParent": "先启用 {channel}，这个开关才会生效"
+    },
+    "detail": {
+      "circuit": "熔断",
+      "circuitState": {
+        "closed": "关闭（正常）",
+        "open": "熔断中",
+        "half_open": "试探中"
+      },
+      "failures": "连续失败",
+      "lastError": "最近错误",
+      "openUntil": "熔断到",
+      "runs": "近 {days} 天运行",
+      "runsValue": "{runs} 次，{failed} 次失败",
+      "budget": "本月 {used} / {limit}",
+      "budgetLabel": "本月付费用量",
+      "noBudget": "这个通道不产生付费用量"
+    },
+    "reason": {
+      "offChannel": "已关闭",
+      "otherMarket": "其他市场（{markets}），这一市场不运行",
+      "offBoard": "已停用",
+      "parentOff": "{channel} 通道已关闭",
+      "noRuns": "还没有运行记录",
+      "notRegistered": "runner 里还没有登记这个通道",
+      "lastRunFailed": "最近一轮失败：{error}",
+      "consecutive": "连续 {count} 次",
+      "circuitUntil": "熔断到 {when}",
+      "halfOpen": "熔断后试探中",
+      "requestFailures": "最近有请求失败",
+      "skipped": "最近 {count, plural, other {# 轮}}被跳过：{error}",
+      "cascadeStandby": "级联备用：前面的通道可用时不会运行",
+      "missingEnv": "缺 {names}",
+      "loginMissing": "LinkedIn 未登录",
+      "loginExpired": "LinkedIn 登录已过期",
+      "missingApify": "缺 APIFY_TOKEN 或 actor_id",
+      "notConfigured": "还没配置",
+      "neverChecked": "还没检查过（下一轮会检查）",
+      "boardFailing": "连续 {count} 次失败：{error}",
+      "boardFailedOnce": "最近一次失败：{error}",
+      "boardStale": "已 {hours} 小时没检查（通道关闭、熔断或没跑）"
+    },
+    "errorCode": {
+      "rate_limited": "被限流",
+      "blocked": "被网站拦截",
+      "auth_expired": "登录过期",
+      "budget_exceeded": "超出预算",
+      "network": "网络错误",
+      "parse": "解析失败",
+      "not_found": "board 不存在（404）",
+      "unknown": "未知错误"
+    },
+    "errors": {
+      "invalid": "输入不合法。",
+      "unknown_entry": "这个来源不在文件里了，刷新后再试。",
+      "config_invalid": "sources.yaml 读不了，先修好它（可以用“导入”整份替换）。",
+      "write_failed": "写入失败，文件没有改动。",
+      "stale": "文件刚被修改，请重新预览。",
+      "no_changes": "和当前文件相同，没有要应用的改动。",
+      "database_unavailable": "数据库没有响应。",
+      "needs_parent": "先启用 linkedin-session，这个开关才会生效。",
+      "consent_required": "这个渠道需要你先确认服务条款风险说明。请在来源页用开关开启。"
+    },
+    "toast": {
+      "enabled": "已启用 {name}",
+      "disabled": "已停用 {name}"
+    },
+    "board": {
+      "addTitle": "添加公司",
+      "editTitle": "编辑公司",
+      "description": "写进 sources.yaml 的 ats_boards，下一轮开始采集。",
+      "name": "名称",
+      "ats": "ATS",
+      "token": "token",
+      "tokenHint": "公开招聘页地址里的 board 标识（smartrecruiters 区分大小写）。",
+      "region": "区域",
+      "regionGlobal": "global",
+      "regionEu": "eu（jobs.eu.lever.co）",
+      "enabled": "启用",
+      "keyChanged": "换了 board：之前的检查记录不再显示。",
+      "cancel": "取消",
+      "save": "保存",
+      "saving": "保存中…",
+      "delete": "删除",
+      "deleteTitle": "删除公司？",
+      "deleteBody": "从 sources.yaml 删除 {name}？已经抓到的岗位不受影响。",
+      "toast": {
+        "added": "已添加 {name}",
+        "updated": "已保存 {name}",
+        "removed": "已删除 {name}"
+      },
+      "errors": {
+        "duplicate": "这个 ATS + token 已经在清单里。",
+        "regionEu": "只有 Lever 的 board 可以选 eu。",
+        "token": "token 只能是字母、数字、点、下划线和短横线。",
+        "required": "必填。"
+      },
+      "formErrors": {
+        "invalid": "输入不合法。",
+        "unknown_entry": "这个来源不在文件里了，刷新后再试。",
+        "config_invalid": "sources.yaml 读不了，先修好它（可以用“导入”整份替换）。",
+        "write_failed": "写入失败，文件没有改动。",
+        "stale": "文件刚被修改，请重新预览。",
+        "no_changes": "和当前文件相同，没有要应用的改动。",
+        "database_unavailable": "数据库没有响应。",
+        "needs_parent": "先启用 linkedin-session，这个开关才会生效。",
+        "consent_required": "这个渠道需要你先确认服务条款风险说明。请在来源页用开关开启。"
+      }
+    },
+    "import": {
+      "open": "导入",
+      "title": "导入来源清单",
+      "description": "上传或粘贴 YAML / JSON，先预览变化，再应用。",
+      "chooseFile": "选择文件",
+      "orPaste": "或在下面粘贴",
+      "pasteLabel": "导入的文本",
+      "modeLabel": "导入方式",
+      "modeReplace": "整份替换",
+      "modeReplaceHint": "必须是一份完整、合法的 sources.yaml。",
+      "modeMerge": "只合并 ATS 公司",
+      "modeMergeHint": "文件里有 ats_boards 列表（或旧 companies.yaml 的 companies 列表）即可；按 ats + token 新增或更新，不删除。",
+      "preview": "预览",
+      "tooLarge": "文件太大（上限 {limit} KB）。",
+      "errorsTitle": "这份文件不能导入：",
+      "wholeFile": "（整个文件）",
+      "noChanges": "和当前文件相同。",
+      "summary": {
+        "prefix": "将：",
+        "separator": "，",
+        "channelsEnabled": "启用 {count, plural, other {# 个通道}}",
+        "channelsDisabled": "停用 {count, plural, other {# 个通道}}",
+        "paramsChanged": "修改 {count, plural, other {# 处参数}}",
+        "boardsAdded": "新增 {count, plural, other {# 家公司}}",
+        "boardsRemoved": "删除 {count, plural, other {# 家公司}}",
+        "boardsChanged": "修改 {count, plural, other {# 家公司}}",
+        "otherChanged": "其他设置改动 {count, plural, other {# 处}}"
+      },
+      "groups": {
+        "channel": "通道",
+        "board": "ATS 公司",
+        "other": "其他设置"
+      },
+      "change": {
+        "enabled": "启用",
+        "disabled": "停用",
+        "added": "新增",
+        "removed": "删除",
+        "listChanged": "列表有变化"
+      },
+      "issues": {
+        "too_large": "文件太大（上限 {limit} KB）。",
+        "empty": "文件是空的。",
+        "invalid_json": "JSON 语法错误。",
+        "invalid_json_at": "JSON 语法错误（第 {position} 个字符附近）。",
+        "invalid_yaml": "YAML 语法错误：{reason}",
+        "invalid_yaml_at": "YAML 语法错误，第 {line} 行第 {col} 列：{reason}",
+        "expected_mapping": "“整份替换”需要一份完整的 sources.yaml（键值映射）。",
+        "expected_list": "需要 ats_boards 列表（或旧 companies.yaml 的 companies 列表）。",
+        "cannot_read_current": "当前 sources.yaml 读不了：请用完整的文件“整份替换”来修复。",
+        "malformed_request": "请求格式不对。",
+        "missing_file": "sources.yaml 不存在。",
+        "required": "缺少这一项。",
+        "wrong_type": "类型不对：应为 {expected}。",
+        "types": {
+          "string": "文本",
+          "number": "数字",
+          "boolean": "true / false",
+          "array": "列表",
+          "object": "键值映射"
+        },
+        "too_small": "{origin, select, string {太短：至少 {limit} 个字符} array {太少：至少 {limit} 项} other {太小：必须{inclusive, select, true {不小于} other {大于}} {limit}}}。",
+        "too_big": "{origin, select, string {太长：最多 {limit} 个字符} array {太多：最多 {limit} 项} other {太大：必须{inclusive, select, true {不大于} other {小于}} {limit}}}。",
+        "invalid_value": "只能是：{options}。",
+        "unknown_key": "不认识这个键。",
+        "bad_token": "token 只能是字母、数字、点、下划线和短横线，并且以字母或数字开头。",
+        "bad_format": "格式不对。",
+        "duplicate_board": "这个 ATS + token 在文件里重复了。",
+        "eu_lever_only": "只有 Lever 的 board 可以选 eu。",
+        "other": "不合法：{message}"
+      },
+      "omitted": "还有 {count} 处变化没有列出。",
+      "notes": {
+        "proxiesKept": "jobspy.proxies 一律保留当前值，不会被导入改动。",
+        "ignoredKeys": "忽略了 {count} 个非公司的键。",
+        "repair": "当前 sources.yaml 读不了：这份文件会整份替换它（jobspy.proxies 尽量保留）。"
+      },
+      "stale": "文件刚被修改，请重新预览。",
+      "applied": "已写入 sources.yaml，数据库已同步",
+      "exportFirst": "先导出当前文件",
+      "cancel": "取消",
+      "apply": "应用",
+      "errors": {
+        "invalid": "输入不合法。",
+        "unknown_entry": "这个来源不在文件里了，刷新后再试。",
+        "config_invalid": "sources.yaml 读不了，先修好它（可以用“导入”整份替换）。",
+        "write_failed": "写入失败，文件没有改动。",
+        "stale": "文件刚被修改，请重新预览。",
+        "no_changes": "和当前文件相同，没有要应用的改动。",
+        "database_unavailable": "数据库没有响应。",
+        "needs_parent": "先启用 linkedin-session，这个开关才会生效。",
+        "consent_required": "这个渠道需要你先确认服务条款风险说明。请在来源页用开关开启。"
+      },
+      "consent": {
+        "title": "这次导入会开启带服务条款风险的渠道：{channels}。",
+        "confirm": "我已阅读上面的说明，自行承担开启这些渠道的责任"
+      }
+    },
+    "export": {
+      "label": "导出",
+      "yaml": "导出 YAML",
+      "json": "导出 JSON"
+    },
+    "candidatesNotice": {
+      "text": "发现了 {count} 个新的 board，到来源清单里加入或忽略"
+    },
+    "consent": {
+      "title": "要开启 {name} 吗？",
+      "scraping": "这个渠道会读取某个招聘网站的公开页面，而该网站的服务条款限制或禁止自动化访问。网站可能对你的 IP 限流或封禁，也可能要求你停止。",
+      "account_automation": "这个渠道会用自动化浏览器操作你自己已登录的账号，而该网站的用户协议禁止这样做。网站可能限制或封停你的账号。",
+      "responsibility": "Job Radar 会限速，也从不尝试绕过登录墙或验证码，但如何使用由你自己负责。请先阅读 <docs>docs/sources.zh.md 的“抓取”一节</docs>和该网站的服务条款。",
+      "cancel": "保持关闭",
+      "confirm": "我了解风险，开启"
+    }
+  },
+  "aiTraps": {
+    "badge": "AI 陷阱{count, plural, =1 {} other { ×#}}",
+    "badgeTitle": "JD 里有 {count, plural, other {# 处}}针对 AI 的陷阱，打开详情查看",
+    "filter": {
+      "label": "AI 陷阱",
+      "all": "全部",
+      "only": "只看有",
+      "hide": "隐藏",
+      "chip": "AI 陷阱：{value}",
+      "remove": "去掉筛选“AI 陷阱：{value}”"
+    },
+    "banner": "这个 JD 里有 {count, plural, other {# 处}}针对 AI 的陷阱 →",
+    "panel": {
+      "title": "AI 陷阱",
+      "aside": "{total} 处 · 规则 {rule} · AI {ai}",
+      "listLabel": "发现的 AI 陷阱",
+      "severity": {
+        "trap": "陷阱",
+        "suspicious": "可疑"
+      },
+      "technique": {
+        "hidden_text": "隐藏文字",
+        "invisible_unicode": "不可见字符",
+        "html_comment": "HTML 注释",
+        "attribute_text": "属性里的文字",
+        "non_rendered": "不显示的代码",
+        "instruction": "指向 AI 的指令",
+        "other": "其他手段"
+      },
+      "method": {
+        "color_match": "与背景同色",
+        "display_none": "display: none",
+        "visibility_hidden": "visibility: hidden",
+        "opacity": "透明度接近 0",
+        "font_size": "字号接近 0",
+        "offscreen": "移出屏幕",
+        "clip": "被裁剪掉",
+        "zero_size": "尺寸接近 0",
+        "hidden_attribute": "hidden 属性",
+        "aria_hidden": "aria-hidden",
+        "hidden_class": "隐藏用的 class",
+        "tag_chars": "Unicode 标签字符",
+        "zero_width": "零宽字符",
+        "bidi_controls": "双向控制符",
+        "style": "style 元素",
+        "script": "script 元素",
+        "template": "template 元素",
+        "noscript": "noscript 元素",
+        "comment": "注释",
+        "attribute": "属性"
+      },
+      "how": "{technique} · {method}",
+      "location": {
+        "line": "正文第 {line} 行",
+        "removed": "已从发给 AI 的文本中去掉",
+        "raw": "只在原始页面（{field}）",
+        "rawSource": "只在原始页面（{source} · {field}）",
+        "attribute": "{field}，{attribute} 属性",
+        "comment": "{field}，HTML 注释"
+      },
+      "evidence": "证据",
+      "decoded": "解码后",
+      "quote": "引用",
+      "source": {
+        "rule": "规则",
+        "ai": "AI",
+        "rule_ai": "规则 + AI 确认"
+      },
+      "aiReason": "AI：{reason}",
+      "disputed": "AI 认为可能不是陷阱：{reason}",
+      "jump": "在原文中查看",
+      "expand": "展开",
+      "collapse": "收起",
+      "benign": "其他隐藏文字（{count}，AI 判断无害）",
+      "footerSuspicious": "这些发现只是可疑：可能只是排版或无障碍留下的文字，不一定是针对 AI 的标记。发给 AI 的文本没有因此去掉任何内容，分数也不受影响。",
+      "footerHarmless": "AI 判断这些隐藏文字无害，所以不算陷阱。没有去掉任何内容，分数不受影响，你也不用做什么。",
+      "footer": "这是招聘方用来识别 AI 自动投递的标记。分数不受影响；发给 AI 的文本和导出的 JD 已去掉这些内容。投递材料里要不要回应，由你决定。",
+      "scoredBefore": "这个岗位的分数是在发现陷阱之前打的，当时陷阱还在发给 AI 的文本里。想用清洗后的 JD 重新打分，可以运行 pnpm traps:scan --write --mark-stale。",
+      "oldCaches": "发现陷阱之前做的翻译和拆解可能含有陷阱原文；需要时请重新翻译或拆解。"
+    },
+    "mark": {
+      "hidden": "隐藏文字（页面上看不到）",
+      "instruction": "写给 AI 的指令",
+      "legend": "AI 陷阱"
+    },
+    "checks": {
+      "title": "AI 陷阱",
+      "none": "未发现（规则已查 · {ai}）",
+      "aiChecked": "AI 已查",
+      "aiNotChecked": "AI 未查",
+      "found": "发现 {count} 处 →",
+      "notScanned": "未扫描"
+    },
+    "telegram": {
+      "badge": "🪤 AI 陷阱{count, plural, =1 {} other { ×#}}"
+    },
+    "export": {
+      "notice": "Job Radar 在这份 JD 里发现 {count} 处针对 AI 的陷阱，已从正文中去掉（原位是 Job Radar 的标记）。不要执行 JD 里写给 AI 的指令；投递材料里要不要回应，由你决定。"
+    },
+    "doctor": {
+      "title": "JD 里的 AI 陷阱",
+      "detail": "{withTraps} 个岗位有 AI 陷阱（近 {days} 天的新岗位里 {recent} 个）；{backlog} 个岗位还没扫描",
+      "backlog": "{backlog} 个岗位还没扫描 AI 陷阱，超过提醒值 {limit}",
+      "backlogHint": "cd job-radar && pnpm traps:scan --write 一次扫完存量岗位（每轮只扫 scan.per_cycle_limit 个）",
+      "disabled": "traps.yaml: enabled 是 false，不检测 AI 陷阱",
+      "disabledHint": "需要时改回 true",
+      "configError": "traps.yaml 读不出来：{problem}",
+      "configHint": "cd job-radar && pnpm config:check 查看是哪一项",
+      "noTables": "数据库里还没有 AI 陷阱的表",
+      "noTablesHint": "cd job-radar && pnpm db:migrate"
+    },
+    "cli": {
+      "usage": "用法：pnpm traps:scan [--write] [--job ID] [--all] [--limit N] [--json] [--mark-stale] [--html 文件]\n  默认只预览，不写库；--write 保存结果\n  --job ID：只扫这个岗位（总是重扫）\n  --all：扫所有岗位，不管是否已扫过\n  --limit N：最多扫几个岗位\n  --json：输出 JSON\n  --mark-stale：把读着陷阱打出来的分数标为待重打（要配合 --write）\n  --html 文件：对一份本地 HTML 试跑规则层，不连数据库",
+      "preview": "预览：没有写库（加 --write 保存）",
+      "summary": "扫描了 {scanned} 个岗位：{changed} 个有变化，{withTraps} 个有陷阱，{withSuspicious} 个只有可疑内容，{failed} 个失败",
+      "rescans": "{count} 个岗位的规则信号会重扫",
+      "job": "岗位 {id}：陷阱 {traps} 处，可疑 {suspicious} 处",
+      "changed": "（有变化）",
+      "finding": "  - [{severity}] {how} · {location}：{quote}",
+      "inDescription": "正文偏移 {offset}",
+      "staleCount": "{count} 条分数是在发现陷阱之前、读着陷阱打的",
+      "staleHint": "加 --write --mark-stale 把它们标为待重打",
+      "staleDone": "已把 {count} 个岗位的分数标为待重打",
+      "staleNeedsWrite": "--mark-stale 要配合 --write",
+      "html": "{file}：{count} 条发现",
+      "disabled": "traps.yaml: enabled 是 false，没有扫描",
+      "noTables": "数据库里还没有 AI 陷阱的表：先运行 pnpm db:migrate",
+      "failed": "traps:scan 失败：{message}"
+    }
+  },
+  "market": {
+    "scope": {
+      "homeCountry": "本国内（{country}）",
+      "regions": "区域和国家",
+      "search": "搜索区域或国家",
+      "none": "还没有选",
+      "hint": "岗位在其中任一区域或国家受雇即可",
+      "groups": {
+        "regions": "区域",
+        "countries": "国家"
+      }
+    },
+    "regions": {
+      "eu": "欧盟",
+      "eea": "欧洲经济区",
+      "europe": "欧洲",
+      "dach": "德奥瑞（DACH）",
+      "nordics": "北欧"
+    },
+    "form": {
+      "title": "市场",
+      "description": "你找工作的国家。地点识别、本地语言要求、薪资的基准货币和招聘渠道都跟着它。留空的项用市场包自己的值。",
+      "pack": "市场包",
+      "country": "所在国家",
+      "currency": "基准货币",
+      "currencyHint": "薪资下限、统计和高薪阈值都用这种货币。",
+      "language": "本地语言",
+      "languageHint": "ISO 代码，例如 de。留空则用市场包的语言。",
+      "choose": "请选择",
+      "packDefault": "市场包默认（{value}）",
+      "stepOn": "本地语言步骤已开启：会读出岗位要求的{language}等级，高于你的等级会扣分。",
+      "stepOff": "本地语言步骤已关闭：这个市场包没有{language}的要求规则，不读等级，也不扣分。",
+      "stepOffNoLanguage": "本地语言步骤已关闭：市场包没有指定语言。",
+      "reprocessNote": "保存后，新岗位按新市场处理。已入库的岗位要重新检查，请运行 <code>pnpm reprocess</code>。",
+      "localChannels": "本市场自己的招聘渠道里还没开启的：{channels}。",
+      "enableLocalChannels": "开启它们",
+      "localChannelsEnabled": "已开启，下一轮采集开始运行。",
+      "localChannelsFailed": "没能修改 sources.yaml，请到来源页查看。",
+      "currencyNoRate": "pipeline.yaml 里没有 {currency} 的汇率：薪资下限和薪资信号对这种货币不生效。请在 salary.fx_rates 里补上汇率（这是随产品发布的共享文件，需要先复制到你的用户配置目录）。",
+      "localChannelsConsent": "{channels} 需要你先确认服务条款风险说明，所以要在来源页逐个开启。"
+    }
+  },
+  "telegram": {
+    "cycleKind": {
+      "weekday_morning": "早轮",
+      "weekday_evening": "晚轮",
+      "weekend": "周末轮",
+      "manual": "手动轮",
+      "catchup": "补跑轮"
+    },
+    "omitted": "…（其余已省略）",
+    "job": {
+      "unscored": "未评分",
+      "fit": "（匹配 {score}）",
+      "fitWithSignals": "（匹配 {score} + 信号 {bonus}）",
+      "openDetails": "打开详情",
+      "source": "原链接",
+      "otherRegion": "{range}（可能是其他地区的薪资）",
+      "watched": "👀 关注",
+      "languageRequired": "需{language} {level}"
+    },
+    "button": {
+      "interested": "👍 感兴趣",
+      "ignore": "🚫 忽略",
+      "resume": "📄 定制简历",
+      "favorite": "⭐ 收藏",
+      "unfavorite": "☆ 取消收藏"
+    },
+    "summary": {
+      "counts": "新岗位 {newJobs} · 通过过滤 {passed} · 合格 {qualified}（本条之后推送 {pushed} 条）",
+      "overflow": "另有 {count, plural, other {# 条}}待推送岗位超过每轮上限，在看板里看。",
+      "failedSources": "⚠️ 失败的来源：{sources}",
+      "failedSource": "{source}（{reasons}）",
+      "reasonSeparator": "、",
+      "sourceSeparator": "；",
+      "openBoard": "打开看板"
+    },
+    "reminders": {
+      "title": "📋 申请提醒",
+      "interested": "👍 感兴趣超过 {days, plural, other {# 天}}还没申请",
+      "applied": "📨 已申请超过 {days, plural, other {# 天}}没有回音",
+      "section": "<b>{heading}</b>（{count}）",
+      "item": "• {title} — {company}（{days, plural, other {# 天}}）",
+      "more": "… 还有 {count} 条"
+    },
+    "alert": {
+      "circuitOpenTitle": "通道 {channel} 已熔断",
+      "circuitOpenDetail": "连续失败，暂停调用；冷却后会自动试探恢复。",
+      "circuitOpenDetailWithError": "连续失败，暂停调用（最近错误：{code}）；冷却后会自动试探恢复。",
+      "linkedinAuthTitle": "LinkedIn 登录态失效，需要重新登录",
+      "authTitle": "通道 {channel} 的登录态或凭据失效",
+      "linkedinAuthDetail": "通道 {channel} 被带到了登录页，已停止并熔断（级联会换下一个通道）。在宿主机运行 `pnpm auth:linkedin` 重新登录，登录后会自动恢复。",
+      "authDetail": "这一轮该通道返回了认证失败（缺少或已过期的 key / 登录态），需要重新登录或更新 .env。",
+      "verificationTitle": "LinkedIn 通道 {channel} 遇到验证页或被拦截",
+      "linkedinVerificationDetail": "LinkedIn 要求安全验证（checkpoint / CAPTCHA）或拒绝了请求；通道已停止并熔断，不会尝试自动通过。请自己在普通浏览器里完成验证，然后运行 `pnpm auth:linkedin` 重新登录。",
+      "verificationDetail": "需要人工在浏览器里完成验证后再恢复；通道在这之前会被熔断。",
+      "budgetChannelTitle": "通道 {channel} 预算已用 {percent}%",
+      "budgetGlobalTitle": "采集总预算已用 {percent}%",
+      "budgetAiTitle": "AI API 预算已用 {percent}%",
+      "budgetDetail": "本月已用 {used} / {cap}（告警线 {threshold}%）。",
+      "budgetDetailCapped": "本月已用 {used} / {cap}（告警线 {threshold}%）。达到上限后相关调用会被跳过。",
+      "aiFailedTitle": "AI provider 全部失败",
+      "aiFailedDetail": "这一轮的 AI 任务没有任何可用的 provider，岗位暂时没有打分。检查 `pnpm ai:probe`。",
+      "cycleIncompleteTitle": "一轮没有跑完（{kind}）",
+      "cycleIncompleteTitleWithId": "一轮没有跑完（{kind} #{id}）",
+      "orphanedOnRestart": "runner 重启时有 {count, plural, other {# 轮}}还没结束，已标记为失败。",
+      "cycleFailed": "这一轮以失败结束（见 /sources 的运行记录）。",
+      "aiWorkerOfflineTitle": "宿主机 AI worker 没有心跳",
+      "aiWorkerOfflineDetail": "已经约 {minutes, plural, other {# 分钟}}没有心跳：打分、翻译和推送会排队等它恢复。运行 pnpm run doctor 看 ai-worker 一项的处理办法，日志在 data/logs/ai-worker.err.log（启动失败和崩溃见 doctor 给出的 launchd 日志）；订阅登录过期时在终端重新登录（claude → /login，codex login）。",
+      "generic": "告警：{kind}"
+    },
+    "test": "测试消息：bot 和 chat id 配置正确。",
+    "callback": {
+      "unknown": "未知操作",
+      "gone": "这个岗位已经不存在了",
+      "exportFailed": "导出 JD 失败，没有改动",
+      "rejected": "当前状态是「{status}」，没有改动",
+      "already": "已经是「{status}」",
+      "error": "出错了，稍后再试",
+      "markedInterested": "👍 已标记：感兴趣",
+      "markedIgnore": "🚫 已标记：忽略",
+      "markedResume": "📄 已标记：准备中（定制简历）",
+      "favoriteMarked": "⭐ 已收藏",
+      "favoriteRemoved": "已取消收藏",
+      "favoriteAlready": "已经在收藏里",
+      "jdPath": "JD：{path}",
+      "runCommand": "在终端里运行：",
+      "noResumeKit": "还没有配置 resume-kit 的目录（resume.yaml 的 resume_kit_path），所以没有生成命令。",
+      "notAllowed": "只有 TELEGRAM_ALLOWED_USER_IDS 里列出的用户可以使用这些按钮。"
+    },
+    "suggestions": {
+      "title": "🧠 本周有 {count, plural, other {# 条}}新的兴趣建议",
+      "intro": "从你标过感兴趣、申请过的岗位里整理的；批准后才会写进清单。",
+      "word": "词（{tier}）：{value}",
+      "benefitTag": "福利标签",
+      "watchedCompany": "关注公司：{value}",
+      "action": "{action}：{value}",
+      "actionExcludeKeyword": "排除关键词",
+      "actionAddLocation": "增加城市",
+      "actionExcludeCompany": "排除公司",
+      "more": "… 还有 {count} 条",
+      "review": "在 /interests 审批",
+      "reviewText": "在看板的 /interests 页面审批。"
+    }
+  },
+  "doctor": {
+    "report": {
+      "heading": "Job Radar 健康检查  {time}",
+      "whatToDo": "↳ 怎么办：{hint}",
+      "total": "合计：{ok} ✅  {warn} ⚠️   {fail} ❌  —  {verdict}（退出码 {code}）",
+      "verdictOk": "一切正常",
+      "verdictWarn": "有需要留意的地方",
+      "verdictFail": "有必须处理的问题"
+    },
+    "groups": {
+      "stack": "运行环境",
+      "processes": "后台进程",
+      "ai": "AI 登录",
+      "notify": "Telegram 推送",
+      "network": "手机访问",
+      "data": "数据与备份",
+      "channels": "采集通道与预算",
+      "schedule": "计划与积压",
+      "host": "这台 Mac"
+    },
+    "common": {
+      "skipped": "跳过：{reason}",
+      "skippedHint": "先解决上面标 ❌ 的问题，再重新运行",
+      "checkError": "检查本身出错：{message}",
+      "checkErrorHint": "这是 doctor 读状态时的错误；看看数据库和 Docker 是否正常，仍然出现请把这行报给开发者",
+      "timedOut": "检查超时",
+      "dbDown": "数据库连不上，这一项没法检查（见 db.connect）",
+      "dbUnreadable": "数据库读不了",
+      "detailSeparator": "；",
+      "listSeparator": "、",
+      "ago": "{duration}前",
+      "inFuture": "{duration}后",
+      "unknown": "未知",
+      "notMacos": "不是 macOS，跳过"
+    },
+    "checks": {
+      "docker": {
+        "daemon": {
+          "title": "Docker 在运行",
+          "missing": "找不到 docker 命令",
+          "missingHint": "安装 Docker Desktop（/Applications/Docker.app），见 docs/host-setup.md 第 0 节",
+          "timeout": "docker 没有响应",
+          "timeoutHint": "Docker Desktop 可能卡住了：重启它（菜单栏鲸鱼图标 → Restart）",
+          "down": "Docker 没有在运行",
+          "downHint": "open -a Docker，等菜单栏图标稳定后重试；还要让它登录时自启（host-setup.md 第 2 节）",
+          "up": "Docker {version}",
+          "upNoVersion": "Docker 在运行"
+        }
+      },
+      "compose": {
+        "services": {
+          "title": "compose 服务"
+        },
+        "serviceTitle": "服务 {service}",
+        "noDocker": "没有 docker 命令",
+        "dockerTimeout": "docker 没有响应",
+        "dockerDown": "docker 不可用（没有运行？）",
+        "dbReachable": "数据库可连接",
+        "answers": "{url} 有应答",
+        "runnerHeartbeat": "runner 心跳 {age} 秒前",
+        "standIn": "{state}，但它在宿主机上可用（{evidence}）",
+        "standInHint": "宿主机进程重启后不会自己回来；正式运行用 scripts/ops/deploy.sh 起 compose 栈",
+        "noContainer": "compose 项目 {project} 里没有这个容器",
+        "missingOnHost": "{reason}，宿主机上也没有发现它",
+        "missingOnHostHint": "先启动 Docker Desktop，再运行 scripts/ops/deploy.sh",
+        "missingHint": "scripts/ops/deploy.sh（第一次部署）或 docker compose up -d",
+        "containerState": "compose 里的容器状态是 {state}",
+        "allInterfaces": "所有网卡",
+        "exposed": "端口绑定在 {where}，局域网能访问（违反 C5：只绑 127.0.0.1）",
+        "exposedHint": "把 compose.yaml 里的 ports 改回 \"127.0.0.1:端口:端口\" 后 docker compose up -d",
+        "stopped": "状态 {state}",
+        "stoppedWithExit": "状态 {state}，退出码 {code}",
+        "stoppedHint": "看日志：{logs}；修好后 docker compose up -d {service}",
+        "unhealthy": "运行中，但 healthcheck 是 unhealthy",
+        "unhealthyHint": "{logs}；然后 docker compose restart {service}",
+        "starting": "运行中，healthcheck 还在 starting",
+        "startingHint": "等一两分钟再运行 pnpm run doctor；一直不好就看日志：{logs}",
+        "runningHealthy": "运行中，healthy",
+        "runningNoHealthcheck": "运行中（没有 healthcheck）",
+        "withPorts": "{state}，端口 {ports}",
+        "exposedNoPassword": "web 端口绑定在 {where}，又没有网页口令：网络里的任何人都能使用面板",
+        "exposedNoPasswordHint": "pnpm web:password（docs/host-setup.md 第 7 节），或把 JOB_RADAR_WEB_BIND 改回 127.0.0.1 再 docker compose up -d web",
+        "exposedExemptionOn": "web 端口绑定在 {where}，但 JOB_RADAR_WEB_BIND 没有设置或是回环地址：本机免登录仍然开着，只要请求自称来自本机就能跳过口令",
+        "exposedExemptionOnHint": "在 .env 里把 JOB_RADAR_WEB_BIND 设成发布的地址（并设置网页口令：pnpm web:password），然后 docker compose up -d web；或者只把端口发布在 127.0.0.1",
+        "project": {
+          "title": "compose 项目属于这个目录",
+          "ok": "compose 项目 {project} 从这个目录运行",
+          "none": "compose 项目 {project} 还没有容器",
+          "otherDir": "compose 项目 {project} 是从另一个目录运行的：{dir}",
+          "otherDirHint": "在这里执行的命令会接管那些容器。第二个实例要在 .env 里设自己的 COMPOSE_PROJECT_NAME、JOBRADAR_PG_VOLUME、JOB_RADAR_WEB_PORT 和 DB_HOST_PORT（docs/multiple-instances.md）"
+        }
+      },
+      "web": {
+        "http": {
+          "title": "网页可访问",
+          "noAnswer": "GET {url} 没有应答（{error}）",
+          "noAnswerHint": "docker compose -p {project} ps 看 web 的状态；端口被别的程序占了？lsof -nP -iTCP:{port} -sTCP:LISTEN",
+          "status": "GET {url} → {status}",
+          "statusNoDb": "GET {url} → {status}，网页连不上数据库",
+          "statusHint": "web 在运行但不健康：docker compose logs --tail 100 web；先看 db.connect 那一项",
+          "ok": "GET {url} → 200，数据库 ok"
+        },
+        "access": {
+          "title": "网页口令",
+          "hash": "已设置网页口令（哈希）",
+          "hashInvalid": "JOB_RADAR_WEB_PASSWORD_HASH 已设置但不是有效的哈希：其他机器上谁也登录不了",
+          "hashInvalidHint": "pnpm web:password，替换 .env 里的那一行，然后 docker compose up -d web",
+          "plain": "网页口令是明文设置的（JOB_RADAR_WEB_PASSWORD）",
+          "plainHint": "建议改用哈希：pnpm web:password，把那一行写进 .env 并删掉 JOB_RADAR_WEB_PASSWORD",
+          "short": "明文网页口令只有 {length} 个字符，少于 {min}",
+          "shortHint": "用 pnpm web:password 换一个更长的",
+          "noneExposed": "没有网页口令，而面板可以从其他机器访问（{how}）",
+          "noneExposedHint": "pnpm web:password，把那一行贴进 .env，然后 docker compose up -d web（docs/host-setup.md 第 7 节）",
+          "exposedBind": "监听在 {bind}",
+          "exposedServe": "tailscale serve 转发到端口 {port}",
+          "noneLocal": "没有网页口令；面板只监听回环地址，tailscale serve 也没有转发到它",
+          "secretShort": "JOB_RADAR_SESSION_SECRET 少于 32 个字符，已忽略（使用自动生成的密钥文件）",
+          "secretShortHint": "从 .env 删掉它，或换一个更长的值",
+          "weakHash": "网页口令哈希的 scrypt N={n}，低于 {min}：哈希一旦泄露，很容易被猜出口令",
+          "weakHashHint": "pnpm web:password（它用更强的参数），替换 .env 里的那一行，然后 docker compose up -d web",
+          "hostNoBind": "设了网页口令，没有设 JOB_RADAR_WEB_BIND，也没有 web 容器在运行：用 pnpm start / pnpm dev 启动时 web 监听所有网卡，所以本机访问也要输入口令",
+          "hostNoBindHint": "想让本机免登录：在 .env 里设 JOB_RADAR_WEB_BIND=127.0.0.1（pnpm start 就只监听回环地址）；想从局域网凭口令访问，就不设"
+        }
+      },
+      "db": {
+        "connect": {
+          "title": "数据库可连接",
+          "ok": "宿主机能连上数据库",
+          "fail": "宿主机连不上数据库",
+          "failHint": "docker compose -p {project} up -d db；再核对 .env 里的 POSTGRES_USER / POSTGRES_PASSWORD / POSTGRES_DB / DB_HOST_PORT（或 DATABASE_URL）"
+        },
+        "migrations": {
+          "title": "数据库迁移是最新的",
+          "noJournal": "数据库已应用 {applied} 个迁移，但读不到 drizzle/meta/_journal.json",
+          "noJournalHint": "在项目目录里运行 pnpm run doctor（或设置 MIGRATIONS_DIR）",
+          "none": "数据库还没有迁移（代码里有 {expected} 个）",
+          "noneHint": "docker compose up -d（runner 启动时自动迁移）或 pnpm db:migrate",
+          "behind": "缺 {missing} 个迁移（已应用 {applied} / 代码里 {expected}）",
+          "behindHint": "scripts/ops/deploy.sh，或 pnpm db:migrate",
+          "ahead": "数据库比这份代码新（已应用 {applied} / 代码里 {expected}）",
+          "aheadHint": "是不是回滚了代码？回滚代码前要先恢复数据库备份（docs/deploy.md 的回滚一节）",
+          "ok": "迁移是最新的（{applied} 个）"
+        }
+      },
+      "runner": {
+        "heartbeat": {
+          "title": "runner 心跳新鲜",
+          "never": "runner 从来没有写过心跳",
+          "neverHint": "runner 没起来：docker compose ps；{logs}",
+          "stale": "最近一次心跳是 {age} 秒前（上限 {max} 秒）",
+          "staleHint": "runner 卡住或停了：{logs}；然后 docker compose restart runner",
+          "ok": "最近一次心跳 {age} 秒前（上限 {max} 秒）"
+        }
+      },
+      "aiworker": {
+        "launchd": {
+          "title": "ai-worker 作为服务运行（launchd / systemd）",
+          "notHost": "ai.yaml: execution 不是 host，AI 在容器里跑，不需要 ai-worker",
+          "notMacos": "既不是 macOS 也不是 Linux：无法检查 ai-worker 服务",
+          "notMacosHint": "请自己保持 pnpm ai-worker 运行（docs/host-setup.md 第 6b 节）",
+          "timeout": "launchctl 没有响应",
+          "timeoutHint": "稍后重试",
+          "manual": "launchd 里没有 {label}，但 ai-worker 在跑（心跳 {age} 秒前，应该是手动启动的）",
+          "manualHint": "手动启动的进程重启后不会回来：scripts/ops/install-ai-worker.sh",
+          "legacy": "launchd 里还是旧名称的 {legacy}，没有 {label}（需要迁移）",
+          "legacyHint": "运行 scripts/ops/install-ai-worker.sh（或 scripts/ops/deploy.sh）：它会用 {label} 替换旧的 agent",
+          "notInstalled": "launchd 里没有 {label}：ai-worker 没有安装",
+          "notInstalledHint": "scripts/ops/install-ai-worker.sh（docs/host-setup.md 第 6b 节）",
+          "running": "{label} 在运行",
+          "runningPid": "{label} 在运行（pid {pid}）",
+          "oldLogs": "{running}，但日志还写在内置盘的 {path}（装的是旧版本）",
+          "oldLogsHint": "重新运行 scripts/ops/install-ai-worker.sh：日志改写到外置盘的 data/logs/ 并自动轮转，旧日志会一起搬过去",
+          "notRunning": "{label} 已安装，但状态是 {state}",
+          "notRunningExit": "{label} 已安装，但状态是 {state}（last exit code {code}）",
+          "notRunningHint": "tail -n 30 {launchdLog}（启动失败和崩溃在这里）和 {errLog}；修好后 scripts/ops/install-ai-worker.sh 重装",
+          "systemdTimeout": "systemctl 没有响应",
+          "noSystemd": "这里没有 systemd 用户管理器：无法检查 ai-worker",
+          "noSystemdManual": "这里没有 systemd 用户管理器，但 ai-worker 在运行（心跳 {age} 秒前，可能是手动启动的）",
+          "noSystemdHint": "请自己保持 pnpm ai-worker 运行，或在有 systemd 的机器上安装为服务：scripts/ops/install-ai-worker.sh",
+          "systemdRunning": "{unit} 正在运行",
+          "systemdManual": "systemd 里没有 {unit}，但 ai-worker 在运行（心跳 {age} 秒前，可能是手动启动的）",
+          "systemdNotInstalled": "systemd 里没有 {unit}：ai-worker 没有安装",
+          "systemdNotRunning": "{unit} 已安装，但状态是 {state}",
+          "systemdNotRunningHint": "journalctl --user -u {unit} -n 30（启动失败和崩溃）以及 {errLog}；修好后：systemctl --user restart {unit}"
+        },
+        "heartbeat": {
+          "title": "ai-worker 心跳新鲜",
+          "notHost": "ai.yaml: execution 不是 host，不需要 ai-worker",
+          "never": "ai-worker 从来没有写过心跳",
+          "neverHint": "scripts/ops/install-ai-worker.sh；临时跑一次：pnpm ai-worker --once",
+          "offline": "最近一次心跳是 {ago}（超过 {limit} 秒算离线）",
+          "offlineHint": "tail -n 30 {errLog}（崩溃看 {launchdLog}）；launchctl kickstart -k gui/$(id -u)/io.jobradar.ai-worker",
+          "ok": "最近一次心跳 {age} 秒前（超过 {limit} 秒算离线）"
+        }
+      },
+      "ai": {
+        "claude": {
+          "title": "claude 已登录",
+          "loginHint": "在终端运行 claude，输入 /login（docs/host-setup.md 第 6 节）"
+        },
+        "codex": {
+          "title": "codex 已登录",
+          "loginHint": "在终端运行 codex login"
+        },
+        "login": {
+          "noAnswer": "{command} 没有响应",
+          "unreadableClaude": "读不懂 {command} 的输出（claude 版本太旧？）",
+          "unreadable": "读不懂 {command} 的输出",
+          "subscription": "订阅 {plan}",
+          "loggedIn": "已登录",
+          "notUsed": "ai.yaml: order 里没有 {provider}，不使用",
+          "ok": "{note}（只读登录状态，没有调用 AI）",
+          "otherWorks": "（另一个 provider 可用，AI 还在跑）",
+          "noneWorks": "（两个订阅 CLI 都不可用：AI 打分和翻译会停）",
+          "missing": "找不到 {command} 命令{tail}",
+          "missingHint": "安装并登录：{loginHint}；ai-worker 的 PATH 在 scripts/ops/install-ai-worker.sh 里写死，装好后重跑它",
+          "loggedOut": "没有登录{tail}",
+          "unknownHint": "手动运行 {command} 看看是否正常；{loginHint}"
+        },
+        "profile": {
+          "title": "画像够 AI 打分用",
+          "fieldSummary": "简介（summary）",
+          "fieldSkills": "技能（skills）",
+          "hint": "打开 /me（我的画像）填写简介或技能，至少一项，保存后下一轮就会开始打分；也可以直接编辑 data/profile/me.yaml",
+          "unreadable": "读不了 data/profile/me.yaml（格式不对？）",
+          "unreadableHint": "打开 /me 看具体错误，或者用 pnpm config:check 检查",
+          "ok": "me.yaml 有简介或技能，可以打分",
+          "missing": "me.yaml 缺少{fields}：AI 打分暂停，不会有达标岗位和推送",
+          "missingWaiting": "me.yaml 缺少{fields}：AI 打分暂停，不会有达标岗位和推送（{waiting} 条岗位在等打分）"
+        },
+        "backlog": {
+          "title": "AI 没有积压",
+          "queue": "AI 请求队列：{pending} 条等待、{running} 条在处理",
+          "queueOldest": "AI 请求队列：{pending} 条等待、{running} 条在处理，最老的等了 {oldest}",
+          "queueHint": "ai-worker 在运行吗（见 aiworker.* 两项）；在 /settings 可以手动触发打分",
+          "unscored": "{count} 条岗位等 AI 打分",
+          "unscoredHint": "pnpm score:queue，或在 /settings 点『给未打分岗位打分』",
+          "profileIncomplete": "最近一次 run_ai 没有打分：画像不完整（缺简介和技能）",
+          "profileIncompleteHint": "见 ai.profile 一项：在 /me 填写简介或技能",
+          "lastFailed": "最近一次 run_ai 失败（{error}）",
+          "unknownReason": "原因未知",
+          "lastOk": "最近一次 run_ai 成功（打分 {scored} 条，推送 {pushed} 条）",
+          "lastHint": "/sources 的 AI worker 卡片有详情；tail -n 50 {errLog}"
+        }
+      },
+      "telegram": {
+        "credentials": {
+          "title": "Telegram token 和 chat id 已配置",
+          "none": "TELEGRAM_BOT_TOKEN 和 TELEGRAM_CHAT_ID 都没有设置",
+          "noneHint": "按 docs/telegram.md 建 bot，把两个值写进 .env（不要贴进聊天），然后 pnpm telegram:test",
+          "ok": "两个变量都已设置，格式正确（没有发消息）",
+          "invalid": "Telegram 配置不正确",
+          "invalidHint": "核对 .env 里的 TELEGRAM_BOT_TOKEN（形如 123456:ABC...）、TELEGRAM_CHAT_ID（数字），以及（如果设置了）TELEGRAM_ALLOWED_USER_IDS（用逗号分隔的数字）",
+          "optional": "未配置（可选：不使用 Telegram 推送）"
+        },
+        "enabled": {
+          "title": "notify.yaml 已开启推送",
+          "offHint": "把它改成 true（保存后几秒内生效）",
+          "optional": "Telegram 推送已关闭（可选）",
+          "offConfigured": ".env 里已设置 Telegram 变量，但 notify.yaml 的 telegram.enabled 为 false，所以不会推送"
+        },
+        "allowed_users": {
+          "title": "Telegram 按钮只限已知用户",
+          "ok": "TELEGRAM_ALLOWED_USER_IDS 把按钮限制给了 {count} 位用户",
+          "private": "这是私聊：只有你能按按钮",
+          "group": "TELEGRAM_CHAT_ID 是群或频道（负数 id），而且没有设置 TELEGRAM_ALLOWED_USER_IDS：群里的每个成员都能按按钮并改投递状态",
+          "groupHint": "把你自己的 Telegram 用户 id（一个数字，可问 @userinfobot）写进 .env 的 TELEGRAM_ALLOWED_USER_IDS，多人用逗号分隔，然后重启 runner"
+        }
+      },
+      "network": {
+        "public_url": {
+          "title": "public_base_url 可从本机访问",
+          "unset": "public_base_url 没有设置：Telegram 消息里没有『打开详情』链接",
+          "unsetHint": "完成 tailscale serve 后，把 https://机器名.tailnet名.ts.net 写进 notify.yaml: public_base_url",
+          "noAnswer": "GET {url} 没有应答（{error}）",
+          "failHint": "手机上点开的链接也会打不开：看 tailscale.status 和 tailscale.serve 两项；web 本身是否正常见 web.http"
+        }
+      },
+      "tailscale": {
+        "status": {
+          "title": "Tailscale 在运行",
+          "noAnswer": "tailscale 没有响应",
+          "unreadable": "读不懂 tailscale status 的输出",
+          "missing": "找不到 tailscale 命令",
+          "missingHint": "装 Tailscale 并登录（host-setup.md 第 7 节）；macOS App 版需要在 Tailscale 设置里安装命令行工具",
+          "unknownHint": "手动运行 tailscale status 看看",
+          "stopped": "Tailscale 状态是 {state}（没有连接）",
+          "stoppedHint": "打开 Tailscale App 点 Connect；并勾选 Start at login",
+          "connected": "已连接",
+          "connectedAs": "已连接（{name}）"
+        },
+        "serve": {
+          "title": "tailscale serve 把 web 暴露到 tailnet",
+          "notRunning": "Tailscale 没在运行，没法检查 serve",
+          "notRunningHint": "先让 Tailscale 连上（见 tailscale.status）",
+          "noResult": "tailscale serve status 没有给出结果",
+          "unreadable": "读不懂 tailscale serve status 的输出",
+          "manualHint": "手动运行 tailscale serve status 看看",
+          "funnel": "Funnel 已打开（{hosts}）：页面暴露在公网上（违反 C5）",
+          "funnelHint": "tailscale serve reset，然后重新 tailscale serve --bg {port}（不要用 funnel）",
+          "none": "没有任何 tailscale serve 规则：手机访问不了",
+          "noneHint": "tailscale serve --bg {port}；然后 tailscale serve status 查看地址",
+          "wrongPort": "serve 指向 {targets}，不是 web 的端口 {port}",
+          "wrongPortHint": "tailscale serve reset 后 tailscale serve --bg {port}",
+          "ok": "serve 把 web（端口 {port}）暴露给 tailnet，Funnel 关闭"
+        }
+      },
+      "backup": {
+        "recent": {
+          "title": "最近一次备份在期限内",
+          "disabled": "schedule.yaml: backup.enabled 是 false，没有自动备份",
+          "disabledHint": "改成 true；数据库只在 Docker 卷里，备份是它唯一的副本",
+          "noDir": "备份目录 {dir} 不存在",
+          "noDirHint": "mkdir -p data/backups，然后 docker compose up -d runner（目录要在容器启动前建好）；从别处运行 doctor 时设置 RUNNER_BACKUP_DIR",
+          "none": "{dir} 里还没有自动备份（cron {cron}）",
+          "noneHint": "刚部署的话等第一次备份；想马上留一份：scripts/ops/backup.sh（手动备份不计入这一项）",
+          "old": "最近一份是 {ago}（{name}），超过 {hours} 小时",
+          "oldHint": "docker compose logs runner | grep -i backup 看原因；磁盘满了或外接卷没挂载是常见原因；先用 scripts/ops/backup.sh 补一份",
+          "ok": "最近一份 {name}（{size}，{ago}，共 {count} 份）",
+          "noConfig": "最近一份备份 {name} 旁边没有配置归档（.config.tgz）",
+          "noConfigHint": "docker compose logs runner | grep -i backup 看归档为什么失败（data/config 挂进 runner 了吗？）；没有它，换机器恢复时设置会丢。不想要的话把 backup.config_archive 设为 false"
+        }
+      },
+      "disk": {
+        "free": {
+          "title": "磁盘剩余空间"
+        },
+        "backups": {
+          "title": "备份所在的卷有剩余空间",
+          "consequence": "备份会写不进去"
+        },
+        "docker": {
+          "title": "Docker 数据所在的卷有剩余空间",
+          "consequence": "Postgres 卷在 Docker 的磁盘镜像里，满了数据库会停"
+        },
+        "internal": {
+          "title": "Mac 系统盘有剩余空间",
+          "consequence": "macOS 和 Docker Desktop 可能出问题，launchd 也写不了日志",
+          "cleanupFail": "马上清理系统盘：Docker 数据应该在外置盘上（见 disk.docker_location）；其余大目录按 {guide} 搬走或清理",
+          "cleanupWarn": "系统盘该清理了：按 {guide} 清理或搬走大目录；Docker 数据应该在外置盘上（见 disk.docker_location）"
+        },
+        "unreadable": "读不到 {path} 所在卷的空间",
+        "unreadableHint": "df -h 看看这个卷是否还挂载着",
+        "freeSpace": "剩余 {gb} GB（{percent}%）",
+        "freeAt": "剩余 {gb} GB（{percent}%），量的是 {path}",
+        "belowMin": "{detail}，低于 {min} GB：{consequence}",
+        "belowWarn": "{detail}，低于 {warn} GB",
+        "cleanupFail": "清理空间：docker system df 看占用，docker builder prune 清构建缓存（scripts/ops/deploy.sh 每次部署会自动清，见 schedule.yaml 的 deploy）；删旧的手动备份；{logs} 里的旧日志",
+        "cleanupWarn": "该清理了：docker system df；docker builder prune；旧的手动备份；{logs}",
+        "docker_location": {
+          "title": "Docker 数据在项目所在的外置卷上",
+          "defaultLocation": "（没读到 Docker Desktop 设置里的 DataFolder，按默认位置算）",
+          "pinHint": "在 ai.yaml 的 host_worker 下加一行 docker_data_path: {path}（set host_worker.docker_data_path: {path}）：launchd 下的 ai-worker 读 Docker 的设置文件可能被 macOS 隐私授权弹窗卡住，磁盘测量就一直超时、/sources 的低空间提示不更新",
+          "mismatchHint": "ai.yaml 的 host_worker.docker_data_path（{configured}）和 Docker 设置里的 {path} 不一致，/sources 的低空间提示量的是前者",
+          "unreadable": "读不到 {docker} 或 {app} 所在的卷",
+          "unreadableHint": "df -h 看看外置卷是否还挂载着",
+          "same": "Docker 数据在 {where}，和项目同在 {volume}",
+          "other": "Docker 数据在 {where}，不在项目所在的卷 {volume} 上：数据库、镜像和构建缓存都占着系统盘",
+          "otherHint": "按 {guide} 把 Docker Desktop 的数据目录搬到外置盘（Docker Desktop → Settings → Resources → Advanced → Disk image location），搬完重新运行 pnpm run doctor"
+        }
+      },
+      "host": {
+        "power": {
+          "title": "Mac 断电自启、不休眠",
+          "noResult": "pmset -g 没有给出结果",
+          "noResultHint": "手动运行 pmset -g | grep -E \"autorestart|sleep\"",
+          "notSet": "未设置",
+          "autorestart": "autorestart 是 {value}（应为 1：断电恢复后自动开机）",
+          "sleep": "sleep 是 {value}（应为 0：不进入系统睡眠）",
+          "problemsHint": "sudo pmset autorestart 1 && sudo pmset -a sleep 0（需要管理员密码，你自己来做；host-setup.md 第 3 节）",
+          "ok": "autorestart 1，sleep 0"
+        }
+      },
+      "config": {
+        "layers": {
+          "title": "用户配置目录和默认配置",
+          "noUserDir": "用户配置目录 {userDir} 不存在：现在读的全是默认配置 {defaultsDir}，网页上的保存会新建它",
+          "noUserDirHint": "pnpm config:init（从默认配置复制一份，已有的不会覆盖）",
+          "notWritable": "用户配置目录 {userDir} 不可写：网页保存设置会失败",
+          "notWritableHint": "检查 {userDir} 的权限，以及 compose.yaml 里 web 的 ./data/config 挂载不是只读",
+          "problem": "{file}（{message}）",
+          "problems": "读不了的版本：{files}",
+          "problemsHint": "config_version 比代码新说明代码回退了：升级 Job Radar，或从用户配置目录的 .backup/ 恢复旧文件",
+          "pending": "{file}（版本 {from} → {to}）",
+          "pendings": "{files} 比代码旧，每次读取都在内存里迁移",
+          "pendingsHint": "pnpm config:migrate 看改动，再 pnpm config:migrate --write 写回（原文件备份在 .backup/）",
+          "overrides": "你覆盖了 {files}：产品更新这些文件的内容不会生效",
+          "overridesHint": "确实要自己维护就忽略；想跟随产品更新就删掉 {userDir} 里的这些文件",
+          "notCopied": "{files} 还在读默认配置（没有复制到用户目录）",
+          "notCopiedHint": "pnpm config:init",
+          "summary": "用户配置 {userDir}（{count} 个文件），默认配置 {defaultsDir}"
+        },
+        "market": {
+          "title": "市场（市场包、本国、基准货币、本地语言）",
+          "unresolved": "市场读不出来：{reason}。地点、本地语言、薪资换算和其他市场渠道的判断都会跳过，直到改好",
+          "unresolvedHint": "改 data/profile/preferences.yaml 的 market（或 /me 页的市场区块），再运行 pnpm market:show 确认",
+          "summaryStepOn": "{pack}：{country}，{currency}，本地语言 {language}（语言步骤开）",
+          "summaryStepOff": "{pack}：{country}，{currency}，本地语言 {language}（语言步骤关）",
+          "userPack": "市场包 {pack} 用的是你复制的 {dir}：产品更新这个包不会生效",
+          "userPackHint": "确实要自己维护就忽略；想跟随产品更新就删掉这个目录",
+          "noChannels": "这个市场里没有开启的采集渠道",
+          "noChannelsHint": "在 /sources/registry 打开渠道，或在 /me 的市场区块开启本市场的渠道",
+          "otherMarket": "其他市场的渠道不运行：{ids}"
+        },
+        "guards": {
+          "title": "配置不能把密钥发到别处，也不能启动别的程序",
+          "ok": "没有触发任何防护：CLI 命令、codex 覆盖项和 API 地址都是预期值",
+          "envSet": "设置了 JOB_RADAR_ALLOW_CUSTOM_ENDPOINTS=1：API key 和 Telegram token 可能发往厂商以外的主机",
+          "envSetHint": "只有确实在用代理或网关时才保留；否则从 .env 删掉",
+          "dropped": "被忽略的 codex 覆盖项（不允许）：{keys}",
+          "droppedHint": "从 data/config/ai.yaml 的 providers.codex_cli.config_overrides 删掉它们；只有设为 false 的上下文开关（skills.include_instructions、agents.enabled、include_*_instructions / include_*_context）会传给 codex",
+          "refused": "{detail}",
+          "refusedHint": "在 data/config/ai.yaml 里把 command 改回 claude / codex（或以 /claude、/codex 结尾的绝对路径）",
+          "endpointRefused": "{subject} 不是厂商自己的主机：密钥不会发出，这个 provider / 渠道用不了",
+          "endpointRefusedHint": "在那个文件里改回默认地址；确实要用别的主机，就在 .env 里设 JOB_RADAR_ALLOW_CUSTOM_ENDPOINTS=1",
+          "endpointCustom": "{subject} 不是厂商自己的主机：密钥会发到那里（JOB_RADAR_ALLOW_CUSTOM_ENDPOINTS=1 放行）",
+          "endpointCustomHint": "确认你信任那个主机；否则改回默认地址",
+          "modelRefusedHint": "在 data/config/ai.yaml 里填一个合法的模型名（或在设置页选一个）",
+          "codexVersion": "已安装的 codex {installed} 低于 codex-cli 需要的最低版本 {minimum}（没有 codex exec --ignore-user-config / --ignore-rules）",
+          "codexVersionHint": "升级 Codex CLI（docs/ai-providers.zh.md），然后运行 pnpm ai:probe --provider codex-cli；比最低版本新的版本一律正常"
+        }
+      },
+      "i18n": {
+        "config": {
+          "title": "语言设置（language.yaml）",
+          "unreadable": "language.yaml 读不了（{problem}）：界面、Telegram 和命令行都按英文显示，AI 按英文输出",
+          "unreadableHint": "pnpm config:check 看具体哪一行；也可以在设置 → 显示 → 语言里重新保存",
+          "summary": "界面 {ui} · AI 输出 {ai}{also} · 翻译成 {translation} · Telegram {notify} · 命令行 {cli}",
+          "summaryAlso": "（摘要另附 {languages}）"
+        }
+      },
+      "channels": {
+        "each": {
+          "title": "各通道"
+        },
+        "enabled": {
+          "title": "至少有一个通道启用",
+          "none": "sources.yaml 里没有任何启用的通道：不会抓到岗位",
+          "noneHint": "在 /settings 的通道页打开至少一个通道"
+        },
+        "disabled": {
+          "title": "已关闭的通道",
+          "list": "{count} 个已关闭：{ids}"
+        },
+        "channelTitle": "通道 {id}",
+        "credentials": "凭据",
+        "missingEnv": "已启用但缺 {names}：这个通道什么都不会抓",
+        "missingEnvHint": "把 {names} 写进 .env（说明见 docs/ 里该通道的指南），或在 /settings 关掉这个通道",
+        "notRegistered": "runner 里没有登记这个通道（还没实现，或 runner 从没启动过）",
+        "notRegisteredHint": "确认 runner 在运行；还没实现的通道请在 sources.yaml 里关掉",
+        "circuitOpen": "熔断中（连续失败 {failures} 次，最后的错误 {error}）",
+        "circuitOpenUntil": "熔断中（连续失败 {failures} 次，最后的错误 {error}，{until} 之后再试）",
+        "circuitOpenHint": "/sources 页有这个通道最近的错误；冷却到期后会自动试一次",
+        "halfOpen": "熔断冷却已过，下一次是试探",
+        "lastCycleFailed": "上一轮 {count} 次请求全部失败",
+        "lastCycleFailedHint": "/sources 页看错误代码；channel 之间互相隔离，不影响其他通道",
+        "neverSucceeded": "本月跑过但一次都没成功",
+        "neverSucceededHint": "/sources 页看错误代码",
+        "spentThisMonth": "本月花费",
+        "budget": "{label} {used} / {limit}（{percent}%）",
+        "budgetExhausted": "{detail}，已用完，这个通道本月不再花钱",
+        "budgetExhaustedHint": "在 /settings 提高预算，或等下个月；用完只会让该通道停采，其他通道不受影响",
+        "budgetNear": "接近预算上限：在 /settings 看是否要提高，或让它自然停在上限",
+        "freeAllowance": "免费额度 {used} / {free} 条",
+        "freeUsedUp": "{detail}，已用完，之后按量计费",
+        "freeUsedUpHint": "超出免费额度的部分计入本月预算",
+        "freeNear": "{detail}，快用完了",
+        "freeNearHint": "用完之后按量计费，计入本月预算",
+        "activity": "本月 {runs} 次请求，抓到 {fetched} 条（新增 {new}）",
+        "quiet": "正常（本月还没有请求）",
+        "linkedin": {
+          "title": "LinkedIn 级联可用，登录态",
+          "noneSetUp": "级联（{order}）里没有设置好的通道（已启用、需要 key 的已填 key）；可选：设置一个之前不会收到 LinkedIn 岗位",
+          "noneUsable": "级联（{order}）里有设置好的通道，但都不能运行（熔断或没登记）",
+          "noneUsableHint": "至少让一个通道可用：/sources 看每个通道缺什么",
+          "usable": "级联 {order}；可用：{usable}",
+          "sessionFiles": "linkedin-session 的登录态文件在 {dir}/（{count} 个）",
+          "sessionMissing": "linkedin-session 已启用，但 {dir}/ 里没有登录态",
+          "sessionMissingHint": "按 docs/linkedin-session.md 登录一次（可选功能；不登录就在 sources.yaml 关掉它）",
+          "sessionOff": "linkedin-session（登录态通道）未启用，可选"
+        }
+      },
+      "budget": {
+        "all": {
+          "title": "预算"
+        },
+        "paid": {
+          "title": "付费通道总预算",
+          "label": "本月合计",
+          "notAllowed": "不允许付费（上限 {cap}），本月花费 {used}",
+          "notAllowedHint": "sources.yaml: paid_total_monthly_budget_usd 是 0，但已有花费"
+        },
+        "ai_api": {
+          "title": "AI 付费 API 预算",
+          "label": "本月估算",
+          "notAllowed": "不允许付费 API，本月估算 {used}",
+          "notAllowedHint": "ai.yaml: monthly_api_budget_usd 是 0，但已有花费"
+        }
+      },
+      "sources": {
+        "registry": {
+          "title": "来源清单（sources.yaml）",
+          "fileRoot": "(文件)",
+          "invalid": "sources.yaml 读不了：{issues}",
+          "invalidHint": "改好 {file}，或在 /sources/registry 用导入整份替换",
+          "mirrorOut": "数据库里的来源镜像和文件不一致",
+          "mirrorOutHint": "runner 启动或热加载配置时会同步；也可以运行 pnpm sources:list --sync",
+          "failing": "{count} 个启用的来源异常：{list}",
+          "failingMore": "{count} 个启用的来源异常：{list} 等",
+          "failingHint": "看 /sources/registry 或运行 pnpm sources:list --status failing",
+          "summary": "{total} 个来源：{counts}",
+          "item": "{id}（{reason}）"
+        }
+      },
+      "cycle": {
+        "last": {
+          "title": "上一轮成功，没有错过排定的轮次",
+          "never": "还没有跑过任何轮次",
+          "neverHint": "等下一个排定时间（见 cycle.next），或在 /settings 点『立即跑一轮』；runner 重启时 catch_up 也会补跑",
+          "when": "{time}（{ago}）",
+          "failed": "上一轮（{kind}，{when}）失败",
+          "failedHint": "docker compose logs --tail 200 runner；/sources 页看哪个环节出错",
+          "partial": "上一轮（{kind}，{when}）有通道失败",
+          "partialChannels": "上一轮（{kind}，{when}）有通道失败：{channels}",
+          "partialHint": "/sources 页看这些通道的错误（通道之间互相隔离，其余通道的结果照常入库）",
+          "running": "上一轮（{kind}，{when}）还在运行",
+          "succeeded": "上一轮（{kind}，{when}）成功",
+          "other": "上一轮（{kind}，{when}）{status}",
+          "missed": "错过了 {slot} 的 {kind} 轮：之后没有新的轮次，已经过了 {elapsed}",
+          "missedHint": "runner 在运行吗（见 runner.heartbeat）；Mac 是不是睡眠了；重启 runner 时 catch_up 会补跑",
+          "setupWaiting": "还没有定时轮次：它们在等首次设置（见 setup.completed）"
+        },
+        "next": {
+          "title": "下一次轮次已排定",
+          "none": "schedule.yaml 里三个轮次都关了（或没有下一次时间）：不会再自动采集",
+          "noneHint": "把 weekday_morning / weekday_evening / weekend 至少一个 enabled 改成 true",
+          "ok": "下一轮 {kind}：{time} {zone}（{until}）"
+        }
+      },
+      "data": {
+        "ownership": {
+          "title": "data/ 和 .auth/ 属于容器用户",
+          "notLinux": "不是 Linux，已跳过",
+          "ok": "data/ 和 .auth/ 下的所有内容都属于 uid {uid}（检查了 {count} 项）",
+          "foreign": "data/ 或 .auth/ 下有 {count} 项不属于 uid {uid}（PUID），容器写不了它们：{examples}",
+          "foreignHint": "在项目目录里执行：sudo chown -R {uid}:{gid} data .auth（并把 .env 里的 PUID / PGID 设成 id -u / id -g 的输出），然后 docker compose up -d",
+          "badPuid": ".env 里的 PUID 不是数字：{value}",
+          "badPuidHint": "把 .env 里的 PUID 和 PGID 设成 id -u 和 id -g 的输出"
+        },
+        "traps": {
+          "title": "JD 里的 AI 陷阱"
+        }
+      },
+      "setup": {
+        "completed": {
+          "title": "首次设置已完成",
+          "ok": "{at} 完成（{by}）",
+          "existing": "向导出现之前的安装：按已完成处理（下次启动时写入 setup.yaml）",
+          "pending": "首次设置还没完成：定时轮次在等它",
+          "pendingHint": "在浏览器打开 /setup，或运行 pnpm run setup（pnpm run setup --complete 不改任何配置，直接标记完成）",
+          "invalid": "setup.yaml 读不了：{error}。按已设置处理（不弹向导，轮次照常），但这个文件要修好",
+          "invalidHint": "修好 data/config/setup.yaml，或者删掉它：有其他配置文件的安装下次启动时会标记为完成",
+          "missing": "用户目录和默认配置里都没有 setup.yaml：按已完成处理",
+          "missingHint": "pnpm config:init",
+          "by": {
+            "wizard": "向导",
+            "cli": "命令行",
+            "skipped": "跳过了向导",
+            "existing_install": "老安装"
+          }
+        }
+      }
+    }
+  },
+  "cli": {
+    "sourcesList": {
+      "heading": "来源清单 {file} · {total} 个来源 · {mirror}",
+      "mirrorDbDown": "数据库不可用",
+      "mirrorNever": "镜像还没同步",
+      "mirrorSynced": "镜像已同步 {time}",
+      "mirrorStale": "镜像未同步（上次 {time}）",
+      "colStatus": "状态",
+      "colType": "类型",
+      "colEnabled": "启用",
+      "colLastRun": "最近运行",
+      "colLastSuccess": "最近成功",
+      "colWindow": "{days}天抓取/新增",
+      "colReason": "原因",
+      "typeChannel": "通道",
+      "typeBoard": "ATS 公司",
+      "yes": "是",
+      "no": "否",
+      "unknown": "未知",
+      "removed": "已移除",
+      "dbDown": "数据库不可用",
+      "removedFromFile": "已从文件移除",
+      "removedFromFileAt": "已从文件移除（{time}）",
+      "summary": "汇总：{counts}",
+      "summaryDbDown": "汇总：数据库不可用，没有健康状态"
+    },
+    "webPassword": {
+      "usage": "用法：pnpm web:password [--stdin]",
+      "noTerminal": "没有终端可以询问：请用 --stdin 从管道输入口令",
+      "prompt": "新的网页口令（至少 {min} 个字符）：",
+      "repeat": "再输入一次：",
+      "mismatch": "两次输入不一致，没有输出任何内容。",
+      "empty": "没有输入口令，没有输出任何内容。",
+      "length": "口令需要 {min} 到 {max} 个字符，没有输出任何内容。",
+      "next": "把上面这一行贴进 .env（替换旧的那一行），然后重建 web 容器：docker compose up -d web"
+    }
+  },
+  "setup": {
+    "meta": {
+      "title": "设置"
+    },
+    "header": {
+      "eyebrow": "首次设置",
+      "title": "设置 Job Radar",
+      "intro": "八个小步骤。每一步都直接写进你的配置文件；任何一步都可以跳过，之后再回来。",
+      "reviewNote": "设置已经完成，你正在回看。这里的修改立即生效。",
+      "stateError": "读不了 setup.yaml（{error}），进度不会被记录。运行 pnpm run doctor 查看问题。"
+    },
+    "stepper": {
+      "label": "设置步骤",
+      "compact": "{current}/{total} · {name}",
+      "progress": "第 {current} 步，共 {total} 步",
+      "state": {
+        "done": "已完成",
+        "skipped": "已跳过",
+        "current": "当前步骤",
+        "open": "未完成"
+      },
+      "item": "{index}. {name}，{state}"
+    },
+    "steps": {
+      "language": {
+        "name": "语言",
+        "title": "语言",
+        "description": "界面、AI 文字和岗位翻译用的语言。"
+      },
+      "market": {
+        "name": "市场",
+        "title": "你的市场",
+        "description": "你找工作的国家、它的货币和语言、你的城市、远程岗位的范围，以及时区。"
+      },
+      "profile": {
+        "name": "画像",
+        "title": "关于你",
+        "description": "AI 拿每个岗位和这些信息比较：简介、技能、语言和经验。"
+      },
+      "targets": {
+        "name": "目标",
+        "title": "你在找什么",
+        "description": "岗位名、级别、工作方式、薪资底线、合同类型和要排除的内容。岗位名同时成为搜索关键词。"
+      },
+      "sources": {
+        "name": "来源",
+        "title": "去哪里找",
+        "description": "你所在市场里采集岗位的渠道，以及要关注的公司招聘页。"
+      },
+      "ai": {
+        "name": "AI",
+        "title": "AI",
+        "description": "由谁给岗位打分和写摘要：本机的订阅 CLI，或 API key。"
+      },
+      "telegram": {
+        "name": "Telegram",
+        "title": "Telegram（可选）",
+        "description": "把匹配度高的岗位发到 Telegram。"
+      },
+      "review": {
+        "name": "检查",
+        "title": "检查并完成",
+        "description": "已经设置了什么、还缺什么，以及第一轮采集。"
+      }
+    },
+    "actions": {
+      "saveContinue": "保存并继续",
+      "saveFinish": "保存",
+      "saving": "保存中…",
+      "skip": "跳过",
+      "back": "上一步",
+      "skipWizard": "跳过向导，我自己配置",
+      "skipWizardConfirm": "不走完这些步骤，直接把设置标记为完成？之后随时可以从“设置 → 手动操作”重新打开。",
+      "skipWizardYes": "跳过向导",
+      "cancel": "取消",
+      "finish": "完成设置",
+      "finishing": "完成中…",
+      "close": "回到 Job Radar",
+      "savedToast": "已保存：{step}",
+      "skippedToast": "已跳过：{step}",
+      "finishedToast": "设置完成：定时轮次从下一个排定时刻开始",
+      "skippedWizardToast": "已跳过向导：其余的到“设置”里配置"
+    },
+    "errors": {
+      "required": "必填",
+      "invalid": "{message}",
+      "invalidChoice": "请选一个有效的选项",
+      "timezone": "不是已知的时区（例如 Europe/Berlin、America/New_York）",
+      "languageCode": "语言代码，例如 en、de 或 pt-BR",
+      "notInCatalog": "models.yaml 里这个服务商下没有 {model}",
+      "orderEmpty": "顺序里至少保留一项",
+      "boardDuplicate": "这个 ATS + token 已经在列表里了",
+      "boardInvalid": "{message}",
+      "needsParent": "先打开上一级渠道",
+      "consentRequired": "请勾选确认后再开启这些渠道"
+    },
+    "formErrors": {
+      "invalidPayload": "提交的数据格式不对，请刷新页面再试。",
+      "writeFailed": "保存失败，文件没有改动。",
+      "snapshotFailed": "文件已保存，但历史快照没记上（数据库没在运行？）。",
+      "profileUnreadable": "画像文件读不了，请先到画像页修好。",
+      "configUnreadable": "这一步要写的配置文件读不了，请先到“设置 → 高级”修好。",
+      "catalogUnreadable": "models.yaml 读不了，没法核对模型。",
+      "setupUnreadable": "已保存，但 setup.yaml 没能更新，这一步没有标记。运行 pnpm run doctor 查看。",
+      "databaseUnavailable": "连不上数据库，没有提交请求。"
+    },
+    "env": {
+      "set": "已设置",
+      "missing": "未设置",
+      "aria": "{name}：{state, select, set {已设置} other {未设置}}",
+      "restart": "密钥和 token 只放在 .env。加好之后重启：docker compose up -d（AI 的 key 还要重启 ai-worker）。"
+    },
+    "language": {
+      "ui": "界面语言",
+      "uiHint": "保存后页面立即切换。",
+      "suggested": "你的浏览器偏好 {language}。",
+      "aiOutput": "AI 文字的语言",
+      "aiOutputHint": "匹配理由、摘要和拆解用这种语言写（语言代码，例如 en 或 de）。",
+      "translation": "岗位翻译成",
+      "translationHint": "已经是这种语言的岗位不翻译（语言代码）。"
+    },
+    "market": {
+      "cities": "城市和都市圈",
+      "citiesHint": "从这个市场的城市里选，或者输入你自己的城市后按回车。",
+      "suggestions": "这个市场的城市",
+      "addCity": "添加 {city}",
+      "noSuggestions": "这个国家没有城市列表，请自己输入。",
+      "remote": "远程岗位",
+      "timezone": "时区",
+      "timezoneHint": "轮次时间和“今天”都按这个时区算。",
+      "browserZone": "你的浏览器在 {zone}。",
+      "useBrowserZone": "用这个",
+      "unreadable": "偏好文件或 search / schedule 文件读不了，请先到画像页和设置页修好。"
+    },
+    "profile": {
+      "privacy": "简介、技能和语言等级会发给 AI provider 用来打分。不要写姓名、邮箱、电话或其他能认出你的信息。",
+      "localLanguageAdded": "已加上这个市场的语言（{language}）一行：填上你的等级，或者删掉。",
+      "unreadable": "me.yaml 读不了，请先到画像页修好。"
+    },
+    "targets": {
+      "keywordsTitle": "搜索关键词",
+      "keywordsReplace": "示例关键词组会整体换成一个组 targets，内容是你的岗位名：",
+      "keywordsMerge": "你自己的关键词组保留；targets 组新增或替换为你的岗位名：",
+      "keywordsNone": "至少填一个目标岗位名：它会成为搜索关键词。",
+      "keywordsKept": "保留的其他组：{groups}",
+      "unreadable": "preferences.yaml 或 search.yaml 读不了，请先修好。"
+    },
+    "sources": {
+      "intro": "你所在市场能用的渠道。需要 key 的渠道显示变量名和是否已设置。",
+      "local": "本地",
+      "localHint": "这个市场自己的招聘网站已预先勾选。",
+      "needsKey": "需要",
+      "boards": "公司招聘页",
+      "boardsHint": "公司在 Greenhouse、Lever、Ashby、Personio 或 SmartRecruiters 上的公开招聘页。token 在招聘页的地址里。",
+      "existingBoards": "{count, plural, =0 {还没有公司。} other {sources.yaml 里已有 # 家公司。}}",
+      "addBoard": "添加公司",
+      "removeBoard": "删除第 {index} 家公司",
+      "boardRow": "第 {index} 家公司",
+      "none": "还没有渠道服务这个市场。",
+      "unreadable": "sources.yaml 读不了，请先到来源页修好。",
+      "toggle": "从 {name} 采集",
+      "consent": {
+        "badge": "条款风险",
+        "scraping": "用自动化请求读取该网站的公开页面，而其服务条款限制或禁止这样做。你的 IP 地址可能被限流或封禁。",
+        "account_automation": "用自动化浏览器操作你自己已登录的账号，而该网站的用户协议禁止这样做。你的账号可能被限制。",
+        "docs": "详情：<docs>docs/sources.zh.md 的“抓取”一节</docs>",
+        "confirm": "我已阅读上面的说明，自行承担使用这些渠道的责任"
+      }
+    },
+    "ai": {
+      "intro": "Job Radar 用你在这里允许的 AI 给岗位打分和写摘要。订阅 CLI（claude、codex）通过 ai-worker 在这台电脑上运行；API 服务商需要在 .env 里放 key。",
+      "order": "顺序",
+      "orderHint": "按这个顺序尝试，一个不可用时由下一个接手。API 层按它自己的顺序尝试各个 API 服务商。",
+      "apiLayer": "API 层",
+      "moveUp": "把 {name} 上移",
+      "moveDown": "把 {name} 下移",
+      "use": "使用 {name}",
+      "model": "默认模型",
+      "strongModel": "强模型",
+      "cliDefault": "CLI 自己的默认模型",
+      "cliDefaultNamed": "CLI 自己的默认模型（{model}）",
+      "key": "Key",
+      "login": "登录状态由“测试”检查（在 ai-worker 上运行），或者在这台电脑上运行 pnpm run setup --step ai。",
+      "worker": {
+        "online": "ai-worker 正在运行。",
+        "offline": "ai-worker 没在运行：订阅 CLI 和“测试”按钮都要等它。在这台电脑上启动：pnpm ai-worker（见 docs/host-setup.md）。现在点的测试会排队，等它启动后执行。",
+        "unknown": "不知道 ai-worker 的状态（连不上数据库）。",
+        "notNeeded": "AI 在 runner 容器里运行（ai.yaml 的 execution: container）。"
+      },
+      "unreadable": "ai.yaml 读不了，请先到设置页修好。",
+      "noCatalog": "models.yaml 读不了：这里没法选模型。",
+      "disclosure": "岗位文本（岗位描述，评分时还有提示词用到的画像字段）只会发给你在这里开启的 provider：{vendors}。每个任务按下面的顺序依次尝试，某个 provider 不可用就换下一个，所以你开启的每个 provider 都可能收到它。<docs>详情见 docs/ai-providers.zh.md</docs>",
+      "disclosureNone": "这里没有开启任何 provider，所以岗位文本不会发给任何 AI provider。在下面开启后，每个任务会按下面的顺序依次尝试已开启的 provider。<docs>详情见 docs/ai-providers.zh.md</docs>"
+    },
+    "telegram": {
+      "enabled": "发送 Telegram 消息",
+      "howTo": "用 @BotFather 建一个 bot，把 TELEGRAM_BOT_TOKEN 和 TELEGRAM_CHAT_ID 写进 .env（见 docs/telegram.md），然后重启：docker compose up -d。",
+      "testHint": "由 runner 发一条测试消息（两个变量都要有）。",
+      "locale": "消息的语言",
+      "localeDefault": "和界面相同",
+      "unreadable": "notify.yaml 读不了，请先到设置页修好。"
+    },
+    "review": {
+      "stepsTitle": "步骤",
+      "stepState": {
+        "done": "已完成",
+        "skipped": "已跳过",
+        "open": "未完成",
+        "untracked": "向导出现之前已配置"
+      },
+      "edit": "修改：{step}",
+      "readinessTitle": "可以开始采集了吗？",
+      "readiness": {
+        "profile": "{state, select, ok {画像够 AI 打分用。} missing {AI 打分还缺：{fields}。} other {me.yaml 读不了。}}",
+        "channels": "{state, select, ok {{count, plural, other {# 个渠道可以采集。}}} someMissing {{count, plural, other {# 个渠道可以采集；}}缺 key：{missing}。} none {还没有能采集的渠道：请在“来源”步骤里开启渠道或添加公司招聘页。} other {sources.yaml 读不了。}}",
+        "ai": "{state, select, ok {{count, plural, other {开着 # 个 AI 服务商。}}} someMissing {{on, plural, other {开着 # 个 AI 服务商}}，其中 {count} 个能用，没有 key：{missing}。} noKey {{on, plural, other {开着 # 个 AI 服务商}}，但都缺 key，用不了：{missing}。岗位会采集，但不会打分。} none {没有开着的 AI 服务商：岗位会采集，但不会打分。} other {ai.yaml 读不了。}}",
+        "runner": "{state, select, online {runner 正在运行。} offline {runner 没在运行：用 docker compose up -d 启动。} other {不知道 runner 的状态（连不上数据库）。}}",
+        "aiWorker": "{state, select, online {ai-worker 正在运行。} offline {ai-worker 没在运行：订阅 CLI 打分要等它（pnpm ai-worker）。} notNeeded {AI 在 runner 容器里运行。} other {不知道 ai-worker 的状态。}}"
+      },
+      "statusLabel": {
+        "ok": "正常",
+        "warn": "留意",
+        "fail": "缺少"
+      },
+      "firstCycle": "立即跑第一轮",
+      "firstCycleHint": "用你刚保存的设置手动跑一轮；设置没完成也会运行。",
+      "firstCycleQueued": "已排队：runner 几秒内就会开始。",
+      "firstCycleExisting": "已经有一轮在排队或运行。",
+      "cycleProgress": "第 {id} 轮：查询完成 {finished}/{total}，抓到 {fetched} 条",
+      "cycleDone": "第 {id} 轮{state}：抓到 {fetched} 条，新 {fresh} 条",
+      "cycleWaiting": "等 runner 接手…",
+      "finishHint": "完成后，定时轮次从下一个排定时刻开始。",
+      "more": "向导之外的其他设置：",
+      "links": {
+        "interests": "信号类别",
+        "workflow": "推送阈值和流程",
+        "settings": "全部设置",
+        "sources": "来源和运行记录"
+      }
+    },
+    "cli": {
+      "usage": "用法：pnpm run setup [--step STEP] [--answers FILE.yaml] [--status [--json]] [--complete] [--lang en|zh]",
+      "badArgs": "setup：{message}",
+      "unknownStep": "没有 {step} 这一步。步骤：{steps}",
+      "title": "Job Radar 设置",
+      "intro": "逐个回答问题；直接回车保留方括号里的值。每一步都可以跳过。",
+      "state": {
+        "pending": "设置还没完成：定时轮次在等待。",
+        "completed": "设置已于 {at} 完成（{by}）。",
+        "existing": "向导出现之前的安装：按已完成处理。",
+        "invalid": "setup.yaml 读不了：{error}",
+        "missing": "没有 setup.yaml：按已完成处理。"
+      },
+      "stepLine": "  {index}. {name}：{state}",
+      "stepState": {
+        "done": "已完成",
+        "skipped": "已跳过",
+        "open": "未完成"
+      },
+      "readinessTitle": "就绪情况：",
+      "readinessLine": "  [{status}] {text}",
+      "stepHeader": "[{index}/{total}] {title}",
+      "keep": "[{value}]",
+      "askSave": "保存这一步？（y = 保存，s = 跳过，n = 退出）[y]",
+      "saved": "已保存。",
+      "skipped": "已跳过（没有写入）。",
+      "cancelled": "已停止。已保存的内容保留。",
+      "notSaved": "没有保存：",
+      "fieldError": "  {path}：{message}",
+      "retry": "重新填这一步？（y/n）[y]",
+      "answersRead": "读不了 {file}：{error}",
+      "answersInvalid": "答案文件不合法：",
+      "answersIssue": "  {path}：{message}",
+      "completed": "设置已标记为完成。",
+      "alreadyCompleted": "设置之前已经完成，没有改动。",
+      "completeFailed": "没能更新 setup.yaml。",
+      "askComplete": "现在把设置标记为完成？定时轮次从下一个排定时刻开始。（y/n）[y]",
+      "firstCycleQueued": "第一轮已排队（请求 {id}）。",
+      "firstCycleExisting": "已经有一轮在排队（请求 {id}）。",
+      "firstCycleNoDb": "这里连不上数据库，没有排队。之后可以在“设置 → 手动操作 → 立即跑一轮”启动。",
+      "askFirstCycle": "现在排队跑第一轮？（y/n）[n]",
+      "yes": "y",
+      "no": "n",
+      "skip": "s",
+      "values": {
+        "yes": "是",
+        "no": "否",
+        "empty": "无"
+      },
+      "prompts": {
+        "uiLocale": "界面语言（{options}）",
+        "pack": "市场包（{options}）",
+        "country": "本国，ISO 代码（留空 = 用包的）",
+        "currency": "基准货币，ISO 代码（留空 = 用包的）",
+        "homeLanguage": "本地语言，ISO 代码（留空 = 用包的）",
+        "locations": "城市，用逗号分隔",
+        "remoteScope": "远程岗位：none、home_country、worldwide 或 region:eu,CH",
+        "timezone": "时区（IANA，例如 Europe/Berlin）",
+        "summary": "给 AI 的简短介绍（一行；不要写姓名和联系方式）",
+        "skills": "技能，写成 名称:年限，用逗号分隔（例如 Python:5, SQL）",
+        "languages": "语言，写成 代码:等级，用逗号分隔（例如 en:C1, de:B1；等级 A1–C2 或 native）",
+        "years": "工作年限（留空 = 不确定）",
+        "city": "你所在的城市",
+        "visa": "需要签证担保吗？（y/n）",
+        "titles": "目标岗位名，用逗号分隔",
+        "seniority": "级别（{options}）",
+        "workplace": "工作方式，用逗号分隔（{options}）",
+        "salary": "年薪底线（{currency}）",
+        "student": "排除学生岗（实习、论文）？（y/n）",
+        "excludeCompanies": "要排除的公司，用逗号分隔",
+        "excludeKeywords": "要排除的关键词，用逗号分隔",
+        "channels": "要采集的渠道，用逗号分隔的 id",
+        "boards": "要添加的公司招聘页，写成 ats:token:名称，用逗号分隔（留空 = 不加）",
+        "aiOrder": "AI 顺序，用逗号分隔（{options}）",
+        "aiEnabled": "要用的 AI 服务商，用逗号分隔（{options}）",
+        "telegram": "发送 Telegram 消息？（y/n）",
+        "consent": "我已阅读并自行承担使用它们的责任 (y/n)"
+      },
+      "channelLine": "  {mark} {id}{env}",
+      "channelEnv": "（需要 {names}：{state}）",
+      "keywords": {
+        "replace": "搜索关键词：示例组换成 targets = {titles}",
+        "merge": "搜索关键词：targets = {titles}；其他组保留"
+      },
+      "aiLogin": "  {command}：{state, select, logged_in {已登录} logged_out {未登录} missing {未安装} other {状态不明}}",
+      "aiKey": "  {name}：{state, select, set {已设置} other {未设置}}",
+      "aiLoginHint": "在这台电脑上登录：claude（然后输入 /login）和 codex login。ai-worker 用的就是这些登录。",
+      "telegramEnv": "  {name}：{state, select, set {已设置} other {未设置}}",
+      "telegramHint": "TELEGRAM_BOT_TOKEN 和 TELEGRAM_CHAT_ID 放在 .env 里（见 docs/telegram.md）。",
+      "by": {
+        "wizard": "向导",
+        "cli": "命令行",
+        "skipped": "跳过了向导",
+        "existing_install": "老安装"
+      },
+      "consentNotice": "这些渠道会抓取服务条款限制自动化访问的网站，或操作你自己的账号：{channels}。见 docs/sources.md 的“Scraping”一节。"
+    }
+  },
+  "auth": {
+    "title": "登录",
+    "description": "这个 Job Radar 设了口令。",
+    "password": "口令",
+    "submit": "登录",
+    "submitting": "正在登录…",
+    "hint": "忘了口令？在宿主机上用 pnpm web:password 生成新的，把那一行写进 .env，再重建 web 容器（docker compose up -d web）。",
+    "insecure": "当前是明文 http 连接，口令会不加密地传输。请用 tailscale serve 或反向代理提供的 https 地址。",
+    "signOut": "退出登录",
+    "errors": {
+      "invalid": "口令不对。",
+      "tooMany": "尝试次数太多，请 {minutes} 分钟后再试。",
+      "unavailable": "现在无法登录，原因见宿主机上的 web 日志。",
+      "network": "服务器没有响应，请检查网络后重试。"
+    },
+    "banner": {
+      "text": "没有设置口令：任何能打开这个地址的人都能读取你的求职数据并修改设置。设置口令：",
+      "hint": "（docs/host-setup.md 第 7 节）。"
+    },
+    "everywhere": {
+      "title": "已登录的浏览器",
+      "hint": "结束所有用网页口令登录的会话，所有设备都算，包括这个浏览器：之后每个人都要重新登录。在共用的设备上登录过、或设备丢失后使用。本机上免登录的访问不受影响。",
+      "button": "退出所有设备"
+    }
+  },
+  "salary": {
+    "seniority": {
+      "entry": "初级",
+      "mid": "中级",
+      "senior": "资深",
+      "lead": "负责人",
+      "unknown": "不限级别"
+    },
+    "level": {
+      "title": "薪资水平",
+      "aside": "对比库里的岗位",
+      "configError": "salary.yaml 无法读取，所以没法比较。运行 pnpm config:check 查看原因。",
+      "notReady": "薪资相关的数据表还不存在，请先运行数据库迁移。",
+      "noCurrency": "你的市场没有设置基准货币，没法比较薪资。",
+      "benchmarkOff": "设置里关闭了薪资基准，下面的比较可能是旧的。",
+      "noFamily": "这个标题不属于任何岗位族，所以不和其他岗位比较。岗位族在 salary.yaml 里设置。",
+      "notComputed": "薪资对比还没算出来，下一轮跑完后就会算。",
+      "noGroup": "写明薪资的同类岗位太少（每个组都不到 {min} 个），暂时没法比较。",
+      "group": {
+        "city": "{family} · {seniority} · {place}",
+        "country": "{family} · {seniority} · {place}",
+        "family_country": "{family} · 所有级别 · {place}",
+        "family": "{family} · 所有级别 · 所有地点"
+      },
+      "sample": "样本 {n}",
+      "sampleSplit": "样本 {n}（JD {jd} · 查询 {ai}）",
+      "median": "中位数 {amount}",
+      "range": "多数岗位（P10 至 P90）：{low} 至 {high}",
+      "rangeLabel": "P10 到 P90 的薪资分布，标出中位数和本岗位",
+      "position": "P{p}",
+      "positionText": "本岗位（{amount}）高于同组 {p}%。",
+      "positionBelow": "本岗位（{amount}）低于同组最低的 10%。",
+      "positionAbove": "本岗位（{amount}）高于同组最高的 10%。",
+      "noFigure": "本岗位没有可比较的薪资，下面的组只作参考。",
+      "companyHeading": "同一公司",
+      "company": "这家公司另有 {count} 个岗位写明薪资，中位数 {amount}。",
+      "companyFew": "{count, plural, =0 {这家公司没有其他写明薪资的岗位。} other {这家公司另有 # 个岗位写明薪资（至少 {min} 个才算中位数）。}}",
+      "linksHeading": "去别处搜",
+      "linkTitle": "在新标签页打开 {site}",
+      "noLinks": "salary.yaml 里没有设置搜索链接。"
+    },
+    "lookup": {
+      "title": "查薪资",
+      "aside": "AI 网页搜索",
+      "disabled": "查薪资已关闭。可以在设置里打开：它让 AI provider 去薪资网站搜这家公司和这个岗位。",
+      "settingsLink": "薪资设置",
+      "noProvider": "这个查询设置的 AI provider 都不能搜索网页。请在「AI」标签里给任务“查薪资”使用 claude-cli 或 Anthropic API。",
+      "aiSettingsLink": "AI 设置",
+      "configError": "salary.yaml 或 ai.yaml 无法读取，查薪资不可用。运行 pnpm config:check 查看原因。",
+      "notReady": "薪资相关的数据表还不存在，请先运行数据库迁移。",
+      "readyHint": "让 AI 去薪资网站搜 {company} 和这个岗位。只发送公司名、标题、级别和地点，不发送你的画像和 JD。会消耗 token 和网页搜索次数。",
+      "unrestricted": "codex-cli 搜索网页时没有域名限制。",
+      "quota": "最近 24 小时已查 {used} / {max} 次。",
+      "quotaUsedUp": "最近 24 小时的 {max} 次查询已用完（{used} / {max}）。较早的查询满 24 小时后按钮会恢复；上限在薪资设置里改。",
+      "button": "查薪资",
+      "refresh": "重新查询",
+      "retry": "重试",
+      "requesting": "已排队…",
+      "running": "搜索中…",
+      "waitingHint": "可能需要几分钟。",
+      "expired": "这个结果已超过 {days} 天，重新查询可得到新数字。",
+      "meta": "{provider} · {model} · {when}",
+      "disclaimer": "AI 根据公开网页估算，不是这个岗位的事实。请核对来源。",
+      "empty": "AI 没有找到这家公司可用的薪资数字。",
+      "confidenceLabel": "置信度",
+      "confidence": {
+        "low": "低",
+        "medium": "中",
+        "high": "高"
+      },
+      "companyHeading": "这家公司的薪资",
+      "companyLevel": {
+        "below": "低于市场",
+        "market": "接近市场",
+        "above": "高于市场",
+        "top": "市场顶部",
+        "unknown": "不明确"
+      },
+      "companyMedian": "典型年薪 {amount}",
+      "roleHeading": "本岗位",
+      "relatedHeading": "这家公司的相关岗位",
+      "noRole": "没有找到这个岗位的数字。",
+      "bandRange": "{min} 至 {max}",
+      "bandMedian": "中位数 {amount}",
+      "bandVsGroup": "约在上面那组的 P{p}",
+      "bandVsGroupBelow": "低于上面那组的 P10",
+      "bandVsGroupAbove": "高于上面那组的 P90",
+      "notConvertible": "以 {currency} 写明，没有汇率，不做比较。",
+      "basis": {
+        "base": "底薪",
+        "total": "总包（含奖金或股权）",
+        "unknown": "口径不明"
+      },
+      "sourcesHeading": "来源",
+      "otherSource": "其他来源",
+      "sourceRef": "来源 {n}",
+      "notesHeading": "备注",
+      "dropped": "丢弃了 {n} 条（没有来源、链接不合格或数字不合理）。",
+      "done": "薪资查询完成",
+      "sourcesLink": "来源页"
+    },
+    "error": {
+      "invalid": "请求无效",
+      "not_ready": "薪资相关的数据表还不存在，请先运行数据库迁移。",
+      "disabled": "查薪资已关闭。",
+      "config_error": "salary.yaml 或 ai.yaml 无法读取。",
+      "not_found": "找不到这个岗位",
+      "no_web_provider": "这个查询设置的 AI provider 都不能搜索网页。",
+      "quota": "今天的查薪资次数已用完。稍后再试，或在设置里调高上限。",
+      "aborted": "查询时 AI worker 被停止了，请重试。",
+      "auth": "{providers} 的登录或 key 已过期或被拒绝。请先处理（{fixes}），然后重试。",
+      "timeout": "查询没有在限定时间内完成。请重试，或在设置里调高超时。",
+      "rate_limited": "AI provider 现在被限流，请稍后再试。",
+      "invalid_output": "AI 返回的内容不符合薪资结果的格式，请重试。",
+      "provider_error": "AI provider 报告了错误。请重试；如果一直失败，看 AI worker 的日志。",
+      "network": "连不上 AI provider，请重试。",
+      "budget": "本月 AI API 预算已用完。",
+      "unavailable": "现在没有能搜索网页的 AI provider 可用。请检查 CLI 登录或 API key（claude-cli 需要 2.1.296 或更新版本）。",
+      "failed": "查询失败，请重试。",
+      "invalid_payload": "请求内容不合法。",
+      "handler_error": "处理请求时出错，请重试。",
+      "no_handler": "没有进程处理查薪资请求（ai-worker 没有运行？）。",
+      "waitTimeout": "ai-worker 一直没有响应，去来源页看看它是否在线。"
+    },
+    "cli": {
+      "usage": "pnpm salary:benchmark [--json]\n\n用库里的岗位重算薪资基准，并打印各组。",
+      "noCurrency": "市场没有设置基准货币，没有可比较的内容。",
+      "disabled": "薪资基准已关闭（salary.yaml: benchmark.enabled），或者相关数据表不存在。",
+      "summary": "薪资基准（{currency}）：{groups} 个组，来自 {postings} 个岗位和 {ai} 个 AI 查询数字。"
+    }
+  }
+}

@@ -1,0 +1,220 @@
+/*
+ * Job table / card layout of Today and /jobs. Ported from docs/design/design-system.html ".jobs", ".mc" and ".kpi";
+ * colours, type sizes, radii, shadows and motion durations are the v3 tokens. Column widths are local geometry.
+ *
+ * The list is a container: from `--jb-table-min` of its own width the rows are table rows (7 columns under a sticky head), below
+ * that they are cards (score + salary side by side, then tags, skill overlap + freshness). The phone (<= 768px) is always cards.
+ */
+
+.jb { container: jb / inline-size; }
+/* a row that leaves slides 30px to the right (row-motion.ts): on a phone that must not widen the page; the margin keeps the frame's hard shadow */
+.jb { overflow-x: clip; overflow-clip-margin: var(--space-3); }
+
+/* ---------------------------------------------------------------- head (table only) */
+.jb-head { display: none; }
+
+/* ---------------------------------------------------------------- card (default) */
+.jb-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-3);
+  padding: var(--space-3);
+  background: var(--card-bg);
+  border: var(--bw) solid var(--ink);
+  border-radius: var(--r-frame);
+  box-shadow: var(--e3);
+  outline: none;
+  transition: background-color var(--dur-fast), box-shadow var(--dur-fast), translate var(--dur-fast);
+}
+.jb-row:hover { background-color: color-mix(in srgb, var(--hi) 14%, var(--card-bg)); }
+.jb-row:focus-within { background-color: color-mix(in srgb, var(--hi) 30%, var(--card-bg)); }
+.jb-row:focus-visible { outline: 3px solid var(--signal-t4); outline-offset: 2px; }
+.jb-row[data-status="archived"] .jb-title { text-decoration: line-through; opacity: 0.6; }
+.jb-row[data-filtered="true"] { opacity: 0.85; }
+
+.jb-li { list-style: none; padding-bottom: var(--space-3); }
+
+.jb-cell { min-width: 0; }
+.jb-cell--label { display: none; }
+.jb-mid { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--space-4); align-items: end; }
+.jb-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2) var(--space-4); }
+.jb-cell--status { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+
+/* the unseen dot sits in front of the first line of the title, however long the title is: a flex row, the link wraps inside its own box */
+.jb-title { display: flex; align-items: baseline; gap: var(--space-1); font-weight: 800; font-size: var(--text-title); line-height: var(--text-title-lh); overflow-wrap: anywhere; }
+.jb-title a { min-width: 0; color: inherit; text-decoration: none; }
+.jb-title a::after { content: ""; position: absolute; inset: 0; border-radius: inherit; }
+.jb-sub { font-size: var(--text-body-sm); line-height: var(--text-body-sm-lh); color: var(--ink-2); overflow-wrap: anywhere; }
+.jb-sub b { color: var(--ink); font-weight: 700; }
+.jb-title [data-slot="fav-mark"] { align-self: flex-start; margin-top: 0.3em; }
+.jb-fav { display: flex; align-items: center; gap: var(--space-1); min-width: 0; font-family: var(--font-mono); font-size: var(--text-data); color: var(--ink-2); position: relative; z-index: 1; }
+.jb-fav button { cursor: pointer; }
+/* editing the note: the input gets a line of its own and fills the column */
+.jb-fav[data-editing] { flex-wrap: wrap; }
+/* An unseen job keeps the bold title and a dot in front of it; a seen one drops to the normal weight */
+.jb-row[data-seen="true"] .jb-title { font-weight: 500; }
+.jb-title [data-slot="unseen-dot"] { align-self: center; flex: none; }
+/* the "new since your last visit" divider (sort by first seen, newest first) */
+.jb-divider { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2) 0; font-family: var(--font-mono); font-size: var(--text-data-sm); color: var(--ink-2); }
+.jb-divider::before, .jb-divider::after { content: ""; flex: 1; height: 0; border-top: 1px dashed var(--ink-3); }
+.jb-sum { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-body-sm); color: var(--ink-3); }
+.jb-notes { font-size: var(--text-body-sm); color: var(--ink-2); }
+.jb-reasons { font-size: var(--text-body-sm); color: var(--bad); }
+.jb-note { font-family: var(--font-mono); font-size: var(--text-data-sm); color: var(--ink-3); }
+
+.jb-tags { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-1); align-content: flex-start; min-width: 0; }
+/* a tag never outgrows its cell: the text gets an ellipsis (the title holds the full tier name) */
+.jb-tags > * { max-width: 100%; min-width: 0; }
+.jb-tags [data-slot="signal-tag"] > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.jb-tags [data-slot="gate"], .jb-tags [data-slot="job-status-chip"] { display: inline-block; overflow: hidden; text-overflow: ellipsis; }
+/* "Not disclosed" may take two lines; a stated range stays on one */
+.jb-cell--salary .jr-salm--none .jr-salm__f { white-space: normal; overflow-wrap: anywhere; line-height: 1.1; }
+.jb-cell--status [data-slot="status-chip"] { display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; text-align: center; }
+.jb-na { font-family: var(--font-mono); font-size: var(--text-data); color: var(--ink-3); }
+
+/* row actions: hidden at rest (opacity, so they stay reachable by Tab), they slide in on hover / focus; always there on a card (status pill left, buttons right) */
+.jb-act { display: flex; gap: var(--space-1); position: relative; z-index: 1; opacity: 0; translate: 6px 0; transition: opacity var(--dur-fast), translate var(--dur-base) var(--ease-out); }
+.jb-row:hover .jb-act, .jb-row:focus-within .jb-act { opacity: 1; translate: 0 0; }
+@container jb (max-width: 67.99rem) { .jb-act { opacity: 1; translate: 0 0; } }
+.jb-act button { position: relative; z-index: 1; }
+/* touch / card layout: 40px tap targets; the wide table keeps the compact size */
+@container jb (max-width: 67.99rem) { .jb-act .jb-act-btn { width: 40px; height: 40px; } }
+
+/* ---------------------------------------------------------------- table */
+@container jb (min-width: 68rem) {
+  .jb-frame { border: var(--bw) solid var(--ink); border-radius: var(--r-card); background: var(--card-bg); box-shadow: var(--e3); }
+  .jb-li { padding-bottom: 0; border-top: 1.5px solid var(--grid); }
+  .jb-li:first-child { border-top: 0; }
+  .jb-head, .jb-row {
+    display: grid;
+    /* mins fit the longest English strings ("Not disclosed", "Competitive", "Interested"); the spare width goes to job / salary / signals / status.
+       The status column is as wide as the four row buttons (9.5rem, the job column gave up 2.5rem of its minimum), so the strip
+       shown on hover / focus never covers the freshness date */
+    grid-template-columns: minmax(8.5rem, 3fr) 13.5rem minmax(9rem, 1.3fr) minmax(8.5rem, 1.1fr) minmax(6.25rem, 0.7fr) minmax(6rem, 0.6fr) minmax(9.5rem, 0.8fr);
+    column-gap: var(--space-3);
+    align-items: center;
+  }
+  .jb-head {
+    position: sticky;
+    top: 3.5rem; /* under the topbar (h-14) */
+    z-index: var(--z-sticky);
+    padding: 0 var(--space-3);
+    background: var(--soft);
+    border-bottom: var(--bw) solid var(--ink);
+    border-radius: var(--r-card) var(--r-card) 0 0;
+    font-family: var(--font-mono);
+    font-size: var(--text-cap);
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: var(--ink-2);
+    text-transform: uppercase;
+    align-items: end;
+  }
+  /* a long label (SIGNALS / GATES, SKILL OVERLAP) wraps to a second line instead of running into its neighbour */
+  .jb-head > span { min-width: 0; padding: var(--space-2) 0; line-height: 1.25; overflow-wrap: anywhere; }
+  /* A sortable head is a link with an arrow: the current column's arrow is solid ink, the others' a faint double arrow */
+  .jb-sort { display: inline-flex; align-items: center; gap: var(--space-1); color: inherit; text-decoration: none; text-transform: inherit; border-radius: var(--r-cell); }
+  .jb-sort:hover { color: var(--ink); }
+  .jb-sort:focus-visible { outline: 3px solid var(--signal-t4); outline-offset: 2px; }
+  .jb-sort-icon { flex: none; width: 0.95rem; height: 0.95rem; color: var(--ink-3); }
+  .jb-sort:hover .jb-sort-icon { color: var(--ink-2); }
+  .jb-sort[data-sort-active="true"] { color: var(--ink); }
+  .jb-sort[data-sort-active="true"] .jb-sort-icon { color: var(--ink); }
+  .jb-row { padding: var(--space-3); border: 0; border-radius: 0; box-shadow: none; background: transparent; }
+  .jb-li:last-child .jb-row { border-radius: 0 0 var(--r-card) var(--r-card); }
+  .jb-row:hover { background-color: color-mix(in srgb, var(--hi) 22%, transparent); }
+  .jb-row:focus-within { background-color: color-mix(in srgb, var(--hi) 38%, transparent); box-shadow: inset 5px 0 0 var(--ink); }
+  .jb-row:focus-visible { outline-offset: -3px; }
+  .jb-mid, .jb-foot { display: contents; }
+  .jb-cell--status { display: grid; grid-template-columns: minmax(0, 1fr); align-items: center; }
+  .jb-cell--status > * { grid-area: 1 / 1; }
+  /* The strip of four buttons fits the status column (see its minimum); `unsafe end` keeps it right-aligned should it ever not */
+  .jb-act { justify-self: unsafe end; width: max-content; background: var(--card-bg); border-radius: var(--r-tag); }
+  .jb-row:hover .jb-cell--status > :first-child, .jb-row:focus-within .jb-cell--status > :first-child { visibility: hidden; }
+}
+
+/* ---------------------------------------------------------------- motion (no-preference only: reduced motion shows the final state at once) */
+@media (prefers-reduced-motion: no-preference) {
+  .jb-row[data-stagger] { animation: jb-in var(--dur-slow) var(--ease-out) both; animation-delay: calc(var(--n, 0) * 60ms); }
+}
+@keyframes jb-in { from { opacity: 0; translate: -10px 0; } }
+
+/* a long list scrolls smoothly: rows far from the viewport are not laid out or painted */
+.jb[data-dense="true"] .jb-li { content-visibility: auto; contain-intrinsic-size: auto 11rem; }
+@container jb (min-width: 68rem) {
+  .jb[data-dense="true"] .jb-li { contain-intrinsic-size: auto 5.5rem; }
+}
+
+/* ---------------------------------------------------------------- company mark */
+.jb-mark { display: grid; flex: none; place-items: center; width: 34px; height: 34px; border: var(--bw) solid var(--ink); border-radius: var(--r-tag); font-family: var(--font-display); font-size: var(--text-data); line-height: 1; }
+
+/* ---------------------------------------------------------------- summary blocks */
+.kpis { display: grid; gap: var(--space-4); grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.kpi { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; padding: var(--space-3) var(--space-4); background: var(--card-bg); border: var(--bw) solid var(--ink); border-radius: var(--r-card); box-shadow: var(--e3); }
+.kpi--hero { grid-column: 1 / -1; background: var(--hi); color: var(--hi-ink); }
+.kpi__l { display: flex; align-items: center; gap: var(--space-2); font-family: var(--font-mono); font-size: var(--text-data-sm); font-weight: 600; letter-spacing: 0.04em; color: var(--ink-2); }
+.kpi--hero .kpi__l { color: var(--hi-ink); }
+.kpi__l i { width: 10px; height: 10px; border: 1.5px solid var(--ink); border-radius: var(--r-cell); background: var(--c); }
+.kpi__n { font-family: var(--font-display); font-size: var(--num-l); line-height: var(--num-l-lh); font-variant-numeric: tabular-nums; }
+.kpi--hero .kpi__n { font-size: var(--num-xl); line-height: var(--num-xl-lh); }
+.kpi__f { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--space-2); margin-top: auto; }
+.kpi--hero .jr-spark__ln { stroke: var(--hi-ink); }
+.kpi--hero .jr-spark__dot { fill: var(--card-bg); stroke: var(--hi-ink); }
+.kpi__one { font-family: var(--font-mono); font-size: var(--text-data-sm); color: var(--ink-2); white-space: nowrap; }
+.kpi--hero .kpi__one { color: var(--hi-ink); }
+/* the pending note is a sentence, not a figure: it wraps inside narrow (phone) blocks instead of running past the edge */
+.kpi__one--wrap { white-space: normal; min-width: 0; overflow-wrap: anywhere; }
+.kpi__src { font-family: var(--font-mono); font-size: var(--text-data-sm); color: var(--hi-ink); }
+@media (min-width: 48rem) {
+  .kpis { grid-template-columns: 1.4fr repeat(4, minmax(0, 1fr)); }
+  .kpi--hero { grid-column: auto; }
+}
+/* the short labels are for the phone row only */
+.kpi__ls { display: none; }
+
+/* phone (design s-phone): three compact blocks in one row (fetched, at-or-above the push line, salary stated: label + rolling number, no bar or trend),
+   so the first job is on the first screen. "passed" and "pushed" are on the tablet / desktop strip only. */
+@media (max-width: 47.99rem) {
+  .kpis { grid-template-columns: 1.2fr 1fr 1fr; gap: var(--space-2); }
+  .kpi { padding: var(--space-2) var(--space-3); gap: var(--space-1); box-shadow: var(--e2); }
+  .kpi--hero { grid-column: auto; }
+  .kpi[data-k="passed"], .kpi[data-k="pushed"] { display: none; }
+  .kpi__n, .kpi--hero .kpi__n { font-size: var(--num-m); line-height: var(--num-m-lh); }
+  .kpi--hero .kpi__n { font-size: var(--num-l); line-height: var(--num-l-lh); }
+  .kpi .jr-ratio { display: none; }
+  .kpi__f { display: none; }
+  .kpi[data-pending] .kpi__f { display: flex; }
+  .kpi__l { gap: var(--space-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+  .kpi__l i { display: inline-block; margin-right: var(--space-1); vertical-align: -1px; }
+  .kpi__ll { display: none; }
+  .kpi__ls { display: inline; }
+}
+
+/* a block whose step failed: the word instead of a number, never a fake 0 */
+.kpi[data-pending] { border-style: dashed; }
+.kpi__n--pending { font-family: var(--font-display); font-size: var(--num-m); line-height: var(--num-m-lh); color: var(--bad); }
+@media (max-width: 47.99rem) { .kpi__n--pending { font-size: var(--text-title); line-height: var(--text-title-lh); } }
+.kpi[data-pending="unscored"] .kpi__n--pending { color: var(--ink-2); }
+
+.jb-cell--fresh .jr-fresh__b { width: 28px; }
+.kpi--hero .jr-ratio, .kpi--hero .jr-ratio b { color: var(--hi-ink); }
+.kpi--hero .jr-pbar-track { background: var(--card-bg); }
+
+/* score cell: number block of a fixed width, meter always to its right, so every row lines up (2- and 3-digit values alike) */
+.jb .jr-score { flex-wrap: nowrap; gap: var(--space-2); }
+/* the band name ("Worth a look") is one line, whatever the language: the score column is wide enough for it */
+.jb .jr-score__b { white-space: nowrap; }
+.jb .jr-score__n { min-width: 6.9rem; } /* room for "100/100" and the "+6" overflow mark */
+
+/* the date boxes of the filter bar keep their focus inside (month / day / year parts), where the host never matches :focus-visible: same ring as everywhere */
+.jb-filter-date:focus-within { outline: 3px solid var(--signal-t4); outline-offset: 2px; }
+
+/* the view switch scrolls sideways on a phone: a fade at the edge that has more behind it, and room after the last item so it can be scrolled fully into view */
+.jb-tabs { scroll-padding-inline: var(--space-6); }
+.jb-tabs::after { content: ""; display: block; flex: none; width: var(--space-4); height: 1px; }
+.jb-tabs { display: flex; }
+.jb-tabs > * { flex: none; }
+.jb-tabs[data-fade-end="true"] { mask-image: linear-gradient(to right, var(--ink) calc(100% - var(--space-8)), transparent); }
+.jb-tabs[data-fade-start="true"] { mask-image: linear-gradient(to left, var(--ink) calc(100% - var(--space-8)), transparent); }
+.jb-tabs[data-fade-start="true"][data-fade-end="true"] { mask-image: linear-gradient(to right, transparent, var(--ink) var(--space-8), var(--ink) calc(100% - var(--space-8)), transparent); }

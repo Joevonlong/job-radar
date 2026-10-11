@@ -1,0 +1,66 @@
+/*
+ * /insights. Ported from docs/design/design-system.html (.vbars, .hb, .kpi): HTML columns and bars instead of
+ * one SVG, so every column is a link, a tooltip and screen-reader text, and the page needs no horizontal scroll at 390px.
+ * Colours, sizes, radii and motion come from the v3 tokens only; the grow animations are the shared ones of viz.css
+ * (`jr-growy` / `jr-grow`, started by the `data-played` ancestor).
+ */
+
+/* hatch fill: card colour with ink lines (the "filtered / total" look) */
+.ins-hatch {
+  background-color: var(--card-bg);
+  background-image: repeating-linear-gradient(135deg, var(--ink-3) 0 1.5px, transparent 1.5px 5px);
+}
+
+/* legend swatches */
+.ins-legend { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-3); font-family: var(--font-mono); font-size: var(--text-data-sm); line-height: var(--text-data-sm-lh); color: var(--ink-2); }
+.ins-legend > span { display: inline-flex; align-items: center; gap: 5px; }
+.ins-legend i { display: inline-block; width: 12px; height: 12px; border: 1.5px solid var(--ink); border-radius: var(--r-cell); background-color: var(--c, var(--ink)); }
+.ins-legend i.ins-hatch { background-color: var(--card-bg); }
+.ins-legend i[data-line] { height: 0; width: 16px; border-width: 0 0 3px; border-radius: 0; border-color: var(--c); background-color: transparent; }
+.ins-legend i[data-line="dashed"] { border-bottom-style: dashed; border-bottom-width: 2px; }
+
+/* column chart */
+.ins-chart { padding-top: calc(var(--mark-rows, 0) * 1.3em + 0.2em); display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: var(--space-2); font-family: var(--font-mono); font-size: var(--text-data-sm); line-height: var(--text-data-sm-lh); color: var(--ink-3); }
+.ins-chart__y { position: relative; width: 2.5ch; min-width: 2.5ch; text-align: right; font-variant-numeric: tabular-nums; }
+.ins-chart__y > span { position: absolute; right: 0; transform: translateY(50%); }
+.ins-plot { position: relative; height: var(--plot-h, 10rem); }
+.ins-plot__grid { position: absolute; left: 0; right: 0; height: 0; border-top: 1.5px solid var(--grid); pointer-events: none; }
+.ins-cols { position: absolute; inset: 0; display: flex; align-items: stretch; margin: 0; padding: 0; list-style: none; }
+.ins-col { position: relative; flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; justify-content: flex-end; padding: 0 var(--col-pad, 2px); }
+.ins-col:hover > .ins-stack { filter: brightness(1.1); }
+.ins-col[data-tip]:first-child:hover::after, .ins-col[data-tip]:first-child:focus-within::after { left: 0; transform: none; }
+.ins-col[data-tip]:last-child:hover::after, .ins-col[data-tip]:last-child:focus-within::after { left: auto; right: 0; transform: none; }
+.ins-stack { display: flex; flex-direction: column-reverse; gap: 2px; width: 100%; max-width: 2.5rem; margin: 0 auto; }
+.ins-seg { display: block; width: 100%; min-height: 3px; border: 1.5px solid var(--ink); border-radius: var(--r-cell); background-color: var(--c, var(--ink)); }
+.ins-seg.ins-hatch { background-color: var(--card-bg); }
+a.ins-seg:focus-visible { outline: var(--bw) solid var(--ring); outline-offset: 1px; }
+a.ins-seg:hover { filter: brightness(1.12); }
+.ins-chart__x { grid-column: 2; display: flex; margin-top: var(--space-1); height: 1.1rem; }
+.ins-chart__x > span { position: relative; flex: 1 1 0; min-width: 0; }
+.ins-chart__x > span > span { position: absolute; left: 50%; transform: translateX(-50%); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.ins-chart__x > span > span[data-phone="false"] { display: none; }
+@media (min-width: 640px) { .ins-chart__x > span > span[data-phone="false"] { display: block; } }
+
+/* a marker line across the plot (salary floor, median) */
+.ins-mark { position: absolute; top: 0; bottom: 0; width: 0; border-left: 3px solid var(--c); pointer-events: none; z-index: 1; }
+.ins-mark[data-kind="median"] { border-left: 2px dashed var(--c); }
+.ins-mark__l { position: absolute; top: calc((var(--row, 0) - var(--mark-rows, 1)) * 1.3em - 0.2em); line-height: 1.3; left: 5px; white-space: nowrap; font-weight: 700; color: var(--c); }
+.ins-mark[data-flip="true"] .ins-mark__l { left: auto; right: 5px; }
+
+/* horizontal bars (source / city / tiers / reasons) */
+/* The label column is as wide as the longest label (at most 10.5rem, at most 42% of the card) and shared by every row (subgrid), so the bars line up.
+   A longer label wraps to two lines and then ends in an ellipsis; the row's tooltip and screen-reader sentence carry the full text. */
+.ins-hb { display: grid; grid-template-columns: fit-content(min(10.5rem, 42%)) minmax(0, 1fr) auto; column-gap: 10px; row-gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+.ins-hb__r { display: grid; grid-template-columns: subgrid; grid-column: 1 / -1; align-items: center; font-size: var(--text-label); line-height: var(--text-label-lh); }
+.ins-hb__l { min-width: 0; font-weight: 700; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
+.ins-hb__t { position: relative; display: flex; height: 18px; min-width: 0; gap: 0; }
+.ins-hb__t > i { display: block; height: 100%; min-width: 3px; border: 1.5px solid var(--ink); border-left-width: 0; background-color: var(--c, var(--ink)); transform-origin: left; }
+.ins-hb__t > i:first-child { border-left-width: 1.5px; border-radius: 3px 0 0 3px; }
+.ins-hb__t > i:last-child { border-radius: 0 3px 3px 0; }
+.ins-hb__t > i:only-child { border-radius: 3px; }
+.ins-hb__t > i.ins-hatch { background-color: var(--card-bg); }
+.ins-hb__v { font-family: var(--font-mono); font-size: var(--text-data); text-align: right; color: var(--ink-2); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.ins-hb__v b { color: var(--ink); }
+.ins-hb__v a { text-decoration: underline dotted; text-underline-offset: 3px; }
+.ins-hb__v a:hover { background: var(--hi); color: var(--hi-ink); }
+.ins-hb__r:hover .ins-hb__t { filter: brightness(1.1); }

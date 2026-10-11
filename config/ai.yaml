@@ -1,0 +1,236 @@
+# AI provider layer. Keys go only in .env, never here.
+
+# Where AI runs:
+#   host      the runner in the container only writes a run_ai request; ai-worker on the host (launchd) runs it with the local claude / codex subscription
+#             for the AI and notify steps; the container needs no AI credentials (default)
+#   container the runner runs them inside the container itself (needs a subscription token or API key in the container; not recommended)
+config_version: 2
+execution: host
+
+# Host ai-worker (pnpm ai-worker)
+host_worker:
+  # How often to check the request queue (seconds)
+  poll_seconds: 5
+  # Max requests handled per pass; the rest wait for the next pass
+  max_requests_per_poll: 10
+  # Heartbeat interval (seconds)
+  heartbeat_seconds: 15
+  # No heartbeat for this many seconds = offline: /sources shows offline and the runner sends a Telegram alert
+  offline_after_seconds: 180
+  # How often (minutes) to measure free disk space on the host (the volume of doctor's disk.docker, i.e. where Docker Desktop stores data); used by the low-space hint on /sources
+  disk_check_minutes: 10
+  # ai-worker's own log (the launchd install writes it to data/logs/): rotated to .1, .2 … once it exceeds this many MB
+  log_max_mb: 10
+  # How many old logs to keep (.1 is newest); 0 = only truncate, keep no old logs
+  log_keep: 3
+  # After SIGTERM, wait at most this many seconds for the current request and DB connections to finish; on timeout log an error and force exit so launchd restarts it. A second signal exits immediately
+  shutdown_grace_seconds: 30
+  # A request cut off by a restart (deploy, crash) goes back to the queue and runs again after the restart, at most this many times; then it fails. 0 = fail at once. The runner uses it too
+  requeue_interrupted_max: 3
+  # Only one ai-worker runs per database: a second one (e.g. pnpm ai-worker next to the launchd service) waits this many seconds, then exits with code 3
+  # (so launchd does not restart it in a tight loop); --once exits at once. 0 = no wait
+  already_running_wait_seconds: 60
+  # Max seconds for one heartbeat write or one disk measurement; on timeout skip it and log, so the heartbeat loop never hangs
+  step_timeout_seconds: 20
+  # Docker Desktop data directory (absolute path); the low-space hint on /sources measures this volume. Unset = ai-worker reads Docker's settings file itself,
+  # which under launchd can hang forever on a macOS privacy permission prompt. pnpm run doctor prints the value to use; once set, that file is not read
+  # docker_data_path: /path/to/docker-data
+
+# Global order: try codex-cli first, then claude-cli, then the API tier (order in api_order).
+# The claude subscription quota is shared with your own interactive Claude use, so by default it comes after codex and has a daily request cap (providers.*.daily_request_cap).
+order: [codex-cli, claude-cli, api]
+# Pay-per-token APIs, tried in this order once both CLIs are unavailable; each needs its key in .env. DeepSeek and MiMo are off by default (providers.*.enabled).
+api_order: [anthropic, deepseek, mimo]
+
+providers:
+  # Subscription CLIs: run non-interactively in a temporary empty directory, no tools, no file writes; cost counts as 0 (subscription).
+  # Every provider has enabled (false = routing never tries it) and daily_request_cap (max model calls per day, failures included; 0 = unlimited; days follow the schedule.yaml timezone).
+  # Model catalog: the models and prices of each provider live in models.yaml (its header has the "new model" steps); here you only pick which one:
+  # model / strong_model must be a model under this provider in models.yaml (the model dropdown on /settings lists only those).
+  claude_cli:
+    enabled: true
+    daily_request_cap: 100
+    command: claude
+    model: claude-sonnet-5-5
+    strong_model: claude-sonnet-5-5
+    timeout_seconds: 120
+  codex_cli:
+    enabled: true
+    daily_request_cap: 200
+    # Must be codex or a path ending in /codex (claude_cli: claude): the ai-worker never starts another program.
+    command: codex
+    # model: unset = the CLI's built-in default model (gpt-6.1-sol in 0.162.0). Calls pass --ignore-user-config,
+    # so the model chosen in ~/.codex/config.toml has no effect; the model actually used is recorded in ai_usage.
+    # Reasoning effort. low is enough for scoring, signals and translation, and much faster; can be overridden per task, e.g. { translate: low }.
+    reasoning_effort: low
+    reasoning_effort_by_task: {}
+    # Trim Codex's agent context. Input tokens per call drop from ~16k to ~3k (measured on 0.160.1). false = old behavior.
+    trim_context: true
+    # Codex features turned off on every call (with or without trim_context), passed as -c features.<name>=false (--disable exits on unknown names; -c ignores them).
+    # The ai-worker turns off every feature the installed codex lists (codex features list) except a few harmless ones, plus a fixed list of tool
+    # features (shell, exec, apps, plugins, browser, hooks ...), and always disables web search; this list can only add names, removing one turns nothing back on.
+    disable_features: [shell_tool, unified_exec, multi_agent, plugins, apps, memories, image_generation, browser_use, computer_use, in_app_browser, view_image, tool_suggest, skill_search, goals, sleep_tool, hooks, workspace_dependencies, worktrees, code_mode_host, mentions_v2, realtime_conversation]
+    # Extra -c overrides, passed with trim_context only: key -> value. Only context switches set to "false" are allowed:
+    # skills.include_instructions, agents.enabled, include_*_instructions, include_*_context. Any other key or value is ignored with a warning (log, doctor).
+    config_overrides:
+      skills.include_instructions: "false"
+      agents.enabled: "false"
+      include_permissions_instructions: "false"
+      include_environment_context: "false"
+      include_collaboration_mode_instructions: "false"
+      include_apps_instructions: "false"
+    # Concurrent codex calls within one process; processes share ~/.codex/auth.json and may collide when refreshing the token.
+    max_concurrency: 3
+    # On the first login (auth) error, wait this many seconds and retry once; only a second failure marks the login as expired; 0 = no retry.
+    auth_retry_seconds: 5
+    # The oldest codex-cli this app works with: 0.122.0 added `codex exec --ignore-user-config` and `--ignore-rules`, which every call passes
+    # (`--ephemeral`, `model_instructions_file` and `codex features list` are older). An older install draws a warning (pnpm run doctor, ai:probe, ai-worker
+    # startup log) and calls are not blocked; an equal or newer version is fine. An old `verified_version` key in your own ai.yaml is ignored.
+    min_version: "0.122.0"
+    timeout_seconds: 180
+  anthropic:
+    enabled: true
+    daily_request_cap: 0
+    model: claude-sonnet-5-5
+    strong_model: claude-sonnet-5-5
+  # DeepSeek and MiMo are off by default: switch one on (enabled: true) and put its key in .env to use it.
+  # base_url: the key is only sent to the vendor's own host; another host needs JOB_RADAR_ALLOW_CUSTOM_ENDPOINTS=1 in .env.
+  deepseek:
+    enabled: false
+    daily_request_cap: 0
+    base_url: https://api.deepseek.com
+    model: deepseek-flash
+    # DeepSeek also only has JSON mode: the schema goes into the prompt
+    json_mode_only: true
+  mimo:
+    enabled: false
+    daily_request_cap: 0
+    base_url: https://api.xiaomimimo.com/v1
+    model: mimo-v2.6-pro
+    # MiMo only has JSON mode, no json_schema
+    json_mode_only: true
+
+# All five tasks use the global order by default; add an order override to a task when needed, e.g.:
+#   translate:
+#     order: [deepseek, api]
+# A task override can also add models: {provider: model}, only for providers listed directly in that task's own order, e.g.:
+#     models: {claude-cli: claude-sonnet-5-5}
+# Breakdown can also be added here as breakdown: {order: [...]}; unset = global order
+tasks:
+  score: {}
+  signals: {}
+  # Measured: claude-cli often takes over 90 s to translate a 2500-character chunk; codex-cli is faster, so translation tries codex first
+  translate:
+    order: [codex-cli, claude-cli, api]
+    models:
+      claude-cli: claude-sonnet-5-5
+  summarize: {}
+  suggest: {}
+
+# API provider request timeout (seconds) and max output tokens per call
+api_timeout_seconds: 60
+max_output_tokens: 4096
+
+# Cooldown: when a provider reports a quota / session limit / rate limit, all processes (runner, ai-worker) skip it
+# until the reset time given in the error; if that can't be parsed, cool down for default_minutes; never longer than max_minutes.
+cooldown:
+  default_minutes: 60
+  max_minutes: 360
+
+# Max minutes of AI work (scoring, signals) per run; the rest waits for the next run; 0 = unlimited. Push goes out right after scoring; translation comes after push.
+cycle_budget_minutes: 30
+# Budget for a run with no new jobs (only working through the backlog); 0 = unlimited
+idle_cycle_budget_minutes: 10
+
+# Max jobs processed per run
+per_cycle_limit: 80
+# Monthly cap on paid API spend (USD)
+monthly_api_budget_usd: 10
+# Jobs scoring ≥ this value are translated automatically (target language: translation.target in language.yaml)
+translate_auto_min_score: 70
+
+# Translation
+translation:
+  # The JD is split by paragraph into chunks of at most this many characters, one request per chunk; each chunk is saved once translated, so a retry only redoes the missing chunks
+  chunk_chars: 2500
+  # Max seconds one provider may take for one chunk (overrides providers.*.timeout_seconds). On timeout, switch to the next provider,
+  # and stop trying this slow provider for the remaining chunks of this JD
+  chunk_timeout_seconds: 90
+  # Fixed translations: source term -> translation (same as the source = keep the English). Keeps the same job title translated the same way every time;
+  # only terms that appear in a chunk are sent to the AI. Case-insensitive
+  glossary:
+    Site Reliability Engineer: Site Reliability Engineer
+    Solutions Engineer: Solutions Engineer
+    Customer Engineer: Customer Engineer
+    Developer Advocate: Developer Advocate
+    Product Manager: Product Manager
+
+# Scoring
+scoring:
+  # Max JD characters sent to the AI; longer JDs keep the start and the end (language requirements are often at the end)
+  jd_max_chars: 6000
+  # When truncating, the share taken from the start (the rest comes from the end)
+  jd_head_share: 0.7
+  # Jobs scored concurrently (keep it low for CLI subscription providers)
+  concurrency: 3
+  # Points deducted from the match score when the job's required local language (the market's language, e.g. German for the German market) is above your level in me.yaml; unlisted levels deduct nothing.
+  # If the market pack has no rule for this language, this step is off and nothing is deducted.
+  # Computed by code outside the prompt, so it is always consistent.
+  language_penalty:
+    B2: 10
+    C1: 20
+    C2: 25
+  # Max jobs scored by one "score unscored jobs" request (/settings). The per-run per_cycle_limit is unchanged; this is a separate backlog budget.
+  backlog_per_run: 40
+  # Your own scoring criteria (Settings → AI → Scoring), one sentence each, in any language; sent to your AI provider with every job (docs/privacy.md).
+  # priorities = what matters most, dealbreakers = situations you will not accept (such a job lands in the 0-29 band),
+  # nice_to_have = small pluses. At most 10 entries per list, 300 characters each. Changing them re-scores current scores.
+  criteria:
+    priorities: []
+    dealbreakers: []
+    nice_to_have: []
+  # Scoring order: rank first by an AI-free relevance pre-score, then send to the AI from high to low.
+  # Pre-score = sum of weight x item score (0..1), minus the local language gap; only used for ordering, never shown.
+  priority:
+    weights:
+      title: 40 # title matches a target role (preferences.yaml) or a search keyword (search.yaml)
+      signals: 25 # pay signals: stored signal bonus / bonus_cap in interests.yaml (T1/T2 first)
+      location: 15 # highest in a desired city; nearby and remote next
+      seniority: 10 # seniority match: follows preferences.yaml seniority, see seniority_from_preferences
+      recency: 10 # newer ranks higher, see recency_days
+      language_gap: 10 # deducted when the required local language is above me.yaml (proportional to language_penalty)
+    # Title-match factor for words from search.yaml keyword groups, relative to target roles (1 = same)
+    keyword_group_factor: 0.9
+    # All words are in the title but not adjacent ("Senior Android Engineer - AI Product" vs "AI Product Engineer")
+    all_words_match: 0.8
+    # At least half the words are in the title: this factor x share of matched words
+    partial_match: 0.5
+    # Matching only these words is not a partial match ("Cooling Flow Design Engineer" vs "AI Engineer")
+    generic_title_words: [engineer, engineers, engineering, developer, entwickler, entwicklerin, manager, specialist, consultant, architect, analyst, associate, lead, solutions]
+    # true: the seniority fit follows `seniority` in preferences.yaml (entry / mid / senior / lead; "all" fits everything), so a junior search does not rank senior postings first.
+    # false: use the seniority_fit table below as written
+    seniority_from_preferences: true
+    # With seniority_from_preferences: fit for a posting 0, 1, 2, 3+ levels away from the wanted level (the last value repeats)
+    seniority_distance_fit: [1, 0.7, 0.4, 0.15]
+    # Used when seniority_from_preferences is false
+    seniority_fit:
+      intern: 0
+      junior: 0.2
+      mid: 0.7
+      senior: 1
+      staff: 1
+      principal: 0.9
+      lead: 0.8
+      manager: 0.5
+      unknown: 0.6
+    location_fit:
+      exact: 1 # location is a city from preferences.yaml
+      nearby: 0.6 # nearby location
+      remote: 0.7 # remote and in scope (incl. country-only "<country> (Remote)" and JDs stating hiring in the home country)
+      country_level: 0.5 # not remote, location only at country level
+      other: 0.3 # other
+      unclear: 0.1 # marked "remote scope unclear" or "location unclear" by filtering ("Remote - Virginia"), mostly outside your market; country-only is not unclear
+    # Jobs with an unclear location (unclear above) have their overall priority multiplied by this factor: most are outside your market
+    unclear_location_factor: 0.7
+    # Jobs posted more than this many days ago get no recency score; linear decay until then
+    recency_days: 14

@@ -1,0 +1,138 @@
+# Run times. cron has 5 fields: minute hour day month weekday, interpreted in the timezone below.
+# The runner hot-reloads this file: changes take effect within about 5 seconds of saving; invalid content is ignored and an error is logged.
+# IANA time zone name (the setup wizard asks for yours)
+timezone: America/New_York
+
+cycles:
+  # Morning run: weekdays 07:00; search window in window_hours.morning of search.yaml
+  weekday_morning:
+    cron: "0 7 * * 1-5"
+    enabled: true
+  # Evening run: weekdays 17:00; window window_hours.evening
+  weekday_evening:
+    cron: "0 17 * * 1-5"
+    enabled: true
+  # Weekend run: Saturday and Sunday 09:00; window window_hours.weekend
+  weekend:
+    cron: "0 9 * * 0,6"
+    enabled: true
+
+# If the runner missed the latest run when it starts, catch up once immediately
+catch_up: true
+# If the previous run is still going, skip the new run and log it
+skip_if_running: true
+
+# Database backup: the runner runs pg_dump once a day per cron (same timezone as above),
+# writing data/backups/jobradar-YYYYMMDD-HHMMSS.dump. Restore steps in docs/backup-restore.md.
+backup:
+  enabled: true
+  cron: "30 3 * * *"
+  # Keep the latest backup of each day for the last N days
+  keep_daily: 14
+  # Also keep the latest backup of each week for the last N calendar weeks (ISO weeks); 0 = no weekly backups
+  keep_weekly: 8
+  # Abort pg_dump and count it as failed after this many minutes
+  timeout_minutes: 30
+  # pnpm run doctor: report ❌ if the latest backup is older than this (one per day, plus a margin)
+  max_age_hours: 30
+  # Also write the config and profile (data/config, data/profile) next to every dump as <dump>.config.tgz
+  config_archive: true
+  # Back up before pending database migrations are applied (runner start, pnpm migrate:run); the file is named ...-premigrate-<from>-<to>.dump
+  pre_migrate: true
+  # Keep the newest N backups of each safety kind (pre-deploy, pre-restore, premigrate); manual backups with your own label are never deleted
+  keep_system: 5
+  # scripts/ops/restore.sh keeps the newest N replaced databases (<db>_before_restore_<time>) after a restore into the main database
+  keep_old_databases: 1
+
+# "Recommended for you" of the LinkedIn session channel (linkedin-session:recommended): once a day, not part of the cascade.
+# Not a separate scheduled job: the first of the runs above that finds today's cron time has passed and it hasn't been read yet reads it once; manual runs always read it.
+linkedin_recommended:
+  enabled: true
+  cron: "0 7 * * *"
+
+# How often (seconds) the runner checks for requests left by the web app ("Run now", "Rescore stale scores", see /settings)
+control_poll_seconds: 5
+
+# Weekly AI interest suggestions: from jobs you marked interested, preparing, applied, interviewing or offer,
+# extract new signal words, companies to watch and filters as "suggestions" on /interests; they are written to interests.yaml / preferences.yaml only after approval.
+# At the cron time (in the timezone above) the runner leaves a run_suggest request, executed by the process that runs AI; can also be triggered manually.
+suggest:
+  enabled: true
+  # Every Monday 08:00
+  cron: "0 8 * * 1"
+  # Only consider jobs whose status changed within this many recent weeks
+  lookback_weeks: 4
+  # Statuses that count as "liked" (evidence)
+  positive_statuses: [interested, preparing, applied, interviewing, offer]
+  # Statuses that count as "dismissed" (for contrast in the AI)
+  ignored_statuses: [archived]
+  # With fewer liked jobs than this, skip the run without calling AI (nothing to learn from)
+  min_positive_jobs: 3
+  # Max liked / dismissed jobs handed to the AI (later statuses and more recent ones first)
+  max_positive_jobs: 20
+  max_ignored_jobs: 10
+  # Max JD characters sent to the AI per job
+  jd_max_chars: 3000
+  # Max new suggestions per pass
+  max_suggestions: 10
+  # Discard suggestions whose AI confidence (0 to 1) is below this
+  min_confidence: 0.5
+  # Minimum jobs as evidence per suggestion (companies need only 1; a word or filter seen in a single job is not a pattern)
+  min_evidence:
+    signal_word: 2
+    watched_company: 1
+    filter: 2
+  # Max characters for words, company names and cities
+  max_term_chars: 60
+  # Send a Telegram reminder when there are new suggestions (telegram in notify.yaml must also be on)
+  notify: true
+
+# Health check: pnpm run doctor checks the whole system item by item on the host; below are its names, addresses, timeouts and thresholds.
+doctor:
+  # compose project name (name in compose.yaml) and the services that must be healthy
+  compose_project: job-radar
+  compose_services: [db, web, runner, jobspy]
+  # Web address as seen from the host (web binds only to 127.0.0.1). Override temporarily with the env var JOB_RADAR_DOCTOR_WEB_URL
+  web_url: "http://127.0.0.1:3000"
+  # Max wait for one HTTP request or TCP connection (seconds)
+  probe_timeout_seconds: 5
+  # Max run time for docker / launchctl / claude / codex / tailscale / pmset commands (seconds)
+  command_timeout_seconds: 15
+  # Free disk space (GB): ❌ below min, ⚠️ below warn (the backup volume and the Docker data volume)
+  min_free_disk_gb: 5
+  warn_free_disk_gb: 20
+  # Free space on the host's internal system disk (GB): ❌ below min, ⚠️ below warn
+  internal_min_free_disk_gb: 10
+  internal_warn_free_disk_gb: 30
+  # Guide doctor points to when Docker data is not on the project's external volume (default docs/host-setup.md)
+  # storage_guide: docs/host-setup.md
+  # AI requests queued for ai-worker: ⚠️ when there are more than this many, or the oldest has waited longer than this many minutes
+  ai_backlog_warn: 40
+  # ⚠️ when more than this many jobs are still waiting for AI scoring
+  ai_unscored_warn: 200
+  ai_oldest_pending_warn_minutes: 30
+  # A scheduled run that hasn't started this many minutes after its time counts as missed
+  cycle_grace_minutes: 90
+  # launchd label of ai-worker (scripts/ops/install-ai-worker.sh)
+  ai_worker_launchd_label: io.jobradar.ai-worker
+  # Browser session directory (relative to the project root, gitignored)
+  linkedin_auth_dir: .auth
+
+# Docker cleanup on deploy: scripts/ops/deploy.sh runs it after the services start; --no-prune skips it.
+# Only clears build cache and dangling images; never touches data volumes (the database lives there) and never deletes images in use.
+deploy:
+  # Prune the Docker build cache, keeping build_cache_keep_gb GB of the most recently used (docker builder prune --max-used-space)
+  prune_build_cache: true
+  # 0 = clear all unused build cache (the next build is slower)
+  build_cache_keep_gb: 5
+  # Remove dangling images: untagged images left by old builds (docker image prune, without -a)
+  prune_dangling_images: true
+  # Before recreating the containers, wait at most this many seconds for a running cycle to finish (a cycle cut off is re-run by the runner's catch-up at start-up); 0 = do not wait
+  drain_timeout_seconds: 900
+  # How often to check while waiting (seconds)
+  drain_poll_seconds: 10
+
+# Manual buttons: "Collect now" and "Test" on /sources, "Send Telegram test message" on /settings
+manual_triggers:
+  # After a request of the same kind for the same target finishes, clicks within this many seconds are rejected (unfinished requests are reused, not duplicated); 0 = no limit
+  min_interval_seconds: 30

@@ -1,0 +1,14 @@
+/*
+ * /sources/ai-usage. Only what the shared v3 utilities and insights.css do not cover: a wider value axis for the
+ * daily chart (token counts are longer than job counts) and the stacked-card look of the tables on a phone.
+ */
+.ai-chart .ins-chart__y { width: 6ch; min-width: 6ch; }
+
+/* a sub-nav of the /sources pages: the current one is the highlight with an ink outline (same as a selected segment) */
+.ai-subnav { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.ai-subnav a { display: inline-flex; align-items: center; min-height: var(--h-sm); padding: 0 var(--space-3); border: var(--bw) solid transparent; border-radius: var(--r-btn); font-weight: 700; color: var(--ink); text-decoration: none; }
+.ai-subnav a:hover { background-color: var(--soft); border-color: var(--ink); }
+.ai-subnav a[aria-current="location"] { background-color: var(--hi); color: var(--hi-ink); border-color: var(--ink); }
+
+/* the range picker scrolls inside its own box on a phone */
+.ai-range-scroll { max-width: 100%; overflow-x: auto; padding-bottom: var(--space-1); }

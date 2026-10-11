@@ -1,0 +1,1 @@
+ALTER TABLE "applications" ADD COLUMN "interview_rounds" integer DEFAULT 0 NOT NULL;

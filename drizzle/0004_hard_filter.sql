@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "scores_job_snapshot_uq" ON "scores" USING btree ("job_id","profile_snapshot_id") WHERE "scores"."profile_snapshot_id" is not null;

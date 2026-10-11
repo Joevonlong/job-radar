@@ -1,0 +1,10 @@
+# 德国市场包：国家、货币、本地语言、区域和默认渠道。preferences.yaml 的 market 省略的项取这里的值。
+
+id: de
+name: Germany
+country: DE
+currency: EUR
+language: de
+locale: de-DE
+region: eu
+default_channels: [arbeitsagentur, stepstone, xing]

@@ -1,0 +1,118 @@
+# German rules: German company suffixes, agencies, contract phrases, out-of-scope remote markers and body phrases for "hired in Germany / the EU".
+
+company:
+  legal_suffixes: [gmbh, mbh, ag, se, kg, kgaa, ug, ohg, gbr, ev]
+  agency_names: [Gulp, Haystack, Rocken, Instaffo]
+agency:
+  company_name_patterns:
+    - personalberatung
+    - personalvermittlung
+    - personaldienstleist
+    - personalmanagement
+    - \bzeitarbeit
+  text_patterns:
+    - für unseren kunden
+    - für (?:unseren|meinen|einen unserer) mandanten
+    - im auftrag (?:unseres|eines|meines|unserer) (?:kunden|kundin|mandanten|klienten|auftraggebers)
+    - im auftrag eines? unserer (?:kunden|mandanten)
+    - für einen? (?:unserer |meiner )?(?:kunden|mandanten|klienten|auftraggeber)\b
+    - unser(?:e)? (?:kunde|kundin|mandant|auftraggeber) (?:ist|sucht|bietet)\b
+    - \bim kundenauftrag\b
+    - \bim auftrag (?:eines|einer|von) (?:kunden|kundin|unseres|unserer)
+    - \b(?:für|fuer) (?:einen|eine) (?:unserer )?(?:renommierten |namhaften )?(?:kunden|kundin)\b
+    - \bpersonalberatung\b
+    - \bpersonalvermittlung\b
+    - \bpersonaldienstleister\b
+  exclude_context_patterns:
+    - \bunaufgefordert\w*
+    - \bkeine\b[^.\n]{0,60}\b(?:personalberat|personalvermittl|personaldienstleist|headhunter|agentur)
+    - \bnicht (?:akzeptier|annehmen|berücksichtig)
+    - \bohne (?:personalberat|personalvermittl|personaldienstleist|agentur)
+contract:
+  student:
+    - \bwerkstudent
+    - praktik(?:um|ant)
+    - \bpflichtpraktik
+    - \bausbildung\b
+    - \bauszubildende
+    - \bazubi\b
+    - \bduales? studium\b
+    - abschlussarbeit
+    - \b(?:master|bachelor)arbeit
+  temp_agency:
+    - \bzeitarbeit
+    - arbeitnehmerüberlassung
+    - arbeitnehmerueberlassung
+  direct_hire:
+    - \b(?:vertragsart|anstellungsart|beschäftigungsart|art der anstellung|anstellungsverhältnis|employment type|contract type)\s*:\s*(?:personalvermittlung|direktvermittlung|direct hire|direct placement)\b
+    - \bdirektvermittlung\b
+    - \bim rahmen (?:der|einer) (?:direkten )?personalvermittlung\b
+    - \b(?:direkte|feste) (?:festanstellung|anstellung|einstellung) (?:bei|beim) (?:unserem|unserer|unseren|dem|der) (?:kunden|kundin|mandanten|auftraggeber)
+  freelance:
+    - \bfreiberuf
+    - \bfreie[rn]? mitarbeit
+  fixed_term:
+    - \bbefristet
+    - \bzeitvertrag\b
+    - \bbefristete[nrs]? (?:vertrag|stelle|anstellung|arbeitsvertrag)
+    - \bmutterschaftsvertretung\b
+    - elternzeitvertretung
+  permanent:
+    - \bunbefristet
+    - \bfestanstellung\b
+    - \bunbefristete[nrs]? (?:vertrag|stelle|anstellung|arbeitsvertrag)
+    - \bdauerstelle\b
+    - \bfeste anstellung\b
+    - \b(?:employment|job|contract|position)[\s-]*(?:type)?\s*:\s*(?:permanent|festanstellung)\b
+    - \b(?:employment|job|contract|position)[\s-]*(?:type)?\s*:[^\n:]{0,40}\b(?:permanent|festanstellung|unbefristet)\b
+    - \b(?:art der anstellung|anstellungsart|beschäftigungsart|vertragsart|anstellungsverhältnis)\s*:\s*(?:unbefristet|festanstellung|permanent)
+filter:
+  generic_location_patterns:
+    - ^\W*(?:mehrere standorte|flexibel)\W*$
+  remote:
+    worldwide_patterns:
+      - \bweltweit\b
+    outside_patterns:
+      - \busa\b
+      - \bu\.s\.
+      - \bunited states\b
+      - \bthe us\b
+      - \bnorth america\b
+      - \bamericas?\b
+      - \blatam\b
+      - \bcanada\b
+      - \bapac\b
+      - \basia\b
+      - \bindia\b
+      - \bsingapore\b
+      - \baustralia\b
+      - \bnew zealand\b
+      - \bmiddle east\b
+      - \bafrica\b
+      - \b(?:colombia|mexico|brazil|brasil|argentina|chile|peru|uruguay|costa rica|panama|ecuador|venezuela|bolivia|paraguay|guatemala)\b
+      - \b(?:japan|tokyo|korea|seoul|china|beijing|shanghai|hong kong|taiwan|vietnam|thailand|bangkok|malaysia|kuala lumpur|indonesia|philippines|manila|pakistan|bangladesh|sri lanka)\b
+      - \b(?:israel|tel aviv|saudi|riyadh|dubai|uae|emirates|qatar|egypt|nigeria|kenya|south africa|morocco|ghana)\b
+      - \b(?:toronto|vancouver|montreal|ottawa|ontario|british columbia|quebec|alberta)\b
+      - \b(?:new york|san francisco|los angeles|seattle|austin|boston|denver|chicago|atlanta|dallas|houston|miami|washington|mountain view|palo alto|san jose|san diego|portland|philadelphia|phoenix|salt lake|raleigh|pittsburgh|minneapolis|detroit|nashville|charlotte|brooklyn|cambridge, ma|boulder|sunnyvale|menlo park|redwood city|bellevue|arlington|reston|mclean|edison)\b
+      - \b(?:alabama|alaska|arizona|arkansas|california|colorado|connecticut|delaware|florida|hawaii|idaho|illinois|indiana|iowa|kansas|kentucky|louisiana|maine|maryland|massachusetts|michigan|minnesota|mississippi|missouri|montana|nebraska|nevada|new hampshire|new jersey|new mexico|north carolina|north dakota|ohio|oklahoma|oregon|pennsylvania|rhode island|south carolina|south dakota|tennessee|texas|utah|vermont|virginia|wisconsin|wyoming)\b
+      - \b(?:east coast|west coast|midwest|northeast|southeast|southwest|northwest|central) - (?:united states|us|usa)\b
+    title_outside_patterns:
+      - (?:^|[-–—|,(/:])\s*(?:us|usa|u\.s\.(?:a\.)?|united states|north america|americas|latam|latin america|canada|apac|asia|india|brazil|mexico|australia)(?:\s+(?:east|west|central)(?:\s+coast)?)?(?:\s+(?:remote|only|based))?\s*(?:$|[-–—|,)/])
+      - \b(?:us|u\.s\.) (?:east|west|central) coast\b
+      - \b(?:east|west) coast\b
+      - \b(?:us|usa|u\.s\.|canada)[- ](?:based|only|remote)\b
+    description_in_scope_patterns:
+      - \b(?:remote(?:ly)?|work(?:ing)? remotely|work from (?:home|anywhere)|home ?office)\W{0,3}(?:from|within|in|across|throughout)\s+(?:anywhere\s+in\s+)?(?:the\s+)?(?:germany|deutschland|eu|european union|europe|eea)\b
+      - \b(?:germany|deutschland|eu|european union|europe|eea)[- ](?:wide|remote)\b
+      - \b(?:hir(?:e|ing)|employ(?:ing|ment)?|candidates?|residents?)\b[^.\n]{0,30}\b(?:in|within|across|throughout)\s+(?:the\s+)?(?:germany|deutschland|eu|european union|europe|eea)\b
+      - \b(?:hir(?:e|ing)|candidates?|apply from|work from|employees? in)\b[^.\n]{0,80}\b(?:germany|deutschland)\b
+      - \b(?:deutschlandweit|bundesweit)\b[^.\n]{0,30}\b(?:remote|home ?office|mobil)
+      - \bremote\b[^.\n]{0,15}\b(?:aus|in|innerhalb)\s+(?:deutschland|der eu|europa)\b
+
+# Stellenseite, die keine Bewerbungen mehr annimmt (German phrases for the recheck of starred / followed jobs; regex, case-insensitive)
+closed_posting:
+  phrases:
+    - \bnicht mehr verfügbar\b
+    - \bStelle (?:ist )?(?:bereits )?(?:besetzt|vergeben)\b
+    - \bBewerbungs(?:phase|frist) (?:ist )?(?:beendet|abgelaufen)\b
+    - \bnimmt keine Bewerbungen mehr\b

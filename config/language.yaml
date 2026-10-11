@@ -1,0 +1,27 @@
+# Languages (docs/settings.md, Settings → Display → Language). Language codes are BCP 47: en, zh, de, fr, pt-BR …
+# Interface languages are the files in messages/ (en, zh, plus any you add); the AI and the translator accept any language.
+
+config_version: 1
+
+ui:
+  # Interface language of a browser that never picked one (the language menu remembers a choice per browser)
+  default_locale: en
+
+ai:
+  # Language of everything the AI writes: fit reasons, gaps, the one-line summary, the job breakdown, suggestion reasons.
+  # Changing it does not rewrite older results: they keep their language and are marked as such.
+  output: en
+  # The one-line summary is also written in these languages, so another interface language still shows one (e.g. [zh])
+  summary_also: []
+
+translation:
+  # Job ads are translated into this language; ads already written in it get no translate button
+  target: en
+
+notify:
+  # Language of Telegram messages; null = ui.default_locale
+  locale: null
+
+cli:
+  # Language of `pnpm run doctor` and `pnpm sources:list`; null = ui.default_locale (`--lang en|zh` overrides it)
+  locale: null

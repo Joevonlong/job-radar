@@ -1,0 +1,37 @@
+# What I want (template). Copied to data/profile/preferences.yaml on first run; after that, edit only the copy in data/profile/.
+
+config_version: 2
+market:
+  # Market: pack = market pack (directory name under config/packs/); country / currency / home_language default to the pack's values when unset.
+  # The generic pack sets no country, currency or language, so fill them all in; countries with their own market pack (e.g. de) only need pack
+  pack: generic
+  country: US
+  currency: USD
+  home_language: en
+
+target_titles:
+  - Software Engineer
+
+locations:
+  - New York
+
+# onsite | hybrid | remote
+workplace: [onsite, hybrid, remote]
+# none | home_country | worldwide | {region: [eu, CH …]}
+remote_scope: home_country
+# all | entry | mid | senior | lead
+seniority: all
+
+# Annual salary floor (market base currency, gross): jobs whose stated maximum is below it are filtered out; jobs without a stated salary are kept
+salary_floor_year: 70000
+
+# Contract types: permanent | fixed_term | freelance | temp_agency
+contracts:
+  allow: [permanent, fixed_term, freelance]
+  exclude: [temp_agency]
+
+# Exclude internships, apprenticeships, working-student, thesis and other student jobs
+exclude_student_roles: true
+# These two lists are sent to your AI provider with every job (see docs/privacy.md), so do not put anything in them you would not tell that provider
+exclude_companies: []
+exclude_keywords: []

@@ -1,0 +1,23 @@
+{
+  "query": "AI Engineer OR Machine Learning Engineer jobs Berlin",
+  "follow_up_questions": null,
+  "answer": null,
+  "images": [],
+  "results": [
+    { "url": "https://jobs.ashbyhq.com/examplelabs/0a1b2c3d-0000-4000-8000-000000000001", "title": "Machine Learning Engineer - Example Labs", "content": "Example Labs is hiring a Machine Learning Engineer in Berlin ...", "score": 0.91, "raw_content": null },
+    { "url": "https://jobs.ashbyhq.com/examplelabs", "title": "Jobs at Example Labs", "content": "duplicate board", "score": 0.84, "raw_content": null },
+    { "url": "https://betagmbh.jobs.personio.de/job/123456?language=en", "title": "AI Engineer - Beta GmbH", "content": "Munich ...", "score": 0.8, "raw_content": null },
+    { "url": "https://jobs.eu.lever.co/gamma/abcd-1234", "title": "KI Entwickler - Gamma", "content": "EU lever", "score": 0.77, "raw_content": null },
+    { "url": "https://job-boards.greenhouse.io/delta/jobs/42", "title": "AI Engineer - Delta", "content": "greenhouse", "score": 0.72, "raw_content": null },
+    { "url": "https://jobs.lever.co/pipewerk/xyz", "title": "Already known - Known Co", "content": "in companies.yaml", "score": 0.7, "raw_content": null },
+    { "url": "https://jobs.smartrecruiters.com/EpsilonGroup/744000000000009-ml-engineer", "title": "ML Engineer - Epsilon", "content": "case matters", "score": 0.66, "raw_content": null },
+    { "url": "https://jobs.lever.co.evil.example/fake/1", "title": "Fake board", "content": "wrong host", "score": 0.5, "raw_content": null },
+    { "url": "https://evil.example/jobs.lever.co/fake2", "title": "Fake board 2", "content": "wrong host", "score": 0.48, "raw_content": null },
+    { "url": "https://boards.greenhouse.io/embed/job_app?token=1", "title": "Embed", "content": "not a board", "score": 0.4, "raw_content": null },
+    { "url": "https://www.example.com/blog/ats", "title": "A blog", "content": "not an ats", "score": 0.3, "raw_content": null },
+    { "url": "https://a.b.jobs.personio.de/job/1", "title": "Nested personio", "content": "not a company site", "score": 0.2, "raw_content": null }
+  ],
+  "response_time": 1.12,
+  "usage": { "credits": 1 },
+  "request_id": "123e4567-e89b-12d3-a456-426614174111"
+}

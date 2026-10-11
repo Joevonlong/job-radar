@@ -1,0 +1,55 @@
+[
+  {
+    "id": "00000000-0000-4000-8000-000000000001",
+    "text": "Lead Applied Scientist (Example)",
+    "createdAt": 1776323831956,
+    "country": "DE",
+    "hostedUrl": "https://jobs.lever.co/examplecorp/00000000-0000-4000-8000-000000000001",
+    "applyUrl": "https://jobs.lever.co/examplecorp/00000000-0000-4000-8000-000000000001/apply",
+    "workplaceType": "hybrid",
+    "categories": { "commitment": "Full Time", "department": "DATA", "location": "Berlin", "team": "ML & Data Science", "allLocations": ["Berlin"] },
+    "descriptionPlain": "We build example software for imaginary customers.",
+    "description": "<div>We build example software for imaginary customers.</div>",
+    "lists": [
+      { "text": "Your new adventure: ", "content": "\n<li>Lead a small team of scientists</li>\n<li>Build agentic workflows</li>\n" },
+      { "text": "Does this sound like you?", "content": "\n<li>8+ years of applied science</li>\n" }
+    ],
+    "additionalPlain": "Compensation: EUR 120,000 - 150,000 plus stock options.",
+    "additional": "<div>Compensation: EUR 120,000 - 150,000 plus stock options.</div>",
+    "salaryRange": { "min": 120000, "max": 150000, "currency": "EUR", "interval": "per-year-salary" },
+    "salaryDescriptionPlain": "EUR 120,000 - 150,000 per year"
+  },
+  {
+    "id": "a1b2c3d4-0000-4000-8000-000000000002",
+    "text": "Forward Deployed Engineer",
+    "createdAt": 1776323831957,
+    "country": "GB",
+    "hostedUrl": "https://jobs.eu.lever.co/examplecorp/a1b2c3d4-0000-4000-8000-000000000002",
+    "applyUrl": "https://jobs.eu.lever.co/examplecorp/a1b2c3d4-0000-4000-8000-000000000002/apply",
+    "workplaceType": "onsite",
+    "categories": { "commitment": "Full Time", "location": "London", "allLocations": ["London", "Remote - EU"] },
+    "descriptionPlain": "Deploy things at customers.",
+    "salaryRange": { "min": 600, "max": 800, "currency": "EUR", "interval": "per-month-salary" }
+  },
+  {
+    "id": "a1b2c3d4-0000-4000-8000-000000000003",
+    "text": "Customer Success Manager",
+    "createdAt": 1776323831958,
+    "hostedUrl": "https://jobs.lever.co/examplecorp/a1b2c3d4-0000-4000-8000-000000000003",
+    "applyUrl": "https://jobs.lever.co/examplecorp/a1b2c3d4-0000-4000-8000-000000000003/apply",
+    "workplaceType": "unspecified",
+    "categories": { "location": "Madrid" },
+    "description": "<div>Help &amp; support customers.<br>Daily.</div>"
+  },
+  {
+    "id": "a1b2c3d4-0000-4000-8000-000000000004",
+    "text": "Applied AI Engineer",
+    "createdAt": 1776323831959,
+    "hostedUrl": "https://jobs.lever.co/examplecorp/a1b2c3d4-0000-4000-8000-000000000004",
+    "applyUrl": "https://jobs.lever.co/examplecorp/a1b2c3d4-0000-4000-8000-000000000004/apply",
+    "workplaceType": "remote",
+    "categories": { "location": "Remote", "allLocations": ["Remote"] },
+    "descriptionPlain": "Work from anywhere.",
+    "salaryRange": { "min": 1000, "max": 1000, "currency": "EUR", "interval": "one-time" }
+  }
+]

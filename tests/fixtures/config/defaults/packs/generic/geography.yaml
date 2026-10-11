@@ -1,0 +1,660 @@
+# 通用地理：世界国家表、命名区域、欧洲城市表、州代码。
+# pattern 写了就用它（正则，大小写不敏感），否则按 name + aliases 整词匹配；match: false 的国家不从文字里认（名字容易误判）。
+# cities：地点里的写法 -> [规范名, 国家]。规范名是去重键的一部分，不要改。
+
+countries:
+  - {code: GB, name: United Kingdom, aliases: [UK, Great Britain, England, Scotland, Wales, Northern Ireland], indeed: uk, pattern: northern ireland|\b(?:united kingdom|great britain|england|scotland|wales)\b|\buk\b}
+  - {code: DE, name: Germany, aliases: [Deutschland], indeed: germany, pattern: germany|deutschland}
+  - {code: FR, name: France, indeed: france, pattern: \bfrance\b}
+  - {code: NL, name: Netherlands, aliases: [Nederland, Holland], indeed: netherlands, pattern: netherlands|nederland|holland}
+  - {code: BE, name: Belgium, aliases: [België, Belgique], indeed: belgium, pattern: belgium|belgië|belgie|belgique}
+  - {code: DK, name: Denmark, aliases: [Danmark], indeed: denmark, pattern: denmark|danmark}
+  - {code: CH, name: Switzerland, aliases: [Schweiz, Suisse, Svizzera], indeed: switzerland, pattern: switzerland|schweiz|suisse|svizzera}
+  - {code: SE, name: Sweden, aliases: [Sverige], indeed: sweden, pattern: sweden|sverige}
+  - {code: NO, name: Norway, aliases: [Norge], indeed: norway, pattern: norway|norge}
+  - {code: FI, name: Finland, aliases: [Suomi], indeed: finland, pattern: finland|suomi}
+  - {code: IS, name: Iceland, aliases: [Ísland], pattern: iceland|ísland}
+  - {code: IE, name: Ireland, aliases: [Éire], indeed: ireland, pattern: \bireland\b|éire}
+  - {code: ES, name: Spain, aliases: [España], indeed: spain, pattern: \bspain\b|españa|espana}
+  - {code: PT, name: Portugal, indeed: portugal, pattern: portugal}
+  - {code: AT, name: Austria, aliases: [Österreich], indeed: austria, pattern: austria|österreich|osterreich}
+  - {code: IT, name: Italy, aliases: [Italia], indeed: italy, pattern: \bitaly\b|italia}
+  - {code: PL, name: Poland, aliases: [Polska], indeed: poland, pattern: poland|polska}
+  - {code: CZ, name: Czech Republic, aliases: [Czechia, Česko], indeed: czech republic, pattern: czech republic|czechia|česko}
+  - {code: SK, name: Slovakia, aliases: [Slovensko], indeed: slovakia, pattern: slovakia|slovensko}
+  - {code: HU, name: Hungary, aliases: [Magyarország], indeed: hungary, pattern: hungary|magyarország}
+  - {code: SI, name: Slovenia, aliases: [Slovenija], indeed: slovenia, pattern: slovenia|slovenija}
+  - {code: HR, name: Croatia, aliases: [Hrvatska], indeed: croatia, pattern: croatia|hrvatska}
+  - {code: RO, name: Romania, aliases: [România], indeed: romania, pattern: romania|românia}
+  - {code: BG, name: Bulgaria, indeed: bulgaria, pattern: bulgaria|българия}
+  - {code: GR, name: Greece, aliases: [Hellas], indeed: greece, pattern: greece|ελλάδα}
+  - {code: EE, name: Estonia, aliases: [Eesti], indeed: estonia, pattern: estonia|eesti}
+  - {code: LV, name: Latvia, aliases: [Latvija], indeed: latvia, pattern: latvia|latvija}
+  - {code: LT, name: Lithuania, aliases: [Lietuva], indeed: lithuania, pattern: lithuania|lietuva}
+  - {code: LU, name: Luxembourg, aliases: [Luxemburg], indeed: luxembourg, pattern: luxembourg|luxemburg}
+  - {code: MT, name: Malta, indeed: malta, pattern: \bmalta\b}
+  - {code: CY, name: Cyprus, aliases: [Kypros], indeed: cyprus, pattern: cyprus|κύπρος}
+  - {code: AD, name: Andorra}
+  - {code: AE, name: United Arab Emirates, aliases: [UAE, Emirates, Dubai, Abu Dhabi], indeed: united arab emirates, pattern: \bunited arab emirates\b|\buae\b|\bemirates\b|\bdubai\b|\babu dhabi\b}
+  - {code: AF, name: Afghanistan}
+  - {code: AG, name: Antigua & Barbuda, aliases: [Antigua and Barbuda]}
+  - {code: AI, name: Anguilla}
+  - {code: AL, name: Albania}
+  - {code: AM, name: Armenia}
+  - {code: AO, name: Angola}
+  - {code: AQ, name: Antarctica}
+  - {code: AR, name: Argentina, indeed: argentina}
+  - {code: AS, name: American Samoa}
+  - {code: AU, name: Australia, indeed: australia}
+  - {code: AW, name: Aruba}
+  - {code: AX, name: Åland Islands}
+  - {code: AZ, name: Azerbaijan}
+  - {code: BA, name: Bosnia & Herzegovina, aliases: [Bosnia, Bosnia-Herzegovina, Bosnia and Herzegovina]}
+  - {code: BB, name: Barbados}
+  - {code: BD, name: Bangladesh, indeed: bangladesh}
+  - {code: BF, name: Burkina Faso}
+  - {code: BH, name: Bahrain, indeed: bahrain}
+  - {code: BI, name: Burundi}
+  - {code: BJ, name: Benin}
+  - {code: BL, name: St. Barthélemy, aliases: [Saint Barthélemy]}
+  - {code: BM, name: Bermuda}
+  - {code: BN, name: Brunei, aliases: [Brunei Darussalam]}
+  - {code: BO, name: Bolivia, aliases: [Plurinational State of Bolivia]}
+  - {code: BQ, name: Caribbean Netherlands}
+  - {code: BR, name: Brazil, aliases: [Brasil], indeed: brazil}
+  - {code: BS, name: Bahamas}
+  - {code: BT, name: Bhutan}
+  - {code: BV, name: Bouvet Island}
+  - {code: BW, name: Botswana}
+  - {code: BY, name: Belarus}
+  - {code: BZ, name: Belize}
+  - {code: CA, name: Canada, indeed: canada}
+  - {code: CC, name: Cocos (Keeling) Islands}
+  - {code: CD, name: DR Congo, aliases: [Democratic Republic of the Congo, Congo-Kinshasa]}
+  - {code: CF, name: Central African Republic}
+  - {code: CG, name: Republic of the Congo, aliases: [Congo-Brazzaville]}
+  - {code: CI, name: Ivory Coast, aliases: [Côte d'Ivoire, Cote d'Ivoire]}
+  - {code: CK, name: Cook Islands}
+  - {code: CL, name: Chile, indeed: chile}
+  - {code: CM, name: Cameroon}
+  - {code: CN, name: China, aliases: [PRC, People's Republic of China], indeed: china}
+  - {code: CO, name: Colombia, indeed: colombia}
+  - {code: CR, name: Costa Rica, indeed: costa rica}
+  - {code: CU, name: Cuba}
+  - {code: CV, name: Cape Verde, aliases: [Cabo Verde]}
+  - {code: CW, name: Curaçao}
+  - {code: CX, name: Christmas Island}
+  - {code: DJ, name: Djibouti}
+  - {code: DM, name: Dominica}
+  - {code: DO, name: Dominican Republic}
+  - {code: DZ, name: Algeria}
+  - {code: EC, name: Ecuador, indeed: ecuador}
+  - {code: EG, name: Egypt, indeed: egypt}
+  - {code: EH, name: Western Sahara}
+  - {code: ER, name: Eritrea}
+  - {code: ET, name: Ethiopia}
+  - {code: FJ, name: Fiji}
+  - {code: FK, name: Falkland Islands}
+  - {code: FM, name: Micronesia}
+  - {code: FO, name: Faroe Islands}
+  - {code: GA, name: Gabon}
+  - {code: GD, name: Grenada}
+  - {code: GE, name: Georgia, pattern: \btbilisi\b|\bsakartvelo\b}
+  - {code: GF, name: French Guiana}
+  - {code: GG, name: Guernsey}
+  - {code: GH, name: Ghana}
+  - {code: GI, name: Gibraltar}
+  - {code: GL, name: Greenland}
+  - {code: GM, name: Gambia}
+  - {code: GN, name: Guinea, pattern: (?<!new\s|equatorial\s)\bguinea\b(?!-)}
+  - {code: GP, name: Guadeloupe}
+  - {code: GQ, name: Equatorial Guinea}
+  - {code: GS, name: South Georgia & South Sandwich Islands, aliases: [South Georgia and South Sandwich Islands]}
+  - {code: GT, name: Guatemala}
+  - {code: GU, name: Guam}
+  - {code: GW, name: Guinea-Bissau}
+  - {code: GY, name: Guyana}
+  - {code: HK, name: Hong Kong, aliases: [Hong Kong SAR], indeed: hong kong}
+  - {code: HM, name: Heard & McDonald Islands, aliases: [Heard and McDonald Islands]}
+  - {code: HN, name: Honduras}
+  - {code: HT, name: Haiti}
+  - {code: ID, name: Indonesia, indeed: indonesia}
+  - {code: IL, name: Israel, indeed: israel}
+  - {code: IM, name: Isle of Man}
+  - {code: IN, name: India, aliases: [Bharat], indeed: india}
+  - {code: IO, name: British Indian Ocean Territory}
+  - {code: IQ, name: Iraq}
+  - {code: IR, name: Iran, aliases: [Islamic Republic of Iran]}
+  - {code: JE, name: Jersey, match: false}
+  - {code: JM, name: Jamaica}
+  - {code: JO, name: Jordan, pattern: "(?:^|[,\\-–/(|]\\s*)jordan\\s*(?=$|[,\\-–/)|])"}
+  - {code: JP, name: Japan, indeed: japan}
+  - {code: KE, name: Kenya}
+  - {code: KG, name: Kyrgyzstan}
+  - {code: KH, name: Cambodia}
+  - {code: KI, name: Kiribati}
+  - {code: KM, name: Comoros}
+  - {code: KN, name: St. Kitts & Nevis, aliases: [St. Kitts and Nevis, Saint Kitts and Nevis]}
+  - {code: KP, name: North Korea}
+  - {code: KR, name: South Korea, aliases: [Republic of Korea], indeed: south korea, pattern: (?<!north\s)\bkorea\b|\brepublic of korea\b}
+  - {code: KW, name: Kuwait, indeed: kuwait}
+  - {code: KY, name: Cayman Islands}
+  - {code: KZ, name: Kazakhstan}
+  - {code: LA, name: Laos, aliases: [Lao PDR]}
+  - {code: LB, name: Lebanon}
+  - {code: LC, name: St. Lucia, aliases: [Saint Lucia]}
+  - {code: LI, name: Liechtenstein}
+  - {code: LK, name: Sri Lanka}
+  - {code: LR, name: Liberia}
+  - {code: LS, name: Lesotho}
+  - {code: LY, name: Libya}
+  - {code: MA, name: Morocco, indeed: morocco}
+  - {code: MC, name: Monaco}
+  - {code: MD, name: Moldova, aliases: [Republic of Moldova]}
+  - {code: ME, name: Montenegro}
+  - {code: MF, name: St. Martin, aliases: [Saint Martin]}
+  - {code: MG, name: Madagascar}
+  - {code: MH, name: Marshall Islands}
+  - {code: MK, name: North Macedonia, aliases: [Macedonia]}
+  - {code: ML, name: Mali}
+  - {code: MM, name: Myanmar, aliases: [Burma]}
+  - {code: MN, name: Mongolia}
+  - {code: MO, name: Macao, aliases: [Macau]}
+  - {code: MP, name: Northern Mariana Islands}
+  - {code: MQ, name: Martinique}
+  - {code: MR, name: Mauritania}
+  - {code: MS, name: Montserrat}
+  - {code: MU, name: Mauritius}
+  - {code: MV, name: Maldives}
+  - {code: MW, name: Malawi}
+  - {code: MX, name: Mexico, aliases: [México], indeed: mexico, pattern: (?<!new\s)\bmexico\b|\bméxico\b}
+  - {code: MY, name: Malaysia, indeed: malaysia}
+  - {code: MZ, name: Mozambique}
+  - {code: NA, name: Namibia}
+  - {code: NC, name: New Caledonia}
+  - {code: NE, name: Niger}
+  - {code: NF, name: Norfolk Island}
+  - {code: NG, name: Nigeria, indeed: nigeria}
+  - {code: NI, name: Nicaragua}
+  - {code: NP, name: Nepal}
+  - {code: NR, name: Nauru}
+  - {code: NU, name: Niue}
+  - {code: NZ, name: New Zealand, indeed: new zealand}
+  - {code: OM, name: Oman, indeed: oman}
+  - {code: PA, name: Panama, indeed: panama}
+  - {code: PE, name: Peru, indeed: peru}
+  - {code: PF, name: French Polynesia}
+  - {code: PG, name: Papua New Guinea}
+  - {code: PH, name: Philippines, indeed: philippines}
+  - {code: PK, name: Pakistan, indeed: pakistan}
+  - {code: PM, name: St. Pierre & Miquelon, aliases: [St. Pierre and Miquelon, Saint Pierre and Miquelon]}
+  - {code: PN, name: Pitcairn Islands}
+  - {code: PR, name: Puerto Rico}
+  - {code: PS, name: Palestine}
+  - {code: PW, name: Palau}
+  - {code: PY, name: Paraguay}
+  - {code: QA, name: Qatar, indeed: qatar}
+  - {code: RE, name: Réunion}
+  - {code: RS, name: Serbia}
+  - {code: RU, name: Russia, aliases: [Russian Federation]}
+  - {code: RW, name: Rwanda}
+  - {code: SA, name: Saudi Arabia, aliases: [KSA], indeed: saudi arabia}
+  - {code: SB, name: Solomon Islands}
+  - {code: SC, name: Seychelles}
+  - {code: SD, name: Sudan, pattern: (?<!south\s)\bsudan\b}
+  - {code: SG, name: Singapore, indeed: singapore}
+  - {code: SH, name: St. Helena, aliases: [Saint Helena]}
+  - {code: SJ, name: Svalbard & Jan Mayen, aliases: [Svalbard and Jan Mayen]}
+  - {code: SL, name: Sierra Leone}
+  - {code: SM, name: San Marino}
+  - {code: SN, name: Senegal}
+  - {code: SO, name: Somalia}
+  - {code: SR, name: Suriname}
+  - {code: SS, name: South Sudan}
+  - {code: ST, name: São Tomé & Príncipe, aliases: [São Tomé and Príncipe]}
+  - {code: SV, name: El Salvador}
+  - {code: SX, name: Sint Maarten}
+  - {code: SY, name: Syria, aliases: [Syrian Arab Republic]}
+  - {code: SZ, name: Eswatini, aliases: [Swaziland]}
+  - {code: TC, name: Turks & Caicos Islands, aliases: [Turks and Caicos Islands]}
+  - {code: TD, name: Chad, pattern: "(?:^|[,\\-–/(|]\\s*)chad\\s*(?=$|[,\\-–/)|])"}
+  - {code: TF, name: French Southern Territories}
+  - {code: TG, name: Togo}
+  - {code: TH, name: Thailand, indeed: thailand}
+  - {code: TJ, name: Tajikistan}
+  - {code: TK, name: Tokelau}
+  - {code: TL, name: Timor-Leste, aliases: [East Timor]}
+  - {code: TM, name: Turkmenistan}
+  - {code: TN, name: Tunisia}
+  - {code: TO, name: Tonga}
+  - {code: TR, name: Turkey, aliases: [Türkiye, Turkiye], indeed: turkey}
+  - {code: TT, name: Trinidad & Tobago, aliases: [Trinidad and Tobago]}
+  - {code: TV, name: Tuvalu}
+  - {code: TW, name: Taiwan, indeed: taiwan}
+  - {code: TZ, name: Tanzania, aliases: [United Republic of Tanzania]}
+  - {code: UA, name: Ukraine, indeed: ukraine}
+  - {code: UG, name: Uganda}
+  - {code: UM, name: U.S. Outlying Islands}
+  - {code: US, name: United States, aliases: [USA, U.S.A., U.S., US], indeed: usa, pattern: "\\bunited states\\b|\\busa\\b|\\bu\\.s\\.a\\b|\\bu\\.s\\.(?![\\p{L}])|(?:^|[,\\-–/(|;]\\s*)us(?![\\p{L}])"}
+  - {code: UY, name: Uruguay, indeed: uruguay}
+  - {code: UZ, name: Uzbekistan}
+  - {code: VA, name: Vatican City, aliases: [Holy See]}
+  - {code: VC, name: St. Vincent & Grenadines, aliases: [St. Vincent and Grenadines, Saint Vincent and Grenadines]}
+  - {code: VE, name: Venezuela, aliases: [Bolivarian Republic of Venezuela], indeed: venezuela}
+  - {code: VG, name: British Virgin Islands}
+  - {code: VI, name: U.S. Virgin Islands}
+  - {code: VN, name: Vietnam, aliases: [Viet Nam], indeed: vietnam}
+  - {code: VU, name: Vanuatu}
+  - {code: WF, name: Wallis & Futuna, aliases: [Wallis and Futuna]}
+  - {code: WS, name: Samoa, pattern: (?<!american\s)\bsamoa\b}
+  - {code: XK, name: Kosovo, aliases: [Kosova]}
+  - {code: YE, name: Yemen}
+  - {code: YT, name: Mayotte}
+  - {code: ZA, name: South Africa, indeed: south africa}
+  - {code: ZM, name: Zambia}
+  - {code: ZW, name: Zimbabwe}
+regions:
+  eu:
+    name: European Union
+    countries: [AT, BE, BG, HR, CY, CZ, DK, EE, FI, FR, DE, GR, HU, IE, IT, LV, LT, LU, MT, NL, PL, PT, RO, SK, SI, ES, SE]
+    patterns:
+      - \beu\b
+      - \beuropean union\b
+      - \beurope\b
+      - \beea\b
+      - \bemea\b
+      - \beuropa\b
+  eea:
+    name: European Economic Area
+    countries:
+      - AT
+      - BE
+      - BG
+      - HR
+      - CY
+      - CZ
+      - DK
+      - EE
+      - FI
+      - FR
+      - DE
+      - GR
+      - HU
+      - IE
+      - IT
+      - LV
+      - LT
+      - LU
+      - MT
+      - NL
+      - PL
+      - PT
+      - RO
+      - SK
+      - SI
+      - ES
+      - SE
+      - IS
+      - LI
+      - NO
+    patterns:
+      - \beea\b
+      - \beuropean economic area\b
+  europe:
+    name: Europe
+    countries:
+      - AT
+      - BE
+      - BG
+      - HR
+      - CY
+      - CZ
+      - DK
+      - EE
+      - FI
+      - FR
+      - DE
+      - GR
+      - HU
+      - IE
+      - IT
+      - LV
+      - LT
+      - LU
+      - MT
+      - NL
+      - PL
+      - PT
+      - RO
+      - SK
+      - SI
+      - ES
+      - SE
+      - IS
+      - LI
+      - NO
+      - CH
+      - GB
+      - AD
+      - AL
+      - BA
+      - BY
+      - FO
+      - GI
+      - GG
+      - IM
+      - JE
+      - XK
+      - MC
+      - MD
+      - ME
+      - MK
+      - RS
+      - SM
+      - UA
+      - VA
+    patterns:
+      - \beurope\b
+      - \beuropa\b
+  dach:
+    name: DACH
+    countries: [DE, AT, CH]
+    patterns:
+      - \bdach\b
+  nordics:
+    name: Nordics
+    countries: [DK, FI, IS, NO, SE, FO, AX, GL]
+    patterns:
+      - \bnordics?\b
+      - \bscandinavia\b
+cities:
+  berlin: [Berlin, DE]
+  munich: [München, DE]
+  münchen: [München, DE]
+  hamburg: [Hamburg, DE]
+  cologne: [Köln, DE]
+  köln: [Köln, DE]
+  frankfurt: [Frankfurt, DE]
+  stuttgart: [Stuttgart, DE]
+  düsseldorf: [Düsseldorf, DE]
+  dusseldorf: [Düsseldorf, DE]
+  leipzig: [Leipzig, DE]
+  dresden: [Dresden, DE]
+  hannover: [Hannover, DE]
+  hanover: [Hannover, DE]
+  nürnberg: [Nürnberg, DE]
+  nuremberg: [Nürnberg, DE]
+  bremen: [Bremen, DE]
+  dortmund: [Dortmund, DE]
+  essen: [Essen, DE]
+  bonn: [Bonn, DE]
+  karlsruhe: [Karlsruhe, DE]
+  aachen: [Aachen, DE]
+  potsdam: [Potsdam, DE]
+  darmstadt: [Darmstadt, DE]
+  heidelberg: [Heidelberg, DE]
+  freiburg: [Freiburg, DE]
+  münster: [Münster, DE]
+  mannheim: [Mannheim, DE]
+  augsburg: [Augsburg, DE]
+  wolfsburg: [Wolfsburg, DE]
+  ingolstadt: [Ingolstadt, DE]
+  jena: [Jena, DE]
+  kiel: [Kiel, DE]
+  amsterdam: [Amsterdam, NL]
+  rotterdam: [Rotterdam, NL]
+  utrecht: [Utrecht, NL]
+  eindhoven: [Eindhoven, NL]
+  the hague: [The Hague, NL]
+  den haag: [The Hague, NL]
+  groningen: [Groningen, NL]
+  delft: [Delft, NL]
+  haarlem: [Haarlem, NL]
+  tilburg: [Tilburg, NL]
+  breda: [Breda, NL]
+  nijmegen: [Nijmegen, NL]
+  leiden: [Leiden, NL]
+  almere: [Almere, NL]
+  arnhem: [Arnhem, NL]
+  enschede: [Enschede, NL]
+  maastricht: [Maastricht, NL]
+  amersfoort: [Amersfoort, NL]
+  hilversum: [Hilversum, NL]
+  zwolle: [Zwolle, NL]
+  paris: [Paris, FR]
+  lyon: [Lyon, FR]
+  marseille: [Marseille, FR]
+  toulouse: [Toulouse, FR]
+  bordeaux: [Bordeaux, FR]
+  lille: [Lille, FR]
+  nantes: [Nantes, FR]
+  strasbourg: [Strasbourg, FR]
+  montpellier: [Montpellier, FR]
+  rennes: [Rennes, FR]
+  grenoble: [Grenoble, FR]
+  sophia antipolis: [Sophia Antipolis, FR]
+  aix-en-provence: [Aix-en-Provence, FR]
+  toulon: [Toulon, FR]
+  reims: [Reims, FR]
+  dijon: [Dijon, FR]
+  angers: [Angers, FR]
+  clermont-ferrand: [Clermont-Ferrand, FR]
+  london: [London, GB]
+  manchester: [Manchester, GB]
+  edinburgh: [Edinburgh, GB]
+  glasgow: [Glasgow, GB]
+  birmingham: [Birmingham, GB]
+  bristol: [Bristol, GB]
+  leeds: [Leeds, GB]
+  cambridge: [Cambridge, GB]
+  oxford: [Oxford, GB]
+  liverpool: [Liverpool, GB]
+  sheffield: [Sheffield, GB]
+  nottingham: [Nottingham, GB]
+  newcastle: [Newcastle, GB]
+  cardiff: [Cardiff, GB]
+  belfast: [Belfast, GB]
+  brighton: [Brighton, GB]
+  southampton: [Southampton, GB]
+  coventry: [Coventry, GB]
+  leicester: [Leicester, GB]
+  aberdeen: [Aberdeen, GB]
+  dundee: [Dundee, GB]
+  exeter: [Exeter, GB]
+  norwich: [Norwich, GB]
+  zurich: [Zürich, CH]
+  zürich: [Zürich, CH]
+  geneva: [Geneva, CH]
+  genève: [Geneva, CH]
+  geneve: [Geneva, CH]
+  basel: [Basel, CH]
+  bern: [Bern, CH]
+  lausanne: [Lausanne, CH]
+  lugano: [Lugano, CH]
+  winterthur: [Winterthur, CH]
+  st. gallen: [St. Gallen, CH]
+  zug: [Zug, CH]
+  brussels: [Brussels, BE]
+  bruxelles: [Brussels, BE]
+  antwerp: [Antwerp, BE]
+  antwerpen: [Antwerp, BE]
+  ghent: [Ghent, BE]
+  gent: [Ghent, BE]
+  leuven: [Leuven, BE]
+  liège: [Liège, BE]
+  bruges: [Bruges, BE]
+  brugge: [Bruges, BE]
+  mechelen: [Mechelen, BE]
+  hasselt: [Hasselt, BE]
+  kortrijk: [Kortrijk, BE]
+  namur: [Namur, BE]
+  copenhagen: [Copenhagen, DK]
+  københavn: [Copenhagen, DK]
+  aarhus: [Aarhus, DK]
+  århus: [Aarhus, DK]
+  odense: [Odense, DK]
+  aalborg: [Aalborg, DK]
+  esbjerg: [Esbjerg, DK]
+  stockholm: [Stockholm, SE]
+  gothenburg: [Gothenburg, SE]
+  göteborg: [Gothenburg, SE]
+  goteborg: [Gothenburg, SE]
+  malmö: [Malmö, SE]
+  malmo: [Malmö, SE]
+  uppsala: [Uppsala, SE]
+  linköping: [Linköping, SE]
+  lund: [Lund, SE]
+  oslo: [Oslo, NO]
+  bergen: [Bergen, NO]
+  trondheim: [Trondheim, NO]
+  stavanger: [Stavanger, NO]
+  helsinki: [Helsinki, FI]
+  espoo: [Espoo, FI]
+  tampere: [Tampere, FI]
+  oulu: [Oulu, FI]
+  turku: [Turku, FI]
+  dublin: [Dublin, IE]
+  cork: [Cork, IE]
+  galway: [Galway, IE]
+  limerick: [Limerick, IE]
+  madrid: [Madrid, ES]
+  barcelona: [Barcelona, ES]
+  valencia: [Valencia, ES]
+  seville: [Seville, ES]
+  sevilla: [Seville, ES]
+  málaga: [Málaga, ES]
+  malaga: [Málaga, ES]
+  bilbao: [Bilbao, ES]
+  zaragoza: [Zaragoza, ES]
+  las palmas: [Las Palmas, ES]
+  lisbon: [Lisbon, PT]
+  lisboa: [Lisbon, PT]
+  porto: [Porto, PT]
+  braga: [Braga, PT]
+  coimbra: [Coimbra, PT]
+  vienna: [Wien, AT]
+  wien: [Wien, AT]
+  graz: [Graz, AT]
+  linz: [Linz, AT]
+  salzburg: [Salzburg, AT]
+  innsbruck: [Innsbruck, AT]
+  klagenfurt: [Klagenfurt, AT]
+  milan: [Milan, IT]
+  milano: [Milan, IT]
+  rome: [Rome, IT]
+  roma: [Rome, IT]
+  turin: [Turin, IT]
+  torino: [Turin, IT]
+  bologna: [Bologna, IT]
+  florence: [Florence, IT]
+  firenze: [Florence, IT]
+  naples: [Naples, IT]
+  napoli: [Naples, IT]
+  padua: [Padua, IT]
+  padova: [Padua, IT]
+  trento: [Trento, IT]
+  warsaw: [Warsaw, PL]
+  warszawa: [Warsaw, PL]
+  krakow: [Kraków, PL]
+  kraków: [Kraków, PL]
+  cracow: [Kraków, PL]
+  wroclaw: [Wrocław, PL]
+  wrocław: [Wrocław, PL]
+  poznan: [Poznań, PL]
+  poznań: [Poznań, PL]
+  gdansk: [Gdańsk, PL]
+  gdańsk: [Gdańsk, PL]
+  katowice: [Katowice, PL]
+  łódź: [Łódź, PL]
+  prague: [Prague, CZ]
+  praha: [Prague, CZ]
+  brno: [Brno, CZ]
+  ostrava: [Ostrava, CZ]
+  tallinn: [Tallinn, EE]
+  tartu: [Tartu, EE]
+  riga: [Riga, LV]
+  vilnius: [Vilnius, LT]
+  kaunas: [Kaunas, LT]
+  budapest: [Budapest, HU]
+  bratislava: [Bratislava, SK]
+  ljubljana: [Ljubljana, SI]
+  zagreb: [Zagreb, HR]
+  bucharest: [Bucharest, RO]
+  bucurești: [Bucharest, RO]
+  cluj-napoca: [Cluj-Napoca, RO]
+  cluj: [Cluj-Napoca, RO]
+  timisoara: [Timișoara, RO]
+  iasi: [Iași, RO]
+  sofia: [Sofia, BG]
+  plovdiv: [Plovdiv, BG]
+  athens: [Athens, GR]
+  thessaloniki: [Thessaloniki, GR]
+  luxembourg: [Luxembourg, LU]
+  reykjavik: [Reykjavík, IS]
+  reykjavík: [Reykjavík, IS]
+  valletta: [Valletta, MT]
+  nicosia: [Nicosia, CY]
+  limassol: [Limassol, CY]
+subdivision_codes:
+  US:
+    - AL
+    - AK
+    - AZ
+    - AR
+    - CA
+    - CO
+    - CT
+    - FL
+    - GA
+    - HI
+    - ID
+    - IL
+    - IN
+    - IA
+    - KS
+    - KY
+    - LA
+    - MA
+    - MD
+    - MI
+    - MN
+    - MS
+    - MO
+    - MT
+    - NE
+    - NV
+    - NH
+    - NJ
+    - NM
+    - NY
+    - NC
+    - ND
+    - OH
+    - OK
+    - OR
+    - PA
+    - RI
+    - SC
+    - SD
+    - TN
+    - TX
+    - UT
+    - VT
+    - VA
+    - WA
+    - WV
+    - WI
+    - WY
+    - DC
+non_city_labels:
+  - remote
+  - home\s*office
+  - multiple
+  - various
+  - several
+  - all
+  - anywhere
+  - nationwide
+non_city_words:
+  - \bremote\b
+  - home\s*office

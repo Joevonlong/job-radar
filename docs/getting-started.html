@@ -1,0 +1,521 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Job Radar Tuning Guide</title>
+<style>
+:root {
+  --bg: #f6f5f1;
+  --surface: #ffffff;
+  --surface-2: #f0eee8;
+  --ink: #1d1d1b;
+  --ink-2: #55534d;
+  --ink-3: #8a877f;
+  --line: #e2dfd6;
+  --accent: #2f5bd3;
+  --accent-soft: #e6ecfb;
+  --ok: #1f8a4c;
+  --ok-soft: #e3f3e9;
+  --warn: #b86e00;
+  --warn-soft: #fbf0dc;
+  --bad: #c0392b;
+  --bad-soft: #fbe5e2;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Segoe UI", sans-serif;
+  --radius: 12px;
+  --shadow: 0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #141413; --surface: #1d1d1b; --surface-2: #262623; --ink: #ecebe6; --ink-2: #b4b1a8; --ink-3: #7f7c74;
+    --line: #34332f; --accent: #7f9ef0; --accent-soft: #23293a; --ok: #5cc48a; --ok-soft: #1c2c22;
+    --warn: #e0a543; --warn-soft: #30281a; --bad: #ec7b6e; --bad-soft: #34201d; --shadow: none;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #141413; --surface: #1d1d1b; --surface-2: #262623; --ink: #ecebe6; --ink-2: #b4b1a8; --ink-3: #7f7c74;
+  --line: #34332f; --accent: #7f9ef0; --accent-soft: #23293a; --ok: #5cc48a; --ok-soft: #1c2c22;
+  --warn: #e0a543; --warn-soft: #30281a; --bad: #ec7b6e; --bad-soft: #34201d; --shadow: none;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 16px; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.7 var(--sans); }
+a { color: var(--accent); }
+code, .mono { font-family: var(--mono); font-size: .88em; }
+code { background: var(--surface-2); padding: 1px 5px; border-radius: 5px; }
+.layout { max-width: 1180px; margin: 0 auto; padding: 32px 16px 80px; display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 40px; }
+nav.toc { position: sticky; top: 24px; align-self: start; font-size: 14px; }
+nav.toc .brand { font-weight: 700; font-size: 16px; margin-bottom: 14px; }
+nav.toc ol { list-style: none; padding: 0; margin: 0; }
+nav.toc li a { display: flex; gap: 10px; padding: 6px 8px; border-radius: 8px; color: var(--ink-2); text-decoration: none; }
+nav.toc li a:hover { background: var(--surface-2); color: var(--ink); }
+nav.toc .n { width: 20px; height: 20px; flex: none; border-radius: 50%; background: var(--surface-2); display: grid; place-items: center; font-size: 11px; font-weight: 700; margin-top: 2px; }
+.theme-btn { margin-top: 18px; border: 1px solid var(--line); background: var(--surface); color: var(--ink-2); border-radius: 8px; padding: 5px 10px; font: inherit; font-size: 13px; cursor: pointer; }
+main { min-width: 0; }
+header.hero h1 { font-size: 32px; line-height: 1.25; margin: 0 0 10px; letter-spacing: -.01em; }
+header.hero p.lead { color: var(--ink-2); font-size: 16px; margin: 0 0 6px; max-width: 720px; }
+.meta { color: var(--ink-3); font-size: 13px; }
+section { margin-top: 56px; }
+h2 { font-size: 23px; margin: 0 0 6px; display: flex; align-items: center; gap: 12px; }
+h2 .badge { width: 34px; height: 34px; border-radius: 50%; background: var(--accent); color: #fff; display: grid; place-items: center; font-size: 16px; flex: none; }
+h3 { font-size: 16px; margin: 26px 0 8px; }
+.where { display: inline-flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 14px; }
+.chip { display: inline-block; font-family: var(--mono); font-size: 12.5px; padding: 2px 9px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); }
+.chip.file { background: var(--surface-2); color: var(--ink-2); }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px 20px; box-shadow: var(--shadow); }
+.grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.callout { border-radius: var(--radius); padding: 14px 16px; margin: 16px 0; font-size: 14.5px; }
+.callout.tip { background: var(--ok-soft); }
+.callout.warn { background: var(--warn-soft); }
+.callout.info { background: var(--accent-soft); }
+.callout b:first-child { margin-right: 4px; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--ink-3); font-weight: 600; font-size: 12.5px; }
+.table-wrap { overflow-x: auto; }
+ol.steps { padding-left: 20px; margin: 8px 0; }
+ol.steps li { margin: 4px 0; }
+pre { background: var(--surface-2); border-radius: 10px; padding: 12px 14px; overflow-x: auto; font-size: 13px; line-height: 1.55; margin: 10px 0; }
+pre code { background: none; padding: 0; }
+
+/* pipeline diagram */
+.flow { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; margin: 22px 0 8px; }
+.flow a { text-decoration: none; color: inherit; }
+.flow .node { position: relative; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px 12px 10px; height: 100%; box-shadow: var(--shadow); transition: border-color .15s; }
+.flow a:hover .node { border-color: var(--accent); }
+.flow .node .ico { font-size: 20px; }
+.flow .node .t { font-weight: 700; font-size: 14px; margin: 2px 0; }
+.flow .node .d { color: var(--ink-2); font-size: 12.5px; line-height: 1.5; }
+.flow .node .s { margin-top: 6px; font-family: var(--mono); font-size: 11px; color: var(--accent); }
+.flow .node:not(.last)::after { content: "→"; position: absolute; right: -12px; top: 50%; transform: translateY(-50%); color: var(--ink-3); font-size: 14px; z-index: 1; }
+
+/* "where to set" map */
+.map { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 14px; }
+.map .card h4 { margin: 0 0 2px; font-size: 15px; }
+.map .card .q { color: var(--ink-2); font-size: 13.5px; margin-bottom: 8px; }
+.map ul { margin: 0; padding-left: 18px; font-size: 13.5px; color: var(--ink-2); }
+.map .card.primary { border: 2px solid var(--accent); }
+
+/* UI mockups */
+.mock { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--surface); box-shadow: var(--shadow); margin: 14px 0; }
+.mock .bar { display: flex; align-items: center; gap: 6px; padding: 8px 12px; background: var(--surface-2); border-bottom: 1px solid var(--line); }
+.mock .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--line); }
+.mock .url { margin-left: 8px; font-family: var(--mono); font-size: 12px; color: var(--ink-3); background: var(--surface); border-radius: 6px; padding: 2px 10px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mock .body { padding: 16px 18px; }
+.mock .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin: -4px 0 14px; overflow-x: auto; }
+.mock .tabs span { padding: 6px 12px; font-size: 13px; color: var(--ink-3); border-bottom: 2px solid transparent; white-space: nowrap; }
+.mock .tabs span.on { color: var(--ink); border-color: var(--accent); font-weight: 600; }
+.mock .sec { font-weight: 700; font-size: 14px; margin: 0 0 2px; }
+.mock .secd { font-size: 12.5px; color: var(--ink-3); margin-bottom: 12px; }
+.f { display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 4px 14px; align-items: start; padding: 8px 0; border-top: 1px dashed var(--line); position: relative; }
+.f:first-of-type { border-top: 0; }
+.f .l { font-size: 13px; font-weight: 600; padding-top: 3px; }
+.f .h { grid-column: 2; font-size: 12px; color: var(--ink-3); }
+.f .num { position: absolute; left: -28px; top: 9px; width: 19px; height: 19px; border-radius: 50%; background: var(--warn); color: #fff; font-size: 11px; font-weight: 700; display: grid; place-items: center; }
+.mock.annot .body { padding-left: 40px; }
+.tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.tag { font-size: 12.5px; padding: 2px 8px; border-radius: 6px; background: var(--surface-2); border: 1px solid var(--line); }
+.tag.in { border-style: dashed; color: var(--ink-3); background: transparent; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; font-size: 12.5px; }
+.seg span { padding: 3px 10px; border-left: 1px solid var(--line); }
+.seg span:first-child { border-left: 0; }
+.seg span.on { background: var(--accent); color: #fff; }
+.input { display: inline-block; min-width: 140px; border: 1px solid var(--line); border-radius: 7px; padding: 3px 10px; font-size: 13px; background: var(--surface); }
+.input.wide { display: block; min-height: 54px; color: var(--ink-2); }
+.check { font-size: 13px; }
+.check::before { content: "☑ "; color: var(--accent); }
+.toggle { display: inline-block; width: 32px; height: 18px; border-radius: 9px; background: var(--accent); position: relative; vertical-align: middle; }
+.toggle::after { content: ""; position: absolute; right: 2px; top: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; }
+.toggle.off { background: var(--line); }
+.toggle.off::after { right: auto; left: 2px; }
+.btn { display: inline-block; font-size: 13px; padding: 4px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); }
+.btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+.status { font-size: 12px; color: var(--ok); }
+.row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.chan { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 10px; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font-size: 13px; }
+.chan .name { font-weight: 700; }
+.chan .sub { color: var(--ink-3); font-size: 12px; grid-column: 1 / -1; }
+.pill { font-size: 11.5px; padding: 1px 8px; border-radius: 999px; }
+.pill.ok { background: var(--ok-soft); color: var(--ok); }
+.pill.warn { background: var(--warn-soft); color: var(--warn); }
+.pill.off { background: var(--surface-2); color: var(--ink-3); }
+.job { display: grid; grid-template-columns: 46px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); font-size: 13px; }
+.job:first-of-type { border-top: 0; }
+.score { width: 46px; height: 46px; border-radius: 10px; display: grid; place-items: center; font-weight: 800; font-size: 17px; background: var(--ok-soft); color: var(--ok); }
+.score.mid { background: var(--warn-soft); color: var(--warn); }
+.job .tt { font-weight: 700; font-size: 14px; }
+.job .co { color: var(--ink-3); }
+.sig { font-size: 11px; padding: 1px 6px; border-radius: 5px; background: var(--accent-soft); color: var(--accent); margin-right: 4px; }
+.kanban { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; font-size: 12px; }
+.kanban .col { background: var(--surface-2); border-radius: 8px; padding: 8px; min-height: 90px; }
+.kanban .col b { display: block; margin-bottom: 6px; color: var(--ink-2); }
+.kanban .k { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 5px 7px; margin-bottom: 5px; }
+.tg { max-width: 360px; background: var(--surface-2); border-radius: 14px; padding: 12px 14px; font-size: 13px; }
+.tg .bt { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 8px; }
+.tg .bt span { text-align: center; background: var(--surface); border-radius: 8px; padding: 4px; font-size: 12px; }
+.check-list { list-style: none; padding: 0; margin: 8px 0; }
+.check-list li { padding: 6px 0 6px 28px; position: relative; border-bottom: 1px dashed var(--line); }
+.check-list li::before { content: "✓"; position: absolute; left: 4px; color: var(--ok); font-weight: 700; }
+.cmp { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; margin: 14px 0; }
+.cmp > div { padding: 14px 16px; }
+.cmp > div + div { border-left: 1px solid var(--line); }
+.cmp h4 { margin: 0 0 6px; font-size: 14px; }
+.cmp p { margin: 0; font-size: 13.5px; color: var(--ink-2); }
+footer { margin-top: 64px; color: var(--ink-3); font-size: 13px; border-top: 1px solid var(--line); padding-top: 16px; }
+
+@media (max-width: 960px) {
+  .layout { grid-template-columns: minmax(0, 1fr); gap: 0; padding-top: 20px; }
+  nav.toc { position: static; margin-bottom: 18px; }
+  nav.toc ol { display: flex; flex-wrap: wrap; gap: 4px; }
+  nav.toc li a { padding: 4px 8px; background: var(--surface); border: 1px solid var(--line); }
+  .flow { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .flow .node::after { display: none; }
+  .grid3 { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 640px) {
+  header.hero h1 { font-size: 25px; }
+  .grid2, .map, .cmp { grid-template-columns: minmax(0, 1fr); }
+  .cmp > div + div { border-left: 0; border-top: 1px solid var(--line); }
+  .f { grid-template-columns: minmax(0, 1fr); }
+  .f .h { grid-column: 1; }
+  .kanban { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .mock .body { padding: 14px; }
+  .mock.annot .body { padding-left: 34px; }
+}
+</style>
+</head>
+<body>
+<div class="layout">
+  <nav class="toc" aria-label="Contents">
+    <div class="brand">📡 Job Radar Tuning Guide</div>
+    <ol>
+      <li><a href="#overview"><span class="n">·</span>How it works</a></li>
+      <li><a href="#where"><span class="n">?</span>Where to set what</a></li>
+      <li><a href="#s1"><span class="n">1</span>Open the web UI, check health</a></li>
+      <li><a href="#s2"><span class="n">2</span>About me (for scoring)</a></li>
+      <li><a href="#s3"><span class="n">3</span>What I want (filters)</a></li>
+      <li><a href="#s4"><span class="n">4</span>Search criteria</a></li>
+      <li><a href="#s5"><span class="n">5</span>Collection channels</a></li>
+      <li><a href="#s6"><span class="n">6</span>Notifications &amp; Telegram</a></li>
+      <li><a href="#s7"><span class="n">7</span>Bonuses &amp; watched companies</a></li>
+      <li><a href="#s8"><span class="n">8</span>Run a cycle, read results</a></li>
+      <li><a href="#daily"><span class="n">✓</span>Every day after</a></li>
+    </ol>
+    <button class="theme-btn" type="button" id="theme">Toggle dark / light</button>
+  </nav>
+
+  <main>
+    <header class="hero">
+      <h1>After the setup wizard: tuning what you get</h1>
+      <p class="lead"><b>Start here:</b> run <code>docker compose up -d --build</code> in the project directory and open <code>http://127.0.0.1:3000</code>; the setup wizard (<code>/setup</code>) asks for your language, market, profile, targets, sources, AI and Telegram and writes the files for you (see <a href="setup.md">setup.md</a>). This guide is for <b>after</b> the wizard: it explains the same settings page by page, so you can tune them later. Each step says which page to use, what to fill in, and how to confirm it took effect. The mock-ups use example values (a Berlin / Germany setup); yours will show your own market, cities and currency.</p>
+      <p class="meta">Web address: <code>http://127.0.0.1:3000</code> on this machine; from a phone or another device, use your Tailscale address (<code>public_base_url</code> in <code>data/config/notify.yaml</code>). Changes made on the pages are written back to the YAML files in the project directory with comments preserved; editing the YAML directly works too, and the two are equivalent. (The project directory is the one that contains <code>package.json</code>, <code>compose.yaml</code>, <code>config/</code> and <code>data/</code>.)</p>
+      <p class="meta"><a href="getting-started.zh.html">中文版</a></p>
+    </header>
+
+    <!-- ============ overview ============ -->
+    <section id="overview">
+      <h2>How it works</h2>
+      <p>By default a cycle runs automatically on weekdays at 07:00 and 17:00 and at 09:00 on weekends, in your configured time zone (<code>schedule.yaml</code>). Each cycle goes through 6 stages, and each condition you set affects exactly one of them. Click a block to jump to the matching setup step.</p>
+      <div class="flow">
+        <a href="#s4"><div class="node"><div class="ico">🔎</div><div class="t">Collect</div><div class="d">Search each site by keyword × city</div><div class="s">search.yaml · sources.yaml</div></div></a>
+        <a href="#s3"><div class="node"><div class="ico">🧹</div><div class="t">Dedupe + hard filter</div><div class="d">Location, contract, salary floor, student roles, blocklists</div><div class="s">preferences.yaml</div></div></a>
+        <a href="#s2"><div class="node"><div class="ico">🤖</div><div class="t">AI scoring</div><div class="d">Compare with your profile, give 0–100 and reasons</div><div class="s">me.yaml + preferences.yaml</div></div></a>
+        <a href="#s7"><div class="node"><div class="ico">💶</div><div class="t">Signal bonus</div><div class="d">Bonus when the JD states salary, equity, etc.</div><div class="s">interests.yaml</div></div></a>
+        <a href="#s6"><div class="node"><div class="ico">📨</div><div class="t">Notify</div><div class="d">Jobs whose rank value clears the threshold go to Telegram</div><div class="s">notify.yaml</div></div></a>
+        <a href="#s8"><div class="node last"><div class="ico">🗂️</div><div class="t">You decide</div><div class="d">Read the JD, mark interested, drag into the pipeline board</div><div class="s">/ · /jobs · /pipeline</div></div></a>
+      </div>
+      <p class="meta">Rank value = AI match score + signal bonus (capped). Jobs removed by the hard filter are not scored or notified, but they stay in the database and you can keep them manually at any time with "Keep anyway".</p>
+    </section>
+
+    <!-- ============ where ============ -->
+    <section id="where">
+      <h2>Where do I set the roles I want and my filters?</h2>
+      <p>There are two kinds, and the first two cards are the easiest to mix up: <b>"What to search"</b> decides which jobs get pulled from the sites; <b>"What I want"</b> decides which of the pulled jobs stay and how they are scored.</p>
+      <div class="map">
+        <div class="card primary">
+          <h4>My profile → What I want <span class="chip">/me</span></h4>
+          <div class="q">Of the jobs pulled in, which stay and which are filtered out?</div>
+          <ul>
+            <li>Target roles (also used for scoring)</li>
+            <li>Location, work mode, remote scope, seniority</li>
+            <li>Salary floor, contract type</li>
+            <li>Exclude student roles, companies, keywords</li>
+          </ul>
+          <p class="meta" style="margin:8px 0 0">File <code>data/profile/preferences.yaml</code> → <a href="#s3">Step 3</a></p>
+        </div>
+        <div class="card primary">
+          <h4>Settings → Search <span class="chip">/settings</span></h4>
+          <div class="q">Which keywords and cities to search on the sites?</div>
+          <ul>
+            <li>Keyword groups (each group is OR-ed into one query)</li>
+            <li>Cities (each group is queried once per city), remote scope</li>
+            <li>Look-back hours per cycle, max results per group per city</li>
+          </ul>
+          <p class="meta" style="margin:8px 0 0">File <code>data/config/search.yaml</code> → <a href="#s4">Step 4</a></p>
+        </div>
+        <div class="card">
+          <h4>My profile → About me <span class="chip">/me</span></h4>
+          <div class="q">On what basis does the AI judge whether I fit?</div>
+          <ul>
+            <li>Languages and levels, skills and years, years of experience</li>
+            <li>Home city, whether you need visa sponsorship, a summary for the AI</li>
+          </ul>
+          <p class="meta" style="margin:8px 0 0">File <code>data/profile/me.yaml</code> → <a href="#s2">Step 2</a></p>
+        </div>
+        <div class="card">
+          <h4>Interests + notifications <span class="chip">/interests</span> <span class="chip">/settings</span></h4>
+          <div class="q">Which jobs rank higher and get pushed to your phone?</div>
+          <ul>
+            <li>Compensation / benefit signal words and bonus weights, watched companies</li>
+            <li>Notification threshold (default 70, 60 with a salary or equity signal), quiet hours</li>
+            <li>Saved filter views (switch at the top of the Today page)</li>
+          </ul>
+          <p class="meta" style="margin:8px 0 0">→ <a href="#s6">Step 6</a>, <a href="#s7">Step 7</a></p>
+        </div>
+      </div>
+      <div class="callout warn"><b>⚠️ Keep both sides in sync.</b> If you add a target role in /me but no matching keyword in the /settings search, the system will never go looking for it; conversely, if you add a search keyword but not the target role, the pulled jobs will get a lower title-match score. When you change one side, change the other.</div>
+    </section>
+
+    <!-- ============ step 1 ============ -->
+    <section id="s1">
+      <h2><span class="badge">1</span>Open the web UI and confirm the system is healthy</h2>
+      <div class="where"><span class="chip">/sources</span><span class="chip file">pnpm run doctor</span></div>
+      <ol class="steps">
+        <li>Open <code>http://127.0.0.1:3000</code> in a browser (on a phone, first connect with the Tailscale app, then open the Tailscale address). Left navigation: Today, Jobs, Favorites, Pipeline, Sources, Insights, Settings, My profile, Interests.</li>
+        <li>Run a health check in the project directory and read the summary on the last line:</li>
+      </ol>
+<pre><code>cd &lt;your project directory&gt;
+pnpm run doctor</code></pre>
+      <div class="grid3">
+        <div class="callout tip" style="margin:0"><b>All ✅</b> Everything is fine, go on to the next step.</div>
+        <div class="callout warn" style="margin:0"><b>Some ⚠️</b> It works, but something needs attention (for example a channel is missing its key). Each item has a "what to do" line below it.</div>
+        <div class="callout" style="margin:0;background:var(--bad-soft)"><b>Some ❌</b> Something is broken. Follow the "what to do" line before continuing.</div>
+      </div>
+      <p>Write <code>pnpm run doctor</code>, not just <code>pnpm doctor</code> (the latter is a built-in pnpm command). doctor is read-only: it sends no messages, calls no AI and costs nothing. The <b>Sources</b> page in the web UI shows the same information: each channel's status, usage and latest run, plus the heartbeats of the runner and ai-worker.</p>
+    </section>
+
+    <!-- ============ step 2 ============ -->
+    <section id="s2">
+      <h2><span class="badge">2</span>Write "About me" — the basis for AI scoring</h2>
+      <div class="where"><span class="chip">/me → About me</span><span class="chip file">data/profile/me.yaml</span></div>
+      <p>This part is sent to the AI as a summary for scoring. <b>Fill in at least skills or the summary</b>, otherwise scoring pauses (a banner appears at the top of the Today page).</p>
+      <div class="mock annot">
+        <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="url">127.0.0.1:3000/me</span></div>
+        <div class="body">
+          <div class="sec">About me</div>
+          <div class="secd">Languages, skills and the summary are sent to the AI as a summary for scoring. Do not write your name, contact details or ID numbers.</div>
+          <div class="f"><span class="num">1</span><span class="l">Languages</span><div class="tags"><span class="tag">zh · native</span><span class="tag">en · C1</span><span class="tag">de · A2</span><span class="tag in">＋ Add language</span></div><span class="h">Language code (en, de, zh) + CEFR level. Your German level is compared with the JD's German requirement.</span></div>
+          <div class="f"><span class="num">2</span><span class="l">Skills</span><div class="tags"><span class="tag">Python · 6 yrs</span><span class="tag">TypeScript · 4 yrs</span><span class="tag">LLM / RAG · 2 yrs</span><span class="tag in">＋ Add skill</span></div><span class="h">Name + years; list the ones relevant to your target roles.</span></div>
+          <div class="f"><span class="num">3</span><span class="l">Years of experience / home city</span><div class="row"><span class="input">8</span><span class="input">Berlin</span></div></div>
+          <div class="f"><span class="num">4</span><span class="l">Needs visa sponsorship</span><div class="check">Need the employer to provide visa sponsorship</div></div>
+          <div class="f"><span class="num">5</span><span class="l">Summary for the AI</span><span class="input wide">A few sentences: what you have done, what you are good at, what direction you want your next job to take.</span><span class="h">The most important text for AI scoring. Do not write your name, email or phone number.</span></div>
+          <div class="row" style="margin-top:12px"><span class="btn primary">Save</span><span class="btn">Revert</span><span class="status">Saved</span></div>
+        </div>
+      </div>
+      <div class="callout info"><b>After you change your profile:</b> old scores are marked "stale" and re-scored automatically in later processing cycles; you can also click "Re-score stale scores" in /settings to do it right away. Every save keeps a history snapshot, and you can roll back at the bottom of the /me page.</div>
+    </section>
+
+    <!-- ============ step 3 ============ -->
+    <section id="s3">
+      <h2><span class="badge">3</span>Write "What I want" — roles and filters</h2>
+      <div class="where"><span class="chip">/me → What I want</span><span class="chip file">data/profile/preferences.yaml</span></div>
+      <p>These conditions drive the <b>hard filter</b> (non-matching jobs are filtered out directly, not scored or notified), and target roles also make up 40% of the pre-score.</p>
+      <div class="mock annot">
+        <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="url">127.0.0.1:3000/me</span></div>
+        <div class="body">
+          <div class="sec">What I want</div>
+          <div class="secd">Target roles, locations, salary floor and exclusions, used for the hard filter and scoring.</div>
+          <div class="f"><span class="num">1</span><span class="l">Target roles</span><div class="tags"><span class="tag">AI Engineer</span><span class="tag">LLM Engineer</span><span class="tag">Forward Deployed Engineer</span><span class="tag">AI Solutions Engineer</span><span class="tag in">Type and press Enter to add</span></div><span class="h">Compared with the job title: whole phrase present = 1, all words present but not adjacent = 0.8, more than half matched = 0.5.</span></div>
+          <div class="f"><span class="num">2</span><span class="l">Locations</span><div class="tags"><span class="tag">Berlin</span><span class="tag">München</span><span class="tag in">＋</span></div><span class="h">On-site / hybrid jobs outside these cities are filtered out.</span></div>
+          <div class="f"><span class="num">3</span><span class="l">Work mode</span><div class="seg"><span class="on">On-site</span><span class="on">Hybrid</span><span class="on">Remote</span></div></div>
+          <div class="f"><span class="num">4</span><span class="l">Remote scope</span><div class="seg"><span>Not accepted</span><span class="on">Within EU, employable in Germany</span><span>Anywhere in EU</span><span>Worldwide</span></div></div>
+          <div class="f"><span class="num">5</span><span class="l">Seniority</span><div class="seg"><span class="on">Any</span><span>Entry</span><span>Mid</span><span>Senior</span><span>Lead</span></div></div>
+          <div class="f"><span class="num">6</span><span class="l">Salary floor (EUR, gross/yr)</span><span class="input">70000</span><span class="h">Filtered only when a stated salary ceiling is below it; jobs with no stated salary are kept.</span></div>
+          <div class="f"><span class="num">7</span><span class="l">Contract type</span><div class="row" style="font-size:12.5px"><span>Permanent <b style="color:var(--ok)">accept</b></span><span>Fixed-term <b style="color:var(--ok)">accept</b></span><span>Freelance <b style="color:var(--ok)">accept</b></span><span>Temp agency <b style="color:var(--bad)">exclude</b></span></div></div>
+          <div class="f"><span class="num">8</span><span class="l">Exclude</span><div><div class="check">Exclude student roles (working student, internship, thesis, …)</div><div class="row" style="margin-top:6px;font-size:12.5px"><span>Companies:</span><span class="tag in">Type and press Enter</span><span>Keywords:</span><span class="tag">Sales</span><span class="tag in">＋</span></div></div></div>
+          <div class="row" style="margin-top:12px"><span class="btn primary">Save</span><span class="btn">Revert</span></div>
+        </div>
+      </div>
+      <h3>How each item takes effect</h3>
+      <div class="table-wrap"><table>
+        <tr><th>#</th><th>Condition</th><th>When it does not match</th><th>Advice</th></tr>
+        <tr><td>1</td><td>Target roles</td><td>No filtering, only affects the score</td><td>List every synonymous title (AI Engineer / Applied AI Engineer…)</td></tr>
+        <tr><td>2–4</td><td>Location, work mode, remote scope</td><td>Filtered, with a reason such as "location outside target area"</td><td>If you only want remote, remove "On-site" and "Hybrid"; if you do not want remote at all, choose "Not accepted"</td></tr>
+        <tr><td>5</td><td>Seniority</td><td>Filtered, reason "level mismatch"</td><td>If unsure, leave "Any" and let the AI judge</td></tr>
+        <tr><td>6</td><td>Salary floor</td><td>Filtered only when a stated ceiling is below the floor</td><td>Most German JDs state no salary, so nothing is wrongly dropped</td></tr>
+        <tr><td>7</td><td>Contract type</td><td>"Exclude" is filtered directly; anything not in "accept" is also filtered; JDs that state no contract type are kept</td><td>Choose "exclude" for temp agencies (Zeitarbeit)</td></tr>
+        <tr><td>8</td><td>Student roles, company and keyword blocklists</td><td>Filtered</td><td>Keywords match whole words in the title and body, so be careful with very broad words</td></tr>
+      </table></div>
+      <div class="callout tip"><b>Newly fetched jobs are filtered by the new conditions immediately.</b> To re-filter the jobs already in the database too, run <code>pnpm refilter --dry-run</code> in the project directory to see a before/after comparison, then run it again without <code>--dry-run</code> to apply (no fetching, no AI calls).</div>
+    </section>
+
+    <!-- ============ step 4 ============ -->
+    <section id="s4">
+      <h2><span class="badge">4</span>Set the search criteria — where and what to search</h2>
+      <div class="where"><span class="chip">/settings → Search</span><span class="chip file">data/config/search.yaml</span></div>
+      <div class="mock annot">
+        <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="url">127.0.0.1:3000/settings</span></div>
+        <div class="body">
+          <div class="tabs"><span>Schedule</span><span class="on">Search</span><span>Channels</span><span>AI</span><span>Notifications</span></div>
+          <div class="sec">Keyword groups</div>
+          <div class="secd">Each keyword group is OR-ed into one query, then queried once per city.</div>
+          <div class="f"><span class="num">1</span><span class="l mono">engineering</span><div class="tags"><span class="tag">AI Engineer</span><span class="tag">LLM Engineer</span><span class="tag">Machine Learning Engineer</span><span class="tag">…</span><span class="tag in">＋</span></div></div>
+          <div class="f"><span class="l mono">fde_solutions</span><div class="tags"><span class="tag">Forward Deployed Engineer</span><span class="tag">AI Solutions Engineer</span><span class="tag">…</span><span class="tag in">＋</span></div></div>
+          <div class="f"><span class="l mono">german</span><div class="tags"><span class="tag">KI Engineer</span><span class="tag">KI-Entwickler</span><span class="tag in">＋</span></div><span class="h">Group IDs use lowercase letters, digits and underscores. You can add new groups.</span></div>
+          <div class="sec" style="margin-top:14px">Location &amp; remote</div>
+          <div class="f"><span class="num">2</span><span class="l">Cities</span><div class="tags"><span class="tag">Berlin</span><span class="tag">München</span><span class="tag in">＋</span></div><span class="h">Each keyword group is queried once per city.</span></div>
+          <div class="f"><span class="l">Remote scope</span><div class="seg"><span>None</span><span class="on">Within EU, employable in Germany</span><span>Anywhere in EU</span><span>Worldwide</span></div></div>
+          <div class="sec" style="margin-top:14px">Time window &amp; limits</div>
+          <div class="f"><span class="num">3</span><span class="l">Look-back window (hours)</span><div class="row" style="font-size:12.5px">Morning <span class="input" style="min-width:50px">24</span> Evening <span class="input" style="min-width:50px">10</span> Weekend <span class="input" style="min-width:50px">24</span></div></div>
+          <div class="f"><span class="l">Max results per group per city</span><span class="input" style="min-width:60px">40</span></div>
+          <div class="row" style="margin-top:12px"><span class="btn primary">Save</span><span class="status">runner loaded (04:12)</span></div>
+        </div>
+      </div>
+      <div class="cmp">
+        <div><h4>How the query count works</h4><p>Queries per channel per cycle ≈ number of keyword groups × number of cities (plus one more for remote). 3 groups × 2 cities = 6 queries. More groups give better coverage, but paid channels cost more and free sites are more likely to rate-limit you.</p></div>
+        <div><h4>When a save takes effect</h4><p>On save, the settings are validated with the same rules as the runner; the runner hot-reloads within a few seconds, and "runner loaded" appears next to the button. The next collection uses the new criteria, with no restart needed.</p></div>
+      </div>
+      <div class="callout info"><b>While you are here, look at the "Schedule" tab:</b> by default cycles run at 07:00 / 17:00 on weekdays and 09:00 on weekends, in the time zone you chose in the wizard (the shipped default is America/New_York); cycles missed while the host was off are made up after it boots.</div>
+    </section>
+
+    <!-- ============ step 5 ============ -->
+    <section id="s5">
+      <h2><span class="badge">5</span>Confirm the collection channels — which sites to pull from</h2>
+      <div class="where"><span class="chip">/settings → Channels</span><span class="chip">/sources</span><span class="chip file">data/config/sources.yaml</span><span class="chip file">.env</span></div>
+      <p>Channels are the data sources. Switch them on and off and set budgets in <b>/settings → Channels</b>; see each channel's status and test it in <b>/sources</b>.</p>
+      <div class="mock">
+        <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="url">127.0.0.1:3000/sources</span></div>
+        <div class="body">
+          <div class="grid2">
+            <div class="chan"><span class="name">arbeitsagentur (Federal Employment Agency)</span><span class="pill ok">OK</span><span class="sub">Free · 40 this month · <span class="btn" style="padding:1px 8px">Test</span> <span class="btn" style="padding:1px 8px">Collect now</span></span></div>
+            <div class="chan"><span class="name">linkedin-brightdata</span><span class="pill ok">OK</span><span class="sub">Paid · $0.00 / $5.00 · free quota 225 / 5000</span></div>
+            <div class="chan"><span class="name">greenhouse · lever · ashby …</span><span class="pill ok">OK</span><span class="sub">Company career pages (ATS); the list is ats_boards in sources.yaml</span></div>
+            <div class="chan"><span class="name">tavily</span><span class="pill warn">Missing key</span><span class="sub">Discovers career pages of new companies · needs TAVILY_API_KEY</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="table-wrap"><table>
+        <tr><th>Type</th><th>Channels</th><th>What to prepare</th></tr>
+        <tr><td>Official APIs and public company feeds, on by default</td><td>Greenhouse, Lever, Ashby, Personio, SmartRecruiters; Federal Employment Agency (Germany market only)</td><td>Nothing to do; add the companies you care about under <code>ats_boards</code></td></tr>
+        <tr><td>Scraping, <b>off by default</b></td><td>Indeed, StepStone (Germany pack), LinkedIn guest, XING</td><td>Their terms of service may forbid automated access. Switch one on only after reading <a href="sources.md#scraping">Scraping</a>; the wizard and /sources/registry ask you to confirm</td></tr>
+        <tr><td>Paid (monthly budget)</td><td>LinkedIn Bright Data, Apify, JSearch</td><td>Put the key in the <code>.env</code> file in the project directory and set a monthly budget in /settings; switch the channel off if you do not want it</td></tr>
+        <tr><td>Discover new companies</td><td>Tavily (default) / Brave</td><td><code>TAVILY_API_KEY</code>, 1000 free calls per month</td></tr>
+        <tr><td>Needs login</td><td>LinkedIn session (off by default, uses your own account), Gmail alert emails</td><td>See the <a href="linkedin-session.md">LinkedIn session</a> and <a href="gmail-alerts.md">Gmail alerts</a> guides; optional</td></tr>
+      </table></div>
+      <div class="callout tip"><b>How to confirm a channel works:</b> click <b>Test</b> on the channel card in /sources. It runs only the first query, fetches at most 5 results and parses them in memory; it <b>does not write to the database or count against the budget</b>, and the result is shown right under the button. Paid and login-based channels have no Test button; use "Collect now".</div>
+      <div class="callout warn"><b>Fill in keys yourself:</b> open the <code>.env</code> file in the project directory with a text editor and fill them in; after saving, run <code>docker compose up -d runner</code> so the runner picks up the new values. <code>.env</code> is not in git, and never paste keys into a chat.</div>
+    </section>
+
+    <!-- ============ step 6 ============ -->
+    <section id="s6">
+      <h2><span class="badge">6</span>Set up notifications — which jobs go to your phone</h2>
+      <div class="where"><span class="chip">/settings → Notifications</span><span class="chip file">data/config/notify.yaml</span></div>
+      <div class="grid2">
+        <div class="mock" style="margin:0">
+          <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="url">/settings · Notifications</span></div>
+          <div class="body">
+            <div class="f"><span class="l">Notify threshold</span><span class="input" style="min-width:60px">70</span><span class="h">A job is pushed only when its rank value reaches this.</span></div>
+            <div class="f"><span class="l">With T1 / T2 signal</span><span class="input" style="min-width:60px">60</span><span class="h">Lower threshold for jobs with a stated salary or equity.</span></div>
+            <div class="f"><span class="l">Max per cycle</span><span class="input" style="min-width:60px">10</span><span class="h">The rest you read in the web UI.</span></div>
+            <div class="f"><span class="l">Quiet hours</span><div class="row"><span class="toggle"></span><span class="input" style="min-width:60px">22:00</span>–<span class="input" style="min-width:60px">07:00</span></div><span class="h">Alerts are not held back by quiet hours.</span></div>
+          </div>
+        </div>
+        <div>
+          <p style="margin-top:0">Each job pushed to Telegram looks like this, and the buttons write straight into your application records:</p>
+          <div class="tg">
+            <b>87 · AI Solutions Engineer</b><br>
+            Example GmbH · Berlin · Hybrid<br>
+            <span class="sig">T1 €85–100k</span><span class="sig">English role</span><br>
+            <span style="color:var(--ink-3)">Match: LLM application experience, customer delivery…</span>
+            <div class="bt"><span>👍 Interested</span><span>🚫 Ignore</span><span>📄 Tailor résumé</span></div>
+            <div class="bt"><span>⭐ Save</span></div>
+          </div>
+          <p class="meta">Each cycle also ends with a summary message: new jobs, jobs that passed the filter, qualified jobs, failed sources. <b>Receiving the summary = that cycle finished.</b></p>
+        </div>
+      </div>
+      <div class="callout info"><b>First time with Telegram (it is off by default):</b> follow the <a href="telegram.md">Telegram guide</a> to create a bot with @BotFather and put <code>TELEGRAM_BOT_TOKEN</code> and <code>TELEGRAM_CHAT_ID</code> into <code>.env</code>; then click <b>Send Telegram test message</b> in <b>/settings → Manual actions</b>. If it arrives on your phone, setup is done.</div>
+    </section>
+
+    <!-- ============ step 7 ============ -->
+    <section id="s7">
+      <h2><span class="badge">7</span>Tune the ranking: signal bonuses, watched companies, views</h2>
+      <div class="where"><span class="chip">/interests</span><span class="chip file">data/config/interests.yaml</span></div>
+      <div class="grid3">
+        <div class="card"><h4 style="margin:0 0 4px">💶 Signal words and weights</h4><p style="margin:0;font-size:13.5px;color:var(--ink-2)">These phrases in a JD earn a bonus: T1 a stated amount, T2 equity / options, T3 salary description, T4 other. You can adjust each tier's weight and the bonus cap; after saving, rank values are recomputed immediately without calling the AI.</p></div>
+        <div class="card"><h4 style="margin:0 0 4px">👀 Watched companies</h4><p style="margin:0;font-size:13.5px;color:var(--ink-2)">Add companies you especially want to join. Any new job from them is pushed on its own, <b>regardless of the score threshold and filters</b>. You can add a company before it appears in the database.</p></div>
+        <div class="card"><h4 style="margin:0 0 4px">👁️ Saved views</h4><p style="margin:0;font-size:13.5px;color:var(--ink-2)">After setting filters in <b>/jobs</b> (score, city, remote, German requirement…), click "Save current filters as a view" and you can switch to it with one click at the top of the Today page; you can set one default view.</p></div>
+      </div>
+      <div class="callout tip"><b>Every Monday at 08:00</b> the AI proposes adjustments based on your actions (marking interested / ignore). They appear on the /interests page and <b>only take effect once you approve them</b>.</div>
+    </section>
+
+    <!-- ============ step 8 ============ -->
+    <section id="s8">
+      <h2><span class="badge">8</span>Run a cycle by hand and look at the results</h2>
+      <div class="where"><span class="chip">/settings → Manual actions</span><span class="chip">/</span><span class="chip">/jobs/&lt;id&gt;</span><span class="chip">/pipeline</span></div>
+      <ol class="steps">
+        <li>In <b>/settings → Manual actions</b> click <b>Run a cycle now</b> (you can tick only a few channels). Live progress shows under the button: "Cycle N: x / y queries finished, z fetched". You can also run <code>pnpm cycle:run</code> in a terminal.</li>
+        <li>After collection, the ai-worker starts scoring; scores usually trickle in within a few minutes.</li>
+        <li>Open <b>Today</b>: new jobs are sorted by rank value, with per-source counts at the top.</li>
+        <li>Click a title to open the <b>detail</b> page: the original JD / translation, the AI's match reasons and gaps, compensation signals, German requirement, and the "View original post" link (to record that you applied, click "Mark as applied"; opening the original post does not change the status).</li>
+        <li>If you want to apply, click "Interested", then drag the status in the <b>Pipeline</b> board.</li>
+      </ol>
+      <div class="mock">
+        <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="url">127.0.0.1:3000/</span></div>
+        <div class="body">
+          <div class="tabs"><span class="on">All</span><span>Default view</span><span>High pay + Berlin</span></div>
+          <div class="job"><div class="score">87</div><div><div class="tt">AI Solutions Engineer</div><div class="co">Example GmbH · Berlin · Hybrid · 2 hours ago</div><div><span class="sig">T1 salary</span><span class="sig">English</span></div></div><span class="btn">👍</span></div>
+          <div class="job"><div class="score">74</div><div><div class="tt">Applied AI Engineer</div><div class="co">Sample AG · München · Remote (EU)</div><div><span class="sig">T2 options</span></div></div><span class="btn">👍</span></div>
+          <div class="job"><div class="score mid">58</div><div><div class="tt">ML Engineer (m/w/d)</div><div class="co">Demo SE · Berlin · On-site · German B2</div></div><span class="btn">👍</span></div>
+        </div>
+      </div>
+      <div class="kanban" style="margin-top:12px">
+        <div class="col"><b>Interested</b><div class="k">AI Solutions Eng.</div><div class="k">Applied AI Eng.</div></div>
+        <div class="col"><b>Preparing</b><div class="k">FDE · Example</div></div>
+        <div class="col"><b>Applied</b><div class="k">LLM Eng.</div></div>
+        <div class="col"><b>Interviewing</b></div>
+        <div class="col"><b>Offer / Closed</b></div>
+      </div>
+      <h3>What to check when results look wrong</h3>
+      <div class="table-wrap"><table>
+        <tr><th>Symptom</th><th>Where to look first</th></tr>
+        <tr><td>A job you wanted did not appear</td><td>In /jobs turn on "Show filtered" and search for it: the top of the detail page states the filter reason (for example "location outside target area"). You can click "Keep anyway", or go back to Step 3 and loosen the conditions</td></tr>
+        <tr><td>Jobs of this kind were never fetched</td><td>Whether the Step 4 keyword groups contain that title; whether the Step 5 channels are healthy</td></tr>
+        <tr><td>Scores stay empty</td><td>Whether /me has skills or a summary; the "AI has no backlog" and "ai-worker heartbeat fresh" items in <code>pnpm run doctor</code></td></tr>
+        <tr><td>Scores are all low</td><td>Whether the Step 2 summary and skills are specific enough; whether the Step 3 target roles cover the common titles</td></tr>
+        <tr><td>No notification on your phone</td><td>Whether it is quiet hours; whether the rank value reaches the threshold; send a Telegram test message from /settings</td></tr>
+      </table></div>
+    </section>
+
+    <!-- ============ daily ============ -->
+    <section id="daily">
+      <h2><span class="badge">✓</span>Every day after</h2>
+      <ul class="check-list">
+        <li>Nothing to start: once the host is set up as in the deployment guide, Docker and the ai-worker start automatically at boot, and 3 cycles run on their own every day.</li>
+        <li>Watch Telegram: qualified new jobs arrive one by one; handle them with 👍 / 🚫 directly, and tap ⭐ to save ones for later.</li>
+        <li>When you have time, open <b>Today</b> or <b>Jobs</b> to browse what was not pushed; follow progress on the <b>Pipeline</b> board, which reminds you when a reply is overdue.</li>
+        <li>On Monday, check the AI's suggested adjustments on /interests and approve or reject them.</li>
+        <li>When something feels off, run <code>pnpm run doctor</code>; Telegram also sends proactive alerts (channel circuit-breaker, budget at 80%, ai-worker offline, etc.).</li>
+      </ul>
+      <p class="meta">More: daily use <a href="usage.md">usage</a> · settings page details <a href="settings.md">settings</a> · deployment and health-check items <a href="deploy.md">deploy</a> · configuration reference <a href="configuration.md">configuration</a></p>
+    </section>
+
+    <footer>Job Radar Getting Started · Company names and scores in the example screenshots are fictional; the real pages are authoritative.</footer>
+  </main>
+</div>
+<script>
+(function () {
+  var root = document.documentElement, btn = document.getElementById("theme");
+  try { var saved = localStorage.getItem("jr-guide-theme"); if (saved) root.setAttribute("data-theme", saved); } catch (e) {}
+  btn.addEventListener("click", function () {
+    var dark = root.getAttribute("data-theme") === "dark" ||
+      (!root.getAttribute("data-theme") && window.matchMedia("(prefers-color-scheme: dark)").matches);
+    var next = dark ? "light" : "dark";
+    root.setAttribute("data-theme", next);
+    try { localStorage.setItem("jr-guide-theme", next); } catch (e) {}
+  });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,49 @@
+# Answers file of `pnpm run setup --answers` (docs/setup.md). Every section is optional; a missing one is skipped.
+language:
+  ui_locale: en
+  ai_output: en
+  translation_target: en
+market:
+  pack: generic
+  country: NL
+  currency: EUR
+  home_language: nl
+  locations: [Amsterdam, Utrecht]
+  remote_scope: home_country
+  timezone: Europe/Amsterdam
+profile:
+  summary: Backend engineer moving into applied machine learning.
+  skills:
+    - { name: Python, years: 6 }
+    - { name: SQL, years: 4 }
+    - Kubernetes
+  languages: { en: C1, nl: A2 }
+  years_experience: 7
+  city: Amsterdam
+  needs_visa_sponsorship: false
+targets:
+  target_titles: [Machine Learning Engineer, Data Engineer]
+  seniority: senior
+  workplace: [hybrid, remote]
+  salary_floor_year: 65000
+  contracts: { allow: [permanent], exclude: [temp_agency] }
+  exclude_student_roles: true
+  exclude_companies: [Example Staffing]
+  exclude_keywords: [unpaid]
+sources:
+  enable: [greenhouse, lever]
+  disable: [linkedin-brightdata]
+  boards:
+    - { name: Example Co, ats: greenhouse, token: exampleco }
+ai:
+  order: [claude-cli, codex-cli, api]
+  providers:
+    claude-cli: { enabled: true }
+    codex-cli: { enabled: false }
+    mimo: { enabled: false }
+telegram:
+  enabled: false
+  notify_locale: null
+finish:
+  complete: true
+  run_first_cycle: false

@@ -1,0 +1,21 @@
+/*
+ * Shared-element morph of a job (list row -> detail page). `JobViewTransition` gives the element the view
+ * transition class `morph`. Duration and easing are the motion tokens; with reduced motion the token is 0ms and the
+ * rules below also zero the animation, so the page just switches.
+ */
+::view-transition-group(.morph) {
+  animation-duration: var(--dur-slow);
+  animation-timing-function: var(--ease-out);
+}
+/* the clicks of the user reach the live page while the morph plays */
+::view-transition {
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(*),
+  ::view-transition-new(*),
+  ::view-transition-group(*) {
+    animation-duration: 0s !important;
+    animation-delay: 0s !important;
+  }
+}

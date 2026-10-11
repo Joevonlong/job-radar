@@ -1,0 +1,43 @@
+# 通用语言数据：识别正文语言用的英文停用词。
+
+stopwords:
+  en:
+    - the
+    - and
+    - of
+    - to
+    - in
+    - for
+    - with
+    - a
+    - an
+    - is
+    - are
+    - be
+    - you
+    - your
+    - we
+    - our
+    - will
+    - on
+    - as
+    - at
+    - by
+    - or
+    - this
+    - that
+    - from
+    - it
+    - their
+    - about
+    - have
+    - has
+    - can
+    - work
+    - team
+    - experience
+    - skills
+    - ability
+    - who
+    - what
+    - join

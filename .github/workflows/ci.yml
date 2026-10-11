@@ -1,0 +1,478 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Read-only token for every job; no job needs more. `pull_request` (not `pull_request_target`): pull requests from
+# forks run without secrets.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# The checks of scripts/validate.sh run as separate jobs side by side (static, unit test shards, integration, e2e,
+# images), so the run takes as long as the slowest job instead of the sum. `ci-ok` sums them up into one check.
+# Runners are pinned to ubuntu-24.04 (ubuntu-latest moves to Ubuntu 26 from 2026-10-19); move deliberately, with the
+# Playwright system libraries and the pg client wrappers checked on the new image.
+#
+# What runs (gates add up for mixed changes; anything not recognised as documentation runs the full product checks):
+#   docs-only PR        changes (classification + documentation link check), ci-docs
+#   code PR             changes, ci-docs, static (+ jobspy), unit, integration (shuffled file order), e2e
+#   + image inputs      + images, linux-smoke (Dockerfiles, .dockerignore, package/lock/workspace, next.config, tsconfig, compose, CI)
+#   push to main        same selection over the pushed commits; integration runs in default and shuffled order
+#   manual run          everything
+jobs:
+  # Decides which checks run, and checks the relative links of the documentation for every change.
+  # Every path that is not documentation (scripts, config, CI) counts as code.
+  changes:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      code: ${{ steps.diff.outputs.code }}
+      images: ${{ steps.diff.outputs.images }}
+      full: ${{ steps.diff.outputs.full }}
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+        with:
+          fetch-depth: 0
+      - name: Classify the change
+        id: diff
+        env:
+          EVENT: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+        run: |
+          image_re='^(Dockerfile|\.dockerignore|package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|next\.config\.ts|tsconfig[^/]*\.json|compose\.yaml|jobspy/(Dockerfile|requirements\.txt))$|^\.github/'
+          # Documentation: *.md / *.html / images (no test reads them). Everything else is code: tests read fixtures,
+          # YAML and Dockerfiles.
+          docs_re='\.(md|html|png|jpe?g|svg|gif)$'
+          case "$EVENT" in
+            pull_request) range="$PR_BASE...$PR_HEAD"; full=false ;;
+            push) range="$PUSH_BEFORE..$GITHUB_SHA"; full=true ;;
+            *) printf 'code=true\nimages=true\nfull=true\n' >> "$GITHUB_OUTPUT"; exit 0 ;;
+          esac
+          if [[ "$EVENT" == push && ( -z "$PUSH_BEFORE" || "$PUSH_BEFORE" =~ ^0+$ ) ]]; then
+            printf 'code=true\nimages=true\nfull=true\n' >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          # Fails the job (and with it ci-ok) when the diff cannot be computed: no silent "nothing changed".
+          changed=$(git diff --name-only "$range")
+          echo "$changed"
+          code=false
+          if grep -vE "$docs_re" <<< "$changed" | grep -q .; then code=true; fi
+          # A docs-only push to main leaves the code that main was last checked with unchanged, so it is skipped as well.
+          images=false
+          if grep -qE "$image_re" <<< "$changed"; then images=true; fi
+          printf 'code=%s\nimages=%s\nfull=%s\n' "$code" "$images" "$full" >> "$GITHUB_OUTPUT"
+          echo "product checks: $code, images: $images, full: $full"
+      - name: Documentation links
+        run: node scripts/check-doc-links.mjs
+
+  # The CI documentation (docs/ci.md, docs/ci.zh.md) must list exactly the jobs and steps of the workflows. Runs for every
+  # change, documentation-only ones included (deleting a heading of docs/ci.md is a documentation-only change).
+  ci-docs:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+        timeout-minutes: 5
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        timeout-minutes: 5
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - name: Install dependencies
+        timeout-minutes: 8
+        run: pnpm install --frozen-lockfile
+      - name: CI documentation matches the workflows
+        timeout-minutes: 2
+        run: pnpm ci:docs-check
+
+  # Lint, typecheck, config check,  runner bundle, migration drift, and the jobspy sidecar tests (short ones share a job).
+  static:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+        timeout-minutes: 5
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        timeout-minutes: 5
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - name: Install dependencies
+        timeout-minutes: 8
+        run: pnpm install --frozen-lockfile
+      - name: I18n catalog (messages valid, generated files current)
+        timeout-minutes: 3
+        run: pnpm i18n:check
+      - name: Lint
+        timeout-minutes: 8
+        run: pnpm lint
+      - name: Typecheck
+        timeout-minutes: 8
+        run: pnpm typecheck
+      - name: Config check
+        timeout-minutes: 5
+        run: pnpm config:check
+      - name: Shell script syntax
+        timeout-minutes: 2
+        run: for f in scripts/*.sh scripts/ops/*.sh; do bash -n "$f"; done
+      # The runner ships as an esbuild bundle (Dockerfile runner target); the e2e job uses a stand-in, so build it here.
+      - name: Runner bundle
+        timeout-minutes: 5
+        run: pnpm build:runner
+      # The schema in src/lib/db/schema.ts must match the committed migrations: generating again must change nothing.
+      - name: Migration drift
+        timeout-minutes: 5
+        run: |
+          pnpm exec drizzle-kit generate < /dev/null
+          if [[ -n "$(git status --porcelain -- drizzle)" ]]; then
+            git status --porcelain -- drizzle
+            echo "::error::src/lib/db/schema.ts and drizzle/ disagree: run 'pnpm db:generate' and commit the migration"; exit 1
+          fi
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        timeout-minutes: 5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: jobspy/requirements*.txt
+      - name: Install jobspy sidecar dependencies
+        timeout-minutes: 8
+        working-directory: jobspy
+        run: python -m pip install -r requirements-dev.txt
+      - name: Jobspy sidecar tests
+        timeout-minutes: 10
+        working-directory: jobspy
+        run: python -m pytest -q
+
+  # The unit suite is the longest check (~4 min in one go): Vitest splits its files over the shards.
+  unit:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    name: unit (${{ matrix.shard }}/2)
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+        timeout-minutes: 5
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        timeout-minutes: 5
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - name: Install dependencies
+        timeout-minutes: 8
+        run: pnpm install --frozen-lockfile
+      - name: Unit tests
+        timeout-minutes: 12
+        run: pnpm test --shard=${{ matrix.shard }}/2
+
+  integration:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-24.04
+    # Normal run is ~3-4 min; a hung step once sat here for an hour with no output.
+    timeout-minutes: 20
+    env:
+      PG_DUMP_PATH: ${{ github.workspace }}/../pgbin/pg_dump
+      PG_RESTORE_PATH: ${{ github.workspace }}/../pgbin/pg_restore
+      # The real dump/restore tests fail instead of skipping when the client tools are missing.
+      REQUIRE_PG_TOOLS: "1"
+      # Throwaway service container; each run creates and drops its own uniquely named database.
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+        timeout-minutes: 5
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        timeout-minutes: 5
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - name: Install dependencies
+        timeout-minutes: 8
+        run: pnpm install --frozen-lockfile
+      # The backup tests run the real pg_dump / pg_restore, whose major version must match the postgres:17 service.
+      # They come from the postgres:17 image (already pulled for the service) instead of apt.postgresql.org, which once
+      # hung this step for an hour. The wrappers run the tool in a --network host container, so localhost:5432 works.
+      - name: Provide PostgreSQL 17 client tools
+        timeout-minutes: 5
+        run: |
+          mkdir -p "$(dirname "$PG_DUMP_PATH")"
+          ln -sf "$GITHUB_WORKSPACE/scripts/ops/pg-docker.sh" "$PG_DUMP_PATH"
+          ln -sf "$GITHUB_WORKSPACE/scripts/ops/pg-docker.sh" "$PG_RESTORE_PATH"
+          "$PG_DUMP_PATH" --version
+          "$PG_RESTORE_PATH" --version
+      # Main runs the default order too; pull requests run the shuffled order only. Re-run a failure locally with
+      # `pnpm test:integration --sequence.shuffle.files --sequence.seed=<seed>`.
+      - name: Integration tests (default order)
+        if: needs.changes.outputs.full == 'true'
+        # A stalled run once sat here silently for over an hour; fail early and name the file that hangs.
+        timeout-minutes: 15
+        run: pnpm test:integration --reporter=verbose
+      - name: Integration tests (shuffled file order)
+        timeout-minutes: 15
+        run: |
+          seed=$((RANDOM * 32768 + RANDOM))
+          echo "::notice::integration file order seed: $seed"
+          pnpm test:integration --reporter=verbose --sequence.shuffle.files --sequence.seed="$seed"
+
+  # The Playwright suite (e2e) against a production build, a throwaway Postgres and the stand-in runner
+  # (scripts/e2e-runner.ts): no AI, no job channel, no network beyond localhost.
+  e2e:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    # Measured: running in the Playwright container image was slower (54 s image pull, slower build and tests) than the
+    # host runner with cached browsers, so it stays on the host.
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # The role may create the e2e database (scripts/e2e-prepare.ts creates `jobradar_e2e`, migrates and seeds it).
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
+      E2E_PORT: "3100"
+      # The suite starts the server on the build made by the step below; it does not build again.
+      E2E_SKIP_BUILD: "1"
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+        timeout-minutes: 5
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        timeout-minutes: 5
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - name: Install dependencies
+        timeout-minutes: 8
+        run: pnpm install --frozen-lockfile
+      # The browser build follows the locked @playwright/test version, so the lockfile is the cache key.
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v4
+        timeout-minutes: 5
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+      - name: Install Playwright browser and system libraries
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        timeout-minutes: 8
+        run: pnpm exec playwright install --with-deps chromium
+      # The cache holds the browser only: the operating system libraries it needs are installed on every run.
+      - name: Install Playwright system libraries
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        timeout-minutes: 8
+        run: pnpm exec playwright install-deps chromium
+      # Next's incremental build cache only; the app is always built from the current source.
+      - name: Cache the Next build cache
+        uses: actions/cache@v4
+        timeout-minutes: 5
+        with:
+          path: .next/cache
+          key: nextjs-${{ hashFiles('pnpm-lock.yaml') }}-${{ hashFiles('src/**', 'messages/**', 'next.config.ts') }}
+          restore-keys: nextjs-${{ hashFiles('pnpm-lock.yaml') }}-
+      - name: Build
+        timeout-minutes: 8
+        run: pnpm build
+      # Playwright defaults to half the cores on CI, i.e. one worker on the 2-core runner; the specs run fully parallel.
+      # A test that only passes on its retry fails the job (the retry still records a trace for the report).
+      - name: End-to-end tests
+        timeout-minutes: 12
+        run: pnpm test:e2e --workers=2 --fail-on-flaky-tests
+      # The first-run setup wizard on a fresh install (empty config / profile directories, empty database, no stand-in
+      # runner): its own port, database and directories, after the main suite, on the same build.
+      - name: Setup wizard end-to-end tests
+        timeout-minutes: 6
+        run: pnpm test:e2e:setup --fail-on-flaky-tests
+      - name: Upload the Playwright report and traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        timeout-minutes: 5
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
+
+  # Builds the production images (web and runner targets, jobspy sidecar) without pushing: catches apt / CLI installs,
+  # COPY paths and build-stage breakage before deploy. Layers are cached per image in the Actions cache.
+  images:
+    needs: changes
+    if: needs.changes.outputs.images == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: web
+            context: .
+            target: web
+          - name: runner
+            context: .
+            target: runner
+          - name: jobspy
+            context: jobspy
+            target: ""
+    name: image (${{ matrix.name }})
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+        timeout-minutes: 5
+      - name: Build
+        uses: docker/build-push-action@v7
+        timeout-minutes: 25
+        with:
+          context: ${{ matrix.context }}
+          target: ${{ matrix.target }}
+          push: false
+          cache-from: type=gha,scope=image-${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=image-${{ matrix.name }}
+
+  # Linux first run from scratch: an empty checkout on Ubuntu, `docker compose up --build` with the defaults (only
+  # PUID / PGID set to the runner's user, as docs/host-setup.md says), and the dashboard answers. Catches file ownership
+  # and permission problems that Docker Desktop on macOS hides.
+  linux-smoke:
+    needs: changes
+    if: needs.changes.outputs.images == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v7
+        timeout-minutes: 5
+      - name: Prepare .env and the data folders as the host user
+        timeout-minutes: 2
+        run: |
+          printf 'PUID=%s\nPGID=%s\n' "$(id -u)" "$(id -g)" > .env
+          mkdir -p data/config data/profile data/backups data/exports data/logs .auth
+      - name: Start the stack from scratch
+        timeout-minutes: 35
+        run: docker compose up -d --build --wait --wait-timeout 600
+      - name: Dashboard health check
+        timeout-minutes: 2
+        run: |
+          curl -fsS --retry 5 --retry-delay 3 --retry-all-errors http://127.0.0.1:3000/api/health
+          echo
+          code=$(curl -s -o /dev/null -w '%{http_code}' -H 'accept: text/html' http://127.0.0.1:3000/)
+          echo "GET / -> $code"
+          [[ "$code" =~ ^(200|307|308)$ ]] || { echo "::error::the dashboard page answered $code"; exit 1; }
+      - name: The web can write its config folder
+        timeout-minutes: 2
+        run: |
+          docker compose exec -T web sh -c 'touch /app/data/config/.write-check && rm /app/data/config/.write-check'
+          docker compose exec -T runner sh -c 'test -w /app/data/backups'
+          ls -la data/config
+      - name: Container logs on failure
+        if: failure()
+        timeout-minutes: 2
+        run: |
+          docker compose ps -a
+          docker compose logs --no-color --tail 200
+      - name: Remove the stack and its volume
+        if: always()
+        timeout-minutes: 5
+        run: docker compose down -v --remove-orphans
+
+  # The single check to require: every job the classifier selected must have succeeded; only the jobs it deselected
+  # may be skipped.
+  ci-ok:
+    needs: [changes, ci-docs, static, unit, integration, e2e, images, linux-smoke]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: All selected checks passed
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          code=$(jq -r '.changes.outputs.code // "unknown"' <<< "$NEEDS")
+          images=$(jq -r '.changes.outputs.images // "unknown"' <<< "$NEEDS")
+          jq -r 'to_entries[] | "\(.key): \(.value.result)"' <<< "$NEEDS"
+          fail=0
+          for job in changes ci-docs; do
+            [[ $(jq -r ".\"$job\".result" <<< "$NEEDS") == success ]] || fail=1
+          done
+          for job in static unit integration e2e; do
+            r=$(jq -r ".${job}.result" <<< "$NEEDS")
+            if [[ "$code" == true ]]; then [[ "$r" == success ]] || fail=1; else [[ "$r" == skipped ]] || fail=1; fi
+          done
+          for job in images linux-smoke; do
+            r=$(jq -r ".\"$job\".result" <<< "$NEEDS")
+            if [[ "$images" == true ]]; then [[ "$r" == success ]] || fail=1; else [[ "$r" == skipped ]] || fail=1; fi
+          done
+          [[ $fail == 0 ]] || { echo "::error::a selected check did not succeed (product: $code, images: $images)"; exit 1; }
+          echo "all selected checks passed (product: $code, images: $images)"

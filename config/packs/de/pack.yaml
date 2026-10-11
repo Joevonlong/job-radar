@@ -1,0 +1,10 @@
+# German market pack: country, currency, local language, regions and default channels. Fields omitted from market in preferences.yaml take their values from here.
+
+id: de
+name: Germany
+country: DE
+currency: EUR
+language: de
+locale: de-DE
+region: eu
+default_channels: [arbeitsagentur, stepstone, xing]

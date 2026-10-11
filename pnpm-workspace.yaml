@@ -1,0 +1,6 @@
+# Postinstall scripts are not needed: native binaries ship as prebuilt optional packages.
+allowBuilds:
+  '@parcel/watcher': false
+  '@swc/core': false
+  esbuild: false
+  unrs-resolver: false

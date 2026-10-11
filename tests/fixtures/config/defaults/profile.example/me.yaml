@@ -1,0 +1,23 @@
+# 关于我（模板）。首次运行时会被复制到 data/profile/me.yaml，之后只改 data/profile/ 里的那份。
+# 这里的内容会（以简介和语言等级的形式）发给 AI provider 打分，不要写姓名、邮箱、电话或证件号。
+
+# 每种语言一行：语言代码 → CEFR 等级（A1–C2）或 native
+languages:
+  - en: C1
+  - de: B1
+  - es: native
+
+# 技能及年限，例如：
+#   - name: Python
+#     years: 5
+skills: []
+
+# 工作年限，不确定就留 null
+years_experience: null
+
+city: Berlin
+# 是否需要雇主提供签证担保
+needs_visa_sponsorship: false
+
+# 给 AI 看的简短介绍（几句话）
+summary: ""

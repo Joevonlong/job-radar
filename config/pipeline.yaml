@@ -1,0 +1,478 @@
+# Processing pipeline: normalization, dedup, job lifecycle.
+# Lists marked "regex" match case-insensitively in Unicode mode; invalid regexes are reported by pnpm config:check.
+
+# How many pending raw rows to fetch from the database per parse batch; the step keeps fetching until none are pending
+config_version: 2
+batch_size: 200
+
+dedupe:
+  # Two jobs from the same company are merged when the 64-bit SimHash Hamming distance of their JD bodies is ≤ this value (rechecked 2026-10 on 621 real jobs, kept at 3; recheck with pnpm simhash:analyze)
+  simhash_max_distance: 3
+  # Different but related company names (one is a word prefix of the other, or same first word: "SIV.AG" / "SIV.AG - Service für …", "Allianz in Deutschland" / "Allianz Kunde und Markt GmbH") with the same title are also merged at Hamming distance ≤ this value (the same JD carries different boilerplate on different channels, so this is looser than same-company)
+  cross_company_simhash_max_distance: 14
+  # Words per shingle
+  simhash_shingle_words: 3
+  # Bodies shorter than this many words get no SimHash (too short; different jobs would collide)
+  simhash_min_words: 30
+
+lifecycle:
+  # Not returned by any source for this many consecutive days → possibly_closed (only channels that ran successfully during that period count, so a channel outage never closes jobs)
+  possibly_closed_after_days: 7
+  # Max possibly_closed jobs whose original link is checked per run (404 / 410 → closed)
+  max_link_checks_per_cycle: 20
+  link_check_timeout_ms: 10000
+  # Recheck of watched jobs (starred, or an application you follow: interested / preparing / applied / interviewing / offer).
+  # The posting page is fetched like a careful reader: robots.txt is obeyed (a disallowed page is skipped), one request per host
+  # every per_host_min_interval_ms, at most max_body_bytes read. 404 / 410 → closed; a "no longer accepting applications" phrase
+  # (market packs' closed_posting.phrases + ui.yaml job_checks.closed_recheck.extra_phrases) in the visible text → possibly closed.
+  # Turn it off in ui.yaml: job_checks.closed_recheck.enabled
+  watch_recheck:
+    # Each watched job is rechecked at most once in this many hours
+    interval_hours: 72
+    # Watched jobs rechecked per run
+    max_per_cycle: 10
+    # Least time between two requests to the same host
+    per_host_min_interval_ms: 3000
+    timeout_ms: 10000
+    # Longest page read (1 MiB); the rest is not downloaded
+    max_body_bytes: 1048576
+    # Sent with the recheck and with the possibly_closed link check; its first word is the robots.txt product token
+    user_agent: "JobRadar/2 (self-hosted job tracker; link check)"
+
+# "Apply" link priority, lower number wins: company ATS 1 > LinkedIn 2 > StepStone / XING / Indeed 3 > aggregators 4
+apply_priority:
+  ats: 1
+  linkedin: 2
+  stepstone: 3
+  xing: 3
+  indeed: 3
+  manual: 3
+  arbeitsagentur: 4
+  google: 4
+  email: 4
+
+# Entries identical to the market packs have been removed (now provided by config/packs/generic, config/packs/de); what remains are your own additions
+company:
+  # Legal forms at the end of company names, removed during normalization (lowercase; punctuation is removed first, so G.m.b.H. also matches gmbh)
+  legal_suffixes: []
+  # Canonical name -> other spellings; after normalization, a company matching any spelling is merged into the canonical one
+  aliases:
+    "Google": ["Alphabet", "Google Germany", "Google Deutschland"]
+    "Meta": ["Meta Platforms", "Facebook"]
+  # Known headhunter / agency company names (legal form ignored); their jobs get the "agency" tag
+  agency_names: []
+
+agency:
+  # Matched against the company name
+  company_name_patterns: []
+  # Matched against title and body: wording of headhunters posting for a client ("on behalf of our client", "I'm hiring for a company"). Consulting firms writing "our clients" don't count, so only posting-for-a-client phrases are listed here
+  text_patterns: []
+  # If the same sentence also contains these words, it's the employer turning agencies away ("we do not accept unsolicited CVs from recruitment agencies"), which doesn't count
+  exclude_context_chars: 120
+  exclude_context_patterns: []
+
+description:
+  # Scraping leftovers: UI text at the end of descriptions (LinkedIn's "Show more Show less"); matched and removed only at the end of the text
+  trailing_ui_patterns:
+    - (?:\s*(?:show more|show less|mehr anzeigen|weniger anzeigen|voir plus|voir moins))+\s*$
+  # Long descriptions without a single line break (Bright Data's LinkedIn summaries): restore paragraphs from headings and sentences. Only adds line breaks, never changes any text
+  restore:
+    # Descriptions shorter than this many characters are left alone
+    min_chars: 600
+    # Once a paragraph is at least this long, break at the next sentence end
+    paragraph_chars: 450
+    # These phrases (capitalized, at sentence start or followed by a colon) start a new paragraph
+    section_headings:
+      - What You'll Do
+      - What You’ll Do
+      - What You'll Be Doing
+      - What You’ll Be Doing
+      - What You Will Do
+      - What You'll Bring
+      - What You’ll Bring
+      - What You Will Bring
+      - What You'll Need
+      - What We're Looking For
+      - What We’re Looking For
+      - What We Offer
+      - What We Offer You
+      - What You Get
+      - Who You Are
+      - Who We Are
+      - About the Role
+      - About the Team
+      - About You
+      - About Us
+      - About the Company
+      - The Role
+      - The Opportunity
+      - The Candidate
+      - Your Role
+      - Your Profile
+      - Your Responsibilities
+      - Your Tasks
+      - Your Skills
+      - Key Responsibilities
+      - Responsibilities
+      - Requirements
+      - Qualifications
+      - Minimum Qualifications
+      - Preferred Qualifications
+      - Nice to Have
+      - Nice-to-Have
+      - Bonus Points
+      - Benefits
+      - Perks
+      - Why Join Us
+      - Why You'll Love It
+      - Company Description
+      - Job Description
+      - Deine Aufgaben
+      - Ihre Aufgaben
+      - Dein Profil
+      - Ihr Profil
+      - Das bringst du mit
+      - Das bringen Sie mit
+      - Was du mitbringst
+      - Was Sie mitbringen
+      - Wir bieten
+      - Wir bieten dir
+      - Wir bieten Ihnen
+      - Unser Angebot
+      - Das erwartet dich
+      - Das erwartet Sie
+      - Über uns
+      - Über Uns
+      - Deine Vorteile
+      - Ihre Vorteile
+      - Anforderungen
+      - Aufgaben
+      - Qualifikationen
+    abbreviations: [e.g, i.e, etc, vs, approx, incl, inc, ltd, mr, mrs, ms, dr, prof, no, z.b, d.h, u.a, p.a, bzw, ca, ggf, inkl, evtl, usw, vgl, nr, tel, str, mio, mrd, sr, jr]
+    # List bullets flattened into inline text by scraping; each bullet is replaced with a line break plus "- "
+    bullet_glyphs: ["•", "●", "▪", "◦", "→", "➢", "✓", "✔", "►"]
+
+workplace:
+  # Work mode (onsite / hybrid / remote): read from text only when the source doesn't provide it, and only what the text states explicitly, no guessing.
+  # head: title, location text, contract hint, each matched separately (short, so lenient); if only one mode appears in head, use it.
+  # text: description body (strict: benefit list items like "Remote Working Furniture" or "100% remote work option during pregnancy" don't count).
+  # If two or more modes appear in the same text ("remote or hybrid"), keep unknown rather than picking one.
+  # negation_patterns: a body match doesn't count if a negation appears within negation_window_chars characters before it in the same sentence ("is not available as fully remote").
+  negation_window_chars: 40
+  negation_patterns:
+    - \b(?:not|no|never|without|cannot|can['’]t|don['’]t|do not|doesn['’]t|does not|isn['’]t|is not|aren['’]t|are not|won['’]t|will not)\b
+    - \b(?:nicht|kein\w*|ohne|nie|niemals)\b
+  head:
+    remote:
+      - \bremote\b(?!\s+(?:sensing|monitoring|support|desktop|access|control)\b)
+      - \bhome[\s-]?office\b(?!\s*(?:möglich|option))
+      - \bfully[\s-]remote\b
+    hybrid:
+      - \bhybrid(?:e[nrsm]?)?\b(?![\s-]+(?:professional|deployment|cloud|infrastructure))
+      - \bhome[\s-]?office\s*(?:möglich|option)
+    onsite:
+      - \bon-?site\b
+      - \bvor ort\b
+      - \bpräsenz\b
+  text:
+    remote:
+      - (?<!\boder\s)\b(?:100\s?%|fully|completely|totally|full)[\s-]+(?:remote|home[\s-]?office)\b(?!\s+(?:work(?:ing)?\s+)?(?:options?|possibilit\w*|möglichkeit\w*))
+      - \bremote[\s-]first\b
+      - \bremote[\s-]only\b
+      - \b(?:this|the)\s+(?:role|position|job|opportunity)\s+is\s+(?:fully\s+|100\s?%\s+)?remote\b
+      - \ba\s+(?:fully\s+)?remote\s+(?:role|position|job|opportunity)\b
+      - \bwork(?:ing)?\s+(?:model|mode|type|arrangement|location)\s*:\s*(?:fully\s+)?remote\b
+      - \bworkplace\s+type\s*:\s*remote\b
+      - '#li-remote\b'
+      - \b(?:vollständig|komplett|voll|ausschließlich)\s+remote\b
+      - \bremote[\s-]stelle\b
+      - \bausschließlich\s+(?:im\s+)?(?:home[\s-]?office|homeoffice)\b
+      - \b(?:location|standort|arbeitsort|ort)\s*:[^\n]{0,60}[-–|,(]\s*(?:fully\s+)?remote\b
+      - \(\s*(?:fully\s+|100\s?%\s+)?remote\s*\)
+    hybrid:
+      - \bhybrid(?:e[nrsm]?)?[\s-]+(?:work\w*|arbeit\w*|modell\w*|model\w*|basis|position|role|setup|set-up|schedule|workplace|policy|office|mode|modus|environment|arbeitsweise|arbeitsplatz|setting|approach|capacity|structure|arrangement)\b
+      - \bhybrid(?:modell|modus|arbeit\w*)
+      - \(\s*hybrid\s*\)
+      - \b(?:location|standort|arbeitsort|ort)\s*:[^\n]{0,60}\bhybrid\b
+      - \bwir arbeiten (?:flexibel,\s*)?hybrid\b
+      - \b(?:office|büro)\s+(?:oder|und)\s+(?:remote|(?:im\s+)?home[\s-]?office|mobil)\b
+      - \b(?:office|in-person|on-?site)\s+(?:or|and)\s+(?:remotely|remote|from home|home[\s-]?office)\b
+      - \bmix of (?:working )?(?:in the )?(?:office|büro) and (?:working )?(?:from )?(?:home[\s-]?office|remote|home)\b
+      - \bbürotage\b
+      - \bmobilarbeit\b
+      - \bmobil\s+arbeiten\b
+      - \bmobile\s+work\b
+      - \bwork[\s-]from[\s-]home[\w/ ]{0,15}\boptions?\b
+      - \bhybrid\s*/\s*remote\b|\bremote\s*/\s*hybrid\b|\bhybrid[\s-]remote\b
+      - '#li-hybrid\b'
+      - \b(?:working|work|arbeits)[\s-]*(?:model|mode|type|modell|weise)\s*:\s*hybrid\b
+      - \bworkplace\s+type\s*:\s*hybrid\b
+      - (?:^|\n)\s*[-–•]?\s*hybrid\b
+      - \b(?:\d+|one|two|three|four|five|ein|zwei|drei|vier|fünf)\s+(?:days?|tage?n?)\s+(?:(?:per|a|each|pro)\s+(?:week|month|woche|monat)\s+)?(?:in|at|from)\s+(?:the\s+|our\s+|unserem\s+|unserer\s+)?(?:office|büro|home|homeoffice|home office)\b
+      - \b(?:\d+|one|two|three|four|five|ein|zwei|drei|vier|fünf)\s+(?:days?|tage?n?)\s+(?:of\s+)?(?:working\s+)?(?:from\s+home|home[\s-]?office|remote|office|büro)\b
+      - \b(?:in|im)\s+(?:the\s+|unserem\s+)?(?:office|büro)\s+(?:at least\s+|mindestens\s+)?(?:\d+|one|two|three|four|zwei|drei|vier)\s+(?:days?|tage)
+      - \b(?:mindestens|at least)\s+(?:\d+|one|two|three|zwei|drei|vier|einmal|zweimal|dreimal)\s*(?:mal|x|days?|tage)?\s+(?:die\s+woche|pro\s+woche|per\s+week|a\s+week)\b[^.\n]{0,50}(?:büro|office)
+      - \bremote\s+days\b
+      - \b(?:team|office|anchor)[\s-]days?\b
+      - \bremote\s+working\s+model\b
+      - \bhome[\s-]?office\s*(?:möglich|optionen?|ist möglich|anteil|regelung|tage)\b
+      - \b(?:option|möglichkeit)\s+(?:auf|zum|zu|für|des)\s+[„"“]?(?:mobile[snm]?\s+arbeit\w*|home[\s-]?office|remote|homeoffice)
+      - \bmobile[snm]?\s+arbeit\w*
+      - \bmobile\s+working\b
+      - \bteilweise\s+(?:im\s+)?(?:home[\s-]?office|remote)\b
+      - \bwork\s+from\s+home\s+(?:option|up to|\d)
+      - \b(?:up to|bis zu)\s+\w+\s+days?\s+(?:per\s+\w+\s+)?(?:of\s+)?(?:working\s+)?(?:from\s+home|remote)
+    onsite:
+      - \(\s*on-?site\s*\)
+      - \b(?:location|standort|arbeitsort|ort)\s*:[^\n]{0,60}[-–|,(]\s*(?:fully\s+)?on-?site\b
+      - \bwork(?:ing)?\s+on-?site\b
+      - \boffice[\s-]first[\s-](?:kultur|culture)\b
+      - \bwe work from our (?:\w+ )?office\b
+      - \bworkplace\s+type\s*:\s*on-?site\b
+      - \bwork(?:ing)?\s+(?:model|mode|type|arrangement)\s*:\s*on-?site\b
+      - \b100\s?%\s*(?:on-?site|präsenz|vor ort)
+      - '#li-onsite\b'
+      - \b(?:fully|full)[\s-]+on-?site\b
+      - \bon-?site\s+(?:role|position|job|only|based)\b
+      - \b(?:this|the)\s+(?:role|position|job)\s+is\s+(?:fully\s+)?on-?site\b
+      - \boffice[\s-]based\s+(?:role|position|job)\b
+      - \bpräsenzstelle\b
+      - \bvollständig\s+vor\s+ort\b
+      - \bausschließlich\s+vor\s+ort\b
+      - \b(?:arbeit|arbeiten|tätigkeit|einsatz|arbeitsort)\s*:?\s+vor\s+ort\b
+
+contract:
+  # Student / internship / apprenticeship (title and contract hint only; "Praktikum" in the body often means something else)
+  student: []
+  # Temp agency work: only Arbeitnehmerüberlassung / Zeitarbeit themselves. "Personaldienstleister" only says the poster is an agency;
+  # agency placement (Personalvermittlung) means direct employment by the client company; such jobs are kept and tagged "agency" (see agency)
+  temp_agency: []
+  # Explicit agency placement with direct employment by the client ("Vertragsart: Personalvermittlung", "Direktvermittlung"): not temp agency work,
+  # even if the agency's company blurb mentions Zeitarbeit. Only explicit phrases count; "Personalvermittlung" on its own doesn't
+  direct_hire: []
+  # Freelance
+  freelance: []
+  fixed_term: []
+  permanent: []
+
+language:
+  # With fewer words than this, the language isn't detected from the body; the channel's hint is used instead, otherwise unknown
+  min_words_for_detection: 25
+
+salary:
+  # Annualization factors: month 12; week 52; day 260 (5 days × 52 weeks); hour 2080 (8 hours × 260 days). All gross, excluding vacation.
+  periods_per_year:
+    year: 1
+    month: 12
+    week: 52
+    day: 260
+    hour: 2080
+  # Currency the rate table is written in: an fx_rates value = how much fx_pivot one unit of foreign currency is worth. Any two currencies convert to the market base currency through it.
+  fx_pivot: EUR
+  # Reference rates (filled in manually 2026-10; update on large moves; the rates of non-European currencies are rough). Currencies not in the table keep their original currency and aren't converted (no invented rates).
+  # The converted base-currency annual salary is used for the salary floor, the "min annual salary" filter, the stats page and the T1 threshold.
+  fx_rates:
+    USD: 0.86
+    GBP: 1.15
+    CHF: 1.07
+    SEK: 0.09
+    NOK: 0.085
+    DKK: 0.134
+    PLN: 0.235
+    CZK: 0.041
+    # Other regions (approximate; the amounts of these currencies are only compared with the salary floor, not shown as exact)
+    CAD: 0.62
+    AUD: 0.56
+    NZD: 0.51
+    SGD: 0.66
+    HKD: 0.11
+    JPY: 0.0058
+    CNY: 0.12
+    INR: 0.0099
+    KRW: 0.00062
+    BRL: 0.155
+    MXN: 0.045
+    ZAR: 0.048
+    AED: 0.234
+    ILS: 0.26
+    TRY: 0.0206
+  # A number with no period stated: amounts ≥ this value are treated as annual (flagged PERIOD_ASSUMED_YEAR); otherwise the period stays unknown
+  assume_annual_from: 20000
+  # Converted annual salaries outside this range are flagged for review
+  plausible_annual:
+    min: 10000
+    max: 1000000
+  # Stated amounts (in their stated period, not annualized) outside this range are flagged for review. "€60/month" is a phone allowance, not a monthly salary
+  plausible_per_period:
+    year: { min: 10000, max: 1000000 }
+    month: { min: 800, max: 100000 }
+    week: { min: 200, max: 20000 }
+    day: { min: 50, max: 5000 }
+    hour: { min: 8, max: 500 }
+  # Salary in the body: one of these words must be near the amount (distance: context_window_chars)
+  description_context_patterns:
+    - \bsalary\b
+    - \bgehalt\b
+    - \bvergütung\b
+    - \bcompensation\b
+    - \bjahresgehalt\b
+    - \bbruttojahr
+    - \bremuneration\b
+    - \bpay range\b
+    - \bbase pay\b
+    - \bbase salary\b
+    - \bgrundgehalt\b
+    - \bbruttogehalt\b
+    - \bjahresvergütung\b
+    - \bsalary range\b
+    - \bgehaltsrahmen\b
+    - \bgehaltsspanne\b
+    - \bote\b
+    - \bon-target earnings\b
+    - \bbase range\b
+    - \bpay band\b
+    - \bsalary band\b
+    - \bgehaltsband\b
+    - \bpay scale\b
+  # Max characters between an amount and the nearest salary word for it to count as salary (without a salary word, a range with a stated period "€80,000 - €120,000 gross a year"
+  # or a single amount with a currency and an hour/day/week/month period "Rate: 18 USD per hour" also counts)
+  context_window_chars: 120
+  # These words near an amount mean it's a benefit (relocation, learning budget, equipment, vacation, phone, company funding …), not salary;
+  # when both a salary word and one of these words are in the window, the one closer to the amount wins ("Salary: €80,000 plus relocation" is still salary)
+  negative_context_patterns:
+    - \brelocation\b
+    - \bumzug
+    - \ballowances?\b
+    - \bzuschuss
+    - \bzuschüsse
+    - \bbudget
+    - \blearning\b
+    - \bweiterbildung
+    - \btraining\b
+    - \bconference
+    - \beducation\b
+    - \bequipment\b
+    - \bhardware\b
+    - \blaptop\b
+    - \bworkstation\b
+    - \bvacation\b
+    - \bholidays?\b
+    - \burlaub
+    - \bpension\b
+    - \bbav\b
+    - \binsurance\b
+    - \bversicherung
+    - \bgym\b
+    - \bfitness\b
+    - \bwellness\b
+    - \bwell-?being\b
+    - \bphone\b
+    - \binternet\b
+    - \bhandy\b
+    - \bmobilfunk
+    - \bchild\s?care\b
+    - \bkita\b
+    - \bkinderbetreuung
+    - \bmeals?\b
+    - \blunch\b
+    - \bverpflegung
+    - \bvoucher
+    - \bgutschein
+    - \breferral\b
+    - \bsign(?:ing)?[- ]on\b
+    - \bsigning bonus\b
+    - \bretention bonus\b
+    - \bwelcome bonus\b
+    - \bwillkommensbonus\b
+    - \braised\b
+    - \bfunding\b
+    - \bseries [a-e]\b
+    - \bvaluation\b
+    - \brevenue\b
+    - \bturnover\b
+    - \bumsatz\b
+    - \bper diem\b
+    - \bspesen\b
+    - \btravel\b
+    - \bfahrtkosten\b
+    - \bcommut
+    - \bjobticket\b
+    - \bdeutschlandticket\b
+  # How far to look for these words (characters on each side of the amount)
+  negative_context_window_chars: 50
+  # Local currencies (local_currencies; unset = market base currency): amounts in other currencies are tagged "possibly salary for another region" (USD ranges in Berlin jobs are mostly New York ones),
+  # still converted to the base currency for the salary floor check, but the T1 bonus uses signals.T1.other_region_weight in interests.yaml
+  # When these phrases appear in the body, a stated salary (even in EUR) is also tagged "possibly salary for another region"
+  other_region_patterns:
+    - \bU\.?S\.? benefits\b
+    - \brates? (?:vary|differ|varies|differs) (?:per|by) (?:country|location|region)\b
+    - \bfor the location for which it has been posted\b
+    - \b(?:pay|salary|compensation|base) (?:range|scale|band)s?\b[^.\n]{0,80}\b(?:in|for) (?:the )?(?:U\.?S\.?A?|United States|New York|NYC|San Francisco|Bay Area|California|Colorado|Washington|Canada|UK|United Kingdom|London|Switzerland|Zurich)\b
+    - \b(?:U\.?S\.?|United States|New York|NYC|San Francisco|California|Colorado|UK|London)[- ]based (?:candidates|employees|roles?)\b[^.\n]{0,60}\b(?:pay|salary|compensation|base)\b
+  # The stated amount includes variable pay (OTE = on-target earnings, base + target bonus): the detail page shows "OTE (incl. variable)" and doesn't treat it as base salary
+  variable_patterns:
+    - \bOTE\b
+    - \bon[- ]target[- ](?:earnings|earning|income|compensation|pay)\b
+    - \bon[- ]target[- ]e\b
+
+# Skill tags (title + body). name is the display name, pattern is a regex.
+# aliases (optional): other spellings of the same skill in me.yaml; the job list's "skill overlap" uses them to compare with the profile (ignores case, spaces, hyphens, singular/plural; doesn't affect tagging).
+skills:
+  - { name: Python, pattern: '\bpython\b', aliases: [Python3, Python 3] }
+  - { name: PyTorch, pattern: '\bpytorch\b' }
+  - { name: TensorFlow, pattern: '\btensorflow\b', aliases: [TF] }
+  - { name: Kubernetes, pattern: '\bkubernetes\b|\bk8s\b', aliases: [k8s] }
+  - { name: LLMs, pattern: '\bllms?\b|large language model', aliases: [Large Language Models, Generative AI, GenAI] }
+  - { name: NLP, pattern: '\bnlp\b|natural language processing', aliases: [Natural Language Processing] }
+  - { name: MLOps, pattern: '\bmlops\b' }
+  - { name: AWS, pattern: '\baws\b', aliases: [Amazon Web Services] }
+  - { name: GCP, pattern: '\bgcp\b|google cloud', aliases: [Google Cloud, Google Cloud Platform] }
+  - { name: Azure, pattern: '\bazure\b' }
+  - { name: JAX, pattern: '\bjax\b' }
+  - { name: Hugging Face, pattern: '\bhugging\s*face\b', aliases: [HuggingFace, HF] }
+  - { name: Transformers, pattern: '\btransformers?\b' }
+  - { name: Vector databases, pattern: '\bvector (?:data)?bases?\b|\bvector stores?\b', aliases: [Vector DB, Vector DBs, Vector stores, Vector search] }
+  - { name: MLflow, pattern: '\bmlflow\b' }
+  - { name: RAG, pattern: '\brag\b|retrieval[- ]augmented', aliases: [Retrieval Augmented Generation] }
+  - { name: LangChain, pattern: '\blangchain\b' }
+
+# Hard filters. Your own criteria (cities, salary floor, contracts, blacklist) go in data/profile/preferences.yaml; only helper data for the rules lives here.
+filter:
+  # Canonical city name -> other spellings. If a city is in locations in preferences.yaml, all its spellings count as allowed locations
+  city_aliases: {}
+  # Metro areas: a city in preferences.yaml (or its alias) -> towns counted as its suburbs / surroundings.
+  # If the location's city field or tags contain the city itself (incl. LinkedIn's "<city> Metropolitan Area") or any town below, it counts as the target city. Market packs already include the home country's metro areas; add only your own here.
+  # Town names match as whole words, ignoring case and umlauts (ü/ue, ß/ss); list every spelling of the same town
+  metro_areas: {}
+  # Regions too coarse to locate: a city in preferences.yaml -> the state / region containing it. Locations naming only this region are kept and tagged "location only at country/region level"
+  metro_regions: {}
+  # Location text names only the country (the market pack provides the home country's phrases, e.g. "Germany", "bundesweit"): the whole text must match exactly.
+  # Remote / hybrid / unknown-mode jobs are always kept and tagged location_country_level; pure onsite jobs follow onsite_policy:
+  #   keep_note = also keep and tag them (the job could be anywhere in the country; left to AI scoring and your own judgment; default); exclude = filter them out
+  country_level:
+    patterns: []
+    onsite_policy: keep_note
+  # Location text doesn't point to a specific place ("Home Office", "multiple locations"): such jobs may be in an allowed city, so they are kept and tagged "location unclear". A specific place ("Bochum") that isn't an allowed city is filtered out
+  generic_location_patterns: []
+  # Member states (ISO codes) added to the eu region of the generic pack, used when remote_scope is {region: [eu]}; the region itself is in config/packs/generic/geography.yaml
+  eu_countries: []
+  remote:
+    # Remote job location says "EU / Europe-wide" (phrases added to the eu region): in scope when the home country's region is eu or remote_scope lists eu
+    eu_wide_patterns: []
+    # Remote job location says "worldwide": in scope unless remote_scope is none
+    worldwide_patterns: []
+    # No country code, but the text clearly points to regions or places outside the EU / Europe: out of scope (US states and cities, Canada, LatAm, APAC, Middle East, Africa)
+    outside_patterns: []
+    # Region markers in remote job titles ("Staff AI Engineer - US", "FDE - US East Coast", "(Americas)"): hiring only in these regions,
+    # so out of scope whatever the location and body say; doesn't apply when the title also names an eu_wide / worldwide region ("EMEA / Americas")
+    title_outside_patterns: []
+    # US state codes: "Austin, TX", "Remote - NY" (case-sensitive, only after a comma / dash / slash; the generic pack has all state codes, add only extras here)
+    outside_state_codes: []
+    # The body states the job can be hired in the home country / region (the market pack provides the home country's phrases): remote jobs with an out-of-scope location are kept and tagged too (words like "remote / hire / based / work" must be close to the region, to avoid false matches like "customers across Europe")
+    description_in_scope_patterns: []
+  # seniority in preferences.yaml (when not all) -> matching job levels; jobs with no stated level (unknown) are kept
+  seniority_map:
+    entry: [intern, junior]
+    mid: [mid]
+    senior: [senior, staff, principal]
+    lead: [lead, manager, staff, principal]

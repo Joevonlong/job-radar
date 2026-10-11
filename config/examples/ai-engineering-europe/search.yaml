@@ -1,0 +1,23 @@
+# Keyword groups for AI engineering roles. Each group is OR-joined into one query, which then runs once per city.
+keyword_groups:
+  # Engineering
+  engineering:
+    - AI Engineer
+    - Applied AI Engineer
+    - LLM Engineer
+    - GenAI Engineer
+    - Machine Learning Engineer
+    - AI Agent Engineer
+    - AI Product Engineer
+    - Agentic Engineer
+    - AI Enablement Engineer
+    - Developer Productivity Engineer
+  # FDE and Solutions roles
+  fde_solutions:
+    - Forward Deployed Engineer
+    - AI Solutions Engineer
+    - AI Solutions Architect
+    - AI Deployment Engineer
+    - AI Customer Engineer
+    - AI Transformation
+    - AI Consultant

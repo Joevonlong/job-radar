@@ -1,0 +1,68 @@
+{
+  "id": "744000000000003",
+  "name": "Engineering Manager - AI Engineering & AI Platform (m/f/x)",
+  "defaultJobAd": false,
+  "refNumber": "REF821R",
+  "company": {
+    "identifier": "ExampleLabs",
+    "name": "Example Labs"
+  },
+  "location": {
+    "city": "Berlin",
+    "region": "BE",
+    "country": "de",
+    "remote": true,
+    "hybrid": false,
+    "fullLocation": "Berlin, BE, Germany"
+  },
+  "releasedDate": "2026-08-14T13:45:59.965Z",
+  "postingUrl": "https://jobs.smartrecruiters.com/ExampleLabs/744000000000003-example",
+  "applyUrl": "https://jobs.smartrecruiters.com/ExampleLabs/744000000000003-example?oga=true",
+  "jobAd": {
+    "sections": {
+      "companyDescription": {
+        "title": "Company Description",
+        "text": "<p>We build <strong>AI</strong> products.</p>"
+      },
+      "jobDescription": {
+        "title": "Job Description",
+        "text": "<p>Build and run <strong>AI</strong> services &amp; platforms.</p><p>You will work with Python and cloud tooling.</p>"
+      },
+      "qualifications": {
+        "title": "Qualifications",
+        "text": "<ul><li>A degree in a relevant field, or a comparable qualification</li><li>Previous experience in software, platform or cloud engineering</li><li>Experience leading engineers as a team lead or in a comparable role</li></ul>"
+      },
+      "additionalInformation": {
+        "title": "Additional Information",
+        "text": "<ul><li>Be part of a small example team building services for fictional customers</li><li>Work with an international and growing team</li><li>Use modern hardware and tools</li></ul>"
+      }
+    }
+  },
+  "active": true,
+  "visibility": "PUBLIC",
+  "industry": {
+    "id": "banking",
+    "label": "Banking"
+  },
+  "function": {
+    "id": "engineering",
+    "label": "Engineering"
+  },
+  "department": {
+    "id": 9019051,
+    "label": "Data"
+  },
+  "experienceLevel": {
+    "id": "mid_senior_level",
+    "label": "Mid-Senior Level"
+  },
+  "typeOfEmployment": {
+    "id": "permanent",
+    "label": "Full-time"
+  },
+  "language": {
+    "code": "en",
+    "label": "English",
+    "labelNative": "English (US)"
+  }
+}

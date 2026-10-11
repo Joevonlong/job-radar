@@ -1,0 +1,114 @@
+# 通用规则：英文的公司后缀、中介、合同、地点说法。和用户 pipeline.yaml、当前市场包取并集。
+
+company:
+  legal_suffixes:
+    - co
+    - inc
+    - incorporated
+    - llc
+    - llp
+    - ltd
+    - limited
+    - plc
+    - corp
+    - corporation
+    - sarl
+    - sas
+    - sa
+    - bv
+    - nv
+    - ab
+    - oy
+    - srl
+    - spa
+    - pty
+  agency_names:
+    - Hays
+    - Randstad
+    - Adecco
+    - Robert Half
+    - Michael Page
+    - Page Personnel
+    - Experis
+    - Amoria Bond
+    - Darwin Recruitment
+    - Harvey Nash
+    - Jack & Jill
+    - Acceler8 Talent
+    - Findr
+    - AI Futures
+    - Optimus Search
+agency:
+  company_name_patterns:
+    - \brecruit(?:ing|ment|er|ers)?\b
+    - \bstaffing\b
+    - \bheadhunt
+    - \btalent (?:solutions|partners|acquisition)\b
+    - \bexecutive search\b
+  text_patterns:
+    - on behalf of (?:one of )?(?:our|my) (?:\w+ ){0,2}(?:clients?|customers?)
+    - on behalf of an? (?:\w+ ){0,2}(?:client|customer)
+    - we are recruiting on behalf
+    - (?:hiring|recruiting|searching|looking) on behalf of\b
+    - our client (?:is|are) (?:a|an|looking)
+    - our client,\s+an?\b
+    - exclusively (?:retained|engaged|instructed)
+    - (?:has|have) been (?:retained|instructed) (?:by|to)\b
+    - \b(?:i['’]m|i am) (?:currently )?(?:hiring|recruiting|searching for|looking to (?:hire|recruit))\b
+    - \bwe(?:['’]re| are) (?:currently )?(?:supporting|partnering with|representing|working with|helping) (?:a|an|one of) (?:[\w&-]+[ ,]+){0,6}(?:company|startup|start-up|scale-?up|business|firm|organi[sz]ation|client|customer)
+    - \brecruitment (?:agency|consultancy|firm)\b
+    - \bstaffing (?:agency|firm)\b
+    - \bexecutive search (?:firm|consultancy)\b
+    - \bheadhunter
+    - \bexecutive search\b
+  exclude_context_patterns:
+    - \bunsolicited\b
+    - \b(?:do|does|will|would|can) not (?:accept|consider|respond|reply|take)\b
+    - \b(?:don['’]t|doesn['’]t|won['’]t|cannot|can['’]t) (?:accept|consider|respond|reply|take)\b
+    - \bno (?:agencies|recruiters|headhunters|agency)\b
+    - \bagency submissions?\b
+contract:
+  student:
+    - \bthesis\b
+    - \bintern(?:ship)?\b
+    - \bworking student\b
+  temp_agency:
+    - \btemp(?:orary)? (?:agency|staffing)\b
+  direct_hire:
+    - \b(?:employment type|contract type)\s*:\s*(?:direct hire|direct placement)\b
+  freelance:
+    - \bfreelanc
+    - \bcontractor\b
+  fixed_term:
+    - \bfixed[- ]term\b
+    - \btemporary (?:contract|position|role)\b
+    - \btime[- ]limited (?:contract|position)\b
+    - \bmaternity (?:cover|leave replacement)\b
+    - \b(?:employment|job|contract)[\s-]*(?:type)?\s*:\s*(?:fixed[- ]term|temporary)\b
+  permanent:
+    - \bpermanent (?:contract|position|role|employment|basis|full[- ]time|employee)\b
+    - \bopen[- ]ended (?:contract|employment|position)\b
+    - \bemployment[\s-]*type\s*:[^\n:]{0,40}\bregular\b
+    - \bindefinite[- ](?:term|period|duration|contract)\b
+    - \bcontract(?:ual)? (?:is )?(?:of )?indefinite\b
+    - \b(?:employment|job|contract|position)[\s-]*(?:type)?\s*:\s*permanent\b
+    - \b(?:employment|job|contract|position)[\s-]*(?:type)?\s*:[^\n:]{0,40}\bpermanent\b
+salary:
+  currencies:
+    - {code: EUR, symbols: [€], words: [eur(?:os?)?]}
+    - {code: USD, symbols: [\$], words: [usd]}
+    - {code: GBP, symbols: [£], words: [gbp]}
+    - {code: CHF, symbols: [sfr\.?], words: [chf]}
+    - {code: SEK, symbols: [], words: [sek]}
+    - {code: NOK, symbols: [], words: [nok]}
+    - {code: DKK, symbols: [], words: [dkk]}
+    - {code: PLN, symbols: [zł], words: [pln]}
+    - {code: CZK, symbols: [kč], words: [czk]}
+filter:
+  generic_location_patterns:
+    - ^\W*(?:home ?office|homeoffice|multiple locations|various locations|several locations|flexible|remotely in)\W*$
+  remote:
+    worldwide_patterns:
+      - \bworldwide\b
+      - \bglobal(?:ly)?\b
+      - \banywhere\b

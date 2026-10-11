@@ -1,0 +1,9 @@
+# Keep the build context small: the local venv and tests never belong in the image.
+.venv
+__pycache__
+.pytest_cache
+tests
+requirements-dev.txt
+.gitignore
+.dockerignore
+*.pyc

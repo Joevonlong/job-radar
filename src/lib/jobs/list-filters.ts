@@ -1,0 +1,29 @@
+/** The /jobs URL state -> the list query's filters (server only): the page and its "mark all seen" action read the list the same way. */
+import { germanLevelsToHide } from "@/lib/dashboard/german";
+import { hasHighValueCategories, type Db, type JobFilters } from "@/lib/db";
+import { viewFiltersFromParams } from "@/lib/interests/view-filters";
+import { loadBaseCurrency, loadHighValuePolicy } from "@/lib/signals/floor";
+
+import { loadCityGroups } from "./cities";
+import type { CityGroup } from "./city-groups";
+import { toJobFilters } from "./job-filters";
+import type { JobsSearchParams } from "./search-params";
+
+/** The filters of `/jobs?<params>`; `cities` = the city groups when the caller already loaded them. */
+export async function jobsListFilters(db: Db, params: JobsSearchParams, cities?: readonly CityGroup[]): Promise<JobFilters> {
+  const highValue = loadHighValuePolicy();
+  return {
+    ...toJobFilters(viewFiltersFromParams(params), { cityGroups: cities ?? (await loadCityGroups(db)) }),
+    from: params.from,
+    to: params.to,
+    includeFiltered: params.filtered,
+    filteredOnly: params.filteredOnly === true,
+    hideGermanLevels: params.hideLang ? germanLevelsToHide() : null,
+    // without any high-value category the filter has nothing to keep (its button is hidden): ignored
+    highValue: params.high === true && hasHighValueCategories(highValue) ? highValue : null,
+    favoritesOnly: params.fav === true,
+    unseenOnly: params.unseen === true,
+    // the salary filter and the salary sort compare in the market's base currency (left out, they would assume EUR)
+    baseCurrency: loadBaseCurrency(),
+  };
+}

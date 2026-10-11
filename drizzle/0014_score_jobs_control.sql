@@ -1,0 +1,1 @@
+ALTER TYPE "public"."control_request_kind" ADD VALUE 'score_jobs';

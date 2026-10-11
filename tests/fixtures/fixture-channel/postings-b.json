@@ -1,0 +1,26 @@
+{
+  "postings": [
+    {
+      "id": "fx-2001",
+      "title": "Machine Learning Engineer",
+      "company": "Adventure Works",
+      "city": "Berlin",
+      "country": "DE",
+      "remote": false,
+      "description": "Own training and evaluation pipelines for ranking models.",
+      "url": "https://jobs.example.test/adventure-works/2001",
+      "posted_at": "2026-10-05T14:00:00Z"
+    },
+    {
+      "id": "fx-2002",
+      "title": "AI Solutions Architect",
+      "company": "Tailspin Consulting",
+      "city": "Berlin",
+      "country": "DE",
+      "remote": false,
+      "description": "Design reference architectures for generative AI projects.",
+      "url": "https://jobs.example.test/tailspin/2002",
+      "posted_at": "2026-10-06T07:15:00Z"
+    }
+  ]
+}

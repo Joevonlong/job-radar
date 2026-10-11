@@ -1,0 +1,64 @@
+/*
+ * /sources. Ported from docs/design/design-system.html (.chain, .lnk, .ch); colours, sizes, radii and shadows
+ * come from the v3 tokens only. Geometry that is local to these blocks stays here.
+ */
+
+/* LinkedIn cascade: a chain of steps joined by arrows */
+.src-chain { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-6); list-style: none; margin: 0; padding: 0; }
+.src-chain > li { position: relative; min-width: 0; display: flex; }
+.src-chain > li + li::before {
+  content: "→";
+  position: absolute;
+  left: calc(var(--space-6) * -0.8);
+  top: 50%;
+  transform: translateY(-50%);
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: var(--text-h2);
+}
+@media (max-width: 1023px) {
+  .src-chain { grid-template-columns: minmax(0, 1fr); gap: var(--space-6); }
+  .src-chain > li + li::before { content: "↓"; left: 50%; top: calc(var(--space-6) * -0.85); transform: translateX(-50%); }
+}
+@media (min-width: 640px) and (max-width: 1023px) {
+  .src-chain { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .src-chain > li:nth-child(2n + 1)::before { content: none; }
+  .src-chain > li:nth-child(2n)::before { content: "→"; left: calc(var(--space-6) * -0.8); top: 50%; transform: translateY(-50%); }
+  .src-chain > li:nth-child(n + 3)::before { content: none; }
+}
+
+.src-step {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: 10px 12px;
+  border: var(--bw) solid var(--ink);
+  border-radius: 9px;
+  background: var(--card-bg);
+  color: var(--ink);
+  box-shadow: var(--e2);
+}
+.src-step[data-step="on"] { background: var(--hi); color: var(--hi-ink); }
+.src-step[data-step="ko"] { border-style: dashed; opacity: 0.85; }
+.src-step__o { font-family: var(--font-mono); font-size: var(--text-data-sm); line-height: var(--text-data-sm-lh); font-weight: 700; }
+.src-step__n { font-family: var(--font-mono); font-size: var(--text-title); font-weight: 800; overflow-wrap: anywhere; }
+.src-step__t { font-size: var(--text-data); line-height: var(--text-data-lh); }
+
+/* channel card */
+.src-ch { transition: transform var(--dur-press), box-shadow var(--dur-press); }
+.src-ch:hover { transform: translate(-2px, -2px); box-shadow: var(--e4); }
+@media (prefers-reduced-motion: reduce) {
+  .src-ch { transition: none; }
+  .src-ch:hover { transform: none; }
+}
+.src-ch__n { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--space-2); }
+.src-ch__n .jr-numroll { font-family: var(--font-display); font-size: var(--num-l); line-height: var(--num-l-lh); font-weight: 400; }
+.src-ch__n .jr-numroll[data-unknown="true"] { color: var(--ink-3); }
+.src-ch__line { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; min-height: 1.5em; }
+.src-ch__more { border-top: var(--bw) dashed var(--grid); padding-top: var(--space-2); }
+.src-ch details > summary { cursor: pointer; list-style: none; }
+.src-ch details > summary::-webkit-details-marker { display: none; }
+.src-ch details > summary::before { content: "▸"; display: inline-block; margin-right: var(--space-1); transition: transform var(--dur-fast); }
+.src-ch details[open] > summary::before { transform: rotate(90deg); }

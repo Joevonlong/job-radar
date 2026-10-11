@@ -1,0 +1,332 @@
+import { render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { NextIntlClientProvider } from "next-intl";
+import { withNuqsTestingAdapter, type UrlUpdateEvent } from "nuqs/adapters/testing";
+import { beforeAll, describe, expect, it, vi } from "vitest";
+
+import { FilterBar } from "@/components/jobs/filter-bar";
+
+import en from "../messages/en.json";
+import zh from "../messages/zh.json";
+
+beforeAll(() => {
+  // jsdom: cmdk scrolls the highlighted item into view
+  Element.prototype.scrollIntoView = vi.fn();
+});
+
+const options = { families: ["ats", "linkedin"], cities: [{ key: "Berlin", target: false }, { key: "München", target: false }], contracts: ["permanent"] };
+
+function renderBar(searchParams = "", locale: "en" | "zh" = "en", extra: { highValueNames?: string[] } = {}) {
+  const onUrlUpdate = vi.fn<(event: UrlUpdateEvent) => void>();
+  const Adapter = withNuqsTestingAdapter({ searchParams, onUrlUpdate, hasMemory: true });
+  render(
+    <Adapter>
+      <NextIntlClientProvider locale={locale} messages={locale === "en" ? en : zh}>
+        <FilterBar options={{ ...options, ...extra }} />
+      </NextIntlClientProvider>
+    </Adapter>,
+  );
+  const lastQuery = () => onUrlUpdate.mock.calls.at(-1)?.[0].queryString ?? "";
+  return { onUrlUpdate, lastQuery };
+}
+
+describe("FilterBar: application status", () => {
+  it("offers every status as a toggle, in pipeline order, with ignored among them", () => {
+    renderBar();
+    const group = screen.getByTestId("filter-app");
+    expect(within(group).getAllByRole("button").map((b) => b.textContent)).toEqual(["New (untouched)", "Interested", "Preparing", "Applied", "Interviewing", "Offer", "Rejected", "Withdrawn", "Ignored"]);
+  });
+
+  it("speaks Chinese: ignored is 已忽略", () => {
+    renderBar("", "zh");
+    expect(screen.getByTestId("filter-app-archived")).toHaveTextContent("已忽略");
+    expect(screen.getByTestId("filter-app-new")).toHaveTextContent("新（未处理）");
+  });
+
+  it("picks several statuses (repeated URL keys) and unpicks them again", async () => {
+    const { lastQuery } = renderBar("?page=3");
+    // The toggle computes the next list from the committed render (nuqs state behind a transition), not from the
+    // URL event. So after every click wait for the button state to commit before the next click, otherwise a
+    // loaded machine lets the next click read the stale list.
+    const pressed = (id: string, value: boolean) => waitFor(() => expect(screen.getByTestId(id)).toHaveAttribute("aria-pressed", String(value)));
+    const user = userEvent.setup();
+
+    await user.click(screen.getByTestId("filter-app-archived"));
+    await pressed("filter-app-archived", true);
+    await waitFor(() => expect(lastQuery()).toBe("?app=archived"));
+
+    await user.click(screen.getByTestId("filter-app-interested"));
+    await pressed("filter-app-interested", true);
+    // pipeline order, not click order; the page goes back to 1
+    await waitFor(() => expect(lastQuery()).toBe("?app=interested&app=archived"));
+
+    await user.click(screen.getByTestId("filter-app-archived"));
+    await pressed("filter-app-archived", false);
+    await waitFor(() => expect(lastQuery()).toBe("?app=interested"));
+
+    await user.click(screen.getByTestId("filter-app-interested"));
+    await pressed("filter-app-interested", false);
+    await waitFor(() => expect(lastQuery()).toBe(""));
+  });
+
+  it("shows the statuses of the URL as pressed", () => {
+    renderBar("?app=applied&app=offer");
+    expect(screen.getByTestId("filter-app-applied")).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByTestId("filter-app-offer")).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByTestId("filter-app-new")).toHaveAttribute("aria-pressed", "false");
+  });
+});
+
+describe("FilterBar: minimum score and salary", () => {
+  it("writes the numbers to the URL once typing pauses, and clears them when emptied", async () => {
+    const { lastQuery } = renderBar();
+    const score = screen.getByTestId("filter-min-score");
+    await userEvent.type(score, "75");
+    // the box follows typing at once
+    expect(score).toHaveValue(75);
+    await waitFor(() => expect(lastQuery()).toBe("?minScore=75"), { timeout: 2000 });
+
+    const salary = screen.getByTestId("filter-min-salary");
+    await userEvent.type(salary, "70000");
+    await waitFor(() => expect(lastQuery()).toBe("?minScore=75&minSalary=70000"), { timeout: 2000 });
+
+    await userEvent.clear(score);
+    await waitFor(() => expect(lastQuery()).toBe("?minSalary=70000"), { timeout: 2000 });
+  });
+
+  it("caps the score at 100 and ignores negative input", async () => {
+    const { lastQuery } = renderBar();
+    const score = screen.getByTestId("filter-min-score");
+    await userEvent.type(score, "250");
+    await waitFor(() => expect(lastQuery()).toBe("?minScore=100"), { timeout: 2000 });
+    expect(score).toHaveAttribute("min", "0");
+  });
+
+  it("shows the values from the URL and the clear button resets all new filters", async () => {
+    const { lastQuery } = renderBar("?app=new&minScore=60&minSalary=70000&q=rust");
+    expect(screen.getByTestId("filter-min-score")).toHaveValue(60);
+    expect(screen.getByTestId("filter-min-salary")).toHaveValue(70000);
+    await userEvent.click(screen.getByTestId("filter-clear"));
+    await waitFor(() => expect(lastQuery()).toBe(""));
+  });
+});
+
+describe("FilterBar on a phone", () => {
+  it("collapses the filters behind a Filters (n) button that counts them, without the search text", () => {
+    renderBar("?q=rust&app=new&app=applied&minScore=60&city=Berlin");
+    const toggle = screen.getByTestId("filter-toggle");
+    expect(toggle).toHaveTextContent("Filters (3)");
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByTestId("filter-panel")).toHaveAttribute("data-open", "false");
+    // hidden on the phone by CSS (max-md:hidden), shown from md up
+    expect(screen.getByTestId("filter-panel").className).toContain("max-md:hidden");
+  });
+
+  it("says plain Filters when none is set, and 筛选 (n) in Chinese", () => {
+    const { unmount } = renderBarWithUnmount("");
+    expect(screen.getByTestId("filter-toggle")).toHaveTextContent(/^Filters$/);
+    unmount();
+    renderBar("?minScore=60&minSalary=70000", "zh");
+    expect(screen.getByTestId("filter-toggle")).toHaveTextContent("筛选 (2)");
+  });
+
+  it("opens the filters as a sheet, closes with the close button, Done and Escape", async () => {
+    renderBar();
+    const toggle = screen.getByTestId("filter-toggle");
+    const panel = screen.getByTestId("filter-panel");
+
+    await userEvent.click(toggle);
+    expect(panel).toHaveAttribute("data-open", "true");
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(panel.className).toContain("max-md:fixed");
+
+    await userEvent.click(screen.getByTestId("filter-close"));
+    expect(panel).toHaveAttribute("data-open", "false");
+
+    await userEvent.click(toggle);
+    await userEvent.click(screen.getByTestId("filter-apply"));
+    expect(panel).toHaveAttribute("data-open", "false");
+
+    await userEvent.click(toggle);
+    await userEvent.keyboard("{Escape}");
+    await waitFor(() => expect(panel).toHaveAttribute("data-open", "false"));
+    expect(document.body.style.overflow).not.toBe("hidden");
+  });
+});
+
+function renderBarWithUnmount(searchParams: string) {
+  const Adapter = withNuqsTestingAdapter({ searchParams });
+  return render(
+    <Adapter>
+      <NextIntlClientProvider locale="en" messages={en}>
+        <FilterBar options={options} />
+      </NextIntlClientProvider>
+    </Adapter>,
+  );
+}
+
+
+describe("FilterBar: multi-select filters", () => {
+  const optionOf = (testId: string, value: string) => {
+    const option = screen.getAllByTestId(`${testId}-option`).find((o) => o.getAttribute("data-value") === value);
+    if (!option) throw new Error(`no option ${value}`);
+    return option;
+  };
+  const pick = async (testId: string, value: string) => {
+    await userEvent.click(screen.getByTestId(testId));
+    const option = screen.getAllByTestId(`${testId}-option`).find((o) => o.getAttribute("data-value") === value);
+    if (!option) throw new Error(`no option ${value}`);
+    await userEvent.click(option);
+  };
+
+  it("two picks in a row make one URL update with repeated keys, and the page goes back to 1", async () => {
+    const { onUrlUpdate, lastQuery } = renderBar("?page=3");
+    await pick("filter-city", "Berlin");
+    // MultiSelect computes the next list from the committed value: let the first pick commit before the second
+    await waitFor(() => expect(optionOf("filter-city", "Berlin")).toHaveAttribute("aria-checked", "true"));
+    await userEvent.click(optionOf("filter-city", "München"));
+    // the button already shows both; the URL waits for the quiet time
+    await waitFor(() => expect(screen.getByTestId("filter-city")).toHaveTextContent("Berlin +1"));
+    expect(onUrlUpdate).not.toHaveBeenCalled();
+    await waitFor(() => expect(lastQuery()).toBe("?city=Berlin&city=München"), { timeout: 2000 });
+    expect(onUrlUpdate).toHaveBeenCalledTimes(1);
+  });
+
+  it("closing the popover sends the pick at once", async () => {
+    const { lastQuery } = renderBar();
+    await pick("filter-source", "linkedin");
+    await userEvent.keyboard("{Escape}");
+    await waitFor(() => expect(lastQuery()).toBe("?source=linkedin"), { timeout: 300 });
+  });
+
+  it("offers the work-place values in canonical order and writes enum picks in that order", async () => {
+    const { lastQuery } = renderBar();
+    await pick("filter-workplace", "remote");
+    await waitFor(() => expect(optionOf("filter-workplace", "remote")).toHaveAttribute("aria-checked", "true"));
+    await userEvent.click(optionOf("filter-workplace", "onsite"));
+    await waitFor(() => expect(optionOf("filter-workplace", "onsite")).toHaveAttribute("aria-checked", "true"));
+    await userEvent.keyboard("{Escape}");
+    await waitFor(() => expect(lastQuery()).toBe("?workplace=onsite&workplace=remote"));
+  });
+
+  it("shows an old bookmark's value that no job has as a selected, marked option", async () => {
+    renderBar("?city=Gone&city=Berlin");
+    expect(screen.getByTestId("filter-city")).toHaveTextContent("Gone +1");
+    await userEvent.click(screen.getByTestId("filter-city"));
+    const first = screen.getAllByTestId("filter-city-option")[0] as HTMLElement;
+    expect(first).toHaveAttribute("data-value", "Gone");
+    expect(first).toHaveAttribute("aria-checked", "true");
+    expect(first).toHaveTextContent("no jobs now");
+  });
+
+  it("reads an old single-value link the same as before: one selected city", () => {
+    renderBar("?city=Berlin&source=ats&workplace=remote");
+    expect(screen.getByTestId("filter-city")).toHaveTextContent("Berlin");
+    expect(screen.getByTestId("filter-source")).toHaveAttribute("aria-label", "Source: Company ATS");
+    expect(screen.getByTestId("filter-workplace")).toHaveTextContent("remote");
+  });
+
+  it("lists every picked value as a chip; the x removes just that one", async () => {
+    const { lastQuery } = renderBar("?city=Berlin&city=M%C3%BCnchen&workplace=remote");
+    const chips = screen.getAllByTestId("filter-chip");
+    expect(chips.map((c) => c.textContent)).toEqual(["City · Berlin×", "City · München×", "Workplace · remote×"]);
+    await userEvent.click(screen.getByRole("button", { name: "Remove filter City: Berlin" }));
+    await waitFor(() => expect(lastQuery()).toBe("?workplace=remote&city=München"));
+    await waitFor(() => expect(screen.getAllByTestId("filter-chip")).toHaveLength(2));
+  });
+
+  it("has no chip row without a picked value", () => {
+    renderBar("?app=new&minScore=60");
+    expect(screen.queryByTestId("filter-chips")).toBeNull();
+  });
+
+  it("counts a multi-select once in Filters (n) and Clear filters empties every list", async () => {
+    const { lastQuery } = renderBar("?city=Berlin&city=M%C3%BCnchen&source=ats&source=xing&workplace=remote");
+    expect(screen.getByTestId("filter-toggle")).toHaveTextContent("Filters (3)");
+    await userEvent.click(screen.getByTestId("filter-clear"));
+    await waitFor(() => expect(lastQuery()).toBe(""));
+    await waitFor(() => expect(screen.queryByTestId("filter-chips")).toBeNull());
+  });
+
+  it("speaks Chinese: any, chips and the remove label", () => {
+    renderBar("?city=Berlin", "zh");
+    expect(screen.getByTestId("filter-source")).toHaveTextContent("全部");
+    expect(screen.getByTestId("filter-chip")).toHaveTextContent("城市 · Berlin");
+    expect(screen.getByRole("button", { name: "移除筛选 城市：Berlin" })).toBeInTheDocument();
+  });
+});
+
+describe("FilterBar: multi-select on a phone", () => {
+  it("unfolds one list at a time inside the sheet", async () => {
+    const original = window.innerWidth;
+    Object.defineProperty(window, "innerWidth", { value: 390, configurable: true, writable: true });
+    try {
+      renderBar("?city=Berlin");
+      await userEvent.click(screen.getByTestId("filter-toggle"));
+      expect(screen.queryAllByTestId("filter-city-option")).toHaveLength(0);
+      await userEvent.click(screen.getByTestId("filter-city"));
+      expect(screen.getAllByTestId("filter-city-option").length).toBeGreaterThan(0);
+      await userEvent.click(screen.getByTestId("filter-workplace"));
+      expect(screen.queryAllByTestId("filter-city-option")).toHaveLength(0);
+      expect(screen.getAllByTestId("filter-workplace-option").length).toBe(4);
+    } finally {
+      Object.defineProperty(window, "innerWidth", { value: original, configurable: true, writable: true });
+    }
+  });
+});
+
+describe("FilterBar: high-value signals only", () => {
+  it("is hidden when no category is high value", () => {
+    renderBar();
+    expect(screen.queryByTestId("filter-high")).toBeNull();
+  });
+
+  it("names the high-value categories in its tooltip and writes `high`", async () => {
+    const { lastQuery } = renderBar("", "en", { highValueNames: ["Explicit amount", "Equity"] });
+    const button = screen.getByTestId("filter-high");
+    expect(button).toHaveAttribute("title", "Only jobs with a high-value signal: Explicit amount / Equity");
+    await userEvent.click(button);
+    await waitFor(() => expect(lastQuery()).toBe("?high=true"));
+  });
+
+  it("reads an old `t12` link as on, and writes only `high` from then on", async () => {
+    const { lastQuery } = renderBar("?t12=true", "en", { highValueNames: ["Equity"] });
+    expect(screen.getByTestId("filter-high")).toHaveAttribute("aria-pressed", "true");
+    await userEvent.click(screen.getByTestId("filter-salary"));
+    await waitFor(() => expect(screen.getByTestId("filter-salary")).toHaveAttribute("aria-pressed", "true"));
+    await waitFor(() => expect(lastQuery()).toBe("?high=true&salary=true"));
+    await userEvent.click(screen.getByTestId("filter-high"));
+    await waitFor(() => expect(lastQuery()).toBe("?salary=true"));
+  });
+});
+
+describe("FilterBar: sort direction", () => {
+  it("offers the salary sort next to the score and a new sort drops the direction", async () => {
+    const { lastQuery } = renderBar("?sort=first_seen&dir=asc&page=2");
+    const user = userEvent.setup();
+    await user.click(screen.getByTestId("filter-sort"));
+    const options = await screen.findAllByTestId("filter-sort-option");
+    expect(options.map((o) => o.getAttribute("data-value"))).toEqual(["rank", "salary", "first_seen", "posted"]);
+    await user.click(options[1]!);
+    await waitFor(() => expect(lastQuery()).toBe("?sort=salary"));
+  });
+
+  it("flips the direction with the button next to the drop-down and leaves the default out of the URL", async () => {
+    const { lastQuery } = renderBar("?sort=salary&page=3");
+    const user = userEvent.setup();
+    const button = screen.getByTestId("filter-sort-dir");
+    expect(button).toHaveAttribute("data-dir", "desc");
+    expect(button).toHaveAccessibleName("Descending (highest first), click for ascending");
+    await user.click(button);
+    await waitFor(() => expect(lastQuery()).toBe("?sort=salary&dir=asc"));
+    await waitFor(() => expect(screen.getByTestId("filter-sort-dir")).toHaveAttribute("data-dir", "asc"));
+    await user.click(screen.getByTestId("filter-sort-dir"));
+    await waitFor(() => expect(lastQuery()).toBe("?sort=salary"));
+  });
+
+  it("speaks Chinese", () => {
+    renderBar("?sort=rank&dir=asc", "zh");
+    expect(screen.getByTestId("filter-sort-dir")).toHaveAccessibleName("升序（低的在前），点击改为降序");
+  });
+});
+

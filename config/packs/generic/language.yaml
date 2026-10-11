@@ -1,0 +1,43 @@
+# Generic language data: English stop words used to detect the language of the body text.
+
+stopwords:
+  en:
+    - the
+    - and
+    - of
+    - to
+    - in
+    - for
+    - with
+    - a
+    - an
+    - is
+    - are
+    - be
+    - you
+    - your
+    - we
+    - our
+    - will
+    - on
+    - as
+    - at
+    - by
+    - or
+    - this
+    - that
+    - from
+    - it
+    - their
+    - about
+    - have
+    - has
+    - can
+    - work
+    - team
+    - experience
+    - skills
+    - ability
+    - who
+    - what
+    - join

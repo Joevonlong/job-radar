@@ -1,0 +1,666 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+/*
+ * Design system v3: "paper" light theme (default) and "terminal" dark theme.
+ * Token values come from docs/design/tokens.css; spec in docs/design/tokens.md.
+ * Theme switching uses next-themes with attribute="class": `light` (default) and `dark`.
+ *
+ * Tailwind utilities mapped from the tokens (use these in components, never raw hex / px / ms):
+ *   colours   bg-paper (page) bg-card-bg bg-ink text-ink text-ink-2 text-ink-3 border-ink bg-grid bg-soft
+ *             bg-hi text-hi-ink bg-meter bg-good bg-warn bg-bad text-on-bad text-on-signal bg-term-bg text-term-ink
+ *             text-term-amber text-term-green text-term-dim text-term-bad border-term-line text-shadow-c (+ shadcn names:
+ *             bg-background bg-card bg-primary text-muted-foreground border-border ... and the signal-t1..t4 colours,
+ *             plus the signal category colours bg-signal-olive / -violet / -slate / -pink; pick them via src/lib/signals/palette.ts)
+ *   border    border-bw, border-x-bw, border-y-bw, border-t/r/b/l-bw (2px width token), border-border
+ *   type      text-num-xxl/xl/l/m/s  text-h1 text-h1-detail text-h2 text-title text-title-sm text-body text-body-sm
+ *             text-label text-cap text-data text-data-sm (each sets size + line height);
+ *             font-display (Archivo Black, Noto Sans SC 900) font-sans (Archivo) font-mono (IBM Plex Mono);
+ *             `text-cap-style` adds the table-head look (mono 600 uppercase tracking .08em)
+ *   spacing   p-sp-1 .. p-sp-14 (gap-sp-3, m-sp-4 ...) = --space-1..14; control heights h-ctl-sm / h-ctl-md / h-ctl-lg
+ *             (also size-ctl-*, min-h-ctl-*, w-ctl-*)
+ *   radius    rounded-cell rounded-tag rounded-btn rounded-card rounded-frame rounded-pill
+ *   elevation shadow-e1 .. shadow-e5 (hard offset, colour = --shadow-c), shadow-e2-bad (invalid fields); `press` = button press gesture, `lift` = its hover (box rises, shadow grows to --lift-shadow)
+ *   layers    z-sticky z-dropdown z-drawer z-modal z-toast z-tooltip
+ *   motion    duration-press duration-fast duration-base duration-slow duration-count; ease-snap (--ease-out),
+ *             ease-spring; delay via style={{ transitionDelay: "calc(var(--step) * n)" }}
+ *   shell     term-cursor (blinking amber block after a label), nav-caret (terminal nav row: ">" on hover / active),
+ *             `scroll-progress` class (top bar driven by the page scroll; shown only where animation-timeline is supported)
+ * Kept for existing pages: every shadcn variable name, plus score-* / signal-t* / success / warning and their *-text.
+ */
+@custom-variant dark (&:is(.dark, .dark *));
+
+:root,
+.light {
+  color-scheme: light;
+
+  /* v3 roles */
+  --bg: #f1f0e8; /* paper */
+  --card-bg: #ffffff;
+  --ink: #111111; /* text, borders, hard shadows */
+  --ink-2: #4d4b45;
+  --ink-3: #68655e;
+  --grid: #d9d6ca; /* grid lines, empty meter cells */
+  --soft: #e7e5db; /* table head, board columns */
+  --hi: #ffd23f; /* money, selection, primary button */
+  --hi-ink: #111111;
+  --meter: #111111; /* score meter cells (single-hue sequential) */
+  --shadow-c: #111111;
+
+  --signal-t1: #d18f00; /* T1 stated amount */
+  --signal-t2: #0e9f8e; /* T2 equity */
+  --signal-t3: #ef5b3a; /* T3 competitive */
+  --signal-t4: #2f7fd8; /* T4 bonus */
+  /* Signal category palette: amber/teal/coral/blue are --signal-t1..t4; these four are the extra colours (checked with the
+     dataviz validator: adjacent normal-vision ΔE >= 15, CVD ΔE >= 8 in the picker order olive/violet/slate/pink; ink text >= 4.5:1) */
+  --signal-olive: #7a9a1e;
+  --signal-violet: #ad6ad6;
+  --signal-slate: #9aa6b8;
+  --signal-pink: #d9468f;
+  --good: #1a7f4b;
+  --warn: #f2c200; /* always with a hatch pattern */
+  --bad: #c8322a; /* failures, German gate, salary floor line */
+  --on-bad: #ffffff;
+  --on-signal: #111111; /* text on signal / warn blocks, both themes */
+
+  --term-bg: #111111; /* terminal panels: sidebar, toast, ticker, logs */
+  --term-ink: #e8e3d3;
+  --term-amber: #ffb000;
+  --term-green: #36d27a;
+  --term-dim: #8a8576;
+  --term-bad: #ff5f56; /* red on the terminal panels: --bad is 4.05:1 on --term-bg, this one 6.3:1 */
+  --term-line: #2c2b24;
+
+  /* shadcn names, mapped */
+  --background: var(--bg);
+  --foreground: var(--ink);
+  --card: var(--card-bg);
+  --card-foreground: var(--ink);
+  --popover: var(--card-bg);
+  --popover-foreground: var(--ink);
+  --muted: var(--soft);
+  --muted-foreground: var(--ink-2);
+  --border: var(--ink);
+  --input: var(--ink);
+  --primary: var(--hi);
+  --primary-foreground: var(--hi-ink);
+  --secondary: var(--soft);
+  --secondary-foreground: var(--ink);
+  --accent: var(--hi);
+  --accent-foreground: var(--hi-ink);
+  --ring: var(--signal-t4);
+  --destructive: var(--bad);
+  --success: var(--good);
+  --warning: var(--warn);
+  --score-low: var(--meter);
+  --score-mid: var(--meter);
+  --score-good: var(--meter);
+  --score-top: var(--meter);
+
+  /*
+   * Text shades kept for pages that are not migrated yet. v3 rule: text is always ink, colour only
+   * fills blocks; the one exception is amber, which is unreadable on paper as text, so it is darkened.
+   */
+  --success-text: var(--good);
+  --warning-text: color-mix(in srgb, var(--warn) 40%, var(--ink));
+  --signal-t1-text: var(--ink);
+  --signal-t2-text: var(--ink);
+  --signal-t3-text: var(--ink);
+  --signal-t4-text: var(--ink);
+  --score-low-text: var(--ink);
+  --score-mid-text: var(--ink);
+  --score-good-text: var(--ink);
+  --score-top-text: var(--ink);
+
+  /* shape */
+  --bw: 2px; /* every border */
+  --sh: 4px; /* hard shadow offset: 4px 4px 0 var(--shadow-c) */
+  --press-d: 3px; /* button press: translate by this much while the shadow collapses */
+  --lift-d: 1px; /* button hover: the box rises by this much (up-left) while the shadow grows one step */
+  --radius: 0.625rem; /* 10px cards; tags 7px; buttons 8px */
+
+  /* type scale: size / line-height (see tokens.md "字号与用法") */
+  --num-xxl: 72px;
+  --num-xxl-lh: 0.9; /* detail score, max 1 per page */
+  --num-xl: 44px;
+  --num-xl-lh: 0.95; /* today hero kpi, big percent */
+  --num-l: 32px;
+  --num-l-lh: 1; /* kpi, detail salary */
+  --num-m: 22px;
+  --num-m-lh: 1; /* list score, phone kpi */
+  --num-s: 17px;
+  --num-s-lh: 1; /* table salary, board card */
+  --text-h1: 30px;
+  --text-h1-lh: 1.05;
+  --text-h1-detail: 32px;
+  --text-h1-detail-lh: 1.05;
+  --text-h2: 15px;
+  --text-h2-lh: 1.3;
+  --text-title: 14px;
+  --text-title-lh: 1.3; /* Archivo 800 */
+  --text-title-sm: 12.5px;
+  --text-title-sm-lh: 1.25;
+  --text-body: 14px;
+  --text-body-lh: 1.6;
+  --text-body-sm: 12.5px;
+  --text-body-sm-lh: 1.5;
+  --text-label: 12.5px;
+  --text-label-lh: 1.3; /* Archivo 700 */
+  --text-cap: 10.5px;
+  --text-cap-lh: 1.3; /* Plex Mono 600, 0.08em, uppercase */
+  --text-data: 12px;
+  --text-data-lh: 1.5; /* Plex Mono 500 */
+  --text-data-sm: 10.5px;
+  --text-data-sm-lh: 1.3; /* minimum size */
+
+  /* spacing (4px base) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-14: 56px;
+
+  /* radius */
+  --r-cell: 2px;
+  --r-tag: 7px;
+  --r-btn: 8px;
+  --r-card: 10px;
+  --r-frame: 14px;
+  --r-pill: 999px;
+
+  /* elevation: hard offset shadows, no blur */
+  --e1: 2px 2px 0 var(--shadow-c);
+  --e2: 3px 3px 0 var(--shadow-c);
+  --e3: 4px 4px 0 var(--shadow-c);
+  --e4: 6px 6px 0 var(--shadow-c);
+  --e5: 8px 8px 0 var(--shadow-c);
+  --e2-bad: 3px 3px 0 var(--bad); /* invalid fields */
+  --e-drawer: -6px 0 0 var(--shadow-c); /* right-hand drawer */
+
+  /* layers */
+  --z-sticky: 10;
+  --z-dropdown: 20;
+  --z-drawer: 30;
+  --z-modal: 40;
+  --z-toast: 50;
+  --z-tooltip: 60;
+
+  /* control sizes */
+  --h-sm: 30px;
+  --h-md: 38px;
+  --h-lg: 46px;
+
+  /* motion */
+  --dur-press: 90ms;
+  --dur-fast: 140ms;
+  --dur-base: 220ms;
+  --dur-slow: 360ms;
+  --dur-count: 1100ms;
+  --step: 35ms; /* delay between meter cells lighting up */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.dark {
+  color-scheme: dark;
+  --bg: #0b0b0a;
+  --card-bg: #12120f;
+  --ink: #e8e3d3;
+  --ink-2: #b3ad9c;
+  --ink-3: #898475;
+  --grid: #2c2b24;
+  --soft: #1b1b17;
+  --hi: #ffb000;
+  --hi-ink: #0b0b0a;
+  --meter: #36d27a;
+  --shadow-c: #ffb000; /* amber hard shadows in the terminal theme */
+  --signal-t1: #bd8200;
+  --signal-t2: #1aa38d;
+  --signal-t3: #e8593a;
+  --signal-t4: #3a8ae0;
+  /* the extra category colours pass the same checks on the terminal surface unchanged */
+  --signal-olive: #7a9a1e;
+  --signal-violet: #ad6ad6;
+  --signal-slate: #9aa6b8;
+  --signal-pink: #d9468f;
+  --good: #36d27a;
+  --warn: #f2c200;
+  --bad: #ff5f56;
+  --on-bad: #0b0b0a;
+  --term-bg: #050504;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root,
+  .light,
+  .dark {
+    --dur-press: 0ms;
+    --dur-fast: 0ms;
+    --dur-base: 0ms;
+    --dur-slow: 0ms;
+    --dur-count: 0ms;
+    --step: 0ms;
+  }
+}
+
+/* Fonts: next/font injects --font-archivo / --font-archivo-black / --font-plex-mono / --font-noto-sans-sc on <html>. */
+@theme static {
+  --font-display:
+    var(--font-archivo-black), var(--font-noto-sans-sc), "Noto Sans SC", "PingFang SC",
+    "Microsoft YaHei", sans-serif;
+  --font-sans:
+    var(--font-archivo), var(--font-noto-sans-sc), "Noto Sans SC", ui-sans-serif, system-ui,
+    "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-mono:
+    var(--font-plex-mono), var(--font-noto-sans-sc), "Noto Sans SC", ui-monospace,
+    SFMono-Regular, Menlo, monospace;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-ring: var(--ring);
+  --color-destructive: var(--destructive);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-score-low: var(--score-low);
+  --color-score-mid: var(--score-mid);
+  --color-score-good: var(--score-good);
+  --color-score-top: var(--score-top);
+  --color-signal-t1: var(--signal-t1);
+  --color-signal-t2: var(--signal-t2);
+  --color-signal-t3: var(--signal-t3);
+  --color-signal-t4: var(--signal-t4);
+  --color-signal-olive: var(--signal-olive);
+  --color-signal-violet: var(--signal-violet);
+  --color-signal-slate: var(--signal-slate);
+  --color-signal-pink: var(--signal-pink);
+  --color-success-text: var(--success-text);
+  --color-warning-text: var(--warning-text);
+  --color-signal-t1-text: var(--signal-t1-text);
+  --color-signal-t2-text: var(--signal-t2-text);
+  --color-signal-t3-text: var(--signal-t3-text);
+  --color-signal-t4-text: var(--signal-t4-text);
+  --color-score-low-text: var(--score-low-text);
+  --color-score-mid-text: var(--score-mid-text);
+  --color-score-good-text: var(--score-good-text);
+  --color-score-top-text: var(--score-top-text);
+
+  /* v3 roles */
+  --color-paper: var(--bg);
+  --color-card-bg: var(--card-bg);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-grid: var(--grid);
+  --color-soft: var(--soft);
+  --color-hi: var(--hi);
+  --color-hi-ink: var(--hi-ink);
+  --color-meter: var(--meter);
+  --color-shadow-c: var(--shadow-c);
+  --color-good: var(--good);
+  --color-warn: var(--warn);
+  --color-bad: var(--bad);
+  --color-on-bad: var(--on-bad);
+  --color-on-signal: var(--on-signal);
+  --color-term-bg: var(--term-bg);
+  --color-term-ink: var(--term-ink);
+  --color-term-amber: var(--term-amber);
+  --color-term-green: var(--term-green);
+  --color-term-dim: var(--term-dim);
+  --color-term-bad: var(--term-bad);
+  --color-term-line: var(--term-line);
+
+  /* type: text-num-xl etc. set size and line height together */
+  --text-num-xxl: var(--num-xxl);
+  --text-num-xxl--line-height: var(--num-xxl-lh);
+  --text-num-xl: var(--num-xl);
+  --text-num-xl--line-height: var(--num-xl-lh);
+  --text-num-l: var(--num-l);
+  --text-num-l--line-height: var(--num-l-lh);
+  --text-num-m: var(--num-m);
+  --text-num-m--line-height: var(--num-m-lh);
+  --text-num-s: var(--num-s);
+  --text-num-s--line-height: var(--num-s-lh);
+  --text-h1: var(--text-h1);
+  --text-h1--line-height: var(--text-h1-lh);
+  --text-h1-detail: var(--text-h1-detail);
+  --text-h1-detail--line-height: var(--text-h1-detail-lh);
+  --text-h2: var(--text-h2);
+  --text-h2--line-height: var(--text-h2-lh);
+  --text-title: var(--text-title);
+  --text-title--line-height: var(--text-title-lh);
+  --text-title-sm: var(--text-title-sm);
+  --text-title-sm--line-height: var(--text-title-sm-lh);
+  --text-body: var(--text-body);
+  --text-body--line-height: var(--text-body-lh);
+  --text-body-sm: var(--text-body-sm);
+  --text-body-sm--line-height: var(--text-body-sm-lh);
+  --text-label: var(--text-label);
+  --text-label--line-height: var(--text-label-lh);
+  --text-cap: var(--text-cap);
+  --text-cap--line-height: var(--text-cap-lh);
+  --text-data: var(--text-data);
+  --text-data--line-height: var(--text-data-lh);
+  --text-data-sm: var(--text-data-sm);
+  --text-data-sm--line-height: var(--text-data-sm-lh);
+
+  /* spacing: p-sp-4, gap-sp-3 ...; control heights: h-ctl-md */
+  --spacing-sp-1: var(--space-1);
+  --spacing-sp-2: var(--space-2);
+  --spacing-sp-3: var(--space-3);
+  --spacing-sp-4: var(--space-4);
+  --spacing-sp-5: var(--space-5);
+  --spacing-sp-6: var(--space-6);
+  --spacing-sp-8: var(--space-8);
+  --spacing-sp-10: var(--space-10);
+  --spacing-sp-14: var(--space-14);
+  --spacing-ctl-sm: var(--h-sm);
+  --spacing-ctl-md: var(--h-md);
+  --spacing-ctl-lg: var(--h-lg);
+
+  /* radius: shadcn names stay, v3 names added */
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-cell: var(--r-cell);
+  --radius-tag: var(--r-tag);
+  --radius-btn: var(--r-btn);
+  --radius-card: var(--r-card);
+  --radius-frame: var(--r-frame);
+  --radius-pill: var(--r-pill);
+
+  /* elevation */
+  --shadow-e1: var(--e1);
+  --shadow-e2: var(--e2);
+  --shadow-e3: var(--e3);
+  --shadow-e4: var(--e4);
+  --shadow-e5: var(--e5);
+  --shadow-e2-bad: var(--e2-bad);
+  --shadow-drawer: var(--e-drawer);
+
+  /* Motion: 140ms by default (zeroed under prefers-reduced-motion through the tokens). */
+  --default-transition-duration: var(--dur-fast);
+  --default-transition-timing-function: var(--ease-out);
+}
+
+/* Layers, durations and easing have no Tailwind theme namespace: static utilities read the tokens. */
+@utility z-sticky {
+  z-index: var(--z-sticky);
+}
+@utility z-dropdown {
+  z-index: var(--z-dropdown);
+}
+@utility z-drawer {
+  z-index: var(--z-drawer);
+}
+@utility z-modal {
+  z-index: var(--z-modal);
+}
+@utility z-toast {
+  z-index: var(--z-toast);
+}
+@utility z-tooltip {
+  z-index: var(--z-tooltip);
+}
+@utility duration-press {
+  --tw-duration: var(--dur-press);
+  transition-duration: var(--dur-press);
+  animation-duration: var(--dur-press);
+}
+@utility duration-fast {
+  --tw-duration: var(--dur-fast);
+  transition-duration: var(--dur-fast);
+  animation-duration: var(--dur-fast);
+}
+@utility duration-base {
+  --tw-duration: var(--dur-base);
+  transition-duration: var(--dur-base);
+  animation-duration: var(--dur-base);
+}
+@utility duration-slow {
+  --tw-duration: var(--dur-slow);
+  transition-duration: var(--dur-slow);
+  animation-duration: var(--dur-slow);
+}
+@utility duration-count {
+  --tw-duration: var(--dur-count);
+  transition-duration: var(--dur-count);
+  animation-duration: var(--dur-count);
+}
+@utility ease-snap {
+  transition-timing-function: var(--ease-out);
+  animation-timing-function: var(--ease-out);
+}
+@utility ease-spring {
+  transition-timing-function: var(--ease-spring);
+  animation-timing-function: var(--ease-spring);
+}
+/* Every border is --bw (2px) thick; side variants for rules and folder tabs. */
+@utility border-bw {
+  border-width: var(--bw);
+}
+@utility border-x-bw {
+  border-inline-width: var(--bw);
+}
+@utility border-y-bw {
+  border-block-width: var(--bw);
+}
+@utility border-t-bw {
+  border-top-width: var(--bw);
+}
+@utility border-r-bw {
+  border-right-width: var(--bw);
+}
+@utility border-b-bw {
+  border-bottom-width: var(--bw);
+}
+@utility border-l-bw {
+  border-left-width: var(--bw);
+}
+/* Table-head / summary-label look (tokens.md "表头"). Combine with text-cap. */
+@utility text-cap-style {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+/*
+ * Hover lift (tokens.md "悬停浮起"): the box rises by --lift-d up-left and the hard shadow grows one step (the variant sets
+ * --lift-shadow, e.g. e2 -> e3, so the shadow tip stays put). Not while disabled / busy / toggled on / pressed (:active belongs
+ * to `press`, which collapses the shadow); reduced motion keeps the shadow step but does not move the box.
+ */
+@utility lift {
+  &:hover:not(:active, :disabled, [aria-disabled="true"], [aria-busy="true"], [aria-pressed="true"]) {
+    box-shadow: var(--lift-shadow);
+    @media (prefers-reduced-motion: no-preference) {
+      translate: calc(-1 * var(--lift-d)) calc(-1 * var(--lift-d));
+    }
+  }
+}
+/* Press gesture: the box moves by --press-d while the hard shadow collapses (tokens.md "按钮"). */
+@utility press {
+  transition-property: translate, box-shadow, background-color, color, border-color;
+  transition-duration: var(--dur-press), var(--dur-press), var(--dur-fast), var(--dur-fast),
+    var(--dur-fast);
+  &:active:not(:disabled, [aria-disabled="true"], [aria-busy="true"]) {
+    translate: var(--press-d) var(--press-d);
+    box-shadow: 0 0 0 var(--shadow-c);
+  }
+}
+/* Terminal nav row: a 1ch caret column; ">" on hover / focus and on the current page. Alt text keeps it out of the link name. */
+@utility nav-caret {
+  &::before {
+    content: " ";
+    content: " " / "";
+    display: inline-block;
+    width: 1ch;
+    flex: none;
+    white-space: pre;
+    color: var(--term-amber);
+  }
+  &:hover::before,
+  &:focus-visible::before {
+    content: ">";
+    content: ">" / "";
+  }
+  &[aria-current="page"]::before {
+    content: ">";
+    content: ">" / "";
+    color: var(--term-bg);
+  }
+}
+/* Blinking block cursor after the brand. */
+@utility term-cursor {
+  &::after {
+    content: "█";
+    content: "█" / "";
+    margin-left: 0.25em;
+    color: var(--term-amber);
+    animation: jr-blink 1s steps(1) infinite;
+  }
+}
+@keyframes jr-blink {
+  50% {
+    opacity: 0;
+  }
+}
+/* Page scroll progress: a bar at the very top that grows with the scroll position (scroll-driven animation). */
+.scroll-progress {
+  display: none;
+}
+@supports (animation-timeline: scroll()) {
+  .scroll-progress {
+    display: block;
+    transform-origin: left;
+    transform: scaleX(0);
+    animation: jr-scroll-grow linear both;
+    animation-timeline: scroll(root block);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .scroll-progress {
+      animation-duration: auto !important;
+    }
+  }
+}
+@keyframes jr-scroll-grow {
+  to {
+    transform: scaleX(1);
+  }
+}
+/* Loading spinner ring (Button loading, inline waits). */
+@utility spin-ring {
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: jr-spin 0.7s linear infinite;
+}
+@keyframes jr-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    font-size: 14px;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-weight: 500;
+    line-height: var(--text-body-lh);
+  }
+
+  /* Display type: Archivo Black has one weight, so ask for 900 (Noto Sans SC Black for Chinese) without synthetic bold. */
+  .font-display {
+    font-weight: 900;
+    font-synthesis-weight: none;
+  }
+
+  /* Focus ring for every interactive element (spec: 3px t4, 2px offset). */
+  :focus-visible {
+    outline: 3px solid var(--signal-t4);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background: var(--hi);
+    color: var(--hi-ink);
+  }
+}
+
+/*
+ * Toast: 2px border, amber bar that drains over the toast's life (paused while hovered, like sonner's timer).
+ * The bar is a background image on the toast itself (its size shrinks): sonner uses both pseudo elements for its own
+ * hit areas (the bridge between stacked toasts, swiping), so neither is free for a bar.
+ */
+[data-sonner-toast] {
+  border-width: var(--bw) !important;
+  overflow: hidden;
+}
+[data-sonner-toast][data-styled="true"]:not([data-type="loading"]) {
+  background-image: linear-gradient(var(--term-amber), var(--term-amber));
+  background-repeat: no-repeat;
+  background-position: left bottom;
+  background-size: 100% 3px;
+  animation: toast-drain var(--toast-life, 3200ms) linear forwards;
+}
+[data-sonner-toast]:hover {
+  animation-play-state: paused;
+}
+@keyframes toast-drain {
+  to {
+    background-size: 0% 3px;
+  }
+}
+
+/*
+ * Toasts sit above the bar fixed to the bottom of the job detail page on narrow screens: the bar is
+ * two rows (36px status row + 38px buttons row, gaps and top padding) 92px plus its bottom padding (8px or the safe area) tall, and the toast keeps 12px clear of it. The bar is hidden
+ * from `lg` (64rem) up. `components/ui/sonner.tsx` reads the variable; without a bar it keeps sonner's own offsets.
+ */
+@media (max-width: 63.99rem) {
+  body:has([data-bottom-bar]) {
+    --toast-bottom: calc(104px + max(8px, env(safe-area-inset-bottom)));
+  }
+}
+
+/* A save bar stuck to the bottom edge (settings, /me, /interests; on /settings it is the last thing) is never covered by a toast: it sits above the bar, whose row can wrap on a phone. */
+body:has([data-testid="save-bar-dock"][data-floating="true"]) {
+  --toast-bottom: calc(112px + max(8px, env(safe-area-inset-bottom)));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

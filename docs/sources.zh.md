@@ -1,0 +1,110 @@
+# 来源清单：一个文件管所有采集来源
+
+用户要的是"清楚知道有哪些来源、哪些正常、哪些异常，不要黑盒地跑"。所有采集来源现在在一个文件里：`data/config/sources.yaml`。网页 `/sources/registry` 和命令 `pnpm sources:list` 读的就是它，再加上数据库里的健康记录。
+
+## 1. 三个副本，谁说了算
+
+| 副本 | 是什么 | 谁改 |
+|---|---|---|
+| `data/config/sources.yaml` | **真相**。所有通道的开关、参数、预算，加要采集的公司 ATS board | 你、网页（设置页的"来源"标签、来源清单页）、agent |
+| 数据库表 `source_registry` | 文件的**镜像**：每个条目一行；从文件里删掉的条目留着，标 `in_config = false` | runner 启动和热加载配置时、网页每次写文件后、来源清单页发现不同步时、`pnpm sources:list --sync` |
+| `/sources/registry` 页面 | 文件 + 健康数据（`channels`、`runs`、`ats_boards`、`raw_postings`） | 只读视图；开关和编辑写回文件 |
+
+网页上的所有修改都写回 `sources.yaml`（注释保留），然后立刻同步数据库。
+
+## 2. 文件结构
+
+```
+顶部        付费总预算、熔断、并发、HTTP、"测试"按钮的规模（所有通道共用）
+linkedin    LinkedIn 级联顺序和四个 LinkedIn 通道
+jobspy      jobspy sidecar（linkedin-guest、indeed、jobspy-google 共用）；proxies 可能含账号密码
+sources     其他通道：招聘网站、搜索 API、公司 ATS、board 发现、Gmail 提醒邮件
+ats_boards  要采集的公司 ATS board：name、ats、token、enabled、可选 region
+registry    来源清单页的统计窗口、判定阈值、导入大小上限、"打开 board"的地址模板
+```
+
+条目 id：通道就是通道名（`greenhouse`、`gmail-alerts`、`linkedin-session:recommended`）；公司是 `board:<ats>:<token>`（`board:greenhouse:celonis`）。
+
+`registry:` 里的键只在 YAML 里改：`window_days`（统计窗口，7 天）、`board_failing_after`（连续失败几次算异常，2）、`board_stale_hours`（多久没检查算不稳，48）、`import_max_bytes`、`board_page_urls`，以及可选的 `candidates_page_size`（"发现的 board"一次列出几条，不写是 10；故意不写进随仓库的文件，因为写进去的默认值会被每次保存带进文件）。
+
+## 3. 七种状态怎么判
+
+| 状态 | 意思 |
+|---|---|
+| 正常 | 最近运行成功；公司最近一次检查成功且不久前 |
+| 不稳 | 最近有请求失败、熔断后试探中；**最近几轮的运行全是"跳过"**（级联里没有可用通道或预算用完，原因写"最近 N 轮被跳过：<原因>"，即使更早成功过）；公司最近一次失败（次数不到阈值）或太久没检查 |
+| 异常 | 最近一轮失败或熔断中；公司连续失败达到 `board_failing_after` 次 |
+| 停用 | 开关关了；公司所在的 ATS 通道关了 |
+| 未配置 | 启用了但缺 key / 没登录（页面只写变量名，不写值） |
+| 从未运行 | 通道还没有运行记录；公司还没被检查过 |
+| 待命 | LinkedIn 级联里排在后面的通道：已启用、前面有可用的通道所以从没轮到（"级联备用：前面的通道可用时不会运行"）；排在"正常"后面 |
+
+通道的状态和 `/sources` 概览页的通道卡片是同一个结果。公司按顺序取第一条：停用 → 从未运行 → 连续失败达到阈值（异常）→ 最近一次失败（不稳）→ 太久没检查（不稳）→ 正常。每一行都有一句原因，悬停看全文。
+
+## 4. 页面上能做什么
+
+- 看：汇总条（点一块只看这个状态）、类型 / 状态 / 搜索筛选（都在 URL 里，刷新保留）；通道按分组，公司默认异常在前。
+- 开关：通道和公司的启用开关，只改文件里那一行的 `enabled`。`linkedin-session:recommended`（"为你推荐"每天读一次）要先启用 `linkedin-session`：它关着时这个开关是灰的，悬停写明原因，不会假装已启用。
+- 编辑参数：通道行的"编辑参数"跳到 `/settings?tab=channels&section=<通道 id>`。
+- 公司：添加、编辑、删除（删除前确认；已抓到的岗位不受影响）；"打开 board"在新窗口看招聘页。
+- 发现的 board：页面下方，先列一页（默认 10 个）并写明总数，"再显示 N 个"展开更多；搜索框、ATS 和类型筛选对它同样有效，状态筛选不适用（页面会写明）。"加入"写进 `ats_boards`，"忽略"后不再出现。
+- 通道详情：熔断状态、连续失败、本月用量、"立即采集"和"测试"按钮。
+- 手机（窄屏）上两张表变成卡片，"详情"展开其余信息。
+
+### 导入和导出
+
+- 导出 YAML：文件原文（含注释），文件名 `sources-20261008-1402.yaml`。导出 JSON：校验后的值。两种都把 `jobspy.proxies` 里 URL 的账号密码换成 `***`。
+- 导入：上传或粘贴 YAML / JSON，点"预览"看差异（通道启用 / 停用、参数改动、公司新增 / 删除 / 修改、其他设置），再"应用"。应用时服务器重新校验；预览之后文件被改过会拒绝，请重新预览。
+- 两种方式：**整份替换**（必须是完整合法的 sources.yaml）和**只合并 ATS 公司**（文件里有 `ats_boards` 列表；新增或更新，不删除）。
+- `jobspy.proxies` 永远保留当前值，导入改不了它。导出的 JSON 可以原样整份导回，没有差异。
+- 先导出一份当前文件再导入，出问题可以导回去。
+- 校验不通过时，错误用界面语言写明，公司用"名称（ats/token）"指出，不用列表下标；YAML 语法错误只说一次行列。
+- "整份替换"删掉一家公司时，别的公司上面的分组注释留在原处；被删公司自己的分组注释移到它后面的那一家。
+- `sources.yaml` 读不了时：表格显示数据库镜像（可能过期），开关和编辑禁用，导出 YAML 和导入仍然可用，用导入整份替换来修复。
+
+## 5. 命令行
+
+```
+pnpm sources:list [--type channel|ats_board] [--status failing ...] [--all] [--json] [--sync] [--strict] [--lang en|zh]
+```
+
+打印所有来源、状态和原因（表格语言跟随 `cli.locale`，可用 `--lang en|zh` 覆盖）。`--json` 输出代码值：`status`（`ok` / `degraded` / …）、`lastRunResult`（`succeeded` / `failed` / `skipped`，公司是 `ok` / `not_modified` / `error`）、`reasons`（`[{ key, values }]`）；"最近运行"和"最近成功"都是结束时间。`--status` 可重复；`--all` 带上已从文件移除的条目；`--sync` 先把文件同步进数据库；`--strict` 在有启用的来源处于"异常"时退出码为 1。连不上数据库时只列出文件里的条目（状态"未知"）。
+
+`pnpm run doctor` 里的 `sources.registry`：有异常的启用来源或镜像落后时是 warn；`sources.yaml` 读不了时是 fail。
+
+## 6. 常见异常怎么处理
+
+| 看到 | 怎么办 |
+|---|---|
+| 公司"连续 N 次失败：board 不存在（404）" | token 错了或公司换了 ATS：点"打开 board"看招聘页，在"编辑"里改 token，或"删除" |
+| 公司"已 N 小时没检查" | 它的 ATS 通道关了、熔断了，或 runner 没在跑；看通道行 |
+| 通道"熔断到 …" | 连续失败达到 `circuit_breaker.failures` 次，冷却到期自动试一次；展开"详情"看最近错误码；被拦截（blocked）通常要等或换通道 |
+| "缺 TAVILY_API_KEY" 之类 | 在 `.env` 里写这个变量（页面只告诉你名字），或关掉这个通道 |
+| "LinkedIn 未登录 / 登录已过期" | 按 [LinkedIn 登录态](linkedin-session.zh.md)重新登录 |
+| 页面顶部"镜像未同步" | runner 启动或热加载配置时会补上；也可以 `pnpm sources:list --sync` |
+
+## 抓取
+
+并非每个通道都用官方 API。有些读取公开网页或非官方接口，有些以你自己登录的账号操作。多数招聘网站的服务条款禁止自动访问，
+所以这些通道**在新安装里默认关闭**，需要你明确同意才能打开。
+
+| 类型 | 通道 | 默认 | 风险 |
+|---|---|---|---|
+| 抓取 | LinkedIn 游客搜索（`linkedin-guest`）、Indeed（`indeed`）、StepStone（`stepstone`）、XING（`xing`）、经 sidecar 的 Google Jobs（`jobspy-google`） | 关 | 网站条款可能禁止；你的 IP 可能被限流或封禁 |
+| 账号自动化 | LinkedIn 登录会话（`linkedin-session`、`linkedin-session:recommended`） | 关 | 使用你自己的账号；账号可能被限制或封禁 |
+| 官方 API 和公开的公司数据源 | Arbeitsagentur、Greenhouse、Lever、Ashby、Personio、SmartRecruiters（开）；JSearch、Gmail 提醒、Tavily、Brave（需要你的 key 或账号） | 开，或填 key 之前关 | 遵守各提供方自己的条款和配额 |
+| 付费抓取服务 | Bright Data、Apify | 开，但没有你的 token 就什么也不做 | 由服务替你抓取；**这并不能消除服务条款风险**，风险仍在你身上 |
+
+怎么打开：
+
+- **设置向导的"来源"步骤。** 抓取类和账号类通道永远不会被预先勾选，即使你的市场包把它们列为本地渠道。勾选时会出现说明和一个确认框，
+  必须勾上才能保存这一步。用 `pnpm run setup --answers` 时设置 `sources.acknowledge_scraping: true`（见 [setup.zh.md](setup.zh.md#答案文件)）。
+- **`/sources/registry`。** 打开这类通道的开关会先弹出带同样说明的对话框，确认后才写入。关闭不需要确认。服务端也会拒绝没有确认的开启请求。导入文件如果会开启这类通道，预览里会显示同样的说明，并要先勾选确认框才能应用。
+- **设置页或直接改 YAML。** 在那里设置 `enabled: true` 视为你的明确决定：设置表单在开关旁显示说明，但不拦截。`/me` 上（换市场之后）的"开启它们"按钮会跳过这些通道，
+  并提示你去来源页处理。
+
+已有的安装会保持 `data/config/sources.yaml` 原样不变；只有新安装才会从这些通道关闭开始。`jobspy.linkedin_fetch_description`
+（每个 LinkedIn 岗位多一次请求去读完整描述）同样默认关闭。
+
+如果你打开抓取类通道：阅读每个网站的条款，保持低请求量（少量关键词、少量城市、默认的调度），不要再发布采集到的数据，
+能用官方 API、公司招聘页和你自己的职位提醒邮件就优先用。使用方式由你自己负责；另见 [README](../README.zh.md#抓取与网站条款) 里的声明。

@@ -1,0 +1,385 @@
+# Source registry: every job collection source lives in this one file; the web page /sources/registry and `pnpm sources:list` read it.
+# Layout:
+#   top        total paid budget, circuit breaker, concurrency, HTTP, size of the "Test" button run (shared by all channels)
+#   linkedin   LinkedIn cascade order and the four LinkedIn channels
+#   jobspy     jobspy sidecar (shared by linkedin-guest, indeed, jobspy-google)
+#   sources    other channels: job boards, search APIs, company ATS, board discovery, Gmail alert emails
+#   ats_boards company ATS boards to collect (formerly companies.yaml)
+#   registry   source registry page stats window, status thresholds, import limit
+# Entry ids: a channel is its channel name (greenhouse, gmail-alerts, linkedin-session:recommended); a company is board:<ats>:<token> (board:greenhouse:celonis).
+# Changes made on the web page (toggles, adding/removing/editing companies, import) are written back to this file with comments kept; the DB table source_registry mirrors it (the runner syncs within about 5 seconds).
+# Don't put secrets here (they go in .env). jobspy.proxies may contain usernames and passwords: hidden on the web page, masked on export, left unchanged on import.
+
+# Collection channels. Channels that aren't implemented, need extra setup, or scrape sites whose terms of service restrict automated access (linkedin.guest, indeed, stepstone, xing, jobspy_google = channel jobspy-google) are off by default.
+# Switching one of those channels (and linkedin.session) on in the web app shows a terms-of-service notice first; the choice is yours. See "Scraping" in docs/sources.md.
+# monthly_budget_usd: paid allowance per month for the channel (USD); 0 = no paid usage allowed; no single channel may exceed paid_total_monthly_budget_usd.
+# throttle: random wait of min~max milliseconds between requests.  max_results: max results per request.
+
+# Monthly cap on the combined spend of all paid collection channels (USD); the channels' actual spend may not exceed it in total, enforced by the budget control.
+# (AI spend has its own cap: monthly_api_budget_usd in ai.yaml.)
+config_version: 2
+paid_total_monthly_budget_usd: 15
+
+# Circuit breaker: after failures consecutive failures a channel is marked unavailable (paused) and retried after cooldown_hours hours
+circuit_breaker:
+  failures: 3
+  cooldown_hours: 24
+
+# Collection step: number of channels collected in parallel (the LinkedIn cascade counts as one); queries within a channel always run sequentially
+collect:
+  concurrency: 3
+
+# Defaults for a channel's ctx.http: per-request timeout, retry count (network errors / 5xx / 429, honoring Retry-After), start and cap of exponential backoff
+http:
+  timeout_ms: 30000
+  max_retries: 3
+  backoff_base_ms: 1000
+  backoff_max_ms: 30000
+
+# "Test" on the /sources channel cards: the runner runs only the first query, fetches at most max_results, and parses in memory only,
+# without writing jobs, run records, usage or circuit breaker state. No test while a run is in progress, the budget is used up, or the channel isn't configured.
+test_channel:
+  max_results: 5
+  # Max searches when testing discovery channels (tavily, brave) (each one uses quota); only checks that the API works, discovered boards aren't saved
+  max_queries: 1
+  # Give up if not finished after this many seconds
+  timeout_seconds: 120
+  # Channel kinds with no test: paid bills every result, session (LinkedIn login session) has a daily page cap; use "Collect now" for them
+  excluded_kinds: [paid, session]
+
+linkedin:
+  # Cascade: the main search uses only the first "available" channel (enabled, budget left, not paused by the circuit breaker) each run
+  cascade:
+    - linkedin-brightdata
+    - linkedin-apify
+    - linkedin-session
+    - linkedin-guest
+
+  brightdata:
+    enabled: true
+    monthly_budget_usd: 5 # counts only spend beyond the free allowance
+    throttle: { min_delay_ms: 500, max_delay_ms: 1500 }
+    max_results: 300
+    # Free records per month; the free allowance is used up before any cost is incurred
+    free_records_per_month: 5000
+    dataset_id: gd_lpfll7v5hcqtkxl6l # "LinkedIn job listings - discover by keyword"
+    cost_per_1k_usd: 1.5 # price per 1000 records beyond the free allowance; 0 = treated as free
+    poll_interval_ms: 3000 # polling interval for snapshot progress
+    # Max total wait from trigger to finished download (snapshot build + download); a timeout counts as a retryable failure and the snapshot id is logged (the vendor keeps it 30 days, so it can be fetched later)
+    timeout_ms: 600000
+    country: "" # country code for all city queries (ISO, uppercase); empty = the market's country
+    # location used for remote queries (remote_scope in search.yaml); unset keys follow the market (home_country = market country name, region = region / country name)
+    remote_locations:
+      worldwide: Worldwide
+
+  apify:
+    # Cascade position 2. Without APIFY_TOKEN in .env (or with an empty actor_id) the channel shows "not configured" and the cascade skips it, with no failure recorded.
+    # Another LinkedIn jobs actor can be used instead: switching actors only needs actor_id, prices and input_template changed.
+    enabled: true
+    monthly_budget_usd: 10
+    throttle: { min_delay_ms: 1000, max_delay_ms: 3000 }
+    max_results: 300
+    actor_id: valig/linkedin-jobs-scraper
+    api_base_url: "https://api.apify.com" # POST /v2/acts/{actor}/run-sync-get-dataset-items
+    # Accounting: price per result + a start fee per run (Free tier: $0.40 / 1000 results, start $0.001 / GB). The Pricing section on the actor page is authoritative; plans may give discounts
+    price_per_1k_usd: 0.4
+    run_start_usd: 0.001
+    memory_mb: 1024 # memory per run; the start fee is charged per GB
+    timeout_secs: 300 # timeout per run; the sync API caps at 300 seconds, beyond that Apify returns 408 (counted as a retryable failure)
+    country_name: "" # location for city queries = "<city>, <country>"; empty = the market's country name
+    # location used for remote queries (remote_scope in search.yaml); unset keys follow the market (home_country = market country name, region = region / country name)
+    remote_locations:
+      worldwide: Worldwide
+    # How this actor expresses the "date posted" filter (LinkedIn f_TPR): window ≤24 hours / ≤7 days / ≤30 days / longer (empty = key omitted)
+    date_posted: { day: r86400, week: r604800, month: r2592000, any: "" }
+    # Actor input template: {keywords} (keyword group joined as "A" OR "B"), {location}, {date_posted}, {limit} (becomes a number when the whole string is "{limit}")
+    input_template:
+      keywords: "{keywords}"
+      location: "{location}"
+      datePosted: "{date_posted}"
+      limit: "{limit}"
+    # Keys added on top of the template for remote queries: LinkedIn's f_WT=2 is the "remote" work mode
+    remote_input:
+      urlParam:
+        - { key: f_WT, value: "2" }
+
+  session:
+    # Cascade position 3: searches jobs with your own LinkedIn login session (Playwright, read-only). Log in once first by running `pnpm auth:linkedin` on the host;
+    # without a session (.auth/linkedin.json), /sources shows "not logged in" and the cascade skips it. On a login or verification page (checkpoint / CAPTCHA) it stops at once, trips the circuit breaker and sends a Telegram alert,
+    # and never tries to get past it automatically. See docs/linkedin-session.md.
+    enabled: false # turn on after logging in and confirming `pnpm cycle:run --channel linkedin-session --dry-run` works
+    monthly_budget_usd: 0
+    throttle: { min_delay_ms: 3000, max_delay_ms: 8000 } # random wait between two page loads
+    max_results: 50 # max results read per query (further limited by max_per_group_per_location in search.yaml)
+    # "Recommended for you" side path (channel linkedin-session:recommended): runs once a day, not part of the cascade; time set by linkedin_recommended in schedule.yaml
+    recommended_daily: true
+    recommended_max_results: 25
+    daily_request_limit: 200 # max LinkedIn pages loaded per calendar day (schedule.yaml timezone; search, detail and recommendation pages combined); when used up, the cascade moves to the next channel
+    max_pages: 2 # max search result pages per query (about 25 results per page)
+    fetch_details: true # whether to also open the detail page of each new job (JD body, salary, work mode, applicant count); jobs already in the DB aren't reopened
+    site:
+      base_url: https://www.linkedin.com
+      auth_file: .auth/linkedin.json # login session file, relative to the working directory (/app/.auth in the runner container, mounted read-only); not committed, mode 600
+      country_name: "" # location for city queries = "<city>, <country>"; empty = the market's country name
+      # location used for remote queries (remote_scope in search.yaml); unset keys follow the market
+      remote_locations:
+        worldwide: Worldwide
+    browser:
+      headless: true # run without a window; `pnpm auth:linkedin` always shows a window for login
+      navigation_timeout_ms: 30000 # timeout per page load
+      render_wait_ms: 1500 # wait after page load for rendering (single-page app)
+      scroll_steps: 6 # search results and recommendation lists only render visible cards: scroll down this many times to load the whole page
+      scroll_pause_ms: 400 # pause between scrolls
+      locale: en-US # browser language (the LinkedIn UI language follows it; relative time text is parsed in both English and Chinese)
+      block_resources: [image, font, media] # don't load these resource types: saves traffic and looks more like reading text
+      user_agent: "" # empty = the browser's own User-Agent
+
+  guest:
+    enabled: false # scraping channel, off by default: read "Scraping" in docs/sources.md before switching it on (setup wizard or /sources/registry). jobspy uses the logged-out endpoints: free, most prone to 429
+    monthly_budget_usd: 0
+    throttle: { min_delay_ms: 2000, max_delay_ms: 6000 }
+    max_results: 100
+
+# python-jobspy sidecar: shared by linkedin-guest, indeed, jobspy-google.
+# The JOBSPY_URL env var takes precedence over url (compose sets it to http://jobspy:8000 for the runner; running uvicorn directly on the host uses the default below).
+jobspy:
+  url: http://127.0.0.1:8000
+  timeout_ms: 180000 # one search (including fetching each LinkedIn description) may take tens of seconds
+  country_indeed: "" # Indeed country site (jobspy spelling, e.g. germany); empty = the market's country
+  linkedin_fetch_description: false # off by default: fetching each LinkedIn description costs one extra request each and is more prone to 429; when off, LinkedIn jobs from this channel have no body
+  # Location used for remote queries (per remote_scope in search.yaml); empty string = any location, unset keys follow the market
+  remote_location:
+    worldwide: ""
+  # Proxy list (rotated); empty by default = direct connection. Proxy URLs may contain usernames and passwords: never commit real values
+  proxies: []
+
+# Other sources
+sources:
+  arbeitsagentur:
+    enabled: true
+    # Runs only in these markets (home country ISO codes); skipped in other markets, not counted as a failure
+    markets: [DE]
+    monthly_budget_usd: 0
+    throttle: { min_delay_ms: 500, max_delay_ms: 1500 }
+    max_results: 100
+    # Jobsuche API (rest.arbeitsagentur.de, docs: https://jobsuche.api.bund.dev/); search uses /pc/v6/jobs, details use /pc/v4/jobdetails/{base64(refnr)}
+    base_url: https://rest.arbeitsagentur.de/jobboerse/jobsuche-service
+    # Public client key (this exact value is in the official BA docs), not a secret, so it can stay in YAML
+    api_key: jobboerse-jobsuche
+    radius_km: 30 # radius around the city
+    page_size: 50 # results per page
+    fetch_details: true # whether to also fetch details for each job (the JD body is only in the details)
+    max_details_per_query: 25 # max details fetched per query
+    reuse_known_details: true # jobs whose details are already in the DB aren't fetched again, the stored details are reused; false = refetch every run
+    # Remote queries: no city, search all of Germany; keep only jobs that state home office is possible (homeofficemoeglich). false = keep all results
+    remote_requires_home_office: true
+    remote_max_pages: 4 # max pages per keyword when filtering (most results are on-site jobs)
+  indeed:
+    enabled: false # scraping channel, off by default: read "Scraping" in docs/sources.md before switching it on (setup wizard or /sources/registry)
+    monthly_budget_usd: 0
+    throttle: { min_delay_ms: 2000, max_delay_ms: 5000 }
+    max_results: 100
+  # StepStone / XING: JSON embedded in the public search pages, plain HTTP, no browser, no login. On 403 / a verification page it stops at once (blocked), no retry.
+  # Search results match loosely: only jobs whose title matches this query's keywords or include_terms are kept (see title_prefilter); the rest get no detail fetch.
+  stepstone:
+    enabled: false # scraping channel, off by default: read "Scraping" in docs/sources.md before switching it on (setup wizard or /sources/registry)
+    # Runs only in these markets (home country ISO codes); skipped in other markets, not counted as a failure
+    markets: [DE]
+    monthly_budget_usd: 0
+    throttle: { min_delay_ms: 3000, max_delay_ms: 8000 }
+    max_results: 50
+    base_url: https://www.stepstone.de
+    user_agent: "JobRadar/0.1 (personal job search)"
+    radius_km: 30 # radius around the city
+    max_pages: 2 # max pages per keyword (25 results per page, sorted by posting date)
+    fetch_details: true # whether to also fetch the detail page of each job (the JD body is only on the detail page)
+    max_details_per_query: 25
+    reuse_known_details: true # jobs whose details are already in the DB don't get their detail page opened again, the stored details are reused
+    title_prefilter:
+      enabled: true
+      # Jobs whose title contains these words (whole-word match) are kept even if they don't match this query's keywords
+      include_terms: []
+      # Jobs whose title contains these words are always dropped (student jobs, internships)
+      exclude_terms: [Werkstudent, Working Student, Intern, Internship, Praktikum, Praktikant]
+  xing:
+    enabled: false # off by default: XING's robots.txt disallows crawling /jobs/search/; turn it on only if you accept that
+    # Runs only in these markets (home country ISO codes); skipped in other markets, not counted as a failure
+    markets: [DE]
+    monthly_budget_usd: 0
+    throttle: { min_delay_ms: 3000, max_delay_ms: 8000 }
+    max_results: 50
+    base_url: https://www.xing.com
+    user_agent: "JobRadar/0.1 (personal job search)"
+    radius_km: 30
+    max_pages: 3 # max pages per keyword (20 results per page; XING sorts by relevance with no date filter, so posting date is filtered afterwards, hence one extra page)
+    fetch_details: true
+    max_details_per_query: 25
+    reuse_known_details: true # same as stepstone
+    # XING's "fully remote" filter value (the remoteOption param of the search URL); has a hash suffix, update it if XING changes it
+    remote_option_id: FULL_REMOTE.050e26
+    title_prefilter:
+      enabled: true
+      include_terms: []
+      exclude_terms: [Werkstudent, Working Student, Intern, Internship, Praktikum, Praktikant]
+  jsearch:
+    enabled: false # JSearch (Google for Jobs, RapidAPI). Needs JSEARCH_API_KEY in .env (see docs/jsearch.md); without a key the channel shows "not configured" and sends no requests
+    monthly_budget_usd: 0 # counts only spend beyond monthly_request_limit (overage_cost_per_request_usd × requests)
+    throttle: { min_delay_ms: 500, max_delay_ms: 1500 }
+    max_results: 50
+    api_base_url: "https://jsearch.p.rapidapi.com" # GET /search (jobs), /job-details; the domain is also used as X-RapidAPI-Host
+    country: "" # country= param (lowercase ISO country code); empty = the market's country
+    language: "" # language= param (lowercase ISO 639-1); empty = the country's main language
+    pages_per_query: 1 # num_pages: pages read per query (10 results per page, each page is one request)
+    keywords_per_query: 1 # queries each of the first N words of every search.yaml keyword group (one request per word per city; the free tier has only 200 per month)
+    monthly_request_limit: 200 # requests included in the RapidAPI plan per month (free tier 200); when used up, the channel sends no more requests
+    overage_cost_per_request_usd: 0 # price per request beyond monthly_request_limit (about 0.003 on paid tiers); 0 = send nothing beyond it
+    pace_requests: true # spread the monthly requests evenly over the calendar, so early-month runs can't use up the whole month's quota
+    fetch_details: false # fetch /job-details only when a search result has no body (1 request per job)
+    max_details_per_query: 5 # max details fetched per query
+    # "Apply" links that aren't direct employer links are chosen in this publisher order (case-insensitive); direct employer links (is_direct or domain matching the employer's site) always win, unlisted publishers come last
+    apply_publisher_preference: [LinkedIn, StepStone, XING, Indeed]
+    rate_limit_retries: 2 # max retries after per-second / per-minute rate limiting (429), waiting one throttle interval first each time; a 429 for an exhausted monthly quota isn't retried
+  greenhouse:
+    enabled: true
+    monthly_budget_usd: 0
+    throttle: { min_delay_ms: 300, max_delay_ms: 1000 }
+    max_results: 500 # max results kept per board (after prefiltering)
+    api_base_url: "https://boards-api.greenhouse.io"
+    # Title prefilter: a board returns all its open jobs; only those whose title matches a search.yaml keyword (or whose company is in watched_companies in interests.yaml) are stored.
+    # include_terms: extra title words to keep besides the search.yaml keywords; exclude_terms: title words that drop a job (watched companies are exempt). Words match as whole words, case-insensitive.
+    title_prefilter:
+      enabled: true
+      # Jobs whose title contains these words (whole-word match; slash forms like AI/ML count too) are kept even without a search.yaml keyword match
+      include_terms: []
+      # Jobs whose title contains these words are always dropped (student jobs, internships); watched companies are exempt
+      exclude_terms: [Werkstudent, Working Student, Intern, Internship, Praktikum, Praktikant]
+  lever:
+    enabled: true
+    monthly_budget_usd: 0
+    throttle: { min_delay_ms: 300, max_delay_ms: 1000 }
+    max_results: 500 # max results kept per board (after prefiltering)
+    api_base_url: "https://api.lever.co"
+    # Host used for boards with region: eu in ats_boards
+    eu_api_base_url: "https://api.eu.lever.co"
+    title_prefilter:
+      enabled: true
+      # Jobs whose title contains these words (whole-word match; slash forms like AI/ML count too) are kept even without a search.yaml keyword match
+      include_terms: []
+      # Jobs whose title contains these words are always dropped (student jobs, internships); watched companies are exempt
+      exclude_terms: [Werkstudent, Working Student, Intern, Internship, Praktikum, Praktikant]
+  ashby:
+    enabled: true
+    monthly_budget_usd: 0
+    throttle: { min_delay_ms: 300, max_delay_ms: 1000 }
+    max_results: 500 # max results kept per board (after prefiltering)
+    api_base_url: "https://api.ashbyhq.com" # GET /posting-api/job-board/{token}
+    include_compensation: true # include the salary range (salary field)
+    title_prefilter:
+      enabled: true
+      # Same as greenhouse: stored only if the title matches a search.yaml keyword or include_terms, or the company is in watched_companies; an exclude_terms match drops it
+      include_terms: []
+      exclude_terms: [Werkstudent, Working Student, Intern, Internship, Praktikum, Praktikant]
+  personio:
+    enabled: true
+    monthly_budget_usd: 0
+    throttle: { min_delay_ms: 300, max_delay_ms: 1000 }
+    max_results: 500
+    # Company careers site; {token} is replaced with the ats_boards token (the company's Personio subdomain); the job list is at <site>/xml
+    api_base_url: "https://{token}.jobs.personio.de"
+    language: en # en | de: the ?language= param of the xml; if the company has no version in that language, Personio returns its default language
+    title_prefilter:
+      enabled: true
+      # Same as greenhouse: stored only if the title matches a search.yaml keyword or include_terms, or the company is in watched_companies; an exclude_terms match drops it
+      include_terms: []
+      exclude_terms: [Werkstudent, Working Student, Intern, Internship, Praktikum, Praktikant]
+  smartrecruiters:
+    enabled: true
+    monthly_budget_usd: 0
+    throttle: { min_delay_ms: 300, max_delay_ms: 1000 }
+    max_results: 500
+    api_base_url: "https://api.smartrecruiters.com" # GET /v1/companies/{token}/postings (token is case-sensitive)
+    # country: de # only jobs in this country (big companies' boards are global); unset = the market's country, empty string = all
+    page_size: 100 # per-page size of the list (API max 100)
+    fetch_details: true # the list has no body: after prefiltering, fetch details once per job
+    title_prefilter:
+      enabled: true
+      # Same as greenhouse: stored only if the title matches a search.yaml keyword or include_terms, or the company is in watched_companies; an exclude_terms match drops it
+      include_terms: []
+      exclude_terms: [Werkstudent, Working Student, Intern, Internship, Praktikum, Praktikant]
+  tavily:
+    enabled: true # default ATS board discovery channel; without TAVILY_API_KEY it shows "not configured" and doesn't search (see docs/tavily.md)
+    monthly_budget_usd: 0 # counts only spend beyond monthly_credit_limit (credit_cost_usd × credits)
+    throttle: { min_delay_ms: 500, max_delay_ms: 1000 }
+    max_results: 20 # results per search (Tavily max 20)
+    api_base_url: "https://api.tavily.com" # POST /search，Authorization: Bearer
+    search_depth: basic # basic / fast / ultra-fast cost 1 credit per search, advanced costs 2
+    keywords_per_query: 2 # first N words of each keyword group, OR-joined into one query
+    interval_hours: 24 # don't search again within this many hours of the last discovery (once a day)
+    max_queries_per_run: 30 # max searches per pass (5 ATS × keyword groups × cities); 30 × about 30 days a month ≈ 900 credits, within the free allowance
+    monthly_credit_limit: 1000 # credits included in the Tavily plan per month (free tier 1000); when used up, the channel stops searching
+    credit_cost_usd: 0 # price per credit beyond monthly_credit_limit (about 0.008 pay-as-you-go); 0 = no searches beyond it
+  brave:
+    enabled: false # replaced by tavily, off by default; to use it, set BRAVE_SEARCH_API_KEY and change to true; don't enable both channels (duplicate searches)
+    monthly_budget_usd: 0
+    throttle: { min_delay_ms: 1000, max_delay_ms: 2000 } # free plan allows 1 request per second
+    max_results: 20 # results per search (Brave max 20)
+    api_base_url: "https://api.search.brave.com"
+    country: "" # country of the search results (ISO, uppercase); empty = the market's country
+    safesearch: strict
+    interval_hours: 20 # don't search again within this many hours of the last discovery (once a day)
+    max_queries_per_run: 40 # max searches per pass (5 ATS × keyword groups × cities; the free plan allows 2000 per month)
+  jobspy_google:
+    enabled: false # jobspy's Google Jobs scraping is unreliable, off by default
+    monthly_budget_usd: 0
+    throttle: { min_delay_ms: 3000, max_delay_ms: 8000 }
+    max_results: 50
+  gmail:
+    enabled: false # reads alert emails from job sites; needs an app password (GMAIL_USER / GMAIL_APP_PASSWORD in .env, see docs/gmail-alerts.md)
+    monthly_budget_usd: 0
+    throttle: { min_delay_ms: 0, max_delay_ms: 0 }
+    max_results: 200 # max jobs produced per run (all emails combined)
+    host: imap.gmail.com
+    port: 993
+    secure: true # implicit TLS; the login is only sent to imap.gmail.com:993 with TLS unless JOB_RADAR_ALLOW_CUSTOM_ENDPOINTS=1 (e.g. a local test server)
+    label: JobAlerts # read only this one label (opened read-only: no mark-as-read, no moving, no deleting)
+    max_messages_per_cycle: 50 # max emails read per run (newest first); the rest wait for the next run
+    lookback_days: 14 # only emails received within this many recent days
+    timeout_ms: 30000 # connection / greeting / socket timeout
+    # Sender domain (the part after @, subdomains included) → parser for that site
+    senders:
+      linkedin: [linkedin.com]
+      stepstone: [stepstone.de, stepstone.com, stepstone.at]
+      indeed: [indeed.com]
+      xing: [xing.com]
+
+# Company career boards to collect (Settings → Sources → Companies, or the setup wizard, adds them here).
+# ats: greenhouse | lever | ashby | personio | smartrecruiters; token is the board identifier in the public API (case-sensitive for smartrecruiters).
+# region (optional, lever only): global (default, api.lever.co) | eu (api.eu.lever.co, boards on jobs.eu.lever.co).
+# name: display name (company name in lists and detail pages; after normalization it merges with same-name companies from other sources); don't write it as the lowercase token.
+# enabled: whether to collect. Watched companies (new jobs pushed individually) are set only in watched_companies in interests.yaml, matched by company name (case-insensitive).
+# Example entries:
+#   - { name: "Example Corp", ats: greenhouse, token: "examplecorp", enabled: true }
+#   - { name: "Example GmbH", ats: personio, token: "example-gmbh", enabled: true }
+# A ready-made list (AI companies in Europe) comes with the example setup in config/examples/ai-engineering-europe (pnpm config:example).
+ats_boards: []
+
+# Settings for the source registry page (/sources/registry) and pnpm sources:list; edit only in this file, not shown on the web page.
+registry:
+  # Stats window in days for "last N days" on the source registry page and in pnpm sources:list
+  window_days: 7
+  # Consecutive failures after which an ATS company counts as "failing"; fewer counts as "unstable"
+  board_failing_after: 2
+  # An enabled company not checked for more than this many hours counts as "unstable" (channel off, paused by the circuit breaker, or not run)
+  board_stale_hours: 48
+  # Max file size for source registry "Import" (bytes)
+  import_max_bytes: 524288
+  # (Optional) how many "Discovered boards" to list at once, the rest behind "Show more"; unset = 10
+  # candidates_page_size: 10
+  # Careers page URL for the "Open board" link in the company table, {token} replaced with the company's token; Lever EU boards use lever_eu
+  board_page_urls:
+    greenhouse: "https://job-boards.greenhouse.io/{token}"
+    lever: "https://jobs.lever.co/{token}"
+    lever_eu: "https://jobs.eu.lever.co/{token}"
+    ashby: "https://jobs.ashbyhq.com/{token}"
+    personio: "https://{token}.jobs.personio.de"
+    smartrecruiters: "https://jobs.smartrecruiters.com/{token}"

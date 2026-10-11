@@ -1,0 +1,31 @@
+# systemd USER unit of the Job Radar ai-worker (Linux). scripts/ops/install-ai-worker.sh fills in the @...@ values and
+# installs it as ~/.config/systemd/user/job-radar-ai-worker.service (mode 0600: it holds DATABASE_URL); the same script
+# on macOS installs a launchd agent instead. To install it by hand, replace every @...@ value with an absolute path
+# (`%` written as `%%`; inside quotes also `\\` and `\"` escaped, and `$` as `$$` in ExecStart), then:
+#   systemctl --user daemon-reload && systemctl --user enable --now job-radar-ai-worker.service
+#   loginctl enable-linger "$USER"     # keep it running while you are logged out (needs sudo on some systems)
+# Logs: the worker writes data/logs/ai-worker.{out,err}.log itself; start-up failures and crashes are in
+#   journalctl --user -u job-radar-ai-worker.service
+[Unit]
+Description=Job Radar ai-worker (AI steps with the local claude / codex logins)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=@APP_DIR@
+# node loads tsx as a loader (not through the tsx CLI), so the process systemd tracks is the worker itself
+ExecStart="@NODE_BIN@" --import "@TSX_LOADER@" --env-file-if-exists=.env src/ai-worker/index.ts --log-dir "@LOG_DIR@"
+Environment="PATH=@PATH@"
+Environment="DATABASE_URL=@DATABASE_URL@"
+Environment="JOB_RADAR_DEFAULTS_DIR=@DEFAULTS_DIR@"
+Environment="JOB_RADAR_CONFIG_DIR=@USER_CONFIG_DIR@"
+Environment="JOB_RADAR_PROFILE_DIR=@PROFILE_DIR@"
+Restart=always
+RestartSec=10
+# SIGTERM to the worker only; it ends its own claude / codex children (ai.yaml host_worker.shutdown_grace_seconds)
+KillMode=mixed
+TimeoutStopSec=60
+
+[Install]
+WantedBy=default.target

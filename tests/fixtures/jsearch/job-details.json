@@ -1,0 +1,46 @@
+{
+  "status": "OK",
+  "request_id": "00000000-0000-4000-8000-000000000003",
+  "parameters": {
+    "job_id": "Zml4dHVyZS0wMDAzLWF0cw==",
+    "country": "de"
+  },
+  "data": [
+    {
+      "job_id": "Zml4dHVyZS0wMDAzLWF0cw==",
+      "job_title": "Applied AI Engineer",
+      "employer_name": "Tafel AI",
+      "employer_website": "https://tafel.example",
+      "job_publisher": "LinkedIn",
+      "job_employment_type": null,
+      "job_employment_types": null,
+      "job_apply_link": "https://www.linkedin.com/jobs/view/applied-ai-engineer-at-tafel-555?utm_campaign=google_jobs_apply&utm_source=google_jobs_apply&utm_medium=organic",
+      "job_apply_is_direct": false,
+      "apply_options": [
+        {
+          "publisher": "LinkedIn",
+          "apply_link": "https://www.linkedin.com/jobs/view/applied-ai-engineer-at-tafel-555?utm_campaign=google_jobs_apply&utm_source=google_jobs_apply&utm_medium=organic",
+          "is_direct": false
+        }
+      ],
+      "job_description": "Tafel AI baut Agenten.\nDu entwickelst und evaluierst LLM-Anwendungen in Produktion.\n",
+      "job_is_remote": null,
+      "job_posted_at": "3 days ago",
+      "job_posted_at_timestamp": 1791072000,
+      "job_posted_at_datetime_utc": "2026-10-04T00:00:00.000Z",
+      "job_location": "München, Bayern, Germany",
+      "job_city": "München",
+      "job_state": "Bayern",
+      "job_country": "DE",
+      "job_min_salary": 45,
+      "job_max_salary": 60,
+      "job_salary_period": "HOUR",
+      "employer_reviews": [
+        {
+          "publisher": "Indeed",
+          "score": 4.1
+        }
+      ]
+    }
+  ]
+}

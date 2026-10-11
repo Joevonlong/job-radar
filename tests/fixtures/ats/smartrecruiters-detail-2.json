@@ -1,0 +1,68 @@
+{
+  "id": "744000000000002",
+  "name": "Sales Manager (m/f/x)",
+  "defaultJobAd": true,
+  "refNumber": "REF820K",
+  "company": {
+    "identifier": "ExampleLabs",
+    "name": "Example Labs"
+  },
+  "location": {
+    "city": "München",
+    "region": "BY",
+    "country": "de",
+    "remote": false,
+    "hybrid": true,
+    "fullLocation": "München, BY, Germany"
+  },
+  "releasedDate": "2026-07-29T11:18:34.402Z",
+  "postingUrl": "https://jobs.smartrecruiters.com/ExampleLabs/744000000000002-example",
+  "applyUrl": "https://jobs.smartrecruiters.com/ExampleLabs/744000000000002-example?oga=true",
+  "jobAd": {
+    "sections": {
+      "companyDescription": {
+        "title": "Company Description",
+        "text": "<p>We build <strong>AI</strong> products.</p>"
+      },
+      "jobDescription": {
+        "title": "Job Description",
+        "text": "<p>Build and run <strong>AI</strong> services &amp; platforms.</p><p>You will work with Python and cloud tooling.</p>"
+      },
+      "qualifications": {
+        "title": "Qualifications",
+        "text": "<ul><li>Experience in software projects with end-to-end ownership</li><li>Degree in a relevant field of study, or a comparable qualification</li><li>Ability to work independently in a changing product environment</li></ul>"
+      },
+      "additionalInformation": {
+        "title": "Additional Information",
+        "text": "<ul><li>Be part of a small example team building services for fictional customers</li><li>Work with an international and growing team</li><li>Use modern hardware and tools</li></ul>"
+      }
+    }
+  },
+  "active": true,
+  "visibility": "PUBLIC",
+  "industry": {
+    "id": "banking",
+    "label": "Banking"
+  },
+  "function": {
+    "id": "human_resources",
+    "label": "Human Resources"
+  },
+  "department": {
+    "id": 9019051,
+    "label": "Data"
+  },
+  "experienceLevel": {
+    "id": "mid_senior_level",
+    "label": "Mid-Senior Level"
+  },
+  "typeOfEmployment": {
+    "id": "permanent",
+    "label": "Full-time"
+  },
+  "language": {
+    "code": "en",
+    "label": "English",
+    "labelNative": "English (US)"
+  }
+}

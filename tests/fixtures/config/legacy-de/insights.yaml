@@ -1,0 +1,22 @@
+# /insights 统计页（：时间范围、单列的城市、直方图怎么分段。只影响统计页的显示，不影响采集。
+# 网页没有配置热加载：每次打开页面时重新读取本文件。
+
+# 时间范围切换（天数，从短到长）。"今天"按 schedule.yaml 的 timezone 算，范围包含今天
+ranges_days: [7, 30, 90]
+# URL 没带范围（或带了不在上面列表里的值）时用哪个
+default_range_days: 30
+
+# 城市卡片里单列的城市，写法同 /jobs 的城市筛选（locations_json 里的 city：München，不是 Munich）。
+# 岗位的任一地点命中就算；"远程"按岗位的工作方式单独列；剩下的合为"其他"
+cities: [Hamburg, Köln]
+
+# "被过滤的原因"卡片列几行
+top_filter_reasons: 8
+
+# 排序值直方图：每个柱子多宽（分），从 score_bucket_cap 起的都归进最后一根
+score_bucket_width: 5
+score_bucket_cap: 100
+
+# 年薪直方图：每个柱子多宽（欧元/年，用披露区间的中点），从 salary_bucket_cap_eur 起的都归进最后一根
+salary_bucket_eur: 10000
+salary_bucket_cap_eur: 150000

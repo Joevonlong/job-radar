@@ -1,0 +1,180 @@
+# Interest list.
+#
+# Signal word lists: the rule layer (no AI) finds candidates in the JD, then the AI layer confirms or rejects them.
+# All regexes compile with the "iu" flags (case-insensitive, Unicode); keywords match literally, as whole words.
+# Every signal carries a quote from the JD; without a quote it isn't stored.
+config_version: 3
+# Signal categories (on /interests you can add, delete, rename and reorder them; list order is display and sort order; at most 12). Each category:
+#   id          starts with a letter; letters/digits/_/-; at most 24 characters; unique ignoring case; can't change after saving (nor can kind).
+#   kind        amount = stated amount (at most one); keyword = keywords, regexes, excludes; tag = benefit-style tags (not sent to AI review).
+#   label       { zh, en }, at least one of them; icon at most 2 characters; color only amber, teal, coral, blue, olive, violet, slate, pink, neutral.
+#   weight      points added on a match (each category counts once per job); high_value = high-value signal ("high-value signals only", the lower push threshold, stats page).
+#   ai_confirm_only  rule matches are only candidates and become signals once AI confirms them (not for tag); ai_definition = English definition for the AI.
+# Deleted categories move to retired_categories (full definition kept); their signals stay in the DB but aren't shown, scored, filtered or pushed; they can be restored, and the id can't be reused.
+signals:
+  categories:
+    # Explicit amount. On a match, the salary section of pipeline.yaml (period conversion, FX rates) converts it to an annual salary;
+    # annual salaries (market base currency) below amount.min_annual are dropped ("€50", "€2,000 yearly" and the like).
+    - id: T1
+      kind: amount
+      label: { zh: 具体金额, en: Explicit amount }
+      icon: 💰
+      color: amber
+      weight: 10
+      high_value: true
+      ai_definition: a concrete salary figure or range for the role (base salary, "€85,000-105,000", "up to 120k", "€7,200 per month"). Not company revenue, funding, prices, perks worth a fixed sum (e.g. a pension contribution or a voucher), or referral/relocation payments.
+      patterns:
+        # €85,000–105,000 / EUR 90k / €80,000 - €120,000 / $184,050 $262,928 / €7,200 monthly
+        - '(?<![\p{L}\p{N}.,])(?:€|EUR|USD|\$|£|GBP|CHF|C\$|CA\$|A\$|AU\$|NZ\$|S\$|SG\$|HK\$|R\$|MX\$|JP¥|CN¥|₹|₩|₪|₺|CAD|AUD|NZD|SGD|HKD|JPY|CNY|INR|KRW|BRL|MXN|ZAR|AED|ILS)\s?(?:\d{1,3}(?:[.,]\d{3})+|\d{2,6})(?:[.,]\d{1,2})?(?:\s?k\b)?(?![\d])(?!\s?(?:[mb]|bn|mn|mio|million|billion)(?![\p{L}]))(?:\s?(?:[-–—]|to|bis|und|and)\s?(?:€|EUR|USD|\$|£|GBP|CHF|C\$|CA\$|A\$|AU\$|NZ\$|S\$|SG\$|HK\$|R\$|MX\$|JP¥|CN¥|₹|₩|₪|₺|CAD|AUD|NZD|SGD|HKD|JPY|CNY|INR|KRW|BRL|MXN|ZAR|AED|ILS)?\s?(?:\d{1,3}(?:[.,]\d{3})+|\d{2,6})(?:[.,]\d{1,2})?(?:\s?k\b)?(?![\d])(?!\s?(?:[mb]|bn|mn|mio|million|billion)(?![\p{L}]))|\s?(?:€|EUR|USD|\$|£|GBP|CHF|C\$|CA\$|A\$|AU\$|NZ\$|S\$|SG\$|HK\$|R\$|MX\$|JP¥|CN¥|₹|₩|₪|₺|CAD|AUD|NZD|SGD|HKD|JPY|CNY|INR|KRW|BRL|MXN|ZAR|AED|ILS)\s?(?:\d{1,3}(?:[.,]\d{3})+|\d{2,6})(?:[.,]\d{1,2})?(?:\s?k\b)?(?![\d])(?!\s?(?:[mb]|bn|mn|mio|million|billion)(?![\p{L}])))?'
+        # 85.000 € / 90k EUR / 85.000 – 105.000 Euro
+        - '(?<![\p{L}\p{N}.,])(?:\d{1,3}(?:[.,]\d{3})+|\d{2,6})(?:\s?k\b)?(?:\s?(?:[-–—]|to|bis|und|and)\s?(?:\d{1,3}(?:[.,]\d{3})+|\d{2,6})(?:\s?k\b)?)?\s?(?:€|EUR|Euro|USD|£|GBP|CHF|C\$|CA\$|A\$|AU\$|NZ\$|S\$|SG\$|HK\$|R\$|MX\$|JP¥|CN¥|₹|₩|₪|₺|CAD|AUD|NZD|SGD|HKD|JPY|CNY|INR|KRW|BRL|MXN|ZAR|AED|ILS)(?![\p{L}\p{N}])'
+        # 85.000 € bis 95.000 € / 85k € - 95k €
+        - '(?<![\p{L}\p{N}.,])(?:\d{1,3}(?:[.,]\d{3})+|\d{2,6})(?:\s?k\b)?\s?(?:€|EUR|Euro|USD|£|GBP|CHF|C\$|CA\$|A\$|AU\$|NZ\$|S\$|SG\$|HK\$|R\$|MX\$|JP¥|CN¥|₹|₩|₪|₺|CAD|AUD|NZD|SGD|HKD|JPY|CNY|INR|KRW|BRL|MXN|ZAR|AED|ILS)\s?(?:[-–—]|to|bis)\s?(?:\d{1,3}(?:[.,]\d{3})+|\d{2,6})(?:\s?k\b)?\s?(?:€|EUR|Euro|USD|£|GBP|CHF|C\$|CA\$|A\$|AU\$|NZ\$|S\$|SG\$|HK\$|R\$|MX\$|JP¥|CN¥|₹|₩|₪|₺|CAD|AUD|NZD|SGD|HKD|JPY|CNY|INR|KRW|BRL|MXN|ZAR|AED|ILS)(?![\p{L}\p{N}])'
+        # Gehalt: 70.000 - 90.000 / Gehalt von 80k
+        - 'Gehalt[^.\n]{0,40}?\d{2,3}(?:[.,]\d{3})?\s?k?(?:\s?[-–—]\s?\d{2,3}(?:[.,]\d{3})?\s?k?)?'
+        # up to 120k / bis zu 90.000
+        - '(?:up to|bis zu)\s+(?:\d{2,3}\s?k\b|\d{2,3}[.,]\d{3}(?!\d))'
+      # When these words come right before the amount, it's not salary ("bonus of €25,000", "funding round of $30M").
+      # A match is dropped if an exclude match starts within limits.exclude_lookbehind_chars characters before the matched range or inside it;
+      # words after the amount don't matter ("€90k + 10% bonus" is kept).
+      exclude:
+        - '\b(?:bonus|prämie|prämien|zuschuss|gutschein|voucher|budget|allowance|stipend)\b[^.\n€$£\d]{0,12}'
+        - '\b(?:raised|funding|revenue|umsatz|valuation|arr|investment|invested|turnover)\b[^.\n€$£\d]{0,25}'
+      amount:
+        min_annual: 20000
+        # Amounts without a currency ("up to 120k", "Gehalt: 70.000 - 90.000") with a salary word in the same sentence are treated as this currency and flagged (market = market base currency); null = drop such amounts
+        assume_currency: market
+        # When a stated amount counts as "high pay" (points, colored badge, high-value signal):
+        #   salary_floor = annual maximum ≥ salary_floor_year in preferences.yaml (default); a number = at least this much base currency per year; none = any stated amount counts.
+        # Amounts below the threshold are still extracted and shown, but with a gray badge and no points.
+        bonus_requires_at_least: salary_floor
+        # Rough FX rates for comparing non-base-currency amounts with the threshold (base currency per unit of foreign currency; only for this comparison; salary.fx_rates in pipeline.yaml wins when it can convert).
+        # Currencies in neither table can't be compared and are treated as high pay.
+        rough_fx: { USD: 0.9, GBP: 1.15, CHF: 1.05 }
+        # Points for amounts that are "possibly salary for another region" (currencies outside salary.local_currencies in pipeline.yaml, or ranges the body says are for elsewhere),
+        # instead of this category's weight. 0 = no points and not a high-value signal (neither "high-value signals only" nor the lower push threshold counts it)
+        other_region_weight: 0
+    # Equity or stock options
+    - id: T2
+      kind: keyword
+      label: { zh: 股权, en: Equity }
+      icon: 📈
+      color: teal
+      weight: 8
+      high_value: true
+      ai_definition: 'equity-like compensation: stock options, ESOP/VSOP, RSUs, employee shares, virtual shares, employee participation programmes. Not "diversity, equity and inclusion", private equity, or investor names.'
+      default_kind: equity
+      keywords: [equity, stock options, ESOP, VSOP, RSU, RSUs, virtuelle Anteile, Mitarbeiterbeteiligung, Aktienoptionen, Mitarbeiteraktien]
+      patterns:
+        # employee shares programme / company shares / virtual shares / shares in the company
+        - '\b(?:employee|company|virtual|phantom|restricted)\s+(?:shares?|stock)\b'
+        - '\bshares?\s+(?:in|of)\s+the\s+company\b'
+        - '\b(?:share|stock)\s+(?:option|ownership|participation|purchase|grant|award)s?\b'
+        - '\bshares?\s+(?:programme|program|plan|scheme)\b'
+        - '\brestricted\s+stock\s+units?\b'
+        - '\bvirtuelle[rn]?\s+(?:Geschäfts)?anteile?\b'
+      # "diversity, equity and inclusion" and "private equity" are not compensation
+      exclude:
+        - '\b(?:diversity|inclusion|belonging|DEI|DE&I)\W{1,4}(?:and\W+|&\W*)?equity\b'
+        - '\bequity\W{1,4}(?:and|&)\W+(?:equality|inclusion|belonging|diversity)\b'
+        - '\b(?:private|brand|home|vista)\s+equity\b'
+        - '\bequity\s+(?:partners|research|capital|markets?|investor|firm)\b'
+    # Qualitative salary descriptions
+    - id: T3
+      kind: keyword
+      label: { zh: 有竞争力, en: Competitive }
+      icon: 🏅
+      color: coral
+      weight: 3
+      high_value: false
+      ai_definition: 'the JD says in words that pay is good: "competitive salary", "above-market pay", "attractive compensation", "überdurchschnittliche Vergütung". Not generic "competitive market" or "competitive benefits" without pay.'
+      default_kind: competitive_pay
+      keywords: [competitive salary, competitive pay, competitive compensation, above-market, top-tier compensation, attraktive Vergütung, überdurchschnittliches Gehalt]
+      patterns:
+        - '\b(?:highly\s+)?competitive\s+(?:\w+\s+)?(?:salary|salaries|pay|compensation|remuneration|package|base)\b'
+        - '\b(?:attractive|generous|excellent|great|fair|strong)\s+(?:\w+\s+)?(?:salary|compensation|remuneration|pay|package)\b'
+        - '\b(?:above|over)[- ]market\b'
+        - '\bmarket[- ](?:rate|leading|competitive|conform)\s+(?:salary|pay|compensation|remuneration)\b'
+        - '\btop[- ](?:tier|of[- ]market)\s+(?:salary|pay|compensation)\b'
+        - '(?:attraktiv|marktgerecht|marktüblich|überdurchschnittlich|leistungsgerecht|wettbewerbsfähig|faire?)\w*[,\s]+(?:(?:attraktiv|marktgerecht|überdurchschnittlich|leistungsgerecht)\w*[,\s]+)?(?:Vergütung|Gehalt|Bezahlung|Entlohnung|Einkommen)\w*'
+        - '\bTop[- ]Gehalt\b'
+    # Other money-related terms. The words are too broad ("bonus points if you know Rust"), so they're only candidates: with ai_confirm_only, AI must confirm before it becomes a signal.
+    - id: T4
+      kind: keyword
+      label: { zh: 奖金, en: Bonus }
+      icon: 🎁
+      color: blue
+      weight: 2
+      high_value: false
+      ai_confirm_only: true
+      ai_definition: 'other money for the employee: bonus, signing bonus, 13th salary, profit sharing, variable pay. Not "bonus points if you know X", "a bonus if you have X", or referral bonuses.'
+      default_kind: bonus
+      keywords: [bonus, signing bonus, 13. Gehalt, Gewinnbeteiligung, Weihnachtsgeld, Urlaubsgeld, Tantieme, Jahressonderzahlung]
+      patterns:
+        - '\b13\.?\s?(?:Monats)?gehalt\b'
+        - '\bvariable[rns]?\s+(?:pay|compensation|Vergütung|Gehaltsbestandteil\w*)\b'
+        - '\bbonus(?:es)?\b'
+        - '\bprofit[- ]sharing\b'
+      exclude:
+        - '\bbonus\s+points?\b'
+        - '\b(?:is|are|would\s+be|will\s+be)\s+(?:a\s+)?(?:big\s+|nice\s+|real\s+|huge\s+|great\s+)?(?:plus|bonus)\b'
+        - '\breferral\s+bonus'
+    # Benefit tags: display only, no points. tags are literal words; name in tag_patterns is the tag name.
+    - id: tag
+      kind: tag
+      label: { zh: 福利, en: Benefit }
+      color: neutral
+      weight: 0
+      high_value: false
+      ai_definition: a benefit worth showing as a tag (a travel ticket, a bike leasing programme, a sabbatical, a learning budget, ...).
+      # Literal benefit words shown as tags; add local ones for your market (e.g. Deutschlandticket, JobRad in Germany)
+      tags: [sabbatical]
+      tag_patterns:
+        - { name: 28+ vacation days, pattern: '\b(?:2[89]|3\d)\s+(?:paid\s+)?(?:(?:working\s+)?days?\s+(?:of\s+)?(?:paid\s+)?)?(?:vacation|holiday|leave|PTO|annual\s+leave)|\b(?:2[89]|3\d)\s+(?:Tage\s+)?(?:Jahres)?Urlaub|\b(?:2[89]|3\d)\s+Urlaubstage' }
+        - { name: learning budget, pattern: '\b(?:learning|education|training|development)\s+(?:&\s+development\s+)?budget\b|Weiterbildungsbudget' }
+        - { name: 4-day week, pattern: '\b4[- ]day\s+(?:work\s+)?week\b|\bVier-Tage-Woche|\b4-Tage-Woche' }
+        - { name: relocation, pattern: '(?<!\b(?:without|no|not|kein\w*|ohne)\b[^.\n]{0,80})\brelocation\b|\bUmzugs(?:kosten|zuschuss|unterstützung)' }
+        - { name: company pension, pattern: 'betriebliche\s+Altersvorsorge|betriebliche\s+Altersversorgung|\bcompany\s+pension\b|\bpension\s+scheme\b' }
+        - { name: remote / office budget, pattern: '\b(?:home\s*office|remote|workspace|office)\s+(?:budget|allowance|stipend|equipment\s+budget)\b|\bHomeoffice-(?:Budget|Zuschuss)' }
+  retired_categories: []
+# Cap on the total signal bonus: rank value = match score + min(total signal bonus, bonus_cap)
+bonus_cap: 15
+
+# Extraction limits
+limits:
+  # Max quote length per signal (rule-layer sentences are trimmed around the match on both sides; longer quotes from the AI are dropped)
+  quote_max_chars: 280
+  # Max signals kept per category per job (a category's bonus counts only once; more is just noise)
+  per_category_max: 3
+  # Max tags per tag category per job
+  tags_max: 12
+  # How many characters to the left of the matched range exclude applies ("bonus of €25,000" must see the preceding "bonus of")
+  exclude_lookbehind_chars: 30
+  # Max JD characters the AI reads; longer JDs have the middle cut out
+  ai_max_jd_chars: 12000
+  # Also send JDs where the rules found no candidates to the AI (the word lists may miss some phrasing); those with candidates go first
+  ai_review_without_candidates: true
+  # The AI subtask stops for this run after this many consecutive jobs get no answer (if every provider is down, don't keep trying job by job)
+  ai_stop_after_failures: 3
+  # The "Try it on recent jobs" preview on /interests runs the word lists on this many recent open jobs (rules only, no AI)
+  preview_jobs: 500
+  # The preview stops after this many milliseconds and shows how far it got (it runs in the web server, so a slow pattern must not hold it up)
+  preview_time_budget_ms: 1500
+
+# Saved filter views: "Save current filters as view" on /jobs; rename, set default, delete on /interests; the Today page shows them as tabs at the top.
+# filters use the /jobs URL params (without sort, page): q, source, city, workplace (onsite|hybrid|remote|unknown),
+# contract, status (job status: active|possibly_closed|closed), app (application status, multi-select: new|interested|preparing|applied|interviewing|
+# offer|rejected|withdrawn|archived; new = no application record yet, archived = dismissed), minScore (min rank value, 0–100),
+# minSalary (min of the stated annual salary maximum, market base currency/year), from, to (YYYY-MM-DD, ignored on the Today page), salary, filtered, hideLang (hide jobs requiring a local language above yours), high (high-value signals only).
+# The view with default: true (at most one) applies automatically on the Today page when there are no explicit params. Example:
+#   - id: high-pay-local
+#     name: High-pay signals in my city
+#     default: false
+#     filters: { high: true, city: New York }
+#   - id: shortlist
+#     name: Jobs in follow-up
+#     filters: { app: [interested, applied], minScore: 70 }
+views: []
+
+# Watched companies: new jobs are pushed individually, regardless of the score threshold (company names)
+watched_companies: []

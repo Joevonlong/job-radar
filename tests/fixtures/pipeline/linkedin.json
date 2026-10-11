@@ -1,0 +1,26 @@
+{
+  "postings": [
+    {
+      "id": "li-9001",
+      "title": "Applied AI Engineer",
+      "company": "Northwind Labs",
+      "city": "Berlin",
+      "country": "DE",
+      "remote": false,
+      "description": "Applied AI Engineer at Northwind Labs. Build LLM features for logistics. Hybrid in Berlin.",
+      "url": "https://www.linkedin.example.test/jobs/view/9001",
+      "posted_at": "2026-10-06T09:00:00Z"
+    },
+    {
+      "id": "li-9002",
+      "title": "Forward Deployed Engineer - Customer Facing",
+      "company": "Contoso AI",
+      "city": "Munich",
+      "country": "DE",
+      "remote": false,
+      "description": "Work with enterprise customers to deploy agent systems into their environments. You will scope projects, write integration code, run workshops and be the technical point of contact for our largest accounts. Strong communication skills, experience with Python and cloud platforms such as AWS or Azure, and the ability to travel up to twenty percent are required. German C1 is required for customer workshops in Munich. Hybrid, three days in the office.",
+      "url": "https://www.linkedin.example.test/jobs/view/9002",
+      "posted_at": "2026-10-06T10:00:00Z"
+    }
+  ]
+}

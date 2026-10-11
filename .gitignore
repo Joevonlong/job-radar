@@ -1,0 +1,49 @@
+# Dependencies and build output
+node_modules/
+.next/
+/dist/
+out/
+coverage/
+next-env.d.ts
+*.tsbuildinfo
+.venv/
+__pycache__/
+
+# Test output
+test-results/
+playwright-report/
+playwright-report-setup/
+
+# Secrets: never commit these
+.env
+.env.*
+!.env.example
+# LinkedIn login state written by `pnpm auth:linkedin` (session cookies). Only the empty marker is tracked, so a clone
+# creates the directory owned by you (Docker would create a missing one as root on Linux).
+/.auth/*
+!/.auth/.gitkeep
+
+# Runtime data: your config, profile, backups, exports and logs stay on your machine. Only the empty markers are
+# tracked, so a clone creates the directories owned by you (Docker would create missing ones as root on Linux).
+/data/*
+!/data/config/
+!/data/profile/
+!/data/backups/
+!/data/exports/
+!/data/logs/
+/data/*/*
+!/data/*/.gitkeep
+*.log
+
+# Machine noise
+.DS_Store
+._*
+.vscode/
+.idea/
+
+# Local release-check patterns (personal strings)
+.release-check.local
+.claude/
+
+# README screenshots: staging, recorded video, local mp4 (pnpm demo:shots)
+.local-demo/

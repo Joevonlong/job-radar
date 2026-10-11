@@ -1,0 +1,10 @@
+# Job titles that stay in English when a JD is translated.
+translation:
+  glossary:
+    Forward Deployed Engineer: Forward Deployed Engineer
+    Forward Deployed Software Engineer: Forward Deployed Software Engineer
+    Solutions Engineer: Solutions Engineer
+    Customer Engineer: Customer Engineer
+    Developer Advocate: Developer Advocate
+    Machine Learning Engineer: Machine Learning Engineer
+    AI Engineer: AI Engineer

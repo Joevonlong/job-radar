@@ -1,0 +1,125 @@
+# 处理轮时间。cron 为 5 段：分 时 日 月 周，按下面的 timezone 解释。
+# runner 热加载本文件：保存后约 5 秒内生效，非法内容会被忽略并记录错误。
+timezone: Europe/Berlin
+
+cycles:
+  # 早轮：工作日 07:00，搜索时间窗见 search.yaml 的 window_hours.morning
+  weekday_morning:
+    cron: "0 7 * * 1-5"
+    enabled: true
+  # 晚轮：工作日 17:00，时间窗 window_hours.evening
+  weekday_evening:
+    cron: "0 17 * * 1-5"
+    enabled: true
+  # 周末轮：周六、周日 09:00，时间窗 window_hours.weekend
+  weekend:
+    cron: "0 9 * * 0,6"
+    enabled: true
+
+# runner 启动时如果错过了最近一轮，立即补跑一次
+catch_up: true
+# 上一轮还没跑完时，跳过新的一轮并记录
+skip_if_running: true
+
+# 数据库备份：runner 每天按 cron（同上面的 timezone）执行一次 pg_dump，
+# 写到 data/backups/jobradar-YYYYMMDD-HHMMSS.dump。恢复步骤见 docs/backup-restore.md。
+backup:
+  enabled: true
+  cron: "30 3 * * *"
+  # 保留最近 N 天里每天最新的一份
+  keep_daily: 14
+  # 另外保留最近 N 个自然周（ISO 周）里每周最新的一份；0 = 不留周备份
+  keep_weekly: 8
+  # pg_dump 超过这么多分钟就中止并算失败
+  timeout_minutes: 30
+  # pnpm run doctor：最新一份备份比这个更旧就报 ❌（每天一份，留出余量）
+  max_age_hours: 30
+
+# LinkedIn 登录态通道的"为你推荐"（linkedin-session:recommended）：每天一次，不参与级联。
+# 不是单独的定时任务：在上面的处理轮里，第一轮发现"今天 cron 的时间点已过、还没读过"时顺带读一次；手动运行（manual）总会读。
+linkedin_recommended:
+  enabled: true
+  cron: "0 7 * * *"
+
+# runner 每隔多少秒查看一次网页留下的请求（"立即跑一轮"、"重打过期分数"，见 /settings）
+control_poll_seconds: 5
+
+# 感兴趣清单的每周 AI 建议：从你标过感兴趣、准备中、已申请、面试中、Offer 的岗位里
+# 提炼新的信号词、关注公司和筛选条件，作为"建议"放在 /interests，批准后才写进 interests.yaml / preferences.yaml。
+# runner 在 cron 时间（按上面的 timezone）留一个 run_suggest 请求，由跑 AI 的进程执行；也可以手动触发。
+suggest:
+  enabled: true
+  # 每周一 08:00
+  cron: "0 8 * * 1"
+  # 只看最近这么多周里状态有变化的岗位
+  lookback_weeks: 4
+  # 算"喜欢"的状态（证据来源）
+  positive_statuses: [interested, preparing, applied, interviewing, offer]
+  # 算"忽略"的状态（给 AI 对比用）
+  ignored_statuses: [archived]
+  # 喜欢的岗位少于这个数就不跑（学不出什么），也不调用 AI
+  min_positive_jobs: 3
+  # 最多把多少个喜欢的 / 忽略的岗位交给 AI（优先状态更靠后、时间更新的）
+  max_positive_jobs: 20
+  max_ignored_jobs: 10
+  # 每个岗位发给 AI 的 JD 最多多少字符
+  jd_max_chars: 3000
+  # 每次最多新增多少条建议
+  max_suggestions: 10
+  # AI 的把握（0 到 1）低于这个值的建议丢弃
+  min_confidence: 0.5
+  # 一条建议至少要有几个岗位作证据（公司只要 1 个；词和筛选条件只在一个岗位里出现算不上规律）
+  min_evidence:
+    signal_word: 2
+    watched_company: 1
+    filter: 2
+  # 词、公司名、城市最长多少字符
+  max_term_chars: 60
+  # 有新建议时发一条 Telegram 提醒（还要 notify.yaml 里的 telegram 开着）
+  notify: true
+
+# 健康检查：pnpm run doctor 在宿主机上逐项检查整个系统，下面是它的名字、地址、超时和阈值。
+doctor:
+  # compose 项目名（compose.yaml 的 name）和必须健康的服务
+  compose_project: job-radar
+  compose_services: [db, web, runner, jobspy]
+  # 宿主机看到的网页地址（web 只绑 127.0.0.1）。临时改用环境变量 JOB_RADAR_DOCTOR_WEB_URL
+  web_url: "http://127.0.0.1:3000"
+  # 一次 HTTP 请求或 TCP 连接最多等多久（秒）
+  probe_timeout_seconds: 5
+  # docker / launchctl / claude / codex / tailscale / pmset 命令最多跑多久（秒）
+  command_timeout_seconds: 15
+  # 剩余磁盘空间（GB）：低于 min 报 ❌，低于 warn 报 ⚠️（备份所在的卷、Docker 数据所在的卷）
+  min_free_disk_gb: 5
+  warn_free_disk_gb: 20
+  # Mac 内置系统盘的剩余空间（GB）：低于 min 报 ❌，低于 warn 报 ⚠️
+  internal_min_free_disk_gb: 10
+  internal_warn_free_disk_gb: 30
+  # Docker 数据不在项目所在的外置卷上时，doctor 提示去看的指南（默认 docs/host-setup.md）
+  # storage_guide: docs/host-setup.md
+  # 排队等 ai-worker 的 AI 请求：超过这么多条，或最老的一条等了超过这么多分钟，就报 ⚠️
+  ai_backlog_warn: 40
+  # 还在等 AI 打分的岗位超过这么多条，报 ⚠️
+  ai_unscored_warn: 200
+  ai_oldest_pending_warn_minutes: 30
+  # 排定的轮次过了这么多分钟还没开始，算错过
+  cycle_grace_minutes: 90
+  # ai-worker 的 launchd 名称（scripts/ops/install-ai-worker.sh）
+  ai_worker_launchd_label: io.jobradar.ai-worker
+  # 浏览器登录态目录（相对项目根目录，已 gitignore）
+  linkedin_auth_dir: .auth
+
+# 部署时的 Docker 清理：scripts/ops/deploy.sh 在服务启动之后执行，--no-prune 跳过。
+# 只清构建缓存和悬空镜像；从不碰数据卷（数据库在里面），从不删正在使用的镜像。
+deploy:
+  # 清理 Docker 构建缓存，按最近使用保留 build_cache_keep_gb GB（docker builder prune --max-used-space）
+  prune_build_cache: true
+  # 0 = 清掉全部未使用的构建缓存（下次构建会慢一些）
+  build_cache_keep_gb: 5
+  # 删除悬空镜像：旧构建留下的、没有标签的镜像（docker image prune，不带 -a）
+  prune_dangling_images: true
+
+# 手动按钮：/sources 的"立即采集""测试"、/settings 的"发送 Telegram 测试消息"
+manual_triggers:
+  # 同一个目标的同类请求结束后，多少秒内再点会被拒绝（还没结束的请求直接复用，不重复创建）；0 = 不限
+  min_interval_seconds: 30

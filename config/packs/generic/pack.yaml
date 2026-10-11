@@ -1,0 +1,4 @@
+# Generic pack: always loaded. Sets no country, currency or language: when you use it, market in preferences.yaml must be complete.
+
+id: generic
+name: Generic

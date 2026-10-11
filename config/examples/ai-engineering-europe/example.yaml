@@ -1,0 +1,10 @@
+# An example setup: AI engineering roles (AI / LLM / ML engineers, forward deployed and AI solutions roles) at
+# companies in Europe, most of them in Germany. It is a starting point to adapt, not a recommendation.
+#
+# Apply it with `pnpm config:example ai-engineering-europe` (add --dry-run to only see what would change). Each file in
+# this directory holds only the keys it changes; applying writes them into your own copy in data/config/ (maps are
+# merged key by key, lists are replaced, except ats_boards, where boards you do not have yet are added).
+# Your market, cities and time zone are not part of it: pick them in the setup wizard (for this example: the Germany
+# market pack, a city such as Berlin, time zone Europe/Berlin), or on /me and /settings.
+name: AI engineering in Europe
+description: AI / LLM / ML engineering, forward deployed and AI solutions roles; a short list of example company career boards.

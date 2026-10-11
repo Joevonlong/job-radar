@@ -1,0 +1,24 @@
+# resume-kit 联动。详情页"定制简历"会把 JD 导出成 md，并给出在 resume-kit 里运行 /tailor 的命令。
+# 路径都指向你自己的文件（主简历在本仓库之外，系统不会读取它）。路径必须是绝对路径，不支持 ~。
+
+# resume-kit 的本地目录；命令是 `cd <这个目录> && claude "/tailor <jd 路径>"`。null = 只显示导出路径，不给命令
+resume_kit_path: null
+# 你的主简历 YAML；只会写进命令里，不会被读取。null = 命令里不提
+master_resume_path: null
+# 定制后的 PDF 所在目录；"挂上简历"只接受这个目录里的文件（防路径穿越）。null = 不能挂简历
+pdf_dir: null
+
+# JD 导出目录（相对路径从项目根目录算起）：<company>-<title>-<yyyy-mm-dd>.md，同一天重复导出会覆盖同一个文件
+jd_export_dir: data/exports/jd
+# 在 Docker 里运行时，宿主机看到的导出目录（命令里要用宿主机路径）；null = 与 jd_export_dir 相同
+jd_export_host_dir: null
+
+# 终端里启动 Claude Code 的命令
+claude_command: claude
+
+# 文件名里公司名、职位名各最多保留多少个字符
+filename_part_max_chars: 48
+# 导出 front matter 里每条信号原句最多保留多少个字符
+signal_quote_max_chars: 240
+# "挂上简历"的下拉里最多列出多少个 PDF（最新的在前）
+pdf_list_limit: 50

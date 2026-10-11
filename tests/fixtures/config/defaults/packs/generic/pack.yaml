@@ -1,0 +1,4 @@
+# 通用包：总是加载。不指定国家、货币和语言：用它时 preferences.yaml 的 market 要写全。
+
+id: generic
+name: Generic
