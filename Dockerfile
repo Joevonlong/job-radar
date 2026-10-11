@@ -6,7 +6,7 @@
 
 ARG NODE_VERSION=22
 # Must equal the @playwright/test version in package.json (tests/dockerfile.test.ts enforces it).
-ARG PLAYWRIGHT_VERSION=1.63.0
+ARG PLAYWRIGHT_VERSION=1.64.0
 ARG PNPM_VERSION=11.15.1
 # AI CLIs used by the runner's claude-cli / codex-cli providers. Pinned to the versions the recorded
 # fixtures in tests/fixtures/ai come from; to upgrade, re-record the fixtures and run `pnpm ai:probe`.
