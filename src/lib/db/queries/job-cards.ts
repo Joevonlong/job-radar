@@ -5,6 +5,7 @@ import { getApplicationStatuses } from "../repos/applications";
 import { getFavoriteStates } from "../repos/favorites";
 import { seenSql } from "../repos/seen";
 import { parseLinkCheck } from "@/lib/jobs/link-check-evidence";
+import { ghostTrustedKeys } from "@/lib/ghost/settings";
 import { closedReasonSql, effectiveStatusSql } from "./job-status";
 import { loadGhostLevels } from "../repos/ghost";
 import { loadTrapCounts } from "../repos/traps";
@@ -253,7 +254,7 @@ export async function hydrateCards(db: Db, rows: readonly CardRow[], options: Hy
     getFavoriteStates(db, ids),
     loadTrapCounts(db, ids),
     options.visa === false ? new Map<number, never>() : loadVisaStatuses(db, ids),
-    options.ghost === true ? loadGhostLevels(db, ids) : new Map<number, never>(),
+    options.ghost === true ? loadGhostLevels(db, ids, ghostTrustedKeys()) : new Map<number, never>(),
   ]);
   return rows.map((row) => ({
     id: row.id,

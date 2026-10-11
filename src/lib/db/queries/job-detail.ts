@@ -15,6 +15,7 @@ import { getApplicationByJobId, listApplicationEvents, type Application, type Ap
 import { companies, jobs, profileSnapshots, scores, signalScans, translations } from "../schema";
 import { loadSignals, loadSources } from "./job-cards";
 import { summarizeMonthSalaries } from "@/lib/domain/salary";
+import { ghostTrustedKeys } from "@/lib/ghost/settings";
 import { listMonthSalaryFigures } from "./jobs";
 import { asContract, asGermanLevel, asJobLanguage, parseLocations, parseSalary } from "./parse";
 import type { Contract, GermanLevel, JobLanguage, JobLocation, JobSalary, JobSignal, JobSourceRef, JobStatus, Workplace } from "./types";
@@ -202,7 +203,7 @@ export async function getJobDetail(db: Db, id: number): Promise<JobDetail | null
     getFavorite(db, id),
     loadClosure(db, id, job.status),
     getVisaOfJob(db, id),
-    getGhostOfJob(db, id),
+    getGhostOfJob(db, id, ghostTrustedKeys()),
   ]);
   const applicationEvents = application ? await listApplicationEvents(db, application.id) : [];
   const salaryFiltered = score?.filterResult === "filtered_out" && score.filterReasons.some((reason) => reason.startsWith("salary_below_floor"));

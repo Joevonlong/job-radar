@@ -63,6 +63,8 @@ test("the detail page: reasons, the quote with its JD mark, dismiss and undo", a
   const check = page.getByTestId("ghost-check");
   await expect(check).toContainText("疑似幽灵（7 分）");
   await expect(check.getByTestId("ghost-check-reason")).toHaveCount(4);
+  // channels by their display names, not their ids
+  await expect(check).toContainText("Greenhouse");
   await expect(check.getByTestId("ghost-check-quote")).toContainText("talent pool");
   await check.getByTestId("ghost-check-jump").click();
   const mark = page.getByTestId("jd-ghost-mark");
@@ -72,6 +74,8 @@ test("the detail page: reasons, the quote with its JD mark, dismiss and undo", a
   await check.getByTestId("ghost-dismiss").click();
   await expect(check).toContainText("已忽略");
   await expect(page.getByTestId("ghost-mark")).toHaveCount(0);
+  // the JD mark goes with it
+  await expect(page.getByTestId("jd-ghost-mark")).toHaveCount(0);
   await openJobs(page, "?filtered=true&ghost=only");
   await expect(page.getByRole("link", { name: GHOST })).toHaveCount(0);
 

@@ -253,6 +253,12 @@ describe("interests", () => {
     expect(issuePaths("interests", good)).toEqual([]);
   });
 
+  it("a category may be called like a job check (ghost, visa): only breakdown and trap are reserved", () => {
+    const good = fixture("interests");
+    categoriesOf(good).push(keyword("ghost"), keyword("visa"));
+    expect(issuePaths("interests", good)).toEqual([]);
+  });
+
   it("rejects duplicate ids (case-insensitive, deleted ones included), reserved ids, a second amount category and too many categories", () => {
     const dup = fixture("interests");
     categoriesOf(dup).push(keyword("t2"));

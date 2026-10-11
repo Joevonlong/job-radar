@@ -113,6 +113,9 @@ filter:
 # Regex, case-insensitive with Unicode: word boundaries are (?<![\p{L}\p{N}]) / (?![\p{L}\p{N}]); \b does not know umlauts.
 # Keys, `id` and `check_negation` as in the generic pack.
 ghost:
+  # Deutsch stellt "nicht" oft ans Satzende ("Für unseren Talentpool ist diese Anzeige ganz ausdrücklich nicht gedacht"): nach einer
+  # Phrase wird bis zum Ende des Teilsatzes nach einer Verneinung gesucht, nicht nur pipeline.yaml negation_words_after Wörter.
+  negation_after: clause
   # LinkedIn auf Deutsch: "Wiedereingestellt vor 2 Wochen"
   repost_label_patterns:
     - id: reposted
@@ -120,10 +123,11 @@ ghost:
   evergreen_patterns:
     # "Diese Ausschreibung dient dem Aufbau unseres Talentpools", "Wir suchen für unseren Talent-Pool"
     - id: talent_pool
-      pattern: '(?<![\p{L}\p{N}])(?:für|aufbau|erweiterung|ausbau)\s+(?:unser(?:es|en|em|e)?|des|den|einen?|eines)\s+(?:\p{L}+\s+)?(?:talent-?\s?pools?|talent-?\s?community|bewerber-?pools?|kandidaten-?pools?|talentnetzwerk(?:e?s)?)(?![\p{L}\p{N}])'
+      pattern: '(?<![\p{L}\p{N}])(?:für|aufbau|erweiterung|ausbau)\s+(?:unser(?:es|en|em|e)?|des|den|einen?|eines)\s+(?:\p{L}+\s+)?(?:talent-?\s?pools?|talent-?\s?community|bewerber-?pools?|kandidaten-?pools?|talentnetzwerk(?:e?s)?)(?![\p{L}\p{N}]|-\p{L})'
     # "Diese Stelle dient der Sammlung von Initiativbewerbungen", "Die Ausschreibung richtet sich an zukünftige Vakanzen"
+    # (a talent pool is talent_pool's; "zukünftige" only with an opening: not "zukünftige Kollegen", "zukünftige Führungsaufgaben")
     - id: open_application
-      pattern: '(?<![\p{L}\p{N}])(?:stelle|ausschreibung|stellenausschreibung|stellenanzeige|anzeige|position|vakanz)\s+(?:ist|dient|richtet\s+sich|gilt)\s+(?:[\p{L}-]+\s+){0,5}?(?:initiativbewerbung\p{L}*|initiativ|talent-?\s?pool\p{L}*|zukünftige\p{L}*|künftige\p{L}*)(?![\p{L}\p{N}])'
+      pattern: '(?<![\p{L}\p{N}])(?:stelle|ausschreibung|stellenausschreibung|stellenanzeige|anzeige|position|vakanz)\s+(?:ist|dient|richtet\s+sich|gilt)\s+(?:[\p{L}-]+\s+){0,5}?(?:initiativbewerbung\p{L}*|initiativ|(?:zukünftige|künftige)n?\s+(?:stellen|vakanzen|positionen|ausschreibungen))(?![\p{L}\p{N}])'
     # "Initiativbewerbung (m/w/d)" as the posting's own title in the text
     - id: open_application_title
       pattern: '(?<![\p{L}\p{N}])initiativbewerbung(?:en)?\s*\(\s*(?:m|w|d|f|x|gn|div|all)\s*/'
@@ -131,17 +135,19 @@ ghost:
     - id: no_specific_opening
       pattern: '(?<![\p{L}\p{N}])(?:kein(?:e|en)?|nicht\s+(?:für|auf|an)\s+(?:eine|einen))\s+(?:konkrete|bestimmte|offene|aktuelle|ausgeschriebene|vakante|spezifische|feste)n?\s+(?:stelle|position|vakanz|stellenausschreibung|ausschreibung)(?:n)?(?![\p{L}\p{N}])'
       check_negation: false
-    # "Wir stellen laufend ein", "Wir sind immer auf der Suche nach motivierten Menschen"
+    # "Wir stellen laufend ein", "Wir suchen ständig neue Kolleg:innen", "Wir suchen laufend für unsere Kunden" (a staffing agency),
+    # "Wir sind immer auf der Suche nach motivierten Menschen". Always with a person (or "ein"): not "Wir stellen ständig neue
+    # Anforderungen", "Wir suchen ständig nach neuen Wegen".
     - id: always_hiring
-      pattern: '(?<![\p{L}\p{N}])(?:(?:suchen|sucht|stellen|stellt)\s+(?:wir\s+|sie\s+)?(?:laufend|ständig|fortlaufend|kontinuierlich|jederzeit|permanent|das\s+ganze\s+jahr)(?!\s+nach\s+(?:wegen|möglichkeiten|lösungen|verbesserung\p{L}*|ideen))|(?:immer|stets|ständig|laufend|jederzeit)\s+auf\s+der\s+suche\s+nach\s+(?:\p{L}+\s+){0,2}?(?:menschen|talenten|verstärkung|kolleg\p{L}*|mitarbeit\p{L}*|persönlichkeiten|bewerber\p{L}*))(?![\p{L}\p{N}])'
+      pattern: '(?<![\p{L}\p{N}])(?:(?:stellen|stellt)\s+(?:wir\s+|sie\s+)?(?:laufend|ständig|fortlaufend|kontinuierlich|jederzeit|permanent|das\s+ganze\s+jahr(?:\s+über)?)\s+(?:[\p{L}-]+\s+){0,3}?ein|(?:suchen|sucht)\s+(?:wir\s+|sie\s+)?(?:laufend|ständig|fortlaufend|kontinuierlich|jederzeit|permanent|das\s+ganze\s+jahr(?:\s+über)?)\s+(?:(?:nach|für)\s+)?(?:\p{L}+\s+){0,2}?(?:menschen|talente\p{L}*|verstärkung|kolleg\p{L}*|mitarbeit\p{L}*|persönlichkeiten|bewerber\p{L}*|fachkr[aä]ft\p{L}*|personal|nachwuchs|kunden|mandanten|auftraggeber\p{L}*|entwickler\p{L}*|ingenieur\p{L}*|engineers?)|(?:immer|stets|ständig|laufend|jederzeit)\s+auf\s+der\s+suche\s+nach\s+(?:\p{L}+\s+){0,2}?(?:menschen|talenten|verstärkung|kolleg\p{L}*|mitarbeit\p{L}*|persönlichkeiten|bewerber\p{L}*))(?![\p{L}\p{N}])'
     # "Wir sammeln Bewerbungen für zukünftige Stellen"
     - id: future_openings
       pattern: '(?<![\p{L}\p{N}])(?:für|auf)\s+(?:zukünftige|künftige|kommende|spätere)\s+(?:stellen|positionen|vakanzen|ausschreibungen|bedarfe|einsätze)(?![\p{L}\p{N}])'
   responsibility_patterns:
     - id: responsibilities
-      pattern: '(?<![\p{L}\p{N}])(?:(?:deine|ihre|eure|unsere|die|meine|deine\s+wichtigsten|ihre\s+wichtigsten)\s+)?(?:aufgaben\p{L}*|tätigkeit(?:en|sbeschreibung|sbereich|sfeld)?|verantwortung(?:en|sbereich)?|zuständigkeit\p{L}*)(?![\p{L}\p{N}])'
+      pattern: '(?<![\p{L}\p{N}])(?:(?:deine|ihre|eure|unsere|die|meine|deine\s+wichtigsten|ihre\s+wichtigsten)\s+)?(?:aufgaben\p{L}*|tätigkeit\p{L}*|verantwortung(?:en|sbereich)?|zuständigkeit\p{L}*|stellenbeschreibung|jobbeschreibung)(?![\p{L}\p{N}])'
     - id: what_you_do
-      pattern: '(?<![\p{L}\p{N}])(?:was\s+(?:du|sie)\s+(?:bewegst|bewegen|tun|tust|machst|machen|erreichst|erreichen)|das\s+erwartet\s+(?:dich|sie)|was\s+(?:dich|sie)\s+erwartet)(?![\p{L}\p{N}])'
+      pattern: '(?<![\p{L}\p{N}])(?:was\s+(?:du|sie)\s+(?:bei\s+uns\s+)?(?:bewegst|bewegen|tun|tust|machst|machen|erreichst|erreichen)|das\s+erwartet\s+(?:dich|sie)|was\s+(?:dich|sie)\s+erwartet)(?![\p{L}\p{N}])'
     - id: the_role
       pattern: '^(?:deine|ihre|die|dein|ihr)\s+(?:rolle|mission|herausforderung(?:en)?|job|einsatz)$'
   negation_cues:
@@ -155,8 +161,14 @@ ghost:
     - '(?<![\p{L}\p{N}])(?:aber|jedoch|sondern|während|wobei|allerdings|außer|stattdessen)(?![\p{L}\p{N}])'
     - '(?<![\p{L}\p{N}])(?:und|daher|deshalb)\s+(?:wir|du|sie|ihr|es|unser\p{L}*|dein\p{L}*|euer\p{L}*|diese\p{L}*)(?![\p{L}\p{N}])'
   exclude_context:
-    # das Produkt oder die Kunden: "Talentpool-Software", "Wir helfen Unternehmen beim Aufbau ihres Talentpools"
-    - '(?<![\p{L}\p{N}])(?:talent|bewerber|kandidaten)-?\s?pool-?\s?(?:software|management|lösung\p{L}*|plattform\p{L}*|tools?|systems?|crm|funktion\p{L}*)(?![\p{L}\p{N}])'
+    # das Produkt, die Kunden oder ein Team dieses Namens: "Talentpool-Software", "Wir helfen Unternehmen beim Aufbau ihres
+    # Talentpools", "Wir bauen eine Plattform für …"
+    - '(?<![\p{L}\p{N}])(?:talent|bewerber|kandidaten)-?\s?pool-?\s?(?:software|management|lösung\p{L}*|plattform\p{L}*|tools?|systems?|crm|funktion\p{L}*|team\p{L}*|abteilung)(?![\p{L}\p{N}])'
+    - '(?<![\p{L}\p{N}])(?:plattform|software|saas|app|tool|crm|lösung)\p{L}*\s+(?:für|zum|zur)(?![\p{L}\p{N}])'
+    # die Anzeige sagt doch, dass es eine echte Stelle ist: "…, aber diese Stelle ist eine konkrete Vakanz"
+    - '(?<![\p{L}\p{N}])(?:diese|die)\s+(?:stelle|position|vakanz|anzeige|ausschreibung)\s+ist\s+(?:eine\s+)?(?:konkrete|echte|reale|tatsächliche|bestehende)(?![\p{L}\p{N}])'
+    # ein Newsletter-Schluss: "Noch nicht bereit? Bleib in Kontakt", "Abonniere unseren Job-Alert"
+    - '(?<![\p{L}\p{N}])(?:noch\s+nicht\s+bereit|bleib\p{L}*\s+(?:in\s+kontakt|auf\s+dem\s+laufenden|informiert)|in\s+kontakt\s+bleiben|job-?\s?(?:alarm|alert|abo)\p{L}*)'
     - '(?<![\p{L}\p{N}])(?:kunden|kundinnen|mandanten|unternehmen|firmen|arbeitgeber\p{L}*|recruiter\p{L}*)\s+(?:[\p{L}-]+\s+){0,4}?(?:talent|bewerber|kandidaten)-?\s?pool\p{L}*'
     # eine Aufgabe der Stelle: "Du bist verantwortlich für den Aufbau unseres Talentpools", "Aufbau und Pflege unseres Talentpools"
     - '(?<![\p{L}\p{N}])(?:verantwort\p{L}*|pflegst|pflegen|pflege|betreust|betreuen|baust|managst|kümmerst|übernimmst|unterstützt|unterstützen|entwickelst|gestaltest)(?![\p{L}\p{N}])'

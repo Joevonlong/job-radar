@@ -75,11 +75,13 @@ pnpm run doctor --only config.market
 | 键 | 是什么 |
 |---|---|
 | `repost_label_patterns` | 来源自己的"重新发布"标签（"Reposted 2 weeks ago"、"Wiedereingestellt"）；`{id, pattern}` |
-| `evergreen_patterns` | JD 写明是人才库或常年招聘（"for our talent pool"、"always hiring"、"Initiativbewerbung (m/w/d)"）；`{id, pattern, check_negation}`。`check_negation: false` 表示说法本身就是否定（"no specific opening"、"keine konkrete Stelle"） |
+| `evergreen_patterns` | JD 写明是人才库或常年招聘（"for our talent pool"、"always hiring"、"Initiativbewerbung (m/w/d)"）；`{id, pattern, check_negation, negation_after}`。`check_negation: false` 表示说法本身就是否定（"no specific opening"、"keine konkrete Stelle"）；`negation_after` 覆盖这一条所在包的设置 |
 | `responsibility_patterns` | 职责段落的标题（"Responsibilities"、"What you'll do"、"Deine Aufgaben"），只对像标题的行测试；`{id, pattern}` |
 | `negation_cues` | 让人才库说法不算的词：在说法里面、说法前 `pipeline.yaml job_checks.ghost.negation_words_before` 个词内、说法后同一分句 `negation_words_after` 个词内，或在所在列表的标题里 |
+| `negation_after` | 这个包的说法后面往后找多远的否定词：`words`（默认：`negation_words_after` 个词）或 `clause`（到分句结束）。`de` 用 `clause`：德语把 "nicht" 放在句末（"Für unseren Talentpool ist diese Anzeige ganz ausdrücklich nicht gedacht"） |
 | `clause_breaks` | 分句在哪里结束（";"、" but "、" aber "、"and we …"） |
-| `exclude_context` | 匹配到的句子（或紧挨在它前面的问句）不算：雇主的产品或客户、岗位职责、真实招聘帖的结尾、条件句、隐私说明 |
+| `exclude_context` | 匹配到的句子（或紧挨在它前面的问句）不算：雇主的产品、客户或同名团队、岗位职责、"but this role is a concrete opening"、真实招聘帖的结尾（"Not ready to apply? … stay in touch"）、条件句、隐私说明 |
+| `lead_in_question` | 句子前面哪个问句和它一起读：`ends`（问句结尾的字符：`?`、`？`）、`starts`（问句从最后一个这些字符或换行之后开始：`.`、`!`、`¿` 等）和 `line_above`（问句可以在上一行）。各包的列表合并；没有 `ends` 就不读问句 |
 | `abbreviations` | 句点不表示句子结束的缩写 |
 | `prefilter` | 快速初筛：没有命中的 JD 或行不再找人才库说法 |
 

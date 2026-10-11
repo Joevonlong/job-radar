@@ -2,6 +2,7 @@
 import { describe, expect, it } from "vitest";
 
 import { ghostReasonListSchema, isDismissActive, type GhostOfJob, type GhostReason } from "@/lib/ghost/types";
+import { channelDisplayName } from "@/lib/dashboard/labels";
 import { buildGhostCheckView, ghostMarkText, ghostReasonMessage, ghostShortMessage } from "@/lib/ghost/view";
 
 const longOpen: GhostReason = { code: "long_open", points: 2, days: 214, since: "2026-02-28", from: "posted", channelId: "greenhouse" };
@@ -80,6 +81,23 @@ describe("messages", () => {
 
   it("the JD mark is the quote's first line", () => {
     expect(ghostMarkText("  First line.\nSecond")).toBe("First line.");
+  });
+});
+
+describe("channel names in the reasons", () => {
+  it("the pages name channels, the CLI keeps the ids", () => {
+    const names: Record<string, string> = { greenhouse: "Greenhouse", lever: "Lever" };
+    expect(ghostReasonMessage(longOpen, (id) => names[id] ?? id).values.channel).toBe("Greenhouse");
+    expect(ghostReasonMessage(reposted, (id) => names[id] ?? id).values.channel).toBe("Lever");
+    expect(ghostReasonMessage(longOpen).values.channel).toBe("greenhouse");
+  });
+
+  it("channelDisplayName: the ATS brand, else the family's label, else the id", () => {
+    const label = (family: string) => `[${family}]`;
+    expect(channelDisplayName("smartrecruiters", "ats", label)).toBe("SmartRecruiters");
+    expect(channelDisplayName("linkedin-session", "linkedin", label)).toBe("[linkedin]");
+    expect(channelDisplayName("my-feed", "custom", label)).toBe("my-feed");
+    expect(channelDisplayName("my-feed", null, label)).toBe("my-feed");
   });
 });
 

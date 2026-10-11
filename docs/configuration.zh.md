@@ -224,10 +224,10 @@ web 和 runner 以 `0600`（仅属主）写配置文件：`data/config/*.yaml` �
 | | `job_checks.ghost.thin_description.min_words` / `.points` | 120 / 1 | 全文 JD 比这短，或没有职责段落（0–5000 / 0–10） |
 | | `job_checks.ghost.<信号>.enabled` | `true` | 每个信号都可以单独关掉 |
 | | `job_checks.ghost.quote_max_chars` | 280 | 引文最长字数（40–2000） |
-| | `job_checks.ghost.negation_words_before` / `_after` | 6 / 5 | 人才库说法前后查否定词的词数（0–20） |
+| | `job_checks.ghost.negation_words_before` / `_after` | 6 / 5 | 人才库说法前后查否定词的词数（0–20）；`negation_after: clause` 的市场包在说法后一直找到分句结束 |
 | | `job_checks.ghost.heading_max_chars` | 60 | 当作标题、和下一行合读的最长行（10–200） |
 | `ui.yaml`（用户） | `job_checks.ghost.enabled` | `false` | 打开：每轮检查岗位，页面显示标记和筛选 |
-| | `job_checks.ghost.trusted_companies` | `[]` | 从不标记的公司名（按规范化的名字匹配，不看公司形式，别名生效） |
+| | `job_checks.ghost.trusted_companies` | `[]` | 从不标记的公司名（按规范化的名字匹配，不看公司形式，别名生效）；加进来后标记立刻消失，已关闭的岗位也一样 |
 
 旧版本不认 `ui.yaml` 里的 `job_checks.ghost`：回滚前删掉。
 

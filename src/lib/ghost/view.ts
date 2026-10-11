@@ -24,18 +24,21 @@ export interface GhostMessage {
   values: Record<string, string | number>;
 }
 
-/** The full line of a reason (checks panel, CLI). */
-export function ghostReasonMessage(reason: GhostReason): GhostMessage {
+/**
+ * The full line of a reason (checks panel, CLI). `channelName` names a channel id ("greenhouse" → "Greenhouse"); the CLI keeps the
+ * ids.
+ */
+export function ghostReasonMessage(reason: GhostReason, channelName: (channelId: string) => string = (id) => id): GhostMessage {
   switch (reason.code) {
     case "long_open":
       return reason.from === "posted"
-        ? { key: "reason.long_open", values: { days: reason.days, date: reason.since, channel: reason.channelId ?? "" } }
+        ? { key: "reason.long_open", values: { days: reason.days, date: reason.since, channel: reason.channelId === null ? "" : channelName(reason.channelId) } }
         : { key: "reason.long_open_first_seen", values: { days: reason.days } };
     case "repost_label":
-      return { key: "reason.repost_label", values: { channel: reason.channelId, label: reason.label } };
+      return { key: "reason.repost_label", values: { channel: channelName(reason.channelId), label: reason.label } };
     case "reposted": {
       const dates = [reason.events[0]?.oldSeen ?? "", ...reason.events.map((e) => e.newSeen)].filter((d) => d !== "");
-      return { key: "reason.reposted", values: { channel: reason.channelId, dates: [...new Set(dates)].join(", ") } };
+      return { key: "reason.reposted", values: { channel: channelName(reason.channelId), dates: [...new Set(dates)].join(", ") } };
     }
     case "evergreen_wording":
       return { key: "reason.evergreen_wording", values: {} };

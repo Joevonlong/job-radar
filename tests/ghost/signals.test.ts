@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import { countWords, hasResponsibilityHeading, longOpen, repostLabel, reposted, thinDescription } from "@/lib/ghost/signals";
 
-import { DAY_MS, NOW, daysAgo, input, posting, rulesWith } from "./helpers";
+import { DAY_MS, NOW, daysAgo, fixtureRules, input, posting, rulesWith } from "./helpers";
 
 describe("long_open", () => {
   const rules = rulesWith((s) => {
@@ -169,6 +169,14 @@ describe("thin_description", () => {
     );
     expect(thinDescription(input({ description: longText("Your tasks:") }), strict)).toMatchObject({ points: 2, minWords: 500 });
   });
+});
+
+describe("duties headings of the fixture packs", () => {
+  const rules = fixtureRules();
+  const duties = ["Job Description", "Stellenbeschreibung", "Ihre Tätigkeitsschwerpunkte", "The opportunity", "Was du bei uns machst", "Role overview", "Your Impact", "Deine Aufgaben", "What you'll do", "Das erwartet dich", "**Your Responsibilities**", "## Aufgaben", "Ihr Aufgabengebiet:", "Was Sie bei uns bewegen", "Your tasks", "Die Rolle"];
+  const others = ["Your profile", "Dein Profil", "Benefits", "Wir bieten"];
+  it.each(duties)("%j opens the duties", (heading) => expect(hasResponsibilityHeading(`${heading}\n- Something here.`, rules)).toBe(true));
+  it.each(others)("%j does not", (heading) => expect(hasResponsibilityHeading(`${heading}\n- Something here.`, rules)).toBe(false));
 });
 
 describe("dates are whole days", () => {

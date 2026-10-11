@@ -4,6 +4,7 @@ import type { Db } from "../client";
 import { applications, channels, companies, jobFavorites, jobSources, jobs, jobVisa, trapScans } from "../schema";
 import type { MonthSalaryFigure } from "@/lib/domain/salary";
 import { DEFAULT_SORT_DIR, type ApplicationFilterStatus, type GhostFilter, type JobSort, type SortDir, type TrapFilter, type VisaFilter } from "@/lib/jobs/constants";
+import { ghostTrustedKeys } from "@/lib/ghost/settings";
 
 import { ghostFilterCondition } from "../repos/ghost";
 import { seenSql } from "../repos/seen";
@@ -191,7 +192,7 @@ export function buildJobConditions(db: Db, filters: JobFilters, timezone: string
     conditions.push(filters.visa === "offered" ? found : not(found));
   }
   if (filters.ghost) {
-    const ghost = ghostFilterCondition(filters.ghost, jobs.id);
+    const ghost = ghostFilterCondition(filters.ghost, jobs.id, ghostTrustedKeys());
     if (ghost) conditions.push(ghost);
   }
   if (filters.unseenOnly && ux) conditions.push(not(seenSql()));

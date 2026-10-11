@@ -208,14 +208,27 @@ export function strongestFirst(reasons: readonly GhostReason[]): GhostReason[] {
   return [...reasons].sort((a, b) => b.points - a.points || GHOST_REASONS.indexOf(a.code) - GHOST_REASONS.indexOf(b.code));
 }
 
-/** The marks of the given jobs (watch and likely, not dismissed; others are absent). Empty when the table is not there yet. */
-export async function loadGhostLevels(db: Executor, jobIds: readonly number[]): Promise<Map<number, GhostMark>> {
+/**
+ * A job of a trusted company (ui.yaml `trusted_companies` as `companies.name_norm` keys), over `jobId`; null without keys. The pages
+ * apply it on top of the stored result, so adding a company hides its marks at once (closed jobs included, which the check skips).
+ */
+function trustedJobSql(jobId: SQL | typeof jobs.id | typeof jobGhost.jobId, trustedKeys: readonly string[]): SQL | null {
+  if (trustedKeys.length === 0) return null;
+  return sql`exists (select 1 from jobs tj join companies tc on tc.id = tj.company_id where tj.id = ${jobId} and tc.name_norm = any(${textArray(trustedKeys)}))`;
+}
+
+/**
+ * The marks of the given jobs (watch and likely, not dismissed, not of a trusted company; others are absent). Empty when the table
+ * is not there yet.
+ */
+export async function loadGhostLevels(db: Executor, jobIds: readonly number[], trustedKeys: readonly string[] = []): Promise<Map<number, GhostMark>> {
   const out = new Map<number, GhostMark>();
   if (jobIds.length === 0 || !(await checkTableReady(db, "job_ghost"))) return out;
+  const trusted = trustedJobSql(jobGhost.jobId, trustedKeys);
   const rows = await db
     .select({ jobId: jobGhost.jobId, level: jobGhost.level, score: jobGhost.score, evidence: jobGhost.evidence, dismissedCodes: jobGhost.dismissedCodes })
     .from(jobGhost)
-    .where(and(inArray(jobGhost.jobId, [...new Set(jobIds)]), ne(jobGhost.level, "none")));
+    .where(and(inArray(jobGhost.jobId, [...new Set(jobIds)]), ne(jobGhost.level, "none"), trusted ? sql`not ${trusted}` : undefined));
   for (const row of rows) {
     const level = parseLevel(row.level);
     if (level === null || level === "none") continue;
@@ -226,11 +239,21 @@ export async function loadGhostLevels(db: Executor, jobIds: readonly number[]): 
   return out;
 }
 
-/** One job's result with its reasons, for the detail page; null when the job is not checked yet or the table is not there. */
-export async function getGhostOfJob(db: Executor, jobId: number): Promise<GhostOfJob | null> {
+/**
+ * One job's result with its reasons, for the detail page; null when the job is not checked yet or the table is not there. A job of
+ * a trusted company reads as "none" (what the check stores for it).
+ */
+export async function getGhostOfJob(db: Executor, jobId: number, trustedKeys: readonly string[] = []): Promise<GhostOfJob | null> {
   if (!(await checkTableReady(db, "job_ghost"))) return null;
-  const [row] = await db.select().from(jobGhost).where(eq(jobGhost.jobId, jobId)).limit(1);
+  const trusted = trustedJobSql(jobGhost.jobId, trustedKeys);
+  const [row] = await db
+    .select({ ghost: jobGhost, trusted: trusted ?? sql<boolean>`false` })
+    .from(jobGhost)
+    .where(eq(jobGhost.jobId, jobId))
+    .limit(1)
+    .then((rows) => rows.map((r) => ({ ...r.ghost, trusted: r.trusted === true })));
   if (!row) return null;
+  if (row.trusted) return { level: "none", score: 0, reasons: [], checkedAt: row.checkedAt, dismissedAt: null, dismissedCodes: null, dismissed: false };
   const level = parseLevel(row.level);
   if (level === null) return null;
   const reasons = parseReasons(row.evidence);
@@ -276,12 +299,15 @@ const DISMISS_ACTIVE = sql`(g.dismissed_codes is not null and not exists (select
 
 /**
  * The `/jobs` condition of the ghost filter over `jobId` (the jobs' id column): `only` = watch and likely jobs not dismissed;
- * `hide` = every job except the likely ones not dismissed; `all` = none. Call only when the table exists.
+ * `hide` = every job except the likely ones not dismissed; `all` = none. A job of a trusted company counts as unmarked. Call only
+ * when the table exists.
  */
-export function ghostFilterCondition(filter: GhostFilter, jobId: SQL | typeof jobs.id): SQL | null {
+export function ghostFilterCondition(filter: GhostFilter, jobId: SQL | typeof jobs.id, trustedKeys: readonly string[] = []): SQL | null {
   if (filter === "all") return null;
-  if (filter === "only") return sql`exists (select 1 from job_ghost g where g.job_id = ${jobId} and g.level in ('watch', 'likely') and not ${DISMISS_ACTIVE})`;
-  return sql`not exists (select 1 from job_ghost g where g.job_id = ${jobId} and g.level = 'likely' and not ${DISMISS_ACTIVE})`;
+  const trusted = trustedJobSql(jobId, trustedKeys);
+  const notTrusted = trusted ? sql` and not ${trusted}` : sql``;
+  if (filter === "only") return sql`(exists (select 1 from job_ghost g where g.job_id = ${jobId} and g.level in ('watch', 'likely') and not ${DISMISS_ACTIVE})${notTrusted})`;
+  return sql`not (exists (select 1 from job_ghost g where g.job_id = ${jobId} and g.level = 'likely' and not ${DISMISS_ACTIVE})${notTrusted})`;
 }
 
 export interface GhostStats {

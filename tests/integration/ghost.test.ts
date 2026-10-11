@@ -27,7 +27,7 @@ import { FIXTURE_DEFAULTS_DIR, makeTempConfig, type TempConfig } from "../config
 import { config as cycleConfig, quietLogger } from "../cycle/helpers";
 import { FULL_JD, rulesWith } from "../ghost/helpers";
 
-const hooks = vi.hoisted(() => ({ enabled: true }));
+const hooks = vi.hoisted(() => ({ enabled: true, trustedKeys: [] as string[] }));
 
 vi.mock("@/lib/ghost/settings", async (importOriginal) => {
   const original = await importOriginal<typeof import("@/lib/ghost/settings")>();
@@ -35,6 +35,7 @@ vi.mock("@/lib/ghost/settings", async (importOriginal) => {
     ...original,
     readGhostSettings: () => ({ enabled: hooks.enabled, trusted_companies: [] }),
     ghostEnabled: () => hooks.enabled,
+    ghostTrustedKeys: () => [...hooks.trustedKeys],
   };
 });
 
@@ -133,6 +134,7 @@ beforeEach(async () => {
     ])
     .onConflictDoNothing();
   hooks.enabled = true;
+  hooks.trustedKeys = [];
   temp = makeTempConfig();
 });
 
@@ -190,11 +192,14 @@ describe("the stored ghost job check", () => {
 
   it("touches no score, signal or JD", async () => {
     const id = await likelyJob();
-    const before = await db().select().from(schema.jobs).where(eq(schema.jobs.id, id));
+    await db().insert(schema.scores).values({ jobId: id, filterResult: "passed", score: 71, rankValue: 71.5 });
+    await db().insert(schema.signals).values({ jobId: id, tier: "T1", kind: "salary", quote: "EUR 70,000 per year", extractor: "rule" });
+    const before = { jobs: await db().select().from(schema.jobs).where(eq(schema.jobs.id, id)), scores: await db().select().from(schema.scores), signals: await db().select().from(schema.signals) };
+    expect(before.scores).toHaveLength(1);
+    expect(before.signals).toHaveLength(1);
     await check();
-    expect(await db().select().from(schema.jobs).where(eq(schema.jobs.id, id))).toEqual(before);
-    expect(await db().select().from(schema.scores)).toEqual([]);
-    expect(await db().select().from(schema.signals)).toEqual([]);
+    expect((await row(id))?.level).toBe("likely");
+    expect({ jobs: await db().select().from(schema.jobs).where(eq(schema.jobs.id, id)), scores: await db().select().from(schema.scores), signals: await db().select().from(schema.signals) }).toEqual(before);
   });
 });
 
@@ -245,6 +250,30 @@ describe("what the pages read", () => {
     expect((await getGhostOfJob(db(), watch))?.dismissed).toBe(false);
     expect((await loadGhostLevels(db(), [watch])).has(watch)).toBe(true);
     expect(await listIds("only")).toEqual([watch]);
+  });
+
+  it("hides a trusted company's marks at once, before the check runs again (closed jobs too)", async () => {
+    const likely = await likelyJob();
+    const watch = await watchJob();
+    const closed = await likelyJob();
+    await check();
+    await db().update(schema.jobs).set({ status: "closed" }).where(eq(schema.jobs.id, closed));
+    const keyOf = async (jobId: number) => (await db().select({ name: schema.companies.nameNorm }).from(schema.companies).innerJoin(schema.jobs, eq(schema.jobs.companyId, schema.companies.id)).where(eq(schema.jobs.id, jobId)))[0]!.name;
+    const keys = [await keyOf(likely), await keyOf(closed)];
+    expect((await loadGhostLevels(db(), [likely, watch, closed], keys)).size).toBe(1);
+    expect((await loadGhostLevels(db(), [likely, watch, closed])).size).toBe(3);
+    expect(await getGhostOfJob(db(), likely, keys)).toMatchObject({ level: "none", score: 0, reasons: [], dismissed: false });
+    expect(await getGhostOfJob(db(), closed, keys)).toMatchObject({ level: "none" });
+    expect(await getGhostOfJob(db(), watch, keys)).toMatchObject({ level: "watch" });
+    // the pages read ui.yaml's list (mocked here): the filter, the list mark and the detail page
+    hooks.trustedKeys = keys;
+    expect(await listIds("only")).toEqual([watch]);
+    expect(await listIds("hide")).toEqual(sorted(likely, watch));
+    const cards = (await listJobs(db(), { filters: {}, sort: "first_seen", page: 1, pageSize: 50, timezone: "Europe/Berlin", ghost: true })).jobs;
+    expect(cards.find((c) => c.id === likely)?.ghost ?? null).toBeNull();
+    expect((await getJobDetail(db(), likely))?.ghost).toMatchObject({ level: "none" });
+    // the stored result is untouched: the next cycle stores "none" itself
+    expect((await row(likely))?.level).toBe("likely");
   });
 
   it("a clear result cannot be dismissed", async () => {
@@ -337,6 +366,9 @@ describe("pnpm ghost:check", () => {
     expect(JSON.parse(write.stdout)).toMatchObject({ write: true, enabled: true, scanned: 2, changed: 2, stats: { unchecked: 0, total: 2 } });
     expect(await row(id)).toBeDefined();
     expect(JSON.parse(run(["--write", "--json"]).stdout)).toMatchObject({ scanned: 0, changed: 0 });
+    // a preview reads every open job, also the current ones (the share of each level), unless --limit says otherwise
+    expect(JSON.parse(run(["--json"]).stdout)).toMatchObject({ write: false, scanned: 2, changed: 0 });
+    expect(JSON.parse(run(["--json", "--limit", "1"]).stdout)).toMatchObject({ scanned: 1 });
     expect(JSON.parse(run(["--job", String(id), "--json"]).stdout)).toMatchObject({ scanned: 1, changed: 0, jobs: [expect.objectContaining({ jobId: id })] });
   }, 180_000);
 

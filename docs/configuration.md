@@ -309,10 +309,10 @@ missing: the defaults below apply. The phrases live in the market packs (`rules.
 | | `job_checks.ghost.thin_description.min_words` / `.points` | 120 / 1 | A full-text JD shorter than this, or without a duties section (0–5000 / 0–10) |
 | | `job_checks.ghost.<signal>.enabled` | `true` | Each signal can be turned off |
 | | `job_checks.ghost.quote_max_chars` | 280 | Longest quote (40–2000) |
-| | `job_checks.ghost.negation_words_before` / `_after` | 6 / 5 | Words around an evergreen phrase searched for a negation (0–20) |
+| | `job_checks.ghost.negation_words_before` / `_after` | 6 / 5 | Words around an evergreen phrase searched for a negation (0–20); a pack with `negation_after: clause` searches after it to the end of the clause instead |
 | | `job_checks.ghost.heading_max_chars` | 60 | Longest line read as a heading together with the next line (10–200) |
 | `ui.yaml` (user) | `job_checks.ghost.enabled` | `false` | On: the cycle checks jobs and the pages show the marks and the filter |
-| | `job_checks.ghost.trusted_companies` | `[]` | Company names never marked (matched by the normalized name, without the legal form, aliases applied) |
+| | `job_checks.ghost.trusted_companies` | `[]` | Company names never marked (matched by the normalized name, without the legal form, aliases applied); their marks disappear at once, closed jobs included |
 
 An older version rejects `job_checks.ghost` in `ui.yaml`: remove it before rolling back.
 

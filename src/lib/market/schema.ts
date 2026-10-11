@@ -244,8 +244,44 @@ export type GhostPatternEntry = z.infer<typeof ghostPatternSchema>;
  * An `evergreen_patterns` entry. `check_negation: false` for a phrase that is a negation itself ("no current opening", "keine
  * offene Stelle"): its own "no" must not cancel it.
  */
-export const ghostEvergreenPatternSchema = z.strictObject({ id: ghostPatternId, pattern: regexString, check_negation: z.boolean().default(true) });
+/**
+ * How far after an evergreen phrase a negation cue is searched: `words` = `pipeline.yaml job_checks.ghost.negation_words_after`
+ * words (within the clause), `clause` = to the end of the clause (German puts "nicht" at the end: "Für unseren Talentpool ist diese
+ * Anzeige ganz ausdrücklich nicht gedacht").
+ */
+export const GHOST_NEGATION_AFTER = ["words", "clause"] as const;
+export type GhostNegationAfter = (typeof GHOST_NEGATION_AFTER)[number];
+
+/**
+ * An `evergreen_patterns` entry. `check_negation: false` for a phrase that is a negation itself ("no current opening", "keine
+ * offene Stelle"): its own "no" must not cancel it. `negation_after`: this entry's own window after the phrase (default: its pack's).
+ */
+export const ghostEvergreenPatternSchema = z.strictObject({
+  id: ghostPatternId,
+  pattern: regexString,
+  check_negation: z.boolean().default(true),
+  negation_after: z.enum(GHOST_NEGATION_AFTER).optional(),
+});
 export type GhostEvergreenPatternEntry = z.infer<typeof ghostEvergreenPatternSchema>;
+
+/**
+ * The question right before a sentence, read as that sentence's context ("Don't see a role that fits? Join our talent community"):
+ * the text before the sentence ends in one of `ends`; the question starts after the last of `starts` (or a line break) before it.
+ * `line_above`: the question may stand on the line above (false: only on the same line). Plain characters, not patterns.
+ */
+export interface GhostLeadInQuestion {
+  ends: string[];
+  starts: string[];
+  line_above: boolean;
+}
+
+export const emptyGhostLeadInQuestion = (): GhostLeadInQuestion => ({ ends: [], starts: [], line_above: false });
+
+const markList = z.array(z.string().min(1).max(4)).default([]);
+
+const ghostLeadInQuestionSchema = z
+  .strictObject({ ends: markList, starts: markList, line_above: z.boolean().default(false) })
+  .default(emptyGhostLeadInQuestion) satisfies z.ZodType<GhostLeadInQuestion>;
 
 /** `rules.yaml` `ghost` as the code reads it (the schema's output). */
 export interface GhostPack {
@@ -253,15 +289,29 @@ export interface GhostPack {
   evergreen_patterns: GhostEvergreenPatternEntry[];
   responsibility_patterns: GhostPatternEntry[];
   negation_cues: string[];
+  /** The default `negation_after` of this pack's evergreen patterns. */
+  negation_after: GhostNegationAfter;
   clause_breaks: string[];
   exclude_context: string[];
+  lead_in_question: GhostLeadInQuestion;
   abbreviations: string[];
   prefilter: string[];
 }
 
 /** `rules.yaml` `ghost` when a pack has none. */
 export function emptyGhostPack(): GhostPack {
-  return { repost_label_patterns: [], evergreen_patterns: [], responsibility_patterns: [], negation_cues: [], clause_breaks: [], exclude_context: [], abbreviations: [], prefilter: [] };
+  return {
+    repost_label_patterns: [],
+    evergreen_patterns: [],
+    responsibility_patterns: [],
+    negation_cues: [],
+    negation_after: "words",
+    clause_breaks: [],
+    exclude_context: [],
+    lead_in_question: emptyGhostLeadInQuestion(),
+    abbreviations: [],
+    prefilter: [],
+  };
 }
 
 /**
@@ -282,10 +332,17 @@ export const ghostPackSchema = z
      * `clause_breaks` match, and in the heading of its list.
      */
     negation_cues: optionalList,
+    /** How far after a phrase of this pack a negation cue is searched (`words` / `clause`); an entry's own `negation_after` wins. */
+    negation_after: z.enum(GHOST_NEGATION_AFTER).default("words"),
     /** Where the clause after an evergreen phrase ends for the negation search (regular expressions). */
     clause_breaks: optionalList,
-    /** A sentence matching one of these is not about this posting (talent-pool software, "no suitable role? apply anyway", privacy notes). */
+    /**
+     * A sentence matching one of these is not about this posting (talent-pool software, "no suitable role? apply anyway", privacy
+     * notes); the question right before it (`lead_in_question`) is tested too.
+     */
     exclude_context: optionalList,
+    /** Which question before a sentence is read with it (see `GhostLeadInQuestion`). */
+    lead_in_question: ghostLeadInQuestionSchema,
     /** Abbreviations whose dot does not end a sentence, without the final dot. */
     abbreviations: z.array(nonEmptyString).default([]),
     /**

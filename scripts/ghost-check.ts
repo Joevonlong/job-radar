@@ -4,9 +4,10 @@
  *   pnpm ghost:check [--write] [--job ID] [--limit N] [--json]
  *
  * Previews by default (nothing is written), also while ui.yaml `job_checks.ghost.enabled` is false: that is how the owner sees the
- * share of each level before turning the check on. `--write` stores the results and is refused while the check is off. Jobs whose
- * inputs did not change since their last check (and did not reach the next "open for long" tier) are skipped, so a second `--write`
- * run reports 0 changes. `--job ID` checks that job again even when its result is current. Reading and printing live here; the logic
+ * share of each level before turning the check on, so a preview reads every open job (current results too, newest first; `--limit`
+ * caps it). `--write` stores the results, at most pipeline.yaml `per_cycle_limit` jobs unless `--limit` says otherwise, and is
+ * refused while the check is off. A write skips jobs whose inputs did not change since their last check (and did not reach the next
+ * "open for long" tier), so a second `--write` run reports 0 changes. `--job ID` checks that job again even when its result is current. Reading and printing live here; the logic
  * is `src/lib/ghost`.
  */
 import { parseArgs } from "node:util";
@@ -23,6 +24,9 @@ import { ghostReasonMessage } from "../src/lib/ghost/view";
 import { scopeLocale } from "../src/lib/i18n/node";
 
 const t = ghostTranslator(scopeLocale("cli"));
+
+/** A preview reads every open job (a SQL limit, not a setting: "no limit"). */
+const PREVIEW_LIMIT = 2_147_483_647;
 
 const argsSchema = z.object({
   write: z.boolean(),
@@ -81,11 +85,11 @@ async function main(): Promise<void> {
   const result = await runGhostCheck(db, {
     ...config,
     channels: ghostChannelsOf(undefined),
-    limit: args.job !== undefined ? 1 : (args.limit ?? config.limit),
+    limit: args.job !== undefined ? 1 : (args.limit ?? (args.write ? config.limit : PREVIEW_LIMIT)),
     logger,
     now: new Date(),
     write: args.write,
-    ...(args.job !== undefined ? { jobIds: [args.job], force: true } : {}),
+    ...(args.job !== undefined ? { jobIds: [args.job], force: true } : args.write ? {} : { force: true }),
   });
   if (result.skipped === "no_table") {
     console.error(t("cli.noTable"));

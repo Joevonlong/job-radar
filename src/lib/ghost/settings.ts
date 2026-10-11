@@ -5,6 +5,7 @@
 import { reloadConfig } from "@/lib/config";
 import type { PipelineConfig } from "@/lib/config/schemas/pipeline";
 import { GHOST_UI_DEFAULTS, type UiConfig } from "@/lib/config/schemas/ui";
+import { loadPipeline } from "@/lib/market/effective";
 import { resolveCompanyName } from "@/lib/pipeline/company";
 
 export interface GhostSettings {
@@ -31,4 +32,18 @@ export function ghostEnabled(): boolean {
 export function trustedCompanyKeys(names: readonly string[], pipeline: PipelineConfig): string[] {
   const keys = names.map((name) => resolveCompanyName(name, pipeline).nameNorm).filter((key) => key !== "");
   return [...new Set(keys)].sort();
+}
+
+/**
+ * ui.yaml `trusted_companies` as `companies.name_norm` keys, for the pages: their marks are hidden at once, before the next cycle
+ * stores "none". Empty when the config cannot be read (the stored results show as they are).
+ */
+export function ghostTrustedKeys(load: () => PipelineConfig = loadPipeline): string[] {
+  const names = readGhostSettings().trusted_companies;
+  if (names.length === 0) return [];
+  try {
+    return trustedCompanyKeys(names, load());
+  } catch {
+    return [];
+  }
 }

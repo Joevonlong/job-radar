@@ -80,11 +80,18 @@ export function mergeGhostPacks(packs: ReadonlyArray<{ rules: { ghost: GhostPack
   const ghost = packs.map((p) => p.rules.ghost);
   return {
     repost_label_patterns: unionEntries(...ghost.map((g) => g.repost_label_patterns)),
-    evergreen_patterns: unionEntries(...ghost.map((g) => g.evergreen_patterns)),
+    // each entry keeps its own pack's negation window
+    evergreen_patterns: unionEntries(...ghost.map((g) => g.evergreen_patterns.map((entry) => ({ ...entry, negation_after: entry.negation_after ?? g.negation_after })))),
     responsibility_patterns: unionEntries(...ghost.map((g) => g.responsibility_patterns)),
     negation_cues: union(...ghost.map((g) => g.negation_cues)),
+    negation_after: "words",
     clause_breaks: union(...ghost.map((g) => g.clause_breaks)),
     exclude_context: union(...ghost.map((g) => g.exclude_context)),
+    lead_in_question: {
+      ends: union(...ghost.map((g) => g.lead_in_question.ends)),
+      starts: union(...ghost.map((g) => g.lead_in_question.starts)),
+      line_above: ghost.some((g) => g.lead_in_question.line_above),
+    },
     abbreviations: union(...ghost.map((g) => g.abbreviations)),
     prefilter: union(...ghost.map((g) => g.prefilter)),
   };

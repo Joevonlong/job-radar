@@ -7,8 +7,8 @@ under a new id again and again. Job Radar can mark postings that show such signs
 tokens), it is **only a hint**: it never changes a score, a rank, a filter result or a notification, and a mark does not
 mean the job is not real.
 
-The check is **off by default**. Preview it first (`pnpm ghost:check --json`, below), then turn it on in `ui.yaml` when the
-share of marked jobs looks right for your market.
+The check is **off by default**. Preview it first (`pnpm ghost:check --json`, below: it reads every open job and writes
+nothing), then turn it on in `ui.yaml` when the share of marked jobs looks right for your market.
 
 ## The signals
 
@@ -19,7 +19,7 @@ Each signal adds points; the points come from `pipeline.yaml: job_checks.ghost` 
 | `long_open` | An open job whose source gives a trusted posted date (company ATS, LinkedIn with your login) has been online for at least 90 days (1) or 180 days (2). Without a trusted date the days count from when Job Radar first saw it, at most 1 point. | 1–2 |
 | `repost_label` | The source itself labels the posting "Reposted" (LinkedIn with your login) | 1 |
 | `reposted` | The same source listed the job again under a new id, at the same place, at least 30 days after the earlier one. Only sources whose ids stay the same for one posting (company ATS, LinkedIn with your login, StepStone, XING, Arbeitsagentur) count; never two different sources. | 2 |
-| `evergreen_wording` | The job description says it is a talent pool or always open ("This posting is for our talent pool", "We are always hiring", "Initiativbewerbung (m/w/d)", "Es gibt keine konkrete Stelle") | 2 |
+| `evergreen_wording` | The job description says it is a talent pool or always open ("This posting is for our talent pool", "We are always hiring", "Wir stellen laufend ein", "Initiativbewerbung (m/w/d)", "Es gibt keine konkrete Stelle"). Not "We're always looking for people who …" (the About-us text of many real postings) | 2 |
 | `thin_description` | The description comes from a source that keeps the full text and has fewer than 120 words, or no duties section (a heading such as "Responsibilities", "Your tasks", "Deine Aufgaben"). When the job has a current [JD breakdown](breakdown.md), its duties list decides instead of the headings. | 1 |
 
 The sum gives the level:
@@ -38,15 +38,19 @@ Time and length alone never make a job `likely`: an old job with a short descrip
 The description is cut into pieces (sentences, list items, a short heading with the line after it), as for the
 [visa check](visa-sponsorship.md#how-a-posting-is-read). A piece with an evergreen phrase does **not** count when:
 
-- a negation word is inside the phrase, within `negation_words_before` words before it, within `negation_words_after` words
-  after it in the same clause, or in the heading of its list ("This is not a talent pool posting", "Ein Talentpool ist
-  das nicht");
-- it is about the employer's product or customers ("We build talent pool software", "Wir helfen Unternehmen beim Aufbau
-  ihres Talentpools");
+- a negation word is inside the phrase, within `negation_words_before` words before it, after it in the same clause
+  (within `negation_words_after` words; to the end of the clause for German, which puts "nicht" last), or in the heading of
+  its list ("This is not a talent pool posting", "Für unseren Talentpool ist diese Anzeige ganz ausdrücklich nicht
+  gedacht");
+- it is about the employer's product, customers or a team of that name ("We build talent pool software", "Our ATS lets
+  hiring managers add candidates to the talent pipeline", "Join our Talent Network team", "Wir helfen Unternehmen beim
+  Aufbau ihres Talentpools");
 - it is a duty of the role ("You will build our talent pipeline", a list item under "Your tasks:");
-- it is the footer of a real posting ("Don't see a role that fits? Join our talent community", "Keine passende Stelle
-  dabei? Dann bewirb dich initiativ"; the question right before the sentence counts too), a conditional ("If there is no
-  open role…"), a privacy note, or "we may also consider you for future roles".
+- it says the role is a real opening after all ("…, but this role is a concrete opening", "this role is based in Berlin");
+- it is the footer of a real posting ("Don't see a role that fits? Join our talent community", "Not ready to apply? Join our
+  talent community to stay in touch", "Keine passende Stelle dabei? Dann bewirb dich initiativ"; the question right before
+  the sentence counts too, see `lead_in_question` in [market-packs.md](market-packs.md#ghost-job-patterns)), a conditional
+  ("If there is no open role…"), a privacy note, or "we may also consider you for future roles".
 
 The quote is a verbatim piece of the description with its position. Text hidden from readers that the
 [AI trap detection](ai-traps.md) found does not count. The phrases live in the market packs
@@ -70,8 +74,8 @@ The pipeline board shows no mark.
 
 ## Not a ghost job
 
-**Not a ghost job** on the job page dismisses the mark: it disappears from the list, the score card and the
-"Suspected only" filter. The dismissal keeps the kinds of reasons the job had; if a new kind comes up later (say, a
+**Not a ghost job** on the job page dismisses the mark: it disappears from the list, the score card, the description's
+wavy underline and the "Suspected only" filter. The dismissal keeps the kinds of reasons the job had; if a new kind comes up later (say, a
 relisting), the mark comes back. **Undo** takes the dismissal back. Nothing else changes.
 
 ## When it runs
@@ -83,11 +87,11 @@ source's declarations), or when it reaches the next `long_open` tier; at most
 the step "partial" and is retried next cycle.
 
 ```bash
-pnpm ghost:check                 # preview: what each job would get, nothing is written (works while the check is off)
+pnpm ghost:check                 # preview: what every open job would get, nothing is written (works while the check is off)
 pnpm ghost:check --json          # the same as JSON, with the share of each level
-pnpm ghost:check --write         # store the results (only while the check is on; a second run reports 0 changes)
+pnpm ghost:check --write         # store the results (only while the check is on; at most per_cycle_limit jobs; a second run reports 0 changes)
 pnpm ghost:check --job 1234      # one job, checked again even when it is current
-pnpm ghost:check --limit 500
+pnpm ghost:check --limit 500     # at most 500 jobs (newest first), for a preview or a write
 ```
 
 ## Settings
@@ -98,7 +102,7 @@ pnpm ghost:check --limit 500
 job_checks:
   ghost:
     enabled: false             # true: the cycle checks jobs and the pages show the marks
-    trusted_companies: []      # company names never marked, e.g. ["Acme GmbH"]
+    trusted_companies: []      # company names never marked, e.g. ["Acme GmbH"]; their marks disappear at once
 ```
 
 `pipeline.yaml` (shipped), see [configuration.md](configuration.md#ghost-job-check-pipelineyaml--uiyaml):

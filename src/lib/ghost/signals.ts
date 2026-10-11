@@ -203,9 +203,10 @@ function lastBreakEnd(text: string, breaks: readonly RegExp[]): number {
 
 /**
  * A negation cue inside the hit, among the `negation_words_before` words before it or the `negation_words_after` words after it
- * (both within its clause), in the heading of its list, or, for a heading read with its next line, in that next line.
+ * (both within its clause; after it to the end of the clause for a pattern with `negationAfter: "clause"`), in the heading of its
+ * list, or, for a heading read with its next line, in that next line.
  */
-function negated(segment: TextSegment, hit: Hit, rules: CompiledGhostRules, description: string): boolean {
+function negated(segment: TextSegment, hit: Hit, pattern: CompiledGhostPattern, rules: CompiledGhostRules, description: string): boolean {
   if (rules.negationCues.length === 0) return false;
   if (segment.listHeading !== undefined && hasCue(description.slice(segment.listHeading.start, segment.listHeading.end), rules)) return true;
   if (segment.headingEnd !== undefined && hit.end <= segment.headingEnd && hasCue(description.slice(segment.headingEnd, segment.end), rules)) return true;
@@ -216,7 +217,8 @@ function negated(segment: TextSegment, hit: Hit, rules: CompiledGhostRules, desc
   const before = settings.negation_words_before === 0 ? [] : wordsOf(head.slice(lastBreakEnd(head, rules.clauseBreaks))).slice(-settings.negation_words_before);
   const inside = wordsOf(segment.text.slice(from, to));
   const tail = segment.text.slice(to);
-  const after = settings.negation_words_after === 0 ? [] : wordsOf(tail.slice(0, firstBreak(tail, rules.clauseBreaks))).slice(0, settings.negation_words_after);
+  const clauseAfter = wordsOf(tail.slice(0, firstBreak(tail, rules.clauseBreaks)));
+  const after = pattern.negationAfter === "clause" ? clauseAfter : clauseAfter.slice(0, settings.negation_words_after);
   return [...before, ...inside, ...after].some((word) => rules.negationCues.some((cue) => cue.test(word)));
 }
 
@@ -228,14 +230,22 @@ function underDutiesHeading(segment: TextSegment, rules: CompiledGhostRules, des
 }
 
 /**
- * The question right before a piece (same line or the line above), when the text before it ends in "?": "Don't see a role that
- * fits? Join our talent community" is one thought cut in two, so the question is read as the piece's context. Empty when none.
+ * The question right before a piece, when the text before it ends in one of the packs' `lead_in_question.ends` ("?"): "Don't see a
+ * role that fits? Join our talent community" is one thought cut in two, so the question is read as the piece's context. It starts
+ * after the last `starts` mark or line break before it; with `line_above` false it must end on the piece's own line. Empty when none.
  */
-function leadInQuestion(description: string, start: number): string {
-  const before = description.slice(0, start).trimEnd();
-  if (!before.endsWith("?")) return "";
-  const head = before.slice(0, -1);
-  const from = Math.max(head.lastIndexOf("\n"), head.lastIndexOf("."), head.lastIndexOf("!"), head.lastIndexOf("?")) + 1;
+function leadInQuestion(description: string, start: number, lead: CompiledGhostRules["leadInQuestion"]): string {
+  if (lead.ends.length === 0) return "";
+  const raw = description.slice(0, start);
+  const before = raw.trimEnd();
+  if (!lead.line_above && raw.slice(before.length).includes("\n")) return "";
+  const end = lead.ends.find((mark) => before.endsWith(mark));
+  if (end === undefined) return "";
+  const head = before.slice(0, -end.length);
+  const from = Math.max(head.lastIndexOf("\n"), ...lead.starts.map((mark) => {
+    const at = head.lastIndexOf(mark);
+    return at === -1 ? -1 : at + mark.length - 1;
+  })) + 1;
   return before.slice(from);
 }
 
@@ -270,13 +280,13 @@ export function evergreenWording(description: string | null, rules: CompiledGhos
     const candidates: Array<{ hit: Hit; pattern: CompiledGhostPattern }> = [];
     for (const pattern of rules.evergreen) for (const hit of hitsOf(pattern, segment)) candidates.push({ hit, pattern });
     if (candidates.length === 0) continue;
-    const question = leadInQuestion(description, segment.start);
+    const question = leadInQuestion(description, segment.start, rules.leadInQuestion);
     if (rules.excludeContext.some((re) => segment.text.search(re) !== -1 || (question !== "" && question.search(re) !== -1))) continue;
     if (underDutiesHeading(segment, rules, description)) continue;
     candidates.sort((a, b) => a.hit.start - b.hit.start || b.hit.end - a.hit.end);
     for (const { hit, pattern } of candidates) {
       if (options.skip?.(hit.start, hit.end)) continue;
-      if (pattern.checkNegation && negated(segment, hit, rules, description)) continue;
+      if (pattern.checkNegation && negated(segment, hit, pattern, rules, description)) continue;
       const { quote, offset } = clipQuote(description, segment.start, segment.end, hit, rules.settings.quote_max_chars);
       // C7: the quote must be the description at its offset; a quote that is not is never stored
       if (quote === "" || description.slice(offset, offset + quote.length) !== quote) continue;

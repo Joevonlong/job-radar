@@ -6,7 +6,7 @@ import type { GhostRulesInput } from "./rules";
  * Bump when the check changes in a way the packs and pipeline.yaml do not show (segmenting, the negation window, how points are
  * summed up): every job is checked again by the next cycles.
  */
-export const GHOST_RULES_VERSION = 1;
+export const GHOST_RULES_VERSION = 2;
 
 /**
  * Hash of the packs' ghost section, the check's version and every limit that shapes a result (not `per_cycle_limit`): a change

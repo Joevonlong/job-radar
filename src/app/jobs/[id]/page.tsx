@@ -45,7 +45,7 @@ import { germanCheck } from "@/lib/dashboard/german-check";
 import { userGermanLabelOrNull } from "@/lib/dashboard/german";
 import { floorCheck } from "@/lib/dashboard/floor-check";
 import { loadDealBreakerNotice } from "@/lib/dashboard/deal-breakers";
-import { knownContract, knownFamily } from "@/lib/dashboard/labels";
+import { channelDisplayName, knownContract, knownFamily } from "@/lib/dashboard/labels";
 import { buildSkillAliasMap, matchSkills, profileSkillKeys } from "@/lib/dashboard/skills";
 import { quotesFoundInJd } from "@/lib/dashboard/jd";
 import { loadModelCatalog } from "@/lib/ai/catalog";
@@ -230,7 +230,9 @@ export default async function JobDetailPage({ params }: { params: Params }) {
   const visaMarks = visaView ? visaView.evidence.map((e) => visaMarkText(e.quote)).filter((text) => text !== "") : [];
   // The ghost job check (nothing when ui.yaml job_checks.ghost is off); its evergreen quote is marked after the visa marks
   const ghostView = ghostEnabled() ? buildGhostCheckView(job.ghost) : null;
-  const ghostMark = ghostView?.quote && ghostView.state !== "clear" ? ghostMarkText(ghostView.quote) : "";
+  // marked only while the result shows (watch / likely): not once it is dismissed
+  const ghostMark = ghostView?.quote && (ghostView.state === "watch" || ghostView.state === "likely") ? ghostMarkText(ghostView.quote) : "";
+  const ghostChannelNames = Object.fromEntries(job.sources.map((source) => [source.channelId, channelDisplayName(source.channelId, source.family, (family) => tDash(`source.${family}`))]));
   const jdQuotes: Array<{ text: string; tier: string; trapKind?: "hidden" | "instruction" }> = [
     ...baseQuotes,
     ...trapItems.map((item) => ({ text: item.markText as string, tier: TRAP_QUOTE, trapKind: item.markKind })),
@@ -564,7 +566,7 @@ export default async function JobDetailPage({ params }: { params: Params }) {
               profileHasSkills={mySkills.length > 0}
               floor={floor}
               traps={trapCheck}
-              ghost={ghostView ? { jobId: job.id, view: ghostView, jdIndex: ghostJdIndex } : null}
+              ghost={ghostView ? { jobId: job.id, view: ghostView, jdIndex: ghostJdIndex, channelNames: ghostChannelNames } : null}
               visa={visaView ? { view: visaView, jdIndex: visaJdIndex } : null}
             />
           </Panel>

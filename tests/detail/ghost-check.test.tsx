@@ -68,6 +68,11 @@ describe("ChecksPanel ghost row", () => {
     expect(action).toHaveBeenCalledWith({ jobId: 9, action: "dismiss" });
   });
 
+  it("names the channels by the page's display names", () => {
+    render(wrap(<ChecksPanel {...base} ghost={{ jobId: 9, view: buildGhostCheckView(stored()), jdIndex: 0, channelNames: { greenhouse: "Greenhouse" } }} />));
+    expect(screen.getByTestId("ghost-check")).toHaveTextContent("Open 214 days (source posted date 2026-02-28, Greenhouse)");
+  });
+
   it("comes after the traps and before visa", () => {
     render(
       wrap(
