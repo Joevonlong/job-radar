@@ -44,8 +44,8 @@ Which jobs run depends on what the change touches (decided by the `changes` job)
 
 | Change | Jobs that run |
 |---|---|
-| Pull request that changes only documentation (`*.md`, `*.html`, images; never anything under `tests/`) | `changes` (with the documentation link check), `ci-docs`, `static`, `unit`, `ci-ok`. Several unit tests read the documentation (link targets, picture sizes), so they run. |
-| Any other pull request (code, scripts, config, anything under `tests/`, workflows, Dockerfiles) | the above plus `integration`, `e2e` and `linux-smoke` |
+| Pull request that changes only documentation (`*.md`, `*.html`, images; never anything under `tests/`, `src/` or `public/`) | `changes` (with the documentation link check), `ci-docs`, `static`, `unit`, `ci-ok`. Several unit tests read the documentation (link targets, picture sizes), so they run. |
+| Any other pull request (code, scripts, config, anything under `tests/`, `src/` or `public/`, workflows, Dockerfiles) | the above plus `integration`, `e2e` and `linux-smoke` |
 | Push to `main` | always everything, whatever the pushed commits touch; `integration` also runs the default file order |
 | Manual run (`workflow_dispatch`) | everything, like a push to `main` |
 
@@ -89,7 +89,8 @@ GitHub outages.
 Only a pull request is classified; it writes two outputs that the other jobs read:
 
 - `code`: `true` unless every changed file is documentation (`*.md`, `*.html`, `png`, `jpg`, `svg`, `gif`). Anything
-  under `tests/` is code even when it is an HTML file or an image: the tests read their fixtures. Scripts, YAML,
+  under `tests/`, `src/` or `public/` is code even when it is an HTML file, an SVG or an image: the tests read their
+  fixtures and the app ships its own pictures and pages. Scripts, YAML,
   Dockerfiles and workflows are code as well. `code` selects `integration`, `e2e` and `linux-smoke`; `static` and `unit`
   run either way (the unit tests read the documentation, and no list of "which tests read which file" is kept that
   could go stale).
@@ -97,9 +98,9 @@ Only a pull request is classified; it writes two outputs that the other jobs rea
 
 A push to `main` and a manual run are not classified at all: both write `code=true` and `full=true`. The commits on `main`
 are what gets deployed, so a documentation-only push must not end in a run that checked nothing. The range of a pull
-request is `base...head`. If the diff cannot be computed the step fails (and so does `ci-ok`): there is no silent "nothing
-changed". Run it by hand: `git diff --name-only origin/main...HEAD`, then look for a path that is not `*.md`, `*.html` or
-an image, or that starts with `tests/`.
+request is `base...head`, listed without rename detection, so a moved file counts with both its old and new path. If the diff cannot be computed the step fails (and so does `ci-ok`): there is no silent "nothing
+changed". Run it by hand: `git diff --name-only --no-renames origin/main...HEAD`, then look for a path that is not `*.md`, `*.html` or
+an image, or that starts with `tests/`, `src/` or `public/`.
 
 #### Documentation links
 

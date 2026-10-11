@@ -21,7 +21,7 @@ concurrency:
 # Playwright system libraries and the pg client wrappers checked on the new image.
 #
 # What runs (gates add up for mixed changes; anything not recognised as documentation, and everything under tests/,
-# counts as code):
+# src/ and public/, counts as code):
 #   docs-only PR        changes (classification + documentation link check), ci-docs, static (+ jobspy), unit
 #                       (the unit tests read the documentation and the fixtures)
 #   code PR             the above plus integration (shuffled file order), e2e, linux-smoke
@@ -56,15 +56,16 @@ jobs:
             echo "product checks: true, full: true"
             exit 0
           fi
-          # Documentation: *.md / *.html / images, anywhere except under tests/ (the tests read fixtures, among them HTML
-          # files). Everything else is code: scripts, YAML, Dockerfiles, workflows.
+          # Documentation: *.md / *.html / images, anywhere except under tests/, src/ and public/ (the tests read their
+          # fixtures, among them HTML files; the app ships its own HTML, SVG and images). Everything else is code:
+          # scripts, YAML, Dockerfiles, workflows.
           docs_re='\.(md|html|png|jpe?g|svg|gif)$'
           # Fails the job (and with it ci-ok) when the diff cannot be computed: no silent "nothing changed".
-          changed=$(git diff --name-only "$PR_BASE...$PR_HEAD")
+          changed=$(git diff --name-only --no-renames "$PR_BASE...$PR_HEAD")
           echo "$changed"
           code=false
           if grep -vE "$docs_re" <<< "$changed" | grep -q .; then code=true; fi
-          if grep -qE '^tests/' <<< "$changed"; then code=true; fi
+          if grep -qE '^(tests|src|public)/' <<< "$changed"; then code=true; fi
           printf 'code=%s\nfull=false\n' "$code" >> "$GITHUB_OUTPUT"
           echo "product checks: $code, full: false"
       - name: Documentation links

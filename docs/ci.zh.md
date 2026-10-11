@@ -35,8 +35,8 @@ flowchart LR
 
 | 改动 | 运行的任务 |
 |---|---|
-| 只改文档的 PR（`*.md`、`*.html`、图片；`tests/` 下的文件不算文档） | `changes`（含文档链接检查）、`ci-docs`、`static`、`unit`、`ci-ok`。有些单元测试会读文档（链接目标、图片大小），所以 `unit` 要跑。 |
-| 其他 PR（代码、脚本、配置、`tests/` 下任何文件、workflow、Dockerfile） | 上面的再加 `integration`、`e2e`、`linux-smoke` |
+| 只改文档的 PR（`*.md`、`*.html`、图片；`tests/`、`src/`、`public/` 下的文件不算文档） | `changes`（含文档链接检查）、`ci-docs`、`static`、`unit`、`ci-ok`。有些单元测试会读文档（链接目标、图片大小），所以 `unit` 要跑。 |
+| 其他 PR（代码、脚本、配置、`tests/`、`src/`、`public/` 下任何文件、workflow、Dockerfile） | 上面的再加 `integration`、`e2e`、`linux-smoke` |
 | 推送到 `main` | 无论改了什么，一律全部；`integration` 还会按默认文件顺序再跑一遍 |
 | 手动运行（`workflow_dispatch`） | 全部，同推送到 `main` |
 
@@ -68,10 +68,10 @@ workflow 级设置：`permissions: contents: read`（任何任务都不能写仓
 
 只对 pull request 分类，写出其他任务读取的两个输出：
 
-- `code`：只要有一个改动文件不是文档（`*.md`、`*.html`、`png`、`jpg`、`svg`、`gif`）就是 `true`。`tests/` 下的任何文件都算代码，即使是 HTML 或图片：测试会读自己的 fixture。脚本、YAML、Dockerfile、workflow 同样是代码。`code` 选中 `integration`、`e2e` 和 `linux-smoke`；`static` 和 `unit` 无论如何都跑（单元测试会读文档，这里也不维护“哪些测试读哪些文件”的清单，免得过时）。
+- `code`：只要有一个改动文件不是文档（`*.md`、`*.html`、`png`、`jpg`、`svg`、`gif`）就是 `true`。`tests/`、`src/`、`public/` 下的任何文件都算代码，即使是 HTML、SVG 或图片：测试会读自己的 fixture，应用也自带图片和页面。脚本、YAML、Dockerfile、workflow 同样是代码。`code` 选中 `integration`、`e2e` 和 `linux-smoke`；`static` 和 `unit` 无论如何都跑（单元测试会读文档，这里也不维护“哪些测试读哪些文件”的清单，免得过时）。
 - `full`：推送到 `main` 和手动运行时为 `true`，会多跑一遍默认顺序的集成测试。
 
-推送到 `main` 和手动运行完全不分类：两者都写 `code=true`、`full=true`。`main` 上的提交就是要部署的内容，所以只改文档的推送不能留下一次什么都没检查的运行。PR 的对比范围是 `base...head`。算不出差异时这一步会失败（`ci-ok` 随之失败），不会悄悄当作“没改动”。手动复现：`git diff --name-only origin/main...HEAD`，再看有没有不是 `*.md`、`*.html` 或图片的路径，或以 `tests/` 开头的路径。
+推送到 `main` 和手动运行完全不分类：两者都写 `code=true`、`full=true`。`main` 上的提交就是要部署的内容，所以只改文档的推送不能留下一次什么都没检查的运行。PR 的对比范围是 `base...head`，不做改名检测，所以被移动的文件新旧路径都会计入。算不出差异时这一步会失败（`ci-ok` 随之失败），不会悄悄当作“没改动”。手动复现：`git diff --name-only --no-renames origin/main...HEAD`，再看有没有不是 `*.md`、`*.html` 或图片的路径，或以 `tests/`、`src/`、`public/` 开头的路径。
 
 #### Documentation links
 
