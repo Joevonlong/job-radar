@@ -20,11 +20,13 @@ function httpUrlOrNull(value: string | undefined): string | null {
   }
 }
 
-/** Unix seconds -> Date; null for anything that is not a finite number. */
+/** Largest Unix time in seconds with a four-digit year (9999-12-31T23:59:59Z). A millisecond value lies far above it. */
+const MAX_UNIX_SECONDS = 253_402_300_799;
+
+/** Unix seconds -> Date; null for anything that is not a finite number of seconds between 1970 and the year 9999. */
 export function fromUnixSeconds(value: unknown): Date | null {
-  if (typeof value !== "number" || !Number.isFinite(value)) return null;
-  const date = new Date(value * 1000);
-  return Number.isNaN(date.getTime()) ? null : date;
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || value > MAX_UNIX_SECONDS) return null;
+  return new Date(value * 1000);
 }
 
 function readJob(payload: unknown): StoredArbeitnowJob {

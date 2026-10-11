@@ -30,7 +30,7 @@ const RUN_VARIANT = {
 const ATTRIBUTIONS = { arbeitnow: { message: "card.attribution.arbeitnow", url: ARBEITNOW_SITE_URL } } as const;
 const hasAttribution = (id: string): id is keyof typeof ATTRIBUTIONS => Object.hasOwn(ATTRIBUTIONS, id);
 
-const loginHint =(status: "missing" | "valid" | "expired"): "hintMissing" | "hintValid" | "hintExpired" => (status === "missing" ? "hintMissing" : status === "valid" ? "hintValid" : "hintExpired");
+const loginHint = (status: "missing" | "valid" | "expired"): "hintMissing" | "hintValid" | "hintExpired" => (status === "missing" ? "hintMissing" : status === "valid" ? "hintValid" : "hintExpired");
 
 /** One channel: light, this cycle's count with its trend, the health strip of the last cycles, switches, this month's usage against its budget, and its last runs. */
 export async function ChannelCard({ card, timeZone, healthCycles, alertPercent }: { card: SourceCard; timeZone: string; healthCycles: number; alertPercent: number }) {
@@ -61,7 +61,7 @@ export async function ChannelCard({ card, timeZone, healthCycles, alertPercent }
             .filter((part): part is string => part !== null)
             .join(" · ");
   const attribution = hasAttribution(card.id) ? ATTRIBUTIONS[card.id] : null;
-  const statusLine = card.registered ?`${t(`status.${card.status}`)}${card.history.running ? ` · ${t("status.running")}` : ""}` : null;
+  const statusLine = card.registered ? `${t(`status.${card.status}`)}${card.history.running ? ` · ${t("status.running")}` : ""}` : null;
 
   return (
     <Card className="src-ch gap-3 py-3.5" data-testid="channel-card" data-channel={card.id} data-enabled={card.enabled ? "1" : "0"} data-circuit={card.circuit?.state ?? "none"} data-status={card.status}>

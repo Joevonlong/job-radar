@@ -5,7 +5,7 @@ import { createTitlePrefilter } from "../ats/prefilter";
 import { ChannelError } from "../errors";
 import type { Channel, ChannelContext, RawPostingInput, SearchQuery } from "../types";
 import { fetchPage } from "./client";
-import { arbeitnowDescriptionHtml, parseArbeitnowPayload } from "./parse";
+import { arbeitnowDescriptionHtml, fromUnixSeconds, parseArbeitnowPayload } from "./parse";
 import { jobSchema, type ArbeitnowJob } from "./schema";
 
 export const ARBEITNOW_CHANNEL_ID = "arbeitnow";
@@ -65,11 +65,11 @@ async function sweep(query: SearchQuery, ctx: ChannelContext, deps: ArbeitnowDep
     keywordGroups: inputs.search.keyword_groups,
     watchedCompanies: inputs.interests.watched_companies,
   });
-  const windowStartSeconds = ((deps.now?.() ?? new Date()).getTime() - query.windowHours * 3_600_000) / 1000;
+  const windowStart = (deps.now?.() ?? new Date()).getTime() - query.windowHours * 3_600_000;
   const cap = Math.min(query.maxResults, ctx.settings.maxResults);
   const stats: SweepStats = { pages: 0, listed: 0, invalid: 0, duplicates: 0, outsideWindow: 0, prefiltered: 0, truncated: 0 };
   const seen = new Set<string>();
-  const kept: Array<{ job: ArbeitnowJob; raw: unknown }> = [];
+  const kept: Array<{ job: ArbeitnowJob; raw: unknown; postedAt: Date }> = [];
 
   for (let page = 1; page <= settings.max_pages; page += 1) {
     ctx.signal.throwIfAborted();
@@ -81,18 +81,22 @@ async function sweep(query: SearchQuery, ctx: ChannelContext, deps: ArbeitnowDep
     let newest = Number.NEGATIVE_INFINITY;
     for (const item of body.data) {
       const parsed = jobSchema.safeParse(item);
-      if (!parsed.success) {
+      // a date that is not Unix seconds (a string, milliseconds, out of range) makes the posting unusable: it must not
+      // count as the page's newest either, or a millisecond value would look like the far future and keep paging going
+      const postedAt = parsed.success ? fromUnixSeconds(parsed.data.created_at) : null;
+      if (!parsed.success || postedAt === null) {
         stats.invalid += 1;
         continue;
       }
       const job = parsed.data;
-      newest = Math.max(newest, job.created_at);
+      const postedMs = postedAt.getTime();
+      newest = Math.max(newest, postedMs);
       if (seen.has(job.slug)) {
         stats.duplicates += 1;
         continue;
       }
       seen.add(job.slug);
-      if (job.created_at < windowStartSeconds) {
+      if (postedMs < windowStart) {
         stats.outsideWindow += 1;
         continue;
       }
@@ -100,23 +104,23 @@ async function sweep(query: SearchQuery, ctx: ChannelContext, deps: ArbeitnowDep
         stats.prefiltered += 1;
         continue;
       }
-      kept.push({ job, raw: item });
+      kept.push({ job, raw: item, postedAt });
     }
     // a page without a usable posting has no "newest" either: it says nothing about the next one, so paging goes on
-    if (newest !== Number.NEGATIVE_INFINITY && newest < windowStartSeconds) break;
+    if (newest !== Number.NEGATIVE_INFINITY && newest < windowStart) break;
     const next = body.links?.next;
     if (next === null || next === undefined || next.trim() === "") break;
   }
 
   // newest first, then the cap
-  kept.sort((a, b) => b.job.created_at - a.job.created_at);
+  kept.sort((a, b) => b.postedAt.getTime() - a.postedAt.getTime());
   stats.truncated = Math.max(0, kept.length - cap);
   const postings = kept.slice(0, cap).map(
-    ({ job, raw }): RawPostingInput => ({
+    ({ job, raw, postedAt }): RawPostingInput => ({
       externalId: job.slug,
       url: job.url ?? null,
       payload: raw,
-      postedAt: new Date(job.created_at * 1000),
+      postedAt,
     }),
   );
   return { postings, stats };

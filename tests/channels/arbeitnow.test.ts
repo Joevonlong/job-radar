@@ -225,6 +225,12 @@ describe("parse", () => {
     expect(fromUnixSeconds(1_791_547_200)).toEqual(NOW);
     expect(fromUnixSeconds("1791547200")).toBeNull();
     expect(fromUnixSeconds(Number.NaN)).toBeNull();
+    // milliseconds, negative and beyond the year 9999: not Unix seconds, never an Invalid Date
+    expect(fromUnixSeconds(NOW.getTime())).toBeNull();
+    expect(fromUnixSeconds(-1)).toBeNull();
+    expect(fromUnixSeconds(1e17)).toBeNull();
+    expect(fromUnixSeconds(253_402_300_799)).toEqual(new Date("9999-12-31T23:59:59Z"));
+    expect(parseArbeitnowPayload({ ...bySlug("ai-engineer-munich-100004"), created_at: NOW.getTime() }).postedAt).toBeNull();
     expect(parseArbeitnowPayload({ ...bySlug("ai-engineer-munich-100004"), created_at: "yesterday" }).postedAt).toBeNull();
   });
 
@@ -339,6 +345,24 @@ describe("collect: paging over unsorted, overlapping pages", () => {
     expect(calls).toHaveLength(2);
     // the same page twice: its postings are kept once
     expect(slugs(postings)).toHaveLength(4);
+  });
+
+  it("skips a posting dated in milliseconds or out of range, and it does not keep paging going", async () => {
+    const records: LogRecord[] = [];
+    // all of page 3 is older than the window, but one posting carries milliseconds (it would look like the far future)
+    const millis = { ...bySlug("ai-engineer-stuttgart-100010"), slug: "ai-engineer-millis-100098", created_at: NOW.getTime() };
+    const huge = { ...bySlug("ai-engineer-stuttgart-100010"), slug: "ai-engineer-huge-100097", created_at: 1e17 };
+    const page = { ...PAGE_3, data: [millis, huge, ...jobs(PAGE_3)] };
+    const { ctx, calls } = makeContext(board([page, PAGE_1]), {}, { records });
+    const postings = await channel().collect(sweepQuery(), ctx);
+    expect(postings).toEqual([]);
+    expect(calls).toHaveLength(1);
+    expect(records.find((r) => r.message === "arbeitnow sweep done")?.fields).toMatchObject({ invalid: 2, outsideWindow: 3 });
+  });
+
+  it("every stored posting has a valid date", async () => {
+    const { ctx } = makeContext(board());
+    for (const posting of await channel().collect(sweepQuery(), ctx)) expect(Number.isNaN(posting.postedAt?.getTime())).toBe(false);
   });
 
   it("goes on paging past a page without one usable posting", async () => {
