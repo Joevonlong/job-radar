@@ -2,12 +2,16 @@
  * `pnpm run setup` (host side; scripts/setup.ts is the thin entry). The same eight steps as the web wizard, through
  * the same step services, so both write the same files. Modes: interactive (`node:readline`), `--answers <file.yaml>`
  * (unattended), `--step <id>` (one step), `--status [--json]`, `--complete`. Prints environment variables by name with
- * set / not set only; no value is ever read into the output (C4).
+ * set / not set only; no value is ever read into the output (C4). The one exception to "the setup never touches .env" is
+ * the interactive Telegram step (telegram-setup.ts): it writes the three Telegram keys, then restarts what reads them
+ * (`--no-restart` only prints the commands).
  */
 import fs from "node:fs";
+import path from "node:path";
 import { parseArgs } from "node:util";
 
 import { parse as parseYaml } from "yaml";
+import { z } from "zod";
 
 import { ensureConfigFiles, ensureProfileFiles, loadConfig } from "@/lib/config";
 import { listPackIds } from "@/lib/market";
@@ -18,7 +22,11 @@ import { closeDb, getDb, pingDb } from "@/lib/db";
 import { underVitest } from "@/lib/db/test-guard";
 import { requestRunCycle } from "@/lib/control/service";
 import { resolveHostDatabaseUrl } from "@/lib/ops/doctor/database-url";
-import { runCommand } from "@/lib/ops/doctor/probes";
+import { aiWorkerLaunchdLabel, AI_WORKER_SYSTEMD_UNIT } from "@/lib/ops/doctor/checks/ai";
+import { resolveComposeProject, runCommand } from "@/lib/ops/doctor/probes";
+import { createServiceControl, type ServiceControl } from "@/lib/ops/services";
+import type { TelegramFetch } from "@/lib/notify/telegram-client";
+import type { Locale } from "@/i18n/locale";
 
 import { aiInputOf, languageInputOf, marketInputOf, parseAnswers, profileInputOf, sourcesInputOf, targetsInputOf, telegramInputOf, type SetupAnswers } from "./answers";
 import { claudeLoginState, codexLoginState } from "./cli-login";
@@ -34,15 +42,25 @@ import { saveSourcesStep } from "./steps/sources";
 import { saveTargetsStep } from "./steps/targets";
 import { saveTelegramStep } from "./steps/telegram";
 import { readinessParams } from "./readiness";
+import { runTelegramSetup, type DoctorLine } from "./telegram-setup";
 import { cliLocale, profileErrorsTranslator, profileFieldsTranslator, setupTranslator, type SetupTranslator } from "./text";
 import type { SetupStepResult } from "./types";
 import { heartbeats, loadSetupView, readinessOf, type SetupView } from "./view";
+import type { CliIo } from "./cli-io";
 
-export interface CliIo {
-  out(line: string): void;
-  err(line: string): void;
-  /** Ask one question; resolves with the typed line (null at the end of the input). */
-  ask(question: string): Promise<string | null>;
+export type { CliIo } from "./cli-io";
+
+/** What tests replace: the Bot API, Docker / launchd / systemd, the doctor, the `.env` path, the clock. */
+export interface CliDeps {
+  telegram?: {
+    fetch?: TelegramFetch;
+    /** null: nothing can be restarted from here. */
+    services?: ServiceControl | null;
+    doctor?: () => Promise<DoctorLine[] | null>;
+    envFile?: string;
+    now?: () => Date;
+    sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
+  };
 }
 
 interface Context {
@@ -51,6 +69,10 @@ interface Context {
   tProfile: ReturnType<typeof profileErrorsTranslator>;
   tFields: ReturnType<typeof profileFieldsTranslator>;
   db: boolean;
+  locale: Locale;
+  env: NodeJS.ProcessEnv;
+  restart: boolean;
+  deps: CliDeps;
 }
 
 const DB_PING_MS = 4000;
@@ -180,7 +202,8 @@ class EndOfInput extends Error {
 }
 
 /** Interactive questions of each step -> the answers section the converters take. */
-async function interview(ctx: Context, step: Exclude<SetupStepId, "review">, view: SetupView): Promise<SetupAnswers> {
+/** (The Telegram step has a flow of its own: `telegramStep`.) */
+async function interview(ctx: Context, step: Exclude<SetupStepId, "review" | "telegram">, view: SetupView): Promise<SetupAnswers> {
   const { t } = ctx;
   const p = (key: Parameters<SetupTranslator>[0], values?: Record<string, string>): string => t(key, values as never);
   switch (step) {
@@ -295,12 +318,6 @@ async function interview(ctx: Context, step: Exclude<SetupStepId, "review">, vie
       const enabled = split(await ask(ctx, p("cli.prompts.aiEnabled", { options: AI_PROVIDER_IDS.join(", ") }), view.ai.providers.filter((x) => x.enabled).map((x) => x.id).join(", ")));
       return parseOrThrow({ ai: { order, providers: Object.fromEntries(view.ai.providers.map((x) => [x.id, { enabled: enabled.includes(x.id) }])) } });
     }
-    case "telegram": {
-      for (const env of view.telegram.env) ctx.io.out(t("cli.telegramEnv", { name: env.name, state: env.present ? "set" : "missing" }));
-      ctx.io.out(t("cli.telegramHint"));
-      const enabled = await askYes(ctx, p("cli.prompts.telegram"), view.telegram.enabled ?? false);
-      return parseOrThrow({ telegram: { enabled } });
-    }
   }
 }
 
@@ -320,6 +337,7 @@ function parseOrThrow(raw: unknown): SetupAnswers {
 /** One interactive step: ask, then save / skip / stop; offers to retry after errors. "stop" ends the run. */
 async function interactiveStep(ctx: Context, step: Exclude<SetupStepId, "review">): Promise<"next" | "stop"> {
   const { t } = ctx;
+  if (step === "telegram") return telegramStep(ctx);
   for (;;) {
     const view = await freshView();
     ctx.io.out("");
@@ -351,6 +369,90 @@ async function interactiveStep(ctx: Context, step: Exclude<SetupStepId, "review"
   }
 }
 
+// ---------------------------------------------------------------- telegram (writes .env, restarts)
+
+const doctorJsonSchema = z.object({ results: z.array(z.object({ status: z.enum(["ok", "warn", "fail"]), title: z.string(), detail: z.string() })) });
+
+/** `pnpm run doctor --only telegram --json` as a child process: it reads the new `.env` itself. */
+async function telegramDoctor(locale: Locale, timeoutMs: number): Promise<DoctorLine[] | null> {
+  const out = await runCommand(process.execPath, ["--env-file-if-exists=.env", "--import", "tsx", "scripts/doctor.ts", "--only", "telegram", "--json", "--lang", locale], timeoutMs);
+  if (out.kind !== "ran") return null;
+  try {
+    const parsed = doctorJsonSchema.safeParse(JSON.parse(out.stdout));
+    return parsed.success ? parsed.data.results : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Docker compose, launchd / systemd as the deploy script and the doctor find them; null when schedule.yaml cannot be read. */
+function hostServices(env: NodeJS.ProcessEnv, restartWaitSeconds: number): ServiceControl | null {
+  try {
+    const { doctor } = loadConfig("schedule");
+    return createServiceControl(
+      {
+        project: resolveComposeProject(env, doctor.compose_project),
+        platform: process.platform,
+        uid: typeof process.getuid === "function" ? process.getuid() : null,
+        launchdLabel: aiWorkerLaunchdLabel(doctor.ai_worker_launchd_label),
+        systemdUnit: AI_WORKER_SYSTEMD_UNIT,
+        commandTimeoutMs: doctor.command_timeout_seconds * 1000,
+        restartWaitSeconds,
+      },
+      runCommand,
+    );
+  } catch {
+    return null;
+  }
+}
+
+async function telegramStep(ctx: Context): Promise<"next" | "stop"> {
+  const { t, io } = ctx;
+  io.out("");
+  io.out(t("cli.stepHeader", { index: SETUP_STEP_IDS.indexOf("telegram") + 1, total: SETUP_STEP_IDS.length, title: t("steps.telegram.title") }));
+  io.out(t("steps.telegram.description"));
+  let config;
+  try {
+    config = loadConfig("notify");
+  } catch {
+    io.err(t("formErrors.configUnreadable"));
+    return "next";
+  }
+  const deps = ctx.deps.telegram ?? {};
+  const services = deps.services !== undefined ? deps.services : hostServices(ctx.env, config.telegram.setup.restart_wait_seconds);
+  const doctorTimeoutMs = (() => {
+    try {
+      const { doctor } = loadConfig("schedule");
+      return (doctor.command_timeout_seconds + doctor.probe_timeout_seconds) * 4 * 1000;
+    } catch {
+      return 60_000;
+    }
+  })();
+  const outcome = await runTelegramSetup({
+    io,
+    t,
+    env: ctx.env,
+    envFile: deps.envFile ?? path.resolve(".env"),
+    config,
+    services,
+    restart: ctx.restart,
+    doctor: deps.doctor ?? (() => telegramDoctor(ctx.locale, doctorTimeoutMs)),
+    saveEnabled: (enabled) => saveTelegramStep({ enabled }),
+    skip: () => skipSetupStep("telegram"),
+    ...(deps.fetch ? { fetch: deps.fetch } : {}),
+    ...(deps.now ? { now: deps.now } : {}),
+    ...(deps.sleep ? { sleep: deps.sleep } : {}),
+  });
+  if (outcome === "saved") io.out(t("cli.saved"));
+  else if (outcome === "skipped") io.out(t("cli.skipped"));
+  else if (outcome === "failed") io.err(t("cli.notSaved"));
+  else {
+    io.out(t("cli.cancelled"));
+    return "stop";
+  }
+  return "next";
+}
+
 async function queueFirstCycle(ctx: Context): Promise<void> {
   if (!ctx.db) {
     ctx.io.out(ctx.t("cli.firstCycleNoDb"));
@@ -374,12 +476,12 @@ async function complete(ctx: Context): Promise<boolean> {
 
 // ---------------------------------------------------------------- entry
 
-export async function runSetupCli(argv: readonly string[], io: CliIo, env: NodeJS.ProcessEnv = process.env): Promise<number> {
-  let values: { step?: string; answers?: string; status?: boolean; json?: boolean; complete?: boolean; lang?: string; help?: boolean };
+export async function runSetupCli(argv: readonly string[], io: CliIo, env: NodeJS.ProcessEnv = process.env, deps: CliDeps = {}): Promise<number> {
+  let values: { step?: string; answers?: string; status?: boolean; json?: boolean; complete?: boolean; lang?: string; help?: boolean; "no-restart"?: boolean };
   try {
     ({ values } = parseArgs({
       args: [...argv],
-      options: { step: { type: "string" }, answers: { type: "string" }, status: { type: "boolean" }, json: { type: "boolean" }, complete: { type: "boolean" }, lang: { type: "string" }, help: { type: "boolean", short: "h" } },
+      options: { step: { type: "string" }, answers: { type: "string" }, status: { type: "boolean" }, json: { type: "boolean" }, complete: { type: "boolean" }, lang: { type: "string" }, "no-restart": { type: "boolean" }, help: { type: "boolean", short: "h" } },
       strict: true,
     }));
   } catch (error) {
@@ -409,7 +511,7 @@ export async function runSetupCli(argv: readonly string[], io: CliIo, env: NodeJ
       // reported by the steps that read the profile
     }
   }
-  const ctx: Context = { io, t, tProfile: profileErrorsTranslator(locale), tFields: profileFieldsTranslator(locale), db: await databaseAvailable(env) };
+  const ctx: Context = { io, t, tProfile: profileErrorsTranslator(locale), tFields: profileFieldsTranslator(locale), db: await databaseAvailable(env), locale, env, restart: values["no-restart"] !== true, deps };
   try {
     if (values.status) {
       const report = await statusReport(ctx);

@@ -3096,6 +3096,42 @@
       },
       "protectedNote": "Locked keys in {file} (commands, API hosts, credential paths) can only be changed by editing the file by hand:",
       "protectedUnlocked": "JOB_RADAR_ALLOW_WEB_EDIT_PROTECTED=1 is set, so these normally locked keys of {file} can be changed here:"
+    },
+    "telegramStatus": {
+      "title": "Telegram",
+      "state": {
+        "configured": "Connected",
+        "missing": "Not connected",
+        "partial": "Incomplete",
+        "invalid": "Invalid values"
+      },
+      "enabledOn": "Push is on (notify.yaml telegram.enabled).",
+      "enabledOff": "Push is off: switch it on with “Send Telegram messages”.",
+      "lastTest": {
+        "none": "No test message sent yet.",
+        "ok": "Last test message: sent {at}.",
+        "failed": "Last test message: failed {at} ({reason})."
+      },
+      "testErrors": {
+        "telegram_not_configured": "the runner does not have the bot token and chat id; restart it after setting them",
+        "telegram_failed": "Telegram did not accept the message",
+        "other": "see the runner log"
+      },
+      "problem": {
+        "partial": "Only one of TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID is set: Telegram needs both.",
+        "invalid": "TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID has an invalid value (pnpm run doctor says which)."
+      },
+      "guide": {
+        "botFather": "In Telegram, open @BotFather and send /newbot; it gives you a bot token.",
+        "run": "On the computer that runs Job Radar, in the project folder, run:",
+        "paste": "Paste the token (it is not shown), then send any message to your bot: the command finds the chat id and sends a test message.",
+        "restart": "It writes .env and restarts web, runner and the ai-worker. Then reload this page.",
+        "manual": "Prefer doing it by hand? Put <code>TELEGRAM_BOT_TOKEN</code> and <code>TELEGRAM_CHAT_ID</code> in .env, then recreate the containers and restart the ai-worker (<doc>Telegram guide</doc>). For safety this page never shows or changes these values."
+      },
+      "changeHint": "To replace the bot or chat, test it again or remove it, run the same command on the computer that runs Job Radar:",
+      "copy": "Copy",
+      "copied": "Command copied.",
+      "copyFailed": "Could not copy; select the command and copy it yourself."
     }
   },
   "sources": {
@@ -5513,8 +5549,6 @@
     },
     "telegram": {
       "enabled": "Send Telegram messages",
-      "howTo": "Create a bot with @BotFather, put TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID in .env (docs/telegram.md), then restart: docker compose up -d.",
-      "testHint": "The runner sends one test message (it needs both variables).",
       "locale": "Language of the messages",
       "localeDefault": "Same as the interface",
       "unreadable": "notify.yaml cannot be read. Fix it on the settings page first."
@@ -5558,7 +5592,7 @@
       }
     },
     "cli": {
-      "usage": "Usage: pnpm run setup [--step STEP] [--answers FILE.yaml] [--status [--json]] [--complete] [--lang en|zh]",
+      "usage": "Usage: pnpm run setup [--step STEP] [--answers FILE.yaml] [--status [--json]] [--complete] [--no-restart] [--lang en|zh]",
       "badArgs": "setup: {message}",
       "unknownStep": "Unknown step {step}. Steps: {steps}",
       "title": "Job Radar setup",
@@ -5632,7 +5666,6 @@
         "boards": "Company boards to add as ats:token:Name, comma-separated (empty = none)",
         "aiOrder": "AI order, comma-separated ({options})",
         "aiEnabled": "AI providers to use, comma-separated ({options})",
-        "telegram": "Send Telegram messages? (y/n)",
         "consent": "I have read this and take responsibility for using them (y/n)"
       },
       "channelLine": "  {mark} {id}{env}",
@@ -5644,15 +5677,89 @@
       "aiLogin": "  {command}: {state, select, logged_in {signed in} logged_out {not signed in} missing {not installed} other {status unknown}}",
       "aiKey": "  {name}: {state, select, set {is set} other {is not set}}",
       "aiLoginHint": "Sign in on this computer: claude (then /login) and codex login. The ai-worker uses these sign-ins.",
-      "telegramEnv": "  {name}: {state, select, set {is set} other {is not set}}",
-      "telegramHint": "TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID go in .env (docs/telegram.md).",
       "by": {
         "wizard": "wizard",
         "cli": "command line",
         "skipped": "wizard skipped",
         "existing_install": "existing install"
       },
-      "consentNotice": "These channels scrape sites whose terms of service restrict automated access, or drive your own account: {channels}. See \"Scraping\" in docs/sources.md."
+      "consentNotice": "These channels scrape sites whose terms of service restrict automated access, or drive your own account: {channels}. See \"Scraping\" in docs/sources.md.",
+      "telegram": {
+        "intro": "Job Radar sends good matches and alerts through a Telegram bot of your own. This takes about two minutes:\n  1. In Telegram, open @BotFather, send /newbot and answer its two questions. It replies with a token like 123456789:AAE...\n  2. Paste that token here (nothing is shown while you paste).\n  3. Send any message to your new bot, so this command learns the chat id.\n  4. A test message arrives; then the values go into .env and the services restart.",
+        "askStart": "Set up Telegram now? y = yes, s = skip this step, n = no",
+        "currentInvalid": "The Telegram values in .env are not valid (the doctor says which one). Set them up again:",
+        "current": "Telegram is set up: bot {bot}, chat {id}.",
+        "askExisting": "k = keep, r = replace with another bot or chat, t = send a test message, d = remove from .env, s = skip",
+        "optKeep": "k",
+        "optReplace": "r",
+        "optTest": "t",
+        "optRemove": "d",
+        "optSkip": "s",
+        "askRemove": "Remove the bot token, chat id and allowed user ids from .env (a backup is kept)? (y/n)",
+        "endpointRefused": "Not set up: {reason}",
+        "askToken": "Bot token from @BotFather (not shown): ",
+        "tokenFormat": "That is not a bot token. It looks like 123456789:AAE... (digits, a colon, then letters, digits, - and _).",
+        "checkingToken": "Checking the token with Telegram ...",
+        "tokenOk": "Token works: this is bot @{bot}.",
+        "retryToken": "Try another token? (y/n)",
+        "errorRejected": "Telegram rejected this token. Copy it again from @BotFather (/mybots -> your bot -> API Token).",
+        "errorConflict": "Telegram says another program is reading this bot's messages right now (another Job Radar runner, or a webhook).",
+        "conflictHint": "Stop that program, or type the chat id yourself (m).",
+        "errorNetwork": "Could not reach {host}. Check the internet connection (or a proxy / firewall) and try again.",
+        "errorApi": "Telegram answered with an error: {reason}",
+        "errorUnknown": "Unexpected error while talking to Telegram.",
+        "askChatHow": "Chat id: a = detect it from a message you send to the bot (recommended), m = type it in, q = quit",
+        "optDetect": "a",
+        "optManual": "m",
+        "optQuit": "q",
+        "runnerStopping": "The runner reads this bot's messages too: stopping it while the chat id is detected (it starts again when this command ends) ...",
+        "runnerStopFailed": "Could not stop the runner ({reason}); it may take the message first. If nothing is detected, type the chat id yourself.",
+        "runnerStarting": "Starting the runner again ...",
+        "runnerStartFailed": "Could not start the runner again ({reason}). Start it yourself:",
+        "sendNow": "Now send any message (for example \"hi\") to @{bot} in Telegram. For a group: add the bot to the group, then send /start@{bot} there.",
+        "waiting": "Waiting up to {seconds} s for the message (Ctrl-C stops) ...",
+        "noMessage": "No message arrived in time.",
+        "detected": "Received from {chat}, chat id {id}.",
+        "chatPrivate": "{name} (private chat)",
+        "chatGroup": "group \"{title}\" (sent by {name})",
+        "useChat": "Send to this chat? (y/n)",
+        "askChatId": "Chat id (a number; groups start with -): ",
+        "chatFormat": "A chat id is a whole number, for a group or channel a negative one (e.g. -1001234567890).",
+        "groupHint": "This is a group: anyone in it could press the buttons. Only the Telegram user ids listed here are allowed (comma-separated; empty = everyone in the group).",
+        "askAllowed": "Allowed user ids",
+        "allowedFormat": "Use numeric user ids separated by commas, e.g. 12345678,23456789.",
+        "sendingTest": "Sending a test message to chat {id} ...",
+        "retryTest": "Try again? (y/n)",
+        "askArrived": "Did the test message arrive in Telegram? (y/n)",
+        "retryChat": "Choose the chat again? (y/n)",
+        "summary": "Bot @{bot}, chat {id}, allowed user ids: {allowed}.",
+        "askWrite": "Write the token, chat id and allowed user ids to {file}? (y/n)",
+        "nothingWritten": ".env was not changed.",
+        "stoppedAfterWrite": "Stopped. .env was already written; restart the services yourself (docs/telegram.md).",
+        "envCreated": "Created {file} from .env.example with the Telegram values (only you can read it).",
+        "envWritten": "Wrote the Telegram values to {file}; the previous file is kept as {backup}.",
+        "envFailed": "Could not write {file}: {reason}. Nothing was changed.",
+        "askEnable": "Switch the Telegram push on (notify.yaml telegram.enabled)? (y/n)",
+        "enabledOn": "Telegram push is on.",
+        "enabledOff": "Telegram push is off (switch it on later under Settings -> Notifications).",
+        "restartSkipped": "--no-restart: nothing restarted. web and runner read .env only when their container is created, the ai-worker when it starts. Run:",
+        "restartUnavailable": "Cannot restart the services from here (schedule.yaml is not readable). Run:",
+        "restartManualGeneric": "  docker compose up -d --no-deps --force-recreate web runner, then restart the ai-worker (scripts/ops/install-ai-worker.sh).",
+        "dockerUnavailable": "Docker does not answer: web and runner were not restarted.",
+        "stackDown": "web and runner are not running; they read the new values when they start.",
+        "recreating": "Recreating {services} so they read .env again (waiting up to {seconds} s until healthy) ...",
+        "recreated": "{services} restarted with the new values.",
+        "recreateFailed": "The restart failed: {reason}",
+        "aiWorkerNotRunning": "The ai-worker is not running as a service on this machine; if you started it by hand, restart it.",
+        "aiWorkerRestarted": "ai-worker restarted with the new values.",
+        "aiWorkerFailed": "Could not restart the ai-worker: {reason}",
+        "manualTitle": "Run these yourself to finish:",
+        "pollerOk": "Runner log: telegram poller started.",
+        "pollerMissing": "The runner has not logged \"telegram poller started\" yet. Check: {command}",
+        "doctorTitle": "Doctor (Telegram checks):",
+        "doctorFailed": "The doctor could not run; run pnpm run doctor yourself.",
+        "done": "Telegram is set up. Settings -> Notifications shows the state; the button there sends another test message."
+      }
     }
   },
   "auth": {
