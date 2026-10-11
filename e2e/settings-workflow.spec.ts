@@ -113,6 +113,10 @@ test("the 'interested' timeout 7 -> 3 goes to notify.yaml; the board header foll
   await expect(page.getByTestId("settings-card-notify")).toBeVisible();
   await expect(page.getByLabel("“感兴趣”提醒（天）")).toHaveCount(0);
   await expect(page.getByTestId("reminder-link")).toBeVisible();
+  // the Telegram block: names and state only, and the host command to set it up
+  await expect(page.getByTestId("telegram-status")).toBeVisible();
+  await expect(page.getByTestId("telegram-status").getByTestId("env-presence")).toContainText("TELEGRAM_BOT_TOKEN");
+  await expect(page.getByTestId("telegram-setup-command").first()).toHaveText("pnpm run setup --step telegram");
 });
 
 test("hiding the workplace 'onsite' and the contract 'temp agency' removes them from the /jobs filter", async ({ page }) => {
