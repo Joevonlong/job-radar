@@ -34,7 +34,7 @@ export function createConnection(url: string, options: { max?: number; connectTi
 }
 
 /** DB_CONNECT_TIMEOUT_SECONDS for connections created without an explicit timeout (tests, scripts); 5 when unset or invalid. */
-function connectTimeoutFromEnv(): number {
+export function connectTimeoutFromEnv(): number {
   const value = Number(process.env.DB_CONNECT_TIMEOUT_SECONDS);
   return Number.isInteger(value) && value >= 1 && value <= 120 ? value : 5;
 }

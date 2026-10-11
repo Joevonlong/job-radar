@@ -25,7 +25,9 @@ import { measureDisk, sameVolume } from "../disk";
 import { resolveDockerDataLocation } from "../docker-data";
 import { redact } from "./helpers";
 import { resolveHostDatabaseUrl } from "./database-url";
-import type { CommandOutcome, DiskSpace, DoctorContext, DoctorProbes, HttpOutcome, OwnershipScan, TrapsProbe } from "./types";
+import { enabledTools, readMcpSettings } from "@/lib/mcp/settings";
+
+import type { CommandOutcome, DiskSpace, DoctorContext, DoctorProbes, HttpOutcome, McpProbe, OwnershipScan, TrapsProbe } from "./types";
 
 const MAX_OUTPUT_BYTES = 4 * 1024 * 1024;
 const MAX_BODY_CHARS = 4096;
@@ -223,6 +225,7 @@ export function createRealProbes(options: RealProbeOptions): DoctorProbes {
     registry: () => loadRegistryPage({ syncMirror: false }),
     unscoredJobs: () => countUnscoredJobs(getDb()),
     traps: (now) => probeTraps(now),
+    mcp: async () => probeMcp(),
     profile: async () => readProfileReadiness(),
     async backups(directory) {
       try {
@@ -291,6 +294,16 @@ export async function createRealContext(env: Readonly<Record<string, string | un
     runnerMaxAgeSeconds: runnerEnv.RUNNER_HEALTH_MAX_AGE_SECONDS,
     probes: createRealProbes({ commandTimeoutMs: settings.command_timeout_seconds * 1000, probeTimeoutMs: settings.probe_timeout_seconds * 1000, now: () => now, migrationsDir }),
   };
+}
+
+/** `data.mcp`: the switch and the tools of mcp.yaml (a file missing from both layers means the defaults: off). */
+function probeMcp(): McpProbe {
+  try {
+    const settings = readMcpSettings();
+    return { state: "ok", enabled: settings.enabled, tools: enabledTools(settings) };
+  } catch (error) {
+    return { state: "config_error", problem: error instanceof ConfigError ? firstConfigProblem(error) : "unreadable" };
+  }
 }
 
 /** `data.traps`: traps.yaml and the counts; a missing table is `stats: null`, not an error. */

@@ -48,6 +48,7 @@
     "simhash:analyze": "node --env-file-if-exists=.env --import tsx scripts/simhash-analyze.ts",
     "ai:probe": "node --env-file-if-exists=.env --import tsx scripts/ai-probe.ts",
     "doctor": "node --env-file-if-exists=.env --import tsx scripts/doctor.ts",
+    "mcp:serve": "node --env-file-if-exists=.env --import tsx scripts/mcp-serve.ts",
     "setup": "node --env-file-if-exists=.env --import tsx scripts/setup.ts",
     "migrate:run": "node --env-file-if-exists=.env --import tsx scripts/migrate-run.ts",
     "ops:drain": "node --env-file-if-exists=.env --import tsx scripts/ops-drain.ts",
@@ -74,6 +75,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.132.0",
     "@dnd-kit/core": "^6.3.1",
+    "@modelcontextprotocol/server": "2.3.1",
     "@number-flow/react": "0.6.2",
     "@tanstack/react-table": "^9.2.6",
     "@tanstack/react-virtual": "^3.14.13",
@@ -106,6 +108,7 @@
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@modelcontextprotocol/client": "2.3.1",
     "@playwright/test": "^1.64.0",
     "@tailwindcss/postcss": "^4.3.3",
     "@testing-library/jest-dom": "^7.0.1",

@@ -131,6 +131,7 @@ pnpm run doctor --lang zh    # 用另一种语言输出报告（默认：languag
 | `backup.recent` | 备份目录存在，最新一份在 `backup.max_age_hours`（默认 30）内 | ❌ 目录不存在或备份太旧：见 [backup-restore.zh.md](backup-restore.zh.md)；⚠️ 目录里还没有自动备份（刚部署） |
 | `data.ownership` | 仅 Linux：`data/` 和 `.auth/` 下的一切都属于容器运行用的 uid（`PUID`，默认 1000） | ⚠️ 有文件属于别的用户（旧版本或 `sudo` 命令留下的），容器写不了：`sudo chown -R <PUID>:<PGID> data .auth`，见 [upgrade.zh.md](upgrade.zh.md) |
 | `data.traps` | AI 陷阱：有陷阱的岗位数（总数 / 近 `scan.recent_days` 天）、还没扫描的岗位数 | ⚠️ 积压超过 `scan.backlog_warn`：`pnpm traps:scan --write`；⚠️ `traps.yaml` 读不出来 / `enabled: false` / 还没迁移。见 [ai-traps.zh.md](ai-traps.zh.md) |
+| `data.mcp` | 只读 MCP 服务是否打开（`mcp.yaml: enabled`）、开了哪些工具；默认关闭 | ⚠️ `mcp.yaml` 读不出来：`pnpm config:check`。见 [mcp.zh.md](mcp.zh.md) |
 | `disk.backups` `disk.docker` | 备份所在的卷、Docker 数据所在的卷剩余空间。`disk.docker` 量的是 Docker Desktop 设置里的 `DataFolder`（`~/Library/Group Containers/group.com.docker/settings-store.json`，读不到就按默认位置 `~/Library/Containers/com.docker.docker/Data/vms/0/data`），detail 里写出量的路径 | ⚠️ 低于 `warn_free_disk_gb`（20），❌ 低于 `min_free_disk_gb`（5）。清理：`docker system df`、`docker builder prune`、旧的手动备份、`data/logs/` |
 | `disk.docker_location` | Docker 的数据目录（`DataFolder`）和项目在同一个卷上（按设备号比较，不写死卷名） | ⚠️ 不在：数据库、镜像和构建缓存都占着系统盘。如果内置盘不大，把 Docker 数据目录搬到外置盘（配置了 `doctor.storage_guide` 的话按它的说明） |
 | `disk.internal` | Mac 系统盘（`/System/Volumes/Data`）的剩余空间 | ⚠️ 低于 `internal_warn_free_disk_gb`（30），❌ 低于 `internal_min_free_disk_gb`（10）：先确认 `disk.docker_location` 是 ✅，其余自行清理 |
