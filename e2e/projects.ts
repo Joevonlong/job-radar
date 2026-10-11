@@ -48,6 +48,8 @@ export const SERIAL_CHAIN: readonly ChainEntry[] = [
   { name: "chromium-deal-breakers", spec: "deal-breakers.spec.ts" },
   // me.yaml needs_visa_sponsorship (the visa badge and filter show only for a user who needs sponsorship)
   { name: "chromium-visa", spec: "visa.spec.ts" },
+  // ui.yaml job_checks.ghost (the check is off by default), and one job's dismissal
+  { name: "chromium-ghost", spec: "ghost-jobs.spec.ts" },
   // the market changes every page and preferences.yaml: last, alone
   { name: "chromium-market", spec: "market.spec.ts" },
 ];

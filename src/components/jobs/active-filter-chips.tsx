@@ -17,16 +17,20 @@ export function ActiveFilterChips({
   choices,
   traps = false,
   visa = false,
+  ghost = false,
 }: {
   choices: Record<SelectFilterKey, readonly MultiSelectOption[]>;
   /** show the "AI traps" chip. */
   traps?: boolean;
   /** show the "Visa" chip (hidden: a `visa=` in the URL is ignored and kept). */
   visa?: boolean;
+  /** show the "Ghost jobs" chip (hidden: a `ghost=` in the URL is ignored and kept; `ghost=all` is no filter, so no chip). */
+  ghost?: boolean;
 }) {
   const t = useTranslations("dashboard.jobs.filters");
   const tTrap = useTranslations("aiTraps.filter");
   const tVisa = useTranslations("visa.filter");
+  const tGhost = useTranslations("ghostJobs.filter");
   // same URL state as the filter bar (nuqs keeps all hooks of a page in sync)
   const [params, setParams] = useQueryStates(jobsSearchParsers, { shallow: false, history: "replace" });
 
@@ -40,9 +44,10 @@ export function ActiveFilterChips({
 
   const trap = traps ? params.trap : null;
   const visaValue = visa ? params.visa : null;
+  const ghostValue = ghost && params.ghost !== "all" ? params.ghost : null;
 
   // the slot keeps the height of one chip row whether or not there are chips, so ticking a filter never moves the list
-  if (chips.length === 0 && !trap && !visaValue) return <div className="min-h-[24.5px]" aria-hidden data-testid="filter-chips-slot" />;
+  if (chips.length === 0 && !trap && !visaValue && !ghostValue) return <div className="min-h-[24.5px]" aria-hidden data-testid="filter-chips-slot" />;
 
   return (
     <ul className="flex min-h-[24.5px] flex-wrap gap-1.5" aria-label={t("chipsLabel")} data-testid="filter-chips">
@@ -64,6 +69,13 @@ export function ActiveFilterChips({
         <li>
           <FilterChip removeLabel={tVisa("remove", { value: tVisa(visaValue) })} onRemove={() => void setParams({ visa: null, page: null })} data-testid="filter-chip" data-key="visa" data-value={visaValue} className="max-w-full">
             <span className="min-w-0 truncate">{tVisa("chip", { value: tVisa(visaValue) })}</span>
+          </FilterChip>
+        </li>
+      ) : null}
+      {ghostValue ? (
+        <li>
+          <FilterChip removeLabel={tGhost("remove", { value: tGhost(ghostValue) })} onRemove={() => void setParams({ ghost: null, page: null })} data-testid="filter-chip" data-key="ghost" data-value={ghostValue} className="max-w-full">
+            <span className="min-w-0 truncate">{tGhost("chip", { value: tGhost(ghostValue) })}</span>
           </FilterChip>
         </li>
       ) : null}

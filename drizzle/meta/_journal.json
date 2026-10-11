@@ -218,6 +218,13 @@
       "when": 1791746089912,
       "tag": "0030_job_visa",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1791755993451,
+      "tag": "0031_job_ghost",
+      "breakpoints": true
     }
   ]
 }

@@ -233,6 +233,126 @@ export const visaPackSchema = z
   })
   .default(emptyVisaPack) satisfies z.ZodType<VisaPack>;
 
+/** The id of a ghost pattern: what the evidence stores and the checks panel shows ("talent_pool"). */
+const ghostPatternId = z.string().regex(/^[a-z][a-z0-9_]{0,63}$/u, "lower-case letters, digits and _ (starting with a letter)");
+
+/** A pattern of the ghost job check with its id. */
+export const ghostPatternSchema = z.strictObject({ id: ghostPatternId, pattern: regexString });
+export type GhostPatternEntry = z.infer<typeof ghostPatternSchema>;
+
+/**
+ * An `evergreen_patterns` entry. `check_negation: false` for a phrase that is a negation itself ("no current opening", "keine
+ * offene Stelle"): its own "no" must not cancel it.
+ */
+/**
+ * How far after an evergreen phrase a negation cue is searched: `words` = `pipeline.yaml job_checks.ghost.negation_words_after`
+ * words (within the clause), `clause` = to the end of the clause (German puts "nicht" at the end: "Für unseren Talentpool ist diese
+ * Anzeige ganz ausdrücklich nicht gedacht").
+ */
+export const GHOST_NEGATION_AFTER = ["words", "clause"] as const;
+export type GhostNegationAfter = (typeof GHOST_NEGATION_AFTER)[number];
+
+/**
+ * An `evergreen_patterns` entry. `check_negation: false` for a phrase that is a negation itself ("no current opening", "keine
+ * offene Stelle"): its own "no" must not cancel it. `negation_after`: this entry's own window after the phrase (default: its pack's).
+ */
+export const ghostEvergreenPatternSchema = z.strictObject({
+  id: ghostPatternId,
+  pattern: regexString,
+  check_negation: z.boolean().default(true),
+  negation_after: z.enum(GHOST_NEGATION_AFTER).optional(),
+});
+export type GhostEvergreenPatternEntry = z.infer<typeof ghostEvergreenPatternSchema>;
+
+/**
+ * The question right before a sentence, read as that sentence's context ("Don't see a role that fits? Join our talent community"):
+ * the text before the sentence ends in one of `ends`; the question starts after the last of `starts` (or a line break) before it.
+ * `line_above`: the question may stand on the line above (false: only on the same line). Plain characters, not patterns.
+ */
+export interface GhostLeadInQuestion {
+  ends: string[];
+  starts: string[];
+  line_above: boolean;
+}
+
+export const emptyGhostLeadInQuestion = (): GhostLeadInQuestion => ({ ends: [], starts: [], line_above: false });
+
+const markList = z.array(z.string().min(1).max(4)).default([]);
+
+const ghostLeadInQuestionSchema = z
+  .strictObject({ ends: markList, starts: markList, line_above: z.boolean().default(false) })
+  .default(emptyGhostLeadInQuestion) satisfies z.ZodType<GhostLeadInQuestion>;
+
+/** `rules.yaml` `ghost` as the code reads it (the schema's output). */
+export interface GhostPack {
+  repost_label_patterns: GhostPatternEntry[];
+  evergreen_patterns: GhostEvergreenPatternEntry[];
+  responsibility_patterns: GhostPatternEntry[];
+  negation_cues: string[];
+  /** The default `negation_after` of this pack's evergreen patterns. */
+  negation_after: GhostNegationAfter;
+  clause_breaks: string[];
+  exclude_context: string[];
+  lead_in_question: GhostLeadInQuestion;
+  abbreviations: string[];
+  prefilter: string[];
+}
+
+/** `rules.yaml` `ghost` when a pack has none. */
+export function emptyGhostPack(): GhostPack {
+  return {
+    repost_label_patterns: [],
+    evergreen_patterns: [],
+    responsibility_patterns: [],
+    negation_cues: [],
+    negation_after: "words",
+    clause_breaks: [],
+    exclude_context: [],
+    lead_in_question: emptyGhostLeadInQuestion(),
+    abbreviations: [],
+    prefilter: [],
+  };
+}
+
+/**
+ * `rules.yaml` `ghost`: the words of the ghost job check (docs/ghost-jobs.md). Every pattern is matched case-insensitively with
+ * Unicode (flags `iu`); write word boundaries as `(?<![\p{L}\p{N}])` / `(?![\p{L}\p{N}])`, not `\b`.
+ */
+export const ghostPackSchema = z
+  .strictObject({
+    /** A source's own "reposted" label (LinkedIn's "Reposted 2 weeks ago", "Wiedereingestellt vor 3 Tagen"). */
+    repost_label_patterns: z.array(ghostPatternSchema).default([]),
+    /** The JD says it is a talent pool or an always-open posting, not one opening ("talent pool", "Initiativbewerbung"). */
+    evergreen_patterns: z.array(ghostEvergreenPatternSchema).default([]),
+    /** A heading that opens the duties of the role ("Responsibilities", "Deine Aufgaben"): tested against heading-shaped lines only. */
+    responsibility_patterns: z.array(ghostPatternSchema).default([]),
+    /**
+     * Words that negate an evergreen phrase ("not", "kein…"); each must match a whole word. They count inside the phrase, within
+     * `pipeline.yaml job_checks.ghost.negation_words_before` words before it, within `negation_words_after` words after it up to a
+     * `clause_breaks` match, and in the heading of its list.
+     */
+    negation_cues: optionalList,
+    /** How far after a phrase of this pack a negation cue is searched (`words` / `clause`); an entry's own `negation_after` wins. */
+    negation_after: z.enum(GHOST_NEGATION_AFTER).default("words"),
+    /** Where the clause after an evergreen phrase ends for the negation search (regular expressions). */
+    clause_breaks: optionalList,
+    /**
+     * A sentence matching one of these is not about this posting (talent-pool software, "no suitable role? apply anyway", privacy
+     * notes); the question right before it (`lead_in_question`) is tested too.
+     */
+    exclude_context: optionalList,
+    /** Which question before a sentence is read with it (see `GhostLeadInQuestion`). */
+    lead_in_question: ghostLeadInQuestionSchema,
+    /** Abbreviations whose dot does not end a sentence, without the final dot. */
+    abbreviations: z.array(nonEmptyString).default([]),
+    /**
+     * A quick first look: a text or sentence that matches none of these is not searched for evergreen phrases. So every phrase an
+     * `evergreen_patterns` entry can match must contain a match of one of these (`pnpm config:check` warns). Empty = every sentence is read.
+     */
+    prefilter: optionalList,
+  })
+  .default(emptyGhostPack) satisfies z.ZodType<GhostPack>;
+
 /** `rules.yaml`: pieces of pipeline.yaml that are language / market specific. Lists are united with the user's and the other packs'. */
 export const packRulesSchema = z.strictObject({
   company: z.strictObject({ legal_suffixes: stringList.default([]), agency_names: stringList.default([]) }).default({ legal_suffixes: [], agency_names: [] }),
@@ -261,6 +381,8 @@ export const packRulesSchema = z.strictObject({
   /** Phrases (regex) in a posting page's visible text that say it no longer takes applications (the watched-job recheck). */
   // Run on untrusted pages, so only the safe pattern subset (see unsafePhraseReason)
   closed_posting: z.strictObject({ phrases: z.array(phraseRegexString).default([]) }).default({ phrases: [] }),
+  /** Signs that a posting is not a real opening (the ghost job check). */
+  ghost: ghostPackSchema,
   /** What a posting says about visa sponsorship / a work permit (the visa check). */
   visa: visaPackSchema,
 });

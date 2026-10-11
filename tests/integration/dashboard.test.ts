@@ -72,14 +72,14 @@ describe("seed", () => {
     const result = await seedDatabase(getDb(), { now: NOW, timezone: TZ });
     expect(result.replacedJobs).toBe(Number(before?.jobs));
     expect(await count()).toEqual(before);
-    expect(Number(before?.jobs)).toBe(21);
+    expect(Number(before?.jobs)).toBe(22);
   });
 
   it("stores the company keys the pipeline computes, so seeded companies round-trip", async () => {
     const db = getDb();
     const pipeline = loadPipeline();
     const rows = await db.select({ name: schema.companies.name, nameNorm: schema.companies.nameNorm }).from(schema.companies);
-    expect(rows).toHaveLength(21);
+    expect(rows).toHaveLength(22);
     for (const row of rows) expect(row.nameNorm, row.name).toBe(resolveCompanyName(row.name, pipeline).nameNorm);
     // the legal form is not part of the key
     expect(rows.find((row) => row.name === "Orbitrail AG")?.nameNorm).toBe("orbitrail");

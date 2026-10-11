@@ -291,6 +291,31 @@ live in two files; both blocks may be missing (older files): the defaults below 
 The `ui.yaml` block is edited in the YAML or the advanced editor (no form). An older version rejects it: remove it before
 rolling back.
 
+## Ghost job check (`pipeline.yaml` + `ui.yaml`)
+
+Signs that a posting is not a real opening (see [ghost-jobs.md](ghost-jobs.md)). Off by default; both blocks may be
+missing: the defaults below apply. The phrases live in the market packs (`rules.yaml` `ghost`, see
+[market-packs.md](market-packs.md#ghost-job-patterns)).
+
+| File | Key | Default | Meaning |
+|---|---|---|---|
+| `pipeline.yaml` (shipped) | `job_checks.ghost.per_cycle_limit` | 2000 | Jobs checked per cycle at most |
+| | `job_checks.ghost.levels.watch` / `.likely` | 3 / 5 | Points for "watch" / "likely ghost" (1–50, watch ≤ likely); "likely" also needs a reason that is not about time or length |
+| | `job_checks.ghost.long_open.tiers` | `[{days: 90, points: 1}, {days: 180, points: 2}]` | Days open since the trusted posted date and their points (1–10 tiers, ascending days 1–3650, points 0–10) |
+| | `job_checks.ghost.long_open.first_seen_max_points` | 1 | Most points when only the first-seen date is known (0–10) |
+| | `job_checks.ghost.repost_label.points` | 1 | The source labels it "Reposted" (0–10) |
+| | `job_checks.ghost.reposted.min_gap_days` / `.points` | 30 / 2 | Relisted by the same source under a new id at the same place at least this many days later (1–3650 / 0–10) |
+| | `job_checks.ghost.evergreen_wording.points` | 2 | The JD says talent pool / always open (0–10) |
+| | `job_checks.ghost.thin_description.min_words` / `.points` | 120 / 1 | A full-text JD shorter than this, or without a duties section (0–5000 / 0–10) |
+| | `job_checks.ghost.<signal>.enabled` | `true` | Each signal can be turned off |
+| | `job_checks.ghost.quote_max_chars` | 280 | Longest quote (40–2000) |
+| | `job_checks.ghost.negation_words_before` / `_after` | 6 / 5 | Words around an evergreen phrase searched for a negation (0–20); a pack with `negation_after: clause` searches after it to the end of the clause instead |
+| | `job_checks.ghost.heading_max_chars` | 60 | Longest line read as a heading together with the next line (10–200) |
+| `ui.yaml` (user) | `job_checks.ghost.enabled` | `false` | On: the cycle checks jobs and the pages show the marks and the filter |
+| | `job_checks.ghost.trusted_companies` | `[]` | Company names never marked (matched by the normalized name, without the legal form, aliases applied); their marks disappear at once, closed jobs included |
+
+An older version rejects `job_checks.ghost` in `ui.yaml`: remove it before rolling back.
+
 ## Visa check (`pipeline.yaml` + `ui.yaml`)
 
 What a posting says about visa sponsorship (see [visa-sponsorship.md](visa-sponsorship.md)). Both blocks may be missing:

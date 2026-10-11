@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { ConfigError, resetConfigCache } from "@/lib/config";
 import { buildEffectivePipeline, loadMarket, loadPack, loadPipeline, MarketUnresolvedError, marketSettingsProblems, resetPackCache, resolveMarket } from "@/lib/market";
 import type { Pack } from "@/lib/market/load";
-import { emptyVisaPack, visaPackSchema } from "@/lib/market/schema";
+import { emptyGhostPack, emptyVisaPack, ghostPackSchema, visaPackSchema } from "@/lib/market/schema";
 
 import { makeTempConfig, type TempConfig } from "../config/helpers";
 import { fixtureMarket, fixturePack, shippedPipelineFile } from "../pipeline/helpers";
@@ -51,6 +51,25 @@ describe("packs", () => {
     fs.writeFileSync(path.join(dir, "rules.yaml"), "contract:\n  student: ['(unclosed']\n");
     expect(() => loadPack("de")).toThrow(expect.objectContaining({ kind: "schema", configName: "packs/de/rules.yaml" }));
     expect(() => loadPack("xx")).toThrow(ConfigError);
+  });
+
+  it("a bad ghost pattern is a ConfigError naming its path", () => {
+    const dir = copyPack("de");
+    fs.writeFileSync(path.join(dir, "rules.yaml"), "ghost:\n  evergreen_patterns:\n    - id: pool\n      pattern: '(unclosed'\n  exclude_context: ['[a-']\n");
+    expect(() => loadPack("de")).toThrow(
+      expect.objectContaining({
+        kind: "schema",
+        configName: "packs/de/rules.yaml",
+        issues: expect.arrayContaining([expect.objectContaining({ path: "ghost.evergreen_patterns[0].pattern" }), expect.objectContaining({ path: "ghost.exclude_context[0]" })]),
+      }),
+    );
+  });
+
+  it("a pack without a ghost section reads as an empty one", () => {
+    const dir = copyPack("de");
+    fs.writeFileSync(path.join(dir, "rules.yaml"), "contract:\n  student: ['werkstudent']\n");
+    expect(loadPack("de").rules.ghost).toEqual(emptyGhostPack());
+    expect(ghostPackSchema.parse(undefined)).toEqual(emptyGhostPack());
   });
 });
 
@@ -129,6 +148,21 @@ describe("the effective pipeline config", () => {
     };
     expect(visaPackSchema.parse(undefined)).toEqual(emptyVisaPack());
     expect(buildEffectivePipeline(shippedPipelineFile(), fixtureMarket({ pack: "de" }), withoutVisa).visa).toEqual(buildEffectivePipeline(shippedPipelineFile(), fixtureMarket({ pack: "generic", country: "US", currency: "USD", home_language: "en" }), fixturePack).visa);
+  });
+
+  it("unites the packs' ghost patterns; each evergreen pattern keeps its own pack's negation window", () => {
+    const de = buildEffectivePipeline(shippedPipelineFile(), fixtureMarket({ pack: "de" }), fixturePack);
+    const generic = fixturePack("generic").rules.ghost;
+    const german = fixturePack("de").rules.ghost;
+    expect(de.ghost.evergreen_patterns).toHaveLength(generic.evergreen_patterns.length + german.evergreen_patterns.length);
+    expect(de.ghost.evergreen_patterns.slice(0, generic.evergreen_patterns.length).every((entry) => entry.negation_after === generic.negation_after)).toBe(true);
+    expect(de.ghost.evergreen_patterns.slice(generic.evergreen_patterns.length).every((entry) => entry.negation_after === german.negation_after)).toBe(true);
+    expect(de.ghost.lead_in_question.ends).toEqual(expect.arrayContaining(generic.lead_in_question.ends));
+    const withoutGhost = (id: string): Pack => {
+      const pack = fixturePack(id);
+      return id === "de" ? { ...pack, rules: { ...pack.rules, ghost: emptyGhostPack() } } : pack;
+    };
+    expect(buildEffectivePipeline(shippedPipelineFile(), fixtureMarket({ pack: "de" }), withoutGhost).ghost).toEqual(buildEffectivePipeline(shippedPipelineFile(), fixtureMarket({ pack: "generic", country: "US", currency: "USD", home_language: "en" }), fixturePack).ghost);
   });
 
   it("has no German rules under a market without them", () => {

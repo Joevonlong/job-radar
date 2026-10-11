@@ -23,7 +23,7 @@ import {
 } from "./contract";
 import { hasJobContent, parseJobDetail } from "./parse-detail";
 import { isEmptyResultsPage, parseListCards, type ListCard } from "./parse-search";
-import { buildPayload, parseSessionPayload, sessionDescriptionHtml, sessionPayloadSchema, type PayloadSource, type SessionPayload } from "./payload";
+import { buildPayload, parseSessionPayload, sessionDescriptionHtml, sessionPayloadSchema, sessionRepostLabel, type PayloadSource, type SessionPayload } from "./payload";
 import { createDbSessionStore, createMemorySessionStore, type SessionStore } from "./store";
 
 export interface SessionChannelDeps {
@@ -287,6 +287,12 @@ async function read(input: ReadInput): Promise<RawPostingInput[]> {
 }
 
 /**
+ * What both session channels declare for the ghost job check: LinkedIn job ids are stable, the job page's full text is stored, the
+ * posted date is LinkedIn's own, and the page shows a "Reposted" label.
+ */
+const SESSION_GHOST_DECLARATIONS = { stableExternalIds: true, fullDescription: true, trustedPostedAt: true, repostLabel: sessionRepostLabel } as const;
+
+/**
  * The two LinkedIn channels that read with the user's own login: `linkedin-session` (third in the LinkedIn cascade: the keyword
  * searches of search.yaml) and `linkedin-session:recommended` ("recommended for you", once a day, outside the cascade).
  *
@@ -319,6 +325,7 @@ export function createSessionChannels(deps: SessionChannelDeps = defaultSessionD
     },
     parse: parseSessionPayload,
     descriptionHtml: sessionDescriptionHtml,
+    ...SESSION_GHOST_DECLARATIONS,
   };
 
   const recommended: Channel = {
@@ -350,6 +357,7 @@ export function createSessionChannels(deps: SessionChannelDeps = defaultSessionD
     },
     parse: parseSessionPayload,
     descriptionHtml: sessionDescriptionHtml,
+    ...SESSION_GHOST_DECLARATIONS,
   };
 
   return { session, recommended };

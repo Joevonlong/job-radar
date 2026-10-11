@@ -45,3 +45,10 @@ export type TrapFilter = (typeof TRAP_FILTERS)[number];
  */
 export const VISA_FILTERS = ["offered", "not_denied"] as const;
 export type VisaFilter = (typeof VISA_FILTERS)[number];
+
+/**
+ * The "Ghost jobs" filter of /jobs and saved views: `only` = jobs marked watch or likely, `hide` = all but the likely ones (a dismissed
+ * mark counts as none). `all` says "no filter" out loud (the same as no parameter; saved views never store it).
+ */
+export const GHOST_FILTERS = ["all", "only", "hide"] as const;
+export type GhostFilter = (typeof GHOST_FILTERS)[number];

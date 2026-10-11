@@ -6,7 +6,7 @@ import { getFormatter, getLocale, getTranslations } from "next-intl/server";
 import { BackLink } from "@/components/jobs/detail/back-link";
 import { BreakdownPanel } from "@/components/jobs/detail/breakdown-panel";
 import { ChecksPanel } from "@/components/jobs/detail/checks-panel";
-import { TRAP_QUOTE, VISA_QUOTE } from "@/components/jobs/detail/marks";
+import { GHOST_QUOTE, TRAP_QUOTE, VISA_QUOTE } from "@/components/jobs/detail/marks";
 import { CompPanel } from "@/components/jobs/detail/comp-panel";
 import { GermanPanel } from "@/components/jobs/detail/german-panel";
 import { JdPanel } from "@/components/jobs/detail/jd-panel";
@@ -45,7 +45,7 @@ import { germanCheck } from "@/lib/dashboard/german-check";
 import { userGermanLabelOrNull } from "@/lib/dashboard/german";
 import { floorCheck } from "@/lib/dashboard/floor-check";
 import { loadDealBreakerNotice } from "@/lib/dashboard/deal-breakers";
-import { knownContract, knownFamily } from "@/lib/dashboard/labels";
+import { channelDisplayName, knownContract, knownFamily } from "@/lib/dashboard/labels";
 import { buildSkillAliasMap, matchSkills, profileSkillKeys } from "@/lib/dashboard/skills";
 import { quotesFoundInJd } from "@/lib/dashboard/jd";
 import { loadModelCatalog } from "@/lib/ai/catalog";
@@ -59,11 +59,13 @@ import { aiOutputLanguage, languageSettings, translationTarget } from "@/lib/i18
 import { bcp47, displayLanguageName, languageAutonym, sameLanguage } from "@/lib/i18n/languages";
 import { describeSalary } from "@/lib/dashboard/salary";
 import { effectiveStatus } from "@/lib/dashboard/status";
-import { getDb, getJobDetail, getTranslation, listTrapsOfJob, loadMonthSalaryStats } from "@/lib/db";
+import { getDb, getJobDetail, getTranslation, listTrapsOfJob, loadMonthSalaryStats, strongestFirst } from "@/lib/db";
 import { trapsEnabled } from "@/lib/traps/settings";
 import { buildTrapCheckView, buildTrapPanelView } from "@/lib/traps/view";
 import { readNeedsVisaSponsorship, visaEnabled } from "@/lib/visa/settings";
 import { buildVisaCheckView, visaMarkText } from "@/lib/visa/view";
+import { ghostEnabled } from "@/lib/ghost/settings";
+import { buildGhostCheckView, GHOST_TOOLTIP_REASONS, ghostMarkText, ghostShortMessage } from "@/lib/ghost/view";
 import { readInitialBreakdownRequest } from "@/lib/control/breakdown-request";
 import { readInitialTranslateRequest, readPartialTranslation } from "@/lib/control/translate-request";
 import { toJobTranslation } from "@/lib/translation/service";
@@ -189,6 +191,7 @@ export default async function JobDetailPage({ params }: { params: Params }) {
   const floor = floorCheck(job.salary, salaryFloor, baseCurrency);
   // The salary level within the benchmark and the on-demand salary lookup (salary.yaml; the lookup is off by default)
   const tSalary = await getTranslations("salary");
+  const tGhost = await getTranslations("ghostJobs");
   const salarySettings = readSalarySettings();
   let salaryAi: AiConfig | null = null;
   try {
@@ -225,10 +228,16 @@ export default async function JobDetailPage({ params }: { params: Params }) {
   // What the JD says about visa sponsorship (nothing when ui.yaml job_checks.visa is off); its marks follow the trap marks
   const visaView = visaEnabled() ? buildVisaCheckView(job.visa, readNeedsVisaSponsorship()) : null;
   const visaMarks = visaView ? visaView.evidence.map((e) => visaMarkText(e.quote)).filter((text) => text !== "") : [];
+  // The ghost job check (nothing when ui.yaml job_checks.ghost is off); its evergreen quote is marked after the visa marks
+  const ghostView = ghostEnabled() ? buildGhostCheckView(job.ghost) : null;
+  // marked only while the result shows (watch / likely): not once it is dismissed
+  const ghostMark = ghostView?.quote && (ghostView.state === "watch" || ghostView.state === "likely") ? ghostMarkText(ghostView.quote) : "";
+  const ghostChannelNames = Object.fromEntries(job.sources.map((source) => [source.channelId, channelDisplayName(source.channelId, source.family, (family) => tDash(`source.${family}`))]));
   const jdQuotes: Array<{ text: string; tier: string; trapKind?: "hidden" | "instruction" }> = [
     ...baseQuotes,
     ...trapItems.map((item) => ({ text: item.markText as string, tier: TRAP_QUOTE, trapKind: item.markKind })),
     ...visaMarks.map((text) => ({ text, tier: VISA_QUOTE })),
+    ...(ghostMark !== "" ? [{ text: ghostMark, tier: GHOST_QUOTE }] : []),
   ];
   const trapMarksFound = quotesFoundInJd(job.description, jdQuotes.map((q) => q.text));
   const trapJdIndex: Record<number, number> = {};
@@ -238,6 +247,23 @@ export default async function JobDetailPage({ params }: { params: Params }) {
   });
   const visaFirstMark = visaMarks.findIndex((_, i) => trapMarksFound[baseQuotes.length + trapItems.length + i] === true);
   const visaJdIndex = visaFirstMark === -1 ? null : baseQuotes.length + trapItems.length + visaFirstMark;
+  const ghostIndex = baseQuotes.length + trapItems.length + visaMarks.length;
+  const ghostJdIndex = ghostMark !== "" && trapMarksFound[ghostIndex] === true ? ghostIndex : null;
+  // the score card's mark: a watch / likely result that is not dismissed, its strongest reasons in the tooltip
+  const ghostScoreMark =
+    ghostView && (ghostView.state === "watch" || ghostView.state === "likely")
+      ? {
+          level: ghostView.state,
+          score: ghostView.score,
+          reasons: strongestFirst(ghostView.reasons)
+            .slice(0, GHOST_TOOLTIP_REASONS)
+            .map((reason) => {
+              const message = ghostShortMessage(reason);
+              return tGhost(message.key, message.values);
+            })
+            .join(" · "),
+        }
+      : null;
   const hasDescription = job.description !== null && job.description.trim() !== "";
   const inJd = quotesFoundInJd(job.description, quoteList.map((q) => q.text));
   const signalRows = activeSignals.map((s, index) => ({
@@ -362,6 +388,7 @@ export default async function JobDetailPage({ params }: { params: Params }) {
           scoreNow={scoreNowButton}
           scoredWhen={job.score?.scoredAt ? absolute(job.score.scoredAt) : null}
           languageName={languageName}
+          ghost={ghostScoreMark}
         />
         <SalaryCard
           salary={job.salary}
@@ -539,6 +566,7 @@ export default async function JobDetailPage({ params }: { params: Params }) {
               profileHasSkills={mySkills.length > 0}
               floor={floor}
               traps={trapCheck}
+              ghost={ghostView ? { jobId: job.id, view: ghostView, jdIndex: ghostJdIndex, channelNames: ghostChannelNames } : null}
               visa={visaView ? { view: visaView, jdIndex: visaJdIndex } : null}
             />
           </Panel>

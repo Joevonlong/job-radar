@@ -4,6 +4,7 @@ import type { SignalColor } from "@/lib/signals/palette";
 import type { ApplicationStatus } from "@/lib/db/repos/applications";
 import type { ClosedReason } from "@/lib/jobs/closure";
 import type { ClosedEvidence } from "./status-chip";
+import type { GhostMarkValue } from "./ghost-mark";
 import type { VisaBadgeValue } from "./visa-badge";
 
 export interface JobListSignal {
@@ -77,6 +78,8 @@ export interface JobListItem {
   trapCount?: number;
   /** What the JD says about visa sponsorship when it is clear; only set when the badge shows (`visaVisible`). */
   visa?: VisaBadgeValue;
+  /** The ghost job mark under the score (watch / likely, not dismissed); only set while ui.yaml turns the check on. */
+  ghost?: GhostMarkValue;
   /** First seen after the user's last visit: only draws the "new since your last visit" divider, not the row style. */
   isNew?: boolean;
   /** Why the job shows as (possibly) closed; null / absent when open. */

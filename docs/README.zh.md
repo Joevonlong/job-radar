@@ -33,6 +33,7 @@
 | [salary.zh.md](salary.zh.md) | 岗位页的薪资水平（按你采集的岗位做的基准、薪资网站链接）和可选的 AI 查薪资（网页搜索），`salary.yaml` |
 | [breakdown.zh.md](breakdown.zh.md) | 岗位拆解：手动 / 自动、卡片状态和错误码、引用核对、`breakdown.yaml` |
 | [ai-traps.zh.md](ai-traps.zh.md) | AI 陷阱检测：能认出哪些手段、哪些来源只有文字、发给 AI 的文字怎么清洗、页面和推送上的标记、`traps.yaml`、`pnpm traps:scan` |
+| [ghost-jobs.zh.md](ghost-jobs.zh.md) | 招聘帖背后可能没有真实空缺的迹象：五个信号和分值、列表标记和筛选、详情页一行、"不是幽灵岗位"、`pnpm ghost:check`、设置 |
 | [visa-sponsorship.zh.md](visa-sponsorship.zh.md) | JD 里关于签证赞助或工作许可的说法：四种结果、列表徽标和筛选（给需要赞助的用户）、详情页一行、签证一票否决、`pnpm visa:scan`、设置 |
 | [insights.zh.md](insights.zh.md) | 统计页 /insights：每张卡片怎么算、`insights.yaml` |
 | [interest-suggestions.zh.md](interest-suggestions.zh.md) | 每周 AI 建议：证据规则、批准 / 拒绝、`suggest` 配置 |

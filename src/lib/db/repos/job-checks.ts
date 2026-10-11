@@ -1,10 +1,10 @@
-/** Whether the tables of the job checks exist (the visa check's `job_visa`). C9: the probe lives here. */
+/** Whether the tables of the job checks exist (the visa check's `job_visa`, the ghost job check's `job_ghost`). C9: the probe lives here. */
 import { sql } from "drizzle-orm";
 
 import type { Executor } from "../executor";
 
 /** A table of a job check. */
-export type JobCheckTable = "job_visa";
+export type JobCheckTable = "job_visa" | "job_ghost";
 
 const seen = new Set<JobCheckTable>();
 

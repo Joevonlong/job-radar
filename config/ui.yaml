@@ -83,6 +83,13 @@ job_checks:
     enabled: true
     # Extra phrases (regex, case-insensitive) on top of the market packs' closed_posting.phrases, e.g. "position (is )?filled"
     extra_phrases: []
+  # Signs that a posting is not a real opening ("ghost job": open for months, reposted under a new id, a talent pool, a thin JD;
+  # rules only, see docs/ghost-jobs.md). Only a hint next to the score: it never changes a score, a filter or a push. Off by
+  # default: run `pnpm ghost:check --json` first and turn it on when the share of "likely" and "watch" jobs looks right.
+  # trusted_companies: company names never flagged (e.g. ["Acme GmbH"]).
+  ghost:
+    enabled: false
+    trusted_companies: []
   # What the JD says about visa sponsorship / a work permit (rules only, no AI; see docs/visa-sponsorship.md). Nothing here changes
   # a score or hides a job. enabled: false = no scan, nothing shown. badges: when the list badge and the /jobs "Visa" filter show:
   # auto = only when data/profile/me.yaml says needs_visa_sponsorship: true; always; never. The detail page shows its line

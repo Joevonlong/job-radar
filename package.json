@@ -63,6 +63,7 @@
     "score:queue": "node --env-file-if-exists=.env --import tsx scripts/score-queue.ts",
     "suggest:smoke": "node --env-file-if-exists=.env --import tsx scripts/suggest-smoke.ts",
     "traps:scan": "node --env-file-if-exists=.env --import tsx scripts/traps-scan.ts",
+    "ghost:check": "node --env-file-if-exists=.env --import tsx scripts/ghost-check.ts",
     "visa:scan": "node --env-file-if-exists=.env --import tsx scripts/visa-scan.ts",
     "salary:benchmark": "node --env-file-if-exists=.env --import tsx scripts/salary-benchmark.ts",
     "smoke:signals": "node --env-file-if-exists=.env --import tsx scripts/signals-smoke.ts",

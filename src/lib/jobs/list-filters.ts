@@ -3,6 +3,7 @@ import { germanLevelsToHide } from "@/lib/dashboard/german";
 import { hasHighValueCategories, type Db, type JobFilters } from "@/lib/db";
 import { viewFiltersFromParams } from "@/lib/interests/view-filters";
 import { loadBaseCurrency, loadHighValuePolicy } from "@/lib/signals/floor";
+import { ghostFilterAvailable } from "@/lib/ghost/filter";
 import { visaFilterAvailable } from "@/lib/visa/filter";
 
 import { loadCityGroups } from "./cities";
@@ -11,13 +12,13 @@ import { toJobFilters } from "./job-filters";
 import type { JobsSearchParams } from "./search-params";
 
 /**
- * The filters of `/jobs?<params>`; `cities` = the city groups and `visa` = `visaFilterAvailable` when the caller already has
- * them.
+ * The filters of `/jobs?<params>`; `cities` = the city groups and `visa` = `visaFilterAvailable` / `ghost` =
+ * `ghostFilterAvailable` when the caller already has them.
  */
-export async function jobsListFilters(db: Db, params: JobsSearchParams, known: { cities?: readonly CityGroup[]; visa?: boolean } = {}): Promise<JobFilters> {
+export async function jobsListFilters(db: Db, params: JobsSearchParams, known: { cities?: readonly CityGroup[]; visa?: boolean; ghost?: boolean } = {}): Promise<JobFilters> {
   const highValue = loadHighValuePolicy();
   return {
-    ...toJobFilters(viewFiltersFromParams(params), { cityGroups: known.cities ?? (await loadCityGroups(db)), visa: known.visa ?? (await visaFilterAvailable(db)) }),
+    ...toJobFilters(viewFiltersFromParams(params), { cityGroups: known.cities ?? (await loadCityGroups(db)), visa: known.visa ?? (await visaFilterAvailable(db)), ghost: known.ghost ?? (await ghostFilterAvailable(db)) }),
     from: params.from,
     to: params.to,
     includeFiltered: params.filtered,

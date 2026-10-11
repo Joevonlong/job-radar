@@ -146,6 +146,9 @@ export function createStepstoneChannel(deps: StepstoneDeps = {}): Channel {
     family: "stepstone",
     kind: "guest",
     usesQueries: true,
+    // the ghost job check: StepStone ids are stable and the detail page's full text is stored
+    stableExternalIds: true,
+    fullDescription: true,
     collect,
     parse: parseStepstonePayload,
   };

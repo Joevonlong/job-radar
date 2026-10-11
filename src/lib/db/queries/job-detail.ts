@@ -6,13 +6,16 @@ import type { Db } from "../client";
 import { getFavorite, type FavoriteState } from "../repos/favorites";
 import { getClosureOverride, type ClosureOverride } from "../repos/closures";
 import { uxTablesReady } from "../repos/ux-tables";
+import { getGhostOfJob } from "../repos/ghost";
 import { getVisaOfJob, type VisaDetail } from "../repos/visa";
+import type { GhostOfJob } from "@/lib/ghost/types";
 import { closedReason, effectiveJobStatus, type ClosedReason } from "@/lib/jobs/closure";
 import { parseLinkCheck, type LinkCheckEvidence } from "@/lib/jobs/link-check-evidence";
 import { getApplicationByJobId, listApplicationEvents, type Application, type ApplicationEvent } from "../repos/applications";
 import { companies, jobs, profileSnapshots, scores, signalScans, translations } from "../schema";
 import { loadSignals, loadSources } from "./job-cards";
 import { summarizeMonthSalaries } from "@/lib/domain/salary";
+import { ghostTrustedKeys } from "@/lib/ghost/settings";
 import { listMonthSalaryFigures } from "./jobs";
 import { asContract, asGermanLevel, asJobLanguage, parseLocations, parseSalary } from "./parse";
 import type { Contract, GermanLevel, JobLanguage, JobLocation, JobSalary, JobSignal, JobSourceRef, JobStatus, Workplace } from "./types";
@@ -92,6 +95,8 @@ export interface JobDetail {
   applicationEvents: ApplicationEvent[];
   /** What the JD says about visa sponsorship (the visa check); null before the job was checked. */
   visa: VisaDetail | null;
+  /** The ghost job check's stored result (also a dismissed one); null before the check or without the table. */
+  ghost: GhostOfJob | null;
 }
 
 type ScoreRow = typeof scores.$inferSelect;
@@ -188,7 +193,7 @@ export async function getJobDetail(db: Db, id: number): Promise<JobDetail | null
   if (!row) return null;
   const { job } = row;
 
-  const [sources, signals, score, translated, application, [scan], favorite, closed, visa] = await Promise.all([
+  const [sources, signals, score, translated, application, [scan], favorite, closed, visa, ghost] = await Promise.all([
     loadSources(db, [id]),
     loadSignals(db, [id]),
     displayedScore(db, id),
@@ -198,6 +203,7 @@ export async function getJobDetail(db: Db, id: number): Promise<JobDetail | null
     getFavorite(db, id),
     loadClosure(db, id, job.status),
     getVisaOfJob(db, id),
+    getGhostOfJob(db, id, ghostTrustedKeys()),
   ]);
   const applicationEvents = application ? await listApplicationEvents(db, application.id) : [];
   const salaryFiltered = score?.filterResult === "filtered_out" && score.filterReasons.some((reason) => reason.startsWith("salary_below_floor"));
@@ -256,6 +262,7 @@ export async function getJobDetail(db: Db, id: number): Promise<JobDetail | null
     favorite,
     applicationEvents,
     visa,
+    ghost,
   };
 }
 

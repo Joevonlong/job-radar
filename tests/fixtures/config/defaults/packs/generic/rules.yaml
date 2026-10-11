@@ -113,6 +113,124 @@ filter:
       - \bglobal(?:ly)?\b
       - \banywhere\b
 
+# Signs that a posting is not a real opening (the ghost job check, English; docs/ghost-jobs.md). Only a hint next to the score:
+# nothing here changes a score or hides a job. Regex, matched case-insensitively with Unicode: write word boundaries as
+# (?<![\p{L}\p{N}]) and (?![\p{L}\p{N}]), not \b. Every entry has an `id` the checks panel names; a pattern in several packs counts once.
+ghost:
+  # The source's own "reposted" label (LinkedIn: "Reposted 2 weeks ago"). Only channels that report such a label use these.
+  repost_label_patterns:
+    - id: reposted
+      pattern: '(?<![\p{L}\p{N}])re-?posted(?![\p{L}\p{N}])'
+  # The JD says the posting is a talent pool or always open, not one opening. Each sentence, list item or short heading + next line
+  # is judged on its own. A negation cue (negation_cues) inside the phrase, a few words before it, a few words after it in the same
+  # clause, or in the heading of its list cancels it ("This is not a talent pool posting"); `check_negation: false` marks a phrase
+  # that is a negation itself. A sentence matching exclude_context does not count, nor does a list item under a duties heading
+  # (responsibility_patterns: a recruiter's "- Build our talent pool").
+  evergreen_patterns:
+    # "This posting is for our talent pool", "Join our talent community", "talent pool requisition", "We are building a talent
+    # pool" (first person only: not "Experience building a talent pipeline")
+    - id: talent_pool
+      pattern: '(?<![\p{L}\p{N}])(?:(?:for|into|join|joining|to|in)\s+(?:our|the)\s+(?:global\s+|future\s+|general\s+)?talent\s+(?:pool|community|network|pipeline)|talent\s+(?:pool|community|pipeline)\s+(?:posting|position|role|requisition|listing|opening|vacancy)|we(?:\s+are|[''’]re|\s+will\s+be)\s+(?:currently\s+|now\s+)?(?:building|growing)\s+(?:a|our)\s+(?:global\s+|future\s+|general\s+)?talent\s+(?:pool|pipeline|community|network))(?![\p{L}\p{N}])'
+    # "This is an evergreen role", "evergreen requisition"
+    - id: evergreen_posting
+      pattern: '(?<![\p{L}\p{N}])evergreen\s+(?:role|position|posting|requisition|req|opening|job|listing|vacancy)(?![\p{L}\p{N}])'
+    # "There is no current opening", "This posting is not tied to a specific role"
+    - id: no_specific_opening
+      pattern: '(?<![\p{L}\p{N}])(?:no|not\s+(?:tied|linked|attached)\s+to\s+(?:a|any|one)|not\s+for\s+(?:a|one|any))\s+(?:current|specific|particular|immediate|concrete|actual|open|active)\s+(?:openings?|positions?|roles?|vacanc(?:y|ies)|jobs?|requisitions?)(?![\p{L}\p{N}])'
+      check_negation: false
+    # "We are always hiring", "We're always accepting applications" (not "always looking for people who …": the About-us text of
+    # many real postings)
+    - id: always_hiring
+      pattern: '(?<![\p{L}\p{N}])(?:always|continuously|constantly|perpetually)\s+(?:hiring|recruiting|accepting\s+(?:applications|resumes|cvs|candidates))(?![\p{L}\p{N}])'
+    # "We collect applications for future openings", "… on a rolling basis for upcoming positions" ("upcoming" only before an
+    # opening: not "for upcoming projects")
+    - id: future_openings
+      pattern: '(?<![\p{L}\p{N}])(?:for|about)\s+(?:(?:potential\s+|upcoming\s+)?future\s+(?:openings|opportunities|vacancies|positions|roles|needs)|upcoming\s+(?:openings|positions|vacancies|roles))(?![\p{L}\p{N}])'
+  # A heading that opens the duties of the role. Tested only against heading-shaped lines (short; a "#" heading, ending in ":" or
+  # without end punctuation) and "Label:" prefixes, after "*" / "_" emphasis is removed.
+  responsibility_patterns:
+    - id: responsibilities
+      pattern: '(?<![\p{L}\p{N}])(?:(?:key|main|core|your|primary|job|role|daily)\s+)?(?:responsibilities|duties|accountabilities|tasks)(?![\p{L}\p{N}])'
+    - id: what_you_do
+      pattern: '(?<![\p{L}\p{N}])what\s+you[''’]?(?:ll|\s+will)?\s+(?:do|be\s+doing|work\s+on|own|build|achieve)(?![\p{L}\p{N}])'
+    - id: the_role
+      pattern: '^(?:about\s+)?(?:the|your|this)\s+(?:role|position|job|mission|impact|day|opportunity|challenge)$'
+    # "Job Description", "Role overview", "Position summary"
+    - id: job_description
+      pattern: '(?<![\p{L}\p{N}])(?:job|role|position)\s+(?:description|overview|summary)(?![\p{L}\p{N}])'
+    - id: in_this_role
+      pattern: '(?<![\p{L}\p{N}])(?:in\s+this\s+(?:role|position)|day[-\s]to[-\s]day|a\s+day\s+in\s+the\s+life)(?![\p{L}\p{N}])'
+  negation_cues:
+    - not
+    - 'no'
+    - never
+    - none
+    - without
+    - cannot
+    - 'can[''’]?t'
+    - 'don[''’]?t'
+    - 'doesn[''’]?t'
+    - 'isn[''’]?t'
+    - 'aren[''’]?t'
+  # Where the clause around an evergreen phrase ends for the negation search: "We have no open role in sales; this posting is for
+  # our talent pool" still counts. A comma does not end it, except before "not" ("This posting is for our talent pool, not for a
+  # specific team"). "not only / just / merely" is a break, not a negation ("We're always hiring, not only engineers").
+  clause_breaks:
+    - '[;(]'
+    - ',\s*(?=not\s)'
+    - '(?<![\p{L}\p{N}])not\s+(?:only|just|merely)(?![\p{L}\p{N}])'
+    - '\s[–—]\s'
+    - '(?<![\p{L}\p{N}])(?:but|however|although|though|while|whereas|except|instead|rather)(?![\p{L}\p{N}])'
+    - '(?<![\p{L}\p{N}])(?:so|and)\s+(?:we|you|they|our|your|there|this)(?![\p{L}\p{N}])'
+  # Sentences that mention a talent pool or future roles without saying this posting is one.
+  exclude_context:
+    # the employer's product, its customers or a team of that name: "talent pool software", "helps companies build their talent
+    # pipelines", "Our ATS lets hiring managers add candidates to …", "Our app alerts users about future openings", "Join our Talent
+    # Network team as a Recruiter"
+    - '(?<![\p{L}\p{N}])talent\s+(?:pool|community|pipeline|network|acquisition)\s+(?:software|platform|management|crm|tools?|solutions?|products?|systems?|features?|teams?|department|managers?|specialists?|leads?|partners?|function)(?![\p{L}\p{N}])'
+    - '(?<![\p{L}\p{N}])(?:customers?|clients?|companies|employers|businesses|users|recruiters|hiring\s+managers|teams)(?:[''’]s?)?\s+(?:[\p{L}-]+\s+){0,3}?talent\s+(?:pools?|pipelines?|communit(?:y|ies)|networks?)(?![\p{L}\p{N}])'
+    - '(?<![\p{L}\p{N}])(?:our|the|its)\s+(?:ats|apps?|platforms?|software|products?|tools?|crm|solutions?|services?|systems?|marketplace)\s+(?:lets|helps|allows|enables|alerts|notifies|matches|connects|sends|shows|tells|informs)(?![\p{L}\p{N}])'
+    # … or as a noun phrase: "Evergreen job listings are a core feature of our ATS", "our platform's talent pool module"
+    - '(?<![\p{L}\p{N}])(?:(?:features?|modules?|capabilit(?:y|ies)|functionality|components?)\s+(?:of|in)\s+(?:our|the|its|their|an?)\s+(?:[\p{L}-]+\s+)?(?:ats|apps?|platforms?|software|products?|tools?|crm|solutions?|services?|systems?|marketplace)|(?:our|the|its|their)\s+(?:ats|app|platform|software|product|tool|crm|solution|service|system)[''’]s?\s+(?:[\p{L}-]+\s+){0,3}?(?:features?|modules?|capabilit(?:y|ies)|functionality))(?![\p{L}\p{N}])'
+    # the posting says it is a real opening after all: "…, but this role is a concrete opening", "this role is based in Berlin"
+    - '(?<![\p{L}\p{N}])(?:this|the)\s+(?:role|position|job|posting|vacancy|opening)\s+is\s+(?:an?\s+)?(?:concrete|real|specific|actual|genuine|existing|based|located)(?![\p{L}\p{N}])'
+    # a duty of the role: "You will build and nurture our talent pipeline", "help us grow our talent pool", "responsible for our
+    # talent pool", "Build our talent community" (the verb opens the sentence). Not "We are building a talent pool": that is the posting.
+    - '(?<![\p{L}\p{N}])(?:(?:you(?:[''’]ll|[''’]re|[''’]d|\s+will|\s+would|\s+are|\s+can|\s+should)?|help(?:s|ing)?(?:\s+us)?(?:\s+to)?)\s+(?:also\s+|actively\s+|be\s+)?(?:build|building|grow|growing|manage|managing|maintain|maintaining|nurture|nurturing|develop|developing|own|owning|source|sourcing|engage|engaging|support|supporting|expand|expanding)|responsible\s+for)\s+(?:[\p{L}''’-]+\s+){0,3}?talent\s+(?:pools?|pipelines?|communit(?:y|ies)|networks?)(?![\p{L}\p{N}])'
+    - '^[\s*•·–-]*(?:build|building|grow|growing|manage|managing|maintain|maintaining|nurture|nurturing|develop|developing|own|owning|source|sourcing|engage|engaging|support|supporting|expand|expanding)\s+(?:[\p{L}''’-]+\s+){0,3}?talent\s+(?:pools?|pipelines?|communit(?:y|ies)|networks?)(?![\p{L}\p{N}])'
+    # a recruiter's duty: "You will source candidates for upcoming roles"
+    - '(?<![\p{L}\p{N}])you(?:[''’]ll|[''’]re|[''’]d|\s+will|\s+would|\s+are|\s+can)?\s+(?:also\s+)?(?:hire|hiring|recruit\p{L}*|source|sourcing|screen\p{L}*|interview\p{L}*|staff\p{L}*|plan|planning|forecast\p{L}*|partner\p{L}*|identify|identifying|attract\p{L}*|find|finding)\s+(?:[\p{L}''’-]+\s+){0,4}?(?:for|about)\s+(?:potential\s+|upcoming\s+)?(?:future|upcoming)(?![\p{L}\p{N}])'
+    # training for later roles is a benefit, not an opening: "Mentoring for future roles in leadership"
+    - '(?<![\p{L}\p{N}])(?:training|mentoring|coaching|career|learning|upskilling|development|preparation|prepares?|preparing|readiness)\s+(?:[\p{L}''’-]+\s+){0,3}?(?:for|towards?|into)\s+(?:potential\s+|upcoming\s+)?(?:future|upcoming)(?![\p{L}\p{N}])'
+    # the footer of a real posting: "Don't see a role that fits? Join our talent community", "If none of our roles fit …"
+    - '(?<![\p{L}\p{N}])(?:don[''’]?t|do\s+not|didn[''’]?t|can[''’]?t|cannot|couldn[''’]?t)\s+(?:see|find)(?![\p{L}\p{N}])'
+    - '(?<![\p{L}\p{N}])(?:none\s+of\s+(?:our|the|these)|no)\s+(?:suitable|matching|relevant|right|fitting)\s+(?:roles?|positions?|jobs?|openings?|vacanc(?:y|ies))(?![\p{L}\p{N}])'
+    - '(?<![\p{L}\p{N}])(?:if|in\s+case|should|whether)\s+(?:[\p{L}''’-]+\s+){0,6}?(?:no|none|not|don[''’]?t|doesn[''’]?t|isn[''’]?t|aren[''’]?t|can[''’]?t)(?![\p{L}\p{N}])'
+    # a newsletter-style footer: "Not ready to apply? Join our talent community to stay in touch", "Want to hear about new roles?"
+    - '(?<![\p{L}\p{N}])(?:not\s+(?:yet\s+)?ready\s+to\s+apply|(?:want|like|wish)\s+to\s+(?:hear|know|learn|be\s+(?:notified|informed|the\s+first))\s+(?:about|when|of)|stay\s+(?:in\s+touch|connected|informed|up\s+to\s+date)|keep\s+in\s+touch|(?:job|career)\s+alerts?)(?![\p{L}\p{N}])'
+    # privacy notes and "your application may also be considered for future roles"
+    - '(?<![\p{L}\p{N}])(?:privacy|gdpr|data\s+protection|personal\s+data|consent|retain|retention|on\s+file|keep\s+your|store\s+your|delete)(?![\p{L}\p{N}])'
+    - '(?<![\p{L}\p{N}])also\s+(?:be\s+)?(?:consider\p{L}*|kept|keep|use|used|added)(?![\p{L}\p{N}])'
+    - '(?<![\p{L}\p{N}])(?:may|might|will|would|can)\s+(?:also\s+)?(?:contact|reach\s+out\s+to|notify)\s+you(?![\p{L}\p{N}])'
+  # The question right before a sentence is read with it ("Don't see a role that fits? Join our talent community"): the text before
+  # the sentence ends in one of `ends`; the question starts after the last of `starts` (or a line break). line_above: the question
+  # may stand on the line above. A sentence that itself ends in one of `ends` is a question, not a statement about the posting
+  # ("Always hiring? Acme automates your sourcing"), and does not count. Plain characters; the packs' lists are united.
+  lead_in_question:
+    ends: ['?', '？']
+    starts: ['.', '!', '?', '？', '¿', '¡', '。', '！']
+    line_above: true
+  abbreviations: [e.g, i.e, etc, incl, approx, vs, inc, ltd, co, corp, mr, ms, dr]
+  # A quick first look (speed): a JD or sentence with none of these is not searched for evergreen phrases. Every phrase the
+  # evergreen patterns can match contains one of them; keep it so when you add a pattern (pnpm config:check warns).
+  prefilter:
+    - talent
+    - evergreen
+    - '(?:always|continuously|constantly|perpetually)'
+    - future
+    - upcoming
+    - '(?:current|specific|particular|immediate|concrete|actual|open|active)'
+
 visa:
   # Support is mentioned: "We offer visa sponsorship and relocation support", "Visa sponsorship is available".
   # A negation cue (negation_cues) inside it, a few words before it ("We do not offer …") or a few words after it in the same clause
