@@ -355,7 +355,7 @@ jobs:
         run: pnpm test:e2e:setup --fail-on-flaky-tests
       - name: Upload the Playwright report and traces
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         timeout-minutes: 5
         with:
           name: playwright-report
