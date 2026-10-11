@@ -31,9 +31,12 @@ describe("FavoriteNote", () => {
     const { unmount } = note("ask about visa");
     expect(screen.getByText(/starred 3 days ago/)).toBeInTheDocument();
     expect(screen.getByTestId("fav-note-edit")).toHaveTextContent("ask about visa");
+    // the name starts with the visible text and tells the rows apart by the job title
+    expect(screen.getByRole("button", { name: "ask about visa · LLM Engineer" })).toBe(screen.getByTestId("fav-note-edit"));
     unmount();
     note(null);
     expect(screen.getByTestId("fav-note-edit")).toHaveTextContent("Add note");
+    expect(screen.getByRole("button", { name: "Add note · LLM Engineer" })).toBe(screen.getByTestId("fav-note-edit"));
   });
 
   it("Enter saves, shows the new note and toasts", async () => {

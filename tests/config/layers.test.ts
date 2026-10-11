@@ -136,7 +136,8 @@ describe("resolution: the user file wins, else the shipped default", () => {
     expect(displayConfigPathForWeb(path.join(getAppRoot(), "data", "config", "ai.yaml"))).toBe(path.join("data", "config", "ai.yaml"));
     expect(displayConfigPathForWeb(user("ai.yaml"))).toBe(path.join("data", "config", "ai.yaml"));
     expect(displayConfigPathForWeb(path.join(dirs().profileDir, "me.yaml"))).toBe(path.join("data", "profile", "me.yaml"));
-    expect(displayConfigPathForWeb(shipped("ai.yaml"))).toBe(shipped("ai.yaml"));
+    expect(displayConfigPathForWeb(shipped("ai.yaml"))).toBe(path.join("config", "ai.yaml"));
+    expect(displayConfigPathForWeb(path.join(path.dirname(dirs().configDir), "elsewhere", "ai.yaml"))).toBe(path.join(path.dirname(dirs().configDir), "elsewhere", "ai.yaml"));
   });
 });
 

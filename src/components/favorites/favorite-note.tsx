@@ -103,7 +103,7 @@ export function FavoriteNote({ jobId, title, note, starredLabel, starredTitle }:
           ) : null}
         </span>
       ) : (
-        <button type="button" className="-my-sp-1 min-h-sp-6 min-w-0 truncate py-sp-1 text-left underline-offset-4 hover:underline focus-visible:underline" onClick={start} data-testid="fav-note-edit" title={t("note.edit", { title })}>
+        <button type="button" className="-my-sp-1 min-h-sp-6 min-w-0 truncate py-sp-1 text-left underline-offset-4 hover:underline focus-visible:underline" onClick={start} data-testid="fav-note-edit" aria-label={`${value ? value : t("note.add")} · ${title}`} title={t("note.edit", { title })}>
           {value ? value : <span className="text-ink-3">{t("note.add")}</span>}
         </button>
       )}

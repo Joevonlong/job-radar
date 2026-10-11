@@ -376,7 +376,8 @@
   [data-played] .jr-lvl i, [data-played] .jr-up > i { transform: none; opacity: 1; }
   [data-played] .jr-term__txt { width: auto; }
   /* no motion: the strip stands still, the doubled copy goes, and the rest of the line is reached by scrolling it (keyboard: the strip is focusable) */
-  .jr-ticker { overflow-x: auto; }
+  .jr-ticker { overflow-x: auto; scrollbar-width: thin; }
+  .jr-ticker__lb { position: sticky; left: 0; }
   .jr-ticker__in { animation: none !important; }
   .jr-ticker__copy { display: none; }
   .jr-led--live { box-shadow: none; }

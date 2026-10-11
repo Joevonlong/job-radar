@@ -110,7 +110,8 @@ export function displayConfigPath(file: string): string {
 
 /**
  * A path for the web pages (Settings): like `displayConfigPath`, but a file of a config or profile directory that lives outside the app
- * (`JOB_RADAR_CONFIG_DIR`) is shown under its conventional name (`data/config/schedule.yaml`) instead of the machine's absolute path.
+ * (`JOB_RADAR_CONFIG_DIR`) is shown under its conventional name (`data/config/schedule.yaml`) instead of the machine's absolute path; so is a
+ * shipped file of a moved defaults directory (`JOB_RADAR_DEFAULTS_DIR`, shown as `config/<file>`).
  * The CLI and the doctor keep the real path (`displayConfigPath`), where it is what the reader needs.
  */
 export function displayConfigPathForWeb(file: string): string {
@@ -124,6 +125,8 @@ export function displayConfigPathForWeb(file: string): string {
   if (underConfig !== null) return path.join("data", "config", underConfig);
   const underProfile = inside(getProfileDir());
   if (underProfile !== null) return path.join("data", "profile", underProfile);
+  const underDefaults = inside(getDefaultsDir());
+  if (underDefaults !== null) return path.join("config", underDefaults);
   return file;
 }
 

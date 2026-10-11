@@ -67,6 +67,9 @@ test("the ticker pauses on hover and on focus, and stands still with reduced mot
   await page.emulateMedia({ reducedMotion: "reduce" });
   await expect(track).toHaveCSS("animation-name", "none");
   await expect(ticker.locator(".jr-ticker__copy")).toBeHidden();
+  // the label stays put while the strip scrolls, and a scrollbar does not change the strip's height
+  await expect(ticker.locator(".jr-ticker__lb")).toHaveCSS("position", "sticky");
+  expect((await ticker.boundingBox())?.height).toBe(34);
 });
 
 test("the registry tables name their last column, and a jump tag is 24px high with its visible text as name", async ({ page }) => {
