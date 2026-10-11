@@ -67,7 +67,8 @@ sed -i.bak -e "s/^PUID=.*/PUID=$(id -u)/" -e "s/^PGID=.*/PGID=$(id -g)/" .env &&
 mkdir -p data/config data/profile data/backups data/exports data/logs .auth
 ```
 
-Start the stack, then the AI worker on your machine (leave it running):
+Sign in to your AI on this machine (`claude` then `/login`, or `codex login`). Then start the stack and the AI worker
+(leave it running):
 
 ```bash
 docker compose up -d --build         # db, web, runner, jobspy; the first build takes a few minutes
@@ -84,8 +85,7 @@ pnpm run setup --step telegram       # Telegram pushes, once you have created yo
 pnpm run doctor                      # checks everything and says what to fix
 ```
 
-Sign in to your AI first (`claude` then `/login`, or `codex login`). The full walkthrough, with updating, backups,
-phone access and troubleshooting: **[docs/installation.md](docs/installation.md)**.
+The full walkthrough, with updating, backups, phone access and troubleshooting: **[docs/installation.md](docs/installation.md)**.
 
 ## Documentation
 

@@ -67,7 +67,7 @@ sed -i.bak -e "s/^PUID=.*/PUID=$(id -u)/" -e "s/^PGID=.*/PGID=$(id -g)/" .env &&
 mkdir -p data/config data/profile data/backups data/exports data/logs .auth
 ```
 
-启动服务，再在你的机器上启动 AI worker（让它一直开着）：
+先在这台机器上登录你的 AI（运行 `claude` 后输入 `/login`，或者 `codex login`）。然后启动服务和 AI worker（让它一直开着）：
 
 ```bash
 docker compose up -d --build         # db、web、runner、jobspy；第一次构建要几分钟
@@ -75,7 +75,9 @@ pnpm install
 pnpm ai-worker                       # 或用 scripts/ops/install-ai-worker.sh 装成后台服务
 ```
 
-打开 <http://127.0.0.1:3000>，设置向导会问你 8 个小问题；完成之前不会采集任何东西。这台机器没有浏览器？在终端里跑同一个向导：
+打开 <http://127.0.0.1:3000>。设置向导会问你 8 个小问题。向导完成之前，不会采集任何东西。
+
+这台机器没有浏览器？那就在终端里跑同一个向导：
 
 ```bash
 pnpm run setup                       # 全部 8 步
@@ -83,8 +85,7 @@ pnpm run setup --step telegram       # Telegram 推送，建好自己的 bot 之
 pnpm run doctor                      # 体检，并告诉你该怎么修
 ```
 
-先登录你的 AI（运行 `claude` 后输入 `/login`，或者 `codex login`）。完整步骤（含升级、备份、手机访问、排错）见
-**[docs/installation.zh.md](docs/installation.zh.md)**。
+完整步骤（含升级、备份、手机访问、排错）见 **[docs/installation.zh.md](docs/installation.zh.md)**。
 
 ## 文档
 
