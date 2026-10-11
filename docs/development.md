@@ -80,10 +80,27 @@ is data goes into `scripts/planning-ids.allow`). User-visible text lives in `mes
 a messages file run `pnpm i18n:catalog`. In addition:
 
 ```bash
-pnpm test:integration   # needs the compose db; creates and drops its own database
+pnpm test:integration   # needs a disposable Postgres (see below); creates and drops its own database
 pnpm build && pnpm build:runner
 pnpm test:e2e           # Playwright against a production build and a throw-away database
+pnpm test:e2e:setup     # the first-run wizard on a brand-new install
 ```
+
+The database-backed tests (`test:integration`, `test:e2e`, `test:e2e:setup`) never use the database of your own installation,
+and they have no default address that could lead there. Start a throw-away Postgres on a port of its own and point the
+tests at it; the role must be allowed to create databases:
+
+```bash
+docker run --rm -d --name jobradar-test-pg -p 127.0.0.1:55432:5432 \
+  -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres postgres:17
+export DATABASE_URL=postgres://postgres:postgres@127.0.0.1:55432/postgres   # E2E_ADMIN_DATABASE_URL also works for e2e
+pnpm test:integration
+docker rm -f jobradar-test-pg
+```
+
+Without `DATABASE_URL` the run stops at once and prints these commands. Each integration run creates and drops a database of
+its own (`jobradar_test_*`); the e2e runs use `jobradar_e2e*` databases, and `scripts/e2e-prepare.ts` refuses to truncate or
+seed any other name. Unit tests (`pnpm test`) need no database.
 
 `E2E_PORT=<port>` gives the e2e run its own database, config and profile directories, so several checkouts can run in
 parallel.

@@ -3,12 +3,8 @@ import postgres from "postgres";
 
 /** The graphic columns of the job list, the hover actions, the summary blocks and the phone cards on the seeded e2e database. */
 
-const ADMIN_URL = process.env.E2E_ADMIN_DATABASE_URL ?? process.env.DATABASE_URL ?? "postgres://jobradar:jobradar@127.0.0.1:5433/jobradar";
-const E2E_URL = (() => {
-  const url = new URL(ADMIN_URL);
-  url.pathname = `/${process.env.E2E_DB_NAME ?? "jobradar_e2e"}`;
-  return url.toString();
-})();
+// the database of this run: playwright.config.ts exports its address (E2E_DATABASE_URL) to the workers
+const E2E_URL = process.env.E2E_DATABASE_URL ?? "";
 
 async function withDb<T>(run: (sql: postgres.Sql) => Promise<T>): Promise<T> {
   const sql = postgres(E2E_URL, { max: 1, onnotice: () => {} });
