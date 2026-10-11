@@ -167,8 +167,9 @@ describe("saveSettings", () => {
 
   it("every tab names the user file it saves to; the AI tab names the models.yaml in use", async () => {
     const page = await loadSettingsPage();
-    for (const section of page.sections) expect(section.file).toBe(getConfigPath(section.tab));
-    expect(page.sections.find((section) => section.tab === "ai")?.catalogFile).toBe(path.join(temp.defaultsDir, "models.yaml"));
+    // the web shows the conventional short path, not the machine's absolute one
+    for (const section of page.sections) expect(section.file).toBe(path.join("data", "config", path.basename(getConfigPath(section.tab))));
+    expect(page.sections.find((section) => section.tab === "ai")?.catalogFile).toBe(path.join("config", "models.yaml"));
   });
 
   it("a broken models.yaml makes the AI tab unsavable and shows up on the page, other tabs are unaffected", async () => {
@@ -181,7 +182,7 @@ describe("saveSettings", () => {
     const page = await loadSettingsPage();
     expect(page.catalog).toBeNull();
     expect(page.catalogError).toContain("providers.mimo.models[0].price");
-    expect(page.sections.find((section) => section.tab === "ai")?.catalogFile).toBe(getConfigPath("models"));
+    expect(page.sections.find((section) => section.tab === "ai")?.catalogFile).toBe(path.join("data", "config", "models.yaml"));
     expect(await saveNow({ tab: "search", draft: draftOf("search") })).toMatchObject({ status: "saved" });
     // fixed: the file is read fresh on the next request
     fs.writeFileSync(getConfigPath("models"), good);
