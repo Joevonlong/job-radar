@@ -9,7 +9,7 @@ import {
   ConfigError,
   configLayer,
   configRegistry,
-  displayConfigPath,
+  displayConfigPathForWeb,
   documentConfigVersion,
   currentConfigVersion,
   getDefaultConfigPath,
@@ -117,7 +117,7 @@ export function loadAdvancedFile(stem: string): AdvancedLoad {
     ok: true,
     data: {
       entry: entryOf(name),
-      path: displayConfigPath(resolveConfigPath(name)),
+      path: displayConfigPathForWeb(resolveConfigPath(name)),
       hash: hashConfigText(read.text),
       layer,
       text: maskConfigText(name, read.text),

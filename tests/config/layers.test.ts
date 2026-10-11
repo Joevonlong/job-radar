@@ -8,6 +8,7 @@ import {
   configLayer,
   configSourcePath,
   displayConfigPath,
+  displayConfigPathForWeb,
   ensureConfigFiles,
   getAppRoot,
   getConfigPath,
@@ -129,6 +130,13 @@ describe("resolution: the user file wins, else the shipped default", () => {
   it("displays paths inside the app relative to it and others as they are", () => {
     expect(displayConfigPath(path.join(getAppRoot(), "data", "config", "ai.yaml"))).toBe(path.join("data", "config", "ai.yaml"));
     expect(displayConfigPath(user("ai.yaml"))).toBe(user("ai.yaml"));
+  });
+
+  it("the web display shows a moved config or profile directory under its conventional name and leaves other paths alone", () => {
+    expect(displayConfigPathForWeb(path.join(getAppRoot(), "data", "config", "ai.yaml"))).toBe(path.join("data", "config", "ai.yaml"));
+    expect(displayConfigPathForWeb(user("ai.yaml"))).toBe(path.join("data", "config", "ai.yaml"));
+    expect(displayConfigPathForWeb(path.join(dirs().profileDir, "me.yaml"))).toBe(path.join("data", "profile", "me.yaml"));
+    expect(displayConfigPathForWeb(shipped("ai.yaml"))).toBe(shipped("ai.yaml"));
   });
 });
 

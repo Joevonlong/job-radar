@@ -1,6 +1,6 @@
 /** Data for the /settings page (server only): the five config files as form drafts, the live status, the channel choices. */
 import { CHANNEL_CONFIG_TABLE, settingsFromConfig, type ConfiguredChannelId } from "@/lib/channels/registry";
-import { ConfigError, configSourcePath, displayConfigPath, firstConfigProblem, getUserConfigPath, hashConfigText, readConfigText, reloadConfig, type ChannelsConfig } from "@/lib/config";
+import { ConfigError, configSourcePath, displayConfigPathForWeb, firstConfigProblem, getUserConfigPath, hashConfigText, readConfigText, reloadConfig, type ChannelsConfig } from "@/lib/config";
 import { aiDisclosure, type AiDisclosureRow } from "@/lib/ai/disclosure";
 import type { AiProviderState } from "@/lib/ai/provider-state";
 import { scorePromptFor } from "@/lib/ai/prompts/score";
@@ -54,7 +54,7 @@ async function loadCriteriaImpact(): Promise<number | null> {
 }
 
 function loadSection(tab: SettingsForm): SettingsSection {
-  const files = { file: displayConfigPath(getUserConfigPath(tab)), ...(tab === "ai" ? { catalogFile: displayConfigPath(configSourcePath("models")) } : {}) };
+  const files = { file: displayConfigPathForWeb(getUserConfigPath(tab)), ...(tab === "ai" ? { catalogFile: displayConfigPathForWeb(configSourcePath("models")) } : {}) };
   let hash = "";
   try {
     hash = hashConfigText(readConfigText(tab));

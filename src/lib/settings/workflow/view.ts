@@ -1,5 +1,5 @@
 /** Data for the workflow panel of /settings (server only). */
-import { ConfigError, displayConfigPath, firstConfigProblem, getUserConfigPath, hashConfigText, readConfigText, reloadConfig } from "@/lib/config";
+import { ConfigError, displayConfigPathForWeb, firstConfigProblem, getUserConfigPath, hashConfigText, readConfigText, reloadConfig } from "@/lib/config";
 import { getDb } from "@/lib/db";
 import { countApplicationsByStatus } from "@/lib/db/repos/applications";
 
@@ -19,7 +19,7 @@ export function workflowHash(): string {
 }
 
 export async function loadWorkflowView(): Promise<WorkflowView> {
-  const files = { ui: displayConfigPath(getUserConfigPath("ui")), notify: displayConfigPath(getUserConfigPath("notify")) };
+  const files = { ui: displayConfigPathForWeb(getUserConfigPath("ui")), notify: displayConfigPathForWeb(getUserConfigPath("notify")) };
   let draft: WorkflowDraft | null = null;
   let loadError: WorkflowView["loadError"] = null;
   try {
