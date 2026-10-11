@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { mcpSchema, type McpConfig } from "@/lib/config/schemas/mcp";
 import type { Db } from "@/lib/db/client";
 import { formatCallLine } from "@/lib/mcp/call-log";
-import { runLogged, ToolFailure, type McpContext } from "@/lib/mcp/context";
+import { errorCategory, runLogged, ToolFailure, type McpContext } from "@/lib/mcp/context";
 import { buildServer } from "@/lib/mcp/server";
 import { mcpTranslator } from "@/lib/mcp/text";
 
@@ -128,6 +128,23 @@ describe("the call log", () => {
     expect(JSON.stringify(result)).not.toContain("5433");
     expect(JSON.stringify(result)).not.toContain("hunter2");
     expect(lines).toEqual([expect.stringMatching(/^\[mcp\] get_job fail database items=0 ms=\d+$/)]);
+  });
+  it("a database error wrapped by the query builder (code on the cause) is still a database error", async () => {
+    const sqlState = Object.assign(new Error("cannot execute INSERT in a read-only transaction"), { code: "25006" });
+    const refused = Object.assign(new Error("connect ECONNREFUSED 127.0.0.1:5433"), { code: "ECONNREFUSED" });
+    expect(errorCategory(new Error("Failed query: insert into jobs ...", { cause: sqlState }))).toBe("database");
+    expect(errorCategory(new Error("Failed query", { cause: new Error("wrapped twice", { cause: refused }) }))).toBe("database");
+    expect(errorCategory(refused)).toBe("database");
+    expect(errorCategory(new TypeError("x is undefined"))).toBe("internal");
+    expect(errorCategory("a string was thrown")).toBe("internal");
+    expect(errorCategory(null)).toBe("internal");
+    const lines: string[] = [];
+    const result = await runLogged({ ...ctx, log: (l) => lines.push(l) }, "search_jobs", async () => {
+      throw new Error("Failed query: select ... params: secret", { cause: sqlState });
+    });
+    expect(JSON.stringify(result)).toContain("(database)");
+    expect(JSON.stringify(result)).not.toContain("secret");
+    expect(lines[0]).toContain("fail database");
   });
   it("a ToolFailure keeps its own message", async () => {
     const lines: string[] = [];

@@ -85,6 +85,8 @@ export type StrictCleanResult =
       text: string | null;
       /** Pieces of the JD that were removed or replaced (0: the JD is the original). */
       removed: number;
+      /** The findings' places in the original JD (for anything else quoted from it, e.g. signal quotes). */
+      spans: TrapSpan[];
       markers: { hidden: string; instruction: string };
     }
   | { ok: false; reason: StrictCleanFailure };
@@ -111,8 +113,8 @@ export async function cleanDescriptionStrict(db: Executor, job: JobText, options
     return { ok: false, reason: "findings_unreadable" };
   }
   const markers = { hidden: settings.ai_input.hidden_marker, instruction: settings.ai_input.instruction_marker };
-  if (job.description === null) return { ok: true, text: null, removed: 0, markers };
-  return { ok: true, text: jdForAi(job.description, spans, markers), removed: spans.length, markers };
+  if (job.description === null) return { ok: true, text: null, removed: 0, spans: [], markers };
+  return { ok: true, text: jdForAi(job.description, spans, markers), removed: spans.length, spans, markers };
 }
 
 /** The trap spans of one JD; unlike `loadTrapSpans` a read error is thrown, not swallowed. */

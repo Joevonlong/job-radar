@@ -41,9 +41,18 @@ export class ToolFailure extends Error {
   }
 }
 
-/** The category of an unexpected error: never its message, which may hold an address, a path or a query. */
+const hasCode = (value: unknown): boolean => typeof value === "object" && value !== null && "code" in value && typeof value.code === "string";
+
+/**
+ * The category of an unexpected error: never its message, which may hold an address, a path or a query. A Postgres error (an SQLSTATE
+ * or a connection error such as ECONNREFUSED) carries a string `code`; the query builder wraps it and keeps it as `cause`.
+ */
 export function errorCategory(error: unknown): string {
-  if (error && typeof error === "object" && "code" in error && typeof (error as { code: unknown }).code === "string") return "database";
+  let current: unknown = error;
+  for (let depth = 0; depth < 5 && typeof current === "object" && current !== null; depth++) {
+    if (hasCode(current)) return "database";
+    current = "cause" in current ? current.cause : undefined;
+  }
   return "internal";
 }
 

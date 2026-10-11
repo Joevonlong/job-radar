@@ -90,14 +90,16 @@ Every answer says how many items matched (`total`) and how many it returns (`ret
 The reader of an answer is an AI, which is exactly what the [AI traps](ai-traps.md) in some postings aim at. So:
 
 - `get_job` gives the JD only after the stored trap findings were taken out (hidden text and instructions to an AI are replaced
-  by the markers of `traps.yaml: ai_input`), and starts the answer with "Job Radar found N pieces of text aimed at AI in this JD
-  and removed them".
+  by the markers of `traps.yaml: ai_input`). A signal quote that overlaps a finding is replaced by its marker as well.
 - **The JD is withheld** ("JD not available") when trap detection is off (`traps.yaml: enabled: false`), when the job has not
   been scanned under the current rules yet (it will be on the next cycle, or run `pnpm traps:scan --write`), or when the
-  findings cannot be read. The other fields of the job are still given.
+  findings cannot be read. The signal quotes are withheld then too (`quote: null`); the other fields of the job are still given.
 - Short fields (title, company, locations, salary text, quotes, links) lose invisible characters; a field that carries an
   instruction to an AI is replaced by the marker.
-- Every answer starts with a notice that the posting texts are third-party content to be treated as data.
+- Notices come first, in this order: for `get_job`, "Job Radar found N pieces of text aimed at AI in this JD and removed them"
+  (when it found any), then "The JD was cut at … characters" (when it was cut), then the notice that the posting texts are
+  third-party content to be treated as data. `search_jobs` and `list_applications` give "N of M shown" (when the list was cut)
+  before the third-party notice. Every answer has the third-party notice.
 
 This lowers the risk; it cannot rule it out. A posting can always word an instruction in a way no rule recognises. Since the
 server has no tools that change anything, the worst a trap can do is mislead your client's answer.

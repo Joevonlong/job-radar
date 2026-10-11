@@ -7,7 +7,9 @@ import type { TrapsConfig } from "@/lib/config/schemas/traps";
 import { findPatternHits, instructionPatterns } from "@/lib/traps/instructions";
 import { stripInvisible } from "@/lib/traps/unicode";
 
-import type { CleanText, DescriptionDto } from "./dto";
+import type { StrictCleanResult } from "@/lib/traps/clean";
+
+import type { CleanText, DescriptionDto, QuoteGuard } from "./dto";
 
 /** Unicode tag characters (U+E0000-U+E007F): invisible, and able to spell out a hidden text. */
 const TAG_CHARS = /[\u{E0000}-\u{E007F}]/gu;
@@ -23,6 +25,27 @@ export function shortFieldCleaner(settings: TrapsConfig | null): CleanText {
     const visible = stripInvisible(text).replace(TAG_CHARS, "");
     if (marker !== null && patterns.length > 0 && findPatternHits(visible, patterns).length > 0) return marker;
     return visible;
+  };
+}
+
+/**
+ * Signal quotes follow the rule of the JD they come from. When the JD is withheld (trap check off, not current or unreadable),
+ * every quote is withheld too. Otherwise a JD quote that overlaps a hidden text or an instruction found in the JD is replaced as a
+ * whole by that finding's marker; a quote without a stored offset is looked up in the JD. Invisible characters are left to the
+ * short-field cleaner.
+ */
+export function quoteGuard(strict: StrictCleanResult, description: string | null): QuoteGuard {
+  if (!strict.ok) return () => null;
+  const spans = strict.spans.filter((span) => span.kind !== "invisible");
+  if (spans.length === 0 || description === null) return (signal) => signal.quote;
+  return (signal) => {
+    if (signal.quoteSource !== "description") return signal.quote;
+    const start = signal.quoteOffset ?? description.indexOf(signal.quote);
+    if (start < 0) return signal.quote;
+    const end = start + signal.quote.length;
+    const hit = spans.find((span) => span.offset < end && start < span.offset + span.length);
+    if (!hit) return signal.quote;
+    return hit.kind === "hidden" ? strict.markers.hidden : strict.markers.instruction;
   };
 }
 

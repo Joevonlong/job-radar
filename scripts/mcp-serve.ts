@@ -74,7 +74,7 @@ function main(): void {
   process.stdin.on("end", () => stop(0));
   process.stdin.on("close", () => stop(0));
   process.on("uncaughtException", (error) => {
-    stderrLine(text("serve.failed", { category: error.name }));
+    stderrLine(text("serve.failed", { category: error instanceof Error ? error.name : typeof error }));
     stop(1);
   });
 }

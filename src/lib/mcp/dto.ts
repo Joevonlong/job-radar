@@ -112,8 +112,11 @@ export const signalDto = z.strictObject({
   kind: z.string(),
   /** The amount of an amount signal; null for any other. */
   amount: amountDto.nullable(),
-  /** Verbatim JD quote, or the source's own salary field when `quote_source` is `structured`. */
-  quote: z.string(),
+  /**
+   * Verbatim JD quote, or the source's own salary field when `quote_source` is `structured`. A quote that overlaps an AI trap is
+   * the trap marker instead; null when the JD itself is withheld (see `description.reason`).
+   */
+  quote: z.string().nullable(),
   /** Index of the quote in the original posting text (before trap cleaning); null for a structured quote. */
   quote_offset: z.number().int().nullable(),
   quote_source: z.string(),
@@ -303,9 +306,15 @@ function amountOf(value: unknown): z.infer<typeof amountDto> | null {
   };
 }
 
-export function toSignalDto(signal: JobSignal, clean: CleanText): z.infer<typeof signalDto> {
+/** The quote of a signal as it may be given (the trap marker in place of a trapped one), or null when it is withheld. */
+export type QuoteGuard = (signal: JobSignal) => string | null;
+
+const quoteAsIs: QuoteGuard = (signal) => signal.quote;
+
+export function toSignalDto(signal: JobSignal, clean: CleanText, guard: QuoteGuard = quoteAsIs): z.infer<typeof signalDto> {
   const amount = amountOf(signal.value);
-  return { category: signal.tier, kind: signal.kind, amount, quote: clean(signal.quote), quote_offset: signal.quoteOffset, quote_source: signal.quoteSource, extractor: signal.extractor };
+  const quote = guard(signal);
+  return { category: signal.tier, kind: signal.kind, amount, quote: quote === null ? null : clean(quote), quote_offset: signal.quoteOffset, quote_source: signal.quoteSource, extractor: signal.extractor };
 }
 
 export function toApplicationDto(application: Application | null): z.infer<typeof applicationDto> | null {
@@ -319,7 +328,7 @@ export function toApplicationDto(application: Application | null): z.infer<typeo
   };
 }
 
-export function toJobDetailDto(detail: JobDetail, extra: { traps: TrapCounts | null; description: DescriptionDto }, clean: CleanText): JobDetailDto {
+export function toJobDetailDto(detail: JobDetail, extra: { traps: TrapCounts | null; description: DescriptionDto; quote?: QuoteGuard }, clean: CleanText): JobDetailDto {
   return jobDetailDto.parse({
     id: detail.id,
     title: clean(detail.title),
@@ -341,7 +350,7 @@ export function toJobDetailDto(detail: JobDetail, extra: { traps: TrapCounts | n
     language: detail.language,
     last_seen_at: isoOf(detail.lastSeenAt),
     closed_reason: detail.closure.reason,
-    signals: detail.signals.map((signal) => toSignalDto(signal, clean)),
+    signals: detail.signals.map((signal) => toSignalDto(signal, clean, extra.quote)),
     ai_traps: extra.traps ? { traps: extra.traps.traps, suspicious: extra.traps.suspicious } : null,
     application: toApplicationDto(detail.application),
     description: extra.description,

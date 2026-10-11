@@ -138,6 +138,22 @@ describe("search_jobs", () => {
     expect(applied.structured.jobs.every((j) => j.application_status === "applied")).toBe(true);
   });
 
+  it("filters by city (city groups read on the read-only connection)", async () => {
+    const client = await connect();
+    const all = await call<SearchJobsOutput>(client, "search_jobs", { limit: 100 });
+    const sample = all.structured.jobs.find((j) => j.locations.some((l) => l.city !== null));
+    const city = sample?.locations.find((l) => l.city !== null)?.city;
+    if (!sample || !city) throw new Error("the seed should have a job with a city");
+    lines = [];
+    const inCity = await call<SearchJobsOutput>(client, "search_jobs", { city, limit: 100 });
+    expect(inCity.isError).toBe(false);
+    expect(inCity.structured.jobs.map((j) => j.id)).toContain(sample.id);
+    expect(inCity.structured.total).toBeLessThan(all.structured.total);
+    const nowhere = await call<SearchJobsOutput>(client, "search_jobs", { city: "Atlantis" });
+    expect(nowhere.structured.total).toBe(0);
+    expect(lines).toEqual([expect.stringMatching(/^\[mcp\] search_jobs ok /), expect.stringMatching(/^\[mcp\] search_jobs ok items=0 /)]);
+  });
+
   it("cuts at the limit and says so", async () => {
     const client = await connect({ mcp: settings({ limits: { max_results: 2, max_description_chars: 12_000 } }) });
     const { structured } = await call<SearchJobsOutput>(client, "search_jobs", { limit: 50 });
@@ -172,7 +188,7 @@ describe("get_job", () => {
     const { structured } = await call<GetJobOutput>(client, "get_job", { job_id: ids[0]!.jobId });
     const withOffset = structured.job.signals.filter((s) => s.quote_offset !== null);
     expect(withOffset.length).toBeGreaterThan(0);
-    for (const signal of withOffset) expect(signal.quote.length).toBeGreaterThan(0);
+    for (const signal of withOffset) expect(signal.quote?.length ?? 0).toBeGreaterThan(0);
   });
 
   it("cuts a long JD at max_description_chars and marks it", async () => {
@@ -241,6 +257,44 @@ describe("get_job", () => {
         await getDb().execute(sql`alter table job_traps_away rename to job_traps`);
         resetTrapTablesCache();
       }
+    });
+  });
+
+  describe("signal quotes follow the JD's trap rule", () => {
+    /** A signal quoting the trap text at its place in the JD, and one quoting the JD's harmless opening. */
+    async function quoteTheTrap(): Promise<number> {
+      const id = await redBanana();
+      const [job] = await getDb().select({ description: schema.jobs.description }).from(schema.jobs).where(eq(schema.jobs.id, id));
+      const description = job!.description!;
+      const traps = (await getDb().select().from(schema.jobTraps).where(eq(schema.jobTraps.jobId, id))).filter((t) => t.quoteSource === "description" && t.quoteOffset !== null);
+      expect(traps.length).toBeGreaterThan(0);
+      const trap = traps[0]!;
+      await getDb().insert(schema.signals).values([
+        { jobId: id, tier: "T3", kind: "test_trapped", quote: description.slice(trap.quoteOffset!, trap.quoteOffset! + trap.quote.length), quoteOffset: trap.quoteOffset!, quoteSource: "description", extractor: "rule" },
+        { jobId: id, tier: "T3", kind: "test_clean", quote: description.slice(0, 20), quoteOffset: 0, quoteSource: "description", extractor: "rule" },
+      ]);
+      return id;
+    }
+
+    it("a quote overlapping a trap is the marker; another quote stays", async () => {
+      const id = await quoteTheTrap();
+      const client = await connect();
+      const { structured } = await call<GetJobOutput>(client, "get_job", { job_id: id });
+      const trapped = structured.job.signals.find((s) => s.kind === "test_trapped");
+      const clean = structured.job.signals.find((s) => s.kind === "test_clean");
+      expect(trapped?.quote).toMatch(/^\[(hidden text|instruction to AI) removed by Job Radar\]$/);
+      expect(clean?.quote).toBe("Obstgarten Analytics");
+      expect(JSON.stringify(structured)).not.toMatch(/red banana/i);
+    });
+
+    it("when the JD is withheld, every quote is withheld too", async () => {
+      const id = await quoteTheTrap();
+      await getDb().delete(schema.trapScans).where(eq(schema.trapScans.jobId, id));
+      const client = await connect();
+      const { structured } = await call<GetJobOutput>(client, "get_job", { job_id: id });
+      expect(structured.job.description.available).toBe(false);
+      expect(structured.job.signals.length).toBeGreaterThan(1);
+      expect(structured.job.signals.every((s) => s.quote === null)).toBe(true);
     });
   });
 
