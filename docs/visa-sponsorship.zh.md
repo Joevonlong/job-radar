@@ -38,16 +38,17 @@ Job Radar 读出每条 JD 里关于签证赞助或工作许可的说法，并用
 
 ## 怎么读一条 JD
 
-JD 先切成小段：句子、列表项，以及短标题行和它的下一行合成的一段。标题行指不超过 `heading_max_chars` 个字符、并且以":"结尾、以"#"开头（markdown），或者是一个没有句末标点的短语的行："Visa sponsorship:" / "Not available"，"## Visa sponsorship" / "Not available for this role."。标题下面紧跟列表或另一个标题时，标题单独成段。每段单独判断：
+JD 先切成小段：句子、列表项，以及短标题行和它的下一行合成的一段。标题行指不超过 `heading_max_chars` 个字符、并且以":"结尾、以"#"开头（markdown），或者是一个没有句末标点的短语的行："Visa sponsorship:" / "Not available"，"## Visa sponsorship" / "Not available for this role."。标题下面紧跟列表或另一个标题时，标题单独成段；列表项把引出列表的那一行（标题，或任何以":"结尾的行）当作上下文。每段单独判断：
 
 1. 讲别的事的段落跳过：支付卡（"Visa/Mastercard"）、"sponsored events"、"Sponsoring von Veranstaltungen"，以及雇主自己的产品或客户（"We help our customers with visa applications"、"You will support our immigration team"、"Wir unterstützen Unternehmen bei der Relocation"）。
-2. "提供"类说法带否定词（"not"、"no"、"unable"、"without"、"nicht"、"kein…"、"leider" 等）时算 `unclear`，绝不算 `offered`。否定词出现在说法里面、说法前 `negation_words_before` 个词内（"We do not offer relocation support"），或说法后同一分句的 `negation_words_after` 个词内（"Relocation support is not available"、"Relocation support: No"、"Relocation-Support bieten wir nicht an"）都算。分句在";"、破折号、"but"、"however"、"aber"、"jedoch" 等处结束，所以 "We offer visa sponsorship, but no signing bonus" 仍算 `offered`。
+2. "提供"类说法带否定词（"not"、"no"、"none"、"unable"、"without"、"nicht"、"nein"、"kein…"、"leider" 等）时算 `unclear`，绝不算 `offered`。否定词出现在说法里面、说法前 `negation_words_before` 个词内（"We do not offer relocation support"），或说法后同一分句的 `negation_words_after` 个词内（"Relocation support is not available"、"Relocation support: No"、"Relocation-Support bieten wir nicht an"）都算。分句在";"、破折号、"but"、"however"、"aber"、"jedoch" 等处结束，所以 "We offer visa sponsorship, but no signing bonus" 仍算 `offered`。引出列表的那一行里有否定词时，对列表的每一项都算："What we can't offer:" / "- Visa sponsorship" 算 `unclear`，"What we offer:" / "- Visa sponsorship" 算 `offered`。
 3. 列表里只有一个名词（"- Visa sponsorship"、"- Visa-Unterstützung"）只在它自己是一个列表项时算 `offered`，当标题时不算。
 4. "要求工作许可"后面紧跟替代办法（"…or are eligible for an EU Blue Card"、"bei Bedarf unterstützen wir"），算 `unclear`，不算拒绝。
 5. 同一段里既拒绝又提供，算 `unclear`。
 6. 签证词和语境词同时出现（"visa" + "relocation"、"Visum" + "unterstützen"），又没有更明确的说法，算一次不明确的提及。单独一个 "Visa" 不算。
+7. 关于签证的标题，下一行带否定词（"Visa sponsorship" / "We can't help with this."），只要不是拒绝说法就算 `unclear`；否定标题下的列表（第 2 条）也一样。
 
-整条 JD 的结果：既有 `offered` 段又有 `not_offered` 段，算 `unclear`（两边都引用）；否则取那个明确的结果；再否则 `unclear`；都没有就是 `not_mentioned`。公司名本身是签证词时（比如 Visa Inc.），只算把这个词和语境连在一起的说法。
+整条 JD 的结果：既有 `offered` 段又有 `not_offered` 段，算 `unclear`（两边都引用）；否则 `not_offered`；再否则 `offered`，但有第 7 条那种说"不"的标题时算 `unclear`；再否则 `unclear`；都没有就是 `not_mentioned`。公司名本身是签证词时（比如 Visa Inc.），只算把这个词和语境连在一起的说法。
 
 AI 陷阱检测找出的隐藏文字（[ai-traps.zh.md](ai-traps.zh.md)）不算。
 

@@ -1,10 +1,11 @@
 /**
  * Performance budget of the deal-breakers: the filter step re-evaluates every open job in every run, so 20,000 open jobs
- * × 20 rules (one of them the visa rule, which runs the packs' visa patterns) must add less than 2.5 s (twice that on CI, whose
- * machines are slower and shared): 2 s for the user's rules as before, and the visa rule, which alone must stay under 0.8 s
- * (measured: about 1.7 s for all 20 and 0.45 s for the visa rule on an idle laptop, a fifth more inside the full parallel test
- * run). Measured as CPU time of this process, not wall time: a full parallel test run makes a busy machine wait, which says
- * nothing about the rules.
+ * × 20 rules (one of them the visa rule, which runs the packs' visa patterns) must add less than 2 s, the visa rule included
+ * (twice that on CI, whose machines are slower and shared); the visa rule alone must stay under 0.8 s. Measured on an idle
+ * laptop: about 1.5 s for all 20 (1.1 s of it the phrase rules, 0.4 s the visa rule). Measured as CPU time of the test's own
+ * thread, after a warm-up pass (the first pass compiles the patterns), not as wall time: a full parallel test run makes a busy
+ * machine wait, which says nothing about the rules. A busy machine still runs the thread on slower cores now and then, so a run
+ * over budget is tried again, up to three times, and the best run counts.
  *
  * The postings are multi-line like real ones, and a third of them carry a visa phrase (offers, refusals, permits, mentions, in
  * English and German), half a decoy that passes the visa prefilter without being about visas ("work authorization", "permitted"),
@@ -22,8 +23,9 @@ import { visaRulesFor } from "@/lib/visa/rules";
 import { shippedPipeline } from "../pipeline/helpers";
 
 const JOBS = 20_000;
-const BUDGET_MS = process.env.CI ? 5_000 : 2_500;
+const BUDGET_MS = process.env.CI ? 4_000 : 2_000;
 const VISA_BUDGET_MS = process.env.CI ? 1_600 : 800;
+const TRIES = 3;
 
 /** A small deterministic generator, so every run measures the same text. */
 function random(seed: number): () => number {
@@ -75,13 +77,19 @@ function jobs(): DealBreakerJob[] {
   });
 }
 
-/** CPU milliseconds of `work` in this process. */
+/** CPU time of this thread (of the process on a Node 22 older than 22.19), without the garbage collector's and compilers' threads. */
+const node: { threadCpuUsage?: (previous?: NodeJS.CpuUsage) => NodeJS.CpuUsage } = process;
+const cpuUsage = (previous?: NodeJS.CpuUsage): NodeJS.CpuUsage => (node.threadCpuUsage ? node.threadCpuUsage(previous) : process.cpuUsage(previous));
+
+/** CPU milliseconds of `work` in this thread. */
 function cpuMs(work: () => void): number {
-  const started = process.cpuUsage();
+  const started = cpuUsage();
   work();
-  const used = process.cpuUsage(started);
+  const used = cpuUsage(started);
   return (used.user + used.system) / 1000;
 }
+
+const WARM_UP_JOBS = 2_000;
 
 const rules = [
   { id: "gate", label: "Gate", type: "language_gate" },
@@ -98,6 +106,17 @@ const rules = [
 // the run's time budget is wall time and not what is measured here: a large one, so a busy machine stops no rule
 const compile = (list: typeof rules) =>
   compileDealBreakers(list, { language: "de", me: { languages: [{ de: "B1" }], needs_visa_sponsorship: true }, limits: { ...DEAL_BREAKER_DEFAULTS, rule_budget_ms: 600_000 }, visa: visaRulesFor(shippedPipeline()) });
+
+/** The best of up to `TRIES` runs of `measure` after a warm-up pass, stopping at the first one within `budget`. */
+function best(budget: number, list: typeof rules, subjects: readonly DealBreakerJob[]): { ms: number; vetoes: Map<string, number> } {
+  measure(list, subjects.slice(0, WARM_UP_JOBS));
+  let result = measure(list, subjects);
+  for (let tried = 1; tried < TRIES && result.ms >= budget; tried += 1) {
+    const again = measure(list, subjects);
+    if (again.ms < result.ms) result = again;
+  }
+  return result;
+}
 
 /** Vetoes per rule id over all jobs, in batches as the filter step reads them, and the CPU time it took. */
 function measure(list: typeof rules, subjects: readonly DealBreakerJob[]): { ms: number; vetoes: Map<string, number> } {
@@ -124,13 +143,13 @@ describe("deal-breakers performance", () => {
   it(`checks ${JOBS} jobs against ${rules.length} rules within ${BUDGET_MS} ms`, () => {
     expect(rules).toHaveLength(20);
     expect(compile(rules).rules).toHaveLength(20);
-    const { ms, vetoes } = measure(rules, subjects);
+    const { ms, vetoes } = best(BUDGET_MS, rules, subjects);
     expect(vetoes.get("visa") ?? 0).toBeGreaterThan(0);
     expect(ms).toBeLessThan(BUDGET_MS);
   });
 
   it(`checks ${JOBS} jobs against the visa rule alone within ${VISA_BUDGET_MS} ms`, () => {
-    const { ms, vetoes } = measure(rules.filter((rule) => rule.type === "visa_not_offered"), subjects);
+    const { ms, vetoes } = best(VISA_BUDGET_MS, rules.filter((rule) => rule.type === "visa_not_offered"), subjects);
     // the refusals, the permit and the German refusal: 4 of the 9 visa lines, on a third of the jobs
     expect(vetoes.get("visa") ?? 0).toBeGreaterThan(JOBS / 3 / 9 * 3);
     expect(ms).toBeLessThan(VISA_BUDGET_MS);

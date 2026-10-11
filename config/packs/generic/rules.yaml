@@ -221,6 +221,7 @@ visa:
     - 'doesn[''’]?t'
     - without
     - never
+    - none
   # Where the clause after an "offered" phrase ends for the negation search: "Visa sponsorship is available, but not for interns"
   # still counts. A comma or colon does not end it ("Relocation support: No").
   clause_breaks:

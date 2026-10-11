@@ -4,13 +4,17 @@
  *
  * Each segment (sentence, list item, short heading + next line) is judged on its own:
  * 1. a segment matching `exclude_context` is skipped; a `list_item` pattern counts only in a list item;
- * 2. an `offered` hit with a negation cue inside it, within `negation_words_before` words before it, or within `negation_words_after`
- *    words after it up to a `clause_breaks` match counts as unclear, never as offered;
+ * 2. an `offered` hit with a negation cue inside it, within `negation_words_before` words before it, within `negation_words_after`
+ *    words after it up to a `clause_breaks` match, or in the heading of its list ("What we can't offer:" / "- Visa sponsorship")
+ *    counts as unclear, never as offered;
  * 3. a `permit_required` hit with a `permit_alternatives` phrase in the segment counts as unclear;
  * 4. offered and not_offered in one segment → unclear; only not_offered → not_offered; only offered (plus unclear hits) → unclear
  *    when an unclear hit is there, else offered; only unclear hits → unclear;
- * 5. no hit, but a visa word and a context word together → unclear (a mention).
- * Summed up: offered and not_offered segments → unclear (both quoted); else the one clear state; else unclear; else not_mentioned.
+ * 5. no hit, but a visa word and a context word together → unclear (a mention);
+ * 6. a heading about visas read with its next line, where that line has a negation cue ("Visa sponsorship" / "We can't help with
+ *    this.") → unclear, and so is a list under a negated heading: such a heading block keeps the whole result from being offered.
+ * Summed up: offered and not_offered segments → unclear (both quoted); else not_offered; else offered unless a heading block of 6.
+ * doubts it; else unclear; else not_mentioned.
  * A text, line or segment without a `prefilter` match is skipped first (the packs promise every phrase contains one, and
  * `pnpm config:check` warns about a pattern that breaks it): the speed of the deal-breaker, which runs this over every open job. Only
  * the lines with a prefilter match (with their heading) are cut into sentences.
@@ -42,6 +46,8 @@ interface Verdict {
   kind: VisaKind;
   segment: TextSegment;
   hit: Hit;
+  /** A heading block says no (rule 6): the result cannot be offered. */
+  doubt: boolean;
 }
 
 const WORD = /[\p{L}\p{N}]+(?:['’]\p{L}+)?/gu;
@@ -91,10 +97,32 @@ function clauseAfter(text: string, breaks: readonly RegExp[]): string {
   return text.slice(0, end);
 }
 
-/** A negation cue inside the hit, among the words before it, or among the words after it in its clause (all in its segment). */
-function negated(segment: TextSegment, hit: Hit, rules: CompiledVisaRules): boolean {
+const hasCue = (text: string, rules: CompiledVisaRules): boolean => wordsOf(text).some((word) => rules.negationCues.some((cue) => cue.test(word)));
+
+/** The heading of the segment's list has a negation cue ("What we can't offer:", "Was wir leider nicht bieten können:"). */
+function underNegatedHeading(segment: TextSegment, rules: CompiledVisaRules, description: string): boolean {
+  return segment.listHeading !== undefined && hasCue(description.slice(segment.listHeading.start, segment.listHeading.end), rules);
+}
+
+/**
+ * A heading read with its next line, the heading about visas (a prefilter word, else a mention term) and the next line with a
+ * negation cue: "Visa sponsorship" / "We can't help with this.". Returns where the heading's topic is, for the quote.
+ */
+function refusingHeading(segment: TextSegment, rules: CompiledVisaRules, description: string): Hit | null {
+  if (segment.headingEnd === undefined || !hasCue(description.slice(segment.headingEnd, segment.end), rules)) return null;
+  const heading = description.slice(segment.start, segment.headingEnd);
+  const topics = rules.prefilter === null ? rules.mentionTerms.map((pattern) => pattern.re) : [rules.prefilter];
+  return topics.some((re) => matches(re, heading)) ? { start: segment.start, end: segment.headingEnd } : null;
+}
+
+/**
+ * A negation cue inside the hit, among the words before it, among the words after it in its clause (all in its segment), or in
+ * the heading of its list (`headingSaysNo`).
+ */
+function negated(segment: TextSegment, hit: Hit, rules: CompiledVisaRules, headingSaysNo: boolean): boolean {
   const cues = rules.negationCues;
   if (cues.length === 0) return false;
+  if (headingSaysNo) return true;
   const from = hit.start - segment.start;
   const to = hit.end - segment.start;
   const before = rules.negationWordsBefore === 0 ? [] : wordsOf(segment.text.slice(0, from)).slice(-rules.negationWordsBefore);
@@ -103,18 +131,40 @@ function negated(segment: TextSegment, hit: Hit, rules: CompiledVisaRules): bool
   return [...before, ...inside, ...after].some((word) => cues.some((cue) => cue.test(word)));
 }
 
-function judgeSegment(segment: TextSegment, rules: CompiledVisaRules, usable: (p: CompiledVisaPattern) => boolean, keep: (hit: Hit) => boolean): Verdict | null {
+function judgeSegment(segment: TextSegment, rules: CompiledVisaRules, usable: (p: CompiledVisaPattern) => boolean, keep: (hit: Hit) => boolean, description: string): Verdict | null {
+  const block = refusingHeading(segment, rules, description);
+  const headingBlock = block !== null && keep(block) ? block : null;
+  // most segments that pass the prefilter match no phrase at all: one search says so
+  if (headingBlock === null && rules.anyPhrase !== null && segment.text.search(rules.anyPhrase) === -1) return null;
   const offered = hitsOf(rules.offered, segment, usable, keep);
   const refused = hitsOf(rules.noSponsorship, segment, usable, keep).map((hit) => ({ hit, kind: "no_sponsorship" as const }));
   const required = hitsOf(rules.permitRequired, segment, usable, keep);
   const phrases = offered.length + refused.length + required.length > 0;
   const term = phrases ? undefined : hitsOf(rules.mentionTerms, segment, usable, keep)[0];
   // nothing to judge (most segments that only passed the prefilter): the exclusions need not run
-  if (!phrases && term === undefined) return null;
+  if (!phrases && term === undefined && headingBlock === null) return null;
   if (rules.excludeContext.some((re) => matches(re, segment.text))) return null;
-  const alternative = required.length > 0 && rules.permitAlternatives.some((re) => matches(re, segment.text));
+  const verdict = judgeHits(segment, rules, keep, { offered, refused, required, term }, underNegatedHeading(segment, rules, description));
+  if (headingBlock === null) return verdict;
+  // rule 6: the heading block says no; a refusal stays one, anything else is unclear and doubts the result
+  if (verdict?.status === "not_offered") return verdict;
+  return { status: "unclear", kind: null, segment, hit: verdict?.hit ?? headingBlock, doubt: true };
+}
 
-  const clearOffers = offered.filter((hit) => !negated(segment, hit, rules));
+interface SegmentHits {
+  offered: Hit[];
+  refused: Array<{ hit: Hit; kind: "no_sponsorship" }>;
+  required: Hit[];
+  term: Hit | undefined;
+}
+
+function judgeHits(segment: TextSegment, rules: CompiledVisaRules, keep: (hit: Hit) => boolean, hits: SegmentHits, headingSaysNo: boolean): Verdict | null {
+  const { offered, refused, required, term } = hits;
+  const alternative = required.length > 0 && rules.permitAlternatives.some((re) => matches(re, segment.text));
+  // a list under a negated heading doubts the result like a refusing heading block (rule 6)
+  const doubt = headingSaysNo && offered.length > 0;
+
+  const clearOffers = offered.filter((hit) => !negated(segment, hit, rules, headingSaysNo));
   const unclear: Hit[] = offered.filter((hit) => !clearOffers.includes(hit));
   const refusals: Array<{ hit: Hit; kind: Exclude<VisaKind, null> }> = [...refused];
   if (alternative) unclear.push(...required);
@@ -124,14 +174,14 @@ function judgeSegment(segment: TextSegment, rules: CompiledVisaRules, usable: (p
 
   const first = refusals[0];
   const firstOffer = clearOffers[0];
-  if (firstOffer && first) return { status: "unclear", kind: null, segment, hit: firstOffer.start <= first.hit.start ? firstOffer : first.hit };
-  if (first) return { status: "not_offered", kind: first.kind, segment, hit: first.hit };
+  if (firstOffer && first) return { status: "unclear", kind: null, segment, hit: firstOffer.start <= first.hit.start ? firstOffer : first.hit, doubt };
+  if (first) return { status: "not_offered", kind: first.kind, segment, hit: first.hit, doubt };
   const firstUnclear = unclear[0];
-  if (firstOffer && firstUnclear) return { status: "unclear", kind: null, segment, hit: firstOffer.start <= firstUnclear.start ? firstOffer : firstUnclear };
-  if (firstOffer) return { status: "offered", kind: null, segment, hit: firstOffer };
-  if (firstUnclear) return { status: "unclear", kind: null, segment, hit: firstUnclear };
+  if (firstOffer && firstUnclear) return { status: "unclear", kind: null, segment, hit: firstOffer.start <= firstUnclear.start ? firstOffer : firstUnclear, doubt };
+  if (firstOffer) return { status: "offered", kind: null, segment, hit: firstOffer, doubt };
+  if (firstUnclear) return { status: "unclear", kind: null, segment, hit: firstUnclear, doubt };
 
-  if (term && anyHit(rules.mentionContext, segment, keep)) return { status: "unclear", kind: null, segment, hit: term };
+  if (term && anyHit(rules.mentionContext, segment, keep)) return { status: "unclear", kind: null, segment, hit: term, doubt };
   return null;
 }
 
@@ -197,13 +247,14 @@ export function detectVisa(description: string | null, rules: CompiledVisaRules,
   const keepSegment = focus === null ? null : overlapsAny(focus);
   for (const segment of segmentText(description, { abbreviations: rules.abbreviations, headingMaxChars: rules.headingMaxChars, keep: keepLine })) {
     if (keepSegment !== null && !keepSegment(segment.start, segment.end)) continue;
-    const verdict = judgeSegment(segment, rules, usable, keep);
+    const verdict = judgeSegment(segment, rules, usable, keep, description);
     if (verdict) verdicts.push(verdict);
   }
   if (verdicts.length === 0) return notMentioned();
 
   const offered = verdicts.some((v) => v.status === "offered");
   const refused = verdicts.some((v) => v.status === "not_offered");
-  const status = offered && refused ? "unclear" : refused ? "not_offered" : offered ? "offered" : "unclear";
+  const doubted = verdicts.some((v) => v.doubt);
+  const status = offered && refused ? "unclear" : refused ? "not_offered" : offered && !doubted ? "offered" : "unclear";
   return { status, evidence: pickEvidence(verdicts, rules.maxQuotes, rules, description) };
 }

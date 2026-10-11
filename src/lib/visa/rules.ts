@@ -39,6 +39,11 @@ export interface CompiledVisaRules {
    * on texts without one); `pnpm config:check` lists them as warnings.
    */
   prefilterViolations: string[];
+  /**
+   * All phrase patterns (`offered`, `not_offered.*`, `mention_terms`) as one expression (flags `iu`): a segment it misses has no hit
+   * of any of them, so they need not run one by one (speed). Null when they cannot be joined (a back-reference or a named group).
+   */
+  anyPhrase: RegExp | null;
   maxQuotes: number;
   quoteMaxChars: number;
 }
@@ -68,6 +73,21 @@ function compilePrefilter(sources: readonly string[]): RegExp | null {
   if (sources.length === 0) return null;
   sources.forEach((source, index) => compile(source, `visa.prefilter[${index}]`));
   return new RegExp(sources.map((source) => `(?:${source})`).join("|"), "iu");
+}
+
+/** The phrase patterns joined into one expression, or null when joining could change what one of them means. */
+function joinPhrases(pack: VisaRulesInput["visa"]): RegExp | null {
+  const sources = [...pack.offered, ...pack.not_offered.no_sponsorship, ...pack.not_offered.permit_required, ...pack.mention_terms].map((entry) =>
+    typeof entry === "string" ? entry : entry.pattern,
+  );
+  if (sources.length === 0) return null;
+  // a numbered back-reference would point at another pattern's group; a named group may repeat
+  if (sources.some((source) => /\\[1-9]|\\k<|\(\?<(?![=!])/u.test(source))) return null;
+  try {
+    return new RegExp(sources.map((source) => `(?:${source})`).join("|"), "iu");
+  } catch {
+    return null;
+  }
 }
 
 function prefilterViolations(pack: VisaRulesInput["visa"], prefilter: RegExp | null): string[] {
@@ -111,6 +131,7 @@ export function compileVisaRules(config: VisaRulesInput): CompiledVisaRules {
     abbreviations: [...pack.abbreviations],
     prefilter,
     prefilterViolations: prefilterViolations(pack, prefilter),
+    anyPhrase: joinPhrases(pack),
     maxQuotes: limits.max_quotes,
     quoteMaxChars: limits.quote_max_chars,
   };

@@ -11,6 +11,13 @@ export interface TextSegment {
   end: number;
   /** The piece is (part of) a line that starts with a list marker ("- ", "• ", "2) "); a "#" heading is not a list item. */
   listItem: boolean;
+  /**
+   * A list item's: the line that introduces its list ("What we can't offer:" above "- Visa sponsorship"), when the line right above
+   * the list is a heading (short, or ending in ":"). Not part of the piece: a check reads it as context.
+   */
+  listHeading?: { start: number; end: number };
+  /** A heading read with the next line: where the heading line ends (the rest of the piece is the next line's first sentence). */
+  headingEnd?: number;
 }
 
 export interface SegmentOptions {
@@ -123,7 +130,7 @@ type Range = { start: number; end: number };
  * Cuts `description` into segments (in text order, not overlapping). A heading line is joined with the first sentence of the next
  * line unless that line is a list item or itself a heading (of the line after it, or of a list), so "## Benefits" / "Visa sponsorship"
  * / "Not available." pairs the last two, and "Visa sponsorship:" / "Not available" / "Benefits" / "- Gym" pairs the first two. A
- * joined line is never a heading itself, so joins do not chain.
+ * joined line is never a heading itself, so joins do not chain. The items of a list carry the line that introduces it.
  */
 export function segmentText(description: string, options: SegmentOptions): TextSegment[] {
   const abbreviations = options.abbreviations ?? [];
@@ -157,26 +164,34 @@ export function segmentText(description: string, options: SegmentOptions): TextS
     heads[index] = joins[index] || next.listItem;
   }
   const segments: TextSegment[] = [];
-  const emit = (range: Range, listItem: boolean): void => {
-    segments.push({ text: description.slice(range.start, range.end), start: range.start, end: range.end, listItem });
+  const emit = (range: Range, listItem: boolean, extra: Pick<TextSegment, "listHeading" | "headingEnd"> = {}): void => {
+    segments.push({ text: description.slice(range.start, range.end), start: range.start, end: range.end, listItem, ...extra });
   };
+  // the heading of the list being read: the non-list line right above its first item, when it is a heading or ends in ":"
+  let listHeading: Range | null = null;
   for (let index = 0; index < lines.length; index += 1) {
     const line = lines[index] as Line;
     if (joins[index]) {
+      listHeading = null;
       const next = lines[index + 1] as Line;
       if (options.keep === undefined || options.keep(line.start, next.end)) {
         const own = rangesOf(index);
         const after = rangesOf(index + 1);
         const heading = own[own.length - 1] as Range;
         for (const range of own.slice(0, -1)) emit(range, false);
-        emit({ start: heading.start, end: (after[0] as Range).end }, false);
+        emit({ start: heading.start, end: (after[0] as Range).end }, false, { headingEnd: line.end });
         for (const range of after.slice(1)) emit(range, next.listItem);
       }
       index += 1;
       continue;
     }
+    if (!line.listItem) {
+      const opensList = lines[index + 1]?.listItem === true && (heads[index] === true || description.charAt(line.end - 1) === ":");
+      listHeading = opensList ? { start: line.start, end: line.end } : null;
+    }
     if (options.keep !== undefined && !options.keep(line.start, line.end)) continue;
-    for (const range of rangesOf(index)) emit(range, line.listItem);
+    const context = line.listItem && listHeading !== null ? { listHeading } : {};
+    for (const range of rangesOf(index)) emit(range, line.listItem, context);
   }
   return segments;
 }

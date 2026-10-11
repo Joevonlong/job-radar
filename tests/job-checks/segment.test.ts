@@ -83,6 +83,34 @@ describe("segmentText", () => {
     for (const segment of kept) expect(all).toContainEqual(segment);
   });
 
+  it("gives each list item the line that introduces its list, and nothing else", () => {
+    const description = "What we can't offer:\n- Visa sponsorship\n- Relocation package";
+    const segments = cut(description);
+    const heading = { start: 0, end: "What we can't offer:".length };
+    expect(segments.map((s) => [s.text, s.listHeading])).toEqual([
+      ["What we can't offer:", undefined],
+      ["Visa sponsorship", heading],
+      ["Relocation package", heading],
+    ]);
+    // a long line ending in ":" heads its list too; a sentence does not, and a line in between ends the list
+    const long = `${"word ".repeat(15)}ends here:`;
+    expect(cut(`${long}\n- Gym`)[1]?.listHeading).toEqual({ start: 0, end: long.length });
+    expect(cut("We are a team.\n- Gym")[1]?.listHeading).toBeUndefined();
+    expect(cut("Benefits:\n- Gym\nThe team is small.\n- Lunch").map((s) => s.listHeading === undefined)).toEqual([true, false, true, true]);
+    // the heading line need not be kept for its items to carry it
+    const kept = cut(description, { keep: (start, end) => /visa/iu.test(description.slice(start, end)) });
+    expect(kept).toEqual([{ text: "Visa sponsorship", start: 23, end: 39, listItem: true, listHeading: heading }]);
+  });
+
+  it("marks where the heading of a joined piece ends", () => {
+    const segments = cut("Intro.\nVisa sponsorship\nWe can't help. Ask us.");
+    expect(segments.map((s) => [s.text, s.headingEnd])).toEqual([
+      ["Intro.", undefined],
+      ["Visa sponsorship\nWe can't help.", "Intro.\nVisa sponsorship".length],
+      ["Ask us.", undefined],
+    ]);
+  });
+
   it("returns nothing for an empty or blank text", () => {
     expect(cut("")).toEqual([]);
     expect(cut("  \n \n")).toEqual([]);

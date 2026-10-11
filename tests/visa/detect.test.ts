@@ -96,6 +96,10 @@ describe("detectVisa: English phrases", () => {
       "Visa sponsorship\nNot available.",
       "## Relocation support\nNot available",
       "Visa sponsorship\n\nNot available for this role.",
+      // "none" / "nein" after the phrase
+      "Relocation package\nNone",
+      "Relocation package: none",
+      "Relocation-Paket: nein",
     ])
       expect(status(text), text).not.toBe("offered");
   });
@@ -113,6 +117,33 @@ describe("detectVisa: English phrases", () => {
     expect(detectVisa("Relocation support: No", noAfter).status).toBe("offered");
     const noBefore = compileVisaRules({ ...pipeline, job_checks: { ...pipeline.job_checks, visa: { ...visa, negation_words_before: 0 } } });
     expect(detectVisa("This role comes without relocation support.", noBefore).status).toBe("offered");
+  });
+
+  it("reads a list under a negated heading as unclear, never offered; under a plain heading it stays offered", () => {
+    for (const text of [
+      "What we can't offer:\n- Visa sponsorship\n- Relocation package",
+      "Not available for this role:\n- Visa sponsorship",
+      "Not included:\n• Relocation package\n• Visa sponsorship",
+      "Was wir leider nicht bieten können:\n- Visasponsoring\n- Umzugspauschale",
+      // a long heading ending in ":" introduces its list too
+      "Unfortunately there are a few things we are not able to offer for this position:\n- Relocation package",
+    ])
+      expect(status(text), text).toBe("unclear");
+    expect(status("What we offer:\n- Visa sponsorship")).toBe("offered");
+    expect(status("Benefits\n- Visa sponsorship\n- Relocation package")).toBe("offered");
+    // the negated heading belongs to its own list only
+    expect(status("Not included:\n- Gym\nThe team is small.\n- Relocation package")).toBe("offered");
+  });
+
+  it("lets a heading block that says no keep the whole result from being offered", () => {
+    // "We can't help with this." is the content of the heading; the offer after it does not make the posting an offer
+    expect(status("Visa sponsorship\nWe can't help with this. Relocation support is offered though.")).toBe("unclear");
+    expect(status("What we can't offer:\n- Visa sponsorship\n\nWe sponsor your visa.")).toBe("unclear");
+    // a heading block without a cue, or whose heading is not about visas, changes nothing
+    expect(status("## Relocation\nWe cover relocation costs up to 5k.")).toBe("offered");
+    expect(status("Remote work\nNot possible. We offer relocation support.")).toBe("offered");
+    // a refusal in the heading block stays a refusal
+    expect(status("Visa sponsorship\nNot available.")).toBe("not_offered");
   });
 
   it("counts a bare noun only as a list item of its own", () => {
@@ -181,6 +212,17 @@ describe("detectVisa: German word forms", () => {
       expect(result.status, text).toBe("not_offered");
       expect(visaKindOf(result), text).toBe("permit_required");
     }
+  });
+
+  it("reads 'jedoch nicht' after a visa noun as a refusal next to the offer, and 'Arbeitserlaubnis vorhanden' as a required permit", () => {
+    expect(status("Ein Relocation-Paket bieten wir, eine Visumsunterstützung jedoch nicht.")).toBe("unclear");
+    expect(status("Visumsunterstützung jedoch nicht.")).toBe("not_offered");
+    const permit = detect("Dein Profil:\n- Aufenthalts- und Arbeitserlaubnis vorhanden\n- Gute Deutschkenntnisse");
+    expect(permit.status).toBe("not_offered");
+    expect(visaKindOf(permit)).toBe("permit_required");
+    // a question or a missing permit is no requirement
+    expect(status("Keine Arbeitserlaubnis vorhanden? Kein Problem.")).not.toBe("not_offered");
+    expect(status("Arbeitserlaubnis vorhanden?")).not.toBe("not_offered");
   });
 
   it("reads a negated German offer as not offered", () => {

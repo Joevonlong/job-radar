@@ -136,6 +136,9 @@ visa:
         combo: true
       - pattern: '(?<![\p{L}\p{N}])(?:visa|visum)(?:-?sponsoring|-?unterstützung)?\s*:\s*(?:nein|nicht\s+möglich|kein\p{L}*)(?![\p{L}\p{N}])'
         combo: true
+      # "Ein Relocation-Paket bieten wir, eine Visumsunterstützung jedoch nicht."
+      - pattern: '(?:visum|visa)[\p{L}-]*\s+(?:jedoch|aber|allerdings)\s+(?:leider\s+)?(?:nicht|kein\p{L}*)(?![\p{L}\p{N}])'
+        combo: true
     permit_required:
       # "Eine Arbeitserlaubnis ist Voraussetzung", "Eine gültige Arbeitserlaubnis für Deutschland wird vorausgesetzt"
       - pattern: '(?<![\p{L}\p{N}])(?:arbeitserlaubnis|arbeitsgenehmigung|aufenthalts-?\s*(?:und\s+arbeitserlaubnis|titel|genehmigung))(?:\s+[\p{L}\p{N}-]+){0,4}?\s+(?:ist|wird)\s+(?:zwingend\s+)?(?:voraussetzung|erforderlich|notwendig|vorausgesetzt|zwingend)(?![\p{L}\p{N}])'
@@ -148,6 +151,9 @@ visa:
         combo: true
       # "Du benötigst eine gültige Arbeitserlaubnis", "Du brauchst eine Arbeitserlaubnis"
       - pattern: '(?<![\p{L}\p{N}])(?:benötigst|brauchst|benötigen|brauchen)\s+(?:du\s+|sie\s+)?(?:bereits\s+)?(?:eine\s+)?(?:gültige\s+)?(?:arbeitserlaubnis|arbeitsgenehmigung|aufenthalts-?\s*(?:und\s+arbeitserlaubnis|titel|genehmigung))(?![\p{L}\p{N}])'
+        combo: true
+      # "Aufenthalts- und Arbeitserlaubnis vorhanden" in a list of requirements (not "Keine Arbeitserlaubnis vorhanden?")
+      - pattern: '(?<![\p{L}\p{N}])(?<!(?:kein\p{L}*|ohne)\s+)(?:arbeitserlaubnis|arbeitsgenehmigung|aufenthalts-?\s*(?:und\s+arbeitserlaubnis|titel|genehmigung))\s+(?:ist\s+|muss\s+)?vorhanden(?:\s+sein)?(?![\p{L}\p{N}])(?!\s*\?)'
         combo: true
       # "Du musst in Deutschland arbeitsberechtigt sein"
       - pattern: '(?<![\p{L}\p{N}])(?:musst|müssen|solltest|sollten)(?:\s+[\p{L}]+){0,3}?\s+arbeitsberechtigt(?![\p{L}\p{N}])'
@@ -167,6 +173,7 @@ visa:
     - '(?<![\p{L}\p{N}])beantrag\p{L}*'
   negation_cues:
     - nicht
+    - nein
     - 'kein\p{L}*'
     - leider
     - ohne
