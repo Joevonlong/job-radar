@@ -16,7 +16,7 @@
 | 目标 | 岗位名、级别、工作方式、薪资底线（市场货币）、合同类型、要排除的公司 / 关键词 / 学生岗 | `preferences.yaml`；`search.yaml` 的 `keyword_groups`（见下） |
 | 来源 | 你所在市场的渠道（市场包自己的招聘网站带"本地"标记；抓取类和账号类渠道永远不预选，需要确认，见下）、要添加的公司招聘页 | `sources.yaml` |
 | AI | 订阅 CLI 和 API 服务商：开关、顺序、默认模型和强模型，每个服务商可以测试 | `ai.yaml`（按 `models.yaml` 核对） |
-| Telegram（可选） | 推送开关（默认关，需要你打开）、消息语言、测试消息 | `notify.yaml` 的 `telegram.enabled`；`language.yaml` 的 `notify.locale` |
+| Telegram（可选） | 推送开关（默认关，需要你打开）、消息语言；bot 是否已配置、最近一次测试消息和测试按钮，或者怎样用 `pnpm run setup --step telegram` 配置 | `notify.yaml` 的 `telegram.enabled`；`language.yaml` 的 `notify.locale` |
 | 检查 | 每一步的结果、就绪清单（画像、渠道、AI、runner 和 ai-worker）、"立即跑第一轮"、完成 | `setup.yaml` |
 
 "保存并继续"立即写入这一步的文件（文件里的注释会保留），并把这一步标为完成；文件不接受的值显示在对应字段旁边，什么都不写。
@@ -30,7 +30,8 @@
 已经开启且之前确认过的渠道不会再问。详情和渠道清单见 [sources.zh.md](sources.zh.md#抓取)。
 
 **密钥和 token 不在这里填写。** 向导只显示变量名（`TELEGRAM_BOT_TOKEN`、`JSEARCH_API_KEY`、`ANTHROPIC_API_KEY` ……）和是否已设置。
-把它们写进 `.env`，再用 `docker compose up -d` 重启（AI 的 key 还要重启 ai-worker）。向导也不会替你安装 ai-worker，不会替你登录
+把它们写进 `.env`，再用 `docker compose up -d` 重启（AI 的 key 还要重启 ai-worker）。Telegram 可以在宿主机上用
+`pnpm run setup --step telegram` 一次配好：见 [telegram.zh.md](telegram.zh.md#1-用一条命令配置)。向导也不会替你安装 ai-worker，不会替你登录
 `claude` / `codex` 或 LinkedIn：见 [host-setup.zh.md](host-setup.zh.md)、[ai-providers.zh.md](ai-providers.zh.md) 和
 [linkedin-session.zh.md](linkedin-session.zh.md)。
 
@@ -56,6 +57,8 @@
 ```bash
 pnpm run setup                         # 交互式走完八步；直接回车保留方括号里的值
 pnpm run setup --step ai               # 只跑一步
+pnpm run setup --step telegram         # 配置 Telegram bot：token、聊天、测试消息、.env、重启
+pnpm run setup --step telegram --no-restart   # 同上，但只打印重启命令
 pnpm run setup --answers answers.yaml  # 无人值守
 pnpm run setup --status [--json]       # 设置进度和就绪清单（只读，不写任何文件）
 pnpm run setup --complete              # 不改任何配置，直接标记完成
@@ -63,7 +66,11 @@ pnpm run setup --lang zh               # 提问的语言（默认 language.yaml 
 ```
 
 AI 步骤在这台电脑上读取 `claude` 和 `codex` 是否安装、是否登录（`claude auth status`、`codex login status`，不调用 AI）。没有数据库
-（stack 没在运行）时画像文件照常写入，历史快照在下次读取画像时补记；"跑第一轮"只会告诉你之后怎样启动。退出码：0 完成，1 某一步或
+（stack 没在运行）时画像文件照常写入，历史快照在下次读取画像时补记；"跑第一轮"只会告诉你之后怎样启动。
+
+Telegram 这一步不显示地读取 bot token，从你发给 bot 的消息里找到 chat id，发一条测试消息，写入 `.env` 里的三行 `TELEGRAM_*`
+（先做备份），再重建读取 `.env` 的服务；详见 [telegram.zh.md](telegram.zh.md#1-用一条命令配置)。答案文件里从不放 token：它的
+`telegram` 部分只设置推送开关和消息语言。退出码：0 完成，1 某一步或
 "完成"失败，2 参数错误或答案文件读不了。
 
 ### 答案文件

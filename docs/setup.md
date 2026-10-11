@@ -17,7 +17,7 @@ pages.
 | Targets | Job titles, level, work modes, salary floor in the market currency, contract types, companies / keywords / student jobs to leave out | `preferences.yaml`; `search.yaml` `keyword_groups` (see below) |
 | Sources | The channels of your market (the pack's own job boards are listed with a "local" mark; scraping and account channels are never pre-ticked and need a confirmation, see below), company career boards to add | `sources.yaml` |
 | AI | Subscription CLIs and API providers: on / off, order, default and strong model, a test per provider | `ai.yaml` (checked against `models.yaml`) |
-| Telegram (optional) | Push on / off (off until you switch it on), message language, a test message | `notify.yaml` `telegram.enabled`; `language.yaml` `notify.locale` |
+| Telegram (optional) | Push on / off (off until you switch it on), message language; whether the bot is set up, the last test message and a test button, or how to set it up with `pnpm run setup --step telegram` | `notify.yaml` `telegram.enabled`; `language.yaml` `notify.locale` |
 | Review | What each step did, a readiness list (profile, channels, AI, runner and ai-worker), "run the first cycle now", finish | `setup.yaml` |
 
 "Save and continue" writes the step's files at once (comments in the files are kept) and marks the step done; a value the
@@ -38,7 +38,8 @@ not asked again. Details and the list of channels: [sources.md](sources.md#scrap
 
 **Keys and tokens are never entered here.** The wizard only shows the variable names (`TELEGRAM_BOT_TOKEN`,
 `JSEARCH_API_KEY`, `ANTHROPIC_API_KEY` …) and whether each is set. Put them in `.env`, then restart the stack with
-`docker compose up -d` (restart the ai-worker too for AI keys). The wizard also does not install the ai-worker or sign in
+`docker compose up -d` (restart the ai-worker too for AI keys). For Telegram, `pnpm run setup --step telegram` on the host
+does all of it: see [telegram.md](telegram.md#1-set-it-up-with-one-command). The wizard also does not install the ai-worker or sign in
 to `claude` / `codex` or LinkedIn for you: see [host-setup.md](host-setup.md), [ai-providers.md](ai-providers.md) and
 [linkedin-session.md](linkedin-session.md).
 
@@ -68,6 +69,8 @@ Run it in the project directory on the host (`pnpm setup` alone is pnpm's own co
 ```bash
 pnpm run setup                         # the eight steps, interactive; Enter keeps the value in [brackets]
 pnpm run setup --step ai               # one step
+pnpm run setup --step telegram         # set up the Telegram bot: token, chat, test message, .env, restart
+pnpm run setup --step telegram --no-restart   # same, but only print the restart commands
 pnpm run setup --answers answers.yaml  # unattended
 pnpm run setup --status [--json]       # where the setup stands, with the readiness list (read-only: writes no file)
 pnpm run setup --complete              # mark it complete without changing any configuration
@@ -77,7 +80,12 @@ pnpm run setup --lang en               # language of the questions (default: lan
 The AI step reads on this computer whether `claude` and `codex` are installed and signed in (`claude auth status`,
 `codex login status`: no AI call is made). Without a database (stack not running) the profile files are still written;
 their history snapshot is recorded the next time the profile is read, and "run the first cycle" only tells you how to
-start one later. Exit codes: 0 done, 1 a step or the completion failed, 2 bad arguments or an unreadable answers file.
+start one later.
+
+The Telegram step asks for the bot token without showing it, finds the chat id from a message you send to the bot,
+sends a test message, writes the three `TELEGRAM_*` lines of `.env` (keeping a backup) and recreates the services that
+read `.env`; details in [telegram.md](telegram.md#1-set-it-up-with-one-command). The answers file never holds the token:
+its `telegram` section only sets the push switch and the message language. Exit codes: 0 done, 1 a step or the completion failed, 2 bad arguments or an unreadable answers file.
 
 ### The answers file
 

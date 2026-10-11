@@ -113,6 +113,13 @@ health_cycles: 14
 ticker_max_items: 8
 ```
 
+## 推送标签：Telegram
+
+推送标签顶部的 Telegram 区块显示 bot 是否已配置：“已连接”“未连接”“不完整”（`TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID`
+只设了一个）或“值无效”；三个 `TELEGRAM_*` 变量哪些已设置（只显示名字，从不显示值）；推送是否打开；最近一次测试消息。
+已连接时有测试按钮和修改用的命令；否则是一段简短的指引，附上要在宿主机上运行的命令 `pnpm run setup --step telegram` 和复制按钮。
+网页不能填写或修改 token：见 [telegram.zh.md](telegram.zh.md#1-用一条命令配置)。设置向导的 Telegram 步骤显示同样的区块。
+
 ## 申请流程标签
 
 隐藏不用的申请状态、调整超时天数、隐藏列表筛选里不用的分类，加上 `resume.yaml` 的简历工具表单。**状态是固定的**（这是固定的产品设计）：不能新增、改名，也不能隐藏"新"和"已忽略"；隐藏只影响显示。

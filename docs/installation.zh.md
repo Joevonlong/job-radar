@@ -212,19 +212,15 @@ pnpm run setup --status        # 看设置进行到哪了
 Telegram 在你设置好之前是关着的。向导里跳过 Telegram 这一步，它就保持关闭；没打开的推送 doctor 也不会报。
 
 1. 在 Telegram 里打开 `@BotFather`，发送 `/newbot`，按提示起名，复制 token（形如 `123456:ABC-...`）。
-2. 打开你的新 bot，点 **Start**，随便发一条消息。
-3. 在浏览器里打开 `https://api.telegram.org/bot<token>/getUpdates`，找到 `"chat":{"id":...}`，这个数字就是 chat id。
-   这个链接里有 token，不要发给别人。
-4. 把两个值写进 `.env`：
+2. 在项目目录里运行：
+   ```bash
+   pnpm run setup --step telegram
    ```
-   TELEGRAM_BOT_TOKEN=...
-   TELEGRAM_CHAT_ID=...
-   ```
-5. 重启容器和 AI worker，让它们读到新值：先 `docker compose up -d`，再重启 worker（macOS：
-   `launchctl kickstart -k gui/$(id -u)/io.jobradar.ai-worker`；Linux 用 systemd：`systemctl --user restart job-radar-ai-worker`；
-   在终端里跑的：Ctrl-C 后重新启动）。
-6. 发一条测试：`pnpm telegram:test`。收到“✅ Job Radar”就说明通了。
-7. 在向导的 Telegram 那一步打开推送，或者在 `data/config/notify.yaml` 里设 `telegram.enabled: true`。
+   粘贴 token（不显示），按提示给你的 bot 随便发一句话。命令会找到 chat id、发一条测试消息、写入 `.env`（先做备份）、
+   问你要不要打开推送，然后重启容器和 AI worker 让它们读到新值。加 `--no-restart` 则只打印重启命令，不替你运行。
+3. 检查：设置 → 推送 显示“已连接”，`pnpm run doctor --only telegram` 全是 ✅。
+
+想手动配置（用 `getUpdates` 找 chat id、改 `.env`、重建容器）？见 [telegram.zh.md](telegram.zh.md#手动配置)。
 
 bot 只接受来自你这个 chat id 的消息和按钮；按钮是通过长轮询收回来的，不需要开任何端口。推送和按钮的规则见
 [telegram.zh.md](telegram.zh.md)。

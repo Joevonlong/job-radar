@@ -276,7 +276,7 @@ pnpm run doctor                  # 每项 ✅ / ⚠️ / ❌，并告诉你该�
 ```
 
 AI 还没登录的话先登录：运行 `claude` 后输入 `/login`，或者 `codex login`。密钥和 token 只放在 `.env`，向导从不问你要。
-Telegram 要等你建好自己的 bot 才会打开。完整步骤（含 Telegram、手机访问、升级）见 **[docs/installation.zh.md](docs/installation.zh.md)**。
+Telegram 要等你建好自己的 bot 才会打开，之后用 `pnpm run setup --step telegram` 接上。完整步骤（含 Telegram、手机访问、升级）见 **[docs/installation.zh.md](docs/installation.zh.md)**。
 
 ## 安装
 
