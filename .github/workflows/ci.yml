@@ -88,7 +88,7 @@ jobs:
         uses: pnpm/action-setup@v6
         timeout-minutes: 5
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         timeout-minutes: 5
         with:
           node-version: "22"
@@ -115,7 +115,7 @@ jobs:
         uses: pnpm/action-setup@v6
         timeout-minutes: 5
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         timeout-minutes: 5
         with:
           node-version: "22"
@@ -187,7 +187,7 @@ jobs:
         uses: pnpm/action-setup@v6
         timeout-minutes: 5
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         timeout-minutes: 5
         with:
           node-version: "22"
@@ -235,7 +235,7 @@ jobs:
         uses: pnpm/action-setup@v6
         timeout-minutes: 5
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         timeout-minutes: 5
         with:
           node-version: "22"
@@ -306,7 +306,7 @@ jobs:
         uses: pnpm/action-setup@v6
         timeout-minutes: 5
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         timeout-minutes: 5
         with:
           node-version: "22"
@@ -318,7 +318,7 @@ jobs:
       # The browser build follows the locked @playwright/test version, so the lockfile is the cache key.
       - name: Cache Playwright browsers
         id: playwright-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         timeout-minutes: 5
         with:
           path: ~/.cache/ms-playwright
@@ -334,7 +334,7 @@ jobs:
         run: pnpm exec playwright install-deps chromium
       # Next's incremental build cache only; the app is always built from the current source.
       - name: Cache the Next build cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         timeout-minutes: 5
         with:
           path: .next/cache
@@ -355,7 +355,7 @@ jobs:
         run: pnpm test:e2e:setup --fail-on-flaky-tests
       - name: Upload the Playwright report and traces
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         timeout-minutes: 5
         with:
           name: playwright-report

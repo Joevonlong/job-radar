@@ -184,6 +184,8 @@ test("ai: the worker is offline (no ai-worker here), a provider is switched off"
 
 test("telegram: variables by name only, the switch lands in notify.yaml", async () => {
   await expect(page.getByTestId("env-presence").first()).toContainText("TELEGRAM_BOT_TOKEN");
+  await expect(page.getByTestId("telegram-status")).toBeVisible();
+  await expect(page.getByTestId("telegram-setup-command").first()).toHaveText("pnpm run setup --step telegram");
   const enabledBefore = ((config("notify") as { telegram: { enabled: boolean } }).telegram.enabled);
   await page.getByTestId("setup-telegram-enabled").click();
   await page.getByTestId("setup-telegram-locale").selectOption("en");

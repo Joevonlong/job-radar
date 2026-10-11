@@ -109,6 +109,15 @@ health_cycles: 14
 ticker_max_items: 8
 ```
 
+## Notifications tab: Telegram
+
+At the top of the Notifications tab a Telegram block shows whether the bot is set up: "Connected", "Not connected",
+"Incomplete" (only one of `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` is set) or "Invalid values"; which of the three
+`TELEGRAM_*` variables are set (names only, never a value); whether the push is on; and the last test message. When it is
+connected there is a test button and the command to change it; otherwise a short guide with the command to run on the
+host, `pnpm run setup --step telegram`, with a copy button. The page cannot enter or change the token: see
+[telegram.md](telegram.md#1-set-it-up-with-one-command). The setup wizard's Telegram step shows the same block.
+
 ## Workflow tab
 
 Hide the application statuses you do not use, set the two reminder timeouts, hide unused categories in the list filters, and edit `resume.yaml` (the resume tool). **Statuses are fixed**: none can be added or renamed, and "New" and "Ignored" cannot be hidden. Hiding only affects display.

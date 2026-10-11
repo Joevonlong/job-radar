@@ -79,7 +79,7 @@ pnpm ai-worker                       # 或用 scripts/ops/install-ai-worker.sh �
 
 ```bash
 pnpm run setup                       # 全部 8 步
-pnpm run setup --step telegram       # Telegram 推送，以后随时可以设
+pnpm run setup --step telegram       # Telegram 推送，建好自己的 bot 之后
 pnpm run doctor                      # 体检，并告诉你该怎么修
 ```
 

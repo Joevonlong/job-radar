@@ -26,6 +26,8 @@ export const DOC_LINKS = {
   scraping: { file: "sources", anchor: { en: "scraping", zh: "抓取" } },
   /** Which AI providers can receive job text, and in which order they are tried. */
   aiProviders: { file: "ai-providers", anchor: { en: "which-providers-receive-job-text", zh: "哪些-provider-会收到岗位文本" } },
+  /** Setting up the Telegram bot on the host (`pnpm run setup --step telegram`), and the manual way. */
+  telegram: { file: "telegram", anchor: { en: "1-set-it-up-with-one-command", zh: "1-用一条命令配置" } },
 } as const;
 
 export type DocKey = keyof typeof DOC_LINKS;

@@ -80,7 +80,7 @@ No browser on this machine? Run the same wizard in the terminal:
 
 ```bash
 pnpm run setup                       # all eight steps
-pnpm run setup --step telegram       # Telegram pushes, any time later
+pnpm run setup --step telegram       # Telegram pushes, once you have created your bot
 pnpm run doctor                      # checks everything and says what to fix
 ```
 

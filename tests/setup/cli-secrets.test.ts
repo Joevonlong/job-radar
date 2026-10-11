@@ -71,10 +71,12 @@ describe("secrets never leave the server", () => {
     const view = await loadSetupView({ locale: "en", acceptLanguage: null });
     const json = JSON.stringify(view);
     expectNoSecret(json);
-    expect(view.telegram.env).toEqual([
+    expect(view.telegram.status.env.slice(0, 2)).toEqual([
       { name: "TELEGRAM_BOT_TOKEN", present: true },
       { name: "TELEGRAM_CHAT_ID", present: true },
     ]);
+    expect(view.telegram.status.env.map((e) => e.name)).toEqual(["TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "TELEGRAM_ALLOWED_USER_IDS"]);
+    expect(view.telegram.status.command).toBe("pnpm run setup --step telegram");
     expect(view.ai.providers.find((p) => p.id === "anthropic")?.key).toEqual({ name: "ANTHROPIC_API_KEY", present: true });
     expect(view.ai.providers.find((p) => p.id === "mimo")?.key).toEqual({ name: "MIMO_API_KEY", present: process.env.MIMO_API_KEY !== undefined && process.env.MIMO_API_KEY.trim() !== "" });
     expect(json).toContain("JSEARCH_API_KEY");
@@ -179,9 +181,16 @@ describe("pnpm run setup", () => {
   });
 
   it("interactive: s skips, the end of the input stops without an error", async () => {
-    const skip = io(["", "s"]);
-    expect(await runSetupCli(["--step", "telegram", "--lang", "en"], skip)).toBe(0);
+    // Telegram is configured (fake values): the step shows it and offers keep / replace / test / remove / skip. The Bot API
+    // is not reachable here; the failure is reported without the token.
+    const offline = async (): Promise<never> => {
+      throw new TypeError("fetch failed");
+    };
+    const skip = io(["s"]);
+    expect(await runSetupCli(["--step", "telegram", "--lang", "en"], skip, process.env, { telegram: { fetch: offline, services: null, envFile: path.join(tmp.root, ".env") } })).toBe(0);
     expect(readSetupState().state?.steps.telegram?.status).toBe("skipped");
+    expect(skip.lines.join("\n")).toContain("Could not reach api.telegram.org");
+    expectNoSecret([...skip.lines, ...skip.errors].join("\n"));
     const end = io([]);
     expect(await runSetupCli(["--step", "ai", "--lang", "en"], end)).toBe(0);
     expect(end.lines.join("\n")).toContain("Stopped.");

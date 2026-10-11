@@ -2,7 +2,7 @@
 # Creating a bot and getting the chat id: see docs/telegram.md; once set up, send a test message with `pnpm telegram:test`.
 config_version: 2
 telegram:
-  enabled: false # off until you set up the bot (docs/telegram.md): switch it on in the setup wizard or under Settings once TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID are in .env
+  enabled: false # off until you set up the bot with `pnpm run setup --step telegram` (docs/telegram.md), which offers to switch it on; or switch it on in the setup wizard / Settings
   api_base_url: "https://api.telegram.org"
   # long-polling: max wait per getUpdates (seconds, ≤ 50)
   poll_timeout_seconds: 30
@@ -14,6 +14,17 @@ telegram:
   message_gap_ms: 1100
   # Retries on 429 / 5xx
   max_retries: 2
+  # `pnpm run setup --step telegram` (docs/telegram.md)
+  # `pnpm run setup --step telegram` (on the host)
+  setup:
+    # wait this long for the first message to the bot (that is how it learns the chat id)
+    wait_for_message_seconds: 180
+    # after writing .env: how long web and runner may take to come back healthy
+    restart_wait_seconds: 180
+    # how long to look for "telegram poller started" in the runner log after the restart
+    poller_check_seconds: 60
+    # while a button press for the runner is waiting (never confirmed by the setup), ask again every this many seconds
+    poll_interval_seconds: 3
 
 # Web dashboard address (e.g. a Tailscale address), used by the "Open details" link in job messages; null = attach only the original job link
 public_base_url: null

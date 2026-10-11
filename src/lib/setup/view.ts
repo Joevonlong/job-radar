@@ -11,6 +11,8 @@ import type { Locale } from "@/i18n/locale";
 import { GENERIC_PACK_ID, listPackIds, loadMarket, loadPack } from "@/lib/market";
 import { remoteScopeKey } from "@/lib/market/remote-scope";
 import { loadAiWorkerStatus } from "@/lib/ops/ai-worker";
+import { loadTelegramStatus, type TelegramStatusView } from "@/lib/notify/telegram-status";
+import type { Db } from "@/lib/db/client";
 import { meConfigToDraft, preferencesConfigToDraft, type MarketDraft, type MeDraft } from "@/lib/profile/draft";
 import { readProfileReadiness } from "@/lib/scoring/profile";
 import { toCatalogView, type CatalogView } from "@/lib/settings/catalog-view";
@@ -18,7 +20,7 @@ import { heartbeatView } from "@/lib/settings/status";
 import { vendorOf, type AiVendorId } from "@/lib/settings/ai-vendors";
 import { isConfiguredChannelId, settingsFromConfig } from "@/lib/channels/registry";
 
-import { aiKeyEnv, channelEnv, envPresence, TELEGRAM_ENV } from "./env";
+import { aiKeyEnv, channelEnv } from "./env";
 import type { MarketInput, TargetsInput } from "./inputs";
 import { buildReadiness, type ReadinessItem } from "./readiness";
 import { readSetupState } from "./state";
@@ -100,7 +102,8 @@ export interface SetupView {
     catalog: CatalogView | null;
     worker: { online: boolean; ageSeconds: number | null } | null;
   };
-  telegram: { enabled: boolean | null; env: EnvPresence[]; fileAvailable: boolean; notifyLocale: Locale | null };
+  /** `status` says whether the variables are set (names and booleans only) and the last test; `.env` is written by `pnpm run setup --step telegram` on the host. */
+  telegram: { enabled: boolean | null; status: TelegramStatusView; fileAvailable: boolean; notifyLocale: Locale | null };
   review: { readiness: ReadinessItem[] };
 }
 
@@ -252,6 +255,15 @@ export interface Heartbeats {
 }
 
 /** Runner and ai-worker heartbeats; nulls when the database cannot be read. */
+/** The database handle, or null when it is not configured (the parts that need it are left out). */
+function dbOrNull(): Db | null {
+  try {
+    return getDb();
+  } catch {
+    return null;
+  }
+}
+
 export async function heartbeats(ai: AiConfig | null): Promise<Heartbeats> {
   try {
     const db = getDb();
@@ -340,7 +352,7 @@ export async function loadSetupView(options: { locale: Locale; acceptLanguage: L
       catalog: models === null ? null : toCatalogView(models),
       worker: beats.worker,
     },
-    telegram: { enabled: notify?.telegram.enabled ?? null, env: envPresence(TELEGRAM_ENV), fileAvailable: languageDefaults.aiOutput !== null, notifyLocale: languageDefaults.notifyLocale },
+    telegram: { enabled: notify?.telegram.enabled ?? null, status: await loadTelegramStatus({ enabled: notify?.telegram.enabled ?? null, db: dbOrNull() }), fileAvailable: languageDefaults.aiOutput !== null, notifyLocale: languageDefaults.notifyLocale },
     review: { readiness: readinessOf({ channels, ai, heartbeats: beats }) },
   };
 }

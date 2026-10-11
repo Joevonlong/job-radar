@@ -90,7 +90,7 @@ explains every variable. `.env` is ignored by git: never commit it, and never pa
 | Google Jobs via JSearch | `JSEARCH_API_KEY` | [jsearch.md](jsearch.md) |
 | Job-alert emails from Gmail | `GMAIL_USER`, `GMAIL_APP_PASSWORD` | [gmail-alerts.md](gmail-alerts.md) |
 | Finding new company boards | `TAVILY_API_KEY` | [tavily.md](tavily.md) |
-| Telegram pushes | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | step 7 below |
+| Telegram pushes | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` (written for you by `pnpm run setup --step telegram`) | step 7 below |
 | AI via API | `ANTHROPIC_API_KEY`, `DEEPSEEK_API_KEY`, `MIMO_API_KEY` | step 4 below |
 | A password for the dashboard | `JOB_RADAR_WEB_PASSWORD_HASH` (from `pnpm web:password`) | step 8 below |
 | Linux: the user the containers run as | `PUID`, `PGID` | step 3 below |
@@ -236,19 +236,17 @@ Telegram is off until you set it up. Skipping the wizard's Telegram step keeps i
 about a push you haven't switched on.
 
 1. In Telegram, open `@BotFather`, send `/newbot`, follow the prompts, and copy the token (it looks like `123456:ABC-...`).
-2. Open your new bot, press **Start**, and send it any message.
-3. In a browser, open `https://api.telegram.org/bot<token>/getUpdates` and find `"chat":{"id":...}`. That number is your
-   chat id. Don't share this link: it contains the token.
-4. Add both to `.env`:
+2. In the project directory, run:
+   ```bash
+   pnpm run setup --step telegram
    ```
-   TELEGRAM_BOT_TOKEN=...
-   TELEGRAM_CHAT_ID=...
-   ```
-5. Restart the containers and the AI worker so they read them: `docker compose up -d`, then restart the worker (macOS:
-   `launchctl kickstart -k gui/$(id -u)/io.jobradar.ai-worker`; Linux with systemd:
-   `systemctl --user restart job-radar-ai-worker`; in a terminal: Ctrl-C and start it again).
-6. Send a test: `pnpm telegram:test`. A "✅ Job Radar" message means it works.
-7. Turn pushes on in the wizard's Telegram step, or set `telegram.enabled: true` in `data/config/notify.yaml`.
+   Paste the token (it isn't shown), then send any message to your bot when asked. The command finds your chat id,
+   sends a test message, writes `.env` (with a backup), offers to turn pushes on, and restarts the containers and the
+   AI worker so they read the new values. Add `--no-restart` to print the restart commands instead of running them.
+3. Check it: Settings → Notifications shows "Connected", and `pnpm run doctor --only telegram` is all ✅.
+
+Prefer to do it by hand (find the chat id with `getUpdates`, edit `.env`, recreate the containers)? See
+[telegram.md](telegram.md#doing-it-by-hand).
 
 The bot only accepts messages and button taps from your chat id, and button taps are fetched by long polling, so no
 port needs to be open. Pushes and buttons: [telegram.md](telegram.md).
