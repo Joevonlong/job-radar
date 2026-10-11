@@ -28,6 +28,8 @@ export const requestResultViewSchema = z.object({
   messageId: z.number().int().optional(),
   cycleId: z.number().int().nullable().optional(),
   cycleStatus: z.string().optional(),
+  /** `quota_guard` failures: when Job Radar's AI usage cap is expected to let the AI work again (null = not known). */
+  resumeAt: iso.nullable().optional().catch(undefined),
 });
 
 export const controlRequestViewSchema = z.object({
@@ -56,4 +58,10 @@ export type RequestResultView = z.infer<typeof requestResultViewSchema>;
 
 export function isOpenRequest(view: Pick<ControlRequestView, "status">): boolean {
   return view.status === "pending" || view.status === "running";
+}
+
+/** A stored `resumeAt` (ISO) as the pages use it; anything else is null. */
+export function resumeAtOf(value: unknown): string | null {
+  const parsed = iso.safeParse(value);
+  return parsed.success ? parsed.data : null;
 }

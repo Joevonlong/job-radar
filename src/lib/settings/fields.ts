@@ -619,6 +619,24 @@ const aiSections: SectionDef[] = [
     title: { section: "ai_limits_cooldown" },
     fields: [int("cooldown.default_minutes", "cooldown_default_minutes"), int("cooldown.max_minutes", "cooldown_max_minutes")],
   },
+  // Job Radar's own cap on the subscription CLIs (counts only its own calls; not the account's remaining quota)
+  {
+    id: "limits_quota",
+    block: "limits",
+    title: { section: "ai_limits_quota" },
+    fields: [
+      bool("quota_guard.enabled", "quota_enabled"),
+      bool("quota_guard.fallthrough_to_api", "quota_fallthrough_to_api"),
+      bool("quota_guard.notify_recovery", "quota_notify_recovery"),
+      ...(["codex_cli", "claude_cli"] as const).flatMap((id) => [
+        int(`quota_guard.providers.${id}.cycle_request_cap`, `quota_cycle_cap_${id}`),
+        int(`quota_guard.providers.${id}.hard_requests`, `quota_hard_${id}`),
+        int(`quota_guard.providers.${id}.window_hours`, `quota_window_${id}`, { advanced: true }),
+      ]),
+      num("quota_guard.resume_ratio", "quota_resume_ratio", { advanced: true }),
+      int("quota_guard.alert_dedupe_hours", "quota_alert_dedupe_hours", { advanced: true }),
+    ],
+  },
   {
     id: "limits_api",
     block: "limits",

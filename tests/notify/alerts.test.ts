@@ -1,7 +1,18 @@
 import { describe, expect, it } from "vitest";
 
-import { aiAllProvidersFailed, buildAlerts, collectErrorsOf, cycleIncompleteAlert, dedupeAlerts, queuedAlertToCandidate, type AlertInput } from "@/lib/notify/alerts";
-import { failedSourcesOf } from "@/lib/notify/step";
+import {
+  aiAllProvidersFailed,
+  buildAlerts,
+  collectErrorsOf,
+  cycleIncompleteAlert,
+  dedupeAlerts,
+  queuedAlertToCandidate,
+  silentQuotaRecoveries,
+  type AlertInput,
+  type AlertQuota,
+  type AlertQuotaInput,
+} from "@/lib/notify/alerts";
+import { aiQuotaHoldOf, failedSourcesOf } from "@/lib/notify/step";
 import { notifyText } from "@/lib/notify/text";
 
 const ZH = notifyText("zh");
@@ -175,5 +186,87 @@ describe("alerts in English", () => {
     });
     expect(cycleIncompleteAlert({ cycleId: 4, kind: "manual", reason: { code: "cycle_failed", detail: null } }, ZH).detail).toBe("这一轮以失败结束（见 /sources 的运行记录）。");
     expect(queuedAlertToCandidate({ id: 1, kind: "backup_failed", payload: {} }, EN).title).toBe("Alert: backup_failed");
+  });
+});
+
+describe("usage-cap alerts (state changes only)", () => {
+  const NOW = new Date("2026-10-07T10:00:00Z");
+  const quota = (over: Partial<AlertQuota> = {}): AlertQuota => ({
+    provider: "codex-cli",
+    level: "ok",
+    reason: null,
+    resumeAt: null,
+    windowRequests: 3,
+    hardRequests: 10,
+    windowHours: 5,
+    notifiedLevel: null,
+    ...over,
+  });
+  const input = (providers: AlertQuota[], notifyRecovery = true): AlertQuotaInput => ({ providers, notifyRecovery, now: NOW, timeZone: "Europe/Berlin" });
+  const quotaKinds = (q: AlertQuotaInput) => kinds({ aiQuota: q });
+
+  it("alerts once when a window cap starts, with the count and the local resume time", () => {
+    const hard = quota({ level: "hard", reason: "window", windowRequests: 10, resumeAt: new Date("2026-10-07T12:30:00Z") });
+    const [alert] = buildAlerts({ ...empty, aiQuota: input([hard]) }, ZH);
+    expect(alert).toMatchObject({ kind: "quota_hard", key: "codex-cli", quota: { provider: "codex-cli", level: "hard" } });
+    expect(alert?.title).toContain("codex-cli");
+    expect(alert?.detail).toContain("14:30"); // Berlin
+    expect(alert?.detail).toContain("10");
+    // the same state, already announced: nothing, however long it lasts
+    expect(quotaKinds(input([{ ...hard, notifiedLevel: "hard" }]))).toEqual([]);
+  });
+
+  it("alerts once for a limit the provider reported (the cooldown)", () => {
+    expect(quotaKinds(input([quota({ level: "hard", reason: "error", resumeAt: new Date("2026-10-07T11:00:00Z") })]))).toEqual(["quota_cooldown:codex-cli"]);
+  });
+
+  it("sends one recovery message when notify_recovery is on, and marks it silently when off", () => {
+    const back = quota({ level: "ok", notifiedLevel: "hard" });
+    expect(quotaKinds(input([back]))).toEqual(["quota_recovered:codex-cli"]);
+    expect(quotaKinds(input([{ ...back, notifiedLevel: "ok" }]))).toEqual([]);
+    expect(quotaKinds(input([back], false))).toEqual([]);
+    expect(silentQuotaRecoveries(input([back], false))).toEqual([{ provider: "codex-cli", level: "ok" }]);
+    expect(silentQuotaRecoveries(input([back], true))).toEqual([]);
+  });
+
+  it("says nothing for a provider that was never capped", () => {
+    expect(quotaKinds(input([quota(), quota({ provider: "claude-cli" })]))).toEqual([]);
+  });
+});
+
+describe("aiQuotaHoldOf", () => {
+  it("finds the cap in a skipped step, a skipped sub-task or a scoring run that stopped, earliest time first", () => {
+    expect(aiQuotaHoldOf({ subtasks: [], skipped: "quota_guard", resumeAt: "2026-10-07T12:00:00.000Z" })).toEqual({ resumeAt: new Date("2026-10-07T12:00:00.000Z") });
+    expect(aiQuotaHoldOf({ subtasks: [{ name: "translate", status: "skipped", reason: "quota_guard", resumeAt: null }] })).toEqual({ resumeAt: null });
+    expect(
+      aiQuotaHoldOf({
+        subtasks: [
+          { name: "score", status: "ok", result: { scored: 3, stopped: "quota_guard", quotaResumeAt: "2026-10-07T13:00:00.000Z" } },
+          { name: "signals", status: "skipped", reason: "quota_guard", resumeAt: "2026-10-07T12:00:00.000Z" },
+        ],
+      }),
+    ).toEqual({ resumeAt: new Date("2026-10-07T12:00:00.000Z") });
+  });
+
+  it("is null when the cap played no part or the result is unexpected", () => {
+    expect(aiQuotaHoldOf({ subtasks: [{ name: "score", status: "ok", result: { scored: 3 } }], skipped: "no_provider_available" })).toBeNull();
+    expect(aiQuotaHoldOf(undefined)).toBeNull();
+    expect(aiQuotaHoldOf("nonsense")).toBeNull();
+  });
+});
+
+describe("dedupeAlerts per kind", () => {
+  const now = new Date("2026-10-07T10:00:00Z");
+  const hoursAgo = (h: number) => new Date(now.getTime() - h * 3_600_000);
+  const alert = (kind: string, key: string) => ({ kind, key, title: "t", detail: "d" });
+
+  it("a kind with its own window uses it; every other kind keeps the general window", () => {
+    const sent = [
+      { kind: "quota_hard", key: "codex-cli", sentAt: hoursAgo(7) },
+      { kind: "circuit_open", key: "a", sentAt: hoursAgo(7) },
+    ];
+    const result = dedupeAlerts([alert("quota_hard", "codex-cli"), alert("circuit_open", "a")], sent, { now, windowHours: 24, windowHoursByKind: { quota_hard: 6 } });
+    expect(result.map((a) => a.kind)).toEqual(["quota_hard"]);
+    expect(dedupeAlerts([alert("circuit_open", "a")], sent, { now, windowHours: 24 })).toEqual([]);
   });
 });

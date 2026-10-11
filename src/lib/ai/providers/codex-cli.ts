@@ -4,6 +4,7 @@ import path from "node:path";
 
 import { z } from "zod";
 
+import type { ChannelLogger } from "@/lib/channels/types";
 import type { AiConfig } from "@/lib/config";
 
 import { AiProviderError, QUOTA_PATTERN } from "../errors";
@@ -12,6 +13,7 @@ import type { AiAvailability, AiProvider, AiTask, AiTokenUsage, AiTransport, AiT
 import { webAccessAllowed } from "../web-tasks";
 import { CODEX_ENFORCED_CONFIG, cliCommandProblem, cliModelProblem, codexFeaturesOff, filterCodexOverrides } from "./cli-guards";
 import { defaultCodexFeatureLister, type CodexFeatureLister } from "./codex-features";
+import { codexOutputShape } from "./output-shape";
 import { Semaphore } from "./semaphore";
 import { childEnv, findExecutable, makeScratchDir, processFailure, runProcess, type ProcessRunner } from "./process";
 
@@ -70,6 +72,8 @@ export interface CodexCliOptions {
    * injected (tests), then none (the fixed fallback list applies).
    */
   listFeatures?: CodexFeatureLister;
+  /** Gets the event / key names of every reply at debug level (passive check for a usage-limit field; no values). */
+  logger?: Pick<ChannelLogger, "debug">;
 }
 
 /** A TOML basic string (JSON string syntax is a subset of it), so any path or text is quoted safely. */
@@ -328,6 +332,7 @@ export function createCodexCliTransport(options: CodexCliOptions): AiTransport {
       if (result.stdout.trim() === "") {
         throw new AiProviderError("codex-cli", "provider_error", `exit code ${result.exitCode ?? "signal"}: ${result.stderr || "no output"}`);
       }
+      if (options.logger) options.logger.debug("codex-cli output shape", { ...codexOutputShape(result.stdout) });
       return parseCodexOutput(result.stdout);
     } finally {
       scratch.cleanup();

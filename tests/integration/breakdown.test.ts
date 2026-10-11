@@ -154,7 +154,7 @@ describe("the card's state after a reload", () => {
     expect(await readInitialBreakdownRequest(db(), other, null)).toBeNull();
     const finishedAt = new Date("2026-10-07T10:05:00Z");
     await db().update(schema.controlRequests).set({ status: "failed", finishedAt, result: { error: "timeout", detail: "codex-cli: timeout" } }).where(eq(schema.controlRequests.id, queued.requestId));
-    expect(await readInitialBreakdownRequest(db(), jobId, null)).toEqual({ state: "failed", error: "timeout", detail: "codex-cli: timeout" });
+    expect(await readInitialBreakdownRequest(db(), jobId, null)).toEqual({ state: "failed", error: "timeout", detail: "codex-cli: timeout", resumeAt: null });
     // a result made after the failure hides it
     expect(await readInitialBreakdownRequest(db(), jobId, new Date("2026-10-07T10:09:00Z"))).toBeNull();
     await db().update(schema.controlRequests).set({ status: "done", result: {} }).where(eq(schema.controlRequests.id, queued.requestId));

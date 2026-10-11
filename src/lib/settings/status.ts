@@ -32,6 +32,7 @@ const resultSchema = z
     scored: z.number().int().optional(),
     failed: z.number().int().optional(),
     placeholder: z.boolean().optional(),
+    resumeAt: z.iso.datetime().nullable().optional().catch(undefined),
   })
   .passthrough();
 
@@ -75,6 +76,7 @@ async function requestView(db: Db, request: SettingsRequest): Promise<ControlReq
     scored: result.success ? (result.data.scored ?? null) : null,
     failed: result.success ? (result.data.failed ?? null) : null,
     placeholder: result.success ? (result.data.placeholder ?? false) : false,
+    ...(result.success && result.data.resumeAt !== undefined ? { resumeAt: result.data.resumeAt } : {}),
     cycle: cycleId === null ? null : progressView(await getCycleProgress(db, cycleId)),
   };
 }

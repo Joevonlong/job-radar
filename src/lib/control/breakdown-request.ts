@@ -10,6 +10,7 @@ import { getJobBreakdown, getJobForBreakdown } from "@/lib/db/repos/breakdowns";
 import { findLatestJobControlRequest, findOpenJobControlRequest, getControlRequest, insertControlRequest } from "@/lib/db/repos/control-requests";
 import { TRANSLATION_FAILURE_CODES } from "@/lib/translation/errors";
 import { descriptionHash } from "@/lib/translation/hash";
+import { resumeAtOf } from "./request-view-schema";
 
 const log = createLogger({ fields: { component: "control" } });
 
@@ -54,7 +55,8 @@ export async function requestBreakdownJob(db: Db, input: { jobId: number; force:
 export type BreakdownRequestState =
   | { state: "waiting"; stage: "pending" | "running" }
   | { state: "done" }
-  | { state: "failed"; error: BreakdownErrorCode; detail: string | null };
+  /** `resumeAt`: with `quota_guard`, when Job Radar's AI usage cap is expected to let the AI work again (ISO; null = not known). */
+  | { state: "failed"; error: BreakdownErrorCode; detail: string | null; resumeAt: string | null };
 
 /** Where a queued breakdown stands. `jobId` must be the request's job: a request id alone never reveals another job's request. Null: no such request. */
 export async function readBreakdownRequest(db: Db, input: { requestId: number; jobId: number }): Promise<BreakdownRequestState | null> {
@@ -63,11 +65,12 @@ export async function readBreakdownRequest(db: Db, input: { requestId: number; j
   if (!request || request.kind !== "breakdown_job" || payload.jobId !== input.jobId) return null;
   if (request.status === "pending" || request.status === "running") return { state: "waiting", stage: request.status };
   if (request.status === "failed") {
-    const result = typeof request.result === "object" && request.result !== null ? (request.result as { error?: unknown; detail?: unknown }) : {};
+    const result = typeof request.result === "object" && request.result !== null ? (request.result as { error?: unknown; detail?: unknown; resumeAt?: unknown }) : {};
     return {
       state: "failed",
       error: BREAKDOWN_ERROR_CODES.find((c) => c === result.error) ?? "failed",
       detail: typeof result.detail === "string" ? result.detail : null,
+      resumeAt: resumeAtOf(result.resumeAt),
     };
   }
   return { state: "done" };
@@ -76,7 +79,7 @@ export async function readBreakdownRequest(db: Db, input: { requestId: number; j
 /** What the card starts with after a page load, from the job's newest `breakdown_job` request (null: nothing to resume). */
 export type InitialBreakdownRequest =
   | { state: "waiting"; requestId: number; stage: "pending" | "running" }
-  | { state: "failed"; error: BreakdownErrorCode; detail: string | null };
+  | { state: "failed"; error: BreakdownErrorCode; detail: string | null; resumeAt?: string | null };
 
 /**
  * The server's memory of the card: an open request means the card waits again (and polls); a request that ended

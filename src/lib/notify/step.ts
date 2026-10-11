@@ -3,7 +3,10 @@ import { setTimeout as delay } from "node:timers/promises";
 import { z } from "zod";
 
 import { loadHiddenSettings } from "@/lib/applications/hidden";
-import { loadConfig, type NotifyConfig } from "@/lib/config";
+import { createDbQuotaStore, recordQuotaNotified } from "@/lib/ai/quota-guard";
+import { QUOTA_GUARD_CODE } from "@/lib/ai/errors";
+import { AI_PROVIDER_IDS } from "@/lib/ai/types";
+import { loadConfig, type AiConfig, type NotifyConfig } from "@/lib/config";
 import { loadPipeline } from "@/lib/market";
 import type { Db } from "@/lib/db/client";
 import { getCycle } from "@/lib/db/repos/cycles";
@@ -21,12 +24,12 @@ import { isResumeKitConfigured } from "@/lib/resume/config";
 import { isHighValueSignal } from "@/lib/signals/bonus";
 import { loadHighValuePolicy, loadSignalCatalog } from "@/lib/signals/floor";
 
-import { buildAlerts, deliverAlerts, gatherAlertInput, loadQueuedAlerts, type AlertDelivery } from "./alerts";
+import { buildAlerts, deliverAlerts, gatherAlertInput, loadQueuedAlerts, QUOTA_ALERT_KINDS, silentQuotaRecoveries, type AlertDelivery } from "./alerts";
 import { formatJobMessage, formatSummary, jobKeyboard } from "./format";
 import { createTelegramRuntime, type TelegramRuntime } from "./runtime";
 import { hasHighSignal, reachesPushScore, selectForPush } from "./select";
 import { isTelegramError } from "./telegram-client";
-import { isQuietHours } from "./time";
+import { formatLocalTime, isQuietHours } from "./time";
 import { notifyText, type NotifyText } from "./text";
 import type { NotifyDeps } from "./types";
 import { trapsEnabled } from "@/lib/traps/settings";
@@ -39,6 +42,8 @@ import { trapsEnabled } from "@/lib/traps/settings";
 
 export interface NotifyStepOptions {
   loadNotifyConfig?: () => NotifyConfig;
+  /** ai.yaml (budget and usage-cap alerts); default: the loaded config. */
+  loadAiConfig?: () => AiConfig;
   /** Override how the Telegram client is built (tests use a fake Bot API server). */
   createRuntime?: (ctx: CycleStepContext, config: NotifyConfig) => TelegramRuntime | null;
   sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
@@ -82,6 +87,41 @@ export function failedSourcesOf(collectResult: unknown): Array<{ channelId: stri
   return [...result].map(([channelId, reasons]) => ({ channelId, reasons: [...reasons].sort() }));
 }
 
+const resumeAtSchema = z.string().nullable().optional().catch(undefined);
+
+const aiQuotaResultSchema = z.object({
+  skipped: z.string().optional().catch(undefined),
+  resumeAt: resumeAtSchema,
+  subtasks: z
+    .array(
+      z.object({
+        reason: z.string().optional().catch(undefined),
+        resumeAt: resumeAtSchema,
+        result: z.object({ stopped: z.string().optional().catch(undefined), quotaResumeAt: resumeAtSchema }).optional().catch(undefined),
+      }),
+    )
+    .default([])
+    .catch([]),
+});
+
+/**
+ * Whether Job Radar's AI usage cap held this cycle's AI back (the step skipped, a sub-task skipped, or scoring stopped
+ * early), and the earliest known time it is expected to work again (null = the next cycle). Null when it did not.
+ */
+export function aiQuotaHoldOf(aiResult: unknown): { resumeAt: Date | null } | null {
+  const parsed = aiQuotaResultSchema.safeParse(aiResult);
+  if (!parsed.success) return null;
+  const times: Array<string | null | undefined> = [];
+  if (parsed.data.skipped === QUOTA_GUARD_CODE) times.push(parsed.data.resumeAt);
+  for (const subtask of parsed.data.subtasks) {
+    if (subtask.reason === QUOTA_GUARD_CODE) times.push(subtask.resumeAt);
+    if (subtask.result?.stopped === QUOTA_GUARD_CODE) times.push(subtask.result.quotaResumeAt);
+  }
+  if (times.length === 0) return null;
+  const known = times.map((t) => (t ? new Date(t).getTime() : Number.NaN)).filter((t) => !Number.isNaN(t));
+  return { resumeAt: known.length > 0 ? new Date(Math.min(...known)) : null };
+}
+
 function describe(error: unknown): string {
   return isTelegramError(error) ? error.message : error instanceof Error ? `${error.name}: ${error.message}`.slice(0, 300) : "unexpected error";
 }
@@ -103,6 +143,9 @@ async function sendJobs(deps: NotifyDeps, ctx: CycleStepContext, db: Db, cycleId
   const qualifiedIds = new Set(fresh.filter(reaches).map((c) => c.jobId));
   for (const item of [...selection.selected, ...selection.overflow]) if (reaches(item.candidate)) qualifiedIds.add(item.candidate.jobId);
   const qualified = qualifiedIds.size;
+  // new jobs that passed the filter but have no AI score because the usage cap held the AI back
+  const hold = aiQuotaHoldOf(ctx.results.ai);
+  const quotaHeld = hold ? { count: fresh.filter((c) => c.score?.filterResult === "passed" && c.score.score === null).length, time: hold.resumeAt ? formatLocalTime(hold.resumeAt, deps.timeZone, deps.now()) : "none" } : undefined;
   const jobs: NotifyJobsResult = {
     newJobs: fresh.length,
     passedFilter: fresh.filter((c) => c.score?.filterResult === "passed").length,
@@ -127,6 +170,7 @@ async function sendJobs(deps: NotifyDeps, ctx: CycleStepContext, db: Db, cycleId
         overflow: selection.overflow.length,
         failedSources: failedSourcesOf(ctx.results.collect),
         publicBaseUrl: config.public_base_url,
+        ...(quotaHeld ? { quotaHeld } : {}),
       }, text),
     });
     await recordNotification(db, {
@@ -213,7 +257,7 @@ export function createNotifyStep(options: NotifyStepOptions = {}): CycleStepFn {
 
     // 1. alerts (not held back by quiet hours unless alerts_exempt is off)
     try {
-      const ai = loadConfig("ai");
+      const ai = (options.loadAiConfig ?? (() => loadConfig("ai")))();
       const input = await gatherAlertInput({
         db,
         now: ctx.now(),
@@ -225,9 +269,22 @@ export function createNotifyStep(options: NotifyStepOptions = {}): CycleStepFn {
         budgetThresholds: config.alerts.budget_thresholds,
         collectResult: ctx.results.collect,
         aiResult: ctx.results.ai,
+        aiConfig: ai,
       });
       const text = deps.text ?? notifyText();
-      result.alerts = await deliverAlerts(deps, [...buildAlerts(input, text), ...(await loadQueuedAlerts(db, text))], ctx.cycle.id);
+      const quotaStore = createDbQuotaStore(db);
+      const providerOf = (id: string) => AI_PROVIDER_IDS.find((p) => p === id);
+      const acknowledge = async (quota: { provider: string; level: "ok" | "hard" }) => {
+        const provider = providerOf(quota.provider);
+        if (provider) await recordQuotaNotified(quotaStore, provider, quota.level, ctx.now());
+      };
+      result.alerts = await deliverAlerts(deps, [...buildAlerts(input, text), ...(await loadQueuedAlerts(db, text))], ctx.cycle.id, {
+        dedupeHoursByKind: Object.fromEntries(QUOTA_ALERT_KINDS.map((kind) => [kind, ai.quota_guard.alert_dedupe_hours])),
+        onHandled: async (alert) => {
+          if (alert.quota) await acknowledge(alert.quota);
+        },
+      });
+      if (input.aiQuota) for (const recovery of silentQuotaRecoveries(input.aiQuota)) await acknowledge(recovery);
       if (result.alerts.failed > 0) status = "partial";
     } catch (error) {
       status = "partial";

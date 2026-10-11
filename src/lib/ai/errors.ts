@@ -68,11 +68,22 @@ export class AiSchemaError extends Error {
   }
 }
 
+/** The reason / error code used wherever Job Radar's own AI usage cap stopped the work (step result, control requests). */
+export const QUOTA_GUARD_CODE = "quota_guard";
+
+/** Set when Job Radar's own usage cap (ai.yaml `quota_guard`) held the provider back: why, and when it is expected back. */
+export interface AiQuotaGuardMark {
+  reason: "window" | "cycle_cap" | "error";
+  /** ISO time; null = not known (the per-cycle cap: the next cycle). */
+  resumeAt: string | null;
+}
+
 export interface AiAttempt {
   provider: AiProviderId;
   outcome: "skipped" | "failed";
   kind: AiProviderErrorKind;
   message: string;
+  guard?: AiQuotaGuardMark;
 }
 
 /** Every provider in the plan was skipped or failed. */
@@ -91,4 +102,32 @@ export class AiUnavailableError extends Error {
     this.task = task;
     this.attempts = attempts;
   }
+}
+
+/** The attempts the usage cap held back (empty = the cap played no part). */
+export function quotaGuardAttempts(attempts: readonly AiAttempt[]): (AiAttempt & { guard: AiQuotaGuardMark })[] {
+  return attempts.filter((a): a is AiAttempt & { guard: AiQuotaGuardMark } => a.guard !== undefined);
+}
+
+/**
+ * Whether `error` means "the usage cap holds the AI back": every provider was skipped or failed and at least one of them
+ * was held back by the cap. Returns the earliest expected resume time (null = unknown / the next cycle), or undefined
+ * when the cap played no part.
+ */
+export function quotaGuardResume(error: unknown): { resumeAt: string | null } | undefined {
+  if (!(error instanceof AiUnavailableError)) return undefined;
+  const guarded = quotaGuardAttempts(error.attempts);
+  if (guarded.length === 0) return undefined;
+  return { resumeAt: earliestResume(guarded.map((a) => a.guard.resumeAt)) };
+}
+
+/** The earliest of the known times; null when none is known. */
+export function earliestResume(times: readonly (string | null)[]): string | null {
+  let best: number | null = null;
+  for (const time of times) {
+    if (time === null) continue;
+    const at = new Date(time).getTime();
+    if (!Number.isNaN(at) && (best === null || at < best)) best = at;
+  }
+  return best === null ? null : new Date(best).toISOString();
 }

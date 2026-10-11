@@ -2,6 +2,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { createMemoryHealthStore } from "@/lib/ai/health";
+import { createMemoryQuotaStore } from "@/lib/ai/quota-guard";
 import { createMemoryUsageStore } from "@/lib/ai/usage";
 import { ChannelError } from "@/lib/channels/errors";
 import { registerFixtureChannel } from "@/lib/channels/fixture";
@@ -15,7 +16,7 @@ import type { Db } from "@/lib/db/client";
 import type { ControlRequest } from "@/lib/db/repos/control-requests";
 import { createTelegramRuntime } from "@/lib/notify/runtime";
 
-import { scriptedProvider, pinnedAi } from "../ai/helpers";
+import { scriptedProvider, pinnedAi, usageEntry } from "../ai/helpers";
 import { quietLogger, config as cycleConfig } from "../cycle/helpers";
 import { FAKE_TOKEN, FakeBotApi } from "../notify/fake-bot-api";
 import { notifyConfig } from "../notify/helpers";
@@ -145,6 +146,28 @@ describe("test_ai", () => {
     const outcome = await failing(request("test_ai", { provider: "mimo" }), context());
     expect(outcome).toMatchObject({ status: "failed", result: { error: "ai_test_failed", errorKind: "invalid_output" } });
     expect((await failing(request("test_ai", { provider: "gpt" }), context())).result.error).toBe("invalid_payload");
+  });
+});
+
+describe("test_ai: Job Radar's usage cap", () => {
+  it("does not call a CLI whose window is full and reports the code with the expected time", async () => {
+    const now = new Date("2026-10-07T10:00:00Z");
+    const codex = scriptedProvider("codex-cli", ['{"answer":"ok"}']);
+    const calls = [1, 2].map((m) => usageEntry({ provider: "codex-cli", task: "score", at: new Date(now.getTime() - m * 60_000) }));
+    const handler = createTestAiHandler({
+      config: pinnedAi((raw) => {
+        raw.quota_guard = { providers: { codex_cli: { hard_requests: 2, cycle_request_cap: 1 } } };
+      }),
+      timeZone: "UTC",
+      providers: () => [codex.provider],
+      usage: () => createMemoryUsageStore(),
+      health: () => createMemoryHealthStore(),
+      quota: () => createMemoryQuotaStore(calls),
+      now: () => now,
+    });
+    const outcome = await handler(request("test_ai", { provider: "codex-cli" }), context());
+    expect(outcome).toMatchObject({ status: "failed", result: { error: "quota_guard", provider: "codex-cli", resumeAt: expect.any(String) } });
+    expect(codex.transport.calls).toHaveLength(0);
   });
 });
 

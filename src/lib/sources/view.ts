@@ -3,6 +3,7 @@ import { effectiveState } from "@/lib/channels/circuit";
 import { CHANNEL_CONFIG_TABLE, settingsFromConfig, type ConfiguredChannelId } from "@/lib/channels/registry";
 import { healthDay, isCoolingDown, requestsOn, type ProviderHealth } from "@/lib/ai/health";
 import { aiProviderState, type AiProviderState } from "@/lib/ai/provider-state";
+import type { QuotaStatus } from "@/lib/ai/quota-guard";
 import { AI_PROVIDER_IDS, type AiProviderId } from "@/lib/ai/types";
 import { cliDefaultModel, findCatalogModel, type AiConfig, type ChannelsConfig, type ModelsConfig } from "@/lib/config";
 import type { AiUsageRow, ChannelCycleStat, ChannelStateRow, CycleChannelRuns, LatestCycleRuns, MonthRunTotals, RecentRun } from "@/lib/db/queries/sources";
@@ -124,10 +125,28 @@ export interface AiProviderView {
   lastErrorMessage: string | null;
   /** Set only while the cooldown is still running. */
   coolingUntil: Date | null;
+  /** Set only while Job Radar's own usage cap (its rolling window) holds it back: when it is expected back. */
+  guardedUntil: Date | null;
   /** Whether it can take a request now (shared with the settings dropdowns). */
   state: AiProviderState;
+  /**
+   * Job Radar's own usage cap of a subscription CLI (ai.yaml `quota_guard`): its calls in the rolling window against the
+   * cap. Null for the API providers, when the cap is off or when it could not be read.
+   */
+  quota: AiProviderQuota | null;
   /** The default model of the provider now (from ai.yaml, named by models.yaml). */
   model: AiProviderModel;
+}
+
+export interface AiProviderQuota {
+  level: "ok" | "hard";
+  /** `window`: the rolling window is full; `error`: the provider reported a limit (the cooldown). */
+  reason: "window" | "cycle_cap" | "error" | null;
+  resumeAt: Date | null;
+  windowRequests: number;
+  /** 0 = the window cap is off. */
+  hardRequests: number;
+  windowHours: number;
 }
 
 /** `cliDefault`: codex without a model of its own; `deprecated` / `missing`: the catalog flags it; without a catalog nothing is flagged. */
@@ -170,6 +189,8 @@ export interface SourcesViewInput {
   aiConfig: Pick<AiConfig, "monthly_api_budget_usd"> & Partial<Pick<AiConfig, "providers">>;
   /** Stored provider health (`runtime_state`); missing = never used. */
   aiHealth?: ReadonlyMap<AiProviderId, ProviderHealth>;
+  /** Job Radar's own usage cap per subscription CLI (`readQuotaStatuses`); missing = off or not readable. */
+  aiQuota?: ReadonlyMap<AiProviderId, QuotaStatus>;
   /** Providers whose API key is set; absent id = configured (CLI providers, and callers that do not care). */
   aiConfigured?: Partial<Record<AiProviderId, boolean>>;
   /** Latest `ai_usage` record per provider: a provider used before health tracking existed still has a last success. */
@@ -253,7 +274,7 @@ export function providerModel(provider: AiProviderId, model: string | undefined,
 }
 
 /** One view per AI provider (the /sources health card and the provider marks of the settings page). */
-export function buildProviderViews(input: Pick<SourcesViewInput, "now" | "aiConfig" | "aiHealth" | "aiConfigured" | "aiLastUsedAt" | "timeZone" | "catalog">): AiProviderView[] {
+export function buildProviderViews(input: Pick<SourcesViewInput, "now" | "aiConfig" | "aiHealth" | "aiQuota" | "aiConfigured" | "aiLastUsedAt" | "timeZone" | "catalog">): AiProviderView[] {
   const providers = input.aiConfig.providers;
   if (!providers) return [];
   const today = healthDay(input.now, input.timeZone ?? "UTC");
@@ -272,7 +293,14 @@ export function buildProviderViews(input: Pick<SourcesViewInput, "now" | "aiConf
       lastErrorMessage: health?.lastErrorMessage ?? null,
       coolingUntil: health && isCoolingDown(health, input.now) ? health.coolingUntil : null,
     };
-    return { ...view, state: aiProviderState(view), model: providerModel(id, (policy as { model?: string }).model, input.catalog ?? null) };
+    const status = input.aiQuota?.get(id);
+    const quota: AiProviderQuota | null = status
+      ? { level: status.level, reason: status.reason, resumeAt: status.resumeAt, windowRequests: status.windowRequests, hardRequests: status.hardRequests, windowHours: status.windowHours }
+      : null;
+    // the window cap shows as `guarded`, with the later of its own and a running cooldown's resume time
+    const guardedUntil = quota?.level === "hard" && quota.reason === "window" ? (quota.resumeAt ?? view.coolingUntil ?? input.now) : null;
+    const withGuard = { ...view, guardedUntil };
+    return { ...withGuard, state: aiProviderState(withGuard), quota, model: providerModel(id, (policy as { model?: string }).model, input.catalog ?? null) };
   });
 }
 

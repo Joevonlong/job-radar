@@ -1162,7 +1162,8 @@
           "no_handler": "runner 不认识这个请求",
           "unknown": "失败",
           "score_profile_incomplete": "打分没有开始：画像不完整，缺少简介（summary）和技能（skills）。在“我的画像”里至少填一项后再打分",
-          "score_ai_unavailable": "打分没有开始：AI 不可用（provider 都在冷却、超额或没有登录），见 /sources 的 AI 卡片"
+          "score_ai_unavailable": "打分没有开始：AI 不可用（provider 都在冷却、超额或没有登录），见 /sources 的 AI 卡片",
+          "quota_guard": "打分没有开始：已达 Job Radar 的 AI 用量上限（只统计 Job Radar 自己的调用）。{time, select, none {稍后会自动继续。} other {{time} 后可用。}}"
         }
       },
       "actionBar": {
@@ -1451,6 +1452,7 @@
       "provider_error": "AI provider 报告了错误。请重试；如果一直失败，看 AI worker 的日志。",
       "network": "连不上 AI provider，请重试。",
       "budget": "本月 AI API 预算已用完。",
+      "quota_guard": "已达 Job Radar 的 AI 用量上限（只统计 Job Radar 自己的调用）。{time, select, none {稍后会自动继续。} other {{time} 后可用。}}",
       "aborted": "翻译时 AI worker 被停止了，请重试。",
       "waitTimeout": "翻译在限定时间内没有完成。这台 Mac 上的 AI worker 可能没有运行：到「来源」页看 AI worker 卡片，然后重试。",
       "same_language": "这份 JD 本来就是{language}，不需要翻译。"
@@ -1768,7 +1770,8 @@
       "language_channels": "Telegram 与命令行",
       "ai_scoring_criteria": "打分标准",
       "salary_lookup": "查薪资（AI 网页搜索）",
-      "salary_benchmark": "薪资基准"
+      "salary_benchmark": "薪资基准",
+      "ai_limits_quota": "用量上限（订阅 CLI）"
     },
     "sectionHints": {
       "search_keywords": "每个关键词组用 OR 合并成一次查询，再按城市各查一次。",
@@ -1791,7 +1794,8 @@
       "language_channels": "留空 = 跟上面的界面默认语言一致。pnpm run doctor 和 pnpm sources:list 也可以用 --lang 临时指定。",
       "ai_scoring_criteria": "你自己的标准，每项一句话，任何语言都可以（每个列表最多 10 项，每项最多 300 字）。会和其他偏好一样随每个岗位发给 AI。分数仍是一个 0–100 的总分；命中\"不能接受\"的岗位压到 0–29 档。",
       "salary_lookup": "默认关闭。每次查询把公司名、岗位标题、级别、城市和国家（不含你的画像和 JD）发给 AI provider，由它搜索网页。会消耗 token；用 Anthropic API 时每次搜索另外计费。用哪个 AI 在「AI」标签的任务覆盖里设（任务“查薪资”）。",
-      "salary_benchmark": "每轮运行后重算，只用时间窗内写明可比薪资（基准货币、年薪）的岗位。"
+      "salary_benchmark": "每轮运行后重算，只用时间窗内写明可比薪资（基准货币、年薪）的岗位。",
+      "ai_limits_quota": "Job Radar 自己限制调用 Claude Code 和 Codex 的频率。只统计 Job Radar 自己的调用，看不到账户的真实用量，所以只会限得晚、不会限得早。你主动发起的请求（给岗位打分、翻译）不受每轮上限约束。填 0 表示关闭该项。"
     },
     "options": {
       "remoteScope": {
@@ -2806,6 +2810,50 @@
       "salary_include_ai": {
         "label": "AI 查询结果计入基准",
         "hint": "查询里校验过的底薪数字（置信度中或高、有来源）会加入各组。卡片上分开显示其中有多少来自查询。"
+      },
+      "quota_enabled": {
+        "label": "启用用量上限",
+        "hint": "关闭后不做任何限制，和以前一样。"
+      },
+      "quota_fallthrough_to_api": {
+        "label": "受限时改用付费 API",
+        "hint": "关闭时，被上限跳过的任务会等待，不会改走付费 API。"
+      },
+      "quota_notify_recovery": {
+        "label": "恢复时通知我",
+        "hint": "受限的 provider 恢复可用时发一条 Telegram 消息。"
+      },
+      "quota_cycle_cap_codex_cli": {
+        "label": "Codex：每轮调用数",
+        "hint": "超出的留到下一轮。0 = 不限每轮。"
+      },
+      "quota_hard_codex_cli": {
+        "label": "Codex：窗口内调用数",
+        "hint": "窗口内达到这个次数后，Codex 对所有任务暂停。0 = 不限窗口。"
+      },
+      "quota_window_codex_cli": {
+        "label": "Codex：窗口（小时）",
+        "hint": "统计调用次数的滚动窗口长度。"
+      },
+      "quota_cycle_cap_claude_cli": {
+        "label": "Claude Code：每轮调用数",
+        "hint": "超出的留到下一轮。0 = 不限每轮。"
+      },
+      "quota_hard_claude_cli": {
+        "label": "Claude Code：窗口内调用数",
+        "hint": "窗口内达到这个次数后，Claude Code 对所有任务暂停。0 = 不限窗口。"
+      },
+      "quota_window_claude_cli": {
+        "label": "Claude Code：窗口（小时）",
+        "hint": "统计调用次数的滚动窗口长度。"
+      },
+      "quota_resume_ratio": {
+        "label": "降到多少后恢复（窗口上限的比例）",
+        "hint": "窗口受限后，次数降到这个比例以下才恢复，例如 0.8。"
+      },
+      "quota_alert_dedupe_hours": {
+        "label": "同一告警最短间隔（小时）",
+        "hint": "告警只在状态变化时发；这一项只防止状态来回抖动时重复发送。"
       }
     },
     "control": {
@@ -2882,7 +2930,8 @@
           "rescore_profile_incomplete": "重打没有开始：画像不完整，缺少简介（summary）和技能（skills）。在“我的画像”里至少填一项",
           "rescore_ai_unavailable": "重打没有开始：AI 不可用（provider 都在冷却、超额或没有登录），见 /sources 的 AI 卡片",
           "score_profile_incomplete": "打分没有开始：画像不完整，缺少简介（summary）和技能（skills）。在“我的画像”里至少填一项",
-          "score_ai_unavailable": "打分没有开始：AI 不可用（provider 都在冷却、超额或没有登录），见 /sources 的 AI 卡片"
+          "score_ai_unavailable": "打分没有开始：AI 不可用（provider 都在冷却、超额或没有登录），见 /sources 的 AI 卡片",
+          "quota_guard": "没有执行：已达 Job Radar 的 AI 用量上限（只统计 Job Radar 自己的调用）。{time, select, none {稍后会自动继续。} other {{time} 后可用。}}"
         },
         "scoreResult": "打分完成：{scored} 条成功，{failed} 条失败",
         "jobs": "岗位：{jobs}"
@@ -2906,7 +2955,8 @@
       "off": "已关闭",
       "auth": "登录失败",
       "cooling": "冷却中",
-      "capped": "已达每日上限"
+      "capped": "已达每日上限",
+      "guarded": "已达 AI 用量上限"
     },
     "timeline": {
       "title": "一天的安排",
@@ -3365,11 +3415,16 @@
         "off": "已关闭",
         "capped": "已达每日上限",
         "cooling": "冷却中，{until} 恢复",
-        "auth": "未登录或登录失效"
+        "auth": "未登录或登录失效",
+        "guarded": "已达 Job Radar 的 AI 用量上限，{until} 后继续"
       },
       "cliDefault": "CLI 默认",
       "modelDeprecated": "已停用",
-      "modelMissing": "不在目录"
+      "modelMissing": "不在目录",
+      "window": "近 {hours} 小时：{used} / {cap}",
+      "windowOff": "近 {hours} 小时：{used}（不设上限）",
+      "windowLabel": "Job Radar 的 AI 用量，近 {hours} 小时：{provider}",
+      "quotaNote": "订阅 CLI 的用量上限只统计 Job Radar 自己的调用，看不到账户的真实用量（你在终端或网页里自己用的不算在内）。窗口满了的 CLI 会暂停，之后自动继续；它只会比真实上限晚触发，不会提前。"
     },
     "status": {
       "ok": "正常",
@@ -3709,7 +3764,8 @@
       "no_handler": "没有进程能处理这个请求（重新部署后 runner / ai-worker 要重启）",
       "handler_error": "执行出错，详情见日志",
       "invalid_payload": "请求格式不对",
-      "unknown": "失败"
+      "unknown": "失败",
+      "quota_guard": "已达 Job Radar 的 AI 用量上限，这个 provider 暂停使用。{time, select, none {稍后会自动继续。} other {{time} 后可用。}}"
     },
     "done": {
       "testChannel": "抓到 {fetched} 条，解析成功 {parsed} 条（{seconds} 秒，没有保存）",
@@ -4135,6 +4191,7 @@
       "provider_error": "AI provider 报告了错误。请重试；如果一直失败，看 AI worker 的日志。",
       "network": "连不上 AI provider，请重试。",
       "budget": "本月 AI API 预算已用完。",
+      "quota_guard": "已达 Job Radar 的 AI 用量上限（只统计 Job Radar 自己的调用）。{time, select, none {稍后会自动继续。} other {{time} 后可用。}}",
       "unavailable": "现在没有可用的 AI provider。请检查 CLI 登录或 API key 后重试。",
       "failed": "拆解失败，请重试。",
       "invalid_payload": "请求内容不合法。",
@@ -4672,7 +4729,8 @@
       "failedSource": "{source}（{reasons}）",
       "reasonSeparator": "、",
       "sourceSeparator": "；",
-      "openBoard": "打开看板"
+      "openBoard": "打开看板",
+      "quotaHeld": "另有 {count} 个新岗位因 AI 用量上限暂未打分，{time, select, none {下一轮处理。} other {预计 {time} 后处理。}}"
     },
     "reminders": {
       "title": "📋 申请提醒",
@@ -4706,7 +4764,13 @@
       "cycleFailed": "这一轮以失败结束（见 /sources 的运行记录）。",
       "aiWorkerOfflineTitle": "宿主机 AI worker 没有心跳",
       "aiWorkerOfflineDetail": "已经约 {minutes, plural, other {# 分钟}}没有心跳：打分、翻译和推送会排队等它恢复。运行 pnpm run doctor 看 ai-worker 一项的处理办法，日志在 data/logs/ai-worker.err.log（启动失败和崩溃见 doctor 给出的 launchd 日志）；订阅登录过期时在终端重新登录（claude → /login，codex login）。",
-      "generic": "告警：{kind}"
+      "generic": "告警：{kind}",
+      "quotaHardTitle": "{provider}：已达 Job Radar 的 AI 用量上限",
+      "quotaHardDetail": "最近 {hours} 小时调用 {count} 次（上限 {cap}，只统计 Job Radar 自己的调用）。所有任务暂停，工作排队等待，{time, select, none {之后会自动继续。} other {预计 {time} 左右恢复。}}",
+      "quotaCooldownTitle": "{provider} 报告了用量限制",
+      "quotaCooldownDetail": "Job Radar 暂停使用它，工作排队等待，{time, select, none {之后会自动继续。} other {预计 {time} 左右恢复。}}",
+      "quotaRecoveredTitle": "{provider} 已恢复可用",
+      "quotaRecoveredDetail": "之前等待的 AI 工作会在下一轮继续。"
     },
     "test": "测试消息：bot 和 chat id 配置正确。",
     "callback": {
@@ -4985,6 +5049,18 @@
           "unknownReason": "原因未知",
           "lastOk": "最近一次 run_ai 成功（打分 {scored} 条，推送 {pushed} 条）",
           "lastHint": "/sources 的 AI worker 卡片有详情；tail -n 50 {errLog}"
+        },
+        "quota": {
+          "title": "Job Radar 的 AI 用量上限（订阅 CLI）",
+          "off": "用量上限已关闭（ai.yaml quota_guard.enabled: false）",
+          "none": "没有需要看管的订阅 CLI",
+          "usage": "近 {hours} 小时 {used} / {cap} 次调用",
+          "usageOff": "近 {hours} 小时 {used} 次调用，不设上限",
+          "ok": "{provider}：{usage}",
+          "hard": "{provider}：已达上限（{usage}），暂停到约 {until}",
+          "cooling": "{provider}：provider 报告了额度限制，暂停到约 {until}",
+          "unknownTime": "下一轮",
+          "hint": "到时会自动继续；这里只统计 Job Radar 自己的调用。如果上限对你的套餐太低，到 设置 → AI → 限额 调高（或关闭）"
         }
       },
       "telegram": {
@@ -5911,6 +5987,7 @@
       "provider_error": "AI provider 报告了错误。请重试；如果一直失败，看 AI worker 的日志。",
       "network": "连不上 AI provider，请重试。",
       "budget": "本月 AI API 预算已用完。",
+      "quota_guard": "已达 Job Radar 的 AI 用量上限（只统计 Job Radar 自己的调用）。{time, select, none {稍后会自动继续。} other {{time} 后可用。}}",
       "unavailable": "现在没有能搜索网页的 AI provider 可用。请检查 CLI 登录或 API key（claude-cli 需要 2.1.296 或更新版本）。",
       "failed": "查询失败，请重试。",
       "invalid_payload": "请求内容不合法。",

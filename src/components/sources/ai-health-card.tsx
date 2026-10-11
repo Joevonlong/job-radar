@@ -58,12 +58,35 @@ export async function AiHealthCard({ providers, timeZone, alertPercent }: { prov
                       </span>
                     </td>
                     <td className={cell} data-label={t("col.state")}>
-                      <span className="max-sm:text-right">{state === "cooling" && p.coolingUntil ? t("state.cooling", { until: formatWhen(format, p.coolingUntil, timeZone) }) : t(`state.${state}`)}</span>
+                      <span className="max-sm:text-right">
+                        {state === "cooling" && p.coolingUntil
+                          ? t("state.cooling", { until: formatWhen(format, p.coolingUntil, timeZone) })
+                          : state === "guarded" && p.guardedUntil
+                            ? t("state.guarded", { until: formatWhen(format, p.guardedUntil, timeZone) })
+                            : t(`state.${state}`)}
+                      </span>
                     </td>
                     <td className={cn(cell, "font-mono tabular-nums")} data-label={t("col.today")} data-testid="ai-today">
                       <span className="flex flex-col gap-1 whitespace-nowrap max-sm:items-end">
                         <span>{p.dailyCap > 0 ? `${format.number(p.requestsToday)} / ${format.number(p.dailyCap)}` : t("unlimited", { count: format.number(p.requestsToday) })}</span>
                         {p.dailyCap > 0 ? <Battery value={(p.requestsToday / p.dailyCap) * 100} threshold={alertPercent} ariaLabel={`${t("col.today")}: ${p.id}`} /> : null}
+                        {/* Job Radar's own usage cap of a subscription CLI: its calls in the rolling window */}
+                        {p.quota ? (
+                          <span className="mt-1 flex flex-col gap-1 max-sm:items-end" data-testid="ai-quota-window" data-level={p.quota.level}>
+                            <span className="text-ink-2">
+                              {p.quota.hardRequests > 0
+                                ? t("window", { hours: format.number(p.quota.windowHours), used: format.number(p.quota.windowRequests), cap: format.number(p.quota.hardRequests) })
+                                : t("windowOff", { hours: format.number(p.quota.windowHours), used: format.number(p.quota.windowRequests) })}
+                            </span>
+                            {p.quota.hardRequests > 0 ? (
+                              <Battery
+                                value={(p.quota.windowRequests / p.quota.hardRequests) * 100}
+                                threshold={alertPercent}
+                                ariaLabel={t("windowLabel", { hours: format.number(p.quota.windowHours), provider: p.id })}
+                              />
+                            ) : null}
+                          </span>
+                        ) : null}
                       </span>
                     </td>
                     <td className={cn(cell, "whitespace-nowrap")} data-label={t("col.lastSuccess")}>{p.lastSuccessAt ? formatWhen(format, p.lastSuccessAt, timeZone) : t("never")}</td>
@@ -78,7 +101,7 @@ export async function AiHealthCard({ providers, timeZone, alertPercent }: { prov
                     </td>
                     <td className="max-w-64 py-1.5 max-sm:block max-sm:max-w-none max-sm:pt-2">
                       {/* A probe call on the ai-worker; off while the provider cannot run (the router would refuse it anyway) */}
-                      <TriggerButton kind="testAi" target={p.id} disabled={state === "unconfigured" || state === "off" || state === "capped" || state === "cooling"} />
+                      <TriggerButton kind="testAi" target={p.id} disabled={state === "unconfigured" || state === "off" || state === "capped" || state === "cooling" || state === "guarded"} />
                     </td>
                   </tr>
                 );
@@ -86,6 +109,11 @@ export async function AiHealthCard({ providers, timeZone, alertPercent }: { prov
             </tbody>
           </table>
         </div>
+        {providers.some((p) => p.quota !== null) ? (
+          <p className="text-ink-2 mt-2 text-body-sm" data-testid="ai-quota-note">
+            {t("quotaNote")}
+          </p>
+        ) : null}
       </CardContent>
     </Card>
   );

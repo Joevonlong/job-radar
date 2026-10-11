@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 
 import { translateJobAction, translateStatusAction, type PartialPayload, type TranslateErrorKey } from "@/app/jobs/[id]/actions";
 import { Button } from "@/components/ui/button";
+import { formatClock } from "@/lib/format/clock";
 import { STATUS_POLL_MS, TRANSLATE_WAIT_MAX_MS } from "@/lib/settings/constants";
 import { parseTranslation, type MarkerCategories, type TranslationSegment } from "@/lib/translation/render";
 import { toastTone } from "@/lib/toast";
@@ -63,9 +64,11 @@ export function TranslationPanel({ jobId, hasDescription, initial, initialPartia
   const t = useTranslations("translation");
   const format = useFormatter();
   const [translation, setTranslation] = useState<TranslationView | null>(initial);
-  const [error, setError] = useState<{ key: TranslateErrorKey | "waitTimeout"; detail: string | null } | null>(
+  const [error, setError] = useState<{ key: TranslateErrorKey | "waitTimeout"; detail: string | null; resumeAt?: string | null } | null>(
     initialPartial?.errorCode ? { key: initialPartial.errorCode as TranslateErrorKey, detail: initialPartial.errorDetail ?? null } : null,
   );
+  // the time Job Radar's AI usage cap is expected to let the AI work again (a `quota_guard` failure); "none" = not known
+  const resumeTime = (resumeAt: string | null | undefined): string => (resumeAt ? formatClock(format, resumeAt, timeZone) : "none");
   const [partial, setPartial] = useState<PartialPayload | null>(initialPartial);
   const [pending, startTransition] = useTransition();
   const [waiting, setWaiting] = useState<WaitingRequest | null>(initialRequest);
@@ -83,9 +86,9 @@ export function TranslationPanel({ jobId, hasDescription, initial, initialPartia
   const partialBlocks = useMemo(() => (shownPartial && shownPartial.content !== "" ? parseTranslation(shownPartial.content, categories) : []), [shownPartial, categories]);
   const highlighted = blocks.some((block) => (block.type === "paragraph" ? block.segments.some((s) => s.tier) : block.type === "list" ? block.items.some((item) => item.some((s) => s.tier)) : false));
 
-  const fail = (key: TranslateErrorKey | "waitTimeout", detail: string | null = null): void => {
-    setError({ key, detail });
-    toastTone("error", t(`error.${key}`, { language: target.name }));
+  const fail = (key: TranslateErrorKey | "waitTimeout", detail: string | null = null, resumeAt: string | null = null): void => {
+    setError({ key, detail, resumeAt });
+    toastTone("error", t(`error.${key}`, { language: target.name, time: resumeTime(resumeAt) }));
   };
 
   // Poll the queued request until the ai-worker has finished it (or the wait limit is up).
@@ -114,7 +117,7 @@ export function TranslationPanel({ jobId, hasDescription, initial, initialPartia
       } else if (result) {
         setWaiting(null);
         if (result.partial) setPartial(result.partial);
-        fail(result.error, result.detail ?? null);
+        fail(result.error, result.detail ?? null, result.resumeAt ?? null);
         return;
       }
       if (Date.now() - startedAt >= TRANSLATE_WAIT_MAX_MS) {
@@ -222,7 +225,7 @@ export function TranslationPanel({ jobId, hasDescription, initial, initialPartia
       ) : null}
       {error && !busy ? (
         <div role="alert" className="text-destructive text-sm [overflow-wrap:anywhere]" data-testid="translation-error">
-          <p>{t(`error.${error.key}`, { language: target.name })}</p>
+          <p>{t(`error.${error.key}`, { language: target.name, time: resumeTime(error.resumeAt) })}</p>
           {error.detail ? (
             <p className="text-muted-foreground mt-0.5 font-mono text-xs" data-testid="translation-error-detail">
               {error.detail}

@@ -122,7 +122,7 @@ export type TranslateStatusResult =
   | { ok: true; state: "waiting"; stage: "pending" | "running"; partial: PartialPayload | null }
   | { ok: true; state: "done"; translation: TranslationPayload }
   /** `detail`: which provider failed how (no JD text); `partial`: what is saved, a retry continues from there. */
-  | { ok: false; error: TranslateErrorKey; detail?: string | null; partial?: PartialPayload | null };
+  | { ok: false; error: TranslateErrorKey; detail?: string | null; partial?: PartialPayload | null; resumeAt?: string | null };
 
 const toPartial = (partial: PartialTranslation | null): PartialPayload | null => (partial ? { content: partial.content, done: partial.done, total: partial.total } : null);
 
@@ -159,7 +159,7 @@ export async function translateStatusAction(input: { jobId: number; requestId: n
     const state = await readTranslateRequest(getDb(), parsed.data);
     if (state === null) return { ok: false, error: "not_found" };
     if (state.state === "waiting") return { ok: true, state: "waiting", stage: state.stage, partial: toPartial(state.partial) };
-    if (state.state === "failed") return { ok: false, error: state.error, detail: state.detail, partial: toPartial(state.partial) };
+    if (state.state === "failed") return { ok: false, error: state.error, detail: state.detail, partial: toPartial(state.partial), resumeAt: state.resumeAt };
     revalidatePath(`/jobs/${parsed.data.jobId}`);
     return { ok: true, state: "done", translation: toPayload(state.translation) };
   } catch {

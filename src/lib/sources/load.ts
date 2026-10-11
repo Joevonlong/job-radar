@@ -1,6 +1,6 @@
 /** Reads everything `/sources` shows (server only) and folds it with `buildSourcesView`. */
 import { monthKey } from "@/lib/channels/budget";
-import { loadConfig, reloadConfig, type ModelsConfig } from "@/lib/config";
+import { loadConfig, reloadConfig, type AiConfig, type ModelsConfig } from "@/lib/config";
 import {
   getAiUsageForMonth,
   getDb,
@@ -15,7 +15,9 @@ import {
   listChannelStates,
   listRecentRunsByChannel,
 } from "@/lib/db";
-import { listProviderHealth } from "@/lib/ai/health";
+import { listProviderHealth, type ProviderHealth } from "@/lib/ai/health";
+import { createDbQuotaStore, readQuotaStatuses, type QuotaStatus } from "@/lib/ai/quota-guard";
+import type { AiProviderId } from "@/lib/ai/types";
 import { API_PROVIDER_IDS } from "@/lib/ai/usage";
 import { sumAiCostForMonth } from "@/lib/db/repos/ai-usage";
 import { BRAVE_API_KEY_ENV } from "@/lib/channels/discovery/brave";
@@ -53,8 +55,19 @@ function readCatalog(): ModelsConfig | null {
 
 /** The AI provider views alone (the settings page marks the providers that cannot run). */
 export async function loadAiProviderViews(db: Db, now: Date): Promise<AiProviderView[]> {
-  const [aiHealth, aiLastUsedAt] = await Promise.all([listProviderHealth(db).catch(() => new Map()), getLastAiUsageAt(db).catch(() => new Map<string, Date>())]);
-  return buildProviderViews({ now, aiConfig: loadConfig("ai"), aiHealth, aiLastUsedAt, aiConfigured: aiKeysPresent(), timeZone: loadConfig("schedule").timezone, catalog: readCatalog() });
+  const aiConfig = loadConfig("ai");
+  const [aiHealth, aiLastUsedAt] = await Promise.all([listProviderHealth(db).catch(() => new Map<AiProviderId, ProviderHealth>()), getLastAiUsageAt(db).catch(() => new Map<string, Date>())]);
+  const aiQuota = await loadQuota(db, aiConfig, aiHealth, now);
+  return buildProviderViews({ now, aiConfig, aiHealth, aiQuota, aiLastUsedAt, aiConfigured: aiKeysPresent(), timeZone: loadConfig("schedule").timezone, catalog: readCatalog() });
+}
+
+/** Job Radar's own usage cap per subscription CLI, read live (nothing is stored); an unreadable state counts as "no numbers". */
+async function loadQuota(db: Db, aiConfig: AiConfig, aiHealth: ReadonlyMap<AiProviderId, ProviderHealth>, now: Date): Promise<Map<AiProviderId, QuotaStatus>> {
+  try {
+    return new Map(await readQuotaStatuses(createDbQuotaStore(db), aiConfig, aiHealth, now));
+  } catch {
+    return new Map();
+  }
 }
 
 /** `at` defaults to the database clock: heartbeats and runs are stamped by it. */
@@ -81,9 +94,10 @@ export async function loadSourcesView(at?: Date): Promise<SourcesView> {
     sumAiCostForMonth(db, { month, timeZone, providers: API_PROVIDER_IDS }),
     getLatestHeartbeat(db),
     loadAiWorkerStatus(db, { now, aiConfig }),
-    listProviderHealth(db).catch(() => new Map()),
+    listProviderHealth(db).catch(() => new Map<AiProviderId, ProviderHealth>()),
     getLastAiUsageAt(db).catch(() => new Map<string, Date>()),
   ]);
+  const aiQuota = await loadQuota(db, aiConfig, aiHealth, now);
 
   // The saved LinkedIn login. A flag that cannot be read counts as "no flag" (the file alone decides).
   const authFlag = await getRuntimeState(db, AUTH_FLAG_KEY).then((row) => readAuthFlag(row?.value), () => null);
@@ -95,6 +109,7 @@ export async function loadSourcesView(at?: Date): Promise<SourcesView> {
     channelsConfig,
     aiConfig,
     aiHealth,
+    aiQuota,
     aiLastUsedAt,
     aiConfigured: aiKeysPresent(),
     timeZone,

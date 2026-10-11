@@ -5,7 +5,7 @@ import { loadPipeline } from "@/lib/market";
 import type { FxTable } from "@/lib/market/currency";
 import { runSalaryLookup } from "@/lib/salary/lookup";
 import { loadBaseCurrency } from "@/lib/signals/floor";
-import { classifyTranslationFailure } from "@/lib/translation/errors";
+import { classifyTranslationFailure, resumeOf } from "@/lib/translation/errors";
 import { createRequestRouter } from "@/lib/translation/router";
 
 import { salaryLookupPayloadSchema, type ControlHandler, type ControlHandlerContext } from "./types";
@@ -54,7 +54,7 @@ export function createSalaryLookupHandler(options: SalaryLookupHandlerOptions = 
     } catch (error) {
       if (error instanceof AiProviderError && error.kind === "aborted") return { status: "failed", result: { jobId, error: "aborted" } };
       const failure = classifyTranslationFailure(error);
-      return { status: "failed", result: { jobId, error: failure.code, detail: failure.message } };
+      return { status: "failed", result: { jobId, error: failure.code, detail: failure.message, ...resumeOf(failure) } };
     }
   };
 }

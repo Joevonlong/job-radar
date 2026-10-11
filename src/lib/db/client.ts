@@ -20,7 +20,7 @@ interface Connection {
 const globalForDb = globalThis as typeof globalThis & { __jobRadarDb?: Connection };
 
 /** Create an independent connection (used by the singleton, migrations and tests). */
-export function createConnection(url: string, options: { max?: number; connectTimeoutSeconds?: number } = {}): Connection {
+export function createConnection(url: string, options: { max?: number; connectTimeoutSeconds?: number; readOnly?: boolean } = {}): Connection {
   // Under Vitest only a disposable test database may be opened
   assertTestDatabase(url);
   const sql = postgres(url, {
@@ -29,6 +29,8 @@ export function createConnection(url: string, options: { max?: number; connectTi
     connect_timeout: options.connectTimeoutSeconds ?? connectTimeoutFromEnv(),
     idle_timeout: 30,
     onnotice: () => {},
+    // read-only tools: the server itself refuses every write in this session
+    ...(options.readOnly ? { connection: { default_transaction_read_only: true } } : {}),
   });
   return { sql, db: drizzle(sql, { schema }) };
 }

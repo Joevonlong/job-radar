@@ -77,7 +77,7 @@ TELEGRAM_ALLOWED_USER_IDS=123456789
 | 汇总（每轮一条） | 轮次类型和时间、新岗位数 / 通过过滤数 / 合格数、失败的来源 |
 | 岗位消息 | 排序值 ≥ `push_min_score`（带高价值信号 ≥ `push_min_score_high_value`；哪些信号类别算高价值在 `/interests` 设置）；关注公司的新岗位不受门槛限制（没有分数也推）；被硬过滤掉的不推；还没打分的不推（关注公司除外）；每轮最多 `max_per_cycle` 条，超出的不再推，在看板里看 |
 | 徽章 | 岗位有的每个信号类别一个，按 `/interests` 的顺序：图标加 Telegram 语言（`language.yaml: notify.locale`）的类别名称（没有这种语言的名称时用另一种），如 📈 股权；金额类显示统一换算的年薪区间（💰 €85–105k）· 👀 关注公司 · 需德语 B2；标签类和已删除的类别不做徽章 |
-| 告警 | 通道熔断、登录态失效 / LinkedIn 验证页、预算 80% / 100%、AI provider 全部失败、一轮没跑完；同一类（类型 + 对象）`alerts.dedupe_hours`（24）小时内只发一次 |
+| 告警 | 通道熔断、登录态失效 / LinkedIn 验证页、预算 80% / 100%、AI provider 全部失败、一轮没跑完；同一类（类型 + 对象）`alerts.dedupe_hours`（24）小时内只发一次。Job Radar 的 AI 用量上限（[ai-providers.zh.md](ai-providers.zh.md)）：订阅 CLI 窗口满或报告限制时发一条，恢复可用时发一条；只在状态变化时发，`quota_guard.alert_dedupe_hours`（6）防状态来回抖动 |
 | 其他功能排队的告警 | 别的功能（如备份）往 `notifications` 里写 `alert.<类型>` 的未发送行，下一轮 notify 会发出去并回填消息 id；同样按 类型 + `key` 24 小时去重（重复的直接标记为已处理，不发） |
 | 申请提醒 | 每天一条（`reminders.send_at`，默认 09:00，按 `schedule.yaml` 的时区）："感兴趣"超过 `interested_days` 天还没申请、"已申请"超过 `applied_days` 天没回音；当天没有就不发 |
 

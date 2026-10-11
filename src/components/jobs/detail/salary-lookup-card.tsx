@@ -13,6 +13,7 @@ import { INK_LINK } from "@/components/ui/ink-link";
 import { useAppLocale } from "@/components/viz/intl";
 import type { AiProviderId } from "@/lib/ai/types";
 import type { InitialSalaryRequest } from "@/lib/control/salary-request";
+import { formatClock } from "@/lib/format/clock";
 import { formatSalary } from "@/lib/format/numbers";
 import { SALARY_LOOKUP_WAIT_MAX_MS } from "@/lib/salary/constants";
 import type { SalaryBand, SalarySource } from "@/lib/salary/lookup-types";
@@ -87,7 +88,10 @@ export function SalaryLookupCard(props: SalaryLookupCardProps) {
   const t = useTranslations("salary.lookup");
   const tError = useTranslations("salary.error");
   const router = useRouter();
-  const [error, setError] = useState<{ key: ErrorKey; detail: string | null } | null>(initialRequest?.state === "failed" ? { key: initialRequest.error, detail: initialRequest.detail } : null);
+  const format = useFormatter();
+  const [error, setError] = useState<{ key: ErrorKey; detail: string | null; resumeAt?: string | null } | null>(
+    initialRequest?.state === "failed" ? { key: initialRequest.error, detail: initialRequest.detail, resumeAt: initialRequest.resumeAt } : null,
+  );
   const [pending, startTransition] = useTransition();
   const [waiting, setWaiting] = useState<{ requestId: number; stage: "pending" | "running" } | null>(
     initialRequest?.state === "waiting" ? { requestId: initialRequest.requestId, stage: initialRequest.stage } : null,
@@ -112,12 +116,17 @@ export function SalaryLookupCard(props: SalaryLookupCardProps) {
   }
   const usedUp = used >= props.maxPerDay;
 
-  const errorText = (key: ErrorKey): string =>
-    key === "auth" ? tError("auth", { providers: props.providers.join(", "), fixes: props.providers.map((id) => AUTH_FIX[id]).join(", ") }) : tError(key);
-  const fail = (key: ErrorKey, detail: string | null = null): void => {
+  // `resumeAt`: with `quota_guard`, when Job Radar's AI usage cap is expected to let the AI work again ("none" = not known)
+  const errorText = (key: ErrorKey, resumeAt: string | null = null): string =>
+    key === "auth"
+      ? tError("auth", { providers: props.providers.join(", "), fixes: props.providers.map((id) => AUTH_FIX[id]).join(", ") })
+      : key === "quota_guard"
+        ? tError("quota_guard", { time: resumeAt ? formatClock(format, resumeAt, props.timeZone) : "none" })
+        : tError(key);
+  const fail = (key: ErrorKey, detail: string | null = null, resumeAt: string | null = null): void => {
     if (key === "quota") setUsed((current) => Math.max(current, props.maxPerDay));
-    setError({ key, detail });
-    toastTone("error", errorText(key));
+    setError({ key, detail, resumeAt });
+    toastTone("error", errorText(key, resumeAt));
   };
 
   useEffect(() => {
@@ -142,7 +151,7 @@ export function SalaryLookupCard(props: SalaryLookupCardProps) {
         return;
       } else if (result) {
         setWaiting(null);
-        fail(result.error, result.detail ?? null);
+        fail(result.error, result.detail ?? null, result.resumeAt ?? null);
         return;
       }
       if (Date.now() - startedAt >= SALARY_LOOKUP_WAIT_MAX_MS) {
@@ -196,7 +205,7 @@ export function SalaryLookupCard(props: SalaryLookupCardProps) {
     error && !busy && error.key !== "quota" ? (
       <div role="alert" className="text-bad text-body-sm [overflow-wrap:anywhere]" data-testid="salary-lookup-error" data-error={error.key}>
         <p className="font-semibold">
-          {errorText(error.key)}
+          {errorText(error.key, error.resumeAt ?? null)}
           {error.key === "waitTimeout" ? (
             <>
               {" "}

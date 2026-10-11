@@ -1,13 +1,14 @@
 "use client";
 
 import { FlaskConical, Loader2, Play, Send } from "lucide-react";
-import { useTranslations } from "next-intl";
+import { useFormatter, useTranslations } from "next-intl";
 import { useCallback, useEffect, useState, useTransition } from "react";
 
 import { runChannelNowAction, testAiAction, testChannelAction, testTelegramAction } from "@/app/control-actions";
 import { Button } from "@/components/ui/button";
 import { controlRequestViewSchema, isOpenRequest, type ControlRequestView } from "@/lib/control/request-view-schema";
 import { IDLE_CONTROL_STATE, type ControlActionState } from "@/lib/control/service-types";
+import { formatClock } from "@/lib/format/clock";
 import { STATUS_POLL_MS, TRIGGER_WAIT_MAX_MS } from "@/lib/settings/constants";
 import { cn } from "@/lib/utils";
 
@@ -28,6 +29,7 @@ const RESULT_ERRORS = [
   "channel_test_failed",
   "ai_unavailable",
   "ai_test_failed",
+  "quota_guard",
   "telegram_not_configured",
   "telegram_failed",
   "no_handler",
@@ -152,6 +154,7 @@ export function TriggerButton({ kind, target = "", disabled = false, disabledHin
 function Outcome({ kind, state, view, gaveUp }: { kind: TriggerKind; state: ControlActionState; view: ControlRequestView | null; gaveUp: boolean }) {
   const t = useTranslations("trigger");
   const tCycle = useTranslations("dashboard.cycle");
+  const format = useFormatter();
   if (state.status === "error") {
     return (
       <p role="alert" className="text-destructive text-xs" data-testid="trigger-outcome" data-outcome="refused">
@@ -189,7 +192,7 @@ function Outcome({ kind, state, view, gaveUp }: { kind: TriggerKind; state: Cont
     const detail = result.errorCode ?? result.errorKind;
     return (
       <p role="alert" className="text-destructive text-xs" data-testid="trigger-outcome" data-outcome="failed" data-error={result.error ?? ""}>
-        {code ? t(`failed.${code}`) : t("failed.unknown")}
+        {code ? t(`failed.${code}`, { time: result.resumeAt ? formatClock(format, result.resumeAt) : "none" }) : t("failed.unknown")}
         {detail ? <span className="ml-1 font-mono">({detail})</span> : null}
       </p>
     );

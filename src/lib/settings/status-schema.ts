@@ -35,6 +35,8 @@ const requestSchema = z.object({
   scored: z.number().int().nullable(),
   failed: z.number().int().nullable(),
   placeholder: z.boolean(),
+  /** `error: "quota_guard"`: when Job Radar's AI usage cap is expected to let the AI work again (null = not known). */
+  resumeAt: iso.nullable().optional(),
   cycle: cycleProgressSchema.nullable(),
 });
 

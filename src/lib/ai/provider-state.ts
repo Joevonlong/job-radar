@@ -2,7 +2,7 @@
  * Whether an AI provider can take a request right now, as the web pages show it (health, dropdowns).
  * Pure: the inputs come from ai.yaml, the environment and the shared health rows (`runtime_state`).
  */
-export const AI_PROVIDER_STATES = ["ready", "unconfigured", "off", "auth", "cooling", "capped"] as const;
+export const AI_PROVIDER_STATES = ["ready", "unconfigured", "off", "auth", "guarded", "cooling", "capped"] as const;
 export type AiProviderState = (typeof AI_PROVIDER_STATES)[number];
 
 export interface AiProviderStateInput {
@@ -11,6 +11,8 @@ export interface AiProviderStateInput {
   enabled: boolean;
   /** Set only while a cooldown is still running. */
   coolingUntil: Date | null;
+  /** Set only while Job Radar's own usage cap (its rolling window) holds the provider back: when it is expected back. */
+  guardedUntil?: Date | null;
   /** 0 = unlimited. */
   dailyCap: number;
   requestsToday: number;
@@ -27,12 +29,14 @@ function failedLastWith(input: AiProviderStateInput, kinds: readonly string[]): 
 
 /**
  * `unconfigured`: no key, or the host reported the CLI missing; `off`: switched off in ai.yaml; `auth`: the last call
- * failed with a login error (not logged in / expired token); `cooling`: skipped after a quota error; `capped`: today's
- * `daily_request_cap` is used up; otherwise `ready`.
+ * failed with a login error (not logged in / expired token); `guarded`: Job Radar's own usage cap (ai.yaml `quota_guard`,
+ * its rolling window) is reached; `cooling`: skipped after a quota error; `capped`: today's `daily_request_cap` is used up;
+ * otherwise `ready`.
  */
 export function aiProviderState(input: AiProviderStateInput): AiProviderState {
   if (!input.configured || failedLastWith(input, ["not_configured"])) return "unconfigured";
   if (!input.enabled) return "off";
+  if (input.guardedUntil !== undefined && input.guardedUntil !== null) return "guarded";
   if (input.coolingUntil !== null) return "cooling";
   if (input.dailyCap > 0 && input.requestsToday >= input.dailyCap) return "capped";
   if (failedLastWith(input, ["auth"])) return "auth";

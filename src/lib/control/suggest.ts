@@ -1,4 +1,4 @@
-import { sanitize } from "@/lib/ai/errors";
+import { QUOTA_GUARD_CODE, quotaGuardResume, sanitize } from "@/lib/ai/errors";
 import { loadConfig } from "@/lib/config";
 import { createSuggestDeps, runSuggest, type SuggestDeps } from "@/lib/interests/suggest";
 
@@ -24,6 +24,11 @@ export function createRunSuggestHandler(options: RunSuggestHandlerOptions = {}):
       const summary = await runSuggest(deps);
       return { status: "done", result: { ...summary } };
     } catch (error) {
+      const capped = quotaGuardResume(error);
+      if (capped) {
+        context.logger.warn("run_suggest held back by Job Radar's AI usage cap", { resumeAt: capped.resumeAt });
+        return { status: "failed", result: { error: QUOTA_GUARD_CODE, resumeAt: capped.resumeAt } };
+      }
       const detail = error instanceof Error ? sanitize(`${error.name}: ${error.message}`).slice(0, 300) : "unknown error";
       context.logger.error("run_suggest failed", { detail });
       return { status: "failed", result: { error: "suggest_failed", detail } };

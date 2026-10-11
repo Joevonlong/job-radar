@@ -1162,7 +1162,8 @@
           "no_handler": "The runner does not know this request",
           "unknown": "Failed",
           "score_profile_incomplete": "Scoring did not start: the profile is incomplete, it has no summary and no skills. Fill in at least one on the profile page, then score again",
-          "score_ai_unavailable": "Scoring did not start: no AI provider is available (cooling down, over its cap or logged out), see the AI card on /sources"
+          "score_ai_unavailable": "Scoring did not start: no AI provider is available (cooling down, over its cap or logged out), see the AI card on /sources",
+          "quota_guard": "Scoring did not start: Job Radar's own AI usage cap is reached (only its own calls count). {time, select, none {It continues by itself later.} other {Available again after {time}.}}"
         }
       },
       "actionBar": {
@@ -1451,6 +1452,7 @@
       "provider_error": "The AI provider reported an error. Try again; check the AI worker log if it keeps failing.",
       "network": "The AI provider could not be reached. Try again.",
       "budget": "The monthly budget for the AI API is used up.",
+      "quota_guard": "Job Radar's own AI usage cap is reached (only its own calls count). {time, select, none {It continues by itself later.} other {Available again after {time}.}}",
       "aborted": "The AI worker was stopped while translating. Try again.",
       "waitTimeout": "The translation did not finish in time. The AI worker on this Mac may be offline: check the AI worker card on the Sources page, then try again.",
       "same_language": "This JD is already written in {language}: there is nothing to translate."
@@ -1768,7 +1770,8 @@
       "language_channels": "Telegram and command line",
       "ai_scoring_criteria": "Scoring criteria",
       "salary_lookup": "Salary lookup (AI web search)",
-      "salary_benchmark": "Salary benchmark"
+      "salary_benchmark": "Salary benchmark",
+      "ai_limits_quota": "Usage cap (subscription CLIs)"
     },
     "sectionHints": {
       "search_keywords": "Each group is OR-merged into one query, then run once per city.",
@@ -1791,7 +1794,8 @@
       "language_channels": "Empty = the interface default above. pnpm run doctor and pnpm sources:list also take --lang.",
       "ai_scoring_criteria": "Your own criteria, one sentence each, in any language (at most 10 per list, 300 characters each). They are sent to the AI with every job (like your other preferences). The score stays one 0–100 number; a dealbreaker puts a job into the 0–29 band.",
       "salary_lookup": "Off by default. Each lookup sends the company name, job title, seniority, city and country (never your profile or the JD) to the AI provider, which searches the web. It costs tokens and, with the Anthropic API, a fee per search. Which AI it uses is set under task overrides on the \"AI\" tab (task \"Salary lookup\").",
-      "salary_benchmark": "Rebuilt after every cycle from the postings of the window that state a salary you can compare (base currency, per year)."
+      "salary_benchmark": "Rebuilt after every cycle from the postings of the window that state a salary you can compare (base currency, per year).",
+      "ai_limits_quota": "Job Radar's own cap on how often it calls Claude Code and Codex. It counts only Job Radar's own calls and cannot see your account's real usage, so it can only step in late, never early. Your own requests (scoring a job, translating) are not held by the per-cycle cap. 0 turns a cap off."
     },
     "options": {
       "remoteScope": {
@@ -2806,6 +2810,50 @@
       "salary_include_ai": {
         "label": "Count AI lookups in the benchmark",
         "hint": "Checked base-salary figures from lookups (medium or high confidence, with a source) join the groups. The card shows how many came from lookups."
+      },
+      "quota_enabled": {
+        "label": "Use the usage cap",
+        "hint": "Off: no cap at all, as before."
+      },
+      "quota_fallthrough_to_api": {
+        "label": "Fall back to paid APIs when capped",
+        "hint": "Off: a task skipped by the cap waits instead of using a paid API provider."
+      },
+      "quota_notify_recovery": {
+        "label": "Tell me when it continues",
+        "hint": "One Telegram message when a capped provider is usable again."
+      },
+      "quota_cycle_cap_codex_cli": {
+        "label": "Codex: calls per cycle",
+        "hint": "The rest waits for the next cycle. 0 = no cycle cap."
+      },
+      "quota_hard_codex_cli": {
+        "label": "Codex: calls per window",
+        "hint": "At this many calls in the window Codex pauses for every task. 0 = no window cap."
+      },
+      "quota_window_codex_cli": {
+        "label": "Codex: window (hours)",
+        "hint": "Length of the rolling window the calls are counted in."
+      },
+      "quota_cycle_cap_claude_cli": {
+        "label": "Claude Code: calls per cycle",
+        "hint": "The rest waits for the next cycle. 0 = no cycle cap."
+      },
+      "quota_hard_claude_cli": {
+        "label": "Claude Code: calls per window",
+        "hint": "At this many calls in the window Claude Code pauses for every task. 0 = no window cap."
+      },
+      "quota_window_claude_cli": {
+        "label": "Claude Code: window (hours)",
+        "hint": "Length of the rolling window the calls are counted in."
+      },
+      "quota_resume_ratio": {
+        "label": "Resume below (share of the window cap)",
+        "hint": "After a window cap, calls resume once the count is below this share, e.g. 0.8."
+      },
+      "quota_alert_dedupe_hours": {
+        "label": "Repeat alert at most every (hours)",
+        "hint": "Alerts are sent when the state changes; this only stops a flapping state from repeating them."
       }
     },
     "control": {
@@ -2882,7 +2930,8 @@
           "rescore_profile_incomplete": "Re-scoring did not start: the profile is incomplete, it has no summary and no skills. Fill in at least one on the profile page",
           "rescore_ai_unavailable": "Re-scoring did not start: no AI provider is available (cooling down, over its cap or logged out), see the AI card on /sources",
           "score_profile_incomplete": "Scoring did not start: the profile is incomplete, it has no summary and no skills. Fill in at least one on the profile page",
-          "score_ai_unavailable": "Scoring did not start: no AI provider is available (cooling down, over its cap or logged out), see the AI card on /sources"
+          "score_ai_unavailable": "Scoring did not start: no AI provider is available (cooling down, over its cap or logged out), see the AI card on /sources",
+          "quota_guard": "Not run: Job Radar's own AI usage cap is reached (only its own calls count). {time, select, none {It continues by itself later.} other {Available again after {time}.}}"
         },
         "scoreResult": "Scoring finished: {scored} scored, {failed} failed",
         "jobs": "Jobs: {jobs}"
@@ -2906,7 +2955,8 @@
       "off": "switched off",
       "auth": "login failed",
       "cooling": "cooling down",
-      "capped": "daily cap reached"
+      "capped": "daily cap reached",
+      "guarded": "AI usage cap reached"
     },
     "timeline": {
       "title": "Plan of the day",
@@ -3365,11 +3415,16 @@
         "off": "Turned off",
         "capped": "Daily cap reached",
         "cooling": "Cooling down until {until}",
-        "auth": "not logged in / login expired"
+        "auth": "not logged in / login expired",
+        "guarded": "Job Radar's AI usage cap reached, continues after {until}"
       },
       "cliDefault": "CLI default",
       "modelDeprecated": "Deprecated",
-      "modelMissing": "Not in catalog"
+      "modelMissing": "Not in catalog",
+      "window": "Last {hours} h: {used} / {cap}",
+      "windowOff": "Last {hours} h: {used} (no cap)",
+      "windowLabel": "Job Radar's AI usage, last {hours} h: {provider}",
+      "quotaNote": "The usage cap of the subscription CLIs counts only Job Radar's own calls and cannot see your account's real usage (your own use in the terminal or the web is not counted). A CLI whose window is full is paused and goes on by itself; it can only trigger later than the real limit, never earlier."
     },
     "status": {
       "ok": "Healthy",
@@ -3709,7 +3764,8 @@
       "no_handler": "No process handles this request (restart the runner / ai-worker after a deploy)",
       "handler_error": "It failed; see the log",
       "invalid_payload": "Malformed request",
-      "unknown": "Failed"
+      "unknown": "Failed",
+      "quota_guard": "Job Radar's own AI usage cap holds this provider back. {time, select, none {It continues by itself later.} other {Available again after {time}.}}"
     },
     "done": {
       "testChannel": "{fetched} fetched, {parsed} parsed ({seconds} s, nothing stored)",
@@ -4135,6 +4191,7 @@
       "provider_error": "The AI provider reported an error. Try again; check the AI worker log if it keeps failing.",
       "network": "The AI provider could not be reached. Try again.",
       "budget": "The monthly budget for the AI API is used up.",
+      "quota_guard": "Job Radar's own AI usage cap is reached (only its own calls count). {time, select, none {It continues by itself later.} other {Available again after {time}.}}",
       "unavailable": "No AI provider is available right now. Check the CLI logins or API keys and try again.",
       "failed": "The breakdown failed. Please try again.",
       "invalid_payload": "The request was not valid.",
@@ -4672,7 +4729,8 @@
       "failedSource": "{source} ({reasons})",
       "reasonSeparator": ", ",
       "sourceSeparator": "; ",
-      "openBoard": "Open the board"
+      "openBoard": "Open the board",
+      "quotaHeld": "{count, plural, one {# more new job has} other {# more new jobs have}} no score yet: Job Radar's AI usage cap is reached. {time, select, none {They are scored in the next cycle.} other {Expected after {time}.}}"
     },
     "reminders": {
       "title": "📋 Application reminders",
@@ -4706,7 +4764,13 @@
       "cycleFailed": "The run ended in failure (see the run history on /sources).",
       "aiWorkerOfflineTitle": "No heartbeat from the AI worker on the host",
       "aiWorkerOfflineDetail": "No heartbeat for about {minutes, plural, one {# minute} other {# minutes}}: scoring, translation and the push wait until it is back. Run pnpm run doctor for what to do about the ai-worker; its log is data/logs/ai-worker.err.log (start failures and crashes: the launchd log the doctor names). If a subscription login expired, log in again in a terminal (claude → /login, codex login).",
-      "generic": "Alert: {kind}"
+      "generic": "Alert: {kind}",
+      "quotaHardTitle": "{provider}: Job Radar's AI usage cap reached",
+      "quotaHardDetail": "{count} calls in the last {hours} h (cap {cap}; only Job Radar's own calls count). It pauses for every task and the work waits, {time, select, none {it continues by itself later.} other {back around {time}.}}",
+      "quotaCooldownTitle": "{provider} reported a usage limit",
+      "quotaCooldownDetail": "Job Radar pauses it and the work waits, {time, select, none {it continues by itself later.} other {back around {time}.}}",
+      "quotaRecoveredTitle": "{provider} is usable again",
+      "quotaRecoveredDetail": "The AI work that waited continues in the next cycle."
     },
     "test": "Test message: the bot and the chat id are set up correctly.",
     "callback": {
@@ -4985,6 +5049,18 @@
           "unknownReason": "reason unknown",
           "lastOk": "The last run_ai succeeded ({scored} scored, {pushed} pushed)",
           "lastHint": "The AI worker card on /sources has details; tail -n 50 {errLog}"
+        },
+        "quota": {
+          "title": "Job Radar's AI usage cap (subscription CLIs)",
+          "off": "The usage cap is turned off (ai.yaml quota_guard.enabled: false)",
+          "none": "No subscription CLI is watched",
+          "usage": "{used} / {cap} calls in the last {hours} h",
+          "usageOff": "{used} calls in the last {hours} h, no cap",
+          "ok": "{provider}: {usage}",
+          "hard": "{provider}: cap reached ({usage}), paused until about {until}",
+          "cooling": "{provider}: the provider reported a limit, paused until about {until}",
+          "unknownTime": "the next cycle",
+          "hint": "The AI continues by itself then; only Job Radar's own calls are counted. If the cap is too low for your plan, raise it under Settings → AI → Limits (or turn it off)"
         }
       },
       "telegram": {
@@ -5911,6 +5987,7 @@
       "provider_error": "The AI provider reported an error. Try again; check the AI worker log if it keeps failing.",
       "network": "The AI provider could not be reached. Try again.",
       "budget": "The monthly budget for the AI API is used up.",
+      "quota_guard": "Job Radar's own AI usage cap is reached (only its own calls count). {time, select, none {It continues by itself later.} other {Available again after {time}.}}",
       "unavailable": "No AI provider that can search the web is available right now. Check the CLI logins or API keys (claude-cli needs version 2.1.296 or newer).",
       "failed": "The lookup failed. Please try again.",
       "invalid_payload": "The request was not valid.",

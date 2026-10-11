@@ -12,12 +12,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { IDLE_CONTROL_STATE, type ControlActionState } from "@/lib/control/service-types";
+import { formatClock } from "@/lib/format/clock";
 import { ageParts } from "@/lib/settings/age";
 import type { ControlRequestView, ControlStatus } from "@/lib/settings/status-schema";
 import { cn } from "@/lib/utils";
 import { INK_LINK } from "@/components/ui/ink-link";
 
-const ERROR_CODES = ["invalid_payload", "another_cycle_running", "cycle_failed", "handler_error", "no_handler", "rescore_failed", "rescore_stopped", "rescore_profile_incomplete", "rescore_ai_unavailable", "score_failed", "score_stopped", "score_profile_incomplete", "score_ai_unavailable"] as const;
+const ERROR_CODES = ["invalid_payload", "another_cycle_running", "cycle_failed", "handler_error", "no_handler", "rescore_failed", "rescore_stopped", "rescore_profile_incomplete", "rescore_ai_unavailable", "score_failed", "score_stopped", "score_profile_incomplete", "score_ai_unavailable", "quota_guard"] as const;
 
 function useAgeText() {
   const t = useTranslations("settings.control.age");
@@ -99,7 +100,11 @@ function RequestRow({ request, timezone, aiRunning }: { request: ControlRequestV
       {request.jobIds ? <p className="text-muted-foreground font-mono text-xs break-words">{t("jobs", { jobs: request.jobIds.map((id) => `#${id}`).join(", ") })}</p> : null}
       {request.channelIds ? <p className="text-muted-foreground font-mono text-xs break-words">{t("channels", { channels: request.channelIds.join(", ") })}</p> : null}
       {detail ? <p className="text-muted-foreground text-xs">{detail}</p> : null}
-      {request.status === "failed" ? <p className="text-destructive text-xs">{errorCode ? t(`error.${errorCode}`) : t("error.unknown")}</p> : null}
+      {request.status === "failed" ? (
+        <p className="text-destructive text-xs">
+          {errorCode ? t(`error.${errorCode}`, { time: request.resumeAt ? formatClock(format, request.resumeAt, timezone) : "none" }) : t("error.unknown")}
+        </p>
+      ) : null}
       {request.cycle && !open ? (
         <Link href="/sources" className={cn(INK_LINK, "w-fit text-xs")}>
           {t("viewSources")}

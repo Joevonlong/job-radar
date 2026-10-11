@@ -2,7 +2,7 @@ import { AiProviderError } from "@/lib/ai";
 import type { AiRouter } from "@/lib/ai/router";
 import { runBreakdown } from "@/lib/breakdown/service";
 import { ConfigError, loadConfig, type BreakdownConfig } from "@/lib/config";
-import { classifyTranslationFailure } from "@/lib/translation/errors";
+import { classifyTranslationFailure, resumeOf } from "@/lib/translation/errors";
 import { createRequestRouter } from "@/lib/translation/router";
 
 import { breakdownJobPayloadSchema, type ControlHandler, type ControlHandlerContext } from "./types";
@@ -41,7 +41,7 @@ export function createBreakdownJobHandler(options: BreakdownJobHandlerOptions = 
     } catch (error) {
       if (error instanceof AiProviderError && error.kind === "aborted") return { status: "failed", result: { jobId, error: "aborted" } };
       const failure = classifyTranslationFailure(error);
-      return { status: "failed", result: { jobId, error: failure.code, detail: failure.message } };
+      return { status: "failed", result: { jobId, error: failure.code, detail: failure.message, ...resumeOf(failure) } };
     }
   };
 }
