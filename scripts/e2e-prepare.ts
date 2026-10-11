@@ -51,7 +51,8 @@ if (!dbName.startsWith("jobradar_e2e")) {
 }
 
 // The settings page writes the user config directory: the run has its own, refilled from the defaults directory it
-// runs with (playwright.config.ts points JOB_RADAR_DEFAULTS_DIR at the test fixture snapshot). Never the real user directory.
+// runs with (playwright.config.ts points JOB_RADAR_DEFAULTS_DIR at the test fixture snapshot, playwright.setup.config.ts at the
+// shipped config/). Never the real user directory.
 const configDir = getConfigDir();
 const realUserDirs = [path.join(getAppRoot(), "data", "config"), path.join(getAppRoot(), "config"), getDefaultsDir()];
 const realProfileDirs = [path.join(getAppRoot(), "data", "profile")];

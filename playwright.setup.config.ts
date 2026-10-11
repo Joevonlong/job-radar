@@ -10,6 +10,7 @@ import { requireTestAdminDatabaseUrl } from "./scripts/test-database";
  * directories, so it never shares state with the main suite (playwright.config.ts): `scripts/e2e-prepare.ts --fresh`
  * empties the config and profile directories (the web fills them on start, as on a first `docker compose up`) and drops,
  * recreates and migrates the database without the seed. No stand-in runner: requested cycles stay queued.
+ * The run uses the shipped `config/` as its defaults (and so its example profile), not the frozen fixture of the main suite.
  * `E2E_SETUP_PORT` picks the port; with `E2E_PORT` set (one port per worktree) the default is that port + 5.
  */
 const BASE_PORT = process.env.E2E_PORT ? Number(process.env.E2E_PORT) : null;
@@ -24,13 +25,15 @@ const DATABASE_URL = (() => {
 })();
 const CONFIG_DIR = path.join(os.tmpdir(), `job-radar-e2e-setup-config${SUFFIX.replace("_", "-")}`);
 const PROFILE_DIR = path.join(os.tmpdir(), `job-radar-e2e-setup-profile${SUFFIX.replace("_", "-")}`);
-// the frozen test fixture, like the main suite: tests never depend on the repository's shipped defaults
-const DEFAULTS_DIR = path.resolve(import.meta.dirname, "tests/fixtures/config/defaults");
+// The shipped defaults, exactly what a first `docker compose up` runs with (compose.yaml: JOB_RADAR_DEFAULTS_DIR=/app/config).
+// Unlike the main suite (a frozen fixture), this is a product-contract test: a brand-new install must work with what ships.
+const DEFAULTS_DIR = path.resolve(import.meta.dirname, "config");
 
 // the spec reads and writes the files of the run, and queries the database
 process.env.E2E_SETUP_CONFIG_DIR = CONFIG_DIR;
 process.env.E2E_SETUP_PROFILE_DIR = PROFILE_DIR;
 process.env.E2E_SETUP_DATABASE_URL = DATABASE_URL;
+process.env.E2E_SETUP_DEFAULTS_DIR = DEFAULTS_DIR;
 
 export default defineConfig({
   testDir: "./e2e-setup",
