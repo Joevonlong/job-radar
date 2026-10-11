@@ -162,11 +162,21 @@ exit 0
 
 /** Linux: the systemd user unit (forced with JOB_RADAR_SERVICE_MANAGER, so it runs on any platform; a dry run touches nothing). */
 describe("scripts/ops/install-ai-worker.sh --dry-run with systemd", () => {
-  const systemdDryRun = (checkout: string, databaseUrl: string) =>
-    spawnSync("bash", [script, "--dry-run", "--root", checkout, "--database-url", databaseUrl], {
-      encoding: "utf8",
-      env: { ...process.env, HOME: home, JOB_RADAR_SERVICE_MANAGER: "systemd" },
-    });
+  // XDG_CONFIG_HOME (set on many Linux machines and CI runners) takes precedence over HOME: the tests pick it explicitly
+  const systemdDryRun = (checkout: string, databaseUrl: string, xdgConfigHome?: string) => {
+    const env: NodeJS.ProcessEnv = { ...process.env, HOME: home, JOB_RADAR_SERVICE_MANAGER: "systemd" };
+    if (xdgConfigHome === undefined) delete env.XDG_CONFIG_HOME;
+    else env.XDG_CONFIG_HOME = xdgConfigHome;
+    return spawnSync("bash", [script, "--dry-run", "--root", checkout, "--database-url", databaseUrl], { encoding: "utf8", env });
+  };
+
+  it("puts the unit under XDG_CONFIG_HOME when that is set", () => {
+    const xdg = path.join(tmp, "xdg");
+    const r = systemdDryRun(root, "postgres://u:secret@127.0.0.1:5433/db", xdg);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain(path.join(xdg, "systemd/user/job-radar-ai-worker.service"));
+    expect(r.stdout).not.toContain(path.join(home, ".config"));
+  });
 
   it("renders the job-radar-ai-worker.service user unit and writes nothing", () => {
     const r = systemdDryRun(root, "postgres://u:secret@127.0.0.1:5433/db");
