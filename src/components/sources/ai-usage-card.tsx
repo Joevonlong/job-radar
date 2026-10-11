@@ -18,7 +18,7 @@ export async function AiUsageCard({ ai, month }: { ai: SourcesView["ai"]; month:
       <CardHeader className="px-4 py-3">
         <CardTitle className="flex items-baseline justify-between gap-3">
           <h2>{t("title")}</h2>
-          <Link href="/sources/ai-usage?range=month" className="text-body-sm font-bold underline underline-offset-4" data-testid="ai-usage-details">
+          <Link href="/sources/ai-usage?range=month" className="inline-flex min-h-sp-6 items-center text-body-sm font-bold underline underline-offset-4" data-testid="ai-usage-details">
             {t("details")}
           </Link>
         </CardTitle>

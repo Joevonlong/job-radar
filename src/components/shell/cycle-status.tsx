@@ -210,7 +210,7 @@ export function CycleStatusDotView({ status, className }: { status: ShellStatus 
       data-testid="cycle-status-dot"
       data-state={face.state}
       aria-label={`${t("label")}: ${face.aria}`}
-      className={cn("flex flex-none items-center gap-1 rounded-tag px-sp-1 font-mono text-data-sm whitespace-nowrap", face.tone, className)}
+      className={cn("flex min-h-sp-6 flex-none items-center gap-1 rounded-tag px-sp-1 font-mono text-data-sm whitespace-nowrap", face.tone, className)}
     >
       <span aria-hidden>●</span>
       {/* one line, never wrapped; the English word is wider than the Chinese one, so on a phone it gives way to the dot */}

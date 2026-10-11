@@ -34,19 +34,19 @@ function renderItems(items: readonly TickerItem[]): ReactNode {
   ));
 }
 
-/** Terminal strip that scrolls what just happened. Only for live places; pauses on hover. The list is doubled for a seamless loop (the copy is hidden from assistive technology). */
+/** Terminal strip that scrolls what just happened. Only for live places; pauses on hover and while it has the keyboard focus (it is a tab stop for that), and stands still, scrollable, with reduced motion. The list is doubled for a seamless loop (the copy is hidden from assistive technology). */
 export function Ticker({ items, maxItems, className }: TickerProps) {
   const t = useTranslations("viz");
   const shown = maxItems === undefined ? items : items.slice(0, maxItems);
   return (
-    <div className={cx("jr jr-ticker", shown.length === 0 && "jr-ticker--static", className)} role="group" aria-label={t("ticker.aria")}>
+    <div className={cx("jr jr-ticker", shown.length === 0 && "jr-ticker--static", className)} role="group" aria-label={t("ticker.aria")} tabIndex={shown.length === 0 ? undefined : 0}>
       <span className="jr-ticker__lb">{t("ticker.live")}</span>
       {shown.length === 0 ? (
         <span className="jr-ticker__in">{t("ticker.empty")}</span>
       ) : (
         <div className="jr-ticker__in">
           {renderItems(shown)}
-          <span aria-hidden style={{ display: "contents" }}>
+          <span aria-hidden className="jr-ticker__copy">
             {renderItems(shown.map((item) => ({ ...item, key: `${item.key}-copy` })))}
           </span>
         </div>

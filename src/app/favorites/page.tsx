@@ -59,7 +59,7 @@ export default async function FavoritesPage({ searchParams }: { searchParams: Pr
         viz={loadListViz(now, timezone)}
       />
       <p className="text-sm">
-        <Link href="/jobs?fav=true" className="text-foreground font-medium underline underline-offset-2" data-testid="favorites-filter-link">
+        <Link href="/jobs?fav=true" className="text-foreground inline-flex min-h-sp-6 items-center font-medium underline underline-offset-2" data-testid="favorites-filter-link">
           {tf("filterLink")} →
         </Link>
       </p>

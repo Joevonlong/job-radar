@@ -114,7 +114,7 @@
   /* a long label (SIGNALS / GATES, SKILL OVERLAP) wraps to a second line instead of running into its neighbour */
   .jb-head > span { min-width: 0; padding: var(--space-2) 0; line-height: 1.25; overflow-wrap: anywhere; }
   /* A sortable head is a link with an arrow: the current column's arrow is solid ink, the others' a faint double arrow */
-  .jb-sort { display: inline-flex; align-items: center; gap: var(--space-1); color: inherit; text-decoration: none; text-transform: inherit; border-radius: var(--r-cell); }
+  .jb-sort { display: inline-flex; align-items: center; min-height: var(--space-6); gap: var(--space-1); color: inherit; text-decoration: none; text-transform: inherit; border-radius: var(--r-cell); }
   .jb-sort:hover { color: var(--ink); }
   .jb-sort:focus-visible { outline: 3px solid var(--signal-t4); outline-offset: 2px; }
   .jb-sort-icon { flex: none; width: 0.95rem; height: 0.95rem; color: var(--ink-3); }

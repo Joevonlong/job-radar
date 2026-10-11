@@ -36,7 +36,7 @@ export function ProfileIncompleteBanner({ missing, waiting = null, showLink = tr
         {waiting !== null && waiting > 0 ? ` ${t("waiting", { count: waiting })}` : ""}
       </span>
       {showLink ? (
-        <Link href="/me" className={cn(INK_LINK, "ml-auto")} data-testid="profile-incomplete-link">
+        <Link href="/me" className={cn(INK_LINK, "ml-auto inline-flex min-h-sp-6 items-center")} data-testid="profile-incomplete-link">
           {t("link")}
         </Link>
       ) : null}

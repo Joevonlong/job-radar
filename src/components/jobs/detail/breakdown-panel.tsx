@@ -420,7 +420,7 @@ function SourceButton({ quote }: { quote: BreakdownQuote }) {
     return <span className="text-ink-3 text-data-sm cursor-help font-mono" title={quote.quote} data-testid="jd-breakdown-quote-text">{t("quoteButton")}</span>;
   }
   return (
-    <JumpTag index={quote.quoteIndex} label={t("jumpTo", { quote: quote.quote })} className="border-border bg-card text-ink-2 text-data-sm hover:bg-soft h-5 gap-1 border-[1.5px] px-1.5 font-mono">
+    <JumpTag index={quote.quoteIndex} label={t("jumpTo", { quote: quote.quote })} className="border-border bg-card text-ink-2 text-data-sm hover:bg-soft h-sp-6 gap-1 border-[1.5px] px-1.5 font-mono">
       <Quote aria-hidden className="size-3" />
       <span>{t("quoteButton")}</span>
     </JumpTag>
