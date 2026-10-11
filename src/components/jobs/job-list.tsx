@@ -44,7 +44,8 @@ const inList = (selector: string) => `:scope > li:not([data-leaving]) ${selector
 
 /**
  * One list item of the animated (not virtualized) list. While it plays its exit animation it is still in the DOM, but it
- * is no longer part of the list: marked `data-leaving`, hidden from assistive technology and inert (no focus, no clicks).
+ * is no longer part of the list: marked `data-leaving` and inert (no focus, no clicks, hidden from assistive technology;
+ * no `aria-hidden` on top, which Chrome blocks with a warning while the row still holds the focus, e.g. right after x).
  * Without this the list would briefly hold the old rows next to the new ones (e.g. 7 rows under a view tab that says 5)
  * for as long as the exit animation takes, which on a busy machine is not bounded.
  */
@@ -56,7 +57,7 @@ function ListItem({ reduced, children }: { reduced: boolean; children: React.Rea
       animate={{ opacity: 1, x: 0 }}
       transition={reduced ? { duration: 0 } : ROW_TRANSITION}
       className="jb-li"
-      {...(present ? {} : { "data-leaving": "true", "aria-hidden": true, inert: true })}
+      {...(present ? {} : { "data-leaving": "true", inert: true })}
     >
       {children}
     </motion.li>

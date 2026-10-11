@@ -1,4 +1,4 @@
-import type { Locator, Page } from "@playwright/test";
+import { expect, type Locator, type Page } from "@playwright/test";
 
 /**
  * The rows of the job list on screen (Today, /jobs, /favorites). A row that the last change removed (a filter, a view
@@ -13,3 +13,12 @@ export const listRows = (page: Page, extra = ""): Locator => page.getByTestId("j
 
 /** The row of one job. */
 export const listRow = (page: Page, jobId: number | string): Locator => listRows(page, `[data-job-id="${jobId}"]`);
+
+/**
+ * Every row that left the list is gone from the DOM in the end: a row stuck in `data-leaving` (an exit animation that never
+ * finishes) would otherwise pass the counts above unnoticed. Generous timeout: the exit is frame-driven and a loaded machine
+ * delays it.
+ */
+export async function expectNoLeavingRows(page: Page): Promise<void> {
+  await expect(page.getByTestId("job-list").locator(":scope > li[data-leaving]")).toHaveCount(0, { timeout: 15_000 });
+}

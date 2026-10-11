@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
 import { EXCLUSIVE_TAG } from "./projects";
-import { listRow, listRows } from "./list-rows";
+import { expectNoLeavingRows, listRow, listRows } from "./list-rows";
 
 /**
  * Dashboard v1 on the seeded e2e database (see e2e/global-setup.ts). Fictional seed jobs used here:
@@ -112,6 +112,8 @@ test.describe("Today, detail and status", () => {
     await page.keyboard.press("x");
     await expect(listRows(page).filter({ hasText: "Lindenhof Data" })).toHaveCount(0);
     await expect(listRow(page, nextId)).toBeFocused();
+    // and the ignored row does finish leaving
+    await expectNoLeavingRows(page);
     // (the toast of the earlier s may still be on screen: take the ignore's own)
     await page.locator("[data-sonner-toast]", { hasText: "已忽略" }).getByRole("button", { name: "撤销" }).click();
     await expect(listRows(page).filter({ hasText: "Lindenhof Data" })).toHaveCount(1);
@@ -265,6 +267,7 @@ test.describe("/jobs filters", () => {
 
     await fillFilter(page, "filter-min-salary", "110001", /minSalary=110001/);
     await expect(listRows(page).filter({ hasText: "Applied Scientist, Clinical NLP" })).toHaveCount(0);
+    await expectNoLeavingRows(page);
 
     await page.getByTestId("filter-min-salary").fill("");
     await expect(page).not.toHaveURL(/minSalary/, { timeout: 15_000 });

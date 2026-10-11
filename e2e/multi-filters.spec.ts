@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { expect, test, type Page } from "@playwright/test";
-import { listRows } from "./list-rows";
+import { expectNoLeavingRows, listRows } from "./list-rows";
 
 /**
  * Multi-select filters of /jobs on the seeded e2e database. Seed facts: today's jobs are in Berlin (4) and
@@ -134,6 +134,8 @@ test("save a two-city view: the file holds a list, Today has a tab with the same
   const shown = Number(((await tab.textContent()) ?? "").replace(/\D/g, ""));
   expect(shown).toBeGreaterThanOrEqual(5);
   await expect(rows).toHaveCount(shown);
+  // the rows of the other tab do finish leaving
+  await expectNoLeavingRows(page);
   expect(shown).toBeLessThanOrEqual(expected);
 
   await open(page, "/interests");
@@ -146,6 +148,7 @@ test("save a two-city view: the file holds a list, Today has a tab with the same
   await open(page, "/");
   await page.getByTestId("view-tabs").getByRole("radio", { name: /两个城市/ }).click();
   await expect(listRows(page)).toHaveCount(shown);
+  await expectNoLeavingRows(page);
 });
 
 test("a hand-written scalar view (city: München) still applies on Today", async ({ page }) => {

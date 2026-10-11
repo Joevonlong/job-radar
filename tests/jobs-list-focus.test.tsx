@@ -171,20 +171,57 @@ describe("JobList: undoing an ignore", () => {
 });
 
 describe("JobList: rows that leave the list", () => {
-  it("are out of the list at once while their exit animation still runs: marked, hidden from assistive tech, inert", async () => {
+  it("are out of the list at once while their exit animation still runs: marked and inert", async () => {
     const { rerender } = render(list([job(1), job(2), job(3)]));
     rerender(list([job(1), job(2)]));
     // the exit animation keeps the old row in the DOM for a while (on a busy machine for as long as frames are late)
     const leaving = document.querySelector('[data-job-id="3"]')?.closest("li");
     expect(leaving).not.toBeNull();
     expect(leaving).toHaveAttribute("data-leaving", "true");
-    expect(leaving).toHaveAttribute("aria-hidden", "true");
     expect(leaving).toHaveAttribute("inert");
+    // inert already hides it from assistive tech; aria-hidden on a row that may still hold the focus makes Chrome warn
+    expect(leaving).not.toHaveAttribute("aria-hidden");
     // the list as a user (or a test) sees it holds only the rows of the new list
-    expect(screen.getAllByRole("group").map((row) => row.getAttribute("data-job-id"))).toEqual(["1", "2"]);
+    // (Testing Library does not model inert, which takes the row out of the accessibility tree in a browser: leave it out here)
+    const reachable = screen.getAllByRole("group").filter((row) => row.closest("[inert]") === null);
+    expect(reachable.map((row) => row.getAttribute("data-job-id"))).toEqual(["1", "2"]);
     expect(document.querySelectorAll('[data-testid="job-list"] > li:not([data-leaving]) [data-job-id]')).toHaveLength(2);
     for (const id of ["1", "2"]) expect(document.querySelector(`[data-job-id="${id}"]`)?.closest("li")).not.toHaveAttribute("data-leaving");
     await waitFor(() => expect(document.querySelector('[data-job-id="3"]')).toBeNull());
+  });
+
+  it("come back as ordinary rows when they return during their exit (an undo)", async () => {
+    const { rerender } = render(list([job(1), job(2), job(3)]));
+    rerender(list([job(1), job(2)]));
+    const leaving = document.querySelector('[data-job-id="3"]')?.closest("li");
+    expect(leaving).toHaveAttribute("data-leaving", "true");
+    // the undo puts the job back before the exit animation is over: the same list item stays, in the list again
+    rerender(list([job(1), job(2), job(3)]));
+    const back = document.querySelector('[data-job-id="3"]')?.closest("li");
+    expect(back).toBe(leaving);
+    await waitFor(() => expect(back).not.toHaveAttribute("data-leaving"));
+    expect(back).not.toHaveAttribute("inert");
+    expect(document.querySelectorAll('[data-testid="job-list"] > li:not([data-leaving]) [data-job-id]')).toHaveLength(3);
+    // and it is not removed when the cancelled exit would have ended
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    expect(document.querySelector('[data-job-id="3"]')?.closest("li")).toBe(back);
+    expect(back).not.toHaveAttribute("data-leaving");
+  });
+
+  it("are skipped by the keyboard focus even when they still carry the row index of the row that took their place", async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(list([job(1), job(2), job(3)]));
+    await user.keyboard("j");
+    expect(focusedJob()).toBe("1");
+    // job 2 leaves: while it plays its exit it still says data-row-index="1", and so does job 3, which is now the second row
+    await act(async () => rerender(list([job(1), job(3)])));
+    const leaving = document.querySelector('[data-job-id="2"]');
+    expect(leaving?.closest("li")).toHaveAttribute("data-leaving", "true");
+    expect(leaving).toHaveAttribute("data-row-index", "1");
+    expect(document.querySelector('[data-job-id="3"]')).toHaveAttribute("data-row-index", "1");
+    // j moves to the second row of the list: job 3, not the leaving job 2 that comes first in the DOM
+    await user.keyboard("j");
+    expect(focusedJob()).toBe("3");
   });
 });
 
