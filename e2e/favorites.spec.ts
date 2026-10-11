@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { listRows } from "./list-rows";
 
 /**
  * The star is independent of the application status. Seeded: "LLM Engineer" (with a note), "Prompt Engineer" (closed,
@@ -13,7 +14,7 @@ async function open(page: Page, path: string) {
   await page.waitForLoadState("networkidle");
 }
 
-const rowOf = (page: Page, title: string) => page.locator("[data-job-id]", { hasText: title }).first();
+const rowOf = (page: Page, title: string) => listRows(page).filter({ hasText: title }).first();
 const favCount = async (page: Page): Promise<number> => Number((await page.getByTestId("nav-count-favorites").innerText()).trim());
 
 /** Open a job's detail page by its title in the /jobs list. */
@@ -61,7 +62,7 @@ test.describe("favorites", () => {
     const unstar = rowOf(page, "NLP Engineer");
     await unstar.hover();
     await unstar.getByTestId("row-favorite").click();
-    await expect(page.locator("[data-job-id]", { hasText: "NLP Engineer" })).toHaveCount(0);
+    await expect(listRows(page).filter({ hasText: "NLP Engineer" })).toHaveCount(0);
     await page.getByRole("button", { name: "撤销" }).click();
     await expect(rowOf(page, "NLP Engineer")).toBeVisible();
     await expect(rowOf(page, "NLP Engineer").getByTestId("fav-note-edit")).toHaveText("ask about the team size");
@@ -69,7 +70,7 @@ test.describe("favorites", () => {
     // put it back
     await rowOf(page, "NLP Engineer").hover();
     await rowOf(page, "NLP Engineer").getByTestId("row-favorite").click();
-    await expect(page.locator("[data-job-id]", { hasText: "NLP Engineer" })).toHaveCount(0);
+    await expect(listRows(page).filter({ hasText: "NLP Engineer" })).toHaveCount(0);
     await expect.poll(() => favCount(page)).toBe(before);
   });
 
@@ -104,7 +105,7 @@ test.describe("favorites", () => {
     await expect(page.getByTestId("favorites-count")).toContainText(/共 \d+ 个收藏/);
     await expect(page.getByTestId("favorites-count")).toContainText(/已关闭 \d+\/\d+/);
 
-    const order = async () => page.locator("[data-job-id]").evaluateAll((els) => els.map((el) => el.getAttribute("data-job-id")));
+    const order = async () => listRows(page).evaluateAll((els) => els.map((el) => el.getAttribute("data-job-id")));
     const starredOrder = await order();
     await page.getByTestId("favorites-sort").getByRole("radio", { name: "排序值" }).click();
     await expect(page).toHaveURL(/sort=rank/);
@@ -167,10 +168,10 @@ test.describe("favorites", () => {
   test("/jobs?fav=true shows only starred jobs as a removable chip, stacks with other filters, and clear-all lifts it", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 900 });
     await open(page, "/jobs");
-    const all = await page.locator("[data-job-id]").count();
+    const all = await listRows(page).count();
     await page.getByTestId("toggle-fav").click();
     await expect(page).toHaveURL(/fav=true/);
-    const only = page.locator("[data-job-id]");
+    const only = listRows(page);
     await expect.poll(() => only.count()).toBeLessThan(all);
     for (const el of await only.all()) await expect(el.locator('[data-slot="fav-mark"]')).toBeVisible();
     const starred = await only.count();
@@ -178,14 +179,14 @@ test.describe("favorites", () => {
 
     // stacks: favorites that are applied
     await open(page, "/jobs?fav=true&app=applied");
-    await expect(page.locator("[data-job-id]")).toHaveCount(1);
+    await expect(listRows(page)).toHaveCount(1);
     await expect(rowOf(page, "Machine Learning Engineer, Perception")).toBeVisible();
 
     // clear all lifts it
     await page.getByTestId("filter-clear").click();
     await expect(page).not.toHaveURL(/fav=/);
     // (more than the starred ones again; not exactly `all`: other specs ignore and close jobs while this runs)
-    await expect.poll(() => page.locator("[data-job-id]").count()).toBeGreaterThan(starred);
+    await expect.poll(() => listRows(page).count()).toBeGreaterThan(starred);
 
     // the save-view dialog says fav is not stored
     await open(page, "/jobs?fav=true&minScore=60");

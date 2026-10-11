@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { expect, test, type Page } from "@playwright/test";
+import { listRows } from "./list-rows";
 
 /**
  * Multi-select filters of /jobs on the seeded e2e database. Seed facts: today's jobs are in Berlin (4) and
@@ -24,11 +25,6 @@ async function open(page: Page, url: string) {
   await page.waitForLoadState("networkidle");
 }
 
-/**
- * The rows of the list on screen. A row the last change removed stays in the DOM while it plays its exit animation (marked
- * `data-leaving`); it is not in the list any more, and how long the animation takes depends on the machine's load.
- */
-const listRows = (page: Page) => page.getByTestId("job-list").locator(":scope > li:not([data-leaving]) [data-job-id]");
 const resultCount = async (page: Page) => Number(((await page.getByTestId("result-count").textContent()) ?? "").replace(/\D/g, ""));
 const option = (page: Page, testId: string, value: string) => page.locator(`[data-testid="${testId}-option"][data-value="${value}"]`);
 

@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import postgres from "postgres";
+import { listRows } from "./list-rows";
 
 /**
  * AI scoring on the dashboard: score breakdown with the German deduction, the German badge,
@@ -52,22 +53,22 @@ test.afterAll(async () => {
 
 test("the list shows the score and the German badge; the quick filter hides the job and survives a reload", async ({ page }) => {
   await page.goto(`/jobs?q=${encodeURIComponent(TITLE)}`);
-  const row = page.locator("[data-job-id]", { hasText: TITLE });
+  const row = listRows(page).filter({ hasText: TITLE });
   await expect(row).toBeVisible();
   await expect(row.locator('[data-rank="mid"]')).toContainText("65");
   await expect(row).toContainText("德语 C2");
 
   await page.getByTestId("filter-hide-german").click();
   await expect(page).toHaveURL(/[?&]hideLang=true/);
-  await expect(page.locator("[data-job-id]", { hasText: TITLE })).toHaveCount(0);
+  await expect(listRows(page).filter({ hasText: TITLE })).toHaveCount(0);
   await expect(page.getByTestId("filter-hide-german")).toHaveAttribute("aria-pressed", "true");
 
   await page.reload();
   await expect(page.getByTestId("filter-hide-german")).toHaveAttribute("aria-pressed", "true");
-  await expect(page.locator("[data-job-id]", { hasText: TITLE })).toHaveCount(0);
+  await expect(listRows(page).filter({ hasText: TITLE })).toHaveCount(0);
 
   await page.getByTestId("filter-hide-german").click();
-  await expect(page.locator("[data-job-id]", { hasText: TITLE })).toBeVisible();
+  await expect(listRows(page).filter({ hasText: TITLE })).toBeVisible();
 });
 
 test("the detail page shows reasons, gaps, summary, the breakdown with the German deduction and the German block", async ({ page }) => {
@@ -94,7 +95,7 @@ test("the detail page shows reasons, gaps, summary, the breakdown with the Germa
 test("a stale score is marked in the list and on the detail page", async ({ page }) => {
   // the seed marks the score of "LLM Engineer" as out of date
   await page.goto("/jobs?q=LLM+Engineer");
-  const row = page.locator("[data-job-id]", { hasText: "LLM Engineer" }).first();
+  const row = listRows(page).filter({ hasText: "LLM Engineer" }).first();
   await expect(row.getByTestId("rank-stale")).toHaveText("已过期");
   await row.click();
   await expect(page.getByTestId("score-stale")).toContainText("已过期");

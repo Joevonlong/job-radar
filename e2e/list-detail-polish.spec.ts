@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { listRows } from "./list-rows";
 
 /**
  * List and detail polish. Read-only: no test here changes a job (the seed has "LLM Engineer" starred and
@@ -9,7 +10,7 @@ async function open(page: Page, path: string) {
   await page.waitForLoadState("networkidle");
 }
 
-const rowOf = (page: Page, title: string) => page.locator("[data-job-id]", { hasText: title }).first();
+const rowOf = (page: Page, title: string) => listRows(page).filter({ hasText: title }).first();
 const background = (locator: ReturnType<Page["locator"]>) => locator.evaluate((el) => getComputedStyle(el).backgroundColor);
 
 test.describe("row buttons: one toggle language", () => {
@@ -39,7 +40,7 @@ test.describe("row buttons: one toggle language", () => {
     await page.setViewportSize({ width: 390, height: 844 });
     await open(page, "/jobs");
     for (const id of ["row-favorite", "row-interested", "row-ignore"]) {
-      const box = await page.locator("[data-job-id]").first().getByTestId(id).boundingBox();
+      const box = await listRows(page).first().getByTestId(id).boundingBox();
       expect(box?.width ?? 0).toBeGreaterThanOrEqual(40);
       expect(box?.height ?? 0).toBeGreaterThanOrEqual(40);
     }

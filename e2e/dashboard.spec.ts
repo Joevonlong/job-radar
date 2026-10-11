@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
 import { EXCLUSIVE_TAG } from "./projects";
+import { listRow, listRows } from "./list-rows";
 
 /**
  * Dashboard v1 on the seeded e2e database (see e2e/global-setup.ts). Fictional seed jobs used here:
@@ -36,7 +37,7 @@ test.describe("Today, detail and status", () => {
     await expect(strip.locator('[data-channel="xing"]')).toHaveAttribute("data-state", "circuit_open");
     await expect(strip.locator('[data-channel="greenhouse"]')).toHaveAttribute("data-state", "ok");
 
-    const rows = page.locator("[data-job-id]");
+    const rows = listRows(page);
     expect(await rows.count()).toBeGreaterThanOrEqual(5);
     await expect(rows.first()).toContainText("Applied Scientist, Clinical NLP");
     await expect(page.getByRole("link", { name: /LLM Engineer/ })).toBeVisible();
@@ -74,19 +75,19 @@ test.describe("Today, detail and status", () => {
     // back to the list: the chip is there
     await page.getByTestId("back-link").click();
     await page.waitForURL((url) => !url.pathname.startsWith("/jobs/"));
-    const row = page.locator("[data-job-id]", { hasText: "LLM Engineer" });
+    const row = listRows(page).filter({ hasText: "LLM Engineer" });
     await expect(row.locator('[data-slot="status-chip"]')).toHaveText("感兴趣");
 
     // and on /jobs
     await open(page, "/jobs?q=LLM+Engineer");
-    await expect(page.locator("[data-job-id]", { hasText: "LLM Engineer" }).locator('[data-slot="status-chip"]')).toHaveText("感兴趣");
+    await expect(listRows(page).filter({ hasText: "LLM Engineer" }).locator('[data-slot="status-chip"]')).toHaveText("感兴趣");
     expect(detailUrl).toMatch(/\/jobs\/\d+$/);
   });
 
   test("keyboard: j/k move focus, Enter opens, s toggles interested, x ignores and undo restores", async ({ page }) => {
     await open(page, "/");
     // other specs change the statuses of other Today jobs at the same time: only the Lindenhof row and its neighbour are counted on
-    const rows = page.locator("[data-job-id]");
+    const rows = listRows(page);
 
     await page.keyboard.press("j");
     await expect(rows.nth(0)).toBeFocused();
@@ -96,7 +97,7 @@ test.describe("Today, detail and status", () => {
     await expect(rows.nth(0)).toBeFocused();
 
     // s on the Lindenhof row: new -> interested -> new
-    const lindenhof = page.locator("[data-job-id]", { hasText: "Lindenhof Data" });
+    const lindenhof = listRows(page).filter({ hasText: "Lindenhof Data" });
     const index = await rows.evaluateAll((els) => els.findIndex((el) => el.textContent?.includes("Lindenhof Data")));
     for (let i = 0; i < index; i += 1) await page.keyboard.press("j");
     await expect(lindenhof).toBeFocused();
@@ -107,14 +108,14 @@ test.describe("Today, detail and status", () => {
     await expect(lindenhof).toHaveAttribute("data-status", before ?? "new");
 
     // x hides the row from Today, the focus moves on to the next row, and the toast offers undo
-    const nextId = await rows.nth(index + 1).getAttribute("data-job-id");
+    const nextId = (await rows.nth(index + 1).getAttribute("data-job-id")) ?? "";
     await page.keyboard.press("x");
-    await expect(page.locator("[data-job-id]", { hasText: "Lindenhof Data" })).toHaveCount(0);
-    await expect(page.locator(`[data-job-id="${nextId}"]`)).toBeFocused();
+    await expect(listRows(page).filter({ hasText: "Lindenhof Data" })).toHaveCount(0);
+    await expect(listRow(page, nextId)).toBeFocused();
     // (the toast of the earlier s may still be on screen: take the ignore's own)
     await page.locator("[data-sonner-toast]", { hasText: "已忽略" }).getByRole("button", { name: "撤销" }).click();
-    await expect(page.locator("[data-job-id]", { hasText: "Lindenhof Data" })).toHaveCount(1);
-    await expect(page.locator(`[data-job-id="${nextId}"]`)).toHaveCount(1);
+    await expect(listRows(page).filter({ hasText: "Lindenhof Data" })).toHaveCount(1);
+    await expect(listRow(page, nextId)).toHaveCount(1);
     // the restored row has the focus again
     await expect(lindenhof).toBeFocused();
 
@@ -127,7 +128,7 @@ test.describe("Today, detail and status", () => {
   test("s (interested) offers an undo like x does, and the undo puts the status back", async ({ page }) => {
     // a job no other spec touches (the others run in parallel)
     await open(page, "/jobs?q=MLOps+Engineer");
-    const row = page.locator("[data-job-id]", { hasText: "Windrose Mobility" });
+    const row = listRows(page).filter({ hasText: "Windrose Mobility" });
     await row.focus();
     const before = await row.getAttribute("data-status");
     expect(before).toBe("new");
@@ -210,7 +211,7 @@ test.describe("/jobs filters", () => {
     await expect(page).toHaveURL(/[?&]app=archived/);
     // the seed ignored "ML Platform Engineer": it is not on Today, but this is the way back to it
     await expect(page.getByTestId("result-count")).toHaveText("共 1 条");
-    const row = page.locator("[data-job-id]", { hasText: "ML Platform Engineer" });
+    const row = listRows(page).filter({ hasText: "ML Platform Engineer" });
     await expect(row).toBeVisible();
     await expect(row.locator('[data-slot="status-chip"]')).toHaveText("已忽略");
 
@@ -235,8 +236,8 @@ test.describe("/jobs filters", () => {
     // the list follows the URL a moment later: every row left is ranked 90 or more, and there are some
     await expect
       .poll(async () => {
-        const ranks = await page.locator("[data-job-id] [data-rank]").evaluateAll((els) => els.map((el) => Number(el.getAttribute("data-rank-value"))));
-        const rows = await page.locator("[data-job-id]").count();
+        const ranks = await listRows(page).locator("[data-rank]").evaluateAll((els) => els.map((el) => Number(el.getAttribute("data-rank-value"))));
+        const rows = await listRows(page).count();
         return rows > 0 && ranks.length === rows && Math.min(...ranks) >= 90;
       })
       .toBe(true);
@@ -253,17 +254,17 @@ test.describe("/jobs filters", () => {
     const all = await count();
     // "Applied Scientist, Clinical NLP" states EUR 90,000 to 110,000 per year
     await fillFilter(page, "filter-min-salary", "100000", /minSalary=100000/);
-    await expect(page.locator("[data-job-id]", { hasText: "Applied Scientist, Clinical NLP" })).toBeVisible();
+    await expect(listRows(page).filter({ hasText: "Applied Scientist, Clinical NLP" })).toBeVisible();
     // the list follows the URL a moment later
     await expect.poll(count).toBeLessThan(all);
     const withSalary = await count();
     expect(withSalary).toBeGreaterThan(0);
     // every row left states a salary, drawn on the mini axis
-    await expect(page.locator("[data-job-id]")).toHaveCount(withSalary);
-    await expect(page.locator("[data-job-id] [data-salary-state]:not([data-salary-state=none])")).toHaveCount(withSalary);
+    await expect(listRows(page)).toHaveCount(withSalary);
+    await expect(listRows(page).locator("[data-salary-state]:not([data-salary-state=none])")).toHaveCount(withSalary);
 
     await fillFilter(page, "filter-min-salary", "110001", /minSalary=110001/);
-    await expect(page.locator("[data-job-id]", { hasText: "Applied Scientist, Clinical NLP" })).toHaveCount(0);
+    await expect(listRows(page).filter({ hasText: "Applied Scientist, Clinical NLP" })).toHaveCount(0);
 
     await page.getByTestId("filter-min-salary").fill("");
     await expect(page).not.toHaveURL(/minSalary/, { timeout: 15_000 });
@@ -272,7 +273,7 @@ test.describe("/jobs filters", () => {
 
   test("a row shows the AI summary and the salary on the mini axis", async ({ page }) => {
     await open(page, "/jobs?q=Applied+Scientist");
-    const row = page.locator("[data-job-id]", { hasText: "Applied Scientist, Clinical NLP" });
+    const row = listRows(page).filter({ hasText: "Applied Scientist, Clinical NLP" });
     await expect(row.locator('[data-slot="job-summary"]')).toHaveText("Applied Scientist, Clinical NLP 的虚构摘要。");
     await expect(row.locator('[data-salary-state="stated"]')).toContainText("€90–110k");
   });
@@ -328,7 +329,7 @@ test.describe("mobile (390px)", () => {
     await open(page, "/jobs");
     await expect(page.getByTestId("filter-panel")).toBeHidden();
     await expect(page.getByTestId("filter-toggle")).toHaveText("筛选");
-    const firstRow = page.locator("[data-job-id]").first();
+    const firstRow = listRows(page).first();
     expect((await firstRow.boundingBox())?.y ?? 9999).toBeLessThan(400);
 
     await page.getByTestId("filter-toggle").click();
@@ -338,7 +339,7 @@ test.describe("mobile (390px)", () => {
     await page.getByTestId("filter-apply").click();
     await expect(page.getByTestId("filter-panel")).toBeHidden();
     await expect(page.getByTestId("filter-toggle")).toHaveText("筛选 (1)");
-    await expect(page.locator("[data-job-id]", { hasText: "ML Platform Engineer" })).toBeVisible();
+    await expect(listRows(page).filter({ hasText: "ML Platform Engineer" })).toBeVisible();
 
     const widths = await page.evaluate(() => [document.documentElement.scrollWidth, window.innerWidth]);
     expect(widths[0]).toBeLessThanOrEqual(widths[1] ?? 390);
