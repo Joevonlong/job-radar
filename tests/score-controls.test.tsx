@@ -93,7 +93,8 @@ describe("ScoreNowButton (job detail)", () => {
     render(wrap(<ScoreNowButton jobId={7} />));
     await userEvent.click(screen.getByRole("button", { name: "Score now" }));
     await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Scoring failed, see the ai-worker log"));
-    expect(screen.getByRole("button", { name: "Score now" })).toBeEnabled();
+    // the failure can show while the click's transition is still "Requesting…": wait for the button to come back
+    await waitFor(() => expect(screen.getByRole("button", { name: "Score now" })).toBeEnabled());
     expect(refresh).not.toHaveBeenCalled();
   });
 
