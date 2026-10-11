@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 export function Brand({ className, prefetch }: { className?: string; prefetch?: false }) {
   const t = useTranslations("shell");
   return (
-    <Link href="/" prefetch={prefetch} className={cn("term-cursor font-mono text-title font-bold tracking-wider text-term-amber", className)}>
+    <Link href="/" prefetch={prefetch} className={cn("term-cursor inline-flex min-h-sp-6 items-center font-mono text-title font-bold tracking-wider text-term-amber", className)}>
       {t("brand")}
     </Link>
   );

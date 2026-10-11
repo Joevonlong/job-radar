@@ -66,7 +66,7 @@ export function BreakdownTable({ title, rows, kind, testId, state }: { title: st
                 >
                   <td className={cn(cell, "max-sm:flex-col max-sm:items-start max-sm:gap-0")}>
                     {filter ? (
-                      <Link href={aiUsageHref(state, { ...filter, page: null })} className="block after:absolute after:inset-0 after:content-['']" aria-label={t("filterBy", { name: plainName })} data-testid="ai-breakdown-link">
+                      <Link href={aiUsageHref(state, { ...filter, page: null })} className="block after:absolute after:inset-0 after:content-['']" title={t("filterBy", { name: plainName })} data-testid="ai-breakdown-link">
                         {name}
                       </Link>
                     ) : (

@@ -36,7 +36,9 @@ export function DisclosureSection({ ctx }: { ctx: Pick<AiTabContext, "t" | "aiDi
                     </Badge>
                   </li>
                 ))}
-                {row.web ? <span className="text-cap text-ink-2">{t("ai.disclosure.web")}</span> : null}
+                {row.web ? (
+                  <li className="text-cap text-ink-2">{t("ai.disclosure.web")}</li>
+                ) : null}
               </ol>
             )}
           </li>

@@ -1787,7 +1787,7 @@
       "ai_order": "先试排在前面的；失败（额度用完、冷却、离线）就换下一个。节点显示为“厂商 · 方式”，API 层展开成下面“API 层内的顺序”。",
       "ai_tasks": "每个任务一行：不改就沿用全局顺序和服务商的默认模型；要自定义，就给它单独排顺序，并可以给每个节点选一个模型。",
       "ai_scoring_german": "岗位要求的本地语言（市场的语言）高于 me.yaml 里的等级时，从匹配分里扣下面的分数；留空的等级不扣。扣分由代码计算，不经过 prompt。",
-      "schedule_backup": "runner 按下面的 cron（用上面的时区）做 pg_dump，写到 data/backups/，同时把配置和画像（data/config、data/profile）打成 .config.tgz 放在旁边。要恢复时，运行 scripts/ops/restore.sh --latest（见备份指南）；它会选出最新的备份并先做检查。",
+      "schedule_backup": "后台程序（runner）按下面的 cron 表达式（用上面的时区）导出数据库（pg_dump），写到 data/backups/，同时把配置和画像（data/config、data/profile）打成 .config.tgz 放在旁边。要恢复时，运行 scripts/ops/restore.sh --latest（见备份指南）；它会选出最新的备份并先做检查。",
       "notify_telegram": "一般不用改：Bot API 地址、long-polling 超时、退避和重试。",
       "ui_salary_axis": "岗位详情页的薪资轴和表格里的迷你轴共用。单位是千（市场的基准货币）/ 年；写明的区间画不下时会被截在端点上。",
       "ui_freshness": "岗位首次发现后，新鲜度条随时间缩短；超过变黄线后变黄并带斜线纹理。",
@@ -1795,7 +1795,7 @@
       "ai_priority_weights": "优先度 = 各项权重 × 得分（0 到 1）之和，再减去德语差距。只有先后顺序有意义，这个数不会显示成分数。",
       "ai_priority_seniority": "0 到 1：标题里读出的级别对你有多合适。",
       "ai_priority_location": "0 到 1：地点和你想去的地方有多吻合。",
-      "schedule_suggest": "每周一次，用 AI 看你标记过的岗位。只改开关、时间和主要上限；其余只影响 prompt 大小，在“高级”里改。",
+      "schedule_suggest": "每周一次，用 AI 看你标记过的岗位。只改开关、时间和主要上限；其余只影响提示词长度，在“高级”里改。",
       "language_ai": "语言代码：en、zh、de、fr、pt-BR……改了 AI 语言以后，旧结果不会重写，保持原语言并带语言标记。",
       "language_channels": "留空 = 跟上面的界面默认语言一致。pnpm run doctor 和 pnpm sources:list 也可以用 --lang 临时指定。",
       "ai_scoring_criteria": "你自己的标准，每项一句话，任何语言都可以（每个列表最多 10 项，每项最多 300 字）。会和其他偏好一样随每个岗位发给 AI。分数仍是一个 0–100 的总分；命中\"不能接受\"的岗位压到 0–29 档。",
@@ -1867,7 +1867,7 @@
       },
       "catch_up": {
         "label": "启动时补跑错过的一轮",
-        "hint": "runner 启动时如果错过了最近一轮，立即补跑一次。"
+        "hint": "后台程序启动时如果错过了最近一轮，立即补跑一次。"
       },
       "skip_if_running": {
         "label": "上一轮没跑完时跳过",
@@ -1875,7 +1875,7 @@
       },
       "control_poll_seconds": {
         "label": "请求轮询间隔（秒）",
-        "hint": "runner 每隔多少秒查看一次这个页面留下的请求。"
+        "hint": "后台程序每隔多少秒查看一次这个页面留下的请求。"
       },
       "keyword_groups": {
         "label": "关键词组"
@@ -2251,7 +2251,7 @@
         "hint": "每个 ISO 周保留最新一份；0 = 不留周备份。"
       },
       "backup_timeout": {
-        "label": "pg_dump 超时（分钟）",
+        "label": "数据库导出（pg_dump）超时（分钟）",
         "hint": "超过就中止并算失败。"
       },
       "backup_config_archive": {
@@ -2260,7 +2260,7 @@
       },
       "backup_pre_migrate": {
         "label": "数据库迁移前先备份",
-        "hint": "runner 或 pnpm migrate:run 执行待迁移的数据库迁移之前先做一份备份；备份失败就不迁移。"
+        "hint": "后台程序或 pnpm migrate:run 执行待迁移的数据库迁移之前先做一份备份；备份失败就不迁移。"
       },
       "backup_keep_system": {
         "label": "安全备份保留份数（每种）",
@@ -4283,7 +4283,8 @@
       "lastSuccess": "最近成功",
       "window": "{days}天 抓/新",
       "postings": "条数",
-      "reason": "原因"
+      "reason": "原因",
+      "actions": "操作"
     },
     "empty": "没有符合筛选的来源。",
     "run": {

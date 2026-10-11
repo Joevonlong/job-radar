@@ -49,7 +49,7 @@ export function EndedColumn({ cards, dragging, open, pushLine, settleId, onToggl
 
   return (
     <section aria-label={t("ended")} data-testid="board-column" data-column="ended" className={columnClass}>
-      <button type="button" aria-expanded={open} onClick={onToggle} className="rounded-tag text-left" data-testid="ended-toggle">
+      <button type="button" aria-expanded={open} onClick={onToggle} className="min-h-sp-6 rounded-tag text-left" data-testid="ended-toggle">
         <ColumnHead column="ended" label={t("ended")} count={cards.length}>
           <Chevron aria-hidden className="text-ink-3 size-4" />
         </ColumnHead>

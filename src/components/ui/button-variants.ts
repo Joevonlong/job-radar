@@ -42,8 +42,8 @@ export const buttonVariants = cva(
         "icon-lg": "size-ctl-lg rounded-btn p-0",
         // legacy names
         default: "h-ctl-md rounded-btn px-4 text-label has-[>svg]:px-3",
-        xs: "h-6 gap-1 rounded-cell px-2 text-data shadow-e1 [--lift-shadow:var(--e2)] has-[>svg]:px-1.5 [&_svg:not([class*='size-'])]:size-3",
-        "icon-xs": "size-6 rounded-cell p-0 shadow-e1 [--lift-shadow:var(--e2)] [&_svg:not([class*='size-'])]:size-3",
+        xs: "h-sp-6 gap-1 rounded-cell px-2 text-data shadow-e1 [--lift-shadow:var(--e2)] has-[>svg]:px-1.5 [&_svg:not([class*='size-'])]:size-3",
+        "icon-xs": "size-sp-6 rounded-cell p-0 shadow-e1 [--lift-shadow:var(--e2)] [&_svg:not([class*='size-'])]:size-3",
       },
     },
     compoundVariants: [

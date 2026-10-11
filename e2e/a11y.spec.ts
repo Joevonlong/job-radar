@@ -51,3 +51,42 @@ test("the command palette title is not in the page while the palette is closed, 
   await expect(page.getByRole("dialog", { name: "命令面板" })).toBeHidden();
   await expect(page.getByRole("button", { name: /^搜索/ })).toBeFocused();
 });
+
+test("the ticker pauses on hover and on focus, and stands still with reduced motion", async ({ page }) => {
+  await open(page, "/");
+  const ticker = page.locator(".jr-ticker");
+  const track = ticker.locator(".jr-ticker__in");
+  await expect(track).toHaveCSS("animation-play-state", "running");
+  await ticker.hover();
+  await expect(track).toHaveCSS("animation-play-state", "paused");
+  await page.mouse.move(0, 0);
+  await expect(track).toHaveCSS("animation-play-state", "running");
+  await ticker.focus();
+  await expect(track).toHaveCSS("animation-play-state", "paused");
+
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await expect(track).toHaveCSS("animation-name", "none");
+  await expect(ticker.locator(".jr-ticker__copy")).toBeHidden();
+  // the label stays put while the strip scrolls, and a scrollbar does not change the strip's height
+  await expect(ticker.locator(".jr-ticker__lb")).toHaveCSS("position", "sticky");
+  expect((await ticker.boundingBox())?.height).toBe(34);
+});
+
+test("the registry tables name their last column, and a jump tag is 24px high with its visible text as name", async ({ page }) => {
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await open(page, "/sources/registry");
+  await expect(page.getByRole("columnheader", { name: "操作" }).first()).toBeAttached();
+
+  await open(page, "/jobs?q=Clinical+NLP");
+  await page.getByRole("link", { name: /Applied Scientist, Clinical NLP/ }).first().click();
+  await expect(page.getByTestId("job-title")).toBeVisible();
+  const tags = page.getByTestId("jump-tag");
+  expect(await tags.count()).toBeGreaterThan(0);
+  for (const tag of await tags.all()) {
+    const box = await tag.boundingBox();
+    expect(box?.height ?? 0).toBeGreaterThanOrEqual(24);
+  }
+  const first = tags.first();
+  await expect(first).toHaveAccessibleName(((await first.textContent()) ?? "").trim());
+  await expect(first).toHaveAccessibleDescription(/\S/);
+});

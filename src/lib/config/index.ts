@@ -42,6 +42,7 @@ export * from "./model-catalog";
 export {
   configLayer,
   displayConfigPath,
+  displayConfigPathForWeb,
   getAppRoot,
   getConfigDir,
   getConfigPath,

@@ -344,7 +344,8 @@
 .jr-ticker__lb { position: relative; z-index: 2; flex: none; background: var(--term-amber); color: var(--term-bg); font-weight: 700; padding: 0 10px; height: 100%; display: flex; align-items: center; gap: 6px; }
 .jr-ticker__lb::before { content: ""; width: 7px; height: 7px; border-radius: var(--r-pill); background: currentColor; animation: jr-blink 1s steps(1) infinite; }
 .jr-ticker__in { display: inline-flex; gap: 34px; white-space: nowrap; padding-left: 20px; animation: jr-tick 28s linear infinite; }
-.jr-ticker:hover .jr-ticker__in { animation-play-state: paused; }
+.jr-ticker:hover .jr-ticker__in, .jr-ticker:focus-within .jr-ticker__in { animation-play-state: paused; }
+.jr-ticker__copy { display: contents; }
 .jr-ticker__in > span b { color: var(--term-amber); font-weight: 600; }
 .jr-ticker__in > span em { font-style: normal; color: var(--term-green); }
 .jr-ticker--static .jr-ticker__in { animation: none; }
@@ -374,7 +375,11 @@
   [data-played] .jr-spark__ln { stroke-dasharray: none; stroke-dashoffset: 0; }
   [data-played] .jr-lvl i, [data-played] .jr-up > i { transform: none; opacity: 1; }
   [data-played] .jr-term__txt { width: auto; }
+  /* no motion: the strip stands still, the doubled copy goes, and the rest of the line is reached by scrolling it (keyboard: the strip is focusable) */
+  .jr-ticker { overflow-x: auto; scrollbar-width: thin; }
+  .jr-ticker__lb { position: sticky; left: 0; }
   .jr-ticker__in { animation: none !important; }
+  .jr-ticker__copy { display: none; }
   .jr-led--live { box-shadow: none; }
 }
 

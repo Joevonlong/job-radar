@@ -4,7 +4,7 @@ import fs from "node:fs";
 import {
   ConfigError,
   configSourcePath,
-  displayConfigPath,
+  displayConfigPathForWeb,
   hashConfigText,
   readConfigText,
   reloadConfig,
@@ -80,7 +80,7 @@ export async function loadRegistryPage(options: { syncMirror?: boolean } = {}): 
     if (!(error instanceof ConfigError)) throw error;
     invalid = describeInvalid(error);
   }
-  const label = displayConfigPath(configSourcePath("channels"));
+  const label = displayConfigPathForWeb(configSourcePath("channels"));
   const file: RegistryFileState = { mode, label, invalid };
 
   if (config === null) {

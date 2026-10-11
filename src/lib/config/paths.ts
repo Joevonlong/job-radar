@@ -108,6 +108,28 @@ export function displayConfigPath(file: string): string {
   return relative === "" || relative.startsWith("..") || path.isAbsolute(relative) ? file : relative;
 }
 
+/**
+ * A path for the web pages (Settings): like `displayConfigPath`, but a file of a config or profile directory that lives outside the app
+ * (`JOB_RADAR_CONFIG_DIR`) is shown under its conventional name (`data/config/schedule.yaml`) instead of the machine's absolute path; so is a
+ * shipped file of a moved defaults directory (`JOB_RADAR_DEFAULTS_DIR`, shown as `config/<file>`).
+ * The CLI and the doctor keep the real path (`displayConfigPath`), where it is what the reader needs.
+ */
+export function displayConfigPathForWeb(file: string): string {
+  const shown = displayConfigPath(file);
+  if (shown !== file) return shown;
+  const inside = (base: string): string | null => {
+    const relative = path.relative(base, file);
+    return relative.startsWith("..") || path.isAbsolute(relative) ? null : relative;
+  };
+  const underConfig = inside(getConfigDir());
+  if (underConfig !== null) return path.join("data", "config", underConfig);
+  const underProfile = inside(getProfileDir());
+  if (underProfile !== null) return path.join("data", "profile", underProfile);
+  const underDefaults = inside(getDefaultsDir());
+  if (underDefaults !== null) return path.join("config", underDefaults);
+  return file;
+}
+
 /** `JOB_RADAR_CONFIG_POLL_MS` (default 5000). 0 disables polling. */
 export function getPollIntervalMs(): number {
   const raw = process.env.JOB_RADAR_CONFIG_POLL_MS;
