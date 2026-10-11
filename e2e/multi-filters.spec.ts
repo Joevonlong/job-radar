@@ -24,6 +24,11 @@ async function open(page: Page, url: string) {
   await page.waitForLoadState("networkidle");
 }
 
+/**
+ * The rows of the list on screen. A row the last change removed stays in the DOM while it plays its exit animation (marked
+ * `data-leaving`); it is not in the list any more, and how long the animation takes depends on the machine's load.
+ */
+const listRows = (page: Page) => page.getByTestId("job-list").locator(":scope > li:not([data-leaving]) [data-job-id]");
 const resultCount = async (page: Page) => Number(((await page.getByTestId("result-count").textContent()) ?? "").replace(/\D/g, ""));
 const option = (page: Page, testId: string, value: string) => page.locator(`[data-testid="${testId}-option"][data-value="${value}"]`);
 
@@ -128,7 +133,7 @@ test("save a two-city view: the file holds a list, Today has a tab with the same
   const tab = page.getByTestId("view-tabs").getByRole("radio", { name: /两个城市/ });
   await tab.click();
   await expect(page).toHaveURL(/view=/);
-  const rows = page.locator("[data-job-id]");
+  const rows = listRows(page);
   // the tab's number and the list agree (Berlin 4 + München 1 in the seed)
   const shown = Number(((await tab.textContent()) ?? "").replace(/\D/g, ""));
   expect(shown).toBeGreaterThanOrEqual(5);
@@ -144,15 +149,15 @@ test("save a two-city view: the file holds a list, Today has a tab with the same
   // reopen it from Today after a reload
   await open(page, "/");
   await page.getByTestId("view-tabs").getByRole("radio", { name: /两个城市/ }).click();
-  await expect(page.locator("[data-job-id]")).toHaveCount(shown);
+  await expect(listRows(page)).toHaveCount(shown);
 });
 
 test("a hand-written scalar view (city: München) still applies on Today", async ({ page }) => {
   const text = fs.readFileSync(SHIPPED_FILE, "utf8").replace("views: []", "views:\n  - id: muc\n    name: 慕尼黑手写\n    default: false\n    filters:\n      city: München\n");
   fs.writeFileSync(INTERESTS_FILE, text);
   await open(page, "/?view=muc");
-  await expect(page.locator("[data-job-id]", { hasText: "Machine Learning Engineer, Perception" })).toBeVisible();
-  await expect(page.locator("[data-job-id]")).toHaveCount(1);
+  await expect(listRows(page).filter({ hasText: "Machine Learning Engineer, Perception" })).toBeVisible();
+  await expect(listRows(page)).toHaveCount(1);
   await open(page, "/interests");
   await expect(page.getByTestId("view-row").first()).toContainText("München");
   fs.copyFileSync(SHIPPED_FILE, INTERESTS_FILE);

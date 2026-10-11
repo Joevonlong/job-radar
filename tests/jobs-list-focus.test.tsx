@@ -170,6 +170,24 @@ describe("JobList: undoing an ignore", () => {
   });
 });
 
+describe("JobList: rows that leave the list", () => {
+  it("are out of the list at once while their exit animation still runs: marked, hidden from assistive tech, inert", async () => {
+    const { rerender } = render(list([job(1), job(2), job(3)]));
+    rerender(list([job(1), job(2)]));
+    // the exit animation keeps the old row in the DOM for a while (on a busy machine for as long as frames are late)
+    const leaving = document.querySelector('[data-job-id="3"]')?.closest("li");
+    expect(leaving).not.toBeNull();
+    expect(leaving).toHaveAttribute("data-leaving", "true");
+    expect(leaving).toHaveAttribute("aria-hidden", "true");
+    expect(leaving).toHaveAttribute("inert");
+    // the list as a user (or a test) sees it holds only the rows of the new list
+    expect(screen.getAllByRole("group").map((row) => row.getAttribute("data-job-id"))).toEqual(["1", "2"]);
+    expect(document.querySelectorAll('[data-testid="job-list"] > li:not([data-leaving]) [data-job-id]')).toHaveLength(2);
+    for (const id of ["1", "2"]) expect(document.querySelector(`[data-job-id="${id}"]`)?.closest("li")).not.toHaveAttribute("data-leaving");
+    await waitFor(() => expect(document.querySelector('[data-job-id="3"]')).toBeNull());
+  });
+});
+
 describe("JobList: rows", () => {
   it("labels an unseen row for assistive tech and flags it", () => {
     render(list([job(1, { seen: false, isNew: true }), job(2, { seen: true })]));

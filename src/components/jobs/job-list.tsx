@@ -13,7 +13,7 @@ import { undoApplicationStatusAction } from "@/app/pipeline/actions";
 import { useFavoriteToggle } from "@/components/favorites/use-favorite-toggle";
 import { useHiddenStatuses } from "@/components/applications/visibility-context";
 import { isStatusOffered } from "@/lib/applications/visibility";
-import { LayoutGroup, motion, Presence, useReducedMotion, VizMotionConfig } from "@/components/viz/motion";
+import { LayoutGroup, motion, Presence, useIsPresent, useReducedMotion, VizMotionConfig } from "@/components/viz/motion";
 import { ESTIMATED_ROW_HEIGHT, VIRTUALIZE_ROWS_ABOVE } from "@/lib/dashboard/constants";
 import { rememberOpenedRow, takeReturnedRow } from "@/lib/dashboard/row-return";
 import { effectiveStatus, statusAfterIgnoreKey, statusAfterInterestKey } from "@/lib/dashboard/status";
@@ -38,6 +38,30 @@ const DENSE_ROWS = 30;
 /** How long the toast needs to leave the page (its exit animation) before the focus is put back on a restored row. */
 const TOAST_EXIT_SETTLE_MS = 600;
 const COLUMNS = ["job", "score", "salary", "signals", "skills", "fresh", "status"] as const;
+
+/** A row of the list: inside a list item that is not playing its exit (a leaving row keeps its old index and job id until it is gone). */
+const inList = (selector: string) => `:scope > li:not([data-leaving]) ${selector}`;
+
+/**
+ * One list item of the animated (not virtualized) list. While it plays its exit animation it is still in the DOM, but it
+ * is no longer part of the list: marked `data-leaving`, hidden from assistive technology and inert (no focus, no clicks).
+ * Without this the list would briefly hold the old rows next to the new ones (e.g. 7 rows under a view tab that says 5)
+ * for as long as the exit animation takes, which on a busy machine is not bounded.
+ */
+function ListItem({ reduced, children }: { reduced: boolean; children: React.ReactNode }) {
+  const present = useIsPresent();
+  return (
+    <motion.li
+      {...(reduced ? { initial: false } : { layout: "position" as const, initial: ROW_ENTER, exit: ROW_EXIT })}
+      animate={{ opacity: 1, x: 0 }}
+      transition={reduced ? { duration: 0 } : ROW_TRANSITION}
+      className="jb-li"
+      {...(present ? {} : { "data-leaving": "true", "aria-hidden": true, inert: true })}
+    >
+      {children}
+    </motion.li>
+  );
+}
 
 function isTypingTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
@@ -135,7 +159,7 @@ export function JobList({ jobs, empty, label, viz, mode = "default", sortHead, n
       rerender((n) => n + 1);
       // the toast takes the focus back to the row it stole it from while it leaves; once it is gone the restored row has it
       window.setTimeout(() => {
-        const el = listRef.current?.querySelector<HTMLElement>(`[data-job-id="${jobId}"]`);
+        const el = listRef.current?.querySelector<HTMLElement>(inList(`[data-job-id="${jobId}"]`));
         if (el && document.activeElement?.closest("[data-job-id]") !== el) el.focus();
       }, TOAST_EXIT_SETTLE_MS);
     },
@@ -200,7 +224,7 @@ export function JobList({ jobs, empty, label, viz, mode = "default", sortHead, n
       if (virtualized) virtualizer.scrollToIndex(target, { align: "auto" });
       // focus now when the row is in the DOM (state may not change, so no re-render would follow);
       // otherwise the effect below does it once the row is rendered
-      const el = listRef.current?.querySelector<HTMLElement>(`[data-row-index="${target}"]`);
+      const el = listRef.current?.querySelector<HTMLElement>(inList(`[data-row-index="${target}"]`));
       if (el) {
         el.focus();
         pendingFocus.current = null;
@@ -218,7 +242,7 @@ export function JobList({ jobs, empty, label, viz, mode = "default", sortHead, n
     if (jobId !== null) {
       const index = rows.findIndex((row) => row.id === jobId);
       if (index < 0) return;
-      const el = listRef.current?.querySelector<HTMLElement>(`[data-job-id="${jobId}"]`);
+      const el = listRef.current?.querySelector<HTMLElement>(inList(`[data-job-id="${jobId}"]`));
       if (!el) {
         // a virtualized row that is not rendered yet: scroll to it, the effect runs again once it is
         if (virtualized) virtualizer.scrollToIndex(index, { align: "auto" });
@@ -230,7 +254,7 @@ export function JobList({ jobs, empty, label, viz, mode = "default", sortHead, n
     }
     const target = pendingFocus.current;
     if (target === null) return;
-    const el = listRef.current?.querySelector<HTMLElement>(`[data-row-index="${target}"]`);
+    const el = listRef.current?.querySelector<HTMLElement>(inList(`[data-row-index="${target}"]`));
     if (!el) return;
     pendingFocus.current = null;
     el.focus({ preventScroll: false });
@@ -242,7 +266,7 @@ export function JobList({ jobs, empty, label, viz, mode = "default", sortHead, n
     if (jobId === null) return;
     const index = rows.findIndex((row) => row.id === jobId);
     if (index < 0) return;
-    const el = listRef.current?.querySelector<HTMLElement>(`[data-job-id="${jobId}"]`);
+    const el = listRef.current?.querySelector<HTMLElement>(inList(`[data-job-id="${jobId}"]`));
     if (el) {
       el.focus(); // the row's onFocus makes it the active one
       return;
@@ -293,7 +317,7 @@ export function JobList({ jobs, empty, label, viz, mode = "default", sortHead, n
                 rerender((n) => n + 1);
                 // the toast takes the focus back to the row it stole it from while it leaves (its own exit); once it is gone the restored row has it
                 window.setTimeout(() => {
-                  const el = listRef.current?.querySelector<HTMLElement>(`[data-job-id="${job.id}"]`);
+                  const el = listRef.current?.querySelector<HTMLElement>(inList(`[data-job-id="${job.id}"]`));
                   if (el && document.activeElement?.closest("[data-job-id]") !== el) el.focus();
                 }, TOAST_EXIT_SETTLE_MS);
               },
@@ -511,15 +535,9 @@ export function JobList({ jobs, empty, label, viz, mode = "default", sortHead, n
               <ul ref={listRef} aria-label={label} className="m-0 list-none p-0" data-testid="job-list" onClickCapture={(event) => rememberOpen(event.target)}>
                 <Presence>
                   {rows.map((job, index) => (
-                    <motion.li
-                      key={job.id}
-                      {...(reduced ? { initial: false } : { layout: "position" as const, initial: ROW_ENTER, exit: ROW_EXIT })}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={reduced ? { duration: 0 } : ROW_TRANSITION}
-                      className="jb-li"
-                    >
+                    <ListItem key={job.id} reduced={reduced}>
                       {renderRow(index)}
-                    </motion.li>
+                    </ListItem>
                   ))}
                 </Presence>
               </ul>
