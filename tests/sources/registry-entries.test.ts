@@ -11,14 +11,15 @@ describe("registry entries", () => {
     for (const id of Object.keys(CHANNEL_CONFIG_TABLE)) expect(CHANNEL_GROUP).toHaveProperty([id]);
   });
 
-  it("lists the 19 channels in group order (LinkedIn by cascade first), then the boards in file order", () => {
+  it("lists the 20 channels in group order (LinkedIn by cascade first), then the boards in file order", () => {
     const config = shippedChannels();
     const entries = buildRegistryEntries(config);
     const channels = entries.filter((e) => e.type === "channel");
-    expect(channels).toHaveLength(19);
-    expect(new Set(channels.map((e) => e.id)).size).toBe(19);
+    expect(channels).toHaveLength(20);
+    expect(new Set(channels.map((e) => e.id)).size).toBe(20);
     expect(channels.slice(0, 4).map((e) => e.id)).toEqual([...config.linkedin.cascade]);
     expect(channels[4]?.id).toBe("linkedin-session:recommended");
+    expect(channels.find((e) => e.id === "arbeitnow")?.group).toBe("job_boards");
     const groups = channels.map((e) => e.group);
     expect(groups).toEqual([...groups].sort((a, b) => ["linkedin", "job_boards", "search_apis", "email", "ats", "discovery"].indexOf(a) - ["linkedin", "job_boards", "search_apis", "email", "ats", "discovery"].indexOf(b)));
     const boards = entries.filter((e) => e.type === "ats_board");

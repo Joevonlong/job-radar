@@ -27,6 +27,7 @@ export const CHANNEL_CONFIG_TABLE = {
   indeed: { section: "sources", key: "indeed" },
   stepstone: { section: "sources", key: "stepstone" },
   xing: { section: "sources", key: "xing" },
+  arbeitnow: { section: "sources", key: "arbeitnow" },
   jsearch: { section: "sources", key: "jsearch" },
   greenhouse: { section: "sources", key: "greenhouse" },
   lever: { section: "sources", key: "lever" },

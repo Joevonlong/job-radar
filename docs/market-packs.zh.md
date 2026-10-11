@@ -48,7 +48,7 @@ pnpm run doctor --only config.market
 
 | 文件 | 内容 |
 |---|---|
-| `pack.yaml` | `id`（= 目录名）、`name`，以及市场默认值：`country`、`currency`、`language`、`locale`（地名的大小写规则）、`region`（本国所在的命名区域）、`default_channels`（本市场的招聘渠道：向导里带"本地"标记列出，/me 上可以"开启它们"；StepStone、XING 这类抓取渠道不会未经你确认就被它打开，见 [sources.zh.md](sources.zh.md#抓取)）。 |
+| `pack.yaml` | `id`（= 目录名）、`name`，以及市场默认值：`country`、`currency`、`language`、`locale`（地名的大小写规则）、`region`（本国所在的命名区域）、`default_channels`（本市场的招聘渠道：向导里带"本地"标记列出，/me 上可以"开启它们"；StepStone、XING 这类抓取渠道不会未经你确认就被它打开，见 [sources.zh.md](sources.zh.md#抓取)；`de` 包列的是 arbeitsagentur、stepstone、xing 和 [arbeitnow](sources.zh.md#arbeitnow)）。 |
 | `geography.yaml` | `countries`（代码、英文名、可选的 `currency`（设置向导选这个国家时建议的货币）、`aliases`、`indeed` 名、可选 `pattern`、名字是常用词时 `match: false`）、`regions`（名称、国家、`patterns`）、`cities`（写法 → 规范名 + 国家）、`subdivision_codes`（`US: [TX, NY, …]`）、`non_city_labels`、`non_city_words`、`city_aliases`、`metro_areas`、`metro_regions`、`country_level_patterns`、`transliterations`。 |
 | `language.yaml` | 各语言的 `stopwords`（判断正文语言）和 `requirement`：读取要求等级的规则（`word_pattern`、`cefr_name_pattern`、`cefr_connectors`、`level_rules`、`optional_patterns`、`not_required_patterns` ……，以及给打分提示词的 `prompt_examples`）。 |
 | `rules.yaml` | pipeline.yaml 里和语言有关的部分：`company.legal_suffixes` / `agency_names`、`agency.*_patterns`、`contract.*`、`salary.currencies`（货币的写法）、`filter.generic_location_patterns`、`filter.remote.*`；`closed_posting.phrases`：原帖页面上表示"不再接收申请"的句子（正则，不区分大小写；只接受 configuration.zh.md"关注岗位复查"一节说的安全子集：不允许 `*`、`+`、`{n,}`），收藏 / 跟进岗位的复查用（见 usage.zh.md"已关闭的岗位"）。 |

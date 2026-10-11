@@ -1,0 +1,68 @@
+{
+  "data": [
+    {
+      "slug": "data-scientist-leipzig-100011",
+      "company_name": "Example Energy",
+      "title": "Data Scientist",
+      "description": "<p>Forecasting.</p><p style=\"margin-top: 1rem; font-size: 0.875rem;\">Find more English Speaking Jobs in Germany on <a href=\"https://www.arbeitnow.com/\">Arbeitnow</a></p>",
+      "remote": false,
+      "url": "https://www.arbeitnow.com/jobs/companies/example-energy/data-scientist-leipzig-100011",
+      "tags": [
+        "Data Science"
+      ],
+      "job_types": [
+        "Full Time"
+      ],
+      "location": "Leipzig",
+      "created_at": 1791457200
+    },
+    {
+      "slug": "ai-engineer-stuttgart-100010",
+      "company_name": "Example Auto AI",
+      "title": "AI Engineer",
+      "description": "<p>Perception models.</p><p style=\"margin-top: 1rem; font-size: 0.875rem;\">Find more English Speaking Jobs in Germany on <a href=\"https://www.arbeitnow.com/\">Arbeitnow</a></p>",
+      "remote": false,
+      "url": "https://www.arbeitnow.com/jobs/companies/example-auto-ai/ai-engineer-stuttgart-100010",
+      "tags": [
+        "Engineering"
+      ],
+      "job_types": [
+        "Full Time"
+      ],
+      "location": "Stuttgart",
+      "created_at": 1791453600
+    },
+    {
+      "slug": "machine-learning-engineer-dresden-100012",
+      "company_name": "Example Chips",
+      "title": "Machine Learning Engineer",
+      "description": "<p>Edge ML.</p><p style=\"margin-top: 1rem; font-size: 0.875rem;\">Find more English Speaking Jobs in Germany on <a href=\"https://www.arbeitnow.com/\">Arbeitnow</a></p>",
+      "remote": false,
+      "url": "https://www.arbeitnow.com/jobs/companies/example-chips/machine-learning-engineer-dresden-100012",
+      "tags": [
+        "Engineering"
+      ],
+      "job_types": [
+        "Full Time"
+      ],
+      "location": "Dresden",
+      "created_at": 1791446400
+    }
+  ],
+  "links": {
+    "first": "https://www.arbeitnow.com/api/job-board-api?page=1",
+    "last": null,
+    "prev": "https://www.arbeitnow.com/api/job-board-api?page=2",
+    "next": "https://www.arbeitnow.com/api/job-board-api?page=4"
+  },
+  "meta": {
+    "current_page": 3,
+    "current_page_url": "https://www.arbeitnow.com/api/job-board-api?page=3",
+    "from": 201,
+    "path": "https://www.arbeitnow.com/api/job-board-api",
+    "per_page": 100,
+    "to": 203,
+    "terms": "Fictional fixture: shape of the free public API as observed on 2026-10-09.",
+    "info": "Fictional fixture: jobs ordered roughly by created_at, paginated with ?page=."
+  }
+}

@@ -83,6 +83,31 @@ Prints all sources, their status and the reason (the table language follows `cli
 | "LinkedIn not logged in / login expired" | Log in again, see [LinkedIn session](linkedin-session.md) |
 | "Mirror out of sync" at the top of the page | The runner fixes it on start or config hot-reload; or run `pnpm sources:list --sync` |
 
+## Arbeitnow
+
+Arbeitnow (`arbeitnow`) is a free public job board API: no key, no login. It is one of the Germany pack's local channels and is
+on in the shipped `sources.yaml` (`markets: [DE]`); an existing installation gets the same block from the config update
+(`pnpm config:migrate`), with the title prefilter terms copied from its `greenhouse` block.
+
+- **What a run reads.** The API takes no keywords or places. Each run reads the newest pages of the whole board (at most
+  `max_pages`, 8 by default, 1 to 3 seconds apart), keeps the postings inside the cycle's look-back window and stores only the
+  titles that pass `title_prefilter`, as for the company career boards: a search keyword or an `include_terms` entry, or a
+  watched company; `exclude_terms` drops student and intern jobs. About half of the board is outside Germany: the location
+  filter drops what does not fit your market, and a job that also comes from a company's ATS board is merged into one.
+- **What a posting has.** Title, company, one free-text location, a remote flag, free-text job types (kept as the contract
+  hint), tags and an HTML description, which the trap scan reads for hidden text ([ai-traps.md](ai-traps.md)). There is no
+  salary field (salaries are read from the text). The job's link goes to its page on arbeitnow.com.
+- **Terms.** The API is offered as is and can be withdrawn at any time; a platform that uses it links back to arbeitnow.com
+  (Arbeitnow terms, section 11). The Arbeitnow card on `/sources` carries that link. If you use your instance commercially or
+  show the jobs to other people, read the [Arbeitnow terms](https://www.arbeitnow.com/terms) yourself; don't mirror or
+  republish the collected data (section 2.1.5).
+- **Limits.** The pages are cached one by one and are not sorted by date, so a posting missed in one cycle is usually picked up
+  in the next. The rate-limit headers of the responses are cached too and are not used. A 429 is retried after its
+  `Retry-After`; a 403 or a 410 (the API was withdrawn) counts as blocked and opens the channel's circuit breaker, the other
+  channels keep running.
+- **Settings**: `base_url`, `user_agent`, `max_pages`, `max_results`, `throttle` and `title_prefilter` under
+  `sources.arbeitnow` (also on the settings page). Switch it off with `enabled: false` or the switch on `/sources/registry`.
+
 ## Scraping
 
 Not every channel uses an official API. Some read public web pages or unofficial endpoints, and some act as your own
@@ -93,7 +118,7 @@ for a new installation** and need your explicit consent to switch on.
 |---|---|---|---|
 | Scraping | LinkedIn guest search (`linkedin-guest`), Indeed (`indeed`), StepStone (`stepstone`), XING (`xing`), Google Jobs via the sidecar (`jobspy-google`) | off | the site's terms may forbid it; your IP address can be rate limited or blocked |
 | Account automation | LinkedIn logged-in session (`linkedin-session`, `linkedin-session:recommended`) | off | uses your own account; the account can be restricted or banned |
-| Official APIs and public company feeds | Arbeitsagentur, Greenhouse, Lever, Ashby, Personio, SmartRecruiters (on); JSearch, Gmail alerts, Tavily, Brave (need your key or account) | on, or off until you add a key | follow the provider's own terms and quotas |
+| Official APIs and public company feeds | Arbeitsagentur, [Arbeitnow](#arbeitnow), Greenhouse, Lever, Ashby, Personio, SmartRecruiters (on); JSearch, Gmail alerts, Tavily, Brave (need your key or account) | on, or off until you add a key | follow the provider's own terms and quotas |
 | Paid scraping services | Bright Data, Apify | on, but nothing happens without your token | a service scrapes for you; **this does not remove the terms-of-service risk**, which stays with you |
 
 How to switch one on:

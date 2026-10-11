@@ -2,7 +2,7 @@
 # 带 "正则" 的列表按大小写不敏感、Unicode 模式匹配；写错的正则会在 pnpm config:check 里报错。
 
 # 每次从数据库取多少条 pending 的 raw 来解析；步骤会一直取到没有 pending 为止
-config_version: 2
+config_version: 3
 batch_size: 200
 
 dedupe:
@@ -31,6 +31,7 @@ apply_priority:
   indeed: 3
   manual: 3
   arbeitsagentur: 4
+  arbeitnow: 4
   google: 4
   email: 4
 

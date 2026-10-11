@@ -149,7 +149,7 @@ database. The full list of what is stored, each AI provider's data policy and a 
 
 | Kind | Sources | Needs | In a new install |
 |---|---|---|---|
-| Job boards, official | Arbeitsagentur (German Federal Employment Agency) | nothing | on (Germany pack) |
+| Job boards, official | Arbeitsagentur (German Federal Employment Agency), Arbeitnow (free public board API) | nothing | on (Germany pack) |
 | Job boards, scraped | LinkedIn guest search, Indeed, StepStone, XING | nothing | off: the wizard shows the risk and asks first |
 | Company career pages | Greenhouse, Lever, Ashby, Personio, SmartRecruiters | nothing; you add the companies | on |
 | Search APIs | Google Jobs via JSearch | a RapidAPI key (free plan available) | off; switch it on once the key is in `.env` |
@@ -177,7 +177,7 @@ Yes. The defaults assume no country, and you pick your market in the setup wizar
 to a country: its cities and regions, the local-language rules, the base currency and its job boards. Job Radar ships a
 neutral pack (`generic`) and a Germany / EU pack (`de`). For another country, copy a pack into `data/config/packs/` and
 adjust it ([market-packs.md](market-packs.md)). The company career pages, LinkedIn, Indeed and Google Jobs work in many
-countries; StepStone, XING and Arbeitsagentur are the Germany pack's own boards.
+countries; StepStone, XING, Arbeitsagentur and Arbeitnow are the Germany pack's own boards.
 
 Salary reading knows the euro, dollar and pound plus many more currencies (among them CAD, AUD, SGD, JPY, CNY, INR,
 BRL and ZAR), with rough exchange rates you can adjust; the market form tells you when your currency has no rate. In a

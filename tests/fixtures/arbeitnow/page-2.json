@@ -1,0 +1,85 @@
+{
+  "data": [
+    {
+      "slug": "data-scientist-berlin-100008",
+      "company_name": "Example Health",
+      "title": "Data Scientist",
+      "description": "<p>Clinical data science.</p><p style=\"margin-top: 1rem; font-size: 0.875rem;\">Find more English Speaking Jobs in Germany on <a href=\"https://www.arbeitnow.com/\">Arbeitnow</a></p>",
+      "remote": false,
+      "url": "https://www.arbeitnow.com/jobs/companies/example-health/data-scientist-berlin-100008",
+      "tags": [
+        "Data Science"
+      ],
+      "job_types": [
+        "Full Time"
+      ],
+      "location": "Berlin",
+      "created_at": 1791403200
+    },
+    {
+      "slug": "machine-learning-engineer-remote-100002",
+      "company_name": "Example Remote Labs",
+      "title": "Machine Learning Engineer",
+      "description": "<p><strong>About the role</strong></p><p style=\"line-height: 1.5;\">You will train and ship ranking models for a fully remote team.</p><ul><li>Python, PyTorch</li><li>Experience with MLOps</li></ul><p style=\"margin-top: 1rem; font-size: 0.875rem;\">Find more English Speaking Jobs in Germany on <a href=\"https://www.arbeitnow.com/\">Arbeitnow</a></p>",
+      "remote": true,
+      "url": "https://www.arbeitnow.com/jobs/companies/example-remote-labs/machine-learning-engineer-remote-100002",
+      "tags": [
+        "Remote",
+        "Engineering"
+      ],
+      "job_types": [
+        "Full Time"
+      ],
+      "location": "Remote",
+      "created_at": 1791543600
+    },
+    {
+      "slug": "machine-learning-engineer-hamburg-100009",
+      "company_name": "Example Logistics",
+      "title": "Machine Learning Engineer",
+      "description": "<p>Route optimisation with ML.</p><p style=\"margin-top: 1rem; font-size: 0.875rem;\">Find more English Speaking Jobs in Germany on <a href=\"https://www.arbeitnow.com/\">Arbeitnow</a></p>",
+      "remote": false,
+      "url": "https://www.arbeitnow.com/jobs/companies/example-logistics/machine-learning-engineer-hamburg-100009",
+      "tags": [
+        "Engineering"
+      ],
+      "job_types": [
+        "Full Time"
+      ],
+      "location": "Hamburg",
+      "created_at": 1791475200
+    },
+    {
+      "slug": "ai-engineer-frankfurt-100007",
+      "company_name": "Example Finance AI",
+      "title": "AI Engineer",
+      "description": "<p>LLM tooling for analysts.</p><p style=\"margin-top: 1rem; font-size: 0.875rem;\">Find more English Speaking Jobs in Germany on <a href=\"https://www.arbeitnow.com/\">Arbeitnow</a></p>",
+      "remote": false,
+      "url": "https://www.arbeitnow.com/jobs/companies/example-finance-ai/ai-engineer-frankfurt-100007",
+      "tags": [
+        "Engineering"
+      ],
+      "job_types": [
+        "Full Time"
+      ],
+      "location": "Frankfurt",
+      "created_at": 1791504000
+    }
+  ],
+  "links": {
+    "first": "https://www.arbeitnow.com/api/job-board-api?page=1",
+    "last": null,
+    "prev": "https://www.arbeitnow.com/api/job-board-api?page=1",
+    "next": "https://www.arbeitnow.com/api/job-board-api?page=3"
+  },
+  "meta": {
+    "current_page": 2,
+    "current_page_url": "https://www.arbeitnow.com/api/job-board-api?page=2",
+    "from": 7,
+    "path": "https://www.arbeitnow.com/api/job-board-api",
+    "per_page": 6,
+    "to": 10,
+    "terms": "Fictional fixture: shape of the free public API as observed on 2026-10-09.",
+    "info": "Fictional fixture: jobs ordered roughly by created_at, paginated with ?page=."
+  }
+}

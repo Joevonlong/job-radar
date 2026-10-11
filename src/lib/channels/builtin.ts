@@ -1,5 +1,6 @@
 import { registerJobspyChannels } from "./jobspy";
 import { arbeitsagenturChannel } from "./arbeitsagentur";
+import { arbeitnowChannel } from "./arbeitnow";
 import { stepstoneChannel } from "./stepstone";
 import { xingChannel } from "./xing";
 import { registerAtsChannels } from "./ats";
@@ -22,6 +23,7 @@ import type { ChannelRegistry } from "./registry";
 export function registerBuiltinChannels(registry: ChannelRegistry): void {
   registerJobspyChannels(registry); // linkedin-guest, indeed, jobspy-google
   registry.register(arbeitsagenturChannel);
+  registry.register(arbeitnowChannel); // the free Arbeitnow board API (a sweep of its newest pages, title-prefiltered)
   registerAtsChannels(registry); // greenhouse, lever
   registry.register(createTavilyChannel()); // discovery of new ATS boards through Tavily (no postings; the default search backend)
   registry.register(createBraveChannel()); // the same through Brave Search (off by default)

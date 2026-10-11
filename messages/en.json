@@ -910,6 +910,7 @@
       "xing": "XING",
       "indeed": "Indeed",
       "arbeitsagentur": "Employment agency",
+      "arbeitnow": "Arbeitnow",
       "google": "Google",
       "email": "Email alerts",
       "manual": "Added by hand"
@@ -2015,6 +2016,10 @@
       "max_pages": {
         "label": "Most pages per keyword",
         "hint": "One request per page; the more pages, the likelier a rate limit."
+      },
+      "arbeitnow_max_pages": {
+        "label": "Most pages per run",
+        "hint": "One request per page, newest pages first (a page is not sorted inside). Paging stops earlier once even the newest posting of a page is older than the look-back window."
       },
       "remote_option_id": {
         "label": "\"Fully remote\" filter value",
@@ -3232,6 +3237,9 @@
       "missingEnvOff": "Switched off. To use it, add {names} to .env, then switch it on in Settings.",
       "notConfiguredHintOff": "Switched off and not configured yet. To use it, add its key first, then switch it on in Settings.",
       "notConfiguredHintJsearch": "Set JSEARCH_API_KEY (your RapidAPI key) in .env; until then this channel sends no request.",
+      "attribution": {
+        "arbeitnow": "Data from <link>Arbeitnow (arbeitnow.com)</link>, a free public API offered as is."
+      },
       "circuit": {
         "closed": "Circuit: closed",
         "open": "Circuit open",

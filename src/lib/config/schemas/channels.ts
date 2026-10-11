@@ -203,6 +203,23 @@ export const xingSettingsSchema = z.strictObject({
 export type XingSettings = z.infer<typeof xingSettingsSchema>;
 
 /**
+ * `sources.arbeitnow`: the free public Arbeitnow Job Board API. It has no keyword or location parameters, so the
+ * channel reads the newest pages of the whole board and keeps titles that pass the title prefilter (like an ATS board).
+ */
+export const arbeitnowSettingsSchema = z.strictObject({
+  ...baseShape,
+  /** Site root; the channel appends the API path (`/api/job-board-api`). */
+  base_url: httpBaseUrl,
+  /** Sent as the `User-Agent` of every request. */
+  user_agent: nonEmptyString,
+  /** Most pages read per sweep (one request each); paging also stops at a page whose newest posting is older than the look-back window. */
+  max_pages: positiveInt,
+  /** The board returns every posting: only titles that match a search.yaml keyword or an include term (or a watched company) are stored. */
+  title_prefilter: atsTitlePrefilter,
+});
+export type ArbeitnowSettings = z.infer<typeof arbeitnowSettingsSchema>;
+
+/**
  * `sources.jsearch`: JSearch (Google for Jobs) on RapidAPI. The API key comes from `JSEARCH_API_KEY`.
  * The RapidAPI plan counts requests: `monthly_request_limit` mirrors the plan's included requests and is
  * what the channel's usage is booked against (records = requests).
@@ -530,6 +547,7 @@ export const channelsSchema = z
       indeed: channel,
       stepstone: stepstoneSettingsSchema,
       xing: xingSettingsSchema,
+      arbeitnow: arbeitnowSettingsSchema,
       jsearch: jsearchChannel,
       greenhouse: greenhouseChannel,
       lever: leverChannel,

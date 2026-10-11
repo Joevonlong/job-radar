@@ -42,8 +42,8 @@ const row = (page: Page, id: string) => page.locator(`[data-testid="registry-row
 test("every channel and board shows with its state and a reason; the summary adds up; the sub navigation links both pages", async ({ page }) => {
   enableXing();
   await open(page);
-  await expect(page.getByTestId("channels-count")).toHaveText("19");
-  await expect(page.locator('[data-testid="registry-row"][data-kind="channel"]')).toHaveCount(19);
+  await expect(page.getByTestId("channels-count")).toHaveText("20");
+  await expect(page.locator('[data-testid="registry-row"][data-kind="channel"]')).toHaveCount(20);
   await expect(row(page, "xing")).toHaveAttribute("data-status", "failing");
   await expect(row(page, "xing").getByTestId("reason")).toContainText("被网站拦截");
   await expect(row(page, "greenhouse")).toHaveAttribute("data-status", "ok");
