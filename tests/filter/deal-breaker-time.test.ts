@@ -155,8 +155,13 @@ describe("at run time", () => {
     const kept = unprobed([unchecked(["(a|a)+$"]), unchecked(["vor Ort"], [], "fine")], { rule_budget_ms: 100 });
     expect(dealBreakerVetoes(kept, jobs, { previous: [["slow"], ["slow"], ["slow", "fine"]] }).vetoes).toEqual([["fine"], ["slow"], ["slow", "fine"]]);
     // the next batch does not try it again
-    const again = elapsed(() => void dealBreakerVetoes(run, jobs));
-    expect(again).toBeLessThan(50);
+    // a stopped rule is not tried again: alone in its run, the next batch needs no time box at all
+    const alone = unprobed([unchecked(["(a|a)+$"])], { rule_budget_ms: 100 });
+    dealBreakerVetoes(alone, jobs);
+    expect(alone.warnings).toEqual([{ id: "slow", code: "too_slow" }]);
+    let boxes = 0;
+    dealBreakerVetoes({ ...alone, timeBox: (work, ms) => (boxes++, alone.timeBox(work, ms)) }, jobs);
+    expect(boxes).toBe(0);
     expect(run.warnings).toHaveLength(1);
   });
 
@@ -192,14 +197,48 @@ describe("at run time", () => {
     const refusal = "We are unable to offer visa sponsorship.";
     const slowText = `visa${"a".repeat(40)}!`;
 
+    /** The budget runs out while the rule reads this job: a stand-in for a text that takes the rest of the budget. */
+    const BUDGET_SPENT = new Error("budget spent");
+    const spendsBudget: DealBreakerJob = {
+      title: "Engineer",
+      germanLevel: "unknown",
+      get description(): string {
+        throw BUDGET_SPENT;
+      },
+    };
+    /** A time box that stops the work where `BUDGET_SPENT` is thrown, not after a number of milliseconds. */
+    const stopsWhenSpent = (work: () => void): boolean => {
+      try {
+        work();
+        return true;
+      } catch (error) {
+        if (error === BUDGET_SPENT) return false;
+        throw error;
+      }
+    };
+
+    // The first job of a cold process takes tens of milliseconds (the packs' patterns compile on first use, more on a loaded
+    // machine), so the test must not depend on the clock for the jobs before the one that spends the budget.
     it("runs under rule_budget_ms like a phrase rule: stopped, reported, earlier vetoes kept", () => {
-      const run = startDealBreakerRun(compileDealBreakers([visaRule], visaContext({ rule_budget_ms: 100 })), vmTimeBox);
+      const run = { ...startDealBreakerRun(compileDealBreakers([visaRule], visaContext({ rule_budget_ms: 100 })), vmTimeBox), timeBox: stopsWhenSpent };
       expect(run.warnings).toEqual([]);
-      const jobs = [posting(refusal), posting(slowText), posting(refusal)];
+      const jobs = [posting(refusal), spendsBudget, posting(refusal)];
+      const { vetoes } = dealBreakerVetoes(run, jobs, { previous: [[], ["visa"], ["visa"]] });
+      // judged before the budget ran out: vetoed; being read when it ran out, or not reached: the stored veto stays
+      expect(vetoes).toEqual([["visa"], ["visa"], ["visa"]]);
+      expect(run.warnings).toEqual([{ id: "visa", code: "too_slow" }]);
+      // stopped for the rest of the run: not tried again, and the jobs it did not judge keep what they had
+      expect(dealBreakerVetoes(run, [posting(refusal), posting(refusal)], { previous: [[], ["visa"]] }).vetoes).toEqual([[], ["visa"]]);
+      expect(run.warnings).toHaveLength(1);
+    });
+
+    it("stops a catastrophic pack pattern at rule_budget_ms", () => {
+      const run = startDealBreakerRun(compileDealBreakers([visaRule], visaContext({ rule_budget_ms: 100 })), vmTimeBox);
       let result: string[][] = [];
-      const ms = elapsed(() => void (result = dealBreakerVetoes(run, jobs, { previous: [[], [], ["visa"]] }).vetoes));
+      // the slow text comes first, so the outcome does not depend on how long the first match takes
+      const ms = elapsed(() => void (result = dealBreakerVetoes(run, [posting(slowText), posting(refusal)], { previous: [["visa"], []] }).vetoes));
       expect(ms).toBeLessThan(2_000);
-      expect(result).toEqual([["visa"], [], ["visa"]]);
+      expect(result).toEqual([["visa"], []]);
       expect(run.warnings).toEqual([{ id: "visa", code: "too_slow" }]);
     });
 
