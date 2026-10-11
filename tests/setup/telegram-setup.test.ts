@@ -10,7 +10,7 @@ import type { AddressInfo } from "node:net";
 import path from "node:path";
 
 import { parseDocument } from "yaml";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { reloadConfig, setOnProfileSaved } from "@/lib/config";
 import { runSetupCli, type CliIo } from "@/lib/setup/cli";
@@ -84,7 +84,12 @@ async function startFakeApi(): Promise<FakeApi> {
   const { port } = server.address() as AddressInfo;
   return Object.assign(state, {
     url: `http://127.0.0.1:${port}`,
-    close: () => new Promise<void>((resolve) => server.close(() => resolve())),
+    close: () =>
+      new Promise<void>((resolve) => {
+        server.close(() => resolve());
+        // keep-alive sockets and a request still being answered would hold close() open
+        server.closeAllConnections();
+      }),
   });
 }
 
@@ -193,14 +198,10 @@ function expectNoSecret(run: Run): void {
   for (const secret of SECRETS) expect(text).not.toContain(secret);
 }
 
-beforeAll(async () => {
+beforeEach(async () => {
+  // A fresh fake Bot API per test: a getUpdates the previous test aborted (Ctrl-C) can still reach its server after
+  // that test ended, and on a shared server it would take the scripted updates of the next test.
   api = await startFakeApi();
-});
-afterAll(async () => {
-  await api.close();
-});
-
-beforeEach(() => {
   for (const key of ENV_KEYS) savedEnv.set(key, process.env[key]);
   for (const key of ENV_KEYS) delete process.env[key];
   process.env.DATABASE_URL = "postgres://nobody:nothing@127.0.0.1:1/none";
@@ -214,14 +215,10 @@ beforeEach(() => {
   reloadConfig("notify");
   envFile = path.join(tmp.root, ".env");
   fs.writeFileSync(path.join(tmp.root, ".env.example"), "# example\nPOSTGRES_PASSWORD=\n# ---- Telegram\nTELEGRAM_BOT_TOKEN=\nTELEGRAM_CHAT_ID=\nTELEGRAM_ALLOWED_USER_IDS=\n");
-  api.updates = [];
-  api.sent = [];
-  api.calls = [];
-  api.conflicts = 0;
-  api.polls = [];
   resetSetupStateCache();
 });
-afterEach(() => {
+afterEach(async () => {
+  await api.close();
   setOnProfileSaved(null);
   tmp.cleanup();
   for (const [key, value] of savedEnv) {
