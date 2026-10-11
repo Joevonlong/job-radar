@@ -55,7 +55,7 @@ whole (product updates of that pack then no longer apply; `pnpm run doctor` remi
 | `pack.yaml` | `id` (= directory name), `name`, and the market defaults: `country`, `currency`, `language`, `locale` (letter case of place names), `region` (the named region the country belongs to), `default_channels` (the job boards of this market: the wizard lists them with a "local" mark and /me offers to "turn them on"; scraping channels such as StepStone or XING are never switched on by it without your confirmation, see [sources.md](sources.md#scraping); the `de` pack lists arbeitsagentur, stepstone, xing and [arbeitnow](sources.md#arbeitnow)). |
 | `geography.yaml` | `countries` (code, English name, optional `currency` the setup wizard proposes for the country, `aliases`, `indeed` name, optional `pattern`, `match: false` for names that are common words), `regions` (name, countries, `patterns`), `cities` (spelling → canonical name + country), `subdivision_codes` (`US: [TX, NY, …]`), `non_city_labels`, `non_city_words`, `city_aliases`, `metro_areas`, `metro_regions`, `country_level_patterns`, `transliterations`. |
 | `language.yaml` | `stopwords` per language (to tell a description's language) and `requirement`: the rules that read the required level (`word_pattern`, `cefr_name_pattern`, `cefr_connectors`, `level_rules`, `optional_patterns`, `not_required_patterns`, …, `prompt_examples` for the scoring prompt). |
-| `rules.yaml` | Language-specific pieces of pipeline.yaml: `company.legal_suffixes` / `agency_names`, `agency.*_patterns`, `contract.*`, `salary.currencies` (how currencies are written), `filter.generic_location_patterns`, `filter.remote.*`; `closed_posting.phrases`: sentences (regex, case-insensitive; only the safe subset described under "Recheck of watched jobs" in configuration.md: no `*`, `+` or `{n,}`) on a posting page that say it no longer takes applications, used by the recheck of starred / followed jobs (see usage.md "Closed jobs").; `visa`: what a posting says about visa sponsorship (see [Visa patterns](#visa-patterns)). |
+| `rules.yaml` | Language-specific pieces of pipeline.yaml: `company.legal_suffixes` / `agency_names`, `agency.*_patterns`, `contract.*`, `salary.currencies` (how currencies are written), `filter.generic_location_patterns`, `filter.remote.*`; `closed_posting.phrases`: sentences (regex, case-insensitive; only the safe subset described under "Recheck of watched jobs" in configuration.md: no `*`, `+` or `{n,}`) on a posting page that say it no longer takes applications, used by the recheck of starred / followed jobs (see usage.md "Closed jobs").; `ghost`: signs that a posting is not a real opening (see [Ghost job patterns](#ghost-job-patterns)); `visa`: what a posting says about visa sponsorship (see [Visa patterns](#visa-patterns)). |
 
 The `generic` pack is always loaded: the world country table, the regions `eu`, `eea`, `europe`, `dach`, `nordics`,
 the city table, US state codes and English rules. The market's own pack is added on top.
@@ -71,10 +71,33 @@ The code reads `pipeline.yaml` together with the packs (`loadPipeline()`):
 - `salary.local_currencies`: left out = the market's currency;
 - `closed_posting.phrases`: generic's and the market pack's lists united; your own go in `ui.yaml`
   (`job_checks.closed_recheck.extra_phrases`), not in pipeline.yaml.
-- `visa`: generic's and the market pack's lists united (generic first); pipeline.yaml has no visa patterns of its own.
+- `ghost` and `visa`: generic's and the market pack's lists united (generic first); pipeline.yaml has no patterns of its
+  own for them.
 
 So pipeline.yaml keeps only what you add yourself. The config migration of pipeline.yaml removed the entries that are
 now in the packs.
+
+## Ghost job patterns
+
+The `ghost` section of `rules.yaml` holds the phrases of the [ghost job check](ghost-jobs.md). `generic` has the English
+ones, `de` the German ones. Every entry with an `id` (lower-case letters, digits and `_`) keeps that id in the stored
+reason, so the checks card and `pnpm ghost:check` can say which phrase matched.
+
+| Key | What it is |
+|---|---|
+| `repost_label_patterns` | The source's own "reposted" label ("Reposted 2 weeks ago", "Wiedereingestellt"); `{id, pattern}` |
+| `evergreen_patterns` | The JD says it is a talent pool or always open ("for our talent pool", "always hiring", "Initiativbewerbung (m/w/d)"); `{id, pattern, check_negation}`. `check_negation: false` marks a phrase that is a negation itself ("no specific opening", "keine konkrete Stelle") |
+| `responsibility_patterns` | A heading that opens the duties of the role ("Responsibilities", "What you'll do", "Deine Aufgaben"), tested only against heading-shaped lines; `{id, pattern}` |
+| `negation_cues` | Words that cancel an evergreen phrase: inside it, within `pipeline.yaml job_checks.ghost.negation_words_before` words before it, within `negation_words_after` words after it in the same clause, or in the heading of its list |
+| `clause_breaks` | Where that clause ends (";", " but ", " aber ", "and we …") |
+| `exclude_context` | A sentence that matches (or the question right before it) does not count: the employer's product or customers, a duty of the role, the footer of a real posting, a conditional, a privacy note |
+| `abbreviations` | Abbreviations whose dot does not end a sentence |
+| `prefilter` | A quick first look: a JD or line with no match is not searched for evergreen phrases |
+
+As for visa, **every phrase an `evergreen_patterns` entry can match must contain a `prefilter` match**, or it is never
+seen; `pnpm config:check` warns about a pattern whose own text has none, and names an invalid regular expression by its
+path (`ghost.evergreen_patterns[2]`). Changing the patterns checks every job again in the next cycles; preview with
+`pnpm ghost:check`.
 
 ## Visa patterns
 
@@ -122,8 +145,8 @@ cycle also rechecks every job, because the patterns are part of each result's in
 4. `rules.yaml`: legal-form suffixes, agency and contract phrases, how the currency is written, and the "no longer
    accepting applications" sentences of the language (`closed_posting.phrases`; keep them specific: a hit marks a job
    possibly closed).
-   Visa phrases of the language go under `visa` (see [Visa patterns](#visa-patterns)); without them the check reads only
-   English phrases.
+   Visa phrases of the language go under `visa` (see [Visa patterns](#visa-patterns)) and ghost job phrases under `ghost`
+   (see [Ghost job patterns](#ghost-job-patterns)); without them the checks read only English phrases.
 5. Set `market.pack: <id>` and run `pnpm config:check`, `pnpm market:show`, then `pnpm reprocess`.
 6. To see what changed: `pnpm market:regress snapshot --out before.json` before, the same with `after.json` after the
    reprocess, then `pnpm market:regress compare before.json after.json`. It prints counts per field and code-value

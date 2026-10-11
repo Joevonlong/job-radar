@@ -489,10 +489,25 @@ filter:
   #   rule_budget_ms: 2000         # time one rule may take in one filter run; a rule that uses it up stops for that run
   #   preview_ms: 3000             # longest the /me preview may take before it shows what it counted so far
 
-# Checks of a job's JD that only mark it (they change no score and filter nothing). The values below are the defaults that apply
-# while the block is commented out; uncomment it to change one. The on/off switch is in ui.yaml job_checks; the patterns are in the
-# market packs (config/packs/<id>/rules.yaml, section visa).
+# Checks of a job that only mark it (they change no score and filter nothing). The values below are the defaults that apply
+# while the block is commented out; uncomment it to change one. The on/off switches are in ui.yaml job_checks; the patterns are in
+# the market packs (config/packs/<id>/rules.yaml, sections ghost and visa).
 # job_checks:
+#   ghost:                    # signs of a ghost job (docs/ghost-jobs.md); only a hint, never a change to a score
+#     per_cycle_limit: 2000   # jobs checked per cycle at most; pnpm ghost:check --write checks the rest
+#     levels: { watch: 3, likely: 5 }   # points for "watch" / "likely ghost"; "likely" also needs a reason that is not about time
+#     long_open:              # open for long: days since the trusted posted date (ATS, LinkedIn session)
+#       enabled: true
+#       tiers: [{ days: 90, points: 1 }, { days: 180, points: 2 }]
+#       first_seen_max_points: 1   # at most this when only the first-seen date is known
+#     repost_label: { enabled: true, points: 1 }        # the source says "Reposted"
+#     reposted: { enabled: true, min_gap_days: 30, points: 2 }   # same channel, new id, same place, at least this many days later
+#     evergreen_wording: { enabled: true, points: 2 }   # "talent pool", "Initiativbewerbung", "always looking for"
+#     thin_description: { enabled: true, min_words: 120, points: 1 }   # full-text sources only: short JD or no duties section
+#     quote_max_chars: 280
+#     negation_words_before: 6
+#     negation_words_after: 5
+#     heading_max_chars: 60
 #   visa:
 #     per_cycle_limit: 2000   # jobs scanned per cycle at most (new and changed JDs first); pnpm visa:scan --write scans the rest
 #     max_quotes: 3           # quotes kept per job (at most 10)

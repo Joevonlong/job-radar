@@ -392,12 +392,12 @@ describe("ui ai_usage block", () => {
 });
 
 describe("ui job_checks block", () => {
-  it("is optional: a file without it gets the recheck on, no extra phrases and the visa check on (auto)", () => {
+  it("is optional: a file without it gets the recheck on, no extra phrases, the ghost job check off and the visa check on (auto)", () => {
     const ui = fixture("ui");
     delete ui.job_checks;
     expect(issuePaths("ui", ui)).toEqual([]);
     const parsed = configRegistry.ui.schema.parse(ui) as { job_checks: unknown };
-    expect(parsed.job_checks).toEqual({ closed_recheck: { enabled: true, extra_phrases: [] }, visa: { enabled: true, badges: "auto" } });
+    expect(parsed.job_checks).toEqual({ closed_recheck: { enabled: true, extra_phrases: [] }, ghost: { enabled: false, trusted_companies: [] }, visa: { enabled: true, badges: "auto" } });
   });
   it("takes a switch and phrases, and names an invalid regex by its path", () => {
     const ui = fixture("ui");

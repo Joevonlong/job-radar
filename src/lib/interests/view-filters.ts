@@ -52,6 +52,8 @@ export function viewFiltersFromParams(params: Partial<FilterParams>): ViewFilter
   if (params.high === true) filters.high = true;
   if (params.trap) filters.trap = params.trap;
   if (params.visa) filters.visa = params.visa;
+  // `ghost=all` is "no filter": a view never stores it
+  if (params.ghost && params.ghost !== "all") filters.ghost = params.ghost;
   return filters;
 }
 
@@ -75,12 +77,13 @@ export function viewFiltersToParams(filters: ViewFilters): FilterParams {
     high: filters.high === true ? true : null,
     trap: filters.trap ?? null,
     visa: filters.visa ?? null,
+    ghost: filters.ghost === undefined || filters.ghost === "all" ? null : filters.ghost,
   };
 }
 
 /** Keys of `filters` that are set. */
 export function activeFilterKeys(filters: ViewFilters): ViewFilterKey[] {
-  return VIEW_FILTER_KEYS.filter((key) => filters[key] !== undefined && filters[key] !== false);
+  return VIEW_FILTER_KEYS.filter((key) => filters[key] !== undefined && filters[key] !== false && !(key === "ghost" && filters.ghost === "all"));
 }
 
 export function hasViewFilters(filters: ViewFilters): boolean {

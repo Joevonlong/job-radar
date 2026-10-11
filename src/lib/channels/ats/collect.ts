@@ -235,6 +235,10 @@ export function createAtsChannel<S extends { title_prefilter: AtsTitlePrefilterS
     family: "ats",
     kind: "ats",
     usesQueries: false,
+    // the ghost job check: a board keeps one id per posting, stores the full text and its own publish date
+    stableExternalIds: true,
+    fullDescription: true,
+    trustedPostedAt: true,
     async collect(query: SearchQuery, ctx: ChannelContext): Promise<RawPostingInput[]> {
       const settings = parseSettings(adapter.settingsSchema, ctx.settings.extra, adapter.id);
       const inputs = deps.inputs();

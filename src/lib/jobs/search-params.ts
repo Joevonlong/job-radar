@@ -1,6 +1,6 @@
 import { createLoader, createMultiParser, createParser, createSerializer, parseAsBoolean, parseAsInteger, parseAsString, parseAsStringLiteral, type inferParserType } from "nuqs/server";
 
-import { FAVORITE_SORTS, JOB_SORTS, MIN_SALARY_MAX, MIN_SCORE_MAX, SORT_DIRS, TRAP_FILTERS, VISA_FILTERS } from "./constants";
+import { FAVORITE_SORTS, JOB_SORTS, MIN_SALARY_MAX, MIN_SCORE_MAX, GHOST_FILTERS, SORT_DIRS, TRAP_FILTERS, VISA_FILTERS } from "./constants";
 import { FILTER_KEYS, NUMBER_FILTER_KEYS, type FilterKey, type MultiFilterKey } from "./filter-keys";
 import { cleanMultiValues, type MultiValue } from "./filter-values";
 
@@ -87,6 +87,11 @@ export const jobsSearchParsers = {
    * Kept in the URL while the filter is hidden (me.yaml / ui.yaml), but then it filters nothing.
    */
   visa: parseAsStringLiteral(VISA_FILTERS),
+  /**
+   * The ghost job check: only jobs marked watch / likely (`only`), or all but the likely ones (`hide`); `all` (or absent) = no filter.
+   * Kept in the URL while the check is off (ui.yaml), but then it filters nothing.
+   */
+  ghost: parseAsStringLiteral(GHOST_FILTERS),
   /** Only starred jobs. Not stored in saved views. */
   fav: parseAsBoolean,
   /** Only jobs not looked at yet. Not stored in saved views. */
@@ -137,11 +142,12 @@ type FilterParams = Pick<JobsSearchParams, FilterKey>;
 function isSet(key: FilterKey, params: Partial<FilterParams>): boolean {
   const value = params[key];
   if (Array.isArray(value)) return value.length > 0;
-  if (typeof value === "string") return value !== "";
+  // `ghost=all` says "no filter" out loud: never counted, never a chip
+  if (typeof value === "string") return value !== "" && !(key === "ghost" && value === "all");
   return Boolean(value) || ((NUMBER_FILTER_KEYS as readonly string[]).includes(key) && typeof value === "number");
 }
 
-/** Filters that are in the URL but do nothing right now (the visa filter while it is hidden): never counted as set. */
+/** Filters that are in the URL but do nothing right now (the visa or ghost filter while it is hidden): never counted as set. */
 export interface FilterVisibility {
   ignore?: readonly FilterKey[];
 }

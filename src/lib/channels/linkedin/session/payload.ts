@@ -153,3 +153,10 @@ export function sessionDescriptionHtml(payload: unknown): Array<{ path: string; 
   const html = parsed.success ? parsed.data.descriptionHtml : null;
   return html && html.trim() !== "" ? [{ path: "descriptionHtml", html }] : [];
 }
+
+/** The page's own "reposted" label ("Reposted 2 weeks ago", "Wiedereingestellt vor 3 Tagen") of a stored payload, for the ghost job check. */
+export function sessionRepostLabel(payload: unknown): string | null {
+  const parsed = sessionPayloadSchema.safeParse(payload);
+  const text = parsed.success ? parsed.data.postedText : null;
+  return text && text.trim() !== "" ? text.trim() : null;
+}

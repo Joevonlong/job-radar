@@ -11,7 +11,7 @@ import type { CategoryView } from "@/lib/signals/catalog";
 import { cn } from "@/lib/utils";
 
 import "./detail.css";
-import { BREAKDOWN_MARK_CLASS, BREAKDOWN_QUOTE, FLASH_STILL_MS, JD_JUMP_EVENT, jdMarkId, markClass, TRAP_MARK_CLASS, TRAP_QUOTE, VISA_MARK_CLASS, VISA_QUOTE, type JdJumpDetail, type JdQuoteTier } from "./marks";
+import { BREAKDOWN_MARK_CLASS, BREAKDOWN_QUOTE, FLASH_STILL_MS, GHOST_MARK_CLASS, GHOST_QUOTE, JD_JUMP_EVENT, jdMarkId, markClass, TRAP_MARK_CLASS, TRAP_QUOTE, VISA_MARK_CLASS, VISA_QUOTE, type JdJumpDetail, type JdQuoteTier } from "./marks";
 import { PlaceholderBox } from "./panel";
 
 /** `#jd-translation` in the address opens the translation tab (the "translate" button of the title area links there). */
@@ -36,6 +36,7 @@ export function JdPanel({ description, language, quotes, categories, translation
   const t = useTranslations("dashboard.detail.jd");
   const tTraps = useTranslations("aiTraps");
   const tVisa = useTranslations("visa.mark");
+  const tGhost = useTranslations("ghostJobs.jdMark");
   const [tab, setTab] = useState("original");
   const reduced = useReducedMotion();
   // a jump asked for while the translation tab is open waits until the original is on screen
@@ -120,6 +121,11 @@ export function JdPanel({ description, language, quotes, categories, translation
                 {tVisa("legend")}
               </mark>
             ) : null}
+            {quotes.some((q) => q.tier === GHOST_QUOTE) ? (
+              <mark className={cn("bg-transparent px-1 text-inherit", GHOST_MARK_CLASS)} data-testid="jd-legend-ghost">
+                {tGhost("legend")}
+              </mark>
+            ) : null}
           </p>
         ) : null}
       </div>
@@ -172,6 +178,7 @@ function Segments({ segments, quotes, categories }: { segments: Array<{ text: st
   const t = useTranslations("dashboard.detail.jd");
   const tTraps = useTranslations("aiTraps.mark");
   const tVisa = useTranslations("visa.mark");
+  const tGhost = useTranslations("ghostJobs.jdMark");
   return (
     <>
       {segments.map((segment, index) => {
@@ -188,6 +195,13 @@ function Segments({ segments, quotes, categories }: { segments: Array<{ text: st
         if (quote.tier === VISA_QUOTE) {
           return (
             <mark key={index} id={jdMarkId(segment.quote as number)} data-quote-index={segment.quote} title={tVisa("title")} className={cn("scroll-mt-24 bg-transparent text-inherit", VISA_MARK_CLASS)} data-tier="visa" data-testid="jd-visa-mark">
+              {text}
+            </mark>
+          );
+        }
+        if (quote.tier === GHOST_QUOTE) {
+          return (
+            <mark key={index} id={jdMarkId(segment.quote as number)} data-quote-index={segment.quote} title={tGhost("title")} className={cn("scroll-mt-24 bg-transparent text-inherit", GHOST_MARK_CLASS)} data-tier="ghost" data-testid="jd-ghost-mark">
               {text}
             </mark>
           );

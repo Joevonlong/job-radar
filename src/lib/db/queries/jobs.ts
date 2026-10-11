@@ -3,8 +3,9 @@ import { and, asc, count, desc, eq, exists, ilike, inArray, isNull, lte, ne, not
 import type { Db } from "../client";
 import { applications, channels, companies, jobFavorites, jobSources, jobs, jobVisa, trapScans } from "../schema";
 import type { MonthSalaryFigure } from "@/lib/domain/salary";
-import { DEFAULT_SORT_DIR, type ApplicationFilterStatus, type JobSort, type SortDir, type TrapFilter, type VisaFilter } from "@/lib/jobs/constants";
+import { DEFAULT_SORT_DIR, type ApplicationFilterStatus, type GhostFilter, type JobSort, type SortDir, type TrapFilter, type VisaFilter } from "@/lib/jobs/constants";
 
+import { ghostFilterCondition } from "../repos/ghost";
 import { seenSql } from "../repos/seen";
 import { uxTablesReady } from "../repos/ux-tables";
 import { effectiveStatusSql } from "./job-status";
@@ -62,6 +63,11 @@ export interface JobFilters {
    * requires a permit (`not_denied`: unclear and unchecked jobs stay). Set only when the `job_visa` table exists (`toJobFilters`).
    */
   visa?: VisaFilter | null;
+  /**
+   * The ghost job check: only jobs marked watch / likely (`only`), or every job except the likely ones (`hide`); a dismissed mark counts
+   * as none, `all` = no filter. Set only when the check is on and the `job_ghost` table exists (`toJobFilters`).
+   */
+  ghost?: GhostFilter | null;
   /** Only jobs the user has not looked at yet. */
   unseenOnly?: boolean | null;
 }
@@ -78,6 +84,8 @@ export interface ListJobsOptions {
   timezone: string;
   /** Load the visa badge data (`hydrateCards`); false when the badge is hidden. Default true. */
   visa?: boolean;
+  /** Load the ghost job marks (`hydrateCards`); only when the check is on. Default false. */
+  ghost?: boolean;
 }
 
 export interface JobPage {
@@ -182,6 +190,10 @@ export function buildJobConditions(db: Db, filters: JobFilters, timezone: string
     const found = exists(db.select({ one: sql`1` }).from(jobVisa).where(and(eq(jobVisa.jobId, jobs.id), eq(jobVisa.status, status))));
     conditions.push(filters.visa === "offered" ? found : not(found));
   }
+  if (filters.ghost) {
+    const ghost = ghostFilterCondition(filters.ghost, jobs.id);
+    if (ghost) conditions.push(ghost);
+  }
   if (filters.unseenOnly && ux) conditions.push(not(seenSql()));
   const german = hideGermanLevels(latest, filters.hideGermanLevels ?? []);
   if (german) conditions.push(german);
@@ -278,7 +290,7 @@ export async function listJobs(db: Db, options: ListJobsOptions): Promise<JobPag
     .limit(pageSize)
     .offset((page - 1) * pageSize);
 
-  return { jobs: await hydrateCards(db, rows, { visa: options.visa ?? true }), total, page, pageCount, pageSize };
+  return { jobs: await hydrateCards(db, rows, { visa: options.visa ?? true, ghost: options.ghost === true }), total, page, pageCount, pageSize };
 }
 
 /** What the "seen" controls of /jobs need about the whole filtered list (every page): how many are unseen, and how many were first seen after `since`. */

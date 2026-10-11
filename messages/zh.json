@@ -208,7 +208,8 @@
         "hideLang": "隐藏需{language}的岗位",
         "trap": "AI 陷阱",
         "high": "只看高价值信号",
-        "visa": "签证"
+        "visa": "签证",
+        "ghost": "幽灵岗位"
       },
       "localLanguage": "本地语言"
     },
@@ -4726,6 +4727,76 @@
       "disabled": "ui.yaml：job_checks.visa.enabled 为 false，没有检查",
       "noTable": "数据库里还没有 job_visa 表：先运行 pnpm db:migrate",
       "failed": "visa:scan 失败：{message}"
+    }
+  },
+  "ghostJobs": {
+    "mark": {
+      "likely": "疑似幽灵",
+      "watch": "留意",
+      "title": "岗位真实性检查（{level}，{score} 分）：{reasons}。根据挂牌时长、重发和 JD 内容做的推测，分数不受影响。",
+      "jump": "在检查面板查看原因"
+    },
+    "reason": {
+      "long_open": "已挂 {days} 天（来源发布日期 {date}，{channel}）",
+      "long_open_first_seen": "已挂 {days} 天（按首次见到计，来源没有可信发布日期）",
+      "repost_label": "{channel} 标注为“{label}”",
+      "reposted": "在 {channel} 以新编号重发（{dates}）",
+      "evergreen_wording": "写明是人才库或常年招聘",
+      "thin_short_none": "JD 只有 {words} 个词，没有职责段落",
+      "thin_short": "JD 只有 {words} 个词",
+      "thin_none": "JD 里没有职责段落",
+      "thin_none_breakdown": "JD 拆解里没有职责"
+    },
+    "short": {
+      "long_open": "已挂 {days} 天",
+      "repost_label": "来源标注重发",
+      "reposted": "以新编号重发",
+      "evergreen_wording": "写明是人才库",
+      "thin_description": "JD 空泛"
+    },
+    "filter": {
+      "label": "幽灵岗位",
+      "all": "全部",
+      "only": "只看疑似",
+      "hide": "隐藏疑似",
+      "chip": "幽灵岗位：{value}",
+      "remove": "移除筛选“幽灵岗位：{value}”"
+    },
+    "checks": {
+      "title": "岗位真实性",
+      "clear": "未发现异常",
+      "watch": "留意（{score} 分）",
+      "likely": "疑似幽灵（{score} 分）",
+      "dismissed": "已忽略",
+      "notChecked": "尚未检查",
+      "jump": "在原文中查看",
+      "note": "这是根据挂牌时长、重发和 JD 内容做的推测，不代表岗位一定不真实；分数不受影响。",
+      "dismiss": "不是幽灵岗位",
+      "undo": "撤销忽略",
+      "dismissedNote": "你已标记为不是幽灵岗位；出现新的原因时会再次提示。",
+      "failed": "保存失败，请重试。"
+    },
+    "jdMark": {
+      "legend": "幽灵岗位",
+      "title": "这份岗位可能不是真实空缺的原因"
+    },
+    "cli": {
+      "usage": "用法：pnpm ghost:check [--write] [--job ID] [--limit N] [--json]\n  默认只预览、不写库（ui.yaml job_checks.ghost.enabled 为 false 时也能用）；--write 写入结果\n  --job ID：只查这个岗位（总是重新计算）\n  --limit N：最多这么多个岗位（默认 pipeline.yaml job_checks.ghost.per_cycle_limit）\n  --json：输出 JSON，含各档位占比",
+      "preview": "预览：没有写入任何内容（加 --write 才写入）",
+      "summary": "检查了 {scanned} 个岗位：{changed} 个有变化，{failed} 个失败",
+      "levels": "本次检查的岗位：疑似幽灵 {likely} 个（{likelyShare}），留意 {watch} 个（{watchShare}），未发现异常 {none} 个",
+      "stats": "库里未关闭的岗位：疑似幽灵 {likely} 个，留意 {watch} 个，未发现异常 {none} 个，已忽略 {dismissed} 个，尚未检查 {unchecked} 个",
+      "job": "岗位 {id}：{level}（{score} 分）",
+      "changed": "（有变化）",
+      "reason": "  - {reason}（+{points}）",
+      "disabled": "ui.yaml：job_checks.ghost.enabled 为 false，拒绝 --write（去掉 --write 可以预览）",
+      "noTable": "数据库还没有 job_ghost 表：先运行 pnpm db:migrate",
+      "failed": "ghost:check 失败：{message}",
+      "level": {
+        "none": "未发现异常",
+        "watch": "留意",
+        "likely": "疑似幽灵"
+      }
     }
   },
   "market": {

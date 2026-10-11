@@ -220,7 +220,7 @@ async function countCyclePending(db: Db, cycleId: number): Promise<number> {
 }
 
 /** The filters of a saved view that the Today list takes on top of its own (the date range is today, the toggles have their own options). */
-export type TodayExtraFilters = Pick<JobFilters, "q" | "qLocationTerms" | "sources" | "cities" | "cityMembers" | "workplaces" | "contracts" | "statuses" | "applicationStatuses" | "minRank" | "minAnnualSalary" | "salaryDisclosed" | "trap" | "visa">;
+export type TodayExtraFilters = Pick<JobFilters, "q" | "qLocationTerms" | "sources" | "cities" | "cityMembers" | "workplaces" | "contracts" | "statuses" | "applicationStatuses" | "minRank" | "minAnnualSalary" | "salaryDisclosed" | "trap" | "visa" | "ghost">;
 
 export interface TodayOptions {
   /** "Now": the day is the calendar day of this instant in `timezone`. */
@@ -247,6 +247,8 @@ export interface TodayOptions {
   extra?: TodayExtraFilters;
   /** Load the visa badge data (`hydrateCards`); false when the badge is hidden. Default true. */
   visa?: boolean;
+  /** Load the ghost job marks (`hydrateCards`); only when the check is on. Default false. */
+  ghost?: boolean;
 }
 
 /**
@@ -268,7 +270,7 @@ export async function listTodayJobs(db: Db, options: TodayOptions): Promise<JobC
     .leftJoin(latest, eq(latest.jobId, jobs.id))
     .where(and(...conditions))
     .orderBy(sql`coalesce(${latest.filterResult} = 'filtered_out', false) asc`, sql`${latest.rankValue} desc nulls last`, sql`${jobs.postedAt} desc nulls last`, desc(jobs.firstSeenAt), desc(jobs.id));
-  return hydrateCards(db, rows, { visa: options.visa ?? true });
+  return hydrateCards(db, rows, { visa: options.visa ?? true, ghost: options.ghost === true });
 }
 
 /** The conditions that select the Today list (the window, ignored / filtered-out jobs, the toggles and the saved view's filters); the quick view is added by the caller. */

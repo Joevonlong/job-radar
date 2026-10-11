@@ -1,6 +1,7 @@
 import { useTranslations } from "next-intl";
 import type { ReactNode } from "react";
 
+import { GhostMark, type GhostMarkValue } from "@/components/jobs/ghost-mark";
 import { JobViewTransition } from "@/components/jobs/job-view-transition";
 import { ScoreComposition } from "@/components/viz/score-composition";
 import { ScoreMeter } from "@/components/viz/score-meter";
@@ -37,13 +38,15 @@ export interface ScoreCardProps {
   scoredWhen: string | null;
   /** The market's local language as the page names it (the deduction line). */
   languageName?: string | null;
+  /** The ghost job mark (watch / likely, not dismissed, ui.yaml `job_checks.ghost` on); a link to the checks card's row. */
+  ghost?: GhostMarkValue | null;
 }
 
 /**
  * "Rank value" card of the detail page: the 20-cell meter with the 72px number, the stacked match + bonus bar, and the
  * numbers behind it. A job the filter removed has no rank value and says so; one waiting for the AI shows the pending state.
  */
-export function ScoreCard({ jobId, score, pushLine, bonusCap, scoreNow, scoredWhen, languageName = null }: ScoreCardProps) {
+export function ScoreCard({ jobId, score, pushLine, bonusCap, scoreNow, scoredWhen, languageName = null, ghost = null }: ScoreCardProps) {
   const t = useTranslations("dashboard.detail");
   const tRank = useTranslations("dashboard.rank");
   const tMeta = useTranslations("scoring.meta");
@@ -89,6 +92,7 @@ export function ScoreCard({ jobId, score, pushLine, bonusCap, scoreNow, scoredWh
             </div>
           </JobViewTransition>
         )}
+        {ghost ? <GhostMark ghost={ghost} href="#h-checks" /> : null}
         {scoreNow}
         {scored ? (
           <dl className="text-muted-foreground text-data grid grid-cols-[1fr_auto] gap-x-3 gap-y-0.5 font-mono" data-testid="rank-breakdown">

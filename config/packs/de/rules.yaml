@@ -117,6 +117,75 @@ closed_posting:
     - \bBewerbungs(?:phase|frist) (?:ist )?(?:beendet|abgelaufen)\b
     - \bnimmt keine Bewerbungen mehr\b
 
+# Anzeichen, dass eine Anzeige keine echte offene Stelle ist (German patterns of the ghost job check; docs/ghost-jobs.md).
+# Regex, case-insensitive with Unicode: word boundaries are (?<![\p{L}\p{N}]) / (?![\p{L}\p{N}]); \b does not know umlauts.
+# Keys, `id` and `check_negation` as in the generic pack.
+ghost:
+  # LinkedIn auf Deutsch: "Wiedereingestellt vor 2 Wochen"
+  repost_label_patterns:
+    - id: reposted
+      pattern: '(?<![\p{L}\p{N}])(?:wiedereingestellt|wieder\s+eingestellt|erneut\s+(?:veröffentlicht|gepostet|eingestellt|ausgeschrieben))(?![\p{L}\p{N}])'
+  evergreen_patterns:
+    # "Diese Ausschreibung dient dem Aufbau unseres Talentpools", "Wir suchen für unseren Talent-Pool"
+    - id: talent_pool
+      pattern: '(?<![\p{L}\p{N}])(?:für|aufbau|erweiterung|ausbau)\s+(?:unser(?:es|en|em|e)?|des|den|einen?|eines)\s+(?:\p{L}+\s+)?(?:talent-?\s?pools?|talent-?\s?community|bewerber-?pools?|kandidaten-?pools?|talentnetzwerk(?:e?s)?)(?![\p{L}\p{N}])'
+    # "Diese Stelle dient der Sammlung von Initiativbewerbungen", "Die Ausschreibung richtet sich an zukünftige Vakanzen"
+    - id: open_application
+      pattern: '(?<![\p{L}\p{N}])(?:stelle|ausschreibung|stellenausschreibung|stellenanzeige|anzeige|position|vakanz)\s+(?:ist|dient|richtet\s+sich|gilt)\s+(?:[\p{L}-]+\s+){0,5}?(?:initiativbewerbung\p{L}*|initiativ|talent-?\s?pool\p{L}*|zukünftige\p{L}*|künftige\p{L}*)(?![\p{L}\p{N}])'
+    # "Initiativbewerbung (m/w/d)" as the posting's own title in the text
+    - id: open_application_title
+      pattern: '(?<![\p{L}\p{N}])initiativbewerbung(?:en)?\s*\(\s*(?:m|w|d|f|x|gn|div|all)\s*/'
+    # "Es gibt keine konkrete Stelle", "nicht für eine bestimmte Position"
+    - id: no_specific_opening
+      pattern: '(?<![\p{L}\p{N}])(?:kein(?:e|en)?|nicht\s+(?:für|auf|an)\s+(?:eine|einen))\s+(?:konkrete|bestimmte|offene|aktuelle|ausgeschriebene|vakante|spezifische|feste)n?\s+(?:stelle|position|vakanz|stellenausschreibung|ausschreibung)(?:n)?(?![\p{L}\p{N}])'
+      check_negation: false
+    # "Wir stellen laufend ein", "Wir sind immer auf der Suche nach motivierten Menschen"
+    - id: always_hiring
+      pattern: '(?<![\p{L}\p{N}])(?:(?:suchen|sucht|stellen|stellt)\s+(?:wir\s+|sie\s+)?(?:laufend|ständig|fortlaufend|kontinuierlich|jederzeit|permanent|das\s+ganze\s+jahr)(?!\s+nach\s+(?:wegen|möglichkeiten|lösungen|verbesserung\p{L}*|ideen))|(?:immer|stets|ständig|laufend|jederzeit)\s+auf\s+der\s+suche\s+nach\s+(?:\p{L}+\s+){0,2}?(?:menschen|talenten|verstärkung|kolleg\p{L}*|mitarbeit\p{L}*|persönlichkeiten|bewerber\p{L}*))(?![\p{L}\p{N}])'
+    # "Wir sammeln Bewerbungen für zukünftige Stellen"
+    - id: future_openings
+      pattern: '(?<![\p{L}\p{N}])(?:für|auf)\s+(?:zukünftige|künftige|kommende|spätere)\s+(?:stellen|positionen|vakanzen|ausschreibungen|bedarfe|einsätze)(?![\p{L}\p{N}])'
+  responsibility_patterns:
+    - id: responsibilities
+      pattern: '(?<![\p{L}\p{N}])(?:(?:deine|ihre|eure|unsere|die|meine|deine\s+wichtigsten|ihre\s+wichtigsten)\s+)?(?:aufgaben\p{L}*|tätigkeit(?:en|sbeschreibung|sbereich|sfeld)?|verantwortung(?:en|sbereich)?|zuständigkeit\p{L}*)(?![\p{L}\p{N}])'
+    - id: what_you_do
+      pattern: '(?<![\p{L}\p{N}])(?:was\s+(?:du|sie)\s+(?:bewegst|bewegen|tun|tust|machst|machen|erreichst|erreichen)|das\s+erwartet\s+(?:dich|sie)|was\s+(?:dich|sie)\s+erwartet)(?![\p{L}\p{N}])'
+    - id: the_role
+      pattern: '^(?:deine|ihre|die|dein|ihr)\s+(?:rolle|mission|herausforderung(?:en)?|job|einsatz)$'
+  negation_cues:
+    - nicht
+    - nein
+    - nie
+    - niemals
+    - 'kein\p{L}*'
+    - ohne
+  clause_breaks:
+    - '(?<![\p{L}\p{N}])(?:aber|jedoch|sondern|während|wobei|allerdings|außer|stattdessen)(?![\p{L}\p{N}])'
+    - '(?<![\p{L}\p{N}])(?:und|daher|deshalb)\s+(?:wir|du|sie|ihr|es|unser\p{L}*|dein\p{L}*|euer\p{L}*|diese\p{L}*)(?![\p{L}\p{N}])'
+  exclude_context:
+    # das Produkt oder die Kunden: "Talentpool-Software", "Wir helfen Unternehmen beim Aufbau ihres Talentpools"
+    - '(?<![\p{L}\p{N}])(?:talent|bewerber|kandidaten)-?\s?pool-?\s?(?:software|management|lösung\p{L}*|plattform\p{L}*|tools?|systems?|crm|funktion\p{L}*)(?![\p{L}\p{N}])'
+    - '(?<![\p{L}\p{N}])(?:kunden|kundinnen|mandanten|unternehmen|firmen|arbeitgeber\p{L}*|recruiter\p{L}*)\s+(?:[\p{L}-]+\s+){0,4}?(?:talent|bewerber|kandidaten)-?\s?pool\p{L}*'
+    # eine Aufgabe der Stelle: "Du bist verantwortlich für den Aufbau unseres Talentpools", "Aufbau und Pflege unseres Talentpools"
+    - '(?<![\p{L}\p{N}])(?:verantwort\p{L}*|pflegst|pflegen|pflege|betreust|betreuen|baust|managst|kümmerst|übernimmst|unterstützt|unterstützen|entwickelst|gestaltest)(?![\p{L}\p{N}])'
+    # der Schluss einer echten Anzeige: "Keine passende Stelle dabei? Dann bewirb dich initiativ", "Falls aktuell keine offene Stelle …"
+    - '(?<![\p{L}\p{N}])(?:kein(?:e|en)?|nicht)\s+(?:die\s+)?(?:passende|richtige|geeignete)\p{L}*'
+    - '(?<![\p{L}\p{N}])nichts\s+(?:passendes|dabei|gefunden)(?![\p{L}\p{N}])'
+    - '(?<![\p{L}\p{N}])(?:falls|wenn|sofern|sollte|solltest|sollten|ob)(?![\p{L}\p{N}])'
+    # Datenschutz und "wir berücksichtigen deine Bewerbung gerne auch für zukünftige Stellen"
+    - '(?<![\p{L}\p{N}])(?:datenschutz\p{L}*|dsgvo|einwillig\p{L}*|personenbezogen\p{L}*|speicher\p{L}*|aufbewahr\p{L}*|lösch\p{L}*|widerruf\p{L}*)'
+    - '(?<![\p{L}\p{N}])(?:auch|gerne)\s+(?:für|bei)\s+(?:zukünftige|künftige|kommende|spätere|andere)(?![\p{L}\p{N}])'
+    - '(?<![\p{L}\p{N}])(?:berücksichtig\p{L}*|vormerk\p{L}*|in\s+evidenz)(?![\p{L}\p{N}])'
+  abbreviations: [z.B, z, B, ca, inkl, bzw, usw, u.a, d.h, ggf, evtl, nr, z.T, bspw, max, min, std, gmbh, mio, tsd]
+  # A quick first look (speed): every phrase the evergreen patterns above can match contains one of these (or of the generic pack's).
+  prefilter:
+    - talent
+    - pool
+    - initiativ
+    - '(?:laufend|ständig|fortlaufend|kontinuierlich|jederzeit|permanent|stets|immer|ganze)'
+    - '(?:zukünftig|künftig|kommend|später)'
+    - '(?:konkret|bestimmt|offen|aktuell|ausgeschrieben|vakant|spezifisch|fest)'
+
 # Was eine Stellenanzeige zu Visum / Arbeitserlaubnis sagt (German patterns of the visa check; docs/visa-sponsorship.md).
 # Regex, case-insensitive with Unicode: word boundaries are (?<![\p{L}\p{N}]) / (?![\p{L}\p{N}]); \b does not know umlauts.
 # Compounds are written as stems: Visa-?(?:sponsoring|unterstützung), Visums?unterstützung, \p{L}*visum\p{L}*.

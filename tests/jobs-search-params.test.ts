@@ -203,6 +203,32 @@ describe("visa filter", () => {
   });
 });
 
+describe("ghost job filter", () => {
+  it("reads ghost=all|only|hide and ignores anything else; all is no filter", () => {
+    expect(loadJobsSearchParams("?ghost=only").ghost).toBe("only");
+    expect(loadJobsSearchParams("?ghost=hide").ghost).toBe("hide");
+    expect(loadJobsSearchParams("?ghost=yes").ghost).toBeNull();
+    expect(loadJobsSearchParams("?ghost=all").ghost).toBe("all");
+    expect(countActiveFilters(loadJobsSearchParams("?ghost=all&minScore=70"))).toBe(1);
+    expect(hasActiveFilters(loadJobsSearchParams("?ghost=all"))).toBe(false);
+    expect(countActiveFilters(loadJobsSearchParams("?ghost=hide&minScore=70"))).toBe(2);
+    expect(jobsListHref({ ghost: "only", page: 1 })).toBe("/jobs?ghost=only");
+  });
+
+  it("while the check is off is ignored but kept", () => {
+    const params = loadJobsSearchParams("?ghost=only");
+    expect(hasActiveFilters(params, { ignore: ["ghost"] as const })).toBe(false);
+    expect(jobsListHref({ ...params, page: 1 })).toContain("ghost=only");
+  });
+
+  it("a saved view keeps only and hide, never all", () => {
+    expect(viewFiltersFromParams(loadJobsSearchParams("?ghost=hide"))).toEqual({ ghost: "hide" });
+    expect(viewFiltersFromParams(loadJobsSearchParams("?ghost=all"))).toEqual({});
+    expect(viewFiltersToParams({ ghost: "only" }).ghost).toBe("only");
+    expect(viewFiltersToParams({}).ghost).toBeNull();
+  });
+});
+
 describe("jobs sort direction", () => {
   it("reads the sort direction: asc / desc, anything else is unset; it is not a filter", () => {
     expect(loadJobsSearchParams("?sort=salary&dir=asc")).toMatchObject({ sort: "salary", dir: "asc" });

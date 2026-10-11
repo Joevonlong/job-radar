@@ -113,6 +113,92 @@ filter:
       - \bglobal(?:ly)?\b
       - \banywhere\b
 
+# Signs that a posting is not a real opening (the ghost job check, English; docs/ghost-jobs.md). Only a hint next to the score:
+# nothing here changes a score or hides a job. Regex, matched case-insensitively with Unicode: write word boundaries as
+# (?<![\p{L}\p{N}]) and (?![\p{L}\p{N}]), not \b. Every entry has an `id` the checks panel names; a pattern in several packs counts once.
+ghost:
+  # The source's own "reposted" label (LinkedIn: "Reposted 2 weeks ago"). Only channels that report such a label use these.
+  repost_label_patterns:
+    - id: reposted
+      pattern: '(?<![\p{L}\p{N}])re-?posted(?![\p{L}\p{N}])'
+  # The JD says the posting is a talent pool or always open, not one opening. Each sentence, list item or short heading + next line
+  # is judged on its own. A negation cue (negation_cues) inside the phrase, a few words before it, a few words after it in the same
+  # clause, or in the heading of its list cancels it ("This is not a talent pool posting"); `check_negation: false` marks a phrase
+  # that is a negation itself. A sentence matching exclude_context does not count, nor does a list item under a duties heading
+  # (responsibility_patterns: a recruiter's "- Build our talent pool").
+  evergreen_patterns:
+    # "This posting is for our talent pool", "Join our talent community", "talent pool requisition"
+    - id: talent_pool
+      pattern: '(?<![\p{L}\p{N}])(?:(?:for|into|join|joining|to|in)\s+(?:our|the)\s+(?:global\s+|future\s+|general\s+)?talent\s+(?:pool|community|network|pipeline)|talent\s+(?:pool|community|pipeline)\s+(?:posting|position|role|requisition|listing|opening|vacancy))(?![\p{L}\p{N}])'
+    # "This is an evergreen role", "evergreen requisition"
+    - id: evergreen_posting
+      pattern: '(?<![\p{L}\p{N}])evergreen\s+(?:role|position|posting|requisition|req|opening|job|listing|vacancy)(?![\p{L}\p{N}])'
+    # "There is no current opening", "This posting is not tied to a specific role"
+    - id: no_specific_opening
+      pattern: '(?<![\p{L}\p{N}])(?:no|not\s+(?:tied|linked|attached)\s+to\s+(?:a|any|one)|not\s+for\s+(?:a|one|any))\s+(?:current|specific|particular|immediate|concrete|actual|open|active)\s+(?:openings?|positions?|roles?|vacanc(?:y|ies)|jobs?|requisitions?)(?![\p{L}\p{N}])'
+      check_negation: false
+    # "We are always hiring", "We're always accepting applications", "always looking for talented people"
+    # (not "always looking for engineers who …": too common in real postings)
+    - id: always_hiring
+      pattern: '(?<![\p{L}\p{N}])(?:always|continuously|constantly|perpetually)\s+(?:hiring|recruiting|accepting\s+(?:applications|resumes|cvs|candidates)|looking\s+for\s+(?:(?:new|great|talented|exceptional|outstanding|motivated)\s+)*(?:people|talent|candidates|individuals|team\s+members))(?![\p{L}\p{N}])'
+    # "We collect applications for future openings"
+    - id: future_openings
+      pattern: '(?<![\p{L}\p{N}])(?:for|about)\s+(?:potential\s+|upcoming\s+)?future\s+(?:openings|opportunities|vacancies|positions|roles|needs)(?![\p{L}\p{N}])'
+  # A heading that opens the duties of the role. Tested only against heading-shaped lines (short; a "#" heading, ending in ":" or
+  # without end punctuation) and "Label:" prefixes, after "*" / "_" emphasis is removed.
+  responsibility_patterns:
+    - id: responsibilities
+      pattern: '(?<![\p{L}\p{N}])(?:(?:key|main|core|your|primary|job|role|daily)\s+)?(?:responsibilities|duties|accountabilities|tasks)(?![\p{L}\p{N}])'
+    - id: what_you_do
+      pattern: '(?<![\p{L}\p{N}])what\s+you[''’]?(?:ll|\s+will)?\s+(?:do|be\s+doing|work\s+on|own|build|achieve)(?![\p{L}\p{N}])'
+    - id: the_role
+      pattern: '^(?:about\s+)?(?:the|your|this)\s+(?:role|position|job|mission|impact|day)$'
+    - id: in_this_role
+      pattern: '(?<![\p{L}\p{N}])(?:in\s+this\s+(?:role|position)|day[-\s]to[-\s]day|a\s+day\s+in\s+the\s+life)(?![\p{L}\p{N}])'
+  negation_cues:
+    - not
+    - 'no'
+    - never
+    - none
+    - without
+    - cannot
+    - 'can[''’]?t'
+    - 'don[''’]?t'
+    - 'doesn[''’]?t'
+    - 'isn[''’]?t'
+    - 'aren[''’]?t'
+  # Where the clause around an evergreen phrase ends for the negation search: "We have no open role in sales; this posting is for
+  # our talent pool" still counts. A comma does not end it.
+  clause_breaks:
+    - '[;(]'
+    - '\s[–—]\s'
+    - '(?<![\p{L}\p{N}])(?:but|however|although|though|while|whereas|except|instead|rather)(?![\p{L}\p{N}])'
+    - '(?<![\p{L}\p{N}])(?:so|and)\s+(?:we|you|they|our|your|there|this)(?![\p{L}\p{N}])'
+  # Sentences that mention a talent pool or future roles without saying this posting is one.
+  exclude_context:
+    # the employer's product or its customers: "talent pool software", "helps companies build their talent pipelines"
+    - '(?<![\p{L}\p{N}])talent\s+(?:pool|community|pipeline|network|acquisition)\s+(?:software|platform|management|crm|tools?|solutions?|products?|systems?|features?)(?![\p{L}\p{N}])'
+    - '(?<![\p{L}\p{N}])(?:customers?|clients?|companies|employers|businesses|users|recruiters|teams)(?:[''’]s?)?\s+(?:[\p{L}-]+\s+){0,3}?talent\s+(?:pools?|pipelines?|communit(?:y|ies)|networks?)(?![\p{L}\p{N}])'
+    # a duty of the role: "You will build and nurture our talent pipeline", "responsible for our talent pool"
+    - '(?<![\p{L}\p{N}])(?:build|building|grow|growing|manage|managing|maintain|maintaining|nurture|nurturing|develop|developing|own|owning|source|sourcing|engage|engaging|responsible\s+for|support|supporting|expand|expanding)\s+(?:[\p{L}''’-]+\s+){0,3}?talent\s+(?:pools?|pipelines?|communit(?:y|ies)|networks?)(?![\p{L}\p{N}])'
+    # the footer of a real posting: "Don't see a role that fits? Join our talent community", "If none of our roles fit …"
+    - '(?<![\p{L}\p{N}])(?:don[''’]?t|do\s+not|didn[''’]?t|can[''’]?t|cannot|couldn[''’]?t)\s+(?:see|find)(?![\p{L}\p{N}])'
+    - '(?<![\p{L}\p{N}])(?:none\s+of\s+(?:our|the|these)|no)\s+(?:suitable|matching|relevant|right|fitting)\s+(?:roles?|positions?|jobs?|openings?|vacanc(?:y|ies))(?![\p{L}\p{N}])'
+    - '(?<![\p{L}\p{N}])(?:if|in\s+case|should|whether)\s+(?:[\p{L}''’-]+\s+){0,6}?(?:no|none|not|don[''’]?t|doesn[''’]?t|isn[''’]?t|aren[''’]?t|can[''’]?t)(?![\p{L}\p{N}])'
+    # privacy notes and "your application may also be considered for future roles"
+    - '(?<![\p{L}\p{N}])(?:privacy|gdpr|data\s+protection|personal\s+data|consent|retain|retention|on\s+file|keep\s+your|store\s+your|delete)(?![\p{L}\p{N}])'
+    - '(?<![\p{L}\p{N}])also\s+(?:be\s+)?(?:consider\p{L}*|kept|keep|use|used|added)(?![\p{L}\p{N}])'
+    - '(?<![\p{L}\p{N}])(?:may|might|will|would|can)\s+(?:also\s+)?(?:contact|reach\s+out\s+to|notify)\s+you(?![\p{L}\p{N}])'
+  abbreviations: [e.g, i.e, etc, incl, approx, vs, inc, ltd, co, corp, mr, ms, dr]
+  # A quick first look (speed): a JD or sentence with none of these is not searched for evergreen phrases. Every phrase the
+  # evergreen patterns can match contains one of them; keep it so when you add a pattern (pnpm config:check warns).
+  prefilter:
+    - talent
+    - evergreen
+    - '(?:always|continuously|constantly|perpetually)'
+    - future
+    - '(?:current|specific|particular|immediate|concrete|actual|open|active)'
+
 visa:
   # Support is mentioned: "We offer visa sponsorship and relocation support", "Visa sponsorship is available".
   # A negation cue (negation_cues) inside it, a few words before it ("We do not offer …") or a few words after it in the same clause

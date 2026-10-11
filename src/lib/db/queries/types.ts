@@ -4,6 +4,7 @@ import type { ApplicationStatus } from "../repos/applications";
 import type { FavoriteState } from "../repos/favorites";
 import type { Job, JobStatus } from "../repos/jobs";
 import type { ClosedReason } from "@/lib/jobs/closure";
+import type { GhostMark } from "@/lib/db/repos/ghost";
 import type { VisaKind } from "@/lib/visa/types";
 import type { LinkCheckEvidence } from "@/lib/jobs/link-check-evidence";
 
@@ -95,6 +96,8 @@ export interface JobCard {
   traps?: { traps: number; suspicious: number } | null;
   /** What the JD says about visa sponsorship, when it says something clear (`job_visa`: offered / not_offered); null otherwise or before the check. */
   visa?: { status: "offered" | "not_offered"; kind: VisaKind } | null;
+  /** The ghost job check's mark (`job_ghost`: watch / likely, not dismissed); null otherwise, before the check or while the check is off. */
+  ghost?: GhostMark | null;
   /** The user has looked at the job (opened it, its posting, or acted on its row); unseen rows are bold with a dot. */
   seen: boolean;
 }

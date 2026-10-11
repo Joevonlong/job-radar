@@ -68,6 +68,7 @@ function jobDetail(over: Partial<JobDetail> = {}): JobDetail {
     favorite: null,
     applicationEvents: [],
     visa: null,
+    ghost: null,
     ...over,
   };
 }

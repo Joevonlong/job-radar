@@ -39,7 +39,16 @@ describe("toJobFilters", () => {
       salaryDisclosed: true,
       trap: null,
       visa: null,
+      ghost: null,
     });
+  });
+
+  it("passes the ghost filter only while the check is available, and reads `all` as no filter", () => {
+    expect(toJobFilters({ ghost: "only" }, { cityGroups: null, ghost: true }).ghost).toBe("only");
+    expect(toJobFilters({ ghost: "hide" }, { cityGroups: null, ghost: true }).ghost).toBe("hide");
+    expect(toJobFilters({ ghost: "all" }, { cityGroups: null, ghost: true }).ghost).toBeNull();
+    expect(toJobFilters({ ghost: "only" }, { cityGroups: null }).ghost).toBeNull();
+    expect(toJobFilters({ ghost: "only" }, { cityGroups: null, ghost: false }).ghost).toBeNull();
   });
 
   it("needsCityGroups is true only when a city is picked", () => {

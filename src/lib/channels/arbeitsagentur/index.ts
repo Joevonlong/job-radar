@@ -121,6 +121,9 @@ export const arbeitsagenturChannel: Channel = {
   family: "arbeitsagentur",
   kind: "api",
   usesQueries: true,
+  // the ghost job check: the Referenznummer is stable and the detail's full text is stored
+  stableExternalIds: true,
+  fullDescription: true,
   collect,
   parse: parseArbeitsagenturPayload,
 };

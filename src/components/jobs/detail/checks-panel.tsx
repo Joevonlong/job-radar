@@ -11,10 +11,12 @@ import type { GermanCheck } from "@/lib/dashboard/german-check";
 import type { SkillMatch } from "@/lib/dashboard/skills";
 import type { TrapCheckView } from "@/lib/traps/view";
 import type { VisaCheckView } from "@/lib/visa/view";
+import { ghostReasonMessage, type GhostCheckView } from "@/lib/ghost/view";
 import { formatSalary, UNKNOWN } from "@/lib/format/numbers";
 import { cn } from "@/lib/utils";
 
 import { CheckRow } from "./check-row";
+import { GhostDismissButton } from "./ghost-dismiss";
 
 export interface ChecksPanelProps {
   german: GermanCheck;
@@ -32,6 +34,8 @@ export interface ChecksPanelProps {
   traps?: TrapCheckView | null;
   /** The visa sponsorship row (after the trap row); absent when ui.yaml `job_checks.visa.enabled` is false. */
   visa?: { view: VisaCheckView; /** JD panel mark of the first quote the JD shows; null = none. */ jdIndex: number | null } | null;
+  /** The "Is the job real?" row (after the traps, before visa); absent when ui.yaml `job_checks.ghost.enabled` is false. */
+  ghost?: { jobId: number; view: GhostCheckView; /** JD panel mark of the evergreen quote; null = the JD does not show it. */ jdIndex: number | null } | null;
 }
 
 function Cap({ children }: { children: ReactNode }) {
@@ -43,11 +47,12 @@ function Cap({ children }: { children: ReactNode }) {
  * the skills it lists against your profile (cells + all the skills), and the stated salary against your floor.
  * Every unknown stays unknown: no German requirement written means no guess, no salary means no verdict (C3).
  */
-export function ChecksPanel({ german, germanPenalty, germanDetail, skills, profileHasSkills, floor, traps, visa, languageName = null }: ChecksPanelProps) {
+export function ChecksPanel({ german, germanPenalty, germanDetail, skills, profileHasSkills, floor, traps, visa, ghost, languageName = null }: ChecksPanelProps) {
   const language = languageName ?? "";
   const t = useTranslations("dashboard.detail.checks");
   const tTraps = useTranslations("aiTraps.checks");
   const tVisa = useTranslations("visa.checks");
+  const tGhost = useTranslations("ghostJobs");
   const locale = useAppLocale();
   const money = (amount: number | null, approx = false): string => (amount === null ? UNKNOWN : (formatSalary({ min: amount, max: amount, approx, currency: floor.currency }, { locale }) ?? UNKNOWN));
   const mineText = german.native ? t("german.native") : (german.mine ?? "");
@@ -146,6 +151,32 @@ export function ChecksPanel({ german, germanPenalty, germanDetail, skills, profi
             )}
           </span>
         </>
+      ) : null}
+
+      {ghost ? (
+        <CheckRow
+          title={tGhost("checks.title")}
+          testId="ghost-check"
+          state={ghost.view.state}
+          tone={ghost.view.tone}
+          text={
+            ghost.view.state === "watch" || ghost.view.state === "likely"
+              ? tGhost(`checks.${ghost.view.state}`, { score: ghost.view.score })
+              : tGhost(ghost.view.state === "not_checked" ? "checks.notChecked" : `checks.${ghost.view.state}`)
+          }
+          items={
+            ghost.view.state === "clear" || ghost.view.state === "not_checked"
+              ? []
+              : ghost.view.reasons.map((reason) => {
+                  const message = ghostReasonMessage(reason);
+                  return tGhost(message.key, message.values);
+                })
+          }
+          quotes={ghost.view.quote && ghost.view.state !== "clear" ? [{ text: ghost.view.quote }] : []}
+          {...(ghost.jdIndex !== null && ghost.view.state !== "clear" ? { jump: { index: ghost.jdIndex, label: tGhost("checks.jump") } } : {})}
+          action={ghost.view.canDismiss ? <GhostDismissButton jobId={ghost.jobId} action="dismiss" /> : ghost.view.canUndo ? <GhostDismissButton jobId={ghost.jobId} action="clear" /> : null}
+          note={ghost.view.state === "dismissed" ? `${tGhost("checks.dismissedNote")} ${tGhost("checks.note")}` : tGhost("checks.note")}
+        />
       ) : null}
 
       {visa ? (

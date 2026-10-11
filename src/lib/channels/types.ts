@@ -291,6 +291,20 @@ export interface Channel {
    * attributes). Reads the payload only (C1); returns `[]` when the payload does not match. Omit for channels that keep no HTML.
    */
   descriptionHtml?(payload: unknown): DescriptionHtmlFragment[];
+  /**
+   * The ghost job check: one posting keeps one `external_id` on this channel, so a new id for the same job is a relisting. Omit for
+   * channels whose ids change between fetches or come from another id space (search aggregators, e-mail alerts).
+   */
+  readonly stableExternalIds?: boolean;
+  /** The ghost job check: the channel stores the posting's full text, not a snippet, so a short JD says something about the employer. */
+  readonly fullDescription?: boolean;
+  /** The ghost job check: the posted date `parse` returns is the source's own (an ATS's publish date), not a guess or an aggregator's. */
+  readonly trustedPostedAt?: boolean;
+  /**
+   * The ghost job check: the source's own "reposted" label of a stored payload ("Reposted 2 weeks ago"), or null. Reads the payload
+   * only (C1) and returns null when it does not match. Omit for channels without such a label.
+   */
+  repostLabel?(payload: unknown): string | null;
   /** USD for `paidRecords` billable records; omit for free channels. */
   estimateCost?(paidRecords: number): number;
   /**

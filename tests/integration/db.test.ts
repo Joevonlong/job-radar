@@ -32,6 +32,7 @@ const EXPECTED_TABLES = [
   "job_closure_overrides",
   "job_favorites",
   "job_filter_overrides",
+  "job_ghost",
   "job_seen",
   "job_sources",
   "job_traps",

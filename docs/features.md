@@ -136,6 +136,7 @@ Demo data throughout: the companies and jobs are invented. To click around the s
 |---|---|
 | Hard filters | Cities, salary floor, contract types, blocked companies. Filtered jobs aren't deleted; you can see them and why. |
 | Visa sponsorship | If you need sponsorship, each job shows what its ad says about a visa or work permit, quoted from the ad: support mentioned, refused, or a permit you must already hold. Filter on it, or veto refusals. [How](visa-sponsorship.md) |
+| Ghost jobs | Optional: a "Likely ghost" or "Watch" mark for postings open for months, relisted under a new id, written as a talent pool, or with a thin description, each reason shown. Filter on it, or dismiss it per job. Only a hint: the score stays. [How](ghost-jobs.md) |
 | Scoring criteria | Your priorities, nice-to-haves and dealbreakers, one sentence each, any language. A dealbreaker puts a job into the 0–29 band. |
 | Signal categories | Up to 12 of your own (an amount, keywords or a tag), each with a weight and colour. Start from a blank category or a ready-made preset such as "AI tools / token budget" or "Open-source time". Badges show up in lists and pushes. [Signals](signals.md) |
 | Filters and saved views | Score, signal, source, city, remote, language requirement, salary, status, date. Save a combination and switch to it on Today. |

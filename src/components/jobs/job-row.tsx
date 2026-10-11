@@ -16,6 +16,7 @@ import { parseFilterReason } from "@/lib/filter/reasons";
 import { UNKNOWN } from "@/lib/format/numbers";
 
 import { CompanyMark } from "./company-mark";
+import { GhostMark } from "./ghost-mark";
 import { FilterReasonText, useFilterReasonText } from "./filter-reasons";
 import { useHiddenStatuses } from "@/components/applications/visibility-context";
 import { isStatusOffered } from "@/lib/applications/visibility";
@@ -101,6 +102,7 @@ function ScoreCell({ job, pushLine }: { job: JobListItem; pushLine: number }) {
           {t("stale")}
         </span>
       ) : null}
+      {job.ghost ? <GhostMark ghost={job.ghost} /> : null}
     </div>
   );
 }

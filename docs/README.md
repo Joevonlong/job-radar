@@ -37,6 +37,7 @@ mock-ups.
 | [salary.md](salary.md) | Salary level on the job page (benchmark of your collected postings, links to salary sites) and the optional AI salary lookup with web search, `salary.yaml` |
 | [breakdown.md](breakdown.md) | Job breakdown: manual or automatic, card states and error codes, quote checking, `breakdown.yaml` |
 | [ai-traps.md](ai-traps.md) | AI trap detection: what is recognised, which sources only give text, how the text sent to an AI is cleaned, the marks on the pages and in Telegram, `traps.yaml`, `pnpm traps:scan` |
+| [ghost-jobs.md](ghost-jobs.md) | Signs that a posting is not a real opening: the five signals and their points, the list mark and filter, the job page line, "Not a ghost job", `pnpm ghost:check`, settings |
 | [visa-sponsorship.md](visa-sponsorship.md) | What a posting says about visa sponsorship or a work permit: the four results, the list badge and filter (for users who need sponsorship), the job page line, the visa deal-breaker, `pnpm visa:scan`, settings |
 | [insights.md](insights.md) | The /insights page: how every card is computed, `insights.yaml` |
 | [interest-suggestions.md](interest-suggestions.md) | Weekly AI suggestions: evidence rules, approve / reject, `suggest` settings |

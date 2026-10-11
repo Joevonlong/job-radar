@@ -3,7 +3,7 @@ import { z } from "zod";
 import { CHANNEL_FAMILIES, SALARY_PERIODS } from "@/lib/channels/types";
 import { SENIORITIES } from "@/lib/domain/types";
 
-import { languageRequirementSchema, type LanguageRequirement, type VisaPack } from "@/lib/market/schema";
+import { languageRequirementSchema, type GhostPack, type LanguageRequirement, type VisaPack } from "@/lib/market/schema";
 import type { Market } from "@/lib/market/types";
 
 import { nonEmptyString, nonNegativeInt, nonNegativeNumber, positiveInt, regexString } from "./common";
@@ -28,6 +28,107 @@ const periodFactors = z.strictObject(Object.fromEntries(SALARY_PERIODS.map((p) =
 
 /** `job_checks.visa` when the file has none (the visa check of the `signals` step, docs/visa-sponsorship.md). */
 export const VISA_CHECK_DEFAULTS = { per_cycle_limit: 2000, max_quotes: 3, quote_max_chars: 280, negation_words_before: 6, negation_words_after: 5, heading_max_chars: 60 } as const;
+
+/** `job_checks.ghost` when the file has none (the ghost job check of the `signals` step, docs/ghost-jobs.md). */
+export const GHOST_CHECK_DEFAULTS = {
+  per_cycle_limit: 2000,
+  levels: { watch: 3, likely: 5 },
+  long_open: {
+    enabled: true,
+    tiers: [
+      { days: 90, points: 1 },
+      { days: 180, points: 2 },
+    ],
+    first_seen_max_points: 1,
+  },
+  repost_label: { enabled: true, points: 1 },
+  reposted: { enabled: true, min_gap_days: 30, points: 2 },
+  evergreen_wording: { enabled: true, points: 2 },
+  thin_description: { enabled: true, min_words: 120, points: 1 },
+  quote_max_chars: 280,
+  negation_words_before: 6,
+  negation_words_after: 5,
+  heading_max_chars: 60,
+} as const;
+
+const ghostPoints = z.number().int().min(0).max(10);
+const ghostDays = z.number().int().min(1).max(3650);
+
+const ghostCheckSchema = z
+  .strictObject({
+    /** Jobs checked per cycle at most (new and changed jobs first; `pnpm ghost:check --write` catches up on the rest). */
+    per_cycle_limit: positiveInt.default(GHOST_CHECK_DEFAULTS.per_cycle_limit),
+    /** Points summed up: at least `watch` = "watch", at least `likely` = "likely ghost" (which also needs a reason that is not about time). */
+    levels: z
+      .strictObject({ watch: z.number().int().min(1).max(50), likely: z.number().int().min(1).max(50) })
+      .refine((l) => l.watch <= l.likely, "levels.watch must not be above levels.likely")
+      .default(GHOST_CHECK_DEFAULTS.levels),
+    /** Open for a long time: days since the trusted posted date (else since first seen, at most `first_seen_max_points`). */
+    long_open: z
+      .strictObject({
+        enabled: z.boolean().default(true),
+        /** The highest tier whose `days` are reached gives its points. */
+        tiers: z
+          .array(z.strictObject({ days: ghostDays, points: ghostPoints }))
+          .min(1)
+          .max(10)
+          .refine((tiers) => tiers.every((tier, i) => i === 0 || tier.days > (tiers[i - 1] as { days: number }).days), "tiers must be in ascending order of days")
+          .default(GHOST_CHECK_DEFAULTS.long_open.tiers.map((tier) => ({ ...tier }))),
+        /** At most this many points when only the first-seen date is known (no trusted posted date). */
+        first_seen_max_points: ghostPoints.default(GHOST_CHECK_DEFAULTS.long_open.first_seen_max_points),
+      })
+      .default({ ...GHOST_CHECK_DEFAULTS.long_open, tiers: GHOST_CHECK_DEFAULTS.long_open.tiers.map((tier) => ({ ...tier })) }),
+    /** The source labels the posting "reposted" (the market packs' `ghost.repost_label_patterns`). */
+    repost_label: z.strictObject({ enabled: z.boolean().default(true), points: ghostPoints.default(GHOST_CHECK_DEFAULTS.repost_label.points) }).default(GHOST_CHECK_DEFAULTS.repost_label),
+    /** The same channel listed it again under a new id at least `min_gap_days` later, at the same place. */
+    reposted: z
+      .strictObject({ enabled: z.boolean().default(true), min_gap_days: ghostDays.default(GHOST_CHECK_DEFAULTS.reposted.min_gap_days), points: ghostPoints.default(GHOST_CHECK_DEFAULTS.reposted.points) })
+      .default(GHOST_CHECK_DEFAULTS.reposted),
+    /** The JD says it is a talent pool / always open (the market packs' `ghost.evergreen_patterns`). */
+    evergreen_wording: z.strictObject({ enabled: z.boolean().default(true), points: ghostPoints.default(GHOST_CHECK_DEFAULTS.evergreen_wording.points) }).default(GHOST_CHECK_DEFAULTS.evergreen_wording),
+    /** A JD from a full-text source with fewer than `min_words` words, or without a duties section. */
+    thin_description: z
+      .strictObject({ enabled: z.boolean().default(true), min_words: z.number().int().min(0).max(5000).default(GHOST_CHECK_DEFAULTS.thin_description.min_words), points: ghostPoints.default(GHOST_CHECK_DEFAULTS.thin_description.points) })
+      .default(GHOST_CHECK_DEFAULTS.thin_description),
+    /** Longest quote (characters); a longer sentence is cut around the phrase. */
+    quote_max_chars: positiveInt.min(40).max(2000).default(GHOST_CHECK_DEFAULTS.quote_max_chars),
+    /** Words before an evergreen phrase searched for a negation cue (the packs' `ghost.negation_cues`). */
+    negation_words_before: z.number().int().min(0).max(20).default(GHOST_CHECK_DEFAULTS.negation_words_before),
+    /** Words after an evergreen phrase, up to the end of its clause (the packs' `ghost.clause_breaks`), searched for a negation cue. */
+    negation_words_after: z.number().int().min(0).max(20).default(GHOST_CHECK_DEFAULTS.negation_words_after),
+    /** Longest line (characters) read as a heading: a duties heading, or a heading read together with the next line. */
+    heading_max_chars: z.number().int().min(10).max(200).default(GHOST_CHECK_DEFAULTS.heading_max_chars),
+  })
+  .default(() => ghostCheckDefaults());
+
+/** A fresh copy of `GHOST_CHECK_DEFAULTS` in the schema's output shape. */
+export function ghostCheckDefaults(): GhostCheckConfig {
+  const d = GHOST_CHECK_DEFAULTS;
+  return {
+    ...d,
+    levels: { ...d.levels },
+    long_open: { ...d.long_open, tiers: d.long_open.tiers.map((tier) => ({ ...tier })) },
+    repost_label: { ...d.repost_label },
+    reposted: { ...d.reposted },
+    evergreen_wording: { ...d.evergreen_wording },
+    thin_description: { ...d.thin_description },
+  };
+}
+
+/** pipeline.yaml `job_checks.ghost` as the code reads it. */
+export interface GhostCheckConfig {
+  per_cycle_limit: number;
+  levels: { watch: number; likely: number };
+  long_open: { enabled: boolean; tiers: Array<{ days: number; points: number }>; first_seen_max_points: number };
+  repost_label: { enabled: boolean; points: number };
+  reposted: { enabled: boolean; min_gap_days: number; points: number };
+  evergreen_wording: { enabled: boolean; points: number };
+  thin_description: { enabled: boolean; min_words: number; points: number };
+  quote_max_chars: number;
+  negation_words_before: number;
+  negation_words_after: number;
+  heading_max_chars: number;
+}
 
 /**
  * config/pipeline.yaml — normalization, deduplication and job lifecycle. This is the FILE;
@@ -298,6 +399,11 @@ export const pipelineSchema = z.strictObject({
   /** Rule checks of the `signals` step that read the JD (no AI, no tokens); the user's switches are in ui.yaml `job_checks`. */
   job_checks: z
     .strictObject({
+      /**
+       * Signs that a posting is not a real opening (patterns: the market packs' `rules.yaml` `ghost`). Only a hint on the pages:
+       * it never changes a score, a filter or a push.
+       */
+      ghost: ghostCheckSchema,
       /** What the JD says about visa sponsorship / a work permit (patterns: the market packs' `rules.yaml` `visa`). */
       visa: z
         .strictObject({
@@ -316,7 +422,7 @@ export const pipelineSchema = z.strictObject({
         })
         .default(VISA_CHECK_DEFAULTS),
     })
-    .default({ visa: VISA_CHECK_DEFAULTS }),
+    .default(() => ({ ghost: ghostCheckDefaults(), visa: { ...VISA_CHECK_DEFAULTS } })),
 });
 
 /** pipeline.yaml as written (what `loadConfig("pipeline")` returns; only the settings page and migrations read it). */
@@ -356,6 +462,8 @@ export interface PipelineConfig extends Omit<PipelineFileConfig, "language" | "f
   market: Market;
   /** "no longer accepting applications" phrases of the packs (generic + market), for the recheck of watched jobs. */
   closed_posting: { phrases: readonly string[] };
+  /** The ghost job patterns of the packs (generic + market, lists united). */
+  ghost: GhostPack;
   /** The visa patterns of the packs (generic + market, lists united). */
   visa: VisaPack;
 }

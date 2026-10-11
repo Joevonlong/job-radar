@@ -28,6 +28,9 @@ export type VisaBadgeMode = (typeof VISA_BADGE_MODES)[number];
 /** `job_checks.visa` when ui.yaml has none. */
 export const VISA_UI_DEFAULTS: { enabled: boolean; badges: VisaBadgeMode } = { enabled: true, badges: "auto" };
 
+/** `job_checks.ghost` when ui.yaml has none: off until the owner has looked at `pnpm ghost:check --json`. */
+export const GHOST_UI_DEFAULTS: { enabled: boolean; trusted_companies: string[] } = { enabled: false, trusted_companies: [] };
+
 /** Most cycles / items any list in the interface can show (a longer strip is unreadable on a phone). */
 const MAX_CYCLES = 60;
 const MAX_TICKER_ITEMS = 50;
@@ -119,8 +122,9 @@ export const uiSchema = z
       })
       .default(WEB_ACCESS_DEFAULTS),
     /**
-     * Checks of a job: the recheck of watched jobs' postings (its rates and sizes are in pipeline.yaml `lifecycle.watch_recheck`) and
-     * what the JD says about visa sponsorship (its limits are in pipeline.yaml `job_checks.visa`, its patterns in the market packs).
+     * Checks of a job: the recheck of watched jobs' postings (its rates and sizes are in pipeline.yaml `lifecycle.watch_recheck`),
+     * signs of a ghost job and what the JD says about visa sponsorship (their limits are in pipeline.yaml `job_checks`, their
+     * patterns in the market packs).
      */
     job_checks: z
       .strictObject({
@@ -132,6 +136,15 @@ export const uiSchema = z
             extra_phrases: z.array(phraseRegexString).default([]),
           })
           .default({ enabled: true, extra_phrases: [] }),
+        /** The ghost job check (docs/ghost-jobs.md): a hint next to the score, never a change to it. */
+        ghost: z
+          .strictObject({
+            /** Off (the default): nothing is computed in the cycle and no page shows it (`pnpm ghost:check` still previews). */
+            enabled: z.boolean().default(GHOST_UI_DEFAULTS.enabled),
+            /** Company names never flagged (compared after the same normalization as company names). */
+            trusted_companies: z.array(z.string().trim().min(1).max(200)).max(500).default([]),
+          })
+          .default(() => ({ ...GHOST_UI_DEFAULTS, trusted_companies: [] })),
         /** The visa check (docs/visa-sponsorship.md). */
         visa: z
           .strictObject({
@@ -145,7 +158,7 @@ export const uiSchema = z
           })
           .default(VISA_UI_DEFAULTS),
       })
-      .default({ closed_recheck: { enabled: true, extra_phrases: [] }, visa: VISA_UI_DEFAULTS }),
+      .default(() => ({ closed_recheck: { enabled: true, extra_phrases: [] }, ghost: { ...GHOST_UI_DEFAULTS, trusted_companies: [] }, visa: { ...VISA_UI_DEFAULTS } })),
   });
 
 export type UiConfig = z.infer<typeof uiSchema>;

@@ -208,7 +208,8 @@
         "hideLang": "Hide jobs needing {language}",
         "trap": "AI traps",
         "high": "High-value signals only",
-        "visa": "Visa"
+        "visa": "Visa",
+        "ghost": "Ghost jobs"
       },
       "localLanguage": "the local language"
     },
@@ -4726,6 +4727,76 @@
       "disabled": "ui.yaml: job_checks.visa.enabled is false, nothing was checked",
       "noTable": "the database has no job_visa table yet: run pnpm db:migrate first",
       "failed": "visa:scan failed: {message}"
+    }
+  },
+  "ghostJobs": {
+    "mark": {
+      "likely": "Likely ghost",
+      "watch": "Watch",
+      "title": "Ghost job check ({level}, {score} points): {reasons}. A guess from the posting's age, relistings and text; the score is not affected.",
+      "jump": "See why on the checks card"
+    },
+    "reason": {
+      "long_open": "Open {days} days (source posted date {date}, {channel})",
+      "long_open_first_seen": "Open {days} days (counted from first seen; no source gave a trusted posted date)",
+      "repost_label": "{channel} labels it “{label}”",
+      "reposted": "Relisted on {channel} under a new id ({dates})",
+      "evergreen_wording": "Says it is a talent pool or always open",
+      "thin_short_none": "The JD has only {words} words and no duties section",
+      "thin_short": "The JD has only {words} words",
+      "thin_none": "No duties section in the JD",
+      "thin_none_breakdown": "No duties in the JD breakdown"
+    },
+    "short": {
+      "long_open": "open {days} days",
+      "repost_label": "labelled reposted",
+      "reposted": "relisted under a new id",
+      "evergreen_wording": "says talent pool / always open",
+      "thin_description": "thin JD"
+    },
+    "filter": {
+      "label": "Ghost jobs",
+      "all": "All",
+      "only": "Suspected only",
+      "hide": "Hide likely",
+      "chip": "Ghost jobs: {value}",
+      "remove": "Remove the filter “Ghost jobs: {value}”"
+    },
+    "checks": {
+      "title": "Is the job real?",
+      "clear": "Nothing unusual",
+      "watch": "Watch ({score} points)",
+      "likely": "Likely ghost ({score} points)",
+      "dismissed": "Dismissed",
+      "notChecked": "Not checked yet",
+      "jump": "View in the original",
+      "note": "A guess from how long the job has been open, relistings and the JD; it does not mean the job is not real. The score is not affected.",
+      "dismiss": "Not a ghost job",
+      "undo": "Undo",
+      "dismissedNote": "You marked it as not a ghost job; a new reason would show the mark again.",
+      "failed": "Could not save. Try again."
+    },
+    "jdMark": {
+      "legend": "Ghost job",
+      "title": "Why the posting may not be a real opening"
+    },
+    "cli": {
+      "usage": "Usage: pnpm ghost:check [--write] [--job ID] [--limit N] [--json]\n  Previews by default and writes nothing (works while ui.yaml job_checks.ghost.enabled is false); --write stores the results\n  --job ID: only this job (always checked again)\n  --limit N: at most this many jobs (default: pipeline.yaml job_checks.ghost.per_cycle_limit)\n  --json: print JSON with the share of each level",
+      "preview": "Preview: nothing was written (add --write to store)",
+      "summary": "Checked {scanned} jobs: {changed} changed, {failed} failed",
+      "levels": "Checked jobs: {likely} likely ghost ({likelyShare}), {watch} watch ({watchShare}), {none} nothing unusual",
+      "stats": "Stored, open jobs: {likely} likely ghost, {watch} watch, {none} nothing unusual, {dismissed} dismissed, {unchecked} not checked yet",
+      "job": "Job {id}: {level} ({score} points)",
+      "changed": " (changed)",
+      "reason": "  - {reason} (+{points})",
+      "disabled": "ui.yaml: job_checks.ghost.enabled is false; --write is refused (run without --write to preview)",
+      "noTable": "the database has no job_ghost table yet: run pnpm db:migrate first",
+      "failed": "ghost:check failed: {message}",
+      "level": {
+        "none": "nothing unusual",
+        "watch": "watch",
+        "likely": "likely ghost"
+      }
     }
   },
   "market": {

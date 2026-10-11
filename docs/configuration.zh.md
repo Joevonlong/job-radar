@@ -207,6 +207,30 @@ web 和 runner 以 `0600`（仅属主）写配置文件：`data/config/*.yaml` �
 
 `ui.yaml` 这一段在 YAML 或高级编辑器里改（没有表单）。旧版本不认识它：回退前先删掉。
 
+## 幽灵岗位检查（`pipeline.yaml` + `ui.yaml`）
+
+招聘帖背后可能没有真实空缺的迹象（见 [ghost-jobs.zh.md](ghost-jobs.zh.md)）。默认关闭；两块都可以没有，没有时用下面的默认值。
+说法写在市场包里（`rules.yaml` 的 `ghost`，见 [market-packs.zh.md](market-packs.zh.md#幽灵岗位说法)）。
+
+| 文件 | 键 | 默认 | 含义 |
+|---|---|---|---|
+| `pipeline.yaml`（随产品提供） | `job_checks.ghost.per_cycle_limit` | 2000 | 每轮最多检查的岗位数 |
+| | `job_checks.ghost.levels.watch` / `.likely` | 3 / 5 | "留意" / "疑似幽灵"的分数线（1–50，watch ≤ likely）；"疑似"还要有一个和时间、篇幅无关的原因 |
+| | `job_checks.ghost.long_open.tiers` | `[{days: 90, points: 1}, {days: 180, points: 2}]` | 从可信发布日期算起挂的天数和分值（1–10 档，天数递增 1–3650，分值 0–10） |
+| | `job_checks.ghost.long_open.first_seen_max_points` | 1 | 只知道首次见到的日期时最多给几分（0–10） |
+| | `job_checks.ghost.repost_label.points` | 1 | 来源标注"重新发布"（0–10） |
+| | `job_checks.ghost.reposted.min_gap_days` / `.points` | 30 / 2 | 同一来源在同一地点以新编号重挂，至少相隔这么多天（1–3650 / 0–10） |
+| | `job_checks.ghost.evergreen_wording.points` | 2 | JD 写明是人才库 / 常年招聘（0–10） |
+| | `job_checks.ghost.thin_description.min_words` / `.points` | 120 / 1 | 全文 JD 比这短，或没有职责段落（0–5000 / 0–10） |
+| | `job_checks.ghost.<信号>.enabled` | `true` | 每个信号都可以单独关掉 |
+| | `job_checks.ghost.quote_max_chars` | 280 | 引文最长字数（40–2000） |
+| | `job_checks.ghost.negation_words_before` / `_after` | 6 / 5 | 人才库说法前后查否定词的词数（0–20） |
+| | `job_checks.ghost.heading_max_chars` | 60 | 当作标题、和下一行合读的最长行（10–200） |
+| `ui.yaml`（用户） | `job_checks.ghost.enabled` | `false` | 打开：每轮检查岗位，页面显示标记和筛选 |
+| | `job_checks.ghost.trusted_companies` | `[]` | 从不标记的公司名（按规范化的名字匹配，不看公司形式，别名生效） |
+
+旧版本不认 `ui.yaml` 里的 `job_checks.ghost`：回滚前删掉。
+
 ## 签证检查（`pipeline.yaml` + `ui.yaml`）
 
 JD 里关于签证赞助的说法（见 [visa-sponsorship.zh.md](visa-sponsorship.zh.md)）。两块都可以没有，没有时用下面的默认值。

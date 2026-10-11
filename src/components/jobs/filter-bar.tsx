@@ -13,7 +13,7 @@ import { Segmented, SegmentedItem } from "@/components/ui/segmented";
 import { SingleSelect } from "@/components/ui/single-select";
 import { filterOptions } from "@/lib/applications/visibility";
 import { knownContract, knownFamily } from "@/lib/dashboard/labels";
-import { APPLICATION_FILTER_STATUSES, JOB_SORTS, JOB_STATUSES, type JobSort, JOB_WORKPLACES, MIN_SALARY_MAX, MIN_SCORE_MAX, TRAP_FILTERS, VISA_FILTERS, type ApplicationFilterStatus } from "@/lib/jobs/constants";
+import { APPLICATION_FILTER_STATUSES, JOB_SORTS, JOB_STATUSES, type JobSort, JOB_WORKPLACES, MIN_SALARY_MAX, MIN_SCORE_MAX, GHOST_FILTERS, TRAP_FILTERS, VISA_FILTERS, type ApplicationFilterStatus } from "@/lib/jobs/constants";
 import { FILTER_KEYS, SELECT_FILTER_KEYS, type FilterKey, type SelectFilterKey } from "@/lib/jobs/filter-keys";
 import { cleanMultiValues } from "@/lib/jobs/filter-values";
 import { countActiveFilters, hasActiveFilters, jobsSearchParsers, withLegacyKeys } from "@/lib/jobs/search-params";
@@ -45,6 +45,8 @@ export interface FilterBarOptions {
    * ignored but kept (no chip, not counted, "clear" leaves it), so it applies again once the control is back.
    */
   visa?: boolean;
+  /** Show the "Ghost jobs" control (ui.yaml `job_checks.ghost.enabled`); hidden, a `ghost=` in the URL is ignored but kept, like `visa`. */
+  ghost?: boolean;
   /** (ui.yaml `filters`) Values the lists do not offer (one that is selected in the URL still shows). */
   hiddenWorkplaces?: readonly string[];
   hiddenContracts?: readonly string[];
@@ -75,6 +77,7 @@ export function FilterBar({ options }: { options: FilterBarOptions }) {
   const tc = useTranslations("dashboard");
   const tTrap = useTranslations("aiTraps.filter");
   const tVisa = useTranslations("visa.filter");
+  const tGhost = useTranslations("ghostJobs.filter");
   const [pending, startTransition] = useTransition();
   const [params, setParams] = useQueryStates(jobsSearchParsers, { shallow: false, history: "replace", startTransition });
   const [open, setOpen] = useState(false);
@@ -86,7 +89,7 @@ export function FilterBar({ options }: { options: FilterBarOptions }) {
   const highOn = (params.high ?? params.t12) === true;
   const hideLangOn = (params.hideLang ?? params.hideGerman) === true;
   const highValueNames = options.highValueNames ?? [];
-  const visibility: { ignore: readonly FilterKey[] } = { ignore: options.visa === true ? [] : ["visa"] };
+  const visibility: { ignore: readonly FilterKey[] } = { ignore: [...(options.visa === true ? [] : (["visa"] as const)), ...(options.ghost === true ? [] : (["ghost"] as const))] };
   const activeCount = countActiveFilters(withLegacyKeys(params), visibility);
   const apps = params.app ?? [];
   const hiddenStatuses = useHiddenStatuses();
@@ -219,7 +222,7 @@ export function FilterBar({ options }: { options: FilterBarOptions }) {
         </Button>
       </div>
 
-      <ActiveFilterChips choices={choices} traps={options.traps === true} visa={options.visa === true} />
+      <ActiveFilterChips choices={choices} traps={options.traps === true} visa={options.visa === true} ghost={options.ghost === true} />
 
       <div
         id={panelId}
@@ -399,6 +402,26 @@ export function FilterBar({ options }: { options: FilterBarOptions }) {
                   {VISA_FILTERS.map((value) => (
                     <SegmentedItem key={value} value={value} data-testid={`filter-visa-${value}`}>
                       {tVisa(value)}
+                    </SegmentedItem>
+                  ))}
+                </Segmented>
+              </span>
+            ) : null}
+            {options.ghost ? (
+              // All / suspected only / hide the likely ones; "all" writes no parameter
+              <span className="flex items-center gap-2">
+                <span className="text-muted-foreground text-xs" id={`${panelId}-ghost`}>
+                  {tGhost("label")}
+                </span>
+                <Segmented
+                  aria-labelledby={`${panelId}-ghost`}
+                  value={params.ghost ?? "all"}
+                  onValueChange={(next) => set({ ghost: GHOST_FILTERS.find((v) => v === next && v !== "all") ?? null })}
+                  data-testid="filter-ghost"
+                >
+                  {GHOST_FILTERS.map((value) => (
+                    <SegmentedItem key={value} value={value} data-testid={`filter-ghost-${value}`}>
+                      {tGhost(value)}
                     </SegmentedItem>
                   ))}
                 </Segmented>

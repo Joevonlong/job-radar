@@ -1,0 +1,4 @@
+/* "Likely ghost": the warn colour is never alone (globals.css): a fine ink hatch over it, and an ink line (GhostMark). */
+.ghost-likely {
+  background-image: repeating-linear-gradient(135deg, color-mix(in srgb, var(--ink) 22%, transparent) 0 1px, transparent 1px 5px);
+}

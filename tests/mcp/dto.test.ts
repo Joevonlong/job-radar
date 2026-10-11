@@ -128,6 +128,7 @@ function detail(): JobDetail {
     favorite: { createdAt: NOW, note: SENTINEL.favoriteNote },
     applicationEvents: [{ id: 1, applicationId: 1, at: NOW, fromStatus: "interested", toStatus: "applied", note: SENTINEL.eventNote }],
     visa: null,
+    ghost: null,
   };
 }
 

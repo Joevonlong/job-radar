@@ -660,6 +660,34 @@ export const trapScans = pgTable(
 );
 
 /**
+ * Signs that a job is not a real opening (the ghost job check, rules only), one row per checked job. A hint only (C3): nothing here
+ * changes a score, a filter or a push. `evidence` is the list of reasons (`[{code, points, …}]`, validated by zod in
+ * `@/lib/ghost/types`); an evergreen quote is a verbatim piece of `jobs.description` at its offset (C7). `input_hash` covers the
+ * inputs of the check (see `@/lib/db/repos/ghost`); `recheck_at` is when the "open for long" points would next change. The owner's
+ * "not a ghost job" sets `dismissed_at` and the reason codes seen then; a new code shows the mark again.
+ */
+export const jobGhost = pgTable(
+  "job_ghost",
+  {
+    jobId: bigint("job_id", { mode: "number" })
+      .primaryKey()
+      .references(() => jobs.id, { onDelete: "cascade" }),
+    level: text("level").notNull(),
+    score: numeric("score", { precision: 5, scale: 2, mode: "number" }).notNull(),
+    evidence: jsonb("evidence").notNull().default(sql`'[]'::jsonb`),
+    inputHash: text("input_hash").notNull(),
+    checkedAt: timestamptz("checked_at").notNull().defaultNow(),
+    recheckAt: timestamptz("recheck_at"),
+    dismissedAt: timestamptz("dismissed_at"),
+    dismissedCodes: text("dismissed_codes").array(),
+  },
+  (t) => [
+    check("job_ghost_level_check", sql`${t.level} in ('none', 'watch', 'likely')`),
+    index("job_ghost_level_idx").on(t.level).where(sql`${t.level} <> 'none'`),
+  ],
+);
+
+/**
  * What a job's JD says about visa sponsorship / a work permit (rules only), one row per scanned job. A marker only (C3): nothing
  * here changes a score or filters a job. C7: every evidence item (`[{status, kind, quote, offset}]`, validated by zod in
  * `@/lib/visa/types`) is a verbatim quote of `jobs.description` and its offset. `input_hash` covers the JD, the rules and the

@@ -17,7 +17,7 @@ export interface VisaSettings {
  * ui.yaml `job_checks.visa`; when ui.yaml cannot be read the defaults apply (the check stays on: it changes nothing but what the
  * pages show, and a broken ui.yaml is reported by the settings page and `pnpm config:check`).
  */
-export function readVisaSettings(load: () => Pick<UiConfig, "job_checks"> = () => reloadConfig("ui")): VisaSettings {
+export function readVisaSettings(load: () => { job_checks: Pick<UiConfig["job_checks"], "visa"> } = () => reloadConfig("ui")): VisaSettings {
   try {
     return load().job_checks.visa;
   } catch {

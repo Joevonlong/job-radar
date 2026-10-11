@@ -9,7 +9,7 @@ import type { PipelineConfig, PipelineFileConfig } from "@/lib/config/schemas/pi
 
 import { GENERIC_PACK_ID, loadPack, type Pack } from "./load";
 import { loadMarket } from "./resolve";
-import type { VisaPack, VisaPatternEntry } from "./schema";
+import type { GhostPack, VisaPack, VisaPatternEntry } from "./schema";
 import type { Market } from "./types";
 
 const union = (...lists: ReadonlyArray<readonly string[]>): string[] => [...new Set(lists.flat())];
@@ -60,6 +60,33 @@ export function mergeVisaPacks(packs: ReadonlyArray<{ rules: { visa: VisaPack } 
     exclude_companies: union(...visa.map((v) => v.exclude_companies)),
     abbreviations: union(...visa.map((v) => v.abbreviations)),
     prefilter: union(...visa.map((v) => v.prefilter)),
+  };
+}
+
+/** Ghost pattern lists united: a pattern in several packs counts once (the first pack's entry wins); ids may repeat across packs. */
+function unionEntries<T extends { id: string; pattern: string }>(...lists: ReadonlyArray<readonly T[]>): T[] {
+  const seen = new Set<string>();
+  const out: T[] = [];
+  for (const entry of lists.flat()) {
+    if (seen.has(entry.pattern)) continue;
+    seen.add(entry.pattern);
+    out.push({ ...entry });
+  }
+  return out;
+}
+
+/** The `ghost` sections of the packs, united (generic first, then the market's). */
+export function mergeGhostPacks(packs: ReadonlyArray<{ rules: { ghost: GhostPack } }>): GhostPack {
+  const ghost = packs.map((p) => p.rules.ghost);
+  return {
+    repost_label_patterns: unionEntries(...ghost.map((g) => g.repost_label_patterns)),
+    evergreen_patterns: unionEntries(...ghost.map((g) => g.evergreen_patterns)),
+    responsibility_patterns: unionEntries(...ghost.map((g) => g.responsibility_patterns)),
+    negation_cues: union(...ghost.map((g) => g.negation_cues)),
+    clause_breaks: union(...ghost.map((g) => g.clause_breaks)),
+    exclude_context: union(...ghost.map((g) => g.exclude_context)),
+    abbreviations: union(...ghost.map((g) => g.abbreviations)),
+    prefilter: union(...ghost.map((g) => g.prefilter)),
   };
 }
 
@@ -150,6 +177,7 @@ export function buildEffectivePipeline(file: PipelineFileConfig, market: Market,
     },
     market: withUserGeography(market, file),
     closed_posting: { phrases: union(...pick((r) => r.closed_posting.phrases)) },
+    ghost: mergeGhostPacks(packs),
     visa: mergeVisaPacks(packs),
   });
 }

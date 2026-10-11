@@ -14,6 +14,8 @@ import { isNewSince } from "@/lib/jobs/visit";
 import { loadBonusPolicy } from "@/lib/signals/floor";
 import { loadTargetPlaces } from "@/lib/dashboard/target-places";
 import { pickRowLocations } from "@/lib/dashboard/row-locations";
+import { ghostEnabled } from "@/lib/ghost/settings";
+import { GHOST_TOOLTIP_REASONS, ghostShortMessage } from "@/lib/ghost/view";
 import { trapsEnabled } from "@/lib/traps/settings";
 import { visaVisible } from "@/lib/visa/settings";
 
@@ -38,6 +40,8 @@ export async function toListItems(
     filterFloors?: ReadonlyMap<number, number | null>;
     /** Whether the visa badge shows, when the page already knows (`visaVisible` / `visaFilterAvailable`); read here otherwise. */
     visa?: boolean;
+    /** Whether the ghost job marks show (`ghostEnabled`), when the page already knows; read here otherwise. */
+    ghost?: boolean;
   },
 ): Promise<JobListItem[]> {
   const interests = loadConfig("interests");
@@ -46,11 +50,21 @@ export async function toListItems(
   // The axis and the percentile are in the market's base currency; without a market nothing is drawn on it
   const baseCurrency = policy.baseCurrency ?? "";
   const targetPlaces = loadTargetPlaces();
-  const [format, locale, t] = await Promise.all([getFormatter(), getLocale(), getTranslations("dashboard")]);
+  const [format, locale, t, tGhost] = await Promise.all([getFormatter(), getLocale(), getTranslations("dashboard"), getTranslations("ghostJobs")]);
   const aliases = buildSkillAliasMap(loadPipeline().skills);
   const mySkills = profileSkillKeys(readProfileSkillNames(), aliases);
   const showTraps = trapsEnabled();
   const showVisa = options.visa ?? visaVisible();
+  const showGhost = options.ghost ?? ghostEnabled();
+  // the tooltip of the mark: its strongest reasons, short ("open 214 days · relisted under a new id")
+  const ghostReasons = (top: NonNullable<JobCard["ghost"]>["top"]): string =>
+    top
+      .slice(0, GHOST_TOOLTIP_REASONS)
+      .map((reason) => {
+        const message = ghostShortMessage(reason);
+        return tGhost(message.key, message.values);
+      })
+      .join(" · ");
   return cards.map((card) => {
     const salary = listSalary(card.salary, locale, baseCurrency);
     const matches = matchSkills(card.skills, mySkills, aliases);
@@ -118,6 +132,7 @@ export async function toListItems(
       amountMinAnnualEur: policy.minAnnualEur,
       ...(showTraps && (card.traps?.traps ?? 0) > 0 ? { trapCount: card.traps?.traps ?? 0 } : {}),
       ...(showVisa && card.visa ? { visa: { status: card.visa.status, kind: card.visa.kind } } : {}),
+      ...(showGhost && card.ghost ? { ghost: { level: card.ghost.level, score: card.ghost.score, reasons: ghostReasons(card.ghost.top) } } : {}),
       amountCurrency: baseCurrency,
       timeLabel: card.postedAt ? relative : t("time.seen", { time: relative }),
       timeTitle: format.dateTime(reference, { dateStyle: "medium", timeStyle: "short", timeZone: options.timezone }),

@@ -8,7 +8,7 @@
  *   - a user file older than the code is fine (it is migrated in memory) but listed: run pnpm config:migrate --write;
  *   - a user copy of a `shipped` file (models, pipeline) is listed as an override;
  *   - every market pack (shipped and user copies) must pass its schemas, and the market of preferences.yaml must resolve;
- *   - the visa patterns of that market must compile; a phrase pattern without a prefilter word is only a warning;
+ *   - the visa and ghost job patterns of that market must compile; a phrase pattern without a prefilter word is only a warning;
  *   - the deal-breakers of preferences.yaml must keep to the limits of pipeline.yaml (a language gate in a market without a
  *     local-language step is only a warning: it does nothing).
  *
@@ -42,6 +42,7 @@ import {
 import { dealBreakerLimitProblems, slowPatternProblems } from "../src/lib/filter/deal-breakers";
 import { vmTimeBox } from "../src/lib/filter/time-box";
 import { listPackIds, loadMarket, loadPipeline, packDirs, readPackDir } from "../src/lib/market";
+import { compileGhostRules } from "../src/lib/ghost/rules";
 import { compileVisaRules } from "../src/lib/visa/rules";
 
 const rel = displayConfigPath;
@@ -166,7 +167,8 @@ report("preferences.yaml market", () => {
   return `${market.packId}: ${market.country}, ${market.currency}, local language ${market.homeLanguage}${market.language === null ? " (no requirement rules: the language step is off)" : ""}`;
 });
 
-// The visa patterns of the active market: valid, and each phrase contains a prefilter word (else it is skipped on texts without one)
+// The visa and ghost job patterns of the active market: valid, and each phrase contains a prefilter word (else it is skipped on texts
+// without one)
 {
   let pipeline: ReturnType<typeof loadPipeline> | null = null;
   try {
@@ -176,6 +178,7 @@ report("preferences.yaml market", () => {
   }
   if (pipeline === null) {
     console.log("- visa patterns (skipped: fix the files above first)");
+    console.log("- ghost job patterns (skipped: fix the files above first)");
   } else {
     const loaded = pipeline;
     let violations: string[] = [];
@@ -183,6 +186,11 @@ report("preferences.yaml market", () => {
       violations = compileVisaRules(loaded).prefilterViolations;
     });
     for (const where of violations) console.log(`    ! ${where}: has no word of visa.prefilter, so it is skipped on a text without one (add a prefilter word)`);
+    let ghostViolations: string[] = [];
+    report("ghost job patterns of the market packs", () => {
+      ghostViolations = compileGhostRules(loaded).prefilterViolations;
+    });
+    for (const where of ghostViolations) console.log(`    ! ${where}: has no word of ghost.prefilter, so it is skipped on a text without one (add a prefilter word)`);
   }
 }
 

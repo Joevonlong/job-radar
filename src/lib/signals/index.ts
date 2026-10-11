@@ -30,6 +30,7 @@ import { listRuntimeState, setRuntimeState } from "@/lib/db/repos/runtime-state"
 import { computeRankValue } from "@/lib/scoring/rank";
 import { cleanDescriptionsForAi, loadTrapSpans, overlapsTrap, type TrapSpan } from "@/lib/traps";
 import { runTrapScanStep } from "@/lib/traps/cycle";
+import { runGhostCheckStep } from "@/lib/ghost/step";
 import { runVisaScanStep } from "@/lib/visa/step";
 
 import { revalueAmount } from "./amount";
@@ -403,13 +404,14 @@ export async function signalsStep(ctx: CycleStepContext): Promise<StepResult> {
   const revalued = await revalueSignals(db, { interests, pipeline, batchSize: pipeline.batch_size, signal: ctx.signal });
   // The AI trap scan first, so the rule signals below already leave out what lies in hidden text; a failure only makes the step partial
   const traps = await runTrapScanStep(ctx, db);
-  // The job checks next (trap → visa), each with its own error boundary; they only mark jobs and never touch a score
+  // The job checks next (trap → visa → ghost), each with its own error boundary; they only mark jobs and never touch a score
   const visa = await runVisaScanStep(ctx, db);
+  const ghost = await runGhostCheckStep(ctx, db);
   const scan = await runRuleScan(db, { interests, pipeline, logger: ctx.logger, batchSize: pipeline.batch_size, signal: ctx.signal });
   const salary = scan.aborted ? null : await syncSalarySignals(db, { interests, pipeline, logger: ctx.logger, batchSize: pipeline.batch_size, signal: ctx.signal });
   const bonus = await reconcileBonuses(db, interests);
   ctx.logger.info("signals done", { revalued: revalued?.updated ?? 0, scanned: scan.scanned, withSignals: scan.withSignals, failed: scan.failed, salarySynced: salary?.synced ?? 0, bonusUpdated: bonus.updated });
-  return { status: scan.failed > 0 || (salary?.failed ?? 0) > 0 || traps.failed || visa.failed ? "partial" : "ok", result: { revalued, traps: traps.summary, visa: visa.summary, scan, salary, bonus } };
+  return { status: scan.failed > 0 || (salary?.failed ?? 0) > 0 || traps.failed || visa.failed || ghost.failed ? "partial" : "ok", result: { revalued, traps: traps.summary, visa: visa.summary, ghost: ghost.summary, scan, salary, bonus } };
 }
 
 /** The `signals` sub-task of the `ai` step. */

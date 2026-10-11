@@ -134,6 +134,9 @@ export function createXingChannel(deps: XingDeps = {}): Channel {
     family: "xing",
     kind: "guest",
     usesQueries: true,
+    // the ghost job check: XING ids are stable and the full text is stored
+    stableExternalIds: true,
+    fullDescription: true,
     collect,
     parse: parseXingPayload,
   };

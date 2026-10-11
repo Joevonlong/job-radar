@@ -51,7 +51,7 @@ pnpm run doctor --only config.market
 | `pack.yaml` | `id`（= 目录名）、`name`，以及市场默认值：`country`、`currency`、`language`、`locale`（地名的大小写规则）、`region`（本国所在的命名区域）、`default_channels`（本市场的招聘渠道：向导里带"本地"标记列出，/me 上可以"开启它们"；StepStone、XING 这类抓取渠道不会未经你确认就被它打开，见 [sources.zh.md](sources.zh.md#抓取)；`de` 包列的是 arbeitsagentur、stepstone、xing 和 [arbeitnow](sources.zh.md#arbeitnow)）。 |
 | `geography.yaml` | `countries`（代码、英文名、可选的 `currency`（设置向导选这个国家时建议的货币）、`aliases`、`indeed` 名、可选 `pattern`、名字是常用词时 `match: false`）、`regions`（名称、国家、`patterns`）、`cities`（写法 → 规范名 + 国家）、`subdivision_codes`（`US: [TX, NY, …]`）、`non_city_labels`、`non_city_words`、`city_aliases`、`metro_areas`、`metro_regions`、`country_level_patterns`、`transliterations`。 |
 | `language.yaml` | 各语言的 `stopwords`（判断正文语言）和 `requirement`：读取要求等级的规则（`word_pattern`、`cefr_name_pattern`、`cefr_connectors`、`level_rules`、`optional_patterns`、`not_required_patterns` ……，以及给打分提示词的 `prompt_examples`）。 |
-| `rules.yaml` | pipeline.yaml 里和语言有关的部分：`company.legal_suffixes` / `agency_names`、`agency.*_patterns`、`contract.*`、`salary.currencies`（货币的写法）、`filter.generic_location_patterns`、`filter.remote.*`；`closed_posting.phrases`：原帖页面上表示"不再接收申请"的句子（正则，不区分大小写；只接受 configuration.zh.md"关注岗位复查"一节说的安全子集：不允许 `*`、`+`、`{n,}`），收藏 / 跟进岗位的复查用（见 usage.zh.md"已关闭的岗位"）；`visa`：JD 里关于签证赞助的说法（见[签证说法](#签证说法)）。 |
+| `rules.yaml` | pipeline.yaml 里和语言有关的部分：`company.legal_suffixes` / `agency_names`、`agency.*_patterns`、`contract.*`、`salary.currencies`（货币的写法）、`filter.generic_location_patterns`、`filter.remote.*`；`closed_posting.phrases`：原帖页面上表示"不再接收申请"的句子（正则，不区分大小写；只接受 configuration.zh.md"关注岗位复查"一节说的安全子集：不允许 `*`、`+`、`{n,}`），收藏 / 跟进岗位的复查用（见 usage.zh.md"已关闭的岗位"）；`ghost`：招聘帖背后可能没有真实空缺的迹象（见[幽灵岗位说法](#幽灵岗位说法)）；`visa`：JD 里关于签证赞助的说法（见[签证说法](#签证说法)）。 |
 
 `generic` 包总是加载：世界国家表、区域 `eu`、`eea`、`europe`、`dach`、`nordics`、城市表、美国州代码和英文规则。市场自己的包叠加在它上面。
 
@@ -64,9 +64,26 @@ pnpm run doctor --only config.market
 - `language.requirement`：整块来自市场包（规则顺序有意义）；你在 pipeline.yaml 里写了 `language.requirement` 就用你的；
 - `salary.local_currencies`：不写 = 市场的货币；
 - `closed_posting.phrases`：generic 和市场包的列表合并；你自己的短语写在 `ui.yaml` 的 `job_checks.closed_recheck.extra_phrases`，不写在 pipeline.yaml。
-- `visa`：generic 和市场包的列表合并（generic 在前）；pipeline.yaml 里没有自己的签证说法。
+- `ghost` 和 `visa`：generic 和市场包的列表合并（generic 在前）；pipeline.yaml 里没有它们自己的说法。
 
 所以 pipeline.yaml 只需要放你自己加的内容。pipeline.yaml 的配置迁移已经删掉了现在由包提供的条目。
+
+## 幽灵岗位说法
+
+`rules.yaml` 的 `ghost` 一节是[幽灵岗位检查](ghost-jobs.zh.md)用的说法。`generic` 放英文，`de` 放德文。带 `id`（小写字母、数字和 `_`）的条目把 id 存进原因里，检查卡和 `pnpm ghost:check` 能说出是哪条说法命中的。
+
+| 键 | 是什么 |
+|---|---|
+| `repost_label_patterns` | 来源自己的"重新发布"标签（"Reposted 2 weeks ago"、"Wiedereingestellt"）；`{id, pattern}` |
+| `evergreen_patterns` | JD 写明是人才库或常年招聘（"for our talent pool"、"always hiring"、"Initiativbewerbung (m/w/d)"）；`{id, pattern, check_negation}`。`check_negation: false` 表示说法本身就是否定（"no specific opening"、"keine konkrete Stelle"） |
+| `responsibility_patterns` | 职责段落的标题（"Responsibilities"、"What you'll do"、"Deine Aufgaben"），只对像标题的行测试；`{id, pattern}` |
+| `negation_cues` | 让人才库说法不算的词：在说法里面、说法前 `pipeline.yaml job_checks.ghost.negation_words_before` 个词内、说法后同一分句 `negation_words_after` 个词内，或在所在列表的标题里 |
+| `clause_breaks` | 分句在哪里结束（";"、" but "、" aber "、"and we …"） |
+| `exclude_context` | 匹配到的句子（或紧挨在它前面的问句）不算：雇主的产品或客户、岗位职责、真实招聘帖的结尾、条件句、隐私说明 |
+| `abbreviations` | 句点不表示句子结束的缩写 |
+| `prefilter` | 快速初筛：没有命中的 JD 或行不再找人才库说法 |
+
+和签证一样，**`evergreen_patterns` 能匹配到的每个说法都必须包含一个 `prefilter` 命中**，否则永远看不到；`pnpm config:check` 会对正则文本里没有 prefilter 匹配的说法给出警告，写错的正则会指出路径（`ghost.evergreen_patterns[2]`）。改了说法之后，接下来几轮会把所有岗位重新检查一遍；可以先用 `pnpm ghost:check` 预览。
 
 ## 签证说法
 
@@ -104,7 +121,7 @@ pnpm run doctor --only config.market
 3. `language.yaml`：这门语言的停用词；想要本地语言步骤，再写 `requirement` 块，不写这一步就保持关闭。
 4. `rules.yaml`：公司法律形式后缀、中介和合同用语、货币写法，以及这门语言里"不再接收申请"的句子（`closed_posting.phrases`；
    写得具体些：命中会把岗位标为可能已关闭）。
-   这门语言的签证说法写在 `visa` 下（见[签证说法](#签证说法)）；没有的话只读英文说法。
+   这门语言的签证说法写在 `visa` 下（见[签证说法](#签证说法)），幽灵岗位说法写在 `ghost` 下（见[幽灵岗位说法](#幽灵岗位说法)）；没有的话只读英文说法。
 5. 把 `market.pack` 设成 `<id>`，运行 `pnpm config:check`、`pnpm market:show`，再 `pnpm reprocess`。
 6. 想看改了什么：之前运行 `pnpm market:regress snapshot --out before.json`，reprocess 之后同样存一份 `after.json`，
    再 `pnpm market:regress compare before.json after.json`。它只输出各字段的变化数量和代码值的变化（国家、等级、过滤原因），不输出岗位文字。

@@ -28,6 +28,7 @@ import { salaryFilteredIds } from "@/lib/jobs/filter-floors";
 import { effectiveDir, nextSortParams } from "@/lib/jobs/sort";
 import { effectiveSeenUpTo } from "@/lib/jobs/visit";
 import { trapsEnabled } from "@/lib/traps/settings";
+import { ghostFilterAvailable } from "@/lib/ghost/filter";
 import { visaFilterAvailable } from "@/lib/visa/filter";
 import { VisibilityScope } from "@/components/applications/visibility-scope";
 import { loadBaseCurrency } from "@/lib/signals/floor";
@@ -63,8 +64,10 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
   // hidden, a `visa=` in the URL is ignored but kept (no control, no chip, not counted); read once for the filter, the list
   // query and the badges
   const visaFilter = await visaFilterAvailable(db);
-  const filters = await jobsListFilters(db, params, { cities, visa: visaFilter });
-  const visibility: FilterVisibility = { ignore: visaFilter ? [] : ["visa"] };
+  // the same for the ghost job check (ui.yaml job_checks.ghost): off, no control, no chip, no mark, and `ghost=` filters nothing
+  const ghostFilter = await ghostFilterAvailable(db);
+  const filters = await jobsListFilters(db, params, { cities, visa: visaFilter, ghost: ghostFilter });
+  const visibility: FilterVisibility = { ignore: [...(visaFilter ? [] : (["visa"] as const)), ...(ghostFilter ? [] : (["ghost"] as const))] };
   const visit = await getVisitState(db);
   const seenUpTo = effectiveSeenUpTo(visit, now);
   // "Closed (N)" is the status filter "closed + possibly closed" (no URL key of its own); N counts the list it opens
@@ -78,6 +81,7 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
       pageSize: JOBS_PAGE_SIZE,
       timezone,
       visa: visaFilter,
+      ghost: ghostFilter,
     }),
     getJobFilterOptions(db),
     countJobListSeen(db, { filters, timezone, since: seenUpTo }),
@@ -85,7 +89,7 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
     countJobList(db, { filters: { ...filters, statuses: CLOSED_VIEW }, timezone }),
   ]);
   const filterFloors = await getFilterFloors(db, salaryFilteredIds(result.jobs));
-  const items = await toListItems(result.jobs, { now, timezone, filterFloors, seenUpTo, visa: visaFilter, monthSalaries: { figures: salaryFigures, minSample: loadConfig("ui").salary_stats.min_sample } });
+  const items = await toListItems(result.jobs, { now, timezone, filterFloors, seenUpTo, visa: visaFilter, ghost: ghostFilter, monthSalaries: { figures: salaryFigures, minSample: loadConfig("ui").salary_stats.min_sample } });
   // The "new since your last visit" divider when the list runs newest first (it sits on the page of the boundary only);
   // any other order says it next to the count, with a link to that order
   const newestFirst = params.sort === "first_seen" && effectiveDir(params.sort, params.dir) === "desc";
@@ -107,7 +111,7 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
     <div data-wide className="flex min-w-0 flex-col gap-sp-4">
       <VisitTracker />
       <PageHeader title={t("title")} description={t("description")} />
-      <FilterBar options={{ ...options, cities: cities.map(({ key, target }) => ({ key, target })), traps: trapsEnabled(), visa: visaFilter, hiddenWorkplaces: hidden.workplaces, hiddenContracts: hidden.contracts, highValueNames }} />
+      <FilterBar options={{ ...options, cities: cities.map(({ key, target }) => ({ key, target })), traps: trapsEnabled(), visa: visaFilter, ghost: ghostFilter, hiddenWorkplaces: hidden.workplaces, hiddenContracts: hidden.contracts, highValueNames }} />
       <div className="flex flex-wrap items-center gap-x-sp-3 gap-y-sp-2">
         {params.filteredOnly === true ? (
           <FilteredToggle active only href={jobsListHref({ ...params, filteredOnly: null, page: 1 })} />

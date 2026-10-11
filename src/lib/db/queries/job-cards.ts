@@ -6,6 +6,7 @@ import { getFavoriteStates } from "../repos/favorites";
 import { seenSql } from "../repos/seen";
 import { parseLinkCheck } from "@/lib/jobs/link-check-evidence";
 import { closedReasonSql, effectiveStatusSql } from "./job-status";
+import { loadGhostLevels } from "../repos/ghost";
 import { loadTrapCounts } from "../repos/traps";
 import { loadVisaStatuses } from "../repos/visa";
 import { channels, companies, jobSources, jobs, scores, signals } from "../schema";
@@ -238,18 +239,21 @@ export function toSummary(row: Pick<CardRow, "summaries" | "summaryZh" | "summar
 export interface HydrateOptions {
   /** Load the visa check results (the list badge); false when the badge is hidden, saving the query. Default true. */
   visa?: boolean;
+  /** Load the ghost job marks (the list's score cell); only when ui.yaml turns the check on. Default false. */
+  ghost?: boolean;
 }
 
 /** Turn card rows into cards by attaching sources, signals and the application status (3 queries for the whole page). */
 export async function hydrateCards(db: Db, rows: readonly CardRow[], options: HydrateOptions = {}): Promise<JobCard[]> {
   const ids = rows.map((r) => r.id);
-  const [sources, signalMap, statuses, favorites, traps, visa] = await Promise.all([
+  const [sources, signalMap, statuses, favorites, traps, visa, ghost] = await Promise.all([
     loadSources(db, ids),
     loadSignals(db, ids),
     getApplicationStatuses(db, ids),
     getFavoriteStates(db, ids),
     loadTrapCounts(db, ids),
     options.visa === false ? new Map<number, never>() : loadVisaStatuses(db, ids),
+    options.ghost === true ? loadGhostLevels(db, ids) : new Map<number, never>(),
   ]);
   return rows.map((row) => ({
     id: row.id,
@@ -276,6 +280,7 @@ export async function hydrateCards(db: Db, rows: readonly CardRow[], options: Hy
     signals: signalMap.get(row.id) ?? [],
     traps: traps.get(row.id) ?? null,
     visa: visa.get(row.id) ?? null,
+    ghost: ghost.get(row.id) ?? null,
     seen: row.seen,
     closedReason: row.closedReason,
     linkCheck: parseLinkCheck(row.linkCheckJson),
