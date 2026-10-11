@@ -249,6 +249,12 @@ function leadInQuestion(description: string, start: number, lead: CompiledGhostR
   return before.slice(from);
 }
 
+/** The piece itself ends in one of the packs' `lead_in_question.ends` marks. */
+function isQuestion(text: string, lead: CompiledGhostRules["leadInQuestion"]): boolean {
+  const trimmed = text.trimEnd();
+  return lead.ends.some((mark) => trimmed.endsWith(mark));
+}
+
 function hitsOf(pattern: CompiledGhostPattern, segment: TextSegment): Hit[] {
   if (segment.text.search(pattern.re) === -1) return [];
   const hits: Hit[] = [];
@@ -266,7 +272,8 @@ export interface EvergreenOptions {
 
 /**
  * The first sentence (in text order) that says the posting is a talent pool or always open. A sentence matching `exclude_context`
- * (itself or the question right before it), a negated hit and a list item under a duties heading do not count. The quote is verified against the description (C7).
+ * (itself or the question right before it), a sentence that is itself a question (ends in a `lead_in_question.ends` mark), a negated
+ * hit and a list item under a duties heading do not count. The quote is verified against the description (C7).
  */
 export function evergreenWording(description: string | null, rules: CompiledGhostRules, options: EvergreenOptions = {}): GhostReasonOf<"evergreen_wording"> | null {
   const settings = rules.settings.evergreen_wording;
@@ -280,6 +287,8 @@ export function evergreenWording(description: string | null, rules: CompiledGhos
     const candidates: Array<{ hit: Hit; pattern: CompiledGhostPattern }> = [];
     for (const pattern of rules.evergreen) for (const hit of hitsOf(pattern, segment)) candidates.push({ hit, pattern });
     if (candidates.length === 0) continue;
+    // a question is not a statement about the posting ("Always hiring? Acme automates your sourcing")
+    if (isQuestion(segment.text, rules.leadInQuestion)) continue;
     const question = leadInQuestion(description, segment.start, rules.leadInQuestion);
     if (rules.excludeContext.some((re) => segment.text.search(re) !== -1 || (question !== "" && question.search(re) !== -1))) continue;
     if (underDutiesHeading(segment, rules, description)) continue;

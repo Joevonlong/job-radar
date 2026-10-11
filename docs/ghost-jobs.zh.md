@@ -32,9 +32,11 @@
 
 JD 先切成片段（句子、列表项、短标题和它下一行），和[签证检查](visa-sponsorship.zh.md#怎么读一条-jd)一样。含"人才库"类说法的片段在下面情况**不算**：
 
-- 否定词在说法里面、说法前 `negation_words_before` 个词内、说法后同一分句里（`negation_words_after` 个词内；德语到分句结束，因为德语把 "nicht" 放在最后），或在它所在列表的标题里（"This is not a talent pool posting"、"Für unseren Talentpool ist diese Anzeige ganz ausdrücklich nicht gedacht"）；
-- 讲的是雇主的产品、客户或同名团队（"We build talent pool software"、"Our ATS lets hiring managers add candidates to the talent pipeline"、"Join our Talent Network team"、"Wir helfen Unternehmen beim Aufbau ihres Talentpools"）；
-- 是这个岗位的职责（"You will build our talent pipeline"、"Your tasks:" 下面的列表项）；
+- 否定词在说法里面、说法前 `negation_words_before` 个词内、说法后同一分句里（`negation_words_after` 个词内；德语到分句结束，因为德语把 "nicht" 放在最后），或在它所在列表的标题里（"This is not a talent pool posting"、"Für unseren Talentpool ist diese Anzeige ganz ausdrücklich nicht gedacht"）。"not" 前的逗号、德语关系从句或连词前的逗号（"…, die keine Angst vor neuen Technologien haben"）结束分句；"not only"、"nicht nur" 不算否定；
+- 片段本身是问句（"Always hiring? Acme automates your sourcing"）；
+- 讲的是雇主的产品、客户或同名团队（"We build talent pool software"、"Our ATS lets hiring managers add candidates to the talent pipeline"、"Evergreen job listings are a core feature of our ATS"、"Join our Talent Network team"、"Wir helfen Unternehmen beim Aufbau ihres Talentpools"、"Unsere Software hilft Personalabteilungen beim Aufbau eines Talentpools"）；
+- 是这个岗位的职责（"You will build our talent pipeline"、"You will source candidates for upcoming roles"、"Your tasks:" 下面的列表项）；"We are building a talent pool" 则算；
+- 讲的是为以后的岗位做培训（"Mentoring for future roles"、"Weiterbildung für zukünftige Positionen"）；
 - 后面又说这是真实空缺（"…, but this role is a concrete opening"、"this role is based in Berlin"）；
 - 是真实招聘帖的结尾（"Don't see a role that fits? Join our talent community"、"Not ready to apply? Join our talent community to stay in touch"、"Keine passende Stelle dabei? Dann bewirb dich initiativ"；紧挨在前面的问句也一起看，见 [market-packs.zh.md](market-packs.zh.md#幽灵岗位说法) 的 `lead_in_question`）、条件句（"If there is no open role…"）、隐私说明，或"也可能考虑你应聘以后的职位"。
 

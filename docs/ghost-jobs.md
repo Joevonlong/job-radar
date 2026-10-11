@@ -41,11 +41,16 @@ The description is cut into pieces (sentences, list items, a short heading with 
 - a negation word is inside the phrase, within `negation_words_before` words before it, after it in the same clause
   (within `negation_words_after` words; to the end of the clause for German, which puts "nicht" last), or in the heading of
   its list ("This is not a talent pool posting", "Für unseren Talentpool ist diese Anzeige ganz ausdrücklich nicht
-  gedacht");
+  gedacht"). A comma before "not", or before a German relative clause or conjunction ("…, die keine Angst vor neuen
+  Technologien haben"), ends the clause; "not only" and "nicht nur" are not negations;
+- the piece is itself a question ("Always hiring? Acme automates your sourcing");
 - it is about the employer's product, customers or a team of that name ("We build talent pool software", "Our ATS lets
-  hiring managers add candidates to the talent pipeline", "Join our Talent Network team", "Wir helfen Unternehmen beim
-  Aufbau ihres Talentpools");
-- it is a duty of the role ("You will build our talent pipeline", a list item under "Your tasks:");
+  hiring managers add candidates to the talent pipeline", "Evergreen job listings are a core feature of our ATS", "Join our
+  Talent Network team", "Wir helfen Unternehmen beim Aufbau ihres Talentpools", "Unsere Software hilft Personalabteilungen
+  beim Aufbau eines Talentpools");
+- it is a duty of the role ("You will build our talent pipeline", "You will source candidates for upcoming roles", a list
+  item under "Your tasks:"), while "We are building a talent pool" counts;
+- it is training for later roles ("Mentoring for future roles", "Weiterbildung für zukünftige Positionen");
 - it says the role is a real opening after all ("…, but this role is a concrete opening", "this role is based in Berlin");
 - it is the footer of a real posting ("Don't see a role that fits? Join our talent community", "Not ready to apply? Join our
   talent community to stay in touch", "Keine passende Stelle dabei? Dann bewirb dich initiativ"; the question right before

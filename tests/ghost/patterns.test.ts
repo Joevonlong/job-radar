@@ -72,6 +72,61 @@ const CASES: ReadonlyArray<readonly [string, string | null]> = [
   ["Wir sind immer auf der Suche nach motivierten Menschen.", "always_hiring"],
   ["Es gibt keine konkrete Stelle, wir sammeln Bewerbungen für zukünftige Stellen.", "no_specific_opening"],
   ["Initiativbewerbung (m/w/d)", "open_application_title"],
+  // third review round: EN
+  ["We are building a talent pool for future roles.", "talent_pool"],
+  ["We are building a talent pool.", "talent_pool"],
+  ["We're growing our talent community for future openings.", "talent_pool"],
+  ["This is an evergreen posting.", "evergreen_posting"],
+  ["We accept applications on a rolling basis for upcoming positions.", "future_openings"],
+  ["We collect applications for upcoming positions.", "future_openings"],
+  ["We are continuously hiring engineers, so feel free to apply at any time.", "always_hiring"],
+  ["This posting is for our talent pool, not for a specific team.", "talent_pool"],
+  ["This role is for our talent pool for future roles.", "talent_pool"],
+  ["We're always hiring, not only engineers but also designers.", "always_hiring"],
+  ["This is not only a talent pool posting.", "talent_pool"],
+  ["Why join us? We are always hiring.", "always_hiring"],
+  ["We are hiring for future roles in Berlin.", "future_openings"],
+  ["Evergreen job listings are a core feature of our ATS.", null],
+  ["Our platform's talent pool module is used by 500 companies.", null],
+  ["Our recruiting software helps employers manage evergreen requisitions.", null],
+  ["Always hiring? Acme automates your sourcing.", null],
+  ["Is this a talent pool posting?", null],
+  ["Benefits\n- Mentoring for future roles in leadership", null],
+  ["Benefits\n- Career development for future roles", null],
+  ["Experience building a talent pipeline for engineering roles.", null],
+  ["You will build and nurture our talent pipeline.", null],
+  ["Build our talent pool for future growth.", null],
+  ["Help us grow our talent community across Europe.", null],
+  ["You will source candidates for upcoming roles.", null],
+  ["We are not, as you may assume, building a talent pool.", null],
+  // third review round: DE
+  ["Wir suchen laufend Verstärkung.", "always_hiring"],
+  ["Wir suchen laufend Verstärkung.\nKeine Agentur-Anfragen bitte.", "always_hiring"],
+  ["Initiativbewerbung", "open_application_title"],
+  ["Initiativbewerbung – Softwareentwickler", "open_application_title"],
+  ["Initiativbewerbung für Entwickler (m/w/d)", "open_application_title"],
+  ["Dies ist eine Initiativbewerbung.", "open_application"],
+  ["Wir sammeln Bewerbungen für zukünftige Vakanzen.", "future_openings"],
+  ["Wir stellen kontinuierlich Mitarbeiter ein.", "always_hiring"],
+  ["Für unseren Talentpool suchen wir Entwickler, die keine Angst vor neuen Technologien haben.", "talent_pool"],
+  ["Wir suchen laufend Verstärkung, nicht nur in Berlin, sondern auch in München.", "always_hiring"],
+  ["Wir suchen laufend Verstärkung, die nicht nur programmiert, sondern mitdenkt.", "always_hiring"],
+  ["Wir stellen laufend neue Kolleg:innen ein, die nicht lange fackeln.", "always_hiring"],
+  ["Wir sind nicht nur immer auf der Suche nach Talenten.", "always_hiring"],
+  ["Wir suchen für unseren Talentpool Softwareentwickler für unsere Standorte.", "talent_pool"],
+  ["Für unseren Talentpool suchen wir Lösungsarchitekten für SAP.", "talent_pool"],
+  ["Für unseren Talentpool suchen wir Entwickler für unsere Software für Logistik.", "talent_pool"],
+  ["Wir suchen für unseren Talentpool Entwickler.", "talent_pool"],
+  ["Diese Stelle ist für unseren Talentpool, nicht für eine konkrete Vakanz.", "no_specific_opening"],
+  ["Was wir bieten\n- Gezielte Weiterbildung für zukünftige Positionen im Konzern", null],
+  ["Unsere Software hilft Personalabteilungen beim Aufbau eines Talentpools.", null],
+  ["Auf unserem Marktplatz stellen Händler laufend neue Angebote ein.", null],
+  ["Unser Vertriebsteam sucht ständig nach neuen Kunden, und du hilfst dabei.", null],
+  ["Wir suchen ständig nach neuen Kunden für unsere Software.", null],
+  ["Für unseren Talentpool ist diese Anzeige, wie du dir denken kannst, nicht gedacht.", null],
+  ["Diese Ausschreibung dient, wie du siehst, nicht dem Aufbau eines Talentpools.", null],
+  ["Wir bauen eine Plattform für Talentpools.", null],
+  ["Initiativbewerbung: Keine passende Stelle gefunden? Bewirb dich initiativ.", null],
 ];
 
 describe("evergreen_wording against the fixture packs", () => {
@@ -137,6 +192,9 @@ describe("evergreen_wording reads its words and limits from the config", () => {
     expect(evergreenWording("Missing a role?\nOur talent pool.", rulesWith(() => {}, lead({})))).toBeNull();
     // the question starts after the last start mark: "Missing a role" is not in "Hi. Got one?"
     expect(evergreenWording("Missing a role. Got one? Our talent pool.", rulesWith(() => {}, lead({})))?.patternId).toBe("pool");
+    // a sentence that is itself a question does not count; which marks end a question comes from the pack
+    expect(evergreenWording("Our talent pool?", rulesWith(() => {}, lead({})))).toBeNull();
+    expect(evergreenWording("Our talent pool?", rulesWith(() => {}, lead({ ends: [] })))?.patternId).toBe("pool");
   });
 
   it("a negative list heading cancels its items", () => {

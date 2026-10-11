@@ -38,8 +38,8 @@ export function trustedCompanyKeys(names: readonly string[], pipeline: PipelineC
  * ui.yaml `trusted_companies` as `companies.name_norm` keys, for the pages: their marks are hidden at once, before the next cycle
  * stores "none". Empty when the config cannot be read (the stored results show as they are).
  */
-export function ghostTrustedKeys(load: () => PipelineConfig = loadPipeline): string[] {
-  const names = readGhostSettings().trusted_companies;
+export function ghostTrustedKeys(load: () => PipelineConfig = loadPipeline, settings: () => GhostSettings = () => readGhostSettings()): string[] {
+  const names = settings().trusted_companies;
   if (names.length === 0) return [];
   try {
     return trustedCompanyKeys(names, load());

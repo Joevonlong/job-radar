@@ -90,9 +90,9 @@ reason, so the checks card and `pnpm ghost:check` can say which phrase matched.
 | `responsibility_patterns` | A heading that opens the duties of the role ("Responsibilities", "What you'll do", "Deine Aufgaben"), tested only against heading-shaped lines; `{id, pattern}` |
 | `negation_cues` | Words that cancel an evergreen phrase: inside it, within `pipeline.yaml job_checks.ghost.negation_words_before` words before it, within `negation_words_after` words after it in the same clause, or in the heading of its list |
 | `negation_after` | How far after a phrase of this pack a negation cue is searched: `words` (default: `negation_words_after` words) or `clause` (to the end of the clause). `de` uses `clause`: German puts "nicht" at the end ("Für unseren Talentpool ist diese Anzeige ganz ausdrücklich nicht gedacht") |
-| `clause_breaks` | Where that clause ends (";", " but ", " aber ", "and we …") |
+| `clause_breaks` | Where that clause ends (";", " but ", " aber ", "and we …", ", not", ", die …"); a break can also take a word out of the search: `not only`, `nicht nur` |
 | `exclude_context` | A sentence that matches (or the question right before it) does not count: the employer's product, customers or a team of that name, a duty of the role, "but this role is a concrete opening", the footer of a real posting ("Not ready to apply? … stay in touch"), a conditional, a privacy note |
-| `lead_in_question` | Which question before a sentence is read with it: `ends` (the characters a question ends with: `?`, `？`), `starts` (the question starts after the last of these or a line break: `.`, `!`, `¿`, …) and `line_above` (the question may stand on the line above). The packs' lists are united; no `ends` = no question is read |
+| `lead_in_question` | Which question before a sentence is read with it: `ends` (the characters a question ends with: `?`, `？`), `starts` (the question starts after the last of these or a line break: `.`, `!`, `¿`, …) and `line_above` (the question may stand on the line above). The packs' lists are united; no `ends` = no question is read. A piece that itself ends in one of `ends` is a question and does not count |
 | `abbreviations` | Abbreviations whose dot does not end a sentence |
 | `prefilter` | A quick first look: a JD or line with no match is not searched for evergreen phrases |
 
