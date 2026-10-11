@@ -187,7 +187,7 @@ describe("filter step", () => {
     const db = getDb();
     const current = await currentPreferences(db);
     const pipeline = { ...shippedPipeline(), batch_size: 2 };
-    const result = await runFilter(db, { preferences: current.preferences, snapshotId: current.snapshot.id, pipeline });
+    const result = await runFilter(db, { preferences: current.preferences, snapshotId: current.snapshot.id, pipeline, me: null });
     expect(result).toMatchObject({ evaluated: 5, created: 5 });
     expect(await db.select().from(schema.scores).where(and(eq(schema.scores.profileSnapshotId, current.snapshot.id)))).toHaveLength(5);
   });
@@ -198,7 +198,7 @@ describe("filter step", () => {
     const current = await currentPreferences(db);
     const controller = new AbortController();
     controller.abort();
-    const result = await runFilter(db, { preferences: current.preferences, snapshotId: current.snapshot.id, pipeline: shippedPipeline(), signal: controller.signal });
+    const result = await runFilter(db, { preferences: current.preferences, snapshotId: current.snapshot.id, pipeline: shippedPipeline(), me: null, signal: controller.signal });
     expect(result).toMatchObject({ aborted: true, evaluated: 0 });
   });
 });

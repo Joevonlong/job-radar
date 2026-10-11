@@ -35,3 +35,18 @@ exclude_student_roles: true
 # These two lists are sent to your AI provider with every job (see docs/privacy.md), so do not put anything in them you would not tell that provider
 exclude_companies: []
 exclude_keywords: []
+
+# Deal-breakers: rules that veto a job before any AI call (optional; see docs/deal-breakers.md). A vetoed job is kept and
+# shown under "Show filtered" with the rule's name; "Keep anyway" on its page brings it back.
+# deal_breakers:
+#   # the posting requires the market's local language above your level in me.yaml
+#   - id: language-gate
+#     label: Local language above my level
+#     type: language_gate
+#   # whole words (case and accents ignored) and / or regular expressions; unless: a sentence that matches does not count
+#   - id: travel
+#     label: Lots of travel
+#     type: phrase
+#     terms: [travel]
+#     unless: ['\bno travel\b']
+#     scope: description

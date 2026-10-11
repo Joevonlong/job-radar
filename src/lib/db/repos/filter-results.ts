@@ -16,6 +16,8 @@ export interface FilterCandidate {
   companyName: string;
   companyAliases: string[];
   companyBlacklisted: boolean;
+  /** `jobs.german_level_required` (the pipeline's rule reading; what a language gate reads). */
+  germanLevel: string;
 }
 
 /** Jobs that are not closed, by id, after `afterId` (keyset paging: the table can change between batches); `jobIds` limits it to those jobs. */
@@ -33,6 +35,7 @@ export async function listFilterCandidates(db: Executor, input: { afterId: numbe
       companyName: companies.name,
       companyAliases: companies.aliases,
       companyBlacklisted: companies.blacklisted,
+      germanLevel: jobs.germanLevelRequired,
     })
     .from(jobs)
     .innerJoin(companies, eq(companies.id, jobs.companyId))

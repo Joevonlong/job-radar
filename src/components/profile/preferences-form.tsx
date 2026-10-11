@@ -24,6 +24,7 @@ import {
 import { sameLocations } from "@/lib/profile/same-locations";
 import type { ProfileActionState } from "@/lib/profile/types";
 
+import { DealBreakersCard } from "./deal-breakers-card";
 import { Field, TagInput, describedBy, fieldErrorMap } from "./fields";
 import { FloorPreview } from "./floor-preview";
 import { FormCard } from "./form-card";
@@ -44,9 +45,11 @@ interface PreferencesFormProps {
   market: MarketView;
   /** search.yaml `locations`: the cities that are searched; they do not follow `locations` of this form. */
   searchLocations: readonly string[];
+  /** The user's level of the market's local language in me.yaml ("B1", "native"), null = none listed: what a language gate compares. */
+  userLanguageLevel: string | null;
 }
 
-export function PreferencesForm({ initial, hash, state, pending, onSave, salaries, axis, salaryMedian, market, searchLocations }: PreferencesFormProps) {
+export function PreferencesForm({ initial, hash, state, pending, onSave, salaries, axis, salaryMedian, market, searchLocations, userLanguageLevel }: PreferencesFormProps) {
   const t = useTranslations("profile");
   const base = useId();
   const [draft, setDraft] = useState<PreferencesDraft>(initial);
@@ -263,6 +266,16 @@ export function PreferencesForm({ initial, hash, state, pending, onSave, salarie
           describedBy={describedBy(ids.keywords, false, errors.get("exclude_keywords"))}
         />
       </Field>
+
+      <DealBreakersCard
+        baseId={`${base}-deal-breakers`}
+        rules={draft.deal_breakers}
+        onChange={(next) => patch({ deal_breakers: next })}
+        errors={errors}
+        userLevel={userLanguageLevel}
+        languageName={market.languageName}
+        languageStep={market.languageStep}
+      />
     </FormCard>
   );
 }

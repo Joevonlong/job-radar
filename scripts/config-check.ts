@@ -7,7 +7,9 @@
  *     config_version (the defaults ship migrated);
  *   - a user file older than the code is fine (it is migrated in memory) but listed: run pnpm config:migrate --write;
  *   - a user copy of a `shipped` file (models, pipeline) is listed as an override;
- *   - every market pack (shipped and user copies) must pass its schemas, and the market of preferences.yaml must resolve.
+ *   - every market pack (shipped and user copies) must pass its schemas, and the market of preferences.yaml must resolve;
+ *   - the deal-breakers of preferences.yaml must keep to the limits of pipeline.yaml (a language gate in a market without a
+ *     local-language step is only a warning: it does nothing).
  *
  * Usage: pnpm config:check   (honours JOB_RADAR_DEFAULTS_DIR / JOB_RADAR_CONFIG_DIR / JOB_RADAR_PROFILE_DIR)
  */
@@ -36,7 +38,9 @@ import {
   type ConfigName,
   type ConfigValue,
 } from "../src/lib/config";
-import { listPackIds, loadMarket, packDirs, readPackDir } from "../src/lib/market";
+import { dealBreakerLimitProblems, slowPatternProblems } from "../src/lib/filter/deal-breakers";
+import { vmTimeBox } from "../src/lib/filter/time-box";
+import { listPackIds, loadMarket, loadPipeline, packDirs, readPackDir } from "../src/lib/market";
 
 const rel = displayConfigPath;
 let failures = 0;
@@ -159,6 +163,44 @@ report("preferences.yaml market", () => {
   const market = loadMarket();
   return `${market.packId}: ${market.country}, ${market.currency}, local language ${market.homeLanguage}${market.language === null ? " (no requirement rules: the language step is off)" : ""}`;
 });
+
+// preferences.yaml deal_breakers: the limits of pipeline.yaml filter.deal_breakers, and a language gate needs the language step
+// (nothing to check before the profile exists)
+if (fs.existsSync(path.join(getProfileDir(), "preferences.yaml"))) {
+  const label = "preferences.yaml deal_breakers ↔ pipeline.yaml";
+  let rules: ConfigValue<"preferences">["deal_breakers"] | null = null;
+  let pipeline: ReturnType<typeof loadPipeline> | null = null;
+  try {
+    rules = parseConfigText("preferences", readConfigText("preferences")).deal_breakers;
+    pipeline = loadPipeline();
+  } catch {
+    // reported by the lines above
+  }
+  if (rules === null || pipeline === null) {
+    console.log(`- ${label} (skipped: fix the files above first)`);
+  } else if (rules.length > 0) {
+    const problems = dealBreakerLimitProblems(rules, pipeline.filter.deal_breakers);
+    const slow = slowPatternProblems(rules, pipeline.filter.deal_breakers, vmTimeBox);
+    if (problems.length > 0 || slow.length > 0) {
+      failures += 1;
+      console.log(`✗ ${label}`);
+      for (const problem of problems) {
+        const where = ["deal_breakers", ...problem.path].join(".");
+        console.log(`    ${where}: ${problem.kind === "too_many_rules" ? `more than ${problem.max} rules (filter.deal_breakers.max_rules)` : `longer than ${problem.max} characters (filter.deal_breakers.max_pattern_chars)`}`);
+      }
+      for (const problem of slow) {
+        console.log(`    deal_breakers.${problem.path.join(".")}: too slow on a long test text (over ${pipeline.filter.deal_breakers.match_ms} ms, filter.deal_breakers.match_ms)`);
+      }
+    } else {
+      console.log(`✓ ${label}  ${rules.length} rule(s)`);
+    }
+    if (pipeline.market.language === null) {
+      rules.forEach((rule, index) => {
+        if (rule.type === "language_gate" && rule.enabled) console.log(`    ! deal_breakers.${index} (${rule.id}): a language gate does nothing, the market has no local-language step`);
+      });
+    }
+  }
+}
 
 if (failures > 0) {
   console.log(`\n${failures} config file(s) invalid`);

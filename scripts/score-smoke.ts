@@ -52,8 +52,8 @@ async function main(): Promise<number> {
   console.log(`database: ${dbName}   provider order for score: ${deps.router.plan("score").join(" > ")}`);
 
   // Scoring only takes jobs the hard filter passed: run the filter step first, as a cycle would.
-  const { preferences, snapshot } = await currentPreferences(db);
-  const filter = await runFilter(db, { preferences, snapshotId: snapshot.id, pipeline: loadPipeline(), logger });
+  const { preferences, snapshot, me } = await currentPreferences(db);
+  const filter = await runFilter(db, { preferences, snapshotId: snapshot.id, pipeline: loadPipeline(), me, logger });
   console.log(`hard filter: evaluated=${filter.evaluated} passed=${filter.passed} filtered_out=${filter.filteredOut}`);
 
   const started = Date.now();

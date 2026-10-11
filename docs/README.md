@@ -31,6 +31,7 @@ mock-ups.
 | [commercial-use.md](commercial-use.md) | Using Job Radar in a company or team: AGPL, shared instances, scraping and AI-subscription terms |
 | [ai-providers.md](ai-providers.md) | AI via a subscription CLI, an API key, or both: who runs what where, the host ai-worker, `execution` / `host_worker` / `translation` settings, troubleshooting |
 | [ai-usage.md](ai-usage.md) | AI usage and cost statistics, model catalog (`models.yaml`) |
+| [deal-breakers.md](deal-breakers.md) | Your own veto rules (`preferences.yaml: deal_breakers`): language gate, phrases, what happens to a vetoed job, `pnpm deal-breakers:check`, before rolling back |
 | [extraction.md](extraction.md) | Rules for work mode, German level, agency detection and description cleanup; `pnpm reprocess` |
 | [signals.md](signals.md) | Compensation and benefit signals: tiers, vocabularies, the two-step extraction, the board |
 | [salary.md](salary.md) | Salary level on the job page (benchmark of your collected postings, links to salary sites) and the optional AI salary lookup with web search, `salary.yaml` |

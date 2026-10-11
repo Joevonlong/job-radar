@@ -54,6 +54,7 @@ const usRemoteJob: FilterJob = {
   seniority: "senior",
   contract: "permanent",
   salary: null,
+  germanLevel: "unknown",
 };
 
 function filterVerdict() {

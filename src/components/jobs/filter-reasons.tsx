@@ -2,7 +2,7 @@ import { useTranslations } from "next-intl";
 import { useAppLocale } from "@/components/viz/intl";
 
 import { knownContract } from "@/lib/dashboard/labels";
-import { isNoteReason, parseFilterReason } from "@/lib/filter/reasons";
+import { isNoteReason, orderedReasons, parseFilterReason } from "@/lib/filter/reasons";
 import { formatSalary } from "@/lib/format/numbers";
 
 const WORKPLACES = ["onsite", "hybrid", "remote", "unknown"] as const;
@@ -11,7 +11,7 @@ const WORKPLACES = ["onsite", "hybrid", "remote", "unknown"] as const;
  * Localized text of the hard-filter reasons (`scores.filter_reasons`). A reason that is not one of
  * the codes (older rows) is shown as it is. Works in server and client components.
  */
-export function useFilterReasonText(options: { floorAtFilter?: number | null; currency?: string } = {}): (raw: string) => string {
+export function useFilterReasonText(options: { floorAtFilter?: number | null; currency?: string; dealBreakerLabels?: Readonly<Record<string, string>> } = {}): (raw: string) => string {
   const t = useTranslations("filter.reasons");
   const tDash = useTranslations("dashboard");
   const locale = useAppLocale();
@@ -29,6 +29,9 @@ export function useFilterReasonText(options: { floorAtFilter?: number | null; cu
     } else if (code === "contract_excluded" || code === "contract_not_allowed") {
       const kind = knownContract(shown);
       if (kind) shown = tDash(`contract.${kind}`);
+    } else if (code === "deal_breaker") {
+      // the rule's name as it is now; a rule deleted since is shown by its id
+      shown = (detail !== null ? options.dealBreakerLabels?.[detail] : undefined) ?? shown;
     } else if (code === "workplace_not_wanted") {
       const place = WORKPLACES.find((w) => w === shown);
       if (place) shown = tDash(`workplace.${place}`);
@@ -66,9 +69,9 @@ export function FloorChangedText({ floor, currency = "" }: { floor: number; curr
  * The reasons of a filtered job as one line of text. With `floor` a salary reason names the floor used at filter time and, when the
  * floor has changed since, says so: the one wording of the list and of the detail page.
  */
-export function FilterReasonText({ reasons, fallback, floor }: { reasons: readonly string[]; fallback?: string; floor?: FloorContext }) {
-  const text = useFilterReasonText({ floorAtFilter: floor?.atFilter ?? null, ...(floor?.currency !== undefined ? { currency: floor.currency } : {}) });
-  const excluding = reasons.filter((r) => !isNoteReason(r));
+export function FilterReasonText({ reasons, fallback, floor, dealBreakerLabels }: { reasons: readonly string[]; fallback?: string; floor?: FloorContext; dealBreakerLabels?: Readonly<Record<string, string>> }) {
+  const text = useFilterReasonText({ floorAtFilter: floor?.atFilter ?? null, ...(floor?.currency !== undefined ? { currency: floor.currency } : {}), ...(dealBreakerLabels ? { dealBreakerLabels } : {}) });
+  const excluding = orderedReasons(reasons.filter((r) => !isNoteReason(r)));
   const list = excluding.length > 0 ? excluding : reasons;
   return (
     <>

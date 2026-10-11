@@ -116,7 +116,7 @@ describe("floor preview", () => {
     for (const floor of [0, 55_000, 70_000, 95_000, 110_000, 200_000]) {
       await db.delete(schema.scores);
       const [snapshot] = await db.insert(schema.profileSnapshots).values({ kind: "preferences", hash: `floor-${floor}`, contentYaml: `floor: ${floor}` }).returning();
-      await runFilter(db, { preferences: { ...preferences, salary_floor_year: floor }, snapshotId: snapshot?.id ?? 0, pipeline: shippedPipeline() });
+      await runFilter(db, { preferences: { ...preferences, salary_floor_year: floor }, snapshotId: snapshot?.id ?? 0, pipeline: shippedPipeline(), me: null });
       const dropped = await db.select().from(schema.scores).where(eq(schema.scores.filterResult, "filtered_out"));
       const bySalary = dropped.filter((row) => row.filterReasons.some((reason) => reason.startsWith("salary_below_floor")));
       expect(previewFloor(salaries, floor).filtered, `floor ${floor}`).toBe(bySalary.length);

@@ -7,8 +7,12 @@ import { languageRequirementSchema, type LanguageRequirement } from "@/lib/marke
 import type { Market } from "@/lib/market/types";
 
 import { nonEmptyString, nonNegativeInt, nonNegativeNumber, positiveInt, regexString } from "./common";
+import { DEAL_BREAKER_HARD_LIMITS } from "./preferences";
 
 export { regexString } from "./common";
+
+/** `filter.deal_breakers` when the file has none. */
+export const DEAL_BREAKER_DEFAULTS = { max_rules: 20, max_pattern_chars: 200, match_text_max_chars: 20_000, rule_warn_ms: 200, match_ms: 100, rule_budget_ms: 2000, preview_ms: 3000 } as const;
 
 const regexList = z.array(regexString);
 /** Lists the market packs also supply; the user file adds to them (union), so it may leave them out. */
@@ -265,6 +269,28 @@ export const pipelineSchema = z.strictObject({
       senior: z.array(z.enum(SENIORITIES)),
       lead: z.array(z.enum(SENIORITIES)),
     }),
+    /** Limits of preferences.yaml `deal_breakers` (the user's veto rules, run on every open job each cycle). */
+    deal_breakers: z
+      .strictObject({
+        /** Most rules preferences.yaml may hold. */
+        max_rules: positiveInt.max(DEAL_BREAKER_HARD_LIMITS.rules).default(DEAL_BREAKER_DEFAULTS.max_rules),
+        /** Longest term or pattern of a rule (characters). */
+        max_pattern_chars: positiveInt.max(DEAL_BREAKER_HARD_LIMITS.patternChars).default(DEAL_BREAKER_DEFAULTS.max_pattern_chars),
+        /** Only the first this many characters of a description are searched. */
+        match_text_max_chars: positiveInt.default(DEAL_BREAKER_DEFAULTS.match_text_max_chars),
+        /** `pnpm deal-breakers:check` warns about a rule that takes longer than this over all open jobs (ms). */
+        rule_warn_ms: positiveInt.default(DEAL_BREAKER_DEFAULTS.rule_warn_ms),
+        /**
+         * Longest one pattern may take on one of the test texts a rule is tried on before it runs (a long line without a match;
+         * slower: the rule is left out as too slow), and on one job when a page explains a veto (ms).
+         */
+        match_ms: positiveInt.default(DEAL_BREAKER_DEFAULTS.match_ms),
+        /** Time one rule may take over all jobs in one filter run or one preview; a rule that uses it up stops for the rest of the run (ms). */
+        rule_budget_ms: positiveInt.default(DEAL_BREAKER_DEFAULTS.rule_budget_ms),
+        /** Longest the /me card's preview may take; after that it shows the jobs counted so far (ms). */
+        preview_ms: positiveInt.default(DEAL_BREAKER_DEFAULTS.preview_ms),
+      })
+      .default(DEAL_BREAKER_DEFAULTS),
   }),
 });
 

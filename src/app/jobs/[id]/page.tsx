@@ -43,6 +43,7 @@ import { getSchedule } from "@/lib/dashboard/context";
 import { germanCheck } from "@/lib/dashboard/german-check";
 import { userGermanLabelOrNull } from "@/lib/dashboard/german";
 import { floorCheck } from "@/lib/dashboard/floor-check";
+import { loadDealBreakerNotice } from "@/lib/dashboard/deal-breakers";
 import { knownContract, knownFamily } from "@/lib/dashboard/labels";
 import { buildSkillAliasMap, matchSkills, profileSkillKeys } from "@/lib/dashboard/skills";
 import { quotesFoundInJd } from "@/lib/dashboard/jd";
@@ -254,7 +255,7 @@ export default async function JobDetailPage({ params }: { params: Params }) {
       <BackLink href="/jobs" label={t("back")} />
       <SeenTracker jobId={job.id} />
 
-      <FilterNotice rank={job.score} jobId={job.id} withButton={false} floor={{ atFilter: job.score?.filterFloorEur ?? null, current: salaryFloor, currency: baseCurrency }} />
+      <FilterNotice rank={job.score} jobId={job.id} withButton={false} floor={{ atFilter: job.score?.filterFloorEur ?? null, current: salaryFloor, currency: baseCurrency }} dealBreakers={loadDealBreakerNotice(job, job.score?.filterReasons ?? [])} />
 
       <header className="grid gap-4 md:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_300px_300px]" data-testid="detail-header">
         <div className="flex min-w-0 flex-col gap-2.5 md:col-span-2 xl:col-span-1">

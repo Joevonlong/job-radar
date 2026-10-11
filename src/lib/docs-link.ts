@@ -28,6 +28,8 @@ export const DOC_LINKS = {
   aiProviders: { file: "ai-providers", anchor: { en: "which-providers-receive-job-text", zh: "哪些-provider-会收到岗位文本" } },
   /** Setting up the Telegram bot on the host (`pnpm run setup --step telegram`), and the manual way. */
   telegram: { file: "telegram", anchor: { en: "1-set-it-up-with-one-command", zh: "1-用一条命令配置" } },
+  /** The user's own veto rules (preferences.yaml `deal_breakers`). */
+  dealBreakers: { file: "deal-breakers", anchor: { en: "writing-rules", zh: "写规则" } },
 } as const;
 
 export type DocKey = keyof typeof DOC_LINKS;

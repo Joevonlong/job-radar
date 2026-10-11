@@ -9,7 +9,7 @@
 import { z } from "zod";
 
 import type { MeConfig } from "@/lib/config/schemas/me";
-import type { PreferencesConfig } from "@/lib/config/schemas/preferences";
+import type { DealBreaker, PreferencesConfig } from "@/lib/config/schemas/preferences";
 import { parseRemoteScopeKey, remoteScopeKey } from "@/lib/market/remote-scope";
 
 // Option lists mirror the zod enums in the config schemas; tests/profile/draft.test.ts compares them.
@@ -51,6 +51,24 @@ export interface MarketDraft {
   home_language: string;
 }
 
+/** One deal-breaker as the form holds it: every field of both types; the type picks which ones are written. */
+export interface DealBreakerDraft {
+  id: string;
+  label: string;
+  enabled: boolean;
+  /** `language_gate` or `phrase`. */
+  type: string;
+  /** Language gate: "" = the user's own level (me.yaml), else a CEFR level. */
+  at_least: string;
+  terms: string[];
+  patterns: string[];
+  /** `title`, `description` or `any`. */
+  scope: string;
+  unless: string[];
+}
+
+export const DEAL_BREAKER_SCOPES = ["any", "title", "description"] as const;
+
 export interface PreferencesDraft {
   market: MarketDraft;
   target_titles: string[];
@@ -65,7 +83,23 @@ export interface PreferencesDraft {
   exclude_student_roles: boolean;
   exclude_companies: string[];
   exclude_keywords: string[];
+  deal_breakers: DealBreakerDraft[];
 }
+
+/** A deal-breaker row from the browser: shapes and generous sizes only (the config schema then says what is wrong, field by field). */
+const draftText = z.string().max(2_000);
+const draftList = z.array(draftText).max(200);
+export const dealBreakerDraftSchema = z.strictObject({
+  id: draftText,
+  label: draftText,
+  enabled: z.boolean(),
+  type: z.string().max(40),
+  at_least: z.string().max(10),
+  terms: draftList,
+  patterns: draftList,
+  scope: z.string().max(20),
+  unless: draftList,
+});
 
 export const meDraftSchema = z.strictObject({
   languages: z.array(z.strictObject({ code: z.string(), level: z.string() })),
@@ -88,6 +122,7 @@ export const preferencesDraftSchema = z.strictObject({
   exclude_student_roles: z.boolean(),
   exclude_companies: z.array(z.string()),
   exclude_keywords: z.array(z.string()),
+  deal_breakers: z.array(dealBreakerDraftSchema).max(200),
 });
 
 const DECIMAL = /^-?\d+(\.\d+)?$/;
@@ -152,7 +187,30 @@ export function preferencesConfigToDraft(prefs: PreferencesConfig): PreferencesD
     exclude_student_roles: prefs.exclude_student_roles,
     exclude_companies: [...prefs.exclude_companies],
     exclude_keywords: [...prefs.exclude_keywords],
+    deal_breakers: prefs.deal_breakers.map(dealBreakerToDraft),
   };
+}
+
+export function dealBreakerToDraft(rule: DealBreaker): DealBreakerDraft {
+  const empty = { at_least: "", terms: [], patterns: [], scope: "any", unless: [] };
+  return rule.type === "language_gate"
+    ? { ...empty, id: rule.id, label: rule.label, enabled: rule.enabled, type: rule.type, at_least: rule.at_least ?? "" }
+    : { ...empty, id: rule.id, label: rule.label, enabled: rule.enabled, type: rule.type, terms: [...rule.terms], patterns: [...rule.patterns], scope: rule.scope, unless: [...rule.unless] };
+}
+
+/** The unvalidated config candidate of one deal-breaker: only the fields of its type, defaults left out. */
+export function dealBreakerDraftToCandidate(draft: DealBreakerDraft): Record<string, unknown> {
+  const out: Record<string, unknown> = { id: draft.id.trim(), label: draft.label, type: draft.type };
+  if (!draft.enabled) out.enabled = false;
+  if (draft.type === "language_gate") {
+    if (draft.at_least.trim() !== "") out.at_least = draft.at_least.trim();
+    return out;
+  }
+  if (draft.terms.length > 0) out.terms = draft.terms;
+  if (draft.patterns.length > 0) out.patterns = draft.patterns;
+  if (draft.scope !== "any") out.scope = draft.scope;
+  if (draft.unless.length > 0) out.unless = draft.unless;
+  return out;
 }
 
 /** The market block of a draft: empty values are left out (the pack's value applies). */
@@ -180,6 +238,7 @@ export function preferencesDraftToCandidate(draft: PreferencesDraft): unknown {
     exclude_student_roles: draft.exclude_student_roles,
     exclude_companies: draft.exclude_companies,
     exclude_keywords: draft.exclude_keywords,
+    deal_breakers: draft.deal_breakers.map(dealBreakerDraftToCandidate),
   };
 }
 
@@ -193,9 +252,11 @@ export type FieldErrorKey =
   | "atLeastOne"
   | "duplicates"
   | "tooLong"
+  | "tooMany"
   | "languageCode"
   | "invalidChoice"
   | "contractConflict"
+  | "slowPattern"
   | "invalid";
 
 export interface FieldError {
@@ -218,6 +279,8 @@ function draftPath(path: ReadonlyArray<PropertyKey>): string {
   // Rows of `languages` carry one error line; the record key/level distinction is in the message key.
   if (head === "languages") return typeof index === "number" ? `languages.${index}` : "languages";
   if (head === "skills" && typeof index === "number" && typeof field === "string") return `skills.${index}.${field}`;
+  // a deal-breaker's lists (terms, patterns, unless) are one control each, like the lists above
+  if (head === "deal_breakers") return typeof index === "number" ? (typeof field === "string" ? `deal_breakers.${index}.${field}` : `deal_breakers.${index}`) : "deal_breakers";
   return path.map(String).join(".");
 }
 
@@ -232,7 +295,7 @@ export function issueKey(issue: Issue): Pick<FieldError, "key" | "params"> {
       if (issue.origin === "array") return { key: "atLeastOne" };
       return { key: "min", params: { min: Number(issue.minimum) } };
     case "too_big":
-      return { key: "tooLong", params: { max: Number(issue.maximum) } };
+      return { key: issue.origin === "array" ? "tooMany" : "tooLong", params: { max: Number(issue.maximum) } };
     case "invalid_value":
     case "invalid_union":
       return { key: "invalidChoice" };
@@ -243,6 +306,9 @@ export function issueKey(issue: Issue): Pick<FieldError, "key" | "params"> {
       if (issue.message === "needs at least one workplace type") return { key: "atLeastOne" };
       if (issue.message.startsWith("a contract type cannot be both")) return { key: "contractConflict" };
       if (issue.message.startsWith("each entry must have exactly one")) return { key: "languageCode" };
+      if (issue.message.startsWith("duplicate id")) return { key: "duplicates" };
+      if (issue.message === "needs at least one term or pattern") return { key: "atLeastOne" };
+      if (issue.message.startsWith("can be very slow (")) return { key: "slowPattern", params: { kind: /^can be very slow \((\w+)\)/u.exec(issue.message)?.[1] ?? "other" } };
       return { key: "invalid", params: { message: issue.message } };
     default:
       return { key: "invalid", params: { message: issue.message } };
