@@ -415,6 +415,16 @@ describe("the runner and the first message", () => {
     expect(envText()).toContain("TELEGRAM_CHAT_ID=12345\n");
   });
 
+  it("a full first page (100 updates): a later-numbered message dated before the prompt is still only an earlier one", async () => {
+    const page = Array.from({ length: 100 }, (_, i) => oldMessage(100 + i));
+    api.updates = [page, [oldMessage(250)]];
+    // the one from page two is old by its date: offered as earlier, Enter declines, then typed by hand
+    const run = io(["y", GOOD_TOKEN, "a", "", "m", "12345", "y", "y", "n"]);
+    expect(await setup([], run, baseEnv(), fakeServices())).toBe(0);
+    expect(run.errors.join("\n")).toContain("A message was already waiting from before you were asked");
+    expect(envText()).toContain("TELEGRAM_CHAT_ID=12345\n");
+  });
+
   it("the earlier message can still be taken on purpose", async () => {
     api.updates = [[oldMessage(71)]];
     const run = io(["y", GOOD_TOKEN, "a", "y", "y", "y", "n"]);

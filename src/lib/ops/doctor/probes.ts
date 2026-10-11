@@ -29,6 +29,10 @@ import type { CommandOutcome, DiskSpace, DoctorContext, DoctorProbes, HttpOutcom
 
 const MAX_OUTPUT_BYTES = 4 * 1024 * 1024;
 const MAX_BODY_CHARS = 4096;
+/** A detached command that outlives its time-out: SIGTERM to its process group, SIGKILL this much later. */
+const KILL_GRACE_MS = 5000;
+/** After the child exits, how long to wait for its output pipes to close (a grandchild may keep them open). */
+const CLOSE_GRACE_MS = 2000;
 
 /** Walk `roots` (without following symlinks) and collect what is not owned by `uid` (`data.ownership`). */
 export async function scanOwnership(roots: readonly string[], uid: number, options: { sample: number; maxEntries: number }): Promise<OwnershipScan> {
@@ -79,11 +83,15 @@ export interface RunCommandOptions {
    * reach it and it runs to completion: for commands that must not be cut half-way (recreating containers).
    */
   detached?: boolean;
+  /** Detached only: SIGTERM -> SIGKILL delay of the process group after the time-out (default `KILL_GRACE_MS`). */
+  killGraceMs?: number;
+  /** Detached only: how long to wait for the pipes after the exit (default `CLOSE_GRACE_MS`). */
+  closeGraceMs?: number;
 }
 
 /** Run a command to completion (time-out in ms). `ENOENT` is "missing", a kill by the time-out is "timeout"; a non-zero exit is a normal outcome. */
 export function runCommand(command: string, args: readonly string[], timeoutMs: number, options: RunCommandOptions = {}): Promise<CommandOutcome> {
-  if (options.detached) return runDetached(command, args, timeoutMs, options.env);
+  if (options.detached) return runDetached(command, args, timeoutMs, options);
   return new Promise((resolve) => {
     const extra = options.env ? { env: options.env } : {};
     execFile(command, [...args], { timeout: timeoutMs, maxBuffer: MAX_OUTPUT_BYTES, encoding: "utf8", windowsHide: true, ...extra }, (error, stdout, stderr) => {
@@ -99,32 +107,63 @@ export function runCommand(command: string, args: readonly string[], timeoutMs: 
   });
 }
 
-/** `runCommand` in a process group of its own (`execFile` has no `detached`): same outcomes, output cut at the same size. */
-function runDetached(command: string, args: readonly string[], timeoutMs: number, env: NodeJS.ProcessEnv | undefined): Promise<CommandOutcome> {
+/**
+ * `runCommand` in a process group of its own (`execFile` has no `detached`): same outcomes, output cut at the same size.
+ * On the time-out the whole group gets SIGTERM, then SIGKILL after `killGraceMs`; the result comes on the exit (the pipes
+ * get `closeGraceMs` to drain: a grandchild such as the compose plugin may hold them open), so it always settles.
+ */
+function runDetached(command: string, args: readonly string[], timeoutMs: number, options: RunCommandOptions): Promise<CommandOutcome> {
+  const killGraceMs = options.killGraceMs ?? KILL_GRACE_MS;
+  const closeGraceMs = options.closeGraceMs ?? CLOSE_GRACE_MS;
   return new Promise((resolve) => {
+    const timers: NodeJS.Timeout[] = [];
+    const later = (ms: number, run: () => void): void => {
+      timers.push(setTimeout(run, ms));
+    };
+    const child = spawn(command, [...args], { detached: true, windowsHide: true, stdio: ["ignore", "pipe", "pipe"], ...(options.env ? { env: options.env } : {}) });
+    let stdout = "";
+    let stderr = "";
+    let timedOut = false;
+    let exitCode: number | null = null;
     let settled = false;
     const settle = (outcome: CommandOutcome): void => {
       if (settled) return;
       settled = true;
-      clearTimeout(timer);
+      for (const timer of timers) clearTimeout(timer);
+      child.stdout.destroy();
+      child.stderr.destroy();
       resolve(outcome);
     };
-    const child = spawn(command, [...args], { detached: true, windowsHide: true, stdio: ["ignore", "pipe", "pipe"], ...(env ? { env } : {}) });
-    let stdout = "";
-    let stderr = "";
-    let timedOut = false;
+    const result = (): CommandOutcome => (timedOut ? { kind: "timeout" } : { kind: "ran", exitCode, stdout, stderr });
+    const killGroup = (signal: NodeJS.Signals): void => {
+      if (child.pid === undefined) return;
+      try {
+        process.kill(-child.pid, signal);
+      } catch {
+        // the group is gone already
+      }
+    };
     child.stdout.setEncoding("utf8").on("data", (chunk: string) => {
       if (stdout.length < MAX_OUTPUT_BYTES) stdout += chunk;
     });
     child.stderr.setEncoding("utf8").on("data", (chunk: string) => {
       if (stderr.length < MAX_OUTPUT_BYTES) stderr += chunk;
     });
-    const timer = setTimeout(() => {
+    later(timeoutMs, () => {
       timedOut = true;
-      child.kill("SIGTERM");
-    }, timeoutMs);
+      killGroup("SIGTERM");
+      later(killGraceMs, () => {
+        killGroup("SIGKILL");
+        // a process that survives SIGKILL (uninterruptible sleep) must not hold the caller forever
+        later(closeGraceMs, () => settle(result()));
+      });
+    });
     child.on("error", (error: NodeJS.ErrnoException) => settle(error.code === "ENOENT" ? { kind: "missing" } : { kind: "ran", exitCode: null, stdout, stderr: stderr || error.message }));
-    child.on("close", (code) => settle(timedOut ? { kind: "timeout" } : { kind: "ran", exitCode: code, stdout, stderr }));
+    child.on("exit", (code) => {
+      exitCode = code;
+      later(closeGraceMs, () => settle(result()));
+    });
+    child.on("close", () => settle(result()));
   });
 }
 

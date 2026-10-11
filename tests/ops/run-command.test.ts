@@ -19,3 +19,21 @@ describe.skipIf(process.platform === "win32")("runCommand options", () => {
     expect(out.kind === "ran" ? out.stdout.trim() : "").toBe("yes unset");
   });
 });
+
+describe.skipIf(process.platform === "win32")("runCommand detached: it always comes back", () => {
+  it("a child that ignores SIGTERM is killed with its group after the grace period", async () => {
+    const started = Date.now();
+    // the shell and its sleep both ignore SIGTERM (the disposition is inherited)
+    const out = await runCommand("sh", ["-c", 'trap "" TERM; sleep 30; echo never'], 200, { detached: true, killGraceMs: 200, closeGraceMs: 200 });
+    expect(out.kind).toBe("timeout");
+    expect(Date.now() - started).toBeLessThan(5000);
+  });
+
+  it("a grandchild that keeps the output pipe open does not hold the result", async () => {
+    const started = Date.now();
+    const out = await runCommand("sh", ["-c", "sleep 3 & echo done"], 10_000, { detached: true, closeGraceMs: 200 });
+    expect(out).toMatchObject({ kind: "ran", exitCode: 0 });
+    expect(out.kind === "ran" ? out.stdout : "").toContain("done");
+    expect(Date.now() - started).toBeLessThan(2500);
+  });
+});

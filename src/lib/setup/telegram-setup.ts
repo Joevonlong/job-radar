@@ -113,6 +113,9 @@ export function describeChat(t: SetupTranslator, message: Message): string {
   return t("cli.telegram.chatGroup", { title: clean(chat.title ?? "") || "?", name: personName(message.from) });
 }
 
+/** The most updates one getUpdates call returns (Bot API default `limit`). */
+const GET_UPDATES_PAGE = 100;
+
 export async function runTelegramSetup(deps: TelegramSetupDeps): Promise<TelegramSetupOutcome> {
   const { io, t } = deps;
   const now = deps.now ?? (() => new Date());
@@ -240,8 +243,13 @@ export async function runTelegramSetup(deps: TelegramSetupDeps): Promise<Telegra
   const waitForMessage = async (bot: TelegramClient): Promise<{ message: Message; earlier: boolean } | null> => {
     const deadline = now().getTime() + telegram.setup.wait_for_message_seconds * 1000;
     const fromPerson = (update: TelegramUpdate): Message | null => (update.message !== undefined && update.message.from?.is_bot !== true ? update.message : null);
+    const promptAt = Math.floor(now().getTime() / 1000);
     const backlog = await bot.getUpdates({ timeoutSeconds: 0, ...(signal ? { signal } : {}) });
     const promptAfter = backlog.lastUpdateId ?? -1;
+    // getUpdates returns at most 100 updates, and paging further would confirm them: with a full first page, older
+    // updates may still follow, so a message only counts as new when Telegram dates it after the prompt as well
+    const backlogFull = backlog.updates.length >= GET_UPDATES_PAGE;
+    const isNew = (update: TelegramUpdate, message: Message): boolean => update.update_id > promptAfter && (!backlogFull || (message.date ?? 0) >= promptAt);
     let earlier: Message | null = null;
     for (const update of backlog.updates) earlier = fromPerson(update) ?? earlier;
     let offset: number | undefined;
@@ -268,7 +276,16 @@ export async function runTelegramSetup(deps: TelegramSetupDeps): Promise<Telegra
         if (signal?.aborted) throw new Stop();
       }
       const batch = await bot.getUpdates({ ...(offset === undefined ? {} : { offset }), timeoutSeconds: blocked ? 0 : Math.min(telegram.poll_timeout_seconds, remaining), ...(signal ? { signal } : {}) });
-      const fresh = batch.updates.filter((update) => update.update_id > promptAfter).map(fromPerson).find((m): m is Message => m !== null);
+      let fresh: Message | undefined;
+      for (const update of batch.updates) {
+        const message = fromPerson(update);
+        if (message === null || update.update_id <= promptAfter) continue;
+        if (isNew(update, message)) {
+          fresh = message;
+          break;
+        }
+        earlier = message;
+      }
       if (fresh !== undefined) return { message: fresh, earlier: false };
       advance(batch.updates);
     }
