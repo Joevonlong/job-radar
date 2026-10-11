@@ -8,6 +8,7 @@ import type { JobListItem } from "@/components/jobs/types";
 import { RankValue } from "@/components/jobs/rank-value";
 import { SignalBadge } from "@/components/jobs/signal-badge";
 import { SourceIcon } from "@/components/jobs/source-icons";
+import { VisaBadge } from "@/components/jobs/visa-badge";
 import en from "../messages/en.json";
 import { listSignal } from "./signals/helpers";
 import { BaseCurrencyProvider } from "@/components/base-currency";
@@ -37,6 +38,21 @@ describe("SignalBadge", () => {
       </SignalBadge>,
     );
     expect(screen.getByText("x").closest("[data-slot=signal-badge]")?.className).toContain("text-signal-t3-text");
+  });
+});
+
+describe("VisaBadge", () => {
+  it("says support in green and a refusal in a dashed red outline, by kind", () => {
+    const { rerender } = render(wrap(<VisaBadge visa={{ status: "offered", kind: null }} />));
+    expect(screen.getByTestId("visa-badge")).toHaveTextContent(en.visa.badge.offered);
+    expect(screen.getByTestId("visa-badge").className).toContain("text-good");
+    rerender(wrap(<VisaBadge visa={{ status: "not_offered", kind: "permit_required" }} />));
+    expect(screen.getByTestId("visa-badge")).toHaveTextContent(en.visa.badge.permit_required);
+    expect(screen.getByTestId("visa-badge")).toHaveAttribute("data-kind", "permit_required");
+    expect(screen.getByTestId("visa-badge").className).toContain("border-dashed");
+    rerender(wrap(<VisaBadge visa={{ status: "not_offered", kind: "no_sponsorship" }} />));
+    expect(screen.getByTestId("visa-badge")).toHaveTextContent(en.visa.badge.no_sponsorship);
+    expect(screen.getByTestId("visa-badge")).toHaveAttribute("title", en.visa.badgeTitle.no_sponsorship);
   });
 });
 

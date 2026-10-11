@@ -23,11 +23,12 @@ import { loadHighValuePolicy, loadSignalCatalog } from "@/lib/signals/floor";
 import { countJobList, countJobListSeen, getDb, getFilterFloors, getJobFilterOptions, getVisitState, hasHighValueCategories, listJobs, listMonthSalaryFigures } from "@/lib/db";
 import { loadCityGroups } from "@/lib/jobs/cities";
 import { jobsListFilters } from "@/lib/jobs/list-filters";
-import { hasActiveFilters, jobsListHref, jobsSearchQuery, loadJobsSearchParams, withLegacyKeys } from "@/lib/jobs/search-params";
+import { hasActiveFilters, type FilterVisibility, jobsListHref, jobsSearchQuery, loadJobsSearchParams, withLegacyKeys } from "@/lib/jobs/search-params";
 import { salaryFilteredIds } from "@/lib/jobs/filter-floors";
 import { effectiveDir, nextSortParams } from "@/lib/jobs/sort";
 import { effectiveSeenUpTo } from "@/lib/jobs/visit";
 import { trapsEnabled } from "@/lib/traps/settings";
+import { visaFilterAvailable } from "@/lib/visa/filter";
 import { VisibilityScope } from "@/components/applications/visibility-scope";
 import { loadBaseCurrency } from "@/lib/signals/floor";
 
@@ -60,6 +61,9 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
   const db = getDb();
   const cities = await loadCityGroups(db);
   const filters = await jobsListFilters(db, params, cities);
+  // hidden, a `visa=` in the URL is ignored but kept (no control, no chip, not counted)
+  const visaFilter = await visaFilterAvailable(db);
+  const visibility: FilterVisibility = { ignore: visaFilter ? [] : ["visa"] };
   const visit = await getVisitState(db);
   const seenUpTo = effectiveSeenUpTo(visit, now);
   // "Closed (N)" is the status filter "closed + possibly closed" (no URL key of its own); N counts the list it opens
@@ -101,7 +105,7 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
     <div data-wide className="flex min-w-0 flex-col gap-sp-4">
       <VisitTracker />
       <PageHeader title={t("title")} description={t("description")} />
-      <FilterBar options={{ ...options, cities: cities.map(({ key, target }) => ({ key, target })), traps: trapsEnabled(), hiddenWorkplaces: hidden.workplaces, hiddenContracts: hidden.contracts, highValueNames }} />
+      <FilterBar options={{ ...options, cities: cities.map(({ key, target }) => ({ key, target })), traps: trapsEnabled(), visa: visaFilter, hiddenWorkplaces: hidden.workplaces, hiddenContracts: hidden.contracts, highValueNames }} />
       <div className="flex flex-wrap items-center gap-x-sp-3 gap-y-sp-2">
         {params.filteredOnly === true ? (
           <FilteredToggle active only href={jobsListHref({ ...params, filteredOnly: null, page: 1 })} />
@@ -144,14 +148,14 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
         label={tJobs("listLabel")}
         empty={
           // "only favorites" and nothing else narrowing the list: no star yet, so say how to star a job instead of "relax the filters"
-          params.fav === true && !hasActiveFilters({ ...params, fav: null }) ? (
+          params.fav === true && !hasActiveFilters({ ...params, fav: null }, visibility) ? (
             <span data-testid="jobs-fav-empty">
               {tFavPage("empty")}{" "}
               <Link href={jobsListHref({ ...params, fav: null, page: 1 })} className="text-foreground font-medium underline underline-offset-2">
                 {tFav("remove")} →
               </Link>
             </span>
-          ) : hasActiveFilters(params) ? (
+          ) : hasActiveFilters(params, visibility) ? (
             tJobs("emptyFiltered")
           ) : (
             tJobs("empty")

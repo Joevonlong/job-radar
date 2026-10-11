@@ -5,12 +5,13 @@
  */
 import { z } from "zod";
 
-import type { MeConfig, PipelineConfig } from "@/lib/config";
+import type { PipelineConfig } from "@/lib/config";
+import { visaRulesFor } from "@/lib/visa/rules";
 import { dealBreakerSchema, DEAL_BREAKER_HARD_LIMITS, type DealBreaker } from "@/lib/config/schemas/preferences";
 import type { Db } from "@/lib/db/client";
 import { listFilterCandidates } from "@/lib/db";
 import { asGermanLevel } from "@/lib/db/queries/parse";
-import { compileDealBreakers, dealBreakerVetoes, explainDealBreaker, startDealBreakerRun, type DealBreakerJob, type DealBreakerRun, type DealBreakerWarningCode, type TimeBox } from "@/lib/filter/deal-breakers";
+import { compileDealBreakers, dealBreakerVetoes, explainDealBreaker, startDealBreakerRun, type DealBreakerJob, type DealBreakerMe, type DealBreakerRun, type DealBreakerWarningCode, type TimeBox } from "@/lib/filter/deal-breakers";
 import { vmTimeBox } from "@/lib/filter/time-box";
 
 import { dealBreakerDraftSchema, dealBreakerDraftToCandidate } from "./draft";
@@ -50,7 +51,7 @@ export interface DealBreakerPreview {
 
 export interface PreviewOptions {
   pipeline: PipelineConfig;
-  me: Pick<MeConfig, "languages"> | null;
+  me: DealBreakerMe | null;
   /** Examples per rule. */
   sampleLimit: number;
   /** Quote the job's words for each example (`explainDealBreaker`). */
@@ -71,7 +72,7 @@ interface Prepared {
 /** Compile and probe each rule on its own; null when the deadline passed first (probing a slow pattern takes up to `match_ms` per test text). */
 function prepare(rules: readonly DealBreaker[], options: PreviewOptions, timeBox: TimeBox, deadline: number): Prepared[] | null {
   const limits = options.pipeline.filter.deal_breakers;
-  const context = { language: options.pipeline.market.language?.code ?? null, me: options.me, limits };
+  const context = { language: options.pipeline.market.language?.code ?? null, me: options.me, limits, visa: visaRulesFor(options.pipeline) };
   const prepared: Prepared[] = [];
   for (const [index, rule] of rules.entries()) {
     if (performance.now() >= deadline) return null;
@@ -102,7 +103,7 @@ export async function previewDealBreakers(db: Db, rules: readonly DealBreaker[],
   // out of time before every rule was probed: nothing counted
   if (ready === null) return { total: 0, partial: true, rules: rules.map((rule) => ({ id: rule.id, status: rule.enabled ? "ok" : "disabled", count: 0, samples: [], ms: 0 })) };
   const prepared = ready;
-  const context = { language: options.pipeline.market.language?.code ?? null, me: options.me, limits: options.pipeline.filter.deal_breakers };
+  const context = { language: options.pipeline.market.language?.code ?? null, me: options.me, limits: options.pipeline.filter.deal_breakers, visa: visaRulesFor(options.pipeline) };
   let total = 0;
   let partial = false;
   for (let afterId = 0; ; ) {
@@ -113,7 +114,7 @@ export async function previewDealBreakers(db: Db, rules: readonly DealBreaker[],
     const batch = await listFilterCandidates(db, { afterId, limit: BATCH });
     if (batch.length === 0) break;
     afterId = batch[batch.length - 1]?.id ?? afterId;
-    const jobs = batch.map((row): DealBreakerJob => ({ title: row.title, description: row.description, germanLevel: asGermanLevel(row.germanLevel) }));
+    const jobs = batch.map((row): DealBreakerJob => ({ title: row.title, description: row.description, germanLevel: asGermanLevel(row.germanLevel), companyNameNorm: row.companyNameNorm }));
     // a batch counts only when every rule finished it before the deadline
     const found: Array<{ entry: Prepared; hits: number[]; ms: number }> = [];
     for (const entry of prepared) {

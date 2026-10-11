@@ -13,8 +13,8 @@ import { Segmented, SegmentedItem } from "@/components/ui/segmented";
 import { SingleSelect } from "@/components/ui/single-select";
 import { filterOptions } from "@/lib/applications/visibility";
 import { knownContract, knownFamily } from "@/lib/dashboard/labels";
-import { APPLICATION_FILTER_STATUSES, JOB_SORTS, JOB_STATUSES, type JobSort, JOB_WORKPLACES, MIN_SALARY_MAX, MIN_SCORE_MAX, TRAP_FILTERS, type ApplicationFilterStatus } from "@/lib/jobs/constants";
-import { FILTER_KEYS, SELECT_FILTER_KEYS, type SelectFilterKey } from "@/lib/jobs/filter-keys";
+import { APPLICATION_FILTER_STATUSES, JOB_SORTS, JOB_STATUSES, type JobSort, JOB_WORKPLACES, MIN_SALARY_MAX, MIN_SCORE_MAX, TRAP_FILTERS, VISA_FILTERS, type ApplicationFilterStatus } from "@/lib/jobs/constants";
+import { FILTER_KEYS, SELECT_FILTER_KEYS, type FilterKey, type SelectFilterKey } from "@/lib/jobs/filter-keys";
 import { cleanMultiValues } from "@/lib/jobs/filter-values";
 import { countActiveFilters, hasActiveFilters, jobsSearchParsers, withLegacyKeys } from "@/lib/jobs/search-params";
 import { dirParam, effectiveDir, flipDir } from "@/lib/jobs/sort";
@@ -40,6 +40,11 @@ export interface FilterBarOptions {
   contracts: string[];
   /** Show the "AI traps" control (traps.yaml `enabled`). */
   traps?: boolean;
+  /**
+   * Show the "Visa" control (ui.yaml `job_checks.visa`, me.yaml `needs_visa_sponsorship`). Hidden: a `visa=` in the URL is
+   * ignored but kept (no chip, not counted, "clear" leaves it), so it applies again once the control is back.
+   */
+  visa?: boolean;
   /** (ui.yaml `filters`) Values the lists do not offer (one that is selected in the URL still shows). */
   hiddenWorkplaces?: readonly string[];
   hiddenContracts?: readonly string[];
@@ -69,6 +74,7 @@ export function FilterBar({ options }: { options: FilterBarOptions }) {
   const languageName = useLocalLanguageName();
   const tc = useTranslations("dashboard");
   const tTrap = useTranslations("aiTraps.filter");
+  const tVisa = useTranslations("visa.filter");
   const [pending, startTransition] = useTransition();
   const [params, setParams] = useQueryStates(jobsSearchParsers, { shallow: false, history: "replace", startTransition });
   const [open, setOpen] = useState(false);
@@ -80,7 +86,8 @@ export function FilterBar({ options }: { options: FilterBarOptions }) {
   const highOn = (params.high ?? params.t12) === true;
   const hideLangOn = (params.hideLang ?? params.hideGerman) === true;
   const highValueNames = options.highValueNames ?? [];
-  const activeCount = countActiveFilters(withLegacyKeys(params));
+  const visibility: { ignore: readonly FilterKey[] } = { ignore: options.visa === true ? [] : ["visa"] };
+  const activeCount = countActiveFilters(withLegacyKeys(params), visibility);
   const apps = params.app ?? [];
   const hiddenStatuses = useHiddenStatuses();
   const sortDir = effectiveDir(params.sort, params.dir);
@@ -164,7 +171,7 @@ export function FilterBar({ options }: { options: FilterBarOptions }) {
   };
   const clear = () => {
     // every filter, from the filter table (sort stays)
-    void setParams({ ...Object.fromEntries(FILTER_KEYS.filter((key) => key !== "filtered").map((key) => [key, null])), t12: null, hideGerman: null, page: null });
+    void setParams({ ...Object.fromEntries(FILTER_KEYS.filter((key) => key !== "filtered" && !visibility.ignore.includes(key)).map((key) => [key, null])), t12: null, hideGerman: null, page: null });
   };
 
   return (
@@ -212,7 +219,7 @@ export function FilterBar({ options }: { options: FilterBarOptions }) {
         </Button>
       </div>
 
-      <ActiveFilterChips choices={choices} traps={options.traps === true} />
+      <ActiveFilterChips choices={choices} traps={options.traps === true} visa={options.visa === true} />
 
       <div
         id={panelId}
@@ -374,7 +381,30 @@ export function FilterBar({ options }: { options: FilterBarOptions }) {
                 </Segmented>
               </span>
             ) : null}
-            {hasActiveFilters(withLegacyKeys(params)) ? (
+            {options.visa ? (
+              // All / support mentioned / not refused
+              <span className="flex items-center gap-2">
+                <span className="text-muted-foreground text-xs" id={`${panelId}-visa`}>
+                  {tVisa("label")}
+                </span>
+                <Segmented
+                  aria-labelledby={`${panelId}-visa`}
+                  value={params.visa ?? "all"}
+                  onValueChange={(next) => set({ visa: VISA_FILTERS.find((v) => v === next) ?? null })}
+                  data-testid="filter-visa"
+                >
+                  <SegmentedItem value="all" data-testid="filter-visa-all">
+                    {tVisa("all")}
+                  </SegmentedItem>
+                  {VISA_FILTERS.map((value) => (
+                    <SegmentedItem key={value} value={value} data-testid={`filter-visa-${value}`}>
+                      {tVisa(value)}
+                    </SegmentedItem>
+                  ))}
+                </Segmented>
+              </span>
+            ) : null}
+            {hasActiveFilters(withLegacyKeys(params), visibility) ? (
               <Button type="button" variant="ghost" size="sm" data-testid="filter-clear" onClick={clear}>
                 <X aria-hidden /> {t("clear")}
               </Button>

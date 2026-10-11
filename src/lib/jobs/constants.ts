@@ -38,3 +38,10 @@ export const MAX_FILTER_VALUE_CHARS = 120;
 /** The "AI trap" filter of /jobs and saved views: only jobs with a trap, or none of them (absent = all). */
 export const TRAP_FILTERS = ["only", "hide"] as const;
 export type TrapFilter = (typeof TRAP_FILTERS)[number];
+
+/**
+ * The "Visa" filter of /jobs and saved views: only jobs whose JD mentions visa support, or every job except those whose JD refuses
+ * sponsorship or requires a permit (unclear and not yet checked jobs stay in). Absent = all.
+ */
+export const VISA_FILTERS = ["offered", "not_denied"] as const;
+export type VisaFilter = (typeof VISA_FILTERS)[number];

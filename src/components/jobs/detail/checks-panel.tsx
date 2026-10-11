@@ -10,8 +10,11 @@ import type { FloorCheck } from "@/lib/dashboard/floor-check";
 import type { GermanCheck } from "@/lib/dashboard/german-check";
 import type { SkillMatch } from "@/lib/dashboard/skills";
 import type { TrapCheckView } from "@/lib/traps/view";
+import type { VisaCheckView } from "@/lib/visa/view";
 import { formatSalary, UNKNOWN } from "@/lib/format/numbers";
 import { cn } from "@/lib/utils";
+
+import { CheckRow } from "./check-row";
 
 export interface ChecksPanelProps {
   german: GermanCheck;
@@ -27,6 +30,8 @@ export interface ChecksPanelProps {
   floor: FloorCheck;
   /** The AI trap row; absent when traps.yaml is off. */
   traps?: TrapCheckView | null;
+  /** The visa sponsorship row (after the trap row); absent when ui.yaml `job_checks.visa.enabled` is false. */
+  visa?: { view: VisaCheckView; /** JD panel mark of the first quote the JD shows; null = none. */ jdIndex: number | null } | null;
 }
 
 function Cap({ children }: { children: ReactNode }) {
@@ -38,10 +43,11 @@ function Cap({ children }: { children: ReactNode }) {
  * the skills it lists against your profile (cells + all the skills), and the stated salary against your floor.
  * Every unknown stays unknown: no German requirement written means no guess, no salary means no verdict (C3).
  */
-export function ChecksPanel({ german, germanPenalty, germanDetail, skills, profileHasSkills, floor, traps, languageName = null }: ChecksPanelProps) {
+export function ChecksPanel({ german, germanPenalty, germanDetail, skills, profileHasSkills, floor, traps, visa, languageName = null }: ChecksPanelProps) {
   const language = languageName ?? "";
   const t = useTranslations("dashboard.detail.checks");
   const tTraps = useTranslations("aiTraps.checks");
+  const tVisa = useTranslations("visa.checks");
   const locale = useAppLocale();
   const money = (amount: number | null, approx = false): string => (amount === null ? UNKNOWN : (formatSalary({ min: amount, max: amount, approx, currency: floor.currency }, { locale }) ?? UNKNOWN));
   const mineText = german.native ? t("german.native") : (german.mine ?? "");
@@ -140,6 +146,25 @@ export function ChecksPanel({ german, germanPenalty, germanDetail, skills, profi
             )}
           </span>
         </>
+      ) : null}
+
+      {visa ? (
+        <CheckRow
+          title={tVisa("title")}
+          testId="visa-check"
+          state={visa.view.state}
+          kind={visa.view.kind}
+          tone={visa.view.tone}
+          text={
+            visa.view.state === "not_checked"
+              ? tVisa("notChecked")
+              : visa.view.state === "not_offered"
+                ? tVisa(visa.view.kind === "permit_required" ? "permit_required" : "no_sponsorship")
+                : tVisa(visa.view.state)
+          }
+          quotes={visa.view.evidence.map((e) => ({ text: e.quote, label: tVisa(`quoteStatus.${e.status}`) }))}
+          {...(visa.jdIndex !== null ? { jump: { index: visa.jdIndex, label: tVisa("jump") } } : {})}
+        />
       ) : null}
     </div>
   );

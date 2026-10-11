@@ -3,6 +3,7 @@ import { germanLevelsToHide } from "@/lib/dashboard/german";
 import { hasHighValueCategories, type Db, type JobFilters } from "@/lib/db";
 import { viewFiltersFromParams } from "@/lib/interests/view-filters";
 import { loadBaseCurrency, loadHighValuePolicy } from "@/lib/signals/floor";
+import { visaFilterAvailable } from "@/lib/visa/filter";
 
 import { loadCityGroups } from "./cities";
 import type { CityGroup } from "./city-groups";
@@ -13,7 +14,7 @@ import type { JobsSearchParams } from "./search-params";
 export async function jobsListFilters(db: Db, params: JobsSearchParams, cities?: readonly CityGroup[]): Promise<JobFilters> {
   const highValue = loadHighValuePolicy();
   return {
-    ...toJobFilters(viewFiltersFromParams(params), { cityGroups: cities ?? (await loadCityGroups(db)) }),
+    ...toJobFilters(viewFiltersFromParams(params), { cityGroups: cities ?? (await loadCityGroups(db)), visa: await visaFilterAvailable(db) }),
     from: params.from,
     to: params.to,
     includeFiltered: params.filtered,

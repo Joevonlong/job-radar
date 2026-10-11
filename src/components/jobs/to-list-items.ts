@@ -15,6 +15,7 @@ import { loadBonusPolicy } from "@/lib/signals/floor";
 import { loadTargetPlaces } from "@/lib/dashboard/target-places";
 import { pickRowLocations } from "@/lib/dashboard/row-locations";
 import { trapsEnabled } from "@/lib/traps/settings";
+import { visaVisible } from "@/lib/visa/settings";
 
 import type { JobListItem } from "./types";
 
@@ -47,6 +48,7 @@ export async function toListItems(
   const aliases = buildSkillAliasMap(loadPipeline().skills);
   const mySkills = profileSkillKeys(readProfileSkillNames(), aliases);
   const showTraps = trapsEnabled();
+  const showVisa = visaVisible();
   return cards.map((card) => {
     const salary = listSalary(card.salary, locale, baseCurrency);
     const matches = matchSkills(card.skills, mySkills, aliases);
@@ -113,6 +115,7 @@ export async function toListItems(
         .sort((a, b) => catalog.order(a.tier) - catalog.order(b.tier)),
       amountMinAnnualEur: policy.minAnnualEur,
       ...(showTraps && (card.traps?.traps ?? 0) > 0 ? { trapCount: card.traps?.traps ?? 0 } : {}),
+      ...(showVisa && card.visa ? { visa: { status: card.visa.status, kind: card.visa.kind } } : {}),
       amountCurrency: baseCurrency,
       timeLabel: card.postedAt ? relative : t("time.seen", { time: relative }),
       timeTitle: format.dateTime(reference, { dateStyle: "medium", timeStyle: "short", timeZone: options.timezone }),

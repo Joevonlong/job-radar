@@ -13,6 +13,10 @@ import { greenhouseAdapter } from "@/lib/channels/ats/greenhouse";
 import { wrapPosting } from "@/lib/channels/ats/envelope";
 import { runTrapScan } from "@/lib/traps/step";
 import { readTrapsSettings } from "@/lib/traps/settings";
+import { visaRulesFingerprint } from "@/lib/visa/fingerprint";
+import { visaRulesFor } from "@/lib/visa/rules";
+import { readVisaSettings } from "@/lib/visa/settings";
+import { runVisaScan } from "@/lib/visa/step";
 
 import type { Executor } from "./executor";
 import { seedSalary } from "./seed-salary";
@@ -440,7 +444,7 @@ const SEED_JOBS: readonly SeedJob[] = [
     cities: ["Tübingen"],
     workplace: "onsite",
     contract: "fixed_term",
-    offer: ["Salary range: EUR 70,000 to 80,000 per year.", "Two-year contract with extension option."],
+    offer: ["Salary range: EUR 70,000 to 80,000 per year.", "Two-year contract with extension option.", "Applicants must already hold a valid EU work permit."],
     salary: { min: 70000, max: 80000, currency: "EUR", period: "year", raw: "EUR 70,000 to 80,000 per year" },
     day: 1,
     at: 0.55,
@@ -727,6 +731,11 @@ export async function seedDatabase(db: Executor, options: SeedOptions): Promise<
       jobIds,
       force: true,
     });
+  }
+  // The visa check of the seeded jobs, as the cycle's signals step runs it after the trap scan (Tidewater offers relocation
+  // support, Mosaik mentions sponsorship without saying more, Nebelhorn requires a work permit)
+  if (readVisaSettings().enabled) {
+    await runVisaScan(db, { rules: visaRulesFor(pipeline), rulesHash: visaRulesFingerprint(pipeline), limit: jobIds.length, jobIds, force: true, logger: { warn: () => {}, error: () => {} } });
   }
   // The salary benchmark of the seeded jobs and one fictional lookup
   await seedSalary(db, { now, currency: pipeline.market.currency });

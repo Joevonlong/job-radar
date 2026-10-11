@@ -24,6 +24,7 @@ import { orderedReasons } from "@/lib/filter/reasons";
 import { toFilterJob } from "@/lib/filter";
 import { extractGermanLevel } from "@/lib/pipeline/language";
 import { userLanguageRank } from "@/lib/scoring/german";
+import { visaRulesFor } from "@/lib/visa/rules";
 
 import { shippedPipeline } from "../pipeline/helpers";
 import { job, prefs } from "./helpers";
@@ -113,6 +114,7 @@ describe("language gate", () => {
       locationsJson: [],
       salaryJson: null,
       companyName: "Example",
+      companyNameNorm: "example",
       companyAliases: [],
       companyBlacklisted: false,
       // the stored rule reading wins over the text: the gate reads the column, it does not parse the description again
@@ -281,5 +283,52 @@ describe("explanations", () => {
     expect(explained).toMatchObject({ field: "description", quote: "Expect travel up to 75% of the time." });
     expect(description.slice(explained?.offset ?? 0).startsWith(explained?.quote ?? "?")).toBe(true);
     expect(explainDealBreaker(posting({ title: "Rust Engineer" }), phrase({ terms: ["rust"] }), context(), pipeline)).toMatchObject({ field: "title", quote: "Rust Engineer", offset: 0 });
+  });
+});
+
+describe("visa rule", () => {
+  const visaRule = (): DealBreaker => rule({ id: "visa", label: "No visa sponsorship", type: "visa_not_offered" });
+  const needs = (value: boolean): DealBreakerContext => context({ me: { ...me("B1"), needs_visa_sponsorship: value }, visa: visaRulesFor(pipeline) });
+
+  it("vetoes a JD that refuses sponsorship or requires a work permit", () => {
+    expect(vetoes([visaRule()], posting({ description: "Great team. We are unable to offer visa sponsorship for this role." }), needs(true))).toEqual(["visa"]);
+    expect(vetoes([visaRule()], posting({ description: "You must hold a valid work permit for Germany." }), needs(true))).toEqual(["visa"]);
+  });
+
+  it("keeps offered, unclear and silent JDs", () => {
+    for (const description of [
+      "We offer visa sponsorship and relocation support.",
+      "You must hold a valid work permit for Germany or be eligible for an EU Blue Card.",
+      "We offer relocation support, but visa sponsorship is not available.",
+      "Build data pipelines in Python.",
+    ])
+      expect(vetoes([visaRule()], posting({ description }), needs(true)), description).toEqual([]);
+    expect(vetoes([visaRule()], posting({ description: null }), needs(true))).toEqual([]);
+  });
+
+  it("counts only combined phrases on a company named like a visa word", () => {
+    const description = "We cannot sponsor visas for this role.";
+    expect(vetoes([visaRule()], posting({ description }), needs(true))).toEqual(["visa"]);
+    expect(vetoes([visaRule()], posting({ description, companyNameNorm: "visa" }), needs(true))).toEqual([]);
+  });
+
+  it("does nothing, with a warning, for a user who does not need sponsorship or whose me.yaml cannot be read", () => {
+    const description = "We are unable to offer visa sponsorship.";
+    expect(compileDealBreakers([visaRule()], needs(false)).warnings).toEqual([{ id: "visa", code: "visa_not_needed" }]);
+    expect(vetoes([visaRule()], posting({ description }), needs(false))).toEqual([]);
+    expect(vetoes([visaRule()], posting({ description }), context({ me: { languages: [{ en: "C1" }] }, visa: visaRulesFor(pipeline) }))).toEqual([]);
+    expect(compileDealBreakers([visaRule()], context({ me: null, visa: visaRulesFor(pipeline) })).warnings).toEqual([{ id: "visa", code: "me_unreadable" }]);
+  });
+
+  it("never vetoes without the packs' patterns", () => {
+    expect(vetoes([visaRule()], posting({ description: "We are unable to offer visa sponsorship." }), context({ me: { ...me("B1"), needs_visa_sponsorship: true } }))).toEqual([]);
+  });
+
+  it("explains a veto with the verbatim quote and its kind", () => {
+    const description = "About us. You must hold a valid work permit for Germany. Benefits.";
+    const explained = explainDealBreaker(posting({ description }), visaRule(), needs(true), pipeline);
+    expect(explained).toMatchObject({ id: "visa", type: "visa_not_offered", field: "description", visaKind: "permit_required", quote: "You must hold a valid work permit for Germany." });
+    expect(description.slice(explained?.offset ?? 0).startsWith(explained?.quote ?? "?")).toBe(true);
+    expect(explainDealBreaker(posting({ description: "We offer relocation support." }), visaRule(), needs(true), pipeline)).toBeNull();
   });
 });

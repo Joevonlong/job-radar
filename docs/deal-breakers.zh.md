@@ -21,7 +21,7 @@
 ## 写规则
 
 每条规则有 `id`（小写字母、数字、`-` 和 `_`，记在每个被否决的岗位上）、`label`（列表里显示的名字，最多 60 字）、
-`enabled`（默认 `true`）和 `type`。类型有两种。
+`enabled`（默认 `true`）和 `type`。类型有三种。
 
 ### 语言门槛
 
@@ -88,6 +88,25 @@ deal_breakers:
 
 它命中 “Reisetätigkeit von bis zu 60 %” 和 “travel up to 75%”，不命中 “Reisetätigkeit ca. 20 %” 和 “travel 10% of the time”。
 
+### 不提供签证
+
+```yaml
+deal_breakers:
+  - id: visa
+    label: No visa sponsorship
+    type: visa_not_offered
+```
+
+在卡片上点**添加签证规则**。JD 明确拒绝签证赞助（"We are unable to offer visa sponsorship"），或要求你已经持有工作许可
+（"You must hold a valid work permit for Germany"）时否决，也就是[签证检查](visa-sponsorship.zh.md)的 `not_offered` 结果。
+说法不明确、两种说法都有、给了替代办法（"…or are eligible for an EU Blue Card"）或什么都没写的 JD 都放过。
+
+- 只有**关于我**写了需要赞助（`me.yaml: needs_visa_sponsorship: true`）时才起作用；否则不起作用，卡片和
+  `pnpm config:check` 会提示（`visa_not_needed`）。
+- 用的是市场包里的说法，不是你自己写的；这条规则没有别的键。它当场读 JD，包括隐藏文字（过滤在陷阱扫描之前运行），
+  所以极少数情况下，被它否决的岗位在详情页的签证一行写"未提及"。见 [visa-sponsorship.zh.md](visa-sponsorship.zh.md#作为一票否决)。
+- 岗位页会引用拒绝的那句话，并写明是哪一种。
+
 ### 上限
 
 你写的正则每轮过滤都要在所有未关闭的岗位上跑一遍，而 JavaScript 正则本身没有超时，所以有三处限制它能用的时间：
@@ -137,3 +156,5 @@ pnpm deal-breakers:check --limit 50 --json
 
 没有一票否决项的旧版本不认识 `deal_breakers` 键，会拒绝带这个键的 `preferences.yaml`。**回滚到旧版本前先删掉 `deal_breakers` 键。**
 其他都不用撤销：没有数据库变更，已经记在被否决岗位上的原因会原样显示。
+
+没有签证规则的旧版本不认 `visa_not_offered` 规则：回滚到这些版本前，删掉这条规则（或整个键）。

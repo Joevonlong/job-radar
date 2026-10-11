@@ -11,7 +11,7 @@ function jobDetail(over: Partial<JobDetail> = {}): JobDetail {
   return {
     id: 42,
     title: "AI Engineer (m/w/d)",
-    company: { id: 1, name: "Acme: Labs GmbH", watched: false },
+    company: { id: 1, name: "Acme: Labs GmbH", nameNorm: "acme labs", watched: false },
     locations: [
       { label: "Berlin, Germany", city: "Berlin", countryCode: "DE", isPrimary: true },
       { label: "Berlin, Germany", city: "Berlin", countryCode: "DE", isPrimary: false },
@@ -67,6 +67,7 @@ function jobDetail(over: Partial<JobDetail> = {}): JobDetail {
     application: null,
     favorite: null,
     applicationEvents: [],
+    visa: null,
     ...over,
   };
 }

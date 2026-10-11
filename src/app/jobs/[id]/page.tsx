@@ -6,6 +6,7 @@ import { getFormatter, getLocale, getTranslations } from "next-intl/server";
 import { BackLink } from "@/components/jobs/detail/back-link";
 import { BreakdownPanel } from "@/components/jobs/detail/breakdown-panel";
 import { ChecksPanel } from "@/components/jobs/detail/checks-panel";
+import { TRAP_QUOTE, VISA_QUOTE } from "@/components/jobs/detail/marks";
 import { CompPanel } from "@/components/jobs/detail/comp-panel";
 import { GermanPanel } from "@/components/jobs/detail/german-panel";
 import { JdPanel } from "@/components/jobs/detail/jd-panel";
@@ -61,6 +62,8 @@ import { effectiveStatus } from "@/lib/dashboard/status";
 import { getDb, getJobDetail, getTranslation, listTrapsOfJob, loadMonthSalaryStats } from "@/lib/db";
 import { trapsEnabled } from "@/lib/traps/settings";
 import { buildTrapCheckView, buildTrapPanelView } from "@/lib/traps/view";
+import { readNeedsVisaSponsorship, visaEnabled } from "@/lib/visa/settings";
+import { buildVisaCheckView, visaMarkText } from "@/lib/visa/view";
 import { readInitialBreakdownRequest } from "@/lib/control/breakdown-request";
 import { readInitialTranslateRequest, readPartialTranslation } from "@/lib/control/translate-request";
 import { toJobTranslation } from "@/lib/translation/service";
@@ -219,9 +222,13 @@ export default async function JobDetailPage({ params }: { params: Params }) {
   const trapCheck = showTraps ? buildTrapCheckView(trapData.scan, trapView) : null;
   const trapItems = trapView ? [...trapView.items, ...trapView.benign].filter((item) => item.markText !== null) : [];
   const baseQuotes = [...quoteList, ...extraQuotes.map((text) => ({ text, tier: "breakdown" as const }))];
-  const jdQuotes: Array<{ text: string; tier: (typeof baseQuotes)[number]["tier"] | "trap"; trapKind?: "hidden" | "instruction" }> = [
+  // What the JD says about visa sponsorship (nothing when ui.yaml job_checks.visa is off); its marks follow the trap marks
+  const visaView = visaEnabled() ? buildVisaCheckView(job.visa, readNeedsVisaSponsorship()) : null;
+  const visaMarks = visaView ? visaView.evidence.map((e) => visaMarkText(e.quote)).filter((text) => text !== "") : [];
+  const jdQuotes: Array<{ text: string; tier: string; trapKind?: "hidden" | "instruction" }> = [
     ...baseQuotes,
-    ...trapItems.map((item) => ({ text: item.markText as string, tier: "trap" as const, trapKind: item.markKind })),
+    ...trapItems.map((item) => ({ text: item.markText as string, tier: TRAP_QUOTE, trapKind: item.markKind })),
+    ...visaMarks.map((text) => ({ text, tier: VISA_QUOTE })),
   ];
   const trapMarksFound = quotesFoundInJd(job.description, jdQuotes.map((q) => q.text));
   const trapJdIndex: Record<number, number> = {};
@@ -229,6 +236,8 @@ export default async function JobDetailPage({ params }: { params: Params }) {
     const index = baseQuotes.length + i;
     if (trapMarksFound[index]) trapJdIndex[item.id] = index;
   });
+  const visaFirstMark = visaMarks.findIndex((_, i) => trapMarksFound[baseQuotes.length + trapItems.length + i] === true);
+  const visaJdIndex = visaFirstMark === -1 ? null : baseQuotes.length + trapItems.length + visaFirstMark;
   const hasDescription = job.description !== null && job.description.trim() !== "";
   const inJd = quotesFoundInJd(job.description, quoteList.map((q) => q.text));
   const signalRows = activeSignals.map((s, index) => ({
@@ -530,6 +539,7 @@ export default async function JobDetailPage({ params }: { params: Params }) {
               profileHasSkills={mySkills.length > 0}
               floor={floor}
               traps={trapCheck}
+              visa={visaView ? { view: visaView, jdIndex: visaJdIndex } : null}
             />
           </Panel>
 

@@ -108,3 +108,77 @@ filter:
       - \b(?:hir(?:e|ing)|candidates?|apply from|work from|employees? in)\b[^.\n]{0,80}\b(?:germany|deutschland)\b
       - \b(?:deutschlandweit|bundesweit)\b[^.\n]{0,30}\b(?:remote|home ?office|mobil)
       - \bremote\b[^.\n]{0,15}\b(?:aus|in|innerhalb)\s+(?:deutschland|der eu|europa)\b
+
+visa:
+  offered:
+    # "Wir unterstützen dich beim Visumprozess", "Relocation-Support inkl. Visumprozess", "Hilfe bei der Blauen Karte EU"
+    - pattern: '(?<![\p{L}\p{N}])(?:bieten|bietet|unterstützen|unterstützt|übernehmen|übernimmt|helfen|hilft|begleiten|begleitet|inkl\.|inklusive|einschließlich|samt|(?:unterstützung|hilfe|support|übernahme|begleitung)\s+(?:bei|beim|für|mit|im|in|zum|zur))(?:\s+[\p{L}\p{N}’''.-]+){0,6}?\s+(?:\p{L}*visum\p{L}*|visums\p{L}*|visa-?(?:sponsoring|unterstützung|antrag|prozess|verfahren|fragen|angelegenheiten)|visasponsoring|blaue[nr]?\s+karte|aufenthalts\p{L}*|arbeitserlaubnis|arbeitsgenehmigung|relocation\p{L}*|umzug\p{L}*)(?![\p{L}\p{N}])'
+      combo: true
+    # "Visa-Sponsoring ist möglich", "Visumsunterstützung wird angeboten"
+    - pattern: '(?<![\p{L}\p{N}])(?:visa|visum|visums)-?\s*(?:sponsoring|sponsorship|unterstützung)\s+(?:ist\s+|wird\s+)?(?:möglich|angeboten|vorhanden|inklusive|gegeben)(?![\p{L}\p{N}])'
+      combo: true
+    - pattern: '(?<![\p{L}\p{N}])relocation[-\s]?(?:support|paket|package|unterstützung|service|budget|pauschale)(?![\p{L}\p{N}])'
+      combo: true
+    # A list item that is only the noun: "- Visasponsoring", "- Visa-Unterstützung"
+    - pattern: '^(?:visa|visum|visums)-?\s*(?:sponsoring|unterstützung)(?:\s+(?:und|&|\+)\s+relocation\p{L}*)?\s*[.!]?$'
+      combo: true
+  not_offered:
+    no_sponsorship:
+      # "Ein Visa-Sponsoring ist leider nicht möglich"
+      - pattern: '(?<![\p{L}\p{N}])(?:visa|visum|visums)-?\s*(?:sponsoring|sponsorship|unterstützung)\s+(?:ist|wird|kann)\s+(?:leider\s+|derzeit\s+|aktuell\s+|grundsätzlich\s+)*(?:nicht|kein\p{L}*)(?![\p{L}\p{N}])'
+        combo: true
+      # "Wir bieten kein Visum-Sponsoring an", "unterstützen wir leider nicht bei Visa-Fragen"
+      - '(?<![\p{L}\p{N}])(?:bieten|bietet|können|übernehmen|unterstützen|ermöglichen|sponsern)\s+(?:wir\s+|ihr\s+|dir\s+|ihnen\s+)?(?:leider\s+|derzeit\s+|aktuell\s+)*(?:kein\p{L}*|nicht)(?:\s+[\p{L}\p{N}’''-]+){0,3}?\s+(?:\p{L}*visum\p{L}*|visa\p{L}*|visa-\p{L}+|sponsoring|arbeitserlaubnis|blaue[nr]?\s+karte)(?![\p{L}\p{N}])'
+      # "keine Visumsunterstützung"
+      - pattern: '(?<![\p{L}\p{N}])kein(?:e|en)?\s+(?:\p{L}*visum\p{L}*|visa-?(?:sponsoring|unterstützung)|visasponsoring|sponsoring\s+(?:für|von)\s+(?:visa|visum|arbeits\p{L}*))(?![\p{L}\p{N}])'
+        combo: true
+      - pattern: '(?<![\p{L}\p{N}])(?:visa|visum)(?:-?sponsoring|-?unterstützung)?\s*:\s*(?:nein|nicht\s+möglich|kein\p{L}*)(?![\p{L}\p{N}])'
+        combo: true
+    permit_required:
+      # "Eine Arbeitserlaubnis ist Voraussetzung", "Eine gültige Arbeitserlaubnis für Deutschland wird vorausgesetzt"
+      - pattern: '(?<![\p{L}\p{N}])(?:arbeitserlaubnis|arbeitsgenehmigung|aufenthalts-?\s*(?:und\s+arbeitserlaubnis|titel|genehmigung))(?:\s+[\p{L}\p{N}-]+){0,4}?\s+(?:ist|wird)\s+(?:zwingend\s+)?(?:voraussetzung|erforderlich|notwendig|vorausgesetzt|zwingend)(?![\p{L}\p{N}])'
+        combo: true
+      # "Du besitzt eine gültige Arbeitserlaubnis"
+      - pattern: '(?<![\p{L}\p{N}])(?:besitzt|besitzen|verfügst\s+über|verfügen\s+über)\s+(?:bereits\s+)?(?:eine\s+)?(?:gültige\s+)?(?:arbeitserlaubnis|arbeitsgenehmigung|aufenthalts-?\s*(?:und\s+arbeitserlaubnis|titel|genehmigung))(?![\p{L}\p{N}])'
+        combo: true
+      # "Voraussetzung ist eine gültige Arbeitserlaubnis"
+      - pattern: '(?<![\p{L}\p{N}])(?:voraussetzung|erforderlich)\s*(?:ist|sind|:)?\s*(?:eine\s+)?(?:gültige\s+)?(?:arbeitserlaubnis|arbeitsgenehmigung|aufenthaltstitel)(?![\p{L}\p{N}])'
+        combo: true
+      # "Du musst in Deutschland arbeitsberechtigt sein"
+      - pattern: '(?<![\p{L}\p{N}])(?:musst|müssen|solltest|sollten)(?:\s+[\p{L}]+){0,3}?\s+arbeitsberechtigt(?![\p{L}\p{N}])'
+        combo: true
+  permit_alternatives:
+    - '(?<![\p{L}\p{N}])oder(?:\s+[\p{L}\p{N}-]+){0,4}?\s+(?:blaue[nr]?\s+karte|visum|visa|aufenthalts\p{L}*|beantrag\p{L}*)(?![\p{L}\p{N}])'
+    - '(?<![\p{L}\p{N}])bei\s+bedarf\s+(?:unterstütz|helfen|hilft|begleit)\p{L}*'
+  mention_terms:
+    - '(?<![\p{L}\p{N}])(?:visum|visums)(?![\p{L}\p{N}])'
+    - pattern: '(?<![\p{L}\p{N}])(?:\p{L}+visum|visums\p{L}+|visa-\p{L}+)(?![\p{L}\p{N}])'
+      combo: true
+  mention_context:
+    - '(?<![\p{L}\p{N}])unterstütz\p{L}*'
+    - '(?<![\p{L}\p{N}])blaue[nr]?\s+karte(?![\p{L}\p{N}])'
+    - '(?<![\p{L}\p{N}])arbeitserlaubnis(?![\p{L}\p{N}])'
+    - '(?<![\p{L}\p{N}])aufenthaltstitel(?![\p{L}\p{N}])'
+    - '(?<![\p{L}\p{N}])beantrag\p{L}*'
+  negation_cues:
+    - nicht
+    - 'kein\p{L}*'
+    - leider
+    - ohne
+  exclude_context:
+    - '(?<![\p{L}\p{N}])sponsoring\s+von\s+(?:veranstaltungen|events?|konferenzen)(?![\p{L}\p{N}])'
+    - '(?<![\p{L}\p{N}])visa\s*(?:/|,|&|und|oder)\s*(?:master\s*card|amex|american\s+express|maestro|girocard)(?![\p{L}\p{N}])'
+  abbreviations: [z.B, z, B, ca, inkl, bzw, usw, u.a, d.h, ggf, evtl, nr, z.T, bspw, max, min, std, gmbh, mio, tsd]
+  # A quick first look (speed): a JD or sentence with none of these (or of the generic pack's) is skipped. Every phrase the
+  # patterns above can match contains one of them; keep it so when you add a pattern.
+  prefilter:
+    - visum
+    - visa
+    - sponsor
+    - relocat
+    - umzug
+    - 'blaue[nr]?\s+karte'
+    - aufenthalt
+    - arbeitserlaubnis
+    - arbeitsgenehmigung
+    - arbeitsberechtigt

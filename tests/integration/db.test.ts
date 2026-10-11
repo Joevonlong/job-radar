@@ -35,6 +35,7 @@ const EXPECTED_TABLES = [
   "job_seen",
   "job_sources",
   "job_traps",
+  "job_visa",
   "jobs",
   "notifications",
   "profile_snapshots",

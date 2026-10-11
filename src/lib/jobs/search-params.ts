@@ -1,6 +1,6 @@
 import { createLoader, createMultiParser, createParser, createSerializer, parseAsBoolean, parseAsInteger, parseAsString, parseAsStringLiteral, type inferParserType } from "nuqs/server";
 
-import { FAVORITE_SORTS, JOB_SORTS, MIN_SALARY_MAX, MIN_SCORE_MAX, SORT_DIRS, TRAP_FILTERS } from "./constants";
+import { FAVORITE_SORTS, JOB_SORTS, MIN_SALARY_MAX, MIN_SCORE_MAX, SORT_DIRS, TRAP_FILTERS, VISA_FILTERS } from "./constants";
 import { FILTER_KEYS, NUMBER_FILTER_KEYS, type FilterKey, type MultiFilterKey } from "./filter-keys";
 import { cleanMultiValues, type MultiValue } from "./filter-values";
 
@@ -82,6 +82,11 @@ export const jobsSearchParsers = {
   t12: parseAsBoolean,
   /** Only jobs with an AI trap (`only`) or none of them (`hide`); absent = all. */
   trap: parseAsStringLiteral(TRAP_FILTERS),
+  /**
+   * The visa check: only jobs whose JD mentions visa support (`offered`), or all but those that refuse (`not_denied`); absent = all.
+   * Kept in the URL while the filter is hidden (me.yaml / ui.yaml), but then it filters nothing.
+   */
+  visa: parseAsStringLiteral(VISA_FILTERS),
   /** Only starred jobs. Not stored in saved views. */
   fav: parseAsBoolean,
   /** Only jobs not looked at yet. Not stored in saved views. */
@@ -136,14 +141,19 @@ function isSet(key: FilterKey, params: Partial<FilterParams>): boolean {
   return Boolean(value) || ((NUMBER_FILTER_KEYS as readonly string[]).includes(key) && typeof value === "number");
 }
 
+/** Filters that are in the URL but do nothing right now (the visa filter while it is hidden): never counted as set. */
+export interface FilterVisibility {
+  ignore?: readonly FilterKey[];
+}
+
 /** Whether any filter (not sort or page) is set; the "show filtered" switch does not count (it widens the list). */
-export function hasActiveFilters(params: Partial<FilterParams>): boolean {
-  return FILTER_KEYS.some((key) => key !== "filtered" && isSet(key, params));
+export function hasActiveFilters(params: Partial<FilterParams>, visibility: FilterVisibility = {}): boolean {
+  return FILTER_KEYS.some((key) => key !== "filtered" && !visibility.ignore?.includes(key) && isSet(key, params));
 }
 
 /** How many filters are set (search text, sort, page and the "show filtered" switch excluded): the number on the mobile "Filters (n)" button. A multi filter counts once, however many values it has. */
-export function countActiveFilters(params: Partial<FilterParams>): number {
-  return FILTER_KEYS.filter((key) => key !== "q" && key !== "filtered" && isSet(key, params)).length;
+export function countActiveFilters(params: Partial<FilterParams>, visibility: FilterVisibility = {}): number {
+  return FILTER_KEYS.filter((key) => key !== "q" && key !== "filtered" && !visibility.ignore?.includes(key) && isSet(key, params)).length;
 }
 
 /** URL state of /favorites: how the list is ordered; an invalid value reads as the default. */

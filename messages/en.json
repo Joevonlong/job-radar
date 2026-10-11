@@ -207,7 +207,8 @@
         "filtered": "Incl. filtered",
         "hideLang": "Hide jobs needing {language}",
         "trap": "AI traps",
-        "high": "High-value signals only"
+        "high": "High-value signals only",
+        "visa": "Visa"
       },
       "localLanguage": "the local language"
     },
@@ -4668,6 +4669,64 @@
       "failed": "traps:scan failed: {message}"
     }
   },
+  "visa": {
+    "status": {
+      "offered": "Visa support mentioned",
+      "not_offered": "No visa sponsorship",
+      "unclear": "Unclear",
+      "not_mentioned": "Not mentioned"
+    },
+    "badge": {
+      "offered": "Visa support",
+      "no_sponsorship": "No visa sponsorship",
+      "permit_required": "Work permit required"
+    },
+    "badgeTitle": {
+      "offered": "The JD mentions support with a visa, a Blue Card or relocation (read by rules: check the quote on the job's page)",
+      "no_sponsorship": "The JD says it does not sponsor a visa (read by rules: check the quote on the job's page)",
+      "permit_required": "The JD asks for a work permit you already have (read by rules: check the quote on the job's page)"
+    },
+    "filter": {
+      "label": "Visa",
+      "all": "All",
+      "offered": "Support mentioned",
+      "not_denied": "Not refused",
+      "chip": "Visa: {value}",
+      "remove": "Remove the filter “Visa: {value}”"
+    },
+    "checks": {
+      "title": "Visa sponsorship",
+      "offered": "The JD mentions visa or relocation support",
+      "no_sponsorship": "The JD says there is no visa sponsorship",
+      "permit_required": "The JD asks for a work permit you already have",
+      "unclear": "Mentioned, but not clear: read the quote",
+      "not_mentioned": "Not in the JD: ask the employer",
+      "notChecked": "Not checked yet",
+      "jump": "View in the original",
+      "quoteStatus": {
+        "offered": "support",
+        "not_offered": "refusal",
+        "unclear": "unclear"
+      }
+    },
+    "mark": {
+      "legend": "Visa",
+      "title": "What the JD says about visa sponsorship"
+    },
+    "cli": {
+      "usage": "Usage: pnpm visa:scan [--write] [--job ID] [--limit N] [--json] [--text FILE]\n  Previews by default and writes nothing; --write stores the results\n  --job ID: only this job (always checked again)\n  --limit N: at most this many jobs (default: pipeline.yaml job_checks.visa.per_cycle_limit)\n  --json: print JSON\n  --text FILE: run the rules on a local text file, no database",
+      "preview": "Preview: nothing was written (add --write to store)",
+      "summary": "Checked {scanned} jobs: {changed} changed, {failed} failed",
+      "stats": "Open jobs: {offered} support mentioned, {notOffered} refused ({noSponsorship} no sponsorship, {permitRequired} permit required), {unclear} unclear, {notMentioned} not mentioned, {unchecked} not checked yet",
+      "job": "Job {id}: {status}",
+      "changed": " (changed)",
+      "quote": "  - [{status}] offset {offset}: {quote}",
+      "text": "{file}: {status}",
+      "disabled": "ui.yaml: job_checks.visa.enabled is false, nothing was checked",
+      "noTable": "the database has no job_visa table yet: run pnpm db:migrate first",
+      "failed": "visa:scan failed: {message}"
+    }
+  },
   "market": {
     "scope": {
       "homeCountry": "Home country ({country})",
@@ -6083,6 +6142,7 @@
     "empty": "No deal-breakers yet.",
     "addGate": "Add language gate",
     "addPhrase": "Add phrase rule",
+    "addVisa": "Add visa rule",
     "enabled": "Rule on: {name}",
     "moveUp": "Move up: {name}",
     "moveDown": "Move down: {name}",
@@ -6090,7 +6150,8 @@
     "previewOnly": "The counts are a preview over the jobs in the database now; saving applies the rules on the next filter run, and old scores stay valid.",
     "types": {
       "language_gate": "Language gate",
-      "phrase": "Phrase"
+      "phrase": "Phrase",
+      "visa_not_offered": "Visa not offered"
     },
     "scopes": {
       "any": "Title or description",
@@ -6099,7 +6160,8 @@
     },
     "defaults": {
       "gate": "{language} above my level",
-      "phrase": "New rule"
+      "phrase": "New rule",
+      "visa": "No visa sponsorship"
     },
     "levels": {
       "none": "none",
@@ -6126,6 +6188,10 @@
       "fixed": "A fixed level: your level in \"About me\" is not read.",
       "noLanguageStep": "This market has no local-language step, so the rule does nothing."
     },
+    "visa": {
+      "explain": "Vetoes a job whose JD says there is no visa sponsorship or asks for a work permit you already have. A JD that is unclear or says nothing is kept.",
+      "notNeeded": "\"About me\" says you do not need visa sponsorship, so this rule does nothing."
+    },
     "preview": {
       "counting": "Counting…",
       "count": "Would veto {countText} of {total} open jobs",
@@ -6138,7 +6204,8 @@
         "me_unreadable": "Does nothing: \"About me\" cannot be read.",
         "too_many_rules": "Does nothing: more rules than pipeline.yaml allows (filter.deal_breakers.max_rules).",
         "pattern_too_long": "Does nothing: a pattern is longer than pipeline.yaml allows (filter.deal_breakers.max_pattern_chars).",
-        "too_slow": "Too slow: a pattern takes too long on long texts, so the filter leaves this rule out or stops it. Make the pattern simpler."
+        "too_slow": "Too slow: a pattern takes too long on long texts, so the filter leaves this rule out or stops it. Make the pattern simpler.",
+        "visa_not_needed": "Does nothing: \"About me\" says you do not need visa sponsorship."
       },
       "partial": "Counted the first {total} open jobs only: the preview stopped at its time limit (filter.deal_breakers.preview_ms)."
     },
@@ -6147,7 +6214,8 @@
       "levels": "The rules read: {required}; your level: {user}.",
       "levelsThreshold": "The rules read: {required}; the rule vetoes {threshold} or above.",
       "inTitle": "In the title:",
-      "noQuote": "No sentence to quote (the requirement is in the title, or the rule matched a phrase that is gone)."
+      "noQuote": "No sentence to quote (the requirement is in the title, or the rule matched a phrase that is gone).",
+      "visa": "The JD says: {status}"
     }
   }
 }

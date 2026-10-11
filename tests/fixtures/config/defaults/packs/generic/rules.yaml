@@ -112,3 +112,96 @@ filter:
       - \bworldwide\b
       - \bglobal(?:ly)?\b
       - \banywhere\b
+
+visa:
+  # Support is mentioned: "We offer visa sponsorship and relocation support", "Visa sponsorship is available".
+  # A negation within six words before it ("We do not offer …") makes the sentence unclear, never "offered".
+  offered:
+    - pattern: '(?<![\p{L}\p{N}])(?:offer(?:s|ing)?|provid(?:e|es|ing)|sponsor(?:s|ing)?|support(?:s|ing)?|assist(?:s|ing)?|help(?:s|ing)?|cover(?:s|ing)?|includ(?:e|es|ing)|incl\.)(?:\s+[\p{L}\p{N}’''-]+){0,5}?\s+(?:visa\s+(?:sponsorship|support|process(?:es)?|applications?)|work\s+(?:permits?|visas?)|(?:eu\s+)?blue\s+card|relocation|immigration)(?![\p{L}\p{N}])'
+      combo: true
+    - pattern: '(?<![\p{L}\p{N}])sponsor(?:s|ing)?\s+(?:your\s+|a\s+|the\s+|their\s+)?(?:visas?|work\s+permits?)(?![\p{L}\p{N}])'
+      combo: true
+    - pattern: '(?<![\p{L}\p{N}])(?:visa|immigration|work\s+permit|relocation)(?:\s+(?:and|&|/)\s+(?:visa|immigration|work\s+permit|relocation))?\s+(?:sponsorship|support|assistance|help)\s+(?:is\s+|are\s+|will\s+be\s+)?(?:available|provided|offered|included|possible)(?![\p{L}\p{N}])'
+      combo: true
+    - pattern: '(?<![\p{L}\p{N}])relocation\s+(?:support|package|assistance|bonus|budget|allowance)(?![\p{L}\p{N}])'
+      combo: true
+    - pattern: '(?<![\p{L}\p{N}])(?:visa|immigration)\s+(?:sponsorship|support)\s*:\s*(?:yes|available|provided|offered)(?![\p{L}\p{N}])'
+      combo: true
+    # A list item that is only the noun: "- Visa sponsorship"
+    - pattern: '^(?:visa|immigration)\s+(?:sponsorship|support|assistance)(?:\s+(?:and|&|\+)\s+relocation(?:\s+(?:support|package|assistance))?)?\s*[.!]?$'
+      combo: true
+  not_offered:
+    # It says there is no sponsorship: "Visa sponsorship is not available", "We are unable to offer sponsorship".
+    no_sponsorship:
+      - pattern: '(?<![\p{L}\p{N}])sponsorship\s+(?:is\s+|will\s+)?(?:not\s+(?:be\s+)?|no\s+longer\s+|un)(?:available|provided|offered|possible)(?![\p{L}\p{N}])'
+        combo: true
+      - pattern: '(?<![\p{L}\p{N}])(?:(?:unable|not\s+able|not\s+in\s+a\s+position)\s+to|cannot|can[''’]?t|can\s+not|do(?:es)?\s+not|don[''’]?t|doesn[''’]?t|will\s+not|won[''’]?t|(?:are|is)\s+not)\s+(?:currently\s+|presently\s+|yet\s+)?(?:offer|provide|sponsor|support)(?:\s+[\p{L}\p{N}’''-]+){0,4}?\s+(?:sponsorships?|visa\s+(?:sponsorship|support|applications?)|work\s+(?:permits?|visas?))(?![\p{L}\p{N}])'
+        combo: true
+      - '(?<![\p{L}\p{N}])(?:(?:unable|not\s+able|not\s+in\s+a\s+position)\s+to|cannot|can[''’]?t|can\s+not|do(?:es)?\s+not|don[''’]?t|doesn[''’]?t|will\s+not|won[''’]?t)\s+(?:currently\s+|presently\s+)?(?:sponsor|support)\s+(?:your\s+|a\s+|any\s+)?visas?(?![\p{L}\p{N}])'
+      - pattern: '(?<![\p{L}\p{N}])(?:visa\s+|immigration\s+)?sponsorship\s*:\s*(?:no|none|not\s+(?:available|offered|provided)|n/?a)(?![\p{L}\p{N}])'
+        combo: true
+      - pattern: '(?<![\p{L}\p{N}])no\s+(?:visa\s+|immigration\s+)?sponsorship(?![\p{L}\p{N}])'
+        combo: true
+    # It requires a permit the candidate already has: "You must hold a valid work permit", "eligible to work in the EU without sponsorship".
+    permit_required:
+      - pattern: '(?<![\p{L}\p{N}])(?:must|need\s+to|needs\s+to|should|required\s+to)\s+(?:already\s+)?(?:have|hold|possess|be\s+in\s+possession\s+of)\s+(?:a\s+|an\s+|the\s+)?(?:valid\s+|existing\s+|current\s+)?(?:(?:eu|eea|german|uk|us)\s+)?(?:work(?:ing)?\s+(?:permit|authori[sz]ation|visa)|right\s+to\s+work|residence\s+permit)(?![\p{L}\p{N}])'
+        combo: true
+      - pattern: '(?<![\p{L}\p{N}])(?:must|need\s+to|needs\s+to|should)\s+(?:already\s+)?be\s+(?:legally\s+)?(?:eligible|authori[sz]ed|permitted|allowed|entitled)\s+to\s+work(?![\p{L}\p{N}])'
+        combo: true
+      - pattern: '(?<![\p{L}\p{N}])(?:eligible|authori[sz]ed|permitted|allowed|entitled)\s+to\s+work(?:\s+[\p{L}\p{N}’''-]+){0,5}?\s+without\s+(?:(?:visa|employer|company|any)\s+)?sponsorship(?![\p{L}\p{N}])'
+        combo: true
+      - pattern: '(?<![\p{L}\p{N}])you\s+(?:already\s+)?(?:hold|have|possess)\s+(?:a\s+|an\s+)?(?:valid\s+|existing\s+)(?:work(?:ing)?\s+(?:permit|authori[sz]ation|visa)|residence\s+permit|right\s+to\s+work)(?![\p{L}\p{N}])'
+        combo: true
+      - pattern: '(?<![\p{L}\p{N}])(?:work(?:ing)?\s+permit|right\s+to\s+work|work\s+authori[sz]ation)(?:\s+(?:for|in)(?:\s+[\p{L}]+){1,3}?)?\s+(?:is\s+)?(?:required|mandatory|a\s+must|a\s+requirement|essential)(?![\p{L}\p{N}])'
+        combo: true
+      - pattern: '(?<![\p{L}\p{N}])only\s+(?:candidates|applicants|applications)\s+(?:with|who\s+(?:have|hold|already\s+have))\s+(?:a\s+|an\s+)?(?:valid\s+|existing\s+)?(?:work(?:ing)?\s+permits?|right\s+to\s+work|work\s+authori[sz]ation)(?![\p{L}\p{N}])'
+        combo: true
+  # Next to a permit_required phrase these make the sentence unclear, not a refusal: "… or are eligible for an EU Blue Card".
+  permit_alternatives:
+    - '(?<![\p{L}\p{N}])or\s+(?:are\s+|be\s+)?(?:eligible|qualify|qualified)\s+(?:for|to\s+(?:obtain|apply))(?![\p{L}\p{N}])'
+    - '(?<![\p{L}\p{N}])or\s+(?:can|could|are\s+able\s+to)\s+(?:obtain|get|apply\s+for|receive)(?![\p{L}\p{N}])'
+    - '(?<![\p{L}\p{N}])or\s+(?:an?\s+)?(?:eu\s+)?blue\s+card(?![\p{L}\p{N}])'
+    - '(?<![\p{L}\p{N}])(?:we|will)\s+(?:support|help|assist)\s+(?:you\s+)?(?:with\s+)?(?:the\s+)?(?:visa|blue\s+card|application|process)(?![\p{L}\p{N}])'
+  # A visa word next to a context word in the same sentence, with nothing above matching: a mention the rules cannot judge.
+  mention_terms:
+    - '(?<![\p{L}\p{N}])visas?(?![\p{L}\p{N}])'
+  mention_context:
+    - '(?<![\p{L}\p{N}])sponsor\p{L}*'
+    - '(?<![\p{L}\p{N}])support\p{L}*'
+    - '(?<![\p{L}\p{N}])blue\s+card(?![\p{L}\p{N}])'
+    - '(?<![\p{L}\p{N}])work\s+permits?(?![\p{L}\p{N}])'
+    - '(?<![\p{L}\p{N}])relocat\p{L}*'
+    - '(?<![\p{L}\p{N}])immigration(?![\p{L}\p{N}])'
+  # Whole words that negate an "offered" phrase.
+  negation_cues:
+    - not
+    - 'no'
+    - unable
+    - cannot
+    - 'can[''’]?t'
+    - 'won[''’]?t'
+    - 'don[''’]?t'
+    - 'doesn[''’]?t'
+    - without
+    - never
+  # Sentences about payment cards, not visas.
+  exclude_context:
+    - '(?<![\p{L}\p{N}])visa\s*(?:/|,|&|and|or)\s*(?:master\s*card|amex|american\s+express|maestro|discover)(?![\p{L}\p{N}])'
+    - '(?<![\p{L}\p{N}])(?:master\s*card|amex|american\s+express|maestro)\s*(?:/|,|&|and|or)\s*visa(?![\p{L}\p{N}])'
+    - '(?<![\p{L}\p{N}])visa\s+(?:cards?|payments?|network|direct|checkout|credentials?|transactions?)(?![\p{L}\p{N}])'
+  # A company whose name is a visa word (normalized name, as in companies.name_norm).
+  exclude_companies:
+    - '^visa(?:-|$)'
+  abbreviations: [e.g, i.e, etc, incl, approx, vs, inc, ltd, co, corp, mr, ms, dr]
+  # A quick first look (speed): a JD or sentence with none of these is skipped. Every phrase the patterns above can match
+  # contains one of them; keep it so when you add a pattern.
+  prefilter:
+    - visa
+    - sponsor
+    - permit
+    - relocat
+    - immigration
+    - 'blue\s+card'
+    - 'authori[sz]'
+    - 'right\s+to\s+work'
+    - '(?:eligible|allowed|entitled)\s+to\s+work'

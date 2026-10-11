@@ -56,7 +56,7 @@ export interface DealBreakerDraft {
   id: string;
   label: string;
   enabled: boolean;
-  /** `language_gate` or `phrase`. */
+  /** `language_gate`, `phrase` or `visa_not_offered`. */
   type: string;
   /** Language gate: "" = the user's own level (me.yaml), else a CEFR level. */
   at_least: string;
@@ -193,6 +193,7 @@ export function preferencesConfigToDraft(prefs: PreferencesConfig): PreferencesD
 
 export function dealBreakerToDraft(rule: DealBreaker): DealBreakerDraft {
   const empty = { at_least: "", terms: [], patterns: [], scope: "any", unless: [] };
+  if (rule.type === "visa_not_offered") return { ...empty, id: rule.id, label: rule.label, enabled: rule.enabled, type: rule.type };
   return rule.type === "language_gate"
     ? { ...empty, id: rule.id, label: rule.label, enabled: rule.enabled, type: rule.type, at_least: rule.at_least ?? "" }
     : { ...empty, id: rule.id, label: rule.label, enabled: rule.enabled, type: rule.type, terms: [...rule.terms], patterns: [...rule.patterns], scope: rule.scope, unless: [...rule.unless] };
@@ -206,6 +207,8 @@ export function dealBreakerDraftToCandidate(draft: DealBreakerDraft): Record<str
     if (draft.at_least.trim() !== "") out.at_least = draft.at_least.trim();
     return out;
   }
+  // the visa rule has no fields of its own: the patterns are the market packs'
+  if (draft.type === "visa_not_offered") return out;
   if (draft.terms.length > 0) out.terms = draft.terms;
   if (draft.patterns.length > 0) out.patterns = draft.patterns;
   if (draft.scope !== "any") out.scope = draft.scope;

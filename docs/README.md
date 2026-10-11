@@ -31,12 +31,13 @@ mock-ups.
 | [commercial-use.md](commercial-use.md) | Using Job Radar in a company or team: AGPL, shared instances, scraping and AI-subscription terms |
 | [ai-providers.md](ai-providers.md) | AI via a subscription CLI, an API key, or both: who runs what where, the host ai-worker, `execution` / `host_worker` / `translation` settings, troubleshooting |
 | [ai-usage.md](ai-usage.md) | AI usage and cost statistics, model catalog (`models.yaml`) |
-| [deal-breakers.md](deal-breakers.md) | Your own veto rules (`preferences.yaml: deal_breakers`): language gate, phrases, what happens to a vetoed job, `pnpm deal-breakers:check`, before rolling back |
+| [deal-breakers.md](deal-breakers.md) | Your own veto rules (`preferences.yaml: deal_breakers`): language gate, phrases, visa rule, what happens to a vetoed job, `pnpm deal-breakers:check`, before rolling back |
 | [extraction.md](extraction.md) | Rules for work mode, German level, agency detection and description cleanup; `pnpm reprocess` |
 | [signals.md](signals.md) | Compensation and benefit signals: tiers, vocabularies, the two-step extraction, the board |
 | [salary.md](salary.md) | Salary level on the job page (benchmark of your collected postings, links to salary sites) and the optional AI salary lookup with web search, `salary.yaml` |
 | [breakdown.md](breakdown.md) | Job breakdown: manual or automatic, card states and error codes, quote checking, `breakdown.yaml` |
 | [ai-traps.md](ai-traps.md) | AI trap detection: what is recognised, which sources only give text, how the text sent to an AI is cleaned, the marks on the pages and in Telegram, `traps.yaml`, `pnpm traps:scan` |
+| [visa-sponsorship.md](visa-sponsorship.md) | What a posting says about visa sponsorship or a work permit: the four results, the list badge and filter (for users who need sponsorship), the job page line, the visa deal-breaker, `pnpm visa:scan`, settings |
 | [insights.md](insights.md) | The /insights page: how every card is computed, `insights.yaml` |
 | [interest-suggestions.md](interest-suggestions.md) | Weekly AI suggestions: evidence rules, approve / reject, `suggest` settings |
 | [resume-kit.md](resume-kit.md) | Resume tailoring hand-off: `resume.yaml`, exporting a JD, the `/tailor` command |

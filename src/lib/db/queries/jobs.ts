@@ -1,9 +1,9 @@
 import { and, asc, count, desc, eq, exists, ilike, inArray, isNull, lte, ne, not, or, sql, type SQL } from "drizzle-orm";
 
 import type { Db } from "../client";
-import { applications, channels, companies, jobFavorites, jobSources, jobs, trapScans } from "../schema";
+import { applications, channels, companies, jobFavorites, jobSources, jobs, jobVisa, trapScans } from "../schema";
 import type { MonthSalaryFigure } from "@/lib/domain/salary";
-import { DEFAULT_SORT_DIR, type ApplicationFilterStatus, type JobSort, type SortDir, type TrapFilter } from "@/lib/jobs/constants";
+import { DEFAULT_SORT_DIR, type ApplicationFilterStatus, type JobSort, type SortDir, type TrapFilter, type VisaFilter } from "@/lib/jobs/constants";
 
 import { seenSql } from "../repos/seen";
 import { uxTablesReady } from "../repos/ux-tables";
@@ -57,6 +57,11 @@ export interface JobFilters {
   highValue?: HighValuePolicy | null;
   /** Only jobs with an AI trap (`only`), or without one (`hide`). */
   trap?: TrapFilter | null;
+  /**
+   * The visa check: only jobs whose JD mentions visa support (`offered`), or every job except those whose JD refuses sponsorship or
+   * requires a permit (`not_denied`: unclear and unchecked jobs stay). Set only when the `job_visa` table exists (`toJobFilters`).
+   */
+  visa?: VisaFilter | null;
   /** Only jobs the user has not looked at yet. */
   unseenOnly?: boolean | null;
 }
@@ -169,6 +174,11 @@ export function buildJobConditions(db: Db, filters: JobFilters, timezone: string
   if (filters.trap) {
     const trapped = exists(db.select({ one: sql`1` }).from(trapScans).where(and(eq(trapScans.jobId, jobs.id), sql`${trapScans.trapCount} > 0`)));
     conditions.push(filters.trap === "only" ? trapped : not(trapped));
+  }
+  if (filters.visa) {
+    const status = filters.visa === "offered" ? "offered" : "not_offered";
+    const found = exists(db.select({ one: sql`1` }).from(jobVisa).where(and(eq(jobVisa.jobId, jobs.id), eq(jobVisa.status, status))));
+    conditions.push(filters.visa === "offered" ? found : not(found));
   }
   if (filters.unseenOnly && ux) conditions.push(not(seenSql()));
   const german = hideGermanLevels(latest, filters.hideGermanLevels ?? []);

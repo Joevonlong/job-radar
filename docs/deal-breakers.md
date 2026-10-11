@@ -25,7 +25,7 @@ that pass the hard filter are scored.
 ## Writing rules
 
 Each rule has an `id` (lower case letters, digits, `-` and `_`; it is what each vetoed job records), a `label` (the name
-shown in the lists, at most 60 characters), `enabled` (default `true`) and a `type`. There are two types.
+shown in the lists, at most 60 characters), `enabled` (default `true`) and a `type`. There are three types.
 
 ### Language gate
 
@@ -96,6 +96,27 @@ Business travel over 50% has no type of its own yet. This pattern comes close in
 It matches "Reisetätigkeit von bis zu 60 %" and "travel up to 75%", but not "Reisetätigkeit ca. 20 %" or "travel 10% of
 the time".
 
+### Visa not offered
+
+```yaml
+deal_breakers:
+  - id: visa
+    label: No visa sponsorship
+    type: visa_not_offered
+```
+
+**Add visa rule** on the card. It vetoes a job whose description refuses visa sponsorship ("We are unable to offer visa
+sponsorship") or asks for a work permit you must already have ("You must hold a valid work permit for Germany"): the
+`not_offered` result of the [visa check](visa-sponsorship.md). A posting that is unclear, offers both, offers an
+alternative ("…or are eligible for an EU Blue Card") or says nothing passes.
+
+- It only works while **About me** says you need sponsorship (`me.yaml: needs_visa_sponsorship: true`); otherwise it
+  does nothing, and the card and `pnpm config:check` say so (`visa_not_needed`).
+- It uses the patterns of the market packs, not your own; the rule has no other keys. It reads the description on the
+  spot, hidden text included (the filter runs before the trap scan), so in rare cases the job page's visa line says
+  "not mentioned" for a job the rule vetoed. See [visa-sponsorship.md](visa-sponsorship.md#as-a-deal-breaker).
+- The job page quotes the refusing sentence and says which kind it is.
+
 ### Limits
 
 Your patterns run on every open job in every filter run, and JavaScript regular expressions have no time limit of their
@@ -154,3 +175,6 @@ scoring criteria** under "unacceptable": the AI reads it when it scores a job an
 Versions before deal-breakers do not know the `deal_breakers` key and refuse a `preferences.yaml` that has it. **Delete
 the `deal_breakers` key before you roll back.** Nothing else needs undoing: there is no database change, and the reasons
 already stored on vetoed jobs are shown as they are.
+
+Versions before the visa rule refuse a `deal_breakers` list with a `visa_not_offered` rule: delete that rule (or the whole
+key) before rolling back to one of them.

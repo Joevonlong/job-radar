@@ -291,6 +291,22 @@ live in two files; both blocks may be missing (older files): the defaults below 
 The `ui.yaml` block is edited in the YAML or the advanced editor (no form). An older version rejects it: remove it before
 rolling back.
 
+## Visa check (`pipeline.yaml` + `ui.yaml`)
+
+What a posting says about visa sponsorship (see [visa-sponsorship.md](visa-sponsorship.md)). Both blocks may be missing:
+the defaults below apply. The patterns live in the market packs (`rules.yaml` `visa`, see
+[market-packs.md](market-packs.md#visa-patterns)).
+
+| File | Key | Default | Meaning |
+|---|---|---|---|
+| `pipeline.yaml` (shipped) | `job_checks.visa.per_cycle_limit` | 2000 | Jobs checked per cycle at most |
+| | `job_checks.visa.max_quotes` | 3 | Quotes kept per job (1–10) |
+| | `job_checks.visa.quote_max_chars` | 280 | Longest quote (40–2000); a longer sentence is cut around the phrase |
+| `ui.yaml` (user) | `job_checks.visa.enabled` | `true` | Off: nothing is checked and no page shows it |
+| | `job_checks.visa.badges` | `auto` | When the list badge and the /jobs filter show: `auto` (only when me.yaml `needs_visa_sponsorship` is true), `always`, `never` |
+
+An older version rejects `job_checks.visa` in `ui.yaml`: remove it before rolling back.
+
 ## Backup
 
 Every backup, the runner's daily one (`backup.config_archive`, on by default) and `scripts/ops/backup.sh`, leaves a `….config.tgz` (`data/config` + `data/profile`, without `.backup/` and the sign-in key `.web-session-secret`) next to the database dump. The `backup` section of `schedule.yaml` also has `pre_migrate` (take a backup before a database migration), `keep_system` (how many safety backups of each kind to keep) and `keep_old_databases` (how many databases replaced by a restore to keep). `.env` and `.auth/` are in no backup. See [`backup-restore.md`](backup-restore.md), including "Restoring the configuration".

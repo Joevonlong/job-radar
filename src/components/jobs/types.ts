@@ -4,6 +4,7 @@ import type { SignalColor } from "@/lib/signals/palette";
 import type { ApplicationStatus } from "@/lib/db/repos/applications";
 import type { ClosedReason } from "@/lib/jobs/closure";
 import type { ClosedEvidence } from "./status-chip";
+import type { VisaBadgeValue } from "./visa-badge";
 
 export interface JobListSignal {
   /** Category id. */
@@ -74,6 +75,8 @@ export interface JobListItem {
   summary?: string | null;
   /** AI traps in the posting (severity `trap`); 0 / absent = none (or traps.yaml is off). Shown as the first badge. */
   trapCount?: number;
+  /** What the JD says about visa sponsorship when it is clear; only set when the badge shows (`visaVisible`). */
+  visa?: VisaBadgeValue;
   /** First seen after the user's last visit: only draws the "new since your last visit" divider, not the row style. */
   isNew?: boolean;
   /** Why the job shows as (possibly) closed; null / absent when open. */

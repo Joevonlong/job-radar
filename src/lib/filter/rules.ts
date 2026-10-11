@@ -1,10 +1,11 @@
-import type { MeConfig, PipelineConfig, PreferencesConfig } from "@/lib/config";
+import type { PipelineConfig, PreferencesConfig } from "@/lib/config";
 import type { GermanLevel, JobLocation, JobSalary } from "@/lib/domain/types";
 import { scopeCountries, scopeWidePatterns } from "@/lib/market/remote-scope";
 import type { Market } from "@/lib/market/types";
 import { normalizeCompanyKey, resolveCompanyName } from "@/lib/pipeline/company";
+import { visaRulesFor } from "@/lib/visa/rules";
 
-import { compileDealBreakers, type CompiledDealBreakers } from "./deal-breakers";
+import { compileDealBreakers, type CompiledDealBreakers, type DealBreakerMe } from "./deal-breakers";
 import { encodeReason } from "./reasons";
 import { salaryBelowFloor } from "./salary";
 
@@ -19,6 +20,8 @@ export interface FilterJob {
   title: string;
   description: string | null;
   companyName: string;
+  /** `companies.name_norm` (a visa deal-breaker reads it). */
+  companyNameNorm?: string | null;
   /** Other spellings of the company (`companies.aliases`). */
   companyAliases: readonly string[];
   /** `companies.blacklisted`. */
@@ -154,7 +157,7 @@ export interface CompiledFilter {
 /** What the filter reads besides preferences.yaml and pipeline.yaml. */
 export interface FilterContext {
   /** me.yaml (the user's languages, for a language gate); null = it cannot be read: such a gate does nothing. */
-  me: Pick<MeConfig, "languages"> | null;
+  me: DealBreakerMe | null;
 }
 
 const compilePatterns = (patterns: readonly string[]): RegExp[] => patterns.map((p) => new RegExp(p, "iu"));
@@ -229,7 +232,7 @@ export function compileFilter(preferences: PreferencesConfig, pipeline: Pipeline
     blacklistedCompanyKeys,
     keywords: preferences.exclude_keywords.map((keyword) => ({ keyword, pattern: wholeWordPattern(keyword) })),
     legalSuffixes: pipeline.company.legal_suffixes,
-    dealBreakers: compileDealBreakers(preferences.deal_breakers, { language: market.language?.code ?? null, me: context.me, limits: cfg.deal_breakers }),
+    dealBreakers: compileDealBreakers(preferences.deal_breakers, { language: market.language?.code ?? null, me: context.me, limits: cfg.deal_breakers, visa: visaRulesFor(pipeline) }),
     pipeline,
   };
 }

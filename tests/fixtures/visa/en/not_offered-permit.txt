@@ -1,0 +1,4 @@
+Requirements
+- 3+ years of TypeScript
+- Experience with PostgreSQL
+- You must hold a valid work permit for Germany

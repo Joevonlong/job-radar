@@ -51,6 +51,7 @@ export function viewFiltersFromParams(params: Partial<FilterParams>): ViewFilter
   if (params.hideLang === true) filters.hideLang = true;
   if (params.high === true) filters.high = true;
   if (params.trap) filters.trap = params.trap;
+  if (params.visa) filters.visa = params.visa;
   return filters;
 }
 
@@ -73,6 +74,7 @@ export function viewFiltersToParams(filters: ViewFilters): FilterParams {
     hideLang: filters.hideLang === true ? true : null,
     high: filters.high === true ? true : null,
     trap: filters.trap ?? null,
+    visa: filters.visa ?? null,
   };
 }
 

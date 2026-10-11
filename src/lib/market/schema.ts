@@ -138,6 +138,84 @@ export type PackLanguage = z.infer<typeof packLanguageSchema>;
 
 const optionalList = regexList.default([]);
 
+/**
+ * A pattern of the visa check: a regular expression, or `{ pattern, combo: true }` for one that only matches a visa word together
+ * with its context ("visa sponsorship", "Arbeitsvisum", "work permit") or names no visa at all. On postings of a company that
+ * `exclude_companies` names (a company called Visa) only `combo` patterns count.
+ */
+export const visaPatternSchema = z.union([regexString, z.strictObject({ pattern: regexString, combo: z.boolean().default(false) })]);
+export type VisaPatternEntry = z.infer<typeof visaPatternSchema>;
+const visaPatternList = z.array(visaPatternSchema).default([]);
+
+/** `rules.yaml` `visa` as the code reads it (the schema's output). */
+export interface VisaPack {
+  offered: VisaPatternEntry[];
+  not_offered: { no_sponsorship: VisaPatternEntry[]; permit_required: VisaPatternEntry[] };
+  permit_alternatives: string[];
+  mention_terms: VisaPatternEntry[];
+  mention_context: string[];
+  negation_cues: string[];
+  exclude_context: string[];
+  exclude_companies: string[];
+  abbreviations: string[];
+  prefilter: string[];
+}
+
+/** `rules.yaml` `visa` when a pack has none. */
+export function emptyVisaPack(): VisaPack {
+  return {
+    offered: [],
+    not_offered: { no_sponsorship: [], permit_required: [] },
+    permit_alternatives: [],
+    mention_terms: [],
+    mention_context: [],
+    negation_cues: [],
+    exclude_context: [],
+    exclude_companies: [],
+    abbreviations: [],
+    prefilter: [],
+  };
+}
+
+/**
+ * `rules.yaml` `visa`: what a posting says about visa sponsorship or a work permit (docs/visa-sponsorship.md). Every pattern is
+ * matched case-insensitively with Unicode (flags `iu`); write word boundaries as `(?<![\p{L}\p{N}])` / `(?![\p{L}\p{N}])`,
+ * not `\b` (which only knows ASCII letters).
+ */
+export const visaPackSchema = z
+  .strictObject({
+    /** The posting mentions support with a visa, a Blue Card, a work permit or relocation. */
+    offered: visaPatternList,
+    not_offered: z
+      .strictObject({
+        /** It says there is no sponsorship. */
+        no_sponsorship: visaPatternList,
+        /** It requires a work permit the candidate already has. */
+        permit_required: visaPatternList,
+      })
+      .default({ no_sponsorship: [], permit_required: [] }),
+    /** "… or are eligible for an EU Blue Card": next to a `permit_required` phrase the sentence is unclear, not a refusal. */
+    permit_alternatives: optionalList,
+    /** Visa words ("visa", "Visum") that, with a `mention_context` word in the same sentence, make a mention the rules cannot judge. */
+    mention_terms: visaPatternList,
+    mention_context: optionalList,
+    /** Words that negate an `offered` phrase when they stand within six words before it or inside it ("not", "kein…"); each must match a whole word. */
+    negation_cues: optionalList,
+    /** A sentence matching one of these is not about visas at all ("sponsored events", "Visa/Mastercard"). */
+    exclude_context: optionalList,
+    /** Company names (matched against the normalized name) whose own name is a visa word: only `combo` patterns count for them. */
+    exclude_companies: optionalList,
+    /** Abbreviations whose dot does not end a sentence ("z.B.", "inkl."), without the final dot. */
+    abbreviations: z.array(nonEmptyString).default([]),
+    /**
+     * A quick first look (speed: the deal-breaker runs the check over every open job in every filter run): a text or sentence
+     * that matches none of these is skipped without running the patterns above. So every phrase that `offered`, `not_offered`
+     * or `mention_terms` can match must contain a match of one of these. Empty = no quick look, every sentence is read.
+     */
+    prefilter: optionalList,
+  })
+  .default(emptyVisaPack) satisfies z.ZodType<VisaPack>;
+
 /** `rules.yaml`: pieces of pipeline.yaml that are language / market specific. Lists are united with the user's and the other packs'. */
 export const packRulesSchema = z.strictObject({
   company: z.strictObject({ legal_suffixes: stringList.default([]), agency_names: stringList.default([]) }).default({ legal_suffixes: [], agency_names: [] }),
@@ -166,6 +244,8 @@ export const packRulesSchema = z.strictObject({
   /** Phrases (regex) in a posting page's visible text that say it no longer takes applications (the watched-job recheck). */
   // Run on untrusted pages, so only the safe pattern subset (see unsafePhraseReason)
   closed_posting: z.strictObject({ phrases: z.array(phraseRegexString).default([]) }).default({ phrases: [] }),
+  /** What a posting says about visa sponsorship / a work permit (the visa check). */
+  visa: visaPackSchema,
 });
 export type PackRules = z.infer<typeof packRulesSchema>;
 

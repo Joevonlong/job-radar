@@ -207,6 +207,21 @@ web 和 runner 以 `0600`（仅属主）写配置文件：`data/config/*.yaml` �
 
 `ui.yaml` 这一段在 YAML 或高级编辑器里改（没有表单）。旧版本不认识它：回退前先删掉。
 
+## 签证检查（`pipeline.yaml` + `ui.yaml`）
+
+JD 里关于签证赞助的说法（见 [visa-sponsorship.zh.md](visa-sponsorship.zh.md)）。两块都可以没有，没有时用下面的默认值。
+说法写在市场包里（`rules.yaml` 的 `visa`，见 [market-packs.zh.md](market-packs.zh.md#签证说法)）。
+
+| 文件 | 键 | 默认 | 含义 |
+|---|---|---|---|
+| `pipeline.yaml`（随产品提供） | `job_checks.visa.per_cycle_limit` | 2000 | 每轮最多检查的岗位数 |
+| | `job_checks.visa.max_quotes` | 3 | 每个岗位保留的引文数（1–10） |
+| | `job_checks.visa.quote_max_chars` | 280 | 引文最长字数（40–2000）；句子更长时围绕关键说法截取 |
+| `ui.yaml`（用户） | `job_checks.visa.enabled` | `true` | 关掉：什么都不检查，页面也不显示 |
+| | `job_checks.visa.badges` | `auto` | 列表徽标和 /jobs 筛选什么时候显示：`auto`（me.yaml `needs_visa_sponsorship` 为 true 时才显示）、`always`、`never` |
+
+旧版本不认 `ui.yaml` 里的 `job_checks.visa`：回滚前删掉。
+
 ## 备份
 
 每一份备份，不管是 runner 每天做的（`backup.config_archive`，默认开）还是 `scripts/ops/backup.sh` 做的，都会在数据库 dump 旁边留一份 `….config.tgz`（`data/config` + `data/profile`，不含 `.backup/` 和登录密钥 `.web-session-secret`）。`schedule.yaml` 的 `backup` 段还有 `pre_migrate`（数据库迁移前先备份）、`keep_system`（每一类安全备份保留几份）和 `keep_old_databases`（恢复时被替换的旧库保留几个）。`.env` 和 `.auth/` 不在任何备份里。见 [`backup-restore.zh.md`](backup-restore.zh.md)，包括"恢复配置"。

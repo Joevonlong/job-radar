@@ -35,6 +35,8 @@ interface DealBreakersCardProps {
   /** The market's local language ("German"), and whether its step is on (a language gate needs it). */
   languageName: string;
   languageStep: boolean;
+  /** me.yaml `needs_visa_sponsorship` as saved; null = me.yaml cannot be read. A visa rule does nothing unless true. */
+  needsVisaSponsorship: boolean | null;
 }
 
 const EMPTY_RULE: Omit<DealBreakerDraft, "id" | "label" | "type"> = { enabled: true, at_least: "", terms: [], patterns: [], scope: "any", unless: [] };
@@ -92,7 +94,7 @@ function RulePreview({ preview, total, rule }: { preview: DraftPreviewRule | und
  * filter, before any AI call. Each rule shows what it would veto among the jobs in the database now (the same count as
  * `pnpm deal-breakers:check`).
  */
-export function DealBreakersCard({ baseId, rules, onChange, errors, userLevel, languageName, languageStep }: DealBreakersCardProps) {
+export function DealBreakersCard({ baseId, rules, onChange, errors, userLevel, languageName, languageStep, needsVisaSponsorship }: DealBreakersCardProps) {
   const t = useTranslations("dealBreakers");
   const locale = useAppLocale();
   const headingId = useId();
@@ -125,6 +127,9 @@ export function DealBreakersCard({ baseId, rules, onChange, errors, userLevel, l
 
   function addGate() {
     onChange([...rules, { ...EMPTY_RULE, id: freshId(rules, "language-gate", false), label: t("defaults.gate", { language: languageName }), type: "language_gate" }]);
+  }
+  function addVisa() {
+    onChange([...rules, { ...EMPTY_RULE, id: freshId(rules, "visa", false), label: t("defaults.visa"), type: "visa_not_offered" }]);
   }
   function addPhrase() {
     onChange([...rules, { ...EMPTY_RULE, id: freshId(rules, "rule", true), label: t("defaults.phrase"), type: "phrase" }]);
@@ -173,7 +178,7 @@ export function DealBreakersCard({ baseId, rules, onChange, errors, userLevel, l
             <li key={index} className="border-border bg-card flex min-w-0 flex-col gap-3 rounded-card border-bw p-3" data-testid="deal-breaker" data-type={rule.type} data-enabled={rule.enabled ? "true" : "false"}>
               <div className="flex min-w-0 flex-wrap items-center gap-2">
                 <Switch id={`${id}-enabled`} checked={rule.enabled} onCheckedChange={(checked) => update(index, { enabled: checked })} aria-label={t("enabled", { name })} />
-                <span className="font-mono text-data-sm text-ink-2 border-border rounded-tag border-bw px-1.5">{t(`types.${rule.type === "language_gate" ? "language_gate" : "phrase"}`)}</span>
+                <span className="font-mono text-data-sm text-ink-2 border-border rounded-tag border-bw px-1.5">{t(`types.${rule.type === "language_gate" || rule.type === "visa_not_offered" ? rule.type : "phrase"}`)}</span>
                 <span className="ml-auto flex items-center gap-1">
                   <Button type="button" variant="ghost" size="icon-sm" disabled={index === 0} aria-label={t("moveUp", { name })} onClick={() => onChange(move(rules, index, index - 1))}>
                     <ArrowUp aria-hidden />
@@ -239,6 +244,17 @@ export function DealBreakersCard({ baseId, rules, onChange, errors, userLevel, l
                     </p>
                   )}
                 </>
+              ) : rule.type === "visa_not_offered" ? (
+                <>
+                  <p className="text-ink-2 text-body-sm" data-testid="deal-breaker-visa-explain">
+                    {t("visa.explain")}
+                  </p>
+                  {needsVisaSponsorship !== false ? null : (
+                    <p className="text-bad text-body-sm font-bold" data-testid="deal-breaker-visa-not-needed">
+                      {t("visa.notNeeded")}
+                    </p>
+                  )}
+                </>
               ) : (
                 <>
                   <Field id={`${id}-terms`} label={t("fields.terms")} hint={t("fields.termsHint")} error={err("terms")}>
@@ -277,6 +293,11 @@ export function DealBreakersCard({ baseId, rules, onChange, errors, userLevel, l
         <Button type="button" size="sm" onClick={addPhrase} data-testid="deal-breaker-add-phrase">
           {t("addPhrase")}
         </Button>
+        {rules.some((rule) => rule.type === "visa_not_offered") ? null : (
+          <Button type="button" size="sm" onClick={addVisa} data-testid="deal-breaker-add-visa">
+            {t("addVisa")}
+          </Button>
+        )}
         <span className="text-ink-2 font-mono text-data-sm" data-testid="deal-breaker-user-level">
           {levelText}
         </span>

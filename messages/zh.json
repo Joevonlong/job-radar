@@ -207,7 +207,8 @@
         "filtered": "含已过滤",
         "hideLang": "隐藏需{language}的岗位",
         "trap": "AI 陷阱",
-        "high": "只看高价值信号"
+        "high": "只看高价值信号",
+        "visa": "签证"
       },
       "localLanguage": "本地语言"
     },
@@ -4668,6 +4669,64 @@
       "failed": "traps:scan 失败：{message}"
     }
   },
+  "visa": {
+    "status": {
+      "offered": "提到签证支持",
+      "not_offered": "不提供签证",
+      "unclear": "不明确",
+      "not_mentioned": "未提及"
+    },
+    "badge": {
+      "offered": "提到签证支持",
+      "no_sponsorship": "不提供签证",
+      "permit_required": "要求已有工作许可"
+    },
+    "badgeTitle": {
+      "offered": "JD 提到签证、蓝卡或搬迁方面的支持（规则识别，请到详情页看引用）",
+      "no_sponsorship": "JD 写明不提供签证赞助（规则识别，请到详情页看引用）",
+      "permit_required": "JD 要求已经有工作许可（规则识别，请到详情页看引用）"
+    },
+    "filter": {
+      "label": "签证",
+      "all": "全部",
+      "offered": "提到支持",
+      "not_denied": "去掉明确不提供的",
+      "chip": "签证：{value}",
+      "remove": "移除筛选“签证：{value}”"
+    },
+    "checks": {
+      "title": "签证赞助",
+      "offered": "JD 提到签证或搬迁支持",
+      "no_sponsorship": "JD 写明不提供签证赞助",
+      "permit_required": "JD 要求已经有工作许可",
+      "unclear": "提到了，但说法不明确：请看引用",
+      "not_mentioned": "JD 没写，需自行确认",
+      "notChecked": "尚未检查",
+      "jump": "在原文中查看",
+      "quoteStatus": {
+        "offered": "支持",
+        "not_offered": "拒绝",
+        "unclear": "不明确"
+      }
+    },
+    "mark": {
+      "legend": "签证",
+      "title": "JD 里关于签证赞助的说法"
+    },
+    "cli": {
+      "usage": "用法：pnpm visa:scan [--write] [--job ID] [--limit N] [--json] [--text FILE]\n  默认只预览、不写库；--write 写入结果\n  --job ID：只查这个岗位（总是重查）\n  --limit N：最多这么多个岗位（默认 pipeline.yaml job_checks.visa.per_cycle_limit）\n  --json：输出 JSON\n  --text FILE：对本地文本文件试跑规则，不连数据库",
+      "preview": "预览：没有写入（加 --write 才保存）",
+      "summary": "检查了 {scanned} 个岗位：{changed} 个有变化，{failed} 个失败",
+      "stats": "未关闭岗位：提到支持 {offered} 个，不提供 {notOffered} 个（不赞助 {noSponsorship}、要求已有许可 {permitRequired}），不明确 {unclear} 个，未提及 {notMentioned} 个，尚未检查 {unchecked} 个",
+      "job": "岗位 {id}：{status}",
+      "changed": "（有变化）",
+      "quote": "  - [{status}] 偏移 {offset}：{quote}",
+      "text": "{file}：{status}",
+      "disabled": "ui.yaml：job_checks.visa.enabled 为 false，没有检查",
+      "noTable": "数据库里还没有 job_visa 表：先运行 pnpm db:migrate",
+      "failed": "visa:scan 失败：{message}"
+    }
+  },
   "market": {
     "scope": {
       "homeCountry": "本国内（{country}）",
@@ -6083,6 +6142,7 @@
     "empty": "还没有一票否决项。",
     "addGate": "添加语言门槛",
     "addPhrase": "添加短语规则",
+    "addVisa": "添加签证规则",
     "enabled": "启用：{name}",
     "moveUp": "上移：{name}",
     "moveDown": "下移：{name}",
@@ -6090,7 +6150,8 @@
     "previewOnly": "数字是按库里现有岗位的预览；保存后下一轮过滤才生效，旧分数仍然有效。",
     "types": {
       "language_gate": "语言门槛",
-      "phrase": "短语"
+      "phrase": "短语",
+      "visa_not_offered": "不提供签证"
     },
     "scopes": {
       "any": "标题或正文",
@@ -6099,7 +6160,8 @@
     },
     "defaults": {
       "gate": "{language}要求高于我的水平",
-      "phrase": "新规则"
+      "phrase": "新规则",
+      "visa": "不提供签证赞助"
     },
     "levels": {
       "none": "无",
@@ -6126,6 +6188,10 @@
       "fixed": "固定等级：不读“关于我”里的水平。",
       "noLanguageStep": "这个市场没有本地语言步骤，这条规则不生效。"
     },
+    "visa": {
+      "explain": "JD 写明不提供签证赞助、或要求已经有工作许可时否决。说法不明确或没写的岗位会保留。",
+      "notNeeded": "“关于我”里写了不需要签证赞助，所以这条规则不起作用。"
+    },
     "preview": {
       "counting": "计算中…",
       "count": "会否决 {total} 个未关闭岗位中的 {countText} 个",
@@ -6138,7 +6204,8 @@
         "me_unreadable": "不生效：读不到“关于我”。",
         "too_many_rules": "不生效：规则条数超过 pipeline.yaml 的上限（filter.deal_breakers.max_rules）。",
         "pattern_too_long": "不生效：有正则超过 pipeline.yaml 的长度上限（filter.deal_breakers.max_pattern_chars）。",
-        "too_slow": "太慢：有正则在长文本上耗时过长，过滤会跳过或中途停掉这条规则。请把正则写简单些。"
+        "too_slow": "太慢：有正则在长文本上耗时过长，过滤会跳过或中途停掉这条规则。请把正则写简单些。",
+        "visa_not_needed": "不起作用：“关于我”里写了不需要签证赞助。"
       },
       "partial": "只算了前 {total} 个未关闭岗位：预览到了时间上限（filter.deal_breakers.preview_ms）就停下了。"
     },
@@ -6147,7 +6214,8 @@
       "levels": "规则读到：{required}；你的等级：{user}。",
       "levelsThreshold": "规则读到：{required}；这条规则在 {threshold} 及以上时否决。",
       "inTitle": "在标题里：",
-      "noQuote": "没有可引用的原句（要求写在标题里，或命中的短语已不在正文中）。"
+      "noQuote": "没有可引用的原句（要求写在标题里，或命中的短语已不在正文中）。",
+      "visa": "JD 的说法：{status}"
     }
   }
 }

@@ -47,9 +47,11 @@ interface PreferencesFormProps {
   searchLocations: readonly string[];
   /** The user's level of the market's local language in me.yaml ("B1", "native"), null = none listed: what a language gate compares. */
   userLanguageLevel: string | null;
+  /** me.yaml `needs_visa_sponsorship` as saved; null = me.yaml cannot be read (a visa deal-breaker then does nothing). */
+  needsVisaSponsorship: boolean | null;
 }
 
-export function PreferencesForm({ initial, hash, state, pending, onSave, salaries, axis, salaryMedian, market, searchLocations, userLanguageLevel }: PreferencesFormProps) {
+export function PreferencesForm({ initial, hash, state, pending, onSave, salaries, axis, salaryMedian, market, searchLocations, userLanguageLevel, needsVisaSponsorship }: PreferencesFormProps) {
   const t = useTranslations("profile");
   const base = useId();
   const [draft, setDraft] = useState<PreferencesDraft>(initial);
@@ -275,6 +277,7 @@ export function PreferencesForm({ initial, hash, state, pending, onSave, salarie
         userLevel={userLanguageLevel}
         languageName={market.languageName}
         languageStep={market.languageStep}
+        needsVisaSponsorship={needsVisaSponsorship}
       />
     </FormCard>
   );

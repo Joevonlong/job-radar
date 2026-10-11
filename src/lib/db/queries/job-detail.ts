@@ -6,6 +6,7 @@ import type { Db } from "../client";
 import { getFavorite, type FavoriteState } from "../repos/favorites";
 import { getClosureOverride, type ClosureOverride } from "../repos/closures";
 import { uxTablesReady } from "../repos/ux-tables";
+import { getVisaOfJob, type VisaDetail } from "../repos/visa";
 import { closedReason, effectiveJobStatus, type ClosedReason } from "@/lib/jobs/closure";
 import { parseLinkCheck, type LinkCheckEvidence } from "@/lib/jobs/link-check-evidence";
 import { getApplicationByJobId, listApplicationEvents, type Application, type ApplicationEvent } from "../repos/applications";
@@ -51,7 +52,8 @@ export interface JobScoreDetail {
 export interface JobDetail {
   id: number;
   title: string;
-  company: { id: number; name: string; watched: boolean };
+  /** `nameNorm`: the company key (what the visa rules compare with `exclude_companies`). */
+  company: { id: number; name: string; nameNorm: string; watched: boolean };
   locations: JobLocation[];
   workplace: Workplace;
   seniority: string;
@@ -88,6 +90,8 @@ export interface JobDetail {
   /** The user's star on this job. */
   favorite: FavoriteState | null;
   applicationEvents: ApplicationEvent[];
+  /** What the JD says about visa sponsorship (the visa check); null before the job was checked. */
+  visa: VisaDetail | null;
 }
 
 type ScoreRow = typeof scores.$inferSelect;
@@ -176,7 +180,7 @@ async function loadClosure(db: Db, id: number, autoStatus: JobStatus): Promise<{
 
 export async function getJobDetail(db: Db, id: number): Promise<JobDetail | null> {
   const [row] = await db
-    .select({ job: detailColumns(), companyName: companies.name, companyWatched: companies.watched })
+    .select({ job: detailColumns(), companyName: companies.name, companyNameNorm: companies.nameNorm, companyWatched: companies.watched })
     .from(jobs)
     .innerJoin(companies, eq(companies.id, jobs.companyId))
     .where(eq(jobs.id, id))
@@ -184,7 +188,7 @@ export async function getJobDetail(db: Db, id: number): Promise<JobDetail | null
   if (!row) return null;
   const { job } = row;
 
-  const [sources, signals, score, translated, application, [scan], favorite, closed] = await Promise.all([
+  const [sources, signals, score, translated, application, [scan], favorite, closed, visa] = await Promise.all([
     loadSources(db, [id]),
     loadSignals(db, [id]),
     displayedScore(db, id),
@@ -193,6 +197,7 @@ export async function getJobDetail(db: Db, id: number): Promise<JobDetail | null
     db.select({ aiScannedAt: signalScans.aiScannedAt, aiDescriptionHash: signalScans.aiDescriptionHash, descriptionHash: signalScans.descriptionHash }).from(signalScans).where(eq(signalScans.jobId, id)).limit(1),
     getFavorite(db, id),
     loadClosure(db, id, job.status),
+    getVisaOfJob(db, id),
   ]);
   const applicationEvents = application ? await listApplicationEvents(db, application.id) : [];
   const salaryFiltered = score?.filterResult === "filtered_out" && score.filterReasons.some((reason) => reason.startsWith("salary_below_floor"));
@@ -201,7 +206,7 @@ export async function getJobDetail(db: Db, id: number): Promise<JobDetail | null
   return {
     id: job.id,
     title: job.title,
-    company: { id: job.companyId, name: row.companyName, watched: row.companyWatched },
+    company: { id: job.companyId, name: row.companyName, nameNorm: row.companyNameNorm, watched: row.companyWatched },
     locations: parseLocations(job.locationsJson),
     workplace: job.workplace,
     seniority: job.seniority,
@@ -250,6 +255,7 @@ export async function getJobDetail(db: Db, id: number): Promise<JobDetail | null
     application,
     favorite,
     applicationEvents,
+    visa,
   };
 }
 

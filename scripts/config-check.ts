@@ -199,6 +199,21 @@ if (fs.existsSync(path.join(getProfileDir(), "preferences.yaml"))) {
         if (rule.type === "language_gate" && rule.enabled) console.log(`    ! deal_breakers.${index} (${rule.id}): a language gate does nothing, the market has no local-language step`);
       });
     }
+    if (rules.some((rule) => rule.type === "visa_not_offered" && rule.enabled)) {
+      let needs: boolean | null = null;
+      try {
+        needs = parseConfigText("me", readConfigText("me")).needs_visa_sponsorship;
+      } catch {
+        // me.yaml is reported above; the filter then leaves the visa rule out
+      }
+      if (needs !== true) {
+        rules.forEach((rule, index) => {
+          if (rule.type === "visa_not_offered" && rule.enabled) {
+            console.log(`    ! deal_breakers.${index} (${rule.id}): a visa rule does nothing, ${needs === false ? "me.yaml needs_visa_sponsorship is false" : "me.yaml cannot be read"}`);
+          }
+        });
+      }
+    }
   }
 }
 

@@ -660,6 +660,30 @@ export const trapScans = pgTable(
 );
 
 /**
+ * What a job's JD says about visa sponsorship / a work permit (rules only), one row per scanned job. A marker only (C3): nothing
+ * here changes a score or filters a job. C7: every evidence item (`[{status, kind, quote, offset}]`, validated by zod in
+ * `@/lib/visa/types`) is a verbatim quote of `jobs.description` and its offset. `input_hash` covers the JD, the rules and the
+ * other inputs of the check (see `@/lib/visa/step`): a different hash rescans the job.
+ */
+export const jobVisa = pgTable(
+  "job_visa",
+  {
+    jobId: bigint("job_id", { mode: "number" })
+      .primaryKey()
+      .references(() => jobs.id, { onDelete: "cascade" }),
+    status: text("status").notNull(),
+    evidence: jsonb("evidence").notNull().default(sql`'[]'::jsonb`),
+    inputHash: text("input_hash").notNull(),
+    checkedAt: timestamptz("checked_at").notNull().defaultNow(),
+  },
+  (t) => [
+    check("job_visa_status_check", sql`${t.status} in ('offered', 'not_offered', 'unclear', 'not_mentioned')`),
+    check("job_visa_evidence_check", sql`${t.status} = 'not_mentioned' or jsonb_array_length(${t.evidence}) > 0`),
+    index("job_visa_status_idx").on(t.status).where(sql`${t.status} in ('offered', 'not_offered')`),
+  ],
+);
+
+/**
  * A translation that is not finished: a long JD is translated piece by piece, and every piece that came back is
  * kept here so a failure (timeout, provider down) costs only the pieces that are missing. `chunks` is the list of
  * finished pieces (`index`, Chinese `content` in stored form, `provider`, token counts). The row belongs to one

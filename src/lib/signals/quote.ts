@@ -45,10 +45,14 @@ export function sentenceAround(text: string, hit: Span, maxChars: number): { quo
       break;
     }
   }
-  return clip(text, start, end, hit, maxChars);
+  return clipQuote(text, start, end, hit, maxChars);
 }
 
-function clip(text: string, start: number, end: number, hit: Span, maxChars: number): { quote: string; offset: number } {
+/**
+ * `text[start, end)` trimmed, without a leading list marker, and at most `maxChars` long (cut around `hit` at word boundaries):
+ * a verbatim substring of `text` and where it starts.
+ */
+export function clipQuote(text: string, start: number, end: number, hit: Span, maxChars: number): { quote: string; offset: number } {
   // trim whitespace and a leading list marker
   while (start < end && /\s/u.test(text.charAt(start))) start += 1;
   while (end > start && /\s/u.test(text.charAt(end - 1))) end -= 1;

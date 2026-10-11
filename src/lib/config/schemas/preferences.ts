@@ -65,10 +65,19 @@ const phrase = z
   })
   .refine((rule) => rule.terms.length + rule.patterns.length > 0, { message: "needs at least one term or pattern", path: ["terms"] });
 
-export const dealBreakerSchema = z.discriminatedUnion("type", [languageGate, phrase]);
+/**
+ * The visa check (docs/visa-sponsorship.md): the JD refuses visa sponsorship or asks for a work permit the candidate already has
+ * (`not_offered`, either kind). Unclear and silent JDs never veto. Does nothing while me.yaml says `needs_visa_sponsorship: false`.
+ */
+const visaNotOffered = z.strictObject({
+  ...dealBreakerBase,
+  type: z.literal("visa_not_offered"),
+});
+
+export const dealBreakerSchema = z.discriminatedUnion("type", [languageGate, phrase, visaNotOffered]);
 export type DealBreaker = z.infer<typeof dealBreakerSchema>;
 export type DealBreakerType = DealBreaker["type"];
-export const DEAL_BREAKER_TYPES = ["language_gate", "phrase"] as const satisfies readonly DealBreakerType[];
+export const DEAL_BREAKER_TYPES = ["language_gate", "phrase", "visa_not_offered"] as const satisfies readonly DealBreakerType[];
 
 export const dealBreakersSchema = z
   .array(dealBreakerSchema)
