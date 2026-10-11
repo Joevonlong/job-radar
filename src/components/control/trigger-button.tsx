@@ -104,6 +104,8 @@ interface TriggerButtonProps {
   confirm?: boolean;
   variant?: "default" | "outline";
   className?: string;
+  /** schedule.yaml `timezone`: the zone of a resume time in the outcome (default: the browser's). */
+  timeZone?: string;
 }
 
 /**
@@ -111,7 +113,7 @@ interface TriggerButtonProps {
  * under the button. The button stays off while its request is open; the server reuses an open request and refuses a
  * repeat within `schedule.yaml: manual_triggers.min_interval_seconds`.
  */
-export function TriggerButton({ kind, target = "", disabled = false, disabledHint, confirm = false, variant = "outline", className }: TriggerButtonProps) {
+export function TriggerButton({ kind, target = "", disabled = false, disabledHint, confirm = false, variant = "outline", className, timeZone }: TriggerButtonProps) {
   const t = useTranslations("trigger");
   const [state, setState] = useState<ControlActionState>(IDLE_CONTROL_STATE);
   const [pending, startTransition] = useTransition();
@@ -146,12 +148,12 @@ export function TriggerButton({ kind, target = "", disabled = false, disabledHin
         ) : null}
       </div>
       {disabled && disabledHint ? <p className="text-muted-foreground text-xs">{disabledHint}</p> : null}
-      <Outcome kind={kind} state={state} view={view} gaveUp={gaveUp} />
+      <Outcome kind={kind} state={state} view={view} gaveUp={gaveUp} timeZone={timeZone} />
     </div>
   );
 }
 
-function Outcome({ kind, state, view, gaveUp }: { kind: TriggerKind; state: ControlActionState; view: ControlRequestView | null; gaveUp: boolean }) {
+function Outcome({ kind, state, view, gaveUp, timeZone }: { kind: TriggerKind; state: ControlActionState; view: ControlRequestView | null; gaveUp: boolean; timeZone?: string | undefined }) {
   const t = useTranslations("trigger");
   const tCycle = useTranslations("dashboard.cycle");
   const format = useFormatter();
@@ -192,7 +194,7 @@ function Outcome({ kind, state, view, gaveUp }: { kind: TriggerKind; state: Cont
     const detail = result.errorCode ?? result.errorKind;
     return (
       <p role="alert" className="text-destructive text-xs" data-testid="trigger-outcome" data-outcome="failed" data-error={result.error ?? ""}>
-        {code ? t(`failed.${code}`, { time: result.resumeAt ? formatClock(format, result.resumeAt) : "none" }) : t("failed.unknown")}
+        {code ? t(`failed.${code}`, { time: result.resumeAt ? formatClock(format, result.resumeAt, timeZone) : "none" }) : t("failed.unknown")}
         {detail ? <span className="ml-1 font-mono">({detail})</span> : null}
       </p>
     );

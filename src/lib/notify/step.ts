@@ -5,6 +5,7 @@ import { z } from "zod";
 import { loadHiddenSettings } from "@/lib/applications/hidden";
 import { createDbQuotaStore, recordQuotaNotified } from "@/lib/ai/quota-guard";
 import { QUOTA_GUARD_CODE } from "@/lib/ai/errors";
+import { SCORE_SUBTASK_NAME } from "@/lib/scoring/score-task";
 import { AI_PROVIDER_IDS } from "@/lib/ai/types";
 import { loadConfig, type AiConfig, type NotifyConfig } from "@/lib/config";
 import { loadPipeline } from "@/lib/market";
@@ -95,9 +96,13 @@ const aiQuotaResultSchema = z.object({
   subtasks: z
     .array(
       z.object({
+        name: z.string().optional().catch(undefined),
         reason: z.string().optional().catch(undefined),
         resumeAt: resumeAtSchema,
-        result: z.object({ stopped: z.string().optional().catch(undefined), quotaResumeAt: resumeAtSchema }).optional().catch(undefined),
+        result: z
+          .object({ stopped: z.string().optional().catch(undefined), quotaResumeAt: resumeAtSchema, quotaHeldJobIds: z.array(z.number().int()).optional().catch(undefined) })
+          .optional()
+          .catch(undefined),
       }),
     )
     .default([])
@@ -107,8 +112,10 @@ const aiQuotaResultSchema = z.object({
 /**
  * Whether Job Radar's AI usage cap held this cycle's AI back (the step skipped, a sub-task skipped, or scoring stopped
  * early), and the earliest known time it is expected to work again (null = the next cycle). Null when it did not.
+ * `heldJobIds`: when the scoring ran, the jobs the cap left unscored (empty when the cap did not stop the scoring);
+ * null when the scoring never ran (the cap held all of it back).
  */
-export function aiQuotaHoldOf(aiResult: unknown): { resumeAt: Date | null } | null {
+export function aiQuotaHoldOf(aiResult: unknown): { resumeAt: Date | null; heldJobIds: ReadonlySet<number> | null } | null {
   const parsed = aiQuotaResultSchema.safeParse(aiResult);
   if (!parsed.success) return null;
   const times: Array<string | null | undefined> = [];
@@ -119,7 +126,9 @@ export function aiQuotaHoldOf(aiResult: unknown): { resumeAt: Date | null } | nu
   }
   if (times.length === 0) return null;
   const known = times.map((t) => (t ? new Date(t).getTime() : Number.NaN)).filter((t) => !Number.isNaN(t));
-  return { resumeAt: known.length > 0 ? new Date(Math.min(...known)) : null };
+  const scoring = parsed.data.subtasks.find((s) => s.name === SCORE_SUBTASK_NAME && s.result !== undefined);
+  const heldJobIds = scoring ? new Set(scoring.result?.stopped === QUOTA_GUARD_CODE ? (scoring.result.quotaHeldJobIds ?? []) : []) : null;
+  return { resumeAt: known.length > 0 ? new Date(Math.min(...known)) : null, heldJobIds };
 }
 
 function describe(error: unknown): string {
@@ -143,9 +152,10 @@ async function sendJobs(deps: NotifyDeps, ctx: CycleStepContext, db: Db, cycleId
   const qualifiedIds = new Set(fresh.filter(reaches).map((c) => c.jobId));
   for (const item of [...selection.selected, ...selection.overflow]) if (reaches(item.candidate)) qualifiedIds.add(item.candidate.jobId);
   const qualified = qualifiedIds.size;
-  // new jobs that passed the filter but have no AI score because the usage cap held the AI back
+  // new jobs that passed the filter but have no AI score because the usage cap held the AI back (not the ones per_cycle_limit left)
   const hold = aiQuotaHoldOf(ctx.results.ai);
-  const quotaHeld = hold ? { count: fresh.filter((c) => c.score?.filterResult === "passed" && c.score.score === null).length, time: hold.resumeAt ? formatLocalTime(hold.resumeAt, deps.timeZone, deps.now()) : "none" } : undefined;
+  const heldBack = (c: PushCandidate): boolean => c.score?.filterResult === "passed" && c.score.score === null && (!hold || hold.heldJobIds === null || hold.heldJobIds.has(c.jobId));
+  const quotaHeld = hold ? { count: fresh.filter(heldBack).length, time: hold.resumeAt ? formatLocalTime(hold.resumeAt, deps.timeZone, deps.now()) : "none" } : undefined;
   const jobs: NotifyJobsResult = {
     newJobs: fresh.length,
     passedFilter: fresh.filter((c) => c.score?.filterResult === "passed").length,

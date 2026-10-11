@@ -145,8 +145,8 @@ cooldown:
 #                      the window has slid far enough; 0 = no window cap
 #   cycle_request_cap  calls one processing cycle may make; the rest of the cycle skips the provider, the next cycle counts anew.
 #                      Your own requests (translate, score now, test) are not held back by it; 0 = no cycle cap
-# Default numbers: 1.5 x the most calls seen in one window / one cycle on the owner's machine; with too little history,
-# codex-cli: cycle cap = 2 x per_cycle_limit and window cap = 2 x that, claude-cli: 10 / 20. Raise them on /settings if they get in your way.
+# Defaults = 1.5 x the maximum seen in the maintainer's own usage (most calls in one window / one cycle). Plans differ:
+# tune them in Settings (AI tab, "Limits"); `pnpm ai:usage-stats` prints your own numbers and suggested caps (read only).
 quota_guard:
   # false = no usage cap at all
   enabled: true
@@ -161,12 +161,12 @@ quota_guard:
   providers:
     codex_cli:
       window_hours: 5
-      hard_requests: 320
-      cycle_request_cap: 160
+      hard_requests: 861
+      cycle_request_cap: 554
     claude_cli:
       window_hours: 5
-      hard_requests: 20
-      cycle_request_cap: 10
+      hard_requests: 399
+      cycle_request_cap: 399
 
 # Max minutes of AI work (scoring, signals) per run; the rest waits for the next run; 0 = unlimited. Push goes out right after scoring; translation comes after push.
 cycle_budget_minutes: 30

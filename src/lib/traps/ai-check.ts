@@ -4,7 +4,7 @@
  * a suspicious finding becomes a trap ("confirmed") or harmless ("benign"); a rule trap it doubts stays a trap ("disputed", with
  * the reason shown). Every quote it gives must be the JD's or a hidden text's own text (C7), else it is dropped.
  */
-import { AiProviderError, AiUnavailableError } from "@/lib/ai/errors";
+import { AiProviderError, AiUnavailableError, QUOTA_GUARD_CODE, quotaGuardResume } from "@/lib/ai/errors";
 import { buildTrapsPrompt, TRAPS_PROMPT_VERSION, trapsOutputSchema, type TrapCandidate, type TrapsOutput } from "@/lib/ai/prompts/traps";
 import { registerAiSubtask, type AiSubtask, type AiSubtaskContext } from "@/lib/ai/step";
 import { aiOutputLanguage } from "@/lib/i18n/config";
@@ -109,7 +109,9 @@ export interface TrapCheckResult {
   failed: number;
   /** The JD changed while the AI worked: the next cycle checks it again. */
   skippedJobs: number;
-  stopped: "cancelled" | "ai_unavailable" | null;
+  stopped: "cancelled" | "ai_unavailable" | typeof QUOTA_GUARD_CODE | null;
+  /** With `stopped: quota_guard`: when Job Radar's AI usage cap is expected to let the AI work again (ISO; null = not known). */
+  quotaResumeAt?: string | null;
 }
 
 export interface TrapCheckDeps {
@@ -155,6 +157,13 @@ export async function runTrapAiCheck(ctx: AiSubtaskContext, deps: TrapCheckDeps 
     } catch (error) {
       if ((error instanceof AiProviderError && error.kind === "aborted") || ctx.cycle.signal.aborted) {
         result.stopped = "cancelled";
+        break;
+      }
+      // Job Radar's usage cap held the AI back: the remaining jobs wait for a later cycle, nothing failed
+      const capped = quotaGuardResume(error);
+      if (capped) {
+        result.stopped = QUOTA_GUARD_CODE;
+        result.quotaResumeAt = capped.resumeAt;
         break;
       }
       result.failed += 1;

@@ -219,7 +219,8 @@ const translation = z.strictObject({
 
 /**
  * The shipped `quota_guard` values, also the defaults of a file written before the block existed (an older user ai.yaml
- * keeps parsing and gets the same caps as a new install). The numbers follow the rule in the block's comment in ai.yaml.
+ * keeps parsing and gets the same caps as a new install). Defaults = 1.5 x the maximum seen in the maintainer's own usage
+ * (most calls in one window / one cycle); plans differ, so they are tuned in Settings (`pnpm ai:usage-stats` helps).
  */
 export const QUOTA_GUARD_DEFAULTS = {
   enabled: true,
@@ -228,8 +229,8 @@ export const QUOTA_GUARD_DEFAULTS = {
   alert_dedupe_hours: 6,
   notify_recovery: true,
   providers: {
-    codex_cli: { window_hours: 5, hard_requests: 320, cycle_request_cap: 160 },
-    claude_cli: { window_hours: 5, hard_requests: 20, cycle_request_cap: 10 },
+    codex_cli: { window_hours: 5, hard_requests: 861, cycle_request_cap: 554 },
+    claude_cli: { window_hours: 5, hard_requests: 399, cycle_request_cap: 399 },
   },
 } as const;
 

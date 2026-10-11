@@ -244,7 +244,7 @@ export default async function JobDetailPage({ params }: { params: Params }) {
   });
 
   const scoreNowButton =
-    job.score?.filterResult === "passed" && job.score.rankValue === null && job.status === "active" ? <ScoreNowButton jobId={job.id} profileMissing={readProfileReadiness()?.missing ?? []} /> : null;
+    job.score?.filterResult === "passed" && job.score.rankValue === null && job.status === "active" ? <ScoreNowButton jobId={job.id} profileMissing={readProfileReadiness()?.missing ?? []} timeZone={timezone} /> : null;
   const actionLink = "h-ctl-md";
   const overrideAction = overrideActionFor(job.score);
 

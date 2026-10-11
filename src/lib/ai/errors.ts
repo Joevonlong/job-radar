@@ -109,15 +109,20 @@ export function quotaGuardAttempts(attempts: readonly AiAttempt[]): (AiAttempt &
   return attempts.filter((a): a is AiAttempt & { guard: AiQuotaGuardMark } => a.guard !== undefined);
 }
 
+/** Failures that need the user (a login) or say something went wrong on a call: they outrank the usage cap's skip. */
+const ACTIONABLE_KINDS: readonly AiProviderErrorKind[] = ["auth", "timeout", "network", "provider_error", "invalid_output"];
+
 /**
- * Whether `error` means "the usage cap holds the AI back": every provider was skipped or failed and at least one of them
- * was held back by the cap. Returns the earliest expected resume time (null = unknown / the next cycle), or undefined
- * when the cap played no part.
+ * Whether `error` means "the usage cap holds the AI back": every provider was skipped or failed, at least one of them
+ * was held back by the cap, and no other provider failed for a more actionable reason (a provider that is not logged in
+ * must still surface as such). Returns the earliest expected resume time (null = unknown / the next cycle), or undefined
+ * when the cap played no part or something more actionable explains the failure.
  */
 export function quotaGuardResume(error: unknown): { resumeAt: string | null } | undefined {
   if (!(error instanceof AiUnavailableError)) return undefined;
   const guarded = quotaGuardAttempts(error.attempts);
   if (guarded.length === 0) return undefined;
+  if (error.attempts.some((a) => a.guard === undefined && ACTIONABLE_KINDS.includes(a.kind))) return undefined;
   return { resumeAt: earliestResume(guarded.map((a) => a.guard.resumeAt)) };
 }
 

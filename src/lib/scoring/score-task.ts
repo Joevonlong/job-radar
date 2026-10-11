@@ -97,6 +97,8 @@ export interface ScoringResult {
   stopped?: string;
   /** With `stopped: "quota_guard"`: when the usage cap is expected to let the AI work again (ISO; null = the next cycle). */
   quotaResumeAt?: string | null;
+  /** With `stopped: "quota_guard"`: the picked jobs the cap left unscored (not every unscored job: `per_cycle_limit` leaves some too). */
+  quotaHeldJobIds?: number[];
   /** With `stopped: "profile_incomplete"`: the me.yaml fields to fill in (at least one of them). */
   profileMissing?: ProfileScoringField[];
   failures: ScoringFailure[];
@@ -321,12 +323,15 @@ export async function runScoring(deps: ScoringDeps, options: ScoringOptions): Pr
   const ctx = { profile, snapshotId, bonusCap, forAi, pipeline, language, promptVersion, output };
 
   let next = 0;
+  // the candidates that got an answer or a failure of their own (the rest is what the usage cap held back, if it stopped the run)
+  const tried = new Set<number>();
   const worker = async (): Promise<void> => {
     while (result.stopped === undefined && !deps.signal?.aborted) {
       const candidate = candidates[next++];
       if (candidate === undefined) return;
       try {
         const { provider, rankValue } = await scoreCandidate(deps, ctx, candidate);
+        tried.add(candidate.jobId);
         result.scored += 1;
         result.scoredJobs.push({ jobId: candidate.jobId, rankValue });
         result.providers[provider] = (result.providers[provider] ?? 0) + 1;
@@ -343,6 +348,7 @@ export async function runScoring(deps: ScoringDeps, options: ScoringOptions): Pr
           deps.logger.warn("scoring paused: Job Radar's AI usage cap reached", { jobId: candidate.jobId, resumeAt: capped.resumeAt });
           return;
         }
+        tried.add(candidate.jobId);
         result.failed += 1;
         const reason = describe(error);
         if (result.failures.length < MAX_FAILURE_SAMPLES) result.failures.push({ jobId: candidate.jobId, reason });
@@ -353,6 +359,7 @@ export async function runScoring(deps: ScoringDeps, options: ScoringOptions): Pr
   };
   const workers = Math.max(1, Math.min(deps.config.scoring.concurrency, candidates.length));
   await Promise.all(Array.from({ length: workers }, worker));
+  if (result.stopped === QUOTA_GUARD) result.quotaHeldJobIds = candidates.filter((c) => !tried.has(c.jobId)).map((c) => c.jobId);
   if (result.stopped === undefined && deps.signal?.aborted) result.stopped = "cancelled";
   return finish();
 }

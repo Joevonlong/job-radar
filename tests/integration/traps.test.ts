@@ -5,6 +5,7 @@ import { eq, sql } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, inject, it } from "vitest";
 import { stringify } from "yaml";
 
+import { AiUnavailableError } from "@/lib/ai/errors";
 import { TRAPS_PROMPT_VERSION } from "@/lib/ai/prompts/traps";
 import { createProvider } from "@/lib/ai/provider";
 import { createAiRouter } from "@/lib/ai/router";
@@ -360,5 +361,26 @@ describe("the AI check (sub-task traps)", () => {
     // checked: not again until the JD or the prompt version changes
     expect((await runTrapAiCheck(subtaskContext(ai.router), { loadSettings: () => settings })).candidates).toBe(0);
     expect((await runTrapAiCheck(subtaskContext(ai.router), { loadSettings: () => ({ ...settings, ai_check: { ...settings.ai_check, mode: "off" } }) })).skipped).toBe("off");
+  });
+
+  it("stops quietly when Job Radar's AI usage cap holds the AI back: nothing failed, the jobs wait for a later cycle", async () => {
+    await addJob({ html: RED_HTML });
+    await addJob({ html: RED_HTML });
+    await scan();
+    const resumeAt = new Date(NOW.getTime() + 3_600_000).toISOString();
+    let calls = 0;
+    const capped: AiSubtaskContext["router"] = {
+      plan: () => ["codex-cli"],
+      usable: async () => ({ usable: false, blocked: [] }),
+      run: async () => {
+        calls += 1;
+        throw new AiUnavailableError("traps", [{ provider: "codex-cli", outcome: "skipped", kind: "budget", message: "usage cap", guard: { reason: "window", resumeAt } }]);
+      },
+    };
+    const result = await runTrapAiCheck(subtaskContext(capped), { loadSettings: () => settings });
+    expect(result).toMatchObject({ candidates: 2, checked: 0, failed: 0, stopped: "quota_guard", quotaResumeAt: resumeAt });
+    expect(calls).toBe(1);
+    // still to check next time
+    expect((await runTrapAiCheck(subtaskContext(capped), { loadSettings: () => settings })).candidates).toBe(2);
   });
 });

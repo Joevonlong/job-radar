@@ -21,7 +21,7 @@ const ERROR_CODES = ["invalid_payload", "score_failed", "score_stopped", "score_
  * job, polls the request like the settings controls do and refreshes the page when the score is there.
  * With an incomplete profile scoring cannot start: the button is off and says why, with a link to /me.
  */
-export function ScoreNowButton({ jobId, profileMissing = [] }: { jobId: number; profileMissing?: readonly ProfileScoringField[] }) {
+export function ScoreNowButton({ jobId, profileMissing = [], timeZone }: { jobId: number; profileMissing?: readonly ProfileScoringField[]; timeZone?: string }) {
   const t = useTranslations("dashboard.detail.scoreNow");
   const tProfile = useTranslations("profile.incomplete");
   const format = useFormatter();
@@ -82,7 +82,7 @@ export function ScoreNowButton({ jobId, profileMissing = [] }: { jobId: number; 
       ) : null}
       {failed ? (
         <p role="alert" className="text-destructive text-xs">
-          {errorCode ? t(`failure.${errorCode}`, { time: request?.resumeAt ? formatClock(format, request.resumeAt) : "none" }) : t("failure.unknown")}
+          {errorCode ? t(`failure.${errorCode}`, { time: request?.resumeAt ? formatClock(format, request.resumeAt, timeZone) : "none" }) : t("failure.unknown")}
           {errorCode === "score_profile_incomplete" ? <> {profileLink}</> : null}
         </p>
       ) : null}

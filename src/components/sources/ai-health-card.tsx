@@ -101,7 +101,7 @@ export async function AiHealthCard({ providers, timeZone, alertPercent }: { prov
                     </td>
                     <td className="max-w-64 py-1.5 max-sm:block max-sm:max-w-none max-sm:pt-2">
                       {/* A probe call on the ai-worker; off while the provider cannot run (the router would refuse it anyway) */}
-                      <TriggerButton kind="testAi" target={p.id} disabled={state === "unconfigured" || state === "off" || state === "capped" || state === "cooling" || state === "guarded"} />
+                      <TriggerButton kind="testAi" target={p.id} timeZone={timeZone} disabled={state === "unconfigured" || state === "off" || state === "capped" || state === "cooling" || state === "guarded"} />
                     </td>
                   </tr>
                 );

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { z } from "zod";
 
 import { AiUnavailableError, quotaGuardAttempts, quotaGuardResume } from "@/lib/ai/errors";
+import { classifyTranslationFailure } from "@/lib/translation/errors";
 import { createMemoryHealthStore, EMPTY_HEALTH } from "@/lib/ai/health";
 import {
   createMemoryQuotaStore,
@@ -48,7 +49,7 @@ const policy = (over: Partial<QuotaPolicy> = {}): QuotaPolicy => ({
 const calls = (count: number, firstAgoMs: number, stepMs = MIN, provider = "codex-cli") =>
   Array.from({ length: count }, (_, i) => ({ provider, at: at(-firstAgoMs + i * stepMs) }));
 
-const hardState = (over: Partial<QuotaState> = {}): QuotaState => ({ level: "hard", reason: "window", since: at(-HOUR), resumeAt: at(HOUR), notifiedLevel: null, ...over });
+const hardState = (over: Partial<QuotaState> = {}): QuotaState => ({ level: "hard", reason: "window", since: at(-HOUR), resumeAt: at(HOUR), hardRequests: 10, notifiedLevel: null, ...over });
 
 describe("evaluateQuota", () => {
   it("is ok below the cap and hard at it, counting only calls inside the window of this provider", () => {
@@ -73,6 +74,19 @@ describe("evaluateQuota", () => {
     expect(evaluateQuota(calls(8, HOUR), policy(), NOW, null).level).toBe("ok");
   });
 
+  it("a pause caused by another cap does not carry over: putting the cap back lifts it at once", () => {
+    // 300 calls against a cap of 320; the user lowers the cap to 3: paused
+    const rows = calls(300, 2 * HOUR, 10_000);
+    const lowered = evaluateQuota(rows, policy({ hardRequests: 3 }), NOW, null);
+    expect(lowered).toMatchObject({ level: "hard", hardRequests: 3 });
+    const stored = nextQuotaState(null, lowered, NOW);
+    expect(stored.hardRequests).toBe(3);
+    // set back to 320: 300 is above 0.8 x 320 but the stored pause was the cap of 3, so the window is judged afresh
+    expect(evaluateQuota(rows, policy({ hardRequests: 320 }), NOW, stored)).toMatchObject({ level: "ok", hardRequests: 320 });
+    // an unchanged cap keeps the hysteresis
+    expect(evaluateQuota(calls(300, 2 * HOUR, 10_000), policy({ hardRequests: 320 }), NOW, hardState({ hardRequests: 320 })).level).toBe("hard");
+  });
+
   it("puts the resume time where enough of the oldest calls have left the window", () => {
     // 10 calls, one per minute, the oldest 4 h ago: below the line means at most 7 calls, so the 3rd oldest has to leave
     const rows = calls(10, 4 * HOUR);
@@ -95,14 +109,14 @@ describe("quota state", () => {
     expect(parseQuotaState({ level: "very hard" })).toBeNull();
     expect(parseQuotaState("nonsense")).toBeNull();
     expect(parseQuotaState({ level: "hard", reason: "window", since: "not a date", resumeAt: null, notifiedLevel: null })).toBeNull();
-    expect(parseQuotaState({ level: "hard", reason: "window", since: NOW.toISOString(), resumeAt: null, notifiedLevel: "hard" })).toMatchObject({ level: "hard", notifiedLevel: "hard" });
+    expect(parseQuotaState({ level: "hard", reason: "window", since: NOW.toISOString(), resumeAt: null, notifiedLevel: "hard" })).toMatchObject({ level: "hard", hardRequests: null, notifiedLevel: "hard" });
   });
 
   it("keeps notifiedLevel and marks a level change with since", () => {
     const previous = hardState({ notifiedLevel: "hard" });
-    const next = nextQuotaState(previous, { level: "ok", reason: null, resumeAt: null, windowRequests: 1 }, NOW);
-    expect(next).toEqual({ level: "ok", reason: null, since: NOW, resumeAt: null, notifiedLevel: "hard" });
-    const same = nextQuotaState(previous, { level: "hard", reason: "window", resumeAt: previous.resumeAt, windowRequests: 11 }, NOW);
+    const next = nextQuotaState(previous, { level: "ok", reason: null, resumeAt: null, windowRequests: 1, hardRequests: 10 }, NOW);
+    expect(next).toEqual({ level: "ok", reason: null, since: NOW, resumeAt: null, hardRequests: null, notifiedLevel: "hard" });
+    const same = nextQuotaState(previous, { level: "hard", reason: "window", resumeAt: previous.resumeAt, windowRequests: 11, hardRequests: 10 }, NOW);
     expect(same.since).toBe(previous.since);
     expect(quotaStateChanged(previous, same)).toBe(false);
     expect(quotaStateChanged(null, same)).toBe(true);
@@ -111,9 +125,9 @@ describe("quota state", () => {
   it("an error cooldown counts as hard with reason error; with a window cap the later resume time wins", () => {
     const p = policy();
     const cooling = { ...EMPTY_HEALTH, coolingUntil: at(2 * HOUR) };
-    expect(effectiveQuota(p, { level: "ok", reason: null, resumeAt: null, windowRequests: 1 }, cooling, NOW, null)).toMatchObject({ level: "hard", reason: "error", resumeAt: at(2 * HOUR) });
-    expect(effectiveQuota(p, { level: "hard", reason: "window", resumeAt: at(HOUR), windowRequests: 10 }, cooling, NOW, null)).toMatchObject({ level: "hard", reason: "window", resumeAt: at(2 * HOUR) });
-    expect(effectiveQuota(p, { level: "ok", reason: null, resumeAt: null, windowRequests: 1 }, { ...EMPTY_HEALTH, coolingUntil: at(-MIN) }, NOW, null)).toMatchObject({ level: "ok", reason: null });
+    expect(effectiveQuota(p, { level: "ok", reason: null, resumeAt: null, windowRequests: 1, hardRequests: 10 }, cooling, NOW, null)).toMatchObject({ level: "hard", reason: "error", resumeAt: at(2 * HOUR) });
+    expect(effectiveQuota(p, { level: "hard", reason: "window", resumeAt: at(HOUR), windowRequests: 10, hardRequests: 10 }, cooling, NOW, null)).toMatchObject({ level: "hard", reason: "window", resumeAt: at(2 * HOUR) });
+    expect(effectiveQuota(p, { level: "ok", reason: null, resumeAt: null, windowRequests: 1, hardRequests: 10 }, { ...EMPTY_HEALTH, coolingUntil: at(-MIN) }, NOW, null)).toMatchObject({ level: "ok", reason: null });
   });
 
   it("recordQuotaNotified stores the level once, creating a state when there is none", async () => {
@@ -123,6 +137,16 @@ describe("quota state", () => {
     store.states.set("codex-cli", hardState());
     await recordQuotaNotified(store, "codex-cli", "hard", NOW);
     expect(store.states.get("codex-cli")).toMatchObject({ level: "hard", reason: "window", notifiedLevel: "hard" });
+  });
+
+  it("the router's write keeps notifiedLevel and the alerts' write keeps the window fields", async () => {
+    const store = createMemoryQuotaStore();
+    await store.setNotifiedLevel("codex-cli", "hard", NOW);
+    // the router stores from a read made before the alert was recorded: notifiedLevel null in its copy
+    await store.setState("codex-cli", hardState({ notifiedLevel: null }));
+    expect(store.states.get("codex-cli")).toMatchObject({ level: "hard", hardRequests: 10, notifiedLevel: "hard" });
+    await store.setNotifiedLevel("codex-cli", "ok", NOW);
+    expect(store.states.get("codex-cli")).toMatchObject({ level: "hard", reason: "window", hardRequests: 10, notifiedLevel: "ok" });
   });
 });
 
@@ -152,8 +176,31 @@ describe("readQuotaStatuses", () => {
       countSince: async () => 0,
       getState: async () => null,
       setState: async () => {},
+      setNotifiedLevel: async () => {},
     };
     expect((await readQuotaStatuses(broken, config, new Map(), NOW)).get("codex-cli")).toMatchObject({ level: "ok", windowRequests: 0 });
+  });
+});
+
+describe("quotaGuardResume", () => {
+  const guarded = { provider: "codex-cli" as const, outcome: "skipped" as const, kind: "budget" as const, message: "usage cap", guard: { reason: "window" as const, resumeAt: at(HOUR).toISOString() } };
+
+  it("names the cap when it is the reason, with the earliest resume time", () => {
+    const apiClosed = { provider: "anthropic" as const, outcome: "skipped" as const, kind: "budget" as const, message: "closed" };
+    const off = { provider: "mimo" as const, outcome: "skipped" as const, kind: "not_configured" as const, message: "off" };
+    expect(quotaGuardResume(new AiUnavailableError("translate", [guarded, apiClosed, off]))).toEqual({ resumeAt: at(HOUR).toISOString() });
+  });
+
+  it("leaves a more actionable failure of another provider to surface (not logged in, a broken call)", () => {
+    for (const kind of ["auth", "timeout", "invalid_output"] as const) {
+      const other = { provider: "claude-cli" as const, outcome: "failed" as const, kind, message: kind };
+      expect(quotaGuardResume(new AiUnavailableError("translate", [guarded, other]))).toBeUndefined();
+    }
+  });
+  it("a translation names the login problem, not the cap, when another provider is not logged in", () => {
+    const auth = { provider: "claude-cli" as const, outcome: "failed" as const, kind: "auth" as const, message: "login expired" };
+    expect(classifyTranslationFailure(new AiUnavailableError("translate", [guarded, auth]))).toMatchObject({ code: "auth" });
+    expect(classifyTranslationFailure(new AiUnavailableError("translate", [guarded]))).toMatchObject({ code: "quota_guard", resumeAt: at(HOUR).toISOString() });
   });
 });
 
@@ -242,7 +289,8 @@ function setup(
   const quota = createMemoryQuotaStore(usage.entries);
   const health = createMemoryHealthStore();
   const logger = warnings();
-  const router = createAiRouter({
+  // another router on the same stores: the late phase, or the other process, of the same cycle
+  const makeRouter = () => createAiRouter({
     config,
     providers,
     usage,
@@ -255,10 +303,11 @@ function setup(
     catalog: shippedCatalog(),
     logger,
   });
+  const router = makeRouter();
   const seed = (provider: AiProviderId, count: number, firstAgoMs: number) => {
     for (const c of calls(count, firstAgoMs, MIN, provider)) usage.entries.push(usageEntry({ provider, task: "score", at: c.at }));
   };
-  return { router, usage, quota, health, transports, seed, logger };
+  return { router, makeRouter, usage, quota, health, transports, seed, logger };
 }
 
 const callsOf = (env: ReturnType<typeof setup>, id: AiProviderId) => env.transports.get(id)?.calls.length ?? 0;
@@ -295,6 +344,16 @@ describe("router: usage cap", () => {
     const unknown = setup({ cycleStartedAt: null });
     unknown.seed("codex-cli", 4, 20 * MIN);
     expect((await unknown.router.run("score", prompt, schema)).provider).toBe("codex-cli");
+  });
+
+  it("the main and the late phase share one cycle count (two routers on the same usage rows)", async () => {
+    const env = setup();
+    for (let i = 0; i < 3; i += 1) expect((await env.router.run("score", prompt, schema)).provider).toBe("codex-cli");
+    const late = env.makeRouter();
+    expect((await late.run("translate", prompt, schema)).provider).toBe("codex-cli"); // the 4th call of the cycle
+    expect((await late.run("translate", prompt, schema)).provider).toBe("claude-cli");
+    expect((await env.router.run("score", prompt, schema)).provider).toBe("claude-cli");
+    expect(callsOf(env, "codex-cli")).toBe(4);
   });
 
   it("never falls through to a paid API provider when the cap held the CLIs back (fallthrough_to_api: false)", async () => {
@@ -358,6 +417,7 @@ describe("router: usage cap", () => {
         },
         getState: async () => null,
         setState: async () => {},
+        setNotifiedLevel: async () => {},
       },
       cycleStartedAt: CYCLE_START,
       now: () => NOW,

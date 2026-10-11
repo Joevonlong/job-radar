@@ -465,6 +465,7 @@ describe("failures", () => {
     const router = createAiRouter({ config, providers: [createProvider(transport)], usage: null, quota, now: () => NOW, timeZone: "UTC" });
     const result = await runScoring(deps({ calls: [], router, replies: new Map() }, { config }), { limit: 3 });
     expect(result).toMatchObject({ scored: 0, failed: 0, stopped: "quota_guard", quotaResumeAt: expect.any(String), backlog: { unscored: 3, stale: 0 } });
+    expect(result.quotaHeldJobIds).toHaveLength(3);
     expect(result.failures).toEqual([]);
     expect(calls).toEqual([]);
   });

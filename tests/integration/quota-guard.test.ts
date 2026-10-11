@@ -2,6 +2,8 @@ import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, inject, it } from "vitest";
 import { z } from "zod";
 
+import { AiProviderError } from "@/lib/ai/errors";
+import { createDbHealthStore, listProviderHealth } from "@/lib/ai/health";
 import { createDbQuotaStore, quotaStateKey } from "@/lib/ai/quota-guard";
 import { createAiRouter } from "@/lib/ai/router";
 import { createDbUsageStore } from "@/lib/ai/usage";
@@ -110,6 +112,17 @@ describe("the usage cap on the database", () => {
     expect((await getRuntimeState(db(), quotaStateKey("codex-cli")))?.value).toMatchObject({ level: "hard", reason: "window", notifiedLevel: null });
   });
 
+  it("the router and the alerts each write only their own fields (no lost update from a stale read)", async () => {
+    const store = createDbQuotaStore(db());
+    const now = new Date();
+    await store.setNotifiedLevel("codex-cli", "hard", now);
+    // the router's copy was read before the alert was recorded
+    await store.setState("codex-cli", { level: "hard", reason: "window", since: now, resumeAt: now, hardRequests: 5, notifiedLevel: null });
+    expect(await store.getState("codex-cli")).toMatchObject({ level: "hard", hardRequests: 5, notifiedLevel: "hard" });
+    await store.setNotifiedLevel("codex-cli", "ok", now);
+    expect(await store.getState("codex-cli")).toMatchObject({ level: "hard", reason: "window", hardRequests: 5, notifiedLevel: "ok" });
+  });
+
   it("reads a broken state row as no state", async () => {
     await setRuntimeState(db(), quotaStateKey("codex-cli"), { level: 42 });
     expect(await createDbQuotaStore(db()).getState("codex-cli")).toBeNull();
@@ -185,6 +198,22 @@ describe("usage-cap alerts", () => {
     expect(kinds).toEqual([`${ALERT_KIND_PREFIX}quota_recovered`]);
   });
 
+  it("a provider that reports `limit reached|<epoch>` cools down until then, and the alerts say so exactly once", async () => {
+    const until = Math.floor(Date.now() / 1000) + 2 * 3600;
+    const claude = scriptedProvider("claude-cli", [new AiProviderError("claude-cli", "rate_limited", `Claude AI usage limit reached|${until}`)]);
+    const router = createAiRouter({ config: aiConfig(), providers: [claude.provider], usage: createDbUsageStore(db()), health: createDbHealthStore(db()), quota: createDbQuotaStore(db()), timeZone: "UTC", catalog: shippedCatalog() });
+    await expect(router.run("score", { system: "s", user: "u" }, z.object({ ok: z.boolean() }))).rejects.toThrow();
+    expect((await listProviderHealth(db())).get("claude-cli")?.coolingUntil).toEqual(new Date(until * 1000));
+
+    useSteps();
+    await cycle();
+    await cycle();
+    expect(quotaAlerts()).toHaveLength(1);
+    expect(quotaAlerts()[0]).toContain("claude-cli");
+    const kinds = (await db().select().from(schema.notifications)).map((n) => n.kind).filter((k) => k.startsWith(ALERT_KIND_PREFIX));
+    expect(kinds).toEqual([`${ALERT_KIND_PREFIX}quota_cooldown`]);
+  });
+
   it("with notify_recovery off the recovery is only recorded, so the next cap alerts again", async () => {
     await capCodex();
     useSteps({ notifyRecovery: false });
@@ -224,6 +253,15 @@ describe("push footer", () => {
     await cycle();
     const summary = texts().find((t) => t.startsWith("<b>📡"));
     expect(summary?.split("\n").at(-1)).toBe("另有 2 个新岗位因 AI 用量上限暂未打分，下一轮处理。");
+  });
+
+  it("counts only the jobs the cap held back, not the ones per_cycle_limit left for later", async () => {
+    await seedUnscored(3);
+    const [first] = await db().select({ id: schema.jobs.id }).from(schema.jobs).orderBy(schema.jobs.id).limit(1);
+    useSteps({ ai: { subtasks: [{ name: "score", status: "ok", result: { scored: 1, stopped: "quota_guard", quotaResumeAt: null, quotaHeldJobIds: [first!.id] } }] } });
+    await cycle();
+    const summary = texts().find((t) => t.startsWith("<b>📡"));
+    expect(summary?.split("\n").at(-1)).toBe("另有 1 个新岗位因 AI 用量上限暂未打分，下一轮处理。");
   });
 
   it("has no such line when the cap played no part or nothing waits", async () => {

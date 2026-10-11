@@ -236,16 +236,27 @@ describe("usage-cap alerts (state changes only)", () => {
 
 describe("aiQuotaHoldOf", () => {
   it("finds the cap in a skipped step, a skipped sub-task or a scoring run that stopped, earliest time first", () => {
-    expect(aiQuotaHoldOf({ subtasks: [], skipped: "quota_guard", resumeAt: "2026-10-07T12:00:00.000Z" })).toEqual({ resumeAt: new Date("2026-10-07T12:00:00.000Z") });
-    expect(aiQuotaHoldOf({ subtasks: [{ name: "translate", status: "skipped", reason: "quota_guard", resumeAt: null }] })).toEqual({ resumeAt: null });
+    expect(aiQuotaHoldOf({ subtasks: [], skipped: "quota_guard", resumeAt: "2026-10-07T12:00:00.000Z" })).toEqual({ resumeAt: new Date("2026-10-07T12:00:00.000Z"), heldJobIds: null });
+    expect(aiQuotaHoldOf({ subtasks: [{ name: "translate", status: "skipped", reason: "quota_guard", resumeAt: null }] })).toEqual({ resumeAt: null, heldJobIds: null });
     expect(
       aiQuotaHoldOf({
         subtasks: [
-          { name: "score", status: "ok", result: { scored: 3, stopped: "quota_guard", quotaResumeAt: "2026-10-07T13:00:00.000Z" } },
+          { name: "score", status: "ok", result: { scored: 3, stopped: "quota_guard", quotaResumeAt: "2026-10-07T13:00:00.000Z", quotaHeldJobIds: [7, 8] } },
           { name: "signals", status: "skipped", reason: "quota_guard", resumeAt: "2026-10-07T12:00:00.000Z" },
         ],
       }),
-    ).toEqual({ resumeAt: new Date("2026-10-07T12:00:00.000Z") });
+    ).toEqual({ resumeAt: new Date("2026-10-07T12:00:00.000Z"), heldJobIds: new Set([7, 8]) });
+  });
+
+  it("names no held job when the scoring finished and only a later sub-task was capped (per_cycle_limit left the rest)", () => {
+    expect(
+      aiQuotaHoldOf({
+        subtasks: [
+          { name: "score", status: "ok", result: { scored: 80 } },
+          { name: "translate", status: "skipped", reason: "quota_guard", resumeAt: null },
+        ],
+      }),
+    ).toEqual({ resumeAt: null, heldJobIds: new Set() });
   });
 
   it("is null when the cap played no part or the result is unexpected", () => {
