@@ -63,24 +63,25 @@ describe("demoInstance", () => {
 });
 
 describe("demo-prepare refuses before touching anything", () => {
-  it.each([[[]], [["--drop"]]])("with a non-demo database name (args %j)", (args) => {
-    const result = spawnSync("pnpm", ["exec", "tsx", "scripts/demo-prepare.ts", ...args], {
+  // tsx straight from node_modules, like the other script tests: no package-manager wrapper that could fail on its own
+  const tsx = path.join(ROOT, "node_modules", ".bin", "tsx");
+  const prepare = (args: string[], env: Record<string, string>) =>
+    spawnSync(tsx, ["scripts/demo-prepare.ts", ...args], {
       cwd: ROOT,
-      // an unreachable server: a refusal must come before any connection
-      env: { NODE_ENV: "test", PATH: process.env.PATH, HOME: process.env.HOME, DEMO_ADMIN_DATABASE_URL: "postgres://u:p@127.0.0.1:1/postgres", DEMO_DB_NAME: "jobradar" },
+      env: { NODE_ENV: "test", PATH: process.env.PATH, HOME: process.env.HOME, ...env },
       encoding: "utf8",
     });
-    expect(result.status).toBe(2);
+
+  it.each([[[]], [["--drop"]]])("with a non-demo database name (args %j)", (args) => {
+    // an unreachable server: a refusal must come before any connection
+    const result = prepare(args, { DEMO_ADMIN_DATABASE_URL: "postgres://u:p@127.0.0.1:1/postgres", DEMO_DB_NAME: "jobradar" });
+    expect(result.status, result.stderr).toBe(2);
     expect(result.stderr).toContain("jobradar_demo");
   });
 
   it("with a config directory outside temp", () => {
-    const result = spawnSync("pnpm", ["exec", "tsx", "scripts/demo-prepare.ts", "--drop"], {
-      cwd: ROOT,
-      env: { NODE_ENV: "test", PATH: process.env.PATH, HOME: process.env.HOME, DEMO_ADMIN_DATABASE_URL: "postgres://u:p@127.0.0.1:1/postgres", DEMO_CONFIG_DIR: ROOT },
-      encoding: "utf8",
-    });
-    expect(result.status).toBe(2);
+    const result = prepare(["--drop"], { DEMO_ADMIN_DATABASE_URL: "postgres://u:p@127.0.0.1:1/postgres", DEMO_CONFIG_DIR: ROOT });
+    expect(result.status, result.stderr).toBe(2);
     expect(fs.existsSync(path.join(ROOT, "package.json"))).toBe(true);
   });
 });
