@@ -27,6 +27,7 @@ describe("markets of a channel", () => {
     const settings = settingsFromConfig("arbeitsagentur", config);
     expect(settings).toMatchObject({ enabled: true, otherMarket: false, markets: ["DE"] });
     expect(settingsFromConfig("greenhouse", config).otherMarket).toBe(false);
+    expect(settingsFromConfig("arbeitnow", config)).toMatchObject({ enabled: true, otherMarket: false, markets: ["DE"] });
   });
 });
 
@@ -71,6 +72,7 @@ describe("under another market", () => {
       registry.register(channel("greenhouse") as never);
       const config = shippedChannels();
       expect(settingsFromConfig("arbeitsagentur", config)).toMatchObject({ enabled: false, otherMarket: true });
+      expect(settingsFromConfig("arbeitnow", config)).toMatchObject({ enabled: false, otherMarket: true });
       expect(registry.enabled(config).map((c) => c.id)).toEqual(["greenhouse"]);
     } finally {
       tmp.cleanup();

@@ -2,7 +2,7 @@
 # Lists marked "regex" match case-insensitively in Unicode mode; invalid regexes are reported by pnpm config:check.
 
 # How many pending raw rows to fetch from the database per parse batch; the step keeps fetching until none are pending
-config_version: 2
+config_version: 3
 batch_size: 200
 
 dedupe:
@@ -39,7 +39,7 @@ lifecycle:
     # Sent with the recheck and with the possibly_closed link check; its first word is the robots.txt product token
     user_agent: "JobRadar/2 (self-hosted job tracker; link check)"
 
-# "Apply" link priority, lower number wins: company ATS 1 > LinkedIn 2 > StepStone / XING / Indeed 3 > aggregators 4
+# "Apply" link priority, lower number wins: company ATS 1 > LinkedIn 2 > StepStone / XING / Indeed 3 > aggregators 4 (Arbeitsagentur, Arbeitnow, Google, e-mail alerts)
 apply_priority:
   ats: 1
   linkedin: 2
@@ -48,6 +48,7 @@ apply_priority:
   indeed: 3
   manual: 3
   arbeitsagentur: 4
+  arbeitnow: 4
   google: 4
   email: 4
 

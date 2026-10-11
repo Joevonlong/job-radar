@@ -23,6 +23,7 @@ describe("CHANNEL_CONFIG_TABLE", () => {
     expect(CHANNEL_CONFIG_TABLE["linkedin-guest"]).toEqual({ section: "linkedin", key: "guest" });
     expect(CHANNEL_CONFIG_TABLE["linkedin-session:recommended"]).toEqual({ section: "linkedin", key: "session", view: "recommended" });
     expect(CHANNEL_CONFIG_TABLE.arbeitsagentur).toEqual({ section: "sources", key: "arbeitsagentur" });
+    expect(CHANNEL_CONFIG_TABLE.arbeitnow).toEqual({ section: "sources", key: "arbeitnow" });
     expect(CHANNEL_CONFIG_TABLE.greenhouse).toEqual({ section: "sources", key: "greenhouse" });
   });
 

@@ -77,7 +77,7 @@ Gmail）、换一个数据库密码、给看板加额外的主机名。每个变
 
 | 来源或功能 | 变量 | 说明 |
 |---|---|---|
-| Arbeitsagentur、公司招聘页 | 不需要 | [sources.zh.md](sources.zh.md) |
+| Arbeitsagentur、Arbeitnow、公司招聘页 | 不需要 | [sources.zh.md](sources.zh.md) |
 | Indeed、StepStone、XING、LinkedIn 游客搜索 | 不需要；新安装时关闭，打开时要你确认服务条款风险 | [sources.zh.md](sources.zh.md#抓取) |
 | 用你自己登录态的 LinkedIn | 不需要：用 `pnpm auth:linkedin` 登录一次（默认关闭，先看风险说明） | [linkedin-session.zh.md](linkedin-session.zh.md) |
 | 经 Bright Data / Apify 的 LinkedIn（付费） | `BRIGHT_DATA_API_KEY` / `APIFY_TOKEN` | [brightdata.zh.md](brightdata.zh.md)、[apify.zh.md](apify.zh.md) |

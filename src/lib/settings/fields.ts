@@ -170,6 +170,7 @@ export const HIDDEN_PATHS: Record<SettingsForm, readonly string[]> = {
     "sources.arbeitsagentur.markets",
     "sources.stepstone.markets",
     "sources.xing.markets",
+    "sources.arbeitnow.markets",
   ],
   // Where the AI runs and the host worker's timings are edited in the YAML (operations parameters, machine paths).
   // The pre-score weights and tables (`scoring.priority`) are a form in the "scoring" block.
@@ -401,6 +402,12 @@ const channelsSections: SectionDef[] = [
   channelSection("indeed", "sources.indeed"),
   channelSection("stepstone", "sources.stepstone", jobBoardFields("sources.stepstone")),
   channelSection("xing", "sources.xing", [...jobBoardFields("sources.xing"), text("sources.xing.remote_option_id", "remote_option_id", { mono: true })]),
+  channelSection("arbeitnow", "sources.arbeitnow", [
+    text("sources.arbeitnow.base_url", "base_url", { mono: true }),
+    text("sources.arbeitnow.user_agent", "user_agent", { mono: true }),
+    int("sources.arbeitnow.max_pages", "arbeitnow_max_pages"),
+    ...atsPrefilter("sources.arbeitnow"),
+  ]),
   channelSection("jsearch", "sources.jsearch", [
     text("sources.jsearch.api_base_url", "api_base_url", { mono: true }),
     text("sources.jsearch.country", "jsearch_country", { mono: true }),

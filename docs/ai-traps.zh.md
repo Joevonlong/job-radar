@@ -21,7 +21,7 @@
 
 **位置**：隐藏文字在 `jobs.description` 里能找到（空白、换行、列表符号不敏感）就记正文偏移；找不到就记"只在原始页面"和字段路径（例如 `raw:posting.content@alt`）。
 
-**哪些来源有 HTML**：greenhouse、lever、ashby、personio、smartrecruiters、linkedin-session、linkedin-apify、linkedin-brightdata（`Channel.descriptionHtml`）。stepstone、xing、jobspy（indeed / linkedin-guest / google）、arbeitsagentur、jsearch、gmail-alerts **只有文字**，只能用指令模式和不可见字符检测，看不到隐藏样式。
+**哪些来源有 HTML**：greenhouse、lever、ashby、personio、smartrecruiters、arbeitnow、linkedin-session、linkedin-apify、linkedin-brightdata（`Channel.descriptionHtml`）。stepstone、xing、jobspy（indeed / linkedin-guest / google）、arbeitsagentur、jsearch、gmail-alerts **只有文字**，只能用指令模式和不可见字符检测，看不到隐藏样式。
 
 **看不到的**：外部 CSS 里定义的隐藏 class（不在清单里的）、图片里的文字、截图 / OCR。这些交给指令模式和 AI 层兜底。
 

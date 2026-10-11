@@ -17,7 +17,7 @@
 
 # Monthly cap on the combined spend of all paid collection channels (USD); the channels' actual spend may not exceed it in total, enforced by the budget control.
 # (AI spend has its own cap: monthly_api_budget_usd in ai.yaml.)
-config_version: 2
+config_version: 3
 paid_total_monthly_budget_usd: 15
 
 # Circuit breaker: after failures consecutive failures a channel is marked unavailable (paused) and retried after cooldown_hours hours
@@ -219,6 +219,28 @@ sources:
     remote_option_id: FULL_REMOTE.050e26
     title_prefilter:
       enabled: true
+      include_terms: []
+      exclude_terms: [Werkstudent, Working Student, Intern, Internship, Praktikum, Praktikant]
+  # Arbeitnow: free public Job Board API (no key, no login), mostly German and other European employers, many from company ATS boards.
+  # Terms (arbeitnow.com/terms, section 11): the API is provided as is and can be withdrawn at any time; platforms using it must link back
+  # to arbeitnow.com (the /sources card and every job's source link do). Don't mirror or republish the collected postings (section 2.1.5).
+  # The API takes no keywords or places: each run reads the newest pages of the whole board and keeps titles that pass title_prefilter.
+  arbeitnow:
+    enabled: true
+    # Runs only in these markets (home country ISO codes); skipped in other markets, not counted as a failure. About half of its postings
+    # are outside Germany (France, the UK, Switzerland, remote): add your country here if you live elsewhere
+    markets: [DE]
+    monthly_budget_usd: 0
+    throttle: { min_delay_ms: 1000, max_delay_ms: 3000 }
+    max_results: 100 # max postings stored per run (after prefiltering, newest first)
+    base_url: https://www.arbeitnow.com # the channel appends /api/job-board-api; arbeitnow.co.uk serves the same API
+    user_agent: "JobRadar/2 (self-hosted job tracker)"
+    # Each page holds roughly 3-5 hours of postings (the first two pages are bigger and span days); 8 pages cover the largest window_hours (24).
+    # Paging stops earlier at a page whose newest posting is older than the look-back window
+    max_pages: 8
+    title_prefilter:
+      enabled: true
+      # Same as greenhouse: stored only if the title matches a search.yaml keyword or include_terms, or the company is in watched_companies; an exclude_terms match drops it
       include_terms: []
       exclude_terms: [Werkstudent, Working Student, Intern, Internship, Praktikum, Praktikant]
   jsearch:

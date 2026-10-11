@@ -910,6 +910,7 @@
       "xing": "XING",
       "indeed": "Indeed",
       "arbeitsagentur": "劳工局",
+      "arbeitnow": "Arbeitnow",
       "google": "Google",
       "email": "邮件提醒",
       "manual": "手动添加"
@@ -2015,6 +2016,10 @@
       "max_pages": {
         "label": "每个关键词最多翻页数",
         "hint": "每页一次请求；翻得越多越容易被限流。"
+      },
+      "arbeitnow_max_pages": {
+        "label": "每轮最多翻页数",
+        "hint": "每页一次请求，从最新的页读起（页内不按时间排序）。某页连最新的一条都早于回看窗口时提前停止。"
       },
       "remote_option_id": {
         "label": "“完全远程”筛选值",
@@ -3232,6 +3237,9 @@
       "notConfiguredHintOff": "已关闭，也还没配置。要启用它，先填好密钥，再在设置里打开。",
       "missingEnv": "已启用但缺 {names}：这个通道暂时什么也不做。把它写进 .env，或在设置里关掉这个通道。",
       "notConfiguredHintJsearch": "在 .env 里设置 JSEARCH_API_KEY（RapidAPI 的 key）；设置之前这个通道不发任何请求。",
+      "attribution": {
+        "arbeitnow": "数据来自 <link>Arbeitnow（arbeitnow.com）</link>，免费公开接口，按现状提供。"
+      },
       "circuit": {
         "closed": "熔断：正常",
         "open": "熔断中",

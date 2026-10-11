@@ -82,8 +82,8 @@ describe.runIf(legacyText("pipeline") !== null)("pipeline.yaml: legacy -> migrat
   /** v1 wrote one regex that the packs split in two (same alternatives): compared by what it matches only. */
   const REWRITTEN = new Set(["filter.generic_location_patterns"]);
 
-  it("migrates in one step and a second run changes nothing", () => {
-    expect(migrated.steps).toBe(1);
+  it("migrates in two steps (the market move, then the new channel family) and a second run changes nothing", () => {
+    expect(migrated.steps).toBe(2);
     const again = migrateText("pipeline", migrated.text);
     expect(again.steps).toBe(0);
     expect(again.text).toBe(migrated.text);
@@ -119,7 +119,11 @@ describe.runIf(legacyText("pipeline") !== null)("pipeline.yaml: legacy -> migrat
   });
 
   it("everything that did not move is unchanged", () => {
-    for (const key of ["batch_size", "dedupe", "apply_priority", "description", "workplace"]) expect(effective[key as keyof PipelineConfig]).toEqual(original[key]);
+    for (const key of ["batch_size", "dedupe", "description", "workplace"]) expect(effective[key as keyof PipelineConfig]).toEqual(original[key]);
+    // the Arbeitnow channel added its family to apply_priority (as an aggregator); every other priority is as before
+    const { arbeitnow: arbeitnowPriority, ...priorities } = effective.apply_priority;
+    expect(arbeitnowPriority).toBe(4);
+    expect(priorities).toEqual(original.apply_priority);
     // The watched-job recheck added `lifecycle.watch_recheck` (schema defaults when the file has none)
     const { watch_recheck: _watchRecheck, ...lifecycle } = effective.lifecycle;
     void _watchRecheck;
@@ -180,7 +184,7 @@ describe("sources.yaml", () => {
   it.runIf(legacyText("channels") !== null)("renames the remote-location keys, keeps every value", () => {
     const original = legacyValue("channels");
     const migrated = migrateText("channels", legacyText("channels") ?? "");
-    expect(migrated.steps).toBe(1);
+    expect(migrated.steps).toBe(2);
     const back = renameBack(parse(migrated.text) as Json, ["linkedin.brightdata.remote_locations", "linkedin.apify.remote_locations", "linkedin.session.site.remote_locations", "jobspy.remote_location"], [
       ["home_country", "eu_hire_in_de"],
       ["region", "eu_any"],
@@ -192,6 +196,9 @@ describe("sources.yaml", () => {
       expect(sources[id]?.markets).toEqual(["DE"]);
       delete sources[id]?.markets;
     }
+    // the second step added the Arbeitnow channel, bound to the German market too
+    expect(sources.arbeitnow).toMatchObject({ enabled: true, markets: ["DE"] });
+    delete sources.arbeitnow;
     expect(back).toEqual(original);
     expect(migrateText("channels", migrated.text).steps).toBe(0);
   });

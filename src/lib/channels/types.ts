@@ -16,6 +16,7 @@ export const CHANNEL_FAMILIES = [
   "stepstone",
   "xing",
   "arbeitsagentur",
+  "arbeitnow",
   "google",
   "ats",
   "email",

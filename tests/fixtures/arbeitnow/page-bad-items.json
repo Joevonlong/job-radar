@@ -1,0 +1,56 @@
+{
+  "data": [
+    {
+      "slug": "ai-engineer-bonn-100013",
+      "company_name": "Example Bonn AI",
+      "title": "AI Engineer",
+      "description": "<p>Bonn.</p><p style=\"margin-top: 1rem; font-size: 0.875rem;\">Find more English Speaking Jobs in Germany on <a href=\"https://www.arbeitnow.com/\">Arbeitnow</a></p>",
+      "remote": false,
+      "url": "https://www.arbeitnow.com/jobs/companies/example-bonn-ai/ai-engineer-bonn-100013",
+      "tags": [
+        "Engineering"
+      ],
+      "job_types": [
+        "Full Time"
+      ],
+      "location": "Bonn",
+      "created_at": "yesterday"
+    },
+    {
+      "slug": "data-scientist-bonn-100014",
+      "company_name": "Example Bonn Data",
+      "title": "Data Scientist",
+      "description": "<p>Bonn data.</p><p style=\"margin-top: 1rem; font-size: 0.875rem;\">Find more English Speaking Jobs in Germany on <a href=\"https://www.arbeitnow.com/\">Arbeitnow</a></p>",
+      "remote": false,
+      "url": "https://www.arbeitnow.com/jobs/companies/example-bonn-data/data-scientist-bonn-100014",
+      "tags": [
+        "Data Science"
+      ],
+      "job_types": [
+        "Full Time"
+      ],
+      "location": "Bonn",
+      "created_at": 1791540000
+    },
+    {
+      "slug": "",
+      "title": "Missing fields"
+    }
+  ],
+  "links": {
+    "first": "https://www.arbeitnow.com/api/job-board-api?page=1",
+    "last": null,
+    "prev": null,
+    "next": null
+  },
+  "meta": {
+    "current_page": 1,
+    "current_page_url": "https://www.arbeitnow.com/api/job-board-api?page=1",
+    "from": 1,
+    "path": "https://www.arbeitnow.com/api/job-board-api",
+    "per_page": 100,
+    "to": 3,
+    "terms": "Fictional fixture: shape of the free public API as observed on 2026-10-09.",
+    "info": "Fictional fixture: jobs ordered roughly by created_at, paginated with ?page=."
+  }
+}

@@ -83,7 +83,7 @@ explains every variable. `.env` is ignored by git: never commit it, and never pa
 
 | Source or feature | Variables | Guide |
 |---|---|---|
-| Arbeitsagentur, company career pages | none | [sources.md](sources.md) |
+| Arbeitsagentur, Arbeitnow, company career pages | none | [sources.md](sources.md) |
 | Indeed, StepStone, XING, LinkedIn guest search | none; off in a new install, switching one on asks you to confirm the terms-of-service risk | [sources.md](sources.md#scraping) |
 | LinkedIn with your own session | none: a one-time login with `pnpm auth:linkedin` (off by default, read the risks first) | [linkedin-session.md](linkedin-session.md) |
 | LinkedIn via Bright Data / Apify (paid) | `BRIGHT_DATA_API_KEY` / `APIFY_TOKEN` | [brightdata.md](brightdata.md), [apify.md](apify.md) |

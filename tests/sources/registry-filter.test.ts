@@ -23,7 +23,7 @@ const base = { type: "all" as const, statuses: [], ats: null, q: "" };
 describe("filterRegistryRows", () => {
   it("keeps everything without filters and sorts the boards failing first", () => {
     const rows = filterRegistryRows(view, base);
-    expect(rows.channels).toHaveLength(19);
+    expect(rows.channels).toHaveLength(20);
     expect(rows.boards).toHaveLength(config.ats_boards.length);
     expect(rows.boards[0]?.id).toBe("board:greenhouse:gegensprech");
   });

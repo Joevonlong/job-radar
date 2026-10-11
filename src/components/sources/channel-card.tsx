@@ -4,6 +4,7 @@ import { TriggerButton } from "@/components/control/trigger-button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Led, NumberRoll, Sparkline, UptimeStrip } from "@/components/viz";
+import { ARBEITNOW_SITE_URL } from "@/lib/channels/arbeitnow/site";
 import { RUNS_PER_CHANNEL } from "@/lib/settings/constants";
 import type { RecentRun } from "@/lib/db/queries/sources";
 import { statusTone, TONE_TEXT } from "@/lib/sources/channel-tone";
@@ -25,7 +26,11 @@ const RUN_VARIANT = {
   skipped: "status",
 } as const satisfies Record<RecentRun["status"], "status-on" | "status-good" | "status-warn" | "gate-bad" | "status">;
 
-const loginHint = (status: "missing" | "valid" | "expired"): "hintMissing" | "hintValid" | "hintExpired" => (status === "missing" ? "hintMissing" : status === "valid" ? "hintValid" : "hintExpired");
+/** Channels whose data terms ask for a link back: id -> the attribution line under the status and the site it links to. */
+const ATTRIBUTIONS = { arbeitnow: { message: "card.attribution.arbeitnow", url: ARBEITNOW_SITE_URL } } as const;
+const hasAttribution = (id: string): id is keyof typeof ATTRIBUTIONS => Object.hasOwn(ATTRIBUTIONS, id);
+
+const loginHint =(status: "missing" | "valid" | "expired"): "hintMissing" | "hintValid" | "hintExpired" => (status === "missing" ? "hintMissing" : status === "valid" ? "hintValid" : "hintExpired");
 
 /** One channel: light, this cycle's count with its trend, the health strip of the last cycles, switches, this month's usage against its budget, and its last runs. */
 export async function ChannelCard({ card, timeZone, healthCycles, alertPercent }: { card: SourceCard; timeZone: string; healthCycles: number; alertPercent: number }) {
@@ -55,7 +60,8 @@ export async function ChannelCard({ card, timeZone, healthCycles, alertPercent }
           ]
             .filter((part): part is string => part !== null)
             .join(" · ");
-  const statusLine = card.registered ? `${t(`status.${card.status}`)}${card.history.running ? ` · ${t("status.running")}` : ""}` : null;
+  const attribution = hasAttribution(card.id) ? ATTRIBUTIONS[card.id] : null;
+  const statusLine = card.registered ?`${t(`status.${card.status}`)}${card.history.running ? ` · ${t("status.running")}` : ""}` : null;
 
   return (
     <Card className="src-ch gap-3 py-3.5" data-testid="channel-card" data-channel={card.id} data-enabled={card.enabled ? "1" : "0"} data-circuit={card.circuit?.state ?? "none"} data-status={card.status}>
@@ -114,6 +120,17 @@ export async function ChannelCard({ card, timeZone, healthCycles, alertPercent }
             {detail}
           </span>
         </p>
+        {attribution ? (
+          <p className="text-ink-2 text-data" data-testid="channel-attribution">
+            {t.rich(attribution.message, {
+              link: (chunks) => (
+                <a href={attribution.url} target="_blank" rel="noopener noreferrer" className="text-ink underline underline-offset-4 hover:bg-hi hover:text-hi-ink">
+                  {chunks}
+                </a>
+              ),
+            })}
+          </p>
+        ) : null}
 
         <details className="src-ch__more mt-auto flex flex-col gap-3" data-testid="channel-details">
           <summary className="text-label font-bold">{t("card.details")}</summary>

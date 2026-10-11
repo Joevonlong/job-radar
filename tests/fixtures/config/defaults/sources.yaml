@@ -16,7 +16,7 @@
 
 # 所有付费采集通道每月合计花费的上限（美元）；各通道实际花费之和不得超过它，由预算控制执行。
 # （AI 费用另有上限，见 ai.yaml 的 monthly_api_budget_usd。）
-config_version: 2
+config_version: 3
 paid_total_monthly_budget_usd: 15
 
 # 熔断：连续失败 failures 次后，通道标为不可用，冷却 cooldown_hours 小时后再试
@@ -224,6 +224,23 @@ sources:
     reuse_known_details: true # 同 stepstone
     # XING 的"完全远程"筛选值（搜索 URL 的 remoteOption 参数）；带哈希后缀，XING 改了就要更新
     remote_option_id: FULL_REMOTE.050e26
+    title_prefilter:
+      enabled: true
+      include_terms: [AI, ML, KI, LLM, GenAI, Machine Learning, Applied Scientist, Forward Deployed]
+      exclude_terms: [Werkstudent, Working Student, Intern, Internship, Praktikum, Praktikant]
+  # Arbeitnow: free public Job Board API (no key, no login), added by the config update.
+  # Terms (arbeitnow.com/terms, section 11): provided as is, can be withdrawn at any time, platforms using it link back to arbeitnow.com.
+  # Don't mirror or republish the collected postings (section 2.1.5). The API takes no keywords or places: each run reads the newest
+  # pages of the whole board and keeps titles that pass title_prefilter (copied from your greenhouse prefilter). enabled: false switches it off.
+  arbeitnow:
+    enabled: true
+    markets: [DE]
+    monthly_budget_usd: 0
+    throttle: { min_delay_ms: 1000, max_delay_ms: 3000 }
+    max_results: 100
+    base_url: https://www.arbeitnow.com
+    user_agent: JobRadar/2 (self-hosted job tracker)
+    max_pages: 8
     title_prefilter:
       enabled: true
       include_terms: [AI, ML, KI, LLM, GenAI, Machine Learning, Applied Scientist, Forward Deployed]

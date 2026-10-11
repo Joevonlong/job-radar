@@ -83,6 +83,26 @@ pnpm sources:list [--type channel|ats_board] [--status failing ...] [--all] [--j
 | "LinkedIn 未登录 / 登录已过期" | 按 [LinkedIn 登录态](linkedin-session.zh.md)重新登录 |
 | 页面顶部"镜像未同步" | runner 启动或热加载配置时会补上；也可以 `pnpm sources:list --sync` |
 
+## Arbeitnow
+
+Arbeitnow（`arbeitnow`）是免费公开的招聘板接口：不要 key，不用登录。它是德国包的本地渠道之一，默认 `sources.yaml` 里开着
+（`markets: [DE]`）；已有的安装由配置更新（`pnpm config:migrate`）补上同样的块，标题预过滤词从它的 `greenhouse` 块复制。
+
+- **每轮读什么。** 接口不收关键词和地点。每轮读整个招聘板最新的几页（最多 `max_pages` 页，默认 8 页，每页间隔 1 到 3 秒），
+  留下本轮回看窗口内的岗位，并且和公司招聘页一样只存通过 `title_prefilter` 的标题：命中搜索关键词或 `include_terms`，或属于
+  关注的公司；`exclude_terms` 去掉学生岗和实习。招聘板上约一半岗位不在德国：地点过滤会去掉不符合你市场的，同一岗位若也来自
+  公司的 ATS 招聘页，会合并成一个。
+- **一条岗位有什么。** 标题、公司、一个自由文本地点、远程标记、自由文本的岗位类型（作为合同提示保留）、标签和 HTML 描述
+  （陷阱扫描会读其中的隐藏文字，见 [ai-traps.zh.md](ai-traps.zh.md)）。没有薪资字段（薪资从正文里读）。岗位链接指向它在
+  arbeitnow.com 上的页面。
+- **条款。** 接口按现状提供，可随时撤销；使用它的平台要链回 arbeitnow.com（Arbeitnow 条款第 11 节）。`/sources` 上的
+  Arbeitnow 卡片带这个链接。若你把实例用于商业用途或对外展示岗位，请自行阅读 [Arbeitnow 条款](https://www.arbeitnow.com/terms)；
+  不要把采集到的数据镜像或再发布（第 2.1.5 节）。
+- **限制。** 各页分别缓存、页内不按日期排序，所以某一轮漏掉的岗位通常下一轮会补上。响应里的限额头也是缓存下来的，不使用。
+  429 按它的 `Retry-After` 重试；403 或 410（接口被撤销）算被封，打开该通道的熔断，其他通道照常运行。
+- **设置**：`sources.arbeitnow` 下的 `base_url`、`user_agent`、`max_pages`、`max_results`、`throttle` 和 `title_prefilter`
+  （设置页上也有）。用 `enabled: false` 或 `/sources/registry` 上的开关关掉它。
+
 ## 抓取
 
 并非每个通道都用官方 API。有些读取公开网页或非官方接口，有些以你自己登录的账号操作。多数招聘网站的服务条款禁止自动访问，
@@ -92,7 +112,7 @@ pnpm sources:list [--type channel|ats_board] [--status failing ...] [--all] [--j
 |---|---|---|---|
 | 抓取 | LinkedIn 游客搜索（`linkedin-guest`）、Indeed（`indeed`）、StepStone（`stepstone`）、XING（`xing`）、经 sidecar 的 Google Jobs（`jobspy-google`） | 关 | 网站条款可能禁止；你的 IP 可能被限流或封禁 |
 | 账号自动化 | LinkedIn 登录会话（`linkedin-session`、`linkedin-session:recommended`） | 关 | 使用你自己的账号；账号可能被限制或封禁 |
-| 官方 API 和公开的公司数据源 | Arbeitsagentur、Greenhouse、Lever、Ashby、Personio、SmartRecruiters（开）；JSearch、Gmail 提醒、Tavily、Brave（需要你的 key 或账号） | 开，或填 key 之前关 | 遵守各提供方自己的条款和配额 |
+| 官方 API 和公开的公司数据源 | Arbeitsagentur、[Arbeitnow](#arbeitnow)、Greenhouse、Lever、Ashby、Personio、SmartRecruiters（开）；JSearch、Gmail 提醒、Tavily、Brave（需要你的 key 或账号） | 开，或填 key 之前关 | 遵守各提供方自己的条款和配额 |
 | 付费抓取服务 | Bright Data、Apify | 开，但没有你的 token 就什么也不做 | 由服务替你抓取；**这并不能消除服务条款风险**，风险仍在你身上 |
 
 怎么打开：

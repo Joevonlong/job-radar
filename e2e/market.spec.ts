@@ -56,4 +56,5 @@ test("switching to the generic pack in the US: no German filter, dollars, the Ge
   await page.goto("/sources");
   await expect(page.getByTestId("other-market-channels")).toBeVisible();
   await expect(page.getByTestId("other-market-channels")).toContainText("arbeitsagentur");
+  await expect(page.getByTestId("other-market-channels")).toContainText("arbeitnow");
 });

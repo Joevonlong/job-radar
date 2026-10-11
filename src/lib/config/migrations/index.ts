@@ -10,9 +10,11 @@ import { interests002 } from "./interests/002-signal-categories";
 import { interests003 } from "./interests/003-market";
 import { notify002 } from "./notify/002-high-value";
 import { pipeline002 } from "./pipeline/002-market-packs";
+import { pipeline003 } from "./pipeline/003-arbeitnow-priority";
 import { preferences002 } from "./preferences/002-market";
 import { search002 } from "./search/002-market";
 import { sources002 } from "./sources/002-market";
+import { sources003 } from "./sources/003-arbeitnow";
 import type { ConfigMigration } from "./types";
 import { ui002 } from "./ui/002-visibility-blocks";
 
@@ -24,8 +26,8 @@ export const CONFIG_MIGRATIONS: Readonly<Partial<Record<ConfigName, readonly Con
   ui: [ui002],
   preferences: [preferences002],
   search: [search002],
-  channels: [sources002],
-  pipeline: [pipeline002],
+  channels: [sources002, sources003],
+  pipeline: [pipeline002, pipeline003],
   ai: [ai002],
   insights: [insights002],
 };

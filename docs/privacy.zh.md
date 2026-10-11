@@ -34,6 +34,7 @@ Job Radar 是跑在你自己机器上的单用户工具：没有账号、没有�
 |---|---|---|---|
 | 你使用的 AI 提供方：OpenAI（`codex` 命令行）、Anthropic（`claude` 命令行或 API）、DeepSeek 或小米 MiMo（API，**默认关闭**） | **评分：** 画像摘要、技能和年限、语言等级、**目标职位、目标城市、工作方式、远程范围、级别、薪资底线、合同偏好、排除的公司、排除的关键词、你自己的评分标准**，加上岗位描述。**每周建议：** 你标记过的岗位（感兴趣、准备中、已申请、面试中、offer、忽略）**及其状态**，加上你的偏好。**翻译、拆解、信号、陷阱检查：** 只有岗位文本。你的居住城市和签证状态（`me.yaml`）、备注和申请备注不会发送。 | 每一轮 | 关掉该提供方（`ai.yaml` 里 `enabled: false`，或"设置 → AI"），不安装它的命令行、不填它的 key；每周建议用 `schedule.yaml` 的 `suggest.enabled` 关掉 |
 | 招聘网站和接口：Arbeitsagentur、Indeed、LinkedIn、StepStone、XING、经 JSearch 的 Google Jobs、公司招聘页、Bright Data、Apify | 你的搜索关键词和城市，以及来自你 IP 地址的请求（LinkedIn 登录会话：以你登录的账号发请求） | 每一轮 | 在"来源"页关掉该通道 |
+| Arbeitnow（免费招聘板接口） | 只有来自你 IP 地址的请求（它不收关键词和地点） | 每一轮 | 在"来源"页关掉该通道 |
 | Tavily 或 Brave（招聘页发现） | 形如"关键词 jobs 城市"的搜索词 | 每天，且仅在有 key 时 | 不设置 key |
 | Google（Gmail，IMAP） | 用应用密码登录并读取一个标签 | 每一轮 | 关掉 Gmail 通道；撤销应用密码 |
 | Telegram | 职位名、公司、分数、AI 一句话摘要、提醒、健康告警，以及用"定制简历"按钮时的命令文本 | 推送时 | Telegram 默认关闭（`notify.yaml`），保持关闭即可 |
