@@ -15,8 +15,8 @@ importers:
         specifier: ^6.3.1
         version: 6.3.1(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       '@modelcontextprotocol/server':
-        specifier: 2.3.1
-        version: 2.3.1
+        specifier: 2.1.0
+        version: 2.1.0
       '@number-flow/react':
         specifier: 0.6.2
         version: 0.6.2(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
@@ -109,8 +109,8 @@ importers:
         version: 4.6.5
     devDependencies:
       '@modelcontextprotocol/client':
-        specifier: 2.3.1
-        version: 2.3.1
+        specifier: 2.1.0
+        version: 2.1.0
       '@playwright/test':
         specifier: ^1.64.0
         version: 1.64.0
@@ -1089,16 +1089,16 @@ packages:
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
 
-  '@modelcontextprotocol/client@2.3.1':
-    resolution: {integrity: sha512-mIGZXpHsjnZ6lD+gD/WCMpR5k8yVQQ8nNFH1N0Srf7AvnwTUMYD6pvTY8ng2+He5FfV7YMZLmrjL7cLa/cc3dQ==}
+  '@modelcontextprotocol/client@2.1.0':
+    resolution: {integrity: sha512-mDVhoy5WjDb0U+4dQPzLcciC2erSex/GRVQqnoZdiuMoE3YiTZdiS7ezNcFwX4XEOWOaj7jZr0kLYnILnL8orA==}
     engines: {node: '>=20'}
 
-  '@modelcontextprotocol/core@2.3.1':
-    resolution: {integrity: sha512-laVmIhPGpWi7rG9q+0UigblRN0Hws/Yjlb6qLFtVqryXVLkc4h+yN8z731POD2LnAGQlFe7/tXhUm7Bi0YB91g==}
+  '@modelcontextprotocol/core@2.1.0':
+    resolution: {integrity: sha512-YdFj5gMRHr0gYNAhTbQDgjLHiEJdIAUYxomhKseUNye7ZGlISQmUoLh2sveFFCiQ7j2YMffT1kgSND0FSfIFjQ==}
     engines: {node: '>=20'}
 
-  '@modelcontextprotocol/server@2.3.1':
-    resolution: {integrity: sha512-e59MfWuSssj6DoQ96JCTqdW1AXT5/XtnTl0WWd6MU1Ka434fFUGGosCLJbGNySDhHGvxQWoRWK137FXYFkYNWw==}
+  '@modelcontextprotocol/server@2.1.0':
+    resolution: {integrity: sha512-FdvwZU5N03O77Suh35JqjAqq5R1ZTEPFtwu6N4BgBq28qrQtrCnpbLL5U2pwYCuE194jAw0xnlOVmIqhfoYuUQ==}
     engines: {node: '>=20'}
 
   '@napi-rs/wasm-runtime@1.2.5':
@@ -5514,9 +5514,9 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.6.0
 
-  '@modelcontextprotocol/client@2.3.1':
+  '@modelcontextprotocol/client@2.1.0':
     dependencies:
-      '@modelcontextprotocol/core': 2.3.1
+      '@modelcontextprotocol/core': 2.1.0
       cross-spawn: 7.0.6
       eventsource: 3.0.7
       eventsource-parser: 3.1.1
@@ -5524,13 +5524,13 @@ snapshots:
       pkce-challenge: 5.0.1
       zod: 4.6.5
 
-  '@modelcontextprotocol/core@2.3.1':
+  '@modelcontextprotocol/core@2.1.0':
     dependencies:
       zod: 4.6.5
 
-  '@modelcontextprotocol/server@2.3.1':
+  '@modelcontextprotocol/server@2.1.0':
     dependencies:
-      '@modelcontextprotocol/core': 2.3.1
+      '@modelcontextprotocol/core': 2.1.0
       zod: 4.6.5
 
   '@napi-rs/wasm-runtime@1.2.5(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)':
