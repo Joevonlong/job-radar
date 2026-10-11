@@ -1,6 +1,6 @@
 # Deploy, upgrade, roll back, and the 7-day unattended acceptance run
 
-This guide deploys Job Radar onto a host for real and explains how to confirm it keeps running unattended. The host-specific steps (Docker Desktop, power settings, launchd) are written for macOS; on Linux or Windows (WSL2) follow the Platform notes of the [README](../README.md#platform-notes) and use the platform-independent parts (the deploy script, doctor, upgrade and rollback).
+This guide deploys Job Radar onto a host for real and explains how to confirm it keeps running unattended. The host-specific steps (Docker Desktop, power settings, launchd) are written for macOS; on Linux or Windows (WSL2) follow the [platform notes](installation.md#macos-linux-windows) and use the platform-independent parts (the deploy script, doctor, upgrade and rollback).
 
 - First deployment: work through the checklist in section 1, then run `scripts/ops/deploy.sh` (section 2).
 - Day to day: `pnpm run doctor` (section 3) tells you at a glance whether the system is healthy and what is missing.

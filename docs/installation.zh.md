@@ -44,8 +44,13 @@ git --version
 - **Linux** 上所有部分都一样能跑；CI 里会在全新的 Ubuntu 上从零装一遍。区别有两处：容器以你的用户身份运行（`PUID` / `PGID`，第 3 步），
   辅助脚本把 AI worker 装成 systemd 用户单元而不是 launchd 服务（第 5 步）。Linux 主机清单见
   [host-setup.zh.md 第 10 节](host-setup.zh.md#10-linux)。
-- **Windows**：全部在 WSL2 里跑，项目放在 Linux 文件系统里（不要放在 `/mnt/c` 下），并打开 Docker Desktop 的 WSL 集成。
-  步骤和 Linux 一样，见 [README 的平台说明](../README.zh.md#平台说明)。
+- **Windows（WSL2）**：全部在 WSL2 里跑。把仓库克隆到 Linux 文件系统里（比如 `~/job-radar`，不要放在 `/mnt/c` 下，那里绑定挂载慢、
+  权限也不一样），在 Docker Desktop 里为这个发行版打开 WSL 集成，在 WSL 里装 Node、pnpm 和 `claude` / `codex` 命令行。步骤和 Linux 一样。
+  `pnpm ai-worker` 也在 WSL 里跑（放在 tmux 里，或者在支持 systemd 的 WSL 里做成 systemd 用户服务）。在 Windows 的浏览器里打开
+  <http://127.0.0.1:3000>。WSL2 维护者没有测试过，欢迎反馈。
+- **让 AI worker 常驻**：`scripts/ops/install-ai-worker.sh` 在 macOS 上装成 launchd 代理，在 Linux 上装成 systemd 用户单元
+  （`job-radar-ai-worker.service`）。两者都没有的话，用你自己的进程管理工具跑 `pnpm ai-worker`（第 5 步）。
+- **一人一实例。** 同一台机器上的第二套要用自己的项目名、卷名和端口：见 [multiple-instances.zh.md](multiple-instances.zh.md)。
 
 ## 1. 获取代码
 

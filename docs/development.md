@@ -55,7 +55,7 @@ The first visit may open the setup; every step can be skipped. `pnpm db:seed` on
 
 ## README screenshots
 
-`pnpm demo:shots` regenerates the pictures in `docs/images/` (the README screenshots and the demo GIF) from a throw-away
+`pnpm demo:shots` regenerates the pictures in `docs/images/` (the screenshots and the demo GIF in [features.md](features.md)) from a throw-away
 instance with fictional data: its own `jobradar_demo` database, config and profile in temp directories, and an empty
 environment (your `.env` and `data/` are never read). It needs ffmpeg and a Postgres server where the role may create a
 database:

@@ -10,6 +10,14 @@ All Job Radar settings are YAML, in two layers:
 
 Relative paths are resolved against the project directory (not the current directory). In Docker, the mounts and variables of web and runner are in `compose.yaml` (web: `./config:/app/config:ro`, `./data/config:/app/data/config`; runner mounts both read-only); the host ai-worker gets all three directories written explicitly into its launchd plist by `scripts/ops/install-ai-worker.sh`.
 
+A file in `data/config/` wins over the default with the same name, so `git pull` never touches your settings, and almost
+everything can also be changed on the Settings page. `pnpm config:example` applies a ready-made setup as a head start.
+
+Secrets (API keys, the Telegram token, the Gmail app password, the web password hash) go only in `.env`, never in the
+YAML files. The one exception to watch: `jobspy.proxies` in `sources.yaml` can contain proxy credentials
+(`user:password@host`), and every backup's config archive includes that file, so keep backup archives private. Which
+source needs which key: [installation.md](installation.md#2-optional-create-env).
+
 ## Which copy is read
 
 - If the user directory **has** the file, it is read; if not, the one in the defaults directory is read. The layers are not merged: a file in the user directory takes effect as a whole.

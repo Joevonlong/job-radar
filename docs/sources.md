@@ -113,4 +113,18 @@ well.
 
 If you switch scraping channels on: read the terms of every site, keep volumes low (few keywords, few cities, the
 default schedule), do not republish collected data, and prefer official APIs, company career boards and your own job-alert
-emails. You are responsible for how you use them; see also the disclaimer in the [README](../README.md#scraping-and-terms-of-service).
+emails. You are responsible for how you use them.
+
+### Disclaimer
+
+Some sources read public web pages or unofficial endpoints. Job boards' terms of service may forbid automated access,
+and their pages change without notice. Job Radar is a personal tool: it throttles requests, never tries to get past a
+login wall, CAPTCHA or verification page, and stops using a source that keeps failing. You are responsible for how you
+use it: check the terms of every site you enable, keep volumes low, prefer official APIs and your own alert emails where
+you can, and don't republish collected data. The maintainers give no warranty and accept no liability for your use of
+third-party services. Paid services such as Bright Data or Apify scrape for you but don't remove the terms-of-service
+risk.
+
+Job Radar is an independent project. It is not affiliated with, endorsed by or sponsored by any job board, employer or
+service it can talk to; all trademarks belong to their owners (see [NOTICE](../NOTICE)). The test fixtures and demo data
+are synthetic: employers, ids, links, contacts and ad texts are invented.

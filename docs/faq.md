@@ -207,7 +207,7 @@ Yes, inside WSL2. Clone the repository into the Linux file system (for example `
 where bind mounts are slow and permissions differ), switch on Docker Desktop's WSL integration for that distribution,
 and install Node, pnpm and the `claude` / `codex` CLIs inside WSL. Then follow the Linux steps; the AI worker runs in WSL
 too, and the dashboard opens at <http://127.0.0.1:3000> in the Windows browser. Notes:
-[README, platform notes](../README.md#platform-notes). Job Radar is run day to day on macOS and Linux, so an issue
+[platform notes](installation.md#macos-linux-windows). Job Radar is run day to day on macOS and Linux, so an issue
 about anything that behaves differently on WSL is welcome.
 
 ---

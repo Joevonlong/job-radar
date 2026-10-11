@@ -8,7 +8,8 @@
 
 | 指南 | 内容 |
 |---|---|
-| [installation.zh.md](installation.zh.md) | **从零安装**：环境要求、macOS 和 Linux 上的每一步、AI worker 装成服务、Telegram、手机访问、升级、备份、卸载、常见问题排查 |
+| [features.zh.md](features.zh.md) | **它做什么**：背后的四个想法、全部功能、各部分怎么配合、截图和短片 |
+| [installation.zh.md](installation.zh.md) | **从零安装**：环境要求、macOS、Linux 和 Windows（WSL2）上的每一步、AI worker 装成服务、Telegram、手机访问、升级、备份、卸载、常见问题排查 |
 | [faq.zh.md](faq.zh.md) | 简短回答：费用、AI 选项、隐私、来源、市场、手机访问、Windows |
 | [setup.zh.md](setup.zh.md) | **首次启动**：设置向导（`/setup`）和 `pnpm run setup`、答案文件、`setup.yaml`、重新打开向导 |
 | [usage.zh.md](usage.zh.md) | **日常使用从这里开始**：打开网页、看健康状态（doctor、来源页、告警、日志）、各页面、看 JD、在终端里查岗位 |
@@ -39,4 +40,5 @@
 | [linkedin-session.zh.md](linkedin-session.zh.md) | `pnpm auth:linkedin`、每日页面上限、遇到验证页怎么办 |
 | [jsearch.zh.md](jsearch.zh.md)、[tavily.zh.md](tavily.zh.md)、[apify.zh.md](apify.zh.md)、[brightdata.zh.md](brightdata.zh.md) | 需要 key 或付费的通道：key、额度和预算 |
 | [development.md](development.md) | 给贡献者：代码结构、测试、e2e、约定（英文） |
+| [roadmap.zh.md](roadmap.zh.md) | 后续版本计划做的事 |
 | [ci.zh.md](ci.zh.md) | CI 流水线逐任务逐步骤说明：每步做什么、为什么、耗时、本地复现、怎么读失败、e2e 的 project、Dependabot、发布检查 |

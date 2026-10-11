@@ -2,6 +2,16 @@
 
 AI 可以走订阅命令行（`claude`、`codex`）、按量计费的 API key，或两者都用，由你选。无论用哪种，每次 AI 调用都由宿主机上的 `ai-worker` 执行，订阅登录和 API key 都不会放进容器。每个提供方会收到什么，见 [privacy.zh.md](privacy.zh.md)。
 
+## 订阅还是 API key
+
+| | 怎么用 | 花费 |
+|---|---|---|
+| **订阅命令行**（默认） | ai-worker 用你已有的登录运行 `codex` 和 `claude`（`codex login`；运行 `claude` 后 `/login`）。 | 不按 token 计费。每天的调用上限（codex 200 次、claude 100 次）保护你的订阅额度。 |
+| **API key**（可选） | 在 `.env` 里填 `ANTHROPIC_API_KEY`、`DEEPSEEK_API_KEY` 或 `MIMO_API_KEY`；DeepSeek 和 MiMo 还要在 `ai.yaml` 里打开。 | 按 token 计费，到 `ai.yaml` 里 `monthly_api_budget_usd` 的月预算就停。 |
+
+用一种或两种都行；API 排在命令行之后才会用到。`pnpm ai:probe` 显示现在哪些可用。消费者订阅是个人许可：要给你自己以外的人用之前，
+先看 [commercial-use.zh.md](commercial-use.zh.md)。用量和费用见 [ai-usage.zh.md](ai-usage.zh.md)。
+
 ## 谁在哪里跑什么
 
 | 进程 | 位置 | 做什么 |

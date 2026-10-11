@@ -47,9 +47,16 @@ Optional, for later:
   containers run as your user (`PUID` / `PGID`, step 3), and the helper script installs the AI worker as a systemd user
   unit instead of a launchd agent (step 5). The Linux host checklist is
   [host-setup.md, section 10](host-setup.md#10-linux).
-- **Windows**: run everything inside WSL2, with the checkout in the Linux file system (not under `/mnt/c`) and Docker
-  Desktop's WSL integration switched on. The steps are the Linux ones; see the
-  [platform notes in the README](../README.md#platform-notes).
+- **Windows (WSL2)**: run everything inside WSL2. Clone the repository into the Linux file system (for example
+  `~/job-radar`, not under `/mnt/c`, where bind mounts are slow and permissions differ), turn on Docker Desktop's WSL
+  integration for that distribution, and install Node, pnpm and the `claude` / `codex` CLIs inside WSL. The steps are
+  the Linux ones. `pnpm ai-worker` runs in WSL too (under tmux, or as a systemd user service where WSL has systemd).
+  Open <http://127.0.0.1:3000> in the Windows browser. WSL2 is not tested by the maintainer; reports are welcome.
+- **Keeping the AI worker alive**: `scripts/ops/install-ai-worker.sh` installs a launchd agent on macOS and a systemd
+  user unit (`job-radar-ai-worker.service`) on Linux. Without either, run `pnpm ai-worker` under a supervisor of your
+  own (step 5).
+- **One person, one instance.** A second installation on the same machine needs its own project name, volume and
+  ports: [multiple-instances.md](multiple-instances.md).
 
 ## 1. Get the code
 
