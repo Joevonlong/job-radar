@@ -21,10 +21,11 @@ The score itself does not change: the sources only show how much of the reasonin
 scoring:
   evidence:
     enabled: true        # default false
-    quote_max_chars: 150 # longest quote the AI may give, 20 to 500
+    quote_max_chars: 150 # longest quote the AI may give, 20 to 500 (a longer one is cut to it)
+    quote_min_chars: 8   # shortest quote that counts, characters other than spaces, 1 to 100
 ```
 
-Turning it on or off, and changing `quote_max_chars`, marks no score stale and re-scores nothing: the prompt version
+Turning it on or off, and changing the quote limits, marks no score stale and re-scores nothing: the prompt version
 stays the same. The setting applies to jobs scored from then on.
 
 ## Why it is off by default
@@ -41,7 +42,8 @@ language (never translated, even when the reasons are written in Chinese). Job R
 stored job description (spaces, line breaks and list bullets do not count):
 
 - Found: it is stored as the posting spells it, with its position, and the reason shows **JD**.
-- Not found (the AI paraphrased or translated it), or it falls on text the AI trap check flagged (hidden text or an
+- Shorter than `quote_min_chars` (a word or two could match any spot of the posting), not found (the AI paraphrased or
+  translated it), or it falls on text the AI trap check flagged (hidden text or an
   instruction aimed at an AI, see [ai-traps.md](ai-traps.md)): the reason is kept and shows **Inferred**. The scoring
   run logs how many reasons were downgraded this way.
 

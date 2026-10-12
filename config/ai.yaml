@@ -228,6 +228,8 @@ scoring:
     enabled: false
     # Longest quote the AI is asked for (characters); shorter quotes are found more reliably and cost fewer tokens
     quote_max_chars: 150
+    # Shortest quote that counts (characters other than spaces); a shorter one is stored as "inferred"
+    quote_min_chars: 8
   # Scoring order: rank first by an AI-free relevance pre-score, then send to the AI from high to low.
   # Pre-score = sum of weight x item score (0..1), minus the local language gap; only used for ordering, never shown.
   priority:

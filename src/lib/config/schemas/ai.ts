@@ -167,8 +167,11 @@ const scoring = z.strictObject({
       enabled: z.boolean().default(false),
       /** Longest quote the model is asked for (characters). */
       quote_max_chars: positiveInt.min(20).max(500).default(150),
+      /** Shortest quote that counts as evidence (characters other than spaces): a shorter one ("o", "AI") would mark a random spot of the JD. */
+      quote_min_chars: positiveInt.min(1).max(100).default(8),
     })
-    .default({ enabled: false, quote_max_chars: 150 }),
+    .refine((evidence) => evidence.quote_min_chars <= evidence.quote_max_chars, { message: "quote_min_chars must not exceed quote_max_chars", path: ["quote_min_chars"] })
+    .default({ enabled: false, quote_max_chars: 150, quote_min_chars: 8 }),
 });
 
 /** Where the AI work of a cycle runs. */

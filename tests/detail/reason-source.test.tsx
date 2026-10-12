@@ -58,7 +58,21 @@ describe("ReasonSource", () => {
     expect(marker).toHaveAttribute("title", zh.scoreEvidence.hint.inferred);
     expect(marker.className).toContain("border-border");
     expect(marker.className).not.toContain("bg-ink");
-    expect(screen.queryByRole("button")).toBeNull();
+  });
+
+  it("Inferred and Not stated: the hint opens from the keyboard too", async () => {
+    const user = userEvent.setup();
+    render(wrap(<ReasonSource text="资深职位" source={{ basis: "inferred", quote: null, mark: null }} jumpable={false} />, "zh"));
+    const marker = screen.getByRole("button", { name: /推断/ });
+    expect(marker).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByTestId("reason-hint")).not.toBeVisible();
+    await user.tab();
+    expect(marker).toHaveFocus();
+    await user.keyboard("{Enter}");
+    expect(marker).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByTestId("reason-hint")).toBeVisible();
+    expect(screen.getByTestId("reason-hint")).toHaveTextContent(zh.scoreEvidence.hint.inferred);
+    expect(marker).toHaveAttribute("aria-controls", screen.getByTestId("reason-hint").id);
   });
 
   it("Not stated: a dashed marker that says the JD does not mention it", () => {

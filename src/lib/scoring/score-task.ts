@@ -14,7 +14,7 @@ import type { Db } from "@/lib/db/client";
 import { countScoreBacklog, countUnscoredJobs, listScoreCandidates, listScoreQueue, markScoresStaleByPromptVersion, saveScore, type ScoreCandidate } from "@/lib/db/repos/scores";
 import { asGermanLevel, parseLocations, parseSalary } from "@/lib/db/queries/parse";
 import { parseFilterReason } from "@/lib/filter/reasons";
-import { cleanDescriptionsForAi, loadTrapSpans } from "@/lib/traps/clean";
+import { cleanDescriptionsWithSpans } from "@/lib/traps/clean";
 import type { TrapSpan } from "@/lib/traps/types";
 
 import { scoredReasons } from "./evidence";
@@ -175,7 +175,7 @@ async function scoreCandidate(deps: ScoringDeps, ctx: ScoreContext, candidate: S
   const result = await deps.router.run("score", prompt, scoreOutputSchemaFor(ctx.output, { evidence: ctx.evidence, quoteMaxChars }), { jobId: candidate.jobId, ...(deps.signal ? { signal: deps.signal } : {}) });
   const output: ScoreOutput = result.value;
   // cleaned, checked against the stored JD and split from the same lists, so the reasons and their sources line up
-  const reasons = scoredReasons(output, { evidence: ctx.evidence, description: candidate.description, trapSpans: ctx.trapSpans.get(candidate.jobId) ?? [] });
+  const reasons = scoredReasons(output, { evidence: ctx.evidence, description: candidate.description, trapSpans: ctx.trapSpans.get(candidate.jobId) ?? [], quoteMinChars: config.scoring.evidence.quote_min_chars });
 
   const german = resolveGermanLevel({ rule: asGermanLevel(candidate.germanLevelRule), ai: output.german_level_required, jdText: candidate.description ?? "", pipeline: ctx.pipeline });
   const penalty = languagePenalty(german.level, ctx.profile.me, config.scoring.language_penalty, ctx.pipeline.market.language?.code ?? null);
@@ -341,10 +341,9 @@ export async function runScoring(deps: ScoringDeps, options: ScoringOptions): Pr
   const candidates = await loadInOrder(deps, snapshotId, picked);
   result.candidates = candidates.length;
   // Hidden text and instructions to the AI are taken out of the JD the model reads (the German check below keeps the real JD)
-  const forAi = await cleanDescriptionsForAi(deps.db, candidates.map((c) => ({ jobId: c.jobId, description: c.description })), { logger: deps.logger });
-  // Reason sources (off by default): a quote is checked against the stored JD and must not touch an AI trap
+  // Reason sources (off by default) check a quote against the stored JD: it must not touch the same trap spans (one read of them)
+  const { texts: forAi, spans: trapSpans } = await cleanDescriptionsWithSpans(deps.db, candidates.map((c) => ({ jobId: c.jobId, description: c.description })), { logger: deps.logger });
   const evidence = deps.config.scoring.evidence.enabled;
-  const trapSpans = evidence ? await loadTrapSpans(deps.db, candidates.map((c) => ({ jobId: c.jobId, description: c.description })), { logger: deps.logger }) : new Map<number, TrapSpan[]>();
   const ctx: ScoreContext = { profile, snapshotId, bonusCap, forAi, pipeline, language, promptVersion, output, evidence, trapSpans };
   let evidenceWarned = false;
 

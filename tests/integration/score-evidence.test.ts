@@ -136,6 +136,38 @@ describe("storing the sources", () => {
     expect((await latest(id)).reasonEvidence).toMatchObject({ fit: [{ basis: "inferred", quote: null, offset: null }] });
   });
 
+  it("stores a quote shorter than quote_min_chars as inferred, and counts it", async () => {
+    const id = await addJob("Too short");
+    const config = aiConfig((raw) => {
+      (raw.scoring as Record<string, unknown>).evidence = { enabled: true, quote_max_chars: 150, quote_min_chars: 8 };
+    });
+    const fake = fakeAi(config);
+    fake.replies.set("Too short", sourced({ fit_reasons: [{ text: "Python", basis: "jd", quote: "Python" }, { text: "多年 Python", basis: "jd", quote: "5+ years of Python" }] }));
+    const result = await runScoring(deps(fake, config), { limit: 5 });
+    expect(result.evidenceDowngraded).toBe(1);
+    expect((await latest(id)).reasonEvidence).toMatchObject({ fit: [{ basis: "inferred", quote: null }, { basis: "jd", quote: "5+ years of Python" }] });
+  });
+
+  it("scores a near-miss answer instead of failing it: an over-long quote is cut, extra keys and non-reasons are dropped", async () => {
+    const id = await addJob("Near miss");
+    const config = aiConfig((raw) => {
+      (raw.scoring as Record<string, unknown>).evidence = { enabled: true, quote_max_chars: 20, quote_min_chars: 8 };
+    });
+    const fake = fakeAi(config);
+    fake.replies.set(
+      "Near miss",
+      sourced({ fit_reasons: [{ text: "RAG 经验", basis: "jd", quote: "Experience with RAG and vector search", offset: 3 }, 42, { text: "资深", basis: "guess" }], gaps: [{ text: "没写薪资", basis: "unstated" }] }),
+    );
+    const result = await runScoring(deps(fake, config), { limit: 5 });
+    expect(result).toMatchObject({ scored: 1, failed: 0 });
+    const row = await latest(id);
+    expect(row.fitReasons).toEqual(["RAG 经验", "资深"]);
+    expect(row.reasonEvidence).toMatchObject({
+      fit: [{ basis: "jd", quote: "Experience with RAG", offset: JD.indexOf("Experience with RAG") }, { basis: null, quote: null }],
+      gaps: [{ basis: "unstated", quote: null }],
+    });
+  });
+
   it("takes an answer in the old shape (plain strings) as reasons without a source", async () => {
     const id = await addJob("Old shape");
     const config = withEvidence(true);

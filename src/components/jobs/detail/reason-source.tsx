@@ -30,7 +30,8 @@ interface ReasonSourceProps {
 
 /**
  * One fit reason or gap with the marker of its source. "JD" opens the verbatim quote (external text, rendered as text only) and
- * "View in the original", which jumps to the quote's mark in the JD panel; "Inferred" and "Not stated" explain themselves on hover.
+ * "View in the original", which jumps to the quote's mark in the JD panel; "Inferred" and "Not stated" open a line that explains
+ * them (and show it on hover).
  */
 export function ReasonSource({ text, source, jumpable, quoteLang }: ReasonSourceProps) {
   const t = useTranslations("scoreEvidence");
@@ -43,14 +44,31 @@ export function ReasonSource({ text, source, jumpable, quoteLang }: ReasonSource
   const hint = t(`hint.${basis}`);
 
   if (basis !== "jd" || source?.quote == null) {
+    // a toggle like the quote's, so the hint is there for keyboard and touch users too, not only on mouse hover
+    const kind = basis === "unstated" ? "unstated" : "inferred";
     return (
-      <span data-testid="reason-text" data-basis={basis}>
-        <span lang={locale} title={hint} className={cn(MARKER, MARKER_CLASS[basis === "unstated" ? "unstated" : "inferred"])} data-testid="reason-source" data-basis={basis}>
-          {label}
-          <span className="sr-only">: {hint}</span>
-        </span>
-        {text}
-      </span>
+      <div className="flex min-w-0 flex-col gap-1.5" data-testid="reason-text" data-basis={basis}>
+        <div>
+          <button
+            type="button"
+            lang={locale}
+            title={hint}
+            aria-expanded={open}
+            aria-controls={id}
+            onClick={() => setOpen((value) => !value)}
+            className={cn(MARKER, MARKER_CLASS[kind], "press cursor-pointer")}
+            data-testid="reason-source"
+            data-basis={basis}
+          >
+            {label}
+            <span className="sr-only">: {hint}</span>
+          </button>
+          {text}
+        </div>
+        <p id={id} hidden={!open} lang={locale} className="text-ink-3 text-data-sm" data-testid="reason-hint">
+          {hint}
+        </p>
+      </div>
     );
   }
 

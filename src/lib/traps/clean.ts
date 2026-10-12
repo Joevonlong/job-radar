@@ -60,14 +60,19 @@ function safeSettings(logger: CleanOptions["logger"]): TrapsConfig | null {
 
 /** Each job's JD as an AI may read it (`jdForAi`); a job without findings (or a null JD) maps to its own value. */
 export async function cleanDescriptionsForAi(db: Executor, jobs: readonly JobText[], options: CleanOptions = {}): Promise<Map<number, string | null>> {
+  return (await cleanDescriptionsWithSpans(db, jobs, options)).texts;
+}
+
+/** `cleanDescriptionsForAi` plus the trap spans it read (one read of the findings for a caller that needs both). */
+export async function cleanDescriptionsWithSpans(db: Executor, jobs: readonly JobText[], options: CleanOptions = {}): Promise<{ texts: Map<number, string | null>; spans: Map<number, TrapSpan[]> }> {
   const settings = options.settings === undefined ? safeSettings(options.logger) : options.settings;
   const spans = await loadTrapSpans(db, jobs, { ...options, settings });
-  const out = new Map<number, string | null>();
+  const texts = new Map<number, string | null>();
   for (const job of jobs) {
     const jobSpans = spans.get(job.jobId);
-    out.set(job.jobId, job.description !== null && jobSpans && settings ? jdForAi(job.description, jobSpans, { hidden: settings.ai_input.hidden_marker, instruction: settings.ai_input.instruction_marker }) : job.description);
+    texts.set(job.jobId, job.description !== null && jobSpans && settings ? jdForAi(job.description, jobSpans, { hidden: settings.ai_input.hidden_marker, instruction: settings.ai_input.instruction_marker }) : job.description);
   }
-  return out;
+  return { texts, spans };
 }
 
 /** One job's JD as an AI may read it. */

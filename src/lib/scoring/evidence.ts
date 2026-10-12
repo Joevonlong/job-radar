@@ -33,6 +33,13 @@ export interface ResolveContext {
   description: string | null;
   /** The JD's AI trap findings: a quote that touches one is not evidence. */
   trapSpans: readonly TrapSpan[];
+  /** Shortest quote that counts, in characters other than whitespace (`ai.yaml: scoring.evidence.quote_min_chars`; default 1). */
+  quoteMinChars?: number;
+}
+
+/** Characters of a quote other than whitespace: what `quote_min_chars` counts. */
+export function quoteLength(quote: string): number {
+  return quote.replace(/\s+/gu, "").length;
 }
 
 /** A reason with its checked source. */
@@ -62,7 +69,9 @@ function resolveOne(item: ReasonItem, context: ResolveContext): { reason: Resolv
   const plain = { text: item.text, quote: null, offset: null };
   if (item.basis !== "jd") return { reason: { ...plain, basis: item.basis }, downgraded: false };
   const quote = item.quote?.trim() ?? "";
-  const found = quote !== "" && context.description ? locateLoose(context.description, quote) : null;
+  // too short a quote ("o", "AI") would be found somewhere in any JD and mark a random spot: not evidence
+  const longEnough = quote !== "" && quoteLength(quote) >= (context.quoteMinChars ?? 1);
+  const found = longEnough && context.description ? locateLoose(context.description, quote) : null;
   if (found === null || context.description === null || overlapsTrap(found.start, found.end - found.start, context.trapSpans)) {
     return { reason: { ...plain, basis: "inferred" }, downgraded: true };
   }
@@ -70,7 +79,8 @@ function resolveOne(item: ReasonItem, context: ResolveContext): { reason: Resolv
 }
 
 /**
- * Check the sources of cleaned reasons: a `jd` reason keeps its quote only when `locateLoose` finds it in the JD (whitespace and
+ * Check the sources of cleaned reasons: a `jd` reason keeps its quote only when it has at least `quoteMinChars` characters other
+ * than whitespace, `locateLoose` finds it in the JD (whitespace and
  * bullets do not count) and it does not touch an AI trap; the stored quote is then the JD's own text. Otherwise the reason becomes
  * `inferred` (counted in `downgraded`). `inferred` / `unstated` drop any quote; a reason without a source stays without one.
  */
@@ -89,7 +99,7 @@ export interface ScoredReasons {
   gaps: string[];
   /** null when sources are off: the score is stored as before. */
   reasonEvidence: ReasonEvidence | null;
-  /** `jd` reasons whose quote was not found in the JD (or touched a trap) and were stored as `inferred`. */
+  /** `jd` reasons whose quote was too short, not found in the JD or touched a trap, and were stored as `inferred`. */
   downgraded: number;
 }
 

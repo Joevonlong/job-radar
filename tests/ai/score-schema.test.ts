@@ -70,14 +70,17 @@ describe("the answer schema with reason sources", () => {
     expect(basisOf("fit_reasons")).not.toContain("unstated");
     expect(basisOf("fit_reasons")).toContain('"jd"');
     expect(basisOf("gaps")).toContain("unstated");
-    expect(schema.safeParse(JSON.parse(answer({ fit_reasons: [{ text: "x", basis: "unstated", quote: null }] }))).success).toBe(false);
+    // a fit reason the model still marks `unstated` is read as inferred, not refused (see the lenient read below)
+    expect(schema.parse(JSON.parse(answer({ fit_reasons: [{ text: "x", basis: "unstated", quote: null }] }))).fit_reasons[0]).toEqual({ text: "x", basis: "inferred", quote: null });
   });
 
   it("takes the quote limit from the options and allows a null quote", () => {
     const quoteOf = (max: number) => ((items(toJsonSchema(scoreOutputSchemaFor(REFERENCE_OUTPUT, { evidence: true, quoteMaxChars: max })), "gaps").properties as Json).quote);
     expect(JSON.stringify(quoteOf(80))).toContain('"maxLength":80');
     expect(JSON.stringify(quoteOf(80))).toContain('"type":"null"');
-    expect(schema.safeParse(JSON.parse(answer({ fit_reasons: [{ text: "x", basis: "jd", quote: "q".repeat(151) }] }))).success).toBe(false);
+    // what the provider is asked for keeps the limit; an answer over it is cut to it instead of failing the whole score
+    const cut = schema.parse(JSON.parse(answer({ fit_reasons: [{ text: "x", basis: "jd", quote: `${"q".repeat(150)}r` }] })));
+    expect(cut.fit_reasons[0]).toEqual({ text: "x", basis: "jd", quote: "q".repeat(150) });
   });
 
   it("accepts the new shape and an old-shape answer (plain strings become reasons without a source)", () => {
@@ -99,7 +102,52 @@ describe("the answer schema with reason sources", () => {
     expect(schema.safeParse(JSON.parse(answer(fit("   ")))).success).toBe(false);
     expect(schema.safeParse(JSON.parse(answer({ fit_reasons: Array.from({ length: MAX_FIT_REASONS + 1 }, (_, i) => `r${i}`) }))).success).toBe(false);
     expect(schema.safeParse(JSON.parse(answer({ gaps: Array.from({ length: MAX_GAPS + 1 }, (_, i) => `g${i}`) }))).success).toBe(false);
-    expect(schema.safeParse(JSON.parse(answer({ fit_reasons: [{ text: "x", basis: "jd", quote: null, extra: 1 }] }))).success).toBe(false);
+  });
+});
+
+describe("the lenient read of reason items (near misses do not fail the score)", () => {
+  const fit = (items: unknown[]) => schema.parse(JSON.parse(answer({ fit_reasons: items }))).fit_reasons;
+  const gaps = (items: unknown[]) => schema.parse(JSON.parse(answer({ gaps: items }))).gaps;
+
+  it("cuts a quote one character over quote_max_chars to the limit; the cut quote is still the start of the JD's words", () => {
+    const words = "Fluent German and English are required for this customer-facing role in our Berlin office.";
+    const short = scoreOutputSchemaFor(REFERENCE_OUTPUT, { evidence: true, quoteMaxChars: 40 });
+    const parsed = short.parse(JSON.parse(answer({ fit_reasons: [{ text: "x", basis: "jd", quote: words.slice(0, 41) }] })));
+    expect(parsed.fit_reasons[0]).toEqual({ text: "x", basis: "jd", quote: words.slice(0, 40) });
+    expect(words.startsWith((parsed.fit_reasons[0] as ReasonItem).quote ?? "")).toBe(true);
+  });
+
+  it("an unknown basis is no source; unstated on a fit reason is inferred, on a gap it stays", () => {
+    expect(fit([{ text: "a", basis: "source", quote: null }, { text: "b", basis: 3, quote: null }])).toEqual([
+      { text: "a", basis: null, quote: null },
+      { text: "b", basis: null, quote: null },
+    ]);
+    expect(fit([{ text: "c", basis: "unstated", quote: null }])).toEqual([{ text: "c", basis: "inferred", quote: null }]);
+    expect(gaps([{ text: "d", basis: "unstated", quote: null }])).toEqual([{ text: "d", basis: "unstated", quote: null }]);
+  });
+
+  it("a missing or non-string quote is null", () => {
+    expect(fit([{ text: "a", basis: "jd" }, { text: "b", basis: "inferred", quote: 12 }])).toEqual([
+      { text: "a", basis: "jd", quote: null },
+      { text: "b", basis: "inferred", quote: null },
+    ]);
+  });
+
+  it("drops extra keys such as offset", () => {
+    expect(fit([{ text: "a", basis: "jd", quote: "Python", offset: 12, confidence: "high" }])).toEqual([{ text: "a", basis: "jd", quote: "Python" }]);
+  });
+
+  it("drops what is not a reason (a number, null, an array, an object without text); the rest keeps its order", () => {
+    expect(fit([7, { text: "a", basis: "jd", quote: "Python" }, null, ["b"], { basis: "inferred" }, "plain"])).toEqual([
+      { text: "a", basis: "jd", quote: "Python" },
+      { text: "plain", basis: null, quote: null },
+    ]);
+  });
+
+  it("still refuses what the old schema refused: an empty or over-long text, too many reasons", () => {
+    expect(schema.safeParse(JSON.parse(answer({ fit_reasons: [{ text: "  ", basis: "inferred", quote: null }] }))).success).toBe(false);
+    expect(schema.safeParse(JSON.parse(answer({ fit_reasons: [{ text: "x".repeat(201), basis: null, quote: null }] }))).success).toBe(false);
+    expect(schema.safeParse(JSON.parse(answer({ gaps: [1, "a", "b", "c", "d"] }))).success).toBe(false);
   });
 });
 

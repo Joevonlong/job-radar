@@ -81,12 +81,34 @@ export interface ReasonItem {
 /** Longest quote the prompt asks for when the caller gives none (`ai.yaml: scoring.evidence.quote_max_chars` sets it at run time). */
 export const DEFAULT_QUOTE_MAX_CHARS = 150;
 
-/** A reason in the old shape (a plain string) is still accepted when sources are on: it is read as a reason without a source. */
-const fromPlainString = (value: unknown): unknown => (typeof value === "string" ? { text: value, basis: null, quote: null } : value);
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 
-function reasonItemSchema(bases: readonly [ReasonBasis, ...ReasonBasis[]], quoteMaxChars: number) {
-  // every key required, `additionalProperties: false`: what OpenAI-style strict schemas need; "absent" is null
-  return z.preprocess(fromPlainString, z.strictObject({ text: reasonText, basis: z.enum(bases).nullable(), quote: z.string().max(quoteMaxChars).nullable() }));
+/**
+ * One reason as the model answered it, read leniently before the strict check, so a near miss does not cost the whole score (and a
+ * paid retry): a plain string (the old shape) is a reason without a source; an unknown `basis` is no source, `unstated` on a fit
+ * reason is `inferred`; a missing or non-string `quote` is null and one over the limit is cut to it (its start is still a verbatim
+ * piece of the JD, checked later like any quote); extra keys are dropped. Anything without a string `text` is not a reason: null.
+ * The text itself is left to the strict check, as in the old schema.
+ */
+function normalizeReason(value: unknown, bases: readonly ReasonBasis[], quoteMaxChars: number): ReasonItem | null {
+  if (typeof value === "string") return { text: value, basis: null, quote: null };
+  if (!isRecord(value) || typeof value.text !== "string") return null;
+  const raw = value.basis;
+  const basis = bases.find((b) => b === raw) ?? (raw === "unstated" && bases.includes("inferred") ? "inferred" : null);
+  const quote = typeof value.quote === "string" ? value.quote.slice(0, quoteMaxChars) : null;
+  return { text: value.text, basis, quote };
+}
+
+/** The reasons of an answer read leniently (see `normalizeReason`); what is not a reason at all is dropped, so the rest stays aligned. */
+function normalizeReasons(bases: readonly ReasonBasis[], quoteMaxChars: number) {
+  return (value: unknown): unknown => (Array.isArray(value) ? value.map((item) => normalizeReason(item, bases, quoteMaxChars)).filter((item) => item !== null) : value);
+}
+
+function reasonListSchema(bases: readonly [ReasonBasis, ...ReasonBasis[]], quoteMaxChars: number, max: number) {
+  // every key required, `additionalProperties: false`: what OpenAI-style strict schemas need; "absent" is null. The `.max()` on the
+  // quote stays so the schema sent to the provider asks for it; the lenient read has already cut a longer one.
+  const item = z.strictObject({ text: reasonText, basis: z.enum(bases).nullable(), quote: z.string().max(quoteMaxChars).nullable() });
+  return z.preprocess(normalizeReasons(bases, quoteMaxChars), z.array(item).max(max));
 }
 
 /** The model's answer: the base fields plus one `summary_<lang>` per summary language. Reasons are strings, or items while reason sources are on. */
@@ -111,8 +133,8 @@ export function scoreOutputSchemaFor(output: ScoreOutputLanguages, options: Scor
   if (options.evidence !== true) return scoreBaseSchema.extend(summaries) as unknown as z.ZodType<ScoreOutput>;
   const quoteMax = options.quoteMaxChars ?? DEFAULT_QUOTE_MAX_CHARS;
   return scoreBaseSchema.extend({
-    fit_reasons: z.array(reasonItemSchema(FIT_REASON_BASES, quoteMax)).max(MAX_FIT_REASONS),
-    gaps: z.array(reasonItemSchema(GAP_REASON_BASES, quoteMax)).max(MAX_GAPS),
+    fit_reasons: reasonListSchema(FIT_REASON_BASES, quoteMax, MAX_FIT_REASONS),
+    gaps: reasonListSchema(GAP_REASON_BASES, quoteMax, MAX_GAPS),
     ...summaries,
   }) as unknown as z.ZodType<ScoreOutput>;
 }

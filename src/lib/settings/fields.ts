@@ -668,7 +668,7 @@ const aiSections: SectionDef[] = [
     id: "scoring_evidence",
     block: "scoring",
     title: { section: "ai_scoring_evidence" },
-    fields: [bool("scoring.evidence.enabled", "scoring_evidence_enabled"), int("scoring.evidence.quote_max_chars", "scoring_evidence_quote_max")],
+    fields: [bool("scoring.evidence.enabled", "scoring_evidence_enabled"), int("scoring.evidence.quote_max_chars", "scoring_evidence_quote_max"), int("scoring.evidence.quote_min_chars", "scoring_evidence_quote_min")],
   },
   {
     id: "scoring_german",

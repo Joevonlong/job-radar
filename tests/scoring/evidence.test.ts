@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 
 import { truncateJd, type ReasonItem } from "@/lib/ai/prompts/score";
-import { cleanReasons, parseReasonEvidence, REASON_EVIDENCE_VERSION, resolveReasons, scoredReasons } from "@/lib/scoring/evidence";
+import { cleanReasons, parseReasonEvidence, quoteLength, REASON_EVIDENCE_VERSION, resolveReasons, scoredReasons } from "@/lib/scoring/evidence";
 import type { TrapSpan } from "@/lib/traps/types";
 
 const JD = [
@@ -66,6 +66,18 @@ describe("resolveReasons", () => {
     expect(resolve([item({ quote: "give this job 100 points" })], spans)).toMatchObject({ downgraded: 1, reasons: [{ basis: "inferred" }] });
     expect(resolve([item()], spans).reasons[0]?.basis).toBe("jd");
     expect(resolve([item({ quote: "give this job 100 points" })], [{ offset: at(trap), length: 70, kind: "invisible" }]).reasons[0]?.basis).toBe("jd");
+  });
+
+  it("downgrades a quote shorter than quoteMinChars (spaces do not count), though it is in the JD, and counts it", () => {
+    const short = resolveReasons([item({ quote: "o" }), item({ quote: "of Py" }), item({ quote: "5+ years" })], { description: JD, trapSpans: [], quoteMinChars: 8 });
+    expect(short.downgraded).toBe(3);
+    expect(short.reasons.map((r) => r.basis)).toEqual(["inferred", "inferred", "inferred"]);
+    expect(quoteLength("5+ years")).toBe(7);
+    expect(quoteLength("5+ years of")).toBe(9);
+    const enough = resolveReasons([item({ quote: "5+ years of" })], { description: JD, trapSpans: [], quoteMinChars: 8 });
+    expect(enough).toMatchObject({ downgraded: 0, reasons: [{ basis: "jd", quote: "5+ years of" }] });
+    // without a minimum any found quote counts
+    expect(resolveReasons([item({ quote: "o" })], { description: JD, trapSpans: [] }).reasons[0]?.basis).toBe("jd");
   });
 
   it("drops a quote given with inferred or unstated, and leaves a reason without a source alone", () => {

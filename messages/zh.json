@@ -2876,6 +2876,10 @@
       "scoring_evidence_quote_max": {
         "label": "引用最长字符数",
         "hint": "引用越短越容易在 JD 里核对成功，token 也越少。"
+      },
+      "scoring_evidence_quote_min": {
+        "label": "引用最短字符数",
+        "hint": "不算空格少于这个字数的引用按“推断”显示：一两个词可能在 JD 里随便哪处都能匹配。"
       }
     },
     "control": {

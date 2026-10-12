@@ -2876,6 +2876,10 @@
       "scoring_evidence_quote_max": {
         "label": "Longest quote (characters)",
         "hint": "Shorter quotes are found in the JD more reliably and cost fewer tokens."
+      },
+      "scoring_evidence_quote_min": {
+        "label": "Shortest quote (characters)",
+        "hint": "A quote with fewer characters (not counting spaces) is shown as Inferred: a word or two could match any spot in the JD."
       }
     },
     "control": {

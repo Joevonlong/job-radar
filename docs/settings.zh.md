@@ -31,7 +31,7 @@ AI 标签的打分区块里有**打分标准**（`ai.yaml: scoring.criteria`）�
 ## AI 标签：理由来源
 
 **理由来源**（`ai.yaml: scoring.evidence`，默认关闭）给详情页的每条匹配理由和差距标上**原文**（附 JD 原话，可跳到原文）、**推断**或**未提及**。
-打开后每次打分多回答一些（输出 token 变多），引用长度由 `quote_max_chars`（默认 150）封顶。两项设置都不会触发重打；旧分数的理由照旧显示、没有来源。
+打开后每次打分多回答一些（输出 token 变多），引用长度由 `quote_max_chars`（默认 150）封顶，短于 `quote_min_chars`（默认 8，不计空格）的引用按推断处理。两项设置都不会触发重打；旧分数的理由照旧显示、没有来源。
 见 [score-evidence.zh.md](score-evidence.zh.md)。
 
 ## AI 标签：下拉选择
