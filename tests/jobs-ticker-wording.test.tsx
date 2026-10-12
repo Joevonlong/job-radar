@@ -80,4 +80,15 @@ describe("the ticker and the cycle card say the same thing", () => {
     const ticker = render(wrap(await JobTicker({ summary, newJobs: [], timezone: "Europe/Berlin", maxItems: 10 }), "zh"));
     expect(ticker.container.textContent).toContain("987 抓取 · 350 待处理");
   });
+
+  it("lists a source whose query was interrupted after some pages, not one that only had invalid records", async () => {
+    state.locale = "zh";
+    const channels: CycleSummary["channels"] = [
+      { channelId: "stepstone", family: "stepstone", runs: 1, fetched: 20, newCount: 3, outcome: "interrupted", errorCode: "parse", circuitOpenUntil: null },
+      { channelId: "xing", family: "xing", runs: 1, fetched: 20, newCount: 3, outcome: "ok", errorCode: null, circuitOpenUntil: null },
+    ];
+    const ticker = render(wrap(await JobTicker({ summary: { ...summary, channels, failedChannels: 1 }, newJobs: [], timezone: "Europe/Berlin", maxItems: 10 }), "zh"));
+    expect(ticker.container.textContent).toContain("stepstone 中途中断");
+    expect(ticker.container.textContent).not.toContain("xing");
+  });
 });

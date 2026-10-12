@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
 
-import { BudgetExceededError, ChannelError, errorFromHttp, isAbortError, looksBlocked, toChannelError } from "@/lib/channels/errors";
+import { BudgetExceededError, ChannelError, errorFromHttp, isAbortError, looksBlocked, PartialCollectError, toChannelError } from "@/lib/channels/errors";
 
 describe("errorFromHttp", () => {
   it.each([
@@ -77,6 +77,20 @@ describe("ChannelError", () => {
     expect(wrapped.retryable).toBe(false);
     expect(wrapped.message).toContain("boom");
     expect(toChannelError("a string").code).toBe("unknown");
+  });
+
+  it("PartialCollectError carries the postings and the original failure; toChannelError unwraps it to that failure", () => {
+    const cause = new ChannelError("blocked", "HTTP 403 from x: request blocked", { status: 403, tripsCircuit: true });
+    const postings = [{ externalId: "1", url: "https://x.test/1", payload: {}, postedAt: null }];
+    const partial = new PartialCollectError(postings, cause);
+    expect(partial).toBeInstanceOf(Error);
+    expect(partial).not.toBeInstanceOf(ChannelError);
+    expect(partial.cause).toBe(cause);
+    expect(partial.postings).toEqual(postings);
+    expect(partial.message).toContain("request blocked");
+    expect(toChannelError(partial)).toBe(cause);
+    const budget = new BudgetExceededError("channel", "cap");
+    expect(toChannelError(new PartialCollectError(postings, budget))).toBe(budget);
   });
 
   it("detects abort and timeout errors", () => {

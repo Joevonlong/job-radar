@@ -132,11 +132,11 @@ describe("skipped runs, cascade standby, the recommended switch, one time basis"
     });
   const build = (cfg: ReturnType<typeof own>, cards: ReturnType<typeof cardsFor>, stats = new Map<string, ReturnType<typeof windowStat>>()) =>
     buildRegistryView({ now: NOW, config: cfg, cards, channelStats: stats, boardHealth: [], boardSeen: new Map() });
-  const stat = (extra: Partial<ChannelCycleStat>): ChannelCycleStat => ({ cycleId: 1, runs: 1, succeeded: 0, partial: 0, failed: 0, skipped: 1, running: 0, fetched: 0, newCount: 0, ...extra });
+  const stat = (extra: Partial<ChannelCycleStat>): ChannelCycleStat => ({ cycleId: 1, runs: 1, succeeded: 0, partial: 0, failed: 0, skipped: 1, interrupted: 0, running: 0, fetched: 0, newCount: 0, ...extra });
 
   it("a channel whose newest cycles were only skipped is unstable with the skip reason, even after an earlier success", () => {
     const cfg = own(false);
-    const run = { id: 1, cycleId: 2, startedAt: NOW, finishedAt: NOW, status: "skipped" as const, fetched: 0, newCount: 0, cost: 0, errorCode: "budget_exceeded", error: "no available channel" };
+    const run = { id: 1, cycleId: 2, startedAt: NOW, finishedAt: NOW, status: "skipped" as const, fetched: 0, newCount: 0, cost: 0, errorCode: "budget_exceeded", error: "no available channel", interrupted: false };
     const cards = cardsFor({
       channelsConfig: cfg,
       states: [state("linkedin-brightdata")],

@@ -32,10 +32,21 @@ describe("cycle.last", () => {
     expect(r.hint).toContain("logs");
   });
   it("warns on a partial cycle and names the failed channels", async () => {
-    const channels = [{ channelId: "indeed", family: "indeed", runs: 3, succeeded: 0, failed: 3, skipped: 0, fetched: 0 }];
+    const channels = [{ channelId: "indeed", family: "indeed", runs: 3, succeeded: 0, failed: 3, skipped: 0, interrupted: 0, fetched: 0 }];
     const r = await only(lastCycleCheck, withCycle(cycle({ status: "partial", channels })));
     expect(r.status).toBe("warn");
     expect(r.detail).toContain("indeed");
+  });
+  it("names a channel whose queries were all interrupted, but not one whose runs only had invalid records", async () => {
+    // both shapes are `partial` runs with error code parse; getLatestCycleRuns counts the first as interrupted, the second as succeeded
+    const channels = [
+      { channelId: "stepstone", family: "stepstone", runs: 2, succeeded: 0, failed: 0, skipped: 0, interrupted: 2, fetched: 40 },
+      { channelId: "xing", family: "xing", runs: 2, succeeded: 2, failed: 0, skipped: 0, interrupted: 0, fetched: 40 },
+    ];
+    const r = await only(lastCycleCheck, withCycle(cycle({ status: "partial", channels })));
+    expect(r.status).toBe("warn");
+    expect(r.detail).toContain("stepstone");
+    expect(r.detail).not.toContain("xing");
   });
   it("warns when no cycle has run yet", async () => {
     const r = await only(lastCycleCheck, withCycle(null));

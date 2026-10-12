@@ -133,6 +133,14 @@ describe("reading cycle results", () => {
     ]);
     expect(failedSourcesOf(null)).toEqual([]);
   });
+
+  it("lists a source whose queries were interrupted after some pages, not one with only invalid records", () => {
+    expect(
+      failedSourcesOf({
+        channels: { cut: { failed: 0, interrupted: 1, errorCodes: { parse: 1 } }, invalid: { failed: 0, interrupted: 0, errorCodes: { parse: 1 } } },
+      }),
+    ).toEqual([{ channelId: "cut", reasons: ["parse"] }]);
+  });
 });
 
 describe("queuedAlertToCandidate", () => {

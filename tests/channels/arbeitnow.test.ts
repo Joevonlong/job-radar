@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import { arbeitnowDescriptionHtml, createArbeitnowChannel, pageUrl, parseArbeitnowPayload, type ArbeitnowInputs } from "@/lib/channels/arbeitnow";
 import { fromUnixSeconds } from "@/lib/channels/arbeitnow/parse";
 import { createChannelContext } from "@/lib/channels/context";
-import { ChannelError } from "@/lib/channels/errors";
+import { ChannelError, PartialCollectError } from "@/lib/channels/errors";
 import { createLogger, type LogRecord } from "@/lib/channels/logger";
 import { buildSweepQuery } from "@/lib/channels/query";
 import { normalizedPostingDraftSchema, type ChannelContext, type HttpResponse, type SearchQuery } from "@/lib/channels/types";
@@ -16,7 +16,7 @@ import { scanHtml } from "@/lib/traps/html";
 
 import { shippedYaml } from "../config/helpers";
 import { trapSettings } from "../traps/helpers";
-import { shippedChannels, shippedSearch } from "./helpers";
+import { failingHttp, interruption, INTERRUPTIONS, shippedChannels, shippedSearch } from "./helpers";
 
 const FIXTURES = path.resolve(import.meta.dirname, "../fixtures/arbeitnow");
 
@@ -139,7 +139,7 @@ function channel(options: { watched?: string[] } = {}) {
   return createArbeitnowChannel({ inputs: () => inputs(options), now: () => NOW });
 }
 
-const slugs = (postings: Array<{ externalId: string }>): string[] => postings.map((p) => p.externalId);
+const slugs = (postings: ReadonlyArray<{ externalId: string }>): string[] => postings.map((p) => p.externalId);
 
 describe("fixtures", () => {
   it("page 1 is out of order and page 2 overlaps it, as the live board does", () => {
@@ -460,6 +460,58 @@ describe("collect: errors", () => {
     expect(error.code).toBe("blocked");
     expect(error.message).toContain("HTTP 410");
     expect(error.tripsCircuit).toBe(true);
+  });
+
+  describe("a later page fails", () => {
+    /** What page 1 alone yields (the board ends after it). */
+    const pageOneOnly = async (): Promise<string[]> => {
+      const last = { ...PAGE_1, links: { ...(PAGE_1.links as object), next: null } };
+      return slugs(await channel().collect(sweepQuery(), makeContext(board([last])).ctx));
+    };
+    const settle = (promise: Promise<unknown>) => promise.then((value) => ({ value }), (error: unknown) => ({ error }));
+
+    for (const kind of INTERRUPTIONS) {
+      it(`keeps the postings of page 1 when page 2 fails (${kind}) and passes the failure on unchanged`, async () => {
+        const expected = await pageOneOnly();
+        expect(expected.length).toBeGreaterThan(0);
+        const made = makeContext(board());
+        const ctx = failingHttp(made.ctx, (url) => url.searchParams.get("page") === "2", kind);
+        const result = await settle(channel().collect(sweepQuery(), ctx));
+        const error = (result as { error: PartialCollectError }).error;
+        expect(error).toBeInstanceOf(PartialCollectError);
+        expect(error.cause).toMatchObject({ code: kind, retryable: interruption(kind).retryable, tripsCircuit: interruption(kind).tripsCircuit });
+        expect(slugs(error.postings)).toEqual(expected);
+        expect(made.calls.map((c) => c.url.searchParams.get("page"))).toEqual(["1"]);
+      });
+
+      it(`fails as before when page 1 fails (${kind})`, async () => {
+        const made = makeContext(board());
+        const ctx = failingHttp(made.ctx, () => true, kind);
+        const result = await settle(channel().collect(sweepQuery(), ctx));
+        expect((result as { error: unknown }).error).toBeInstanceOf(ChannelError);
+        expect((result as { error: ChannelError }).error.code).toBe(kind);
+      });
+    }
+
+    it("a server error or an unreadable page 2 (a parse error) interrupts the sweep the same way", async () => {
+      const expected = await pageOneOnly();
+      const serverError = await settle(channel().collect(sweepQuery(), makeContext((call, n) => (n === 1 ? response(503, "busy") : board()(call, n))).ctx));
+      expect((serverError as { error: PartialCollectError }).error).toBeInstanceOf(PartialCollectError);
+      expect((serverError as { error: PartialCollectError }).error.cause.code).toBe("network");
+      expect(slugs((serverError as { error: PartialCollectError }).error.postings)).toEqual(expected);
+
+      const malformed = await settle(channel().collect(sweepQuery(), makeContext(board([PAGE_1, PAGE_MALFORMED])).ctx));
+      expect((malformed as { error: PartialCollectError }).error).toBeInstanceOf(PartialCollectError);
+      expect((malformed as { error: PartialCollectError }).error.cause.code).toBe("parse");
+      expect(slugs((malformed as { error: PartialCollectError }).error.postings)).toEqual(expected);
+    });
+
+    it("counts the kept postings against the budget", async () => {
+      const consumed: number[] = [];
+      const made = makeContext(board(), {}, { consumed });
+      const result = await settle(channel().collect(sweepQuery(), failingHttp(made.ctx, (url) => url.searchParams.get("page") === "2", "network")));
+      expect(consumed).toEqual([(result as { error: PartialCollectError }).error.postings.length]);
+    });
   });
 
   it("an unusable settings block is reported, not guessed", async () => {

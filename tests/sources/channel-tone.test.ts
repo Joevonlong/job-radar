@@ -17,6 +17,8 @@ describe("one colour mapping for Today's channel chips and the /sources cards", 
     expect(statusTone("ok")).toBe("good");
     expect(outcomeTone({ outcome: "ok", keyMissing: false })).toBe("good");
     expect(outcomeTone({ outcome: "skipped", keyMissing: false })).toBe("warn");
+    // a query that failed after some pages: something arrived, but not everything
+    expect(outcomeTone({ outcome: "interrupted", keyMissing: false })).toBe("warn");
     expect(statusTone("degraded")).toBe("warn");
     expect(statusTone("off")).toBe("idle");
   });
