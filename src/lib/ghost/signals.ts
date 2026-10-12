@@ -5,6 +5,7 @@
 import { segmentText, type TextSegment } from "@/lib/job-checks/segment";
 import { clipQuote } from "@/lib/signals/quote";
 
+import { endsInQuestion, questionEndAsColon, stripTrailingDecoration, trailingDotsAsColon, trailingPauseAsColon } from "./heading-ends";
 import type { CompiledGhostPattern, CompiledGhostRules } from "./rules";
 import type { GhostInput, GhostPosting, GhostReasonOf, RepostEvent } from "./types";
 
@@ -118,13 +119,6 @@ const EMPHASIS = /[*_]+/gu;
 const END_PUNCTUATION = /[.!?;,)\]"'“”»]$/u;
 /** Emoji, arrows and other symbols before a heading ("🚀 Your tasks", "→ Your tasks", "» Deine Aufgaben"), with the joiners and selectors of emoji. */
 const DECORATION = /^[\p{Extended_Pictographic}\p{So}\p{Sk}\u{2190}-\u{21FF}\u{00BB}\u{203A}\u{FE0E}\u{FE0F}\u{200D}\u{20E3}\s]+/u;
-/** … and emoji after it ("Your impact 🌍", "Outcomes 🎯:"); a final ":" stays. */
-const TRAILING_DECORATION = /[\p{Extended_Pictographic}\p{So}\u{FE0E}\u{FE0F}\u{200D}\u{20E3}\s]+(:?)\s*$/u;
-/** A heading line that trails off ("Your tasks…") or ends in a dash ("Your Role -", "Your tasks —") ends as if in ":". */
-const TRAILING_PAUSE = /\s*(?:…|\s[-–]|—)\s*$/u;
-/** … and so does one that ends in three dots ("Your tasks..."), but only right above a list. */
-const TRAILING_DOTS = /\s*\.{3}\s*$/u;
-const QUESTION_END = /\s*[?？]+\s*$/u;
 const APOSTROPHES = /[‘’ʼ]/gu;
 const AMPERSAND_ENTITY = /&amp;/giu;
 
@@ -138,13 +132,13 @@ const AMPERSAND_ENTITY = /&amp;/giu;
  */
 function normalizeHeadingLine(raw: string, rules: CompiledGhostRules, listFollows: boolean): string {
   let text = raw.replace(AMPERSAND_ENTITY, "&").replace(APOSTROPHES, "'").trim().replace(DECORATION, "");
-  text = text.replace(LIST_OR_HEADING_MARKER, "").replace(DECORATION, "").replace(EMPHASIS, "").replace(TRAILING_DECORATION, "$1").trim();
-  text = text.replace(TRAILING_PAUSE, ":");
+  text = stripTrailingDecoration(text.replace(LIST_OR_HEADING_MARKER, "").replace(DECORATION, "").replace(EMPHASIS, "")).trim();
+  text = trailingPauseAsColon(text);
   if (!listFollows) return text;
-  text = text.replace(TRAILING_DOTS, ":");
-  if (QUESTION_END.test(text)) {
+  text = trailingDotsAsColon(text);
+  if (endsInQuestion(text)) {
     const first = (wordsOf(text)[0] ?? "").split("'")[0] ?? "";
-    if (rules.questionWords.some((word) => word.test(first))) text = text.replace(QUESTION_END, ":");
+    if (rules.questionWords.some((word) => word.test(first))) text = questionEndAsColon(text);
   }
   return text;
 }

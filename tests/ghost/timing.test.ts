@@ -1,9 +1,9 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
 
-import { evergreenWording } from "@/lib/ghost/signals";
+import { evergreenWording, thinDescription } from "@/lib/ghost/signals";
 
-import { fixtureRules } from "./helpers";
+import { fixtureRules, input } from "./helpers";
 
 /**
  * The packs' expressions and the ghost check stay linear on long runs of blank lines or spaces (input the ingestion normally
@@ -45,5 +45,15 @@ describe("ghost check timing", () => {
     const ms = elapsed(() => void (found = evergreenWording(`Initiativbewerbung\nÜber uns${" ".repeat(3000)}x\n\nDeine Aufgaben\n- Code Reviews`, rules)));
     expect(ms).toBeLessThan(500);
     expect(found).toMatchObject({ patternId: "open_application_title", offset: 0 });
+  });
+
+  it.each([
+    ["5000 spaces inside a line", `a${" ".repeat(5000)}b\nc`],
+    ["5000 em spaces inside a line", `a${" ".repeat(5000)}b\nc`],
+    ["spaces left by dropped emphasis marks", `a${" _".repeat(2000)}b\nc`],
+    ["5000 spaces before a final pause, dots or question mark", ["a", "b …", "c ...", "What d ?"].map((line) => line.replace(" ", " ".repeat(5000))).join("\n")],
+  ])("reading headings in a description with %s", (_name, description) => {
+    const ms = elapsed(() => void thinDescription(input({ description }), rules));
+    expect(ms).toBeLessThan(100);
   });
 });
