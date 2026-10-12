@@ -291,10 +291,13 @@ const ghostLeadInQuestionSchema = z
 
 /**
  * A statement with a short invitation tagged on ("We are always hiring – want to join?") is not a question, though it ends in a
- * `lead_in_question.ends` mark: the text after the last `breaks` match (regexes), without the mark, is one of `invitations` (regexes, the whole text) and has
- * at most `pipeline.yaml job_checks.ghost.question_tag_max_words` words, and the sentence before it (and the hit's clause) does not
- * open with one of `openers` (whole words: "is", "are", "what", "stellt"), after any `markers` ("so", "also"). Empty = every
- * sentence that ends in "?" is a question.
+ * `lead_in_question.ends` mark: the text after the last `breaks` match (regexes), without the mark, is one of `invitations`
+ * (regexes, the whole text) and has at most `pipeline.yaml job_checks.ghost.question_tag_max_words` words. A hit counts only when
+ * its clause (from the last `clause_breaks` match, comma or colon before it) opens, after any `markers` ("so", "also"), neither
+ * with one of `openers` ("is", "are", "what", "stellt"; "Recruiters, are you always hiring – interested?") nor with the hit itself
+ * ("Always hiring – interested?" has no subject). `openers` and `markers` are regexes matched at the start of the clause up to a
+ * word end, so a phrase works too ("wie\s+immer" as a marker, "wie(?!\s+immer)" as an opener). Empty = every sentence that
+ * ends in "?" is a question.
  */
 export interface GhostQuestionTag {
   breaks: string[];
@@ -323,6 +326,8 @@ export interface GhostPack {
   exclude_context: string[];
   /** Like `exclude_context`, but only for the hits from the start of its match to the end of that clause (`clause_breaks`). */
   exclude_clause: string[];
+  /** Where an `exclude_clause` range ends besides `clause_breaks` (", we …", a German verb-second inversion). */
+  exclude_clause_ends: string[];
   lead_in_question: GhostLeadInQuestion;
   question_tag: GhostQuestionTag;
   abbreviations: string[];
@@ -341,6 +346,7 @@ export function emptyGhostPack(): GhostPack {
     clause_breaks: [],
     exclude_context: [],
     exclude_clause: [],
+    exclude_clause_ends: [],
     lead_in_question: emptyGhostLeadInQuestion(),
     question_tag: emptyGhostQuestionTag(),
     abbreviations: [],
@@ -382,10 +388,15 @@ export const ghostPackSchema = z
      */
     exclude_context: optionalList,
     /**
-     * A hit from the start of a match of one of these to the end of its clause (`clause_breaks`) does not count; other hits in the
+     * A hit from the start of a match of one of these to the end of its clause (`clause_breaks`, `exclude_clause_ends`) does not count; other hits in the
      * sentence still do ("Experience building a talent pipeline is valued; we are always hiring": a qualification, then the posting).
      */
     exclude_clause: optionalList,
+    /**
+     * Where an `exclude_clause` range also ends (regexes, besides `clause_breaks`): a comma or colon before a subject ("Experience
+     * building teams is a plus, we are always hiring"), a German verb-second inversion ("… stellen wir laufend ein").
+     */
+    exclude_clause_ends: optionalList,
     /** Which question before a sentence is read with it (see `GhostLeadInQuestion`). */
     lead_in_question: ghostLeadInQuestionSchema,
     /** Which sentence ending in "?" is a statement with an invitation tagged on (see `GhostQuestionTag`). */

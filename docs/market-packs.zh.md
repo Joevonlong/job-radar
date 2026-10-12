@@ -82,9 +82,10 @@ pnpm run doctor --only config.market
 | `negation_after` | 这个包的说法后面往后找多远的否定词：`words`（默认：`negation_words_after` 个词）或 `clause`（到分句结束）。`de` 用 `clause`：德语把 "nicht" 放在句末（"Für unseren Talentpool ist diese Anzeige ganz ausdrücklich nicht gedacht"） |
 | `clause_breaks` | 分句在哪里结束（";"、" but "、" aber "、"and we …"、", not"、", die …"）；分句界也能把词排除在否定搜索之外：`not only`、`nicht nur` |
 | `exclude_context` | 匹配到的句子（或紧挨在它前面的问句）不算：雇主的产品、客户或同名团队、岗位职责、"but this role is a concrete opening"、真实招聘帖的结尾（"Not ready to apply? … stay in touch"）、条件句、隐私说明 |
-| `exclude_clause` | 和 `exclude_context` 一样，但只去掉从它的匹配处到该分句结尾（`clause_breaks`）的命中：对候选人的资格要求（"Experience building a talent pipeline …"、"Erfahrung im Aufbau eines Talentpools"），后面 "…; we are always hiring" 仍然算 |
+| `exclude_clause` | 和 `exclude_context` 一样，但只去掉从它的匹配处到该分句结尾（`clause_breaks` 或 `exclude_clause_ends`）的命中：对候选人的资格要求（"Experience building a talent pipeline …"、"Erfahrung im Aufbau eines Talentpools"），后面 "…; we are always hiring" 仍然算 |
+| `exclude_clause_ends` | `exclude_clause` 的范围还在哪里结束（正则）：主语前的逗号或冒号（"…, we are always hiring"）、德语动词第二位的倒装（"… Teams stellen wir laufend ein"）。对别的判断不算分句结束 |
 | `lead_in_question` | 句子前面哪个问句和它一起读：`ends`（问句结尾的字符：`?`、`？`）、`starts`（问句从最后一个这些字符或换行之后开始：`.`、`!`、`¿` 等）和 `line_above`（问句可以在上一行）。各包的列表合并；没有 `ends` 就不读问句。片段本身以 `ends` 之一结尾就是问句，不算，除非 `question_tag` 把它读成陈述句 |
-| `question_tag` | 什么时候陈述句后面跟一个简短邀请不算问句（"We are always hiring – want to join?"）：`breaks`（尾巴从哪里开始的正则：" – "、"—"、";"）、`invitations`（正则；最后一个 break 之后、去掉 "?" 的文字必须整个是其中之一，且最多 `pipeline.yaml job_checks.ghost.question_tag_max_words` 个词）、`openers` 和 `markers`（整词：句子或说法所在的分句在跳过 `markers` 之后以 `openers` 之一开头，仍然是问句："So, is your company always hiring – interested?"）。只搜尾巴之前的部分。各包的列表合并；没有 `invitations` 就所有问句都还是问句 |
+| `question_tag` | 什么时候陈述句后面跟一个简短邀请不算问句（"We are always hiring – want to join?"）：`breaks`（尾巴从哪里开始的正则：" – "、"—"、";"）、`invitations`（正则；最后一个 break 之后、去掉 "?" 的文字必须整个是其中之一，且最多 `pipeline.yaml job_checks.ghost.question_tag_max_words` 个词）、`openers` 和 `markers`（正则，从说法所在分句的开头匹配到一个词的结尾，所以可以写词组：`wie(?!\s+immer)`）。分句从说法前最后一个 `clause_breaks` 匹配、逗号或冒号开始；跳过 `markers` 之后以 `openers` 之一开头（"Recruiters, are you always hiring – interested?"），或直接以说法本身开头（"Always hiring – interested?"），仍然是问句。只搜尾巴之前的部分。各包的列表合并；没有 `invitations` 就所有问句都还是问句 |
 | `abbreviations` | 句点不表示句子结束的缩写 |
 | `prefilter` | 快速初筛：没有命中的 JD 或行不再找人才库说法 |
 

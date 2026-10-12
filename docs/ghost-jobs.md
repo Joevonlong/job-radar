@@ -45,9 +45,12 @@ The description is cut into pieces (sentences, list items, a short heading with 
   Technologien haben"), ends the clause; "not only" and "nicht nur" are not negations;
 - the piece is itself a question ("Always hiring? Acme automates your sourcing", "Is your company always hiring –
   interested?"). A statement with a short invitation tagged on after a dash or ";" is no question: "We are always hiring –
-  want to join?" and "Wir stellen laufend ein – neugierig geworden?" count (the tag is at most
-  `question_tag_max_words` words and one of the pack's invitations as a whole; see `question_tag` in
-  [market-packs.md](market-packs.md#ghost-job-patterns));
+  want to join?", "When we grow, we are always hiring – want to join?" and "Wir stellen laufend ein – neugierig
+  geworden?" count (the tag is at most `question_tag_max_words` words and one of the pack's invitations as a whole; see
+  `question_tag` in [market-packs.md](market-packs.md#ghost-job-patterns)). It stays a question when the phrase's clause
+  (after a comma or colon) opens with a question word or verb ("Recruiters, are you always hiring – interested?", "Liebe
+  Recruiter, stellen Sie laufend ein – neugierig?") or with the phrase itself, without a subject ("Always hiring –
+  interested?");
 - it is about the employer's product, customers or a team of that name ("We build talent pool software", "Our ATS lets
   hiring managers add candidates to the talent pipeline", "Evergreen job listings are a core feature of our ATS", "Join our
   Talent Network team", "Our SaaS lets agencies post evergreen job listings", "Wir helfen Unternehmen beim Aufbau ihres
@@ -58,16 +61,21 @@ The description is cut into pieces (sentences, list items, a short heading with 
   "We are building a talent pool", "We are hiring for our AI talent pool" and "Help us grow by joining our talent pool" count;
   a recruiter's own duty in German too ("Als Recruiter sprichst du Kandidaten für unseren Talentpool an", "Ansprache von
   Kandidaten für unseren Talentpool"), while "Bewirb dich jetzt für unseren KI-Talentpool" counts;
-- a qualification asked of the candidate ("Experience building a talent pipeline for future roles", "Erfahrung im Aufbau
-  eines Talentpools für zukünftige Stellen"): this takes out only the phrase up to the end of its clause, so "Experience
-  building a talent pipeline is valued; we are always hiring" still counts;
+- a qualification asked of the candidate ("Experience building a talent pipeline for future roles", "Experience with talent
+  pipelines for future roles", "Berufserfahrung im Aufbau eines Talentpools für zukünftige Stellen"): this takes out only the
+  phrase up to the end of its clause (";", or a comma before "we"/"wir"), so "Experience building a talent pipeline is
+  valued; we are always hiring" still counts. The company's own record is none: "With our history of growing fast, we are
+  always hiring" and "Mit unserer Erfahrung in der Entwicklung von KI-Produkten stellen wir laufend ein" count;
 - "Initiativbewerbung" stands as a title on its own line below the first duties heading (a section of a real posting);
   "Initiativbewerbung (m/w/d)" counts anywhere;
 - it is training for later roles or an event for a community ("Mentoring for our future roles", "Leadership development
-  for our upcoming positions", "Weiterbildung für zukünftige Positionen", "Karriereentwicklung für zukünftige Positionen",
-  "Organize events for our engineering talent community", "Organisiere Events für Kandidaten in unserem KI-Talentpool");
-  technical development is the work, not training: "We hire in backend development for upcoming positions" and "Wir suchen
-  Talente in der Produktentwicklung für zukünftige Positionen" count;
+  for our upcoming positions", "Business development opportunities for future roles", "Weiterbildung für zukünftige
+  Positionen", "Karriereentwicklung für zukünftige Positionen", "Organize events for our engineering talent community",
+  "Organisiere Events für Kandidaten in unserem KI-Talentpool"). "Development" is training only next to a training word
+  (professional, personal, leadership …; opportunities, programs …): "We hire in AI development for upcoming positions" and
+  "Wir suchen Verstärkung in der Entwicklung für zukünftige Positionen" count. Like the other exclusions in this list, an
+  event takes out the whole sentence: "Bewirb dich für unseren KI-Talentpool und erhalte Einladungen zu Events für unsere
+  Talent-Community" does not count;
 - a phrase that needs recruiting words around it has none: "join our AI talent pool" counts with "apply", "candidates",
   "future opportunities" or the like in the same sentence ("By joining our AI talent pool, you will be contacted … for our
   future opportunities"; not "networking opportunities"), "access to the largest tech talent pool in Europe" never does;

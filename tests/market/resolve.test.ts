@@ -165,6 +165,18 @@ describe("the effective pipeline config", () => {
     expect(buildEffectivePipeline(shippedPipelineFile(), fixtureMarket({ pack: "de" }), withoutGhost).ghost).toEqual(buildEffectivePipeline(shippedPipelineFile(), fixtureMarket({ pack: "generic", country: "US", currency: "USD", home_language: "en" }), fixturePack).ghost);
   });
 
+  it("unites the packs' clause exclusions and question tags", () => {
+    const de = buildEffectivePipeline(shippedPipelineFile(), fixtureMarket({ pack: "de" }), fixturePack).ghost;
+    const generic = fixturePack("generic").rules.ghost;
+    const german = fixturePack("de").rules.ghost;
+    expect(german.exclude_clause.length).toBeGreaterThan(0);
+    expect(de.exclude_clause).toEqual([...generic.exclude_clause, ...german.exclude_clause]);
+    expect(de.exclude_clause_ends).toEqual([...generic.exclude_clause_ends, ...german.exclude_clause_ends]);
+    for (const key of ["breaks", "invitations", "openers", "markers"] as const) {
+      expect(de.question_tag[key]).toEqual([...new Set([...generic.question_tag[key], ...german.question_tag[key]])]);
+    }
+  });
+
   it("has no German rules under a market without them", () => {
     const effective = buildEffectivePipeline(shippedPipelineFile(), fixtureMarket({ pack: "generic", country: "US", currency: "USD", home_language: "en" }), fixturePack);
     expect(effective.language.requirement).toBeNull();

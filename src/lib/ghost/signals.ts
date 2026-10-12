@@ -168,10 +168,10 @@ function wholeLineHeading(line: string, rules: CompiledGhostRules, listFollows: 
  * The heading-shaped pieces of a line: the whole line when it is short and looks like a heading, and a short "Label:" prefix.
  * `listFollows`: a list starts at the next line that is not blank, or after one line of lead-in (see `hasResponsibilityHeading`).
  */
-function headingsOfLine(line: string, rules: CompiledGhostRules, listFollows: boolean): string[] {
+function headingsOfLine(line: string, rules: CompiledGhostRules, listFollows: boolean, wholeLine = true): string[] {
   if (line.trim() === "") return [];
   const out: string[] = [];
-  const whole = wholeLineHeading(line, rules, listFollows);
+  const whole = wholeLine ? wholeLineHeading(line, rules, listFollows) : null;
   if (whole !== null) out.push(whole);
   const content = normalizeHeadingLine(line, rules, listFollows);
   const colon = content.indexOf(":");
@@ -186,17 +186,22 @@ export function hasResponsibilityHeading(description: string | null, rules: Comp
   return firstDutiesHeading(description, rules) !== null;
 }
 
-/** Where the line of the text's first duties heading starts (as `hasResponsibilityHeading` reads them), or null. */
-function firstDutiesHeading(description: string | null, rules: CompiledGhostRules): number | null {
+/**
+ * Where the line of the text's first duties heading starts (as `hasResponsibilityHeading` reads them), or null. With `cap`, a
+ * longer line is read only up to `cap` characters and only for a "Label:" prefix (it is no heading as a whole): the time stays
+ * linear in the length of a line.
+ */
+function firstDutiesHeading(description: string | null, rules: CompiledGhostRules, cap?: number): number | null {
   if (description === null || rules.responsibilities.length === 0) return null;
   const lines = description.split("\n");
   // whether a list starts at the next line that is not blank, or after one line of lead-in that ends in ":" or is itself
   // heading-shaped ("What will I be doing?" / "As a senior engineer, you will:" / "- …"; not "Which tasks can our AI automate?" /
   // "Almost all of them." / "- …"), from the end
+  const fits = (line: string): boolean => cap === undefined || line.length <= cap;
   const isList = (at: number): boolean => at !== -1 && LIST_LINE.test(lines[at] as string);
   const isLeadIn = (at: number): boolean => {
     const line = (lines[at] as string).trim();
-    return line.endsWith(":") || line.endsWith("：") || wholeLineHeading(line, rules, false) !== null;
+    return line.endsWith(":") || line.endsWith("：") || (fits(line) && wholeLineHeading(line, rules, false) !== null);
   };
   const listFollows = new Array<boolean>(lines.length).fill(false);
   let next = -1;
@@ -207,7 +212,8 @@ function firstDutiesHeading(description: string | null, rules: CompiledGhostRule
   }
   let offset = 0;
   for (const [i, line] of lines.entries()) {
-    for (const heading of headingsOfLine(line, rules, listFollows[i] === true)) {
+    const whole = fits(line);
+    for (const heading of headingsOfLine(whole ? line : line.slice(0, cap), rules, listFollows[i] === true, whole)) {
       if (isDutiesHeading(heading, rules)) return offset;
     }
     offset += line.length + 1;
@@ -352,20 +358,47 @@ function isQuestion(text: string, lead: CompiledGhostRules["leadInQuestion"]): b
   return lead.ends.some((mark) => trimmed.endsWith(mark));
 }
 
-/** The text opens with one of the packs' `question_tag.openers` ("Is …", "So, are …", "Stellt ihr …"), after any `markers`. */
-function opensQuestion(text: string, tag: CompiledGhostRules["questionTag"]): boolean {
-  const words = wordsOf(text);
-  let at = 0;
-  while (at < words.length && tag.markers.some((marker) => marker.test(words[at] as string))) at += 1;
-  const first = words[at];
-  return first !== undefined && tag.openers.some((opener) => opener.test(first));
+/** A comma or colon also starts a clause for the question test ("Recruiters, are you always hiring – interested?"). */
+const CLAUSE_PUNCTUATION = /[,:，：]/gu;
+const LEADING_NON_WORD = /^[^\p{L}\p{N}]*/u;
+
+/**
+ * Whether the clause of a hit at `from` (in a statement with an invitation tagged on) is a question after all. The clause starts
+ * at the last `clause_breaks` match, comma or colon before the hit; after any `question_tag.markers` it opens with one of `openers`
+ * ("Recruiters, are you always hiring – interested?", "So, is it …", "Liebe Recruiter, stellen Sie laufend ein – neugierig?") or
+ * with the hit itself ("Always hiring – interested?": no subject, an advert's question). "When we grow, we are always hiring – want
+ * to join?" and "Have a look: we are always hiring – interested?" are statements.
+ */
+function questionClause(text: string, from: number, rules: CompiledGhostRules): boolean {
+  const tag = rules.questionTag;
+  const head = text.slice(0, from);
+  let at = Math.max(lastBreakStart(head, rules.clauseBreaks), lastBreakStart(head, [CLAUSE_PUNCTUATION]));
+  const skip = (): void => {
+    at += LEADING_NON_WORD.exec(text.slice(at))?.[0].length ?? 0;
+  };
+  skip();
+  for (let marked = true; marked && at < from; ) {
+    marked = false;
+    const rest = text.slice(at);
+    for (const marker of tag.markers) {
+      const length = marker.exec(rest)?.[0].length ?? 0;
+      if (length === 0) continue;
+      at += length;
+      skip();
+      marked = true;
+      break;
+    }
+  }
+  if (at >= from) return true;
+  const rest = text.slice(at, from);
+  return tag.openers.some((opener) => opener.test(rest));
 }
 
 /**
  * A piece that ends in a question mark but is a statement with a short invitation tagged on ("We are always hiring – want to
  * join?", "Wir suchen laufend Verstärkung – bist du dabei?"): the length of the statement before the last `question_tag.breaks`
- * match, or null when the piece is a question. The tag must be one of `invitations` and have at most
- * `question_tag_max_words` words; the statement must not open with one of `openers` ("Is your company always hiring – interested?").
+ * match, or null when the piece is a question. The tag must be one of `invitations` and have at most `question_tag_max_words`
+ * words; whether the clause of a hit is a question all the same is `questionClause`'s ("Is your company always hiring – interested?").
  */
 function taggedStatement(text: string, rules: CompiledGhostRules): number | null {
   const tag = rules.questionTag;
@@ -384,17 +417,22 @@ function taggedStatement(text: string, rules: CompiledGhostRules): number | null
   const tagText = body.slice(tagStart).trim();
   const words = wordsOf(tagText).length;
   if (words === 0 || words > rules.settings.question_tag_max_words || !tag.invitations.some((re) => re.test(tagText))) return null;
-  return opensQuestion(body.slice(0, headEnd), tag) ? null : headEnd;
+  return headEnd;
 }
 
-/** The ranges (offsets in the description) that the packs' `exclude_clause` take out: each match to the end of its clause. */
+/**
+ * The ranges (offsets in the description) that the packs' `exclude_clause` take out: each match to the end of its clause (the
+ * first `clause_breaks` or `exclude_clause_ends` match after it).
+ */
 function clauseExclusions(segment: TextSegment, rules: CompiledGhostRules): Array<[number, number]> {
   const out: Array<[number, number]> = [];
+  if (rules.excludeClause.length === 0) return out;
+  const ends = [...rules.clauseBreaks, ...rules.excludeClauseEnds];
   for (const re of rules.excludeClause) {
     for (const match of segment.text.matchAll(re)) {
       if (match[0].length === 0) continue;
       const after = match.index + match[0].length;
-      out.push([segment.start + match.index, segment.start + after + firstBreak(segment.text.slice(after), rules.clauseBreaks)]);
+      out.push([segment.start + match.index, segment.start + after + firstBreak(segment.text.slice(after), ends)]);
     }
   }
   return out;
@@ -453,16 +491,16 @@ export function evergreenWording(description: string | null, rules: CompiledGhos
       if (options.skip?.(hit.start, hit.end)) continue;
       if (statementEnd < segment.text.length) {
         const from = hit.start - segment.start;
-        // in the tag, or in a clause that is itself a question ("We grow fast, but are you always hiring – interested?"); the
-        // clause is read from its break on ("and we are …": "and" is a marker)
+        // in the tag, or in a clause that is itself a question ("We grow fast, but are you always hiring – interested?") or has
+        // no subject ("Always hiring – interested?")
         if (from >= statementEnd) continue;
-        const head = segment.text.slice(0, from);
-        if (opensQuestion(segment.text.slice(lastBreakStart(head, rules.clauseBreaks), statementEnd), rules.questionTag)) continue;
+        if (questionClause(segment.text, from, rules)) continue;
       }
       // a qualification of the candidate, to the end of its clause ("Experience building a talent pipeline for future roles")
       if (excluded.some(([start, end]) => hit.start >= start && hit.start < end)) continue;
       if (pattern.onlyBeforeDuties) {
-        if (dutiesAt === undefined) dutiesAt = firstDutiesHeading(description, rules);
+        // a heading line is short: longer lines are read only up to twice heading_max_chars
+        if (dutiesAt === undefined) dutiesAt = firstDutiesHeading(description, rules, rules.settings.heading_max_chars * 2);
         if (dutiesAt !== null && hit.start > dutiesAt) continue;
       }
       // a broad phrase counts only next to recruiting words ("join our AI talent pool" … "future opportunities")

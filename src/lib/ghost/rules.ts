@@ -25,8 +25,9 @@ export interface CompiledQuestionTag {
   breaks: RegExp[];
   /** Anchored (`^(?:invitation)$`, flags `iu`): tested against the whole tag, without its question mark. */
   invitations: RegExp[];
-  /** Anchored (`^(?:word)$`): tested against one word. */
+  /** Anchored at the start and at a word end (`^(?:opener)(?![\p{L}\p{N}])`, flags `iu`): tested against a clause's text from a word on. */
   openers: RegExp[];
+  /** As `openers`: the words or phrases skipped before the opener test ("so", "and", "wie immer"). */
   markers: RegExp[];
 }
 
@@ -44,6 +45,8 @@ export interface CompiledGhostRules {
   excludeContext: RegExp[];
   /** Flags `giu`: a match takes out the hits from its start to the end of its clause. */
   excludeClause: RegExp[];
+  /** Flags `giu`: where an `excludeClause` range also ends, besides `clauseBreaks`. */
+  excludeClauseEnds: RegExp[];
   questionTag: CompiledQuestionTag;
   /** Which question before a sentence is read with it (the packs' `lead_in_question`; no `ends` = none). */
   leadInQuestion: GhostLeadInQuestion;
@@ -67,11 +70,18 @@ function compile(source: string, path: string, flags = "giu"): RegExp {
 
 const compileList = (sources: readonly string[], path: string): RegExp[] => sources.map((source, index) => compile(source, `${path}[${index}]`));
 
-/** Word lists (`negation_cues`, `question_words`, `question_tag.openers` / `.markers`): each entry must match one whole word. */
+/** Word lists (`negation_cues`, `question_words`): each entry must match one whole word. */
 const anchoredWords = (sources: readonly string[], path: string): RegExp[] =>
   sources.map((source, index) => {
     compile(source, `${path}[${index}]`);
     return new RegExp(`^(?:${source})$`, "iu");
+  });
+
+/** `question_tag.openers` / `.markers`: each entry is matched at the start of a text and must end at a word end. */
+const leadingPhrases = (sources: readonly string[], path: string): RegExp[] =>
+  sources.map((source, index) => {
+    compile(source, `${path}[${index}]`);
+    return new RegExp(`^(?:${source})(?![\\p{L}\\p{N}])`, "iu");
   });
 
 function compilePrefilter(sources: readonly string[]): RegExp | null {
@@ -106,14 +116,15 @@ export function compileGhostRules(config: GhostRulesInput): CompiledGhostRules {
     clauseBreaks: compileList(pack.clause_breaks, "ghost.clause_breaks"),
     excludeContext: compileList(pack.exclude_context, "ghost.exclude_context"),
     excludeClause: compileList(pack.exclude_clause, "ghost.exclude_clause"),
+    excludeClauseEnds: compileList(pack.exclude_clause_ends, "ghost.exclude_clause_ends"),
     questionTag: {
       breaks: compileList(pack.question_tag.breaks, "ghost.question_tag.breaks"),
       invitations: pack.question_tag.invitations.map((source, index) => {
         compile(source, `ghost.question_tag.invitations[${index}]`);
         return new RegExp(`^(?:${source})$`, "iu");
       }),
-      openers: anchoredWords(pack.question_tag.openers, "ghost.question_tag.openers"),
-      markers: anchoredWords(pack.question_tag.markers, "ghost.question_tag.markers"),
+      openers: leadingPhrases(pack.question_tag.openers, "ghost.question_tag.openers"),
+      markers: leadingPhrases(pack.question_tag.markers, "ghost.question_tag.markers"),
     },
     leadInQuestion: { ends: [...pack.lead_in_question.ends], starts: [...pack.lead_in_question.starts], line_above: pack.lead_in_question.line_above },
     abbreviations: [...pack.abbreviations],

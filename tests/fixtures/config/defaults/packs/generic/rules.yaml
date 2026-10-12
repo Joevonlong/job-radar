@@ -240,7 +240,7 @@ ghost:
     # building a talent pool": that is the posting, nor "Help us grow by joining our engineering talent pool" (no "join", "apply" or
     # "by" in between), "Support engineers wanted for our talent pool" (at most three words in between).
     - '(?<![\p{L}\p{N}])(?:(?:you(?:[''’]ll|[''’]re|[''’]d|\s+will|\s+would|\s+are|\s+can|\s+should)?|help(?:s|ing)?(?:\s+us)?(?:\s+to)?)\s+(?:also\s+|actively\s+|be\s+)?(?:build|building|grow|growing|manage|managing|maintain|maintaining|nurture|nurturing|develop|developing|own|owning|source|sourcing|engage|engaging|support|supporting|expand|expanding)|responsible\s+for)\s+(?:(?!(?:join|joining|apply|applying|by)(?![\p{L}\p{N}]))[\p{L}''’-]+\s+){0,3}?talent\s+(?:pools?|pipelines?|communit(?:y|ies)|networks?)(?![\p{L}\p{N}])'
-    - '(?:^|\n)(?:[\s*•·–\-▪▫◦‣►▸➢➤✓✔→]|\p{So}|(?:\d{1,3}|[a-z])[.)])*\s*(?:build|building|grow|growing|manage|managing|maintain|maintaining|nurture|nurturing|develop|developing|own|owning|source|sourcing|engage|engaging|support|supporting|expand|expanding)\s+(?:(?!(?:join|joining|apply|applying|by)(?![\p{L}\p{N}]))[\p{L}''’-]+\s+){0,3}?talent\s+(?:pools?|pipelines?|communit(?:y|ies)|networks?)(?![\p{L}\p{N}])'
+    - '(?:^|\n)(?:[^\S\n]|[*•·–\-▪▫◦‣►▸➢➤✓✔→]|\p{So}|(?:\d{1,3}|[a-z])[.)])*(?:build|building|grow|growing|manage|managing|maintain|maintaining|nurture|nurturing|develop|developing|own|owning|source|sourcing|engage|engaging|support|supporting|expand|expanding)\s+(?:(?!(?:join|joining|apply|applying|by)(?![\p{L}\p{N}]))[\p{L}''’-]+\s+){0,3}?talent\s+(?:pools?|pipelines?|communit(?:y|ies)|networks?)(?![\p{L}\p{N}])'
     # a recruiter's duty: "You will source candidates for upcoming roles"
     - '(?<![\p{L}\p{N}])you(?:[''’]ll|[''’]re|[''’]d|\s+will|\s+would|\s+are|\s+can)?\s+(?:also\s+)?(?:hire|hiring|recruit\p{L}*|source|sourcing|screen\p{L}*|interview\p{L}*|staff\p{L}*|plan|planning|forecast\p{L}*|partner\p{L}*|identify|identifying|attract\p{L}*|find|finding)\s+(?:[\p{L}''’-]+\s+){0,4}?(?:for|about)\s+(?:our\s+)?(?:potential\s+|upcoming\s+)?(?:future|upcoming)(?![\p{L}\p{N}])'
     # a recruiter's duty for a talent pool: "You will screen applicants for our engineering talent pool", "In this role you will
@@ -250,11 +250,12 @@ ghost:
     # … and opening the sentence or a line (after any bullet) with the people it is about: "Identify and attract candidates
     # for our engineering talent pool", "Sourcing and assessing candidates for our data talent pool". Not "Interviewing now for our
     # AI talent pool — apply today", "Placements into our AI talent pool happen on a rolling basis", "Hiring for our AI talent pool".
-    - '(?:^|\n)(?:[\s*•·–\-▪▫◦‣►▸➢➤✓✔→]|\p{So}|(?:\d{1,3}|[a-z])[.)])*\s*(?:(?:screen|interview|identif|attract|assess|evaluat|plac|find|sourc|engag)\p{L}*|build\p{L}*\s+relationships)\s+(?:(?!(?:join|joining|apply|applying|by)(?![\p{L}\p{N}]))[\p{L}''’-]+\s+){0,3}?(?:candidates?|applicants?|profiles?|engineers?|developers?|talents?|people|professionals?|experts?|specialists?|hires?|prospects?)\s+(?:(?!(?:join|joining|apply|applying|by)(?![\p{L}\p{N}]))[\p{L}''’-]+\s+){0,2}?(?:for|into)\s+our\s+(?:[\p{L}-]+\s+){0,2}?talent\s+(?:pools?|communit(?:y|ies)|networks?)(?![\p{L}\p{N}])'
+    - '(?:^|\n)(?:[^\S\n]|[*•·–\-▪▫◦‣►▸➢➤✓✔→]|\p{So}|(?:\d{1,3}|[a-z])[.)])*(?:(?:screen|interview|identif|attract|assess|evaluat|plac|find|sourc|engag)\p{L}*|build\p{L}*\s+relationships)\s+(?:(?!(?:join|joining|apply|applying|by)(?![\p{L}\p{N}]))[\p{L}''’-]+\s+){0,3}?(?:candidates?|applicants?|profiles?|engineers?|developers?|talents?|people|professionals?|experts?|specialists?|hires?|prospects?)\s+(?:(?!(?:join|joining|apply|applying|by)(?![\p{L}\p{N}]))[\p{L}''’-]+\s+){0,2}?(?:for|into)\s+our\s+(?:[\p{L}-]+\s+){0,2}?talent\s+(?:pools?|communit(?:y|ies)|networks?)(?![\p{L}\p{N}])'
     # training for later roles is a benefit, not an opening: "Mentoring for future roles in leadership", "Development opportunities
-    # for future roles"; technical development is the work ("applications in software development for future openings", also with
-    # several spaces or a hyphen between)
-    - '(?<![\p{L}\p{N}])(?:training|mentoring|coaching|career|learning|upskilling|(?<!(?<![\p{L}\p{N}])(?:software|hardware|firmware|product|web|app|application|mobile|platform|backend|back-end|frontend|front-end|full-?stack|business|model|tool|tooling|game|api|data|cloud|systems?|solutions?|feature|infrastructure|sdk)[\s-]+)development|preparation|prepares?|preparing|readiness)\s+(?:[\p{L}''’-]+\s+){0,3}?(?:for|towards?|into)\s+(?:our\s+)?(?:potential\s+|upcoming\s+)?(?:future|upcoming)(?![\p{L}\p{N}])'
+    # for future roles", "Personal and business development for future roles". "development" is training only next to a training
+    # word (professional, personal, leadership, … before it; opportunities, programs, plans, budgets, paths after it): otherwise it
+    # is the work ("applications in software / AI / embedded development for future openings")
+    - '(?<![\p{L}\p{N}])(?:training|mentoring|coaching|career|learning|upskilling|(?:professional|personal|career|leadership|skills?|self|employee|talent)(?:\s+(?:and|&)\s+[\p{L}-]+)?[\s-]+development|development(?=\s+(?:opportunit\p{L}*|program\p{L}*|plans?|budgets?|paths?)(?![\p{L}\p{N}]))|preparation|prepares?|preparing|readiness)\s+(?:[\p{L}''’-]+\s+){0,3}?(?:for|towards?|into)\s+(?:our\s+)?(?:potential\s+|upcoming\s+)?(?:future|upcoming)(?![\p{L}\p{N}])'
     # events and training for a community, not this posting: "Organize events for our engineering talent community", "We run
     # workshops for our internal talent community", "Join our AI talent community meetups", "Join our engineering talent community
     # for networking opportunities and events" (not "This program is for our talent pool: apply now")
@@ -270,11 +271,16 @@ ghost:
     - '(?<![\p{L}\p{N}])(?:privacy|gdpr|data\s+protection|personal\s+data|consent|retain|retention|on\s+file|keep\s+your|store\s+your|delete)(?![\p{L}\p{N}])'
     - '(?<![\p{L}\p{N}])also\s+(?:be\s+)?(?:consider\p{L}*|kept|keep|use|used|added)(?![\p{L}\p{N}])'
     - '(?<![\p{L}\p{N}])(?:may|might|will|would|can)\s+(?:also\s+)?(?:contact|reach\s+out\s+to|notify)\s+you(?![\p{L}\p{N}])'
-  # A qualification of the candidate takes out the evergreen phrases from its start to the end of its clause (clause_breaks), not
-  # the whole sentence: "Experience building a talent pipeline for future roles" does not count, "Experience building a talent
-  # pipeline is valued; we are always hiring" does (after the ";").
+  # A qualification of the candidate takes out the evergreen phrases from its start to the end of its clause (clause_breaks or
+  # exclude_clause_ends), not the whole sentence: "Experience building a talent pipeline for future roles" and "Experience with
+  # talent pipelines for future roles" do not count, "Experience building a talent pipeline is valued; we are always hiring" does
+  # (after the ";"). The company's own record is no qualification: "With our history of growing fast, we are always hiring",
+  # "Your experience managing teams helps us" (after "our" / "your", with at most one word between).
   exclude_clause:
-    - '(?<![\p{L}\p{N}])(?:(?:experience|track\s+record|background|history|expertise|skills?|knowledge)\s+(?:(?:of|in|with|at)\s+)?(?:successfully\s+|actively\s+)?(?:building|growing|developing|managing|creating|maintaining|scaling|nurturing|sourcing|establishing|expanding|running|owning|leading)|(?:ability|able)\s+to\s+(?:build|grow|develop|manage|create|maintain|scale|nurture|source|establish|expand|run|own|lead))(?![\p{L}\p{N}])'
+    - '(?<![\p{L}\p{N}])(?=\p{L})(?<!(?<![\p{L}\p{N}])(?:our|your)\s+(?:[\p{L}-]+\s+)?)(?:(?:experience|track\s+record|background|history|expertise|skills?|knowledge)\s+(?:(?:of|in|with|at)\s+)?(?:successfully\s+|actively\s+)?(?:building|growing|developing|managing|creating|maintaining|scaling|nurturing|sourcing|establishing|expanding|running|owning|leading)|(?:ability|able)\s+to\s+(?:build|develop|manage|create|maintain|scale|nurture|source|establish|expand|run|own|lead)|(?:experience|expertise|background|knowledge)\s+(?:with|in|of)\s+(?:[\p{L}-]+\s+){0,2}?(?:talent|candidate|applicant)\s+(?:pools?|pipelines?|communit(?:y|ies)|networks?|databases?))(?![\p{L}\p{N}])'
+  # … and ends also at a comma or colon before a subject: "Experience building teams is a plus, we are always hiring"
+  exclude_clause_ends:
+    - '[,:]\s*(?:(?:since|as|so|because|and|but|while|when|which\s+is\s+why|that[''’]s\s+why)\s+)?(?:we|you|they)(?![\p{L}\p{N}])'
   # The question right before a sentence is read with it ("Don't see a role that fits? Join our talent community"): the text before
   # the sentence ends in one of `ends`; the question starts after the last of `starts` (or a line break). line_above: the question
   # may stand on the line above. A sentence that itself ends in one of `ends` is a question, not a statement about the posting
@@ -285,16 +291,19 @@ ghost:
     line_above: true
   # A statement with a short invitation tagged on is no question: "We are always hiring – want to join?" counts. The text after the
   # last of `breaks` (without its "?") must be one of `invitations` as a whole and have at most pipeline.yaml
-  # job_checks.ghost.question_tag_max_words words, and the sentence and the phrase's clause must not open with one of `openers`
-  # (whole words, after any `markers`): "Is your company always hiring – interested?", "So, are you always hiring – or just
-  # pretending?", "Always hiring – sound familiar?" and "Your recruiters are always hiring – interested in a better ATS?" stay
-  # questions. The packs' lists are united.
+  # job_checks.ghost.question_tag_max_words words. The phrase's clause (from the last clause break, comma or colon before it) must
+  # open, after any `markers`, neither with one of `openers` nor with the phrase itself: "Is your company always hiring –
+  # interested?", "Recruiters, are you always hiring – interested?", "Always hiring – interested?" (no subject), "So, are you
+  # always hiring – or just pretending?" and "Your recruiters are always hiring – interested in a better ATS?" stay questions;
+  # "When we grow, we are always hiring – want to join?" counts. `openers` and `markers` are regexes matched at the start of the
+  # clause, up to a word end. The packs' lists are united.
   question_tag:
     breaks: ['\s[–—-]\s', '—', ';']
     invitations:
       - '(?:do\s+you\s+)?(?:want|like|wish)\s+to\s+(?:join(?:\s+us|\s+the\s+team|\s+our\s+team)?|apply|be\s+part\s+of\s+(?:it|this|the\s+team|our\s+team))'
       - '(?:are\s+you\s+)?(?:keen|ready|eager|excited)\s+to\s+(?:join(?:\s+us|\s+the\s+team|\s+our\s+team)?|apply)'
       - '(?:(?:are\s+)?you\s+)?interested'
+      - 'interested\s+in\s+joining(?:\s+us)?'
       - '(?:are\s+)?you\s+in'
       - '(?:will\s+you\s+)?join\s+us'
       - 'sounds?\s+like\s+you'

@@ -89,6 +89,7 @@ export function mergeGhostPacks(packs: ReadonlyArray<{ rules: { ghost: GhostPack
     clause_breaks: union(...ghost.map((g) => g.clause_breaks)),
     exclude_context: union(...ghost.map((g) => g.exclude_context)),
     exclude_clause: union(...ghost.map((g) => g.exclude_clause)),
+    exclude_clause_ends: union(...ghost.map((g) => g.exclude_clause_ends)),
     lead_in_question: {
       ends: union(...ghost.map((g) => g.lead_in_question.ends)),
       starts: union(...ghost.map((g) => g.lead_in_question.starts)),
