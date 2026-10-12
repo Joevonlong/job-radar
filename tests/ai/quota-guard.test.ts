@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 
-import { AiUnavailableError, quotaGuardAttempts, quotaGuardResume } from "@/lib/ai/errors";
+import { AiUnavailableError, quotaGuardAttempts, quotaGuardResume, quotaGuardResumeOf } from "@/lib/ai/errors";
 import { classifyTranslationFailure } from "@/lib/translation/errors";
 import { createMemoryHealthStore, EMPTY_HEALTH } from "@/lib/ai/health";
 import {
@@ -72,6 +72,14 @@ describe("evaluateQuota", () => {
     expect(evaluateQuota(calls(7, HOUR), policy(), NOW, previous).level).toBe("ok");
     // without a previous cap the same 8 calls are fine
     expect(evaluateQuota(calls(8, HOUR), policy(), NOW, null).level).toBe("ok");
+  });
+
+  it("evaluates against the current cap when the stored pause has no recorded cap (an older state): no softer resume line", () => {
+    const legacy = hardState({ hardRequests: null });
+    expect(evaluateQuota(calls(8, HOUR), policy(), NOW, legacy).level).toBe("ok");
+    expect(evaluateQuota(calls(10, HOUR), policy(), NOW, legacy).level).toBe("hard");
+    // a pause recorded under another cap does not carry over either
+    expect(evaluateQuota(calls(8, HOUR), policy(), NOW, hardState({ hardRequests: 20 })).level).toBe("ok");
   });
 
   it("a pause caused by another cap does not carry over: putting the cap back lifts it at once", () => {
@@ -196,6 +204,19 @@ describe("quotaGuardResume", () => {
       const other = { provider: "claude-cli" as const, outcome: "failed" as const, kind, message: kind };
       expect(quotaGuardResume(new AiUnavailableError("translate", [guarded, other]))).toBeUndefined();
     }
+  });
+  it("quotaGuardResumeOf gives the same answer for the attempts as quotaGuardResume gives for the error", () => {
+    const apiClosed = { provider: "anthropic" as const, outcome: "skipped" as const, kind: "budget" as const, message: "closed" };
+    const auth = { provider: "claude-cli" as const, outcome: "skipped" as const, kind: "auth" as const, message: "login expired" };
+    const later = { ...guarded, provider: "claude-cli" as const, guard: { reason: "window" as const, resumeAt: at(2 * HOUR).toISOString() } };
+    const unknown = { ...guarded, provider: "claude-cli" as const, guard: { reason: "cycle_cap" as const, resumeAt: null } };
+    for (const attempts of [[], [apiClosed], [guarded], [guarded, apiClosed], [guarded, auth], [guarded, later], [guarded, unknown]]) {
+      expect(quotaGuardResumeOf(attempts)).toEqual(quotaGuardResume(new AiUnavailableError("score", attempts)));
+    }
+    expect(quotaGuardResumeOf([guarded, later])).toEqual({ resumeAt: at(HOUR).toISOString() });
+    expect(quotaGuardResumeOf([guarded, unknown])).toEqual({ resumeAt: at(HOUR).toISOString() });
+    expect(quotaGuardResumeOf([guarded, auth])).toBeUndefined();
+    expect(quotaGuardResumeOf([])).toBeUndefined();
   });
   it("a translation names the login problem, not the cap, when another provider is not logged in", () => {
     const auth = { provider: "claude-cli" as const, outcome: "failed" as const, kind: "auth" as const, message: "login expired" };
