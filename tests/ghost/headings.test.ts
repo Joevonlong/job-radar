@@ -127,12 +127,10 @@ const SENTENCES_WITHOUT_LIST: readonly string[] = [
   "Which tasks can our AI automate?",
   "How does Acme reduce your daily tasks?",
   "We automate repetitive tasks...",
-  "We automate repetitive tasks…",
   "Learn more about our day-to-day...",
   "What do our customers' teams do day-to-day?",
   "What will I be doing?",
   "Welche Aufgaben übernimmt unsere KI?",
-  "Wir automatisieren lästige Aufgaben…",
 ];
 
 describe("duties headings: unusual forms and near-misses", () => {
@@ -153,10 +151,45 @@ describe("a heading ending in '?' or '...' needs a list right after it", () => {
   });
 });
 
+/** A line ending in the ellipsis character is a heading as it always was, a list after it or not ("Your tasks…" / prose). */
+const ELLIPSIS_HEADINGS: readonly string[] = ["Your tasks…", "Your responsibilities…", "Deine Aufgaben…", "In this role…", "🔑 You’ll play a key role by…"];
+
+describe("a line ending in '…' is a heading without a list too", () => {
+  const rules = fixtureRules();
+  it.each(ELLIPSIS_HEADINGS)("%j followed by prose: duties heading", (line) => {
+    expect(hasResponsibilityHeading(`Intro line of the company.\n${line}\nYou build and run the data platform with the team.`, rules)).toBe(true);
+  });
+  it("a long JD under 'Your responsibilities…' with prose duties is not thin", () => {
+    const prose = Array.from({ length: 30 }, (_, i) => `You build and run service number ${i} of the platform end to end.`);
+    expect(thinDescription(input({ description: ["About us", "We build software.", "Your responsibilities…", ...prose].join("\n") }), rules)).toBeNull();
+  });
+});
+
 describe("one lead-in line between the heading and its list", () => {
   const rules = fixtureRules();
-  it.each(["What will I be doing?", "Welche Aufgaben erwarten dich?", "Your tasks…"])("%j, one line of prose, then the list: duties heading", (line) => {
-    expect(hasResponsibilityHeading(`Intro.\n${line}\n\nAs a senior engineer you join the platform team.\n\n- Build the platform.`, rules)).toBe(true);
+  // the lead-in ends in ":" or is itself heading-shaped (short, no end punctuation)
+  it.each([
+    ["What will I be doing?", "As a Senior AI Infrastructure Engineer focused on model training and inference, you will:"],
+    ["What will I be doing?", "You will:"],
+    ["What will I be doing?", "Product Engineers in the AI Group"],
+    ["Welche Aufgaben erwarten dich?", "Als Data Engineer wirst du:"],
+    ["Your tasks...", "In the platform team"],
+  ])("%j, lead-in %j, then the list: duties heading", (line, lead) => {
+    expect(hasResponsibilityHeading(`Intro.\n${line}\n\n${lead}\n\n- Build the platform.`, rules)).toBe(true);
+  });
+  // a sentence between them: the "?" or "..." line was a question or remark of the company text
+  it.each([
+    ["Which tasks can our AI automate?", "Almost all of them."],
+    ["What will I be doing?", "As a senior engineer you join the platform team."],
+    ["Welche Aufgaben übernimmt unsere KI?", "Fast alle davon."],
+    ["We automate repetitive tasks...", "Our customers love it!"],
+  ])("%j, sentence %j, then a list: no duties heading", (line, lead) => {
+    expect(hasResponsibilityHeading(`Intro.\n${line}\n${lead}\n- Invoice matching.\n- Ticket routing.`, rules)).toBe(false);
+  });
+  it("a long JD whose only candidate is a question, a sentence, then a feature list stays thin", () => {
+    const features = Array.from({ length: 30 }, (_, i) => `- Invoice matching for ledger number ${i} of the customer, end to end.`);
+    const text = ["About us", "Which tasks can our AI automate?", "Almost all of them.", ...features].join("\n");
+    expect(thinDescription(input({ description: text }), rules)).toMatchObject({ hasResponsibilities: false, responsibilitiesFrom: "headings" });
   });
   it.each(["Which tasks can our AI automate?", "Welche Aufgaben übernimmt unsere KI?", "We automate repetitive tasks..."])("%j, two lines of prose, then a list: no duties heading", (line) => {
     expect(hasResponsibilityHeading(`Intro.\n${line}\nWe help teams ship faster.\nOur customers love it.\n- Feature one.`, rules)).toBe(false);

@@ -163,7 +163,15 @@ const CASES: ReadonlyArray<readonly [string, string | null]> = [
   ["Your job: build relationships with candidates for our tech talent pool.", null],
   ["- Sourcing and assessing candidates for our data talent pool", null],
   ["You will evaluate and place applicants into our engineering talent network.", null],
+  // … also on the line under a short heading (the segmenter reads them together)
+  ["Your tasks\nScreen applicants for our engineering talent pool and run interviews.", null],
+  ["About the role\nIdentify and attract candidates for our engineering talent pool.", null],
+  ["About the role\nGrow and nurture our talent pool for future roles.", null],
   // … but the posting's own words with the same verbs still count
+  // a noun or title at the start of the sentence is no duty (no object of the verb)
+  ["Interviewing now for our AI talent pool — apply today.", "talent_pool_join"],
+  ["Placements into our AI talent pool happen on a rolling basis; apply now.", "talent_pool_join"],
+  ["Support engineers wanted for our talent pool – apply now.", "talent_pool"],
   ["Help us grow by joining our engineering talent pool for future roles.", "talent_pool_join"],
   ["If selected, you will be placed into our AI talent pool and contacted for future roles.", "talent_pool_join"],
   ["We are hiring for our AI talent pool – apply now.", "talent_pool_join"],

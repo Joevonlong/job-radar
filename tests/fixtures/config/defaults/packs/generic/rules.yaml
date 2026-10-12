@@ -156,9 +156,10 @@ ghost:
         - '(?<![\p{L}\p{N}])(?:appl(?:y|ying|ied|ications?|icants?)|candidates?|cvs?|resumes?|roles?|positions?|openings?|vacanc(?:y|ies)|hiring|recruit\p{L}*|contacted|(?:job|career|future|new|open|upcoming)\s+opportunit(?:y|ies))(?![\p{L}\p{N}])'
   # A heading that opens the duties of the role. Tested only against heading-shaped lines (short; a "#" heading, ending in ":" or
   # without end punctuation) and "Label:" prefixes, read without "*" / "_" emphasis, list or "#" markers and the emoji or arrows
-  # around it, with "&amp;" as "&" and curly apostrophes as straight ones; a final " -" or "—" counts as ":". Right above a list
-  # (at most one line of lead-in between) a final "…" or "..." counts as ":" too, and so does a final "?" after one of question_words ("What will I be doing?" / "- …");
-  # without a list such a line is a sentence ("Which tasks can our AI automate?"). A list right under a duties heading is the
+  # around it, with "&amp;" as "&" and curly apostrophes as straight ones; a final "…", " -" or "—" counts as ":". Right above a
+  # list (at most one lead-in line between, ending in ":" or heading-shaped) a final "..." counts as ":" too, and so does a final
+  # "?" after one of question_words ("What will I be doing?" / "- …"); without a list such a line is a sentence ("Which tasks can
+  # our AI automate?"). A list right under a duties heading is the
   # role's duties (evergreen phrases in it do not count).
   responsibility_patterns:
     - id: responsibilities
@@ -235,18 +236,21 @@ ghost:
     # the posting says it is a real opening after all: "…, but this role is a concrete opening", "this role is based in Berlin"
     - '(?<![\p{L}\p{N}])(?:this|the)\s+(?:role|position|job|posting|vacancy|opening)\s+is\s+(?:an?\s+)?(?:concrete|real|specific|actual|genuine|existing|based|located)(?![\p{L}\p{N}])'
     # a duty of the role: "You will build and nurture our talent pipeline", "help us grow our talent pool", "responsible for our
-    # talent pool", "Build our talent community" (the verb opens the sentence). Not "We are building a talent pool": that is the posting,
-    # nor "Help us grow by joining our engineering talent pool" (no "join", "apply" or "by" in between).
-    - '(?<![\p{L}\p{N}])(?:(?:you(?:[''’]ll|[''’]re|[''’]d|\s+will|\s+would|\s+are|\s+can|\s+should)?|help(?:s|ing)?(?:\s+us)?(?:\s+to)?)\s+(?:also\s+|actively\s+|be\s+)?(?:build|building|grow|growing|manage|managing|maintain|maintaining|nurture|nurturing|develop|developing|own|owning|source|sourcing|engage|engaging|support|supporting|expand|expanding)|responsible\s+for)\s+(?:(?!(?:join|joining|apply|applying|by)(?![\p{L}\p{N}]))[\p{L}''’-]+\s+){0,5}?talent\s+(?:pools?|pipelines?|communit(?:y|ies)|networks?)(?![\p{L}\p{N}])'
-    - '^[\s*•·–-]*(?:build|building|grow|growing|manage|managing|maintain|maintaining|nurture|nurturing|develop|developing|own|owning|source|sourcing|engage|engaging|support|supporting|expand|expanding)\s+(?:(?!(?:join|joining|apply|applying|by)(?![\p{L}\p{N}]))[\p{L}''’-]+\s+){0,5}?talent\s+(?:pools?|pipelines?|communit(?:y|ies)|networks?)(?![\p{L}\p{N}])'
+    # talent pool", "Build our talent community" (the verb opens the sentence or the line under a short heading). Not "We are
+    # building a talent pool": that is the posting, nor "Help us grow by joining our engineering talent pool" (no "join", "apply" or
+    # "by" in between), "Support engineers wanted for our talent pool" (at most three words in between).
+    - '(?<![\p{L}\p{N}])(?:(?:you(?:[''’]ll|[''’]re|[''’]d|\s+will|\s+would|\s+are|\s+can|\s+should)?|help(?:s|ing)?(?:\s+us)?(?:\s+to)?)\s+(?:also\s+|actively\s+|be\s+)?(?:build|building|grow|growing|manage|managing|maintain|maintaining|nurture|nurturing|develop|developing|own|owning|source|sourcing|engage|engaging|support|supporting|expand|expanding)|responsible\s+for)\s+(?:(?!(?:join|joining|apply|applying|by)(?![\p{L}\p{N}]))[\p{L}''’-]+\s+){0,3}?talent\s+(?:pools?|pipelines?|communit(?:y|ies)|networks?)(?![\p{L}\p{N}])'
+    - '(?:^|\n)[\s*•·–-]*(?:build|building|grow|growing|manage|managing|maintain|maintaining|nurture|nurturing|develop|developing|own|owning|source|sourcing|engage|engaging|support|supporting|expand|expanding)\s+(?:(?!(?:join|joining|apply|applying|by)(?![\p{L}\p{N}]))[\p{L}''’-]+\s+){0,3}?talent\s+(?:pools?|pipelines?|communit(?:y|ies)|networks?)(?![\p{L}\p{N}])'
     # a recruiter's duty: "You will source candidates for upcoming roles"
     - '(?<![\p{L}\p{N}])you(?:[''’]ll|[''’]re|[''’]d|\s+will|\s+would|\s+are|\s+can)?\s+(?:also\s+)?(?:hire|hiring|recruit\p{L}*|source|sourcing|screen\p{L}*|interview\p{L}*|staff\p{L}*|plan|planning|forecast\p{L}*|partner\p{L}*|identify|identifying|attract\p{L}*|find|finding)\s+(?:[\p{L}''’-]+\s+){0,4}?(?:for|about)\s+(?:our\s+)?(?:potential\s+|upcoming\s+)?(?:future|upcoming)(?![\p{L}\p{N}])'
-    # a recruiter's duty for a talent pool: "You will screen applicants for our engineering talent pool", "Identify and attract
-    # candidates for our engineering talent pool", "Your job: build relationships with candidates for our tech talent pool" (the verb
-    # opens the sentence or follows "you" / "Your job:"). Not "We are hiring for our AI talent pool", "Hiring for our AI talent pool:
-    # apply now" (no "hire" or "recruit" opening the sentence), "you will be placed into our AI talent pool", "Find out how to apply
-    # for our AI talent pool".
-    - '(?:^[\s*•·–-]*(?!hir|recruit)|(?<![\p{L}\p{N}])(?:you(?:[''’]ll|[''’]re|[''’]d|\s+will|\s+would|\s+are|\s+can|\s+should)?\s+(?:also\s+|actively\s+)?|(?:job|role|tasks?|duties|focus|mission)\s*:\s*))(?:screen|recruit|interview|identif|attract|hir|assess|evaluat|plac|find|sourc|engag|build|grow|manag|maintain|nurtur|develop|own|support|expand)\p{L}*\s+(?:(?!(?:join|joining|apply|applying|by)(?![\p{L}\p{N}]))[\p{L}''’-]+\s+){0,4}?(?:for|into)\s+our\s+(?:[\p{L}-]+\s+){0,2}?talent\s+(?:pools?|communit(?:y|ies)|networks?)(?![\p{L}\p{N}])'
+    # a recruiter's duty for a talent pool: "You will screen applicants for our engineering talent pool", "In this role you will
+    # interview candidates for our AI talent network", "Your job: build relationships with candidates for our tech talent pool" (after
+    # "you" or "Your job:"). Not "We are hiring for our AI talent pool", "you will be placed into our AI talent pool".
+    - '(?<![\p{L}\p{N}])(?:you(?:[''’]ll|[''’]re|[''’]d|\s+will|\s+would|\s+are|\s+can|\s+should)?\s+(?:also\s+|actively\s+)?|(?:job|role|tasks?|duties|focus|mission)\s*:\s*)(?:screen|recruit|interview|identif|attract|hir|assess|evaluat|plac|find|sourc|engag|build|grow|manag|maintain|nurtur|develop|own|support|expand)\p{L}*\s+(?:(?!(?:join|joining|apply|applying|by)(?![\p{L}\p{N}]))[\p{L}''’-]+\s+){0,4}?(?:for|into)\s+our\s+(?:[\p{L}-]+\s+){0,2}?talent\s+(?:pools?|communit(?:y|ies)|networks?)(?![\p{L}\p{N}])'
+    # … and opening the sentence (or the line under a short heading) with the people it is about: "Identify and attract candidates
+    # for our engineering talent pool", "Sourcing and assessing candidates for our data talent pool". Not "Interviewing now for our
+    # AI talent pool — apply today", "Placements into our AI talent pool happen on a rolling basis", "Hiring for our AI talent pool".
+    - '(?:^|\n)[\s*•·–-]*(?:(?:screen|interview|identif|attract|assess|evaluat|plac|find|sourc|engag)\p{L}*|build\p{L}*\s+relationships)\s+(?:(?!(?:join|joining|apply|applying|by)(?![\p{L}\p{N}]))[\p{L}''’-]+\s+){0,3}?(?:candidates?|applicants?|profiles?|engineers?|developers?|talents?|people|professionals?|experts?|specialists?|hires?|prospects?)\s+(?:(?!(?:join|joining|apply|applying|by)(?![\p{L}\p{N}]))[\p{L}''’-]+\s+){0,2}?(?:for|into)\s+our\s+(?:[\p{L}-]+\s+){0,2}?talent\s+(?:pools?|communit(?:y|ies)|networks?)(?![\p{L}\p{N}])'
     # training for later roles is a benefit, not an opening: "Mentoring for future roles in leadership"
     - '(?<![\p{L}\p{N}])(?:training|mentoring|coaching|career|learning|upskilling|development|preparation|prepares?|preparing|readiness)\s+(?:[\p{L}''’-]+\s+){0,3}?(?:for|towards?|into)\s+(?:our\s+)?(?:potential\s+|upcoming\s+)?(?:future|upcoming)(?![\p{L}\p{N}])'
     # events and training for a community, not this posting: "Organize events for our engineering talent community", "We run
