@@ -46,6 +46,15 @@ describe("ScoreMeter", () => {
     expect(at(85)).toBe("85%");
   });
 
+  it("without a push line (null) the triangle and the line in the tip are gone, the number stays", () => {
+    const { container } = renderViz(<ScoreMeter value={45} pushLine={null} />);
+    const meter = container.querySelector(".jr-segm") as HTMLElement;
+    expect(meter).toHaveClass("jr-segm--noline");
+    expect(meter.getAttribute("data-tip")).toBe("排序值 45");
+    expect(screen.getByRole("meter")).toHaveAttribute("aria-valuenow", "45");
+    expect(lit(container)).toBe(9);
+  });
+
   it("0 is a score (all cells empty, band 偏弱), not 'unknown'", () => {
     const { container } = renderViz(<ScoreMeter value={0} pushLine={70} />);
     expect(screen.getByRole("meter")).toHaveAttribute("aria-valuenow", "0");
@@ -118,6 +127,12 @@ describe("ScoreMeter", () => {
 });
 
 describe("ScoreComposition", () => {
+  it("without a push line (null) the scale has no push line label", () => {
+    const { container } = renderViz(<ScoreComposition match={45} bonus={0} bonusCap={15} pushLine={null} />);
+    expect(container.querySelector(".jr-comp__lg [data-line]")).toBeNull();
+    expect(container.querySelectorAll(".jr-comp__lg > span")).toHaveLength(3);
+  });
+
   it("78 + 10 on the 0-115 scale", () => {
     const { container } = renderViz(<ScoreComposition match={78} bonus={10} bonusCap={15} pushLine={70} />);
     expect(screen.getByRole("img")).toHaveAttribute("aria-label", "排序值构成：AI 匹配分 78，信号加分 10");

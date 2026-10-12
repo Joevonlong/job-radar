@@ -82,6 +82,61 @@ describe("ScoreCard unscored state", () => {
   });
 });
 
+describe("ScoreCard by filter result and rank value", () => {
+  const props = { jobId: 1, pushLine: 70, bonusCap: 15, scoreNow: null, scoredWhen: null };
+  const row = { rankValue: 45, score: 45, signalBonus: 0, stale: false, aiScore: 45, germanPenalty: 0, provider: null, model: null, promptVersion: null, scoredAt: null };
+
+  it("keeps the score of a filtered-out job (whatever removed it) and draws no push line", () => {
+    const { container } = render(wrap(<ScoreCard {...props} score={{ ...row, filterResult: "filtered_out" }} />));
+    expect(container.querySelector('[data-rank="ranked"]')).not.toBeNull();
+    expect(container.querySelector('[data-rank="not-ranked"]')).toBeNull();
+    expect(screen.getByRole("meter")).toHaveAttribute("aria-valuenow", "45");
+    expect(screen.getByTestId("rank-breakdown")).toHaveTextContent("45");
+    // never pushed: no triangle on the meter, no push line on the bar's scale, and the tip does not talk about it
+    expect(container.querySelector(".jr-segm")).toHaveClass("jr-segm--noline");
+    expect(container.querySelector(".jr-segm")?.getAttribute("data-tip")).toBe("Rank value 45");
+    expect(container.querySelector(".jr-comp__lg [data-line]")).toBeNull();
+    expect(container.textContent).not.toMatch(/push line/i);
+  });
+
+  it("a filtered-out job with a score of 0 still shows the number", () => {
+    const { container } = render(wrap(<ScoreCard {...props} score={{ ...row, rankValue: 0, score: 0, aiScore: 0, filterResult: "filtered_out" }} />));
+    expect(container.querySelector('[data-rank="ranked"]')).not.toBeNull();
+    expect(screen.getByRole("meter")).toHaveAttribute("aria-valuenow", "0");
+  });
+
+  it("says 'not ranked' only for a filtered-out job that has no score", () => {
+    const { container } = render(wrap(<ScoreCard {...props} score={{ ...row, rankValue: null, score: null, aiScore: null, filterResult: "filtered_out" }} />));
+    const box = container.querySelector('[data-rank="not-ranked"]') as HTMLElement;
+    expect(box).toHaveTextContent("not ranked");
+    expect(screen.queryByRole("meter")).toBeNull();
+    expect(container.querySelector('[data-rank="pending"]')).toBeNull();
+  });
+
+  it("a job that passed with a score keeps the push line", () => {
+    const { container } = render(wrap(<ScoreCard {...props} score={{ ...row, rankValue: 82, score: 82, aiScore: 82, filterResult: "passed" }} />));
+    expect(container.querySelector('[data-rank="ranked"]')).not.toBeNull();
+    expect(container.querySelector(".jr-segm")).not.toHaveClass("jr-segm--noline");
+    expect(container.querySelector(".jr-segm")?.getAttribute("data-tip")).toContain("push line 70");
+    expect(container.querySelector(".jr-comp__lg [data-line]")).toHaveTextContent("70");
+  });
+
+  it("a job that passed and has no score yet is waiting, not 'not ranked'", () => {
+    const { container } = render(wrap(<ScoreCard {...props} score={{ ...row, rankValue: null, score: null, aiScore: null, filterResult: "passed", stale: true }} />));
+    expect(container.querySelector('[data-rank="pending"]')).not.toBeNull();
+    expect(container.querySelector('[data-rank="not-ranked"]')).toBeNull();
+  });
+
+  it("marks an outdated score, also on a filtered-out job, and nothing for a fresh one", () => {
+    const { rerender } = render(wrap(<ScoreCard {...props} score={{ ...row, filterResult: "passed", stale: true }} />));
+    expect(screen.getByTestId("score-stale")).toBeInTheDocument();
+    rerender(wrap(<ScoreCard {...props} score={{ ...row, filterResult: "filtered_out", stale: true }} />));
+    expect(screen.getByTestId("score-stale")).toBeInTheDocument();
+    rerender(wrap(<ScoreCard {...props} score={{ ...row, filterResult: "passed", stale: false }} />));
+    expect(screen.queryByTestId("score-stale")).toBeNull();
+  });
+});
+
 describe("ClampedQuote toggle", () => {
   it("is ink text with an underline, never the yellow as text colour", () => {
     render(wrap(<ClampedQuote text={"word ".repeat(80)} term={null} color="teal" expandLabel="Expand" collapseLabel="Collapse" />));

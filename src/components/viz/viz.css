@@ -107,7 +107,7 @@
 .jr-segm--sm { --jr-cw: 5px; --jr-ch: 13px; }
 .jr-segm--xl { --jr-cw: 11px; --jr-ch: 30px; }
 .jr-segm--xl > i { border-width: var(--bw); }
-.jr-segm--pending::after { display: none; }
+.jr-segm--pending::after, .jr-segm--noline::after { display: none; }
 /* phones: the detail-page meter shrinks instead of overflowing */
 @media (max-width: 480px) {
   .jr-segm--xl { --jr-cw: 8px; --jr-ch: 24px; }

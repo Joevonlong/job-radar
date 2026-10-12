@@ -903,8 +903,6 @@
     "rank": {
       "pending": "waiting for AI scoring",
       "notRanked": "not ranked",
-      "valueLabel": "Rank value {value}",
-      "breakdown": "= {match} + {bonus}",
       "stale": "outdated",
       "staleHint": "Scored under an older profile or prompt; it is re-scored in the next cycles."
     },
@@ -3815,6 +3813,7 @@
       "pushLine": "Push line {line}",
       "tip": "Rank value {value} · the triangle is the push line {line}",
       "tipPending": "Rank value awaiting score · the triangle is the push line {line}",
+      "tipNoLine": "Rank value {value}",
       "breakdown": "{match} + {bonus}",
       "aria": "Rank value {value}/100, {band}",
       "ariaPending": "Rank value awaiting score",
