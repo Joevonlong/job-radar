@@ -99,6 +99,37 @@ describe("the cycle strip of Today", () => {
     expect(screen.queryByTestId("cycle-problem")).toBeNull();
   });
 
+  it.each([
+    ["zh", "中途中断：解析失败"],
+    ["en", "interrupted: parse error"],
+  ] as const)("a channel whose query was interrupted gets a yellow chip with its error; one with invalid records stays green (%s)", async (locale, words) => {
+    state.locale = locale;
+    const channels: CycleSummary["channels"] = [
+      { channelId: "stepstone", family: "stepstone", runs: 1, fetched: 20, newCount: 3, outcome: "interrupted", errorCode: "parse", circuitOpenUntil: null },
+      { channelId: "xing", family: "xing", runs: 1, fetched: 20, newCount: 3, outcome: "ok", errorCode: null, circuitOpenUntil: null },
+    ];
+    const { container } = render(await CycleSummaryStrip({ summary: cycle({ status: "partial", channels, failedChannels: 1 }), next: null, timezone: "Europe/Berlin", now: NOW }));
+    const cut = container.querySelector<HTMLElement>("[data-channel='stepstone']");
+    expect(cut).toHaveAttribute("data-state", "interrupted");
+    expect(cut).toHaveTextContent(words);
+    expect(cut?.querySelector("span[aria-hidden]")).toHaveClass("bg-warning");
+    expect(cut).not.toHaveClass("border-bad");
+    const ok = container.querySelector<HTMLElement>("[data-channel='xing']");
+    expect(ok).toHaveAttribute("data-state", "ok");
+    expect(ok?.querySelector("span[aria-hidden]")).toHaveClass("bg-success");
+  });
+
+  it("the list of today's cycles names interrupted channels with the failed ones", async () => {
+    state.locale = "zh";
+    const channels: CycleSummary["channels"] = [
+      { channelId: "stepstone", family: "stepstone", runs: 1, fetched: 20, newCount: 3, outcome: "interrupted", errorCode: "network", circuitOpenUntil: null },
+      { channelId: "xing", family: "xing", runs: 1, fetched: 20, newCount: 3, outcome: "ok", errorCode: null, circuitOpenUntil: null },
+    ];
+    render(await TodayCyclesList({ cycles: [cycle({ status: "partial", channels, failedChannels: 1 }), cycle({ id: 8 })], timezone: "Europe/Berlin" }));
+    expect(screen.getByTestId("today-cycle-failed")).toHaveTextContent("stepstone");
+    expect(screen.getByTestId("today-cycle-failed")).not.toHaveTextContent("xing");
+  });
+
   it("the list of today's cycles shows the waiting count instead of 0 new / 0 passed", async () => {
     state.locale = "zh";
     render(await TodayCyclesList({ cycles: [cycle({ status: "partial", steps: failedSteps, unprocessed: 231 }), cycle({ id: 8 })], timezone: "Europe/Berlin" }));

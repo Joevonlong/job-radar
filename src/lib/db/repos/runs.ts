@@ -28,6 +28,8 @@ export async function finishRun(
     cost?: number;
     error?: string | null;
     errorCode?: string | null;
+    /** The query failed after some pages; what they returned was stored. */
+    interrupted?: boolean;
   },
 ): Promise<Run | null> {
   const [row] = await db
@@ -40,6 +42,7 @@ export async function finishRun(
       cost: input.cost ?? 0,
       error: input.error ?? null,
       errorCode: input.errorCode ?? null,
+      interrupted: input.interrupted ?? false,
     })
     .where(eq(runs.id, id))
     .returning();

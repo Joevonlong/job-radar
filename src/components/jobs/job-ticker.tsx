@@ -39,8 +39,9 @@ export async function JobTicker({ summary, newJobs, timezone, maxItems }: JobTic
       items.push({ key: `steps-${summary.id}`, tag: "ERR", text: stateWords(tc, face, () => "", summary) });
     }
     for (const channel of summary.channels) {
-      if (channel.outcome !== "failed" && channel.outcome !== "circuit_open") continue;
-      items.push({ key: `src-${channel.channelId}`, tag: "SRC", text: `${channel.channelId} ${channel.outcome === "circuit_open" ? tc("circuitOpen") : tc("outcome.failed")}` });
+      if (channel.outcome !== "failed" && channel.outcome !== "interrupted" && channel.outcome !== "circuit_open") continue;
+      const word = channel.outcome === "circuit_open" ? tc("circuitOpen") : channel.outcome === "interrupted" ? tc("outcome.interrupted") : tc("outcome.failed");
+      items.push({ key: `src-${channel.channelId}`, tag: "SRC", text: `${channel.channelId} ${word}` });
     }
   }
   for (const job of newJobs) {

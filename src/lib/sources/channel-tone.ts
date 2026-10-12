@@ -3,6 +3,8 @@
  * red only for failures (a failed run, an open circuit); a missing optional key or a skipped run is yellow ("it did nothing, you may want to
  * fix it"); green is only for a channel that did its job. The words next to the colour say the same.
  */
+import type { ChannelOutcome } from "@/lib/db/queries/today";
+
 import type { ChannelStatus } from "./view";
 
 export type ChannelTone = "good" | "warn" | "bad" | "idle";
@@ -26,10 +28,13 @@ export function statusTone(status: ChannelStatus): ChannelTone {
   }
 }
 
-/** A channel's result in one cycle (Today's chip) -> the colour of its dot. A missing key beats "ok": the channel cannot have fetched anything. */
-export function outcomeTone(input: { outcome: "ok" | "failed" | "skipped" | "circuit_open"; keyMissing: boolean }): ChannelTone {
+/**
+ * A channel's result in one cycle (Today's chip) -> the colour of its dot. A missing key beats "ok": the channel cannot have fetched anything.
+ * An interrupted query (it failed after some pages, which are kept) is yellow: something arrived, but not everything.
+ */
+export function outcomeTone(input: { outcome: ChannelOutcome; keyMissing: boolean }): ChannelTone {
   if (input.outcome === "failed" || input.outcome === "circuit_open") return "bad";
-  if (input.outcome === "skipped" || input.keyMissing) return "warn";
+  if (input.outcome === "interrupted" || input.outcome === "skipped" || input.keyMissing) return "warn";
   return "good";
 }
 

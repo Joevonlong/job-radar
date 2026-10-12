@@ -24,7 +24,7 @@ export function registryText(locale: Locale): RegistryText {
 const ERROR_CODES = ["rate_limited", "blocked", "auth_expired", "budget_exceeded", "network", "parse", "not_found", "unknown"] as const;
 type ErrorCode = (typeof ERROR_CODES)[number];
 const isErrorCode = (code: string): code is ErrorCode => (ERROR_CODES as readonly string[]).includes(code);
-const RUN_RESULTS = ["succeeded", "partial", "failed", "skipped", "running"] as const;
+const RUN_RESULTS = ["succeeded", "partial", "interrupted", "failed", "skipped", "running"] as const;
 type RunResult = (typeof RUN_RESULTS)[number];
 const isRunResult = (code: string): code is RunResult => (RUN_RESULTS as readonly string[]).includes(code);
 
@@ -133,7 +133,11 @@ export interface CliRow {
   windowNew: number | null;
 }
 
+/** The last run's result; a run whose query was cut short after some pages reads `interrupted` rather than `partial`. */
+const lastRunResult = (run: ChannelRow["lastRun"]): string | null => (run ? (run.interrupted ? "interrupted" : run.status) : null);
+
 function channelRow(row: ChannelRow, timeZone: string, text: RegistryText): CliRow {
+  const result = lastRunResult(row.lastRun);
   return {
     id: row.id,
     type: "channel",
@@ -144,8 +148,8 @@ function channelRow(row: ChannelRow, timeZone: string, text: RegistryText): CliR
     reasons: row.reasons,
     reason: reasonsText(row.reasons, timeZone, text),
     lastRunAt: row.lastRun?.at ?? null,
-    lastRunResult: row.lastRun?.status ?? null,
-    lastRunLabel: row.lastRun ? (isRunResult(row.lastRun.status) ? text.r(`run.${row.lastRun.status}`) : row.lastRun.status) : null,
+    lastRunResult: result,
+    lastRunLabel: result === null ? null : isRunResult(result) ? text.r(`run.${result}`) : result,
     lastSuccessAt: row.lastSuccessAt,
     windowFetched: row.window.fetched,
     windowNew: row.window.newCount,

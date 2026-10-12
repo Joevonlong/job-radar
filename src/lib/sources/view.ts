@@ -19,15 +19,16 @@ export type CircuitView = "closed" | "open" | "half_open";
 export type CycleOutcome = "ok" | "warn" | "fail";
 
 /**
- * How a channel did in one cycle, from its runs: all runs failed = `fail`; some failed or ended partial = `warn`;
+ * How a channel did in one cycle, from its runs: all runs failed = `fail`; some failed, ended partial or were interrupted = `warn`;
  * at least one succeeded and none failed = `ok`. No run, or only skipped ones (the cascade did not need it), = null:
- * nothing to judge.
+ * nothing to judge. An interrupted run (the query failed after some pages, which were kept) is never "good": with no
+ * answering run it is a `fail` next to a failed one, else a `warn`, since something did arrive.
  */
 export function cycleOutcome(stat: ChannelCycleStat | null): CycleOutcome | null {
   if (stat === null || stat.runs === 0) return null;
   const good = stat.succeeded + stat.partial;
   if (stat.failed > 0 && good === 0) return "fail";
-  if (stat.failed > 0 || stat.partial > 0) return "warn";
+  if (stat.failed > 0 || stat.partial > 0 || stat.interrupted > 0) return "warn";
   if (stat.succeeded > 0) return "ok";
   return null;
 }

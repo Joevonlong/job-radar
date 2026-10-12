@@ -24,7 +24,7 @@ function state(id: string, extra: Partial<ChannelStateRow> = {}): ChannelStateRo
 }
 
 function cycleChannel(channelId: string, extra: Partial<CycleChannelRuns> = {}): CycleChannelRuns {
-  return { channelId, family: "linkedin", runs: 1, succeeded: 1, failed: 0, skipped: 0, fetched: 10, ...extra };
+  return { channelId, family: "linkedin", runs: 1, succeeded: 1, failed: 0, skipped: 0, interrupted: 0, fetched: 10, ...extra };
 }
 
 function input(extra: Partial<SourcesViewInput> = {}): SourcesViewInput {
@@ -139,7 +139,7 @@ describe("buildSourcesView", () => {
   });
 
   it("passes the runs through untouched", () => {
-    const run: RecentRun = { id: 1, cycleId: 1, startedAt: NOW, finishedAt: NOW, status: "failed", fetched: 0, newCount: 0, cost: 0, errorCode: "blocked", error: "blocked by the site" };
+    const run: RecentRun = { id: 1, cycleId: 1, startedAt: NOW, finishedAt: NOW, status: "failed", fetched: 0, newCount: 0, cost: 0, errorCode: "blocked", error: "blocked by the site", interrupted: false };
     const view = buildSourcesView(input({ runsByChannel: new Map([["indeed", [run]]]) }));
     expect(view.cards.find((c) => c.id === "indeed")?.runs).toEqual([run]);
   });
@@ -233,7 +233,7 @@ describe("test buttons and provider states", () => {
 });
 
 function stat(extra: Partial<ChannelCycleStat> = {}): ChannelCycleStat {
-  return { cycleId: 1, runs: 1, succeeded: 1, partial: 0, failed: 0, skipped: 0, running: 0, fetched: 10, newCount: 1, ...extra };
+  return { cycleId: 1, runs: 1, succeeded: 1, partial: 0, failed: 0, skipped: 0, interrupted: 0, running: 0, fetched: 10, newCount: 1, ...extra };
 }
 
 describe("the default model of each provider", () => {
@@ -277,6 +277,16 @@ describe("cycleOutcome", () => {
     expect(cycleOutcome(stat({ runs: 1, succeeded: 0, skipped: 1 }))).toBeNull();
     expect(cycleOutcome(stat({ runs: 0, succeeded: 0 }))).toBeNull();
     expect(cycleOutcome(null)).toBeNull();
+  });
+
+  it("an interrupted run (failed after some pages) is never good, unlike a partial with invalid records", () => {
+    // the same shape of cycle, once with the invalid-records partial, once with the interrupted one
+    expect(cycleOutcome(stat({ runs: 2, succeeded: 0, partial: 1, failed: 1 }))).toBe("warn");
+    expect(cycleOutcome(stat({ runs: 2, succeeded: 0, interrupted: 1, failed: 1 }))).toBe("fail");
+    expect(cycleOutcome(stat({ runs: 1, succeeded: 1 }))).toBe("ok");
+    expect(cycleOutcome(stat({ runs: 2, succeeded: 1, interrupted: 1 }))).toBe("warn");
+    // interrupted only: something arrived, so a warning rather than a failure
+    expect(cycleOutcome(stat({ runs: 1, succeeded: 0, interrupted: 1 }))).toBe("warn");
   });
 });
 

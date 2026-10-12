@@ -62,7 +62,8 @@ export async function CascadeCard({ cascade, hasCycle, alertPercent }: { cascade
                     {entry.latest ? (
                       <>
                         {entry.latest.succeeded > 0 ? <b>{t("served", { count: entry.latest.succeeded })}</b> : null}
-                        {entry.latest.failed > 0 ? <span>{t("failed", { count: entry.latest.failed })}</span> : null}
+                        {/* an interrupted query (failed after some pages) was not served either */}
+                        {entry.latest.failed + entry.latest.interrupted > 0 ? <span>{t("failed", { count: entry.latest.failed + entry.latest.interrupted })}</span> : null}
                         {entry.latest.skipped > 0 ? <span>{t("skipped", { count: entry.latest.skipped })}</span> : null}
                       </>
                     ) : hasCycle ? (

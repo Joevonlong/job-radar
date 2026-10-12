@@ -1,4 +1,4 @@
-import { CHANNEL_ERROR_CODES, type ChannelErrorCode } from "./types";
+import { CHANNEL_ERROR_CODES, type ChannelBudget, type ChannelErrorCode, type RawPostingInput } from "./types";
 
 export { CHANNEL_ERROR_CODES, type ChannelErrorCode };
 
@@ -57,6 +57,24 @@ export class InfrastructureError extends Error {
   }
 }
 
+/**
+ * A paginated query that got some pages and then failed (a later page or keyword): the postings already fetched
+ * plus the original failure. The runner stores the postings and then treats `cause` exactly like a plain failure
+ * (circuit, cascade, retry), recording the run as an interrupted partial. Only thrown with at least one posting;
+ * when nothing was fetched yet the channel throws `cause` itself.
+ */
+export class PartialCollectError extends Error {
+  readonly postings: readonly RawPostingInput[];
+  override readonly cause: ChannelError;
+
+  constructor(postings: readonly RawPostingInput[], cause: ChannelError) {
+    super(`interrupted after ${postings.length} postings: ${cause.message}`, { cause });
+    this.name = "PartialCollectError";
+    this.postings = postings;
+    this.cause = cause;
+  }
+}
+
 export type BudgetScope = "channel" | "global";
 
 /** Raised when a channel or the global paid cap would be exceeded. Never retryable. */
@@ -68,6 +86,28 @@ export class BudgetExceededError extends ChannelError {
     this.name = "BudgetExceededError";
     this.scope = scope;
   }
+}
+
+/**
+ * Books a query's postings against the budget and hands them back. When the query was cut short (`interrupted`), it
+ * throws `PartialCollectError` with that cause instead, and a budget refusal does not replace it: the postings were
+ * already read, so they are kept and the run reports why the query stopped. Any other error from the budget propagates.
+ */
+export async function settlePostings(
+  budget: Pick<ChannelBudget, "consume">,
+  postings: RawPostingInput[],
+  interrupted: ChannelError | null,
+): Promise<RawPostingInput[]> {
+  if (!interrupted) {
+    await budget.consume(postings.length);
+    return postings;
+  }
+  try {
+    await budget.consume(postings.length);
+  } catch (error) {
+    if (!(error instanceof BudgetExceededError)) throw error;
+  }
+  throw new PartialCollectError(postings, interrupted);
 }
 
 /** Page markers that mean "you were detected as a bot / must log in", whatever the status code. */
@@ -105,9 +145,10 @@ export function isAbortError(error: unknown): boolean {
   return error instanceof Error && (error.name === "AbortError" || error.name === "TimeoutError");
 }
 
-/** Normalize anything thrown by a channel into a ChannelError (keeps ChannelErrors as they are). */
+/** Normalize anything thrown by a channel into a ChannelError (keeps ChannelErrors as they are; an interrupted query yields its original failure). */
 export function toChannelError(error: unknown): ChannelError {
   if (error instanceof ChannelError) return error;
+  if (error instanceof PartialCollectError) return error.cause;
   if (error instanceof Error) {
     return new ChannelError("unknown", `${error.name}: ${error.message}`.slice(0, 500), { cause: error });
   }

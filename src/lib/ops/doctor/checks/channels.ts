@@ -52,8 +52,10 @@ function channelResult(ctx: DoctorContext, card: SourceCard): CheckOutcome {
     }
   }
   const latest = card.latestCycleRuns;
-  if (latest !== null && latest.runs > 0 && latest.succeeded === 0 && latest.failed > 0) {
-    pieces.push({ status: "warn", detail: t("checks.channels.lastCycleFailed", { count: latest.failed }), hint: t("checks.channels.lastCycleFailedHint") });
+  // interrupted queries (failed after some pages) count as failed ones
+  const failedRuns = latest === null ? 0 : latest.failed + latest.interrupted;
+  if (latest !== null && latest.runs > 0 && latest.succeeded === 0 && failedRuns > 0) {
+    pieces.push({ status: "warn", detail: t("checks.channels.lastCycleFailed", { count: failedRuns }), hint: t("checks.channels.lastCycleFailedHint") });
   }
   if (card.registered && card.lastSuccessAt === null && card.usage.activity.runs > 0) {
     pieces.push({ status: "warn", detail: t("checks.channels.neverSucceeded"), hint: t("checks.channels.neverSucceededHint") });

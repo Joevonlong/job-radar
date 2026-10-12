@@ -70,7 +70,7 @@ export function sourcesView(extra: Partial<SourcesViewInput> = {}, channelsEdit?
     status: "succeeded",
     startedAt: new Date("2026-10-07T05:00:30Z"),
     finishedAt: new Date("2026-10-07T05:09:00Z"),
-    channels: [{ channelId: "indeed", family: "indeed", runs: 3, succeeded: 3, failed: 0, skipped: 0, fetched: 40 }],
+    channels: [{ channelId: "indeed", family: "indeed", runs: 3, succeeded: 3, failed: 0, skipped: 0, interrupted: 0, fetched: 40 }],
   };
   return buildSourcesView({
     now: NOW,

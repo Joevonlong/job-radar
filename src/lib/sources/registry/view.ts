@@ -31,7 +31,8 @@ export interface ChannelRow {
   /** Switching it on needs the terms-of-service acknowledgement of this kind (`channels/access.ts`); null = none. */
   consent: ConsentKind | null;
   /** The newest run: when it ENDED (its start while it is still running; the same basis as `lastSuccessAt`), what it ended as, its error code. Null = never ran. */
-  lastRun: { at: string; status: string; errorCode: string | null } | null;
+  /** `interrupted`: the run stored what it read before its query failed part way (status `partial`). */
+  lastRun: { at: string; status: string; errorCode: string | null; interrupted: boolean } | null;
   lastSuccessAt: string | null;
   /** The last `registry.window_days` days. */
   window: { runs: number; failed: number; fetched: number; newCount: number };
@@ -181,7 +182,7 @@ export function buildRegistryView(input: RegistryViewInput): RegistryView {
         markets,
         needsParent: parentOff,
         consent: consentKind(entry.id),
-        lastRun: stat?.lastRun ? { at: (stat.lastRun.finishedAt ?? stat.lastRun.startedAt).toISOString(), status: stat.lastRun.status, errorCode: stat.lastRun.errorCode } : null,
+        lastRun: stat?.lastRun ? { at: (stat.lastRun.finishedAt ?? stat.lastRun.startedAt).toISOString(), status: stat.lastRun.status, errorCode: stat.lastRun.errorCode, interrupted: stat.lastRun.interrupted } : null,
         lastSuccessAt: isoOrNull(card?.lastSuccessAt),
         window: { runs: stat?.runs ?? 0, failed: stat?.failed ?? 0, fetched: stat?.fetched ?? 0, newCount: stat?.newCount ?? 0 },
         boards: CHANNEL_GROUP[entry.id as keyof typeof CHANNEL_GROUP] === "ats" ? (boardSummary.get(entry.id) ?? null) : null,
@@ -244,7 +245,7 @@ export function buildRegistryViewFromMirror(input: MirrorViewInput): RegistryVie
         markets: [],
         needsParent: null,
         consent: consentKind(row.id),
-        lastRun: last ? { at: (last.finishedAt ?? last.startedAt).toISOString(), status: last.status, errorCode: last.errorCode } : null,
+        lastRun: last ? { at: (last.finishedAt ?? last.startedAt).toISOString(), status: last.status, errorCode: last.errorCode, interrupted: last.interrupted } : null,
         lastSuccessAt: null,
         window: { runs: stat?.runs ?? 0, failed: stat?.failed ?? 0, fetched: stat?.fetched ?? 0, newCount: stat?.newCount ?? 0 },
         boards: null,

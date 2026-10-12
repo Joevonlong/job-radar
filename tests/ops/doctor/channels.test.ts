@@ -59,9 +59,24 @@ describe("channels.each", () => {
   });
 
   it("warns when every request of the last cycle failed", async () => {
-    const latestCycle = { id: 1, kind: "weekday_morning" as const, status: "partial" as const, startedAt: ago(3600), finishedAt: ago(3000), channels: [{ channelId: "lever", family: "lever", runs: 2, succeeded: 0, failed: 2, skipped: 0, fetched: 0 }] };
+    const latestCycle = { id: 1, kind: "weekday_morning" as const, status: "partial" as const, startedAt: ago(3600), finishedAt: ago(3000), channels: [{ channelId: "lever", family: "lever", runs: 2, succeeded: 0, failed: 2, skipped: 0, interrupted: 0, fetched: 0 }] };
     const list = byId(await results(channelsCheck, makeContext(view({ latestCycle }))));
     expect(list.get("channels.lever")).toMatchObject({ status: "warn", detail: expect.stringContaining("全部失败") });
+  });
+
+  it("warns when every query of the last cycle was interrupted after some pages, not when records were only invalid", async () => {
+    const latestCycle = (extra: { succeeded: number; interrupted: number }) => ({
+      id: 1,
+      kind: "weekday_morning" as const,
+      status: "partial" as const,
+      startedAt: ago(3600),
+      finishedAt: ago(3000),
+      channels: [{ channelId: "lever", family: "lever", runs: 2, failed: 0, skipped: 0, fetched: 30, ...extra }],
+    });
+    const cut = byId(await results(channelsCheck, makeContext(view({ latestCycle: latestCycle({ succeeded: 0, interrupted: 2 }) }))));
+    expect(cut.get("channels.lever")).toMatchObject({ status: "warn", detail: expect.stringContaining("全部失败") });
+    const invalid = byId(await results(channelsCheck, makeContext(view({ latestCycle: latestCycle({ succeeded: 2, interrupted: 0 }) }))));
+    expect(invalid.get("channels.lever")?.detail ?? "").not.toContain("全部失败");
   });
 
   it("budget: ok below 80 %, warns from 80 %, fails when used up", async () => {

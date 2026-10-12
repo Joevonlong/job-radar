@@ -20,7 +20,7 @@ function view(overrides: Partial<Parameters<typeof buildRegistryView>[0]> = {}) 
     now: NOW,
     config,
     cards: cardsFor({ channelsConfig: config, states: [state("greenhouse"), failing] }),
-    channelStats: new Map([["xing", windowStat({ runs: 4, failed: 4, lastRun: { startedAt: NOW, status: "failed", errorCode: "blocked" } })], ["greenhouse", windowStat({ runs: 6, fetched: 812, newCount: 14 })]]),
+    channelStats: new Map([["xing", windowStat({ runs: 4, failed: 4, lastRun: { startedAt: NOW, status: "failed", errorCode: "blocked", interrupted: false } })], ["greenhouse", windowStat({ runs: 6, fetched: 812, newCount: 14 })]]),
     boardHealth: [
       boardHealth("greenhouse", "zellwerk"),
       boardHealth("greenhouse", "gegensprech", { lastStatus: "error", lastErrorCode: "not_found", consecutiveFailures: 3 }),
@@ -109,7 +109,7 @@ describe("buildRegistryViewFromMirror", () => {
         row("greenhouse", { sourceGroup: "ats" }),
         row("board:greenhouse:zellwerk", { type: "ats_board", sourceGroup: "ats", name: "Zellwerk", parentId: "greenhouse", params: { ats: "greenhouse", token: "zellwerk" } }),
       ],
-      channelStats: new Map([["xing", windowStat({ lastRun: { startedAt: NOW, status: "failed", errorCode: "blocked" } })]]),
+      channelStats: new Map([["xing", windowStat({ lastRun: { startedAt: NOW, status: "failed", errorCode: "blocked", interrupted: false } })]]),
       boardHealth: [boardHealth("greenhouse", "zellwerk")],
       boardSeen: new Map(),
       settings: REGISTRY_DEFAULTS,
@@ -132,11 +132,11 @@ describe("skipped runs, cascade standby, the recommended switch, one time basis"
     });
   const build = (cfg: ReturnType<typeof own>, cards: ReturnType<typeof cardsFor>, stats = new Map<string, ReturnType<typeof windowStat>>()) =>
     buildRegistryView({ now: NOW, config: cfg, cards, channelStats: stats, boardHealth: [], boardSeen: new Map() });
-  const stat = (extra: Partial<ChannelCycleStat>): ChannelCycleStat => ({ cycleId: 1, runs: 1, succeeded: 0, partial: 0, failed: 0, skipped: 1, running: 0, fetched: 0, newCount: 0, ...extra });
+  const stat = (extra: Partial<ChannelCycleStat>): ChannelCycleStat => ({ cycleId: 1, runs: 1, succeeded: 0, partial: 0, failed: 0, skipped: 1, interrupted: 0, running: 0, fetched: 0, newCount: 0, ...extra });
 
   it("a channel whose newest cycles were only skipped is unstable with the skip reason, even after an earlier success", () => {
     const cfg = own(false);
-    const run = { id: 1, cycleId: 2, startedAt: NOW, finishedAt: NOW, status: "skipped" as const, fetched: 0, newCount: 0, cost: 0, errorCode: "budget_exceeded", error: "no available channel" };
+    const run = { id: 1, cycleId: 2, startedAt: NOW, finishedAt: NOW, status: "skipped" as const, fetched: 0, newCount: 0, cost: 0, errorCode: "budget_exceeded", error: "no available channel", interrupted: false };
     const cards = cardsFor({
       channelsConfig: cfg,
       states: [state("linkedin-brightdata")],
@@ -179,7 +179,7 @@ describe("skipped runs, cascade standby, the recommended switch, one time basis"
   it("the last run is dated by its end, like the last success", () => {
     const cfg = own(true);
     const started = new Date(NOW.getTime() - 2 * 60_000);
-    const stats = new Map([["linkedin-brightdata", windowStat({ runs: 1, lastRun: { startedAt: started, finishedAt: NOW, status: "succeeded", errorCode: null } })]]);
+    const stats = new Map([["linkedin-brightdata", windowStat({ runs: 1, lastRun: { startedAt: started, finishedAt: NOW, status: "succeeded", errorCode: null, interrupted: false } })]]);
     expect(build(cfg, cardsFor({ channelsConfig: cfg, states: [state("linkedin-brightdata")] }), stats).channels.find((c) => c.id === "linkedin-brightdata")?.lastRun?.at).toBe(NOW.toISOString());
   });
 });

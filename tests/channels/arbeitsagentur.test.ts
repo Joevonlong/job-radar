@@ -9,7 +9,7 @@ import { detailUrl, publishedDays, searchUrl } from "@/lib/channels/arbeitsagent
 import { redactContacts } from "@/lib/channels/arbeitsagentur/redact";
 import { parseArbeitsagenturPayload } from "@/lib/channels/arbeitsagentur/parse";
 import { createChannelContext } from "@/lib/channels/context";
-import { ChannelError } from "@/lib/channels/errors";
+import { ChannelError, PartialCollectError } from "@/lib/channels/errors";
 import { createLogger, type LogRecord } from "@/lib/channels/logger";
 import { queryId } from "@/lib/channels/query";
 import { ChannelRegistry, settingsFromConfig } from "@/lib/channels/registry";
@@ -17,7 +17,7 @@ import { registerBuiltinChannels } from "@/lib/channels/builtin";
 import { normalizedPostingDraftSchema, type ChannelContext, type HttpResponse, type KnownPostings, type SearchQuery } from "@/lib/channels/types";
 import { arbeitsagenturSettingsSchema, type ArbeitsagenturSettings } from "@/lib/config";
 
-import { channelsWith, shippedChannels } from "./helpers";
+import { channelsWith, failingHttp, interruption, INTERRUPTIONS, shippedChannels } from "./helpers";
 
 const FIXTURES = path.resolve(import.meta.dirname, "../fixtures/arbeitsagentur");
 
@@ -405,6 +405,98 @@ describe("collect: remote queries", () => {
     const { ctx, calls } = makeContext(api({ pages: [SEARCH_REMOTE], details: {} }));
     const result = await arbeitsagenturChannel.collect(remoteQuery(), ctx);
     expect(calls.filter((c) => !isSearch(c))).toHaveLength(result.length);
+  });
+});
+
+describe("collect: a later page or keyword fails", () => {
+  /** Search pages of two postings per keyword (`<term>-<page>-<i>`), `pages` of them; no details. */
+  const byTerm =
+    (pages: number): Handler =>
+    ({ url }) => {
+      if (!isSearch({ url, headers: {} })) return response(404, {});
+      const term = url.searchParams.get("was") ?? "";
+      const n = Number(url.searchParams.get("page"));
+      return response(200, { maxErgebnisse: pages * 2, ergebnisliste: [0, 1].map((i) => ({ ...ITEMS[0], referenznummer: `${term}-${n}-${i}` })) });
+    };
+  const searchCall = (term: string, page: number) => (url: URL) => isSearch({ url, headers: {} }) && url.searchParams.get("was") === term && url.searchParams.get("page") === String(page);
+  const outcome = (ctx: ChannelContext, q: SearchQuery) => arbeitsagenturChannel.collect(q, ctx).then((value) => ({ value }), (error: unknown) => ({ error }));
+
+  for (const kind of INTERRUPTIONS) {
+    it(`keeps the postings of earlier pages when page 2 fails (${kind}) and passes the failure on unchanged`, async () => {
+      const made = makeContext(byTerm(3), { fetch_details: false, page_size: 2 });
+      const ctx = failingHttp(made.ctx, searchCall("a", 2), kind);
+      const result = await outcome(ctx, query({ keywords: ["a"], maxResults: 100 }));
+      expect(result).toMatchObject({ error: { name: "PartialCollectError", cause: { code: kind, retryable: interruption(kind).retryable } } });
+      const error = (result as { error: PartialCollectError }).error;
+      expect(error).toBeInstanceOf(PartialCollectError);
+      expect(error.cause).toBeInstanceOf(ChannelError);
+      expect(error.postings.map((p) => p.externalId)).toEqual(["a-1-0", "a-1-1"]);
+      // nothing is asked after the failure
+      expect(made.calls.map((c) => c.url.searchParams.get("page"))).toEqual(["1"]);
+    });
+
+    it(`keeps earlier keywords and the fetched pages of the unfinished one when a later keyword fails (${kind})`, async () => {
+      const made = makeContext(byTerm(2), { fetch_details: false, page_size: 2 });
+      const ctx = failingHttp(made.ctx, searchCall("b", 2), kind);
+      const result = await outcome(ctx, query({ keywords: ["a", "b", "c"], maxResults: 100 }));
+      const error = (result as { error: PartialCollectError }).error;
+      expect(error).toBeInstanceOf(PartialCollectError);
+      expect(error.cause.code).toBe(kind);
+      expect(error.postings.map((p) => p.externalId).sort()).toEqual(["a-1-0", "a-1-1", "a-2-0", "a-2-1", "b-1-0", "b-1-1"]);
+      // keyword "c" is never searched
+      expect(made.calls.map((c) => c.url.searchParams.get("was"))).toEqual(["a", "a", "b"]);
+    });
+
+    it(`fails as before when the first page fails (${kind}): nothing was fetched`, async () => {
+      const made = makeContext(byTerm(3), { fetch_details: false, page_size: 2 });
+      const ctx = failingHttp(made.ctx, searchCall("a", 1), kind);
+      const result = await outcome(ctx, query({ keywords: ["a", "b"], maxResults: 100 }));
+      expect((result as { error: unknown }).error).toBeInstanceOf(ChannelError);
+      expect((result as { error: ChannelError }).error.code).toBe(kind);
+      expect(made.calls).toHaveLength(0);
+    });
+  }
+
+  it("asks for no details after the failure, but keeps the stored detail of known postings", async () => {
+    const stored = { list: ITEMS[0], detail: DETAIL_MULTI };
+    const known: KnownPostings = { payloads: async () => new Map([["a-1-0", stored]]) };
+    const made = makeContext(byTerm(3), { page_size: 2 }, { known });
+    const ctx = failingHttp(made.ctx, searchCall("a", 2), "network");
+    const error = (await outcome(ctx, query({ keywords: ["a"], maxResults: 100 })) as { error: PartialCollectError }).error;
+    expect(error).toBeInstanceOf(PartialCollectError);
+    expect(error.postings.map((p) => (p.payload as { detail: unknown }).detail)).toEqual([DETAIL_MULTI, null]);
+    expect(made.calls.filter((c) => !isSearch(c))).toHaveLength(0);
+  });
+
+  it("counts the kept postings against the budget", async () => {
+    const consume = vi.fn(async () => ({ usd: 0, freeRecords: 0, paidRecords: 0 }));
+    const made = makeContext(byTerm(3), { fetch_details: false, page_size: 2 });
+    const ctx = failingHttp({ ...made.ctx, budget: { ...made.ctx.budget, consume } }, searchCall("a", 2), "network");
+    await outcome(ctx, query({ keywords: ["a"], maxResults: 100 }));
+    expect(consume).toHaveBeenCalledWith(2);
+  });
+
+  it("keeps the stored detail of a known posting with reuse_known_details off", async () => {
+    const stored = { list: ITEMS[0], detail: DETAIL_MULTI };
+    const known: KnownPostings = { payloads: async () => new Map([["a-1-0", stored]]) };
+    const made = makeContext(byTerm(3), { page_size: 2, reuse_known_details: false }, { known });
+    const ctx = failingHttp(made.ctx, searchCall("a", 2), "network");
+    const error = (await outcome(ctx, query({ keywords: ["a"], maxResults: 100 })) as { error: PartialCollectError }).error;
+    expect(error).toBeInstanceOf(PartialCollectError);
+    expect(error.postings.map((p) => (p.payload as { detail: unknown }).detail)).toEqual([DETAIL_MULTI, null]);
+    expect(made.calls.filter((c) => !isSearch(c))).toHaveLength(0);
+  });
+
+  it("keeps the postings and the original cause when the budget refuses them after the failure", async () => {
+    const consume = vi.fn(async () => {
+      throw interruption("budget_exceeded");
+    });
+    const made = makeContext(byTerm(3), { fetch_details: false, page_size: 2 });
+    const ctx = failingHttp({ ...made.ctx, budget: { ...made.ctx.budget, consume } }, searchCall("a", 2), "network");
+    const error = (await outcome(ctx, query({ keywords: ["a"], maxResults: 100 })) as { error: PartialCollectError }).error;
+    expect(error).toBeInstanceOf(PartialCollectError);
+    expect(error.cause.code).toBe("network");
+    expect(error.postings).toHaveLength(2);
   });
 });
 

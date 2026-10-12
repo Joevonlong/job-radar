@@ -2,16 +2,16 @@
 import { describe, expect, it } from "vitest";
 
 import { registerBuiltinChannels } from "@/lib/channels/builtin";
-import { ChannelError } from "@/lib/channels/errors";
+import { ChannelError, PartialCollectError } from "@/lib/channels/errors";
 import { ChannelRegistry, settingsFromConfig } from "@/lib/channels/registry";
 import { createXingChannel } from "@/lib/channels/xing";
 import { fetchDetail, fetchSearchPage, PAGE_SIZE, postingId, postingUrl, searchUrl } from "@/lib/channels/xing/client";
 import { parseXingPayload } from "@/lib/channels/xing/parse";
 import { payloadSchema, type XingPayload } from "@/lib/channels/xing/schema";
-import { normalizedPostingDraftSchema } from "@/lib/channels/types";
+import { normalizedPostingDraftSchema, type ChannelContext } from "@/lib/channels/types";
 import { xingSettingsSchema } from "@/lib/config";
 
-import { channelsWith, shippedChannels } from "./helpers";
+import { channelsWith, failingHttp, interruption, INTERRUPTIONS, shippedChannels, type Interruption } from "./helpers";
 import { fixtureHtml, htmlResponse, makeContext, searchQuery, type Handler } from "./web/helpers";
 
 const NOW = new Date("2026-10-07T12:00:00Z");
@@ -392,6 +392,92 @@ describe("collect", () => {
       const brokenAll: Handler = (call, n) => (call.url.pathname.startsWith("/jobs/search") ? site()(call, n) : htmlResponse(200, "<html>nothing</html>"));
       const channel = createXingChannel({ now: () => NOW });
       await expect(channel.collect(searchQuery({ windowHours: 5000 }), makeContext(brokenAll, extra()).ctx)).rejects.toMatchObject({ code: "parse" });
+    });
+
+    describe("a later page or keyword fails", () => {
+      /** Full search pages per keyword: ids 9<keyword index><page>NN, so every page and keyword is told apart. */
+      const pages: Handler = ({ url }) => {
+        if (!url.pathname.startsWith("/jobs/search")) return htmlResponse(404, "n/a");
+        const keyword = url.searchParams.get("keywords") === "AI Engineer" ? 1 : 2;
+        const page = Number(url.searchParams.get("page") ?? "1");
+        return htmlResponse(200, generatedSearchPage(PAGE_SIZE, 1000, 900000 + keyword * 1000 + page * 100));
+      };
+      const request = (keyword: string, page: number) => (url: URL) =>
+        url.pathname.startsWith("/jobs/search") && url.searchParams.get("keywords") === keyword && (url.searchParams.get("page") ?? "1") === String(page);
+      const ids = (from: number) => Array.from({ length: PAGE_SIZE }, (_, n) => String(from + n));
+      const settle = (promise: Promise<unknown>) => promise.then((value) => ({ value }), (error: unknown) => ({ error }));
+      const run = (fails: (url: URL) => boolean, kind: Interruption, keywords = ["AI Engineer"]) => {
+        const made = makeContext(pages, extra({ max_pages: 3, fetch_details: false }));
+        return { made, result: settle(createXingChannel({ now: () => NOW }).collect(searchQuery({ keywords, maxResults: 200 }), failingHttp(made.ctx, fails, kind))) };
+      };
+
+      for (const kind of INTERRUPTIONS) {
+        it(`keeps page 1 when page 2 fails (${kind}) and passes the failure on unchanged`, async () => {
+          const { made, result } = run(request("AI Engineer", 2), kind);
+          const error = ((await result) as { error: PartialCollectError }).error;
+          expect(error).toBeInstanceOf(PartialCollectError);
+          expect(error.cause).toMatchObject({ code: kind, retryable: interruption(kind).retryable, tripsCircuit: interruption(kind).tripsCircuit });
+          expect(error.postings.map((p) => p.externalId)).toEqual(ids(901100));
+          expect(made.calls).toHaveLength(1);
+        });
+
+        it(`keeps the earlier keyword and the fetched page of the unfinished one when a later keyword fails (${kind})`, async () => {
+          const { made, result } = run(request("ML Engineer", 2), kind, ["AI Engineer", "ML Engineer"]);
+          const error = ((await result) as { error: PartialCollectError }).error;
+          expect(error).toBeInstanceOf(PartialCollectError);
+          expect(error.cause.code).toBe(kind);
+          expect(error.postings.map((p) => p.externalId).sort()).toEqual([...ids(901100), ...ids(901200), ...ids(901300), ...ids(902100)].sort());
+          expect(made.calls).toHaveLength(4);
+        });
+
+        it(`fails as before when page 1 fails (${kind})`, async () => {
+          const { made, result } = run(request("AI Engineer", 1), kind, ["AI Engineer", "ML Engineer"]);
+          const { error } = (await result) as { error: ChannelError };
+          expect(error).toBeInstanceOf(ChannelError);
+          expect(error.code).toBe(kind);
+          expect(made.calls).toHaveLength(0);
+        });
+      }
+
+      it("opens no posting page after the failure", async () => {
+        const made = makeContext(pages, extra({ max_pages: 3 }));
+        const result = await settle(createXingChannel({ now: () => NOW }).collect(searchQuery({ maxResults: 200 }), failingHttp(made.ctx, request("AI Engineer", 2), "network")));
+        expect((result as { error: unknown }).error).toBeInstanceOf(PartialCollectError);
+        expect(made.calls.every((c) => c.url.pathname.startsWith("/jobs/search"))).toBe(true);
+      });
+
+      it("keeps the stored details with reuse_known_details off", async () => {
+        const withDetails: Handler = (call, n) =>
+          call.url.pathname.startsWith("/jobs/search") ? pages(call, n) : htmlResponse(200, fixtureHtml("xing", "detail-salary-range.html"));
+        const channel = createXingChannel({ now: () => NOW });
+        const first = await channel.collect(searchQuery({ maxResults: 200 }), makeContext(withDetails, extra({ max_pages: 1, max_details_per_query: PAGE_SIZE })).ctx);
+        expect(first.every((p) => (p.payload as { detail: unknown }).detail !== null)).toBe(true);
+        const stored = new Map(first.map((p) => [p.externalId, p.payload]));
+        const made = makeContext(withDetails, extra({ max_pages: 3, reuse_known_details: false }), { known: { payloads: async () => stored } });
+        const result = await settle(channel.collect(searchQuery({ maxResults: 200 }), failingHttp(made.ctx, request("AI Engineer", 2), "network")));
+        const error = (result as { error: PartialCollectError }).error;
+        expect(error).toBeInstanceOf(PartialCollectError);
+        expect(error.postings.map((p) => p.payload)).toEqual(first.map((p) => p.payload));
+        expect(made.calls).toHaveLength(1);
+      });
+
+      it("keeps the postings and the original cause when the budget refuses them after the failure", async () => {
+        const made = makeContext(pages, extra({ max_pages: 3, fetch_details: false }));
+        const refusing: ChannelContext = {
+          ...made.ctx,
+          budget: {
+            ...made.ctx.budget,
+            consume: async () => {
+              throw interruption("budget_exceeded");
+            },
+          },
+        };
+        const result = await settle(createXingChannel({ now: () => NOW }).collect(searchQuery({ maxResults: 200 }), failingHttp(refusing, request("AI Engineer", 2), "network")));
+        const error = (result as { error: PartialCollectError }).error;
+        expect(error).toBeInstanceOf(PartialCollectError);
+        expect(error.cause.code).toBe("network");
+        expect(error.postings.map((p) => p.externalId)).toEqual(ids(901100));
+      });
     });
 
     it("rejects an unusable sources.yaml block without any request", async () => {

@@ -2,7 +2,7 @@ import { arbeitnowSettingsSchema, loadConfig, type ArbeitnowSettings, type Inter
 
 import { issuePaths } from "../ats/envelope";
 import { createTitlePrefilter } from "../ats/prefilter";
-import { ChannelError } from "../errors";
+import { ChannelError, settlePostings } from "../errors";
 import type { Channel, ChannelContext, RawPostingInput, SearchQuery } from "../types";
 import { fetchPage } from "./client";
 import { arbeitnowDescriptionHtml, fromUnixSeconds, parseArbeitnowPayload } from "./parse";
@@ -57,7 +57,11 @@ export interface SweepStats {
  * outside the look-back window is dropped on its own, and paging stops at the first page whose NEWEST posting is older than the
  * window (never judged by its first or last item), at an empty page, when `links.next` is empty, or after `max_pages`.
  */
-async function sweep(query: SearchQuery, ctx: ChannelContext, deps: ArbeitnowDeps): Promise<{ postings: RawPostingInput[]; stats: SweepStats }> {
+async function sweep(
+  query: SearchQuery,
+  ctx: ChannelContext,
+  deps: ArbeitnowDeps,
+): Promise<{ postings: RawPostingInput[]; stats: SweepStats; interrupted: ChannelError | null }> {
   const settings = settingsOf(ctx);
   const inputs = deps.inputs();
   const prefilter = createTitlePrefilter({
@@ -70,11 +74,20 @@ async function sweep(query: SearchQuery, ctx: ChannelContext, deps: ArbeitnowDep
   const stats: SweepStats = { pages: 0, listed: 0, invalid: 0, duplicates: 0, outsideWindow: 0, prefiltered: 0, truncated: 0 };
   const seen = new Set<string>();
   const kept: Array<{ job: ArbeitnowJob; raw: unknown; postedAt: Date }> = [];
+  // a failing page ends the sweep; the earlier pages are kept and handed on with the failure
+  let interrupted: ChannelError | null = null;
 
   for (let page = 1; page <= settings.max_pages; page += 1) {
     ctx.signal.throwIfAborted();
     if (page > 1) await ctx.throttle();
-    const body = await fetchPage(ctx, settings, page);
+    let body;
+    try {
+      body = await fetchPage(ctx, settings, page);
+    } catch (error) {
+      if (!(error instanceof ChannelError)) throw error;
+      interrupted = error;
+      break;
+    }
     stats.pages += 1;
     if (body.data.length === 0) break;
     stats.listed += body.data.length;
@@ -123,7 +136,7 @@ async function sweep(query: SearchQuery, ctx: ChannelContext, deps: ArbeitnowDep
       postedAt,
     }),
   );
-  return { postings, stats };
+  return { postings, stats, interrupted };
 }
 
 export function createArbeitnowChannel(deps: ArbeitnowDeps = defaultArbeitnowDeps): Channel {
@@ -133,11 +146,11 @@ export function createArbeitnowChannel(deps: ArbeitnowDeps = defaultArbeitnowDep
     kind: "api",
     usesQueries: false,
     async collect(query: SearchQuery, ctx: ChannelContext): Promise<RawPostingInput[]> {
-      const { postings, stats } = await sweep(query, ctx, deps);
+      const { postings, stats, interrupted } = await sweep(query, ctx, deps);
+      if (interrupted && postings.length === 0) throw interrupted;
       if (stats.invalid > 0) ctx.logger.warn("arbeitnow postings of an unexpected shape skipped", { count: stats.invalid });
-      ctx.logger.info("arbeitnow sweep done", { ...stats, postings: postings.length });
-      await ctx.budget.consume(postings.length);
-      return postings;
+      ctx.logger.info("arbeitnow sweep done", { ...stats, postings: postings.length, interrupted: interrupted?.code });
+      return settlePostings(ctx.budget, postings, interrupted);
     },
     parse: parseArbeitnowPayload,
     descriptionHtml: arbeitnowDescriptionHtml,

@@ -114,7 +114,7 @@ async function main(): Promise<number> {
       }
       for (const [id, s] of Object.entries(collect.channels)) {
         const codes = Object.keys(s.errorCodes).length > 0 ? ` errors=${JSON.stringify(s.errorCodes)}` : "";
-        console.log(`  ${id}: runs=${s.runs} ok=${s.succeeded} failed=${s.failed} skipped=${s.skipped} fetched=${s.fetched} new=${s.inserted} cost=$${s.costUsd}${codes}`);
+        console.log(`  ${id}: runs=${s.runs} ok=${s.succeeded} failed=${s.failed} skipped=${s.skipped} interrupted=${s.interrupted} fetched=${s.fetched} new=${s.inserted} cost=$${s.costUsd}${codes}`);
         const report = collect.dryRun?.[id];
         if (report) {
           console.log(`    parsed ${report.parsed}/${report.fetched} (${report.parseFailed} failed to parse)`);

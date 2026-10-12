@@ -1,7 +1,7 @@
 import { remoteScopeKey } from "@/lib/market/remote-scope";
 import { CascadeController, type CascadeSpec, type UnavailableReason } from "@/lib/channels/cascade";
 import { createChannelContext, createThrottle, httpSettingsFromConfig, NO_KNOWN_POSTINGS } from "@/lib/channels/context";
-import { ChannelError, InfrastructureError, isAbortError, toChannelError } from "@/lib/channels/errors";
+import { ChannelError, InfrastructureError, isAbortError, PartialCollectError, toChannelError } from "@/lib/channels/errors";
 import { buildQueries, buildSweepQuery, capQuery } from "@/lib/channels/query";
 import {
   normalizedPostingDraftSchema,
@@ -32,6 +32,8 @@ export interface CollectChannelSummary {
   succeeded: number;
   failed: number;
   skipped: number;
+  /** Attempts that failed after some pages: their postings are stored, the failure counts like a failed attempt. */
+  interrupted: number;
   fetched: number;
   inserted: number;
   changed: number;
@@ -94,6 +96,7 @@ const emptySummary = (): CollectChannelSummary => ({
   succeeded: 0,
   failed: 0,
   skipped: 0,
+  interrupted: 0,
   fetched: 0,
   inserted: 0,
   changed: 0,
@@ -243,7 +246,7 @@ export async function collectStep(ctx: CycleStepContext): Promise<StepResult> {
 
     const finish = async (
       status: Exclude<RunStatus, "running">,
-      fields: { fetched?: number; newCount?: number; error?: string | null; errorCode?: string | null },
+      fields: { fetched?: number; newCount?: number; error?: string | null; errorCode?: string | null; interrupted?: boolean },
     ): Promise<void> => {
       if (runId === null) return;
       try {
@@ -254,6 +257,8 @@ export async function collectStep(ctx: CycleStepContext): Promise<StepResult> {
     };
 
     let collected: RawPostingInput[];
+    /** Set when the query failed after some pages (`PartialCollectError`): their postings are stored first, then this is the failure. */
+    let interrupted: ChannelError | null = null;
     try {
       const output: unknown = await channel.collect(effective, channelContext);
       if (!Array.isArray(output)) throw new ChannelError("parse", `${channelId}.collect did not return an array`);
@@ -263,16 +268,21 @@ export async function collectStep(ctx: CycleStepContext): Promise<StepResult> {
         await finish("failed", { error: "cancelled" });
         throw error;
       }
-      const failure = toChannelError(error);
-      const skipped = failure.code === "budget_exceeded";
-      summary.costUsd += budget.attempt.usd;
-      if (skipped) summary.skipped += 1;
-      else summary.failed += 1;
-      summary.errorCodes[failure.code] = (summary.errorCodes[failure.code] ?? 0) + 1;
-      await finish(skipped ? "skipped" : "failed", { error: truncate(failure.message), errorCode: failure.code });
-      if (!skipped) await services.breaker.recordFailure(channelId, failure.code, { trips: failure.tripsCircuit });
-      ctx.logger.warn("channel attempt failed", { channel: channelId, query: query.id, code: failure.code, retryable: failure.retryable });
-      throw failure;
+      if (error instanceof PartialCollectError && error.postings.length > 0) {
+        collected = [...error.postings];
+        interrupted = error.cause;
+      } else {
+        const failure = toChannelError(error);
+        const skipped = failure.code === "budget_exceeded";
+        summary.costUsd += budget.attempt.usd;
+        if (skipped) summary.skipped += 1;
+        else summary.failed += 1;
+        summary.errorCodes[failure.code] = (summary.errorCodes[failure.code] ?? 0) + 1;
+        await finish(skipped ? "skipped" : "failed", { error: truncate(failure.message), errorCode: failure.code });
+        if (!skipped) await services.breaker.recordFailure(channelId, failure.code, { trips: failure.tripsCircuit });
+        ctx.logger.warn("channel attempt failed", { channel: channelId, query: query.id, code: failure.code, retryable: failure.retryable });
+        throw failure;
+      }
     }
 
     // validate the boundary (C6); keep every valid record, flag the rest
@@ -310,17 +320,37 @@ export async function collectStep(ctx: CycleStepContext): Promise<StepResult> {
       }
     }
 
-    summary.succeeded += 1;
     summary.fetched += collected.length;
     summary.inserted += counts.inserted;
     summary.changed += counts.changed;
     summary.unchanged += counts.unchanged;
     summary.costUsd += budget.attempt.usd;
     if (invalid > 0) summary.errorCodes.parse = (summary.errorCodes.parse ?? 0) + invalid;
+    const rejected = invalid > 0 ? `${invalid} of ${collected.length} records rejected (invalid shape)` : null;
+
+    if (interrupted) {
+      // the postings are kept; the failure itself is handled exactly as for a failed attempt (circuit, cascade, retry),
+      // and the run is marked interrupted so readers never take it for a "some records invalid" partial
+      summary.interrupted += 1;
+      summary.errorCodes[interrupted.code] = (summary.errorCodes[interrupted.code] ?? 0) + 1;
+      const message = `interrupted after ${collected.length} postings: ${interrupted.message}${rejected ? `; ${rejected}` : ""}`;
+      await finish("partial", { fetched: collected.length, newCount: counts.inserted, error: truncate(message), errorCode: interrupted.code, interrupted: true });
+      if (interrupted.code !== "budget_exceeded") await services.breaker.recordFailure(channelId, interrupted.code, { trips: interrupted.tripsCircuit });
+      ctx.logger.warn("channel attempt interrupted", {
+        channel: channelId,
+        query: query.id,
+        code: interrupted.code,
+        retryable: interrupted.retryable,
+        kept: collected.length,
+      });
+      throw interrupted;
+    }
+
+    summary.succeeded += 1;
     await finish(invalid > 0 ? "partial" : "succeeded", {
       fetched: collected.length,
       newCount: counts.inserted,
-      ...(invalid > 0 ? { error: `${invalid} of ${collected.length} records rejected (invalid shape)`, errorCode: "parse" } : {}),
+      ...(rejected ? { error: rejected, errorCode: "parse" } : {}),
     });
     // a channel that answered is healthy, even if some records were malformed
     await services.breaker.recordSuccess(channelId);
@@ -384,7 +414,8 @@ export async function collectStep(ctx: CycleStepContext): Promise<StepResult> {
   });
 
   const totals = [...summaries.values()].reduce(
-    (acc, s) => ({ succeeded: acc.succeeded + s.succeeded, bad: acc.bad + s.failed + s.skipped }),
+    // an interrupted attempt stored postings but is a failure of the channel: it never counts as a success here
+    (acc, s) => ({ succeeded: acc.succeeded + s.succeeded, bad: acc.bad + s.failed + s.skipped + s.interrupted }),
     { succeeded: 0, bad: errors.length },
   );
   const status: CollectResult["status"] =

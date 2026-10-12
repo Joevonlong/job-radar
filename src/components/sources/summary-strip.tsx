@@ -41,7 +41,7 @@ export async function SummaryStrip({ view, disk, timeZone, aiWorker }: { view: S
   const runnerTone: LedTone = runner.ageSeconds === null ? "idle" : runner.online ? "good" : "bad";
   const diskGauge = disk === null ? null : diskBattery(disk);
   // the cycle's state in words: a cycle whose steps failed never reads "finished"
-  const face = latestCycle ? cycleFace({ status: latestCycle.status, steps: latestCycle.steps ?? [], failedChannels: latestCycle.channels.filter((channel) => channel.failed > 0).length, finishedAt: null }) : null;
+  const face = latestCycle ? cycleFace({ status: latestCycle.status, steps: latestCycle.steps ?? [], failedChannels: latestCycle.channels.filter((channel) => channel.failed + channel.interrupted > 0).length, finishedAt: null }) : null;
   const cycleTone = face?.tone ?? "ok";
   const cycleState = face ? stateWords(tCycle, face, () => "", { finishedAt: null }) : "";
 

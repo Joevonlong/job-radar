@@ -1,6 +1,6 @@
 import { arbeitsagenturSettingsSchema, type ArbeitsagenturSettings } from "@/lib/config";
 
-import { ChannelError } from "../errors";
+import { ChannelError, settlePostings } from "../errors";
 import { loadKnownDetails, storedDetailOf } from "../known";
 import type { Channel, ChannelContext, RawPostingInput, SearchQuery } from "../types";
 import { fetchDetail, fetchSearchPage } from "./client";
@@ -62,19 +62,29 @@ async function collect(query: SearchQuery, ctx: ChannelContext): Promise<RawPost
     first = false;
   };
 
-  // ---- search: one request series per keyword
+  // ---- search: one request series per keyword. A failing page ends the search; what earlier pages
+  // (and keywords) returned is kept and handed on with the failure (see the end)
   const perTerm: BaSearchItem[][] = [];
-  for (const term of query.keywords) {
+  let interrupted: ChannelError | null = null;
+  search: for (const term of query.keywords) {
     const items: BaSearchItem[] = [];
+    perTerm.push(items);
     for (let page = 1; items.length < query.maxResults && page <= maxPages; page += 1) {
       await pace();
-      const response = await fetchSearchPage(ctx, settings, { term, location, windowHours: query.windowHours, page, size });
+      let response;
+      try {
+        response = await fetchSearchPage(ctx, settings, { term, location, windowHours: query.windowHours, page, size });
+      } catch (error) {
+        if (!(error instanceof ChannelError)) throw error;
+        interrupted = error;
+        break search;
+      }
       items.push(...(filterRemote ? response.ergebnisliste.filter((item) => item.homeofficemoeglich === true) : response.ergebnisliste));
       if (response.ergebnisliste.length === 0 || page * size >= response.maxErgebnisse) break;
     }
-    perTerm.push(items);
   }
   const selected = interleave(perTerm, query.maxResults);
+  if (interrupted && selected.length === 0) throw interrupted;
 
   // ---- details: the job description lives only there
   const details = new Map<string, BaDetail>();
@@ -82,13 +92,16 @@ async function collect(query: SearchQuery, ctx: ChannelContext): Promise<RawPost
   if (settings.fetch_details) {
     // postings already stored keep their stored detail; only the others cost a request
     const known = await loadKnownDetails(ctx, {
-      enabled: settings.reuse_known_details,
+      // an interrupted query never overwrites a stored detail with none, whatever reuse_known_details says
+      enabled: settings.reuse_known_details || interrupted !== null,
       externalIds: selected.map((item) => item.referenznummer),
       detailOf: storedDetailOf<BaDetail>(payloadSchema),
     });
     for (const [id, detail] of known) details.set(id, detail);
     reused = known.size;
-    for (const item of selected.filter((i) => !known.has(i.referenznummer)).slice(0, settings.max_details_per_query)) {
+    // after a failure no further request goes out: the stored details are kept, the rest stays list data
+    const toFetch = interrupted ? [] : selected.filter((i) => !known.has(i.referenznummer)).slice(0, settings.max_details_per_query);
+    for (const item of toFetch) {
       await pace();
       try {
         const detail = await fetchDetail(ctx, settings, item.referenznummer);
@@ -111,9 +124,8 @@ async function collect(query: SearchQuery, ctx: ChannelContext): Promise<RawPost
       postedAt: toDate(item.datumErsteVeroeffentlichung) ?? toDate(item.veroeffentlichungszeitraum?.von),
     };
   });
-  ctx.logger.info("arbeitsagentur query done", { query: query.id, postings: postings.length, details: details.size, reusedDetails: reused });
-  await ctx.budget.consume(postings.length);
-  return postings;
+  ctx.logger.info("arbeitsagentur query done", { query: query.id, postings: postings.length, details: details.size, reusedDetails: reused, interrupted: interrupted?.code });
+  return settlePostings(ctx.budget, postings, interrupted);
 }
 
 export const arbeitsagenturChannel: Channel = {

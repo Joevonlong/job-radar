@@ -11,7 +11,7 @@ import { getCycleProgress } from "./sources";
 /** What the sidebar's cycle status needs: the newest cycle, how its sources did, and the AI part while it is open. */
 export interface ShellCycleStatus {
   cycle: { id: number; kind: CycleKind; status: "running" | "succeeded" | "partial" | "failed"; runsTotal: number; runsFinished: number; failedSteps: StepName[]; partialSteps: StepName[] } | null;
-  /** Channels of that cycle by outcome: ok / failed this run / behind an open circuit. */
+  /** Channels of that cycle by outcome: ok / failed this run (also after some pages: an interrupted query) / behind an open circuit. */
   sources: { ok: number; failed: number; circuitOpen: number } | null;
   /** The open `run_ai` request: postings scored so far and the total (scored + still waiting). */
   ai: { status: "pending" | "running"; kind: CycleKind | null; scored: number; total: number } | null;
@@ -25,7 +25,7 @@ async function latestCycleId(db: Db): Promise<number | null> {
 
 async function channelOutcomes(db: Db, cycleId: number): Promise<NonNullable<ShellCycleStatus["sources"]>> {
   const rows = await db
-    .select({ channelId: runs.channelId, status: runs.status, circuitState: channels.circuitState })
+    .select({ channelId: runs.channelId, status: runs.status, interrupted: runs.interrupted, circuitState: channels.circuitState })
     .from(runs)
     .innerJoin(channels, eq(channels.id, runs.channelId))
     .where(eq(runs.cycleId, cycleId));
@@ -33,7 +33,8 @@ async function channelOutcomes(db: Db, cycleId: number): Promise<NonNullable<She
   for (const row of rows) {
     const current = byChannel.get(row.channelId) ?? "ok";
     let next = current;
-    if (row.status === "failed" && current !== "circuitOpen") next = "failed";
+    // an interrupted query failed too (its earlier pages are kept); a partial without the marker only had invalid records: ok
+    if ((row.status === "failed" || row.interrupted) && current !== "circuitOpen") next = "failed";
     if (row.status === "skipped" && current === "ok") next = "skipped";
     if (row.circuitState === "open") next = "circuitOpen";
     byChannel.set(row.channelId, next);
