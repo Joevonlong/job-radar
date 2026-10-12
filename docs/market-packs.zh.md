@@ -75,8 +75,9 @@ pnpm run doctor --only config.market
 | 键 | 是什么 |
 |---|---|
 | `repost_label_patterns` | 来源自己的"重新发布"标签（"Reposted 2 weeks ago"、"Wiedereingestellt"）；`{id, pattern}` |
-| `evergreen_patterns` | JD 写明是人才库或常年招聘（"for our talent pool"、"always hiring"、"Initiativbewerbung (m/w/d)"）；`{id, pattern, check_negation, negation_after}`。`check_negation: false` 表示说法本身就是否定（"no specific opening"、"keine konkrete Stelle"）；`negation_after` 覆盖这一条所在包的设置 |
-| `responsibility_patterns` | 职责段落的标题（"Responsibilities"、"What you'll do"、"Deine Aufgaben"），只对像标题的行测试；`{id, pattern}` |
+| `evergreen_patterns` | JD 写明是人才库或常年招聘（"for our talent pool"、"always hiring"、"Initiativbewerbung (m/w/d)"）；`{id, pattern, check_negation, negation_after, requires_context}`。`check_negation: false` 表示说法本身就是否定（"no specific opening"、"keine konkrete Stelle"）；`negation_after` 覆盖这一条所在包的设置；`requires_context`（正则列表）表示命中所在的句子还要匹配其中一条才算（"join our AI talent pool" 要和 "apply"、"opportunities" 在一起） |
+| `responsibility_patterns` | 职责段落的标题（"Responsibilities"、"What you'll do"、"Deine Aufgaben"），只对像标题的行测试；`{id, pattern}`。读这一行时去掉强调符号、行首 emoji 和列表 / 标题标记，"&amp;" 当作 "&"，`’` 当作 `'`；行尾的 "…"、"..."、" -"、"—" 当作 ":" |
+| `question_words` | 疑问词（"what"、"which"、"welche…"；整词匹配）：以 "?" 结尾的标题行只有在第一个词是其中之一时才算标题（"What will I be doing?"），所以 "Ready to take on new responsibilities?" 仍是句子 |
 | `negation_cues` | 让人才库说法不算的词：在说法里面、说法前 `pipeline.yaml job_checks.ghost.negation_words_before` 个词内、说法后同一分句 `negation_words_after` 个词内，或在所在列表的标题里 |
 | `negation_after` | 这个包的说法后面往后找多远的否定词：`words`（默认：`negation_words_after` 个词）或 `clause`（到分句结束）。`de` 用 `clause`：德语把 "nicht" 放在句末（"Für unseren Talentpool ist diese Anzeige ganz ausdrücklich nicht gedacht"） |
 | `clause_breaks` | 分句在哪里结束（";"、" but "、" aber "、"and we …"、", not"、", die …"）；分句界也能把词排除在否定搜索之外：`not only`、`nicht nur` |

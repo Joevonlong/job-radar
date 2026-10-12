@@ -44,7 +44,7 @@ export const GHOST_CHECK_DEFAULTS = {
   repost_label: { enabled: true, points: 1 },
   reposted: { enabled: true, min_gap_days: 30, points: 2 },
   evergreen_wording: { enabled: true, points: 2 },
-  thin_description: { enabled: true, min_words: 120, points: 1 },
+  thin_description: { enabled: true, min_words: 120, points: 1, infer_from_headings: true },
   quote_max_chars: 280,
   negation_words_before: 6,
   negation_words_after: 5,
@@ -88,7 +88,16 @@ const ghostCheckSchema = z
     evergreen_wording: z.strictObject({ enabled: z.boolean().default(true), points: ghostPoints.default(GHOST_CHECK_DEFAULTS.evergreen_wording.points) }).default(GHOST_CHECK_DEFAULTS.evergreen_wording),
     /** A JD from a full-text source with fewer than `min_words` words, or without a duties section. */
     thin_description: z
-      .strictObject({ enabled: z.boolean().default(true), min_words: z.number().int().min(0).max(5000).default(GHOST_CHECK_DEFAULTS.thin_description.min_words), points: ghostPoints.default(GHOST_CHECK_DEFAULTS.thin_description.points) })
+      .strictObject({
+        enabled: z.boolean().default(true),
+        min_words: z.number().int().min(0).max(5000).default(GHOST_CHECK_DEFAULTS.thin_description.min_words),
+        points: ghostPoints.default(GHOST_CHECK_DEFAULTS.thin_description.points),
+        /**
+         * Without a current AI breakdown, whether the duties headings decide that a long JD has no duties section. false: such a
+         * JD is not judged by its headings (a current breakdown still decides; a short JD still counts, for its length only).
+         */
+        infer_from_headings: z.boolean().default(GHOST_CHECK_DEFAULTS.thin_description.infer_from_headings),
+      })
       .default(GHOST_CHECK_DEFAULTS.thin_description),
     /** Longest quote (characters); a longer sentence is cut around the phrase. */
     quote_max_chars: positiveInt.min(40).max(2000).default(GHOST_CHECK_DEFAULTS.quote_max_chars),
@@ -123,7 +132,7 @@ export interface GhostCheckConfig {
   repost_label: { enabled: boolean; points: number };
   reposted: { enabled: boolean; min_gap_days: number; points: number };
   evergreen_wording: { enabled: boolean; points: number };
-  thin_description: { enabled: boolean; min_words: number; points: number };
+  thin_description: { enabled: boolean; min_words: number; points: number; infer_from_headings: boolean };
   quote_max_chars: number;
   negation_words_before: number;
   negation_words_after: number;

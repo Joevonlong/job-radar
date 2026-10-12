@@ -16,7 +16,7 @@
 | `repost_label` | 来源自己把帖子标成"重新发布"（用你的登录读的 LinkedIn） | 1 |
 | `reposted` | 同一个来源在同一地点以新编号重新挂出，距上一次至少 30 天。只有同一帖子编号不变的来源算（公司 ATS、用你的登录读的 LinkedIn、StepStone、XING、Arbeitsagentur）；两个不同来源之间从不算。 | 2 |
 | `evergreen_wording` | JD 写明是人才库或常年招聘（"This posting is for our talent pool"、"We are always hiring"、"Wir stellen laufend ein"、"Initiativbewerbung (m/w/d)"、"Es gibt keine konkrete Stelle"）。"We're always looking for people who …" 不算（很多真实招聘帖的公司介绍都这么写） | 2 |
-| `thin_description` | JD 来自保留全文的来源，且不到 120 个词，或没有职责段落（"Responsibilities"、"Your tasks"、"Deine Aufgaben" 这样的标题）。岗位有当前的 [JD 拆解](breakdown.zh.md)时，以拆解里的职责列表为准，不看标题。 | 1 |
+| `thin_description` | JD 来自保留全文的来源，且不到 120 个词，或没有职责段落（"Responsibilities"、"Your tasks"、"What will I be doing?"、"The impact you'll have"、"Deine Aufgaben"、"Darum geht's" 这样的标题；读标题时去掉行首 emoji，"&amp;" 当作 "&"，行尾的 "…" 或疑问词开头的行尾 "?" 当作 ":"）。岗位有当前的 [JD 拆解](breakdown.zh.md)时，以拆解里的职责列表为准（职责列表为空也算），不看标题。`thin_description.infer_from_headings: false` 时不看标题：没有当前拆解时只有篇幅短才算。 | 1 |
 
 分数加起来得到等级：
 
@@ -35,7 +35,9 @@ JD 先切成片段（句子、列表项、短标题和它下一行），和[签�
 - 否定词在说法里面、说法前 `negation_words_before` 个词内、说法后同一分句里（`negation_words_after` 个词内；德语到分句结束，因为德语把 "nicht" 放在最后），或在它所在列表的标题里（"This is not a talent pool posting"、"Für unseren Talentpool ist diese Anzeige ganz ausdrücklich nicht gedacht"）。"not" 前的逗号、德语关系从句或连词前的逗号（"…, die keine Angst vor neuen Technologien haben"）结束分句；"not only"、"nicht nur" 不算否定；
 - 片段本身是问句（"Always hiring? Acme automates your sourcing"）；
 - 讲的是雇主的产品、客户或同名团队（"We build talent pool software"、"Our ATS lets hiring managers add candidates to the talent pipeline"、"Evergreen job listings are a core feature of our ATS"、"Join our Talent Network team"、"Wir helfen Unternehmen beim Aufbau ihres Talentpools"、"Unsere Software hilft Personalabteilungen beim Aufbau eines Talentpools"）；
-- 是这个岗位的职责（"You will build our talent pipeline"、"You will source candidates for upcoming roles"、"Your tasks:" 下面的列表项）；"We are building a talent pool" 则算；
+- 是这个岗位的职责（"You will build our talent pipeline"、"You will source candidates for our upcoming roles"、"Your tasks:" 或 "What will I be doing?" 下面的列表项）；"We are building a talent pool" 则算；
+- 是为以后岗位做的培训，或给社群办的活动（"Mentoring for our future roles"、"Weiterbildung für zukünftige Positionen"、"Organize events for our engineering talent community"）；
+- 需要招聘语境的说法，同一句里没有招聘用词："join our AI talent pool" 要和 "apply"、"candidates"、"opportunities" 这类词在同一句才算（"By joining our AI talent pool, you will be contacted … for our future opportunities"），"access to the largest tech talent pool in Europe" 永远不算；
 - 讲的是为以后的岗位做培训（"Mentoring for future roles"、"Weiterbildung für zukünftige Positionen"）；
 - 后面又说这是真实空缺（"…, but this role is a concrete opening"、"this role is based in Berlin"）；
 - 是真实招聘帖的结尾（"Don't see a role that fits? Join our talent community"、"Not ready to apply? Join our talent community to stay in touch"、"Keine passende Stelle dabei? Dann bewirb dich initiativ"；紧挨在前面的问句也一起看，见 [market-packs.zh.md](market-packs.zh.md#幽灵岗位说法) 的 `lead_in_question`）、条件句（"If there is no open role…"）、隐私说明，或"也可能考虑你应聘以后的职位"。
@@ -91,6 +93,7 @@ job_checks:
 | `job_checks.ghost.reposted.min_gap_days`、`.points` | 30、2 | |
 | `job_checks.ghost.evergreen_wording.points` | 2 | |
 | `job_checks.ghost.thin_description.min_words`、`.points` | 120、1 | |
+| `job_checks.ghost.thin_description.infer_from_headings` | `true` | 没有当前 JD 拆解时，由职责标题判断长 JD 有没有职责段落；`false`：不看标题，只有篇幅短才算 |
 | `job_checks.ghost.quote_max_chars` | 280 | 引文最长字数 |
 | `job_checks.ghost.negation_words_before` / `_after` | 6 / 5 | 人才库说法前后查否定词的词数 |
 | `job_checks.ghost.heading_max_chars` | 60 | 当作标题、和下一行合读的最长行 |

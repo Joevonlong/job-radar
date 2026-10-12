@@ -160,6 +160,15 @@ ghost:
       pattern: '(?<![\p{L}\p{N}])(?:was\s+(?:du|sie)\s+(?:bei\s+uns\s+)?(?:bewegst|bewegen|tun|tust|machst|machen|erreichst|erreichen)|das\s+erwartet\s+(?:dich|sie)|was\s+(?:dich|sie)\s+erwartet)(?![\p{L}\p{N}])'
     - id: the_role
       pattern: '^(?:deine|ihre|die|dein|ihr)\s+(?:rolle|mission|herausforderung(?:en)?|job|einsatz)$'
+    # "Darum geht's", "Wie Sie etwas bewirken können", "In deiner Mission blühst du auf, denn:"
+    - id: darum_gehts
+      pattern: '^darum\s+geht(?:[''’]?s|\s+es)$'
+    - id: wie_du_bewirkst
+      pattern: '^wie\s+(?:du|sie)\s+(?:etwas\s+)?bewirken\s+(?:kannst|können|wirst|werden)$'
+    - id: in_deiner_rolle
+      pattern: '^in\s+(?:deiner|ihrer)\s+(?:rolle|mission)(?![\p{L}\p{N}])'
+  # Fragewörter: eine Überschrift mit "?" am Ende ("Welche Aufgaben erwarten dich?") gilt nur nach einem davon als Überschrift.
+  question_words: [was, wie, 'welche\p{L}*', wer, warum, wieso, weshalb, wo, wann, womit, wofür]
   negation_cues:
     - nicht
     - nein

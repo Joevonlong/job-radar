@@ -95,4 +95,11 @@ describe("ghostRulesFingerprint", () => {
     expect(ghostRulesFingerprint(config((s) => (s.levels.likely = 6)))).not.toBe(base);
     expect(ghostRulesFingerprint({ ...config(), ghost: { ...emptyGhostPack(), negation_cues: ["not"] } })).not.toBe(base);
   });
+
+  it("changes with infer_from_headings and the packs' question words", () => {
+    const base = ghostRulesFingerprint(config());
+    expect(ghostRulesFingerprint(config((s) => (s.thin_description.infer_from_headings = false)))).not.toBe(base);
+    expect(ghostRulesFingerprint(config((s) => (s.thin_description.infer_from_headings = true)))).toBe(base);
+    expect(ghostRulesFingerprint({ ...config(), ghost: { ...emptyGhostPack(), question_words: ["what"] } })).not.toBe(base);
+  });
 });

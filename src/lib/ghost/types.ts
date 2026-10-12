@@ -63,9 +63,13 @@ export const thinReasonSchema = z.strictObject({
   points,
   words: z.number().int().nonnegative(),
   minWords: z.number().int().nonnegative(),
-  /** Whether a duties section was found (in the JD's headings, or in the current AI breakdown when there is one). */
+  /** Whether a duties section was found (in the JD's headings, or in the current AI breakdown when there is one); false for `none`. */
   hasResponsibilities: z.boolean(),
-  responsibilitiesFrom: z.enum(["headings", "breakdown"]),
+  /**
+   * What decided `hasResponsibilities`: the current AI breakdown, the JD's duties headings, or nothing (`none`: no current breakdown
+   * and `infer_from_headings` off; only a short JD is a reason then, for its length).
+   */
+  responsibilitiesFrom: z.enum(["headings", "breakdown", "none"]),
   channelId,
 });
 

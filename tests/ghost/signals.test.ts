@@ -1,7 +1,9 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
 
+import { ghostCheckDefaults } from "@/lib/config/schemas/pipeline";
 import { countWords, hasResponsibilityHeading, longOpen, repostLabel, reposted, thinDescription } from "@/lib/ghost/signals";
+import { ghostReasonMessage } from "@/lib/ghost/view";
 
 import { DAY_MS, NOW, daysAgo, fixtureRules, input, posting, rulesWith } from "./helpers";
 
@@ -153,6 +155,44 @@ describe("thin_description", () => {
   it("a current breakdown decides whether there are duties", () => {
     expect(thinDescription(input({ description: longText("What we offer"), breakdownResponsibilities: 3 }), rules)).toBeNull();
     expect(thinDescription(input({ description: longText("Your tasks:"), breakdownResponsibilities: 0 }), rules)).toMatchObject({ hasResponsibilities: false, responsibilitiesFrom: "breakdown" });
+  });
+
+  it("infer_from_headings is on by default (the schema's default)", () => {
+    expect(ghostCheckDefaults().thin_description.infer_from_headings).toBe(true);
+    expect(rules.settings.thin_description.infer_from_headings).toBe(true);
+  });
+
+  describe("infer_from_headings: false", () => {
+    const off = rulesWith(
+      (s) => {
+        s.thin_description.min_words = 20;
+        s.thin_description.infer_from_headings = false;
+      },
+      { responsibility_patterns: [{ id: "responsibilities", pattern: "(?<![\\p{L}\\p{N}])(?:your\\s+)?(?:responsibilities|tasks)(?![\\p{L}\\p{N}])" }] },
+    );
+
+    it("without a current breakdown a long JD is not judged by its headings", () => {
+      expect(thinDescription(input({ description: longText("What we offer") }), off)).toBeNull();
+      expect(thinDescription(input({ description: longText("What we offer") }), rules)).toMatchObject({ responsibilitiesFrom: "headings", hasResponsibilities: false });
+    });
+
+    it("a short JD still counts, without claiming there is no duties section", () => {
+      const reason = thinDescription(input({ description: "We build things." }), off);
+      expect(reason).toMatchObject({ points: 1, words: 3, hasResponsibilities: false, responsibilitiesFrom: "none" });
+      expect(reason && ghostReasonMessage(reason).key).toBe("reason.thin_short");
+      // with a duties heading in the short JD: still "none", the headings were not read
+      expect(thinDescription(input({ description: "Your tasks:\n- Code." }), off)).toMatchObject({ responsibilitiesFrom: "none" });
+    });
+
+    it("a current breakdown still decides, an empty duties list included", () => {
+      expect(thinDescription(input({ description: longText("What we offer"), breakdownResponsibilities: 3 }), off)).toBeNull();
+      expect(thinDescription(input({ description: longText("Your tasks:"), breakdownResponsibilities: 0 }), off)).toMatchObject({ hasResponsibilities: false, responsibilitiesFrom: "breakdown" });
+      expect(thinDescription(input({ description: "We build things.", breakdownResponsibilities: 2 }), off)).toMatchObject({ hasResponsibilities: true, responsibilitiesFrom: "breakdown" });
+    });
+
+    it("a stale breakdown is none (the input carries null): the same as no breakdown", () => {
+      expect(thinDescription(input({ description: longText("What we offer"), breakdownResponsibilities: null }), off)).toBeNull();
+    });
   });
 
   it("is not judged without a full-text source", () => {

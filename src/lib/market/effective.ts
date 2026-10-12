@@ -84,6 +84,7 @@ export function mergeGhostPacks(packs: ReadonlyArray<{ rules: { ghost: GhostPack
     evergreen_patterns: unionEntries(...ghost.map((g) => g.evergreen_patterns.map((entry) => ({ ...entry, negation_after: entry.negation_after ?? g.negation_after })))),
     responsibility_patterns: unionEntries(...ghost.map((g) => g.responsibility_patterns)),
     negation_cues: union(...ghost.map((g) => g.negation_cues)),
+    question_words: union(...ghost.map((g) => g.question_words)),
     negation_after: "words",
     clause_breaks: union(...ghost.map((g) => g.clause_breaks)),
     exclude_context: union(...ghost.map((g) => g.exclude_context)),
