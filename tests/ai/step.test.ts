@@ -1,9 +1,9 @@
 // @vitest-environment node
 import { afterEach, describe, expect, it } from "vitest";
 
-import { AiUnavailableError } from "@/lib/ai/errors";
+import { AiUnavailableError, type AiAttempt } from "@/lib/ai/errors";
 import { createMemoryQuotaStore } from "@/lib/ai/quota-guard";
-import { createAiRouter } from "@/lib/ai/router";
+import { createAiRouter, type AiRouter } from "@/lib/ai/router";
 import { createAiStep, listAiSubtasks, registerAiSubtask, resetAiSubtasks, skipSubtask } from "@/lib/ai/step";
 import { listCycleSteps } from "@/lib/cycle/steps";
 import type { CycleStepContext } from "@/lib/cycle/steps";
@@ -92,6 +92,33 @@ describe("ai cycle step: Job Radar's usage cap", () => {
     })(ctx());
     expect(ran).toEqual([]);
     expect(outcome).toMatchObject({ result: { subtasks: [], skipped: "quota_guard", resumeAt: expect.any(String), guards: [{ provider: "codex-cli", reason: "window" }] } });
+  });
+
+  describe("the pre-check names the cap only when the error classification would", () => {
+    const guard: AiAttempt = { provider: "codex-cli", outcome: "skipped", kind: "budget", message: "usage cap", guard: { reason: "window", resumeAt: "2026-10-07T12:00:00.000Z" } };
+    const blockedRouter = (blocked: AiAttempt[]) => ({ plan: () => [], usable: async () => ({ usable: false, blocked }), run: async () => { throw new Error("must not run"); } }) as unknown as AiRouter;
+    const runWith = async (blocked: AiAttempt[]) => {
+      const ran: string[] = [];
+      registerAiSubtask({ name: "score", run: async () => { ran.push("score"); } });
+      const outcome = await createAiStep({ ...deps, createRouter: () => blockedRouter(blocked) })(ctx());
+      return { outcome, ran };
+    };
+
+    it("reports no provider available, not the cap, when another provider needs a login", async () => {
+      const auth: AiAttempt = { provider: "claude-cli", outcome: "skipped", kind: "auth", message: "login expired" };
+      const { outcome, ran } = await runWith([guard, auth]);
+      expect(ran).toEqual([]);
+      expect(outcome).toMatchObject({ result: { subtasks: [], skipped: "no_provider_available" } });
+      expect(outcome).not.toMatchObject({ result: { skipped: "quota_guard" } });
+    });
+
+    it("reports the cap with its resume time when the rest is closed or switched off", async () => {
+      const apiClosed: AiAttempt = { provider: "anthropic", outcome: "skipped", kind: "budget", message: "closed" };
+      const off: AiAttempt = { provider: "mimo", outcome: "skipped", kind: "not_configured", message: "off" };
+      const { outcome, ran } = await runWith([guard, apiClosed, off]);
+      expect(ran).toEqual([]);
+      expect(outcome).toMatchObject({ result: { subtasks: [], skipped: "quota_guard", resumeAt: "2026-10-07T12:00:00.000Z" } });
+    });
   });
 
   it("records a sub-task the cap stopped as skipped (not failed), with its resume time", async () => {

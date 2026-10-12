@@ -2,7 +2,7 @@ import { loadConfig, type AiConfig } from "@/lib/config";
 import type { CycleStepContext, CycleStepFn, StepResult } from "@/lib/cycle/steps";
 import { getCycle } from "@/lib/db/repos/cycles";
 
-import { earliestResume, QUOTA_GUARD_CODE, quotaGuardAttempts, quotaGuardResume } from "./errors";
+import { QUOTA_GUARD_CODE, quotaGuardAttempts, quotaGuardResume, quotaGuardResumeOf } from "./errors";
 import { createDefaultProviders } from "./providers";
 import { createAiRouter, type AiRouter } from "./router";
 import { createDbHealthStore } from "./health";
@@ -138,10 +138,12 @@ export function createAiStep(deps: AiStepDeps = {}): CycleStepFn {
       const check = await router.usable(phase === "late" ? "translate" : "score");
       if (!check.usable) {
         const blocked = check.blocked.map((b) => ({ provider: b.provider, kind: b.kind, message: b.message }));
-        const guards = quotaGuardAttempts(check.blocked).map((b) => ({ provider: b.provider, reason: b.guard.reason, resumeAt: b.guard.resumeAt }));
-        if (guards.length > 0) {
+        // Same decision as for a failed call: another provider that needs a login or broke keeps the cap from being named
+        const capped = quotaGuardResumeOf(check.blocked);
+        if (capped) {
           // Job Radar's own usage cap (or a limit the provider reported) holds the AI back: the work waits, nothing failed
-          const resumeAt = earliestResume(guards.map((g) => g.resumeAt));
+          const guards = quotaGuardAttempts(check.blocked).map((b) => ({ provider: b.provider, reason: b.guard.reason, resumeAt: b.guard.resumeAt }));
+          const resumeAt = capped.resumeAt;
           ctx.logger.warn("ai step skipped: Job Radar's AI usage cap reached", { guards: guards.map((g) => `${g.provider}: ${g.reason}`), resumeAt });
           return { result: { subtasks: [], skipped: QUOTA_GUARD_CODE, resumeAt, guards, blocked } };
         }

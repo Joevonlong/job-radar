@@ -113,17 +113,22 @@ export function quotaGuardAttempts(attempts: readonly AiAttempt[]): (AiAttempt &
 const ACTIONABLE_KINDS: readonly AiProviderErrorKind[] = ["auth", "timeout", "network", "provider_error", "invalid_output"];
 
 /**
- * Whether `error` means "the usage cap holds the AI back": every provider was skipped or failed, at least one of them
- * was held back by the cap, and no other provider failed for a more actionable reason (a provider that is not logged in
- * must still surface as such). Returns the earliest expected resume time (null = unknown / the next cycle), or undefined
- * when the cap played no part or something more actionable explains the failure.
+ * Whether these attempts mean "the usage cap holds the AI back": at least one provider was held back by the cap, and no
+ * other provider failed for a more actionable reason (a provider that is not logged in must still surface as such).
+ * Returns the earliest expected resume time (null = unknown / the next cycle), or undefined when the cap played no part
+ * or something more actionable explains the failure. The one place that decides this, for a thrown error and for the
+ * router's pre-check alike.
  */
-export function quotaGuardResume(error: unknown): { resumeAt: string | null } | undefined {
-  if (!(error instanceof AiUnavailableError)) return undefined;
-  const guarded = quotaGuardAttempts(error.attempts);
+export function quotaGuardResumeOf(attempts: readonly AiAttempt[]): { resumeAt: string | null } | undefined {
+  const guarded = quotaGuardAttempts(attempts);
   if (guarded.length === 0) return undefined;
-  if (error.attempts.some((a) => a.guard === undefined && ACTIONABLE_KINDS.includes(a.kind))) return undefined;
+  if (attempts.some((a) => a.guard === undefined && ACTIONABLE_KINDS.includes(a.kind))) return undefined;
   return { resumeAt: earliestResume(guarded.map((a) => a.guard.resumeAt)) };
+}
+
+/** `quotaGuardResumeOf` for a caught error: only an `AiUnavailableError` (every provider skipped or failed) can name the cap. */
+export function quotaGuardResume(error: unknown): { resumeAt: string | null } | undefined {
+  return error instanceof AiUnavailableError ? quotaGuardResumeOf(error.attempts) : undefined;
 }
 
 /** The earliest of the known times; null when none is known. */
