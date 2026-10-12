@@ -116,24 +116,32 @@ const LIST_OR_HEADING_MARKER = /^(?:[-*•–·]\s+|\d{1,3}[.)]\s+|#{1,6}\s+)/u;
 const LIST_LINE = /^\s*(?:[-*•–·]\s+|\d{1,3}[.)]\s+)/u;
 const EMPHASIS = /[*_]+/gu;
 const END_PUNCTUATION = /[.!?;,)\]"'“”»]$/u;
-/** Emoji and other symbols before a heading ("🚀 Your tasks", "🇩🇪 Deine Aufgaben"), with the joiners and selectors of emoji. */
-const DECORATION = /^[\p{Extended_Pictographic}\p{So}\p{Sk}\u{FE0E}\u{FE0F}\u{200D}\u{20E3}\s]+/u;
-/** A heading line that trails off ("Your tasks…", "Your tasks...", "Your Role -", "Your tasks —") ends as if in ":". */
-const TRAILING_PAUSE = /\s*(?:…|\.{3}|\s[-–]|—)\s*$/u;
+/** Emoji, arrows and other symbols before a heading ("🚀 Your tasks", "→ Your tasks", "» Deine Aufgaben"), with the joiners and selectors of emoji. */
+const DECORATION = /^[\p{Extended_Pictographic}\p{So}\p{Sk}\u{2190}-\u{21FF}\u{00BB}\u{203A}\u{FE0E}\u{FE0F}\u{200D}\u{20E3}\s]+/u;
+/** … and emoji after it ("Your impact 🌍", "Outcomes 🎯:"); a final ":" stays. */
+const TRAILING_DECORATION = /[\p{Extended_Pictographic}\p{So}\u{FE0E}\u{FE0F}\u{200D}\u{20E3}\s]+(:?)\s*$/u;
+/** A heading line that ends in a dash ("Your Role -", "Your tasks —") ends as if in ":". */
+const TRAILING_DASH = /\s*(?:\s[-–]|—)\s*$/u;
+/** … and so does one that trails off ("Your tasks…", "Your tasks..."), but only right above a list. */
+const TRAILING_ELLIPSIS = /\s*(?:…|\.{3})\s*$/u;
 const QUESTION_END = /\s*[?？]+\s*$/u;
 const APOSTROPHES = /[‘’ʼ]/gu;
 const AMPERSAND_ENTITY = /&amp;/giu;
 
 /**
  * A line as the ghost check reads it when it looks for a heading: "&amp;" as "&", curly apostrophes as straight ones, without
- * leading emoji, list or "#" marker and emphasis, and a final "…", "...", " -" or "—" as ":". A final "?" is ":" as well when the
- * line opens with one of the packs' `question_words` ("What will I be doing?"), so "Ready to take on new responsibilities?" stays a
- * sentence. Only for telling headings: quotes and offsets always come from the description itself.
+ * emoji or arrows before it and emoji after it, without list or "#" marker and emphasis, and a final " -" or "—" as ":". Right
+ * above a list (`listFollows`; at most one line of lead-in between) a final "…" or "..." is ":" too, and so is a final "?" when the line opens with one of the packs'
+ * `question_words` ("What will I be doing?" / "- …"): "Ready to take on new responsibilities?" and a question or "..." in the
+ * company text ("Which tasks can our AI automate?" and prose after it) stay sentences. Only for telling headings: quotes and
+ * offsets always come from the description itself.
  */
-function normalizeHeadingLine(raw: string, rules: CompiledGhostRules): string {
+function normalizeHeadingLine(raw: string, rules: CompiledGhostRules, listFollows: boolean): string {
   let text = raw.replace(AMPERSAND_ENTITY, "&").replace(APOSTROPHES, "'").trim().replace(DECORATION, "");
-  text = text.replace(LIST_OR_HEADING_MARKER, "").replace(DECORATION, "").replace(EMPHASIS, "").trim();
-  text = text.replace(TRAILING_PAUSE, ":");
+  text = text.replace(LIST_OR_HEADING_MARKER, "").replace(DECORATION, "").replace(EMPHASIS, "").replace(TRAILING_DECORATION, "$1").trim();
+  text = text.replace(TRAILING_DASH, ":");
+  if (!listFollows) return text;
+  text = text.replace(TRAILING_ELLIPSIS, ":");
   if (QUESTION_END.test(text)) {
     const first = (wordsOf(text)[0] ?? "").split("'")[0] ?? "";
     if (rules.questionWords.some((word) => word.test(first))) text = text.replace(QUESTION_END, ":");
@@ -142,29 +150,33 @@ function normalizeHeadingLine(raw: string, rules: CompiledGhostRules): string {
 }
 
 /** A heading's text as the responsibility patterns see it: normalized (`normalizeHeadingLine`), no final colon, single spaces. */
-function headingText(raw: string, rules: CompiledGhostRules): string {
-  return normalizeHeadingLine(raw, rules).replace(/:\s*$/u, "").replace(/\s+/gu, " ").trim();
+function headingText(raw: string, rules: CompiledGhostRules, listFollows: boolean): string {
+  return normalizeHeadingLine(raw, rules, listFollows).replace(/:\s*$/u, "").replace(/\s+/gu, " ").trim();
 }
 
 /** The whole line as a heading (short, and a "#" heading, ending in ":" or without end punctuation), or null. */
-function wholeLineHeading(line: string, rules: CompiledGhostRules): string | null {
+function wholeLineHeading(line: string, rules: CompiledGhostRules, listFollows: boolean): string | null {
   const trimmed = line.trim();
-  const content = normalizeHeadingLine(trimmed, rules);
+  const content = normalizeHeadingLine(trimmed, rules, listFollows);
   if (content.length === 0 || content.length > rules.settings.heading_max_chars) return null;
-  if (!/^#{1,6}\s+/u.test(trimmed) && !content.endsWith(":") && END_PUNCTUATION.test(content)) return null;
-  const text = headingText(content, rules);
+  // "…" is no end punctuation of a sentence, but a line that trails off is a heading only right above a list
+  if (!/^#{1,6}\s+/u.test(trimmed) && !content.endsWith(":") && (END_PUNCTUATION.test(content) || TRAILING_ELLIPSIS.test(content))) return null;
+  const text = headingText(content, rules, listFollows);
   return text.length > 0 ? text : null;
 }
 
-/** The heading-shaped pieces of a line: the whole line when it is short and looks like a heading, and a short "Label:" prefix. */
-function headingsOfLine(line: string, rules: CompiledGhostRules): string[] {
+/**
+ * The heading-shaped pieces of a line: the whole line when it is short and looks like a heading, and a short "Label:" prefix.
+ * `listFollows`: a list starts at the next line that is not blank, or after one line of lead-in.
+ */
+function headingsOfLine(line: string, rules: CompiledGhostRules, listFollows: boolean): string[] {
   if (line.trim() === "") return [];
   const out: string[] = [];
-  const whole = wholeLineHeading(line, rules);
+  const whole = wholeLineHeading(line, rules, listFollows);
   if (whole !== null) out.push(whole);
-  const content = normalizeHeadingLine(line, rules);
+  const content = normalizeHeadingLine(line, rules, listFollows);
   const colon = content.indexOf(":");
-  if (colon > 0 && colon <= rules.settings.heading_max_chars && colon < content.length - 1) out.push(headingText(content.slice(0, colon), rules));
+  if (colon > 0 && colon <= rules.settings.heading_max_chars && colon < content.length - 1) out.push(headingText(content.slice(0, colon), rules, listFollows));
   return out.filter((text) => text.length > 0);
 }
 
@@ -173,8 +185,19 @@ const isDutiesHeading = (heading: string, rules: CompiledGhostRules): boolean =>
 /** Whether the text has a heading that opens the duties of the role ("Responsibilities", "Deine Aufgaben:"). */
 export function hasResponsibilityHeading(description: string | null, rules: CompiledGhostRules): boolean {
   if (description === null || rules.responsibilities.length === 0) return false;
-  for (const line of description.split("\n")) {
-    for (const heading of headingsOfLine(line, rules)) {
+  const lines = description.split("\n");
+  // whether a list starts at the next line that is not blank, or after one line of lead-in ("What will I be doing?" / "As a
+  // senior engineer you …" / "- …"), from the end
+  const listFollows = new Array<boolean>(lines.length).fill(false);
+  let next = -1;
+  let afterNext = -1;
+  for (let i = lines.length - 1; i >= 0; i -= 1) {
+    const isList = (at: number): boolean => at !== -1 && LIST_LINE.test(lines[at] as string);
+    listFollows[i] = isList(next) || (next !== -1 && isList(afterNext));
+    if ((lines[i] as string).trim() !== "") [next, afterNext] = [i, next];
+  }
+  for (const [i, line] of lines.entries()) {
+    for (const heading of headingsOfLine(line, rules, listFollows[i] === true)) {
       if (isDutiesHeading(heading, rules)) return true;
     }
   }
@@ -263,7 +286,7 @@ function negated(segment: TextSegment, hit: Hit, pattern: CompiledGhostPattern, 
  * as a heading. The segmenter does not take a line ending in "?" or "..." as a list's heading ("What will I be doing?" / "- …").
  */
 function listHeadingOf(segment: TextSegment, rules: CompiledGhostRules, description: string): string | null {
-  if (segment.listHeading !== undefined) return headingText(description.slice(segment.listHeading.start, segment.listHeading.end), rules);
+  if (segment.listHeading !== undefined) return headingText(description.slice(segment.listHeading.start, segment.listHeading.end), rules, true);
   if (!segment.listItem) return null;
   let lineStart = description.lastIndexOf("\n", segment.start - 1) + 1;
   while (lineStart > 0) {
@@ -272,7 +295,7 @@ function listHeadingOf(segment: TextSegment, rules: CompiledGhostRules, descript
     const line = description.slice(lineStart, lineEnd);
     // blank lines and the items above it in the same list
     if (line.trim() === "" || LIST_LINE.test(line)) continue;
-    return wholeLineHeading(line, rules);
+    return wholeLineHeading(line, rules, true);
   }
   return null;
 }

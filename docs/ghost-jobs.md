@@ -20,7 +20,7 @@ Each signal adds points; the points come from `pipeline.yaml: job_checks.ghost` 
 | `repost_label` | The source itself labels the posting "Reposted" (LinkedIn with your login) | 1 |
 | `reposted` | The same source listed the job again under a new id, at the same place, at least 30 days after the earlier one. Only sources whose ids stay the same for one posting (company ATS, LinkedIn with your login, StepStone, XING, Arbeitsagentur) count; never two different sources. | 2 |
 | `evergreen_wording` | The job description says it is a talent pool or always open ("This posting is for our talent pool", "We are always hiring", "Wir stellen laufend ein", "Initiativbewerbung (m/w/d)", "Es gibt keine konkrete Stelle"). Not "We're always looking for people who …" (the About-us text of many real postings) | 2 |
-| `thin_description` | The description comes from a source that keeps the full text and has fewer than 120 words, or no duties section (a heading such as "Responsibilities", "Your tasks", "What will I be doing?", "The impact you'll have", "Deine Aufgaben", "Darum geht's"; read without leading emoji, with "&amp;" as "&", and with a final "…" or a "?" after a question word as ":"). When the job has a current [JD breakdown](breakdown.md), its duties list decides instead of the headings, an empty one included. With `thin_description.infer_from_headings: false` the headings are not read: without a current breakdown only a short description counts. | 1 |
+| `thin_description` | The description comes from a source that keeps the full text and has fewer than 120 words, or no duties section (a heading such as "Responsibilities", "Your tasks", "What will I be doing?", "The impact you'll have", "Deine Aufgaben", "Darum geht's"; read without emoji or arrows around it and with "&amp;" as "&"; a line ending in "…", "..." or a "?" after a question word is a heading only right above a list (one line of lead-in may stand between), so "Which tasks can our AI automate?" in the company text is none). When the job has a current [JD breakdown](breakdown.md), its duties list decides instead of the headings, an empty one included. With `thin_description.infer_from_headings: false` the headings are not read: without a current breakdown only a short description counts. | 1 |
 
 The sum gives the level:
 
@@ -48,12 +48,13 @@ The description is cut into pieces (sentences, list items, a short heading with 
   hiring managers add candidates to the talent pipeline", "Evergreen job listings are a core feature of our ATS", "Join our
   Talent Network team", "Wir helfen Unternehmen beim Aufbau ihres Talentpools", "Unsere Software hilft Personalabteilungen
   beim Aufbau eines Talentpools");
-- it is a duty of the role ("You will build our talent pipeline", "You will source candidates for our upcoming roles", a
-  list item under "Your tasks:" or "What will I be doing?"), while "We are building a talent pool" counts;
+- it is a duty of the role ("You will build our talent pipeline", "You will source candidates for our upcoming roles", "You
+  will screen applicants for our engineering talent pool", a list item under "Your tasks:" or "What will I be doing?"), while
+  "We are building a talent pool", "We are hiring for our AI talent pool" and "Help us grow by joining our talent pool" count;
 - it is training for later roles or an event for a community ("Mentoring for our future roles", "Weiterbildung für
-  zukünftige Positionen", "Organize events for our engineering talent community");
+  zukünftige Positionen", "Organize events for our engineering talent community", "Join our AI talent community meetups");
 - a phrase that needs recruiting words around it has none: "join our AI talent pool" counts with "apply", "candidates",
-  "opportunities" or the like in the same sentence ("By joining our AI talent pool, you will be contacted … for our future
+  "future opportunities" or the like in the same sentence (not "networking opportunities") ("By joining our AI talent pool, you will be contacted … for our future
   opportunities"), "access to the largest tech talent pool in Europe" never does;
 - it says the role is a real opening after all ("…, but this role is a concrete opening", "this role is based in Berlin");
 - it is the footer of a real posting ("Don't see a role that fits? Join our talent community", "Not ready to apply? Join our

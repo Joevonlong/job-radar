@@ -70,6 +70,12 @@ const DUTIES: readonly string[] = [
   "Welche Aufgaben erwarten dich?",
   "Was sind deine Aufgaben?",
   "🎯 Deine Aufgaben bei uns",
+  // arrows and guillemets before it, emoji after it
+  "→ Your tasks",
+  "» Deine Aufgaben",
+  "Your impact 🌍",
+  "Outcomes 🎯:",
+  "➡️ What you’ll do",
 ];
 
 const NOT_DUTIES: readonly string[] = [
@@ -109,12 +115,52 @@ const NOT_DUTIES: readonly string[] = [
   "In deiner Freizeit",
   "Your Role – we're hiring now!",
   "Within your first months here we celebrate.",
+  "Our impact 🌍",
+  "→ Our mission",
+];
+
+/**
+ * A line ending in "?" or "..." / "…" reads as a heading only when a list follows it: on its own (prose after it) it is a sentence
+ * of the company text, even after a question word.
+ */
+const SENTENCES_WITHOUT_LIST: readonly string[] = [
+  "Which tasks can our AI automate?",
+  "How does Acme reduce your daily tasks?",
+  "We automate repetitive tasks...",
+  "We automate repetitive tasks…",
+  "Learn more about our day-to-day...",
+  "What do our customers' teams do day-to-day?",
+  "What will I be doing?",
+  "Welche Aufgaben übernimmt unsere KI?",
+  "Wir automatisieren lästige Aufgaben…",
 ];
 
 describe("duties headings: unusual forms and near-misses", () => {
   const rules = fixtureRules();
   it.each(DUTIES)("%j opens the duties", (heading) => expect(hasResponsibilityHeading(`Intro line of the company.\n${heading}\n- Build the data platform.`, rules)).toBe(true));
   it.each(NOT_DUTIES)("%j does not", (heading) => expect(hasResponsibilityHeading(`Intro line of the company.\n${heading}\n- Something here.`, rules)).toBe(false));
+});
+
+describe("a heading ending in '?' or '...' needs a list right after it", () => {
+  const rules = fixtureRules();
+  it.each(SENTENCES_WITHOUT_LIST)("%j followed by prose: no duties heading", (line) => {
+    expect(hasResponsibilityHeading(`Intro line of the company.\n${line}\nWe help teams ship faster with less toil.`, rules)).toBe(false);
+    expect(hasResponsibilityHeading(`Intro line of the company.\n${line}`, rules)).toBe(false);
+  });
+  it.each(["What will I be doing?", "Welche Aufgaben erwarten dich?", "Your tasks...", "Your tasks…"])("%j followed by a list (after a blank line too): duties heading", (line) => {
+    expect(hasResponsibilityHeading(`Intro.\n${line}\n- Build the platform.`, rules)).toBe(true);
+    expect(hasResponsibilityHeading(`Intro.\n${line}\n\n1. Build the platform.`, rules)).toBe(true);
+  });
+});
+
+describe("one lead-in line between the heading and its list", () => {
+  const rules = fixtureRules();
+  it.each(["What will I be doing?", "Welche Aufgaben erwarten dich?", "Your tasks…"])("%j, one line of prose, then the list: duties heading", (line) => {
+    expect(hasResponsibilityHeading(`Intro.\n${line}\n\nAs a senior engineer you join the platform team.\n\n- Build the platform.`, rules)).toBe(true);
+  });
+  it.each(["Which tasks can our AI automate?", "Welche Aufgaben übernimmt unsere KI?", "We automate repetitive tasks..."])("%j, two lines of prose, then a list: no duties heading", (line) => {
+    expect(hasResponsibilityHeading(`Intro.\n${line}\nWe help teams ship faster.\nOur customers love it.\n- Feature one.`, rules)).toBe(false);
+  });
 });
 
 describe("question headings need a configured question word", () => {
@@ -132,6 +178,11 @@ describe("thin_description of a long JD under the new headings", () => {
   const body = Array.from({ length: 30 }, (_, i) => `- Build and run service number ${i} of the platform end to end.`);
   it.each(["What will I be doing?", "YOU WILL:", "🔑 You’ll play a key role by…", "**Darum geht's:**", "THE ROLE &amp; THE TEAM"])("%j: not thin", (heading) => {
     expect(thinDescription(input({ description: ["About us", "We build software.", heading, ...body].join("\n") }), rules)).toBeNull();
+  });
+
+  it("a long JD whose only candidate is a question in the prose stays thin", () => {
+    const text = ["About us", "Which tasks can our AI automate?", "We help teams ship faster.", ...body.map((line) => line.slice(2))].join("\n");
+    expect(thinDescription(input({ description: text }), rules)).toMatchObject({ hasResponsibilities: false, responsibilitiesFrom: "headings" });
   });
 
   it("a long JD without any duties heading stays thin", () => {

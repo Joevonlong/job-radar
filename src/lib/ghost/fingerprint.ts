@@ -6,7 +6,7 @@ import type { GhostRulesInput } from "./rules";
  * Bump when the check changes in a way the packs and pipeline.yaml do not show (segmenting, the negation window, how points are
  * summed up): every job is checked again by the next cycles.
  */
-// 4: duties headings are read normalized (emoji, "&amp;", "…", "?" after a question word) and a list under such a heading counts
+// 4: duties headings are read normalized (emoji, "&amp;", and above a list "…" or "?" after a question word) and a list under such a heading counts
 // as the role's duties; evergreen patterns may require recruiting context
 export const GHOST_RULES_VERSION = 4;
 

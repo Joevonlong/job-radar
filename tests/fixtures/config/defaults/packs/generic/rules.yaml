@@ -147,17 +147,19 @@ ghost:
     - id: future_openings
       pattern: '(?<![\p{L}\p{N}])(?:for|about)\s+(?:our\s+)?(?:(?:potential\s+|upcoming\s+)?future\s+(?:openings|opportunities|vacancies|positions|roles|needs)|upcoming\s+(?:openings|positions|vacancies|roles))(?![\p{L}\p{N}])'
     # "By joining our AI talent pool, you will be contacted … for our future opportunities", "Join our engineering talent community
-    # to apply": up to two words before "talent", and only in a sentence with recruiting words (requires_context): not "Organize
-    # events for our engineering talent community", "access to the largest tech talent pool in Europe"
+    # to apply": up to two words before "talent", and only in a sentence with recruiting words (requires_context; "opportunities"
+    # only after a job word: not "networking opportunities"): not "Organize events for our engineering talent community",
+    # "access to the largest tech talent pool in Europe"
     - id: talent_pool_join
       pattern: '(?<![\p{L}\p{N}])(?:join|joining|for|into)\s+our\s+(?:[\p{L}-]+\s+){0,2}?talent\s+(?:pool|community|network)(?![\p{L}\p{N}])'
       requires_context:
-        - '(?<![\p{L}\p{N}])(?:appl(?:y|ying|ied|ications?|icants?)|candidates?|cvs?|resumes?|opportunit(?:y|ies)|roles?|positions?|openings?|vacanc(?:y|ies)|hiring|recruit\p{L}*|contacted)(?![\p{L}\p{N}])'
+        - '(?<![\p{L}\p{N}])(?:appl(?:y|ying|ied|ications?|icants?)|candidates?|cvs?|resumes?|roles?|positions?|openings?|vacanc(?:y|ies)|hiring|recruit\p{L}*|contacted|(?:job|career|future|new|open|upcoming)\s+opportunit(?:y|ies))(?![\p{L}\p{N}])'
   # A heading that opens the duties of the role. Tested only against heading-shaped lines (short; a "#" heading, ending in ":" or
-  # without end punctuation) and "Label:" prefixes, read without "*" / "_" emphasis, leading emoji and list or "#" markers, with
-  # "&amp;" as "&" and curly apostrophes as straight ones; a final "…", "...", " -" or "—" counts as ":", and so does a final "?"
-  # after one of question_words ("What will I be doing?"). A list right under such a heading is the role's duties (evergreen
-  # phrases in it do not count).
+  # without end punctuation) and "Label:" prefixes, read without "*" / "_" emphasis, list or "#" markers and the emoji or arrows
+  # around it, with "&amp;" as "&" and curly apostrophes as straight ones; a final " -" or "—" counts as ":". Right above a list
+  # (at most one line of lead-in between) a final "…" or "..." counts as ":" too, and so does a final "?" after one of question_words ("What will I be doing?" / "- …");
+  # without a list such a line is a sentence ("Which tasks can our AI automate?"). A list right under a duties heading is the
+  # role's duties (evergreen phrases in it do not count).
   responsibility_patterns:
     - id: responsibilities
       pattern: '(?<![\p{L}\p{N}])(?:(?:key|main|core|your|primary|job|role|daily)\s+)?(?:responsibilities|duties|accountabilities|tasks)(?![\p{L}\p{N}])'
@@ -196,7 +198,7 @@ ghost:
     - id: role_teasers
       pattern: '^(?:what\s+awaits\s+you|so\s+what(?:[''’]s|\s+is)\s+the\s+job|your\s+new\s+adventure|what\s+good\s+looks\s+like)$'
   # Words that open a question: a heading line ending in "?" is read as a heading ("What will I be doing?") only after one of
-  # them, so "Ready to take on new responsibilities?" stays a sentence. Whole words; the packs' lists are united.
+  # them (and right above a list), so "Ready to take on new responsibilities?" stays a sentence. Whole words; the packs' lists are united.
   question_words: [what, which, how, who, why, where, when]
   negation_cues:
     - not
@@ -233,16 +235,25 @@ ghost:
     # the posting says it is a real opening after all: "…, but this role is a concrete opening", "this role is based in Berlin"
     - '(?<![\p{L}\p{N}])(?:this|the)\s+(?:role|position|job|posting|vacancy|opening)\s+is\s+(?:an?\s+)?(?:concrete|real|specific|actual|genuine|existing|based|located)(?![\p{L}\p{N}])'
     # a duty of the role: "You will build and nurture our talent pipeline", "help us grow our talent pool", "responsible for our
-    # talent pool", "Build our talent community" (the verb opens the sentence). Not "We are building a talent pool": that is the posting.
-    - '(?<![\p{L}\p{N}])(?:(?:you(?:[''’]ll|[''’]re|[''’]d|\s+will|\s+would|\s+are|\s+can|\s+should)?|help(?:s|ing)?(?:\s+us)?(?:\s+to)?)\s+(?:also\s+|actively\s+|be\s+)?(?:build|building|grow|growing|manage|managing|maintain|maintaining|nurture|nurturing|develop|developing|own|owning|source|sourcing|engage|engaging|support|supporting|expand|expanding)|responsible\s+for)\s+(?:[\p{L}''’-]+\s+){0,5}?talent\s+(?:pools?|pipelines?|communit(?:y|ies)|networks?)(?![\p{L}\p{N}])'
-    - '^[\s*•·–-]*(?:build|building|grow|growing|manage|managing|maintain|maintaining|nurture|nurturing|develop|developing|own|owning|source|sourcing|engage|engaging|support|supporting|expand|expanding)\s+(?:[\p{L}''’-]+\s+){0,5}?talent\s+(?:pools?|pipelines?|communit(?:y|ies)|networks?)(?![\p{L}\p{N}])'
+    # talent pool", "Build our talent community" (the verb opens the sentence). Not "We are building a talent pool": that is the posting,
+    # nor "Help us grow by joining our engineering talent pool" (no "join", "apply" or "by" in between).
+    - '(?<![\p{L}\p{N}])(?:(?:you(?:[''’]ll|[''’]re|[''’]d|\s+will|\s+would|\s+are|\s+can|\s+should)?|help(?:s|ing)?(?:\s+us)?(?:\s+to)?)\s+(?:also\s+|actively\s+|be\s+)?(?:build|building|grow|growing|manage|managing|maintain|maintaining|nurture|nurturing|develop|developing|own|owning|source|sourcing|engage|engaging|support|supporting|expand|expanding)|responsible\s+for)\s+(?:(?!(?:join|joining|apply|applying|by)(?![\p{L}\p{N}]))[\p{L}''’-]+\s+){0,5}?talent\s+(?:pools?|pipelines?|communit(?:y|ies)|networks?)(?![\p{L}\p{N}])'
+    - '^[\s*•·–-]*(?:build|building|grow|growing|manage|managing|maintain|maintaining|nurture|nurturing|develop|developing|own|owning|source|sourcing|engage|engaging|support|supporting|expand|expanding)\s+(?:(?!(?:join|joining|apply|applying|by)(?![\p{L}\p{N}]))[\p{L}''’-]+\s+){0,5}?talent\s+(?:pools?|pipelines?|communit(?:y|ies)|networks?)(?![\p{L}\p{N}])'
     # a recruiter's duty: "You will source candidates for upcoming roles"
     - '(?<![\p{L}\p{N}])you(?:[''’]ll|[''’]re|[''’]d|\s+will|\s+would|\s+are|\s+can)?\s+(?:also\s+)?(?:hire|hiring|recruit\p{L}*|source|sourcing|screen\p{L}*|interview\p{L}*|staff\p{L}*|plan|planning|forecast\p{L}*|partner\p{L}*|identify|identifying|attract\p{L}*|find|finding)\s+(?:[\p{L}''’-]+\s+){0,4}?(?:for|about)\s+(?:our\s+)?(?:potential\s+|upcoming\s+)?(?:future|upcoming)(?![\p{L}\p{N}])'
+    # a recruiter's duty for a talent pool: "You will screen applicants for our engineering talent pool", "Identify and attract
+    # candidates for our engineering talent pool", "Your job: build relationships with candidates for our tech talent pool" (the verb
+    # opens the sentence or follows "you" / "Your job:"). Not "We are hiring for our AI talent pool", "Hiring for our AI talent pool:
+    # apply now" (no "hire" or "recruit" opening the sentence), "you will be placed into our AI talent pool", "Find out how to apply
+    # for our AI talent pool".
+    - '(?:^[\s*•·–-]*(?!hir|recruit)|(?<![\p{L}\p{N}])(?:you(?:[''’]ll|[''’]re|[''’]d|\s+will|\s+would|\s+are|\s+can|\s+should)?\s+(?:also\s+|actively\s+)?|(?:job|role|tasks?|duties|focus|mission)\s*:\s*))(?:screen|recruit|interview|identif|attract|hir|assess|evaluat|plac|find|sourc|engag|build|grow|manag|maintain|nurtur|develop|own|support|expand)\p{L}*\s+(?:(?!(?:join|joining|apply|applying|by)(?![\p{L}\p{N}]))[\p{L}''’-]+\s+){0,4}?(?:for|into)\s+our\s+(?:[\p{L}-]+\s+){0,2}?talent\s+(?:pools?|communit(?:y|ies)|networks?)(?![\p{L}\p{N}])'
     # training for later roles is a benefit, not an opening: "Mentoring for future roles in leadership"
     - '(?<![\p{L}\p{N}])(?:training|mentoring|coaching|career|learning|upskilling|development|preparation|prepares?|preparing|readiness)\s+(?:[\p{L}''’-]+\s+){0,3}?(?:for|towards?|into)\s+(?:our\s+)?(?:potential\s+|upcoming\s+)?(?:future|upcoming)(?![\p{L}\p{N}])'
     # events and training for a community, not this posting: "Organize events for our engineering talent community", "We run
-    # workshops for our internal talent community"
-    - '(?<![\p{L}\p{N}])(?:events?|workshops?|meetups?|webinars?|hackathons?|programs?|programmes?|sessions?|trainings?|mentoring|newsletters?)\s+(?:[\p{L}''’-]+\s+){0,3}?(?:for|in|into|with|across)\s+our\s+(?:[\p{L}-]+\s+){0,2}?talent\s+(?:pools?|communit(?:y|ies)|networks?)(?![\p{L}\p{N}])'
+    # workshops for our internal talent community", "Join our AI talent community meetups", "Join our engineering talent community
+    # for networking opportunities and events" (not "This program is for our talent pool: apply now")
+    - '(?<![\p{L}\p{N}])(?:events?|workshops?|meetups?|webinars?|hackathons?|trainings?|mentoring|newsletters?)\s+(?:[\p{L}''’-]+\s+){0,3}?(?:for|in|into|with|across)\s+our\s+(?:[\p{L}-]+\s+){0,2}?talent\s+(?:pools?|communit(?:y|ies)|networks?)(?![\p{L}\p{N}])'
+    - '(?<![\p{L}\p{N}])talent\s+(?:pools?|communit(?:y|ies)|networks?)\s+(?:[\p{L}''’-]+\s+){0,3}?(?:events?|workshops?|meetups?|webinars?|hackathons?|networking|mentoring|newsletters?)(?![\p{L}\p{N}])'
     # the footer of a real posting: "Don't see a role that fits? Join our talent community", "If none of our roles fit …"
     - '(?<![\p{L}\p{N}])(?:don[''’]?t|do\s+not|didn[''’]?t|can[''’]?t|cannot|couldn[''’]?t)\s+(?:see|find)(?![\p{L}\p{N}])'
     - '(?<![\p{L}\p{N}])(?:none\s+of\s+(?:our|the|these)|no)\s+(?:suitable|matching|relevant|right|fitting)\s+(?:roles?|positions?|jobs?|openings?|vacanc(?:y|ies))(?![\p{L}\p{N}])'
