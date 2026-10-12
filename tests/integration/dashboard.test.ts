@@ -106,6 +106,17 @@ describe("seed", () => {
     await seedDatabase(db, { now: NOW, timezone: TZ });
     expect((await db.select().from(schema.jobs).where(eq(schema.jobs.title, "Real job"))).length).toBe(1);
   });
+
+  it("gives one score reason sources (each JD quote at its place in the JD) and leaves the others without", async () => {
+    const sourced = await getJobDetail(getDb(), await jobIdByTitle("AI Engineer (Agents)"));
+    const evidence = sourced?.score?.reasonEvidence;
+    expect(evidence?.fit.map((s) => s.basis)).toEqual(["inferred", "jd", "jd"]);
+    expect(evidence?.gaps.map((s) => s.basis)).toEqual(["unstated"]);
+    for (const s of evidence?.fit ?? []) if (s.quote !== null) expect(sourced?.description?.slice(s.offset!, s.offset! + s.quote.length)).toBe(s.quote);
+    const legacy = await getJobDetail(getDb(), await jobIdByTitle("Applied Scientist, Clinical NLP"));
+    expect(legacy?.score?.fitReasons.length).toBeGreaterThan(0);
+    expect(legacy?.score?.reasonEvidence).toBeNull();
+  });
 });
 
 describe("listJobs", () => {

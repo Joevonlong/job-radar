@@ -28,6 +28,13 @@ A dealbreaker you can write as a rule (a required language level above yours, a 
 **deal-breaker** on My profile → What I want: it vetoes the job in the hard filter, before any AI call, and costs no
 scoring call. See [deal-breakers.md](deal-breakers.md).
 
+## AI tab: reason sources
+
+**Reason sources** (`ai.yaml: scoring.evidence`, off by default) marks every fit reason and gap on the job page as
+**JD** (with the posting's own words and a jump to them), **Inferred** or **Not stated**. Each scoring call then answers a
+little more (more output tokens), and the quote limit (`quote_max_chars`, default 150) caps the quotes. Neither switch
+re-scores anything; old scores keep their reasons without sources. See [score-evidence.md](score-evidence.md).
+
 ## AI tab: dropdown selection
 
 - **Provider order** (`order`, `api_order`, and each task's `tasks.<task>.order`) is an ordered list: move up / move down / remove, and use the "Add" dropdown to put one back. The only selectable values are the providers defined in `config/ai-options.ts`, and the `ai.yaml` schema takes them from there too, so the two cannot disagree.

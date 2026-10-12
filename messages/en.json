@@ -1779,7 +1779,8 @@
       "ai_scoring_criteria": "Scoring criteria",
       "salary_lookup": "Salary lookup (AI web search)",
       "salary_benchmark": "Salary benchmark",
-      "ai_limits_quota": "Usage cap (subscription CLIs)"
+      "ai_limits_quota": "Usage cap (subscription CLIs)",
+      "ai_scoring_evidence": "Reason sources"
     },
     "sectionHints": {
       "search_keywords": "Each group is OR-merged into one query, then run once per city.",
@@ -1803,7 +1804,8 @@
       "ai_scoring_criteria": "Your own criteria, one sentence each, in any language (at most 10 per list, 300 characters each). They are sent to the AI with every job (like your other preferences). The score stays one 0–100 number; a dealbreaker puts a job into the 0–29 band.",
       "salary_lookup": "Off by default. Each lookup sends the company name, job title, seniority, city and country (never your profile or the JD) to the AI provider, which searches the web. It costs tokens and, with the Anthropic API, a fee per search. Which AI it uses is set under task overrides on the \"AI\" tab (task \"Salary lookup\").",
       "salary_benchmark": "Rebuilt after every cycle from the postings of the window that state a salary you can compare (base currency, per year).",
-      "ai_limits_quota": "Job Radar's own cap on how often it calls Claude Code and Codex. It counts only Job Radar's own calls and cannot see your account's real usage, so it can only step in late, never early. Your own requests (scoring a job, translating) are not held by the per-cycle cap. 0 turns a cap off."
+      "ai_limits_quota": "Job Radar's own cap on how often it calls Claude Code and Codex. It counts only Job Radar's own calls and cannot see your account's real usage, so it can only step in late, never early. Your own requests (scoring a job, translating) are not held by the per-cycle cap. 0 turns a cap off.",
+      "ai_scoring_evidence": "Off by default: each score then also writes a short JD quote per reason, so the output tokens of the \"score\" task grow (compare its median on /ai-usage). Turning it on or off re-scores nothing."
     },
     "options": {
       "remoteScope": {
@@ -2866,6 +2868,14 @@
       "quota_alert_dedupe_hours": {
         "label": "Repeat alert at most every (hours)",
         "hint": "Alerts are sent when the state changes; this only stops a flapping state from repeating them."
+      },
+      "scoring_evidence_enabled": {
+        "label": "Mark the source of every reason",
+        "hint": "The AI marks each fit reason and gap as stated in the JD (with a quote that is checked), inferred, or not stated. More output tokens per score; only new scores carry it."
+      },
+      "scoring_evidence_quote_max": {
+        "label": "Longest quote (characters)",
+        "hint": "Shorter quotes are found in the JD more reliably and cost fewer tokens."
       }
     },
     "control": {
@@ -6288,6 +6298,27 @@
       "inTitle": "In the title:",
       "noQuote": "No sentence to quote (the requirement is in the title, or the rule matched a phrase that is gone).",
       "visa": "The JD says: {status}"
+    }
+  },
+  "scoreEvidence": {
+    "basis": {
+      "jd": "JD",
+      "inferred": "Inferred",
+      "unstated": "Not stated"
+    },
+    "hint": {
+      "jd": "Stated in the JD: open it to see the quote",
+      "inferred": "Inferred by the AI from the JD and your profile; the JD does not say this directly",
+      "unstated": "The JD does not say anything about this"
+    },
+    "showQuote": "show the quote from the JD",
+    "hideQuote": "hide the quote",
+    "quoteLabel": "JD",
+    "viewInJd": "View in the original",
+    "legacy": "This score was made before reason sources were on; a new score will carry them.",
+    "jdMark": {
+      "title": "Quoted by a fit reason or gap",
+      "legend": "Reason"
     }
   }
 }

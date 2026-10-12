@@ -110,6 +110,7 @@ function detail(): JobDetail {
       filterFloorEur: SENTINEL.floor,
       fitReasons: [SENTINEL.fitReason],
       gaps: [SENTINEL.gap],
+      reasonEvidence: null,
       summaries: { en: SENTINEL.summary },
       outputLang: "en",
       stale: false,

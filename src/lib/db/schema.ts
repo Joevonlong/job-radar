@@ -461,6 +461,11 @@ export const scores = pgTable(
     summaries: jsonb("summaries").$type<Record<string, string>>().notNull().default(sql`'{}'::jsonb`),
     /** The language of `fit_reasons`, `gaps` and the summary in that language (a BCP 47 code); null before the AI scored. */
     outputLang: text("output_lang"),
+    /**
+     * Where each reason and gap comes from (`{ v, fit: [{ basis, quote, offset }], gaps: [...] }`, aligned by index with
+     * `fit_reasons` / `gaps`); null for scores made without reason sources (`ai.yaml: scoring.evidence`) or before them.
+     */
+    reasonEvidence: jsonb("reason_evidence").$type<unknown>(),
     stale: boolean("stale").notNull().default(false),
     createdAt: createdAt(),
   },

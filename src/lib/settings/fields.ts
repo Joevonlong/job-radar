@@ -663,6 +663,13 @@ const aiSections: SectionDef[] = [
     title: { section: "ai_scoring_criteria" },
     fields: [tags("scoring.criteria.priorities", "scoring_criteria_priorities"), tags("scoring.criteria.dealbreakers", "scoring_criteria_dealbreakers"), tags("scoring.criteria.nice_to_have", "scoring_criteria_nice")],
   },
+  // Reason sources: off by default (output tokens); neither key re-scores
+  {
+    id: "scoring_evidence",
+    block: "scoring",
+    title: { section: "ai_scoring_evidence" },
+    fields: [bool("scoring.evidence.enabled", "scoring_evidence_enabled"), int("scoring.evidence.quote_max_chars", "scoring_evidence_quote_max")],
+  },
   {
     id: "scoring_german",
     block: "scoring",

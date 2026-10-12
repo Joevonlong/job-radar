@@ -1,0 +1,1 @@
+ALTER TABLE "scores" ADD COLUMN "reason_evidence" jsonb;

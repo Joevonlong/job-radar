@@ -18,6 +18,7 @@ import { visaRulesFor } from "@/lib/visa/rules";
 import { readVisaSettings } from "@/lib/visa/settings";
 import { runVisaScan } from "@/lib/visa/step";
 import { ghostChannelsOf, ghostCheckConfig, runGhostCheck } from "@/lib/ghost/step";
+import { REASON_EVIDENCE_VERSION, type ReasonEvidence } from "@/lib/scoring/evidence";
 
 import type { Executor } from "./executor";
 import { seedSalary } from "./seed-salary";
@@ -166,6 +167,11 @@ interface SeedJob {
   signals?: SeedSignal[];
   fit?: string[];
   gaps?: string[];
+  /**
+   * The sources of `fit` and `gaps`, one per reason in the same order (as with `ai.yaml: scoring.evidence` on): a `jd` quote must be in
+   * the JD (its offset is computed). Omitted = a score from before reason sources (no `reason_evidence`).
+   */
+  evidence?: { fit: SeedReasonSource[]; gaps: SeedReasonSource[] };
   /** The user starred this job, `ageDays` ago (default: now). */
   favorite?: { note?: string; ageDays?: number };
   application?: { status: ApplicationStatus; notes?: string; /** The status was set this many days before `now` (the pipeline board's overdue marker needs old ones). */ ageDays?: number };
@@ -215,6 +221,9 @@ const escapeHtml = (html: string): string => html.replace(/&/g, "&amp;").replace
 function descriptionOf(job: SeedJob): string {
   return job.greenhouseHtml ? htmlToText(escapeHtml(job.greenhouseHtml), { escaped: true }) : describeJob(job);
 }
+
+/** The source of one seeded reason: a JD quote, or inferred / not stated. */
+type SeedReasonSource = { basis: "jd"; quote: string } | { basis: "inferred" | "unstated" };
 
 /** A seeded breakdown, quotes without offsets. */
 interface SeedBreakdown {
@@ -340,8 +349,12 @@ const SEED_JOBS: readonly SeedJob[] = [
     sources: ["lever", "linkedin-brightdata"],
     match: 88,
     signals: [{ tier: "T3", kind: "competitive_pay", quote: "We offer an above-market salary and a yearly learning budget." }],
-    fit: ["Agent frameworks are the core of the role", "Salary stated qualitatively as above market"],
+    fit: ["Agent frameworks are the core of the role", "Salary stated qualitatively as above market", "Two office days a week fits the hybrid preference"],
     gaps: ["Salary amount is not stated"],
+    evidence: {
+      fit: [{ basis: "inferred" }, { basis: "jd", quote: "We offer an above-market salary and a yearly learning budget." }, { basis: "jd", quote: "Hybrid: two office days per week." }],
+      gaps: [{ basis: "unstated" }],
+    },
   },
   {
     key: "fernweh-remote",
@@ -666,6 +679,19 @@ function companyKey(name: string, pipeline: PipelineConfig): string {
 
 function slugify(text: string): string {
   return normalizeName(text).replace(/ /g, "-");
+}
+
+/** The stored reason sources of a seeded score (the shape scoring writes), each `jd` quote checked against the JD. */
+function seedReasonEvidence(job: SeedJob, evidence: NonNullable<SeedJob["evidence"]>): ReasonEvidence {
+  if (evidence.fit.length !== (job.fit ?? []).length || evidence.gaps.length !== (job.gaps ?? []).length) throw new Error(`seed evidence of ${job.key}: one source per reason`);
+  const description = descriptionOf(job);
+  const source = (s: SeedReasonSource): ReasonEvidence["fit"][number] => {
+    if (s.basis !== "jd") return { basis: s.basis, quote: null, offset: null };
+    const offset = description.indexOf(s.quote);
+    if (offset === -1) throw new Error(`seed evidence of ${job.key}: quote is not in the JD: ${s.quote}`);
+    return { basis: "jd", quote: s.quote, offset };
+  };
+  return { v: REASON_EVIDENCE_VERSION, fit: evidence.fit.map(source), gaps: evidence.gaps.map(source) };
 }
 
 function describeJob(job: SeedJob): string {
@@ -1018,6 +1044,7 @@ async function insertSeed(db: Executor, input: { now: Date; tz: string; pipeline
           rankValue: job.filtered ? null : job.match + bonus,
           fitReasons: job.fit ?? [],
           gaps: job.gaps ?? [],
+          reasonEvidence: job.evidence ? seedReasonEvidence(job, job.evidence) : null,
           summaryEn: `Fictional summary for ${job.title}.`,
           summaryZh: `${job.title} 的虚构摘要。`,
           // What the migration backfills for existing rows

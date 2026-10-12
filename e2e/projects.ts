@@ -50,6 +50,8 @@ export const SERIAL_CHAIN: readonly ChainEntry[] = [
   { name: "chromium-visa", spec: "visa.spec.ts" },
   // ui.yaml job_checks.ghost (the check is off by default), and one job's dismissal
   { name: "chromium-ghost", spec: "ghost-jobs.spec.ts" },
+  // ai.yaml scoring.evidence (the legacy note shows only while reason sources are on)
+  { name: "chromium-score-evidence", spec: "score-evidence.spec.ts" },
   // the market changes every page and preferences.yaml: last, alone
   { name: "chromium-market", spec: "market.spec.ts" },
 ];

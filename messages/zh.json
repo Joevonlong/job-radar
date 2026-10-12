@@ -1779,7 +1779,8 @@
       "ai_scoring_criteria": "打分标准",
       "salary_lookup": "查薪资（AI 网页搜索）",
       "salary_benchmark": "薪资基准",
-      "ai_limits_quota": "用量上限（订阅 CLI）"
+      "ai_limits_quota": "用量上限（订阅 CLI）",
+      "ai_scoring_evidence": "理由来源"
     },
     "sectionHints": {
       "search_keywords": "每个关键词组用 OR 合并成一次查询，再按城市各查一次。",
@@ -1803,7 +1804,8 @@
       "ai_scoring_criteria": "你自己的标准，每项一句话，任何语言都可以（每个列表最多 10 项，每项最多 300 字）。会和其他偏好一样随每个岗位发给 AI。分数仍是一个 0–100 的总分；命中\"不能接受\"的岗位压到 0–29 档。",
       "salary_lookup": "默认关闭。每次查询把公司名、岗位标题、级别、城市和国家（不含你的画像和 JD）发给 AI provider，由它搜索网页。会消耗 token；用 Anthropic API 时每次搜索另外计费。用哪个 AI 在「AI」标签的任务覆盖里设（任务“查薪资”）。",
       "salary_benchmark": "每轮运行后重算，只用时间窗内写明可比薪资（基准货币、年薪）的岗位。",
-      "ai_limits_quota": "Job Radar 自己限制调用 Claude Code 和 Codex 的频率。只统计 Job Radar 自己的调用，看不到账户的真实用量，所以只会限得晚、不会限得早。你主动发起的请求（给岗位打分、翻译）不受每轮上限约束。填 0 表示关闭该项。"
+      "ai_limits_quota": "Job Radar 自己限制调用 Claude Code 和 Codex 的频率。只统计 Job Radar 自己的调用，看不到账户的真实用量，所以只会限得晚、不会限得早。你主动发起的请求（给岗位打分、翻译）不受每轮上限约束。填 0 表示关闭该项。",
+      "ai_scoring_evidence": "默认关闭：开启后每次打分还要为每条理由写一段 JD 引用，score 任务的输出 token 会变多（在 /ai-usage 对比中位数）。开关都不会让已有分数重打。"
     },
     "options": {
       "remoteScope": {
@@ -2866,6 +2868,14 @@
       "quota_alert_dedupe_hours": {
         "label": "同一告警最短间隔（小时）",
         "hint": "告警只在状态变化时发；这一项只防止状态来回抖动时重复发送。"
+      },
+      "scoring_evidence_enabled": {
+        "label": "标注每条理由的来源",
+        "hint": "AI 把每条匹配理由和差距标成原文（附经过核对的引用）、推断或未提及。每次打分多花输出 token；只对之后新打的分数生效。"
+      },
+      "scoring_evidence_quote_max": {
+        "label": "引用最长字符数",
+        "hint": "引用越短越容易在 JD 里核对成功，token 也越少。"
       }
     },
     "control": {
@@ -6288,6 +6298,27 @@
       "inTitle": "在标题里：",
       "noQuote": "没有可引用的原句（要求写在标题里，或命中的短语已不在正文中）。",
       "visa": "JD 的说法：{status}"
+    }
+  },
+  "scoreEvidence": {
+    "basis": {
+      "jd": "原文",
+      "inferred": "推断",
+      "unstated": "未提及"
+    },
+    "hint": {
+      "jd": "JD 原文写明：展开查看引用",
+      "inferred": "AI 根据 JD 和你的画像推断，JD 没有直接这样写",
+      "unstated": "JD 没写这件事"
+    },
+    "showQuote": "展开 JD 原文引用",
+    "hideQuote": "收起引用",
+    "quoteLabel": "原文",
+    "viewInJd": "在原文中查看",
+    "legacy": "这个分数打于来源标注开启之前；重新打分后会带标注。",
+    "jdMark": {
+      "title": "匹配理由或差距引用的原文",
+      "legend": "理由"
     }
   }
 }

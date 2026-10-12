@@ -157,6 +157,18 @@ const scoring = z.strictObject({
       nice_to_have: criterionList,
     })
     .default({ priorities: [], dealbreakers: [], nice_to_have: [] }),
+  /**
+   * Reason sources: the model marks every fit reason and gap as stated in the JD (with a verbatim quote, checked against the JD),
+   * inferred, or (gaps) not stated. Costs output tokens on every score, so it is off unless turned on. Neither key re-scores:
+   * only scores made from then on carry sources. Absent = off.
+   */
+  evidence: z
+    .strictObject({
+      enabled: z.boolean().default(false),
+      /** Longest quote the model is asked for (characters). */
+      quote_max_chars: positiveInt.min(20).max(500).default(150),
+    })
+    .default({ enabled: false, quote_max_chars: 150 }),
 });
 
 /** Where the AI work of a cycle runs. */

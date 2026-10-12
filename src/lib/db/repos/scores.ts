@@ -1,5 +1,7 @@
 import { and, count, desc, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 
+import type { ReasonEvidence } from "@/lib/scoring/evidence";
+
 import type { Db } from "../client";
 import type { Executor } from "../executor";
 import { companies, jobs, profileSnapshots, scores } from "../schema";
@@ -260,7 +262,32 @@ export interface SaveScoreInput {
   germanLevelAi: string;
   germanLevelSource: string;
   promptVersion: string;
+  /** Where each reason and gap comes from, aligned by index; null when reason sources are off (an older value is cleared). */
+  reasonEvidence?: ReasonEvidence | null;
 }
+
+let evidenceColumn = false;
+
+/**
+ * Whether `scores.reason_evidence` exists yet. An ai-worker restarted before the runner applied the migration must not fail its
+ * scores (or a page its detail view) over the missing column (42703): until then the evidence is not written and reads as none.
+ * Checked in the catalog, which never throws; once the column is there the answer is cached for the life of the process.
+ */
+export async function reasonEvidenceColumnReady(db: Executor): Promise<boolean> {
+  if (evidenceColumn) return true;
+  const [row] = await db.execute<{ ok: boolean }>(sql`
+    select exists (select 1 from information_schema.columns where table_schema = current_schema() and table_name = 'scores' and column_name = 'reason_evidence') as ok`);
+  evidenceColumn = row?.ok === true;
+  return evidenceColumn;
+}
+
+/** For tests: forget the cached answer. */
+export function resetReasonEvidenceColumnCache(): void {
+  evidenceColumn = false;
+}
+
+/** What `saveScore` did with the reason sources: written (also a null that clears older ones), or left out because the column is missing. */
+export type SavedEvidence = "written" | "column_missing";
 
 /** The summaries without empty texts, trimmed. */
 export function cleanSummaries(summaries: Readonly<Record<string, string>>): Record<string, string> {
@@ -276,7 +303,9 @@ export function cleanSummaries(summaries: Readonly<Record<string, string>>): Rec
  * the row is updated in place and un-staled, never a second row for the same (job, snapshot).
  * `filter_result` and `filter_reasons` stay as the filter left them.
  */
-export async function saveScore(db: Executor, input: SaveScoreInput): Promise<void> {
+export async function saveScore(db: Executor, input: SaveScoreInput): Promise<{ evidence: SavedEvidence }> {
+  // before the migration the text arrays are written alone (the evidence is lost for this score, the score itself is not)
+  const evidenceReady = await reasonEvidenceColumnReady(db);
   const updated = await db
     .update(scores)
     .set({
@@ -299,12 +328,15 @@ export async function saveScore(db: Executor, input: SaveScoreInput): Promise<vo
       summaryZh: cleanSummaries(input.summaries).zh ?? null,
       summaryEn: cleanSummaries(input.summaries).en ?? null,
       promptVersion: input.promptVersion,
+      // always written once the column exists: a re-score without sources must not keep the sources of the reasons it replaced
+      ...(evidenceReady ? { reasonEvidence: input.reasonEvidence ?? null } : {}),
       scoredAt: sql`now()`, // the database clock, like every persisted timestamp
       stale: false,
     })
     .where(and(eq(scores.id, input.rowId), eq(scores.jobId, input.jobId)))
     .returning({ id: scores.id });
   if (updated.length === 0) throw new Error(`saveScore: score row ${input.rowId} of job ${input.jobId} does not exist`);
+  return { evidence: evidenceReady ? "written" : "column_missing" };
 }
 
 /**
