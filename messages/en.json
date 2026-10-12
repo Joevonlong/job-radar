@@ -828,8 +828,10 @@
       "circuitOpenUntil": "circuit open, retry {when}",
       "outcome": {
         "skipped": "skipped",
-        "failed": "failed"
+        "failed": "failed",
+        "interrupted": "interrupted"
       },
+      "interruptedBy": "interrupted: {error}",
       "error": {
         "rate_limited": "rate limited",
         "blocked": "blocked by the site",

@@ -828,8 +828,10 @@
       "circuitOpenUntil": "熔断中，{when} 后重试",
       "outcome": {
         "skipped": "已跳过",
-        "failed": "失败"
+        "failed": "失败",
+        "interrupted": "中途中断"
       },
+      "interruptedBy": "中途中断：{error}",
       "error": {
         "rate_limited": "被限流",
         "blocked": "被网站拦截",

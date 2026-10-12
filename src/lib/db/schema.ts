@@ -118,8 +118,13 @@ export const runs = pgTable(
     newCount: integer("new_count").notNull().default(0),
     cost: numeric("cost", { precision: 12, scale: 6, mode: "number" }).notNull().default(0),
     error: text("error"),
-    /** Channel error classification (ChannelErrorCode) when the run failed or was skipped. */
+    /** Channel error classification (ChannelErrorCode) when the run failed, was skipped or was interrupted. */
     errorCode: text("error_code"),
+    /**
+     * The query failed after some pages: what they returned was stored (status `partial`), the failure is in `error_code` and
+     * counted against the channel like a failed run. False for every other run, including a `partial` with invalid records.
+     */
+    interrupted: boolean("interrupted").notNull().default(false),
   },
   (t) => [index("runs_cycle_id_idx").on(t.cycleId), index("runs_channel_started_idx").on(t.channelId, t.startedAt)],
 );

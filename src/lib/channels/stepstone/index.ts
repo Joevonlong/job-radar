@@ -1,6 +1,6 @@
 import { stepstoneSettingsSchema, type StepstoneSettings } from "@/lib/config";
 
-import { ChannelError } from "../errors";
+import { ChannelError, PartialCollectError } from "../errors";
 import type { Channel, ChannelContext, RawPostingInput, SearchQuery } from "../types";
 import { createCycleCache } from "../web/cache";
 import { createTitleFilter, interleave, isWithinWindow, parseDate, windowCutoff } from "../web/select";
@@ -43,10 +43,13 @@ export function createStepstoneChannel(deps: StepstoneDeps = {}): Channel {
 
     // ---- search: one request series per keyword. The page lists the answers (`main`) newest first, then
     // the loose matches (`semantic`) newest first; the `ag` filter already limits both to the look-back window
+    // A failing page ends the search; what earlier pages (and keywords) returned is kept and handed on with the failure.
     const perKeyword: StepstoneListItem[][] = [];
     const stats = { pages: 0, results: 0, outsideSections: 0, outsideWindow: 0, titleRejected: 0 };
-    for (const keyword of query.keywords) {
+    let interrupted: ChannelError | null = null;
+    search: for (const keyword of query.keywords) {
       const kept: StepstoneListItem[] = [];
+      perKeyword.push(kept);
       for (let page = 1; page <= settings.max_pages && kept.length < query.maxResults; page += 1) {
         const url = searchUrl(settings, { keyword, location, windowHours: query.windowHours, page });
         if (url === null) {
@@ -54,7 +57,14 @@ export function createStepstoneChannel(deps: StepstoneDeps = {}): Channel {
           break;
         }
         await pace();
-        const result = await fetchSearchPage(ctx, settings, url);
+        let result;
+        try {
+          result = await fetchSearchPage(ctx, settings, url);
+        } catch (error) {
+          if (!(error instanceof ChannelError)) throw error;
+          interrupted = error;
+          break search;
+        }
         stats.pages += 1;
         stats.results += result.items.length;
         for (const item of result.items) {
@@ -76,9 +86,9 @@ export function createStepstoneChannel(deps: StepstoneDeps = {}): Channel {
         const lastPage = result.pageCount !== null && page >= result.pageCount;
         if (result.items.length === 0 || lastPage) break;
       }
-      perKeyword.push(kept);
     }
     const selected = interleave(perKeyword, query.maxResults, (item) => String(item.id));
+    if (interrupted && selected.length === 0) throw interrupted;
 
     // ---- details: the job description lives only on the posting page
     const cache = detailsOfCycle(ctx.signal);
@@ -98,7 +108,9 @@ export function createStepstoneChannel(deps: StepstoneDeps = {}): Channel {
         if (stored) details.set(item.id, stored);
       }
       reused = known.size;
-      for (const item of selected.filter((i) => !known.has(String(i.id))).slice(0, settings.max_details_per_query)) {
+      // after a failure no further request goes out: the stored details are kept, the rest stays list data
+      const toFetch = interrupted ? [] : selected.filter((i) => !known.has(String(i.id))).slice(0, settings.max_details_per_query);
+      for (const item of toFetch) {
         const url = postingUrl(settings, item);
         if (url === null) continue;
         const key = String(item.id);
@@ -136,8 +148,17 @@ export function createStepstoneChannel(deps: StepstoneDeps = {}): Channel {
       const payload: StepstonePayload = { url, list: item, detail: details.get(item.id) ?? null };
       return [{ externalId: String(item.id), url, payload, postedAt: parseDate(item.datePosted) }];
     });
-    ctx.logger.info("stepstone query done", { query: query.id, ...stats, postings: postings.length, details: details.size, reusedDetails: reused });
+    if (interrupted && postings.length === 0) throw interrupted;
+    ctx.logger.info("stepstone query done", {
+      query: query.id,
+      ...stats,
+      postings: postings.length,
+      details: details.size,
+      reusedDetails: reused,
+      interrupted: interrupted?.code,
+    });
     await ctx.budget.consume(postings.length);
+    if (interrupted) throw new PartialCollectError(postings, interrupted);
     return postings;
   }
 

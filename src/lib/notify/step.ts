@@ -72,17 +72,22 @@ export interface NotifyStepResult {
 }
 
 const failedSourcesSchema = z.object({
-  channels: z.record(z.string(), z.object({ failed: z.number().default(0), errorCodes: z.record(z.string(), z.number()).default({}) })).default({}),
+  channels: z
+    .record(
+      z.string(),
+      z.object({ failed: z.number().default(0), interrupted: z.number().default(0), errorCodes: z.record(z.string(), z.number()).default({}) }),
+    )
+    .default({}),
   unusable: z.record(z.string(), z.string()).default({}),
 });
 
-/** Sources that failed or were given up on during collect, with their error codes. */
+/** Sources that failed (also after some pages: interrupted) or were given up on during collect, with their error codes. */
 export function failedSourcesOf(collectResult: unknown): Array<{ channelId: string; reasons: string[] }> {
   const parsed = failedSourcesSchema.safeParse(collectResult);
   if (!parsed.success) return [];
   const result = new Map<string, Set<string>>();
   for (const [id, channel] of Object.entries(parsed.data.channels)) {
-    if (channel.failed > 0) result.set(id, new Set(Object.keys(channel.errorCodes)));
+    if (channel.failed > 0 || channel.interrupted > 0) result.set(id, new Set(Object.keys(channel.errorCodes)));
   }
   for (const [id, code] of Object.entries(parsed.data.unusable)) result.set(id, (result.get(id) ?? new Set()).add(code));
   return [...result].map(([channelId, reasons]) => ({ channelId, reasons: [...reasons].sort() }));

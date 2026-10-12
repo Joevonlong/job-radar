@@ -23,7 +23,8 @@ function highValueSql(db: Db, policy: HighValuePolicy | null | undefined): SQL {
   return policy ? hasHighValueSignal(db, policy) : sql`false`;
 }
 
-export type ChannelOutcome = "ok" | "failed" | "skipped" | "circuit_open";
+/** `interrupted`: a query failed after some pages (`runs.interrupted`): its postings are stored, but the channel failed. */
+export type ChannelOutcome = "ok" | "failed" | "interrupted" | "skipped" | "circuit_open";
 
 /** What one channel did in a cycle (all its runs, one run per query, folded together). */
 export interface CycleChannelSummary {
@@ -33,7 +34,7 @@ export interface CycleChannelSummary {
   fetched: number;
   newCount: number;
   outcome: ChannelOutcome;
-  /** `ChannelErrorCode` of the first failed or skipped run. */
+  /** `ChannelErrorCode` of the first failed, interrupted or skipped run (never of a run that only had invalid records). */
   errorCode: string | null;
   /** While the channel's circuit is open: when one probe run is allowed again. */
   circuitOpenUntil: Date | null;
@@ -52,7 +53,7 @@ export interface CycleSummary {
   mergedCount: number | null;
   /** Raw postings fetched (sum of `runs.fetched`): more than jobs, because sources overlap and postings repeat. */
   fetched: number;
-  /** Channels that failed or sit behind an open circuit. */
+  /** Channels that failed (also after some pages: interrupted) or sit behind an open circuit. */
   failedChannels: number;
   /** Of the jobs first seen while the cycle ran: how many passed the hard filter. */
   passedCount: number;
@@ -154,9 +155,11 @@ async function summarizeCycle(db: Db, cycle: typeof cycles.$inferSelect, options
     current.runs += 1;
     current.fetched += run.fetched;
     current.newCount += run.newCount;
+    // circuit_open > failed > interrupted > skipped > ok; a partial without the marker (some records invalid) is ok
     if (run.status === "failed" && current.outcome !== "circuit_open") current.outcome = "failed";
+    if (run.interrupted && (current.outcome === "ok" || current.outcome === "skipped")) current.outcome = "interrupted";
     if (run.status === "skipped" && current.outcome === "ok") current.outcome = "skipped";
-    if ((run.status === "failed" || run.status === "skipped") && current.errorCode === null) current.errorCode = run.errorCode;
+    if ((run.status === "failed" || run.status === "skipped" || run.interrupted) && current.errorCode === null) current.errorCode = run.errorCode;
     if (circuitState === "open") current.outcome = "circuit_open";
     byChannel.set(run.channelId, current);
   }
@@ -202,7 +205,7 @@ async function summarizeCycle(db: Db, cycle: typeof cycles.$inferSelect, options
     newCount,
     mergedCount: pipeline?.merged ?? null,
     fetched: summaries.reduce((sum, c) => sum + c.fetched, 0),
-    failedChannels: summaries.filter((c) => c.outcome === "failed" || c.outcome === "circuit_open").length,
+    failedChannels: summaries.filter((c) => c.outcome === "failed" || c.outcome === "interrupted" || c.outcome === "circuit_open").length,
     passedCount: outcome?.passed ?? 0,
     qualifiedCount: qualifiedMinRank === null ? null : (outcome?.qualified ?? 0),
     steps: readCycleSteps(cycle.summaryJson),

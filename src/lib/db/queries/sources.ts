@@ -50,6 +50,8 @@ export interface RecentRun {
   cost: number;
   errorCode: string | null;
   error: string | null;
+  /** The query failed after some pages (`status` is `partial`, the failure in `errorCode`); false for a partial with invalid records. */
+  interrupted: boolean;
 }
 
 /** The newest `perChannel` runs of every channel, newest first within a channel. */
@@ -67,6 +69,7 @@ export async function listRecentRunsByChannel(db: Db, perChannel: number): Promi
       cost: runs.cost,
       errorCode: runs.errorCode,
       error: runs.error,
+      interrupted: runs.interrupted,
       rank: sql<number>`row_number() over (partition by ${runs.channelId} order by ${runs.startedAt} desc, ${runs.id} desc)`.as("rank"),
     })
     .from(runs)
@@ -90,9 +93,12 @@ export interface CycleChannelRuns {
   channelId: string;
   family: string;
   runs: number;
+  /** Runs that answered: succeeded, or partial with some invalid records. */
   succeeded: number;
   failed: number;
   skipped: number;
+  /** Partial runs whose query failed after some pages (`runs.interrupted`): postings kept, but a failure, never a success. */
+  interrupted: number;
   fetched: number;
 }
 
@@ -123,9 +129,10 @@ export async function getLatestCycleRuns(db: Db): Promise<LatestCycleRuns | null
       channelId: runs.channelId,
       family: channels.family,
       runs: sql<number>`count(*)::int`,
-      succeeded: sql<number>`count(*) filter (where ${runs.status} in ('succeeded', 'partial'))::int`,
+      succeeded: sql<number>`count(*) filter (where ${runs.status} in ('succeeded', 'partial') and not ${runs.interrupted})::int`,
       failed: sql<number>`count(*) filter (where ${runs.status} = 'failed')::int`,
       skipped: sql<number>`count(*) filter (where ${runs.status} = 'skipped')::int`,
+      interrupted: sql<number>`count(*) filter (where ${runs.interrupted})::int`,
       fetched: sql<number>`coalesce(sum(${runs.fetched}), 0)::int`,
     })
     .from(runs)
@@ -254,9 +261,12 @@ export interface ChannelCycleStat {
   cycleId: number;
   runs: number;
   succeeded: number;
+  /** Partial runs that answered with some invalid records (not the interrupted ones). */
   partial: number;
   failed: number;
   skipped: number;
+  /** Partial runs whose query failed after some pages (`runs.interrupted`). */
+  interrupted: number;
   running: number;
   fetched: number;
   newCount: number;
@@ -278,6 +288,7 @@ export async function listChannelCycleHistory(db: Db, count: number): Promise<Ma
     partial: number[];
     failed: number[];
     skipped: number[];
+    interrupted: number[];
     running: number[];
     fetched: number[];
     new_count: number[];
@@ -289,9 +300,10 @@ export async function listChannelCycleHistory(db: Db, count: number): Promise<Ma
       select r.channel_id, r.cycle_id,
         count(*)::int as runs,
         count(*) filter (where r.status = 'succeeded')::int as succeeded,
-        count(*) filter (where r.status = 'partial')::int as partial,
+        count(*) filter (where r.status = 'partial' and not r.interrupted)::int as partial,
         count(*) filter (where r.status = 'failed')::int as failed,
         count(*) filter (where r.status = 'skipped')::int as skipped,
+        count(*) filter (where r.interrupted)::int as interrupted,
         count(*) filter (where r.status = 'running')::int as running,
         coalesce(sum(r.fetched), 0)::int as fetched,
         coalesce(sum(r.new_count), 0)::int as new_count
@@ -306,6 +318,7 @@ export async function listChannelCycleHistory(db: Db, count: number): Promise<Ma
       array_agg(coalesce(p.partial, 0) order by g.started_at, g.cycle_id) as partial,
       array_agg(coalesce(p.failed, 0) order by g.started_at, g.cycle_id) as failed,
       array_agg(coalesce(p.skipped, 0) order by g.started_at, g.cycle_id) as skipped,
+      array_agg(coalesce(p.interrupted, 0) order by g.started_at, g.cycle_id) as interrupted,
       array_agg(coalesce(p.running, 0) order by g.started_at, g.cycle_id) as running,
       array_agg(coalesce(p.fetched, 0) order by g.started_at, g.cycle_id) as fetched,
       array_agg(coalesce(p.new_count, 0) order by g.started_at, g.cycle_id) as new_count
@@ -327,6 +340,7 @@ export async function listChannelCycleHistory(db: Db, count: number): Promise<Ma
               partial: row.partial[i] ?? 0,
               failed: row.failed[i] ?? 0,
               skipped: row.skipped[i] ?? 0,
+              interrupted: row.interrupted[i] ?? 0,
               running: row.running[i] ?? 0,
               fetched: row.fetched[i] ?? 0,
               newCount: row.new_count[i] ?? 0,

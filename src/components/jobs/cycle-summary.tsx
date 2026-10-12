@@ -165,7 +165,8 @@ export async function TodayCyclesList({ cycles, timezone }: { cycles: readonly C
   const rows = (
     <ol className="divide-grid divide-y-[1.5px]" aria-label={t("todayLabel")}>
       {cycles.map((cycle) => {
-        const failed = cycle.channels.filter((c) => c.outcome === "failed" || c.outcome === "circuit_open");
+        // the same channels `failedChannels` counts: interrupted ones (failed after some pages) included
+        const failed = cycle.channels.filter((c) => c.outcome === "failed" || c.outcome === "interrupted" || c.outcome === "circuit_open");
         const face = cycleFace(cycle);
         const state = stateWords(t, face, time, cycle);
         const waiting = processingFailed(cycle.steps) && cycle.unprocessed > 0;
@@ -245,14 +246,18 @@ function Stat({ label, value, bad = false, small = false }: { label: string; val
 function ChannelChip({ channel, format, timezone, now, t, missingEnv = [] }: { channel: CycleChannelSummary; format: Awaited<ReturnType<typeof getFormatter>>; timezone: string; now: Date; t: Translator; missingEnv?: readonly string[] }) {
   const bad = channel.outcome === "failed" || channel.outcome === "circuit_open";
   const skipped = channel.outcome === "skipped";
+  const interrupted = channel.outcome === "interrupted";
   // enabled but missing its key: it cannot have done anything, so never show it green
   const keyMissing = !bad && missingEnv.length > 0;
 
   let message: string | null = null;
+  const code = KNOWN_ERROR_CODES.find((c) => c === channel.errorCode);
   if (channel.outcome === "circuit_open") {
     message = channel.circuitOpenUntil ? t("circuitOpenUntil", { when: formatWhen(format, channel.circuitOpenUntil, now, timezone) }) : t("circuitOpen");
+  } else if (interrupted) {
+    // the postings of the earlier pages are in; the failure that cut the query short is said too
+    message = code ? t("interruptedBy", { error: t(`error.${code}`) }) : t("outcome.interrupted");
   } else if (bad || skipped) {
-    const code = KNOWN_ERROR_CODES.find((c) => c === channel.errorCode);
     message = code ? t(`error.${code}`) : t(skipped ? "outcome.skipped" : "outcome.failed");
   }
 
@@ -275,7 +280,7 @@ function ChannelChip({ channel, format, timezone, now, t, missingEnv = [] }: { c
           {t("missingEnv", { names: missingEnv.join(", ") })}
         </span>
       ) : null}
-      {message ? <span className={cn("truncate", bad ? "text-destructive" : "text-muted-foreground")}>{message}</span> : null}
+      {message ? <span className={cn("truncate", bad ? "text-destructive" : interrupted ? "text-warning-text" : "text-muted-foreground")}>{message}</span> : null}
     </li>
   );
 }

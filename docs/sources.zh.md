@@ -79,6 +79,7 @@ pnpm sources:list [--type channel|ats_board] [--status failing ...] [--all] [--j
 | 公司"连续 N 次失败：board 不存在（404）" | token 错了或公司换了 ATS：点"打开 board"看招聘页，在"编辑"里改 token，或"删除" |
 | 公司"已 N 小时没检查" | 它的 ATS 通道关了、熔断了，或 runner 没在跑；看通道行 |
 | 通道"熔断到 …" | 连续失败达到 `circuit_breaker.failures` 次，冷却到期自动试一次；展开"详情"看最近错误码；被拦截（blocked）通常要等或换通道 |
+| 某次运行显示"中途中断：<错误>"（琥珀色） | 一个要翻多页的搜索中途停了（网络错误、被拦截、预算用完）。停之前读到的岗位会保留，但这次运行算失败：计入通道熔断、列在失败来源里，也不用它来判断岗位是否可能已下架。中断运行留下的岗位可能还没有详情页，后面的轮次会补抓 |
 | "缺 TAVILY_API_KEY" 之类 | 在 `.env` 里写这个变量（页面只告诉你名字），或关掉这个通道 |
 | "LinkedIn 未登录 / 登录已过期" | 按 [LinkedIn 登录态](linkedin-session.zh.md)重新登录 |
 | 页面顶部"镜像未同步" | runner 启动或热加载配置时会补上；也可以 `pnpm sources:list --sync` |

@@ -24,7 +24,8 @@ export const lastCycleCheck: DoctorCheck = {
     const age = ageSeconds(latest.startedAt, ctx.now);
     const when = t("checks.cycle.last.when", { time: formatLocal(latest.startedAt, schedule.timezone), ago: formatAgo(ctx, age) });
     const kind = latest.kind;
-    const failedChannels = latest.channels.filter((c) => c.failed > 0 && c.succeeded === 0).map((c) => c.channelId);
+    // an interrupted query (failed after some pages) is a failure too, never a success
+    const failedChannels = latest.channels.filter((c) => c.failed + c.interrupted > 0 && c.succeeded === 0).map((c) => c.channelId);
     if (latest.status === "failed") {
       pieces.push({ status: "fail", detail: t("checks.cycle.last.failed", { kind, when }), hint: t("checks.cycle.last.failedHint") });
     } else if (latest.status === "partial" || failedChannels.length > 0) {

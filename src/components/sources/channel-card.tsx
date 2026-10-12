@@ -188,7 +188,13 @@ export async function ChannelCard({ card, timeZone, healthCycles, alertPercent }
                 {card.runs.map((run) => {
                   const code = ERROR_CODES.find((c) => c === run.errorCode);
                   return (
-                    <li key={run.id} className="border-grid flex flex-wrap items-center gap-x-3 gap-y-1 border-t-[1.5px] py-1.5 text-data first:border-t-0" data-status={run.status} data-run={run.id}>
+                    <li
+                      key={run.id}
+                      className="border-grid flex flex-wrap items-center gap-x-3 gap-y-1 border-t-[1.5px] py-1.5 text-data first:border-t-0"
+                      data-status={run.status}
+                      data-interrupted={run.interrupted ? "1" : undefined}
+                      data-run={run.id}
+                    >
                       <span className="text-ink-2 w-28 shrink-0 font-mono tabular-nums">{formatWhen(format, run.startedAt, timeZone)}</span>
                       <Badge variant={RUN_VARIANT[run.status]}>{tCycle(`state.${run.status}`)}</Badge>
                       <span className="font-mono tabular-nums" title={t("card.col.fetched")}>
@@ -201,6 +207,11 @@ export async function ChannelCard({ card, timeZone, healthCycles, alertPercent }
                       {run.status === "failed" || run.status === "skipped" ? (
                         <span className="text-bad min-w-0 truncate font-semibold" title={run.error ?? undefined}>
                           {code ? tCycle(`error.${code}`) : tCycle("error.unknown")}
+                        </span>
+                      ) : run.interrupted ? (
+                        // the query failed after some pages: what they returned is stored (the counts above), the failure is said here
+                        <span className="text-warning-text min-w-0 truncate font-semibold" title={run.error ?? undefined} data-testid="run-interrupted">
+                          {tCycle("interruptedBy", { error: code ? tCycle(`error.${code}`) : tCycle("error.unknown") })}
                         </span>
                       ) : null}
                     </li>
