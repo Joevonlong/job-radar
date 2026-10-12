@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { ConfigError } from "./errors";
-import { configSourcePath, parseConfigText, primeConfigCache, readConfigText } from "./load";
+import { configSourcePath, parseConfigText, primeConfigCache, readConfigText, registerConfigWatcher } from "./load";
 import { getDefaultConfigPath, getPollIntervalMs, getUserConfigPath } from "./paths";
 import { CONFIG_NAMES, type ConfigName, type ConfigValue } from "./registry";
 
@@ -45,6 +45,7 @@ function defaultOnError(error: ConfigError): void {
  *   switches the value to it / back to the shipped default.
  * - Invalid content never throws out of the watcher: the previous value stays in the cache and
  *   `onError` is called once per distinct bad content.
+ * - While at least one watcher runs, `loadConfig` does not refresh the cache on demand (see there).
  * - Returns an unsubscribe function that stops all watchers and timers.
  */
 export function watchConfig(target: ConfigTarget, onChange: (event: ConfigChangeEvent) => void, options: WatchOptions = {}): () => void {
@@ -57,6 +58,8 @@ export function watchConfig(target: ConfigTarget, onChange: (event: ConfigChange
   const lastText = new Map<ConfigName, string | null>();
   for (const name of names) lastText.set(name, readTextOrNull(name));
 
+  // A process with a watcher keeps its cache current here, so `loadConfig` does not also refresh on demand.
+  const releaseWatcher = registerConfigWatcher();
   let closed = false;
 
   const check = (name: ConfigName): void => {
@@ -148,6 +151,7 @@ export function watchConfig(target: ConfigTarget, onChange: (event: ConfigChange
   }
 
   return () => {
+    releaseWatcher();
     closed = true;
     for (const w of watchers) w.close();
     for (const t of timers.values()) clearTimeout(t);
