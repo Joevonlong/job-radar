@@ -383,6 +383,33 @@ const CASES: ReadonlyArray<readonly [string, string | null]> = [
   ["Your experience managing teams helps us, since we are always hiring.", "always_hiring"],
   ["We value experience building products and we are always hiring.", "always_hiring"],
   ["Background in growing companies? We are always hiring.", "always_hiring"],
+  // a tagged statement needs the company as subject before the hit's end; a qualification ends only before "we" / "wir"; "your"
+  // experience is the candidate's
+  ["Tired of always hiring – interested?", null],
+  ["Still always hiring – interested?", null],
+  ["Sick of always hiring – interested?", null],
+  ["Ever feel like your team is always hiring – curious?", null],
+  ["Feel like you're always hiring – curious?", null],
+  ["You're always hiring – curious?", null],
+  ["Recruiters always hiring – interested?", null],
+  ["Hiring managers, always hiring – interested?", null],
+  ["Is your company, like ours, always hiring – interested?", null],
+  ["At Acme we are always hiring – want to join?", "always_hiring"],
+  ["Like many startups, we are always hiring – interested?", "always_hiring"],
+  ["Did you know: we are always hiring – curious?", "always_hiring"],
+  ["Honestly, we're always hiring – interested?", "always_hiring"],
+  ["We're always hiring – are you in?", "always_hiring"],
+  ["Our team is always hiring – want to join?", "always_hiring"],
+  ["Bei uns suchen wir laufend Verstärkung – bist du dabei?", "always_hiring"],
+  ["Bei Acme suchen wir ständig neue Kolleginnen – Lust?", "always_hiring"],
+  ["Unser Team stellt laufend ein – interessiert?", "always_hiring"],
+  ["Ständig auf der Suche nach Talenten – neugierig?", null],
+  ["Kenntnisse im Aufbau von Bewerberpools bringst du für zukünftige Vakanzen mit.", null],
+  ["Erfahrung im Aufbau eines Talentpools hast du idealerweise schon für künftige Stellen gesammelt.", null],
+  ["Experience building talent pools, so you can staff future roles.", null],
+  ["Experience building talent pools, we are always hiring.", "always_hiring"],
+  ["Your experience building talent pipelines for future roles is a strong plus.", null],
+  ["Your background in building talent pools for upcoming positions matters.", null],
   // known limits, by design: an exclude_context line takes out the whole sentence; a clause that opens with the hit has no
   // subject; German talent_pool_join reads only "für unseren …"
   ["Bewirb dich für unseren KI-Talentpool und erhalte Einladungen zu Events für unsere Talent-Community.", null],
@@ -483,7 +510,7 @@ describe("evergreen_wording reads its words and limits from the config", () => {
   });
 
   it("question_tag: a statement with a short invitation after a break is read as a statement (words from the pack, length from pipeline.yaml)", () => {
-    const tag = { breaks: ["\\s[–-]\\s", ";"], invitations: ["want\\s+to\\s+join(?:\\s+\\p{L}+)*", "interested"], openers: ["is", "are"], markers: ["so"] };
+    const tag = { breaks: ["\\s[–-]\\s", ";"], invitations: ["want\\s+to\\s+join(?:\\s+\\p{L}+)*", "interested"], openers: ["is", "are"], markers: ["so"], subjects: [] as string[] };
     const lead = { ends: ["?"], starts: ["."], line_above: true };
     const withTag = (edit: (s: { question_tag_max_words: number }) => void = () => {}, over: Partial<typeof tag> = {}) =>
       rulesWith(edit, { ...pack, lead_in_question: lead, question_tag: { ...tag, ...over } });
@@ -518,6 +545,20 @@ describe("evergreen_wording reads its words and limits from the config", () => {
     expect(() => withTag(() => {}, { openers: ["(unclosed"] })).toThrow("ghost.question_tag.openers[0]");
     // a hit inside the tag is part of the question
     expect(evergreenWording("We build software – interested in our talent pool?", withTag())).toBeNull();
+    // with subjects: the clause needs one of them before the hit's end, as a whole word
+    const subjects = { subjects: ["we", "our", "wir"] };
+    expect(evergreenWording("At Acme we run a talent pool – interested?", withTag(() => {}, subjects))?.patternId).toBe("pool");
+    expect(evergreenWording("Tired of a talent pool – interested?", withTag(() => {}, subjects))).toBeNull();
+    expect(evergreenWording("Tired of a talent pool – interested?", withTag())?.patternId).toBe("pool");
+    expect(evergreenWording("Your talent pool – interested?", withTag(() => {}, subjects))).toBeNull();
+    expect(evergreenWording("Wedding talent pool – interested?", withTag(() => {}, subjects))).toBeNull();
+    // in the hit's own clause: a subject before a comma does not count
+    expect(evergreenWording("We know, a talent pool – interested?", withTag(() => {}, subjects))).toBeNull();
+    // in the hit counts too (German puts the subject after the verb)
+    const german = rulesWith(() => {}, { ...pack, evergreen_patterns: [{ id: "search", pattern: "suchen (?:wir |sie )?laufend talente", check_negation: true }], prefilter: ["laufend"], lead_in_question: lead, question_tag: { ...tag, ...subjects, invitations: ["interessiert"] } });
+    expect(evergreenWording("Bei Acme suchen wir laufend Talente – interessiert?", german)?.patternId).toBe("search");
+    expect(evergreenWording("Bei Acme suchen Sie laufend Talente – interessiert?", german)).toBeNull();
+    expect(() => withTag(() => {}, { subjects: ["(unclosed"] })).toThrow("ghost.question_tag.subjects[0]");
   });
 
   it("exclude_clause: a match takes out the hits from its start to the end of its clause, not the whole sentence", () => {

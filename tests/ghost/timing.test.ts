@@ -48,6 +48,18 @@ describe("ghost check timing", () => {
   });
 
   it.each([
+    ["4000 hits in comma clauses before a tagged invitation", `${"always hiring, ".repeat(4000)}always hiring – interested?`],
+    ["4000 qualifications before a hit", `${"Experience building teams ".repeat(4000)}for future roles.`],
+  ])("a piece with %s (every hit left out)", (_name, description) => {
+    // the expressions' first runs (compiling) are not what is measured: the time must not grow with the square of the hits
+    evergreenWording(description.slice(-2000), rules);
+    let found: ReturnType<typeof evergreenWording> = null;
+    const ms = elapsed(() => void (found = evergreenWording(description, rules)));
+    expect(ms).toBeLessThan(100);
+    expect(found).toBeNull();
+  });
+
+  it.each([
     ["5000 spaces inside a line", `a${" ".repeat(5000)}b\nc`],
     ["5000 em spaces inside a line", `a${" ".repeat(5000)}b\nc`],
     ["spaces left by dropped emphasis marks", `a${" _".repeat(2000)}b\nc`],

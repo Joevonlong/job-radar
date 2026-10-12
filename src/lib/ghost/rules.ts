@@ -29,6 +29,8 @@ export interface CompiledQuestionTag {
   openers: RegExp[];
   /** As `openers`: the words or phrases skipped before the opener test ("so", "and", "wie immer"). */
   markers: RegExp[];
+  /** Whole words (`(?<![\p{L}\p{N}])(?:subject)(?![\p{L}\p{N}])`, flags `giu`): the subject a tagged clause needs ("we", "wir"); empty = none needed. */
+  subjects: RegExp[];
 }
 
 export interface CompiledGhostRules {
@@ -125,6 +127,10 @@ export function compileGhostRules(config: GhostRulesInput): CompiledGhostRules {
       }),
       openers: leadingPhrases(pack.question_tag.openers, "ghost.question_tag.openers"),
       markers: leadingPhrases(pack.question_tag.markers, "ghost.question_tag.markers"),
+      subjects: pack.question_tag.subjects.map((source, index) => {
+        compile(source, `ghost.question_tag.subjects[${index}]`);
+        return new RegExp(`(?<![\\p{L}\\p{N}])(?:${source})(?![\\p{L}\\p{N}])`, "giu");
+      }),
     },
     leadInQuestion: { ends: [...pack.lead_in_question.ends], starts: [...pack.lead_in_question.starts], line_above: pack.lead_in_question.line_above },
     abbreviations: [...pack.abbreviations],

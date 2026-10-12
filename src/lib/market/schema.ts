@@ -295,21 +295,24 @@ const ghostLeadInQuestionSchema = z
  * (regexes, the whole text) and has at most `pipeline.yaml job_checks.ghost.question_tag_max_words` words. A hit counts only when
  * its clause (from the last `clause_breaks` match, comma or colon before it) opens, after any `markers` ("so", "also"), neither
  * with one of `openers` ("is", "are", "what", "stellt"; "Recruiters, are you always hiring – interested?") nor with the hit itself
- * ("Always hiring – interested?" has no subject). `openers` and `markers` are regexes matched at the start of the clause up to a
- * word end, so a phrase works too ("wie\s+immer" as a marker, "wie(?!\s+immer)" as an opener). Empty = every sentence that
- * ends in "?" is a question.
+ * ("Always hiring – interested?" has no subject), and, when the packs list `subjects`, only when one of them (regexes, whole
+ * words: "we", "our", "wir") starts in that clause before the hit's end ("At Acme we are always hiring – want to join?", "Bei uns
+ * suchen wir laufend …"; not "Tired of always hiring – interested?"). `openers` and `markers` are regexes matched at the start
+ * of the clause up to a word end, so a phrase works too ("wie\s+immer" as a marker, "wie(?!\s+immer)" as an opener). Empty =
+ * every sentence that ends in "?" is a question.
  */
 export interface GhostQuestionTag {
   breaks: string[];
   invitations: string[];
   openers: string[];
   markers: string[];
+  subjects: string[];
 }
 
-export const emptyGhostQuestionTag = (): GhostQuestionTag => ({ breaks: [], invitations: [], openers: [], markers: [] });
+export const emptyGhostQuestionTag = (): GhostQuestionTag => ({ breaks: [], invitations: [], openers: [], markers: [], subjects: [] });
 
 const ghostQuestionTagSchema = z
-  .strictObject({ breaks: optionalList, invitations: optionalList, openers: optionalList, markers: optionalList })
+  .strictObject({ breaks: optionalList, invitations: optionalList, openers: optionalList, markers: optionalList, subjects: optionalList })
   .default(emptyGhostQuestionTag) satisfies z.ZodType<GhostQuestionTag>;
 
 /** `rules.yaml` `ghost` as the code reads it (the schema's output). */

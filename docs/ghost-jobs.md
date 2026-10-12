@@ -50,7 +50,10 @@ The description is cut into pieces (sentences, list items, a short heading with 
   `question_tag` in [market-packs.md](market-packs.md#ghost-job-patterns)). It stays a question when the phrase's clause
   (after a comma or colon) opens with a question word or verb ("Recruiters, are you always hiring – interested?", "Liebe
   Recruiter, stellen Sie laufend ein – neugierig?") or with the phrase itself, without a subject ("Always hiring –
-  interested?");
+  interested?"), and also when that clause does not name the company as subject before the phrase's end ("we", "our",
+  "wir", "uns"): "Tired of always hiring – interested?" and "You're always hiring – curious?" are questions, "At Acme we
+  are always hiring – want to join?", "Did you know: we are always hiring – curious?" and "Bei uns suchen wir laufend
+  Verstärkung – bist du dabei?" count;
 - it is about the employer's product, customers or a team of that name ("We build talent pool software", "Our ATS lets
   hiring managers add candidates to the talent pipeline", "Evergreen job listings are a core feature of our ATS", "Join our
   Talent Network team", "Our SaaS lets agencies post evergreen job listings", "Wir helfen Unternehmen beim Aufbau ihres
@@ -63,9 +66,11 @@ The description is cut into pieces (sentences, list items, a short heading with 
   Kandidaten für unseren Talentpool"), while "Bewirb dich jetzt für unseren KI-Talentpool" counts;
 - a qualification asked of the candidate ("Experience building a talent pipeline for future roles", "Experience with talent
   pipelines for future roles", "Berufserfahrung im Aufbau eines Talentpools für zukünftige Stellen"): this takes out only the
-  phrase up to the end of its clause (";", or a comma before "we"/"wir"), so "Experience building a talent pipeline is
-  valued; we are always hiring" still counts. The company's own record is none: "With our history of growing fast, we are
-  always hiring" and "Mit unserer Erfahrung in der Entwicklung von KI-Produkten stellen wir laufend ein" count;
+  phrase up to the end of its clause (";", or a comma before "we"/"wir"; not before "you"/"du": "Kenntnisse im Aufbau von
+  Bewerberpools bringst du für zukünftige Vakanzen mit" does not count), so "Experience building a talent pipeline is
+  valued; we are always hiring" still counts. "Your experience building talent pipelines for future roles" is the
+  candidate's; the company's own record is none: "With our history of growing fast, we are always hiring" and "Mit unserer
+  Erfahrung in der Entwicklung von KI-Produkten stellen wir laufend ein" count;
 - "Initiativbewerbung" stands as a title on its own line below the first duties heading (a section of a real posting);
   "Initiativbewerbung (m/w/d)" counts anywhere;
 - it is training for later roles or an event for a community ("Mentoring for our future roles", "Leadership development

@@ -243,12 +243,14 @@ ghost:
   exclude_clause:
     - '(?<![\p{L}\p{N}])(?=\p{L})(?<!(?<![\p{L}\p{N}])unser\p{L}*\s+(?:\p{L}+\s+)?)(?:\p{L}*erfahrung\p{L}*|kenntnisse|expertise|know-how|praxis)\s+(?:\p{L}+\s+){0,4}?(?:im|in|beim|bei|mit)\s+(?:(?:dem|der|einem|einer)\s+)?(?:aufbau|ausbau|erweiterung|pflege|management|entwicklung|gewinnung)(?![\p{L}\p{N}])'
   # … und endet auch an einem Komma oder Doppelpunkt vor dem Subjekt ("…, wir stellen laufend ein") und an einer Inversion
-  # ("… Teams stellen wir laufend ein"; nicht nach "die", "wie", "dass" …: ein Nebensatz)
+  # ("… Teams stellen wir laufend ein"; nicht nach "die", "wie", "dass" …: ein Nebensatz). Nur "wir", die Firma: "Kenntnisse im
+  # Aufbau von Bewerberpools bringst du für zukünftige Vakanzen mit" bleibt die Qualifikation.
   exclude_clause_ends:
-    - '[,:]\s*(?:(?:da|denn|weil|und|aber|deshalb|daher|darum|so|also)\s+)?(?:wir|ihr|du)(?![\p{L}\p{N}])'
-    - '\s(?=(?!(?:die|der|das|den|dem|denen|deren|dessen|wie|was|wo\p{L}*|dass|ob|als|wenn|weil|da|damit|welche\p{L}*)\s)\p{L}+\s+(?:wir|ihr|du)(?![\p{L}\p{N}]))'
-  # "Wir suchen laufend Verstärkung – bist du dabei?" ist keine Frage (keys as in the generic pack); "Suchen Sie ständig neue
-  # Mitarbeiter – interessiert?" bleibt eine.
+    - '[,:]\s*(?:(?:da|denn|weil|und|aber|deshalb|daher|darum|so|also)\s+)?wir(?![\p{L}\p{N}])'
+    - '\s(?=(?!(?:die|der|das|den|dem|denen|deren|dessen|wie|was|wo\p{L}*|dass|ob|als|wenn|weil|da|damit|welche\p{L}*)\s)\p{L}+\s+wir(?![\p{L}\p{N}]))'
+  # "Wir suchen laufend Verstärkung – bist du dabei?" und "Bei uns suchen wir laufend …" sind keine Fragen (keys as in the generic
+  # pack; das Subjekt darf im Treffer stehen: "suchen wir laufend"); "Suchen Sie ständig neue Mitarbeiter – interessiert?" und
+  # "Ständig auf der Suche nach Talenten – neugierig?" (kein "wir") bleiben welche.
   question_tag:
     breaks: ['\s[–—-]\s', '—', ';']
     invitations:
@@ -264,6 +266,7 @@ ghost:
       - 'bereit\s+für\s+(?:den\s+nächsten\s+schritt|uns)'
     openers: [was, 'wie(?!\s+(?:immer|gewohnt))', 'welche\p{L}*', wer, wen, wem, warum, wieso, weshalb, wo, wann, womit, wofür, woher, ist, sind, bist, seid, hast, habt, hat, haben, kannst, könnt, kann, können, willst, wollt, will, wollen, möchtest, möchtet, suchst, sucht, suchen, stellst, stellt, stellen, wirst, wird, werden, gibt, brauchst, braucht, brauchen, findest, findet, finden, kennst, kennt, kennen]
     markers: [also, und, aber, na, ok, okay, nun]
+    subjects: [wir, 'unser\p{L}*', uns]
   abbreviations: [z.B, z, B, ca, inkl, bzw, usw, u.a, d.h, ggf, evtl, nr, z.T, bspw, max, min, std, gmbh, mio, tsd]
   # A quick first look (speed): every phrase the evergreen patterns above can match contains one of these (or of the generic pack's).
   prefilter:

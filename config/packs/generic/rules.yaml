@@ -299,13 +299,14 @@ ghost:
   # A qualification of the candidate takes out the evergreen phrases from its start to the end of its clause (clause_breaks or
   # exclude_clause_ends), not the whole sentence: "Experience building a talent pipeline for future roles" and "Experience with
   # talent pipelines for future roles" do not count, "Experience building a talent pipeline is valued; we are always hiring" does
-  # (after the ";"). The company's own record is no qualification: "With our history of growing fast, we are always hiring",
-  # "Your experience managing teams helps us" (after "our" / "your", with at most one word between).
+  # (after the ";"). The company's own record is no qualification: "With our history of growing fast, we are always hiring"
+  # (after "our", with at most one word between; "Your experience building talent pipelines for future roles" is the candidate's).
   exclude_clause:
-    - '(?<![\p{L}\p{N}])(?=\p{L})(?<!(?<![\p{L}\p{N}])(?:our|your)\s+(?:[\p{L}-]+\s+)?)(?:(?:experience|track\s+record|background|history|expertise|skills?|knowledge)\s+(?:(?:of|in|with|at)\s+)?(?:successfully\s+|actively\s+)?(?:building|growing|developing|managing|creating|maintaining|scaling|nurturing|sourcing|establishing|expanding|running|owning|leading)|(?:ability|able)\s+to\s+(?:build|develop|manage|create|maintain|scale|nurture|source|establish|expand|run|own|lead)|(?:experience|expertise|background|knowledge)\s+(?:with|in|of)\s+(?:[\p{L}-]+\s+){0,2}?(?:talent|candidate|applicant)\s+(?:pools?|pipelines?|communit(?:y|ies)|networks?|databases?))(?![\p{L}\p{N}])'
-  # … and ends also at a comma or colon before a subject: "Experience building teams is a plus, we are always hiring"
+    - '(?<![\p{L}\p{N}])(?=\p{L})(?<!(?<![\p{L}\p{N}])our\s+(?:[\p{L}-]+\s+)?)(?:(?:experience|track\s+record|background|history|expertise|skills?|knowledge)\s+(?:(?:of|in|with|at)\s+)?(?:successfully\s+|actively\s+)?(?:building|growing|developing|managing|creating|maintaining|scaling|nurturing|sourcing|establishing|expanding|running|owning|leading)|(?:ability|able)\s+to\s+(?:build|develop|manage|create|maintain|scale|nurture|source|establish|expand|run|own|lead)|(?:experience|expertise|background|knowledge)\s+(?:with|in|of)\s+(?:[\p{L}-]+\s+){0,2}?(?:talent|candidate|applicant)\s+(?:pools?|pipelines?|communit(?:y|ies)|networks?|databases?))(?![\p{L}\p{N}])'
+  # … and ends also at a comma or colon before the company as subject: "Experience building teams is a plus, we are always hiring"
+  # ("…, so you can staff future roles" is still the qualification)
   exclude_clause_ends:
-    - '[,:]\s*(?:(?:since|as|so|because|and|but|while|when|which\s+is\s+why|that[''’]s\s+why)\s+)?(?:we|you|they)(?![\p{L}\p{N}])'
+    - '[,:]\s*(?:(?:since|as|so|because|and|but|while|when|which\s+is\s+why|that[''’]s\s+why)\s+)?we(?![\p{L}\p{N}])'
   # The question right before a sentence is read with it ("Don't see a role that fits? Join our talent community"): the text before
   # the sentence ends in one of `ends`; the question starts after the last of `starts` (or a line break). line_above: the question
   # may stand on the line above. A sentence that itself ends in one of `ends` is a question, not a statement about the posting
@@ -320,8 +321,11 @@ ghost:
   # open, after any `markers`, neither with one of `openers` nor with the phrase itself: "Is your company always hiring –
   # interested?", "Recruiters, are you always hiring – interested?", "Always hiring – interested?" (no subject), "So, are you
   # always hiring – or just pretending?" and "Your recruiters are always hiring – interested in a better ATS?" stay questions;
-  # "When we grow, we are always hiring – want to join?" counts. `openers` and `markers` are regexes matched at the start of the
-  # clause, up to a word end. The packs' lists are united.
+  # "When we grow, we are always hiring – want to join?" counts. The clause must also hold one of `subjects` (the company: "we",
+  # "our") before the phrase's end: "Tired of always hiring – interested?" and "You're always hiring – curious?" stay questions,
+  # "At Acme we are always hiring – want to join?" and "Did you know: we are always hiring – curious?" count. `openers` and
+  # `markers` are regexes matched at the start of the clause, up to a word end; `subjects` are regexes for whole words. The packs'
+  # lists are united.
   question_tag:
     breaks: ['\s[–—-]\s', '—', ';']
     invitations:
@@ -336,6 +340,7 @@ ghost:
       - 'curious'
     openers: [what, which, how, who, whom, whose, why, where, when, is, are, am, was, were, do, does, did, can, could, will, would, shall, should, have, has, had, may, might, must, 'isn[''’]t', 'aren[''’]t', 'don[''’]t', 'doesn[''’]t', 'didn[''’]t', 'can[''’]t', 'won[''’]t', 'wouldn[''’]t', 'haven[''’]t', 'hasn[''’]t']
     markers: [so, well, now, ok, okay, and, but, also, then]
+    subjects: [we, 'we[''’]re', 'we[''’]ve', our, us]
   abbreviations: [e.g, i.e, etc, incl, approx, vs, inc, ltd, co, corp, mr, ms, dr]
   # A quick first look (speed): a JD or sentence with none of these is not searched for evergreen phrases. Every phrase the
   # evergreen patterns can match contains one of them; keep it so when you add a pattern (pnpm config:check warns).

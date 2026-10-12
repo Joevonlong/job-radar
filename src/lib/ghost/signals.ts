@@ -271,13 +271,45 @@ function lastBreakEnd(text: string, breaks: readonly RegExp[]): number {
   return from;
 }
 
-/** Where the last clause break in `text` starts (0 when none). */
-function lastBreakStart(text: string, breaks: readonly RegExp[]): number {
-  let from = 0;
-  for (const re of breaks) {
-    for (const match of text.matchAll(re)) if (match.index > from) from = match.index;
+/** The first index in the ascending `values` whose value is at least `value` (`values.length` when none). */
+function lowerBound(values: readonly number[], value: number): number {
+  let low = 0;
+  let high = values.length;
+  while (low < high) {
+    const mid = (low + high) >>> 1;
+    if ((values[mid] as number) < value) low = mid + 1;
+    else high = mid;
   }
-  return from;
+  return low;
+}
+
+/**
+ * The matches of `res` in a piece, read once so that each hit finds its clause in log time (re-reading the text before every hit
+ * takes the square of the hit count). `ends` ascending, `starts[i]` the last start among the matches up to `ends[i]`.
+ */
+interface ClauseMarks {
+  ends: number[];
+  starts: number[];
+}
+
+function clauseMarks(text: string, res: readonly RegExp[]): ClauseMarks {
+  const found: Array<[number, number]> = [];
+  for (const re of res) for (const match of text.matchAll(re)) found.push([match.index + match[0].length, match.index]);
+  found.sort((a, b) => a[0] - b[0]);
+  const marks: ClauseMarks = { ends: [], starts: [] };
+  let last = 0;
+  for (const [end, start] of found) {
+    last = Math.max(last, start);
+    marks.ends.push(end);
+    marks.starts.push(last);
+  }
+  return marks;
+}
+
+/** Where the last mark that ends at or before `from` starts (0 when none). */
+function lastMarkStart(marks: ClauseMarks, from: number): number {
+  const count = lowerBound(marks.ends, from + 1);
+  return count === 0 ? 0 : (marks.starts[count - 1] as number);
 }
 
 /**
@@ -356,19 +388,36 @@ function isQuestion(text: string, lead: CompiledGhostRules["leadInQuestion"]): b
 const CLAUSE_PUNCTUATION = /[,:，：]/gu;
 const LEADING_NON_WORD = /^[^\p{L}\p{N}]*/u;
 
+/** What a piece's tagged clauses are read with: its clause starts and the starts of its `question_tag.subjects`, read once. */
+interface TaggedPiece {
+  text: string;
+  clauses: ClauseMarks;
+  subjects: number[];
+}
+
+function taggedPiece(text: string, rules: CompiledGhostRules): TaggedPiece {
+  const subjects: number[] = [];
+  for (const re of rules.questionTag.subjects) for (const match of text.matchAll(re)) if (match[0].length > 0) subjects.push(match.index);
+  subjects.sort((a, b) => a - b);
+  return { text, clauses: clauseMarks(text, [...rules.clauseBreaks, CLAUSE_PUNCTUATION]), subjects };
+}
+
 /**
- * Whether the clause of a hit at `from` (in a statement with an invitation tagged on) is a question after all. The clause starts
- * at the last `clause_breaks` match, comma or colon before the hit; after any `question_tag.markers` it opens with one of `openers`
- * ("Recruiters, are you always hiring – interested?", "So, is it …", "Liebe Recruiter, stellen Sie laufend ein – neugierig?") or
- * with the hit itself ("Always hiring – interested?": no subject, an advert's question). "When we grow, we are always hiring – want
- * to join?" and "Have a look: we are always hiring – interested?" are statements.
+ * Whether the clause of a hit at `from`…`to` (in a statement with an invitation tagged on) is a question after all. The clause
+ * starts at the last `clause_breaks` match, comma or colon before the hit; after any `question_tag.markers` it opens with one of
+ * `openers` ("Recruiters, are you always hiring – interested?", "So, is it …", "Liebe Recruiter, stellen Sie laufend ein –
+ * neugierig?") or with the hit itself ("Always hiring – interested?": no subject, an advert's question), or, when the packs list
+ * `subjects`, none of them starts in the clause before the hit's end ("Tired of always hiring – interested?"; "At Acme we are
+ * always hiring – want to join?" and "Bei uns suchen wir laufend …" are statements, and so are "When we grow, we are always hiring
+ * – want to join?" and "Have a look: we are always hiring – interested?").
  */
-function questionClause(text: string, from: number, rules: CompiledGhostRules): boolean {
+function questionClause(piece: TaggedPiece, from: number, to: number, rules: CompiledGhostRules): boolean {
   const tag = rules.questionTag;
-  const head = text.slice(0, from);
-  let at = Math.max(lastBreakStart(head, rules.clauseBreaks), lastBreakStart(head, [CLAUSE_PUNCTUATION]));
+  const text = piece.text;
+  const clauseStart = lastMarkStart(piece.clauses, from);
+  let at = clauseStart;
   const skip = (): void => {
-    at += LEADING_NON_WORD.exec(text.slice(at))?.[0].length ?? 0;
+    at += LEADING_NON_WORD.exec(text.slice(at, from))?.[0].length ?? 0;
   };
   skip();
   for (let marked = true; marked && at < from; ) {
@@ -385,7 +434,10 @@ function questionClause(text: string, from: number, rules: CompiledGhostRules): 
   }
   if (at >= from) return true;
   const rest = text.slice(at, from);
-  return tag.openers.some((opener) => opener.test(rest));
+  if (tag.openers.some((opener) => opener.test(rest))) return true;
+  if (tag.subjects.length === 0) return false;
+  const subject = piece.subjects[lowerBound(piece.subjects, clauseStart)];
+  return subject === undefined || subject >= to;
 }
 
 /**
@@ -416,20 +468,33 @@ function taggedStatement(text: string, rules: CompiledGhostRules): number | null
 
 /**
  * The ranges (offsets in the description) that the packs' `exclude_clause` take out: each match to the end of its clause (the
- * first `clause_breaks` or `exclude_clause_ends` match after it).
+ * first `clause_breaks` or `exclude_clause_ends` match after it), sorted by start. Each end expression is searched forward from
+ * the match ends in order and its last find reused while it lies ahead, so the time stays linear in the number of matches.
  */
 function clauseExclusions(segment: TextSegment, rules: CompiledGhostRules): Array<[number, number]> {
-  const out: Array<[number, number]> = [];
-  if (rules.excludeClause.length === 0) return out;
-  const ends = [...rules.clauseBreaks, ...rules.excludeClauseEnds];
+  if (rules.excludeClause.length === 0) return [];
+  const text = segment.text;
+  const starts: Array<[number, number]> = [];
   for (const re of rules.excludeClause) {
-    for (const match of segment.text.matchAll(re)) {
-      if (match[0].length === 0) continue;
-      const after = match.index + match[0].length;
-      out.push([segment.start + match.index, segment.start + after + firstBreak(segment.text.slice(after), ends)]);
-    }
+    for (const match of text.matchAll(re)) if (match[0].length > 0) starts.push([match.index, match.index + match[0].length]);
   }
-  return out;
+  starts.sort((a, b) => a[1] - b[1]);
+  const ends = [...rules.clauseBreaks, ...rules.excludeClauseEnds].map((re) => ({ re: new RegExp(re.source, re.flags.includes("g") ? re.flags : `${re.flags}g`), from: -1, at: -1 }));
+  const out: Array<[number, number]> = [];
+  for (const [start, after] of starts) {
+    let end = text.length;
+    for (const cursor of ends) {
+      // the first match at or after `from` is `at` (-1: none); still the first one at or after `after` while `after <= at`
+      if (cursor.from === -1 || (cursor.at !== -1 && after > cursor.at)) {
+        cursor.re.lastIndex = after;
+        cursor.from = after;
+        cursor.at = cursor.re.exec(text)?.index ?? -1;
+      }
+      if (cursor.at !== -1 && cursor.at < end) end = cursor.at;
+    }
+    out.push([segment.start + start, segment.start + end]);
+  }
+  return out.sort((a, b) => a[0] - b[0]);
 }
 
 function hitsOf(pattern: CompiledGhostPattern, segment: TextSegment): Hit[] {
@@ -480,18 +545,25 @@ export function evergreenWording(description: string | null, rules: CompiledGhos
     if (rules.excludeContext.some((re) => segment.text.search(re) !== -1 || (question !== "" && question.search(re) !== -1))) continue;
     if (underDutiesHeading(segment, rules, description)) continue;
     const excluded = clauseExclusions(segment, rules);
+    // the exclusions that start at or before the current hit (hits come in text order) and the furthest end among them
+    let excludedSeen = 0;
+    let excludedTo = -1;
+    const tagged = statementEnd < segment.text.length ? taggedPiece(segment.text, rules) : null;
     candidates.sort((a, b) => a.hit.start - b.hit.start || b.hit.end - a.hit.end);
     for (const { hit, pattern } of candidates) {
       if (options.skip?.(hit.start, hit.end)) continue;
-      if (statementEnd < segment.text.length) {
+      if (tagged !== null) {
         const from = hit.start - segment.start;
         // in the tag, or in a clause that is itself a question ("We grow fast, but are you always hiring – interested?") or has
-        // no subject ("Always hiring – interested?")
+        // no subject ("Always hiring – interested?", "Tired of always hiring – interested?")
         if (from >= statementEnd) continue;
-        if (questionClause(segment.text, from, rules)) continue;
+        if (questionClause(tagged, from, hit.end - segment.start, rules)) continue;
       }
       // a qualification of the candidate, to the end of its clause ("Experience building a talent pipeline for future roles")
-      if (excluded.some(([start, end]) => hit.start >= start && hit.start < end)) continue;
+      for (; excludedSeen < excluded.length && (excluded[excludedSeen] as [number, number])[0] <= hit.start; excludedSeen++) {
+        excludedTo = Math.max(excludedTo, (excluded[excludedSeen] as [number, number])[1]);
+      }
+      if (hit.start < excludedTo) continue;
       if (pattern.onlyBeforeDuties) {
         // a heading line is short: longer lines are read only up to twice heading_max_chars
         if (dutiesAt === undefined) dutiesAt = firstDutiesHeading(description, rules, rules.settings.heading_max_chars * 2);

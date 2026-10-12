@@ -172,7 +172,8 @@ describe("the effective pipeline config", () => {
     expect(german.exclude_clause.length).toBeGreaterThan(0);
     expect(de.exclude_clause).toEqual([...generic.exclude_clause, ...german.exclude_clause]);
     expect(de.exclude_clause_ends).toEqual([...generic.exclude_clause_ends, ...german.exclude_clause_ends]);
-    for (const key of ["breaks", "invitations", "openers", "markers"] as const) {
+    expect(german.question_tag.subjects.length).toBeGreaterThan(0);
+    for (const key of ["breaks", "invitations", "openers", "markers", "subjects"] as const) {
       expect(de.question_tag[key]).toEqual([...new Set([...generic.question_tag[key], ...german.question_tag[key]])]);
     }
   });

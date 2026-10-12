@@ -100,6 +100,7 @@ export function mergeGhostPacks(packs: ReadonlyArray<{ rules: { ghost: GhostPack
       invitations: union(...ghost.map((g) => g.question_tag.invitations)),
       openers: union(...ghost.map((g) => g.question_tag.openers)),
       markers: union(...ghost.map((g) => g.question_tag.markers)),
+      subjects: union(...ghost.map((g) => g.question_tag.subjects)),
     },
     abbreviations: union(...ghost.map((g) => g.abbreviations)),
     prefilter: union(...ghost.map((g) => g.prefilter)),
