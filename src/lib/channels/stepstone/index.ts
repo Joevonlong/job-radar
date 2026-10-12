@@ -1,6 +1,6 @@
 import { stepstoneSettingsSchema, type StepstoneSettings } from "@/lib/config";
 
-import { ChannelError, PartialCollectError } from "../errors";
+import { ChannelError, settlePostings } from "../errors";
 import type { Channel, ChannelContext, RawPostingInput, SearchQuery } from "../types";
 import { createCycleCache } from "../web/cache";
 import { createTitleFilter, interleave, isWithinWindow, parseDate, windowCutoff } from "../web/select";
@@ -99,7 +99,8 @@ export function createStepstoneChannel(deps: StepstoneDeps = {}): Channel {
     if (settings.fetch_details) {
       // postings already stored keep their stored detail; only the others open their page
       const known = await loadKnownDetails(ctx, {
-        enabled: settings.reuse_known_details,
+        // an interrupted query never overwrites a stored detail with none, whatever reuse_known_details says
+        enabled: settings.reuse_known_details || interrupted !== null,
         externalIds: selected.map((item) => String(item.id)),
         detailOf: storedDetailOf<StepstoneDetail>(payloadSchema),
       });
@@ -108,8 +109,7 @@ export function createStepstoneChannel(deps: StepstoneDeps = {}): Channel {
         if (stored) details.set(item.id, stored);
       }
       reused = known.size;
-      // after a failure no further request goes out: the stored details are kept, the rest stays list data
-      const toFetch = interrupted ? [] : selected.filter((i) => !known.has(String(i.id))).slice(0, settings.max_details_per_query);
+      const toFetch = selected.filter((i) => !known.has(String(i.id))).slice(0, settings.max_details_per_query);
       for (const item of toFetch) {
         const url = postingUrl(settings, item);
         if (url === null) continue;
@@ -119,6 +119,8 @@ export function createStepstoneChannel(deps: StepstoneDeps = {}): Channel {
           if (cached) details.set(item.id, cached);
           continue;
         }
+        // after a failure no new request goes out: stored and already fetched details are kept, the rest stays list data
+        if (interrupted) continue;
         await pace();
         attempted += 1;
         try {
@@ -157,9 +159,7 @@ export function createStepstoneChannel(deps: StepstoneDeps = {}): Channel {
       reusedDetails: reused,
       interrupted: interrupted?.code,
     });
-    await ctx.budget.consume(postings.length);
-    if (interrupted) throw new PartialCollectError(postings, interrupted);
-    return postings;
+    return settlePostings(ctx.budget, postings, interrupted);
   }
 
   return {

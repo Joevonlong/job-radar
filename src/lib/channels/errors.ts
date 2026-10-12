@@ -1,4 +1,4 @@
-import { CHANNEL_ERROR_CODES, type ChannelErrorCode, type RawPostingInput } from "./types";
+import { CHANNEL_ERROR_CODES, type ChannelBudget, type ChannelErrorCode, type RawPostingInput } from "./types";
 
 export { CHANNEL_ERROR_CODES, type ChannelErrorCode };
 
@@ -86,6 +86,28 @@ export class BudgetExceededError extends ChannelError {
     this.name = "BudgetExceededError";
     this.scope = scope;
   }
+}
+
+/**
+ * Books a query's postings against the budget and hands them back. When the query was cut short (`interrupted`), it
+ * throws `PartialCollectError` with that cause instead, and a budget refusal does not replace it: the postings were
+ * already read, so they are kept and the run reports why the query stopped. Any other error from the budget propagates.
+ */
+export async function settlePostings(
+  budget: Pick<ChannelBudget, "consume">,
+  postings: RawPostingInput[],
+  interrupted: ChannelError | null,
+): Promise<RawPostingInput[]> {
+  if (!interrupted) {
+    await budget.consume(postings.length);
+    return postings;
+  }
+  try {
+    await budget.consume(postings.length);
+  } catch (error) {
+    if (!(error instanceof BudgetExceededError)) throw error;
+  }
+  throw new PartialCollectError(postings, interrupted);
 }
 
 /** Page markers that mean "you were detected as a bot / must log in", whatever the status code. */

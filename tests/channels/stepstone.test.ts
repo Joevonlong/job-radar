@@ -8,7 +8,7 @@ import { ageFacet, fetchDetail, fetchSearchPage, MAX_SLUG_LENGTH, postingUrl, se
 import { createStepstoneChannel } from "@/lib/channels/stepstone";
 import { parseLocations, parseStepstonePayload } from "@/lib/channels/stepstone/parse";
 import { payloadSchema, type StepstonePayload } from "@/lib/channels/stepstone/schema";
-import { normalizedPostingDraftSchema, type RawPostingInput } from "@/lib/channels/types";
+import { normalizedPostingDraftSchema, type ChannelContext, type RawPostingInput } from "@/lib/channels/types";
 import { stepstoneSettingsSchema } from "@/lib/config";
 
 import { channelsWith, failingHttp, interruption, INTERRUPTIONS, shippedChannels, type Interruption } from "./helpers";
@@ -436,6 +436,49 @@ describe("collect", () => {
         const { made, result } = run(request("ai-engineer", 2), "network", ["AI Engineer"], { fetch_details: true });
         expect(((await result) as { error: unknown }).error).toBeInstanceOf(PartialCollectError);
         expect(made.calls.every((c) => c.url.pathname.startsWith("/jobs/"))).toBe(true);
+      });
+
+      it("keeps the stored details with reuse_known_details off", async () => {
+        const first = await collectAll();
+        expect(first.postings.some((p) => (p.payload as { detail: unknown }).detail !== null)).toBe(true);
+        const stored = new Map(first.postings.map((p) => [p.externalId, p.payload]));
+        const made = makeContext(site(), extra({ max_pages: 3, reuse_known_details: false }), { known: { payloads: async () => stored } });
+        const result = await settle(createStepstoneChannel({ now: () => NOW }).collect(searchQuery(), failingHttp(made.ctx, request("ai-engineer", 2), "network")));
+        const error = (result as { error: PartialCollectError }).error;
+        expect(error).toBeInstanceOf(PartialCollectError);
+        expect(error.postings.map((p) => p.payload)).toEqual(first.postings.map((p) => p.payload));
+        expect(made.calls).toHaveLength(1);
+      });
+
+      it("still uses the details this cycle already fetched, without a new request", async () => {
+        const signal = new AbortController().signal;
+        const channel = createStepstoneChannel({ now: () => NOW });
+        const first = await channel.collect(searchQuery(), makeContext(site(), extra({ max_pages: 3 }), { signal }).ctx);
+        expect(first.some((p) => (p.payload as { detail: unknown }).detail !== null)).toBe(true);
+        const made = makeContext(site(), extra({ max_pages: 3, reuse_known_details: false }), { signal });
+        const result = await settle(channel.collect(searchQuery(), failingHttp(made.ctx, request("ai-engineer", 2), "network")));
+        const error = (result as { error: PartialCollectError }).error;
+        expect(error).toBeInstanceOf(PartialCollectError);
+        expect(error.postings.map((p) => p.payload)).toEqual(first.map((p) => p.payload));
+        expect(made.calls).toHaveLength(1);
+      });
+
+      it("keeps the postings and the original cause when the budget refuses them after the failure", async () => {
+        const made = makeContext(site(), extra({ max_pages: 3, fetch_details: false }));
+        const refusing: ChannelContext = {
+          ...made.ctx,
+          budget: {
+            ...made.ctx.budget,
+            consume: async () => {
+              throw interruption("budget_exceeded");
+            },
+          },
+        };
+        const result = await settle(createStepstoneChannel({ now: () => NOW }).collect(searchQuery(), failingHttp(refusing, request("ai-engineer", 2), "network")));
+        const error = (result as { error: PartialCollectError }).error;
+        expect(error).toBeInstanceOf(PartialCollectError);
+        expect(error.cause.code).toBe("network");
+        expect(error.postings.map((p) => p.externalId)).toEqual(await pageOne());
       });
     });
 

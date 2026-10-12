@@ -151,6 +151,19 @@ describe("health queries", () => {
     expect(stats.has("greenhouse")).toBe(false);
   });
 
+  it("getChannelWindowStats counts a run whose query was cut short after some pages as failed, unlike invalid records", async () => {
+    const db = getDb();
+    await db.execute(sql`truncate table runs, raw_postings, channels restart identity cascade`);
+    await db.insert(schema.channels).values([{ id: "stepstone", family: "stepstone", kind: "guest" }]);
+    const at = (iso: string) => new Date(iso);
+    await db.insert(schema.runs).values([
+      { channelId: "stepstone", status: "partial", startedAt: at("2026-10-07T07:00:00Z"), fetched: 12, newCount: 2, errorCode: "parse" },
+      { channelId: "stepstone", status: "partial", startedAt: at("2026-10-08T07:00:00Z"), fetched: 25, newCount: 4, errorCode: "network", interrupted: true },
+    ]);
+    const stats = await getChannelWindowStats(db, { since: at("2026-10-02T00:00:00Z") });
+    expect(stats.get("stepstone")).toMatchObject({ runs: 2, failed: 1, fetched: 37, lastRun: { status: "partial", errorCode: "network", interrupted: true } });
+  });
+
   it("getBoardSeenCounts counts postings per board inside the window, from the stored envelope", async () => {
     const db = getDb();
     await db.execute(sql`truncate table runs, raw_postings, channels restart identity cascade`);

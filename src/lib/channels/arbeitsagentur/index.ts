@@ -1,6 +1,6 @@
 import { arbeitsagenturSettingsSchema, type ArbeitsagenturSettings } from "@/lib/config";
 
-import { ChannelError, PartialCollectError } from "../errors";
+import { ChannelError, settlePostings } from "../errors";
 import { loadKnownDetails, storedDetailOf } from "../known";
 import type { Channel, ChannelContext, RawPostingInput, SearchQuery } from "../types";
 import { fetchDetail, fetchSearchPage } from "./client";
@@ -92,7 +92,8 @@ async function collect(query: SearchQuery, ctx: ChannelContext): Promise<RawPost
   if (settings.fetch_details) {
     // postings already stored keep their stored detail; only the others cost a request
     const known = await loadKnownDetails(ctx, {
-      enabled: settings.reuse_known_details,
+      // an interrupted query never overwrites a stored detail with none, whatever reuse_known_details says
+      enabled: settings.reuse_known_details || interrupted !== null,
       externalIds: selected.map((item) => item.referenznummer),
       detailOf: storedDetailOf<BaDetail>(payloadSchema),
     });
@@ -124,9 +125,7 @@ async function collect(query: SearchQuery, ctx: ChannelContext): Promise<RawPost
     };
   });
   ctx.logger.info("arbeitsagentur query done", { query: query.id, postings: postings.length, details: details.size, reusedDetails: reused, interrupted: interrupted?.code });
-  await ctx.budget.consume(postings.length);
-  if (interrupted) throw new PartialCollectError(postings, interrupted);
-  return postings;
+  return settlePostings(ctx.budget, postings, interrupted);
 }
 
 export const arbeitsagenturChannel: Channel = {

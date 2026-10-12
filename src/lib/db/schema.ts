@@ -121,8 +121,10 @@ export const runs = pgTable(
     /** Channel error classification (ChannelErrorCode) when the run failed, was skipped or was interrupted. */
     errorCode: text("error_code"),
     /**
-     * The query failed after some pages: what they returned was stored (status `partial`), the failure is in `error_code` and
-     * counted against the channel like a failed run. False for every other run, including a `partial` with invalid records.
+     * A paginated query was cut short after some pages (a later page or keyword failed): what the earlier pages returned
+     * was stored (status `partial`), the failure is in `error_code` and counted against the channel like a failed run.
+     * False for every other run, including a `partial` with invalid records. Not the cycle-level "interrupted" (a shutdown
+     * or a dead runner cut the whole cycle off: `cycles.summary_json.aborted` / `orphaned`, see `repos/cycles.ts`).
      */
     interrupted: boolean("interrupted").notNull().default(false),
   },

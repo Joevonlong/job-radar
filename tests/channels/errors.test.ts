@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
 
-import { BudgetExceededError, ChannelError, errorFromHttp, isAbortError, looksBlocked, PartialCollectError, toChannelError } from "@/lib/channels/errors";
+import { BudgetExceededError, ChannelError, errorFromHttp, isAbortError, looksBlocked, PartialCollectError, settlePostings, toChannelError } from "@/lib/channels/errors";
 
 describe("errorFromHttp", () => {
   it.each([
@@ -91,6 +91,52 @@ describe("ChannelError", () => {
     expect(toChannelError(partial)).toBe(cause);
     const budget = new BudgetExceededError("channel", "cap");
     expect(toChannelError(new PartialCollectError(postings, budget))).toBe(budget);
+  });
+
+  describe("settlePostings", () => {
+    const postings = [{ externalId: "1", url: "https://x.test/1", payload: {}, postedAt: null }];
+    const cause = new ChannelError("network", "HTTP 503 from x: server error", { status: 503 });
+    const booked: number[] = [];
+    const paying = { consume: async (records: number) => (booked.push(records), { usd: 0, freeRecords: records, paidRecords: 0 }) };
+    const refusing = {
+      consume: async (): Promise<never> => {
+        throw new BudgetExceededError("channel", "cap");
+      },
+    };
+    const broken = {
+      consume: async (): Promise<never> => {
+        throw new Error("usage store down");
+      },
+    };
+    const settled = (promise: Promise<unknown>) => promise.then(() => null, (error: unknown) => error);
+
+    it("books and returns the postings of a complete query; a budget refusal stops it", async () => {
+      booked.length = 0;
+      await expect(settlePostings(paying, postings, null)).resolves.toBe(postings);
+      expect(booked).toEqual([1]);
+      await expect(settlePostings(refusing, postings, null)).rejects.toBeInstanceOf(BudgetExceededError);
+    });
+
+    it("books an interrupted query's postings and throws them with the original cause", async () => {
+      booked.length = 0;
+      const error = await settled(settlePostings(paying, postings, cause));
+      expect(error).toBeInstanceOf(PartialCollectError);
+      expect((error as PartialCollectError).cause).toBe(cause);
+      expect(booked).toEqual([1]);
+    });
+
+    it("keeps an interrupted query's postings and cause when the budget refuses them", async () => {
+      const error = await settled(settlePostings(refusing, postings, cause));
+      expect(error).toBeInstanceOf(PartialCollectError);
+      expect((error as PartialCollectError).cause).toBe(cause);
+      expect((error as PartialCollectError).postings).toEqual(postings);
+    });
+
+    it("passes any other budget error on", async () => {
+      const error = await settled(settlePostings(broken, postings, cause));
+      expect(error).not.toBeInstanceOf(PartialCollectError);
+      expect((error as Error).message).toBe("usage store down");
+    });
   });
 
   it("detects abort and timeout errors", () => {

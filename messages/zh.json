@@ -4317,6 +4317,7 @@
     "run": {
       "succeeded": "成功",
       "partial": "部分",
+      "interrupted": "中途中断",
       "failed": "失败",
       "skipped": "跳过",
       "running": "运行中"

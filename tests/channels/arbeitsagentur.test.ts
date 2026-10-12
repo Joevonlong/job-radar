@@ -475,6 +475,29 @@ describe("collect: a later page or keyword fails", () => {
     await outcome(ctx, query({ keywords: ["a"], maxResults: 100 }));
     expect(consume).toHaveBeenCalledWith(2);
   });
+
+  it("keeps the stored detail of a known posting with reuse_known_details off", async () => {
+    const stored = { list: ITEMS[0], detail: DETAIL_MULTI };
+    const known: KnownPostings = { payloads: async () => new Map([["a-1-0", stored]]) };
+    const made = makeContext(byTerm(3), { page_size: 2, reuse_known_details: false }, { known });
+    const ctx = failingHttp(made.ctx, searchCall("a", 2), "network");
+    const error = (await outcome(ctx, query({ keywords: ["a"], maxResults: 100 })) as { error: PartialCollectError }).error;
+    expect(error).toBeInstanceOf(PartialCollectError);
+    expect(error.postings.map((p) => (p.payload as { detail: unknown }).detail)).toEqual([DETAIL_MULTI, null]);
+    expect(made.calls.filter((c) => !isSearch(c))).toHaveLength(0);
+  });
+
+  it("keeps the postings and the original cause when the budget refuses them after the failure", async () => {
+    const consume = vi.fn(async () => {
+      throw interruption("budget_exceeded");
+    });
+    const made = makeContext(byTerm(3), { fetch_details: false, page_size: 2 });
+    const ctx = failingHttp({ ...made.ctx, budget: { ...made.ctx.budget, consume } }, searchCall("a", 2), "network");
+    const error = (await outcome(ctx, query({ keywords: ["a"], maxResults: 100 })) as { error: PartialCollectError }).error;
+    expect(error).toBeInstanceOf(PartialCollectError);
+    expect(error.cause.code).toBe("network");
+    expect(error.postings).toHaveLength(2);
+  });
 });
 
 describe("error classification and retries", () => {

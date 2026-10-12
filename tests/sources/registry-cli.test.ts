@@ -15,7 +15,7 @@ const view = buildRegistryView({
   now: NOW,
   config,
   cards: cardsFor({ channelsConfig: config, states: [state("xing", { circuitState: "open", circuitOpenUntil: new Date(NOW.getTime() + 20 * HOUR), consecutiveFailures: 3, lastErrorCode: "blocked" })] }),
-  channelStats: new Map([["xing", windowStat({ runs: 3, failed: 3, lastRun: { startedAt: new Date(NOW.getTime() - 5 * HOUR), status: "failed", errorCode: "blocked" } })]]),
+  channelStats: new Map([["xing", windowStat({ runs: 3, failed: 3, lastRun: { startedAt: new Date(NOW.getTime() - 5 * HOUR), status: "failed", errorCode: "blocked", interrupted: false } })]]),
   boardHealth: [boardHealth("greenhouse", "gegensprech", { lastStatus: "error", lastErrorCode: "not_found", consecutiveFailures: 3 })],
   boardSeen: new Map(),
 });
@@ -77,6 +77,20 @@ describe("sources:list report", () => {
     expect(JSON.stringify(json.entries)).not.toMatch(/[\u4e00-\u9fff]/);
     // the table stays in Chinese
     expect(renderRegistryText(report(cliRows(view, { type: null, statuses: ["failing"] }, "UTC", ZH)), ZH)).toContain("失败");
+  });
+
+  it("a last run whose query was cut short after some pages reads interrupted, not partial", () => {
+    const interruptedView = buildRegistryView({
+      now: NOW,
+      config,
+      cards: cardsFor({ channelsConfig: config, states: [] }),
+      channelStats: new Map([["xing", windowStat({ runs: 2, failed: 1, lastRun: { startedAt: new Date(NOW.getTime() - 5 * HOUR), status: "partial", errorCode: "network", interrupted: true } })]]),
+      boardHealth: [],
+      boardSeen: new Map(),
+    });
+    const of = (text: ReturnType<typeof registryText>) => cliRows(interruptedView, { type: "channel", statuses: [] }, "UTC", text).find((r) => r.id === "xing");
+    expect(of(ZH)).toMatchObject({ lastRunResult: "interrupted", lastRunLabel: "中途中断" });
+    expect(of(registryText("en"))).toMatchObject({ lastRunResult: "interrupted", lastRunLabel: "interrupted" });
   });
 
   it("measures CJK characters as two columns", () => {

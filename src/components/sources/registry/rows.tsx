@@ -85,7 +85,7 @@ export function ChannelRowView({ row, now, timeZone, readOnlyHint, windowDays, a
       <Extra label={t("cols.lastRun")} expanded={expanded}>
         {run ? (
           <span title={text.full(run.at)}>
-            {text.relative(run.at, now)} · {t(`run.${run.status === "succeeded" || run.status === "partial" || run.status === "failed" || run.status === "skipped" ? run.status : "skipped"}`)}
+            {text.relative(run.at, now)} · {run.interrupted ? <span className="text-warning-text">{t("run.interrupted")}</span> : t(`run.${run.status === "succeeded" || run.status === "partial" || run.status === "failed" || run.status === "skipped" ? run.status : "skipped"}`)}
           </span>
         ) : (
           "—"

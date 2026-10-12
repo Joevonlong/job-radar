@@ -4317,6 +4317,7 @@
     "run": {
       "succeeded": "succeeded",
       "partial": "partial",
+      "interrupted": "interrupted",
       "failed": "failed",
       "skipped": "skipped",
       "running": "running"

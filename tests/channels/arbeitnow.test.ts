@@ -512,6 +512,24 @@ describe("collect: errors", () => {
       const result = await settle(channel().collect(sweepQuery(), failingHttp(made.ctx, (url) => url.searchParams.get("page") === "2", "network")));
       expect(consumed).toEqual([(result as { error: PartialCollectError }).error.postings.length]);
     });
+
+    it("keeps the postings and the original cause when the budget refuses them after the failure", async () => {
+      const made = makeContext(board());
+      const refusing: ChannelContext = {
+        ...made.ctx,
+        budget: {
+          ...made.ctx.budget,
+          consume: async () => {
+            throw interruption("budget_exceeded");
+          },
+        },
+      };
+      const result = await settle(channel().collect(sweepQuery(), failingHttp(refusing, (url) => url.searchParams.get("page") === "2", "network")));
+      const error = (result as { error: PartialCollectError }).error;
+      expect(error).toBeInstanceOf(PartialCollectError);
+      expect(error.cause.code).toBe("network");
+      expect(error.postings.length).toBeGreaterThan(0);
+    });
   });
 
   it("an unusable settings block is reported, not guessed", async () => {

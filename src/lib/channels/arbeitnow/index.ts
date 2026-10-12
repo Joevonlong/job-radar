@@ -2,7 +2,7 @@ import { arbeitnowSettingsSchema, loadConfig, type ArbeitnowSettings, type Inter
 
 import { issuePaths } from "../ats/envelope";
 import { createTitlePrefilter } from "../ats/prefilter";
-import { ChannelError, PartialCollectError } from "../errors";
+import { ChannelError, settlePostings } from "../errors";
 import type { Channel, ChannelContext, RawPostingInput, SearchQuery } from "../types";
 import { fetchPage } from "./client";
 import { arbeitnowDescriptionHtml, fromUnixSeconds, parseArbeitnowPayload } from "./parse";
@@ -150,9 +150,7 @@ export function createArbeitnowChannel(deps: ArbeitnowDeps = defaultArbeitnowDep
       if (interrupted && postings.length === 0) throw interrupted;
       if (stats.invalid > 0) ctx.logger.warn("arbeitnow postings of an unexpected shape skipped", { count: stats.invalid });
       ctx.logger.info("arbeitnow sweep done", { ...stats, postings: postings.length, interrupted: interrupted?.code });
-      await ctx.budget.consume(postings.length);
-      if (interrupted) throw new PartialCollectError(postings, interrupted);
-      return postings;
+      return settlePostings(ctx.budget, postings, interrupted);
     },
     parse: parseArbeitnowPayload,
     descriptionHtml: arbeitnowDescriptionHtml,

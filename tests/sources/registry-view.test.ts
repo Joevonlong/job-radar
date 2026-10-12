@@ -20,7 +20,7 @@ function view(overrides: Partial<Parameters<typeof buildRegistryView>[0]> = {}) 
     now: NOW,
     config,
     cards: cardsFor({ channelsConfig: config, states: [state("greenhouse"), failing] }),
-    channelStats: new Map([["xing", windowStat({ runs: 4, failed: 4, lastRun: { startedAt: NOW, status: "failed", errorCode: "blocked" } })], ["greenhouse", windowStat({ runs: 6, fetched: 812, newCount: 14 })]]),
+    channelStats: new Map([["xing", windowStat({ runs: 4, failed: 4, lastRun: { startedAt: NOW, status: "failed", errorCode: "blocked", interrupted: false } })], ["greenhouse", windowStat({ runs: 6, fetched: 812, newCount: 14 })]]),
     boardHealth: [
       boardHealth("greenhouse", "zellwerk"),
       boardHealth("greenhouse", "gegensprech", { lastStatus: "error", lastErrorCode: "not_found", consecutiveFailures: 3 }),
@@ -109,7 +109,7 @@ describe("buildRegistryViewFromMirror", () => {
         row("greenhouse", { sourceGroup: "ats" }),
         row("board:greenhouse:zellwerk", { type: "ats_board", sourceGroup: "ats", name: "Zellwerk", parentId: "greenhouse", params: { ats: "greenhouse", token: "zellwerk" } }),
       ],
-      channelStats: new Map([["xing", windowStat({ lastRun: { startedAt: NOW, status: "failed", errorCode: "blocked" } })]]),
+      channelStats: new Map([["xing", windowStat({ lastRun: { startedAt: NOW, status: "failed", errorCode: "blocked", interrupted: false } })]]),
       boardHealth: [boardHealth("greenhouse", "zellwerk")],
       boardSeen: new Map(),
       settings: REGISTRY_DEFAULTS,
@@ -179,7 +179,7 @@ describe("skipped runs, cascade standby, the recommended switch, one time basis"
   it("the last run is dated by its end, like the last success", () => {
     const cfg = own(true);
     const started = new Date(NOW.getTime() - 2 * 60_000);
-    const stats = new Map([["linkedin-brightdata", windowStat({ runs: 1, lastRun: { startedAt: started, finishedAt: NOW, status: "succeeded", errorCode: null } })]]);
+    const stats = new Map([["linkedin-brightdata", windowStat({ runs: 1, lastRun: { startedAt: started, finishedAt: NOW, status: "succeeded", errorCode: null, interrupted: false } })]]);
     expect(build(cfg, cardsFor({ channelsConfig: cfg, states: [state("linkedin-brightdata")] }), stats).channels.find((c) => c.id === "linkedin-brightdata")?.lastRun?.at).toBe(NOW.toISOString());
   });
 });
