@@ -14,7 +14,10 @@ import type { Db } from "@/lib/db/client";
 import { countScoreBacklog, countUnscoredJobs, listScoreCandidates, listScoreQueue, markScoresStaleByPromptVersion, saveScore, type ScoreCandidate } from "@/lib/db/repos/scores";
 import { asGermanLevel, parseLocations, parseSalary } from "@/lib/db/queries/parse";
 import { parseFilterReason } from "@/lib/filter/reasons";
-import { cleanDescriptionsForAi } from "@/lib/traps/clean";
+import { cleanDescriptionsWithSpans } from "@/lib/traps/clean";
+import type { TrapSpan } from "@/lib/traps/types";
+
+import { scoredReasons } from "./evidence";
 
 import { languagePenalty, resolveGermanLevel } from "./german";
 import { recheckGerman } from "./german-recheck";
@@ -87,6 +90,8 @@ export interface ScoringResult {
   failed: number;
   /** Scores marked stale at the start because the prompt version changed. */
   staleByPromptVersion: number;
+  /** Reasons the model marked as stated in the JD whose quote was not found there (or touched an AI trap): stored as inferred. */
+  evidenceDowngraded: number;
   /** Current scores whose German level / deduction was settled again at the start (the job's rule level changed). */
   germanRechecked: number;
   /** Postings still waiting after this run. */
@@ -134,15 +139,25 @@ function toPromptJob(candidate: ScoreCandidate, description: string | null): Sco
   };
 }
 
-const clean = (items: readonly string[], max: number): string[] => items.map((s) => s.trim()).filter((s) => s !== "").slice(0, max);
+interface ScoreContext {
+  profile: ScoringProfile;
+  snapshotId: number;
+  bonusCap: number;
+  forAi: ReadonlyMap<number, string | null>;
+  pipeline: PipelineConfig;
+  language: ScoreLanguage | null;
+  promptVersion: string;
+  output: ScoreOutputLanguages;
+  /** `ai.yaml: scoring.evidence.enabled`: ask for and check the source of every reason. */
+  evidence: boolean;
+  /** The AI trap spans of each picked JD (only loaded with `evidence`): a quote touching one is not evidence. */
+  trapSpans: ReadonlyMap<number, TrapSpan[]>;
+}
 
 /** Score one posting and store it. Throws on provider or database failure. */
-async function scoreCandidate(
-  deps: ScoringDeps,
-  ctx: { profile: ScoringProfile; snapshotId: number; bonusCap: number; forAi: ReadonlyMap<number, string | null>; pipeline: PipelineConfig; language: ScoreLanguage | null; promptVersion: string; output: ScoreOutputLanguages },
-  candidate: ScoreCandidate,
-): Promise<{ provider: string; rankValue: number | null }> {
+async function scoreCandidate(deps: ScoringDeps, ctx: ScoreContext, candidate: ScoreCandidate): Promise<{ provider: string; rankValue: number | null; downgraded: number; evidenceColumnMissing: boolean }> {
   const { config } = deps;
+  const quoteMaxChars = config.scoring.evidence.quote_max_chars;
   const prompt = buildScorePrompt({
     me: ctx.profile.me,
     preferences: ctx.profile.preferences,
@@ -154,9 +169,13 @@ async function scoreCandidate(
     currency: ctx.pipeline.market.currency,
     output: ctx.output,
     criteria: config.scoring.criteria,
+    evidence: ctx.evidence,
+    quoteMaxChars,
   });
-  const result = await deps.router.run("score", prompt, scoreOutputSchemaFor(ctx.output), { jobId: candidate.jobId, ...(deps.signal ? { signal: deps.signal } : {}) });
+  const result = await deps.router.run("score", prompt, scoreOutputSchemaFor(ctx.output, { evidence: ctx.evidence, quoteMaxChars }), { jobId: candidate.jobId, ...(deps.signal ? { signal: deps.signal } : {}) });
   const output: ScoreOutput = result.value;
+  // cleaned, checked against the stored JD and split from the same lists, so the reasons and their sources line up
+  const reasons = scoredReasons(output, { evidence: ctx.evidence, description: candidate.description, trapSpans: ctx.trapSpans.get(candidate.jobId) ?? [], quoteMinChars: config.scoring.evidence.quote_min_chars });
 
   const german = resolveGermanLevel({ rule: asGermanLevel(candidate.germanLevelRule), ai: output.german_level_required, jdText: candidate.description ?? "", pipeline: ctx.pipeline });
   const penalty = languagePenalty(german.level, ctx.profile.me, config.scoring.language_penalty, ctx.pipeline.market.language?.code ?? null);
@@ -164,7 +183,7 @@ async function scoreCandidate(
   const signalBonus = candidate.existing.signalBonus;
   const rankValue = computeRankValue(score, signalBonus, ctx.bonusCap);
 
-  await saveScore(deps.db, {
+  const saved = await saveScore(deps.db, {
     jobId: candidate.jobId,
     rowId: candidate.existing.id,
     profileSnapshotId: ctx.snapshotId,
@@ -175,8 +194,9 @@ async function scoreCandidate(
     score,
     signalBonus,
     rankValue,
-    fitReasons: clean(output.fit_reasons, 4),
-    gaps: clean(output.gaps, 3),
+    fitReasons: reasons.fitReasons,
+    gaps: reasons.gaps,
+    reasonEvidence: reasons.reasonEvidence,
     summaries: summariesOfAnswer(output, ctx.output),
     outputLang: ctx.output.language,
     germanLevel: german.level,
@@ -193,8 +213,9 @@ async function scoreCandidate(
       source: german.source,
     });
   }
+  if (reasons.downgraded > 0) deps.logger.info("reason quotes not found in the JD, stored as inferred", { jobId: candidate.jobId, downgraded: reasons.downgraded });
   deps.logger.info("job scored", { jobId: candidate.jobId, provider: result.provider, aiScore: output.score, germanPenalty: penalty, score });
-  return { provider: result.provider, rankValue };
+  return { provider: result.provider, rankValue, downgraded: reasons.downgraded, evidenceColumnMissing: reasons.reasonEvidence !== null && saved.evidence === "column_missing" };
 }
 
 /** Filter notes that mean "could not place the posting" for the priority's location part. */
@@ -271,6 +292,7 @@ export async function runScoring(deps: ScoringDeps, options: ScoringOptions): Pr
     scoredJobs: [],
     failed: 0,
     staleByPromptVersion: 0,
+    evidenceDowngraded: 0,
     germanRechecked: 0,
     backlog: { unscored: 0, stale: 0 },
     providers: {},
@@ -319,8 +341,11 @@ export async function runScoring(deps: ScoringDeps, options: ScoringOptions): Pr
   const candidates = await loadInOrder(deps, snapshotId, picked);
   result.candidates = candidates.length;
   // Hidden text and instructions to the AI are taken out of the JD the model reads (the German check below keeps the real JD)
-  const forAi = await cleanDescriptionsForAi(deps.db, candidates.map((c) => ({ jobId: c.jobId, description: c.description })), { logger: deps.logger });
-  const ctx = { profile, snapshotId, bonusCap, forAi, pipeline, language, promptVersion, output };
+  // Reason sources (off by default) check a quote against the stored JD: it must not touch the same trap spans (one read of them)
+  const { texts: forAi, spans: trapSpans } = await cleanDescriptionsWithSpans(deps.db, candidates.map((c) => ({ jobId: c.jobId, description: c.description })), { logger: deps.logger });
+  const evidence = deps.config.scoring.evidence.enabled;
+  const ctx: ScoreContext = { profile, snapshotId, bonusCap, forAi, pipeline, language, promptVersion, output, evidence, trapSpans };
+  let evidenceWarned = false;
 
   let next = 0;
   // the candidates that got an answer or a failure of their own (the rest is what the usage cap held back, if it stopped the run)
@@ -330,7 +355,12 @@ export async function runScoring(deps: ScoringDeps, options: ScoringOptions): Pr
       const candidate = candidates[next++];
       if (candidate === undefined) return;
       try {
-        const { provider, rankValue } = await scoreCandidate(deps, ctx, candidate);
+        const { provider, rankValue, downgraded, evidenceColumnMissing } = await scoreCandidate(deps, ctx, candidate);
+        result.evidenceDowngraded += downgraded;
+        if (evidenceColumnMissing && !evidenceWarned) {
+          evidenceWarned = true;
+          deps.logger.warn("reason sources not stored: the database is not migrated yet (scores.reason_evidence is missing)", { jobId: candidate.jobId });
+        }
         tried.add(candidate.jobId);
         result.scored += 1;
         result.scoredJobs.push({ jobId: candidate.jobId, rankValue });

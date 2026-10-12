@@ -51,3 +51,26 @@ describe("ai.yaml scoring block", () => {
     expect(paths((s) => { s.language_penalty = {}; })).toEqual([]);
   });
 });
+
+describe("ai.yaml scoring.evidence", () => {
+  it("is off with a 150-character quote when the key is absent (an older ai.yaml needs no change)", () => {
+    const raw = structuredClone(shippedYaml("ai.yaml"));
+    delete (raw.scoring as Record<string, unknown>).evidence;
+    expect(configRegistry.ai.schema.parse(raw).scoring.evidence).toEqual({ enabled: false, quote_max_chars: 150, quote_min_chars: 8 });
+    (raw.scoring as Record<string, unknown>).evidence = { enabled: true };
+    expect(configRegistry.ai.schema.parse(raw).scoring.evidence).toEqual({ enabled: true, quote_max_chars: 150, quote_min_chars: 8 });
+  });
+
+  it("rejects unusable values and unknown keys", () => {
+    const evidence = (value: unknown) => paths((s) => { s.evidence = value; });
+    expect(evidence({ enabled: "yes" })).toContain("scoring.evidence.enabled");
+    expect(evidence({ quote_max_chars: 0 })).toContain("scoring.evidence.quote_max_chars");
+    expect(evidence({ quote_max_chars: 10_000 })).toContain("scoring.evidence.quote_max_chars");
+    expect(evidence({ typo: 1 })).toContain("scoring.evidence");
+    expect(evidence({ enabled: true, quote_max_chars: 80 })).toEqual([]);
+    expect(evidence({ quote_min_chars: 0 })).toContain("scoring.evidence.quote_min_chars");
+    expect(evidence({ quote_min_chars: 101 })).toContain("scoring.evidence.quote_min_chars");
+    expect(evidence({ quote_min_chars: 30, quote_max_chars: 20 })).toContain("scoring.evidence.quote_min_chars");
+    expect(evidence({ quote_min_chars: 20, quote_max_chars: 20 })).toEqual([]);
+  });
+});

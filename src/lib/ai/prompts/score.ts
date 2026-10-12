@@ -50,21 +50,93 @@ export function summaryLanguages(output: ScoreOutputLanguages): string[] {
 }
 
 const summaryText = z.string().trim().min(1).max(400);
+const reasonText = z.string().trim().min(1).max(200);
 
+/**
+ * Frozen: the answer schema every score so far was made with (reasons and gaps as plain strings). The version fingerprint is
+ * taken from it, and it is what goes to the model while reason sources are off.
+ */
 const scoreBaseSchema = z.object({
   score: z.number().int().min(0).max(100),
-  fit_reasons: z.array(z.string().trim().min(1).max(200)).max(MAX_FIT_REASONS),
-  gaps: z.array(z.string().trim().min(1).max(200)).max(MAX_GAPS),
+  fit_reasons: z.array(reasonText).max(MAX_FIT_REASONS),
+  gaps: z.array(reasonText).max(MAX_GAPS),
   german_level_required: z.enum(GERMAN_LEVELS),
 });
 
-/** The model's answer: the base fields plus one `summary_<lang>` per summary language. */
-export type ScoreOutput = z.infer<typeof scoreBaseSchema> & { readonly [summary: `summary_${string}`]: string };
+/**
+ * Where a reason comes from: `jd` the posting states it (with a verbatim quote), `inferred` the AI concluded it from the posting
+ * and the profile, `unstated` (gaps only) the posting does not say it. null: the model gave no source (an answer in the old shape).
+ */
+export const FIT_REASON_BASES = ["jd", "inferred"] as const;
+export const GAP_REASON_BASES = ["jd", "inferred", "unstated"] as const;
+export type ReasonBasis = (typeof GAP_REASON_BASES)[number];
 
-/** zod schema of the model's answer for `output` (one `summary_<lang>` per summary language). */
-export function scoreOutputSchemaFor(output: ScoreOutputLanguages): z.ZodType<ScoreOutput> {
+/** One reason or gap with its source, as the model answers it while reason sources are on. */
+export interface ReasonItem {
+  text: string;
+  basis: ReasonBasis | null;
+  quote: string | null;
+}
+
+/** Longest quote the prompt asks for when the caller gives none (`ai.yaml: scoring.evidence.quote_max_chars` sets it at run time). */
+export const DEFAULT_QUOTE_MAX_CHARS = 150;
+
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
+
+/**
+ * One reason as the model answered it, read leniently before the strict check, so a near miss does not cost the whole score (and a
+ * paid retry): a plain string (the old shape) is a reason without a source; an unknown `basis` is no source, `unstated` on a fit
+ * reason is `inferred`; a missing or non-string `quote` is null and one over the limit is cut to it (its start is still a verbatim
+ * piece of the JD, checked later like any quote); extra keys are dropped. Anything without a string `text` is not a reason: null.
+ * The text itself is left to the strict check, as in the old schema.
+ */
+function normalizeReason(value: unknown, bases: readonly ReasonBasis[], quoteMaxChars: number): ReasonItem | null {
+  if (typeof value === "string") return { text: value, basis: null, quote: null };
+  if (!isRecord(value) || typeof value.text !== "string") return null;
+  const raw = value.basis;
+  const basis = bases.find((b) => b === raw) ?? (raw === "unstated" && bases.includes("inferred") ? "inferred" : null);
+  const quote = typeof value.quote === "string" ? value.quote.slice(0, quoteMaxChars) : null;
+  return { text: value.text, basis, quote };
+}
+
+/** The reasons of an answer read leniently (see `normalizeReason`); what is not a reason at all is dropped, so the rest stays aligned. */
+function normalizeReasons(bases: readonly ReasonBasis[], quoteMaxChars: number) {
+  return (value: unknown): unknown => (Array.isArray(value) ? value.map((item) => normalizeReason(item, bases, quoteMaxChars)).filter((item) => item !== null) : value);
+}
+
+function reasonListSchema(bases: readonly [ReasonBasis, ...ReasonBasis[]], quoteMaxChars: number, max: number) {
+  // every key required, `additionalProperties: false`: what OpenAI-style strict schemas need; "absent" is null. The `.max()` on the
+  // quote stays so the schema sent to the provider asks for it; the lenient read has already cut a longer one.
+  const item = z.strictObject({ text: reasonText, basis: z.enum(bases).nullable(), quote: z.string().max(quoteMaxChars).nullable() });
+  return z.preprocess(normalizeReasons(bases, quoteMaxChars), z.array(item).max(max));
+}
+
+/** The model's answer: the base fields plus one `summary_<lang>` per summary language. Reasons are strings, or items while reason sources are on. */
+export type ScoreOutput = Omit<z.infer<typeof scoreBaseSchema>, "fit_reasons" | "gaps"> & {
+  fit_reasons: ReadonlyArray<string | ReasonItem>;
+  gaps: ReadonlyArray<string | ReasonItem>;
+} & { readonly [summary: `summary_${string}`]: string };
+
+/** Reason sources in the prompt and the answer schema (`ai.yaml: scoring.evidence`); off unless the caller turns them on. */
+export interface ScoreEvidenceOptions {
+  evidence?: boolean;
+  /** Longest quote asked for (default `DEFAULT_QUOTE_MAX_CHARS`). */
+  quoteMaxChars?: number;
+}
+
+/**
+ * zod schema of the model's answer for `output` (one `summary_<lang>` per summary language). With `evidence` every reason and gap
+ * is an object `{ text, basis, quote }`; a plain string is still accepted (read as a reason without a source).
+ */
+export function scoreOutputSchemaFor(output: ScoreOutputLanguages, options: ScoreEvidenceOptions = {}): z.ZodType<ScoreOutput> {
   const summaries = Object.fromEntries(summaryLanguages(output).map((code) => [summaryKey(code), summaryText]));
-  return scoreBaseSchema.extend(summaries) as unknown as z.ZodType<ScoreOutput>;
+  if (options.evidence !== true) return scoreBaseSchema.extend(summaries) as unknown as z.ZodType<ScoreOutput>;
+  const quoteMax = options.quoteMaxChars ?? DEFAULT_QUOTE_MAX_CHARS;
+  return scoreBaseSchema.extend({
+    fit_reasons: reasonListSchema(FIT_REASON_BASES, quoteMax, MAX_FIT_REASONS),
+    gaps: reasonListSchema(GAP_REASON_BASES, quoteMax, MAX_GAPS),
+    ...summaries,
+  }) as unknown as z.ZodType<ScoreOutput>;
 }
 
 /** zod schema of the model's answer (the reference rendering). `german_level_required` is the model's reading of the JD, cross-checked in code. */
@@ -137,7 +209,22 @@ export interface ScoreLanguage {
   examples: string;
 }
 
-function systemText(language: ScoreLanguage | null, output: ScoreOutputLanguages = REFERENCE_OUTPUT, criteria: ScoringCriteria = NO_CRITERIA): string {
+/**
+ * What the prompt says about reason sources, appended at the very end of the system text (so the text before it, and the
+ * version fingerprint taken without it, stay the same). Changing these lines bumps `REASON_EVIDENCE_VERSION`, not `score-v1`.
+ */
+function evidenceLines(quoteMaxChars: number): string[] {
+  return [
+    "",
+    'Reason sources: every item of "fit_reasons" and "gaps" is an object {"text", "basis", "quote"} instead of a plain sentence.',
+    '- "text": the sentence, as described above.',
+    '- "basis": "jd" when the posting itself states it; "inferred" when you conclude it from the posting and the candidate profile but the posting does not say it in so many words. In "gaps" only: "unstated" when the gap is that the posting does not say something.',
+    `- "quote": with "jd", the shortest piece of the posting that proves the reason, at most ${quoteMaxChars} characters, copied word for word in the posting's own language: never translated, even when "text" is in another language. null with "inferred" and "unstated".`,
+    '- When you cannot quote the posting word for word, use "inferred". Never quote the candidate profile.',
+  ];
+}
+
+function systemText(language: ScoreLanguage | null, output: ScoreOutputLanguages = REFERENCE_OUTPUT, criteria: ScoringCriteria = NO_CRITERIA, evidence: ScoreEvidenceOptions = {}): string {
   const outputName = promptLanguageName(output.language);
   const main = summaryKey(output.language);
   const also = summaryLanguages(output).slice(1);
@@ -162,6 +249,7 @@ function systemText(language: ScoreLanguage | null, output: ScoreOutputLanguages
     `- "${main}": one ${outputName} sentence saying what the role is.${also.map((code) => ` "${summaryKey(code)}": the same in one ${promptLanguageName(code)} sentence.`).join("")}`,
     "- Output only the JSON object.",
     ...criteriaLines(criteria),
+    ...(evidence.evidence === true ? evidenceLines(evidence.quoteMaxChars ?? DEFAULT_QUOTE_MAX_CHARS) : []),
   ];
   return lines.join("\n");
 }
@@ -176,8 +264,8 @@ function fingerprint(system: string): string {
   return createHash("sha256").update(system).update("\u0000").update(JSON.stringify(z.toJSONSchema(scoreOutputSchema, { io: "output", target: "draft-2020-12" }))).digest("hex").slice(0, 8);
 }
 
-/** What the scoring prompt is rendered with besides the market; both parts are optional (the reference rendering). */
-export interface ScorePromptOptions {
+/** What the scoring prompt is rendered with besides the market; every part is optional (the reference rendering, no reason sources). */
+export interface ScorePromptOptions extends ScoreEvidenceOptions {
   output?: ScoreOutputLanguages;
   criteria?: ScoringCriteria;
 }
@@ -186,10 +274,11 @@ export interface ScorePromptOptions {
  * The scoring prompt's system text and version for a market's language, output languages and criteria.
  * The version: `score-v1`, `+m<fingerprint>` when the market renders differently from the German one before the market packs (taken
  * on the reference output), `+c<hash>` when there are criteria. The output language is not part of it: changing it does
- * not re-score (older scores keep their language and are marked).
+ * not re-score (older scores keep their language and are marked). Neither are reason sources (`evidence`): the fingerprint is
+ * taken from the rendering without them, so turning them on re-scores nothing; only scores made from then on carry them.
  */
 export function scorePromptFor(language: ScoreLanguage | null, options: ScorePromptOptions = {}): { system: string; version: string } {
-  const system = systemText(language, options.output, options.criteria);
+  const system = systemText(language, options.output, options.criteria, { ...(options.evidence !== undefined ? { evidence: options.evidence } : {}), ...(options.quoteMaxChars !== undefined ? { quoteMaxChars: options.quoteMaxChars } : {}) });
   const print = fingerprint(systemText(language));
   const market = print === BASE_RENDERING_FINGERPRINT ? "" : `+m${print}`;
   const criteria = criteriaFingerprint(options.criteria ?? NO_CRITERIA);
@@ -214,6 +303,10 @@ export interface ScorePromptInput {
   output?: ScoreOutputLanguages;
   /** `ai.yaml: scoring.criteria`. */
   criteria?: ScoringCriteria;
+  /** `ai.yaml: scoring.evidence.enabled`: ask for the source of every reason (default false: the prompt is the one without sources). */
+  evidence?: boolean;
+  /** `ai.yaml: scoring.evidence.quote_max_chars`. */
+  quoteMaxChars?: number;
 }
 
 export interface ScorePromptJob {
@@ -318,5 +411,13 @@ export function buildScorePrompt(input: ScorePromptInput): AiPrompt {
     "</job_description>",
   ].join("\n");
 
-  return { system: scorePromptFor(input.language, { ...(input.output ? { output: input.output } : {}), ...(input.criteria ? { criteria: input.criteria } : {}) }).system, user };
+  return {
+    system: scorePromptFor(input.language, {
+      ...(input.output ? { output: input.output } : {}),
+      ...(input.criteria ? { criteria: input.criteria } : {}),
+      ...(input.evidence === true ? { evidence: true } : {}),
+      ...(input.quoteMaxChars !== undefined ? { quoteMaxChars: input.quoteMaxChars } : {}),
+    }).system,
+    user,
+  };
 }

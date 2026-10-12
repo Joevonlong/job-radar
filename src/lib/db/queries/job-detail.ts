@@ -6,6 +6,8 @@ import type { Db } from "../client";
 import { getFavorite, type FavoriteState } from "../repos/favorites";
 import { getClosureOverride, type ClosureOverride } from "../repos/closures";
 import { uxTablesReady } from "../repos/ux-tables";
+import { reasonEvidenceColumnReady } from "../repos/scores";
+import { parseReasonEvidence, type ReasonEvidence } from "@/lib/scoring/evidence";
 import { getGhostOfJob } from "../repos/ghost";
 import { getVisaOfJob, type VisaDetail } from "../repos/visa";
 import type { GhostOfJob } from "@/lib/ghost/types";
@@ -35,6 +37,8 @@ export interface JobScoreDetail {
   filterFloorEur: number | null;
   fitReasons: string[];
   gaps: string[];
+  /** Where each reason and gap comes from, aligned with `fitReasons` / `gaps`; null for a score made without reason sources. */
+  reasonEvidence: ReasonEvidence | null;
   /** The one-line summary per language. */
   summaries: Record<string, string>;
   /** The language of `fitReasons` / `gaps`; null when unknown (no AI output). */
@@ -99,7 +103,7 @@ export interface JobDetail {
   ghost: GhostOfJob | null;
 }
 
-type ScoreRow = typeof scores.$inferSelect;
+type ScoreRow = Omit<typeof scores.$inferSelect, "reasonEvidence"> & { reasonEvidence?: unknown };
 
 /**
  * The score row the detail page shows: the newest one, except that a newest row which passed the
@@ -143,11 +147,19 @@ export async function getFilterFloors(db: Db, jobIds: readonly number[]): Promis
   return out;
 }
 
+/** The columns of `scores` the page reads: all of them once `reason_evidence` exists, all but that one before the migration. */
+async function scoreColumns(db: Db) {
+  const { reasonEvidence: _reasonEvidence, ...rest } = getTableColumns(scores);
+  void _reasonEvidence;
+  return (await reasonEvidenceColumnReady(db)) ? getTableColumns(scores) : rest;
+}
+
 async function displayedScore(db: Db, jobId: number): Promise<ScoreRow | null> {
-  const [newest] = await db.select().from(scores).where(eq(scores.jobId, jobId)).orderBy(desc(scores.createdAt), desc(scores.id)).limit(1);
+  const columns = await scoreColumns(db);
+  const [newest] = await db.select(columns).from(scores).where(eq(scores.jobId, jobId)).orderBy(desc(scores.createdAt), desc(scores.id)).limit(1);
   if (!newest || newest.score !== null || newest.filterResult !== "passed") return newest ?? null;
   const [scored] = await db
-    .select()
+    .select(columns)
     .from(scores)
     .where(and(eq(scores.jobId, jobId), isNotNull(scores.score)))
     .orderBy(desc(scores.createdAt), desc(scores.id))
@@ -243,6 +255,7 @@ export async function getJobDetail(db: Db, id: number): Promise<JobDetail | null
           filterFloorEur,
           fitReasons: score.fitReasons,
           gaps: score.gaps,
+          reasonEvidence: parseReasonEvidence(score.reasonEvidence, { fit: score.fitReasons.length, gaps: score.gaps.length }),
           summaries: summariesOf(score),
           outputLang: score.outputLang,
           stale: score.score !== null && score.stale, // only a row with AI output can be outdated

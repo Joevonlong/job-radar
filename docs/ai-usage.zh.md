@@ -19,6 +19,8 @@
 
 两种费用都在**写入时**按当时的 `models.yaml` 算好存下；以后改价格不会改写历史。迁移前的旧行新列都是空（页面上叫"旧记录"）。
 
+打开理由来源（`ai.yaml: scoring.evidence`）后，每次打分为每条理由多写一个来源和一段短引用，输出 token 会变多。对比打开前后 `score` 任务的输出 token 中位数即可；这些调用仍记作 `score`。见 [score-evidence.zh.md](score-evidence.zh.md)。
+
 ## 价格：`price` 和 `equivalent_price`
 
 - `price`：只给 API 服务商，真实计费，参与月预算。可加 `cached_input_per_mtok`（缓存命中的输入）、`cache_write_per_mtok`（写入缓存的输入）；不写就按 `input_per_mtok` 算（和以前一样偏保守）。

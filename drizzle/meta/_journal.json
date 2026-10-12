@@ -225,6 +225,13 @@
       "when": 1791755993451,
       "tag": "0031_job_ghost",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1791762199900,
+      "tag": "0032_score_reason_evidence",
+      "breakpoints": true
     }
   ]
 }

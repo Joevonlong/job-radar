@@ -5,6 +5,14 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **Reason sources** (off by default, `ai.yaml: scoring.evidence`): each fit reason and gap on the job page says whether
+  the posting states it (with its own words and a jump to them in the job description), the AI inferred it, or the
+  posting does not mention it. Quotes are checked against the posting; one that is not found counts as inferred. Nothing
+  is re-scored; old scores show their reasons as before. Costs more output tokens per scoring call: see
+  [docs/score-evidence.md](docs/score-evidence.md). Before rolling back to an older version, delete `scoring.evidence`.
+
 ## [2.0.1] - 2026-10-11
 
 ### Upgrade notes

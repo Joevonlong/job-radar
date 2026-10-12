@@ -28,6 +28,12 @@ AI 标签的打分区块里有**打分标准**（`ai.yaml: scoring.criteria`）�
 能写成规则的“不能接受”（岗位要求的语言等级高于你、JD 里的某个短语），更省钱的做法是在 我的画像 → 我要什么 里写成**一票否决项**：
 它在硬过滤里、任何 AI 调用之前否决岗位，不花打分调用。见 [deal-breakers.zh.md](deal-breakers.zh.md)。
 
+## AI 标签：理由来源
+
+**理由来源**（`ai.yaml: scoring.evidence`，默认关闭）给详情页的每条匹配理由和差距标上**原文**（附 JD 原话，可跳到原文）、**推断**或**未提及**。
+打开后每次打分多回答一些（输出 token 变多），引用长度由 `quote_max_chars`（默认 150）封顶，短于 `quote_min_chars`（默认 8，不计空格）的引用按推断处理。两项设置都不会触发重打；旧分数的理由照旧显示、没有来源。
+见 [score-evidence.zh.md](score-evidence.zh.md)。
+
 ## AI 标签：下拉选择
 
 - **provider 顺序**（`order`、`api_order`、各任务的 `tasks.<任务>.order`）是有序列表：上移 / 下移 / 移除，用"添加"下拉补回。可选值只有 `config/ai-options.ts` 里定义的 provider，`ai.yaml` 的 schema 也从这里取，不会两处不一致。

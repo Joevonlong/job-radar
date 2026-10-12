@@ -220,6 +220,16 @@ scoring:
     priorities: []
     dealbreakers: []
     nice_to_have: []
+  # Reason sources (docs/score-evidence.md): the AI marks every fit reason and gap as "JD" (with a word-for-word quote that is
+  # checked against the JD; one that is not found becomes "inferred"), "inferred", or (gaps only) "not stated".
+  # Off by default: every score then writes the quotes too, i.e. more output tokens per score (compare the median output
+  # tokens of "score" calls on /ai-usage before and after). Changing these keys re-scores nothing; only new scores carry sources.
+  evidence:
+    enabled: false
+    # Longest quote the AI is asked for (characters); shorter quotes are found more reliably and cost fewer tokens
+    quote_max_chars: 150
+    # Shortest quote that counts (characters other than spaces); a shorter one is stored as "inferred"
+    quote_min_chars: 8
   # Scoring order: rank first by an AI-free relevance pre-score, then send to the AI from high to low.
   # Pre-score = sum of weight x item score (0..1), minus the local language gap; only used for ordering, never shown.
   priority:

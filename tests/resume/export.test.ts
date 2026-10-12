@@ -50,6 +50,7 @@ function jobDetail(over: Partial<JobDetail> = {}): JobDetail {
       filterFloorEur: null,
       fitReasons: [],
       gaps: [],
+      reasonEvidence: null,
       summaries: {},
       outputLang: null,
       stale: false,

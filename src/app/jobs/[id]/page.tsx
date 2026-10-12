@@ -6,7 +6,8 @@ import { getFormatter, getLocale, getTranslations } from "next-intl/server";
 import { BackLink } from "@/components/jobs/detail/back-link";
 import { BreakdownPanel } from "@/components/jobs/detail/breakdown-panel";
 import { ChecksPanel } from "@/components/jobs/detail/checks-panel";
-import { GHOST_QUOTE, TRAP_QUOTE, VISA_QUOTE } from "@/components/jobs/detail/marks";
+import { EVIDENCE_QUOTE, GHOST_QUOTE, TRAP_QUOTE, VISA_QUOTE } from "@/components/jobs/detail/marks";
+import { ReasonSource } from "@/components/jobs/detail/reason-source";
 import { CompPanel } from "@/components/jobs/detail/comp-panel";
 import { GermanPanel } from "@/components/jobs/detail/german-panel";
 import { JdPanel } from "@/components/jobs/detail/jd-panel";
@@ -48,6 +49,7 @@ import { loadDealBreakerNotice } from "@/lib/dashboard/deal-breakers";
 import { channelDisplayName, knownContract, knownFamily } from "@/lib/dashboard/labels";
 import { buildSkillAliasMap, matchSkills, profileSkillKeys } from "@/lib/dashboard/skills";
 import { quotesFoundInJd } from "@/lib/dashboard/jd";
+import { reasonSourceViews } from "@/lib/dashboard/reason-evidence";
 import { loadModelCatalog } from "@/lib/ai/catalog";
 import { buildBreakdownView } from "@/lib/breakdown/view";
 import { readBreakdownSettings } from "@/lib/breakdown/settings";
@@ -192,6 +194,7 @@ export default async function JobDetailPage({ params }: { params: Params }) {
   // The salary level within the benchmark and the on-demand salary lookup (salary.yaml; the lookup is off by default)
   const tSalary = await getTranslations("salary");
   const tGhost = await getTranslations("ghostJobs");
+  const tEvidence = await getTranslations("scoreEvidence");
   const salarySettings = readSalarySettings();
   let salaryAi: AiConfig | null = null;
   try {
@@ -233,12 +236,15 @@ export default async function JobDetailPage({ params }: { params: Params }) {
   // marked only while the result shows (watch / likely): not once it is dismissed
   const ghostMark = ghostView?.quote && (ghostView.state === "watch" || ghostView.state === "likely") ? ghostMarkText(ghostView.quote) : "";
   const ghostChannelNames = Object.fromEntries(job.sources.map((source) => [source.channelId, channelDisplayName(source.channelId, source.family, (family) => tDash(`source.${family}`))]));
-  const jdQuotes: Array<{ text: string; tier: string; trapKind?: "hidden" | "instruction" }> = [
+  const checkQuotes: Array<{ text: string; tier: string; trapKind?: "hidden" | "instruction" }> = [
     ...baseQuotes,
     ...trapItems.map((item) => ({ text: item.markText as string, tier: TRAP_QUOTE, trapKind: item.markKind })),
     ...visaMarks.map((text) => ({ text, tier: VISA_QUOTE })),
     ...(ghostMark !== "" ? [{ text: ghostMark, tier: GHOST_QUOTE }] : []),
   ];
+  // The verified JD quotes of the scoring reasons (reason sources); their marks come last, a quote another mark already has jumps there
+  const reasonSources = reasonSourceViews(job.score?.reasonEvidence ?? null, checkQuotes);
+  const jdQuotes = [...checkQuotes, ...reasonSources.marks.map((text) => ({ text, tier: EVIDENCE_QUOTE }))];
   const trapMarksFound = quotesFoundInJd(job.description, jdQuotes.map((q) => q.text));
   const trapJdIndex: Record<number, number> = {};
   trapItems.forEach((item, i) => {
@@ -264,6 +270,11 @@ export default async function JobDetailPage({ params }: { params: Params }) {
             .join(" · "),
         }
       : null;
+  const reasonJumpable = (mark: number | null) => mark !== null && trapMarksFound[mark] === true;
+  // a score made before reason sources (or while they were off) says so, but only while they are on: then a new score would carry them
+  const evidenceOn = salaryAi?.scoring.evidence.enabled === true;
+  const reasonsWithoutSources = evidenceOn && job.score !== null && job.score.reasonEvidence === null && job.score.fitReasons.length + job.score.gaps.length > 0;
+  const jdLang = job.language === "en" || job.language === "de" ? job.language : undefined;
   const hasDescription = job.description !== null && job.description.trim() !== "";
   const inJd = quotesFoundInJd(job.description, quoteList.map((q) => q.text));
   const signalRows = activeSignals.map((s, index) => ({
@@ -464,7 +475,7 @@ export default async function JobDetailPage({ params }: { params: Params }) {
                 <ul className="flex flex-col gap-1.5 text-[13px]" lang={reasonsLang} aria-label={t("fit.title")} data-testid="fit-list">
                   {job.score.fitReasons.map((reason, index) => (
                     <li key={index} className={cn(REASON_ROW, "before:bg-good before:text-on-bad before:content-['+']")}>
-                      {reason}
+                      <ReasonSource text={reason} source={reasonSources.fit[index] ?? null} jumpable={reasonJumpable(reasonSources.fit[index]?.mark ?? null)} quoteLang={jdLang} />
                     </li>
                   ))}
                 </ul>
@@ -475,7 +486,7 @@ export default async function JobDetailPage({ params }: { params: Params }) {
                 <ul className="flex flex-col gap-1.5 text-[13px]" lang={reasonsLang} aria-label={t("gaps.title")} data-testid="gaps-list">
                   {job.score.gaps.map((gap, index) => (
                     <li key={index} className={cn(REASON_ROW, "before:bg-warn before:text-on-signal before:content-['–']")}>
-                      {gap}
+                      <ReasonSource text={gap} source={reasonSources.gaps[index] ?? null} jumpable={reasonJumpable(reasonSources.gaps[index]?.mark ?? null)} quoteLang={jdLang} />
                     </li>
                   ))}
                 </ul>
@@ -483,6 +494,11 @@ export default async function JobDetailPage({ params }: { params: Params }) {
                 <PlaceholderBox testId="gaps-pending">{t("gaps.pending")}</PlaceholderBox>
               )}
             </div>
+            {reasonsWithoutSources ? (
+              <p className="text-ink-3 text-data-sm mt-3 font-mono" data-testid="reasons-evidence-legacy">
+                {tEvidence("legacy")}
+              </p>
+            ) : null}
           </Panel>
 
           <Panel
