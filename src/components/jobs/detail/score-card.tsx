@@ -44,14 +44,19 @@ export interface ScoreCardProps {
 
 /**
  * "Rank value" card of the detail page: the 20-cell meter with the 72px number, the stacked match + bonus bar, and the
- * numbers behind it. A job the filter removed has no rank value and says so; one waiting for the AI shows the pending state.
+ * numbers behind it. A job the filter removed shows the score it earned (without the push line); one that has no number says so,
+ * and one waiting for the AI shows the pending state.
  */
 export function ScoreCard({ jobId, score, pushLine, bonusCap, scoreNow, scoredWhen, languageName = null, ghost = null }: ScoreCardProps) {
   const t = useTranslations("dashboard.detail");
   const tRank = useTranslations("dashboard.rank");
   const tMeta = useTranslations("scoring.meta");
-  const notRanked = score !== null && score.filterResult === "filtered_out";
-  const scored = score !== null && score.rankValue !== null && !notRanked;
+  // A job the filter removed keeps the score it earned (0 is a score): only one without any number is "not ranked"; one that passed
+  // without a number yet is waiting. Why a job was filtered out is said by the filter banner of the page, not by this card.
+  const notRanked = score !== null && score.filterResult === "filtered_out" && score.rankValue === null;
+  const scored = score !== null && score.rankValue !== null;
+  // a filtered-out job is never pushed: no push line on its meter and bar
+  const line = score?.filterResult === "filtered_out" ? null : pushLine;
   const bonus = score === null ? 0 : Math.min(score.signalBonus, bonusCap);
   const meta =
     scored && score
@@ -75,10 +80,10 @@ export function ScoreCard({ jobId, score, pushLine, bonusCap, scoreNow, scoredWh
           <>
             <JobViewTransition id={jobId} part="score">
               <div className="w-fit max-w-full" data-rank="ranked">
-                <ScoreMeter value={score.rankValue} pushLine={pushLine} size="xl" match={score.score} bonus={bonus} />
+                <ScoreMeter value={score.rankValue} pushLine={line} size="xl" match={score.score} bonus={bonus} />
               </div>
             </JobViewTransition>
-            <ScoreComposition match={score.score} bonus={bonus} bonusCap={bonusCap} pushLine={pushLine} />
+            <ScoreComposition match={score.score} bonus={bonus} bonusCap={bonusCap} pushLine={line} />
           </>
         ) : (
           // not scored yet: one dashed box (the design's null state), not an empty meter and an empty bar

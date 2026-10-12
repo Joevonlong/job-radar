@@ -148,6 +148,12 @@ test.describe("mobile (390px)", () => {
 
     // phone top bar: terminal black
     await expect(page.getByTestId("topbar")).toHaveCSS("background-color", "rgb(17, 17, 17)");
+    // the status dot: its name starts with the word drawn on it (nothing is drawn while all is well)
+    const dot = page.getByTestId("topbar").getByTestId("cycle-status-dot");
+    await expect(dot).toBeVisible();
+    const word = ((await dot.textContent()) ?? "").replace("●", "").trim();
+    const dotName = (await dot.getAttribute("aria-label")) ?? "";
+    expect(dotName.startsWith(word === "" ? "处理轮状态：" : `${word} · `)).toBe(true);
     // the theme and language buttons stay on the bar
     await expect(page.getByTestId("topbar").getByRole("button", { name: "切换深浅主题" })).toBeVisible();
     await expect(page.getByTestId("topbar").getByRole("button", { name: "切换语言" })).toBeVisible();

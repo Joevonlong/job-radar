@@ -5,7 +5,6 @@ import { describe, expect, it } from "vitest";
 
 import { JobBadges } from "@/components/jobs/job-badges";
 import type { JobListItem } from "@/components/jobs/types";
-import { RankValue } from "@/components/jobs/rank-value";
 import { SignalBadge } from "@/components/jobs/signal-badge";
 import { SourceIcon } from "@/components/jobs/source-icons";
 import { VisaBadge } from "@/components/jobs/visa-badge";
@@ -53,41 +52,6 @@ describe("VisaBadge", () => {
     rerender(wrap(<VisaBadge visa={{ status: "not_offered", kind: "no_sponsorship" }} />));
     expect(screen.getByTestId("visa-badge")).toHaveTextContent(en.visa.badge.no_sponsorship);
     expect(screen.getByTestId("visa-badge")).toHaveAttribute("title", en.visa.badgeTitle.no_sponsorship);
-  });
-});
-
-describe("RankValue", () => {
-  it("says it is waiting for AI when there is no score", () => {
-    render(wrap(<RankValue rank={null} />));
-    expect(screen.getByText(/waiting for AI/)).toBeInTheDocument();
-  });
-
-  it("colours by band and shows the breakdown", () => {
-    const rank = { rankValue: 97, score: 82, signalBonus: 15, filterResult: "passed" as const, filterReasons: [], stale: false };
-    const { container } = render(wrap(<RankValue rank={rank} />));
-    expect(container.querySelector("[data-rank=top]")).not.toBeNull();
-    expect(screen.getByText("97")).toHaveClass("text-score-top-text");
-    expect(screen.getByText("= 82 + 15")).toBeInTheDocument();
-  });
-
-  it("says waiting for AI, not outdated, for a passed job whose row has no score yet", () => {
-    const rank = { rankValue: null, score: null, signalBonus: 0, filterResult: "passed" as const, filterReasons: [], stale: true };
-    const { container } = render(wrap(<RankValue rank={rank} />));
-    expect(screen.getByText(/waiting for AI/)).toBeInTheDocument();
-    expect(container.querySelector("[data-rank=pending]")).not.toBeNull();
-    expect(screen.queryByTestId("rank-stale")).toBeNull();
-  });
-
-  it("marks an old score as outdated", () => {
-    const rank = { rankValue: 70, score: 70, signalBonus: 0, filterResult: "passed" as const, filterReasons: [], stale: true };
-    render(wrap(<RankValue rank={rank} />));
-    expect(screen.getByTestId("rank-stale")).toHaveTextContent("outdated");
-  });
-
-  it("shows hard-filtered jobs as not ranked", () => {
-    const rank = { rankValue: null, score: null, signalBonus: 0, filterResult: "filtered_out" as const, filterReasons: ["x"], stale: false };
-    render(wrap(<RankValue rank={rank} />));
-    expect(screen.getByText("not ranked")).toBeInTheDocument();
   });
 });
 

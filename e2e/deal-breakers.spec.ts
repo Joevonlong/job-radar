@@ -79,6 +79,11 @@ test("a vetoed job names the rule, quotes the posting and shows both levels; Kee
     await expect(explanation.getByTestId("deal-breaker-levels")).toContainText("B1");
     await expect(explanation.getByTestId("deal-breaker-quote")).toContainText("Deutschkenntnisse (B2)");
     await expect(page.getByTestId("detail-header").getByRole("button", { name: "仍然保留" })).toBeVisible();
+    // the score the job earned stays on the rank card (the banner says why it is filtered out); a veto means no push, so no push line
+    const rankBox = page.getByTestId("rank-box");
+    await expect(rankBox.locator('[data-rank="ranked"]')).toBeVisible();
+    await expect(rankBox.locator('[data-rank="not-ranked"]')).toHaveCount(0);
+    await expect(rankBox.locator(".jr-segm--noline")).toHaveCount(1);
 
     // in the filtered list the row carries the rule's name
     await page.goto("/jobs?q=Orbitrail&filtered=true");

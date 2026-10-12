@@ -74,6 +74,56 @@ test.describe("favorites", () => {
     await expect.poll(() => favCount(page)).toBe(before);
   });
 
+  for (const locale of ["zh", "en"] as const) {
+    test(`the note sits on its own line at 1280px (${locale}): the add button and a short note are tappable, the star label and a long note stay in the cell, a saved note survives a reload`, async ({ page, context, baseURL }) => {
+      await context.addCookies([{ name: "NEXT_LOCALE", value: locale, url: baseURL ?? "http://127.0.0.1:3100" }]);
+      await page.setViewportSize({ width: 1280, height: 900 });
+      await open(page, "/favorites");
+      const row = () => rowOf(page, "Prompt Engineer");
+      const box = (id: string) => row().getByTestId(id).boundingBox();
+      // every control is measured against its own cell: nothing sticks out of it
+      const fits = (selector: string) => row().locator(selector).evaluate((el) => el.scrollWidth <= el.clientWidth);
+      const noteIsAlone = async () => {
+        const note = await box("fav-note-edit");
+        const label = await row().locator('[data-slot="fav-note"] > span[title]').first().boundingBox();
+        expect(note?.y ?? 0).toBeGreaterThanOrEqual((label?.y ?? 0) + (label?.height ?? 0) - 1);
+      };
+
+      // no note yet: the button is there, wide enough to hit, and not squeezed beside the star label
+      expect((await box("fav-note-edit"))?.width ?? 0).toBeGreaterThanOrEqual(40);
+      await noteIsAlone();
+      expect(await fits('[data-slot="fav-note"] > span[title]')).toBe(true);
+      expect(await fits(".jb-cell--job")).toBe(true);
+
+      // a very short note
+      await row().getByTestId("fav-note-edit").click();
+      await row().getByTestId("fav-note-input").fill("ok");
+      await row().getByTestId("fav-note-input").press("Enter");
+      await expect(row().getByTestId("fav-note-edit")).toHaveText("ok");
+      expect((await box("fav-note-edit"))?.width ?? 0).toBeGreaterThanOrEqual(40);
+      await page.reload();
+      await page.waitForLoadState("networkidle");
+      await expect(row().getByTestId("fav-note-edit")).toHaveText("ok");
+      await noteIsAlone();
+
+      // a long note without a space does not push the cell wider
+      const long = "x".repeat(180);
+      await row().getByTestId("fav-note-edit").click();
+      await row().getByTestId("fav-note-input").fill(long);
+      await row().getByTestId("fav-note-input").press("Enter");
+      await expect(row().getByTestId("fav-note-edit")).toHaveText(long);
+      expect(await fits(".jb-cell--job")).toBe(true);
+      expect(await fits('[data-slot="fav-note"] > span[title]')).toBe(true);
+      expect((await box("fav-note-edit"))?.width ?? 0).toBeGreaterThanOrEqual(40);
+
+      // put it back
+      await row().getByTestId("fav-note-edit").click();
+      await row().getByTestId("fav-note-input").fill("");
+      await row().getByTestId("fav-note-input").press("Enter");
+      await expect(row().getByTestId("fav-note-edit")).toHaveText(locale === "en" ? "Add note" : "添加备注");
+    });
+  }
+
   test("the f key toggles the focused row, and it stays starred after a reload", async ({ page }) => {
     await open(page, "/jobs?q=Freelance+ML+Engineer");
     const row = rowOf(page, "Freelance ML Engineer");

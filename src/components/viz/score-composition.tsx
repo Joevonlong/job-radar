@@ -13,8 +13,8 @@ export interface ScoreCompositionProps {
   bonus: number | null | undefined;
   /** Largest signal bonus (`interests.yaml` cap); the bar spans `100 + bonusCap` points. */
   bonusCap: number;
-  /** Push line, marked on the scale. */
-  pushLine: number;
+  /** Push line, marked on the scale. Null = none (a job that is never pushed): the scale has no push line label. */
+  pushLine: number | null;
   className?: string;
 }
 
@@ -83,9 +83,11 @@ export function ScoreComposition({ match, bonus, bonusCap, pushLine, className }
       </div>
       <div className="jr-comp__lg" aria-hidden>
         <span style={{ left: 0 }}>0</span>
-        <span data-line style={{ left: pctStyle((clamp(pushLine, 0, scale) / scale) * 100) }}>
-          {t("composition.pushLine", { value: pushLine })}
-        </span>
+        {pushLine === null ? null : (
+          <span data-line style={{ left: pctStyle((clamp(pushLine, 0, scale) / scale) * 100) }}>
+            {t("composition.pushLine", { value: pushLine })}
+          </span>
+        )}
         <span style={{ left: pctStyle((100 / scale) * 100) }}>100</span>
         <span style={{ left: "100%" }}>{scale}</span>
       </div>

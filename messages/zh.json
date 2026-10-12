@@ -383,6 +383,16 @@
         "aiOffline": "AI 离线",
         "partial": "部分失败"
       },
+      "dotName": "{word} · {label}：{detail}",
+      "dotNameQuiet": "{label}：{detail}",
+      "dotDetail": {
+        "offline": "runner 已停止上报",
+        "failed": "上一轮失败",
+        "running": "处理轮运行中",
+        "partial": "上一轮部分失败",
+        "aiOffline": "AI worker 没有上报",
+        "idle": "空闲"
+      },
       "partial": "部分失败",
       "stepsFailed": "失败",
       "partialWhy": "查看原因"
@@ -903,8 +913,6 @@
     "rank": {
       "pending": "等待 AI 打分",
       "notRanked": "未参与排序",
-      "valueLabel": "排序值 {value}",
-      "breakdown": "= {match} + {bonus}",
       "stale": "已过期",
       "staleHint": "分数是在旧画像或旧 prompt 下算的，后续处理轮会重新打分。"
     },
@@ -3815,6 +3823,7 @@
       "pushLine": "推送线 {line}",
       "tip": "排序值 {value} · 三角是推送线 {line}",
       "tipPending": "排序值 等待打分 · 三角是推送线 {line}",
+      "tipNoLine": "排序值 {value}",
       "breakdown": "{match} + {bonus}",
       "aria": "排序值 {value}/100，{band}",
       "ariaPending": "排序值 等待打分",

@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { listRows } from "./list-rows";
+import { EXCLUSIVE_TAG } from "./projects";
 
 /**
  * Pay and benefit signals on the seeded e2e database. Fictional seed job used here:
@@ -13,7 +14,8 @@ async function open(page: Page, path: string) {
 }
 
 test.describe("signals", () => {
-  test("rows carry category tags, and the high-value filter keeps only jobs with an amount or equity (the default high-value categories)", async ({ page }) => {
+  // counts the whole /jobs table before and after clearing a filter: other specs that close and reopen seeded jobs must not run meanwhile
+  test("rows carry category tags, and the high-value filter keeps only jobs with an amount or equity (the default high-value categories)", { tag: EXCLUSIVE_TAG }, async ({ page }) => {
     await open(page, "/jobs");
     const total = await listRows(page).count();
     expect(total).toBeGreaterThan(3);

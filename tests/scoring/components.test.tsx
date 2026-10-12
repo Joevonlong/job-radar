@@ -5,7 +5,6 @@ import { describe, expect, it } from "vitest";
 
 import { GermanPanel } from "@/components/jobs/detail/german-panel";
 import { JobBadges } from "@/components/jobs/job-badges";
-import { RankValue } from "@/components/jobs/rank-value";
 import type { JobListItem } from "@/components/jobs/types";
 
 import en from "../../messages/en.json";
@@ -57,25 +56,6 @@ describe("GermanPanel", () => {
     render(wrap(<GermanPanel languageName="德语" {...base} />, "zh"));
     expect(screen.getByText("要求德语 C1")).toBeInTheDocument();
     expect(screen.getByTestId("german-penalty")).toHaveTextContent("匹配分扣 20 分");
-  });
-});
-
-describe("RankValue stale marker", () => {
-  const rank = { rankValue: 70, score: 70, signalBonus: 0, filterResult: "passed" as const, filterReasons: [], stale: true };
-
-  it("marks an outdated score in the list", () => {
-    render(wrap(<RankValue rank={rank} />));
-    expect(screen.getByTestId("rank-stale")).toHaveTextContent("outdated");
-  });
-
-  it("shows nothing for a fresh score", () => {
-    render(wrap(<RankValue rank={{ ...rank, stale: false }} />));
-    expect(screen.queryByTestId("rank-stale")).toBeNull();
-  });
-
-  it("says a job is waiting for scoring", () => {
-    render(wrap(<RankValue rank={null} />));
-    expect(screen.getByText("waiting for AI scoring")).toBeInTheDocument();
   });
 });
 

@@ -151,8 +151,36 @@ describe("CycleStatusDotView (phone top bar)", () => {
     expect(screen.getByTestId("cycle-status-dot")).toHaveTextContent("离线");
     expect(screen.getByTestId("cycle-status-dot")).toHaveAttribute("href", "/sources");
   });
-});
 
+  // WCAG 2.5.3: what a screen reader calls the dot starts with the word drawn on it, in the page's language
+  const faces: Array<{ name: string; status: ShellStatus; state: string }> = [
+    { name: "offline", state: "offline", status: { ...base, runner: { online: false, ageSeconds: 900 } } },
+    { name: "failed", state: "failed", status: { ...base, state: "failed" } },
+    { name: "running", state: "running", status: { ...base, state: "running", progress: { phase: "fetch", status: "running", kind: "weekday_evening", done: 3, total: 9 } } },
+    { name: "partial", state: "partial", status: { ...base, cycle: { id: 8, kind: "weekday_morning", status: "partial", failedSteps: ["pipeline"], partialSteps: [] } } },
+    { name: "ai worker offline", state: "ai-offline", status: { ...base, aiWorker: { expected: true, online: false, ageSeconds: 300 } } },
+  ];
+
+  describe.each(["en", "zh"] as const)("accessible name (%s)", (locale) => {
+    it.each(faces)("$name: starts with the visible word, then says what it means", ({ status, state }) => {
+      render(wrap(<CycleStatusDotView status={status} />, locale));
+      const dot = screen.getByTestId("cycle-status-dot");
+      expect(dot).toHaveAttribute("data-state", state);
+      const word = (dot.textContent ?? "").replace("●", "").trim();
+      expect(word).not.toBe("");
+      const label = dot.getAttribute("aria-label") ?? "";
+      expect(label.startsWith(`${word} · `)).toBe(true);
+      // a dedicated sentence, not the desktop box's terminal word (OFFLINE / FAILED / RUNNING)
+      expect(label).not.toMatch(/OFFLINE|FAILED|RUNNING/);
+      expect(screen.getByRole("link", { name: label })).toBe(dot);
+    });
+
+    it("idle: no word on the dot, so the name is the status label and what it means", () => {
+      render(wrap(<CycleStatusDotView status={base} />, locale));
+      expect(screen.getByTestId("cycle-status-dot").getAttribute("aria-label")).toBe(locale === "en" ? "Cycle status: idle" : "处理轮状态：空闲");
+    });
+  });
+});
 
 describe("CycleStatusView: a silent runner and a partly failed cycle", () => {
   it("shows OFFLINE and the partial failure with its steps, both at once", () => {

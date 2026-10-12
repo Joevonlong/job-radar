@@ -13,8 +13,8 @@ export type ScoreMeterSize = "sm" | "md" | "xl";
 export interface ScoreMeterProps {
   /** The rank value: 0-100 for a match score, up to 100 + the bonus cap with signals. The number shows it as it is (106 stays 106); the cells stop at full and mark the overflow. Null = not scored yet: shows `—` and "等待打分", never 0. */
   value: number | null | undefined;
-  /** Score at which a job is pushed (`notify.yaml: push_min_score`). Drawn as the red triangle. */
-  pushLine: number;
+  /** Score at which a job is pushed (`notify.yaml: push_min_score`). Drawn as the red triangle. Null = no line: a job that is never pushed (the filter removed it) shows no triangle and a tip without it. */
+  pushLine: number | null;
   /** `sm`: 10 cells (lists, phones) · `md`: 20 cells · `xl`: 20 big cells and the 72px number (detail page, once per page). */
   size?: ScoreMeterSize;
   /** AI match score and signal bonus, shown after the band name (`· 78+10`). Not shown at `sm`. */
@@ -40,7 +40,7 @@ export function ScoreMeter({ value, pushLine, size = "md", match, bonus, max = 1
   const perCell = 100 / cells;
   const lit = shown === null ? 0 : Math.round(clamp(shown, 0, 100) / perCell);
   const over = shown === null ? 0 : Math.max(0, Math.round(shown) - 100);
-  const cut = Math.round(clamp(pushLine, 0, 100) / perCell);
+  const cut = pushLine === null ? 0 : Math.round(clamp(pushLine, 0, 100) / perCell);
   const band = shown === null ? t("band.pending") : t(`band.${scoreTone(shown)}`);
   const showSplit = shown !== null && size !== "sm" && known(match) && known(bonus);
   const bandText = showSplit ? `${band} · ${formatScoreValue(match)}+${formatScoreValue(bonus)}` : band;
@@ -51,7 +51,14 @@ export function ScoreMeter({ value, pushLine, size = "md", match, bonus, max = 1
       : showSplit
         ? t("score.valueTextSplit", { value: valueNow, band, match: formatScoreValue(match), bonus: formatScoreValue(bonus) })
         : `${t("score.valueText", { value: valueNow })}, ${band}`;
-  const tip = shown === null ? t("score.tipPending", { line: pushLine }) : t("score.tip", { value: valueNow ?? 0, line: pushLine });
+  const tip =
+    pushLine === null
+      ? shown === null
+        ? t("score.pending")
+        : t("score.tipNoLine", { value: valueNow ?? 0 })
+      : shown === null
+        ? t("score.tipPending", { line: pushLine })
+        : t("score.tip", { value: valueNow ?? 0, line: pushLine });
 
   const cellsView = Array.from({ length: cells }, (_, index) => <i key={index} className={cx(index < lit && "jr-on", over > 0 && index === cells - 1 && "jr-over")} style={stepStyle(index)} />);
   const meterProps =
@@ -80,7 +87,7 @@ export function ScoreMeter({ value, pushLine, size = "md", match, bonus, max = 1
         )}
       </span>
       <span className="jr-score__t">
-        <span {...meterProps} className={cx("jr-segm jr-tip", `jr-segm--${size}`, shown === null && "jr-segm--pending")} style={cssVars({ "--cut": pctStyle((cut / cells) * 100) })} data-tip={tip}>
+        <span {...meterProps} className={cx("jr-segm jr-tip", `jr-segm--${size}`, shown === null && "jr-segm--pending", pushLine === null && "jr-segm--noline")} style={cssVars({ "--cut": pctStyle((cut / cells) * 100) })} data-tip={tip}>
           {cellsView}
         </span>
         <span className="jr-score__b">{bandText}</span>

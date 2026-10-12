@@ -383,6 +383,16 @@
         "aiOffline": "AI OFF",
         "partial": "Partial"
       },
+      "dotName": "{word} · {label}: {detail}",
+      "dotNameQuiet": "{label}: {detail}",
+      "dotDetail": {
+        "offline": "the runner has stopped reporting",
+        "failed": "the last cycle failed",
+        "running": "a cycle is running",
+        "partial": "the last cycle partly failed",
+        "aiOffline": "the AI worker is not reporting",
+        "idle": "idle"
+      },
       "partial": "PARTIAL",
       "stepsFailed": "failed",
       "partialWhy": "See why"
@@ -903,8 +913,6 @@
     "rank": {
       "pending": "waiting for AI scoring",
       "notRanked": "not ranked",
-      "valueLabel": "Rank value {value}",
-      "breakdown": "= {match} + {bonus}",
       "stale": "outdated",
       "staleHint": "Scored under an older profile or prompt; it is re-scored in the next cycles."
     },
@@ -3815,6 +3823,7 @@
       "pushLine": "Push line {line}",
       "tip": "Rank value {value} · the triangle is the push line {line}",
       "tipPending": "Rank value awaiting score · the triangle is the push line {line}",
+      "tipNoLine": "Rank value {value}",
       "breakdown": "{match} + {bonus}",
       "aria": "Rank value {value}/100, {band}",
       "ariaPending": "Rank value awaiting score",
