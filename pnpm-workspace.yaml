@@ -4,3 +4,10 @@ allowBuilds:
   '@swc/core': false
   esbuild: false
   unrs-resolver: false
+
+# drizzle-kit pulls in the deprecated @esbuild-kit/* loader, which pins
+# esbuild 0.18.x (dev-server CORS advisory, fixed in 0.25.0). Force the
+# patched line for that one path only. Remove once drizzle-kit no longer
+# depends on @esbuild-kit/*.
+overrides:
+  '@esbuild-kit/core-utils>esbuild': ^0.25.12
