@@ -383,6 +383,16 @@
         "aiOffline": "AI OFF",
         "partial": "Partial"
       },
+      "dotName": "{word} · {label}: {detail}",
+      "dotNameQuiet": "{label}: {detail}",
+      "dotDetail": {
+        "offline": "the runner has stopped reporting",
+        "failed": "the last cycle failed",
+        "running": "a cycle is running",
+        "partial": "the last cycle partly failed",
+        "aiOffline": "the AI worker is not reporting",
+        "idle": "idle"
+      },
       "partial": "PARTIAL",
       "stepsFailed": "failed",
       "partialWhy": "See why"

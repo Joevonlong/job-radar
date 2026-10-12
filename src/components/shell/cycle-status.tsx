@@ -192,24 +192,27 @@ export function CycleStatusDotView({ status, className }: { status: ShellStatus 
   const locale = resolveLocale(useLocale());
   if (status === null) return null;
   const health = shellHealth(status);
+  // The dot's name starts with the word on screen (WCAG 2.5.3 label in name), then says what it means in the page's language;
+  // the desktop box above keeps its own terminal-style words and has its own keys
   const face =
     health === "offline"
-      ? { state: "offline", tone: "text-term-bad", word: t("dot.offline"), aria: t("offline") }
+      ? { state: "offline", tone: "text-term-bad", word: t("dot.offline"), detail: t("dotDetail.offline") }
       : status.state === "failed"
-        ? { state: "failed", tone: "text-term-bad", word: t("dot.failed"), aria: t("failed") }
+        ? { state: "failed", tone: "text-term-bad", word: t("dot.failed"), detail: t("dotDetail.failed") }
         : status.state === "running"
-          ? { state: "running", tone: "text-term-amber", word: t("dot.running"), aria: t("running") }
+          ? { state: "running", tone: "text-term-amber", word: t("dot.running"), detail: t("dotDetail.running") }
           : failedStepsOf(status).length > 0
-            ? { state: "partial", tone: "text-term-amber", word: t("dot.partial"), aria: t("partial") }
-          : health === "aiOffline"
-            ? { state: "ai-offline", tone: "text-term-bad", word: t("dot.aiOffline"), aria: t("aiWorkerNever") }
-            : { state: "idle", tone: "text-term-green", word: null, aria: t("idle") };
+            ? { state: "partial", tone: "text-term-amber", word: t("dot.partial"), detail: t("dotDetail.partial") }
+            : health === "aiOffline"
+              ? { state: "ai-offline", tone: "text-term-bad", word: t("dot.aiOffline"), detail: t("dotDetail.aiOffline") }
+              : { state: "idle", tone: "text-term-green", word: null, detail: t("dotDetail.idle") };
+  const name = face.word === null ? t("dotNameQuiet", { label: t("label"), detail: face.detail }) : t("dotName", { word: face.word, label: t("label"), detail: face.detail });
   return (
     <Link
       href="/sources"
       data-testid="cycle-status-dot"
       data-state={face.state}
-      aria-label={`${t("label")}: ${face.aria}`}
+      aria-label={name}
       className={cn("flex min-h-sp-6 flex-none items-center gap-1 rounded-tag px-sp-1 font-mono text-data-sm whitespace-nowrap", face.tone, className)}
     >
       <span aria-hidden>●</span>

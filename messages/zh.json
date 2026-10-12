@@ -383,6 +383,16 @@
         "aiOffline": "AI 离线",
         "partial": "部分失败"
       },
+      "dotName": "{word} · {label}：{detail}",
+      "dotNameQuiet": "{label}：{detail}",
+      "dotDetail": {
+        "offline": "runner 已停止上报",
+        "failed": "上一轮失败",
+        "running": "处理轮运行中",
+        "partial": "上一轮部分失败",
+        "aiOffline": "AI worker 没有上报",
+        "idle": "空闲"
+      },
       "partial": "部分失败",
       "stepsFailed": "失败",
       "partialWhy": "查看原因"
