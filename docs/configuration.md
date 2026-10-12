@@ -308,6 +308,7 @@ missing: the defaults below apply. The phrases live in the market packs (`rules.
 | | `job_checks.ghost.reposted.min_gap_days` / `.points` | 30 / 2 | Relisted by the same source under a new id at the same place at least this many days later (1–3650 / 0–10) |
 | | `job_checks.ghost.evergreen_wording.points` | 2 | The JD says talent pool / always open (0–10) |
 | | `job_checks.ghost.thin_description.min_words` / `.points` | 120 / 1 | A full-text JD shorter than this, or without a duties section (0–5000 / 0–10) |
+| | `job_checks.ghost.thin_description.infer_from_headings` | `true` | Without a current JD breakdown, the duties headings decide whether a long JD has a duties section. `false`: the headings are not read, so only a short JD counts (a current breakdown still decides, an empty duties list included) |
 | | `job_checks.ghost.<signal>.enabled` | `true` | Each signal can be turned off |
 | | `job_checks.ghost.quote_max_chars` | 280 | Longest quote (40–2000) |
 | | `job_checks.ghost.negation_words_before` / `_after` | 6 / 5 | Words around an evergreen phrase searched for a negation (0–20); a pack with `negation_after: clause` searches after it to the end of the clause instead |

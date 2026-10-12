@@ -44,8 +44,9 @@ export function ghostReasonMessage(reason: GhostReason, channelName: (channelId:
       return { key: "reason.evergreen_wording", values: {} };
     case "thin_description": {
       const short = reason.words < reason.minWords;
-      if (short && !reason.hasResponsibilities) return { key: "reason.thin_short_none", values: { words: reason.words } };
-      if (short) return { key: "reason.thin_short", values: { words: reason.words } };
+      // `none`: the duties were not looked for, so only the length is named (a long JD is never a reason then)
+      if (reason.responsibilitiesFrom === "none" || (short && reason.hasResponsibilities)) return { key: "reason.thin_short", values: { words: reason.words } };
+      if (short) return { key: "reason.thin_short_none", values: { words: reason.words } };
       return { key: reason.responsibilitiesFrom === "breakdown" ? "reason.thin_none_breakdown" : "reason.thin_none", values: {} };
     }
   }

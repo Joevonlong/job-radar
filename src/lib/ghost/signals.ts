@@ -112,35 +112,97 @@ export function reposted(postings: readonly GhostPosting[], rules: CompiledGhost
 // ---------------------------------------------------------------- headings (duties section)
 
 const LIST_OR_HEADING_MARKER = /^(?:[-*•–·]\s+|\d{1,3}[.)]\s+|#{1,6}\s+)/u;
+/** A list item's line, as the segmenter reads it (a "#" heading is not one). */
+const LIST_LINE = /^\s*(?:[-*•–·]\s+|\d{1,3}[.)]\s+)/u;
 const EMPHASIS = /[*_]+/gu;
 const END_PUNCTUATION = /[.!?;,)\]"'“”»]$/u;
+/** Emoji, arrows and other symbols before a heading ("🚀 Your tasks", "→ Your tasks", "» Deine Aufgaben"), with the joiners and selectors of emoji. */
+const DECORATION = /^[\p{Extended_Pictographic}\p{So}\p{Sk}\u{2190}-\u{21FF}\u{00BB}\u{203A}\u{FE0E}\u{FE0F}\u{200D}\u{20E3}\s]+/u;
+/** … and emoji after it ("Your impact 🌍", "Outcomes 🎯:"); a final ":" stays. */
+const TRAILING_DECORATION = /[\p{Extended_Pictographic}\p{So}\u{FE0E}\u{FE0F}\u{200D}\u{20E3}\s]+(:?)\s*$/u;
+/** A heading line that trails off ("Your tasks…") or ends in a dash ("Your Role -", "Your tasks —") ends as if in ":". */
+const TRAILING_PAUSE = /\s*(?:…|\s[-–]|—)\s*$/u;
+/** … and so does one that ends in three dots ("Your tasks..."), but only right above a list. */
+const TRAILING_DOTS = /\s*\.{3}\s*$/u;
+const QUESTION_END = /\s*[?？]+\s*$/u;
+const APOSTROPHES = /[‘’ʼ]/gu;
+const AMPERSAND_ENTITY = /&amp;/giu;
 
-/** A heading's text as the responsibility patterns see it: no markers, no emphasis, no final colon, single spaces. */
-function headingText(raw: string): string {
-  return raw.replace(EMPHASIS, "").replace(/:\s*$/u, "").replace(/\s+/gu, " ").trim();
+/**
+ * A line as the ghost check reads it when it looks for a heading: "&amp;" as "&", curly apostrophes as straight ones, without
+ * emoji or arrows before it and emoji after it, without list or "#" marker and emphasis, and a final "…", " -" or "—" as ":".
+ * Right above a list (`listFollows`) a final "..." is ":" too, and so is a final "?" when the line opens with one of the packs'
+ * `question_words` ("What will I be doing?" / "- …"): "Ready to take on new responsibilities?" and a question or "..." in the
+ * company text ("Which tasks can our AI automate?" and prose after it) stay sentences. Only for telling headings: quotes and
+ * offsets always come from the description itself.
+ */
+function normalizeHeadingLine(raw: string, rules: CompiledGhostRules, listFollows: boolean): string {
+  let text = raw.replace(AMPERSAND_ENTITY, "&").replace(APOSTROPHES, "'").trim().replace(DECORATION, "");
+  text = text.replace(LIST_OR_HEADING_MARKER, "").replace(DECORATION, "").replace(EMPHASIS, "").replace(TRAILING_DECORATION, "$1").trim();
+  text = text.replace(TRAILING_PAUSE, ":");
+  if (!listFollows) return text;
+  text = text.replace(TRAILING_DOTS, ":");
+  if (QUESTION_END.test(text)) {
+    const first = (wordsOf(text)[0] ?? "").split("'")[0] ?? "";
+    if (rules.questionWords.some((word) => word.test(first))) text = text.replace(QUESTION_END, ":");
+  }
+  return text;
 }
 
-/** The heading-shaped pieces of a line: the whole line when it is short and looks like a heading, and a short "Label:" prefix. */
-function headingsOfLine(line: string, maxChars: number): string[] {
+/** A heading's text as the responsibility patterns see it: normalized (`normalizeHeadingLine`), no final colon, single spaces. */
+function headingText(raw: string, rules: CompiledGhostRules, listFollows: boolean): string {
+  return normalizeHeadingLine(raw, rules, listFollows).replace(/:\s*$/u, "").replace(/\s+/gu, " ").trim();
+}
+
+/** The whole line as a heading (short, and a "#" heading, ending in ":" or without end punctuation), or null. */
+function wholeLineHeading(line: string, rules: CompiledGhostRules, listFollows: boolean): string | null {
   const trimmed = line.trim();
-  if (trimmed === "") return [];
-  const markdown = /^#{1,6}\s+/u.test(trimmed);
-  const content = trimmed.replace(LIST_OR_HEADING_MARKER, "").trim();
+  const content = normalizeHeadingLine(trimmed, rules, listFollows);
+  if (content.length === 0 || content.length > rules.settings.heading_max_chars) return null;
+  if (!/^#{1,6}\s+/u.test(trimmed) && !content.endsWith(":") && END_PUNCTUATION.test(content)) return null;
+  const text = headingText(content, rules, listFollows);
+  return text.length > 0 ? text : null;
+}
+
+/**
+ * The heading-shaped pieces of a line: the whole line when it is short and looks like a heading, and a short "Label:" prefix.
+ * `listFollows`: a list starts at the next line that is not blank, or after one line of lead-in (see `hasResponsibilityHeading`).
+ */
+function headingsOfLine(line: string, rules: CompiledGhostRules, listFollows: boolean): string[] {
+  if (line.trim() === "") return [];
   const out: string[] = [];
-  const plain = content.replace(EMPHASIS, "").trim();
-  if (plain.length > 0 && plain.length <= maxChars && (markdown || plain.endsWith(":") || !END_PUNCTUATION.test(plain))) out.push(headingText(content));
+  const whole = wholeLineHeading(line, rules, listFollows);
+  if (whole !== null) out.push(whole);
+  const content = normalizeHeadingLine(line, rules, listFollows);
   const colon = content.indexOf(":");
-  if (colon > 0 && colon <= maxChars && colon < content.length - 1) out.push(headingText(content.slice(0, colon)));
+  if (colon > 0 && colon <= rules.settings.heading_max_chars && colon < content.length - 1) out.push(headingText(content.slice(0, colon), rules, listFollows));
   return out.filter((text) => text.length > 0);
 }
+
+const isDutiesHeading = (heading: string, rules: CompiledGhostRules): boolean => rules.responsibilities.some((pattern) => pattern.re.test(heading));
 
 /** Whether the text has a heading that opens the duties of the role ("Responsibilities", "Deine Aufgaben:"). */
 export function hasResponsibilityHeading(description: string | null, rules: CompiledGhostRules): boolean {
   if (description === null || rules.responsibilities.length === 0) return false;
-  const max = rules.settings.heading_max_chars;
-  for (const line of description.split("\n")) {
-    for (const heading of headingsOfLine(line, max)) {
-      if (rules.responsibilities.some((pattern) => pattern.re.test(heading))) return true;
+  const lines = description.split("\n");
+  // whether a list starts at the next line that is not blank, or after one line of lead-in that ends in ":" or is itself
+  // heading-shaped ("What will I be doing?" / "As a senior engineer, you will:" / "- …"; not "Which tasks can our AI automate?" /
+  // "Almost all of them." / "- …"), from the end
+  const isList = (at: number): boolean => at !== -1 && LIST_LINE.test(lines[at] as string);
+  const isLeadIn = (at: number): boolean => {
+    const line = (lines[at] as string).trim();
+    return line.endsWith(":") || line.endsWith("：") || wholeLineHeading(line, rules, false) !== null;
+  };
+  const listFollows = new Array<boolean>(lines.length).fill(false);
+  let next = -1;
+  let afterNext = -1;
+  for (let i = lines.length - 1; i >= 0; i -= 1) {
+    listFollows[i] = isList(next) || (next !== -1 && isList(afterNext) && isLeadIn(next));
+    if ((lines[i] as string).trim() !== "") [next, afterNext] = [i, next];
+  }
+  for (const [i, line] of lines.entries()) {
+    for (const heading of headingsOfLine(line, rules, listFollows[i] === true)) {
+      if (isDutiesHeading(heading, rules)) return true;
     }
   }
   return false;
@@ -150,22 +212,23 @@ export function hasResponsibilityHeading(description: string | null, rules: Comp
 
 /**
  * A short JD, or one without a duties section, judged only when the description comes from a source that keeps the full text. A
- * current AI breakdown decides whether there are duties (its count of responsibilities) instead of the headings.
+ * current AI breakdown decides whether there are duties (its count of responsibilities, an empty list included); without one the
+ * duties headings do, unless `infer_from_headings` is off: then only a short JD counts (`responsibilitiesFrom: "none"`).
  */
 export function thinDescription(input: Pick<GhostInput, "description" | "descriptionSource" | "breakdownResponsibilities">, rules: CompiledGhostRules): GhostReasonOf<"thin_description"> | null {
   const settings = rules.settings.thin_description;
   if (!settings.enabled || settings.points <= 0 || input.descriptionSource === null) return null;
   const words = countWords(input.description);
-  const fromBreakdown = input.breakdownResponsibilities !== null;
-  const hasResponsibilities = fromBreakdown ? (input.breakdownResponsibilities as number) > 0 : hasResponsibilityHeading(input.description, rules);
-  if (words >= settings.min_words && hasResponsibilities) return null;
+  const from: GhostReasonOf<"thin_description">["responsibilitiesFrom"] = input.breakdownResponsibilities !== null ? "breakdown" : settings.infer_from_headings ? "headings" : "none";
+  const hasResponsibilities = from === "breakdown" ? (input.breakdownResponsibilities as number) > 0 : from === "headings" && hasResponsibilityHeading(input.description, rules);
+  if (words >= settings.min_words && (hasResponsibilities || from === "none")) return null;
   return {
     code: "thin_description",
     points: settings.points,
     words,
     minWords: settings.min_words,
     hasResponsibilities,
-    responsibilitiesFrom: fromBreakdown ? "breakdown" : "headings",
+    responsibilitiesFrom: from,
     channelId: input.descriptionSource.channelId,
   };
 }
@@ -222,11 +285,29 @@ function negated(segment: TextSegment, hit: Hit, pattern: CompiledGhostPattern, 
   return [...before, ...inside, ...after].some((word) => rules.negationCues.some((cue) => cue.test(word)));
 }
 
+/**
+ * The heading of a list item's list: the segmenter's, else (ghost-local) the first line above the list when the ghost check reads it
+ * as a heading. The segmenter does not take a line ending in "?" or "..." as a list's heading ("What will I be doing?" / "- …").
+ */
+function listHeadingOf(segment: TextSegment, rules: CompiledGhostRules, description: string): string | null {
+  if (segment.listHeading !== undefined) return headingText(description.slice(segment.listHeading.start, segment.listHeading.end), rules, true);
+  if (!segment.listItem) return null;
+  let lineStart = description.lastIndexOf("\n", segment.start - 1) + 1;
+  while (lineStart > 0) {
+    const lineEnd = lineStart - 1;
+    lineStart = description.lastIndexOf("\n", lineEnd - 1) + 1;
+    const line = description.slice(lineStart, lineEnd);
+    // blank lines and the items above it in the same list
+    if (line.trim() === "" || LIST_LINE.test(line)) continue;
+    return wholeLineHeading(line, rules, true);
+  }
+  return null;
+}
+
 /** A list item under a duties heading: the role's work ("Your tasks:" / "- Build our talent pool"), not what the posting is. */
 function underDutiesHeading(segment: TextSegment, rules: CompiledGhostRules, description: string): boolean {
-  if (segment.listHeading === undefined) return false;
-  const heading = headingText(description.slice(segment.listHeading.start, segment.listHeading.end).replace(LIST_OR_HEADING_MARKER, ""));
-  return rules.responsibilities.some((pattern) => pattern.re.test(heading));
+  const heading = listHeadingOf(segment, rules, description);
+  return heading !== null && isDutiesHeading(heading, rules);
 }
 
 /**
@@ -273,7 +354,8 @@ export interface EvergreenOptions {
 /**
  * The first sentence (in text order) that says the posting is a talent pool or always open. A sentence matching `exclude_context`
  * (itself or the question right before it), a sentence that is itself a question (ends in a `lead_in_question.ends` mark), a negated
- * hit and a list item under a duties heading do not count. The quote is verified against the description (C7).
+ * hit, a hit of a pattern with `requires_context` whose sentence has none of it, and a list item under a duties heading do not
+ * count. The quote is verified against the description (C7).
  */
 export function evergreenWording(description: string | null, rules: CompiledGhostRules, options: EvergreenOptions = {}): GhostReasonOf<"evergreen_wording"> | null {
   const settings = rules.settings.evergreen_wording;
@@ -295,6 +377,8 @@ export function evergreenWording(description: string | null, rules: CompiledGhos
     candidates.sort((a, b) => a.hit.start - b.hit.start || b.hit.end - a.hit.end);
     for (const { hit, pattern } of candidates) {
       if (options.skip?.(hit.start, hit.end)) continue;
+      // a broad phrase counts only next to recruiting words ("join our AI talent pool" … "future opportunities")
+      if (pattern.requiresContext.length > 0 && !pattern.requiresContext.some((re) => segment.text.search(re) !== -1)) continue;
       if (pattern.checkNegation && negated(segment, hit, pattern, rules, description)) continue;
       const { quote, offset } = clipQuote(description, segment.start, segment.end, hit, rules.settings.quote_max_chars);
       // C7: the quote must be the description at its offset; a quote that is not is never stored

@@ -223,6 +223,7 @@ web 和 runner 以 `0600`（仅属主）写配置文件：`data/config/*.yaml` �
 | | `job_checks.ghost.reposted.min_gap_days` / `.points` | 30 / 2 | 同一来源在同一地点以新编号重挂，至少相隔这么多天（1–3650 / 0–10） |
 | | `job_checks.ghost.evergreen_wording.points` | 2 | JD 写明是人才库 / 常年招聘（0–10） |
 | | `job_checks.ghost.thin_description.min_words` / `.points` | 120 / 1 | 全文 JD 比这短，或没有职责段落（0–5000 / 0–10） |
+| | `job_checks.ghost.thin_description.infer_from_headings` | `true` | 没有当前 JD 拆解时，由职责标题判断长 JD 有没有职责段落。`false`：不看标题，只有短 JD 才算（有当前拆解时仍以拆解为准，职责列表为空也算） |
 | | `job_checks.ghost.<信号>.enabled` | `true` | 每个信号都可以单独关掉 |
 | | `job_checks.ghost.quote_max_chars` | 280 | 引文最长字数（40–2000） |
 | | `job_checks.ghost.negation_words_before` / `_after` | 6 / 5 | 人才库说法前后查否定词的词数（0–20）；`negation_after: clause` 的市场包在说法后一直找到分句结束 |

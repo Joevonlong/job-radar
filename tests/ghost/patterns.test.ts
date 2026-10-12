@@ -127,6 +127,93 @@ const CASES: ReadonlyArray<readonly [string, string | null]> = [
   ["Diese Ausschreibung dient, wie du siehst, nicht dem Aufbau eines Talentpools.", null],
   ["Wir bauen eine Plattform für Talentpools.", null],
   ["Initiativbewerbung: Keine passende Stelle gefunden? Bewirb dich initiativ.", null],
+  // talent pool with words in between, only with recruiting context in the sentence; "for our future …"
+  ["By joining our AI talent pool, you will be contacted as a priority for our future opportunities in the following areas:", "talent_pool_join"],
+  ["Join our engineering talent community to apply for future roles.", "talent_pool_join"],
+  ["Apply now and join our growing tech talent network.", "talent_pool_join"],
+  ["Send us your CV for our data talent pool.", "talent_pool_join"],
+  ["Submit your CV to join our global talent pool.", "talent_pool"],
+  ["We collect applications for our future openings.", "future_openings"],
+  ["We hire on a rolling basis for our upcoming positions.", "future_openings"],
+  ["Joining our AI talent pool is not a commitment; you can still apply to open roles.", null],
+  ["Berlin offers access to the largest tech talent pool in Europe.", null],
+  ["Tap into a diverse global talent pool.", null],
+  ["Berlin is home to a deep engineering talent pool.", null],
+  ["You will mentor juniors in our internal talent community.", null],
+  ["Organize events for our engineering talent community.", null],
+  ["We run workshops for our internal talent community.", null],
+  ["Contribute to our engineering talent pipeline.", null],
+  ["Contribute to our engineering talent pool.", null],
+  ["Organize events for our engineering talent community and source candidates for open roles.", null],
+  ["We host meetups for our local talent community; candidates of all levels are welcome.", null],
+  ["Join our team and grow with our engineering talent community.", null],
+  ["Join our engineering talent community.", null],
+  ["You will source candidates for our upcoming roles.", null],
+  ["You'll recruit engineers for our future openings.", null],
+  ["You will source candidates for our engineering talent pool.", null],
+  ["Source candidates for our engineering talent pool and run interviews.", null],
+  ["Mentoring for our future roles in leadership.", null],
+  ["Training for our upcoming positions.", null],
+  ["Career development for our future roles", null],
+  // a recruiter's own duties for the talent pool are the role, not the posting
+  ["As a recruiter, you will screen applicants for our engineering talent pool.", null],
+  ["You'll recruit candidates for our tech talent community.", null],
+  ["Identify and attract candidates for our engineering talent pool.", null],
+  ["In this role you will interview candidates for our AI talent network.", null],
+  ["Your job: build relationships with candidates for our tech talent pool.", null],
+  ["- Sourcing and assessing candidates for our data talent pool", null],
+  ["You will evaluate and place applicants into our engineering talent network.", null],
+  // … also on the line under a short heading (the segmenter reads them together)
+  ["Your tasks\nScreen applicants for our engineering talent pool and run interviews.", null],
+  ["About the role\nIdentify and attract candidates for our engineering talent pool.", null],
+  ["About the role\nGrow and nurture our talent pool for future roles.", null],
+  // … and after bullets the segmenter does not take for list markers ("▪", "a)", "✓"), under a heading or an intro sentence
+  ["Your tasks:\n▪ Screen applicants for our engineering talent pool\n▪ Run interviews", null],
+  ["What you'll do\na) Screen applicants for our engineering talent pool\nb) Run interviews", null],
+  ["As our recruiter you will:\n✓ Build relationships with candidates for our tech talent pool", null],
+  ["Acme builds payroll software.\n▪ Screen applicants for our engineering talent pool\n▪ Run interviews", null],
+  ["Acme builds payroll software.\na) Screen applicants for our engineering talent pool\nb) Run interviews", null],
+  ["Acme builds payroll software.\n✓ Build relationships with candidates for our tech talent pool", null],
+  ["Acme builds payroll software.\n➤ Grow and nurture our talent pool for future roles.", null],
+  ["Acme builds payroll software.\n1. Screen applicants for our engineering talent pool\n2. Run interviews", null],
+  ["Acme builds payroll software.\r\n▪ Screen applicants for our engineering talent pool\r\n▪ Run interviews", null],
+  ["Your tasks:\r\n1) Identify and attract candidates for our engineering talent pool", null],
+  // a bullet before the posting's own words changes nothing
+  ["Acme builds payroll software.\n▪ We are hiring for our AI talent pool – apply now.", "talent_pool_join"],
+  ["Acme builds payroll software.\n✓ Interviewing now for our AI talent pool — apply today.", "talent_pool_join"],
+  // … but the posting's own words with the same verbs still count
+  // a noun or title at the start of the sentence is no duty (no object of the verb)
+  ["Interviewing now for our AI talent pool — apply today.", "talent_pool_join"],
+  ["Placements into our AI talent pool happen on a rolling basis; apply now.", "talent_pool_join"],
+  ["Support engineers wanted for our talent pool – apply now.", "talent_pool"],
+  ["Help us grow by joining our engineering talent pool for future roles.", "talent_pool_join"],
+  ["If selected, you will be placed into our AI talent pool and contacted for future roles.", "talent_pool_join"],
+  ["We are hiring for our AI talent pool – apply now.", "talent_pool_join"],
+  ["We are recruiting for our talent pool.", "talent_pool"],
+  ["Hiring for our AI talent pool: apply now.", "talent_pool_join"],
+  ["Recruiting engineers for our data talent pool – send your CV.", "talent_pool_join"],
+  ["Find out how to apply for our AI talent pool and future roles.", "talent_pool_join"],
+  // events for a community, the event word before or after it; "opportunities" only with a job word
+  ["This program is for our talent pool: apply now for future roles.", "talent_pool"],
+  ["This session is for our AI talent pool: candidates apply below.", "talent_pool_join"],
+  ["Join our engineering talent community for networking opportunities and events.", null],
+  ["Join our AI talent community meetups to meet our hiring team.", null],
+  ["Join our tech talent network for mentoring opportunities.", null],
+  ["Join our data talent community for learning opportunities.", null],
+  ["Join our engineering talent pool for new opportunities.", "talent_pool_join"],
+  ["Join our AI talent pool for career opportunities.", "talent_pool_join"],
+  // a list under a duties heading that the segmenter does not see as one ("?" heading, emoji, "&amp;", blank line)
+  ["What awaits you?\n- Coordinate interviews for upcoming positions.", null],
+  ["What will I be doing?\n\n- Run interviews.\n- Coordinate interviews for upcoming positions.", null],
+  ["🛠️ About the role:\n- Coordinate interviews for upcoming positions.", null],
+  ["THE ROLE &amp; THE TEAM\n- Coordinate interviews for upcoming positions.", null],
+  ["Welche Aufgaben erwarten dich?\n- Aufbau unseres Talentpools für zukünftige Stellen", null],
+  // … but not under a question or heading that is not about the duties
+  ["Ready to join us?\n- We are always hiring.", "always_hiring"],
+  ["Why join us?\n- We are always hiring great people.", "always_hiring"],
+  ["Ready to take on new responsibilities?\n- We collect applications for upcoming positions.", "future_openings"],
+  ["Bereit für mehr?\n- Wir stellen laufend ein.", "always_hiring"],
+  ["Warum wir?\n- Wir suchen ständig neue Kolleginnen und Kollegen.", "always_hiring"],
 ];
 
 describe("evergreen_wording against the fixture packs", () => {
@@ -151,6 +238,19 @@ describe("evergreen_wording against the fixture packs", () => {
     const found = evergreenWording(jd, rules);
     expect(found).toMatchObject({ patternId: "talent_pool", quote: "This posting is for our talent pool." });
     expect(jd.slice(found?.offset, (found?.offset ?? 0) + (found?.quote.length ?? 0))).toBe(found?.quote);
+  });
+
+  it("the talent pool posting with words in between: exact quote, offset and pattern", () => {
+    const sentence = "By joining our AI talent pool, you will be contacted as a priority for our future opportunities in the following areas:";
+    const jd = `Are you passionate about AI? We build software for clinics.\n\nWe use AI across our products.\n\n${sentence}\n\nThe areas we are looking for:\n- ML engineering\n- NLP`;
+    const found = evergreenWording(jd, rules);
+    expect(found).toEqual({ code: "evergreen_wording", points: rules.settings.evergreen_wording.points, patternId: "talent_pool_join", quote: sentence, offset: jd.indexOf(sentence) });
+    // each of the two widened patterns finds it on its own
+    const only = (id: string) => ({ ...rules, evergreen: rules.evergreen.filter((pattern) => pattern.id === id) });
+    expect(evergreenWording(jd, only("talent_pool_join"))).toMatchObject({ patternId: "talent_pool_join", quote: sentence, offset: jd.indexOf(sentence) });
+    expect(evergreenWording(jd, only("future_openings"))).toMatchObject({ patternId: "future_openings", quote: sentence, offset: jd.indexOf(sentence) });
+    // and neither did before: the original talent_pool phrase does not take "AI" in between
+    expect(evergreenWording(jd, only("talent_pool"))).toBeNull();
   });
 
   it("skips hits the caller hides (AI trap ranges)", () => {
@@ -195,6 +295,17 @@ describe("evergreen_wording reads its words and limits from the config", () => {
     // a sentence that is itself a question does not count; which marks end a question comes from the pack
     expect(evergreenWording("Our talent pool?", rulesWith(() => {}, lead({})))).toBeNull();
     expect(evergreenWording("Our talent pool?", rulesWith(() => {}, lead({ ends: [] })))?.patternId).toBe("pool");
+  });
+
+  it("requires_context: a hit counts only when its piece also matches one of the entry's patterns", () => {
+    const entry = { id: "pool", pattern: "talent pool", check_negation: true };
+    const plain = rulesWith(() => {}, { ...pack, evergreen_patterns: [entry] });
+    const strict = rulesWith(() => {}, { ...pack, evergreen_patterns: [{ ...entry, requires_context: ["apply"] }] });
+    expect(evergreenWording("Our talent pool.", plain)?.patternId).toBe("pool");
+    expect(evergreenWording("Our talent pool.", strict)).toBeNull();
+    expect(evergreenWording("Our talent pool. Apply now.", strict)).toBeNull();
+    expect(evergreenWording("Apply to our talent pool.", strict)?.patternId).toBe("pool");
+    expect(() => rulesWith(() => {}, { ...pack, evergreen_patterns: [{ ...entry, requires_context: ["(unclosed"] }] })).toThrow("ghost.evergreen_patterns[0].requires_context[0]");
   });
 
   it("a negative list heading cancels its items", () => {

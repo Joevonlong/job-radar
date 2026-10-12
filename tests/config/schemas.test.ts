@@ -444,6 +444,20 @@ describe("visa check settings", () => {
     expect(issuePaths("pipeline", pipeline)).toEqual([]);
   });
 
+  it("pipeline.yaml job_checks.ghost.thin_description.infer_from_headings: true when missing, a boolean otherwise", () => {
+    const pipeline = fixture("pipeline");
+    delete pipeline.config_version;
+    delete pipeline.job_checks;
+    type Thin = { job_checks: { ghost: { thin_description: Record<string, unknown> } } };
+    expect((configRegistry.pipeline.schema.parse(pipeline) as Thin).job_checks.ghost.thin_description.infer_from_headings).toBe(true);
+    pipeline.job_checks = { ghost: { thin_description: { min_words: 80 } } };
+    expect((configRegistry.pipeline.schema.parse(pipeline) as Thin).job_checks.ghost.thin_description).toMatchObject({ min_words: 80, infer_from_headings: true });
+    pipeline.job_checks = { ghost: { thin_description: { infer_from_headings: false } } };
+    expect((configRegistry.pipeline.schema.parse(pipeline) as Thin).job_checks.ghost.thin_description.infer_from_headings).toBe(false);
+    pipeline.job_checks = { ghost: { thin_description: { infer_from_headings: "no" } } };
+    expect(issuePaths("pipeline", pipeline)).toEqual(["job_checks.ghost.thin_description.infer_from_headings"]);
+  });
+
   it("a saved view keeps a visa filter and rejects an unknown one", () => {
     const good = fixture("interests");
     good.views = [{ id: "sponsor", name: "Sponsor", filters: { visa: "offered" } }];

@@ -255,12 +255,15 @@ export type GhostNegationAfter = (typeof GHOST_NEGATION_AFTER)[number];
 /**
  * An `evergreen_patterns` entry. `check_negation: false` for a phrase that is a negation itself ("no current opening", "keine
  * offene Stelle"): its own "no" must not cancel it. `negation_after`: this entry's own window after the phrase (default: its pack's).
+ * `requires_context`: a hit counts only when its piece of text also matches one of these (a broad phrase that is about this
+ * posting only next to recruiting words: "join our AI talent pool" with "apply", "opportunities"); missing or empty = always.
  */
 export const ghostEvergreenPatternSchema = z.strictObject({
   id: ghostPatternId,
   pattern: regexString,
   check_negation: z.boolean().default(true),
   negation_after: z.enum(GHOST_NEGATION_AFTER).optional(),
+  requires_context: regexList.optional(),
 });
 export type GhostEvergreenPatternEntry = z.infer<typeof ghostEvergreenPatternSchema>;
 
@@ -289,6 +292,8 @@ export interface GhostPack {
   evergreen_patterns: GhostEvergreenPatternEntry[];
   responsibility_patterns: GhostPatternEntry[];
   negation_cues: string[];
+  /** Words that open a question ("what", "welche…"): a heading line ending in "?" is read as a heading only after one of them. */
+  question_words: string[];
   /** The default `negation_after` of this pack's evergreen patterns. */
   negation_after: GhostNegationAfter;
   clause_breaks: string[];
@@ -305,6 +310,7 @@ export function emptyGhostPack(): GhostPack {
     evergreen_patterns: [],
     responsibility_patterns: [],
     negation_cues: [],
+    question_words: [],
     negation_after: "words",
     clause_breaks: [],
     exclude_context: [],
@@ -332,6 +338,12 @@ export const ghostPackSchema = z
      * `clause_breaks` match, and in the heading of its list.
      */
     negation_cues: optionalList,
+    /**
+     * Words that open a question ("what", "which", "welche…"); each must match a whole word. A duties heading that ends in "?"
+     * ("What will I be doing?", "Welche Aufgaben erwarten dich?") counts only when its first word is one of these, so "Ready to
+     * take on new responsibilities?" stays a sentence.
+     */
+    question_words: optionalList,
     /** How far after a phrase of this pack a negation cue is searched (`words` / `clause`); an entry's own `negation_after` wins. */
     negation_after: z.enum(GHOST_NEGATION_AFTER).default("words"),
     /** Where the clause after an evergreen phrase ends for the negation search (regular expressions). */

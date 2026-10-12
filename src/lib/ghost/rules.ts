@@ -13,6 +13,8 @@ export interface CompiledGhostPattern {
   checkNegation: boolean;
   /** How far after the phrase a negation cue is searched: `negation_words_after` words, or to the end of the clause. */
   negationAfter: GhostNegationAfter;
+  /** A hit counts only when its piece also matches one of these (flags `iu`); empty = always. */
+  requiresContext: RegExp[];
 }
 
 export interface CompiledGhostRules {
@@ -23,6 +25,8 @@ export interface CompiledGhostRules {
   responsibilities: Array<{ id: string; re: RegExp }>;
   /** Anchored (`^(?:cue)$`): tested against one word. */
   negationCues: RegExp[];
+  /** Anchored (`^(?:word)$`): tested against the first word of a heading that ends in "?". */
+  questionWords: RegExp[];
   clauseBreaks: RegExp[];
   excludeContext: RegExp[];
   /** Which question before a sentence is read with it (the packs' `lead_in_question`; no `ends` = none). */
@@ -47,6 +51,13 @@ function compile(source: string, path: string, flags = "giu"): RegExp {
 
 const compileList = (sources: readonly string[], path: string): RegExp[] => sources.map((source, index) => compile(source, `${path}[${index}]`));
 
+/** Word lists (`negation_cues`, `question_words`): each entry must match one whole word. */
+const anchoredWords = (sources: readonly string[], path: string): RegExp[] =>
+  sources.map((source, index) => {
+    compile(source, `${path}[${index}]`);
+    return new RegExp(`^(?:${source})$`, "iu");
+  });
+
 function compilePrefilter(sources: readonly string[]): RegExp | null {
   if (sources.length === 0) return null;
   sources.forEach((source, index) => compile(source, `ghost.prefilter[${index}]`));
@@ -64,18 +75,17 @@ export function compileGhostRules(config: GhostRulesInput): CompiledGhostRules {
   }
   return {
     settings: config.job_checks.ghost,
-    repostLabels: pack.repost_label_patterns.map((entry, index) => ({ id: entry.id, re: compile(entry.pattern, `ghost.repost_label_patterns[${index}]`), checkNegation: false, negationAfter: "words" })),
+    repostLabels: pack.repost_label_patterns.map((entry, index) => ({ id: entry.id, re: compile(entry.pattern, `ghost.repost_label_patterns[${index}]`), checkNegation: false, negationAfter: "words", requiresContext: [] })),
     evergreen: pack.evergreen_patterns.map((entry, index) => ({
       id: entry.id,
       re: compile(entry.pattern, `ghost.evergreen_patterns[${index}]`),
       checkNegation: entry.check_negation,
       negationAfter: entry.negation_after ?? pack.negation_after,
+      requiresContext: (entry.requires_context ?? []).map((source, at) => compile(source, `ghost.evergreen_patterns[${index}].requires_context[${at}]`, "iu")),
     })),
     responsibilities: pack.responsibility_patterns.map((entry, index) => ({ id: entry.id, re: compile(entry.pattern, `ghost.responsibility_patterns[${index}]`, "iu") })),
-    negationCues: pack.negation_cues.map((cue, index) => {
-      compile(cue, `ghost.negation_cues[${index}]`);
-      return new RegExp(`^(?:${cue})$`, "iu");
-    }),
+    negationCues: anchoredWords(pack.negation_cues, "ghost.negation_cues"),
+    questionWords: anchoredWords(pack.question_words, "ghost.question_words"),
     clauseBreaks: compileList(pack.clause_breaks, "ghost.clause_breaks"),
     excludeContext: compileList(pack.exclude_context, "ghost.exclude_context"),
     leadInQuestion: { ends: [...pack.lead_in_question.ends], starts: [...pack.lead_in_question.starts], line_above: pack.lead_in_question.line_above },

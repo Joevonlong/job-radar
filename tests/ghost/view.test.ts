@@ -72,6 +72,9 @@ describe("messages", () => {
     expect(ghostReasonMessage({ ...thin, words: 40, hasResponsibilities: true, responsibilitiesFrom: "headings" }).key).toBe("reason.thin_short");
     expect(ghostReasonMessage({ ...thin, words: 400, hasResponsibilities: false, responsibilitiesFrom: "headings" }).key).toBe("reason.thin_none");
     expect(ghostReasonMessage({ ...thin, words: 400, hasResponsibilities: false, responsibilitiesFrom: "breakdown" }).key).toBe("reason.thin_none_breakdown");
+    // the headings were not read (infer_from_headings: false, no current breakdown): only the length is named
+    expect(ghostReasonMessage({ ...thin, words: 40, hasResponsibilities: false, responsibilitiesFrom: "none" }).key).toBe("reason.thin_short");
+    expect(ghostReasonListSchema.safeParse([{ ...thin, words: 40, hasResponsibilities: false, responsibilitiesFrom: "none" }]).success).toBe(true);
   });
 
   it("short forms for the tooltip", () => {
