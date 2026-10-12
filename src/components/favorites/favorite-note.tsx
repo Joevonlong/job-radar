@@ -19,7 +19,7 @@ interface FavoriteNoteProps {
 }
 
 /**
- * The line under a row on the favorites page: "★ starred 3 days ago · note". The note text (or "Add note") turns into a one-line
+ * The lines under a row on the favorites page: "★ starred 3 days ago", then the note on a line of its own (always: beside the label the button was squeezed to nothing in a narrow column). The note text (or "Add note") turns into a one-line
  * input: Enter or leaving it saves, Esc cancels. Clicks inside never open the job behind the row.
  */
 export function FavoriteNote({ jobId, title, note, starredLabel, starredTitle }: FavoriteNoteProps) {
@@ -65,10 +65,10 @@ export function FavoriteNote({ jobId, title, note, starredLabel, starredTitle }:
 
   return (
     <div className="jb-fav" data-slot="fav-note" data-editing={editing ? "" : undefined} onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>
-      <span className="inline-flex shrink-0 items-center gap-1" title={starredTitle}>
-        <Star aria-hidden className="fill-hi stroke-ink size-3" /> {t("starredAt", { time: starredLabel })}
+      <span className="inline-flex max-w-full min-w-0 items-center gap-1" title={starredTitle}>
+        <Star aria-hidden className="fill-hi stroke-ink size-3 shrink-0" />
+        <span className="min-w-0 truncate">{t("starredAt", { time: starredLabel })}</span>
       </span>
-      {editing ? null : <span aria-hidden>·</span>}
       {editing ? (
         <span className="flex min-w-0 basis-full flex-col gap-0.5" data-slot="fav-note-edit-field">
           <Input
@@ -103,7 +103,7 @@ export function FavoriteNote({ jobId, title, note, starredLabel, starredTitle }:
           ) : null}
         </span>
       ) : (
-        <button type="button" className="-my-sp-1 min-h-sp-6 min-w-0 truncate py-sp-1 text-left underline-offset-4 hover:underline focus-visible:underline" onClick={start} data-testid="fav-note-edit" aria-label={`${value ? value : t("note.add")} · ${title}`} title={t("note.edit", { title })}>
+        <button type="button" className="-my-sp-1 min-h-sp-6 min-w-sp-10 basis-full truncate py-sp-1 text-left underline-offset-4 hover:underline focus-visible:underline" onClick={start} data-testid="fav-note-edit" aria-label={`${value ? value : t("note.add")} · ${title}`} title={t("note.edit", { title })}>
           {value ? value : <span className="text-ink-3">{t("note.add")}</span>}
         </button>
       )}

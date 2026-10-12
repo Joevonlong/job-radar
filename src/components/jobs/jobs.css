@@ -48,10 +48,9 @@
 .jb-sub { font-size: var(--text-body-sm); line-height: var(--text-body-sm-lh); color: var(--ink-2); overflow-wrap: anywhere; }
 .jb-sub b { color: var(--ink); font-weight: 700; }
 .jb-title [data-slot="fav-mark"] { align-self: flex-start; margin-top: 0.3em; }
-.jb-fav { display: flex; align-items: center; gap: var(--space-1); min-width: 0; font-family: var(--font-mono); font-size: var(--text-data); color: var(--ink-2); position: relative; z-index: 1; }
+.jb-fav { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); min-width: 0; font-family: var(--font-mono); font-size: var(--text-data); color: var(--ink-2); position: relative; z-index: 1; }
 .jb-fav button { cursor: pointer; }
-/* editing the note: the input gets a line of its own and fills the column */
-.jb-fav[data-editing] { flex-wrap: wrap; }
+/* the note (button or input) takes a line of its own below the "starred" label, whatever the column width */
 /* An unseen job keeps the bold title and a dot in front of it; a seen one drops to the normal weight */
 .jb-row[data-seen="true"] .jb-title { font-weight: 500; }
 .jb-title [data-slot="unseen-dot"] { align-self: center; flex: none; }
