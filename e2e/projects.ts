@@ -52,6 +52,8 @@ export const SERIAL_CHAIN: readonly ChainEntry[] = [
   { name: "chromium-ghost", spec: "ghost-jobs.spec.ts" },
   // ai.yaml scoring.evidence (the legacy note shows only while reason sources are on)
   { name: "chromium-score-evidence", spec: "score-evidence.spec.ts" },
+  // notify.yaml edited by hand while the web runs (the web's on-demand config refresh)
+  { name: "chromium-config-refresh", spec: "config-refresh.spec.ts" },
   // the market changes every page and preferences.yaml: last, alone
   { name: "chromium-market", spec: "market.spec.ts" },
 ];

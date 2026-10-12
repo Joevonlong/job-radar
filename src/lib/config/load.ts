@@ -4,7 +4,7 @@ import { parseDocument, type Document } from "yaml";
 
 import { ConfigError, zodIssues } from "./errors";
 import { migrateConfigDocument, withoutConfigVersion, type DocumentMigrationResult } from "./migrations/version";
-import { getDefaultsDir, getUserConfigPath, resolveConfigPath } from "./paths";
+import { getDefaultsDir, getPollIntervalMs, getUserConfigPath, resolveConfigPath } from "./paths";
 import { CONFIG_NAMES, configRegistry, type ConfigName, type ConfigValue } from "./registry";
 
 interface CacheEntry {
@@ -14,6 +14,29 @@ interface CacheEntry {
 
 /** Keyed by the user file path plus the defaults directory, so changing JOB_RADAR_*_DIR never serves stale values. */
 const cache = new Map<string, CacheEntry>();
+
+/**
+ * When the cache was last brought in line with the files (ms, `Date.now()`), or null while nothing is cached. The
+ * on-demand refresh in `loadConfig` compares it with the poll interval.
+ */
+let lastRefreshAt: number | null = null;
+
+/** Number of running `watchConfig` watchers in this process; while there is one, `loadConfig` leaves refreshing to it. */
+let activeWatchers = 0;
+
+/** Internal: `watchConfig` calls this when it starts; the returned function undoes it (call once). */
+export function registerConfigWatcher(): () => void {
+  activeWatchers += 1;
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    activeWatchers -= 1;
+  };
+}
+
+/** The bad file text last reported per config (or a marker when the file could not be read), so one bad content is reported once. */
+const reportedBad = new Map<ConfigName, string>();
 
 function cacheKey(name: ConfigName): string {
   return `${getUserConfigPath(name)}\u0000${getDefaultsDir()}`;
@@ -98,24 +121,53 @@ export function parseConfigTextWithVersion<N extends ConfigName>(name: N, text: 
 export function reloadConfig<N extends ConfigName>(name: N): ConfigValue<N> {
   const text = readConfigText(name);
   const value = deepFreeze(parseConfigText(name, text, configSourcePath(name)));
-  cache.set(cacheKey(name), { value, text });
+  setEntry(name, value, text);
   return value;
+}
+
+function setEntry(name: ConfigName, value: unknown, text: string): void {
+  if (cache.size === 0) lastRefreshAt = Date.now();
+  // a good value is in the cache now: the same bad content coming back later is a new problem
+  reportedBad.delete(name);
+  cache.set(cacheKey(name), { value, text });
 }
 
 /**
  * Load, validate and cache a config. Subsequent calls return the cached value until
  * `reloadConfig` (used by the watcher) or `writeConfig` refreshes it.
+ * A process without a watcher (the web, the MCP server) would never see a change another process made, so there a call
+ * made more than `JOB_RADAR_CONFIG_POLL_MS` after the last check first brings the whole cache in line with the files
+ * (`refreshStaleCache`). With a watcher running, or with the interval 0, nothing here reads the disk.
  * Returned values are deeply frozen: treat them as read-only and use `writeConfig` to change them.
  */
 export function loadConfig<N extends ConfigName>(name: N): ConfigValue<N> {
-  const hit = cache.get(cacheKey(name));
+  let hit = cache.get(cacheKey(name));
+  if (hit && refreshStaleCache()) hit = cache.get(cacheKey(name));
   if (hit) return hit.value as ConfigValue<N>;
   return reloadConfig(name);
 }
 
+/**
+ * The throttled on-demand refresh behind `loadConfig`; true when it ran. The timestamp is taken before the read, so a
+ * throw or a re-entrant call cannot make it loop. A bad file keeps its last good value and is reported once per distinct
+ * content (as the watcher does); `refreshConfigCache` never throws.
+ */
+function refreshStaleCache(): boolean {
+  if (activeWatchers > 0) return false;
+  const interval = getPollIntervalMs();
+  if (interval <= 0) return false;
+  const now = Date.now();
+  if (lastRefreshAt !== null && now - lastRefreshAt < interval) return false;
+  lastRefreshAt = now;
+  for (const error of refreshCacheEntries(true).errors) {
+    console.error(`[config] ${error.message}\n[config] keeping the last valid value`);
+  }
+  return true;
+}
+
 /** Internal: used by writeConfig to refresh the cache with what it just wrote. */
 export function primeConfigCache<N extends ConfigName>(name: N, value: ConfigValue<N>, text: string): void {
-  cache.set(cacheKey(name), { value: deepFreeze(value), text });
+  setEntry(name, deepFreeze(value), text);
 }
 
 export interface ConfigRefreshResult {
@@ -137,21 +189,43 @@ export interface ConfigRefreshResult {
  * Never throws.
  */
 export function refreshConfigCache(): ConfigRefreshResult {
+  lastRefreshAt = Date.now();
+  return refreshCacheEntries(false);
+}
+
+/**
+ * The loop behind `refreshConfigCache`. `reportOnce` (the on-demand refresh): a file that stays bad with the same content
+ * is reported only the first time, and a file that is good again (or equal to the cache) forgets that it was bad.
+ */
+function refreshCacheEntries(reportOnce: boolean): ConfigRefreshResult {
   const changed: ConfigName[] = [];
   const errors: ConfigError[] = [];
   for (const name of CONFIG_NAMES) {
     const key = cacheKey(name);
     const hit = cache.get(key);
     if (hit === undefined) continue;
+    // What was read, to tell "the same bad content again" from a new one; a file that cannot be read has no text.
+    let badContent = "";
     try {
       const text = readConfigText(name);
-      if (text === hit.text) continue;
+      if (text === hit.text) {
+        reportedBad.delete(name);
+        continue;
+      }
+      badContent = text;
       const value = deepFreeze(parseConfigText(name, text, configSourcePath(name)));
       cache.set(key, { value, text });
+      reportedBad.delete(name);
       changed.push(name);
     } catch (err) {
       // Never throws: a bug in a migration step must not take the cycle or a claimed request down with it.
-      errors.push(err instanceof ConfigError ? err : new ConfigError({ configName: name, filePath: configSourcePath(name), kind: "read", detail: unexpectedDetail(err) }));
+      const error = err instanceof ConfigError ? err : new ConfigError({ configName: name, filePath: configSourcePath(name), kind: "read", detail: unexpectedDetail(err) });
+      if (reportOnce) {
+        const marker = badContent === "" ? `\u0000${error.kind}` : badContent;
+        if (reportedBad.get(name) === marker) continue;
+        reportedBad.set(name, marker);
+      }
+      errors.push(error);
     }
   }
   return { changed, errors };
@@ -164,4 +238,6 @@ function unexpectedDetail(err: unknown): string {
 /** Drop all cached values (tests, or after changing the config directories). */
 export function resetConfigCache(): void {
   cache.clear();
+  reportedBad.clear();
+  lastRefreshAt = null;
 }

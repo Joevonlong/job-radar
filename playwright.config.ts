@@ -74,6 +74,8 @@ export default defineConfig({
       JOB_RADAR_PROFILE_DIR: E2E_PROFILE_DIR,
       JOB_RADAR_CONFIG_DIR: E2E_CONFIG_DIR,
       JOB_RADAR_DEFAULTS_DIR: E2E_DEFAULTS_DIR,
+      // the web has no config watcher: it re-reads the files itself at most this often (the default is 5 s), see e2e/config-refresh.spec.ts
+      JOB_RADAR_CONFIG_POLL_MS: "500",
       JOB_RADAR_WEB_PASSWORD: E2E_WEB_PASSWORD,
     },
     url: `http://127.0.0.1:${PORT}`,
