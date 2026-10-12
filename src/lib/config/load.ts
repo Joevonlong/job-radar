@@ -127,6 +127,8 @@ export function reloadConfig<N extends ConfigName>(name: N): ConfigValue<N> {
 
 function setEntry(name: ConfigName, value: unknown, text: string): void {
   if (cache.size === 0) lastRefreshAt = Date.now();
+  // a good value is in the cache now: the same bad content coming back later is a new problem
+  reportedBad.delete(name);
   cache.set(cacheKey(name), { value, text });
 }
 
@@ -165,7 +167,6 @@ function refreshStaleCache(): boolean {
 
 /** Internal: used by writeConfig to refresh the cache with what it just wrote. */
 export function primeConfigCache<N extends ConfigName>(name: N, value: ConfigValue<N>, text: string): void {
-  reportedBad.delete(name);
   setEntry(name, deepFreeze(value), text);
 }
 

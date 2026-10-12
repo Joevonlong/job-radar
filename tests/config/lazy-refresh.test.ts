@@ -8,7 +8,7 @@ import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { loadConfig, refreshConfigCache, watchConfig, writeConfig } from "@/lib/config";
+import { loadConfig, refreshConfigCache, reloadConfig, watchConfig, writeConfig } from "@/lib/config";
 
 import { makeTempConfig, type TempConfig } from "./helpers";
 
@@ -178,6 +178,21 @@ describe("loadConfig without a watcher", () => {
       fs.writeFileSync(uiFile(), goodText);
       vi.advanceTimersByTime(INTERVAL_MS);
       loadConfig("ui");
+      fs.writeFileSync(uiFile(), "trend_cycles: [unclosed\n");
+      vi.advanceTimersByTime(INTERVAL_MS);
+      loadConfig("ui");
+      expect(errors).toHaveBeenCalledTimes(2);
+    });
+
+    it("reports the same bad content again after a good value arrived through reloadConfig", () => {
+      loadConfig("ui");
+      const goodText = fs.readFileSync(uiFile(), "utf8");
+      fs.writeFileSync(uiFile(), "trend_cycles: [unclosed\n");
+      vi.advanceTimersByTime(INTERVAL_MS);
+      loadConfig("ui");
+      expect(errors).toHaveBeenCalledTimes(1);
+      fs.writeFileSync(uiFile(), goodText);
+      reloadConfig("ui");
       fs.writeFileSync(uiFile(), "trend_cycles: [unclosed\n");
       vi.advanceTimersByTime(INTERVAL_MS);
       loadConfig("ui");
