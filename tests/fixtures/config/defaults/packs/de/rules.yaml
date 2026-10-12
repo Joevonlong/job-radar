@@ -129,10 +129,15 @@ ghost:
     # (a talent pool is talent_pool's; "zukünftige" only with an opening: not "zukünftige Kollegen", "zukünftige Führungsaufgaben")
     - id: open_application
       pattern: '(?<![\p{L}\p{N}])(?:(?:stelle|ausschreibung|stellenausschreibung|stellenanzeige|anzeige|position|vakanz)\s+(?:ist|dient|richtet\s+sich|gilt)|(?:dies|hier)\s+ist|es\s+handelt\s+sich\s+um)\s+(?:[\p{L}-]+\s+){0,5}?(?:initiativbewerbung\p{L}*|initiativ|(?:zukünftige|künftige)n?\s+(?:stellen|vakanzen|positionen|ausschreibungen))(?![\p{L}\p{N}])'
-    # "Initiativbewerbung (m/w/d)" as the posting's own title in the text, or a line that opens with it: "Initiativbewerbung",
-    # "Initiativbewerbung – Softwareentwickler", "Initiativbewerbung für Entwickler", "Initiativbewerbung als …"
+    # "Initiativbewerbung (m/w/d)" as the posting's own title in the text, anywhere
     - id: open_application_title
-      pattern: '(?<![\p{L}\p{N}])initiativbewerbung(?:en)?\s*\(\s*(?:m|w|d|f|x|gn|div|all)\s*/|^[\s#*_•·-]*initiativbewerbung(?:en)?[*_]*(?:\s*[–—:|(]|\s+-\s|\s+(?:für|als)(?![\p{L}\p{N}])|(?=[ \t]*(?:\n|$)))'
+      pattern: '(?<![\p{L}\p{N}])initiativbewerbung(?:en)?\s*\(\s*(?:m|w|d|f|x|gn|div|all)\s*/'
+    # … or a line that opens with it: "Initiativbewerbung", "Initiativbewerbung – Softwareentwickler", "Initiativbewerbung für
+    # Entwickler", "Initiativbewerbung als …"; only above the first duties heading (responsibility_patterns): below the duties of a
+    # real posting the same line is its footer ("Initiativbewerbungen:" / "Wir freuen uns auch über …")
+    - id: open_application_title
+      pattern: '^[\s#*_•·-]*initiativbewerbung(?:en)?[*_]*(?:\s*[–—:|(]|\s+-\s|\s+(?:für|als)(?![\p{L}\p{N}])|(?=[ \t]*(?:\n|$)))'
+      only_before_duties: true
     # "Es gibt keine konkrete Stelle", "nicht für eine bestimmte Position"
     - id: no_specific_opening
       pattern: '(?<![\p{L}\p{N}])(?:kein(?:e|en)?|nicht\s+(?:für|auf|an)\s+(?:eine|einen))\s+(?:konkrete|bestimmte|offene|aktuelle|ausgeschriebene|vakante|spezifische|feste)n?\s+(?:stelle|position|vakanz|stellenausschreibung|ausschreibung)(?:n)?(?![\p{L}\p{N}])'
@@ -142,6 +147,13 @@ ghost:
     # Anforderungen", "Wir suchen ständig nach neuen Wegen"; customers only after "für" (not sales: "sucht ständig nach neuen Kunden").
     - id: always_hiring
       pattern: '(?<![\p{L}\p{N}])(?:(?:stellen|stellt)\s+(?:wir\s+|sie\s+)?(?:laufend|ständig|fortlaufend|kontinuierlich|jederzeit|permanent|das\s+ganze\s+jahr(?:\s+über)?)\s+(?:[\p{L}:*_/-]+\s+){0,3}?ein|(?:suchen|sucht)\s+(?:wir\s+|sie\s+)?(?:laufend|ständig|fortlaufend|kontinuierlich|jederzeit|permanent|das\s+ganze\s+jahr(?:\s+über)?)\s+(?:(?:(?:nach|für)\s+)?(?:\p{L}+\s+){0,2}?(?:menschen|talente\p{L}*|verstärkung|kolleg\p{L}*|mitarbeit\p{L}*|persönlichkeiten|bewerber\p{L}*|fachkr[aä]ft\p{L}*|personal|nachwuchs|entwickler\p{L}*|ingenieur\p{L}*|engineers?)|für\s+(?:\p{L}+\s+){0,2}?(?:kunden|kundinnen|mandanten|auftraggeber\p{L}*))|(?:immer|stets|ständig|laufend|jederzeit)\s+auf\s+der\s+suche\s+nach\s+(?:\p{L}+\s+){0,2}?(?:menschen|talenten|verstärkung|kolleg\p{L}*|mitarbeit\p{L}*|persönlichkeiten|bewerber\p{L}*))(?![\p{L}\p{N}])'
+    # "Bewirb dich jetzt für unseren KI-Talentpool", "Sende uns deinen Lebenslauf für unseren Tech-Talentpool": a compound or up
+    # to two words before it, and only in a sentence with recruiting words (requires_context): not "Organisiere Events für unseren
+    # KI-Talentpool"
+    - id: talent_pool_join
+      pattern: '(?<![\p{L}\p{N}])(?:für|in|zu)\s+unser(?:en|em|es|e)?\s+(?:[\p{L}-]+\s+){0,2}?(?:\p{L}+-\s?)?talent-?\s?(?:pools?|community|netzwerk(?:e?s)?)(?![\p{L}\p{N}]|-\p{L})'
+      requires_context:
+        - '(?<![\p{L}\p{N}])(?:bewirb\p{L}*|bewerb\p{L}*|lebenslauf|lebensläufe|cv|unterlagen|kandidat\p{L}*|kontaktier\p{L}*|suchen\s+wir|wir\s+suchen|(?:zukünftige|künftige|kommende|neue|offene|passende)n?\s+(?:stellen|positionen|vakanzen|jobs|jobangebote))(?![\p{L}\p{N}])'
     # "Wir sammeln Bewerbungen für zukünftige Stellen"
     - id: future_openings
       pattern: '(?<![\p{L}\p{N}])(?:für|auf)\s+(?:zukünftige|künftige|kommende|spätere)\s+(?:stellen|positionen|vakanzen|ausschreibungen|bedarfe|einsätze)(?![\p{L}\p{N}])'
@@ -152,11 +164,11 @@ ghost:
       pattern: '(?<![\p{L}\p{N}])(?:was\s+(?:du|sie)\s+(?:bei\s+uns\s+)?(?:bewegst|bewegen|tun|tust|machst|machen|erreichst|erreichen)|das\s+erwartet\s+(?:dich|sie)|was\s+(?:dich|sie)\s+erwartet)(?![\p{L}\p{N}])'
     - id: the_role
       pattern: '^(?:deine|ihre|die|dein|ihr)\s+(?:rolle|mission|herausforderung(?:en)?|job|einsatz)$'
-    # "Darum geht's", "Wie Sie etwas bewirken können", "In deiner Mission blühst du auf, denn:"
+    # "Darum geht's", "Wie Sie etwas bewirken können", "Wie du bei uns etwas bewirken kannst", "In deiner Mission blühst du auf, denn:"
     - id: darum_gehts
       pattern: '^darum\s+geht(?:[''’]?s|\s+es)$'
     - id: wie_du_bewirkst
-      pattern: '^wie\s+(?:du|sie)\s+(?:etwas\s+)?bewirken\s+(?:kannst|können|wirst|werden)$'
+      pattern: '^wie\s+(?:du|sie)\s+(?:bei\s+uns\s+)?(?:etwas\s+)?bewirken\s+(?:kannst|können|wirst|werden)$'
     - id: in_deiner_rolle
       pattern: '^in\s+(?:deiner|ihrer)\s+(?:rolle|mission)(?![\p{L}\p{N}])'
   # Fragewörter: eine Überschrift mit "?" am Ende ("Welche Aufgaben erwarten dich?") gilt nur nach einem davon als Überschrift.
@@ -190,6 +202,14 @@ ghost:
     - '(?<![\p{L}\p{N}])(?:kunden|kundinnen|mandanten|unternehmen|firmen|arbeitgeber\p{L}*|recruiter\p{L}*|personalabteilung\p{L}*|personaler\p{L}*|hr-?\s?(?:teams?|abteilung\p{L}*)|recruiting-?\s?teams?)\s+(?:[\p{L}-]+\s+){0,4}?(?:talent|bewerber|kandidaten)-?\s?pool\p{L}*'
     # eine Aufgabe der Stelle: "Du bist verantwortlich für den Aufbau unseres Talentpools", "Aufbau und Pflege unseres Talentpools"
     - '(?<![\p{L}\p{N}])(?:verantwort\p{L}*|pflegst|pflegen|pflege|betreust|betreuen|baust|managst|kümmerst|übernimmst|unterstützt|unterstützen|entwickelst|gestaltest)(?![\p{L}\p{N}])'
+    # die Arbeit einer Recruiterin für den Talentpool: "Als Recruiter sprichst du Kandidaten für unseren Talentpool an", "Du
+    # identifizierst und gewinnst Talente für unseren KI-Talentpool" (not "Du bewirbst dich für unseren Talentpool")
+    - '(?<![\p{L}\p{N}])(?:du\s+(?:auch\s+|aktiv\s+|gezielt\s+)?(?:sprichst|identifizierst|gewinnst|rekrutierst|qualifizierst|bewertest|sichtest|screenst|akquirierst|vermittelst|interviewst|kontaktierst|recherchierst)|(?:sprichst|identifizierst|gewinnst|rekrutierst|qualifizierst|bewertest|sichtest|screenst|akquirierst|vermittelst|interviewst|kontaktierst|recherchierst)\s+du)\s+(?:[\p{L}-]+\s+){0,4}?(?:für|in|zu)\s+unser(?:en|em|es|e)?\s+(?:[\p{L}-]+\s+){0,2}?(?:\p{L}+-\s?)?(?:talent|bewerber|kandidaten)-?\s?(?:pools?|community|netzwerk\p{L}*)(?![\p{L}\p{N}])'
+    # … and opening the sentence, a line (after any bullet) or "Aufgabe:" with the work and the people it is about: "Ansprache von
+    # Kandidaten für unseren Talentpool", "Identifikation und Ansprache von Bewerbern für …", "Kandidaten für unseren Talentpool
+    # identifizieren und ansprechen". Not "Entwickler für unseren Talentpool gesucht".
+    - '(?:^|\n|(?<![\p{L}\p{N}])(?:aufgaben?|rolle|job|fokus|mission)\s*:)(?:[\s*•·–\-▪▫◦‣►▸➢➤✓✔→]|\p{So}|(?:\d{1,3}|[a-z])[.)])*\s*(?:ansprache|ansprechen|direktansprache|identifi\p{L}*|gewinnung|gewinnen|auswahl|auswählen|rekrutier\p{L}*|akquise|akquirier\p{L}*|sichtung|sichten|bewertung|bewerten|vorauswahl|interview\p{L}*|screening|screenen|recherch\p{L}*|sourcing|vermittlung|vermitteln|qualifizier\p{L}*)\s+(?:[\p{L}-]+\s+){0,3}?(?:kandidat\p{L}*|bewerber\p{L}*|talente?n?|fachkr[aä]ft\p{L}*|profile?n?|entwickler\p{L}*|ingenieur\p{L}*|engineers?|expert\p{L}*|spezialist\p{L}*|menschen|personen)\s+(?:[\p{L}-]+\s+){0,2}?(?:für|in)\s+unser(?:en|em|es|e)?\s+(?:[\p{L}-]+\s+){0,2}?(?:\p{L}+-\s?)?(?:talent|bewerber|kandidaten)-?\s?(?:pools?|community|netzwerk\p{L}*)(?![\p{L}\p{N}])'
+    - '(?:^|\n|(?<![\p{L}\p{N}])(?:aufgaben?|rolle|job|fokus|mission)\s*:)(?:[\s*•·–\-▪▫◦‣►▸➢➤✓✔→]|\p{So}|(?:\d{1,3}|[a-z])[.)])*\s*(?:kandidat\p{L}*|bewerber\p{L}*|talente?n?|fachkr[aä]ft\p{L}*|profile?n?|entwickler\p{L}*|ingenieur\p{L}*|engineers?|expert\p{L}*|spezialist\p{L}*|menschen|personen)\s+(?:[\p{L}-]+\s+){0,2}?(?:für|in)\s+unser(?:en|em|es|e)?\s+(?:[\p{L}-]+\s+){0,2}?(?:\p{L}+-\s?)?(?:talent|bewerber|kandidaten)-?\s?(?:pools?|community|netzwerk\p{L}*)\s+(?:[\p{L}-]+\s+){0,3}?(?:identifizieren|ansprechen|gewinnen|rekrutieren|auswählen|bewerten|interviewen|sichten|akquirieren|begeistern|qualifizieren|vermitteln)(?![\p{L}\p{N}])'
     # der Schluss einer echten Anzeige: "Keine passende Stelle dabei? Dann bewirb dich initiativ", "Falls aktuell keine offene Stelle …"
     - '(?<![\p{L}\p{N}])(?:kein(?:e|en)?|nicht)\s+(?:die\s+)?(?:passende|richtige|geeignete)\p{L}*'
     - '(?<![\p{L}\p{N}])nichts\s+(?:passendes|dabei|gefunden)(?![\p{L}\p{N}])'
@@ -197,9 +217,33 @@ ghost:
     # Datenschutz und "wir berücksichtigen deine Bewerbung gerne auch für zukünftige Stellen"
     - '(?<![\p{L}\p{N}])(?:datenschutz\p{L}*|dsgvo|einwillig\p{L}*|personenbezogen\p{L}*|speicher\p{L}*|aufbewahr\p{L}*|lösch\p{L}*|widerruf\p{L}*)'
     - '(?<![\p{L}\p{N}])(?:auch|gerne)\s+(?:für|bei)\s+(?:zukünftige|künftige|kommende|spätere|andere)(?![\p{L}\p{N}])'
-    # Weiterbildung für spätere Aufgaben ist ein Benefit, keine Stelle: "Gezielte Weiterbildung für zukünftige Positionen im Konzern"
-    - '(?<![\p{L}\p{N}])\p{L}*(?:weiterbildung|fortbildung|entwicklung|karriere|vorbereitung|qualifizierung|schulung|training|mentoring|coaching|förderung)\p{L}*\s+(?:[\p{L}-]+\s+){0,3}?(?:für|auf)\s+(?:zukünftige|künftige|kommende|spätere)(?![\p{L}\p{N}])'
+    # Weiterbildung für spätere Aufgaben ist ein Benefit, keine Stelle: "Gezielte Weiterbildung für zukünftige Positionen im Konzern",
+    # "Entwicklungsmöglichkeiten", "Karriereentwicklung"; "Softwareentwicklung", "Produktentwicklung" sind die Arbeit selbst
+    - '(?<![\p{L}\p{N}])(?:\p{L}*(?:weiterbildung|fortbildung|karriere|vorbereitung|qualifizierung|schulung|training|mentoring|coaching|förderung)\p{L}*|(?:weiter|fort|personal|karriere|persönlichkeits)?entwicklung\p{L}*)\s+(?:[\p{L}-]+\s+){0,3}?(?:für|auf)\s+(?:zukünftige|künftige|kommende|spätere)(?![\p{L}\p{N}])'
     - '(?<![\p{L}\p{N}])(?:berücksichtig\p{L}*|vormerk\p{L}*|in\s+evidenz)(?![\p{L}\p{N}])'
+    # Veranstaltungen für eine Community, nicht diese Anzeige: "Organisiere Events für Kandidaten in unserem KI-Talentpool", "Wir
+    # veranstalten Workshops für unseren Talentpool"
+    - '(?<![\p{L}\p{N}])(?:events?|veranstaltung\p{L}*|workshops?|meetups?|webinar\p{L}*|hackathons?|netzwerktreffen|newsletter\p{L}*|stammtisch\p{L}*)\s+(?:[\p{L}-]+\s+){0,3}?(?:für|in|mit|aus)\s+unser(?:en|em|es|e)?\s+(?:[\p{L}-]+\s+){0,2}?(?:\p{L}+-\s?)?(?:talent|bewerber|kandidaten)-?\s?(?:pools?|community|netzwerk\p{L}*)(?![\p{L}\p{N}])'
+    - '(?<![\p{L}\p{N}])(?:\p{L}+-\s?)?talent-?\s?(?:pools?|community|netzwerk\p{L}*)-?\s?(?:events?|veranstaltung\p{L}*|workshops?|meetups?|webinar\p{L}*|hackathons?|treffen|newsletter\p{L}*)(?![\p{L}\p{N}])'
+  # Eine Qualifikation des Bewerbers bis zum Ende ihres Teilsatzes: "Erfahrung im Aufbau eines Talentpools für zukünftige Stellen"
+  # zählt nicht, "…, und wir stellen laufend ein" danach schon.
+  exclude_clause:
+    - '(?<![\p{L}\p{N}])(?:erfahrung\p{L}*|kenntnisse|expertise|know-how|praxis)\s+(?:\p{L}+\s+){0,2}?(?:im|in|beim|bei|mit)\s+(?:(?:dem|der|einem|einer)\s+)?(?:aufbau|ausbau|erweiterung|pflege|management|entwicklung|gewinnung)(?![\p{L}\p{N}])'
+  # "Wir suchen laufend Verstärkung – bist du dabei?" ist keine Frage (keys as in the generic pack); "Suchen Sie ständig neue
+  # Mitarbeiter – interessiert?" bleibt eine.
+  question_tag:
+    breaks: ['\s[–—-]\s', '—', ';']
+    invitations:
+      - '(?:bist\s+du|sind\s+sie|seid\s+ihr)\s+dabei'
+      - '(?:(?:hast\s+du|haben\s+sie|habt\s+ihr)\s+)?lust(?:\s+auf\s+(?:mehr|uns|den\s+job|die\s+stelle))?'
+      - 'interesse'
+      - 'interessiert'
+      - 'neugierig(?:\s+geworden)?'
+      - '(?:klingt|passt)\s+(?:das\s+)?(?:nach|zu)\s+(?:dir|ihnen)'
+      - '(?:willst|möchtest)\s+du\s+(?:dabei\s+sein|mitmachen|einsteigen)'
+      - 'bereit\s+für\s+(?:den\s+nächsten\s+schritt|uns)'
+    openers: [was, wie, 'welche\p{L}*', wer, wen, wem, warum, wieso, weshalb, wo, wann, womit, wofür, woher, ist, sind, bist, seid, hast, habt, hat, haben, kannst, könnt, kann, können, willst, wollt, will, wollen, möchtest, möchtet, suchst, sucht, suchen, stellst, stellt, stellen, wirst, wird, werden, gibt, brauchst, braucht, brauchen, findest, findet, finden, kennst, kennt, kennen]
+    markers: [also, und, aber, na, ok, okay, nun]
   abbreviations: [z.B, z, B, ca, inkl, bzw, usw, u.a, d.h, ggf, evtl, nr, z.T, bspw, max, min, std, gmbh, mio, tsd]
   # A quick first look (speed): every phrase the evergreen patterns above can match contains one of these (or of the generic pack's).
   prefilter:

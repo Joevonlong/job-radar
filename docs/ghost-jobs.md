@@ -43,16 +43,31 @@ The description is cut into pieces (sentences, list items, a short heading with 
   its list ("This is not a talent pool posting", "Für unseren Talentpool ist diese Anzeige ganz ausdrücklich nicht
   gedacht"). A comma before "not", or before a German relative clause or conjunction ("…, die keine Angst vor neuen
   Technologien haben"), ends the clause; "not only" and "nicht nur" are not negations;
-- the piece is itself a question ("Always hiring? Acme automates your sourcing");
+- the piece is itself a question ("Always hiring? Acme automates your sourcing", "Is your company always hiring –
+  interested?"). A statement with a short invitation tagged on after a dash or ";" is no question: "We are always hiring –
+  want to join?" and "Wir stellen laufend ein – neugierig geworden?" count (the tag is at most
+  `question_tag_max_words` words and one of the pack's invitations as a whole; see `question_tag` in
+  [market-packs.md](market-packs.md#ghost-job-patterns));
 - it is about the employer's product, customers or a team of that name ("We build talent pool software", "Our ATS lets
   hiring managers add candidates to the talent pipeline", "Evergreen job listings are a core feature of our ATS", "Join our
-  Talent Network team", "Wir helfen Unternehmen beim Aufbau ihres Talentpools", "Unsere Software hilft Personalabteilungen
-  beim Aufbau eines Talentpools");
+  Talent Network team", "Our SaaS lets agencies post evergreen job listings", "Wir helfen Unternehmen beim Aufbau ihres
+  Talentpools", "Unsere Software hilft Personalabteilungen beim Aufbau eines Talentpools"; "Our SaaS team is always hiring"
+  counts);
 - it is a duty of the role ("You will build our talent pipeline", "You will source candidates for our upcoming roles", "You
   will screen applicants for our engineering talent pool", "Identify and attract candidates for our talent pool", a list item under "Your tasks:" or "What will I be doing?"), while
   "We are building a talent pool", "We are hiring for our AI talent pool" and "Help us grow by joining our talent pool" count;
-- it is training for later roles or an event for a community ("Mentoring for our future roles", "Weiterbildung für
-  zukünftige Positionen", "Organize events for our engineering talent community", "Join our AI talent community meetups");
+  a recruiter's own duty in German too ("Als Recruiter sprichst du Kandidaten für unseren Talentpool an", "Ansprache von
+  Kandidaten für unseren Talentpool"), while "Bewirb dich jetzt für unseren KI-Talentpool" counts;
+- a qualification asked of the candidate ("Experience building a talent pipeline for future roles", "Erfahrung im Aufbau
+  eines Talentpools für zukünftige Stellen"): this takes out only the phrase up to the end of its clause, so "Experience
+  building a talent pipeline is valued; we are always hiring" still counts;
+- "Initiativbewerbung" stands as a title on its own line below the first duties heading (a section of a real posting);
+  "Initiativbewerbung (m/w/d)" counts anywhere;
+- it is training for later roles or an event for a community ("Mentoring for our future roles", "Leadership development
+  for our upcoming positions", "Weiterbildung für zukünftige Positionen", "Karriereentwicklung für zukünftige Positionen",
+  "Organize events for our engineering talent community", "Organisiere Events für Kandidaten in unserem KI-Talentpool");
+  technical development is the work, not training: "We hire in backend development for upcoming positions" and "Wir suchen
+  Talente in der Produktentwicklung für zukünftige Positionen" count;
 - a phrase that needs recruiting words around it has none: "join our AI talent pool" counts with "apply", "candidates",
   "future opportunities" or the like in the same sentence ("By joining our AI talent pool, you will be contacted … for our
   future opportunities"; not "networking opportunities"), "access to the largest tech talent pool in Europe" never does;

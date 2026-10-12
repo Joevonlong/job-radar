@@ -183,7 +183,12 @@ const isDutiesHeading = (heading: string, rules: CompiledGhostRules): boolean =>
 
 /** Whether the text has a heading that opens the duties of the role ("Responsibilities", "Deine Aufgaben:"). */
 export function hasResponsibilityHeading(description: string | null, rules: CompiledGhostRules): boolean {
-  if (description === null || rules.responsibilities.length === 0) return false;
+  return firstDutiesHeading(description, rules) !== null;
+}
+
+/** Where the line of the text's first duties heading starts (as `hasResponsibilityHeading` reads them), or null. */
+function firstDutiesHeading(description: string | null, rules: CompiledGhostRules): number | null {
+  if (description === null || rules.responsibilities.length === 0) return null;
   const lines = description.split("\n");
   // whether a list starts at the next line that is not blank, or after one line of lead-in that ends in ":" or is itself
   // heading-shaped ("What will I be doing?" / "As a senior engineer, you will:" / "- …"; not "Which tasks can our AI automate?" /
@@ -200,12 +205,14 @@ export function hasResponsibilityHeading(description: string | null, rules: Comp
     listFollows[i] = isList(next) || (next !== -1 && isList(afterNext) && isLeadIn(next));
     if ((lines[i] as string).trim() !== "") [next, afterNext] = [i, next];
   }
+  let offset = 0;
   for (const [i, line] of lines.entries()) {
     for (const heading of headingsOfLine(line, rules, listFollows[i] === true)) {
-      if (isDutiesHeading(heading, rules)) return true;
+      if (isDutiesHeading(heading, rules)) return offset;
     }
+    offset += line.length + 1;
   }
-  return false;
+  return null;
 }
 
 // ---------------------------------------------------------------- thin_description
@@ -260,6 +267,15 @@ function lastBreakEnd(text: string, breaks: readonly RegExp[]): number {
       const end = match.index + match[0].length;
       if (end > from) from = end;
     }
+  }
+  return from;
+}
+
+/** Where the last clause break in `text` starts (0 when none). */
+function lastBreakStart(text: string, breaks: readonly RegExp[]): number {
+  let from = 0;
+  for (const re of breaks) {
+    for (const match of text.matchAll(re)) if (match.index > from) from = match.index;
   }
   return from;
 }
@@ -336,6 +352,54 @@ function isQuestion(text: string, lead: CompiledGhostRules["leadInQuestion"]): b
   return lead.ends.some((mark) => trimmed.endsWith(mark));
 }
 
+/** The text opens with one of the packs' `question_tag.openers` ("Is …", "So, are …", "Stellt ihr …"), after any `markers`. */
+function opensQuestion(text: string, tag: CompiledGhostRules["questionTag"]): boolean {
+  const words = wordsOf(text);
+  let at = 0;
+  while (at < words.length && tag.markers.some((marker) => marker.test(words[at] as string))) at += 1;
+  const first = words[at];
+  return first !== undefined && tag.openers.some((opener) => opener.test(first));
+}
+
+/**
+ * A piece that ends in a question mark but is a statement with a short invitation tagged on ("We are always hiring – want to
+ * join?", "Wir suchen laufend Verstärkung – bist du dabei?"): the length of the statement before the last `question_tag.breaks`
+ * match, or null when the piece is a question. The tag must be one of `invitations` and have at most
+ * `question_tag_max_words` words; the statement must not open with one of `openers` ("Is your company always hiring – interested?").
+ */
+function taggedStatement(text: string, rules: CompiledGhostRules): number | null {
+  const tag = rules.questionTag;
+  if (tag.breaks.length === 0 || tag.invitations.length === 0) return null;
+  const trimmed = text.trimEnd();
+  const mark = rules.leadInQuestion.ends.find((end) => trimmed.endsWith(end));
+  const body = mark === undefined ? trimmed : trimmed.slice(0, -mark.length);
+  let headEnd = -1;
+  let tagStart = -1;
+  for (const re of tag.breaks) {
+    for (const match of body.matchAll(re)) {
+      if (match[0].length > 0 && match.index > headEnd) [headEnd, tagStart] = [match.index, match.index + match[0].length];
+    }
+  }
+  if (headEnd <= 0) return null;
+  const tagText = body.slice(tagStart).trim();
+  const words = wordsOf(tagText).length;
+  if (words === 0 || words > rules.settings.question_tag_max_words || !tag.invitations.some((re) => re.test(tagText))) return null;
+  return opensQuestion(body.slice(0, headEnd), tag) ? null : headEnd;
+}
+
+/** The ranges (offsets in the description) that the packs' `exclude_clause` take out: each match to the end of its clause. */
+function clauseExclusions(segment: TextSegment, rules: CompiledGhostRules): Array<[number, number]> {
+  const out: Array<[number, number]> = [];
+  for (const re of rules.excludeClause) {
+    for (const match of segment.text.matchAll(re)) {
+      if (match[0].length === 0) continue;
+      const after = match.index + match[0].length;
+      out.push([segment.start + match.index, segment.start + after + firstBreak(segment.text.slice(after), rules.clauseBreaks)]);
+    }
+  }
+  return out;
+}
+
 function hitsOf(pattern: CompiledGhostPattern, segment: TextSegment): Hit[] {
   if (segment.text.search(pattern.re) === -1) return [];
   const hits: Hit[] = [];
@@ -353,9 +417,10 @@ export interface EvergreenOptions {
 
 /**
  * The first sentence (in text order) that says the posting is a talent pool or always open. A sentence matching `exclude_context`
- * (itself or the question right before it), a sentence that is itself a question (ends in a `lead_in_question.ends` mark), a negated
- * hit, a hit of a pattern with `requires_context` whose sentence has none of it, and a list item under a duties heading do not
- * count. The quote is verified against the description (C7).
+ * (itself or the question right before it), a sentence that is itself a question (ends in a `lead_in_question.ends` mark; a
+ * statement with a short invitation tagged on is none, `question_tag`), a negated hit, a hit in the reach of an `exclude_clause`
+ * match, a hit of a pattern with `requires_context` whose sentence has none of it, a hit of an `only_before_duties` pattern below
+ * the first duties heading, and a list item under a duties heading do not count. The quote is verified against the description (C7).
  */
 export function evergreenWording(description: string | null, rules: CompiledGhostRules, options: EvergreenOptions = {}): GhostReasonOf<"evergreen_wording"> | null {
   const settings = rules.settings.evergreen_wording;
@@ -364,19 +429,42 @@ export function evergreenWording(description: string | null, rules: CompiledGhos
   if (prefilter !== null && description.search(prefilter) === -1) return null;
   const keep = prefilter === null ? undefined : (start: number, end: number): boolean => description.slice(start, end).search(prefilter) !== -1;
   const segments = segmentText(description, { abbreviations: rules.abbreviations, headingMaxChars: rules.settings.heading_max_chars, ...(keep ? { keep } : {}) });
+  // where the first duties heading starts, read once and only for an `only_before_duties` hit (undefined = not read yet)
+  let dutiesAt: number | null | undefined;
   for (const segment of segments) {
     if (prefilter !== null && segment.text.search(prefilter) === -1) continue;
     const candidates: Array<{ hit: Hit; pattern: CompiledGhostPattern }> = [];
     for (const pattern of rules.evergreen) for (const hit of hitsOf(pattern, segment)) candidates.push({ hit, pattern });
     if (candidates.length === 0) continue;
-    // a question is not a statement about the posting ("Always hiring? Acme automates your sourcing")
-    if (isQuestion(segment.text, rules.leadInQuestion)) continue;
+    // a question is not a statement about the posting ("Always hiring? Acme automates your sourcing"), unless it is a statement
+    // with an invitation tagged on ("We are always hiring – want to join?"): then only hits before the tag count
+    let statementEnd = segment.text.length;
+    if (isQuestion(segment.text, rules.leadInQuestion)) {
+      const head = taggedStatement(segment.text, rules);
+      if (head === null) continue;
+      statementEnd = head;
+    }
     const question = leadInQuestion(description, segment.start, rules.leadInQuestion);
     if (rules.excludeContext.some((re) => segment.text.search(re) !== -1 || (question !== "" && question.search(re) !== -1))) continue;
     if (underDutiesHeading(segment, rules, description)) continue;
+    const excluded = clauseExclusions(segment, rules);
     candidates.sort((a, b) => a.hit.start - b.hit.start || b.hit.end - a.hit.end);
     for (const { hit, pattern } of candidates) {
       if (options.skip?.(hit.start, hit.end)) continue;
+      if (statementEnd < segment.text.length) {
+        const from = hit.start - segment.start;
+        // in the tag, or in a clause that is itself a question ("We grow fast, but are you always hiring – interested?"); the
+        // clause is read from its break on ("and we are …": "and" is a marker)
+        if (from >= statementEnd) continue;
+        const head = segment.text.slice(0, from);
+        if (opensQuestion(segment.text.slice(lastBreakStart(head, rules.clauseBreaks), statementEnd), rules.questionTag)) continue;
+      }
+      // a qualification of the candidate, to the end of its clause ("Experience building a talent pipeline for future roles")
+      if (excluded.some(([start, end]) => hit.start >= start && hit.start < end)) continue;
+      if (pattern.onlyBeforeDuties) {
+        if (dutiesAt === undefined) dutiesAt = firstDutiesHeading(description, rules);
+        if (dutiesAt !== null && hit.start > dutiesAt) continue;
+      }
       // a broad phrase counts only next to recruiting words ("join our AI talent pool" … "future opportunities")
       if (pattern.requiresContext.length > 0 && !pattern.requiresContext.some((re) => segment.text.search(re) !== -1)) continue;
       if (pattern.checkNegation && negated(segment, hit, pattern, rules, description)) continue;

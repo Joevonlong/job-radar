@@ -49,6 +49,7 @@ export const GHOST_CHECK_DEFAULTS = {
   negation_words_before: 6,
   negation_words_after: 5,
   heading_max_chars: 60,
+  question_tag_max_words: 6,
 } as const;
 
 const ghostPoints = z.number().int().min(0).max(10);
@@ -107,6 +108,8 @@ const ghostCheckSchema = z
     negation_words_after: z.number().int().min(0).max(20).default(GHOST_CHECK_DEFAULTS.negation_words_after),
     /** Longest line (characters) read as a heading: a duties heading, or a heading read together with the next line. */
     heading_max_chars: z.number().int().min(10).max(200).default(GHOST_CHECK_DEFAULTS.heading_max_chars),
+    /** Longest invitation (words) tagged on a statement that keeps it a statement ("We are always hiring – want to join?"; the packs' `ghost.question_tag`). */
+    question_tag_max_words: z.number().int().min(1).max(20).default(GHOST_CHECK_DEFAULTS.question_tag_max_words),
   })
   .default(() => ghostCheckDefaults());
 
@@ -137,6 +140,7 @@ export interface GhostCheckConfig {
   negation_words_before: number;
   negation_words_after: number;
   heading_max_chars: number;
+  question_tag_max_words: number;
 }
 
 /**

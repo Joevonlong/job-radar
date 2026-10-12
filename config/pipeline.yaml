@@ -509,6 +509,7 @@ filter:
 #     negation_words_before: 6
 #     negation_words_after: 5
 #     heading_max_chars: 60
+#     question_tag_max_words: 6   # longest invitation after a statement that keeps it one ("We are always hiring – want to join?"; 1 to 20)
 #   visa:
 #     per_cycle_limit: 2000   # jobs scanned per cycle at most (new and changed JDs first); pnpm visa:scan --write scans the rest
 #     max_quotes: 3           # quotes kept per job (at most 10)

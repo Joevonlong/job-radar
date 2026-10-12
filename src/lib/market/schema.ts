@@ -257,6 +257,8 @@ export type GhostNegationAfter = (typeof GHOST_NEGATION_AFTER)[number];
  * offene Stelle"): its own "no" must not cancel it. `negation_after`: this entry's own window after the phrase (default: its pack's).
  * `requires_context`: a hit counts only when its piece of text also matches one of these (a broad phrase that is about this
  * posting only next to recruiting words: "join our AI talent pool" with "apply", "opportunities"); missing or empty = always.
+ * `only_before_duties`: a hit counts only above the JD's first duties heading (`responsibility_patterns`): a title line such as
+ * "Initiativbewerbung" heads an open application, the same line below the duties of a real posting is its footer.
  */
 export const ghostEvergreenPatternSchema = z.strictObject({
   id: ghostPatternId,
@@ -264,6 +266,7 @@ export const ghostEvergreenPatternSchema = z.strictObject({
   check_negation: z.boolean().default(true),
   negation_after: z.enum(GHOST_NEGATION_AFTER).optional(),
   requires_context: regexList.optional(),
+  only_before_duties: z.boolean().optional(),
 });
 export type GhostEvergreenPatternEntry = z.infer<typeof ghostEvergreenPatternSchema>;
 
@@ -286,6 +289,26 @@ const ghostLeadInQuestionSchema = z
   .strictObject({ ends: markList, starts: markList, line_above: z.boolean().default(false) })
   .default(emptyGhostLeadInQuestion) satisfies z.ZodType<GhostLeadInQuestion>;
 
+/**
+ * A statement with a short invitation tagged on ("We are always hiring – want to join?") is not a question, though it ends in a
+ * `lead_in_question.ends` mark: the text after the last `breaks` match (regexes), without the mark, is one of `invitations` (regexes, the whole text) and has
+ * at most `pipeline.yaml job_checks.ghost.question_tag_max_words` words, and the sentence before it (and the hit's clause) does not
+ * open with one of `openers` (whole words: "is", "are", "what", "stellt"), after any `markers` ("so", "also"). Empty = every
+ * sentence that ends in "?" is a question.
+ */
+export interface GhostQuestionTag {
+  breaks: string[];
+  invitations: string[];
+  openers: string[];
+  markers: string[];
+}
+
+export const emptyGhostQuestionTag = (): GhostQuestionTag => ({ breaks: [], invitations: [], openers: [], markers: [] });
+
+const ghostQuestionTagSchema = z
+  .strictObject({ breaks: optionalList, invitations: optionalList, openers: optionalList, markers: optionalList })
+  .default(emptyGhostQuestionTag) satisfies z.ZodType<GhostQuestionTag>;
+
 /** `rules.yaml` `ghost` as the code reads it (the schema's output). */
 export interface GhostPack {
   repost_label_patterns: GhostPatternEntry[];
@@ -298,7 +321,10 @@ export interface GhostPack {
   negation_after: GhostNegationAfter;
   clause_breaks: string[];
   exclude_context: string[];
+  /** Like `exclude_context`, but only for the hits from the start of its match to the end of that clause (`clause_breaks`). */
+  exclude_clause: string[];
   lead_in_question: GhostLeadInQuestion;
+  question_tag: GhostQuestionTag;
   abbreviations: string[];
   prefilter: string[];
 }
@@ -314,7 +340,9 @@ export function emptyGhostPack(): GhostPack {
     negation_after: "words",
     clause_breaks: [],
     exclude_context: [],
+    exclude_clause: [],
     lead_in_question: emptyGhostLeadInQuestion(),
+    question_tag: emptyGhostQuestionTag(),
     abbreviations: [],
     prefilter: [],
   };
@@ -353,8 +381,15 @@ export const ghostPackSchema = z
      * notes); the question right before it (`lead_in_question`) is tested too.
      */
     exclude_context: optionalList,
+    /**
+     * A hit from the start of a match of one of these to the end of its clause (`clause_breaks`) does not count; other hits in the
+     * sentence still do ("Experience building a talent pipeline is valued; we are always hiring": a qualification, then the posting).
+     */
+    exclude_clause: optionalList,
     /** Which question before a sentence is read with it (see `GhostLeadInQuestion`). */
     lead_in_question: ghostLeadInQuestionSchema,
+    /** Which sentence ending in "?" is a statement with an invitation tagged on (see `GhostQuestionTag`). */
+    question_tag: ghostQuestionTagSchema,
     /** Abbreviations whose dot does not end a sentence, without the final dot. */
     abbreviations: z.array(nonEmptyString).default([]),
     /**

@@ -88,10 +88,17 @@ export function mergeGhostPacks(packs: ReadonlyArray<{ rules: { ghost: GhostPack
     negation_after: "words",
     clause_breaks: union(...ghost.map((g) => g.clause_breaks)),
     exclude_context: union(...ghost.map((g) => g.exclude_context)),
+    exclude_clause: union(...ghost.map((g) => g.exclude_clause)),
     lead_in_question: {
       ends: union(...ghost.map((g) => g.lead_in_question.ends)),
       starts: union(...ghost.map((g) => g.lead_in_question.starts)),
       line_above: ghost.some((g) => g.lead_in_question.line_above),
+    },
+    question_tag: {
+      breaks: union(...ghost.map((g) => g.question_tag.breaks)),
+      invitations: union(...ghost.map((g) => g.question_tag.invitations)),
+      openers: union(...ghost.map((g) => g.question_tag.openers)),
+      markers: union(...ghost.map((g) => g.question_tag.markers)),
     },
     abbreviations: union(...ghost.map((g) => g.abbreviations)),
     prefilter: union(...ghost.map((g) => g.prefilter)),

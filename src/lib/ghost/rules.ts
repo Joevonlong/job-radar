@@ -15,6 +15,19 @@ export interface CompiledGhostPattern {
   negationAfter: GhostNegationAfter;
   /** A hit counts only when its piece also matches one of these (flags `iu`); empty = always. */
   requiresContext: RegExp[];
+  /** A hit counts only above the JD's first duties heading (a title line, not the footer of a real posting). */
+  onlyBeforeDuties: boolean;
+}
+
+/** The packs' `question_tag`, compiled: a statement with a short invitation tagged on is not a question. */
+export interface CompiledQuestionTag {
+  /** Flags `giu`: where the tag starts (after the last match). */
+  breaks: RegExp[];
+  /** Anchored (`^(?:invitation)$`, flags `iu`): tested against the whole tag, without its question mark. */
+  invitations: RegExp[];
+  /** Anchored (`^(?:word)$`): tested against one word. */
+  openers: RegExp[];
+  markers: RegExp[];
 }
 
 export interface CompiledGhostRules {
@@ -29,6 +42,9 @@ export interface CompiledGhostRules {
   questionWords: RegExp[];
   clauseBreaks: RegExp[];
   excludeContext: RegExp[];
+  /** Flags `giu`: a match takes out the hits from its start to the end of its clause. */
+  excludeClause: RegExp[];
+  questionTag: CompiledQuestionTag;
   /** Which question before a sentence is read with it (the packs' `lead_in_question`; no `ends` = none). */
   leadInQuestion: GhostLeadInQuestion;
   abbreviations: string[];
@@ -51,7 +67,7 @@ function compile(source: string, path: string, flags = "giu"): RegExp {
 
 const compileList = (sources: readonly string[], path: string): RegExp[] => sources.map((source, index) => compile(source, `${path}[${index}]`));
 
-/** Word lists (`negation_cues`, `question_words`): each entry must match one whole word. */
+/** Word lists (`negation_cues`, `question_words`, `question_tag.openers` / `.markers`): each entry must match one whole word. */
 const anchoredWords = (sources: readonly string[], path: string): RegExp[] =>
   sources.map((source, index) => {
     compile(source, `${path}[${index}]`);
@@ -75,19 +91,30 @@ export function compileGhostRules(config: GhostRulesInput): CompiledGhostRules {
   }
   return {
     settings: config.job_checks.ghost,
-    repostLabels: pack.repost_label_patterns.map((entry, index) => ({ id: entry.id, re: compile(entry.pattern, `ghost.repost_label_patterns[${index}]`), checkNegation: false, negationAfter: "words", requiresContext: [] })),
+    repostLabels: pack.repost_label_patterns.map((entry, index) => ({ id: entry.id, re: compile(entry.pattern, `ghost.repost_label_patterns[${index}]`), checkNegation: false, negationAfter: "words", requiresContext: [], onlyBeforeDuties: false })),
     evergreen: pack.evergreen_patterns.map((entry, index) => ({
       id: entry.id,
       re: compile(entry.pattern, `ghost.evergreen_patterns[${index}]`),
       checkNegation: entry.check_negation,
       negationAfter: entry.negation_after ?? pack.negation_after,
       requiresContext: (entry.requires_context ?? []).map((source, at) => compile(source, `ghost.evergreen_patterns[${index}].requires_context[${at}]`, "iu")),
+      onlyBeforeDuties: entry.only_before_duties === true,
     })),
     responsibilities: pack.responsibility_patterns.map((entry, index) => ({ id: entry.id, re: compile(entry.pattern, `ghost.responsibility_patterns[${index}]`, "iu") })),
     negationCues: anchoredWords(pack.negation_cues, "ghost.negation_cues"),
     questionWords: anchoredWords(pack.question_words, "ghost.question_words"),
     clauseBreaks: compileList(pack.clause_breaks, "ghost.clause_breaks"),
     excludeContext: compileList(pack.exclude_context, "ghost.exclude_context"),
+    excludeClause: compileList(pack.exclude_clause, "ghost.exclude_clause"),
+    questionTag: {
+      breaks: compileList(pack.question_tag.breaks, "ghost.question_tag.breaks"),
+      invitations: pack.question_tag.invitations.map((source, index) => {
+        compile(source, `ghost.question_tag.invitations[${index}]`);
+        return new RegExp(`^(?:${source})$`, "iu");
+      }),
+      openers: anchoredWords(pack.question_tag.openers, "ghost.question_tag.openers"),
+      markers: anchoredWords(pack.question_tag.markers, "ghost.question_tag.markers"),
+    },
     leadInQuestion: { ends: [...pack.lead_in_question.ends], starts: [...pack.lead_in_question.starts], line_above: pack.lead_in_question.line_above },
     abbreviations: [...pack.abbreviations],
     prefilter,

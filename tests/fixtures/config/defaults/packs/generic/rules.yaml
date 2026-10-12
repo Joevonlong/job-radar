@@ -226,11 +226,11 @@ ghost:
   # Sentences that mention a talent pool or future roles without saying this posting is one.
   exclude_context:
     # the employer's product, its customers or a team of that name: "talent pool software", "helps companies build their talent
-    # pipelines", "Our ATS lets hiring managers add candidates to …", "Our app alerts users about future openings", "Join our Talent
-    # Network team as a Recruiter"
+    # pipelines", "Our ATS lets hiring managers add candidates to …", "Our SaaS lets agencies post evergreen job listings", "Our app
+    # alerts users about future openings", "Join our Talent Network team as a Recruiter" (not "Our SaaS team is always hiring")
     - '(?<![\p{L}\p{N}])talent\s+(?:pool|community|pipeline|network|acquisition)\s+(?:software|platform|management|crm|tools?|solutions?|products?|systems?|features?|teams?|department|managers?|specialists?|leads?|partners?|function)(?![\p{L}\p{N}])'
     - '(?<![\p{L}\p{N}])(?:customers?|clients?|companies|employers|businesses|users|recruiters|hiring\s+managers|teams)(?:[''’]s?)?\s+(?:[\p{L}-]+\s+){0,3}?talent\s+(?:pools?|pipelines?|communit(?:y|ies)|networks?)(?![\p{L}\p{N}])'
-    - '(?<![\p{L}\p{N}])(?:our|the|its)\s+(?:ats|apps?|platforms?|software|products?|tools?|crm|solutions?|services?|systems?|marketplace)\s+(?:lets|helps|allows|enables|alerts|notifies|matches|connects|sends|shows|tells|informs)(?![\p{L}\p{N}])'
+    - '(?<![\p{L}\p{N}])(?:our|the|its)\s+(?:saas\s+)?(?:saas|ats|apps?|platforms?|software|products?|tools?|crm|solutions?|services?|systems?|marketplace)\s+(?:lets|helps|allows|enables|alerts|notifies|matches|connects|sends|shows|tells|informs)(?![\p{L}\p{N}])'
     # … or as a noun phrase: "Evergreen job listings are a core feature of our ATS", "our platform's talent pool module"
     - '(?<![\p{L}\p{N}])(?:(?:features?|modules?|capabilit(?:y|ies)|functionality|components?)\s+(?:of|in)\s+(?:our|the|its|their|an?)\s+(?:[\p{L}-]+\s+)?(?:ats|apps?|platforms?|software|products?|tools?|crm|solutions?|services?|systems?|marketplace)|(?:our|the|its|their)\s+(?:ats|app|platform|software|product|tool|crm|solution|service|system)[''’]s?\s+(?:[\p{L}-]+\s+){0,3}?(?:features?|modules?|capabilit(?:y|ies)|functionality))(?![\p{L}\p{N}])'
     # the posting says it is a real opening after all: "…, but this role is a concrete opening", "this role is based in Berlin"
@@ -251,8 +251,10 @@ ghost:
     # for our engineering talent pool", "Sourcing and assessing candidates for our data talent pool". Not "Interviewing now for our
     # AI talent pool — apply today", "Placements into our AI talent pool happen on a rolling basis", "Hiring for our AI talent pool".
     - '(?:^|\n)(?:[\s*•·–\-▪▫◦‣►▸➢➤✓✔→]|\p{So}|(?:\d{1,3}|[a-z])[.)])*\s*(?:(?:screen|interview|identif|attract|assess|evaluat|plac|find|sourc|engag)\p{L}*|build\p{L}*\s+relationships)\s+(?:(?!(?:join|joining|apply|applying|by)(?![\p{L}\p{N}]))[\p{L}''’-]+\s+){0,3}?(?:candidates?|applicants?|profiles?|engineers?|developers?|talents?|people|professionals?|experts?|specialists?|hires?|prospects?)\s+(?:(?!(?:join|joining|apply|applying|by)(?![\p{L}\p{N}]))[\p{L}''’-]+\s+){0,2}?(?:for|into)\s+our\s+(?:[\p{L}-]+\s+){0,2}?talent\s+(?:pools?|communit(?:y|ies)|networks?)(?![\p{L}\p{N}])'
-    # training for later roles is a benefit, not an opening: "Mentoring for future roles in leadership"
-    - '(?<![\p{L}\p{N}])(?:training|mentoring|coaching|career|learning|upskilling|development|preparation|prepares?|preparing|readiness)\s+(?:[\p{L}''’-]+\s+){0,3}?(?:for|towards?|into)\s+(?:our\s+)?(?:potential\s+|upcoming\s+)?(?:future|upcoming)(?![\p{L}\p{N}])'
+    # training for later roles is a benefit, not an opening: "Mentoring for future roles in leadership", "Development opportunities
+    # for future roles"; technical development is the work ("applications in software development for future openings", also with
+    # several spaces or a hyphen between)
+    - '(?<![\p{L}\p{N}])(?:training|mentoring|coaching|career|learning|upskilling|(?<!(?<![\p{L}\p{N}])(?:software|hardware|firmware|product|web|app|application|mobile|platform|backend|back-end|frontend|front-end|full-?stack|business|model|tool|tooling|game|api|data|cloud|systems?|solutions?|feature|infrastructure|sdk)[\s-]+)development|preparation|prepares?|preparing|readiness)\s+(?:[\p{L}''’-]+\s+){0,3}?(?:for|towards?|into)\s+(?:our\s+)?(?:potential\s+|upcoming\s+)?(?:future|upcoming)(?![\p{L}\p{N}])'
     # events and training for a community, not this posting: "Organize events for our engineering talent community", "We run
     # workshops for our internal talent community", "Join our AI talent community meetups", "Join our engineering talent community
     # for networking opportunities and events" (not "This program is for our talent pool: apply now")
@@ -268,6 +270,11 @@ ghost:
     - '(?<![\p{L}\p{N}])(?:privacy|gdpr|data\s+protection|personal\s+data|consent|retain|retention|on\s+file|keep\s+your|store\s+your|delete)(?![\p{L}\p{N}])'
     - '(?<![\p{L}\p{N}])also\s+(?:be\s+)?(?:consider\p{L}*|kept|keep|use|used|added)(?![\p{L}\p{N}])'
     - '(?<![\p{L}\p{N}])(?:may|might|will|would|can)\s+(?:also\s+)?(?:contact|reach\s+out\s+to|notify)\s+you(?![\p{L}\p{N}])'
+  # A qualification of the candidate takes out the evergreen phrases from its start to the end of its clause (clause_breaks), not
+  # the whole sentence: "Experience building a talent pipeline for future roles" does not count, "Experience building a talent
+  # pipeline is valued; we are always hiring" does (after the ";").
+  exclude_clause:
+    - '(?<![\p{L}\p{N}])(?:(?:experience|track\s+record|background|history|expertise|skills?|knowledge)\s+(?:(?:of|in|with|at)\s+)?(?:successfully\s+|actively\s+)?(?:building|growing|developing|managing|creating|maintaining|scaling|nurturing|sourcing|establishing|expanding|running|owning|leading)|(?:ability|able)\s+to\s+(?:build|grow|develop|manage|create|maintain|scale|nurture|source|establish|expand|run|own|lead))(?![\p{L}\p{N}])'
   # The question right before a sentence is read with it ("Don't see a role that fits? Join our talent community"): the text before
   # the sentence ends in one of `ends`; the question starts after the last of `starts` (or a line break). line_above: the question
   # may stand on the line above. A sentence that itself ends in one of `ends` is a question, not a statement about the posting
@@ -276,6 +283,25 @@ ghost:
     ends: ['?', '？']
     starts: ['.', '!', '?', '？', '¿', '¡', '。', '！']
     line_above: true
+  # A statement with a short invitation tagged on is no question: "We are always hiring – want to join?" counts. The text after the
+  # last of `breaks` (without its "?") must be one of `invitations` as a whole and have at most pipeline.yaml
+  # job_checks.ghost.question_tag_max_words words, and the sentence and the phrase's clause must not open with one of `openers`
+  # (whole words, after any `markers`): "Is your company always hiring – interested?", "So, are you always hiring – or just
+  # pretending?", "Always hiring – sound familiar?" and "Your recruiters are always hiring – interested in a better ATS?" stay
+  # questions. The packs' lists are united.
+  question_tag:
+    breaks: ['\s[–—-]\s', '—', ';']
+    invitations:
+      - '(?:do\s+you\s+)?(?:want|like|wish)\s+to\s+(?:join(?:\s+us|\s+the\s+team|\s+our\s+team)?|apply|be\s+part\s+of\s+(?:it|this|the\s+team|our\s+team))'
+      - '(?:are\s+you\s+)?(?:keen|ready|eager|excited)\s+to\s+(?:join(?:\s+us|\s+the\s+team|\s+our\s+team)?|apply)'
+      - '(?:(?:are\s+)?you\s+)?interested'
+      - '(?:are\s+)?you\s+in'
+      - '(?:will\s+you\s+)?join\s+us'
+      - 'sounds?\s+like\s+you'
+      - '(?:is\s+)?(?:that|this)\s+you'
+      - 'curious'
+    openers: [what, which, how, who, whom, whose, why, where, when, is, are, am, was, were, do, does, did, can, could, will, would, shall, should, have, has, had, may, might, must, 'isn[''’]t', 'aren[''’]t', 'don[''’]t', 'doesn[''’]t', 'didn[''’]t', 'can[''’]t', 'won[''’]t', 'wouldn[''’]t', 'haven[''’]t', 'hasn[''’]t']
+    markers: [so, well, now, ok, okay, and, but, also, then]
   abbreviations: [e.g, i.e, etc, incl, approx, vs, inc, ltd, co, corp, mr, ms, dr]
   # A quick first look (speed): a JD or sentence with none of these is not searched for evergreen phrases. Every phrase the
   # evergreen patterns can match contains one of them; keep it so when you add a pattern (pnpm config:check warns).
