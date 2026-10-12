@@ -167,6 +167,20 @@ const CASES: ReadonlyArray<readonly [string, string | null]> = [
   ["Your tasks\nScreen applicants for our engineering talent pool and run interviews.", null],
   ["About the role\nIdentify and attract candidates for our engineering talent pool.", null],
   ["About the role\nGrow and nurture our talent pool for future roles.", null],
+  // … and after bullets the segmenter does not take for list markers ("▪", "a)", "✓"), under a heading or an intro sentence
+  ["Your tasks:\n▪ Screen applicants for our engineering talent pool\n▪ Run interviews", null],
+  ["What you'll do\na) Screen applicants for our engineering talent pool\nb) Run interviews", null],
+  ["As our recruiter you will:\n✓ Build relationships with candidates for our tech talent pool", null],
+  ["Acme builds payroll software.\n▪ Screen applicants for our engineering talent pool\n▪ Run interviews", null],
+  ["Acme builds payroll software.\na) Screen applicants for our engineering talent pool\nb) Run interviews", null],
+  ["Acme builds payroll software.\n✓ Build relationships with candidates for our tech talent pool", null],
+  ["Acme builds payroll software.\n➤ Grow and nurture our talent pool for future roles.", null],
+  ["Acme builds payroll software.\n1. Screen applicants for our engineering talent pool\n2. Run interviews", null],
+  ["Acme builds payroll software.\r\n▪ Screen applicants for our engineering talent pool\r\n▪ Run interviews", null],
+  ["Your tasks:\r\n1) Identify and attract candidates for our engineering talent pool", null],
+  // a bullet before the posting's own words changes nothing
+  ["Acme builds payroll software.\n▪ We are hiring for our AI talent pool – apply now.", "talent_pool_join"],
+  ["Acme builds payroll software.\n✓ Interviewing now for our AI talent pool — apply today.", "talent_pool_join"],
   // … but the posting's own words with the same verbs still count
   // a noun or title at the start of the sentence is no duty (no object of the verb)
   ["Interviewing now for our AI talent pool — apply today.", "talent_pool_join"],
