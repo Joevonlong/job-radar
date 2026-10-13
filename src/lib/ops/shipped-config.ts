@@ -9,6 +9,7 @@
  */
 import os from "node:os";
 
+import { loadConfig } from "@/lib/config";
 import { getDefaultsDir } from "@/lib/config/paths";
 import { ShippedConfigError, shippedConfigId, shortShippedConfigId, type ShippedConfigProcess } from "@/lib/config/shipped-id";
 import { getDb, type Db } from "@/lib/db/client";
@@ -59,8 +60,10 @@ export function createShippedConfigReporter(options: ShippedConfigReporterOption
   return {
     async report() {
       try {
+        // The limit first: when reading it fails, no write is left running unobserved.
+        const limitMs = options.timeoutMs?.();
         const work = write();
-        const { id, dir } = options.timeoutMs === undefined ? await work : await withTimeout(work, options.timeoutMs(), "shipped config report");
+        const { id, dir } = limitMs === undefined ? await work : await withTimeout(work, limitMs, "shipped config report");
         if (!written || lastProblem !== null) options.log(`shipped config ${dir} (${shortShippedConfigId(id)}) reported`);
         written = true;
         lastProblem = null;
@@ -78,7 +81,8 @@ export function createShippedConfigReporter(options: ShippedConfigReporterOption
 
 /**
  * Retry until one report succeeds: concurrent calls share the attempt in flight, and after a success every call resolves
- * at once without writing again (the web's report: start-up, then each health check until it worked).
+ * at once without writing again (the web's report: start-up, then each health check until it worked). Give the reporter a
+ * time limit: an attempt that never settles would otherwise be shared by every later call, and nothing would retry.
  */
 export function createReportOnce(reporter: ShippedConfigReporter): () => Promise<boolean> {
   let done = false;
@@ -100,10 +104,19 @@ type WebGlobal = typeof globalThis & { [WEB_REPORT]?: () => Promise<boolean> };
 
 /**
  * The web's report. One per server process: Next.js may load `instrumentation.ts` and the route handlers as separate module
- * copies, so the state lives on `globalThis`.
+ * copies, so the state lives on `globalThis`. Each attempt is limited to `schedule.yaml doctor.probe_timeout_seconds` (what
+ * the doctor waits for one answer), so a write stuck on a dead connection or a lock is abandoned and the next health check
+ * tries again.
  */
 export function reportWebShippedConfig(): Promise<boolean> {
   const holder = globalThis as WebGlobal;
-  holder[WEB_REPORT] ??= createReportOnce(createShippedConfigReporter({ process: "web", db: getDb, log: (message) => console.log(`[config] ${message}`) }));
+  holder[WEB_REPORT] ??= createReportOnce(
+    createShippedConfigReporter({
+      process: "web",
+      db: getDb,
+      log: (message) => console.log(`[config] ${message}`),
+      timeoutMs: () => loadConfig("schedule").doctor.probe_timeout_seconds * 1000,
+    }),
+  );
   return holder[WEB_REPORT]();
 }

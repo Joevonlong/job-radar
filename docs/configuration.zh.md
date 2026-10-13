@@ -206,7 +206,7 @@ cd config && find . -type f ! -name .DS_Store ! -name '._*' | LC_ALL=C sort | wh
 - `pnpm config:check` 在画像那行之后写出它：`shipped:  config  c86995b8f48f`（先目录，再短标识）。目录算不出标识时
   `config:check` 失败。
 - 运行中的进程把自己用的标识报告到数据库（`runtime_state` 键 `shipped_config:<web|runner|ai-worker>`：完整标识、目录、主机名、PID 和
-  进程启动时间；这一行的时间是数据库时钟）。web 启动时报告一次，没成功之前每次 `/api/health` 请求再试；runner 和 ai-worker（服务方式）
+  进程启动时间；这一行的时间是数据库时钟）。web 启动时报告一次，没成功之前每次 `/api/health` 请求再试（每次最多等 `schedule.yaml doctor.probe_timeout_seconds`，卡住的写入会被放弃、下次再试）；runner 和 ai-worker（服务方式）
   启动时报告，之后每次心跳刷新，受心跳的时间上限约束。报告失败只在该进程日志里警告一句（`could not report the shipped config`），不会停掉进程，
   也不算心跳失败。
 - `pnpm run doctor` 的 `config.shipped` 检查（"数据"组）显示每个进程的标识，并核对每份报告是否来自现在运行的进程：web 和 runner（在

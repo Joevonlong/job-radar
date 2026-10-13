@@ -292,7 +292,8 @@ gives a new identity.
 - The running processes report the identity they run with, in the database (`runtime_state` key
   `shipped_config:<web|runner|ai-worker>`: the full id, the directory, the host name, the PID and the process start; the
   row's time is the database clock). The web reports at start-up and, until one write worked, again on each `/api/health`
-  request; the runner and the ai-worker (as a service) report at start-up and refresh the report with every heartbeat,
+  request (each attempt limited to `schedule.yaml doctor.probe_timeout_seconds`, so a stuck write is abandoned and
+  retried); the runner and the ai-worker (as a service) report at start-up and refresh the report with every heartbeat,
   under the heartbeat's time limit. A failed report is only a warning in that process's log (`could not report the
   shipped config`); it never stops the process or fails a heartbeat.
 - `pnpm run doctor` check `config.shipped` (group "data") shows the identity of each process and checks that each report

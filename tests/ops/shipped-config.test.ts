@@ -8,6 +8,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const repo = vi.hoisted(() => ({ reportShippedConfig: vi.fn<(db: unknown, process: string, report: Record<string, unknown>) => Promise<void>>() }));
 vi.mock("@/lib/db/repos/runtime-state", () => repo);
 vi.mock("@/lib/db/client", () => ({ getDb: () => ({ fake: "db" }) }));
+// The web's time limit per attempt: schedule.yaml doctor.probe_timeout_seconds (1 s here, the smallest it may be).
+const schedule = vi.hoisted(() => ({ probeTimeoutSeconds: 1, reads: 0 }));
+vi.mock("@/lib/config", async (importOriginal) => {
+  const original = await importOriginal<typeof import("@/lib/config")>();
+  return {
+    ...original,
+    loadConfig: ((name: Parameters<typeof original.loadConfig>[0]) => {
+      if (name !== "schedule") return original.loadConfig(name);
+      schedule.reads += 1;
+      const real = original.loadConfig("schedule");
+      return { ...real, doctor: { ...real.doctor, probe_timeout_seconds: schedule.probeTimeoutSeconds } };
+    }) as typeof original.loadConfig,
+  };
+});
 
 import { shippedConfigId } from "@/lib/config/shipped-id";
 import type { Db } from "@/lib/db/client";
@@ -133,6 +147,38 @@ describe("createReportOnce (the web)", () => {
   });
 });
 
+describe("a bounded retry (the web's report)", () => {
+  it("abandons an attempt that never settles after the time limit, and the next call retries", async () => {
+    repo.reportShippedConfig.mockReturnValueOnce(new Promise<void>(() => undefined));
+    const once = createReportOnce(reporter({ timeoutMs: () => 50 }));
+    const first = once();
+    expect(once()).toBe(first); // shared while in flight
+    expect(await first).toBe(false);
+    expect(lines[0]).toMatch(/^WARNING: could not report the shipped config: shipped config report did not finish/);
+    expect(await once()).toBe(true);
+    expect(repo.reportShippedConfig).toHaveBeenCalledTimes(2);
+    expect(await once()).toBe(true);
+    expect(repo.reportShippedConfig).toHaveBeenCalledTimes(2);
+  });
+
+  it("an unreadable time limit fails the attempt without leaving a write behind, and the next call retries", async () => {
+    let calls = 0;
+    const once = createReportOnce(
+      reporter({
+        timeoutMs: () => {
+          calls += 1;
+          if (calls === 1) throw Object.assign(new Error("schedule.yaml: bad"), { name: "ConfigError" });
+          return 20_000;
+        },
+      }),
+    );
+    expect(await once()).toBe(false);
+    expect(repo.reportShippedConfig).not.toHaveBeenCalled();
+    expect(lines).toEqual(["WARNING: could not report the shipped config: ConfigError"]);
+    expect(await once()).toBe(true);
+  });
+});
+
 describe("reportWebShippedConfig", () => {
   const key = Symbol.for("job-radar.shipped-config.web");
   afterEach(() => {
@@ -148,6 +194,18 @@ describe("reportWebShippedConfig", () => {
     expect(repo.reportShippedConfig).toHaveBeenCalledTimes(2);
     expect(repo.reportShippedConfig.mock.calls[1]?.[1]).toBe("web");
     expect(log.mock.calls.map((call) => String(call[0]))).toEqual([expect.stringMatching(/^\[config\] WARNING: could not report/), expect.stringMatching(/^\[config\] shipped config .+ reported$/)]);
+    log.mockRestore();
+  });
+
+  it("gives up on a stuck write after doctor.probe_timeout_seconds, so a later health check writes again", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const readsBefore = schedule.reads;
+    repo.reportShippedConfig.mockReturnValueOnce(new Promise<void>(() => undefined));
+    expect(await reportWebShippedConfig()).toBe(false);
+    expect(schedule.reads).toBeGreaterThan(readsBefore);
+    expect(String(log.mock.calls[0]?.[0])).toMatch(/did not finish within 1s/);
+    expect(await reportWebShippedConfig()).toBe(true);
+    expect(repo.reportShippedConfig).toHaveBeenCalledTimes(2);
     log.mockRestore();
   });
 });
