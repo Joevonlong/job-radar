@@ -548,6 +548,13 @@ export function evergreenWording(description: string | null, rules: CompiledGhos
     const tagged = statementEnd < segment.text.length ? taggedPiece(segment.text, rules) : null;
     let negation: NegationIndex | undefined;
     const negationOf = (): NegationIndex => (negation ??= negationIndex(segment.text, rules));
+    // whether the piece has a pattern's recruiting words, searched once per pattern rather than once per hit
+    const context = new Map<CompiledGhostPattern, boolean>();
+    const hasContext = (pattern: CompiledGhostPattern): boolean => {
+      let found = context.get(pattern);
+      if (found === undefined) context.set(pattern, (found = pattern.requiresContext.some((re) => segment.text.search(re) !== -1)));
+      return found;
+    };
     candidates.sort((a, b) => a.hit.start - b.hit.start || b.hit.end - a.hit.end);
     for (const { hit, pattern } of candidates) {
       if (options.skip?.(hit.start, hit.end)) continue;
@@ -569,7 +576,7 @@ export function evergreenWording(description: string | null, rules: CompiledGhos
         if (dutiesAt !== null && hit.start > dutiesAt) continue;
       }
       // a broad phrase counts only next to recruiting words ("join our AI talent pool" … "future opportunities")
-      if (pattern.requiresContext.length > 0 && !pattern.requiresContext.some((re) => segment.text.search(re) !== -1)) continue;
+      if (pattern.requiresContext.length > 0 && !hasContext(pattern)) continue;
       if (pattern.checkNegation && negated(segment, hit, pattern, rules, description, negationOf)) continue;
       const { quote, offset } = clipQuote(description, segment.start, segment.end, hit, rules.settings.quote_max_chars);
       // C7: the quote must be the description at its offset; a quote that is not is never stored

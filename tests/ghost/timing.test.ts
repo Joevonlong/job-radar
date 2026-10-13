@@ -76,6 +76,10 @@ describe("ghost check timing", () => {
     ["2000 negated list items after 60000 others", `${"- x\n".repeat(60000)}${"- not always hiring\n".repeat(2000)}`, 600],
     // (~30 ms; was ~4 s)
     ["2000 hits under a question heading after 32000 items and blank lines", `What will you be doing?\n${"- x\n\n".repeat(32000)}${"- no open job\n".repeat(2000)}`, 400],
+    // a broad phrase with no recruiting words next to it: the piece is searched for them once, not once per hit (~20 ms;
+    // was ~5 s)
+    ["8333 broad phrases with no recruiting words", "join our AI talent pool ".repeat(8333), 300],
+    ["7692 German broad phrases with no recruiting words", "für unseren KI-Talentpool ".repeat(7692), 300],
   ])("a piece with %s (every hit left out)", (_name, description, bound) => {
     evergreenWording(description.slice(-2000), rules);
     let found: ReturnType<typeof evergreenWording> = null;
