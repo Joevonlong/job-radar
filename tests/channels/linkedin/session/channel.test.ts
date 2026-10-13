@@ -442,6 +442,17 @@ describe("linkedin-session: a failure part-way keeps what was read", () => {
       expect(viewedJobs(s)).toEqual([]);
     });
 
+    it("cards that cannot be turned into postings do not hide the failure: it is the network error, not a parse error", async () => {
+      const noCompany = fixture("search-results.html").replace(/<div class="artdeco-entity-lockup__subtitle[^>]*>[\s\S]*?<\/div>/g, "");
+      const s = setup({
+        config: sessionConfig((session) => (session.fetch_details = false)),
+        site: happySite({ search: (url) => (url.searchParams.get("start") === "25" ? { html: "", timeout: true } : { html: noCompany }) }),
+      });
+      const error = await failure(s.session.collect(berlinQuery(), (await harness(s.session, s.config)).ctx));
+      expect(error).not.toBeInstanceOf(PartialCollectError);
+      expect(error).toMatchObject({ code: "network", retryable: true });
+    });
+
     it("a result page that is blocked (HTTP 999) after the first one: circuit-tripping, the stored postings are kept", async () => {
       const before = await deliveredBefore();
       const s = setup({ store: createMemorySessionStore({ payloads: { "4385000101": before.get("4385000101") } }), site: happySite({ search: (url) => (url.searchParams.get("start") === "25" ? { html: "", status: 999 } : null) }) });
