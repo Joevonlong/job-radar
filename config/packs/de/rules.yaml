@@ -266,7 +266,7 @@ ghost:
       - 'bereit\s+für\s+(?:den\s+nächsten\s+schritt|uns)'
     openers: [was, 'wie(?!\s+(?:immer|gewohnt))', 'welche\p{L}*', wer, wen, wem, warum, wieso, weshalb, wo, wann, womit, wofür, woher, ist, sind, bist, seid, hast, habt, hat, haben, kannst, könnt, kann, können, willst, wollt, will, wollen, möchtest, möchtet, suchst, sucht, suchen, stellst, stellt, stellen, wirst, wird, werden, gibt, brauchst, braucht, brauchen, findest, findet, finden, kennst, kennt, kennen]
     markers: [also, und, aber, na, ok, okay, nun]
-    subjects: [wir, 'unser\p{L}*', uns]
+    subjects: [wir, 'unser\p{L}*']
   abbreviations: [z.B, z, B, ca, inkl, bzw, usw, u.a, d.h, ggf, evtl, nr, z.T, bspw, max, min, std, gmbh, mio, tsd]
   # A quick first look (speed): every phrase the evergreen patterns above can match contains one of these (or of the generic pack's).
   prefilter:

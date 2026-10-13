@@ -315,7 +315,7 @@ ghost:
       - 'curious'
     openers: [what, which, how, who, whom, whose, why, where, when, is, are, am, was, were, do, does, did, can, could, will, would, shall, should, have, has, had, may, might, must, 'isn[''’]t', 'aren[''’]t', 'don[''’]t', 'doesn[''’]t', 'didn[''’]t', 'can[''’]t', 'won[''’]t', 'wouldn[''’]t', 'haven[''’]t', 'hasn[''’]t']
     markers: [so, well, now, ok, okay, and, but, also, then]
-    subjects: [we, 'we[''’]re', 'we[''’]ve', our, us]
+    subjects: [we, 'we[''’]re', 'we[''’]ve', our]
   abbreviations: [e.g, i.e, etc, incl, approx, vs, inc, ltd, co, corp, mr, ms, dr]
   # A quick first look (speed): a JD or sentence with none of these is not searched for evergreen phrases. Every phrase the
   # evergreen patterns can match contains one of them; keep it so when you add a pattern (pnpm config:check warns).

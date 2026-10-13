@@ -394,6 +394,9 @@ const CASES: ReadonlyArray<readonly [string, string | null]> = [
   ["Recruiters always hiring – interested?", null],
   ["Hiring managers, always hiring – interested?", null],
   ["Is your company, like ours, always hiring – interested?", null],
+  ["Companies that trust us are always hiring – interested?", null],
+  ["Recruiters who work with us are always hiring – curious?", null],
+  ["Kunden von uns stellen laufend ein – interessiert?", null],
   ["At Acme we are always hiring – want to join?", "always_hiring"],
   ["Like many startups, we are always hiring – interested?", "always_hiring"],
   ["Did you know: we are always hiring – curious?", "always_hiring"],
@@ -558,6 +561,17 @@ describe("evergreen_wording reads its words and limits from the config", () => {
     const german = rulesWith(() => {}, { ...pack, evergreen_patterns: [{ id: "search", pattern: "suchen (?:wir |sie )?laufend talente", check_negation: true }], prefilter: ["laufend"], lead_in_question: lead, question_tag: { ...tag, ...subjects, invitations: ["interessiert"] } });
     expect(evergreenWording("Bei Acme suchen wir laufend Talente – interessiert?", german)?.patternId).toBe("search");
     expect(evergreenWording("Bei Acme suchen Sie laufend Talente – interessiert?", german)).toBeNull();
+    // the subjects are the company doing the hiring: an object pronoun ("us", "uns") is someone else's clause, so the packs do not
+    // list it ("Companies that trust us are always hiring – interested?" is an ATS advert's question)
+    const always = { id: "always", pattern: "always hiring", check_negation: true };
+    const hiring = (words: string[]) => rulesWith(() => {}, { ...pack, evergreen_patterns: [always], prefilter: ["always"], lead_in_question: lead, question_tag: { ...tag, subjects: words } });
+    expect(evergreenWording("Companies that trust us are always hiring – interested?", hiring(["we", "our"]))).toBeNull();
+    expect(evergreenWording("Companies that trust us know we are always hiring – interested?", hiring(["we", "our"]))?.patternId).toBe("always");
+    expect(evergreenWording("Companies that trust us are always hiring – interested?", hiring(["we", "our", "us"]))?.patternId).toBe("always");
+    const germanSubjects = (words: string[]) =>
+      rulesWith(() => {}, { ...pack, evergreen_patterns: [{ id: "search", pattern: "suchen (?:wir |sie )?laufend talente", check_negation: true }], prefilter: ["laufend"], lead_in_question: lead, question_tag: { ...tag, subjects: words, invitations: ["interessiert"] } });
+    expect(evergreenWording("Kunden von uns suchen laufend Talente – interessiert?", germanSubjects(["wir", "unser\\p{L}*"]))).toBeNull();
+    expect(evergreenWording("Bei uns suchen wir laufend Talente – interessiert?", germanSubjects(["wir", "unser\\p{L}*"]))?.patternId).toBe("search");
     expect(() => withTag(() => {}, { subjects: ["(unclosed"] })).toThrow("ghost.question_tag.subjects[0]");
   });
 
