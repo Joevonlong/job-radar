@@ -7,6 +7,9 @@
  *   - ai-worker (with `execution: host`): the report is newer than `ai.yaml host_worker.offline_after_seconds`, and its PID is
  *     the PID launchd / systemd gives for the service. No PID from the service manager means the report cannot be matched.
  *
+ * It also warns when a running container of the project has something mounted over /app/config: the shipped defaults
+ * are part of the image, and a mount there (a compose file from before that change) hides them.
+ *
  * Every case that cannot be confirmed is a warning; there is no failure. Without the database the check is skipped.
  */
 import { z } from "zod";
@@ -29,6 +32,8 @@ interface RunningContainer {
   service: string;
   /** Docker's start time; null when it cannot be read. */
   startedAt: Date | null;
+  /** The sources of whatever is mounted on /app/config or below it (the shipped defaults in the image). */
+  configMounts: string[];
 }
 
 type Containers = { available: true; running: RunningContainer[] } | { available: false; reason: string };
@@ -38,8 +43,15 @@ const inspectSchema = z.array(
     Id: z.string(),
     State: z.object({ StartedAt: z.string().optional(), Running: z.boolean().optional() }).optional(),
     Config: z.object({ Labels: z.record(z.string(), z.string()).nullable().optional() }).optional(),
+    Mounts: z
+      .array(z.object({ Destination: z.string(), Source: z.string().optional(), Name: z.string().optional() }))
+      .nullable()
+      .optional(),
   }),
 );
+
+/** Where the images keep the shipped defaults (Dockerfile: COPY config/ /app/config/). */
+const SHIPPED_DIR_IN_IMAGE = "/app/config";
 
 const SERVICE_LABEL = "com.docker.compose.service";
 
@@ -79,7 +91,10 @@ export function loadRunningContainers(ctx: DoctorContext): Promise<Containers> {
     for (const row of parsed) {
       if (row.State?.Running === false) continue;
       const started = row.State?.StartedAt === undefined ? Number.NaN : Date.parse(row.State.StartedAt);
-      running.push({ id: row.Id, service: row.Config?.Labels?.[SERVICE_LABEL] ?? "", startedAt: Number.isNaN(started) ? null : new Date(started) });
+      const configMounts = (row.Mounts ?? [])
+        .filter((m) => m.Destination === SHIPPED_DIR_IN_IMAGE || m.Destination.startsWith(`${SHIPPED_DIR_IN_IMAGE}/`))
+        .map((m) => m.Source || m.Name || m.Destination);
+      running.push({ id: row.Id, service: row.Config?.Labels?.[SERVICE_LABEL] ?? "", startedAt: Number.isNaN(started) ? null : new Date(started), configMounts });
     }
     return { available: true, running };
   });
@@ -155,22 +170,31 @@ export const shippedConfigCheck: DoctorCheck = {
       throw new SkipCheck(t("common.dbUnreadable"));
     }
     const findings: Finding[] = [];
+    const mountProblems: string[] = [];
     const services = CONTAINER_PROCESSES.filter((process) => ctx.settings.compose_services.includes(process));
     if (services.length > 0) {
       const containers = await loadRunningContainers(ctx);
       for (const process of services) findings.push(containerFinding(ctx, process, reports[process], containers));
+      if (containers.available) {
+        for (const c of containers.running) {
+          if (c.configMounts.length === 0) continue;
+          mountProblems.push(t("checks.config.shipped.configMounted", { service: c.service || c.id.slice(0, 12), source: c.configMounts.join(", "), dir: SHIPPED_DIR_IN_IMAGE }));
+        }
+      }
     }
     if (ctx.config.ai.execution === "host") findings.push(await workerFinding(ctx, reports["ai-worker"]));
     findings.sort((a, b) => SHIPPED_CONFIG_PROCESSES.indexOf(a.process) - SHIPPED_CONFIG_PROCESSES.indexOf(b.process));
 
-    const problems = findings.filter((f) => f.problem !== null).map((f) => f.problem as string);
+    const reportProblems = findings.filter((f) => f.problem !== null).map((f) => f.problem as string);
+    const problems = [...mountProblems, ...reportProblems];
     const confirmed = findings
       .filter((f) => f.problem === null)
       .map((f) => t("checks.config.shipped.item", { process: f.process, id: f.id ?? "" }))
       .join(t("common.detailSeparator"));
     if (problems.length > 0) {
       const detail = [...problems, ...(confirmed === "" ? [] : [confirmed])].join(t("common.detailSeparator"));
-      return warn(spec, detail, t("checks.config.shipped.hint"));
+      const hints = [...(mountProblems.length > 0 ? [t("checks.config.shipped.configMountedHint")] : []), ...(reportProblems.length > 0 ? [t("checks.config.shipped.hint")] : [])];
+      return warn(spec, detail, hints.join(t("common.detailSeparator")));
     }
     if (findings.length === 0) return ok(spec, t("checks.config.shipped.nothing"));
     return ok(spec, confirmed);

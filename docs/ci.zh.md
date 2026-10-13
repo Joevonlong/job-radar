@@ -139,7 +139,19 @@ workflow 级设置：`permissions: contents: read`（任何任务都不能写仓
 
 #### Shell script syntax
 
-`for f in scripts/*.sh scripts/ops/*.sh; do bash -n "$f"; done`。只做语法解析，覆盖运维脚本（部署、备份、恢复、worker 安装、validate）。脚本的行为由 `tests/ops/` 测试。瞬间完成。
+`for f in scripts/*.sh scripts/ops/*.sh scripts/ops/lib/*.sh tests/ops/*.sh tests/ops/proc-lib/*.sh; do bash -n "$f"; done`。只做语法解析，覆盖运维脚本（部署、备份、恢复、worker 安装、validate）、它们 source 的库和 shell 测试脚本。脚本的行为由 `tests/ops/` 测试。瞬间完成。
+
+#### Process library cases (bash 3.2)
+
+`docker run --rm -v "$PWD":/w -w /w bash:3.2@sha256:0fd7cb8499c63a3c9345e7088a9cd83bb69f6e895e83833859aff838a0312091 bash tests/ops/proc-lib/cases.sh`。
+
+`scripts/ops/lib/proc.sh` 让部署脚本里每个会改状态的命令在自己的进程组里运行，收到 INT / TERM / HUP 时只记下来，跑完当前这一步再停，并统一退出码。它的用例（新进程组、三种信号下的管道和孙进程、协作式子进程、退出码归一、两条“信号和子进程同时结束”的竞态各跑 60 次、拒绝 POSIX 模式、`VAR=value proc_run`）在这里用 bash 3.2（macOS `/bin/bash` 的版本）跑一遍。官方 `bash` 镜像按 digest 固定；它们基于 alpine 和 busybox，所以 `cases.sh` 只用 `bash`、`sh`、`uname`、`sleep`（要支持 `0.05`）、`cat`、`tr`、`grep`、`mktemp`、`rm`、`seq` 和可读的 `/proc`，开头逐个核对，缺任何一样就打印 `FAIL: missing <工具>` 并失败，不跳过。伪终端里的 `tostop` 用例和用真 pnpm 的进程组用例要 `script`、`node`、`pnpm`，在 unit 任务里由 `tests/ops/proc-lib.test.ts` 运行。约 30 秒。本地：同一条命令，或者 `bash tests/ops/proc-lib/cases.sh`。
+
+#### Process library cases (bash 5.2)
+
+`docker run --rm -v "$PWD":/w -w /w bash:5.2@sha256:a54fb4422b18f05dd3107c36f39d67b26334fda7ec89f4126052b45e228e2f15 bash tests/ops/proc-lib/cases.sh`。
+
+同样的用例，用 bash 5.2 跑。竞态用例在这里最要紧：子进程恰好在 trap 打断 `wait` 时结束，bash 5.2 的 `wait` 返回 255；`proc_run` 用 `kill -0` 轮询、只 `wait` 一次来避开。约 30 秒。
 
 #### Runner bundle
 
@@ -299,7 +311,7 @@ project 的规划在 `e2e/projects.ts`（由 `tests/e2e-projects.test.ts` 做单
 
 ### Job `linux-smoke`
 
-Linux 从零首次运行：在 Ubuntu runner 上用一份空的检出，按随附默认值 `docker compose up --build`，面板必须能应答。它能发现 macOS 上 Docker Desktop 掩盖的问题：bind mount 的文件属主（`PUID` / `PGID`）、以 0600 写入的配置文件、容器写不了的目录。它从 Dockerfile 构建 web、runner、jobspy 三个镜像，所以也是在部署之前发现 `apt` / CLI 安装失败、`COPY` 路径错误、构建阶段损坏的地方（不再有单独的只构建镜像的任务）。每个不是只改文档的 PR 和每次推送到 `main` 都会运行。上限 20 分钟，构建步骤 15 分钟；通常几分钟（冷构建，没有层缓存）。本地（Linux）：在一份新克隆里执行下面各步骤的命令（不要在你想保留其服务栈和数据库的检出里做：最后一步会删除服务栈和它的卷）。
+Linux 从零首次运行：在 Ubuntu runner 上用一份空的检出，按随附默认值 `docker compose up --build`，面板必须能应答。它能发现 macOS 上 Docker Desktop 掩盖的问题：bind mount 的文件属主（`PUID` / `PGID`）、以 0600 写入的配置文件、容器写不了的目录。它从 Dockerfile 构建 web、runner、jobspy 三个镜像，所以也是在部署之前发现 `apt` / CLI 安装失败、`COPY` 路径错误、构建阶段损坏的地方（不再有单独的只构建镜像的任务）。它和 `scripts/ops/deploy.sh` 一样，从解开的 `git archive` 构建镜像，并核对镜像里的出厂配置（`config/` 打进镜像，不再挂载），以及从工作树构建时 `.gitignore` 忽略的文件都进不了构建上下文。每个不是只改文档的 PR 和每次推送到 `main` 都会运行。上限 20 分钟，构建步骤 15 分钟；通常几分钟（冷构建，没有层缓存）。本地（Linux）：在一份新克隆里执行下面各步骤的命令（不要在你想保留其服务栈和数据库的检出里做：最后一步会删除服务栈和它的卷）。
 
 #### Check out the repository
 
@@ -308,6 +320,10 @@ Linux 从零首次运行：在 Ubuntu runner 上用一份空的检出，按随�
 #### Prepare .env and the data folders as the host user
 
 写一个只设 `PUID` / `PGID`（runner 自己的用户，`id -u`、`id -g`）的 `.env`，正如 [host-setup.zh.md](host-setup.zh.md) 要求 Linux 用户做的那样；并以该用户创建 `data/` 下的目录和 `.auth/`，避免 Docker 以 root 身份创建 bind mount 目录。
+
+#### Unpack the commit as the build context
+
+`git archive HEAD | tar -x -C "$(mktemp -d)"`，这个目录写进 `JOB_RADAR_BUILD_CONTEXT`，供后面的步骤使用。`compose.yaml` 从 `${JOB_RADAR_BUILD_CONTEXT:-.}` 构建 web、runner、jobspy，`scripts/ops/deploy.sh` 也是这样设置的，所以镜像里只有已提交的文件。瞬间完成。
 
 #### Start the stack from scratch
 
@@ -320,6 +336,22 @@ Linux 从零首次运行：在 Ubuntu runner 上用一份空的检出，按随�
 #### The web can write its config folder
 
 在 web 容器里的 `data/config` 中创建并删除一个文件（设置页和向导会写这里），并检查 runner 能写 `data/backups`。失败说明容器用户不拥有 bind mount 的目录：检查 `compose.yaml` 的 `user:` 和 `PUID` / `PGID` 两行。
+
+#### The images ship exactly the committed config
+
+列出 web、runner 容器里 `/app/config` 下的文件，和 `git ls-files config` 比较（`diff -u`）。有差别说明 Dockerfile 的 `COPY config/ /app/config/` 或 `.dockerignore` 改变了进入镜像的内容。几秒钟。
+
+#### The shipped config is read-only for every user
+
+在每个容器里以容器自己的用户运行四条 `find`，都必须没有输出：`find /app/config ! -user root`（全部归 root 所有）、`find /app/config -perm /022`（组和其他用户都不能写）、`find /app/config -type f ! -perm -444`（每个文件所有人可读）、`find /app/config -type d ! -perm -555`（每个目录所有人可读、可进入）。失败说明 Dockerfile 里缺了 `RUN chmod -R a+rX,go-w /app/config`，或者它跑在后面某个 `COPY` 之前。几秒钟。
+
+#### Nothing is mounted over the shipped config
+
+对 web、runner 容器 `docker inspect`：任何挂载的目标都不能是 `/app/config`（或它下面的路径）。挂载在那里会挡住镜像里的配置；安装好的系统上 doctor（`config.shipped`）也会对此告警。瞬间完成。
+
+#### Docker build context leaves out what .gitignore ignores
+
+`bash tests/ops/gitignore-coverage.sh`。在一个放了 `.gitignore`、`.dockerignore` 副本的临时目录里，把 `.gitignore` 的每个条目变成根目录和子目录各一个样本文件（展开规则写在脚本开头；每个样本都先用 `git check-ignore` 确认 git 确实忽略它），用 `tests/fixtures/docker/context-list.Dockerfile`（`node:${{NODE_VERSION}}-slim`，`NODE_VERSION` 取自 Dockerfile，并在构建日志里核对）列出两个构建上下文，任何样本出现在上下文里就失败。否定条目（`!.env.example`、`data/` 的占位文件）在白名单里，各写明原因。失败时会列出漏进去的样本：把条目加进 `.dockerignore`，`.gitignore` 在任意深度匹配的，用 `**/` 写法。部署从 `git archive` 构建，看不到被忽略的文件；这一步覆盖的是 `pnpm stack:up` 和直接 `docker compose build`。约 10 秒。
 
 #### Container logs on failure
 
@@ -369,6 +401,7 @@ pnpm install --frozen-lockfile
 # 任务：changes（链接）、ci-docs、static、unit（第一条就是 scripts/validate.sh 做的事）
 scripts/validate.sh            # shell 语法、i18n、lint、typecheck、单元测试、配置、文档链接、CI 文档
 pnpm build:runner
+bash tests/ops/proc-lib/cases.sh   # CI 另在固定 digest 的 bash:3.2、bash:5.2 镜像里各跑一遍（见该任务）
 pnpm exec drizzle-kit generate < /dev/null && git status --porcelain -- drizzle   # 必须没有输出
 (cd jobspy && python3.12 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt && .venv/bin/python -m pytest -q)
 
@@ -385,7 +418,9 @@ E2E_PORT=3100 E2E_SKIP_BUILD=1 pnpm test:e2e:setup --fail-on-flaky-tests
 
 # 任务：linux-smoke（Linux，只在新克隆里做：最后会 `docker compose down -v`；它会构建 web、runner、jobspy 三个镜像）
 printf 'PUID=%s\nPGID=%s\n' "$(id -u)" "$(id -g)" > .env && mkdir -p data/{config,profile,backups,exports,logs} .auth
+export JOB_RADAR_BUILD_CONTEXT="$(mktemp -d)" && git archive HEAD | tar -x -C "$JOB_RADAR_BUILD_CONTEXT"
 docker compose up -d --build --wait --wait-timeout 600 && curl -fsS http://127.0.0.1:3000/api/health
+bash tests/ops/gitignore-coverage.sh
 docker compose down -v --remove-orphans
 
 docker rm -f -v jr-ci-pg

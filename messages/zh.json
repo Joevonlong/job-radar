@@ -5428,6 +5428,8 @@
           "notLoaded": "{service} 没有加载",
           "notRunning": "{service} 没有运行中的进程",
           "noServiceManager": "这台机器上没有 launchd 或 systemd",
+          "configMounted": "{service}：{source} 挂载在 {dir} 上，挡住了镜像里自带的出厂配置（compose 文件还是出厂配置进镜像之前的版本？）",
+          "configMountedHint": "去掉这个挂载（compose.yaml 或 compose.override.yaml），然后运行 scripts/ops/deploy.sh：出厂配置现在来自镜像（docs/upgrade.zh.md）",
           "hint": "每个进程启动时上报一次（web 在健康检查时重试到成功为止，runner 和 ai-worker 每次心跳都刷新）。刚部署或重启过的话，等一分钟再运行 doctor；一直这样的话，到那个进程的日志里找 \"could not report the shipped config\"（docs/configuration.zh.md《出厂配置标识》）"
         }
       },

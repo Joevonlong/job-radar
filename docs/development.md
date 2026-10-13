@@ -39,6 +39,14 @@ pnpm ai-worker                     # host AI worker (optional)
 pnpm cycle:run --channel fixture --dry-run   # rehearse a cycle on the fixture channel
 ```
 
+The containers carry the shipped defaults inside their images (`/app/config`, copied from `config/` at build time; nothing
+is mounted there). After editing a file in `config/`, `pnpm dev` and the host processes see it at once, the containers
+only after a rebuild (`pnpm stack:up`, which is `docker compose up -d --build`). A build from the working tree uses
+`.dockerignore`, which leaves out everything `.gitignore` ignores (`tests/ops/gitignore-coverage.sh` checks this with a
+real Docker build); `scripts/ops/deploy.sh` instead builds from a `git archive` of the commit it deploys, setting
+`JOB_RADAR_BUILD_CONTEXT` (`compose.yaml` falls back to `.` when it is unset), so uncommitted changes never reach a
+deployed image.
+
 ## Try it with sample data
 
 To look around without your own data or any API key:
@@ -73,7 +81,8 @@ the repository's `.next/`, so don't run it next to `pnpm dev` / `pnpm start`. De
 
 ## Checks
 
-`scripts/validate.sh` runs the i18n catalog check (`pnpm i18n:check`), lint, typecheck, unit tests, config check, the
+`scripts/validate.sh` runs a syntax check of the shell scripts (`scripts/`, `scripts/ops/`, `scripts/ops/lib/` and the
+shell tests under `tests/ops/`), the i18n catalog check (`pnpm i18n:check`), lint, typecheck, unit tests, config check, the
 documentation link check, the CI documentation check (`pnpm ci:docs-check`) and the planning-id check
 (`scripts/release-check.sh --planning-ids-only`: internal tracker ids such as `F-` / `B-` / `ADR-` numbers must not appear in the repository; a path whose id
 is data goes into `scripts/planning-ids.allow`). User-visible text lives in `messages/*.json` (see [languages.md](languages.md)); after editing

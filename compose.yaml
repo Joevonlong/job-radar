@@ -49,7 +49,10 @@ services:
 
   web:
     build:
-      context: .
+      # JOB_RADAR_BUILD_CONTEXT is set only by scripts/ops/deploy.sh: it builds from an unpacked `git archive` of the
+      # target commit (data/build/<commit>-<pid>), so nothing from the working tree reaches the image. Unset (pnpm
+      # stack:up, a plain `docker compose build`) the context is the checkout itself.
+      context: ${JOB_RADAR_BUILD_CONTEXT:-.}
       target: web
     restart: unless-stopped
     # Linux: the uid:gid that owns data/ on the host (`id -u`, `id -g`), so the web can write data/config (docs/host-setup.md).
@@ -73,14 +76,15 @@ services:
       # The host address the port is published on (below): with anything but loopback, local requests need the web
       # password too, because a forged Host: localhost could then come from the network (docs/configuration.md "Web access").
       JOB_RADAR_WEB_BIND: ${JOB_RADAR_WEB_BIND:-127.0.0.1}
-      # shipped defaults (read-only) and the user's config (every save lands here; a file there wins)
+      # shipped defaults (baked into the image at /app/config, read-only) and the user's config (every save lands
+      # here; a file there wins)
       JOB_RADAR_DEFAULTS_DIR: /app/config
       JOB_RADAR_CONFIG_DIR: /app/data/config
       JOB_RADAR_PROFILE_DIR: /app/data/profile
-    # The settings pages write the user config (data/config) and the profile files back, so both are read-write;
-    # the shipped defaults (config/) are never written. At start-up the web copies the user files data/config lacks from config/.
+    # The settings pages write the user config (data/config) and the profile files back, so both are read-write.
+    # The shipped defaults are in the image (/app/config), never mounted: a deploy changes them only by rebuilding.
+    # At start-up the web copies the user files data/config lacks from them.
     volumes:
-      - ./config:/app/config:ro
       - ./data/config:/app/data/config
       - ./data/profile:/app/data/profile
       # JDs exported for resume-kit. Set jd_export_host_dir to the
@@ -108,7 +112,8 @@ services:
 
   runner:
     build:
-      context: .
+      # Same context as the web (see there).
+      context: ${JOB_RADAR_BUILD_CONTEXT:-.}
       target: runner
     restart: unless-stopped
     # The same uid:gid as the web: the runner reads the config files the web writes (mode 0600) and writes data/backups.
@@ -152,11 +157,11 @@ services:
       JOB_RADAR_WEB_PASSWORD: ""
       JOB_RADAR_WEB_PASSWORD_HASH: ""
       JOB_RADAR_SESSION_SECRET: ""
-    # Both config directories are read-only for the runner (it hot-reloads what the web writes into data/config). The
-    # profile directory is mounted read-write for one reason: at start-up the runner seeds missing me.yaml /
-    # preferences.yaml from config/profile.example (ensureProfileFiles). It never overwrites an existing file.
+    # The user config is read-only for the runner (it hot-reloads what the web writes into data/config); the shipped
+    # defaults are in the image (/app/config). The profile directory is mounted read-write for one reason: at start-up
+    # the runner seeds missing me.yaml / preferences.yaml from config/profile.example (ensureProfileFiles). It never
+    # overwrites an existing file.
     volumes:
-      - ./config:/app/config:ro
       - ./data/config:/app/data/config:ro
       - ./data/profile:/app/data/profile
       - ./data/backups:/app/data/backups
@@ -184,7 +189,8 @@ services:
   # .env (API keys, the web password, the session key) reaches it.
   jobspy:
     build:
-      context: ./jobspy
+      # Same context as the web (see there), its jobspy/ subdirectory.
+      context: ${JOB_RADAR_BUILD_CONTEXT:-.}/jobspy
     restart: unless-stopped
     <<: *hardening
     read_only: true

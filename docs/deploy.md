@@ -46,21 +46,21 @@ Run it in the **main checkout** (not in a worktree or feature branch; without `-
 
 | Step | What it does | Usual failure |
 |---|---|---|
-| 1 preflight | git / docker / node / pnpm are present, Docker is running, the external volume is not mounted twice | Docker Desktop is not up |
-| 2 pull | No uncommitted changes. Without `--ref`: you are on main and, after `git fetch`, it fast-forwards to `origin/main`. With `--ref <tag>`: it fetches and checks out that tag (or branch) | You are on another branch (without `--ref`); unpushed local commits (diverged) |
+| 1 preflight | The terminal does not stop background output (`tostop` unset); takes the deploy lock (one deploy at a time, see "One deploy at a time" below) and removes build contexts that earlier, interrupted deploys left in `data/build/`; git / docker / node / pnpm are present, Docker is running; no uncommitted changes to tracked files (in every mode, `--skip-pull` too, see "Build context and a clean checkout"); the external volume is not mounted twice | Docker Desktop is not up; uncommitted changes; another deploy holds the lock; `stty tostop` is set (run `stty -tostop`) |
+| 2 pull | Without `--ref`: you are on main and, after `git fetch`, it fast-forwards to `origin/main`. With `--ref <tag>`: it fetches and checks out that tag (or branch). Then the commit to deploy is fixed: every later step uses it, and the steps from install to migrate stop if HEAD moved or tracked files changed meanwhile | You are on another branch (without `--ref`); unpushed local commits (diverged); `checkout moved during deploy` (another git command ran in the checkout during the deploy) |
 | 3 install | `pnpm install --frozen-lockfile` | Network |
 | 4 config | Creates `data/config`, `data/profile`, `data/backups`, `data/exports`; `pnpm config:init` (copies files missing from the user config directory `data/config` from the shipped defaults in `config/`, never overwriting; on the first deployment the user directory is empty, so everything is copied); `pnpm config:migrate --write` (`config_version` upgrade, originals backed up to `data/config/.backup/<timestamp>/`); `pnpm config:check` (checks both layers and writes out which layer each config is read from); checks `.env`; `docker compose config` | A YAML error (the message names the file and field); a file's `config_version` is newer than the code (the code was rolled back) |
 | 5 backup | If db is already running, take a `pre-deploy` backup first (skipped on the first deployment) | If the backup fails the upgrade does not continue |
-| 6 build | `docker compose -p job-radar build` | Disk full |
+| 6 build | Unpacks `git archive` of the commit fixed in step 2 into `data/build/<commit>-<pid>/` and runs `docker compose -p job-radar build` with that directory as the build context (`JOB_RADAR_BUILD_CONTEXT`). The images contain exactly the committed files, the shipped defaults of `config/` included | Disk full |
 | 7 up | First `pnpm ops:drain`: if a cycle is running, wait for it to finish (up to `schedule.yaml: deploy.drain_timeout_seconds`, 900 seconds), because recreating the runner would cut it off. Then `docker compose up -d --wait`: db / web / runner / jobspy must all become healthy (up to 300 seconds) | A service does not start: the script lists `docker compose ps` and the command to view logs. A cycle still running after the wait only prints a warning (`pnpm ops:drain` exit code 1), and so does a check that could not be made (exit code 3: config or database error, or a query that hung): the deployment carries on and the runner re-runs that scheduled slot when it starts (catch-up) |
-| 8 prune | Cleans up Docker: keeps the build cache by most recent use down to `schedule.yaml: deploy.build_cache_keep_gb` (`docker builder prune -f --max-used-space 5gb`), removes dangling images (`docker image prune -f`, without `-a`). Never touches data volumes and never removes images in use | Never fails the deployment: a command error just prints ⚠ and continues (for example an old Docker that does not know `--max-used-space`) |
-| 9 migrate | `pnpm migrate:run` (the runner also migrates automatically on start; this is a confirmation, and does nothing if already up to date). When a migration is pending, a `premigrate` backup (database and config archive) is taken first, and the migration does not run if that backup fails (`backup.pre_migrate` in `schedule.yaml`) | Bad migration SQL; the pre-migration backup failed |
-| 10 ai-worker | `scripts/ops/install-ai-worker.sh`: installs or restarts the ai-worker as a launchd agent on macOS or a systemd user unit (`job-radar-ai-worker.service`) on Linux (on macOS it also replaces an agent still installed under the old label `de.jobradar.ai-worker`, see below). An AI request it is working on (for example a `run_ai` scoring a whole cycle) is not lost: it goes back to the queue and runs again after the restart (see "Work interrupted by a restart" below) | `claude` / `codex` not on PATH |
+| 8 migrate | `pnpm migrate:run` (the runner also migrates automatically on start; this is a confirmation, and does nothing if already up to date). When a migration is pending, a `premigrate` backup (database and config archive) is taken first, and the migration does not run if that backup fails (`backup.pre_migrate` in `schedule.yaml`) | Bad migration SQL; the pre-migration backup failed |
+| 9 ai-worker | `scripts/ops/install-ai-worker.sh`: installs or restarts the ai-worker as a launchd agent on macOS or a systemd user unit (`job-radar-ai-worker.service`) on Linux (on macOS it also replaces an agent still installed under the old label `de.jobradar.ai-worker`, see below). An AI request it is working on (for example a `run_ai` scoring a whole cycle) is not lost: it goes back to the queue and runs again after the restart (see "Work interrupted by a restart" below) | `claude` / `codex` not on PATH |
+| 10 prune | First releases the deploy lock and removes the build context of step 6. Then cleans up Docker: keeps the build cache by most recent use down to `schedule.yaml: deploy.build_cache_keep_gb` (`docker builder prune -f --max-used-space 5gb`), removes dangling images (`docker image prune -f`, without `-a`). Never touches data volumes and never removes images in use | Never fails the deployment: a command error just prints ⚠ and continues (for example an old Docker that does not know `--max-used-space`) |
 | 11 doctor | Waits 20 seconds for heartbeats, then runs `pnpm run doctor` | See below |
 
-Options: `--skip-pull` (leave git alone and deploy the current code; used for rollback), `--no-backup`, `--no-prune` (skip the cleanup in step 8), `--no-ai-worker`, `--no-drain` (do not wait for a running cycle in step 7), `--drain-timeout SECONDS` (instead of `deploy.drain_timeout_seconds`), `--ref <tag|branch>` (deploy a release tag such as `v2.0.0` instead of `main`, see [upgrade.md](upgrade.md)), `--branch`, `--remote`, `--wait-timeout SECONDS`, `--settle SECONDS`; see `--help` for all of them.
+Options: `--skip-pull` (leave git alone and deploy the current code; used for rollback), `--no-backup`, `--no-prune` (skip the Docker cleanup in step 10), `--no-ai-worker`, `--no-drain` (do not wait for a running cycle in step 7), `--drain-timeout SECONDS` (instead of `deploy.drain_timeout_seconds`), `--ref <tag|branch>` (deploy a release tag such as `v2.0.0` instead of `main`, see [upgrade.md](upgrade.md)), `--branch`, `--remote`, `--wait-timeout SECONDS`, `--settle SECONDS`; see `--help` for all of them.
 
-The settings for steps 7 and 8 are in the `deploy` block of `schedule.yaml` (only the deploy script reads it; changes take effect on the next deployment). The deploy and backup scripts read `schedule.yaml` the same way the code does: first the user config `data/config/schedule.yaml`, and only if it is absent the shipped default `config/schedule.yaml`:
+The settings for steps 7 and 10 are in the `deploy` block of `schedule.yaml` (only the deploy script reads it; changes take effect on the next deployment). The deploy and backup scripts read `schedule.yaml` the same way the code does: first the user config `data/config/schedule.yaml`, and only if it is absent the shipped default `config/schedule.yaml`:
 
 | Key | Default | Meaning |
 |---|---|---|
@@ -69,6 +69,53 @@ The settings for steps 7 and 8 are in the `deploy` block of `schedule.yaml` (onl
 | `deploy.prune_dangling_images` | true | Remove dangling images (untagged images left over from old builds) |
 | `deploy.drain_timeout_seconds` | 900 | Step 7 waits at most this long for a running cycle to finish before the containers are recreated; 0 = do not wait |
 | `deploy.drain_poll_seconds` | 10 | How often step 7 looks while it waits |
+
+### Build context and a clean checkout
+
+The images are built from the commit being deployed, not from the working tree: step 6 unpacks `git archive` of that
+commit into `data/build/<commit>-<pid>/` and builds from there. Files git ignores (`.env`, `data/`, a `*.local.yaml`),
+untracked files, local edits, permission-only changes and symbolic links that point outside the repository never reach an
+image. The shipped defaults in `config/` are part of the web and runner images (`/app/config`, read-only, owned by root);
+nothing is mounted over them, so a change to `config/` reaches the containers only through a deploy.
+
+Because the config steps and the migration run from the checkout itself, the checkout must match that commit: every mode,
+`--skip-pull` included, refuses to start when a tracked file has uncommitted changes (`git status --porcelain
+--untracked-files=no`; untracked files are allowed). From step 2 on, the steps stop with `checkout moved during deploy`
+if HEAD moves or a tracked file changes while the deploy runs.
+
+The build context directory is removed when the deploy ends. If a deploy is killed outright (for example `kill -9`), the
+directory stays; the next deploy removes it once it holds the lock.
+
+### One deploy at a time: the deploy lock
+
+Step 1 takes the lock `data/releases/ai-worker/.lock/` (a directory; `owner` names the process and host,
+`inflight/` holds one record per script working under the lock). A second deploy started meanwhile stops in step 1 with
+exit code 1, changes nothing and prints who holds the lock, the records, and how to check and clear it. The lock is
+released just before the Docker cleanup (step 10), or when the deploy stops early.
+
+A lock is never taken over automatically. It stays behind only when a deploy was killed with `kill -9` (its exit handler
+could not run), or when the deploy could not confirm that everything it started has ended (then it exits 1 with
+"descendant exit not confirmed; lock left in place"). Before you clear it, make sure nothing it started is still running,
+with the `ps` command the message prints (a build, `pnpm install`, a migration, a config write, a drain), then remove the
+lock with the `rm -rf data/releases/ai-worker/.lock` it prints, and deploy again.
+
+### Interrupting a deploy
+
+Ctrl-C, closing the terminal and `kill <pid>` do not cut a step off halfway. Each command of a step runs in its own
+process group, which the terminal's signals do not reach: the step that is running finishes first, no further step
+starts, the lock is released and the build context removed, and the script exits with 130 (Ctrl-C, INT), 143 (TERM) or
+129 (HUP, the terminal closed). It prints the step and its process group as it stops:
+
+```text
+stopping after this step (build: build the images from the target commit, process group 12345); to abort it now: kill -TERM -12345
+```
+
+To abort the running step at once, send that `kill -TERM -<group>` yourself: the step then fails, and the deploy still
+waits for the group to empty before it cleans up and releases the lock. A deploy stopped this way leaves the system as
+a failed step would (the steps already done are not rolled back); run the script again to finish.
+
+When the terminal closes, a command that writes to it can fail and fail its step. Run a production deploy inside `tmux`
+(or `nohup scripts/ops/deploy.sh > deploy.log 2>&1 &`) so that a dropped ssh connection does not stop it.
 
 ### Work interrupted by a restart
 
@@ -84,14 +131,14 @@ The ai-worker holds a Postgres session advisory lock for as long as it runs; a s
 - The lock needs a real session. If `DATABASE_URL` goes through a pooler in transaction mode (for example PgBouncer `pool_mode = transaction`), the lock is not tied to the worker's connection and does not protect anything: point the ai-worker at Postgres directly or at a session-mode pool. The compose setup connects directly.
 - When the database restarts, every lock is gone. The worker takes it again on its next heartbeat (`host_worker.heartbeat_seconds`); a second worker that starts in that gap gets the lock instead, puts the first one's running request back into the queue (so it can run twice) and the first one shuts down at its next heartbeat. Only a second worker started by hand during a database restart can hit this.
 
-Where the ai-worker installed in step 10 writes its logs:
+Where the ai-worker installed in step 9 writes its logs:
 
 - **Limitation**: launchd itself cannot open files on an external volume. If the plist's `StandardOutPath` / `StandardErrorPath` point to an external volume, the job does not start at all (`launchctl print` shows `last exit code = 78: EX_CONFIG`; same with `/bin/sh` and with node, verified on macOS). `WorkingDirectory` and program files on the external volume are fine, and a node process started by launchd can also write files to the external volume. So do **not** change those two plist paths to an external volume.
 - The ai-worker writes its own output to `data/logs/ai-worker.out.log` / `ai-worker.err.log` (on the project's volume). When a file exceeds `ai.yaml: host_worker.log_max_mb` (10 MB) it is copied and truncated, keeping `log_keep` (3) copies `.1` to `.3`.
 - launchd's own output file stays on the internal disk: `~/Library/Logs/job-radar/ai-worker.launchd.log`. It only catches output and crashes from before the worker opens its own log; it is rotated by size too, and the rotated old copies go to `data/logs/`, so the internal disk only ever holds this one small file.
 - Versions installed before this arrangement also wrote logs to `~/Library/Logs/job-radar/ai-worker.{out,err}.log` (doctor's `aiworker.launchd` shows ⚠️ for it): re-run `scripts/ops/install-ai-worker.sh` (or `scripts/ops/deploy.sh`) and the old logs are moved once to `data/logs/ai-worker.{out,err}.before-upgrade.log`.
 
-Exit codes: `0` deployment finished and doctor has no problems (or only ⚠️); `1` a step failed; `2` deployment finished but doctor reported ❌ (follow its "what to do", then run `pnpm run doctor` again).
+Exit codes: `0` deployment finished and doctor has no problems (or only ⚠️); `1` a step failed, or another deploy holds the lock; `2` deployment finished but doctor reported ❌ (follow its "what to do", then run `pnpm run doctor` again); `130`, `143`, `129` the deploy was interrupted (INT, TERM, HUP; see "Interrupting a deploy").
 
 On the first deployment it is normal for doctor to show ⚠️ or ❌ (Tailscale not connected, the paid channels without a key; Telegram is reported as optional until you switch it on): complete the section 1 checklist until `pnpm run doctor` is all ✅. Then do a restart verification (host-setup section 5: quit and reopen Docker Desktop; the four services return to healthy within a minute or two), and ideally reboot the Mac once to confirm the whole system comes back with nobody touching it.
 
@@ -145,7 +192,7 @@ The exit code reflects the worst item: `0` all ✅, `1` some ⚠️, `2` some �
 | `ai.backlog` | AI request queue, jobs waiting to be scored, result of the latest `run_ai` (if nothing was scored because the profile is incomplete, the reason is stated and it does not count as success) | ⚠️ backlog: is the ai-worker up? |
 | `ai.quota` | Job Radar's own usage cap of the subscription CLIs (`ai.yaml: quota_guard`): each CLI's calls in the rolling window against `hard_requests`. Only Job Radar's own calls are counted, so this says nothing about what is left of your account's quota | ⚠️ a CLI's window is full, or the CLI reported a limit and is cooling down: it resumes by itself at the time shown; raise the cap in Settings → AI → Limits if it gets in your way (`pnpm ai:usage-stats` shows your own numbers) |
 | `config.layers` | The user config directory `data/config` exists and is writable; lists overridden `shipped` files, files whose version is behind (need migrating), and `user` files still read from the defaults | ❌ directory missing or not writable (`pnpm config:init`; check the mount); ❌ a file's `config_version` is newer than the code (the code was rolled back: upgrade the code or restore from `data/config/.backup/`); ⚠️ you overrode `models.yaml` / `pipeline.yaml`: product updates to those files will not take effect, delete your copy in `data/config` if you want to follow them; ⚠️ version behind: `pnpm config:migrate` shows the changes, `--write` writes them back |
-| `config.shipped` | The shipped config identity each running process reports (web, runner, and the ai-worker with `execution: host`), and that each report comes from the process running now: the running container (host name and start time) or the ai-worker service's PID. See [configuration.md](configuration.md#shipped-config-identity) | ⚠️ no report, a report from an earlier container or process, or no PID from launchd / systemd to match it: right after a deploy or restart, wait a minute and run again; otherwise look for "could not report the shipped config" in that process's log. Skipped without the database |
+| `config.shipped` | The shipped config identity each running process reports (web, runner, and the ai-worker with `execution: host`), and that each report comes from the process running now: the running container (host name and start time) or the ai-worker service's PID. See [configuration.md](configuration.md#shipped-config-identity) | ⚠️ no report, a report from an earlier container or process, or no PID from launchd / systemd to match it: right after a deploy or restart, wait a minute and run again; otherwise look for "could not report the shipped config" in that process's log. ⚠️ something mounted on `/app/config` in a container (it hides the shipped config in the image; usually an old `compose.override.yaml`): remove the mount and deploy. Skipped without the database |
 | `host.power` | In `pmset`, autorestart is 1 and sleep is 0 | ⚠️ not set: host-setup section 3 |
 
 Doctor's thresholds and names are in `schedule.yaml` (the copy in the user config `data/config/`; no restart needed, changes apply on the next run):
@@ -174,10 +221,13 @@ Other locations: the database connection uses `DATABASE_URL` (if unset it is ass
 
 ## 4. Upgrade
 
+The first upgrade from 2.0.1 or older to a version that builds the shipped config into the images takes three commands
+of its own; see "Upgrading across the shipped config in the images" in [upgrade.md](upgrade.md).
+
 ```bash
 scripts/ops/deploy.sh --dry-run     # take a look first
 scripts/ops/deploy.sh --ref v2.0.0   # recommended for users: a release tag (see upgrade.md)
-scripts/ops/deploy.sh               # or follow main:  pull latest main, back up, build, restart, prune Docker build cache, migrate, restart ai-worker, doctor
+scripts/ops/deploy.sh               # or follow main:  pull latest main, back up, build, restart, migrate, restart ai-worker, prune Docker build cache, doctor
 ```
 
 Before upgrading the script automatically takes a `jobradar-manual-…-pre-deploy.dump` backup (manual backups are never pruned automatically). During the upgrade web and runner restart for a few tens of seconds; restarting the runner while a cycle is running interrupts that cycle, and on the next start `catch_up` re-runs it. To avoid cycles, upgrade between them: morning cycle 07:00, evening cycle 17:00 (weekdays), weekend 09:00.
@@ -186,7 +236,7 @@ After upgrading run `pnpm run doctor` and confirm there are no new ❌.
 
 ### With layered config
 
-- The live configuration is `data/config/` (not in git) and the web UI only writes there. `config/` holds the defaults shipped with the code; if it changes after a deploy `git pull`, it only affects files that are **not** in the user directory (`shipped` files such as `models.yaml` and `pipeline.yaml`, unless you overrode them). So the main checkout no longer becomes dirty because of a save in the web UI, and a deployment no longer refuses to pull for that reason.
+- The live configuration is `data/config/` (not in git) and the web UI only writes there. `config/` holds the defaults shipped with the code; they are built into the web and runner images, so a change reaches the containers with the deploy that builds and restarts them (steps 6 and 7), not with a `git pull` alone. A changed default only affects files that are **not** in the user directory (`shipped` files such as `models.yaml` and `pipeline.yaml`, unless you overrode them). So the main checkout no longer becomes dirty because of a save in the web UI, and a deployment no longer refuses to pull for that reason.
 - **Upgrading from a version before layered config**: step 4 finds `data/config` empty, and `pnpm config:init` copies all `user`-type files currently in `config/` into it (same result as `pnpm config:init --from config`: at that point the defaults are the old live config). Changes already saved in the web UI but not committed live in `config/` (the checkout is dirty and step 2 refuses); commit first, then deploy. Between steps 4 and 7 (the old containers are still running and still write `config/`) do not save settings in the web UI.
 - An upgrade that changes a config format (a file's `config_version` goes up one): `pnpm config:migrate --write` in step 4 migrates automatically, with originals in `data/config/.backup/<timestamp>/`. To look first: `pnpm config:migrate` (prints the diff only).
 

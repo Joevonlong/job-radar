@@ -46,21 +46,21 @@ scripts/ops/deploy.sh
 
 | 步骤 | 做什么 | 失败时通常是 |
 |---|---|---|
-| 1 preflight | git / docker / node / pnpm 都在，Docker 在运行，外接卷没有重复挂载 | Docker Desktop 没起来 |
-| 2 pull | 没有未提交的改动。不带 `--ref`：当前在 main，`git fetch` 后快进到 `origin/main`。带 `--ref <tag>`：fetch 后检出该 tag（或分支） | 在别的分支（不带 `--ref` 时）；本地有没推送的提交（分叉） |
+| 1 preflight | 终端没有设 `tostop`（否则后台输出会被暂停）；取部署锁（同一时间只有一次部署，见下面“同一时间只有一次部署”），并删除以前被中断的部署留在 `data/build/` 里的构建上下文；git / docker / node / pnpm 都在，Docker 在运行；已跟踪的文件没有未提交的改动（所有模式都查，`--skip-pull` 也一样，见“构建上下文和干净的工作树”）；外接卷没有重复挂载 | Docker Desktop 没起来；有未提交的改动；另一次部署持有锁；设了 `stty tostop`（运行 `stty -tostop`） |
+| 2 pull | 不带 `--ref`：当前在 main，`git fetch` 后快进到 `origin/main`。带 `--ref <tag>`：fetch 后检出该 tag（或分支）。然后固定要部署的提交：后面每一步都用它；从 install 到 migrate，HEAD 移动了或已跟踪的文件变了，那一步就停下 | 在别的分支（不带 `--ref` 时）；本地有没推送的提交（分叉）；`checkout moved during deploy`（部署期间有别的 git 命令动了检出目录） |
 | 3 install | `pnpm install --frozen-lockfile` | 网络 |
 | 4 config | 建 `data/config`、`data/profile`、`data/backups`、`data/exports`；`pnpm config:init`（把用户配置目录 `data/config` 缺的文件从默认配置 `config/` 复制过去，从不覆盖；第一次部署时用户目录是空的，于是整份复制）；`pnpm config:migrate --write`（`config_version` 升级，原文件备份到 `data/config/.backup/<时间>/`）；`pnpm config:check`（两层都查，并写出每份配置读的是哪一层）；检查 `.env`；`docker compose config` | YAML 写错了（报错会指出文件和字段）；某个文件的 `config_version` 比代码新（代码回退了） |
 | 5 backup | db 已经在运行就先做一份 `pre-deploy` 备份（第一次部署跳过） | 备份失败时不继续升级 |
-| 6 build | `docker compose -p job-radar build` | 磁盘满 |
+| 6 build | 把第 2 步固定的提交用 `git archive` 解到 `data/build/<提交>-<pid>/`，以这个目录为构建上下文（`JOB_RADAR_BUILD_CONTEXT`）运行 `docker compose -p job-radar build`。镜像里正好是已提交的文件，包括 `config/` 里的出厂默认配置 | 磁盘满 |
 | 7 up | 先 `pnpm ops:drain`：有轮次正在运行就等它结束（最长 `schedule.yaml: deploy.drain_timeout_seconds`，900 秒），因为重建 runner 会打断它。然后 `docker compose up -d --wait`：db / web / runner / jobspy 都要变成 healthy（最长 300 秒） | 某个服务起不来：脚本会列出 `docker compose ps` 和看日志的命令。等完了轮次还在跑只打印警告（`pnpm ops:drain` 退出码 1），没能检查（退出码 3：配置或数据库出错，或某个查询卡住）也只打印警告：部署继续，runner 启动时的补跑会重跑那个定时时段 |
-| 8 prune | 清理 Docker：构建缓存按最近使用只留 `schedule.yaml: deploy.build_cache_keep_gb`（`docker builder prune -f --max-used-space 5gb`），删悬空镜像（`docker image prune -f`，不带 `-a`）。从不碰数据卷，不删正在使用的镜像 | 不会让部署失败：命令出错只打印 ⚠ 继续（比如 Docker 太旧不认 `--max-used-space`） |
-| 9 migrate | `pnpm migrate:run`（runner 启动时也会自动迁移，这里是确认；已是最新则什么都不做）。有待执行的迁移时先做一份 `premigrate` 备份（数据库加配置压缩包），备份失败就不迁移（`schedule.yaml` 的 `backup.pre_migrate`） | 迁移 SQL 有问题；迁移前备份失败 |
-| 10 ai-worker | `scripts/ops/install-ai-worker.sh`：安装或重启 ai-worker：macOS 上是 launchd agent，Linux 上是 systemd 用户单元 `job-radar-ai-worker.service`（macOS 上也会替换还装在旧标签 `de.jobradar.ai-worker` 下的 agent，见 host-setup）。它正在处理的 AI 请求（比如给一整轮打分的 `run_ai`）不会丢：回到队列，重启后接着跑（见下面“被重启打断的工作”） | `claude` / `codex` 不在 PATH 里 |
+| 8 migrate | `pnpm migrate:run`（runner 启动时也会自动迁移，这里是确认；已是最新则什么都不做）。有待执行的迁移时先做一份 `premigrate` 备份（数据库加配置压缩包），备份失败就不迁移（`schedule.yaml` 的 `backup.pre_migrate`） | 迁移 SQL 有问题；迁移前备份失败 |
+| 9 ai-worker | `scripts/ops/install-ai-worker.sh`：安装或重启 ai-worker：macOS 上是 launchd agent，Linux 上是 systemd 用户单元 `job-radar-ai-worker.service`（macOS 上也会替换还装在旧标签 `de.jobradar.ai-worker` 下的 agent，见 host-setup）。它正在处理的 AI 请求（比如给一整轮打分的 `run_ai`）不会丢：回到队列，重启后接着跑（见下面“被重启打断的工作”） | `claude` / `codex` 不在 PATH 里 |
+| 10 prune | 先释放部署锁、删除第 6 步的构建上下文。然后清理 Docker：构建缓存按最近使用只留 `schedule.yaml: deploy.build_cache_keep_gb`（`docker builder prune -f --max-used-space 5gb`），删悬空镜像（`docker image prune -f`，不带 `-a`）。从不碰数据卷，不删正在使用的镜像 | 不会让部署失败：命令出错只打印 ⚠ 继续（比如 Docker 太旧不认 `--max-used-space`） |
 | 11 doctor | 等 20 秒让心跳到位，再运行 `pnpm run doctor` | 见下 |
 
-选项：`--skip-pull`（不动 git，按当前代码部署，回滚用）、`--ref <标签|分支>`（部署 `v2.0.0` 这样的发布标签而不是 `main`，见 [upgrade.zh.md](upgrade.zh.md)）、`--no-backup`、`--no-prune`（跳过第 8 步的清理）、`--no-ai-worker`、`--no-drain`（第 7 步不等正在运行的轮次）、`--drain-timeout 秒`（代替 `deploy.drain_timeout_seconds`）、`--branch`、`--remote`、`--wait-timeout 秒`、`--settle 秒`；`--help` 看全部。
+选项：`--skip-pull`（不动 git，按当前代码部署，回滚用）、`--ref <标签|分支>`（部署 `v2.0.0` 这样的发布标签而不是 `main`，见 [upgrade.zh.md](upgrade.zh.md)）、`--no-backup`、`--no-prune`（跳过第 10 步的 Docker 清理）、`--no-ai-worker`、`--no-drain`（第 7 步不等正在运行的轮次）、`--drain-timeout 秒`（代替 `deploy.drain_timeout_seconds`）、`--branch`、`--remote`、`--wait-timeout 秒`、`--settle 秒`；`--help` 看全部。
 
-第 7、8 步的设置在 `schedule.yaml` 的 `deploy` 块（只有部署脚本读它，改完下次部署生效）。部署脚本和备份脚本读 `schedule.yaml` 时和代码一样：先读用户配置 `data/config/schedule.yaml`，没有才读默认的 `config/schedule.yaml`：
+第 7、10 步的设置在 `schedule.yaml` 的 `deploy` 块（只有部署脚本读它，改完下次部署生效）。部署脚本和备份脚本读 `schedule.yaml` 时和代码一样：先读用户配置 `data/config/schedule.yaml`，没有才读默认的 `config/schedule.yaml`：
 
 | 键 | 默认 | 含义 |
 |---|---|---|
@@ -69,6 +69,32 @@ scripts/ops/deploy.sh
 | `deploy.prune_dangling_images` | true | 删除悬空镜像（旧构建留下的、没有标签的镜像） |
 | `deploy.drain_timeout_seconds` | 900 | 第 7 步重建容器前，最多等这么多秒让正在运行的轮次结束；0 = 不等 |
 | `deploy.drain_poll_seconds` | 10 | 第 7 步等待时多久看一次 |
+
+### 构建上下文和干净的工作树
+
+镜像从要部署的提交构建，而不是从工作树构建：第 6 步把这个提交用 `git archive` 解到 `data/build/<提交>-<pid>/`，从那里构建。被 git 忽略的文件（`.env`、`data/`、`*.local.yaml`）、未跟踪的文件、本地改动、只改了权限的文件、指向仓库外的符号链接，都进不了镜像。`config/` 里的出厂默认配置是 web、runner 镜像的一部分（`/app/config`，只读，属于 root），上面不挂载任何东西，所以 `config/` 的改动只有经过部署才会到容器里。
+
+配置步骤和迁移是从检出目录本身运行的，所以检出目录必须和那个提交一致：所有模式（包括 `--skip-pull`）在已跟踪的文件有未提交的改动时都拒绝开始（`git status --porcelain --untracked-files=no`；未跟踪的文件不影响）。从第 2 步起，部署期间 HEAD 移动了或已跟踪的文件变了，步骤就以 `checkout moved during deploy` 停下。
+
+部署结束时删除构建上下文目录。部署被直接杀掉（比如 `kill -9`）时目录会留下，下一次部署拿到锁之后删除它。
+
+### 同一时间只有一次部署：部署锁
+
+第 1 步取锁 `data/releases/ai-worker/.lock/`（一个目录；`owner` 记着持有它的进程和主机，`inflight/` 里每个在锁下工作的脚本有一条记录）。这时再启动的部署在第 1 步以退出码 1 停下，什么都不改，并打印谁持有锁、有哪些记录、怎么核对和清除。锁在 Docker 清理（第 10 步）之前释放，部署提前停下时也会释放。
+
+锁从不被自动接管。只有两种情况会留下锁：部署被 `kill -9` 杀掉（它的退出处理没能运行）；或者部署没法确认它启动的东西都已结束（这时它以 1 退出，消息是 “descendant exit not confirmed; lock left in place”）。清除之前，先用消息里打印的 `ps` 命令确认它启动的东西（构建、`pnpm install`、迁移、配置写入、drain）都已不在，再执行它打印的 `rm -rf data/releases/ai-worker/.lock`，然后重新部署。
+
+### 中断部署
+
+Ctrl-C、关掉终端、`kill <pid>` 都不会把某一步从中间切断。每一步的命令都在自己的进程组里运行，终端的信号到不了它：正在运行的那一步先跑完，不再开始下一步，释放锁、删除构建上下文，脚本以 130（Ctrl-C，INT）、143（TERM）或 129（HUP，终端关了）退出。停下时它会打印当前这一步和它的进程组：
+
+```text
+stopping after this step (build: build the images from the target commit, process group 12345); to abort it now: kill -TERM -12345
+```
+
+想立刻中止正在运行的这一步，自己发这条 `kill -TERM -<组号>`：这一步就算失败，部署照样等这个组清空后才清理、释放锁。这样停下的部署，和某一步失败时一样（已完成的步骤不回滚）；再运行一次脚本就能做完。
+
+终端关掉之后，往终端写输出的命令可能出错，让这一步失败。生产部署建议在 `tmux` 里运行（或者 `nohup scripts/ops/deploy.sh > deploy.log 2>&1 &`），这样 ssh 断线不会让它停下。
 
 ### 被重启打断的工作
 
@@ -84,14 +110,14 @@ ai-worker 运行期间一直持有一个 Postgres 会话级 advisory lock；第�
 - 这把锁需要真正的会话。如果 `DATABASE_URL` 经过事务模式的连接池（例如 PgBouncer `pool_mode = transaction`），锁就不跟 worker 的连接绑定，起不到保护作用：让 ai-worker 直连 Postgres，或者用会话模式的池。compose 的配置是直连。
 - 数据库重启时所有锁都没了。worker 在下一次心跳（`host_worker.heartbeat_seconds`）时重新拿锁；如果恰好在这个空档里启动了第二个 worker，锁归它，它会把第一个正在执行的请求放回队列（于是可能跑两次），第一个在下一次心跳时退出。只有在数据库重启期间手动再起一个 worker 才会碰到。
 
-第 10 步装的 ai-worker 的日志位置：
+第 9 步装的 ai-worker 的日志位置：
 
 - **限制**：launchd 自己打不开外接卷上的文件。plist 的 `StandardOutPath` / `StandardErrorPath` 指向外接卷时，任务根本起不来（`launchctl print` 显示 `last exit code = 78: EX_CONFIG`；用 `/bin/sh` 和 node 都一样，在 macOS 上实测）。`WorkingDirectory` 和程序文件在外接卷上没问题，launchd 启动的 node 进程也能往外接卷写文件。所以**不要**把 plist 的这两个路径改到外接卷上。
 - ai-worker 自己把输出写到 `data/logs/ai-worker.out.log` / `ai-worker.err.log`（项目所在的卷），超过 `ai.yaml: host_worker.log_max_mb`（10 MB）复制后截断，留 `log_keep`（3）份 `.1`…`.3`。
 - launchd 的输出文件留在内置盘：`~/Library/Logs/job-radar/ai-worker.launchd.log`，只接住 worker 打开自己的日志之前的输出和崩溃；同样按大小轮转，轮转出来的旧副本放到 `data/logs/`，内置盘上始终只有这一个小文件。
 - 更早版本安装的 ai-worker 还把日志写在 `~/Library/Logs/job-radar/ai-worker.{out,err}.log`（doctor 的 `aiworker.launchd` 会 ⚠️ 提示）：重新运行 `scripts/ops/install-ai-worker.sh`（或 `scripts/ops/deploy.sh`），旧日志会一次性搬到 `data/logs/ai-worker.{out,err}.before-upgrade.log`。
 
-退出码：`0` 部署完成且 doctor 没有问题（或只有 ⚠️）；`1` 某一步失败；`2` 部署完成，但 doctor 报告了 ❌（按它的「怎么办」处理，处理完再运行 `pnpm run doctor`）。
+退出码：`0` 部署完成且 doctor 没有问题（或只有 ⚠️）；`1` 某一步失败，或者另一次部署持有锁；`2` 部署完成，但 doctor 报告了 ❌（按它的「怎么办」处理，处理完再运行 `pnpm run doctor`）；`130`、`143`、`129` 部署被中断（INT、TERM、HUP，见《中断部署》）。
 
 第一次部署时 doctor 出现 ⚠️ 或 ❌ 很正常（比如 Tailscale 没连、付费渠道没填 key；Telegram 没开时 doctor 只当它是可选项）：按第 1 节的清单补齐，直到 `pnpm run doctor` 全是 ✅。然后做一次重启验证（host-setup 第 5 节：退出再打开 Docker Desktop，一两分钟内四个服务回到 healthy），最好再重启一次 Mac，确认不用任何人干预整套系统都回来。
 
@@ -145,7 +171,7 @@ pnpm run doctor --lang zh    # 用另一种语言输出报告（默认：languag
 | `ai.backlog` | AI 请求队列、等打分的岗位数、最近一次 `run_ai` 的结果（因画像不完整没有打分时写明原因，不算成功） | ⚠️ 积压：ai-worker 在不在 |
 | `ai.quota` | Job Radar 自己对订阅 CLI 的用量上限（`ai.yaml: quota_guard`）：每个 CLI 在滚动窗口内的调用数对比 `hard_requests`。只统计 Job Radar 自己的调用，看不到账户的真实用量 | ⚠️ 某个 CLI 的窗口满了，或它报告了限制正在冷却：到显示的时间会自动恢复；如果碍事，在设置 → AI → 限额里调高（`pnpm ai:usage-stats` 打印你自己的数据） |
 | `config.layers` | 用户配置目录 `data/config` 存在且可写；列出覆盖了的 `shipped` 文件、版本落后（要迁移）的文件、还在读默认配置的 `user` 文件 | ❌ 目录不存在或不可写（`pnpm config:init`；查挂载）；❌ 某个文件的 `config_version` 比代码新（代码回退了：升级代码或从 `data/config/.backup/` 恢复）；⚠️ 覆盖了 `models.yaml` / `pipeline.yaml`：产品更新这些文件的内容不会生效，想跟随就删掉 `data/config` 里那份；⚠️ 版本落后：`pnpm config:migrate` 看改动，`--write` 写回 |
-| `config.shipped` | 每个运行中的进程（web、runner，以及 `execution: host` 时的 ai-worker）报告的出厂配置标识，并核对每份报告是否来自现在运行的进程：运行中的容器（主机名和启动时间），或 ai-worker 服务的 PID。见 [configuration.zh.md](configuration.zh.md#出厂配置标识) | ⚠️ 没有报告、报告来自之前的容器或进程、或 launchd / systemd 给不出 PID 无法核对：部署或重启后等一分钟再运行；否则在该进程日志里找 "could not report the shipped config"。连不上数据库时跳过 |
+| `config.shipped` | 每个运行中的进程（web、runner，以及 `execution: host` 时的 ai-worker）报告的出厂配置标识，并核对每份报告是否来自现在运行的进程：运行中的容器（主机名和启动时间），或 ai-worker 服务的 PID。见 [configuration.zh.md](configuration.zh.md#出厂配置标识) | ⚠️ 没有报告、报告来自之前的容器或进程、或 launchd / systemd 给不出 PID 无法核对：部署或重启后等一分钟再运行；否则在该进程日志里找 "could not report the shipped config"。⚠️ 容器的 `/app/config` 上有挂载（会挡住镜像里的出厂配置，通常是旧的 `compose.override.yaml`）：去掉挂载再部署。连不上数据库时跳过 |
 | `host.power` | `pmset` 里 autorestart 是 1、sleep 是 0 | ⚠️ 没设置：host-setup 第 3 节 |
 
 doctor 的阈值和名字都在 `schedule.yaml`（用户配置 `data/config/` 里那份；改完不用重启，下次运行就生效）：
@@ -174,10 +200,12 @@ doctor 的阈值和名字都在 `schedule.yaml`（用户配置 `data/config/` �
 
 ## 4. 升级
 
+从 2.0.1 或更早的版本第一次升级到出厂配置打进镜像的版本，要多做三条命令，见 [upgrade.zh.md](upgrade.zh.md)《跨过“出厂配置打进镜像”这一版的升级》。
+
 ```bash
 scripts/ops/deploy.sh --dry-run     # 先看一眼
 scripts/ops/deploy.sh --ref v2.0.0   # 用户推荐：发布标签（见 upgrade.zh.md）
-scripts/ops/deploy.sh               # 或跟随 main：拉最新 main、备份、构建、重启、清理 Docker 构建缓存、迁移、重启 ai-worker、doctor
+scripts/ops/deploy.sh               # 或跟随 main：拉最新 main、备份、构建、重启、迁移、重启 ai-worker、清理 Docker 构建缓存、doctor
 ```
 
 升级前脚本会自动做一份 `jobradar-manual-…-pre-deploy.dump` 备份（手动备份不会被自动清理）。升级期间 web 和 runner 会重启几十秒；轮次正在运行时重启 runner 会让这一轮中断，下次启动时 `catch_up` 会补跑。想避开轮次：早轮 07:00、晚轮 17:00（工作日）、周末 09:00，在两轮之间升级。
@@ -186,7 +214,7 @@ scripts/ops/deploy.sh               # 或跟随 main：拉最新 main、备份�
 
 ### 配置分层之后
 
-- 线上配置是 `data/config/`（不进 git），网页只写这里；`config/` 是随代码发布的默认配置，部署 `git pull` 后它变了也只影响用户目录里**没有**的文件（`models.yaml`、`pipeline.yaml` 这类 `shipped` 文件，除非你覆盖了它们）。所以主 checkout 不会再因为网页保存而变脏，部署也不会再因此拒绝 pull。
+- 线上配置是 `data/config/`（不进 git），网页只写这里；`config/` 是随代码发布的默认配置，打进 web、runner 镜像，所以它的改动随构建并重启容器的那次部署（第 6、7 步）生效，单独 `git pull` 不会生效。默认配置变了也只影响用户目录里**没有**的文件（`models.yaml`、`pipeline.yaml` 这类 `shipped` 文件，除非你覆盖了它们）。所以主 checkout 不会再因为网页保存而变脏，部署也不会再因此拒绝 pull。
 - **从配置分层之前的版本升级**：第 4 步发现 `data/config` 是空的，`pnpm config:init` 把当时 `config/` 里的全部 `user` 类文件复制过去（和 `pnpm config:init --from config` 结果相同：此时默认配置就是旧的线上配置）。第 4 步之前已经在网页上保存、但还没提交的改动在 `config/` 里（checkout 是脏的，第 2 步会拒绝），先提交再部署。第 4 步到第 7 步之间（旧容器还在跑、还写 `config/`）不要在网页上保存设置。
 - 升级带了配置格式变化（某个文件的 `config_version` 加了一版）：第 4 步的 `pnpm config:migrate --write` 自动迁移，原文件在 `data/config/.backup/<时间>/`。想先看：`pnpm config:migrate`（只打印 diff）。
 

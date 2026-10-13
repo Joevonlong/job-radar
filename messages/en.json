@@ -5428,6 +5428,8 @@
           "notLoaded": "{service} is not loaded",
           "notRunning": "{service} has no running process",
           "noServiceManager": "no launchd or systemd on this system",
+          "configMounted": "{service}: {source} is mounted over {dir}, which hides the shipped config built into the image (a compose file from before the shipped config moved into the image?)",
+          "configMountedHint": "Remove that mount (compose.yaml or compose.override.yaml) and run scripts/ops/deploy.sh: the shipped defaults come from the image now (docs/upgrade.md)",
           "hint": "Each process reports at start-up (the web again on its health checks until it works, runner and ai-worker with every heartbeat). Right after a deploy or restart, wait a minute and run the doctor again; if it stays, look in that process's log for \"could not report the shipped config\" (docs/configuration.md, \"Shipped config identity\")"
         }
       },

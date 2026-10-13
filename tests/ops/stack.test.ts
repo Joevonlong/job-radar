@@ -27,6 +27,7 @@ interface ComposeService {
   read_only?: boolean;
   tmpfs?: string[];
   mem_limit?: string;
+  build?: { context?: string; target?: string };
 }
 // merge: the `<<: *hardening` keys, as docker compose reads them
 const compose = parse(read("compose.yaml"), { merge: true }) as { name?: string; services: Record<string, ComposeService>; volumes?: Record<string, { name?: string }> };
@@ -73,26 +74,37 @@ describe("compose.yaml: restart, logging and healthchecks", () => {
 });
 
 describe("compose.yaml: config layers", () => {
-  it("web reads the shipped defaults read-only and writes the user config", () => {
+  it("web writes the user config; the shipped defaults come from the image", () => {
     const web = compose.services.web;
-    expect(web?.volumes).toContain("./config:/app/config:ro");
     expect(web?.volumes).toContain("./data/config:/app/data/config");
     expect(web?.environment).toMatchObject({ JOB_RADAR_DEFAULTS_DIR: "/app/config", JOB_RADAR_CONFIG_DIR: "/app/data/config", JOB_RADAR_PROFILE_DIR: "/app/data/profile" });
   });
 
-  it("the runner gets both config directories read-only", () => {
+  it("the runner gets the user config read-only; the shipped defaults come from the image", () => {
     const runner = compose.services.runner;
-    expect(runner?.volumes).toContain("./config:/app/config:ro");
     expect(runner?.volumes).toContain("./data/config:/app/data/config:ro");
     expect(runner?.environment).toMatchObject({ JOB_RADAR_DEFAULTS_DIR: "/app/config", JOB_RADAR_CONFIG_DIR: "/app/data/config" });
   });
 
-  it("no service can write the shipped defaults", () => {
-    for (const service of Object.values(compose.services)) {
+  it("no service mounts anything over /app/config or from ./config", () => {
+    for (const [name, service] of Object.entries(compose.services)) {
       for (const volume of service.volumes ?? []) {
-        if (typeof volume === "string" && volume.startsWith("./config:")) expect(volume.endsWith(":ro")).toBe(true);
+        const [source, target] = typeof volume === "string" ? volume.split(":") : [volume.source, volume.target];
+        expect(target, `${name}: ${String(source)}`).not.toMatch(/^\/app\/config(\/|$)/);
+        expect(source, name).not.toMatch(/^\.\/config(\/|$)/);
       }
     }
+  });
+});
+
+describe("compose.yaml: build contexts", () => {
+  it("web and runner build from JOB_RADAR_BUILD_CONTEXT (set by deploy.sh), else the checkout", () => {
+    expect(compose.services.web?.build).toMatchObject({ context: "${JOB_RADAR_BUILD_CONTEXT:-.}", target: "web" });
+    expect(compose.services.runner?.build).toMatchObject({ context: "${JOB_RADAR_BUILD_CONTEXT:-.}", target: "runner" });
+  });
+
+  it("jobspy builds from the jobspy directory of the same context", () => {
+    expect(compose.services.jobspy?.build).toMatchObject({ context: "${JOB_RADAR_BUILD_CONTEXT:-.}/jobspy" });
   });
 });
 

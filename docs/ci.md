@@ -189,8 +189,28 @@ resolves). A few seconds. Typical cause: a config edit that violates its zod sch
 
 #### Shell script syntax
 
-`for f in scripts/*.sh scripts/ops/*.sh; do bash -n "$f"; done`. A parse-only check of the operations scripts (deploy,
-backup, restore, worker installers, validate). The scripts' behaviour is tested in `tests/ops/`. Instant.
+`for f in scripts/*.sh scripts/ops/*.sh scripts/ops/lib/*.sh tests/ops/*.sh tests/ops/proc-lib/*.sh; do bash -n "$f"; done`.
+A parse-only check of the operations scripts (deploy, backup, restore, worker installers, validate), the libraries they
+source and the shell test scripts. The scripts' behaviour is tested in `tests/ops/`. Instant.
+
+#### Process library cases (bash 3.2)
+
+`docker run --rm -v "$PWD":/w -w /w bash:3.2@sha256:0fd7cb8499c63a3c9345e7088a9cd83bb69f6e895e83833859aff838a0312091 bash tests/ops/proc-lib/cases.sh`.
+`scripts/ops/lib/proc.sh` runs every state-changing command of the deploy scripts in its own process group, records
+INT / TERM / HUP and finishes the current step before stopping, and maps exit codes. Its cases (new process group,
+pipes and grandchildren under each signal, cooperative children, exit-code mapping, the two signal-versus-exit races run
+60 times each, POSIX mode refused, `VAR=value proc_run`) run here under bash 3.2, the version of macOS `/bin/bash`. The
+official `bash` images are pinned by digest; they are alpine with busybox, so `cases.sh` uses only `bash`, `sh`,
+`uname`, `sleep` (with `0.05`), `cat`, `tr`, `grep`, `mktemp`, `rm`, `seq` and a readable `/proc`; it checks them
+first and fails (never skips) with `FAIL: missing <tool>` when one is missing. The pseudo-terminal (`tostop`) cases and
+the real-pnpm process-group case need `script`, `node` and `pnpm`, so they run in the unit job
+(`tests/ops/proc-lib.test.ts`). About 30 seconds. Locally: the same command, or `bash tests/ops/proc-lib/cases.sh`.
+
+#### Process library cases (bash 5.2)
+
+`docker run --rm -v "$PWD":/w -w /w bash:5.2@sha256:a54fb4422b18f05dd3107c36f39d67b26334fda7ec89f4126052b45e228e2f15 bash tests/ops/proc-lib/cases.sh`.
+The same cases under bash 5.2. The races matter most here: bash 5.2 returns 255 from a `wait` that a trap interrupted
+just as the child ended, which `proc_run` avoids by polling with `kill -0` and waiting once. About 30 seconds.
 
 #### Runner bundle
 
@@ -442,7 +462,10 @@ The Linux first run from scratch: an empty checkout on the Ubuntu runner, `docke
 defaults, and the dashboard must answer. It catches what Docker Desktop on macOS hides: file ownership of the bind
 mounts (`PUID` / `PGID`), config files written with mode 0600, folders the containers cannot write. Because it builds the
 web, runner and jobspy images from the Dockerfiles, it is also what catches a broken `apt` / CLI install, a wrong `COPY`
-path or a build-stage failure before a deploy does (there is no separate image-only build job). Runs for every pull
+path or a build-stage failure before a deploy does (there is no separate image-only build job). It builds the images
+the way `scripts/ops/deploy.sh` does, from an unpacked `git archive` of the commit, and checks the shipped config in
+them (the `config/` files are part of the images, not mounted), and that a build from a working tree leaves out
+everything `.gitignore` ignores. Runs for every pull
 request that is not documentation-only, and for every push to `main`. Limit 20 minutes, the build step 15; typically a
 few minutes (a cold build, without layer cache). Locally on a Linux machine: the commands of the steps below in a fresh clone (never in a checkout whose
 stack and database you want to keep: the last step removes the stack and its volume).
@@ -456,6 +479,12 @@ stack and database you want to keep: the last step removes the stack and its vol
 Writes a `.env` with only `PUID` / `PGID` set to the runner's own user (`id -u`, `id -g`), as
 [host-setup.md](host-setup.md) tells Linux users to, and creates the `data/` folders and `.auth/` as that user, so the
 bind mounts are not created by Docker as root.
+
+#### Unpack the commit as the build context
+
+`git archive HEAD | tar -x -C "$(mktemp -d)"`, and that directory goes into `JOB_RADAR_BUILD_CONTEXT` for the following
+steps. `compose.yaml` builds web, runner and jobspy from `${JOB_RADAR_BUILD_CONTEXT:-.}`, which `scripts/ops/deploy.sh`
+sets the same way, so the images contain only committed files. Instant.
 
 #### Start the stack from scratch
 
@@ -475,6 +504,37 @@ logs on failure" step prints why.
 Creates and removes a file in `data/config` inside the web container (the settings page and the wizard write there) and
 checks that the runner can write `data/backups`. A failure means the container user does not own the bind-mounted
 folders: check `user:` in `compose.yaml` and the `PUID` / `PGID` lines.
+
+#### The images ship exactly the committed config
+
+Lists the files under `/app/config` in the web and runner containers and compares them with `git ls-files config`
+(`diff -u`). A difference means the Dockerfile's `COPY config/ /app/config/` or `.dockerignore` changed what reaches the
+image. Seconds.
+
+#### The shipped config is read-only for every user
+
+Four `find`s in each container, run as the container's own user, must print nothing: `find /app/config ! -user root`
+(everything owned by root), `find /app/config -perm /022` (nothing writable by group or others), `find /app/config -type
+f ! -perm -444` (every file readable by all) and `find /app/config -type d ! -perm -555` (every directory readable and
+searchable by all). A failure means the `RUN chmod -R a+rX,go-w /app/config` in the Dockerfile is missing or runs before
+a later `COPY`. Seconds.
+
+#### Nothing is mounted over the shipped config
+
+`docker inspect` of the web and runner containers: no mount may have `/app/config` (or a path below it) as its
+destination. A mount there would hide the config in the image; the doctor (`config.shipped`) warns about it on an
+installation too. Instant.
+
+#### Docker build context leaves out what .gitignore ignores
+
+`bash tests/ops/gitignore-coverage.sh`. In a temporary directory with copies of `.gitignore` and `.dockerignore`, it
+turns every `.gitignore` entry into a sample file at the root and one in a subdirectory (the expansion rule is in the
+script's header; `git check-ignore` confirms that git ignores each sample), lists two build contexts with
+`tests/fixtures/docker/context-list.Dockerfile` (`node:${{NODE_VERSION}}-slim`, `NODE_VERSION` from the Dockerfile, checked in the
+build log) and fails when any sample is in a context. Negations (`!.env.example`, the `data/` markers) are in an
+allowlist with their reasons. A failure names the leaked samples: add the entry to `.dockerignore`, at any depth
+(`**/`) when `.gitignore` matches it at any depth. Deploys build from `git archive` and never see ignored files; this
+covers `pnpm stack:up` and a plain `docker compose build`. About 10 seconds.
 
 #### Container logs on failure
 
@@ -540,6 +600,7 @@ pnpm install --frozen-lockfile
 # jobs: changes (links) and ci-docs, static, unit  (the first block is what scripts/validate.sh does)
 scripts/validate.sh            # shell syntax, i18n, lint, typecheck, unit tests, config, doc links, CI docs
 pnpm build:runner
+bash tests/ops/proc-lib/cases.sh   # the CI also runs it in the pinned bash:3.2 and bash:5.2 images (see the job)
 pnpm exec drizzle-kit generate < /dev/null && git status --porcelain -- drizzle   # must print nothing
 (cd jobspy && python3.12 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt && .venv/bin/python -m pytest -q)
 
@@ -557,7 +618,9 @@ E2E_PORT=3100 E2E_SKIP_BUILD=1 pnpm test:e2e:setup --fail-on-flaky-tests
 # job: linux-smoke (Linux, in a fresh clone only: it ends with `docker compose down -v`; it builds the web, runner
 # and jobspy images)
 printf 'PUID=%s\nPGID=%s\n' "$(id -u)" "$(id -g)" > .env && mkdir -p data/{config,profile,backups,exports,logs} .auth
+export JOB_RADAR_BUILD_CONTEXT="$(mktemp -d)" && git archive HEAD | tar -x -C "$JOB_RADAR_BUILD_CONTEXT"
 docker compose up -d --build --wait --wait-timeout 600 && curl -fsS http://127.0.0.1:3000/api/health
+bash tests/ops/gitignore-coverage.sh
 docker compose down -v --remove-orphans
 
 docker rm -f -v jr-ci-pg

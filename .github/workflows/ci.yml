@@ -133,7 +133,18 @@ jobs:
         run: pnpm config:check
       - name: Shell script syntax
         timeout-minutes: 2
-        run: for f in scripts/*.sh scripts/ops/*.sh; do bash -n "$f"; done
+        run: for f in scripts/*.sh scripts/ops/*.sh scripts/ops/lib/*.sh tests/ops/*.sh tests/ops/proc-lib/*.sh; do bash -n "$f"; done
+      # scripts/ops/lib/proc.sh (process groups, signals, exit codes of the deploy scripts) under the two bash versions it
+      # must work with: 3.2 (macOS /bin/bash) and 5.2, in the official images pinned by digest. Those images are alpine with
+      # busybox; tests/ops/proc-lib/cases.sh needs only bash, sh, uname, sleep (with 0.05), cat, tr, grep, mktemp, rm, seq
+      # and a readable /proc, checks them first and fails (never skips) when one is missing. The pseudo-terminal and real
+      # pnpm cases run in the unit job (tests/ops/proc-lib.test.ts).
+      - name: Process library cases (bash 3.2)
+        timeout-minutes: 5
+        run: docker run --rm -v "$PWD":/w -w /w bash:3.2@sha256:0fd7cb8499c63a3c9345e7088a9cd83bb69f6e895e83833859aff838a0312091 bash tests/ops/proc-lib/cases.sh
+      - name: Process library cases (bash 5.2)
+        timeout-minutes: 5
+        run: docker run --rm -v "$PWD":/w -w /w bash:5.2@sha256:a54fb4422b18f05dd3107c36f39d67b26334fda7ec89f4126052b45e228e2f15 bash tests/ops/proc-lib/cases.sh
       # The runner ships as an esbuild bundle (Dockerfile runner target); the e2e job uses a stand-in, so build it here.
       - name: Runner bundle
         timeout-minutes: 5
@@ -362,7 +373,10 @@ jobs:
   # Linux first run from scratch: an empty checkout on Ubuntu, `docker compose up --build` with the defaults (only
   # PUID / PGID set to the runner's user, as docs/host-setup.md says), and the dashboard answers. Catches file ownership
   # and permission problems that Docker Desktop on macOS hides, and, because it builds the three production images (web,
-  # runner, jobspy), a Dockerfile or COPY that no longer builds.
+  # runner, jobspy), a Dockerfile or COPY that no longer builds. The images are built the way scripts/ops/deploy.sh builds
+  # them, from an unpacked `git archive` of the commit (JOB_RADAR_BUILD_CONTEXT), and the shipped config in them is
+  # checked: exactly the committed config/ files, owned by root, readable by all, writable by none, nothing mounted over
+  # it. The .gitignore coverage test checks that a build from the working tree leaves out every ignored file.
   linux-smoke:
     needs: changes
     if: needs.changes.outputs.code == 'true'
@@ -377,6 +391,13 @@ jobs:
         run: |
           printf 'PUID=%s\nPGID=%s\n' "$(id -u)" "$(id -g)" > .env
           mkdir -p data/config data/profile data/backups data/exports data/logs .auth
+      - name: Unpack the commit as the build context
+        timeout-minutes: 2
+        run: |
+          ctx="$(mktemp -d)"
+          git archive HEAD | tar -x -C "$ctx"
+          echo "JOB_RADAR_BUILD_CONTEXT=$ctx" >> "$GITHUB_ENV"
+          echo "build context: $ctx ($(find "$ctx" -type f | wc -l) files)"
       - name: Start the stack from scratch
         timeout-minutes: 15
         run: docker compose up -d --build --wait --wait-timeout 600
@@ -394,6 +415,35 @@ jobs:
           docker compose exec -T web sh -c 'touch /app/data/config/.write-check && rm /app/data/config/.write-check'
           docker compose exec -T runner sh -c 'test -w /app/data/backups'
           ls -la data/config
+      - name: The images ship exactly the committed config
+        timeout-minutes: 2
+        run: |
+          git ls-files config | sort > "$RUNNER_TEMP/config-committed.txt"
+          for svc in web runner; do
+            docker compose exec -T "$svc" find /app/config -type f | sed 's|^/app/||' | sort > "$RUNNER_TEMP/config-$svc.txt"
+            diff -u "$RUNNER_TEMP/config-committed.txt" "$RUNNER_TEMP/config-$svc.txt" \
+              || { echo "::error::/app/config in the $svc image differs from git ls-files config"; exit 1; }
+          done
+          echo "web and runner: $(wc -l < "$RUNNER_TEMP/config-committed.txt") files, as committed"
+      - name: The shipped config is read-only for every user
+        timeout-minutes: 2
+        run: |
+          # Four finds, run as the container's own user; each must print nothing: everything owned by root, nothing
+          # writable by group or others, every file readable by all, every directory readable and searchable by all.
+          for svc in web runner; do
+            out="$(docker compose exec -T "$svc" sh -c 'find /app/config ! -user root; find /app/config -perm /022; find /app/config -type f ! -perm -444; find /app/config -type d ! -perm -555')"
+            [[ -z "$out" ]] || { echo "$out"; echo "::error::wrong owner or permissions under /app/config in the $svc image"; exit 1; }
+          done
+          echo "web and runner: /app/config owned by root, a+rX, go-w"
+      - name: Nothing is mounted over the shipped config
+        timeout-minutes: 2
+        run: |
+          mounts="$(docker inspect --format '{{range .Mounts}}{{.Destination}}{{"\n"}}{{end}}' $(docker compose ps -q web runner))"
+          echo "$mounts"
+          if grep -qE '^/app/config(/|$)' <<< "$mounts"; then echo "::error::a container has a mount on /app/config"; exit 1; fi
+      - name: Docker build context leaves out what .gitignore ignores
+        timeout-minutes: 5
+        run: bash tests/ops/gitignore-coverage.sh
       - name: Container logs on failure
         if: failure()
         timeout-minutes: 2
