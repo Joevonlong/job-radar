@@ -53,6 +53,8 @@ export interface FakeAnswer {
   status?: number;
   /** The URL after a redirect (default: the requested one). */
   url?: string;
+  /** The page never loads: the browser throws Playwright's `TimeoutError` (the answer's other fields are ignored). */
+  timeout?: boolean;
 }
 
 export type FakeSite = (url: URL) => FakeAnswer;
@@ -72,6 +74,11 @@ export function fakeBrowser(site: FakeSite): { open: OpenBrowser; log: FakeBrows
       async load(url: string, loadOptions: LoadOptions): Promise<LoadedPage> {
         log.loads.push({ url, scrollList: loadOptions.scrollList });
         const answer = site(new URL(url));
+        if (answer.timeout) {
+          const error = new Error(`page.goto: Timeout 30000ms exceeded at ${url}\nCall log: ...`);
+          error.name = "TimeoutError";
+          throw error;
+        }
         return { url: answer.url ?? url, status: answer.status ?? 200, html: answer.html };
       },
       async close() {

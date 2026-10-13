@@ -58,6 +58,7 @@ function channels(edit: (session: Record<string, unknown>) => void = () => {}) {
 }
 
 function setup(options: { site?: FakeSite; login?: boolean; edit?: (session: Record<string, unknown>) => void } = {}) {
+  const clock = { now: NOW };
   const channelsConfig = channels(options.edit);
   const authFile = authFileIn({ login: options.login ?? true });
   const browser = fakeBrowser(options.site ?? happySite());
@@ -67,7 +68,7 @@ function setup(options: { site?: FakeSite; login?: boolean; edit?: (session: Rec
     recommendedSchedule: () => ({ enabled: true, cron: "0 7 * * *", timezone: "Europe/Berlin" }),
     store: () => createDbSessionStore(getDb()),
     openBrowser: browser.open,
-    now: () => NOW,
+    now: () => clock.now,
     authFile: () => authFile,
     mutex: new Mutex(),
   };
@@ -79,8 +80,8 @@ function setup(options: { site?: FakeSite; login?: boolean; edit?: (session: Rec
   registry.register(session.recommended);
   const guest = registerFixtureChannel(registry, { id: GUEST, family: "linkedin" });
   const run = (kind: CycleKind = "manual") =>
-    runCycle(kind, { registry, cascades: cascade, config: { ...config(), channels: channelsConfig }, logger: quietLogger, sleep: async () => {}, random: () => 0, now: () => NOW });
-  return { run, guest, browser, registry, channelsConfig };
+    runCycle(kind, { registry, cascades: cascade, config: { ...config(), channels: channelsConfig }, logger: quietLogger, sleep: async () => {}, random: () => 0, now: () => clock.now });
+  return { run, guest, browser, registry, channelsConfig, clock };
 }
 
 const flag = async () => (await getRuntimeState(getDb(), AUTH_FLAG_KEY))?.value;
@@ -189,6 +190,41 @@ describe("LinkedIn cascade: the session channel is third", () => {
     expect(runs.slice(2).every((r) => r.channelId === GUEST)).toBe(true);
     expect(browser.log.loads).toHaveLength(2);
     expect(guest.seen.length).toBeGreaterThan(0);
+  });
+});
+
+describe("a posting page that fails part-way", () => {
+  it("keeps the postings read: interrupted run, the rest of the day skipped, and the next day does not open the pages of the stored postings", async () => {
+    const site = { failing: true };
+    const flaky = happySite({ detail: (u) => (site.failing && u.pathname.includes("4385000103") ? { html: "", timeout: true } : null) });
+    // 7 pages: four search pages (two keyword strings, two pages each), the postings 101 and 102, and 103, which times out on the last page of the day
+    const { run, guest, browser, clock } = setup({ site: flaky, edit: (session) => (session.daily_request_limit = 7) });
+
+    const first = await run();
+    const runs = await listRunsForCycle(getDb(), first.cycleId as number);
+    expect(runs[0]).toMatchObject({ channelId: SESSION, status: "partial", interrupted: true, errorCode: "network", fetched: 2, newCount: 2 });
+    expect((await listRawPostingsForChannel(getDb(), SESSION)).map((r) => r.externalId).sort()).toEqual(["4385000101", "4385000102"]);
+    expect((await getRuntimeState(getDb(), "linkedin-session:requests:2026-10-07"))?.value).toEqual({ count: 7 });
+    // the day's pages are used up: the next query of the channel is skipped without opening a browser, the guest channel takes over
+    expect(runs[1]).toMatchObject({ channelId: SESSION, status: "skipped", errorCode: "budget_exceeded", fetched: 0 });
+    expect(runs.filter((r) => r.channelId === SESSION)).toHaveLength(2);
+    expect(runs.filter((r) => r.channelId === GUEST).length).toBeGreaterThan(0);
+    expect(browser.log.opened).toHaveLength(1);
+    expect(browser.log.loads).toHaveLength(7);
+    expect(guest.seen.length).toBeGreaterThan(0);
+
+    // the next day: what the first day stored is delivered again from the database and its pages are not opened
+    clock.now = new Date("2026-10-08T08:00:00Z");
+    site.failing = false;
+    const before = browser.log.loads.length;
+    const second = await run();
+    const next = browser.log.loads.slice(before).map((l) => new URL(l.url).pathname).filter((p) => p.startsWith("/jobs/view/"));
+    expect(next).not.toContain("/jobs/view/4385000101/");
+    expect(next).not.toContain("/jobs/view/4385000102/");
+    expect(next).toContain("/jobs/view/4385000103/");
+    const secondRuns = await listRunsForCycle(getDb(), second.cycleId as number);
+    expect(secondRuns[0]).toMatchObject({ channelId: SESSION, status: "succeeded", interrupted: false, fetched: 3, newCount: 1 });
+    expect((await listRawPostingsForChannel(getDb(), SESSION)).map((r) => r.externalId).sort()).toEqual(["4385000101", "4385000102", "4385000104"]);
   });
 });
 

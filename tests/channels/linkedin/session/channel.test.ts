@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
 
-import { BudgetExceededError, ChannelError } from "@/lib/channels/errors";
+import { BudgetExceededError, ChannelError, PartialCollectError } from "@/lib/channels/errors";
 import { sessionPayloadSchema } from "@/lib/channels/linkedin/session/payload";
 import { createMemorySessionStore } from "@/lib/channels/linkedin/session/store";
 import { normalizedPostingDraftSchema } from "@/lib/channels/types";
@@ -18,7 +18,30 @@ async function failure(promise: Promise<unknown>): Promise<ChannelError> {
   throw new Error("expected a ChannelError");
 }
 
+/** Await a collect that must end in a `PartialCollectError`; any other outcome fails the test. */
+async function partial(promise: Promise<unknown>): Promise<PartialCollectError> {
+  try {
+    await promise;
+  } catch (error) {
+    if (error instanceof PartialCollectError) return error;
+    throw error;
+  }
+  throw new Error("expected a PartialCollectError");
+}
+
 const DAY = "2026-10-07";
+
+/** The raw payloads a normal run delivers, by job id: what an earlier run would have left in the database. */
+async function deliveredBefore(): Promise<Map<string, unknown>> {
+  const first = setup();
+  const out = await first.session.collect(berlinQuery(), (await harness(first.session, first.config)).ctx);
+  return new Map(out.map((o) => [o.externalId, o.payload]));
+}
+
+const viewedJobs = (s: ReturnType<typeof setup>): string[] => s.browser.log.loads.map((l) => new URL(l.url).pathname).filter((p) => p.startsWith("/jobs/view/"));
+const listPages = (s: ReturnType<typeof setup>): number => s.browser.log.loads.filter((l) => new URL(l.url).pathname.startsWith("/jobs/search/")).length;
+const detailFails = (id: string, answer: { timeout?: true; html?: string; status?: number } = { timeout: true }) => (url: URL) => (url.pathname.includes(id) ? { html: "", ...answer } : null);
+const SECOND_PAGE_FAILS = (url: URL) => (url.searchParams.get("start") === "25" ? { html: "", timeout: true } : null);
 
 describe("linkedin-session: search", () => {
   it("opens the search page, then the page of every new posting, and delivers one raw posting per job", async () => {
@@ -214,11 +237,15 @@ describe("linkedin-session: login wall, verification and denial stop the run", (
     expect(s.store.flag).toMatchObject({ status: "expired", reason: "checkpoint" });
   });
 
-  it("a verification page in the middle of reading postings stops at once (earlier postings are not delivered half-way)", async () => {
+  it("a verification page in the middle of reading postings stops at once and hands over the postings already read", async () => {
     const s = setup({ site: happySite({ detail: (url) => (url.pathname.includes("4385000102") ? { html: fixture("checkpoint.html") } : null) }) });
     const h = await harness(s.session, s.config);
-    expect(await failure(s.session.collect(berlinQuery(), h.ctx))).toMatchObject({ code: "blocked" });
-    expect(s.browser.log.loads.map((l) => new URL(l.url).pathname).filter((p) => p.startsWith("/jobs/view/"))).toEqual(["/jobs/view/4385000101/", "/jobs/view/4385000102/"]);
+    const error = await partial(s.session.collect(berlinQuery(), h.ctx));
+    expect(error.postings.map((p) => p.externalId)).toEqual(["4385000101"]);
+    expect(error.cause).toMatchObject({ code: "blocked", retryable: false, tripsCircuit: true });
+    // not one more page is loaded, the verification page itself is not touched again
+    expect(viewedJobs(s)).toEqual(["/jobs/view/4385000101/", "/jobs/view/4385000102/"]);
+    expect(s.store.flag).toMatchObject({ status: "expired", reason: "checkpoint" });
   });
 
   it("an auth wall page is a lost login as well", async () => {
@@ -344,4 +371,201 @@ describe("linkedin-session:recommended", () => {
 
 it("all fixture detail pages used by the helpers exist", () => {
   expect(Object.keys(DETAIL_PAGES).length).toBeGreaterThan(5);
+});
+
+describe("linkedin-session: a failure part-way keeps what was read", () => {
+  it("a posting page that does not load: the postings read and the stored ones after the failure are delivered, nothing more is loaded", async () => {
+    const before = await deliveredBefore();
+    const s = setup({ site: happySite({ detail: detailFails("4385000103") }), store: createMemorySessionStore({ payloads: { "4385000104": before.get("4385000104") } }) });
+    const h = await harness(s.session, s.config);
+    const error = await partial(s.session.collect(berlinQuery(), h.ctx));
+    expect(error.cause).toBeInstanceOf(ChannelError);
+    expect(error.cause).toMatchObject({ code: "network", retryable: true, tripsCircuit: false });
+    expect(error.postings.map((p) => p.externalId)).toEqual(["4385000101", "4385000102", "4385000104"]);
+    expect(error.postings[2]?.payload).toEqual(before.get("4385000104"));
+    // the failing page is the last one loaded (the posting after it is not opened), and it is counted for the day
+    expect(viewedJobs(s)).toEqual(["/jobs/view/4385000101/", "/jobs/view/4385000102/", "/jobs/view/4385000103/"]);
+    expect(s.store.requests.get(DAY)).toBe(s.browser.log.loads.length);
+    expect(s.browser.log.closed).toBe(1);
+    expect(h.logs.find((l) => l.message === "linkedin session read finished")?.fields).toMatchObject({ delivered: 3, interrupted: "network" });
+  });
+
+  it("a login wall in the middle of reading postings: auth_expired and circuit-tripping, the postings read are kept", async () => {
+    const s = setup({ site: happySite({ detail: (url) => (url.pathname.includes("4385000102") ? { html: fixture("authwall.html") } : null) }) });
+    const error = await partial(s.session.collect(berlinQuery(), (await harness(s.session, s.config)).ctx));
+    expect(error.cause).toMatchObject({ code: "auth_expired", retryable: false, tripsCircuit: true });
+    expect(error.postings.map((p) => p.externalId)).toEqual(["4385000101"]);
+    expect(viewedJobs(s)).toEqual(["/jobs/view/4385000101/", "/jobs/view/4385000102/"]);
+    expect(s.store.flag).toMatchObject({ status: "expired" });
+  });
+
+  it("HTTP 429 in the middle of reading postings: rate_limited, retryable and not circuit-tripping, the postings read are kept", async () => {
+    const s = setup({ site: happySite({ detail: detailFails("4385000102", { status: 429 }) }) });
+    const error = await partial(s.session.collect(berlinQuery(), (await harness(s.session, s.config)).ctx));
+    expect(error.cause).toMatchObject({ code: "rate_limited", retryable: true, tripsCircuit: false, status: 429 });
+    expect(error.postings.map((p) => p.externalId)).toEqual(["4385000101"]);
+    expect(viewedJobs(s)).toEqual(["/jobs/view/4385000101/", "/jobs/view/4385000102/"]);
+  });
+
+  it("a failing posting page is not replaced by its list card (the card would be taken for a finished posting next time)", async () => {
+    const s = setup({ site: happySite({ detail: detailFails("4385000101") }) });
+    const error = await failure(s.session.collect(berlinQuery(), (await harness(s.session, s.config)).ctx));
+    expect(error).not.toBeInstanceOf(PartialCollectError);
+    expect(error).toMatchObject({ code: "network" });
+  });
+
+  describe("the second result page fails", () => {
+    it("with detail fetching, only the postings already held are delivered and no posting page is opened", async () => {
+      const before = await deliveredBefore();
+      const store = createMemorySessionStore({ payloads: { "4385000101": before.get("4385000101"), "4385000102": before.get("4385000102") } });
+      const s = setup({ store, site: happySite({ search: SECOND_PAGE_FAILS }) });
+      const error = await partial(s.session.collect(berlinQuery(), (await harness(s.session, s.config)).ctx));
+      expect(error.cause).toMatchObject({ code: "network", retryable: true });
+      expect(error.postings.map((p) => p.externalId)).toEqual(["4385000101", "4385000102"]);
+      expect(viewedJobs(s)).toEqual([]);
+      expect(listPages(s)).toBe(2);
+    });
+
+    it("without detail fetching, every card of the first page is delivered", async () => {
+      const s = setup({ config: sessionConfig((session) => (session.fetch_details = false)), site: happySite({ search: SECOND_PAGE_FAILS }) });
+      const error = await partial(s.session.collect(berlinQuery(), (await harness(s.session, s.config)).ctx));
+      expect(error.cause).toMatchObject({ code: "network" });
+      expect(error.postings.map((p) => p.externalId)).toEqual(["4385000101", "4385000102", "4385000103", "4385000104"]);
+      expect(viewedJobs(s)).toEqual([]);
+    });
+
+    it("with detail fetching and nothing held, the plain failure is thrown (there is nothing to hand over) and no posting page is opened", async () => {
+      const s = setup({ site: happySite({ search: SECOND_PAGE_FAILS }) });
+      const error = await failure(s.session.collect(berlinQuery(), (await harness(s.session, s.config)).ctx));
+      expect(error).not.toBeInstanceOf(PartialCollectError);
+      expect(error).toMatchObject({ code: "network", retryable: true });
+      expect(viewedJobs(s)).toEqual([]);
+    });
+
+    it("cards that cannot be turned into postings do not hide the failure: it is the network error, not a parse error", async () => {
+      const noCompany = fixture("search-results.html").replace(/<div class="artdeco-entity-lockup__subtitle[^>]*>[\s\S]*?<\/div>/g, "");
+      const s = setup({
+        config: sessionConfig((session) => (session.fetch_details = false)),
+        site: happySite({ search: (url) => (url.searchParams.get("start") === "25" ? { html: "", timeout: true } : { html: noCompany }) }),
+      });
+      const error = await failure(s.session.collect(berlinQuery(), (await harness(s.session, s.config)).ctx));
+      expect(error).not.toBeInstanceOf(PartialCollectError);
+      expect(error).toMatchObject({ code: "network", retryable: true });
+    });
+
+    it("a result page that is blocked (HTTP 999) after the first one: circuit-tripping, the stored postings are kept", async () => {
+      const before = await deliveredBefore();
+      const s = setup({ store: createMemorySessionStore({ payloads: { "4385000101": before.get("4385000101") } }), site: happySite({ search: (url) => (url.searchParams.get("start") === "25" ? { html: "", status: 999 } : null) }) });
+      const error = await partial(s.session.collect(berlinQuery(), (await harness(s.session, s.config)).ctx));
+      expect(error.cause).toMatchObject({ code: "blocked", tripsCircuit: true, retryable: false });
+      expect(error.postings.map((p) => p.externalId)).toEqual(["4385000101"]);
+    });
+  });
+
+  describe("the first page of the second keyword piece has a changed layout", () => {
+    // two keywords that do not fit into one search string: two pieces, searched one after another
+    const twoPieces = () => berlinQuery({ keywords: ["A".repeat(150), "B".repeat(150)] });
+    const site = () => happySite({ search: (url) => (url.searchParams.get("keywords")?.includes("BBBB") ? { html: fixture("layout-unknown.html") } : null) });
+
+    it("with held postings, they are delivered with the parse failure", async () => {
+      const before = await deliveredBefore();
+      const store = createMemorySessionStore({ payloads: { "4385000101": before.get("4385000101"), "4385000102": before.get("4385000102") } });
+      const s = setup({ store, site: site() });
+      const error = await partial(s.session.collect(twoPieces(), (await harness(s.session, s.config)).ctx));
+      expect(error.cause).toMatchObject({ code: "parse", retryable: false });
+      expect(error.postings.map((p) => p.externalId)).toEqual(["4385000101", "4385000102"]);
+      expect(viewedJobs(s)).toEqual([]);
+    });
+
+    it("without detail fetching, the cards of the first piece are delivered with the parse failure", async () => {
+      const s = setup({ config: sessionConfig((session) => (session.fetch_details = false)), site: site() });
+      const error = await partial(s.session.collect(twoPieces(), (await harness(s.session, s.config)).ctx));
+      expect(error.cause).toMatchObject({ code: "parse" });
+      expect(error.postings).toHaveLength(4);
+    });
+
+    it("with detail fetching and nothing held, the plain parse error is thrown", async () => {
+      const s = setup({ site: site() });
+      const error = await failure(s.session.collect(twoPieces(), (await harness(s.session, s.config)).ctx));
+      expect(error).not.toBeInstanceOf(PartialCollectError);
+      expect(error).toMatchObject({ code: "parse" });
+      expect(viewedJobs(s)).toEqual([]);
+    });
+  });
+
+  it("the page that uses up the day's limit fails: the failure is the network error, not a budget error, and the next call is refused before a browser opens", async () => {
+    // 2 search pages + postings 101, 102 and the failing 103 = the 5th and last page of the day
+    const s = setup({ config: sessionConfig((session) => (session.daily_request_limit = 5)), site: happySite({ detail: detailFails("4385000103") }) });
+    const error = await partial(s.session.collect(berlinQuery(), (await harness(s.session, s.config)).ctx));
+    expect(error.cause).not.toBeInstanceOf(BudgetExceededError);
+    expect(error.cause).toMatchObject({ code: "network" });
+    expect(error.postings.map((p) => p.externalId)).toEqual(["4385000101", "4385000102"]);
+    expect(s.store.requests.get(DAY)).toBe(5);
+
+    expect(await failure(s.session.collect(berlinQuery(), (await harness(s.session, s.config)).ctx))).toBeInstanceOf(BudgetExceededError);
+    expect(s.browser.log.opened).toHaveLength(1);
+    expect(s.browser.log.loads).toHaveLength(5);
+  });
+
+  it("a failure of the very first result page stays a plain failure", async () => {
+    const s = setup({ site: happySite({ search: () => ({ html: "", timeout: true }) }) });
+    const error = await failure(s.session.collect(berlinQuery(), (await harness(s.session, s.config)).ctx));
+    expect(error).not.toBeInstanceOf(PartialCollectError);
+    expect(error).toMatchObject({ code: "network" });
+    expect(s.browser.log.closed).toBe(1);
+  });
+
+  it("a cancelled cycle is not turned into a partial result", async () => {
+    const controller = new AbortController();
+    const s = setup({
+      site: happySite({
+        detail: (url) => {
+          if (!url.pathname.includes("4385000102")) return null;
+          controller.abort();
+          return { html: "", timeout: true };
+        },
+      }),
+    });
+    const h = await harness(s.session, s.config);
+    const error = await s.session.collect(berlinQuery(), { ...h.ctx, signal: controller.signal }).then(
+      () => null,
+      (e: unknown) => e,
+    );
+    expect(error).not.toBeNull();
+    expect(error).not.toBeInstanceOf(PartialCollectError);
+    expect(error).not.toBeInstanceOf(ChannelError);
+    expect(s.browser.log.closed).toBe(1);
+  });
+
+  it("a failure of the channel's own bookkeeping (the page counter) is thrown as it is, not wrapped", async () => {
+    const boom = new Error("counter write failed");
+    const base = createMemorySessionStore();
+    const addRequest = base.addRequest.bind(base);
+    const store = Object.assign(base, {
+      addRequest: async (day: string) => {
+        if (base.requests.get(day) === 3) throw boom;
+        return addRequest(day);
+      },
+    });
+    const s = setup({ store });
+    await expect(s.session.collect(berlinQuery(), (await harness(s.session, s.config)).ctx)).rejects.toBe(boom);
+  });
+
+  it("the recommended list: a posting page failing part-way keeps the postings read and does not mark the list as read", async () => {
+    const s = setup({ site: happySite({ detail: detailFails("4385000202") }) });
+    const h = await harness(s.recommended, s.config, { id: "linkedin-session:recommended" });
+    const error = await partial(s.recommended.collect({ ...berlinQuery(), keywords: [], keywordGroup: "*", location: null, maxResults: Number.MAX_SAFE_INTEGER }, h.ctx));
+    expect(error.cause).toMatchObject({ code: "network" });
+    expect(error.postings.map((p) => p.externalId)).toEqual(["4385000201"]);
+    expect(s.store.recommendedAt).toBeNull();
+  });
+
+  it("a dry run that fails part-way reports what it read and persists nothing", async () => {
+    const s = setup({ site: happySite({ detail: detailFails("4385000102") }) });
+    const h = await harness(s.session, s.config, { cycleId: null });
+    const error = await partial(s.session.collect(berlinQuery(), h.ctx));
+    expect(error.postings.map((p) => p.externalId)).toEqual(["4385000101"]);
+    expect(s.store.requests.size).toBe(0);
+    expect(s.store.flag).toBeNull();
+  });
 });

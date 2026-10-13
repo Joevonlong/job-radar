@@ -1,7 +1,7 @@
 import { latestSlotAtOrBefore } from "@/lib/cycle/schedule";
 import { getDb } from "@/lib/db/client";
 
-import { BudgetExceededError, ChannelError } from "../../errors";
+import { BudgetExceededError, ChannelError, PartialCollectError } from "../../errors";
 import { marketForChannel } from "../../market";
 import type { Channel, ChannelContext, RawPostingInput, SearchQuery } from "../../types";
 import { loadConfig } from "@/lib/config";
@@ -192,6 +192,15 @@ async function read(input: ReadInput): Promise<RawPostingInput[]> {
     return { page, verdict };
   };
 
+  // The first failed page load ends the page loading of this query: no further page is opened (that would only spend the day's
+  // pages while LinkedIn is failing, limiting or checking us). What needs no page is still delivered, with the failure.
+  const stop: { error: ChannelError | null } = { error: null };
+  const interrupt = (error: unknown): boolean => {
+    if (!(error instanceof ChannelError) || ctx.signal.aborted) return false;
+    stop.error = error;
+    return true;
+  };
+
   // ---- list pages
   const cards = new Map<string, ListCard>();
   let pages = 0;
@@ -202,6 +211,7 @@ async function read(input: ReadInput): Promise<RawPostingInput[]> {
       try {
         loaded = await load(plan.listUrl(piece, pageIndex * SEARCH_PAGE_SIZE), true);
       } catch (error) {
+        if (interrupt(error)) break lists;
         if (!(error instanceof DailyLimitReached)) throw error;
         if (cards.size === 0) throw new BudgetExceededError("channel", `${LINKEDIN_SESSION_ID}: daily limit of ${limit} LinkedIn pages reached`);
         ctx.logger.warn("daily page limit reached while listing", { limit });
@@ -211,7 +221,8 @@ async function read(input: ReadInput): Promise<RawPostingInput[]> {
       const found = parseListCards(loaded.page.html, deps.now());
       if (found.length === 0) {
         if (pageIndex > 0 || isEmptyResultsPage(loaded.page.html)) break;
-        throw new ChannelError("parse", "a LinkedIn result page has no job cards and is not an empty-results page: the page layout may have changed");
+        stop.error = new ChannelError("parse", "a LinkedIn result page has no job cards and is not an empty-results page: the page layout may have changed");
+        break lists;
       }
       for (const card of found) if (!cards.has(card.jobId)) cards.set(card.jobId, card);
     }
@@ -243,10 +254,13 @@ async function read(input: ReadInput): Promise<RawPostingInput[]> {
       payload = buildPayload({ jobId: card.jobId, url, source: plan.source, card, detail: null });
       if (payload === null) counts.unreadable += 1;
     } else {
+      // after a failure the postings that need a page are left for the next run (they are listed again then)
+      if (stop.error !== null) continue;
       let loaded: { page: LoadedPage; verdict: PageVerdict };
       try {
         loaded = await load(url, false);
       } catch (error) {
+        if (interrupt(error)) continue;
         if (!(error instanceof DailyLimitReached)) throw error;
         capped = true;
         break;
@@ -269,7 +283,7 @@ async function read(input: ReadInput): Promise<RawPostingInput[]> {
     if (payload !== null) emit(card.jobId, payload, payload.postedAt);
   }
   if (capped) ctx.logger.warn("daily page limit reached while reading postings; the rest waits for the next run", { limit });
-  if (out.length === 0 && counts.unreadable > 0) {
+  if (stop.error === null && out.length === 0 && counts.unreadable > 0) {
     throw new ChannelError("parse", "no LinkedIn posting page could be read: the page layout may have changed");
   }
   if (counts.cardOnly > 0) ctx.logger.warn("some posting pages had no readable content; their list card data was kept", { count: counts.cardOnly });
@@ -279,10 +293,16 @@ async function read(input: ReadInput): Promise<RawPostingInput[]> {
     cards: cards.size,
     delivered: out.length,
     ...counts,
+    ...(stop.error === null ? {} : { interrupted: stop.error.code }),
     pagesToday: input.counter.used,
     dailyLimit: limit,
     ...(ctx.cycle.id === null ? { dryRun: true, note: "dry run: the page loads are real, but the daily counter is not persisted" } : {}),
   });
+  if (stop.error !== null) {
+    // the postings are handed over with the failure; with none to hand over it is a plain failure
+    if (out.length > 0) throw new PartialCollectError(out, stop.error);
+    throw stop.error;
+  }
   return out;
 }
 

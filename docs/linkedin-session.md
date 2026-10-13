@@ -62,6 +62,8 @@ On the **first** such page the channel stops immediately (loads no more pages), 
 
 Recovery: log into LinkedIn yourself in a normal browser, complete the verification it asks for, then run `pnpm auth:linkedin`. HTTP 429 counts only as one retryable failure (no immediate breaker; consecutive failures open it). If the page structure changed (neither job cards nor a "no results" page) it reports a `parse` error and never quietly returns empty.
 
+What was already read is kept. After the stop no more pages are loaded in that query; the postings already read, and those that need no page load (already stored, or list cards when `fetch_details` is off), are handed over. If at least one posting is handed over the run shows as interrupted on `/sources`, otherwise as an ordinary failure. The same applies to a network error or HTTP 429 part way through a query. Postings already stored are not read again next time, so they cost no pages; cards that still need their posting page are listed again by the next run. Reaching `daily_request_limit` part way is a planned stop: the run ends normally.
+
 ## Containers and permissions
 - In the runner container the Playwright base image ships the browser, and `playwright-core` is installed separately in the image (`build:runner` marks it external). `/dev/shm` is tiny, so `--disable-dev-shm-usage` is added.
 - `.auth/` is mounted read-only into runner and web (web only uses it to decide "Not logged in / Valid", it does not browse). Permissions 700/600 work on macOS Docker Desktop; on a Linux host, if the container user cannot see a 600 file, change the owner of `.auth/` to the container user's uid rather than loosening the permissions.
