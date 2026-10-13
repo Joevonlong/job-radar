@@ -51,6 +51,9 @@ const RELEASE_LOGGER = `
 # test only: log every call of releases_lock_release
 eval "$(declare -f releases_lock_release | sed '1s/^releases_lock_release/test_real_releases_lock_release/')"
 releases_lock_release() { echo "# release mine=$RELEASES_LOCK_MINE" >> "\${DEPLOY_TEST_LOG:-/dev/null}"; test_real_releases_lock_release "$@"; }
+# test only: log every liveness check with the in-flight records present at that moment
+eval "$(declare -f releases_pid_alive | sed '1s/^releases_pid_alive/test_real_releases_pid_alive/')"
+releases_pid_alive() { echo "# pid_alive $1 inflight=$(ls "\${LOCK:-/nonexistent}/inflight" 2>/dev/null | tr '\\n' ',')" >> "\${DEPLOY_TEST_LOG:-/dev/null}"; test_real_releases_pid_alive "$@"; }
 `;
 
 // Hook snippets for the stubs (run with bash -c; DEPLOY_PID is deploy.sh's PID, WORK the checkout, LOCK the lock directory).
@@ -59,6 +62,7 @@ const MOVE_HEAD = `${GIT_T} commit -q --allow-empty -m moved`;
 const COMMIT_LATE_FILE = `echo late > "$WORK/LATE" && ${GIT_T} add LATE && ${GIT_T} commit -q -m late`;
 const TOUCH_TRACKED = 'echo changed >> "$WORK/src/app.ts"';
 const BLOCK = (name: string): string => `BLOCK_NAME=${name} bash "${blockingStub}"`;
+const CORRUPT_INDEX = 'printf "not an index" > "$WORK/.git/index"';
 const ADD_OTHER_RECORD = `printf 'script=install-ai-worker.sh\\npid=1\\nstarted=1\\n' > "$LOCK/inflight/1"`;
 
 beforeAll(() => {
@@ -94,6 +98,10 @@ beforeAll(() => {
     `#!/usr/bin/env bash
 echo "git $*" >> "$DEPLOY_TEST_LOG.git"
 if [[ "\${GIT_FAIL_ARCHIVE:-}" == 1 && " $* " == *" archive "* ]]; then echo "fatal: archive failed (test)" >&2; exit 1; fi
+# GIT_TARGET_HOOK runs once, right after the first plain \`rev-parse HEAD\` (the one that fixes TARGET).
+if [[ -n "\${GIT_TARGET_HOOK:-}" && "$*" == *" rev-parse HEAD" && ! -e "$DEPLOY_TEST_LOG.hooked" ]]; then
+  "${realGit}" "$@"; rc=$?; : > "$DEPLOY_TEST_LOG.hooked"; bash -c "$GIT_TARGET_HOOK"; exit $rc
+fi
 exec "${realGit}" "$@"
 `,
     0o755,
@@ -159,6 +167,7 @@ const readLines = (file: string): string[] =>
 
 function resetLogs(): void {
   for (const f of [log, `${log}.ctx`, `${log}.git`]) fs.writeFileSync(f, "");
+  fs.rmSync(`${log}.hooked`, { force: true });
 }
 
 function collect(status: number | null, out: string): Run {
@@ -225,6 +234,12 @@ function restore(commit: string): void {
   git(work, "reset", "-q", "--hard", commit);
   fs.rmSync(path.join(realWork, "data/releases"), { recursive: true, force: true });
   fs.rmSync(buildDir, { recursive: true, force: true });
+}
+
+// After a test that damaged the index: rebuild it from HEAD.
+function repairIndex(): void {
+  fs.rmSync(path.join(work, ".git/index"), { force: true });
+  git(work, "reset", "-q");
 }
 
 // A sorted listing of a tree: path, permission bits, link target.
@@ -755,6 +770,65 @@ describe("scripts/ops/deploy.sh: the target commit is fixed", () => {
     }
   });
 
+  it("HEAD moves right after the target is fixed: the check before the install stops it (no pnpm install)", () => {
+    const base = head();
+    try {
+      const r = deploy(["--skip-pull", "--settle", "0"], { GIT_TARGET_HOOK: MOVE_HEAD });
+      expect(r.status).toBe(1);
+      expect(r.out).toContain('step 3/11 "install: dependencies" failed: checkout moved during deploy');
+      expect(r.calls.some((c) => c.startsWith("pnpm"))).toBe(false);
+    } finally {
+      restore(base);
+    }
+  });
+
+  it.each([
+    ["HEAD moves", MOVE_HEAD],
+    ["a tracked file changes", TOUCH_TRACKED],
+  ])("%s during the install: the check before the config step stops it (no config command)", (_label, hook) => {
+    const base = head();
+    try {
+      const r = deploy(["--skip-pull", "--settle", "0"], { PNPM___frozen_lockfile_HOOK: hook });
+      expect(r.status).toBe(1);
+      expect(r.calls).toContain("pnpm install --frozen-lockfile");
+      expect(r.out).toContain('step 4/11 "config: configuration, .env, data directories" failed: checkout moved during deploy');
+      expect(r.calls.some((c) => c.startsWith("pnpm config:"))).toBe(false);
+    } finally {
+      restore(base);
+    }
+  });
+
+  it("a damaged index (git status fails, prints nothing) is never read as a clean checkout: preflight stops with exit 1", () => {
+    const base = head();
+    try {
+      fs.appendFileSync(path.join(work, "src/app.ts"), "// local change\n");
+      fs.writeFileSync(path.join(work, ".git/index"), "not an index");
+      const r = deploy(["--skip-pull", "--settle", "0"]);
+      expect(r.status).toBe(1);
+      expect(r.out).toContain('step 1/11 "preflight: terminal, deploy lock, tools, Docker, clean checkout, external volume" failed: cannot read the state of the checkout (git status failed');
+      expect(r.calls).toEqual(["docker info"]);
+      expect(r.gitCalls.some((c) => / (fetch|merge|pull|archive) /.test(` ${c} `))).toBe(false);
+      expect(fs.existsSync(lockDir)).toBe(false);
+    } finally {
+      repairIndex();
+      restore(base);
+    }
+  });
+
+  it("the index gets damaged during the build: the next check fails instead of passing on empty output (no drain, no up, no migrate)", () => {
+    const base = head();
+    try {
+      const r = deploy(["--skip-pull", "--settle", "0"], { BUILD_HOOK: CORRUPT_INDEX });
+      expect(r.status).toBe(1);
+      expect(r.out).toContain('step 7/11 "up: start and wait until healthy (at most 300 s)" failed: cannot check the checkout (git failed, see above)');
+      expect(r.calls.some((c) => c.startsWith("pnpm ops:drain") || c.includes(" up ") || c === "pnpm migrate:run")).toBe(false);
+      expect(buildContexts()).toEqual([]);
+    } finally {
+      repairIndex();
+      restore(base);
+    }
+  });
+
   it("JOB_RADAR_DEPLOY_EXPECT_SHA: another commit stops before the install; the same commit deploys", () => {
     const base = head();
     try {
@@ -912,6 +986,25 @@ describe("scripts/ops/deploy.sh: the deploy lock and in-flight records", () => {
     }
   });
 
+  it.skipIf(process.getuid?.() === 0)("the lock cannot be set up (inflight/ cannot be created): it is removed again, and nobody else is blamed", () => {
+    const base = head();
+    fs.mkdirSync(path.dirname(lockDir), { recursive: true });
+    try {
+      resetLogs();
+      // umask 0222: the new .lock is not writable, so creating inflight/ in it fails (like a permission problem would).
+      const result = spawnSync("bash", ["-c", 'umask 0222; exec bash "$0" --skip-pull --settle 0', path.join(work, "scripts/ops/deploy.sh")], { cwd: work, encoding: "utf8", env: deployEnv({}), timeout: 60_000 });
+      const r = collect(result.status, `${result.stdout}${result.stderr}`);
+      expect(r.status).toBe(1);
+      expect(r.out).toContain("releases: could not initialise the lock (cannot create");
+      expect(r.out).toContain("failed: could not initialise the deploy lock");
+      expect(r.out).not.toContain("another deploy holds the lock");
+      expect(r.calls).toEqual([]);
+      expect(fs.existsSync(lockDir)).toBe(false);
+    } finally {
+      restore(base);
+    }
+  });
+
   it("an inherited token that does not match, or no lock at all: preflight refuses, no stub runs, no lock is made", () => {
     const base = head();
     try {
@@ -974,12 +1067,10 @@ describe("scripts/ops/deploy.sh: the deploy lock and in-flight records", () => {
     const alive = path.join(buildDir, `${"c".repeat(40)}-${process.pid}`);
     const notContext = path.join(buildDir, "something-else");
     for (const d of [stale, alive, notContext]) fs.mkdirSync(d, { recursive: true });
-    const psDir = path.join(tmp, "psbin");
-    write(path.join(psDir, "ps"), `#!/usr/bin/env bash\necho "ps $* inflight=$(ls "$LOCK/inflight" 2>/dev/null | tr '\\n' ',')" >> "$DEPLOY_TEST_LOG"\nexec /bin/ps "$@"\n`, 0o755);
     try {
-      const r = deploy(["--skip-pull", "--settle", "0", "--no-prune"], { PATH: `${psDir}:${stubs}:${process.env.PATH ?? ""}` });
+      const r = deploy(["--skip-pull", "--settle", "0", "--no-prune"]);
       expect(r.status, r.out).toBe(0);
-      const check = r.events.find((e) => e.startsWith(`ps -p ${dead} `));
+      const check = r.events.find((e) => e.startsWith(`# pid_alive ${dead} `));
       expect(check).toMatch(/inflight=\d+,$/);
       expect(r.events.indexOf(check ?? "")).toBeLessThan(r.events.indexOf("docker info"));
       expect(r.out.indexOf("deploy lock taken")).toBeLessThan(r.out.indexOf(`removed data/build/${path.basename(stale)}`));
@@ -1019,6 +1110,29 @@ describe("scripts/ops/deploy.sh: the deploy lock and in-flight records", () => {
       expect(fs.existsSync(path.join(lockDir, "owner"))).toBe(true);
       expect(buildContexts()).toHaveLength(1);
     } finally {
+      restore(base);
+    }
+  });
+
+  it("the calling script gets TERM and deploy.sh is then killed with -9: the kept lock's 3 wins over the signal's 143", async () => {
+    const base = head();
+    try {
+      const run = startDeploy([fakeWrapper, realLib, realWork, path.join(work, "scripts/ops/deploy.sh"), "--skip-pull", "--settle", "0"], {
+        BUILD_HOOK: `echo "# deploy pid=$DEPLOY_PID" >> "$DEPLOY_TEST_LOG"; ${BLOCK("build")}`,
+      });
+      await waitFor("the build to start", () => logHas("# build started"));
+      const deployPid = Number(/# deploy pid=(\d+)/.exec(fs.readFileSync(log, "utf8"))?.[1]);
+      process.kill(run.pid, "SIGTERM");
+      await sleep(300);
+      process.kill(deployPid, "SIGKILL");
+      release();
+      const r = await run.done;
+      expect(r.events).toContain("# helper deploy rc=137");
+      expect(r.events).toContain("# helper release rc=3");
+      expect(r.status).toBe(3);
+      expect(fs.existsSync(path.join(lockDir, "owner"))).toBe(true);
+    } finally {
+      release();
       restore(base);
     }
   });

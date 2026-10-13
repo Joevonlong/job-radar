@@ -80,8 +80,10 @@ nothing is mounted over them, so a change to `config/` reaches the containers on
 
 Because the config steps and the migration run from the checkout itself, the checkout must match that commit: every mode,
 `--skip-pull` included, refuses to start when a tracked file has uncommitted changes (`git status --porcelain
---untracked-files=no`; untracked files are allowed). From step 2 on, the steps stop with `checkout moved during deploy`
-if HEAD moves or a tracked file changes while the deploy runs.
+--untracked-files=no`; untracked files are allowed), and also when `git status` itself fails (for example a damaged
+`.git/index`): a git that cannot answer never counts as a clean checkout. From step 2 on, the steps stop with `checkout
+moved during deploy` if HEAD moves or a tracked file changes while the deploy runs, and with `cannot check the checkout`
+if git fails at one of those checks.
 
 The build context directory is removed when the deploy ends. If a deploy is killed outright (for example `kill -9`), the
 directory stays; the next deploy removes it once it holds the lock.
@@ -91,7 +93,10 @@ directory stays; the next deploy removes it once it holds the lock.
 Step 1 takes the lock `data/releases/ai-worker/.lock/` (a directory; `owner` names the process and host,
 `inflight/` holds one record per script working under the lock). A second deploy started meanwhile stops in step 1 with
 exit code 1, changes nothing and prints who holds the lock, the records, and how to check and clear it. The lock is
-released just before the Docker cleanup (step 10), or when the deploy stops early.
+released just before the Docker cleanup (step 10), or when the deploy stops early. If the lock cannot even be set up
+(disk full, no write permission on `data/releases/`), step 1 stops with `could not initialise the deploy lock`, removes
+what it created and blames no other deploy; if that removal fails too, the half-made lock stays and is reported like
+any lock left in place.
 
 A lock is never taken over automatically. It stays behind only when a deploy was killed with `kill -9` (its exit handler
 could not run), or when the deploy could not confirm that everything it started has ended (then it exits 1 with
@@ -192,7 +197,7 @@ The exit code reflects the worst item: `0` all ✅, `1` some ⚠️, `2` some �
 | `ai.backlog` | AI request queue, jobs waiting to be scored, result of the latest `run_ai` (if nothing was scored because the profile is incomplete, the reason is stated and it does not count as success) | ⚠️ backlog: is the ai-worker up? |
 | `ai.quota` | Job Radar's own usage cap of the subscription CLIs (`ai.yaml: quota_guard`): each CLI's calls in the rolling window against `hard_requests`. Only Job Radar's own calls are counted, so this says nothing about what is left of your account's quota | ⚠️ a CLI's window is full, or the CLI reported a limit and is cooling down: it resumes by itself at the time shown; raise the cap in Settings → AI → Limits if it gets in your way (`pnpm ai:usage-stats` shows your own numbers) |
 | `config.layers` | The user config directory `data/config` exists and is writable; lists overridden `shipped` files, files whose version is behind (need migrating), and `user` files still read from the defaults | ❌ directory missing or not writable (`pnpm config:init`; check the mount); ❌ a file's `config_version` is newer than the code (the code was rolled back: upgrade the code or restore from `data/config/.backup/`); ⚠️ you overrode `models.yaml` / `pipeline.yaml`: product updates to those files will not take effect, delete your copy in `data/config` if you want to follow them; ⚠️ version behind: `pnpm config:migrate` shows the changes, `--write` writes them back |
-| `config.shipped` | The shipped config identity each running process reports (web, runner, and the ai-worker with `execution: host`), and that each report comes from the process running now: the running container (host name and start time) or the ai-worker service's PID. See [configuration.md](configuration.md#shipped-config-identity) | ⚠️ no report, a report from an earlier container or process, or no PID from launchd / systemd to match it: right after a deploy or restart, wait a minute and run again; otherwise look for "could not report the shipped config" in that process's log. ⚠️ something mounted on `/app/config` in a container (it hides the shipped config in the image; usually an old `compose.override.yaml`): remove the mount and deploy. Skipped without the database |
+| `config.shipped` | The shipped config identity each running process reports (web, runner, and the ai-worker with `execution: host`), and that each report comes from the process running now: the running container (host name and start time) or the ai-worker service's PID. See [configuration.md](configuration.md#shipped-config-identity) | ⚠️ no report, a report from an earlier container or process, or no PID from launchd / systemd to match it: right after a deploy or restart, wait a minute and run again; otherwise look for "could not report the shipped config" in that process's log. ⚠️ something mounted on `/app/config` in a container (it hides the shipped config in the image; usually an old `compose.override.yaml`): remove the mount and deploy. Without the database the reports are skipped, the mount check still runs (it needs only Docker) |
 | `host.power` | In `pmset`, autorestart is 1 and sleep is 0 | ⚠️ not set: host-setup section 3 |
 
 Doctor's thresholds and names are in `schedule.yaml` (the copy in the user config `data/config/`; no restart needed, changes apply on the next run):

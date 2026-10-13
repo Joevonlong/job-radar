@@ -74,13 +74,13 @@ scripts/ops/deploy.sh
 
 镜像从要部署的提交构建，而不是从工作树构建：第 6 步把这个提交用 `git archive` 解到 `data/build/<提交>-<pid>/`，从那里构建。被 git 忽略的文件（`.env`、`data/`、`*.local.yaml`）、未跟踪的文件、本地改动、只改了权限的文件、指向仓库外的符号链接，都进不了镜像。`config/` 里的出厂默认配置是 web、runner 镜像的一部分（`/app/config`，只读，属于 root），上面不挂载任何东西，所以 `config/` 的改动只有经过部署才会到容器里。
 
-配置步骤和迁移是从检出目录本身运行的，所以检出目录必须和那个提交一致：所有模式（包括 `--skip-pull`）在已跟踪的文件有未提交的改动时都拒绝开始（`git status --porcelain --untracked-files=no`；未跟踪的文件不影响）。从第 2 步起，部署期间 HEAD 移动了或已跟踪的文件变了，步骤就以 `checkout moved during deploy` 停下。
+配置步骤和迁移是从检出目录本身运行的，所以检出目录必须和那个提交一致：所有模式（包括 `--skip-pull`）在已跟踪的文件有未提交的改动时都拒绝开始（`git status --porcelain --untracked-files=no`；未跟踪的文件不影响）；`git status` 本身出错（例如 `.git/index` 损坏）时同样拒绝：git 答不上来，绝不算干净。从第 2 步起，部署期间 HEAD 移动了或已跟踪的文件变了，步骤就以 `checkout moved during deploy` 停下；这些核对里 git 出错时以 `cannot check the checkout` 停下。
 
 部署结束时删除构建上下文目录。部署被直接杀掉（比如 `kill -9`）时目录会留下，下一次部署拿到锁之后删除它。
 
 ### 同一时间只有一次部署：部署锁
 
-第 1 步取锁 `data/releases/ai-worker/.lock/`（一个目录；`owner` 记着持有它的进程和主机，`inflight/` 里每个在锁下工作的脚本有一条记录）。这时再启动的部署在第 1 步以退出码 1 停下，什么都不改，并打印谁持有锁、有哪些记录、怎么核对和清除。锁在 Docker 清理（第 10 步）之前释放，部署提前停下时也会释放。
+第 1 步取锁 `data/releases/ai-worker/.lock/`（一个目录；`owner` 记着持有它的进程和主机，`inflight/` 里每个在锁下工作的脚本有一条记录）。这时再启动的部署在第 1 步以退出码 1 停下，什么都不改，并打印谁持有锁、有哪些记录、怎么核对和清除。锁在 Docker 清理（第 10 步）之前释放，部署提前停下时也会释放。如果连锁都建不起来（磁盘满、`data/releases/` 没有写权限），第 1 步以 `could not initialise the deploy lock` 停下，删掉自己刚建的东西，不说是别的部署占着锁；如果连删除也失败，这个建了一半的锁会留下，并像其他留下的锁一样打印报告。
 
 锁从不被自动接管。只有两种情况会留下锁：部署被 `kill -9` 杀掉（它的退出处理没能运行）；或者部署没法确认它启动的东西都已结束（这时它以 1 退出，消息是 “descendant exit not confirmed; lock left in place”）。清除之前，先用消息里打印的 `ps` 命令确认它启动的东西（构建、`pnpm install`、迁移、配置写入、drain）都已不在，再执行它打印的 `rm -rf data/releases/ai-worker/.lock`，然后重新部署。
 
@@ -171,7 +171,7 @@ pnpm run doctor --lang zh    # 用另一种语言输出报告（默认：languag
 | `ai.backlog` | AI 请求队列、等打分的岗位数、最近一次 `run_ai` 的结果（因画像不完整没有打分时写明原因，不算成功） | ⚠️ 积压：ai-worker 在不在 |
 | `ai.quota` | Job Radar 自己对订阅 CLI 的用量上限（`ai.yaml: quota_guard`）：每个 CLI 在滚动窗口内的调用数对比 `hard_requests`。只统计 Job Radar 自己的调用，看不到账户的真实用量 | ⚠️ 某个 CLI 的窗口满了，或它报告了限制正在冷却：到显示的时间会自动恢复；如果碍事，在设置 → AI → 限额里调高（`pnpm ai:usage-stats` 打印你自己的数据） |
 | `config.layers` | 用户配置目录 `data/config` 存在且可写；列出覆盖了的 `shipped` 文件、版本落后（要迁移）的文件、还在读默认配置的 `user` 文件 | ❌ 目录不存在或不可写（`pnpm config:init`；查挂载）；❌ 某个文件的 `config_version` 比代码新（代码回退了：升级代码或从 `data/config/.backup/` 恢复）；⚠️ 覆盖了 `models.yaml` / `pipeline.yaml`：产品更新这些文件的内容不会生效，想跟随就删掉 `data/config` 里那份；⚠️ 版本落后：`pnpm config:migrate` 看改动，`--write` 写回 |
-| `config.shipped` | 每个运行中的进程（web、runner，以及 `execution: host` 时的 ai-worker）报告的出厂配置标识，并核对每份报告是否来自现在运行的进程：运行中的容器（主机名和启动时间），或 ai-worker 服务的 PID。见 [configuration.zh.md](configuration.zh.md#出厂配置标识) | ⚠️ 没有报告、报告来自之前的容器或进程、或 launchd / systemd 给不出 PID 无法核对：部署或重启后等一分钟再运行；否则在该进程日志里找 "could not report the shipped config"。⚠️ 容器的 `/app/config` 上有挂载（会挡住镜像里的出厂配置，通常是旧的 `compose.override.yaml`）：去掉挂载再部署。连不上数据库时跳过 |
+| `config.shipped` | 每个运行中的进程（web、runner，以及 `execution: host` 时的 ai-worker）报告的出厂配置标识，并核对每份报告是否来自现在运行的进程：运行中的容器（主机名和启动时间），或 ai-worker 服务的 PID。见 [configuration.zh.md](configuration.zh.md#出厂配置标识) | ⚠️ 没有报告、报告来自之前的容器或进程、或 launchd / systemd 给不出 PID 无法核对：部署或重启后等一分钟再运行；否则在该进程日志里找 "could not report the shipped config"。⚠️ 容器的 `/app/config` 上有挂载（会挡住镜像里的出厂配置，通常是旧的 `compose.override.yaml`）：去掉挂载再部署。连不上数据库时跳过报告的核对，挂载检查照样运行（它只需要 Docker） |
 | `host.power` | `pmset` 里 autorestart 是 1、sleep 是 0 | ⚠️ 没设置：host-setup 第 3 节 |
 
 doctor 的阈值和名字都在 `schedule.yaml`（用户配置 `data/config/` 里那份；改完不用重启，下次运行就生效）：

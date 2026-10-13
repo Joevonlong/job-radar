@@ -23,7 +23,8 @@ and the project uses [Semantic Versioning](https://semver.org/).
   deploys into `data/build/` and builds from there (`JOB_RADAR_BUILD_CONTEXT`), so ignored, untracked or locally
   changed files never reach an image. The web and runner images carry the shipped defaults in `/app/config` (owned by
   root, read-only for everyone); `compose.yaml` no longer mounts `./config`. Every later step checks that the checkout
-  still is at that commit and stops with `checkout moved during deploy` otherwise. See
+  still is at that commit and stops with `checkout moved during deploy` otherwise; a `git status` that fails (a damaged
+  index) stops the deploy too instead of passing as clean. See
   [docs/deploy.md](docs/deploy.md#build-context-and-a-clean-checkout).
 - **One deploy at a time:** `scripts/ops/deploy.sh` takes a lock (`data/releases/ai-worker/.lock/`); a second deploy stops
   in step 1 and prints who holds the lock and how to check and clear one that was left behind.
@@ -35,8 +36,9 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-- **Doctor:** `config.shipped` warns when something is mounted on `/app/config` in a running container (it would hide the
-  shipped config in the image).
+- **Doctor:** `config.shipped` warns when something is mounted on `/app/config`, or on a directory inside it, in a running
+  container (it would hide the shipped config in the image, or that part of it). This part runs even when the database
+  is down.
 - **Reason sources** (off by default, `ai.yaml: scoring.evidence`): each fit reason and gap on the job page says whether
   the posting states it (with its own words and a jump to them in the job description), the AI inferred it, or the
   posting does not mention it. Quotes are checked against the posting; one that is not found counts as inferred. Nothing

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Stands in for a calling script that holds the deploy lock (as a production wrapper does): sources the real proc.sh and
 # releases.sh, takes the lock, writes its in-flight record, starts deploy.sh as a cooperative child with the lock token,
-# and releases the lock in its exit handler. Lines in $DEPLOY_TEST_LOG: "# helper deploy rc=<n>", "# helper release rc=<n>".
+# and releases the lock in its exit handler; a kept lock exits 3, even after a signal. Lines in $DEPLOY_TEST_LOG: "# helper deploy rc=<n>", "# helper release rc=<n>".
 #   fake-deploy-prod.sh <lib dir> <checkout> <deploy.sh> [deploy.sh arguments...]
 set -euo pipefail
 lib="$1" main="$2" deploy="$3"
@@ -18,7 +18,8 @@ on_exit() {
   [[ -z "$PROC_PGID" ]] || proc_group_wait "$PROC_PGID"
   lrc=0; releases_lock_release "$main" || lrc=$?
   echo "# helper release rc=$lrc" >> "$DEPLOY_TEST_LOG"
-  (( lrc == 3 )) && rc=3
+  # A kept lock (3) wins over this script's own signal code: the operator must see that the lock is left in place.
+  (( lrc == 3 )) && exit 3
   exit "$(proc_exit_rc "$rc")"
 }
 proc_traps on_exit

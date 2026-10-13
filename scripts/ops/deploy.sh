@@ -224,11 +224,15 @@ run() { # run <hint> <command...>
   proc_step "command failed: $*" "$hint" "$@"
 }
 
-# The checkout must still be at the target commit with no tracked file changed (before every step that uses it).
+# The checkout must still be at the target commit with no tracked file changed (before every step that uses it). A git
+# that fails (a damaged index, for instance) prints nothing on stdout: that is a failure, never "clean".
 assert_target() {
   [[ "$DRY_RUN" -eq 1 ]] && return 0
-  [[ "$(git -C "$APP" rev-parse HEAD)" == "$TARGET" ]] \
-    && [[ -z "$(git -C "$APP" status --porcelain --untracked-files=no)" ]] \
+  local head status
+  if ! head="$(git -C "$APP" rev-parse HEAD)" || ! status="$(git -C "$APP" status --porcelain --untracked-files=no)"; then
+    fail_step "cannot check the checkout (git failed, see above): treated as checkout moved during deploy" "Fix the git error above (git status must work in $APP), then run this script again"
+  fi
+  [[ "$head" == "$TARGET" && -z "$status" ]] \
     || fail_step "checkout moved during deploy (HEAD is no longer $TARGET, or tracked files changed)" "Something changed the checkout while the deploy ran (another git command or editor?). Let it finish, then run this script again"
 }
 
@@ -257,7 +261,7 @@ remove_stale_build_contexts() {
   for dir in "$BUILD_DIR"/*; do
     is_build_context "$dir" || continue
     name="${dir##*/}"; pid="${name##*-}"
-    if ps -p "$pid" >/dev/null 2>&1; then
+    if releases_pid_alive "$pid"; then
       say "data/build/$name: its deploy (pid $pid) is still running, left alone"
       continue
     fi
@@ -285,6 +289,10 @@ elif releases_lock_acquire "$APP"; then
   if [[ "$RELEASES_LOCK_MINE" == 1 ]]; then say "deploy lock taken: $LOCK_DIR"; else say "deploy lock held by the calling script: $LOCK_DIR"; fi
   releases_inflight_register "$APP" deploy.sh || fail_step "could not write the in-flight record under $LOCK_DIR" "Check write permission on data/releases/"
   remove_stale_build_contexts
+elif [[ "$RELEASES_LOCK_INIT_FAILED" == 1 ]]; then
+  # Not another deploy: this run could not set the lock up (the reason is above). A half-made lock that could not be
+  # removed is still this run's: on_exit keeps and reports it (exit 1).
+  fail_step "could not initialise the deploy lock $LOCK_DIR (see the message above)" "Check free disk space and write permission on data/releases/, then retry"
 else
   [[ ! -e "$LOCK_DIR" ]] || releases_lock_report "$APP" >&2
   fail_step "another deploy holds the lock $LOCK_DIR (or the lock token passed in does not match it); nothing was changed" "Wait for the other deploy to finish; if none is running, check and clear the lock as shown above"
@@ -307,7 +315,10 @@ if command -v docker >/dev/null 2>&1; then
 fi
 [[ -f "$APP/package.json" ]] || require "$APP/package.json does not exist" "Run this from a Job Radar checkout"
 # Every mode (--skip-pull too): the images are built from the commit, so a local change would silently not be deployed.
-if [[ -n "$(git -C "$ROOT" status --porcelain --untracked-files=no 2>/dev/null)" ]]; then
+# A failing git status (a damaged index) prints nothing on stdout: that must not read as a clean checkout.
+if ! CHECKOUT_STATUS="$(git -C "$ROOT" status --porcelain --untracked-files=no)"; then
+  require "cannot read the state of the checkout (git status failed, see above)" "Fix the git error above (git status must work in $ROOT), then retry"
+elif [[ -n "$CHECKOUT_STATUS" ]]; then
   require "there are uncommitted changes" "Commit or git stash them first; deploy only accepts a clean checkout (the images are built from the commit, local changes would not reach them)"
 fi
 

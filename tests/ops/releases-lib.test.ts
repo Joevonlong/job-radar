@@ -143,12 +143,88 @@ describe("scripts/ops/lib/releases.sh: the lock", () => {
     expect(fs.existsSync(path.dirname(lock))).toBe(true);
   });
 
-  it("releasing does not remove a lock whose owner token is no longer this process's", () => {
+  it("the owner whose owner file no longer holds its token keeps the lock untouched, reports it and returns 3", () => {
     const r = sh(
-      `releases_lock_acquire "$MAIN"; printf '${ownerFixture.replaceAll("\n", "\\n")}' > "$MAIN/data/releases/ai-worker/.lock/owner"; releases_lock_release "$MAIN"; echo "release=$?"`,
+      `releases_lock_acquire "$MAIN"; printf '${ownerFixture.replaceAll("\n", "\\n")}' > "$MAIN/data/releases/ai-worker/.lock/owner"; releases_lock_release "$MAIN"; echo "release=$? mine=$RELEASES_LOCK_MINE"`,
     );
-    expect(r.stdout).toContain("release=0");
+    expect(r.stdout).toContain("release=3 mine=1");
+    expect(r.out).toContain("no longer holds this run's token; lock left in place");
+    expect(r.out).toContain(`rm -rf ${lock}`);
+    expect(r.out).not.toContain(FIXTURE_TOKEN);
     expect(ownerText()).toBe(ownerFixture);
+    expect(inflight()).toEqual([]);
+  });
+
+  it("the owner whose owner file became unreadable keeps the lock, reports it and returns 3", () => {
+    const r = sh('releases_lock_acquire "$MAIN"; echo broken > "$MAIN/data/releases/ai-worker/.lock/owner"; releases_lock_release "$MAIN"; echo "release=$?"');
+    expect(r.stdout).toContain("release=3");
+    expect(r.out).toContain("owner unknown");
+    expect(ownerText()).toBe("broken\n");
+  });
+
+  describe("taking the lock fails after its own mkdir", () => {
+    // Shell function overrides make one file operation fail, like a full disk or a permission problem would.
+    const failMkdirInflight = 'mkdir() { if [[ "${1:-}" == */.lock/inflight ]]; then echo "mkdir: No space left on device" >&2; return 1; fi; command mkdir "$@"; }; ';
+    const failOwnerWrite = 'mv() { if [[ "${2:-}" == */.lock/owner ]]; then echo "mv: No space left on device" >&2; return 1; fi; command mv "$@"; }; ';
+    const failRmdirLock = 'rmdir() { if [[ "${1:-}" == */.lock ]]; then return 1; fi; command rmdir "$@"; }; ';
+
+    it.each([
+      ["creating inflight/", failMkdirInflight, "cannot create"],
+      ["writing the owner file", failOwnerWrite, "cannot write"],
+    ])("%s: removes what it created, returns 1 and says it could not initialise the lock (no other deploy is blamed)", (_label, override, why) => {
+      const r = sh(`${override}releases_lock_acquire "$MAIN"; echo "rc=$? mine=$RELEASES_LOCK_MINE init=$RELEASES_LOCK_INIT_FAILED partial=$RELEASES_LOCK_PARTIAL token=\${JOB_RADAR_RELEASES_LOCK_TOKEN:-none}"`);
+      expect(r.stdout).toContain("rc=1 mine=0 init=1 partial=0 token=none");
+      expect(r.out).toContain(`releases: could not initialise the lock (${why}`);
+      expect(r.out).toContain("nothing is held");
+      expect(r.out).not.toContain("held by");
+      expect(fs.existsSync(lock)).toBe(false);
+      expect(fs.existsSync(path.dirname(lock))).toBe(true);
+    });
+
+    it("and removing it fails too: the half-made lock stays this process's; its release keeps it, reports it and returns 3", () => {
+      const r = sh(`${failOwnerWrite}${failRmdirLock}releases_lock_acquire "$MAIN"; echo "rc=$? mine=$RELEASES_LOCK_MINE init=$RELEASES_LOCK_INIT_FAILED partial=$RELEASES_LOCK_PARTIAL"; releases_lock_release "$MAIN"; echo "release=$? mine=$RELEASES_LOCK_MINE"`);
+      expect(r.stdout).toContain("rc=1 mine=1 init=1 partial=1");
+      expect(r.out).toContain("could not remove it again");
+      expect(r.stdout).toContain("release=3 mine=1");
+      expect(r.out).toContain("the lock was only partly created and could not be removed; lock left in place");
+      expect(r.out).toContain("owner unknown");
+      expect(r.out).toContain(`rm -rf ${lock}`);
+      expect(fs.existsSync(lock)).toBe(true);
+    });
+
+    it.skipIf(process.getuid?.() === 0)("the lock directory cannot be created at all (no permission): could not initialise, not held", () => {
+      const parent = path.dirname(lock);
+      fs.mkdirSync(parent, { recursive: true });
+      fs.chmodSync(parent, 0o555);
+      try {
+        const r = sh('releases_lock_acquire "$MAIN"; echo "rc=$? mine=$RELEASES_LOCK_MINE init=$RELEASES_LOCK_INIT_FAILED"');
+        expect(r.stdout).toContain("rc=1 mine=0 init=1");
+        expect(r.out).toContain(`could not initialise the lock (cannot create ${lock})`);
+        expect(r.out).not.toContain("is held");
+      } finally {
+        fs.chmodSync(parent, 0o755);
+      }
+    });
+  });
+
+  it("a final rmdir of .lock that fails puts inflight/ and the owner back and returns 3 (the state stays readable)", () => {
+    const r = sh(
+      'rmdir() { if [[ "${1:-}" == */.lock ]]; then return 1; fi; command rmdir "$@"; }\n' +
+        'releases_lock_acquire "$MAIN"; cp "$MAIN/data/releases/ai-worker/.lock/owner" "$MAIN/owner.before"; releases_lock_release "$MAIN"; echo "release=$? mine=$RELEASES_LOCK_MINE"',
+    );
+    expect(r.stdout).toContain("release=3 mine=1");
+    expect(r.out).toContain(`could not remove ${lock}; lock left in place`);
+    expect(r.out).toMatch(/owner: pid \d+ on /);
+    expect(ownerText()).toBe(fs.readFileSync(path.join(main, "owner.before"), "utf8"));
+    expect(inflight()).toEqual([]);
+  });
+
+  it("anything unexpected in .lock keeps it (3), with owner and inflight/ in place", () => {
+    const r = sh('releases_lock_acquire "$MAIN"; touch "$MAIN/data/releases/ai-worker/.lock/stray"; releases_lock_release "$MAIN"; echo "release=$?"');
+    expect(r.stdout).toContain("release=3");
+    expect(r.out).toContain("holds something unexpected (stray)");
+    expect(fs.existsSync(path.join(lock, "owner"))).toBe(true);
+    expect(inflight()).toEqual([]);
   });
 
   describe("releases_lock_verify is read-only", () => {
@@ -221,6 +297,13 @@ describe("scripts/ops/lib/releases.sh: in-flight records", () => {
     expect(r.stdout).toContain("rc=3");
     expect(r.out).toContain("descendant exit not confirmed");
     expect(fs.existsSync(path.join(lock, "owner"))).toBe(true);
+  });
+
+  it("releases_pid_alive asks kill -0, not ps: this shell is alive, an exited pid is gone, another user's process (pid 1) counts as alive", () => {
+    const dead = deadPid();
+    const r = sh(`for p in $$ ${dead} 1 abc; do if releases_pid_alive "$p"; then echo "$p alive"; else echo "$p gone"; fi; done`, { PATH: "/nonexistent-no-ps" });
+    const pid = r.stdout.split("\n")[0]?.split(" ")[0];
+    expect(r.stdout.split("\n")).toEqual([`${pid} alive`, `${dead} gone`, "1 alive", "abc gone", ""]);
   });
 
   it("lists a record written by another implementation (fixture), unreadable entries and .tmp-* too", () => {
