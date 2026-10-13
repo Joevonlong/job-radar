@@ -87,8 +87,9 @@ Why the extra steps: the old containers read `config/` straight from the checkou
 while they run would hand them the new defaults while they still run the old code (the same window every upgrade had
 until now); stopping web and runner first closes it. The new `deploy.sh` then builds images with the config inside and
 recreates the containers without the mount. Running only `docker compose up -d` is not enough: it does not rebuild
-existing images, and the old images have no config inside, so the new compose file (without the mount) would start them
-without any shipped defaults; it would also skip the config steps and the migration. Web and runner stay stopped from
+existing images, and the old images do not carry the shipped config (the old runner image has none; the old web image
+has only an incomplete copy, a side effect of how the web app is bundled), so the new compose file (without the mount)
+would start them without complete shipped defaults; it would also skip the config steps and the migration. Web and runner stay stopped from
 the first command until step 7 of the deploy (a few minutes, mostly the build); a collection cycle due in that time is
 caught up when the runner starts.
 

@@ -55,10 +55,14 @@ fi
 [[ "$NODE_VERSION" =~ ^[0-9][0-9.]*$ ]] || fail "cannot read NODE_VERSION from the Dockerfile"
 
 TMP="$(mktemp -d)"
-IIDS=()
+# The listings run in command substitutions (subshells), so the image IDs are read back from their --iidfile files here.
 cleanup() {
-  local id
-  for id in ${IIDS[@]+"${IIDS[@]}"}; do docker image rm -f "$id" >/dev/null 2>&1 || true; done
+  local f id
+  for f in "$TMP"/*.iid; do
+    [[ -f "$f" ]] || continue
+    id="$(cat "$f" 2>/dev/null || true)"
+    [[ -z "$id" ]] || docker image rm -f "$id" >/dev/null 2>&1 || true
+  done
   rm -rf "$TMP"
 }
 trap cleanup EXIT
@@ -112,15 +116,13 @@ done < "$REPO/.gitignore"
 
 # list_context <dir> <name>: prints the paths in the build context of <dir>, one per line (/ctx/...)
 list_context() {
-  local log="$TMP/$2.log" iid
+  local log="$TMP/$2.log"
   if ! docker build --no-cache --progress=plain --iidfile "$TMP/$2.iid" \
         -f "$REPO/tests/fixtures/docker/context-list.Dockerfile" --build-arg "NODE_VERSION=$NODE_VERSION" \
         "$1" >"$log" 2>&1; then
     cat "$log" >&2
     fail "docker build of the $2 context listing failed"
   fi
-  iid="$(cat "$TMP/$2.iid" 2>/dev/null || true)"
-  [[ -z "$iid" ]] || IIDS+=("$iid")
   grep -q "node:$NODE_VERSION-slim" "$log" || { cat "$log" >&2; fail "the build did not use node:$NODE_VERSION-slim (--build-arg NODE_VERSION had no effect)"; }
   # `RUN find /ctx` prints one path per line, as "#<step> <seconds> /ctx/<path>" in the plain progress output.
   sed -nE 's|^#[0-9]+ [0-9.]+ (/ctx(/.*)?)$|\1|p' "$log"
