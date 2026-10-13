@@ -5409,6 +5409,26 @@
           "modelRefusedHint": "Set a valid model name in data/config/ai.yaml (or pick one on the Settings page)",
           "codexVersion": "Installed codex {installed} is older than the minimum {minimum} that codex-cli needs (it lacks codex exec --ignore-user-config / --ignore-rules)",
           "codexVersionHint": "Update the Codex CLI (docs/ai-providers.md), then run pnpm ai:probe --provider codex-cli; a newer version than the minimum is always fine"
+        },
+        "shipped": {
+          "title": "Shipped config of the running processes",
+          "item": "{process} {id}",
+          "nothing": "No process to check (web and runner are not in doctor.compose_services, the AI runs in the containers)",
+          "noReport": "{process} has not reported its shipped config",
+          "dockerUnavailable": "{process}: the containers cannot be read ({reason})",
+          "noContainer": "{process}: no running container in the compose project {project}",
+          "otherContainer": "{process}: the report comes from container {instance}, not from the running one ({running})",
+          "noStartTime": "{process}: Docker gives no start time for the container",
+          "beforeStart": "{process}: the report ({reported}) is older than the start of the running container ({started})",
+          "stale": "{process}: the newest report is {ago} (limit {limit} s, ai.yaml host_worker.offline_after_seconds)",
+          "noPid": "{process}: the report cannot be matched to the service ({reason})",
+          "otherPid": "{process}: the report comes from PID {reported}, the service runs PID {running}",
+          "inspectUnreadable": "docker inspect gave no readable answer",
+          "noAnswer": "{command} did not answer",
+          "notLoaded": "{service} is not loaded",
+          "notRunning": "{service} has no running process",
+          "noServiceManager": "no launchd or systemd on this system",
+          "hint": "Each process reports at start-up (the web again on its health checks until it works, runner and ai-worker with every heartbeat). Right after a deploy or restart, wait a minute and run the doctor again; if it stays, look in that process's log for \"could not report the shipped config\" (docs/configuration.md, \"Shipped config identity\")"
         }
       },
       "i18n": {

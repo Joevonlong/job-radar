@@ -41,7 +41,8 @@ DRY_RUN=0
 ROOT=""
 DATABASE_URL_ARG=""
 
-usage() { sed -n '2,31p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+# The header comment above (line 2 up to the first line that is not a comment); tests/ops/script-help.test.ts checks it names every option.
+usage() { awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "${BASH_SOURCE[0]}"; }
 die() { echo "install-ai-worker: $*" >&2; exit 1; }
 
 while [[ $# -gt 0 ]]; do

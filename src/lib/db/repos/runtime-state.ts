@@ -1,5 +1,7 @@
 import { eq, like, sql } from "drizzle-orm";
 
+import { SHIPPED_CONFIG_PROCESSES, shippedConfigReportSchema, type ShippedConfigProcess, type ShippedConfigReport } from "@/lib/config/shipped-id";
+
 import type { Db } from "../client";
 import { runtimeState } from "../schema";
 
@@ -46,4 +48,30 @@ export async function mergeRuntimeState(db: Db, key: string, values: { insert: R
       target: runtimeState.key,
       set: { value: sql`(case when jsonb_typeof(${runtimeState.value}) = 'object' then ${runtimeState.value} else '{}'::jsonb end) || ${JSON.stringify(values.patch)}::jsonb`, updatedAt: sql`now()` },
     });
+}
+
+// ---------------------------------------------------------------- shipped config reports
+
+const SHIPPED_CONFIG_PREFIX = "shipped_config:";
+
+/** One process's report and when it was written (database clock). */
+export interface ShippedConfigReportRow {
+  report: ShippedConfigReport;
+  updatedAt: Date;
+}
+
+/** Write (or refresh) the shipped config report of `process`; `updated_at` is the database's `now()`. */
+export async function reportShippedConfig(db: Db, process: ShippedConfigProcess, report: ShippedConfigReport): Promise<void> {
+  await setRuntimeState(db, `${SHIPPED_CONFIG_PREFIX}${process}`, shippedConfigReportSchema.parse(report));
+}
+
+/** The newest report of each process; null when there is none or it does not pass the schema (treated as no report). */
+export async function readShippedConfigReports(db: Db): Promise<Record<ShippedConfigProcess, ShippedConfigReportRow | null>> {
+  const reports = Object.fromEntries(SHIPPED_CONFIG_PROCESSES.map((name) => [name, null])) as Record<ShippedConfigProcess, ShippedConfigReportRow | null>;
+  for (const row of await listRuntimeState(db, SHIPPED_CONFIG_PREFIX)) {
+    const process = SHIPPED_CONFIG_PROCESSES.find((name) => `${SHIPPED_CONFIG_PREFIX}${name}` === row.key);
+    const parsed = shippedConfigReportSchema.safeParse(row.value);
+    if (process !== undefined && parsed.success) reports[process] = { report: parsed.data, updatedAt: row.updatedAt };
+  }
+  return reports;
 }

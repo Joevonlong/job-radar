@@ -18,13 +18,15 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 PURGE=0
 ROOT=""
 
+# The header comment above (line 2 up to the first line that is not a comment); tests/ops/script-help.test.ts checks it names every option.
+usage() { awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "${BASH_SOURCE[0]}"; }
 die() { echo "uninstall-ai-worker: $*" >&2; exit 1; }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --purge-logs) PURGE=1 ;;
     --root) [[ $# -ge 2 ]] || die "--root needs a path"; ROOT="$2"; shift ;;
-    -h|--help) sed -n '2,12p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) usage; exit 0 ;;
     *) die "unknown argument: $1" ;;
   esac
   shift

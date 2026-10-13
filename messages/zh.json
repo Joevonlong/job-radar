@@ -5409,6 +5409,26 @@
           "modelRefusedHint": "在 data/config/ai.yaml 里填一个合法的模型名（或在设置页选一个）",
           "codexVersion": "已安装的 codex {installed} 低于 codex-cli 需要的最低版本 {minimum}（没有 codex exec --ignore-user-config / --ignore-rules）",
           "codexVersionHint": "升级 Codex CLI（docs/ai-providers.zh.md），然后运行 pnpm ai:probe --provider codex-cli；比最低版本新的版本一律正常"
+        },
+        "shipped": {
+          "title": "运行中进程的出厂配置",
+          "item": "{process} {id}",
+          "nothing": "没有要检查的进程（doctor.compose_services 里没有 web 和 runner，AI 在容器里运行）",
+          "noReport": "{process} 还没有上报出厂配置",
+          "dockerUnavailable": "{process}：读不到容器（{reason}）",
+          "noContainer": "{process}：compose 项目 {project} 里没有运行中的容器",
+          "otherContainer": "{process}：上报来自容器 {instance}，不是正在运行的那个（{running}）",
+          "noStartTime": "{process}：Docker 没有给出容器的启动时间",
+          "beforeStart": "{process}：上报时间（{reported}）早于正在运行的容器的启动时间（{started}）",
+          "stale": "{process}：最新的上报是{ago}（上限 {limit} 秒，ai.yaml host_worker.offline_after_seconds）",
+          "noPid": "{process}：无法把上报对应到服务（{reason}）",
+          "otherPid": "{process}：上报来自 PID {reported}，服务正在运行的是 PID {running}",
+          "inspectUnreadable": "docker inspect 的输出读不懂",
+          "noAnswer": "{command} 没有回答",
+          "notLoaded": "{service} 没有加载",
+          "notRunning": "{service} 没有运行中的进程",
+          "noServiceManager": "这台机器上没有 launchd 或 systemd",
+          "hint": "每个进程启动时上报一次（web 在健康检查时重试到成功为止，runner 和 ai-worker 每次心跳都刷新）。刚部署或重启过的话，等一分钟再运行 doctor；一直这样的话，到那个进程的日志里找 \"could not report the shipped config\"（docs/configuration.zh.md《出厂配置标识》）"
         }
       },
       "i18n": {

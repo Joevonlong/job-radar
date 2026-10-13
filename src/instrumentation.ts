@@ -15,4 +15,8 @@ export async function register(): Promise<void> {
   } catch (error) {
     console.error(`[config] could not fill the user config directory: ${error instanceof Error ? error.message : String(error)}`);
   }
+  // Which shipped defaults this server runs with (for `pnpm run doctor`). Not awaited: the start-up never waits for the
+  // database; a failed write is retried on the health checks.
+  const { reportWebShippedConfig } = await import("@/lib/ops/shipped-config");
+  void reportWebShippedConfig();
 }

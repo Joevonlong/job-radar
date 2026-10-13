@@ -3,6 +3,7 @@ import { vi } from "vitest";
 import { CHANNEL_CONFIG_TABLE } from "@/lib/channels/registry";
 import { configRegistry, type ConfigLayersState, type DoctorConfig } from "@/lib/config";
 import type { ChannelStateRow, LatestCycleRuns } from "@/lib/db/queries/sources";
+import type { ShippedConfigReportRow } from "@/lib/db/repos/runtime-state";
 import type { Locale } from "@/i18n/locale";
 import { translatorFor } from "@/lib/i18n/node";
 import { CHECK_GROUPS, checkTitle, type CheckResult, type CommandOutcome, type DoctorCheck, type DoctorContext, type DoctorProbes, type HttpOutcome } from "@/lib/ops/doctor";
@@ -52,6 +53,41 @@ export const SERVE_OK = JSON.stringify({ TCP: { "443": { HTTPS: true } }, Web: {
 /** Docker Desktop's data folder in the healthy context: on the project volume. */
 export const DOCKER_DATA = "/Volumes/SSD/.docker-data";
 export const PMSET_OK =[" autorestart          1", " sleep                0 (sleep prevented by powerd)", " womp                 1"].join("\n");
+
+/** The running web and runner containers (full ids) and when they started; their shipped config reports came after. */
+export const WEB_CONTAINER = `${"a1".repeat(6)}${"0".repeat(52)}`;
+export const RUNNER_CONTAINER = `${"b2".repeat(6)}${"0".repeat(52)}`;
+export const CONTAINERS_STARTED = ago(3600);
+export const SHIPPED_ID = "c3".repeat(32);
+
+export function inspectJson(rows: { id: string; service: string; startedAt?: string; running?: boolean }[] = [
+  { id: WEB_CONTAINER, service: "web" },
+  { id: RUNNER_CONTAINER, service: "runner" },
+]): string {
+  return JSON.stringify(
+    rows.map((row) => ({
+      Id: row.id,
+      State: { Running: row.running ?? true, StartedAt: row.startedAt ?? CONTAINERS_STARTED.toISOString() },
+      Config: { Labels: { "com.docker.compose.project": "job-radar", "com.docker.compose.service": row.service } },
+    })),
+  );
+}
+
+/** The healthy shipped config reports: the web and runner from their containers, the ai-worker with launchd's PID. */
+export function shippedReports(
+  edit: Partial<Record<"web" | "runner" | "ai-worker", ShippedConfigReportRow | null>> = {},
+): Record<"web" | "runner" | "ai-worker", ShippedConfigReportRow | null> {
+  const row = (instance: string, pid: number, updatedAt: Date): ShippedConfigReportRow => ({
+    report: { id: SHIPPED_ID, dir: "/app/config", instance, pid, startedAt: CONTAINERS_STARTED.toISOString() },
+    updatedAt,
+  });
+  return {
+    web: row(WEB_CONTAINER.slice(0, 12), 1, ago(3500)),
+    runner: row(RUNNER_CONTAINER.slice(0, 12), 1, ago(20)),
+    "ai-worker": row("mac.local", 4242, ago(5)),
+    ...edit,
+  };
+}
 
 /** A well-formed scrypt hash (all zero bytes; matches no password anyone would type). */
 export const HEALTHY_PASSWORD_HASH = "scrypt:131072:8:1:AAAAAAAAAAAAAAAAAAAAAA:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
@@ -132,6 +168,8 @@ const COMMANDS: Record<string, CommandOutcome> = {
   "docker info --format {{.ServerVersion}}": ran("29.8.2\n"),
   "docker compose -p job-radar ps -a --format json": ran(composeJson()),
   "launchctl print gui/501/io.jobradar.ai-worker": ran(LAUNCHCTL_RUNNING),
+  "docker ps --no-trunc --filter label=com.docker.compose.project=job-radar --format {{.ID}}": ran(`${WEB_CONTAINER}\n${RUNNER_CONTAINER}\n`),
+  [`docker inspect ${WEB_CONTAINER} ${RUNNER_CONTAINER}`]: ran(inspectJson()),
   "claude auth status": ran(CLAUDE_JSON),
   "codex login status": ran("Logged in using ChatGPT\n"),
   "tailscale status --json": ran(TAILSCALE_RUNNING),
@@ -188,6 +226,7 @@ export function makeContext(overrides: Overrides = {}): DoctorContext & { probes
     traps: vi.fn(async () => ({ state: "ok" as const, enabled: true, backlogWarn: 500, recentDays: 7, stats: { jobsWithTraps: 2, recentJobsWithTraps: 1, backlog: 0 } })),
     mcp: vi.fn(async () => ({ state: "ok" as const, enabled: false, tools: ["search_jobs", "get_job", "list_applications"] })),
     market: vi.fn(async () => marketSummary()),
+    shippedConfigReports: vi.fn(async () => shippedReports()),
     setup: vi.fn(async () => ({ pending: false, state: { completed_at: "2026-10-01T08:00:00.000Z", completed_by: "wizard", steps: {} }, error: null, source: "user", path: "/u/setup.yaml" })),
     ...overrides.probes,
   } as unknown as DoctorContext["probes"] & { [K in keyof DoctorProbes]: ReturnType<typeof vi.fn> & DoctorProbes[K] };

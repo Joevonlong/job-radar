@@ -8,6 +8,7 @@ import { z } from "zod";
 import { getAppRoot, inspectConfigLayers, loadConfig } from "@/lib/config";
 import { getDb, getDbNow, pingDb, readAppliedMigrations } from "@/lib/db";
 import { readJournal } from "@/lib/db/migration-journal";
+import { readShippedConfigReports } from "@/lib/db/repos/runtime-state";
 import { countUnscoredJobs } from "@/lib/db/repos/scores";
 import { countTrapStats, trapTablesReady } from "@/lib/db/repos/traps";
 import { ConfigError, firstConfigProblem } from "@/lib/config/errors";
@@ -249,6 +250,7 @@ export function createRealProbes(options: RealProbeOptions): DoctorProbes {
     foreignOwned: (roots, uid, options) => scanOwnership(roots, uid, options),
     market: async () => summarizeMarket(),
     setup: async () => readSetupState(),
+    shippedConfigReports: () => readShippedConfigReports(getDb()),
   };
 }
 
