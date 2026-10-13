@@ -103,7 +103,7 @@ pnpm run doctor --only config.market
 | `permit_alternatives` | 紧跟在 `permit_required` 说法旁边的替代办法，让这句变成不明确（"…or are eligible for an EU Blue Card"） |
 | `mention_terms`、`mention_context` | 同一句里有签证词又有语境词，算一次不明确的提及 |
 | `negation_cues` | 让 `offered` 说法变成不明确的词（"not"、"kein…"）：出现在说法里面、说法前 `pipeline.yaml job_checks.visa.negation_words_before` 个词内，或说法后同一分句的 `negation_words_after` 个词内 |
-| `clause_breaks` | 上面那个分句在哪里结束（"; "、" but "、" aber "）：之后的否定词不算。逗号和冒号不结束分句（"Relocation support: No"） |
+| `clause_breaks` | 上面那个分句在哪里结束（"; "、" but "、" aber "）：之后的否定词不算。逗号和冒号不结束分句（"Relocation support: No"）。分句界在整个句子上匹配，而不是只在说法后面的文字上匹配，所以跨过说法结尾去读的分句界，按它在整句里匹配到的位置结束分句：lookbehind 看得到说法本身（`(?<=support)\s` 在 "Relocation support" 紧后面结束分句，于是 "Relocation support is not available" 里的 "not" 不再算）；`^` 只在句子开头成立，不在说法紧后面成立；正好在说法结尾处的 `\b` 或 `\B` 看得到说法的最后一个字符；从说法内部开始、越过说法结尾的匹配不算分句界，而且会盖住它覆盖范围内的其他匹配。lookahead 两种读法一样。lookaround 只写分句界旁边的字符，出厂的分句界都是这样 |
 | `exclude_context` | 匹配到的句子不是在讲求职者的签证（"sponsored events"、"Visa/Mastercard"、"our customers with visa applications"） |
 | `exclude_companies` | 本身就是签证词的公司名（规范化后）：对这些公司只算标了 `combo: true` 的说法 |
 | `abbreviations` | 点号不表示句子结束的缩写（"z.B"、"inkl"） |
@@ -111,6 +111,10 @@ pnpm run doctor --only config.market
 
 `offered`、`not_offered.*` 和 `mention_terms` 的条目是 `{pattern, combo, list_item}`：`combo: true` 表示这个说法把签证词和语境连在一起，
 所以对名字是签证词的公司也算；`list_item: true` 表示只在它自己是一个列表项时才算（单独的名词 "- Visa sponsorship"），当标题时不算（"## Visa sponsorship" 下一行 "Not available"）。说法是带 `iu` 标志的正则；写错时 `pnpm config:check` 会指出路径（`visa.offered[3]`）。
+
+每条 `offered` 说法都要在词的边界结束（`(?![\p{L}\p{N}])` 或 `$`，出厂的说法都是这样）。否定判断从句子的索引里读每个命中前后的几个词，
+只有这样耗时才和句子长度成正比：命中如果开始或结束在一个很长的词里面（一长串字母），每个命中都要把这个词重读一遍，
+和每个命中都把整句重读一遍一样慢。
 
 **`prefilter`**：签证一票否决每轮过滤都要读所有未关闭的岗位，所以一段文字或一句话如果不匹配任何 prefilter，就直接跳过，
 不再跑其他说法。前提是 **`offered`、`not_offered` 或 `mention_terms` 能匹配的每个说法里都含有一个 prefilter 匹配**：

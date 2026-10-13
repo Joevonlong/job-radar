@@ -6,7 +6,7 @@ import type { VisaRulesInput } from "./rules";
  * Bump when the detection changes in a way the packs do not show (segmenting, the negation window, how results are summed up):
  * every job is checked again by the next cycles.
  */
-export const VISA_RULES_VERSION = 3;
+export const VISA_RULES_VERSION = 4;
 
 /** Hash of the packs' visa section, the detection version and the limits that shape a result: a change checks every job again. */
 export function visaRulesFingerprint(config: VisaRulesInput): string {

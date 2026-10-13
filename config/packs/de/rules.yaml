@@ -282,6 +282,7 @@ ghost:
 # Compounds are written as stems: Visa-?(?:sponsoring|unterstützung), Visums?unterstützung, \p{L}*visum\p{L}*.
 # Keys and `combo` / `list_item` as in the generic pack.
 visa:
+  # End every pattern at a word boundary ((?![\p{L}\p{N}]) or $), as these do: the negation test is linear only then.
   offered:
     # "Wir unterstützen dich beim Visumprozess", "Relocation-Support inkl. Visumprozess", "Hilfe bei der Blauen Karte EU"
     - pattern: '(?<![\p{L}\p{N}])(?:bieten|bietet|unterstützen|unterstützt|übernehmen|übernimmt|helfen|hilft|begleiten|begleitet|inkl\.|inklusive|einschließlich|samt|(?:unterstützung|hilfe|support|übernahme|begleitung)\s+(?:bei|beim|für|mit|im|in|zum|zur))(?:\s+[\p{L}\p{N}’''.-]+){0,6}?\s+(?:\p{L}*visum\p{L}*|visums\p{L}*|visa-?(?:sponsoring|unterstützung|antrag|prozess|verfahren|fragen|angelegenheiten)|visasponsoring|blaue[nr]?\s+karte|aufenthalts\p{L}*|arbeitserlaubnis|arbeitsgenehmigung|relocation\p{L}*|umzug\p{L}*)(?![\p{L}\p{N}])'
@@ -349,6 +350,8 @@ visa:
     - 'kein\p{L}*'
     - leider
     - ohne
+  # Where the clause after an "offered" phrase ends for the negation search ("Relocation-Support, aber keinen Firmenwagen"). Matched
+  # over the whole sentence: keep lookarounds to the characters around the break (docs/market-packs.md).
   clause_breaks:
     - '(?<![\p{L}\p{N}])(?:aber|jedoch|sondern|während|wobei|allerdings|außer)(?![\p{L}\p{N}])'
     - '(?<![\p{L}\p{N}])und\s+(?:wir|du|sie|ihr|es|unser\p{L}*|dein\p{L}*|euer\p{L}*)(?![\p{L}\p{N}])'

@@ -2,13 +2,19 @@
  * The visa check as a part of the cycle's `signals` step: it runs after the trap scan, a failure makes the step `partial` (never
  * an exception), and `job_checks.visa.enabled: false` in ui.yaml skips it. Synthetic JDs only.
  */
+import { createHash } from "node:crypto";
+
 import { eq, sql } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, inject, it, vi } from "vitest";
 
 import type { CycleStepContext } from "@/lib/cycle/steps";
 import { closeDb, getDb, schema } from "@/lib/db";
 import { runMigrations } from "@/lib/db/migrate";
+import { loadPipeline } from "@/lib/market/effective";
 import { signalsStep } from "@/lib/signals";
+import { VISA_RULES_VERSION } from "@/lib/visa/fingerprint";
+import { visaRulesFor } from "@/lib/visa/rules";
+import { runVisaScan } from "@/lib/visa/step";
 
 import { config as cycleConfig, quietLogger } from "../cycle/helpers";
 
@@ -123,6 +129,23 @@ describe("the visa check in the signals step", () => {
     const result = await signalsStep(ctx());
     expect(result.status).toBe("partial");
     expect(result.result).toMatchObject({ visa: { error: expect.stringContaining("rules failed") as unknown }, scan: { scanned: 1 } });
+  });
+
+  it("checks again a result stored under an earlier detection version", async () => {
+    const job = await addJob(REFUSED);
+    // the fingerprint `visaRulesFingerprint` gave the same config with the version before this one
+    const pipeline = loadPipeline();
+    const visa = pipeline.job_checks.visa;
+    const limits = { max_quotes: visa.max_quotes, quote_max_chars: visa.quote_max_chars, negation_words_before: visa.negation_words_before, negation_words_after: visa.negation_words_after, heading_max_chars: visa.heading_max_chars };
+    const earlier = createHash("sha256").update(JSON.stringify({ version: VISA_RULES_VERSION - 1, pack: pipeline.visa, limits })).digest("hex").slice(0, 32);
+    await runVisaScan(getDb(), { rules: visaRulesFor(pipeline), rulesHash: earlier, limit: 10, logger: quietLogger });
+    const stored = await visaRow(job);
+    expect(stored).toMatchObject({ status: "not_offered" });
+    const result = await signalsStep(ctx());
+    expect(result.result).toMatchObject({ visa: { scanned: 1, failed: 0 } });
+    expect((await visaRow(job))?.inputHash).not.toBe(stored?.inputHash);
+    // current now: the next step checks nothing
+    expect((await signalsStep(ctx())).result).toMatchObject({ visa: { scanned: 0 } });
   });
 
   it("is skipped when ui.yaml turns it off", async () => {

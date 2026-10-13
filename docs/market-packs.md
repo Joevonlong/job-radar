@@ -118,7 +118,7 @@ ones, `de` the German ones; both are always used in the German market.
 | `permit_alternatives` | Next to a `permit_required` phrase, an alternative makes the sentence unclear ("…or are eligible for an EU Blue Card") |
 | `mention_terms`, `mention_context` | A visa word with a context word in the same sentence is an unclear mention |
 | `negation_cues` | Words that make an `offered` phrase unclear ("not", "kein…"): inside it, within `pipeline.yaml job_checks.visa.negation_words_before` words before it, or within `negation_words_after` words after it in the same clause |
-| `clause_breaks` | Where that clause ends ("; ", " but ", " aber "): a negation beyond it does not count. A comma or a colon does not end it ("Relocation support: No") |
+| `clause_breaks` | Where that clause ends ("; ", " but ", " aber "): a negation beyond it does not count. A comma or a colon does not end it ("Relocation support: No"). The breaks are matched over the whole sentence, not over the text after the phrase, so a break that reads across the phrase's end ends the clause where it matches in the whole sentence: a lookbehind sees the phrase (`(?<=support)\s` ends the clause right after "Relocation support", so in "Relocation support is not available" the "not" no longer counts); `^` holds only at the start of the sentence, not right after the phrase; `\b` or `\B` right at the phrase's end sees the phrase's last character; a match that starts inside the phrase and reaches past its end is not a break, and hides the matches it covers. Lookaheads read the same either way. Keep lookarounds to the characters around the break, as the shipped breaks do |
 | `exclude_context` | A sentence that matches is not about the candidate's visa ("sponsored events", "Visa/Mastercard", "our customers with visa applications") |
 | `exclude_companies` | Company names (normalized) that are visa words: only patterns marked `combo: true` count for them |
 | `abbreviations` | Abbreviations whose dot does not end a sentence ("z.B", "inkl") |
@@ -129,6 +129,11 @@ that joins the visa word with its context, so it still counts for a company name
 that counts only on a list item of its own (the bare noun "- Visa sponsorship"), never on a heading ("## Visa
 sponsorship" followed by "Not available"). Patterns are regular
 expressions with the flags `iu`; `pnpm config:check` names an invalid one by its path (`visa.offered[3]`).
+
+End every `offered` pattern at a word boundary (`(?![\p{L}\p{N}])` or `$`, as the shipped ones do). The negation test
+reads the few words around each hit from an index of its sentence, which takes time linear in the sentence's length only
+then: a hit that starts or ends inside a long word (a long run of letters) reads that word again for every hit, as slowly
+as reading the whole sentence again for every hit.
 
 **`prefilter`**: the visa deal-breaker reads every open job in every filter run, so a text or sentence that matches none
 of the prefilter patterns is skipped without running the others. That works only when **every phrase `offered`,
