@@ -17,7 +17,7 @@
 //      and its binary are inside the root; so is ESBUILD_BINARY_PATH when it is set. esbuild locates its binary with
 //      require.resolve, which no hook sees.
 //   5. preloads (Node treats `_` and `-` in an option name alike; names are compared with `_` turned into `-`):
-//      - NODE_OPTIONS, split the way Node splits it (whitespace; double quotes group, a backslash escapes inside them),
+//      - NODE_OPTIONS, split the way Node splits it (spaces; double quotes group, a backslash escapes inside them),
 //        may hold only the options of NODE_OPTIONS_ALLOWED below, each as one `--name` or `--name=value` token; any
 //        other token, or text that does not parse, stops the process. The service definition sets none of these; a
 //        value would come from the user's environment.
@@ -25,6 +25,8 @@
 //        --experimental-loader stop the process (no CommonJS preload, no hooks thread). Every --import names a file
 //        whose real path is inside the root: this guard and tsx's loader in production; tests add their own fixtures
 //        from the release. Package names are refused (the service definition uses absolute paths).
+//        --experimental-config-file and --experimental-default-config-file stop it too: a Node config file can add
+//        preloads that appear in neither NODE_OPTIONS nor execArgv.
 //      A preload that comes before this guard has already run when the check happens; the check makes the process
 //      stop before any application code runs.
 //
@@ -139,50 +141,60 @@ const NODE_OPTIONS_ALLOWED = new Map([
   ["--enable-source-maps", null],
   ["--no-warnings", null],
 ]);
+// Split as Node splits NODE_OPTIONS: on spaces only; double quotes group and are dropped, a backslash inside them takes
+// the next character as it is; a word starts at its first character, so an empty quoted segment adds nothing. null for
+// an unclosed quote or a trailing backslash (Node refuses those too).
 function splitNodeOptions(text) {
   const tokens = [];
-  let token = "";
-  let inToken = false;
   let quoted = false;
+  let fresh = true;
   for (let i = 0; i < text.length; i++) {
-    const c = text[i];
-    if (quoted) {
-      if (c === "\\" && i + 1 < text.length) token += text[++i];
-      else if (c === '"') quoted = false;
-      else token += c;
-    } else if (/\s/.test(c)) {
-      if (inToken) tokens.push(token);
-      token = "";
-      inToken = false;
-    } else {
-      inToken = true;
-      if (c === '"') quoted = true;
-      else token += c;
+    let c = text[i];
+    if (c === "\\" && quoted) {
+      if (i + 1 === text.length) return null;
+      c = text[++i];
+    } else if (c === " " && !quoted) {
+      fresh = true;
+      continue;
+    } else if (c === '"') {
+      quoted = !quoted;
+      continue;
     }
+    if (fresh) tokens.push(c);
+    else tokens[tokens.length - 1] += c;
+    fresh = false;
   }
-  if (quoted) return null;
-  if (inToken) tokens.push(token);
-  return tokens;
+  return quoted ? null : tokens;
 }
+const NODE_OPTIONS_HELP =
+  "NODE_OPTIONS comes from the service environment (or .env): see it with `launchctl getenv NODE_OPTIONS` and clear it " +
+  "with `launchctl unsetenv NODE_OPTIONS` (macOS), or `systemctl --user show-environment` and " +
+  "`systemctl --user unset-environment NODE_OPTIONS` (Linux), then restart the ai-worker";
 const nodeOptions = process.env.NODE_OPTIONS ?? "";
 const nodeOptionTokens = splitNodeOptions(nodeOptions);
-if (nodeOptionTokens === null) stop("NODE_OPTIONS has an unclosed quote; unset NODE_OPTIONS for the ai-worker");
+if (nodeOptionTokens === null) stop(`NODE_OPTIONS has an unclosed quote or a trailing backslash. ${NODE_OPTIONS_HELP}`);
 for (const token of nodeOptionTokens) {
   const name = optionName(token);
   const value = optionValue(token);
   const rule = NODE_OPTIONS_ALLOWED.get(name);
   const ok = rule !== undefined && (rule === null ? value === null : value !== null && rule.test(value));
   if (!ok) {
-    stop(`NODE_OPTIONS holds ${JSON.stringify(token)}, which is not one of ${[...NODE_OPTIONS_ALLOWED.keys()].join(", ")}; unset NODE_OPTIONS for the ai-worker`);
+    stop(
+      `NODE_OPTIONS holds ${JSON.stringify(token)}, which is not an allowed option or value (allowed: ` +
+        `--max-old-space-size=N, --max-semi-space-size=N, --enable-source-maps, --no-warnings). ${NODE_OPTIONS_HELP}`,
+    );
   }
 }
 
 // the command line: --import only, each one a file inside the root
 const REFUSED_PRELOADS = new Set(["--require", "-r", "--loader", "--experimental-loader"]);
+// a Node config file can add preloads (nodeOptions.import / require) that show up in neither NODE_OPTIONS nor execArgv
+const REFUSED_CONFIG_FILES = new Set(["--experimental-config-file", "--experimental-default-config-file"]);
 const execArgv = process.execArgv;
 for (let i = 0; i < execArgv.length; i++) {
   const name = optionName(execArgv[i]);
   if (REFUSED_PRELOADS.has(name)) stop(`${execArgv[i]}: only --import preloads are allowed for the ai-worker (no CommonJS preload, no loader thread)`);
+  if (REFUSED_CONFIG_FILES.has(name)) stop(`${execArgv[i]}: no Node config file for the ai-worker (it could add preloads this guard cannot see)`);
   if (name !== "--import") continue;
   const value = optionValue(execArgv[i]) ?? execArgv[++i];
   if (!value) stop("--import without a value");

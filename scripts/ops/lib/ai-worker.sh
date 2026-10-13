@@ -8,7 +8,7 @@
 #   ai_worker_wait_ready <main> <old pid> <since> <timeout>   until a new PID of the installed definition shows evidence
 #   ai_worker_wait_stopped <label-or-unit> <pid> <timeout>     until the service and the PID are gone
 #   ai_worker_db_url <main> [--database-url X]                 the DATABASE_URL the install script writes
-#   sd_env_decode / sd_path_decode / sd_unit_db_url            exact inverses of the install script's unit escaping
+#   sd_env_decode / sd_path_decode / sd_exec_decode / sd_unit_db_url   exact inverses of the install script's unit escaping
 #
 # The platform is JOB_RADAR_SERVICE_MANAGER (launchd or systemd) when set, else launchd on macOS and systemd elsewhere.
 #
@@ -134,10 +134,11 @@ ai_worker_identity() {
 }
 
 # ai_worker_service_pid <platform> <label-or-unit> [timeout s]: the PID the service manager reports, or nothing. With a
-# timeout, the launchctl / systemctl call is given at most that long (ai_worker_run_bounded) and reports nothing when cut
-# off; its output goes to a temp file, not a pipe, so that nothing left behind can hold the call open.
+# timeout, the launchctl / systemctl call is given at most that long (ai_worker_run_bounded). A call that fails or is cut
+# off reports nothing, whatever it printed before; its output goes to a temp file, not a pipe, so that nothing left behind
+# can hold the call open.
 ai_worker_service_pid() {
-  local platform="$1" target="$2" secs="${3:-}" out="" f
+  local platform="$1" target="$2" secs="${3:-}" out="" f rc=0
   f="$(mktemp "${TMPDIR:-/tmp}/ai-worker-pid.XXXXXX")" || return 0
   case "$platform" in
     launchd) set -- launchctl print "gui/$(id -u)/$target" ;;
@@ -145,10 +146,11 @@ ai_worker_service_pid() {
     *) rm -f "$f"; return 0 ;;
   esac
   if [[ -n "$secs" ]]; then
-    ai_worker_run_bounded "$secs" ai_worker_exec_to "$f" "$@" || true
+    ai_worker_run_bounded "$secs" ai_worker_exec_to "$f" "$@" || rc=$?
   else
-    "$@" > "$f" 2>/dev/null || true
+    "$@" > "$f" 2>/dev/null || rc=$?
   fi
+  if (( rc != 0 )); then rm -f "$f"; return 0; fi
   case "$platform" in
     launchd) out="$(awk '$1 == "pid" && $2 == "=" { print $3; exit }' "$f" 2>/dev/null)" || out="" ;;
     systemd) out="$(cat "$f" 2>/dev/null)" || out="" ;;
@@ -202,7 +204,7 @@ ai_worker_evidence_probe() {
 # unit), not the configured label L. After a failed migration from the default or legacy label to L, the rollback puts
 # the definition back under its old label, and this waits for that one.
 # Every call (the service manager's PID, the evidence probe, the PID confirmation) is bounded by the time left, which is
-# recomputed after each one, and success counts only within the timeout. Returns 1 on timeout, when no
+# recomputed after each one; a confirmation that fails or is cut off is not one, and success counts only within the timeout. Returns 1 on timeout, when no
 # definition exists, when the identity is ambiguous, or at once when DATABASE_URL is empty: the caller sets it
 # explicitly (the URL written into the definition), it is never read from .env or derived here.
 ai_worker_wait_ready() {
@@ -315,6 +317,23 @@ sd_path_decode() {
       [[ "$n" == '%' ]] || return 1
       out+='%'; i=$((i+2)); continue
     fi
+    out+="$c"; i=$((i+1))
+  done
+  printf '%s' "$out"
+}
+
+# sd_exec_decode <s>: an ExecStart= line as sd_exec writes its arguments, decoded: \\ -> \, \" -> ", %% -> %, $$ -> $, and
+# unescaped quotes dropped (they only group words). Any other backslash, % or $ sequence (a C escape, a specifier, a
+# variable) is not something sd_exec writes and could hide what the line runs: 1.
+sd_exec_decode() {
+  local s="$1" out="" i=0 c n
+  while (( i < ${#s} )); do
+    c="${s:i:1}"; n="${s:i+1:1}"
+    case "$c" in
+      '\') case "$n" in '\'|'"') out+="$n"; i=$((i+2)); continue ;; *) return 1 ;; esac ;;
+      '%'|'$') [[ "$n" == "$c" ]] || return 1; out+="$c"; i=$((i+2)); continue ;;
+      '"'|"'") i=$((i+1)); continue ;;
+    esac
     out+="$c"; i=$((i+1))
   done
   printf '%s' "$out"

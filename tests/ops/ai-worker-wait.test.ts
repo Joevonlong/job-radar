@@ -249,4 +249,20 @@ describe("ai_worker_wait_ready: the service polled and the time bound", () => {
     expect(r.ms).toBeLessThan(6500); // the stub hangs 8 s; the bound is 2 s (+1 for whole seconds, +1 for TERM)
     expect(calls().some((c) => c.startsWith("node "))).toBe(true);
   });
+
+  it.each([
+    ["prints the PID and then fails", 'echo "pid = 4242"; exit 1'],
+    ["prints the PID and then hangs until it is cut off", 'echo "pid = 4242"; sleep 8'],
+  ])("a confirmation that %s is not one: not ready (1)", (_label, later) => {
+    plist("io.jobradar.ai-worker");
+    // the first launchctl call answers at once; every later one (the confirmation) prints the PID, then goes wrong
+    write(
+      path.join(bin, "launchctl"),
+      `#!/bin/bash\necho "launchctl $*" >> "${state}/calls"\nif [[ -e "${state}/answered" ]]; then ${later}; fi\ntouch "${state}/answered"\necho "pid = 4242"\n`,
+      0o755,
+    );
+    const r = run(`ai_worker_wait_ready "${main()}" 1 2026-01-01T00:00:00Z 2; echo "rc=$?"`, env);
+    expect(r.stdout.trim()).toBe("rc=1");
+    expect(calls().some((c) => c.startsWith("node "))).toBe(true);
+  });
 });

@@ -265,6 +265,10 @@ describe("the release guard refuses preloads from outside the release (no databa
     const r = runOnce(["--import", guard, "--import", loader, ...loadArgs], { ...workerEnv(), NODE_OPTIONS: `--require ${outside}` });
     expect(r.status).toBe(1);
     expect(r.stderr).toContain(`release guard: NODE_OPTIONS holds "--require"`);
+    expect(r.stderr).toContain("not an allowed option or value");
+    // where the value comes from and how to clear it
+    expect(r.stderr).toContain("launchctl unsetenv NODE_OPTIONS");
+    expect(r.stderr).toContain("systemctl --user unset-environment NODE_OPTIONS");
     expect(r.stderr).not.toContain("loaded");
   });
 
@@ -279,6 +283,12 @@ describe("the release guard refuses preloads from outside the release (no databa
     expect(r.status).toBe(1);
     expect(r.stderr).toContain(`release guard: NODE_OPTIONS holds ${shown}`);
     expect(r.stderr).not.toContain("loaded");
+  });
+
+  it.each([['"" --no-warnings'], ['--no-warnings ""'], ['--no-war""nings']])("NODE_OPTIONS %s (empty quotes add nothing, as in Node) is accepted", (value) => {
+    const r = runOnce(["--import", guard, "--import", loader, ...loadArgs], { ...workerEnv(), NODE_OPTIONS: value });
+    expect(r.stderr).not.toContain("release guard:");
+    expect(r.status).toBe(0);
   });
 
   it("NODE_OPTIONS with only allowlisted options (either spelling, quoted or not) is accepted", () => {
@@ -302,6 +312,24 @@ describe("the release guard refuses preloads from outside the release (no databa
     expect(r.status).toBe(1);
     expect(r.stderr).toContain("only --import preloads are allowed");
     expect(r.stderr).not.toContain("loaded");
+  });
+
+  it.each([
+    ["--experimental-config-file=<file>", (f: string) => [`--experimental-config-file=${f}`]],
+    ["--experimental_config_file <file> (the underscore spelling)", (f: string) => ["--experimental_config_file", f]],
+    ["--experimental-default-config-file", () => ["--experimental-default-config-file"]],
+    ["--experimental_default_config_file (the underscore spelling)", () => ["--experimental_default_config_file"]],
+  ])("%s on the command line: exit 1 (a Node config file could add preloads the guard cannot see)", (_label, flags) => {
+    // Node reads the config file before anything runs (the default one from the working directory), so run from a
+    // directory that has one; the guard finds the release from its own path
+    const dir = tmpPath("node-config");
+    fs.mkdirSync(dir, { recursive: true });
+    const config = path.join(dir, "node.config.json");
+    fs.writeFileSync(config, "{}\n");
+    const r = spawnSync(process.execPath, ["--import", guard, ...flags(config), "-e", "console.log('loaded')"], { cwd: dir, env: workerEnv(), encoding: "utf8", timeout: 120_000 });
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain("no Node config file for the ai-worker");
+    expect(r.stdout).not.toContain("loaded");
   });
 
   it("an --import on the command line whose file lies outside the release (this checkout's copy of a fixture): exit 1", () => {

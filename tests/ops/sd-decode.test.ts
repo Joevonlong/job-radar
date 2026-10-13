@@ -75,6 +75,18 @@ describe("sd_env_decode / sd_path_decode", () => {
   });
 });
 
+describe("sd_exec_decode", () => {
+  it.each(SAMPLES.map((s) => [s]))("round trip of %j through a quoted sd_exec argument", (s) => {
+    const r = sh('enc="\\"$(sd_exec "$1")\\""; out="$(sd_exec_decode "$enc")"; rc=$?; printf "%s|%s" "$rc" "$out"', s);
+    expect(r.stdout).toBe(`0|${s}`);
+    expect(fs.readdirSync(tmp).sort()).toEqual(["encoders.sh"]);
+  });
+
+  it.each([["a\\x2fb"], ["a\\057b"], ["%h/x"], ["50%"], ["$HOME"], ["${X}"], ["$"]])("refuses %j (a C escape, specifier or variable)", (s) => {
+    expect(sh('sd_exec_decode "$1" >/dev/null; echo "rc=$?"', s).stdout.trim()).toBe("rc=1");
+  });
+});
+
 describe("sd_unit_db_url", () => {
   const unit = (lines: string[]): string => {
     const file = path.join(tmp, "unit.service");

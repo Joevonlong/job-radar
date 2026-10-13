@@ -20,8 +20,9 @@
 #      label) and 4 (installed, not from a release directory) let the rebuild go on, and 1 or any other exit refuses
 #      (the script cannot tell). An install script that does not mention --print-release at all predates release
 #      directories; it is not run, and the rebuild goes on only when the installed service definition (found by the
-#      ai-worker identity rules, read as a file) does not mention data/releases/ai-worker/ (a worker installed by a
-#      newer checkout may run from a release). Anything that cannot be read refuses.
+#      ai-worker identity rules, read as a file and decoded: plutil, or the unit's escapes) does not mention
+#      data/releases/ai-worker/ (a worker installed by a newer checkout may run from a release). Anything that cannot
+#      be read or decoded refuses.
 #   2  git archive of <sha> into .tmp-<sha>-<pid>/ next to the releases
 #   3  `pnpm --version` must equal the packageManager of that commit (else: run `corepack enable`)
 #   4  pnpm install --frozen-lockfile --prod --prefer-offline --ignore-scripts: no lifecycle script runs at all, not even
@@ -124,23 +125,56 @@ installed_release() {
   esac
   return 0
 }
-# installed_definition_without_release: 0 when no ai-worker definition is installed, or the installed one does not
-# mention data/releases/ai-worker/ (its worker runs from a checkout). 1, with the reason, otherwise or when it cannot be read.
+# installed_definition_without_release: 0 when no ai-worker definition is installed, or the installed one does not run
+# from data/releases/ai-worker/ (its worker runs from a checkout). 1, with the reason, otherwise or when it cannot be
+# read or decoded.
 installed_definition_without_release() {
-  local ident def grc=0
+  local ident def platform drc=0
   if ! ident="$(ai_worker_identity "$MAIN")"; then
     say "cannot tell which release the installed ai-worker runs from: its service identity is ambiguous (see above)"
     return 1
   fi
   def="$(printf '%s\n' "$ident" | sed -n 's/^found_definition=//p')"
+  platform="$(printf '%s\n' "$ident" | sed -n 's/^platform=//p')"
   [[ -n "$def" ]] || return 0
-  grep -qF -- 'data/releases/ai-worker/' "$def" || grc=$?
-  case "$grc" in
+  definition_names_release "$platform" "$def" || drc=$?
+  case "$drc" in
     0) say "cannot tell which release the installed ai-worker runs from: its definition $def names a release directory, and install-ai-worker.sh here predates --print-release"
        return 1 ;;
     1) return 0 ;;
-    *) say "cannot tell which release the installed ai-worker runs from: cannot read $def (grep exited $grc)"; return 1 ;;
+    *) say "cannot tell which release the installed ai-worker runs from: cannot read or decode $def"; return 1 ;;
   esac
+}
+# definition_names_release <platform> <file>: 0 when the decoded definition mentions data/releases/ai-worker/, 1 when it
+# does not, 2 when it cannot be read or decoded. Never the raw bytes: a binary plist, XML character references or unit
+# escapes spell the path differently.
+#   launchd  the plist as `plutil -convert xml1` writes it (every string literal, only &, < and > escaped)
+#   systemd  WorkingDirectory= (sd_path_decode) and ExecStart= (sd_exec_decode); a backslash in WorkingDirectory=, a
+#            continued line, or a sequence the install script never writes cannot be decoded
+definition_names_release() {
+  local platform="$1" def="$2" xml line value dec re='^(WorkingDirectory|ExecStart)[[:space:]]*=(.*)$'
+  [[ -f "$def" && -r "$def" ]] || return 2
+  if [[ "$platform" == launchd ]]; then
+    xml="$(plutil -convert xml1 -o - "$def" 2>/dev/null)" || return 2
+    [[ "$xml" == *data/releases/ai-worker/* ]] && return 0
+    return 1
+  fi
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    line="${line%$'\r'}"
+    line="${line#"${line%%[![:space:]]*}"}"
+    case "$line" in ''|'#'*|';'*) continue ;; esac
+    [[ "$line" != *'\' ]] || return 2
+    [[ "$line" =~ $re ]] || continue
+    value="${BASH_REMATCH[2]}"
+    if [[ "${BASH_REMATCH[1]}" == WorkingDirectory ]]; then
+      [[ "$value" != *'\'* ]] || return 2
+      dec="$(sd_path_decode "$value")" || return 2
+    else
+      dec="$(sd_exec_decode "$value")" || return 2
+    fi
+    [[ "$dec" == *data/releases/ai-worker/* ]] && return 0
+  done < "$def"
+  return 1
 }
 same_dir() { [[ "$1" == "$2" ]] || { [[ -d "$1" && -d "$2" ]] && [[ "$(cd "$1" && pwd -P)" == "$(cd "$2" && pwd -P)" ]]; }; }
 

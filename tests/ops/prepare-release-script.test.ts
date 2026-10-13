@@ -409,28 +409,94 @@ exit 1
     return file;
   };
 
-  it("an install script without --print-release and an installed definition that names a release directory: kept (exit 1)", () => {
+  const plistXml = (workdir: string): string =>
+    `<?xml version="1.0" encoding="UTF-8"?>\n<plist version="1.0">\n<dict>\n  <key>ProgramArguments</key>\n  <array><string>/usr/bin/node</string></array>\n  <key>WorkingDirectory</key>\n  <string>${workdir}</string>\n</dict>\n</plist>\n`;
+  const unitFile = (body: string): string => {
+    const file = path.join(base, "home/.config/systemd/user/job-radar-ai-worker.service");
+    write(file, body);
+    return file;
+  };
+  // an old install script; the definition in force decides (decoded, never the raw bytes)
+  function preOption(env: Record<string, string> = {}): Run {
     const copy = opsCopy(false);
-    expect(prepare([], {}, copy).status).toBe(0);
+    expect(prepare([], env, copy).status).toBe(0);
     corruptMarker();
-    installed("io.jobradar.ai-worker", `<plist><string>${path.join(rdir(), "c".repeat(40))}</string></plist>\n`);
-    const r = prepare([], {}, copy);
+    return prepare([], env, copy);
+  }
+  const expectKept = (r: Run, message: string): void => {
     expect(r.status).toBe(1);
-    expect(r.stderr).toContain("names a release directory");
+    expect(r.stderr).toContain(message);
     expect(askedInstall()).toEqual([]);
     expect(fs.readFileSync(path.join(dest(), ".release.json"), "utf8")).toContain("broken");
     expect(installs()).toHaveLength(1);
-  });
-
-  it("an install script without --print-release and an installed definition that runs from a checkout: rebuilt", () => {
-    const copy = opsCopy(false);
-    expect(prepare([], {}, copy).status).toBe(0);
-    corruptMarker();
-    installed("io.jobradar.ai-worker", `<plist><string>${main}</string></plist>\n`);
-    const r = prepare([], {}, copy);
+  };
+  const expectRebuilt = (r: Run): void => {
     expect(r.status).toBe(0);
     expect(r.stderr).toContain("rebuilding");
     expect(installs()).toHaveLength(2);
+  };
+  const inRelease = (): string => path.join(rdir(), "c".repeat(40));
+  const darwin = process.platform === "darwin";
+
+  describe.runIf(darwin)("an install script without --print-release, launchd (plutil decodes the plist)", () => {
+    it("a plist whose working directory is a release directory: kept (exit 1)", () => {
+      installed("io.jobradar.ai-worker", plistXml(inRelease()));
+      expectKept(preOption(), "names a release directory");
+    });
+
+    it("the same as a binary plist with a non-ASCII path (stored as UTF-16, so the raw bytes never spell it): kept", () => {
+      const file = installed("io.jobradar.ai-worker", plistXml(path.join(base, "jö", "data/releases/ai-worker", "c".repeat(40))));
+      expect(spawnSync("plutil", ["-convert", "binary1", file]).status).toBe(0);
+      expect(fs.readFileSync(file).includes("data/releases/ai-worker/")).toBe(false);
+      expectKept(preOption(), "names a release directory");
+    });
+
+    it("the same in XML with character references for the slashes: kept", () => {
+      const file = installed("io.jobradar.ai-worker", plistXml(inRelease().replace("data/releases/ai-worker/", "data&#x2F;releases&#47;ai-worker&#x2f;")));
+      expect(fs.readFileSync(file, "utf8")).not.toContain("data/releases/ai-worker/");
+      expectKept(preOption(), "names a release directory");
+    });
+
+    it("a plist that runs from a checkout: rebuilt", () => {
+      installed("io.jobradar.ai-worker", plistXml(main));
+      expectRebuilt(preOption());
+    });
+  });
+
+  it("an install script without --print-release and a launchd definition that cannot be decoded: kept (exit 1)", () => {
+    installed("io.jobradar.ai-worker", "not a property list\n");
+    expectKept(preOption(), "cannot read or decode");
+  });
+
+  describe("an install script without --print-release, systemd (the unit's escapes decoded)", () => {
+    const env = { JOB_RADAR_SERVICE_MANAGER: "systemd" };
+    const unit = (workdir: string, exec: string): string =>
+      `[Service]\n# a comment that names data/releases/ai-worker/ does not count\nWorkingDirectory=${workdir}\nExecStart=${exec}\nEnvironment="PATH=/usr/bin"\n`;
+
+    it("a unit that runs from a checkout (escaped as the install script writes it): rebuilt", () => {
+      unitFile(unit(main, '"/usr/bin/node" --import "/x/100%% done/loader.mjs" src/ai-worker/index.ts --log-dir "/l/a\\"b$$c"'));
+      expectRebuilt(preOption(env));
+    });
+
+    it.each([
+      ["WorkingDirectory= in a release directory", () => unit(inRelease(), '"/usr/bin/node" src/ai-worker/index.ts')],
+      ["ExecStart= importing from a release directory, with quotes splitting the path", () => unit(main, `"/usr/bin/node" --import "${inRelease().replace("releases/", 'rel""eases/')}/x.mjs"`)],
+      ["WorkingDirectory= in a release directory with an escaped %", () => unit(`${inRelease()}/100%%`, '"/usr/bin/node"')],
+    ])("%s: kept (exit 1)", (_label, body) => {
+      unitFile(body());
+      expectKept(preOption(env), "names a release directory");
+    });
+
+    it.each([
+      ["a C escape in ExecStart=", () => unit(main, `"/usr/bin/node" --import "${inRelease().replaceAll("/", "\\x2f")}/x.mjs"`)],
+      ["a specifier in ExecStart=", () => unit(main, '"%h/node" src/ai-worker/index.ts')],
+      ["a variable in ExecStart=", () => unit(main, '"/usr/bin/node" --import "$RELEASE/x.mjs"')],
+      ["a backslash in WorkingDirectory=", () => unit(`${main}\\x2f`, '"/usr/bin/node"')],
+      ["a continued line", () => `[Service]\nWorkingDirectory=${main}\nExecStart="/usr/bin/node" \\\n  src/ai-worker/index.ts\n`],
+    ])("%s (cannot be decoded): kept (exit 1)", (_label, body) => {
+      unitFile(body());
+      expectKept(preOption(env), "cannot read or decode");
+    });
   });
 
   it.each([
