@@ -91,6 +91,8 @@ pnpm run doctor --only config.market
 
 和签证一样，**`evergreen_patterns` 能匹配到的每个说法都必须包含一个 `prefilter` 命中**，否则永远看不到；`pnpm config:check` 会对正则文本里没有 prefilter 匹配的说法给出警告，写错的正则会指出路径（`ghost.evergreen_patterns[2]`）。改了说法之后，接下来几轮会把所有岗位重新检查一遍；可以先用 `pnpm ghost:check` 预览。
 
+每条 `evergreen_patterns` 说法都要在词的边界开始和结束（`(?<![\p{L}\p{N}])` … `(?![\p{L}\p{N}])`，出厂的说法都是这样）。否定判断从片段的索引里读每个命中周围的词，耗时与片段长度成线性，用撇号连起来的长串词也一样；不带边界的说法可能在一个长词（一长串字母）里命中很多次，每次都可能把这个词剩下的部分再读一遍，耗时随词长的平方增长。
+
 ## 签证说法
 
 `rules.yaml` 的 `visa` 一节是[签证检查](visa-sponsorship.zh.md)用的说法。`generic` 放英文，`de` 放德文；德国市场两者都用。
