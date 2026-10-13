@@ -50,8 +50,10 @@ COPY --from=build --chown=node:node /app/.next/static ./.next/static
 # compose may run the web under another uid (PUID / PGID on Linux): Next's cache directory must be writable for it too.
 RUN mkdir -p .next/cache && chmod 1777 .next/cache
 # The shipped defaults (config/) are part of the image: owned by root, readable by any uid, writable by none of them.
-# The user's own config stays outside the image (data/config, a bind mount).
+# The user's own config stays outside the image (data/config, a bind mount). Next's standalone output already holds a
+# traced copy of config/ owned by node (its directories would stay writable for the web): replace it.
 ENV JOB_RADAR_DEFAULTS_DIR=/app/config
+RUN rm -rf /app/config
 COPY config/ /app/config/
 RUN chmod -R a+rX,go-w /app/config
 USER node

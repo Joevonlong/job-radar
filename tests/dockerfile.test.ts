@@ -54,6 +54,13 @@ describe("Dockerfile", () => {
     });
   });
 
+  it("the web stage drops the copy of config/ that Next's standalone output brings (owned by node) before copying its own", () => {
+    const web = dockerfile.slice(dockerfile.indexOf("AS web\n"), dockerfile.indexOf("\nFROM ", dockerfile.indexOf("AS web\n")));
+    const rm = web.search(/^RUN rm -rf \/app\/config$/m);
+    expect(rm).toBeGreaterThan(web.search(/^COPY --from=build --chown=node:node \/app\/\.next\/standalone /m));
+    expect(web.search(/^COPY config\/ /m)).toBeGreaterThan(rm);
+  });
+
   it("the runner's FAIL_RUNNER_BUILD test hook is empty by default (a normal build never fails on it)", () => {
     const runner = dockerfile.slice(dockerfile.indexOf("AS runner"));
     expect(runner).toMatch(/^ARG FAIL_RUNNER_BUILD=""$/m);
