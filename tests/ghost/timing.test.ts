@@ -3,18 +3,15 @@ import { describe, expect, it } from "vitest";
 
 import { evergreenWording, thinDescription } from "@/lib/ghost/signals";
 
+import { leastCpuTime } from "../helpers/cpu-time";
 import { fixtureRules, input } from "./helpers";
 
 /**
  * The packs' expressions and the ghost check stay linear on long runs of blank lines or spaces (input the ingestion normally
  * collapses, but nothing guarantees it). The bounds are far above the expected few milliseconds and far below a backtracking blow-up
- * (seconds).
+ * (seconds). Times are this thread's CPU time, the least of three runs: a busy machine stretches wall time several times over.
  */
-const elapsed = (work: () => void): number => {
-  const started = performance.now();
-  work();
-  return performance.now() - started;
-};
+const elapsed = (work: () => void): number => leastCpuTime(work, { atLeast: 0 });
 
 describe("ghost check timing", () => {
   const rules = fixtureRules();
@@ -47,16 +44,26 @@ describe("ghost check timing", () => {
     expect(found).toMatchObject({ patternId: "open_application_title", offset: 0 });
   });
 
+  // Each bound is ten times the time measured under load and a tenth of the time of a reading with the square of the hits (noted
+  // per case); the time from n hits to 4n grows at most 8 times (linear ≈ 4, quadratic ≈ 16).
   it.each([
-    ["4000 hits in comma clauses before a tagged invitation", `${"always hiring, ".repeat(4000)}always hiring – interested?`],
-    ["4000 qualifications before a hit", `${"Experience building teams ".repeat(4000)}for future roles.`],
-  ])("a piece with %s (every hit left out)", (_name, description) => {
+    // the clause of every hit read in log time (~85 ms; finding the clause marks again for every hit: ~50 s)
+    ["hits in comma clauses before a tagged invitation", (n: number) => `${"always hiring, ".repeat(n)}always hiring – interested?`, 900],
+    // the end of every qualification's clause searched forward once (~30 ms; searching the rest of the piece again from every
+    // qualification: ~11 s)
+    ["qualifications before a hit", (n: number) => `${"Experience building teams ".repeat(n)}for future roles.`, 400],
+  ])("a piece with 8000 %s (every hit left out)", (_name, description, bound) => {
     // the expressions' first runs (compiling) are not what is measured: the time must not grow with the square of the hits
-    evergreenWording(description.slice(-2000), rules);
+    evergreenWording(description(500), rules);
     let found: ReturnType<typeof evergreenWording> = null;
-    const ms = elapsed(() => void (found = evergreenWording(description, rules)));
-    expect(ms).toBeLessThan(100);
+    const ms = leastCpuTime(() => void (found = evergreenWording(description(8000), rules)), { atLeast: 0, giveUpAbove: 3 * bound });
+    expect(ms).toBeLessThan(bound);
     expect(found).toBeNull();
+    const [small, large] = [2000, 8000].map((n) => {
+      const text = description(n);
+      return leastCpuTime(() => void evergreenWording(text, rules));
+    }) as [number, number];
+    expect(large / small, `${large.toFixed(1)} ms at 8000 / ${small.toFixed(1)} ms at 2000`).toBeLessThanOrEqual(8);
   });
 
   // Each bound is about ten times the time measured here and the input is large enough that reading it with the square of its

@@ -86,4 +86,59 @@ describe("listHeadingFinder", () => {
     expect(evergreenWording("\n- We are always hiring.", rules)).toMatchObject({ patternId: "always_hiring" });
     expect(evergreenWording("\n\n- x\n- We are always hiring.", rules)).toMatchObject({ patternId: "always_hiring" });
   });
+
+  it("reads the segmenter's heading of a list item as a heading (the list's line above it)", () => {
+    const text = "Your responsibilities:\n- Build things\n- Ship them";
+    const find = listHeadingFinder(text, rules);
+    const items = segmentsOf(text).filter((segment) => segment.listHeading !== undefined);
+    expect(items).toHaveLength(2);
+    expect(items.map((segment) => find(segment))).toEqual(["Your responsibilities", "Your responsibilities"]);
+  });
+});
+
+describe("list headings read once per list", () => {
+  const rules = fixtureRules();
+  const long = (words: number): string => "lorem ipsum dolor sit amet ".repeat(words).trim();
+
+  it("keeps two long headings apart: the items under the duties heading do not count, those under the other one do", () => {
+    const text = `${long(40)} your responsibilities:\n- We are always hiring\n- We are always hiring\n\n${long(40)}:\n- We are always hiring`;
+    const found = evergreenWording(text, rules);
+    expect(found).toMatchObject({ patternId: "always_hiring", offset: text.lastIndexOf("We are always hiring") });
+    // and the other way round
+    const swapped = `${long(40)}:\n- We are always hiring\n\n${long(40)} your responsibilities:\n- We are always hiring`;
+    expect(evergreenWording(swapped, rules)).toMatchObject({ offset: swapped.indexOf("We are always hiring") });
+  });
+
+  it("keeps a negated heading and one without a cue apart", () => {
+    const text = `${long(40)} not:\n- We are always hiring\n- We are always hiring\n\n${long(40)}:\n- We are always hiring`;
+    expect(evergreenWording(text, rules)).toMatchObject({ offset: text.lastIndexOf("We are always hiring") });
+  });
+
+  it("negates every item under a negated heading, blank lines between the items included, and items negated themselves", () => {
+    expect(evergreenWording("We do not offer the following:\n- We are always hiring\n\n- always hiring\n- not always hiring", rules)).toBeNull();
+  });
+
+  it("skips the items under a duties heading whether or not a pattern checks negation", () => {
+    const unchecked: CompiledGhostRules = { ...rules, evergreen: rules.evergreen.map((pattern) => ({ ...pattern, checkNegation: false })) };
+    const text = `${long(40)} your responsibilities:\n- We are always hiring\n- We are always hiring`;
+    expect(evergreenWording(text, unchecked)).toBeNull();
+    expect(evergreenWording(text.replace("your responsibilities", "our perks"), unchecked)).toMatchObject({ patternId: "always_hiring" });
+  });
+
+  it("reads the next line of a heading once for all its hits", () => {
+    expect(evergreenWording("always hiring, always hiring\nnot now", rules)).toBeNull();
+    expect(evergreenWording("always hiring, always hiring\nsee below", rules)).toMatchObject({ patternId: "always_hiring", offset: 0 });
+  });
+
+  it("does not keep what it read between calls (the same rules, headings at the same offset)", () => {
+    expect(evergreenWording("Benefits not:\n- We are always hiring", rules)).toBeNull();
+    expect(evergreenWording("Benefits now:\n- We are always hiring", rules)).toMatchObject({ patternId: "always_hiring" });
+    expect(evergreenWording("Your tasks:\n- We are always hiring", rules)).toBeNull();
+    expect(evergreenWording("Your perks:\n- We are always hiring", rules)).toMatchObject({ patternId: "always_hiring" });
+  });
+
+  it("reads only the items that the prefilter keeps under one heading", () => {
+    expect(evergreenWording(`${long(40)} not:\n- x\n- We are always hiring\n- y\n- We are always hiring`, rules)).toBeNull();
+    expect(evergreenWording(`${long(40)}:\n- x\n- We are always hiring\n- y`, rules)).toMatchObject({ patternId: "always_hiring" });
+  });
 });

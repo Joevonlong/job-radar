@@ -105,6 +105,11 @@ seen; `pnpm config:check` warns about a pattern whose own text has none, and nam
 path (`ghost.evergreen_patterns[2]`). Changing the patterns checks every job again in the next cycles; preview with
 `pnpm ghost:check`.
 
+Start and end every `evergreen_patterns` entry at a word boundary (`(?<![\p{L}\p{N}])` … `(?![\p{L}\p{N}])`, as the shipped
+ones do). The negation test reads the words around each hit from an index of its piece, in time linear in the piece's length,
+also across long runs of words joined by apostrophes; a pattern without boundaries can hit many times inside one long word (a
+long run of letters), and each such hit may read the rest of that word again, which grows with the square of its length.
+
 ## Visa patterns
 
 The `visa` section of `rules.yaml` holds the phrases of the [visa check](visa-sponsorship.md). `generic` has the English

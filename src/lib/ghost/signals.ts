@@ -277,17 +277,27 @@ function lastMarkStart(marks: ClauseMarks, from: number): number {
   return count === 0 ? 0 : (marks.starts[count - 1] as number);
 }
 
+/** What the negation tests of a piece's hits share, each read on the first test that needs it. */
+interface PieceNegation {
+  /** The piece's words and clause breaks. */
+  index: () => NegationIndex;
+  /** Whether the heading of the piece's list has a negation cue (read once for all the items of the list). */
+  listHeading: () => boolean;
+  /** Whether the next line of a heading read with it has a negation cue. */
+  nextLine: () => boolean;
+}
+
 /**
  * A negation cue inside the hit, among the `negation_words_before` words before it or the `negation_words_after` words after it
  * (both within its clause; after it to the end of the clause for a pattern with `negationAfter: "clause"`), in the heading of its
- * list, or, for a heading read with its next line, in that next line. `index`: the piece's, read on its first negation test.
+ * list, or, for a heading read with its next line, in that next line.
  */
-function negated(segment: TextSegment, hit: Hit, pattern: CompiledGhostPattern, rules: CompiledGhostRules, description: string, index: () => NegationIndex): boolean {
+function negated(segment: TextSegment, hit: Hit, pattern: CompiledGhostPattern, rules: CompiledGhostRules, piece: PieceNegation): boolean {
   if (rules.negationCues.length === 0) return false;
-  if (segment.listHeading !== undefined && hasCue(description.slice(segment.listHeading.start, segment.listHeading.end), rules)) return true;
-  if (segment.headingEnd !== undefined && hit.end <= segment.headingEnd && hasCue(description.slice(segment.headingEnd, segment.end), rules)) return true;
+  if (segment.listHeading !== undefined && piece.listHeading()) return true;
+  if (segment.headingEnd !== undefined && hit.end <= segment.headingEnd && piece.nextLine()) return true;
   const settings = rules.settings;
-  return negatedInClause(index(), hit.start - segment.start, hit.end - segment.start, {
+  return negatedInClause(piece.index(), hit.start - segment.start, hit.end - segment.start, {
     before: settings.negation_words_before,
     after: pattern.negationAfter === "clause" ? "clause" : settings.negation_words_after,
   });
@@ -525,6 +535,21 @@ export function evergreenWording(description: string | null, rules: CompiledGhos
   // where the first duties heading starts, read once and only for an `only_before_duties` hit (undefined = not read yet)
   let dutiesAt: number | null | undefined;
   const listHeadingOf = listHeadingFinder(description, rules);
+  // the items of one list share its heading (one line, however long): whether it opens the duties and whether it has a negation
+  // cue are read once for all of them, by where the heading starts
+  const headingDuties = new Map<number, boolean>();
+  const headingNegated = new Map<number, boolean>();
+  const underDuties = (segment: TextSegment): boolean => {
+    if (segment.listHeading === undefined) return underDutiesHeading(segment, rules, listHeadingOf);
+    let duties = headingDuties.get(segment.listHeading.start);
+    if (duties === undefined) headingDuties.set(segment.listHeading.start, (duties = underDutiesHeading(segment, rules, listHeadingOf)));
+    return duties;
+  };
+  const listHeadingNegated = ({ start, end }: { start: number; end: number }): boolean => {
+    let negation = headingNegated.get(start);
+    if (negation === undefined) headingNegated.set(start, (negation = hasCue(description.slice(start, end), rules)));
+    return negation;
+  };
   for (const segment of segments) {
     if (prefilter !== null && segment.text.search(prefilter) === -1) continue;
     const candidates: Array<{ hit: Hit; pattern: CompiledGhostPattern }> = [];
@@ -540,14 +565,19 @@ export function evergreenWording(description: string | null, rules: CompiledGhos
     }
     const question = leadInQuestion(description, segment.start, rules.leadInQuestion);
     if (rules.excludeContext.some((re) => segment.text.search(re) !== -1 || (question !== "" && question.search(re) !== -1))) continue;
-    if (underDutiesHeading(segment, rules, listHeadingOf)) continue;
+    if (underDuties(segment)) continue;
     const excluded = clauseExclusions(segment, rules);
     // the exclusions that start at or before the current hit (hits come in text order) and the furthest end among them
     let excludedSeen = 0;
     let excludedTo = -1;
     const tagged = statementEnd < segment.text.length ? taggedPiece(segment.text, rules) : null;
     let negation: NegationIndex | undefined;
-    const negationOf = (): NegationIndex => (negation ??= negationIndex(segment.text, rules));
+    let nextLine: boolean | undefined;
+    const piece: PieceNegation = {
+      index: () => (negation ??= negationIndex(segment.text, rules)),
+      listHeading: () => segment.listHeading !== undefined && listHeadingNegated(segment.listHeading),
+      nextLine: () => (nextLine ??= segment.headingEnd !== undefined && hasCue(description.slice(segment.headingEnd, segment.end), rules)),
+    };
     // whether the piece has a pattern's recruiting words, searched once per pattern rather than once per hit
     const context = new Map<CompiledGhostPattern, boolean>();
     const hasContext = (pattern: CompiledGhostPattern): boolean => {
@@ -577,7 +607,7 @@ export function evergreenWording(description: string | null, rules: CompiledGhos
       }
       // a broad phrase counts only next to recruiting words ("join our AI talent pool" … "future opportunities")
       if (pattern.requiresContext.length > 0 && !hasContext(pattern)) continue;
-      if (pattern.checkNegation && negated(segment, hit, pattern, rules, description, negationOf)) continue;
+      if (pattern.checkNegation && negated(segment, hit, pattern, rules, piece)) continue;
       const { quote, offset } = clipQuote(description, segment.start, segment.end, hit, rules.settings.quote_max_chars);
       // C7: the quote must be the description at its offset; a quote that is not is never stored
       if (quote === "" || description.slice(offset, offset + quote.length) !== quote) continue;
