@@ -50,14 +50,6 @@ describe("ghost check timing", () => {
   it.each([
     ["4000 hits in comma clauses before a tagged invitation", `${"always hiring, ".repeat(4000)}always hiring – interested?`],
     ["4000 qualifications before a hit", `${"Experience building teams ".repeat(4000)}for future roles.`],
-    // the clause of every hit opens with the same long run of markers, or of signs, before a tagged invitation
-    ["1785 hits after 6250 markers before a tagged invitation", `${"and ".repeat(6250)}${"always hiring ".repeat(1785)}– interested?`],
-    ["1785 hits after 25000 signs before a tagged invitation", `${"~".repeat(25000)}${" always hiring".repeat(1785)} – interested?`],
-    // every hit negated, in one clause with no break
-    ["4000 negated hits in one clause", "not always hiring ".repeat(4000)],
-    // each list item looks for its list's heading above it: the lines of one list are read once, not once per item below them
-    ["4000 negated list items", "- not always hiring\n".repeat(4000)],
-    ["2000 hits under a question heading after 8000 items and blank lines", `What will you be doing?\n${"- x\n\n".repeat(8000)}${"- no open job\n".repeat(2000)}`],
   ])("a piece with %s (every hit left out)", (_name, description) => {
     // the expressions' first runs (compiling) are not what is measured: the time must not grow with the square of the hits
     evergreenWording(description.slice(-2000), rules);
@@ -67,14 +59,38 @@ describe("ghost check timing", () => {
     expect(found).toBeNull();
   });
 
+  // Each bound is about ten times the time measured here and the input is large enough that reading it with the square of its
+  // hits took seconds (noted per case), so a busy machine does not fail them and a quadratic reading still does.
   it.each([
+    // the clause of every hit opens with the same long run of markers, or of signs, before a tagged invitation (~80 ms; was ~9 s)
+    ["3570 hits after 12500 markers before a tagged invitation", `${"and ".repeat(12500)}${"always hiring ".repeat(3570)}– interested?`, 1000],
+    // (~130 ms; was ~9 s)
+    ["5355 hits after 75000 signs before a tagged invitation", `${"~".repeat(75000)}${" always hiring".repeat(5355)} – interested?`, 1500],
+    // every hit negated, in one clause with no break (~15 ms; was ~5 s)
+    ["4000 negated hits in one clause", "not always hiring ".repeat(4000), 200],
+    // each list item looks for its list's heading above it: the lines of one list are read once, not once per item below them
+    // (~50 ms; was ~5 s)
+    ["2000 negated list items after 60000 others", `${"- x\n".repeat(60000)}${"- not always hiring\n".repeat(2000)}`, 600],
+    // (~30 ms; was ~4 s)
+    ["2000 hits under a question heading after 32000 items and blank lines", `What will you be doing?\n${"- x\n\n".repeat(32000)}${"- no open job\n".repeat(2000)}`, 400],
+  ])("a piece with %s (every hit left out)", (_name, description, bound) => {
+    evergreenWording(description.slice(-2000), rules);
+    let found: ReturnType<typeof evergreenWording> = null;
+    const ms = elapsed(() => void (found = evergreenWording(description, rules)));
+    expect(ms).toBeLessThan(bound);
+    expect(found).toBeNull();
+  });
+
+  it.each([
+    // (~15 ms; was ~2 s)
     ["clauses", `${"not always hiring; ".repeat(4000)}we are always hiring.`],
+    // (~15 ms; was ~6 s)
     ["one clause joined by 'and'", `${"not always hiring and ".repeat(4000)}we are always hiring.`],
   ])("4000 negated hits before a last one that counts, in %s", (_name, description) => {
     evergreenWording(description.slice(-2000), rules);
     let found: ReturnType<typeof evergreenWording> = null;
     const ms = elapsed(() => void (found = evergreenWording(description, rules)));
-    expect(ms).toBeLessThan(100);
+    expect(ms).toBeLessThan(200);
     expect(found).toMatchObject({ patternId: "always_hiring", quote: expect.stringContaining("we are always hiring.") });
   });
 
