@@ -2,6 +2,11 @@
  * No user pattern may hold up the filter step or a page for long: the patterns a review measured as catastrophic are refused
  * by the schema, the test texts catch them when the schema is bypassed (a hand-written file read without it), and at run time
  * each rule has a budget and the preview a deadline.
+ *
+ * The time boxes, budgets and deadlines are the product's own, measured on the wall clock, and are used as such here (a rule is
+ * stopped where `match_ms` or `rule_budget_ms` run out in real time). The bounds on how much work the tests themselves burn
+ * before the box stops it, and on the speed of a rule that must stay within its budget, are in CPU time of this thread
+ * (`tests/helpers/cpu-time.ts`): wall time grows several times over on a busy machine, the CPU time hardly at all.
  */
 import { describe, expect, it } from "vitest";
 
@@ -23,6 +28,7 @@ import { vmTimeBox } from "@/lib/filter/time-box";
 import { issueKey } from "@/lib/profile/draft";
 import { compileVisaRules } from "@/lib/visa/rules";
 
+import { cpuTime, leastCpuTime, type MeasureOptions } from "../helpers/cpu-time";
 import { shippedPipeline } from "../pipeline/helpers";
 
 /** Measured in the review: seconds each on a 26-character or a 20,000-character line. */
@@ -41,16 +47,11 @@ function unchecked(patterns: string[], unless: string[] = [], id = "slow"): Deal
 }
 
 const posting = (description: string): DealBreakerJob => ({ title: "Engineer", description, germanLevel: "unknown" });
-const elapsed = (work: () => void): number => {
-  const started = performance.now();
-  work();
-  return performance.now() - started;
-};
 
 describe("vmTimeBox", () => {
   it("stops a catastrophic expression and stays usable", () => {
     let finished = true;
-    const ms = elapsed(() => void (finished = vmTimeBox(() => void /(a|a)+$/.test(`${"a".repeat(30)}!`), 50)));
+    const ms = cpuTime(() => void (finished = vmTimeBox(() => void /(a|a)+$/.test(`${"a".repeat(30)}!`), 50)));
     expect(finished).toBe(false);
     expect(ms).toBeLessThan(1_000);
     let value = 0;
@@ -100,7 +101,7 @@ describe("the schema refuses the slow shapes", () => {
 describe("the test texts", () => {
   it.each(REVIEW_PATTERNS)("catch %s when the schema is bypassed, within a few match_ms", (pattern) => {
     let fast = true;
-    const ms = elapsed(() => void (fast = patternIsFast(pattern, "pattern", { ...limits, match_ms: 50 }, vmTimeBox)));
+    const ms = cpuTime(() => void (fast = patternIsFast(pattern, "pattern", { ...limits, match_ms: 50 }, vmTimeBox)));
     expect(fast).toBe(false);
     expect(ms).toBeLessThan(2_000);
   });
@@ -147,7 +148,7 @@ describe("at run time", () => {
     const run = unprobed([unchecked(["(a|a)+$"]), unchecked(["vor Ort"], [], "fine")], { rule_budget_ms: 100 });
     const jobs = [posting("vor Ort"), posting(`${"a".repeat(40)}!`), posting("vor Ort")];
     let first: string[][] = [];
-    const ms = elapsed(() => void (first = dealBreakerVetoes(run, jobs).vetoes));
+    const ms = cpuTime(() => void (first = dealBreakerVetoes(run, jobs).vetoes));
     expect(ms).toBeLessThan(2_000);
     expect(first).toEqual([["fine"], [], ["fine"]]);
     expect(run.warnings).toEqual([{ id: "slow", code: "too_slow" }]);
@@ -168,7 +169,7 @@ describe("at run time", () => {
   it("bounds the review's quadratic pattern on a 20,000-character line", () => {
     const run = unprobed([unchecked([".*100%\\s*on-?site"])], { rule_budget_ms: 100 });
     const line = "Lorem ipsum dolor sit amet ".repeat(800).slice(0, 20_000);
-    const ms = elapsed(() => void dealBreakerVetoes(run, Array.from({ length: 20 }, () => posting(line))));
+    const ms = cpuTime(() => void dealBreakerVetoes(run, Array.from({ length: 20 }, () => posting(line))));
     expect(ms).toBeLessThan(2_000);
     expect(run.warnings).toEqual([{ id: "slow", code: "too_slow" }]);
   });
@@ -176,7 +177,7 @@ describe("at run time", () => {
   it("stops at a deadline without calling the rule too slow", () => {
     const run = unprobed([unchecked(["(a|a)+$"])]);
     let result: ReturnType<typeof dealBreakerVetoes> | null = null;
-    const ms = elapsed(() => void (result = dealBreakerVetoes(run, [posting(`${"a".repeat(40)}!`)], { deadline: performance.now() + 50 })));
+    const ms = cpuTime(() => void (result = dealBreakerVetoes(run, [posting(`${"a".repeat(40)}!`)], { deadline: performance.now() + 50 })));
     expect(ms).toBeLessThan(1_000);
     expect(result).toMatchObject({ complete: false });
     expect(run.warnings).toEqual([]);
@@ -236,7 +237,7 @@ describe("at run time", () => {
       const run = startDealBreakerRun(compileDealBreakers([visaRule], visaContext({ rule_budget_ms: 100 })), vmTimeBox);
       let result: string[][] = [];
       // the slow text comes first, so the outcome does not depend on how long the first match takes
-      const ms = elapsed(() => void (result = dealBreakerVetoes(run, [posting(slowText), posting(refusal)], { previous: [["visa"], []] }).vetoes));
+      const ms = cpuTime(() => void (result = dealBreakerVetoes(run, [posting(slowText), posting(refusal)], { previous: [["visa"], []] }).vetoes));
       expect(ms).toBeLessThan(2_000);
       expect(result).toEqual([["visa"], []]);
       expect(run.warnings).toEqual([{ id: "visa", code: "too_slow" }]);
@@ -245,14 +246,14 @@ describe("at run time", () => {
     it("stops at a deadline", () => {
       const run = startDealBreakerRun(compileDealBreakers([visaRule], visaContext()), vmTimeBox);
       let result: ReturnType<typeof dealBreakerVetoes> | null = null;
-      const ms = elapsed(() => void (result = dealBreakerVetoes(run, [posting(slowText)], { deadline: performance.now() + 50 })));
+      const ms = cpuTime(() => void (result = dealBreakerVetoes(run, [posting(slowText)], { deadline: performance.now() + 50 })));
       expect(ms).toBeLessThan(1_000);
       expect(result).toMatchObject({ complete: false });
     });
 
     it("gives up explaining after match_ms", () => {
       let explanation: ReturnType<typeof explainDealBreaker> = { id: "x", type: "phrase", quote: null, field: null, offset: null };
-      const ms = elapsed(() => void (explanation = explainDealBreaker(posting(slowText), visaRule, visaContext({ match_ms: 50 }), shippedPipeline(), vmTimeBox)));
+      const ms = cpuTime(() => void (explanation = explainDealBreaker(posting(slowText), visaRule, visaContext({ match_ms: 50 }), shippedPipeline(), vmTimeBox)));
       expect(explanation).toBeNull();
       expect(ms).toBeLessThan(1_000);
     });
@@ -265,11 +266,21 @@ describe("at run time", () => {
       });
 
       // thousands of offered phrases in one sentence: their negation test reads the sentence once, not once per phrase (which
-      // took seconds, over the budget)
-      it("reads 4000 offered phrases in one sentence within rule_budget_ms: not too slow, no refusal", () => {
-        const run = startDealBreakerRun(compileDealBreakers([visaRule], shippedContext()), vmTimeBox);
+      // took seconds, over the budget). The budget here is the shipped default's size in CPU time; the rule's own wall budget is
+      // raised so that a busy machine cannot stop it, and the time is checked at 4000 phrases and from 1000 to 4000 (linear ≈ 4,
+      // quadratic ≈ 16). Measured here: about 20 ms at 4000.
+      it("reads 4000 offered phrases in one sentence within rule_budget_ms of CPU time: not too slow, no refusal", () => {
+        const run = startDealBreakerRun(compileDealBreakers([visaRule], shippedContext({ rule_budget_ms: 60_000 })), vmTimeBox);
+        const read = (phrases: number, options: MeasureOptions = {}): number => {
+          const jobs = [posting("we offer relocation support and ".repeat(phrases))];
+          return leastCpuTime(() => void dealBreakerVetoes(run, jobs), options);
+        };
+        const ms = read(4000, { atLeast: 0, giveUpAbove: 3 * limits.rule_budget_ms });
+        expect(ms, "CPU ms at 4000 phrases").toBeLessThan(limits.rule_budget_ms);
         expect(dealBreakerVetoes(run, [posting("we offer relocation support and ".repeat(4000))]).vetoes).toEqual([[]]);
         expect(run.warnings).toEqual([]);
+        const [small, large] = [read(1000), read(4000)] as [number, number];
+        expect(large / small, `CPU ms ${large.toFixed(1)} at 4000 / ${small.toFixed(1)} at 1000`).toBeLessThanOrEqual(8);
       });
 
       // 130000 required permits in one sentence once overflowed the stack, an error the time box passes on: the whole filter step
@@ -285,7 +296,7 @@ describe("at run time", () => {
   it("gives up explaining a veto after match_ms", () => {
     const pipeline = shippedPipeline();
     let explanation: ReturnType<typeof explainDealBreaker> = null;
-    const ms = elapsed(() => void (explanation = explainDealBreaker(posting(`${"a".repeat(40)}!`), unchecked(["(a|a)+$"]), context({ match_ms: 50 }), pipeline, vmTimeBox)));
+    const ms = cpuTime(() => void (explanation = explainDealBreaker(posting(`${"a".repeat(40)}!`), unchecked(["(a|a)+$"]), context({ match_ms: 50 }), pipeline, vmTimeBox)));
     expect(explanation).toBeNull();
     expect(ms).toBeLessThan(1_000);
   });
