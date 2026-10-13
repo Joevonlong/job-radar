@@ -329,6 +329,21 @@ annotation (`integration file order seed: N`). Pull requests run only this order
 another file's leftovers, which a fixed order hides. To reproduce a failure, run
 `pnpm test:integration --sequence.shuffle.files --sequence.seed=<seed>` with the seed from the annotation. Limit 15 minutes.
 
+#### Set up the lowest Node.js of engines.node
+
+`actions/setup-node` again, now with Node 22.22.3, the lowest version `engines.node` (`>=22.22.3 <23`) allows. The host
+ai-worker's release guard (`src/ai-worker/release-guard.mjs`) needs Node's synchronous module hooks, and tsx only uses
+them from this version on. These are the last steps of the job, so nothing after them runs with this Node.
+
+#### Load a release module with the lowest Node.js
+
+Builds a release directory of the checked-out commit with `scripts/ops/prepare-release.sh --offline` in a clone under a
+temporary directory (the pnpm store already holds every package after the install step), then loads one of its `.ts`
+modules through the release guard and the tsx loader from inside the release directory, as the ai-worker service will (tsx reads the path aliases from the release's `tsconfig.json`). Fails when that exits non-zero or
+when stderr says `module.register called` (tsx would have taken the hooks-thread path, which the guard refuses). Limit 5
+minutes. Locally, with Node 22.22.3 active: the same commands from the workflow, in a temporary directory, never with
+`--root` pointing at your installation's checkout.
+
 ### Job `e2e`
 
 The Playwright browser suite against a production build (`pnpm build` then `pnpm start`), a throwaway PostgreSQL 17 service

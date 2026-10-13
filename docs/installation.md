@@ -15,22 +15,22 @@ Steps 1, 3, 5 and 6 are the core. Everything marked *optional* can wait until la
 | | Version | Why |
 |---|---|---|
 | Docker with Compose 2.24+ | Docker Desktop on macOS; Docker Engine with the compose plugin on Linux. Compose 2.24 or newer (the compose file treats `.env` as optional, which older versions reject) | Runs the dashboard, the runner, the scraping sidecar and the database |
-| Node.js | 22 (the project pins `>=22 <23`) | Helper commands and the AI worker, which runs on your machine |
-| pnpm | 11 (pinned in `package.json`) | Installs the dependencies for the helper commands |
+| Node.js | 22.22.3 or a later 22.x (the project pins `>=22.22.3 <23`; the AI worker's release guard needs the synchronous module hooks of these versions) | Helper commands and the AI worker, which runs on your machine |
+| pnpm | exactly the version in `package.json` (`packageManager`, currently 11.15.1) | Installs the dependencies for the helper commands; building an AI worker release refuses any other version |
 | git | any recent | Gets the code, and updates it later |
-| Disk space | a few GB | The images (the runner image includes a headless browser) and the database |
+| Disk space | a few GB | The images (the runner image includes a headless browser) and the database. Each AI worker release directory (`data/releases/ai-worker/<commit>/`, `scripts/ops/prepare-release.sh`) adds about 580 MB as `du` counts it; on APFS its files are clones of the pnpm store, so the disk actually loses about 60 MB per release |
 
 Check what you have:
 
 ```bash
 docker compose version
-node --version      # v22.x
-pnpm --version      # 11.x
+node --version      # v22.22.3 or later, below v23
+pnpm --version      # the packageManager version of package.json
 git --version
 ```
 
-No pnpm yet? With Node 22, `corepack enable` gives you the version pinned in `package.json`; `npm install -g pnpm@11`
-works too.
+No pnpm yet, or another version? With Node 22, `corepack enable` gives you the version pinned in `package.json`;
+`npm install -g pnpm@<that version>` works too.
 
 Optional, for later:
 
@@ -168,7 +168,7 @@ Only one AI worker runs per database; a second one exits with code 3 and the mes
 ### Keep it running in the background
 
 Stop the one in your terminal first (Ctrl-C), then install it as a service that starts at login and restarts after a
-crash. The same script works on both systems: a launchd agent on macOS, a systemd user unit
+crash. Have the stack running first (`docker compose up -d`, step 3): the worker needs the database from its first start. The same script works on both systems: a launchd agent on macOS, a systemd user unit
 (`job-radar-ai-worker.service`) on Linux.
 
 ```bash
