@@ -214,6 +214,210 @@ const CASES: ReadonlyArray<readonly [string, string | null]> = [
   ["Ready to take on new responsibilities?\n- We collect applications for upcoming positions.", "future_openings"],
   ["Bereit für mehr?\n- Wir stellen laufend ein.", "always_hiring"],
   ["Warum wir?\n- Wir suchen ständig neue Kolleginnen und Kollegen.", "always_hiring"],
+  // training for later roles is a benefit, technical development is the work: benefit lines stay out, hiring lines count
+  ["Development opportunities for future roles.", null],
+  ["Benefits\n- Professional development for future roles", null],
+  ["Leadership development for our upcoming positions.", null],
+  ["We collect applications in software development for future openings.", "future_openings"],
+  ["We collect applications in software  development for future openings.", "future_openings"],
+  ["We collect applications in software-development for future openings.", "future_openings"],
+  ["We hire in backend development for upcoming positions.", "future_openings"],
+  ["Gezielte Entwicklungsmöglichkeiten für zukünftige Positionen.", null],
+  ["Was wir bieten\n- Karriereentwicklung für zukünftige Positionen", null],
+  ["Persönliche Weiterentwicklung für künftige Stellen im Konzern.", null],
+  ["Für unsere Softwareentwicklung sammeln wir Bewerbungen für zukünftige Stellen.", "future_openings"],
+  ["Wir suchen Talente in der Produktentwicklung für zukünftige Positionen.", "future_openings"],
+  // a statement with a short invitation tagged on is no question; a question with a tag stays one
+  ["We are always hiring – want to join?", "always_hiring"],
+  ["We're always hiring - interested?", "always_hiring"],
+  ["We are always hiring; want to join us?", "always_hiring"],
+  ["So, we are always hiring – are you in?", "always_hiring"],
+  ["Wir suchen laufend Verstärkung – bist du dabei?", "always_hiring"],
+  ["Wir stellen laufend ein – Lust?", "always_hiring"],
+  ["Wir suchen ständig neue Kolleginnen und Kollegen – hast du Lust?", "always_hiring"],
+  ["Always hiring – sound familiar?", null],
+  ["So, are you always hiring – or just pretending?", null],
+  ["Stellt ihr laufend ein – und findet niemanden?", null],
+  ["Are you looking for a team that is always hiring – and growing?", null],
+  ["Is your company always hiring – and struggling to cope?", null],
+  ["Is this a talent pool posting; or a real vacancy?", null],
+  ["Is your company always hiring and you can't keep up?", null],
+  ["Is your team always hiring – interested?", null],
+  ["So, are you always hiring – want to join?", null],
+  ["We build sourcing software – always hiring?", null],
+  ["Suchen Sie ständig neue Mitarbeiter – interessiert?", null],
+  ["Stellen Sie laufend neue Leute ein – Interesse an unserer Software?", null],
+  // "Initiativbewerbung" as a line of its own: the posting's title above the duties, a footer below them
+  ["Initiativbewerbung – Softwareentwicklung\nWir freuen uns über deine Initiativbewerbung als Entwickler:in in Berlin.", "open_application_title"],
+  ["Initiativbewerbungen", "open_application_title"],
+  ["Initiativbewerbung – Softwareentwicklung\nDeine Aufgaben:\n- Backend-Services entwickeln\n- Code Reviews\n\nInitiativbewerbung\nWir freuen uns über deine Initiativbewerbung.", "open_application_title"],
+  ["Deine Aufgaben:\n- Code Reviews\n\nInitiativbewerbung (m/w/d)", "open_application_title"],
+  ["Deine Aufgaben:\n- Entwicklung von Backend-Services\n- Code Reviews\n\nInitiativbewerbungen:\nWir freuen uns auch über Initiativbewerbungen für andere Bereiche.", null],
+  ["Deine Aufgaben:\n- Code Reviews\n\nInitiativbewerbung\nWir freuen uns auch über deine Initiativbewerbung für andere Bereiche.", null],
+  ["Your tasks:\n- Code reviews\n\nInitiativbewerbung – alle Bereiche\nWir freuen uns über deine Initiativbewerbung.", null],
+  // a qualification ("experience building a talent pipeline") is about the candidate, up to the end of its clause
+  ["Experience building a talent pipeline for future roles.", null],
+  ["5+ years of experience in building talent pipelines for upcoming positions.", null],
+  ["Proven track record of growing a talent community for future roles.", null],
+  ["Track record in building a talent pool for future openings is a plus.", null],
+  ["Experience building a talent pipeline is valued; we are always hiring.", "always_hiring"],
+  ["You have experience building talent pools, and we are always hiring.", "always_hiring"],
+  ["We are building a talent pipeline for future roles", "talent_pool"],
+  ["Erfahrung im Aufbau eines Talentpools für zukünftige Stellen.", null],
+  ["Mehrjährige Erfahrung beim Aufbau unseres Talentpools ist ein Plus.", null],
+  ["Erfahrung im Aufbau eines Talentpools ist ein Plus, und wir stellen laufend ein.", "always_hiring"],
+  ["Diese Ausschreibung dient dem Aufbau unseres Talentpools.", "talent_pool"],
+  // the employer's SaaS product, not this posting; a SaaS team still hires
+  ["Our SaaS lets agencies post evergreen job listings.", null],
+  ["Our SaaS platform lets agencies post evergreen job listings.", null],
+  ["Our SaaS team is always hiring.", "always_hiring"],
+  ["We are a SaaS company and we are always hiring.", "always_hiring"],
+  // German: a compound talent pool after "unseren" with recruiting words; a recruiter's own duties are the role
+  ["Bewirb dich jetzt für unseren KI-Talentpool.", "talent_pool_join"],
+  ["Sende uns deinen Lebenslauf für unseren Tech-Talentpool.", "talent_pool_join"],
+  ["Für unseren KI-Talentpool suchen wir Entwickler – jetzt bewerben!", "talent_pool_join"],
+  ["Organisiere Events für unseren KI-Talentpool.", null],
+  ["Berlin bietet Zugang zu einem riesigen KI-Talentpool.", null],
+  ["Als Recruiter sprichst du Kandidaten für unseren Talentpool an.", null],
+  ["Du sprichst Kandidaten für unseren KI-Talentpool an und führst Interviews.", null],
+  ["Du identifizierst und gewinnst Talente für unseren Talentpool.", null],
+  ["Deine Aufgabe: Kandidaten für unseren Talentpool gewinnen.", null],
+  ["- Ansprache von Kandidaten für unseren Talentpool", null],
+  ["Identifikation und Ansprache von Bewerbern für unseren Talentpool.", null],
+  ["Kandidaten für unseren Talentpool identifizieren und ansprechen", null],
+  ["Über uns\n▪ Direktansprache von Entwicklern für unseren Tech-Talentpool", null],
+  ["Entwickler für unseren Talentpool gesucht – jetzt bewerben!", "talent_pool"],
+  ["Du bewirbst dich für unseren Talentpool und wir melden uns bei passenden Stellen.", "talent_pool"],
+  ["Mit deiner Bewerbung für unseren Talentpool bist du bei zukünftigen Stellen dabei.", "talent_pool"],
+  // a German duties heading in the du form
+  ["Wie du bei uns etwas bewirken kannst\n- Aufbau unseres Talentpools für zukünftige Stellen", null],
+  // a tagged statement: discourse markers before the wording, the tag is the whole text after the break
+  ["So we are always hiring – want to join?", "always_hiring"],
+  ["We grow fast and we are always hiring – want to join?", "always_hiring"],
+  ["We are always hiring—want to join?", "always_hiring"],
+  ["We grow fast, but are you always hiring – interested?", null],
+  ["Your recruiters are always hiring – interested in a better ATS?", null],
+  ["Always hiring – want to join our webinar on sourcing?", null],
+  ["Wir stellen laufend ein – neugierig geworden?", "always_hiring"],
+  // German events for a community, and a pool with "suchen wir"
+  ["Organisiere Events für Kandidaten in unserem KI-Talentpool.", null],
+  ["Wir veranstalten Workshops für unseren KI-Talentpool – Kandidaten willkommen.", null],
+  ["Für unseren KI-Talentpool suchen wir Entwickler mit ML-Erfahrung.", "talent_pool_join"],  // an independent reviewer's adversarial set (EN + DE): footers and recruiter work, the company's own record, vocatives and
+  // verbless questions before a tag, call-to-action tags, training versus technical development, qualification forms
+  ["We hire in AI development for upcoming positions.", "future_openings"],
+  ["We are recruiting across Research and Development for upcoming positions.", "future_openings"],
+  ["We collect applications in iOS development for future openings.", "future_openings"],
+  ["We collect applications in embedded development for future openings.", "future_openings"],
+  ["We collect applications in ML development for future openings.", "future_openings"],
+  ["We collect applications in business development for future openings.", "future_openings"],
+  ["Personal and business development for future roles.", null],
+  ["Our development team for upcoming projects is always hiring.", "always_hiring"],
+  ["Wir suchen Verstärkung in der Entwicklung für zukünftige Positionen.", "future_openings"],
+  ["Unser Entwicklungsteam wächst für kommende Projekte, wir stellen laufend ein.", "always_hiring"],
+  ["Wir sammeln Bewerbungen im Bereich Entwicklung für zukünftige Stellen.", "future_openings"],
+  ["Constantly hiring – sound like you?", null],
+  ["Always recruiting – is that you?", null],
+  ["Recruiters, are you always hiring – interested?", null],
+  ["Hey, is your team always hiring – curious?", null],
+  ["Honestly, is your startup constantly recruiting – interested?", null],
+  ["Hand aufs Herz: Sucht ihr ständig nach Entwicklern – interessiert?", null],
+  ["Liebe HR-Teams, stellt ihr laufend ein – neugierig?", null],
+  ["When we grow, we are always hiring – want to join?", "always_hiring"],
+  ["How we work: we are always hiring – want to join?", "always_hiring"],
+  ["We are always hiring – interested in joining?", "always_hiring"],
+  ["Wir stellen laufend ein – Interesse geweckt?", "always_hiring"],
+  ["Wir stellen laufend ein – klingt spannend?", "always_hiring"],
+  ["Wie immer suchen wir laufend Verstärkung – bist du dabei?", "always_hiring"],
+  ["Our clients are always hiring – interested?", "always_hiring"],
+  ["With our history of growing fast, we are always hiring.", "always_hiring"],
+  ["Given our track record of growing quickly, we're always hiring.", "always_hiring"],
+  ["Thanks to our experience in building great teams, we are constantly recruiting.", "always_hiring"],
+  ["You get the ability to grow in a team that is always hiring.", "always_hiring"],
+  ["Mit unserer Erfahrung in der Entwicklung von KI-Produkten stellen wir laufend ein.", "always_hiring"],
+  ["Dank unserer Expertise im Aufbau von Teams suchen wir ständig neue Kolleginnen.", "always_hiring"],
+  ["Experience building data pipelines, and we are always hiring.", "always_hiring"],
+  ["Experience building a talent pipeline (we are always hiring).", "always_hiring"],
+  ["Experience in managing teams – we are always hiring.", "always_hiring"],
+  ["Strong skills managing a talent pool for future roles.", null],
+  ["Hands-on experience scaling a talent pipeline for future roles.", null],
+  ["Experience with talent pipelines for future roles.", null],
+  ["Erfahrung in der Pflege eines Talentpools für zukünftige Stellen.", null],
+  ["Erfahrung mit dem Aufbau eines Talentpools für zukünftige Stellen.", null],
+  ["Gerne nehmen wir deine Bewerbung auch in unseren Talentpool auf.", null],
+  ["Mit deiner Bewerbung nehmen wir dich gerne in unseren Talentpool auf.", null],
+  ["Wir suchen eine Recruiterin, die Kandidaten in unserem Talentpool betreut.", null],
+  ["Sie sind Ansprechpartner für alle Bewerber in unserem Talentpool.", null],
+  ["Wir suchen Mentorinnen für unser Talent-Netzwerk.", null],
+  ["Bewirb dich jetzt für unseren KI-Talentpool!", "talent_pool_join"],
+  ["Bewirb dich für unseren Talentpool für Data Science.", "talent_pool"],
+  ["Für unseren Talentpool im Bereich KI freuen wir uns über deine Bewerbung.", "talent_pool"],
+  ["Wir suchen dich für unseren KI-Talentpool.", "talent_pool_join"],
+  ["Wir suchen dich für unsere KI-Talent-Community.", "talent_pool_join"],
+  ["Deine Bewerbung für unseren KI-Talentpool-Prozess.", null],
+  ["Kandidat:innen für unseren Talentpool gesucht – bewirb dich!", "talent_pool"],
+  ["Initiativbewerbung\nWir freuen uns über deine Bewerbung.\n\nDeine Aufgaben\n- Entwicklung\n\nInitiativbewerbung\nJetzt bewerben.", "open_application_title"],
+  ["Über uns\nWir bauen Software.\nDeine Aufgaben\n- Code\nInitiativbewerbung (m/w/d) für alle Bereiche möglich.", "open_application_title"],
+  ["Hand aufs Herz: Stellen Sie laufend ein – interessiert?", null],
+  ["Liebe Recruiter, stellen Sie laufend ein – neugierig?", null],
+  ["Berufserfahrung im Aufbau eines Talentpools für zukünftige Stellen.", null],
+  ["Praxiserfahrung im Aufbau eines Talentpools für zukünftige Stellen.", null],
+  ["Wir nehmen deine Bewerbung gerne in unseren Talentpool auf, sofern du zustimmst.", null],
+  ["Gerne nehmen wir dich in unseren Talentpool auf.", null],
+  ["Bewerbungen nehmen wir gerne in unseren Talentpool auf.", null],
+  ["Always hiring – interested?", null],
+  ["We are always hiring – want to join? Apply below.", "always_hiring"],
+  ["Do you know that we are always hiring – interested?", null],
+  ["Did you know we are always hiring – curious?", null],
+  ["Are we always hiring? Yes – want to join?", null],
+  ["Wir suchen ständig neue Kolleginnen und Kollegen; Interesse?", "always_hiring"],
+  ["Personal development for future roles.", null],
+  ["Business development opportunities for future roles.", null],
+  ["Leadership and business development for future roles.", null],
+  ["Join our talent pool – interested?", null],
+  ["Join our team – we are always hiring – want to join?", "always_hiring"],
+  ["Werden Sie Teil unseres Teams, wir stellen laufend ein – interessiert?", "always_hiring"],
+  ["Have a look: we are always hiring – interested?", "always_hiring"],
+  ["Kennen Sie das? Wir stellen laufend ein – interessiert?", "always_hiring"],
+  ["Experience in building a talent pool for future roles; we are always hiring.", "always_hiring"],
+  ["Erfahrung im Aufbau von Talentpools für zukünftige Stellen, und wir stellen laufend ein.", "always_hiring"],
+  ["Your experience managing teams helps us, since we are always hiring.", "always_hiring"],
+  ["We value experience building products and we are always hiring.", "always_hiring"],
+  ["Background in growing companies? We are always hiring.", "always_hiring"],
+  // a tagged statement needs the company as subject before the hit's end; a qualification ends only before "we" / "wir"; "your"
+  // experience is the candidate's
+  ["Tired of always hiring – interested?", null],
+  ["Still always hiring – interested?", null],
+  ["Sick of always hiring – interested?", null],
+  ["Ever feel like your team is always hiring – curious?", null],
+  ["Feel like you're always hiring – curious?", null],
+  ["You're always hiring – curious?", null],
+  ["Recruiters always hiring – interested?", null],
+  ["Hiring managers, always hiring – interested?", null],
+  ["Is your company, like ours, always hiring – interested?", null],
+  ["Companies that trust us are always hiring – interested?", null],
+  ["Recruiters who work with us are always hiring – curious?", null],
+  ["Kunden von uns stellen laufend ein – interessiert?", null],
+  ["At Acme we are always hiring – want to join?", "always_hiring"],
+  ["Like many startups, we are always hiring – interested?", "always_hiring"],
+  ["Did you know: we are always hiring – curious?", "always_hiring"],
+  ["Honestly, we're always hiring – interested?", "always_hiring"],
+  ["We're always hiring – are you in?", "always_hiring"],
+  ["Our team is always hiring – want to join?", "always_hiring"],
+  ["Bei uns suchen wir laufend Verstärkung – bist du dabei?", "always_hiring"],
+  ["Bei Acme suchen wir ständig neue Kolleginnen – Lust?", "always_hiring"],
+  ["Unser Team stellt laufend ein – interessiert?", "always_hiring"],
+  ["Ständig auf der Suche nach Talenten – neugierig?", null],
+  ["Kenntnisse im Aufbau von Bewerberpools bringst du für zukünftige Vakanzen mit.", null],
+  ["Erfahrung im Aufbau eines Talentpools hast du idealerweise schon für künftige Stellen gesammelt.", null],
+  ["Experience building talent pools, so you can staff future roles.", null],
+  ["Experience building talent pools, we are always hiring.", "always_hiring"],
+  ["Your experience building talent pipelines for future roles is a strong plus.", null],
+  ["Your background in building talent pools for upcoming positions matters.", null],
+  // known limits, by design: an exclude_context line takes out the whole sentence; a clause that opens with the hit has no
+  // subject; German talent_pool_join reads only "für unseren …"
+  ["Bewirb dich für unseren KI-Talentpool und erhalte Einladungen zu Events für unsere Talent-Community.", null],
+  ["Join our AI talent pool – want to apply?", null],
+  ["Mit deiner Bewerbung gewinnst du Zugang zu unserem KI-Talentnetzwerk und zu zukünftigen Stellen.", null],
 ];
 
 describe("evergreen_wording against the fixture packs", () => {
@@ -306,6 +510,109 @@ describe("evergreen_wording reads its words and limits from the config", () => {
     expect(evergreenWording("Our talent pool. Apply now.", strict)).toBeNull();
     expect(evergreenWording("Apply to our talent pool.", strict)?.patternId).toBe("pool");
     expect(() => rulesWith(() => {}, { ...pack, evergreen_patterns: [{ ...entry, requires_context: ["(unclosed"] }] })).toThrow("ghost.evergreen_patterns[0].requires_context[0]");
+  });
+
+  it("question_tag: a statement with a short invitation after a break is read as a statement (words from the pack, length from pipeline.yaml)", () => {
+    const tag = { breaks: ["\\s[–-]\\s", ";"], invitations: ["want\\s+to\\s+join(?:\\s+\\p{L}+)*", "interested"], openers: ["is", "are"], markers: ["so"], subjects: [] as string[] };
+    const lead = { ends: ["?"], starts: ["."], line_above: true };
+    const withTag = (edit: (s: { question_tag_max_words: number }) => void = () => {}, over: Partial<typeof tag> = {}) =>
+      rulesWith(edit, { ...pack, lead_in_question: lead, question_tag: { ...tag, ...over } });
+    expect(evergreenWording("Our talent pool – want to join?", withTag())?.patternId).toBe("pool");
+    expect(evergreenWording("Our talent pool; interested?", withTag())?.patternId).toBe("pool");
+    // no question tag configured: a question as before
+    expect(evergreenWording("Our talent pool – want to join?", rulesWith(() => {}, { ...pack, lead_in_question: lead }))).toBeNull();
+    // the tag must be an invitation as a whole, and be short enough
+    expect(evergreenWording("Our talent pool – sound familiar?", withTag())).toBeNull();
+    expect(evergreenWording("Our talent pool – interested in a better ATS?", withTag())).toBeNull();
+    expect(evergreenWording("Our talent pool – and still want to join?", withTag())).toBeNull();
+    expect(evergreenWording("Our talent pool – want to join the best team in town?", withTag((s) => (s.question_tag_max_words = 4)))).toBeNull();
+    expect(evergreenWording("Our talent pool – want to join the best team in town?", withTag((s) => (s.question_tag_max_words = 10)))?.patternId).toBe("pool");
+    // the break comes from the pack
+    expect(evergreenWording("Our talent pool, want to join?", withTag())).toBeNull();
+    expect(evergreenWording("Our talent pool, want to join?", withTag(() => {}, { breaks: [","] }))?.patternId).toBe("pool");
+    // a clause that opens with a question word (after a discourse marker) stays a question
+    expect(evergreenWording("Is it our talent pool – interested?", withTag())).toBeNull();
+    expect(evergreenWording("So is it our talent pool – interested?", withTag())).toBeNull();
+    expect(evergreenWording("So is it our talent pool – interested?", withTag(() => {}, { markers: [] }))?.patternId).toBe("pool");
+    // a comma or colon starts the clause: what comes before it does not decide
+    expect(evergreenWording("Recruiters, is it our talent pool – interested?", withTag())).toBeNull();
+    expect(evergreenWording("Is it new: our talent pool – interested?", withTag())?.patternId).toBe("pool");
+    // a clause that opens with the hit itself has no subject: a question
+    expect(evergreenWording("Talent pool – interested?", withTag())).toBeNull();
+    expect(evergreenWording("So, talent pool – interested?", withTag())).toBeNull();
+    // openers and markers are phrases matched at the start of the clause, up to a word end
+    expect(evergreenWording("Isabel runs our talent pool – interested?", withTag())?.patternId).toBe("pool");
+    expect(evergreenWording("As always our talent pool – interested?", withTag(() => {}, { openers: ["as(?!\\s+always)"] }))?.patternId).toBe("pool");
+    expect(evergreenWording("As usual our talent pool – interested?", withTag(() => {}, { openers: ["as(?!\\s+always)"] }))).toBeNull();
+    expect(evergreenWording("As usual is it our talent pool – interested?", withTag(() => {}, { markers: ["as\\s+usual"] }))).toBeNull();
+    expect(() => withTag(() => {}, { openers: ["(unclosed"] })).toThrow("ghost.question_tag.openers[0]");
+    // a hit inside the tag is part of the question
+    expect(evergreenWording("We build software – interested in our talent pool?", withTag())).toBeNull();
+    // with subjects: the clause needs one of them before the hit's end, as a whole word
+    const subjects = { subjects: ["we", "our", "wir"] };
+    expect(evergreenWording("At Acme we run a talent pool – interested?", withTag(() => {}, subjects))?.patternId).toBe("pool");
+    expect(evergreenWording("Tired of a talent pool – interested?", withTag(() => {}, subjects))).toBeNull();
+    expect(evergreenWording("Tired of a talent pool – interested?", withTag())?.patternId).toBe("pool");
+    expect(evergreenWording("Your talent pool – interested?", withTag(() => {}, subjects))).toBeNull();
+    expect(evergreenWording("Wedding talent pool – interested?", withTag(() => {}, subjects))).toBeNull();
+    // in the hit's own clause: a subject before a comma does not count
+    expect(evergreenWording("We know, a talent pool – interested?", withTag(() => {}, subjects))).toBeNull();
+    // in the hit counts too (German puts the subject after the verb)
+    const german = rulesWith(() => {}, { ...pack, evergreen_patterns: [{ id: "search", pattern: "suchen (?:wir |sie )?laufend talente", check_negation: true }], prefilter: ["laufend"], lead_in_question: lead, question_tag: { ...tag, ...subjects, invitations: ["interessiert"] } });
+    expect(evergreenWording("Bei Acme suchen wir laufend Talente – interessiert?", german)?.patternId).toBe("search");
+    expect(evergreenWording("Bei Acme suchen Sie laufend Talente – interessiert?", german)).toBeNull();
+    // the subjects are the company doing the hiring: an object pronoun ("us", "uns") is someone else's clause, so the packs do not
+    // list it ("Companies that trust us are always hiring – interested?" is an ATS advert's question)
+    const always = { id: "always", pattern: "always hiring", check_negation: true };
+    const hiring = (words: string[]) => rulesWith(() => {}, { ...pack, evergreen_patterns: [always], prefilter: ["always"], lead_in_question: lead, question_tag: { ...tag, subjects: words } });
+    expect(evergreenWording("Companies that trust us are always hiring – interested?", hiring(["we", "our"]))).toBeNull();
+    expect(evergreenWording("Companies that trust us know we are always hiring – interested?", hiring(["we", "our"]))?.patternId).toBe("always");
+    expect(evergreenWording("Companies that trust us are always hiring – interested?", hiring(["we", "our", "us"]))?.patternId).toBe("always");
+    const germanSubjects = (words: string[]) =>
+      rulesWith(() => {}, { ...pack, evergreen_patterns: [{ id: "search", pattern: "suchen (?:wir |sie )?laufend talente", check_negation: true }], prefilter: ["laufend"], lead_in_question: lead, question_tag: { ...tag, subjects: words, invitations: ["interessiert"] } });
+    expect(evergreenWording("Kunden von uns suchen laufend Talente – interessiert?", germanSubjects(["wir", "unser\\p{L}*"]))).toBeNull();
+    expect(evergreenWording("Bei uns suchen wir laufend Talente – interessiert?", germanSubjects(["wir", "unser\\p{L}*"]))?.patternId).toBe("search");
+    expect(() => withTag(() => {}, { subjects: ["(unclosed"] })).toThrow("ghost.question_tag.subjects[0]");
+  });
+
+  it("exclude_clause: a match takes out the hits from its start to the end of its clause, not the whole sentence", () => {
+    const always = { id: "always", pattern: "always hiring", check_negation: true };
+    const both = { ...pack, evergreen_patterns: [...pack.evergreen_patterns, always], prefilter: ["talent", "always"], clause_breaks: [";"] };
+    const clause = rulesWith(() => {}, { ...both, exclude_clause: ["experience building"] });
+    expect(evergreenWording("Experience building a talent pool.", clause)).toBeNull();
+    expect(evergreenWording("Experience building a talent pool; we are always hiring.", clause)?.patternId).toBe("always");
+    // a hit before the match is not in its reach
+    expect(evergreenWording("Our talent pool needs experience building.", clause)?.patternId).toBe("pool");
+    // exclude_context takes out the whole sentence
+    const sentence = rulesWith(() => {}, { ...both, exclude_context: ["experience building"] });
+    expect(evergreenWording("Experience building a talent pool; we are always hiring.", sentence)).toBeNull();
+    expect(() => rulesWith(() => {}, { ...both, exclude_clause: ["(unclosed"] })).toThrow("ghost.exclude_clause[0]");
+  });
+
+  it("exclude_clause_ends: where an exclude_clause range ends besides clause_breaks", () => {
+    const always = { id: "always", pattern: "always hiring", check_negation: true };
+    const both = { ...pack, evergreen_patterns: [...pack.evergreen_patterns, always], prefilter: ["talent", "always"], clause_breaks: [";"], exclude_clause: ["experience building"] };
+    const text = "Experience building a talent pool is a plus, we are always hiring.";
+    expect(evergreenWording(text, rulesWith(() => {}, both))).toBeNull();
+    expect(evergreenWording(text, rulesWith(() => {}, { ...both, exclude_clause_ends: [",\\s*(?=we\\s)"] }))?.patternId).toBe("always");
+    // the ends do not end a clause for anything else (exclude_context, the negation search)
+    expect(evergreenWording("Experience building a talent pool, not hiring.", rulesWith(() => {}, { ...both, exclude_clause: [], exclude_clause_ends: [",\\s*"] }))).toBeNull();
+    expect(() => rulesWith(() => {}, { ...both, exclude_clause_ends: ["(unclosed"] })).toThrow("ghost.exclude_clause_ends[0]");
+  });
+
+  it("only_before_duties: an entry's hit counts only above the first duties heading", () => {
+    const title = { id: "title", pattern: "^talent pool(?=\\n|$)", check_negation: true };
+    const duties = { responsibility_patterns: [{ id: "tasks", pattern: "^your tasks$" }] };
+    const base = { ...pack, ...duties };
+    const plain = rulesWith(() => {}, { ...base, evergreen_patterns: [title] });
+    const scoped = rulesWith(() => {}, { ...base, evergreen_patterns: [{ ...title, only_before_duties: true }] });
+    const footer = "Your tasks:\n- Code reviews\n\nTalent pool\nWe welcome all applications.";
+    expect(evergreenWording(footer, plain)?.patternId).toBe("title");
+    expect(evergreenWording(footer, scoped)).toBeNull();
+    const posting = "Talent pool\nWe welcome all applications.\n\nYour tasks:\n- Code reviews\n\nTalent pool\nApply below.";
+    expect(evergreenWording(posting, scoped)).toMatchObject({ patternId: "title", offset: 0 });
+    // no duties heading at all: it counts
+    expect(evergreenWording("About us\nWe build software.\n\nTalent pool\nWe welcome all applications.", scoped)?.patternId).toBe("title");
   });
 
   it("a negative list heading cancels its items", () => {

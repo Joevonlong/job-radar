@@ -15,6 +15,22 @@ export interface CompiledGhostPattern {
   negationAfter: GhostNegationAfter;
   /** A hit counts only when its piece also matches one of these (flags `iu`); empty = always. */
   requiresContext: RegExp[];
+  /** A hit counts only above the JD's first duties heading (a title line, not the footer of a real posting). */
+  onlyBeforeDuties: boolean;
+}
+
+/** The packs' `question_tag`, compiled: a statement with a short invitation tagged on is not a question. */
+export interface CompiledQuestionTag {
+  /** Flags `giu`: where the tag starts (after the last match). */
+  breaks: RegExp[];
+  /** Anchored (`^(?:invitation)$`, flags `iu`): tested against the whole tag, without its question mark. */
+  invitations: RegExp[];
+  /** Anchored at the start and at a word end (`^(?:opener)(?![\p{L}\p{N}])`, flags `iu`): tested against a clause's text from a word on. */
+  openers: RegExp[];
+  /** As `openers`: the words or phrases skipped before the opener test ("so", "and", "wie immer"). */
+  markers: RegExp[];
+  /** Whole words (`(?<![\p{L}\p{N}])(?:subject)(?![\p{L}\p{N}])`, flags `giu`): the subject a tagged clause needs ("we", "wir"); empty = none needed. */
+  subjects: RegExp[];
 }
 
 export interface CompiledGhostRules {
@@ -29,6 +45,11 @@ export interface CompiledGhostRules {
   questionWords: RegExp[];
   clauseBreaks: RegExp[];
   excludeContext: RegExp[];
+  /** Flags `giu`: a match takes out the hits from its start to the end of its clause. */
+  excludeClause: RegExp[];
+  /** Flags `giu`: where an `excludeClause` range also ends, besides `clauseBreaks`. */
+  excludeClauseEnds: RegExp[];
+  questionTag: CompiledQuestionTag;
   /** Which question before a sentence is read with it (the packs' `lead_in_question`; no `ends` = none). */
   leadInQuestion: GhostLeadInQuestion;
   abbreviations: string[];
@@ -58,6 +79,13 @@ const anchoredWords = (sources: readonly string[], path: string): RegExp[] =>
     return new RegExp(`^(?:${source})$`, "iu");
   });
 
+/** `question_tag.openers` / `.markers`: each entry is matched at the start of a text and must end at a word end. */
+const leadingPhrases = (sources: readonly string[], path: string): RegExp[] =>
+  sources.map((source, index) => {
+    compile(source, `${path}[${index}]`);
+    return new RegExp(`^(?:${source})(?![\\p{L}\\p{N}])`, "iu");
+  });
+
 function compilePrefilter(sources: readonly string[]): RegExp | null {
   if (sources.length === 0) return null;
   sources.forEach((source, index) => compile(source, `ghost.prefilter[${index}]`));
@@ -75,19 +103,35 @@ export function compileGhostRules(config: GhostRulesInput): CompiledGhostRules {
   }
   return {
     settings: config.job_checks.ghost,
-    repostLabels: pack.repost_label_patterns.map((entry, index) => ({ id: entry.id, re: compile(entry.pattern, `ghost.repost_label_patterns[${index}]`), checkNegation: false, negationAfter: "words", requiresContext: [] })),
+    repostLabels: pack.repost_label_patterns.map((entry, index) => ({ id: entry.id, re: compile(entry.pattern, `ghost.repost_label_patterns[${index}]`), checkNegation: false, negationAfter: "words", requiresContext: [], onlyBeforeDuties: false })),
     evergreen: pack.evergreen_patterns.map((entry, index) => ({
       id: entry.id,
       re: compile(entry.pattern, `ghost.evergreen_patterns[${index}]`),
       checkNegation: entry.check_negation,
       negationAfter: entry.negation_after ?? pack.negation_after,
       requiresContext: (entry.requires_context ?? []).map((source, at) => compile(source, `ghost.evergreen_patterns[${index}].requires_context[${at}]`, "iu")),
+      onlyBeforeDuties: entry.only_before_duties === true,
     })),
     responsibilities: pack.responsibility_patterns.map((entry, index) => ({ id: entry.id, re: compile(entry.pattern, `ghost.responsibility_patterns[${index}]`, "iu") })),
     negationCues: anchoredWords(pack.negation_cues, "ghost.negation_cues"),
     questionWords: anchoredWords(pack.question_words, "ghost.question_words"),
     clauseBreaks: compileList(pack.clause_breaks, "ghost.clause_breaks"),
     excludeContext: compileList(pack.exclude_context, "ghost.exclude_context"),
+    excludeClause: compileList(pack.exclude_clause, "ghost.exclude_clause"),
+    excludeClauseEnds: compileList(pack.exclude_clause_ends, "ghost.exclude_clause_ends"),
+    questionTag: {
+      breaks: compileList(pack.question_tag.breaks, "ghost.question_tag.breaks"),
+      invitations: pack.question_tag.invitations.map((source, index) => {
+        compile(source, `ghost.question_tag.invitations[${index}]`);
+        return new RegExp(`^(?:${source})$`, "iu");
+      }),
+      openers: leadingPhrases(pack.question_tag.openers, "ghost.question_tag.openers"),
+      markers: leadingPhrases(pack.question_tag.markers, "ghost.question_tag.markers"),
+      subjects: pack.question_tag.subjects.map((source, index) => {
+        compile(source, `ghost.question_tag.subjects[${index}]`);
+        return new RegExp(`(?<![\\p{L}\\p{N}])(?:${source})(?![\\p{L}\\p{N}])`, "giu");
+      }),
+    },
     leadInQuestion: { ends: [...pack.lead_in_question.ends], starts: [...pack.lead_in_question.starts], line_above: pack.lead_in_question.line_above },
     abbreviations: [...pack.abbreviations],
     prefilter,

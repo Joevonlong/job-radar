@@ -5,15 +5,15 @@
 import { segmentText, type TextSegment } from "@/lib/job-checks/segment";
 import { clipQuote } from "@/lib/signals/quote";
 
+import { endsInQuestion, questionEndAsColon, stripTrailingDecoration, trailingDotsAsColon, trailingPauseAsColon } from "./heading-ends";
+import { lowerBound, negatedInClause, negationIndex, WORD, wordsOf, type NegationIndex } from "./negation";
 import type { CompiledGhostPattern, CompiledGhostRules } from "./rules";
 import type { GhostInput, GhostPosting, GhostReasonOf, RepostEvent } from "./types";
 
 const DAY_MS = 86_400_000;
-const WORD = /[\p{L}\p{N}]+(?:['’]\p{L}+)?/gu;
 
 const isoDay = (date: Date): string => date.toISOString().slice(0, 10);
 const daysBetween = (from: Date, to: Date): number => Math.max(0, Math.floor((to.getTime() - from.getTime()) / DAY_MS));
-const wordsOf = (text: string): string[] => Array.from(text.matchAll(WORD), (m) => m[0]);
 
 /** The number of words of a text (letters and digits, "don't" as one). */
 export function countWords(text: string | null): number {
@@ -118,13 +118,6 @@ const EMPHASIS = /[*_]+/gu;
 const END_PUNCTUATION = /[.!?;,)\]"'“”»]$/u;
 /** Emoji, arrows and other symbols before a heading ("🚀 Your tasks", "→ Your tasks", "» Deine Aufgaben"), with the joiners and selectors of emoji. */
 const DECORATION = /^[\p{Extended_Pictographic}\p{So}\p{Sk}\u{2190}-\u{21FF}\u{00BB}\u{203A}\u{FE0E}\u{FE0F}\u{200D}\u{20E3}\s]+/u;
-/** … and emoji after it ("Your impact 🌍", "Outcomes 🎯:"); a final ":" stays. */
-const TRAILING_DECORATION = /[\p{Extended_Pictographic}\p{So}\u{FE0E}\u{FE0F}\u{200D}\u{20E3}\s]+(:?)\s*$/u;
-/** A heading line that trails off ("Your tasks…") or ends in a dash ("Your Role -", "Your tasks —") ends as if in ":". */
-const TRAILING_PAUSE = /\s*(?:…|\s[-–]|—)\s*$/u;
-/** … and so does one that ends in three dots ("Your tasks..."), but only right above a list. */
-const TRAILING_DOTS = /\s*\.{3}\s*$/u;
-const QUESTION_END = /\s*[?？]+\s*$/u;
 const APOSTROPHES = /[‘’ʼ]/gu;
 const AMPERSAND_ENTITY = /&amp;/giu;
 
@@ -138,13 +131,13 @@ const AMPERSAND_ENTITY = /&amp;/giu;
  */
 function normalizeHeadingLine(raw: string, rules: CompiledGhostRules, listFollows: boolean): string {
   let text = raw.replace(AMPERSAND_ENTITY, "&").replace(APOSTROPHES, "'").trim().replace(DECORATION, "");
-  text = text.replace(LIST_OR_HEADING_MARKER, "").replace(DECORATION, "").replace(EMPHASIS, "").replace(TRAILING_DECORATION, "$1").trim();
-  text = text.replace(TRAILING_PAUSE, ":");
+  text = stripTrailingDecoration(text.replace(LIST_OR_HEADING_MARKER, "").replace(DECORATION, "").replace(EMPHASIS, "")).trim();
+  text = trailingPauseAsColon(text);
   if (!listFollows) return text;
-  text = text.replace(TRAILING_DOTS, ":");
-  if (QUESTION_END.test(text)) {
+  text = trailingDotsAsColon(text);
+  if (endsInQuestion(text)) {
     const first = (wordsOf(text)[0] ?? "").split("'")[0] ?? "";
-    if (rules.questionWords.some((word) => word.test(first))) text = text.replace(QUESTION_END, ":");
+    if (rules.questionWords.some((word) => word.test(first))) text = questionEndAsColon(text);
   }
   return text;
 }
@@ -155,7 +148,7 @@ function headingText(raw: string, rules: CompiledGhostRules, listFollows: boolea
 }
 
 /** The whole line as a heading (short, and a "#" heading, ending in ":" or without end punctuation), or null. */
-function wholeLineHeading(line: string, rules: CompiledGhostRules, listFollows: boolean): string | null {
+export function wholeLineHeading(line: string, rules: CompiledGhostRules, listFollows: boolean): string | null {
   const trimmed = line.trim();
   const content = normalizeHeadingLine(trimmed, rules, listFollows);
   if (content.length === 0 || content.length > rules.settings.heading_max_chars) return null;
@@ -168,10 +161,10 @@ function wholeLineHeading(line: string, rules: CompiledGhostRules, listFollows: 
  * The heading-shaped pieces of a line: the whole line when it is short and looks like a heading, and a short "Label:" prefix.
  * `listFollows`: a list starts at the next line that is not blank, or after one line of lead-in (see `hasResponsibilityHeading`).
  */
-function headingsOfLine(line: string, rules: CompiledGhostRules, listFollows: boolean): string[] {
+function headingsOfLine(line: string, rules: CompiledGhostRules, listFollows: boolean, wholeLine = true): string[] {
   if (line.trim() === "") return [];
   const out: string[] = [];
-  const whole = wholeLineHeading(line, rules, listFollows);
+  const whole = wholeLine ? wholeLineHeading(line, rules, listFollows) : null;
   if (whole !== null) out.push(whole);
   const content = normalizeHeadingLine(line, rules, listFollows);
   const colon = content.indexOf(":");
@@ -183,15 +176,25 @@ const isDutiesHeading = (heading: string, rules: CompiledGhostRules): boolean =>
 
 /** Whether the text has a heading that opens the duties of the role ("Responsibilities", "Deine Aufgaben:"). */
 export function hasResponsibilityHeading(description: string | null, rules: CompiledGhostRules): boolean {
-  if (description === null || rules.responsibilities.length === 0) return false;
+  return firstDutiesHeading(description, rules) !== null;
+}
+
+/**
+ * Where the line of the text's first duties heading starts (as `hasResponsibilityHeading` reads them), or null. With `cap`, a
+ * longer line is read only up to `cap` characters and only for a "Label:" prefix (it is no heading as a whole): the time stays
+ * linear in the length of a line.
+ */
+function firstDutiesHeading(description: string | null, rules: CompiledGhostRules, cap?: number): number | null {
+  if (description === null || rules.responsibilities.length === 0) return null;
   const lines = description.split("\n");
   // whether a list starts at the next line that is not blank, or after one line of lead-in that ends in ":" or is itself
   // heading-shaped ("What will I be doing?" / "As a senior engineer, you will:" / "- …"; not "Which tasks can our AI automate?" /
   // "Almost all of them." / "- …"), from the end
+  const fits = (line: string): boolean => cap === undefined || line.length <= cap;
   const isList = (at: number): boolean => at !== -1 && LIST_LINE.test(lines[at] as string);
   const isLeadIn = (at: number): boolean => {
     const line = (lines[at] as string).trim();
-    return line.endsWith(":") || line.endsWith("：") || wholeLineHeading(line, rules, false) !== null;
+    return line.endsWith(":") || line.endsWith("：") || (fits(line) && wholeLineHeading(line, rules, false) !== null);
   };
   const listFollows = new Array<boolean>(lines.length).fill(false);
   let next = -1;
@@ -200,12 +203,15 @@ export function hasResponsibilityHeading(description: string | null, rules: Comp
     listFollows[i] = isList(next) || (next !== -1 && isList(afterNext) && isLeadIn(next));
     if ((lines[i] as string).trim() !== "") [next, afterNext] = [i, next];
   }
+  let offset = 0;
   for (const [i, line] of lines.entries()) {
-    for (const heading of headingsOfLine(line, rules, listFollows[i] === true)) {
-      if (isDutiesHeading(heading, rules)) return true;
+    const whole = fits(line);
+    for (const heading of headingsOfLine(whole ? line : line.slice(0, cap), rules, listFollows[i] === true, whole)) {
+      if (isDutiesHeading(heading, rules)) return offset;
     }
+    offset += line.length + 1;
   }
-  return false;
+  return null;
 }
 
 // ---------------------------------------------------------------- thin_description
@@ -242,71 +248,90 @@ interface Hit {
 
 const hasCue = (text: string, rules: CompiledGhostRules): boolean => wordsOf(text).some((word) => rules.negationCues.some((cue) => cue.test(word)));
 
-/** The end of the first clause break in `text` (or its length). */
-function firstBreak(text: string, breaks: readonly RegExp[]): number {
-  let end = text.length;
-  for (const re of breaks) {
-    const at = text.search(re);
-    if (at !== -1 && at < end) end = at;
-  }
-  return end;
+/**
+ * The matches of `res` in a piece, read once so that each hit finds its clause in log time (re-reading the text before every hit
+ * takes the square of the hit count). `ends` ascending, `starts[i]` the last start among the matches up to `ends[i]`.
+ */
+interface ClauseMarks {
+  ends: number[];
+  starts: number[];
 }
 
-/** Where the clause that ends at the end of `text` starts: right after the last clause break in it (0 when none). */
-function lastBreakEnd(text: string, breaks: readonly RegExp[]): number {
-  let from = 0;
-  for (const re of breaks) {
-    for (const match of text.matchAll(re)) {
-      const end = match.index + match[0].length;
-      if (end > from) from = end;
-    }
+function clauseMarks(text: string, res: readonly RegExp[]): ClauseMarks {
+  const found: Array<[number, number]> = [];
+  for (const re of res) for (const match of text.matchAll(re)) found.push([match.index + match[0].length, match.index]);
+  found.sort((a, b) => a[0] - b[0]);
+  const marks: ClauseMarks = { ends: [], starts: [] };
+  let last = 0;
+  for (const [end, start] of found) {
+    last = Math.max(last, start);
+    marks.ends.push(end);
+    marks.starts.push(last);
   }
-  return from;
+  return marks;
+}
+
+/** Where the last mark that ends at or before `from` starts (0 when none). */
+function lastMarkStart(marks: ClauseMarks, from: number): number {
+  const count = lowerBound(marks.ends, from + 1);
+  return count === 0 ? 0 : (marks.starts[count - 1] as number);
 }
 
 /**
  * A negation cue inside the hit, among the `negation_words_before` words before it or the `negation_words_after` words after it
  * (both within its clause; after it to the end of the clause for a pattern with `negationAfter: "clause"`), in the heading of its
- * list, or, for a heading read with its next line, in that next line.
+ * list, or, for a heading read with its next line, in that next line. `index`: the piece's, read on its first negation test.
  */
-function negated(segment: TextSegment, hit: Hit, pattern: CompiledGhostPattern, rules: CompiledGhostRules, description: string): boolean {
+function negated(segment: TextSegment, hit: Hit, pattern: CompiledGhostPattern, rules: CompiledGhostRules, description: string, index: () => NegationIndex): boolean {
   if (rules.negationCues.length === 0) return false;
   if (segment.listHeading !== undefined && hasCue(description.slice(segment.listHeading.start, segment.listHeading.end), rules)) return true;
   if (segment.headingEnd !== undefined && hit.end <= segment.headingEnd && hasCue(description.slice(segment.headingEnd, segment.end), rules)) return true;
   const settings = rules.settings;
-  const from = hit.start - segment.start;
-  const to = hit.end - segment.start;
-  const head = segment.text.slice(0, from);
-  const before = settings.negation_words_before === 0 ? [] : wordsOf(head.slice(lastBreakEnd(head, rules.clauseBreaks))).slice(-settings.negation_words_before);
-  const inside = wordsOf(segment.text.slice(from, to));
-  const tail = segment.text.slice(to);
-  const clauseAfter = wordsOf(tail.slice(0, firstBreak(tail, rules.clauseBreaks)));
-  const after = pattern.negationAfter === "clause" ? clauseAfter : clauseAfter.slice(0, settings.negation_words_after);
-  return [...before, ...inside, ...after].some((word) => rules.negationCues.some((cue) => cue.test(word)));
+  return negatedInClause(index(), hit.start - segment.start, hit.end - segment.start, {
+    before: settings.negation_words_before,
+    after: pattern.negationAfter === "clause" ? "clause" : settings.negation_words_after,
+  });
 }
 
 /**
  * The heading of a list item's list: the segmenter's, else (ghost-local) the first line above the list when the ghost check reads it
  * as a heading. The segmenter does not take a line ending in "?" or "..." as a list's heading ("What will I be doing?" / "- …").
+ * One finder per description: the lines above an item (the items before it in its list, and blank lines) are walked once and
+ * share the line their walk ends at, so a long list is not read again for every item in it.
  */
-function listHeadingOf(segment: TextSegment, rules: CompiledGhostRules, description: string): string | null {
-  if (segment.listHeading !== undefined) return headingText(description.slice(segment.listHeading.start, segment.listHeading.end), rules, true);
-  if (!segment.listItem) return null;
-  let lineStart = description.lastIndexOf("\n", segment.start - 1) + 1;
-  while (lineStart > 0) {
-    const lineEnd = lineStart - 1;
-    lineStart = description.lastIndexOf("\n", lineEnd - 1) + 1;
-    const line = description.slice(lineStart, lineEnd);
-    // blank lines and the items above it in the same list
-    if (line.trim() === "" || LIST_LINE.test(line)) continue;
-    return wholeLineHeading(line, rules, true);
-  }
-  return null;
+export function listHeadingFinder(description: string, rules: CompiledGhostRules): (segment: TextSegment) => string | null {
+  // the start of a line → the heading found above it (null: none)
+  const found = new Map<number, string | null>();
+  return (segment) => {
+    if (segment.listHeading !== undefined) return headingText(description.slice(segment.listHeading.start, segment.listHeading.end), rules, true);
+    if (!segment.listItem) return null;
+    let lineStart = description.lastIndexOf("\n", segment.start - 1) + 1;
+    const walked: number[] = [];
+    let heading: string | null = null;
+    for (;;) {
+      const known = found.get(lineStart);
+      if (known !== undefined) {
+        heading = known;
+        break;
+      }
+      walked.push(lineStart);
+      if (lineStart === 0) break;
+      const lineEnd = lineStart - 1;
+      lineStart = lineEnd === 0 ? 0 : description.lastIndexOf("\n", lineEnd - 1) + 1;
+      const line = description.slice(lineStart, lineEnd);
+      // blank lines and the items above it in the same list
+      if (line.trim() === "" || LIST_LINE.test(line)) continue;
+      heading = wholeLineHeading(line, rules, true);
+      break;
+    }
+    for (const at of walked) found.set(at, heading);
+    return heading;
+  };
 }
 
 /** A list item under a duties heading: the role's work ("Your tasks:" / "- Build our talent pool"), not what the posting is. */
-function underDutiesHeading(segment: TextSegment, rules: CompiledGhostRules, description: string): boolean {
-  const heading = listHeadingOf(segment, rules, description);
+function underDutiesHeading(segment: TextSegment, rules: CompiledGhostRules, listHeadingOf: (segment: TextSegment) => string | null): boolean {
+  const heading = listHeadingOf(segment);
   return heading !== null && isDutiesHeading(heading, rules);
 }
 
@@ -336,6 +361,138 @@ function isQuestion(text: string, lead: CompiledGhostRules["leadInQuestion"]): b
   return lead.ends.some((mark) => trimmed.endsWith(mark));
 }
 
+/** A comma or colon also starts a clause for the question test ("Recruiters, are you always hiring – interested?"). */
+const CLAUSE_PUNCTUATION = /[,:，：]/gu;
+const LEADING_NON_WORD = /^[^\p{L}\p{N}]*/u;
+
+/**
+ * What a piece's tagged clauses are read with: its clause starts and the starts of its `question_tag.subjects`, read once, and per
+ * clause start where its first word after any `question_tag.markers` starts (read on the first hit in the clause).
+ */
+interface TaggedPiece {
+  text: string;
+  clauses: ClauseMarks;
+  subjects: number[];
+  afterMarkers: Map<number, number>;
+}
+
+function taggedPiece(text: string, rules: CompiledGhostRules): TaggedPiece {
+  const subjects: number[] = [];
+  for (const re of rules.questionTag.subjects) for (const match of text.matchAll(re)) if (match[0].length > 0) subjects.push(match.index);
+  subjects.sort((a, b) => a - b);
+  return { text, clauses: clauseMarks(text, [...rules.clauseBreaks, CLAUSE_PUNCTUATION]), subjects, afterMarkers: new Map() };
+}
+
+/**
+ * Where the clause that starts at `clauseStart` goes on after the signs and `question_tag.markers` it opens with. Read to the end
+ * of the piece rather than to a hit, so that it is the same for every hit in the clause: a hit at or before it opens its clause.
+ */
+function afterMarkers(piece: TaggedPiece, clauseStart: number, rules: CompiledGhostRules): number {
+  const cached = piece.afterMarkers.get(clauseStart);
+  if (cached !== undefined) return cached;
+  const text = piece.text;
+  let at = clauseStart;
+  const skip = (): void => {
+    at += LEADING_NON_WORD.exec(text.slice(at))?.[0].length ?? 0;
+  };
+  skip();
+  for (let marked = true; marked && at < text.length; ) {
+    marked = false;
+    const rest = text.slice(at);
+    for (const marker of rules.questionTag.markers) {
+      const length = marker.exec(rest)?.[0].length ?? 0;
+      if (length === 0) continue;
+      at += length;
+      skip();
+      marked = true;
+      break;
+    }
+  }
+  piece.afterMarkers.set(clauseStart, at);
+  return at;
+}
+
+/**
+ * Whether the clause of a hit at `from`…`to` (in a statement with an invitation tagged on) is a question after all. The clause
+ * starts at the last `clause_breaks` match, comma or colon before the hit; after any `question_tag.markers` it opens with one of
+ * `openers` ("Recruiters, are you always hiring – interested?", "So, is it …", "Liebe Recruiter, stellen Sie laufend ein –
+ * neugierig?") or with the hit itself ("Always hiring – interested?": no subject, an advert's question), or, when the packs list
+ * `subjects`, none of them starts in the clause before the hit's end ("Tired of always hiring – interested?"; "At Acme we are
+ * always hiring – want to join?" and "Bei uns suchen wir laufend …" are statements, and so are "When we grow, we are always hiring
+ * – want to join?" and "Have a look: we are always hiring – interested?").
+ */
+function questionClause(piece: TaggedPiece, from: number, to: number, rules: CompiledGhostRules): boolean {
+  const tag = rules.questionTag;
+  const text = piece.text;
+  const clauseStart = lastMarkStart(piece.clauses, from);
+  const at = afterMarkers(piece, clauseStart, rules);
+  if (at >= from) return true;
+  // the subject first: one look-up per hit, where the openers are many expressions
+  if (tag.subjects.length > 0) {
+    const subject = piece.subjects[lowerBound(piece.subjects, clauseStart)];
+    if (subject === undefined || subject >= to) return true;
+  }
+  const rest = text.slice(at, from);
+  return tag.openers.some((opener) => opener.test(rest));
+}
+
+/**
+ * A piece that ends in a question mark but is a statement with a short invitation tagged on ("We are always hiring – want to
+ * join?", "Wir suchen laufend Verstärkung – bist du dabei?"): the length of the statement before the last `question_tag.breaks`
+ * match, or null when the piece is a question. The tag must be one of `invitations` and have at most `question_tag_max_words`
+ * words; whether the clause of a hit is a question all the same is `questionClause`'s ("Is your company always hiring – interested?").
+ */
+function taggedStatement(text: string, rules: CompiledGhostRules): number | null {
+  const tag = rules.questionTag;
+  if (tag.breaks.length === 0 || tag.invitations.length === 0) return null;
+  const trimmed = text.trimEnd();
+  const mark = rules.leadInQuestion.ends.find((end) => trimmed.endsWith(end));
+  const body = mark === undefined ? trimmed : trimmed.slice(0, -mark.length);
+  let headEnd = -1;
+  let tagStart = -1;
+  for (const re of tag.breaks) {
+    for (const match of body.matchAll(re)) {
+      if (match[0].length > 0 && match.index > headEnd) [headEnd, tagStart] = [match.index, match.index + match[0].length];
+    }
+  }
+  if (headEnd <= 0) return null;
+  const tagText = body.slice(tagStart).trim();
+  const words = wordsOf(tagText).length;
+  if (words === 0 || words > rules.settings.question_tag_max_words || !tag.invitations.some((re) => re.test(tagText))) return null;
+  return headEnd;
+}
+
+/**
+ * The ranges (offsets in the description) that the packs' `exclude_clause` take out: each match to the end of its clause (the
+ * first `clause_breaks` or `exclude_clause_ends` match after it), sorted by start. Each end expression is searched forward from
+ * the match ends in order and its last find reused while it lies ahead, so the time stays linear in the number of matches.
+ */
+function clauseExclusions(segment: TextSegment, rules: CompiledGhostRules): Array<[number, number]> {
+  if (rules.excludeClause.length === 0) return [];
+  const text = segment.text;
+  const starts: Array<[number, number]> = [];
+  for (const re of rules.excludeClause) {
+    for (const match of text.matchAll(re)) if (match[0].length > 0) starts.push([match.index, match.index + match[0].length]);
+  }
+  starts.sort((a, b) => a[1] - b[1]);
+  const ends = [...rules.clauseBreaks, ...rules.excludeClauseEnds].map((re) => ({ re: new RegExp(re.source, re.flags.includes("g") ? re.flags : `${re.flags}g`), from: -1, at: -1 }));
+  const out: Array<[number, number]> = [];
+  for (const [start, after] of starts) {
+    let end = text.length;
+    for (const cursor of ends) {
+      // the first match at or after `from` is `at` (-1: none); still the first one at or after `after` while `after <= at`
+      if (cursor.from === -1 || (cursor.at !== -1 && after > cursor.at)) {
+        cursor.re.lastIndex = after;
+        cursor.from = after;
+        cursor.at = cursor.re.exec(text)?.index ?? -1;
+      }
+      if (cursor.at !== -1 && cursor.at < end) end = cursor.at;
+    }
+    out.push([segment.start + start, segment.start + end]);
+  }
+  return out.sort((a, b) => a[0] - b[0]);
+}
+
 function hitsOf(pattern: CompiledGhostPattern, segment: TextSegment): Hit[] {
   if (segment.text.search(pattern.re) === -1) return [];
   const hits: Hit[] = [];
@@ -353,9 +510,10 @@ export interface EvergreenOptions {
 
 /**
  * The first sentence (in text order) that says the posting is a talent pool or always open. A sentence matching `exclude_context`
- * (itself or the question right before it), a sentence that is itself a question (ends in a `lead_in_question.ends` mark), a negated
- * hit, a hit of a pattern with `requires_context` whose sentence has none of it, and a list item under a duties heading do not
- * count. The quote is verified against the description (C7).
+ * (itself or the question right before it), a sentence that is itself a question (ends in a `lead_in_question.ends` mark; a
+ * statement with a short invitation tagged on is none, `question_tag`), a negated hit, a hit in the reach of an `exclude_clause`
+ * match, a hit of a pattern with `requires_context` whose sentence has none of it, a hit of an `only_before_duties` pattern below
+ * the first duties heading, and a list item under a duties heading do not count. The quote is verified against the description (C7).
  */
 export function evergreenWording(description: string | null, rules: CompiledGhostRules, options: EvergreenOptions = {}): GhostReasonOf<"evergreen_wording"> | null {
   const settings = rules.settings.evergreen_wording;
@@ -364,22 +522,62 @@ export function evergreenWording(description: string | null, rules: CompiledGhos
   if (prefilter !== null && description.search(prefilter) === -1) return null;
   const keep = prefilter === null ? undefined : (start: number, end: number): boolean => description.slice(start, end).search(prefilter) !== -1;
   const segments = segmentText(description, { abbreviations: rules.abbreviations, headingMaxChars: rules.settings.heading_max_chars, ...(keep ? { keep } : {}) });
+  // where the first duties heading starts, read once and only for an `only_before_duties` hit (undefined = not read yet)
+  let dutiesAt: number | null | undefined;
+  const listHeadingOf = listHeadingFinder(description, rules);
   for (const segment of segments) {
     if (prefilter !== null && segment.text.search(prefilter) === -1) continue;
     const candidates: Array<{ hit: Hit; pattern: CompiledGhostPattern }> = [];
     for (const pattern of rules.evergreen) for (const hit of hitsOf(pattern, segment)) candidates.push({ hit, pattern });
     if (candidates.length === 0) continue;
-    // a question is not a statement about the posting ("Always hiring? Acme automates your sourcing")
-    if (isQuestion(segment.text, rules.leadInQuestion)) continue;
+    // a question is not a statement about the posting ("Always hiring? Acme automates your sourcing"), unless it is a statement
+    // with an invitation tagged on ("We are always hiring – want to join?"): then only hits before the tag count
+    let statementEnd = segment.text.length;
+    if (isQuestion(segment.text, rules.leadInQuestion)) {
+      const head = taggedStatement(segment.text, rules);
+      if (head === null) continue;
+      statementEnd = head;
+    }
     const question = leadInQuestion(description, segment.start, rules.leadInQuestion);
     if (rules.excludeContext.some((re) => segment.text.search(re) !== -1 || (question !== "" && question.search(re) !== -1))) continue;
-    if (underDutiesHeading(segment, rules, description)) continue;
+    if (underDutiesHeading(segment, rules, listHeadingOf)) continue;
+    const excluded = clauseExclusions(segment, rules);
+    // the exclusions that start at or before the current hit (hits come in text order) and the furthest end among them
+    let excludedSeen = 0;
+    let excludedTo = -1;
+    const tagged = statementEnd < segment.text.length ? taggedPiece(segment.text, rules) : null;
+    let negation: NegationIndex | undefined;
+    const negationOf = (): NegationIndex => (negation ??= negationIndex(segment.text, rules));
+    // whether the piece has a pattern's recruiting words, searched once per pattern rather than once per hit
+    const context = new Map<CompiledGhostPattern, boolean>();
+    const hasContext = (pattern: CompiledGhostPattern): boolean => {
+      let found = context.get(pattern);
+      if (found === undefined) context.set(pattern, (found = pattern.requiresContext.some((re) => segment.text.search(re) !== -1)));
+      return found;
+    };
     candidates.sort((a, b) => a.hit.start - b.hit.start || b.hit.end - a.hit.end);
     for (const { hit, pattern } of candidates) {
       if (options.skip?.(hit.start, hit.end)) continue;
+      if (tagged !== null) {
+        const from = hit.start - segment.start;
+        // in the tag, or in a clause that is itself a question ("We grow fast, but are you always hiring – interested?") or has
+        // no subject ("Always hiring – interested?", "Tired of always hiring – interested?")
+        if (from >= statementEnd) continue;
+        if (questionClause(tagged, from, hit.end - segment.start, rules)) continue;
+      }
+      // a qualification of the candidate, to the end of its clause ("Experience building a talent pipeline for future roles")
+      for (; excludedSeen < excluded.length && (excluded[excludedSeen] as [number, number])[0] <= hit.start; excludedSeen++) {
+        excludedTo = Math.max(excludedTo, (excluded[excludedSeen] as [number, number])[1]);
+      }
+      if (hit.start < excludedTo) continue;
+      if (pattern.onlyBeforeDuties) {
+        // a heading line is short: longer lines are read only up to twice heading_max_chars
+        if (dutiesAt === undefined) dutiesAt = firstDutiesHeading(description, rules, rules.settings.heading_max_chars * 2);
+        if (dutiesAt !== null && hit.start > dutiesAt) continue;
+      }
       // a broad phrase counts only next to recruiting words ("join our AI talent pool" … "future opportunities")
-      if (pattern.requiresContext.length > 0 && !pattern.requiresContext.some((re) => segment.text.search(re) !== -1)) continue;
-      if (pattern.checkNegation && negated(segment, hit, pattern, rules, description)) continue;
+      if (pattern.requiresContext.length > 0 && !hasContext(pattern)) continue;
+      if (pattern.checkNegation && negated(segment, hit, pattern, rules, description, negationOf)) continue;
       const { quote, offset } = clipQuote(description, segment.start, segment.end, hit, rules.settings.quote_max_chars);
       // C7: the quote must be the description at its offset; a quote that is not is never stored
       if (quote === "" || description.slice(offset, offset + quote.length) !== quote) continue;

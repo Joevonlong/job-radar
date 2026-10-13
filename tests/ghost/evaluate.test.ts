@@ -102,4 +102,12 @@ describe("ghostRulesFingerprint", () => {
     expect(ghostRulesFingerprint(config((s) => (s.thin_description.infer_from_headings = true)))).toBe(base);
     expect(ghostRulesFingerprint({ ...config(), ghost: { ...emptyGhostPack(), question_words: ["what"] } })).not.toBe(base);
   });
+
+  it("changes with the question tag, the clause exclusions and question_tag_max_words", () => {
+    const base = ghostRulesFingerprint(config());
+    expect(ghostRulesFingerprint(config((s) => (s.question_tag_max_words += 1)))).not.toBe(base);
+    expect(ghostRulesFingerprint({ ...config(), ghost: { ...emptyGhostPack(), exclude_clause: ["skills?"] } })).not.toBe(base);
+    const tag = { ...emptyGhostPack().question_tag, invitations: ["interested"] };
+    expect(ghostRulesFingerprint({ ...config(), ghost: { ...emptyGhostPack(), question_tag: tag } })).not.toBe(base);
+  });
 });

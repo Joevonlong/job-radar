@@ -257,6 +257,8 @@ export type GhostNegationAfter = (typeof GHOST_NEGATION_AFTER)[number];
  * offene Stelle"): its own "no" must not cancel it. `negation_after`: this entry's own window after the phrase (default: its pack's).
  * `requires_context`: a hit counts only when its piece of text also matches one of these (a broad phrase that is about this
  * posting only next to recruiting words: "join our AI talent pool" with "apply", "opportunities"); missing or empty = always.
+ * `only_before_duties`: a hit counts only above the JD's first duties heading (`responsibility_patterns`): a title line such as
+ * "Initiativbewerbung" heads an open application, the same line below the duties of a real posting is its footer.
  */
 export const ghostEvergreenPatternSchema = z.strictObject({
   id: ghostPatternId,
@@ -264,6 +266,7 @@ export const ghostEvergreenPatternSchema = z.strictObject({
   check_negation: z.boolean().default(true),
   negation_after: z.enum(GHOST_NEGATION_AFTER).optional(),
   requires_context: regexList.optional(),
+  only_before_duties: z.boolean().optional(),
 });
 export type GhostEvergreenPatternEntry = z.infer<typeof ghostEvergreenPatternSchema>;
 
@@ -286,6 +289,32 @@ const ghostLeadInQuestionSchema = z
   .strictObject({ ends: markList, starts: markList, line_above: z.boolean().default(false) })
   .default(emptyGhostLeadInQuestion) satisfies z.ZodType<GhostLeadInQuestion>;
 
+/**
+ * A statement with a short invitation tagged on ("We are always hiring – want to join?") is not a question, though it ends in a
+ * `lead_in_question.ends` mark: the text after the last `breaks` match (regexes), without the mark, is one of `invitations`
+ * (regexes, the whole text) and has at most `pipeline.yaml job_checks.ghost.question_tag_max_words` words. A hit counts only when
+ * its clause (from the last `clause_breaks` match, comma or colon before it) opens, after any `markers` ("so", "also"), neither
+ * with one of `openers` ("is", "are", "what", "stellt"; "Recruiters, are you always hiring – interested?") nor with the hit itself
+ * ("Always hiring – interested?" has no subject), and, when the packs list `subjects`, only when one of them (regexes, whole
+ * words: "we", "our", "wir") starts in that clause before the hit's end ("At Acme we are always hiring – want to join?", "Bei uns
+ * suchen wir laufend …"; not "Tired of always hiring – interested?"). `openers` and `markers` are regexes matched at the start
+ * of the clause up to a word end, so a phrase works too ("wie\s+immer" as a marker, "wie(?!\s+immer)" as an opener). Empty =
+ * every sentence that ends in "?" is a question.
+ */
+export interface GhostQuestionTag {
+  breaks: string[];
+  invitations: string[];
+  openers: string[];
+  markers: string[];
+  subjects: string[];
+}
+
+export const emptyGhostQuestionTag = (): GhostQuestionTag => ({ breaks: [], invitations: [], openers: [], markers: [], subjects: [] });
+
+const ghostQuestionTagSchema = z
+  .strictObject({ breaks: optionalList, invitations: optionalList, openers: optionalList, markers: optionalList, subjects: optionalList })
+  .default(emptyGhostQuestionTag) satisfies z.ZodType<GhostQuestionTag>;
+
 /** `rules.yaml` `ghost` as the code reads it (the schema's output). */
 export interface GhostPack {
   repost_label_patterns: GhostPatternEntry[];
@@ -298,7 +327,12 @@ export interface GhostPack {
   negation_after: GhostNegationAfter;
   clause_breaks: string[];
   exclude_context: string[];
+  /** Like `exclude_context`, but only for the hits from the start of its match to the end of that clause (`clause_breaks`). */
+  exclude_clause: string[];
+  /** Where an `exclude_clause` range ends besides `clause_breaks` (", we …", a German verb-second inversion). */
+  exclude_clause_ends: string[];
   lead_in_question: GhostLeadInQuestion;
+  question_tag: GhostQuestionTag;
   abbreviations: string[];
   prefilter: string[];
 }
@@ -314,7 +348,10 @@ export function emptyGhostPack(): GhostPack {
     negation_after: "words",
     clause_breaks: [],
     exclude_context: [],
+    exclude_clause: [],
+    exclude_clause_ends: [],
     lead_in_question: emptyGhostLeadInQuestion(),
+    question_tag: emptyGhostQuestionTag(),
     abbreviations: [],
     prefilter: [],
   };
@@ -353,8 +390,20 @@ export const ghostPackSchema = z
      * notes); the question right before it (`lead_in_question`) is tested too.
      */
     exclude_context: optionalList,
+    /**
+     * A hit from the start of a match of one of these to the end of its clause (`clause_breaks`, `exclude_clause_ends`) does not count; other hits in the
+     * sentence still do ("Experience building a talent pipeline is valued; we are always hiring": a qualification, then the posting).
+     */
+    exclude_clause: optionalList,
+    /**
+     * Where an `exclude_clause` range also ends (regexes, besides `clause_breaks`): a comma or colon before a subject ("Experience
+     * building teams is a plus, we are always hiring"), a German verb-second inversion ("… stellen wir laufend ein").
+     */
+    exclude_clause_ends: optionalList,
     /** Which question before a sentence is read with it (see `GhostLeadInQuestion`). */
     lead_in_question: ghostLeadInQuestionSchema,
+    /** Which sentence ending in "?" is a statement with an invitation tagged on (see `GhostQuestionTag`). */
+    question_tag: ghostQuestionTagSchema,
     /** Abbreviations whose dot does not end a sentence, without the final dot. */
     abbreviations: z.array(nonEmptyString).default([]),
     /**
