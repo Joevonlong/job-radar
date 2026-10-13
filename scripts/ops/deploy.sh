@@ -70,7 +70,8 @@ DRAIN_TIMEOUT=""
 WAIT_TIMEOUT=300
 SETTLE=20
 
-usage() { sed -n '2,51p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+# The header comment above (line 2 up to the first line that is not a comment); tests/ops/script-help.test.ts checks it names every option.
+usage() { awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "${BASH_SOURCE[0]}"; }
 die() { echo "deploy: $*" >&2; exit 1; }
 need_value() { [[ $# -ge 2 && -n "$2" ]] || die "$1 needs a value"; }
 need_number() { [[ "$2" =~ ^[0-9]+$ ]] || die "$1 needs a whole number, got '$2'"; }

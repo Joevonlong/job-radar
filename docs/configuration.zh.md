@@ -49,7 +49,7 @@ pnpm config:init                  # 建用户目录，复制缺的 user 文件�
 pnpm config:init --from <目录>     # 从别的目录复制（旧安装迁移用），并复制与默认内容不同的 shipped 文件
 pnpm config:migrate               # 列出要迁移的文件和 diff，不写
 pnpm config:migrate --write       # 迁移：先把要改的原文件备份到 data/config/.backup/<时间>/，再写
-pnpm config:check                 # 校验两层（默认目录的文件即使被覆盖也要合法），写出每个文件读的是哪层
+pnpm config:check                 # 校验两层（默认目录的文件即使被覆盖也要合法），写出每个文件读的是哪层和出厂配置标识
 pnpm config:example               # 列出示例配置；`pnpm config:example <id> [--dry-run]` 套用其中一个（见下文）
 ```
 
@@ -190,6 +190,32 @@ web 和 runner 以 `0600`（仅属主）写配置文件：`data/config/*.yaml` �
 - 默认目录的文件随产品发布，永远是当前版本（`config:check` 检查）。
 
 写迁移（开发者）：在 `src/lib/config/migrations/<文件名>/NNN-slug.ts` 导出一个 `{ from, to, description?, migrate(doc) }`（`to = from + 1`，`migrate` 原地改 yaml 的 `Document`，保留注释，不做 I/O），在 `migrations/index.ts` 的 `CONFIG_MIGRATIONS` 里按顺序登记，同时把默认目录里那份文件改成新格式并写上新的 `config_version`。契约见 `src/lib/config/migrations/types.ts`。
+
+## 出厂配置标识
+
+默认配置目录（`config/`，或 `JOB_RADAR_DEFAULTS_DIR`）有一个标识：对目录文件清单算的 sha256。清单每个普通文件一行
+`<sha256>  ./<相对路径>`，按路径的字节顺序排序（`LC_ALL=C`）。任何层级的 `.DS_Store` 和 `._*` 文件都不算；符号链接，或文件名里有换行或
+反斜杠，直接报错。给人看的是前 12 个字符。在目录里用 shell 算出同一个标识：
+
+```bash
+cd config && find . -type f ! -name .DS_Store ! -name '._*' | LC_ALL=C sort | while IFS= read -r f; do sha256sum "$f"; done | sha256sum
+```
+
+（macOS 上没有 `sha256sum` 时用 `shasum -a 256`）。改了出厂文件的内容、改名、加文件或删文件，标识都会变。
+
+- `pnpm config:check` 在画像那行之后写出它：`shipped:  config  c86995b8f48f`（先目录，再短标识）。目录算不出标识时
+  `config:check` 失败。
+- 运行中的进程把自己用的标识报告到数据库（`runtime_state` 键 `shipped_config:<web|runner|ai-worker>`：完整标识、目录、主机名、PID 和
+  进程启动时间；这一行的时间是数据库时钟）。web 启动时报告一次，没成功之前每次 `/api/health` 请求再试（每次最多等 `schedule.yaml doctor.probe_timeout_seconds`，卡住的写入会被放弃、下次再试）；runner 和 ai-worker（服务方式）
+  启动时报告，之后每次心跳刷新，受心跳的时间上限约束。报告失败只在该进程日志里警告一句（`could not report the shipped config`），不会停掉进程，
+  也不算心跳失败。
+- `pnpm run doctor` 的 `config.shipped` 检查（"数据"组）显示每个进程的标识，并核对每份报告是否来自现在运行的进程：web 和 runner（在
+  `doctor.compose_services` 里时）要求报告里的主机名是运行中容器 id 的开头，且报告时间不早于容器启动时间减
+  `schedule.yaml doctor.shipped_report_skew_seconds`（默认 2，容忍 Docker 和数据库的时钟差）；ai-worker（`ai.yaml execution: host` 时）要求报告比
+  `host_worker.offline_after_seconds` 新，且 PID 等于 launchd（`launchctl print`）或 systemd（`systemctl --user show -p MainPID`）给出的服务 PID。服务管理器
+  给不出 PID 时，报告无法核对。凡是无法确认的都是警告，并逐个列出进程；没有失败。连不上数据库时跳过。
+
+部署或重启后的短时间内报告可能还没写；过一分钟再运行一次 doctor。
 
 ## 关注岗位复查（`pipeline.yaml` + `ui.yaml`）
 

@@ -24,6 +24,14 @@ describe("schedule.yaml: doctor block and backup.max_age_hours", () => {
     expect(parsed.backup.max_age_hours).toBe(30);
   });
 
+  it("doctor.shipped_report_skew_seconds is optional (default 2) and may be 0", () => {
+    const raw = shipped();
+    delete (raw.doctor as Record<string, unknown>).shipped_report_skew_seconds;
+    expect(schema.parse(raw).doctor.shipped_report_skew_seconds).toBe(2);
+    (raw.doctor as Record<string, unknown>).shipped_report_skew_seconds = 0;
+    expect(schema.parse(raw).doctor.shipped_report_skew_seconds).toBe(0);
+  });
+
   it.each([
     ["max_age_hours 0", (raw: Record<string, unknown>) => ((raw.backup as Record<string, unknown>).max_age_hours = 0)],
     ["unknown doctor key", (raw: Record<string, unknown>) => ((raw.doctor as Record<string, unknown>).typo = 1)],
@@ -31,6 +39,8 @@ describe("schedule.yaml: doctor block and backup.max_age_hours", () => {
     ["no compose service", (raw: Record<string, unknown>) => ((raw.doctor as Record<string, unknown>).compose_services = [])],
     ["warn below min disk", (raw: Record<string, unknown>) => Object.assign(raw.doctor as Record<string, unknown>, { min_free_disk_gb: 10, warn_free_disk_gb: 5 })],
     ["zero time-out", (raw: Record<string, unknown>) => ((raw.doctor as Record<string, unknown>).command_timeout_seconds = 0)],
+    ["negative shipped report skew", (raw: Record<string, unknown>) => ((raw.doctor as Record<string, unknown>).shipped_report_skew_seconds = -1)],
+    ["fractional shipped report skew", (raw: Record<string, unknown>) => ((raw.doctor as Record<string, unknown>).shipped_report_skew_seconds = 1.5)],
   ])("rejects %s", (_name, edit) => {
     const raw = shipped();
     edit(raw);

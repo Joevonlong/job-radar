@@ -39,6 +39,7 @@ import { configGuardFindings } from "@/lib/ops/config-guards";
 import { requeueInterruptedControlRequests } from "@/lib/db/repos/control-requests";
 import { withTimeout } from "@/lib/ops/timeout";
 import { exitProcess, installShutdown } from "@/lib/ops/shutdown";
+import { createShippedConfigReporter } from "@/lib/ops/shipped-config";
 import { recordHostDisk } from "@/lib/ops/disk";
 import { createDiskChecker } from "@/lib/ops/disk-check";
 import { redirectOutputToFiles, rotateLogFile, type FileOutput } from "@/lib/ops/log-files";
@@ -227,6 +228,9 @@ async function main(): Promise<number> {
     timeoutMs: stepMs,
     log,
   });
+  // Which shipped defaults this worker runs with (`pnpm run doctor`): written with the first heartbeat, refreshed with every
+  // one after it, under the same time limit; a failure is only a warning.
+  const shippedConfig = createShippedConfigReporter({ process: "ai-worker", db: () => db, log, timeoutMs: stepMs });
   const heartbeats = (async (): Promise<void> => {
     while (!abort.signal.aborted) {
       try {
@@ -234,6 +238,7 @@ async function main(): Promise<number> {
       } catch (error) {
         log(`heartbeat failed: ${error instanceof Error ? error.message : "unknown error"}`);
       }
+      await shippedConfig.report();
       // Free space of the Docker data volume, at most every `disk_check_minutes`: the container cannot see the Mac's disk.
       diskChecker.tick();
       rotateLogs(output, launchdLog);

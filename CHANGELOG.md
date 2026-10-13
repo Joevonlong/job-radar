@@ -12,6 +12,13 @@ and the project uses [Semantic Versioning](https://semver.org/).
   posting does not mention it. Quotes are checked against the posting; one that is not found counts as inferred. Nothing
   is re-scored; old scores show their reasons as before. Costs more output tokens per scoring call: see
   [docs/score-evidence.md](docs/score-evidence.md). Before rolling back to an older version, delete `scoring.evidence`.
+- **Shipped config identity**: `pnpm config:check` prints a 12-character identity of the shipped defaults directory (a
+  hash over its files). The web, the runner and the ai-worker report the identity they run with, and the new doctor check
+  `config.shipped` shows it per process and warns when a report does not come from the process running now (another
+  container, an older start, another PID). See [docs/configuration.md](docs/configuration.md#shipped-config-identity);
+  new optional key `schedule.yaml: doctor.shipped_report_skew_seconds` (default 2).
+- **`--help` of every `scripts/ops/*.sh`** prints its whole header comment, which names every option the script accepts
+  (`uninstall-ai-worker.sh` gained `--help`).
 
 ## [2.0.1] - 2026-10-11
 

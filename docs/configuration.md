@@ -55,7 +55,7 @@ pnpm config:init                  # create the user directory, copy missing user
 pnpm config:init --from <dir>     # copy from another directory (for migrating an old install), and also copy shipped files that differ from the defaults
 pnpm config:migrate               # list the files to migrate and their diffs, write nothing
 pnpm config:migrate --write       # migrate: first back up the original files to data/config/.backup/<timestamp>/, then write
-pnpm config:check                 # validate both layers (default-directory files must be valid even when overridden), print which layer each file is read from
+pnpm config:check                 # validate both layers (default-directory files must be valid even when overridden), print which layer each file is read from and the shipped config identity
 pnpm config:example               # list the example setups; `pnpm config:example <id> [--dry-run]` applies one (see below)
 ```
 
@@ -272,6 +272,40 @@ backups, `ui.yaml: config_editor.backups_keep` copies per file).
 - Files in the defaults directory ship with the product and are always at the current version (checked by `config:check`).
 
 Writing a migration (for developers): in `src/lib/config/migrations/<file name>/NNN-slug.ts`, export a `{ from, to, description?, migrate(doc) }` (`to = from + 1`; `migrate` edits the yaml `Document` in place, keeps comments, and does no I/O), register it in order in `CONFIG_MIGRATIONS` in `migrations/index.ts`, and change the default-directory copy of the file to the new format with the new `config_version`. The contract is in `src/lib/config/migrations/types.ts`.
+
+## Shipped config identity
+
+The shipped defaults directory (`config/`, or `JOB_RADAR_DEFAULTS_DIR`) has an identity: a sha256 over a manifest of its
+files, one line `<sha256>  ./<relative path>` per regular file, sorted by path in byte order (`LC_ALL=C`). `.DS_Store` and
+`._*` files are left out at any depth; a symbolic link, or a file name with a newline or a backslash, is an error. People see
+the first 12 characters. The same identity from the shell, in the directory:
+
+```bash
+cd config && find . -type f ! -name .DS_Store ! -name '._*' | LC_ALL=C sort | while IFS= read -r f; do sha256sum "$f"; done | sha256sum
+```
+
+(on macOS without `sha256sum`, use `shasum -a 256`). Any change to a shipped file, a rename, an added or a deleted file
+gives a new identity.
+
+- `pnpm config:check` prints it after the profile line: `shipped:  config  c86995b8f48f` (the directory, then the short id).
+  A directory that cannot be identified is a failure of `config:check`.
+- The running processes report the identity they run with, in the database (`runtime_state` key
+  `shipped_config:<web|runner|ai-worker>`: the full id, the directory, the host name, the PID and the process start; the
+  row's time is the database clock). The web reports at start-up and, until one write worked, again on each `/api/health`
+  request (each attempt limited to `schedule.yaml doctor.probe_timeout_seconds`, so a stuck write is abandoned and
+  retried); the runner and the ai-worker (as a service) report at start-up and refresh the report with every heartbeat,
+  under the heartbeat's time limit. A failed report is only a warning in that process's log (`could not report the
+  shipped config`); it never stops the process or fails a heartbeat.
+- `pnpm run doctor` check `config.shipped` (group "data") shows the identity of each process and checks that each report
+  comes from the process running now: for web and runner (when they are in `doctor.compose_services`), the report's host
+  name is the start of the running container's id, and the report was written no earlier than the container's start
+  minus `schedule.yaml doctor.shipped_report_skew_seconds` (default 2, for the clock difference between Docker and the
+  database); for the ai-worker (with `ai.yaml execution: host`), the report is newer than `host_worker.offline_after_seconds`
+  and its PID is the one launchd (`launchctl print`) or systemd (`systemctl --user show -p MainPID`) gives for the service.
+  When the service manager gives no PID, the report cannot be matched. Everything that cannot be confirmed is a warning
+  that names each process; there is no failure. Without the database the check is skipped.
+
+Right after a deploy or a restart a report can be missing for a moment; run the doctor again after a minute.
 
 ## Recheck of watched jobs (`pipeline.yaml` + `ui.yaml`)
 

@@ -1,5 +1,6 @@
 import { getDb, pingDb, readLatestHeartbeatAt } from "@/lib/db";
 import { shapeHealth } from "@/lib/health";
+import { reportWebShippedConfig } from "@/lib/ops/shipped-config";
 
 // Always evaluated per request: the answer is the live state of db and runner.
 export const dynamic = "force-dynamic";
@@ -11,7 +12,11 @@ export async function GET(): Promise<Response> {
   try {
     const db = getDb();
     dbOk = await pingDb(db);
-    if (dbOk) lastHeartbeatAt = await readLatestHeartbeatAt(db);
+    if (dbOk) {
+      lastHeartbeatAt = await readLatestHeartbeatAt(db);
+      // The start-up report of the shipped config failed (database not up yet): try again, without delaying the answer.
+      void reportWebShippedConfig();
+    }
   } catch (error) {
     // Only the error class is logged: messages can embed connection details (C4).
     console.error("[health] database unavailable:", error instanceof Error ? error.name : "unknown error");

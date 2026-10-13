@@ -35,6 +35,7 @@ import {
 import { sendAiWorkerOfflineAlert, sendCycleIncompleteAlert, startNotifyPoller } from "@/lib/notify";
 import { isAckName } from "@/lib/settings/tabs";
 import { createHeartbeatWatchdog } from "@/lib/ops/heartbeat-watchdog";
+import { createShippedConfigReporter } from "@/lib/ops/shipped-config";
 import { exitProcess, installShutdown } from "@/lib/ops/shutdown";
 import { recordAllConfigLoaded, recordConfigLoaded } from "@/lib/settings/ack";
 import { createSetupGate } from "@/lib/setup/runner-gate";
@@ -168,6 +169,9 @@ async function main(): Promise<number> {
 
   const db = getDb();
   const logger = createLogger();
+  // Which shipped defaults this runner runs with (`pnpm run doctor`): written now, refreshed with every heartbeat.
+  const shippedConfig = createShippedConfigReporter({ process: "runner", db: () => db, log, timeoutMs: () => env.RUNNER_HEARTBEAT_SECONDS * 1000 });
+  await shippedConfig.report();
 
   registerBuiltinChannels(defaultRegistry);
   registerBuiltinCycleSteps();
@@ -447,6 +451,8 @@ async function main(): Promise<number> {
         exitProcess(1);
       }
     }
+    // Its own step: a failed report is only a warning and never counts as a failed heartbeat.
+    await shippedConfig.report();
     await watchAiWorker();
     try {
       await sleep(intervalMs, undefined, { signal: abort.signal });

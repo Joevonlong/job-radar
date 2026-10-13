@@ -12,6 +12,9 @@
  *   - the deal-breakers of preferences.yaml must keep to the limits of pipeline.yaml (a language gate in a market without a
  *     local-language step is only a warning: it does nothing).
  *
+ *   - the identity of the shipped defaults directory is printed (12 characters); a directory that cannot be identified (a
+ *     symbolic link, an unsupported file name) is a failure.
+ *
  * Usage: pnpm config:check   (honours JOB_RADAR_DEFAULTS_DIR / JOB_RADAR_CONFIG_DIR / JOB_RADAR_PROFILE_DIR)
  */
 import fs from "node:fs";
@@ -39,6 +42,7 @@ import {
   type ConfigName,
   type ConfigValue,
 } from "../src/lib/config";
+import { shippedConfigId, shortShippedConfigId } from "../src/lib/config/shipped-id";
 import { dealBreakerLimitProblems, slowPatternProblems } from "../src/lib/filter/deal-breakers";
 import { vmTimeBox } from "../src/lib/filter/time-box";
 import { listPackIds, loadMarket, loadPipeline, packDirs, readPackDir } from "../src/lib/market";
@@ -67,7 +71,14 @@ function report(label: string, run: () => string | void): void {
 
 console.log(`defaults: ${rel(getDefaultsDir())}`);
 console.log(`user:     ${rel(getConfigDir())}${fs.existsSync(getConfigDir()) ? "" : "  (does not exist yet: run pnpm config:init)"}`);
-console.log(`profile:  ${rel(getProfileDir())}\n`);
+console.log(`profile:  ${rel(getProfileDir())}`);
+// The identity of the shipped defaults (what the running processes report; `pnpm run doctor` compares them).
+try {
+  console.log(`shipped:  ${rel(getDefaultsDir())}  ${shortShippedConfigId(await shippedConfigId(getDefaultsDir()))}\n`);
+} catch (err) {
+  failures += 1;
+  console.log(`✗ shipped:  ${rel(getDefaultsDir())}\n    ${err instanceof Error ? err.message : String(err)}\n`);
+}
 
 // What each config is read from.
 for (const name of CONFIG_NAMES) {

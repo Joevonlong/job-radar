@@ -3,6 +3,8 @@ import type { Locale } from "@/i18n/locale";
 import type { AiConfig, ChannelsConfig, ConfigLayersState, DoctorConfig, LanguageConfig, NotifyConfig, ScheduleConfig } from "@/lib/config";
 import type { translatorFor } from "@/lib/i18n/node";
 import type { AppliedMigrations } from "@/lib/db/migration-status";
+import type { ShippedConfigProcess } from "@/lib/config/shipped-id";
+import type { ShippedConfigReportRow } from "@/lib/db/repos/runtime-state";
 import type { MarketSummaryResult } from "@/lib/market/summary";
 import type { ProfileReadiness } from "@/lib/scoring/profile";
 import type { RegistryPageData } from "@/lib/sources/registry/load";
@@ -106,6 +108,8 @@ export interface DoctorProbes {
   market(): Promise<MarketSummaryResult>;
   /** The first-run setup state (setup.yaml). Never throws. */
   setup(): Promise<SetupStatus>;
+  /** Each process's shipped config report (null: none, or not readable). Throws when the database cannot be read. */
+  shippedConfigReports(): Promise<Record<ShippedConfigProcess, ShippedConfigReportRow | null>>;
   /**
    * Files and directories under `roots` (missing roots are skipped) not owned by `uid`: a sample of at most `sample`
    * paths and the total found within the first `maxEntries` entries walked. Never throws (unreadable entries count as

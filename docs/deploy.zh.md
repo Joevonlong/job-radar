@@ -145,6 +145,7 @@ pnpm run doctor --lang zh    # 用另一种语言输出报告（默认：languag
 | `ai.backlog` | AI 请求队列、等打分的岗位数、最近一次 `run_ai` 的结果（因画像不完整没有打分时写明原因，不算成功） | ⚠️ 积压：ai-worker 在不在 |
 | `ai.quota` | Job Radar 自己对订阅 CLI 的用量上限（`ai.yaml: quota_guard`）：每个 CLI 在滚动窗口内的调用数对比 `hard_requests`。只统计 Job Radar 自己的调用，看不到账户的真实用量 | ⚠️ 某个 CLI 的窗口满了，或它报告了限制正在冷却：到显示的时间会自动恢复；如果碍事，在设置 → AI → 限额里调高（`pnpm ai:usage-stats` 打印你自己的数据） |
 | `config.layers` | 用户配置目录 `data/config` 存在且可写；列出覆盖了的 `shipped` 文件、版本落后（要迁移）的文件、还在读默认配置的 `user` 文件 | ❌ 目录不存在或不可写（`pnpm config:init`；查挂载）；❌ 某个文件的 `config_version` 比代码新（代码回退了：升级代码或从 `data/config/.backup/` 恢复）；⚠️ 覆盖了 `models.yaml` / `pipeline.yaml`：产品更新这些文件的内容不会生效，想跟随就删掉 `data/config` 里那份；⚠️ 版本落后：`pnpm config:migrate` 看改动，`--write` 写回 |
+| `config.shipped` | 每个运行中的进程（web、runner，以及 `execution: host` 时的 ai-worker）报告的出厂配置标识，并核对每份报告是否来自现在运行的进程：运行中的容器（主机名和启动时间），或 ai-worker 服务的 PID。见 [configuration.zh.md](configuration.zh.md#出厂配置标识) | ⚠️ 没有报告、报告来自之前的容器或进程、或 launchd / systemd 给不出 PID 无法核对：部署或重启后等一分钟再运行；否则在该进程日志里找 "could not report the shipped config"。连不上数据库时跳过 |
 | `host.power` | `pmset` 里 autorestart 是 1、sleep 是 0 | ⚠️ 没设置：host-setup 第 3 节 |
 
 doctor 的阈值和名字都在 `schedule.yaml`（用户配置 `data/config/` 里那份；改完不用重启，下次运行就生效）：
@@ -164,6 +165,7 @@ doctor 的阈值和名字都在 `schedule.yaml`（用户配置 `data/config/` �
 | `doctor.ai_backlog_warn` / `ai_oldest_pending_warn_minutes` / `ai_unscored_warn` | 40 / 30 / 200 | AI 积压阈值 |
 | `doctor.cycle_grace_minutes` | 90 | 排定的轮次晚多久算错过 |
 | `doctor.ai_worker_launchd_label` | `io.jobradar.ai-worker` | launchd 名称 |
+| `doctor.shipped_report_skew_seconds` | 2 | `config.shipped`：报告（数据库时钟）最多可以比容器启动时间（Docker 时钟）早多少秒。出厂文件里没有这一项，要改就自己加上 |
 | `doctor.linkedin_auth_dir` | `.auth` | 登录态目录（相对项目目录） |
 
 数据库密码：用 `scripts/ops/deploy.sh`（或运行 `pnpm config:init`）做首次安装（`.env` 里没有 `POSTGRES_PASSWORD`，也还没有 `jobradar-pg` 卷）时，`pnpm config:init` 会在创建数据库之前往 `.env` 写一个随机密码（权限 0600，不打印），不再用众所周知的默认值。已有的数据库保留创建时的密码，所以那里什么都不会改；以后要改，先在数据库里用 `ALTER USER`，再更新 `.env`。`.env` 请自己备份：它不在任何备份里。

@@ -76,6 +76,11 @@ const doctor = z.strictObject({
   internal_warn_free_disk_gb: positiveInt.default(30),
   /** The guide (default: docs/host-setup.md) that `disk.docker_location` points at when Docker's data is not on the project volume. */
   storage_guide: nonEmptyString.default("docs/host-setup.md"),
+  /**
+   * `config.shipped`: a container's report of its shipped config counts when it was written at most this many seconds before
+   * Docker's start time of the container (the database and the Docker daemon may disagree a little on the time).
+   */
+  shipped_report_skew_seconds: nonNegativeInt.default(2),
 })
   .refine((d) => d.warn_free_disk_gb >= d.min_free_disk_gb, { message: "warn_free_disk_gb must be >= min_free_disk_gb", path: ["warn_free_disk_gb"] })
   .refine((d) => d.internal_warn_free_disk_gb >= d.internal_min_free_disk_gb, { message: "internal_warn_free_disk_gb must be >= internal_min_free_disk_gb", path: ["internal_warn_free_disk_gb"] });
@@ -99,6 +104,7 @@ const DOCTOR_DEFAULTS: DoctorConfig = {
   internal_min_free_disk_gb: 10,
   internal_warn_free_disk_gb: 30,
   storage_guide: "docs/host-setup.md",
+  shipped_report_skew_seconds: 2,
 };
 
 /** Docker housekeeping `scripts/ops/deploy.sh` does once the stack is up. Never touches volumes or images in use. */
