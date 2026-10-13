@@ -213,15 +213,19 @@ describe("the application_name of the instance lock (an interface: the evidence 
 
 describe("ai_worker_wait_ready (stub launchctl reports the holder's pid)", () => {
   const LABEL = "test.invalid.evidence";
-  function waitReady(url: string, oldPid: string, since: string, pid: number): { status: number | null; stdout: string; stderr: string } {
+  // the timeout bounds the evidence probes too (node and tsx start inside it): generous where success is expected
+  function waitReady(url: string, oldPid: string, since: string, pid: number, timeout = 20): { status: number | null; stdout: string; stderr: string } {
     const main = path.join(tmp, "main");
     const bin = path.join(tmp, "bin");
     fs.mkdirSync(path.join(main, "config"), { recursive: true });
     fs.writeFileSync(path.join(main, "config/schedule.yaml"), `doctor:\n  ai_worker_launchd_label: ${LABEL}\n`);
+    // the installed definition (only its existence is read): the label polled is the one in force
+    fs.mkdirSync(path.join(tmp, "Library/LaunchAgents"), { recursive: true });
+    fs.writeFileSync(path.join(tmp, `Library/LaunchAgents/${LABEL}.plist`), "<plist/>\n");
     fs.mkdirSync(bin, { recursive: true });
     // only the made-up label is answered; any other call fails
     fs.writeFileSync(path.join(bin, "launchctl"), `#!/bin/bash\n[[ "$1" == print && "$2" == */${LABEL} ]] && { echo "pid = ${pid}"; exit 0; }\nexit 113\n`, { mode: 0o755 });
-    const r = spawnSync("/bin/bash", ["-c", `source "${aiWorkerLib}"; ai_worker_wait_ready "$1" "$2" "$3" 3`, "_", main, oldPid, since], {
+    const r = spawnSync("/bin/bash", ["-c", `source "${aiWorkerLib}"; ai_worker_wait_ready "$1" "$2" "$3" "$4"`, "_", main, oldPid, since, String(timeout)], {
       env: {
         ...process.env,
         PATH: [bin, path.dirname(process.execPath), "/usr/bin", "/bin"].join(path.delimiter),
@@ -248,7 +252,7 @@ describe("ai_worker_wait_ready (stub launchctl reports the holder's pid)", () =>
     const since = now();
     const holder = await startHolder(otherRoleUrl);
     await heartbeat();
-    const r = waitReady(iso.url, "1", since, holder.pid);
+    const r = waitReady(iso.url, "1", since, holder.pid, 3);
     expect(r.status).toBe(1);
     expect(r.stdout).toBe("");
   }, 60_000);
