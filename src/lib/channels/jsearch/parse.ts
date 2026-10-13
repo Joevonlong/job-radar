@@ -1,7 +1,7 @@
 import { ChannelError } from "../errors";
 import type { NormalizedPostingDraft } from "../types";
 import { cleanUrl, rankApplyLinks } from "./apply";
-import { payloadSchema, type JsearchJob } from "./schema";
+import { lacksDescription, payloadSchema, type JsearchJob } from "./schema";
 
 /** `job_salary_period` as the API spells it → period. Other values keep the text only (C3: no guessing). */
 const SALARY_PERIODS: Readonly<Record<string, "year" | "month" | "week" | "day" | "hour">> = {
@@ -57,6 +57,16 @@ function merge(search: JsearchJob, detail: JsearchJob | null | undefined): Jsear
   return { ...search, ...Object.fromEntries(Object.entries(detail).filter(([, value]) => value !== null && value !== undefined)) } as JsearchJob;
 }
 
+/**
+ * The search record with the description of a detail kept from an earlier cycle, when the search has none. Nothing else of that
+ * detail is used: it may be weeks old, and mixing its location, salary or apply links into this week's search would put old and
+ * new facts into one record.
+ */
+function withStoredDescription(search: JsearchJob, detail: JsearchJob | null | undefined): JsearchJob {
+  if (!detail || !lacksDescription(search) || lacksDescription(detail)) return search;
+  return { ...search, job_description: detail.job_description };
+}
+
 function workplace(job: JsearchJob): NormalizedPostingDraft["workplace"] {
   const stated = job.work_arrangement ? WORK_ARRANGEMENTS[job.work_arrangement.toLowerCase()] : undefined;
   if (stated) return stated;
@@ -108,7 +118,7 @@ export function parseJsearchPayload(payload: unknown, applyPublisherPreference: 
     const paths = parsed.error.issues.slice(0, 5).map((i) => i.path.join(".") || "(root)");
     throw new ChannelError("parse", `jsearch payload does not match the expected shape (${paths.join(", ")})`);
   }
-  const job = merge(parsed.data.search, parsed.data.detail);
+  const job = parsed.data.detail_source === "stored" ? withStoredDescription(parsed.data.search, parsed.data.detail) : merge(parsed.data.search, parsed.data.detail);
 
   const title = clean(job.job_title);
   if (!title) throw new ChannelError("parse", "jsearch posting has no title");

@@ -104,7 +104,7 @@ describe("the AI part of a cycle (getOpenAiRun, control status)", () => {
 });
 
 describe("what a channel did this month (getMonthRunTotals)", () => {
-  it("sums the runs of the month per channel, in the time zone of the schedule, without skipped ones", async () => {
+  it("sums the runs of the month per channel, in the time zone of the schedule; a skipped run counts only when it stored postings", async () => {
     const db = getDb();
     await upsertChannelRows(db, [
       { id: "greenhouse", family: "ats", kind: "ats", enabled: true },
@@ -119,11 +119,13 @@ describe("what a channel did this month (getMonthRunTotals)", () => {
     await make("greenhouse", new Date("2026-10-02T08:00:00Z"), { status: "succeeded", fetched: 300, newCount: 40 });
     await make("greenhouse", new Date("2026-10-06T08:00:00Z"), { status: "succeeded", fetched: 91, newCount: 2 });
     await make("greenhouse", new Date("2026-10-06T09:00:00Z"), { status: "skipped", fetched: 0, newCount: 0 });
+    // a query that stopped as planned after some of its requests: skipped, but its postings are stored
+    await make("greenhouse", new Date("2026-10-06T10:00:00Z"), { status: "skipped", fetched: 4, newCount: 3 });
     await make("greenhouse", new Date("2026-09-30T21:59:00Z"), { status: "succeeded", fetched: 999, newCount: 99 }); // 23:59 on 30 Sep in Berlin: last month
     await make("indeed", new Date("2026-09-30T22:30:00Z"), { status: "succeeded", fetched: 5, newCount: 5 }); // 00:30 on 1 Oct in Berlin: this month
 
     const totals = await getMonthRunTotals(db, { month: "2026-10", timeZone: TZ });
-    expect(totals.get("greenhouse")).toEqual({ runs: 2, fetched: 391, newCount: 42 });
+    expect(totals.get("greenhouse")).toEqual({ runs: 3, fetched: 395, newCount: 45 });
     expect(totals.get("indeed")).toEqual({ runs: 1, fetched: 5, newCount: 5 });
     expect(totals.has("lever")).toBe(false);
   });

@@ -1,15 +1,16 @@
 import { jsearchSettingsSchema, loadConfig, type JsearchSettings } from "@/lib/config";
 
-import { BudgetExceededError, ChannelError, isAbortError } from "../errors";
+import { BudgetExceededError, ChannelError, isAbortError, PartialCollectError } from "../errors";
 import { marketForChannel } from "@/lib/channels/market";
 import type { Channel, ChannelContext, NormalizedPostingDraft, RawPostingInput, SearchQuery } from "../types";
 import { assertCredentialEndpoint } from "../credential-endpoint";
+import { loadKnownDetails, storedDetailOf } from "../known";
 import { cleanUrl } from "./apply";
 import { getRecords, detailsUrl, JSEARCH_API_KEY_ENV, MAX_DETAIL_IDS, searchUrl } from "./client";
 import { assertRequestsAllowed } from "./pace";
 import { parseJsearchPayload, postedAt } from "./parse";
 import { buildRequests } from "./query";
-import { jobSchema } from "./schema";
+import { jobSchema, lacksDescription, payloadSchema } from "./schema";
 
 export { JSEARCH_API_KEY_ENV } from "./client";
 export { rankApplyLinks, cleanUrl, type ApplyLink } from "./apply";
@@ -101,24 +102,46 @@ export function createJsearchChannel(deps: JsearchDeps = {}): Channel {
       // ---- search: one request series per keyword
       const lists: unknown[][] = [];
       let requestsMade = 0;
+      /** The request of a later keyword failed: what the earlier keywords read is kept, the failure is reported with it. */
+      let interrupted: ChannelError | null = null;
+      /** A later keyword was refused by the plan's own limits before its request: a planned stop, not a failure. */
+      let stoppedBy: BudgetExceededError | null = null;
       for (const [index, request] of buildRequests(query, settings).entries()) {
         ctx.signal.throwIfAborted();
         if (index > 0) await ctx.throttle();
-        assertRequestsAllowed(ctx.budget, settings, settings.pages_per_query, now());
-        const answer = await getRecords(ctx, settings, apiKey, searchUrl(settings, request));
-        await ctx.budget.consume(settings.pages_per_query);
+        try {
+          assertRequestsAllowed(ctx.budget, settings, settings.pages_per_query, now());
+        } catch (error) {
+          // the first keyword refused: the whole query is skipped, as before
+          if (!(error instanceof BudgetExceededError) || index === 0) throw error;
+          ctx.logger.info("jsearch budget reached mid-query", { query: query.id, keywordsDone: index });
+          stoppedBy = error;
+          break;
+        }
+        let answer: Awaited<ReturnType<typeof getRecords>>;
+        try {
+          answer = await getRecords(ctx, settings, apiKey, searchUrl(settings, request));
+        } catch (error) {
+          if (isAbortError(error) || ctx.signal.aborted || !(error instanceof ChannelError)) throw error;
+          interrupted = error;
+          break;
+        }
+        // the request is answered, so it is used: booked in full even when another unit just took the last of the global allowance
+        await ctx.budget.consume(settings.pages_per_query, { allowOverspend: true });
         requestsMade += settings.pages_per_query;
         if (answer.remaining !== null) ctx.logger.debug("jsearch plan requests left", { remaining: answer.remaining });
         lists.push(answer.records);
       }
       const selected = interleaveRecords(lists, query.maxResults);
       const dropped = lists.reduce((sum, list) => sum + list.length, 0) - selected.length;
+      // nothing to hand over: the failure or the refusal is the result
+      if (selected.length === 0 && (interrupted ?? stoppedBy)) throw interrupted ?? stoppedBy;
 
-      // ---- details: only for postings the search left without a description
+      // ---- details: only for postings the search left without a description (none after a failed request: it would fail too)
       const details = new Map<string, unknown>();
-      if (settings.fetch_details) {
+      if (settings.fetch_details && interrupted === null) {
         const wanted = selected
-          .filter(({ record }) => (stringField(record, "job_description") ?? "").trim() === "")
+          .filter(({ record }) => lacksDescription(record))
           .slice(0, settings.max_details_per_query)
           .map(({ id }) => id);
         try {
@@ -127,7 +150,7 @@ export function createJsearchChannel(deps: JsearchDeps = {}): Channel {
             await ctx.throttle();
             assertRequestsAllowed(ctx.budget, settings, batch.length, now());
             const answer = await getRecords(ctx, settings, apiKey, detailsUrl(settings, batch));
-            await ctx.budget.consume(batch.length);
+            await ctx.budget.consume(batch.length, { allowOverspend: true });
             requestsMade += batch.length;
             for (const record of answer.records) {
               const id = idOf(record);
@@ -135,30 +158,56 @@ export function createJsearchChannel(deps: JsearchDeps = {}): Channel {
             }
           }
         } catch (error) {
-          if (isAbortError(error) || ctx.signal.aborted) throw error;
+          // a failure of ours (the usage store) is not "details unavailable"
+          if (isAbortError(error) || ctx.signal.aborted || !(error instanceof ChannelError)) throw error;
           // the search already cost requests: keep its postings, only the descriptions are missing
           // (a quota / auth problem shows again on the next query)
-          const failure = error instanceof ChannelError ? error : null;
           ctx.logger.warn("jsearch details unavailable, continuing with search data", {
             query: query.id,
-            code: failure?.code ?? "unknown",
+            code: error.code,
             budget: error instanceof BudgetExceededError,
           });
         }
       }
 
+      // ---- stored details: a posting with no description from this search and none from a new detail keeps the description of
+      // one stored earlier, whatever stopped the details from being fetched (the stored payload would otherwise be replaced by none)
+      const missing = selected.filter(({ id, record }) => lacksDescription(record) && lacksDescription(details.get(id))).map(({ id }) => id);
+      const storedDetail = storedDetailOf<unknown>(payloadSchema);
+      const stored = await loadKnownDetails(ctx, {
+        enabled: true,
+        externalIds: missing,
+        // a stored detail without a usable description gives nothing to keep
+        detailOf: (payload) => {
+          const detail = storedDetail(payload);
+          return detail !== null && !lacksDescription(detail) ? detail : null;
+        },
+      });
+
       const postings = selected.map(({ id, record }): RawPostingInput => {
-        const detail = details.get(id) ?? null;
         const typed = jobSchema.safeParse(record);
+        const keptDetail = stored.get(id);
         return {
           externalId: id,
           url: cleanUrl(stringField(record, "job_apply_link")),
-          // the whole record as the API sent it (C1), plus the details record when one was fetched
-          payload: { search: record, detail },
+          // the whole record as the API sent it (C1), plus the details record when one was fetched; a detail kept from an earlier
+          // cycle is marked, and the parser takes only its description
+          payload: keptDetail === undefined ? { search: record, detail: details.get(id) ?? null } : { search: record, detail: keptDetail, detail_source: "stored" },
           postedAt: typed.success ? postedAt(typed.data) : null,
         };
       });
-      ctx.logger.info("jsearch query done", { query: query.id, requests: requestsMade, postings: postings.length, details: details.size, dropped: dropped });
+      ctx.logger.info("jsearch query done", {
+        query: query.id,
+        requests: requestsMade,
+        postings: postings.length,
+        details: details.size,
+        storedDetails: stored.size,
+        dropped: dropped,
+        ...(interrupted ? { interrupted: interrupted.code } : {}),
+        ...(stoppedBy ? { stopped: "budget" } : {}),
+      });
+      if (interrupted) throw new PartialCollectError(postings, interrupted);
+      if (stoppedBy) throw new PartialCollectError(postings, stoppedBy, { planned: true });
       return postings;
     },
 

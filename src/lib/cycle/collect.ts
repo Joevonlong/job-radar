@@ -259,6 +259,8 @@ export async function collectStep(ctx: CycleStepContext): Promise<StepResult> {
     let collected: RawPostingInput[];
     /** Set when the query failed after some pages (`PartialCollectError`): their postings are stored first, then this is the failure. */
     let interrupted: ChannelError | null = null;
+    /** The stop was the channel's own plan (its next request was refused by the channel's budget before it was sent), not a failure. */
+    let plannedStop = false;
     try {
       const output: unknown = await channel.collect(effective, channelContext);
       if (!Array.isArray(output)) throw new ChannelError("parse", `${channelId}.collect did not return an array`);
@@ -271,6 +273,7 @@ export async function collectStep(ctx: CycleStepContext): Promise<StepResult> {
       if (error instanceof PartialCollectError && error.postings.length > 0) {
         collected = [...error.postings];
         interrupted = error.cause;
+        plannedStop = error.planned && error.cause.code === "budget_exceeded";
       } else {
         const failure = toChannelError(error);
         const skipped = failure.code === "budget_exceeded";
@@ -327,6 +330,17 @@ export async function collectStep(ctx: CycleStepContext): Promise<StepResult> {
     summary.costUsd += budget.attempt.usd;
     if (invalid > 0) summary.errorCodes.parse = (summary.errorCodes.parse ?? 0) + invalid;
     const rejected = invalid > 0 ? `${invalid} of ${collected.length} records rejected (invalid shape)` : null;
+
+    if (interrupted && plannedStop) {
+      // the postings are kept and the query is recorded like any other budget skip: no failure or interruption is counted, the circuit
+      // is left alone, and the run is not a success either, so an incomplete set of keywords never counts as a complete visit of the channel
+      summary.skipped += 1;
+      summary.errorCodes.budget_exceeded = (summary.errorCodes.budget_exceeded ?? 0) + 1;
+      const message = `budget reached after ${collected.length} postings: ${interrupted.message}${rejected ? `; ${rejected}` : ""}`;
+      await finish("skipped", { fetched: collected.length, newCount: counts.inserted, error: truncate(message), errorCode: "budget_exceeded" });
+      ctx.logger.info("channel attempt stopped by its budget", { channel: channelId, query: query.id, kept: collected.length });
+      throw interrupted;
+    }
 
     if (interrupted) {
       // the postings are kept; the failure itself is handled exactly as for a failed attempt (circuit, cascade, retry),

@@ -70,34 +70,41 @@ export interface Harness {
   logs: LogRecord[];
   usage: ReturnType<typeof memoryUsage>;
   budget: AttemptBudget;
+  /** Books `usd` for another channel, as a concurrent unit of the cycle would (the global cap shrinks under this channel's feet). */
+  spendElsewhere(usd: number): Promise<void>;
+  /** Cancels the cycle's signal. */
+  abort(): void;
 }
 
 /** A jsearch channel and a context wired to a real budget tracker and a fake network. */
 export async function harness(
   handler: Handler,
-  options: { settings?: Partial<JsearchSettings>; usage?: Record<string, MonthUsage>; deps?: JsearchDeps; paidCapUsd?: number } = {},
+  options: { settings?: Partial<JsearchSettings>; usage?: Record<string, MonthUsage>; deps?: JsearchDeps; paidCapUsd?: number; known?: ReadonlyMap<string, unknown>; usageStore?: UsageStore } = {},
 ): Promise<Harness> {
   const channels = options.settings ? jsearchWith({ enabled: true, ...options.settings }) : jsearchWith({ enabled: true });
   const calls: Call[] = [];
   const sleeps: number[] = [];
   const logs: LogRecord[] = [];
   const usage = memoryUsage(options.usage);
+  const store = options.usageStore ?? usage;
   const channel = createJsearchChannel({ settings: () => channels.sources.jsearch, environment: KEY_ENV, now: () => NOW, ...options.deps });
   const settings = settingsFromConfig("jsearch", channels);
   const tracker = await BudgetTracker.create({
-    store: usage,
+    store,
     month: MONTH,
     globalCapUsd: options.paidCapUsd ?? channels.paid_total_monthly_budget_usd,
-    settingsFor: (id) => (id === "jsearch" ? settings : undefined),
+    settingsFor: (id) => (id === "jsearch" ? settings : id === "elsewhere" ? { ...settings, monthlyBudgetUsd: 1000 } : undefined),
   });
   const budget = tracker.forChannel(channel);
+  const controller = new AbortController();
   const ctx = createChannelContext({
     channelId: "jsearch",
     settings,
     http: { timeoutMs: 1000, maxRetries: 0, backoffBaseMs: 10, backoffMaxMs: 5000 },
     budget,
-    signal: new AbortController().signal,
+    signal: controller.signal,
     cycle: { id: null, kind: "manual" },
+    known: { payloads: async (ids) => new Map([...(options.known ?? new Map<string, unknown>())].filter(([id]) => ids.includes(id))) },
     logger: createLogger({ sink: (r) => logs.push(r), minLevel: "debug" }),
     sleep: async (ms) => {
       sleeps.push(ms);
@@ -111,7 +118,10 @@ export async function harness(
       return result;
     },
   });
-  return { channel, ctx, calls, sleeps, logs, usage, budget };
+  const spendElsewhere = async (usd: number): Promise<void> => {
+    await tracker.forChannel({ ...channel, id: "elsewhere" }).consume(1, { costUsd: usd, allowOverspend: true });
+  };
+  return { channel, ctx, calls, sleeps, logs, usage, budget, spendElsewhere, abort: () => controller.abort() };
 }
 
 export function query(overrides: Partial<SearchQuery> = {}): SearchQuery {
