@@ -388,18 +388,51 @@ function isQuestion(text: string, lead: CompiledGhostRules["leadInQuestion"]): b
 const CLAUSE_PUNCTUATION = /[,:，：]/gu;
 const LEADING_NON_WORD = /^[^\p{L}\p{N}]*/u;
 
-/** What a piece's tagged clauses are read with: its clause starts and the starts of its `question_tag.subjects`, read once. */
+/**
+ * What a piece's tagged clauses are read with: its clause starts and the starts of its `question_tag.subjects`, read once, and per
+ * clause start where its first word after any `question_tag.markers` starts (read on the first hit in the clause).
+ */
 interface TaggedPiece {
   text: string;
   clauses: ClauseMarks;
   subjects: number[];
+  afterMarkers: Map<number, number>;
 }
 
 function taggedPiece(text: string, rules: CompiledGhostRules): TaggedPiece {
   const subjects: number[] = [];
   for (const re of rules.questionTag.subjects) for (const match of text.matchAll(re)) if (match[0].length > 0) subjects.push(match.index);
   subjects.sort((a, b) => a - b);
-  return { text, clauses: clauseMarks(text, [...rules.clauseBreaks, CLAUSE_PUNCTUATION]), subjects };
+  return { text, clauses: clauseMarks(text, [...rules.clauseBreaks, CLAUSE_PUNCTUATION]), subjects, afterMarkers: new Map() };
+}
+
+/**
+ * Where the clause that starts at `clauseStart` goes on after the signs and `question_tag.markers` it opens with. Read to the end
+ * of the piece rather than to a hit, so that it is the same for every hit in the clause: a hit at or before it opens its clause.
+ */
+function afterMarkers(piece: TaggedPiece, clauseStart: number, rules: CompiledGhostRules): number {
+  const cached = piece.afterMarkers.get(clauseStart);
+  if (cached !== undefined) return cached;
+  const text = piece.text;
+  let at = clauseStart;
+  const skip = (): void => {
+    at += LEADING_NON_WORD.exec(text.slice(at))?.[0].length ?? 0;
+  };
+  skip();
+  for (let marked = true; marked && at < text.length; ) {
+    marked = false;
+    const rest = text.slice(at);
+    for (const marker of rules.questionTag.markers) {
+      const length = marker.exec(rest)?.[0].length ?? 0;
+      if (length === 0) continue;
+      at += length;
+      skip();
+      marked = true;
+      break;
+    }
+  }
+  piece.afterMarkers.set(clauseStart, at);
+  return at;
 }
 
 /**
@@ -415,29 +448,15 @@ function questionClause(piece: TaggedPiece, from: number, to: number, rules: Com
   const tag = rules.questionTag;
   const text = piece.text;
   const clauseStart = lastMarkStart(piece.clauses, from);
-  let at = clauseStart;
-  const skip = (): void => {
-    at += LEADING_NON_WORD.exec(text.slice(at, from))?.[0].length ?? 0;
-  };
-  skip();
-  for (let marked = true; marked && at < from; ) {
-    marked = false;
-    const rest = text.slice(at);
-    for (const marker of tag.markers) {
-      const length = marker.exec(rest)?.[0].length ?? 0;
-      if (length === 0) continue;
-      at += length;
-      skip();
-      marked = true;
-      break;
-    }
-  }
+  const at = afterMarkers(piece, clauseStart, rules);
   if (at >= from) return true;
+  // the subject first: one look-up per hit, where the openers are many expressions
+  if (tag.subjects.length > 0) {
+    const subject = piece.subjects[lowerBound(piece.subjects, clauseStart)];
+    if (subject === undefined || subject >= to) return true;
+  }
   const rest = text.slice(at, from);
-  if (tag.openers.some((opener) => opener.test(rest))) return true;
-  if (tag.subjects.length === 0) return false;
-  const subject = piece.subjects[lowerBound(piece.subjects, clauseStart)];
-  return subject === undefined || subject >= to;
+  return tag.openers.some((opener) => opener.test(rest));
 }
 
 /**

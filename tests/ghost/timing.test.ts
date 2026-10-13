@@ -50,6 +50,9 @@ describe("ghost check timing", () => {
   it.each([
     ["4000 hits in comma clauses before a tagged invitation", `${"always hiring, ".repeat(4000)}always hiring – interested?`],
     ["4000 qualifications before a hit", `${"Experience building teams ".repeat(4000)}for future roles.`],
+    // the clause of every hit opens with the same long run of markers, or of signs, before a tagged invitation
+    ["1785 hits after 6250 markers before a tagged invitation", `${"and ".repeat(6250)}${"always hiring ".repeat(1785)}– interested?`],
+    ["1785 hits after 25000 signs before a tagged invitation", `${"~".repeat(25000)}${" always hiring".repeat(1785)} – interested?`],
   ])("a piece with %s (every hit left out)", (_name, description) => {
     // the expressions' first runs (compiling) are not what is measured: the time must not grow with the square of the hits
     evergreenWording(description.slice(-2000), rules);
