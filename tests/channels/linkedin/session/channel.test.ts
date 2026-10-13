@@ -249,6 +249,55 @@ describe("linkedin-session: the daily page limit part way through a query", () =
     expect(capWarning(h, "listing")?.fields).toEqual({ limit: 1, kept: 3, skippedCards: 2 });
   });
 
+  it("while listing, with every selected card stored: all of them are kept with the budget stop, none is skipped, and no posting page is opened", async () => {
+    const before = await deliveredBefore();
+    // 103 and 106 are closed or gone today; an earlier run held them while they were still open
+    const heldEarlier = (id: string) => ({ ...(before.get("4385000101") as Record<string, unknown>), jobId: id, url: `https://www.linkedin.com/jobs/view/${id}/` });
+    const store = createMemorySessionStore({ payloads: { ...Object.fromEntries(before), "4385000103": heldEarlier("4385000103"), "4385000106": heldEarlier("4385000106") } });
+    const s = setup({ config: limited(1), store });
+    const h = await harness(s.session, s.config);
+    const error = await partial(s.session.collect(berlinQuery(), h.ctx));
+    expect(error.planned).toBe(true);
+    expect(error.cause).toBeInstanceOf(BudgetExceededError);
+    expect(error.postings.map((p) => p.externalId)).toEqual(["4385000101", "4385000102", "4385000103", "4385000104", "4385000106"]);
+    expect(viewedJobs(s)).toEqual([]);
+    expect(listPages(s)).toBe(1);
+    expect(capWarning(h, "listing")?.fields).toEqual({ limit: 1, kept: 5, skippedCards: 0 });
+  });
+
+  describe("while listing a query of two keyword pieces", () => {
+    // two keywords that do not fit into one search string: two pieces, searched one after another
+    const twoPieces = () => berlinQuery({ keywords: ["A".repeat(150), "B".repeat(150)] });
+    const piecesRequested = (s: ReturnType<typeof setup>) =>
+      s.browser.log.loads.filter((l) => new URL(l.url).pathname === "/jobs/search/").map((l) => (new URL(l.url).searchParams.get("keywords")?.includes("BBBB") ? "B" : "A"));
+
+    it("the limit in the first piece: the later piece's list pages are never requested, and the held cards read so far are delivered with the budget stop", async () => {
+      const before = await deliveredBefore();
+      // 2 pages: both list pages of the first piece; the limit refuses the first list page of the second piece
+      const s = setup({ config: limited(2), store: createMemorySessionStore({ payloads: Object.fromEntries(before) }) });
+      const h = await harness(s.session, s.config);
+      const error = await partial(s.session.collect(twoPieces(), h.ctx));
+      expect(piecesRequested(s)).toEqual(["A", "A"]);
+      expect(error.planned).toBe(true);
+      expect(error.cause).toBeInstanceOf(BudgetExceededError);
+      expect(error.postings.map((p) => p.externalId)).toEqual(["4385000101", "4385000102", "4385000104"]);
+      expect(viewedJobs(s)).toEqual([]);
+      expect(capWarning(h, "listing")?.fields).toEqual({ limit: 2, kept: 3, skippedCards: 2 });
+    });
+
+    it("the limit in the first piece with nothing held: the plain budget error, and neither the later piece nor a posting page is requested", async () => {
+      const s = setup({ config: limited(1) });
+      const h = await harness(s.session, s.config);
+      const error = await failure(s.session.collect(twoPieces(), h.ctx));
+      expect(error).not.toBeInstanceOf(PartialCollectError);
+      expect(error).toBeInstanceOf(BudgetExceededError);
+      expect(piecesRequested(s)).toEqual(["A"]);
+      expect(viewedJobs(s)).toEqual([]);
+      // the cards read went through the postings phase: all five needed a page and were left for the next run
+      expect(capWarning(h, "listing")?.fields).toEqual({ limit: 1, kept: 0, skippedCards: 5 });
+    });
+  });
+
   it("while listing, without detail fetching: the cards read so far are delivered with the budget stop", async () => {
     const s = setup({ config: limited(1, (session) => (session.fetch_details = false)) });
     const h = await harness(s.session, s.config);
