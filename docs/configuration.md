@@ -8,7 +8,7 @@ All Job Radar settings are YAML, in two layers:
 | User config | `JOB_RADAR_CONFIG_DIR`, default `data/config/` | You, the web app (/settings, /interests, /sources/registry), `pnpm config:*` | No (`data/` is ignored) |
 | Profile | `JOB_RADAR_PROFILE_DIR`, default `data/profile/` | You, the web app /me | No |
 
-Relative paths are resolved against the project directory (not the current directory). In Docker, the mounts and variables of web and runner are in `compose.yaml` (web: `./config:/app/config:ro`, `./data/config:/app/data/config`; runner mounts both read-only); the host ai-worker gets all three directories written explicitly into its launchd plist by `scripts/ops/install-ai-worker.sh`.
+Relative paths are resolved against the project directory (not the current directory). In Docker, the shipped defaults are part of the web and runner images: the Dockerfile copies `config/` to `/app/config` (owned by root, readable by everyone, writable by no one) and sets `JOB_RADAR_DEFAULTS_DIR=/app/config`; nothing is mounted there. `scripts/ops/deploy.sh` builds the images from a `git archive` of the commit it deploys, so the defaults in the containers are exactly the committed `config/`, and a change to `config/` reaches them only with a deploy (a plain `git pull` changes nothing in the running containers). The user config and the profile are bind mounts (`compose.yaml`: web `./data/config:/app/data/config`, runner the same read-only). The host ai-worker reads `config/` from the checkout; `scripts/ops/install-ai-worker.sh` writes all three directories explicitly into its launchd plist or systemd unit.
 
 A file in `data/config/` wins over the default with the same name, so `git pull` never touches your settings, and almost
 everything can also be changed on the Settings page. `pnpm config:example` applies a ready-made setup as a head start.
@@ -22,7 +22,7 @@ source needs which key: [installation.md](installation.md#2-optional-create-env)
 
 - If the user directory **has** the file, it is read; if not, the one in the defaults directory is read. The layers are not merged: a file in the user directory takes effect as a whole.
 - Saving in the web app always writes to the user directory; the first time a file that only exists in the defaults directory is saved, it is generated from the default file as a base (the default file's comments are carried over). The defaults directory is never written. A save also leaves out keys the file does not have yet when the value is just what the schema defaults to (it would pin a default that a later product update may change); keys the file already has are kept, and a value that differs from the default is written.
-- Hot reload watches both layers: a user file appearing, being deleted (falling back to the default), or a default file changing (when you have no copy of your own) all take effect within about 5 seconds. The runner and the ai-worker watch every config file, `me.yaml` and `preferences.yaml` included, and also re-read them at the start of each cycle and each request, so a change (for example the market saved in the setup wizard or on `/me`) applies to the next cycle even when it starts right away, without a restart.
+- Hot reload watches both layers: a user file appearing, being deleted (falling back to the default), or a default file changing (when you have no copy of your own) all take effect within about 5 seconds. In the containers the defaults are in the image and only change with a new image (a deploy); outside Docker (`pnpm dev`, the host ai-worker) a changed file in `config/` is picked up like this. The runner and the ai-worker watch every config file, `me.yaml` and `preferences.yaml` included, and also re-read them at the start of each cycle and each request, so a change (for example the market saved in the setup wizard or on `/me`) applies to the next cycle even when it starts right away, without a restart.
 - The web app and the MCP server have no watcher, so they check the files themselves: a read of a config more than 5 seconds after the last check first re-reads every config it has loaded, so a file you edit by hand (or that another process changed) shows up on the next page load without a restart. An invalid file is ignored (the last valid values stay) and reported once in the log. `JOB_RADAR_CONFIG_POLL_MS` (default `5000`, in milliseconds; set it in the environment of the process) is this interval and also the watchers' polling interval; `0` turns off this check and the watchers' polling (a watcher still reacts to file events).
 - `pnpm config:check` prints which layer each file is read from: `(user)`, `(default)`, `(user override of a shipped file)`.
 
@@ -303,7 +303,9 @@ gives a new identity.
   database); for the ai-worker (with `ai.yaml execution: host`), the report is newer than `host_worker.offline_after_seconds`
   and its PID is the one launchd (`launchctl print`) or systemd (`systemctl --user show -p MainPID`) gives for the service.
   When the service manager gives no PID, the report cannot be matched. Everything that cannot be confirmed is a warning
-  that names each process; there is no failure. Without the database the check is skipped.
+  that names each process; there is no failure. Without the database the check is skipped. The check also warns when a
+  running container of the project has something mounted on `/app/config` (or below it): that would hide the defaults in
+  the image, typically a `compose.override.yaml` from before they moved into the image; remove the mount and deploy.
 
 Right after a deploy or a restart a report can be missing for a moment; run the doctor again after a minute.
 

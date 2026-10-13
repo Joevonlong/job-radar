@@ -1,0 +1,4 @@
+token=0123456789abcdef0123456789abcdef
+pid=999999
+host=wrapper-host
+started=1760000000

@@ -31,20 +31,25 @@ its fingerprint is `SHA256:HHRRfExpbUjcK0/pdc5E1qf94ogkREVkt9+1VP58JQc`, also gi
 
 In order, and it stops at the first failing step:
 
-1. **Preflight**: git, docker, node and pnpm are installed and Docker is running.
-2. **Checkout**: fetches tags and branches and switches to `--ref` (it refuses to run on a dirty checkout).
+1. **Preflight**: takes the deploy lock (one deploy at a time), checks that git, docker, node and pnpm are installed and
+   Docker is running, and refuses a checkout with uncommitted changes to tracked files (with `--skip-pull` too).
+2. **Checkout**: fetches tags and branches and switches to `--ref`. From here on the deploy uses exactly that commit.
 3. **Install** the dependencies from the lockfile.
 4. **Config**: creates `data/` folders, copies config files you do not have yet, and migrates config files whose format
    changed (originals are kept in `data/config/.backup/`).
 5. **Backup**: if the database is running, takes a `pre-deploy` dump into `data/backups/` first. A failing backup stops the
    upgrade.
-6. **Build** the images.
+6. **Build** the images from a `git archive` of that commit: they contain exactly the committed files, the shipped
+   defaults of `config/` included, and nothing else from your checkout.
 7. **Drain and restart**: waits (bounded) for a running cycle to finish, then recreates the containers and waits until they
    are healthy.
-8. **Prune** the Docker build cache and dangling images (never volumes).
-9. **Migrate** the database (also done by the runner at start-up). A pending migration is preceded by its own `premigrate` backup; if that fails, nothing is migrated.
-10. **ai-worker**: reinstalls or restarts the host AI worker service: the launchd agent on macOS, the systemd user unit `job-radar-ai-worker.service` on Linux (without a systemd user manager nothing is installed and the script says so).
+8. **Migrate** the database (also done by the runner at start-up). A pending migration is preceded by its own `premigrate` backup; if that fails, nothing is migrated.
+9. **ai-worker**: reinstalls or restarts the host AI worker service: the launchd agent on macOS, the systemd user unit `job-radar-ai-worker.service` on Linux (without a systemd user manager nothing is installed and the script says so).
+10. **Prune**: releases the deploy lock, then cleans the Docker build cache and dangling images (never volumes).
 11. **Doctor**: `pnpm run doctor` reports what needs attention.
+
+Ctrl-C or a closed terminal lets the running step finish and then stops (exit code 130, 143 or 129); run the script
+again to complete the upgrade. Details: [deploy.md](deploy.md), "Interrupting a deploy".
 
 Details and options: [deploy.md](deploy.md).
 
@@ -62,6 +67,35 @@ sudo chown -R "$(id -u):$(id -g)" data .auth  # .auth only exists after a Linked
 
 Then upgrade as above. `pnpm run doctor` checks this afterwards (`data.ownership`: it warns about anything under `data/`
 or `.auth/` that does not belong to `PUID`). macOS is not affected (Docker Desktop maps the ownership).
+
+### Upgrading across the shipped config in the images
+
+From the first release after 2.0.1 on (its changelog section has an upgrade note about this), the shipped defaults
+(`config/`) are built into the web and runner images instead of being mounted from the checkout, and
+`scripts/ops/deploy.sh` builds the images from a `git archive` of the commit it deploys. The first upgrade from 2.0.1 or
+older takes three commands, in the project directory:
+
+```bash
+docker compose -p job-radar stop web runner
+git pull                                # or, for a release: git fetch --tags && git checkout --detach <tag>
+scripts/ops/deploy.sh --skip-pull
+```
+
+`job-radar` is the default compose project; if your `.env` sets `COMPOSE_PROJECT_NAME`, use that name.
+
+Why the extra steps: the old containers read `config/` straight from the checkout through a mount. Updating the checkout
+while they run would hand them the new defaults while they still run the old code (the same window every upgrade had
+until now); stopping web and runner first closes it. The new `deploy.sh` then builds images with the config inside and
+recreates the containers without the mount. Running only `docker compose up -d` is not enough: it does not rebuild
+existing images, and the old images do not carry the shipped config (the old runner image has none; the old web image
+has only an incomplete copy, a side effect of how the web app is bundled), so the new compose file (without the mount)
+would start them without complete shipped defaults; it would also skip the config steps and the migration. Web and runner stay stopped from
+the first command until step 7 of the deploy (a few minutes, mostly the build); a collection cycle due in that time is
+caught up when the runner starts.
+
+Later upgrades need nothing extra. If `pnpm run doctor` warns (`config.shipped`) that something is mounted over
+`/app/config`, a compose file of your own (for example `compose.override.yaml`) still mounts `./config`: remove that
+mount and deploy again.
 
 ## Roll back
 

@@ -36,6 +36,37 @@ describe("Dockerfile", () => {
     expect(runner.indexOf("postgresql-client-")).toBeLessThan(runner.indexOf("USER pwuser"));
   });
 
+  describe.each(["web", "runner"])("the %s stage ships the defaults from config/", (target) => {
+    const start = dockerfile.indexOf(`AS ${target}\n`);
+    const next = dockerfile.indexOf("\nFROM ", start);
+    const stage = dockerfile.slice(start, next === -1 ? undefined : next);
+    const user = stage.search(/^USER /m);
+
+    it("copies config/ into /app/config and points JOB_RADAR_DEFAULTS_DIR at it", () => {
+      expect(stage).toMatch(/^ENV JOB_RADAR_DEFAULTS_DIR=\/app\/config$/m);
+      expect(stage).toMatch(/^COPY config\/ \/app\/config\/$/m);
+    });
+
+    it("makes it readable by every uid and writable by none but root, before switching user", () => {
+      const chmod = stage.search(/^RUN chmod -R a\+rX,go-w \/app\/config$/m);
+      expect(chmod).toBeGreaterThan(stage.search(/^COPY config\/ /m));
+      expect(user).toBeGreaterThan(chmod);
+    });
+  });
+
+  it("the web stage drops the copy of config/ that Next's standalone output brings (owned by node) before copying its own", () => {
+    const web = dockerfile.slice(dockerfile.indexOf("AS web\n"), dockerfile.indexOf("\nFROM ", dockerfile.indexOf("AS web\n")));
+    const rm = web.search(/^RUN rm -rf \/app\/config$/m);
+    expect(rm).toBeGreaterThan(web.search(/^COPY --from=build --chown=node:node \/app\/\.next\/standalone /m));
+    expect(web.search(/^COPY config\/ /m)).toBeGreaterThan(rm);
+  });
+
+  it("the runner's FAIL_RUNNER_BUILD test hook is empty by default (a normal build never fails on it)", () => {
+    const runner = dockerfile.slice(dockerfile.indexOf("AS runner"));
+    expect(runner).toMatch(/^ARG FAIL_RUNNER_BUILD=""$/m);
+    expect(runner).toMatch(/^RUN if \[ -n "\$FAIL_RUNNER_BUILD" \]; then .*false; fi$/m);
+  });
+
   it("defines the web and runner targets", () => {
     expect(dockerfile).toMatch(/AS web\b/);
     expect(dockerfile).toMatch(/AS runner\b/);

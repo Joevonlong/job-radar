@@ -8,7 +8,7 @@ Job Radar 的所有设置都是 YAML，分两层：
 | 用户配置 | `JOB_RADAR_CONFIG_DIR`，默认 `data/config/` | 你、网页（/settings、/interests、/sources/registry）、`pnpm config:*` | 否（`data/` 被忽略） |
 | 画像 | `JOB_RADAR_PROFILE_DIR`，默认 `data/profile/` | 你、网页 /me | 否 |
 
-相对路径按项目目录解析（不是当前目录）。Docker 里 web 和 runner 的挂载和变量写在 `compose.yaml`（web：`./config:/app/config:ro`、`./data/config:/app/data/config`；runner 两个都只读）；宿主机的 ai-worker 由 `scripts/ops/install-ai-worker.sh` 把三个目录显式写进 launchd 的 plist。
+相对路径按项目目录解析（不是当前目录）。Docker 里出厂默认配置是 web、runner 镜像的一部分：Dockerfile 把 `config/` 复制到 `/app/config`（属于 root，所有人可读，谁都不能写），并设置 `JOB_RADAR_DEFAULTS_DIR=/app/config`；那里不挂载任何东西。`scripts/ops/deploy.sh` 从要部署的提交的 `git archive` 构建镜像，所以容器里的默认配置正好是已提交的 `config/`，`config/` 的改动只有经过部署才会到容器里（单独 `git pull` 不会改变运行中的容器）。用户配置和个人画像是 bind mount（`compose.yaml`：web `./data/config:/app/data/config`，runner 同样挂载但只读）。宿主机的 ai-worker 从检出目录读 `config/`；`scripts/ops/install-ai-worker.sh` 把三个目录显式写进它的 launchd plist 或 systemd 单元。
 
 `data/config/` 里的同名文件优先于默认配置，所以 `git pull` 永远不会动你的设置；几乎所有设置也都能在设置页上改。想快点上手，
 `pnpm config:example` 可以套用一份现成的示例配置。
@@ -21,7 +21,7 @@ Job Radar 的所有设置都是 YAML，分两层：
 
 - 用户目录里**有**这个文件就读它，**没有**就读默认目录的。两层不合并：用户目录里的文件是整份生效的。
 - 网页保存永远写用户目录；第一次保存一个只在默认目录里的文件时，以默认文件为底稿生成（默认文件的注释会带过去）。默认目录从不被写。保存时，文件里还没有的键如果取值就是 schema 的默认值，也不会写进去（否则会把默认值固定住，以后产品更新改了默认值你也拿不到）；文件里已有的键会保留，与默认值不同的取值才会写入。
-- 热加载同时盯两层：用户文件新出现、被删除（退回默认）、默认文件变了（你没有自己那份时）都在约 5 秒内生效。runner 和 ai-worker 盯所有配置文件（包括 `me.yaml`、`preferences.yaml`），并在每轮周期和每个请求开始时再读一遍，所以改动（比如在设置向导或 `/me` 里保存的市场）在下一轮周期就生效，即使它紧接着就开始，也不用重启。
+- 热加载同时盯两层：用户文件新出现、被删除（退回默认）、默认文件变了（你没有自己那份时）都在约 5 秒内生效。容器里的默认配置在镜像里，只随新镜像（部署）改变；Docker 之外（`pnpm dev`、宿主机的 ai-worker）`config/` 里的文件改了会这样生效。runner 和 ai-worker 盯所有配置文件（包括 `me.yaml`、`preferences.yaml`），并在每轮周期和每个请求开始时再读一遍，所以改动（比如在设置向导或 `/me` 里保存的市场）在下一轮周期就生效，即使它紧接着就开始，也不用重启。
 - web 和 MCP server 没有 watcher，所以自己检查文件：读取某个配置时，如果距上次检查已超过 5 秒，会先把它已加载的所有配置重新读一遍，所以手工改的文件（或别的进程改的）下一次打开页面就能看到，不用重启。文件无效时被忽略（保留上一份有效值），日志里只报告一次。`JOB_RADAR_CONFIG_POLL_MS`（默认 `5000`，单位毫秒，设在该进程的环境变量里）就是这个间隔，也是 watcher 的轮询间隔；设为 `0` 会关闭这项检查和 watcher 的轮询（watcher 仍会响应文件事件）。
 - `pnpm config:check` 逐个文件写出读的是哪一层：`(user)`、`(default)`、`(user override of a shipped file)`。
 
@@ -213,7 +213,8 @@ cd config && find . -type f ! -name .DS_Store ! -name '._*' | LC_ALL=C sort | wh
   `doctor.compose_services` 里时）要求报告里的主机名是运行中容器 id 的开头，且报告时间不早于容器启动时间减
   `schedule.yaml doctor.shipped_report_skew_seconds`（默认 2，容忍 Docker 和数据库的时钟差）；ai-worker（`ai.yaml execution: host` 时）要求报告比
   `host_worker.offline_after_seconds` 新，且 PID 等于 launchd（`launchctl print`）或 systemd（`systemctl --user show -p MainPID`）给出的服务 PID。服务管理器
-  给不出 PID 时，报告无法核对。凡是无法确认的都是警告，并逐个列出进程；没有失败。连不上数据库时跳过。
+  给不出 PID 时，报告无法核对。凡是无法确认的都是警告，并逐个列出进程；没有失败。连不上数据库时跳过。项目里运行中的容器在
+  `/app/config`（或它下面）有挂载时，这项检查也会告警：挂载会挡住镜像里的默认配置，通常是出厂配置进镜像之前的 `compose.override.yaml`；去掉挂载再部署。
 
 部署或重启后的短时间内报告可能还没写；过一分钟再运行一次 doctor。
 

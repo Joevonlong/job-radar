@@ -183,7 +183,7 @@ claude-cli，然后 Anthropic API；只用能搜索网页的 provider，codex-cl
 
 ### 部署后
 
-新的请求类型要求 runner 和 ai-worker 都是新代码：数据库迁移（`0018`）由 runner 启动时自动执行；`scripts/ops/deploy.sh` 的第 10 步会重启 ai-worker。没用 `deploy.sh`（或带了 `--no-ai-worker`）时要手动重启一次（`launchctl kickstart -k gui/$(id -u)/io.jobradar.ai-worker`，或重跑 `scripts/ops/install-ai-worker.sh`），否则 AI 测试会一直排队。`ai.yaml` 新增的 `tasks.<任务>.models` 随代码一起更新；升级到带模型目录的版本时：先升级代码（`models.yaml` 新增、`ai.yaml` 只改注释，旧代码不受影响），再在项目目录运行 `pnpm models:migrate --dry-run`、`pnpm models:migrate`、`pnpm config:check`；之后才能往 `tasks.*.models` 里写。旧代码遇到新文件、或新代码遇到旧文件，热加载都会忽略无效配置并保留上一份。
+新的请求类型要求 runner 和 ai-worker 都是新代码：数据库迁移（`0018`）由 runner 启动时自动执行；`scripts/ops/deploy.sh` 的第 9 步会重启 ai-worker。没用 `deploy.sh`（或带了 `--no-ai-worker`）时要手动重启一次（`launchctl kickstart -k gui/$(id -u)/io.jobradar.ai-worker`，或重跑 `scripts/ops/install-ai-worker.sh`），否则 AI 测试会一直排队。`ai.yaml` 新增的 `tasks.<任务>.models` 随代码一起更新；升级到带模型目录的版本时：先升级代码（`models.yaml` 新增、`ai.yaml` 只改注释，旧代码不受影响），再在项目目录运行 `pnpm models:migrate --dry-run`、`pnpm models:migrate`、`pnpm config:check`；之后才能往 `tasks.*.models` 里写。旧代码遇到新文件、或新代码遇到旧文件，热加载都会忽略无效配置并保留上一份。
 
 ### 调参
 

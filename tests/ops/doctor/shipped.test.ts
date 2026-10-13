@@ -136,6 +136,73 @@ describe("config.shipped", () => {
       expect(result.detail).toContain("web: the containers cannot be read");
     });
 
+    it("warns when something is mounted over the shipped config in the image, even with confirmed reports", async () => {
+      const json = inspectJson([
+        { id: WEB_CONTAINER, service: "web", mounts: [{ Destination: "/app/config", Source: "/srv/job-radar/config" }, { Destination: "/app/data/config", Source: "/srv/job-radar/data/config" }] },
+        { id: RUNNER_CONTAINER, service: "runner", mounts: [{ Destination: "/app/config/packs", Name: "packs-volume" }] },
+      ]);
+      const result = await only(shippedConfigCheck, context({ commands: { [INSPECT]: ran(json) } }));
+      expect(result.status).toBe("warn");
+      expect(result.detail).toBe(
+        [
+          "web: /srv/job-radar/config is mounted over /app/config, which hides the shipped config built into the image (a compose file from before the shipped config moved into the image?)",
+          "runner: packs-volume is mounted on /app/config/packs, inside /app/config: it hides that part of the shipped config built into the image",
+          "web c3c3c3c3c3c3; runner c3c3c3c3c3c3; ai-worker c3c3c3c3c3c3",
+        ].join("; "),
+      );
+      expect(result.hint).toContain("Remove that mount");
+      expect(result.hint).not.toContain("Shipped config identity");
+    });
+
+    it("still checks the mounts without the database (they need only Docker), and says the reports were not checked", async () => {
+      const json = inspectJson([
+        { id: WEB_CONTAINER, service: "web", mounts: [{ Destination: "/app/config", Source: "/srv/job-radar/config" }] },
+        { id: RUNNER_CONTAINER, service: "runner" },
+      ]);
+      const down = await only(shippedConfigCheck, context({ probes: { dbPing: async () => false }, commands: { [INSPECT]: ran(json) } }));
+      expect(down.status).toBe("warn");
+      expect(down.detail).toBe(
+        "web: /srv/job-radar/config is mounted over /app/config, which hides the shipped config built into the image (a compose file from before the shipped config moved into the image?); the shipped config reports were not checked: the database cannot be reached (see db.connect)",
+      );
+      expect(down.hint).toContain("Remove that mount");
+      expect(down.hint).not.toContain("Shipped config identity");
+      const unreadable = await only(
+        shippedConfigCheck,
+        context({
+          probes: {
+            shippedConfigReports: async () => {
+              throw new Error("relation does not exist");
+            },
+          },
+          commands: { [INSPECT]: ran(json) },
+        }),
+      );
+      expect(unreadable.status).toBe("warn");
+      expect(unreadable.detail).toContain("the shipped config reports were not checked: the database cannot be read");
+    });
+
+    it("does not mistake a mount elsewhere (/app/config-old, /app/data/config) or no Mounts field for a shipped-config mount", async () => {
+      const json = inspectJson([
+        { id: WEB_CONTAINER, service: "web", mounts: [{ Destination: "/app/config-old", Source: "/x" }, { Destination: "/app/data/config", Source: "/y" }] },
+        { id: RUNNER_CONTAINER, service: "runner", mounts: [] },
+      ]);
+      expect((await only(shippedConfigCheck, context({ commands: { [INSPECT]: ran(json) } }))).status).toBe("ok");
+      const bare = JSON.stringify((JSON.parse(inspectJson()) as Record<string, unknown>[]).map((row) => Object.fromEntries(Object.entries(row).filter(([key]) => key !== "Mounts"))));
+      expect((await only(shippedConfigCheck, context({ commands: { [INSPECT]: ran(bare) } }))).status).toBe("ok");
+    });
+
+    it("gives both hints when a mount and a report problem come together", async () => {
+      const json = inspectJson([
+        { id: WEB_CONTAINER, service: "web", mounts: [{ Destination: "/app/config", Source: "/srv/job-radar/config" }] },
+        { id: RUNNER_CONTAINER, service: "runner" },
+      ]);
+      const result = await only(shippedConfigCheck, withReports({ runner: null }, { commands: { [INSPECT]: ran(json) } }));
+      expect(result.detail).toContain("web: /srv/job-radar/config is mounted over /app/config");
+      expect(result.detail).toContain("runner has not reported its shipped config");
+      expect(result.hint).toContain("Remove that mount");
+      expect(result.hint).toContain("Shipped config identity");
+    });
+
     it("asks Docker only once for both containers", async () => {
       const ctx = context();
       await only(shippedConfigCheck, ctx);
@@ -202,5 +269,13 @@ describe("config.shipped", () => {
     const result = await only(shippedConfigCheck, makeContext({ ai: host, probes: { shippedConfigReports: async () => shippedReports({ runner: null }) } }));
     expect(result.status).toBe("warn");
     expect(result.detail).not.toContain("has not reported");
+    const json = inspectJson([
+      { id: WEB_CONTAINER, service: "web", mounts: [{ Destination: "/app/config", Source: "/srv/job-radar/config" }] },
+      { id: RUNNER_CONTAINER, service: "runner" },
+    ]);
+    const mounted = await only(shippedConfigCheck, makeContext({ ai: host, commands: { [INSPECT]: ran(json) } }));
+    expect(mounted.status).toBe("warn");
+    expect(mounted.detail).toContain("/srv/job-radar/config");
+    expect(mounted.detail).not.toContain("is mounted over");
   });
 });

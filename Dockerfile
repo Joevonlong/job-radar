@@ -49,6 +49,13 @@ COPY --from=build --chown=node:node /app/.next/standalone ./
 COPY --from=build --chown=node:node /app/.next/static ./.next/static
 # compose may run the web under another uid (PUID / PGID on Linux): Next's cache directory must be writable for it too.
 RUN mkdir -p .next/cache && chmod 1777 .next/cache
+# The shipped defaults (config/) are part of the image: owned by root, readable by any uid, writable by none of them.
+# The user's own config stays outside the image (data/config, a bind mount). Next's standalone output already holds a
+# traced copy of config/ owned by node (its directories would stay writable for the web): replace it.
+ENV JOB_RADAR_DEFAULTS_DIR=/app/config
+RUN rm -rf /app/config
+COPY config/ /app/config/
+RUN chmod -R a+rX,go-w /app/config
 USER node
 EXPOSE 3000
 CMD ["node", "server.js"]
@@ -92,5 +99,12 @@ RUN mkdir -p /app/data/backups /app/data/profile /app/data/exports /app/data/con
 # The container healthcheck (compose.yaml): reads the newest heartbeat and exits 1 when it is too old.
 COPY --from=build --chown=pwuser:pwuser /app/dist/healthcheck.mjs ./dist/healthcheck.mjs
 COPY --from=build --chown=pwuser:pwuser /app/drizzle ./drizzle
+# The shipped defaults, as in the web image.
+ENV JOB_RADAR_DEFAULTS_DIR=/app/config
+COPY config/ /app/config/
+RUN chmod -R a+rX,go-w /app/config
+# Test hook only: a non-empty value makes the runner build fail (upgrade tests use it to simulate a failed build).
+ARG FAIL_RUNNER_BUILD=""
+RUN if [ -n "$FAIL_RUNNER_BUILD" ]; then echo "FAIL_RUNNER_BUILD is set: failing the runner build on purpose" >&2; false; fi
 USER pwuser
 CMD ["node", "dist/runner.mjs"]

@@ -1,0 +1,7 @@
+{
+  "name": "pnpm-pgid-fixture",
+  "private": true,
+  "scripts": {
+    "pgid": "node -e \"const { execFileSync } = require('node:child_process'); const pgid = execFileSync('ps', ['-o', 'pgid=', '-p', String(process.pid)], { encoding: 'utf8' }).trim(); require('node:fs').writeFileSync(process.env.PGID_OUT, pgid + '\\n');\""
+  }
+}

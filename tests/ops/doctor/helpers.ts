@@ -60,7 +60,7 @@ export const RUNNER_CONTAINER = `${"b2".repeat(6)}${"0".repeat(52)}`;
 export const CONTAINERS_STARTED = ago(3600);
 export const SHIPPED_ID = "c3".repeat(32);
 
-export function inspectJson(rows: { id: string; service: string; startedAt?: string; running?: boolean }[] = [
+export function inspectJson(rows: { id: string; service: string; startedAt?: string; running?: boolean; mounts?: { Destination: string; Source?: string; Name?: string }[] }[] = [
   { id: WEB_CONTAINER, service: "web" },
   { id: RUNNER_CONTAINER, service: "runner" },
 ]): string {
@@ -69,6 +69,7 @@ export function inspectJson(rows: { id: string; service: string; startedAt?: str
       Id: row.id,
       State: { Running: row.running ?? true, StartedAt: row.startedAt ?? CONTAINERS_STARTED.toISOString() },
       Config: { Labels: { "com.docker.compose.project": "job-radar", "com.docker.compose.service": row.service } },
+      Mounts: row.mounts ?? [{ Type: "bind", Source: "/srv/job-radar/data/config", Destination: "/app/data/config" }],
     })),
   );
 }

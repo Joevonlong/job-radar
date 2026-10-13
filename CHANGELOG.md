@@ -5,8 +5,40 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Upgrade notes
+
+- **The shipped config is now part of the images.** Upgrading from 2.0.1 or older with `scripts/ops/deploy.sh` yourself
+  takes three commands once: `docker compose -p job-radar stop web runner`, then `git pull` (or `git fetch --tags && git
+  checkout --detach <tag>`), then `scripts/ops/deploy.sh --skip-pull`. A plain `docker compose up -d` is not enough. Why,
+  and the details: [docs/upgrade.md](docs/upgrade.md) ("Upgrading across the shipped config in the images"). A
+  `compose.override.yaml` of your own that mounts `./config` must drop that mount (`pnpm run doctor` warns about it).
+- **`scripts/ops/deploy.sh` refuses a checkout with uncommitted changes to tracked files in every mode**, `--skip-pull`
+  included (untracked files are fine). Commit or stash first.
+- **Deploy steps renumbered:** migrate is now step 8, ai-worker step 9, and the Docker cleanup (prune) step 10, after the
+  ai-worker restart (it used to be step 8, before the migration). `--no-prune` skips step 10.
+
+### Changed
+
+- **Images built from the commit being deployed:** `scripts/ops/deploy.sh` unpacks a `git archive` of the commit it
+  deploys into `data/build/` and builds from there (`JOB_RADAR_BUILD_CONTEXT`), so ignored, untracked or locally
+  changed files never reach an image. The web and runner images carry the shipped defaults in `/app/config` (owned by
+  root, read-only for everyone); `compose.yaml` no longer mounts `./config`. Every later step checks that the checkout
+  still is at that commit and stops with `checkout moved during deploy` otherwise; a `git status` that fails (a damaged
+  index) stops the deploy too instead of passing as clean. See
+  [docs/deploy.md](docs/deploy.md#build-context-and-a-clean-checkout).
+- **One deploy at a time:** `scripts/ops/deploy.sh` takes a lock (`data/releases/ai-worker/.lock/`); a second deploy stops
+  in step 1 and prints who holds the lock and how to check and clear one that was left behind.
+- **Interrupting a deploy** (Ctrl-C, closing the terminal, `kill`) lets the running step finish, starts no further step,
+  releases the lock and exits with 130, 143 or 129; the script prints how to abort the running step at once.
+  See [docs/deploy.md](docs/deploy.md#interrupting-a-deploy).
+- `.dockerignore` leaves out everything `.gitignore` ignores, at any depth (editor folders, local demo and release-check
+  files, nested `.env`, logs, test output), also for a build from the working tree (`pnpm stack:up`).
+
 ### Added
 
+- **Doctor:** `config.shipped` warns when something is mounted on `/app/config`, or on a directory inside it, in a running
+  container (it would hide the shipped config in the image, or that part of it). This part runs even when the database
+  is down.
 - **Reason sources** (off by default, `ai.yaml: scoring.evidence`): each fit reason and gap on the job page says whether
   the posting states it (with its own words and a jump to them in the job description), the AI inferred it, or the
   posting does not mention it. Quotes are checked against the posting; one that is not found counts as inferred. Nothing

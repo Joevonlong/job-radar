@@ -9,7 +9,7 @@ echo "== dependencies"
 if [[ ! -d node_modules ]]; then pnpm install --frozen-lockfile; else echo "node_modules present"; fi
 
 echo "== shell scripts"
-for f in scripts/*.sh scripts/ops/*.sh; do bash -n "$f"; done
+for f in scripts/*.sh scripts/ops/*.sh scripts/ops/lib/*.sh tests/ops/*.sh tests/ops/proc-lib/*.sh; do bash -n "$f"; done
 
 echo "== i18n catalog"
 pnpm i18n:check

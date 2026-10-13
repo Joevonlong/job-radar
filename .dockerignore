@@ -1,32 +1,44 @@
 # Keep the build context small and keep secrets / personal data out of images (C4, C5).
+# scripts/ops/deploy.sh builds from an unpacked `git archive` of the target commit, so only tracked files reach its
+# context; these rules also cover a build from the working tree (pnpm stack:up, a plain `docker compose build`).
+# Every .gitignore entry is excluded here too, at any depth when .gitignore matches it at any depth
+# (tests/ops/gitignore-coverage.sh checks it with a real docker build).
 **/node_modules
 **/.next
 dist
-out
-coverage
+**/out
+**/coverage
 .git
 .gitignore
-.DS_Store
-._*
-*.log
-*.tsbuildinfo
-next-env.d.ts
+**/.DS_Store
+**/._*
+**/*.log
+**/*.tsbuildinfo
+**/next-env.d.ts
 
 # Secrets and runtime data
-.env
-.env.*
+**/.env
+**/.env.*
 !.env.example
 .auth
 data
+**/.release-check.local
 
 # Not needed to build images
 e2e
 tests
-test-results
-playwright-report
+**/test-results
+**/playwright-report
+**/playwright-report-setup
 compose.yaml
 Dockerfile
 .dockerignore
 **/__pycache__
 **/.venv
 jobspy
+
+# Local tooling and editor state
+**/.claude/
+**/.vscode/
+**/.idea/
+**/.local-demo/
