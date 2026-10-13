@@ -68,6 +68,9 @@ describe("ghost check timing", () => {
     ["5355 hits after 75000 signs before a tagged invitation", `${"~".repeat(75000)}${" always hiring".repeat(5355)} – interested?`, 1500],
     // every hit negated, in one clause with no break (~15 ms; was ~5 s)
     ["4000 negated hits in one clause", "not always hiring ".repeat(4000), 200],
+    // the clause starts inside a long word joined by apostrophes: its rest is read once, not again for every hit (~40 ms;
+    // was ~8 s)
+    ["5552 negated hits after a clause break cutting a 100000-character word", `but${"'a".repeat(50000)}${" not always hiring".repeat(5552)}`, 500],
     // each list item looks for its list's heading above it: the lines of one list are read once, not once per item below them
     // (~50 ms; was ~5 s)
     ["2000 negated list items after 60000 others", `${"- x\n".repeat(60000)}${"- not always hiring\n".repeat(2000)}`, 600],

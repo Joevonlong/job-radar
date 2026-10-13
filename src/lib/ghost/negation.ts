@@ -38,6 +38,14 @@ export interface NegationIndex {
   cuesBefore: number[];
   runStarts: number[];
   runEnds: number[];
+  /** The rest of a word cut at a window's start, read to the end of its run, by the start (the clause start of many hits). */
+  rests: Map<number, Words>;
+}
+
+/** Words read on their own, with `cuesBefore` as in the index. */
+interface Words {
+  words: string[];
+  cuesBefore: number[];
 }
 
 export function negationIndex(text: string, rules: Pick<CompiledGhostRules, "clauseBreaks" | "negationCues">): NegationIndex {
@@ -51,7 +59,7 @@ export function negationIndex(text: string, rules: Pick<CompiledGhostRules, "cla
   }
   breakEnds.sort((a, b) => a - b);
   breakStarts.sort((a, b) => a - b);
-  const index: NegationIndex = { text, cues: rules.negationCues, breakEnds, breakStarts, wordStarts: [], wordEnds: [], cuesBefore: [0], runStarts: [], runEnds: [] };
+  const index: NegationIndex = { text, cues: rules.negationCues, breakEnds, breakStarts, wordStarts: [], wordEnds: [], cuesBefore: [0], runStarts: [], runEnds: [], rests: new Map() };
   let count = 0;
   for (const match of text.matchAll(WORD)) {
     index.wordStarts.push(match.index);
@@ -68,12 +76,21 @@ export function negationIndex(text: string, rules: Pick<CompiledGhostRules, "cla
 
 const isCue = (word: string, cues: readonly RegExp[]): boolean => cues.some((cue) => cue.test(word));
 
+function wordsWithCues(text: string, cues: readonly RegExp[]): Words {
+  const words = wordsOf(text);
+  const cuesBefore = [0];
+  for (const word of words) cuesBefore.push((cuesBefore[cuesBefore.length - 1] as number) + (isCue(word, cues) ? 1 : 0));
+  return { words, cuesBefore };
+}
+
+const NO_WORDS: Words = { words: [], cuesBefore: [0] };
+
 /**
  * The words of `text.slice(a, b)`, as read on that slice alone: `left` (read on their own when `a` cuts a word, up to the end of its
  * run or `b`), then the index's words `lo` to `hi` (exclusive), then `right` (the word that `b` cuts, as far as it goes).
  */
 interface Window {
-  left: string[];
+  left: Words;
   lo: number;
   hi: number;
   right: string[];
@@ -81,32 +98,41 @@ interface Window {
 
 function windowOf(index: NegationIndex, a: number, b: number): Window {
   const { text, wordStarts, wordEnds } = index;
-  if (b <= a) return { left: [], lo: 0, hi: 0, right: [] };
+  if (b <= a) return { left: NO_WORDS, lo: 0, hi: 0, right: [] };
   let from = a;
-  let left: string[] = [];
+  let left = NO_WORDS;
   // a cuts a word: what is left of it reads differently ("x'don't" cut after "x'" is "don't"), up to the end of its run (where the
   // words of the slice and of the whole piece are the same again)
   const cut = lowerBound(wordEnds, a + 1);
   if (cut < wordStarts.length && (wordStarts[cut] as number) < a) {
-    const run = lowerBound(index.runEnds, a + 1);
-    from = Math.min(b, index.runEnds[run] as number);
-    left = wordsOf(text.slice(a, from));
+    const runEnd = index.runEnds[lowerBound(index.runEnds, a + 1)] as number;
+    if (runEnd <= b) {
+      // the same for every window that starts at a and reaches past the run: read once
+      const known = index.rests.get(a);
+      left = known ?? wordsWithCues(text.slice(a, runEnd), index.cues);
+      if (known === undefined) index.rests.set(a, left);
+      from = runEnd;
+    } else {
+      from = b;
+      left = wordsWithCues(text.slice(a, b), index.cues);
+    }
   }
   const lo = lowerBound(wordStarts, from);
   const hi = Math.max(lo, lowerBound(wordEnds, b + 1));
   // b cuts a word: its part before b ("don't" cut after "don'" is "don")
-  const right = hi < wordStarts.length && (wordStarts[hi] as number) < b && hi >= lo && (wordStarts[hi] as number) >= from ? wordsOf(text.slice(wordStarts[hi] as number, b)) : [];
+  const right = hi < wordStarts.length && (wordStarts[hi] as number) < b && (wordStarts[hi] as number) >= from ? wordsOf(text.slice(wordStarts[hi] as number, b)) : [];
   return { left, lo, hi, right };
 }
 
-const sizeOf = (window: Window): number => window.left.length + (window.hi - window.lo) + window.right.length;
+const sizeOf = (window: Window): number => window.left.words.length + (window.hi - window.lo) + window.right.length;
 
 /** Whether one of the words `first` to `last` (exclusive) of a window is a negation cue. */
 function cueAmong(index: NegationIndex, window: Window, first: number, last: number): boolean {
   if (last <= first) return false;
-  const left = window.left.length;
+  const left = window.left.words.length;
   const middle = window.hi - window.lo;
-  for (let i = first; i < Math.min(last, left); i++) if (isCue(window.left[i] as string, index.cues)) return true;
+  const leftLast = Math.min(last, left);
+  if (leftLast > first && (window.left.cuesBefore[leftLast] as number) > (window.left.cuesBefore[first] as number)) return true;
   const a = Math.max(first, left) - left;
   const b = Math.min(last, left + middle) - left;
   if (b > a && (index.cuesBefore[window.lo + b] as number) > (index.cuesBefore[window.lo + a] as number)) return true;
