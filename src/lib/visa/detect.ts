@@ -24,6 +24,7 @@ import { clipQuote } from "@/lib/signals/quote";
 import { overlapsTrap } from "@/lib/traps/ai-input";
 import type { TrapSpan } from "@/lib/traps/types";
 
+import { cueInside, negatedInWindow, negationIndex, type NegationIndex } from "./negation";
 import type { CompiledVisaPattern, CompiledVisaRules } from "./rules";
 import type { VisaEvidence, VisaKind, VisaResult } from "./types";
 
@@ -87,21 +88,21 @@ function anyHit(patterns: readonly RegExp[], segment: TextSegment, keep: (hit: H
 
 const wordsOf = (text: string): string[] => Array.from(text.matchAll(WORD), (m) => m[0]);
 
-/** The text after a hit up to the end of its clause: the first `clause_breaks` match. */
-function clauseAfter(text: string, breaks: readonly RegExp[]): string {
-  let end = text.length;
-  for (const re of breaks) {
-    const at = text.search(re);
-    if (at !== -1 && at < end) end = at;
-  }
-  return text.slice(0, end);
-}
-
 const hasCue = (text: string, rules: CompiledVisaRules): boolean => wordsOf(text).some((word) => rules.negationCues.some((cue) => cue.test(word)));
 
-/** The heading of the segment's list has a negation cue ("What we can't offer:", "Was wir leider nicht bieten können:"). */
-function underNegatedHeading(segment: TextSegment, rules: CompiledVisaRules, description: string): boolean {
-  return segment.listHeading !== undefined && hasCue(description.slice(segment.listHeading.start, segment.listHeading.end), rules);
+/**
+ * The heading of the segment's list has a negation cue ("What we can't offer:", "Was wir leider nicht bieten können:"). The items
+ * of one list share its heading, so it is read once per list (`headings`, by the heading's start), not once per item.
+ */
+function underNegatedHeading(segment: TextSegment, rules: CompiledVisaRules, description: string, headings: Map<number, boolean>): boolean {
+  const heading = segment.listHeading;
+  if (heading === undefined) return false;
+  let says = headings.get(heading.start);
+  if (says === undefined) {
+    says = hasCue(description.slice(heading.start, heading.end), rules);
+    headings.set(heading.start, says);
+  }
+  return says;
 }
 
 /**
@@ -115,23 +116,36 @@ function refusingHeading(segment: TextSegment, rules: CompiledVisaRules, descrip
   return topics.some((re) => matches(re, heading)) ? { start: segment.start, end: segment.headingEnd } : null;
 }
 
+/** `make()`, called at most once and only when first needed. */
+function once<T>(make: () => T): () => T {
+  let made: { value: T } | null = null;
+  return () => (made ??= { value: make() }).value;
+}
+
 /**
  * A negation cue inside the hit, among the words before it, among the words after it in its clause (all in its segment), or in
- * the heading of its list (`headingSaysNo`).
+ * the heading of its list (`headingSaysNo`). The words around the hit come from `index`, the segment read once for all its hits
+ * (built only when a hit needs the words around it). Exported for the tests, which compare it with the reading it replaced.
  */
-function negated(segment: TextSegment, hit: Hit, rules: CompiledVisaRules, headingSaysNo: boolean): boolean {
+export function negated(segment: TextSegment, hit: Hit, rules: CompiledVisaRules, headingSaysNo: boolean, index: () => NegationIndex = once(() => negationIndex(segment.text, rules))): boolean {
   const cues = rules.negationCues;
   if (cues.length === 0) return false;
   if (headingSaysNo) return true;
   const from = hit.start - segment.start;
   const to = hit.end - segment.start;
-  const before = rules.negationWordsBefore === 0 ? [] : wordsOf(segment.text.slice(0, from)).slice(-rules.negationWordsBefore);
-  const inside = wordsOf(segment.text.slice(from, to));
-  const after = rules.negationWordsAfter === 0 ? [] : wordsOf(clauseAfter(segment.text.slice(to), rules.clauseBreaks)).slice(0, rules.negationWordsAfter);
-  return [...before, ...inside, ...after].some((word) => cues.some((cue) => cue.test(word)));
+  if (cueInside(segment.text, from, to, cues)) return true;
+  if (rules.negationWordsBefore === 0 && rules.negationWordsAfter === 0) return false;
+  return negatedInWindow(index(), from, to, { before: rules.negationWordsBefore, after: rules.negationWordsAfter });
 }
 
-function judgeSegment(segment: TextSegment, rules: CompiledVisaRules, usable: (p: CompiledVisaPattern) => boolean, keep: (hit: Hit) => boolean, description: string): Verdict | null {
+function judgeSegment(
+  segment: TextSegment,
+  rules: CompiledVisaRules,
+  usable: (p: CompiledVisaPattern) => boolean,
+  keep: (hit: Hit) => boolean,
+  description: string,
+  headings: Map<number, boolean>,
+): Verdict | null {
   const block = refusingHeading(segment, rules, description);
   const headingBlock = block !== null && keep(block) ? block : null;
   // most segments that pass the prefilter match no phrase at all: one search says so
@@ -144,7 +158,7 @@ function judgeSegment(segment: TextSegment, rules: CompiledVisaRules, usable: (p
   // nothing to judge (most segments that only passed the prefilter): the exclusions need not run
   if (!phrases && term === undefined && headingBlock === null) return null;
   if (rules.excludeContext.some((re) => matches(re, segment.text))) return null;
-  const verdict = judgeHits(segment, rules, keep, { offered, refused, required, term }, underNegatedHeading(segment, rules, description));
+  const verdict = judgeHits(segment, rules, keep, { offered, refused, required, term }, underNegatedHeading(segment, rules, description, headings));
   if (headingBlock === null) return verdict;
   // rule 6: the heading block says no; a refusal stays one, anything else is unclear and doubts the result
   if (verdict?.status === "not_offered") return verdict;
@@ -164,11 +178,14 @@ function judgeHits(segment: TextSegment, rules: CompiledVisaRules, keep: (hit: H
   // a list under a negated heading doubts the result like a refusing heading block (rule 6)
   const doubt = headingSaysNo && offered.length > 0;
 
-  const clearOffers = offered.filter((hit) => !negated(segment, hit, rules, headingSaysNo));
-  const unclear: Hit[] = offered.filter((hit) => !clearOffers.includes(hit));
+  const index = once(() => negationIndex(segment.text, rules));
+  const clearOffers: Hit[] = [];
+  const unclear: Hit[] = [];
+  for (const hit of offered) (negated(segment, hit, rules, headingSaysNo, index) ? unclear : clearOffers).push(hit);
   const refusals: Array<{ hit: Hit; kind: Exclude<VisaKind, null> }> = [...refused];
-  if (alternative) unclear.push(...required);
-  else refusals.push(...required.map((hit) => ({ hit, kind: "permit_required" as const })));
+  // one push per hit: spreading them as arguments overflows the stack on a very long segment
+  if (alternative) for (const hit of required) unclear.push(hit);
+  else for (const hit of required) refusals.push({ hit, kind: "permit_required" });
   refusals.sort((a, b) => a.hit.start - b.hit.start);
   unclear.sort((a, b) => a.start - b.start);
 
@@ -242,12 +259,13 @@ export function detectVisa(description: string | null, rules: CompiledVisaRules,
   const keep = (hit: Hit): boolean => spans.length === 0 || !overlapsTrap(hit.start, hit.end - hit.start, spans);
 
   const verdicts: Verdict[] = [];
+  const headings = new Map<number, boolean>();
   const keepLine = focus === null || options.unfiltered === true ? undefined : overlapsAny(focus);
   // a segment without a prefilter match is skipped too (segments come in text order, like the lines)
   const keepSegment = focus === null ? null : overlapsAny(focus);
   for (const segment of segmentText(description, { abbreviations: rules.abbreviations, headingMaxChars: rules.headingMaxChars, keep: keepLine })) {
     if (keepSegment !== null && !keepSegment(segment.start, segment.end)) continue;
-    const verdict = judgeSegment(segment, rules, usable, keep, description);
+    const verdict = judgeSegment(segment, rules, usable, keep, description, headings);
     if (verdict) verdicts.push(verdict);
   }
   if (verdicts.length === 0) return notMentioned();

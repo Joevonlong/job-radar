@@ -256,6 +256,30 @@ describe("at run time", () => {
       expect(explanation).toBeNull();
       expect(ms).toBeLessThan(1_000);
     });
+
+    describe("with the shipped packs only", () => {
+      const shippedContext = (over: Partial<DealBreakerLimits> = {}): DealBreakerContext => ({
+        ...context(over),
+        me: { languages: [{ de: "B1" }], needs_visa_sponsorship: true },
+        visa: compileVisaRules(shippedPipeline()),
+      });
+
+      // thousands of offered phrases in one sentence: their negation test reads the sentence once, not once per phrase (which
+      // took seconds, over the budget)
+      it("reads 4000 offered phrases in one sentence within rule_budget_ms: not too slow, no refusal", () => {
+        const run = startDealBreakerRun(compileDealBreakers([visaRule], shippedContext()), vmTimeBox);
+        expect(dealBreakerVetoes(run, [posting("we offer relocation support and ".repeat(4000))]).vetoes).toEqual([[]]);
+        expect(run.warnings).toEqual([]);
+      });
+
+      // 130000 required permits in one sentence once overflowed the stack, an error the time box passes on: the whole filter step
+      // failed. The budget is raised so that only an error, not a busy machine, can fail it.
+      it("reads 130000 required permits in one sentence without an error: a refusal", () => {
+        const run = startDealBreakerRun(compileDealBreakers([visaRule], shippedContext({ rule_budget_ms: 60_000 })), vmTimeBox);
+        expect(dealBreakerVetoes(run, [posting("work permit required, ".repeat(130_000))]).vetoes).toEqual([["visa"]]);
+        expect(run.warnings).toEqual([]);
+      });
+    });
   });
 
   it("gives up explaining a veto after match_ms", () => {

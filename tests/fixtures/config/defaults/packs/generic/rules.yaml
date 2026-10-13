@@ -332,7 +332,8 @@ visa:
   # Support is mentioned: "We offer visa sponsorship and relocation support", "Visa sponsorship is available".
   # A negation cue (negation_cues) inside it, a few words before it ("We do not offer …") or a few words after it in the same clause
   # ("Relocation support is not available", "Relocation support: No") makes the sentence unclear, never "offered". The word counts
-  # are pipeline.yaml job_checks.visa.negation_words_before / _after; clause_breaks end the clause.
+  # are pipeline.yaml job_checks.visa.negation_words_before / _after; clause_breaks end the clause. End every pattern at a word
+  # boundary ((?![\p{L}\p{N}]) or $), as these do: the words around each hit are read in time linear in the sentence only then.
   offered:
     - pattern: '(?<![\p{L}\p{N}])(?:offer(?:s|ing)?|provid(?:e|es|ing)|sponsor(?:s|ing)?|support(?:s|ing)?|assist(?:s|ing)?|help(?:s|ing)?|cover(?:s|ing)?|includ(?:e|es|ing)|incl\.)(?:\s+[\p{L}\p{N}’''-]+){0,5}?\s+(?:visa\s+(?:sponsorship|support|process(?:es)?|applications?)|work\s+(?:permits?|visas?)|(?:eu\s+)?blue\s+card|relocation|immigration)(?![\p{L}\p{N}])'
       combo: true
@@ -407,7 +408,8 @@ visa:
     - never
     - none
   # Where the clause after an "offered" phrase ends for the negation search: "Visa sponsorship is available, but not for interns"
-  # still counts. A comma or colon does not end it ("Relocation support: No").
+  # still counts. A comma or colon does not end it ("Relocation support: No"). The breaks are matched over the whole sentence, so a
+  # lookbehind, ^ or \b here would read the phrase itself: keep them to the characters around the break (docs/market-packs.md).
   clause_breaks:
     - '[;(]'
     - '\s[–—]\s'
