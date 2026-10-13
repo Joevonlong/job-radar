@@ -264,7 +264,43 @@ describe("the release guard refuses preloads from outside the release (no databa
     fs.writeFileSync(outside, "\n");
     const r = runOnce(["--import", guard, "--import", loader, ...loadArgs], { ...workerEnv(), NODE_OPTIONS: `--require ${outside}` });
     expect(r.status).toBe(1);
-    expect(r.stderr).toContain("release guard: NODE_OPTIONS carries --require");
+    expect(r.stderr).toContain(`release guard: NODE_OPTIONS holds "--require"`);
+    expect(r.stderr).not.toContain("loaded");
+  });
+
+  it.each([
+    ['a quoted "--import" with a data: URL', '"--import" data:text/javascript,0', '"--import"'],
+    ['a quoted "--require" of a built-in', '"--require" node:fs', '"--require"'],
+    ["the underscore spelling --experimental_loader", "--experimental_loader=node:fs", '"--experimental_loader=node:fs"'],
+    ["an option that is not on the allowlist", "--trace-warnings", '"--trace-warnings"'],
+    ["an allowlisted option with a value out of its range", "--max-old-space-size=99999999", '"--max-old-space-size=99999999"'],
+  ])("NODE_OPTIONS with %s: exit 1, nothing of the release loaded", (_label, value, shown) => {
+    const r = runOnce(["--import", guard, "--import", loader, ...loadArgs], { ...workerEnv(), NODE_OPTIONS: value });
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain(`release guard: NODE_OPTIONS holds ${shown}`);
+    expect(r.stderr).not.toContain("loaded");
+  });
+
+  it("NODE_OPTIONS with only allowlisted options (either spelling, quoted or not) is accepted", () => {
+    const r = runOnce(["--import", guard, "--import", loader, ...loadArgs], {
+      ...workerEnv(),
+      NODE_OPTIONS: '--max-old-space-size=512 --max_semi_space_size=16 "--enable-source-maps" --no-warnings',
+    });
+    expect(r.stderr).not.toContain("release guard:");
+    expect(r.status).toBe(0);
+  });
+
+  it.each([
+    ["--loader", (f: string) => ["--loader", f]],
+    ["--experimental-loader", (f: string) => [`--experimental-loader=${f}`]],
+    ["--experimental_loader (the underscore spelling)", (f: string) => [`--experimental_loader=${f}`]],
+    ["--require", (f: string) => ["--require", f]],
+    ["-r", (f: string) => ["-r", f]],
+  ])("%s on the command line, even with a file inside the release: exit 1 (only --import preloads)", (_label, flags) => {
+    const inside = path.join(release, "scripts/ops/check-node-engines.mjs");
+    const r = runOnce(["--import", guard, ...flags(inside), "--import", loader, ...loadArgs], workerEnv());
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain("only --import preloads are allowed");
     expect(r.stderr).not.toContain("loaded");
   });
 
@@ -276,10 +312,10 @@ describe("the release guard refuses preloads from outside the release (no databa
     expect(r.stderr).not.toContain("loaded");
   });
 
-  it.each([["--import", "tsx"], ["--require", "tsx/cjs"]])("%s %s as a package name: exit 1", (flag, value) => {
-    const r = runOnce(["--import", guard, `${flag}=${value}`, "--import", loader, ...loadArgs], workerEnv());
+  it.each([["tsx"], ["data:text/javascript,0"]])("--import %s (a package name or URL): exit 1", (value) => {
+    const r = runOnce(["--import", guard, `--import=${value}`, "--import", loader, ...loadArgs], workerEnv());
     expect(r.status).toBe(1);
-    expect(r.stderr).toContain(`release guard: ${flag} ${value}: a preload must be given as a path inside`);
+    expect(r.stderr).toContain(`release guard: --import ${value}: a preload must be given as a path inside`);
   });
 
   it("the guard and tsx's loader as relative paths inside the release are accepted", () => {

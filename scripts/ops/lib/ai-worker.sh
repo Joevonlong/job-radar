@@ -52,11 +52,11 @@ ai_worker_yaml_scalar() {
       [[ "$v" == *"$q"* ]] || return 1
       local rest="${v#*"$q"}"
       v="${v%%"$q"*}"
-      rest="${rest#"${rest%%[![:space:]]*}"}"
-      [[ -z "$rest" || "$rest" == "#"* ]] || return 1 ;;
+      # after the closing quote: nothing, or whitespace and then nothing or a comment
+      [[ -z "$rest" || "$rest" =~ ^[[:space:]]+(#.*)?$ ]] || return 1 ;;
     "#"*) v="" ;;
     *)
-      if [[ "$v" =~ ^(.*[^[:space:]])[[:space:]]+#.*$ ]]; then v="${BASH_REMATCH[1]}"; fi
+      v="${v%%[[:space:]]#*}"   # a comment starts at the first whitespace followed by #
       v="${v%"${v##*[![:space:]]}"}" ;;
   esac
   printf '%s' "$v"
@@ -133,12 +133,27 @@ ai_worker_identity() {
   return 0
 }
 
-ai_worker_service_pid() {   # ai_worker_service_pid <platform> <label-or-unit>: the PID the service manager reports, or nothing
-  local out=""
-  case "$1" in
-    launchd) out="$(launchctl print "gui/$(id -u)/$2" 2>/dev/null | awk '$1 == "pid" && $2 == "=" { print $3; exit }')" || out="" ;;
-    systemd) out="$(systemctl --user show -p MainPID --value "$2" 2>/dev/null)" || out="" ;;
+# ai_worker_service_pid <platform> <label-or-unit> [timeout s]: the PID the service manager reports, or nothing. With a
+# timeout, the launchctl / systemctl call is given at most that long (ai_worker_run_bounded) and reports nothing when cut
+# off; its output goes to a temp file, not a pipe, so that nothing left behind can hold the call open.
+ai_worker_service_pid() {
+  local platform="$1" target="$2" secs="${3:-}" out="" f
+  f="$(mktemp "${TMPDIR:-/tmp}/ai-worker-pid.XXXXXX")" || return 0
+  case "$platform" in
+    launchd) set -- launchctl print "gui/$(id -u)/$target" ;;
+    systemd) set -- systemctl --user show -p MainPID --value "$target" ;;
+    *) rm -f "$f"; return 0 ;;
   esac
+  if [[ -n "$secs" ]]; then
+    ai_worker_run_bounded "$secs" ai_worker_exec_to "$f" "$@" || true
+  else
+    "$@" > "$f" 2>/dev/null || true
+  fi
+  case "$platform" in
+    launchd) out="$(awk '$1 == "pid" && $2 == "=" { print $3; exit }' "$f" 2>/dev/null)" || out="" ;;
+    systemd) out="$(cat "$f" 2>/dev/null)" || out="" ;;
+  esac
+  rm -f "$f"
   out="${out//[[:space:]]/}"
   [[ "$out" =~ ^[0-9]+$ && "$out" != 0 ]] && printf '%s\n' "$out"
   return 0
@@ -148,7 +163,7 @@ ai_worker_service_pid() {   # ai_worker_service_pid <platform> <label-or-unit>: 
 # returns its exit status, or 124 after killing it (TERM, then KILL a second later) when the time is up. The command
 # should exec its program, so that the PID killed is the program's.
 ai_worker_run_bounded() {
-  local secs="$1" p rc=0 end
+  local secs="$1" p rc=0 end i
   shift
   "$@" &
   p=$!
@@ -156,8 +171,8 @@ ai_worker_run_bounded() {
   while kill -0 "$p" 2>/dev/null; do
     if (( SECONDS >= end )); then
       kill -TERM "$p" 2>/dev/null
-      sleep 1
-      kill -KILL "$p" 2>/dev/null
+      for i in 1 2 3 4 5; do kill -0 "$p" 2>/dev/null || break; sleep 0.2; done
+      if kill -0 "$p" 2>/dev/null; then kill -KILL "$p" 2>/dev/null; fi
       wait "$p" 2>/dev/null
       return 124
     fi
@@ -166,6 +181,9 @@ ai_worker_run_bounded() {
   wait "$p" || rc=$?
   return "$rc"
 }
+
+# ai_worker_exec_to <file> <command…>: execs the command with stdout to <file> and stderr discarded.
+ai_worker_exec_to() { local f="$1"; shift; exec "$@" > "$f" 2>/dev/null; }
 
 # ai_worker_evidence_probe <pid> <host> <since>: worker-heartbeat.ts --evidence, run from this checkout (its tsconfig and
 # tsx), with the caller's DATABASE_URL; exec, so that ai_worker_run_bounded can kill it.
@@ -183,7 +201,8 @@ ai_worker_evidence_probe() {
 # The service polled is the definition in force when it is called: found_label of ai_worker_identity <main> (systemd: the
 # unit), not the configured label L. After a failed migration from the default or legacy label to L, the rollback puts
 # the definition back under its old label, and this waits for that one.
-# Every probe is bounded by the time left, and success counts only within the timeout. Returns 1 on timeout, when no
+# Every call (the service manager's PID, the evidence probe, the PID confirmation) is bounded by the time left, which is
+# recomputed after each one, and success counts only within the timeout. Returns 1 on timeout, when no
 # definition exists, when the identity is ambiguous, or at once when DATABASE_URL is empty: the caller sets it
 # explicitly (the URL written into the definition), it is never read from .env or derived here.
 ai_worker_wait_ready() {
@@ -195,17 +214,18 @@ ai_worker_wait_ready() {
   target="$(printf '%s\n' "$ident" | sed -n 's/^found_label=//p')"
   [[ -n "$target" ]] || { echo "ai-worker: no ai-worker definition is installed; nothing to wait for" >&2; return 1; }
   host="$(hostname)"
-  deadline=$((SECONDS + timeout))
+  # SECONDS counts whole seconds: one more makes the wait at least <timeout> s long (and less than <timeout> + 1)
+  deadline=$((SECONDS + timeout + 1))
   while :; do
-    left=$((deadline - SECONDS))
-    (( left > 0 )) || return 1
-    pid="$(ai_worker_service_pid "$platform" "$target")"
-    if [[ -n "$pid" && "$pid" != "$old" ]] \
-       && ai_worker_run_bounded "$left" ai_worker_evidence_probe "$pid" "$host" "$since" \
-       && [[ "$(ai_worker_service_pid "$platform" "$target")" == "$pid" ]] \
-       && (( SECONDS <= deadline )); then
-      printf '%s\n' "$pid"
-      return 0
+    left=$((deadline - SECONDS)); (( left > 0 )) || return 1
+    pid="$(ai_worker_service_pid "$platform" "$target" "$left")"
+    left=$((deadline - SECONDS)); (( left > 0 )) || return 1
+    if [[ -n "$pid" && "$pid" != "$old" ]] && ai_worker_run_bounded "$left" ai_worker_evidence_probe "$pid" "$host" "$since"; then
+      left=$((deadline - SECONDS)); (( left > 0 )) || return 1
+      if [[ "$(ai_worker_service_pid "$platform" "$target" "$left")" == "$pid" ]] && (( SECONDS <= deadline )); then
+        printf '%s\n' "$pid"
+        return 0
+      fi
     fi
     (( SECONDS < deadline )) || return 1
     sleep 1

@@ -142,7 +142,7 @@ describe("ai_worker_identity (launchd)", () => {
     expect(r.stderr).toContain("not a valid label");
   });
 
-  it.each([['"com.example.worker'], ['"com.example.worker" trailing'], ["'a.b'c"]])("a malformed quoted value %s: exit 1", (value) => {
+  it.each([['"com.example.worker'], ['"com.example.worker" trailing'], ["'a.b'c"], ['"a.b"#no-space']])("a malformed quoted value %s: exit 1", (value) => {
     schedule(value);
     const r = identity();
     expect(r.status).toBe(1);
@@ -152,6 +152,9 @@ describe("ai_worker_identity (launchd)", () => {
   it.each([
     ["com.example.worker", "com.example.worker"],
     ["com.example.worker   # a comment", "com.example.worker"],
+    ["com.example.worker # a # b", "com.example.worker"],
+    ["com.example.worker\t# tab before the comment", "com.example.worker"],
+    ['"com.example.worker" # a # b', "com.example.worker"],
     ['"com.example.worker"  # a comment', "com.example.worker"],
     ["'com.example.worker'", "com.example.worker"],
     ["com.example.worker\r", "com.example.worker"],

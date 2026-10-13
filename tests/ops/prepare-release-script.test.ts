@@ -105,8 +105,12 @@ afterEach(() => {
 function scriptEnv(extra: Record<string, string> = {}): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...process.env };
   delete env.JOB_RADAR_RELEASES_LOCK_TOKEN;
+  delete env.XDG_CONFIG_HOME;
   return {
     ...env,
+    // the ai-worker identity rules read service definitions under HOME: a temp one, never the machine's
+    HOME: path.join(base, "home"),
+    JOB_RADAR_SERVICE_MANAGER: "launchd",
     PATH: `${bin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
     STUB_LOG: log,
     STUB_PNPM_VERSION: STUB_PNPM,
@@ -307,7 +311,7 @@ describe("scripts/ops/prepare-release.sh: reuse and rebuild", () => {
     const ops = path.join(base, "ops");
     fs.mkdirSync(path.join(ops, "lib"), { recursive: true });
     fs.copyFileSync(script, path.join(ops, "prepare-release.sh"));
-    for (const lib of ["proc.sh", "releases.sh"]) fs.copyFileSync(path.join(repo, "scripts/ops/lib", lib), path.join(ops, "lib", lib));
+    for (const lib of ["proc.sh", "releases.sh", "ai-worker.sh"]) fs.copyFileSync(path.join(repo, "scripts/ops/lib", lib), path.join(ops, "lib", lib));
     const stub = printRelease
       ? `#!/usr/bin/env bash
 echo "install $*" >> "$STUB_LOG"
@@ -396,6 +400,74 @@ exit 1
     const r = prepare([], {}, copy);
     expect(r.status).toBe(1);
     expect(r.stderr).toContain("install-ai-worker.sh is missing");
+    expect(installs()).toHaveLength(1);
+  });
+
+  const installed = (label: string, body: string): string => {
+    const file = path.join(base, "home/Library/LaunchAgents", `${label}.plist`);
+    write(file, body);
+    return file;
+  };
+
+  it("an install script without --print-release and an installed definition that names a release directory: kept (exit 1)", () => {
+    const copy = opsCopy(false);
+    expect(prepare([], {}, copy).status).toBe(0);
+    corruptMarker();
+    installed("io.jobradar.ai-worker", `<plist><string>${path.join(rdir(), "c".repeat(40))}</string></plist>\n`);
+    const r = prepare([], {}, copy);
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain("names a release directory");
+    expect(askedInstall()).toEqual([]);
+    expect(fs.readFileSync(path.join(dest(), ".release.json"), "utf8")).toContain("broken");
+    expect(installs()).toHaveLength(1);
+  });
+
+  it("an install script without --print-release and an installed definition that runs from a checkout: rebuilt", () => {
+    const copy = opsCopy(false);
+    expect(prepare([], {}, copy).status).toBe(0);
+    corruptMarker();
+    installed("io.jobradar.ai-worker", `<plist><string>${main}</string></plist>\n`);
+    const r = prepare([], {}, copy);
+    expect(r.status).toBe(0);
+    expect(r.stderr).toContain("rebuilding");
+    expect(installs()).toHaveLength(2);
+  });
+
+  it.each([
+    ["an ambiguous identity (two definitions)", () => (installed("io.jobradar.ai-worker", "<plist/>\n"), installed("de.jobradar.ai-worker", "<plist/>\n")), "identity is ambiguous"],
+    ["an unreadable definition", () => fs.chmodSync(installed("io.jobradar.ai-worker", "<plist/>\n"), 0o000), "cannot read"],
+  ])("an install script without --print-release and %s: kept (exit 1)", (_label, setup, message) => {
+    if (process.getuid?.() === 0) return; // root reads anything
+    const copy = opsCopy(false);
+    expect(prepare([], {}, copy).status).toBe(0);
+    corruptMarker();
+    setup();
+    const r = prepare([], {}, copy);
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain(message);
+    expect(installs()).toHaveLength(1);
+  });
+
+  it.each([
+    ["a symbolic link (to a script that knows --print-release)", (file: string) => {
+      fs.renameSync(file, `${file}.real`);
+      fs.symlinkSync(`${file}.real`, file);
+    }, "a symbolic link or not a regular file"],
+    ["a directory", (file: string) => {
+      fs.rmSync(file);
+      fs.mkdirSync(file);
+    }, "a symbolic link or not a regular file"],
+    ["unreadable", (file: string) => fs.chmodSync(file, 0o000), "cannot read"],
+  ])("an install script that is %s: it cannot tell, the invalid release is kept (exit 1)", (_label, change, message) => {
+    if (process.getuid?.() === 0) return; // root reads anything
+    const copy = opsCopy();
+    expect(prepare([], {}, copy).status).toBe(0);
+    corruptMarker();
+    change(path.join(base, "ops/install-ai-worker.sh"));
+    const r = prepare([], { STUB_PRINT_EXIT: "3" }, copy);
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain(message);
+    expect(askedInstall()).toEqual([]);
     expect(installs()).toHaveLength(1);
   });
 

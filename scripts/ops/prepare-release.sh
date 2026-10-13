@@ -15,11 +15,13 @@
 # script exported in JOB_RADAR_RELEASES_LOCK_TOKEN):
 #   1  an existing release with a valid .release.json (sha, tree of <sha>, sha256 of pnpm-lock.yaml) is reused as is;
 #      one with an invalid marker is renamed to .trash-<sha>-<pid> and removed, unless the installed worker may run
-#      from it. That is asked of install-ai-worker.sh --print-release (next to this script): exit 0 names the release
-#      in use (refused when it is this one), 3 (not installed, or only under the legacy label) and 4 (installed, not
-#      from a release directory) let the rebuild go on, and 1 or any other exit refuses (the script cannot tell). An
-#      install script that does not mention --print-release at all predates release directories: no worker can run
-#      from one then, so nothing is in use.
+#      from it. That is asked of install-ai-worker.sh --print-release (next to this script, a regular file, not a
+#      link): exit 0 names the release in use (refused when it is this one), 3 (not installed, or only under the legacy
+#      label) and 4 (installed, not from a release directory) let the rebuild go on, and 1 or any other exit refuses
+#      (the script cannot tell). An install script that does not mention --print-release at all predates release
+#      directories; it is not run, and the rebuild goes on only when the installed service definition (found by the
+#      ai-worker identity rules, read as a file) does not mention data/releases/ai-worker/ (a worker installed by a
+#      newer checkout may run from a release). Anything that cannot be read refuses.
 #   2  git archive of <sha> into .tmp-<sha>-<pid>/ next to the releases
 #   3  `pnpm --version` must equal the packageManager of that commit (else: run `corepack enable`)
 #   4  pnpm install --frozen-lockfile --prod --prefer-offline --ignore-scripts: no lifecycle script runs at all, not even
@@ -71,6 +73,8 @@ source "$OPS/lib/proc.sh"
 PROC_RC_ALLOWED="0 1 2"
 # shellcheck source=lib/releases.sh
 source "$OPS/lib/releases.sh"
+# shellcheck source=lib/ai-worker.sh
+source "$OPS/lib/ai-worker.sh"
 
 RDIR="$(releases_dir "$MAIN")"
 DEST="$RDIR/$SHA"
@@ -96,11 +100,18 @@ run_step() { local rc; proc_check_stop; rc=0; proc_run "$@" || rc=$?; proc_check
 # from none (see step 1 in the header). Returns 1, with the reason on stderr, when that cannot be told.
 INSTALLED_RELEASE=""
 installed_release() {
-  local install="$OPS/install-ai-worker.sh" out rc=0
+  local install="$OPS/install-ai-worker.sh" out rc=0 grc=0
   INSTALLED_RELEASE=""
-  if [[ ! -f "$install" ]]; then say "cannot tell which release the installed ai-worker runs from: $install is missing"; return 1; fi
-  # An install script without --print-release predates release directories: the worker runs from the checkout.
-  grep -qF -- '--print-release' "$install" || return 0
+  if [[ -L "$install" || ! -f "$install" ]]; then
+    say "cannot tell which release the installed ai-worker runs from: $install is missing, a symbolic link or not a regular file"
+    return 1
+  fi
+  grep -qF -- '--print-release' "$install" || grc=$?
+  case "$grc" in
+    0) ;;
+    1) installed_definition_without_release; return ;;   # an install script from before release directories
+    *) say "cannot tell which release the installed ai-worker runs from: cannot read $install (grep exited $grc)"; return 1 ;;
+  esac
   out="$(bash "$install" --print-release --root "$MAIN" </dev/null)" || rc=$?
   case "$rc" in
     0) if [[ "$out" != /* || "$out" == *$'\n'* ]]; then
@@ -112,6 +123,24 @@ installed_release() {
     *) say "cannot tell which release the installed ai-worker runs from: install-ai-worker.sh --print-release exited $rc"; return 1 ;;
   esac
   return 0
+}
+# installed_definition_without_release: 0 when no ai-worker definition is installed, or the installed one does not
+# mention data/releases/ai-worker/ (its worker runs from a checkout). 1, with the reason, otherwise or when it cannot be read.
+installed_definition_without_release() {
+  local ident def grc=0
+  if ! ident="$(ai_worker_identity "$MAIN")"; then
+    say "cannot tell which release the installed ai-worker runs from: its service identity is ambiguous (see above)"
+    return 1
+  fi
+  def="$(printf '%s\n' "$ident" | sed -n 's/^found_definition=//p')"
+  [[ -n "$def" ]] || return 0
+  grep -qF -- 'data/releases/ai-worker/' "$def" || grc=$?
+  case "$grc" in
+    0) say "cannot tell which release the installed ai-worker runs from: its definition $def names a release directory, and install-ai-worker.sh here predates --print-release"
+       return 1 ;;
+    1) return 0 ;;
+    *) say "cannot tell which release the installed ai-worker runs from: cannot read $def (grep exited $grc)"; return 1 ;;
+  esac
 }
 same_dir() { [[ "$1" == "$2" ]] || { [[ -d "$1" && -d "$2" ]] && [[ "$(cd "$1" && pwd -P)" == "$(cd "$2" && pwd -P)" ]]; }; }
 

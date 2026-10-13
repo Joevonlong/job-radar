@@ -16,12 +16,17 @@
 //   4. esbuild's platform package, found the way esbuild finds it from tsx (tsx -> esbuild -> @esbuild/<platform>-<arch>),
 //      and its binary are inside the root; so is ESBUILD_BINARY_PATH when it is set. esbuild locates its binary with
 //      require.resolve, which no hook sees.
-//   5. no preload from outside the root: NODE_OPTIONS carries no --import, --require / -r, --loader or
-//      --experimental-loader at all (the service definition never sets one; a value there would come from the user's
-//      environment), and every such option on the command line (process.execArgv) names a file whose real path is
-//      inside the root: this guard and tsx's loader in production; tests add their own fixtures from the release. Bare
-//      package names are refused (the service definition uses absolute paths). A preload listed before this guard has
-//      already run when the check happens; the check makes the process stop before any application code runs.
+//   5. preloads (Node treats `_` and `-` in an option name alike; names are compared with `_` turned into `-`):
+//      - NODE_OPTIONS, split the way Node splits it (whitespace; double quotes group, a backslash escapes inside them),
+//        may hold only the options of NODE_OPTIONS_ALLOWED below, each as one `--name` or `--name=value` token; any
+//        other token, or text that does not parse, stops the process. The service definition sets none of these; a
+//        value would come from the user's environment.
+//      - on the command line (process.execArgv) the only preload kind allowed is --import: --require / -r, --loader and
+//        --experimental-loader stop the process (no CommonJS preload, no hooks thread). Every --import names a file
+//        whose real path is inside the root: this guard and tsx's loader in production; tests add their own fixtures
+//        from the release. Package names are refused (the service definition uses absolute paths).
+//      A preload that comes before this guard has already run when the check happens; the check makes the process
+//      stop before any application code runs.
 //
 // What is guaranteed: in the worker's main thread, every resolution made through `import` or `require()` whose result
 // lies outside the root (Node built-ins excepted) is refused before the module runs (registerHooks resolve hook:
@@ -120,25 +125,73 @@ if (process.env.ESBUILD_BINARY_PATH) {
 }
 
 // 5. preloads
-const PRELOAD_FLAGS = ["--import", "--require", "-r", "--loader", "--experimental-loader"];
-const preloadFlagOf = (arg) => PRELOAD_FLAGS.find((f) => arg === f || arg.startsWith(`${f}=`));
-const nodeOptions = process.env.NODE_OPTIONS ?? "";
-const fromNodeOptions = nodeOptions.split(/\s+/).map((t) => t.replace(/^["']/, "")).find((t) => preloadFlagOf(t));
-if (fromNodeOptions) {
-  stop(`NODE_OPTIONS carries ${preloadFlagOf(fromNodeOptions)} (a preload from the environment); unset NODE_OPTIONS for the ai-worker`);
+const optionName = (token) => {
+  const eq = token.indexOf("=");
+  const name = eq === -1 ? token : token.slice(0, eq);
+  return name.startsWith("--") ? `--${name.slice(2).replaceAll("_", "-")}` : name;
+};
+const optionValue = (token) => (token.includes("=") ? token.slice(token.indexOf("=") + 1) : null);
+
+// NODE_OPTIONS: a short allowlist (name -> what its value must look like; null: no value)
+const NODE_OPTIONS_ALLOWED = new Map([
+  ["--max-old-space-size", /^[1-9][0-9]{0,6}$/],
+  ["--max-semi-space-size", /^[1-9][0-9]{0,4}$/],
+  ["--enable-source-maps", null],
+  ["--no-warnings", null],
+]);
+function splitNodeOptions(text) {
+  const tokens = [];
+  let token = "";
+  let inToken = false;
+  let quoted = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (quoted) {
+      if (c === "\\" && i + 1 < text.length) token += text[++i];
+      else if (c === '"') quoted = false;
+      else token += c;
+    } else if (/\s/.test(c)) {
+      if (inToken) tokens.push(token);
+      token = "";
+      inToken = false;
+    } else {
+      inToken = true;
+      if (c === '"') quoted = true;
+      else token += c;
+    }
+  }
+  if (quoted) return null;
+  if (inToken) tokens.push(token);
+  return tokens;
 }
+const nodeOptions = process.env.NODE_OPTIONS ?? "";
+const nodeOptionTokens = splitNodeOptions(nodeOptions);
+if (nodeOptionTokens === null) stop("NODE_OPTIONS has an unclosed quote; unset NODE_OPTIONS for the ai-worker");
+for (const token of nodeOptionTokens) {
+  const name = optionName(token);
+  const value = optionValue(token);
+  const rule = NODE_OPTIONS_ALLOWED.get(name);
+  const ok = rule !== undefined && (rule === null ? value === null : value !== null && rule.test(value));
+  if (!ok) {
+    stop(`NODE_OPTIONS holds ${JSON.stringify(token)}, which is not one of ${[...NODE_OPTIONS_ALLOWED.keys()].join(", ")}; unset NODE_OPTIONS for the ai-worker`);
+  }
+}
+
+// the command line: --import only, each one a file inside the root
+const REFUSED_PRELOADS = new Set(["--require", "-r", "--loader", "--experimental-loader"]);
 const execArgv = process.execArgv;
 for (let i = 0; i < execArgv.length; i++) {
-  const flag = preloadFlagOf(execArgv[i]);
-  if (!flag) continue;
-  const value = execArgv[i] === flag ? execArgv[++i] : execArgv[i].slice(flag.length + 1);
-  if (!value) stop(`${flag} without a value`);
+  const name = optionName(execArgv[i]);
+  if (REFUSED_PRELOADS.has(name)) stop(`${execArgv[i]}: only --import preloads are allowed for the ai-worker (no CommonJS preload, no loader thread)`);
+  if (name !== "--import") continue;
+  const value = optionValue(execArgv[i]) ?? execArgv[++i];
+  if (!value) stop("--import without a value");
   let file;
   if (value.startsWith("file:")) file = fileURLToPath(value);
   else if (path.isAbsolute(value)) file = value;
   else if (value.startsWith("./") || value.startsWith("../")) file = path.resolve(process.cwd(), value);
-  else stop(`${flag} ${value}: a preload must be given as a path inside ${root}, not as a package name`);
-  realInRoot(`the preload ${flag} ${value}`, () => file);
+  else stop(`--import ${value}: a preload must be given as a path inside ${root}, not as a package name or URL`);
+  realInRoot(`the preload --import ${value}`, () => file);
 }
 
 // The hooks: accept only built-ins and real paths inside the root (resolve: after the next resolver; load: before it).

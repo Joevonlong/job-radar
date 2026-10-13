@@ -32,7 +32,7 @@ beforeEach(() => {
   // launchctl print <domain>/<label>: succeeds while state/loaded (any label) or state/loaded-<label> exists
   write(
     path.join(bin, "launchctl"),
-    `#!/bin/bash\necho "launchctl $*" >> "${state}/calls"\n[[ "$1" == print && ( -e "${state}/loaded" || -e "${state}/loaded-\${2##*/}" ) ]] && { echo "pid = 4242"; exit 0; }\nexit 113\n`,
+    `#!/bin/bash\necho "launchctl $*" >> "${state}/calls"\n[[ -n "\${STUB_LAUNCHCTL_SLEEP:-}" ]] && sleep "$STUB_LAUNCHCTL_SLEEP"\n[[ "$1" == print && ( -e "${state}/loaded" || -e "${state}/loaded-\${2##*/}" ) ]] && { echo "pid = 4242"; exit 0; }\nexit 113\n`,
     0o755,
   );
   // node: stands in for the worker-heartbeat.ts --evidence probe (sleeps STUB_NODE_SLEEP, exits STUB_NODE_EXIT)
@@ -224,5 +224,29 @@ describe("ai_worker_wait_ready: the service polled and the time bound", () => {
       const r = run(`ai_worker_wait_ready "${main()}" 1 2026-01-01T00:00:00Z 2; echo "rc=$?"`, { ...env, STUB_NODE_EXIT: code });
       expect(r.stdout.trim()).toBe("rc=1");
     }
+  });
+
+  it("slow service-manager calls are bounded by the time left too (1 within the bound, no call left running)", () => {
+    plist("io.jobradar.ai-worker");
+    write(path.join(state, "loaded"), "");
+    const r = run(`ai_worker_wait_ready "${main()}" 1 2026-01-01T00:00:00Z 2; echo "rc=$?"`, { ...env, STUB_LAUNCHCTL_SLEEP: "8" });
+    expect(r.stdout.trim()).toBe("rc=1");
+    expect(r.ms).toBeLessThan(6500); // the stub hangs 8 s; the bound is 2 s (+1 for whole seconds, +1 for TERM)
+    expect(calls().some((c) => c.startsWith("node "))).toBe(false);
+  });
+
+  it("a slow confirmation of the PID after the evidence is bounded as well", () => {
+    plist("io.jobradar.ai-worker");
+    write(path.join(state, "loaded"), "");
+    // the first launchctl call answers at once; every later one (the confirmation) hangs
+    write(
+      path.join(bin, "launchctl"),
+      `#!/bin/bash\necho "launchctl $*" >> "${state}/calls"\nif [[ -e "${state}/answered" ]]; then sleep 8; fi\ntouch "${state}/answered"\necho "pid = 4242"\n`,
+      0o755,
+    );
+    const r = run(`ai_worker_wait_ready "${main()}" 1 2026-01-01T00:00:00Z 2; echo "rc=$?"`, env);
+    expect(r.stdout.trim()).toBe("rc=1");
+    expect(r.ms).toBeLessThan(6500); // the stub hangs 8 s; the bound is 2 s (+1 for whole seconds, +1 for TERM)
+    expect(calls().some((c) => c.startsWith("node "))).toBe(true);
   });
 });
