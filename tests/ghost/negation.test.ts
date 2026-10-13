@@ -355,6 +355,20 @@ describe("negatedInClause against reference B", () => {
     expect(evergreenWording(`${"hit ".repeat(50)}${"a".repeat(500)}'but`, rules)).toBeNull();
     expect(evergreenWording(`${"hit ".repeat(50)}${"a".repeat(500)}'xbut`, rules)).toMatchObject({ patternId: "hit" });
   });
+
+  it("answers, and stops, for offsets inside a surrogate pair (outside the contract: the answer may differ from the slices')", () => {
+    // astral letters after an apostrophe: a window starting inside one reads after the piece word's apostrophe
+    for (const text of ["x'𝐀𝐁'not no", "a'𝐀 b'𝐁𝐀'c not", "no'𝐀'𝐁"]) {
+      for (const [, rules] of CUSTOM_PACKS) {
+        const index = negationIndex(text, rules);
+        for (let from = 0; from <= text.length; from++) {
+          for (let to = from; to <= text.length; to++) {
+            for (const reach of ALL_REACHES) expect(typeof negatedInClause(index, from, to, reach)).toBe("boolean");
+          }
+        }
+      }
+    }
+  });
 });
 
 describe("windowWords", () => {

@@ -135,7 +135,11 @@ function nextWord(index: NegationIndex, at: number, end: number): { piece: numbe
   return start < end ? { start, inside: k } : null;
 }
 
-/** The word of the slice ending at `end` that starts at `start`, inside the piece's word `inside`. */
+/**
+ * The word of the slice ending at `end` that starts at `start`, inside the piece's word `inside`. Offsets are on code point
+ * boundaries; one inside a surrogate pair reads no word after an apostrophe, so reading stops (the answer may then differ from the
+ * slice read alone).
+ */
 function readWord(index: NegationIndex, start: number, inside: number, end: number): ChainWord {
   const { text } = index;
   const join = index.wordJoins[inside] as number;
@@ -324,7 +328,9 @@ export interface NegationReach {
  * start of one at or after its end; words are read as on the slices before, inside and after the hit alone. The breaks are
  * matched over the whole piece (read once), so a lookaround in one may read into the hit: a break that only matches with (or
  * without) the hit's own text around it ends the clause where it matches in the whole piece. Asked for the hits of a piece in
- * text order, the time stays linear in its length; asked in any order, the answers are the same.
+ * text order, the time stays linear in its length; asked in any order, the answers are the same. `from` and `to` are on code point
+ * boundaries (as the matches of a `u` expression are); an offset inside a surrogate pair still gets an answer, which may differ
+ * from reading the slices alone.
  */
 export function negatedInClause(index: NegationIndex, from: number, to: number, reach: NegationReach): boolean {
   if (index.cues.length === 0) return false;
@@ -335,6 +341,7 @@ export function negatedInClause(index: NegationIndex, from: number, to: number, 
   if (reach.before > 0 && from > clauseStart && cueBefore(index, clauseStart, from, reach.before)) return true;
   if (cueAhead(index, from, to, Infinity, null, false)) return true;
   if (reach.after === "clause") {
+    // keyed by the clause end only to hold one clause's places at a time: places kept for one end are never looked up for another
     if (index.rest?.end !== clauseEnd) index.rest = { end: clauseEnd, cueAfter: new Map() };
     return cueAhead(index, to, clauseEnd, Infinity, index.rest.cueAfter, true);
   }
