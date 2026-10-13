@@ -6,15 +6,14 @@ import { segmentText, type TextSegment } from "@/lib/job-checks/segment";
 import { clipQuote } from "@/lib/signals/quote";
 
 import { endsInQuestion, questionEndAsColon, stripTrailingDecoration, trailingDotsAsColon, trailingPauseAsColon } from "./heading-ends";
+import { lowerBound, negatedInClause, negationIndex, WORD, wordsOf, type NegationIndex } from "./negation";
 import type { CompiledGhostPattern, CompiledGhostRules } from "./rules";
 import type { GhostInput, GhostPosting, GhostReasonOf, RepostEvent } from "./types";
 
 const DAY_MS = 86_400_000;
-const WORD = /[\p{L}\p{N}]+(?:['’]\p{L}+)?/gu;
 
 const isoDay = (date: Date): string => date.toISOString().slice(0, 10);
 const daysBetween = (from: Date, to: Date): number => Math.max(0, Math.floor((to.getTime() - from.getTime()) / DAY_MS));
-const wordsOf = (text: string): string[] => Array.from(text.matchAll(WORD), (m) => m[0]);
 
 /** The number of words of a text (letters and digits, "don't" as one). */
 export function countWords(text: string | null): number {
@@ -249,40 +248,6 @@ interface Hit {
 
 const hasCue = (text: string, rules: CompiledGhostRules): boolean => wordsOf(text).some((word) => rules.negationCues.some((cue) => cue.test(word)));
 
-/** The end of the first clause break in `text` (or its length). */
-function firstBreak(text: string, breaks: readonly RegExp[]): number {
-  let end = text.length;
-  for (const re of breaks) {
-    const at = text.search(re);
-    if (at !== -1 && at < end) end = at;
-  }
-  return end;
-}
-
-/** Where the clause that ends at the end of `text` starts: right after the last clause break in it (0 when none). */
-function lastBreakEnd(text: string, breaks: readonly RegExp[]): number {
-  let from = 0;
-  for (const re of breaks) {
-    for (const match of text.matchAll(re)) {
-      const end = match.index + match[0].length;
-      if (end > from) from = end;
-    }
-  }
-  return from;
-}
-
-/** The first index in the ascending `values` whose value is at least `value` (`values.length` when none). */
-function lowerBound(values: readonly number[], value: number): number {
-  let low = 0;
-  let high = values.length;
-  while (low < high) {
-    const mid = (low + high) >>> 1;
-    if ((values[mid] as number) < value) low = mid + 1;
-    else high = mid;
-  }
-  return low;
-}
-
 /**
  * The matches of `res` in a piece, read once so that each hit finds its clause in log time (re-reading the text before every hit
  * takes the square of the hit count). `ends` ascending, `starts[i]` the last start among the matches up to `ends[i]`.
@@ -315,22 +280,17 @@ function lastMarkStart(marks: ClauseMarks, from: number): number {
 /**
  * A negation cue inside the hit, among the `negation_words_before` words before it or the `negation_words_after` words after it
  * (both within its clause; after it to the end of the clause for a pattern with `negationAfter: "clause"`), in the heading of its
- * list, or, for a heading read with its next line, in that next line.
+ * list, or, for a heading read with its next line, in that next line. `index`: the piece's, read on its first negation test.
  */
-function negated(segment: TextSegment, hit: Hit, pattern: CompiledGhostPattern, rules: CompiledGhostRules, description: string): boolean {
+function negated(segment: TextSegment, hit: Hit, pattern: CompiledGhostPattern, rules: CompiledGhostRules, description: string, index: () => NegationIndex): boolean {
   if (rules.negationCues.length === 0) return false;
   if (segment.listHeading !== undefined && hasCue(description.slice(segment.listHeading.start, segment.listHeading.end), rules)) return true;
   if (segment.headingEnd !== undefined && hit.end <= segment.headingEnd && hasCue(description.slice(segment.headingEnd, segment.end), rules)) return true;
   const settings = rules.settings;
-  const from = hit.start - segment.start;
-  const to = hit.end - segment.start;
-  const head = segment.text.slice(0, from);
-  const before = settings.negation_words_before === 0 ? [] : wordsOf(head.slice(lastBreakEnd(head, rules.clauseBreaks))).slice(-settings.negation_words_before);
-  const inside = wordsOf(segment.text.slice(from, to));
-  const tail = segment.text.slice(to);
-  const clauseAfter = wordsOf(tail.slice(0, firstBreak(tail, rules.clauseBreaks)));
-  const after = pattern.negationAfter === "clause" ? clauseAfter : clauseAfter.slice(0, settings.negation_words_after);
-  return [...before, ...inside, ...after].some((word) => rules.negationCues.some((cue) => cue.test(word)));
+  return negatedInClause(index(), hit.start - segment.start, hit.end - segment.start, {
+    before: settings.negation_words_before,
+    after: pattern.negationAfter === "clause" ? "clause" : settings.negation_words_after,
+  });
 }
 
 /**
@@ -568,6 +528,8 @@ export function evergreenWording(description: string | null, rules: CompiledGhos
     let excludedSeen = 0;
     let excludedTo = -1;
     const tagged = statementEnd < segment.text.length ? taggedPiece(segment.text, rules) : null;
+    let negation: NegationIndex | undefined;
+    const negationOf = (): NegationIndex => (negation ??= negationIndex(segment.text, rules));
     candidates.sort((a, b) => a.hit.start - b.hit.start || b.hit.end - a.hit.end);
     for (const { hit, pattern } of candidates) {
       if (options.skip?.(hit.start, hit.end)) continue;
@@ -590,7 +552,7 @@ export function evergreenWording(description: string | null, rules: CompiledGhos
       }
       // a broad phrase counts only next to recruiting words ("join our AI talent pool" … "future opportunities")
       if (pattern.requiresContext.length > 0 && !pattern.requiresContext.some((re) => segment.text.search(re) !== -1)) continue;
-      if (pattern.checkNegation && negated(segment, hit, pattern, rules, description)) continue;
+      if (pattern.checkNegation && negated(segment, hit, pattern, rules, description, negationOf)) continue;
       const { quote, offset } = clipQuote(description, segment.start, segment.end, hit, rules.settings.quote_max_chars);
       // C7: the quote must be the description at its offset; a quote that is not is never stored
       if (quote === "" || description.slice(offset, offset + quote.length) !== quote) continue;

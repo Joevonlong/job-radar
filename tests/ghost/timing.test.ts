@@ -53,6 +53,8 @@ describe("ghost check timing", () => {
     // the clause of every hit opens with the same long run of markers, or of signs, before a tagged invitation
     ["1785 hits after 6250 markers before a tagged invitation", `${"and ".repeat(6250)}${"always hiring ".repeat(1785)}– interested?`],
     ["1785 hits after 25000 signs before a tagged invitation", `${"~".repeat(25000)}${" always hiring".repeat(1785)} – interested?`],
+    // every hit negated, in one clause with no break
+    ["4000 negated hits in one clause", "not always hiring ".repeat(4000)],
   ])("a piece with %s (every hit left out)", (_name, description) => {
     // the expressions' first runs (compiling) are not what is measured: the time must not grow with the square of the hits
     evergreenWording(description.slice(-2000), rules);
@@ -60,6 +62,17 @@ describe("ghost check timing", () => {
     const ms = elapsed(() => void (found = evergreenWording(description, rules)));
     expect(ms).toBeLessThan(100);
     expect(found).toBeNull();
+  });
+
+  it.each([
+    ["clauses", `${"not always hiring; ".repeat(4000)}we are always hiring.`],
+    ["one clause joined by 'and'", `${"not always hiring and ".repeat(4000)}we are always hiring.`],
+  ])("4000 negated hits before a last one that counts, in %s", (_name, description) => {
+    evergreenWording(description.slice(-2000), rules);
+    let found: ReturnType<typeof evergreenWording> = null;
+    const ms = elapsed(() => void (found = evergreenWording(description, rules)));
+    expect(ms).toBeLessThan(100);
+    expect(found).toMatchObject({ patternId: "always_hiring", quote: expect.stringContaining("we are always hiring.") });
   });
 
   it.each([
