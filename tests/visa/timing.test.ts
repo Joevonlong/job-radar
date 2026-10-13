@@ -5,98 +5,61 @@ import { detectVisa } from "@/lib/visa/detect";
 import { visaRulesFor } from "@/lib/visa/rules";
 import type { VisaStatus } from "@/lib/visa/types";
 
+import { leastCpuTime } from "../helpers/cpu-time";
 import { shippedPipeline } from "../pipeline/helpers";
 
 /**
  * The visa check stays linear in the length of a segment with many hits: the words around each hit are read from one index of
  * the segment, and the heading of a list is read once for all its items. Reading the text before and after every hit again (and
  * the heading again for every item) took the square of the hits.
+ *
+ * Each shape is checked in CPU time of this thread (the least of three measurements; wall time grows several times over on a busy
+ * machine) in two steps: first a bound at one size (failing there stops the case, so slow code fails in seconds instead of running
+ * the larger sizes), then the growth from a quarter of that size to the size, at most 8 times the time (linear ≈ 4, quadratic ≈
+ * 16). The bounds are about ten times the time measured here and a tenth of what reading with the square of the hits took.
  */
 const rules = visaRulesFor(shippedPipeline());
-
-const elapsed = (work: () => void): number => {
-  const started = performance.now();
-  work();
-  return performance.now() - started;
-};
-
-const median = (values: readonly number[]): number => [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)] as number;
 
 /** A heading line of about `chars` characters ending in ":", which opens the list below it. */
 const heading = (chars: number): string => `${"Things we talk about with every candidate before the first day ".repeat(Math.ceil(chars / 64)).slice(0, chars)}:\n`;
 
-/** The shapes whose reading grew with the square of their size: `n` repeats (the list shape: a heading and items both growing with `n`). */
-const SHAPES: Record<string, { make: (n: number) => string; status: VisaStatus }> = {
-  "hits joined by 'and'": { make: (n) => "we offer relocation support and ".repeat(n), status: "offered" },
-  "hits joined by commas": { make: (n) => "we offer relocation support, ".repeat(n), status: "offered" },
-  "hits after a dot and a lower-case word": { make: (n) => "we offer relocation support. we ".repeat(n), status: "offered" },
-  "hits joined by 'and', negated at the end": { make: (n) => `${"we offer relocation support and ".repeat(n)}not available`, status: "unclear" },
-  "German hits joined by commas": { make: (n) => "wir bieten Relocation-Support, ".repeat(n), status: "offered" },
-  "hits inside one run of words joined by apostrophes": { make: (n) => "Umzugszuschuss'".repeat(n), status: "offered" },
-  "list items under one long heading": { make: (n) => `${heading(Math.round(17.5 * n))}${"- Relocation support\n".repeat(n)}`, status: "offered" },
-};
-const shape = (name: string, n: number): string => (SHAPES[name] as { make: (n: number) => string }).make(n);
+interface Shape {
+  name: string;
+  /** The text for a size `n`: `n` repeats (the list shape: a heading and items both growing with `n`). */
+  make: (n: number) => string;
+  status: VisaStatus;
+  /** The size checked against `bound` (CPU milliseconds); the growth is checked from a quarter of it to it. */
+  n: number;
+  bound: number;
+}
+
+/** The shapes whose reading grew with the square of their size. CPU ms measured / wall seconds of the reading before the index. */
+const SHAPES: Shape[] = [
+  { name: "9400 hits joined by 'and'", make: (n) => "we offer relocation support and ".repeat(n), status: "offered", n: 9400, bound: 600 }, // 52 ms / 234 s
+  { name: "7000 hits joined by commas", make: (n) => "we offer relocation support, ".repeat(n), status: "offered", n: 7000, bound: 400 }, // 34 ms / 141 s
+  { name: "6250 hits after a dot and a lower-case word", make: (n) => "we offer relocation support. we ".repeat(n), status: "offered", n: 6250, bound: 400 }, // 34 ms / 146 s
+  { name: "9400 hits joined by 'and', negated at the end", make: (n) => `${"we offer relocation support and ".repeat(n)}not available`, status: "unclear", n: 9400, bound: 600 }, // 52 ms / 215 s
+  { name: "9400 German hits joined by commas", make: (n) => "wir bieten Relocation-Support, ".repeat(n), status: "offered", n: 9400, bound: 500 }, // 43 ms / 218 s
+  { name: "30000 hits inside one run of words joined by apostrophes", make: (n) => "Umzugszuschuss'".repeat(n), status: "offered", n: 30_000, bound: 800 }, // 70 ms / 272 s
+  { name: "12000 list items under a 210000-character heading", make: (n) => `${heading(Math.round(17.5 * n))}${"- Relocation support\n".repeat(n)}`, status: "offered", n: 12_000, bound: 800 }, // 68 ms / 446 s
+  // linear before too, and no slower now: a hit after a 100000-character sentence without one (n = its characters)
+  { name: "a hit after a 100000-character sentence without one", make: (n) => `${"Our team builds data tools for many customers ".repeat(Math.ceil(n / 46))}and we offer relocation support.`, status: "offered", n: 100_000, bound: 100 }, // 7 ms
+];
 
 describe("visa check timing", () => {
-  // Each bound is ten times the slowest of fifteen runs measured while the whole unit suite ran in parallel on the same machine
-  // (rounded up to 100 ms), and the reading before the index took more than ten times the bound on the same input under a similar
-  // load (a load average near 170 on ten cores). Noted per case: slowest new run / old run.
-  it.each([
-    ["9400 hits joined by 'and'", shape("hits joined by 'and'", 9400), 4500, "offered"], // 445 ms / 234 s
-    ["7000 hits joined by commas", shape("hits joined by commas", 7000), 3800, "offered"], // 378 ms / 141 s
-    ["6250 hits after a dot and a lower-case word", shape("hits after a dot and a lower-case word", 6250), 3800, "offered"], // 378 ms / 146 s
-    ["9400 hits joined by 'and', negated at the end", shape("hits joined by 'and', negated at the end", 9400), 4500, "unclear"], // 446 ms / 215 s
-    ["9400 German hits joined by commas", shape("German hits joined by commas", 9400), 3100, "offered"], // 302 ms / 218 s
-    ["30000 hits inside one run of words joined by apostrophes", shape("hits inside one run of words joined by apostrophes", 30000), 7500, "offered"], // 747 ms / 272 s
-    ["12000 list items under a 210000-character heading", `${heading(210_000)}${"- Relocation support\n".repeat(12000)}`, 5500, "offered"], // 547 ms / 446 s
-  ] as Array<[string, string, number, VisaStatus]>)("%s", (_name, description, bound, expected) => {
+  it.each(SHAPES)("$name", ({ make, status, n, bound }) => {
     // the expressions' first runs (compiling) are not what is measured
-    detectVisa(description.slice(-2000), rules);
-    let status: VisaStatus = "not_mentioned";
-    const ms = elapsed(() => void (status = detectVisa(description, rules).status));
-    expect(ms).toBeLessThan(bound);
-    expect(status).toBe(expected);
-  });
-
-  // linear before too: the bound is ten times the slowest new run with the unit suite alongside (229 ms); measured side by side
-  // under another load, the old reading took up to 83 ms and the new one up to 57 ms
-  it("a hit after a 100000-character sentence without one (linear before, and no slower now)", () => {
-    const description = `${"Our team builds data tools for many customers ".repeat(Math.ceil(100_000 / 46))}and we offer relocation support.`;
-    detectVisa(description.slice(-2000), rules);
-    let status: VisaStatus = "not_mentioned";
-    const ms = elapsed(() => void (status = detectVisa(description, rules).status));
-    expect(ms).toBeLessThan(2300);
-    expect(status).toBe("offered");
-  });
-
-  // Four times the input takes about four times as long when the reading is linear (sixteen times when it is quadratic). The
-  // smaller input is doubled until each of its runs takes 20 ms, so the ratio is not timer noise; medians of three runs, taken in
-  // turns with the larger input.
-  it.each(Object.keys(SHAPES))("%s: four times the input, at most eight times the time", (name) => {
-    const { make, status } = SHAPES[name] as { make: (n: number) => string; status: VisaStatus };
-    const run = (text: string): number => {
-      let result: VisaStatus = "not_mentioned";
-      const ms = elapsed(() => void (result = detectVisa(text, rules).status));
-      expect(result).toBe(status);
-      return ms;
-    };
     detectVisa(make(64).slice(-2000), rules);
-    let n = 500;
-    let small = make(n);
-    let smalls = [run(small), run(small), run(small)];
-    while (Math.min(...smalls) < 20 && small.length < 1_000_000) {
-      n *= 2;
-      small = make(n);
-      smalls = [run(small), run(small), run(small)];
-    }
-    expect(Math.min(...smalls)).toBeGreaterThanOrEqual(20);
-    const large = make(4 * n);
-    const larges: number[] = [];
-    for (let i = 0; i < 3; i++) {
-      larges.push(run(large));
-      smalls.push(run(small));
-    }
-    expect(median(larges) / median(smalls)).toBeLessThanOrEqual(8);
+    const text = make(n);
+    const ms = leastCpuTime(() => void detectVisa(text, rules), { giveUpAbove: 3 * bound });
+    expect(ms, `CPU ms at ${n}`).toBeLessThan(bound);
+    expect(detectVisa(text, rules).status).toBe(status);
+    const [small, large] = [n / 4, n].map((size) => {
+      const sized = make(size);
+      expect(detectVisa(sized, rules).status).toBe(status);
+      return leastCpuTime(() => void detectVisa(sized, rules));
+    }) as [number, number];
+    expect(large / small, `CPU ms ${large.toFixed(1)} at ${n} / ${small.toFixed(1)} at ${n / 4}`).toBeLessThanOrEqual(8);
   });
 });
 
