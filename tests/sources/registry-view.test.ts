@@ -119,6 +119,50 @@ describe("buildRegistryViewFromMirror", () => {
     expect(v.boards[0]).toMatchObject({ id: "board:greenhouse:zellwerk", status: "ok" });
     expect(v.total).toBe(4);
   });
+
+  describe("the status of an enabled channel follows its last run only", () => {
+    type LastRun = NonNullable<ReturnType<typeof windowStat>["lastRun"]>;
+    const mirrorOf = (lastRun: LastRun | null, extra: Partial<SourceRegistryRow> = {}) =>
+      buildRegistryViewFromMirror({
+        now: NOW,
+        rows: [row("xing", extra)],
+        channelStats: new Map(lastRun === null ? [] : [["xing", windowStat({ runs: 1, lastRun })]]),
+        boardHealth: [],
+        boardSeen: new Map(),
+        settings: REGISTRY_DEFAULTS,
+      });
+    const run = (status: LastRun["status"], errorCode: string | null, interrupted: boolean): LastRun => ({ startedAt: NOW, status, errorCode, interrupted });
+
+    it("is degraded when the last run was cut short, which the last-run column also shows", () => {
+      const v = mirrorOf(run("partial", "network", true));
+      expect(v.channels[0]).toMatchObject({ status: "degraded", reasons: [{ key: "requestFailures" }], lastRun: { status: "partial", interrupted: true, errorCode: "network" } });
+      expect(v.counts.degraded).toBe(1);
+      expect(v.counts.ok).toBe(0);
+    });
+
+    it("is degraded when the last run kept only some of the records", () => {
+      const v = mirrorOf(run("partial", "parse", false));
+      expect(v.channels[0]).toMatchObject({ status: "degraded", reasons: [{ key: "requestFailures" }], lastRun: { interrupted: false } });
+      expect(v.counts.degraded).toBe(1);
+    });
+
+    it.each([
+      ["succeeded", run("succeeded", null, false), "ok"],
+      ["failed", run("failed", "blocked", false), "failing"],
+      ["skipped", run("skipped", "budget_exceeded", false), "ok"],
+    ] as const)("is %s -> %s", (_name, last, status) => {
+      expect(mirrorOf(last).channels[0]?.status).toBe(status);
+    });
+
+    it("stays off for a disabled channel whatever its last run was", () => {
+      const v = mirrorOf(run("partial", "network", true), { enabled: false });
+      expect(v.channels[0]).toMatchObject({ status: "off", reasons: [{ key: "offChannel" }] });
+    });
+
+    it("is never run without any run", () => {
+      expect(mirrorOf(null).channels[0]).toMatchObject({ status: "never_run", reasons: [{ key: "noRuns" }] });
+    });
+  });
 });
 
 describe("skipped runs, cascade standby, the recommended switch, one time basis", () => {

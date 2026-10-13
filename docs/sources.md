@@ -60,7 +60,7 @@ A channel's status is the same result as the channel card on the `/sources` over
 - Export the current file before importing; if something goes wrong you can import it back.
 - When validation fails, errors are written in the UI language and name companies as "name (ats/token)", not by list index; a YAML syntax error reports the line and column once.
 - When "replace the whole file" removes a company, the group comments above the other companies stay where they are; the removed company's own group comment moves to the company after it.
-- When `sources.yaml` cannot be read: the table shows the database mirror (possibly stale), switches and editing are disabled, but export YAML and import still work; use import to replace the whole file and repair it.
+- When `sources.yaml` cannot be read: the table shows the database mirror (possibly stale; its status is coarser and follows only the last run: failed is Failing, partial or cut short is Degraded, anything else OK), switches and editing are disabled, but export YAML and import still work; use import to replace the whole file and repair it.
 
 ## 5. Command line
 

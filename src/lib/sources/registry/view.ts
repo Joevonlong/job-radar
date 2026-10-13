@@ -231,8 +231,18 @@ export function buildRegistryViewFromMirror(input: MirrorViewInput): RegistryVie
     .map((row): ChannelRow => {
       const stat = input.channelStats.get(row.id) ?? null;
       const last = stat?.lastRun ?? null;
-      const status: RegistryStatus = !row.enabled ? "off" : last === null ? "never_run" : last.status === "failed" ? "failing" : "ok";
-      const reasons: RegistryReason[] = !row.enabled ? [{ key: "offChannel" }] : last === null ? [{ key: "noRuns" }] : last.status === "failed" ? [{ key: "lastRunFailed", values: { error: last.errorCode ?? "unknown" } }] : [];
+      // Only the last run is known here, so the grade is coarse: a failed run is failing, a partial one (cut short or with
+      // some invalid records) degraded, anything else ok.
+      const status: RegistryStatus = !row.enabled ? "off" : last === null ? "never_run" : last.status === "failed" ? "failing" : last.status === "partial" ? "degraded" : "ok";
+      const reasons: RegistryReason[] = !row.enabled
+        ? [{ key: "offChannel" }]
+        : last === null
+          ? [{ key: "noRuns" }]
+          : last.status === "failed"
+            ? [{ key: "lastRunFailed", values: { error: last.errorCode ?? "unknown" } }]
+            : last.status === "partial"
+              ? [{ key: "requestFailures" }]
+              : [];
       return {
         id: row.id,
         type: "channel",
