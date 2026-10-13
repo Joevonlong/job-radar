@@ -55,6 +55,9 @@ describe("ghost check timing", () => {
     ["1785 hits after 25000 signs before a tagged invitation", `${"~".repeat(25000)}${" always hiring".repeat(1785)} – interested?`],
     // every hit negated, in one clause with no break
     ["4000 negated hits in one clause", "not always hiring ".repeat(4000)],
+    // each list item looks for its list's heading above it: the lines of one list are read once, not once per item below them
+    ["4000 negated list items", "- not always hiring\n".repeat(4000)],
+    ["2000 hits under a question heading after 8000 items and blank lines", `What will you be doing?\n${"- x\n\n".repeat(8000)}${"- no open job\n".repeat(2000)}`],
   ])("a piece with %s (every hit left out)", (_name, description) => {
     // the expressions' first runs (compiling) are not what is measured: the time must not grow with the square of the hits
     evergreenWording(description.slice(-2000), rules);

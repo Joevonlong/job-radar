@@ -148,7 +148,7 @@ function headingText(raw: string, rules: CompiledGhostRules, listFollows: boolea
 }
 
 /** The whole line as a heading (short, and a "#" heading, ending in ":" or without end punctuation), or null. */
-function wholeLineHeading(line: string, rules: CompiledGhostRules, listFollows: boolean): string | null {
+export function wholeLineHeading(line: string, rules: CompiledGhostRules, listFollows: boolean): string | null {
   const trimmed = line.trim();
   const content = normalizeHeadingLine(trimmed, rules, listFollows);
   if (content.length === 0 || content.length > rules.settings.heading_max_chars) return null;
@@ -296,25 +296,42 @@ function negated(segment: TextSegment, hit: Hit, pattern: CompiledGhostPattern, 
 /**
  * The heading of a list item's list: the segmenter's, else (ghost-local) the first line above the list when the ghost check reads it
  * as a heading. The segmenter does not take a line ending in "?" or "..." as a list's heading ("What will I be doing?" / "- …").
+ * One finder per description: the lines above an item (the items before it in its list, and blank lines) are walked once and
+ * share the line their walk ends at, so a long list is not read again for every item in it.
  */
-function listHeadingOf(segment: TextSegment, rules: CompiledGhostRules, description: string): string | null {
-  if (segment.listHeading !== undefined) return headingText(description.slice(segment.listHeading.start, segment.listHeading.end), rules, true);
-  if (!segment.listItem) return null;
-  let lineStart = description.lastIndexOf("\n", segment.start - 1) + 1;
-  while (lineStart > 0) {
-    const lineEnd = lineStart - 1;
-    lineStart = description.lastIndexOf("\n", lineEnd - 1) + 1;
-    const line = description.slice(lineStart, lineEnd);
-    // blank lines and the items above it in the same list
-    if (line.trim() === "" || LIST_LINE.test(line)) continue;
-    return wholeLineHeading(line, rules, true);
-  }
-  return null;
+export function listHeadingFinder(description: string, rules: CompiledGhostRules): (segment: TextSegment) => string | null {
+  // the start of a line → the heading found above it (null: none)
+  const found = new Map<number, string | null>();
+  return (segment) => {
+    if (segment.listHeading !== undefined) return headingText(description.slice(segment.listHeading.start, segment.listHeading.end), rules, true);
+    if (!segment.listItem) return null;
+    let lineStart = description.lastIndexOf("\n", segment.start - 1) + 1;
+    const walked: number[] = [];
+    let heading: string | null = null;
+    for (;;) {
+      const known = found.get(lineStart);
+      if (known !== undefined) {
+        heading = known;
+        break;
+      }
+      walked.push(lineStart);
+      if (lineStart === 0) break;
+      const lineEnd = lineStart - 1;
+      lineStart = lineEnd === 0 ? 0 : description.lastIndexOf("\n", lineEnd - 1) + 1;
+      const line = description.slice(lineStart, lineEnd);
+      // blank lines and the items above it in the same list
+      if (line.trim() === "" || LIST_LINE.test(line)) continue;
+      heading = wholeLineHeading(line, rules, true);
+      break;
+    }
+    for (const at of walked) found.set(at, heading);
+    return heading;
+  };
 }
 
 /** A list item under a duties heading: the role's work ("Your tasks:" / "- Build our talent pool"), not what the posting is. */
-function underDutiesHeading(segment: TextSegment, rules: CompiledGhostRules, description: string): boolean {
-  const heading = listHeadingOf(segment, rules, description);
+function underDutiesHeading(segment: TextSegment, rules: CompiledGhostRules, listHeadingOf: (segment: TextSegment) => string | null): boolean {
+  const heading = listHeadingOf(segment);
   return heading !== null && isDutiesHeading(heading, rules);
 }
 
@@ -507,6 +524,7 @@ export function evergreenWording(description: string | null, rules: CompiledGhos
   const segments = segmentText(description, { abbreviations: rules.abbreviations, headingMaxChars: rules.settings.heading_max_chars, ...(keep ? { keep } : {}) });
   // where the first duties heading starts, read once and only for an `only_before_duties` hit (undefined = not read yet)
   let dutiesAt: number | null | undefined;
+  const listHeadingOf = listHeadingFinder(description, rules);
   for (const segment of segments) {
     if (prefilter !== null && segment.text.search(prefilter) === -1) continue;
     const candidates: Array<{ hit: Hit; pattern: CompiledGhostPattern }> = [];
@@ -522,7 +540,7 @@ export function evergreenWording(description: string | null, rules: CompiledGhos
     }
     const question = leadInQuestion(description, segment.start, rules.leadInQuestion);
     if (rules.excludeContext.some((re) => segment.text.search(re) !== -1 || (question !== "" && question.search(re) !== -1))) continue;
-    if (underDutiesHeading(segment, rules, description)) continue;
+    if (underDutiesHeading(segment, rules, listHeadingOf)) continue;
     const excluded = clauseExclusions(segment, rules);
     // the exclusions that start at or before the current hit (hits come in text order) and the furthest end among them
     let excludedSeen = 0;
