@@ -58,7 +58,7 @@ export function defaultSessionDeps(): SessionChannelDeps {
   };
 }
 
-/** The daily page limit is used up (internal: turned into a budget skip, or into a partial result). */
+/** The daily page limit is used up (internal: turned into a budget skip, or into a planned budget stop that hands over the postings kept). */
 class DailyLimitReached extends Error {
   constructor(readonly limit: number) {
     super(`daily request limit of ${limit} LinkedIn pages reached`);
@@ -201,6 +201,10 @@ async function read(input: ReadInput): Promise<RawPostingInput[]> {
     return true;
   };
 
+  // The day's page limit refused a page of this query. Nothing more is loaded; what needs no page is still delivered, and the read ends
+  // as a planned budget stop rather than a complete result (a result cut short must not count as a complete visit of the channel).
+  let capped: "listing" | "postings" | null = null;
+
   // ---- list pages
   const cards = new Map<string, ListCard>();
   let pages = 0;
@@ -213,8 +217,7 @@ async function read(input: ReadInput): Promise<RawPostingInput[]> {
       } catch (error) {
         if (interrupt(error)) break lists;
         if (!(error instanceof DailyLimitReached)) throw error;
-        if (cards.size === 0) throw new BudgetExceededError("channel", `${LINKEDIN_SESSION_ID}: daily limit of ${limit} LinkedIn pages reached`);
-        ctx.logger.warn("daily page limit reached while listing", { limit });
+        capped = "listing";
         break lists;
       }
       pages += 1;
@@ -232,8 +235,7 @@ async function read(input: ReadInput): Promise<RawPostingInput[]> {
   const selected = [...cards.values()].slice(0, plan.limit);
   const stored = ctx.cycle.id === null ? new Map<string, unknown>() : await store.storedPayloads(selected.map((c) => c.jobId));
   const out: RawPostingInput[] = [];
-  const counts = { reused: 0, fetched: 0, unavailable: 0, closed: 0, cardOnly: 0, unreadable: 0 };
-  let capped = false;
+  const counts = { reused: 0, fetched: 0, unavailable: 0, closed: 0, cardOnly: 0, unreadable: 0, skippedCards: 0 };
 
   const emit = (jobId: string, payload: unknown, postedAt: string | null | undefined): void => {
     out.push({ externalId: jobId, url: jobUrl(settings.site.base_url, jobId), payload, postedAt: postedAt ? new Date(postedAt) : null });
@@ -254,16 +256,20 @@ async function read(input: ReadInput): Promise<RawPostingInput[]> {
       payload = buildPayload({ jobId: card.jobId, url, source: plan.source, card, detail: null });
       if (payload === null) counts.unreadable += 1;
     } else {
-      // after a failure the postings that need a page are left for the next run (they are listed again then)
-      if (stop.error !== null) continue;
+      // after a failure or the day's limit the postings that need a page are left for the next run (they are listed again then)
+      if (stop.error !== null || capped !== null) {
+        counts.skippedCards += 1;
+        continue;
+      }
       let loaded: { page: LoadedPage; verdict: PageVerdict };
       try {
         loaded = await load(url, false);
       } catch (error) {
         if (interrupt(error)) continue;
         if (!(error instanceof DailyLimitReached)) throw error;
-        capped = true;
-        break;
+        capped = "postings";
+        counts.skippedCards += 1;
+        continue;
       }
       if (loaded.verdict.kind === "unavailable") {
         counts.unavailable += 1;
@@ -282,7 +288,10 @@ async function read(input: ReadInput): Promise<RawPostingInput[]> {
     }
     if (payload !== null) emit(card.jobId, payload, payload.postedAt);
   }
-  if (capped) ctx.logger.warn("daily page limit reached while reading postings; the rest waits for the next run", { limit });
+  if (capped !== null) {
+    const message = capped === "listing" ? "daily page limit reached while listing" : "daily page limit reached while reading postings; the rest waits for the next run";
+    ctx.logger.warn(message, { limit, kept: out.length, skippedCards: counts.skippedCards });
+  }
   if (stop.error === null && out.length === 0 && counts.unreadable > 0) {
     throw new ChannelError("parse", "no LinkedIn posting page could be read: the page layout may have changed");
   }
@@ -302,6 +311,12 @@ async function read(input: ReadInput): Promise<RawPostingInput[]> {
     // the postings are handed over with the failure; with none to hand over it is a plain failure
     if (out.length > 0) throw new PartialCollectError(out, stop.error);
     throw stop.error;
+  }
+  if (capped !== null) {
+    // a planned stop: the postings are stored and the run is recorded as a budget skip (never as a success); with none, a plain budget skip
+    const budget = new BudgetExceededError("channel", `${LINKEDIN_SESSION_ID}: daily limit of ${limit} LinkedIn pages reached`);
+    if (out.length > 0) throw new PartialCollectError(out, budget, { planned: true });
+    throw budget;
   }
   return out;
 }
@@ -366,13 +381,24 @@ export function createSessionChannels(deps: SessionChannelDeps = defaultSessionD
     },
     async collect(query: SearchQuery, ctx: ChannelContext): Promise<RawPostingInput[]> {
       const settings = readSessionSettings(ctx.settings.extra);
-      const found = await browse(deps, ctx, settings, {
-        source: "recommended",
-        pieces: 1,
-        listUrl: (_piece, start) => recommendedUrl(settings, start),
-        limit: Math.min(query.maxResults, settings.recommended_max_results),
-      });
-      if (ctx.cycle.id !== null) await deps.store().markRecommended();
+      // a dry run never marks the list as read
+      const markRead = async (): Promise<void> => {
+        if (ctx.cycle.id !== null) await deps.store().markRecommended();
+      };
+      let found: RawPostingInput[];
+      try {
+        found = await browse(deps, ctx, settings, {
+          source: "recommended",
+          pieces: 1,
+          listUrl: (_piece, start) => recommendedUrl(settings, start),
+          limit: Math.min(query.maxResults, settings.recommended_max_results),
+        });
+      } catch (error) {
+        // the day's limit stopped it after some postings: those are kept, so the list counts as read for today
+        if (error instanceof PartialCollectError && error.planned) await markRead();
+        throw error;
+      }
+      await markRead();
       return found;
     },
     parse: parseSessionPayload,

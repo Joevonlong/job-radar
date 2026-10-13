@@ -176,15 +176,18 @@ describe("linkedin-session: the daily page limit", () => {
     expect(s.browser.log.opened).toHaveLength(0);
   });
 
-  it("stops listing at the limit; delivers what was read when the limit hits while reading postings", async () => {
+  it("the limit hitting while reading postings is a planned budget stop: what was read is handed over with it, not returned as a complete result", async () => {
     const s = setup({ config: limited(4), store: createMemorySessionStore({ requests: { [DAY]: 1 } }) });
     const h = await harness(s.session, s.config);
-    const out = await s.session.collect(berlinQuery(), h.ctx);
+    const error = await partial(s.session.collect(berlinQuery(), h.ctx));
     // 3 loads left: the search page, the next search page, then one posting page
     expect(s.browser.log.loads).toHaveLength(3);
-    expect(out.map((o) => o.externalId)).toEqual(["4385000101"]);
+    expect(error.planned).toBe(true);
+    expect(error.cause).toBeInstanceOf(BudgetExceededError);
+    expect(error.cause).toMatchObject({ code: "budget_exceeded" });
+    expect(error.postings.map((o) => o.externalId)).toEqual(["4385000101"]);
     expect(s.store.requests.get(DAY)).toBe(4);
-    expect(h.warnings.map((w) => w.message)).toContain("daily page limit reached while reading postings; the rest waits for the next run");
+    expect(h.warnings.find((w) => w.message === "daily page limit reached while reading postings; the rest waits for the next run")?.fields).toEqual({ limit: 4, kept: 1, skippedCards: 4 });
   });
 
   it("the limit is per calendar day in the schedule's time zone", async () => {
@@ -200,6 +203,185 @@ describe("linkedin-session: the daily page limit", () => {
     await s.session.collect(berlinQuery(), h.ctx);
     expect(s.store.requests.size).toBe(0);
     expect(s.store.flag).toBeNull();
+  });
+});
+
+describe("linkedin-session: the daily page limit part way through a query", () => {
+  const limited = (limit: number, edit: (session: Record<string, unknown>) => void = () => {}) =>
+    sessionConfig((session) => {
+      session.daily_request_limit = limit;
+      edit(session);
+    });
+  const recommendedQuery = () => ({ ...berlinQuery(), keywords: [], keywordGroup: "*", location: null, maxResults: Number.MAX_SAFE_INTEGER });
+  const capWarning = (h: Awaited<ReturnType<typeof harness>>, phase: "listing" | "postings") =>
+    h.warnings.find((w) => w.message === (phase === "listing" ? "daily page limit reached while listing" : "daily page limit reached while reading postings; the rest waits for the next run"));
+
+  it("while reading postings: the stored postings after the limit are still delivered, the ones that need a page are not opened", async () => {
+    const before = await deliveredBefore();
+    // 3 pages: both search pages and the posting 101; the limit refuses 102; 103 and 106 need a page too; 104 is stored
+    const s = setup({ config: limited(3), store: createMemorySessionStore({ payloads: { "4385000104": before.get("4385000104") } }) });
+    const h = await harness(s.session, s.config);
+    const error = await partial(s.session.collect(berlinQuery(), h.ctx));
+    expect(error.planned).toBe(true);
+    expect(error.cause).toBeInstanceOf(BudgetExceededError);
+    expect(error.postings.map((p) => p.externalId)).toEqual(["4385000101", "4385000104"]);
+    expect(error.postings[1]?.payload).toEqual(before.get("4385000104"));
+    expect(viewedJobs(s)).toEqual(["/jobs/view/4385000101/"]);
+    expect(s.browser.log.loads).toHaveLength(3);
+    expect(s.store.requests.get(DAY)).toBe(3);
+    expect(capWarning(h, "postings")?.fields).toEqual({ limit: 3, kept: 2, skippedCards: 3 });
+    expect(h.logs.find((l) => l.message === "linkedin session read finished")?.fields).toMatchObject({ delivered: 2, reused: 1, fetched: 1, skippedCards: 3 });
+  });
+
+  it("while listing, with every card the channel holds stored: the stored postings are delivered with the budget stop and no posting page is opened", async () => {
+    const before = await deliveredBefore();
+    const store = createMemorySessionStore({ payloads: Object.fromEntries(before) });
+    // 1 page: the first search page; the second one is refused (the results fitted on one page, but that is only known after reading the next)
+    const s = setup({ config: limited(1), store });
+    const h = await harness(s.session, s.config);
+    const error = await partial(s.session.collect(berlinQuery(), h.ctx));
+    expect(error.planned).toBe(true);
+    expect(error.cause).toMatchObject({ code: "budget_exceeded" });
+    expect(error.postings.map((p) => p.externalId)).toEqual(["4385000101", "4385000102", "4385000104"]);
+    expect(viewedJobs(s)).toEqual([]);
+    expect(listPages(s)).toBe(1);
+    // 103 and 106 were never delivered, so they are not stored: they need their page and wait for the next run
+    expect(capWarning(h, "listing")?.fields).toEqual({ limit: 1, kept: 3, skippedCards: 2 });
+  });
+
+  it("while listing, with every selected card stored: all of them are kept with the budget stop, none is skipped, and no posting page is opened", async () => {
+    const before = await deliveredBefore();
+    // 103 and 106 are closed or gone today; an earlier run held them while they were still open
+    const heldEarlier = (id: string) => ({ ...(before.get("4385000101") as Record<string, unknown>), jobId: id, url: `https://www.linkedin.com/jobs/view/${id}/` });
+    const store = createMemorySessionStore({ payloads: { ...Object.fromEntries(before), "4385000103": heldEarlier("4385000103"), "4385000106": heldEarlier("4385000106") } });
+    const s = setup({ config: limited(1), store });
+    const h = await harness(s.session, s.config);
+    const error = await partial(s.session.collect(berlinQuery(), h.ctx));
+    expect(error.planned).toBe(true);
+    expect(error.cause).toBeInstanceOf(BudgetExceededError);
+    expect(error.postings.map((p) => p.externalId)).toEqual(["4385000101", "4385000102", "4385000103", "4385000104", "4385000106"]);
+    expect(viewedJobs(s)).toEqual([]);
+    expect(listPages(s)).toBe(1);
+    expect(capWarning(h, "listing")?.fields).toEqual({ limit: 1, kept: 5, skippedCards: 0 });
+  });
+
+  describe("while listing a query of two keyword pieces", () => {
+    // two keywords that do not fit into one search string: two pieces, searched one after another
+    const twoPieces = () => berlinQuery({ keywords: ["A".repeat(150), "B".repeat(150)] });
+    const piecesRequested = (s: ReturnType<typeof setup>) =>
+      s.browser.log.loads.filter((l) => new URL(l.url).pathname === "/jobs/search/").map((l) => (new URL(l.url).searchParams.get("keywords")?.includes("BBBB") ? "B" : "A"));
+
+    it("the limit in the first piece: the later piece's list pages are never requested, and the held cards read so far are delivered with the budget stop", async () => {
+      const before = await deliveredBefore();
+      // 2 pages: both list pages of the first piece; the limit refuses the first list page of the second piece
+      const s = setup({ config: limited(2), store: createMemorySessionStore({ payloads: Object.fromEntries(before) }) });
+      const h = await harness(s.session, s.config);
+      const error = await partial(s.session.collect(twoPieces(), h.ctx));
+      expect(piecesRequested(s)).toEqual(["A", "A"]);
+      expect(error.planned).toBe(true);
+      expect(error.cause).toBeInstanceOf(BudgetExceededError);
+      expect(error.postings.map((p) => p.externalId)).toEqual(["4385000101", "4385000102", "4385000104"]);
+      expect(viewedJobs(s)).toEqual([]);
+      expect(capWarning(h, "listing")?.fields).toEqual({ limit: 2, kept: 3, skippedCards: 2 });
+    });
+
+    it("the limit in the first piece with nothing held: the plain budget error, and neither the later piece nor a posting page is requested", async () => {
+      const s = setup({ config: limited(1) });
+      const h = await harness(s.session, s.config);
+      const error = await failure(s.session.collect(twoPieces(), h.ctx));
+      expect(error).not.toBeInstanceOf(PartialCollectError);
+      expect(error).toBeInstanceOf(BudgetExceededError);
+      expect(piecesRequested(s)).toEqual(["A"]);
+      expect(viewedJobs(s)).toEqual([]);
+      // the cards read went through the postings phase: all five needed a page and were left for the next run
+      expect(capWarning(h, "listing")?.fields).toEqual({ limit: 1, kept: 0, skippedCards: 5 });
+    });
+  });
+
+  it("while listing, without detail fetching: the cards read so far are delivered with the budget stop", async () => {
+    const s = setup({ config: limited(1, (session) => (session.fetch_details = false)) });
+    const h = await harness(s.session, s.config);
+    const error = await partial(s.session.collect(berlinQuery(), h.ctx));
+    expect(error.planned).toBe(true);
+    expect(error.cause).toMatchObject({ code: "budget_exceeded" });
+    expect(error.postings.map((p) => p.externalId)).toEqual(["4385000101", "4385000102", "4385000103", "4385000104"]);
+    expect(viewedJobs(s)).toEqual([]);
+    expect(listPages(s)).toBe(1);
+    expect(capWarning(h, "listing")?.fields).toEqual({ limit: 1, kept: 4, skippedCards: 0 });
+  });
+
+  it("while listing, with nothing deliverable: the plain budget error (nothing to hand over), and no posting page is opened", async () => {
+    const s = setup({ config: limited(1) });
+    const h = await harness(s.session, s.config);
+    const error = await failure(s.session.collect(berlinQuery(), h.ctx));
+    expect(error).not.toBeInstanceOf(PartialCollectError);
+    expect(error).toBeInstanceOf(BudgetExceededError);
+    expect(viewedJobs(s)).toEqual([]);
+    expect(s.browser.log.loads).toHaveLength(1);
+  });
+
+  it("while reading postings, with nothing delivered: the plain budget error", async () => {
+    // 2 pages: both search pages; the limit refuses the first posting page
+    const s = setup({ config: limited(2) });
+    const h = await harness(s.session, s.config);
+    const error = await failure(s.session.collect(berlinQuery(), h.ctx));
+    expect(error).not.toBeInstanceOf(PartialCollectError);
+    expect(error).toBeInstanceOf(BudgetExceededError);
+    expect(viewedJobs(s)).toEqual([]);
+  });
+
+  it("a posting page that cannot be read wins over the limit: with nothing delivered it is the parse error, not a budget stop", async () => {
+    // cards without a title link (they cannot stand on their own) and a posting page in an unknown layout
+    const site = happySite({ search: () => ({ html: fixture("search-results.html").replace(/<a [^>]*job-card-list__title--link[^>]*>[\s\S]*?<\/a>/g, "") }), detail: () => ({ html: fixture("layout-unknown.html") }) });
+    // 3 pages: the search page (the next one has the same cards, nothing new), its next page, the unreadable posting 101; the limit refuses 102
+    const s = setup({ config: limited(3), site });
+    const h = await harness(s.session, s.config);
+    const error = await failure(s.session.collect(berlinQuery(), h.ctx));
+    expect(error).not.toBeInstanceOf(BudgetExceededError);
+    expect(error).toMatchObject({ code: "parse" });
+    expect(viewedJobs(s)).toEqual(["/jobs/view/4385000101/"]);
+  });
+
+  it("using up the limit exactly, with no further page tried, is a normal complete result", async () => {
+    // a full read is 7 pages: 2 search pages, then 101, 102, 103, 104, 106
+    const s = setup({ config: limited(7) });
+    const h = await harness(s.session, s.config);
+    const out = await s.session.collect(berlinQuery(), h.ctx);
+    expect(out.map((o) => o.externalId)).toEqual(["4385000101", "4385000102", "4385000104"]);
+    expect(s.store.requests.get(DAY)).toBe(7);
+    expect(capWarning(h, "listing")).toBeUndefined();
+    expect(capWarning(h, "postings")).toBeUndefined();
+    // the next query is refused before a browser opens
+    expect(await failure(s.session.collect(berlinQuery(), (await harness(s.session, s.config)).ctx))).toBeInstanceOf(BudgetExceededError);
+    expect(s.browser.log.opened).toHaveLength(1);
+  });
+
+  it("the recommended list: a budget stop with postings marks the list as read (it is not read again that day)", async () => {
+    // 3 pages: the recommended page, its next page, the posting 201; the limit refuses 202
+    const s = setup({ config: limited(3) });
+    const h = await harness(s.recommended, s.config, { id: "linkedin-session:recommended" });
+    const error = await partial(s.recommended.collect(recommendedQuery(), h.ctx));
+    expect(error.planned).toBe(true);
+    expect(error.cause).toMatchObject({ code: "budget_exceeded" });
+    expect(error.postings.map((p) => p.externalId)).toEqual(["4385000201"]);
+    expect(s.store.recommendedAt).not.toBeNull();
+  });
+
+  it("the recommended list: a budget stop with nothing delivered does not mark the list as read", async () => {
+    const s = setup({ config: limited(2) });
+    const h = await harness(s.recommended, s.config, { id: "linkedin-session:recommended" });
+    const error = await failure(s.recommended.collect(recommendedQuery(), h.ctx));
+    expect(error).toBeInstanceOf(BudgetExceededError);
+    expect(s.store.recommendedAt).toBeNull();
+  });
+
+  it("the recommended list: a dry run stopped by the limit does not mark the list as read", async () => {
+    const s = setup({ config: limited(3) });
+    const h = await harness(s.recommended, s.config, { id: "linkedin-session:recommended", cycleId: null });
+    const error = await partial(s.recommended.collect(recommendedQuery(), h.ctx));
+    expect(error.planned).toBe(true);
+    expect(s.store.recommendedAt).toBeNull();
+    expect(s.store.requests.size).toBe(0);
   });
 });
 
@@ -499,6 +681,7 @@ describe("linkedin-session: a failure part-way keeps what was read", () => {
     const error = await partial(s.session.collect(berlinQuery(), (await harness(s.session, s.config)).ctx));
     expect(error.cause).not.toBeInstanceOf(BudgetExceededError);
     expect(error.cause).toMatchObject({ code: "network" });
+    expect(error.planned).toBe(false);
     expect(error.postings.map((p) => p.externalId)).toEqual(["4385000101", "4385000102"]);
     expect(s.store.requests.get(DAY)).toBe(5);
 
