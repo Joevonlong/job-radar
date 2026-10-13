@@ -289,9 +289,15 @@ elif releases_lock_acquire "$APP"; then
   if [[ "$RELEASES_LOCK_MINE" == 1 ]]; then say "deploy lock taken: $LOCK_DIR"; else say "deploy lock held by the calling script: $LOCK_DIR"; fi
   releases_inflight_register "$APP" deploy.sh || fail_step "could not write the in-flight record under $LOCK_DIR" "Check write permission on data/releases/"
   remove_stale_build_contexts
+elif [[ "$RELEASES_LOCK_VANISHED" == 1 ]]; then
+  fail_step "the deploy lock $LOCK_DIR was released while this deploy was taking it; nothing was changed" "Run this script again"
+elif [[ "$RELEASES_LOCK_PARTIAL" == 1 ]]; then
+  # A half-made lock that could not be removed is still this run's: release it here (it is kept and reported).
+  RELEASE_DONE=1
+  releases_lock_release "$APP" || true
+  fail_step "could not initialise the deploy lock $LOCK_DIR, and could not remove the half-made lock (see above)" "Fix the cause (free disk space, write permission on data/releases/), clear the leftover lock with the rm -rf command shown above, then retry"
 elif [[ "$RELEASES_LOCK_INIT_FAILED" == 1 ]]; then
-  # Not another deploy: this run could not set the lock up (the reason is above). A half-made lock that could not be
-  # removed is still this run's: on_exit keeps and reports it (exit 1).
+  # Not another deploy: this run could not set the lock up (the reason is above); nothing of it is left.
   fail_step "could not initialise the deploy lock $LOCK_DIR (see the message above)" "Check free disk space and write permission on data/releases/, then retry"
 else
   [[ ! -e "$LOCK_DIR" ]] || releases_lock_report "$APP" >&2
@@ -467,7 +473,15 @@ elif [[ "$RELEASES_LOCK_MINE" == 1 ]]; then
   RELEASE_DONE=1
   release_rc=0; releases_lock_release "$APP" || release_rc=$?
   if (( release_rc == 3 )); then
-    fail_step "descendant exit not confirmed; lock left in place (see above), and the build context data/build/$TARGET-$$ is kept" "Everything is deployed. Check and clear the lock as shown above before the next deploy"
+    kept="the build context data/build/$TARGET-$$ is kept"
+    case "$RELEASES_LOCK_KEPT" in
+      owner-changed) fail_step "the deploy lock now belongs to another run, so it was not released (see above); $kept" "Everything is deployed. Something replaced the lock while this deploy held it: find out which run holds it now before deploying again (do not clear a lock another deploy holds)" ;;
+      gone) fail_step "the deploy lock disappeared while this deploy held it (someone removed $LOCK_DIR); $kept" "Everything is deployed. Find out what removed the lock before deploying again" ;;
+      owner-unreadable | partial) fail_step "the owner file of the deploy lock is missing or damaged; lock left in place (see above), and $kept" "Everything is deployed. Check and clear the lock as shown above before the next deploy" ;;
+      unexpected) fail_step "the deploy lock holds unexpected entries; lock left in place (see above), and $kept" "Everything is deployed. Check and clear the lock as shown above before the next deploy" ;;
+      rmdir) fail_step "the deploy lock could not be removed; lock left in place (see above), and $kept" "Everything is deployed. Check and clear the lock as shown above before the next deploy" ;;
+      *) fail_step "descendant exit not confirmed; lock left in place (see above), and $kept" "Everything is deployed. Check and clear the lock as shown above before the next deploy" ;;
+    esac
   fi
   remove_build_context
   say "deploy lock released, build context removed"

@@ -96,7 +96,10 @@ exit code 1, changes nothing and prints who holds the lock, the records, and how
 released just before the Docker cleanup (step 10), or when the deploy stops early. If the lock cannot even be set up
 (disk full, no write permission on `data/releases/`), step 1 stops with `could not initialise the deploy lock`, removes
 what it created and blames no other deploy; if that removal fails too, the half-made lock stays and is reported like
-any lock left in place.
+any lock left in place (clear it as shown, then retry). If another deploy releases the lock at the very moment this one
+tries to take it, step 1 says so; just run the script again. When releasing, the deploy names why it keeps a lock
+(records left, a damaged owner file, unexpected entries); if the lock now belongs to another run, or is gone, it says so
+and prints no clear command (never remove a lock another deploy holds).
 
 A lock is never taken over automatically. It stays behind only when a deploy was killed with `kill -9` (its exit handler
 could not run), or when the deploy could not confirm that everything it started has ended (then it exits 1 with

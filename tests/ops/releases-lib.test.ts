@@ -143,16 +143,24 @@ describe("scripts/ops/lib/releases.sh: the lock", () => {
     expect(fs.existsSync(path.dirname(lock))).toBe(true);
   });
 
-  it("the owner whose owner file no longer holds its token keeps the lock untouched, reports it and returns 3", () => {
+  it("the owner file now holds another run's token: 3, the lock is left untouched, and no clear command is offered for it", () => {
     const r = sh(
-      `releases_lock_acquire "$MAIN"; printf '${ownerFixture.replaceAll("\n", "\\n")}' > "$MAIN/data/releases/ai-worker/.lock/owner"; releases_lock_release "$MAIN"; echo "release=$? mine=$RELEASES_LOCK_MINE"`,
+      `releases_lock_acquire "$MAIN"; printf '${ownerFixture.replaceAll("\n", "\\n")}' > "$MAIN/data/releases/ai-worker/.lock/owner"; releases_lock_release "$MAIN"; echo "release=$? mine=$RELEASES_LOCK_MINE kept=$RELEASES_LOCK_KEPT"`,
     );
-    expect(r.stdout).toContain("release=3 mine=1");
-    expect(r.out).toContain("no longer holds this run's token; lock left in place");
-    expect(r.out).toContain(`rm -rf ${lock}`);
+    expect(r.stdout).toContain("release=3 mine=1 kept=owner-changed");
+    expect(r.out).toContain("releases: the lock now belongs to another run (pid 999999 on wrapper-host); it is not this run's to release or clear");
+    expect(r.out).not.toContain("rm -rf");
     expect(r.out).not.toContain(FIXTURE_TOKEN);
     expect(ownerText()).toBe(ownerFixture);
     expect(inflight()).toEqual([]);
+  });
+
+  it("the lock was removed while this run held it: 3, \"the lock is gone\", no clear command", () => {
+    const r = sh('releases_lock_acquire "$MAIN"; rm -rf "$MAIN/data/releases/ai-worker/.lock"; releases_lock_release "$MAIN"; echo "release=$? kept=$RELEASES_LOCK_KEPT"');
+    expect(r.stdout).toContain("release=3 kept=gone");
+    expect(r.out).toContain("releases: the lock is gone");
+    expect(r.out).not.toContain("rm -rf");
+    expect(fs.existsSync(lock)).toBe(false);
   });
 
   it("the owner whose owner file became unreadable keeps the lock, reports it and returns 3", () => {
@@ -192,6 +200,33 @@ describe("scripts/ops/lib/releases.sh: the lock", () => {
       expect(fs.existsSync(lock)).toBe(true);
     });
 
+    it("the parent directory cannot be created (data/releases is a file): could not initialise, not held", () => {
+      fs.mkdirSync(path.join(main, "data"), { recursive: true });
+      fs.writeFileSync(path.join(main, "data/releases"), "a file\n");
+      const r = sh('releases_lock_acquire "$MAIN"; echo "rc=$? mine=$RELEASES_LOCK_MINE init=$RELEASES_LOCK_INIT_FAILED"');
+      expect(r.stdout).toContain("rc=1 mine=0 init=1");
+      expect(r.out).toContain(`releases: could not initialise the lock (cannot create ${main}/data/releases/ai-worker)`);
+      expect(r.out).not.toContain("is held");
+    });
+
+    it("a previous failure does not leak into the next call: INIT_FAILED is reset at the start", () => {
+      fs.mkdirSync(path.join(main, "data"), { recursive: true });
+      fs.writeFileSync(path.join(main, "data/releases"), "a file\n");
+      const r = sh(`releases_lock_acquire "$MAIN"; rm -f "$MAIN/data/releases"; releases_lock_acquire "$MAIN"; echo "rc=$? mine=$RELEASES_LOCK_MINE init=$RELEASES_LOCK_INIT_FAILED"`);
+      expect(r.stdout).toContain("rc=0 mine=1 init=0");
+    });
+
+    it("mkdir .lock fails because it exists, and it is gone a moment later (released meanwhile): vanished, retry; not an init failure", () => {
+      const r = sh(
+        'mkdir() { if [[ "${1:-}" == */.lock ]]; then echo "mkdir: $1: File exists" >&2; return 1; fi; command mkdir "$@"; }; ' +
+          'releases_lock_acquire "$MAIN"; echo "rc=$? mine=$RELEASES_LOCK_MINE init=$RELEASES_LOCK_INIT_FAILED vanished=$RELEASES_LOCK_VANISHED"',
+      );
+      expect(r.stdout).toContain("rc=1 mine=0 init=0 vanished=1");
+      expect(r.out).toContain("releases: the lock was released while acquiring it");
+      expect(r.out).toContain("retry");
+      expect(r.out).not.toContain("could not initialise");
+    });
+
     it.skipIf(process.getuid?.() === 0)("the lock directory cannot be created at all (no permission): could not initialise, not held", () => {
       const parent = path.dirname(lock);
       fs.mkdirSync(parent, { recursive: true });
@@ -199,7 +234,7 @@ describe("scripts/ops/lib/releases.sh: the lock", () => {
       try {
         const r = sh('releases_lock_acquire "$MAIN"; echo "rc=$? mine=$RELEASES_LOCK_MINE init=$RELEASES_LOCK_INIT_FAILED"');
         expect(r.stdout).toContain("rc=1 mine=0 init=1");
-        expect(r.out).toContain(`could not initialise the lock (cannot create ${lock})`);
+        expect(r.out).toContain(`could not initialise the lock (cannot create ${lock}: Permission denied)`);
         expect(r.out).not.toContain("is held");
       } finally {
         fs.chmodSync(parent, 0o755);

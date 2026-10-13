@@ -51,6 +51,11 @@ const RELEASE_LOGGER = `
 # test only: log every call of releases_lock_release
 eval "$(declare -f releases_lock_release | sed '1s/^releases_lock_release/test_real_releases_lock_release/')"
 releases_lock_release() { echo "# release mine=$RELEASES_LOCK_MINE" >> "\${DEPLOY_TEST_LOG:-/dev/null}"; test_real_releases_lock_release "$@"; }
+# test only: TEST_HALF_MADE_LOCK=1 makes creating inflight/ fail and then the removal of .lock fail too (a half-made lock)
+if [[ -n "\${TEST_HALF_MADE_LOCK:-}" ]]; then
+  mkdir() { if [[ "\${1:-}" == */.lock/inflight ]]; then echo "mkdir: No space left on device" >&2; return 1; fi; command mkdir "$@"; }
+  rmdir() { if [[ "\${1:-}" == */.lock ]]; then return 1; fi; command rmdir "$@"; }
+fi
 # test only: log every liveness check with the in-flight records present at that moment
 eval "$(declare -f releases_pid_alive | sed '1s/^releases_pid_alive/test_real_releases_pid_alive/')"
 releases_pid_alive() { echo "# pid_alive $1 inflight=$(ls "\${LOCK:-/nonexistent}/inflight" 2>/dev/null | tr '\\n' ',')" >> "\${DEPLOY_TEST_LOG:-/dev/null}"; test_real_releases_pid_alive "$@"; }
@@ -1005,6 +1010,40 @@ describe("scripts/ops/deploy.sh: the deploy lock and in-flight records", () => {
     }
   });
 
+  it("the lock's parent cannot be created (data/releases is a file): could not initialise, nobody else is blamed", () => {
+    const base = head();
+    try {
+      fs.mkdirSync(path.join(realWork, "data"), { recursive: true });
+      fs.writeFileSync(path.join(realWork, "data/releases"), "a file\n");
+      const r = deploy(["--skip-pull", "--settle", "0"]);
+      expect(r.status).toBe(1);
+      expect(r.out).toContain("failed: could not initialise the deploy lock");
+      expect(r.out).not.toContain("another deploy holds the lock");
+      expect(r.calls).toEqual([]);
+    } finally {
+      restore(base);
+    }
+  });
+
+  it("a half-made lock that cannot be removed: released once, reported with its clear command, and the hint says to clear it first", () => {
+    const base = head();
+    try {
+      const r = deploy(["--skip-pull", "--settle", "0"], { TEST_HALF_MADE_LOCK: "1" });
+      expect(r.status).toBe(1);
+      expect(r.out).toContain("could not remove it again");
+      expect(r.out).toContain("the lock was only partly created and could not be removed; lock left in place");
+      expect(r.out).toContain(`rm -rf ${lockDir}`);
+      expect(r.out).toContain("failed: could not initialise the deploy lock");
+      expect(r.out).toContain("clear the leftover lock with the rm -rf command shown above, then retry");
+      expect(r.out).not.toContain("another deploy holds the lock");
+      expect(r.events.filter((e) => e.startsWith("# release"))).toEqual(["# release mine=1"]);
+      expect(r.calls).toEqual([]);
+      expect(fs.existsSync(lockDir)).toBe(true);
+    } finally {
+      restore(base);
+    }
+  });
+
   it("an inherited token that does not match, or no lock at all: preflight refuses, no stub runs, no lock is made", () => {
     const base = head();
     try {
@@ -1133,6 +1172,47 @@ describe("scripts/ops/deploy.sh: the deploy lock and in-flight records", () => {
       expect(fs.existsSync(path.join(lockDir, "owner"))).toBe(true);
     } finally {
       release();
+      restore(base);
+    }
+  });
+
+  it("the explicit release finds another run's token in the owner file: it says so, offers no clear command, exit 1, no prune", () => {
+    const base = head();
+    try {
+      const r = deploy(["--skip-pull", "--settle", "0"], { PNPM_migrate_run_HOOK: `printf '${ownerFixture.replaceAll("\n", "\\n")}' > "$LOCK/owner"` });
+      expect(r.status).toBe(1);
+      expect(r.out).toContain('step 10/11 "prune: release the deploy lock, clean the Docker build cache and dangling images" failed: the deploy lock now belongs to another run');
+      expect(r.out).not.toContain("descendant exit not confirmed");
+      expect(r.out).not.toContain("rm -rf");
+      expect(r.calls.some((c) => c.includes("prune") || c === "pnpm run doctor")).toBe(false);
+      expect(fs.readFileSync(path.join(lockDir, "owner"), "utf8")).toBe(ownerFixture);
+      expect(buildContexts()).toHaveLength(1);
+    } finally {
+      restore(base);
+    }
+  });
+
+  it("the explicit release finds the lock gone: it says so (no clear command), exit 1", () => {
+    const base = head();
+    try {
+      const r = deploy(["--skip-pull", "--settle", "0"], { PNPM_migrate_run_HOOK: 'rm -rf "$LOCK"' });
+      expect(r.status).toBe(1);
+      expect(r.out).toContain("failed: the deploy lock disappeared while this deploy held it");
+      expect(r.out).not.toContain("rm -rf");
+    } finally {
+      restore(base);
+    }
+  });
+
+  it("the explicit release finds an unexpected entry in the lock: it names that cause, not the records", () => {
+    const base = head();
+    try {
+      const r = deploy(["--skip-pull", "--settle", "0"], { PNPM_migrate_run_HOOK: 'touch "$LOCK/stray"' });
+      expect(r.status).toBe(1);
+      expect(r.out).toContain("failed: the deploy lock holds unexpected entries; lock left in place");
+      expect(r.out).not.toContain("descendant exit not confirmed");
+      expect(r.out).toContain(`rm -rf ${lockDir}`);
+    } finally {
       restore(base);
     }
   });
