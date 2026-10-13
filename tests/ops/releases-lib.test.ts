@@ -371,3 +371,158 @@ describe("scripts/ops/lib/releases.sh: in-flight records", () => {
     expect(inflight()).toHaveLength(1);
   });
 });
+
+describe("scripts/ops/lib/releases.sh: release directories", () => {
+  const git = (...args: string[]): string => {
+    const r = spawnSync("git", ["-C", main, ...args], {
+      encoding: "utf8",
+      env: { ...process.env, GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@example.invalid", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@example.invalid" },
+    });
+    if (r.status !== 0) throw new Error(`git ${args.join(" ")}: ${r.stderr}`);
+    return r.stdout.trim();
+  };
+  const sha256 = (file: string): string => {
+    const r = spawnSync("/bin/bash", ["-c", 'source "$1"; releases_sha256 "$2"', "_", releasesSh, file], { encoding: "utf8" });
+    return r.stdout.trim();
+  };
+  const SHA = "a".repeat(40);
+  const rdir = (): string => path.join(main, "data/releases/ai-worker");
+
+  // A checkout with one commit, and a release directory of it with a marker as prepare-release.sh writes it.
+  function commitAndRelease(): { sha: string; tree: string; dir: string } {
+    git("init", "-q");
+    fs.writeFileSync(path.join(main, "pnpm-lock.yaml"), "lockfileVersion: '9.0'\n");
+    fs.writeFileSync(path.join(main, "package.json"), "{}\n");
+    git("add", "pnpm-lock.yaml", "package.json");
+    git("commit", "-q", "-m", "init");
+    const sha = git("rev-parse", "HEAD");
+    const tree = git("rev-parse", "HEAD^{tree}");
+    const dir = path.join(rdir(), sha);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.copyFileSync(path.join(main, "pnpm-lock.yaml"), path.join(dir, "pnpm-lock.yaml"));
+    const marker = { sha, tree, lockfile_sha256: sha256(path.join(dir, "pnpm-lock.yaml")), prod_only: true, created: "2026-10-13T00:00:00Z" };
+    fs.writeFileSync(path.join(dir, ".release.json"), `${JSON.stringify(marker, null, 2)}\n`);
+    return { sha, tree, dir };
+  }
+
+  it("releases_dir is <main>/data/releases/ai-worker", () => {
+    expect(sh('releases_dir "$MAIN"').stdout.trim()).toBe(rdir());
+  });
+
+  it.each([
+    [`${SHA}`, true],
+    [`.tmp-${SHA}-123`, true],
+    [`.trash-${SHA}-9`, true],
+    [`${SHA.slice(1)}`, false],
+    [`${SHA.toUpperCase()}`, false],
+    [`.tmp-${SHA}`, false],
+    [`.tmp-${SHA}-12x`, false],
+    [".lock", false],
+    [`${SHA}/node_modules`, false],
+    [`../${SHA}`, false],
+  ])("release_path_ok accepts only the names the scripts create: %s -> %s", (name, ok) => {
+    const r = sh(`release_path_ok "$MAIN" "$MAIN/data/releases/ai-worker/${name}"; echo "rc=$?"`);
+    expect(r.stdout.trim()).toBe(ok ? "rc=0" : "rc=1");
+  });
+
+  it("release_path_ok refuses other parents, a relative main, a symbolic link and a symlinked parent; the main path is not a regex", () => {
+    expect(sh(`release_path_ok "$MAIN" "/elsewhere/data/releases/ai-worker/${SHA}"; echo "rc=$?"`).stdout.trim()).toBe("rc=1");
+    expect(sh(`release_path_ok "rel" "rel/data/releases/ai-worker/${SHA}"; echo "rc=$?"`).stdout.trim()).toBe("rc=1");
+    // "." in <main> must not match any character
+    expect(sh(`release_path_ok "/a.b" "/axb/data/releases/ai-worker/${SHA}"; echo "rc=$?"`).stdout.trim()).toBe("rc=1");
+    fs.mkdirSync(rdir(), { recursive: true });
+    fs.symlinkSync(os.tmpdir(), path.join(rdir(), SHA));
+    expect(sh(`release_path_ok "$MAIN" "$MAIN/data/releases/ai-worker/${SHA}"; echo "rc=$?"`).stdout.trim()).toBe("rc=1");
+    const other = fs.mkdtempSync(path.join(os.tmpdir(), "releases-other-"));
+    try {
+      const main2 = path.join(other, "main");
+      fs.mkdirSync(path.join(main2, "data/releases"), { recursive: true });
+      fs.symlinkSync(rdir(), path.join(main2, "data/releases/ai-worker"));
+      expect(sh(`release_path_ok "${main2}" "${main2}/data/releases/ai-worker/.tmp-${SHA}-1"; echo "rc=$?"`).stdout.trim()).toBe("rc=1");
+    } finally {
+      if (other) fs.rmSync(other, { recursive: true, force: true });
+    }
+  });
+
+  it("release_marker_valid: sha, tree and lockfile sha256 must all match", () => {
+    const { sha, dir } = commitAndRelease();
+    const check = (): string => sh(`release_marker_valid "${dir}" "${sha}"; echo "rc=$?"`).stdout.trim();
+    expect(check()).toBe("rc=0");
+    expect(sh(`release_marker_valid "${dir}" "${"b".repeat(40)}"; echo "rc=$?"`).stdout.trim()).toBe("rc=1");
+    const marker = fs.readFileSync(path.join(dir, ".release.json"), "utf8");
+    fs.writeFileSync(path.join(dir, ".release.json"), marker.replace(/"tree": "[0-9a-f]+"/, `"tree": "${"c".repeat(40)}"`));
+    expect(check()).toBe("rc=1");
+    fs.writeFileSync(path.join(dir, ".release.json"), marker);
+    expect(check()).toBe("rc=0");
+    fs.appendFileSync(path.join(dir, "pnpm-lock.yaml"), "# changed\n");
+    expect(check()).toBe("rc=1");
+  });
+
+  it("release_marker_valid: a missing or unreadable marker is invalid", () => {
+    const { sha, dir } = commitAndRelease();
+    fs.writeFileSync(path.join(dir, ".release.json"), "not json\n");
+    expect(sh(`release_marker_valid "${dir}" "${sha}"; echo "rc=$?"`).stdout.trim()).toBe("rc=1");
+    fs.rmSync(path.join(dir, ".release.json"));
+    expect(sh(`release_marker_valid "${dir}" "${sha}"; echo "rc=$?"`).stdout.trim()).toBe("rc=1");
+  });
+
+  it("release_rm gives read-only directories u+w back, removes the tree, and never follows a link out", () => {
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), "releases-outside-"));
+    try {
+      fs.writeFileSync(path.join(outside, "keep"), "x");
+      const dir = path.join(rdir(), `.trash-${SHA}-1`);
+      fs.mkdirSync(path.join(dir, "sub/deeper"), { recursive: true });
+      fs.writeFileSync(path.join(dir, "sub/deeper/file"), "x");
+      fs.chmodSync(path.join(dir, "sub/deeper/file"), 0o444);
+      fs.symlinkSync(outside, path.join(dir, "sub/link"));
+      for (const d of [path.join(dir, "sub/deeper"), path.join(dir, "sub"), dir]) fs.chmodSync(d, 0o555);
+      const r = sh(`release_rm "$MAIN" "${dir}"; echo "rc=$?"`);
+      expect(r.stdout.trim()).toBe("rc=0");
+      expect(fs.existsSync(dir)).toBe(false);
+      expect(fs.readFileSync(path.join(outside, "keep"), "utf8")).toBe("x");
+      expect(fs.statSync(outside).mode & 0o200).toBe(0o200);
+    } finally {
+      if (outside) fs.rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
+  it("release_rm refuses a path that is not a release directory, and a symbolic link (nothing is removed)", () => {
+    const victim = path.join(main, "data/keep");
+    fs.mkdirSync(victim, { recursive: true });
+    let r = sh(`release_rm "$MAIN" "${victim}"; echo "rc=$?"`);
+    expect(r.stdout.trim()).toBe("rc=1");
+    expect(r.out).toContain("refusing to remove");
+    expect(fs.existsSync(victim)).toBe(true);
+    fs.mkdirSync(rdir(), { recursive: true });
+    fs.symlinkSync(victim, path.join(rdir(), `.tmp-${SHA}-5`));
+    r = sh(`release_rm "$MAIN" "$MAIN/data/releases/ai-worker/.tmp-${SHA}-5"; echo "rc=$?"`);
+    expect(r.stdout.trim()).toBe("rc=1");
+    expect(fs.existsSync(victim)).toBe(true);
+    expect(fs.lstatSync(path.join(rdir(), `.tmp-${SHA}-5`)).isSymbolicLink()).toBe(true);
+  });
+
+  it("sweep_tmp removes .tmp-* and .trash-* only under the lock, and leaves releases and odd names alone", () => {
+    fs.mkdirSync(rdir(), { recursive: true });
+    for (const name of [`.tmp-${SHA}-11`, `.trash-${SHA}-12`, SHA, ".tmp-junk"]) {
+      fs.mkdirSync(path.join(rdir(), name));
+      fs.chmodSync(path.join(rdir(), name), 0o555);
+    }
+    // without the lock: nothing happens
+    let r = sh('sweep_tmp "$MAIN"; echo "rc=$?"');
+    expect(r.stdout.trim()).toBe("rc=1");
+    expect(fs.readdirSync(rdir()).sort()).toEqual([`.tmp-${SHA}-11`, ".tmp-junk", `.trash-${SHA}-12`, SHA].sort());
+    r = sh('releases_lock_acquire "$MAIN" && sweep_tmp "$MAIN"; echo "rc=$?"; releases_lock_release "$MAIN"');
+    expect(r.stdout.trim()).toBe("rc=0");
+    expect(fs.readdirSync(rdir()).sort()).toEqual([".tmp-junk", SHA].sort());
+    for (const name of [".tmp-junk", SHA]) fs.chmodSync(path.join(rdir(), name), 0o755);
+  });
+
+  it("sweep_tmp works for a child that re-entered the lock with the inherited token", () => {
+    fs.mkdirSync(path.join(rdir(), `.tmp-${SHA}-77`), { recursive: true });
+    placeLock(ownerFixture);
+    const r = sh('sweep_tmp "$MAIN"; echo "rc=$?"', { JOB_RADAR_RELEASES_LOCK_TOKEN: FIXTURE_TOKEN });
+    expect(r.stdout.trim()).toBe("rc=0");
+    expect(fs.existsSync(path.join(rdir(), `.tmp-${SHA}-77`))).toBe(false);
+    expect(ownerText()).toBe(ownerFixture);
+  });
+});

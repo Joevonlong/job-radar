@@ -42,6 +42,16 @@ function resolveFromEnv(envVar: string, fallbackRelative: string): string {
 }
 
 /**
+ * The root of the user's data, `JOB_RADAR_DATA_ROOT` (default: the app root). Relative paths that point at user data
+ * outside the config and profile directories (the resume export directory, the LinkedIn auth file) resolve against it,
+ * so a worker running from a release directory still finds them in the checkout's data. A relative value resolves
+ * against the app root.
+ */
+export function getDataRoot(): string {
+  return resolveFromEnv("JOB_RADAR_DATA_ROOT", ".");
+}
+
+/**
  * The shipped defaults directory, `JOB_RADAR_DEFAULTS_DIR` (default `<app root>/config`). It ships with the
  * product (tracked in git) and is only ever read: a config file the user directory lacks is read from here.
  */

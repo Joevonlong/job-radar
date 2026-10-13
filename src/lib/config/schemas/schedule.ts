@@ -122,11 +122,40 @@ const deploy = z.strictObject({
   drain_timeout_seconds: nonNegativeInt.default(900),
   /** ... looking every this many seconds. */
   drain_poll_seconds: positiveInt.default(10),
+  /** Release directories of the host ai-worker (data/releases/ai-worker/) kept in total, the installed and the previous one included. */
+  ai_worker_releases_keep: z.number().int().min(2).default(3),
+  /**
+   * How long the service manager waits after SIGTERM before it kills the ai-worker (launchd ExitTimeOut, systemd
+   * TimeoutStopSec). Keep it above ai.yaml host_worker.shutdown_grace_seconds.
+   */
+  ai_worker_stop_timeout_seconds: z.number().int().min(10).default(60),
+  /**
+   * Upper bound of each wait while the install script swaps the worker (old process gone, new one with database
+   * evidence, and the same on rollback); at least ai_worker_stop_timeout_seconds + 10.
+   */
+  ai_worker_swap_timeout_seconds: positiveInt.default(120),
+}).superRefine((value, ctx) => {
+  if (value.ai_worker_swap_timeout_seconds < value.ai_worker_stop_timeout_seconds + 10) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["ai_worker_swap_timeout_seconds"],
+      message: `must be at least ai_worker_stop_timeout_seconds + 10 (${value.ai_worker_stop_timeout_seconds + 10})`,
+    });
+  }
 });
 
 export type DeployConfig = z.infer<typeof deploy>;
 
-const DEPLOY_DEFAULTS: DeployConfig = { prune_build_cache: true, build_cache_keep_gb: 5, prune_dangling_images: true, drain_timeout_seconds: 900, drain_poll_seconds: 10 };
+const DEPLOY_DEFAULTS: DeployConfig = {
+  prune_build_cache: true,
+  build_cache_keep_gb: 5,
+  prune_dangling_images: true,
+  drain_timeout_seconds: 900,
+  drain_poll_seconds: 10,
+  ai_worker_releases_keep: 3,
+  ai_worker_stop_timeout_seconds: 60,
+  ai_worker_swap_timeout_seconds: 120,
+};
 
 /** The manual buttons of /sources and /settings (run a channel now, test a channel / AI provider / Telegram). */
 const manualTriggers = z.strictObject({

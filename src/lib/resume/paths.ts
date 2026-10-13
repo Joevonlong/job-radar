@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 
-import { getAppRoot } from "@/lib/config/paths";
+import { getDataRoot } from "@/lib/config/paths";
 
 import type { PdfPathError } from "./types";
 
@@ -51,9 +51,9 @@ export function exportFileName(input: ExportFileNameInput): string {
   return `${company}-${title}-${input.date}${suffix}.md`;
 }
 
-/** The export directory as the app process sees it (relative values resolve against the app root). */
+/** The export directory as the app process sees it (relative values resolve against the data root, `getDataRoot`). */
 export function resolveExportDir(configured: string): string {
-  return path.resolve(getAppRoot(), configured);
+  return path.resolve(getDataRoot(), configured);
 }
 
 // ---------------------------------------------------------------- attaching a PDF
