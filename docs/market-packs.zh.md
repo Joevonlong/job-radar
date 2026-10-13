@@ -80,7 +80,7 @@ pnpm run doctor --only config.market
 | `question_words` | 疑问词（"what"、"which"、"welche…"；整词匹配）：以 "?" 结尾的标题行只有在第一个词是其中之一、且下面紧跟列表时才算标题（"What will I be doing?" / "- …"），所以 "Ready to take on new responsibilities?" 仍是句子 |
 | `negation_cues` | 让人才库说法不算的词：在说法里面、说法前 `pipeline.yaml job_checks.ghost.negation_words_before` 个词内、说法后同一分句 `negation_words_after` 个词内，或在所在列表的标题里 |
 | `negation_after` | 这个包的说法后面往后找多远的否定词：`words`（默认：`negation_words_after` 个词）或 `clause`（到分句结束）。`de` 用 `clause`：德语把 "nicht" 放在句末（"Für unseren Talentpool ist diese Anzeige ganz ausdrücklich nicht gedacht"） |
-| `clause_breaks` | 分句在哪里结束（";"、" but "、" aber "、"and we …"、", not"、", die …"）；分句界也能把词排除在否定搜索之外：`not only`、`nicht nur` |
+| `clause_breaks` | 分句在哪里结束（";"、" but "、" aber "、"and we …"、", not"、", die …"）；分句界也能把词排除在否定搜索之外：`not only`、`nicht nur`。分句界在整个句子上匹配，所以 lookaround 可能读到说法本身里面的字（`(?<=hiring)\s` 会读到说法的最后一个词，在 "always hiring" 紧后面结束分句）：lookaround 只写分句界旁边的字符 |
 | `exclude_context` | 匹配到的句子（或紧挨在它前面的问句）不算：雇主的产品、客户或同名团队、岗位职责、"but this role is a concrete opening"、真实招聘帖的结尾（"Not ready to apply? … stay in touch"）、条件句、隐私说明 |
 | `exclude_clause` | 和 `exclude_context` 一样，但只去掉从它的匹配处到该分句结尾（`clause_breaks` 或 `exclude_clause_ends`）的命中：对候选人的资格要求（"Experience building a talent pipeline …"、"Erfahrung im Aufbau eines Talentpools"），后面 "…; we are always hiring" 仍然算 |
 | `exclude_clause_ends` | `exclude_clause` 的范围还在哪里结束（正则）：公司作主语（we、wir）之前的逗号或冒号（"…, we are always hiring"；"…, so you can staff future roles" 不是）、德语动词第二位的倒装（"… Teams stellen wir laufend ein"）。对别的判断不算分句结束 |

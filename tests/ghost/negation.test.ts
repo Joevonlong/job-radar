@@ -8,7 +8,10 @@ import { fixtureRules, rulesWith } from "./helpers";
 
 /**
  * The reference: the negation test as it read the slices before, inside and after each hit on their own (the time grew with the
- * square of the hits in one piece). The index must give the same answer.
+ * square of the hits in one piece). The index must give the same answer. The reference matches the clause breaks on the slices,
+ * the index on the whole piece: the same for the packs' breaks, whose lookarounds read one character or none across a hit's edge.
+ * If a pack adds a break that reads across it (`(?<=hiring)\s`, `\s(?=always)`), the fixture fuzz below fails: then the reference
+ * should match the breaks on the whole piece too, not the index go back to slices (the whole piece is the documented behaviour).
  */
 const WORD = /[\p{L}\p{N}]+(?:['’]\p{L}+)?/gu;
 const wordsOf = (text: string): string[] => Array.from(text.matchAll(WORD), (m) => m[0]);

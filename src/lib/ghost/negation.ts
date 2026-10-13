@@ -150,7 +150,9 @@ export interface NegationReach {
 /**
  * A negation cue among the `reach.before` words before the hit at `from`…`to` (offsets in the index's text), inside it, or after
  * it (`reach.after`). Its clause starts at the furthest end of a `clause_breaks` match at or before the hit and ends at the first
- * start of one at or after its end; words are read as on the slices before, inside and after the hit alone.
+ * start of one at or after its end; words are read as on the slices before, inside and after the hit alone. The breaks are
+ * matched over the whole piece (read once), so a lookaround in one may read into the hit: a break that only matches with (or
+ * without) the hit's own text around it ends the clause where it matches in the whole piece.
  */
 export function negatedInClause(index: NegationIndex, from: number, to: number, reach: NegationReach): boolean {
   if (index.cues.length === 0) return false;

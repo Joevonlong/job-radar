@@ -240,7 +240,8 @@ ghost:
     - 'aren[''’]?t'
   # Where the clause around an evergreen phrase ends for the negation search: "We have no open role in sales; this posting is for
   # our talent pool" still counts. A comma does not end it, except before "not" ("This posting is for our talent pool, not for a
-  # specific team"). "not only / just / merely" is a break, not a negation ("We're always hiring, not only engineers").
+  # specific team"). "not only / just / merely" is a break, not a negation ("We're always hiring, not only engineers"). The breaks
+  # are matched over the whole sentence, so a lookaround may read into the phrase itself: keep them to what is around the break.
   clause_breaks:
     - '[;(]'
     - ',\s*(?=not\s)'
