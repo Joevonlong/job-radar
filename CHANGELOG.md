@@ -52,6 +52,16 @@ and the project uses [Semantic Versioning](https://semver.org/).
 - **`--help` of every `scripts/ops/*.sh`** prints its whole header comment, which names every option the script accepts
   (`uninstall-ai-worker.sh` gained `--help`).
 
+### Fixed
+
+- **LinkedIn session channel, daily page limit reached part way through a query:** the postings that need no page load
+  (already stored, or list cards when `fetch_details` is off) are still delivered after the limit instead of dropped, and
+  the run is recorded as skipped (a budget stop, as with JSearch) instead of succeeded, so a query cut short is no longer
+  used to mark jobs as possibly closed. The capped query itself now goes to the next channel of the cascade (guest, off by
+  default); when it is the last query of its unit, the skip shows in the cycle's collect step (`partial`, or `failed`
+  when nothing else succeeded). "Recommended for you" stopped by the limit counts as read only when it kept postings.
+  See [docs/linkedin-session.md](docs/linkedin-session.md#when-the-daily-page-limit-is-reached).
+
 ## [2.0.1] - 2026-10-11
 
 ### Upgrade notes

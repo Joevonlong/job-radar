@@ -13,13 +13,14 @@ import { ChannelRegistry } from "@/lib/channels/registry";
 import { runCycle } from "@/lib/cycle/run-cycle";
 import type { CycleKind } from "@/lib/db/repos/cycles";
 import { closeDb, getDb, listChannelStates, listRawPostingsForChannel, listRunsForCycle } from "@/lib/db";
+import { markJobsPossiblyClosed } from "@/lib/db/repos/jobs";
 import { runMigrations } from "@/lib/db/migrate";
 import { getRuntimeState } from "@/lib/db/repos/runtime-state";
 import { buildAlerts, collectErrorsOf } from "@/lib/notify/alerts";
 
 import { fixture, happySite, authFileIn, fakeBrowser, type FakeSite } from "../channels/linkedin/session/helpers";
-import { channelsWith } from "../channels/helpers";
-import { config, quietLogger } from "../cycle/helpers";
+import { channelsWith, shippedSearch } from "../channels/helpers";
+import { collectOf, config, quietLogger } from "../cycle/helpers";
 import { notifyText } from "@/lib/notify/text";
 
 const url = inject("testDatabaseUrl");
@@ -57,7 +58,21 @@ function channels(edit: (session: Record<string, unknown>) => void = () => {}) {
   });
 }
 
-function setup(options: { site?: FakeSite; login?: boolean; edit?: (session: Record<string, unknown>) => void } = {}) {
+/** One keyword in one or two cities, no remote query: a full read of a query is 7 pages (2 search pages, 101, 102, 103, 104, 106). */
+function searchIn(locations: string[]) {
+  return { ...shippedSearch(), keyword_groups: { engineering: ["AI Engineer"] }, locations, remote_scope: "none" as const, max_per_group_per_location: 25 };
+}
+
+function setup(
+  options: {
+    site?: FakeSite;
+    login?: boolean;
+    edit?: (session: Record<string, unknown>) => void;
+    search?: ReturnType<typeof shippedSearch>;
+    /** The next channel after the session one; off like `linkedin-guest` in the shipped file when false. */
+    guest?: boolean;
+  } = {},
+) {
   const clock = { now: NOW };
   const channelsConfig = channels(options.edit);
   const authFile = authFileIn({ login: options.login ?? true });
@@ -78,9 +93,10 @@ function setup(options: { site?: FakeSite; login?: boolean; edit?: (session: Rec
   registry.register(createApifyChannel({ pricePer1kUsd: () => 0.4, actorId: () => "valig/linkedin-jobs-scraper", environment: {}, now: () => NOW }));
   registry.register(session.session);
   registry.register(session.recommended);
-  const guest = registerFixtureChannel(registry, { id: GUEST, family: "linkedin" });
-  const run = (kind: CycleKind = "manual") =>
-    runCycle(kind, { registry, cascades: cascade, config: { ...config(), channels: channelsConfig }, logger: quietLogger, sleep: async () => {}, random: () => 0, now: () => clock.now });
+  const guest = registerFixtureChannel(registry, { id: GUEST, family: "linkedin", ...(options.guest === false ? { settings: { enabled: false } } : {}) });
+  const cycleConfig = { ...config(), channels: channelsConfig, ...(options.search ? { search: options.search } : {}) };
+  const run = (kind: CycleKind = "manual", extra: { channelIds?: readonly string[]; dryRun?: boolean } = {}) =>
+    runCycle(kind, { registry, cascades: cascade, config: cycleConfig, logger: quietLogger, sleep: async () => {}, random: () => 0, now: () => clock.now, ...extra });
   return { run, guest, browser, registry, channelsConfig, clock };
 }
 
@@ -180,16 +196,161 @@ describe("LinkedIn cascade: the session channel is third", () => {
     expect(alerts.find((a) => a.kind === "verification")?.detail).toContain("不会尝试自动通过");
   });
 
-  it("when the day's page limit is used up the channel is skipped (budget) and the next channel takes over", async () => {
+  it("when the day's page limit is reached part way the channel is skipped (budget) and the next channel takes over, from that same query on", async () => {
     const { run, guest, browser } = setup({ edit: (session) => (session.daily_request_limit = 2) });
     const result = await run();
     const runs = await listRunsForCycle(getDb(), result.cycleId as number);
-    // the first query gets 2 pages (search page + one posting page), then the limit is reached; the rest goes to the guest channel
-    expect(runs[0]).toMatchObject({ channelId: SESSION, status: "succeeded" });
-    expect(runs[1]).toMatchObject({ channelId: SESSION, status: "skipped", errorCode: "budget_exceeded" });
-    expect(runs.slice(2).every((r) => r.channelId === GUEST)).toBe(true);
-    expect(browser.log.loads).toHaveLength(2);
-    expect(guest.seen.length).toBeGreaterThan(0);
+    // the first query gets 2 pages (its two search pages), then the limit refuses its first posting page: nothing to keep, so the run is
+    // a plain budget skip, and that same query and the rest go to the guest channel
+    expect(browser.log.loads.map((l) => new URL(l.url).pathname)).toEqual(["/jobs/search/", "/jobs/search/"]);
+    expect(runs[0]).toMatchObject({ channelId: SESSION, status: "skipped", errorCode: "budget_exceeded", interrupted: false, fetched: 0 });
+    expect(runs.filter((r) => r.channelId === SESSION)).toHaveLength(1);
+    expect(runs[1]).toMatchObject({ channelId: GUEST, queryHash: runs[0]?.queryHash });
+    expect(runs.slice(1).every((r) => r.channelId === GUEST)).toBe(true);
+    expect(guest.seen).toHaveLength(runs.length - 1);
+    expect(await listRawPostingsForChannel(getDb(), SESSION)).toEqual([]);
+  });
+});
+
+/** An active job that only the session channel has returned, last seen a month ago. */
+async function staleSessionJob(): Promise<number> {
+  const db = getDb();
+  await db.execute(sql`insert into channels (id, family, kind) values (${SESSION}, 'linkedin', 'session') on conflict do nothing`);
+  const [company] = await db.execute<{ id: string }>(sql`insert into companies (name, name_norm) values ('stale co', 'stale co') returning id`);
+  const [raw] = await db.execute<{ id: string }>(sql`insert into raw_postings (channel_id, external_id, payload_json) values (${SESSION}, 'stale', '{}'::jsonb) returning id`);
+  const [job] = await db.execute<{ id: string }>(sql`
+    insert into jobs (company_id, title, title_norm, last_seen_at, status)
+    values (${Number(company!.id)}, 'Stale', 'stale', now() - interval '30 days', 'active') returning id`);
+  await db.execute(sql`insert into job_sources (job_id, raw_posting_id, channel_id) values (${Number(job!.id)}, ${Number(raw!.id)}, ${SESSION})`);
+  return Number(job!.id);
+}
+
+const sessionState = async () => (await listChannelStates(getDb())).find((s) => s.id === SESSION);
+const limitOf = (limit: number) => (session: Record<string, unknown>) => (session.daily_request_limit = limit);
+
+describe("the day's page limit reached part way through a query", () => {
+  it("the query's postings are stored as a skipped run, no failure is counted, the same query goes to the next channel, and the stale job stays open", async () => {
+    const stale = await staleSessionJob();
+    // 3 pages: both search pages of the first query and its posting 101; the limit refuses 102
+    const { run, guest, browser } = setup({ search: searchIn(["Berlin", "München"]), edit: limitOf(3) });
+    const result = await run();
+
+    const runs = await listRunsForCycle(getDb(), result.cycleId as number);
+    expect(runs.map((r) => [r.channelId, r.status])).toEqual([
+      [SESSION, "skipped"],
+      [GUEST, "succeeded"],
+      [GUEST, "succeeded"],
+    ]);
+    expect(runs[0]).toMatchObject({ errorCode: "budget_exceeded", interrupted: false, fetched: 1, newCount: 1 });
+    expect(runs[0]?.error).toMatch(/^budget reached after 1 postings/);
+    expect(runs[1]?.queryHash).toBe(runs[0]?.queryHash);
+    expect(guest.seen).toHaveLength(2);
+    expect(browser.log.loads).toHaveLength(3);
+    expect((await listRawPostingsForChannel(getDb(), SESSION)).map((r) => r.externalId).sort()).toEqual(["4385000101", "stale"]);
+
+    const collect = collectOf(result);
+    expect(collect.status).toBe("partial");
+    expect(collect.unusable).toEqual({ [SESSION]: "budget_exceeded" });
+    expect(collect.channels[SESSION]).toMatchObject({ succeeded: 0, failed: 0, interrupted: 0, skipped: 1, fetched: 1 });
+    // a budget stop is not a failure, and not a success either
+    expect(await sessionState()).toMatchObject({ circuitState: "closed", consecutiveFailures: 0, lastSuccessAt: null });
+    // no complete session run came after the job was last seen: it is not closed
+    expect(await markJobsPossiblyClosed(getDb(), { now: new Date(), days: 7 })).toEqual([]);
+    expect(stale).toBeGreaterThan(0);
+  });
+
+  it("known gap, recorded as it is: the limit in a later query keeps its stored postings, and the complete earlier query lets the job be closed (closure is judged per channel)", async () => {
+    const stale = await staleSessionJob();
+    // 9 pages: the first query's 7, then the second query's two search pages; the limit refuses 103 (101, 102 and 104 are stored by then)
+    const { run, browser } = setup({ search: searchIn(["Berlin", "München"]), edit: limitOf(9) });
+    const result = await run();
+
+    const runs = await listRunsForCycle(getDb(), result.cycleId as number);
+    expect(runs.map((r) => [r.channelId, r.status])).toEqual([
+      [SESSION, "succeeded"],
+      [SESSION, "skipped"],
+      [GUEST, "succeeded"],
+    ]);
+    expect(runs[1]).toMatchObject({ errorCode: "budget_exceeded", fetched: 3, newCount: 0 });
+    expect(runs[2]?.queryHash).toBe(runs[1]?.queryHash);
+    // the second query opened no posting page: the stored postings were delivered again, the rest waits
+    expect(browser.log.loads.slice(7).map((l) => new URL(l.url).pathname)).toEqual(["/jobs/search/", "/jobs/search/"]);
+    expect(await markJobsPossiblyClosed(getDb(), { now: new Date(), days: 7 })).toEqual([stale]);
+  });
+
+  it("the limit used up exactly by a query is a success; the next query is skipped before a browser opens and goes to the next channel", async () => {
+    const { run, browser } = setup({ search: searchIn(["Berlin", "München"]), edit: limitOf(7) });
+    const result = await run();
+    const runs = await listRunsForCycle(getDb(), result.cycleId as number);
+    expect(runs.map((r) => [r.channelId, r.status])).toEqual([
+      [SESSION, "succeeded"],
+      [SESSION, "skipped"],
+      [GUEST, "succeeded"],
+    ]);
+    expect(runs[0]).toMatchObject({ fetched: 3 });
+    expect(runs[1]).toMatchObject({ errorCode: "budget_exceeded", fetched: 0 });
+    expect(runs[2]?.queryHash).toBe(runs[1]?.queryHash);
+    expect(browser.log.opened).toHaveLength(1);
+    expect((await sessionState())?.lastSuccessAt).not.toBeNull();
+  });
+
+  it("a half-open probe that ends at the limit leaves the circuit half-open (no success, no failure)", async () => {
+    await getDb().execute(sql`
+      insert into channels (id, family, kind, circuit_state, consecutive_failures, circuit_open_until, last_error_code)
+      values (${SESSION}, 'linkedin', 'session', 'open', 1, ${new Date(NOW.getTime() - 3_600_000).toISOString()}::timestamptz, 'network')
+      on conflict (id) do update set circuit_state = excluded.circuit_state, consecutive_failures = excluded.consecutive_failures,
+        circuit_open_until = excluded.circuit_open_until, last_error_code = excluded.last_error_code`);
+    const { run } = setup({ search: searchIn(["Berlin"]), edit: limitOf(3) });
+    const result = await run();
+    const runs = await listRunsForCycle(getDb(), result.cycleId as number);
+    expect(runs.map((r) => [r.channelId, r.status])).toEqual([
+      [SESSION, "skipped"],
+      [GUEST, "succeeded"],
+    ]);
+    expect(await sessionState()).toMatchObject({ circuitState: "half_open", consecutiveFailures: 1, lastSuccessAt: null });
+  });
+
+  describe("with no channel after the session one (the guest channel off)", () => {
+    it("the only query, nothing delivered: the session run and the unit's own row are skipped, and collect fails", async () => {
+      // 2 pages: both search pages; the limit refuses the first posting page
+      const { run } = setup({ search: searchIn(["Berlin"]), edit: limitOf(2), guest: false });
+      const result = await run();
+      const runs = await listRunsForCycle(getDb(), result.cycleId as number);
+      expect(runs.map((r) => [r.channelId, r.status, r.fetched])).toEqual([
+        [SESSION, "skipped", 0],
+        [BRIGHT, "skipped", 0],
+      ]);
+      expect(runs[0]).toMatchObject({ errorCode: "budget_exceeded" });
+      expect(collectOf(result).status).toBe("failed");
+      expect(collectOf(result).unusable).toEqual({ [SESSION]: "budget_exceeded" });
+      expect(await listRawPostingsForChannel(getDb(), SESSION)).toEqual([]);
+    });
+
+    it("the only query, postings kept: they are stored, both rows are skipped, and collect still fails (no attempt succeeded)", async () => {
+      const { run } = setup({ search: searchIn(["Berlin"]), edit: limitOf(3), guest: false });
+      const result = await run();
+      const runs = await listRunsForCycle(getDb(), result.cycleId as number);
+      expect(runs.map((r) => [r.channelId, r.status, r.fetched])).toEqual([
+        [SESSION, "skipped", 1],
+        [BRIGHT, "skipped", 0],
+      ]);
+      expect((await listRawPostingsForChannel(getDb(), SESSION)).map((r) => r.externalId)).toEqual(["4385000101"]);
+      expect(collectOf(result).status).toBe("failed");
+      expect(collectOf(result).unusable).toEqual({ [SESSION]: "budget_exceeded" });
+    });
+
+    it("the last query, after a complete one: both rows of the last query are skipped and collect is partial", async () => {
+      const { run } = setup({ search: searchIn(["Berlin", "München"]), edit: limitOf(9), guest: false });
+      const result = await run();
+      const runs = await listRunsForCycle(getDb(), result.cycleId as number);
+      expect(runs.map((r) => [r.channelId, r.status, r.fetched])).toEqual([
+        [SESSION, "succeeded", 3],
+        [SESSION, "skipped", 3],
+        [BRIGHT, "skipped", 0],
+      ]);
+      expect(runs[2]?.queryHash).toBe(runs[1]?.queryHash);
+      expect(collectOf(result).status).toBe("partial");
+    });
   });
 });
 
@@ -262,6 +423,33 @@ describe("linkedin-session:recommended", () => {
     const { run } = setup({ edit: (session) => (session.recommended_daily = false) });
     const result = await run("weekday_morning");
     expect((await listRunsForCycle(getDb(), result.cycleId as number)).some((r) => r.channelId === RECOMMENDED)).toBe(false);
+  });
+
+  it("stopped by the day's page limit with postings: they are stored, both rows are skipped on the recommended channel, and the list counts as read", async () => {
+    // 3 pages: the recommended page, its next page, the posting 201; the limit refuses 202
+    const { run, browser } = setup({ edit: (session) => ((session.recommended_daily = true), (session.daily_request_limit = 3)) });
+    const morning = await run("weekday_morning", { channelIds: [RECOMMENDED] });
+    const runs = await listRunsForCycle(getDb(), morning.cycleId as number);
+    expect(runs.map((r) => [r.channelId, r.status, r.fetched])).toEqual([
+      [RECOMMENDED, "skipped", 1],
+      [RECOMMENDED, "skipped", 0],
+    ]);
+    expect(runs[0]).toMatchObject({ errorCode: "budget_exceeded" });
+    expect((await listRawPostingsForChannel(getDb(), RECOMMENDED)).map((r) => r.externalId)).toEqual(["4385000201"]);
+    expect(await createDbSessionStore(getDb()).lastRecommendedAt()).not.toBeNull();
+
+    // read for today: the next scheduled cycle does not read it again
+    const loads = browser.log.loads.length;
+    const evening = await run("weekday_evening", { channelIds: [RECOMMENDED] });
+    expect((await listRunsForCycle(getDb(), evening.cycleId as number)).some((r) => r.channelId === RECOMMENDED)).toBe(false);
+    expect(browser.log.loads).toHaveLength(loads);
+  });
+
+  it("a dry run stopped by the day's page limit does not mark the list as read", async () => {
+    const { run } = setup({ edit: (session) => ((session.recommended_daily = true), (session.daily_request_limit = 3)) });
+    const result = await run("weekday_morning", { channelIds: [RECOMMENDED], dryRun: true });
+    expect(collectOf(result).dryRun?.[RECOMMENDED]).toMatchObject({ fetched: 1 });
+    expect(await createDbSessionStore(getDb()).lastRecommendedAt()).toBeNull();
   });
 
   it("`pnpm cycle:run --channel linkedin-session:recommended` runs it alone", async () => {
