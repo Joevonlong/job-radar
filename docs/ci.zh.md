@@ -233,6 +233,14 @@ Vitest 单元测试：`tests/**`（除 `tests/integration/`）下的所有测试
 
 用 `--sequence.shuffle.files --sequence.seed=<seed>` 跑同一套测试；seed 以 `::notice::` 注解打印（`integration file order seed: N`）。PR 只跑这种顺序：它能发现依赖其他文件遗留状态的文件，固定顺序会掩盖这类问题。复现失败：用注解里的 seed 运行 `pnpm test:integration --sequence.shuffle.files --sequence.seed=<seed>`。上限 15 分钟。
 
+#### Set up the lowest Node.js of engines.node
+
+再用一次 `actions/setup-node`，这次是 Node 22.22.3，即 `engines.node`（`>=22.22.3 <23`）允许的最低版本。宿主机 ai-worker 的发布目录守卫（`src/ai-worker/release-guard.mjs`）需要 Node 的同步模块 hook，tsx 从这个版本起才走这条路。这是任务的最后几步，之后没有别的步骤用这个 Node。
+
+#### Load a release module with the lowest Node.js
+
+在临时目录的一个 clone 里，用 `scripts/ops/prepare-release.sh --offline` 为当前提交建发布目录（安装依赖那一步之后 pnpm store 里已经有全部包），再像 ai-worker 服务那样，在发布目录里经守卫和 tsx loader 加载其中一个 `.ts` 模块（tsx 从发布目录的 `tsconfig.json` 读路径别名）。退出码不为 0，或者 stderr 里有 `module.register called`（tsx 走了 hook 线程那条路，守卫会拒绝），这一步就失败。上限 5 分钟。本地：切到 Node 22.22.3，在临时目录里执行 workflow 里同样的命令，`--root` 绝不要指向你安装用的 checkout。
+
 ### Job `e2e`
 
 Playwright 浏览器测试，对生产构建（`pnpm build` 再 `pnpm start`）、一次性的 PostgreSQL 17 service 和替身 runner（`scripts/e2e-runner.ts`：心跳、配置确认、控制请求轮询，使“立即运行一轮”和“配置已保存”无需真实采集器即可工作）运行。没有 AI 提供方，没有职位通道，除 localhost 外没有网络。`e2e/` 下的 spec，另有 `e2e-setup/` 的 spec。上限 20 分钟，总共通常 10 到 12 分钟。任务跑在 runner 主机上，不在 Playwright 容器镜像里（实测镜像更慢）。

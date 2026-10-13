@@ -36,6 +36,8 @@ RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
 FROM deps AS build
 ENV NEXT_TELEMETRY_DISABLED=1
 COPY . .
+# engines.node in package.json is the one source of the supported Node range: fail the build on any other Node.
+RUN node scripts/ops/check-node-engines.mjs package.json
 RUN pnpm build && pnpm build:runner
 
 # ---- web: Next.js standalone server --------------------------------------------------------
@@ -56,6 +58,9 @@ ENV JOB_RADAR_DEFAULTS_DIR=/app/config
 RUN rm -rf /app/config
 COPY config/ /app/config/
 RUN chmod -R a+rX,go-w /app/config
+# The final stage's own Node must satisfy engines.node too (the check script and package.json are not otherwise in this stage).
+COPY --from=build /app/package.json /app/scripts/ops/check-node-engines.mjs /tmp/engines/
+RUN node /tmp/engines/check-node-engines.mjs /tmp/engines/package.json && rm -rf /tmp/engines
 USER node
 EXPOSE 3000
 CMD ["node", "server.js"]
@@ -106,5 +111,8 @@ RUN chmod -R a+rX,go-w /app/config
 # Test hook only: a non-empty value makes the runner build fail (upgrade tests use it to simulate a failed build).
 ARG FAIL_RUNNER_BUILD=""
 RUN if [ -n "$FAIL_RUNNER_BUILD" ]; then echo "FAIL_RUNNER_BUILD is set: failing the runner build on purpose" >&2; false; fi
+# The final stage's own Node must satisfy engines.node too (the check script and package.json are not otherwise in this stage).
+COPY --from=build /app/package.json /app/scripts/ops/check-node-engines.mjs /tmp/engines/
+RUN node /tmp/engines/check-node-engines.mjs /tmp/engines/package.json && rm -rf /tmp/engines
 USER pwuser
 CMD ["node", "dist/runner.mjs"]

@@ -43,9 +43,13 @@ export interface AcquireOptions {
 /** Queries `check` tries before it answers "unknown". */
 const CHECK_ATTEMPTS = 3;
 
-function applicationName(name: string): string {
-  // Postgres truncates application_name to 63 bytes.
-  return `job-radar ${name} pid=${process.pid} host=${os.hostname()}`.slice(0, 63);
+/**
+ * The `application_name` of a process holding an instance lock: `job-radar <name> pid=<pid> host=<host>`, cut to 63
+ * characters (Postgres keeps at most 63 bytes; host names are ASCII). The release tooling's evidence check compares the
+ * holder's name with this, so the format is an interface (tests pin it).
+ */
+export function instanceApplicationName(name: string, pid: number = process.pid, host: string = os.hostname()): string {
+  return `job-radar ${name} pid=${pid} host=${host}`.slice(0, 63);
 }
 
 async function tryLock(sql: Sql, k1: number, k2: number): Promise<boolean> {
@@ -53,16 +57,36 @@ async function tryLock(sql: Sql, k1: number, k2: number): Promise<boolean> {
   return rows[0]?.locked === true;
 }
 
+/** The holder as `findInstanceLockHolder` reads it: raw `pg_stat_activity` values (null when not visible to this role). */
+export interface InstanceLockHolderRow {
+  application: string | null;
+  since: Date | null;
+  /** `backend_start` in UTC with microseconds (`2026-01-02T03:04:05.123456Z`), for exact comparisons in SQL. */
+  sinceExact: string | null;
+}
+
+/**
+ * Who holds the instance lock `key` in the current database (null: nobody). `pg_locks` is readable by every role;
+ * `pg_stat_activity` shows `application_name` / `backend_start` of another role's session only to privileged roles, so
+ * those come back null then. Throws when the query fails.
+ */
+export async function findInstanceLockHolder(sql: Sql, key: readonly [number, number] = AI_WORKER_LOCK_KEY): Promise<InstanceLockHolderRow | null> {
+  const [k1, k2] = key;
+  const rows = await sql<{ application_name: string | null; backend_start: Date | null; backend_start_exact: string | null }[]>`
+    select a.application_name, a.backend_start,
+      to_char(a.backend_start at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as backend_start_exact
+    from pg_locks l join pg_stat_activity a on a.pid = l.pid
+    where l.locktype = 'advisory' and l.granted and l.database = (select oid from pg_database where datname = current_database())
+      and l.classid = ${k1}::int::oid and l.objid = ${k2}::int::oid and l.objsubid = 2
+    limit 1`;
+  const row = rows[0];
+  return row ? { application: row.application_name, since: row.backend_start, sinceExact: row.backend_start_exact } : null;
+}
+
 async function holderOf(sql: Sql, k1: number, k2: number): Promise<LockHolder | null> {
   try {
-    const rows = await sql<{ application_name: string | null; backend_start: Date | null }[]>`
-      select a.application_name, a.backend_start
-      from pg_locks l join pg_stat_activity a on a.pid = l.pid
-      where l.locktype = 'advisory' and l.granted and l.database = (select oid from pg_database where datname = current_database())
-        and l.classid = ${k1}::int::oid and l.objid = ${k2}::int::oid and l.objsubid = 2
-      limit 1`;
-    const row = rows[0];
-    return row ? { application: row.application_name || null, since: row.backend_start } : null;
+    const row = await findInstanceLockHolder(sql, [k1, k2]);
+    return row ? { application: row.application || null, since: row.since } : null;
   } catch {
     return null;
   }
@@ -80,7 +104,7 @@ export async function acquireInstanceLock(url: string, options: AcquireOptions):
     idle_timeout: 0,
     max_lifetime: null,
     connect_timeout: options.connectTimeoutSeconds ?? 10,
-    connection: { application_name: applicationName(options.name) },
+    connection: { application_name: instanceApplicationName(options.name) },
     onnotice: () => {},
   });
   let locked: boolean;

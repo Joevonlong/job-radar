@@ -51,7 +51,7 @@ More: [features and screenshots](docs/features.md).
 
 ## Quick start
 
-You need Docker with Compose 2.24 or newer, Node 22 with pnpm 11 and git, on macOS or Linux (Windows: inside WSL2, see
+You need Docker with Compose 2.24 or newer, Node 22.22.3 or a later 22.x with the pnpm version pinned in `package.json` and git, on macOS or Linux (Windows: inside WSL2, see
 [platform notes](docs/installation.md#macos-linux-windows)).
 
 ```bash

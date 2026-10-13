@@ -44,6 +44,7 @@ export {
   displayConfigPath,
   displayConfigPathForWeb,
   getAppRoot,
+  getDataRoot,
   getConfigDir,
   getConfigPath,
   getDefaultConfigPath,

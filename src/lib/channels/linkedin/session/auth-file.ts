@@ -3,7 +3,7 @@ import path from "node:path";
 
 import { z } from "zod";
 
-import { getAppRoot } from "@/lib/config";
+import { getDataRoot } from "@/lib/config";
 
 /**
  * The login state of the LinkedIn session channels: a Playwright storage state (cookies + local storage) that
@@ -37,8 +37,8 @@ export interface AuthFileInfo {
   modifiedAt: Date | null;
 }
 
-/** The auth file path of `linkedin.session.site.auth_file`: relative paths are resolved against the app root. */
-export function resolveAuthFile(authFile: string, root: string = getAppRoot()): string {
+/** The auth file path of `linkedin.session.site.auth_file`: relative paths are resolved against the data root (`getDataRoot`). */
+export function resolveAuthFile(authFile: string, root: string = getDataRoot()): string {
   return path.resolve(root, authFile);
 }
 

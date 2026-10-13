@@ -1,5 +1,6 @@
 # shellcheck shell=bash
-# The release lock and its in-flight records: one deployment at a time on a checkout. Source it once, near the top.
+# The release lock and its in-flight records: one deployment at a time on a checkout; and the release directories of the
+# host ai-worker under <main>/data/releases/ai-worker/ (path check, marker check, removal). Source it once, near the top.
 #
 # The lock is the directory <main>/data/releases/ai-worker/.lock/ (mkdir is atomic). It holds:
 #   owner         exactly four lines: token=<32 lowercase hex>, pid=<decimal>, host=<hostname -s>, started=<UTC epoch s>
@@ -291,4 +292,90 @@ releases_lock_release() {
   fi
   RELEASES_LOCK_MINE=0
   return 0
+}
+
+# ---- release directories ------------------------------------------------------------------------------------------------
+# <main>/data/releases/ai-worker/<40-hex sha>/ is one read-only release (scripts/ops/prepare-release.sh). Next to the
+# releases live only .lock/, .tmp-<sha>-<pid>/ (a release being built) and .trash-<sha>-<pid>/ (one being removed).
+# <main> is passed as the caller has it (absolute, no trailing slash); it is compared as a string, never as a regex.
+
+releases_dir() { echo "$1/data/releases/ai-worker"; }   # releases_dir <main>: the parent of the release directories
+
+# release_path_ok <main> <path>: 0 when <path> is <main>/data/releases/ai-worker/ followed by a 40-hex sha, a
+# .tmp-<sha>-<pid> or a .trash-<sha>-<pid>, and neither it nor that parent directory is a symbolic link.
+release_path_ok() {
+  local main="$1" path="$2" parent name
+  [[ "$main" == /* && "$main" != */ ]] || return 1
+  parent="$(releases_dir "$main")"
+  [[ "$path" == "$parent/"* ]] || return 1
+  name="${path#"$parent/"}"
+  [[ "$name" =~ ^([0-9a-f]{40}|\.tmp-[0-9a-f]{40}-[0-9]+|\.trash-[0-9a-f]{40}-[0-9]+)$ ]] || return 1
+  [[ ! -L "$path" && ! -L "$parent" ]]
+}
+
+# releases_sha256 <file>: the lowercase hex sha256 of a file (sha256sum on Linux, shasum on macOS).
+releases_sha256() {
+  local out
+  if command -v sha256sum >/dev/null 2>&1; then out="$(sha256sum < "$1")" || return 1
+  else out="$(shasum -a 256 < "$1")" || return 1; fi
+  out="${out%% *}"
+  [[ "$out" =~ ^[0-9a-f]{64}$ ]] || return 1
+  printf '%s\n' "$out"
+}
+
+# release_marker_field <file> <key>: the value of one key of a .release.json written by prepare-release.sh (one key per
+# line); a string loses its quotes, true / false stay as they are. Nothing when the key is not there.
+release_marker_field() {
+  sed -n -E "s/^[[:space:]]*\"$2\":[[:space:]]*(\"([^\"]*)\"|(true|false))[[:space:]]*,?[[:space:]]*\$/\\2\\3/p" "$1" 2>/dev/null | head -n 1
+}
+
+# release_marker_valid <dir> <sha>: 0 when <dir>/.release.json names <sha>, the tree of <sha> in the checkout that holds
+# <dir> (<main>/data/releases/ai-worker/<x>), and the sha256 of <dir>/pnpm-lock.yaml. Reads only; prints nothing.
+release_marker_valid() {
+  local dir="$1" sha="$2" marker main tree lock_sum
+  marker="$dir/.release.json"
+  [[ "$sha" =~ ^[0-9a-f]{40}$ && -d "$dir" && ! -L "$dir" && -f "$marker" && ! -L "$marker" ]] || return 1
+  main="${dir%/data/releases/ai-worker/*}"
+  [[ "$main" != "$dir" ]] || return 1
+  [[ "$(release_marker_field "$marker" sha)" == "$sha" ]] || return 1
+  tree="$(git -C "$main" rev-parse --verify --quiet "$sha^{tree}" 2>/dev/null)" || return 1
+  [[ -n "$tree" && "$(release_marker_field "$marker" tree)" == "$tree" ]] || return 1
+  [[ -f "$dir/pnpm-lock.yaml" && ! -L "$dir/pnpm-lock.yaml" ]] || return 1
+  lock_sum="$(releases_sha256 "$dir/pnpm-lock.yaml")" || return 1
+  [[ "$(release_marker_field "$marker" lockfile_sha256)" == "$lock_sum" ]]
+}
+
+# release_rm <main> <path>: removes a release, .tmp-* or .trash-* directory: checks the path first (release_path_ok),
+# gives its directories back u+w (never following a link; files keep their mode, they may be shared with the pnpm
+# store), then rm -rf. 1 when the path is refused or the removal failed.
+release_rm() {
+  local main="$1" path="$2"
+  if ! release_path_ok "$main" "$path"; then
+    echo "releases: refusing to remove $path (not a release directory of $main, or a symbolic link)" >&2
+    return 1
+  fi
+  [[ -e "$path" ]] || return 0
+  if [[ -d "$path" ]]; then find -P "$path" -type d -exec chmod u+w {} + || return 1; fi
+  rm -rf -- "$path"
+}
+
+# sweep_tmp <main>: removes every .tmp-* and .trash-* left next to the releases (by a run that failed or was killed).
+# Only under the lock (the exported token must be the owner's): 1 without it, and nothing is removed.
+sweep_tmp() {
+  local main="$1" dir f rc=0
+  if ! releases_lock_verify "$main"; then
+    echo "releases: sweep_tmp needs the release lock; nothing removed" >&2
+    return 1
+  fi
+  dir="$(releases_dir "$main")"
+  for f in "$dir"/.tmp-* "$dir"/.trash-*; do
+    [[ -e "$f" || -L "$f" ]] || continue
+    if release_path_ok "$main" "$f"; then
+      echo "releases: removing the leftover $f" >&2
+      release_rm "$main" "$f" || rc=1
+    else
+      echo "releases: leaving $f in place (not a name this script creates, or a symbolic link)" >&2
+    fi
+  done
+  return "$rc"
 }

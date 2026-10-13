@@ -16,6 +16,9 @@ and the project uses [Semantic Versioning](https://semver.org/).
   included (untracked files are fine). Commit or stash first.
 - **Deploy steps renumbered:** migrate is now step 8, ai-worker step 9, and the Docker cleanup (prune) step 10, after the
   ai-worker restart (it used to be step 8, before the migration). `--no-prune` skips step 10.
+- **Node.js 22.22.3 or a later 22.x is required** (`engines.node` is now `>=22.22.3 <23`), and pnpm must be the version
+  in `package.json` (`packageManager`; `corepack enable` provides it). The Docker build stages check the Node version
+  of their image.
 
 ### Changed
 
@@ -51,6 +54,16 @@ and the project uses [Semantic Versioning](https://semver.org/).
   new optional key `schedule.yaml: doctor.shipped_report_skew_seconds` (default 2).
 - **`--help` of every `scripts/ops/*.sh`** prints its whole header comment, which names every option the script accepts
   (`uninstall-ai-worker.sh` gained `--help`).
+- **Release directories for the host AI worker** (tooling only; the worker still runs from the checkout):
+  `scripts/ops/prepare-release.sh <commit> --root <checkout>` builds a read-only
+  `data/releases/ai-worker/<commit>/` from `git archive` plus a production `pnpm install`, under the deploy lock, and
+  reuses one whose `.release.json` still matches. `src/ai-worker/release-guard.mjs`, loaded before tsx, refuses any
+  module that resolves outside its release and checks the Node version, the synchronous module hooks and esbuild's
+  binary. `scripts/ops/worker-heartbeat.ts` reports whether a given worker process holds the instance lock and has
+  written a heartbeat since a given time. tsx is now a production dependency.
+- **New optional keys** in `schedule.yaml: deploy`: `ai_worker_releases_keep` (default 3, at least 2),
+  `ai_worker_stop_timeout_seconds` (default 60, at least 10) and `ai_worker_swap_timeout_seconds` (default 120, at least
+  the stop timeout plus 10). Nothing reads them yet.
 
 ### Fixed
 

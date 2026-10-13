@@ -11,7 +11,7 @@ const eslintConfig = defineConfig([
       "@typescript-eslint/ban-ts-comment": "error",
     },
   },
-  globalIgnores([".next/**", "out/**", "build/**", "dist/**", "next-env.d.ts", "playwright-report/**", "test-results/**", ".local-demo/**"]),
+  globalIgnores([".next/**", "out/**", "build/**", "dist/**", "next-env.d.ts", "playwright-report/**", "test-results/**", ".local-demo/**", "data/**"]),
 ]);
 
 export default eslintConfig;

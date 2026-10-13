@@ -273,6 +273,29 @@ jobs:
           seed=$((RANDOM * 32768 + RANDOM))
           echo "::notice::integration file order seed: $seed"
           pnpm test:integration --reporter=verbose --sequence.shuffle.files --sequence.seed="$seed"
+      # engines.node allows Node 22.22.3 and later 22.x: the host ai-worker's release guard needs the synchronous module
+      # hooks, which tsx only takes from that version on. The Node above is the newest 22.x; the lowest allowed one is
+      # checked here, on a release directory built by scripts/ops/prepare-release.sh. Last steps of the job, so no switch back.
+      - name: Set up the lowest Node.js of engines.node
+        uses: actions/setup-node@v7
+        timeout-minutes: 5
+        with:
+          node-version: "22.22.3"
+      - name: Load a release module with the lowest Node.js
+        timeout-minutes: 5
+        run: |
+          node --version
+          root="$(mktemp -d)"
+          [[ -n "$root" && -d "$root" ]] || exit 1
+          git clone -q --shared "$GITHUB_WORKSPACE" "$root/main"
+          release="$(bash scripts/ops/prepare-release.sh "$(git rev-parse HEAD)" --root "$root/main" --offline)"
+          # from the release directory, as the service runs it (tsx reads the path aliases from its tsconfig.json)
+          rc=0
+          (cd "$release" && node --import "$release/src/ai-worker/release-guard.mjs" --import "$release/node_modules/tsx/dist/loader.mjs" \
+            --input-type=module -e "await import('$release/src/lib/config/paths.ts')") 2> "$root/stderr.txt" || rc=$?
+          cat "$root/stderr.txt"
+          if [[ "$rc" -ne 0 ]]; then echo "::error::loading a release module with Node $(node --version) exited $rc"; exit 1; fi
+          if grep -q "module.register called" "$root/stderr.txt"; then echo "::error::tsx took the module.register path"; exit 1; fi
 
   # The Playwright suite (e2e) against a production build, a throwaway Postgres and the stand-in runner
   # (scripts/e2e-runner.ts): no AI, no job channel, no network beyond localhost.

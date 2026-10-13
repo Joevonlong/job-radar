@@ -51,7 +51,17 @@ describe("schedule.yaml: doctor block and backup.max_age_hours", () => {
 describe("schedule.yaml: deploy block and the internal-disk / storage doctor keys", () => {
   it("ships them and they parse", () => {
     const parsed = schema.parse(shipped());
-    expect(parsed.deploy).toEqual({ prune_build_cache: true, build_cache_keep_gb: 5, prune_dangling_images: true, drain_timeout_seconds: 900, drain_poll_seconds: 10 });
+    expect(parsed.deploy).toEqual({
+      prune_build_cache: true,
+      build_cache_keep_gb: 5,
+      prune_dangling_images: true,
+      drain_timeout_seconds: 900,
+      drain_poll_seconds: 10,
+      // not in the shipped file: schema defaults
+      ai_worker_releases_keep: 3,
+      ai_worker_stop_timeout_seconds: 60,
+      ai_worker_swap_timeout_seconds: 120,
+    });
     expect(parsed.doctor).toMatchObject({ internal_min_free_disk_gb: 10, internal_warn_free_disk_gb: 30, storage_guide: "docs/host-setup.md" });
   });
 

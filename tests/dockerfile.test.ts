@@ -67,6 +67,45 @@ describe("Dockerfile", () => {
     expect(runner).toMatch(/^RUN if \[ -n "\$FAIL_RUNNER_BUILD" \]; then .*false; fi$/m);
   });
 
+  describe("checks the running Node against engines.node", () => {
+    const stageOf = (target: string): string => {
+      const start = dockerfile.indexOf(`AS ${target}\n`);
+      const next = dockerfile.indexOf("\nFROM ", start);
+      return dockerfile.slice(start, next === -1 ? undefined : next);
+    };
+
+    it("in the build stage, right after the sources are copied", () => {
+      const build = stageOf("build");
+      const copy = build.search(/^COPY \. \.$/m);
+      const check = build.search(/^RUN node scripts\/ops\/check-node-engines\.mjs package\.json$/m);
+      expect(copy).toBeGreaterThan(-1);
+      expect(check).toBeGreaterThan(copy);
+      expect(build.search(/^RUN pnpm build /m)).toBeGreaterThan(check);
+    });
+
+    it.each(["web", "runner"])("in the final %s stage, before switching user", (target) => {
+      const stage = stageOf(target);
+      const copy = stage.search(/^COPY --from=build \/app\/package\.json \/app\/scripts\/ops\/check-node-engines\.mjs \/tmp\/engines\/$/m);
+      const check = stage.search(
+        /^RUN node \/tmp\/engines\/check-node-engines\.mjs \/tmp\/engines\/package\.json && rm -rf \/tmp\/engines$/m,
+      );
+      expect(copy).toBeGreaterThan(-1);
+      expect(check).toBeGreaterThan(copy);
+      expect(stage.search(/^USER /m)).toBeGreaterThan(check);
+    });
+
+    it("in the runner, after its Node binary is replaced", () => {
+      const runner = stageOf("runner");
+      expect(runner.search(/^RUN node \/tmp\/engines\//m)).toBeGreaterThan(runner.search(/^COPY --from=node22 /m));
+    });
+
+    it("every final stage (each stage that switches user) runs the check", () => {
+      const stages = dockerfile.split(/\n(?=FROM )/).filter((s) => /^USER /m.test(s));
+      expect(stages.length).toBeGreaterThanOrEqual(2);
+      for (const s of stages) expect(s).toMatch(/check-node-engines\.mjs/);
+    });
+  });
+
   it("defines the web and runner targets", () => {
     expect(dockerfile).toMatch(/AS web\b/);
     expect(dockerfile).toMatch(/AS runner\b/);
