@@ -51,7 +51,9 @@ function referenceNegated(segment: TextSegment, hit: Hit, rules: CompiledVisaRul
 
 /**
  * For the run through `detectVisa`: the negation module's two tests can be switched to the reference's reading (`hooks.reference`),
- * so the whole detection is compared with the reading it replaced. Off, they are the module's own.
+ * so the negation part of the detection is compared with the reading it replaced, inside full `detectVisa` runs. Off, they are
+ * the module's own. Both sides run the same `detect.ts` (the per-list heading reading, the split into clear and negated offers):
+ * its directed cases are in tests/visa/detect.test.ts.
  */
 const hooks = vi.hoisted(() => ({ reference: false, breaks: [] as readonly RegExp[] }));
 

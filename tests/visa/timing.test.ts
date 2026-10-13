@@ -25,7 +25,7 @@ const median = (values: readonly number[]): number => [...values].sort((a, b) =>
 /** A heading line of about `chars` characters ending in ":", which opens the list below it. */
 const heading = (chars: number): string => `${"Things we talk about with every candidate before the first day ".repeat(Math.ceil(chars / 64)).slice(0, chars)}:\n`;
 
-/** The shapes whose reading grew with the square of their size: `n` repeats (P4: a heading and items both growing with `n`). */
+/** The shapes whose reading grew with the square of their size: `n` repeats (the list shape: a heading and items both growing with `n`). */
 const SHAPES: Record<string, { make: (n: number) => string; status: VisaStatus }> = {
   "hits joined by 'and'": { make: (n) => "we offer relocation support and ".repeat(n), status: "offered" },
   "hits joined by commas": { make: (n) => "we offer relocation support, ".repeat(n), status: "offered" },

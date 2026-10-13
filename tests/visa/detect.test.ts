@@ -135,6 +135,63 @@ describe("detectVisa: English phrases", () => {
     expect(status("Not included:\n- Gym\nThe team is small.\n- Relocation package")).toBe("offered");
   });
 
+  // each list's heading is read once for all its items: the reading must stay with its own list, and with its own call
+  it("reads each list under its own heading, in either order", () => {
+    expect(detect("What we offer:\n- Relocation support\n\nWhat we can't offer:\n- Relocation support")).toEqual({
+      status: "unclear",
+      evidence: [
+        { status: "offered", kind: null, quote: "Relocation support", offset: 17 },
+        { status: "unclear", kind: null, quote: "Relocation support", offset: 60 },
+      ],
+    });
+    expect(detect("What we can't offer:\n- Relocation support\n\nWhat we offer:\n- Relocation support")).toEqual({
+      status: "unclear",
+      evidence: [
+        { status: "unclear", kind: null, quote: "Relocation support", offset: 23 },
+        { status: "offered", kind: null, quote: "Relocation support", offset: 60 },
+      ],
+    });
+  });
+
+  it("does not carry a heading's reading over to the next call", () => {
+    const negatedList = "What we can't offer:\n- Relocation support";
+    const plainList = "What we offer:\n- Relocation support";
+    const negatedResult = { status: "unclear", evidence: [{ status: "unclear", kind: null, quote: "Relocation support", offset: 23 }] };
+    const plainResult = { status: "offered", evidence: [{ status: "offered", kind: null, quote: "Relocation support", offset: 17 }] };
+    expect(detectVisa(negatedList, rules)).toEqual(negatedResult);
+    expect(detectVisa(plainList, rules)).toEqual(plainResult);
+    expect(detectVisa(negatedList, rules)).toEqual(negatedResult);
+    expect(detectVisa(negatedList, rules)).toEqual(negatedResult);
+    expect(detectVisa(plainList, rules)).toEqual(plainResult);
+  });
+
+  it("splits the offers of one sentence into negated and clear ones", () => {
+    const short: CompiledVisaRules = { ...rules, quoteMaxChars: 40 };
+    // a clear offer before a negated one: unclear, quoted at the clear offer
+    expect(detectVisa("We offer visa sponsorship to every hire in our growing team across many countries in Europe, while relocation support is not available.", short)).toEqual({
+      status: "unclear",
+      evidence: [{ status: "unclear", kind: null, quote: "We offer visa sponsorship to every hire", offset: 0 }],
+    });
+    // a negated offer before a clear one: unclear, quoted at the negated offer
+    expect(detectVisa("Relocation support is not available for this position, so all our hires live in Berlin already and we offer visa sponsorship for them.", short)).toEqual({
+      status: "unclear",
+      evidence: [{ status: "unclear", kind: null, quote: "Relocation support is not available for", offset: 0 }],
+    });
+    // a negated offer next to a refusal is no offer: the refusal stands
+    expect(detect("Relocation support is not available, and we cannot sponsor visas.")).toEqual({
+      status: "not_offered",
+      evidence: [{ status: "not_offered", kind: "no_sponsorship", quote: "Relocation support is not available, and we cannot sponsor visas.", offset: 0 }],
+    });
+    // the mixed sentence, then a clear offer in a list: offered, the quotes in text order
+    expect(detect("Relocation support is not available for this position, so all our hires live in Berlin already and we offer visa sponsorship for them.\nWhat we offer:\n- Relocation package")).toEqual({
+      status: "offered",
+      evidence: [
+        { status: "unclear", kind: null, quote: "Relocation support is not available for this position, so all our hires live in Berlin already and we offer visa sponsorship for them.", offset: 0 },
+        { status: "offered", kind: null, quote: "Relocation package", offset: 152 },
+      ],
+    });
+  });
+
   it("lets a heading block that says no keep the whole result from being offered", () => {
     // "We can't help with this." is the content of the heading; the offer after it does not make the posting an offer
     expect(status("Visa sponsorship\nWe can't help with this. Relocation support is offered though.")).toBe("unclear");
