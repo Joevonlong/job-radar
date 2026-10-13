@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, inArray, lte, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, inArray, lte, ne, or, sql } from "drizzle-orm";
 
 import { readCycleSteps, type CycleStepStatus } from "@/lib/cycle/step-health";
 
@@ -149,7 +149,7 @@ export async function getLatestCycleRuns(db: Db): Promise<LatestCycleRuns | null
 }
 
 export interface MonthRunTotals {
-  /** Runs started in the month (one run per query). */
+  /** Runs started in the month (one run per query); skipped runs only when they stored postings. */
   runs: number;
   /** Raw postings the runs fetched. */
   fetched: number;
@@ -171,7 +171,8 @@ export async function getMonthRunTotals(db: Db, args: { month: string; timeZone:
       newCount: sql<number>`coalesce(sum(${runs.newCount}), 0)::int`,
     })
     .from(runs)
-    .where(and(sql`to_char(${runs.startedAt} at time zone ${args.timeZone}, 'YYYY-MM') = ${args.month}`, ne(runs.status, "skipped")))
+    // a skipped run counts when it stored postings (a query that stopped at its budget after some of its requests)
+    .where(and(sql`to_char(${runs.startedAt} at time zone ${args.timeZone}, 'YYYY-MM') = ${args.month}`, or(ne(runs.status, "skipped"), gt(runs.fetched, 0))))
     .groupBy(runs.channelId);
   return new Map(rows.map(({ channelId, ...totals }) => [channelId, totals]));
 }

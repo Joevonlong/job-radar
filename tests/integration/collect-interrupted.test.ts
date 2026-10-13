@@ -9,6 +9,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, inject, i
 import type { CascadeSpec } from "@/lib/channels/cascade";
 import { BudgetExceededError, ChannelError, PartialCollectError } from "@/lib/channels/errors";
 import type { FetchLike } from "@/lib/channels/http";
+import { createJsearchChannel } from "@/lib/channels/jsearch";
 import { ChannelRegistry } from "@/lib/channels/registry";
 import { createStepstoneChannel } from "@/lib/channels/stepstone";
 import type { Channel, RawPostingInput } from "@/lib/channels/types";
@@ -31,6 +32,7 @@ import { runMigrations } from "@/lib/db/migrate";
 import { cycleOutcome } from "@/lib/sources/view";
 
 import { channelsWith, shippedSearch } from "../channels/helpers";
+import { response as jsearchResponse, SEARCH_PAGE } from "../channels/jsearch/helpers";
 import { fixtureHtml, htmlResponse } from "../channels/web/helpers";
 import { collectOf, config, pinnedSearch, probeChannel, quietLogger, settings } from "../cycle/helpers";
 
@@ -304,21 +306,21 @@ describe("cascade", () => {
   });
 });
 
-describe("closure check", () => {
-  /** An active job of `channelId`, last seen 30 days ago. */
-  async function staleJob(channelId: string): Promise<number> {
-    const db = getDb();
-    await db.execute(sql`insert into channels (id, family, kind) values (${channelId}, 'ats', 'api') on conflict do nothing`);
-    const [company] = await db.execute<{ id: string }>(sql`insert into companies (name, name_norm) values (${channelId}, ${channelId}) returning id`);
-    const [raw] = await db.execute<{ id: string }>(sql`
-      insert into raw_postings (channel_id, external_id, payload_json) values (${channelId}, 'stale', '{}'::jsonb) returning id`);
-    const [job] = await db.execute<{ id: string }>(sql`
-      insert into jobs (company_id, title, title_norm, last_seen_at, status)
-      values (${Number(company!.id)}, 'Stale', 'stale', now() - interval '30 days', 'active') returning id`);
-    await db.execute(sql`insert into job_sources (job_id, raw_posting_id, channel_id) values (${Number(job!.id)}, ${Number(raw!.id)}, ${channelId})`);
-    return Number(job!.id);
-  }
+/** An active job of `channelId`, last seen 30 days ago. */
+async function staleJob(channelId: string): Promise<number> {
+  const db = getDb();
+  await db.execute(sql`insert into channels (id, family, kind) values (${channelId}, 'ats', 'api') on conflict do nothing`);
+  const [company] = await db.execute<{ id: string }>(sql`insert into companies (name, name_norm) values (${channelId}, ${channelId}) returning id`);
+  const [raw] = await db.execute<{ id: string }>(sql`
+    insert into raw_postings (channel_id, external_id, payload_json) values (${channelId}, 'stale', '{}'::jsonb) returning id`);
+  const [job] = await db.execute<{ id: string }>(sql`
+    insert into jobs (company_id, title, title_norm, last_seen_at, status)
+    values (${Number(company!.id)}, 'Stale', 'stale', now() - interval '30 days', 'active') returning id`);
+  await db.execute(sql`insert into job_sources (job_id, raw_posting_id, channel_id) values (${Number(job!.id)}, ${Number(raw!.id)}, ${channelId})`);
+  return Number(job!.id);
+}
 
+describe("closure check", () => {
   it("an interrupted run never lets the channel's jobs close; a complete run does", async () => {
     const cutJob = await staleJob("cut");
     const wholeJob = await staleJob("whole");
@@ -532,4 +534,110 @@ describe("migration 0033: runs.interrupted", () => {
       fs.rmSync(folder, { recursive: true, force: true });
     }
   }, 180_000); // a database built from all migrations
+});
+
+describe("a planned budget stop", () => {
+  const budgetStop = () => new BudgetExceededError("channel", "cut: paced share of the monthly limit used for now");
+
+  /** A channel that returns two postings and then stops as planned (its next request was refused before it was sent). */
+  function stoppingChannel(id: string, cause: () => ChannelError = budgetStop): Channel {
+    return {
+      ...probeChannel(id, { usesQueries: false }),
+      async collect() {
+        throw new PartialCollectError([record("p1"), record("p2")], cause(), { planned: true });
+      },
+    };
+  }
+
+  it("stores the postings and records a skipped run: no failure, no interruption, no circuit count", async () => {
+    const registry = new ChannelRegistry();
+    registry.register(stoppingChannel("cut"), { settings: settings() });
+    const result = await run(registry);
+
+    const runs = await listRunsForCycle(getDb(), result.cycleId as number);
+    expect(runs[0]).toMatchObject({ status: "skipped", interrupted: false, errorCode: "budget_exceeded", fetched: 2, newCount: 2 });
+    expect(runs[0]?.error).toMatch(/^budget reached after 2 postings/);
+    // the channel is given up on for the cycle, as after a plain budget refusal: the unit's own skipped row follows
+    expect(runs.slice(1).map((r) => [r.status, r.interrupted, r.fetched])).toEqual([["skipped", false, 0]]);
+    expect((await listRawPostingsForChannel(getDb(), "cut")).map((r) => r.externalId)).toEqual(["p1", "p2"]);
+    expect(collectOf(result).channels.cut).toMatchObject({ succeeded: 0, failed: 0, interrupted: 0, skipped: 2, fetched: 2, inserted: 2, errorCodes: { budget_exceeded: 1 } });
+    expect(collectOf(result).unusable).toEqual({ cut: "budget_exceeded" });
+    expect(await channelRow("cut")).toMatchObject({ consecutiveFailures: 0, circuitState: "closed" });
+  });
+
+  it("a planned stop for any other reason is an ordinary interruption", async () => {
+    const registry = new ChannelRegistry();
+    registry.register(stoppingChannel("cut", network), { settings: settings() });
+    const result = await run(registry);
+    const [only] = await listRunsForCycle(getDb(), result.cycleId as number);
+    expect(only).toMatchObject({ status: "partial", interrupted: true, errorCode: "network", fetched: 2 });
+    expect(collectOf(result).channels.cut).toMatchObject({ skipped: 0, interrupted: 1 });
+    expect(await channelRow("cut")).toMatchObject({ consecutiveFailures: 1 });
+  });
+
+  it("a dry run reports the kept postings and the skip, and writes nothing", async () => {
+    const registry = new ChannelRegistry();
+    registry.register(stoppingChannel("cut"), { settings: settings() });
+    const result = await run(registry, { dryRun: true });
+    const collect = collectOf(result);
+    expect(collect.channels.cut).toMatchObject({ succeeded: 0, interrupted: 0, fetched: 2, inserted: 0 });
+    expect(collect.dryRun?.cut).toMatchObject({ fetched: 2 });
+    for (const table of ["cycles", "runs", "raw_postings", "channels"]) {
+      const [row] = await getDb().execute<{ n: string }>(sql.raw(`select count(*)::int::text as n from ${table}`));
+      expect(row?.n).toBe("0");
+    }
+  });
+});
+
+describe("JSearch whose second keyword is refused before its request", () => {
+  /** The month allows `limit` requests and no overage is priced, so a keyword past the limit is refused before it is sent. */
+  async function cycle(limit: number, groups: Record<string, string[]>) {
+    const registry = new ChannelRegistry();
+    registry.register(createJsearchChannel({ environment: { JSEARCH_API_KEY: "test-key-not-real" } }));
+    const channelsConfig = channelsWith((raw) => {
+      raw.circuit_breaker = { failures: FAILURES_TO_OPEN, cooldown_hours: COOLDOWN_HOURS };
+      Object.assign((raw.sources as Record<string, Record<string, unknown>>).jsearch!, {
+        enabled: true,
+        keywords_per_query: 2,
+        monthly_request_limit: limit,
+        pace_requests: false,
+        fetch_details: false,
+      });
+    });
+    const search = { ...shippedSearch(), keyword_groups: groups, locations: ["Berlin"], remote_scope: "none" as const };
+    return runCycle("manual", {
+      registry,
+      config: { ...config(), channels: channelsConfig, search },
+      logger: quietLogger,
+      sleep: async () => {},
+      channelIds: ["jsearch"],
+      fetch: async () => jsearchResponse(200, SEARCH_PAGE),
+    });
+  }
+
+  it("stores what the first keyword read as a skipped run, and the job only the second keyword would have found stays open", async () => {
+    const stale = await staleJob("jsearch");
+    const result = await cycle(1, { engineering: ["AI Engineer", "LLM Engineer"] });
+
+    const runs = await listRunsForCycle(getDb(), result.cycleId as number);
+    expect(runs[0]).toMatchObject({ channelId: "jsearch", status: "skipped", interrupted: false, errorCode: "budget_exceeded" });
+    expect(runs[0]?.fetched).toBeGreaterThan(0);
+    expect((await listRawPostingsForChannel(getDb(), "jsearch")).filter((r) => r.externalId !== "stale")).toHaveLength(runs[0]?.fetched as number);
+    expect(collectOf(result).channels.jsearch).toMatchObject({ succeeded: 0, failed: 0, interrupted: 0 });
+    expect(await channelRow("jsearch")).toMatchObject({ consecutiveFailures: 0 });
+
+    // no complete run of the channel came after the job was last seen: it is not closed
+    expect(await markJobsPossiblyClosed(getDb(), { now: new Date(), days: 7 })).toEqual([]);
+    expect(stale).toBeGreaterThan(0);
+  });
+
+  it("known gap, recorded as it is: a complete query of the same round lets the job be closed (closure is judged per channel, not per query)", async () => {
+    const stale = await staleJob("jsearch");
+    // the month allows 3 requests: the first query uses 2, the second query's first keyword the third, its second keyword is refused
+    const result = await cycle(3, { engineering: ["AI Engineer", "LLM Engineer"], other: ["ML Engineer", "Data Engineer"] });
+
+    const runs = await listRunsForCycle(getDb(), result.cycleId as number);
+    expect(runs.slice(0, 2).map((r) => r.status)).toEqual(["succeeded", "skipped"]);
+    expect(await markJobsPossiblyClosed(getDb(), { now: new Date(), days: 7 })).toEqual([stale]);
+  });
 });

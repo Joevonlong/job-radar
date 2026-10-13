@@ -62,16 +62,22 @@ export class InfrastructureError extends Error {
  * plus the original failure. The runner stores the postings and then treats `cause` exactly like a plain failure
  * (circuit, cascade, retry), recording the run as an interrupted partial. Only thrown with at least one posting;
  * when nothing was fetched yet the channel throws `cause` itself.
+ *
+ * `planned` marks a stop the plan itself asked for rather than a failure: the next request was refused by the channel's own
+ * budget before it was sent (`cause` is then a budget error). The runner stores the postings and records the run as skipped,
+ * not as an interruption: no failure is counted and the circuit is left alone. For any other cause the flag changes nothing.
  */
 export class PartialCollectError extends Error {
   readonly postings: readonly RawPostingInput[];
   override readonly cause: ChannelError;
+  readonly planned: boolean;
 
-  constructor(postings: readonly RawPostingInput[], cause: ChannelError) {
+  constructor(postings: readonly RawPostingInput[], cause: ChannelError, options: { planned?: boolean } = {}) {
     super(`interrupted after ${postings.length} postings: ${cause.message}`, { cause });
     this.name = "PartialCollectError";
     this.postings = postings;
     this.cause = cause;
+    this.planned = options.planned ?? false;
   }
 }
 

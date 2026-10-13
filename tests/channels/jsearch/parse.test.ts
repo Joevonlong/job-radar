@@ -6,7 +6,9 @@ import { cleanUrl, rankApplyLinks } from "@/lib/channels/jsearch/apply";
 import { parseJsearchPayload, postedAt } from "@/lib/channels/jsearch/parse";
 import { jobSchema } from "@/lib/channels/jsearch/schema";
 import { normalizedPostingDraftSchema } from "@/lib/channels/types";
+import { normalizeDraft } from "@/lib/pipeline";
 
+import { shippedPipeline } from "../../pipeline/helpers";
 import { DETAILS, RECORDS, SEARCH_V2, shippedJsearch } from "./helpers";
 
 const PREFERENCE = shippedJsearch().apply_publisher_preference;
@@ -183,5 +185,92 @@ describe("parseJsearchPayload", () => {
   it("postedAt ignores unusable values", () => {
     expect(postedAt({ job_posted_at_datetime_utc: "garbage", job_posted_at_timestamp: null })).toBeNull();
     expect(postedAt({ job_posted_at_datetime_utc: null, job_posted_at_timestamp: 0 })).toBeNull();
+  });
+});
+
+describe("a stored detail (detail_source: stored) provides the description only", () => {
+  const OLD_DESCRIPTION = "Description stored weeks ago.";
+  const search = {
+    job_id: "x",
+    job_title: "Platform Engineer",
+    employer_name: "Acme GmbH",
+    job_city: "Hamburg",
+    job_location: null,
+    job_country: "DE",
+    job_min_salary: 110000,
+    job_max_salary: 120000,
+    job_salary_currency: "EUR",
+    job_salary_period: "YEAR",
+    job_salary_string: null,
+    job_apply_link: "https://jobs.acme.example/new",
+    job_posted_at_datetime_utc: "2026-10-06T00:00:00.000Z",
+  };
+  const detail = {
+    job_id: "x",
+    job_title: "Platform Engineer",
+    employer_name: "Acme GmbH",
+    job_description: OLD_DESCRIPTION,
+    job_location: "Berlin, Germany",
+    job_city: "Berlin",
+    job_country: "DE",
+    job_min_salary: 90000,
+    job_max_salary: 100000,
+    job_salary_currency: "EUR",
+    job_salary_period: "YEAR",
+    job_salary_string: "90000-100000 EUR",
+    job_apply_link: "https://jobs.acme.example/old",
+    apply_options: [{ publisher: "Acme Careers", apply_link: "https://careers.acme.example/old", is_direct: true }],
+    job_posted_at_datetime_utc: "2026-09-01T00:00:00.000Z",
+  };
+  const stored = (searchRecord: Record<string, unknown>) => parseJsearchPayload({ search: searchRecord, detail, detail_source: "stored" }, PREFERENCE);
+
+  it.each([
+    ["no description key", undefined],
+    ["a null description", null],
+    ["an empty description", ""],
+    ["a blank description", "  "],
+  ])("takes the stored description when the search has %s (the same judgement the channel uses to ask for details)", (_name, description) => {
+    const record: Record<string, unknown> = { ...search };
+    if (description !== undefined) record.job_description = description;
+    expect(stored(record).description).toBe(OLD_DESCRIPTION);
+  });
+
+  it("prefers the description of the new search to the stored one", () => {
+    expect(stored({ ...search, job_description: "Written for this week's search." }).description).toBe("Written for this week's search.");
+  });
+
+  it("takes location, salary, apply link, apply options and time from the search, never from the stored detail", () => {
+    const draft = stored(search);
+    expect(draft.description).toBe(OLD_DESCRIPTION);
+    expect(draft.locations).toEqual([{ label: "Hamburg", city: "Hamburg", countryCode: "DE" }]);
+    expect(JSON.stringify(draft.locations)).not.toContain("Berlin");
+    expect(draft.salary).toMatchObject({ min: 110000, max: 120000, currency: "EUR", period: "year" });
+    expect(draft.salaryText).not.toContain("90000");
+    expect(draft.applyUrl).toBe("https://jobs.acme.example/new");
+    expect(draft.sourceUrl).toBe("https://jobs.acme.example/new");
+    expect(draft.extra).toMatchObject({ applyLinks: 1 });
+    expect(draft.postedAt?.toISOString()).toBe("2026-10-06T00:00:00.000Z");
+  });
+
+  it("a freshly fetched detail (no marker) still overrides the search, as before", () => {
+    const draft = parseJsearchPayload({ search, detail }, PREFERENCE);
+    expect(draft.locations).toEqual([{ label: "Berlin, Germany", city: "Berlin", countryCode: "DE" }]);
+    expect(draft.salaryText).toBe("90000-100000 EUR");
+    expect(draft.applyUrl).toBe("https://careers.acme.example/old");
+    expect(draft.description).toBe(OLD_DESCRIPTION);
+  });
+
+  it("parses payloads stored without the marker, and refuses any other marker value instead of treating it as fetched", () => {
+    expect(() => parseJsearchPayload({ search, detail: null }, PREFERENCE)).not.toThrow();
+    expect(() => parseJsearchPayload({ search, detail, detail_source: "fetched" }, PREFERENCE)).toThrow(ChannelError);
+    expect(() => parseJsearchPayload({ search, detail, detail_source: null }, PREFERENCE)).toThrow(ChannelError);
+  });
+
+  it("the stored description still shapes the fields derived from it (accepted): an on-site description wins over the remote label", () => {
+    const draft = stored({ ...search, job_is_remote: true });
+    expect(draft.workplace).toBe("remote");
+    const onsite = parseJsearchPayload({ search: { ...search, job_is_remote: true }, detail: { ...detail, job_description: "This role is fully on-site in our Berlin office." }, detail_source: "stored" }, PREFERENCE);
+    expect(onsite.workplace).toBe("remote"); // the draft keeps the source's label; the pipeline reads the wording
+    expect(normalizeDraft(onsite, shippedPipeline()).workplace).toBe("onsite");
   });
 });

@@ -66,10 +66,15 @@ export const responseSchema = z.looseObject({
   data: z.union([z.array(z.unknown()), z.looseObject({ jobs: z.array(z.unknown()) })]).nullish(),
 });
 
-/** What a stored raw posting holds: the search record, plus the `/job-details` record when it was fetched. */
+/**
+ * What a stored raw posting holds: the search record, plus the `/job-details` record when it was fetched.
+ * `detail_source: "stored"` says the detail is one kept from an earlier cycle and used for its description only (see
+ * `parseJsearchPayload`); a freshly fetched detail and "no detail" carry no such key. Any other value does not parse.
+ */
 export const payloadSchema = z.object({
   search: jobSchema,
   detail: jobSchema.nullish(),
+  detail_source: z.literal("stored").optional(),
 });
 export type JsearchPayload = z.infer<typeof payloadSchema>;
 
@@ -78,4 +83,10 @@ export function recordsOf(body: z.infer<typeof responseSchema>): unknown[] {
   const data = body.data;
   if (data === null || data === undefined) return [];
   return Array.isArray(data) ? data : data.jobs;
+}
+
+/** Whether a record has no description to speak of (missing, null, empty or only white space): the one judgement the channel and the parser share. */
+export function lacksDescription(record: unknown): boolean {
+  const value = typeof record === "object" && record !== null ? (record as Record<string, unknown>).job_description : undefined;
+  return (typeof value === "string" ? value : "").trim() === "";
 }
