@@ -29,8 +29,18 @@ beforeEach(() => {
   bin = path.join(tmp, "bin");
   state = path.join(tmp, "state");
   fs.mkdirSync(state, { recursive: true });
-  // launchctl print <domain>/<label>: succeeds while state/loaded exists
-  write(path.join(bin, "launchctl"), `#!/bin/bash\necho "launchctl $*" >> "${state}/calls"\n[[ "$1" == print && -e "${state}/loaded" ]] && { echo "pid = 4242"; exit 0; }\nexit 113\n`, 0o755);
+  // launchctl print <domain>/<label>: succeeds while state/loaded (any label) or state/loaded-<label> exists
+  write(
+    path.join(bin, "launchctl"),
+    `#!/bin/bash\necho "launchctl $*" >> "${state}/calls"\n[[ "$1" == print && ( -e "${state}/loaded" || -e "${state}/loaded-\${2##*/}" ) ]] && { echo "pid = 4242"; exit 0; }\nexit 113\n`,
+    0o755,
+  );
+  // node: stands in for the worker-heartbeat.ts --evidence probe (sleeps STUB_NODE_SLEEP, exits STUB_NODE_EXIT)
+  write(
+    path.join(bin, "node"),
+    `#!/bin/bash\necho "node $*" >> "${state}/calls"\necho $$ > "${state}/node-pid"\n[[ -n "\${STUB_NODE_SLEEP:-}" ]] && sleep "$STUB_NODE_SLEEP"\nexit "\${STUB_NODE_EXIT:-0}"\n`,
+    0o755,
+  );
   // systemctl --user show / list-jobs: from state/show (a counter appended each call for NRestarts) and state/jobs
   write(
     path.join(bin, "systemctl"),
@@ -140,7 +150,18 @@ describe("ai_worker_wait_ready: arguments", () => {
     expect(calls()).toEqual([]);
   });
 
+  it("returns 1 when no definition is installed: there is nothing to wait for", () => {
+    const r = run(`ai_worker_wait_ready "${path.join(tmp, "main")}" "" 2026-01-01T00:00:00Z 5; echo "rc=$?"`, {
+      JOB_RADAR_SERVICE_MANAGER: "launchd",
+      DATABASE_URL: "postgres://unused@127.0.0.1:1/none",
+    });
+    expect(r.stdout.trim()).toBe("rc=1");
+    expect(r.stderr).toContain("no ai-worker definition is installed");
+    expect(calls()).toEqual([]);
+  });
+
   it("times out (1) while the service manager reports only the old PID", () => {
+    write(path.join(tmp, "Library/LaunchAgents/io.jobradar.ai-worker.plist"), "<plist/>\n");
     write(path.join(state, "loaded"), "");
     const r = run(`ai_worker_wait_ready "${path.join(tmp, "main")}" 4242 2026-01-01T00:00:00Z 1; echo "rc=$?"`, {
       JOB_RADAR_SERVICE_MANAGER: "launchd",
@@ -148,5 +169,60 @@ describe("ai_worker_wait_ready: arguments", () => {
     });
     expect(r.stdout.trim()).toBe("rc=1");
     expect(calls().length).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe("ai_worker_wait_ready: the service polled and the time bound", () => {
+  const main = (): string => path.join(tmp, "main");
+  const env = { JOB_RADAR_SERVICE_MANAGER: "launchd", DATABASE_URL: "postgres://unused@127.0.0.1:1/none" };
+  const plist = (label: string): void => write(path.join(tmp, `Library/LaunchAgents/${label}.plist`), "<plist/>\n");
+
+  it("prints the new PID once the evidence probe succeeds (worker-heartbeat.ts --evidence for that PID and this host)", () => {
+    plist("io.jobradar.ai-worker");
+    write(path.join(state, "loaded"), "");
+    const r = run(`ai_worker_wait_ready "${main()}" 1 2026-01-01T00:00:00Z 10; echo "rc=$?"`, env);
+    expect(r.stdout.trim().split("\n")).toEqual(["4242", "rc=0"]);
+    const probe = calls().find((c) => c.startsWith("node "));
+    expect(probe).toMatch(/scripts\/ops\/worker-heartbeat\.ts --evidence --pid 4242 --host \S+ --since 2026-01-01T00:00:00Z$/);
+  });
+
+  it("after a failed migration to a custom label, the rollback's definition under the default label is the one polled", () => {
+    // configured L = com.example.custom, but the definition in force (put back by the rollback) is the default label's
+    write(path.join(main(), "data/config/schedule.yaml"), "doctor:\n  ai_worker_launchd_label: com.example.custom\n");
+    plist("io.jobradar.ai-worker");
+    write(path.join(state, "loaded-io.jobradar.ai-worker"), "");
+    const r = run(`ai_worker_wait_ready "${main()}" 1 2026-01-01T00:00:00Z 10; echo "rc=$?"`, env);
+    expect(r.stdout.trim().split("\n")).toEqual(["4242", "rc=0"]);
+    const asked = calls().filter((c) => c.startsWith("launchctl print"));
+    expect(asked.length).toBeGreaterThanOrEqual(2);
+    expect(asked.every((c) => c.endsWith("/io.jobradar.ai-worker"))).toBe(true);
+  });
+
+  it("the same after a rollback to the legacy label", () => {
+    write(path.join(main(), "data/config/schedule.yaml"), "doctor:\n  ai_worker_launchd_label: com.example.custom\n");
+    plist("de.jobradar.ai-worker");
+    write(path.join(state, "loaded-de.jobradar.ai-worker"), "");
+    const r = run(`ai_worker_wait_ready "${main()}" 1 2026-01-01T00:00:00Z 10; echo "rc=$?"`, env);
+    expect(r.stdout.trim().split("\n")).toEqual(["4242", "rc=0"]);
+    expect(calls().filter((c) => c.startsWith("launchctl print")).every((c) => c.endsWith("/de.jobradar.ai-worker"))).toBe(true);
+  });
+
+  it("a probe slower than the time left is killed, and its late success does not count (1 within the bound)", () => {
+    plist("io.jobradar.ai-worker");
+    write(path.join(state, "loaded"), "");
+    const r = run(`ai_worker_wait_ready "${main()}" 1 2026-01-01T00:00:00Z 2; echo "rc=$?"`, { ...env, STUB_NODE_SLEEP: "8" });
+    expect(r.stdout.trim()).toBe("rc=1");
+    expect(r.ms).toBeLessThan(6000);
+    const probePid = Number(fs.readFileSync(path.join(state, "node-pid"), "utf8").trim());
+    expect(spawnSync("kill", ["-0", String(probePid)]).status).not.toBe(0);
+  });
+
+  it("a probe that keeps answering 2 (not yet) or 1 (cannot tell) times out with 1", () => {
+    plist("io.jobradar.ai-worker");
+    write(path.join(state, "loaded"), "");
+    for (const code of ["2", "1"]) {
+      const r = run(`ai_worker_wait_ready "${main()}" 1 2026-01-01T00:00:00Z 2; echo "rc=$?"`, { ...env, STUB_NODE_EXIT: code });
+      expect(r.stdout.trim()).toBe("rc=1");
+    }
   });
 });

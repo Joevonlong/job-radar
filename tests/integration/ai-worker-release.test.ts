@@ -19,8 +19,8 @@ import { releaseTreeManifest } from "../helpers/release-tree-manifest";
  * Nothing here touches a real checkout or service manager; the worker gets an empty HOME / TMPDIR and a `claude` stub.
  */
 const repo = path.resolve(import.meta.dirname, "../..");
-const recordHook = path.join(repo, "tests/fixtures/release/record-urls.mjs");
-const runtimeStub = path.join(repo, "tests/fixtures/release/runtime-stub.mjs");
+// The test preloads are the release's own copies: the guard refuses a preload from outside the release.
+const fixtureInRepo = (name: string): string => path.join(repo, "tests/fixtures/release", name);
 const claudeFixture = path.join(repo, "tests/fixtures/ai/claude-success-structured.json");
 // The transitive dependency of the fail-closed case: cheerio -> cheerio-select -> css-select -> boolbase. Loaded when
 // the worker starts (the channels import cheerio), not a direct dependency (so nothing in the release's top-level
@@ -32,6 +32,8 @@ let main = "";
 let release = "";
 let guard = "";
 let loader = "";
+let recordHook = "";
+let runtimeStub = "";
 
 const tmpPath = (...parts: string[]): string => path.join(base, ...parts);
 
@@ -58,6 +60,8 @@ beforeAll(() => {
   expect(release).toBe(path.join(main, "data/releases/ai-worker", sha));
   guard = path.join(release, "src/ai-worker/release-guard.mjs");
   loader = path.join(release, "node_modules/tsx/dist/loader.mjs");
+  recordHook = path.join(release, "tests/fixtures/release/record-urls.mjs");
+  runtimeStub = path.join(release, "tests/fixtures/release/runtime-stub.mjs");
 }, 600_000);
 
 afterAll(async () => {
@@ -249,5 +253,38 @@ describe("the release guard's runtime preconditions (no database)", () => {
     const r = runOnce(["--import", guard, ...code], workerEnv());
     expect(r.status).toBe(1);
     expect(r.stderr).toContain("release guard: tsx is not on the synchronous hooks path (module.register called)");
+  });
+});
+
+describe("the release guard refuses preloads from outside the release (no database)", () => {
+  const loadArgs = ["--input-type=module", "-e", "await import('./src/lib/config/paths.ts'); console.log('loaded')"];
+
+  it("a preload in NODE_OPTIONS: exit 1, nothing of the release loaded", () => {
+    const outside = tmpPath("outside-preload.cjs");
+    fs.writeFileSync(outside, "\n");
+    const r = runOnce(["--import", guard, "--import", loader, ...loadArgs], { ...workerEnv(), NODE_OPTIONS: `--require ${outside}` });
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain("release guard: NODE_OPTIONS carries --require");
+    expect(r.stderr).not.toContain("loaded");
+  });
+
+  it("an --import on the command line whose file lies outside the release (this checkout's copy of a fixture): exit 1", () => {
+    const outside = fixtureInRepo("record-urls.mjs");
+    const r = runOnce(["--import", guard, "--import", outside, "--import", loader, ...loadArgs], { ...workerEnv(), RECORD_FILE: tmpPath("record-outside.txt") });
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain(`release guard: the preload --import ${outside} resolved to`);
+    expect(r.stderr).not.toContain("loaded");
+  });
+
+  it.each([["--import", "tsx"], ["--require", "tsx/cjs"]])("%s %s as a package name: exit 1", (flag, value) => {
+    const r = runOnce(["--import", guard, `${flag}=${value}`, "--import", loader, ...loadArgs], workerEnv());
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain(`release guard: ${flag} ${value}: a preload must be given as a path inside`);
+  });
+
+  it("the guard and tsx's loader as relative paths inside the release are accepted", () => {
+    const r = runOnce(["--import", "./src/ai-worker/release-guard.mjs", "--import", "./node_modules/tsx/dist/loader.mjs", ...loadArgs], workerEnv());
+    expect(r.stderr).not.toContain("release guard:");
+    expect(r.status).toBe(0);
   });
 });

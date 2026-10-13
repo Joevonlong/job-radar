@@ -16,14 +16,29 @@
 //   4. esbuild's platform package, found the way esbuild finds it from tsx (tsx -> esbuild -> @esbuild/<platform>-<arch>),
 //      and its binary are inside the root; so is ESBUILD_BINARY_PATH when it is set. esbuild locates its binary with
 //      require.resolve, which no hook sees.
+//   5. no preload from outside the root: NODE_OPTIONS carries no --import, --require / -r, --loader or
+//      --experimental-loader at all (the service definition never sets one; a value there would come from the user's
+//      environment), and every such option on the command line (process.execArgv) names a file whose real path is
+//      inside the root: this guard and tsx's loader in production; tests add their own fixtures from the release. Bare
+//      package names are refused (the service definition uses absolute paths). A preload listed before this guard has
+//      already run when the check happens; the check makes the process stop before any application code runs.
 //
 // What is guaranteed: in the worker's main thread, every resolution made through `import` or `require()` whose result
 // lies outside the root (Node built-ins excepted) is refused before the module runs (registerHooks resolve hook:
-// `node:` passes, a `file:` URL whose real path is inside the root passes, anything else throws).
+// `node:` passes, a `file:` URL whose real path is inside the root passes, anything else throws). A load hook applies the
+// same rule to every URL about to be loaded, as a second layer.
 // Known exceptions:
+//   - hooks registered later run first, and tsx registers after this guard: the resolve hook only sees what tsx's
+//     resolve hook passes on through nextResolve, and the load hook only what tsx's load hook passes on through
+//     nextLoad. A resolution tsx completes on its own reaches neither (the tests record that every module the worker
+//     loads is inside the release);
 //   - require.resolve() does not go through the hooks: esbuild's binary is checked explicitly above; for other packages
 //     the audit recorded with the change that introduced this guard applies;
-//   - worker_threads: the worker creates no threads today; a thread it starts later would not be covered.
+//   - worker_threads: hooks are per thread. The worker's own code starts no thread, but tsx calls esbuild's
+//     transformSync, which starts a worker thread with `execArgv: []`, so this guard is not loaded there. That thread
+//     only runs esbuild's JavaScript API, which talks to the binary checked in 4. (found by the same resolution, with
+//     the same ESBUILD_BINARY_PATH); no way out of the release through it is known. A thread started later would not
+//     be covered either.
 import { existsSync, readFileSync, realpathSync } from "node:fs";
 import module, { createRequire, syncBuiltinESMExports } from "node:module";
 import os from "node:os";
@@ -104,21 +119,52 @@ if (process.env.ESBUILD_BINARY_PATH) {
   realInRoot(`ESBUILD_BINARY_PATH (${process.env.ESBUILD_BINARY_PATH})`, () => process.env.ESBUILD_BINARY_PATH);
 }
 
-// The hook: after the next resolver, accept only built-ins and real paths inside the root.
+// 5. preloads
+const PRELOAD_FLAGS = ["--import", "--require", "-r", "--loader", "--experimental-loader"];
+const preloadFlagOf = (arg) => PRELOAD_FLAGS.find((f) => arg === f || arg.startsWith(`${f}=`));
+const nodeOptions = process.env.NODE_OPTIONS ?? "";
+const fromNodeOptions = nodeOptions.split(/\s+/).map((t) => t.replace(/^["']/, "")).find((t) => preloadFlagOf(t));
+if (fromNodeOptions) {
+  stop(`NODE_OPTIONS carries ${preloadFlagOf(fromNodeOptions)} (a preload from the environment); unset NODE_OPTIONS for the ai-worker`);
+}
+const execArgv = process.execArgv;
+for (let i = 0; i < execArgv.length; i++) {
+  const flag = preloadFlagOf(execArgv[i]);
+  if (!flag) continue;
+  const value = execArgv[i] === flag ? execArgv[++i] : execArgv[i].slice(flag.length + 1);
+  if (!value) stop(`${flag} without a value`);
+  let file;
+  if (value.startsWith("file:")) file = fileURLToPath(value);
+  else if (path.isAbsolute(value)) file = value;
+  else if (value.startsWith("./") || value.startsWith("../")) file = path.resolve(process.cwd(), value);
+  else stop(`${flag} ${value}: a preload must be given as a path inside ${root}, not as a package name`);
+  realInRoot(`the preload ${flag} ${value}`, () => file);
+}
+
+// The hooks: accept only built-ins and real paths inside the root (resolve: after the next resolver; load: before it).
+const allowed = new Map();
+function urlInRoot(url) {
+  if (url.startsWith("node:")) return true;
+  if (!url.startsWith("file:")) return false;
+  const known = allowed.get(url);
+  if (known !== undefined) return known;
+  let ok = false;
+  try {
+    ok = inRoot(realpathSync(fileURLToPath(url)));
+  } catch {
+    ok = false;
+  }
+  allowed.set(url, ok);
+  return ok;
+}
 module.registerHooks({
   resolve(specifier, context, nextResolve) {
     const result = nextResolve(specifier, context);
-    const url = result.url;
-    if (url.startsWith("node:")) return result;
-    if (url.startsWith("file:")) {
-      let real = null;
-      try {
-        real = realpathSync(fileURLToPath(url));
-      } catch {
-        real = null;
-      }
-      if (real !== null && inRoot(real)) return result;
-    }
-    throw new Error(`${PREFIX} ${specifier} resolved to ${url}, outside ${root}`);
+    if (urlInRoot(result.url)) return result;
+    throw new Error(`${PREFIX} ${specifier} resolved to ${result.url}, outside ${root}`);
+  },
+  load(url, context, nextLoad) {
+    if (!urlInRoot(url)) throw new Error(`${PREFIX} refusing to load ${url}, outside ${root}`);
+    return nextLoad(url, context);
   },
 });

@@ -8,23 +8,32 @@
 #   --offline      pnpm install --offline instead of --prefer-offline (tests: the pnpm store must already hold everything)
 #   -h, --help     print this help
 #
+# Before anything is changed: data/releases and data/releases/ai-worker must not be symbolic links (when they exist), and
+# neither may the release path itself.
+#
 # Steps, all under the release lock data/releases/ai-worker/.lock (taken here, or re-entered with the token a calling
 # script exported in JOB_RADAR_RELEASES_LOCK_TOKEN):
 #   1  an existing release with a valid .release.json (sha, tree of <sha>, sha256 of pnpm-lock.yaml) is reused as is;
-#      one with an invalid marker is renamed to .trash-<sha>-<pid> and removed, unless it is the release the installed
-#      worker runs from (install-ai-worker.sh --print-release, when it can tell): then the script refuses and keeps it
+#      one with an invalid marker is renamed to .trash-<sha>-<pid> and removed, unless the installed worker may run
+#      from it. That is asked of install-ai-worker.sh --print-release (next to this script): exit 0 names the release
+#      in use (refused when it is this one), 3 (not installed, or only under the legacy label) and 4 (installed, not
+#      from a release directory) let the rebuild go on, and 1 or any other exit refuses (the script cannot tell). An
+#      install script that does not mention --print-release at all predates release directories: no worker can run
+#      from one then, so nothing is in use.
 #   2  git archive of <sha> into .tmp-<sha>-<pid>/ next to the releases
 #   3  `pnpm --version` must equal the packageManager of that commit (else: run `corepack enable`)
-#   4  pnpm install --frozen-lockfile --prod --prefer-offline --ignore-scripts (no lifecycle scripts; allowBuilds of
-#      pnpm-workspace.yaml still applies); a commit without tsx in its dependencies gets the full install instead
+#   4  pnpm install --frozen-lockfile --prod --prefer-offline --ignore-scripts: no lifecycle script runs at all, not even
+#      one that allowBuilds of pnpm-workspace.yaml would allow; a commit without tsx in its dependencies gets the full
+#      install instead
 #   5  node_modules/tsx/dist/loader.mjs exists; .release.json is written: sha, tree, lockfile_sha256, prod_only, created
-#   6  every archived file, .release.json and every directory lose their write bits (files under node_modules keep
-#      their mode: they may be hard links into the pnpm store)
+#   6  every archived file except symbolic links (chmod would change the link's target), .release.json and every
+#      directory lose their write bits (files under node_modules keep their mode: they may be hard links into the pnpm
+#      store)
 #   7  published with mv, only to a path that does not exist yet
 # stdout gets exactly one line on success, the release directory; everything else goes to stderr.
 #
 # Exit code: 0 = the release is ready (built or reused); 1 = failed or refused (lock held, pnpm version mismatch, a
-# broken release that is in use, the lock kept at release because a descendant's exit is not confirmed). Interrupted
+# broken release that is or may be in use, a symbolic link on the release path, the lock kept at release because a descendant's exit is not confirmed). Interrupted
 # (INT, TERM, HUP): the running step finishes in its own process group, no further step starts, the lock this script
 # took is released, its .tmp directory removed, and the exit code is 130, 143 or 129. Re-entered under a caller's lock,
 # the script never removes its .tmp directory: the next deploy that holds the lock sweeps it.
@@ -83,11 +92,25 @@ proc_traps on_exit
 # A state-changing step: in its own process group; a signal recorded meanwhile stops the script before the next step.
 run_step() { local rc; proc_check_stop; rc=0; proc_run "$@" || rc=$?; proc_check_stop; return "$rc"; }
 
-# The release the installed worker runs from, when the install script can tell (--print-release exits 0); else nothing.
+# installed_release: sets INSTALLED_RELEASE to the release directory the installed worker runs from, empty when it runs
+# from none (see step 1 in the header). Returns 1, with the reason on stderr, when that cannot be told.
+INSTALLED_RELEASE=""
 installed_release() {
-  local out rc=0
-  out="$(bash "$OPS/install-ai-worker.sh" --print-release --root "$MAIN" 2>/dev/null </dev/null)" || rc=$?
-  (( rc == 0 )) && printf '%s\n' "$out"
+  local install="$OPS/install-ai-worker.sh" out rc=0
+  INSTALLED_RELEASE=""
+  if [[ ! -f "$install" ]]; then say "cannot tell which release the installed ai-worker runs from: $install is missing"; return 1; fi
+  # An install script without --print-release predates release directories: the worker runs from the checkout.
+  grep -qF -- '--print-release' "$install" || return 0
+  out="$(bash "$install" --print-release --root "$MAIN" </dev/null)" || rc=$?
+  case "$rc" in
+    0) if [[ "$out" != /* || "$out" == *$'\n'* ]]; then
+         say "cannot tell which release the installed ai-worker runs from: install-ai-worker.sh --print-release printed '$out', not one absolute path"
+         return 1
+       fi
+       INSTALLED_RELEASE="$out" ;;
+    3|4) ;;
+    *) say "cannot tell which release the installed ai-worker runs from: install-ai-worker.sh --print-release exited $rc"; return 1 ;;
+  esac
   return 0
 }
 same_dir() { [[ "$1" == "$2" ]] || { [[ -d "$1" && -d "$2" ]] && [[ "$(cd "$1" && pwd -P)" == "$(cd "$2" && pwd -P)" ]]; }; }
@@ -95,6 +118,12 @@ same_dir() { [[ "$1" == "$2" ]] || { [[ -d "$1" && -d "$2" ]] && [[ "$(cd "$1" &
 if proc_tostop_set; then
   die "the terminal has tostop set: the steps run in the background and would stop at their first output; run stty -tostop, then retry"
 fi
+
+# ---- before anything changes: no symbolic link on the release path ---------------------------------------------------
+for p in "$MAIN/data/releases" "$RDIR"; do
+  [[ ! -L "$p" ]] || die "$p is a symbolic link; refusing to build releases through it (nothing was changed)"
+done
+release_path_ok "$MAIN" "$DEST" || die "$DEST is a symbolic link or sits under one; refusing to use or replace it (nothing was changed)"
 
 # ---- 0: lock ------------------------------------------------------------------------------------------------------------
 LOCK_DIR="$(releases_lock_dir "$MAIN")"
@@ -114,11 +143,12 @@ if [[ -e "$DEST" || -L "$DEST" ]]; then
     printf '%s\n' "$DEST"
     exit 0
   fi
-  inuse="$(installed_release)"
-  if [[ -n "$inuse" ]] && same_dir "$inuse" "$DEST"; then
+  installed_release || die "$DEST has no valid .release.json and the installed ai-worker may run from it; left in place"
+  if [[ -n "$INSTALLED_RELEASE" ]] && same_dir "$INSTALLED_RELEASE" "$DEST"; then
     die "$DEST has no valid .release.json but the installed ai-worker runs from it; left in place (reinstall the worker from another release first)"
   fi
   trash="$RDIR/.trash-$SHA-$$"
+  if [[ -e "$trash" || -L "$trash" ]]; then release_rm "$MAIN" "$trash" || die "could not remove the leftover $trash"; fi
   say "$DEST has no valid .release.json: rebuilding it"
   run_step mv -- "$DEST" "$trash" || die "could not move $DEST aside"
   release_rm "$MAIN" "$trash" || die "could not remove $trash (the next deploy holding the lock removes it)"
@@ -167,7 +197,10 @@ printf '{\n  "sha": "%s",\n  "tree": "%s",\n  "lockfile_sha256": "%s",\n  "prod_
 # shellcheck disable=SC2016  # expanded by the inner bash
 run_step bash -o pipefail -c '
   set -e
-  git -C "$1" ls-tree -r -z --name-only "$2" | (cd "$3" && xargs -0 chmod a-w)
+  # every tracked path but symbolic links (mode 120000): chmod follows a link and would change its target
+  git -C "$1" ls-tree -r -z "$2" | while IFS= read -r -d "" rec; do
+    [[ "${rec%% *}" == 120000 ]] || printf "%s\0" "${rec#*$'\''\t'\''}"
+  done | (cd "$3" && xargs -0 chmod a-w)
   chmod a-w "$3/.release.json"
   find -P "$3" -type d -exec chmod a-w {} +' _ "$MAIN" "$SHA" "$tmp" || die "could not make $tmp read-only"
 [[ ! -w "$tmp" && ! -w "$tmp/.release.json" && ! -w "$tmp/package.json" ]] || die "$tmp is still writable after chmod"

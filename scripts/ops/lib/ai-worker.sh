@@ -5,7 +5,7 @@
 #   ai_worker_start   starts it again only if ai_worker_stop stopped it (both used by scripts/ops/restore.sh)
 #   ai_worker_label   the resolved launchd label L (see ai_worker_identity), the default one when L is not valid
 #   ai_worker_identity <main>       which service definition is the worker's (key=value lines; files only)
-#   ai_worker_wait_ready <main> <old pid> <since> <timeout>   until a new worker PID shows database evidence
+#   ai_worker_wait_ready <main> <old pid> <since> <timeout>   until a new PID of the installed definition shows evidence
 #   ai_worker_wait_stopped <label-or-unit> <pid> <timeout>     until the service and the PID are gone
 #   ai_worker_db_url <main> [--database-url X]                 the DATABASE_URL the install script writes
 #   sd_env_decode / sd_path_decode / sd_unit_db_url            exact inverses of the install script's unit escaping
@@ -40,6 +40,28 @@ ai_worker_label() {
   printf '%s' "$label"
 }
 
+# ai_worker_yaml_scalar <rest of a `key:` line>: the value of a one-line YAML scalar, plain or in matching quotes, with a
+# trailing ` #` comment dropped; an empty value prints nothing. Returns 1 for an unclosed quote or text after the closing
+# quote. No escapes are interpreted (a label has none).
+ai_worker_yaml_scalar() {
+  local v="${1%$'\r'}" q
+  v="${v#"${v%%[![:space:]]*}"}"
+  case "$v" in
+    \"*|\'*)
+      q="${v:0:1}"; v="${v:1}"
+      [[ "$v" == *"$q"* ]] || return 1
+      local rest="${v#*"$q"}"
+      v="${v%%"$q"*}"
+      rest="${rest#"${rest%%[![:space:]]*}"}"
+      [[ -z "$rest" || "$rest" == "#"* ]] || return 1 ;;
+    "#"*) v="" ;;
+    *)
+      if [[ "$v" =~ ^(.*[^[:space:]])[[:space:]]+#.*$ ]]; then v="${BASH_REMATCH[1]}"; fi
+      v="${v%"${v##*[![:space:]]}"}" ;;
+  esac
+  printf '%s' "$v"
+}
+
 ai_worker_platform() {   # launchd or systemd
   case "${JOB_RADAR_SERVICE_MANAGER:-}" in
     launchd|systemd) echo "$JOB_RADAR_SERVICE_MANAGER" ;;
@@ -51,7 +73,9 @@ ai_worker_platform() {   # launchd or systemd
 # nothing from $app). Prints key=value lines:
 #   platform          launchd or systemd
 #   label             L: doctor.ai_worker_launchd_label of <main>/data/config/schedule.yaml when that file exists, else of
-#                     <main>/config/schedule.yaml; io.jobradar.ai-worker when the key is missing or empty
+#                     <main>/config/schedule.yaml; io.jobradar.ai-worker when the key is missing or empty. The whole
+#                     scalar is the value (plain, or in matching single or double quotes; a ` #` comment after it is
+#                     dropped), so `com.example.worker invalid` is not a valid label
 #   definition        where L's definition lives (~/Library/LaunchAgents/<L>.plist, or the systemd user unit file
 #                     ${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/job-radar-ai-worker.service)
 #   found_label       the label (systemd: the unit) whose definition exists, empty when none
@@ -69,8 +93,10 @@ ai_worker_identity() {
   [[ -f "$schedule" ]] || schedule="$main/config/schedule.yaml"
   if [[ -e "$schedule" ]]; then
     if [[ ! -r "$schedule" ]]; then echo "ai-worker: cannot read $schedule" >&2; return 1; fi
-    label="$(awk '/^doctor:/ { in_doctor = 1; next } /^[^ #]/ { in_doctor = 0 } in_doctor && $1 == "ai_worker_launchd_label:" { gsub(/["'"'"']/, "", $2); print $2; exit }' "$schedule")" \
+    label="$(awk '/^doctor:/ { in_doctor = 1; next } /^[^ #]/ { in_doctor = 0 } in_doctor && $1 == "ai_worker_launchd_label:" { sub(/^[ \t]*ai_worker_launchd_label:/, ""); print; exit }' "$schedule")" \
       || { echo "ai-worker: cannot read $schedule" >&2; return 1; }
+    label="$(ai_worker_yaml_scalar "$label")" \
+      || { echo "ai-worker: doctor.ai_worker_launchd_label in $schedule is not a plain or quoted scalar" >&2; return 1; }
   fi
   label="${label:-$AI_WORKER_DEFAULT_LABEL}"
   if [[ ! "$label" =~ ^[A-Za-z0-9._-]+$ ]]; then
@@ -118,27 +144,66 @@ ai_worker_service_pid() {   # ai_worker_service_pid <platform> <label-or-unit>: 
   return 0
 }
 
+# ai_worker_run_bounded <seconds> <command…>: runs the command in the background and waits at most <seconds> for it;
+# returns its exit status, or 124 after killing it (TERM, then KILL a second later) when the time is up. The command
+# should exec its program, so that the PID killed is the program's.
+ai_worker_run_bounded() {
+  local secs="$1" p rc=0 end
+  shift
+  "$@" &
+  p=$!
+  end=$((SECONDS + secs))
+  while kill -0 "$p" 2>/dev/null; do
+    if (( SECONDS >= end )); then
+      kill -TERM "$p" 2>/dev/null
+      sleep 1
+      kill -KILL "$p" 2>/dev/null
+      wait "$p" 2>/dev/null
+      return 124
+    fi
+    sleep 0.2
+  done
+  wait "$p" || rc=$?
+  return "$rc"
+}
+
+# ai_worker_evidence_probe <pid> <host> <since>: worker-heartbeat.ts --evidence, run from this checkout (its tsconfig and
+# tsx), with the caller's DATABASE_URL; exec, so that ai_worker_run_bounded can kill it.
+ai_worker_evidence_probe() {
+  cd "$AI_WORKER_REPO" || exit 1
+  DATABASE_URL="$DATABASE_URL" exec node --import "$AI_WORKER_REPO/node_modules/tsx/dist/loader.mjs" \
+    scripts/ops/worker-heartbeat.ts --evidence --pid "$1" --host "$2" --since "$3" >/dev/null 2>&1 </dev/null
+}
+
 # ai_worker_wait_ready <main> <old pid> <since> <timeout s>: waits until the service manager reports a PID P other than
 # <old pid> and the database shows evidence for it: worker-heartbeat.ts --evidence --pid P --host <this host> --since
 # <since> exits 0 (P holds the worker's instance lock and wrote a heartbeat after <since>). Exit 2 (not yet) or 1 (cannot
 # tell, e.g. the lock holder is another database role) both mean "not ready": it keeps waiting. Once there is evidence it
-# checks the PID once more, prints P and returns 0. Returns 1 on timeout, or at once when DATABASE_URL is empty: the
-# caller sets it explicitly (the URL written into the definition), it is never read from .env or derived here.
+# checks the PID once more, prints P and returns 0.
+# The service polled is the definition in force when it is called: found_label of ai_worker_identity <main> (systemd: the
+# unit), not the configured label L. After a failed migration from the default or legacy label to L, the rollback puts
+# the definition back under its old label, and this waits for that one.
+# Every probe is bounded by the time left, and success counts only within the timeout. Returns 1 on timeout, when no
+# definition exists, when the identity is ambiguous, or at once when DATABASE_URL is empty: the caller sets it
+# explicitly (the URL written into the definition), it is never read from .env or derived here.
 ai_worker_wait_ready() {
-  local main="$1" old="$2" since="$3" timeout="$4" platform target ident host pid deadline
+  local main="$1" old="$2" since="$3" timeout="$4" platform target ident host pid deadline left
   [[ -n "${DATABASE_URL:-}" ]] || { echo "ai-worker: ai_worker_wait_ready needs DATABASE_URL set by the caller" >&2; return 1; }
   [[ "$timeout" =~ ^[0-9]+$ ]] || { echo "ai-worker: timeout must be whole seconds, got '$timeout'" >&2; return 1; }
   ident="$(ai_worker_identity "$main")" || return 1
   platform="$(printf '%s\n' "$ident" | sed -n 's/^platform=//p')"
-  if [[ "$platform" == systemd ]]; then target="$AI_WORKER_SYSTEMD_UNIT"; else target="$(printf '%s\n' "$ident" | sed -n 's/^label=//p')"; fi
+  target="$(printf '%s\n' "$ident" | sed -n 's/^found_label=//p')"
+  [[ -n "$target" ]] || { echo "ai-worker: no ai-worker definition is installed; nothing to wait for" >&2; return 1; }
   host="$(hostname)"
   deadline=$((SECONDS + timeout))
   while :; do
+    left=$((deadline - SECONDS))
+    (( left > 0 )) || return 1
     pid="$(ai_worker_service_pid "$platform" "$target")"
     if [[ -n "$pid" && "$pid" != "$old" ]] \
-       && (cd "$AI_WORKER_REPO" && DATABASE_URL="$DATABASE_URL" node --import "$AI_WORKER_REPO/node_modules/tsx/dist/loader.mjs" \
-             scripts/ops/worker-heartbeat.ts --evidence --pid "$pid" --host "$host" --since "$since" >/dev/null 2>&1 </dev/null) \
-       && [[ "$(ai_worker_service_pid "$platform" "$target")" == "$pid" ]]; then
+       && ai_worker_run_bounded "$left" ai_worker_evidence_probe "$pid" "$host" "$since" \
+       && [[ "$(ai_worker_service_pid "$platform" "$target")" == "$pid" ]] \
+       && (( SECONDS <= deadline )); then
       printf '%s\n' "$pid"
       return 0
     fi

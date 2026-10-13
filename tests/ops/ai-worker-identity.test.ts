@@ -130,6 +130,39 @@ describe("ai_worker_identity (launchd)", () => {
     expect(fs.existsSync(path.join(main, "pwned"))).toBe(false);
   });
 
+  it.each([
+    ["com.example.worker invalid"],
+    ['"com.example.worker invalid"'],
+    ["'com.example.worker invalid'"],
+  ])("the whole scalar is the label: %s is not valid (exit 1 after platform)", (value) => {
+    schedule(value);
+    const r = identity();
+    expect(r.status).toBe(1);
+    expect(Object.keys(kv(r.stdout))).toEqual(["platform"]);
+    expect(r.stderr).toContain("not a valid label");
+  });
+
+  it.each([['"com.example.worker'], ['"com.example.worker" trailing'], ["'a.b'c"]])("a malformed quoted value %s: exit 1", (value) => {
+    schedule(value);
+    const r = identity();
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain("not a plain or quoted scalar");
+  });
+
+  it.each([
+    ["com.example.worker", "com.example.worker"],
+    ["com.example.worker   # a comment", "com.example.worker"],
+    ['"com.example.worker"  # a comment', "com.example.worker"],
+    ["'com.example.worker'", "com.example.worker"],
+    ["com.example.worker\r", "com.example.worker"],
+    ["# only a comment", DEFAULT],
+  ])("reads %j as %s", (value, label) => {
+    schedule(value.replace("\\r", "\r"));
+    const r = identity();
+    expect(r.status).toBe(0);
+    expect(kv(r.stdout).label).toBe(label);
+  });
+
   it("the label comes from data/config when that file exists, else from config/; an empty value is the default", () => {
     schedule("from.config", "config");
     expect(kv(identity().stdout).label).toBe("from.config");

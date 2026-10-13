@@ -302,28 +302,114 @@ describe("scripts/ops/prepare-release.sh: reuse and rebuild", () => {
     expect(leftovers()).toEqual([]);
   });
 
-  it("refuses to replace an invalid release the installed worker runs from (install-ai-worker.sh --print-release names it)", () => {
-    // a copy of the scripts next to a stub install script that knows --print-release
+  // a copy of the scripts next to a stub install script; `printRelease` false: one that does not know --print-release
+  function opsCopy(printRelease = true): string {
     const ops = path.join(base, "ops");
     fs.mkdirSync(path.join(ops, "lib"), { recursive: true });
     fs.copyFileSync(script, path.join(ops, "prepare-release.sh"));
     for (const lib of ["proc.sh", "releases.sh"]) fs.copyFileSync(path.join(repo, "scripts/ops/lib", lib), path.join(ops, "lib", lib));
-    write(path.join(ops, "install-ai-worker.sh"), '#!/usr/bin/env bash\n[[ "$1" == --print-release ]] && { echo "$STUB_INUSE"; exit 0; }\nexit 1\n', 0o755);
+    const stub = printRelease
+      ? `#!/usr/bin/env bash
+echo "install $*" >> "$STUB_LOG"
+if [[ -n "\${STUB_TRASH:-}" ]]; then
+  # the in-flight record of the running prepare is named by its PID
+  for p in $(ls "$BLOCK_LOCK/inflight"); do mkdir -p "$STUB_TRASH-$p/stale" && chmod a-w "$STUB_TRASH-$p"; done
+fi
+[[ "$1" == --print-release ]] && { printf '%s' "\${STUB_INUSE:-}"; exit "\${STUB_PRINT_EXIT:-0}"; }
+exit 1
+`
+      : `#!/usr/bin/env bash\necho "install $*" >> "$STUB_LOG"\necho "unknown argument: $1" >&2\nexit 1\n`;
+    write(path.join(ops, "install-ai-worker.sh"), stub, 0o755);
+    return path.join(ops, "prepare-release.sh");
+  }
+  const askedInstall = (): string[] => logLines().filter((l) => l.startsWith("install "));
 
-    expect(prepare([], {}, path.join(ops, "prepare-release.sh")).status).toBe(0);
+  it("refuses to replace an invalid release the installed worker runs from (install-ai-worker.sh --print-release names it)", () => {
+    const copy = opsCopy();
+    expect(prepare([], {}, copy).status).toBe(0);
     corruptMarker();
-    const r = prepare([], { STUB_INUSE: dest() }, path.join(ops, "prepare-release.sh"));
+    const r = prepare([], { STUB_INUSE: dest() }, copy);
     expect(r.status).toBe(1);
     expect(r.stderr).toContain("the installed ai-worker runs from it");
     expect(fs.readFileSync(path.join(dest(), ".release.json"), "utf8")).toContain("broken");
     expect(installs()).toHaveLength(1);
     expect(leftovers()).toEqual([]);
     expect(fs.existsSync(lockDir())).toBe(false);
+    expect(askedInstall()).toEqual([`install --print-release --root ${main}`]);
 
     // another release in use: this one is rebuilt
-    const other = prepare([], { STUB_INUSE: path.join(rdir(), "b".repeat(40)) }, path.join(ops, "prepare-release.sh"));
+    const other = prepare([], { STUB_INUSE: path.join(rdir(), "b".repeat(40)) }, copy);
     expect(other.status).toBe(0);
     expect(installs()).toHaveLength(2);
+  });
+
+  it.each([
+    ["3 (not installed, or only under the legacy label)", "3"],
+    ["4 (installed, not from a release directory)", "4"],
+  ])("rebuilds an invalid release when --print-release exits %s", (_label, code) => {
+    const copy = opsCopy();
+    expect(prepare([], {}, copy).status).toBe(0);
+    corruptMarker();
+    const r = prepare([], { STUB_PRINT_EXIT: code, STUB_INUSE: code === "4" ? "/somewhere/else" : "" }, copy);
+    expect(r.status).toBe(0);
+    expect(r.stderr).toContain("rebuilding");
+    expect(installs()).toHaveLength(2);
+    expect(leftovers()).toEqual([]);
+  });
+
+  it.each([
+    ["1 (ambiguous identity or a read failure)", "1", ""],
+    ["2 (not a code it defines)", "2", ""],
+    ["127", "127", ""],
+    ["0 with no path", "0", ""],
+    ["0 with a relative path", "0", "data/releases/ai-worker/x"],
+  ])("keeps an invalid release and exits 1 when --print-release exits %s (it cannot tell)", (_label, code, out) => {
+    const copy = opsCopy();
+    expect(prepare([], {}, copy).status).toBe(0);
+    corruptMarker();
+    const r = prepare([], { STUB_PRINT_EXIT: code, STUB_INUSE: out }, copy);
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain("cannot tell which release the installed ai-worker runs from");
+    expect(r.stderr).toContain("may run from it; left in place");
+    expect(fs.readFileSync(path.join(dest(), ".release.json"), "utf8")).toContain("broken");
+    expect(installs()).toHaveLength(1);
+    expect(leftovers()).toEqual([]);
+    expect(fs.existsSync(lockDir())).toBe(false);
+  });
+
+  it("an install script that does not know --print-release (no release directories yet): not asked, the invalid release is rebuilt", () => {
+    const copy = opsCopy(false);
+    expect(prepare([], {}, copy).status).toBe(0);
+    corruptMarker();
+    const r = prepare([], {}, copy);
+    expect(r.status).toBe(0);
+    expect(r.stderr).toContain("rebuilding");
+    expect(askedInstall()).toEqual([]);
+    expect(installs()).toHaveLength(2);
+  });
+
+  it("a missing install script: it cannot tell, so the invalid release is kept (exit 1)", () => {
+    const copy = opsCopy();
+    expect(prepare([], {}, copy).status).toBe(0);
+    corruptMarker();
+    fs.rmSync(path.join(base, "ops/install-ai-worker.sh"));
+    const r = prepare([], {}, copy);
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain("install-ai-worker.sh is missing");
+    expect(installs()).toHaveLength(1);
+  });
+
+  it("removes a stale .trash directory of the same name (a reused PID) before moving the invalid release aside", () => {
+    const copy = opsCopy();
+    expect(prepare([], {}, copy).status).toBe(0);
+    corruptMarker();
+    const r = prepare([], { STUB_PRINT_EXIT: "3", STUB_TRASH: path.join(rdir(), `.trash-${sha}`) }, copy);
+    expect(askedInstall()).toHaveLength(1);
+    // read-only, as a killed run leaves it: a plain mv onto it would fail
+    expect(r.stderr).not.toContain("could not move");
+    expect(r.status).toBe(0);
+    expect(fs.existsSync(path.join(dest(), "stale"))).toBe(false);
+    expect(leftovers()).toEqual([]);
   });
 
   it("refuses a symbolic link at the release path, and leaves the link and its target alone", () => {
@@ -338,6 +424,34 @@ describe("scripts/ops/prepare-release.sh: reuse and rebuild", () => {
     expect(fs.readdirSync(elsewhere)).toEqual(["keep.txt"]);
     expect(installs()).toEqual([]);
     expect(fs.existsSync(lockDir())).toBe(false);
+  });
+
+  it.each([["data/releases/ai-worker"], ["data/releases"]])("refuses a symbolic link at %s before anything is changed (no lock, nothing written)", (rel) => {
+    const elsewhere = path.join(base, "elsewhere");
+    fs.mkdirSync(elsewhere);
+    fs.mkdirSync(path.dirname(path.join(main, rel)), { recursive: true });
+    fs.symlinkSync(elsewhere, path.join(main, rel));
+    const r = prepare();
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain("is a symbolic link");
+    expect(r.stderr).toContain("nothing was changed");
+    expect(fs.readdirSync(elsewhere)).toEqual([]);
+    expect(installs()).toEqual([]);
+  });
+
+  it("leaves tracked symbolic links and their targets alone when making the release read-only", () => {
+    const target = path.join(base, "outside-target.txt");
+    write(target, "outside\n", 0o644);
+    fs.symlinkSync(target, path.join(main, "link-out"));
+    const commit = (() => {
+      git("add", "-A");
+      git("commit", "-q", "-m", "link");
+      return git("rev-parse", "HEAD");
+    })();
+    const r = prepare([commit, "--root", main]);
+    expect(r.status).toBe(0);
+    expect(fs.lstatSync(path.join(rdir(), commit, "link-out")).isSymbolicLink()).toBe(true);
+    expect(mode(target)).toBe(0o644);
   });
 
   it("publishes only to a path that does not exist: a directory that appears there during the build is left alone (exit 1)", () => {

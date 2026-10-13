@@ -25,7 +25,8 @@ const NAME = /^[a-z0-9_]+$/;
 /** The port of a local installation's database (compose.yaml DB_HOST_PORT default): never a test server. */
 const INSTALLATION_PORT = "5433";
 
-function checkedName(name: string): string {
+/** Throws unless `name` is a name this helper may create (exported for its unit test). */
+export function checkedName(name: string): string {
   if (!TEST_DATABASE_NAME.test(name) || !name.startsWith("jobradar_test_") || !NAME.test(name) || name.length > 63) {
     throw new Error(`isolated-db: refusing the name "${name}" (it must start with jobradar_test_, [a-z0-9_] only, at most 63 characters)`);
   }
