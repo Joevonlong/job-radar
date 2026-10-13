@@ -148,6 +148,8 @@ function readWord(index: NegationIndex, start: number, inside: number, end: numb
   // after it: the letters may go on into the digits, or the apostrophe and letters, after the piece's word ("x'y'z" from "y")
   WORD_HERE.lastIndex = 0;
   const word = WORD_HERE.exec(text.slice(start, end))?.[0] ?? "";
+  // (only an offset inside a character, which no match of a `u` expression gives, reads no word here: stop reading)
+  if (word === "") return { start, end, word, whole: false };
   const wordEnd = start + word.length;
   // it is whole when the slice shows what follows it: a character that is not an apostrophe, or an apostrophe and one more
   const whole = wordEnd < end - 1 || (wordEnd === end - 1 && !isApostrophe(text.charCodeAt(wordEnd)));
