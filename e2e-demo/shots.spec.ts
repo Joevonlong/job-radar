@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 
-import { expect, test, type Browser } from "@playwright/test";
+import { expect, test, type Browser } from "../e2e/fixtures";
 
 import { DESKTOP_VIEWPORT, DETAIL_VIEWPORT, MOBILE_VIEWPORT, PIPELINE_VIEWPORT } from "../scripts/demo/settings";
 

@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./fixtures";
 import postgres from "postgres";
 import { listRow, listRows } from "./list-rows";
 

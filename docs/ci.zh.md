@@ -264,6 +264,7 @@ project 的规划在 `e2e/projects.ts`（由 `tests/e2e-projects.test.ts` 做单
 
 所以总时长不是“最慢 spec 除以 2”：这条链是有意串行的。
 - 新 spec 只要写配置目录里的任何文件，就必须加进 `e2e/projects.ts` 的 `SERIAL_CHAIN`（拥有自己的串行 project），否则会与其他 spec 并行而随机失败。新测试如果改共享的数据库状态或计数整个列表，加 `{ tag: EXCLUSIVE_TAG }`。
+- 每个 spec 都从 `e2e/fixtures.ts` 导入 `test` 和 `expect`，不直接从 `@playwright/test` 导入（否则 `pnpm lint` 报错；只导入类型可以）。它的页面不会在 Server Action 还没完成时离开：`goto`、`reload`、`goBack`、`goForward`、`close`、`context.close()` 和每个测试结束时，都先等到该 context 各页面发出的 action 请求的响应全部收完（最多 15 秒，超时就报错并写出是哪个 action）。没有这一步，乐观更新之后马上刷新会取消保存，刷新后的页面与刷新前矛盾。要用别的方式读已保存的状态（数据库、配置文件）时，先调用 `waitForServerActions(page)` 或轮询。`E2E_SERVER_ACTION_DELAY_MS=<毫秒>` 让每个 action 请求延迟这么久再发出，缺少等待的地方就会每次都失败；`e2e/server-action-guard.spec.ts` 测试这个保护本身。
 - 命令行上点名的 spec 文件（`pnpm test:e2e e2e/settings.spec.ts`）只跑它们自己：只有含匹配 spec 的 project 参与，每个都收窄到点名的 spec，顺序仍按上面。（Playwright 会完整运行依赖 project，没有这一步时，链上的 spec 会先把整个并行套件跑一遍。）带 `file:line` 时，选中的 project 不再串起来，只跑那几行的测试。`--project <名称>` 仍会先跑它的依赖；要单独跑加 `--no-deps`。
 - CI 里 `retries` 是 1，reporter 是 `github`、`list`、`html`；`forbidOnly` 拒绝提交 `test.only`。
 

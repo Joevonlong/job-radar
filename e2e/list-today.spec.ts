@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./fixtures";
 import postgres from "postgres";
 
 import { EXCLUSIVE_TAG } from "./projects";
@@ -101,7 +101,7 @@ test("unseen rows are bold with a dot; opening one and going back shows it seen;
   await expect(page.getByTestId("unseen-count")).toHaveAttribute("data-count", String(unseenBefore));
   await expect(unseen.first().locator("[data-slot=unseen-dot]")).toBeVisible();
   // bold title on an unseen row, normal weight on a seen one
-  const weight = (row: import("@playwright/test").Locator) => row.locator(".jb-title").evaluate((el) => Number(getComputedStyle(el).fontWeight));
+  const weight = (row: import("./fixtures").Locator) => row.locator(".jb-title").evaluate((el) => Number(getComputedStyle(el).fontWeight));
   expect(await weight(unseen.first())).toBeGreaterThanOrEqual(700);
   const seenRow = listRows(page, '[data-seen="true"]').first();
   if ((await seenRow.count()) > 0) expect(await weight(seenRow)).toBeLessThan(700);

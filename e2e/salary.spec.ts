@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./fixtures";
 
 /**
  * Salary benchmark and lookup on the seeded e2e database. The e2e salary.yaml turns the lookup on and uses

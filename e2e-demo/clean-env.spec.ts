@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "../e2e/fixtures";
 
 import { findLeaks, serializeDocument } from "./guard";
 import { forbiddenPatterns, recordTraffic, settle } from "./helpers";

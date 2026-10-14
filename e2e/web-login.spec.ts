@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 
 /**
  * The optional web password against the production build (playwright.config.ts sets JOB_RADAR_WEB_PASSWORD). A request

@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 
 /** A save that fails validation brings the first invalid field into view and focuses it (own spec: it edits the shared notify.yaml copy only while restoring it). */
 const CONFIG_DIR = process.env.E2E_CONFIG_DIR ?? "";

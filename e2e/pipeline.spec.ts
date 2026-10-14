@@ -1,4 +1,4 @@
-import { expect, test, type Locator, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "./fixtures";
 
 /**
  * Pipeline board on the seeded e2e database. Fictional seed applications used here:
@@ -13,19 +13,8 @@ test.describe.configure({ mode: "serial" });
 
 const FERNWEH = "Fernweh Software";
 
-/** The toast appears when the server has stored the change: wait for it before reloading. */
+/** The toast appears when the server has stored the change. */
 const saved = (page: Page, company: string, status: string): Locator => page.getByText(`${company} → ${status}`).first();
-
-/**
- * Run `action` (a click that starts a Server Action) and wait until the server has answered it. The save buttons are
- * disabled while the save is still running as well as after it, and the toasts of two saves look alike, so neither is
- * a sign that the change is stored: a reload right after "disabled" can cancel a save that is still on its way.
- */
-async function stored(page: Page, action: () => Promise<void>) {
-  const answered = page.waitForResponse((response) => response.request().method() === "POST" && new URL(response.url()).pathname === "/pipeline");
-  await action();
-  await answered;
-}
 
 /** The lines of the drawer's timeline (a terminal log, oldest first: the newest change is the last line). */
 const timelineLines = (page: Page): Locator => page.locator('[data-testid="timeline"] [role="log"] > span');
@@ -156,7 +145,7 @@ test.describe("desktop", () => {
     await drag(page, card(page, FERNWEH), page.getByTestId("drop-applied"));
     await expect(column(page, "applied").getByTestId("pipeline-card").filter({ hasText: FERNWEH })).toBeVisible();
     await expect(saved(page, FERNWEH, "已申请")).toBeVisible();
-    await stored(page, () => page.getByRole("button", { name: "撤销" }).click());
+    await page.getByRole("button", { name: "撤销" }).click();
     await expect(column(page, "preparing").getByTestId("pipeline-card").filter({ hasText: FERNWEH })).toBeVisible();
     await expect(page.getByText(`已撤销：${FERNWEH} → 准备中`)).toBeVisible();
     await page.reload();
@@ -177,13 +166,13 @@ test.describe("desktop", () => {
     await expect(page.getByTestId("drop-preparing")).toHaveAttribute("data-over", "true"); // the zones are measured: the arrow keys have somewhere to go
     await page.keyboard.press("ArrowRight");
     await expect(live).toContainText(`${FERNWEH} 在“已申请”列上方`);
-    await stored(page, () => page.keyboard.press("Space"));
+    await page.keyboard.press("Space");
     await expect(column(page, "applied").getByTestId("pipeline-card").filter({ hasText: FERNWEH })).toBeVisible();
     // the handle has the focus again in the new column
     await expect(column(page, "applied").getByTestId("pipeline-card").filter({ hasText: FERNWEH }).getByTestId("card-handle")).toBeFocused();
 
     // Undo takes the move back: no extra event in the timeline, the status is back
-    await stored(page, () => page.getByRole("button", { name: "撤销" }).click());
+    await page.getByRole("button", { name: "撤销" }).click();
     await expect(column(page, "preparing").getByTestId("pipeline-card").filter({ hasText: FERNWEH })).toBeVisible();
     await page.reload();
     await openDrawer(page, FERNWEH);
@@ -243,20 +232,19 @@ test.describe("desktop", () => {
 
     await page.getByTestId("next-action-input").fill("Send the tailored CV");
     await page.getByTestId("next-date-input").fill("2026-12-24");
-    await stored(page, () => page.getByTestId("next-action-save").click());
-    // the server answered; its toast follows (the toast alone is not enough: two saves' toasts look alike)
+    await page.getByTestId("next-action-save").click();
     await expect(page.getByText("下一步已保存")).toBeVisible();
     await expect(page.getByTestId("next-action-save")).toBeDisabled(); // saved: nothing left to save
 
-    // every click is its own save; Next runs them one after another
-    await stored(page, () => page.getByTestId("rounds-plus").click());
-    await stored(page, () => page.getByTestId("rounds-plus").click());
-    await stored(page, () => page.getByTestId("rounds-minus").click());
+    // every click is its own save; Next runs them one after another (and a reload waits for them: e2e/fixtures.ts)
+    await page.getByTestId("rounds-plus").click();
+    await page.getByTestId("rounds-plus").click();
+    await page.getByTestId("rounds-minus").click();
     await expect(page.getByTestId("rounds-value")).toHaveText("1");
 
     await page.getByTestId("drawer-notes-input").fill("Recruiter is Sam, prefers email.");
-    await stored(page, () => page.getByTestId("drawer-notes-save").click());
-    await expect(page.getByText("备注已保存")).toBeVisible(); // stored: the reload below must not cancel the save
+    await page.getByTestId("drawer-notes-save").click();
+    await expect(page.getByText("备注已保存")).toBeVisible();
     await expect(page.getByTestId("drawer-notes-save")).toBeDisabled();
 
     await page.keyboard.press("Escape");
@@ -275,13 +263,13 @@ test.describe("desktop", () => {
     // clean up: blank next step, zero rounds, no notes
     await page.getByTestId("next-action-input").fill("");
     await page.getByTestId("next-date-input").fill("");
-    await stored(page, () => page.getByTestId("next-action-save").click());
+    await page.getByTestId("next-action-save").click();
     await expect(page.getByText("下一步已保存")).toBeVisible(); // (the reload above cleared the earlier toasts)
     await expect(page.getByTestId("next-action-save")).toBeDisabled();
-    await stored(page, () => page.getByTestId("rounds-minus").click());
+    await page.getByTestId("rounds-minus").click();
     await expect(page.getByTestId("rounds-value")).toHaveText("0");
     await page.getByTestId("drawer-notes-input").fill("");
-    await stored(page, () => page.getByTestId("drawer-notes-save").click());
+    await page.getByTestId("drawer-notes-save").click();
     await expect(page.getByText("备注已保存")).toBeVisible();
     await expect(page.getByTestId("drawer-notes-save")).toBeDisabled();
     // the stepper's last change is a server action too: it is stored once the board card shows 0 rounds

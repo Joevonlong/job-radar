@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 import postgres from "postgres";
 import { listRow } from "./list-rows";
 
@@ -8,7 +8,7 @@ import { listRow } from "./list-rows";
  */
 const TITLE = "Applied Scientist, Clinical NLP";
 
-async function openDetail(page: import("@playwright/test").Page) {
+async function openDetail(page: import("./fixtures").Page) {
   await page.goto("/jobs?q=Clinical+NLP");
   await page.getByRole("link", { name: new RegExp(TITLE) }).first().click();
   await expect(page.getByTestId("job-title")).toHaveText(TITLE);
@@ -70,7 +70,7 @@ test.describe("job detail v3", () => {
 });
 
 /** What a navigation did with the View Transitions API: how many it started, which names it paired, how long the morph lasts. */
-async function watchTransitions(page: import("@playwright/test").Page, options: { unsupported?: boolean } = {}) {
+async function watchTransitions(page: import("./fixtures").Page, options: { unsupported?: boolean } = {}) {
   await page.addInitScript((unsupported) => {
     const w = window as unknown as { __vt: { calls: number; names: string[]; durations: number[] } };
     w.__vt = { calls: 0, names: [], durations: [] };

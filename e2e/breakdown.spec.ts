@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./fixtures";
 
 /**
  * The job breakdown card on the seeded e2e database. "Forward Deployed Engineer" (Quillfeather Labs) has a

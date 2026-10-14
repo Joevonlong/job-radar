@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 
 // The e2e run serves the production build: the dev-only component page must not exist there.
 test("/dev/viz is a 404 in production", async ({ page }) => {

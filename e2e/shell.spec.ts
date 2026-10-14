@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./fixtures";
 
 /** Load a page and wait until client JS is attached, so clicks are not lost to pre-hydration. */
 async function open(page: Page, path = "/") {

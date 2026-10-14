@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./fixtures";
 
 /**
  * The translation tab of the job page on the seeded e2e database. "Forward Deployed Engineer"

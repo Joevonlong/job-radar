@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 
 /**
  * A config file edited by hand shows up in the web app without a restart: the web has no watcher, so `loadConfig` checks the

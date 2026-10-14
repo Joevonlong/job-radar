@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./fixtures";
 
 /**
  * The visa check on the seeded e2e database (the seed runs it, like the cycle's signals step). Fictional seed jobs:

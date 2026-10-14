@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 
 /**
  * The test buttons of /sources on the seeded e2e database. scripts/e2e-runner.ts (the stand-in runner) answers

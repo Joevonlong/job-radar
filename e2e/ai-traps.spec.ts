@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./fixtures";
 
 /**
  * AI trap detection on the seeded e2e database. "Senior Data Engineer" (Obstgarten Analytics) is a Greenhouse posting
