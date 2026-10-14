@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 
 /**
  * The host allowlist (DNS rebinding protection) and the security headers, against the production build. Requests only;

@@ -1,6 +1,6 @@
 import path from "node:path";
 
-import { expect, test } from "@playwright/test";
+import { expect, test } from "../e2e/fixtures";
 
 import { PIPELINE_VIEWPORT, VIDEO_DIR, VIDEO_VIEWPORT } from "../scripts/demo/settings";
 

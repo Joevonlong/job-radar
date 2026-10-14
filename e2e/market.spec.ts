@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 
 // Switching the market on /me. The seeded instance is German (the fixture template); the generic pack with the
 // United States drops the local-language step, writes amounts in dollars and folds the German job boards away.

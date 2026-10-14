@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 
 /** Without a saved LinkedIn login, /sources says "未登录" on the session channels and in the cascade (the e2e run has no .auth/linkedin.json). */
 test("sources shows the LinkedIn session as not logged in", async ({ page }) => {

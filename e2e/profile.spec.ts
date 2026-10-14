@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./fixtures";
 
 // playwright.config.ts points the web server at this directory (and a disposable database).
 const PROFILE_DIR = process.env.E2E_PROFILE_DIR ?? "";

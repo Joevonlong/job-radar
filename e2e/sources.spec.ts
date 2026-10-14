@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 
 /** /sources on the seeded e2e database (see src/lib/db/seed.ts): the dashboard's fictional cycles and runs. The UI is Chinese by default. */
 test("sources shows a card per channel with its circuit state, runs and budget", async ({ page }) => {

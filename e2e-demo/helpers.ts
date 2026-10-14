@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import type { BrowserContext, Page } from "@playwright/test";
+import type { BrowserContext, Page } from "../e2e/fixtures";
 import postgres from "postgres";
 
 import { STAGING_DIR } from "../scripts/demo/settings";

@@ -1,4 +1,4 @@
-import { expect, type Locator, type Page } from "@playwright/test";
+import { expect, type Locator, type Page } from "./fixtures";
 
 /**
  * The rows of the job list on screen (Today, /jobs, /favorites). A row that the last change removed (a filter, a view

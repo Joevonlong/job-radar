@@ -124,6 +124,11 @@ one runs in full): name the file as well. The named files are read from the comm
 environment (a JSON list of filters, used to hand them to the workers): an exported value overrides the command line. The integration tests need `pg_dump` / `pg_restore` of the server's major version (17): set `PG_DUMP_PATH` /
 `PG_RESTORE_PATH`, or use `scripts/ops/pg-docker.sh` symlinked as `pg_dump` and `pg_restore` (what CI does).
 
+e2e specs import `test` and `expect` from `e2e/fixtures.ts` (lint enforces it): a reload or navigation there waits for
+Server Actions still in flight, so a test can reload right after a click that saves. See "Projects of the main suite"
+in [ci.md](ci.md#job-e2e) for the details and `E2E_SERVER_ACTION_DELAY_MS`, which exposes uncovered navigation paths and direct database reads (not bypassed imports; lint
+covers those) and the coverage boundary of the guard.
+
 What the CI runs, job by job, and how to run it locally: [ci.md](ci.md). Changing a workflow means updating that page
 (`pnpm ci:docs-check` enforces it).
 

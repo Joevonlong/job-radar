@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./fixtures";
 import { listRows } from "./list-rows";
 import { EXCLUSIVE_TAG } from "./projects";
 

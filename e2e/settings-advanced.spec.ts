@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./fixtures";
 
 /**
  * The advanced YAML editor (/settings?tab=advanced) on the disposable config directory. The specs rewrite ui.yaml,

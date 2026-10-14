@@ -388,6 +388,20 @@ The projects are planned in `e2e/projects.ts` (unit-tested by `tests/e2e-project
 - A new spec that writes any file of the config directory must be added to `SERIAL_CHAIN` in `e2e/projects.ts` (its
   own chained project); otherwise it will fail randomly in parallel with other specs. A new test that changes shared
   database state or counts whole lists gets `{ tag: EXCLUSIVE_TAG }`.
+- Every spec imports `test` and `expect` from `e2e/fixtures.ts`, not from `@playwright/test` (`pnpm lint` fails
+  otherwise; type-only imports are fine). Its pages never leave while a Server Action is still in flight:
+  `goto`, `reload`, `goBack`, `goForward`, `close`, `context.close()` and the end of each test first wait until every
+  action request the context's pages started has its whole answer (up to 15 s, then the call fails naming the action).
+  Without it a reload right after an optimistic update cancels the save and the page after the reload contradicts the
+  one before. Before reading stored state some other way (the database, a config file), call `waitForServerActions(page)`
+  or poll. `E2E_SERVER_ACTION_DELAY_MS=<ms>` holds every action request that long, which exposes navigation paths the
+  guard does not cover and direct reads of stored state (the database) that skip the wait, and makes them fail every
+  time; it does not catch a spec that bypasses the fixture import (the lint rule covers imports, dynamic ones and
+  `playwright` / `playwright-core` included). `e2e/server-action-guard.spec.ts` tests the guard itself.
+  Not covered: full-document navigations the page starts itself (a link click, a form submit), `page.setContent()`,
+  `browser.close()`, and contexts from `browser.newContext()` that the test never closes (only the `context` fixture
+  gets the end-of-test wait). The guard sees an action from its `fetch` call on; the moment before that is short but not
+  covered, which is why a quiet period of 400 ms must follow the last settled action.
 - Spec files named on the command line (`pnpm test:e2e e2e/settings.spec.ts`) run alone: only the projects with a
   matching spec take part, each narrowed to the named specs and still in the order above. (Playwright runs a dependency
   project in full, so without this a chained spec would first run the whole parallel suite.) With a `file:line`

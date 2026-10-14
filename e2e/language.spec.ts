@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./fixtures";
 
 /**
  * languages. The e2e configuration is the Chinese one of an existing install (tests/fixtures/config/defaults/language.yaml):

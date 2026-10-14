@@ -1,6 +1,6 @@
 import fs from "node:fs";
 
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./fixtures";
 
 /**
  * /sources/ai-usage on the seeded e2e database (src/lib/db/seed.ts: eight ai_usage rows). Other specs may write `probe` rows
