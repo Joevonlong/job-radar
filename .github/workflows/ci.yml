@@ -490,36 +490,25 @@ jobs:
         timeout-minutes: 5
         run: docker compose down -v --remove-orphans
 
-  # The ai-worker's move between release directories with the real scripts and the real worker code, under the systemd
-  # simulator (tests/transition/run.sh): first install, a switch, a switch that is rolled back, an emergency restore of
-  # the previous release, uninstall; after each step the worker's directory, --print-release and the doctor are checked.
+  # Upgrade transitions with real Docker and the real deploy / install / uninstall scripts of each version, the worker
+  # under the systemd simulator (tests/transition/run.sh): A, every documented hop from 62d7ad9 to HEAD; B, from 62d7ad9
+  # straight to HEAD (with a failed and a real replacement of the worker installed from the checkout first); D, a deploy
+  # whose runner image fails to build changes nothing; C, a release with a broken loader is rolled back; E, the
+  # emergency restore of the previous release; then the uninstall. After each step: /app/config of the containers,
+  # the worker's directory, --print-release, a run_ai request and the doctor. Each project runs its own database.
   # Runs when scripts/ops/, src/ai-worker/, compose.yaml, the Dockerfile or the simulator change, and on main.
   upgrade-transition:
     needs: changes
     if: needs.changes.outputs.transition == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    env:
-      # Throwaway service container: the script migrates it and the worker writes into it.
-      DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
-    services:
-      postgres:
-        image: postgres:17
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: postgres
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U postgres"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
+    timeout-minutes: 120
     steps:
       - name: Check out the repository
         uses: actions/checkout@v7
         timeout-minutes: 5
+        with:
+          # the scenarios check out every earlier version
+          fetch-depth: 0
       - name: Set up pnpm
         uses: pnpm/action-setup@v6
         timeout-minutes: 5
@@ -533,8 +522,8 @@ jobs:
       - name: Install dependencies
         timeout-minutes: 8
         run: pnpm install --frozen-lockfile
-      - name: Release transition scenarios
-        timeout-minutes: 20
+      - name: Upgrade transition scenarios
+        timeout-minutes: 105
         run: bash tests/transition/run.sh "$RUNNER_TEMP/transition"
       - name: Upload the transition logs
         if: failure()

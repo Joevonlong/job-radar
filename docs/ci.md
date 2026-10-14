@@ -580,14 +580,14 @@ Always: `docker compose down -v --remove-orphans` on the throwaway runner.
 
 ### Job `upgrade-transition`
 
-The ai-worker's move between release directories with the real scripts and the real worker code
-(`tests/transition/run.sh`), under the systemd simulator. Runs when `changes` sets `transition` (pull requests that touch
-the deploy side, every push to `main`, manual runs). A `postgres:17` service container, `DATABASE_URL` as in
-`integration`. Limit 30 minutes, typically a few minutes (three release directories are built).
+Upgrade transitions with real Docker and the real deploy, install and uninstall scripts of each version, the ai-worker
+under the systemd simulator (`tests/transition/run.sh`). Runs when `changes` sets `transition` (pull requests that touch
+the deploy side, every push to `main`, manual runs). No service container: each compose project of the script runs its
+own database. Limit 120 minutes; it builds the images about ten times.
 
 #### Check out the repository
 
-`actions/checkout`.
+`actions/checkout` with `fetch-depth: 0`: the scenarios check out the earlier versions.
 
 #### Set up pnpm
 
@@ -601,15 +601,33 @@ the deploy side, every push to `main`, manual runs). A `postgres:17` service con
 
 `pnpm install --frozen-lockfile` (fills the pnpm store the release directories install from).
 
-#### Release transition scenarios
+#### Upgrade transition scenarios
 
-`bash tests/transition/run.sh "$RUNNER_TEMP/transition"`. In a clone under a temporary directory it makes three commits
-(PREV = the checked-out commit, NEXT on top, BROKEN = NEXT with a worker that throws at start), migrates the database, and
-runs: first install of PREV; switch to NEXT; switch to BROKEN, which must end in `rolled back:` with NEXT running again;
-emergency restore of PREV; back to NEXT; uninstall. After each step the worker's working directory (`/proc/<pid>/cwd`),
-`install-ai-worker.sh --print-release` and `pnpm run doctor --json --only config.shipped --only ops` must name the
-expected release, with no lock and no switch backup left. Limit 20 minutes. Locally (Linux or macOS): the same command
-with `DATABASE_URL` pointing at a throw-away database; nothing real is installed and the temporary directory is removed.
+`bash tests/transition/run.sh "$RUNNER_TEMP/transition"`. In clones under a temporary directory, each with its own compose
+project (`jrtransition-<random>-*`), ports, volume and database password, and with the scheduled cycles off:
+
+- A: 62d7ad9, then each documented hop (4dd8d03, 2656364, b3f69b0, the checked-out commit) with that version's
+  `deploy.sh --skip-pull`, the stop of web and runner before 2656364, and the first-upgrade steps of `docs/upgrade.md`
+  (uninstall the old worker, check that it stopped, stop web and runner, check out, deploy) before the last one.
+- B: 62d7ad9; the new `install-ai-worker.sh --release` of a release whose worker throws at start must roll back to the
+  worker installed from the checkout; the same with a good release succeeds; then the strict stop and the deploy of the
+  checked-out commit.
+- D: a deploy whose runner image fails to build (the build arg `FAIL_RUNNER_BUILD=1`) changes no container, image or
+  worker and leaves no lock; the same deploy without it succeeds.
+- C: a release with a broken tsx loader is rolled back.
+- E: the emergency restore of the previous release; the doctor reports release != HEAD. Then the uninstall.
+
+After each step: `/app/config` of the web and runner containers equals `config/` of the deployed commit (sha256 of every
+file); the worker's MainPID runs from the expected directory and `install-ai-worker.sh --print-release` agrees; a
+`run_ai` request is done by the worker; the doctor's JSON (`--only config.shipped --only ops`) has the shipped config
+check, and from the release-directory version on confirms the reports and finds no lock and no switch backup. A docker
+wrapper lets through only read-only commands and compose commands of the script's own projects; `launchctl` and
+`systemctl` must resolve to the simulator. Limit 105 minutes. Locally (Linux or macOS, Docker with compose v2): the same
+command; the temporary directory and the script's compose projects, images and volumes are removed at the end.
+
+Not covered: launchd (the integration tests run the switch against the launchd simulator; real launchd is the manual
+drill), and `deploy.sh`'s own git pull (each hop checks out the commit and uses `--skip-pull`). Off Linux the doctor's
+match of the worker's report against systemd is skipped.
 
 #### Upload the transition logs
 

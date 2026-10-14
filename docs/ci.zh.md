@@ -379,11 +379,11 @@ Linux 从零首次运行：在 Ubuntu runner 上用一份空的检出，按随�
 
 ### Job `upgrade-transition`
 
-用真脚本和真 worker 代码，在模拟的 systemd 下测 ai-worker 在发布目录之间的迁移（`tests/transition/run.sh`）。`changes` 设了 `transition` 时运行（改到部署相关文件的 PR、每次推送到 `main`、手动运行）。带一个 `postgres:17` service 容器，`DATABASE_URL` 同 `integration`。上限 30 分钟，通常几分钟（要建三个发布目录）。
+用真 Docker 和每个版本自己的 deploy、install、uninstall 脚本测升级迁移，ai-worker 跑在模拟的 systemd 下（`tests/transition/run.sh`）。`changes` 设了 `transition` 时运行（改到部署相关文件的 PR、每次推送到 `main`、手动运行）。没有 service 容器：脚本的每个 compose 项目自带数据库。上限 120 分钟，要构建镜像大约十次。
 
 #### Check out the repository
 
-`actions/checkout`。
+`actions/checkout`，`fetch-depth: 0`：场景要检出更早的版本。
 
 #### Set up pnpm
 
@@ -397,9 +397,19 @@ Linux 从零首次运行：在 Ubuntu runner 上用一份空的检出，按随�
 
 `pnpm install --frozen-lockfile`（发布目录从这个 pnpm store 安装依赖）。
 
-#### Release transition scenarios
+#### Upgrade transition scenarios
 
-`bash tests/transition/run.sh "$RUNNER_TEMP/transition"`。在临时目录下的一个 clone 里做三个提交（PREV = 检出的提交，NEXT 在它之上，BROKEN = NEXT 加上一个启动就抛错的 worker），迁移数据库，然后依次：首次安装 PREV；替换到 NEXT；替换到 BROKEN，必须以 `rolled back:` 结束并且 NEXT 重新运行；应急恢复 PREV；回到 NEXT；卸载。每一步之后，worker 的工作目录（`/proc/<pid>/cwd`）、`install-ai-worker.sh --print-release` 和 `pnpm run doctor --json --only config.shipped --only ops` 都必须指向预期的发布目录，并且没有残留的锁和替换备份。上限 20 分钟。本地（Linux 或 macOS）：同样的命令，`DATABASE_URL` 指向一个一次性数据库；不会真的安装任何东西，临时目录结束时删除。
+`bash tests/transition/run.sh "$RUNNER_TEMP/transition"`。在临时目录下的 clone 里运行，每个 clone 有自己的 compose 项目（`jrtransition-<随机>-*`）、端口、卷和数据库密码，定时周期关闭：
+
+- A：62d7ad9，然后按文档逐跳升级（4dd8d03、2656364、b3f69b0、检出的提交），每跳用该版本的 `deploy.sh --skip-pull`；升到 2656364 前先停 web 和 runner；最后一跳前按 `docs/upgrade.md` 的首次升级步骤做（卸载旧 worker，确认已停，停 web 和 runner，检出，部署）。
+- B：62d7ad9；新的 `install-ai-worker.sh --release` 换上一个启动就抛错的发布，必须回滚到从 checkout 安装的 worker；换上正常的发布则成功；然后严格停止，部署检出的提交。
+- D：runner 镜像构建失败的部署（构建参数 `FAIL_RUNNER_BUILD=1`）不改任何容器、镜像和 worker，也不留锁；去掉参数再部署成功。
+- C：tsx loader 坏掉的发布被回滚。
+- E：应急恢复上一个发布；doctor 报告 release != HEAD。最后卸载。
+
+每一步之后：web 和 runner 容器里的 `/app/config` 等于所部署提交的 `config/`（逐文件 sha256）；worker 的 MainPID 在预期目录里运行，`install-ai-worker.sh --print-release` 一致；worker 完成一个 `run_ai` 请求；doctor 的 JSON（`--only config.shipped --only ops`）有 shipped config 检查，从发布目录版本起确认各进程的报告，并且没有锁和替换备份。一个 docker 包装只放行只读命令和脚本自己项目的 compose 命令；`launchctl` 和 `systemctl` 必须指向模拟器。上限 105 分钟。本地（Linux 或 macOS，Docker 带 compose v2）：同样的命令；结束时删除临时目录和脚本自己的 compose 项目、镜像、卷。
+
+不覆盖：launchd（集成测试在 launchd 模拟器上测替换；真 launchd 靠手动演练），以及 `deploy.sh` 自己的 git pull（每跳先检出提交再用 `--skip-pull`）。不在 Linux 上时跳过 doctor 把 worker 报告和 systemd 对照的那部分。
 
 #### Upload the transition logs
 
