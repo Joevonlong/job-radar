@@ -126,7 +126,7 @@ Demo data throughout: the companies and jobs are invented. To click around the s
 | Your consent first | Sources that scrape a site or use your own LinkedIn login are off in a new install. Turning one on shows the risk and asks you to confirm. [Scraping](sources.md#scraping) |
 | Isolated | One source failing never stops a cycle. Each has a circuit breaker and an optional monthly budget. |
 | One job, not five | Near-duplicates across sources merge into one entry, with every source link kept. |
-| Noise flagged | Agency posts are marked. A job that has not been seen for about a week is marked "possibly closed" (a time-based hint); the link check then decides: a dead link marks it "closed", a live one reopens it. |
+| Noise flagged | Agency posts are marked. A job that has not been seen for about a week is marked "possibly closed" (a time-based hint); the link check then decides: when every link is dead it marks the job "closed", and a live link reopens it. |
 | Closed jobs | Mark a job closed yourself (undo any time); closed and possibly-closed jobs move to their own Closed view. Saved and in-pipeline jobs get a polite recheck of their source link (robots.txt honoured). |
 | Clean input for your AI | Some ads hide text meant to steer AI readers (white-on-white text, invisible characters, "if you are an AI…"). Job Radar strips it before any AI reads the ad and shows you what it found. [How](ai-traps.md) |
 

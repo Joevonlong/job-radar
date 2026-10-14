@@ -85,8 +85,8 @@ and the project uses [Semantic Versioning](https://semver.org/).
 ### Documentation
 
 - "Possibly closed" is now described as what it is: a time-based hint judged per channel (not per search query), with the
-  link check as the evidence (a live page reopens the job, 404 / 410 closes it) and any new sighting making the job active
-  again. See [docs/sources.md](docs/sources.md#how-jobs-get-marked-possibly-closed).
+  link check as the evidence (a live link reopens the job; it closes only when every link returns 404 / 410). A job seen
+  again becomes active again, except when its page says it no longer accepts applications or you closed it yourself. See [docs/sources.md](docs/sources.md#how-jobs-get-marked-possibly-closed).
 
 ## [2.0.1] - 2026-10-11
 
