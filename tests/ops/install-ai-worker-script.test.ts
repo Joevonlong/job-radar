@@ -200,7 +200,11 @@ describe("--print-release", () => {
         fs.symlinkSync(path.join(dir, name), path.join(bin, name));
       }
     }
-    if (!fs.existsSync(path.join(bin, "plutil"))) fs.symlinkSync(path.join(plutilShim, "plutil"), path.join(bin, "plutil"));
+    // Without a real plutil (Linux): a wrapper that runs the shim from its own directory (a symbolic link would make the
+    // shim look for plutil.mjs next to the link).
+    if (!fs.existsSync(path.join(bin, "plutil"))) {
+      fs.writeFileSync(path.join(bin, "plutil"), `#!/bin/sh\nexec '${path.join(plutilShim, "plutil")}' "$@"\n`, { mode: 0o755 });
+    }
   });
 
   function printRelease(manager: string, main: string, extra: Record<string, string> = {}) {
