@@ -318,7 +318,8 @@ export async function systemctl(argvIn) {
   const now = argv.includes("--now");
   const args = argv.filter((a) => a !== "--now");
   const cmd = args[0];
-  const name = args.at(-1);
+  // the unit is the last argument, except for show, where -p / --value may follow it (as the doctor calls it)
+  const name = cmd === "show" ? (args.slice(1).find((a, i, rest) => !a.startsWith("-") && rest[i - 1] !== "-p") ?? args.at(-1)) : args.at(-1);
   const file = path.join(unitDir(), name ?? "");
   switch (cmd) {
     case "show-environment":
