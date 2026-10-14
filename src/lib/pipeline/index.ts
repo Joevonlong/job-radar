@@ -8,7 +8,7 @@ import { loadPipeline } from "@/lib/market";
 import type { Db } from "@/lib/db/client";
 import { getOrCreateCompany } from "@/lib/db/repos/companies";
 import { bestOtherPriority, getJobSourceByRawPosting, upsertJobSource } from "@/lib/db/repos/job-sources";
-import { getJob, insertJob, updateJob, type Job } from "@/lib/db/repos/jobs";
+import { getJob, insertJob, statusWhenSeenAgain, updateJob, type Job } from "@/lib/db/repos/jobs";
 import { listPendingRawPostings, markRawParseFailed, markRawParsed, type RawPosting } from "@/lib/db/repos/raw-postings";
 import type { CycleStepContext, StepResult } from "@/lib/cycle/steps";
 import { registerCycleStep } from "@/lib/cycle/steps";
@@ -163,7 +163,7 @@ async function persist(db: Db, raw: RawPosting, normalized: NormalizedJob, famil
       await updateJob(tx, job.id, {
         ...merged,
         ...(wins ? { companyId: company.id } : {}),
-        ...(seenAgain ? { lastSeenAt: raw.fetchedAt, status: "active" as const } : {}),
+        ...(seenAgain ? { lastSeenAt: raw.fetchedAt, status: statusWhenSeenAgain(job) } : {}),
       });
       jobId = job.id;
     }
