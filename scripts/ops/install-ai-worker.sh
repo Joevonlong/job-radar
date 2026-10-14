@@ -802,6 +802,17 @@ else
   cleanup_releases
 fi
 remove_backup || echo "warning: could not remove the backup $BACKUP_DIR" >&2
+# Logs that installs from before data/logs/ left in launchd's capture directory move next to the new logs, once (a moved
+# file is gone, so a second run has nothing to do). Only after a successful switch; failures only warn.
+if [[ "$MANAGER" == launchd ]]; then
+  for name in ai-worker.out.log ai-worker.err.log; do
+    old="$LAUNCHD_LOG_DIR/$name"
+    [[ -f "$old" && ! -L "$old" ]] || continue
+    target="$LOG_DIR/${name%.log}.before-upgrade.log"
+    if cat "$old" >> "$target" && rm -f -- "$old"; then echo "moved $old -> $target"
+    else echo "warning: could not move $old to $target; it stays where it is" >&2; fi
+  done
+fi
 if [[ "$MANAGER" == systemd && "$(loginctl show-user "$(id -un)" -p Linger --value 2>/dev/null || true)" != "yes" ]]; then
   echo "note: the worker stops when you log out. To keep it running: loginctl enable-linger $(id -un)"
 fi

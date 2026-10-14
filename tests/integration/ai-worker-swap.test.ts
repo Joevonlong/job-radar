@@ -75,9 +75,19 @@ describe.each<Manager>(["systemd", "launchd"])("install-ai-worker.sh switch (%s)
   it("installs a first release: absolute paths, release cwd, empty NODE_OPTIONS, enable before start, no backup, no lock", () => {
     fx = new FakeInstall(manager);
     const rel = fx.release();
+    // launchd: a log an install from before data/logs/ left in launchd's capture directory
+    const oldLog = path.join(fx.home, "Library/Logs/job-radar/ai-worker.err.log");
+    if (manager === "launchd") {
+      fs.mkdirSync(path.dirname(oldLog), { recursive: true });
+      fs.writeFileSync(oldLog, "old line\n");
+    }
     const r = install(rel);
     expect(r.status, r.stderr).toBe(0);
     expect(r.stdout).toContain(`installed: ${target()} runs ${shaOf(rel)} from ${rel}`);
+    if (manager === "launchd") {
+      expect(fs.existsSync(oldLog)).toBe(false);
+      expect(fs.readFileSync(path.join(fx.main, "data/logs/ai-worker.err.before-upgrade.log"), "utf8")).toBe("old line\n");
+    }
     expect(fx.changes()).toEqual(manager === "launchd" ? [`enable gui/${process.getuid?.()}/${L_DEFAULT}`, `bootstrap gui/${process.getuid?.()} ${def()}`] : ["daemon-reload", "enable job-radar-ai-worker.service", "start job-radar-ai-worker.service"]);
     const [start] = fx.starts();
     expect(start?.cwd).toBe(rel);
