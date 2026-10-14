@@ -15,7 +15,6 @@ import { parseArgs } from "node:util";
 
 import { registerBuiltinChannels } from "../src/lib/channels/builtin";
 import { FIXTURE_CHANNEL_ID, registerFixtureChannel } from "../src/lib/channels/fixture";
-import { createLogger } from "../src/lib/channels/logger";
 import { defaultRegistry } from "../src/lib/channels/registry";
 import { loadConfig } from "../src/lib/config";
 import { closeDb, getDb, pingDb, type Db } from "../src/lib/db";
@@ -23,6 +22,7 @@ import { cycleKindEnum } from "../src/lib/db/schema";
 import { registerBuiltinAiSubtasks, registerBuiltinCycleSteps } from "../src/lib/cycle/builtin-steps";
 import type { CollectResult } from "../src/lib/cycle/collect";
 import { runCycle } from "../src/lib/cycle/run-cycle";
+import { createProcessLogger } from "../src/lib/logging/process-logger";
 import type { MaintenanceResult, PipelineResult } from "../src/lib/pipeline";
 
 const KINDS = cycleKindEnum.enumValues;
@@ -87,7 +87,7 @@ async function main(): Promise<number> {
     else console.warn("cycle:run: database unreachable; dry run starts from empty budget and circuit state");
   }
 
-  const logger = createLogger({ minLevel: "info" });
+  const logger = createProcessLogger();
   try {
     const result = await runCycle(kindArg, { dryRun, db, logger, ...(channelIds.length > 0 ? { channelIds } : {}) });
     const collect = result.results.collect as CollectResult | undefined;

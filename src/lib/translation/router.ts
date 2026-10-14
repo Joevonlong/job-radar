@@ -25,7 +25,7 @@ export function createRequestRouter(db: Db, logger?: ChannelLogger, overrides: R
   const config = overrides.config ?? loadConfig("ai");
   return createAiRouter({
     config,
-    providers: overrides.providers ?? createDefaultProviders(config),
+    providers: overrides.providers ?? createDefaultProviders(config, logger ? { logger } : {}),
     usage: createDbUsageStore(db),
     health: createDbHealthStore(db),
     quota: overrides.quota === undefined ? createDbQuotaStore(db) : overrides.quota,

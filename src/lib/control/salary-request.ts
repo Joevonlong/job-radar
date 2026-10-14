@@ -7,17 +7,17 @@ import { SALARY_PROMPT_VERSION } from "@/lib/ai/prompts/salary";
 import { resolveProviderOrder } from "@/lib/ai/router";
 import { UNRESTRICTED_WEB_PROVIDERS, webAccessAllowed } from "@/lib/ai/web-tasks";
 import type { AiProviderId } from "@/lib/ai/types";
-import { createLogger } from "@/lib/channels/logger";
 import type { AiConfig, SalaryConfig } from "@/lib/config";
 import { AI_PROVIDER_CONFIG_KEYS } from "@/lib/config/ai-options";
 import type { Db } from "@/lib/db/client";
 import { getControlRequest } from "@/lib/db/repos/control-requests";
 import { findLatestSalaryLookup, findLatestSalaryLookupRequest, getJobForSalaryLookup, reserveSalaryLookupRequest, salaryTablesReady } from "@/lib/db/repos";
+import { createProcessLogger } from "@/lib/logging/process-logger";
 import { compileFamilies } from "@/lib/salary/families";
 import { salaryLookupKey, SALARY_ERROR_CODES, type SalaryErrorCode } from "@/lib/salary/lookup";
 import { resumeAtOf } from "./request-view-schema";
 
-const log = createLogger({ fields: { component: "control" } });
+const log = createProcessLogger({ fields: { component: "control" } });
 
 /** The providers the lookup may use: its plan in ai.yaml, switched on, able to search the web (`web-tasks.ts`). */
 export function salaryLookupProviders(ai: AiConfig): AiProviderId[] {

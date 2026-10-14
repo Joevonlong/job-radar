@@ -2,17 +2,17 @@
  * Web side of the breakdown button: the web app never calls an AI provider itself. It leaves a `breakdown_job`
  * request for the ai-worker and then asks for its state. Server only; `app/jobs/[id]/breakdown-actions.ts` calls it.
  */
-import { createLogger } from "@/lib/channels/logger";
 import type { BreakdownSettingsState } from "@/lib/breakdown/settings";
 import { BREAKDOWN_PROMPT_VERSION } from "@/lib/ai/prompts/breakdown";
 import type { Db } from "@/lib/db/client";
 import { getJobBreakdown, getJobForBreakdown } from "@/lib/db/repos/breakdowns";
 import { findLatestJobControlRequest, findOpenJobControlRequest, getControlRequest, insertControlRequest } from "@/lib/db/repos/control-requests";
+import { createProcessLogger } from "@/lib/logging/process-logger";
 import { TRANSLATION_FAILURE_CODES } from "@/lib/translation/errors";
 import { descriptionHash } from "@/lib/translation/hash";
 import { resumeAtOf } from "./request-view-schema";
 
-const log = createLogger({ fields: { component: "control" } });
+const log = createProcessLogger({ fields: { component: "control" } });
 
 /** Error codes the breakdown card has labels for: the AI failure classes of the translation plus the request-level ones. */
 export const BREAKDOWN_ERROR_CODES = [

@@ -48,7 +48,7 @@ export function createTestAiHandler(deps: TestAiDeps = {}): ControlHandler {
     const usage = (deps.usage ?? createDbUsageStore)(context.db);
     const router = createAiRouter({
       config: onlyProvider(config, provider),
-      providers: (deps.providers ?? createDefaultProviders)(config),
+      providers: deps.providers ? deps.providers(config) : createDefaultProviders(config, { logger: context.logger }),
       // the probe's tokens are recorded under their own task name
       usage: { record: (entry) => usage.record({ ...entry, task: AI_PROBE_TASK }), apiSpendUsd: (month, timeZone) => usage.apiSpendUsd(month, timeZone) },
       timeZone: deps.timeZone ?? loadConfig("schedule").timezone,

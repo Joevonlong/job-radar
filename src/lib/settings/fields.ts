@@ -147,8 +147,8 @@ export const HIDDEN_PATHS: Record<SettingsForm, readonly string[]> = {
   // The weekly suggestion's switch, cron, Telegram note and the main limits have a form; the keys that only size its prompt
   // (which statuses count as liked / ignored, how many jobs and characters go to the AI, evidence counts) stay in the YAML.
   // The `pnpm run doctor` checks and the Docker housekeeping of scripts/ops/deploy.sh (read by the script) are operations
-  // parameters: edited in the YAML or in the advanced editor.
-  schedule: ["suggest.positive_statuses", "suggest.ignored_statuses", "suggest.min_positive_jobs", "suggest.max_positive_jobs", "suggest.max_ignored_jobs", "suggest.jd_max_chars", "suggest.min_evidence", "suggest.max_term_chars", "doctor", "deploy", "backup.keep_old_databases"],
+  // parameters: edited in the YAML or in the advanced editor. So is the processes' log level (`logging`, schema default only).
+  schedule: ["suggest.positive_statuses", "suggest.ignored_statuses", "suggest.min_positive_jobs", "suggest.max_positive_jobs", "suggest.max_ignored_jobs", "suggest.jd_max_chars", "suggest.min_evidence", "suggest.max_term_chars", "doctor", "deploy", "backup.keep_old_databases", "logging"],
   search: [],
   // Proxy URLs can carry credentials: edit them in the YAML, never render them in the page.
   // The Apify actor's wire format (input template, look-back filter values) is actor-specific JSON-like data: edit it in the YAML.

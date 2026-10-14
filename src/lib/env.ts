@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { underVitest } from "@/lib/db/test-guard";
+import { LOG_LEVELS, type LogLevel } from "@/lib/logging/levels";
 import { resolveHostDatabaseUrl } from "@/lib/ops/doctor/database-url";
 
 /**
@@ -97,4 +98,25 @@ export function loadTelegramEnv(source: EnvSource = process.env): TelegramEnv | 
   const present = withoutEmpty(source);
   if (present.TELEGRAM_BOT_TOKEN === undefined && present.TELEGRAM_CHAT_ID === undefined) return null;
   return parseEnv(telegramEnvSchema, source);
+}
+
+const logLevelEnvSchema = z.object({
+  /** The log level of this process; wins over schedule.yaml `logging.level`. Case and surrounding spaces do not matter. */
+  JOB_RADAR_LOG_LEVEL: z.enum(LOG_LEVELS).optional(),
+});
+
+/** `JOB_RADAR_LOG_LEVEL`: the level, or `undefined` when unset; `invalid` when a value was set but is not a level. */
+export interface LogLevelEnv {
+  level: LogLevel | undefined;
+  invalid: boolean;
+}
+
+/**
+ * Parse `JOB_RADAR_LOG_LEVEL` on its own (not through the throwing `parseEnv`): a typo there must not take a process down
+ * or override a valid schedule.yaml. Empty or blank = unset; an invalid value counts as unset and is flagged so the caller
+ * can warn (naming the variable, never the value).
+ */
+export function parseLogLevelEnv(source: EnvSource = process.env): LogLevelEnv {
+  const result = logLevelEnvSchema.safeParse(withoutEmpty({ JOB_RADAR_LOG_LEVEL: source.JOB_RADAR_LOG_LEVEL?.trim().toLowerCase() }));
+  return result.success ? { level: result.data.JOB_RADAR_LOG_LEVEL, invalid: false } : { level: undefined, invalid: true };
 }

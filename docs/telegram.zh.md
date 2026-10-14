@@ -60,7 +60,7 @@ systemctl --user restart job-radar-ai-worker.service          # Linux
 4. 测试：`pnpm telegram:test`，收到一条"✅ Job Radar"就对了。
 5. Telegram **默认关闭**。在 `data/config/notify.yaml` 里把 `telegram.enabled` 改成 `true`（或在设置向导里打开）；runner 会热加载这个开关，不用重启。
 
-只有这个 chat id 里的消息和按钮会被处理，其他人发给 bot 的东西一律忽略（只在 debug 日志里记一行，不含内容）。
+只有这个 chat id 里的消息和按钮会被处理，其他人发给 bot 的东西一律忽略（日志级别为 `debug` 时记一行，不含内容；见 [configuration.zh.md](configuration.zh.md) 的“日志级别”）。
 
 **群聊**：`TELEGRAM_CHAT_ID` 是群或频道（负数）时，群里每个成员都能按按钮、改你的投递状态。想限制成只有你自己，把你的 Telegram 用户 id（一个数字，`@userinfobot` 可以告诉你，配置命令也会给出发消息那个人的 id）写进 `.env`，多人用逗号分隔，然后重启 runner：
 ```

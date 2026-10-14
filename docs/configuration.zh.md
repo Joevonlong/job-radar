@@ -279,6 +279,22 @@ JD 里关于签证赞助的说法（见 [visa-sponsorship.zh.md](visa-sponsorshi
 
 旧版本不认 `ui.yaml` 里的 `job_checks.visa`：回滚前删掉。
 
+## 日志级别（`schedule.yaml` 的 `logging.level`、`JOB_RADAR_LOG_LEVEL`）
+
+网页、runner、ai-worker 和 `pnpm cycle:run` 默认按 `info` 记日志。`debug` 会多记诊断记录：AI 提供方的检查、路由跳过的提供方、HTTP 重试、别的聊天发来的 Telegram 消息。
+
+| 位置 | 取值 | 含义 |
+|---|---|---|
+| `.env` 里的 `JOB_RADAR_LOG_LEVEL` | `debug`、`info`、`warn`、`error`（不分大小写） | 优先于配置。空值 = 没设。其他值当作没设（用配置里的级别），并在日志里提示一次，不显示这个值 |
+| `schedule.yaml` 的 `logging.level` | 同上，默认 `info` | 环境变量没设时使用。出厂文件里没有这个键：不加就用默认值 |
+
+- **加到你现有的 `data/config/schedule.yaml` 里**，例如 `logging:` 下面写 `level: debug`。用户文件整份替换出厂文件（见“读哪一份”），只有一个 `logging` 段的 `schedule.yaml` 是非法的。
+- **改配置文件不需要重启。** runner 和 ai-worker 经监视器跟随（Docker 绑定挂载上文件事件不可靠，由轮询接手）；网页按需检查，最多每个 `JOB_RADAR_CONFIG_POLL_MS` 一次。`JOB_RADAR_CONFIG_POLL_MS=0` 时网页不做按需检查：外部的改动要等重启，或者网页自己写这个文件（在设置页保存）后才生效。每个进程最多每个间隔重新取一次级别（间隔为 `0` 时按 5 秒），所以重新加载后几秒内生效。
+- **`schedule.yaml` 改坏了**：沿用上一份合法的级别，直到进程重启（加载器保留上一份合法的文件）。进程启动时文件就是坏的：按 `info` 记日志，提示一次，文件改好后立即采用。
+- **改了 `.env`**：容器要重建，`docker compose up -d`（`restart` 沿用旧的环境变量），ai-worker 要重启（它启动时读 `.env`）。只在 shell 里设的变量到不了容器。
+
+回退到不认识 `logging.level` 的版本之前，先删掉 `data/config/schedule.yaml` 里的 `logging` 段：旧版本拒绝未知的键。
+
 ## 备份
 
 每一份备份，不管是 runner 每天做的（`backup.config_archive`，默认开）还是 `scripts/ops/backup.sh` 做的，都会在数据库 dump 旁边留一份 `….config.tgz`（`data/config` + `data/profile`，不含 `.backup/` 和登录密钥 `.web-session-secret`）。`schedule.yaml` 的 `backup` 段还有 `pre_migrate`（数据库迁移前先备份）、`keep_system`（每一类安全备份保留几份）和 `keep_old_databases`（恢复时被替换的旧库保留几个）。`.env` 和 `.auth/` 不在任何备份里。见 [`backup-restore.zh.md`](backup-restore.zh.md)，包括"恢复配置"。

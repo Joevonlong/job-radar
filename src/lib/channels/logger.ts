@@ -1,6 +1,8 @@
+import { DEFAULT_LOG_LEVEL, type LogLevel } from "@/lib/logging/levels";
+
 import type { ChannelLogger } from "./types";
 
-export type LogLevel = "debug" | "info" | "warn" | "error";
+export type { LogLevel };
 
 const LEVEL_ORDER: Record<LogLevel, number> = { debug: 0, info: 1, warn: 2, error: 3 };
 
@@ -55,20 +57,35 @@ const consoleSink: LogSink = (record) => {
 
 export interface LoggerOptions {
   sink?: LogSink;
-  minLevel?: LogLevel;
+  /**
+   * The lowest level written (default `info`). A function is asked on every record, so a level that changes at run time
+   * (`createProcessLogger`) is followed by this logger and its children; it must be cheap. If it throws, `info` is used:
+   * a logger never throws (callers log inside `catch` and rethrow, so a throwing logger would hide the real error).
+   */
+  minLevel?: LogLevel | (() => LogLevel);
   fields?: Record<string, unknown>;
   now?: () => Date;
+}
+
+/** The order of the level `resolve` names; `info` when it throws or returns something that is not a level. */
+function currentMin(resolve: () => LogLevel): number {
+  try {
+    return LEVEL_ORDER[resolve()] ?? LEVEL_ORDER[DEFAULT_LOG_LEVEL];
+  } catch {
+    return LEVEL_ORDER[DEFAULT_LOG_LEVEL];
+  }
 }
 
 /** Structured logger: one line per record, fields redacted before they reach the sink. */
 export function createLogger(options: LoggerOptions = {}): ChannelLogger {
   const sink = options.sink ?? consoleSink;
-  const min = LEVEL_ORDER[options.minLevel ?? "info"];
+  const minLevel = options.minLevel ?? DEFAULT_LOG_LEVEL;
+  const min = typeof minLevel === "function" ? () => currentMin(minLevel) : () => LEVEL_ORDER[minLevel];
   const now = options.now ?? (() => new Date());
   const base = options.fields ?? {};
 
   const write = (level: LogLevel, message: string, fields?: Record<string, unknown>): void => {
-    if (LEVEL_ORDER[level] < min) return;
+    if (LEVEL_ORDER[level] < min()) return;
     sink({ at: now(), level, message, fields: redactFields({ ...base, ...fields }) });
   };
 
