@@ -26,6 +26,9 @@ import "./globals.css";
 // cyrillic...) as @font-face rules under the same family name, which next/font derives from the constant's name: so the
 // constants must keep their names (archivo, archivoBlack, plexMono) and the calls must not set `font-family`.
 // The latin unicode-range is Fontsource's, copied verbatim (next/font only accepts literals, hence the repetition).
+// The fallback faces (Arial with metric overrides, shown until a web font arrives) are defined in globals.css with the
+// metrics Next.js computed for these families, so the layout during a slow load stays as it was; next/font/local
+// would derive different ones from the subset files (adjustFontFallback: false turns its own off).
 // A variable font limited to 500-800: `font-normal` (400) falls on 500, as it always has.
 const archivo = localFont({
   src: "../../node_modules/@fontsource-variable/archivo/files/archivo-latin-wght-normal.woff2",
@@ -33,6 +36,8 @@ const archivo = localFont({
   style: "normal",
   variable: "--font-archivo",
   display: "swap",
+  adjustFontFallback: false,
+  fallback: ["Archivo Fallback"],
   declarations: [
     {
       prop: "unicode-range",
@@ -47,6 +52,8 @@ const archivoBlack = localFont({
   style: "normal",
   variable: "--font-archivo-black",
   display: "swap",
+  adjustFontFallback: false,
+  fallback: ["Archivo Black Fallback"],
   declarations: [
     {
       prop: "unicode-range",
@@ -64,6 +71,8 @@ const plexMono = localFont({
   ],
   variable: "--font-plex-mono",
   display: "swap",
+  adjustFontFallback: false,
+  fallback: ["IBM Plex Mono Fallback"],
   declarations: [
     {
       prop: "unicode-range",
