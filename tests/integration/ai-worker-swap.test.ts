@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -19,6 +20,7 @@ const L_DEFAULT = "io.jobradar.ai-worker";
 const L_LEGACY = "de.jobradar.ai-worker";
 const L_CUSTOM = "com.example.ai-worker";
 const SLOW = 150_000;
+const repoRoot = path.resolve(import.meta.dirname, "../..");
 
 let iso: IsolatedDb;
 let urlA: IsolatedDb;
@@ -547,6 +549,60 @@ describe.each<Manager>(["systemd", "launchd"])("install-ai-worker.sh switch (%s)
       expect(Math.max(...fx.calls().map((c) => c.t))).toBeLessThanOrEqual(lockGoneAt);
       expect(fs.existsSync(fx.lockDir())).toBe(false);
       expect(fx.tmpLeft()).toEqual([]);
+    }, SLOW);
+
+    it("the real deploy.sh gets SIGHUP while its real install waits for evidence: one TERM to the install, rolled back, exit 129; the lock goes only after the last service-manager call", async () => {
+      const { rel: r1 } = installed();
+      const r2 = fx.release(); // HEAD of the fake main checkout, with its release ready (prepare-release.sh reuses it)
+      fx.setModes({ [shaOf(r2)]: "no-heartbeat", default: "ok" });
+      // the main checkout runs this repository's scripts (deploy.sh, prepare-release.sh, install-ai-worker.sh); the
+      // install reads DATABASE_URL from .env (deploy.sh passes no --database-url); docker and pnpm are stubs
+      fs.symlinkSync(path.join(repoRoot, "scripts"), path.join(fx.main, "scripts"));
+      fx.writeEnv({ DATABASE_URL: iso.url });
+      const stubs = path.join(fx.tmp, "deploy-stubs");
+      fs.mkdirSync(stubs, { recursive: true });
+      const log = path.join(fx.tmp, "deploy-stubs.log");
+      for (const tool of ["docker", "pnpm"]) fs.writeFileSync(path.join(stubs, tool), `#!/usr/bin/env bash\necho "${tool} $*" >> "${log}"\nexit 0\n`, { mode: 0o755 });
+      const env = { ...fx.tmpEnv(), PATH: `${stubs}:${fx.env().PATH ?? ""}` };
+      const child = spawn("bash", [path.join(fx.main, "scripts/ops/deploy.sh"), "--skip-pull", "--no-backup", "--no-prune", "--no-drain", "--settle", "0"], {
+        cwd: fx.main,
+        env: fx.env(env),
+        detached: true,
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+      let out = "";
+      child.stdout?.on("data", (d: Buffer) => (out += d.toString()));
+      child.stderr?.on("data", (d: Buffer) => (out += d.toString()));
+      const done = new Promise<number | null>((resolve) => child.on("close", (code) => resolve(code)));
+      for (let i = 0; i < 600 && !fx.starts().some((st) => st.release === shaOf(r2)); i++) await new Promise((r) => setTimeout(r, 100));
+      expect(fx.starts().some((st) => st.release === shaOf(r2)), out).toBe(true);
+      await new Promise((r) => setTimeout(r, 1000));
+      let lockGoneAt = 0;
+      const poll = setInterval(() => {
+        if (!lockGoneAt && !fs.existsSync(fx.lockDir())) lockGoneAt = Date.now();
+      }, 20);
+      process.kill(-(child.pid ?? 0), "SIGHUP");
+      await new Promise((r) => setTimeout(r, 300));
+      try {
+        process.kill(-(child.pid ?? 0), "SIGHUP"); // a second one is only recorded
+      } catch {
+        /* already done */
+      }
+      const code = await done;
+      clearInterval(poll);
+      if (!lockGoneAt) lockGoneAt = Date.now();
+      expect(code, out).toBe(129);
+      expect(out).toContain("interrupted (SIGTERM) while waiting for the new worker");
+      expect(out).toContain("rolled back:");
+      expect(out).not.toContain("ROLLBACK FAILED");
+      expect(fx.starts().at(-1)?.release).toBe(shaOf(r1));
+      expect(fx.servicePid()).toBeGreaterThan(0);
+      expect(Math.max(...fx.calls().map((c) => c.t))).toBeLessThanOrEqual(lockGoneAt);
+      expect(fs.existsSync(fx.lockDir())).toBe(false);
+      expect(fs.existsSync(fx.backupDir())).toBe(false);
+      const stubCalls = fs.readFileSync(log, "utf8");
+      expect(stubCalls).not.toContain("pnpm run doctor");
+      expect(stubCalls).not.toContain("prune");
     }, SLOW);
   });
 });

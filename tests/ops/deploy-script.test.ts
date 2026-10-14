@@ -45,9 +45,11 @@ function write(file: string, content: string, mode = 0o644): void {
 }
 
 const LOGGING_STUB = (name: string): string => `#!/usr/bin/env bash\necho "${name} $*" >> "$DEPLOY_TEST_LOG"\n`;
-// prepare-release.sh / install-ai-worker.sh stubs: log, run <VAR>_HOOK, exit with <VAR>_EXIT (VAR = PREPARE or INSTALL)
+// prepare-release.sh / install-ai-worker.sh stubs: log, run <VAR>_HOOK, exit with <VAR>_EXIT (VAR = PREPARE or INSTALL).
+// <VAR>_EXEC=1 execs the hook instead, so that the hook is the process deploy.sh started (same PID, group leader).
 const STEP_STUB = (name: string, v: string): string =>
-  `${LOGGING_STUB(name)}if [[ -n "\${${v}_HOOK:-}" ]]; then bash -c "$${v}_HOOK"; fi\nexit "\${${v}_EXIT:-0}"\n`;
+  `${LOGGING_STUB(name)}if [[ -n "\${${v}_HOOK:-}" && "\${${v}_EXEC:-}" == 1 ]]; then exec bash -c "$${v}_HOOK"; fi\n` +
+  `if [[ -n "\${${v}_HOOK:-}" ]]; then bash -c "$${v}_HOOK"; fi\nexit "\${${v}_EXIT:-0}"\n`;
 
 // Appended to the copied releases.sh: logs every release call, then runs the real one.
 const RELEASE_LOGGER = `
@@ -982,6 +984,44 @@ describe("scripts/ops/deploy.sh: signals", () => {
     }
   });
 
+  it.each([
+    ["SIGTERM", 143],
+    ["SIGHUP", 129],
+  ] as const)("%s during the ai-worker install: the install gets exactly one TERM and rolls back; the lock goes only after it and its children ended; exit %i", async (signal, code) => {
+    const base = head();
+    try {
+      // a cooperative install: on TERM it "rolls back" for 1 s, then exits 1; a child in its group ends after 2 s
+      const run = startDeploy(deployCmd(), {
+        INSTALL_HOOK: BLOCK("install"),
+        INSTALL_EXEC: "1",
+        BLOCK_COOPERATIVE: "1",
+        BLOCK_ROLLBACK_SLEEP: "1",
+        BLOCK_GRANDCHILD: "2",
+      });
+      await waitFor("the install to start", () => logHas("# install started"));
+      process.kill(-run.pid, signal);
+      // deploy.sh forwards it as TERM, once (fails here when deploy.sh calls the install without --cooperative)
+      await waitFor("the install to get TERM", () => logHas("# install signal TERM"), 5_000);
+      process.kill(-run.pid, signal); // a second signal is only recorded
+      expect(fs.existsSync(lockDir)).toBe(true);
+      const r = await run.done;
+      expect(r.status, r.out).toBe(code);
+      expect(r.events.filter((e) => e.startsWith("# install signal"))).toEqual(["# install signal TERM"]);
+      expect(r.events).toContain("# install rollback");
+      const released = r.events.indexOf("# release mine=1");
+      expect(released).toBeGreaterThan(-1);
+      expect(r.events.findIndex((e) => e.startsWith("# install exit ") && e.endsWith(" lock=1"))).toBeLessThan(released);
+      expect(r.events.indexOf("# install grandchild done")).toBeLessThan(released);
+      expect(r.events.filter((e) => e.startsWith("# release"))).toEqual(["# release mine=1"]);
+      expect(r.calls.some((c) => c.includes(" prune ") || c === "pnpm run doctor")).toBe(false);
+      expect(fs.existsSync(lockDir)).toBe(false);
+      expect(buildContexts()).toEqual([]);
+    } finally {
+      release();
+      restore(base);
+    }
+  });
+
   it("SIGHUP during the config step (it writes the user config): it finishes, then exit 129, no build", async () => {
     const base = head();
     try {
@@ -1269,6 +1309,73 @@ describe("scripts/ops/deploy.sh: the deploy lock and in-flight records", () => {
       expect(r.events).toContain("# helper release rc=3");
       expect(r.status).toBe(3);
       expect(fs.existsSync(path.join(lockDir, "owner"))).toBe(true);
+    } finally {
+      release();
+      restore(base);
+    }
+  });
+
+  // The install registers its own in-flight record (as install-ai-worker.sh does), starts a grandchild in a group of its
+  // own that later reads the build context, logs its PID and blocks; the test then kills only the install with -9.
+  const installKilledHook = (mark: string): string =>
+    `source "$WORK/scripts/ops/lib/releases.sh"; releases_inflight_register "$WORK" install-ai-worker.sh || exit 9; ` +
+    `set -m; ( sleep 3; [[ -d "$LOCK" ]] && echo done > "${mark}" ) & set +m; echo "# install pid=$$" >> "$DEPLOY_TEST_LOG"; exec env ${BLOCK("install")}`;
+  const installPid = (): number => Number(/# install pid=(\d+)/.exec(fs.readFileSync(log, "utf8"))?.[1]);
+
+  it("only the install is killed with -9: deploy.sh exits 1 (descendant exit not confirmed), the lock, its owner and the install's record stay; the next run is refused", async () => {
+    const base = head();
+    const mark = path.join(tmp, "install-grandchild-mark");
+    fs.rmSync(mark, { force: true });
+    try {
+      const run = startDeploy([path.join(work, "scripts/ops/deploy.sh"), "--skip-pull", "--settle", "0"], { INSTALL_HOOK: installKilledHook(mark), INSTALL_EXEC: "1" });
+      await waitFor("the install to start", () => logHas("# install started"));
+      const pid = installPid();
+      expect(fs.readdirSync(path.join(lockDir, "inflight"))).toContain(String(pid));
+      process.kill(pid, "SIGKILL");
+      const r = await run.done;
+      expect(r.status, r.out).toBe(1);
+      expect(r.out).toContain("the ai-worker switch failed (install-ai-worker.sh exited 137)");
+      expect(r.out).toContain("descendant exit not confirmed");
+      expect(r.calls.some((c) => c.includes(" prune ") || c === "pnpm run doctor")).toBe(false);
+      expect(fs.existsSync(path.join(lockDir, "owner"))).toBe(true);
+      expect(fs.readdirSync(path.join(lockDir, "inflight"))).toEqual([String(pid)]);
+      expect(buildContexts()).toHaveLength(1);
+
+      const next = deploy(["--settle", "0"]);
+      expect(next.status).toBe(1);
+      expect(next.out).toContain("another deploy holds the lock");
+      expect(next.out).toContain(`${pid} install-ai-worker.sh`);
+      expect(next.gitCalls.some((c) => / (fetch|merge|pull) /.test(` ${c} `))).toBe(false);
+
+      // the grandchild the killed install left behind still found the lock in place
+      await waitFor("the grandchild to finish", () => fs.existsSync(mark), 15_000);
+    } finally {
+      release();
+      restore(base);
+    }
+  });
+
+  it("the same through a calling script that holds the lock: deploy.sh exits 1, the caller's release keeps the lock (3), the context stays", async () => {
+    const base = head();
+    const mark = path.join(tmp, "install-grandchild-mark-helper");
+    fs.rmSync(mark, { force: true });
+    try {
+      const run = startDeploy([fakeWrapper, realLib, realWork, path.join(work, "scripts/ops/deploy.sh"), "--skip-pull", "--settle", "0"], {
+        INSTALL_HOOK: installKilledHook(mark),
+        INSTALL_EXEC: "1",
+      });
+      await waitFor("the install to start", () => logHas("# install started"));
+      const pid = installPid();
+      process.kill(pid, "SIGKILL");
+      const r = await run.done;
+      expect(r.events).toContain("# helper deploy rc=1");
+      expect(r.events).toContain("# helper release rc=3");
+      expect(r.status).toBe(3);
+      expect(r.out).toContain("descendant exit not confirmed");
+      expect(fs.existsSync(path.join(lockDir, "owner"))).toBe(true);
+      expect(fs.readdirSync(path.join(lockDir, "inflight"))).toContain(String(pid));
+      expect(buildContexts()).toHaveLength(1);
+      await waitFor("the grandchild to finish", () => fs.existsSync(mark), 15_000);
     } finally {
       release();
       restore(base);
