@@ -259,7 +259,8 @@ describe("the day's page limit reached part way through a query", () => {
     expect(stale).toBeGreaterThan(0);
   });
 
-  it("known gap, recorded as it is: the limit in a later query keeps its stored postings, and the complete earlier query lets the job be closed (closure is judged per channel)", async () => {
+  // Intended behaviour: closure is judged per channel and by time; the link check that follows is the evidence.
+  it("the limit in a later query keeps its stored postings, and the complete earlier query of the channel lets the stale job become possibly closed (judged per channel and by time)", async () => {
     const stale = await staleSessionJob();
     // 9 pages: the first query's 7, then the second query's two search pages; the limit refuses 103 (101, 102 and 104 are stored by then)
     const { run, browser } = setup({ search: searchIn(["Berlin", "München"]), edit: limitOf(9) });

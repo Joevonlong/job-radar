@@ -82,6 +82,12 @@ and the project uses [Semantic Versioning](https://semver.org/).
   `data/config/schedule.yaml` before rolling back to an older version. See
   [docs/configuration.md](docs/configuration.md) ("Log level").
 
+### Documentation
+
+- "Possibly closed" is now described as what it is: a time-based hint judged per channel (not per search query), with the
+  link check as the evidence (a live page reopens the job, 404 / 410 closes it) and any new sighting making the job active
+  again. See [docs/sources.md](docs/sources.md#how-jobs-get-marked-possibly-closed).
+
 ## [2.0.1] - 2026-10-11
 
 ### Upgrade notes
