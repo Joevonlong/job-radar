@@ -631,7 +631,9 @@ describe("JSearch whose second keyword is refused before its request", () => {
     expect(stale).toBeGreaterThan(0);
   });
 
-  it("known gap, recorded as it is: a complete query of the same round lets the job be closed (closure is judged per channel, not per query)", async () => {
+  // Intended behaviour: closure is judged per channel and by time. A query's window-limited results are no evidence that a
+  // job is gone; the link check that follows is. So a later complete run of the channel lets the stale job become possibly closed.
+  it("a complete query of the same channel lets the stale job become possibly closed even when another query was skipped (judged per channel and by time)", async () => {
     const stale = await staleJob("jsearch");
     // the month allows 3 requests: the first query uses 2, the second query's first keyword the third, its second keyword is refused
     const result = await cycle(3, { engineering: ["AI Engineer", "LLM Engineer"], other: ["ML Engineer", "Data Engineer"] });
