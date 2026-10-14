@@ -1,0 +1,3 @@
+#!/bin/sh
+# PLUTIL_SHIM_NODE: the node to run it with when node is not on PATH (the --print-release tests take node off PATH)
+exec "${PLUTIL_SHIM_NODE:-node}" "$(dirname "$0")/plutil.mjs" "$@"
