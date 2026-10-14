@@ -19,18 +19,30 @@ export * from "@playwright/test";
  * byte of the response (or the failure), and `page.goto()`, `reload()`, `goBack()`, `goForward()`, `close()`,
  * `context.close()` and the end of each test first wait until no page of the context has one outstanding. Counting in
  * the page, not from Playwright's network events, leaves no gap between "the page called fetch" and "the test saw the
- * request". After the last one settles the wait stays a moment longer (`SETTLE_MS`), so an action queued behind it (the
+ * request". An action that has not reached `fetch` yet (Next first encodes its arguments, and queued actions run one
+ * at a time) is invisible to it; that window is short but not zero. After the last one settles the wait stays a moment longer (`SETTLE_MS`), so an action queued behind it (the
  * router runs them one at a time) starts and is counted too.
  *
+ * Not covered: a full-document navigation the page itself starts (a link click, a form submit), `page.setContent()`,
+ * `browser.close()`, and contexts from `browser.newContext()` that the test never closes (only the `context` fixture has
+ * an end-of-test wait). Call `waitForServerActions(page)` before those.
+ *
  * A test that means to leave mid-action (none does today) calls `page.evaluate(() => location.reload())`.
- * `E2E_SERVER_ACTION_DELAY_MS=<ms>` holds every action request that long before it is sent: it makes a missing wait
- * fail every time instead of now and then (`E2E_SERVER_ACTION_DELAY_MS=1000 pnpm test:e2e e2e/favorites.spec.ts`).
+ * `E2E_SERVER_ACTION_DELAY_MS=<ms>` holds every action request that long before it is sent: it exposes navigation
+ * paths the guard does not cover and reads of stored state (the database) that skip the wait, and makes them fail every
+ * time instead of now and then (`E2E_SERVER_ACTION_DELAY_MS=1000 pnpm test:e2e e2e/favorites.spec.ts`). It does not
+ * catch a spec that imports `test` from `@playwright/test`: it only applies inside this fixture; lint covers imports.
  */
 
 /** How long the guarded calls wait for outstanding actions before they fail (a fixture option, see `test.use`). */
 const DEFAULT_TIMEOUT_MS = 15_000;
-/** How long "no action outstanding" must hold after the last one finished. */
-const SETTLE_MS = 100;
+/**
+ * How long "no action outstanding" must hold after the last one finished. The router runs actions one at a time: after
+ * one's last byte, React decodes and commits it before the next queued action calls `fetch`, and on a loaded CI runner
+ * that takes well over 100 ms. The page cannot tell "queue empty" from "next one about to start", so the wait is a
+ * quiet period instead, generous enough for that gap; every new action restarts it.
+ */
+const SETTLE_MS = 400;
 const POLL_MS = 20;
 
 /** One outstanding action request, as the page reports it. */
@@ -103,13 +115,26 @@ function installServerActionTracker(): void {
   };
 }
 
-async function pageState(page: Page): Promise<PageActionState> {
+class TimeoutSignal extends Error {}
+
+/** `budgetMs` bounds the read: a hung renderer must not outlast the wait's own deadline. */
+async function pageState(page: Page, budgetMs: number): Promise<PageActionState | "unresponsive"> {
   if (page.isClosed()) return { pending: [], sinceLastSettledMs: null };
+  let timer: NodeJS.Timeout | undefined;
   try {
-    return await page.evaluate(() => window.__e2eServerActions?.state() ?? { pending: [], sinceLastSettledMs: null });
-  } catch {
+    const read = page.evaluate(() => window.__e2eServerActions?.state() ?? { pending: [], sinceLastSettledMs: null });
+    read.catch(() => undefined); // a read that loses the race below may still reject later
+    const timedOut = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new TimeoutSignal()), Math.max(budgetMs, 1));
+    });
+    return await Promise.race([read, timedOut]);
+  } catch (error) {
+    // A renderer that does not answer within the budget: the caller fails the wait (it cannot know nothing is pending).
+    if (error instanceof TimeoutSignal) return "unresponsive";
     // The page is navigating or closing on its own: whatever it had outstanding is cut off already, nothing to wait for.
     return { pending: [], sinceLastSettledMs: null };
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -122,14 +147,20 @@ const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve,
 export async function waitForServerActions(target: Page | BrowserContext, why = "waitForServerActions()", timeoutMs = DEFAULT_TIMEOUT_MS): Promise<void> {
   const context = "context" in target ? target.context() : target;
   const deadline = Date.now() + timeoutMs;
+  let lastPending: PendingServerAction[] = [];
   for (;;) {
-    const states = await Promise.all(context.pages().map(pageState));
-    const pending = states.flatMap((state) => state.pending);
+    const reads = await Promise.all(context.pages().map((p) => pageState(p, deadline - Date.now())));
+    const unresponsive = reads.includes("unresponsive");
+    const states = reads.filter((read): read is PageActionState => read !== "unresponsive");
+    const pending = unresponsive ? lastPending : states.flatMap((state) => state.pending);
+    lastPending = pending;
     const settling = states.some((state) => state.sinceLastSettledMs !== null && state.sinceLastSettledMs < SETTLE_MS);
-    if (pending.length === 0 && !settling) return;
+    // an unresponsive page never counts as "nothing outstanding": the wait runs to its deadline and fails
+    if (!unresponsive && pending.length === 0 && !settling) return;
     if (Date.now() >= deadline) {
       const list = pending.map((p) => `POST ${new URL(p.url).pathname} (action ${p.actionId}, out for ${p.ageMs} ms)`).join(", ");
-      throw new Error(`${why}: a Server Action is still in flight after ${timeoutMs} ms: ${list || "(one just finished)"}. Leaving the page now would cancel it.`);
+      const why2 = unresponsive && pending.length === 0 ? "a page did not answer" : "a Server Action is still in flight";
+      throw new Error(`${why}: ${why2} after ${timeoutMs} ms: ${list || "(one just finished)"}. Leaving the page now would cancel it.`);
     }
     await sleep(POLL_MS);
   }

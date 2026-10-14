@@ -9,6 +9,9 @@ import { expect, test, type Page } from "./fixtures";
  * (slow) work is done, the way a cancelled request never reaches the database; it counts what it stored and what was cut off.
  */
 
+// These tests time their own server's delays; an extra E2E_SERVER_ACTION_DELAY_MS would skew them (it is for the app specs).
+delete process.env.E2E_SERVER_ACTION_DELAY_MS;
+
 interface Counts {
   received: number;
   stored: number;
