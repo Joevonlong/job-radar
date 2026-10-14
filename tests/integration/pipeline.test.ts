@@ -15,7 +15,7 @@ import { resetCycleSteps } from "@/lib/cycle/steps";
 import { closeDb, getDb, schema } from "@/lib/db";
 import { runMigrations } from "@/lib/db/migrate";
 import { listJobSources, listRawPostingsForChannel, upsertRawPostings } from "@/lib/db";
-import { resetRuleDerivedFacts } from "@/lib/db/repos/jobs";
+import { listJobsForLinkCheck, resetRuleDerivedFacts, touchJobsSeen } from "@/lib/db/repos/jobs";
 import { requeueRawPostings } from "@/lib/db/repos/raw-postings";
 import { upsertChannelRows } from "@/lib/db/repos/channels";
 import { createHttpClient } from "@/lib/channels/http";
@@ -434,9 +434,11 @@ describe("a job seen again by the pipeline", () => {
 
   it("keeps a phrase-marked job possibly closed when another channel's posting merges into it", async () => {
     const id = await firstJob();
-    await mark(id, "possibly_closed", phrase);
+    const older = new Date(Date.now() - 5 * DAY);
+    await mark(id, "possibly_closed", phrase, older);
     await otherChannel();
     expect(await allJobs()).toHaveLength(1);
+    expect((await allJobs())[0]?.lastSeenAt.getTime()).toBeGreaterThan(older.getTime());
     expect(await listJobSources(getDb(), id)).toHaveLength(2);
     expect(await statusOf(id)).toBe("possibly_closed");
   });
@@ -450,6 +452,42 @@ describe("a job seen again by the pipeline", () => {
     await mark(id, "closed", { ...alive, outcome: "gone", httpStatus: 404 });
     await otherChannel();
     expect(await statusOf(id)).toBe("active");
+  });
+
+  it("gives the pipeline and touchJobsSeen the same status for the same rows", async () => {
+    const cases: Array<{ name: string; status: "possibly_closed" | "closed"; evidence: object | null }> = [
+      { name: "phrase", status: "possibly_closed", evidence: phrase },
+      { name: "plain", status: "possibly_closed", evidence: alive },
+      { name: "closed", status: "closed", evidence: { ...alive, outcome: "gone", httpStatus: 404 } },
+      { name: "closed with phrase", status: "closed", evidence: phrase },
+      { name: "malformed phrase", status: "possibly_closed", evidence: { outcome: "phrase" } },
+    ];
+    for (const c of cases) {
+      await resetTables();
+      const id = await firstJob();
+      const older = new Date(Date.now() - 5 * DAY);
+      await mark(id, c.status, c.evidence, older);
+      await changedPayload();
+      const viaPipeline = await statusOf(id);
+      await mark(id, c.status, c.evidence, older);
+      await touchJobsSeen(getDb());
+      expect({ case: c.name, status: await statusOf(id) }).toEqual({ case: c.name, status: viaPipeline });
+      if (c.name === "malformed phrase") expect(viaPipeline).toBe("possibly_closed");
+    }
+  });
+
+  it("never offers a phrase-marked job to the plain link check, watched or not, with the watched recheck on or off", async () => {
+    const id = await firstJob();
+    const ids = async (skipWatched: boolean) => (await listJobsForLinkCheck(getDb(), 10, { skipWatched })).map((j) => j.id);
+    await mark(id, "possibly_closed", phrase);
+    // not starred, no application: the watched recheck does not own it, yet the plain check must not touch it
+    expect(await ids(true)).toEqual([]);
+    expect(await ids(false)).toEqual([]);
+    await mark(id, "possibly_closed", alive);
+    expect(await ids(true)).toEqual([id]);
+    expect(await ids(false)).toEqual([id]);
+    await mark(id, "possibly_closed", null);
+    expect(await ids(false)).toEqual([id]);
   });
 
   it("changes no status when the posting was fetched no later than the last sighting", async () => {

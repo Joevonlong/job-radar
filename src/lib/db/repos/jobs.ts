@@ -1,7 +1,7 @@
 import { and, asc, eq, inArray, isNotNull, isNull, lt, ne, not, or, sql, type SQL } from "drizzle-orm";
 
 import { FOLLOWING_STATUSES } from "@/lib/applications/following";
-import { parseLinkCheck, type LinkCheckEvidence } from "@/lib/jobs/link-check-evidence";
+import type { LinkCheckEvidence } from "@/lib/jobs/link-check-evidence";
 
 import type { Executor } from "../executor";
 import { applications, channels, companies, jobClosureOverrides, jobFavorites, jobSources, jobs, rawPostings } from "../schema";
@@ -11,15 +11,18 @@ export type NewJob = typeof jobs.$inferInsert;
 export type JobPatch = Partial<Omit<NewJob, "id" | "searchTsv">>;
 export type JobStatus = Job["status"];
 
+const PHRASE_OUTCOME = "phrase";
+
 /**
  * A job whose posting says it no longer takes applications (link check outcome `phrase`) stays possibly closed when a
  * source returns it again: the source may still list a dead posting. Any other job a source returns is active again.
- * The one rule behind every "seen again" write (`touchJobsSeen` in SQL, the pipeline through `statusWhenSeenAgain`).
+ * The one rule behind every "seen again" write (`touchJobsSeen` in SQL, the pipeline through this function). It reads
+ * only the stored `outcome` key, exactly like the SQL, so a record that does not fully parse still counts.
  */
-const PHRASE_OUTCOME = "phrase";
-
 export function statusWhenSeenAgain(job: Pick<Job, "status" | "linkCheckJson">): JobStatus {
-  return job.status === "possibly_closed" && parseLinkCheck(job.linkCheckJson)?.outcome === PHRASE_OUTCOME ? "possibly_closed" : "active";
+  const record = job.linkCheckJson;
+  const outcome = typeof record === "object" && record !== null && !Array.isArray(record) ? (record as Record<string, unknown>).outcome : undefined;
+  return job.status === "possibly_closed" && outcome === PHRASE_OUTCOME ? "possibly_closed" : "active";
 }
 
 export async function getJob(db: Executor, id: number): Promise<Job | null> {
@@ -196,14 +199,15 @@ function hasClosureOverrideSql(): SQL<boolean> {
 /**
  * `possibly_closed` jobs due a link check: never-checked first, then least recently checked. Watched jobs are left to the
  * watched recheck when it is on (`skipWatched`), unless its last answer was `robots` or `unknown` (the plain link check may still
- * settle those); jobs the user judged are left alone.
+ * settle those); jobs the user judged are left alone. A job marked by the posting's own phrase is never listed, in any mode:
+ * the plain check only sees a live link, not the page text, so its answer is no evidence against that mark.
  */
 export async function listJobsForLinkCheck(db: Executor, limit: number, options: { skipWatched?: boolean } = {}): Promise<Job[]> {
   if (limit <= 0) return [];
   return db
     .select()
     .from(jobs)
-    .where(and(eq(jobs.status, "possibly_closed"), not(hasClosureOverrideSql()), options.skipWatched ? or(not(watchedSql()), lastRecheckUnansweredSql()) : undefined))
+    .where(and(eq(jobs.status, "possibly_closed"), not(hasClosureOverrideSql()), sql`${jobs.linkCheckJson}->>'outcome' is distinct from ${PHRASE_OUTCOME}`, options.skipWatched ? or(not(watchedSql()), lastRecheckUnansweredSql()) : undefined))
     .orderBy(sql`${jobs.linkCheckedAt} asc nulls first`, asc(jobs.lastSeenAt), asc(jobs.id))
     .limit(limit);
 }
