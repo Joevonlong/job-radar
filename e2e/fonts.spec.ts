@@ -1,4 +1,4 @@
-import { expect, test, type CDPSession, type Page } from "@playwright/test";
+import { expect, test, type CDPSession, type Page } from "./fixtures";
 
 /**
  * The self-hosted fonts: every subset the families cover renders in its own family (never a fallback such as Arial),
