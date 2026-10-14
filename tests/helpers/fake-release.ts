@@ -23,7 +23,7 @@ const RELEASES_SH = path.join(repo, "scripts/ops/lib/releases.sh");
 const TSX = fs.realpathSync(path.join(repo, "node_modules/tsx"));
 
 export type Manager = "launchd" | "systemd";
-export type WorkerMode = "ok" | "no-lock" | "no-heartbeat" | "ignore-term" | "ignore-term-no-heartbeat" | "crash";
+export type WorkerMode = "ok" | "no-lock" | "no-heartbeat" | "ignore-term" | "ignore-term-no-heartbeat" | "crash" | "slow-term";
 
 export interface SimCall {
   t: number;

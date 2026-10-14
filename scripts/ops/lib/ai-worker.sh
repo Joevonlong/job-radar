@@ -7,6 +7,7 @@
 #   ai_worker_identity <main>       which service definition is the worker's (key=value lines; files only)
 #   ai_worker_wait_ready <main> <old pid> <since> <timeout>   until a new PID of the installed definition shows evidence
 #   ai_worker_wait_stopped <label-or-unit> <pid> <timeout>     until the service and the PID are gone
+#   ai_worker_probe <seconds> <file> <command…>                a service manager query, bounded in time
 #   ai_worker_db_url <main> [--database-url X]                 the DATABASE_URL the install script writes
 #   ai_worker_db_now <timeout>                                 the database clock (worker-heartbeat.ts --now)
 #   ai_worker_deploy_settings <main>                           the deploy.ai_worker_* timeouts and the releases to keep
@@ -241,30 +242,47 @@ ai_worker_wait_ready() {
 #   launchd  `launchctl print gui/<uid>/<label>` fails and <pid> is gone;
 #   systemd  ActiveState is inactive or failed, MainPID=0, `systemctl --user list-jobs` has no job for the unit, NRestarts
 #            equals the previous reading, and <pid> is gone (LoadState is not looked at).
+# Every launchctl / systemctl call is bounded by the time left (ai_worker_probe): a service manager that hangs cannot keep
+# the caller past <timeout>; a call cut off means "cannot tell", i.e. not stopped yet.
 ai_worker_wait_stopped() {
-  local target="$1" pid="$2" timeout="$3" platform deadline state active mainpid restarts prev="" jobs
+  local target="$1" pid="$2" timeout="$3" platform deadline state active mainpid restarts prev="" jobs left f rc
   [[ "$timeout" =~ ^[0-9]+$ ]] || { echo "ai-worker: timeout must be whole seconds, got '$timeout'" >&2; return 1; }
   platform="$(ai_worker_platform)"
   deadline=$((SECONDS + timeout))
+  f="$(mktemp "${TMPDIR:-/tmp}/ai-worker-stop.XXXXXX")" || return 1
   while :; do
-    ai_worker_interrupted && return 1
+    ai_worker_interrupted && { rm -f "$f"; return 1; }
+    left=$((deadline - SECONDS)); (( left > 0 )) || left=1
     if [[ "$platform" == launchd ]]; then
-      if ! launchctl print "gui/$(id -u)/$target" >/dev/null 2>&1 && ! ai_worker_pid_alive "$pid"; then return 0; fi
+      rc=0; ai_worker_probe "$left" "$f" launchctl print "gui/$(id -u)/$target" || rc=$?
+      # 0: still loaded; 124: cut off (cannot tell); anything else: not loaded
+      if [[ "$rc" != 0 && "$rc" != 124 ]] && ! ai_worker_pid_alive "$pid"; then rm -f "$f"; return 0; fi
     else
-      state="$(systemctl --user show -p ActiveState,SubState,MainPID,NRestarts "$target" 2>/dev/null)" || state=""
+      state=""; ai_worker_probe "$left" "$f" systemctl --user show -p ActiveState,SubState,MainPID,NRestarts "$target" && state="$(cat "$f")"
       active="$(printf '%s\n' "$state" | sed -n 's/^ActiveState=//p')"
       mainpid="$(printf '%s\n' "$state" | sed -n 's/^MainPID=//p')"
       restarts="$(printf '%s\n' "$state" | sed -n 's/^NRestarts=//p')"
-      jobs="$(systemctl --user list-jobs --no-legend "$target" 2>/dev/null)" || jobs="?"
+      left=$((deadline - SECONDS)); (( left > 0 )) || left=1
+      jobs="?"; ai_worker_probe "$left" "$f" systemctl --user list-jobs --no-legend "$target" && jobs="$(cat "$f")"
       if [[ ( "$active" == inactive || "$active" == failed ) && "$mainpid" == 0 && -z "${jobs//[[:space:]]/}" \
             && -n "$restarts" && "$restarts" == "$prev" ]] && ! ai_worker_pid_alive "$pid"; then
-        return 0
+        rm -f "$f"; return 0
       fi
       prev="$restarts"
     fi
-    (( SECONDS < deadline )) || return 1
+    (( SECONDS < deadline )) || { rm -f "$f"; return 1; }
     sleep 1
   done
+}
+
+# ai_worker_probe <seconds> <file> <command…>: runs a read-only service manager query with stdout to <file> (stderr
+# discarded), at most <seconds> long (ai_worker_run_bounded). Returns its status, 124 when it was cut off; <file> is
+# emptied first and holds nothing useful unless it returns 0.
+ai_worker_probe() {
+  local secs="$1" f="$2"
+  shift 2
+  : > "$f" 2>/dev/null || return 1
+  ai_worker_run_bounded "$secs" ai_worker_exec_to "$f" "$@"
 }
 
 # ai_worker_interrupted: 0 when the caller asked the waits to give up on a signal (AI_WORKER_STOP_CHECK=1, a shell

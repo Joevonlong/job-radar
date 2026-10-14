@@ -14,7 +14,12 @@
 //
 // Injections (state.inject, set by the tests): bootstrapFail: string[] (labels), startFail: boolean, failStarts: number
 // (the next N bootstrap / start calls fail, then they work again), noKill: boolean,
-// masked: boolean, stuckAfterStop: boolean (systemd: activating / auto-restart after a stop), pendingJob: boolean.
+// masked: boolean, stuckAfterStop: boolean (systemd: activating / auto-restart after a stop), pendingJob: boolean,
+// overrideFail: string[] (verbs, "enable" / "disable": launchctl and systemctl fail them without changing anything),
+// asyncStop: boolean (bootout / stop send SIGTERM and return at once, without waiting or SIGKILL; systemd reports
+// deactivating until the process is gone).
+// systemd also covers restart (stop when running, then start), which install scripts from before the release
+// directories call.
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
@@ -69,6 +74,15 @@ function alive(pid) {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /** SIGTERM, then (unless noKill) SIGKILL after `timeoutSeconds`; waits until the process is gone or given up on. */
+function termOnly(pid) {
+  if (!alive(pid)) return;
+  try {
+    process.kill(pid, "SIGTERM");
+  } catch {
+    /* gone */
+  }
+}
+
 async function terminate(pid, timeoutSeconds, noKill) {
   if (!alive(pid)) return;
   try {
@@ -196,6 +210,7 @@ export async function launchctl(argv) {
     }
     case "enable":
     case "disable": {
+      if ((state.inject.overrideFail ?? []).includes(cmd)) fail(`${cmd} failed: 5: Input/output error (injected)`, 5);
       ld.disabled[labelOf(target)] = cmd === "disable";
       saveState(state);
       return 0;
@@ -224,7 +239,8 @@ export async function launchctl(argv) {
       if (!job) fail("Boot-out failed: 3: No such process", 3);
       delete ld.loaded[label];
       saveState(state);
-      await terminate(job.pid, job.exitTimeout, state.inject.noKill === true);
+      if (state.inject.asyncStop) termOnly(job.pid);
+      else await terminate(job.pid, job.exitTimeout, state.inject.noKill === true);
       return 0;
     }
     default:
@@ -307,6 +323,7 @@ function unitState(state, name) {
   state.systemd.units[name] ??= { active: "inactive", sub: "dead", pid: 0, nrestarts: 0, loaded: null };
   const u = state.systemd.units[name];
   if (u.active === "active" && !alive(u.pid)) Object.assign(u, { active: "failed", sub: "failed", pid: 0 });
+  if (u.active === "deactivating" && !alive(u.pid)) Object.assign(u, { active: "inactive", sub: "dead", pid: 0 });
   return u;
 }
 
@@ -352,6 +369,7 @@ export async function systemctl(argvIn) {
       return u.active === "active" ? 0 : 3;
     }
     case "enable": {
+      if ((state.inject.overrideFail ?? []).includes("enable")) fail(`Failed to enable unit ${name} (injected).`, 1);
       if (!fs.existsSync(file)) fail(`Failed to enable unit: Unit file ${name} does not exist.`, 1);
       for (const target of parseUnit(fs.readFileSync(file, "utf8")).wantedBy) {
         const dir = path.join(unitDir(), `${target}.wants`);
@@ -367,6 +385,7 @@ export async function systemctl(argvIn) {
       return 0;
     }
     case "disable": {
+      if ((state.inject.overrideFail ?? []).includes("disable")) fail(`Failed to disable unit ${name} (injected).`, 1);
       for (const link of wantsLinks(name)) fs.unlinkSync(link);
       if (now) return systemctl(["stop", name]);
       return 0;
@@ -391,6 +410,10 @@ export async function systemctl(argvIn) {
       const pid = u.pid;
       Object.assign(u, { active: "deactivating", sub: "stop-sigterm" });
       saveState(state);
+      if (state.inject.asyncStop) {
+        termOnly(pid);
+        return 0;
+      }
       await terminate(pid, u.timeoutStop ?? 90, state.inject.noKill === true);
       const after = loadState();
       const v = unitState(after, name);
@@ -398,6 +421,11 @@ export async function systemctl(argvIn) {
       else Object.assign(v, { active: "inactive", sub: "dead", pid: alive(pid) ? pid : 0 });
       saveState(after);
       return 0;
+    }
+    case "restart": {
+      const u = unitState(state, name);
+      if (u.active === "active" || u.active === "activating" || u.active === "deactivating") await systemctl(["stop", name]);
+      return systemctl(["start", name]);
     }
     case "show": {
       const u = unitState(state, name);

@@ -12,6 +12,7 @@
 //   ignore-term         like ok, but ignores SIGTERM (only SIGKILL ends it)
 //   ignore-term-no-heartbeat
 //   crash               exits 1 at once
+//   slow-term           like ok, but takes 4 s to exit after SIGTERM
 // Every start appends one JSON line to FAKE_WORKER_RECORD: pid, mode, cwd, argv, the variables the definition sets.
 import fs from "node:fs";
 import path from "node:path";
@@ -45,9 +46,13 @@ let beat = null;
 
 process.on("SIGTERM", () => {
   if (ignoreTerm) return;
-  clearInterval(keepAlive);
-  if (beat) clearInterval(beat);
-  void Promise.allSettled([lock?.release(), sql?.end({ timeout: 2 })]).finally(() => process.exit(0));
+  const exit = () => {
+    clearInterval(keepAlive);
+    if (beat) clearInterval(beat);
+    void Promise.allSettled([lock?.release(), sql?.end({ timeout: 2 })]).finally(() => process.exit(0));
+  };
+  if (mode === "slow-term") setTimeout(exit, 4000);
+  else exit();
 });
 
 if (mode !== "no-lock") {

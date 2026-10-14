@@ -252,6 +252,56 @@ describe.each<Manager>(["systemd", "launchd"])("install-ai-worker.sh switch (%s)
     }
   }, SLOW);
 
+  it("case 8, the enable state cannot be put back: ROLLBACK FAILED (not rolled back:), the backup is kept", () => {
+    fx = new FakeInstall(manager);
+    // launchd: the label was disabled before; the install enables it, and disabling it again fails. systemd: the unit
+    // file goes in the rollback, so its enable state is the disable of step 2 of the rollback.
+    if (manager === "launchd") fx.setLaunchdOverride(L_DEFAULT, true);
+    fx.inject({ failStarts: 1, overrideFail: ["disable"] });
+    const r = install(fx.release());
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain("ROLLBACK FAILED: install-ai-worker:");
+    expect(r.stderr).toContain(manager === "launchd" ? `cannot restore the enable state of ${L_DEFAULT}` : "systemctl --user disable job-radar-ai-worker.service failed");
+    expect(r.stderr).not.toContain("rolled back:");
+    expect(fs.existsSync(path.join(fx.backupDir(), "state"))).toBe(true);
+    expect(fs.existsSync(fx.lockDir())).toBe(false);
+  }, SLOW);
+
+  it("a signal while the installed worker is stopping: the rollback waits for its pid, then brings it back (exit 143)", async () => {
+    const { rel: r1 } = installed();
+    fx.setModes({ [shaOf(r1)]: "slow-term", default: "ok" });
+    if (manager === "launchd") {
+      fx.sim("launchctl", "bootout", `gui/${process.getuid?.()}/${L_DEFAULT}`);
+      fx.sim("launchctl", "bootstrap", `gui/${process.getuid?.()}`, def());
+    } else {
+      fx.sim("systemctl", "--user", "stop", "job-radar-ai-worker.service");
+      fx.sim("systemctl", "--user", "start", "job-radar-ai-worker.service");
+    }
+    const old = fx.servicePid();
+    expect(old).toBeGreaterThan(0);
+    // the stop returns at once; the old worker needs 4 s to exit
+    fx.inject({ asyncStop: true });
+    const r2 = fx.release();
+    const n = fx.changes().length;
+    const run = fx.spawnInstall(["--release", r2, "--database-url", iso.url], fx.tmpEnv());
+    const stopVerb = manager === "launchd" ? "bootout" : "stop";
+    for (let i = 0; i < 300 && !fx.changes().slice(n).some((c) => c.startsWith(stopVerb)); i++) await new Promise((r) => setTimeout(r, 100));
+    await new Promise((r) => setTimeout(r, 300));
+    process.kill(-(run.child.pid ?? 0), "SIGTERM");
+    const res = await run.done;
+    expect(res.code, res.out).toBe(143);
+    expect(res.out).toContain(`interrupted (SIGTERM) while the installed worker (pid ${old}) was stopping`);
+    expect(res.out).toContain("rolled back:");
+    expect(res.out).not.toContain("ROLLBACK FAILED");
+    expect(fx.starts().some((st) => st.release === shaOf(r2))).toBe(false);
+    const back = fx.servicePid();
+    expect(back).toBeGreaterThan(0);
+    expect(back).not.toBe(old);
+    expect(fx.starts().at(-1)?.release).toBe(shaOf(r1));
+    expect(fs.existsSync(fx.backupDir())).toBe(false);
+    expect(fs.existsSync(fx.lockDir())).toBe(false);
+  }, SLOW);
+
   it("case 9: an unresolved backup refuses the switch (not changed:) without one service-manager call", () => {
     installed();
     fs.mkdirSync(fx.backupDir(), { recursive: true });

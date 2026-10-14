@@ -505,10 +505,21 @@ set_override() {
   if [[ "$MANAGER" == launchd ]]; then proc_run launchctl "$verb" "$DOMAIN/$1"
   else proc_run systemctl --user "$verb" "$SYSTEMD_UNIT"; fi
 }
-service_loaded() {   # service_loaded <label>: launchd has it / systemd: active, activating or reloading
-  if [[ "$MANAGER" == launchd ]]; then launchctl print "$DOMAIN/$1" >/dev/null 2>&1
-  else case "$(systemctl --user show -p ActiveState --value "$SYSTEMD_UNIT" 2>/dev/null)" in active|activating|reloading|deactivating) return 0 ;; *) return 1 ;; esac
+# service_loaded <label>: launchd has it / systemd: active, activating, reloading or deactivating. The query is bounded
+# by the switch timeout (ai_worker_probe); one that is cut off counts as loaded (the safe answer for every caller).
+service_loaded() {
+  local f rc=0 state=""
+  f="$(mktemp "${TMPDIR:-/tmp}/ai-worker-loaded.XXXXXX")" || return 0
+  if [[ "$MANAGER" == launchd ]]; then
+    ai_worker_probe "$SWAP_TIMEOUT" "$f" launchctl print "$DOMAIN/$1" || rc=$?
+    rm -f "$f"
+    [[ "$rc" == 0 || "$rc" == 124 ]]
+    return
   fi
+  ai_worker_probe "$SWAP_TIMEOUT" "$f" systemctl --user show -p ActiveState --value "$SYSTEMD_UNIT" || rc=$?
+  state="$(cat "$f" 2>/dev/null)"; rm -f "$f"
+  [[ "$rc" != 124 ]] || return 0
+  case "${state//[[:space:]]/}" in active|activating|reloading|deactivating) return 0 ;; *) return 1 ;; esac
 }
 service_pid() { ai_worker_service_pid "$MANAGER" "$1" "$SWAP_TIMEOUT"; }   # service_pid <label-or-unit>
 target_of() { if [[ "$MANAGER" == launchd ]]; then echo "$1"; else echo "$SYSTEMD_UNIT"; fi; }   # what launchctl / systemctl get
@@ -640,7 +651,11 @@ swap_restore() {
       rm -f "$NEW_DEF"
     fi
   fi
-  # 3. the original process survived the stop
+  # 3. the original process survived the stop. A rollback that starts while step 4 is still waiting (a signal) waits
+  # for it first, up to the switch timeout, signals ignored: the stop was already sent.
+  if [[ -n "$P0" ]] && (( SWAP_PHASE == 4 )) && ai_worker_pid_alive "$P0"; then
+    ai_worker_wait_stopped "$(target_of "$FOUND_LABEL")" "$P0" "$SWAP_TIMEOUT" || true
+  fi
   if [[ -n "$P0" ]] && ai_worker_pid_alive "$P0"; then
     [[ -z "$FOUND_DEF" ]] || cp -p "$BACKUP_FILE" "$FOUND_DEF" || true
     [[ "$MANAGER" == launchd ]] || proc_run systemctl --user daemon-reload || true
@@ -651,7 +666,11 @@ swap_restore() {
   fi
   if [[ -z "$FOUND_DEF" ]]; then
     # 4. nothing was installed before
-    restore_overrides || true
+    if ! restore_overrides; then
+      rollback_failed "cannot restore the enable state of $LABEL ($OVERRIDE_TARGET before the switch)" \
+        "no ai-worker definition installed; the enable override of $LABEL may differ from before the switch"
+      return 1
+    fi
     if service_loaded "$LABEL" || [[ -e "$NEW_DEF" ]] || { [[ "$MANAGER" == systemd ]] && wants_links_exist; }; then
       rollback_failed "the new definition could not be removed completely" "check $NEW_DEF and the service manager"
       return 1
@@ -744,8 +763,10 @@ if [[ -n "$FOUND_LABEL" ]]; then
     echo "== stopping the installed worker ($FOUND_LABEL${P0:+, pid $P0})"
     stop_service "$FOUND_LABEL" || true
   fi
-  ai_worker_wait_stopped "$(target_of "$FOUND_LABEL")" "$P0" "$SWAP_TIMEOUT" \
-    || fail_switch "the installed worker${P0:+ (pid $P0)} did not stop within $SWAP_TIMEOUT s"
+  if ! ai_worker_wait_stopped "$(target_of "$FOUND_LABEL")" "$P0" "$SWAP_TIMEOUT"; then
+    [[ "$STOPPING" != 1 ]] || fail_switch "interrupted (SIG$STOP_SIGNAL) while the installed worker${P0:+ (pid $P0)} was stopping"
+    fail_switch "the installed worker${P0:+ (pid $P0)} did not stop within $SWAP_TIMEOUT s"
+  fi
 fi
 
 # ---- step 5: install under L -------------------------------------------------------------------------------------

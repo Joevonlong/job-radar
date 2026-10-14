@@ -46,6 +46,7 @@ beforeEach(() => {
     path.join(bin, "systemctl"),
     `#!/bin/bash
 echo "systemctl $*" >> "${state}/calls"
+[[ -n "\${STUB_SYSTEMCTL_SLEEP:-}" ]] && sleep "$STUB_SYSTEMCTL_SLEEP"
 case "$2" in
   show) cat "${state}/show"; if [[ -e "${state}/restarting" ]]; then echo "NRestarts=$(wc -l < "${state}/calls" | tr -d ' ')"; else echo "NRestarts=3"; fi ;;
   list-jobs) cat "${state}/jobs" 2>/dev/null ;;
@@ -94,6 +95,13 @@ describe("ai_worker_wait_stopped (launchd)", () => {
     expect(r.stderr).toContain("whole seconds");
   });
 
+  it("a launchctl that hangs is cut off at the time left: 1 (cannot tell) within the bound, not a late 'stopped'", () => {
+    // the stub hangs 8 s, then says "not loaded": without the bound that late answer would read as stopped
+    const r = run(`ai_worker_wait_stopped ${LABEL} ${deadPid()} 2; echo "rc=$?"`, { JOB_RADAR_SERVICE_MANAGER: "launchd", STUB_LAUNCHCTL_SLEEP: "8" });
+    expect(r.stdout.trim()).toBe("rc=1");
+    expect(r.ms).toBeLessThan(6000);
+  });
+
   it("ai_worker_service_pid reads the pid launchctl prints; ai_worker_pid_alive never treats 0 as alive", () => {
     write(path.join(state, "loaded"), "");
     const r = run(`ai_worker_service_pid launchd ${LABEL}; ai_worker_pid_alive 0 && echo zero-alive; ai_worker_pid_alive $$ && echo self-alive`, {});
@@ -110,6 +118,13 @@ describe("ai_worker_wait_stopped (systemd)", () => {
     expect(r.stdout.trim()).toBe("rc=0");
     // a first reading only sets the NRestarts baseline
     expect(calls().filter((c) => c.includes(" show ")).length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("a systemctl that hangs is cut off at the time left: 1 within the bound", () => {
+    write(path.join(state, "show"), "ActiveState=inactive\nSubState=dead\nMainPID=0\n");
+    const r = run(`ai_worker_wait_stopped job-radar-ai-worker.service ${deadPid()} 2; echo "rc=$?"`, { ...env, STUB_SYSTEMCTL_SLEEP: "8" });
+    expect(r.stdout.trim()).toBe("rc=1");
+    expect(r.ms).toBeLessThan(6000);
   });
 
   it("failed counts as stopped too", () => {
