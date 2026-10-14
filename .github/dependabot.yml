@@ -6,6 +6,10 @@ updates:
       interval: weekly
     open-pull-requests-limit: 5
     groups:
+      # Font files change how every page looks: their updates come as one PR of their own, to be checked by eye
+      # (the first group that matches a dependency takes it).
+      fonts:
+        patterns: ["@fontsource/*", "@fontsource-variable/*"]
       minor-and-patch:
         update-types: [minor, patch]
     ignore:

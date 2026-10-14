@@ -81,6 +81,11 @@ and the project uses [Semantic Versioning](https://semver.org/).
   (translation, breakdown, salary lookup) now hand their logger to the providers. Remove the `logging` block from
   `data/config/schedule.yaml` before rolling back to an older version. See
   [docs/configuration.md](docs/configuration.md) ("Log level").
+- **Building no longer needs Google Fonts:** the fonts (Archivo, Archivo Black, IBM Plex Mono, Noto Sans SC) are
+  self-hosted from pinned npm packages, so `pnpm build` and the image build work behind a network that blocks Google
+  and no longer fail when the font download does. The pages look the same (same families, weights, character coverage
+  and loading). The Dockerfile compiles with `RUN --network=none`, so every image build proves it. The font licences
+  (SIL OFL 1.1) are in `licenses/fonts/` and in the web image.
 
 ### Documentation
 

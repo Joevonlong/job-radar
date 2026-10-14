@@ -7,6 +7,7 @@ const root = path.resolve(import.meta.dirname, "..");
 const dockerfile = readFileSync(path.join(root, "Dockerfile"), "utf8");
 const pkg = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")) as {
   devDependencies: Record<string, string>;
+  packageManager: string;
 };
 
 describe("Dockerfile", () => {
@@ -80,7 +81,7 @@ describe("Dockerfile", () => {
       const check = build.search(/^RUN node scripts\/ops\/check-node-engines\.mjs package\.json$/m);
       expect(copy).toBeGreaterThan(-1);
       expect(check).toBeGreaterThan(copy);
-      expect(build.search(/^RUN pnpm build /m)).toBeGreaterThan(check);
+      expect(build.search(/^RUN --network=none pnpm build /m)).toBeGreaterThan(check);
     });
 
     it.each(["web", "runner"])("in the final %s stage, before switching user", (target) => {
@@ -104,6 +105,34 @@ describe("Dockerfile", () => {
       expect(stages.length).toBeGreaterThanOrEqual(2);
       for (const s of stages) expect(s).toMatch(/check-node-engines\.mjs/);
     });
+  });
+
+  describe("compiles without network access", () => {
+    const build = dockerfile.slice(dockerfile.indexOf("AS build\n"), dockerfile.indexOf("\nFROM ", dockerfile.indexOf("AS build\n")));
+
+    it("runs the web and runner builds with --network=none", () => {
+      expect(build).toMatch(/^RUN --network=none pnpm build && pnpm build:runner$/m);
+      // the only build commands of the stage
+      expect(build.match(/pnpm build/g)).toHaveLength(2);
+    });
+
+    it("starts from no .next cache (a cached copy could hide a network lookup)", () => {
+      expect(build).not.toMatch(/target=[^\s,]*\.next/);
+      const dockerignore = readFileSync(path.join(root, ".dockerignore"), "utf8");
+      expect(dockerignore).toMatch(/^\*\*\/\.next$/m);
+    });
+
+    it("installs the pnpm version package.json names (otherwise pnpm may download its own at build time)", () => {
+      const arg = /ARG PNPM_VERSION=(\S+)/.exec(dockerfile)?.[1];
+      expect(pkg.packageManager).toBe(`pnpm@${arg}`);
+    });
+  });
+
+  it("the web stage ships the licences of the font files it serves", () => {
+    const web = dockerfile.slice(dockerfile.indexOf("AS web\n"), dockerfile.indexOf("\nFROM ", dockerfile.indexOf("AS web\n")));
+    expect(web).toMatch(/^COPY licenses\/fonts\/ \/app\/licenses\/fonts\/$/m);
+    expect(web.search(/^USER /m)).toBeGreaterThan(web.search(/^COPY licenses\/fonts\//m));
+    expect(readFileSync(path.join(root, ".dockerignore"), "utf8")).not.toMatch(/^licenses/m);
   });
 
   it("defines the web and runner targets", () => {

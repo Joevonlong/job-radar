@@ -110,6 +110,9 @@ docker compose up -d --build      # 等同于 pnpm stack:up
 docker compose ps
 ```
 
+构建镜像需要访问 npm registry、Docker Hub 和微软的镜像仓库（基础镜像和 Dockerfile 前端镜像）、Ubuntu 和 PostgreSQL 的
+apt 源以及 PyPI。编译 web（包括字体）不需要网络：字体随 npm 包安装，所以屏蔽了 Google 的网络也能构建。
+
 第一次构建要几分钟。之后一两分钟内，`docker compose ps` 里的 `db`、`web`、`runner`、`jobspy` 应该都变成 `healthy`。
 Docker 起来以后，这四个服务在重启后都会自己恢复（`restart: unless-stopped`）。
 

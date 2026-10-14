@@ -118,6 +118,10 @@ docker compose up -d --build      # same as: pnpm stack:up
 docker compose ps
 ```
 
+Building the images needs network access to the npm registry, Docker Hub and the Microsoft container registry (base
+images and the Dockerfile frontend), the Ubuntu and PostgreSQL apt repositories and PyPI. Compiling the web, its fonts
+included, needs none: the fonts come with the npm packages, so a network that blocks Google is fine.
+
 The first build takes a few minutes. After that, `docker compose ps` should show `db`, `web`, `runner` and `jobspy` as
 `healthy` within a minute or two. All four restart by themselves after a reboot (`restart: unless-stopped`) once Docker
 is running.
