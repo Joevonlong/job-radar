@@ -6,6 +6,9 @@
  *     id, and the report was written no earlier than the container's start minus `doctor.shipped_report_skew_seconds`;
  *   - ai-worker (with `execution: host`): the report is newer than `ai.yaml host_worker.offline_after_seconds`, and its PID is
  *     the PID launchd / systemd gives for the service. No PID from the service manager means the report cannot be matched.
+ *     A confirmed report must also come from a release directory (`<app root>/data/releases/ai-worker/<commit>/config`)
+ *     whose commit is the checkout's HEAD: anything else is the worker of another version (a worker-only rollback, an
+ *     install from before release directories, a deploy that stopped half-way).
  *
  * It also warns when a running container of the project has something mounted over /app/config: the shipped defaults
  * are part of the image, and a mount there (a compose file from before that change) hides them.
@@ -127,8 +130,8 @@ async function workerPid(ctx: DoctorContext): Promise<{ pid: number } | { pid: n
   return { pid: null, reason: t("checks.config.shipped.noServiceManager") };
 }
 
-/** One process: null when its report is confirmed, else what is wrong (in the report's language). */
-type Finding = { process: ShippedConfigProcess; problem: string | null; id: string | null };
+/** One process: null when its report is confirmed, else what is wrong (in the report's language) and, optionally, what to do. */
+type Finding = { process: ShippedConfigProcess; problem: string | null; id: string | null; hint?: string };
 
 function containerFinding(ctx: DoctorContext, process: ShippedConfigProcess, row: ShippedConfigReportRow | null, containers: Containers): Finding {
   const { t } = ctx;
@@ -162,7 +165,26 @@ async function workerFinding(ctx: DoctorContext, row: ShippedConfigReportRow | n
   const service = await workerPid(ctx);
   if (service.pid === null) return finding(t("checks.config.shipped.noPid", { process, reason: service.reason }));
   if (service.pid !== row.report.pid) return finding(t("checks.config.shipped.otherPid", { process, reported: row.report.pid, running: service.pid }));
-  return finding(null);
+  return { ...(await releaseProblem(ctx, row)), process, id };
+}
+
+/** The confirmed worker report's directory: a release directory of this checkout, at HEAD. */
+async function releaseProblem(ctx: DoctorContext, row: ShippedConfigReportRow): Promise<{ problem: string | null; hint?: string }> {
+  const { t } = ctx;
+  const process = "ai-worker";
+  const releases = `${ctx.appRoot}/data/releases/ai-worker`;
+  const dir = row.report.dir.replace(/\/+$/, "");
+  const fromDir = dir.startsWith(`${releases}/`) ? /^([0-9a-f]{40})\/config$/.exec(dir.slice(releases.length + 1))?.[1] : undefined;
+  if (fromDir === undefined) return { problem: t("checks.config.shipped.notRelease", { process, dir: row.report.dir, releases }), hint: t("checks.config.shipped.notReleaseHint", { root: ctx.appRoot }) };
+  const release = row.report.release ?? fromDir;
+  const out = await ctx.probes.run("git", ["-C", ctx.appRoot, "rev-parse", "HEAD"]);
+  const head = out.kind === "ran" && out.exitCode === 0 ? /^([0-9a-f]{40})\s*$/.exec(out.stdout)?.[1] : undefined;
+  if (head === undefined) {
+    const reason = out.kind === "missing" ? t("checks.config.shipped.noGit") : t("checks.config.shipped.noAnswer", { command: "git rev-parse HEAD" });
+    return { problem: t("checks.config.shipped.headUnknown", { process, reason }), hint: t("checks.config.shipped.otherReleaseHint") };
+  }
+  if (release !== head) return { problem: t("checks.config.shipped.otherRelease", { process, release: release.slice(0, 12), head: head.slice(0, 12) }), hint: t("checks.config.shipped.otherReleaseHint") };
+  return { problem: null };
 }
 
 /** One problem per mount: on /app/config itself (hides all of it) or on a directory inside it (hides that part). */
@@ -213,7 +235,10 @@ export const shippedConfigCheck: DoctorCheck = {
       .join(t("common.detailSeparator"));
     if (problems.length > 0) {
       const detail = [...problems, ...(confirmed === "" ? [] : [confirmed])].join(t("common.detailSeparator"));
-      const hints = [...(mountProblems.length > 0 ? [mountHint] : []), ...(reportProblems.length > 0 ? [t("checks.config.shipped.hint")] : [])];
+      // A finding with its own hint (the worker's release) needs that one; the general hint is for reports that do not match.
+      const general = findings.some((f) => f.problem !== null && f.hint === undefined);
+      const own = [...new Set(findings.flatMap((f) => (f.problem !== null && f.hint !== undefined ? [f.hint] : [])))];
+      const hints = [...(mountProblems.length > 0 ? [mountHint] : []), ...(general ? [t("checks.config.shipped.hint")] : []), ...own];
       return warn(spec, detail, hints.join(t("common.detailSeparator")));
     }
     if (findings.length === 0) return ok(spec, t("checks.config.shipped.nothing"));

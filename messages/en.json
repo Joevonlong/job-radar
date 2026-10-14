@@ -5433,7 +5433,13 @@
           "configMountedInside": "{service}: {source} is mounted on {destination}, inside {dir}: it hides that part of the shipped config built into the image",
           "reportsUnchecked": "the shipped config reports were not checked: {reason}",
           "noDatabase": "the database cannot be reached (see db.connect)",
-          "hint": "Each process reports at start-up (the web again on its health checks until it works, runner and ai-worker with every heartbeat). Right after a deploy or restart, wait a minute and run the doctor again; if it stays, look in that process's log for \"could not report the shipped config\" (docs/configuration.md, \"Shipped config identity\")"
+          "hint": "Each process reports at start-up (the web again on its health checks until it works, runner and ai-worker with every heartbeat). Right after a deploy or restart, wait a minute and run the doctor again; if it stays, look in that process's log for \"could not report the shipped config\" (docs/configuration.md, \"Shipped config identity\")",
+          "notRelease": "{process} runs its shipped config from {dir}, not from a release directory under {releases}",
+          "notReleaseHint": "The worker was installed from the checkout (before release directories) or by hand. Run scripts/ops/deploy.sh, or scripts/ops/install-ai-worker.sh --root {root} (docs/deploy.md)",
+          "noGit": "git is not installed",
+          "headUnknown": "{process}: its release cannot be compared with the checkout's HEAD ({reason})",
+          "otherRelease": "{process} runs release {release}, the checkout is at {head}",
+          "otherReleaseHint": "Expected right after a worker-only rollback; otherwise a deploy stopped before the worker step. Run scripts/ops/deploy.sh so the worker runs the checked-out commit (docs/upgrade.md)"
         }
       },
       "i18n": {
@@ -5591,6 +5597,28 @@
             "skipped": "wizard skipped",
             "existing_install": "existing install"
           }
+        }
+      },
+      "ops": {
+        "releases_lock": {
+          "title": "No deploy lock left behind",
+          "none": "No release lock (no deploy or worker install is running)",
+          "current": "Held by the current deploy (pid {pid} on {host}, for {held})",
+          "owner": "The release lock {lock} exists: pid {pid} on {host}, held for {held}",
+          "ownerUnknown": "The release lock {lock} exists; its owner is unknown (the owner file is missing or incomplete)",
+          "noRecords": "in-flight records: none",
+          "records": "in-flight records: {list}",
+          "recordAlive": "{name} ({script}, pid {pid} still running)",
+          "recordGone": "{name} ({script}, pid {pid} gone)",
+          "partial": "{name} (half-written)",
+          "unreadable": "{name} (unreadable)",
+          "hint": "Every deploy is refused while it exists. If no deploy or install is running: first make sure no build, dependency install (pnpm install), migration, config write, drain or install is still running (what a killed script started can only be found like this): {ps} — then remove the lock: rm -rf {lock} (docs/deploy.md)"
+        },
+        "ai_worker_swap_backup": {
+          "title": "No unresolved ai-worker switch",
+          "none": "No switch backup",
+          "found": "An unresolved switch backup exists: {dir} (a worker switch failed and was not rolled back completely)",
+          "hint": "install-ai-worker.sh refuses to run until it is resolved. Read {dir}/state, make sure the ai-worker runs as it should (docs/upgrade.md, \"Unresolved switch backup\"), then remove it: rm -rf {dir}"
         }
       }
     }

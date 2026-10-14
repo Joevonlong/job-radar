@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { shippedConfigCheck } from "@/lib/ops/doctor/checks/shipped";
 import type { CommandOutcome } from "@/lib/ops/doctor";
 
-import { ago, CONTAINERS_STARTED, inspectJson, makeContext, only, ran, RUNNER_CONTAINER, shippedReports, WEB_CONTAINER, type Overrides } from "./helpers";
+import { ago, APP_ROOT, CONTAINERS_STARTED, HEAD_SHA, inspectJson, makeContext, only, ran, RUNNER_CONTAINER, shippedReports, WEB_CONTAINER, type Overrides } from "./helpers";
 
 const PS = "docker ps --no-trunc --filter label=com.docker.compose.project=job-radar --format {{.ID}}";
 const INSPECT = `docker inspect ${WEB_CONTAINER} ${RUNNER_CONTAINER}`;
@@ -256,6 +256,59 @@ describe("config.shipped", () => {
       const result = await only(shippedConfigCheck, context(overrides));
       expect(result.status).toBe("warn");
       expect(result.detail).toContain(`ai-worker: the report cannot be matched to the service (${reason})`);
+    });
+
+    describe("release directory", () => {
+      const GIT = `git -C ${APP_ROOT} rev-parse HEAD`;
+      const RELEASES = `${APP_ROOT}/data/releases/ai-worker`;
+      const workerAt = (dir: string, release?: string) => {
+        const row = shippedReports()["ai-worker"];
+        if (row === null) throw new Error("no default report");
+        return { "ai-worker": { ...row, report: { ...row.report, dir, ...(release === undefined ? {} : { release }) } } };
+      };
+
+      it("is ok when the worker runs the release of HEAD (a trailing slash too)", async () => {
+        expect((await only(shippedConfigCheck, withReports(workerAt(`${RELEASES}/${HEAD_SHA}/config/`)))).status).toBe("ok");
+      });
+
+      it.each([
+        ["the checkout's own config/ (an install from before release directories)", `${APP_ROOT}/config`],
+        ["a release of another checkout", `/elsewhere/data/releases/ai-worker/${HEAD_SHA}/config`],
+        ["a directory inside the releases that is not a release", `${RELEASES}/.tmp-${HEAD_SHA}-12/config`],
+        ["a short commit", `${RELEASES}/${HEAD_SHA.slice(0, 12)}/config`],
+      ])("warns when the worker's config is not from a release directory: %s", async (_name, dir) => {
+        const result = await only(shippedConfigCheck, withReports(workerAt(dir)));
+        expect(result.status).toBe("warn");
+        expect(result.detail).toContain(`ai-worker runs its shipped config from ${dir}, not from a release directory under ${RELEASES}`);
+        expect(result.hint).toContain("install-ai-worker.sh");
+        expect(result.hint).not.toContain("Shipped config identity");
+      });
+
+      it("warns when the release is not HEAD (a worker-only rollback), with the commits shortened", async () => {
+        const old = "e5".repeat(20);
+        const result = await only(shippedConfigCheck, withReports(workerAt(`${RELEASES}/${old}/config`)));
+        expect(result.status).toBe("warn");
+        expect(result.detail).toContain(`ai-worker runs release ${old.slice(0, 12)}, the checkout is at ${HEAD_SHA.slice(0, 12)}`);
+        expect(result.hint).toContain("worker-only rollback");
+        // the report's own release field wins over the directory name
+        const named = await only(shippedConfigCheck, withReports(workerAt(`${RELEASES}/${HEAD_SHA}/config`, old)));
+        expect(named.detail).toContain(`ai-worker runs release ${old.slice(0, 12)}`);
+      });
+
+      it.each([
+        ["git is missing", { kind: "missing" } as CommandOutcome, "git is not installed"],
+        ["git fails", ran("", 128, "not a git repository"), "git rev-parse HEAD did not answer"],
+        ["git prints no commit", ran("HEAD\n"), "git rev-parse HEAD did not answer"],
+      ])("treats an unknown HEAD as a warning when %s", async (_name, outcome, reason) => {
+        const result = await only(shippedConfigCheck, context({ commands: { [GIT]: outcome } }));
+        expect(result.status).toBe("warn");
+        expect(result.detail).toContain(`ai-worker: its release cannot be compared with the checkout's HEAD (${reason})`);
+      });
+
+      it("does not look at the release when the report itself is not confirmed", async () => {
+        const result = await only(shippedConfigCheck, withReports({ ...workerAt(`${APP_ROOT}/config`), ...updatedAt("ai-worker", ago(181)) }));
+        expect(result.detail).not.toContain("release directory");
+      });
     });
 
     it("matches systemd's MainPID on Linux", async () => {
