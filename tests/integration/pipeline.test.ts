@@ -390,6 +390,78 @@ describe("cross-source pipeline", () => {
   });
 });
 
+describe("a job seen again by the pipeline", () => {
+  const phrase = { outcome: "phrase", httpStatus: 200, phrase: "no longer accepting applications", quote: "This job is no longer accepting applications", url: null, at: "2026-10-01T00:00:00Z" };
+  const alive = { outcome: "alive", httpStatus: 200, phrase: null, quote: null, url: null, at: "2026-10-01T00:00:00Z" };
+
+  async function firstJob(): Promise<number> {
+    const registry = new ChannelRegistry();
+    registerFixtureChannel(registry, { id: "fx-a", family: "ats", usesQueries: false, postings: [posting("1", { description: "Build things" })] });
+    await run(registry);
+    const [job] = await allJobs();
+    return job?.id as number;
+  }
+
+  async function mark(id: number, status: "possibly_closed" | "closed", evidence: object | null, lastSeen?: Date): Promise<void> {
+    await getDb()
+      .update(schema.jobs)
+      .set({ status, linkCheckJson: evidence, ...(lastSeen ? { lastSeenAt: lastSeen } : {}) })
+      .where(eq(schema.jobs.id, id));
+  }
+
+  const statusOf = async (id: number) => (await allJobs()).find((j) => j.id === id)?.status;
+
+  async function changedPayload(): Promise<void> {
+    const changed = new ChannelRegistry();
+    registerFixtureChannel(changed, { id: "fx-a", family: "ats", usesQueries: false, postings: [posting("1", { description: "Build zebra things" })] });
+    await run(changed);
+  }
+
+  async function otherChannel(): Promise<void> {
+    const both = new ChannelRegistry();
+    registerFixtureChannel(both, { id: "fx-a", family: "ats", usesQueries: false, postings: [posting("1", { description: "Build things" })] });
+    registerFixtureChannel(both, { id: "fx-li", family: "linkedin", usesQueries: false, postings: [posting("li-1", { title: "Job 1", description: "Build things" })] });
+    await run(both);
+  }
+
+  it("keeps a phrase-marked job possibly closed when its payload changed", async () => {
+    const id = await firstJob();
+    await mark(id, "possibly_closed", phrase);
+    await changedPayload();
+    expect(await statusOf(id)).toBe("possibly_closed");
+    expect((await allJobs())[0]?.description).toBe("Build zebra things");
+  });
+
+  it("keeps a phrase-marked job possibly closed when another channel's posting merges into it", async () => {
+    const id = await firstJob();
+    await mark(id, "possibly_closed", phrase);
+    await otherChannel();
+    expect(await allJobs()).toHaveLength(1);
+    expect(await listJobSources(getDb(), id)).toHaveLength(2);
+    expect(await statusOf(id)).toBe("possibly_closed");
+  });
+
+  it("still reopens a plain possibly closed job and a closed job (changed payload and merge)", async () => {
+    const id = await firstJob();
+    await mark(id, "possibly_closed", alive);
+    await changedPayload();
+    expect(await statusOf(id)).toBe("active");
+
+    await mark(id, "closed", { ...alive, outcome: "gone", httpStatus: 404 });
+    await otherChannel();
+    expect(await statusOf(id)).toBe("active");
+  });
+
+  it("changes no status when the posting was fetched no later than the last sighting", async () => {
+    const id = await firstJob();
+    const future = new Date(Date.now() + DAY);
+    await mark(id, "possibly_closed", alive, future);
+    await changedPayload();
+    expect(await statusOf(id)).toBe("possibly_closed");
+    expect((await allJobs())[0]?.lastSeenAt.getTime()).toBe(future.getTime());
+  });
+});
+
 describe("failures stay isolated (C1, C2)", () => {
   const broken = (id: string): Channel => ({
     id,

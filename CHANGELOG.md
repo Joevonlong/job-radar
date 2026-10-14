@@ -67,6 +67,10 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **A job marked "no longer accepting applications" stays marked when its posting is parsed again or another channel
+  merges into it:** the pipeline reset such a job to active (and made it eligible for scoring and push) whenever a
+  source returned a changed posting or a new channel's copy. It now applies the same rule as the "seen again" step of
+  maintenance; a plain possibly closed or closed job a source returns again is still active again.
 - **LinkedIn session channel, daily page limit reached part way through a query:** the postings that need no page load
   (already stored, or list cards when `fetch_details` is off) are still delivered after the limit instead of dropped, and
   the run is recorded as skipped (a budget stop, as with JSearch) instead of succeeded, so a query cut short is no longer

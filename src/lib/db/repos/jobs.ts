@@ -1,7 +1,7 @@
 import { and, asc, eq, inArray, isNotNull, isNull, lt, ne, not, or, sql, type SQL } from "drizzle-orm";
 
 import { FOLLOWING_STATUSES } from "@/lib/applications/following";
-import type { LinkCheckEvidence } from "@/lib/jobs/link-check-evidence";
+import { parseLinkCheck, type LinkCheckEvidence } from "@/lib/jobs/link-check-evidence";
 
 import type { Executor } from "../executor";
 import { applications, channels, companies, jobClosureOverrides, jobFavorites, jobSources, jobs, rawPostings } from "../schema";
@@ -10,6 +10,17 @@ export type Job = typeof jobs.$inferSelect;
 export type NewJob = typeof jobs.$inferInsert;
 export type JobPatch = Partial<Omit<NewJob, "id" | "searchTsv">>;
 export type JobStatus = Job["status"];
+
+/**
+ * A job whose posting says it no longer takes applications (link check outcome `phrase`) stays possibly closed when a
+ * source returns it again: the source may still list a dead posting. Any other job a source returns is active again.
+ * The one rule behind every "seen again" write (`touchJobsSeen` in SQL, the pipeline through `statusWhenSeenAgain`).
+ */
+const PHRASE_OUTCOME = "phrase";
+
+export function statusWhenSeenAgain(job: Pick<Job, "status" | "linkCheckJson">): JobStatus {
+  return job.status === "possibly_closed" && parseLinkCheck(job.linkCheckJson)?.outcome === PHRASE_OUTCOME ? "possibly_closed" : "active";
+}
 
 export async function getJob(db: Executor, id: number): Promise<Job | null> {
   const [row] = await db.select().from(jobs).where(eq(jobs.id, id)).limit(1);
@@ -123,7 +134,7 @@ export async function touchJobsSeen(db: Executor): Promise<SeenResult> {
       update jobs j
       -- a job whose posting says it no longer takes applications stays possibly closed (the source may still list it)
       set last_seen_at = c.seen,
-          status = case when j.status = 'possibly_closed' and j.link_check_json->>'outcome' = 'phrase' then j.status else 'active' end
+          status = case when j.status = 'possibly_closed' and j.link_check_json->>'outcome' = ${PHRASE_OUTCOME} then j.status else 'active' end
       from changed c
       where j.id = c.id
       returning j.id, j.status
