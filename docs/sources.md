@@ -46,7 +46,7 @@ A channel's status is the same result as the channel card on the `/sources` over
 "Possibly closed" is a hint based on time, not proof, and it is judged per channel, not per search query:
 
 - A job becomes possibly closed when no source has returned it for `possibly_closed_after_days` days (7 by default) **and** each channel it came from has had at least one successful run that started after those days had passed. Runs that failed, were skipped or were interrupted do not count, so a channel that was down never closes its jobs.
-- A search only returns postings inside its time window (`window_hours`; JSearch rounds it up to the windows its API supports), so a query that does not return a job says nothing about whether it is closed. That is why a single query's result never marks a job by itself.
+- A search only returns postings inside its time window (`window_hours`; JSearch maps it onto its supported windows: today, 3 days, week, month; anything above a week becomes a month), so a query that does not return a job says nothing about whether it is closed. That is why a single query's result never marks a job by itself.
 - The evidence is the link check that follows: it tries each source link of the job. A live page on any of them brings the job back to active; it is closed only when every link checked returns 404 or 410. Anything else leaves the mark as it is.
 - A job that is seen again by any source becomes active again, with two exceptions: a mark that came from a "no longer accepting applications" sentence on the posting stays, and so does a closure you made yourself.
 
