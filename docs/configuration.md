@@ -302,12 +302,29 @@ gives a new identity.
   minus `schedule.yaml doctor.shipped_report_skew_seconds` (default 2, for the clock difference between Docker and the
   database); for the ai-worker (with `ai.yaml execution: host`), the report is newer than `host_worker.offline_after_seconds`
   and its PID is the one launchd (`launchctl print`) or systemd (`systemctl --user show -p MainPID`) gives for the service.
-  When the service manager gives no PID, the report cannot be matched. Everything that cannot be confirmed is a warning
+  When the service manager gives no PID, the report cannot be matched. The ai-worker's report must also come from a
+  release directory of this checkout (`<checkout>/data/releases/ai-worker/<commit>/config`) whose commit is the
+  checkout's HEAD: a worker from outside `data/releases/ai-worker/` (installed by a version from before release
+  directories) or from another commit (after a worker-only rollback, or a deploy that stopped before its ai-worker step)
+  is a warning with its own hint. Everything that cannot be confirmed is a warning
   that names each process; there is no failure. Without the database the check is skipped. The check also warns when a
   running container of the project has something mounted on `/app/config` (or below it): that would hide the defaults in
   the image, typically a `compose.override.yaml` from before they moved into the image; remove the mount and deploy.
 
 Right after a deploy or a restart a report can be missing for a moment; run the doctor again after a minute.
+
+The ai-worker's release directories and its switch are set by four keys in `schedule.yaml`. None of them is in the
+shipped file; add one to `data/config/schedule.yaml` only to change it (a version from before release directories does
+not know them, see [upgrade.md](upgrade.md#downgrade-pre-release-dir)):
+
+| Key | Default | Meaning |
+|---|---|---|
+| `deploy.ai_worker_releases_keep` | 3 | Release directories kept after a switch, the installed and the previous one included (at least 2) |
+| `deploy.ai_worker_stop_timeout_seconds` | 60 | launchd `ExitTimeOut` / systemd `TimeoutStopSec` of the worker (at least 10) |
+| `deploy.ai_worker_swap_timeout_seconds` | 120 | Longest wait of each phase of a switch (at least the stop timeout + 10) |
+| `doctor.shipped_report_skew_seconds` | 2 | Clock difference allowed between Docker and the database when `config.shipped` matches a container's report |
+
+Details: [deploy.md](deploy.md), "The ai-worker runs from a release directory".
 
 ## Recheck of watched jobs (`pipeline.yaml` + `ui.yaml`)
 

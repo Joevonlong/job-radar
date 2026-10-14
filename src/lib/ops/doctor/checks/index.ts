@@ -4,6 +4,7 @@ import { AI_CHECKS, BACKLOG_CHECKS } from "./ai";
 import { CHANNEL_CHECKS } from "./channels";
 import { CONFIG_CHECKS, LANGUAGE_CHECKS } from "./config";
 import { DATA_CHECKS, HOST_CHECKS } from "./data";
+import { OPS_CHECKS } from "./ops";
 import { NETWORK_CHECKS, NOTIFY_CHECKS } from "./notify";
 import { SCHEDULE_CHECKS } from "./schedule";
 import { SETUP_CHECKS } from "./setup";
@@ -28,4 +29,5 @@ export const ALL_CHECKS: readonly DoctorCheck[] = [
   ...SCHEDULE_CHECKS,
   ...BACKLOG_CHECKS,
   ...HOST_CHECKS,
+  ...OPS_CHECKS,
 ];

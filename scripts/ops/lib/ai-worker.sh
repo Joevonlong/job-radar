@@ -7,7 +7,10 @@
 #   ai_worker_identity <main>       which service definition is the worker's (key=value lines; files only)
 #   ai_worker_wait_ready <main> <old pid> <since> <timeout>   until a new PID of the installed definition shows evidence
 #   ai_worker_wait_stopped <label-or-unit> <pid> <timeout>     until the service and the PID are gone
+#   ai_worker_probe <seconds> <file> <command…>                a service manager query, bounded in time
 #   ai_worker_db_url <main> [--database-url X]                 the DATABASE_URL the install script writes
+#   ai_worker_db_now <timeout>                                 the database clock (worker-heartbeat.ts --now)
+#   ai_worker_deploy_settings <main>                           the deploy.ai_worker_* timeouts and the releases to keep
 #   sd_env_decode / sd_path_decode / sd_exec_decode / sd_unit_db_url   exact inverses of the install script's unit escaping
 #
 # The platform is JOB_RADAR_SERVICE_MANAGER (launchd or systemd) when set, else launchd on macOS and systemd elsewhere.
@@ -219,6 +222,7 @@ ai_worker_wait_ready() {
   # SECONDS counts whole seconds: one more makes the wait at least <timeout> s long (and less than <timeout> + 1)
   deadline=$((SECONDS + timeout + 1))
   while :; do
+    ai_worker_interrupted && return 1
     left=$((deadline - SECONDS)); (( left > 0 )) || return 1
     pid="$(ai_worker_service_pid "$platform" "$target" "$left")"
     left=$((deadline - SECONDS)); (( left > 0 )) || return 1
@@ -238,30 +242,54 @@ ai_worker_wait_ready() {
 #   launchd  `launchctl print gui/<uid>/<label>` fails and <pid> is gone;
 #   systemd  ActiveState is inactive or failed, MainPID=0, `systemctl --user list-jobs` has no job for the unit, NRestarts
 #            equals the previous reading, and <pid> is gone (LoadState is not looked at).
+# Every launchctl / systemctl call is bounded by the time left (ai_worker_probe): a service manager that hangs cannot keep
+# the caller past <timeout>; a call cut off means "cannot tell", i.e. not stopped yet.
 ai_worker_wait_stopped() {
-  local target="$1" pid="$2" timeout="$3" platform deadline state active mainpid restarts prev="" jobs
+  local target="$1" pid="$2" timeout="$3" platform deadline state active mainpid restarts prev="" jobs left f rc
   [[ "$timeout" =~ ^[0-9]+$ ]] || { echo "ai-worker: timeout must be whole seconds, got '$timeout'" >&2; return 1; }
   platform="$(ai_worker_platform)"
   deadline=$((SECONDS + timeout))
+  f="$(mktemp "${TMPDIR:-/tmp}/ai-worker-stop.XXXXXX")" || return 1
   while :; do
+    ai_worker_interrupted && { rm -f "$f"; return 1; }
+    left=$((deadline - SECONDS)); (( left > 0 )) || left=1
     if [[ "$platform" == launchd ]]; then
-      if ! launchctl print "gui/$(id -u)/$target" >/dev/null 2>&1 && ! ai_worker_pid_alive "$pid"; then return 0; fi
+      rc=0; ai_worker_probe "$left" "$f" launchctl print "gui/$(id -u)/$target" || rc=$?
+      # 0: still loaded; 124: cut off (cannot tell); anything else: not loaded
+      if [[ "$rc" != 0 && "$rc" != 124 ]] && ! ai_worker_pid_alive "$pid"; then rm -f "$f"; return 0; fi
     else
-      state="$(systemctl --user show -p ActiveState,SubState,MainPID,NRestarts "$target" 2>/dev/null)" || state=""
+      state=""; ai_worker_probe "$left" "$f" systemctl --user show -p ActiveState,SubState,MainPID,NRestarts "$target" && state="$(cat "$f")"
       active="$(printf '%s\n' "$state" | sed -n 's/^ActiveState=//p')"
       mainpid="$(printf '%s\n' "$state" | sed -n 's/^MainPID=//p')"
       restarts="$(printf '%s\n' "$state" | sed -n 's/^NRestarts=//p')"
-      jobs="$(systemctl --user list-jobs --no-legend "$target" 2>/dev/null)" || jobs="?"
+      left=$((deadline - SECONDS)); (( left > 0 )) || left=1
+      jobs="?"; ai_worker_probe "$left" "$f" systemctl --user list-jobs --no-legend "$target" && jobs="$(cat "$f")"
       if [[ ( "$active" == inactive || "$active" == failed ) && "$mainpid" == 0 && -z "${jobs//[[:space:]]/}" \
             && -n "$restarts" && "$restarts" == "$prev" ]] && ! ai_worker_pid_alive "$pid"; then
-        return 0
+        rm -f "$f"; return 0
       fi
       prev="$restarts"
     fi
-    (( SECONDS < deadline )) || return 1
+    (( SECONDS < deadline )) || { rm -f "$f"; return 1; }
     sleep 1
   done
 }
+
+# ai_worker_probe <seconds> <file> <command…>: runs a read-only service manager query with stdout to <file> (stderr
+# discarded), at most <seconds> long (ai_worker_run_bounded). Returns its status, 124 when it was cut off; <file> is
+# emptied first and holds nothing useful unless it returns 0.
+ai_worker_probe() {
+  local secs="$1" f="$2"
+  shift 2
+  : > "$f" 2>/dev/null || return 1
+  ai_worker_run_bounded "$secs" ai_worker_exec_to "$f" "$@"
+}
+
+# ai_worker_interrupted: 0 when the caller asked the waits to give up on a signal (AI_WORKER_STOP_CHECK=1, a shell
+# variable of the install script while it switches) and one was recorded (STOPPING=1, scripts/ops/lib/proc.sh). A wait
+# that gives up returns 1 like a timeout. While it restores, the install script sets AI_WORKER_STOP_CHECK=0: then a
+# wait runs to its end whatever arrives.
+ai_worker_interrupted() { [[ "${AI_WORKER_STOP_CHECK:-0}" == 1 && "${STOPPING:-0}" == 1 ]]; }
 
 ai_worker_pid_alive() { [[ "$1" =~ ^[0-9]+$ && "$1" != 0 ]] && kill -0 "$1" 2>/dev/null; }   # never `kill -0 0` (own group)
 
@@ -288,6 +316,70 @@ ai_worker_db_url() {
     DB_URL="postgres://${db_user:-jobradar}:${db_pass:-jobradar}@127.0.0.1:${db_port:-5433}/${db_name:-jobradar}"
   fi
   printf '%s\n' "$DB_URL"
+  return 0
+}
+
+# ai_worker_db_now <timeout s>: the database clock as worker-heartbeat.ts --now prints it (UTC, microseconds), from the
+# caller's DATABASE_URL (set explicitly, never read from .env here); run from this checkout, bounded by <timeout>.
+# Prints nothing and returns 1 when it cannot be read.
+ai_worker_db_now() {
+  local f out rc=0
+  [[ -n "${DATABASE_URL:-}" ]] || return 1
+  f="$(mktemp "${TMPDIR:-/tmp}/ai-worker-now.XXXXXX")" || return 1
+  ai_worker_run_bounded "$1" ai_worker_now_probe "$f" || rc=$?
+  out="$(sed -n 's/^{"now":"\([0-9TZ:.-]*\)"}$/\1/p' "$f" 2>/dev/null | head -n 1)" || out=""
+  rm -f "$f"
+  (( rc == 0 )) && [[ "$out" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.]+Z$ ]] || return 1
+  printf '%s\n' "$out"
+}
+ai_worker_now_probe() {   # ai_worker_now_probe <file>: exec, so that ai_worker_run_bounded can kill it
+  cd "$AI_WORKER_REPO" || exit 1
+  DATABASE_URL="$DATABASE_URL" exec node --import "$AI_WORKER_REPO/node_modules/tsx/dist/loader.mjs" \
+    scripts/ops/worker-heartbeat.ts --now > "$1" 2>/dev/null </dev/null
+}
+
+# ai_worker_schedule_value <main> <block> <key>: a one-line scalar of schedule.yaml, from the user's file
+# (<main>/data/config/schedule.yaml) when it sets the key, else from <main>/config/schedule.yaml; empty when neither does.
+ai_worker_schedule_value() {
+  local main="$1" block="$2" key="$3" f v
+  for f in "$main/data/config/schedule.yaml" "$main/config/schedule.yaml"; do
+    [[ -f "$f" && -r "$f" ]] || continue
+    v="$(awk -v block="$block:" -v key="$key:" '
+      index($0, block) == 1 && substr($0, length(block) + 1) ~ /^[ \t]*(#.*)?$/ { inside = 1; next }
+      inside && /^[^ #]/ { inside = 0 }
+      inside && $1 == key { sub(/^[ \t]*[^:]+:/, ""); print; exit }' "$f" 2>/dev/null)" || v=""
+    [[ -n "$v" ]] || continue
+    v="$(ai_worker_yaml_scalar "$v")" || v="?"
+    [[ -n "$v" ]] || continue
+    printf '%s' "$v"
+    return 0
+  done
+  return 0
+}
+
+# ai_worker_deploy_settings <main>: sets AI_WORKER_STOP_TIMEOUT (deploy.ai_worker_stop_timeout_seconds, default 60, at
+# least 10), AI_WORKER_SWAP_TIMEOUT (deploy.ai_worker_swap_timeout_seconds, default 120) and AI_WORKER_RELEASES_KEEP
+# (deploy.ai_worker_releases_keep, default 3, at least 2). A value that is not a whole number in range falls back to its
+# default with a warning; a swap timeout below the stop timeout + 10 is raised to that, with a warning (pnpm config:check
+# refuses both; this keeps the scripts safe on a file it has not checked).
+ai_worker_deploy_settings() {
+  local main="$1" v
+  v="$(ai_worker_schedule_value "$main" deploy ai_worker_stop_timeout_seconds)"
+  if [[ -z "$v" ]]; then AI_WORKER_STOP_TIMEOUT=60
+  elif [[ "$v" =~ ^[0-9]{1,6}$ ]] && (( 10#$v >= 10 )); then AI_WORKER_STOP_TIMEOUT=$((10#$v))
+  else echo "warning: deploy.ai_worker_stop_timeout_seconds '$v' is not a whole number >= 10; using 60" >&2; AI_WORKER_STOP_TIMEOUT=60; fi
+  v="$(ai_worker_schedule_value "$main" deploy ai_worker_swap_timeout_seconds)"
+  if [[ -z "$v" ]]; then AI_WORKER_SWAP_TIMEOUT=120
+  elif [[ "$v" =~ ^[0-9]{1,6}$ ]] && (( 10#$v >= 1 )); then AI_WORKER_SWAP_TIMEOUT=$((10#$v))
+  else echo "warning: deploy.ai_worker_swap_timeout_seconds '$v' is not a positive whole number; using 120" >&2; AI_WORKER_SWAP_TIMEOUT=120; fi
+  if (( AI_WORKER_SWAP_TIMEOUT < AI_WORKER_STOP_TIMEOUT + 10 )); then
+    echo "warning: deploy.ai_worker_swap_timeout_seconds ($AI_WORKER_SWAP_TIMEOUT) is below the stop timeout + 10; using $((AI_WORKER_STOP_TIMEOUT + 10))" >&2
+    AI_WORKER_SWAP_TIMEOUT=$((AI_WORKER_STOP_TIMEOUT + 10))
+  fi
+  v="$(ai_worker_schedule_value "$main" deploy ai_worker_releases_keep)"
+  if [[ -z "$v" ]]; then AI_WORKER_RELEASES_KEEP=3
+  elif [[ "$v" =~ ^[0-9]{1,6}$ ]] && (( 10#$v >= 2 )); then AI_WORKER_RELEASES_KEEP=$((10#$v))
+  else echo "warning: deploy.ai_worker_releases_keep '$v' is not a whole number >= 2; using 3" >&2; AI_WORKER_RELEASES_KEEP=3; fi
   return 0
 }
 

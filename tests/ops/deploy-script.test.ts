@@ -45,6 +45,11 @@ function write(file: string, content: string, mode = 0o644): void {
 }
 
 const LOGGING_STUB = (name: string): string => `#!/usr/bin/env bash\necho "${name} $*" >> "$DEPLOY_TEST_LOG"\n`;
+// prepare-release.sh / install-ai-worker.sh stubs: log, run <VAR>_HOOK, exit with <VAR>_EXIT (VAR = PREPARE or INSTALL).
+// <VAR>_EXEC=1 execs the hook instead, so that the hook is the process deploy.sh started (same PID, group leader).
+const STEP_STUB = (name: string, v: string): string =>
+  `${LOGGING_STUB(name)}if [[ -n "\${${v}_HOOK:-}" && "\${${v}_EXEC:-}" == 1 ]]; then exec bash -c "$${v}_HOOK"; fi\n` +
+  `if [[ -n "\${${v}_HOOK:-}" ]]; then bash -c "$${v}_HOOK"; fi\nexit "\${${v}_EXIT:-0}"\n`;
 
 // Appended to the copied releases.sh: logs every release call, then runs the real one.
 const RELEASE_LOGGER = `
@@ -85,8 +90,11 @@ beforeAll(() => {
   write(path.join(work, "scripts/ops/deploy.sh"), fs.readFileSync(realScript, "utf8"), 0o755);
   write(path.join(work, "scripts/ops/lib/proc.sh"), fs.readFileSync(path.join(realLib, "proc.sh"), "utf8"));
   write(path.join(work, "scripts/ops/lib/releases.sh"), fs.readFileSync(path.join(realLib, "releases.sh"), "utf8") + RELEASE_LOGGER);
+  write(path.join(work, "scripts/ops/lib/deploy-result.sh"), fs.readFileSync(path.join(realLib, "deploy-result.sh"), "utf8"));
   write(path.join(work, "scripts/ops/backup.sh"), LOGGING_STUB("backup.sh"), 0o755);
-  write(path.join(work, "scripts/ops/install-ai-worker.sh"), LOGGING_STUB("install-ai-worker.sh"), 0o755);
+  // the install stub carries the capability line deploy.sh --ref looks for in the target commit
+  write(path.join(work, "scripts/ops/install-ai-worker.sh"), `${STEP_STUB("install-ai-worker.sh", "INSTALL")}# capability: ai-worker-release-dir\n`, 0o755);
+  write(path.join(work, "scripts/ops/prepare-release.sh"), STEP_STUB("prepare-release.sh", "PREPARE"), 0o755);
   write(path.join(work, "package.json"), '{"name":"job-radar"}\n');
   write(path.join(work, "config/schedule.yaml"), "timezone: Europe/Berlin\ndoctor:\n  compose_project: radar-test\n  web_url: http://127.0.0.1:3000\n");
   write(path.join(work, "src/app.ts"), "export {};\n");
@@ -299,11 +307,11 @@ describe("scripts/ops/deploy.sh", () => {
     expect(deploy(["--settle", "x"]).out).toContain("needs a whole number");
   });
 
-  it("--dry-run prints the eleven steps in order and runs no docker, pnpm or script", () => {
+  it("--dry-run prints the twelve steps in order and runs no docker, pnpm or script", () => {
     const r = deploy(["--dry-run"], { DB_RUNNING: "1" });
     expect(r.status).toBe(0);
-    const steps = [...r.out.matchAll(/^\[(\d+)\/11\] (\S+?):/gm)].map((m) => `${m[1]} ${m[2]}`);
-    expect(steps).toEqual(["1 preflight", "2 pull", "3 install", "4 config", "5 backup", "6 build", "7 up", "8 migrate", "9 ai-worker", "10 prune", "11 doctor"]);
+    const steps = [...r.out.matchAll(/^\[(\d+)\/12\] (\S+?):/gm)].map((m) => `${m[1]} ${m[2]}`);
+    expect(steps).toEqual(["1 preflight", "2 pull", "3 install", "4 config", "5 backup", "6 build", "7 release", "8 up", "9 migrate", "10 ai-worker", "11 prune", "12 doctor"]);
     for (const line of [
       "$ git fetch origin main",
       "$ git merge --ff-only origin/main",
@@ -316,10 +324,11 @@ describe("scripts/ops/deploy.sh", () => {
       "$ scripts/ops/backup.sh --label pre-deploy",
       "$ git archive ",
       "$ docker compose -p radar-test build",
+      "$ scripts/ops/prepare-release.sh ",
       "$ pnpm ops:drain",
       "$ docker compose -p radar-test up -d --wait --wait-timeout 300",
       "$ pnpm migrate:run",
-      "$ scripts/ops/install-ai-worker.sh",
+      "$ scripts/ops/install-ai-worker.sh --release ",
       "the deploy lock is released here, and the build context removed",
       "$ docker builder prune -f --max-used-space 5gb",
       "$ docker image prune -f",
@@ -341,7 +350,7 @@ describe("scripts/ops/deploy.sh", () => {
       const r = deploy(["--dry-run"]);
       expect(r.status).toBe(0);
       expect(r.out).toContain("a real run would stop here: the current branch is feature, not main");
-      expect(r.out).toContain("[11/11] doctor");
+      expect(r.out).toContain("[12/12] doctor");
     } finally {
       git(work, "checkout", "-q", "main");
     }
@@ -362,7 +371,7 @@ describe("scripts/ops/deploy.sh", () => {
     const wrongBranch = deploy([]);
     git(work, "checkout", "-q", "main");
     expect(wrongBranch.status).toBe(1);
-    expect(wrongBranch.out).toContain('step 2/11 "pull: update the code" failed: the current branch is feature, not main');
+    expect(wrongBranch.out).toContain('step 2/12 "pull: update the code" failed: the current branch is feature, not main');
     expect(wrongBranch.calls).toEqual(["docker info"]);
 
     write(path.join(work, "scripts/ops/backup.sh"), `${LOGGING_STUB("backup.sh")}# changed\n`, 0o755);
@@ -371,7 +380,7 @@ describe("scripts/ops/deploy.sh", () => {
       for (const args of [[], ["--skip-pull"]]) {
         const dirty = deploy(args);
         expect(dirty.status).toBe(1);
-        expect(dirty.out).toContain('step 1/11 "preflight: terminal, deploy lock, tools, Docker, clean checkout, external volume" failed: there are uncommitted changes');
+        expect(dirty.out).toContain('step 1/12 "preflight: terminal, deploy lock, tools, Docker, clean checkout, external volume" failed: there are uncommitted changes');
         expect(dirty.calls).toEqual(["docker info"]);
         expect(fs.existsSync(lockDir)).toBe(false);
       }
@@ -404,10 +413,11 @@ describe("scripts/ops/deploy.sh", () => {
       "docker compose -p radar-test config -q",
       "backup.sh --label pre-deploy",
       "docker compose -p radar-test build",
+      `prepare-release.sh ${head()} --root ${realWork}`,
       "pnpm ops:drain",
       "docker compose -p radar-test up -d --wait --wait-timeout 300",
       "pnpm migrate:run",
-      "install-ai-worker.sh",
+      `install-ai-worker.sh --release ${realWork}/data/releases/ai-worker/${head()} --root ${realWork}`,
       "docker builder prune -f --max-used-space 5gb",
       "docker image prune -f",
       "pnpm run doctor",
@@ -415,7 +425,7 @@ describe("scripts/ops/deploy.sh", () => {
     // the lock is released once, after the ai-worker and before the clean-up (which runs outside it); the context is gone
     const events = r.events.filter((c) => !c.startsWith("docker compose -p radar-test ps"));
     expect(events.filter((e) => e.startsWith("# release"))).toEqual(["# release mine=1"]);
-    expect(events.indexOf("# release mine=1")).toBe(events.indexOf("install-ai-worker.sh") + 1);
+    expect(events.indexOf("# release mine=1")).toBe(events.findIndex((e) => e.startsWith("install-ai-worker.sh")) + 1);
     expect(r.out).toContain("deploy lock released, build context removed");
     expect(fs.existsSync(lockDir)).toBe(false);
     expect(buildContexts()).toEqual([]);
@@ -517,7 +527,7 @@ describe("scripts/ops/deploy.sh", () => {
   it("stops at the first failing step and says why (services never turn healthy)", () => {
     const r = deploy(["--settle", "0"], { DB_RUNNING: "1", UP_EXIT: "1" });
     expect(r.status).toBe(1);
-    expect(r.out).toContain('step 7/11 "up: start and wait until healthy (at most 300 s)" failed: not all services became healthy within 300 s');
+    expect(r.out).toContain('step 8/12 "up: start and wait until healthy (at most 300 s)" failed: not all services became healthy within 300 s');
     expect(r.out).toContain("What to do: docker compose -p radar-test logs --tail 100");
     expect(r.calls.some((c) => c.startsWith("pnpm migrate:run") || c.startsWith("install-ai-worker.sh") || c === "pnpm run doctor")).toBe(false);
   });
@@ -525,7 +535,7 @@ describe("scripts/ops/deploy.sh", () => {
   it("stops when config:check fails, before the build", () => {
     const r = deploy(["--settle", "0"], { PNPM_config_check_EXIT: "1" });
     expect(r.status).toBe(1);
-    expect(r.out).toContain("step 4/11");
+    expect(r.out).toContain("step 4/12");
     expect(r.out).toContain("command failed: pnpm config:check");
     expect(r.calls.some((c) => c.includes(" build"))).toBe(false);
   });
@@ -569,7 +579,7 @@ describe("scripts/ops/deploy.sh", () => {
       expect(guarded.out).toContain(`a real run would stop here: ${volume} 1 exists: the external volume is mounted twice`);
       const real = deploy([], { JOB_RADAR_DEPLOY_VOLUME: volume });
       expect(real.status).toBe(1);
-      expect(real.out).toContain("step 1/11");
+      expect(real.out).toContain("step 1/12");
     } finally {
       fs.rmSync(`${volume} 1`, { recursive: true, force: true });
     }
@@ -578,7 +588,7 @@ describe("scripts/ops/deploy.sh", () => {
   it("stops when Docker is not running", () => {
     const r = deploy(["--settle", "0"], { DOCKER_INFO_EXIT: "1" });
     expect(r.status).toBe(1);
-    expect(r.out).toContain("step 1/11");
+    expect(r.out).toContain("step 1/12");
     expect(r.out).toContain("Docker is not running");
   });
 
@@ -590,6 +600,59 @@ describe("scripts/ops/deploy.sh", () => {
     const crashed = deploy(["--settle", "0"], { PNPM_doctor_EXIT: "3" });
     expect(crashed.status).toBe(1);
     expect(crashed.out).toContain("the doctor itself could not run");
+    expect(deploy(["--settle", "0"], { PNPM_doctor_EXIT: "0" }).status).toBe(0);
+    expect(deploy(["--settle", "0"], { PNPM_doctor_EXIT: "127" }).status).toBe(1);
+  });
+
+  it("the worker switch fails (rolled back:): exit 1 with the next steps, the lock is released, no prune, no doctor", () => {
+    const r = deploy(["--settle", "0"], { INSTALL_EXIT: "1", INSTALL_HOOK: 'echo "rolled back: install-ai-worker: test" >&2' });
+    expect(r.status).toBe(1);
+    expect(r.out).toContain("the ai-worker switch failed (install-ai-worker.sh exited 1)");
+    expect(r.out).toContain("rolled back: install-ai-worker: test");
+    expect(r.calls.some((c) => c.includes(" prune ") || c === "pnpm run doctor")).toBe(false);
+    expect(fs.existsSync(lockDir)).toBe(false);
+  });
+
+  it("prepare and install run under the deploy's lock with its token, for the target commit; the lock is gone at the prune", () => {
+    const seen = 'echo "# $0 lock=$([[ -d "$LOCK" ]] && echo 1 || echo 0) token=$([[ -n "$JOB_RADAR_RELEASES_LOCK_TOKEN" && "$(sed -n s/^token=//p "$LOCK/owner")" == "$JOB_RADAR_RELEASES_LOCK_TOKEN" ]] && echo same || echo other)" >> "$DEPLOY_TEST_LOG"';
+    const r = deploy(["--settle", "0"], {
+      PREPARE_HOOK: seen.replace("$0", "prepare"),
+      INSTALL_HOOK: seen.replace("$0", "install"),
+      PRUNE_HOOK: 'echo "# prune lock=$([[ -d "$LOCK" ]] && echo 1 || echo 0)" >> "$DEPLOY_TEST_LOG"',
+    });
+    expect(r.status, r.out).toBe(0);
+    expect(r.events).toEqual(expect.arrayContaining(["# prepare lock=1 token=same", "# install lock=1 token=same", "# prune lock=0"]));
+    expect(r.calls).toContain(`prepare-release.sh ${head()} --root ${realWork}`);
+    expect(r.calls).toContain(`install-ai-worker.sh --release ${realWork}/data/releases/ai-worker/${head()} --root ${realWork}`);
+  });
+
+  it("--no-ai-worker: no prepare, no install; the lock is still taken in preflight and released before the prune", () => {
+    const r = deploy(["--settle", "0", "--no-ai-worker"], { PRUNE_HOOK: 'echo "# prune lock=$([[ -d "$LOCK" ]] && echo 1 || echo 0)" >> "$DEPLOY_TEST_LOG"' });
+    expect(r.status, r.out).toBe(0);
+    expect(r.calls.some((c) => c.startsWith("prepare-release.sh") || c.startsWith("install-ai-worker.sh"))).toBe(false);
+    expect(r.events).toContain("# release mine=1");
+    expect(r.events).toContain("# prune lock=0");
+    placeLock(ownerFixture);
+    try {
+      const held = deploy(["--settle", "0", "--no-ai-worker"]);
+      expect(held.status).toBe(1);
+      expect(held.calls.filter((c) => c !== "docker info")).toEqual([]);
+    } finally {
+      fs.rmSync(path.join(realWork, "data/releases"), { recursive: true, force: true });
+    }
+  });
+
+  it("HEAD moves during the migration: the check before the ai-worker step stops it, install never runs", () => {
+    const base = head();
+    try {
+      const r = deploy(["--skip-pull", "--settle", "0"], { PNPM_migrate_run_HOOK: MOVE_HEAD });
+      expect(r.status).toBe(1);
+      expect(r.out).toContain('step 10/12 "ai-worker');
+      expect(r.out).toContain("checkout moved during deploy");
+      expect(r.calls.some((c) => c.startsWith("install-ai-worker.sh"))).toBe(false);
+    } finally {
+      restore(base);
+    }
   });
   describe("--ref", () => {
     it("rejects a missing or option-like value", () => {
@@ -651,6 +714,39 @@ describe("scripts/ops/deploy.sh", () => {
       git(work, "checkout", "-q", "main");
     });
 
+    it("refuses a version from before the release directories (3b -> 3a), checked on the resolved commit; HEAD and tree unchanged", () => {
+      const other = path.join(tmp, "other-capability");
+      git(tmp, "clone", origin, other);
+      // "3a": prepare-release.sh exists, the install script has no capability line
+      write(path.join(other, "scripts/ops/install-ai-worker.sh"), STEP_STUB("install-ai-worker.sh", "INSTALL"), 0o755);
+      git(other, "add", ".");
+      git(other, "commit", "-m", "3a shape");
+      git(other, "tag", "-a", "v0.0.3", "-m", "3a");
+      git(other, "branch", "old-shape");
+      write(path.join(other, "scripts/ops/install-ai-worker.sh"), `${STEP_STUB("install-ai-worker.sh", "INSTALL")}# capability: ai-worker-release-dir\n`, 0o755);
+      git(other, "add", ".");
+      git(other, "commit", "-m", "3b shape");
+      git(other, "tag", "-a", "v0.0.4", "-m", "3b");
+      git(other, "push", "origin", "v0.0.3", "v0.0.4", "old-shape");
+      const before = head();
+      try {
+        for (const ref of ["v0.0.3", "old-shape"]) {
+          const r = deploy(["--settle", "0", "--ref", ref], { DB_RUNNING: "1" });
+          expect(r.status).toBe(1);
+          expect(r.out).toContain("is a version from before the ai-worker ran from release directories");
+          expect(r.out).toContain("docs/upgrade.md#downgrade-pre-release-dir");
+          expect(head()).toBe(before);
+          expect(git(work, "status", "--porcelain")).toBe("");
+          expect(r.calls.some((c) => c.startsWith("docker compose"))).toBe(false);
+        }
+        const ok = deploy(["--settle", "0", "--ref", "v0.0.4"], { DB_RUNNING: "1" });
+        expect(ok.status, ok.out).toBe(0);
+        expect(head()).toBe(git(other, "rev-parse", "v0.0.4^{commit}"));
+      } finally {
+        git(work, "checkout", "-q", "main");
+      }
+    });
+
     it("fails before anything is built when the ref does not exist", () => {
       const r = deploy(["--settle", "0", "--ref", "v404.0.0"], { DB_RUNNING: "1" });
       expect(r.status).toBe(1);
@@ -708,7 +804,7 @@ describe("scripts/ops/deploy.sh: build context from the target commit", () => {
     try {
       const r = deploy(["--skip-pull", "--settle", "0"], { GIT_FAIL_ARCHIVE: "1" });
       expect(r.status).toBe(1);
-      expect(r.out).toContain('step 6/11 "build: build the images from the target commit" failed: could not unpack the target commit into the build context');
+      expect(r.out).toContain('step 6/12 "build: build the images from the target commit" failed: could not unpack the target commit into the build context');
       expect(r.gitCalls.some((c) => c.includes(" archive "))).toBe(true);
       expect(r.calls.some((c) => c.endsWith(" build"))).toBe(false);
       expect(buildContexts()).toEqual([]);
@@ -738,13 +834,18 @@ describe("scripts/ops/deploy.sh: the target commit is fixed", () => {
   it.each([
     ["HEAD moves", MOVE_HEAD],
     ["a tracked file changes", TOUCH_TRACKED],
-  ])("%s during the build: the check before the drain stops it (no drain, no up, no migrate)", (_label, hook) => {
+  ])("%s during the build: the check before the release stops it; with --no-ai-worker the one before the drain (no drain, no up, no migrate)", (_label, hook) => {
     const base = head();
     try {
       const r = deploy(["--skip-pull", "--settle", "0"], { BUILD_HOOK: hook });
       expect(r.status).toBe(1);
-      expect(r.out).toContain('step 7/11 "up: start and wait until healthy (at most 300 s)" failed: checkout moved during deploy');
-      expect(r.calls.some((c) => c.startsWith("pnpm ops:drain") || c.includes(" up ") || c === "pnpm migrate:run")).toBe(false);
+      expect(r.out).toContain('step 7/12 "release: the ai-worker\'s release directory for the target commit" failed: checkout moved during deploy');
+      expect(r.calls.some((c) => c.startsWith("prepare-release.sh") || c.startsWith("pnpm ops:drain") || c.includes(" up ") || c === "pnpm migrate:run")).toBe(false);
+      restore(base);
+      const noWorker = deploy(["--skip-pull", "--settle", "0", "--no-ai-worker"], { BUILD_HOOK: hook });
+      expect(noWorker.status).toBe(1);
+      expect(noWorker.out).toContain('step 8/12 "up: start and wait until healthy (at most 300 s)" failed: checkout moved during deploy');
+      expect(noWorker.calls.some((c) => c.startsWith("pnpm ops:drain") || c.includes(" up ") || c === "pnpm migrate:run")).toBe(false);
     } finally {
       restore(base);
     }
@@ -768,7 +869,7 @@ describe("scripts/ops/deploy.sh: the target commit is fixed", () => {
     try {
       const r = deploy(["--skip-pull", "--settle", "0"], { UP_HOOK: MOVE_HEAD });
       expect(r.status).toBe(1);
-      expect(r.out).toContain('step 8/11 "migrate: database migrations" failed: checkout moved during deploy');
+      expect(r.out).toContain('step 9/12 "migrate: database migrations" failed: checkout moved during deploy');
       expect(r.calls).not.toContain("pnpm migrate:run");
     } finally {
       restore(base);
@@ -780,7 +881,7 @@ describe("scripts/ops/deploy.sh: the target commit is fixed", () => {
     try {
       const r = deploy(["--skip-pull", "--settle", "0"], { GIT_TARGET_HOOK: MOVE_HEAD });
       expect(r.status).toBe(1);
-      expect(r.out).toContain('step 3/11 "install: dependencies" failed: checkout moved during deploy');
+      expect(r.out).toContain('step 3/12 "install: dependencies" failed: checkout moved during deploy');
       expect(r.calls.some((c) => c.startsWith("pnpm"))).toBe(false);
     } finally {
       restore(base);
@@ -796,7 +897,7 @@ describe("scripts/ops/deploy.sh: the target commit is fixed", () => {
       const r = deploy(["--skip-pull", "--settle", "0"], { PNPM___frozen_lockfile_HOOK: hook });
       expect(r.status).toBe(1);
       expect(r.calls).toContain("pnpm install --frozen-lockfile");
-      expect(r.out).toContain('step 4/11 "config: configuration, .env, data directories" failed: checkout moved during deploy');
+      expect(r.out).toContain('step 4/12 "config: configuration, .env, data directories" failed: checkout moved during deploy');
       expect(r.calls.some((c) => c.startsWith("pnpm config:"))).toBe(false);
     } finally {
       restore(base);
@@ -810,7 +911,7 @@ describe("scripts/ops/deploy.sh: the target commit is fixed", () => {
       fs.writeFileSync(path.join(work, ".git/index"), "not an index");
       const r = deploy(["--skip-pull", "--settle", "0"]);
       expect(r.status).toBe(1);
-      expect(r.out).toContain('step 1/11 "preflight: terminal, deploy lock, tools, Docker, clean checkout, external volume" failed: cannot read the state of the checkout (git status failed');
+      expect(r.out).toContain('step 1/12 "preflight: terminal, deploy lock, tools, Docker, clean checkout, external volume" failed: cannot read the state of the checkout (git status failed');
       expect(r.calls).toEqual(["docker info"]);
       expect(r.gitCalls.some((c) => / (fetch|merge|pull|archive) /.test(` ${c} `))).toBe(false);
       expect(fs.existsSync(lockDir)).toBe(false);
@@ -825,8 +926,8 @@ describe("scripts/ops/deploy.sh: the target commit is fixed", () => {
     try {
       const r = deploy(["--skip-pull", "--settle", "0"], { BUILD_HOOK: CORRUPT_INDEX });
       expect(r.status).toBe(1);
-      expect(r.out).toContain('step 7/11 "up: start and wait until healthy (at most 300 s)" failed: cannot check the checkout (git failed, see above)');
-      expect(r.calls.some((c) => c.startsWith("pnpm ops:drain") || c.includes(" up ") || c === "pnpm migrate:run")).toBe(false);
+      expect(r.out).toContain('step 7/12 "release: the ai-worker\'s release directory for the target commit" failed: cannot check the checkout (git failed, see above)');
+      expect(r.calls.some((c) => c.startsWith("prepare-release.sh") || c.startsWith("pnpm ops:drain") || c.includes(" up ") || c === "pnpm migrate:run")).toBe(false);
       expect(buildContexts()).toEqual([]);
     } finally {
       repairIndex();
@@ -839,7 +940,7 @@ describe("scripts/ops/deploy.sh: the target commit is fixed", () => {
     try {
       const wrong = deploy(["--skip-pull", "--settle", "0"], { JOB_RADAR_DEPLOY_EXPECT_SHA: "0".repeat(40) });
       expect(wrong.status).toBe(1);
-      expect(wrong.out).toContain('step 2/11 "pull: update the code" failed: checkout is not at the approved commit');
+      expect(wrong.out).toContain('step 2/12 "pull: update the code" failed: checkout is not at the approved commit');
       expect(wrong.calls).toEqual(["docker info"]);
       const right = deploy(["--skip-pull", "--settle", "0"], { JOB_RADAR_DEPLOY_EXPECT_SHA: base });
       expect(right.status, right.out).toBe(0);
@@ -869,6 +970,7 @@ describe("scripts/ops/deploy.sh: signals", () => {
       expect(r.status).toBe(code);
       expect(r.events.some((e) => e.startsWith("# build signal"))).toBe(false);
       expect(r.events).toContain("# build exit ctx=1 lock=1");
+      expect(r.events).toContain("# build grandchild done");
       expect(r.events.indexOf("# build grandchild done")).toBeLessThan(r.events.indexOf("# release mine=1"));
       // on_exit ran once, and it is the last thing that happened
       expect(r.events.filter((e) => e.startsWith("# release"))).toEqual(["# release mine=1"]);
@@ -877,6 +979,47 @@ describe("scripts/ops/deploy.sh: signals", () => {
       expect(r.out).toContain("to abort it now: kill -TERM -");
       expect(buildContexts()).toEqual([]);
       expect(fs.existsSync(lockDir)).toBe(false);
+    } finally {
+      release();
+      restore(base);
+    }
+  });
+
+  it.each([
+    ["SIGTERM", 143],
+    ["SIGHUP", 129],
+  ] as const)("%s during the ai-worker install: the install gets exactly one TERM and rolls back; the lock goes only after it and its children ended; exit %i", async (signal, code) => {
+    const base = head();
+    try {
+      // a cooperative install: on TERM it "rolls back" for 1 s, then exits 1; a child in its group ends after 2 s
+      const run = startDeploy(deployCmd(), {
+        INSTALL_HOOK: BLOCK("install"),
+        INSTALL_EXEC: "1",
+        BLOCK_COOPERATIVE: "1",
+        BLOCK_ROLLBACK_SLEEP: "1",
+        BLOCK_GRANDCHILD: "2",
+      });
+      await waitFor("the install to start", () => logHas("# install started"));
+      process.kill(-run.pid, signal);
+      // deploy.sh forwards it as TERM, once (fails here when deploy.sh calls the install without --cooperative)
+      await waitFor("the install to get TERM", () => logHas("# install signal TERM"), 5_000);
+      process.kill(-run.pid, signal); // a second signal is only recorded
+      expect(fs.existsSync(lockDir)).toBe(true);
+      const r = await run.done;
+      expect(r.status, r.out).toBe(code);
+      expect(r.events.filter((e) => e.startsWith("# install signal"))).toEqual(["# install signal TERM"]);
+      expect(r.events).toContain("# install rollback");
+      const released = r.events.indexOf("# release mine=1");
+      const installExit = r.events.findIndex((e) => e.startsWith("# install exit ") && e.endsWith(" lock=1"));
+      const grandchild = r.events.indexOf("# install grandchild done");
+      // all three happened, in this order (a missing one is -1, which would pass a bare "less than")
+      expect([released, installExit, grandchild].every((i) => i >= 0), r.events.join("\n")).toBe(true);
+      expect(installExit).toBeLessThan(released);
+      expect(grandchild).toBeLessThan(released);
+      expect(r.events.filter((e) => e.startsWith("# release"))).toEqual(["# release mine=1"]);
+      expect(r.calls.some((c) => c.includes(" prune ") || c === "pnpm run doctor")).toBe(false);
+      expect(fs.existsSync(lockDir)).toBe(false);
+      expect(buildContexts()).toEqual([]);
     } finally {
       release();
       restore(base);
@@ -894,6 +1037,7 @@ describe("scripts/ops/deploy.sh: signals", () => {
       const r = await run.done;
       expect(r.status).toBe(129);
       expect(r.events.some((e) => e.startsWith("# config signal"))).toBe(false);
+      expect(r.events).toContain("# config exit ctx=0 lock=1");
       expect(r.events.indexOf("# config exit ctx=0 lock=1")).toBeLessThan(r.events.indexOf("# release mine=1"));
       expect(r.calls).not.toContain("pnpm config:migrate --write");
       expect(r.calls.some((c) => c.endsWith(" build"))).toBe(false);
@@ -950,12 +1094,12 @@ describe("scripts/ops/deploy.sh: signals", () => {
       expect(out).toContain("the terminal has tostop set");
       expect(out).toContain("stty -tostop");
       expect(out).toContain("exit=1");
-      expect(out).not.toContain("[2/11]");
+      expect(out).not.toContain("[2/12]");
     });
 
     it("without tostop the dry run goes on", () => {
       const out = inPty(`stty -tostop; bash "${script()}" --dry-run; echo "exit=$?"`);
-      expect(out).toContain("[11/11] doctor");
+      expect(out).toContain("[12/12] doctor");
       expect(out).toContain("exit=0");
     });
   });
@@ -1144,7 +1288,7 @@ describe("scripts/ops/deploy.sh: the deploy lock and in-flight records", () => {
       expect(r.events.filter((e) => e.startsWith("# release"))).toEqual(["# release mine=1"]);
       expect(r.out.split("descendant exit not confirmed").length - 1).toBe(2); // the library's line and the failed step
       expect(r.out.split("release lock:").length - 1).toBe(1);
-      expect(r.out).toContain('step 10/11 "prune: release the deploy lock, clean the Docker build cache and dangling images" failed');
+      expect(r.out).toContain('step 11/12 "prune: release the deploy lock, clean the Docker build cache and dangling images" failed');
       expect(r.calls.some((c) => c.includes("prune") || c === "pnpm run doctor")).toBe(false);
       expect(fs.existsSync(path.join(lockDir, "owner"))).toBe(true);
       expect(buildContexts()).toHaveLength(1);
@@ -1176,12 +1320,79 @@ describe("scripts/ops/deploy.sh: the deploy lock and in-flight records", () => {
     }
   });
 
+  // The install registers its own in-flight record (as install-ai-worker.sh does), starts a grandchild in a group of its
+  // own that later reads the build context, logs its PID and blocks; the test then kills only the install with -9.
+  const installKilledHook = (mark: string): string =>
+    `source "$WORK/scripts/ops/lib/releases.sh"; releases_inflight_register "$WORK" install-ai-worker.sh || exit 9; ` +
+    `set -m; ( sleep 3; [[ -d "$LOCK" ]] && echo done > "${mark}" ) & set +m; echo "# install pid=$$" >> "$DEPLOY_TEST_LOG"; exec env ${BLOCK("install")}`;
+  const installPid = (): number => Number(/# install pid=(\d+)/.exec(fs.readFileSync(log, "utf8"))?.[1]);
+
+  it("only the install is killed with -9: deploy.sh exits 1 (descendant exit not confirmed), the lock, its owner and the install's record stay; the next run is refused", async () => {
+    const base = head();
+    const mark = path.join(tmp, "install-grandchild-mark");
+    fs.rmSync(mark, { force: true });
+    try {
+      const run = startDeploy([path.join(work, "scripts/ops/deploy.sh"), "--skip-pull", "--settle", "0"], { INSTALL_HOOK: installKilledHook(mark), INSTALL_EXEC: "1" });
+      await waitFor("the install to start", () => logHas("# install started"));
+      const pid = installPid();
+      expect(fs.readdirSync(path.join(lockDir, "inflight"))).toContain(String(pid));
+      process.kill(pid, "SIGKILL");
+      const r = await run.done;
+      expect(r.status, r.out).toBe(1);
+      expect(r.out).toContain("the ai-worker switch failed (install-ai-worker.sh exited 137)");
+      expect(r.out).toContain("descendant exit not confirmed");
+      expect(r.calls.some((c) => c.includes(" prune ") || c === "pnpm run doctor")).toBe(false);
+      expect(fs.existsSync(path.join(lockDir, "owner"))).toBe(true);
+      expect(fs.readdirSync(path.join(lockDir, "inflight"))).toEqual([String(pid)]);
+      expect(buildContexts()).toHaveLength(1);
+
+      const next = deploy(["--settle", "0"]);
+      expect(next.status).toBe(1);
+      expect(next.out).toContain("another deploy holds the lock");
+      expect(next.out).toContain(`${pid} install-ai-worker.sh`);
+      expect(next.gitCalls.some((c) => / (fetch|merge|pull) /.test(` ${c} `))).toBe(false);
+
+      // the grandchild the killed install left behind still found the lock in place
+      await waitFor("the grandchild to finish", () => fs.existsSync(mark), 15_000);
+    } finally {
+      release();
+      restore(base);
+    }
+  });
+
+  it("the same through a calling script that holds the lock: deploy.sh exits 1, the caller's release keeps the lock (3), the context stays", async () => {
+    const base = head();
+    const mark = path.join(tmp, "install-grandchild-mark-helper");
+    fs.rmSync(mark, { force: true });
+    try {
+      const run = startDeploy([fakeWrapper, realLib, realWork, path.join(work, "scripts/ops/deploy.sh"), "--skip-pull", "--settle", "0"], {
+        INSTALL_HOOK: installKilledHook(mark),
+        INSTALL_EXEC: "1",
+      });
+      await waitFor("the install to start", () => logHas("# install started"));
+      const pid = installPid();
+      process.kill(pid, "SIGKILL");
+      const r = await run.done;
+      expect(r.events).toContain("# helper deploy rc=1");
+      expect(r.events).toContain("# helper release rc=3");
+      expect(r.status).toBe(3);
+      expect(r.out).toContain("descendant exit not confirmed");
+      expect(fs.existsSync(path.join(lockDir, "owner"))).toBe(true);
+      expect(fs.readdirSync(path.join(lockDir, "inflight"))).toContain(String(pid));
+      expect(buildContexts()).toHaveLength(1);
+      await waitFor("the grandchild to finish", () => fs.existsSync(mark), 15_000);
+    } finally {
+      release();
+      restore(base);
+    }
+  });
+
   it("the explicit release finds another run's token in the owner file: it says so, offers no clear command, exit 1, no prune", () => {
     const base = head();
     try {
       const r = deploy(["--skip-pull", "--settle", "0"], { PNPM_migrate_run_HOOK: `printf '${ownerFixture.replaceAll("\n", "\\n")}' > "$LOCK/owner"` });
       expect(r.status).toBe(1);
-      expect(r.out).toContain('step 10/11 "prune: release the deploy lock, clean the Docker build cache and dangling images" failed: the deploy lock now belongs to another run');
+      expect(r.out).toContain('step 11/12 "prune: release the deploy lock, clean the Docker build cache and dangling images" failed: the deploy lock now belongs to another run');
       expect(r.out).not.toContain("descendant exit not confirmed");
       expect(r.out).not.toContain("rm -rf");
       expect(r.calls.some((c) => c.includes("prune") || c === "pnpm run doctor")).toBe(false);

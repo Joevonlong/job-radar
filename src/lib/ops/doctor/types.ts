@@ -13,6 +13,7 @@ import type { SourcesView } from "@/lib/sources/view";
 
 import type { BackupFile } from "../backup";
 import type { DockerDataLocation } from "../docker-data";
+import type { ReleasesLockState } from "../releases-lock";
 
 export type CheckStatus = "ok" | "warn" | "fail";
 
@@ -110,6 +111,8 @@ export interface DoctorProbes {
   setup(): Promise<SetupStatus>;
   /** Each process's shipped config report (null: none, or not readable). Throws when the database cannot be read. */
   shippedConfigReports(): Promise<Record<ShippedConfigProcess, ShippedConfigReportRow | null>>;
+  /** The release lock under the production checkout `main` (owner, in-flight records and whether their PIDs live). Never throws. */
+  releasesLock(main: string): Promise<ReleasesLockState>;
   /**
    * Files and directories under `roots` (missing roots are skipped) not owned by `uid`: a sample of at most `sample`
    * paths and the total found within the first `maxEntries` entries walked. Never throws (unreadable entries count as

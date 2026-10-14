@@ -7,205 +7,280 @@ import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 /**
- * scripts/ops/install-ai-worker.sh --dry-run: the plist it would write, against a throw-away checkout and home
- * directory. A dry run neither writes nor loads anything, so no launchd agent is touched.
+ * scripts/ops/install-ai-worker.sh without a database or a service manager: its arguments, the paths of the definition
+ * it would write (--dry-run, with the manager forced through JOB_RADAR_SERVICE_MANAGER, so both run on any platform),
+ * --print-release, and static checks. Everything is under a throw-away main checkout and home directory; a dry run
+ * neither writes nor loads anything. The switch itself (simulator, fake worker, database) is in
+ * tests/integration/ai-worker-swap.test.ts.
  */
-const script = path.resolve(import.meta.dirname, "../../scripts/ops/install-ai-worker.sh");
-const uninstall = path.resolve(import.meta.dirname, "../../scripts/ops/uninstall-ai-worker.sh");
+const repo = path.resolve(import.meta.dirname, "../..");
+const script = path.join(repo, "scripts/ops/install-ai-worker.sh");
+const uninstall = path.join(repo, "scripts/ops/uninstall-ai-worker.sh");
+const aiWorkerLib = path.join(repo, "scripts/ops/lib/ai-worker.sh");
+const plutilShim = path.join(repo, "tests/ops/sim/plutil-shim");
+const SHA = "a".repeat(40);
 
 let tmp = "";
 let root = "";
 let home = "";
+let xdg = "";
+let release = "";
+
+function makeRelease(main: string, sha: string, opts: { guard?: boolean } = {}): string {
+  const dir = path.join(main, "data/releases/ai-worker", sha);
+  for (const file of ["src/ai-worker/index.ts", "node_modules/tsx/dist/loader.mjs", "package.json", "tsconfig.json", ...(opts.guard ? ["src/ai-worker/release-guard.mjs"] : [])]) {
+    fs.mkdirSync(path.dirname(path.join(dir, file)), { recursive: true });
+    fs.writeFileSync(path.join(dir, file), "");
+  }
+  return dir;
+}
 
 beforeAll(() => {
-  tmp = fs.mkdtempSync(path.join(os.tmpdir(), "install-ai-worker-"));
+  tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "install-ai-worker-")));
   root = path.join(tmp, "checkout");
   home = path.join(tmp, "home");
-  for (const file of ["package.json", "src/ai-worker/index.ts", "node_modules/tsx/dist/loader.mjs"]) {
-    fs.mkdirSync(path.dirname(path.join(root, file)), { recursive: true });
-    fs.writeFileSync(path.join(root, file), "");
-  }
-  fs.mkdirSync(path.join(home, "Library/Logs/job-radar"), { recursive: true });
+  xdg = path.join(tmp, "xdg");
+  fs.mkdirSync(path.join(root, "data/config"), { recursive: true });
+  fs.mkdirSync(home);
+  fs.writeFileSync(path.join(root, "package.json"), "{}");
+  fs.writeFileSync(path.join(root, "data/config/schedule.yaml"), "deploy:\n  ai_worker_stop_timeout_seconds: 15\n  ai_worker_swap_timeout_seconds: 30\n");
+  release = makeRelease(root, SHA);
 });
 
-afterAll(() => fs.rmSync(tmp, { recursive: true, force: true }));
+afterAll(() => {
+  if (tmp && path.basename(tmp).startsWith("install-ai-worker-")) fs.rmSync(tmp, { recursive: true, force: true });
+});
 
-const dryRun = () =>
-  spawnSync("bash", [script, "--dry-run", "--root", root, "--database-url", "postgres://u:secret@127.0.0.1:5433/db"], {
-    encoding: "utf8",
-    env: { ...process.env, HOME: home },
-  });
+function env(manager: string, extra: Record<string, string> = {}): NodeJS.ProcessEnv {
+  const e: NodeJS.ProcessEnv = { ...process.env, HOME: home, XDG_CONFIG_HOME: xdg, JOB_RADAR_SERVICE_MANAGER: manager, ...extra };
+  delete e.DATABASE_URL;
+  delete e.JOB_RADAR_RELEASES_LOCK_TOKEN;
+  return e;
+}
+const dryRun = (manager: string, args: string[] = ["--release", release], url = "postgres://u:secret@127.0.0.1:5433/db", main = root) =>
+  spawnSync("bash", [script, "--dry-run", "--root", main, "--database-url", url, ...args], { encoding: "utf8", env: env(manager) });
 
-describe.skipIf(process.platform !== "darwin")("scripts/ops/install-ai-worker.sh --dry-run", () => {
+describe("static checks", () => {
   it("passes bash -n, and so does the uninstall script", () => {
     expect(spawnSync("bash", ["-n", script]).status).toBe(0);
     expect(spawnSync("bash", ["-n", uninstall]).status).toBe(0);
   });
 
-  it("starts the worker itself (node --import tsx), not through the tsx CLI parent, and gives launchd an exit timeout", () => {
-    const r = dryRun();
-    expect(r.status).toBe(0);
-    const loader = `file://${path.join(fs.realpathSync(root), "node_modules/tsx/dist/loader.mjs")}`;
-    expect(r.stdout).toContain(`<string>--import</string>\n    <string>${loader}</string>`);
-    expect(r.stdout).not.toContain("cli.mjs");
-    expect(r.stdout).toMatch(/<key>ExitTimeOut<\/key>\n {2}<integer>60<\/integer>/);
+  it("carries the capability line deploy.sh --ref looks for, as a whole line", () => {
+    expect(fs.readFileSync(script, "utf8").split("\n")).toContain("# capability: ai-worker-release-dir");
   });
 
-  it("has the worker write its logs on the checkout's volume and launchd only its small capture file", () => {
-    const r = dryRun();
-    expect(r.status).toBe(0);
-    const logDir = path.join(fs.realpathSync(root), "data/logs");
-    const launchdLog = path.join(home, "Library/Logs/job-radar/ai-worker.launchd.log");
-    expect(r.stdout).toContain(`<string>--log-dir</string>\n    <string>${logDir}</string>`);
-    expect(r.stdout).toContain(`<string>--launchd-log</string>\n    <string>${launchdLog}</string>`);
-    expect(r.stdout).toContain(`<key>StandardOutPath</key>\n  <string>${launchdLog}</string>`);
-    expect(r.stdout).toContain(`<key>StandardErrorPath</key>\n  <string>${launchdLog}</string>`);
-    // launchd cannot open files on an external volume (EX_CONFIG): its capture paths must never point there
-    expect(r.stdout).not.toMatch(/<key>Standard(Out|Error)Path<\/key>\n {2}<string>\/Volumes\//);
-    expect(r.stdout).not.toContain(`<string>${logDir}/ai-worker.out.log</string>`);
-    expect(r.stdout).not.toContain("secret");
-    expect(fs.existsSync(logDir)).toBe(false); // a dry run creates nothing
-  });
-
-  it("gives the worker the three config directories of the checkout explicitly", () => {
-    const r = dryRun();
-    expect(r.status).toBe(0);
-    const app = fs.realpathSync(root);
-    expect(r.stdout).toContain(`<key>JOB_RADAR_DEFAULTS_DIR</key>\n    <string>${app}/config</string>`);
-    expect(r.stdout).toContain(`<key>JOB_RADAR_CONFIG_DIR</key>\n    <string>${app}/data/config</string>`);
-    expect(r.stdout).toContain(`<key>JOB_RADAR_PROFILE_DIR</key>\n    <string>${app}/data/profile</string>`);
-  });
-
-  it("plans to move the logs of an earlier install once, and has nothing to move without them", () => {
-    expect(dryRun().stdout).not.toContain("move the old log");
-    fs.writeFileSync(path.join(home, "Library/Logs/job-radar/ai-worker.err.log"), "old\n");
-    const r = dryRun();
-    expect(r.stdout).toContain(`cat ${path.join(home, "Library/Logs/job-radar/ai-worker.err.log")} >> ${path.join(fs.realpathSync(root), "data/logs/ai-worker.err.before-upgrade.log")}`);
-    expect(r.stdout).not.toContain("ai-worker.out.before-upgrade.log");
-    expect(fs.readFileSync(path.join(home, "Library/Logs/job-radar/ai-worker.err.log"), "utf8")).toBe("old\n");
-  });
-
-  it("installs under the io.jobradar label and plans to remove an agent with the old de.jobradar label", () => {
-    const legacyPlist = path.join(home, "Library/LaunchAgents/de.jobradar.ai-worker.plist");
-    const r = dryRun();
-    expect(r.stdout).toContain("<string>io.jobradar.ai-worker</string>");
-    expect(r.stdout).toContain(`launchctl bootstrap gui/${process.getuid?.()} ${path.join(home, "Library/LaunchAgents/io.jobradar.ai-worker.plist")}`);
-    fs.mkdirSync(path.dirname(legacyPlist), { recursive: true });
-    fs.writeFileSync(legacyPlist, "<plist/>");
-    try {
-      const migrating = dryRun();
-      expect(migrating.status).toBe(0);
-      expect(migrating.stdout).toContain(`launchctl bootout gui/${process.getuid?.()}/de.jobradar.ai-worker && rm ${legacyPlist}`);
-      expect(fs.existsSync(legacyPlist)).toBe(true); // a dry run removes nothing
-    } finally {
-      fs.rmSync(legacyPlist);
+  it("sets traps only through proc_traps (no trap … EXIT of its own) in deploy.sh, prepare-release.sh and the install script", () => {
+    for (const name of ["deploy.sh", "prepare-release.sh", "install-ai-worker.sh"]) {
+      const lines = fs
+        .readFileSync(path.join(repo, "scripts/ops", name), "utf8")
+        .split("\n")
+        .filter((l) => /(^|[^a-z_])(proc_)?traps?\b/.test(l) && !/^\s*#/.test(l));
+      expect(lines.map((l) => l.trim()), name).toEqual(["proc_traps on_exit"]);
     }
-  });
-
-  it("rolls back to the old agent when bootstrapping the new one fails (stub launchctl)", () => {
-    const bin = path.join(tmp, "stubbin");
-    const calls = path.join(tmp, "launchctl.calls");
-    fs.mkdirSync(bin, { recursive: true });
-    fs.writeFileSync(calls, "");
-    // `print` of the old label succeeds until it is booted out, the new label is never loaded, bootstrap of the new plist fails
-    fs.writeFileSync(
-      path.join(bin, "launchctl"),
-      `#!/usr/bin/env bash
-echo "$*" >> "${calls}"
-case "$1" in
-  print) [[ "$2" == */de.jobradar.ai-worker ]] && ! grep -q "^bootout .*de.jobradar" "${calls}"; exit $? ;;
-  bootstrap) [[ "$3" == *io.jobradar* ]] && exit 5; exit 0 ;;
-esac
-exit 0
-`,
-      { mode: 0o755 },
-    );
-    const legacyPlist = path.join(home, "Library/LaunchAgents/de.jobradar.ai-worker.plist");
-    fs.mkdirSync(path.dirname(legacyPlist), { recursive: true });
-    fs.writeFileSync(legacyPlist, "<plist/>");
-    try {
-      const r = spawnSync("bash", [script, "--root", root, "--database-url", "postgres://u:p@127.0.0.1:5433/db"], { encoding: "utf8", env: { ...process.env, HOME: home, PATH: `${bin}:${process.env.PATH ?? ""}` } });
-      expect(r.status).toBe(1);
-      expect(r.stderr).toContain("bootstrap of io.jobradar.ai-worker failed");
-      expect(r.stderr).toContain("rolled back");
-      expect(fs.existsSync(legacyPlist)).toBe(true); // the old plist is kept
-      expect(fs.existsSync(path.join(home, "Library/LaunchAgents/io.jobradar.ai-worker.plist"))).toBe(false);
-      const log = fs.readFileSync(calls, "utf8");
-      expect(log.indexOf("bootout")).toBeLessThan(log.indexOf("bootstrap"));
-      expect(log).toContain(`bootstrap gui/${process.getuid?.()} ${legacyPlist}`);
-    } finally {
-      fs.rmSync(legacyPlist, { force: true });
-    }
-  });
-
-  it("still accepts --root naming a workspace checkout that holds the product in job-radar/", () => {
-    const ws = path.join(tmp, "workspace");
-    fs.mkdirSync(path.join(ws, "job-radar"), { recursive: true });
-    fs.cpSync(root, path.join(ws, "job-radar"), { recursive: true });
-    const r = spawnSync("bash", [script, "--dry-run", "--root", ws, "--database-url", "postgres://u:p@127.0.0.1:5433/db"], { encoding: "utf8", env: { ...process.env, HOME: home } });
-    expect(r.status).toBe(0);
-    expect(r.stdout).toContain(path.join(fs.realpathSync(ws), "job-radar/data/logs"));
-  });
-
-  it("without --root, starts the agent from the product directory the script belongs to", () => {
-    const product = path.join(tmp, "own-repo");
-    fs.cpSync(root, product, { recursive: true });
-    fs.mkdirSync(path.join(product, "scripts/ops"), { recursive: true });
-    fs.copyFileSync(script, path.join(product, "scripts/ops/install-ai-worker.sh"));
-    const git = (...args: string[]) => spawnSync("git", ["-c", "user.name=t", "-c", "user.email=t@example.com", ...args], { cwd: product, encoding: "utf8" });
-    git("init", "-q");
-    const r = spawnSync("bash", [path.join(product, "scripts/ops/install-ai-worker.sh"), "--dry-run", "--database-url", "postgres://u:p@127.0.0.1:5433/db"], { encoding: "utf8", env: { ...process.env, HOME: home } });
-    expect(r.status).toBe(0);
-    expect(r.stdout).toContain(`<string>${path.join(fs.realpathSync(product), "data/logs")}</string>`);
   });
 });
 
-/** Linux: the systemd user unit (forced with JOB_RADAR_SERVICE_MANAGER, so it runs on any platform; a dry run touches nothing). */
-describe("scripts/ops/install-ai-worker.sh --dry-run with systemd", () => {
-  // XDG_CONFIG_HOME (set on many Linux machines and CI runners) takes precedence over HOME: the tests pick it explicitly
-  const systemdDryRun = (checkout: string, databaseUrl: string, xdgConfigHome?: string) => {
-    const env: NodeJS.ProcessEnv = { ...process.env, HOME: home, JOB_RADAR_SERVICE_MANAGER: "systemd" };
-    if (xdgConfigHome === undefined) delete env.XDG_CONFIG_HOME;
-    else env.XDG_CONFIG_HOME = xdgConfigHome;
-    return spawnSync("bash", [script, "--dry-run", "--root", checkout, "--database-url", databaseUrl], { encoding: "utf8", env });
+describe.each(["launchd", "systemd"])("--dry-run (%s)", (manager) => {
+  it("runs the release's code with absolute paths and the user's data from the main checkout; writes nothing, takes no lock", () => {
+    const r = dryRun(manager);
+    expect(r.status, r.stderr).toBe(0);
+    const out = r.stdout;
+    if (manager === "launchd") {
+      expect(out).toContain(`<key>WorkingDirectory</key>\n  <string>${release}</string>`);
+      expect(out).toContain(`<string>file://${release}/node_modules/tsx/dist/loader.mjs</string>`);
+      expect(out).toContain(`<string>${release}/src/ai-worker/index.ts</string>`);
+      expect(out).toContain(`<string>--env-file-if-exists=${root}/.env</string>`);
+      expect(out).toContain(`<key>NODE_OPTIONS</key>\n    <string></string>`);
+      expect(out).toContain(`<key>JOB_RADAR_DEFAULTS_DIR</key>\n    <string>${release}/config</string>`);
+      expect(out).toContain(`<key>JOB_RADAR_CONFIG_DIR</key>\n    <string>${root}/data/config</string>`);
+      expect(out).toContain(`<key>JOB_RADAR_DATA_ROOT</key>\n    <string>${root}</string>`);
+      expect(out).toContain(`<key>TSX_TSCONFIG_PATH</key>\n    <string>${release}/tsconfig.json</string>`);
+      expect(out).toMatch(/<key>ExitTimeOut<\/key>\n {2}<integer>15<\/integer>/);
+      // launchd cannot open files on an external volume: its capture file stays under HOME
+      expect(out).toContain(`<key>StandardOutPath</key>\n  <string>${home}/Library/Logs/job-radar/ai-worker.launchd.log</string>`);
+    } else {
+      expect(out).toContain(`WorkingDirectory=${release}\n`);
+      expect(out).toMatch(new RegExp(`ExecStart="[^"]*node" --import "file://${release}/node_modules/tsx/dist/loader\\.mjs" "--env-file-if-exists=${root}/\\.env" "${release}/src/ai-worker/index\\.ts" --log-dir "${root}/data/logs"`));
+      expect(out).toContain('Environment="NODE_OPTIONS="');
+      expect(out).toContain(`Environment="JOB_RADAR_DEFAULTS_DIR=${release}/config"`);
+      expect(out).toContain(`Environment="JOB_RADAR_PROFILE_DIR=${root}/data/profile"`);
+      expect(out).toContain(`Environment="JOB_RADAR_DATA_ROOT=${root}"`);
+      expect(out).toContain(`Environment="TSX_TSCONFIG_PATH=${release}/tsconfig.json"`);
+      expect(out).toContain("TimeoutStopSec=15");
+      expect(out).toContain(path.join(xdg, "systemd/user/job-radar-ai-worker.service"));
+      expect(out).not.toMatch(/@[A-Z_]+@/);
+    }
+    expect(out).toContain("timeouts:  stop 15 s, switch 30 s");
+    expect(out).not.toContain("secret");
+    expect(out).not.toContain("release-guard"); // this release has no guard
+    expect(fs.existsSync(path.join(root, "data/releases/ai-worker/.lock"))).toBe(false);
+    expect(fs.existsSync(path.join(root, "data/logs"))).toBe(false);
+    expect(fs.existsSync(path.join(xdg, "systemd"))).toBe(false);
+  });
+
+  it("imports the release's guard first, only when the release has one", () => {
+    const sha = "b".repeat(40);
+    const withGuard = makeRelease(root, sha, { guard: true });
+    const r = dryRun(manager, ["--release", withGuard]);
+    expect(r.status, r.stderr).toBe(0);
+    const guard = `file://${withGuard}/src/ai-worker/release-guard.mjs`;
+    const loader = `file://${withGuard}/node_modules/tsx/dist/loader.mjs`;
+    expect(r.stdout.indexOf(guard)).toBeGreaterThan(0);
+    expect(r.stdout.indexOf(guard)).toBeLessThan(r.stdout.indexOf(loader));
+    const command = manager === "launchd" ? r.stdout : (r.stdout.split("\n").find((l) => l.startsWith("ExecStart=")) ?? "");
+    expect(command.match(/--import/g)?.length).toBe(2);
+  });
+
+  it("makes a relative --release absolute; refuses a link, or a directory that is not <main>/data/releases/ai-worker/<sha>", () => {
+    const rel = spawnSync("bash", [script, "--dry-run", "--root", root, "--database-url", "postgres://u@h/d", "--release", `data/releases/ai-worker/${SHA}`], { encoding: "utf8", env: env(manager), cwd: root });
+    expect(rel.status, rel.stderr).toBe(0);
+    expect(rel.stdout).toContain(`release:   ${release}`);
+    const link = path.join(tmp, "link-to-release");
+    fs.rmSync(link, { force: true });
+    fs.symlinkSync(release, link);
+    const linked = dryRun(manager, ["--release", link]);
+    expect(linked.status).toBe(1);
+    expect(linked.stderr).toContain("not changed: install-ai-worker: --release");
+    expect(linked.stderr).toContain("is a symbolic link");
+    const other = path.join(tmp, "elsewhere", SHA);
+    fs.mkdirSync(other, { recursive: true });
+    const outside = dryRun(manager, ["--release", other]);
+    expect(outside.status).toBe(1);
+    expect(outside.stderr).toContain("is not");
+  });
+
+  it("without --release plans prepare-release.sh for HEAD", () => {
+    const main = path.join(tmp, `git-main-${manager}`);
+    fs.mkdirSync(main, { recursive: true });
+    fs.writeFileSync(path.join(main, "package.json"), "{}");
+    const git = (...a: string[]) => spawnSync("git", ["-c", "user.name=t", "-c", "user.email=t@example.com", "-c", "commit.gpgsign=false", ...a], { cwd: main, encoding: "utf8" });
+    git("init", "-q");
+    git("add", "-A");
+    git("commit", "-q", "-m", "x");
+    const head = git("rev-parse", "HEAD").stdout.trim();
+    const r = dryRun(manager, [], "postgres://u@h/d", main);
+    expect(r.status, r.stderr).toBe(0);
+    expect(r.stdout).toContain(`prepare-release.sh ${head} --root ${fs.realpathSync(main)}`);
+    expect(r.stdout).toContain(`release:   ${fs.realpathSync(main)}/data/releases/ai-worker/${head}`);
+  });
+});
+
+describe("--dry-run unit escapes (systemd)", () => {
+  it("escapes values per setting, and sd_unit_db_url reads the URL back exactly (literal \\ \" %)", () => {
+    const odd = path.join(tmp, 'check out%1 "q" $HOME');
+    fs.mkdirSync(path.join(odd, "data"), { recursive: true });
+    fs.writeFileSync(path.join(odd, "package.json"), "{}");
+    const oddRelease = makeRelease(odd, SHA);
+    const url = 'postgres://u@127.0.0.1:5433/d\\b"c%25x$y';
+    const r = dryRun("systemd", ["--release", oddRelease], url, odd);
+    expect(r.status, r.stderr).toBe(0);
+    const esc = (value: string) => value.replaceAll("\\", "\\\\").replaceAll('"', '\\"').replaceAll("%", "%%");
+    expect(r.stdout).toContain(`WorkingDirectory=${oddRelease.replaceAll("%", "%%")}\n`);
+    expect(r.stdout).toContain(`--log-dir "${esc(path.join(odd, "data/logs")).replaceAll("$", () => "$$")}"`);
+    expect(r.stdout).toContain(`Environment="JOB_RADAR_PROFILE_DIR=${esc(path.join(odd, "data/profile"))}"`);
+    const unit = r.stdout.split("--- definition")[1]?.split("\n").slice(1).join("\n").split("--- would run ---")[0] ?? "";
+    const file = path.join(tmp, "roundtrip.service");
+    fs.writeFileSync(file, unit);
+    const back = spawnSync("bash", ["-c", `source "$1"; sd_unit_db_url "$2"`, "_", aiWorkerLib, file], { encoding: "utf8" });
+    expect(back.status, back.stderr).toBe(0);
+    expect(back.stdout).toBe(url);
+  });
+});
+
+/** --print-release reads only the definition file: PATH has no node, launchctl or systemctl. */
+describe("--print-release", () => {
+  let bin = "";
+  beforeAll(() => {
+    bin = path.join(tmp, "bare-bin");
+    fs.mkdirSync(bin);
+    for (const dir of ["/usr/bin", "/bin"]) {
+      for (const name of fs.readdirSync(dir)) {
+        if (["node", "launchctl", "systemctl", "pnpm", "npx"].includes(name) || fs.existsSync(path.join(bin, name))) continue;
+        fs.symlinkSync(path.join(dir, name), path.join(bin, name));
+      }
+    }
+    // Without a real plutil (Linux): a wrapper that runs the shim from its own directory (a symbolic link would make the
+    // shim look for plutil.mjs next to the link).
+    if (!fs.existsSync(path.join(bin, "plutil"))) {
+      fs.writeFileSync(path.join(bin, "plutil"), `#!/bin/sh\nexec '${path.join(plutilShim, "plutil")}' "$@"\n`, { mode: 0o755 });
+    }
+  });
+
+  function printRelease(manager: string, main: string, extra: Record<string, string> = {}) {
+    const e = env(manager, extra);
+    e.PATH = bin;
+    if (!fs.existsSync(path.join("/usr/bin", "plutil"))) {
+      // the shim runs on node: give it node through its own variable, never on the script's PATH
+      e.PLUTIL_SHIM_NODE = process.execPath;
+    }
+    return spawnSync("/bin/bash", [script, "--print-release", "--root", main], { encoding: "utf8", env: e });
+  }
+  function fresh(name: string): { main: string; h: string; x: string } {
+    const main = path.join(tmp, name, "main");
+    const h = path.join(tmp, name, "home");
+    const x = path.join(tmp, name, "xdg");
+    for (const d of [path.join(main, "data/config"), h, x]) fs.mkdirSync(d, { recursive: true });
+    fs.writeFileSync(path.join(main, "package.json"), "{}");
+    return { main, h, x };
+  }
+  const plist = (label: string, wd: string) =>
+    `<?xml version="1.0" encoding="UTF-8"?>\n<plist version="1.0">\n<dict>\n  <key>Label</key>\n  <string>${label}</string>\n  <key>WorkingDirectory</key>\n  <string>${wd}</string>\n</dict>\n</plist>\n`;
+  const writePlist = (h: string, label: string, wd: string) => {
+    fs.mkdirSync(path.join(h, "Library/LaunchAgents"), { recursive: true });
+    fs.writeFileSync(path.join(h, "Library/LaunchAgents", `${label}.plist`), plist(label, wd));
+  };
+  const writeUnit = (x: string, body: string) => {
+    fs.mkdirSync(path.join(x, "systemd/user"), { recursive: true });
+    fs.writeFileSync(path.join(x, "systemd/user/job-radar-ai-worker.service"), body);
   };
 
-  it("puts the unit under XDG_CONFIG_HOME when that is set", () => {
-    const xdg = path.join(tmp, "xdg");
-    const r = systemdDryRun(root, "postgres://u:secret@127.0.0.1:5433/db", xdg);
-    expect(r.status).toBe(0);
-    expect(r.stdout).toContain(path.join(xdg, "systemd/user/job-radar-ai-worker.service"));
-    expect(r.stdout).not.toContain(path.join(home, ".config"));
+  it("launchd: 0 and exactly one line, the release; 4 for a checkout; 3 when nothing or only the old label; 1 when ambiguous", () => {
+    const { main, h } = fresh("pr-launchd");
+    const rel = path.join(fs.realpathSync(main), "data/releases/ai-worker", SHA);
+    expect(printRelease("launchd", main, { HOME: h }).status).toBe(3);
+    writePlist(h, "de.jobradar.ai-worker", rel);
+    expect(printRelease("launchd", main, { HOME: h }).status).toBe(3);
+    fs.rmSync(path.join(h, "Library/LaunchAgents/de.jobradar.ai-worker.plist"));
+    writePlist(h, "io.jobradar.ai-worker", rel);
+    const ok = printRelease("launchd", main, { HOME: h });
+    expect(ok.status, ok.stderr).toBe(0);
+    expect(ok.stdout).toBe(`${rel}\n`);
+    writePlist(h, "io.jobradar.ai-worker", fs.realpathSync(main));
+    const checkout = printRelease("launchd", main, { HOME: h });
+    expect(checkout.status).toBe(4);
+    expect(checkout.stdout).toBe("");
+    expect(checkout.stderr).toContain(fs.realpathSync(main));
+    writePlist(h, "de.jobradar.ai-worker", rel);
+    expect(printRelease("launchd", main, { HOME: h }).status).toBe(1);
   });
 
-  it("renders the job-radar-ai-worker.service user unit and writes nothing", () => {
-    const r = systemdDryRun(root, "postgres://u:secret@127.0.0.1:5433/db");
-    expect(r.status).toBe(0);
-    const real = fs.realpathSync(root);
-    expect(r.stdout).toContain(`${path.join(home, ".config/systemd/user/job-radar-ai-worker.service")}`);
-    expect(r.stdout).toContain(`WorkingDirectory=${real}\n`);
-    expect(r.stdout).toMatch(/ExecStart="[^"]*node" --import "file:\/\/[^"]*\/node_modules\/tsx\/dist\/loader\.mjs" --env-file-if-exists=\.env src\/ai-worker\/index\.ts --log-dir "[^"]*\/data\/logs"/);
-    expect(r.stdout).toContain(`Environment="JOB_RADAR_CONFIG_DIR=${real}/data/config"`);
-    expect(r.stdout).toContain("Restart=always");
-    expect(r.stdout).toContain("WantedBy=default.target");
-    expect(r.stdout).toContain("systemctl --user enable job-radar-ai-worker.service");
-    // the database password never reaches the output
-    expect(r.stdout).not.toContain("secret");
-    expect(r.stdout).not.toContain("@APP_DIR@");
-    expect(fs.existsSync(path.join(home, ".config/systemd"))).toBe(false);
+  it("systemd: finds the unit under XDG_CONFIG_HOME, decodes %%, and refuses a % sequence it never writes", () => {
+    const { main, x } = fresh("pr%systemd");
+    const rel = path.join(fs.realpathSync(main), "data/releases/ai-worker", SHA);
+    expect(printRelease("systemd", main, { XDG_CONFIG_HOME: x }).status).toBe(3);
+    writeUnit(x, `[Service]\nWorkingDirectory=${rel.replaceAll("%", "%%")}\n`);
+    const ok = printRelease("systemd", main, { XDG_CONFIG_HOME: x });
+    expect(ok.status, ok.stderr).toBe(0);
+    expect(ok.stdout).toBe(`${rel}\n`);
+    writeUnit(x, `[Service]\nWorkingDirectory=${rel.replaceAll("%", "%n")}\n`);
+    expect(printRelease("systemd", main, { XDG_CONFIG_HOME: x }).status).toBe(1);
+    writeUnit(x, `[Service]\nWorkingDirectory=${rel.replaceAll("%", "%%")}\nWorkingDirectory=/tmp\n`);
+    expect(printRelease("systemd", main, { XDG_CONFIG_HOME: x }).status).toBe(1);
+    writeUnit(x, `[Service]\nWorkingDirectory=${fs.realpathSync(main).replaceAll("%", "%%")}\n`);
+    expect(printRelease("systemd", main, { XDG_CONFIG_HOME: x }).status).toBe(4);
   });
+});
 
-  it("escapes values per setting: % everywhere, quotes and backslashes inside quotes, $ only in ExecStart", () => {
-    const odd = path.join(tmp, 'check out%1 "q" $HOME');
-    fs.cpSync(root, odd, { recursive: true });
-    const r = systemdDryRun(odd, "postgres://u:secret@127.0.0.1:5433/d$b%x");
-    expect(r.status).toBe(0);
-    const real = fs.realpathSync(odd);
-    const esc = (value: string) => value.replaceAll("\\", "\\\\").replaceAll('"', '\\"').replaceAll("%", "%%");
-    expect(r.stdout).toContain(`WorkingDirectory=${real.replaceAll("%", "%%")}\n`);
-    expect(r.stdout).toContain(`--log-dir "${esc(path.join(real, "data/logs")).replaceAll("$", () => "$$")}"`);
-    expect(r.stdout).toContain(`Environment="JOB_RADAR_PROFILE_DIR=${esc(path.join(real, "data/profile"))}"`);
-    expect(r.stdout).toContain('Environment="DATABASE_URL=postgres://u:***@127.0.0.1:5433/d$b%%x"');
+describe("the main checkout", () => {
+  it("still accepts --root naming a workspace checkout that holds the product in job-radar/", () => {
+    const ws = path.join(tmp, "workspace");
+    fs.mkdirSync(path.join(ws, "job-radar/data/releases/ai-worker"), { recursive: true });
+    fs.writeFileSync(path.join(ws, "job-radar/package.json"), "{}");
+    const rel = makeRelease(path.join(ws, "job-radar"), SHA);
+    const r = spawnSync("bash", [script, "--dry-run", "--root", ws, "--database-url", "postgres://u@h/d", "--release", rel], { encoding: "utf8", env: env("systemd") });
+    expect(r.status, r.stderr).toBe(0);
+    expect(r.stdout).toContain(`checkout:  ${path.join(ws, "job-radar")}`);
   });
 });
 
@@ -220,7 +295,9 @@ describe("the scripts without a reachable systemd user manager", () => {
     fs.writeFileSync(path.join(stubs, "uname"), "#!/bin/sh\necho Linux\n", { mode: 0o755 });
     fs.writeFileSync(path.join(stubs, "systemctl"), "#!/bin/sh\nexit 1\n", { mode: 0o755 });
   });
-  afterAll(() => fs.rmSync(stubs, { recursive: true, force: true }));
+  afterAll(() => {
+    if (stubs && path.basename(stubs).startsWith("ai-worker-stubs-")) fs.rmSync(stubs, { recursive: true, force: true });
+  });
 
   const run = (file: string, args: string[], extra: Record<string, string> = {}) =>
     spawnSync("bash", [file, ...args], { encoding: "utf8", env: { NODE_ENV: "test", PATH: `${stubs}:/usr/bin:/bin`, HOME: linuxHome, ...extra } });
@@ -237,12 +314,12 @@ describe("the scripts without a reachable systemd user manager", () => {
   });
 
   it("uninstall: nothing installed is fine; a unit file it cannot stop is kept, with the reason", () => {
-    const none = run(uninstall, []);
+    const none = run(uninstall, ["--root", root]);
     expect(none.status).toBe(0);
     expect(none.stdout).toContain("no job-radar-ai-worker.service installed");
     fs.mkdirSync(path.dirname(unitFile()), { recursive: true });
     fs.writeFileSync(unitFile(), "[Unit]\n");
-    const stuck = run(uninstall, [], { XDG_RUNTIME_DIR: "/run/user/1000" });
+    const stuck = run(uninstall, ["--root", root], { XDG_RUNTIME_DIR: "/run/user/1000" });
     expect(stuck.status).toBe(1);
     expect(stuck.stderr).toContain("loginctl enable-linger");
     expect(fs.existsSync(unitFile())).toBe(true);

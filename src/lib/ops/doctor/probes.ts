@@ -24,6 +24,7 @@ import { loadRegistryPage } from "@/lib/sources/registry/load";
 import { listBackups } from "../backup";
 import { measureDisk, sameVolume } from "../disk";
 import { resolveDockerDataLocation } from "../docker-data";
+import { readReleasesLock } from "../releases-lock";
 import { redact } from "./helpers";
 import { resolveHostDatabaseUrl } from "./database-url";
 import { enabledTools, readMcpSettings } from "@/lib/mcp/settings";
@@ -251,6 +252,7 @@ export function createRealProbes(options: RealProbeOptions): DoctorProbes {
     market: async () => summarizeMarket(),
     setup: async () => readSetupState(),
     shippedConfigReports: () => readShippedConfigReports(getDb()),
+    releasesLock: (main) => readReleasesLock(main),
   };
 }
 

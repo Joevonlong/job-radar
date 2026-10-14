@@ -5433,7 +5433,13 @@
           "configMountedInside": "{service}：{source} 挂载在 {destination}（{dir} 里面），挡住了镜像里自带的这部分出厂配置",
           "reportsUnchecked": "没有核对出厂配置的上报：{reason}",
           "noDatabase": "连不上数据库（见 db.connect）",
-          "hint": "每个进程启动时上报一次（web 在健康检查时重试到成功为止，runner 和 ai-worker 每次心跳都刷新）。刚部署或重启过的话，等一分钟再运行 doctor；一直这样的话，到那个进程的日志里找 \"could not report the shipped config\"（docs/configuration.zh.md《出厂配置标识》）"
+          "hint": "每个进程启动时上报一次（web 在健康检查时重试到成功为止，runner 和 ai-worker 每次心跳都刷新）。刚部署或重启过的话，等一分钟再运行 doctor；一直这样的话，到那个进程的日志里找 \"could not report the shipped config\"（docs/configuration.zh.md《出厂配置标识》）",
+          "notRelease": "{process} 的出厂配置来自 {dir}，不在 {releases} 下的发布目录里",
+          "notReleaseHint": "worker 是从 checkout 安装的（发布目录之前的版本）或手动安装的。运行 scripts/ops/deploy.sh，或 scripts/ops/install-ai-worker.sh --root {root}（docs/deploy.zh.md）",
+          "noGit": "没有安装 git",
+          "headUnknown": "{process}：无法把它的发布目录和 checkout 的 HEAD 比较（{reason}）",
+          "otherRelease": "{process} 运行的是发布 {release}，checkout 在 {head}",
+          "otherReleaseHint": "刚做过“只回滚 worker”时是正常的；否则是某次部署在 worker 步骤之前停下了。运行 scripts/ops/deploy.sh，让 worker 运行 checkout 的提交（docs/upgrade.zh.md）"
         }
       },
       "i18n": {
@@ -5591,6 +5597,28 @@
             "skipped": "跳过了向导",
             "existing_install": "老安装"
           }
+        }
+      },
+      "ops": {
+        "releases_lock": {
+          "title": "没有残留的部署锁",
+          "none": "没有发布锁（没有部署或 worker 安装在运行）",
+          "current": "由当前部署持有（pid {pid}，{host}，已持有 {held}）",
+          "owner": "发布锁 {lock} 存在：pid {pid}，{host}，已持有 {held}",
+          "ownerUnknown": "发布锁 {lock} 存在，持有者未知（owner 文件缺失或不完整）",
+          "noRecords": "未完成记录：无",
+          "records": "未完成记录：{list}",
+          "recordAlive": "{name}（{script}，pid {pid} 仍在运行）",
+          "recordGone": "{name}（{script}，pid {pid} 已不在）",
+          "partial": "{name}（只写了一半）",
+          "unreadable": "{name}（读不懂）",
+          "hint": "它存在时所有部署都会被拒绝。如果没有部署或安装在运行：先确认没有构建、依赖安装（pnpm install）、迁移、配置写入、drain 或安装进程还在运行（被杀的脚本启动的进程只能这样找）：{ps}；然后删除锁：rm -rf {lock}（docs/deploy.zh.md）"
+        },
+        "ai_worker_swap_backup": {
+          "title": "没有未解决的 ai-worker 替换",
+          "none": "没有替换备份",
+          "found": "存在未解决的替换备份：{dir}（某次 worker 替换失败，并且没有完整回滚）",
+          "hint": "解决之前 install-ai-worker.sh 不会运行。先看 {dir}/state，确认 ai-worker 运行正常（docs/upgrade.zh.md“未解决的替换备份”），然后删除它：rm -rf {dir}"
         }
       }
     }

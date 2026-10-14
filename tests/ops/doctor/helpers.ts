@@ -59,6 +59,9 @@ export const WEB_CONTAINER = `${"a1".repeat(6)}${"0".repeat(52)}`;
 export const RUNNER_CONTAINER = `${"b2".repeat(6)}${"0".repeat(52)}`;
 export const CONTAINERS_STARTED = ago(3600);
 export const SHIPPED_ID = "c3".repeat(32);
+/** The app root of the healthy context, and the commit its checkout (and the ai-worker's release) is at. */
+export const APP_ROOT = "/Volumes/SSD/work/job-radar";
+export const HEAD_SHA = "d4".repeat(20);
 
 export function inspectJson(rows: { id: string; service: string; startedAt?: string; running?: boolean; mounts?: { Destination: string; Source?: string; Name?: string }[] }[] = [
   { id: WEB_CONTAINER, service: "web" },
@@ -85,7 +88,7 @@ export function shippedReports(
   return {
     web: row(WEB_CONTAINER.slice(0, 12), 1, ago(3500)),
     runner: row(RUNNER_CONTAINER.slice(0, 12), 1, ago(20)),
-    "ai-worker": row("mac.local", 4242, ago(5)),
+    "ai-worker": { ...row("mac.local", 4242, ago(5)), report: { ...row("mac.local", 4242, ago(5)).report, dir: `${APP_ROOT}/data/releases/ai-worker/${HEAD_SHA}/config` } },
     ...edit,
   };
 }
@@ -176,6 +179,7 @@ const COMMANDS: Record<string, CommandOutcome> = {
   "tailscale status --json": ran(TAILSCALE_RUNNING),
   "tailscale serve status --json": ran(SERVE_OK),
   "pmset -g": ran(PMSET_OK),
+  [`git -C ${APP_ROOT} rev-parse HEAD`]: ran(`${HEAD_SHA}\n`),
 };
 
 const URLS: Record<string, HttpOutcome> = {
@@ -228,6 +232,7 @@ export function makeContext(overrides: Overrides = {}): DoctorContext & { probes
     mcp: vi.fn(async () => ({ state: "ok" as const, enabled: false, tools: ["search_jobs", "get_job", "list_applications"] })),
     market: vi.fn(async () => marketSummary()),
     shippedConfigReports: vi.fn(async () => shippedReports()),
+    releasesLock: vi.fn(async (main: string) => ({ present: false as const, lockDir: `${main}/data/releases/ai-worker/.lock` })),
     setup: vi.fn(async () => ({ pending: false, state: { completed_at: "2026-10-01T08:00:00.000Z", completed_by: "wizard", steps: {} }, error: null, source: "user", path: "/u/setup.yaml" })),
     ...overrides.probes,
   } as unknown as DoctorContext["probes"] & { [K in keyof DoctorProbes]: ReturnType<typeof vi.fn> & DoctorProbes[K] };
@@ -241,7 +246,7 @@ export function makeContext(overrides: Overrides = {}): DoctorContext & { probes
     config: { schedule, notify, ai, channels, language, languageProblem: null },
     settings: { ...schedule.doctor, ...overrides.settings },
     backupDir: "/b",
-    appRoot: "/Volumes/SSD/work/job-radar",
+    appRoot: APP_ROOT,
     runnerMaxAgeSeconds: 120,
     probes,
   } as DoctorContext & { probes: { [K in keyof DoctorProbes]: ReturnType<typeof vi.fn> & DoctorProbes[K] } };

@@ -33,7 +33,8 @@ In order, and it stops at the first failing step:
 
 1. **Preflight**: takes the deploy lock (one deploy at a time), checks that git, docker, node and pnpm are installed and
    Docker is running, and refuses a checkout with uncommitted changes to tracked files (with `--skip-pull` too).
-2. **Checkout**: fetches tags and branches and switches to `--ref`. From here on the deploy uses exactly that commit.
+2. **Checkout**: fetches tags and branches and switches to `--ref` (a version from before release directories is refused
+   before the checkout moves, see [below](#downgrade-pre-release-dir)). From here on the deploy uses exactly that commit.
 3. **Install** the dependencies from the lockfile.
 4. **Config**: creates `data/` folders, copies config files you do not have yet, and migrates config files whose format
    changed (originals are kept in `data/config/.backup/`).
@@ -41,12 +42,16 @@ In order, and it stops at the first failing step:
    upgrade.
 6. **Build** the images from a `git archive` of that commit: they contain exactly the committed files, the shipped
    defaults of `config/` included, and nothing else from your checkout.
-7. **Drain and restart**: waits (bounded) for a running cycle to finish, then recreates the containers and waits until they
+7. **Release**: builds the ai-worker's release directory `data/releases/ai-worker/<commit>/` (that commit's files plus its
+   production dependencies, read-only), so the worker never runs from a checkout that a later `git pull` changes.
+8. **Drain and restart**: waits (bounded) for a running cycle to finish, then recreates the containers and waits until they
    are healthy.
-8. **Migrate** the database (also done by the runner at start-up). A pending migration is preceded by its own `premigrate` backup; if that fails, nothing is migrated.
-9. **ai-worker**: reinstalls or restarts the host AI worker service: the launchd agent on macOS, the systemd user unit `job-radar-ai-worker.service` on Linux (without a systemd user manager nothing is installed and the script says so).
-10. **Prune**: releases the deploy lock, then cleans the Docker build cache and dangling images (never volumes).
-11. **Doctor**: `pnpm run doctor` reports what needs attention.
+9. **Migrate** the database (also done by the runner at start-up). A pending migration is preceded by its own `premigrate` backup; if that fails, nothing is migrated.
+10. **ai-worker**: switches the host AI worker service (the launchd agent on macOS, the systemd user unit
+    `job-radar-ai-worker.service` on Linux) to the release of step 7, and puts the previous one back if the new worker
+    does not come up (without a systemd user manager nothing is installed and the script says so).
+11. **Prune**: releases the deploy lock, then cleans the Docker build cache and dangling images (never volumes).
+12. **Doctor**: `pnpm run doctor` reports what needs attention.
 
 Ctrl-C or a closed terminal lets the running step finish and then stops (exit code 130, 143 or 129); run the script
 again to complete the upgrade. Details: [deploy.md](deploy.md), "Interrupting a deploy".
@@ -90,12 +95,38 @@ recreates the containers without the mount. Running only `docker compose up -d` 
 existing images, and the old images do not carry the shipped config (the old runner image has none; the old web image
 has only an incomplete copy, a side effect of how the web app is bundled), so the new compose file (without the mount)
 would start them without complete shipped defaults; it would also skip the config steps and the migration. Web and runner stay stopped from
-the first command until step 7 of the deploy (a few minutes, mostly the build); a collection cycle due in that time is
+the first command until step 8 of the deploy (a few minutes, mostly the build); a collection cycle due in that time is
 caught up when the runner starts.
 
 Later upgrades need nothing extra. If `pnpm run doctor` warns (`config.shipped`) that something is mounted over
 `/app/config`, a compose file of your own (for example `compose.override.yaml`) still mounts `./config`: remove that
 mount and deploy again.
+
+<a id="first-upgrade-release-dir"></a>
+
+### Upgrading to the ai-worker release directories
+
+From the release whose changelog section has an upgrade note about release directories on, the host ai-worker no longer
+runs from the checkout but from `data/releases/ai-worker/<commit>/`, which the deploy builds (see
+[deploy.md](deploy.md), "The ai-worker runs from a release directory"). The first upgrade from an older version (this one
+may also be the same upgrade as the one above) stops the worker until the deploy has installed it again; it may send one
+"ai-worker offline" alert, and web and the scheduled cycles stop from step 3 until the deploy has finished. In the
+project directory:
+
+1. Remove the old worker: `scripts/ops/uninstall-ai-worker.sh`. The uninstall script of older versions knows only the
+   labels `io.jobradar.ai-worker` and `de.jobradar.ai-worker`; if you set your own `doctor.ai_worker_launchd_label`, also
+   run `launchctl bootout gui/$(id -u)/<label>` and delete `~/Library/LaunchAgents/<label>.plist`.
+2. **Check that it stopped**, and do not go on until it has:
+   - macOS: `launchctl print gui/$(id -u)/<label>` says the service is not found, and `pgrep -f src/ai-worker/index.ts`
+     prints nothing;
+   - Linux: `systemctl --user is-active job-radar-ai-worker` is not `active`, and `pgrep -f src/ai-worker/index.ts`
+     prints nothing.
+3. `docker compose -p job-radar stop web runner` (skip it and the old containers read the new `config/`).
+4. Update the code: `git pull`, or for a release `git fetch --tags && git checkout --detach <tag>`.
+5. Run the new `scripts/ops/deploy.sh --skip-pull`.
+
+If the deploy stops before step 10, the worker stays stopped: fix the cause and run step 5 again. A switch that ends in
+`rolled back:` leaves nothing installed here (there was nothing before): read the reason, fix it, deploy again.
 
 ## Roll back
 
@@ -105,7 +136,9 @@ Go back to the previous tag:
 scripts/ops/deploy.sh --ref <previous tag>
 ```
 
-This returns the code. If the release you are leaving applied a database migration, the older code may not understand the
+This returns the code. `deploy.sh --ref` refuses a tag from before the ai-worker release directories (it says so before
+the checkout moves); going back that far takes the manual steps in
+[Downgrade to a version before release directories](#downgrade-pre-release-dir). If the release you are leaving applied a database migration, the older code may not understand the
 newer database; then also restore the `pre-deploy` backup the upgrade took (this overwrites the database):
 
 ```bash
@@ -120,6 +153,76 @@ If the release you are leaving migrated a config file, the older code finds it "
 
 More in [deploy.md](deploy.md) (section 5) and [backup-restore.md](backup-restore.md). To follow `main` again:
 `git switch main && scripts/ops/deploy.sh`.
+
+**Rolling back only the ai-worker** (an emergency, for example when a new worker misbehaves and the rest is fine): the
+previous release directories are kept (`deploy.ai_worker_releases_keep`), so
+
+```bash
+ls data/releases/ai-worker/
+scripts/ops/install-ai-worker.sh --release data/releases/ai-worker/<previous commit>
+```
+
+switches back within a minute. **The old worker code then runs on the database the new version may already have
+migrated**; if that migration is not backward compatible, roll back the whole deploy instead. `pnpm run doctor` reports
+`config.shipped` with "the checkout is at …" until the next deploy, which is expected. If that release directory is gone,
+`scripts/ops/prepare-release.sh <commit>` builds it again.
+
+<a id="downgrade-pre-release-dir"></a>
+
+### Downgrade to a version before release directories
+
+Versions before the ai-worker release directories install the worker from the checkout, and `deploy.sh --ref` refuses
+them. By hand, in the project directory:
+
+1. Remove the worker with the **current** `scripts/ops/uninstall-ai-worker.sh` (it also removes a worker under your own
+   label; if it says the definition is ambiguous, follow the commands it prints) and check that it stopped, as in step 2
+   of [Upgrading to the ai-worker release directories](#first-upgrade-release-dir). While the release lock
+   `data/releases/ai-worker/.lock` exists (a deploy or an install is running, or a killed one left it) it refuses and
+   changes nothing; it prints the lock's owner and how to clear a stale lock.
+2. Delete the keys `deploy.ai_worker_releases_keep`, `deploy.ai_worker_stop_timeout_seconds`,
+   `deploy.ai_worker_swap_timeout_seconds` and `doctor.shipped_report_skew_seconds` from `data/config/schedule.yaml` if
+   you added them: the older version does not know them and refuses the file.
+3. Optional, and only now, while the current tools are still there: remove the release directories. Their directories
+   are read-only and their files may be shared with the pnpm store, so only the directories get write permission back,
+   each path is checked first, and nothing follows a symbolic link:
+
+   ```bash
+   source scripts/ops/lib/releases.sh
+   for d in data/releases/ai-worker/* data/releases/ai-worker/.tmp-* data/releases/ai-worker/.trash-*; do
+     [[ -e "$d" ]] && release_rm "$PWD" "$PWD/$d"
+   done
+   rmdir data/releases/ai-worker data/releases   # only removes empty directories
+   ```
+
+   If `data/releases/ai-worker/.lock` exists, a deploy or an install is still running (or was killed): stop and check
+   first (see [deploy.md](deploy.md), "One deploy at a time"). Already on the older version (no `releases.sh`)? Do the same
+   by hand for each directory named like a commit, `.tmp-*` or `.trash-*` that is not a symbolic link:
+   `find -P <dir> -type d -exec chmod u+w {} +`, then `rm -rf -- <dir>`. Never `chmod -R` (it would change files shared
+   with the pnpm store).
+4. `git fetch --tags && git checkout --detach <older tag>`.
+5. Run the **older** `scripts/ops/deploy.sh --skip-pull`: it rebuilds the images and installs the worker from the
+   checkout, as that version did.
+6. Database: if the newer version migrated it, restore the `pre-deploy` backup as described above.
+
+<a id="unresolved-switch-backup"></a>
+
+### Unresolved switch backup
+
+`scripts/ops/install-ai-worker.sh` copies the installed worker definition to `data/run/ai-worker-swap-backup/` before it
+switches, and deletes the copy when the switch, or its rollback, has finished. If the copy is still there, a switch ended
+with `ROLLBACK FAILED:` (or the script was killed): every later install refuses with `not changed:` and
+`pnpm run doctor` warns (`ops.ai_worker_swap_backup`) until you resolve it.
+
+1. Read the `ROLLBACK FAILED:` message (or `data/run/ai-worker-swap-backup/state`: `found_label` and `found_definition` name
+   the definition that was installed before).
+2. Stop every ai-worker: `launchctl bootout gui/$(id -u)/<label>` on macOS, `systemctl --user stop job-radar-ai-worker`
+   on Linux, until `pgrep -fl src/ai-worker/index.ts` prints nothing.
+3. Either put the saved definition back where `found_definition` says and start it (`launchctl bootstrap gui/$(id -u) <plist>`,
+   or `systemctl --user daemon-reload && systemctl --user enable --now job-radar-ai-worker`), or install a release again
+   in the next step.
+4. Remove the backup: `rm -rf data/run/ai-worker-swap-backup`.
+5. `scripts/ops/deploy.sh --skip-pull` (or `scripts/ops/install-ai-worker.sh --release data/releases/ai-worker/<commit>`)
+   and check with `pnpm run doctor`.
 
 ## Uninstall
 

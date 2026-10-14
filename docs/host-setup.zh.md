@@ -102,26 +102,27 @@ compose 里所有服务都是 `restart: unless-stopped`：Docker 起来后会把
 
 AI worker 是宿主机上的一个 Node 进程：轮询数据库里的 AI 请求（每轮的 `run_ai`、网页的"翻译"、"重新打分"），用上面登录好的 `claude` / `codex` 执行，再发 Telegram 推送。它不运行时，AI 请求会排队，`/sources` 的 AI worker 卡片显示"没有响应"，超过 `ai.yaml: host_worker.offline_after_seconds`（默认 180 秒）runner 会发 Telegram 告警。
 
-前提：主 checkout 里 `pnpm install` 已完成，`claude` 和 `codex` 在 PATH 上（例如在 `~/.local/bin`），Docker 里的 db 在运行。
+前提：主 checkout 里 `pnpm install` 已完成，`claude` 和 `codex` 在 PATH 上（例如在 `~/.local/bin`），Docker 里的数据库在运行：先运行 `docker compose up -d`（第 4 节），至少 `docker compose -p job-radar up -d db`。安装会等新 worker 拿到数据库锁并写出心跳，没有数据库就会回滚。
 
 ```bash
 scripts/ops/install-ai-worker.sh --dry-run    # 只打印 plist（密码已遮蔽），什么都不改
-scripts/ops/install-ai-worker.sh              # 写 ~/Library/LaunchAgents/io.jobradar.ai-worker.plist 并 launchctl bootstrap
+scripts/ops/install-ai-worker.sh              # 构建 HEAD 的发布目录，写 ~/Library/LaunchAgents/io.jobradar.ai-worker.plist 并 bootstrap
+scripts/ops/install-ai-worker.sh --print-release   # 已安装的 worker 从哪个发布目录运行
 launchctl print gui/$(id -u)/io.jobradar.ai-worker | grep -E "state|pid"     # 应该是 state = running
 tail -n 20 data/logs/ai-worker.out.log                                   # 日志；错误在 ai-worker.err.log
 tail -n 20 ~/Library/Logs/job-radar/ai-worker.launchd.log                         # 只有启动失败和崩溃会写到这里
 ```
 
-脚本会：从主 checkout（即使你在 worktree 里运行也一样）启动，写下 node / claude / codex / pnpm 的**绝对路径**和 PATH，`DATABASE_URL` 指向 `127.0.0.1:5433`（读 `.env` 的 POSTGRES_* 或 `DATABASE_URL`；密码只写进权限 600 的 plist，不会打印），`KeepAlive` 保证进程退出或被杀后自动拉起，登录时自动启动。重装/升级 node 或搬动 `claude` 后再运行一次脚本即可（它会替换已加载的那份）。
+脚本会：让 worker 从主 checkout 的只读**发布目录** `data/releases/ai-worker/<提交>/` 运行（即使你在 worktree 里运行也一样；`--root <检出目录>` 可以指定别的）。不带 `--release <目录>` 时先用 `scripts/ops/prepare-release.sh` 构建 HEAD 的发布目录；`deploy.sh` 传入它构建好的那个。代码和出厂 `config/` 来自发布目录；`.env`、`data/config`、`data/profile`、`data/logs` 来自主 checkout。只有新 worker 证明已就绪才替换正在运行的那个，否则放回旧的（见 [deploy.zh.md](deploy.zh.md)《ai-worker 从发布目录运行》）。它写下 node / claude / codex / pnpm 的**绝对路径**和 PATH，`DATABASE_URL` 指向 `127.0.0.1:5433`（读 `.env` 的 POSTGRES_* 或 `DATABASE_URL`；密码只写进权限 600 的 plist，不会打印），`KeepAlive` 保证进程退出或被杀后自动拉起，登录时自动启动。重装/升级 node 或搬动 `claude` 后再运行一次脚本即可（它会替换已加载的那份）。之前的发布目录会保留（`schedule.yaml: deploy.ai_worker_releases_keep`，3 个）。
 
 **标签改名：** launchd 标签以前是 `de.jobradar.ai-worker`。`install-ai-worker.sh`（因此 `deploy.sh` 也是）会自动、可重复地迁移：如果旧标签的 agent 已加载，或 `~/Library/LaunchAgents/` 里还有它的 plist，会先 bootout 并删掉旧 plist，再 bootstrap 新的 `io.jobradar.ai-worker`。`uninstall-ai-worker.sh` 两个标签都会清除。如果用户配置 `data/config/schedule.yaml` 里的 `doctor.ai_worker_launchd_label` 还是 `de.jobradar.ai-worker`，doctor 把它当作新标签。
 
-日志：launchd **自己**打不开外接卷上的文件（plist 的 `StandardOutPath` 指向外接卷时，任务直接以 `EX_CONFIG` 退出，在 macOS 上实测），但它启动的 node 进程可以读写外接卷。所以 plist 给 worker 传 `--log-dir <主 checkout>/data/logs`，worker 自己把输出写进 `ai-worker.out.log` / `ai-worker.err.log`（`data/` 已 gitignore），超过 `ai.yaml: host_worker.log_max_mb`（10 MB）就轮转成 `.1`、`.2`……，留 `log_keep`（3）份。launchd 自己的输出文件 `~/Library/Logs/job-radar/ai-worker.launchd.log` 留在内置盘，只接住 worker 打开日志之前的输出和崩溃，同样受大小上限约束，轮转出来的旧副本放到 `data/logs/`。**不要**把 plist 的 `StandardOutPath` / `StandardErrorPath` 改到外接卷上，那样 ai-worker 根本起不来（详见 [deploy.zh.md](deploy.zh.md) 第 2 节）。worker 打不开 `data/logs`（卷没挂载、权限）时会在 launchd 的文件里写一行原因，退回写到那里。更早版本装的 ai-worker 把日志写在 `~/Library/Logs/job-radar/ai-worker.{out,err}.log`：重新运行安装脚本时，它们会被搬到 `data/logs/ai-worker.{out,err}.before-upgrade.log`（只搬一次，重复运行没有影响）。
+日志：launchd **自己**打不开外接卷上的文件（plist 的 `StandardOutPath` 指向外接卷时，任务直接以 `EX_CONFIG` 退出，在 macOS 上实测），但它启动的 node 进程可以读写外接卷。所以 plist 给 worker 传 `--log-dir <主 checkout>/data/logs`，worker 自己把输出写进 `ai-worker.out.log` / `ai-worker.err.log`（`data/` 已 gitignore），超过 `ai.yaml: host_worker.log_max_mb`（10 MB）就轮转成 `.1`、`.2`……，留 `log_keep`（3）份。launchd 自己的输出文件 `~/Library/Logs/job-radar/ai-worker.launchd.log` 留在内置盘，只接住 worker 打开日志之前的输出和崩溃，同样受大小上限约束，轮转出来的旧副本放到 `data/logs/`。**不要**把 plist 的 `StandardOutPath` / `StandardErrorPath` 改到外接卷上，那样 ai-worker 根本起不来（详见 [deploy.zh.md](deploy.zh.md) 第 2 节）。worker 打不开 `data/logs`（卷没挂载、权限）时会在 launchd 的文件里写一行原因，退回写到那里。更早版本装的 ai-worker 把日志写在 `~/Library/Logs/job-radar/ai-worker.{out,err}.log`：下一次安装成功后，它们会被追加到 `data/logs/ai-worker.{out,err}.before-upgrade.log` 并删除（搬不动只打印警告）。
 
-退出：plist 用 `node --import tsx src/ai-worker/index.ts` 直接启动 worker（不经 `tsx` CLI 这层父进程，launchd 跟踪的就是 worker 本身），并设 `ExitTimeOut` 60 秒。worker 收到 SIGTERM 后有 `ai.yaml: host_worker.shutdown_grace_seconds`（30 秒）收尾当前请求和数据库连接，超时就在日志里记 `ERROR shutdown did not finish within …: forcing exit` 并以退出码 1 强制退出，由 launchd 重启；再收到一次信号立刻退出。被关机打断的请求不会丢：回到队列，重启后重新执行（`host_worker.requeue_interrupted_max`，见 [deploy.zh.md](deploy.zh.md#被重启打断的工作)）。心跳写入和磁盘测量各有超时 `host_worker.step_timeout_seconds`（20 秒），磁盘测量与心跳循环互不阻塞（launchd 下读 Docker 设置文件可能被 macOS 隐私授权弹窗卡住）。升级后重新运行 `scripts/ops/install-ai-worker.sh` 才会换用新的 plist。
+退出：plist 在发布目录里用 `node --import <发布目录里的 tsx loader> src/ai-worker/index.ts` 直接启动 worker（不经 `tsx` CLI 这层父进程，launchd 跟踪的就是 worker 本身；`NODE_OPTIONS` 设为空，不会预加载别的东西），并把 `ExitTimeOut` 设为 `schedule.yaml: deploy.ai_worker_stop_timeout_seconds`（60 秒）。worker 收到 SIGTERM 后有 `ai.yaml: host_worker.shutdown_grace_seconds`（30 秒）收尾当前请求和数据库连接，超时就在日志里记 `ERROR shutdown did not finish within …: forcing exit` 并以退出码 1 强制退出，由 launchd 重启；再收到一次信号立刻退出。被关机打断的请求不会丢：回到队列，重启后重新执行（`host_worker.requeue_interrupted_max`，见 [deploy.zh.md](deploy.zh.md#被重启打断的工作)）。心跳写入和磁盘测量各有超时 `host_worker.step_timeout_seconds`（20 秒），磁盘测量与心跳循环互不阻塞（launchd 下读 Docker 设置文件可能被 macOS 隐私授权弹窗卡住）。升级时 `deploy.sh` 会把 worker 切换到新的发布目录（第 10 步）；不用 `deploy.sh` 时重新运行 `scripts/ops/install-ai-worker.sh`。
 
 注意：
-- ai-worker 在外接卷上的 checkout 里运行；开机时如果卷还没挂载，launchd 会每 10 秒重试直到成功。第一次访问外接卷时 macOS 可能弹出"允许 node 访问可移除宗卷"，点允许。
+- ai-worker 在外接卷上的发布目录里运行；开机时如果卷还没挂载，launchd 会每 10 秒重试直到成功。第一次访问外接卷时 macOS 可能弹出"允许 node 访问可移除宗卷"，点允许。
 - Telegram 的 token / chat id 从 `.env` 读取（和 runner 一样）；推送由 worker 发，所以 worker 离线时没有岗位推送。
 - 临时跑一次队列（不装服务）：`pnpm ai-worker --once`。
 
@@ -209,13 +210,14 @@ docker compose up -d --build
 
 ```bash
 scripts/ops/install-ai-worker.sh --dry-run    # 打印单元（密码已遮盖），不做任何改动
-scripts/ops/install-ai-worker.sh              # 写单元，daemon-reload、enable、restart
+scripts/ops/install-ai-worker.sh              # 构建 HEAD 的发布目录，写单元，daemon-reload、enable、start
 systemctl --user status job-radar-ai-worker.service
 journalctl --user -u job-radar-ai-worker.service -n 50     # 启动失败；worker 自己的日志在 data/logs/
 loginctl enable-linger "$USER"                # 退出登录后也保持运行（有的系统需要 sudo）
 scripts/ops/uninstall-ai-worker.sh            # disable --now 并删除单元
 ```
 
+  和 macOS 一样，先启动数据库（`docker compose up -d`）；worker 从发布目录运行（单元的 `WorkingDirectory=`；`TimeoutStopSec` 是 `deploy.ai_worker_stop_timeout_seconds`）。
   没有 systemd 用户会话（容器里、没有 systemd 的 WSL）时，脚本会说明情况和原因，并且不做改动。从 `sudo`、`su` 或 cron 里运行时缺 `XDG_RUNTIME_DIR`：请用这个用户正常登录后再运行。SSH 到服务器而这个用户没有会话管理器时：`sudo loginctl enable-linger <用户>`，重新登录。其余情况用你自己的进程管理器运行 `pnpm ai-worker`。卸载脚本停不掉某个单元文件时会保留它并说明原因。`JOB_RADAR_SERVICE_MANAGER=systemd|launchd|none` 可以覆盖自动判断。要手动安装，模板在 `scripts/ops/systemd/job-radar-ai-worker.service`。Linux 上 doctor 的 `aiworker.launchd` 检查读取 `systemctl --user show`。
 - **备份**在 runner 容器里运行（宿主机不需要定时器）；见 [backup-restore.zh.md](backup-restore.zh.md)。
 - **手机访问**：Tailscale 用法相同（`tailscale serve --bg 3000`）。别人也能访问的服务器上，请设网页口令（第 7 节第 6 步）。

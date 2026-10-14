@@ -14,8 +14,17 @@ and the project uses [Semantic Versioning](https://semver.org/).
   `compose.override.yaml` of your own that mounts `./config` must drop that mount (`pnpm run doctor` warns about it).
 - **`scripts/ops/deploy.sh` refuses a checkout with uncommitted changes to tracked files in every mode**, `--skip-pull`
   included (untracked files are fine). Commit or stash first.
-- **Deploy steps renumbered:** migrate is now step 8, ai-worker step 9, and the Docker cleanup (prune) step 10, after the
-  ai-worker restart (it used to be step 8, before the migration). `--no-prune` skips step 10.
+- **The host ai-worker runs from a release directory.** The first upgrade to this version stops the worker until the
+  deploy installs it again: run `scripts/ops/uninstall-ai-worker.sh`, check that it stopped, `docker compose -p
+  job-radar stop web runner`, update the code, then `scripts/ops/deploy.sh --skip-pull`. A custom
+  `doctor.ai_worker_launchd_label` needs a manual `launchctl bootout` first. See
+  [docs/upgrade.md](docs/upgrade.md#first-upgrade-release-dir). `deploy.sh --ref` refuses older versions; going back
+  takes the manual steps in [docs/upgrade.md](docs/upgrade.md#downgrade-pre-release-dir).
+- **Deploy steps renumbered** (12 steps): release is step 7, up step 8, migrate step 9, ai-worker step 10, and the
+  Docker cleanup (prune) step 11, after the ai-worker switch. `--no-prune` skips step 11, `--no-ai-worker` steps 7
+  and 10.
+- **Install the database before the ai-worker:** `scripts/ops/install-ai-worker.sh` now waits for the new worker to hold
+  its database lock and write a heartbeat, so on a new host run `docker compose up -d` (at least the db) first.
 - **Node.js 22.22.3 or a later 22.x is required** (`engines.node` is now `>=22.22.3 <23`), and pnpm must be the version
   in `package.json` (`packageManager`; `corepack enable` provides it). The Docker build stages check the Node version
   of their image.
@@ -34,11 +43,32 @@ and the project uses [Semantic Versioning](https://semver.org/).
 - **Interrupting a deploy** (Ctrl-C, closing the terminal, `kill`) lets the running step finish, starts no further step,
   releases the lock and exits with 130, 143 or 129; the script prints how to abort the running step at once.
   See [docs/deploy.md](docs/deploy.md#interrupting-a-deploy).
+- **The ai-worker runs from `data/releases/ai-worker/<commit>/`**, a read-only copy of the deployed commit with its
+  production dependencies (built by `scripts/ops/prepare-release.sh`, step 7 of the deploy), so a `git pull` no longer
+  changes the code of the running worker. `scripts/ops/install-ai-worker.sh --release <dir>` replaces the running
+  worker only after the new one holds its instance lock and wrote a heartbeat, and otherwise puts the previous
+  definition back and waits for it (`not changed:`, `rolled back:` or `ROLLBACK FAILED:` say what happened; a
+  signal during the switch rolls back first). The definition names only absolute paths and sets `NODE_OPTIONS` empty.
+  `--print-release` prints the installed release (exit 3 when none, 4 when not from a release directory). The
+  previous releases are kept for a worker-only rollback. `scripts/ops/uninstall-ai-worker.sh` uses the same identity
+  rules, so a worker under a custom label is removed too. See
+  [docs/deploy.md](docs/deploy.md#the-ai-worker-runs-from-a-release-directory).
+- On macOS, logs an earlier version wrote to `~/Library/Logs/job-radar/ai-worker.{out,err}.log` are appended to
+  `data/logs/ai-worker.{out,err}.before-upgrade.log` after the next successful install.
 - `.dockerignore` leaves out everything `.gitignore` ignores, at any depth (editor folders, local demo and release-check
   files, nested `.env`, logs, test output), also for a build from the working tree (`pnpm stack:up`).
 
 ### Added
 
+- **Settings** in `schedule.yaml` (not in the shipped file): `deploy.ai_worker_releases_keep` (3),
+  `deploy.ai_worker_stop_timeout_seconds` (60) and `deploy.ai_worker_swap_timeout_seconds` (120). See
+  [docs/configuration.md](docs/configuration.md#shipped-config-identity).
+- **Doctor:** `ops.releases_lock` warns about a deploy lock left behind (owner, in-flight records, the `ps` command to
+  check and how to clear it; a lock held by the deploy that runs the doctor is fine), `ops.ai_worker_swap_backup` about
+  an unresolved worker switch backup, and `config.shipped` checks that the ai-worker runs from a release directory of
+  HEAD.
+- **CI:** an `upgrade-transition` job installs, switches, rolls back and uninstalls the real worker between releases of
+  real commits under a service-manager simulator.
 - **Doctor:** `config.shipped` warns when something is mounted on `/app/config`, or on a directory inside it, in a running
   container (it would hide the shipped config in the image, or that part of it). This part runs even when the database
   is down.

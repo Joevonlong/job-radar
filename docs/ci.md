@@ -26,6 +26,7 @@ flowchart LR
   changes -- code changed --> integration
   changes -- code changed --> e2e
   changes -- code changed --> linux-smoke
+  changes -- deploy side changed --> upgrade-transition
   changes --> ci-ok
   ci-docs --> ci-ok
   static --> ci-ok
@@ -33,6 +34,7 @@ flowchart LR
   integration --> ci-ok
   e2e --> ci-ok
   linux-smoke --> ci-ok
+  upgrade-transition --> ci-ok
   ci-ok --> merge([the one required check])
 ```
 
@@ -46,6 +48,7 @@ Which jobs run depends on what the change touches (decided by the `changes` job)
 |---|---|
 | Pull request that changes only documentation (`*.md`, `*.html`, images; never anything under `tests/`, `src/` or `public/`) | `changes` (with the documentation link check), `ci-docs`, `static`, `unit`, `ci-ok`. Several unit tests read the documentation (link targets, picture sizes), so they run. |
 | Any other pull request (code, scripts, config, anything under `tests/`, `src/` or `public/`, workflows, Dockerfiles) | the above plus `integration`, `e2e` and `linux-smoke` |
+| Pull request that touches the deploy side (`scripts/ops/`, `src/ai-worker/`, `compose.yaml`, `Dockerfile`, `tests/transition/`, `tests/ops/sim/`) | the above plus `upgrade-transition` |
 | Push to `main` | always everything, whatever the pushed commits touch; `integration` also runs the default file order |
 | Manual run (`workflow_dispatch`) | everything, like a push to `main` |
 
@@ -95,8 +98,10 @@ Only a pull request is classified; it writes two outputs that the other jobs rea
   run either way (the unit tests read the documentation, and no list of "which tests read which file" is kept that
   could go stale).
 - `full`: `true` on pushes to `main` and manual runs; it adds the default-order integration run.
+- `transition`: `true` when a changed path starts with `scripts/ops/`, `src/ai-worker/`, `tests/transition/` or
+  `tests/ops/sim/`, or is `compose.yaml` or `Dockerfile`; it selects `upgrade-transition`.
 
-A push to `main` and a manual run are not classified at all: both write `code=true` and `full=true`. The commits on `main`
+A push to `main` and a manual run are not classified at all: they write `code=true`, `full=true` and `transition=true`. The commits on `main`
 are what gets deployed, so a documentation-only push must not end in a run that checked nothing. The range of a pull
 request is `base...head`, listed without rename detection, so a moved file counts with both its old and new path. If the diff cannot be computed the step fails (and so does `ci-ok`): there is no silent "nothing
 changed". Run it by hand: `git diff --name-only --no-renames origin/main...HEAD`, then look for a path that is not `*.md`, `*.html` or
@@ -281,7 +286,8 @@ time zone or on another test's leftovers (re-run the file alone to tell), a snap
 Tests that need a real PostgreSQL 17: repositories and migrations, the cycle and queues, the control requests, the
 ai-worker, the dashboard queries, backups with the real `pg_dump` / `pg_restore`. The files under
 `tests/integration/`, run through `vitest.integration.config.ts` (node environment, files one after another because they share one
-database that is emptied before and after every file). Limit 20 minutes, typically 3 to 4 minutes.
+database that is emptied before and after every file). Limit 45 minutes, typically 3 to 4 minutes plus about 16 for the
+worker switch tests.
 
 The job has a `postgres:17` service container and the environment `DATABASE_URL=postgres://postgres:postgres@localhost:5432/postgres`.
 The role may create databases: every run creates a uniquely named database (`tests/integration/global-setup.ts`) and
@@ -319,7 +325,8 @@ hung this step for an hour. It prints both versions as a smoke test. Locally, on
 #### Integration tests (default order)
 
 `pnpm test:integration --reporter=verbose`, only when `full` is true (pushes to `main`, manual runs). The verbose
-reporter prints each file as it starts, so a hung file is named. Limit 15 minutes. Run locally with a database as
+reporter prints each file as it starts, so a hung file is named. The two worker switch files are left out (`--exclude`):
+they have their own step below. Limit 15 minutes. Run locally with a database as
 described in [Running the whole pipeline locally](#running-the-whole-pipeline-locally).
 
 #### Integration tests (shuffled file order)
@@ -327,7 +334,19 @@ described in [Running the whole pipeline locally](#running-the-whole-pipeline-lo
 Runs the same suite with `--sequence.shuffle.files --sequence.seed=<seed>`; the seed is printed as a `::notice::`
 annotation (`integration file order seed: N`). Pull requests run only this order: it finds files that depend on
 another file's leftovers, which a fixed order hides. To reproduce a failure, run
-`pnpm test:integration --sequence.shuffle.files --sequence.seed=<seed>` with the seed from the annotation. Limit 15 minutes.
+`pnpm test:integration --sequence.shuffle.files --sequence.seed=<seed>` with the seed from the annotation. The two worker
+switch files are left out here too. Limit 15 minutes.
+
+#### Worker switch and uninstall tests (service-manager simulator)
+
+`tests/integration/ai-worker-swap.test.ts` and `tests/integration/uninstall-ai-worker.test.ts`, once, in default order:
+`scripts/ops/install-ai-worker.sh` (the switch between release directories, its rollback, signals and the database URL
+cases) and `uninstall-ai-worker.sh` against the service-manager simulator `tests/ops/sim` (stand-ins for `launchctl` and
+`systemctl --user` that start real processes and keep their state in a JSON file), for launchd and systemd each. A fake
+worker (`tests/fixtures/release/fake-worker.mjs`) takes the database lock and writes heartbeats in isolated databases.
+Most cases wait for a stop or evidence time-out (the script's floors: 10 s and stop + 10 s), so the step takes about 16
+minutes and runs once instead of in both orders. Limit 25 minutes. Locally: the same command with a disposable
+database; nothing real is installed (temporary `HOME` and `XDG_CONFIG_HOME`).
 
 #### Set up the lowest Node.js of engines.node
 
@@ -576,6 +595,70 @@ Only when an earlier step failed: `docker compose ps -a` and the last 200 log li
 
 Always: `docker compose down -v --remove-orphans` on the throwaway runner.
 
+### Job `upgrade-transition`
+
+Upgrade transitions with real Docker and the real deploy, install and uninstall scripts of each version, the ai-worker
+under the systemd simulator (`tests/transition/run.sh`). Runs when `changes` sets `transition` (pull requests that touch
+the deploy side, every push to `main`, manual runs). No service container: each compose project of the script runs its
+own database. Limit 120 minutes; it builds the images about ten times.
+
+#### Check out the repository
+
+`actions/checkout` with `fetch-depth: 0`: the scenarios check out the earlier versions.
+
+#### Set up pnpm
+
+`pnpm/action-setup`.
+
+#### Set up Node.js
+
+`actions/setup-node`, Node 22, pnpm store cache.
+
+#### Install dependencies
+
+`pnpm install --frozen-lockfile` (fills the pnpm store the release directories install from).
+
+#### Upgrade transition scenarios
+
+`bash tests/transition/run.sh "$RUNNER_TEMP/transition"`. In clones under a temporary directory, each with its own compose
+project (`jrtransition-<random>-*`), ports, volume and database password, and with the scheduled cycles off:
+
+- A: 62d7ad9, then each documented hop (4dd8d03, 2656364, b3f69b0, the checked-out commit) with that version's
+  `deploy.sh --skip-pull`, the stop of web and runner before 2656364, and the first-upgrade steps of `docs/upgrade.md`
+  (uninstall the old worker, check that it stopped, stop web and runner, check out, deploy) before the last one.
+- B: 62d7ad9; the new `install-ai-worker.sh --release` of a release whose worker throws at start must roll back to the
+  worker installed from the checkout; the same with a good release succeeds; then the strict stop and the deploy of the
+  checked-out commit.
+- D: a deploy whose runner image fails to build (the build arg `FAIL_RUNNER_BUILD=1`) changes no container, image or
+  worker and leaves no lock; the same deploy without it succeeds.
+- C: a release with a broken tsx loader is rolled back.
+- E: the emergency restore of the previous release; the doctor reports release != HEAD. Then the uninstall.
+
+After each step: `/app/config` of the web and runner containers equals `config/` of the deployed commit (sha256 of every
+file); the worker's MainPID runs from the expected directory and `install-ai-worker.sh --print-release` agrees; a
+`run_ai` request is done by the worker; the doctor's JSON (`--only config.shipped --only ops`) has the shipped config
+check, and from the release-directory version on confirms the reports and finds no lock and no switch backup. Safety: before
+anything runs, the caller's compose, docker and database variables (`COMPOSE_*`, `DOCKER_HOST`, `JOBRADAR_*`,
+`JOB_RADAR_*`, `POSTGRES_*`, `PG*`, `DATABASE_URL` and every name the compose files interpolate) are unset, so none of
+them can override a project's `.env` (`tests/transition/clean-env.sh`). A docker guard (`tests/transition/docker-guard.sh`)
+lets through read-only commands; a compose command that changes something runs only for the script's own projects, and
+only after `docker compose config` of that same command passed `tests/transition/compose-check.mjs` (every volume
+named with the run's prefix and not external, every bind mount and build context inside the run's directory, no
+`container_name`, only the ports registered for the project); `down`, prune and `volume rm` are refused. Cleanup checks
+the configuration and the containers' mounts the same way, runs `down` without `-v` and removes only volumes named with
+the project's prefix. `launchctl` and `systemctl` must resolve to the simulator. `tests/ops/transition-guard.test.ts`
+covers these rails with fake docker binaries. Limit 105 minutes. Locally (Linux or macOS, Docker with compose v2): the
+same command; the temporary directory and the script's compose projects, images and volumes are removed at the end.
+
+Not covered: launchd (the integration tests run the switch against the launchd simulator; real launchd is the manual
+drill), and `deploy.sh`'s own git pull (each hop checks out the commit and uses `--skip-pull`). Off Linux the doctor's
+match of the worker's report against systemd is skipped.
+
+#### Upload the transition logs
+
+Only when an earlier step failed: the worker logs, the simulator's call log and each step's output, as the artifact
+`upgrade-transition-logs` (kept 7 days).
+
 ### Job `ci-ok`
 
 The single check to require. `needs` lists every other job and `if: always()` makes it run even when they fail or are
@@ -585,7 +668,7 @@ skipped. Limit 5 minutes, a few seconds.
 
 Reads the `needs` results (`jq`): `changes`, `ci-docs`, `static` and `unit` must always have succeeded (a skipped one is a
 failure, not a pass); `integration`, `e2e` and `linux-smoke` must have succeeded when `changes` selected code and be
-skipped otherwise. Any other combination (including a job that must run and was skipped or cancelled) prints the per-job results and
+skipped otherwise; `upgrade-transition` likewise with `transition`. Any other combination (including a job that must run and was skipped or cancelled) prints the per-job results and
 `::error::a selected check did not succeed`. When it is red, look at the per-job lines it prints first, then open that job.
 
 ## Dependabot

@@ -213,10 +213,22 @@ cd config && find . -type f ! -name .DS_Store ! -name '._*' | LC_ALL=C sort | wh
   `doctor.compose_services` 里时）要求报告里的主机名是运行中容器 id 的开头，且报告时间不早于容器启动时间减
   `schedule.yaml doctor.shipped_report_skew_seconds`（默认 2，容忍 Docker 和数据库的时钟差）；ai-worker（`ai.yaml execution: host` 时）要求报告比
   `host_worker.offline_after_seconds` 新，且 PID 等于 launchd（`launchctl print`）或 systemd（`systemctl --user show -p MainPID`）给出的服务 PID。服务管理器
-  给不出 PID 时，报告无法核对。凡是无法确认的都是警告，并逐个列出进程；没有失败。连不上数据库时跳过。项目里运行中的容器在
+  给不出 PID 时，报告无法核对。ai-worker 的报告还必须来自本检出目录的发布目录（`<检出目录>/data/releases/ai-worker/<提交>/config`），而且那个提交就是检出目录的 HEAD：
+  worker 不在 `data/releases/ai-worker/` 下运行（由发布目录之前的版本安装），或者来自别的提交（只回滚了 worker，或者部署在 ai-worker 那一步之前停下），都是带专门提示的警告。凡是无法确认的都是警告，并逐个列出进程；没有失败。连不上数据库时跳过。项目里运行中的容器在
   `/app/config`（或它下面）有挂载时，这项检查也会告警：挂载会挡住镜像里的默认配置，通常是出厂配置进镜像之前的 `compose.override.yaml`；去掉挂载再部署。
 
 部署或重启后的短时间内报告可能还没写；过一分钟再运行一次 doctor。
+
+ai-worker 的发布目录和切换由 `schedule.yaml` 里的四个键控制。出厂文件里都没有；只有要改时才加到 `data/config/schedule.yaml`（发布目录之前的版本不认识它们，见 [upgrade.zh.md](upgrade.zh.md#downgrade-pre-release-dir)）：
+
+| 键 | 默认 | 含义 |
+|---|---|---|
+| `deploy.ai_worker_releases_keep` | 3 | 切换后保留的发布目录个数，含当前安装的和上一个（至少 2） |
+| `deploy.ai_worker_stop_timeout_seconds` | 60 | worker 的 launchd `ExitTimeOut` / systemd `TimeoutStopSec`（至少 10） |
+| `deploy.ai_worker_swap_timeout_seconds` | 120 | 切换中每一段等待的上限（至少停止超时 + 10） |
+| `doctor.shipped_report_skew_seconds` | 2 | `config.shipped` 核对容器报告时容许的 Docker 与数据库时钟差 |
+
+细节见 [deploy.zh.md](deploy.zh.md)《ai-worker 从发布目录运行》。
 
 ## 关注岗位复查（`pipeline.yaml` + `ui.yaml`）
 
