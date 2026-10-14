@@ -13,9 +13,12 @@
 #   --root <path>    the main checkout (its schedule.yaml names the label; its data/logs are purged); default: the MAIN
 #                    checkout, like install-ai-worker.sh
 #
-# Exit code: 0 = no ai-worker definition is left (or none was installed); 1 = more than one definition was found (nothing
-# is changed: the definitions and the commands to remove them by hand are printed), or the worker did not stop within
-# deploy.ai_worker_swap_timeout_seconds (its definition is kept).
+# Refuses (exit 1, nothing changed) while the release lock data/releases/ai-worker/.lock exists: a deploy or an
+# install-ai-worker.sh may be switching the worker right now. The lock's owner and how to clear a stale one are printed.
+#
+# Exit code: 0 = no ai-worker definition is left (or none was installed); 1 = the release lock is held, more than one
+# definition was found (nothing is changed: the definitions and the commands to remove them by hand are printed), or
+# the worker did not stop within deploy.ai_worker_swap_timeout_seconds (its definition is kept).
 # AI requests queue up in the database while the worker is gone; /sources shows the worker as not responding.
 set -euo pipefail
 
@@ -39,6 +42,8 @@ done
 
 # shellcheck source=lib/ai-worker.sh
 source "$SCRIPT_DIR/lib/ai-worker.sh"
+# shellcheck source=lib/releases.sh
+source "$SCRIPT_DIR/lib/releases.sh"
 
 # the main checkout (same lookup as install-ai-worker.sh)
 if [[ -z "$ROOT" ]]; then
@@ -57,6 +62,16 @@ ROOT="$(cd "$ROOT" 2>/dev/null && pwd -P)" || die "--root: no such directory"
 # Transitional: --root may still name a workspace checkout that holds the product in job-radar/.
 if [[ ! -f "$ROOT/package.json" && -f "$ROOT/job-radar/package.json" ]]; then ROOT="$ROOT/job-radar"; fi
 MAIN_DIR="$ROOT"
+
+# A switch in progress (deploy.sh, install-ai-worker.sh) holds the release lock: removing the worker under it could leave
+# its rollback without a definition to put back. Nothing is changed while the lock exists, whoever holds it.
+LOCK_DIR="$(releases_lock_dir "$MAIN_DIR")"
+if [[ -e "$LOCK_DIR" || -L "$LOCK_DIR" ]]; then
+  echo "uninstall-ai-worker: the release lock exists: a deploy or an ai-worker install may be switching the worker; nothing was changed." >&2
+  echo "Wait until it has finished and run this script again. A lock left by a killed run is not cleared automatically:" >&2
+  releases_lock_report "$MAIN_DIR" >&2
+  exit 1
+fi
 
 SYSTEMD_UNIT="$AI_WORKER_SYSTEMD_UNIT"
 UNIT_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/$SYSTEMD_UNIT"

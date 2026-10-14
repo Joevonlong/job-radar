@@ -176,7 +176,9 @@ them. By hand, in the project directory:
 
 1. Remove the worker with the **current** `scripts/ops/uninstall-ai-worker.sh` (it also removes a worker under your own
    label; if it says the definition is ambiguous, follow the commands it prints) and check that it stopped, as in step 2
-   of [Upgrading to the ai-worker release directories](#first-upgrade-release-dir).
+   of [Upgrading to the ai-worker release directories](#first-upgrade-release-dir). While the release lock
+   `data/releases/ai-worker/.lock` exists (a deploy or an install is running, or a killed one left it) it refuses and
+   changes nothing; it prints the lock's owner and how to clear a stale lock.
 2. Delete the keys `deploy.ai_worker_releases_keep`, `deploy.ai_worker_stop_timeout_seconds`,
    `deploy.ai_worker_swap_timeout_seconds` and `doctor.shipped_report_skew_seconds` from `data/config/schedule.yaml` if
    you added them: the older version does not know them and refuses the file.

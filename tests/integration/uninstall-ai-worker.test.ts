@@ -99,6 +99,19 @@ describe.each<Manager>(["systemd", "launchd"])("uninstall-ai-worker.sh (%s)", (m
     expect(fs.existsSync(def(L_DEFAULT))).toBe(true);
   }, SLOW);
 
+  it("the release lock is held (a deploy or install is switching): exit 1, nothing called, the worker keeps running", () => {
+    const pid = installed();
+    fx.takeLock();
+    const n = fx.changes().length;
+    const r = uninstall();
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain("the release lock exists");
+    expect(r.stderr).toContain(fx.lockDir());
+    expect(fx.changes().length).toBe(n);
+    expect(fs.existsSync(def(L_DEFAULT))).toBe(true);
+    expect(gone(pid)).toBe(false);
+  }, SLOW);
+
   it("an unresolved switch backup: uninstalled anyway, the backup stays and is named, exit 0", () => {
     installed();
     fs.mkdirSync(fx.backupDir(), { recursive: true });

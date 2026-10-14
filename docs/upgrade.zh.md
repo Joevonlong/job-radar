@@ -121,7 +121,7 @@ scripts/ops/install-ai-worker.sh --release data/releases/ai-worker/<上一个提
 
 ai-worker 发布目录之前的版本从检出目录安装 worker，`deploy.sh --ref` 会拒绝它们。在项目目录里手动操作：
 
-1. 用**当前**版本的 `scripts/ops/uninstall-ai-worker.sh` 卸掉 worker（自定义 label 也会卸掉；如果它说定义不明确，按它打印的命令处理），并按[升级到 ai-worker 发布目录](#first-upgrade-release-dir)第 2 步核对已经停下。
+1. 用**当前**版本的 `scripts/ops/uninstall-ai-worker.sh` 卸掉 worker（自定义 label 也会卸掉；如果它说定义不明确，按它打印的命令处理），并按[升级到 ai-worker 发布目录](#first-upgrade-release-dir)第 2 步核对已经停下。发布锁 `data/releases/ai-worker/.lock` 存在时（有 deploy 或安装正在运行，或者被杀掉的运行留下了它），它拒绝执行、什么都不改，并打印锁的持有者和清除残留锁的方法。
 2. 如果在 `data/config/schedule.yaml` 里加过 `deploy.ai_worker_releases_keep`、`deploy.ai_worker_stop_timeout_seconds`、`deploy.ai_worker_swap_timeout_seconds`、`doctor.shipped_report_skew_seconds`，删掉它们：旧版本不认识这些键，会拒绝这个文件。
 3. 可选，并且只能现在做（当前版本的工具还在）：删掉发布目录。发布目录里的目录是只读的，文件可能和 pnpm store 共用，所以只给目录加回写权限，每个路径先核对，不跟随符号链接：
 
