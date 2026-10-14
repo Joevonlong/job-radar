@@ -970,6 +970,7 @@ describe("scripts/ops/deploy.sh: signals", () => {
       expect(r.status).toBe(code);
       expect(r.events.some((e) => e.startsWith("# build signal"))).toBe(false);
       expect(r.events).toContain("# build exit ctx=1 lock=1");
+      expect(r.events).toContain("# build grandchild done");
       expect(r.events.indexOf("# build grandchild done")).toBeLessThan(r.events.indexOf("# release mine=1"));
       // on_exit ran once, and it is the last thing that happened
       expect(r.events.filter((e) => e.startsWith("# release"))).toEqual(["# release mine=1"]);
@@ -1009,9 +1010,12 @@ describe("scripts/ops/deploy.sh: signals", () => {
       expect(r.events.filter((e) => e.startsWith("# install signal"))).toEqual(["# install signal TERM"]);
       expect(r.events).toContain("# install rollback");
       const released = r.events.indexOf("# release mine=1");
-      expect(released).toBeGreaterThan(-1);
-      expect(r.events.findIndex((e) => e.startsWith("# install exit ") && e.endsWith(" lock=1"))).toBeLessThan(released);
-      expect(r.events.indexOf("# install grandchild done")).toBeLessThan(released);
+      const installExit = r.events.findIndex((e) => e.startsWith("# install exit ") && e.endsWith(" lock=1"));
+      const grandchild = r.events.indexOf("# install grandchild done");
+      // all three happened, in this order (a missing one is -1, which would pass a bare "less than")
+      expect([released, installExit, grandchild].every((i) => i >= 0), r.events.join("\n")).toBe(true);
+      expect(installExit).toBeLessThan(released);
+      expect(grandchild).toBeLessThan(released);
       expect(r.events.filter((e) => e.startsWith("# release"))).toEqual(["# release mine=1"]);
       expect(r.calls.some((c) => c.includes(" prune ") || c === "pnpm run doctor")).toBe(false);
       expect(fs.existsSync(lockDir)).toBe(false);
@@ -1033,6 +1037,7 @@ describe("scripts/ops/deploy.sh: signals", () => {
       const r = await run.done;
       expect(r.status).toBe(129);
       expect(r.events.some((e) => e.startsWith("# config signal"))).toBe(false);
+      expect(r.events).toContain("# config exit ctx=0 lock=1");
       expect(r.events.indexOf("# config exit ctx=0 lock=1")).toBeLessThan(r.events.indexOf("# release mine=1"));
       expect(r.calls).not.toContain("pnpm config:migrate --write");
       expect(r.calls.some((c) => c.endsWith(" build"))).toBe(false);
