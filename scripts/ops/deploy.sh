@@ -8,11 +8,14 @@
 # Steps (each prints what it does; the first one that fails stops the script and says why):
 #   1  preflight   the terminal does not stop background output (stty -tostop); takes the deploy lock
 #                  data/releases/ai-worker/.lock (one deploy at a time; a second one stops here and says how to check and
-#                  clear a lock that was left behind); removes build contexts of earlier deploys that did not finish;
+#                  clear a lock that was left behind); removes build contexts and half-built release directories
+#                  (.tmp-* / .trash-* under data/releases/ai-worker) of earlier deploys that did not finish;
 #                  git, docker, node, pnpm are installed and Docker is running; no uncommitted changes to tracked files
 #                  (in every mode, --skip-pull too); optional external-volume guard
 #   2  pull        the checkout is on the branch and fast-forwards to <remote>/<branch>; then the target commit is fixed:
-#                  every later step uses that commit, and a step stops when HEAD moved or tracked files changed meanwhile
+#                  every later step uses that commit, and a step stops when HEAD moved or tracked files changed meanwhile.
+#                  With --ref, the resolved commit must ship an install script that runs the worker from a release
+#                  directory (else see docs/upgrade.md, "Downgrade to a version before release directories")
 #   3  install     pnpm install --frozen-lockfile
 #   4  config      data/ folders exist; pnpm config:init (copies what the user config directory data/config lacks from the
 #                  shipped defaults config/, never overwrites; the first layered run copies the whole live config),
@@ -22,18 +25,20 @@
 #   6  build       git archive of the target commit into data/build/<commit>-<pid>, then docker compose -p job-radar build
 #                  from it (JOB_RADAR_BUILD_CONTEXT): the images hold exactly the committed files, shipped config/ included;
 #                  ignored, untracked or locally changed files never reach them
-#   7  up          pnpm ops:drain (wait, bounded by schedule.yaml deploy.drain_timeout_seconds, for a running cycle to finish:
+#   7  release     scripts/ops/prepare-release.sh <target commit>: the read-only release directory of the host ai-worker,
+#                  data/releases/ai-worker/<commit> (reused when it is already there); the running worker is not touched
+#   8  up          pnpm ops:drain (wait, bounded by schedule.yaml deploy.drain_timeout_seconds, for a running cycle to finish:
 #                  recreating the runner would cut it off), then docker compose -p job-radar up -d --wait (db / web / runner /
 #                  jobspy must turn healthy)
-#   8  migrate     pnpm migrate:run (the runner migrates at start-up too; this checks it and is a no-op then)
-#   9  ai-worker   scripts/ops/install-ai-worker.sh (installs or restarts the service: a launchd agent on macOS, a systemd user unit on Linux; also migrates
-#                  an agent still installed under the old label de.jobradar.ai-worker to io.jobradar.ai-worker); an AI
-#                  request it was running goes back to the queue and runs again after the restart
-#                  (ai.yaml host_worker.requeue_interrupted_max)
-#   10 prune       releases the deploy lock and removes the build context first; then docker builder prune down to
+#   9  migrate     pnpm migrate:run (the runner migrates at start-up too; this checks it and is a no-op then)
+#   10 ai-worker   scripts/ops/install-ai-worker.sh --release data/releases/ai-worker/<commit>: switches the service (a
+#                  launchd agent on macOS, a systemd user unit on Linux) to that release; the new worker must show evidence
+#                  in the database (instance lock and a heartbeat), else the old one is put back. An AI request the old
+#                  worker was running goes back to the queue (ai.yaml host_worker.requeue_interrupted_max)
+#   11 prune       releases the deploy lock and removes the build context first; then docker builder prune down to
 #                  schedule.yaml deploy.build_cache_keep_gb, docker image prune (dangling only); never volumes, never images
 #                  in use; a failure here only warns
-#   11 doctor      pnpm run doctor
+#   12 doctor      pnpm run doctor
 #
 #   --dry-run          print the steps and the commands, change nothing (read-only probes still run, and a problem
 #                      that would stop a real run, a deploy lock held by another run included, is shown as a warning)
@@ -45,16 +50,17 @@
 #   --verify           with --ref <tag>: run `git verify-tag` first and stop when the signature is missing or invalid
 #                      (uses the maintainer's public key in docs/signing-key.pub; deploy does not verify tags by default)
 #   --no-backup        skip the pre-deploy backup
-#   --no-prune         skip the Docker clean-up of step 10
-#   --no-ai-worker     do not install / restart the ai-worker
-#   --no-drain         do not wait for a running cycle before step 7 (it is cut off; the runner's catch-up runs it again)
+#   --no-prune         skip the Docker clean-up of step 11
+#   --no-ai-worker     skip steps 7 and 10 (the release directory and the ai-worker switch); the lock is still taken
+#   --no-drain         do not wait for a running cycle before step 8 (it is cut off; the runner's catch-up runs it again)
 #   --drain-timeout S  wait at most S seconds for it (default: schedule.yaml deploy.drain_timeout_seconds)
-#   --wait-timeout S   how long step 7 waits for the services to turn healthy (default 300)
+#   --wait-timeout S   how long step 8 waits for the services to turn healthy (default 300)
 #   --settle S         seconds between the ai-worker restart and the doctor run, so heartbeats arrive (default 20)
 #
-# Exit code: 0 = deployed, doctor found nothing or only warnings; 1 = a step failed (the message says which), or another
-# deploy holds the lock; 2 = deployed, but the doctor reports problems that need your attention. Never runs
-# `docker compose down -v`.
+# Exit code (decided once, at the end, by scripts/ops/lib/deploy-result.sh): 0 = deployed, the doctor found nothing or
+# only warnings; 1 = a step failed (the message says which, and what state the services and the ai-worker are in), another
+# deploy holds the lock, or the doctor itself could not run; 2 = deployed, but the doctor reports problems that need your
+# attention (or user config writes are pending). Never runs `docker compose down -v`.
 # Interrupting (Ctrl-C, closing the terminal, kill): the step that is running finishes first (it runs in its own process
 # group, which the terminal's signals do not reach), no further step starts, the lock is released, and the exit code is
 # 130 (INT), 143 (TERM) or 129 (HUP). To stop the running step at once, use the `kill -TERM -<group>` the script prints.
@@ -67,12 +73,14 @@ set -euo pipefail
 APP="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
 ROOT="$APP"
 OPS="scripts/ops"
-TOTAL=11
+TOTAL=12
 
 # shellcheck source=lib/proc.sh
 source "$APP/$OPS/lib/proc.sh"
 # shellcheck source=lib/releases.sh
 source "$APP/$OPS/lib/releases.sh"
+# shellcheck source=lib/deploy-result.sh
+source "$APP/$OPS/lib/deploy-result.sh"
 
 DRY_RUN=0
 SKIP_PULL=0
@@ -155,6 +163,8 @@ TARGET=""        # the commit this deploy builds and runs (fixed after the pull 
 ctx=""           # the build context directory, data/build/<TARGET>-<pid>
 CLEANED=""       # on_exit ran
 RELEASE_DONE=0   # the explicit release before the prune step ran (whatever it returned)
+CONFIG_WRITES_PENDING=0   # 1 when user config writes were skipped, failed or are still due (set by a config write step)
+DOCTOR_RC=0      # the doctor's exit code (127 and the like: it could not run)
 
 # A path is only ever removed when it is a real directory named like a build context, directly under data/build/.
 BUILD_DIR="$APP/data/build"
@@ -289,6 +299,7 @@ elif releases_lock_acquire "$APP"; then
   if [[ "$RELEASES_LOCK_MINE" == 1 ]]; then say "deploy lock taken: $LOCK_DIR"; else say "deploy lock held by the calling script: $LOCK_DIR"; fi
   releases_inflight_register "$APP" deploy.sh || fail_step "could not write the in-flight record under $LOCK_DIR" "Check write permission on data/releases/"
   remove_stale_build_contexts
+  sweep_tmp "$APP" || say "warning: could not remove every leftover .tmp-* / .trash-* under data/releases/ai-worker (see above); the deploy continues"
 elif [[ "$RELEASES_LOCK_VANISHED" == 1 ]]; then
   fail_step "the deploy lock $LOCK_DIR was released while this deploy was taking it; nothing was changed" "Run this script again"
 elif [[ "$RELEASES_LOCK_PARTIAL" == 1 ]]; then
@@ -357,6 +368,13 @@ else
         git -C "$ROOT" -c gpg.format=ssh ${signers[@]+"${signers[@]}"} verify-tag "$REF" || fail_step "the signature of tag $REF is missing or invalid" "Check docs/signing-key.pub against the fingerprint in SECURITY.md, or deploy without --verify if you accept an unsigned tag"
         say "signature of $REF verified"
       fi
+      # The resolved commit (never the raw name) must run the worker from a release directory: an older install script
+      # would not understand --release (the ai-worker step), and going back before release directories is a manual
+      # procedure. Checked before the checkout moves.
+      commit="$(git -C "$ROOT" rev-parse "$ref_target^{commit}")" || fail_step "cannot resolve $REF to a commit" "Read the git error above"
+      if ! git -C "$ROOT" show "$commit:scripts/ops/install-ai-worker.sh" 2>/dev/null | grep -qx '# capability: ai-worker-release-dir'; then
+        fail_step "$REF ($commit) is a version from before the ai-worker ran from release directories; deploy.sh cannot switch to it (the checkout was not changed)" "Follow docs/upgrade.md#downgrade-pre-release-dir (uninstall the worker first, then check out and deploy the old version by hand)"
+      fi
       proc_step "could not check out $REF" "Resolve the git error above, then run this script again" git -C "$ROOT" checkout --detach "$ref_target"
       say "$before -> $(git -C "$ROOT" rev-parse --short HEAD) ($REF)"
     fi
@@ -419,6 +437,20 @@ fi
 export JOB_RADAR_BUILD_CONTEXT="$ctx"   # every compose call from here on builds from it
 run "Read the build log above; if the disk is full, clean up first (docker system df shows usage, docker builder prune clears the build cache)" docker compose -p "$PROJECT" build
 
+step "release: the ai-worker's release directory for the target commit"
+if [[ "$NO_AI_WORKER" -eq 1 ]]; then
+  say "--no-ai-worker: skipped"
+else
+  say "data/releases/ai-worker/$TARGET (read-only; reused when it is already there). The running ai-worker is not touched."
+  echo "  \$ $OPS/prepare-release.sh $TARGET --root $APP"
+  if [[ "$DRY_RUN" -eq 0 ]]; then
+    assert_target
+    proc_step "could not prepare the release directory of $TARGET (see the prepare-release lines above)" \
+      "Nothing is restarted yet: the services and the ai-worker still run the previous version. Fix the cause (pnpm version: corepack enable; disk space; network for pnpm), then run this script again" \
+      "$OPS/prepare-release.sh" "$TARGET" --root "$APP"
+  fi
+fi
+
 step "up: start and wait until healthy (at most ${WAIT_TIMEOUT} s)"
 # Recreating the runner cuts off a running cycle, so wait (bounded) for it first. Control requests are not waited for:
 # one a restart interrupts goes back to the queue. A cycle still running after the timeout only warns: the runner's catch-up
@@ -456,12 +488,21 @@ step "migrate: database migrations"
 assert_target
 run "Migration failed: the database is not left half-changed (each migration runs in a transaction); read the error and, if needed, restore the pre-deploy backup (docs/backup-restore.md)" pnpm migrate:run
 
-step "ai-worker: host AI process (launchd / systemd)"
+step "ai-worker: host AI process (launchd / systemd) from the release directory"
 if [[ "$NO_AI_WORKER" -eq 1 ]]; then
   say "--no-ai-worker: skipped"
 else
-  say "restarting the ai-worker: an AI request it is running (for example run_ai) goes back to the queue and runs again after the restart; nothing is lost"
-  run "Read the output of scripts/ops/install-ai-worker.sh, data/logs/ai-worker.err.log and ~/Library/Logs/job-radar/ai-worker.launchd.log; claude / codex must be on PATH" "$OPS/install-ai-worker.sh"
+  say "switching the ai-worker to data/releases/ai-worker/$TARGET: an AI request it is running (for example run_ai) goes back to the queue and runs again after the switch; nothing is lost"
+  echo "  \$ $OPS/install-ai-worker.sh --release $APP/data/releases/ai-worker/$TARGET --root $APP"
+  if [[ "$DRY_RUN" -eq 0 ]]; then
+    assert_target
+    # cooperative: a signal to this script reaches the install as one TERM, and it rolls the switch back before it ends
+    proc_check_stop; install_rc=0; proc_run --cooperative "$OPS/install-ai-worker.sh" --release "$APP/data/releases/ai-worker/$TARGET" --root "$APP" || install_rc=$?; proc_check_stop
+    if (( install_rc != 0 )); then
+      fail_step "the ai-worker switch failed (install-ai-worker.sh exited $install_rc). The web, runner and database already run the new version (migrations applied)" \
+        "The first line of the install output says where the worker is: 'not changed:' the old worker still runs untouched; 'rolled back:' the old worker runs again (checked); 'ROLLBACK FAILED:' follow the commands printed above and keep data/run/ai-worker-swap-backup/. Fix the cause (logs: data/logs/ai-worker.err.log), then run this script again"
+    fi
+  fi
 fi
 
 step "prune: release the deploy lock, clean the Docker build cache and dangling images"
@@ -528,13 +569,17 @@ if [[ "$DRY_RUN" -eq 1 ]]; then
 fi
 sleep "$SETTLE"
 proc_check_stop
-doctor_code=0
-pnpm run doctor || doctor_code=$?
+# The doctor's verdict is only recorded here; the exit code is decided once, below (deploy_final_rc).
+DOCTOR_RC=0; proc_run pnpm run doctor || DOCTOR_RC=$?
 proc_check_stop
 echo
-case "$doctor_code" in
+case "$DOCTOR_RC" in
   0) echo "Deploy complete, doctor passed everything." ;;
   1) echo "Deploy complete. The doctor reported warnings (see above); they do not stop it from running, handle them when you have time." ;;
-  2) echo "Deploy complete, but the doctor reported problems (see the hints above)." >&2; exit 2 ;;
-  *) STEP_NAME="doctor: overall check"; fail_step "the doctor itself could not run (exit code ${doctor_code})" "Run pnpm run doctor on its own to see the error" ;;
+  2) echo "Deploy complete, but the doctor reported problems (see the hints above)." >&2 ;;
+  *) echo "deploy: everything is deployed, but the doctor itself could not run (exit code ${DOCTOR_RC}). Run pnpm run doctor on its own to see the error." >&2 ;;
 esac
+if [[ "$CONFIG_WRITES_PENDING" == 1 ]]; then
+  echo "deploy: user config writes are pending (see above)$([[ "$DOCTOR_RC" =~ ^[012]$ ]] || echo '; the doctor did not run either')." >&2
+fi
+exit "$(deploy_final_rc "$CONFIG_WRITES_PENDING" "$DOCTOR_RC")"
