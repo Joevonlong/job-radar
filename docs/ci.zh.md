@@ -320,7 +320,7 @@ project 的规划在 `e2e/projects.ts`（由 `tests/e2e-projects.test.ts` 做单
 
 ### Job `linux-smoke`
 
-Linux 从零首次运行：在 Ubuntu runner 上用一份空的检出，按随附默认值 `docker compose up --build`，面板必须能应答。它能发现 macOS 上 Docker Desktop 掩盖的问题：bind mount 的文件属主（`PUID` / `PGID`）、以 0600 写入的配置文件、容器写不了的目录。它从 Dockerfile 构建 web、runner、jobspy 三个镜像，所以也是在部署之前发现 `apt` / CLI 安装失败、`COPY` 路径错误、构建阶段损坏的地方（不再有单独的只构建镜像的任务）。它和 `scripts/ops/deploy.sh` 一样，从解开的 `git archive` 构建镜像，并核对镜像里的出厂配置（`config/` 打进镜像，不再挂载），以及从工作树构建时 `.gitignore` 忽略的文件都进不了构建上下文。每个不是只改文档的 PR 和每次推送到 `main` 都会运行。上限 20 分钟，构建步骤 15 分钟；通常几分钟（冷构建，没有层缓存）。本地（Linux）：在一份新克隆里执行下面各步骤的命令（不要在你想保留其服务栈和数据库的检出里做：最后一步会删除服务栈和它的卷）。
+Linux 从零首次运行：在 Ubuntu runner 上用一份空的检出，按随附默认值 `docker compose up --build`，面板必须能应答。它能发现 macOS 上 Docker Desktop 掩盖的问题：bind mount 的文件属主（`PUID` / `PGID`）、以 0600 写入的配置文件、容器写不了的目录。它从 Dockerfile 构建 web、runner、jobspy 三个镜像，所以也是在部署之前发现 `apt` / CLI 安装失败、`COPY` 路径错误、构建阶段损坏的地方（不再有单独的只构建镜像的任务）。Dockerfile 用 `RUN --network=none` 编译 web 和 runner（构建阶段没有任何 `.next` 缓存），所以这次构建也证明编译不需要网络：字体来自 npm 包，构建时一旦访问互联网，任务就会失败。它和 `scripts/ops/deploy.sh` 一样，从解开的 `git archive` 构建镜像，并核对镜像里的出厂配置（`config/` 打进镜像，不再挂载），以及从工作树构建时 `.gitignore` 忽略的文件都进不了构建上下文。每个不是只改文档的 PR 和每次推送到 `main` 都会运行。上限 20 分钟，构建步骤 15 分钟；通常几分钟（冷构建，没有层缓存）。本地（Linux）：在一份新克隆里执行下面各步骤的命令（不要在你想保留其服务栈和数据库的检出里做：最后一步会删除服务栈和它的卷）。
 
 #### Check out the repository
 
@@ -384,7 +384,7 @@ Linux 从零首次运行：在 Ubuntu runner 上用一份空的检出，按随�
 
 | 生态系统 | 目录 | 说明 |
 |---|---|---|
-| `npm` | `/` | 最多 5 个未关闭 PR；minor 和 patch 更新合并成一个 PR；忽略 `@types/node` 的 major 更新（类型跟随 `engines` 里的 Node 大版本） |
+| `npm` | `/` | 最多 5 个未关闭 PR；字体包（`@fontsource/*`、`@fontsource-variable/*`）单独一个 PR（字体升级会改变所有页面的样子：合并前对比页面），其他 minor 和 patch 更新合并成一个 PR；忽略 `@types/node` 的 major 更新（类型跟随 `engines` 里的 Node 大版本） |
 | `pip` | `/jobspy` | 最多 3 个未关闭 PR；sidecar 的 Python 依赖 |
 | `github-actions` | `/` | 最多 3 个未关闭 PR；workflow 里固定的 action 版本 |
 

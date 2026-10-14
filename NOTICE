@@ -16,5 +16,11 @@ only to say which service a channel or provider talks to.
 
 Third-party software. Job Radar is built on open-source packages that keep their own licences and copyright notices
 (MIT, ISC, BSD, Apache-2.0 and others). The lock files (pnpm-lock.yaml, jobspy/requirements*.txt) list them exactly; the
-licence texts are included in the installed packages (node_modules/<package>/LICENSE).
+licence texts come with the installed packages (node_modules/<package>/LICENSE) in a source checkout (the web image holds
+only the files Next.js traces for its server, which need not include every licence text).
 The scraping sidecar uses python-jobspy (MIT).
+
+Fonts. The web serves Archivo, Archivo Black, IBM Plex Mono and Noto Sans SC, each under the SIL Open Font License 1.1
+(reserved font names include "Plex" and "Source"). The files come unmodified from pinned npm packages (Fontsource, which
+republishes the Google Fonts files). The licence texts, with each copyright notice taken from upstream, are in
+licenses/fonts/ in the repository and in /app/licenses/fonts/ in the web image.

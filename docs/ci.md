@@ -491,7 +491,10 @@ The Linux first run from scratch: an empty checkout on the Ubuntu runner, `docke
 defaults, and the dashboard must answer. It catches what Docker Desktop on macOS hides: file ownership of the bind
 mounts (`PUID` / `PGID`), config files written with mode 0600, folders the containers cannot write. Because it builds the
 web, runner and jobspy images from the Dockerfiles, it is also what catches a broken `apt` / CLI install, a wrong `COPY`
-path or a build-stage failure before a deploy does (there is no separate image-only build job). It builds the images
+path or a build-stage failure before a deploy does (there is no separate image-only build job). The Dockerfile compiles the
+web and the runner with `RUN --network=none` (from a build stage without any `.next` cache), so this build also proves
+that compiling needs no network: the fonts come from the npm packages, and a lookup on the internet at build time fails
+the job. It builds the images
 the way `scripts/ops/deploy.sh` does, from an unpacked `git archive` of the commit, and checks the shipped config in
 them (the `config/` files are part of the images, not mounted), and that a build from a working tree leaves out
 everything `.gitignore` ignores. Runs for every pull
@@ -591,7 +594,7 @@ skipped otherwise. Any other combination (including a job that must run and was 
 
 | Ecosystem | Directory | Notes |
 |---|---|---|
-| `npm` | `/` | at most 5 open PRs; minor and patch updates grouped into one PR; major `@types/node` updates ignored (the types follow the Node major in `engines`) |
+| `npm` | `/` | at most 5 open PRs; the font packages (`@fontsource/*`, `@fontsource-variable/*`) in a PR of their own (a font update changes how every page looks: compare the pages before merging), other minor and patch updates grouped into one PR; major `@types/node` updates ignored (the types follow the Node major in `engines`) |
 | `pip` | `/jobspy` | at most 3 open PRs; the sidecar's Python dependencies |
 | `github-actions` | `/` | at most 3 open PRs; the action versions pinned in the workflows |
 

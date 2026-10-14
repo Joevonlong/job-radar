@@ -38,7 +38,10 @@ ENV NEXT_TELEMETRY_DISABLED=1
 COPY . .
 # engines.node in package.json is the one source of the supported Node range: fail the build on any other Node.
 RUN node scripts/ops/check-node-engines.mjs package.json
-RUN pnpm build && pnpm build:runner
+# Compiling needs no network (the fonts are self-hosted from node_modules): --network=none proves it on every image build,
+# including CI's linux-smoke. The build stage starts without a .next cache (.dockerignore drops .next, no cache mount), so
+# nothing fetched earlier can hide a lookup. Adding a .next/cache mount here would weaken this check.
+RUN --network=none pnpm build && pnpm build:runner
 
 # ---- web: Next.js standalone server --------------------------------------------------------
 FROM node:${NODE_VERSION}-slim AS web
@@ -58,6 +61,8 @@ ENV JOB_RADAR_DEFAULTS_DIR=/app/config
 RUN rm -rf /app/config
 COPY config/ /app/config/
 RUN chmod -R a+rX,go-w /app/config
+# The web serves the self-hosted font files (under .next/static/media): their licences (SIL OFL 1.1) travel with them.
+COPY licenses/fonts/ /app/licenses/fonts/
 # The final stage's own Node must satisfy engines.node too (the check script and package.json are not otherwise in this stage).
 COPY --from=build /app/package.json /app/scripts/ops/check-node-engines.mjs /tmp/engines/
 RUN node /tmp/engines/check-node-engines.mjs /tmp/engines/package.json && rm -rf /tmp/engines

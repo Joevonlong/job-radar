@@ -95,6 +95,11 @@ pnpm test:e2e           # Playwright against a production build and a throw-away
 pnpm test:e2e:setup     # the first-run wizard on a brand-new install
 ```
 
+The builds need no network: the fonts are self-hosted from the pinned `@fontsource` packages (`next/font/local` in
+`src/app/layout.tsx` for the Latin families, the other subsets and Noto Sans SC in `src/app/globals.css`; licences in
+`licenses/fonts/`). The image build runs them with `RUN --network=none`, so a change that fetches something at build
+time fails there.
+
 The database-backed tests (`test:integration`, `test:e2e`, `test:e2e:setup`) never use the database of your own installation,
 and they have no default address that could lead there. Start a throw-away Postgres on a port of its own and point the
 tests at it; the role must be allowed to create databases:
