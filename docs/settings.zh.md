@@ -169,7 +169,7 @@ claude-cli，然后 Anthropic API；只用能搜索网页的 provider，codex-cl
 
 ## 手动触发和测试
 
-所有按钮都只在 `control_requests` 里留一个请求，由 runner（容器里）或 ai-worker（宿主机上）取走执行；页面每 2 秒问一次这个请求，结果直接显示在按钮下面。请求没结束时按钮是灰的；同一个目标的同类请求还没结束就直接复用，结束后 `schedule.yaml: manual_triggers.min_interval_seconds`（默认 30 秒）内再点会被拒绝并提示还要等几秒。每次创建请求，web 日志里有一行 `manual request queued`。等了 10 分钟还没结果，按钮下会提示 runner / ai-worker 可能没在运行。
+所有按钮都只在 `control_requests` 里留一个请求，由 runner（容器里）或 ai-worker（宿主机上）取走执行；页面每 2 秒问一次这个请求，结果直接显示在按钮下面。请求没结束时按钮是灰的；同一个目标的同类请求还没结束就直接复用，结束后 `schedule.yaml: manual_triggers.min_interval_seconds`（默认 30 秒）内再点会被拒绝并提示还要等几秒。每次创建请求，web 日志里有一行 `manual request queued`（日志级别为 `info` 或 `debug` 时，见 [`configuration.zh.md`](configuration.zh.md) 的“日志级别”）。等了 10 分钟还没结果，按钮下会提示 runner / ai-worker 可能没在运行。
 
 | 按钮 | 位置 | 请求 | 谁执行 | 做什么 |
 |---|---|---|---|---|

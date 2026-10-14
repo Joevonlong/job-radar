@@ -1,7 +1,6 @@
 import { setTimeout as sleep } from "node:timers/promises";
 
 import { registerBuiltinChannels } from "@/lib/channels/builtin";
-import { createLogger } from "@/lib/channels/logger";
 import type { ScheduledCycleKind } from "@/lib/channels/query";
 import { defaultRegistry } from "@/lib/channels/registry";
 import { createDbStateStore } from "@/lib/channels/store";
@@ -21,6 +20,7 @@ import { runCycle, type RunCycleOptions } from "@/lib/cycle/run-cycle";
 import { createScheduler, formatSlot } from "@/lib/cycle/schedule";
 import { createSuggestScheduler, enqueueSuggestRequest, isWeeklySuggestOverdue } from "@/lib/interests/suggest-schedule";
 import { loadDatabaseEnv, loadRunnerEnv } from "@/lib/env";
+import { createProcessLogger } from "@/lib/logging/process-logger";
 import {
   aiWorkerOfflineSeconds,
   applySystemRetention,
@@ -168,7 +168,7 @@ async function main(): Promise<number> {
   }
 
   const db = getDb();
-  const logger = createLogger();
+  const logger = createProcessLogger();
   // Which shipped defaults this runner runs with (`pnpm run doctor`): written now, refreshed with every heartbeat.
   const shippedConfig = createShippedConfigReporter({ process: "runner", db: () => db, log, timeoutMs: () => env.RUNNER_HEARTBEAT_SECONDS * 1000 });
   await shippedConfig.report();

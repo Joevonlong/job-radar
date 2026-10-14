@@ -170,7 +170,7 @@ it, searches without a domain limit). See [salary.md](salary.md).
 
 ## Manual triggers and tests
 
-Every button only leaves a request in `control_requests`, which the runner (in the container) or ai-worker (on the host) picks up and executes; the page polls that request every 2 seconds and shows the result right under the button. While a request is unfinished the button is greyed out; a request of the same kind for the same target that has not finished is simply reused, and after it finishes, clicking again within `schedule.yaml: manual_triggers.min_interval_seconds` (default 30 seconds) is rejected with a hint of how many seconds remain. Each request creation writes one `manual request queued` line in the web log. If there is still no result after 10 minutes, the button shows a hint that the runner / ai-worker may not be running.
+Every button only leaves a request in `control_requests`, which the runner (in the container) or ai-worker (on the host) picks up and executes; the page polls that request every 2 seconds and shows the result right under the button. While a request is unfinished the button is greyed out; a request of the same kind for the same target that has not finished is simply reused, and after it finishes, clicking again within `schedule.yaml: manual_triggers.min_interval_seconds` (default 30 seconds) is rejected with a hint of how many seconds remain. Each request creation writes one `manual request queued` line in the web log (at log level `info` or `debug`, see "Log level" in [`configuration.md`](configuration.md)). If there is still no result after 10 minutes, the button shows a hint that the runner / ai-worker may not be running.
 
 | Button | Location | Request | Executed by | What it does |
 |---|---|---|---|---|

@@ -74,6 +74,13 @@ and the project uses [Semantic Versioning](https://semver.org/).
   default); when it is the last query of its unit, the skip shows in the cycle's collect step (`partial`, or `failed`
   when nothing else succeeded). "Recommended for you" stopped by the limit counts as read only when it kept postings.
   See [docs/linkedin-session.md](docs/linkedin-session.md#when-the-daily-page-limit-is-reached).
+- **Debug logging could not be turned on:** every process logged at `info`, so the diagnostic records (AI provider
+  checks, skipped providers, HTTP retries, ignored Telegram chats) never appeared. The level is now `schedule.yaml`
+  `logging.level` (default `info`, followed without a restart) or `JOB_RADAR_LOG_LEVEL`, which wins; it applies to the
+  web app, the runner, the ai-worker and `pnpm cycle:run`, and the AI provider test and the requests outside a cycle
+  (translation, breakdown, salary lookup) now hand their logger to the providers. Remove the `logging` block from
+  `data/config/schedule.yaml` before rolling back to an older version. See
+  [docs/configuration.md](docs/configuration.md) ("Log level").
 
 ## [2.0.1] - 2026-10-11
 

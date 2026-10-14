@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { DEFAULT_LOG_LEVEL, LOG_LEVELS } from "@/lib/logging/levels";
+
 import { cronString, nonEmptyString, nonNegativeInt, positiveInt, timeZone } from "./common";
 
 const cycle = z.strictObject({
@@ -232,6 +234,19 @@ const SUGGEST_DEFAULTS: SuggestConfig = {
   notify: true,
 };
 
+/**
+ * How much the long-running processes (web, runner, ai-worker) and `pnpm cycle:run` log. `JOB_RADAR_LOG_LEVEL` wins over
+ * it. A schema default only: the shipped schedule.yaml does not carry the block.
+ */
+const logging = z.strictObject({
+  /** The lowest level written: `debug` adds the diagnostic records (provider checks, retries, skipped chats). */
+  level: z.enum(LOG_LEVELS).default(DEFAULT_LOG_LEVEL),
+});
+
+export type LoggingConfig = z.infer<typeof logging>;
+
+const LOGGING_DEFAULTS: LoggingConfig = { level: DEFAULT_LOG_LEVEL };
+
 /** config/schedule.yaml — processing cycles. */
 export const scheduleSchema = z.strictObject({
   timezone: timeZone,
@@ -257,6 +272,8 @@ export const scheduleSchema = z.strictObject({
   deploy: deploy.default(DEPLOY_DEFAULTS),
   /** Rate limit of the manual buttons; a file without the block gets the defaults of the shipped YAML. */
   manual_triggers: manualTriggers.default(MANUAL_TRIGGERS_DEFAULTS),
+  /** Log level of the processes; a file without the block logs at `info`. */
+  logging: logging.default(LOGGING_DEFAULTS),
 });
 
 export type BackupConfig = z.infer<typeof backup>;

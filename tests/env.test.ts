@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { loadDatabaseEnv, loadRunnerEnv } from "@/lib/env";
+import { loadDatabaseEnv, loadRunnerEnv, parseLogLevelEnv } from "@/lib/env";
 
 describe("loadDatabaseEnv", () => {
   it("accepts a postgres URL and applies defaults", () => {
@@ -65,5 +65,25 @@ describe("loadRunnerEnv", () => {
     expect(env).toMatchObject({ RUNNER_HEALTH_MAX_AGE_SECONDS: 300, RUNNER_BACKUP_DIR: "/mnt/backups", PG_DUMP_PATH: "/usr/lib/postgresql/17/bin/pg_dump" });
     expect(loadRunnerEnv({ RUNNER_HEALTH_MAX_AGE_SECONDS: "", RUNNER_BACKUP_DIR: "", PG_DUMP_PATH: "" }).RUNNER_HEALTH_MAX_AGE_SECONDS).toBe(120);
     expect(() => loadRunnerEnv({ RUNNER_HEALTH_MAX_AGE_SECONDS: "0" })).toThrow(/RUNNER_HEALTH_MAX_AGE_SECONDS/);
+  });
+});
+
+describe("parseLogLevelEnv", () => {
+  it.each(["debug", "info", "warn", "error"])("accepts %s", (level) => {
+    expect(parseLogLevelEnv({ JOB_RADAR_LOG_LEVEL: level })).toEqual({ level, invalid: false });
+  });
+
+  it("ignores case and surrounding spaces", () => {
+    expect(parseLogLevelEnv({ JOB_RADAR_LOG_LEVEL: "  Warn " })).toEqual({ level: "warn", invalid: false });
+  });
+
+  it("treats a missing, empty or blank value as unset, not as invalid", () => {
+    expect(parseLogLevelEnv({})).toEqual({ level: undefined, invalid: false });
+    expect(parseLogLevelEnv({ JOB_RADAR_LOG_LEVEL: "" })).toEqual({ level: undefined, invalid: false });
+    expect(parseLogLevelEnv({ JOB_RADAR_LOG_LEVEL: "   " })).toEqual({ level: undefined, invalid: false });
+  });
+
+  it.each(["verbose", "trace", "0", "debug,info"])("refuses %j: unset and flagged, without throwing", (value) => {
+    expect(parseLogLevelEnv({ JOB_RADAR_LOG_LEVEL: value })).toEqual({ level: undefined, invalid: true });
   });
 });

@@ -60,7 +60,7 @@ Ctrl-C cancels the command, which then puts the services back as they were. The 
 4. Test: `pnpm telegram:test`; getting a "✅ Job Radar" message means it works.
 5. Telegram is **off by default**. In `data/config/notify.yaml` set `telegram.enabled` to `true` (or switch it on in the setup wizard); the runner hot-reloads this switch, no restart needed.
 
-Only messages and buttons from this chat id are processed; anything anyone else sends to the bot is ignored (only one line in the debug log, without content).
+Only messages and buttons from this chat id are processed; anything anyone else sends to the bot is ignored (at log level `debug` one line is logged, without content; see "Log level" in [configuration.md](configuration.md)).
 
 **Group chats**: when `TELEGRAM_CHAT_ID` is a group or channel (a negative number), every member of the group can press the buttons and change your application statuses. Limit them to yourself by adding your own Telegram user id (a number; `@userinfobot` tells you, and the setup command offers the id of whoever wrote the message) to `.env`, comma-separated for several people, and restart the runner:
 ```

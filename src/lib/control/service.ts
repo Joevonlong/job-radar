@@ -2,7 +2,6 @@
  * Web side of the control channel: validates what the browser asks for and leaves a row in
  * `control_requests`. The runner does the work (see `poller.ts`); this module never runs a cycle.
  */
-import { createLogger } from "@/lib/channels/logger";
 import { isConfiguredChannelId } from "@/lib/channels/registry";
 import { loadConfig } from "@/lib/config";
 import {
@@ -20,6 +19,7 @@ import {
   type ControlRequestKind,
   type Db,
 } from "@/lib/db";
+import { createProcessLogger } from "@/lib/logging/process-logger";
 
 import { runCyclePayloadSchema, scoreJobsPayloadSchema, testAiPayloadSchema, testChannelPayloadSchema, type ScoreJobsPayload } from "./types";
 import type { ControlActionState } from "./service-types";
@@ -27,7 +27,7 @@ import type { ControlActionState } from "./service-types";
 export type { ControlActionState } from "./service-types";
 
 /** Every request a button creates is logged (web process output). */
-const log = createLogger({ fields: { component: "control" } });
+const log = createProcessLogger({ fields: { component: "control" } });
 
 const fail = (error: Extract<ControlActionState, { status: "error" }>["error"]): ControlActionState => ({ status: "error", error, nonce: Date.now() });
 const queued = (row: ControlRequest, existing: boolean): ControlActionState => ({

@@ -25,7 +25,6 @@ import { parseArgs } from "node:util";
 import { setTimeout as sleep } from "node:timers/promises";
 
 import { registerBuiltinChannels } from "@/lib/channels/builtin";
-import { createLogger } from "@/lib/channels/logger";
 import { defaultRegistry } from "@/lib/channels/registry";
 import { loadConfig, watchConfig } from "@/lib/config";
 import { runControlPoller, processNextControlRequest, aiWorkerRequestKinds } from "@/lib/control";
@@ -35,6 +34,7 @@ import { registerBuiltinAiSubtasks } from "@/lib/cycle/builtin-steps";
 import { closeDb, getDb, writeHeartbeat } from "@/lib/db";
 import { acquireInstanceLock, type InstanceLock, type LockHolder } from "@/lib/db/instance-lock";
 import { loadDatabaseEnv } from "@/lib/env";
+import { createProcessLogger } from "@/lib/logging/process-logger";
 import { configGuardFindings } from "@/lib/ops/config-guards";
 import { requeueInterruptedControlRequests } from "@/lib/db/repos/control-requests";
 import { withTimeout } from "@/lib/ops/timeout";
@@ -155,7 +155,7 @@ async function main(): Promise<number> {
   });
 
   const db = getDb();
-  const logger = createLogger();
+  const logger = createProcessLogger();
   registerBuiltinChannels(defaultRegistry);
   registerBuiltinAiSubtasks();
   registerAiControlHandlers(); // every AI-backed request kind: the single registration point

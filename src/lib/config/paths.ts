@@ -140,10 +140,13 @@ export function displayConfigPathForWeb(file: string): string {
   return file;
 }
 
+/** The config poll interval (ms) when `JOB_RADAR_CONFIG_POLL_MS` is unset or invalid. */
+export const DEFAULT_CONFIG_POLL_MS = 5000;
+
 /** `JOB_RADAR_CONFIG_POLL_MS` (default 5000). 0 disables polling. */
 export function getPollIntervalMs(): number {
   const raw = process.env.JOB_RADAR_CONFIG_POLL_MS;
-  if (raw === undefined || raw.trim() === "") return 5000;
+  if (raw === undefined || raw.trim() === "") return DEFAULT_CONFIG_POLL_MS;
   const n = Number(raw);
-  return Number.isFinite(n) && n >= 0 ? Math.floor(n) : 5000;
+  return Number.isFinite(n) && n >= 0 ? Math.floor(n) : DEFAULT_CONFIG_POLL_MS;
 }

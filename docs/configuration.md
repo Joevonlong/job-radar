@@ -374,6 +374,35 @@ the defaults below apply. The patterns live in the market packs (`rules.yaml` `v
 
 An older version rejects `job_checks.visa` in `ui.yaml`: remove it before rolling back.
 
+## Log level (`schedule.yaml` `logging.level`, `JOB_RADAR_LOG_LEVEL`)
+
+The web app, the runner, the ai-worker and `pnpm cycle:run` log at `info` unless told otherwise. `debug` adds the
+diagnostic records: AI provider checks, a provider the router skipped, HTTP retries, a Telegram message from another chat.
+
+| Where | Value | Meaning |
+|---|---|---|
+| `JOB_RADAR_LOG_LEVEL` in `.env` | `debug`, `info`, `warn`, `error` (case does not matter) | Wins over the config. Empty = not set. Any other value counts as not set (the config applies) and is reported once in the log, without the value |
+| `schedule.yaml` `logging.level` | same, default `info` | Used when the variable is not set. Not in the shipped file: the default applies until you add it |
+
+- **Add it to your existing `data/config/schedule.yaml`**, for example `logging:` with `level: debug` under it. A user
+  file replaces the shipped one as a whole (see "Which copy is read"), so a `schedule.yaml` holding only a `logging`
+  block is invalid.
+- **A change to the file needs no restart.** The runner and the ai-worker follow it through their watcher (on Docker bind
+  mounts file events are unreliable; the polling picks it up instead); the web app checks on demand, at most once per
+  `JOB_RADAR_CONFIG_POLL_MS`. With `JOB_RADAR_CONFIG_POLL_MS=0` the web app does not check on demand: it takes a change
+  made outside it only after a restart or when it writes the file itself (a save in Settings). Each process asks for
+  the level again at most once per that interval (5 seconds when the interval is `0`), so it takes effect within a few
+  seconds of the reload.
+- **A broken `schedule.yaml`** keeps the last valid level until the process restarts (the loader keeps the last valid
+  file). A process that starts with a broken file logs at `info`, says so once, and takes the level as soon as the
+  file is valid again.
+- **A change to `.env`** needs the containers recreated, `docker compose up -d` (a `restart` keeps the old
+  environment), and the ai-worker restarted (it reads `.env` when it starts). A variable set only in your shell does not
+  reach the containers.
+
+Before rolling back to a version without `logging.level`, remove the `logging` block from `data/config/schedule.yaml`:
+older versions reject unknown keys.
+
 ## Backup
 
 Every backup, the runner's daily one (`backup.config_archive`, on by default) and `scripts/ops/backup.sh`, leaves a `….config.tgz` (`data/config` + `data/profile`, without `.backup/` and the sign-in key `.web-session-secret`) next to the database dump. The `backup` section of `schedule.yaml` also has `pre_migrate` (take a backup before a database migration), `keep_system` (how many safety backups of each kind to keep) and `keep_old_databases` (how many databases replaced by a restore to keep). `.env` and `.auth/` are in no backup. See [`backup-restore.md`](backup-restore.md), including "Restoring the configuration".
