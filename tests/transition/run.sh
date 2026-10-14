@@ -5,6 +5,9 @@
 #
 #   tests/transition/run.sh [--scenarios A,B] [<artifact dir>]
 #
+#   --scenarios  A, B or A,B (the default). C, D and E are no separate choices: they run inside B, on its project,
+#                after B's upgrade to V4 (in the order D, C, E), so `--scenarios B` runs B, C, D and E.
+#
 # Needs: git with the full history of this checkout (62d7ad9 and later), node, pnpm (the store already holds the locked
 # packages of every version: CI runs `pnpm install` first, the rest is fetched), Docker with compose v2. No database: each
 # project runs its own db container on a free port. The artifact directory receives each step's output, the simulator's
@@ -27,7 +30,7 @@
 # Scenario D (project b, at V4): deploy NEXT with a runner image build that fails (build arg FAIL_RUNNER_BUILD=1 added
 #   by the docker guard below): the deploy fails at the build; containers, images and the worker are unchanged and the
 #   lock is gone; the same deploy without the build arg then succeeds.
-# Scenario C (project b, at NEXT): install --release LOADER whose tsx loader is broken: rolled back to NEXT with evidence.
+# Scenario C (project b, at NEXT, after D): install --release LOADER whose tsx loader is broken: rolled back to NEXT with evidence.
 # Scenario E (project b): the emergency restore of the previous release (prepare-release.sh V4 + install --release V4):
 #   the V4 worker runs with evidence and the doctor reports release != HEAD; then the uninstall removes it.
 #
@@ -43,9 +46,20 @@
 # the check is skipped, and V0's uninstall script, which picks its service manager from `uname`, gets a uname that says
 # Linux.
 #
-# Safety: a docker guard first on PATH lets through read-only commands and compose commands of this run's projects only
-# (prune, system, volume, down and any other project are refused); deploy.sh always runs with --no-prune and --no-backup;
-# launchctl / systemctl resolve to the simulator (checked before anything starts); `claude` and `codex` are stubs.
+# Safety:
+#   - environment: before anything runs, every compose, docker, database and job-radar variable of the caller's shell is
+#     unset (clean-env.sh: COMPOSE_*, DOCKER_HOST / DOCKER_CONTEXT / DOCKER_TLS*, JOBRADAR_*, JOB_RADAR_*, POSTGRES_*,
+#     PG*, DATABASE_URL and every name the compose files of V0 to V4 interpolate); each project's .env sets its own
+#     project name, volume name, ports, bind address, uid / gid and database password
+#   - docker: a guard first on PATH (docker-guard.sh) lets through read-only commands; compose commands that change
+#     something run only for a project named jrtransition-<id>-* whose ports this run registered, and only after
+#     `docker compose config` of that very command (same options, same environment) passed compose-check.mjs: every
+#     volume named jrtransition-<id>-* and not external, every bind mount and build context inside the run's temporary
+#     directory, no container_name, only the registered ports. prune, rm, volume rm, down and the rest are refused
+#   - cleanup: a project is removed only after compose-check.mjs passed on its configuration and on the mounts of its
+#     containers (docker inspect); `down` without -v, then only volumes whose names carry the project's prefix
+#   - deploy.sh always runs with --no-prune and --no-backup; launchctl / systemctl resolve to the simulator (checked
+#     before anything starts); `claude` and `codex` are stubs
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
@@ -67,6 +81,19 @@ while [[ $# -gt 0 ]]; do
   esac
   shift
 done
+for s in ${SCENARIOS//,/ }; do
+  case "$s" in
+    A|B) ;;
+    C|D|E) echo "--scenarios: $s runs inside B (--scenarios B)" >&2; exit 1 ;;
+    *) echo "--scenarios: unknown scenario '$s' (A, B)" >&2; exit 1 ;;
+  esac
+done
+
+# Before anything runs: no compose, docker or database setting of the caller's shell reaches docker or the scripts
+# under test (each project gets its own values in its .env; see clean-env.sh).
+# shellcheck source=tests/transition/clean-env.sh
+source "$REPO/tests/transition/clean-env.sh"
+transition_clean_env < <(cat "$REPO"/compose*.yaml 2>/dev/null; for c in "$V0" "$V1" "$V2" "$V3"; do git -C "$REPO" show "$c:compose.yaml" 2>/dev/null; done)
 
 say() { printf '\n==> %s\n' "$*"; }
 die() { echo "transition: FAILED: $*" >&2; exit 1; }
@@ -102,6 +129,32 @@ collect_artifacts() {
   done
 }
 
+# teardown_project <project> <dir>: removes the project's containers, network and built images, then the volumes named
+# <project>-...; only after its containers' mounts (docker inspect) and its configuration (compose config) were checked
+# to be this run's (compose-check.mjs). Never `down -v`: a volume is removed only by a name that carries the run's prefix.
+teardown_project() {
+  local p="$1" dir="$2" ids v
+  [[ "$p" == "$PREFIX"-?* ]] || { echo "transition: not removing $p: not a project of this run" >&2; return 1; }
+  ids="$("$REAL_DOCKER" ps -aq --filter "label=com.docker.compose.project=$p")"
+  if [[ -n "$ids" ]]; then
+    # shellcheck disable=SC2086
+    "$REAL_DOCKER" inspect $ids | node "$REPO/tests/transition/compose-check.mjs" inspect "$p" "$PREFIX-" "$root" \
+      || { echo "transition: NOT removing project $p: its containers mount something that is not this run's (above); remove it by hand" >&2; return 1; }
+  fi
+  if [[ -d "$dir" ]]; then
+    (cd "$dir" && "$REAL_DOCKER" compose -p "$p" config --format json 2>/dev/null) \
+      | node "$REPO/tests/transition/compose-check.mjs" config "$p" "$PREFIX-" "$root" "$root/projects/$p.ports" \
+      || { echo "transition: NOT removing project $p: its configuration is not this run's (above); remove it by hand" >&2; return 1; }
+    (cd "$dir" && "$REAL_DOCKER" compose -p "$p" down --rmi local --remove-orphans >/dev/null 2>&1) || true
+  fi
+  for v in $("$REAL_DOCKER" volume ls -q --filter "label=com.docker.compose.project=$p") "$p-pg"; do
+    [[ "$v" == "$p"-?* ]] || continue
+    "$REAL_DOCKER" volume inspect "$v" >/dev/null 2>&1 || continue
+    "$REAL_DOCKER" volume rm "$v" >/dev/null 2>&1 || echo "transition: could not remove volume $v" >&2
+  done
+  return 0
+}
+
 cleanup() {
   local rc=$? pid p dir
   trap - EXIT INT TERM HUP
@@ -115,12 +168,10 @@ cleanup() {
       kill -KILL -- "-$pid" 2>/dev/null || kill -KILL "$pid" 2>/dev/null
     done
   fi
-  # this run's compose projects only: containers, network, the volume and the images compose built for them
+  # this run's compose projects only, each checked first (teardown_project)
   for p in ${PROJECTS[@]+"${PROJECTS[@]}"}; do
     dir="${p#* }"; p="${p%% *}"
-    [[ "$p" == "$PREFIX"-* ]] || continue
-    (cd "$dir" && "$REAL_DOCKER" compose -p "$p" down -v --rmi local --remove-orphans >/dev/null 2>&1)
-    "$REAL_DOCKER" volume rm "$p-pg" >/dev/null 2>&1
+    teardown_project "$p" "$dir" || { (( rc != 0 )) || rc=1; }
   done
   chmod -R u+w "$root" 2>/dev/null
   [[ -n "$root" && "$(basename "$root")" == transition.* ]] && rm -rf -- "$root"
@@ -135,41 +186,12 @@ trap 'exit 129' HUP
 mkdir -p "$root/home" "$root/xdg" "$root/run" "$root/sim" "$root/bin" "$root/uname-linux"
 chmod 700 "$root/run"
 FAIL_FLAG="$root/fail-runner-build"
+mkdir -p "$root/projects"
+# the guard (docker-guard.sh) with this run's settings baked in: the scripts under test cannot change them
 cat > "$root/bin/docker" <<EOF
 #!/usr/bin/env bash
-# transition docker guard: read-only commands, and compose commands of the projects $PREFIX-* only
-real="$REAL_DOCKER" prefix="$PREFIX-" flag="$FAIL_FLAG"
-EOF
-cat >> "$root/bin/docker" <<'EOF'
-refuse() { echo "transition docker guard: refused: docker $*" >&2; exit 97; }
-case "${1:-}" in
-  info|version|ps|inspect|logs) exec "$real" "$@" ;;
-  image) [[ "${2:-}" == inspect || "${2:-}" == ls ]] && exec "$real" "$@"; refuse "$@" ;;
-  volume) [[ "${2:-}" == inspect || "${2:-}" == ls ]] && exec "$real" "$@"; refuse "$@" ;;
-  system) [[ "${2:-}" == df || "${2:-}" == info ]] && exec "$real" "$@"; refuse "$@" ;;
-  compose) ;;
-  *) refuse "$@" ;;
-esac
-args=("$@"); out=(compose); project="${COMPOSE_PROJECT_NAME:-}"; sub=""; i=1
-while (( i < ${#args[@]} )); do
-  a="${args[$i]}"
-  if [[ -z "$sub" ]]; then
-    case "$a" in
-      -p|--project-name) project="${args[$((i + 1))]:-}"; out+=("$a" "$project"); i=$((i + 2)); continue ;;
-      --project-name=*) project="${a#*=}" ;;
-      -f|--file|--env-file|--profile|--project-directory|--ansi|--progress|--parallel) out+=("$a" "${args[$((i + 1))]:-}"); i=$((i + 2)); continue ;;
-      -*) ;;
-      *) sub="$a"; out+=("$a"); i=$((i + 1))
-         if [[ "$sub" == build && -e "$flag" ]]; then out+=(--build-arg FAIL_RUNNER_BUILD=1); fi
-         continue ;;
-    esac
-  fi
-  out+=("$a"); i=$((i + 1))
-done
-case "$sub" in config|ps|ls|images|logs|top|version|port) exec "$real" "${out[@]}" ;; esac
-[[ "$project" == "$prefix"* ]] || refuse "$@"
-[[ "$sub" != down ]] || refuse "$@"
-exec "$real" "${out[@]}"
+TRANSITION_REAL_DOCKER='$REAL_DOCKER' TRANSITION_PREFIX='$PREFIX-' TRANSITION_ROOT='$root' TRANSITION_FAIL_FLAG='$FAIL_FLAG' \\
+  exec bash '$REPO/tests/transition/docker-guard.sh' "\$@"
 EOF
 for tool in claude codex; do
   printf '#!/bin/sh\n# transition stub: no AI provider here\n[ "$1" = --version ] && { echo "0.0.0 (transition stub)"; exit 0; }\necho "%s: transition stub" >&2\nexit 1\n' "$tool" > "$root/bin/$tool"
@@ -181,7 +203,6 @@ chmod 755 "$root/bin/"* "$root/uname-linux/uname"
 export DOCKER_CONFIG="${DOCKER_CONFIG:-$HOME/.docker}"
 export HOME="$root/home" XDG_CONFIG_HOME="$root/xdg" XDG_RUNTIME_DIR="$root/run" JOB_RADAR_SERVICE_MANAGER=systemd JOB_RADAR_SIM_DIR="$root/sim"
 export PATH="$root/bin:$SIM_BIN:$PATH"
-unset NODE_OPTIONS JOB_RADAR_RELEASES_LOCK_TOKEN DATABASE_URL COMPOSE_PROJECT_NAME JOB_RADAR_DOCTOR_WEB_URL
 # every launchctl / systemctl the scripts run must be the simulator's
 [[ "$(command -v launchctl)" == "$SIM_BIN/launchctl" && "$(command -v systemctl)" == "$SIM_BIN/systemctl" ]] \
   || die "launchctl / systemctl do not resolve to the simulator ($(command -v launchctl), $(command -v systemctl))"
@@ -245,10 +266,13 @@ POSTGRES_PASSWORD=$pw
 POSTGRES_DB=jobradar
 DB_HOST_PORT=$db_port
 JOB_RADAR_WEB_PORT=$WEB_PORT
+JOB_RADAR_WEB_BIND=127.0.0.1
 PUID=$(id -u)
 PGID=$(id -g)
 DATABASE_URL=$DB_URL
 EOF
+  # the docker guard starts only projects with registered ports, and only on these
+  printf '%s\n%s\n' "$db_port" "$WEB_PORT" > "$root/projects/$P.ports"
   mkdir -p "$DIR/data/config"
   sed -e 's/^catch_up: true/catch_up: false/' -e 's/^\(    enabled:\) true/\1 false/' "$DIR/config/schedule.yaml" > "$DIR/data/config/schedule.yaml"
   PROJECTS+=("$P $DIR")
@@ -448,7 +472,7 @@ if want A; then
   # A is done: its worker goes (B installs the same unit) and its containers too, before B builds
   logged a-uninstall 0 in_project bash scripts/ops/uninstall-ai-worker.sh
   [[ -z "$(workers_left)" ]] || die "scenario A's worker still runs after the uninstall"
-  (cd "$DIR" && "$REAL_DOCKER" compose -p "$P" down -v --remove-orphans >/dev/null 2>&1) || true
+  teardown_project "$P" "$DIR" || die "scenario A's project could not be removed safely"
 fi
 
 # ==== scenarios B, D, C, E ==================================================================================================

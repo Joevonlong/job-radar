@@ -407,7 +407,7 @@ Linux 从零首次运行：在 Ubuntu runner 上用一份空的检出，按随�
 - C：tsx loader 坏掉的发布被回滚。
 - E：应急恢复上一个发布；doctor 报告 release != HEAD。最后卸载。
 
-每一步之后：web 和 runner 容器里的 `/app/config` 等于所部署提交的 `config/`（逐文件 sha256）；worker 的 MainPID 在预期目录里运行，`install-ai-worker.sh --print-release` 一致；worker 完成一个 `run_ai` 请求；doctor 的 JSON（`--only config.shipped --only ops`）有 shipped config 检查，从发布目录版本起确认各进程的报告，并且没有锁和替换备份。一个 docker 包装只放行只读命令和脚本自己项目的 compose 命令；`launchctl` 和 `systemctl` 必须指向模拟器。上限 105 分钟。本地（Linux 或 macOS，Docker 带 compose v2）：同样的命令；结束时删除临时目录和脚本自己的 compose 项目、镜像、卷。
+每一步之后：web 和 runner 容器里的 `/app/config` 等于所部署提交的 `config/`（逐文件 sha256）；worker 的 MainPID 在预期目录里运行，`install-ai-worker.sh --print-release` 一致；worker 完成一个 `run_ai` 请求；doctor 的 JSON（`--only config.shipped --only ops`）有 shipped config 检查，从发布目录版本起确认各进程的报告，并且没有锁和替换备份。安全措施：开始前清掉调用方环境里所有 compose、docker 和数据库相关变量（`COMPOSE_*`、`DOCKER_HOST`、`JOBRADAR_*`、`JOB_RADAR_*`、`POSTGRES_*`、`PG*`、`DATABASE_URL`，以及 compose 文件里插值用到的每个变量名），它们因此无法覆盖项目的 `.env`（`tests/transition/clean-env.sh`）。docker 包装（`tests/transition/docker-guard.sh`）放行只读命令；会改动东西的 compose 命令只对脚本自己的项目执行，而且要先让同一条命令的 `docker compose config` 通过 `tests/transition/compose-check.mjs`（每个卷都带本次运行的前缀且不是 external，每个 bind mount 和构建上下文都在本次运行的目录里，没有 `container_name`，只发布为该项目登记的端口）；`down`、prune 和 `volume rm` 一律拒绝。清理时用同样的方式检查配置和容器的挂载，执行不带 `-v` 的 `down`，只删除名字带项目前缀的卷。`launchctl` 和 `systemctl` 必须指向模拟器。`tests/ops/transition-guard.test.ts` 用假的 docker 测这些防护。上限 105 分钟。本地（Linux 或 macOS，Docker 带 compose v2）：同样的命令；结束时删除临时目录和脚本自己的 compose 项目、镜像、卷。
 
 不覆盖：launchd（集成测试在 launchd 模拟器上测替换；真 launchd 靠手动演练），以及 `deploy.sh` 自己的 git pull（每跳先检出提交再用 `--skip-pull`）。不在 Linux 上时跳过 doctor 把 worker 报告和 systemd 对照的那部分。
 

@@ -620,10 +620,18 @@ project (`jrtransition-<random>-*`), ports, volume and database password, and wi
 After each step: `/app/config` of the web and runner containers equals `config/` of the deployed commit (sha256 of every
 file); the worker's MainPID runs from the expected directory and `install-ai-worker.sh --print-release` agrees; a
 `run_ai` request is done by the worker; the doctor's JSON (`--only config.shipped --only ops`) has the shipped config
-check, and from the release-directory version on confirms the reports and finds no lock and no switch backup. A docker
-wrapper lets through only read-only commands and compose commands of the script's own projects; `launchctl` and
-`systemctl` must resolve to the simulator. Limit 105 minutes. Locally (Linux or macOS, Docker with compose v2): the same
-command; the temporary directory and the script's compose projects, images and volumes are removed at the end.
+check, and from the release-directory version on confirms the reports and finds no lock and no switch backup. Safety: before
+anything runs, the caller's compose, docker and database variables (`COMPOSE_*`, `DOCKER_HOST`, `JOBRADAR_*`,
+`JOB_RADAR_*`, `POSTGRES_*`, `PG*`, `DATABASE_URL` and every name the compose files interpolate) are unset, so none of
+them can override a project's `.env` (`tests/transition/clean-env.sh`). A docker guard (`tests/transition/docker-guard.sh`)
+lets through read-only commands; a compose command that changes something runs only for the script's own projects, and
+only after `docker compose config` of that same command passed `tests/transition/compose-check.mjs` (every volume
+named with the run's prefix and not external, every bind mount and build context inside the run's directory, no
+`container_name`, only the ports registered for the project); `down`, prune and `volume rm` are refused. Cleanup checks
+the configuration and the containers' mounts the same way, runs `down` without `-v` and removes only volumes named with
+the project's prefix. `launchctl` and `systemctl` must resolve to the simulator. `tests/ops/transition-guard.test.ts`
+covers these rails with fake docker binaries. Limit 105 minutes. Locally (Linux or macOS, Docker with compose v2): the
+same command; the temporary directory and the script's compose projects, images and volumes are removed at the end.
 
 Not covered: launchd (the integration tests run the switch against the launchd simulator; real launchd is the manual
 drill), and `deploy.sh`'s own git pull (each hop checks out the commit and uses `--skip-pull`). Off Linux the doctor's
