@@ -286,8 +286,9 @@ jobs:
         timeout-minutes: 25
         run: pnpm test:integration --reporter=verbose tests/integration/ai-worker-swap.test.ts tests/integration/uninstall-ai-worker.test.ts
       # engines.node allows Node 22.23.4 and later 22.x: the host ai-worker's release guard needs the synchronous module
-      # hooks, which tsx only takes from 22.22.3 on; 22.23.4 is the floor with the security fixes of the 2026-10-21 Node release. The Node above is the newest 22.x; the lowest allowed one is
-      # checked here, on a release directory built by scripts/ops/prepare-release.sh. Last steps of the job, so no switch back.
+      # hooks, which tsx only takes from 22.22.3 on; 22.23.4 is the floor with the security fixes of the 2026-10-21 Node
+      # release. The Node above is the newest 22.x; the lowest allowed one is checked here, on a release directory built
+      # by scripts/ops/prepare-release.sh. Last steps of the job, so no switch back.
       - name: Set up the lowest Node.js of engines.node
         uses: actions/setup-node@v7
         timeout-minutes: 5

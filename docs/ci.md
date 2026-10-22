@@ -352,7 +352,8 @@ database; nothing real is installed (temporary `HOME` and `XDG_CONFIG_HOME`).
 
 `actions/setup-node` again, now with Node 22.23.4, the lowest version `engines.node` (`>=22.23.4 <23`) allows. The host
 ai-worker's release guard (`src/ai-worker/release-guard.mjs`) needs Node's synchronous module hooks, and tsx only uses
-them from 22.22.3 on; 22.23.4 is the floor that carries the October 2026 Node security fixes. These are the last steps of the job, so nothing after them runs with this Node.
+them from 22.22.3 on; 22.23.4 is the floor that carries the October 2026 Node security fixes. These are the last steps
+of the job, so nothing after them runs with this Node.
 
 #### Load a release module with the lowest Node.js
 
