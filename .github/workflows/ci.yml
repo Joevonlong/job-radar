@@ -285,14 +285,14 @@ jobs:
       - name: Worker switch and uninstall tests (service-manager simulator)
         timeout-minutes: 25
         run: pnpm test:integration --reporter=verbose tests/integration/ai-worker-swap.test.ts tests/integration/uninstall-ai-worker.test.ts
-      # engines.node allows Node 22.22.3 and later 22.x: the host ai-worker's release guard needs the synchronous module
-      # hooks, which tsx only takes from that version on. The Node above is the newest 22.x; the lowest allowed one is
+      # engines.node allows Node 22.23.4 and later 22.x: the host ai-worker's release guard needs the synchronous module
+      # hooks, which tsx only takes from 22.22.3 on; 22.23.4 is the floor with the security fixes of the 2026-10-21 Node release. The Node above is the newest 22.x; the lowest allowed one is
       # checked here, on a release directory built by scripts/ops/prepare-release.sh. Last steps of the job, so no switch back.
       - name: Set up the lowest Node.js of engines.node
         uses: actions/setup-node@v7
         timeout-minutes: 5
         with:
-          node-version: "22.22.3"
+          node-version: "22.23.4"
       - name: Load a release module with the lowest Node.js
         timeout-minutes: 5
         run: |

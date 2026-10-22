@@ -25,7 +25,7 @@ and the project uses [Semantic Versioning](https://semver.org/).
   and 10.
 - **Install the database before the ai-worker:** `scripts/ops/install-ai-worker.sh` now waits for the new worker to hold
   its database lock and write a heartbeat, so on a new host run `docker compose up -d` (at least the db) first.
-- **Node.js 22.22.3 or a later 22.x is required** (`engines.node` is now `>=22.22.3 <23`), and pnpm must be the version
+- **Node.js 22.23.4 or a later 22.x is required** (`engines.node` is now `>=22.23.4 <23`), and pnpm must be the version
   in `package.json` (`packageManager`; `corepack enable` provides it). The Docker build stages check the Node version
   of their image.
 
@@ -122,6 +122,13 @@ and the project uses [Semantic Versioning](https://semver.org/).
   and no longer fail when the font download does. The pages look the same (same families, weights, character coverage
   and loading). The Dockerfile compiles with `RUN --network=none`, so every image build proves it. The font licences
   (SIL OFL 1.1) are in `licenses/fonts/` and in the web image.
+
+### Security
+
+- **Dependency and runtime security updates:** Next.js 16.4.2 and React 19.3.1 (published advisories in `use cache`, SVG
+  image optimisation and Server Actions handling), the MCP SDK 2.3.1, and Vite 8.3.5 and `ip-address` 10.7.4 for the
+  development and mail-client chains. The Node.js floor is raised to 22.23.4 for the 2026-10-21 Node security release;
+  rebuild the images with `--pull` so the containers get it too.
 
 ### Documentation
 

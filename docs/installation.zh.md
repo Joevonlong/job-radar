@@ -14,7 +14,7 @@
 | | 版本 | 用来做什么 |
 |---|---|---|
 | Docker（Compose 2.24 以上） | macOS 用 Docker Desktop；Linux 用 Docker Engine 加 compose 插件。Compose 要 2.24 或更新（compose 文件把 `.env` 设成可选，旧版本不认） | 运行看板、runner、抓取 sidecar 和数据库 |
-| Node.js | 22.22.3 或更新的 22.x（项目限定 `>=22.22.3 <23`；AI worker 的发布目录守卫需要这些版本的同步模块 hook） | 辅助命令，以及跑在你机器上的 AI worker |
+| Node.js | 22.23.4 或更新的 22.x（项目限定 `>=22.23.4 <23`；AI worker 的发布目录守卫需要这些版本的同步模块 hook） | 辅助命令，以及跑在你机器上的 AI worker |
 | pnpm | 必须是 `package.json` 里写的版本（`packageManager`，目前是 11.15.1） | 给辅助命令装依赖；建 AI worker 发布目录时版本不对会拒绝 |
 | git | 较新的版本即可 | 获取代码，以后升级 |
 | 磁盘空间 | 几 GB | 镜像（runner 镜像里带一个无界面浏览器）和数据库。每个 AI worker 发布目录（`data/releases/ai-worker/<提交>/`，由 `scripts/ops/prepare-release.sh` 建）按 `du` 算约 580 MB；APFS 上其中的文件是 pnpm store 的克隆，每份实际只多占约 60 MB |
@@ -23,7 +23,7 @@
 
 ```bash
 docker compose version
-node --version      # v22.22.3 或更新，低于 v23
+node --version      # v22.23.4 或更新，低于 v23
 pnpm --version      # package.json 里 packageManager 的版本
 git --version
 ```

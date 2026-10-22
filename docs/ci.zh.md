@@ -243,11 +243,11 @@ Vitest 单元测试：`tests/**`（除 `tests/integration/`）下的所有测试
 
 #### Set up the lowest Node.js of engines.node
 
-再用一次 `actions/setup-node`，这次是 Node 22.22.3，即 `engines.node`（`>=22.22.3 <23`）允许的最低版本。宿主机 ai-worker 的发布目录守卫（`src/ai-worker/release-guard.mjs`）需要 Node 的同步模块 hook，tsx 从这个版本起才走这条路。这是任务的最后几步，之后没有别的步骤用这个 Node。
+再用一次 `actions/setup-node`，这次是 Node 22.23.4，即 `engines.node`（`>=22.23.4 <23`）允许的最低版本。宿主机 ai-worker 的发布目录守卫（`src/ai-worker/release-guard.mjs`）需要 Node 的同步模块 hook，tsx 从 22.22.3 起才走这条路；22.23.4 是带有 2026 年 10 月 Node 安全修复的下限。这是任务的最后几步，之后没有别的步骤用这个 Node。
 
 #### Load a release module with the lowest Node.js
 
-在临时目录的一个 clone 里，用 `scripts/ops/prepare-release.sh --offline` 为当前提交建发布目录（安装依赖那一步之后 pnpm store 里已经有全部包），再像 ai-worker 服务那样，在发布目录里经守卫和 tsx loader 加载其中一个 `.ts` 模块（tsx 从发布目录的 `tsconfig.json` 读路径别名）。退出码不为 0，或者 stderr 里有 `module.register called`（tsx 走了 hook 线程那条路，守卫会拒绝），这一步就失败。上限 5 分钟。本地：切到 Node 22.22.3，在临时目录里执行 workflow 里同样的命令，`--root` 绝不要指向你安装用的 checkout。
+在临时目录的一个 clone 里，用 `scripts/ops/prepare-release.sh --offline` 为当前提交建发布目录（安装依赖那一步之后 pnpm store 里已经有全部包），再像 ai-worker 服务那样，在发布目录里经守卫和 tsx loader 加载其中一个 `.ts` 模块（tsx 从发布目录的 `tsconfig.json` 读路径别名）。退出码不为 0，或者 stderr 里有 `module.register called`（tsx 走了 hook 线程那条路，守卫会拒绝），这一步就失败。上限 5 分钟。本地：切到 Node 22.23.4，在临时目录里执行 workflow 里同样的命令，`--root` 绝不要指向你安装用的 checkout。
 
 ### Job `e2e`
 

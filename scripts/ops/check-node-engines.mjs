@@ -28,8 +28,8 @@ export function parseEnginesRange(range) {
 }
 
 /**
- * @param {string} range engines.node, e.g. ">=22.22.3 <23"
- * @param {string} version a Node version such as "22.22.3" or "v22.22.3"
+ * @param {string} range engines.node, e.g. ">=22.23.4 <23"
+ * @param {string} version a Node version such as "22.23.4" or "v22.23.4"
  * @returns {{ ok: true } | { ok: false, reason: "unsupported-range" | "bad-version" | "out-of-range", message: string }}
  */
 export function checkNodeEngines(range, version) {
