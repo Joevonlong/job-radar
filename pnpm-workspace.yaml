@@ -11,3 +11,9 @@ allowBuilds:
 # depends on @esbuild-kit/*.
 overrides:
   '@esbuild-kit/core-utils>esbuild': ^0.25.12
+  # vite is only a peer dependency of vitest and @vitejs/plugin-react, and the
+  # newest releases of both still accept the vulnerable 8.3.0-8.3.2 (dev-server
+  # advisories, fixed in 8.3.3), so the lockfile kept resolving 8.3.2. Force the
+  # patched line. Remove once the lockfile resolves vite >= 8.3.3 without it
+  # (e.g. after a vitest or plugin-react release that requires it).
+  vite: ^8.3.3
