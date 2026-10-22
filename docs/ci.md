@@ -131,6 +131,8 @@ the dependency install (cached).
 #### Set up Node.js
 
 `actions/setup-node`, Node 22 (the version in `engines`), with the pnpm store cached by the hash of `pnpm-lock.yaml`.
+Every job that uses the floating `22` sets `check-latest: true`: the runner's toolcache can lag a Node security release
+behind `engines.node`, and the job would then run an older Node than the floor.
 
 #### Install dependencies
 

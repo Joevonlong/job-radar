@@ -92,7 +92,9 @@ jobs:
         uses: actions/setup-node@v7
         timeout-minutes: 5
         with:
+          # check-latest: the runner's toolcache can lag a Node security release behind engines.node.
           node-version: "22"
+          check-latest: true
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
       - name: Install dependencies
@@ -119,6 +121,7 @@ jobs:
         timeout-minutes: 5
         with:
           node-version: "22"
+          check-latest: true
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
       - name: Install dependencies
@@ -201,6 +204,7 @@ jobs:
         timeout-minutes: 5
         with:
           node-version: "22"
+          check-latest: true
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
       - name: Install dependencies
@@ -249,6 +253,7 @@ jobs:
         timeout-minutes: 5
         with:
           node-version: "22"
+          check-latest: true
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
       - name: Install dependencies
@@ -351,6 +356,7 @@ jobs:
         timeout-minutes: 5
         with:
           node-version: "22"
+          check-latest: true
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
       - name: Install dependencies
@@ -518,6 +524,7 @@ jobs:
         timeout-minutes: 5
         with:
           node-version: "22"
+          check-latest: true
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
       - name: Install dependencies

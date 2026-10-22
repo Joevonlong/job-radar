@@ -95,7 +95,7 @@ workflow 级设置：`permissions: contents: read`（任何任务都不能写仓
 
 #### Set up Node.js
 
-`actions/setup-node`，Node 22（`engines` 里的版本），pnpm store 按 `pnpm-lock.yaml` 的哈希缓存。
+`actions/setup-node`，Node 22（`engines` 里的版本），pnpm store 按 `pnpm-lock.yaml` 的哈希缓存。所有用浮动 `22` 的 job 都设了 `check-latest: true`：runner 的 toolcache 可能比 Node 安全版晚一个版本，低于 `engines.node` 的下限。
 
 #### Install dependencies
 
