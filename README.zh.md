@@ -51,7 +51,7 @@
 
 ## 快速开始
 
-需要：Docker（Compose 2.24 或更新）、Node 22.22.3 或更新的 22.x、`package.json` 里固定版本的 pnpm、git；macOS 或 Linux（Windows 在 WSL2 里跑，见
+需要：Docker（Compose 2.24 或更新）、Node 22.23.4 或更新的 22.x、`package.json` 里固定版本的 pnpm、git；macOS 或 Linux（Windows 在 WSL2 里跑，见
 [平台说明](docs/installation.zh.md#macoslinuxwindows)）。
 
 ```bash
