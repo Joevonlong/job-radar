@@ -1,10 +1,12 @@
 """jobspy sidecar: a thin HTTP wrapper around python-jobspy (LinkedIn guest, Indeed, Google Jobs).
 
-`POST /search` runs one scrape and returns JSON-safe records. python-jobspy (>= 1.2) never raises for
-upstream failures: its scrapers log an error and return no jobs. The endpoint therefore captures the
-ERROR records jobspy logs during the call and maps them, together with any exception, to a structured
-error (`{"code", "message"}` with HTTP 429 for `rate_limited`, 502 for `blocked` / `upstream_error`) so the
-TypeScript channels can feed the circuit breaker.
+`POST /search` runs one scrape and returns JSON-safe records. python-jobspy (>= 1.4) does not raise for
+upstream failures: a scraper records the error and returns no jobs, and `scrape_jobs` reports them on the
+returned frame as `frame.attrs["errors"]` (site -> message) and `frame.attrs["warnings"]` (site -> messages).
+The endpoint maps those, together with any exception, to a structured error (`{"code", "message"}` with HTTP
+429 for `rate_limited`, 502 for `blocked` / `upstream_error`) so the TypeScript channels can feed the circuit
+breaker. It reads `attrs` rather than jobspy's loggers: the logger names changed between releases, which
+silently turned blocked searches into empty results (tests/test_search.py pins the real `scrape_jobs`).
 
 C5: e-mail addresses and phone fields are dropped before anything leaves this process.
 Proxy URLs may carry credentials: they are never logged and are scrubbed from error messages.
@@ -14,7 +16,6 @@ from __future__ import annotations
 
 import datetime as dt
 import enum
-import logging
 import math
 import re
 import threading
@@ -41,8 +42,7 @@ _MAX_MESSAGE_CHARS = 300
 _RATE_LIMITED = re.compile(r"\b429\b|too many requests|rate.?limit", re.IGNORECASE)
 _BLOCKED = re.compile(r"\b(?:401|403|999)\b|forbidden|captcha|blocked|access denied|unauthori[sz]ed|authwall", re.IGNORECASE)
 
-# jobspy keeps global state per scraper module and logs to process-wide loggers: one scrape at a time
-# keeps the captured error messages attributable to the request that caused them.
+# jobspy keeps global state per scraper module: one scrape at a time keeps concurrent requests from interfering.
 _scrape_lock = threading.Lock()
 
 
@@ -75,7 +75,7 @@ class SearchRequest(BaseModel):
         if value is None:
             return None
         try:
-            Country.from_string(value)
+            Country(value)
         except ValueError as exc:
             raise ValueError("country_indeed is not a country jobspy knows") from exc
         return value.strip().lower()
@@ -99,7 +99,7 @@ class SearchResponse(BaseModel):
     site: Site
     count: int
     jobs: list[dict[str, Any]]
-    # Errors jobspy logged although some jobs came back (a later page failed, for example).
+    # Errors and warnings jobspy reported although some jobs came back (a later page failed, for example).
     warnings: list[str] = Field(default_factory=list)
 
 
@@ -136,23 +136,6 @@ def classify(messages: list[str]) -> ErrorCode:
     if _BLOCKED.search(joined):
         return "blocked"
     return "upstream_error"
-
-
-class _ErrorCapture(logging.Handler):
-    """Collects the ERROR records jobspy's scrapers log (they do not raise)."""
-
-    def __init__(self) -> None:
-        super().__init__(level=logging.ERROR)
-        self.messages: list[str] = []
-
-    def emit(self, record: logging.LogRecord) -> None:
-        self.messages.append(record.getMessage())
-
-
-def _jobspy_loggers() -> list[logging.Logger]:
-    # jobspy creates `JobSpy:<Scraper>` loggers with propagate=False, so the handler goes on each one.
-    names = [n for n in list(logging.root.manager.loggerDict) if n.startswith("JobSpy")]
-    return [logging.getLogger(n) for n in names]
 
 
 # ------------------------------------------------------------------ result conversion
@@ -211,9 +194,20 @@ def records_from_frame(frame: Any) -> list[dict[str, Any]]:
 # ------------------------------------------------------------------ search
 
 
+def _report_messages(frame: Any) -> tuple[list[str], list[str]]:
+    """The (errors, warnings) jobspy attached to the frame: site -> message(s), flattened."""
+    attrs = getattr(frame, "attrs", None) or {}
+    errors_by_site = attrs.get("errors") or {}
+    warnings_by_site = attrs.get("warnings") or {}
+    errors = [str(message) for message in errors_by_site.values() if message]
+    warnings: list[str] = []
+    for messages in warnings_by_site.values():
+        warnings.extend(str(message) for message in ([messages] if isinstance(messages, str) else messages) if message)
+    return errors, warnings
+
+
 def run_search(request: SearchRequest) -> tuple[list[dict[str, Any]], list[str]]:
     """Run jobspy once. Returns (records, warnings) or raises SidecarError."""
-    capture = _ErrorCapture()
     kwargs: dict[str, Any] = {
         "site_name": [request.site],
         "search_term": request.search_term,
@@ -229,26 +223,19 @@ def run_search(request: SearchRequest) -> tuple[list[dict[str, Any]], list[str]]
     if request.country_indeed is not None:
         kwargs["country_indeed"] = request.country_indeed
     with _scrape_lock:
-        loggers = _jobspy_loggers()
-        for logger in loggers:
-            logger.addHandler(capture)
         try:
             frame = scrape_jobs(**kwargs)
         except Exception as exc:  # noqa: BLE001 - every failure is mapped to a structured error
             message = scrub(f"{type(exc).__name__}: {exc}", request.proxies)
             raise SidecarError(classify([str(exc), message]), message) from None
-        finally:
-            for logger in loggers:
-                logger.removeHandler(capture)
-            # Loggers created during the call (first use) were not in `loggers`; remove from all.
-            for logger in _jobspy_loggers():
-                logger.removeHandler(capture)
 
-    messages = [scrub(m, request.proxies) for m in capture.messages]
+    raw_errors, raw_warnings = _report_messages(frame)
+    errors = [scrub(m, request.proxies) for m in raw_errors]
+    warnings = [scrub(m, request.proxies) for m in raw_warnings]
     records = records_from_frame(frame)
-    if not records and messages:
-        raise SidecarError(classify(messages), messages[0])
-    return records, messages
+    if not records and errors:
+        raise SidecarError(classify(raw_errors), errors[0])  # classify the full text: scrub() caps the length
+    return records, errors + warnings
 
 
 _STATUS_BY_CODE: dict[str, int] = {"rate_limited": 429, "blocked": 502, "upstream_error": 502}

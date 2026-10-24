@@ -175,7 +175,7 @@ workflow 级设置：`permissions: contents: read`（任何任务都不能写仓
 
 #### Jobspy sidecar tests
 
-在 `jobspy/` 里 `python -m pytest -q`（`jobspy/tests/` 里的测试，抓取库被 mock：请求校验、结果映射、`jobspy/app.py` 这个小 HTTP 服务的错误处理）。几秒钟。常见原因：改了 `jobspy/app.py` 没改测试，或依赖升级。
+在 `jobspy/` 里 `python -m pytest -q`（`jobspy/tests/` 里的测试，抓取库被 mock：请求校验、结果映射、`jobspy/app.py` 这个小 HTTP 服务的错误处理）。其中两个合同测试经过一个没人监听的代理调用真实的 `scrape_jobs`（不产生外部请求），证明上游失败仍会出现在 `frame.attrs["errors"]` 里；另有一个测试核对 `config/packs/generic/geography.yaml` 里每个 `indeed:` 国家都能通过 sidecar 的国家校验。几秒钟。常见原因：改了 `jobspy/app.py` 没改测试，或依赖升级（`python-jobspy` 新版本改名或删掉了东西）。
 
 ### Job `unit`
 

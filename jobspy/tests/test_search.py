@@ -1,10 +1,12 @@
-"""Sidecar tests. python-jobspy is mocked: no network."""
+"""Sidecar tests. python-jobspy is mocked (no network), except the contract tests that call the real `scrape_jobs`
+through an unreachable proxy (no external request)."""
 
 from __future__ import annotations
 
 import datetime as dt
 import json
-import logging
+import re
+from pathlib import Path
 from typing import Any
 
 import pandas as pd
@@ -22,18 +24,23 @@ def frame(rows: list[dict[str, Any]]) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def patch_scrape(monkeypatch: pytest.MonkeyPatch, result: Any = None, log_errors: list[str] | None = None, raises: Exception | None = None) -> list[dict[str, Any]]:
+def patch_scrape(
+    monkeypatch: pytest.MonkeyPatch,
+    result: Any = None,
+    errors: dict[str, str] | None = None,
+    warnings: dict[str, list[str]] | None = None,
+    raises: Exception | None = None,
+) -> list[dict[str, Any]]:
+    """Replace `scrape_jobs`. Like jobspy >= 1.4 the fake reports upstream failures on `frame.attrs`."""
     calls: list[dict[str, Any]] = []
-    jobspy_logger = logging.getLogger("JobSpy:Test")
-    jobspy_logger.propagate = False
 
     def fake(**kwargs: Any) -> pd.DataFrame:
         calls.append(kwargs)
-        for message in log_errors or []:
-            jobspy_logger.error(message)
         if raises is not None:
             raise raises
-        return result if result is not None else pd.DataFrame()
+        out = result if result is not None else pd.DataFrame()
+        out.attrs = {"errors": errors or {}, "warnings": warnings or {}}
+        return out
 
     monkeypatch.setattr(sidecar, "scrape_jobs", fake)
     return calls
@@ -111,6 +118,26 @@ def test_country_indeed_is_required_for_indeed(monkeypatch: pytest.MonkeyPatch) 
     patch_scrape(monkeypatch)
     body = {key: value for key, value in BASE.items() if key != "country_indeed"}
     assert client.post("/search", json=body).status_code == 422
+
+
+@pytest.mark.parametrize(
+    ("given", "passed"),
+    [("germany", "germany"), (" Germany ", "germany"), ("UK", "uk"), ("United Kingdom", "united kingdom"), ("turkey", "turkey"), ("USA", "usa"), ("czech republic", "czech republic")],
+)
+def test_known_countries_and_aliases_pass(monkeypatch: pytest.MonkeyPatch, given: str, passed: str) -> None:
+    calls = patch_scrape(monkeypatch)
+    assert client.post("/search", json={**BASE, "country_indeed": given}).status_code == 200
+    assert calls[0]["country_indeed"] == passed
+
+
+@pytest.mark.parametrize("given", ["atlantis", "slovakia", "croatia"])
+def test_unknown_country_is_rejected_without_echo(monkeypatch: pytest.MonkeyPatch, given: str) -> None:
+    calls = patch_scrape(monkeypatch)
+    response = client.post("/search", json={**BASE, "country_indeed": given})
+    assert response.status_code == 422
+    assert "country_indeed is not a country jobspy knows" in response.json()["message"]
+    assert given not in response.text
+    assert calls == []
 
 
 def test_linkedin_does_not_need_an_indeed_country(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -200,8 +227,8 @@ def test_emails_and_phone_fields_are_stripped(monkeypatch: pytest.MonkeyPatch) -
 # ---------------------------------------------------------------- error mapping
 
 
-def test_http_429_in_logs_is_rate_limited(monkeypatch: pytest.MonkeyPatch) -> None:
-    patch_scrape(monkeypatch, log_errors=["LinkedIn response status code 429"])
+def test_http_429_in_errors_is_rate_limited(monkeypatch: pytest.MonkeyPatch) -> None:
+    patch_scrape(monkeypatch, errors={"linkedin": "response status code 429"})
     response = client.post("/search", json={**BASE, "site": "linkedin"})
     assert response.status_code == 429
     body = response.json()
@@ -209,16 +236,27 @@ def test_http_429_in_logs_is_rate_limited(monkeypatch: pytest.MonkeyPatch) -> No
     assert "429" in body["message"]
 
 
-@pytest.mark.parametrize("message", ["Indeed response status code 403", "Google response status code 999", "Indeed: captcha required"])
-def test_forbidden_in_logs_is_blocked(monkeypatch: pytest.MonkeyPatch, message: str) -> None:
-    patch_scrape(monkeypatch, log_errors=[message])
+def test_jobspy_blocked_hint_with_429_is_rate_limited(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The wording jobspy 1.4 uses when a site blocks the request: it names both 429 and "blocked".
+    patch_scrape(monkeypatch, errors={"indeed": "response status code 429 (blocked: use a proxy)"})
+    response = client.post("/search", json=BASE)
+    assert response.status_code == 429
+    assert response.json()["code"] == "rate_limited"
+
+
+@pytest.mark.parametrize(
+    "message",
+    ["response status code 403", "response status code 403 (blocked: use a proxy)", "response status code 999", "captcha required"],
+)
+def test_forbidden_in_errors_is_blocked(monkeypatch: pytest.MonkeyPatch, message: str) -> None:
+    patch_scrape(monkeypatch, errors={"indeed": message})
     response = client.post("/search", json=BASE)
     assert response.status_code == 502
     assert response.json()["code"] == "blocked"
 
 
-def test_other_logged_error_with_no_jobs_is_upstream_error(monkeypatch: pytest.MonkeyPatch) -> None:
-    patch_scrape(monkeypatch, log_errors=["Indeed: [{'message': 'internal'}]"])
+def test_other_error_with_no_jobs_is_upstream_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    patch_scrape(monkeypatch, errors={"indeed": "[{'message': 'internal'}]"})
     response = client.post("/search", json=BASE)
     assert response.status_code == 502
     assert response.json()["code"] == "upstream_error"
@@ -231,13 +269,33 @@ def test_empty_result_without_errors_is_ok(monkeypatch: pytest.MonkeyPatch) -> N
     assert response.json()["count"] == 0
 
 
-def test_logged_error_with_some_jobs_is_a_warning(monkeypatch: pytest.MonkeyPatch) -> None:
-    patch_scrape(monkeypatch, frame([{"id": "x", "title": "T", "company": "C"}]), log_errors=["LinkedIn response status code 429"])
+def test_empty_frame_with_columns_but_no_rows_is_ok(monkeypatch: pytest.MonkeyPatch) -> None:
+    # jobspy 1.4 returns "columns, no rows" for an empty result.
+    patch_scrape(monkeypatch, pd.DataFrame(columns=["id", "title", "company"]))
+    response = client.post("/search", json=BASE)
+    assert response.status_code == 200
+    assert response.json() == {"site": "indeed", "count": 0, "jobs": [], "warnings": []}
+
+
+def test_error_with_some_jobs_is_a_warning(monkeypatch: pytest.MonkeyPatch) -> None:
+    patch_scrape(monkeypatch, frame([{"id": "x", "title": "T", "company": "C"}]), errors={"linkedin": "response status code 429"})
     response = client.post("/search", json={**BASE, "site": "linkedin"})
     assert response.status_code == 200
     body = response.json()
     assert body["count"] == 1
-    assert body["warnings"] == ["LinkedIn response status code 429"]
+    assert body["warnings"] == ["response status code 429"]
+
+
+def test_jobspy_warnings_are_returned_and_do_not_fail_an_empty_search(monkeypatch: pytest.MonkeyPatch) -> None:
+    patch_scrape(monkeypatch, warnings={"indeed": ["hours_old ignored", "another note"]})
+    response = client.post("/search", json=BASE)
+    assert response.status_code == 200
+    assert response.json() == {"site": "indeed", "count": 0, "jobs": [], "warnings": ["hours_old ignored", "another note"]}
+
+
+def test_frame_without_attrs_is_tolerated(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(sidecar, "scrape_jobs", lambda **_kwargs: pd.DataFrame())
+    assert client.post("/search", json=BASE).status_code == 200
 
 
 def test_exception_with_429_text_is_rate_limited(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -263,8 +321,78 @@ def test_proxy_credentials_never_appear_in_errors(monkeypatch: pytest.MonkeyPatc
     assert "<proxy>" in response.json()["message"]
 
 
-def test_handler_is_removed_after_each_call(monkeypatch: pytest.MonkeyPatch) -> None:
-    patch_scrape(monkeypatch, log_errors=["Indeed response status code 429"])
-    client.post("/search", json=BASE)
-    logger = logging.getLogger("JobSpy:Test")
-    assert not any(isinstance(h, sidecar._ErrorCapture) for h in logger.handlers)
+def test_proxy_credentials_are_scrubbed_from_reported_errors_and_warnings(monkeypatch: pytest.MonkeyPatch) -> None:
+    proxy = "http://user:topsecret@proxy.example:8080"
+    patch_scrape(monkeypatch, errors={"indeed": f"ProxyError via {proxy}"})
+    failed = client.post("/search", json={**BASE, "proxies": [proxy]})
+    assert failed.status_code == 502
+    assert "topsecret" not in failed.text and "<proxy>" in failed.json()["message"]
+
+    patch_scrape(
+        monkeypatch,
+        frame([{"id": "x", "title": "T", "company": "C"}]),
+        errors={"indeed": f"page 2 failed via {proxy}"},
+        warnings={"indeed": ["retry through http://other:pw123@proxy.example:1"]},
+    )
+    partial = client.post("/search", json={**BASE, "proxies": [proxy]})
+    assert partial.status_code == 200
+    assert "topsecret" not in partial.text and "pw123" not in partial.text
+    assert len(partial.json()["warnings"]) == 2
+
+
+# ---------------------------------------------------------------- contract with the real jobspy
+
+
+def test_real_scrape_jobs_reports_failures_on_frame_attrs() -> None:
+    """Calls the real `scrape_jobs` with a proxy nothing listens on (no external request). If a jobspy release changes
+    how failures are reported again (as the 1.4 logger rename did), this fails instead of searches silently coming back empty."""
+    frame_ = sidecar.scrape_jobs(
+        site_name=["indeed"],
+        search_term="engineer",
+        location="Berlin",
+        country_indeed="germany",
+        results_wanted=1,
+        proxies=["http://127.0.0.1:1"],
+        verbose=0,
+    )
+    assert len(frame_) == 0
+    errors = frame_.attrs["errors"]
+    assert errors.get("indeed"), frame_.attrs
+    assert isinstance(frame_.attrs["warnings"], dict)
+
+
+def test_real_scrape_jobs_failure_becomes_a_structured_error() -> None:
+    response = client.post("/search", json={**BASE, "results_wanted": 1, "proxies": ["http://127.0.0.1:1"]})
+    assert response.status_code == 502
+    body = response.json()
+    assert body["code"] == "upstream_error"
+    assert body["message"]
+
+
+# ---------------------------------------------------------------- the shipped geography table
+
+
+def _indeed_values(path: Path) -> list[str]:
+    # Plain text on purpose: the sidecar image has no YAML library. Entries are one-line flow mappings: `indeed: <value>,`.
+    return [m.group(1).strip() for m in re.finditer(r"\bindeed:\s*([^,}]+)", path.read_text(encoding="utf-8"))]
+
+
+GEOGRAPHY_FILES = [
+    Path(__file__).resolve().parents[2] / "config" / "packs" / "generic" / "geography.yaml",
+    Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "config" / "defaults" / "packs" / "generic" / "geography.yaml",
+]
+
+
+@pytest.mark.parametrize("path", GEOGRAPHY_FILES, ids=["config", "test-fixture"])
+def test_every_indeed_country_of_the_geography_table_passes_validation(path: Path) -> None:
+    if not path.exists():  # the sidecar's own Docker context does not contain the app's config
+        pytest.skip(f"{path} not found")
+    values = _indeed_values(path)
+    assert len(values) > 20
+    rejected = []
+    for value in values:
+        try:
+            sidecar.SearchRequest(site="indeed", search_term="x", country_indeed=value)
+        except ValueError:
+            rejected.append(value)
+    assert rejected == []

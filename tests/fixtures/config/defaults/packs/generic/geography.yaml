@@ -21,19 +21,19 @@ countries:
   - {code: IT, name: Italy, aliases: [Italia], indeed: italy, pattern: \bitaly\b|italia}
   - {code: PL, name: Poland, aliases: [Polska], indeed: poland, pattern: poland|polska}
   - {code: CZ, name: Czech Republic, aliases: [Czechia, Česko], indeed: czech republic, pattern: czech republic|czechia|česko}
-  - {code: SK, name: Slovakia, aliases: [Slovensko], indeed: slovakia, pattern: slovakia|slovensko}
+  - {code: SK, name: Slovakia, aliases: [Slovensko], pattern: slovakia|slovensko}
   - {code: HU, name: Hungary, aliases: [Magyarország], indeed: hungary, pattern: hungary|magyarország}
-  - {code: SI, name: Slovenia, aliases: [Slovenija], indeed: slovenia, pattern: slovenia|slovenija}
-  - {code: HR, name: Croatia, aliases: [Hrvatska], indeed: croatia, pattern: croatia|hrvatska}
+  - {code: SI, name: Slovenia, aliases: [Slovenija], pattern: slovenia|slovenija}
+  - {code: HR, name: Croatia, aliases: [Hrvatska], pattern: croatia|hrvatska}
   - {code: RO, name: Romania, aliases: [România], indeed: romania, pattern: romania|românia}
-  - {code: BG, name: Bulgaria, indeed: bulgaria, pattern: bulgaria|българия}
+  - {code: BG, name: Bulgaria, pattern: bulgaria|българия}
   - {code: GR, name: Greece, aliases: [Hellas], indeed: greece, pattern: greece|ελλάδα}
-  - {code: EE, name: Estonia, aliases: [Eesti], indeed: estonia, pattern: estonia|eesti}
-  - {code: LV, name: Latvia, aliases: [Latvija], indeed: latvia, pattern: latvia|latvija}
-  - {code: LT, name: Lithuania, aliases: [Lietuva], indeed: lithuania, pattern: lithuania|lietuva}
+  - {code: EE, name: Estonia, aliases: [Eesti], pattern: estonia|eesti}
+  - {code: LV, name: Latvia, aliases: [Latvija], pattern: latvia|latvija}
+  - {code: LT, name: Lithuania, aliases: [Lietuva], pattern: lithuania|lietuva}
   - {code: LU, name: Luxembourg, aliases: [Luxemburg], indeed: luxembourg, pattern: luxembourg|luxemburg}
-  - {code: MT, name: Malta, indeed: malta, pattern: \bmalta\b}
-  - {code: CY, name: Cyprus, aliases: [Kypros], indeed: cyprus, pattern: cyprus|κύπρος}
+  - {code: MT, name: Malta, pattern: \bmalta\b}
+  - {code: CY, name: Cyprus, aliases: [Kypros], pattern: cyprus|κύπρος}
   - {code: AD, name: Andorra}
   - {code: AE, name: United Arab Emirates, aliases: [UAE, Emirates, Dubai, Abu Dhabi], indeed: united arab emirates, pattern: \bunited arab emirates\b|\buae\b|\bemirates\b|\bdubai\b|\babu dhabi\b}
   - {code: AF, name: Afghanistan}
@@ -51,7 +51,7 @@ countries:
   - {code: AZ, name: Azerbaijan}
   - {code: BA, name: Bosnia & Herzegovina, aliases: [Bosnia, Bosnia-Herzegovina, Bosnia and Herzegovina]}
   - {code: BB, name: Barbados}
-  - {code: BD, name: Bangladesh, indeed: bangladesh}
+  - {code: BD, name: Bangladesh}
   - {code: BF, name: Burkina Faso}
   - {code: BH, name: Bahrain, indeed: bahrain}
   - {code: BI, name: Burundi}
