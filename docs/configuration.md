@@ -326,6 +326,28 @@ not know them, see [upgrade.md](upgrade.md#downgrade-pre-release-dir)):
 
 Details: [deploy.md](deploy.md), "The ai-worker runs from a release directory".
 
+## Company drop-down on /jobs (`ui.yaml`)
+
+| Key | Default | Meaning |
+|---|---|---|
+| `filters.company_options_max` | 500 | Companies loaded into the company filter of `/jobs` (the ones with the most jobs); 1 to 5000 |
+| `filters.company_options_visible` | 50 | Companies shown before you type in the drop-down's search box; 1 to 5000 |
+
+Both keys may be missing (the defaults apply); a file without them needs no migration.
+
+Rolling back to a version without the company filter: `interests.yaml` views and `ui.yaml` are strict, so the older
+version refuses a file that holds the new keys (and the push step cannot read `interests.yaml` either). Before switching:
+
+1. Stop writing: `docker compose -p job-radar stop web runner`, and let a cycle that is running finish.
+2. Back up `data/config/interests.yaml` and `data/config/ui.yaml`.
+3. Remove every `company:` key from the views in `interests.yaml`.
+4. Remove `filters.company_options_max` and `filters.company_options_visible` from your `ui.yaml`, and a whole
+   `companies:` section if there is one (leaving `companies: {}` is refused as well).
+5. Check both files with the older version (`pnpm config:check` or `pnpm run doctor` in its image).
+6. Switch to the older image and start the services.
+
+The shipped `ui.yaml` is part of the image, so it goes back with it.
+
 ## Recheck of watched jobs (`pipeline.yaml` + `ui.yaml`)
 
 The maintenance step rechecks the posting pages of starred and followed jobs (see usage.md "Closed jobs"). Its keys

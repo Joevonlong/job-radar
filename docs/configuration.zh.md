@@ -230,6 +230,26 @@ ai-worker 的发布目录和切换由 `schedule.yaml` 里的四个键控制。�
 
 细节见 [deploy.zh.md](deploy.zh.md)《ai-worker 从发布目录运行》。
 
+## /jobs 的公司下拉（`ui.yaml`）
+
+| 键 | 默认 | 含义 |
+|---|---|---|
+| `filters.company_options_max` | 500 | `/jobs` 公司筛选最多加载多少家（岗位最多的那些）；1 到 5000 |
+| `filters.company_options_visible` | 50 | 下拉里不输入搜索词时显示多少家；1 到 5000 |
+
+两个键都可以不写（用默认值），不写的文件不用迁移。
+
+回退到没有公司筛选的版本：`interests.yaml` 的视图和 `ui.yaml` 都是严格模式，旧版本读到新键会拒绝整个文件（推送步骤也读不了 `interests.yaml`）。切换前：
+
+1. 停写：`docker compose -p job-radar stop web runner`，等正在跑的处理轮结束。
+2. 备份 `data/config/interests.yaml` 和 `data/config/ui.yaml`。
+3. 删掉 `interests.yaml` 里所有视图的 `company:` 键。
+4. 删掉你的 `ui.yaml` 里的 `filters.company_options_max` 和 `filters.company_options_visible`；如果有 `companies:` 段，整段删掉（只留下 `companies: {}` 一样会被拒绝）。
+5. 用旧版本校验两份文件（在旧镜像里跑 `pnpm config:check` 或 `pnpm run doctor`）。
+6. 切换到旧镜像，启动服务。
+
+出厂的 `ui.yaml` 随镜像，回退后自动是旧版。
+
 ## 关注岗位复查（`pipeline.yaml` + `ui.yaml`）
 
 维护步骤会复查收藏和跟进中岗位的原帖页面（见 usage.zh.md"已关闭的岗位"）。相关的键在两个文件里；两段都可以缺省（旧文件），缺省时用下面的默认值。
