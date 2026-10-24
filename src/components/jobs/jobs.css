@@ -47,6 +47,9 @@
 .jb-title a::after { content: ""; position: absolute; inset: 0; border-radius: inherit; }
 .jb-sub { font-size: var(--text-body-sm); line-height: var(--text-body-sm-lh); color: var(--ink-2); overflow-wrap: anywhere; }
 .jb-sub b { color: var(--ink); font-weight: 700; }
+/* the company name links to its jobs: drawn like the bold name, underlined on hover / keyboard focus */
+.jb-sub .jb-company { position: relative; z-index: 1; color: var(--ink); font-weight: 700; text-underline-offset: 2px; }
+.jb-sub .jb-company:hover, .jb-sub .jb-company:focus-visible { text-decoration: underline; }
 .jb-title [data-slot="fav-mark"] { align-self: flex-start; margin-top: 0.3em; }
 .jb-fav { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); min-width: 0; font-family: var(--font-mono); font-size: var(--text-data); color: var(--ink-2); position: relative; z-index: 1; }
 .jb-fav button { cursor: pointer; }

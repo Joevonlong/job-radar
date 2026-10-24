@@ -20,6 +20,8 @@ export interface MultiSelectOption {
   group?: string
   /** Selected but no job has it now (an old bookmark): listed first, can be unticked. */
   stale?: boolean
+  /** A number shown next to the label (how many jobs); the label alone is what the trigger and the chips show. */
+  count?: number
 }
 
 export interface MultiSelectProps {
@@ -37,6 +39,13 @@ export interface MultiSelectProps {
   anyLabel: string
   /** Small line above the list ("matches any of them"). */
   hint?: string
+  /**
+   * Only this many options are drawn while the search box is empty (the picked and stale ones always are); typing searches all of
+   * them. Absent = all. For long lists (the companies) on a phone.
+   */
+  initialVisible?: number
+  /** Small line under the list (e.g. "only the N companies with most jobs are listed"). */
+  note?: string
   /** `popover`: a floating list under the trigger (desktop). `inline`: the trigger is a full-width row that unfolds the list in place (the phone sheet, where a popover would sit under the sheet). */
   layout: "popover" | "inline"
   /** Inline layout only: the list is unfolded (the caller keeps one open at a time). */
@@ -66,6 +75,24 @@ function useMultiSelectText({ label, options, value, anyLabel }: Pick<MultiSelec
   return { t, summary, ariaLabel }
 }
 
+/** The options to draw: all of them while searching (or without a limit), else the picked / stale ones and the first `limit` others. */
+export function visibleOptions(options: readonly MultiSelectOption[], pinned: readonly string[], search: string, limit: number | undefined) {
+  if (limit === undefined || search.trim() !== "") return options
+  const pinnedSet = new Set(pinned)
+  let rest = 0
+  return options.filter((o) => o.stale || pinnedSet.has(o.value) || rest++ < limit)
+}
+
+/** The job count next to an option's label. */
+function OptionCount({ count }: { count: number | undefined }) {
+  if (count === undefined) return null
+  return (
+    <span className="text-ink-3 text-data-sm shrink-0 font-mono font-normal tabular-nums" data-slot="option-count">
+      {count}
+    </span>
+  )
+}
+
 /**
  * Options in render order: the values picked when the list opened first (their relative order kept; a stale one is
  * always among them), then the rest in groups in the order their first option appears. `pinned` is a snapshot taken at
@@ -86,13 +113,13 @@ export function arrangeOptions(options: readonly MultiSelectOption[], pinned: re
 }
 
 function PopoverMultiSelect(props: MultiSelectProps) {
-  const { label, options, value, onChange, onCommit, searchable = false, searchPlaceholder, hint, testId, className } = props
+  const { label, options, value, onChange, onCommit, searchable = false, searchPlaceholder, hint, note, initialVisible, testId, className } = props
   const { t, summary, ariaLabel } = useMultiSelectText(props)
   const [open, setOpen] = React.useState(false)
   const [search, setSearch] = React.useState("")
   const rootRef = React.useRef<HTMLDivElement>(null)
   const [pinned, setPinned] = React.useState<readonly string[]>([])
-  const { stale, groups } = arrangeOptions(options, pinned)
+  const { stale, groups } = arrangeOptions(visibleOptions(options, pinned, search, initialVisible), pinned)
 
   const toggle = (v: string) => onChange(value.includes(v) ? value.filter((x) => x !== v) : [...value, v])
   const changeOpen = (next: boolean) => {
@@ -121,7 +148,7 @@ function PopoverMultiSelect(props: MultiSelectProps) {
       >
         <Checkbox checked={checked} tabIndex={-1} aria-hidden className="pointer-events-none" />
         <span className="min-w-0 flex-1 truncate">{option.label}</span>
-        {option.stale ? <span className="text-ink-3 text-data-sm shrink-0 font-normal">{t("stale")}</span> : null}
+        {option.stale ? <span className="text-ink-3 text-data-sm shrink-0 font-normal">{t("stale")}</span> : <OptionCount count={option.count} />}
       </CommandPrimitive.Item>
     )
   }
@@ -196,6 +223,7 @@ function PopoverMultiSelect(props: MultiSelectProps) {
                 </CommandPrimitive.Group>
               ))}
             </CommandPrimitive.List>
+            {note ? <p className="text-ink-3 border-t-bw border-border px-3 py-1.5 text-data-sm" data-testid={`${testId}-note`}>{note}</p> : null}
             <div className="border-t-bw border-border flex items-center justify-between gap-sp-2 px-3 py-1.5">
               <span className="text-ink-2 text-data-sm font-mono whitespace-nowrap" aria-live="polite">
                 {t("selected", { count: value.length })}
@@ -217,12 +245,12 @@ function PopoverMultiSelect(props: MultiSelectProps) {
 }
 
 function InlineMultiSelect(props: MultiSelectProps) {
-  const { label, options, value, onChange, onCommit, searchable = false, searchPlaceholder, hint, testId, className, expanded = false, onExpandedChange } = props
+  const { label, options, value, onChange, onCommit, searchable = false, searchPlaceholder, hint, note, initialVisible, testId, className, expanded = false, onExpandedChange } = props
   const { t, summary, ariaLabel } = useMultiSelectText(props)
   const [search, setSearch] = React.useState("")
   const regionId = React.useId()
   const [pinned, setPinned] = React.useState<readonly string[]>(value)
-  const { stale, groups } = arrangeOptions(options, pinned)
+  const { stale, groups } = arrangeOptions(visibleOptions(options, pinned, search, initialVisible), pinned)
   const needle = fold(search.trim())
   const matches = (o: MultiSelectOption) => needle === "" || fold(`${o.value} ${o.label}`).includes(needle)
 
@@ -243,7 +271,7 @@ function InlineMultiSelect(props: MultiSelectProps) {
         <label className="flex min-h-ctl-lg cursor-pointer items-center gap-sp-3 rounded-tag px-2 text-body font-medium hover:bg-soft">
           <Checkbox checked={checked} onCheckedChange={() => toggle(option.value)} data-testid={`${testId}-option`} data-value={option.value} />
           <span className="min-w-0 flex-1 break-words">{option.label}</span>
-          {option.stale ? <span className="text-ink-3 text-data-sm shrink-0 font-normal">{t("stale")}</span> : null}
+          {option.stale ? <span className="text-ink-3 text-data-sm shrink-0 font-normal">{t("stale")}</span> : <OptionCount count={option.count} />}
         </label>
       </li>
     )
@@ -299,6 +327,7 @@ function InlineMultiSelect(props: MultiSelectProps) {
               </div>
             ))}
           </div>
+          {note ? <p className="text-ink-3 px-1 text-data-sm" data-testid={`${testId}-note`}>{note}</p> : null}
         </div>
       ) : null}
     </div>

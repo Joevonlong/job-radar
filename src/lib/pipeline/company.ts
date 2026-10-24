@@ -1,4 +1,5 @@
 import type { PipelineConfig } from "@/lib/config";
+import { MAX_FILTER_VALUE_CHARS } from "@/lib/jobs/constants";
 
 import { compileRules, matchesAny } from "./rules";
 
@@ -73,6 +74,67 @@ export function resolveCompanyName(rawName: string, config: PipelineConfig): Res
     nameNorm: normalizeCompanyKey(canonical, config.company.legal_suffixes),
     aliases: config.company.aliases[canonical] ?? [],
   };
+}
+
+/**
+ * The `name_norm` keys a company name written by the user (an exclusion of preferences.yaml, a company filter of /jobs) stands for:
+ * its own key and the key of the company its alias resolves to under the current config. Both, because a stored company keeps the
+ * key the config gave it when it was created: an alias added later must not lose the rows stored under the old spelling.
+ */
+export function companyFilterKeys(entry: string, config: PipelineConfig): Set<string> {
+  const keys = new Set([normalizeCompanyKey(entry, config.company.legal_suffixes), resolveCompanyName(entry, config).nameNorm]);
+  keys.delete("");
+  return keys;
+}
+
+/** A stored company as the company filter compares it. */
+export interface CompanyMatchRow {
+  id: number;
+  name: string;
+  nameNorm: string;
+  aliases: readonly string[];
+}
+
+/** The keys of a stored company: its `name_norm`, and its display name and stored aliases (raw spellings) normalized. */
+export function storedCompanyKeys(row: Pick<CompanyMatchRow, "name" | "nameNorm" | "aliases">, legalSuffixes: readonly string[]): string[] {
+  return [row.nameNorm, ...[row.name, ...row.aliases].map((name) => normalizeCompanyKey(name, legalSuffixes))].filter((key) => key !== "");
+}
+
+/**
+ * The ids of the stored companies that any of `names` picks: one of the company's keys (`storedCompanyKeys`) is among the name's
+ * keys (`companyFilterKeys`), or its display name equals the name ignoring case (a name taken from a job row always finds that
+ * row). Never a substring: "SAP" does not pick "SAP Fioneer".
+ */
+export function matchCompanyIds(rows: readonly CompanyMatchRow[], names: readonly string[], config: PipelineConfig): number[] {
+  if (names.length === 0) return [];
+  const wanted = new Set<string>();
+  for (const name of names) for (const key of companyFilterKeys(name, config)) wanted.add(key);
+  const lowered = new Set(names.map((name) => name.trim().toLocaleLowerCase("en")));
+  return rows
+    .filter((row) => lowered.has(row.name.toLocaleLowerCase("en")) || storedCompanyKeys(row, config.company.legal_suffixes).some((key) => wanted.has(key)))
+    .map((row) => row.id);
+}
+
+/**
+ * `names` with each name that picks exactly one company written as that company's display name (`zalando` -> `Zalando`), so the
+ * drop-down shows it ticked instead of as a value of its own; only when the display name picks that same company alone and a URL
+ * can carry it. Other names
+ * are kept as written; duplicates that result are dropped (first wins).
+ */
+export function canonicalCompanyNames(rows: readonly CompanyMatchRow[], names: readonly string[], config: PipelineConfig): string[] {
+  const out: string[] = [];
+  for (const name of names) {
+    const [id, ...more] = matchCompanyIds(rows, [name], config);
+    // a display name the URL could not carry (too long, blanks around it) is never written in
+    const row = id !== undefined && more.length === 0 ? rows.find((r) => r.id === id && r.name === r.name.trim() && r.name.length > 0 && r.name.length <= MAX_FILTER_VALUE_CHARS) : undefined;
+    const sameAlone = row !== undefined && (() => {
+      const back = matchCompanyIds(rows, [row.name], config);
+      return back.length === 1 && back[0] === row.id;
+    })();
+    const canonical = row && sameAlone ? row.name : name;
+    if (!out.includes(canonical)) out.push(canonical);
+  }
+  return out;
 }
 
 /**

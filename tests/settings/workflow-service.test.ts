@@ -4,7 +4,7 @@ import fsp from "node:fs/promises";
 import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { parse } from "yaml";
+import { parse, stringify } from "yaml";
 
 import { reloadConfig } from "@/lib/config";
 import { saveWorkflow } from "@/lib/settings/workflow/service";
@@ -41,6 +41,16 @@ describe("saveWorkflow", () => {
     expect(notify.push_min_score).toBe(before.push_min_score);
     // the comments of both files survive
     expect(fs.readFileSync(path.join(tmp.configDir, "notify.yaml"), "utf8")).toContain("#");
+  });
+
+  it("keeps the other keys of the filters block (the company drop-down) as they were", async () => {
+    const file = path.join(tmp.configDir, "ui.yaml");
+    const ui = parse(fs.readFileSync(file, "utf8")) as { filters: Record<string, unknown> };
+    ui.filters.company_options_max = 123;
+    ui.filters.company_options_visible = 7;
+    fs.writeFileSync(file, stringify(ui));
+    expect((await saveWorkflow(request())).status).toBe("saved");
+    expect(yamlOf("ui")).toMatchObject({ filters: { hidden_workplaces: ["onsite"], company_options_max: 123, company_options_visible: 7 } });
   });
 
   it("validates both files first: a bad timeout writes nothing, not even ui.yaml", async () => {

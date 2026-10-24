@@ -5,7 +5,7 @@ import type { CityGroup } from "@/lib/jobs/city-groups";
 
 vi.mock("@/lib/jobs/cities", () => ({ searchLocationTerms: (q: string | null | undefined) => (q ? [q, `${q}-alias`] : []) }));
 
-import { needsCityGroups, toJobFilters } from "@/lib/jobs/job-filters";
+import { needsCityGroups, needsCompanyIds, toJobFilters } from "@/lib/jobs/job-filters";
 
 const group = (key: string, members: string[]): CityGroup => ({ key, members, jobCount: members.length, target: false });
 const groups = [group("München", ["München", "Garching", "Munich"]), group("Berlin", ["Berlin"])];
@@ -28,6 +28,7 @@ describe("toJobFilters", () => {
       q: "ml",
       qLocationTerms: ["ml", "ml-alias"],
       sources: ["ats", "xing"],
+      companyIds: null,
       cities: null,
       cityMembers: null,
       workplaces: null,
@@ -49,6 +50,15 @@ describe("toJobFilters", () => {
     expect(toJobFilters({ ghost: "all" }, { cityGroups: null, ghost: true }).ghost).toBeNull();
     expect(toJobFilters({ ghost: "only" }, { cityGroups: null }).ghost).toBeNull();
     expect(toJobFilters({ ghost: "only" }, { cityGroups: null, ghost: false }).ghost).toBeNull();
+  });
+
+  it("passes the resolved company ids; picked companies without ids match nothing, no company is no filter", () => {
+    expect(toJobFilters({ company: ["Acme"] }, { cityGroups: null, companyIds: [3, 7] }).companyIds).toEqual([3, 7]);
+    expect(toJobFilters({ company: ["Acme"] }, { cityGroups: null, companyIds: [] }).companyIds).toEqual([]);
+    expect(toJobFilters({ company: ["Acme"] }, { cityGroups: null }).companyIds).toEqual([]);
+    expect(toJobFilters({}, { cityGroups: null, companyIds: [3] }).companyIds).toBeNull();
+    expect(needsCompanyIds({})).toBe(false);
+    expect(needsCompanyIds({ company: ["Acme"] })).toBe(true);
   });
 
   it("needsCityGroups is true only when a city is picked", () => {

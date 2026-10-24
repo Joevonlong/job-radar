@@ -281,7 +281,8 @@ export function JobList({ jobs, empty, label, viz, mode = "default", sortHead, n
   /** A click or Enter that opens a job (the title link, the row itself): remember which one before the page changes. */
   const rememberOpen = useCallback((target: EventTarget | null) => {
     const row = target instanceof HTMLElement ? target.closest<HTMLElement>("[data-job-id]") : null;
-    if (!row || (target instanceof HTMLElement && target.closest("button"))) return;
+    // the buttons and the company link (it opens the company's list, not the job) are not an open
+    if (!row || (target instanceof HTMLElement && target.closest('button, [data-slot="company-link"]'))) return;
     const id = Number(row.dataset.jobId);
     if (Number.isFinite(id)) rememberOpenedRow(id);
   }, []);

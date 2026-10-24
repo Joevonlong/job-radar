@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { getLocale, getTranslations } from "next-intl/server";
 
 import { QuickFilter } from "@/components/jobs/quick-filter";
@@ -20,7 +21,9 @@ import { getSchedule } from "@/lib/dashboard/context";
 import { loadListViz } from "@/lib/dashboard/list-viz";
 import { NewSinceVisitNote } from "@/components/jobs/new-since-visit-note";
 import { loadHighValuePolicy, loadSignalCatalog } from "@/lib/signals/floor";
-import { countJobList, countJobListSeen, getDb, getFilterFloors, getJobFilterOptions, getVisitState, hasHighValueCategories, listJobs, listMonthSalaryFigures } from "@/lib/db";
+import { countJobList, countJobListSeen, getDb, getFilterFloors, getJobFilterOptions, getVisitState, hasHighValueCategories, listCompanyFilterOptions, listCompanyMatchRows, listJobs, listMonthSalaryFigures } from "@/lib/db";
+import { loadPipeline } from "@/lib/market/effective";
+import { canonicalCompanyNames } from "@/lib/pipeline/company";
 import { loadCityGroups } from "@/lib/jobs/cities";
 import { jobsListFilters } from "@/lib/jobs/list-filters";
 import { hasActiveFilters, type FilterVisibility, jobsListHref, jobsSearchQuery, loadJobsSearchParams, withLegacyKeys } from "@/lib/jobs/search-params";
@@ -60,6 +63,12 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
   const { timezone } = getSchedule();
   const now = new Date();
   const db = getDb();
+  // a company written another way than it is stored (`zalando`, an alias) reads as its display name, so the drop-down shows it ticked
+  if (params.company.length > 0) {
+    const canonical = canonicalCompanyNames(await listCompanyMatchRows(db), params.company, loadPipeline());
+    if (canonical.length !== params.company.length || canonical.some((name, index) => name !== params.company[index])) redirect(jobsListHref({ ...params, company: canonical }));
+  }
+  const ui = loadConfig("ui");
   const cities = await loadCityGroups(db);
   // hidden, a `visa=` in the URL is ignored but kept (no control, no chip, not counted); read once for the filter, the list
   // query and the badges
@@ -72,7 +81,7 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
   const seenUpTo = effectiveSeenUpTo(visit, now);
   // "Closed (N)" is the status filter "closed + possibly closed" (no URL key of its own); N counts the list it opens
   const closedView = params.status.length === CLOSED_VIEW.length && CLOSED_VIEW.every((status) => params.status.includes(status));
-  const [result, options, seenCounts, salaryFigures, closedCount] = await Promise.all([
+  const [result, options, seenCounts, salaryFigures, closedCount, companies] = await Promise.all([
     listJobs(db, {
       filters,
       sort: params.sort,
@@ -87,9 +96,10 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
     countJobListSeen(db, { filters, timezone, since: seenUpTo }),
     listMonthSalaryFigures(db, { now, timeZone: timezone, currency: loadBaseCurrency() ?? "" }),
     countJobList(db, { filters: { ...filters, statuses: CLOSED_VIEW }, timezone }),
+    listCompanyFilterOptions(db, { limit: ui.filters.company_options_max, timezone }),
   ]);
   const filterFloors = await getFilterFloors(db, salaryFilteredIds(result.jobs));
-  const items = await toListItems(result.jobs, { now, timezone, filterFloors, seenUpTo, visa: visaFilter, ghost: ghostFilter, monthSalaries: { figures: salaryFigures, minSample: loadConfig("ui").salary_stats.min_sample } });
+  const items = await toListItems(result.jobs, { now, timezone, filterFloors, seenUpTo, visa: visaFilter, ghost: ghostFilter, monthSalaries: { figures: salaryFigures, minSample: ui.salary_stats.min_sample } });
   // The "new since your last visit" divider when the list runs newest first (it sits on the page of the boundary only);
   // any other order says it next to the count, with a link to that order
   const newestFirst = params.sort === "first_seen" && effectiveDir(params.sort, params.dir) === "desc";
@@ -111,7 +121,7 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
     <div data-wide className="flex min-w-0 flex-col gap-sp-4">
       <VisitTracker />
       <PageHeader title={t("title")} description={t("description")} />
-      <FilterBar options={{ ...options, cities: cities.map(({ key, target }) => ({ key, target })), traps: trapsEnabled(), visa: visaFilter, ghost: ghostFilter, hiddenWorkplaces: hidden.workplaces, hiddenContracts: hidden.contracts, highValueNames }} />
+      <FilterBar options={{ ...options, cities: cities.map(({ key, target }) => ({ key, target })), companies, companyOptionsMax: ui.filters.company_options_max, companyOptionsVisible: ui.filters.company_options_visible, traps: trapsEnabled(), visa: visaFilter, ghost: ghostFilter, hiddenWorkplaces: hidden.workplaces, hiddenContracts: hidden.contracts, highValueNames }} />
       <div className="flex flex-wrap items-center gap-x-sp-3 gap-y-sp-2">
         {params.filteredOnly === true ? (
           <FilteredToggle active only href={jobsListHref({ ...params, filteredOnly: null, page: 1 })} />

@@ -32,6 +32,7 @@ describe("filter table", () => {
     expect(new Set(FILTER_KEYS).size).toBe(FILTER_KEYS.length);
     for (const key of MULTI_FILTER_KEYS) expect(FILTER_KEYS).toContain(key);
     expect([...SELECT_FILTER_KEYS, "app"].sort()).toEqual([...MULTI_FILTER_KEYS].sort());
-    expect([...SCALAR_COMPAT_KEYS]).toEqual([...SELECT_FILTER_KEYS]);
+    // `company` came after the multi-value filters: never written as a scalar
+    expect([...SCALAR_COMPAT_KEYS]).toEqual(SELECT_FILTER_KEYS.filter((key) => key !== "company"));
   });
 });

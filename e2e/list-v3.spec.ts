@@ -94,6 +94,8 @@ test.describe("Today and /jobs v3", () => {
     const row = listRows(page).first();
     await expect(row).toBeFocused();
     await page.keyboard.press("Tab"); // the title link
+    await page.keyboard.press("Tab"); // the company link
+    await expect(row.locator('[data-slot="company-link"]')).toBeFocused();
     await page.keyboard.press("Tab"); // ★ favorite
     await expect(row.getByTestId("row-favorite")).toBeFocused();
     await expect(row.locator('[data-slot="row-actions"]')).toHaveCSS("opacity", "1");
@@ -101,6 +103,23 @@ test.describe("Today and /jobs v3", () => {
     await expect(row.getByTestId("row-interested")).toBeFocused();
     await page.keyboard.press("Tab"); // ✕ ignore
     await expect(row.getByTestId("row-ignore")).toBeFocused();
+  });
+
+  test("a company name in a row and on the detail page lists only that company's jobs, without opening the job", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await open(page, "/jobs");
+    const row = listRows(page).filter({ hasText: "Brumbach Analytics GmbH" });
+    await row.locator('[data-slot="company-link"]').click();
+    await expect(page).toHaveURL(/\/jobs\?company=Brumbach(\+|%20)Analytics(\+|%20)GmbH$/);
+    await expect(page.getByTestId("result-count")).toHaveText("共 1 条");
+    await expect(listRows(page)).toHaveCount(1);
+    await expect(page.getByTestId("filter-company")).toHaveText("Brumbach Analytics GmbH");
+
+    await listRows(page).first().getByRole("link", { name: "LLM Engineer" }).click();
+    await expect(page).toHaveURL(/\/jobs\/\d+/);
+    await page.getByTestId("job-company").click();
+    await expect(page).toHaveURL(/\/jobs\?company=Brumbach(\+|%20)Analytics(\+|%20)GmbH$/);
+    await expect(listRows(page)).toHaveCount(1);
   });
 
   test("a sort change reorders the rows and the URL keeps it", async ({ page }) => {

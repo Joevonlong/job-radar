@@ -162,6 +162,42 @@ test("a hand-written scalar view (city: München) still applies on Today", async
   fs.copyFileSync(SHIPPED_FILE, INTERESTS_FILE);
 });
 
+test("pick two companies: URL, chips and count follow; a saved view lists both and its Today tab applies them", async ({ page }) => {
+  await open(page, "/jobs");
+  await page.getByTestId("filter-company").click();
+  await expect(page.getByPlaceholder("搜索公司…")).toBeFocused();
+  // each option shows its job count beside the name
+  await expect(option(page, "filter-company", "Brumbach Analytics GmbH").locator('[data-slot="option-count"]')).toHaveText("1");
+  await page.getByTestId("filter-company-search").fill("brumbach");
+  await option(page, "filter-company", "Brumbach Analytics GmbH").click();
+  await page.getByTestId("filter-company-search").fill("quill");
+  await option(page, "filter-company", "Quillfeather Labs").click();
+  await page.keyboard.press("Escape");
+
+  await expect(page).toHaveURL(/[?&]company=Brumbach(\+|%20)Analytics(\+|%20)GmbH&company=Quillfeather(\+|%20)Labs/);
+  await expect.poll(() => resultCount(page)).toBe(2);
+  await expect(page.getByTestId("filter-chip")).toHaveCount(2);
+  await expect(page.getByRole("button", { name: "移除筛选 公司：Quillfeather Labs" })).toBeVisible();
+
+  await page.getByTestId("save-view").click();
+  await page.getByTestId("save-view-name").fill("两家公司");
+  await page.getByTestId("save-view-submit").click();
+  await expect.poll(read).toContain("两家公司");
+  expect(read()).toMatch(/company:\s*\n\s+- Brumbach Analytics GmbH\n\s+- Quillfeather Labs\n/);
+
+  await open(page, "/");
+  const tab = page.getByTestId("view-tabs").getByRole("radio", { name: /两家公司/ });
+  await tab.click();
+  await expect(page).toHaveURL(/view=/);
+  const shown = Number(((await tab.textContent()) ?? "").replace(/\D/g, ""));
+  expect(shown).toBeGreaterThanOrEqual(1);
+  expect(shown).toBeLessThanOrEqual(2);
+  await expect(listRows(page)).toHaveCount(shown);
+  await expectNoLeavingRows(page);
+  for (const text of await listRows(page).allTextContents()) expect(text).toMatch(/Brumbach Analytics GmbH|Quillfeather Labs/);
+  fs.copyFileSync(SHIPPED_FILE, INTERESTS_FILE);
+});
+
 test.describe("phone, English, terminal theme", () => {
   test.use({ viewport: { width: 390, height: 844 } });
 

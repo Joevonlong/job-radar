@@ -104,6 +104,19 @@ describe("jobs search params", () => {
     expect(loadJobsSearchParams(`?city=${"x".repeat(MAX_FILTER_VALUE_CHARS + 1)}`).city).toEqual([]);
   });
 
+  it("reads companies like cities: repeated keys, an old single value, invalid, duplicate and surplus values dropped", () => {
+    expect(loadJobsSearchParams("?company=Zalando&company=N26").company).toEqual(["Zalando", "N26"]);
+    expect(loadJobsSearchParams("?company=Zalando").company).toEqual(["Zalando"]);
+    expect(loadJobsSearchParams("?company=&company=%20Zalando%20&company=Zalando&company=%20").company).toEqual(["Zalando"]);
+    const many = Array.from({ length: MAX_FILTER_VALUES + 5 }, (_, i) => `company=C${i}`).join("&");
+    expect(loadJobsSearchParams(`?${many}`).company).toHaveLength(MAX_FILTER_VALUES);
+    expect(loadJobsSearchParams(`?company=${"x".repeat(MAX_FILTER_VALUE_CHARS + 1)}`).company).toEqual([]);
+    expect(jobsListHref({ company: ["AT&T, Inc.", "N26"] })).toBe("/jobs?company=AT%26T%2C+Inc.&company=N26");
+    expect(loadJobsSearchParams(jobsListHref({ company: ["AT&T, Inc."] }).slice("/jobs".length)).company).toEqual(["AT&T, Inc."]);
+    expect(countActiveFilters(loadJobsSearchParams("?company=Zalando&company=N26&city=Berlin"))).toBe(2);
+    expect(hasActiveFilters(loadJobsSearchParams("?company=Zalando"))).toBe(true);
+  });
+
   it("writes several values as repeated keys and nothing for an empty list", () => {
     const serialize = createSerializer(jobsSearchParsers);
     expect(serialize("/jobs", { city: ["Berlin", "München"], workplace: ["remote"] })).toBe("/jobs?city=Berlin&city=München&workplace=remote");

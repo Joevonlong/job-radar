@@ -5,11 +5,14 @@
  */
 
 export const TEXT_FILTER_KEYS = ["q"] as const;
-/** Categorical filters: repeated URL keys, OR within a key. `app` was the first. */
-export const MULTI_FILTER_KEYS = ["source", "city", "workplace", "contract", "status", "app"] as const;
+/**
+ * Categorical filters: repeated URL keys, OR within a key. `app` was the first. `company`: company display names, each matching the
+ * company rows the hard filter's exclusion list would match (`companyFilterKeys`), never a substring.
+ */
+export const MULTI_FILTER_KEYS = ["source", "city", "company", "workplace", "contract", "status", "app"] as const;
 /** The multi filters shown as drop-downs (the application statuses are a pill group). */
-export const SELECT_FILTER_KEYS = ["source", "city", "workplace", "contract", "status"] as const;
-/** Multi filters that saved views write as a scalar when one value is picked (single-valued before multi-value filters). */
+export const SELECT_FILTER_KEYS = ["source", "city", "company", "workplace", "contract", "status"] as const;
+/** Multi filters that saved views write as a scalar when one value is picked (single-valued before multi-value filters); `company` came later and is always a list. */
 export const SCALAR_COMPAT_KEYS = ["source", "city", "workplace", "contract", "status"] as const;
 export const NUMBER_FILTER_KEYS = ["minScore", "minSalary"] as const;
 export const DATE_FILTER_KEYS = ["from", "to"] as const;
@@ -24,7 +27,7 @@ export const CHOICE_FILTER_KEYS = ["trap", "visa", "ghost"] as const;
 export const NON_VIEW_FILTER_KEYS = ["fav", "unseen", "filteredOnly"] as const;
 
 /** Every filter key, in the order lists and chips show them. */
-export const FILTER_KEYS = ["q", "source", "city", "workplace", "contract", "status", "app", "minScore", "minSalary", "from", "to", "salary", "filtered", "hideLang", "high", "trap", "visa", "ghost", "fav", "unseen", "filteredOnly"] as const;
+export const FILTER_KEYS = ["q", "source", "city", "company", "workplace", "contract", "status", "app", "minScore", "minSalary", "from", "to", "salary", "filtered", "hideLang", "high", "trap", "visa", "ghost", "fav", "unseen", "filteredOnly"] as const;
 
 /**
  * The URL key the "high-value signals only" filter had before the signal categories ("T1/T2 only"). Still read, as `high`, so old links and

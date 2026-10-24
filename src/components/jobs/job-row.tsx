@@ -14,6 +14,7 @@ import { scoreTone } from "@/lib/dashboard/score";
 import { effectiveStatus, statusAfterIgnoreKey, statusAfterInterestKey } from "@/lib/dashboard/status";
 import { parseFilterReason } from "@/lib/filter/reasons";
 import { UNKNOWN } from "@/lib/format/numbers";
+import { companyJobsHref } from "@/lib/jobs/company-link";
 
 import { CompanyMark } from "./company-mark";
 import { GhostMark } from "./ghost-mark";
@@ -27,6 +28,17 @@ import { StatusPill } from "./status-pill";
 import type { JobListItem } from "./types";
 
 import "./jobs.css";
+
+/** The company of a row: a link to the list of its jobs (it never opens the job), plain text when the name cannot be a filter value. */
+function CompanyName({ name, tabIndex }: { name: string; tabIndex: number }) {
+  const href = companyJobsHref(name);
+  if (href === null) return <b>{name}</b>;
+  return (
+    <Link href={href} tabIndex={tabIndex} className="jb-company" data-slot="company-link">
+      {name}
+    </Link>
+  );
+}
 
 /** What the list needs from the config files to draw its graphics (the page loads it on the server: C8). */
 export interface JobListViz {
@@ -220,7 +232,7 @@ function JobRowImpl({ job, favorite, seen, mode = "default", index, active, stag
               </JobViewTransition>
             </div>
             <div className="jb-sub">
-              <b>{job.companyName}</b> · {place}
+              <CompanyName name={job.companyName} tabIndex={tabIndex} /> · {place}
             </div>
             {job.summary ? (
               <div className="jb-sum" data-slot="job-summary" title={job.summary}>

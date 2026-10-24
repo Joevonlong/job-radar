@@ -47,6 +47,10 @@ applications:
 filters:
   hidden_workplaces: []
   hidden_contracts: []
+  # Company filter: how many companies its drop-down loads (most jobs first, 1-5000), and how many it lists before you type
+  # into its search box. Other companies are reached by clicking a company name in the list or on a job page.
+  company_options_max: 500
+  company_options_visible: 50
 
 # Advanced config editor (Settings → Advanced)
 config_editor:

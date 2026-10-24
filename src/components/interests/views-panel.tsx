@@ -65,6 +65,7 @@ function FilterChips({ view }: { view: SavedView }) {
         return app ? tc(`status.${app}`) : raw;
       }
       case "city":
+      case "company":
         return raw;
     }
   };

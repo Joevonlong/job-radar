@@ -8,7 +8,7 @@ import { visaFilterAvailable } from "@/lib/visa/filter";
 
 import { loadCityGroups } from "./cities";
 import type { CityGroup } from "./city-groups";
-import { toJobFilters } from "./job-filters";
+import { resolveViewCompanyIds, toJobFilters } from "./job-filters";
 import type { JobsSearchParams } from "./search-params";
 
 /**
@@ -17,8 +17,10 @@ import type { JobsSearchParams } from "./search-params";
  */
 export async function jobsListFilters(db: Db, params: JobsSearchParams, known: { cities?: readonly CityGroup[]; visa?: boolean; ghost?: boolean } = {}): Promise<JobFilters> {
   const highValue = loadHighValuePolicy();
+  const view = viewFiltersFromParams(params);
+  const [companyIds] = await resolveViewCompanyIds(db, [view]);
   return {
-    ...toJobFilters(viewFiltersFromParams(params), { cityGroups: known.cities ?? (await loadCityGroups(db)), visa: known.visa ?? (await visaFilterAvailable(db)), ghost: known.ghost ?? (await ghostFilterAvailable(db)) }),
+    ...toJobFilters(view, { cityGroups: known.cities ?? (await loadCityGroups(db)), visa: known.visa ?? (await visaFilterAvailable(db)), ghost: known.ghost ?? (await ghostFilterAvailable(db)), companyIds }),
     from: params.from,
     to: params.to,
     includeFiltered: params.filtered,

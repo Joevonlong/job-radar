@@ -32,7 +32,7 @@ export function viewFiltersFromParams(params: Partial<FilterParams>): ViewFilter
   const filters: ViewFilters = {};
   const q = params.q?.trim();
   if (q) filters.q = q;
-  // One value is written as a scalar (what the file looked like before multi-value filters), several as a list; `app` was always a list.
+  // One value is written as a scalar (what the file looked like before multi-value filters), several as a list; `app` and `company` are always a list.
   // Enum filters are written in their canonical order, whatever order the URL listed them in.
   const multi: Record<string, string | string[]> = {};
   for (const key of MULTI_FILTER_KEYS) {
@@ -63,6 +63,7 @@ export function viewFiltersToParams(filters: ViewFilters): FilterParams {
     q: filters.q ?? null,
     source: filterValues(filters, "source"),
     city: filterValues(filters, "city"),
+    company: filterValues(filters, "company"),
     workplace: filterValues(filters, "workplace"),
     contract: filterValues(filters, "contract"),
     status: filterValues(filters, "status"),

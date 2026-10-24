@@ -34,9 +34,20 @@ export interface CityOption {
   target: boolean;
 }
 
+/** A company of the company drop-down: the display name (value and label) and its job count in the unfiltered list. */
+export interface CompanyOption {
+  name: string;
+  jobCount: number;
+}
+
 export interface FilterBarOptions {
   families: string[];
   cities: CityOption[];
+  /** The companies with most jobs, most first (ui.yaml `filters.company_options_max` of them at most). */
+  companies?: CompanyOption[];
+  /** (ui.yaml `filters`) The cap the company list was loaded with, and how many of it are listed before anything is typed. */
+  companyOptionsMax?: number;
+  companyOptionsVisible?: number;
   contracts: string[];
   /** Show the "AI traps" control (traps.yaml `enabled`). */
   traps?: boolean;
@@ -136,6 +147,7 @@ export function FilterBar({ options }: { options: FilterBarOptions }) {
   const choices: Record<SelectFilterKey, MultiSelectOption[]> = {
     source: options.families.map((family) => ({ value: family, label: familyLabel(family) })),
     city: options.cities.map((city) => (grouped ? { value: city.key, label: city.key, group: city.target ? t("cityTargets") : t("cityOthers") } : { value: city.key, label: city.key })),
+    company: (options.companies ?? []).map((company) => ({ value: company.name, label: company.name, count: company.jobCount })),
     workplace: filterOptions(JOB_WORKPLACES, options.hiddenWorkplaces ?? [], params.workplace).map((w) => ({ value: w, label: tc(`workplace.${w}`) })),
     contract: filterOptions(options.contracts, options.hiddenContracts ?? [], params.contract).map((contract) => ({ value: contract, label: contractLabel(contract) })),
     status: JOB_STATUSES.map((s) => ({ value: s, label: tc(`jobStatus.${s}`) })),
@@ -147,6 +159,16 @@ export function FilterBar({ options }: { options: FilterBarOptions }) {
     return [...missing, ...choices[key]];
   };
   const layout = phone ? "inline" : "popover";
+  // the company list is long: only the first ones are drawn until something is typed, and the note says what is left out
+  const companyCount = options.companies?.length ?? 0;
+  const companyVisible = options.companyOptionsVisible;
+  const companyCapped = options.companyOptionsMax !== undefined && companyCount >= options.companyOptionsMax;
+  const companyNote = companyCapped
+    ? t("companyNoteCapped", { count: companyCount, shown: Math.min(companyVisible ?? companyCount, companyCount) })
+    : companyVisible !== undefined && companyCount > companyVisible
+      ? t("companyNoteSearch", { count: companyCount, shown: companyVisible })
+      : undefined;
+  const searchPlaceholders: Partial<Record<SelectFilterKey, string>> = { city: t("searchCities"), source: t("searchSources"), company: t("searchCompanies") };
 
   // a change rewrites an old `t12` as `high` and an old `hideGerman` as `hideLang`
   const legacy = {
@@ -248,8 +270,9 @@ export function FilterBar({ options }: { options: FilterBarOptions }) {
                 value={params[key]}
                 onChange={setMulti(key)}
                 onCommit={commitMulti(key)}
-                searchable={key === "city" || key === "source"}
-                {...(key === "city" ? { searchPlaceholder: t("searchCities") } : key === "source" ? { searchPlaceholder: t("searchSources") } : {})}
+                searchable={key === "city" || key === "source" || key === "company"}
+                {...(searchPlaceholders[key] ? { searchPlaceholder: searchPlaceholders[key] } : {})}
+                {...(key === "company" ? { ...(companyVisible !== undefined ? { initialVisible: companyVisible } : {}), ...(companyNote ? { note: companyNote } : {}) } : {})}
                 anyLabel={t("any")}
                 hint={t("anyOf")}
                 expanded={expandedKey === key}

@@ -1,4 +1,5 @@
 export * from "./ai-run";
+export * from "./companies";
 export * from "./favorites";
 export * from "./job-detail";
 export * from "./jobs";

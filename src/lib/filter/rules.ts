@@ -2,7 +2,7 @@ import type { PipelineConfig, PreferencesConfig } from "@/lib/config";
 import type { GermanLevel, JobLocation, JobSalary } from "@/lib/domain/types";
 import { scopeCountries, scopeWidePatterns } from "@/lib/market/remote-scope";
 import type { Market } from "@/lib/market/types";
-import { normalizeCompanyKey, resolveCompanyName } from "@/lib/pipeline/company";
+import { companyFilterKeys, normalizeCompanyKey } from "@/lib/pipeline/company";
 import { visaRulesFor } from "@/lib/visa/rules";
 
 import { compileDealBreakers, type CompiledDealBreakers, type DealBreakerMe } from "./deal-breakers";
@@ -204,10 +204,8 @@ export function compileFilter(preferences: PreferencesConfig, pipeline: Pipeline
 
   const blacklistedCompanyKeys = new Set<string>();
   for (const entry of preferences.exclude_companies) {
-    blacklistedCompanyKeys.add(normalizeCompanyKey(entry, pipeline.company.legal_suffixes));
-    blacklistedCompanyKeys.add(resolveCompanyName(entry, pipeline).nameNorm);
+    for (const key of companyFilterKeys(entry, pipeline)) blacklistedCompanyKeys.add(key);
   }
-  blacklistedCompanyKeys.delete("");
 
   const seniorities = preferences.seniority === "all" ? null : cfg.seniority_map[preferences.seniority];
 
