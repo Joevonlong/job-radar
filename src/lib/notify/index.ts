@@ -3,7 +3,7 @@ import { loadConfig } from "@/lib/config";
 import { loadPipeline } from "@/lib/market";
 import type { Db } from "@/lib/db/client";
 import { registerCycleStep } from "@/lib/cycle/steps";
-import { resolveCompanyName } from "@/lib/pipeline/company";
+import { buildWatchedCompanyKeys } from "@/lib/companies/marks";
 import { prepareResumeKit } from "@/lib/resume/export";
 
 import { aiWorkerOfflineAlert, cycleIncompleteAlert, deliverAlerts, type CycleIncompleteReason } from "./alerts";
@@ -26,7 +26,7 @@ export function registerNotifySteps(): void {
 /** Normalized watched-company names of interests.yaml (matches `companies.name_norm`). */
 function watchedKeys(): ReadonlySet<string> {
   const pipeline = loadPipeline();
-  return new Set(loadConfig("interests").watched_companies.map((name) => resolveCompanyName(name, pipeline).nameNorm));
+  return buildWatchedCompanyKeys(loadConfig("interests").watched_companies, pipeline);
 }
 
 export interface PollerStartOptions extends Pick<RuntimeOptions, "env" | "fetch" | "sleep"> {

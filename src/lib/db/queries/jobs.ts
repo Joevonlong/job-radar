@@ -103,7 +103,7 @@ export interface JobPage {
   pageSize: number;
 }
 
-function escapeLike(text: string): string {
+export function escapeLike(text: string): string {
   return text.replace(/[\\%_]/g, (c) => `\\${c}`);
 }
 

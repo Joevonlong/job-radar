@@ -236,8 +236,9 @@ ai-worker 的发布目录和切换由 `schedule.yaml` 里的四个键控制。�
 |---|---|---|
 | `filters.company_options_max` | 500 | `/jobs` 公司筛选最多加载多少家（岗位最多的那些）；1 到 5000 |
 | `filters.company_options_visible` | 50 | 下拉里不输入搜索词时显示多少家；1 到 5000 |
+| `companies.page_size` | 50 | `/companies` 每页行数；1 到 500 |
 
-两个键都可以不写（用默认值），不写的文件不用迁移。
+这些键都可以不写（用默认值），不写的文件不用迁移；整个 `companies` 段也可以省略。公司总览的每页行数在 YAML 或高级编辑器中修改。
 
 回退到没有公司筛选的版本：`interests.yaml` 的视图和 `ui.yaml` 都是严格模式，旧版本读到新键会拒绝整个文件（推送步骤也读不了 `interests.yaml`）。切换前：
 

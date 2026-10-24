@@ -332,8 +332,10 @@ Details: [deploy.md](deploy.md), "The ai-worker runs from a release directory".
 |---|---|---|
 | `filters.company_options_max` | 500 | Companies loaded into the company filter of `/jobs` (the ones with the most jobs); 1 to 5000 |
 | `filters.company_options_visible` | 50 | Companies shown before you type in the drop-down's search box; 1 to 5000 |
+| `companies.page_size` | 50 | Rows per page of `/companies`; 1 to 500 |
 
-Both keys may be missing (the defaults apply); a file without them needs no migration.
+These keys may be missing (the defaults apply); a file without them needs no migration. The `companies` block may also be
+omitted. Edit the overview page size in YAML or the advanced editor.
 
 Rolling back to a version without the company filter: `interests.yaml` views and `ui.yaml` are strict, so the older
 version refuses a file that holds the new keys (and the push step cannot read `interests.yaml` either). Before switching:

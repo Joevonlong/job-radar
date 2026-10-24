@@ -12,6 +12,9 @@ export const CONFIG_EDITOR_DEFAULTS = { max_bytes: 262_144, backups_keep: 20 } a
 /** The company drop-down of /jobs when ui.yaml does not say (a user file written before these keys existed). */
 const COMPANY_OPTIONS_DEFAULTS = { company_options_max: 500, company_options_visible: 50 } as const;
 
+/** Rows per page of /companies when a user ui.yaml predates the company overview. */
+export const COMPANIES_PAGE_DEFAULTS = { page_size: 50 } as const;
+
 /** The optional web password: what the code uses when ui.yaml has no `web_access` block. */
 export const WEB_ACCESS_DEFAULTS = {
   session_days: 30,
@@ -98,6 +101,10 @@ export const uiSchema = z
         company_options_visible: z.number().int().min(1).max(5000).default(COMPANY_OPTIONS_DEFAULTS.company_options_visible),
       })
       .default({ hidden_workplaces: [], hidden_contracts: [], ...COMPANY_OPTIONS_DEFAULTS }),
+    /** Rows per page of the company overview (/companies). */
+    companies: z
+      .strictObject({ page_size: positiveInt.max(500).default(COMPANIES_PAGE_DEFAULTS.page_size) })
+      .default(COMPANIES_PAGE_DEFAULTS),
     /** The advanced config editor (/settings?tab=advanced). */
     config_editor: z
       .strictObject({
