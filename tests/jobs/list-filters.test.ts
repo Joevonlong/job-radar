@@ -10,6 +10,9 @@ vi.mock("@/lib/signals/floor", () => ({
 import type { Db } from "@/lib/db";
 import { jobsListFilters } from "@/lib/jobs/list-filters";
 import { loadJobsSearchParams } from "@/lib/jobs/search-params";
+import { buildCompanyMatchIndex } from "@/lib/pipeline/company";
+
+import { pipelineWith } from "../pipeline/helpers";
 
 /** /jobs compares salaries (filter and sort) in the market's base currency, not an assumed EUR. */
 describe("jobsListFilters: base currency", () => {
@@ -27,5 +30,15 @@ describe("jobsListFilters: base currency", () => {
     const filters = await jobsListFilters(db, params("sort=salary"), { cities: [] });
     expect(filters.baseCurrency).toBeNull();
     expect("baseCurrency" in filters).toBe(true);
+  });
+
+  it("uses the caller's company index for the list query", async () => {
+    const companyIndex = buildCompanyMatchIndex([{ id: 7, name: "Acme", nameNorm: "acme", aliases: [] }], pipelineWith((raw) => {
+      const company = raw.company as { aliases: Record<string, string[]>; legal_suffixes: string[] };
+      company.aliases = {};
+      company.legal_suffixes = ["gmbh"];
+    }));
+    const filters = await jobsListFilters(db, params("company=Acme"), { cities: [], visa: false, ghost: false, companyIndex });
+    expect(filters.companyIds).toEqual([7]);
   });
 });

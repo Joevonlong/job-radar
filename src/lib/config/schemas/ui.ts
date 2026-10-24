@@ -9,6 +9,9 @@ const noDuplicates = (items: readonly string[]): boolean => new Set(items).size 
 /** What the advanced editor uses when ui.yaml has no `config_editor` block or cannot be read (so the editor can repair a broken ui.yaml). */
 export const CONFIG_EDITOR_DEFAULTS = { max_bytes: 262_144, backups_keep: 20 } as const;
 
+/** The company drop-down of /jobs when ui.yaml does not say (a user file written before these keys existed). */
+const COMPANY_OPTIONS_DEFAULTS = { company_options_max: 500, company_options_visible: 50 } as const;
+
 /** The optional web password: what the code uses when ui.yaml has no `web_access` block. */
 export const WEB_ACCESS_DEFAULTS = {
   session_days: 30,
@@ -80,13 +83,21 @@ export const uiSchema = z
         hidden_statuses: z.array(z.enum(HIDEABLE_STATUSES)).refine(noDuplicates, "must not contain duplicates").default([]),
       })
       .default({ hidden_statuses: [] }),
-    /** Workplace / contract values the /jobs filter does not list (a link or saved view that selects one still works). */
+    /**
+     * Workplace / contract values the /jobs filter does not list (a link or saved view that selects one still works), and how many
+     * companies its company drop-down offers. Every key has a default: a user file written before a key existed stays valid
+     * (zod returns the object default as it is, so the new keys are in it too).
+     */
     filters: z
       .strictObject({
         hidden_workplaces: z.array(z.enum(HIDEABLE_WORKPLACES)).refine(noDuplicates, "must not contain duplicates").default([]),
         hidden_contracts: z.array(z.enum(HIDEABLE_CONTRACTS)).refine(noDuplicates, "must not contain duplicates").default([]),
+        /** Companies the company drop-down loads (most jobs first); others are reached from a job's company link. */
+        company_options_max: z.number().int().min(1).max(5000).default(COMPANY_OPTIONS_DEFAULTS.company_options_max),
+        /** Of those, how many it lists before anything is typed into its search box. */
+        company_options_visible: z.number().int().min(1).max(5000).default(COMPANY_OPTIONS_DEFAULTS.company_options_visible),
       })
-      .default({ hidden_workplaces: [], hidden_contracts: [] }),
+      .default({ hidden_workplaces: [], hidden_contracts: [], ...COMPANY_OPTIONS_DEFAULTS }),
     /** The advanced config editor (/settings?tab=advanced). */
     config_editor: z
       .strictObject({

@@ -3,7 +3,7 @@ import { and, asc, count, desc, eq, exists, ilike, inArray, isNull, lte, ne, not
 import type { Db } from "../client";
 import { applications, channels, companies, jobFavorites, jobSources, jobs, jobVisa, trapScans } from "../schema";
 import type { MonthSalaryFigure } from "@/lib/domain/salary";
-import { DEFAULT_SORT_DIR, type ApplicationFilterStatus, type GhostFilter, type JobSort, type SortDir, type TrapFilter, type VisaFilter } from "@/lib/jobs/constants";
+import { DEFAULT_SORT_DIR, MAX_FILTER_VALUE_CHARS, type ApplicationFilterStatus, type GhostFilter, type JobSort, type SortDir, type TrapFilter, type VisaFilter } from "@/lib/jobs/constants";
 import { ghostTrustedKeys } from "@/lib/ghost/settings";
 
 import { ghostFilterCondition } from "../repos/ghost";
@@ -26,6 +26,11 @@ export interface JobFilters {
   qLocationTerms?: readonly string[] | null;
   /** Source families (`channels.family`): the job has a source posting from a channel of any of these families. Empty / null = no filter; the same goes for the other lists below. */
   sources?: readonly string[] | null;
+  /**
+   * Only jobs of these companies (`companies.id`, resolved from the company filter's names by `resolveViewCompanyIds`). Null / absent =
+   * no filter; an empty list = companies were picked but none matched: nothing is listed.
+   */
+  companyIds?: readonly number[] | null;
   /** Cities to show (any of them): group keys of the city dropdown (`src/lib/jobs/city-groups.ts`) or raw `locations_json[].city` values. */
   cities?: readonly string[] | null;
   /** The raw `locations_json[].city` values that make up `cities` (a metro area has many; the union); default: `cities` alone. */
@@ -159,6 +164,9 @@ export function buildJobConditions(db: Db, filters: JobFilters, timezone: string
     );
   }
 
+  // on `jobs.company_id` alone: Today and the trends do not join the companies table
+  if (filters.companyIds !== null && filters.companyIds !== undefined) conditions.push(filters.companyIds.length > 0 ? inArray(jobs.companyId, [...filters.companyIds]) : sql`false`);
+
   if (filters.cities && filters.cities.length > 0) {
     const members = filters.cityMembers && filters.cityMembers.length > 0 ? filters.cityMembers : filters.cities;
     conditions.push(jobHasCityIn(members));
@@ -234,9 +242,10 @@ export function jobOrderBy(sort: JobSort, dir: SortDir, latest: LatestScore, cur
 
 /**
  * The WHERE of the /jobs list: the filters plus the default hiding: hard-filtered jobs unless asked for, and jobs that show as
- * closed unless a job-status filter is chosen (possibly closed ones stay). One definition for the list, its counts and "mark all seen".
+ * closed unless a job-status filter is chosen (possibly closed ones stay). One definition for the list, its counts, "mark all seen" and
+ * the job counts of the company drop-down (`listCompanyFilterOptions`, with no filters: the list as /jobs opens).
  */
-function jobListWhere(db: Db, filters: JobFilters, timezone: string, latest: LatestScore, ux: boolean): SQL | undefined {
+export function jobListWhere(db: Db, filters: JobFilters, timezone: string, latest: LatestScore, ux: boolean): SQL | undefined {
   const hideFiltered = filters.filteredOnly
     ? eq(latest.filterResult, "filtered_out")
     : filters.includeFiltered
@@ -378,6 +387,34 @@ export async function getJobFilterOptions(db: Db): Promise<JobFilterOptions> {
     families: familyRows.map((r) => r.family),
     contracts: contractRows.map((r) => r.contract),
   };
+}
+
+/** A company of the company drop-down: its display name (the value of the filter) and how many jobs the unfiltered /jobs list holds of it. */
+export interface CompanyFilterOption {
+  name: string;
+  jobCount: number;
+}
+
+/**
+ * The companies of the company drop-down: those with jobs in the /jobs list as it opens (`jobListWhere` without filters: no
+ * hard-filtered and no closed jobs), most jobs first, then by name; at most `limit`. Rows with the same display name are one option
+ * (the filter picks both). A name longer than a filter value may be is left out: the URL would drop it.
+ */
+export async function listCompanyFilterOptions(db: Db, options: { limit: number; timezone: string }): Promise<CompanyFilterOption[]> {
+  const latest = latestScoreCte(db);
+  const ux = await uxTablesReady(db);
+  const jobCount = sql<number>`count(*)`.mapWith(Number);
+  const rows = await db
+    .with(latest)
+    .select({ name: companies.name, jobCount })
+    .from(jobs)
+    .innerJoin(companies, eq(companies.id, jobs.companyId))
+    .leftJoin(latest, eq(latest.jobId, jobs.id))
+    .where(and(jobListWhere(db, {}, options.timezone, latest, ux), sql`char_length(${companies.name}) <= ${MAX_FILTER_VALUE_CHARS}`, sql`btrim(${companies.name}) <> ''`))
+    .groupBy(companies.name)
+    .orderBy(desc(jobCount), asc(companies.name))
+    .limit(Math.max(1, options.limit));
+  return rows;
 }
 
 /**

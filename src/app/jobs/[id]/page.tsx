@@ -1,7 +1,10 @@
 import { ExternalLink } from "lucide-react";
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getFormatter, getLocale, getTranslations } from "next-intl/server";
+
+import { companyJobsHref } from "@/lib/jobs/company-link";
 
 import { BackLink } from "@/components/jobs/detail/back-link";
 import { BreakdownPanel } from "@/components/jobs/detail/breakdown-panel";
@@ -140,6 +143,7 @@ export default async function JobDetailPage({ params }: { params: Params }) {
   const absolute = (date: Date) => format.dateTime(date, { dateStyle: "medium", timeStyle: "short", timeZone: timezone });
 
   const places = [...new Set(job.locations.map((l) => l.label))];
+  const companyHref = companyJobsHref(job.company.name);
   const salary = job.salary
     ? describeSalary(job.salary, uiLocale)
     : null;
@@ -320,9 +324,16 @@ export default async function JobDetailPage({ params }: { params: Params }) {
             </h1>
           </JobViewTransition>
           <div className="text-ink-2 text-body flex flex-wrap items-center gap-x-1.5 gap-y-1">
-            <b className="text-ink font-bold" data-testid="job-company">
-              {job.company.name}
-            </b>
+            {companyHref ? (
+              // the company's jobs, and only those
+              <Link href={companyHref} className="text-ink font-bold underline-offset-2 hover:underline focus-visible:underline" data-testid="job-company" data-slot="company-link">
+                {job.company.name}
+              </Link>
+            ) : (
+              <b className="text-ink font-bold" data-testid="job-company">
+                {job.company.name}
+              </b>
+            )}
             {job.company.watched ? <Badge variant="status-on">{t("watched")}</Badge> : null}
             <span aria-hidden>·</span>
             <span>{places.length > 0 ? places.join(", ") : <Unknown label={t("unknown")} />}</span>

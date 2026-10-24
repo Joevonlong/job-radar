@@ -397,6 +397,30 @@ describe("ui ai_usage block", () => {
   });
 });
 
+describe("ui company drop-down keys", () => {
+  it("a file without them (or without the whole filters block) reads with the defaults", () => {
+    const parse = (ui: unknown) => configRegistry.ui.schema.parse(ui) as { filters: { hidden_workplaces: string[]; company_options_max: number; company_options_visible: number } };
+    const older = fixture("ui") as Record<string, Record<string, unknown>>;
+    older.filters = { hidden_workplaces: ["onsite"], hidden_contracts: [] };
+    const read = parse(older);
+    expect(read.filters.hidden_workplaces).toEqual(["onsite"]);
+    expect(read.filters.company_options_max).toBeGreaterThan(0);
+    expect(read.filters.company_options_visible).toBeGreaterThan(0);
+    const none = fixture("ui") as Record<string, unknown>;
+    delete none.filters;
+    const fallback = parse(none);
+    expect(fallback.filters.company_options_max).toBe(read.filters.company_options_max);
+    expect(fallback.filters.company_options_visible).toBe(read.filters.company_options_visible);
+  });
+  it("rejects a count that is not a whole number from 1 to 5000", () => {
+    const bad = fixture("ui") as Record<string, Record<string, unknown>>;
+    bad.filters = { hidden_workplaces: [], hidden_contracts: [], company_options_max: 0, company_options_visible: 2.5 };
+    expect(issuePaths("ui", bad)).toEqual(expect.arrayContaining(["filters.company_options_max", "filters.company_options_visible"]));
+    bad.filters = { hidden_workplaces: [], hidden_contracts: [], company_options_max: 5001, company_options_visible: 10 };
+    expect(issuePaths("ui", bad)).toEqual(["filters.company_options_max"]);
+  });
+});
+
 describe("ui job_checks block", () => {
   it("is optional: a file without it gets the recheck on, no extra phrases, the ghost job check off and the visa check on (auto)", () => {
     const ui = fixture("ui");

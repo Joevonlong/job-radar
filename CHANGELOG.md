@@ -60,6 +60,11 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Company filter on `/jobs`:** a multi-select like city (`?company=…`, repeated for several), with job counts in the
+  drop-down, stored in saved views and applied on the Today page and in the view trends. Click a company name in a job row
+  or on a job's detail page to list that company's jobs. New `ui.yaml` keys `filters.company_options_max` (500) and
+  `filters.company_options_visible` (50). Rolling back to an older version needs the `company:` keys removed from views
+  first: see [docs/configuration.md](docs/configuration.md#company-drop-down-on-jobs-uiyaml).
 - **Settings** in `schedule.yaml` (not in the shipped file): `deploy.ai_worker_releases_keep` (3),
   `deploy.ai_worker_stop_timeout_seconds` (60) and `deploy.ai_worker_swap_timeout_seconds` (120). See
   [docs/configuration.md](docs/configuration.md#shipped-config-identity).

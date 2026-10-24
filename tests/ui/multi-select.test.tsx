@@ -20,7 +20,7 @@ const options: MultiSelectOption[] = [
   { value: "Hamburg", label: "Hamburg", group: "Other cities" },
 ];
 
-function Harness({ layout = "popover", initial = [], searchable = true, extra = [], locale = "en", onCommit, onChangeSpy }: { layout?: "popover" | "inline"; initial?: string[]; searchable?: boolean; extra?: MultiSelectOption[]; locale?: "en" | "zh"; onCommit?: () => void; onChangeSpy?: (v: string[]) => void }) {
+function Harness({ layout = "popover", initial = [], initialVisible, searchable = true, extra = [], locale = "en", onCommit, onChangeSpy }: { layout?: "popover" | "inline"; initial?: string[]; initialVisible?: number; searchable?: boolean; extra?: MultiSelectOption[]; locale?: "en" | "zh"; onCommit?: () => void; onChangeSpy?: (v: string[]) => void }) {
   const [value, setValue] = useState<string[]>(initial);
   const [expanded, setExpanded] = useState(false);
   return (
@@ -35,6 +35,7 @@ function Harness({ layout = "popover", initial = [], searchable = true, extra = 
         }}
         onCommit={onCommit}
         searchable={searchable}
+        initialVisible={initialVisible}
         searchPlaceholder="Search cities…"
         anyLabel="All"
         hint="Matches any of them"
@@ -171,6 +172,22 @@ describe("MultiSelect: inline layout (the phone sheet)", () => {
 });
 
 describe("MultiSelect: order when opened", () => {
+  it.each(["popover", "inline"] as const)("%s: keeps a newly picked option beyond the limit visible after clearing search", async (layout) => {
+    const user = userEvent.setup();
+    render(<Harness layout={layout} initialVisible={1} />);
+    await user.click(trigger());
+    expect(screen.getAllByTestId("filter-city-option").map((o) => o.getAttribute("data-value"))).toEqual(["Berlin"]);
+
+    const search = screen.getByTestId("filter-city-search");
+    await user.type(search, "ham");
+    await user.click(screen.getByTestId("filter-city-option"));
+    expect(checked("Hamburg")).toBe("true");
+    await user.clear(search);
+
+    expect(screen.getAllByTestId("filter-city-option").map((o) => o.getAttribute("data-value"))).toEqual(["Berlin", "Hamburg"]);
+    expect(checked("Hamburg")).toBe("true");
+  });
+
   it("arrangeOptions lists the picked values first, keeping their relative order, then the rest by group", () => {
     const { stale, groups } = arrangeOptions(options, ["München", "Berlin"]);
     expect(stale.map((o) => o.value)).toEqual(["Berlin", "München"]);

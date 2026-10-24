@@ -61,7 +61,8 @@ export async function saveWorkflow(rawRequest: unknown): Promise<WorkflowActionS
   const candidateUi = {
     ...ui,
     applications: { hidden_statuses: statuses.ok ? statuses.value : [] },
-    filters: { hidden_workplaces: workplaces.ok ? workplaces.value : [], hidden_contracts: contracts.ok ? contracts.value : [] },
+    // the other `filters` keys (the company drop-down) are not on this form: kept as they are
+    filters: { ...ui.filters, hidden_workplaces: workplaces.ok ? workplaces.value : [], hidden_contracts: contracts.ok ? contracts.value : [] },
   };
   const candidateNotify = {
     ...notify,

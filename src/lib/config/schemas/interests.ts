@@ -199,6 +199,13 @@ export const viewFiltersSchema = z.strictObject({
   /** Source family (`channels.family`, e.g. linkedin). */
   source: oneOrMany(MULTI_VALUE_SCHEMAS.source).optional(),
   city: oneOrMany(MULTI_VALUE_SCHEMAS.city).optional(),
+  /** Company display names, any of them (always a list; matched like the hard filter's company exclusions, never as a substring). */
+  company: z
+    .array(MULTI_VALUE_SCHEMAS.company)
+    .min(1)
+    .max(MAX_FILTER_VALUES)
+    .refine((list) => new Set(list).size === list.length, "must not contain duplicates")
+    .optional(),
   workplace: oneOrMany(MULTI_VALUE_SCHEMAS.workplace).optional(),
   contract: oneOrMany(MULTI_VALUE_SCHEMAS.contract).optional(),
   status: oneOrMany(MULTI_VALUE_SCHEMAS.status).optional(),

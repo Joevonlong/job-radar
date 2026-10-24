@@ -27,7 +27,7 @@ import { loadListViz } from "@/lib/dashboard/list-viz";
 import { germanLevelsToHide } from "@/lib/dashboard/german";
 import { nextScheduledCycle } from "@/lib/dashboard/next-cycle";
 import { loadCityGroups } from "@/lib/jobs/cities";
-import { needsCityGroups, toJobFilters } from "@/lib/jobs/job-filters";
+import { needsCityGroups, resolveViewCompanyIds, toJobFilters } from "@/lib/jobs/job-filters";
 import { loadHighValuePolicy, loadSignalCatalog } from "@/lib/signals/floor";
 import { withLegacyKeys } from "@/lib/jobs/search-params";
 import { countTodayJobs, countTodayQuickViews, countUnscoredJobs, getDb, getDbNow, getFilterFloors, getLatestCycleSummary, getOpenAiRun, getVisitState, hasHighValueCategories, listCycleNewJobs, listMonthSalaryFigures, listRecentCycleKpis, listTodayCycleSummaries, listTodayJobs, type QuickView } from "@/lib/db";
@@ -95,6 +95,8 @@ export default async function TodayPage({ searchParams }: { searchParams: Promis
   const db = getDb();
   // the city groups are only needed when the shown view or one of the tab counts filters by city
   const cityGroups = [filters, ...views.map((view) => view.filters)].some(needsCityGroups) ? await loadCityGroups(db) : null;
+  // the companies the shown view and each tab pick (one read of the companies table, only when one of them picks companies)
+  const [shownCompanyIds, ...viewCompanyIds] = await resolveViewCompanyIds(db, [filters, ...views.map((view) => view.filters)]);
   // a saved view's visa filter applies only while the filter shows (me.yaml / ui.yaml) and its table exists
   const visa = await visaFilterAvailable(db);
   // and its ghost filter (and the list's marks) only while ui.yaml turns the ghost job check on and its table exists
@@ -123,7 +125,7 @@ export default async function TodayPage({ searchParams }: { searchParams: Promis
       hideGermanLevels: hideLang ? germanLevelsToHide() : [],
       highValueOnly: high,
       highValue,
-      extra: toJobFilters(filters, { cityGroups, visa, ghost }),
+      extra: toJobFilters(filters, { cityGroups, visa, ghost, companyIds: shownCompanyIds }),
       visa,
       ghost,
     }),
@@ -152,13 +154,13 @@ export default async function TodayPage({ searchParams }: { searchParams: Promis
   const countBase = { now, timezone: schedule.timezone, cycle: summary, highValue };
   const quickCounts = await countTodayQuickViews(db, { ...countBase, quickLines: { qualifiedMinRank, qualifiedMinRankWithSignals } });
     const viewCounts = await Promise.all(
-    views.map((view) =>
+    views.map((view, index) =>
       countTodayJobs(db, {
         ...countBase,
         includeFiltered: view.filters.filtered === true,
         hideGermanLevels: view.filters.hideLang === true ? germanLevelsToHide() : [],
         highValueOnly: view.filters.high === true,
-        extra: toJobFilters(view.filters, { cityGroups, visa, ghost }),
+        extra: toJobFilters(view.filters, { cityGroups, visa, ghost, companyIds: viewCompanyIds[index] }),
       }),
     ),
   );

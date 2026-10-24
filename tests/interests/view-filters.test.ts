@@ -119,6 +119,20 @@ describe("multi-value filters in saved views", () => {
     expect(viewFiltersFromParams(await loadJobsSearchParams("?city=Berlin&city=M%C3%BCnchen&workplace=remote&workplace=hybrid"))).toEqual({ city: ["Berlin", "München"], workplace: ["hybrid", "remote"] });
   });
 
+  it("writes companies as a list, also a single one, and opens them again unchanged", async () => {
+    const one = viewFiltersFromParams(await loadJobsSearchParams("?company=Zalando"));
+    expect(one).toEqual({ company: ["Zalando"] });
+    const two = viewFiltersFromParams(await loadJobsSearchParams("?company=Zalando&company=N26&city=Berlin"));
+    expect(two).toEqual({ city: "Berlin", company: ["Zalando", "N26"] });
+    expect(serialize("/jobs", viewFiltersToParams(two))).toBe("/jobs?city=Berlin&company=Zalando&company=N26");
+    expect(viewFiltersFromParams(viewFiltersToParams(two))).toEqual(two);
+    // a view without companies writes no company key
+    expect(viewFiltersFromParams(await loadJobsSearchParams("?city=Berlin"))).not.toHaveProperty("company");
+    expect(viewFiltersToParams({ city: "Berlin" }).company).toEqual([]);
+    expect(sameFilters({ company: ["Zalando", "N26"] }, { company: ["Zalando", "N26"] })).toBe(true);
+    expect(activeFilterKeys({ company: ["Zalando"] })).toEqual(["company"]);
+  });
+
   it("keeps the key order of the file: q, source, city, workplace, ..., app, then the rest", async () => {
     const filters = viewFiltersFromParams(await loadJobsSearchParams("?minScore=70&app=new&city=Berlin&q=x&source=ats&source=xing"));
     expect(Object.keys(filters)).toEqual(["q", "source", "city", "app", "minScore"]);

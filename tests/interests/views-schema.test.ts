@@ -2,6 +2,7 @@
 import { describe, expect, it } from "vitest";
 
 import { configRegistry } from "@/lib/config";
+import { MAX_FILTER_VALUES } from "@/lib/jobs/constants";
 import { shippedYaml } from "../config/helpers";
 
 const schema = configRegistry.interests.schema;
@@ -30,6 +31,21 @@ describe("interests views", () => {
     expect(paths(withViews([view("a", { filters: { minScore: 101 } })]))).toEqual(["views.0.filters.minScore"]);
     expect(paths(withViews([view("a", { filters: { minScore: 70.5 } })]))).toEqual(["views.0.filters.minScore"]);
     expect(paths(withViews([view("a", { filters: { minSalary: -1 } })]))).toEqual(["views.0.filters.minSalary"]);
+  });
+
+  it("accepts companies as a list, and a view without them as before", () => {
+    expect(withViews([view("one", { filters: { company: ["Zalando"] } })]).success).toBe(true);
+    expect(withViews([view("two", { filters: { city: "Berlin", company: ["Zalando", "N26"] } })]).success).toBe(true);
+    expect(withViews([view("none", { filters: { city: "Berlin" } })]).success).toBe(true);
+  });
+
+  it("rejects an empty, duplicated, too long or scalar company list", () => {
+    expect(paths(withViews([view("a", { filters: { company: [] } })]))).toEqual(["views.0.filters.company"]);
+    expect(paths(withViews([view("a", { filters: { company: ["Acme", "Acme"] } })]))).toEqual(["views.0.filters.company"]);
+    expect(paths(withViews([view("a", { filters: { company: [""] } })]))).toEqual(["views.0.filters.company.0"]);
+    expect(paths(withViews([view("a", { filters: { company: "Acme" } })]))).toEqual(["views.0.filters.company"]);
+    const tooMany = Array.from({ length: MAX_FILTER_VALUES + 1 }, (_, i) => `C${i}`);
+    expect(paths(withViews([view("a", { filters: { company: tooMany } })]))).toEqual(["views.0.filters.company"]);
   });
 
   it("rejects filters /jobs does not have, bad values and bad dates", () => {

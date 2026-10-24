@@ -30,7 +30,9 @@ describe("ui.yaml 1 -> 2", () => {
     writeVersion1Ui();
     const ui = loadConfig("ui");
     expect(ui.applications.hidden_statuses).toEqual([]);
-    expect(ui.filters).toEqual({ hidden_workplaces: [], hidden_contracts: [] });
+    expect(ui.filters).toMatchObject({ hidden_workplaces: [], hidden_contracts: [] });
+    expect(ui.filters.company_options_max).toBeGreaterThan(0);
+    expect(ui.filters.company_options_visible).toBeGreaterThan(0);
     expect(ui.config_editor.backups_keep).toBeGreaterThan(0);
   });
 

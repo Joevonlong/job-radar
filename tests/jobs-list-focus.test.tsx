@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { JobList } from "@/components/jobs/job-list";
 import type { JobListViz } from "@/components/jobs/job-list";
 import type { JobListItem } from "@/components/jobs/types";
+import { MAX_FILTER_VALUE_CHARS } from "@/lib/jobs/constants";
 
 import en from "../messages/en.json";
 
@@ -316,6 +317,48 @@ describe("JobList: the ★ 👍 ✕ buttons", () => {
     await user.keyboard("j");
     await user.keyboard("{Enter}");
     expect(mocks.push).toHaveBeenCalledWith("/jobs/1");
+  });
+});
+
+describe("JobList: the company name", () => {
+  it("links to the list of that company's jobs only, and is a tab stop of the active row only", () => {
+    render(list([job(1, { companyName: "AT&T, Inc." }), job(2)]));
+    const links = screen.getAllByRole("link").filter((a) => a.getAttribute("data-slot") === "company-link");
+    expect(links.map((a) => a.getAttribute("href"))).toEqual(["/jobs?company=AT%26T%2C+Inc.", "/jobs?company=Company+2"]);
+    expect(links[0]).toHaveTextContent("AT&T, Inc.");
+    expect(links[0]).toHaveAttribute("tabindex", "0");
+    expect(links[1]).toHaveAttribute("tabindex", "-1");
+  });
+
+  it("a click on it neither opens the job nor counts as opening it", async () => {
+    render(list([job(1), job(2)]));
+    const link = screen.getByRole("link", { name: "Company 1" });
+    // jsdom cannot navigate: keep the click from trying
+    link.addEventListener("click", (event) => event.preventDefault());
+    await userEvent.click(link);
+    expect(mocks.push).not.toHaveBeenCalled();
+    expect(window.sessionStorage.getItem("jr:list-return")).toBeNull();
+    // the title link still counts as opening
+    const title = screen.getByRole("link", { name: "Job 1" });
+    title.addEventListener("click", (event) => event.preventDefault());
+    await userEvent.click(title);
+    expect(window.sessionStorage.getItem("jr:list-return")).toContain('"jobId":1');
+  });
+
+  it("Enter on the focused company link does not open the job", async () => {
+    const user = userEvent.setup();
+    render(list([job(1)]));
+    const link = screen.getByRole("link", { name: "Company 1" });
+    link.addEventListener("click", (event) => event.preventDefault());
+    link.focus();
+    await user.keyboard("{Enter}");
+    expect(mocks.push).not.toHaveBeenCalled();
+  });
+
+  it("a name too long for a filter value stays plain text", () => {
+    render(list([job(1, { companyName: "N".repeat(MAX_FILTER_VALUE_CHARS + 1) })]));
+    expect(screen.queryAllByRole("link").filter((a) => a.getAttribute("data-slot") === "company-link")).toHaveLength(0);
+    expect(screen.getByText("N".repeat(MAX_FILTER_VALUE_CHARS + 1)).tagName).toBe("B");
   });
 });
 
