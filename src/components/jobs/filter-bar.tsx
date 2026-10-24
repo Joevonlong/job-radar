@@ -45,8 +45,9 @@ export interface FilterBarOptions {
   cities: CityOption[];
   /** The companies with most jobs, most first (ui.yaml `filters.company_options_max` of them at most). */
   companies?: CompanyOption[];
-  /** (ui.yaml `filters`) The cap the company list was loaded with, and how many of it are listed before anything is typed. */
-  companyOptionsMax?: number;
+  /** More companies existed than the loaded list could hold. */
+  companyOptionsCapped?: boolean;
+  /** (ui.yaml `filters`) How many companies are listed before anything is typed. */
   companyOptionsVisible?: number;
   contracts: string[];
   /** Show the "AI traps" control (traps.yaml `enabled`). */
@@ -162,8 +163,7 @@ export function FilterBar({ options }: { options: FilterBarOptions }) {
   // the company list is long: only the first ones are drawn until something is typed, and the note says what is left out
   const companyCount = options.companies?.length ?? 0;
   const companyVisible = options.companyOptionsVisible;
-  const companyCapped = options.companyOptionsMax !== undefined && companyCount >= options.companyOptionsMax;
-  const companyNote = companyCapped
+  const companyNote = options.companyOptionsCapped
     ? t("companyNoteCapped", { count: companyCount, shown: Math.min(companyVisible ?? companyCount, companyCount) })
     : companyVisible !== undefined && companyCount > companyVisible
       ? t("companyNoteSearch", { count: companyCount, shown: companyVisible })

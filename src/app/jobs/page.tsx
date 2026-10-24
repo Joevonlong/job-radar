@@ -23,7 +23,7 @@ import { NewSinceVisitNote } from "@/components/jobs/new-since-visit-note";
 import { loadHighValuePolicy, loadSignalCatalog } from "@/lib/signals/floor";
 import { countJobList, countJobListSeen, getDb, getFilterFloors, getJobFilterOptions, getVisitState, hasHighValueCategories, listCompanyFilterOptions, listCompanyMatchRows, listJobs, listMonthSalaryFigures } from "@/lib/db";
 import { loadPipeline } from "@/lib/market/effective";
-import { canonicalCompanyNames } from "@/lib/pipeline/company";
+import { buildCompanyMatchIndex, canonicalCompanyNames } from "@/lib/pipeline/company";
 import { loadCityGroups } from "@/lib/jobs/cities";
 import { jobsListFilters } from "@/lib/jobs/list-filters";
 import { hasActiveFilters, type FilterVisibility, jobsListHref, jobsSearchQuery, loadJobsSearchParams, withLegacyKeys } from "@/lib/jobs/search-params";
@@ -63,9 +63,10 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
   const { timezone } = getSchedule();
   const now = new Date();
   const db = getDb();
+  const companyIndex = params.company.length > 0 ? buildCompanyMatchIndex(await listCompanyMatchRows(db), loadPipeline()) : undefined;
   // a company written another way than it is stored (`zalando`, an alias) reads as its display name, so the drop-down shows it ticked
-  if (params.company.length > 0) {
-    const canonical = canonicalCompanyNames(await listCompanyMatchRows(db), params.company, loadPipeline());
+  if (companyIndex) {
+    const canonical = canonicalCompanyNames(companyIndex, params.company);
     if (canonical.length !== params.company.length || canonical.some((name, index) => name !== params.company[index])) redirect(jobsListHref({ ...params, company: canonical }));
   }
   const ui = loadConfig("ui");
@@ -75,7 +76,7 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
   const visaFilter = await visaFilterAvailable(db);
   // the same for the ghost job check (ui.yaml job_checks.ghost): off, no control, no chip, no mark, and `ghost=` filters nothing
   const ghostFilter = await ghostFilterAvailable(db);
-  const filters = await jobsListFilters(db, params, { cities, visa: visaFilter, ghost: ghostFilter });
+  const filters = await jobsListFilters(db, params, { cities, visa: visaFilter, ghost: ghostFilter, companyIndex });
   const visibility: FilterVisibility = { ignore: [...(visaFilter ? [] : (["visa"] as const)), ...(ghostFilter ? [] : (["ghost"] as const))] };
   const visit = await getVisitState(db);
   const seenUpTo = effectiveSeenUpTo(visit, now);
@@ -96,7 +97,7 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
     countJobListSeen(db, { filters, timezone, since: seenUpTo }),
     listMonthSalaryFigures(db, { now, timeZone: timezone, currency: loadBaseCurrency() ?? "" }),
     countJobList(db, { filters: { ...filters, statuses: CLOSED_VIEW }, timezone }),
-    listCompanyFilterOptions(db, { limit: ui.filters.company_options_max, timezone }),
+    listCompanyFilterOptions(db, { limit: ui.filters.company_options_max + 1, timezone }),
   ]);
   const filterFloors = await getFilterFloors(db, salaryFilteredIds(result.jobs));
   const items = await toListItems(result.jobs, { now, timezone, filterFloors, seenUpTo, visa: visaFilter, ghost: ghostFilter, monthSalaries: { figures: salaryFigures, minSample: ui.salary_stats.min_sample } });
@@ -121,7 +122,7 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
     <div data-wide className="flex min-w-0 flex-col gap-sp-4">
       <VisitTracker />
       <PageHeader title={t("title")} description={t("description")} />
-      <FilterBar options={{ ...options, cities: cities.map(({ key, target }) => ({ key, target })), companies, companyOptionsMax: ui.filters.company_options_max, companyOptionsVisible: ui.filters.company_options_visible, traps: trapsEnabled(), visa: visaFilter, ghost: ghostFilter, hiddenWorkplaces: hidden.workplaces, hiddenContracts: hidden.contracts, highValueNames }} />
+      <FilterBar options={{ ...options, cities: cities.map(({ key, target }) => ({ key, target })), companies: companies.slice(0, ui.filters.company_options_max), companyOptionsCapped: companies.length > ui.filters.company_options_max, companyOptionsVisible: ui.filters.company_options_visible, traps: trapsEnabled(), visa: visaFilter, ghost: ghostFilter, hiddenWorkplaces: hidden.workplaces, hiddenContracts: hidden.contracts, highValueNames }} />
       <div className="flex flex-wrap items-center gap-x-sp-3 gap-y-sp-2">
         {params.filteredOnly === true ? (
           <FilteredToggle active only href={jobsListHref({ ...params, filteredOnly: null, page: 1 })} />

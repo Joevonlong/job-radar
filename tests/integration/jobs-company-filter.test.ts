@@ -12,13 +12,13 @@ import {
   listCompanyFilterOptions,
   listJobs,
   listTodayJobs,
-  resolveCompanyIds,
   schema,
   type HighValuePolicy,
   type JobFilters,
 } from "@/lib/db";
 import { runMigrations } from "@/lib/db/migrate";
 import { viewTrendInput } from "@/lib/interests/view-trends";
+import { resolveViewCompanyIds } from "@/lib/jobs/job-filters";
 import { resolveCompanyName } from "@/lib/pipeline/company";
 
 import { pipelineWith } from "../pipeline/helpers";
@@ -76,7 +76,7 @@ async function addJob(companyId: number, input: JobInput): Promise<number> {
 
 const sorted = (values: number[]) => [...values].sort((a, b) => a - b);
 const listed = async (filters: JobFilters) => sorted((await listJobs(getDb(), { filters, sort: "first_seen", page: 1, pageSize: 100, timezone: TZ })).jobs.map((job) => job.id));
-const companyIds = (names: string[], config: PipelineConfig = plain) => resolveCompanyIds(getDb(), names, config);
+const companyIds = async (names: string[], config = plain) => (await resolveViewCompanyIds(getDb(), [{ company: names }], { pipeline: config }))[0] ?? null;
 
 let ids: Record<string, number> = {};
 

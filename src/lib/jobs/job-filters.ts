@@ -1,10 +1,11 @@
 /** Saved-view filters -> the job queries' filters, in one place (server only): /jobs, Today and the view trends all go through it. */
+import type { PipelineConfig } from "@/lib/config";
 import type { ViewFilters } from "@/lib/config/schemas/interests";
 import type { TodayExtraFilters } from "@/lib/db";
 import { listCompanyMatchRows, type Db } from "@/lib/db";
 import { filterValues } from "@/lib/interests/view-filters";
 import { loadPipeline } from "@/lib/market/effective";
-import { matchCompanyIds } from "@/lib/pipeline/company";
+import { buildCompanyMatchIndex, matchCompanyIdsFromIndex, type CompanyMatchIndex } from "@/lib/pipeline/company";
 import { trapsEnabled } from "@/lib/traps/settings";
 
 import { searchLocationTerms } from "./cities";
@@ -26,13 +27,12 @@ export function needsCompanyIds(filters: ViewFilters): boolean {
 
 /**
  * The company ids each of `filterSets` picks, in order (null where it picks no company), reading the companies table once however
- * many sets there are (Today resolves the shown view and every tab).
+ * many sets there are (Today resolves the shown view and every tab), or reusing the caller's index without another read.
  */
-export async function resolveViewCompanyIds(db: Db, filterSets: readonly ViewFilters[]): Promise<(number[] | null)[]> {
+export async function resolveViewCompanyIds(db: Db, filterSets: readonly ViewFilters[], options: { index?: CompanyMatchIndex; pipeline?: PipelineConfig } = {}): Promise<(number[] | null)[]> {
   if (!filterSets.some(needsCompanyIds)) return filterSets.map(() => null);
-  const rows = await listCompanyMatchRows(db);
-  const pipeline = loadPipeline();
-  return filterSets.map((filters) => (needsCompanyIds(filters) ? matchCompanyIds(rows, filterValues(filters, "company"), pipeline) : null));
+  const index = options.index ?? buildCompanyMatchIndex(await listCompanyMatchRows(db), options.pipeline ?? loadPipeline());
+  return filterSets.map((filters) => (needsCompanyIds(filters) ? matchCompanyIdsFromIndex(index, filterValues(filters, "company")) : null));
 }
 
 /**

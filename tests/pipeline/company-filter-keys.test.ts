@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import type { PipelineConfig } from "@/lib/config";
 import { MAX_FILTER_VALUE_CHARS } from "@/lib/jobs/constants";
-import { canonicalCompanyNames, companyFilterKeys, matchCompanyIds, resolveCompanyName, type CompanyMatchRow } from "@/lib/pipeline/company";
+import { buildCompanyMatchIndex, canonicalCompanyNames, companyFilterKeys, matchCompanyIds, matchCompanyIdsFromIndex, resolveCompanyName, type CompanyMatchRow } from "@/lib/pipeline/company";
 
 import { pipelineWith } from "./helpers";
 
@@ -86,25 +86,46 @@ describe("matchCompanyIds", () => {
     expect(fresh.name).toBe("Newbrand");
     expect(matchCompanyIds([old, fresh], ["Oldbrand"], config)).toEqual([7, 8]);
   });
+
+  it("index matching agrees with the wrapper, keeping unique ids in row order across names and aliases", () => {
+    const config = withCompany({ Newbrand: ["Oldbrand"] });
+    const companies = [stored(7, "Oldbrand"), stored(2, "Oldbrand", config), stored(9, "SAP SE"), { id: 3, name: "研究所", nameNorm: "legacy", aliases: [] }];
+    const index = buildCompanyMatchIndex(companies, config);
+    for (const names of [[], ["Nobody"], ["Fioneer"], ["研究所"], ["SAP", "Oldbrand", "NEWBRAND", "sap se", "研究所"]]) {
+      expect(matchCompanyIdsFromIndex(index, names)).toEqual(matchCompanyIds(companies, names, config));
+    }
+    expect(matchCompanyIdsFromIndex(index, ["研究所"])).toEqual([3]);
+    expect(matchCompanyIdsFromIndex(index, ["SAP", "Oldbrand", "NEWBRAND", "sap se", "研究所"])).toEqual([7, 2, 9, 3]);
+  });
 });
 
 describe("canonicalCompanyNames", () => {
   const rows = [stored(1, "Zalando SE"), stored(2, "Acme"), stored(3, "ACME GmbH")];
 
   it("writes a name that picks one company as its display name, and drops the duplicate that leaves", () => {
-    expect(canonicalCompanyNames(rows, ["zalando"], plain)).toEqual(["Zalando SE"]);
-    expect(canonicalCompanyNames(rows, ["zalando", "Zalando SE"], plain)).toEqual(["Zalando SE"]);
-    expect(canonicalCompanyNames(rows, ["Zalando SE"], plain)).toEqual(["Zalando SE"]);
+    expect(canonicalCompanyNames(buildCompanyMatchIndex(rows, plain), ["zalando"])).toEqual(["Zalando SE"]);
+    expect(canonicalCompanyNames(buildCompanyMatchIndex(rows, plain), ["zalando", "Zalando SE"])).toEqual(["Zalando SE"]);
+    expect(canonicalCompanyNames(buildCompanyMatchIndex(rows, plain), ["Zalando SE"])).toEqual(["Zalando SE"]);
   });
 
   it("keeps a name that picks several companies or none as written", () => {
-    expect(canonicalCompanyNames(rows, ["acme"], plain)).toEqual(["acme"]);
-    expect(canonicalCompanyNames(rows, ["Nobody"], plain)).toEqual(["Nobody"]);
+    expect(canonicalCompanyNames(buildCompanyMatchIndex(rows, plain), ["acme"])).toEqual(["acme"]);
+    expect(canonicalCompanyNames(buildCompanyMatchIndex(rows, plain), ["Nobody"])).toEqual(["Nobody"]);
   });
 
   it("never writes a display name the URL cannot carry", () => {
     const long = `${"Long ".repeat(MAX_FILTER_VALUE_CHARS / 5)}Name`;
     const row: CompanyMatchRow = { id: 9, name: long, nameNorm: "long-short", aliases: ["Long Short"] };
-    expect(canonicalCompanyNames([row], ["Long Short"], plain)).toEqual(["Long Short"]);
+    expect(canonicalCompanyNames(buildCompanyMatchIndex([row], plain), ["Long Short"])).toEqual(["Long Short"]);
+  });
+
+  it.each([" Acme ", ""])("keeps the input when the stored display name is %j", (name) => {
+    const row: CompanyMatchRow = { id: 9, name, nameNorm: "short", aliases: [] };
+    expect(canonicalCompanyNames(buildCompanyMatchIndex([row], plain), ["Short"])).toEqual(["Short"]);
+  });
+
+  it("keeps a unique alias when the display name would also pick another row", () => {
+    const row: CompanyMatchRow = { id: 9, name: "Acme", nameNorm: "unique", aliases: [] };
+    expect(canonicalCompanyNames(buildCompanyMatchIndex([...rows, row], plain), ["Unique"])).toEqual(["Unique"]);
   });
 });

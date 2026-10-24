@@ -4,6 +4,7 @@ import { hasHighValueCategories, type Db, type JobFilters } from "@/lib/db";
 import { viewFiltersFromParams } from "@/lib/interests/view-filters";
 import { loadBaseCurrency, loadHighValuePolicy } from "@/lib/signals/floor";
 import { ghostFilterAvailable } from "@/lib/ghost/filter";
+import type { CompanyMatchIndex } from "@/lib/pipeline/company";
 import { visaFilterAvailable } from "@/lib/visa/filter";
 
 import { loadCityGroups } from "./cities";
@@ -13,12 +14,12 @@ import type { JobsSearchParams } from "./search-params";
 
 /**
  * The filters of `/jobs?<params>`; `cities` = the city groups and `visa` = `visaFilterAvailable` / `ghost` =
- * `ghostFilterAvailable` when the caller already has them.
+ * `ghostFilterAvailable` when the caller already has them; `companyIndex` reuses its company lookup.
  */
-export async function jobsListFilters(db: Db, params: JobsSearchParams, known: { cities?: readonly CityGroup[]; visa?: boolean; ghost?: boolean } = {}): Promise<JobFilters> {
+export async function jobsListFilters(db: Db, params: JobsSearchParams, known: { cities?: readonly CityGroup[]; visa?: boolean; ghost?: boolean; companyIndex?: CompanyMatchIndex } = {}): Promise<JobFilters> {
   const highValue = loadHighValuePolicy();
   const view = viewFiltersFromParams(params);
-  const [companyIds] = await resolveViewCompanyIds(db, [view]);
+  const [companyIds] = await resolveViewCompanyIds(db, [view], { index: known.companyIndex });
   return {
     ...toJobFilters(view, { cityGroups: known.cities ?? (await loadCityGroups(db)), visa: known.visa ?? (await visaFilterAvailable(db)), ghost: known.ghost ?? (await ghostFilterAvailable(db)), companyIds }),
     from: params.from,

@@ -1,14 +1,62 @@
 // @vitest-environment node
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { listCompanyMatchRows, type Db } from "@/lib/db";
 import type { CityGroup } from "@/lib/jobs/city-groups";
+import { loadPipeline } from "@/lib/market/effective";
+import { buildCompanyMatchIndex } from "@/lib/pipeline/company";
+
+import { pipelineWith } from "../pipeline/helpers";
 
 vi.mock("@/lib/jobs/cities", () => ({ searchLocationTerms: (q: string | null | undefined) => (q ? [q, `${q}-alias`] : []) }));
+vi.mock("@/lib/db", async (importOriginal) => ({ ...await importOriginal<typeof import("@/lib/db")>(), listCompanyMatchRows: vi.fn() }));
+vi.mock("@/lib/market/effective", async (importOriginal) => ({ ...await importOriginal<typeof import("@/lib/market/effective")>(), loadPipeline: vi.fn() }));
 
-import { needsCityGroups, needsCompanyIds, toJobFilters } from "@/lib/jobs/job-filters";
+import { needsCityGroups, needsCompanyIds, resolveViewCompanyIds, toJobFilters } from "@/lib/jobs/job-filters";
 
 const group = (key: string, members: string[]): CityGroup => ({ key, members, jobCount: members.length, target: false });
 const groups = [group("München", ["München", "Garching", "Munich"]), group("Berlin", ["Berlin"])];
+
+describe("resolveViewCompanyIds", () => {
+  const db = {} as Db;
+  const config = pipelineWith((raw) => {
+    const company = raw.company as { aliases: Record<string, string[]>; legal_suffixes: string[] };
+    company.aliases = { Acme: ["Oldbrand"] };
+    company.legal_suffixes = ["gmbh"];
+  });
+  const rows = [{ id: 1, name: "Acme", nameNorm: "acme", aliases: [] }, { id: 2, name: "N26", nameNorm: "n26", aliases: [] }];
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(listCompanyMatchRows).mockResolvedValue(rows);
+    vi.mocked(loadPipeline).mockReturnValue(config);
+  });
+
+  it("reads neither companies nor pipeline when no set picks a company", async () => {
+    expect(await resolveViewCompanyIds(db, [{}, { company: [] }])).toEqual([null, null]);
+    expect(listCompanyMatchRows).not.toHaveBeenCalled();
+    expect(loadPipeline).not.toHaveBeenCalled();
+  });
+
+  it("reads companies once for several sets, distinguishing no filter from no matches", async () => {
+    expect(await resolveViewCompanyIds(db, [{}, { company: ["N26", "Oldbrand"] }, { company: ["Nobody"] }, { company: ["Acme"] }, { company: [] }])).toEqual([null, [1, 2], [], [1], null]);
+    expect(listCompanyMatchRows).toHaveBeenCalledExactlyOnceWith(db);
+    expect(loadPipeline).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses the supplied pipeline instead of loading one", async () => {
+    expect(await resolveViewCompanyIds(db, [{ company: ["Oldbrand"] }], { pipeline: config })).toEqual([[1]]);
+    expect(listCompanyMatchRows).toHaveBeenCalledExactlyOnceWith(db);
+    expect(loadPipeline).not.toHaveBeenCalled();
+  });
+
+  it("reuses the supplied index without reading companies or loading pipeline", async () => {
+    const index = buildCompanyMatchIndex(rows, config);
+    expect(await resolveViewCompanyIds(db, [{ company: ["Oldbrand"] }, { company: ["Nobody"] }], { index })).toEqual([[1], []]);
+    expect(listCompanyMatchRows).not.toHaveBeenCalled();
+    expect(loadPipeline).not.toHaveBeenCalled();
+  });
+});
 
 describe("toJobFilters", () => {
   it("reads a scalar and a list the same: one-element list", () => {

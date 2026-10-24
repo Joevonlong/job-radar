@@ -27,7 +27,7 @@ export interface JobFilters {
   /** Source families (`channels.family`): the job has a source posting from a channel of any of these families. Empty / null = no filter; the same goes for the other lists below. */
   sources?: readonly string[] | null;
   /**
-   * Only jobs of these companies (`companies.id`, resolved from the company filter's names by `resolveCompanyIds`). Null / absent =
+   * Only jobs of these companies (`companies.id`, resolved from the company filter's names by `resolveViewCompanyIds`). Null / absent =
    * no filter; an empty list = companies were picked but none matched: nothing is listed.
    */
   companyIds?: readonly number[] | null;

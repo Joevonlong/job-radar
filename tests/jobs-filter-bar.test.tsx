@@ -278,7 +278,7 @@ describe("FilterBar: company filter", () => {
   const shownValues = () => screen.getAllByTestId("filter-company-option").map((o) => o.getAttribute("data-value"));
 
   it("lists the companies in the given order with their job count next to the name; trigger and chip show the name only", async () => {
-    const { lastQuery } = renderBar("", "en", { companies: [{ name: "Zalando", jobCount: 12 }, { name: "N26", jobCount: 3 }], companyOptionsMax: 500, companyOptionsVisible: 50 });
+    const { lastQuery } = renderBar("", "en", { companies: [{ name: "Zalando", jobCount: 12 }, { name: "N26", jobCount: 3 }], companyOptionsCapped: false, companyOptionsVisible: 50 });
     await userEvent.click(screen.getByTestId("filter-company"));
     expect(shownValues()).toEqual(["Zalando", "N26"]);
     const zalando = screen.getAllByTestId("filter-company-option")[0] as HTMLElement;
@@ -294,7 +294,7 @@ describe("FilterBar: company filter", () => {
   });
 
   it("draws only the first ones until something is typed, then searches all loaded ones", async () => {
-    renderBar("", "en", { companies: companies(30), companyOptionsMax: 500, companyOptionsVisible: 5 });
+    renderBar("", "en", { companies: companies(30), companyOptionsCapped: false, companyOptionsVisible: 5 });
     await userEvent.click(screen.getByTestId("filter-company"));
     expect(shownValues()).toEqual(["Company 001", "Company 002", "Company 003", "Company 004", "Company 005"]);
     expect(screen.getByTestId("filter-company-note")).toHaveTextContent("Showing 5 of 30 companies");
@@ -302,15 +302,22 @@ describe("FilterBar: company filter", () => {
     await waitFor(() => expect(shownValues()).toEqual(["Company 027"]));
   });
 
-  it("says when the list was capped, and keeps a picked company outside the first ones drawn", async () => {
-    renderBar("?company=Company%20020", "en", { companies: companies(20), companyOptionsMax: 20, companyOptionsVisible: 3 });
+  it("does not say capped when exactly the maximum companies exist", async () => {
+    renderBar("", "en", { companies: companies(20), companyOptionsCapped: false, companyOptionsVisible: 20 });
+    await userEvent.click(screen.getByTestId("filter-company"));
+    expect(shownValues()).toHaveLength(20);
+    expect(screen.queryByTestId("filter-company-note")).toBeNull();
+  });
+
+  it("says when more companies existed than the loaded maximum, and keeps a picked company outside the first ones drawn", async () => {
+    renderBar("?company=Company%20020", "en", { companies: companies(20), companyOptionsCapped: true, companyOptionsVisible: 3 });
     await userEvent.click(screen.getByTestId("filter-company"));
     expect(shownValues()).toEqual(["Company 020", "Company 001", "Company 002", "Company 003"]);
     expect(screen.getByTestId("filter-company-note")).toHaveTextContent("the 20 companies with the most jobs");
   });
 
   it("shows a company of the URL that is not among the options as selected and marked, and counts it as a filter", async () => {
-    renderBar("?company=Gone%20GmbH", "en", { companies: [{ name: "Zalando", jobCount: 1 }], companyOptionsMax: 500, companyOptionsVisible: 50 });
+    renderBar("?company=Gone%20GmbH", "en", { companies: [{ name: "Zalando", jobCount: 1 }], companyOptionsCapped: false, companyOptionsVisible: 50 });
     expect(screen.getByTestId("filter-toggle")).toHaveTextContent("Filters (1)");
     expect(screen.getByTestId("filter-chip")).toHaveTextContent("Company · Gone GmbH");
     await userEvent.click(screen.getByTestId("filter-company"));

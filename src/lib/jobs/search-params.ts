@@ -56,7 +56,7 @@ export const jobsSearchParsers = {
   /** Source family (`channels.family`). */
   source: parseAsMultiValues("source"),
   city: parseAsMultiValues("city"),
-  /** Company display names (any of them); see `resolveCompanyIds` for what one matches. */
+  /** Company display names (any of them); see `resolveViewCompanyIds` for what one matches. */
   company: parseAsMultiValues("company"),
   workplace: parseAsMultiValues("workplace"),
   contract: parseAsMultiValues("contract"),

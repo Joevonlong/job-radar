@@ -75,12 +75,12 @@ function useMultiSelectText({ label, options, value, anyLabel }: Pick<MultiSelec
   return { t, summary, ariaLabel }
 }
 
-/** The options to draw: all of them while searching (or without a limit), else the picked / stale ones and the first `limit` others. */
-export function visibleOptions(options: readonly MultiSelectOption[], pinned: readonly string[], search: string, limit: number | undefined) {
+/** The options to draw: all while searching (or without a limit), else stale ones, picks at open and current picks, plus the first `limit` others. */
+export function visibleOptions(options: readonly MultiSelectOption[], keepVisible: readonly string[], search: string, limit: number | undefined) {
   if (limit === undefined || search.trim() !== "") return options
-  const pinnedSet = new Set(pinned)
+  const keepVisibleSet = new Set(keepVisible)
   let rest = 0
-  return options.filter((o) => o.stale || pinnedSet.has(o.value) || rest++ < limit)
+  return options.filter((o) => o.stale || keepVisibleSet.has(o.value) || rest++ < limit)
 }
 
 /** The job count next to an option's label. */
@@ -119,7 +119,7 @@ function PopoverMultiSelect(props: MultiSelectProps) {
   const [search, setSearch] = React.useState("")
   const rootRef = React.useRef<HTMLDivElement>(null)
   const [pinned, setPinned] = React.useState<readonly string[]>([])
-  const { stale, groups } = arrangeOptions(visibleOptions(options, pinned, search, initialVisible), pinned)
+  const { stale, groups } = arrangeOptions(visibleOptions(options, [...pinned, ...value], search, initialVisible), pinned)
 
   const toggle = (v: string) => onChange(value.includes(v) ? value.filter((x) => x !== v) : [...value, v])
   const changeOpen = (next: boolean) => {
@@ -250,7 +250,7 @@ function InlineMultiSelect(props: MultiSelectProps) {
   const [search, setSearch] = React.useState("")
   const regionId = React.useId()
   const [pinned, setPinned] = React.useState<readonly string[]>(value)
-  const { stale, groups } = arrangeOptions(visibleOptions(options, pinned, search, initialVisible), pinned)
+  const { stale, groups } = arrangeOptions(visibleOptions(options, [...pinned, ...value], search, initialVisible), pinned)
   const needle = fold(search.trim())
   const matches = (o: MultiSelectOption) => needle === "" || fold(`${o.value} ${o.label}`).includes(needle)
 
