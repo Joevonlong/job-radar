@@ -244,8 +244,12 @@ Locally use a virtual environment: `python3.12 -m venv .venv && .venv/bin/pip in
 #### Jobspy sidecar tests
 
 `python -m pytest -q` in `jobspy/` (the tests in `jobspy/tests/`, with the scraping library mocked: request
-validation, result mapping and error handling of the small HTTP service in `jobspy/app.py`). Seconds. Typical cause: a
-change to `jobspy/app.py` without the matching test, or a dependency bump.
+validation, result mapping and error handling of the small HTTP service in `jobspy/app.py`). Two contract tests call the
+real `scrape_jobs` through a proxy nothing listens on (no external request) to prove that upstream failures still arrive
+in `frame.attrs["errors"]`, and one test checks that every `indeed:` country of
+`config/packs/generic/geography.yaml` passes the sidecar's country validation. Seconds. Typical cause: a change to
+`jobspy/app.py` without the matching test, or a dependency bump (a `python-jobspy` release that renames or drops
+something).
 
 ### Job `unit`
 

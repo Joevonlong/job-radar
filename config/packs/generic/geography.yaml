@@ -22,19 +22,19 @@ countries:
   - {code: IT, currency: EUR, name: Italy, aliases: [Italia], indeed: italy, pattern: \bitaly\b|italia}
   - {code: PL, currency: PLN, name: Poland, aliases: [Polska], indeed: poland, pattern: poland|polska}
   - {code: CZ, currency: CZK, name: Czech Republic, aliases: [Czechia, Česko], indeed: czech republic, pattern: czech republic|czechia|česko}
-  - {code: SK, currency: EUR, name: Slovakia, aliases: [Slovensko], indeed: slovakia, pattern: slovakia|slovensko}
+  - {code: SK, currency: EUR, name: Slovakia, aliases: [Slovensko], pattern: slovakia|slovensko}
   - {code: HU, currency: HUF, name: Hungary, aliases: [Magyarország], indeed: hungary, pattern: hungary|magyarország}
-  - {code: SI, currency: EUR, name: Slovenia, aliases: [Slovenija], indeed: slovenia, pattern: slovenia|slovenija}
-  - {code: HR, currency: EUR, name: Croatia, aliases: [Hrvatska], indeed: croatia, pattern: croatia|hrvatska}
+  - {code: SI, currency: EUR, name: Slovenia, aliases: [Slovenija], pattern: slovenia|slovenija}
+  - {code: HR, currency: EUR, name: Croatia, aliases: [Hrvatska], pattern: croatia|hrvatska}
   - {code: RO, currency: RON, name: Romania, aliases: [România], indeed: romania, pattern: romania|românia}
-  - {code: BG, currency: EUR, name: Bulgaria, indeed: bulgaria, pattern: bulgaria|българия}
+  - {code: BG, currency: EUR, name: Bulgaria, pattern: bulgaria|българия}
   - {code: GR, currency: EUR, name: Greece, aliases: [Hellas], indeed: greece, pattern: greece|ελλάδα}
-  - {code: EE, currency: EUR, name: Estonia, aliases: [Eesti], indeed: estonia, pattern: estonia|eesti}
-  - {code: LV, currency: EUR, name: Latvia, aliases: [Latvija], indeed: latvia, pattern: latvia|latvija}
-  - {code: LT, currency: EUR, name: Lithuania, aliases: [Lietuva], indeed: lithuania, pattern: lithuania|lietuva}
+  - {code: EE, currency: EUR, name: Estonia, aliases: [Eesti], pattern: estonia|eesti}
+  - {code: LV, currency: EUR, name: Latvia, aliases: [Latvija], pattern: latvia|latvija}
+  - {code: LT, currency: EUR, name: Lithuania, aliases: [Lietuva], pattern: lithuania|lietuva}
   - {code: LU, currency: EUR, name: Luxembourg, aliases: [Luxemburg], indeed: luxembourg, pattern: luxembourg|luxemburg}
-  - {code: MT, currency: EUR, name: Malta, indeed: malta, pattern: \bmalta\b}
-  - {code: CY, currency: EUR, name: Cyprus, aliases: [Kypros], indeed: cyprus, pattern: cyprus|κύπρος}
+  - {code: MT, currency: EUR, name: Malta, pattern: \bmalta\b}
+  - {code: CY, currency: EUR, name: Cyprus, aliases: [Kypros], pattern: cyprus|κύπρος}
   - {code: AD, currency: EUR, name: Andorra}
   - {code: AE, currency: AED, name: United Arab Emirates, aliases: [UAE, Emirates, Dubai, Abu Dhabi], indeed: united arab emirates, pattern: \bunited arab emirates\b|\buae\b|\bemirates\b|\bdubai\b|\babu dhabi\b}
   - {code: AF, currency: AFN, name: Afghanistan}
@@ -52,7 +52,7 @@ countries:
   - {code: AZ, currency: AZN, name: Azerbaijan}
   - {code: BA, currency: BAM, name: Bosnia & Herzegovina, aliases: [Bosnia, Bosnia-Herzegovina, Bosnia and Herzegovina]}
   - {code: BB, currency: BBD, name: Barbados}
-  - {code: BD, currency: BDT, name: Bangladesh, indeed: bangladesh}
+  - {code: BD, currency: BDT, name: Bangladesh}
   - {code: BF, currency: XOF, name: Burkina Faso}
   - {code: BH, currency: BHD, name: Bahrain, indeed: bahrain}
   - {code: BI, currency: BIF, name: Burundi}
