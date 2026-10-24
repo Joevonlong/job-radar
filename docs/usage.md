@@ -151,9 +151,12 @@ direction. Pagination uses `ui.yaml: companies.page_size` (50 by default).
 
 - Click a company name to open `/jobs?company=…`. Each overview row counts one stored company record; when several
   records match the same name or alias, the link opens their combined jobs, so the result can exceed that row's count.
-- **Watch** and **Unwatch** update the watch list immediately, also shown on `/interests`. Removing a watch uses its
-  original saved spelling, even when the row uses a shorter name. **Watched (database flag)** means the database marks
-  the company as watched without a matching watch-list entry; there is no Unwatch button for that flag here.
+- **Watch** and **Unwatch** update the watch list immediately, also shown on `/interests`. Unwatch removes every matching
+  saved spelling, even when the row uses a shorter name. If the database also marks the company as watched, the success
+  message explains that it remains watched. **Watched (database flag)** means there is no matching watch-list entry;
+  there is no Unwatch button for that flag here.
+- If an alias change leaves a row with an old company key, or its name exceeds the watch list's 120-character limit,
+  the row links to `/interests` instead of offering Watch. Add the current company name or a shorter alias there.
 - **Exclude…** opens the **Excluded companies** field at `/me#exclude-companies`. Add the company there and save your
   preferences. Saving alone does not re-run filtering: the next processing cycle applies the new preferences, or run
   `pnpm refilter` to update existing jobs sooner. Fully filtered companies then leave this overview. The note above the

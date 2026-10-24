@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildBlacklistedCompanyKeys, buildWatchedCompanyKeys, isCompanyExcluded, isCompanyWatched, watchedEntryFor } from "@/lib/companies/marks";
+import { buildBlacklistedCompanyKeys, buildWatchedCompanyKeys, isCompanyExcluded, isCompanyWatched, watchedEntriesFor } from "@/lib/companies/marks";
 
 import { pipelineWith } from "../pipeline/helpers";
 
@@ -34,13 +34,13 @@ describe("company marks", () => {
     expect(isCompanyExcluded({ name: "Other", nameNorm: "legacy", aliases: [], blacklisted: false }, keys, suffixes)).toBe(false);
   });
 
-  it("finds the original watch-list spelling whose resolved key watches the row, as push does", () => {
-    expect(watchedEntryFor(row, ["Other", "Acme GmbH"], pipeline)).toBe("Acme GmbH");
-    expect(watchedEntryFor(row, ["Legacy GmbH"], pipeline)).toBe("Legacy GmbH");
+  it("finds every original watch-list spelling whose resolved key watches the row, as push does", () => {
+    expect(watchedEntriesFor(row, ["Acme", "Other", "Acme GmbH"], pipeline)).toEqual(["Acme", "Acme GmbH"]);
+    expect(watchedEntriesFor(row, ["Legacy GmbH"], pipeline)).toEqual(["Legacy GmbH"]);
     // a persisted alias does not make push watch the row, so it gives no entry to remove either
     expect(isCompanyWatched({ watched: false, nameNorm: row.nameNorm }, buildWatchedCompanyKeys(["Oldbrand"], pipeline))).toBe(false);
-    expect(watchedEntryFor(row, ["Oldbrand"], pipeline)).toBeNull();
-    expect(watchedEntryFor(row, ["Other"], pipeline)).toBeNull();
-    expect(watchedEntryFor(row, [], pipeline)).toBeNull();
+    expect(watchedEntriesFor(row, ["Oldbrand"], pipeline)).toEqual([]);
+    expect(watchedEntriesFor(row, ["Other"], pipeline)).toEqual([]);
+    expect(watchedEntriesFor(row, [], pipeline)).toEqual([]);
   });
 });

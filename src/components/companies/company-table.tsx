@@ -29,7 +29,7 @@ function CompanyStatus({ row }: { row: CompanyOverviewItem }) {
     <div className="flex flex-wrap gap-2 text-body-sm">
       {row.watched ? <span className="rounded-tag border border-border px-2 py-1">{t("watched")}</span> : null}
       {row.excluded ? <span className="rounded-tag border border-dashed border-border px-2 py-1">{t("excluded")}</span> : null}
-      {!row.watched && !row.excluded ? <span className="text-ink-3">{UNKNOWN}</span> : null}
+      {!row.watched && !row.excluded ? <span className="text-ink-3"><span aria-hidden>{UNKNOWN}</span><span className="sr-only">{t("none")}</span></span> : null}
     </div>
   );
 }

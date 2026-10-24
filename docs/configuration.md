@@ -326,7 +326,7 @@ not know them, see [upgrade.md](upgrade.md#downgrade-pre-release-dir)):
 
 Details: [deploy.md](deploy.md), "The ai-worker runs from a release directory".
 
-## Company drop-down on /jobs (`ui.yaml`)
+## Company filter and overview (`ui.yaml`)
 
 | Key | Default | Meaning |
 |---|---|---|
@@ -343,8 +343,9 @@ version refuses a file that holds the new keys (and the push step cannot read `i
 1. Stop writing: `docker compose -p job-radar stop web runner`, and let a cycle that is running finish.
 2. Back up `data/config/interests.yaml` and `data/config/ui.yaml`.
 3. Remove every `company:` key from the views in `interests.yaml`.
-4. Remove `filters.company_options_max` and `filters.company_options_visible` from your `ui.yaml`, and a whole
-   `companies:` section if there is one (leaving `companies: {}` is refused as well).
+4. Remove `filters.company_options_max` and `filters.company_options_visible` from your `ui.yaml`, and the whole
+   `companies:` section, even if you never added it (saving the settings writes it back with its defaults; leaving
+   `companies: {}` is refused as well).
 5. Check both files with the older version (`pnpm config:check` or `pnpm run doctor` in its image).
 6. Switch to the older image and start the services.
 

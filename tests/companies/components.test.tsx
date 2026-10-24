@@ -14,7 +14,7 @@ import { MAX_FILTER_VALUE_CHARS } from "@/lib/jobs/constants";
 import en from "../../messages/en.json";
 
 const mocks = vi.hoisted(() => ({ add: vi.fn(), remove: vi.fn(), refresh: vi.fn(), push: vi.fn(), toast: vi.fn() }));
-vi.mock("@/app/interests/actions", () => ({ addWatchedCompanyAction: mocks.add, removeWatchedCompanyAction: mocks.remove }));
+vi.mock("@/app/interests/actions", () => ({ addWatchedCompanyAction: mocks.add, removeWatchedCompaniesAction: mocks.remove }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: mocks.refresh, push: mocks.push }) }));
 vi.mock("@/lib/toast", () => ({ toastTone: mocks.toast }));
 
@@ -23,7 +23,7 @@ const wrap = (node: ReactNode) => <NextIntlClientProvider locale="en" messages={
 const row = (over: Partial<CompanyOverviewItem> = {}): CompanyOverviewItem => ({
   id: 1, name: "Acme & Co", nameNorm: "acme", aliases: [], watched: false, blacklisted: false,
   jobCount: 3, topRank: 106.6, lastFirstSeenAt: new Date("2026-01-01T23:30:00Z"),
-  watchedEntry: null, watchedByFlagOnly: false, excluded: false, href: companyJobsHref("Acme & Co"), ...over,
+  watchedEntries: [], watchedByFlagOnly: false, companyFlagWatched: false, watchable: true, excluded: false, href: companyJobsHref("Acme & Co"), ...over,
 });
 
 beforeEach(() => {
@@ -71,6 +71,14 @@ describe("company overview", () => {
     expect(table.getAllByText("—")).toHaveLength(1);
   });
 
+  it("labels an empty status for screen readers while keeping the dash visible", () => {
+    render(wrap(<CompanyTable rows={[row()]} params={loadCompaniesSearchParams({})} now={now} timezone="UTC" />));
+    const table = within(screen.getByRole("table"));
+    const label = table.getByText("none");
+    expect(label).toHaveClass("sr-only");
+    expect(within(label.parentElement!).getByText("—")).toHaveAttribute("aria-hidden", "true");
+  });
+
   it("renders an empty state without a table or watch buttons", () => {
     render(wrap(<CompanyTable rows={[]} params={loadCompaniesSearchParams({})} now={now} timezone="UTC" />));
     expect(screen.getByText("No companies found. Try another name or wait for new jobs to arrive.")).toBeInTheDocument();
@@ -96,11 +104,33 @@ describe("company watch toggle", () => {
     expect(mocks.toast).toHaveBeenCalledWith("success", "Now watching “Acme & Co”");
   });
 
-  it("unwatches the original entry, including its suffix and spelling", async () => {
-    render(wrap(<WatchToggle row={row({ name: "Acme", watched: true, watchedEntry: "ACME GmbH" })} />));
+  it("unwatches every original entry, including suffixes and spelling", async () => {
+    render(wrap(<WatchToggle row={row({ name: "Acme", watched: true, watchedEntries: ["Acme", "ACME GmbH"] })} />));
     await userEvent.click(screen.getByRole("button", { name: "Unwatch" }));
-    expect(mocks.remove).toHaveBeenCalledWith({ name: "ACME GmbH" });
+    expect(mocks.remove).toHaveBeenCalledExactlyOnceWith({ names: ["Acme", "ACME GmbH"] });
     expect(mocks.add).not.toHaveBeenCalled();
+    expect(mocks.refresh).toHaveBeenCalledOnce();
+    expect(mocks.toast).toHaveBeenCalledWith("success", "Stopped watching “Acme”");
+  });
+
+  it("links to Interests instead of offering an ineffective watch button", () => {
+    render(wrap(<WatchToggle row={row({ watchable: false })} />));
+    expect(screen.getByText(/Can't watch here/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Interests" })).toHaveAttribute("href", "/interests");
+    expect(screen.queryByRole("button")).toBeNull();
+  });
+
+  it("still allows removing list entries when the displayed name cannot be watched", async () => {
+    render(wrap(<WatchToggle row={row({ watched: true, watchedEntries: ["Acme"], watchable: false })} />));
+    await userEvent.click(screen.getByRole("button", { name: "Unwatch" }));
+    expect(mocks.remove).toHaveBeenCalledWith({ names: ["Acme"] });
+  });
+
+  it("explains that the database flag still watches the company after removing its entries", async () => {
+    render(wrap(<WatchToggle row={row({ name: "Acme", watched: true, watchedEntries: ["Acme", "Acme GmbH"], companyFlagWatched: true })} />));
+    await userEvent.click(screen.getByRole("button", { name: "Unwatch" }));
+    expect(mocks.remove).toHaveBeenCalledWith({ names: ["Acme", "Acme GmbH"] });
+    expect(mocks.toast).toHaveBeenCalledWith("success", "Removed “Acme” from the watch list; still watched by its database flag.");
     expect(mocks.refresh).toHaveBeenCalledOnce();
   });
 

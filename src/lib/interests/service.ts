@@ -22,7 +22,7 @@ import { COMPANY_SUGGESTION_LIMIT, type InterestsActionState, type InterestsForm
 import { draftToCandidate, toFieldErrors, vocabularyDraftSchema } from "./vocabulary-draft";
 
 const MAX_VIEW_NAME_CHARS = 60;
-const MAX_COMPANY_NAME_CHARS = 120;
+export const MAX_COMPANY_NAME_CHARS = 120;
 
 // ---------------------------------------------------------------- plumbing
 
@@ -239,6 +239,18 @@ export async function removeWatchedCompany(rawRequest: unknown): Promise<Interes
   return change("watched", (current) => {
     if (!current.watched_companies.includes(name)) return "watchedNotFound";
     return { next: { ...current, watched_companies: current.watched_companies.filter((existing) => existing !== name) } };
+  });
+}
+
+const companiesSchema = z.strictObject({ names: z.array(z.string()).min(1).max(1000) });
+
+export async function removeWatchedCompanies(rawRequest: unknown): Promise<InterestsActionState> {
+  const request = companiesSchema.safeParse(rawRequest);
+  if (!request.success) return failed("watched", "invalidPayload");
+  const names = new Set(request.data.names);
+  return change("watched", (current) => {
+    if (!current.watched_companies.some((existing) => names.has(existing))) return "watchedNotFound";
+    return { next: { ...current, watched_companies: current.watched_companies.filter((existing) => !names.has(existing)) } };
   });
 }
 

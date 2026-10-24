@@ -230,7 +230,7 @@ ai-worker 的发布目录和切换由 `schedule.yaml` 里的四个键控制。�
 
 细节见 [deploy.zh.md](deploy.zh.md)《ai-worker 从发布目录运行》。
 
-## /jobs 的公司下拉（`ui.yaml`）
+## 公司筛选与公司总览（`ui.yaml`）
 
 | 键 | 默认 | 含义 |
 |---|---|---|
@@ -245,7 +245,7 @@ ai-worker 的发布目录和切换由 `schedule.yaml` 里的四个键控制。�
 1. 停写：`docker compose -p job-radar stop web runner`，等正在跑的处理轮结束。
 2. 备份 `data/config/interests.yaml` 和 `data/config/ui.yaml`。
 3. 删掉 `interests.yaml` 里所有视图的 `company:` 键。
-4. 删掉你的 `ui.yaml` 里的 `filters.company_options_max` 和 `filters.company_options_visible`；如果有 `companies:` 段，整段删掉（只留下 `companies: {}` 一样会被拒绝）。
+4. 删掉你的 `ui.yaml` 里的 `filters.company_options_max` 和 `filters.company_options_visible`；并把整个 `companies:` 段删掉，即使你没写过它（在设置里保存时会连同默认值写回；只留下 `companies: {}` 一样会被拒绝）。
 5. 用旧版本校验两份文件（在旧镜像里跑 `pnpm config:check` 或 `pnpm run doctor`）。
 6. 切换到旧镜像，启动服务。
 

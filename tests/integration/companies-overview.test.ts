@@ -8,7 +8,7 @@ import { ensureProfileFiles, loadConfig, writeConfig, type PipelineConfig } from
 import { closeDb, countJobList, getDb, getOrCreateCompany, getPushCandidate, listCompanyOverview, schema, type CompanyOverviewOptions } from "@/lib/db";
 import { runMigrations } from "@/lib/db/migrate";
 import { compileFilter, evaluateJob } from "@/lib/filter/rules";
-import { removeWatchedCompany } from "@/lib/interests/service";
+import { removeWatchedCompanies } from "@/lib/interests/service";
 import { resolveViewCompanyIds } from "@/lib/jobs/job-filters";
 import { isWatched } from "@/lib/notify/select";
 import { resolveCompanyName } from "@/lib/pipeline/company";
@@ -175,27 +175,37 @@ describe("company overview marks and unwatch", () => {
       const verdict = evaluateJob(filterJob({ companyName: row.name, companyAliases: row.aliases, companyBlacklisted: row.blacklisted }), compiled);
       expect(row.excluded).toBe(verdict.reasons.some((reason) => reason.startsWith("blacklist_company:")));
     }
-    expect(result.rows.find((row) => row.id === flagged)).toMatchObject({ watched: true, watchedByFlagOnly: true, watchedEntry: null });
-    expect(result.rows.find((row) => row.id === watched)).toMatchObject({ watched: true, watchedByFlagOnly: false, watchedEntry: "Acme GmbH" });
+    expect(result.rows.find((row) => row.id === flagged)).toMatchObject({ watched: true, watchedByFlagOnly: true, companyFlagWatched: true, watchedEntries: [] });
+    expect(result.rows.find((row) => row.id === watched)).toMatchObject({ watched: true, watchedByFlagOnly: false, companyFlagWatched: false, watchedEntries: ["Acme GmbH"] });
     expect(result.rows.filter((row) => row.excluded).map((row) => row.id).sort()).toEqual([blacklisted, alias].sort());
   });
 
-  it("loads real settings and removes the original watch-list entry when the row omits its legal suffix", async () => {
+  it("loads real settings and removes every original watch-list entry when the row omits its legal suffix", async () => {
     const temp = makeTempConfig();
     try {
       await ensureProfileFiles();
       await writeConfig("ui", { ...loadConfig("ui"), companies: { page_size: 1 } });
-      await writeConfig("interests", { ...loadConfig("interests"), watched_companies: ["Acme GmbH", "Other"] });
+      await writeConfig("interests", { ...loadConfig("interests"), watched_companies: ["Acme", "Acme GmbH", "Other"] });
       await writeConfig("preferences", { ...loadConfig("preferences"), exclude_companies: ["Excluded"] });
       await addJob(await addCompany("Acme"));
       const before = await loadCompanyOverview({});
       expect(before).toMatchObject({ pageSize: 1, excludedCount: 1 });
-      expect(before.rows[0]).toMatchObject({ name: "Acme", watched: true, watchedEntry: "Acme GmbH", watchedByFlagOnly: false, href: "/jobs?company=Acme" });
-      expect(await removeWatchedCompany({ name: before.rows[0]!.watchedEntry })).toMatchObject({ status: "saved" });
+      expect(before.rows[0]).toMatchObject({ name: "Acme", watched: true, watchedEntries: ["Acme", "Acme GmbH"], watchedByFlagOnly: false, href: "/jobs?company=Acme" });
+      expect(await removeWatchedCompanies({ names: before.rows[0]!.watchedEntries })).toMatchObject({ status: "saved" });
       expect(loadConfig("interests").watched_companies).toEqual(["Other"]);
-      expect((await loadCompanyOverview({})).rows[0]).toMatchObject({ watched: false, watchedEntry: null });
+      expect((await loadCompanyOverview({})).rows[0]).toMatchObject({ watched: false, watchedEntries: [] });
     } finally {
       temp.cleanup();
     }
+  });
+
+  it("cannot watch a stored row after an alias changes the resolved key", async () => {
+    const id = await addCompany("Legacy GmbH");
+    await addJob(id);
+    const list = (options: CompanyOverviewOptions) => listCompanyOverview(getDb(), options);
+    const settings = { pageSize: 50, timezone: "UTC", pipeline: plain, watchedCompanies: [], excludedCompanies: [] };
+    expect((await loadCompanyOverview({}, { loadSettings: () => settings, list })).rows[0]).toMatchObject({ id, nameNorm: "legacy", watchable: true });
+    const changed = { ...settings, pipeline: pipeline({ Acme: ["Legacy GmbH"] }) };
+    expect((await loadCompanyOverview({}, { loadSettings: () => changed, list })).rows[0]).toMatchObject({ id, nameNorm: "legacy", watched: false, watchedEntries: [], watchable: false });
   });
 });

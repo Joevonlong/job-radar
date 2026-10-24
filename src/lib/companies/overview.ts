@@ -2,10 +2,12 @@ import type { LoaderInput } from "nuqs/server";
 
 import { loadConfig, type PipelineConfig } from "@/lib/config";
 import { getDb, listCompanyOverview, type CompanyOverviewOptions, type CompanyOverviewPage, type CompanyOverviewRow } from "@/lib/db";
+import { MAX_COMPANY_NAME_CHARS } from "@/lib/interests/service";
 import { companyJobsHref } from "@/lib/jobs/company-link";
 import { loadPipeline } from "@/lib/market";
+import { resolveCompanyName } from "@/lib/pipeline/company";
 
-import { buildBlacklistedCompanyKeys, buildWatchedCompanyKeys, isCompanyExcluded, isCompanyWatched, watchedEntryFor } from "./marks";
+import { buildBlacklistedCompanyKeys, buildWatchedCompanyKeys, isCompanyExcluded, isCompanyWatched, watchedEntriesFor } from "./marks";
 import { loadCompaniesSearchParams, type CompaniesSearchParams } from "./search-params";
 
 export interface CompanyOverviewSettings {
@@ -22,8 +24,10 @@ export interface CompanyOverviewDependencies {
 }
 
 export interface CompanyOverviewItem extends CompanyOverviewRow {
-  watchedEntry: string | null;
+  watchedEntries: string[];
   watchedByFlagOnly: boolean;
+  companyFlagWatched: boolean;
+  watchable: boolean;
   excluded: boolean;
   href: string | null;
 }
@@ -54,12 +58,14 @@ export async function loadCompanyOverview(searchParams: LoaderInput | Promise<Lo
   const watchedKeys = buildWatchedCompanyKeys(watchedCompanies, pipeline);
   const blacklistedKeys = buildBlacklistedCompanyKeys(excludedCompanies, pipeline);
   const rows = overview.rows.map((row): CompanyOverviewItem => {
-    const watchedEntry = watchedEntryFor(row, watchedCompanies, pipeline);
+    const watchedEntries = watchedEntriesFor(row, watchedCompanies, pipeline);
     return {
       ...row,
       watched: isCompanyWatched(row, watchedKeys),
-      watchedEntry,
-      watchedByFlagOnly: row.watched && watchedEntry === null,
+      watchedEntries,
+      watchedByFlagOnly: row.watched && watchedEntries.length === 0,
+      companyFlagWatched: row.watched,
+      watchable: row.name.length <= MAX_COMPANY_NAME_CHARS && resolveCompanyName(row.name, pipeline).nameNorm === row.nameNorm,
       excluded: isCompanyExcluded(row, blacklistedKeys, pipeline.company.legal_suffixes),
       href: companyJobsHref(row.name),
     };

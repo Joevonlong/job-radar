@@ -30,10 +30,9 @@ export function isCompanyExcluded(
 }
 
 /**
- * The watch-list entry that makes the push treat this company as watched (its resolved key is the stored `name_norm`): the
- * original spelling to pass to removeWatchedCompany, which removes an exact string ("Acme GmbH" for a row shown as "Acme").
- * Null when only the DB flag watches it, or nothing does.
+ * All watch-list entries whose resolved keys watch the stored `name_norm`, keeping their exact spellings for removal.
+ * Empty when only the DB flag watches the company, or nothing does.
  */
-export function watchedEntryFor(row: Pick<CompanyMatchRow, "nameNorm">, watchedCompanies: readonly string[], pipeline: PipelineConfig): string | null {
-  return watchedCompanies.find((entry) => resolveCompanyName(entry, pipeline).nameNorm === row.nameNorm) ?? null;
+export function watchedEntriesFor(row: Pick<CompanyMatchRow, "nameNorm">, watchedCompanies: readonly string[], pipeline: PipelineConfig): string[] {
+  return watchedCompanies.filter((entry) => resolveCompanyName(entry, pipeline).nameNorm === row.nameNorm);
 }

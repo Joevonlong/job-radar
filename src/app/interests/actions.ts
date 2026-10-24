@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import {
   addWatchedCompany,
   deleteView,
+  removeWatchedCompanies,
   removeWatchedCompany,
   renameView,
   saveView,
@@ -55,6 +56,10 @@ export async function addWatchedCompanyAction(request: unknown): Promise<Interes
 
 export async function removeWatchedCompanyAction(request: unknown): Promise<InterestsActionState> {
   return refresh(await removeWatchedCompany(request));
+}
+
+export async function removeWatchedCompaniesAction(request: unknown): Promise<InterestsActionState> {
+  return refresh(await removeWatchedCompanies(request));
 }
 
 export async function suggestCompaniesAction(query: unknown): Promise<string[]> {
