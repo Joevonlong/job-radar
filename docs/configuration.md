@@ -348,6 +348,9 @@ version refuses a file that holds the new keys (and the push step cannot read `i
 5. Check both files with the older version (`pnpm config:check` or `pnpm run doctor` in its image).
 6. Switch to the older image and start the services.
 
+Rolling back only the company overview (to a version that has the company filter but no `/companies`): do steps 1,
+2, 5 and 6, and in between remove the whole `companies:` section from your `ui.yaml`; views and the `filters.*` keys stay.
+
 The shipped `ui.yaml` is part of the image, so it goes back with it.
 
 ## Recheck of watched jobs (`pipeline.yaml` + `ui.yaml`)

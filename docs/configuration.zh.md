@@ -249,6 +249,8 @@ ai-worker 的发布目录和切换由 `schedule.yaml` 里的四个键控制。�
 5. 用旧版本校验两份文件（在旧镜像里跑 `pnpm config:check` 或 `pnpm run doctor`）。
 6. 切换到旧镜像，启动服务。
 
+只回退公司总览（回到有公司筛选、但没有 `/companies` 的版本）：做第 1、2、5、6 步，中间把你的 `ui.yaml` 里整个 `companies:` 段删掉；视图和 `filters.*` 键保留。
+
 出厂的 `ui.yaml` 随镜像，回退后自动是旧版。
 
 ## 关注岗位复查（`pipeline.yaml` + `ui.yaml`）
