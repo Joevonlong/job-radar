@@ -134,6 +134,7 @@ The "Company" filter on `/jobs` is a multi-select like city (several companies =
 
 - The drop-down lists the companies that have jobs in the list as `/jobs` opens (hard-filtered and closed jobs not counted), most jobs first, with the number next to each name. It loads at most `ui.yaml: filters.company_options_max` companies (500) and shows the first `filters.company_options_visible` (50) until you type in its search box; a note under the list says so. A company outside the loaded set is still one click away: click its name.
 - Click a company name in a job row or on a job's detail page to list that company's jobs (`/jobs?company=…`). The click does not open the job.
+- The company link opens the default list, without "show filtered" or a job-status filter. A hard-filtered or closed job of that company is absent; add those filters to see it.
 - A name matches a company the way the hard filter's company exclusions do: case, accents and legal forms (GmbH, SE …) are ignored, and the aliases of `pipeline.yaml` count. It is never a part of a name: "SAP" does not bring in "SAP Fioneer". A name typed in a link (`?company=sap`) is rewritten to the company's display name when it picks exactly one company.
 - A company that was renamed or merged since a view was saved can show as selected with no jobs; pick it again in the drop-down.
 - When one company is stored twice (an alias added later: the old row and the new row both exist), its name picks both rows, so the list after the click can hold more jobs than the number shown next to that row in the drop-down.
