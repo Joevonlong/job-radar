@@ -19,10 +19,10 @@ const wrap = (node: React.ReactNode) => (
 );
 
 describe("NavList", () => {
-  it("lists the 9 pages in order, the last three in a labelled settings group", () => {
+  it("lists the 10 pages in order, the last three in a labelled settings group", () => {
     render(wrap(<NavList />));
     const nav = screen.getByRole("navigation", { name: "主导航" });
-    expect(within(nav).getAllByRole("link").map((l) => l.textContent)).toEqual(["今日", "岗位", "收藏", "申请", "来源", "统计", "设置", "我的画像", "感兴趣清单"]);
+    expect(within(nav).getAllByRole("link").map((l) => l.textContent)).toEqual(["今日", "岗位", "公司", "收藏", "申请", "来源", "统计", "设置", "我的画像", "感兴趣清单"]);
     const group = within(nav).getByRole("group", { name: "// 设置" });
     expect(within(group).getAllByRole("link").map((l) => l.textContent)).toEqual(["设置", "我的画像", "感兴趣清单"]);
   });

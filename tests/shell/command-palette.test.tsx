@@ -61,7 +61,8 @@ describe("CommandPalette", () => {
     await user.click(trigger);
 
     const dialog = await screen.findByRole("dialog", { name: "命令面板" });
-    expect(within(dialog).getAllByRole("option")).toHaveLength(11);
+    expect(within(dialog).getAllByRole("option")).toHaveLength(12);
+    expect(within(dialog).getByRole("option", { name: /公司/ })).toBeInTheDocument();
     expect(within(dialog).getByTestId("palette-page-registry")).toHaveTextContent("来源清单");
     expect(within(dialog).getByTestId("palette-page-aiUsage")).toHaveTextContent("AI 用量");
     // the footer lists the real keys

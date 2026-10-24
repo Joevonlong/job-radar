@@ -1,4 +1,5 @@
 import type { PushCandidate } from "@/lib/db/repos/notifications";
+import { isCompanyWatched } from "@/lib/companies/marks";
 
 /**
  * Which jobs to push after a cycle. A pure function over plain data: the step loads
@@ -49,7 +50,7 @@ export function reachesPushScore(rank: number, highSignal: boolean, config: Pick
 }
 
 export function isWatched(candidate: PushCandidate, watchedKeys: ReadonlySet<string>): boolean {
-  return candidate.companyWatched || watchedKeys.has(candidate.companyNameNorm);
+  return isCompanyWatched({ watched: candidate.companyWatched, nameNorm: candidate.companyNameNorm }, watchedKeys);
 }
 
 /**

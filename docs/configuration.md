@@ -326,14 +326,16 @@ not know them, see [upgrade.md](upgrade.md#downgrade-pre-release-dir)):
 
 Details: [deploy.md](deploy.md), "The ai-worker runs from a release directory".
 
-## Company drop-down on /jobs (`ui.yaml`)
+## Company filter and overview (`ui.yaml`)
 
 | Key | Default | Meaning |
 |---|---|---|
 | `filters.company_options_max` | 500 | Companies loaded into the company filter of `/jobs` (the ones with the most jobs); 1 to 5000 |
 | `filters.company_options_visible` | 50 | Companies shown before you type in the drop-down's search box; 1 to 5000 |
+| `companies.page_size` | 50 | Rows per page of `/companies`; 1 to 500 |
 
-Both keys may be missing (the defaults apply); a file without them needs no migration.
+These keys may be missing (the defaults apply); a file without them needs no migration. The `companies` block may also be
+omitted. Edit the overview page size in YAML or the advanced editor.
 
 Rolling back to a version without the company filter: `interests.yaml` views and `ui.yaml` are strict, so the older
 version refuses a file that holds the new keys (and the push step cannot read `interests.yaml` either). Before switching:
@@ -341,10 +343,14 @@ version refuses a file that holds the new keys (and the push step cannot read `i
 1. Stop writing: `docker compose -p job-radar stop web runner`, and let a cycle that is running finish.
 2. Back up `data/config/interests.yaml` and `data/config/ui.yaml`.
 3. Remove every `company:` key from the views in `interests.yaml`.
-4. Remove `filters.company_options_max` and `filters.company_options_visible` from your `ui.yaml`, and a whole
-   `companies:` section if there is one (leaving `companies: {}` is refused as well).
+4. Remove `filters.company_options_max` and `filters.company_options_visible` from your `ui.yaml`, and the whole
+   `companies:` section, even if you never added it (saving the settings writes it back with its defaults; leaving
+   `companies: {}` is refused as well).
 5. Check both files with the older version (`pnpm config:check` or `pnpm run doctor` in its image).
 6. Switch to the older image and start the services.
+
+Rolling back only the company overview (to a version that has the company filter but no `/companies`): do steps 1,
+2, 5 and 6, and in between remove the whole `companies:` section from your `ui.yaml`; views and the `filters.*` keys stay.
 
 The shipped `ui.yaml` is part of the image, so it goes back with it.
 

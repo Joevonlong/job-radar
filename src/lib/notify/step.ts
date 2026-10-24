@@ -20,7 +20,7 @@ import {
   type PushCandidate,
 } from "@/lib/db/repos/notifications";
 import type { CycleStepContext, CycleStepFn, StepResult } from "@/lib/cycle/steps";
-import { resolveCompanyName } from "@/lib/pipeline/company";
+import { buildWatchedCompanyKeys } from "@/lib/companies/marks";
 import { isResumeKitConfigured } from "@/lib/resume/config";
 import { isHighValueSignal } from "@/lib/signals/bonus";
 import { loadHighValuePolicy, loadSignalCatalog } from "@/lib/signals/floor";
@@ -145,7 +145,7 @@ async function sendJobs(deps: NotifyDeps, ctx: CycleStepContext, db: Db, cycleId
   const text = deps.text ?? notifyText();
   const pipeline = loadPipeline();
   const interests = loadConfig("interests");
-  const watchedKeys = new Set(interests.watched_companies.map((name) => resolveCompanyName(name, pipeline).nameNorm));
+  const watchedKeys = buildWatchedCompanyKeys(interests.watched_companies, pipeline);
   const notified = await listNotifiedJobIds(db, candidates.map((c) => c.jobId));
   const catalog = loadSignalCatalog();
   const selection = selectForPush(candidates, { config, watchedKeys, alreadyNotified: notified });

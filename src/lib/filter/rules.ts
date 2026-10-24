@@ -2,7 +2,7 @@ import type { PipelineConfig, PreferencesConfig } from "@/lib/config";
 import type { GermanLevel, JobLocation, JobSalary } from "@/lib/domain/types";
 import { scopeCountries, scopeWidePatterns } from "@/lib/market/remote-scope";
 import type { Market } from "@/lib/market/types";
-import { companyFilterKeys, normalizeCompanyKey } from "@/lib/pipeline/company";
+import { buildBlacklistedCompanyKeys, isCompanyExcluded } from "@/lib/companies/marks";
 import { visaRulesFor } from "@/lib/visa/rules";
 
 import { compileDealBreakers, type CompiledDealBreakers, type DealBreakerMe } from "./deal-breakers";
@@ -202,10 +202,7 @@ export function compileFilter(preferences: PreferencesConfig, pipeline: Pipeline
     for (const region of regionsOf.get(foldText(canonical)) ?? []) regions.add(foldText(region));
   }
 
-  const blacklistedCompanyKeys = new Set<string>();
-  for (const entry of preferences.exclude_companies) {
-    for (const key of companyFilterKeys(entry, pipeline)) blacklistedCompanyKeys.add(key);
-  }
+  const blacklistedCompanyKeys = buildBlacklistedCompanyKeys(preferences.exclude_companies, pipeline);
 
   const seniorities = preferences.seniority === "all" ? null : cfg.seniority_map[preferences.seniority];
 
@@ -399,12 +396,8 @@ function checkSeniority(job: FilterJob, filter: CompiledFilter, out: PartialVerd
   if (!filter.seniorities.includes(job.seniority)) out.excluded.push(encodeReason("seniority_mismatch", job.seniority));
 }
 
-function companyKeys(job: FilterJob, legalSuffixes: readonly string[]): string[] {
-  return [job.companyName, ...job.companyAliases].map((name) => normalizeCompanyKey(name, legalSuffixes)).filter((key) => key !== "");
-}
-
 function checkBlacklist(job: FilterJob, filter: CompiledFilter, out: PartialVerdict): void {
-  if (job.companyBlacklisted || companyKeys(job, filter.legalSuffixes).some((key) => filter.blacklistedCompanyKeys.has(key))) {
+  if (isCompanyExcluded({ blacklisted: job.companyBlacklisted, name: job.companyName, aliases: job.companyAliases }, filter.blacklistedCompanyKeys, filter.legalSuffixes)) {
     out.excluded.push(encodeReason("blacklist_company", job.companyName));
   }
   if (filter.keywords.length === 0) return;

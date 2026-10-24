@@ -52,6 +52,10 @@ filters:
   company_options_max: 500
   company_options_visible: 50
 
+# Company overview (/companies): rows per page (1-500). Missing block or key uses this default.
+companies:
+  page_size: 50
+
 # Advanced config editor (Settings → Advanced)
 config_editor:
   # Max bytes of text the editor accepts

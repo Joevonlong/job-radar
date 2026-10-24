@@ -263,7 +263,7 @@ project 的规划在 `e2e/projects.ts`（由 `tests/e2e-projects.test.ts` 做单
 - `chromium-exclusive` 在 `chromium` 全部结束后，一次一个（`workers: 1`）运行带 `@exclusive` 标签的测试。所有 spec 共用一个预置数据的数据库，并行的 spec 一边跑一边改它：打开详情页会把岗位标为已看，访问“今日”会移动“上次访问”标记，有的测试会忽略、关闭、收藏岗位（再改回去），scoring spec 会临时插入一个岗位。改动每个页面都会读的状态（访问标记、所有岗位的已看记录：`list-today.spec.ts`），或比较整个列表计数的测试（`dashboard.spec.ts` 里 `/jobs` 筛选的计数、`filter.spec.ts` 的已过滤开关、`insights.spec.ts` 的头部数字）要加这个标签。只改一个岗位的测试用一个别的 spec 不碰的岗位、事后改回，并只对这个岗位断言，它留在并行 project 里。
 - 会改写同一个共享配置目录里文件的 spec（settings、language、breakdown、resume、interests、sources、market）会互相破坏，或破坏并行 spec 里读取这些设置的断言（Sources 页的 AI 卡片、界面语言）。所以它们作为单 spec 的 project，用 `dependencies` 串成链，一个接一个，且在 `chromium-exclusive` 全部结束之后才开始。按顺序如下：
   - 配置链：`chromium-config-settings`、`-settings-invalid`、`-language`、`-breakdown`、`-resume`。
-  - interests 链：`chromium-interests`、`chromium-interests-suggestions`、`chromium-multi-filters`（都会把视图或接受的建议存到唯一的 `interests.yaml`）。
+  - interests 链：`chromium-interests`、`chromium-interests-suggestions`、`chromium-multi-filters`、`chromium-companies`（都会把视图、接受的建议或关注公司存到唯一的 `interests.yaml`）。
   - sources 链：`chromium-sources-registry` 和 `chromium-sources-discovery`（都改写 `sources.yaml`）。
   - settings 链：`chromium-settings-advanced` 和 `chromium-settings-workflow`（高级编辑器和工作流标签页改写 ui、notify、ai、sources、pipeline 配置）。
   - `chromium-deal-breakers`（改写 `preferences.yaml` 的 `deal_breakers` 和一个岗位的过滤结果）。

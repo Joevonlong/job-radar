@@ -6,8 +6,8 @@ async function open(page: Page, path = "/") {
   await page.waitForLoadState("networkidle");
 }
 
-const ZH_NAV = ["今日", "岗位", "收藏", "申请", "来源", "统计", "设置", "我的画像", "感兴趣清单"];
-const EN_NAV = ["Today", "Jobs", "Favorites", "Pipeline", "Sources", "Insights", "Settings", "My profile", "Interests"];
+const ZH_NAV = ["今日", "岗位", "公司", "收藏", "申请", "来源", "统计", "设置", "我的画像", "感兴趣清单"];
+const EN_NAV = ["Today", "Jobs", "Companies", "Favorites", "Pipeline", "Sources", "Insights", "Settings", "My profile", "Interests"];
 /** The links carry count badges after the label ("Jobs18"): match the label at the start. */
 const startsWith = (labels: string[]) => labels.map((label) => new RegExp(`^${label}`));
 
@@ -82,6 +82,7 @@ test("all routes render a heading and highlight their nav entry", async ({ page 
   const routes: [string, string][] = [
     ["/", "今日"],
     ["/jobs", "岗位"],
+    ["/companies", "公司"],
     ["/pipeline", "申请"],
     ["/sources", "来源"],
     ["/insights", "统计"],
@@ -119,7 +120,7 @@ test("command palette opens from the top bar button and Esc gives the focus back
   const trigger = page.getByRole("button", { name: "搜索" });
   await trigger.click();
   await expect(page.getByRole("dialog", { name: "命令面板" })).toBeVisible();
-  await expect(page.getByRole("option")).toHaveCount(11);
+  await expect(page.getByRole("option")).toHaveCount(12);
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog", { name: "命令面板" })).toBeHidden();
   await expect(trigger).toBeFocused();
