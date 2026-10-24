@@ -38,6 +38,7 @@ export const SERIAL_CHAIN: readonly ChainEntry[] = [
   { name: "chromium-interests", spec: "interests.spec.ts" },
   { name: "chromium-interests-suggestions", spec: "interests-suggestions.spec.ts" },
   { name: "chromium-multi-filters", spec: "multi-filters.spec.ts" },
+  { name: "chromium-companies", spec: "companies.spec.ts" },
   // config/sources.yaml
   { name: "chromium-sources-registry", spec: "sources-registry.spec.ts" },
   { name: "chromium-sources-discovery", spec: "sources-discovery.spec.ts" },

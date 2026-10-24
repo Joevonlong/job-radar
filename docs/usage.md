@@ -98,6 +98,7 @@ The web app is the main entry point. Its pages:
 | Page | Use |
 |---|---|
 | `/` Today | New jobs of this cycle and today, ordered by rank value; the top shows the count per source; you can switch between saved views |
+| `/companies` Companies | Companies with open jobs: search names, sort by job count, top score or latest first seen, watch or unwatch, and open the profile's company exclusions |
 | `/favorites` Favorites | All jobs you starred with ⭐ (including closed, hard-filtered and ignored ones, which are still marked in the row), by default ordered by when you favorited them, or by rank value; each row can carry a short note (up to 200 characters, saved with Enter or on leaving the field, Esc cancels); the un-favorite toast has "Undo" (the note and favorite time are restored together). Favorites and application status are independent: a job can be both "applied" and favorited, and favoriting neither puts it on the board nor triggers the "interested for more than N days" reminder. The number in the sidebar is the total number of favorites |
 | `/jobs` All jobs | Sortable by clicking the Rank value, Salary / yr and Freshness column heads (click again to flip the direction; see "Sorting the list"); full-text search + filters (score, salary, high-pay signal, source, city, company, workplace, job status, German requirement, contract, application status, date; source, city, company, workplace, contract, job status and application status are **multi-select**); hard-filtered jobs are hidden by default and can be shown ("Filtered out only", `filteredOnly=true`, lists just them: the filtered-out numbers on /insights open it; not stored in a view); the current filters can be saved as a view ("favorites only" shows just favorited jobs, is `fav=true` in the URL, and is **not** stored in a view; "Unseen only" is `unseen=true` and is not stored either); unseen jobs are bold with a dot, "N unseen · Mark all as seen" next to the count (see "Seen and unseen jobs"); jobs that show as closed are hidden unless you pick a job status, and "Closed (N)" next to the count lists them (see "Closed jobs"); with the ghost job check on, a "Ghost jobs" filter (All / Suspected only / Hide likely) and a mark under the score (see [ghost-jobs.md](ghost-jobs.md)) |
 | `/jobs/<id>` Job detail | **The original JD and its translation into your configured language**, the AI match reasons and gaps, compensation and benefit signals, the German requirement, all source links and "View original posting", "Mark as applied", the application status, notes, "Tailor resume"; "Mark as closed" (with an optional note) / "Reopen", and for a closed job why it is closed and when its posting was last checked |
@@ -138,6 +139,26 @@ The "Company" filter on `/jobs` is a multi-select like city (several companies =
 - A name matches a company the way the hard filter's company exclusions do: case, accents and legal forms (GmbH, SE …) are ignored, and the aliases of `pipeline.yaml` count. It is never a part of a name: "SAP" does not bring in "SAP Fioneer". A name typed in a link (`?company=sap`) is rewritten to the company's display name when it picks exactly one company.
 - A company that was renamed or merged since a view was saved can show as selected with no jobs; pick it again in the drop-down.
 - When one company is stored twice (an alias added later: the old row and the new row both exist), its name picks both rows, so the list after the click can hold more jobs than the number shown next to that row in the drop-down.
+
+### Companies overview
+
+Open **Companies** (`/companies`) from the sidebar, phone menu or command palette. It lists companies with jobs visible
+in the default `/jobs` list: hard-filtered and closed jobs do not count; unscored, possibly closed and manually reopened
+jobs follow the same rules as `/jobs`. Each row shows the open-job count, highest current rank value and most recent
+first-seen time (in the configured timezone). Search by company name; click a sortable column again to reverse its
+direction. On phones, use the sort selector and arrow button above the cards. Missing scores stay last in either
+direction. Pagination uses `ui.yaml: companies.page_size` (50 by default).
+
+- Click a company name to open `/jobs?company=…`. Each overview row counts one stored company record; when several
+  records match the same name or alias, the link opens their combined jobs, so the result can exceed that row's count.
+- **Watch** and **Unwatch** update the watch list immediately, also shown on `/interests`. Removing a watch uses its
+  original saved spelling, even when the row uses a shorter name. **Watched (database flag)** means the database marks
+  the company as watched without a matching watch-list entry; there is no Unwatch button for that flag here.
+- **Exclude…** opens the **Excluded companies** field at `/me#exclude-companies`. Add the company there and save your
+  preferences. Saving alone does not re-run filtering: the next processing cycle applies the new preferences, or run
+  `pnpm refilter` to update existing jobs sooner. Fully filtered companies then leave this overview. The note above the
+  list counts entries in your profile's exclusion list, including companies with no visible jobs; database-only flags
+  are not part of that count.
 
 ### Sorting the list
 

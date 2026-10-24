@@ -332,6 +332,7 @@
   "nav": {
     "today": "Today",
     "jobs": "Jobs",
+    "companies": "Companies",
     "favorites": "Favorites",
     "pipeline": "Pipeline",
     "sources": "Sources",
@@ -452,6 +453,10 @@
       "title": "Jobs",
       "description": "All jobs: full-text search and combined filters."
     },
+    "companies": {
+      "title": "Companies",
+      "description": "Explore companies with open jobs, compare their latest scores and follow the ones that interest you."
+    },
     "favorites": {
       "title": "Favorites",
       "description": "Jobs you starred, newest first; closed and filtered ones stay here too."
@@ -497,6 +502,40 @@
       "title": "Source registry",
       "description": "Every collection source and how it is doing now: what works, what fails."
     }
+  },
+  "companies": {
+    "columns": {
+      "company": "Company",
+      "jobs": "Open jobs",
+      "score": "Top score",
+      "recent": "Latest first seen",
+      "status": "Status",
+      "actions": "Actions"
+    },
+    "sort": "Sort by",
+    "sorts": {
+      "jobs": "Open jobs",
+      "score": "Top score",
+      "recent": "Latest first seen"
+    },
+    "dirAscLabel": "Ascending; switch to descending",
+    "dirDescLabel": "Descending; switch to ascending",
+    "searchLabel": "Search companies",
+    "searchPlaceholder": "Search by company name…",
+    "search": "Search",
+    "listLabel": "Companies with open jobs",
+    "empty": "No companies found. Try another name or wait for new jobs to arrive.",
+    "watched": "Watched",
+    "watchedByFlag": "Watched (database flag)",
+    "watch": "Watch",
+    "unwatch": "Unwatch",
+    "watchedToast": "Now watching “{name}”",
+    "unwatchedToast": "Stopped watching “{name}”",
+    "watchFailed": "Could not update the watch list. Refresh the page and try again.",
+    "excluded": "Excluded",
+    "exclude": "Exclude…",
+    "excludedNote": "{count, plural, one {# company excluded — manage in your profile} other {# companies excluded — manage in your profile}}",
+    "count": "{count, plural, one {# company} other {# companies}}"
   },
   "profile": {
     "sections": {

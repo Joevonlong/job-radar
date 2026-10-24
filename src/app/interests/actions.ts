@@ -24,6 +24,7 @@ function refresh(result: InterestsActionState): InterestsActionState {
     revalidatePath("/interests");
     revalidatePath("/");
     revalidatePath("/jobs");
+    revalidatePath("/companies");
   }
   return result;
 }

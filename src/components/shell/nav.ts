@@ -1,5 +1,6 @@
 import {
   Briefcase,
+  Building2,
   CalendarCheck,
   ChartColumn,
   Coins,
@@ -16,6 +17,7 @@ import {
 export type NavKey =
   | "today"
   | "jobs"
+  | "companies"
   | "favorites"
   | "pipeline"
   | "sources"
@@ -39,6 +41,7 @@ export interface NavItem {
 export const NAV_ITEMS: readonly NavItem[] = [
   { key: "today", href: "/", icon: CalendarCheck, group: "main" },
   { key: "jobs", href: "/jobs", icon: Briefcase, group: "main" },
+  { key: "companies", href: "/companies", icon: Building2, group: "main" },
   { key: "favorites", href: "/favorites", icon: Star, group: "main" },
   { key: "pipeline", href: "/pipeline", icon: KanbanSquare, group: "main" },
   { key: "sources", href: "/sources", icon: Radar, group: "main" },

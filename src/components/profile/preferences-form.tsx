@@ -249,15 +249,17 @@ export function PreferencesForm({ initial, hash, state, pending, onSave, salarie
         </label>
       </div>
 
-      <Field id={ids.companies} label={t("fields.exclude_companies.label")} error={errors.get("exclude_companies")}>
-        <TagInput
-          id={ids.companies}
-          values={draft.exclude_companies}
-          onChange={(next) => patch({ exclude_companies: next })}
-          invalid={errors.has("exclude_companies")}
-          describedBy={describedBy(ids.companies, false, errors.get("exclude_companies"))}
-        />
-      </Field>
+      <div id="exclude-companies" className="scroll-mt-24">
+        <Field id={ids.companies} label={t("fields.exclude_companies.label")} error={errors.get("exclude_companies")}>
+          <TagInput
+            id={ids.companies}
+            values={draft.exclude_companies}
+            onChange={(next) => patch({ exclude_companies: next })}
+            invalid={errors.has("exclude_companies")}
+            describedBy={describedBy(ids.companies, false, errors.get("exclude_companies"))}
+          />
+        </Field>
+      </div>
 
       <Field id={ids.keywords} label={t("fields.exclude_keywords.label")} error={errors.get("exclude_keywords")}>
         <TagInput

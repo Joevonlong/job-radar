@@ -60,6 +60,10 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Companies overview (`/companies`):** search and page through companies with open jobs, sort by job count, top score
+  or latest first seen, open their jobs, and watch or unwatch with the Interests page kept in sync. Phone cards and
+  sortable desktop headers share the URL state. Company exclusions link to the profile field; database-only watch
+  flags are labelled without an Unwatch button. `ui.yaml: companies.page_size` controls the page size (default 50).
 - **Company filter on `/jobs`:** a multi-select like city (`?company=…`, repeated for several), with job counts in the
   drop-down, stored in saved views and applied on the Today page and in the view trends. Click a company name in a job row
   or on a job's detail page to list that company's jobs. New `ui.yaml` keys `filters.company_options_max` (500) and
