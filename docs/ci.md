@@ -405,8 +405,8 @@ The projects are planned in `e2e/projects.ts` (unit-tested by `tests/e2e-project
   cards on the Sources page, the UI language). They therefore run as single-spec projects chained with `dependencies`, one
   after another and only after `chromium-exclusive` has finished. First the config chain: `chromium-config-settings`,
   `-settings-invalid`, `-language`, `-breakdown`, `-resume`. Then the interests chain: `chromium-interests`,
-  `chromium-interests-suggestions` and `chromium-multi-filters` (all save views or accepted suggestions to the one
-  `interests.yaml`). Then `chromium-sources-registry` and `chromium-sources-discovery` (both rewrite `sources.yaml`), then
+  `chromium-interests-suggestions`, `chromium-multi-filters` and `chromium-companies` (save views, accepted suggestions or
+  watched companies to the one `interests.yaml`). Then `chromium-sources-registry` and `chromium-sources-discovery` (both rewrite `sources.yaml`), then
   `chromium-settings-advanced` and `chromium-settings-workflow` (the advanced editor and the workflow tab rewrite ui, notify,
   ai, sources and pipeline config), then `chromium-deal-breakers` (rewrites `deal_breakers` in `preferences.yaml` and one
   job's filter result), then `chromium-visa` (rewrites `needs_visa_sponsorship` in `me.yaml`), and last `chromium-market` (switching the market changes every page and

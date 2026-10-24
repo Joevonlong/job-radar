@@ -332,6 +332,7 @@
   "nav": {
     "today": "今日",
     "jobs": "岗位",
+    "companies": "公司",
     "favorites": "收藏",
     "pipeline": "申请",
     "sources": "来源",
@@ -452,6 +453,10 @@
       "title": "岗位",
       "description": "全部岗位：全文搜索与组合筛选。"
     },
+    "companies": {
+      "title": "公司",
+      "description": "看看哪些公司正在招聘，按岗位数、最高分或最近发现排序，关注感兴趣的公司。"
+    },
     "favorites": {
       "title": "收藏",
       "description": "你收藏的岗位，按收藏时间排列；已关闭和被过滤的也留在这里。"
@@ -497,6 +502,43 @@
       "title": "来源清单",
       "description": "所有采集来源和它们现在的状态：哪些在工作，哪些出了问题。"
     }
+  },
+  "companies": {
+    "columns": {
+      "company": "公司",
+      "jobs": "在招岗位",
+      "score": "最高分",
+      "recent": "最近发现",
+      "status": "状态",
+      "actions": "操作"
+    },
+    "sort": "排序",
+    "sorts": {
+      "jobs": "在招岗位数",
+      "score": "最高分",
+      "recent": "最近发现"
+    },
+    "dirAscLabel": "当前升序，切换为降序",
+    "dirDescLabel": "当前降序，切换为升序",
+    "searchLabel": "搜索公司",
+    "searchPlaceholder": "输入公司名称…",
+    "search": "搜索",
+    "listLabel": "有在招岗位的公司",
+    "empty": "没有找到公司。换个名称试试，或等新岗位采集进来。",
+    "watched": "已关注",
+    "watchedByFlag": "已关注（来自数据库标记）",
+    "notWatchable": "无法在此关注，请前往<interests>感兴趣清单</interests>添加。",
+    "none": "无",
+    "watch": "关注",
+    "unwatch": "取消关注",
+    "watchedToast": "已关注「{name}」",
+    "unwatchedToast": "已取消关注「{name}」",
+    "stillWatchedToast": "已从关注列表移除「{name}」，数据库标记仍使其保持关注。",
+    "watchFailed": "关注列表更新失败，请刷新页面后重试。",
+    "excluded": "已排除",
+    "exclude": "排除…",
+    "excludedNote": "{count, plural, other {已排除 # 家公司，前往我的画像管理}}",
+    "count": "{count, plural, other {共 # 家公司}}"
   },
   "profile": {
     "sections": {

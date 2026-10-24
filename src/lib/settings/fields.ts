@@ -196,7 +196,7 @@ export const HIDDEN_PATHS: Record<SettingsForm, readonly string[]> = {
   // The hidden statuses / categories are the workflow tab's status table; the editor's own limits are in the advanced editor.
   // web_access (the login limits) is a protected key: changed in the file only, never from the dashboard.
   // The job checks (the recheck of watched jobs, the visa check) are edited in the YAML or the advanced editor.
-  ui: ["applications", "filters", "config_editor", "web_access", "job_checks"],
+  ui: ["applications", "filters", "companies", "config_editor", "web_access", "job_checks"],
   insights: [],
   resume: [],
   language: [],

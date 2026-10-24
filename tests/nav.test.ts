@@ -4,10 +4,11 @@ import { NAV_ITEMS, groupNavItems, isNavActive } from "@/components/shell/nav";
 import zh from "../messages/zh.json";
 
 describe("nav config", () => {
-  it("has the 9 expected entries in order", () => {
+  it("has the 10 expected entries in order", () => {
     expect(NAV_ITEMS.map((item) => item.href)).toEqual([
       "/",
       "/jobs",
+      "/companies",
       "/favorites",
       "/pipeline",
       "/sources",
@@ -40,7 +41,7 @@ describe("nav groups", () => {
   it("puts the last three items under the settings group and keeps the overall order", () => {
     const groups = groupNavItems();
     expect(groups.map((g) => g.group)).toEqual(["main", "settings"]);
-    expect(groups[0]?.items.map((i) => i.href)).toEqual(["/", "/jobs", "/favorites", "/pipeline", "/sources", "/insights"]);
+    expect(groups[0]?.items.map((i) => i.href)).toEqual(["/", "/jobs", "/companies", "/favorites", "/pipeline", "/sources", "/insights"]);
     expect(groups[1]?.items.map((i) => i.href)).toEqual(["/settings", "/me", "/interests"]);
     expect(groups.flatMap((g) => g.items)).toEqual([...NAV_ITEMS]);
   });

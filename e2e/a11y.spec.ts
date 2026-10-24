@@ -19,6 +19,7 @@ test("every page has its own title in the form 'Page · Job Radar'", async ({ pa
   const titles: Array<[string, string]> = [
     ["/", "今日 · Job Radar"],
     ["/jobs", "岗位 · Job Radar"],
+    ["/companies", "公司 · Job Radar"],
     ["/pipeline", "申请 · Job Radar"],
     ["/settings", "设置 · Job Radar"],
     ["/me", "我的画像 · Job Radar"],
