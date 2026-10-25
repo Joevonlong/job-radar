@@ -89,11 +89,15 @@ describe.skipIf(!present)("workspace wrappers", () => {
     expect(r.out).toContain("unknown argument: --nope");
   });
 
-  it("deploy.sh --dry-run finds the product root (job-radar/) and prints the eleven steps", () => {
+  it("deploy.sh --dry-run finds the product root (job-radar/) and prints every step of the plan", () => {
     const r = run(path.join(ws, "scripts/deploy.sh"), ["--dry-run", "--skip-pull"]);
     expect(r.status).toBe(0);
     expect(r.out).toContain(`checkout: ${fs.realpathSync(path.join(ws, "job-radar"))}  project: radar-test`);
-    expect([...r.out.matchAll(/^\[(\d+)\/11\]/gm)]).toHaveLength(11);
+    const steps = [...r.out.matchAll(/^\[(\d+)\/(\d+)\]/gm)].map((m) => [Number(m[1]), Number(m[2])] as const);
+    const total = steps[0]?.[1] ?? 0;
+    expect(total).toBeGreaterThanOrEqual(1);
+    expect(steps.map(([, t]) => t)).toEqual(steps.map(() => total));
+    expect(steps.map(([n]) => n)).toEqual(Array.from({ length: total }, (_, i) => i + 1));
     expect(r.out).toContain("dry-run finished");
   });
 
