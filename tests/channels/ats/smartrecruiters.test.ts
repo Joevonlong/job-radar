@@ -3,8 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createSmartrecruitersChannel, smartrecruitersAdapter } from "@/lib/channels/ats";
 import { wrapPosting } from "@/lib/channels/ats/envelope";
-import { ChannelError } from "@/lib/channels/errors";
-import { normalizedPostingDraftSchema } from "@/lib/channels/types";
+import { ChannelError, PartialCollectError } from "@/lib/channels/errors";
+import { normalizedPostingDraftSchema, type RawPostingInput } from "@/lib/channels/types";
 
 import { atsChannelsWith, atsContext, company, depsWith, fixtureJson, inputs, response, routedFetch } from "./helpers";
 
@@ -23,16 +23,27 @@ beforeEach(() => {
 
 afterEach(() => vi.useRealTimers());
 
-function inlineList(ids: string[]) {
+function inlineList(ids: string[], token = sr.token) {
   return {
     totalFound: ids.length,
-    content: ids.map((id) => ({ id, name: "AI Engineer", company: { identifier: sr.token } })),
+    content: ids.map((id) => ({ id, name: "AI Engineer", company: { identifier: token } })),
   };
 }
 
 function channel() {
   const deps = depsWith(inputs([sr]));
   return { channel: createSmartrecruitersChannel(deps), store: deps.memory };
+}
+
+/** Keep the posting assertions while requiring the single-board sweep to report its interruption. */
+async function partialPostings(collection: Promise<RawPostingInput[]>): Promise<readonly RawPostingInput[]> {
+  try {
+    await collection;
+  } catch (error) {
+    if (!(error instanceof PartialCollectError)) throw error;
+    return error.postings;
+  }
+  return expect.unreachable("expected PartialCollectError");
 }
 
 /** sources.yaml with the neutral prefilter plus "AI" as an include term (so "AI Platform Engineer" is kept, "Sales Manager" is not). */
@@ -66,6 +77,7 @@ describe("smartrecruiters sweep", () => {
     expect(logs.filter((l) => l.message === "ats board").map((l) => l.fields)).toEqual([
       { channel: "smartrecruiters", company: "Example Labs", board: "ExampleLabs", outcome: "changed", fetched: 3, kept: 2 },
     ]);
+    expect(logs.find((l) => l.message === "ats sweep done")?.fields).not.toHaveProperty("detailFailedBoards");
     // the stored payload is the detail, in the envelope (C1)
     expect(postings[0]?.payload).toEqual({ source, posting: detail(1) });
     for (const p of postings) expect(normalizedPostingDraftSchema.parse(c.parse(p.payload)).companyName).toBe("Example Labs");
@@ -160,6 +172,64 @@ describe("smartrecruiters sweep", () => {
   });
 
   it.each([
+    { name: "rejects with the first detail error when one board loses every detail and the other list fails", goodDetail: false, healthyOther: false },
+    { name: "rejects with collected postings when one board loses some details and the other list fails", goodDetail: true, healthyOther: false },
+    { name: "returns both boards' postings when one board loses a detail and the other is fully healthy", goodDetail: true, healthyOther: true },
+  ])("$name", async ({ goodDetail, healthyOther }) => {
+    const other = company({ name: "Other Labs", ats: "smartrecruiters", token: "OtherLabs" });
+    const otherBase = "https://api.smartrecruiters.com/v1/companies/OtherLabs/postings";
+    const otherListUrl = `${otherBase}?limit=100&offset=0&country=de`;
+    const firstList = inlineList(["a-failed", "a-good"]);
+    const otherList = inlineList(["b-good"], other.token);
+    const { fetch, requests } = routedFetch([
+      [LIST_URL, response(200, firstList, { ETag: 'W/"a"' })],
+      [`${BASE}/a-failed`, response(500, "detail unavailable")],
+      [`${BASE}/a-good`, goodDetail ? response(200, firstList.content[1]) : response(500, "detail unavailable")],
+      [otherListUrl, healthyOther ? response(200, otherList) : response(503, "list unavailable")],
+      [`${otherBase}/b-good`, response(200, otherList.content[0])],
+    ]);
+    const deps = depsWith(inputs([sr, other]));
+    const c = createSmartrecruitersChannel(deps);
+    const { ctx, query, logs } = atsContext("smartrecruiters", fetch, { channels: aiChannels() });
+
+    if (healthyOther) {
+      await expect(c.collect(query, ctx)).resolves.toMatchObject([
+        { externalId: "a-good", payload: { source: { token: sr.token }, posting: firstList.content[1] } },
+        { externalId: "b-good", payload: { source: { token: other.token }, posting: otherList.content[0] } },
+      ]);
+    } else if (goodDetail) {
+      await expect(c.collect(query, ctx)).rejects.toMatchObject({
+        name: "PartialCollectError",
+        cause: { name: "ChannelError", code: "network", status: 500 },
+        postings: [{ externalId: "a-good", payload: { source, posting: firstList.content[1] } }],
+      });
+    } else {
+      // Board order chooses the detail's 500, not the later list's 503; no partial with zero postings.
+      await expect(c.collect(query, ctx)).rejects.toMatchObject({ name: "ChannelError", code: "network", status: 500 });
+    }
+
+    expect(requests.map((r) => r.url)).toEqual([
+      LIST_URL, `${BASE}/a-failed`, `${BASE}/a-good`, otherListUrl,
+      ...(healthyOther ? [`${otherBase}/b-good`] : []),
+    ]);
+    const retryIds = goodDetail ? ["a-failed"] : ["a-failed", "a-good"];
+    expect(deps.memory.checks).toMatchObject([
+      { key: { ats: "smartrecruiters", token: sr.token }, update: { status: "ok", etag: null, detailRetryIds: retryIds } },
+      { key: { ats: "smartrecruiters", token: other.token }, update: healthyOther ? { status: "ok" } : { status: "error", errorCode: "network" } },
+    ]);
+    expect(deps.memory.states.get(BOARD_KEY)).toMatchObject({ detailRetryIds: retryIds });
+    expect(logs.find((l) => l.message === "ats board" && l.fields.board === sr.token)?.fields).toMatchObject({
+      outcome: "changed", kept: 2, detailFailed: retryIds.length,
+    });
+    expect(logs.find((l) => l.message === "ats board details missing")?.fields).toMatchObject({
+      board: sr.token, failed: retryIds.length, skipped: 0, code: "network",
+    });
+    expect(logs.find((l) => l.message === "ats sweep done")?.fields).toMatchObject({
+      boards: 2, failedBoards: healthyOther ? 0 : 1, detailFailedBoards: 1, postings: healthyOther ? 2 : goodDetail ? 1 : 0,
+    });
+  });
+
+  it.each([
     { storage: "stored", stored: true, etag: 'W/"x"', externalIds: ["744000000000003", "744000000000001"] },
     { storage: "new", stored: false, etag: null, externalIds: ["744000000000003"] },
   ])("keeps the board healthy when a $storage posting's detail returns 500", async ({ stored, etag, externalIds }) => {
@@ -172,7 +242,7 @@ describe("smartrecruiters sweep", () => {
     const { channel: c, store } = channel();
     if (stored) store.stored.add("744000000000001");
 
-    await expect(c.collect(query, ctx)).resolves.toMatchObject([{ externalId: "744000000000003", payload: { posting: detail(3) } }]);
+    await expect(partialPostings(c.collect(query, ctx))).resolves.toMatchObject([{ externalId: "744000000000003", payload: { posting: detail(3) } }]);
 
     expect(requests.map((r) => r.url)).toEqual([LIST_URL, `${BASE}/744000000000001`, `${BASE}/744000000000003`]);
     expect(store.touched).toEqual([["744000000000001"]]);
@@ -198,7 +268,7 @@ describe("smartrecruiters sweep", () => {
     const { ctx, query, logs } = atsContext("smartrecruiters", fetch, { channels: aiChannels() });
     const { channel: c, store } = channel();
 
-    await expect(c.collect(query, ctx)).resolves.toMatchObject([{ externalId: "744000000000003" }]);
+    await expect(partialPostings(c.collect(query, ctx))).resolves.toMatchObject([{ externalId: "744000000000003" }]);
 
     expect(store.checks.at(-1)?.update).toMatchObject({
       status: "ok", etag: null, externalIds: ["744000000000003"], detailRetryIds: ["744000000000001"],
@@ -221,7 +291,7 @@ describe("smartrecruiters sweep", () => {
     const channels = aiChannels((b) => { b.max_results = 1; });
     const { ctx, query } = atsContext("smartrecruiters", fetch, { channels });
 
-    await expect(c.collect(query, ctx)).resolves.toEqual([]);
+    await expect(c.collect(query, ctx)).rejects.toMatchObject({ code: "parse" });
 
     expect(store.touched).toEqual([["744000000000003"], ["744000000000001"]]);
     expect(requests.map((r) => r.url)).toEqual([LIST_URL, `${BASE}/744000000000001`]);
@@ -240,7 +310,7 @@ describe("smartrecruiters sweep", () => {
     ]);
     const { ctx, query } = atsContext("smartrecruiters", fetch, { channels: aiChannels() });
 
-    await expect(c.collect(query, ctx)).resolves.toMatchObject([{ externalId: "744000000000003" }]);
+    await expect(partialPostings(c.collect(query, ctx))).resolves.toMatchObject([{ externalId: "744000000000003" }]);
 
     expect(store.stored.has("744000000000001")).toBe(false);
     expect(store.checks.at(-1)?.update).toMatchObject({
@@ -262,7 +332,7 @@ describe("smartrecruiters sweep", () => {
     const { ctx, query, logs } = atsContext("smartrecruiters", fetch, { channels: aiChannels() });
     const { channel: c, store } = channel();
 
-    await expect(c.collect(query, ctx)).resolves.toMatchObject(["2", "4", "6", "7", "8", "9", "10"].map((externalId) => ({ externalId })));
+    await expect(partialPostings(c.collect(query, ctx))).resolves.toMatchObject(["2", "4", "6", "7", "8", "9", "10"].map((externalId) => ({ externalId })));
 
     expect(requests.map((r) => r.url)).toEqual([LIST_URL, ...body.content.map((p) => `${BASE}/${p.id}`)]);
     expect(store.checks.at(-1)?.update).toMatchObject({ status: "ok", kept: 10, detailRetryIds: ["1", "3", "5"] });
@@ -285,7 +355,7 @@ describe("smartrecruiters sweep", () => {
     store.stored.add("10");
     const { ctx, query, logs } = atsContext("smartrecruiters", fetch, { channels: aiChannels() });
 
-    await expect(c.collect(query, ctx)).resolves.toEqual([]);
+    await expect(c.collect(query, ctx)).rejects.toMatchObject({ code: "network", status: 500 });
 
     expect(requests.map((r) => r.url)).toEqual([LIST_URL, `${BASE}/1`, `${BASE}/2`, `${BASE}/3`]);
     expect(store.touched).toEqual([["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]]);
@@ -308,7 +378,7 @@ describe("smartrecruiters sweep", () => {
     const { channel: c, store } = channel();
     const first = atsContext("smartrecruiters", fetch, { channels: aiChannels() });
 
-    await expect(c.collect(first.query, first.ctx)).resolves.toEqual([]);
+    await expect(c.collect(first.query, first.ctx)).rejects.toMatchObject({ code: "network", status: 500 });
 
     expect(requests.map((r) => r.url)).toEqual([LIST_URL, `${BASE}/bad1`, `${BASE}/bad2`, `${BASE}/bad3`]);
     expect(store.checks.at(-1)?.update).toMatchObject({ status: "ok", etag: null, detailRetryIds: ["bad1", "bad2", "bad3"] });
@@ -319,7 +389,7 @@ describe("smartrecruiters sweep", () => {
     vi.setSystemTime(new Date("2026-10-08T12:00:00Z"));
     const second = atsContext("smartrecruiters", fetch, { channels: aiChannels() });
 
-    await expect(c.collect(second.query, second.ctx)).resolves.toMatchObject([{ externalId: "good-new" }]);
+    await expect(partialPostings(c.collect(second.query, second.ctx))).resolves.toMatchObject([{ externalId: "good-new" }]);
 
     expect(requests.slice(4).map((r) => r.url)).toEqual([LIST_URL, `${BASE}/good-new`, `${BASE}/bad1`, `${BASE}/bad2`, `${BASE}/bad3`]);
     expect(requests[4]?.headers).not.toHaveProperty("If-None-Match");
@@ -328,25 +398,83 @@ describe("smartrecruiters sweep", () => {
     });
   });
 
-  it("stops details at the first host refusal and reports blocked with the rest skipped", async () => {
+  it("retains a prior retry skipped after three new detail failures and clears the ETag", async () => {
+    const body = inlineList(["n1", "n2", "n3", "r1"]);
+    const { fetch, requests } = routedFetch([
+      [LIST_URL, response(200, body, { ETag: 'W/"retry"' })],
+      [`${BASE}/`, response(500, "detail unavailable")],
+    ]);
+    const { channel: c, store } = channel();
+    store.states.set(BOARD_KEY, { etag: null, filterFingerprint: null, externalIds: [], detailRetryIds: ["r1"] });
+    const channels = aiChannels((b) => { b.max_consecutive_detail_failures = 3; });
+    const { ctx, query, logs } = atsContext("smartrecruiters", fetch, { channels });
+
+    await expect(c.collect(query, ctx)).rejects.toMatchObject({ code: "network", status: 500 });
+
+    expect(requests.map((r) => r.url)).toEqual([LIST_URL, `${BASE}/n1`, `${BASE}/n2`, `${BASE}/n3`]);
+    expect(store.touched).toEqual([["n1", "n2", "n3", "r1"]]);
+    expect(store.checks.at(-1)?.update).toMatchObject({
+      status: "ok", etag: null, externalIds: [], detailRetryIds: ["n1", "n2", "n3", "r1"], total: 4, kept: 4,
+    });
+    expect(store.states.get(BOARD_KEY)).toMatchObject({ etag: null, detailRetryIds: ["n1", "n2", "n3", "r1"] });
+    expect(logs.find((l) => l.message === "ats board details missing")?.fields).toMatchObject({
+      failed: 3, skipped: 1, stoppedBy: "network",
+    });
+  });
+
+  it("keeps the ETag when new details succeed and only a prior retry is skipped after failures in the retry group", async () => {
+    const body = inlineList(["n1", "n2", "n3", "r2", "r3", "r4", "r1"]);
+    const { fetch, requests } = routedFetch([
+      [LIST_URL, response(200, body, { ETag: 'W/"retry"' })],
+      [`${BASE}/r`, response(500, "detail unavailable")],
+      [`${BASE}/n`, ({ url }) => response(200, body.content.find((p) => p.id === url.slice(BASE.length + 1)))],
+    ]);
+    const { channel: c, store } = channel();
+    store.states.set(BOARD_KEY, { etag: null, filterFingerprint: null, externalIds: [], detailRetryIds: ["r2", "r3", "r4", "r1"] });
+    const channels = aiChannels((b) => { b.max_consecutive_detail_failures = 3; });
+    const { ctx, query, logs } = atsContext("smartrecruiters", fetch, { channels });
+
+    await expect(partialPostings(c.collect(query, ctx))).resolves.toMatchObject([
+      { externalId: "n1" }, { externalId: "n2" }, { externalId: "n3" },
+    ]);
+
+    expect(requests.map((r) => r.url)).toEqual([
+      LIST_URL, ...["n1", "n2", "n3", "r2", "r3", "r4"].map((id) => `${BASE}/${id}`),
+    ]);
+    expect(store.touched).toEqual([["r2", "r3", "r4", "r1"]]);
+    expect(store.checks.at(-1)?.update).toMatchObject({
+      status: "ok", etag: 'W/"retry"', externalIds: ["n1", "n2", "n3"], detailRetryIds: ["r2", "r3", "r4", "r1"],
+    });
+    expect(store.states.get(BOARD_KEY)).toMatchObject({ etag: 'W/"retry"', detailRetryIds: ["r2", "r3", "r4", "r1"] });
+    expect(logs.find((l) => l.message === "ats board details missing")?.fields).toMatchObject({
+      failed: 3, skipped: 1, stoppedBy: "network",
+    });
+  });
+
+  it.each([
+    { status: 403, code: "blocked" },
+    { status: 429, code: "rate_limited" },
+  ])("stops details at the first $code host refusal with the rest skipped", async ({ status, code }) => {
     const { fetch, requests } = routedFetch([
       [LIST_URL, response(200, list(), { ETag: 'W/"x"' })],
-      [`${BASE}/744000000000001`, response(403, "forbidden")],
+      [`${BASE}/744000000000001`, response(status, "refused")],
       [`${BASE}/744000000000003`, response(200, detail(3))],
     ]);
-    const { ctx, query, logs } = atsContext("smartrecruiters", fetch, { channels: aiChannels() });
+    // atsContext sets maxRetries to zero, so a 429 has exhausted its retries on this request.
+    const { ctx, query, logs, sleeps } = atsContext("smartrecruiters", fetch, { channels: aiChannels() });
     const { channel: c, store } = channel();
     store.stored.add("744000000000003");
 
-    await expect(c.collect(query, ctx)).resolves.toEqual([]);
+    await expect(c.collect(query, ctx)).rejects.toMatchObject({ code, status });
 
     expect(requests.map((r) => r.url)).toEqual([LIST_URL, `${BASE}/744000000000001`]);
+    expect(sleeps).toEqual([]);
     expect(store.touched).toEqual([["744000000000001", "744000000000003"]]);
     expect(store.checks.at(-1)?.update).toMatchObject({
       status: "ok", externalIds: ["744000000000003"], detailRetryIds: ["744000000000001"],
     });
     expect(logs.find((l) => l.message === "ats board details missing")).toMatchObject({
-      level: "warn", fields: { board: sr.token, failed: 1, skipped: 1, code: "blocked", stoppedBy: "blocked" },
+      level: "warn", fields: { board: sr.token, failed: 1, skipped: 1, code, stoppedBy: code },
     });
   });
 
@@ -374,6 +502,33 @@ describe("smartrecruiters sweep", () => {
     expect(logs.filter((l) => ["ats board failed", "ats board details missing"].includes(l.message))).toEqual([]);
   });
 
+  it("[regression guard] rejects cancellation after the last detail body succeeds without recording board state", async () => {
+    const abort = new AbortController();
+    const abortError = new DOMException("cancelled after reading detail", "AbortError");
+    const { fetch, requests } = routedFetch([
+      [LIST_URL, response(200, list())],
+      [`${BASE}/744000000000001`, response(200, detail(1))],
+      [`${BASE}/744000000000003`, {
+        ...response(200, detail(3)),
+        json: async () => {
+          const body = detail(3);
+          abort.abort(abortError);
+          return body;
+        },
+      }],
+    ]);
+    const { ctx, query, logs } = atsContext("smartrecruiters", fetch, { channels: aiChannels(), signal: abort.signal });
+    const { channel: c, store } = channel();
+
+    await expect(c.collect(query, ctx)).rejects.toBe(abortError);
+
+    expect(requests.map((r) => r.url)).toEqual([LIST_URL, `${BASE}/744000000000001`, `${BASE}/744000000000003`]);
+    expect(store.checks).toEqual([]);
+    expect(store.states.size).toBe(0);
+    expect(store.touched).toEqual([]);
+    expect(logs.filter((l) => ["ats board failed", "ats board details missing"].includes(l.message))).toEqual([]);
+  });
+
   it("counts a broken detail stream as a network failure without wrapping it as parse", async () => {
     const { fetch } = routedFetch([
       [LIST_URL, response(200, list())],
@@ -386,7 +541,7 @@ describe("smartrecruiters sweep", () => {
     const { ctx, query, logs } = atsContext("smartrecruiters", fetch, { channels: aiChannels() });
     const { channel: c, store } = channel();
 
-    await expect(c.collect(query, ctx)).resolves.toMatchObject([{ externalId: "744000000000003" }]);
+    await expect(partialPostings(c.collect(query, ctx))).resolves.toMatchObject([{ externalId: "744000000000003" }]);
 
     expect(store.checks.at(-1)?.update).toMatchObject({ status: "ok", detailRetryIds: ["744000000000001"] });
     expect(logs.find((l) => l.message === "ats board details missing")).toMatchObject({
