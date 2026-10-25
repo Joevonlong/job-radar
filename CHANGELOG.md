@@ -107,6 +107,9 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **Company career board scans:** `max_results` no longer hides stored jobs that the board still lists, which could
+  mark them possibly closed after a week. The registry's "kept" count now means postings that passed the prefilter and
+  fit within the cap. **Upgrade:** the first run after upgrading re-reads every board once (cached ETags are discarded).
 - **Deploy and doctor no longer accept an old ai-worker heartbeat as proof the current service process is ready:**
   deploy step 12 waits for its lock, heartbeat and own shipped config report, up to the worker swap timeout
   (`--settle` overrides it; 0 skips the wait). An unconfirmed worker now makes deploy exit 2 even if doctor has no

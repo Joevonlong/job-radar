@@ -11,15 +11,15 @@ import {
 export interface AtsBoardState {
   etag: string | null;
   filterFingerprint: string | null;
-  /** External ids stored from the response `etag` belongs to. */
+  /** Ids handed over or already stored and still listed beyond the cap, from the response `etag` belongs to. */
   externalIds: string[];
 }
 
 export interface AtsBoardStore {
   load(key: AtsBoardKey): Promise<AtsBoardState | null>;
   record(key: AtsBoardKey, update: AtsBoardUpdate): Promise<void>;
-  /** Mark the stored raw postings with these ids as seen now; returns how many exist. */
-  touch(channelId: string, externalIds: readonly string[]): Promise<number>;
+  /** Mark the stored raw postings with these ids as seen now; returns the external ids that exist. */
+  touch(channelId: string, externalIds: readonly string[]): Promise<string[]>;
 }
 
 /** Store backed by `ats_boards` and `raw_postings`. */
@@ -68,7 +68,7 @@ export function createMemoryAtsBoardStore(): AtsBoardStore & {
     },
     async touch(_channelId, externalIds) {
       touched.push([...externalIds]);
-      return externalIds.filter((e) => stored.has(e)).length;
+      return externalIds.filter((e) => stored.has(e));
     },
   };
 }

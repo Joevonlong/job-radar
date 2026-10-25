@@ -7,13 +7,15 @@ import { ChannelRegistry } from "@/lib/channels/registry";
 import { runCycle } from "@/lib/cycle/run-cycle";
 import { closeDb, getAtsBoard, getDb, listRawPostingsForChannel, listRunsForCycle, schema, touchRawPostings, upsertRawPostings } from "@/lib/db";
 import { runMigrations } from "@/lib/db/migrate";
+import { markJobsPossiblyClosed, touchJobsSeen } from "@/lib/db/repos/jobs";
 
-import { company, depsWith, fixtureJson, inputs, neutralChannels, response } from "../channels/ats/helpers";
+import { atsChannelsWith, company, depsWith, fixtureJson, inputs, neutralChannels, response } from "../channels/ats/helpers";
 import { config, quietLogger } from "../cycle/helpers";
 
 const url = inject("testDatabaseUrl");
 
 const GH_URL = "/v1/boards/examplelabs/jobs";
+const GH_KEPT = ["6186419001", "6186419002", "6186419003", "6186419006"];
 const board = company({ name: "Example Labs", ats: "greenhouse", token: "examplelabs" });
 
 beforeAll(async () => {
@@ -22,7 +24,7 @@ beforeAll(async () => {
 });
 
 beforeEach(async () => {
-  await getDb().execute(sql`truncate table ats_boards, raw_postings, runs, cycles, channels restart identity cascade`);
+  await getDb().execute(sql`truncate table ats_boards, raw_postings, runs, cycles, channels, jobs, companies restart identity cascade`);
 });
 
 afterAll(async () => {
@@ -30,7 +32,7 @@ afterAll(async () => {
 });
 
 /** Greenhouse that honours If-None-Match like the real one. */
-function conditionalBoard(etag: string): { fetch: FetchLike; sent: Array<string | undefined> } {
+function conditionalBoard(etag: string, body: unknown = fixtureJson("greenhouse-board.json")): { fetch: FetchLike; sent: Array<string | undefined> } {
   const sent: Array<string | undefined> = [];
   return {
     sent,
@@ -38,15 +40,26 @@ function conditionalBoard(etag: string): { fetch: FetchLike; sent: Array<string 
       expect(requestUrl).toContain(GH_URL);
       const header = init.headers?.["If-None-Match"];
       sent.push(header);
-      return header === etag ? response(304, null, { ETag: etag }) : response(200, fixtureJson("greenhouse-board.json"), { ETag: etag });
+      return header === etag ? response(304, null, { ETag: etag }) : response(200, body, { ETag: etag });
     },
   };
 }
 
-function cycle(fetch: FetchLike) {
+function cycle(fetch: FetchLike, options: { maxResults?: number; at?: Date } = {}) {
+  const db = getDb();
+  const store = createDbAtsBoardStore(db);
+  const at = options.at;
+  // Pin the raw-posting refresh clock while exercising the real database update.
+  if (at) store.touch = (channelId, externalIds) => touchRawPostings(db, { channelId, externalIds, at });
+  const channels = options.maxResults === undefined
+    ? neutralChannels()
+    : atsChannelsWith("greenhouse", (b) => { b.max_results = options.maxResults; });
   const registry = new ChannelRegistry();
-  registry.register(createGreenhouseChannel(depsWith(inputs([board]), createDbAtsBoardStore(getDb()))));
-  return runCycle("manual", { registry, config: { ...config(), channels: neutralChannels() }, logger: quietLogger, sleep: async () => {}, channelIds: ["greenhouse"], fetch });
+  registry.register(createGreenhouseChannel(depsWith(inputs([board]), store)));
+  return runCycle("manual", {
+    registry, config: { ...config(), channels }, logger: quietLogger, sleep: async () => {}, channelIds: ["greenhouse"], fetch,
+    ...(at ? { now: () => at } : {}),
+  });
 }
 
 describe("migration 0002", () => {
@@ -75,20 +88,20 @@ describe("ats_boards and raw posting touch", () => {
     expect(await getAtsBoard(db, key)).toMatchObject({ etag: null, filterFingerprint: "g", externalIds: [], lastStatus: "ok", lastErrorCode: null });
   });
 
-  it("touchRawPostings refreshes fetched_at of existing ids only and counts them", async () => {
+  it("touchRawPostings refreshes fetched_at of existing ids only and returns them", async () => {
     const db = getDb();
     await db.insert(schema.channels).values({ id: "greenhouse", family: "ats", kind: "ats" });
     const old = new Date("2026-01-01T00:00:00Z");
     await upsertRawPostings(db, { channelId: "greenhouse", runId: null, fetchedAt: old, items: [1, 2, 3].map((n) => ({ externalId: String(n), url: null, payload: { n } })) });
     const at = new Date("2026-10-07T00:00:00Z");
-    expect(await touchRawPostings(db, { channelId: "greenhouse", externalIds: ["1", "3", "missing"], at })).toBe(2);
+    expect((await touchRawPostings(db, { channelId: "greenhouse", externalIds: ["1", "3", "missing"], at })).sort()).toEqual(["1", "3"]);
     const rows = await listRawPostingsForChannel(db, "greenhouse");
     expect(rows.map((r) => [r.externalId, r.fetchedAt.toISOString()])).toEqual([
       ["1", at.toISOString()],
       ["2", old.toISOString()],
       ["3", at.toISOString()],
     ]);
-    expect(await touchRawPostings(db, { channelId: "greenhouse", externalIds: [] })).toBe(0);
+    expect(await touchRawPostings(db, { channelId: "greenhouse", externalIds: [] })).toEqual([]);
   });
 });
 
@@ -127,6 +140,61 @@ describe("runCycle with the greenhouse channel", () => {
     await cycle(board1.fetch);
     expect(board1.sent).toEqual([undefined, 'W/"v1"', undefined]);
     expect(await listRawPostingsForChannel(getDb(), "greenhouse")).toHaveLength(4);
+  });
+
+  it.each([
+    { name: "the per-board cap does not make stored postings look closed", listed: true },
+    { name: "a stored posting no longer listed by the board is marked possibly closed", listed: false },
+  ])("$name", async ({ listed }) => {
+    const db = getDb();
+    const now = new Date("2026-10-07T12:00:00Z");
+    const old = new Date("2026-09-07T12:00:00Z");
+    const body = fixtureJson("greenhouse-board.json") as { jobs: Array<{ id: number }> };
+    const board1 = conditionalBoard('W/"v1"', body);
+    const first = await cycle(board1.fetch, { at: old });
+    expect(first.status).toBe("succeeded");
+    if (first.cycleId === null) throw new Error("missing first cycle");
+    const raw = await listRawPostingsForChannel(db, "greenhouse");
+    expect(raw.map((r) => r.externalId)).toEqual(GH_KEPT);
+    const overCap = raw.find((r) => r.externalId === GH_KEPT[2]);
+    if (!overCap) throw new Error("missing over-cap posting");
+
+    const [employer] = await db.insert(schema.companies).values({ name: board.name, nameNorm: "example labs" }).returning({ id: schema.companies.id });
+    if (!employer) throw new Error("missing company");
+    const [job] = await db.insert(schema.jobs).values({
+      companyId: employer.id, title: "KI-Entwickler", titleNorm: "ki entwickler", status: "active", firstSeenAt: old, lastSeenAt: old,
+    }).returning({ id: schema.jobs.id });
+    if (!job) throw new Error("missing job");
+    await db.insert(schema.jobSources).values({ jobId: job.id, rawPostingId: overCap.id, channelId: "greenhouse" });
+    await db.update(schema.rawPostings).set({ fetchedAt: old }).where(eq(schema.rawPostings.channelId, "greenhouse"));
+    await db.update(schema.runs).set({ startedAt: old, finishedAt: old }).where(eq(schema.runs.cycleId, first.cycleId));
+    if (!listed) body.jobs = body.jobs.filter((p) => String(p.id) !== overCap.externalId);
+
+    const second = await cycle(board1.fetch, { maxResults: 2, at: now });
+    expect(second.status).toBe("succeeded");
+    if (second.cycleId === null) throw new Error("missing second cycle");
+    expect(board1.sent).toEqual([undefined, undefined]); // the changed cap invalidates the validator
+    // Run timestamps use database defaults; pin the successful run after the expiry point.
+    await db.update(schema.runs).set({ startedAt: now, finishedAt: now }).where(eq(schema.runs.cycleId, second.cycleId));
+    expect(await listRunsForCycle(db, second.cycleId)).toMatchObject([{ channelId: "greenhouse", status: "succeeded", fetched: 2, startedAt: now }]);
+
+    const refreshed = await listRawPostingsForChannel(db, "greenhouse");
+    expect(refreshed).toHaveLength(4);
+    expect(refreshed.filter((r) => GH_KEPT.slice(2).includes(r.externalId)).map((r) => [r.externalId, r.fetchedAt])).toEqual([
+      [GH_KEPT[2], listed ? now : old],
+      [GH_KEPT[3], now],
+    ]);
+    expect(refreshed.find((r) => r.id === overCap.id)?.payloadJson).toEqual(overCap.payloadJson);
+    const remembered = await getAtsBoard(db, { ats: "greenhouse", token: board.token });
+    expect(remembered).toMatchObject({ lastStatus: "ok", lastKept: 2 });
+    expect(remembered?.externalIds.slice(0, 2)).toEqual(GH_KEPT.slice(0, 2));
+    expect(remembered?.externalIds.slice(2).sort()).toEqual(GH_KEPT.slice(2).filter((id) => listed || id !== overCap.externalId).sort());
+
+    expect(await touchJobsSeen(db)).toEqual({ seen: listed ? 1 : 0, reopened: 0 });
+    const closed = await markJobsPossiblyClosed(db, { now, days: 7 });
+    expect(closed).toEqual(listed ? [] : [job.id]);
+    const [after] = await db.select().from(schema.jobs).where(eq(schema.jobs.id, job.id));
+    expect(after).toMatchObject({ status: listed ? "active" : "possibly_closed", lastSeenAt: listed ? now : old });
   });
 
   it("a failing board fails the run and the circuit is told, without touching stored state", async () => {

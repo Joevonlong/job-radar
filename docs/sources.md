@@ -46,9 +46,21 @@ A channel's status is the same result as the channel card on the `/sources` over
 "Possibly closed" is a hint based on time, not proof, and it is judged per channel, not per search query:
 
 - A job becomes possibly closed when no source has returned it for `possibly_closed_after_days` days (7 by default) **and** each channel it came from has had at least one successful run that started after those days had passed. Runs that failed, were skipped or were interrupted do not count, so a channel that was down never closes its jobs.
+- An already-stored job still listed by a company ATS board counts as seen even when it falls beyond `max_results`.
+  The cap alone does not make it possibly closed.
 - A search only returns postings inside its time window (`window_hours`; JSearch maps it onto its supported windows: today, 3 days, week, month; anything above a week becomes a month), so a query that does not return a job says nothing about whether it is closed. That is why a single query's result never marks a job by itself.
 - The evidence is the link check that follows: it tries each source link of the job. A live page on any of them brings the job back to active; it is closed only when every link checked returns 404 or 410. Anything else leaves the mark as it is.
 - A job that is seen again by any source becomes active again, with two exceptions: a mark that came from a "no longer accepting applications" sentence on the posting stays, and so does a closure you made yourself.
+
+For company ATS boards, `max_results` is the maximum number of postings stored per board per run,
+after the title prefilter. Matching postings are taken in the board's list order up to that cap.
+Stored postings beyond the cap are refreshed as seen while the board still lists them, including
+when the board reports that its list is unchanged. Their saved title and description are not updated
+until they are back within the cap. Postings beyond the cap that have never been stored are not added.
+The registry's "kept" count means postings that passed the title prefilter and fit within the cap.
+
+A stored posting dropped by the title prefilter does **not** count as seen.
+After you narrow your keywords, it ages out as usual unless another source sees it.
 
 ## 4. What you can do on the page
 

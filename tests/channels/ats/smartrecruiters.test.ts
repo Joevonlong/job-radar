@@ -122,9 +122,14 @@ describe("smartrecruiters sweep", () => {
       [`${BASE}/744000000000003`, response(200, detail(3))],
     ]);
     const { ctx, query, logs } = atsContext("smartrecruiters", fetch, { channels: aiChannels() });
-    const postings = await channel().channel.collect(query, ctx);
+    const { channel: c, store } = channel();
+    store.stored.add("744000000000001");
+    const postings = await c.collect(query, ctx);
     expect(postings.map((p) => p.externalId)).toEqual(["744000000000003"]);
-    expect(logs.filter((l) => l.message === "ats board").map((l) => l.fields[("kept")])).toEqual([1]);
+    expect(logs.filter((l) => l.message === "ats board").map((l) => l.fields.kept)).toEqual([2]);
+    expect(store.checks.at(-1)?.update).toMatchObject({ status: "ok", kept: 2, externalIds: ["744000000000003"] });
+    expect(store.touched).toEqual([]);
+    expect(logs.find((l) => l.message === "ats sweep done")?.fields.postings).toBe(1);
   });
 
   it("stores the list entry when fetch_details is off", async () => {
@@ -147,6 +152,27 @@ describe("smartrecruiters sweep", () => {
     const { ctx, query } = atsContext("smartrecruiters", fetch, { channels: aiChannels() });
     const { channel: c, store } = channel();
     await expect(c.collect(query, ctx)).rejects.toMatchObject({ code: "parse" });
+    expect(store.states.has("smartrecruiters:ExampleLabs")).toBe(false);
+  });
+
+  it("touches stored over-cap ids before a detail request fails", async () => {
+    const { channel: c, store } = channel();
+    store.stored.add("744000000000003");
+    const { fetch, requests } = routedFetch([
+      [LIST_URL, response(200, list(), { ETag: 'W/"x"' })],
+      [`${BASE}/744000000000001`, () => {
+        expect(store.touched).toEqual([["744000000000003"]]);
+        return response(200, "not json at all");
+      }],
+    ]);
+    const channels = aiChannels((b) => { b.max_results = 1; });
+    const { ctx, query } = atsContext("smartrecruiters", fetch, { channels });
+
+    await expect(c.collect(query, ctx)).rejects.toMatchObject({ code: "parse" });
+
+    expect(store.touched).toEqual([["744000000000003"]]);
+    expect(requests.map((r) => r.url)).toEqual([LIST_URL, `${BASE}/744000000000001`]);
+    expect(store.checks.at(-1)?.update).toEqual({ status: "error", errorCode: "parse" });
     expect(store.states.has("smartrecruiters:ExampleLabs")).toBe(false);
   });
 
