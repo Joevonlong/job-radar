@@ -134,6 +134,7 @@ const deploy = z.strictObject({
   /**
    * Upper bound of each wait while the install script swaps the worker (old process gone, new one with database
    * evidence, and the same on rollback); at least ai_worker_stop_timeout_seconds + 10.
+   * Also the longest wait of deploy.sh step 12 (`--settle` overrides it).
    */
   ai_worker_swap_timeout_seconds: positiveInt.default(120),
 }).superRefine((value, ctx) => {

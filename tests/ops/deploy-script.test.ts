@@ -4,7 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
 /**
  * scripts/ops/deploy.sh, run for real against a throw-away git repository and stub `docker` / `pnpm`
@@ -81,6 +81,8 @@ beforeAll(() => {
   work = path.join(tmp, "work");
   stubs = path.join(tmp, "bin");
   log = path.join(tmp, "calls.log");
+  fs.mkdirSync(path.join(tmp, "home"));
+  fs.mkdirSync(path.join(tmp, "wait-tmp"));
 
   git(tmp, "init", "--bare", "--initial-branch=main", origin);
   git(tmp, "clone", origin, work);
@@ -91,6 +93,7 @@ beforeAll(() => {
   write(path.join(work, "scripts/ops/lib/proc.sh"), fs.readFileSync(path.join(realLib, "proc.sh"), "utf8"));
   write(path.join(work, "scripts/ops/lib/releases.sh"), fs.readFileSync(path.join(realLib, "releases.sh"), "utf8") + RELEASE_LOGGER);
   write(path.join(work, "scripts/ops/lib/deploy-result.sh"), fs.readFileSync(path.join(realLib, "deploy-result.sh"), "utf8"));
+  write(path.join(work, "scripts/ops/lib/ai-worker.sh"), fs.readFileSync(path.join(realLib, "ai-worker.sh"), "utf8"));
   write(path.join(work, "scripts/ops/backup.sh"), LOGGING_STUB("backup.sh"), 0o755);
   // the install stub carries the capability line deploy.sh --ref looks for in the target commit
   write(path.join(work, "scripts/ops/install-ai-worker.sh"), `${STEP_STUB("install-ai-worker.sh", "INSTALL")}# capability: ai-worker-release-dir\n`, 0o755);
@@ -149,6 +152,17 @@ exit 0
 `,
     0o755,
   );
+  write(path.join(stubs, "launchctl"), `${LOGGING_STUB("launchctl")}[[ "$1" == print && -e "$HOME/loaded" ]] && { echo "pid = 4242"; exit 0; }\nexit 113\n`, 0o755);
+  write(path.join(stubs, "node"), `${LOGGING_STUB("node")}
+case " $* " in
+  *" --now "*) echo '{"now":"2026-10-25T00:00:00.000000Z"}'; exit "\${STUB_NODE_EXIT:-0}" ;;
+  *" --receipt "*)
+    n=$(grep -c -- ' --receipt ' "$DEPLOY_TEST_LOG")
+    if [[ -n "\${STUB_RECEIPT_AFTER:-}" ]]; then (( n >= STUB_RECEIPT_AFTER )) && exit 0; exit 2; fi
+    exit "\${STUB_RECEIPT_EXIT:-0}" ;;
+esac
+exit "\${STUB_NODE_EXIT:-0}"
+`, 0o755);
   // stub pnpm: logs, runs PNPM_<script>_HOOK, exits with PNPM_<script>_EXIT (e.g. PNPM_doctor_EXIT=2)
   write(
     path.join(stubs, "pnpm"),
@@ -165,7 +179,17 @@ exit \${!var:-0}
   );
 });
 
-afterAll(() => fs.rmSync(tmp, { recursive: true, force: true }));
+afterAll(() => {
+  if (tmp && path.basename(tmp).startsWith("deploy-test-")) fs.rmSync(tmp, { recursive: true, force: true });
+});
+afterEach(() => {
+  fs.rmSync(path.join(tmp, "home/Library/LaunchAgents/io.jobradar.ai-worker.plist"), { force: true });
+  fs.rmSync(path.join(tmp, "home/loaded"), { force: true });
+});
+const installWorker = (): void => {
+  write(path.join(tmp, "home/Library/LaunchAgents/io.jobradar.ai-worker.plist"), "<plist/>\n");
+  write(path.join(tmp, "home/loaded"), "");
+};
 
 type Run = { status: number | null; out: string; calls: string[]; events: string[]; contexts: string[]; gitCalls: string[] };
 
@@ -192,9 +216,14 @@ function deployEnv(env: Record<string, string>): NodeJS.ProcessEnv {
   const base = { ...process.env };
   delete base.JOB_RADAR_RELEASES_LOCK_TOKEN;
   delete base.JOB_RADAR_DEPLOY_EXPECT_SHA;
+  delete base.XDG_CONFIG_HOME;
   return {
     ...base,
     PATH: `${stubs}:${process.env.PATH ?? ""}`,
+    HOME: path.join(tmp, "home"),
+    TMPDIR: path.join(tmp, "wait-tmp"),
+    JOB_RADAR_SERVICE_MANAGER: "launchd",
+    DATABASE_URL: "postgres://unused@127.0.0.1:1/none",
     DEPLOY_TEST_LOG: log,
     WORK: realWork,
     LOCK: lockDir,
@@ -363,7 +392,59 @@ describe("scripts/ops/deploy.sh", () => {
     expect(r.out).toContain("--no-backup: skipped");
     expect(r.out).toContain("--no-ai-worker: skipped");
     expect(r.out).toContain("up -d --wait --wait-timeout 45");
-    expect(r.out).toContain("sleep 3");
+    expect(r.out).toContain("--no-ai-worker: no wait for the ai-worker");
+    expect(r.out).not.toContain("sleep");
+  });
+
+  it.each([["3", "3"], ["08", "8"]])("--dry-run --settle %s prints a maximum wait of %s without probing", (arg, seconds) => {
+    installWorker();
+    const r = deploy(["--dry-run", "--settle", arg]);
+    expect(r.status).toBe(0);
+    expect(r.out).toContain(`wait at most ${seconds} s`);
+    expect(r.out).not.toContain("sleep");
+    expect(r.calls.some((c) => c.startsWith("node "))).toBe(false);
+  });
+
+  it("the default wait cap comes from the user schedule", () => {
+    const schedule = path.join(work, "data/config/schedule.yaml");
+    const before = fs.existsSync(schedule) ? fs.readFileSync(schedule) : null;
+    try {
+      write(schedule, "deploy:\n  ai_worker_swap_timeout_seconds: 75\n");
+      const r = deploy(["--dry-run"], { STUB_RECEIPT_EXIT: "2" });
+      expect(r.status).toBe(0);
+      expect(r.out).toContain("wait at most 75 s");
+      expect(r.calls.some((c) => c.startsWith("node "))).toBe(false);
+    } finally {
+      if (before === null) fs.rmSync(schedule, { force: true }); else fs.writeFileSync(schedule, before);
+    }
+  });
+
+  it("confirms the current PID's receipt before running the doctor", () => {
+    installWorker();
+    const r = deploy(["--settle", "5"]);
+    expect(r.status, r.out).toBe(0);
+    const receipt = r.calls.findIndex((c) => c.startsWith("node ") && c.includes("--receipt --pid 4242"));
+    expect(receipt).toBeGreaterThanOrEqual(0);
+    expect(receipt).toBeLessThan(r.calls.indexOf("pnpm run doctor"));
+    expect(r.out).toContain("confirmed: lock, heartbeat and config report");
+  });
+
+  it.each(["0", "1"])("an unconfirmed worker exits 2 even when doctor exits %s, with an accurate closing message", (doctor) => {
+    installWorker();
+    const r = deploy(["--settle", "2"], { STUB_RECEIPT_EXIT: "2", PNPM_doctor_EXIT: doctor });
+    expect(r.status, r.out).toBe(2);
+    expect(r.out).toContain("could not confirm within 2 s");
+    expect(r.calls).toContain("pnpm run doctor");
+    expect(r.out).not.toContain("doctor passed everything");
+    expect(r.out).toContain("Deploy complete, but the ai-worker service could not be confirmed working");
+  });
+
+  it.each([["--no-ai-worker"], ["--settle", "0"]])("%j skips the wait even with an installed worker", (...args) => {
+    installWorker();
+    const r = deploy(args);
+    expect(r.status, r.out).toBe(0);
+    expect(r.calls.some((c) => c.startsWith("node "))).toBe(false);
+    expect(r.calls).toContain("pnpm run doctor");
   });
 
   it("refuses to deploy from another branch or a dirty tree, before anything is changed", () => {
@@ -1060,18 +1141,26 @@ describe("scripts/ops/deploy.sh: signals", () => {
     }
   });
 
-  it("a signal between two steps (while waiting before the doctor): the doctor does not run", async () => {
+  it.each(["process group", "PID only"])("a signal to the %s during the receipt wait stops without running doctor", async (target) => {
     const base = head();
+    installWorker();
+    const run = startDeploy([path.join(work, "scripts/ops/deploy.sh"), "--skip-pull", "--settle", "30"], { STUB_RECEIPT_EXIT: "2" });
     try {
-      const run = startDeploy([path.join(work, "scripts/ops/deploy.sh"), "--skip-pull", "--settle", "5"]);
-      await waitFor("the clean-up to finish", () => logHas("docker image prune -f"));
-      await sleep(300);
-      process.kill(-run.pid, "SIGTERM");
-      const r = await run.done;
-      expect(r.status).toBe(143);
-      expect(r.calls).not.toContain("pnpm run doctor");
-      expect(r.events.filter((e) => e.startsWith("# release"))).toEqual(["# release mine=1"]);
+      await waitFor("the first receipt probe", () => logHas("--receipt"));
+      const signalled = Date.now();
+      process.kill(target === "PID only" ? run.pid : -run.pid, "SIGTERM");
+      const guard = setTimeout(() => { try { process.kill(-run.pid, "SIGKILL"); } catch { /* already ended */ } }, 5000);
+      try {
+        const r = await run.done;
+        expect(r.status, r.out).toBe(143);
+        expect(Date.now() - signalled).toBeLessThan(5000);
+        expect(r.calls).not.toContain("pnpm run doctor");
+        expect(r.events.filter((e) => e.startsWith("# release"))).toEqual(["# release mine=1"]);
+        expect(fs.readdirSync(path.join(tmp, "wait-tmp")).filter((f) => f.startsWith("deploy-wait."))).toEqual([]);
+      } finally { clearTimeout(guard); }
     } finally {
+      try { process.kill(-run.pid, "SIGKILL"); } catch { /* already ended */ }
+      await run.done;
       restore(base);
     }
   });

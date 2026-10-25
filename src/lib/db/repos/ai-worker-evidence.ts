@@ -19,10 +19,10 @@ export interface EvidenceConnection {
 }
 
 export const workerEvidenceSchema = z.discriminatedUnion("status", [
-  z.object({ status: z.literal("found"), reason: z.literal("lock-and-heartbeat") }),
+  z.object({ status: z.literal("found"), reason: z.enum(["lock-and-heartbeat", "lock-heartbeat-report"]) }),
   z.object({
     status: z.literal("not_yet"),
-    reason: z.enum(["no-holder", "other-holder", "no-heartbeat"]),
+    reason: z.enum(["no-holder", "other-holder", "no-heartbeat", "no-report"]),
     holder: z.string().nullable().optional(),
   }),
   z.object({ status: z.literal("unknown"), reason: z.enum(["holder-not-visible", "error"]), detail: z.string().optional() }),
@@ -53,16 +53,36 @@ async function later(sql: Sql, a: string, b: string): Promise<string> {
  * `unknown` when the holder's session is not visible to this role. Query errors propagate (the caller reports unknown).
  */
 export async function workerEvidence(conn: EvidenceConnection, opts: { pid: number; host: string; since: string }): Promise<WorkerEvidence> {
+  return (await evidenceSince(conn, opts)).result;
+}
+
+/** Keep the exact SQL timestamp for the receipt's report comparison too (no JS Date rounding). */
+async function evidenceSince(conn: EvidenceConnection, opts: { pid: number; host: string; since: string }): Promise<{ result: WorkerEvidence; atLeast: string | null }> {
   const holder = await findInstanceLockHolder(conn.sql, AI_WORKER_LOCK_KEY);
-  if (!holder) return { status: "not_yet", reason: "no-holder" };
+  if (!holder) return { result: { status: "not_yet", reason: "no-holder" }, atLeast: null };
   if (holder.application === null || holder.application === "" || holder.sinceExact === null) {
-    return { status: "unknown", reason: "holder-not-visible" };
+    return { result: { status: "unknown", reason: "holder-not-visible" }, atLeast: null };
   }
   if (holder.application !== instanceApplicationName("ai-worker", opts.pid, opts.host)) {
-    return { status: "not_yet", reason: "other-holder", holder: holder.application };
+    return { result: { status: "not_yet", reason: "other-holder", holder: holder.application }, atLeast: null };
   }
   const atLeast = await later(conn.sql, opts.since, holder.sinceExact);
-  return (await hasHeartbeatSince(conn.db, HEARTBEAT_PROCESS.aiWorker, atLeast))
+  const result: WorkerEvidence = (await hasHeartbeatSince(conn.db, HEARTBEAT_PROCESS.aiWorker, atLeast))
     ? { status: "found", reason: "lock-and-heartbeat" }
     : { status: "not_yet", reason: "no-heartbeat" };
+  return { result, atLeast };
+}
+
+/** Evidence plus this PID's own shipped config report, at or after both `since` and its lock connection's start. */
+export async function workerReceipt(conn: EvidenceConnection, { pid, host, since }: { pid: number; host: string; since: string }): Promise<WorkerEvidence> {
+  const { result, atLeast } = await evidenceSince(conn, { pid, host, since });
+  if (result.status !== "found") return result;
+  const rows = await conn.sql<{ ok: boolean }[]>`
+    select exists (select 1 from runtime_state
+      where key = 'shipped_config:ai-worker'
+        and value->>'pid' = ${String(pid)} and value->>'instance' = ${host}
+        and updated_at >= ${atLeast}::timestamptz) as ok`;
+  return rows[0]?.ok
+    ? { status: "found", reason: "lock-heartbeat-report" }
+    : { status: "not_yet", reason: "no-report" };
 }

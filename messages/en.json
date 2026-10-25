@@ -5216,7 +5216,11 @@
           "neverHint": "scripts/ops/install-ai-worker.sh; one run for now: pnpm ai-worker --once",
           "offline": "The last heartbeat was {ago} (offline after {limit} s)",
           "offlineHint": "tail -n 30 {errLog} (crashes: {launchdLog}); launchctl kickstart -k gui/$(id -u)/io.jobradar.ai-worker",
-          "ok": "Last heartbeat {age} s ago (offline after {limit} s)"
+          "ok": "Last heartbeat {age} s ago (offline after {limit} s)",
+          "notConfirmed": "Last heartbeat {age} s ago, but the service's current process (pid {pid}) has not confirmed it is working yet (worker lock, then a heartbeat and its config report)",
+          "notConfirmedHint": "Normal for one heartbeat interval after a start or a database reconnect: run the doctor again shortly. If it stays, read {errLog}, and look for \"could not report the shipped config\" in {outLog}",
+          "otherHolder": "Last heartbeat {age} s ago, but another process holds the ai-worker lock ({holder}); the service's worker (pid {pid}) waits and exits",
+          "otherHolderHint": "Stop the other worker (for example a pnpm ai-worker in a terminal), or stop the service if the other one should run. Right after a restart it can also be the previous service process still exiting: run the doctor again shortly"
         }
       },
       "ai": {
@@ -5480,13 +5484,15 @@
           "configMountedInside": "{service}: {source} is mounted on {destination}, inside {dir}: it hides that part of the shipped config built into the image",
           "reportsUnchecked": "the shipped config reports were not checked: {reason}",
           "noDatabase": "the database cannot be reached (see db.connect)",
-          "hint": "Each process reports at start-up (the web again on its health checks until it works, runner and ai-worker with every heartbeat). Right after a deploy or restart, wait a minute and run the doctor again; if it stays, look in that process's log for \"could not report the shipped config\" (docs/configuration.md, \"Shipped config identity\")",
+          "hint": "Container reports can arrive late just after a deploy or restart: wait a minute and run the doctor again. For the ai-worker, check whether aiworker.heartbeat says its current process is not confirmed yet; if its report stays missing, look for \"could not report the shipped config\" in data/logs/ai-worker.out.log (docs/configuration.md, \"Shipped config identity\")",
           "notRelease": "{process} runs its shipped config from {dir}, not from a release directory under {releases}",
           "notReleaseHint": "The worker was installed from the checkout (before release directories) or by hand. Run scripts/ops/deploy.sh, or scripts/ops/install-ai-worker.sh --root {root} (docs/deploy.md)",
           "noGit": "git is not installed",
           "headUnknown": "{process}: its release cannot be compared with the checkout's HEAD ({reason})",
           "otherRelease": "{process} runs release {release}, the checkout is at {head}",
-          "otherReleaseHint": "Expected right after a worker-only rollback; otherwise a deploy stopped before the worker step. Run scripts/ops/deploy.sh so the worker runs the checked-out commit (docs/upgrade.md)"
+          "otherReleaseHint": "Expected right after a worker-only rollback; otherwise a deploy stopped before the worker step. Run scripts/ops/deploy.sh so the worker runs the checked-out commit (docs/upgrade.md)",
+          "starting": "{process}: the service (pid {pid}) has not taken the worker lock or written a heartbeat since it did; its report follows its first heartbeat",
+          "startingHint": "Run the doctor again in a minute"
         }
       },
       "i18n": {

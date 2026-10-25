@@ -231,6 +231,7 @@ export function makeContext(overrides: Overrides = {}): DoctorContext & { probes
     traps: vi.fn(async () => ({ state: "ok" as const, enabled: true, backlogWarn: 500, recentDays: 7, stats: { jobsWithTraps: 2, recentJobsWithTraps: 1, backlog: 0 } })),
     mcp: vi.fn(async () => ({ state: "ok" as const, enabled: false, tools: ["search_jobs", "get_job", "list_applications"] })),
     market: vi.fn(async () => marketSummary()),
+    aiWorkerReceipt: vi.fn(async () => ({ status: "found", reason: "lock-heartbeat-report" })),
     shippedConfigReports: vi.fn(async () => shippedReports()),
     releasesLock: vi.fn(async (main: string) => ({ present: false as const, lockDir: `${main}/data/releases/ai-worker/.lock` })),
     setup: vi.fn(async () => ({ pending: false, state: { completed_at: "2026-10-01T08:00:00.000Z", completed_by: "wizard", steps: {} }, error: null, source: "user", path: "/u/setup.yaml" })),
