@@ -2878,10 +2878,6 @@
         "label": "Minimum sample",
         "hint": "A group with fewer postings is not compared; the card falls back to a wider group."
       },
-      "salary_include_ai": {
-        "label": "Count AI lookups in the benchmark",
-        "hint": "Checked base-salary figures from lookups (medium or high confidence, with a source) join the groups. The card shows how many came from lookups."
-      },
       "quota_enabled": {
         "label": "Use the usage cap",
         "hint": "Off: no cap at all, as before."
@@ -6169,6 +6165,7 @@
       "notReady": "The salary tables do not exist yet. Run the database migrations.",
       "noCurrency": "No base currency is set for your market, so salaries cannot be compared.",
       "benchmarkOff": "The salary benchmark is turned off in the settings; the comparison below may be old.",
+      "staleAi": "The old salary comparison contained AI figures and is hidden. Turn the salary benchmark on and the next cycle rebuilds it.",
       "noFamily": "This title matches no role family, so it is not compared with other postings. Role families are set in salary.yaml.",
       "notComputed": "The salary comparison is not computed yet; it is computed after the next cycle.",
       "noGroup": "Too few postings of this kind state a salary (fewer than {min} in every group), so there is no comparison yet.",
@@ -6179,7 +6176,6 @@
         "family": "{family} · all levels · all places"
       },
       "sample": "{n} postings",
-      "sampleSplit": "{n} postings ({jd} from JDs · {ai} from lookups)",
       "median": "Median {amount}",
       "range": "Most postings (P10 to P90): {low} to {high}",
       "rangeLabel": "Salary spread from P10 to P90, with the median and this job",
@@ -6216,9 +6212,14 @@
       "waitingHint": "This can take a few minutes.",
       "expired": "This result is older than {days} days. Look up again for fresh numbers.",
       "meta": "{provider} · {model} · {when}",
-      "disclaimer": "AI estimate from public web pages, not a fact of this job. Check the sources.",
+      "disclaimer": "An AI estimate from public web pages. Job Radar has not checked these figures or sources. They are not facts of this job and never count in the salary benchmark or any filter.",
+      "scope": "Estimated from the company, role type, seniority and place; similar postings share this lookup. It is not based on this job description.",
+      "origin": "This lookup was made on another posting: <link>{title}</link>",
+      "originDeleted": "The posting this lookup was made on has been deleted.",
+      "aiBadge": "AI lookup",
+      "unverified": "AI estimate (unverified)",
       "empty": "The AI found no usable salary figures for this company.",
-      "confidenceLabel": "Confidence",
+      "confidenceLabel": "AI's own confidence",
       "confidence": {
         "low": "low",
         "medium": "medium",
@@ -6247,8 +6248,8 @@
         "total": "total pay (with bonus or equity)",
         "unknown": "basis not stated"
       },
-      "sourcesHeading": "Sources",
-      "otherSource": "other source",
+      "sourcesHeading": "Sources given by the AI (unverified)",
+      "otherSource": "not on your salary-site list",
       "sourceRef": "source {n}",
       "notesHeading": "Notes",
       "dropped": "{n, plural, one {# item was} other {# items were}} dropped (no source, a bad link or an implausible figure).",
@@ -6283,7 +6284,7 @@
       "usage": "pnpm salary:benchmark [--json]\n\nRebuilds the salary benchmark from the postings in the database and prints its groups.",
       "noCurrency": "No base currency is set for the market, so there is nothing to compare.",
       "disabled": "The salary benchmark is turned off (salary.yaml: benchmark.enabled), or its tables are missing.",
-      "summary": "Salary benchmark ({currency}): {groups} groups from {postings} postings and {ai} AI lookup figures."
+      "summary": "Salary benchmark ({currency}): {groups} groups from {postings} postings."
     }
   },
   "mcp": {

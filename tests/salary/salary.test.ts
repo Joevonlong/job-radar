@@ -8,8 +8,9 @@ import { ANY, buildBenchmarkRows, groupKeys } from "@/lib/salary/benchmark";
 import { compileFamilies } from "@/lib/salary/families";
 import { buildDeepLinks, slugify } from "@/lib/salary/links";
 import { LOOKUP_KEY_MAX, salaryLookupKey } from "@/lib/salary/lookup";
-import { hostTrusted, observationsOf, placeMatches, publicHttpsUrl, seniorityOf, verifySalaryLookup } from "@/lib/salary/lookup-verify";
+import { hostTrusted, publicHttpsUrl, verifySalaryLookup } from "@/lib/salary/lookup-verify";
 import { percentileIn, quantile, quantilesOf } from "@/lib/salary/percentile";
+import { salaryLookupResultSchema } from "@/lib/salary/lookup-types";
 import { pickGroup } from "@/lib/salary/view";
 
 /** The families these tests use (built here: tests never depend on the shipped salary.yaml). */
@@ -21,7 +22,7 @@ const families = compileFamilies(FAMILIES);
 
 function salaryConfig(edit: (raw: Record<string, unknown>) => void = () => {}) {
   const raw: Record<string, unknown> = {
-    benchmark: { enabled: true, window_days: 365, min_sample: 3, include_ai_lookups: false },
+    benchmark: { enabled: true, window_days: 365, min_sample: 3 },
     role_families: structuredClone(FAMILIES),
     deep_links: [{ id: "levels", label: "Levels.fyi", url: "https://www.levels.fyi/companies/{company_slug}/salaries" }],
     lookup: { enabled: false, ttl_days: 30, max_per_day: 10, timeout_seconds: 300, max_searches: 8, allowed_fetch_domains: ["levels.fyi"], sanity_annual: { min: 5000, max: 2000000 }, unconvertible_max_annual: 100_000_000_000, web_search_usd: 0.01 },
@@ -31,12 +32,13 @@ function salaryConfig(edit: (raw: Record<string, unknown>) => void = () => {}) {
 }
 
 describe("salary.yaml schema", () => {
-  it("accepts a complete file and fills defaults", () => {
+  it("accepts a complete file and rejects the removed key in the v2 schema", () => {
+    expect(salaryConfig().success).toBe(true);
     const parsed = salaryConfig((raw) => {
-      delete (raw.benchmark as Record<string, unknown>).include_ai_lookups;
+      (raw.benchmark as Record<string, unknown>).include_ai_lookups = true;
     });
-    expect(parsed.success).toBe(true);
-    expect(parsed.data?.benchmark.include_ai_lookups).toBe(false);
+    expect(parsed.success).toBe(false);
+    if (!parsed.success) expect(parsed.error.issues).toContainEqual(expect.objectContaining({ code: "unrecognized_keys", keys: ["include_ai_lookups"] }));
   });
 
   it("rejects bad regexes, duplicate family ids, unknown placeholders, non-http links, bad domains and an inverted sanity range", () => {
@@ -109,7 +111,7 @@ describe("benchmark groups", () => {
     expect(groupKeys({ family: "x", seniority: "unknown", city: "Berlin", country: "DE" }).map((k) => k.seniority)).toEqual([ANY, ANY]);
   });
 
-  it("keeps only groups with at least min_sample figures, skips unmatched titles and counts AI figures apart", () => {
+  it("keeps only posting groups with at least min_sample figures, skips unmatched titles and writes zero AI counts", () => {
     const postings = [
       posting("ML Engineer", 80000),
       posting("ML Engineer", 90000),
@@ -117,15 +119,14 @@ describe("benchmark groups", () => {
       posting("Office Manager", 50000),
       posting("Backend Engineer", 70000),
     ];
-    const rows = buildBenchmarkRows({ postings, observations: [{ family: "ml_engineer", seniority: "senior", city: "Berlin", country: "DE", figure: 110000 }], families, currency: "EUR", minSample: 3 });
+    const rows = buildBenchmarkRows({ postings, families, currency: "EUR", minSample: 3 });
     const keys = rows.map((row) => `${row.roleFamily}/${row.seniority}/${row.geoLevel}/${row.geoKey}/${row.n}/${row.nAi}`);
-    expect(keys).toEqual(["ml_engineer/*/all/*/4/1", "ml_engineer/*/country/DE/4/1", "ml_engineer/senior/city/berlin/3/1", "ml_engineer/senior/country/DE/4/1"]);
+    expect(keys).toEqual(["ml_engineer/*/all/*/3/0", "ml_engineer/*/country/DE/3/0", "ml_engineer/senior/country/DE/3/0"]);
     const all = rows.find((row) => row.geoLevel === "all");
-    expect(all?.median).toBe(95000);
+    expect(all?.median).toBe(90000);
     expect(all?.quantiles).toHaveLength(9);
-    // observations of a family that is not configured are ignored; without them Berlin has 2 < 3
-    const noAi = buildBenchmarkRows({ postings, observations: [{ family: "gone", seniority: "senior", city: "Berlin", country: "DE", figure: 1 }], families, currency: "EUR", minSample: 3 });
-    expect(noAi.some((row) => row.geoLevel === "city")).toBe(false);
+    expect(rows.every((row) => row.nAi === 0)).toBe(true);
+    expect(rows.some((row) => row.geoLevel === "city")).toBe(false); // Berlin has 2 < 3
   });
 
   it("picks the narrowest group that exists for a job", () => {
@@ -219,7 +220,7 @@ describe("checking a lookup answer", () => {
     expect(hostTrusted("notlevels.fyi", ["levels.fyi"])).toBe(false);
   });
 
-  it("keeps sourced bands, converts currencies, marks untrusted hosts, and derives observations", () => {
+  it("keeps sourced bands, converts currencies, marks untrusted hosts, and produces no benchmark observations", () => {
     const result = verify(
       output({
         sources: [
@@ -239,11 +240,16 @@ describe("checking a lookup answer", () => {
     expect(result.roleBand).toMatchObject({ min: 90000, max: 110000, median: 100000, convertible: true, sources: [0] });
     expect(result.relatedRoles[0]).toMatchObject({ min: 90000, max: 108000, original: { currency: "USD", min: 100000 }, sources: [1] });
     expect(result.companyLevel).toMatchObject({ level: "above", median: 95000, sources: [0] });
-    // only bands with a trusted source count; a band located in the country only counts for the country (no city)
-    expect(result.observations).toEqual([
-      { family: "ml_engineer", seniority: "senior", city: "Berlin", country: "DE", figure: 100000 },
-      { family: "software_engineer", seniority: "mid", city: null, country: "DE", figure: 85000 },
-    ]);
+    expect(result.observations).toEqual([]);
+  });
+
+  it("still parses old results with non-empty observations and defaults missing observations to empty", () => {
+    const observations = [{ family: "ml_engineer", seniority: "senior", city: "Berlin", country: "DE", figure: 100000 }];
+    const result = verify(output());
+    expect(salaryLookupResultSchema.parse({ ...result, observations }).observations).toEqual(observations);
+    const { observations: removed, ...withoutObservations } = result;
+    expect(removed).toEqual([]);
+    expect(salaryLookupResultSchema.parse(withoutObservations).observations).toEqual([]);
   });
 
   it("drops bands without a valid source, implausible figures and bad URLs; no source at all means low confidence", () => {
@@ -287,18 +293,6 @@ describe("checking a lookup answer", () => {
     const result = verify(planted.data as SalaryLookupOutput);
     expect(result).not.toHaveProperty("extra_action");
     expect(result.sources[0]).toMatchObject({ host: "evil.example.net", trusted: false });
-    // total pay and other places never enter the benchmark
-    expect(observationsOf({ ...result, roleBand: result.roleBand ? { ...result.roleBand, basis: "total" } : null }, { familyOf: () => null, jobFamily: "ml_engineer" })).toEqual([]);
-  });
-
-  it("matches places by city, ISO code or English country name, and reads seniority words", () => {
-    expect(placeMatches("Berlin, Germany", { city: "Berlin", country: "DE" })).toBe(true);
-    expect(placeMatches("Germany", { city: null, country: "DE" })).toBe(true);
-    expect(placeMatches("Remote (DE)", { city: null, country: "DE" })).toBe(true);
-    expect(placeMatches("London, UK", { city: "Berlin", country: "DE" })).toBe(false);
-    expect(placeMatches(null, { city: "Berlin", country: "DE" })).toBe(false);
-    expect(seniorityOf("Sr. Engineer")).toBe("senior");
-    expect(seniorityOf("Staff Engineer (L6)")).toBe("staff");
-    expect(seniorityOf(null)).toBe("unknown");
+    expect(result.observations).toEqual([]);
   });
 });

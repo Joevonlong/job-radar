@@ -29,6 +29,14 @@ export function resetSalaryTablesCache(): void {
   tablesSeen = false;
 }
 
+/** Any AI figure makes the whole stored benchmark stale until a posting-only rebuild replaces it. */
+export async function salaryBenchmarkHasAiRows(db: Executor): Promise<boolean> {
+  const [row] = await db.execute<{ stale: boolean }>(
+    sql`select exists (select 1 from salary_benchmarks where n_ai > 0) as stale`,
+  );
+  return row?.stale === true;
+}
+
 // ---------------------------------------------------------------- inputs
 
 /** One posting with a comparable annual figure in the base currency (`annualBaseFigure`), for the benchmark. */

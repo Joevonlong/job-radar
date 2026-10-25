@@ -28,9 +28,45 @@ and the project uses [Semantic Versioning](https://semver.org/).
 - **Node.js 22.23.4 or a later 22.x is required** (`engines.node` is now `>=22.23.4 <23`), and pnpm must be the version
   in `package.json` (`packageManager`; `corepack enable` provides it). The Docker build stages check the Node version
   of their image.
+- **Salary config migration (1 → 2):** `salary.yaml` no longer accepts `benchmark.include_ai_lookups`.
+  `scripts/ops/deploy.sh` migrates it automatically; for a manual upgrade, run `pnpm config:migrate` to see what the step
+  removes, then `pnpm config:migrate --write`. A v2 file with this key fails validation as an unknown key.
+- **Salary card during deploy:** step 4 migrates the config before the backup, build and restart. The old web may show
+  a salary configuration error for a few minutes until the new code restarts; the runner keeps its last valid settings.
+  If the build fails, the error persists: fix the build and rerun `scripts/ops/deploy.sh` (preferred), or stay on the old
+  version and set `salary.yaml`'s `config_version` back to the old code's current version. This is safe because the
+  migration already removed the key. If instead you restore the original from `.backup/`, follow rollback (b) below.
+- **Existing salary comparisons containing AI figures are hidden** until the next successful recomputation. With the
+  benchmark on, the card shows "not computed yet" until then; run `pnpm salary:benchmark` to recompute now. With the
+  benchmark off, it keeps showing "The old salary comparison contained AI figures and is hidden" until you turn it
+  on and wait for a cycle or recompute manually; the command does not recompute while it is off. Installations whose
+  comparisons contained no AI figures are unaffected. Users who had AI lookups enabled in the benchmark lose the AI
+  part of the sample count.
+
+**Rolling back past the release that made AI salary lookups reference-only (`salary.yaml` `config_version: 2`).** Older code does not hide comparisons containing AI figures.
+
+- **(a) Preferred: recompute with the new code before switching.** If the benchmark is off, temporarily set
+  `benchmark.enabled: true` in `salary.yaml`, run `pnpm salary:benchmark`, confirm that it prints a summary and exits
+  with code 0, then restore the previous setting.
+- **(b) Configuration (required):** Whether you set `salary.yaml`'s `config_version` back to the old code's current
+  version or restore the original from `data/config/.backup/<timestamp>/`, confirm that `benchmark.include_ai_lookups`
+  is absent or `false` **before the old code starts**. The backup may contain `true`. Otherwise, the old code can count
+  older cached lookups again (where the latest cached result still predates the upgrade); upgrading again hides the
+  comparison until it is recomputed.
+- **(c) If you restore a database backup, or (a) did not succeed:** The `pre-deploy` backup contains the old benchmark
+  table, so restoring it undoes (a). With the old code running and `benchmark.include_ai_lookups` absent or `false`,
+  run `pnpm salary:benchmark` again (if the benchmark is off, temporarily enable it, recompute, then restore the
+  previous setting). Until this recomputation, the old code may display comparisons containing AI figures.
+
+A failure in (a) does not block rollback: follow (c) and accept the display window before that recomputation.
 
 ### Changed
 
+- **AI salary lookups are only displayed:** they never count in the salary benchmark or any filter; the benchmark uses
+  only salaries stated in postings. The Salary tab's switch to count AI lookups is removed and the benchmark card shows
+  only "sample n". Lookup cards label the company level and every band "AI estimate (unverified)", identify "AI's own
+  confidence" and "Sources given by the AI (unverified)", and explain that similar postings share a lookup that is not
+  based on this job description. A lookup made on another posting links to it, or says that posting was deleted.
 - **Images built from the commit being deployed:** `scripts/ops/deploy.sh` unpacks a `git archive` of the commit it
   deploys into `data/build/` and builds from there (`JOB_RADAR_BUILD_CONTEXT`), so ignored, untracked or locally
   changed files never reach an image. The web and runner images carry the shipped defaults in `/app/config` (owned by
@@ -159,6 +195,9 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ### Security
 
+- **AI salary figures cannot affect benchmarks or filters.** Job Radar has not checked the figures or sources given by
+  the AI. Old benchmark tables containing any AI figures are hidden in full until recomputed from postings; a failed
+  recomputation leaves them hidden. Source links on the configured salary-site list are still unverified.
 - **Dependency and runtime security updates:** Next.js 16.4.2 and React 19.3.1 (published advisories in `use cache`, SVG
   image optimisation and Server Actions handling), the MCP SDK 2.3.1, and Vite 8.3.5 and `ip-address` 10.7.4 for the
   development and mail-client chains. The Node.js floor is raised to 22.23.4 for the 2026-10-21 Node security release;

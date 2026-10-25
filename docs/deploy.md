@@ -293,6 +293,26 @@ After upgrading run `pnpm run doctor` and confirm there are no new ❌.
 
 ## 5. Rollback
 
+Before restoring config from `data/config/.backup/` or restoring a database backup, read the rollback notes in
+[CHANGELOG.md](../CHANGELOG.md) for the version you are leaving.
+
+**Rolling back past the release that made AI salary lookups reference-only (`salary.yaml` `config_version: 2`).** Older code does not hide comparisons containing AI figures.
+
+- **(a) Preferred: recompute with the new code before switching.** If the benchmark is off, temporarily set
+  `benchmark.enabled: true` in `salary.yaml`, run `pnpm salary:benchmark`, confirm that it prints a summary and exits
+  with code 0, then restore the previous setting.
+- **(b) Configuration (required):** Whether you set `salary.yaml`'s `config_version` back to the old code's current
+  version or restore the original from `data/config/.backup/<timestamp>/`, confirm that `benchmark.include_ai_lookups`
+  is absent or `false` **before the old code starts**. The backup may contain `true`. Otherwise, the old code can count
+  older cached lookups again (where the latest cached result still predates the upgrade); upgrading again hides the
+  comparison until it is recomputed.
+- **(c) If you restore a database backup, or (a) did not succeed:** The `pre-deploy` backup contains the old benchmark
+  table, so restoring it undoes (a). With the old code running and `benchmark.include_ai_lookups` absent or `false`,
+  run `pnpm salary:benchmark` again (if the benchmark is off, temporarily enable it, recompute, then restore the
+  previous setting). Until this recomputation, the old code may display comparisons containing AI figures.
+
+A failure in (a) does not block rollback: follow (c) and accept the display window before that recomputation.
+
 First decide where the problem is:
 
 - **Code problem, database untouched** (this release has no new migration): just go back to the last good commit.

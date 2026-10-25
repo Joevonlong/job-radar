@@ -24,6 +24,10 @@ function leafPaths(value: unknown, prefix = ""): string[] {
 }
 
 describe("the settings form covers the config files", () => {
+  it("salary settings omit the removed benchmark lookup switch", () => {
+    expect(fieldsOf("salary").map((field) => field.path)).not.toContain("benchmark.include_ai_lookups");
+  });
+
   it.each(SETTINGS_FORMS)("%s: every key in the shipped YAML is a field or deliberately hidden", (tab) => {
     // Schema-only defaults need not be form fields; cover the keys actually written in the YAML.
     const config = shippedYaml(SETTINGS_FILES[tab]);

@@ -95,8 +95,9 @@ Job Radar is a single-user tool that you run on your own machine:
   salary lookup, a button on the job page that is off until you turn it on in `salary.yaml`: it may search the public
   web. The task list is fixed in the code, not in any setting. Be aware of what the limits are and are not:
   - only the company name, job title, city, country and seniority go into the request, never your profile or the JD;
-    but the pages the AI reads are untrusted text, and its answer is checked (sources, plausible figures) before it is
-    stored and shown;
+    the pages the AI reads are untrusted text. Checks before storing cover source-link format and plausible ranges;
+    Job Radar has not checked the sources or figures. Lookup results are only displayed: they never enter the salary
+    benchmark, filters or any derived data;
   - with `claude-cli`, page fetches are pre-approved only for the hosts in `lookup.allowed_fetch_domains` and every
     other tool call is denied (`--permission-mode dontAsk`; `--setting-sources project` keeps the permission rules of
     your own `~/.claude/settings.json` out). This is the CLI's own permission check, not a network boundary, and its

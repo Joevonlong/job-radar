@@ -1,7 +1,7 @@
 /** Reads and writes of `salary_lookups` and the `salary_lookup` requests around them (C9). */
 import { and, desc, eq, gte, inArray, sql } from "drizzle-orm";
 
-import { salaryLookupResultSchema, type SalaryLookupResult, type SalaryObservation } from "@/lib/salary/lookup-types";
+import { salaryLookupResultSchema, type SalaryLookupResult } from "@/lib/salary/lookup-types";
 import { jobLocationSchema, type JobLocation } from "@/lib/domain/types";
 
 import type { Executor } from "../executor";
@@ -38,6 +38,7 @@ export interface StoredSalaryLookup {
   id: number;
   lookupKey: string;
   jobId: number | null;
+  origin: { jobId: number; title: string } | null;
   result: SalaryLookupResult;
   provider: string | null;
   model: string | null;
@@ -45,21 +46,22 @@ export interface StoredSalaryLookup {
   expiresAt: Date;
 }
 
-const toStored = (row: SalaryLookupRow): StoredSalaryLookup | null => {
+const toStored = (row: SalaryLookupRow, origin: StoredSalaryLookup["origin"]): StoredSalaryLookup | null => {
   const parsed = salaryLookupResultSchema.safeParse(row.resultJson);
   if (!parsed.success) return null;
-  return { id: row.id, lookupKey: row.lookupKey, jobId: row.jobId, result: parsed.data, provider: row.provider, model: row.model, fetchedAt: row.fetchedAt, expiresAt: row.expiresAt };
+  return { id: row.id, lookupKey: row.lookupKey, jobId: row.jobId, origin, result: parsed.data, provider: row.provider, model: row.model, fetchedAt: row.fetchedAt, expiresAt: row.expiresAt };
 };
 
 /** The newest finished lookup of `lookupKey` made with `promptVersion` (expired or not; the caller compares `expiresAt`). */
 export async function findLatestSalaryLookup(db: Executor, input: { lookupKey: string; promptVersion: string }): Promise<StoredSalaryLookup | null> {
   const [row] = await db
-    .select()
+    .select({ lookup: salaryLookups, origin: { jobId: jobs.id, title: jobs.title } })
     .from(salaryLookups)
+    .leftJoin(jobs, eq(jobs.id, salaryLookups.jobId))
     .where(and(eq(salaryLookups.lookupKey, input.lookupKey), eq(salaryLookups.status, "done"), eq(salaryLookups.promptVersion, input.promptVersion)))
     .orderBy(desc(salaryLookups.fetchedAt), desc(salaryLookups.id))
     .limit(1);
-  return row ? toStored(row) : null;
+  return row ? toStored(row.lookup, row.origin) : null;
 }
 
 export interface SalaryLookupInsert {
@@ -97,19 +99,6 @@ export async function insertSalaryLookup(db: Executor, input: SalaryLookupInsert
     .returning({ id: salaryLookups.id });
   if (!row) throw new Error("insertSalaryLookup: insert returned no row");
   return row.id;
-}
-
-/** The benchmark bands of the newest finished lookup of each key fetched since `since`, with the currency they are in. */
-export async function listSalaryObservations(db: Executor, input: { since: Date }): Promise<Array<{ currency: string; observations: SalaryObservation[] }>> {
-  const rows = await db
-    .selectDistinctOn([salaryLookups.lookupKey], { result: salaryLookups.resultJson })
-    .from(salaryLookups)
-    .where(and(eq(salaryLookups.status, "done"), gte(salaryLookups.fetchedAt, input.since)))
-    .orderBy(salaryLookups.lookupKey, desc(salaryLookups.fetchedAt), desc(salaryLookups.id));
-  return rows.flatMap((row) => {
-    const parsed = salaryLookupResultSchema.safeParse(row.result);
-    return parsed.success ? [{ currency: parsed.data.query.currency, observations: parsed.data.observations }] : [];
-  });
 }
 
 // ---------------------------------------------------------------- requests

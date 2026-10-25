@@ -2878,10 +2878,6 @@
         "label": "最小样本",
         "hint": "岗位数少于这个数的组不做比较，卡片会退到更宽的组。"
       },
-      "salary_include_ai": {
-        "label": "AI 查询结果计入基准",
-        "hint": "查询里校验过的底薪数字（置信度中或高、有来源）会加入各组。卡片上分开显示其中有多少来自查询。"
-      },
       "quota_enabled": {
         "label": "启用用量上限",
         "hint": "关闭后不做任何限制，和以前一样。"
@@ -6169,6 +6165,7 @@
       "notReady": "薪资相关的数据表还不存在，请先运行数据库迁移。",
       "noCurrency": "你的市场没有设置基准货币，没法比较薪资。",
       "benchmarkOff": "设置里关闭了薪资基准，下面的比较可能是旧的。",
+      "staleAi": "旧的薪资对比含 AI 数字，已隐藏；打开薪资基准后，下一轮会重新计算。",
       "noFamily": "这个标题不属于任何岗位族，所以不和其他岗位比较。岗位族在 salary.yaml 里设置。",
       "notComputed": "薪资对比还没算出来，下一轮跑完后就会算。",
       "noGroup": "写明薪资的同类岗位太少（每个组都不到 {min} 个），暂时没法比较。",
@@ -6179,7 +6176,6 @@
         "family": "{family} · 所有级别 · 所有地点"
       },
       "sample": "样本 {n}",
-      "sampleSplit": "样本 {n}（JD {jd} · 查询 {ai}）",
       "median": "中位数 {amount}",
       "range": "多数岗位（P10 至 P90）：{low} 至 {high}",
       "rangeLabel": "P10 到 P90 的薪资分布，标出中位数和本岗位",
@@ -6216,9 +6212,14 @@
       "waitingHint": "可能需要几分钟。",
       "expired": "这个结果已超过 {days} 天，重新查询可得到新数字。",
       "meta": "{provider} · {model} · {when}",
-      "disclaimer": "AI 根据公开网页估算，不是这个岗位的事实。请核对来源。",
+      "disclaimer": "AI 根据公开网页估算，本应用没有核对这些数字和来源。它们不是这个岗位的事实，也不计入薪资基准和任何筛选。",
+      "scope": "按公司、岗位类型、级别和地点估计，同类岗位共用这一次查询，不是根据这条 JD。",
+      "origin": "这次查询是在另一条岗位上发起的：<link>{title}</link>",
+      "originDeleted": "发起这次查询的岗位已删除。",
+      "aiBadge": "AI 查询",
+      "unverified": "AI 估计（未核对）",
       "empty": "AI 没有找到这家公司可用的薪资数字。",
-      "confidenceLabel": "置信度",
+      "confidenceLabel": "AI 自评置信度",
       "confidence": {
         "low": "低",
         "medium": "中",
@@ -6247,8 +6248,8 @@
         "total": "总包（含奖金或股权）",
         "unknown": "口径不明"
       },
-      "sourcesHeading": "来源",
-      "otherSource": "其他来源",
+      "sourcesHeading": "AI 给出的来源（未核对）",
+      "otherSource": "不在薪资网站列表中",
       "sourceRef": "来源 {n}",
       "notesHeading": "备注",
       "dropped": "丢弃了 {n} 条（没有来源、链接不合格或数字不合理）。",
@@ -6283,7 +6284,7 @@
       "usage": "pnpm salary:benchmark [--json]\n\n用库里的岗位重算薪资基准，并打印各组。",
       "noCurrency": "市场没有设置基准货币，没有可比较的内容。",
       "disabled": "薪资基准已关闭（salary.yaml: benchmark.enabled），或者相关数据表不存在。",
-      "summary": "薪资基准（{currency}）：{groups} 个组，来自 {postings} 个岗位和 {ai} 个 AI 查询数字。"
+      "summary": "薪资基准（{currency}）：{groups} 个组，来自 {postings} 个岗位。"
     }
   },
   "mcp": {

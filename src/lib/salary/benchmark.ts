@@ -1,17 +1,15 @@
 /**
  * The salary benchmark. Postings of the window with a comparable annual figure (`annualBaseFigure`, the base
  * currency) are grouped by role family x seniority x place on four levels: city, country, family x country (any
- * seniority), family only. Groups below `min_sample` are not kept. Optionally checked AI lookup bands join as extra
- * figures (counted apart). The whole table is rebuilt after each pipeline step (cheap: a few thousand rows).
+ * seniority), family only. Only posting salaries count; groups below `min_sample` are not kept. The whole table is
+ * rebuilt after each pipeline step (cheap: a few thousand rows).
  */
 import type { ChannelLogger } from "@/lib/channels/types";
 import type { SalaryConfig } from "@/lib/config";
 import type { Executor } from "@/lib/db/executor";
 import { listSalaryFigures, replaceSalaryBenchmarks, salaryTablesReady, type SalaryBenchmarkInput, type SalaryFigureRow } from "@/lib/db/repos/salary-benchmarks";
-import { listSalaryObservations } from "@/lib/db/repos/salary-lookups";
 
 import { compileFamilies, type FamilyMatcher } from "./families";
-import type { SalaryObservation } from "./lookup-types";
 import { quantile, quantilesOf } from "./percentile";
 
 /** Any seniority / any place. */
@@ -26,7 +24,6 @@ interface Figure {
   city: string | null;
   country: string | null;
   value: number;
-  ai: boolean;
 }
 
 /** The group keys one figure counts in (an unknown seniority only in the "any seniority" levels). */
@@ -43,7 +40,6 @@ export function groupKeys(figure: Pick<Figure, "family" | "seniority" | "city" |
 /** Group, cut at `minSample`, and summarise (pure; the rows it returns are what the table holds). */
 export function buildBenchmarkRows(input: {
   postings: readonly SalaryFigureRow[];
-  observations: readonly SalaryObservation[];
   families: FamilyMatcher;
   currency: string;
   minSample: number;
@@ -52,23 +48,18 @@ export function buildBenchmarkRows(input: {
   for (const row of input.postings) {
     const family = input.families.familyOf(row.title);
     if (family === null) continue;
-    figures.push({ family, seniority: row.seniority.toLowerCase(), city: row.location?.city ?? null, country: row.location?.countryCode ?? null, value: row.figure, ai: false });
+    figures.push({ family, seniority: row.seniority.toLowerCase(), city: row.location?.city ?? null, country: row.location?.countryCode ?? null, value: row.figure });
   }
-  for (const observation of input.observations) {
-    if (!input.families.families.some((family) => family.id === observation.family)) continue;
-    figures.push({ family: observation.family, seniority: observation.seniority, city: observation.city, country: observation.country, value: observation.figure, ai: true });
-  }
-  const groups = new Map<string, { family: string; seniority: string; geoLevel: GeoLevel; geoKey: string; values: number[]; ai: number }>();
+  const groups = new Map<string, { family: string; seniority: string; geoLevel: GeoLevel; geoKey: string; values: number[] }>();
   for (const figure of figures) {
     for (const key of groupKeys(figure)) {
       const id = `${figure.family}\u0000${key.seniority}\u0000${key.geoLevel}\u0000${key.geoKey}`;
       let group = groups.get(id);
       if (!group) {
-        group = { family: figure.family, ...key, values: [], ai: 0 };
+        group = { family: figure.family, ...key, values: [] };
         groups.set(id, group);
       }
       group.values.push(figure.value);
-      if (figure.ai) group.ai += 1;
     }
   }
   const rows: SalaryBenchmarkInput[] = [];
@@ -82,7 +73,7 @@ export function buildBenchmarkRows(input: {
       geoKey: group.geoKey,
       currency: input.currency,
       n: sorted.length,
-      nAi: group.ai,
+      nAi: 0,
       median: quantile(sorted, 0.5),
       quantiles: quantilesOf(sorted).map((value) => Math.round(value)),
     });
@@ -93,7 +84,6 @@ export function buildBenchmarkRows(input: {
 export interface BenchmarkRefreshResult {
   groups: number;
   postings: number;
-  aiObservations: number;
   currency: string;
 }
 
@@ -108,9 +98,8 @@ export async function refreshSalaryBenchmark(db: Executor, input: { config: Sala
   const now = input.now ?? new Date();
   const since = new Date(now.getTime() - benchmark.window_days * 86_400_000);
   const postings = await listSalaryFigures(db, { currency: input.currency, since });
-  const observations = benchmark.include_ai_lookups ? (await listSalaryObservations(db, { since })).filter((o) => o.currency === input.currency).flatMap((o) => o.observations) : [];
   const families = compileFamilies(input.config.role_families);
-  const rows = buildBenchmarkRows({ postings, observations, families, currency: input.currency, minSample: benchmark.min_sample });
+  const rows = buildBenchmarkRows({ postings, families, currency: input.currency, minSample: benchmark.min_sample });
   await replaceSalaryBenchmarks(db, rows, now);
-  return { groups: rows.length, postings: postings.length, aiObservations: observations.length, currency: input.currency };
+  return { groups: rows.length, postings: postings.length, currency: input.currency };
 }

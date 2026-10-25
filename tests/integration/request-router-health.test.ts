@@ -35,7 +35,7 @@ const translated = JSON.stringify({ translation: "## 职位\n\n加入我们的�
 /** Built here: the test never depends on the shipped salary.yaml. */
 const salary = (): SalaryConfig =>
   salarySchema.parse({
-    benchmark: { enabled: true, window_days: 365, min_sample: 3, include_ai_lookups: false },
+    benchmark: { enabled: true, window_days: 365, min_sample: 3 },
     role_families: [{ id: "ml_engineer", label: { en: "ML engineer" }, patterns: ["\\b(?:ml|machine learning|ai)\\s+engineer\\b"] }],
     deep_links: [],
     lookup: { enabled: true, ttl_days: 30, max_per_day: 3, timeout_seconds: 60, max_searches: 4, allowed_fetch_domains: ["levels.fyi"], sanity_annual: { min: 5000, max: 2000000 }, unconvertible_max_annual: 100_000_000_000, web_search_usd: 0.01 },

@@ -79,7 +79,7 @@ function Cap({ children, id }: { children: ReactNode; id?: string }) {
 
 /**
  * The "Salary lookup" card: a button that asks the ai-worker to search the web for this company's salaries (off by
- * default, the one task allowed to reach the web), and the checked result: the company's level, this role's band and
+ * default, the one task allowed to reach the web), and the unverified estimate: the company's level, this role's band and
  * related roles with their place in the benchmark group, the sources, the confidence and who answered. Every state has its
  * own `data-state`.
  */
@@ -314,6 +314,7 @@ export function SalaryLookupCard(props: SalaryLookupCardProps) {
 }
 
 function LookupResult({
+  jobId,
   latest,
   currency,
   groupQuantiles,
@@ -329,7 +330,7 @@ function LookupResult({
   const tSeniority = useTranslations("salary.seniority");
   const format = useFormatter();
   const locale = useAppLocale();
-  const { result } = latest;
+  const { result, origin } = latest;
   const money = (value: number, cur: string = currency): string => formatSalary({ min: value, max: value, currency: cur }, { locale }) ?? "";
   const when = format.dateTime(new Date(latest.fetchedAt), { dateStyle: "medium", timeStyle: "short", timeZone });
   const meta = [latest.provider, latest.model, when].filter((part): part is string => part !== null && part !== "").join(" · ");
@@ -360,6 +361,7 @@ function LookupResult({
           {item.title}
           {sourceRefs(item.sources)}
         </span>
+        <span className="text-ink-2 text-body-sm" data-testid={`${testId}-unverified`}>{t("unverified")}</span>
         <span className="text-body-sm">
           <span className="font-mono">{range ?? "–"}</span>
           {median ? <span className="text-ink-2"> · {t("bandMedian", { amount: median })}</span> : null}
@@ -382,18 +384,19 @@ function LookupResult({
   };
 
   return (
-    <div className={cn("flex flex-col gap-4", busy && "opacity-60")} data-testid="salary-lookup-result" aria-busy={busy} data-confidence={result.confidence}>
+    <div className={cn("flex min-w-0 flex-col gap-4 [overflow-wrap:anywhere]", busy && "opacity-60")} data-testid="salary-lookup-result" aria-busy={busy} data-confidence={result.confidence}>
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex min-w-0 flex-col gap-1.5">
           <p className="text-data text-ink-3 font-mono [overflow-wrap:anywhere]" data-testid="salary-lookup-meta">
             {meta}
           </p>
           <div className="flex flex-wrap gap-1.5">
-            <Badge variant={result.confidence === "low" ? "gate-warn" : "gate-note"} data-testid="salary-lookup-confidence">
+            <Badge variant="gate-note" data-testid="salary-lookup-ai-badge">{t("aiBadge")}</Badge>
+            <Badge variant={result.confidence === "low" ? "gate-warn" : "gate-note"} className="max-w-full whitespace-normal" data-testid="salary-lookup-confidence">
               {t("confidenceLabel")}: {t(`confidence.${result.confidence}`)}
             </Badge>
             {latest.expired ? (
-              <Badge variant="gate-note" data-testid="salary-lookup-expired">
+              <Badge variant="gate-note" className="max-w-full whitespace-normal" data-testid="salary-lookup-expired">
                 {t("expired", { days: ttlDays })}
               </Badge>
             ) : null}
@@ -407,11 +410,23 @@ function LookupResult({
       <p className="border-border bg-soft rounded-card text-body-sm border-[1.5px] px-3 py-2" data-testid="salary-lookup-disclaimer">
         {t("disclaimer")}
       </p>
+      <p className="text-ink-2 text-body-sm" data-testid="salary-lookup-scope">{t("scope")}</p>
+      {origin?.jobId !== jobId ? (
+        <p className="text-ink-2 text-body-sm" data-testid="salary-lookup-origin">
+          {origin ? (
+            t.rich("origin", {
+              title: origin.title,
+              link: (chunks) => <Link href={`/jobs/${origin.jobId}`} className={INK_LINK}>{chunks}</Link>,
+            })
+          ) : t("originDeleted")}
+        </p>
+      ) : null}
 
       {!hasFigures ? <p className="text-muted-foreground">{t("empty")}</p> : null}
 
       <section className="flex flex-col gap-1" aria-labelledby="salary-lookup-company" data-testid="salary-lookup-company" data-level={result.companyLevel.level}>
         <Cap id="salary-lookup-company">{t("companyHeading")}</Cap>
+        <p className="text-ink-2 text-body-sm" data-testid="salary-lookup-company-unverified">{t("unverified")}</p>
         <p className="font-semibold">
           {t(`companyLevel.${result.companyLevel.level}`)}
           {result.companyLevel.median !== null ? <span className="text-ink-2 font-normal"> · {t("companyMedian", { amount: money(result.companyLevel.median) })}</span> : null}
@@ -477,7 +492,7 @@ function SourceItem({ source, index }: { source: SalarySource; index: number }) 
             <span className="font-mono">{source.host}</span>
           )}
           {!source.trusted ? (
-            <Badge variant="gate-note" data-testid="salary-lookup-other-source">
+            <Badge variant="gate-note" className="max-w-full whitespace-normal" data-testid="salary-lookup-other-source">
               {t("otherSource")}
             </Badge>
           ) : null}

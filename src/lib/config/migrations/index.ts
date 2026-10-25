@@ -12,6 +12,7 @@ import { notify002 } from "./notify/002-high-value";
 import { pipeline002 } from "./pipeline/002-market-packs";
 import { pipeline003 } from "./pipeline/003-arbeitnow-priority";
 import { preferences002 } from "./preferences/002-market";
+import { salary002 } from "./salary/002-drop-include-ai-lookups";
 import { search002 } from "./search/002-market";
 import { sources002 } from "./sources/002-market";
 import { sources003 } from "./sources/003-arbeitnow";
@@ -30,4 +31,5 @@ export const CONFIG_MIGRATIONS: Readonly<Partial<Record<ConfigName, readonly Con
   pipeline: [pipeline002, pipeline003],
   ai: [ai002],
   insights: [insights002],
+  salary: [salary002],
 };

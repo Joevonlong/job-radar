@@ -1,7 +1,7 @@
 /**
  * Development data: the salary benchmark of the seeded jobs (rebuilt as the pipeline step would) and one fictional
- * salary lookup ("Forward Deployed Engineer" at Quillfeather Labs, provider "seed"), so the job page shows both cards
- * without any AI. Every company, figure and source here is made up.
+ * salary lookup shared with an earlier "Forward Deployed Engineer" posting at Quillfeather Labs (provider "seed"), so
+ * the job page shows both cards without any AI. Every company, figure and source here is made up.
  */
 import { and, eq } from "drizzle-orm";
 
@@ -13,11 +13,12 @@ import { salaryLookupKey } from "@/lib/salary/lookup";
 import type { SalaryLookupResult } from "@/lib/salary/lookup-types";
 
 import type { Executor } from "./executor";
-import { getJobForSalaryLookup, insertSalaryLookup } from "./repos/salary-lookups";
+import { getJobForSalaryLookup, insertSalaryLookup, type JobForSalaryLookup } from "./repos/salary-lookups";
 import { salaryTablesReady } from "./repos/salary-benchmarks";
-import { companies, jobs, salaryLookups } from "./schema";
+import { companies, jobs, jobSources, rawPostings, salaryLookups } from "./schema";
 
 const SEED_PROVIDER = "seed";
+const ORIGIN_EXTERNAL_ID = "seed:salary-lookup-origin";
 
 function readSalaryConfig(): SalaryConfig | null {
   try {
@@ -26,6 +27,28 @@ function readSalaryConfig(): SalaryConfig | null {
     if (error instanceof ConfigError) return null;
     throw error;
   }
+}
+
+/** A closed posting with the same lookup key. Its seed-prefixed source lets a full reseed remove it as usual. */
+async function seedLookupOrigin(db: Executor, job: JobForSalaryLookup, at: Date): Promise<number> {
+  const [existing] = await db.select({ id: jobSources.jobId }).from(jobSources)
+    .innerJoin(rawPostings, eq(rawPostings.id, jobSources.rawPostingId))
+    .where(eq(rawPostings.externalId, ORIGIN_EXTERNAL_ID)).limit(1);
+  if (existing) return existing.id;
+  return db.transaction(async (tx) => {
+    const [origin] = await tx.insert(jobs).values({
+      companyId: job.companyId, title: job.title, titleNorm: job.titleNorm, seniority: job.seniority,
+      locationsJson: job.location ? [job.location] : [], status: "closed", firstSeenAt: at, lastSeenAt: at,
+    }).returning({ id: jobs.id });
+    const url = "https://greenhouse.example/jobs/quillfeather-labs/salary-lookup-origin";
+    const [raw] = await tx.insert(rawPostings).values({
+      channelId: "greenhouse", externalId: ORIGIN_EXTERNAL_ID, url,
+      payloadJson: { title: job.title }, parseStatus: "parsed", fetchedAt: at,
+    }).returning({ id: rawPostings.id });
+    if (!origin || !raw) throw new Error("seed: salary lookup origin was not created");
+    await tx.insert(jobSources).values({ jobId: origin.id, rawPostingId: raw.id, channelId: "greenhouse", url, firstSeenAt: at });
+    return origin.id;
+  });
 }
 
 /** The fictional lookup of the seeded "Forward Deployed Engineer" (figures in the market's base currency). */
@@ -70,16 +93,17 @@ export async function seedSalary(db: Executor, input: { now: Date; currency: str
     .select({ id: jobs.id })
     .from(jobs)
     .innerJoin(companies, eq(companies.id, jobs.companyId))
-    .where(and(eq(companies.name, "Quillfeather Labs"), eq(jobs.title, "Forward Deployed Engineer")))
+    .where(and(eq(companies.name, "Quillfeather Labs"), eq(jobs.title, "Forward Deployed Engineer"), eq(jobs.status, "active")))
     .limit(1);
   const job = row ? await getJobForSalaryLookup(db, row.id) : null;
   if (!job) return { groups: benchmark?.groups ?? 0, lookups: 0 };
   const family = compileFamilies(config.role_families).familyOf(job.title);
   const result = seedLookupResult({ company: job.company, title: job.title, city: job.location?.city ?? null, country: job.location?.countryCode ?? null, seniority: job.seniority, currency: input.currency });
   const fetchedAt = new Date(input.now.getTime() - 2 * 86_400_000);
+  const originId = await seedLookupOrigin(db, job, fetchedAt);
   await insertSalaryLookup(db, {
     companyId: job.companyId,
-    jobId: job.id,
+    jobId: originId,
     lookupKey: salaryLookupKey(job, family),
     status: "done",
     result,
