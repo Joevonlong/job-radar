@@ -9,7 +9,7 @@ import { ChannelRegistry } from "@/lib/channels/registry";
 import type { SearchQuery } from "@/lib/channels/types";
 import type { SearchConfig } from "@/lib/config";
 import { runCycle } from "@/lib/cycle/run-cycle";
-import { closeDb, getDb, getMonthUsage, listRunsForCycle } from "@/lib/db";
+import { closeDb, getDb, getMonthUsage, getQueryRunHistory, listRunsForCycle, schema, type RunStatus } from "@/lib/db";
 import { runMigrations } from "@/lib/db/migrate";
 import { addMonthUsage, upsertChannelRows } from "@/lib/db/repos/channels";
 
@@ -171,5 +171,74 @@ describe("query rotation across cycles", () => {
     expect((await getMonthUsage(getDb(), MONTH)).get("jsearch")).toEqual({ records: 7, usd: 0 });
     expect(secondRuns.map((row) => row.queryHash)).toEqual(queries.map((query) => query.id));
     expect(calls).toEqual(requestQueries(queries));
+  });
+});
+
+describe("query run history", () => {
+  const channelId = "history-fixture";
+  const firstSeenAt = new Date("2026-01-01T00:00:00Z");
+  const attemptAt = new Date("2026-01-02T00:00:00Z");
+  const refusedAt = new Date("2026-01-03T00:00:00Z");
+  const cases: { name: string; status: RunStatus; interrupted?: boolean; error?: string; fetched?: number; usageUnits?: number; cost?: number; turn: boolean; covered: boolean }[] = [
+    { name: "succeeded", status: "succeeded", turn: true, covered: true },
+    { name: "partial", status: "partial", turn: true, covered: true },
+    { name: "interrupted", status: "partial", interrupted: true, turn: true, covered: false },
+    { name: "failed", status: "failed", turn: true, covered: false },
+    { name: "cancelled", status: "failed", error: "cancelled", turn: true, covered: false },
+    { name: "running", status: "running", turn: true, covered: false },
+    { name: "fetched", status: "skipped", fetched: 1, turn: true, covered: true },
+    { name: "usage", status: "skipped", usageUnits: 1, turn: true, covered: true },
+    { name: "cost", status: "skipped", cost: 0.001, turn: true, covered: true },
+    { name: "refused", status: "skipped", turn: false, covered: false },
+    { name: "summary", status: "skipped", error: "no available channel for fixture; 3 queries skipped", turn: false, covered: false },
+  ];
+
+  beforeEach(async () => {
+    await upsertChannelRows(getDb(), [{ id: channelId, family: "ats", kind: "api", enabled: true }]);
+  });
+
+  it.each(cases)("aggregates turn and coverage separately for $name", async ({ name, turn, covered, ...attempt }) => {
+    await getDb().insert(schema.runs).values([
+      { channelId, queryHash: name, status: "skipped", startedAt: firstSeenAt },
+      { channelId, queryHash: name, startedAt: attemptAt, ...attempt },
+      { channelId, queryHash: name, status: "skipped", startedAt: refusedAt },
+    ]);
+    expect(await getQueryRunHistory(getDb(), { channelIds: [channelId], queryHashes: [name] })).toEqual([{
+      channelId, queryHash: name, firstSeenAt,
+      lastTurnAt: turn ? attemptAt : null,
+      lastCoveredAt: covered ? attemptAt : null,
+    }]);
+  });
+
+  it("retains earlier coverage after a newer failure and reads rows older than forty days", async () => {
+    const old = new Date(NOW.getTime() - 40 * 24 * 3_600_000);
+    await getDb().insert(schema.runs).values([
+      { channelId, queryHash: "old", status: "succeeded", startedAt: old },
+      { channelId, queryHash: "latest-failed", status: "succeeded", startedAt: firstSeenAt },
+      { channelId, queryHash: "latest-failed", status: "failed", startedAt: attemptAt },
+    ]);
+    const rows = await getQueryRunHistory(getDb(), { channelIds: [channelId], queryHashes: ["old", "latest-failed"] });
+    expect(rows).toHaveLength(2);
+    expect(rows.find((row) => row.queryHash === "old")).toEqual({ channelId, queryHash: "old", lastTurnAt: old, lastCoveredAt: old, firstSeenAt: old });
+    expect(rows.find((row) => row.queryHash === "latest-failed")).toEqual({ channelId, queryHash: "latest-failed", lastTurnAt: attemptAt, lastCoveredAt: firstSeenAt, firstSeenAt });
+  });
+
+  it("only reads the requested channels and query hashes, excluding null summary hashes", async () => {
+    await upsertChannelRows(getDb(), [{ id: "outside", family: "ats", kind: "api", enabled: true }]);
+    await getDb().insert(schema.runs).values([
+      { channelId, queryHash: "included", status: "succeeded", startedAt: firstSeenAt },
+      { channelId, queryHash: "deleted", status: "succeeded", startedAt: firstSeenAt },
+      { channelId: "outside", queryHash: "included", status: "succeeded", startedAt: firstSeenAt },
+      { channelId, queryHash: null, status: "skipped", startedAt: firstSeenAt },
+    ]);
+    expect(await getQueryRunHistory(getDb(), { channelIds: [channelId], queryHashes: ["included"] })).toEqual([
+      { channelId, queryHash: "included", lastTurnAt: firstSeenAt, lastCoveredAt: firstSeenAt, firstSeenAt },
+    ]);
+  });
+
+  it("does not issue SQL when either argument is empty", async () => {
+    const noSql = new Proxy(getDb(), { get() { throw new Error("SQL must not run"); } });
+    await expect(getQueryRunHistory(noSql, { channelIds: [], queryHashes: ["query"] })).resolves.toEqual([]);
+    await expect(getQueryRunHistory(noSql, { channelIds: [channelId], queryHashes: [] })).resolves.toEqual([]);
   });
 });

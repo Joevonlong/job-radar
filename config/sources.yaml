@@ -28,6 +28,8 @@ circuit_breaker:
 # Collection step: number of channels collected in parallel (the LinkedIn cascade counts as one); queries within a channel always run sequentially
 collect:
   concurrency: 3
+  # query_rotation defaults to true: start each cycle with the queries waiting longest.
+  # Set query_rotation: false to run queries in search.yaml order every cycle.
 
 # Defaults for a channel's ctx.http: per-request timeout, retry count (network errors / 5xx / 429, honoring Retry-After), start and cap of exponential backoff
 http:

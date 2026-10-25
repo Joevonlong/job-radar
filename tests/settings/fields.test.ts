@@ -10,6 +10,7 @@ import { SETTINGS_FILES, SETTINGS_FORMS, type SettingsForm } from "@/lib/setting
 
 import en from "../../messages/en.json";
 import zh from "../../messages/zh.json";
+import { shippedYaml } from "../config/helpers";
 import { shippedConfig } from "./helpers";
 
 /** Every path of the config tree that holds a value (arrays and scalars are leaves; so is an empty object such as `tasks.score: {}`, which its optional `order` field covers). */
@@ -24,7 +25,8 @@ function leafPaths(value: unknown, prefix = ""): string[] {
 
 describe("the settings form covers the config files", () => {
   it.each(SETTINGS_FORMS)("%s: every key in the shipped YAML is a field or deliberately hidden", (tab) => {
-    const config = shippedConfig(tab);
+    // Schema-only defaults need not be form fields; cover the keys actually written in the YAML.
+    const config = shippedYaml(SETTINGS_FILES[tab]);
     const paths = fieldsOf(tab).map((def) => def.path);
     const hidden = HIDDEN_PATHS[tab];
     const uncovered = leafPaths(config).filter(

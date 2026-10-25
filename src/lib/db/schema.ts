@@ -127,6 +127,15 @@ export const runs = pgTable(
      * or a dead runner cut the whole cycle off: `cycles.summary_json.aborted` / `orphaned`, see `repos/cycles.ts`).
      */
     interrupted: boolean("interrupted").notNull().default(false),
+    /**
+     * Usage this attempt recorded on the channel budget (budget.attempt.records): requests for JSearch,
+     * records for Bright Data / Apify, 0 for free channels. Distinguishes a pre-request refusal from a stop that spent quota.
+     */
+    usageUnits: integer("usage_units").notNull().default(0),
+    /** Posting window requested from the channel, in hours; null for no-available-channel summaries and older rows. */
+    windowHours: integer("window_hours"),
+    /** Wider than the base window (catch-up or backfill); such a run never counts as evidence a job closed. Always false for now. */
+    windowExtended: boolean("window_extended").notNull().default(false),
   },
   (t) => [index("runs_cycle_id_idx").on(t.cycleId), index("runs_channel_started_idx").on(t.channelId, t.startedAt)],
 );

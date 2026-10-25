@@ -60,6 +60,7 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Query rotation:** collection starts with the queries waiting longest on its starting channel, so limited budgets reach the tail across cycles. `collect.query_rotation: false` restores config order; dry runs and history read failures use config order. Run records include usage and requested windows, and completed units report rotation summaries.
 - **Companies overview (`/companies`):** search and page through companies with open jobs, sort by job count, top score
   or latest first seen, open their jobs, and watch or unwatch with the Interests page kept in sync. Phone cards and
   sortable desktop headers share the URL state. Company exclusions link to the profile field; database-only watch

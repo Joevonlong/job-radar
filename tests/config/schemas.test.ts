@@ -138,7 +138,7 @@ describe("channels", () => {
     delete raw.collect;
     delete raw.http;
     const parsed = configRegistry.channels.schema.parse(raw);
-    expect(parsed.collect).toEqual({ concurrency: 3 });
+    expect(parsed.collect).toEqual({ concurrency: 3, query_rotation: true });
     expect(parsed.http).toEqual({ timeout_ms: 30000, max_retries: 3, backoff_base_ms: 1000, backoff_max_ms: 30000 });
   });
 

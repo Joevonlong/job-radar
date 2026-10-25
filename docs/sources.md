@@ -27,6 +27,26 @@ Entry ids: a channel is its channel name (`greenhouse`, `gmail-alerts`, `linkedi
 
 Keys under `registry:` can only be changed in the YAML: `window_days` (stats window, 7 days), `board_failing_after` (how many consecutive failures count as failing, 2), `board_stale_hours` (how long without a check counts as degraded, 48), `import_max_bytes`, `board_page_urls`, and optionally `candidates_page_size` (how many "discovered boards" are listed at once; 10 if omitted; deliberately left out of the shipped file, because a default written there would be carried into the file on every save).
 
+### Query rotation
+
+`collect.query_rotation` defaults to `true`. Each cycle starts with queries that have never had a turn on the unit's
+starting channel, then those whose last turn was longest ago. Ties keep `search.yaml` order. Set it to `false` in your
+user `sources.yaml` to use config order every cycle; remove the key before rolling back to code that does not know it.
+
+A turn is any run except a skipped run with no postings, no recorded usage and no cost. Failures, cancellations and
+unfinished runs count; so does a budget stop that spent quota or money even when it returned nothing. A refusal before
+any request does not advance the order. History has no age cutoff. New or changed queries start at the front.
+
+The starting channel is the first currently available channel in the selected cascade, or the single channel of an
+independent unit. With unchanged queries and the same starting channel, at most N−1 other turns fall between two turns
+of one query. Only that starting channel has this fairness guarantee; later cascade channels serve the remaining queries.
+A unit that can run nothing keeps its order. Single-query scan units are unaffected.
+
+Each completed unit emits a `query rotation` log and a `steps[collect].result.rotation` summary: starting channel, query
+count, served/failed outcomes (`reached`), never-run queries, oldest known wait and query, and the largest requested window.
+Unknown waits are null. Windows stay at their configured base values. Dry runs use config order and mark history unavailable;
+the CLI says so. A history read failure warns once and uses the same fallback. Aborted or throwing units have no rotation summary.
+
 ## 3. How the seven statuses are decided
 
 | Status | Meaning |

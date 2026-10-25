@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import { registerFixtureChannel } from "@/lib/channels/fixture";
 import { ChannelRegistry } from "@/lib/channels/registry";
+import { buildQueries } from "@/lib/channels/query";
 import type { CascadeSpec } from "@/lib/channels/cascade";
 import { runCycle } from "@/lib/cycle/run-cycle";
 import { mapWithConcurrency } from "@/lib/cycle/collect";
@@ -32,6 +33,11 @@ describe("dry run", () => {
     expect(report).toMatchObject({ fetched: 45, parsed: 45, parseFailed: 0 });
     expect(report?.sampleTitles).toEqual(["Applied AI Engineer", "Forward Deployed Engineer", "KI-Entwickler (m/w/d)"]);
     expect(collect.channels.fixture).toMatchObject({ runs: 9, succeeded: 9, failed: 0, inserted: 0 });
+    expect(collect.served.map((entry) => entry.queryId)).toEqual(buildQueries(config().search, "manual").map((query) => query.id));
+    expect(collect.rotation.fixture).toEqual({
+      sortChannel: "fixture", queries: 9, reached: 9, neverRun: 0, oldestWaitHours: null, oldestWaiting: null,
+      stretched: 0, maxWindowHours: 24, capped: 0, historyUnavailable: true,
+    });
     expect(result.summary.steps.map((s) => [s.name, s.status])).toEqual([
       ["collect", "ok"],
       ["pipeline", "skipped"],
@@ -220,6 +226,7 @@ describe("cascade inside a cycle", () => {
     const collect = collectOf(result);
     expect(collect.served).toEqual([expect.objectContaining({ channelId: null, status: "skipped" })]);
     expect(collect.channels["fx-1"]).toMatchObject({ skipped: 1, runs: 1, succeeded: 0 });
+    expect(collect.rotation.linkedin).toMatchObject({ sortChannel: null, reached: 0, maxWindowHours: null, historyUnavailable: true });
     expect(result.status).toBe("failed");
   });
 
