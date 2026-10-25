@@ -6,7 +6,7 @@
 #    level and the role's band, with sources. Only the company name, the job title, city, country and seniority are sent,
 #    never your profile or the JD. Costs tokens (and, with the Anthropic API, a fee per search).
 # Takes effect about 5 seconds after saving (runner / ai-worker hot-reload; the web app rereads this file each time a job page opens).
-config_version: 1
+config_version: 2
 
 benchmark:
   # false: the benchmark is no longer rebuilt after each run (the last one stays visible)
@@ -15,9 +15,6 @@ benchmark:
   window_days: 365
   # A group with fewer salaries than this is not kept; the job page then uses a wider group (city -> country -> any seniority -> family only)
   min_sample: 5
-  # Also count the bands of finished AI lookups (base salary, confidence medium or high, with a source, matching place). Off by default:
-  # AI estimates are kept apart from what postings state; the job page shows the two sample counts separately when on.
-  include_ai_lookups: false
 
 # Role families: the first family whose pattern matches the job title wins; a title that matches none is not part of the benchmark.
 # Patterns are regular expressions, case-insensitive. Add the words of your market's language to each family (German ones are included).

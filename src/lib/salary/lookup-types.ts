@@ -1,4 +1,4 @@
-/** The stored shape of a checked salary lookup (`salary_lookups.result_json`), validated again when it is read. */
+/** The stored shape of a salary lookup (`salary_lookups.result_json`), validated again when it is read. */
 import { z } from "zod";
 
 const nullableNumber = z.number().nullable();
@@ -20,7 +20,7 @@ export const salarySourceSchema = z.object({
   site: z.string(),
   title: z.string(),
   excerpt: z.string(),
-  /** The host is on `lookup.allowed_fetch_domains`; false = shown as "other source". */
+  /** The host is in `lookup.allowed_fetch_domains`; this does not mean the page was opened or the figure checked. */
   trusted: z.boolean(),
 });
 export type SalarySource = z.infer<typeof salarySourceSchema>;
@@ -66,7 +66,7 @@ export const salaryLookupResultSchema = z.object({
   notes: z.string(),
   /** Items the checks removed (bad URL, no source, implausible figure). */
   dropped: z.number().int().nonnegative(),
-  /** The bands that may enter the benchmark (`benchmark.include_ai_lookups`). */
-  observations: z.array(salaryObservationSchema),
+  /** Old rows may carry values, unused; new rows are always empty so rolled-back code never counts new lookups. */
+  observations: z.array(salaryObservationSchema).default([]),
 });
 export type SalaryLookupResult = z.infer<typeof salaryLookupResultSchema>;

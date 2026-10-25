@@ -8,7 +8,7 @@ import type { AiProviderId } from "@/lib/ai/types";
 import type { AiConfig, SalaryConfig } from "@/lib/config";
 import { readInitialSalaryRequest, salaryLookupProviders, salaryLookupUnrestricted, type InitialSalaryRequest } from "@/lib/control/salary-request";
 import type { Db } from "@/lib/db/client";
-import { countSalaryLookupRequests, findLatestSalaryLookup, findSalaryBenchmarks, getJobForSalaryLookup, listCompanySalaryFigures, salaryBenchmarkRefreshedAt, salaryTablesReady, type SalaryBenchmarkRow } from "@/lib/db/repos";
+import { countSalaryLookupRequests, findLatestSalaryLookup, findSalaryBenchmarks, getJobForSalaryLookup, listCompanySalaryFigures, salaryBenchmarkHasAiRows, salaryBenchmarkRefreshedAt, salaryTablesReady, type SalaryBenchmarkRow } from "@/lib/db/repos";
 
 import { ANY, normCity } from "./benchmark";
 import { compileFamilies } from "./families";
@@ -28,13 +28,13 @@ export interface BenchmarkGroupView {
   /** The city as the posting names it, the ISO country code, or null (every place). */
   place: string | null;
   n: number;
-  nAi: number;
   median: number;
   quantiles: number[];
 }
 
 export interface SalaryLookupView {
   id: number;
+  origin: { jobId: number; title: string } | null;
   result: SalaryLookupResult;
   provider: string | null;
   model: string | null;
@@ -55,7 +55,8 @@ export interface SalaryContext {
   position: PercentilePosition | null;
   company: { count: number; median: number | null; minSample: number } | null;
   links: DeepLink[];
-  includeAi: boolean;
+  /** The stored benchmark contains AI figures and is hidden until it is rebuilt. */
+  staleAi: boolean;
   /** `benchmark.enabled`: when off the table is not rebuilt any more (the card says the comparison may be old). */
   benchmarkEnabled: boolean;
   /** Whether the benchmark was ever rebuilt (false right after an upgrade, until the next cycle). */
@@ -108,13 +109,14 @@ export async function getSalaryContext(
     position: null,
     company: null,
     links: input.salary ? buildDeepLinks(input.salary.deep_links, { company: job.company, title: job.title, city: job.location?.city ?? null, country: job.location?.countryCode ?? null }) : [],
-    includeAi: false,
+    staleAi: false,
     benchmarkEnabled: input.salary?.benchmark.enabled ?? false,
     benchmarkComputed: false,
     lookup: { availability, unrestricted: false, providers: [], latest: null, initialRequest: null, usedToday: 0, maxPerDay: input.salary?.lookup.max_per_day ?? 0, ttlDays: input.salary?.lookup.ttl_days ?? 0 },
   });
   if (!input.salary) return empty("config_error", "config_error");
   if (!(await salaryTablesReady(db))) return empty("not_ready", "not_ready");
+  const staleAi = await salaryBenchmarkHasAiRows(db);
   const salary = input.salary;
   const families = compileFamilies(salary.role_families);
   const familyId = families.familyOf(job.title);
@@ -123,7 +125,7 @@ export async function getSalaryContext(
 
   let group: BenchmarkGroupView | null = null;
   let position: PercentilePosition | null = null;
-  if (familyId !== null && input.currency !== "") {
+  if (!staleAi && familyId !== null && input.currency !== "") {
     const seniority = job.seniority.toLowerCase();
     const rows = await findSalaryBenchmarks(db, { family: familyId, seniorities: [seniority, ANY], currency: input.currency });
     const picked = pickGroup(rows, { seniority, city, country });
@@ -134,7 +136,6 @@ export async function getSalaryContext(
         seniority: picked.row.seniority === ANY ? null : picked.row.seniority,
         place: picked.level === "city" ? city : picked.level === "family" ? null : (country?.toUpperCase() ?? null),
         n: picked.row.n,
-        nAi: picked.row.nAi,
         median: picked.row.median,
         quantiles,
       };
@@ -152,7 +153,7 @@ export async function getSalaryContext(
   const lookupKey = salaryLookupKey(job, familyId);
   const stored = await findLatestSalaryLookup(db, { lookupKey, promptVersion: SALARY_PROMPT_VERSION });
   const latest: SalaryLookupView | null = stored
-    ? { id: stored.id, result: stored.result, provider: stored.provider, model: stored.model, fetchedAt: stored.fetchedAt.toISOString(), expired: stored.expiresAt <= now }
+    ? { id: stored.id, origin: stored.origin, result: stored.result, provider: stored.provider, model: stored.model, fetchedAt: stored.fetchedAt.toISOString(), expired: stored.expiresAt <= now }
     : null;
   const initialRequest = availability === "enabled" ? await readInitialSalaryRequest(db, { jobId: job.id, lookupKey, fetchedAt: stored?.fetchedAt ?? null }) : null;
   return {
@@ -165,9 +166,9 @@ export async function getSalaryContext(
     position,
     company,
     links: buildDeepLinks(salary.deep_links, { company: job.company, title: job.title, city, country }),
-    includeAi: salary.benchmark.include_ai_lookups,
+    staleAi,
     benchmarkEnabled: salary.benchmark.enabled,
-    benchmarkComputed: (await salaryBenchmarkRefreshedAt(db)) !== null,
+    benchmarkComputed: !staleAi && (await salaryBenchmarkRefreshedAt(db)) !== null,
     lookup: {
       availability,
       unrestricted: input.ai ? salaryLookupUnrestricted(input.ai) : false,

@@ -61,11 +61,6 @@ export const salarySchema = z.strictObject({
     window_days: positiveInt,
     /** A group (family x seniority x place) with fewer figures than this is not stored; the card falls back to a wider group. */
     min_sample: positiveInt,
-    /**
-     * Also count the bands of finished AI lookups (base salary, confidence medium or high, with a source, place and
-     * seniority checked against the job, one per lookup). Off by default: estimates are kept apart from posting facts.
-     */
-    include_ai_lookups: z.boolean().default(false),
   }),
   role_families: z
     .array(roleFamily)

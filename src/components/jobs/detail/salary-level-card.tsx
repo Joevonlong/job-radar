@@ -57,7 +57,7 @@ export function SalaryLevelCard({ context }: { context: SalaryContext }) {
     const seniority = knownSeniority(group.seniority);
     const place = group.place === null ? "" : group.level === "city" ? group.place : regionName(group.place, locale);
     const groupLine = t(`group.${group.level}`, { family: context.familyLabel ?? context.familyId, seniority: seniority ? tSeniority(seniority) : "", place });
-    const sample = context.includeAi || group.nAi > 0 ? t("sampleSplit", { n: group.n, jd: group.n - group.nAi, ai: group.nAi }) : t("sample", { n: group.n });
+    const sample = t("sample", { n: group.n });
     const p10 = group.quantiles[0] ?? group.median;
     const p90 = group.quantiles[group.quantiles.length - 1] ?? group.median;
     const low = Math.min(p10, context.figure ?? p10);

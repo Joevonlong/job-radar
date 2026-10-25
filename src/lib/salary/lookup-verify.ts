@@ -2,7 +2,7 @@
  * The code-side check of an AI salary lookup. The model's answer is untrusted (it read web pages): every source
  * URL is checked here on its own (https, a public host name, trusted when the host is on the configured list, else marked
  * "other source"), figures are converted to the base currency and range-checked, bands without a valid source are
- * dropped, and a lookup without any valid source is low confidence and never enters the benchmark.
+ * dropped, and a lookup without any valid source is low confidence. Lookup results never enter the benchmark.
  */
 import { isIP } from "node:net";
 
@@ -10,7 +10,7 @@ import type { SalaryLookupBandOutput, SalaryLookupOutput } from "@/lib/ai/prompt
 import { SENIORITIES } from "@/lib/domain/types";
 import { fxFactor, type FxTable } from "@/lib/market/currency";
 
-import type { SalaryBand, SalaryLookupQuery, SalaryLookupResult, SalaryObservation, SalarySource } from "./lookup-types";
+import type { SalaryBand, SalaryLookupQuery, SalaryLookupResult, SalarySource } from "./lookup-types";
 
 export interface VerifyInput {
   output: SalaryLookupOutput;
@@ -214,32 +214,5 @@ export function verifySalaryLookup(input: VerifyInput): SalaryLookupResult {
     dropped,
     observations: [],
   };
-  result.observations = observationsOf(result, input);
   return result;
-}
-
-/**
- * The bands that may enter the benchmark (`include_ai_lookups`): base salary, convertible, a figure, confidence medium
- * or high, at least one source on a trusted host, a known role family, and a location that names the job's city or
- * country. The observation carries the city only when the band's location names it (else it counts for the country).
- * One per family and seniority (duplicates removed).
- */
-export function observationsOf(result: SalaryLookupResult, input: Pick<VerifyInput, "familyOf" | "jobFamily">): SalaryObservation[] {
-  if (result.confidence === "low" || result.sources.length === 0) return [];
-  const out: SalaryObservation[] = [];
-  const seen = new Set<string>();
-  const add = (band: SalaryBand, family: string | null, seniority: string): void => {
-    if (family === null || band.basis !== "base" || !band.convertible) return;
-    if (!band.sources.some((index) => result.sources[index]?.trusted === true)) return;
-    if (!placeMatches(band.location, result.query)) return;
-    const figure = bandFigure(band);
-    if (figure === null) return;
-    const key = `${family}|${seniority}`;
-    if (seen.has(key)) return;
-    seen.add(key);
-    out.push({ family, seniority, city: cityMatches(band.location, result.query.city) ? result.query.city : null, country: result.query.country, figure });
-  };
-  if (result.roleBand) add(result.roleBand, input.jobFamily, result.query.seniority);
-  for (const band of result.relatedRoles) add(band, input.familyOf(band.title), seniorityOf(band.seniority ?? band.title));
-  return out;
 }

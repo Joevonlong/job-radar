@@ -751,7 +751,7 @@ const salarySections: SectionDef[] = [
   {
     id: "salary_benchmark",
     title: { section: "salary_benchmark" },
-    fields: [bool("benchmark.enabled", "salary_benchmark_enabled"), int("benchmark.window_days", "salary_window_days"), int("benchmark.min_sample", "salary_min_sample"), bool("benchmark.include_ai_lookups", "salary_include_ai")],
+    fields: [bool("benchmark.enabled", "salary_benchmark_enabled"), int("benchmark.window_days", "salary_window_days"), int("benchmark.min_sample", "salary_min_sample")],
   },
 ];
 

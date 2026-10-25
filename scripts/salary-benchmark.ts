@@ -12,6 +12,7 @@ import { closeDb, getDb } from "../src/lib/db";
 import { listSalaryBenchmarks } from "../src/lib/db/repos/salary-benchmarks";
 import { getTranslator } from "../src/lib/i18n/node";
 import { refreshSalaryBenchmark } from "../src/lib/salary/benchmark";
+import { benchmarkJson, formatBenchmarkText } from "../src/lib/salary/benchmark-report";
 import { loadBaseCurrency } from "../src/lib/signals/floor";
 
 const t = getTranslator("salary", "cli");
@@ -33,18 +34,10 @@ async function main(): Promise<number> {
     const result = await refreshSalaryBenchmark(db, { config, currency });
     const rows = result ? await listSalaryBenchmarks(db) : [];
     if (values.json) {
-      console.log(JSON.stringify({ result, groups: rows.map((row) => ({ family: row.roleFamily, seniority: row.seniority, geoLevel: row.geoLevel, geoKey: row.geoKey, currency: row.currency, n: row.n, nAi: row.nAi, median: row.median, quantiles: row.quantiles })) }, null, 2));
+      console.log(JSON.stringify(benchmarkJson(result, rows), null, 2));
       return 0;
     }
-    if (!result) {
-      console.log(t("cli.disabled"));
-      return 0;
-    }
-    console.log(t("cli.summary", { groups: result.groups, postings: result.postings, ai: result.aiObservations, currency: result.currency }));
-    for (const row of rows) {
-      const q = Array.isArray(row.quantiles) ? row.quantiles : [];
-      console.log(`${row.roleFamily.padEnd(22)} ${row.seniority.padEnd(10)} ${`${row.geoLevel}:${row.geoKey}`.padEnd(28)} n=${String(row.n).padStart(4)} (ai ${row.nAi})  p10 ${String(q[0] ?? "-")}  p50 ${String(row.median)}  p90 ${String(q[8] ?? "-")}`);
-    }
+    console.log(formatBenchmarkText(result, rows, t));
     return 0;
   } finally {
     await closeDb();

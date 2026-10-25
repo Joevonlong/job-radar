@@ -2878,10 +2878,6 @@
         "label": "Minimum sample",
         "hint": "A group with fewer postings is not compared; the card falls back to a wider group."
       },
-      "salary_include_ai": {
-        "label": "Count AI lookups in the benchmark",
-        "hint": "Checked base-salary figures from lookups (medium or high confidence, with a source) join the groups. The card shows how many came from lookups."
-      },
       "quota_enabled": {
         "label": "Use the usage cap",
         "hint": "Off: no cap at all, as before."
@@ -6179,7 +6175,6 @@
         "family": "{family} · all levels · all places"
       },
       "sample": "{n} postings",
-      "sampleSplit": "{n} postings ({jd} from JDs · {ai} from lookups)",
       "median": "Median {amount}",
       "range": "Most postings (P10 to P90): {low} to {high}",
       "rangeLabel": "Salary spread from P10 to P90, with the median and this job",
@@ -6283,7 +6278,7 @@
       "usage": "pnpm salary:benchmark [--json]\n\nRebuilds the salary benchmark from the postings in the database and prints its groups.",
       "noCurrency": "No base currency is set for the market, so there is nothing to compare.",
       "disabled": "The salary benchmark is turned off (salary.yaml: benchmark.enabled), or its tables are missing.",
-      "summary": "Salary benchmark ({currency}): {groups} groups from {postings} postings and {ai} AI lookup figures."
+      "summary": "Salary benchmark ({currency}): {groups} groups from {postings} postings."
     }
   },
   "mcp": {

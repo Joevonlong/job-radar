@@ -2878,10 +2878,6 @@
         "label": "最小样本",
         "hint": "岗位数少于这个数的组不做比较，卡片会退到更宽的组。"
       },
-      "salary_include_ai": {
-        "label": "AI 查询结果计入基准",
-        "hint": "查询里校验过的底薪数字（置信度中或高、有来源）会加入各组。卡片上分开显示其中有多少来自查询。"
-      },
       "quota_enabled": {
         "label": "启用用量上限",
         "hint": "关闭后不做任何限制，和以前一样。"
@@ -6179,7 +6175,6 @@
         "family": "{family} · 所有级别 · 所有地点"
       },
       "sample": "样本 {n}",
-      "sampleSplit": "样本 {n}（JD {jd} · 查询 {ai}）",
       "median": "中位数 {amount}",
       "range": "多数岗位（P10 至 P90）：{low} 至 {high}",
       "rangeLabel": "P10 到 P90 的薪资分布，标出中位数和本岗位",
@@ -6283,7 +6278,7 @@
       "usage": "pnpm salary:benchmark [--json]\n\n用库里的岗位重算薪资基准，并打印各组。",
       "noCurrency": "市场没有设置基准货币，没有可比较的内容。",
       "disabled": "薪资基准已关闭（salary.yaml: benchmark.enabled），或者相关数据表不存在。",
-      "summary": "薪资基准（{currency}）：{groups} 个组，来自 {postings} 个岗位和 {ai} 个 AI 查询数字。"
+      "summary": "薪资基准（{currency}）：{groups} 个组，来自 {postings} 个岗位。"
     }
   },
   "mcp": {
