@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createSmartrecruitersChannel, smartrecruitersAdapter } from "@/lib/channels/ats";
 import { wrapPosting } from "@/lib/channels/ats/envelope";
@@ -14,6 +14,21 @@ const sr = company({ name: "Example Labs", ats: "smartrecruiters", token: "Examp
 const list = () => fixtureJson("smartrecruiters-list.json") as { totalFound: number; content: unknown[] };
 const detail = (n: number) => fixtureJson(`smartrecruiters-detail-${n}.json`);
 const source = { ats: "smartrecruiters", token: "ExampleLabs", companyName: "Example Labs" } as const;
+const BOARD_KEY = "smartrecruiters:ExampleLabs";
+
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-10-07T12:00:00Z"));
+});
+
+afterEach(() => vi.useRealTimers());
+
+function inlineList(ids: string[]) {
+  return {
+    totalFound: ids.length,
+    content: ids.map((id) => ({ id, name: "AI Engineer", company: { identifier: sr.token } })),
+  };
+}
 
 function channel() {
   const deps = depsWith(inputs([sr]));
@@ -144,18 +159,56 @@ describe("smartrecruiters sweep", () => {
     expect(channel().channel.parse(postings[0]?.payload)).toMatchObject({ title: "AI Platform Engineer (m/f/x)", description: "" });
   });
 
-  it("a detail request that fails fails the board (and records no ETag)", async () => {
-    const { fetch } = routedFetch([
+  it.each([
+    { storage: "stored", stored: true, etag: 'W/"x"', externalIds: ["744000000000003", "744000000000001"] },
+    { storage: "new", stored: false, etag: null, externalIds: ["744000000000003"] },
+  ])("keeps the board healthy when a $storage posting's detail returns 500", async ({ stored, etag, externalIds }) => {
+    const { fetch, requests } = routedFetch([
       [LIST_URL, response(200, list(), { ETag: 'W/"x"' })],
-      [`${BASE}/`, response(200, "not json at all")],
+      [`${BASE}/744000000000001`, response(500, "unavailable")],
+      [`${BASE}/744000000000003`, response(200, detail(3))],
     ]);
-    const { ctx, query } = atsContext("smartrecruiters", fetch, { channels: aiChannels() });
+    const { ctx, query, logs } = atsContext("smartrecruiters", fetch, { channels: aiChannels() });
     const { channel: c, store } = channel();
-    await expect(c.collect(query, ctx)).rejects.toMatchObject({ code: "parse" });
-    expect(store.states.has("smartrecruiters:ExampleLabs")).toBe(false);
+    if (stored) store.stored.add("744000000000001");
+
+    await expect(c.collect(query, ctx)).resolves.toMatchObject([{ externalId: "744000000000003", payload: { posting: detail(3) } }]);
+
+    expect(requests.map((r) => r.url)).toEqual([LIST_URL, `${BASE}/744000000000001`, `${BASE}/744000000000003`]);
+    expect(store.touched).toEqual([["744000000000001"]]);
+    expect(store.checks.at(-1)?.update).toMatchObject({
+      status: "ok", etag, externalIds, detailRetryIds: ["744000000000001"], total: 3, kept: 2,
+    });
+    expect(store.states.get(BOARD_KEY)).toMatchObject({ etag, externalIds, detailRetryIds: ["744000000000001"] });
+    const warning = logs.find((l) => l.message === "ats board details missing");
+    expect(warning).toMatchObject({ level: "warn", fields: { board: sr.token, failed: 1, skipped: 0, code: "network" } });
+    expect(warning?.fields).not.toHaveProperty("stoppedBy");
+    const report = logs.find((l) => l.message === "ats board")?.fields;
+    expect(report).toMatchObject({ outcome: "changed", kept: 2, detailFailed: 1 });
+    expect(report).not.toHaveProperty("detailSkipped");
+    expect(logs.find((l) => l.message === "ats sweep done")?.fields).toMatchObject({ failedBoards: 0, postings: 1 });
   });
 
-  it("touches stored over-cap ids before a detail request fails", async () => {
+  it("counts a non-JSON detail as a parse failure while keeping the board healthy", async () => {
+    const { fetch } = routedFetch([
+      [LIST_URL, response(200, list(), { ETag: 'W/"x"' })],
+      [`${BASE}/744000000000001`, response(200, "not json at all")],
+      [`${BASE}/744000000000003`, response(200, detail(3))],
+    ]);
+    const { ctx, query, logs } = atsContext("smartrecruiters", fetch, { channels: aiChannels() });
+    const { channel: c, store } = channel();
+
+    await expect(c.collect(query, ctx)).resolves.toMatchObject([{ externalId: "744000000000003" }]);
+
+    expect(store.checks.at(-1)?.update).toMatchObject({
+      status: "ok", etag: null, externalIds: ["744000000000003"], detailRetryIds: ["744000000000001"],
+    });
+    expect(logs.find((l) => l.message === "ats board details missing")).toMatchObject({
+      level: "warn", fields: { board: sr.token, failed: 1, skipped: 0, code: "parse" },
+    });
+  });
+
+  it("touches stored over-cap ids before any detail request and survives a detail failure", async () => {
     const { channel: c, store } = channel();
     store.stored.add("744000000000003");
     const { fetch, requests } = routedFetch([
@@ -168,12 +221,201 @@ describe("smartrecruiters sweep", () => {
     const channels = aiChannels((b) => { b.max_results = 1; });
     const { ctx, query } = atsContext("smartrecruiters", fetch, { channels });
 
-    await expect(c.collect(query, ctx)).rejects.toMatchObject({ code: "parse" });
+    await expect(c.collect(query, ctx)).resolves.toEqual([]);
 
-    expect(store.touched).toEqual([["744000000000003"]]);
+    expect(store.touched).toEqual([["744000000000003"], ["744000000000001"]]);
     expect(requests.map((r) => r.url)).toEqual([LIST_URL, `${BASE}/744000000000001`]);
-    expect(store.checks.at(-1)?.update).toEqual({ status: "error", errorCode: "parse" });
-    expect(store.states.has("smartrecruiters:ExampleLabs")).toBe(false);
+    expect(store.checks.at(-1)?.update).toMatchObject({
+      status: "ok", etag: null, externalIds: ["744000000000003"], detailRetryIds: ["744000000000001"], total: 3, kept: 1,
+    });
+  });
+
+  it("records the ETag when a never-stored posting already on the retry list fails again", async () => {
+    const { channel: c, store } = channel();
+    store.states.set(BOARD_KEY, { etag: null, filterFingerprint: null, externalIds: [], detailRetryIds: ["744000000000001"] });
+    const { fetch } = routedFetch([
+      [LIST_URL, response(200, list(), { ETag: 'W/"x"' })],
+      [`${BASE}/744000000000001`, response(500, "unavailable")],
+      [`${BASE}/744000000000003`, response(200, detail(3))],
+    ]);
+    const { ctx, query } = atsContext("smartrecruiters", fetch, { channels: aiChannels() });
+
+    await expect(c.collect(query, ctx)).resolves.toMatchObject([{ externalId: "744000000000003" }]);
+
+    expect(store.stored.has("744000000000001")).toBe(false);
+    expect(store.checks.at(-1)?.update).toMatchObject({
+      status: "ok", etag: 'W/"x"', externalIds: ["744000000000003"], detailRetryIds: ["744000000000001"],
+    });
+    expect(store.states.get(BOARD_KEY)).toMatchObject({ etag: 'W/"x"', detailRetryIds: ["744000000000001"] });
+  });
+
+  it("resets the consecutive failure count after a successful detail and returns the other seven postings", async () => {
+    const body = inlineList(Array.from({ length: 10 }, (_, i) => String(i + 1)));
+    const { fetch, requests } = routedFetch([
+      [LIST_URL, response(200, body)],
+      [`${BASE}/`, ({ url }) => {
+        const id = url.slice(BASE.length + 1);
+        return ["1", "3", "5"].includes(id) ? response(500, "unavailable") : response(200, body.content.find((p) => p.id === id));
+      }],
+    ]);
+    // Omitting the setting exercises the designed default of three consecutive failures.
+    const { ctx, query, logs } = atsContext("smartrecruiters", fetch, { channels: aiChannels() });
+    const { channel: c, store } = channel();
+
+    await expect(c.collect(query, ctx)).resolves.toMatchObject(["2", "4", "6", "7", "8", "9", "10"].map((externalId) => ({ externalId })));
+
+    expect(requests.map((r) => r.url)).toEqual([LIST_URL, ...body.content.map((p) => `${BASE}/${p.id}`)]);
+    expect(store.checks.at(-1)?.update).toMatchObject({ status: "ok", kept: 10, detailRetryIds: ["1", "3", "5"] });
+    expect(logs.find((l) => l.message === "ats board")?.fields).toMatchObject({ detailFailed: 3, kept: 10 });
+    expect(logs.find((l) => l.message === "ats board")?.fields).not.toHaveProperty("detailSkipped");
+    expect(logs.find((l) => l.message === "ats board details missing")?.fields).not.toHaveProperty("stoppedBy");
+  });
+
+  it("skips the remaining seven details after three consecutive failures and touches stored skipped ids", async () => {
+    const body = inlineList(Array.from({ length: 10 }, (_, i) => String(i + 1)));
+    const { fetch, requests } = routedFetch([
+      [LIST_URL, response(200, body, { ETag: 'W/"ten"' })],
+      [`${BASE}/`, ({ url }) => {
+        const id = url.slice(BASE.length + 1);
+        return ["1", "2", "3"].includes(id) ? response(500, "unavailable") : response(200, body.content.find((p) => p.id === id));
+      }],
+    ]);
+    const { channel: c, store } = channel();
+    store.stored.add("4");
+    store.stored.add("10");
+    const { ctx, query, logs } = atsContext("smartrecruiters", fetch, { channels: aiChannels() });
+
+    await expect(c.collect(query, ctx)).resolves.toEqual([]);
+
+    expect(requests.map((r) => r.url)).toEqual([LIST_URL, `${BASE}/1`, `${BASE}/2`, `${BASE}/3`]);
+    expect(store.touched).toEqual([["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]]);
+    expect(store.checks.at(-1)?.update).toMatchObject({
+      status: "ok", etag: null, externalIds: ["4", "10"], detailRetryIds: ["1", "2", "3"], total: 10, kept: 10,
+    });
+    expect(logs.find((l) => l.message === "ats board")?.fields).toMatchObject({ detailFailed: 3, detailSkipped: 7, kept: 10 });
+    expect(logs.find((l) => l.message === "ats board details missing")).toMatchObject({
+      level: "warn", fields: { board: sr.token, failed: 3, skipped: 7, code: "network", stoppedBy: "network" },
+    });
+  });
+
+  it("requests a skipped new posting first next round so persistent detail failures cannot starve it", async () => {
+    const body = inlineList(["bad1", "bad2", "bad3", "good-new"]);
+    const { fetch, requests } = routedFetch([
+      [LIST_URL, response(200, body, { ETag: 'W/"same-list"' })],
+      [`${BASE}/good-new`, response(200, body.content[3])],
+      [`${BASE}/bad`, response(500, "unavailable")],
+    ]);
+    const { channel: c, store } = channel();
+    const first = atsContext("smartrecruiters", fetch, { channels: aiChannels() });
+
+    await expect(c.collect(first.query, first.ctx)).resolves.toEqual([]);
+
+    expect(requests.map((r) => r.url)).toEqual([LIST_URL, `${BASE}/bad1`, `${BASE}/bad2`, `${BASE}/bad3`]);
+    expect(store.checks.at(-1)?.update).toMatchObject({ status: "ok", etag: null, detailRetryIds: ["bad1", "bad2", "bad3"] });
+    // The next collect loads the state recorded by the first through the real memory store.
+    expect(await store.load({ ats: "smartrecruiters", token: sr.token })).toMatchObject({
+      etag: null, externalIds: [], detailRetryIds: ["bad1", "bad2", "bad3"],
+    });
+    vi.setSystemTime(new Date("2026-10-08T12:00:00Z"));
+    const second = atsContext("smartrecruiters", fetch, { channels: aiChannels() });
+
+    await expect(c.collect(second.query, second.ctx)).resolves.toMatchObject([{ externalId: "good-new" }]);
+
+    expect(requests.slice(4).map((r) => r.url)).toEqual([LIST_URL, `${BASE}/good-new`, `${BASE}/bad1`, `${BASE}/bad2`, `${BASE}/bad3`]);
+    expect(requests[4]?.headers).not.toHaveProperty("If-None-Match");
+    expect(store.checks.at(-1)?.update).toMatchObject({
+      status: "ok", etag: 'W/"same-list"', externalIds: ["good-new"], detailRetryIds: ["bad1", "bad2", "bad3"],
+    });
+  });
+
+  it("stops details at the first host refusal and reports blocked with the rest skipped", async () => {
+    const { fetch, requests } = routedFetch([
+      [LIST_URL, response(200, list(), { ETag: 'W/"x"' })],
+      [`${BASE}/744000000000001`, response(403, "forbidden")],
+      [`${BASE}/744000000000003`, response(200, detail(3))],
+    ]);
+    const { ctx, query, logs } = atsContext("smartrecruiters", fetch, { channels: aiChannels() });
+    const { channel: c, store } = channel();
+    store.stored.add("744000000000003");
+
+    await expect(c.collect(query, ctx)).resolves.toEqual([]);
+
+    expect(requests.map((r) => r.url)).toEqual([LIST_URL, `${BASE}/744000000000001`]);
+    expect(store.touched).toEqual([["744000000000001", "744000000000003"]]);
+    expect(store.checks.at(-1)?.update).toMatchObject({
+      status: "ok", externalIds: ["744000000000003"], detailRetryIds: ["744000000000001"],
+    });
+    expect(logs.find((l) => l.message === "ats board details missing")).toMatchObject({
+      level: "warn", fields: { board: sr.token, failed: 1, skipped: 1, code: "blocked", stoppedBy: "blocked" },
+    });
+  });
+
+  it("propagates cancellation while reading the last detail body without recording a failure", async () => {
+    const abort = new AbortController();
+    const abortError = new DOMException("cancelled while reading detail", "AbortError");
+    const { fetch, requests } = routedFetch([
+      [LIST_URL, response(200, list())],
+      [`${BASE}/744000000000001`, response(200, detail(1))],
+      [`${BASE}/744000000000003`, {
+        ...response(200, detail(3)),
+        json: async () => { abort.abort(abortError); throw abortError; },
+      }],
+    ]);
+    const { ctx, query, logs } = atsContext("smartrecruiters", fetch, { channels: aiChannels(), signal: abort.signal });
+    const { channel: c, store } = channel();
+
+    await expect(c.collect(query, ctx)).rejects.toBe(abortError);
+
+    expect(abort.signal.aborted).toBe(true);
+    expect(requests.map((r) => r.url)).toEqual([LIST_URL, `${BASE}/744000000000001`, `${BASE}/744000000000003`]);
+    expect(store.checks).toEqual([]);
+    expect(store.states.size).toBe(0);
+    expect(store.touched).toEqual([]);
+    expect(logs.filter((l) => ["ats board failed", "ats board details missing"].includes(l.message))).toEqual([]);
+  });
+
+  it("counts a broken detail stream as a network failure without wrapping it as parse", async () => {
+    const { fetch } = routedFetch([
+      [LIST_URL, response(200, list())],
+      [`${BASE}/744000000000001`, {
+        ...response(200, detail(1)),
+        json: async () => { throw new ChannelError("network", "detail stream interrupted"); },
+      }],
+      [`${BASE}/744000000000003`, response(200, detail(3))],
+    ]);
+    const { ctx, query, logs } = atsContext("smartrecruiters", fetch, { channels: aiChannels() });
+    const { channel: c, store } = channel();
+
+    await expect(c.collect(query, ctx)).resolves.toMatchObject([{ externalId: "744000000000003" }]);
+
+    expect(store.checks.at(-1)?.update).toMatchObject({ status: "ok", detailRetryIds: ["744000000000001"] });
+    expect(logs.find((l) => l.message === "ats board details missing")).toMatchObject({
+      level: "warn", fields: { board: sr.token, failed: 1, skipped: 0, code: "network" },
+    });
+  });
+
+  it("requests new then stored then retry-listed details while returning postings in board order", async () => {
+    const ids = ["retry-stored-1", "stored-1", "new-1", "retry-new", "stored-2", "new-2", "retry-stored-2"];
+    const body = inlineList(ids);
+    const { fetch, requests } = routedFetch([
+      [LIST_URL, response(200, body)],
+      [`${BASE}/`, ({ url }) => response(200, body.content.find((p) => p.id === url.slice(BASE.length + 1)))],
+    ]);
+    const { channel: c, store } = channel();
+    store.states.set(BOARD_KEY, {
+      etag: null, filterFingerprint: null,
+      externalIds: ["stored-2", "retry-stored-2", "stored-1", "retry-stored-1"],
+      detailRetryIds: ["retry-new", "retry-stored-2", "retry-stored-1", "no-longer-listed"],
+    });
+    const { ctx, query } = atsContext("smartrecruiters", fetch, { channels: aiChannels() });
+
+    await expect(c.collect(query, ctx)).resolves.toMatchObject(ids.map((id) => ({ externalId: id, payload: { posting: { id } } })));
+
+    expect(requests.map((r) => r.url)).toEqual([
+      LIST_URL,
+      ...["new-1", "new-2", "stored-1", "stored-2", "retry-stored-1", "retry-new", "retry-stored-2"].map((id) => `${BASE}/${id}`),
+    ]);
+    expect(store.checks.at(-1)?.update).toMatchObject({ status: "ok", externalIds: ids, detailRetryIds: [] });
   });
 
   it("a list in another shape is a parse error", async () => {

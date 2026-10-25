@@ -7,6 +7,7 @@ import { ChannelRegistry } from "@/lib/channels/registry";
 import { runCycle } from "@/lib/cycle/run-cycle";
 import { closeDb, getAtsBoard, getDb, listRawPostingsForChannel, listRunsForCycle, schema, touchRawPostings, upsertRawPostings } from "@/lib/db";
 import { runMigrations } from "@/lib/db/migrate";
+import { recordAtsBoardCheck } from "@/lib/db/repos/ats-boards";
 import { markJobsPossiblyClosed, touchJobsSeen } from "@/lib/db/repos/jobs";
 
 import { atsChannelsWith, company, depsWith, fixtureJson, inputs, neutralChannels, response } from "../channels/ats/helpers";
@@ -62,17 +63,39 @@ function cycle(fetch: FetchLike, options: { maxResults?: number; at?: Date } = {
   });
 }
 
-describe("migration 0002", () => {
-  it("creates ats_boards keyed by (ats, token)", async () => {
+describe("ats board migrations", () => {
+  it("creates ats_boards with the detail retry column", async () => {
     const rows = await getDb().execute<{ column_name: string }>(sql`
       select column_name from information_schema.columns where table_schema = 'public' and table_name = 'ats_boards' order by column_name`);
     expect(rows.map((r) => r.column_name)).toEqual([
-      "ats", "consecutive_failures", "etag", "external_ids", "filter_fingerprint", "last_changed_at", "last_checked_at", "last_error_code", "last_kept", "last_ok_at", "last_status", "last_total", "token",
+      "ats", "consecutive_failures", "detail_retry_ids", "etag", "external_ids", "filter_fingerprint", "last_changed_at", "last_checked_at", "last_error_code", "last_kept", "last_ok_at", "last_status", "last_total", "token",
     ]);
   });
 });
 
 describe("ats_boards and raw posting touch", () => {
+  it("persists retry ids on ok, preserves them on unchanged or failed checks, and clears them on an ok without retry ids", async () => {
+    const db = getDb();
+    const key = { ats: "smartrecruiters", token: "ExampleLabs" };
+    const store = createDbAtsBoardStore(db);
+    const retryIds = ["bad1", "bad2"];
+    await recordAtsBoardCheck(db, key, {
+      status: "ok", etag: 'W/"details"', externalIds: ["stored"], detailRetryIds: retryIds,
+      checkedAt: new Date("2026-10-07T12:00:00Z"),
+    });
+    expect(await getAtsBoard(db, key)).toMatchObject({ lastStatus: "ok", detailRetryIds: retryIds });
+    expect(await store.load(key)).toMatchObject({ detailRetryIds: retryIds });
+
+    await recordAtsBoardCheck(db, key, { status: "not_modified", checkedAt: new Date("2026-10-08T12:00:00Z") });
+    expect(await getAtsBoard(db, key)).toMatchObject({ lastStatus: "not_modified", detailRetryIds: retryIds });
+    await recordAtsBoardCheck(db, key, { status: "error", errorCode: "network", checkedAt: new Date("2026-10-09T12:00:00Z") });
+    expect(await getAtsBoard(db, key)).toMatchObject({ lastStatus: "error", detailRetryIds: retryIds });
+
+    await recordAtsBoardCheck(db, key, { status: "ok", checkedAt: new Date("2026-10-10T12:00:00Z") });
+    expect(await getAtsBoard(db, key)).toMatchObject({ lastStatus: "ok", detailRetryIds: [] });
+    expect(await store.load(key)).toMatchObject({ detailRetryIds: [] });
+  });
+
   it("records ok / not_modified / error checks without losing the last validator", async () => {
     const db = getDb();
     const key = { ats: "greenhouse", token: "t" };
@@ -94,7 +117,9 @@ describe("ats_boards and raw posting touch", () => {
     const old = new Date("2026-01-01T00:00:00Z");
     await upsertRawPostings(db, { channelId: "greenhouse", runId: null, fetchedAt: old, items: [1, 2, 3].map((n) => ({ externalId: String(n), url: null, payload: { n } })) });
     const at = new Date("2026-10-07T00:00:00Z");
-    expect((await touchRawPostings(db, { channelId: "greenhouse", externalIds: ["1", "3", "missing"], at })).sort()).toEqual(["1", "3"]);
+    const touched = await touchRawPostings(db, { channelId: "greenhouse", externalIds: ["1", "3", "missing"], at });
+    expect(touched).toHaveLength(2);
+    expect(touched).toEqual(expect.arrayContaining(["1", "3"]));
     const rows = await listRawPostingsForChannel(db, "greenhouse");
     expect(rows.map((r) => [r.externalId, r.fetchedAt.toISOString()])).toEqual([
       ["1", at.toISOString()],
@@ -144,7 +169,7 @@ describe("runCycle with the greenhouse channel", () => {
 
   it.each([
     { name: "the per-board cap does not make stored postings look closed", listed: true },
-    { name: "a stored posting no longer listed by the board is marked possibly closed", listed: false },
+    { name: "[regression guard] a stored posting no longer listed by the board is marked possibly closed", listed: false },
   ])("$name", async ({ listed }) => {
     const db = getDb();
     const now = new Date("2026-10-07T12:00:00Z");
@@ -188,7 +213,10 @@ describe("runCycle with the greenhouse channel", () => {
     const remembered = await getAtsBoard(db, { ats: "greenhouse", token: board.token });
     expect(remembered).toMatchObject({ lastStatus: "ok", lastKept: 2 });
     expect(remembered?.externalIds.slice(0, 2)).toEqual(GH_KEPT.slice(0, 2));
-    expect(remembered?.externalIds.slice(2).sort()).toEqual(GH_KEPT.slice(2).filter((id) => listed || id !== overCap.externalId).sort());
+    const rememberedOverCap = remembered?.externalIds.slice(2);
+    const expectedOverCap = GH_KEPT.slice(2).filter((id) => listed || id !== overCap.externalId);
+    expect(rememberedOverCap).toHaveLength(expectedOverCap.length);
+    expect(rememberedOverCap).toEqual(expect.arrayContaining(expectedOverCap));
 
     expect(await touchJobsSeen(db)).toEqual({ seen: listed ? 1 : 0, reopened: 0 });
     const closed = await markJobsPossiblyClosed(db, { now, days: 7 });

@@ -2,6 +2,7 @@
 import { describe, expect, it } from "vitest";
 
 import { configRegistry } from "@/lib/config";
+import { smartrecruitersChannelSchema } from "@/lib/config/schemas/channels";
 
 import { shippedYaml } from "./helpers";
 
@@ -18,6 +19,37 @@ function channels(edit: (sources: Record<string, Json>) => void): Json {
   edit(raw.sources);
   return raw;
 }
+
+describe("smartrecruiters consecutive detail failure setting", () => {
+  const block = {
+    enabled: true,
+    monthly_budget_usd: 0,
+    throttle: { min_delay_ms: 0, max_delay_ms: 0 },
+    max_results: 20,
+    api_base_url: "https://ats.example.test",
+    country: "",
+    page_size: 10,
+    fetch_details: true,
+    title_prefilter: { enabled: false, include_terms: [], exclude_terms: [] },
+  };
+
+  it("defaults max_consecutive_detail_failures to three when the key is missing", () => {
+    expect(smartrecruitersChannelSchema.parse(block)).toMatchObject({ max_consecutive_detail_failures: 3 });
+  });
+
+  it.each([0, -1, -3])("rejects max_consecutive_detail_failures=%i as below the positive minimum", (limit) => {
+    const result = smartrecruitersChannelSchema.safeParse({ ...block, max_consecutive_detail_failures: limit });
+    expect(result.success).toBe(false);
+    if (result.success) throw new Error("expected an invalid consecutive failure limit");
+    expect(result.error.issues).toMatchObject([{ path: ["max_consecutive_detail_failures"], code: "too_small" }]);
+  });
+
+  it("keeps an explicit max_consecutive_detail_failures value", () => {
+    expect(smartrecruitersChannelSchema.safeParse({ ...block, max_consecutive_detail_failures: 5 })).toMatchObject({
+      success: true, data: { max_consecutive_detail_failures: 5 },
+    });
+  });
+});
 
 describe("sources.yaml: ashby, personio, smartrecruiters, brave", () => {
   const parsed = configRegistry.channels.schema.parse(shippedYaml("sources.yaml"));
