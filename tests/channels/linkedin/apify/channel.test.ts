@@ -159,6 +159,21 @@ describe("budget accounting", () => {
     expect(ctx.budget.snapshot()).toMatchObject({ records: 0, usd: 0.001 });
   });
 
+  it("retains the start fee when an empty first sub-run leaves too little budget for the second", async () => {
+    const channel = makeChannel();
+    const apify = fakeApify();
+    const config = apifyConfig((block) => {
+      block.monthly_budget_usd = 0.0018;
+      block.price_per_1k_usd = 0.4;
+      block.run_start_usd = 0.001;
+    });
+    const { ctx } = await harness(channel, apify, { config });
+    const query = berlinQuery({ keywords: ["platform engineering ".repeat(6).trim(), "distributed systems ".repeat(6).trim()] });
+    await expect(channel.collect(query, ctx)).rejects.toMatchObject({ code: "budget_exceeded", message: expect.stringContaining("after 1 of 2 runs") });
+    expect(apify.requests).toHaveLength(1);
+    expect(ctx.budget.snapshot()).toMatchObject({ records: 0, usd: 0.001, usdLeft: 0.0008 });
+  });
+
   it("sizes the run to what the budget still covers (start fee first) and passes it as the hard cap", async () => {
     const apify = fakeApify();
     const channel = makeChannel();

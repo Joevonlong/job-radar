@@ -462,8 +462,10 @@ export const channelsSchema = z
       .strictObject({
         /** Channels (and the LinkedIn cascade as one unit) collected in parallel within a cycle. */
         concurrency: positiveInt.default(3),
+        /** Serve the queries waiting longest on the unit's starting channel first. */
+        query_rotation: z.boolean().default(true),
       })
-      .default({ concurrency: 3 }),
+      .default({ concurrency: 3, query_rotation: true }),
     http: httpSettings.default({ timeout_ms: 30000, max_retries: 3, backoff_base_ms: 1000, backoff_max_ms: 30000 }),
     /** The channel test; a file without the block gets the defaults of the shipped YAML. */
     test_channel: testChannel.default(TEST_CHANNEL_DEFAULTS),

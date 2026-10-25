@@ -81,6 +81,43 @@ pnpm sources:list [--type channel|ats_board] [--status failing ...] [--all] [--j
 
 `pnpm run doctor` 里的 `sources.registry`：有异常的启用来源或镜像落后时是 warn；`sources.yaml` 读不了时是 fail。
 
+### 查询轮换
+
+`collect.query_rotation` 默认为 `true`。每轮先跑在单元起始通道上从未轮到的查询，再按上次轮到的时间从早到晚排；
+并列保持 `search.yaml` 顺序。在 `data/config/sources.yaml` 的 `collect` 下设为 `false` 可恢复每轮按配置顺序；
+回滚到不认识这个键的旧代码前先删掉它。新增查询，或修改关键词、地点、远程范围，会产生新编号并排最前；
+删除的查询不再出现。调整查询顺序只影响并列时的先后。
+
+除“跳过且没有岗位、没有记录用量、没有花费”之外的运行都算轮到。失败、取消、未结束的运行都算，包括之后被清理为失败的孤儿运行。
+花了额度或钱的预算截停，即使没有返回岗位，也算轮到，包括只付了启动费、空返回的 Apify 子运行。
+请求前就被拒绝，以及“没有可用通道”的汇总行，都不会推进顺序。历史没有时间下限。
+
+起始通道是选中级联里当前第一个可用通道，独立单元则是该通道本身。N 个查询的集合与起始通道不变时，一个查询两次轮到之间，
+其他查询总共最多轮到 N−1 次。这个公平保证只适用于起始通道；级联后续通道接剩余查询。付费通道预算用完后，guest 可以成为
+起始通道，改按它自己的历史排序。一个查询都跑不了的单元不推进顺序；只有一个查询的扫描单元不受影响。
+手动运行和补跑同样推进轮换；补跑使用被替代的定时轮次的基础窗口（`windowKind`）。通道的“测试”按钮不写运行行，不影响轮换。
+
+每个正常结束的单元输出一条 `query rotation` 日志和 `steps[collect].result.rotation` 摘要；摘要保存在该轮
+`cycles.summary_json.steps` 中 `name` 为 `collect` 的条目里。它们包含起始通道（`sortChannel`）、查询数、
+结果为 served/failed 的查询数（`reached`）、从未运行数、最久的已知等待及对应查询、实际请求的最大窗口（`maxWindowHours`）；
+日志还包含 `notReached`。未知等待为 null；窗口仍是配置的基础值，`stretched` 和 `capped` 都为 0。
+干跑按配置顺序，标记 `historyUnavailable: true`，CLI 也会注明。读历史失败时警告一次并使用同样的回退。
+没有可用起始通道本身不代表历史不可用：历史读取成功时，`historyUnavailable` 为 false，`neverRun` 为 0，最久等待为 null。
+取消或抛错的单元不生成轮换摘要。
+
+单次尝试的记录可在 PostgreSQL 的 `runs` 表中查看（也可以用 `pnpm db:studio`）：
+
+- `usage_units`：记到通道预算上的用量，例如 JSearch 的请求数、Bright Data / Apify 的条数。同时看 `cost`：
+  Apify 空返回的运行可能用量为零，却付了启动费。
+- `window_hours`：实际向通道请求的时间窗；“没有可用通道”的汇总行是 null。
+- `window_extended`：此版本的所有尝试都为 false；轮换不扩大窗口。
+
+记录的历史还有两处不精确：
+
+- LinkedIn 会话的每日页数单独计数，不走通道预算，也不进 `usage_units`。查询读过页面、但尚未留下任何岗位时碰到页数上限，
+  会记为没有岗位、没有用量和花费的跳过，不算轮到。
+- JSearch 只搜每组前 `keywords_per_query` 个关键词。调整组内关键词的顺序不会改变查询编号，因此历史可能对应调整前的那几个关键词。
+
 ## 6. 常见异常怎么处理
 
 | 看到 | 怎么办 |

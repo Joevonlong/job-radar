@@ -108,6 +108,10 @@ async function main(): Promise<number> {
     }
     if (collect) {
       console.log(`  queries: ${collect.queries}`);
+      if (Object.values(collect.rotation).some((unit) => unit.historyUnavailable)) {
+        if (dryRun) console.log("  query order: config order (dry runs do not read run history; real runs rotate by history)");
+        else console.log("  query order: config order (run history unavailable for the starting channel)");
+      }
       for (const q of collect.queryPlan ?? []) {
         const where = q.remoteScope === null ? `location=${q.location ?? "-"}` : `remoteScope=${q.remoteScope}`;
         console.log(`    ${q.id} keywordGroup=${q.keywordGroup} ${where} windowHours=${q.windowHours} maxResults=${q.maxResults}`);

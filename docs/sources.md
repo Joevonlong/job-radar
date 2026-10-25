@@ -81,6 +81,50 @@ Prints all sources, their status and the reason (the table language follows `cli
 
 `sources.registry` in `pnpm run doctor`: warn when an enabled source is failing or the mirror is behind; fail when `sources.yaml` cannot be read.
 
+### Query rotation
+
+`collect.query_rotation` defaults to `true`. Each cycle starts with queries that have never had a turn on the unit's
+starting channel, then those whose last turn was longest ago. Ties keep `search.yaml` order. Set it to `false` under
+`collect` in your `data/config/sources.yaml` to use config order every cycle; remove the key before rolling back to code
+that does not know it. Adding a query or changing its keywords, location or remote scope gives it a new id and puts it
+first; removing a query leaves it out. Reordering queries only changes ties.
+
+A turn is any run except a skipped run with no postings, no recorded usage and no cost. Failures, cancellations and
+unfinished runs count, including orphaned runs later marked failed. A budget stop that spent quota or money counts even
+when it returned nothing, including an empty Apify sub-run that paid a start fee. A refusal before any request and the
+"no available channel" summary row do not advance the order. History has no age cutoff.
+
+The starting channel is the first currently available channel in the selected cascade, or the single channel of an
+independent unit. With an unchanged set of N queries and the same starting channel, at most N−1 other turns fall between
+two turns of one query. Only that starting channel has this fairness guarantee; later cascade channels serve the remaining
+queries. When paid channels run out, the guest can become the start and uses its own history. A unit that can run nothing
+keeps its order. Single-query scan units are unaffected. Manual runs and catch-up cycles also advance rotation; a catch-up
+uses the base window of the scheduled cycle it replaces (`windowKind`). The channel's "Test" button does not write runs
+and does not affect rotation.
+
+Each completed unit emits a `query rotation` log and a `steps[collect].result.rotation` summary, stored in the cycle's
+`cycles.summary_json.steps` entry whose `name` is `collect`. They show the starting channel (`sortChannel`), query count,
+served/failed outcomes (`reached`), never-run count, oldest known wait and query, and largest requested window
+(`maxWindowHours`); the log also includes `notReached`. Unknown waits are null. Windows stay at their configured base
+values, and `stretched` and `capped` are both 0. Dry runs use config order and mark `historyUnavailable: true`; the CLI says
+so. A history read failure warns once and uses the same fallback. Having no available start channel does not itself make
+history unavailable: if the history read succeeded, `historyUnavailable` is false, `neverRun` is 0 and the oldest wait
+is null. Aborted or throwing units have no rotation summary.
+
+For the individual attempts, inspect the `runs` table in PostgreSQL (or `pnpm db:studio`):
+
+- `usage_units`: usage booked to the channel budget, such as JSearch requests or Bright Data / Apify records. Check `cost`
+  too: an empty Apify run can have zero usage units but a positive start fee.
+- `window_hours`: the window actually requested from the channel; null for a "no available channel" summary row.
+- `window_extended`: false for all attempts in this version; rotation does not extend windows.
+
+Two limits of the recorded history remain:
+
+- LinkedIn session's daily page counter is separate from the channel budget and is not in `usage_units`. If the page limit
+  stops a query after loading pages but before retaining any postings, its empty, unspent skip does not count as a turn.
+- JSearch searches only the first `keywords_per_query` keywords in a group. Reordering keywords within that group keeps the
+  query id, so its history can describe a different prefix of keywords.
+
 ## 6. Handling common failures
 
 | You see | What to do |

@@ -3,6 +3,7 @@ import { CascadeController, type CascadeSpec, type UnavailableReason } from "@/l
 import { createChannelContext, createThrottle, httpSettingsFromConfig, NO_KNOWN_POSTINGS } from "@/lib/channels/context";
 import { ChannelError, InfrastructureError, isAbortError, PartialCollectError, toChannelError } from "@/lib/channels/errors";
 import { buildQueries, buildSweepQuery, capQuery } from "@/lib/channels/query";
+import { orderQueries, rotationSummary, turnsOf, type RotationUnitSummary } from "@/lib/channels/rotation";
 import {
   normalizedPostingDraftSchema,
   rawPostingInputSchema,
@@ -12,7 +13,7 @@ import {
   type SearchQuery,
 } from "@/lib/channels/types";
 import type { Db } from "@/lib/db/client";
-import { createRun, finishRun, type RunStatus } from "@/lib/db/repos/runs";
+import { createRun, finishRun, getQueryRunHistory, type QueryRunHistoryRow, type RunStatus } from "@/lib/db/repos/runs";
 import { getRawPayloadsByExternalId, upsertRawPostings } from "@/lib/db/repos/raw-postings";
 
 import type { CycleStepContext, StepResult } from "./steps";
@@ -74,6 +75,7 @@ export interface CollectResult {
   queries: number;
   channels: Record<string, CollectChannelSummary>;
   served: ServedQuery[];
+  rotation: Record<string, RotationUnitSummary>;
   /** Channels given up on during the cycle (budget / non-retryable error), by error code. */
   unusable: Record<string, string>;
   /** Failures of the collect machinery itself (not of a channel). */
@@ -88,6 +90,7 @@ interface Unit {
   /** Family name for cascades, channel id otherwise. */
   name: string;
   spec: CascadeSpec;
+  familyChannels: readonly string[];
   queries: SearchQuery[];
 }
 
@@ -152,6 +155,7 @@ export async function collectStep(ctx: CycleStepContext): Promise<StepResult> {
     return created;
   };
   const served: ServedQuery[] = [];
+  const rotation: Record<string, RotationUnitSummary> = {};
   const errors: string[] = [];
   const dryRun: Record<string, DryRunChannelReport> = {};
   const unusable: Record<string, string> = {};
@@ -181,15 +185,29 @@ export async function collectStep(ctx: CycleStepContext): Promise<StepResult> {
   for (const spec of services.cascades) {
     const order = spec.order.filter(isSelected);
     // a family none of whose channels exists in this process has nothing to run
-    if (order.some((id) => registry.has(id))) units.push({ name: spec.family, spec: { family: spec.family, order }, queries: queriesFor(order) });
+    if (order.some((id) => registry.has(id))) units.push({ name: spec.family, spec: { family: spec.family, order }, familyChannels: spec.order, queries: queriesFor(order) });
   }
   for (const channel of registry.list()) {
     if (cascadeMembers.has(channel.id) || !isSelected(channel.id) || !registry.isEnabled(channel.id, config.channels)) continue;
     if (channel.isDue && !(await isDue(channel))) continue;
     const spec = { family: channel.family, order: [channel.id] };
-    units.push({ name: channel.id, spec, queries: queriesFor(spec.order) });
+    units.push({ name: channel.id, spec, familyChannels: [channel.id], queries: queriesFor(spec.order) });
   }
   for (const unit of units) for (const q of unit.queries) allQueries.set(q.id, q);
+
+  let history: QueryRunHistoryRow[] = [];
+  let historyReason: "dry_run" | "read_failed" | null = ctx.db ? null : "dry_run";
+  if (ctx.db) {
+    try {
+      history = await getQueryRunHistory(ctx.db, {
+        channelIds: [...new Set(units.flatMap((unit) => unit.familyChannels))],
+        queryHashes: [...allQueries.keys()],
+      });
+    } catch (error) {
+      historyReason = "read_failed";
+      ctx.logger.warn("query history could not be read; using config order", { error: error instanceof Error ? error.message : "unknown error" });
+    }
+  }
 
   const requireDb = (): Db => {
     if (!ctx.db) throw new InfrastructureError("collect: database required for a non-dry run");
@@ -207,7 +225,7 @@ export async function collectStep(ctx: CycleStepContext): Promise<StepResult> {
   };
 
   /** One collect call of `channel` for `query`, with its run row. Throws the (classified) failure. */
-  const attempt = async (channelId: string, query: SearchQuery, attempted: Set<string>): Promise<void> => {
+  const attempt = async (channelId: string, query: SearchQuery, attempted: Set<string>, recordWindow: (hours: number) => void): Promise<void> => {
     const channel = registry.get(channelId);
     const settings = registry.settingsFor(channelId, config.channels);
     if (!channel || !settings) throw new InfrastructureError(`collect: channel ${channelId} vanished from the registry`);
@@ -223,7 +241,7 @@ export async function collectStep(ctx: CycleStepContext): Promise<StepResult> {
     let runId: number | null = null;
     if (!ctx.dryRun) {
       try {
-        runId = (await createRun(requireDb(), { channelId, cycleId: ctx.cycle.id, queryHash: query.id })).id;
+        runId = (await createRun(requireDb(), { channelId, cycleId: ctx.cycle.id, queryHash: query.id, windowHours: effective.windowHours, windowExtended: false })).id;
       } catch (error) {
         throw new InfrastructureError(`could not create run row for ${channelId}`, error);
       }
@@ -250,7 +268,7 @@ export async function collectStep(ctx: CycleStepContext): Promise<StepResult> {
     ): Promise<void> => {
       if (runId === null) return;
       try {
-        await finishRun(requireDb(), runId, { status, cost: budget.attempt.usd, ...fields });
+        await finishRun(requireDb(), runId, { status, cost: budget.attempt.usd, usageUnits: budget.attempt.records, ...fields });
       } catch (error) {
         throw new InfrastructureError(`could not finish run row ${runId}`, error);
       }
@@ -262,6 +280,7 @@ export async function collectStep(ctx: CycleStepContext): Promise<StepResult> {
     /** The stop was the channel's own plan (its next request was refused by the channel's budget before it was sent), not a failure. */
     let plannedStop = false;
     try {
+      recordWindow(effective.windowHours);
       const output: unknown = await channel.collect(effective, channelContext);
       if (!Array.isArray(output)) throw new ChannelError("parse", `${channelId}.collect did not return an array`);
       collected = output as RawPostingInput[];
@@ -373,23 +392,38 @@ export async function collectStep(ctx: CycleStepContext): Promise<StepResult> {
   const runUnit = async (unit: Unit): Promise<void> => {
     const controller = new CascadeController(unit.spec, { availability });
     const attempted = new Set<string>();
+    const now = ctx.now();
+    const start = await controller.pick();
+    const sortChannel = "channelId" in start ? start.channelId : null;
+    const turns = sortChannel === null ? new Map<string, Date | null>() : turnsOf(history, sortChannel);
+    const queries = sortChannel !== null && historyReason === null
+      ? orderQueries(unit.queries, turns, config.channels.collect.query_rotation)
+      : unit.queries;
+    let reached = 0;
+    let maxWindowHours: number | null = null;
+    const recordWindow = (hours: number): void => { maxWindowHours = Math.max(maxWindowHours ?? hours, hours); };
     try {
-      for (const [index, query] of unit.queries.entries()) {
+      for (const [index, query] of queries.entries()) {
         ctx.signal.throwIfAborted();
-        const outcome = await controller.serve((id) => attempt(id, query, attempted));
+        const outcome = await controller.serve((id) => attempt(id, query, attempted, recordWindow));
         if (outcome.status === "served") {
+          reached += 1;
           served.push({ unit: unit.name, queryId: query.id, channelId: outcome.channelId, status: "served" });
         } else if (outcome.status === "failed") {
+          reached += 1;
           served.push({ unit: unit.name, queryId: query.id, channelId: outcome.channelId, status: "failed" });
         } else {
           served.push({ unit: unit.name, queryId: query.id, channelId: null, status: "skipped" });
-          await recordSkipped(unit, query, outcome.reasons, unit.queries.length - index);
-          return; // nothing can take the remaining queries this cycle
+          await recordSkipped(unit, query, outcome.reasons, queries.length - index);
+          break; // nothing can take the remaining queries this cycle
         }
       }
     } finally {
       for (const [id, code] of controller.unusableChannels()) unusable[id] = code;
     }
+    const summary = rotationSummary({ queries: unit.queries, sortChannel, turns, reached, maxWindowHours, historyUnavailable: historyReason !== null, now });
+    rotation[unit.name] = summary;
+    ctx.logger.info("query rotation", { unit: unit.name, ...summary, notReached: summary.queries - reached, reason: historyReason ?? (sortChannel === null ? "no_start_channel" : null) });
   };
 
   /** All channels of a unit were unavailable: one skipped run row (on the first registered channel) says why. */
@@ -440,6 +474,7 @@ export async function collectStep(ctx: CycleStepContext): Promise<StepResult> {
     queries: allQueries.size,
     channels: Object.fromEntries(summaries),
     served,
+    rotation,
     unusable,
     errors,
     aborted,

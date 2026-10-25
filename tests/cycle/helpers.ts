@@ -24,7 +24,7 @@ export function pinnedSearch() {
 export function config(overrides: { concurrency?: number; search?: ReturnType<typeof shippedSearch> } = {}) {
   const channels = shippedChannels();
   return {
-    channels: overrides.concurrency === undefined ? channels : { ...channels, collect: { concurrency: overrides.concurrency } },
+    channels: overrides.concurrency === undefined ? channels : { ...channels, collect: { ...channels.collect, concurrency: overrides.concurrency } },
     search: overrides.search ?? shippedSearch(),
     schedule: shippedSchedule(),
   };
