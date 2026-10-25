@@ -15,7 +15,7 @@ import {
 } from "@/lib/channels/discovery";
 import { configRegistry, companiesSchema } from "@/lib/config";
 
-import { atsContext, response, routedFetch } from "../ats/helpers";
+import { atsContext, response, routedFetch, type RecordedRequest } from "../ats/helpers";
 import { shippedSearch } from "../helpers";
 import { shippedYaml } from "../../config/helpers";
 
@@ -28,12 +28,16 @@ const companies = companiesSchema.parse({
 function deps(overrides: Partial<BraveDeps> = {}) {
   const store = createMemoryDiscoveryStore();
   const value: BraveDeps = {
-    inputs: () => ({ search: shippedSearch(), companies }),
+    inputs: () => ({ search: shippedSearch(), companies, queryRotation: true }),
     store: () => store,
     environment: { BRAVE_SEARCH_API_KEY: "test-key-not-real" },
     ...overrides,
   };
   return { deps: value, store };
+}
+
+function requestedQuery(request: RecordedRequest): string | null {
+  return new URL(request.url).searchParams.get("q");
 }
 
 describe("boardFromUrl", () => {
@@ -157,6 +161,35 @@ describe("brave channel", () => {
     expect(store.runs).toBe(1);
     expect(logs.find((l) => l.message === "brave discovery done")?.fields).toMatchObject({ searches: 30, failedSearches: 0, candidates: 5, newCandidates: 5 });
     expect(JSON.stringify(logs)).not.toContain("test-key");
+  });
+
+  it("searches every query within ceil(total / max_queries_per_run) runs instead of starving the tail", async () => {
+    let t = Date.now();
+    const { deps: d } = deps({ now: () => new Date(t) });
+    const channels = configRegistry.channels.schema.parse(
+      (() => {
+        const raw = structuredClone(shippedYaml("sources.yaml")) as { sources: { brave: Record<string, unknown> } };
+        raw.sources.brave.max_queries_per_run = 12;
+        return raw;
+      })(),
+    );
+    const queries = buildDiscoveryQueries(d.inputs().search).map((q) => q.q);
+    expect(queries).toHaveLength(30);
+    const channel = createBraveChannel(d);
+    const runs: (string | null)[][] = [];
+    for (let run = 0; run < Math.ceil(queries.length / channels.sources.brave.max_queries_per_run); run += 1) {
+      const { fetch, requests } = search();
+      const { ctx, query } = atsContext("brave", fetch, { channels });
+      await channel.collect(query, ctx);
+      expect(requests).toHaveLength(12);
+      runs.push(requests.map(requestedQuery));
+      t += 25 * 3_600_000;
+    }
+    expect(runs).toHaveLength(3);
+    expect(runs[0]).toEqual(queries.slice(0, 12));
+    expect(runs[1]).toEqual(queries.slice(12, 24));
+    expect(runs[2]).toEqual([...queries.slice(24), ...queries.slice(0, 6)]);
+    expect(new Set(runs.flat())).toEqual(new Set(queries));
   });
 
   it("obeys max_queries_per_run and the minimum interval between runs", async () => {
