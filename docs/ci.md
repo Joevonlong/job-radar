@@ -693,7 +693,7 @@ everything; if it renames a step, `ci-docs` fails until this page is updated. Th
 bump alone never needs a documentation change.
 
 Every `uses:` in the workflows is pinned to a full 40-character commit SHA, with the release tag as a trailing comment
-(`uses: actions/checkout@<sha> # v7.0.1`), because a tag can be moved to different code. Dependabot's `github-actions`
+(`uses: actions/checkout@<sha> # vX.Y.Z`), because a tag can be moved to different code. Dependabot's `github-actions`
 ecosystem understands this form and updates the SHA and the comment together. When adding an action, resolve the tag to
 its commit (dereference annotated tags) and pin that.
 

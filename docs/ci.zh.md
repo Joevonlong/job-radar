@@ -436,7 +436,7 @@ Linux 从零首次运行：在 Ubuntu runner 上用一份空的检出，按随�
 
 Dependabot 的 PR 和其他 PR 跑同一条流水线。action 升级会改 `.github/`，因此算代码，会跑全部任务；如果它改了步骤名，`ci-docs` 会失败，直到本页更新。本页不写 action 版本号，所以单纯升级版本不需要改文档。
 
-workflow 里的每个 `uses:` 都固定到完整的 40 位 commit SHA，行尾注释写 release 标签（`uses: actions/checkout@<sha> # v7.0.1`），因为标签可以被移动到别的代码上。Dependabot 的 `github-actions` 生态系统认识这种写法，会同时更新 SHA 和注释。新增 action 时，先把标签解析成 commit（annotated tag 要解引用）再固定。
+workflow 里的每个 `uses:` 都固定到完整的 40 位 commit SHA，行尾注释写 release 标签（`uses: actions/checkout@<sha> # vX.Y.Z`），因为标签可以被移动到别的代码上。Dependabot 的 `github-actions` 生态系统认识这种写法，会同时更新 SHA 和注释。新增 action 时，先把标签解析成 commit（annotated tag 要解引用）再固定。
 
 ## 发布检查
 
