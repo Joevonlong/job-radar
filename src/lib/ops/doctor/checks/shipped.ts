@@ -24,7 +24,7 @@ import type { ShippedConfigReportRow } from "@/lib/db/repos/runtime-state";
 import { ageSeconds, cached, formatAgo, ok, warn } from "../helpers";
 import { dbUp } from "../shared";
 import { SkipCheck, type CommandOutcome, type DoctorCheck, type DoctorContext } from "../types";
-import { AI_WORKER_SYSTEMD_UNIT, aiWorkerLaunchdLabel, parseLaunchctlPrint } from "./ai";
+import { aiWorkerServicePid, aiWorkerServiceReceipt } from "./ai";
 
 const spec = { id: "config.shipped", group: "data" } as const;
 
@@ -110,26 +110,6 @@ export function loadRunningContainers(ctx: DoctorContext): Promise<Containers> {
   });
 }
 
-/** The ai-worker's PID as the service manager gives it, or why there is none. */
-async function workerPid(ctx: DoctorContext): Promise<{ pid: number } | { pid: null; reason: string }> {
-  const { t } = ctx;
-  if (ctx.platform === "darwin" && ctx.uid !== null) {
-    const label = aiWorkerLaunchdLabel(ctx.settings.ai_worker_launchd_label);
-    const out = await ctx.probes.run("launchctl", ["print", `gui/${ctx.uid}/${label}`]);
-    if (out.kind !== "ran") return { pid: null, reason: t("checks.config.shipped.noAnswer", { command: "launchctl print" }) };
-    if (out.exitCode !== 0) return { pid: null, reason: t("checks.config.shipped.notLoaded", { service: label }) };
-    const pid = parseLaunchctlPrint(out.stdout).pid;
-    return pid === null ? { pid: null, reason: t("checks.config.shipped.notRunning", { service: label }) } : { pid };
-  }
-  if (ctx.platform === "linux") {
-    const out = await ctx.probes.run("systemctl", ["--user", "show", AI_WORKER_SYSTEMD_UNIT, "-p", "MainPID"]);
-    if (out.kind !== "ran" || out.exitCode !== 0) return { pid: null, reason: t("checks.config.shipped.noAnswer", { command: "systemctl --user show" }) };
-    const pid = Number(/^MainPID=(\d+)\s*$/m.exec(out.stdout)?.[1] ?? "0");
-    return pid > 0 ? { pid } : { pid: null, reason: t("checks.config.shipped.notRunning", { service: AI_WORKER_SYSTEMD_UNIT }) };
-  }
-  return { pid: null, reason: t("checks.config.shipped.noServiceManager") };
-}
-
 /** One process: null when its report is confirmed, else what is wrong (in the report's language) and, optionally, what to do. */
 type Finding = { process: ShippedConfigProcess; problem: string | null; id: string | null; hint?: string };
 
@@ -153,18 +133,21 @@ function containerFinding(ctx: DoctorContext, process: ShippedConfigProcess, row
   return finding(null);
 }
 
-async function workerFinding(ctx: DoctorContext, row: ShippedConfigReportRow | null): Promise<Finding> {
+async function workerFinding(ctx: DoctorContext, row: ShippedConfigReportRow | null, receipt: Awaited<ReturnType<typeof aiWorkerServiceReceipt>>): Promise<Finding> {
   const { t } = ctx;
   const process = "ai-worker";
   const id = row === null ? null : shortShippedConfigId(row.report.id);
   const finding = (problem: string | null): Finding => ({ process, problem, id });
-  if (row === null) return finding(t("checks.config.shipped.noReport", { process }));
+  const starting = receipt?.receipt.status === "not_yet" && ["no-holder", "no-heartbeat"].includes(receipt.receipt.reason)
+    ? { ...finding(t("checks.config.shipped.starting", { process, pid: receipt.pid })), hint: t("checks.config.shipped.startingHint") }
+    : null;
+  if (row === null) return starting ?? finding(t("checks.config.shipped.noReport", { process }));
   const limit = ctx.config.ai.host_worker.offline_after_seconds;
   const age = ageSeconds(row.updatedAt, ctx.now);
   if (age > limit) return finding(t("checks.config.shipped.stale", { process, ago: formatAgo(ctx, age), limit }));
-  const service = await workerPid(ctx);
+  const service = await aiWorkerServicePid(ctx);
   if (service.pid === null) return finding(t("checks.config.shipped.noPid", { process, reason: service.reason }));
-  if (service.pid !== row.report.pid) return finding(t("checks.config.shipped.otherPid", { process, reported: row.report.pid, running: service.pid }));
+  if (service.pid !== row.report.pid) return starting ?? finding(t("checks.config.shipped.otherPid", { process, reported: row.report.pid, running: service.pid }));
   return { ...(await releaseProblem(ctx, row)), process, id };
 }
 
@@ -209,6 +192,8 @@ export const shippedConfigCheck: DoctorCheck = {
 
     let reports: Awaited<ReturnType<DoctorContext["probes"]["shippedConfigReports"]>> | null = null;
     const up = await dbUp(ctx);
+    // Read the receipt before the reports snapshot: a successful receipt must not be paired with an older report.
+    const receipt = up && ctx.config.ai.execution === "host" ? await aiWorkerServiceReceipt(ctx) : null;
     if (up) {
       try {
         reports = await ctx.probes.shippedConfigReports();
@@ -224,7 +209,7 @@ export const shippedConfigCheck: DoctorCheck = {
 
     const findings: Finding[] = [];
     if (containers !== null) for (const process of services) findings.push(containerFinding(ctx, process, reports[process], containers));
-    if (ctx.config.ai.execution === "host") findings.push(await workerFinding(ctx, reports["ai-worker"]));
+    if (ctx.config.ai.execution === "host") findings.push(await workerFinding(ctx, reports["ai-worker"], receipt));
     findings.sort((a, b) => SHIPPED_CONFIG_PROCESSES.indexOf(a.process) - SHIPPED_CONFIG_PROCESSES.indexOf(b.process));
 
     const reportProblems = findings.filter((f) => f.problem !== null).map((f) => f.problem as string);

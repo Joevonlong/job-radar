@@ -107,6 +107,11 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **Deploy and doctor no longer accept an old ai-worker heartbeat as proof the current service process is ready:**
+  deploy step 12 waits for its lock, heartbeat and own shipped config report, up to the worker swap timeout
+  (`--settle` overrides it; 0 skips the wait). An unconfirmed worker now makes deploy exit 2 even if doctor has no
+  failures. Doctor warns for a current process without a receipt or a lock held by another worker; missing and stale
+  heartbeats remain failures.
 - **A job marked "no longer accepting applications" stays marked when its posting is parsed again or another channel
   merges into it:** the pipeline reset such a job to active (and made it eligible for scoring and push) whenever a
   source returned a changed posting or a new channel's copy. It now applies the same rule as the "seen again" step of

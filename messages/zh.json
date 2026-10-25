@@ -5216,7 +5216,11 @@
           "neverHint": "scripts/ops/install-ai-worker.sh；临时跑一次：pnpm ai-worker --once",
           "offline": "最近一次心跳是 {ago}（超过 {limit} 秒算离线）",
           "offlineHint": "tail -n 30 {errLog}（崩溃看 {launchdLog}）；launchctl kickstart -k gui/$(id -u)/io.jobradar.ai-worker",
-          "ok": "最近一次心跳 {age} 秒前（超过 {limit} 秒算离线）"
+          "ok": "最近一次心跳 {age} 秒前（超过 {limit} 秒算离线）",
+          "notConfirmed": "最近一次心跳 {age} 秒前，但还没确认服务当前的进程（pid {pid}）已在工作（拿到 worker 锁后，写入心跳和自己的配置报告）",
+          "notConfirmedHint": "刚启动或刚重连数据库后的一个心跳间隔内，这是正常的：稍后再运行 doctor。如果一直这样，查看 {errLog}，并在 {outLog} 里找 \"could not report the shipped config\"",
+          "otherHolder": "最近一次心跳 {age} 秒前，但 ai-worker 锁在另一个进程手里（{holder}）；服务的 worker（pid {pid}）会等待后退出",
+          "otherHolderHint": "停掉另一个 worker（例如终端里运行的 pnpm ai-worker）；如果应该由另一个运行，就停掉服务。刚重启后也可能是上一个服务进程还没退出：稍后再运行 doctor"
         }
       },
       "ai": {
@@ -5480,13 +5484,15 @@
           "configMountedInside": "{service}：{source} 挂载在 {destination}（{dir} 里面），挡住了镜像里自带的这部分出厂配置",
           "reportsUnchecked": "没有核对出厂配置的上报：{reason}",
           "noDatabase": "连不上数据库（见 db.connect）",
-          "hint": "每个进程启动时上报一次（web 在健康检查时重试到成功为止，runner 和 ai-worker 每次心跳都刷新）。刚部署或重启过的话，等一分钟再运行 doctor；一直这样的话，到那个进程的日志里找 \"could not report the shipped config\"（docs/configuration.zh.md《出厂配置标识》）",
+          "hint": "刚部署或重启后，容器的报告可能晚到：等一分钟再运行 doctor。ai-worker 则看 aiworker.heartbeat 是否说当前进程还没确认在工作；如果一直缺报告，到 data/logs/ai-worker.out.log 里找 \"could not report the shipped config\"（docs/configuration.zh.md《出厂配置标识》）",
           "notRelease": "{process} 的出厂配置来自 {dir}，不在 {releases} 下的发布目录里",
           "notReleaseHint": "worker 是从 checkout 安装的（发布目录之前的版本）或手动安装的。运行 scripts/ops/deploy.sh，或 scripts/ops/install-ai-worker.sh --root {root}（docs/deploy.zh.md）",
           "noGit": "没有安装 git",
           "headUnknown": "{process}：无法把它的发布目录和 checkout 的 HEAD 比较（{reason}）",
           "otherRelease": "{process} 运行的是发布 {release}，checkout 在 {head}",
-          "otherReleaseHint": "刚做过“只回滚 worker”时是正常的；否则是某次部署在 worker 步骤之前停下了。运行 scripts/ops/deploy.sh，让 worker 运行 checkout 的提交（docs/upgrade.zh.md）"
+          "otherReleaseHint": "刚做过“只回滚 worker”时是正常的；否则是某次部署在 worker 步骤之前停下了。运行 scripts/ops/deploy.sh，让 worker 运行 checkout 的提交（docs/upgrade.zh.md）",
+          "starting": "{process}：服务（pid {pid}）还没拿到 worker 锁，或拿到锁后还没写入心跳；配置报告会在第一次心跳之后写入",
+          "startingHint": "过一分钟再运行 doctor"
         }
       },
       "i18n": {

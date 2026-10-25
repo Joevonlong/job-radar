@@ -4,6 +4,7 @@ import type { AiConfig, ChannelsConfig, ConfigLayersState, DoctorConfig, Languag
 import type { translatorFor } from "@/lib/i18n/node";
 import type { AppliedMigrations } from "@/lib/db/migration-status";
 import type { ShippedConfigProcess } from "@/lib/config/shipped-id";
+import type { WorkerEvidence } from "@/lib/db/repos/ai-worker-evidence";
 import type { ShippedConfigReportRow } from "@/lib/db/repos/runtime-state";
 import type { MarketSummaryResult } from "@/lib/market/summary";
 import type { ProfileReadiness } from "@/lib/scoring/profile";
@@ -109,6 +110,8 @@ export interface DoctorProbes {
   market(): Promise<MarketSummaryResult>;
   /** The first-run setup state (setup.yaml). Never throws. */
   setup(): Promise<SetupStatus>;
+  /** The host service PID's receipt. Throws when the database cannot be read. */
+  aiWorkerReceipt(pid: number): Promise<WorkerEvidence>;
   /** Each process's shipped config report (null: none, or not readable). Throws when the database cannot be read. */
   shippedConfigReports(): Promise<Record<ShippedConfigProcess, ShippedConfigReportRow | null>>;
   /** The release lock under the production checkout `main` (owner, in-flight records and whether their PIDs live). Never throws. */

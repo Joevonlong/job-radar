@@ -1,13 +1,15 @@
 // @vitest-environment node
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { aiBacklogCheck, aiQuotaCheck, aiWorkerHeartbeatCheck, aiWorkerLaunchdCheck, claudeLoginCheck, codexLoginCheck, configGuardsCheck, parseLaunchctlPrint, profileCheck } from "@/lib/ops/doctor/checks/ai";
+import { shippedConfigCheck } from "@/lib/ops/doctor/checks/shipped";
 
 import type { QuotaStatus } from "@/lib/ai/quota-guard";
 import type { AiProviderId } from "@/lib/ai/types";
+import type { WorkerEvidence } from "@/lib/db/repos/ai-worker-evidence";
 
 import { shippedAi } from "../../ai/helpers";
-import { ago, LAUNCHCTL_RUNNING, makeContext, only, ran, sourcesView } from "./helpers";
+import { ago, LAUNCHCTL_RUNNING, makeContext, only, ran, shippedReports, sourcesView } from "./helpers";
 
 const LAUNCHCTL = "launchctl print gui/501/io.jobradar.ai-worker";
 const worker = (extra: Partial<ReturnType<typeof sourcesView>["aiWorker"]>) => ({ ...sourcesView().aiWorker, ...extra });
@@ -93,6 +95,65 @@ describe("aiworker.heartbeat", () => {
   });
   it("is not needed with execution: container", async () => {
     expect((await only(aiWorkerHeartbeatCheck, makeContext({ ai: (raw) => (raw.execution = "container") }))).status).toBe("ok");
+  });
+});
+
+describe("aiworker.heartbeat receipts", () => {
+  it.each(["no-holder", "no-heartbeat", "no-report"] as const)("a recent heartbeat with %s warns that the current PID is not confirmed", async (reason) => {
+    const ctx = makeContext({ locale: "en", commands: { [LAUNCHCTL]: ran(LAUNCHCTL_RUNNING) }, probes: {
+      sources: async () => sourcesView({ aiWorker: worker({ lastHeartbeatAt: ago(10), ageSeconds: 10 }) }),
+      aiWorkerReceipt: async () => ({ status: "not_yet", reason }),
+    } });
+    const r = await only(aiWorkerHeartbeatCheck, ctx);
+    expect(r.status).toBe("warn");
+    expect(r.detail).toContain("Last heartbeat 10 s ago");
+    expect(r.detail).toContain("(pid 4242) has not confirmed");
+    expect(r.hint).toContain("database reconnect");
+    expect(r.hint).toContain("data/logs/ai-worker.err.log");
+    expect(r.hint).toContain("data/logs/ai-worker.out.log");
+  });
+  it.each(["job-radar ai-worker pid=777 host=elsewhere", null])("names the other lock holder: %s", async (holder) => {
+    const ctx = makeContext({ locale: "en", probes: { aiWorkerReceipt: async () => ({ status: "not_yet", reason: "other-holder", holder }) } });
+    expect(await only(aiWorkerHeartbeatCheck, ctx)).toMatchObject({ status: "warn", detail: expect.stringContaining(holder ?? ctx.t("common.unknown")) });
+  });
+  it.each([400, null])("an unconfirmed worker never softens an offline or absent heartbeat: %s", async (age) => {
+    const ctx = makeContext({ locale: "en", probes: {
+      sources: async () => sourcesView({ aiWorker: worker({ online: false, lastHeartbeatAt: age === null ? null : ago(age), ageSeconds: age }) }),
+      aiWorkerReceipt: vi.fn(async (): Promise<WorkerEvidence> => ({ status: "not_yet", reason: "no-heartbeat" })),
+    } });
+    expect((await only(aiWorkerHeartbeatCheck, ctx)).status).toBe("fail");
+    expect(ctx.probes.aiWorkerReceipt).not.toHaveBeenCalled();
+  });
+  it.each(["throw", "unknown", "no PID", "container"])("keeps the existing result when the receipt cannot be judged: %s", async (scenario) => {
+    const ctx = makeContext({
+      ...(scenario === "no PID" ? { commands: { [LAUNCHCTL]: ran("", 113) } } : {}),
+      ...(scenario === "container" ? { ai: (raw) => { raw.execution = "container"; } } : {}),
+      probes: { aiWorkerReceipt: vi.fn(async (): Promise<WorkerEvidence> => { if (scenario === "throw") throw new Error("unavailable"); return { status: "unknown", reason: "holder-not-visible" }; }) },
+    });
+    expect((await only(aiWorkerHeartbeatCheck, ctx)).status).toBe("ok");
+    if (["no PID", "container"].includes(scenario)) expect(ctx.probes.aiWorkerReceipt).not.toHaveBeenCalled();
+  });
+  it("a pending receipt falls back after the probe timeout for heartbeat and shipped config, and is cached", async () => {
+    vi.useFakeTimers();
+    try {
+      const ctx = makeContext({ locale: "en", settings: { probe_timeout_seconds: 1 }, probes: {
+        aiWorkerReceipt: vi.fn(() => new Promise<WorkerEvidence>(() => {})),
+        shippedConfigReports: async () => shippedReports({ "ai-worker": null }),
+      } });
+      const results = Promise.all([only(aiWorkerHeartbeatCheck, ctx), only(shippedConfigCheck, ctx)]);
+      await vi.advanceTimersByTimeAsync(1000);
+      const [heartbeat, shipped] = await results;
+      expect(heartbeat.status).toBe("ok");
+      expect(shipped).toMatchObject({ status: "warn", detail: expect.stringContaining("ai-worker has not reported its shipped config") });
+      expect(ctx.probes.aiWorkerReceipt).toHaveBeenCalledTimes(1);
+    } finally { vi.useRealTimers(); }
+  });
+  it("shares the service PID and receipt between heartbeat and shipped config in one run", async () => {
+    const ctx = makeContext();
+    await Promise.all([only(aiWorkerHeartbeatCheck, ctx), only(shippedConfigCheck, ctx)]);
+    expect(ctx.probes.aiWorkerReceipt).toHaveBeenCalledExactlyOnceWith(4242);
+    expect(ctx.probes.run.mock.calls.filter(([cmd]) => cmd === "launchctl")).toHaveLength(1);
+    expect(ctx.probes.aiWorkerReceipt.mock.invocationCallOrder[0]).toBeLessThan(ctx.probes.shippedConfigReports.mock.invocationCallOrder[0]!);
   });
 });
 

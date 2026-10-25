@@ -54,6 +54,11 @@ export function getDb(): Db {
   return getConnection().db;
 }
 
+/** Shared pool handle only for repositories that need native Sql. */
+export function getSql(): Sql {
+  return getConnection().sql;
+}
+
 /** Close the shared pool (graceful shutdown, tests). Safe to call when never opened. */
 export async function closeDb(): Promise<void> {
   const connection = globalForDb.__jobRadarDb;

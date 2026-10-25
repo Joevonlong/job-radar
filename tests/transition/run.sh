@@ -298,7 +298,7 @@ LAST_LOG=""
 log_has() { grep -qF -- "$1" "$LAST_LOG" || die "step $STEP: the output lacks: $1"; }
 log_lacks() { ! grep -qF -- "$1" "$LAST_LOG" || die "step $STEP: the output has: $1"; }
 
-deploy() { logged "deploy-$1" "0 2" in_project bash scripts/ops/deploy.sh --skip-pull --no-backup --no-prune --no-drain --settle 5 --wait-timeout 600; }
+deploy() { logged "deploy-$1" "0 2" in_project bash scripts/ops/deploy.sh --skip-pull --no-backup --no-prune --no-drain --settle "${2:-5}" --wait-timeout 600; }
 checkout() { git -C "$DIR" checkout -q --detach "$1"; }
 stop_web_runner() { logged stop-web-runner 0 in_project docker compose -p "$P" stop web runner; }
 release_of() { echo "$DIR/data/releases/ai-worker/$1"; }
@@ -466,7 +466,8 @@ if want A; then
   check_all "$V3" "$DIR" checkout 1
 
   strict_stop "$DIR/scripts/ops/uninstall-ai-worker.sh"
-  stop_web_runner; checkout "$V4"; deploy a-v4
+  stop_web_runner; checkout "$V4"; deploy a-v4 60
+  log_has "confirmed: lock, heartbeat and config report"
   check_all "$V4" "$(release_of "$V4")" release 4
 
   # A is done: its worker goes (B installs the same unit) and its containers too, before B builds
@@ -499,7 +500,8 @@ if want B; then
 
   # B3: the strict stop with V0's uninstall, then the first upgrade to V4
   strict_stop "$DIR/scripts/ops/uninstall-ai-worker.sh"
-  stop_web_runner; checkout "$V4"; deploy b-v4
+  stop_web_runner; checkout "$V4"; deploy b-v4 60
+  log_has "confirmed: lock, heartbeat and config report"
   check_all "$V4" "$(release_of "$V4")" release 4
 
   say "D: a deploy whose runner image fails to build changes nothing; the same deploy then succeeds"
@@ -508,7 +510,7 @@ if want B; then
   images_before="$(for c in $ids_before; do docker inspect -f '{{.Image}}' "$c"; done)"
   pid_before="$(worker_pid)"
   touch "$FAIL_FLAG"
-  logged d-deploy-fails 1 in_project bash scripts/ops/deploy.sh --skip-pull --no-backup --no-prune --no-drain --settle 5 --wait-timeout 600
+  logged d-deploy-fails 1 in_project bash scripts/ops/deploy.sh --skip-pull --no-backup --no-prune --no-drain --settle 60 --wait-timeout 600
   log_has "FAIL_RUNNER_BUILD is set"
   rm -f "$FAIL_FLAG"
   [[ "$(in_project docker compose -p "$P" ps -q web runner | sort)" == "$ids_before" ]] || die "step $STEP: the web / runner containers changed"
@@ -517,7 +519,8 @@ if want B; then
   [[ "$(worker_pid)" == "$pid_before" ]] || die "step $STEP: the worker was restarted"
   [[ -z "$(ls -A "$DIR/data/build" 2>/dev/null)" ]] || die "step $STEP: a build context is left in data/build"
   check_all "$V4" "$(release_of "$V4")" release 4 "ai-worker runs release $(short "$V4"), the checkout is at $(short "$NEXT")"
-  deploy d-deploy-again
+  deploy d-deploy-again 60
+  log_has "confirmed: lock, heartbeat and config report"
   check_all "$NEXT" "$(release_of "$NEXT")" release 4
 
   say "C: a release with a broken tsx loader: the switch is rolled back to NEXT"

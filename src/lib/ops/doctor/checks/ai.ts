@@ -5,7 +5,9 @@ import { z } from "zod";
 
 import { cliCommandProblem } from "@/lib/ai/providers/cli-guards";
 import { isCodexOlderThan, parseCodexVersion } from "@/lib/ai/providers/codex-version";
+import type { WorkerEvidence } from "@/lib/db/repos/ai-worker-evidence";
 
+import { withTimeout } from "../../timeout";
 import { configGuardFindings } from "../../config-guards";
 import { AI_WORKER_LAUNCHD_LOG, AI_WORKER_LOG_DIR, AI_WORKER_LOG_NAMES } from "../../log-files";
 import { ageSeconds, cached, extractJson, fail, formatAgo, formatDuration, formatLocal, joinList, merge, ok, warn, type Piece, type Spec } from "../helpers";
@@ -36,8 +38,8 @@ export function parseLaunchctlPrint(stdout: string): { state: string | null; pid
 }
 
 /** Where the worker's logs are: its own files on the external volume, and launchd's small capture file for start-up failures and crashes. */
-function workerLogs(ctx: DoctorContext): { err: string; launchd: string } {
-  return { err: path.join(ctx.appRoot, AI_WORKER_LOG_DIR, AI_WORKER_LOG_NAMES.err), launchd: AI_WORKER_LAUNCHD_LOG };
+function workerLogs(ctx: DoctorContext): { err: string; out: string; launchd: string } {
+  return { err: path.join(ctx.appRoot, AI_WORKER_LOG_DIR, AI_WORKER_LOG_NAMES.err), out: path.join(ctx.appRoot, AI_WORKER_LOG_DIR, AI_WORKER_LOG_NAMES.out), launchd: AI_WORKER_LAUNCHD_LOG };
 }
 
 /** A plist written before the log-dir option has launchd write `ai-worker.out.log` itself, on the internal disk. */
@@ -45,6 +47,43 @@ const isOldLogLayout = (stdoutPath: string | null): boolean => stdoutPath !== nu
 
 /** The systemd user unit of the ai-worker on Linux (scripts/ops/install-ai-worker.sh, scripts/ops/systemd/). */
 export const AI_WORKER_SYSTEMD_UNIT = "job-radar-ai-worker.service";
+
+/** The ai-worker's PID as the service manager gives it, or why there is none. */
+export function aiWorkerServicePid(ctx: DoctorContext): Promise<{ pid: number } | { pid: null; reason: string }> {
+  return cached(ctx, "aiworker.servicePid", async () => {
+    const { t } = ctx;
+    if (ctx.platform === "darwin" && ctx.uid !== null) {
+      const label = aiWorkerLaunchdLabel(ctx.settings.ai_worker_launchd_label);
+      const out = await ctx.probes.run("launchctl", ["print", `gui/${ctx.uid}/${label}`]);
+      if (out.kind !== "ran") return { pid: null, reason: t("checks.config.shipped.noAnswer", { command: "launchctl print" }) };
+      if (out.exitCode !== 0) return { pid: null, reason: t("checks.config.shipped.notLoaded", { service: label }) };
+      const pid = parseLaunchctlPrint(out.stdout).pid;
+      return pid === null ? { pid: null, reason: t("checks.config.shipped.notRunning", { service: label }) } : { pid };
+    }
+    if (ctx.platform === "linux") {
+      const out = await ctx.probes.run("systemctl", ["--user", "show", AI_WORKER_SYSTEMD_UNIT, "-p", "MainPID"]);
+      if (out.kind !== "ran" || out.exitCode !== 0) return { pid: null, reason: t("checks.config.shipped.noAnswer", { command: "systemctl --user show" }) };
+      const pid = Number(/^MainPID=(\d+)\s*$/m.exec(out.stdout)?.[1] ?? "0");
+      return pid > 0 ? { pid } : { pid: null, reason: t("checks.config.shipped.notRunning", { service: AI_WORKER_SYSTEMD_UNIT }) };
+    }
+    return { pid: null, reason: t("checks.config.shipped.noServiceManager") };
+  });
+}
+
+/** The receipt of the service's current PID (lock, heartbeat and own report since its lock), or null when it cannot be judged. */
+export function aiWorkerServiceReceipt(ctx: DoctorContext): Promise<{ pid: number; receipt: WorkerEvidence } | null> {
+  return cached(ctx, "aiworker.receipt", async () => {
+    if (ctx.config.ai.execution !== "host") return null;
+    try {
+      const service = await aiWorkerServicePid(ctx);
+      if (service.pid === null) return null;
+      const receipt = await withTimeout(ctx.probes.aiWorkerReceipt(service.pid), ctx.settings.probe_timeout_seconds * 1000, "ai-worker receipt");
+      return receipt.status === "unknown" ? null : { pid: service.pid, receipt };
+    } catch {
+      return null;
+    }
+  });
+}
 
 /** `systemctl show -p LoadState -p ActiveState` output: `LoadState=loaded` / `ActiveState=active` lines. */
 export function parseSystemctlShow(stdout: string): { load: string | null; active: string | null } {
@@ -133,6 +172,14 @@ export const aiWorkerHeartbeatCheck: DoctorCheck = {
     if (!aiWorker.online) {
       const logs = workerLogs(ctx);
       return fail(heartbeatSpec, t("checks.aiworker.heartbeat.offline", { ago: formatAgo(ctx, age), limit }), t("checks.aiworker.heartbeat.offlineHint", { errLog: logs.err, launchdLog: logs.launchd }));
+    }
+    const r = await aiWorkerServiceReceipt(ctx);
+    if (r?.receipt.status === "not_yet") {
+      if (r.receipt.reason === "other-holder") {
+        return warn(heartbeatSpec, t("checks.aiworker.heartbeat.otherHolder", { age, pid: r.pid, holder: r.receipt.holder ?? t("common.unknown") }), t("checks.aiworker.heartbeat.otherHolderHint"));
+      }
+      const logs = workerLogs(ctx);
+      return warn(heartbeatSpec, t("checks.aiworker.heartbeat.notConfirmed", { age, pid: r.pid }), t("checks.aiworker.heartbeat.notConfirmedHint", { errLog: logs.err, outLog: logs.out }));
     }
     return ok(heartbeatSpec, t("checks.aiworker.heartbeat.ok", { age, limit }));
   },

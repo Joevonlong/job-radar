@@ -9,6 +9,7 @@ import { createConnection } from "@/lib/db/client";
 import type { EvidenceConnection } from "@/lib/db/repos/ai-worker-evidence";
 import { instanceApplicationName } from "@/lib/db/instance-lock";
 import { HEARTBEAT_PROCESS, writeHeartbeat } from "@/lib/db/repos/heartbeats";
+import { setRuntimeState } from "@/lib/db/repos/runtime-state";
 
 import { createIsolatedDb, type IsolatedDb } from "../helpers/isolated-db";
 
@@ -44,6 +45,7 @@ afterAll(async () => {
 beforeEach(async () => {
   tmp = fs.mkdtempSync(path.join(os.tmpdir(), "worker-heartbeat-"));
   await conn.sql`truncate table runner_heartbeats`;
+  await conn.sql`delete from runtime_state where key = 'shipped_config:ai-worker'`;
 });
 
 afterEach(async () => {
@@ -192,6 +194,32 @@ describe("worker-heartbeat.ts --evidence", () => {
     const text = fs.readFileSync(script, "utf8");
     expect(text).not.toMatch(/\bsql`|\bselect\s|\binsert\s|\bfrom\s+pg_/i);
     expect(text).not.toContain("--latest");
+  });
+});
+
+describe("worker-heartbeat.ts --receipt", () => {
+  it.each(["own report", "other pid", "old report", "other host", "other holder"])("requires the holder's own report after its lock: %s", async (scenario) => {
+    const since = now();
+    const holder = await startHolder(iso.url);
+    // A heartbeat has no writer PID: the report must still belong to the holder.
+    await heartbeat();
+    await setRuntimeState(conn.db, "shipped_config:ai-worker", {
+      pid: scenario === "other pid" ? holder.pid + 1 : holder.pid,
+      instance: scenario === "other host" ? "elsewhere.invalid" : host,
+    });
+    if (scenario === "old report") {
+      // One microsecond before backend_start also catches accidental JS Date rounding.
+      await conn.sql`update runtime_state set updated_at = (
+        select backend_start - interval '1 microsecond' from pg_stat_activity
+        where application_name = ${instanceApplicationName("ai-worker", holder.pid, host)}
+      ) where key = 'shipped_config:ai-worker'`;
+    }
+    const pid = scenario === "other holder" ? holder.pid + 1 : holder.pid;
+    const r = probe(["--receipt", "--pid", String(pid), "--host", host, "--since", since], iso.url);
+    expect(r.status).toBe(scenario === "own report" ? 0 : 2);
+    expect(r.json).toMatchObject(scenario === "own report"
+      ? { status: "found", reason: "lock-heartbeat-report" }
+      : { status: "not_yet", reason: scenario === "other holder" ? "other-holder" : "no-report" });
   });
 });
 

@@ -1,6 +1,7 @@
 // @vitest-environment node
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
+import type { WorkerEvidence } from "@/lib/db/repos/ai-worker-evidence";
 import { shippedConfigCheck } from "@/lib/ops/doctor/checks/shipped";
 import type { CommandOutcome } from "@/lib/ops/doctor";
 
@@ -242,6 +243,30 @@ describe("config.shipped", () => {
       const result = await only(shippedConfigCheck, context({ commands }));
       expect(result.status).toBe("warn");
       expect(result.detail).toContain("ai-worker: the report comes from PID 4242, the service runs PID 777");
+    });
+
+    it.each(["no-holder", "no-heartbeat", "no-report"] as const)("%s changes only missing or other-PID reports to starting", async (reason) => {
+      for (const missing of [true, false]) {
+        const ctx = context({ commands: { [LAUNCHCTL]: ran("pid = 777") }, probes: {
+          aiWorkerReceipt: vi.fn(async (): Promise<WorkerEvidence> => ({ status: "not_yet", reason })),
+          shippedConfigReports: vi.fn(async () => shippedReports(missing ? { "ai-worker": null } : {})),
+        } });
+        const result = await only(shippedConfigCheck, ctx);
+        expect(result.status).toBe("warn");
+        expect(result.detail).toContain(reason === "no-report"
+          ? missing ? "ai-worker has not reported" : "the report comes from PID 4242, the service runs PID 777"
+          : "the service (pid 777) has not taken the worker lock or written a heartbeat");
+        if (reason !== "no-report") expect(result.hint).toContain("Run the doctor again in a minute");
+        expect(ctx.probes.aiWorkerReceipt.mock.invocationCallOrder[0]).toBeLessThan(ctx.probes.shippedConfigReports.mock.invocationCallOrder[0]!);
+      }
+    });
+
+    it("a stale report keeps its diagnosis even when the current PID has no heartbeat", async () => {
+      const ctx = context({ probes: {
+        aiWorkerReceipt: async () => ({ status: "not_yet", reason: "no-heartbeat" }),
+        shippedConfigReports: async () => shippedReports(updatedAt("ai-worker", ago(400))),
+      } });
+      expect((await only(shippedConfigCheck, ctx)).detail).toContain("ai-worker: the newest report is");
     });
 
     it.each<[string, Overrides, string]>([

@@ -4,6 +4,7 @@
  *
  *   DATABASE_URL=<url> node --import <tsx loader> scripts/ops/worker-heartbeat.ts --now
  *   DATABASE_URL=<url> node --import <tsx loader> scripts/ops/worker-heartbeat.ts --evidence --pid P --host H --since T
+ *   DATABASE_URL=<url> node --import <tsx loader> scripts/ops/worker-heartbeat.ts --receipt --pid P --host H --since T
  *
  * The database is only the one named by DATABASE_URL in the environment, which the caller sets explicitly (the URL it
  * writes into the service definition): no .env is read here, and an empty DATABASE_URL exits 1. Prints one JSON line
@@ -13,11 +14,12 @@
  *   --evidence   does worker P on host H hold the instance lock, with an ai-worker heartbeat at or after max(T, the lock
  *                connection's start)? exit 0 = found, 2 = not yet, 1 = cannot tell (database unreachable, the holder's
  *                session not visible to this role, bad arguments)
+ *   --receipt    evidence plus P's own shipped config report since max(T, the lock connection's start); same exit codes
  */
 import { parseArgs } from "node:util";
 
 import { createConnection } from "../../src/lib/db/client";
-import { dbNow, workerEvidence, workerEvidenceSchema, type EvidenceConnection } from "../../src/lib/db/repos/ai-worker-evidence";
+import { dbNow, workerEvidence, workerReceipt, workerEvidenceSchema, type EvidenceConnection } from "../../src/lib/db/repos/ai-worker-evidence";
 import { redact } from "../../src/lib/ops/doctor/helpers";
 import { withTimeout } from "../../src/lib/ops/timeout";
 
@@ -35,7 +37,7 @@ interface Mode {
 }
 
 // One row per mode: a later mode (e.g. a lock-holder probe) is one more row here.
-const MODES: Record<"now" | "evidence", Mode> = {
+const MODES: Record<"now" | "evidence" | "receipt", Mode> = {
   now: {
     needs: [],
     check: () => null,
@@ -54,6 +56,14 @@ const MODES: Record<"now" | "evidence", Mode> = {
       return { json: result, exit: result.status === "found" ? 0 : result.status === "not_yet" ? 2 : 1 };
     },
   },
+  receipt: {
+    needs: ["pid", "host", "since"],
+    check: (v) => MODES.evidence.check(v),
+    run: async (conn, v) => {
+      const result = workerEvidenceSchema.parse(await workerReceipt(conn, { pid: Number(v.pid), host: v.host ?? "", since: v.since ?? "" }));
+      return { json: result, exit: result.status === "found" ? 0 : result.status === "not_yet" ? 2 : 1 };
+    },
+  },
 };
 
 const print = (json: unknown): void => console.log(JSON.stringify(json));
@@ -63,12 +73,13 @@ const fail = (detail: string): number => {
 };
 
 async function main(): Promise<number> {
-  let parsed: { values: Values & { now?: boolean; evidence?: boolean } };
+  let parsed: { values: Values & { now?: boolean; evidence?: boolean; receipt?: boolean } };
   try {
     parsed = parseArgs({
       options: {
         now: { type: "boolean" },
         evidence: { type: "boolean" },
+        receipt: { type: "boolean" },
         pid: { type: "string" },
         host: { type: "string" },
         since: { type: "string" },
