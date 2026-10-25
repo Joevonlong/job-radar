@@ -18,7 +18,9 @@ dedupe:
 lifecycle:
   # Not returned by any source for this many consecutive days → possibly_closed (only channels that ran successfully during that period count, so a channel outage never closes jobs)
   possibly_closed_after_days: 7
-  # Max possibly_closed jobs whose original link is checked per run (404 / 410 → closed)
+  # unseen_link_check_after_days: active jobs no source returned for this many days get a direct link check (default 14; 0 = off).
+  # unseen_link_check_interval_days: least days between two fallback link checks of the same job (default 7).
+  # Max possibly_closed and unseen active jobs whose original link is checked per run (404 / 410 → closed)
   max_link_checks_per_cycle: 20
   link_check_timeout_ms: 10000
   # Recheck of watched jobs (starred, or an application you follow: interested / preparing / applied / interviewing / offer).

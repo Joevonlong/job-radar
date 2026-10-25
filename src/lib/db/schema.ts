@@ -326,7 +326,7 @@ export const jobs = pgTable(
     skills: text("skills").array().notNull().default(sql`'{}'::text[]`),
     /** Last time maintenance checked the posting's links (rotates the possibly_closed link checks). */
     linkCheckedAt: timestamptz("link_checked_at"),
-    /** What the last recheck of a watched job's posting found (`LinkCheckEvidence`: outcome, HTTP status, phrase, quote, URL, time). */
+    /** What the last recheck of a watched job's posting found (`LinkCheckEvidence`: outcome, HTTP status, phrase, quote, URL, time); unanswered evidence may carry an `unseenCheckedAt` ISO timestamp for fallback link checks. */
     linkCheckJson: jsonb("link_check_json"),
     /**
      * Full-text vector over title + description ('simple' config: postings are de/en mixed).

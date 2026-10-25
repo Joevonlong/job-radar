@@ -255,11 +255,16 @@ ai-worker 的发布目录和切换由 `schedule.yaml` 里的四个键控制。�
 
 ## 关注岗位复查（`pipeline.yaml` + `ui.yaml`）
 
-维护步骤会复查收藏和跟进中岗位的原帖页面（见 usage.zh.md"已关闭的岗位"）。相关的键在两个文件里；两段都可以缺省（旧文件），缺省时用下面的默认值。
+维护步骤会复查收藏和跟进中岗位的原帖页面（见 usage.zh.md"已关闭的岗位"）。相关的键在两个文件里；关注岗位复查的两段都可以缺省（旧文件），缺省时用下面的默认值。表中也列出了可能已关闭和长期未见的有效岗位共用的链接检查设置。
 
 | 文件 | 键 | 默认 | 含义 |
 |---|---|---|---|
-| `pipeline.yaml`（shipped） | `lifecycle.watch_recheck.interval_hours` | 72 | 同一个关注岗位最多每这么多小时复查一次 |
+| `pipeline.yaml`（shipped） | `lifecycle.possibly_closed_after_days` | 7 | 连续未见这么多天，且每个来源通道在到期后都有成功运行，才标为可能已关闭 |
+| | `lifecycle.unseen_link_check_after_days` | 14 | 有效岗位连续未见这么多天就直接兜底检查链接，不依赖通道运行记录；0 为关闭。可选，缺省时由 schema 提供默认值 |
+| | `lifecycle.unseen_link_check_interval_days` | 7 | 同一岗位两次兜底检查的最少间隔天数。可选，缺省时由 schema 提供默认值 |
+| | `lifecycle.max_link_checks_per_cycle` | 20 | 可能已关闭和长期未见的有效岗位共用的每轮链接检查上限 |
+| | `lifecycle.link_check_timeout_ms` | 10000 | 两类链接检查每次请求的超时毫秒数 |
+| | `lifecycle.watch_recheck.interval_hours` | 72 | 同一个关注岗位最多每这么多小时复查一次 |
 | | `lifecycle.watch_recheck.max_per_cycle` | 10 | 每轮最多复查几个岗位 |
 | | `lifecycle.watch_recheck.per_host_min_interval_ms` | 3000 | 对同一网站两次请求的最小间隔（含 robots.txt） |
 | | `lifecycle.watch_recheck.timeout_ms` | 10000 | 单次请求超时 |
