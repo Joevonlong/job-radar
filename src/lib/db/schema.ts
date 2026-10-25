@@ -137,7 +137,13 @@ export const runs = pgTable(
     /** Wider than the base window (catch-up or backfill); such a run never counts as evidence a job closed. Always false for now. */
     windowExtended: boolean("window_extended").notNull().default(false),
   },
-  (t) => [index("runs_cycle_id_idx").on(t.cycleId), index("runs_channel_started_idx").on(t.channelId, t.startedAt)],
+  (t) => [
+    index("runs_cycle_id_idx").on(t.cycleId),
+    index("runs_channel_started_idx").on(t.channelId, t.startedAt),
+    // covers the query history read (`getQueryRunHistory`): it has no time bound, so it must be an index-only scan; the
+    // columns its filters read are trailing key columns because drizzle cannot declare INCLUDE
+    index("runs_channel_query_started_idx").on(t.channelId, t.queryHash, t.startedAt, t.status, t.fetched, t.usageUnits, t.cost, t.interrupted),
+  ],
 );
 
 /** C1: every fetched posting lands here verbatim before any parsing. */

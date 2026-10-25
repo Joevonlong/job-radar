@@ -1,5 +1,5 @@
 {
-  "id": "7896fd46-963c-4370-9dff-4175e4dc7095",
+  "id": "a9e0565f-3d98-43be-b8d8-b60d0216353c",
   "prevId": "59df434e-7f6c-4c7c-825a-15b72b50ad57",
   "version": "7",
   "dialect": "postgresql",
@@ -2726,6 +2726,63 @@
             },
             {
               "expression": "started_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "runs_channel_query_started_idx": {
+          "name": "runs_channel_query_started_idx",
+          "columns": [
+            {
+              "expression": "channel_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "query_hash",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "started_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "fetched",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "usage_units",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "cost",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "interrupted",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
