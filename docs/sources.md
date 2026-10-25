@@ -64,11 +64,15 @@ The registry's "kept" count means postings that passed the title prefilter and f
 A stored posting dropped by the title prefilter does **not** count as seen.
 After you narrow your keywords, it ages out as usual unless another source sees it.
 
-For SmartRecruiters only, a failing detail request no longer fails the board. A stored posting keeps its saved version
-and is refreshed as seen; a new posting is not stored and is retried in later sweeps, ahead of postings whose
-details already failed before. After
+For SmartRecruiters only, a failing detail request no longer marks the board as failed in the registry.
+A stored posting keeps its saved version and is refreshed as seen; a new posting is not stored and is retried in later sweeps, ahead of postings whose
+details already failed before; after a repeated failure, it is only retried once the board's list changes. After
 `sources.smartrecruiters.max_consecutive_detail_failures` failures in a row (default 3), or a host-level refusal
 (blocked, login/auth expired, rate limit, or budget), the board's remaining details are skipped for that sweep.
+The run outcome is unchanged: if every board of the ATS has a failed list or detail request in that sweep,
+the run is still recorded as interrupted when postings were collected, or failed otherwise, not as a success.
+It is therefore not used to mark jobs as possibly closed. The registry still shows a board as OK when its list
+was read and its stored jobs were refreshed, even if a detail request failed.
 
 ## 4. What you can do on the page
 
@@ -158,7 +162,7 @@ earlier writes. Dry runs and the "Test" button keep config order without reading
 
 | You see | What to do |
 |---|---|
-| SmartRecruiters detail request fails | The board stays OK; the `ats board details missing` log line shows failed and skipped counts. Stored jobs keep their saved version and are refreshed as seen; new jobs arrive in later sweeps. For persistent refusals, check the board's careers page and your network, or increase `sources.smartrecruiters.throttle` delays to lower the load. See [Company ATS boards](#company-ats-boards) |
+| SmartRecruiters detail request fails | The board stays OK in the registry; `ats board details missing` logs failed and skipped counts. Stored jobs are refreshed as seen; new jobs are retried in later sweeps, but after a repeated failure only once the board's list changes. Run outcomes are unchanged; see [Company ATS boards](#company-ats-boards). For persistent refusals, check the careers page and network, or increase `sources.smartrecruiters.throttle` delays |
 | Company "N consecutive failures: board does not exist (404)" | The token is wrong or the company changed ATS: click "Open board" to look at the careers page, fix the token under "Edit", or "Delete" |
 | Company "not checked for N hours" | Its ATS channel is off or the breaker is open, or the runner is not running; look at the channel row |
 | Channel "breaker open until ..." | Consecutive failures reached `circuit_breaker.failures`; it tries once automatically when the cooldown expires; expand "Details" for the latest error code; being blocked usually means waiting or switching channels |
