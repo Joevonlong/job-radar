@@ -360,7 +360,9 @@ describe("a posting page that fails part-way", () => {
     const site = { failing: true };
     const flaky = happySite({ detail: (u) => (site.failing && u.pathname.includes("4385000103") ? { html: "", timeout: true } : null) });
     // 7 pages: four search pages (two keyword strings, two pages each), the postings 101 and 102, and 103, which times out on the last page of the day
-    const { run, guest, browser, clock } = setup({ site: flaky, edit: (session) => (session.daily_request_limit = 7) });
+    const { run, guest, browser, clock, channelsConfig } = setup({ site: flaky, edit: (session) => (session.daily_request_limit = 7) });
+    // Keep the same query first on day two: this test isolates reuse of its stored detail pages.
+    channelsConfig.collect.query_rotation = false;
 
     const first = await run();
     const runs = await listRunsForCycle(getDb(), first.cycleId as number);

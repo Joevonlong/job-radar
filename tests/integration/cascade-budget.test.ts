@@ -1,17 +1,20 @@
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, inject, it } from "vitest";
 
 import type { CascadeSpec } from "@/lib/channels/cascade";
 import { registerFixtureChannel } from "@/lib/channels/fixture";
+import { createApifyChannel } from "@/lib/channels/linkedin/apify";
 import { createBrightDataChannel } from "@/lib/channels/linkedin/brightdata";
+import { buildQueries } from "@/lib/channels/query";
 import { ChannelRegistry } from "@/lib/channels/registry";
 import { runCycle } from "@/lib/cycle/run-cycle";
-import { closeDb, getDb, getMonthUsage, listRawPostingsForChannel, listRunsForCycle } from "@/lib/db";
+import { closeDb, getDb, getMonthUsage, listRawPostingsForChannel, listRunsForCycle, schema } from "@/lib/db";
 import { runMigrations } from "@/lib/db/migrate";
 
 import { channelsWith } from "../channels/helpers";
 import { ENV, MONTH, NOW, fakeProvider, type FakeProvider } from "../channels/linkedin/brightdata/helpers";
-import { config, pinnedSearch, quietLogger } from "../cycle/helpers";
+import { ENV as APIFY_ENV } from "../channels/linkedin/apify/helpers";
+import { collectOf, config, pinnedSearch, quietLogger } from "../cycle/helpers";
 
 const url = inject("testDatabaseUrl");
 
@@ -79,6 +82,68 @@ function setup(fake: FakeProvider) {
 }
 
 describe("Bright Data budget -> LinkedIn cascade", () => {
+  it("rotates Bright Data's one-query allowance, then follows the guest's own history when it starts", async () => {
+    const guestId = "linkedin-guest";
+    const apifyId = "linkedin-apify";
+    const search = {
+      ...pinnedSearch(), keyword_groups: { a: ["alpha"], b: ["beta"], c: ["gamma"] },
+      locations: ["Test City"], remote_scope: "none" as const, max_per_group_per_location: 1,
+    };
+    const ids = buildQueries(search, "manual").map((query) => query.id);
+    const fake = provider(() => 1);
+    const registry = new ChannelRegistry();
+    registry.register(createBrightDataChannel({ costPer1kUsd: () => 1.5, environment: ENV, now: () => NOW, sleep: async () => {} }));
+    registry.register(createApifyChannel({ pricePer1kUsd: () => 0.4, environment: APIFY_ENV, now: () => NOW }));
+    const guest = registerFixtureChannel(registry, { id: guestId, family: "linkedin", postings: [] });
+    const run = async (cycle: number, allowance: number, channelIds?: readonly string[]) => {
+      const now = new Date(NOW.getTime() + cycle * 3_600_000);
+      const channels = channelsWith((raw) => {
+        const linkedin = raw.linkedin as Record<string, Record<string, unknown>>;
+        Object.assign(linkedin.brightdata!, { enabled: true, free_records_per_month: 0, monthly_budget_usd: allowance * 0.0015, cost_per_1k_usd: 1.5 });
+        linkedin.apify!.enabled = false;
+      });
+      const result = await runCycle("manual", {
+        registry, cascades: [{ family: "linkedin", order: [BRIGHT, apifyId, guestId] }],
+        config: { ...config({ search }), channels }, logger: quietLogger, fetch: fake.fetch,
+        sleep: async () => {}, now: () => now, ...(channelIds ? { channelIds } : {}),
+      });
+      // Equal timestamps within each cycle make ties explicit; later cycles are strictly newer.
+      await getDb().update(schema.runs).set({ startedAt: now }).where(eq(schema.runs.cycleId, result.cycleId as number));
+      return { result, rows: await listRunsForCycle(getDb(), result.cycleId as number) };
+    };
+
+    const brightQueries: string[] = [];
+    for (let cycle = 0; cycle < 3; cycle += 1) {
+      const { result, rows } = await run(cycle, cycle + 1);
+      expect(result.status).toBe("succeeded");
+      expect(rows).toHaveLength(3);
+      expect(rows.map((row) => row.channelId)).toEqual([BRIGHT, guestId, guestId]);
+      expect(rows.every((row) => row.status === "succeeded")).toBe(true);
+      expect(rows[0]).toMatchObject({ queryHash: ids[cycle], fetched: 1, usageUnits: 1, windowExtended: false });
+      expect(Number(rows[0]!.cost)).toBeCloseTo(0.0015, 6);
+      expect(collectOf(result).rotation.linkedin).toMatchObject({ sortChannel: BRIGHT, queries: 3, reached: 3, historyUnavailable: false });
+      brightQueries.push(rows[0]!.queryHash!);
+    }
+    expect(brightQueries).toEqual(ids);
+    expect(new Set(brightQueries).size).toBe(3);
+    expect(fake.count("trigger")).toBe(3);
+    expect(guest.seen).toHaveLength(6);
+
+    // No allowance increase: the month is spent. Guest last served q3 a cycle before q1/q2.
+    const exhausted = await run(3, 3);
+    expect(exhausted.rows.map((row) => row.channelId)).toEqual([guestId, guestId, guestId]);
+    expect(exhausted.rows.map((row) => row.queryHash)).toEqual([ids[2], ids[0], ids[1]]);
+    expect(collectOf(exhausted.result).rotation.linkedin).toMatchObject({ sortChannel: guestId, neverRun: 0, oldestWaitHours: 2 });
+    expect(fake.count("trigger")).toBe(3);
+
+    // Even with Bright Data affordable again, a guest-only selection starts at the guest.
+    const selected = await run(4, 4, [guestId]);
+    expect(selected.rows.map((row) => row.channelId)).toEqual([guestId, guestId, guestId]);
+    expect(selected.rows.map((row) => row.queryHash)).toEqual(ids);
+    expect(collectOf(selected.result).rotation.linkedin).toMatchObject({ sortChannel: guestId, reached: 3, historyUnavailable: false });
+    expect(fake.count("trigger")).toBe(3);
+  });
+
   it("serves queries until free records and paid budget are used up, then the next channel takes the rest of the cycle", async () => {
     const fake = provider((limit) => Math.min(limit, 2));
     const { next, run } = setup(fake);
