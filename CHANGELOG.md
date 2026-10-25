@@ -111,6 +111,7 @@ and the project uses [Semantic Versioning](https://semver.org/).
   refreshed as seen; new postings are added in later sweeps. New setting
   `sources.smartrecruiters.max_consecutive_detail_failures` (default 3) limits consecutive detail failures per board
   per sweep. **Upgrade:** a database migration adds a column and runs automatically on deploy.
+- Board discovery (Tavily, Brave) no longer drops the same searches every run when there are more than `max_queries_per_run`; it searches the ones that waited longest first.
 - **Company career board scans:** `max_results` no longer hides stored jobs that the board still lists, which could
   mark them possibly closed after a week. The registry's "kept" count now means postings that passed the prefilter and
   fit within the cap. **Upgrade:** the first run after upgrading re-reads every board once (cached ETags are discarded).
@@ -119,6 +120,10 @@ and the project uses [Semantic Versioning](https://semver.org/).
   (`--settle` overrides it; 0 skips the wait). An unconfirmed worker now makes deploy exit 2 even if doctor has no
   failures. Doctor warns for a current process without a receipt or a lock held by another worker; missing and stale
   heartbeats remain failures.
+- **`cycle:run --dry-run` honours the stored budget, circuit and job state:** it ignored the database and started
+  from empty state, so dry runs made billed requests past the monthly caps, hit channels with an open circuit and
+  fetched the details of jobs already stored again. It now starts from the persisted monthly usage, circuit state and
+  stored postings (read-only), as its help text said; it still writes nothing.
 - **A job marked "no longer accepting applications" stays marked when its posting is parsed again or another channel
   merges into it:** the pipeline reset such a job to active (and made it eligible for scoring and push) whenever a
   source returned a changed posting or a new channel's copy. It now applies the same rule as the "seen again" step of

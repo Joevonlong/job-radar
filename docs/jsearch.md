@@ -50,7 +50,7 @@ The `jsearch` channel uses the JSearch API to fetch jobs aggregated by Google fo
 pnpm smoke:jsearch                 # reads .env; one query = 1 request
 pnpm exec tsx --env-file=/path/to/.env scripts/smoke-jsearch.ts --remote
 ```
-Writes nothing to the database; usage is shown only in the output and does not count toward the month. You can also use `pnpm cycle:run --channel jsearch --dry-run` (9 requests for one cycle).
+Writes nothing to the database; usage is shown only in the output and does not count toward the month. You can also use `pnpm cycle:run --channel jsearch --dry-run`: the request count depends on the queries, `keywords_per_query` and remaining quota. When the database state is readable, the dry run starts from this month's persisted request count and sends no requests once the quota is exhausted unless an overage price is configured and the dollar budget still allows them.
 
 ## Notes
 - The vendor's new documentation (<https://www.openwebninja.com/api/jsearch>) lists `/search-v2` (cursor pagination, `x-api-key` header, host `api.openwebninja.com`) as the current search endpoint; this channel goes through RapidAPI's `/search`. Field names are the same in both. Switching to the direct API would require changing the auth header and pagination, and is a separate change.

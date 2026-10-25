@@ -1,13 +1,14 @@
 import { BudgetTracker, monthKey } from "@/lib/channels/budget";
 import type { CascadeSpec } from "@/lib/channels/cascade";
 import { CircuitBreaker } from "@/lib/channels/circuit";
+import { NO_KNOWN_POSTINGS } from "@/lib/channels/context";
 import type { FetchLike, SleepFn } from "@/lib/channels/http";
 import type { HostResolver } from "@/lib/net/public-url";
 import { createLogger } from "@/lib/channels/logger";
 import type { ScheduledCycleKind } from "@/lib/channels/query";
 import { defaultRegistry, type ChannelRegistry } from "@/lib/channels/registry";
-import { createDbStateStore, createMemoryStateStore, type ChannelStateStore } from "@/lib/channels/store";
-import type { ChannelLogger } from "@/lib/channels/types";
+import { createDbKnownPostings, createDbStateStore, createMemoryStateStore, type ChannelStateStore } from "@/lib/channels/store";
+import type { ChannelLogger, KnownPostings } from "@/lib/channels/types";
 import { freshenConfig, loadConfig, type ChannelsConfig, type ScheduleConfig, type SearchConfig } from "@/lib/config";
 import { getDb, type Db } from "@/lib/db/client";
 import { createCycle, createSkippedCycle, finishCycle, type CycleKind } from "@/lib/db/repos/cycles";
@@ -24,7 +25,10 @@ export interface RunCycleOptions {
   windowKind?: ScheduledCycleKind;
   /** Cancels the cycle (runner shutdown): pending steps are skipped, in-flight requests aborted. */
   signal?: AbortSignal;
-  /** Defaults to the shared pool; for dry runs, to none (pass one to read real budget and circuit state). */
+  /**
+   * Defaults to the shared pool. A dry run never writes through it: when given (the CLI passes a read-only one),
+   * the dry run starts from the persisted month usage, circuit state and stored postings; without one it starts from empty state.
+   */
   db?: Db | null;
   registry?: ChannelRegistry;
   /** Cascade families; defaults to `linkedin.cascade` from sources.yaml. */
@@ -115,11 +119,12 @@ export async function runCycle(kind: CycleKind, options: RunCycleOptions = {}): 
     startedAt: now().toISOString(),
   };
 
-  const execute = async (realDb: Db | null): Promise<CycleRunResult> => {
+  const execute = async (writeDb: Db | null, readDb: Db | null): Promise<CycleRunResult> => {
     const startedMs = now().getTime();
     const registry = options.registry ?? defaultRegistry;
-    const store: ChannelStateStore = dryRun ? createMemoryStateStore(realDb ? createDbStateStore(realDb) : null) : createDbStateStore(realDb as Db);
-    const cycleRow = !dryRun && realDb ? await createCycle(realDb, { kind }) : null;
+    const store: ChannelStateStore = dryRun ? createMemoryStateStore(readDb ? createDbStateStore(readDb) : null) : createDbStateStore(writeDb as Db);
+    const known = (channelId: string): KnownPostings => (readDb ? createDbKnownPostings(readDb, channelId) : NO_KNOWN_POSTINGS);
+    const cycleRow = !dryRun && writeDb ? await createCycle(writeDb, { kind }) : null;
     const signal = options.signal ?? new AbortController().signal;
     const steps: StepSummary[] = [];
     const results: Partial<Record<CycleStepName, unknown>> = {};
@@ -155,7 +160,7 @@ export async function runCycle(kind: CycleKind, options: RunCycleOptions = {}): 
         cycle: { id: cycleRow?.id ?? null, kind },
         windowKind: options.windowKind ?? null,
         dryRun,
-        db: realDb,
+        db: writeDb,
         signal,
         logger: logger.child({ cycle: cycleRow?.id ?? "dry-run", kind }),
         now,
@@ -164,6 +169,7 @@ export async function runCycle(kind: CycleKind, options: RunCycleOptions = {}): 
           registry,
           cascades: options.cascades ?? cascadesFromConfig(config.channels),
           store,
+          known,
           breaker,
           budget,
           selected: options.channelIds ?? null,
@@ -221,16 +227,18 @@ export async function runCycle(kind: CycleKind, options: RunCycleOptions = {}): 
       steps,
       ...(setupError === undefined ? {} : { reason: setupError }),
     };
-    if (cycleRow && realDb) {
-      await finishCycle(realDb, cycleRow.id, { status: finalStatus, summary });
+    if (cycleRow && writeDb) {
+      await finishCycle(writeDb, cycleRow.id, { status: finalStatus, summary });
     }
     if (setupError !== undefined) throw new Error(`cycle failed: ${setupError}`);
     return { cycleId: cycleRow?.id ?? null, kind, status: finalStatus, summary, results };
   };
 
-  if (dryRun || db === null) return execute(null);
+  // a dry run reads persisted state through `db` but gets no writable handle and takes no lock
+  if (dryRun) return execute(null, db);
+  if (db === null) throw new Error("runCycle: a database is required unless dryRun is set"); // unreachable (checked above); narrows the type
 
-  const locked = await withCycleLock(db, config.schedule.skip_if_running ? "try" : "wait", () => execute(db));
+  const locked = await withCycleLock(db, config.schedule.skip_if_running ? "try" : "wait", () => execute(db, db));
   if (locked.acquired) return locked.value;
 
   logger.warn("cycle skipped: another cycle is running", { kind });

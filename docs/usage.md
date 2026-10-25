@@ -213,9 +213,23 @@ After each cycle, qualified new jobs (rank value >= 70, or >= 60 with a high-val
 ```bash
 pnpm cycle:run                                  # run one full cycle: collect -> process -> AI -> push
 pnpm cycle:run --channel arbeitsagentur         # run just one channel
+pnpm cycle:run --channel <id> --dry-run         # collect and parse in memory, write nothing
 ```
 
-You can also click "Run a cycle now" on the "Manual actions" tab of `/settings`, with the same effect.
+For a full cycle, you can also click "Run a cycle now" on the "Manual actions" tab of `/settings`.
+
+A dry run sends real requests, so paid channels still bill them, but writes nothing to the database. When the database
+is reachable, migrated and readable, it reads the persisted monthly usage, circuit state and stored postings through a
+read-only connection. Requests follow the same budget checks as a real run: exhausted quotas stop requests unless an
+overage price is configured and the dollar budget still allows them; circuits still cooling down also skip requests.
+The log `cascade has no available channel` gives the reasons when no channel can run. This is not a hard billing cap.
+
+Stored postings are reused by each channel's rules: Arbeitsagentur, StepStone and XING use `reuse_known_details`;
+JSearch only falls back to stored descriptions and makes the same number of detail requests; LinkedIn session skips
+opening stored jobs from its own channel id. Dry-run usage is not added to the month's total, so repeated dry runs can
+each use the same remaining allowance. Brave has no monthly budget check. If the database is unreachable, unmigrated or
+unreadable, the CLI warns and starts from empty state; paid channels then have no protection from persisted monthly
+usage limits. See the [LinkedIn session guide](linkedin-session.md#live-smoke-test) for its daily page cap and login-state limits.
 
 ### Reading jobs and JDs in the terminal
 

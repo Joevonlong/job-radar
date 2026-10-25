@@ -23,7 +23,7 @@
 | `search_depth` | `basic`（默认）/ `fast` / `ultra-fast`：1 个额度；`advanced`：2 个额度、结果更相关 |
 | `keywords_per_query` | 每个 `search.yaml` 关键词组取前几个词，用 OR 连成一个查询（默认 2） |
 | `interval_hours` | 距上次发现不足这么多小时不再搜索（默认 24） |
-| `max_queries_per_run` | 每次最多搜索多少次（ATS × 关键词组 × 城市）。默认 30 |
+| `max_queries_per_run` | 每次最多搜索多少次，默认 30。ATS × 关键词组 × 城市多于上限时，先搜最久没轮到的查询。本地没有轮到记录的查询（包括新增查询）排在已轮到过的前面，并列按 `search.yaml` 顺序。每条至少每 `ceil(总数 / 上限)` 次运行轮到一次，前提是配置和上限不变、轮换开启、每次记录都保存成功、时钟没有回拨，且每次都搜完选中的整批，没有被预算或额度挡下、没有遇到致命错误、没有被取消。被 `interval_hours` 跳过的不算一次运行。设为 `collect.query_rotation: false` 后，每次只搜前 N 条 |
 | `max_results` | 每次搜索取多少条（Tavily 上限 20） |
 | `monthly_credit_limit` | 套餐每月包含的额度（免费档 1000），也是月用量进度条的分母 |
 | `credit_cost_usd` | 超出上限后每个额度的价格；0 = 超出后一律不搜 |
@@ -31,7 +31,10 @@
 | `throttle` | 两次搜索之间的间隔 |
 
 ## 它怎么工作
-- 每个查询 = 一个 ATS × `search.yaml` 的一个关键词组 × 一个城市。例如 `KI Engineer OR KI-Entwickler jobs München`，`include_domains` 为该 ATS 的主机（`jobs.lever.co`、`jobs.eu.lever.co`；Personio 是 `jobs.personio.de`）。Tavily 没有 `site:` 运算符，主机限制靠 `include_domains`。
+- 每个查询 = 一个 ATS × `search.yaml` 的一个关键词组 × 一个城市。例如 `KI Engineer OR KI-Entwickler jobs München`，`include_domains` 为该 ATS 的主机（`jobs.lever.co`、`jobs.eu.lever.co`；Personio 是 `personio.de`）。Tavily 没有 `site:` 运算符，主机限制靠 `include_domains`。
+- Tavily 和 Brave 各自在数据库中保存每条查询上次轮到的时间。搜索出错也算轮到；请求发出前被预算或额度拒绝不算。两者共用 `collect.query_rotation` 开关，关闭轮换时也照常记录。干跑和 `/sources` 的“测试”按钮按 `search.yaml` 顺序搜索，不读也不更新这些记录。
+- 如果发现在开始写数据库之前已取消，这次什么都不写：不记轮到、不存候选、不更新运行标记，下一次重搜同样的查询。写库开始以后才发生的取消，不撤销已经写下的东西。如果每次都在同一处被取消，靠后的查询可能一直轮不到，上面的覆盖保证不成立。
+- `tavily discovery done` 日志中，`capped` 是本次因上限未排上的查询数，`neverRun` 是保存后本地记录里还没有轮到过的查询数；轮到记录没有写成时，`neverRun` 为 `null`。
 - 结果里的每个网址都要通过 `boardFromUrl`（只认五家 ATS 的官方主机和路径），其他网址一律丢弃；已经在 `sources.yaml 的 ats_boards` 里的 board 不再提示。
 - 通道从不修改 `sources.yaml 的 ats_boards`；候选在 `/sources` 里点"加入"才会写进去。
 
@@ -40,6 +43,6 @@
 
 ## 线上冒烟
 ```bash
-pnpm cycle:run --channel tavily --dry-run   # 最多 30 次搜索 = 最多 30 个额度；只打印候选，不写数据库、不更新运行标记
+pnpm cycle:run --channel tavily --dry-run   # 按 search.yaml 顺序；和真实运行一样，本月额度用完就停，除非配置了 credit_cost_usd 且预算还有余量
 ```
-Tavily 那边会扣额度。需要确认：`include_domains` 对 Personio 子域名是否匹配、候选里确实有新 board。
+数据库状态可读时，试跑从本月已存的用量开始。只打印候选，不写数据库，仍不读、也不更新运行标记（`interval_hours`）。Tavily 那边会扣额度。需要确认：`include_domains` 对 Personio 子域名是否匹配、候选里确实有新 board。

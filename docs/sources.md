@@ -145,6 +145,15 @@ Two limits of the recorded history remain:
 - JSearch searches only the first `keywords_per_query` keywords in a group. Reordering keywords within that group keeps the
   query id, so its history can describe a different prefix of keywords.
 
+Board discovery (Tavily and Brave) uses the same `collect.query_rotation` switch, rotating searches inside each channel.
+Its per-query turns live in `runtime_state`, not `runs`, and all turns in one run share a timestamp. It guarantees a turn
+at least every `ceil(N / cap)` runs when the config and cap stay unchanged, rotation is on, turns are saved each time,
+the clock does not move backwards, and each selected batch completes without a budget/quota stop, fatal error or
+cancellation; interval skips do not count. It does not provide the N−1 guarantee above. Cancellation observed before
+discovery starts writing leaves no turns, candidates or run marker; cancellation after writing starts does not undo
+earlier writes. Dry runs and the "Test" button keep config order without reading or writing turns. See
+[Tavily discovery](tavily.md#how-it-works) for the details, including repeated cancellations.
+
 ## 6. Handling common failures
 
 | You see | What to do |

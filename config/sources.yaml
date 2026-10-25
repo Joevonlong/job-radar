@@ -28,7 +28,7 @@ circuit_breaker:
 # Collection step: number of channels collected in parallel (the LinkedIn cascade counts as one); queries within a channel always run sequentially
 collect:
   concurrency: 3
-  # query_rotation defaults to true: start each cycle with the queries waiting longest.
+  # query_rotation defaults to true: start each cycle with the queries waiting longest; also orders the Tavily / Brave board-discovery searches.
   # Set query_rotation: false to run queries in search.yaml order every cycle.
 
 # Defaults for a channel's ctx.http: per-request timeout, retry count (network errors / 5xx / 429, honoring Retry-After), start and cap of exponential backoff
@@ -340,7 +340,7 @@ sources:
     search_depth: basic # basic / fast / ultra-fast cost 1 credit per search, advanced costs 2
     keywords_per_query: 2 # first N words of each keyword group, OR-joined into one query
     interval_hours: 24 # don't search again within this many hours of the last discovery (once a day)
-    max_queries_per_run: 30 # max searches per pass (5 ATS × keyword groups × cities); 30 × about 30 days a month ≈ 900 credits, within the free allowance
+    max_queries_per_run: 30 # max searches per pass; when 5 ATS × groups × cities is more, each pass searches the ones that waited longest first
     monthly_credit_limit: 1000 # credits included in the Tavily plan per month (free tier 1000); when used up, the channel stops searching
     credit_cost_usd: 0 # price per credit beyond monthly_credit_limit (about 0.008 pay-as-you-go); 0 = no searches beyond it
   brave:
@@ -352,7 +352,7 @@ sources:
     country: "" # country of the search results (ISO, uppercase); empty = the market's country
     safesearch: strict
     interval_hours: 20 # don't search again within this many hours of the last discovery (once a day)
-    max_queries_per_run: 40 # max searches per pass (5 ATS × keyword groups × cities; the free plan allows 2000 per month)
+    max_queries_per_run: 40 # max searches per pass; when 5 ATS × groups × cities is more, each pass searches the ones that waited longest first
   jobspy_google:
     enabled: false # jobspy's Google Jobs scraping is unreliable, off by default
     monthly_budget_usd: 0

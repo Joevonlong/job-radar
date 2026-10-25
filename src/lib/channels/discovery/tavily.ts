@@ -6,7 +6,7 @@ import { loadCompanies, loadConfig, tavilyChannelSchema, type SearchConfig, type
 import { getDb } from "@/lib/db/client";
 
 import { DISCOVERABLE_ATS, searchHostsFor, type DiscoverableAts } from "./boards";
-import { createDiscoveryChannel, type DiscoveryDeps, type DiscoveryProvider, type DiscoveryQuery } from "./shared";
+import { createDiscoveryChannel, discoveryQueryId, type DiscoveryDeps, type DiscoveryProvider, type DiscoveryQuery } from "./shared";
 import { createDbDiscoveryStore } from "./store";
 
 /**
@@ -14,6 +14,7 @@ import { createDbDiscoveryStore } from "./store";
  * backend; `brave` is the alternative. Same job as `brave` (see `shared.ts`): for every ATS x keyword
  * group x city it searches, restricted to the ATS hosts with `include_domains`, and keeps the results
  * that are official board URLs. Tavily has no `site:` operator, so the query is plain words.
+ * Searches over the per-run cap rotate across runs, longest-waiting first (see `shared.ts`).
  *
  * `POST {api_base_url}/search` with `Authorization: Bearer $TAVILY_API_KEY`. A search costs 1 credit
  * (2 with `search_depth: advanced`); credits are booked against `monthly_credit_limit` (the plan's
@@ -53,7 +54,8 @@ export function buildTavilyQueries(search: Pick<SearchConfig, "keyword_groups" |
     if (terms.length === 0) continue;
     for (const city of search.locations) {
       for (const ats of DISCOVERABLE_ATS) {
-        queries.push({ ats, group, city, q: `${terms.join(" OR ")} jobs ${city}`, domains: tavilyDomainsFor(ats) });
+        const parts = { ats, group, city, q: `${terms.join(" OR ")} jobs ${city}`, domains: tavilyDomainsFor(ats) };
+        queries.push({ ...parts, id: discoveryQueryId(parts) });
       }
     }
   }
@@ -78,7 +80,7 @@ export interface TavilyDeps extends DiscoveryDeps {
 }
 
 export const defaultTavilyDeps: TavilyDeps = {
-  inputs: () => ({ search: loadConfig("search"), companies: loadCompanies() }),
+  inputs: () => ({ search: loadConfig("search"), companies: loadCompanies(), queryRotation: loadConfig("channels").collect.query_rotation }),
   store: () => createDbDiscoveryStore(getDb(), "tavily"),
 };
 

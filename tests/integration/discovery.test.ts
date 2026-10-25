@@ -2,15 +2,16 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, inject, it } from "vitest";
 
-import { createBraveChannel, createDbDiscoveryStore, type BraveDeps } from "@/lib/channels/discovery";
+import { buildDiscoveryQueries, createBraveChannel, createDbDiscoveryStore, type BraveDeps } from "@/lib/channels/discovery";
 import { ChannelRegistry } from "@/lib/channels/registry";
 import { loadCompanies, reloadConfig, resetConfigCache } from "@/lib/config";
 import { runCycle } from "@/lib/cycle/run-cycle";
 import { closeDb, getDb, listBoardCandidates, schema, setBoardCandidateStatus, upsertBoardCandidates } from "@/lib/db";
 import { runMigrations } from "@/lib/db/migrate";
+import { getRuntimeState, setRuntimeState } from "@/lib/db/repos/runtime-state";
 import { addBoardCandidate, dismissBoardCandidate, loadBoardCandidates } from "@/lib/sources/candidates";
 
 import { response } from "../channels/ats/helpers";
@@ -99,11 +100,58 @@ describe("board candidate repo", () => {
 function braveEnabledConfig() {
   const base = config();
   const sources = base.channels.sources;
-  return { ...base, channels: { ...base.channels, sources: { ...sources, brave: { ...sources.brave, enabled: true } } } };
+  return { ...base, channels: { ...base.channels, sources: { ...sources, brave: { ...sources.brave, enabled: true, max_queries_per_run: 12 } } } };
 }
 
+describe("discovery store turns", () => {
+  it("round-trips timestamps to the millisecond and replaces the previous turns", async () => {
+    const store = createDbDiscoveryStore(getDb(), "brave");
+    const tavily = createDbDiscoveryStore(getDb(), "tavily");
+    expect(await store.lastTurns()).toEqual(new Map());
+    const first = new Map([["one", new Date("2026-10-01T01:02:03.456Z")], ["two", new Date("2026-10-02T02:03:04.567Z")]]);
+    await store.saveTurns(first);
+    expect(await store.lastTurns()).toEqual(first);
+    expect((await getRuntimeState(getDb(), "discovery:brave:turns"))?.value).toEqual({
+      version: 1, turns: Object.fromEntries([...first].map(([id, at]) => [id, at.toISOString()])),
+    });
+    expect(await tavily.lastTurns()).toEqual(new Map());
+    await tavily.saveTurns(first);
+    const next = new Map([["two", new Date("2026-10-03T03:04:05.678Z")]]);
+    await store.saveTurns(next);
+    expect(await store.lastTurns()).toEqual(next);
+    expect(await tavily.lastTurns()).toEqual(first);
+  });
+
+  it("treats malformed or unsupported stored turns as empty and replaces them on save", async () => {
+    const store = createDbDiscoveryStore(getDb(), "brave");
+    for (const value of [{ version: 2 }, "x", { version: 1, turns: { one: "not a date" } }, { version: 1, turns: {}, extra: true }]) {
+      await setRuntimeState(getDb(), "discovery:brave:turns", value);
+      expect(await store.lastTurns()).toEqual(new Map());
+    }
+    const turns = new Map([["one", new Date("2026-10-01T01:02:03.456Z")]]);
+    await store.saveTurns(turns);
+    expect(await store.lastTurns()).toEqual(turns);
+  });
+
+  it("keeps turns separate from the exact last-run key even when a similar key exists", async () => {
+    const db = getDb();
+    const store = createDbDiscoveryStore(db, "brave");
+    const turns = new Map([["one", new Date("2026-10-01T01:02:03.456Z")]]);
+    await store.saveTurns(turns);
+    expect(await store.lastRunAt()).toBeNull();
+    await store.markRun();
+    const last = await store.lastRunAt();
+    expect(last).toBeInstanceOf(Date);
+    expect(await store.lastTurns()).toEqual(turns);
+    await setRuntimeState(db, "discovery:brave:last_run_x", { ok: true });
+    await db.execute(sql`update runtime_state set updated_at = now() - interval '25 hours' where key = 'discovery:brave:last_run_x'`);
+    expect(await store.lastRunAt()).toEqual(last);
+    expect(await store.lastTurns()).toEqual(turns);
+  });
+});
+
 describe("brave channel with the database store", () => {
-  const search = (input: BraveDeps["inputs"] = () => ({ search: shippedSearch(), companies: loadCompanies() })) => {
+  const search = (input: BraveDeps["inputs"] = () => ({ search: shippedSearch(), companies: loadCompanies(), queryRotation: true })) => {
     const calls: string[] = [];
     const deps: BraveDeps = { inputs: input, store: () => createDbDiscoveryStore(getDb(), "brave"), environment: { BRAVE_SEARCH_API_KEY: "test-key-not-real" } };
     const registry = new ChannelRegistry();
@@ -127,7 +175,7 @@ describe("brave channel with the database store", () => {
     const { run, calls } = search();
     const first = await run();
     expect(first.status).toBe("succeeded");
-    expect(calls).toHaveLength(30);
+    expect(calls).toHaveLength(12);
 
     const rows = await listBoardCandidates(getDb(), "new");
     expect(rows.map((r) => `${r.ats}:${r.token}`).sort()).toEqual([
@@ -144,8 +192,31 @@ describe("brave channel with the database store", () => {
     expect(runs[0]).toMatchObject({ channelId: "brave", status: "succeeded", fetched: 0 });
 
     await run();
-    expect(calls).toHaveLength(30); // not searched again
+    expect(calls).toHaveLength(12); // not searched again
     expect(await listBoardCandidates(getDb(), "new")).toHaveLength(5);
+  });
+
+  it("rotates discovery searches across due cycles while keeping one run row per cycle", async () => {
+    const { run, calls } = search();
+    const queries = buildDiscoveryQueries(shippedSearch()).map((q) => q.q);
+    const first = await run();
+    expect(first.status).toBe("succeeded");
+    const firstQueries = calls.map((call) => new URL(call).searchParams.get("q"));
+    expect(firstQueries).toEqual(queries.slice(0, 12));
+    await getDb().execute(sql`update runtime_state set updated_at = now() - interval '25 hours' where key = 'discovery:brave:last_run'`);
+    const second = await run();
+    expect(second.status).toBe("succeeded");
+    expect(calls).toHaveLength(24);
+    const secondQueries = calls.slice(12).map((call) => new URL(call).searchParams.get("q"));
+    expect(secondQueries).toEqual(queries.slice(12, 24));
+    expect(secondQueries.some((q) => firstQueries.includes(q))).toBe(false);
+    const runs = await getDb().select().from(schema.runs).where(eq(schema.runs.channelId, "brave"));
+    expect(runs).toHaveLength(2);
+    for (const result of [first, second]) {
+      const cycleRuns = runs.filter((r) => r.cycleId === result.cycleId);
+      expect(cycleRuns).toHaveLength(1);
+      expect(cycleRuns[0]).toMatchObject({ status: "succeeded", fetched: 0 });
+    }
   });
 });
 

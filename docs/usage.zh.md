@@ -196,9 +196,14 @@ tail -f data/logs/ai-worker.err.log    # ai-worker 的错误
 ```bash
 pnpm cycle:run                                  # 跑一轮完整的采集 → 处理 → AI → 推送
 pnpm cycle:run --channel arbeitsagentur         # 只跑一个通道
+pnpm cycle:run --channel <id> --dry-run         # 只在内存里采集、解析，不写库
 ```
 
-也可以在 `/settings` 的"手动操作"标签点"立即跑一轮"，效果一样。
+要完整跑一轮，也可以在 `/settings` 的"手动操作"标签点"立即跑一轮"。
+
+试跑会发出真实请求，付费通道照样计费，但不写数据库。数据库可达、已迁移且可读时，会通过只读连接读取已存的本月用量、熔断状态和岗位，按真实运行的规则判断能否请求：额度用完就停，除非配置了超额单价且美元预算还有余量；熔断仍在冷却中的通道也会跳过。没有通道可用时，日志 `cascade has no available channel` 会说明原因。这不是严格的账单上限。
+
+已存岗位按各通道的规则复用：Arbeitsagentur、StepStone、XING 看 `reuse_known_details`；JSearch 只用已存描述兜底，不减少详情请求；LinkedIn session 不再打开本通道 id 下已存岗位的页面。试跑用量不计入当月累计，连续试跑每次都能用到同一份剩余额度。Brave 没有月预算检查。数据库连不上、没迁移或读不了时，CLI 会警告并从空状态开始，付费通道也就无法依据已存的本月用量限制请求。LinkedIn session 的每日页面上限和登录标记限制见[会话通道说明](linkedin-session.zh.md#真实冒烟)。
 
 ### 在终端里看岗位和 JD
 

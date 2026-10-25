@@ -8,8 +8,15 @@ import {
   type ChannelRowInput,
   type MonthUsage,
 } from "@/lib/db/repos/channels";
+import { getRawPayloadsByExternalId } from "@/lib/db/repos/raw-postings";
 
 import { CLOSED_CIRCUIT, type CircuitSnapshot, type CircuitStore } from "./circuit";
+import type { KnownPostings } from "./types";
+
+/** The channel's own rows of `raw_postings` as its "known postings". */
+export function createDbKnownPostings(db: Db, channelId: string): KnownPostings {
+  return { payloads: (externalIds) => getRawPayloadsByExternalId(db, { channelIds: [channelId], externalIds }) };
+}
 
 /** Persistent per-channel state the framework needs: breaker state, monthly usage, channel rows. */
 export interface ChannelStateStore extends CircuitStore {
@@ -47,7 +54,10 @@ export function createDbStateStore(db: Db): ChannelStateStore {
   };
 }
 
-/** In-memory store: dry runs (no writes) and unit tests. Optionally seeded from another store's reads. */
+/**
+ * In-memory store: dry runs (no writes) and unit tests. Optionally seeded from another store's reads.
+ * Never calls the base store's write methods; dry runs rely on this.
+ */
 export function createMemoryStateStore(base: ChannelStateStore | null = null): ChannelStateStore {
   const circuits = new Map<string, CircuitSnapshot>();
   const usage = new Map<string, Map<string, MonthUsage>>(); // month -> channel -> delta recorded here

@@ -32,7 +32,7 @@ The `linkedin-brightdata` channel fetches LinkedIn jobs through the Bright Data 
 pnpm smoke:brightdata            # reads .env; one query, at most 10 results
 pnpm exec tsx --env-file=/path/to/.env scripts/smoke-brightdata.ts --limit 5
 ```
-It consumes free quota (the vendor bills every record delivered for smoke tests and dry runs alike); it writes nothing to the database, and usage is shown only in the output and not counted toward the month's total.
+It consumes free quota (the vendor bills every record delivered for smoke tests and dry runs alike); it writes nothing to the database, and usage is shown only in the output and not counted toward the month's total. With readable database state, `pnpm cycle:run --dry-run` starts from persisted monthly usage and skips the channel when its budget limit is reached; records the vendor delivers beyond the requested limit are still billed.
 
 ## Notes
 - Field names follow `GET https://api.brightdata.com/datasets/<dataset_id>/metadata`; requesting a field that does not exist makes the trigger return 500.
