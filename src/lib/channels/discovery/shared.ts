@@ -1,5 +1,8 @@
+import { createHash } from "node:crypto";
+
 import { assertCredentialEndpoint } from "@/lib/channels/credential-endpoint";
 import { ChannelError, isAbortError } from "@/lib/channels/errors";
+import { orderQueries } from "@/lib/channels/rotation";
 import type { Channel, ChannelContext, NormalizedPostingDraft, RawPostingInput, SearchQuery } from "@/lib/channels/types";
 import type { CompaniesConfig, SearchConfig } from "@/lib/config";
 import type { CredentialService } from "@/lib/credential-endpoints";
@@ -12,9 +15,13 @@ import type { DiscoveryStore } from "./store";
  * A provider only supplies its queries, the one HTTP call, and its credentials. Discovery collects no
  * postings: each run searches for career-board URLs of the five ATS, keeps the official ones that are
  * not in `sources.yaml (ats_boards)`, and writes them to the candidate table, where `/sources` lists them.
+ * When queries exceed the cap, `orderQueries` serves the longest-waiting first; cancellation before
+ * writing leaves candidates, turns and the run marker untouched.
  */
 
 export interface DiscoveryQuery {
+  /** Stable while ATS, group, city, query text and domains are unchanged, regardless of config order. */
+  id: string;
   ats: DiscoverableAts;
   group: string;
   city: string;
@@ -22,6 +29,22 @@ export interface DiscoveryQuery {
   q: string;
   /** Hosts the search is restricted to, for providers that filter by domain instead of `site:` (Tavily). */
   domains?: string[];
+}
+
+export function discoveryQueryId(parts: { ats: DiscoverableAts; group: string; city: string; q: string; domains?: readonly string[] }): string {
+  const canonical = JSON.stringify([parts.ats, parts.group, parts.city, parts.q, parts.domains ?? []]);
+  return createHash("sha256").update(canonical).digest("hex").slice(0, 16);
+}
+
+/** Keep current queries' previous turns, set this run's turns to `now`, and drop queries no longer built. */
+export function mergeTurns(all: readonly DiscoveryQuery[], previous: ReadonlyMap<string, Date>, turned: readonly string[], now: Date): Map<string, Date> {
+  const next = new Map<string, Date>();
+  const current = new Set(turned);
+  for (const query of all) {
+    const at = current.has(query.id) ? now : previous.get(query.id);
+    if (at !== undefined) next.set(query.id, at);
+  }
+  return next;
 }
 
 export interface DiscoveredBoard {
@@ -70,8 +93,8 @@ export function boardsFromHits(hits: readonly SearchHit[], known: ReadonlySet<st
 
 /** Dependencies both discovery channels take. */
 export interface DiscoveryDeps {
-  /** Config read on every run (edits apply to the next cycle). */
-  inputs(): { search: SearchConfig; companies: CompaniesConfig };
+  /** Live config read on every run, including sources.yaml collect.query_rotation, not the cycle's frozen config. */
+  inputs(): { search: SearchConfig; companies: CompaniesConfig; queryRotation: boolean };
   /** Candidate storage; only asked for in real runs. */
   store(): DiscoveryStore;
   /** Environment holding the API key (read at collect time, never logged). */
@@ -132,15 +155,30 @@ export function createDiscoveryChannel<S extends DiscoverySettings>(provider: Di
 
       const inputs = deps.inputs();
       const known = new Set(inputs.companies.companies.map((c) => boardKey(c.ats, c.token)));
-      const queries = provider.buildQueries(inputs.search, settings).slice(0, settings.max_queries_per_run);
+      const all = provider.buildQueries(inputs.search, settings);
+      let previous = new Map<string, Date>();
+      let turnsReadable = store !== null;
+      if (store) {
+        try {
+          previous = await store.lastTurns();
+        } catch (error) {
+          turnsReadable = false;
+          ctx.logger.warn(`${provider.id} discovery turns could not be read; using config order`, { error: errorMessage(error) });
+        }
+      }
+      const rotate = turnsReadable && inputs.queryRotation;
+      const turnsMap = new Map(all.map((q) => [q.id, previous.get(q.id) ?? null]));
+      const queries = orderQueries(all, turnsMap, rotate).slice(0, settings.max_queries_per_run);
       const found = new Map<string, DiscoveredBoard>();
       const failures: ChannelError[] = [];
+      const turned: string[] = [];
       let fatal: ChannelError | null = null;
       for (const [index, query] of queries.entries()) {
         ctx.signal.throwIfAborted();
         if (index > 0) await ctx.throttle();
         try {
           const hits = await provider.search(query, apiKey, settings, ctx);
+          turned.push(query.id);
           for (const board of boardsFromHits(hits, known)) {
             const key = boardKey(board.ats, board.token);
             if (!found.has(key)) found.set(key, board);
@@ -148,6 +186,7 @@ export function createDiscoveryChannel<S extends DiscoverySettings>(provider: Di
         } catch (error) {
           if (isAbortError(error) || ctx.signal.aborted) throw error;
           const failure = error instanceof ChannelError ? error : new ChannelError("unknown", errorMessage(error).slice(0, 300), { cause: error });
+          if (failure.code !== "budget_exceeded") turned.push(query.id);
           // a rejected key or an exhausted quota / budget fails every following search the same way: stop, keep what was found
           if (failure.code === "auth_expired" || failure.code === "blocked" || failure.code === "rate_limited" || failure.code === "budget_exceeded") {
             fatal = failure;
@@ -157,13 +196,30 @@ export function createDiscoveryChannel<S extends DiscoverySettings>(provider: Di
           failures.push(failure);
         }
       }
+      ctx.signal.throwIfAborted();
+      const next = mergeTurns(all, previous, turned, now);
+      const saveTurns = async (): Promise<boolean> => {
+        if (!store || !turnsReadable) return false;
+        try {
+          await store.saveTurns(next);
+          return true;
+        } catch (error) {
+          ctx.logger.warn(`${provider.id} discovery turns could not be saved`, { error: errorMessage(error) });
+          return false;
+        }
+      };
+      let turnsSaved = false;
       const [first] = failures;
-      if (!fatal && first && failures.length === queries.length) throw first;
+      if (!fatal && first && failures.length === queries.length) {
+        await saveTurns();
+        throw first;
+      }
 
       const boards = [...found.values()];
       let added = 0;
       if (store) {
         added = await store.upsert(boards.map((b) => ({ ats: b.ats, token: b.token, region: b.region, boardUrl: b.boardUrl, title: b.title })));
+        turnsSaved = await saveTurns();
         // a run that stopped early is not a finished run: the next cycle tries again
         if (!fatal) await store.markRun();
       } else {
@@ -174,6 +230,10 @@ export function createDiscoveryChannel<S extends DiscoverySettings>(provider: Di
         failedSearches: failures.length,
         candidates: boards.length,
         newCandidates: store ? added : null,
+        queries: all.length,
+        capped: all.length - queries.length,
+        neverRun: turnsSaved ? all.filter((q) => !next.has(q.id)).length : null,
+        rotation: rotate,
       });
       if (fatal) throw fatal;
       return [];

@@ -8,11 +8,15 @@ import { z } from "zod";
 import {
   assertCreditsAllowed,
   boardsFromHits,
+  buildDiscoveryQueries,
   buildTavilyQueries,
   createMemoryDiscoveryStore,
   createTavilyChannel,
   creditsPerSearch,
+  discoveryQueryId,
+  mergeTurns,
   tavilyHits,
+  type DiscoveryQuery,
   type TavilyDeps,
 } from "@/lib/channels/discovery";
 import type { ChannelBudget } from "@/lib/channels/types";
@@ -44,6 +48,26 @@ function deps(overrides: Partial<TavilyDeps> = {}) {
 function requestedQuery(request: RecordedRequest): string {
   const body = z.object({ query: z.string(), include_domains: z.array(z.string()) }).parse(JSON.parse(request.body ?? "{}"));
   return `${body.query}|${body.include_domains.join(",")}`;
+}
+
+function queryText(query: DiscoveryQuery): string {
+  return `${query.q}|${(query.domains ?? []).join(",")}`;
+}
+
+function rotationSetup(overrides: Partial<TavilyDeps> = {}) {
+  let t = Date.now();
+  const { deps: d, store } = deps({ now: () => new Date(t), ...overrides });
+  const raw = structuredClone(shippedYaml("sources.yaml")) as { sources: { tavily: Record<string, unknown> } };
+  raw.sources.tavily.max_queries_per_run = 12;
+  const channels = configRegistry.channels.schema.parse(raw);
+  const queries = buildTavilyQueries(d.inputs().search, channels.sources.tavily.keywords_per_query);
+  const channel = createTavilyChannel(d);
+  const pass = (options: Parameters<typeof atsContext>[2] = {}, answer: Parameters<typeof routedFetch>[0][number][1] = response(200, fixture)) => {
+    const { fetch, requests } = routedFetch([["api.tavily.com/search", answer]]);
+    const harness = atsContext("tavily", fetch, { channels, budget: creditBudget(1000).budget, ...options });
+    return { ...harness, requests, collect: () => channel.collect(harness.query, harness.ctx) };
+  };
+  return { store, queries, pass, advance: () => { t += 25 * 3_600_000; } };
 }
 
 /** A budget with `left` free credits that books what the channel consumes. */
@@ -88,6 +112,57 @@ describe("tavily response", () => {
     expect(() => tavilyHits({ query: "x" })).toThrow(/expected shape/);
     expect(() => tavilyHits({ results: "x" })).toThrow(/expected shape/);
     expect(tavilyHits({ results: [] })).toEqual([]);
+  });
+});
+
+describe("discovery query ids and turns", () => {
+  it("keeps the same id only while all identity fields stay the same", () => {
+    const parts: Parameters<typeof discoveryQueryId>[0] = { ats: "lever", group: "engineering", city: "Berlin", q: "engineer jobs Berlin", domains: ["jobs.lever.co", "jobs.eu.lever.co"] };
+    const id = discoveryQueryId(parts);
+    expect(id).toMatch(/^[a-f0-9]{16}$/);
+    expect(discoveryQueryId({ ...parts })).toBe(id);
+    for (const changed of [
+      { ...parts, ats: "ashby" as const },
+      { ...parts, group: "extra" },
+      { ...parts, city: "München" },
+      { ...parts, q: "developer jobs Berlin" },
+      { ...parts, domains: ["jobs.lever.co"] },
+      { ...parts, domains: ["jobs.eu.lever.co", "jobs.lever.co"] },
+    ]) expect(discoveryQueryId(changed)).not.toBe(id);
+    const withoutDomains = { ...parts };
+    delete withoutDomains.domains;
+    expect(discoveryQueryId(withoutDomains)).toBe(discoveryQueryId({ ...withoutDomains, domains: [] }));
+  });
+
+  it("gives each ATS its own id for a Tavily group and city, and every Brave query a unique id", () => {
+    expect(new Set(buildTavilyQueries(shippedSearch(), 2).slice(0, 5).map((q) => q.id)).size).toBe(5);
+    const brave = buildDiscoveryQueries(shippedSearch());
+    expect(brave).toHaveLength(30);
+    expect(new Set(brave.map((q) => q.id)).size).toBe(30);
+  });
+
+  it("changes Tavily ids only when keywords_per_query changes the query text", () => {
+    const two = buildTavilyQueries(shippedSearch(), 2);
+    const one = buildTavilyQueries(shippedSearch(), 1);
+    const three = buildTavilyQueries(shippedSearch(), 3);
+    expect(one).toHaveLength(30);
+    expect(three).toHaveLength(30);
+    for (const [index, query] of two.entries()) {
+      expect(one[index]?.id).not.toBe(query.id);
+      if (query.group === "german") expect(three[index]?.id).toBe(query.id);
+      else expect(three[index]?.id).not.toBe(query.id);
+    }
+  });
+
+  it("retains current queries' old turns, updates attempted ones and drops removed queries", () => {
+    const all = buildTavilyQueries(shippedSearch(), 2).slice(0, 3);
+    const old = new Date("2026-10-01T10:00:00.123Z");
+    const now = new Date("2026-10-02T11:00:00.456Z");
+    const previous = new Map([[all[0]!.id, old], [all[1]!.id, old], ["removed", old]]);
+    const next = mergeTurns(all, previous, [all[1]!.id, "removed"], now);
+    expect(next).toEqual(new Map([[all[0]!.id, old], [all[1]!.id, now]]));
+    expect(previous.get(all[1]!.id)).toBe(old);
+    expect(previous.has("removed")).toBe(true);
   });
 });
 
@@ -176,7 +251,8 @@ describe("tavily channel", () => {
 
   it("keeps what it found when the credits run out part-way", async () => {
     const { deps: d, store } = deps();
-    const { fetch } = search();
+    const { fetch, requests } = search();
+    const queries = buildTavilyQueries(d.inputs().search, 2);
     const { consumed, budget: inner } = creditBudget(1000);
     let left = 2;
     const budget: ChannelBudget = { ...inner, snapshot: () => ({ ...inner.snapshot(), freeRecordsLeft: left }), consume: async (n, o) => { left -= n; return inner.consume(n, o); } };
@@ -185,6 +261,14 @@ describe("tavily channel", () => {
     expect(consumed).toHaveLength(2);
     expect(store.candidates.size).toBe(5);
     expect(store.runs).toBe(0);
+    expect(requests.map(requestedQuery)).toEqual(queries.slice(0, 2).map(queryText));
+    expect([...store.turns.keys()]).toEqual(queries.slice(0, 2).map((q) => q.id));
+
+    left = 1000;
+    const next = search();
+    const retry = atsContext("tavily", next.fetch, { budget });
+    await createTavilyChannel(d).collect(retry.query, retry.ctx);
+    expect(next.requests.map(requestedQuery)).toEqual([...queries.slice(2), ...queries.slice(0, 2)].map(queryText));
   });
 
   it("searches every query within ceil(total / max_queries_per_run) runs instead of starving the tail", async () => {
@@ -205,10 +289,13 @@ describe("tavily channel", () => {
     const runs: string[][] = [];
     for (let run = 0; run < Math.ceil(queries.length / channels.sources.tavily.max_queries_per_run); run += 1) {
       const { fetch, requests } = search();
-      const { ctx, query } = atsContext("tavily", fetch, { channels, budget });
+      const { ctx, query, logs } = atsContext("tavily", fetch, { channels, budget });
       await channel.collect(query, ctx);
       expect(requests).toHaveLength(12);
       runs.push(requests.map(requestedQuery));
+      expect(logs.find((l) => l.message === "tavily discovery done")?.fields).toMatchObject({
+        searches: 12, queries: 30, capped: 18, neverRun: Math.max(0, 30 - (run + 1) * 12), rotation: true,
+      });
       t += 25 * 3_600_000;
     }
     expect(runs).toHaveLength(3);
@@ -255,6 +342,8 @@ describe("tavily channel", () => {
     await createTavilyChannel(d).collect(query, ctx);
     expect(requests).toHaveLength(30);
     expect(store.candidates.size).toBe(0);
+    expect(store.turnReads).toBe(0);
+    expect(store.turnWrites).toBe(0);
     expect(logs.find((l) => l.message === "tavily discovery dry run: candidates")?.fields.boards).toHaveLength(5);
   });
 
@@ -305,6 +394,184 @@ describe("tavily channel", () => {
   it("prices a paid credit with credit_cost_usd from the config", () => {
     const channel = createTavilyChannel({ ...deps().deps, settings: () => configRegistry.channels.schema.parse({ ...(shippedYaml("sources.yaml") as object) }).sources.tavily });
     expect(channel.estimateCost?.(10)).toBe(0);
+  });
+});
+
+describe("tavily discovery rotation", () => {
+  it("keeps config order with rotation off but still records turns", async () => {
+    const { store, queries, pass, advance } = rotationSetup({ inputs: () => ({ search: shippedSearch(), companies, queryRotation: false }) });
+    for (let run = 0; run < 3; run += 1) {
+      const current = pass();
+      await current.collect();
+      expect(current.requests.map(requestedQuery)).toEqual(queries.slice(0, 12).map(queryText));
+      expect(current.logs.find((l) => l.message === "tavily discovery done")?.fields.rotation).toBe(false);
+      advance();
+    }
+    expect([...store.turns.keys()]).toEqual(queries.slice(0, 12).map((q) => q.id));
+    expect(store.turnWrites).toBe(3);
+  });
+
+  it("counts a quota rejection as a turn and retries from the next unattempted query", async () => {
+    const { store, queries, pass } = rotationSetup();
+    let calls = 0;
+    const limited = pass({}, () => ++calls === 3 ? response(432, "limit exceeded") : response(200, fixture));
+    await expect(limited.collect()).rejects.toMatchObject({ code: "rate_limited" });
+    expect(limited.requests).toHaveLength(3);
+    expect([...store.turns.keys()]).toEqual(queries.slice(0, 3).map((q) => q.id));
+    expect(store.runs).toBe(0);
+    const next = pass();
+    await next.collect();
+    expect(next.requests.map(requestedQuery)).toEqual(queries.slice(3, 15).map(queryText));
+  });
+
+  it("saves turns before throwing the first failure when every selected query fails", async () => {
+    const { store, queries, pass } = rotationSetup();
+    const broken = pass({}, response(200, "not JSON"));
+    await expect(broken.collect()).rejects.toMatchObject({ code: "parse", message: "tavily search response is not valid JSON" });
+    expect(broken.requests).toHaveLength(12);
+    expect([...store.turns.keys()]).toEqual(queries.slice(0, 12).map((q) => q.id));
+    expect(store.turnWrites).toBe(1);
+    expect(store.runs).toBe(0);
+    expect(store.candidates.size).toBe(0);
+    const next = pass();
+    await next.collect();
+    expect(next.requests.map(requestedQuery)).toEqual(queries.slice(12, 24).map(queryText));
+  });
+
+  it("ties new queries with other unattempted queries in config order and prunes deleted queries", async () => {
+    const search = shippedSearch();
+    const { store, queries, pass, advance } = rotationSetup({ inputs: () => ({ search, companies, queryRotation: true }) });
+    await pass().collect();
+    delete search.keyword_groups.engineering;
+    search.keyword_groups.extra = ["Extra Engineer", "Extra Developer"];
+    advance();
+    const next = pass();
+    await next.collect();
+    expect(next.requests.map(requestedQuery)).toEqual(queries.slice(12, 24).map(queryText));
+    for (const query of queries.filter((q) => q.group === "engineering")) expect(store.turns.has(query.id)).toBe(false);
+  });
+
+  it("serves new queries first after all earlier queries have had a turn", async () => {
+    const search = shippedSearch();
+    const { store, queries, pass, advance } = rotationSetup({ inputs: () => ({ search, companies, queryRotation: true }) });
+    for (let run = 0; run < 3; run += 1) {
+      await pass().collect();
+      advance();
+    }
+    expect(store.turns.size).toBe(30);
+    delete search.keyword_groups.engineering;
+    search.keyword_groups.extra = ["Extra Engineer", "Extra Developer"];
+    const extra = buildTavilyQueries(search, 2).filter((q) => q.group === "extra");
+    const next = pass();
+    await next.collect();
+    expect(next.requests.map(requestedQuery)).toEqual([...extra, ...queries.slice(10, 12)].map(queryText));
+    for (const query of queries.filter((q) => q.group === "engineering")) expect(store.turns.has(query.id)).toBe(false);
+  });
+
+  it("preserves ids and turns when cities are reordered and follows the new order for ties", async () => {
+    const search = shippedSearch();
+    const { store, queries, pass, advance } = rotationSetup({ inputs: () => ({ search, companies, queryRotation: true }) });
+    await pass().collect();
+    const previous = new Map(store.turns);
+    search.locations.reverse();
+    expect(new Set(buildTavilyQueries(search, 2).map((q) => q.id))).toEqual(new Set(queries.map((q) => q.id)));
+    advance();
+    const next = pass();
+    await next.collect();
+    expect(next.requests.map(requestedQuery)).toEqual([...queries.slice(15, 20), ...queries.slice(12, 15), ...queries.slice(25, 29)].map(queryText));
+    for (const query of queries.slice(0, 12)) expect(store.turns.get(query.id)).toEqual(previous.get(query.id));
+  });
+
+  it("uses config order for dry runs and the test button without reading or writing turns", async () => {
+    const { store, queries, pass } = rotationSetup();
+    const history = new Map(queries.map((q, index) => [q.id, new Date(Date.now() - index * 3_600_000)]));
+    store.turns = new Map(history);
+    const dry = pass({ cycleId: null });
+    await dry.collect();
+    expect(dry.requests.map(requestedQuery)).toEqual(queries.slice(0, 12).map(queryText));
+    expect(store.turnReads).toBe(0);
+    expect(store.turnWrites).toBe(0);
+    expect(store.turns).toEqual(history);
+    expect(store.runs).toBe(0);
+    expect(dry.logs.find((l) => l.message === "tavily discovery done")?.fields).toMatchObject({ neverRun: null, rotation: false });
+  });
+
+  it("writes nothing when cancelled part-way and selects the same batch next time", async () => {
+    const { store, queries, pass } = rotationSetup();
+    const history = new Map(queries.slice(0, 6).map((q) => [q.id, new Date("2026-10-01T00:00:00Z")]));
+    store.turns = new Map(history);
+    const controller = new AbortController();
+    let calls = 0;
+    // atsContext disables retries; cancellation is triggered by the third fetch, never a timer.
+    const cancelled = pass({ signal: controller.signal }, () => {
+      if (++calls === 3) {
+        controller.abort();
+        throw new DOMException("cancelled", "AbortError");
+      }
+      return response(200, fixture);
+    });
+    await expect(cancelled.collect()).rejects.toMatchObject({ name: "AbortError" });
+    expect(cancelled.requests.map(requestedQuery)).toEqual(queries.slice(6, 9).map(queryText));
+    expect(store.turnWrites).toBe(0);
+    expect(store.turns).toEqual(history);
+    expect(store.candidates.size).toBe(0);
+    expect(store.runs).toBe(0);
+    const next = pass();
+    await next.collect();
+    expect(next.requests.map(requestedQuery)).toEqual(queries.slice(6, 18).map(queryText));
+  });
+
+  it("writes nothing when the final successful search returns after cancellation", async () => {
+    const { store, queries, pass } = rotationSetup();
+    const controller = new AbortController();
+    const { budget: inner, consumed } = creditBudget(1000);
+    const budget: ChannelBudget = { ...inner, consume: async (n, options) => {
+      const usage = await inner.consume(n, options);
+      if (consumed.length === 12) controller.abort();
+      return usage;
+    } };
+    const cancelled = pass({ signal: controller.signal, budget });
+    await expect(cancelled.collect()).rejects.toMatchObject({ name: "AbortError" });
+    expect(cancelled.requests.map(requestedQuery)).toEqual(queries.slice(0, 12).map(queryText));
+    expect(consumed).toHaveLength(12);
+    expect(store.turnWrites).toBe(0);
+    expect(store.turns.size).toBe(0);
+    expect(store.candidates.size).toBe(0);
+    expect(store.runs).toBe(0);
+    const next = pass();
+    await next.collect();
+    expect(next.requests.map(requestedQuery)).toEqual(cancelled.requests.map(requestedQuery));
+  });
+
+  it("only warns if saving turns fails, after saving candidates and before marking the run", async () => {
+    const { store, pass } = rotationSetup();
+    const writes: string[] = [];
+    const { upsert, markRun } = store;
+    store.upsert = async (items) => { writes.push("candidates"); return upsert(items); };
+    store.saveTurns = async () => { writes.push("turns"); throw new Error("turn write unavailable"); };
+    store.markRun = async () => { writes.push("run"); await markRun(); };
+    const current = pass();
+    await expect(current.collect()).resolves.toEqual([]);
+    expect(writes).toEqual(["candidates", "turns", "run"]);
+    expect(store.candidates.size).toBe(5);
+    expect(store.runs).toBe(1);
+    expect(current.logs.filter((l) => l.level === "warn" && l.message === "tavily discovery turns could not be saved")).toHaveLength(1);
+    expect(current.logs.find((l) => l.message === "tavily discovery done")?.fields.neverRun).toBeNull();
+  });
+
+  it("only warns if reading turns fails and leaves the stored history untouched", async () => {
+    const { store, queries, pass } = rotationSetup();
+    const history = new Map(queries.slice(0, 12).map((q) => [q.id, new Date("2026-10-01T00:00:00Z")]));
+    store.turns = new Map(history);
+    store.lastTurns = async () => { throw new Error("turn read unavailable"); };
+    const current = pass();
+    await expect(current.collect()).resolves.toEqual([]);
+    expect(current.requests.map(requestedQuery)).toEqual(queries.slice(0, 12).map(queryText));
+    expect(store.turnWrites).toBe(0);
+    expect(store.turns).toEqual(history);
+    expect(store.runs).toBe(1);
+    expect(current.logs.filter((l) => l.level === "warn" && l.message === "tavily discovery turns could not be read; using config order")).toHaveLength(1);
+    expect(current.logs.find((l) => l.message === "tavily discovery done")?.fields).toMatchObject({ rotation: false, neverRun: null });
   });
 });
 

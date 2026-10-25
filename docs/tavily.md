@@ -23,7 +23,7 @@ The `tavily` channel uses the Tavily Search API to find "company careers pages t
 | `search_depth` | `basic` (default) / `fast` / `ultra-fast`: 1 credit; `advanced`: 2 credits, more relevant results |
 | `keywords_per_query` | How many leading words of each `search.yaml` keyword group to take, joined with OR into one query (default 2) |
 | `interval_hours` | Do not search again if the last discovery was less than this many hours ago (default 24) |
-| `max_queries_per_run` | Maximum searches per run (ATS x keyword group x city). Default 30 |
+| `max_queries_per_run` | Maximum searches per run (default 30). When ATS x keyword groups x cities exceeds this cap, the longest-waiting queries go first. Queries with no recorded turn, including new queries, go before previously attempted ones; ties keep `search.yaml` order. Each query gets a turn at least every `ceil(total / cap)` runs, provided the config and cap stay unchanged, rotation is enabled, turns are saved successfully each time, the clock does not move backwards, and each run finishes its selected batch without a budget/quota stop, fatal error or cancellation. Runs skipped by `interval_hours` do not count. With `collect.query_rotation: false`, every run searches only the first N queries |
 | `max_results` | How many results to take per search (Tavily's maximum is 20) |
 | `monthly_credit_limit` | Credits included in the plan per month (free tier 1000); also the denominator of the monthly usage progress bar |
 | `credit_cost_usd` | Price per credit beyond the limit; 0 = never search beyond it |
@@ -31,7 +31,10 @@ The `tavily` channel uses the Tavily Search API to find "company careers pages t
 | `throttle` | Interval between two searches |
 
 ## How it works
-- Each query = one ATS x one keyword group of `search.yaml` x one city. For example `KI Engineer OR KI-Entwickler jobs München`, with `include_domains` set to that ATS's hosts (`jobs.lever.co`, `jobs.eu.lever.co`; for Personio `jobs.personio.de`). Tavily has no `site:` operator, so the host restriction relies on `include_domains`.
+- Each query = one ATS x one keyword group of `search.yaml` x one city. For example `KI Engineer OR KI-Entwickler jobs München`, with `include_domains` set to that ATS's hosts (`jobs.lever.co`, `jobs.eu.lever.co`; for Personio `personio.de`). Tavily has no `site:` operator, so the host restriction relies on `include_domains`.
+- Tavily and Brave each keep their own last-turn record for each query in the database. Search errors count as turns; a budget refusal before a request is sent does not. Both use `collect.query_rotation`; turns are recorded even with rotation off. Dry runs and the `/sources` "Test" button use `search.yaml` order and neither read nor update these records.
+- If discovery observes cancellation before it starts writing to the database, it writes nothing: no turns, candidates or run marker. The next run retries the same queries. Cancellation after writing starts does not undo writes already made. Repeated cancellation at the same point can keep later queries from getting a turn, so the coverage guarantee above does not apply.
+- In the `tavily discovery done` log, `capped` is the number of queries left out by this run's cap, and `neverRun` is the number with no locally recorded turn after saving. If turns were not saved, `neverRun` is `null`.
 - Every URL in the results must pass `boardFromUrl` (which only accepts the official hosts and paths of the five ATS), and any other URL is dropped; boards already in `ats_boards` of `sources.yaml` are not suggested again.
 - The channel never modifies `ats_boards` of `sources.yaml`; a candidate is written there only when you click "Add" on `/sources`.
 
@@ -40,6 +43,6 @@ The `tavily` channel uses the Tavily Search API to find "company careers pages t
 
 ## Live smoke test
 ```bash
-pnpm cycle:run --channel tavily --dry-run   # stops at the monthly quota unless credit_cost_usd is set and budget remains, like a real run
+pnpm cycle:run --channel tavily --dry-run   # search.yaml order; stops at the monthly quota unless credit_cost_usd is set and budget remains, like a real run
 ```
 With readable database state, the dry run starts from persisted monthly usage. It only prints candidates, writes nothing to the database, and neither reads nor updates the run marker (`interval_hours`). Tavily deducts credits. Things to confirm: whether `include_domains` matches Personio subdomains, and that the candidates really contain new boards.

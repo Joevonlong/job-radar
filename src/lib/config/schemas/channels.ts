@@ -141,7 +141,7 @@ const braveChannel = z.strictObject({
   safesearch: z.enum(["off", "moderate", "strict"]),
   /** Do not search again before this many hours have passed since the last discovery run. */
   interval_hours: positiveInt,
-  /** Most searches per discovery run (ATS x keyword group x city can add up; the free plan allows 2000 a month). */
+  /** Most searches per discovery run (ATS x keyword group x city; free plan: 2000 a month); more searches than this are rotated, longest-waiting first. */
   max_queries_per_run: positiveInt,
 });
 
@@ -158,7 +158,7 @@ const tavilyChannel = z.strictObject({
   keywords_per_query: positiveInt,
   /** Do not search again before this many hours have passed since the last discovery run. */
   interval_hours: positiveInt,
-  /** Most searches per discovery run (ATS x keyword group x city). */
+  /** Most searches per discovery run (ATS x keyword group x city); more searches than this are rotated, longest-waiting first. */
   max_queries_per_run: positiveInt,
   /** Credits the Tavily plan includes per month (free plan: 1000); the channel stops searching when they are used up. */
   monthly_credit_limit: positiveInt,
@@ -462,7 +462,7 @@ export const channelsSchema = z
       .strictObject({
         /** Channels (and the LinkedIn cascade as one unit) collected in parallel within a cycle. */
         concurrency: positiveInt.default(3),
-        /** Serve the queries waiting longest on the unit's starting channel first. */
+        /** Serve the queries waiting longest on the unit's starting channel first. Also orders the Tavily / Brave board-discovery searches. */
         query_rotation: z.boolean().default(true),
       })
       .default({ concurrency: 3, query_rotation: true }),

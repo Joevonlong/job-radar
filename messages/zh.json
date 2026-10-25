@@ -2135,7 +2135,7 @@
       },
       "max_queries": {
         "label": "每次最多搜索次数",
-        "hint": "Brave 免费套餐每月 2000 次；Tavily 每次搜索花 1 个额度（免费 1000 个/月）。"
+        "hint": "Brave 免费套餐每月 2000 次；Tavily 每次搜索花 1 个额度（免费 1000 个/月）；多于这个数时分几次轮流搜。"
       },
       "tavily_search_depth": {
         "label": "搜索深度",

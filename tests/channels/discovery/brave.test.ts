@@ -231,6 +231,8 @@ describe("brave channel", () => {
     expect(store.candidates.size).toBe(0);
     expect(store.runs).toBe(0);
     expect(logs.find((l) => l.message === "brave discovery dry run: candidates")?.fields.boards).toHaveLength(5);
+    expect(store.turnReads).toBe(0);
+    expect(store.turnWrites).toBe(0);
   });
 
   it("a rejected key stops the run with auth_expired; nothing is marked as run", async () => {
