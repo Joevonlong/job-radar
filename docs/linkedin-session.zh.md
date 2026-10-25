@@ -24,7 +24,7 @@
    # data/config/sources.yaml 里先把 linkedin.session.enabled 改成 true，然后：
    pnpm cycle:run --channel linkedin-session --dry-run
    ```
-   干跑会真的打开 LinkedIn 页面（有请求），但不写数据库、不计入当天用量。输出里看 `fetched / parsed`。
+   试跑会真的打开 LinkedIn 页面（有请求），但不写数据库、不计入当天用量。数据库状态可读时，本通道 id 下已存的岗位不再打开页面，和真实运行一样。输出里看 `fetched / parsed`；如果通道被跳过，见[真实冒烟](#真实冒烟)。
 6. 没问题就留着 `enabled: true`。runner 在 Docker 里时，`./.auth` 以只读方式挂进容器（`compose.yaml` 已写好），需要 `docker compose up -d --build` 一次让镜像带上 playwright-core。
 
 `pnpm auth:linkedin --status` 只看状态，不打开浏览器：文件在不在、cookie 到期时间、通道最近知道的状态。
@@ -80,6 +80,8 @@
 ## 真实冒烟
 执行 `pnpm auth:linkedin` 之后：
 1. `pnpm auth:linkedin --status` 应显示"有效"。
-2. `pnpm cycle:run --channel linkedin-session --dry-run`：看 `fetched`、`parsed`、`parseFailed`、示例标题；页面选择器如果对不上，会表现为 `parse` 错误或 `cardOnly`（详情页读不出来、只保留了列表卡片）。
+2. `pnpm cycle:run --channel linkedin-session --dry-run`：看 `fetched`、`parsed`、`parseFailed`、示例标题；页面选择器如果对不上，会表现为 `parse` 错误或 `cardOnly`（详情页读不出来、只保留了列表卡片）。数据库状态可读时，多次失败或碰到验证页后打开的熔断，会让试跑像真实运行一样跳过通道。要检查选择器，先跑 `pnpm auth:linkedin` 重置熔断，或等冷却结束。
 3. `pnpm cycle:run --channel linkedin-session:recommended --dry-run`。
 4. 对着真实页面对一遍：把页面 HTML 脱敏后替换 `tests/fixtures/linkedin-session/` 里的 fixture，再跑 `pnpm test` 看解析器是否仍然通过。
+
+试跑仍不读取已存的当天页面计数或登录标记。岗位复用只看当前通道 id：试跑时，`linkedin-session` 和 `linkedin-session:recommended` 不共用已存岗位。

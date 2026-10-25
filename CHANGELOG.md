@@ -112,6 +112,10 @@ and the project uses [Semantic Versioning](https://semver.org/).
   (`--settle` overrides it; 0 skips the wait). An unconfirmed worker now makes deploy exit 2 even if doctor has no
   failures. Doctor warns for a current process without a receipt or a lock held by another worker; missing and stale
   heartbeats remain failures.
+- **`cycle:run --dry-run` honours the stored budget, circuit and job state:** it ignored the database and started
+  from empty state, so dry runs made billed requests past the monthly caps, hit channels with an open circuit and
+  fetched the details of jobs already stored again. It now starts from the persisted monthly usage, circuit state and
+  stored postings (read-only), as its help text said; it still writes nothing.
 - **A job marked "no longer accepting applications" stays marked when its posting is parsed again or another channel
   merges into it:** the pipeline reset such a job to active (and made it eligible for scoring and push) whenever a
   source returned a changed posting or a new channel's copy. It now applies the same rule as the "seen again" step of

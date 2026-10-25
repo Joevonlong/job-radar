@@ -57,7 +57,7 @@
 ## 5. 线上冒烟
 ```bash
 # 1) data/config/sources.yaml: sources.gmail.enabled: true；.env 里写好 GMAIL_USER / GMAIL_APP_PASSWORD
-pnpm cycle:run --channel gmail-alerts --dry-run      # 只读邮箱、在内存里解析，不写库
+pnpm cycle:run --channel gmail-alerts --dry-run      # 只读邮箱、在内存里解析，不写库；熔断打开时和真实运行一样跳过（cascade has no available channel）
 pnpm cycle:run --channel gmail-alerts                # 真正入库（email_messages / raw_postings / jobs）
 ```
 dry-run 会列出解析出的岗位数和前几个标题；`parsed N/M (K failed to parse)` 里 K 不为 0 说明有邮件版式认不出，到 `raw_postings` 里查 `parse_status = 'parse_failed'` 的原文（`payload_json->>'reason'`）。

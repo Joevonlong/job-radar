@@ -50,7 +50,7 @@
 pnpm smoke:jsearch                 # 读 .env；一个查询 = 1 次请求
 pnpm exec tsx --env-file=/path/to/.env scripts/smoke-jsearch.ts --remote
 ```
-不写数据库，用量只在输出里显示，不计入当月累计。也可以用 `pnpm cycle:run --channel jsearch --dry-run`（一轮 9 次请求）。
+不写数据库，用量只在输出里显示，不计入当月累计。也可以用 `pnpm cycle:run --channel jsearch --dry-run`：请求数由查询数、`keywords_per_query` 和剩余额度决定。数据库状态可读时，试跑先看本月已存的请求数；额度用完且没有配置超额单价时不再发请求，配置了单价也要美元预算有余量才能继续。
 
 ## 备注
 - 供应商新文档（<https://www.openwebninja.com/api/jsearch>）把 `/search-v2`（游标分页，`x-api-key` 头，域名 `api.openwebninja.com`）列为当前搜索接口；本通道走 RapidAPI 的 `/search`。字段名两者一致。要切到直连，需要改认证头和分页，属于单独的改动。

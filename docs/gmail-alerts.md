@@ -57,7 +57,7 @@ Keep keywords and cities consistent with `data/config/search.yaml` (keyword grou
 ## 5. Live smoke test
 ```bash
 # 1) data/config/sources.yaml: sources.gmail.enabled: true; GMAIL_USER / GMAIL_APP_PASSWORD set in .env
-pnpm cycle:run --channel gmail-alerts --dry-run      # reads the mailbox only, parses in memory, writes nothing to the DB
+pnpm cycle:run --channel gmail-alerts --dry-run      # reads the mailbox only, parses in memory, writes nothing; an open circuit skips it as in a real run (cascade has no available channel)
 pnpm cycle:run --channel gmail-alerts                # actually stores (email_messages / raw_postings / jobs)
 ```
 The dry run lists the number of parsed jobs and the first few titles; if K in `parsed N/M (K failed to parse)` is not 0, some email layout was not recognised: look in `raw_postings` for `parse_status = 'parse_failed'` and read the original (`payload_json->>'reason'`).
