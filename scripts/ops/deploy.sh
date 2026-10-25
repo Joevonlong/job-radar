@@ -3,7 +3,7 @@
 #
 #   scripts/ops/deploy.sh [--dry-run] [--skip-pull] [--branch main | --ref v2.0.0 [--verify]] [--remote origin]
 #                     [--no-backup] [--no-prune] [--no-ai-worker] [--no-drain] [--drain-timeout S]
-#                     [--wait-timeout 300] [--settle 20]
+#                     [--wait-timeout 300] [--settle S]
 #
 # Steps (each prints what it does; the first one that fails stops the script and says why):
 #   1  preflight   the terminal does not stop background output (stty -tostop); takes the deploy lock
@@ -38,7 +38,8 @@
 #   11 prune       releases the deploy lock and removes the build context first; then docker builder prune down to
 #                  schedule.yaml deploy.build_cache_keep_gb, docker image prune (dangling only); never volumes, never images
 #                  in use; a failure here only warns
-#   12 doctor      pnpm run doctor
+#   12 doctor      waits (bounded) until the ai-worker service's current PID holds the worker lock and wrote a heartbeat
+#                  and its shipped config report after this step started, then pnpm run doctor
 #
 #   --dry-run          print the steps and the commands, change nothing (read-only probes still run, and a problem
 #                      that would stop a real run, a deploy lock held by another run included, is shown as a warning)
@@ -51,16 +52,18 @@
 #                      (uses the maintainer's public key in docs/signing-key.pub; deploy does not verify tags by default)
 #   --no-backup        skip the pre-deploy backup
 #   --no-prune         skip the Docker clean-up of step 11
-#   --no-ai-worker     skip steps 7 and 10 (the release directory and the ai-worker switch); the lock is still taken
+#   --no-ai-worker     skip steps 7 and 10 and the step 12 worker wait; the lock is still taken
 #   --no-drain         do not wait for a running cycle before step 8 (it is cut off; the runner's catch-up runs it again)
 #   --drain-timeout S  wait at most S seconds for it (default: schedule.yaml deploy.drain_timeout_seconds)
 #   --wait-timeout S   how long step 8 waits for the services to turn healthy (default 300)
-#   --settle S         seconds between the ai-worker restart and the doctor run, so heartbeats arrive (default 20)
+#   --settle S         the longest step 12 waits for that, counted from its start (after the prune); 0 = no wait
+#                      (default: schedule.yaml deploy.ai_worker_swap_timeout_seconds, 120)
 #
 # Exit code (decided once, at the end, by scripts/ops/lib/deploy-result.sh): 0 = deployed, the doctor found nothing or
 # only warnings; 1 = a step failed (the message says which, and what state the services and the ai-worker are in), another
 # deploy holds the lock, or the doctor itself could not run; 2 = deployed, but the doctor reports problems that need your
-# attention (or user config writes are pending). Never runs `docker compose down -v`.
+# attention, user config writes are pending, or the ai-worker service could not be confirmed working in step 12.
+# Never runs `docker compose down -v`.
 # Interrupting (Ctrl-C, closing the terminal, kill): the step that is running finishes first (it runs in its own process
 # group, which the terminal's signals do not reach), no further step starts, the lock is released, and the exit code is
 # 130 (INT), 143 (TERM) or 129 (HUP). To stop the running step at once, use the `kill -TERM -<group>` the script prints.
@@ -81,6 +84,8 @@ source "$APP/$OPS/lib/proc.sh"
 source "$APP/$OPS/lib/releases.sh"
 # shellcheck source=lib/deploy-result.sh
 source "$APP/$OPS/lib/deploy-result.sh"
+# shellcheck source=lib/ai-worker.sh
+source "$APP/$OPS/lib/ai-worker.sh"
 
 DRY_RUN=0
 SKIP_PULL=0
@@ -94,7 +99,7 @@ NO_AI_WORKER=0
 NO_DRAIN=0
 DRAIN_TIMEOUT=""
 WAIT_TIMEOUT=300
-SETTLE=20
+SETTLE=""
 
 # The header comment above (line 2 up to the first line that is not a comment); tests/ops/script-help.test.ts checks it names every option.
 usage() { awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "${BASH_SOURCE[0]}"; }
@@ -116,7 +121,7 @@ while [[ $# -gt 0 ]]; do
     --ref) need_value "$@"; [[ "$2" =~ ^[A-Za-z0-9._/-]+$ && "$2" != -* ]] || die "--ref needs a tag or branch name, got '$2'"; REF="$2"; shift ;;
     --remote) need_value "$@"; REMOTE="$2"; shift ;;
     --wait-timeout) need_value "$@"; need_number "$@"; WAIT_TIMEOUT="$2"; shift ;;
-    --settle) need_value "$@"; need_number "$@"; SETTLE="$2"; shift ;;
+    --settle) need_value "$@"; need_number "$@"; SETTLE="$((10#$2))"; shift ;;
     -h|--help) usage; exit 0 ;;
     *) die "unknown argument: $1 (try --help)" ;;
   esac
@@ -164,6 +169,8 @@ ctx=""           # the build context directory, data/build/<TARGET>-<pid>
 CLEANED=""       # on_exit ran
 RELEASE_DONE=0   # the explicit release before the prune step ran (whatever it returned)
 CONFIG_WRITES_PENDING=0   # 1 when user config writes were skipped, failed or are still due (set by a config write step)
+WORKER_WAIT_RC=0  # 1 when step 12 could not confirm the ai-worker service (the exit code policy: lib/deploy-result.sh)
+WAIT_OUT=""     # PID file of the step 12 wait
 DOCTOR_RC=0      # the doctor's exit code (127 and the like: it could not run)
 
 # A path is only ever removed when it is a real directory named like a build context, directly under data/build/.
@@ -177,6 +184,7 @@ remove_build_context() { if [[ -n "$ctx" ]] && is_build_context "$ctx"; then rm 
 on_exit() {
   local rc=$? mine lrc
   set +e
+  [[ -n "$WAIT_OUT" ]] && rm -f "$WAIT_OUT"
   [[ -n "$CLEANED" ]] && return; CLEANED=1
   [[ -z "$PROC_PGID" ]] || proc_group_wait "$PROC_PGID"
   if [[ "$RELEASE_DONE" != 1 ]]; then
@@ -556,7 +564,13 @@ else
 fi
 
 step "doctor: overall check"
-echo "  \$ sleep $SETTLE   # let the runner / ai-worker heartbeats arrive"
+if [[ "$NO_AI_WORKER" -eq 0 ]]; then
+  ai_worker_deploy_settings "$APP"   # after config:check; warns and falls back on a bad value
+  [[ -n "$SETTLE" ]] || SETTLE="$AI_WORKER_SWAP_TIMEOUT"
+fi
+if [[ "$NO_AI_WORKER" -eq 1 ]]; then say "--no-ai-worker: no wait for the ai-worker"
+elif [[ "$SETTLE" -eq 0 ]]; then say "--settle 0: no wait for the ai-worker"
+else echo "  \$ (wait at most $SETTLE s until the ai-worker service's current PID holds the lock and wrote a heartbeat and its config report)"; fi
 echo "  \$ pnpm run doctor"
 if [[ "$DRY_RUN" -eq 1 ]]; then
   echo
@@ -567,19 +581,37 @@ if [[ "$DRY_RUN" -eq 1 ]]; then
   fi
   exit 0
 fi
-sleep "$SETTLE"
+if [[ "$NO_AI_WORKER" -eq 0 && "$SETTLE" -gt 0 ]]; then
+  # Keep the wait in this shell so its interrupt checks see STOPPING; only the PID goes through the file.
+  WAIT_OUT="$(mktemp "${TMPDIR:-/tmp}/deploy-wait.XXXXXX")" || WAIT_OUT=""
+  wait_rc=0
+  if [[ -n "$WAIT_OUT" ]]; then AI_WORKER_STOP_CHECK=1 ai_worker_wait_fresh "$APP" "$SETTLE" > "$WAIT_OUT" || wait_rc=$?; else wait_rc=1; fi
+  fresh_pid="$(head -n 1 "$WAIT_OUT" 2>/dev/null)" || fresh_pid=""
+  rm -f "$WAIT_OUT"; WAIT_OUT=""
+  proc_check_stop
+  case "$wait_rc" in
+    0) say "ai-worker (pid $fresh_pid) confirmed: lock, heartbeat and config report since this step began" ;;
+    3) say "no ai-worker service is installed here: nothing to wait for" ;;
+    *) echo "deploy: ⚠ could not confirm within $SETTLE s that the ai-worker service is working (lock, heartbeat and config report of its current PID); see the doctor below, data/logs/ai-worker.err.log, and \"could not report the shipped config\" in data/logs/ai-worker.out.log" >&2
+       WORKER_WAIT_RC=1 ;;
+  esac
+fi
 proc_check_stop
 # The doctor's verdict is only recorded here; the exit code is decided once, below (deploy_final_rc).
 DOCTOR_RC=0; proc_run pnpm run doctor || DOCTOR_RC=$?
 proc_check_stop
 echo
-case "$DOCTOR_RC" in
-  0) echo "Deploy complete, doctor passed everything." ;;
-  1) echo "Deploy complete. The doctor reported warnings (see above); they do not stop it from running, handle them when you have time." ;;
-  2) echo "Deploy complete, but the doctor reported problems (see the hints above)." >&2 ;;
-  *) echo "deploy: everything is deployed, but the doctor itself could not run (exit code ${DOCTOR_RC}). Run pnpm run doctor on its own to see the error." >&2 ;;
-esac
+if [[ "$WORKER_WAIT_RC" == 1 && "$DOCTOR_RC" =~ ^[01]$ ]]; then
+  echo "Deploy complete, but the ai-worker service could not be confirmed working (see the warning above); the doctor found $([[ $DOCTOR_RC == 0 ]] && echo 'nothing else' || echo 'warnings too')." >&2
+else
+  case "$DOCTOR_RC" in
+    0) echo "Deploy complete, doctor passed everything." ;;
+    1) echo "Deploy complete. The doctor reported warnings (see above); they do not stop it from running, handle them when you have time." ;;
+    2) echo "Deploy complete, but the doctor reported problems (see the hints above)." >&2 ;;
+    *) echo "deploy: everything is deployed, but the doctor itself could not run (exit code ${DOCTOR_RC}). Run pnpm run doctor on its own to see the error." >&2 ;;
+  esac
+fi
 if [[ "$CONFIG_WRITES_PENDING" == 1 ]]; then
   echo "deploy: user config writes are pending (see above)$([[ "$DOCTOR_RC" =~ ^[012]$ ]] || echo '; the doctor did not run either')." >&2
 fi
-exit "$(deploy_final_rc "$CONFIG_WRITES_PENDING" "$DOCTOR_RC")"
+exit "$(deploy_final_rc "$CONFIG_WRITES_PENDING" "$DOCTOR_RC" "$WORKER_WAIT_RC")"

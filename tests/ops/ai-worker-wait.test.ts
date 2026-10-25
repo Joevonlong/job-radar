@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -35,12 +35,20 @@ beforeEach(() => {
     `#!/bin/bash\necho "launchctl $*" >> "${state}/calls"\n[[ -n "\${STUB_LAUNCHCTL_SLEEP:-}" ]] && sleep "$STUB_LAUNCHCTL_SLEEP"\n[[ "$1" == print && ( -e "${state}/loaded" || -e "${state}/loaded-\${2##*/}" ) ]] && { echo "pid = 4242"; exit 0; }\nexit 113\n`,
     0o755,
   );
-  // node: stands in for the worker-heartbeat.ts --evidence probe (sleeps STUB_NODE_SLEEP, exits STUB_NODE_EXIT)
-  write(
-    path.join(bin, "node"),
-    `#!/bin/bash\necho "node $*" >> "${state}/calls"\necho $$ > "${state}/node-pid"\n[[ -n "\${STUB_NODE_SLEEP:-}" ]] && sleep "$STUB_NODE_SLEEP"\nexit "\${STUB_NODE_EXIT:-0}"\n`,
-    0o755,
-  );
+  // node: the database clock and the evidence / receipt probes, without a database.
+  write(path.join(bin, "node"), `#!/bin/bash
+echo "node $*" >> "${state}/calls"
+echo $$ > "${state}/node-pid"
+[[ -n "\${STUB_NODE_SLEEP:-}" ]] && sleep "$STUB_NODE_SLEEP"
+case " $* " in
+  *" --now "*) echo '{"now":"2026-10-25T00:00:00.000000Z"}'; exit "\${STUB_NODE_EXIT:-0}" ;;
+  *" --receipt "*)
+    n=$(grep -c -- ' --receipt ' "${state}/calls")
+    if [[ -n "\${STUB_RECEIPT_AFTER:-}" ]]; then (( n >= STUB_RECEIPT_AFTER )) && exit 0; exit 2; fi
+    exit "\${STUB_RECEIPT_EXIT:-0}" ;;
+esac
+exit "\${STUB_NODE_EXIT:-0}"
+`, 0o755);
   // systemctl --user show / list-jobs: from state/show (a counter appended each call for NRestarts) and state/jobs
   write(
     path.join(bin, "systemctl"),
@@ -279,5 +287,76 @@ describe("ai_worker_wait_ready: the service polled and the time bound", () => {
     const r = run(`ai_worker_wait_ready "${main()}" 1 2026-01-01T00:00:00Z 2; echo "rc=$?"`, env);
     expect(r.stdout.trim()).toBe("rc=1");
     expect(calls().some((c) => c.startsWith("node "))).toBe(true);
+  });
+});
+
+describe("ai_worker_wait_fresh", () => {
+  const main = (): string => path.join(tmp, "main");
+  const env = { JOB_RADAR_SERVICE_MANAGER: "launchd" };
+  function installed(): void {
+    write(path.join(tmp, "Library/LaunchAgents/io.jobradar.ai-worker.plist"), "<plist/>\n");
+    write(path.join(state, "loaded"), "");
+    write(path.join(main(), ".env"), "DATABASE_URL=postgres://test:fixture-password@127.0.0.1:1/none\n");
+  }
+  const fresh = (extra: Record<string, string> = {}, timeout = 5) => run(`ai_worker_wait_fresh "${main()}" ${timeout}`, { ...env, ...extra });
+
+  it("returns 3 without a definition, without calling node", () => {
+    expect(fresh().status).toBe(3);
+    expect(calls()).toEqual([]);
+  });
+  it("returns 3 when the service manager is disabled", () => {
+    installed();
+    expect(fresh({ JOB_RADAR_SERVICE_MANAGER: "none" }).status).toBe(3);
+    expect(calls()).toEqual([]);
+  });
+  it("prints the current PID after its receipt, using the database clock and keeping the URL private", () => {
+    installed();
+    const r = fresh({ STUB_RECEIPT_AFTER: "2" });
+    expect(r.status).toBe(0);
+    expect(r.stdout.trim()).toBe("4242");
+    const nodes = calls().filter((c) => c.startsWith("node "));
+    expect(nodes[0]).toMatch(/ --now$/);
+    expect(nodes.slice(1)).toHaveLength(2);
+    expect(nodes[1]).toMatch(/ --receipt --pid 4242 --host \S+ --since 2026-10-25T00:00:00.000000Z$/);
+    expect(r.stdout + r.stderr + calls().join("\n")).not.toContain("fixture-password");
+  });
+  it("returns 1 within the bound when a receipt never arrives", () => {
+    installed();
+    const r = fresh({ STUB_RECEIPT_EXIT: "2" }, 2);
+    expect(r.status).toBe(1);
+    expect(r.ms).toBeLessThan(4000);
+  });
+  it("returns 1 when the database clock cannot be read", () => {
+    installed();
+    expect(fresh({ STUB_NODE_EXIT: "1" }).status).toBe(1);
+    expect(calls()).toHaveLength(1);
+  });
+  it("a signal during the first PID probe stops before any receipt or PID re-check", async () => {
+    installed();
+    const proc = path.join(path.dirname(lib), "proc.sh");
+    const child = spawn("/bin/bash", ["-c", `source "${proc}"; source "${lib}"; proc_traps ':'; AI_WORKER_STOP_CHECK=1 ai_worker_wait_ready "$1" "" 2026-10-25T00:00:00.000000Z 30 receipt`, "_", main()], {
+      env: { NODE_ENV: "test", PATH: `${bin}:/usr/bin:/bin`, HOME: tmp, ...env, DATABASE_URL: "postgres://unused@127.0.0.1:1/none", STUB_LAUNCHCTL_SLEEP: "2" },
+      detached: true, stdio: "ignore",
+    });
+    const done = new Promise<number | null>((resolve) => child.once("close", resolve));
+    try {
+      const until = Date.now() + 3000;
+      while (!calls().some((c) => c.startsWith("launchctl print"))) {
+        if (Date.now() > until) throw new Error("PID probe did not start");
+        await new Promise((r) => setTimeout(r, 25));
+      }
+      const before = calls();
+      const signalled = Date.now();
+      child.kill("SIGTERM");
+      const guard = setTimeout(() => { if (child.pid) process.kill(-child.pid, "SIGKILL"); }, 4000);
+      try {
+        expect(await done).toBe(1);
+        expect(Date.now() - signalled).toBeLessThan(4000);
+        expect(calls()).toEqual(before);
+      } finally { clearTimeout(guard); }
+    } finally {
+      if (child.exitCode === null && child.signalCode === null && child.pid) process.kill(-child.pid, "SIGKILL");
+      await done;
+    }
   });
 });

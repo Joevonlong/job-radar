@@ -311,7 +311,9 @@ gives a new identity.
   running container of the project has something mounted on `/app/config` (or below it): that would hide the defaults in
   the image, typically a `compose.override.yaml` from before they moved into the image; remove the mount and deploy.
 
-Right after a deploy or a restart a report can be missing for a moment; run the doctor again after a minute.
+Container reports can arrive late just after a deploy or restart: wait a minute and run the doctor again.
+For the ai-worker, check whether `aiworker.heartbeat` says its current process is not confirmed yet; if its report stays
+missing, look for "could not report the shipped config" in `data/logs/ai-worker.out.log`.
 
 The ai-worker's release directories and its switch are set by four keys in `schedule.yaml`. None of them is in the
 shipped file; add one to `data/config/schedule.yaml` only to change it (a version from before release directories does
@@ -321,7 +323,7 @@ not know them, see [upgrade.md](upgrade.md#downgrade-pre-release-dir)):
 |---|---|---|
 | `deploy.ai_worker_releases_keep` | 3 | Release directories kept after a switch, the installed and the previous one included (at least 2) |
 | `deploy.ai_worker_stop_timeout_seconds` | 60 | launchd `ExitTimeOut` / systemd `TimeoutStopSec` of the worker (at least 10) |
-| `deploy.ai_worker_swap_timeout_seconds` | 120 | Longest wait of each phase of a switch (at least the stop timeout + 10) |
+| `deploy.ai_worker_swap_timeout_seconds` | 120 | Longest wait of each phase of a switch (at least the stop timeout + 10), and the step 12 wait cap (`--settle` overrides it) |
 | `doctor.shipped_report_skew_seconds` | 2 | Clock difference allowed between Docker and the database when `config.shipped` matches a container's report |
 
 Details: [deploy.md](deploy.md), "The ai-worker runs from a release directory".

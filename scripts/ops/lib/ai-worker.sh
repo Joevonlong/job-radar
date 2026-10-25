@@ -6,6 +6,7 @@
 #   ai_worker_label   the resolved launchd label L (see ai_worker_identity), the default one when L is not valid
 #   ai_worker_identity <main>       which service definition is the worker's (key=value lines; files only)
 #   ai_worker_wait_ready <main> <old pid> <since> <timeout>   until a new PID of the installed definition shows evidence
+#   ai_worker_wait_fresh <main> <timeout>                    until its current PID shows a receipt since this call
 #   ai_worker_wait_stopped <label-or-unit> <pid> <timeout>     until the service and the PID are gone
 #   ai_worker_probe <seconds> <file> <command…>                a service manager query, bounded in time
 #   ai_worker_db_url <main> [--database-url X]                 the DATABASE_URL the install script writes
@@ -190,19 +191,20 @@ ai_worker_run_bounded() {
 # ai_worker_exec_to <file> <command…>: execs the command with stdout to <file> and stderr discarded.
 ai_worker_exec_to() { local f="$1"; shift; exec "$@" > "$f" 2>/dev/null; }
 
-# ai_worker_evidence_probe <pid> <host> <since>: worker-heartbeat.ts --evidence, run from this checkout (its tsconfig and
+# ai_worker_evidence_probe <pid> <host> <since> [mode]: worker-heartbeat.ts --<mode> (default evidence), from this checkout (its tsconfig and
 # tsx), with the caller's DATABASE_URL; exec, so that ai_worker_run_bounded can kill it.
 ai_worker_evidence_probe() {
   cd "$AI_WORKER_REPO" || exit 1
   DATABASE_URL="$DATABASE_URL" exec node --import "$AI_WORKER_REPO/node_modules/tsx/dist/loader.mjs" \
-    scripts/ops/worker-heartbeat.ts --evidence --pid "$1" --host "$2" --since "$3" >/dev/null 2>&1 </dev/null
+    scripts/ops/worker-heartbeat.ts --"${4:-evidence}" --pid "$1" --host "$2" --since "$3" >/dev/null 2>&1 </dev/null
 }
 
-# ai_worker_wait_ready <main> <old pid> <since> <timeout s>: waits until the service manager reports a PID P other than
+# ai_worker_wait_ready <main> <old pid> <since> <timeout s> [mode]: waits until the service manager reports a PID P other than
 # <old pid> and the database shows evidence for it: worker-heartbeat.ts --evidence --pid P --host <this host> --since
 # <since> exits 0 (P holds the worker's instance lock and wrote a heartbeat after <since>). Exit 2 (not yet) or 1 (cannot
 # tell, e.g. the lock holder is another database role) both mean "not ready": it keeps waiting. Once there is evidence it
 # checks the PID once more, prints P and returns 0.
+# An empty <old pid> accepts any PID. Mode defaults to evidence; receipt also requires P's own shipped config report.
 # The service polled is the definition in force when it is called: found_label of ai_worker_identity <main> (systemd: the
 # unit), not the configured label L. After a failed migration from the default or legacy label to L, the rollback puts
 # the definition back under its old label, and this waits for that one.
@@ -211,7 +213,7 @@ ai_worker_evidence_probe() {
 # definition exists, when the identity is ambiguous, or at once when DATABASE_URL is empty: the caller sets it
 # explicitly (the URL written into the definition), it is never read from .env or derived here.
 ai_worker_wait_ready() {
-  local main="$1" old="$2" since="$3" timeout="$4" platform target ident host pid deadline left
+  local main="$1" old="$2" since="$3" timeout="$4" mode="${5:-evidence}" platform target ident host pid confirmed rc deadline left
   [[ -n "${DATABASE_URL:-}" ]] || { echo "ai-worker: ai_worker_wait_ready needs DATABASE_URL set by the caller" >&2; return 1; }
   [[ "$timeout" =~ ^[0-9]+$ ]] || { echo "ai-worker: timeout must be whole seconds, got '$timeout'" >&2; return 1; }
   ident="$(ai_worker_identity "$main")" || return 1
@@ -225,17 +227,44 @@ ai_worker_wait_ready() {
     ai_worker_interrupted && return 1
     left=$((deadline - SECONDS)); (( left > 0 )) || return 1
     pid="$(ai_worker_service_pid "$platform" "$target" "$left")"
+    ai_worker_interrupted && return 1
     left=$((deadline - SECONDS)); (( left > 0 )) || return 1
-    if [[ -n "$pid" && "$pid" != "$old" ]] && ai_worker_run_bounded "$left" ai_worker_evidence_probe "$pid" "$host" "$since"; then
-      left=$((deadline - SECONDS)); (( left > 0 )) || return 1
-      if [[ "$(ai_worker_service_pid "$platform" "$target" "$left")" == "$pid" ]] && (( SECONDS <= deadline )); then
-        printf '%s\n' "$pid"
-        return 0
+    if [[ -n "$pid" && "$pid" != "$old" ]]; then
+      rc=0; ai_worker_run_bounded "$left" ai_worker_evidence_probe "$pid" "$host" "$since" "$mode" || rc=$?
+      ai_worker_interrupted && return 1
+      if (( rc == 0 )); then
+        left=$((deadline - SECONDS)); (( left > 0 )) || return 1
+        confirmed="$(ai_worker_service_pid "$platform" "$target" "$left")"
+        ai_worker_interrupted && return 1
+        if [[ "$confirmed" == "$pid" ]] && (( SECONDS <= deadline )); then
+          printf '%s\n' "$pid"
+          return 0
+        fi
       fi
     fi
     (( SECONDS < deadline )) || return 1
     sleep 1
   done
+}
+
+# ai_worker_wait_fresh <main> <timeout s>: waits until the PID the ai-worker service of <main> reports shows a receipt
+# written after this call started (worker-heartbeat.ts --receipt: it holds the worker lock, and a heartbeat and its own
+# shipped config report are newer than both this call and the lock connection). Prints that PID and returns 0.
+# Returns 3 at once when there is nothing to wait for (JOB_RADAR_SERVICE_MANAGER=none, or no definition installed);
+# 1 when it could not confirm one: timeout, an interrupt (ai_worker_interrupted), an ambiguous identity, or the
+# database clock could not be read. The DATABASE_URL is resolved as the install script does and never printed.
+ai_worker_wait_fresh() {
+  local main="$1" timeout="$2" ident target url start since left
+  [[ "${JOB_RADAR_SERVICE_MANAGER:-}" == none ]] && return 3
+  [[ "$timeout" =~ ^[0-9]+$ ]] || { echo "ai-worker: timeout must be whole seconds, got '$timeout'" >&2; return 1; }
+  ident="$(ai_worker_identity "$main")" || return 1
+  target="$(printf '%s\n' "$ident" | sed -n 's/^found_label=//p')"
+  [[ -n "$target" ]] || return 3
+  url="$(ai_worker_db_url "$main")"
+  start=$SECONDS
+  since="$(DATABASE_URL="$url" ai_worker_db_now "$timeout")" || return 1
+  left=$((timeout - (SECONDS - start))); (( left > 0 )) || return 1
+  DATABASE_URL="$url" ai_worker_wait_ready "$main" "" "$since" "$left" receipt
 }
 
 # ai_worker_wait_stopped <label-or-unit> <pid> <timeout s>: 0 once the worker is stopped, 1 on timeout. Checked every second:

@@ -1,12 +1,15 @@
 /** The real probes of `pnpm run doctor`: child processes, HTTP, the filesystem and the database. Host-side only. */
 import { execFile, spawn } from "node:child_process";
 import { lstat, readdir, stat } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 
 import { z } from "zod";
 
 import { getAppRoot, inspectConfigLayers, loadConfig } from "@/lib/config";
 import { getDb, getDbNow, pingDb, readAppliedMigrations } from "@/lib/db";
+import { getSql } from "@/lib/db/client";
+import { workerReceipt } from "@/lib/db/repos/ai-worker-evidence";
 import { readJournal } from "@/lib/db/migration-journal";
 import { readShippedConfigReports } from "@/lib/db/repos/runtime-state";
 import { countUnscoredJobs } from "@/lib/db/repos/scores";
@@ -251,6 +254,7 @@ export function createRealProbes(options: RealProbeOptions): DoctorProbes {
     foreignOwned: (roots, uid, options) => scanOwnership(roots, uid, options),
     market: async () => summarizeMarket(),
     setup: async () => readSetupState(),
+    aiWorkerReceipt: (pid) => workerReceipt({ sql: getSql(), db: getDb() }, { pid, host: os.hostname(), since: "1970-01-01T00:00:00.000000Z" }),
     shippedConfigReports: () => readShippedConfigReports(getDb()),
     releasesLock: (main) => readReleasesLock(main),
   };

@@ -217,7 +217,7 @@ cd config && find . -type f ! -name .DS_Store ! -name '._*' | LC_ALL=C sort | wh
   worker 不在 `data/releases/ai-worker/` 下运行（由发布目录之前的版本安装），或者来自别的提交（只回滚了 worker，或者部署在 ai-worker 那一步之前停下），都是带专门提示的警告。凡是无法确认的都是警告，并逐个列出进程；没有失败。连不上数据库时跳过。项目里运行中的容器在
   `/app/config`（或它下面）有挂载时，这项检查也会告警：挂载会挡住镜像里的默认配置，通常是出厂配置进镜像之前的 `compose.override.yaml`；去掉挂载再部署。
 
-部署或重启后的短时间内报告可能还没写；过一分钟再运行一次 doctor。
+刚部署或重启后，容器的报告可能晚到：等一分钟再运行 doctor。ai-worker 则看 `aiworker.heartbeat` 是否说当前进程还没确认在工作；如果一直缺报告，到 `data/logs/ai-worker.out.log` 里找 "could not report the shipped config"。
 
 ai-worker 的发布目录和切换由 `schedule.yaml` 里的四个键控制。出厂文件里都没有；只有要改时才加到 `data/config/schedule.yaml`（发布目录之前的版本不认识它们，见 [upgrade.zh.md](upgrade.zh.md#downgrade-pre-release-dir)）：
 
@@ -225,7 +225,7 @@ ai-worker 的发布目录和切换由 `schedule.yaml` 里的四个键控制。�
 |---|---|---|
 | `deploy.ai_worker_releases_keep` | 3 | 切换后保留的发布目录个数，含当前安装的和上一个（至少 2） |
 | `deploy.ai_worker_stop_timeout_seconds` | 60 | worker 的 launchd `ExitTimeOut` / systemd `TimeoutStopSec`（至少 10） |
-| `deploy.ai_worker_swap_timeout_seconds` | 120 | 切换中每一段等待的上限（至少停止超时 + 10） |
+| `deploy.ai_worker_swap_timeout_seconds` | 120 | 切换中每一段等待的上限（至少停止超时 + 10），也是第 12 步等待的上限（`--settle` 可覆盖） |
 | `doctor.shipped_report_skew_seconds` | 2 | `config.shipped` 核对容器报告时容许的 Docker 与数据库时钟差 |
 
 细节见 [deploy.zh.md](deploy.zh.md)《ai-worker 从发布目录运行》。
