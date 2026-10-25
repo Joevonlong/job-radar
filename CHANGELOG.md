@@ -107,6 +107,10 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **SmartRecruiters detail failures no longer fail the board:** stored postings keep their saved version and are
+  refreshed as seen; new postings are added in later sweeps. New setting
+  `sources.smartrecruiters.max_consecutive_detail_failures` (default 3) limits consecutive detail failures per board
+  per sweep. **Upgrade:** a database migration adds a column and runs automatically on deploy.
 - **Company career board scans:** `max_results` no longer hides stored jobs that the board still lists, which could
   mark them possibly closed after a week. The registry's "kept" count now means postings that passed the prefilter and
   fit within the cap. **Upgrade:** the first run after upgrading re-reads every board once (cached ETags are discarded).

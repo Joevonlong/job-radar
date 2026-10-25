@@ -52,6 +52,8 @@ A channel's status is the same result as the channel card on the `/sources` over
 - The evidence is the link check that follows: it tries each source link of the job. A live page on any of them brings the job back to active; it is closed only when every link checked returns 404 or 410. Anything else leaves the mark as it is.
 - A job that is seen again by any source becomes active again, with two exceptions: a mark that came from a "no longer accepting applications" sentence on the posting stays, and so does a closure you made yourself.
 
+### Company ATS boards
+
 For company ATS boards, `max_results` is the maximum number of postings stored per board per run,
 after the title prefilter. Matching postings are taken in the board's list order up to that cap.
 Stored postings beyond the cap are refreshed as seen while the board still lists them, including
@@ -61,6 +63,12 @@ The registry's "kept" count means postings that passed the title prefilter and f
 
 A stored posting dropped by the title prefilter does **not** count as seen.
 After you narrow your keywords, it ages out as usual unless another source sees it.
+
+For SmartRecruiters only, a failing detail request no longer fails the board. A stored posting keeps its saved version
+and is refreshed as seen; a new posting is not stored and is retried in later sweeps, ahead of postings whose
+details already failed before. After
+`sources.smartrecruiters.max_consecutive_detail_failures` failures in a row (default 3), or a host-level refusal
+(blocked, login/auth expired, rate limit, or budget), the board's remaining details are skipped for that sweep.
 
 ## 4. What you can do on the page
 
@@ -141,6 +149,7 @@ Two limits of the recorded history remain:
 
 | You see | What to do |
 |---|---|
+| SmartRecruiters detail request fails | The board stays OK; the `ats board details missing` log line shows failed and skipped counts. Stored jobs keep their saved version and are refreshed as seen; new jobs arrive in later sweeps. For persistent refusals, check the board's careers page and your network, or increase `sources.smartrecruiters.throttle` delays to lower the load. See [Company ATS boards](#company-ats-boards) |
 | Company "N consecutive failures: board does not exist (404)" | The token is wrong or the company changed ATS: click "Open board" to look at the careers page, fix the token under "Edit", or "Delete" |
 | Company "not checked for N hours" | Its ATS channel is off or the breaker is open, or the runner is not running; look at the channel row |
 | Channel "breaker open until ..." | Consecutive failures reached `circuit_breaker.failures`; it tries once automatically when the cooldown expires; expand "Details" for the latest error code; being blocked usually means waiting or switching channels |
