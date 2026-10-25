@@ -1,6 +1,6 @@
 import type { z } from "zod";
 
-import { ChannelError, isAbortError, type ChannelErrorCode } from "@/lib/channels/errors";
+import { ChannelError, isAbortError, PartialCollectError, type ChannelErrorCode } from "@/lib/channels/errors";
 import type {
   Channel,
   ChannelContext,
@@ -104,6 +104,8 @@ export interface BoardCollection {
   postings: RawPostingInput[];
   /** The failure behind an `error` / `not_found` report. */
   failure?: ChannelError;
+  /** First detail failure: the board stays healthy, but counts as failed for the sweep outcome. */
+  detailFailure?: ChannelError;
 }
 
 function errorMessage(error: unknown): string {
@@ -310,6 +312,7 @@ export async function collectBoard<S extends { title_prefilter: AtsTitlePrefilte
       ...(skipped.size > 0 ? { detailSkipped: skipped.size } : {}),
     },
     postings: returned,
+    ...(firstFailure ? { detailFailure: firstFailure } : {}),
   };
 }
 
@@ -326,9 +329,10 @@ function parseSettings<S>(schema: z.ZodType<S>, extra: unknown, id: string): S {
  * An ATS channel: one sweep over every enabled board of `sources.yaml (ats_boards)` that uses this ATS. The
  * framework hands it the single keyword-less sweep query (`usesQueries: false`).
  *
- * A board whose list fails (404, 5xx after retries, bad shape) does not stop the others; the sweep
- * only fails with the first board's error when every attempted board failed. Classified detail
- * failures leave the board healthy, preserve stored payloads and sightings, and update retry state.
+ * List or classified detail failures do not stop the other boards. Detail failures leave board state
+ * healthy, preserve stored payloads and sightings, and update retry state, but count as failed boards
+ * for the sweep outcome. When every attempted board has a failure, throw the first error, preserving
+ * any collected postings in PartialCollectError. A mixed round with a fully healthy board returns normally.
  */
 export function createAtsChannel<S extends { title_prefilter: AtsTitlePrefilterSettings }>(
   adapter: AtsAdapter<S>,
@@ -368,6 +372,7 @@ export function createAtsChannel<S extends { title_prefilter: AtsTitlePrefilterS
 
       const postings: RawPostingInput[] = [];
       const failures: ChannelError[] = [];
+      let detailFailedBoards = 0;
       let attempted = 0;
       for (const company of companies) {
         ctx.signal.throwIfAborted();
@@ -389,14 +394,27 @@ export function createAtsChannel<S extends { title_prefilter: AtsTitlePrefilterS
           failures.push(result.failure);
           ctx.logger.warn("ats board not found", { company: report.company, board: report.board });
         } else {
+          if (result.detailFailure) {
+            failures.push(result.detailFailure);
+            detailFailedBoards += 1;
+          }
           ctx.logger.info("ats board", { ...report });
         }
         postings.push(...result.postings);
       }
 
-      ctx.logger.info("ats sweep done", { ats: adapter.id, boards: attempted, failedBoards: failures.length, postings: postings.length });
+      ctx.logger.info("ats sweep done", {
+        ats: adapter.id,
+        boards: attempted,
+        failedBoards: failures.length - detailFailedBoards,
+        ...(detailFailedBoards > 0 ? { detailFailedBoards } : {}),
+        postings: postings.length,
+      });
       const [first] = failures;
-      if (first && failures.length === attempted) throw first;
+      if (first && failures.length === attempted) {
+        if (postings.length > 0) throw new PartialCollectError(postings, first);
+        throw first;
+      }
       return postings;
     },
     parse(payload: unknown): NormalizedPostingDraft {
