@@ -1,0 +1,1 @@
+ALTER TABLE "ats_boards" ADD COLUMN "detail_retry_ids" text[] DEFAULT '{}'::text[] NOT NULL;

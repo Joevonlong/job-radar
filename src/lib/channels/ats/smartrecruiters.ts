@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { ChannelError } from "@/lib/channels/errors";
+import { ChannelError, isAbortError } from "@/lib/channels/errors";
 import { marketForChannel } from "@/lib/channels/market";
 import type { ChannelContext, NormalizedPostingDraft } from "@/lib/channels/types";
 import type { CompanyEntry } from "@/lib/config";
@@ -16,7 +16,9 @@ import { htmlToText } from "./text";
  * the postings (paged, no description); `GET /v1/companies/{id}/postings/{postingId}` has the ad
  * text. The first page carries the ETag and `totalFound`, which changes whenever a posting opens or
  * closes, so a 304 on the first page means the whole board is unchanged. An unknown company id is
- * not a 404: the API answers with an empty list.
+ * not a 404: the API answers with an empty list. Detail failures keep the board healthy: stored
+ * postings stay seen with their old payload, and retry state controls request order and whether
+ * the list validator can be reused. Consecutive failures or a host refusal stop remaining details.
  */
 
 type Settings = z.infer<typeof smartrecruitersChannelSchema>;
@@ -142,7 +144,6 @@ async function fetchBoard(ctx: ChannelContext, company: CompanyEntry, settings: 
 }
 
 async function enrich(ctx: ChannelContext, posting: unknown, company: CompanyEntry, settings: Settings): Promise<unknown> {
-  if (!settings.fetch_details) return posting;
   const id = (posting as { id?: unknown }).id;
   if (typeof id !== "string") return posting;
   const response = await ctx.http.request(`${companyBase(company, settings)}/${encodeURIComponent(id)}`, {
@@ -154,6 +155,8 @@ async function enrich(ctx: ChannelContext, posting: unknown, company: CompanyEnt
   try {
     return await response.json();
   } catch (error) {
+    // Body-stream failures keep their channel code, and cancellation must still propagate.
+    if (error instanceof ChannelError || isAbortError(error) || ctx.signal.aborted) throw error;
     throw new ChannelError("parse", `smartrecruiters posting detail is not valid JSON`, { cause: error });
   }
 }
@@ -183,7 +186,11 @@ export const smartrecruitersAdapter: AtsAdapter<Settings> = {
     return parsed.data.content;
   },
   describe,
-  enrich,
+  details: {
+    enabled: (settings) => settings.fetch_details,
+    enrich,
+    maxConsecutiveFailures: (settings) => settings.max_consecutive_detail_failures,
+  },
   parse(payload) {
     const { source, posting } = unwrapPayload(payload, "smartrecruiters");
     const parsed = postingSchema.safeParse(posting);

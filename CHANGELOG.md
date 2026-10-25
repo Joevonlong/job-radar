@@ -107,6 +107,17 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **SmartRecruiters detail failures no longer mark the board as failed in the registry:** stored postings keep
+  their saved version and are refreshed as seen; new postings are retried in later sweeps, but after a repeated failure
+  only once the board's list changes if the server answers 304 for the stored validator. Boards that do not answer 304
+  are re-read every sweep and retry then.
+  Run outcomes are unchanged: if every board of the ATS has a failed list or detail request in that sweep, the run is
+  still interrupted when postings were collected, or failed otherwise, not successful; a board with unresolved details
+  from an earlier sweep that receives 304 keeps counting as failed for the run outcome until a full re-read resolves them.
+  The run is not used to mark jobs as
+  possibly closed. The registry still shows a board as OK when its list was read and its stored jobs were refreshed.
+  New setting `sources.smartrecruiters.max_consecutive_detail_failures` (default 3) limits consecutive detail failures per board
+  per sweep. **Upgrade:** a database migration adds a column and runs automatically on deploy.
 - Board discovery (Tavily, Brave) no longer drops the same searches every run when there are more than `max_queries_per_run`; it searches the ones that waited longest first.
 - **Company career board scans:** `max_results` no longer hides stored jobs that the board still lists, which could
   mark them possibly closed after a week. The registry's "kept" count now means postings that passed the prefilter and

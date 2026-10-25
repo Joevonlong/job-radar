@@ -320,11 +320,12 @@ sources:
     enabled: true
     monthly_budget_usd: 0
     throttle: { min_delay_ms: 300, max_delay_ms: 1000 }
-    max_results: 500 # max postings stored per board per run (after prefiltering); stored jobs beyond it that the board still lists count as seen
+    max_results: 500 # max postings stored per board per run (after prefiltering); also limits detail requests; stored jobs beyond it that the board still lists count as seen
     api_base_url: "https://api.smartrecruiters.com" # GET /v1/companies/{token}/postings (token is case-sensitive)
     # country: de # only jobs in this country (big companies' boards are global); unset = the market's country, empty string = all
     page_size: 100 # per-page size of the list (API max 100)
-    fetch_details: true # the list has no body: after prefiltering, fetch details once per job
+    fetch_details: true # the list has no body: after prefiltering, fetch details once per job; a failed detail leaves stored postings as they were
+    # max_consecutive_detail_failures: 3 # failures in a row allowed per board per sweep before its remaining details are skipped; stored postings keep their stored version, new ones are retried next sweep
     title_prefilter:
       enabled: true
       # Same as greenhouse: stored only if the title matches a search.yaml keyword or include_terms, or the company is in watched_companies; an exclude_terms match drops it

@@ -182,12 +182,14 @@ export const atsBoards = pgTable(
   {
     ats: text("ats").notNull(),
     token: text("token").notNull(),
-    /** Validator of the last complete response; sent as `If-None-Match`. NULL = no usable validator. */
+    /** List validator sent as `If-None-Match`; cleared when a never-stored detail needs its first retry. NULL = no usable validator. */
     etag: text("etag"),
     /** Hash of everything that decided which postings were kept; a changed value invalidates the ETag. */
     filterFingerprint: text("filter_fingerprint"),
-    /** Ids handed over from the last 200 plus already-stored ids the board still listed beyond the cap (raw_postings.external_id). */
+    /** Ids handed over from the last 200 plus still-listed stored ids beyond the cap or missing details (raw_postings.external_id). */
     externalIds: text("external_ids").array().notNull().default(sql`'{}'::text[]`),
+    /** Ids whose details failed at the last 200, including prior failures skipped then; requested last next time. */
+    detailRetryIds: text("detail_retry_ids").array().notNull().default(sql`'{}'::text[]`),
     lastStatus: text("last_status").notNull(),
     lastErrorCode: text("last_error_code"),
     lastCheckedAt: timestamptz("last_checked_at").notNull().defaultNow(),

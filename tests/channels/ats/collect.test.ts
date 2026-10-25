@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createGreenhouseChannel, createLeverChannel, createMemoryAtsBoardStore } from "@/lib/channels/ats";
 import { ChannelError } from "@/lib/channels/errors";
@@ -11,6 +11,13 @@ const GH_URL = "boards-api.greenhouse.io/v1/boards/examplelabs/jobs?content=true
 const GH_KEPT = ["6186419001", "6186419002", "6186419003", "6186419006"];
 const gh = company({ name: "Example Labs", ats: "greenhouse", token: "examplelabs" });
 const lv = company({ name: "Example Corp", ats: "lever", token: "examplecorp" });
+
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-10-07T12:00:00Z"));
+});
+
+afterEach(() => vi.useRealTimers());
 
 function greenhouse(opts: { watched?: string[]; companies?: ReturnType<typeof company>[]; store?: ReturnType<typeof createMemoryAtsBoardStore> } = {}) {
   const deps = depsWith(inputs(opts.companies ?? [gh], { watched: opts.watched ?? [] }), opts.store);
@@ -59,7 +66,7 @@ describe("greenhouse sweep", () => {
     expect(await run([], (b) => { b.title_prefilter = { enabled: true, include_terms: ["Account Executive"], exclude_terms: [] }; })).toHaveLength(5);
   });
 
-  it.each([2, 1, 0])("caps the postings kept per board at max_results with %i over-cap ids already stored", async (storedCount) => {
+  it.each([2, 1, 0])("caps the postings kept per board at max_results with %i over-cap ids already stored (0 stored: regression guard)", async (storedCount) => {
     const { fetch } = routedFetch([[GH_URL, response(200, fixtureJson("greenhouse-board.json"))]]);
     const channels = atsChannelsWith("greenhouse", (b) => { b.max_results = 2; });
     const { ctx, query, logs } = atsContext("greenhouse", fetch, { channels });
@@ -79,7 +86,7 @@ describe("greenhouse sweep", () => {
     ]);
   });
 
-  it("does not count an already-stored posting rejected by the title prefilter as seen", async () => {
+  it("[regression guard] does not count an already-stored posting rejected by the title prefilter as seen", async () => {
     const { channel, store } = greenhouse();
     const rejected = "6186419004";
     store.stored.add(rejected);
@@ -105,10 +112,10 @@ describe("greenhouse sweep", () => {
     expect(postings.map((p) => p.externalId)).toEqual(["7", "8"]);
     expect(postings[0]?.payload).toMatchObject({ posting: { title: "AI Engineer" } });
     expect(store.checks.at(-1)?.update).toMatchObject({ total: 2, kept: 2, externalIds: ["7", "8"] });
-    expect(lastLog(logs, "ats board")[0]).toMatchObject({ fetched: 3, kept: 2 });
-    expect(logs.filter((l) => l.message === "ats board listed duplicate ids")).toMatchObject([
-      { level: "warn", fields: { channel: "greenhouse", board: "examplelabs", count: 1 } },
+    expect(logs.filter((l) => l.message === "ats board")).toMatchObject([
+      { level: "info", fields: { fetched: 3, kept: 2, duplicates: 1 } },
     ]);
+    expect(lastLog(logs, "ats board listed duplicate ids")).toEqual([]);
   });
 
   it("deduplicates before filtering and capping, while still counting postings without ids", async () => {
@@ -131,7 +138,10 @@ describe("greenhouse sweep", () => {
     expect(postings.map((p) => p.externalId)).toEqual(["8"]);
     expect(store.touched).toEqual([["9"]]);
     expect(store.checks.at(-1)?.update).toMatchObject({ total: 4, kept: 1, externalIds: ["8", "9"] });
-    expect(lastLog(logs, "ats board listed duplicate ids")).toEqual([{ channel: "greenhouse", board: "examplelabs", count: 2 }]);
+    expect(lastLog(logs, "ats board")).toEqual([
+      { channel: "greenhouse", company: "Example Labs", board: "examplelabs", outcome: "changed", fetched: 6, kept: 1, touched: 1, duplicates: 2 },
+    ]);
+    expect(lastLog(logs, "ats board listed duplicate ids")).toEqual([]);
     expect(lastLog(logs, "ats board capped at max_results")).toEqual([{ channel: "greenhouse", board: "examplelabs", dropped: 1, cap: 1, touched: 1 }]);
   });
 
@@ -206,7 +216,7 @@ describe("conditional requests (ETag)", () => {
     expect(lastLog(second.logs, "ats sweep done")[0]).toMatchObject({ boards: 1, failedBoards: 0 });
   });
 
-  it.each([2, 1, 0])("keeps %i stored over-cap ids seen on a later 304 without refetching", async (storedCount) => {
+  it.each([2, 1, 0])("keeps %i stored over-cap ids seen on a later 304 without refetching (0 stored: regression guard)", async (storedCount) => {
     const { channel, store } = greenhouse();
     const present = GH_KEPT.slice(2, 2 + storedCount);
     for (const id of present) store.stored.add(id);
@@ -227,7 +237,7 @@ describe("conditional requests (ETag)", () => {
   it("a 304 in a sweep with other boards does not stop them", async () => {
     const companies = [gh, company({ name: "Second", ats: "greenhouse", token: "second" })];
     const { channel, store } = greenhouse({ companies });
-    store.states.set("greenhouse:examplelabs", { etag: 'W/"v1"', filterFingerprint: null, externalIds: [] });
+    store.states.set("greenhouse:examplelabs", { etag: 'W/"v1"', filterFingerprint: null, externalIds: [], detailRetryIds: [] });
     const seed = atsContext("greenhouse", routedFetch([["/v1/boards/", ok()]]).fetch);
     await channel.collect(seed.query, seed.ctx);
 
@@ -312,7 +322,7 @@ describe("conditional requests (ETag)", () => {
 
   it("dry runs neither read nor write board state and always fetch the whole board", async () => {
     const store = createMemoryAtsBoardStore();
-    store.states.set("greenhouse:examplelabs", { etag: 'W/"v1"', filterFingerprint: "x", externalIds: ["1"] });
+    store.states.set("greenhouse:examplelabs", { etag: 'W/"v1"', filterFingerprint: "x", externalIds: ["1"], detailRetryIds: [] });
     const { fetch, requests } = routedFetch([[GH_URL, ok()]]);
     const { ctx, query } = atsContext("greenhouse", fetch, { cycleId: null });
     const postings = await greenhouse({ store }).channel.collect(query, ctx);
@@ -341,7 +351,7 @@ describe("board failures (C2)", () => {
 
   it("a server error or a bad shape on one board does not stop the others, and keeps its old ETag", async () => {
     const { channel, store } = greenhouse({ companies: two });
-    store.states.set("greenhouse:examplelabs", { etag: 'W/"old"', filterFingerprint: "old", externalIds: ["1"] });
+    store.states.set("greenhouse:examplelabs", { etag: 'W/"old"', filterFingerprint: "old", externalIds: ["1"], detailRetryIds: [] });
     const { fetch } = routedFetch([
       ["/examplelabs/", response(503, "unavailable")],
       ["/second/", response(200, { jobs: [{ id: 5, title: "AI Engineer" }] })],

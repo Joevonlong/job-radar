@@ -246,6 +246,13 @@
       "when": 1792935125024,
       "tag": "0034_run_usage_window",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1792945552539,
+      "tag": "0035_ats_detail_retry",
+      "breakpoints": true
     }
   ]
 }
