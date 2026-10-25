@@ -50,6 +50,7 @@ export function SalaryLevelCard({ context }: { context: SalaryContext }) {
   else if (context.state === "not_ready") comparison = <PlaceholderBox testId="salary-level-not-ready">{t("notReady")}</PlaceholderBox>;
   else if (context.currency === "") comparison = <PlaceholderBox testId="salary-level-no-currency">{t("noCurrency")}</PlaceholderBox>;
   else if (context.familyId === null) comparison = <PlaceholderBox testId="salary-level-no-family">{t("noFamily")}</PlaceholderBox>;
+  else if (context.staleAi && !context.benchmarkEnabled) comparison = null;
   else if (context.group === null && !context.benchmarkComputed) comparison = <PlaceholderBox testId="salary-level-not-computed">{t("notComputed")}</PlaceholderBox>;
   else if (context.group === null) comparison = <PlaceholderBox testId="salary-level-no-group">{t("noGroup", { min: context.company?.minSample ?? 0 })}</PlaceholderBox>;
   else {
@@ -115,8 +116,8 @@ export function SalaryLevelCard({ context }: { context: SalaryContext }) {
   return (
     <div className="flex flex-col gap-4" data-testid="salary-level-card" data-state={context.state}>
       {context.state === "ok" && !context.benchmarkEnabled ? (
-        <p className="text-ink-3 text-body-sm" data-testid="salary-level-benchmark-off">
-          {t("benchmarkOff")}
+        <p className="text-ink-3 text-body-sm" data-testid={context.staleAi ? "salary-level-stale-ai" : "salary-level-benchmark-off"}>
+          {t(context.staleAi ? "staleAi" : "benchmarkOff")}
         </p>
       ) : null}
       {comparison}

@@ -72,7 +72,7 @@ describe("seed", () => {
     const result = await seedDatabase(getDb(), { now: NOW, timezone: TZ });
     expect(result.replacedJobs).toBe(Number(before?.jobs));
     expect(await count()).toEqual(before);
-    expect(Number(before?.jobs)).toBe(22);
+    expect(Number(before?.jobs)).toBe(23);
   });
 
   it("stores the company keys the pipeline computes, so seeded companies round-trip", async () => {
