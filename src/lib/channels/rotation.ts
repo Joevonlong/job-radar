@@ -10,9 +10,9 @@ export interface QueryHistory {
 }
 
 /** Oldest turns first, unknowns before dates; ties keep config order. Never mutates the input. */
-export function orderQueries(queries: readonly SearchQuery[], turns: ReadonlyMap<string, Date | null>, enabled: boolean): SearchQuery[] {
+export function orderQueries<Q extends { readonly id: string }>(queries: readonly Q[], turns: ReadonlyMap<string, Date | null>, enabled: boolean): Q[] {
   const ordered = [...queries];
-  const at = (query: SearchQuery): number => turns.get(query.id)?.getTime() ?? Number.NEGATIVE_INFINITY;
+  const at = (query: Q): number => turns.get(query.id)?.getTime() ?? Number.NEGATIVE_INFINITY;
   if (enabled) ordered.sort((a, b) => (at(a) === at(b) ? 0 : at(a) < at(b) ? -1 : 1));
   return ordered;
 }

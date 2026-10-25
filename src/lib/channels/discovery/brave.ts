@@ -7,7 +7,7 @@ import { braveChannelSchema, loadCompanies, loadConfig, type BraveChannelSetting
 import { getDb } from "@/lib/db/client";
 
 import { DISCOVERABLE_ATS, searchHostsFor, type DiscoverableAts } from "./boards";
-import { boardsFromHits, boardUrlOf, createDiscoveryChannel, type DiscoveredBoard, type DiscoveryDeps, type DiscoveryProvider, type DiscoveryQuery } from "./shared";
+import { boardsFromHits, boardUrlOf, createDiscoveryChannel, discoveryQueryId, type DiscoveredBoard, type DiscoveryDeps, type DiscoveryProvider, type DiscoveryQuery } from "./shared";
 import { createDbDiscoveryStore } from "./store";
 
 export { boardUrlOf, type DiscoveredBoard, type DiscoveryQuery };
@@ -18,6 +18,7 @@ export { boardUrlOf, type DiscoveredBoard, type DiscoveryQuery };
  * `site:<ats host> ("<keyword>" OR …) <city>` for every ATS x keyword group x city, keeps the results
  * that are official board URLs, and writes the boards that are not in `sources.yaml (ats_boards)` to the
  * candidate table, where `/sources` lists them. It never edits the config itself.
+ * Searches over the per-run cap rotate across runs, longest-waiting first (see `shared.ts`).
  *
  * The API key is `BRAVE_SEARCH_API_KEY`; without it the channel is "not configured": it logs that and
  * does nothing (no request, no failure).
@@ -64,14 +65,18 @@ export function buildDiscoveryQuery(ats: DiscoverableAts, keywords: readonly str
   return used.length === 0 ? null : `${sites} (${used.join(" OR ")}) ${tail}`;
 }
 
-/** Every ATS x keyword group x city, grouped so a cap on the number of searches drops whole cities last. */
+/**
+ * Every ATS x keyword group x city in search.yaml order (keyword group outermost, then city, then ATS).
+ * When there are more than `max_queries_per_run`, a run takes the ones that had a turn longest ago first
+ * (`shared.ts`); with rotation off the cap drops whole keyword groups from the end.
+ */
 export function buildDiscoveryQueries(search: Pick<SearchConfig, "keyword_groups" | "locations">): DiscoveryQuery[] {
   const queries: DiscoveryQuery[] = [];
   for (const [group, keywords] of Object.entries(search.keyword_groups)) {
     for (const city of search.locations) {
       for (const ats of DISCOVERABLE_ATS) {
         const q = buildDiscoveryQuery(ats, keywords, city);
-        if (q !== null) queries.push({ ats, group, city, q });
+        if (q !== null) queries.push({ ats, group, city, q, id: discoveryQueryId({ ats, group, city, q }) });
       }
     }
   }
@@ -81,7 +86,7 @@ export function buildDiscoveryQueries(search: Pick<SearchConfig, "keyword_groups
 export type BraveDeps = DiscoveryDeps;
 
 export const defaultBraveDeps: BraveDeps = {
-  inputs: () => ({ search: loadConfig("search"), companies: loadCompanies() }),
+  inputs: () => ({ search: loadConfig("search"), companies: loadCompanies(), queryRotation: loadConfig("channels").collect.query_rotation }),
   store: () => createDbDiscoveryStore(getDb(), "brave"),
 };
 

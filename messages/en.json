@@ -2135,7 +2135,7 @@
       },
       "max_queries": {
         "label": "Most searches per run",
-        "hint": "Brave free plan: 2000 searches a month; a Tavily search costs 1 credit (free plan: 1000 a month)."
+        "hint": "Brave free plan: 2000 searches a month; a Tavily search costs 1 credit (free plan: 1000 a month); more searches than this are rotated across runs."
       },
       "tavily_search_depth": {
         "label": "Search depth",

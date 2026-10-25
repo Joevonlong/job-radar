@@ -107,6 +107,7 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Board discovery (Tavily, Brave) no longer drops the same searches every run when there are more than `max_queries_per_run`; it searches the ones that waited longest first.
 - **Company career board scans:** `max_results` no longer hides stored jobs that the board still lists, which could
   mark them possibly closed after a week. The registry's "kept" count now means postings that passed the prefilter and
   fit within the cap. **Upgrade:** the first run after upgrading re-reads every board once (cached ETags are discarded).
