@@ -11,7 +11,7 @@ import { Mutex } from "@/lib/channels/linkedin/session/browser";
 import { createMemorySessionStore } from "@/lib/channels/linkedin/session/store";
 import { settingsFromConfig, type ConfiguredChannelId } from "@/lib/channels/registry";
 import { createMemoryStateStore } from "@/lib/channels/store";
-import type { Channel, ChannelContext, ChannelLogger, SearchQuery } from "@/lib/channels/types";
+import type { Channel, ChannelContext, ChannelLogger, KnownPostings, SearchQuery } from "@/lib/channels/types";
 import type { ChannelsConfig } from "@/lib/config";
 
 import { channelsWith, shippedChannels } from "../../helpers";
@@ -186,7 +186,7 @@ export interface Harness {
 }
 
 /** A channel context for `collect`: real budget tracker (memory), a counting throttle, no network. */
-export async function harness(channel: Channel, config: ChannelsConfig, options: { cycleId?: number | null; kind?: "manual" | "weekday_morning"; id?: ConfiguredChannelId } = {}): Promise<Harness> {
+export async function harness(channel: Channel, config: ChannelsConfig, options: { cycleId?: number | null; kind?: "manual" | "weekday_morning"; id?: ConfiguredChannelId; known?: KnownPostings } = {}): Promise<Harness> {
   const settings = settingsFromConfig(options.id ?? (channel.id as ConfiguredChannelId), config);
   const tracker = await BudgetTracker.create({ store: createMemoryStateStore(), month: MONTH, globalCapUsd: config.paid_total_monthly_budget_usd, settingsFor: () => settings });
   const logs: Harness["logs"] = [];
@@ -206,6 +206,7 @@ export async function harness(channel: Channel, config: ChannelsConfig, options:
     budget: tracker.forChannel(channel),
     signal: new AbortController().signal,
     cycle: { id: options.cycleId === undefined ? 1 : options.cycleId, kind: options.kind ?? "manual" },
+    known: options.known,
     logger,
     sleep: async () => {},
     random: () => 0,

@@ -32,7 +32,7 @@
 pnpm smoke:brightdata            # 读 .env；一个查询，最多 10 条
 pnpm exec tsx --env-file=/path/to/.env scripts/smoke-brightdata.ts --limit 5
 ```
-会消耗免费额度（供应商对冒烟和 dry-run 送达的每条记录一样计费）；不写数据库，用量只在输出里显示，不计入当月累计。
+会消耗免费额度（供应商对冒烟和 dry-run 送达的每条记录一样计费）；不写数据库，用量只在输出里显示，不计入当月累计。数据库状态可读时，`pnpm cycle:run --dry-run` 先看本月已存的用量，达到预算上限就跳过该通道；供应商超出请求上限送达的记录照样计费。
 
 ## 备注
 - 字段名以 `GET https://api.brightdata.com/datasets/<dataset_id>/metadata` 为准；请求了不存在的字段，trigger 会返回 500。

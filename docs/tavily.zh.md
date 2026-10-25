@@ -40,6 +40,6 @@
 
 ## 线上冒烟
 ```bash
-pnpm cycle:run --channel tavily --dry-run   # 最多 30 次搜索 = 最多 30 个额度；只打印候选，不写数据库、不更新运行标记
+pnpm cycle:run --channel tavily --dry-run   # 和真实运行一样，本月额度用完就停，除非配置了 credit_cost_usd 且预算还有余量
 ```
-Tavily 那边会扣额度。需要确认：`include_domains` 对 Personio 子域名是否匹配、候选里确实有新 board。
+数据库状态可读时，试跑从本月已存的用量开始。只打印候选，不写数据库，仍不读、也不更新运行标记（`interval_hours`）。Tavily 那边会扣额度。需要确认：`include_domains` 对 Personio 子域名是否匹配、候选里确实有新 board。

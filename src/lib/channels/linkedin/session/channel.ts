@@ -233,7 +233,9 @@ async function read(input: ReadInput): Promise<RawPostingInput[]> {
 
   // ---- postings
   const selected = [...cards.values()].slice(0, plan.limit);
-  const stored = ctx.cycle.id === null ? new Map<string, unknown>() : await store.storedPayloads(selected.map((c) => c.jobId));
+  const ids = selected.map((c) => c.jobId);
+  // a dry run reads the stored postings through ctx.known (read-only), never through the session store
+  const stored = ctx.cycle.id === null ? await ctx.known.payloads(ids) : await store.storedPayloads(ids);
   const out: RawPostingInput[] = [];
   const counts = { reused: 0, fetched: 0, unavailable: 0, closed: 0, cardOnly: 0, unreadable: 0, skippedCards: 0 };
 

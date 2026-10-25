@@ -1,7 +1,7 @@
 import { BudgetTracker, monthKey } from "@/lib/channels/budget";
 import { CircuitBreaker } from "@/lib/channels/circuit";
 import { defaultRegistry, type ChannelRegistry } from "@/lib/channels/registry";
-import { createDbStateStore } from "@/lib/channels/store";
+import { createDbKnownPostings, createDbStateStore } from "@/lib/channels/store";
 import type { ChannelLogger } from "@/lib/channels/types";
 import { loadConfig } from "@/lib/config";
 import type { Db } from "@/lib/db/client";
@@ -74,7 +74,7 @@ async function createStepContext(options: DelegatedRunOptions, cycle: Cycle): Pr
     logger: options.logger.child({ cycle: cycle.id, kind: cycle.kind }),
     now,
     config,
-    channels: { registry, cascades: cascadesFromConfig(config.channels), store, breaker, budget, selected: null, runtime: {} },
+    channels: { registry, cascades: cascadesFromConfig(config.channels), store, known: (channelId) => createDbKnownPostings(options.db, channelId), breaker, budget, selected: null, runtime: {} },
     results: storedStepResults(cycle.summaryJson),
   };
 }

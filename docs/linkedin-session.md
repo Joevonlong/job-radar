@@ -24,7 +24,7 @@ It is **read-only**: it opens pages and reads them; it does not like, apply, mes
    # first set linkedin.session.enabled to true in data/config/sources.yaml, then:
    pnpm cycle:run --channel linkedin-session --dry-run
    ```
-   A dry run really opens LinkedIn pages (it makes requests) but writes nothing to the database and does not count toward the day's usage. Look at `fetched / parsed` in the output.
+   A dry run really opens LinkedIn pages (it makes requests) but writes nothing to the database and does not count toward the day's usage. With readable database state, stored jobs from the same channel id are no longer opened, as in a real run. Look at `fetched / parsed` in the output; if the channel is skipped, see [Live smoke test](#live-smoke-test).
 6. If it is fine, leave `enabled: true`. When the runner is in Docker, `./.auth` is mounted into the container read-only (already set in `compose.yaml`); run `docker compose up -d --build` once so the image includes playwright-core.
 
 `pnpm auth:linkedin --status` only shows the status without opening a browser: whether the file exists, the cookie expiry time, and the state the channel last knew.
@@ -80,6 +80,8 @@ The limit is checked before every page load. When it refuses a page part way thr
 ## Live smoke test
 After you have run `pnpm auth:linkedin`:
 1. `pnpm auth:linkedin --status` should show "Valid".
-2. `pnpm cycle:run --channel linkedin-session --dry-run`: look at `fetched`, `parsed`, `parseFailed` and the sample titles; if the page selectors do not match, it shows up as a `parse` error or `cardOnly` (the detail page could not be read and only the list card was kept).
+2. `pnpm cycle:run --channel linkedin-session --dry-run`: look at `fetched`, `parsed`, `parseFailed` and the sample titles; if the page selectors do not match, it shows up as a `parse` error or `cardOnly` (the detail page could not be read and only the list card was kept). With readable database state, an open circuit after repeated failures or a verification page skips the channel just as in a real run. To check selectors, run `pnpm auth:linkedin` first to reset the circuit, or wait for its cooldown to end.
 3. `pnpm cycle:run --channel linkedin-session:recommended --dry-run`.
 4. Check against the real pages: redact the page HTML and replace the fixtures in `tests/fixtures/linkedin-session/`, then run `pnpm test` to see whether the parser still passes.
+
+Dry runs still do not read the persisted daily page count or login flag. Stored-job reuse only looks under the current channel id: `linkedin-session` and `linkedin-session:recommended` do not share stored postings during a dry run.

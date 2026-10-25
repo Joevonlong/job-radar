@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { BudgetExceededError, ChannelError, PartialCollectError } from "@/lib/channels/errors";
 import { sessionPayloadSchema } from "@/lib/channels/linkedin/session/payload";
 import { createMemorySessionStore } from "@/lib/channels/linkedin/session/store";
-import { normalizedPostingDraftSchema } from "@/lib/channels/types";
+import { normalizedPostingDraftSchema, type KnownPostings } from "@/lib/channels/types";
 
 import { DETAIL_PAGES, berlinQuery, fixture, happySite, harness, remoteQuery, setup, sessionConfig } from "./helpers";
 
@@ -751,4 +751,24 @@ describe("linkedin-session: a failure part-way keeps what was read", () => {
     expect(s.store.requests.size).toBe(0);
     expect(s.store.flag).toBeNull();
   });
+});
+
+it("a dry run reuses a stored session posting without opening its page or changing the session store", async () => {
+  const before = new Map([...(await deliveredBefore())].filter(([, payload]) => sessionPayloadSchema.safeParse(payload).success));
+  const stored = [...before][0];
+  if (!stored) throw new Error("no valid stored session posting");
+  const [id, payload] = stored;
+  const known: KnownPostings = { payloads: async (ids) => new Map([stored].filter(([jobId]) => ids.includes(jobId))) };
+  const s = setup();
+  const h = await harness(s.session, s.config, { cycleId: null, known });
+
+  const out = await s.session.collect(berlinQuery(), h.ctx);
+
+  expect(viewedJobs(s)).not.toContain(`/jobs/view/${id}/`);
+  expect(viewedJobs(s)).toEqual(["4385000101", "4385000102", "4385000103", "4385000104", "4385000106"].filter((jobId) => jobId !== id).map((jobId) => `/jobs/view/${jobId}/`));
+  expect(h.logs.find((log) => log.message === "linkedin session read finished")?.fields).toMatchObject({ reused: 1 });
+  expect(out.find((posting) => posting.externalId === id)?.payload).toEqual(payload);
+  expect(s.store.requests.size).toBe(0);
+  expect(s.store.flag).toBeNull();
+  expect(s.store.recommendedAt).toBeNull();
 });

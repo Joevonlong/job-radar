@@ -40,6 +40,6 @@ The `tavily` channel uses the Tavily Search API to find "company careers pages t
 
 ## Live smoke test
 ```bash
-pnpm cycle:run --channel tavily --dry-run   # up to 30 searches = up to 30 credits; only prints candidates, writes no database, updates no run marker
+pnpm cycle:run --channel tavily --dry-run   # stops at the monthly quota unless credit_cost_usd is set and budget remains, like a real run
 ```
-Tavily deducts credits. Things to confirm: whether `include_domains` matches Personio subdomains, and that the candidates really contain new boards.
+With readable database state, the dry run starts from persisted monthly usage. It only prints candidates, writes nothing to the database, and neither reads nor updates the run marker (`interval_hours`). Tavily deducts credits. Things to confirm: whether `include_domains` matches Personio subdomains, and that the candidates really contain new boards.

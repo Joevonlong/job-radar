@@ -5,9 +5,10 @@ import { createJsearchChannel } from "@/lib/channels/jsearch";
 import type { FetchLike } from "@/lib/channels/http";
 import { ChannelRegistry } from "@/lib/channels/registry";
 import type { JsearchSettings } from "@/lib/config";
-import { runCycle } from "@/lib/cycle/run-cycle";
+import { runCycle, type RunCycleOptions } from "@/lib/cycle/run-cycle";
 import { closeDb, getDb, getMonthUsage, listChannelStates, listJobSources, listRawPostingsForChannel, listRunsForCycle, schema } from "@/lib/db";
 import { runMigrations } from "@/lib/db/migrate";
+import { createReadOnlyDb, type ReadOnlyDb } from "@/lib/db/read-only-client";
 import { runPipeline } from "@/lib/pipeline";
 
 import { channelsWith } from "../channels/helpers";
@@ -17,10 +18,12 @@ import { shippedPipeline } from "../pipeline/helpers";
 
 const url = inject("testDatabaseUrl");
 const QUOTA = fixture("error-quota-429.json");
+let ro: ReadOnlyDb;
 
 beforeAll(async () => {
   process.env.DATABASE_URL = url;
   await runMigrations();
+  ro = createReadOnlyDb({ url });
 });
 
 beforeEach(async () => {
@@ -28,6 +31,7 @@ beforeEach(async () => {
 });
 
 afterAll(async () => {
+  await ro?.close();
   await closeDb();
 });
 
@@ -41,7 +45,7 @@ function setup(options: { settings?: Partial<JsearchSettings>; environment?: Rec
   const channels = channelsFor(options.settings);
   const registry = new ChannelRegistry();
   registry.register(createJsearchChannel({ settings: () => channels.sources.jsearch, environment: options.environment ?? { JSEARCH_API_KEY: "test-key-not-real" }, now: () => NOW }));
-  const run = () => runCycle("manual", { registry, config: { ...config(), channels }, logger: quietLogger, sleep: async () => {}, channelIds: ["jsearch"], fetch: options.fetch, now: () => NOW });
+  const run = (extra: Partial<RunCycleOptions> = {}) => runCycle("manual", { registry, config: { ...config(), channels }, logger: quietLogger, sleep: async () => {}, channelIds: ["jsearch"], fetch: options.fetch, now: () => NOW, ...extra });
   return { registry, run };
 }
 
@@ -158,5 +162,24 @@ describe("runCycle with the jsearch channel", () => {
     const runs = await listRunsForCycle(getDb(), result.cycleId as number);
     expect(runs[0]).toMatchObject({ status: "failed", errorCode: "auth_expired" });
     expect(runs[0]?.error).toContain("JSEARCH_API_KEY");
+  });
+
+  it("a dry run sends no requests after the stored monthly quota is exhausted without an overage price", async () => {
+    let calls = 0;
+    const { run } = setup({
+      settings: { monthly_request_limit: 4, overage_cost_per_request_usd: 0 },
+      fetch: async () => {
+        calls += 1;
+        return response(200, SEARCH_PAGE);
+      },
+    });
+    await run();
+    expect(calls).toBe(4);
+    expect((await getMonthUsage(getDb(), MONTH)).get("jsearch")).toEqual({ records: 4, usd: 0 });
+
+    await run({ dryRun: true, db: ro.db });
+
+    expect(calls).toBe(4);
+    expect((await getMonthUsage(getDb(), MONTH)).get("jsearch")).toEqual({ records: 4, usd: 0 });
   });
 });
