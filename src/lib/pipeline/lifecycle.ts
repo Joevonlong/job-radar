@@ -2,7 +2,7 @@ import type { ChannelLogger, HttpClient } from "@/lib/channels/types";
 import type { PipelineConfig } from "@/lib/config";
 import type { Db } from "@/lib/db/client";
 import { listJobSources } from "@/lib/db/repos/job-sources";
-import { listJobsForLinkCheck, listWatchedJobsForRecheck, markJobsPossiblyClosed, recordLinkCheck, recordWatchedCheck, touchJobsSeen } from "@/lib/db/repos/jobs";
+import { listJobsForLinkCheck, listWatchedJobsForRecheck, markJobsPossiblyClosed, recordLinkCheck, recordUnseenCheck, recordWatchedCheck, touchJobsSeen } from "@/lib/db/repos/jobs";
 import type { HostResolver, UrlGuard } from "@/lib/net/public-url";
 import type { SleepFn } from "@/lib/channels/http";
 
@@ -35,6 +35,8 @@ export interface MaintenanceResult {
   closed: number;
   /** Link checks that found the posting still online: the job is `active` again. */
   alive: number;
+  /** Fallback link checks of unseen active jobs (also included in the link-check totals). */
+  unseen: { checked: number; closed: number; alive: number };
   /** The recheck of watched jobs; null when it is off. */
   watched: WatchedRecheckResult | null;
   aborted: boolean;
@@ -64,7 +66,8 @@ export interface MaintenanceOptions {
 /**
  * The `maintenance` step: refresh `last_seen_at` from what the channels returned, mark jobs nobody
  * returns any more as `possibly_closed`, then check the links of at most
- * `lifecycle.max_link_checks_per_cycle` possibly_closed jobs (404 / 410 → `closed`). Jobs are only
+ * `lifecycle.max_link_checks_per_cycle` possibly_closed jobs (404 / 410 → `closed`). Unseen active jobs share that cap
+ * for a direct fallback link check, regardless of search coverage. Jobs are only
  * ever updated, never deleted, so jobs with an application keep their history.
  */
 export async function runMaintenance(db: Db, options: MaintenanceOptions): Promise<MaintenanceResult> {
@@ -72,7 +75,7 @@ export async function runMaintenance(db: Db, options: MaintenanceOptions): Promi
   const now = options.now();
   const watchedOn = options.watched?.enabled === true;
   const userAgent = config.lifecycle.watch_recheck.user_agent;
-  const result: MaintenanceResult = { seen: 0, reopened: 0, possiblyClosed: 0, linkChecked: 0, closed: 0, alive: 0, watched: null, aborted: false };
+  const result: MaintenanceResult = { seen: 0, reopened: 0, possiblyClosed: 0, linkChecked: 0, closed: 0, alive: 0, unseen: { checked: 0, closed: 0, alive: 0 }, watched: null, aborted: false };
 
   const touched = await touchJobsSeen(db);
   result.seen = touched.seen;
@@ -83,8 +86,11 @@ export async function runMaintenance(db: Db, options: MaintenanceOptions): Promi
   if (overdue.length > 0) logger.info("jobs marked possibly_closed", { count: overdue.length });
 
   let skipped = 0;
-  // watched jobs are left to their own recheck below (one request per posting, robots.txt obeyed)
-  const candidates = await listJobsForLinkCheck(db, config.lifecycle.max_link_checks_per_cycle, { skipWatched: watchedOn });
+  // Watched jobs use their own recheck below (robots.txt obeyed), with a plain link fallback when the last recheck got no answer.
+  const unseen = config.lifecycle.unseen_link_check_after_days > 0
+    ? { seenBefore: new Date(now.getTime() - config.lifecycle.unseen_link_check_after_days * 86_400_000), checkedBefore: new Date(now.getTime() - config.lifecycle.unseen_link_check_interval_days * 86_400_000) }
+    : undefined;
+  const candidates = await listJobsForLinkCheck(db, config.lifecycle.max_link_checks_per_cycle, { skipWatched: watchedOn, ...(unseen ? { unseen } : {}) });
   for (const job of candidates) {
     if (signal?.aborted) {
       result.aborted = true;
@@ -105,7 +111,14 @@ export async function runMaintenance(db: Db, options: MaintenanceOptions): Promi
       if (status === "alive") break;
     }
     const outcome = combineLinkStatuses(statuses);
-    await recordLinkCheck(db, job.id, { outcome, at: options.now() });
+    const at = options.now();
+    await recordLinkCheck(db, job.id, { outcome, at });
+    if (job.status === "active") {
+      await recordUnseenCheck(db, job.id, at);
+      result.unseen.checked += 1;
+      if (outcome === "gone") result.unseen.closed += 1;
+      if (outcome === "alive") result.unseen.alive += 1;
+    }
     result.linkChecked += 1;
     if (outcome === "gone") result.closed += 1;
     if (outcome === "alive") result.alive += 1;
@@ -113,6 +126,7 @@ export async function runMaintenance(db: Db, options: MaintenanceOptions): Promi
   // One line per cycle: a posting whose link points at a private or internal address is never requested.
   if (skipped > 0) logger.warn(`${skipped} link checks skipped (non-public address)`, { skipped });
   if (result.linkChecked > 0) logger.info("possibly_closed links checked", { checked: result.linkChecked, closed: result.closed, alive: result.alive });
+  if (result.unseen.checked > 0) logger.info("unseen jobs' links checked", { ...result.unseen });
 
   if (watchedOn && !result.aborted && options.watched) {
     const { aborted, ...watched } = await recheckWatchedJobs(db, options, options.watched.extraPhrases);

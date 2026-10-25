@@ -177,7 +177,11 @@ export const pipelineSchema = z.strictObject({
   lifecycle: z.strictObject({
     /** An active job no source has returned for this many days becomes `possibly_closed`. */
     possibly_closed_after_days: positiveInt,
-    /** Links of `possibly_closed` jobs checked per cycle (404 / 410 closes the job). */
+    /** An active job no source has returned for this many days gets its link checked directly; 0 = off. */
+    unseen_link_check_after_days: z.number().int().min(0).max(365).default(14),
+    /** Least days between two fallback link checks of the same unseen active job. */
+    unseen_link_check_interval_days: z.number().int().min(1).max(365).default(7),
+    /** Links of `possibly_closed` and unseen active jobs checked per cycle (404 / 410 closes the job). */
     max_link_checks_per_cycle: nonNegativeInt,
     link_check_timeout_ms: positiveInt,
     /**
@@ -196,7 +200,7 @@ export const pipelineSchema = z.strictObject({
         timeout_ms: positiveInt,
         /** Longest page read; the rest is not downloaded. */
         max_body_bytes: positiveInt,
-        /** The User-Agent of the recheck and of the possibly-closed link check; its first word is the robots.txt product token. */
+        /** The User-Agent of the watched recheck and plain link checks (possibly-closed and unseen active jobs); its first word is the robots.txt product token. */
         user_agent: nonEmptyString,
       })
       .default(WATCH_RECHECK_DEFAULTS),

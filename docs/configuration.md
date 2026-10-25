@@ -368,17 +368,23 @@ The shipped `ui.yaml` is part of the image, so it goes back with it.
 ## Recheck of watched jobs (`pipeline.yaml` + `ui.yaml`)
 
 The maintenance step rechecks the posting pages of starred and followed jobs (see usage.md "Closed jobs"). Its keys
-live in two files; both blocks may be missing (older files): the defaults below apply.
+live in two files; the watched-recheck blocks may be missing (older files): the defaults below apply. The table also lists
+the link-check settings shared by possibly-closed and unseen active jobs.
 
 | File | Key | Default | Meaning |
 |---|---|---|---|
-| `pipeline.yaml` (shipped) | `lifecycle.watch_recheck.interval_hours` | 72 | A watched job is rechecked at most once in this many hours |
+| `pipeline.yaml` (shipped) | `lifecycle.possibly_closed_after_days` | 7 | Days unseen before marking possibly closed, only when every source channel has had a successful run since the deadline |
+| | `lifecycle.unseen_link_check_after_days` | 14 | Days unseen before an active job gets a direct fallback link check, regardless of channel runs; 0 = off. Optional, supplied by the schema when absent |
+| | `lifecycle.unseen_link_check_interval_days` | 7 | Least days between fallback checks of the same job. Optional, supplied by the schema when absent |
+| | `lifecycle.max_link_checks_per_cycle` | 20 | Shared per-cycle cap for possibly-closed and unseen active jobs' link checks |
+| | `lifecycle.link_check_timeout_ms` | 10000 | Per-request timeout for both kinds of link check |
+| | `lifecycle.watch_recheck.interval_hours` | 72 | A watched job is rechecked at most once in this many hours |
 | | `lifecycle.watch_recheck.max_per_cycle` | 10 | Jobs rechecked per run |
 | | `lifecycle.watch_recheck.per_host_min_interval_ms` | 3000 | Least time between two requests to one site (robots.txt included) |
 | | `lifecycle.watch_recheck.timeout_ms` | 10000 | Per request |
 | | `lifecycle.watch_recheck.max_body_bytes` | 1048576 | Longest page read; the rest is not downloaded |
-| | `lifecycle.watch_recheck.user_agent` | `JobRadar/2 (self-hosted job tracker; link check)` | Sent with the recheck and the possibly-closed link check; its first word is the robots.txt product token |
-| `ui.yaml` (user) | `job_checks.closed_recheck.enabled` | `true` | Off: no recheck (the possibly-closed link check keeps running) |
+| | `lifecycle.watch_recheck.user_agent` | `JobRadar/2 (self-hosted job tracker; link check)` | Sent with watched rechecks and plain link checks of possibly-closed and unseen active jobs; its first word is the robots.txt product token |
+| `ui.yaml` (user) | `job_checks.closed_recheck.enabled` | `true` | Off: no watched recheck (plain link checks of possibly-closed and unseen active jobs keep running) |
 | | `job_checks.closed_recheck.extra_phrases` | `[]` | Your phrases (regex, case-insensitive), added to the packs' `closed_posting.phrases`. Only a safe subset is accepted: words, character classes, alternation `(a\|b)`, `\b`, optional parts `?` (at most 8) and `{n,m}` up to 5, at most 200 characters; no `*`, `+`, `{n,}` or backreferences. `pnpm config:check` names an invalid or unsafe one by its path. They search at most the first 200,000 characters of a page's visible text, within 250 ms per page (a page whose search runs out of time counts as not checked) |
 
 The `ui.yaml` block is edited in the YAML or the advanced editor (no form). An older version rejects it: remove it before

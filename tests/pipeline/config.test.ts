@@ -32,8 +32,8 @@ describe("pipeline.yaml", () => {
   it("ships the documented defaults", () => {
     const config = shippedPipeline();
     expect(config.dedupe.simhash_max_distance).toBe(3);
-    // A file without `watch_recheck` gets the schema's defaults
-    expect(config.lifecycle).toEqual({ possibly_closed_after_days: 7, max_link_checks_per_cycle: 20, link_check_timeout_ms: 10000, watch_recheck: WATCH_RECHECK_DEFAULTS });
+    // Missing watched-recheck and unseen-link-check keys get the schema's defaults.
+    expect(config.lifecycle).toEqual({ possibly_closed_after_days: 7, unseen_link_check_after_days: 14, unseen_link_check_interval_days: 7, max_link_checks_per_cycle: 20, link_check_timeout_ms: 10000, watch_recheck: WATCH_RECHECK_DEFAULTS });
     expect(config.apply_priority.ats).toBe(1);
     expect(config.apply_priority.linkedin).toBe(2);
     expect(config.apply_priority.stepstone).toBe(3);

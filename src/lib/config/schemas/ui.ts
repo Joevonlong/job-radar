@@ -148,7 +148,7 @@ export const uiSchema = z
       .strictObject({
         closed_recheck: z
           .strictObject({
-            /** Off: watched jobs are not rechecked (the possibly-closed link check keeps running). */
+            /** Off: watched jobs are not rechecked (plain link checks of possibly-closed and unseen active jobs keep running). */
             enabled: z.boolean(),
             /** Phrases (regex in the safe subset of `unsafePhraseReason`, case-insensitive) added to the market packs' `closed_posting.phrases`. */
             extra_phrases: z.array(phraseRegexString).default([]),

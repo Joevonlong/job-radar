@@ -8,6 +8,7 @@ import { createHttpClient } from "@/lib/channels/http";
 import { addFavorite, closeDb, getDb, setApplicationStatus, setClosureOverride } from "@/lib/db";
 import { runMigrations } from "@/lib/db/migrate";
 import { resetUxTablesCache } from "@/lib/db/repos/ux-tables";
+import { listJobsForLinkCheck, recordWatchedCheck } from "@/lib/db/repos/jobs";
 import { parseLinkCheck } from "@/lib/jobs/link-check-evidence";
 import { publicUrlProblem, type UrlGuard } from "@/lib/net/public-url";
 import { runMaintenance } from "@/lib/pipeline";
@@ -50,6 +51,14 @@ beforeAll(async () => {
     hits.push({ path, at: Date.now(), userAgent: req.headers["user-agent"] });
     if (path === "/robots.txt") {
       res.writeHead(200, { "content-type": "text/plain" }).end(robots);
+      return;
+    }
+    if (path === "/private/gone") {
+      res.writeHead(404).end("not here");
+      return;
+    }
+    if (path === "/unanswered" || path === "/private/unanswered") {
+      res.writeHead(503).end("unavailable");
       return;
     }
     if (path.startsWith("/gone")) {
@@ -156,9 +165,13 @@ async function state(id: number) {
  */
 const localGuard: UrlGuard = async (target) => (new URL(target).hostname === "127.0.0.1" ? null : publicUrlProblem(target, async () => ["93.184.216.34"]));
 
-const maintenance = (options: { enabled?: boolean; maxPerCycle?: number; extraPhrases?: string[]; guard?: UrlGuard | null } = {}) =>
+const maintenance = (options: { enabled?: boolean; maxPerCycle?: number; maxLinkChecksPerCycle?: number; extraPhrases?: string[]; guard?: UrlGuard | null; now?: Date; unseenAfterDays?: number; unseenIntervalDays?: number } = {}) =>
   runMaintenance(getDb(), {
     config: pipelineWith((raw) => {
+      const lifecycle = raw.lifecycle as Record<string, unknown>;
+      if (options.maxLinkChecksPerCycle !== undefined) lifecycle.max_link_checks_per_cycle = options.maxLinkChecksPerCycle;
+      if (options.unseenAfterDays !== undefined) lifecycle.unseen_link_check_after_days = options.unseenAfterDays;
+      if (options.unseenIntervalDays !== undefined) lifecycle.unseen_link_check_interval_days = options.unseenIntervalDays;
       (raw.lifecycle as Record<string, unknown>).watch_recheck = {
         interval_hours: 72,
         max_per_cycle: options.maxPerCycle ?? 10,
@@ -170,12 +183,162 @@ const maintenance = (options: { enabled?: boolean; maxPerCycle?: number; extraPh
     }),
     http: createHttpClient({ settings: { timeoutMs: 500, maxRetries: 0, backoffBaseMs: 1, backoffMaxMs: 1 } }),
     logger: quietLogger,
-    now: () => NOW,
+    now: () => options.now ?? NOW,
     watched: { enabled: options.enabled ?? true, extraPhrases: options.extraPhrases ?? ["\\bno longer accepting applications\\b"] },
     ...(options.guard === null ? {} : { urlGuard: options.guard ?? localGuard }),
   });
 
 const pagesHit = () => hits.filter((h) => h.path !== "/robots.txt").map((h) => h.path);
+
+describe("unseen fallback across watched rechecks", () => {
+  const DAY = 86_400_000;
+  const at = (day: number) => new Date(NOW.getTime() + day * DAY);
+  const lastSeen = new Date("2026-09-01T08:00:00Z");
+  const intervalDays = 7;
+
+  async function unseenJob(title: string, path: string) {
+    const id = await addJob(title, [path]);
+    await getDb().execute(sql`update jobs set first_seen_at = ${lastSeen.toISOString()}::timestamptz, last_seen_at = ${lastSeen.toISOString()}::timestamptz where id = ${id}`);
+    await getDb().execute(sql`update raw_postings set fetched_at = ${lastSeen.toISOString()}::timestamptz where id in (select raw_posting_id from job_sources where job_id = ${id})`);
+    return id;
+  }
+
+  async function unseenWatched(title: string, path: string) {
+    const id = await unseenJob(title, path);
+    await addFavorite(getDb(), id);
+    return id;
+  }
+
+  async function evidence(id: number) {
+    const [row] = await getDb().execute<{ link_check_json: { outcome: string; at: string; unseenCheckedAt?: string }; last_seen_at: Date | string; link_checked_at: Date | string }>(sql`select link_check_json, last_seen_at, link_checked_at from jobs where id = ${id}`);
+    return row!;
+  }
+
+  it.each([
+    ["/private/gone", "closed"],
+    ["/private/alive", "active"],
+  ])("settles robots-blocked %s by its link alone, once across daily maintenance rounds", async (path, status) => {
+    const id = await unseenWatched("Robots fallback", path);
+    const counts: number[] = [];
+    for (let day = 0; day <= intervalDays + 2; day += 1) {
+      const result = await maintenance({ now: at(day), unseenAfterDays: 14, unseenIntervalDays: intervalDays });
+      counts.push(result.unseen.checked);
+      if (day === 0) {
+        expect(result.watched?.robots).toBe(1);
+        expect(pagesHit()).toEqual([]); // the recheck obeys robots.txt
+      }
+      if (day === 1) {
+        expect(result.unseen).toEqual({ checked: 1, closed: status === "closed" ? 1 : 0, alive: status === "active" ? 1 : 0 });
+        expect(pagesHit()).toEqual(status === "closed" ? [path, path] : [path]); // HEAD, then GET for 404; the plain check ignores robots.txt
+        const row = await evidence(id);
+        expect(row.link_check_json.unseenCheckedAt).toBe(at(1).toISOString());
+        expect(new Date(row.last_seen_at)).toEqual(status === "active" ? at(1) : lastSeen);
+      }
+    }
+    expect(counts).toEqual([0, 1, ...Array<number>(intervalDays + 1).fill(0)]);
+    expect((await state(id)).status).toBe(status);
+    if (status === "active") {
+      const row = await evidence(id);
+      expect(row.link_check_json.at).toBe(at(9).toISOString());
+      expect(row.link_check_json.unseenCheckedAt).toBe(at(1).toISOString());
+    }
+  });
+
+  it.each([
+    ["/private/unanswered", "robots"],
+    ["/unanswered", "unknown"],
+  ])("keeps the fallback interval for %s while 72-hour rechecks rewrite the check time", async (path, outcome) => {
+    const id = await unseenWatched("Unanswered fallback", path);
+    const counts: number[] = [];
+    for (let day = 0; day <= intervalDays + 3; day += 1) {
+      const result = await maintenance({ now: at(day), unseenAfterDays: 2, unseenIntervalDays: intervalDays });
+      counts.push(result.unseen.checked);
+      const row = await evidence(id);
+      expect(row.link_check_json.outcome).toBe(outcome);
+      expect(new Date(row.last_seen_at)).toEqual(lastSeen);
+      if (day >= 1 && day <= 8) expect(row.link_check_json.unseenCheckedAt).toBe(at(1).toISOString());
+      if (day === 5) {
+        expect(result.watched?.checked).toBe(1);
+        expect(new Date(row.link_checked_at)).toEqual(at(5));
+        expect(row.link_check_json.at).toBe(at(5).toISOString());
+      }
+      if (day === 9) {
+        expect(result.unseen).toEqual({ checked: 1, closed: 0, alive: 0 });
+        expect(row.link_check_json.unseenCheckedAt).toBe(at(9).toISOString());
+      }
+    }
+    expect(counts).toEqual([0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0]);
+  });
+
+  it("gives a robots-blocked watched job a turn under a full link-check cap without shortening its fallback interval", async () => {
+    for (let i = 0; i < 9; i += 1) await unseenJob(`Unwatched ${i}`, "/unanswered");
+    const id = await unseenWatched("Watched under contention", "/private/unanswered");
+    const fallbackDays: number[] = [];
+    let rechecks = 0;
+    for (let day = 0; day <= 3 * intervalDays; day += 1) {
+      hits = [];
+      const result = await maintenance({ now: at(day), maxLinkChecksPerCycle: 1, unseenAfterDays: 14, unseenIntervalDays: intervalDays });
+      expect(result.unseen).toEqual({ checked: 1, closed: 0, alive: 0 });
+      rechecks += result.watched?.robots ?? 0;
+      // The watched recheck never requests this robots-blocked page; only the fallback can hit it.
+      const fallbackHits = pagesHit().filter((path) => path === "/private/unanswered");
+      if (fallbackHits.length > 0) {
+        expect(fallbackHits).toHaveLength(2); // HEAD, then GET, both 503
+        fallbackDays.push(day);
+        expect((await evidence(id)).link_check_json.unseenCheckedAt).toBe(at(day).toISOString());
+      }
+    }
+    expect(rechecks).toBeGreaterThan(1);
+    expect(fallbackDays.length).toBeGreaterThan(1);
+    for (let i = 1; i < fallbackDays.length; i += 1) expect(fallbackDays[i]! - fallbackDays[i - 1]!).toBeGreaterThanOrEqual(intervalDays);
+    expect((await state(id)).status).toBe("active");
+  });
+
+  it("keeps the fallback interval across alive and then unknown watched rechecks", async () => {
+    const id = await unseenWatched("Changing recheck answer", "/unanswered");
+    const recheck = (outcome: "alive" | "unknown", day: number) => recordWatchedCheck(getDb(), id, {
+      outcome, httpStatus: outcome === "alive" ? 200 : 503, phrase: null, quote: null, url: `${base}/unanswered`, at: at(day).toISOString(),
+    }, at(day));
+    const candidates = (day: number) => listJobsForLinkCheck(getDb(), 10, {
+      skipWatched: true, unseen: { seenBefore: at(day - 14), checkedBefore: at(day - intervalDays) },
+    });
+    await recheck("unknown", -4);
+    expect((await maintenance({ now: at(0), unseenAfterDays: 14, unseenIntervalDays: intervalDays })).unseen).toEqual({ checked: 1, closed: 0, alive: 0 });
+    expect((await evidence(id)).link_check_json.unseenCheckedAt).toBe(at(0).toISOString());
+
+    await recheck("alive", 3.25);
+    const alive = await evidence(id);
+    expect(alive.link_check_json).toMatchObject({ outcome: "alive", unseenCheckedAt: at(0).toISOString() });
+    expect(new Date(alive.last_seen_at)).toEqual(lastSeen);
+    expect(await candidates(3.25)).toEqual([]);
+
+    await recheck("unknown", 6.5);
+    expect(await candidates(6.75)).toEqual([]);
+    expect((await maintenance({ now: at(6.75), unseenAfterDays: 14, unseenIntervalDays: intervalDays })).unseen.checked).toBe(0);
+    expect((await evidence(id)).link_check_json).toMatchObject({ outcome: "unknown", unseenCheckedAt: at(0).toISOString() });
+    expect(await candidates(intervalDays)).toEqual([]);
+    expect((await candidates(intervalDays + 0.25)).map((job) => job.id)).toEqual([id]);
+    expect((await maintenance({ now: at(intervalDays + 0.25), unseenAfterDays: 14, unseenIntervalDays: intervalDays })).unseen).toEqual({ checked: 1, closed: 0, alive: 0 });
+    expect((await evidence(id)).link_check_json.unseenCheckedAt).toBe(at(intervalDays + 0.25).toISOString());
+  });
+
+  it.each(["gone", "phrase"] as const)("never offers a watched job with %s recheck evidence as a fallback candidate", async (outcome) => {
+    const id = await watched("Settled", ["/private/alive"]);
+    const old = { outcome, httpStatus: outcome === "gone" ? 404 : 200, phrase: null, quote: null, url: `${base}/private/alive`, at: at(-20).toISOString() };
+    await getDb().execute(sql`update jobs set last_seen_at = ${lastSeen.toISOString()}::timestamptz, link_check_json = ${JSON.stringify(old)}::jsonb where id = ${id}`);
+    expect(await listJobsForLinkCheck(getDb(), 10, { skipWatched: true, unseen: { seenBefore: at(-14), checkedBefore: at(-7) } })).toEqual([]);
+    await recordWatchedCheck(getDb(), id, old, at(-20));
+    expect(await listJobsForLinkCheck(getDb(), 10, { skipWatched: true, unseen: { seenBefore: at(-14), checkedBefore: at(-7) } })).toEqual([]);
+  });
+
+  it.each(["alive", "gone", "phrase", "robots", "unknown"] as const)("keeps the fallback marker when a watched recheck returns %s", async (outcome) => {
+    const id = await watched("New answer", ["/a"]);
+    await getDb().execute(sql`update jobs set link_check_json = ${JSON.stringify({ outcome: "unknown", unseenCheckedAt: at(-8).toISOString() })}::jsonb where id = ${id}`);
+    await recordWatchedCheck(getDb(), id, { outcome, httpStatus: outcome === "gone" ? 404 : outcome === "robots" || outcome === "unknown" ? null : 200, phrase: null, quote: null, url: `${base}/a`, at: NOW.toISOString() }, NOW);
+    expect((await evidence(id)).link_check_json.unseenCheckedAt).toBe(at(-8).toISOString());
+    expect((await state(id)).evidence?.outcome).toBe(outcome);
+  });
+});
 
 describe("which jobs are rechecked", () => {
   it("starred jobs and the five following statuses; not new / ignored / judged / recently checked ones; at most max_per_cycle", async () => {
