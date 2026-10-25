@@ -5,7 +5,7 @@ import type { BudgetTracker } from "@/lib/channels/budget";
 import type { FetchLike, SleepFn } from "@/lib/channels/http";
 import type { HostResolver } from "@/lib/net/public-url";
 import type { ChannelRegistry } from "@/lib/channels/registry";
-import type { ChannelLogger } from "@/lib/channels/types";
+import type { ChannelLogger, KnownPostings } from "@/lib/channels/types";
 import type { ChannelStateStore } from "@/lib/channels/store";
 import type { Db } from "@/lib/db/client";
 import type { CycleKind } from "@/lib/db/repos/cycles";
@@ -24,6 +24,8 @@ export interface ChannelServices {
   registry: ChannelRegistry;
   cascades: readonly CascadeSpec[];
   store: ChannelStateStore;
+  /** A channel's stored postings (detail reuse). Read-only; in a dry run backed by the database given to runCycle, or empty without one. */
+  known: (channelId: string) => KnownPostings;
   breaker: CircuitBreaker;
   budget: BudgetTracker;
   /** `--channel` filter: when set, only these channels run. */
@@ -37,7 +39,7 @@ export interface CycleStepContext {
   /** The scheduled kind a catch-up replaces (decides the look-back window). */
   windowKind: ScheduledCycleKind | null;
   dryRun: boolean;
-  /** null only in dry runs started without a database. */
+  /** null in every dry run (a dry run writes nothing; it reads persisted state only through channels.store and channels.known). */
   db: Db | null;
   signal: AbortSignal;
   logger: ChannelLogger;

@@ -4,9 +4,11 @@
  *   pnpm cycle:run [--kind manual|weekday_morning|weekday_evening|weekend|catchup]
  *                  [--channel <id>]... [--dry-run]
  *
- * --dry-run collects and parses in memory only: no cycle, run, raw posting, usage or circuit writes.
- * It reads the database (when DATABASE_URL points at a reachable one) so budgets and circuit state
- * are honoured. `--channel fixture` serves tests/fixtures/fixture-channel and needs --dry-run.
+ * --dry-run collects and parses in memory only: no cycle, run, raw posting, usage or circuit writes. When the database
+ * (DATABASE_URL, or the local compose default) is reachable and migrated it is opened read-only and the dry run starts
+ * from the persisted month usage, circuit state and stored postings, admitting requests like a real run would. Its
+ * requests are real (paid channels bill them) but its usage is not persisted. Otherwise it starts from empty state.
+ * `--channel fixture` serves tests/fixtures/fixture-channel and needs --dry-run.
  * `.env` is loaded by the pnpm script (node --env-file-if-exists=.env --import tsx).
  * With ai.yaml `execution: host` (default) the `ai` and `notify` steps are only delegated (a `run_ai` request is
  * queued for the ai-worker; `pnpm ai-worker --once` handles it). `execution: container` runs them here.
@@ -17,7 +19,9 @@ import { registerBuiltinChannels } from "../src/lib/channels/builtin";
 import { FIXTURE_CHANNEL_ID, registerFixtureChannel } from "../src/lib/channels/fixture";
 import { defaultRegistry } from "../src/lib/channels/registry";
 import { loadConfig } from "../src/lib/config";
-import { closeDb, getDb, pingDb, type Db } from "../src/lib/db";
+import { closeDb, getDb, type Db } from "../src/lib/db";
+import { probeCycleState } from "../src/lib/db/health";
+import { createReadOnlyDb, type ReadOnlyDb } from "../src/lib/db/read-only-client";
 import { cycleKindEnum } from "../src/lib/db/schema";
 import { registerBuiltinAiSubtasks, registerBuiltinCycleSteps } from "../src/lib/cycle/builtin-steps";
 import type { CollectResult } from "../src/lib/cycle/collect";
@@ -79,12 +83,22 @@ async function main(): Promise<number> {
   }
 
   let db: Db | null = null;
+  let readOnly: ReadOnlyDb | null = null;
   if (!dryRun) {
     db = getDb();
   } else {
-    const candidate = getDb();
-    if (await pingDb(candidate)) db = candidate;
-    else console.warn("cycle:run: database unreachable; dry run starts from empty budget and circuit state");
+    readOnly = createReadOnlyDb();
+    const state = await probeCycleState(readOnly.db);
+    if (state === "ok") {
+      db = readOnly.db;
+      console.log("[dry-run] budget, circuit state and stored postings are read from the database (read-only); nothing is written");
+    } else if (state === "not_migrated") {
+      console.warn("cycle:run: database reachable but not migrated (or behind the code); dry run starts from empty budget and circuit state and knows no stored postings, so paid channels are not held to their monthly caps");
+    } else if (state === "unreadable") {
+      console.warn("cycle:run: database reachable but its budget and circuit state could not be read; dry run starts from empty budget and circuit state and knows no stored postings, so paid channels are not held to their monthly caps");
+    } else {
+      console.warn("cycle:run: database unreachable; dry run starts from empty budget and circuit state and knows no stored postings, so paid channels are not held to their monthly caps");
+    }
   }
 
   const logger = createProcessLogger();
@@ -130,6 +144,7 @@ async function main(): Promise<number> {
     }
     return result.status === "failed" ? 1 : result.status === "skipped" ? 3 : 0;
   } finally {
+    await readOnly?.close();
     await closeDb();
   }
 }

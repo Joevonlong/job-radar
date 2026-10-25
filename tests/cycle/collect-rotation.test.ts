@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { BudgetTracker } from "@/lib/channels/budget";
 import { CircuitBreaker } from "@/lib/channels/circuit";
+import { NO_KNOWN_POSTINGS } from "@/lib/channels/context";
 import { ChannelError } from "@/lib/channels/errors";
 import { registerFixtureChannel } from "@/lib/channels/fixture";
 import { createLogger, type LogRecord } from "@/lib/channels/logger";
@@ -49,7 +50,7 @@ async function setup() {
     cycle: { id: 1, kind: "manual" }, windowKind: null, dryRun: false, db, signal: new AbortController().signal,
     logger: createLogger({ sink: (record) => logs.push(record) }), now: () => now, config: cfg, results: {},
     channels: {
-      registry, store, selected: null, cascades: [{ family: "linkedin", order: ["first", "second"] }],
+      registry, store, known: () => NO_KNOWN_POSTINGS, selected: null, cascades: [{ family: "linkedin", order: ["first", "second"] }],
       breaker: new CircuitBreaker(store, () => ({ failures: 3, cooldownMs: 60_000 }), () => now),
       budget: await BudgetTracker.create({ store, month: "2026-01", globalCapUsd: 100, settingsFor: (id) => registry.settingsFor(id, cfg.channels) }),
       runtime: { sleep: async () => {} },

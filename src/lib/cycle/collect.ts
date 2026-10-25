@@ -1,6 +1,6 @@
 import { remoteScopeKey } from "@/lib/market/remote-scope";
 import { CascadeController, type CascadeSpec, type UnavailableReason } from "@/lib/channels/cascade";
-import { createChannelContext, createThrottle, httpSettingsFromConfig, NO_KNOWN_POSTINGS } from "@/lib/channels/context";
+import { createChannelContext, createThrottle, httpSettingsFromConfig } from "@/lib/channels/context";
 import { ChannelError, InfrastructureError, isAbortError, PartialCollectError, toChannelError } from "@/lib/channels/errors";
 import { buildQueries, buildSweepQuery, capQuery } from "@/lib/channels/query";
 import { orderQueries, rotationSummary, turnsOf, type RotationUnitSummary } from "@/lib/channels/rotation";
@@ -8,13 +8,12 @@ import {
   normalizedPostingDraftSchema,
   rawPostingInputSchema,
   type Channel,
-  type KnownPostings,
   type RawPostingInput,
   type SearchQuery,
 } from "@/lib/channels/types";
 import type { Db } from "@/lib/db/client";
 import { createRun, finishRun, getQueryRunHistory, type QueryRunHistoryRow, type RunStatus } from "@/lib/db/repos/runs";
-import { getRawPayloadsByExternalId, upsertRawPostings } from "@/lib/db/repos/raw-postings";
+import { upsertRawPostings } from "@/lib/db/repos/raw-postings";
 
 import type { CycleStepContext, StepResult } from "./steps";
 
@@ -22,11 +21,6 @@ import type { CycleStepContext, StepResult } from "./steps";
 const DRY_RUN_SAMPLE_TITLES = 3;
 /** Longest error text stored in `runs.error`. */
 const MAX_ERROR_CHARS = 500;
-
-/** The channel's own rows of `raw_postings` as its "known postings". */
-function createDbKnownPostings(db: Db, channelId: string): KnownPostings {
-  return { payloads: (externalIds) => getRawPayloadsByExternalId(db, { channelIds: [channelId], externalIds }) };
-}
 
 export interface CollectChannelSummary {
   runs: number;
@@ -257,7 +251,7 @@ export async function collectStep(ctx: CycleStepContext): Promise<StepResult> {
       signal: ctx.signal,
       cycle: ctx.cycle,
       logger: ctx.logger,
-      known: ctx.db ? createDbKnownPostings(ctx.db, channelId) : NO_KNOWN_POSTINGS,
+      known: services.known(channelId),
       now: ctx.now,
       ...ctx.channels.runtime,
     });
