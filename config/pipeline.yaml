@@ -38,7 +38,7 @@ lifecycle:
     timeout_ms: 10000
     # Longest page read (1 MiB); the rest is not downloaded
     max_body_bytes: 1048576
-    # Sent with the recheck and with the possibly_closed link check; its first word is the robots.txt product token
+    # Sent with watched rechecks and plain link checks (possibly-closed and unseen active jobs); its first word is the robots.txt product token
     user_agent: "JobRadar/2 (self-hosted job tracker; link check)"
 
 # "Apply" link priority, lower number wins: company ATS 1 > LinkedIn 2 > StepStone / XING / Indeed 3 > aggregators 4 (Arbeitsagentur, Arbeitnow, Google, e-mail alerts)

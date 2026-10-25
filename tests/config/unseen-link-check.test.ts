@@ -3,11 +3,12 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { describe, expect, it } from "vitest";
-import { parse } from "yaml";
+import { parse, stringify } from "yaml";
 
-import { configRegistry } from "@/lib/config";
+import { configRegistry, parseConfigText } from "@/lib/config";
 
 import { pipelineWith, shippedPipelineFile } from "../pipeline/helpers";
+import { shippedYaml } from "./helpers";
 
 describe("unseen jobs' link check configuration", () => {
   it("defaults missing keys to 14 days unseen and 7 days between checks", () => {
@@ -40,13 +41,26 @@ describe("unseen jobs' link check configuration", () => {
   });
 
   it.each([
-    ["unseen_link_check_after_days", -1],
-    ["unseen_link_check_after_days", 366],
-    ["unseen_link_check_after_days", 1.5],
-    ["unseen_link_check_interval_days", 0],
-    ["unseen_link_check_interval_days", 366],
-    ["unseen_link_check_interval_days", 1.5],
-  ])("rejects %s = %s", (key, value) => {
-    expect(() => pipelineWith((raw) => ((raw.lifecycle as Record<string, unknown>)[key] = value))).toThrow();
+    ["unseen_link_check_after_days", -1, "Too small: expected number to be >=0"],
+    ["unseen_link_check_after_days", 366, "Too big: expected number to be <=365"],
+    ["unseen_link_check_after_days", 1.5, "Invalid input: expected int, received number"],
+    ["unseen_link_check_interval_days", 0, "Too small: expected number to be >=1"],
+    ["unseen_link_check_interval_days", 366, "Too big: expected number to be <=365"],
+    ["unseen_link_check_interval_days", 1.5, "Invalid input: expected int, received number"],
+  ])("rejects %s = %s", (key, value, problem) => {
+    const raw = shippedYaml("pipeline.yaml");
+    (raw.lifecycle as Record<string, unknown>)[key] = value;
+    expect(() => parseConfigText("pipeline", stringify(raw), "pipeline.yaml")).toThrow(`lifecycle.${key}: ${problem}`);
+  });
+
+  it.each([
+    ["unseen_link_check_after_days", 0],
+    ["unseen_link_check_after_days", 365],
+    ["unseen_link_check_interval_days", 1],
+    ["unseen_link_check_interval_days", 365],
+  ])("loads the boundary %s = %s", (key, value) => {
+    const raw = shippedYaml("pipeline.yaml");
+    (raw.lifecycle as Record<string, unknown>)[key] = value;
+    expect(parseConfigText("pipeline", stringify(raw), "pipeline.yaml").lifecycle).toHaveProperty(key, value);
   });
 });

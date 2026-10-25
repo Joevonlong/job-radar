@@ -324,9 +324,9 @@ export const jobs = pgTable(
     isAgency: boolean("is_agency").notNull().default(false),
     /** Skill names found in title + description by the `skills` patterns of pipeline.yaml. */
     skills: text("skills").array().notNull().default(sql`'{}'::text[]`),
-    /** Last time maintenance checked the posting's links (rotates the possibly_closed link checks). */
+    /** Last time maintenance checked the posting's links, including watched rechecks and fallback link checks. */
     linkCheckedAt: timestamptz("link_checked_at"),
-    /** What the last recheck of a watched job's posting found (`LinkCheckEvidence`: outcome, HTTP status, phrase, quote, URL, time); unanswered evidence may carry an `unseenCheckedAt` ISO timestamp for fallback link checks. */
+    /** What the last recheck of a watched job's posting found (`LinkCheckEvidence`: outcome, HTTP status, phrase, quote, URL, time); an existing `unseenCheckedAt` ISO timestamp of the last fallback link check survives every recheck outcome. */
     linkCheckJson: jsonb("link_check_json"),
     /**
      * Full-text vector over title + description ('simple' config: postings are de/en mixed).

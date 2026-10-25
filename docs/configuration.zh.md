@@ -269,8 +269,8 @@ ai-worker 的发布目录和切换由 `schedule.yaml` 里的四个键控制。�
 | | `lifecycle.watch_recheck.per_host_min_interval_ms` | 3000 | 对同一网站两次请求的最小间隔（含 robots.txt） |
 | | `lifecycle.watch_recheck.timeout_ms` | 10000 | 单次请求超时 |
 | | `lifecycle.watch_recheck.max_body_bytes` | 1048576 | 页面最多读这么多字节，其余不下载 |
-| | `lifecycle.watch_recheck.user_agent` | `JobRadar/2 (self-hosted job tracker; link check)` | 复查和"可能已关闭"链接检查都带它；第一个词是 robots.txt 里匹配的产品名 |
-| `ui.yaml`（user） | `job_checks.closed_recheck.enabled` | `true` | 关掉后不再复查（"可能已关闭"的链接检查照常） |
+| | `lifecycle.watch_recheck.user_agent` | `JobRadar/2 (self-hosted job tracker; link check)` | 关注岗位复查，以及可能已关闭和长期未见的有效岗位的普通链接检查都带它；第一个词是 robots.txt 里匹配的产品名 |
+| `ui.yaml`（user） | `job_checks.closed_recheck.enabled` | `true` | 关掉后不再复查关注岗位（可能已关闭和长期未见的有效岗位的普通链接检查照常） |
 | | `job_checks.closed_recheck.extra_phrases` | `[]` | 你自己的短语（正则，不区分大小写），与市场包的 `closed_posting.phrases` 合并。只接受安全的子集：文字、字符类、多选 `(a\|b)`、`\b`、可选部分 `?`（最多 8 个）和最多 5 次的 `{n,m}`，长度不超过 200；不允许 `*`、`+`、`{n,}` 和反向引用。写错或不安全的正则 `pnpm config:check` 会报出路径。只搜页面可见文字的前 200,000 个字符，每页最多 250 毫秒（超时的页面记为"未查"） |
 
 `ui.yaml` 这一段在 YAML 或高级编辑器里改（没有表单）。旧版本不认识它：回退前先删掉。

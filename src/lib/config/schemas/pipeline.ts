@@ -200,7 +200,7 @@ export const pipelineSchema = z.strictObject({
         timeout_ms: positiveInt,
         /** Longest page read; the rest is not downloaded. */
         max_body_bytes: positiveInt,
-        /** The User-Agent of the recheck and of the possibly-closed link check; its first word is the robots.txt product token. */
+        /** The User-Agent of the watched recheck and plain link checks (possibly-closed and unseen active jobs); its first word is the robots.txt product token. */
         user_agent: nonEmptyString,
       })
       .default(WATCH_RECHECK_DEFAULTS),

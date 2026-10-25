@@ -86,7 +86,7 @@ export async function runMaintenance(db: Db, options: MaintenanceOptions): Promi
   if (overdue.length > 0) logger.info("jobs marked possibly_closed", { count: overdue.length });
 
   let skipped = 0;
-  // watched jobs are left to their own recheck below (one request per posting, robots.txt obeyed)
+  // Watched jobs use their own recheck below (robots.txt obeyed), with a plain link fallback when the last recheck got no answer.
   const unseen = config.lifecycle.unseen_link_check_after_days > 0
     ? { seenBefore: new Date(now.getTime() - config.lifecycle.unseen_link_check_after_days * 86_400_000), checkedBefore: new Date(now.getTime() - config.lifecycle.unseen_link_check_interval_days * 86_400_000) }
     : undefined;

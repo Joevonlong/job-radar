@@ -203,7 +203,10 @@ function hasClosureOverrideSql(): SQL<boolean> {
  * settle those); jobs the user judged are left alone. A possibly-closed job marked by the posting's own phrase is never listed:
  * the plain check only sees a live link, not the page text, so its answer is no evidence against that mark.
  * Unseen jobs wait until `checkedBefore`; with `skipWatched`, unanswered rechecks also use `unseenCheckedAt` in the evidence
- * so frequent watched rechecks cannot keep postponing their fallback check.
+ * so frequent watched rechecks cannot keep postponing their fallback check. With `unseen`, unanswered active jobs also
+ * queue by `unseenCheckedAt`, the time of their last fallback check, rather than the watched recheck's time. This is safe
+ * regardless of `skipWatched`: the marker still names their last plain check when watched rechecking is off.
+ * Without `unseen`, the original ordering by `link_checked_at`, `last_seen_at` and id stays unchanged.
  */
 export async function listJobsForLinkCheck(db: Executor, limit: number, options: { skipWatched?: boolean; unseen?: { seenBefore: Date; checkedBefore: Date } } = {}): Promise<Job[]> {
   if (limit <= 0) return [];
@@ -224,11 +227,14 @@ export async function listJobsForLinkCheck(db: Executor, limit: number, options:
         ),
       )
     : eq(jobs.status, "possibly_closed");
+  const lastPlainCheck = options.unseen
+    ? sql`case when ${jobs.status} = 'active' and ${lastRecheckUnansweredSql()} then (${jobs.linkCheckJson}->>'unseenCheckedAt')::timestamptz else ${jobs.linkCheckedAt} end`
+    : jobs.linkCheckedAt;
   return db
     .select()
     .from(jobs)
     .where(and(status, not(hasClosureOverrideSql()), options.unseen ? undefined : phraseExcluded, options.skipWatched ? or(not(watchedSql()), lastRecheckUnansweredSql()) : undefined))
-    .orderBy(sql`${jobs.linkCheckedAt} asc nulls first`, sql`(${jobs.status} = 'possibly_closed') desc`, asc(jobs.lastSeenAt), asc(jobs.id))
+    .orderBy(sql`${lastPlainCheck} asc nulls first`, ...(options.unseen ? [sql`(${jobs.status} = 'possibly_closed') desc`] : []), asc(jobs.lastSeenAt), asc(jobs.id))
     .limit(limit);
 }
 
@@ -281,8 +287,8 @@ export async function listWatchedJobsForRecheck(db: Executor, input: { limit: nu
 /**
  * Record a recheck of a watched job. `gone` (404 / 410) closes it; `phrase` marks it possibly closed (the user confirms);
  * `alive` opens a possibly closed job again (whatever marked it) and moves its last-seen time, like a passing link check. `unknown` / `robots` keep
- * the evidence of an earlier gone / phrase and carry forward an existing `unseenCheckedAt` fallback marker; other outcomes
- * write fresh evidence without that marker. The check time is always written, so the job waits `interval_hours` for the next one.
+ * the evidence of an earlier gone / phrase. Every outcome carries forward an existing `unseenCheckedAt` fallback marker,
+ * so it survives every recheck. The check time is always written, so the job waits `interval_hours` for the next one.
  */
 export async function recordWatchedCheck(db: Executor, id: number, evidence: LinkCheckEvidence, at: Date): Promise<void> {
   const json = JSON.stringify(evidence);
@@ -296,10 +302,11 @@ export async function recordWatchedCheck(db: Executor, id: number, evidence: Lin
           : sql`status`;
   // a live posting is a sighting, like a passing link check: a possibly closed job is open again and its last-seen time moves on
   const lastSeen = evidence.outcome === "alive" ? sql`(case when status = 'possibly_closed' then ${at.toISOString()}::timestamptz else last_seen_at end)` : sql`last_seen_at`;
+  const freshEvidence = sql`${json}::jsonb || (case when link_check_json ? 'unseenCheckedAt' then jsonb_build_object('unseenCheckedAt', link_check_json->'unseenCheckedAt') else '{}'::jsonb end)`;
   const evidenceSql =
     evidence.outcome === "unknown" || evidence.outcome === "robots"
-      ? sql`(case when link_check_json->>'outcome' in ('gone', 'phrase') then link_check_json else ${json}::jsonb || (case when link_check_json ? 'unseenCheckedAt' then jsonb_build_object('unseenCheckedAt', link_check_json->'unseenCheckedAt') else '{}'::jsonb end) end)`
-      : sql`${json}::jsonb`;
+      ? sql`(case when link_check_json->>'outcome' in ('gone', 'phrase') then link_check_json else ${freshEvidence} end)`
+      : freshEvidence;
   await db.execute(sql`
     update jobs
     set link_checked_at = ${at.toISOString()}::timestamptz,
