@@ -436,6 +436,8 @@ Linux 从零首次运行：在 Ubuntu runner 上用一份空的检出，按随�
 
 Dependabot 的 PR 和其他 PR 跑同一条流水线。action 升级会改 `.github/`，因此算代码，会跑全部任务；如果它改了步骤名，`ci-docs` 会失败，直到本页更新。本页不写 action 版本号，所以单纯升级版本不需要改文档。
 
+workflow 里的每个 `uses:` 都固定到完整的 40 位 commit SHA，行尾注释写 release 标签（`uses: actions/checkout@<sha> # v7.0.1`），因为标签可以被移动到别的代码上。Dependabot 的 `github-actions` 生态系统认识这种写法，会同时更新 SHA 和注释。新增 action 时，先把标签解析成 commit（annotated tag 要解引用）再固定。
+
 ## 发布检查
 
 `scripts/release-check.sh` 不是流水线的一部分。维护者在仓库公开或发版之前手动运行，提交可疑时也可运行：对 git 会跟踪的每个文件和整个提交历史跑 gitleaks（通过 Docker，镜像版本固定）、扫描个人字符串和本机路径、检查 `.gitignore` 覆盖 `.env`、`data/`、`.auth/`，并检查仓库里没有私有规划编号（维护者跟踪系统里的编号：`F-`、`B-`、`ADR-` 加三位数字，`M-`、`P-` 加两位数字；`ADR` 不分大小写）既不在任何文件内容里也不在文件名里，仓库根目录的 `drizzle/` 和 `pnpm-lock.yaml`，以及 `scripts/planning-ids.allow` 里精确列出的 `路径` 或 `路径:行号`（编号是数据而不是引用）除外。这一项也可单独运行：`scripts/release-check.sh --planning-ids-only`（不需要 Docker，约一秒）；它是 `scripts/validate.sh` 的一部分，也由单元测试 `tests/ops/release-check-script.test.ts` 覆盖，所以编号回来时 CI 会失败。退出码 0 表示干净，1 列出问题，2 表示没能运行。它单独成关，因为需要 Docker 跑 gitleaks，还需要 CI 里没有的、未跟踪的本地模式文件。详见 [RELEASING.md](../RELEASING.md)。
