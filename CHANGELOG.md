@@ -43,7 +43,7 @@ and the project uses [Semantic Versioning](https://semver.org/).
   comparisons contained no AI figures are unaffected. Users who had AI lookups enabled in the benchmark lose the AI
   part of the sample count.
 
-**Salary lookup rollback for this release.** Older code does not hide comparisons containing AI figures.
+**Rolling back past the release that made AI salary lookups reference-only (`salary.yaml` `config_version: 2`).** Older code does not hide comparisons containing AI figures.
 
 - **(a) Preferred: recompute with the new code before switching.** If the benchmark is off, temporarily set
   `benchmark.enabled: true` in `salary.yaml`, run `pnpm salary:benchmark`, confirm that it prints a summary and exits

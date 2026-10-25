@@ -414,10 +414,10 @@ function LookupResult({
       {origin?.jobId !== jobId ? (
         <p className="text-ink-2 text-body-sm" data-testid="salary-lookup-origin">
           {origin ? (
-            <>
-              {t("origin", { title: "" })}
-              <Link href={`/jobs/${origin.jobId}`} className={INK_LINK}>{origin.title}</Link>
-            </>
+            t.rich("origin", {
+              title: origin.title,
+              link: (chunks) => <Link href={`/jobs/${origin.jobId}`} className={INK_LINK}>{chunks}</Link>,
+            })
           ) : t("originDeleted")}
         </p>
       ) : null}

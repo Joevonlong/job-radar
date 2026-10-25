@@ -8,7 +8,7 @@ import { ANY, buildBenchmarkRows, groupKeys } from "@/lib/salary/benchmark";
 import { compileFamilies } from "@/lib/salary/families";
 import { buildDeepLinks, slugify } from "@/lib/salary/links";
 import { LOOKUP_KEY_MAX, salaryLookupKey } from "@/lib/salary/lookup";
-import { hostTrusted, placeMatches, publicHttpsUrl, seniorityOf, verifySalaryLookup } from "@/lib/salary/lookup-verify";
+import { hostTrusted, publicHttpsUrl, verifySalaryLookup } from "@/lib/salary/lookup-verify";
 import { percentileIn, quantile, quantilesOf } from "@/lib/salary/percentile";
 import { salaryLookupResultSchema } from "@/lib/salary/lookup-types";
 import { pickGroup } from "@/lib/salary/view";
@@ -294,16 +294,5 @@ describe("checking a lookup answer", () => {
     expect(result).not.toHaveProperty("extra_action");
     expect(result.sources[0]).toMatchObject({ host: "evil.example.net", trusted: false });
     expect(result.observations).toEqual([]);
-  });
-
-  it("matches places by city, ISO code or English country name, and reads seniority words", () => {
-    expect(placeMatches("Berlin, Germany", { city: "Berlin", country: "DE" })).toBe(true);
-    expect(placeMatches("Germany", { city: null, country: "DE" })).toBe(true);
-    expect(placeMatches("Remote (DE)", { city: null, country: "DE" })).toBe(true);
-    expect(placeMatches("London, UK", { city: "Berlin", country: "DE" })).toBe(false);
-    expect(placeMatches(null, { city: "Berlin", country: "DE" })).toBe(false);
-    expect(seniorityOf("Sr. Engineer")).toBe("senior");
-    expect(seniorityOf("Staff Engineer (L6)")).toBe("staff");
-    expect(seniorityOf(null)).toBe("unknown");
   });
 });

@@ -255,7 +255,7 @@ scripts/ops/deploy.sh               # 或跟随 main：拉最新 main、备份�
 
 从 `data/config/.backup/` 恢复配置或恢复数据库备份之前，先读 [CHANGELOG.md](../CHANGELOG.md) 里要离开的那个版本的回滚说明。
 
-**本版本的查薪资回滚要点。** 旧代码不会隐藏含 AI 数字的对比。
+**回滚到 AI 查薪资改为仅供参考（`salary.yaml` 的 `config_version: 2`）之前的版本。** 旧代码不会隐藏含 AI 数字的对比。
 
 - **(a) 首选：切换代码前，先用新代码重算。** 基准关闭时，临时把 `salary.yaml` 的 `benchmark.enabled` 改为 `true`，
   运行 `pnpm salary:benchmark`，确认它打印出摘要且退出码为 0，再恢复原值。

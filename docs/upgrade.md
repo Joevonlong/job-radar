@@ -133,7 +133,7 @@ If the deploy stops before step 10, the worker stays stopped: fix the cause and 
 Before restoring config from `data/config/.backup/` or restoring a database backup, read the rollback notes in
 [CHANGELOG.md](../CHANGELOG.md) for the version you are leaving.
 
-**Salary lookup rollback for this release.** Older code does not hide comparisons containing AI figures.
+**Rolling back past the release that made AI salary lookups reference-only (`salary.yaml` `config_version: 2`).** Older code does not hide comparisons containing AI figures.
 
 - **(a) Preferred: recompute with the new code before switching.** If the benchmark is off, temporarily set
   `benchmark.enabled: true` in `salary.yaml`, run `pnpm salary:benchmark`, confirm that it prints a summary and exits

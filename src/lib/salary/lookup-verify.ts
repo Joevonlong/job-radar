@@ -7,7 +7,6 @@
 import { isIP } from "node:net";
 
 import type { SalaryLookupBandOutput, SalaryLookupOutput } from "@/lib/ai/prompts/salary";
-import { SENIORITIES } from "@/lib/domain/types";
 import { fxFactor, type FxTable } from "@/lib/market/currency";
 
 import type { SalaryBand, SalaryLookupQuery, SalaryLookupResult, SalarySource } from "./lookup-types";
@@ -59,37 +58,12 @@ export function hostTrusted(host: string, domains: readonly string[]): boolean {
 
 const clip = (text: string, max: number): string => (text.length > max ? `${text.slice(0, max - 1)}…` : text);
 
-/** "Senior", "Staff Engineer (L5)" -> a `jobs.seniority` value, else unknown. */
-export function seniorityOf(text: string | null): string {
-  if (!text) return "unknown";
-  const lower = text.toLowerCase();
-  const order: Array<[string, RegExp]> = [
-    ["intern", /\b(intern|praktikant|werkstudent)/],
-    ["junior", /\b(junior|entry|graduate|jr\.?)\b/],
-    ["principal", /\bprincipal\b/],
-    ["staff", /\bstaff\b/],
-    ["lead", /\b(lead|leiter)/],
-    ["manager", /\b(manager|head|director)\b/],
-    ["senior", /\b(senior|sr\.?)\b/],
-    ["mid", /\b(mid|intermediate|regular)\b/],
-  ];
-  for (const [value, pattern] of order) if (pattern.test(lower)) return value;
-  return (SENIORITIES as readonly string[]).includes(lower) ? lower : "unknown";
-}
-
 const ISO = /^[A-Z]{3}$/;
 
 function convert(value: number | null, factor: number | null, sanity: { min: number; max: number }): number | null {
   if (value === null || factor === null) return null;
   const converted = value * factor;
   return converted >= sanity.min && converted <= sanity.max ? Math.round(converted) : null;
-}
-
-/** A band's figure in the base currency (median, else the middle of min and max, else the one bound); null when none. */
-export function bandFigure(band: Pick<SalaryBand, "min" | "max" | "median">): number | null {
-  if (band.median !== null) return band.median;
-  if (band.min !== null && band.max !== null) return (band.min + band.max) / 2;
-  return band.max ?? band.min ?? null;
 }
 
 function verifyBand(raw: SalaryLookupBandOutput, ctx: { indexMap: Map<number, number>; fx: FxTable; base: string; sanity: Sanity }): { band: SalaryBand | null; dropped: boolean } {
@@ -123,35 +97,6 @@ function verifyBand(raw: SalaryLookupBandOutput, ctx: { indexMap: Map<number, nu
     },
     dropped: false,
   };
-}
-
-const norm = (text: string): string =>
-  text
-    .normalize("NFKD")
-    .replace(/[̀-ͯ]/g, "")
-    .toLowerCase()
-    .trim();
-
-/** The band's location names the job's city. */
-export function cityMatches(location: string | null, city: string | null): boolean {
-  return location !== null && city !== null && city.trim() !== "" && norm(location).includes(norm(city));
-}
-
-/** The band names the job's city or country (or its country's English name). */
-export function placeMatches(location: string | null, query: Pick<SalaryLookupQuery, "city" | "country">): boolean {
-  if (location === null) return false;
-  const text = norm(location);
-  if (cityMatches(location, query.city)) return true;
-  if (query.country) {
-    if (/^[a-z]{2}$/i.test(query.country) && new RegExp(`\\b${query.country.toLowerCase()}\\b`).test(text)) return true;
-    try {
-      const name = new Intl.DisplayNames(["en"], { type: "region" }).of(query.country);
-      if (name && text.includes(norm(name))) return true;
-    } catch {
-      // an unknown code: no name to compare
-    }
-  }
-  return false;
 }
 
 /** Check one answer. Never throws on content: what fails a check is dropped and counted. */

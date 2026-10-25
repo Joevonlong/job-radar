@@ -6214,7 +6214,7 @@
       "meta": "{provider} · {model} · {when}",
       "disclaimer": "AI 根据公开网页估算，本应用没有核对这些数字和来源。它们不是这个岗位的事实，也不计入薪资基准和任何筛选。",
       "scope": "按公司、岗位类型、级别和地点估计，同类岗位共用这一次查询，不是根据这条 JD。",
-      "origin": "这次查询是在另一条岗位上发起的：{title}",
+      "origin": "这次查询是在另一条岗位上发起的：<link>{title}</link>",
       "originDeleted": "发起这次查询的岗位已删除。",
       "aiBadge": "AI 查询",
       "unverified": "AI 估计（未核对）",

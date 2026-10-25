@@ -6214,7 +6214,7 @@
       "meta": "{provider} · {model} · {when}",
       "disclaimer": "An AI estimate from public web pages. Job Radar has not checked these figures or sources. They are not facts of this job and never count in the salary benchmark or any filter.",
       "scope": "Estimated from the company, role type, seniority and place; similar postings share this lookup. It is not based on this job description.",
-      "origin": "This lookup was made on another posting: {title}",
+      "origin": "This lookup was made on another posting: <link>{title}</link>",
       "originDeleted": "The posting this lookup was made on has been deleted.",
       "aiBadge": "AI lookup",
       "unverified": "AI estimate (unverified)",

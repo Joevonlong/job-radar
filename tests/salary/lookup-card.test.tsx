@@ -127,7 +127,7 @@ describe.each(["en", "zh"] as const)("salary lookup trust labels (%s)", (locale)
     const origin = { jobId: 9, title: "Senior Software Engineer" };
     render(wrap(<SalaryLookupCard {...props({ latest: lookup({ origin }) })} />, locale));
     const note = screen.getByTestId("salary-lookup-origin");
-    expect(note).toHaveTextContent(text.origin.replace("{title}", origin.title));
+    expect(note).toHaveTextContent(text.origin.replace("<link>{title}</link>", origin.title));
     expect(within(note).getByRole("link", { name: origin.title })).toHaveAttribute("href", "/jobs/9");
   });
 
