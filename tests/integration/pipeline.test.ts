@@ -12,10 +12,10 @@ import { getAppRoot } from "@/lib/config";
 import { registerBuiltinCycleSteps } from "@/lib/cycle/builtin-steps";
 import { runCycle, type RunCycleOptions } from "@/lib/cycle/run-cycle";
 import { resetCycleSteps } from "@/lib/cycle/steps";
-import { closeDb, getDb, schema } from "@/lib/db";
+import { addFavorite, closeDb, getDb, schema, setClosureOverride } from "@/lib/db";
 import { runMigrations } from "@/lib/db/migrate";
 import { listJobSources, listRawPostingsForChannel, upsertRawPostings } from "@/lib/db";
-import { listJobsForLinkCheck, resetRuleDerivedFacts, touchJobsSeen } from "@/lib/db/repos/jobs";
+import { listJobsForLinkCheck, recordUnseenCheck, resetRuleDerivedFacts, touchJobsSeen, type JobPatch } from "@/lib/db/repos/jobs";
 import { requeueRawPostings } from "@/lib/db/repos/raw-postings";
 import { upsertChannelRows } from "@/lib/db/repos/channels";
 import { createHttpClient } from "@/lib/channels/http";
@@ -81,7 +81,7 @@ const jobTitled = async (titleNorm: string) => {
   return job;
 };
 
-async function insertRun(channelId: string, startedAt: Date, status: "succeeded" | "failed" = "succeeded"): Promise<void> {
+async function insertRun(channelId: string, startedAt: Date, status: "succeeded" | "failed" | "skipped" = "succeeded"): Promise<void> {
   await getDb().insert(schema.runs).values({ channelId, status, startedAt, finishedAt: startedAt });
 }
 
@@ -815,5 +815,167 @@ describe("job lifecycle (fake clock)", () => {
     const result = await run(new ChannelRegistry(), { now: () => at(7.2), fetch, resolveHost: async () => ["93.184.216.34"] });
     expect(maintenanceOf(result)).toMatchObject({ possiblyClosed: 3, linkChecked: 3, closed: 3 });
     expect(Object.values(await statuses())).toEqual(["closed", "closed", "closed"]);
+  });
+
+  describe("fallback link checks for unseen active jobs", () => {
+    const now = new Date("2026-11-01T10:00:00Z");
+    const at = (days: number) => new Date(now.getTime() + days * DAY);
+    const unseen = { seenBefore: at(-14), checkedBefore: at(-7) };
+    const overrides = (raw: Record<string, unknown>) => {
+      const lifecycle = raw.lifecycle as Record<string, unknown>;
+      lifecycle.unseen_link_check_after_days = 14;
+      lifecycle.unseen_link_check_interval_days = 7;
+    };
+
+    beforeEach(async () => {
+      await upsertChannelRows(getDb(), [{ id: "fx-unseen", family: "ats", kind: "api", enabled: true }]);
+    });
+
+    async function add(title: string, patch: JobPatch = {}) {
+      const db = getDb();
+      const [company] = await db.insert(schema.companies).values({ name: title, nameNorm: title.toLowerCase() }).returning();
+      const [job] = await db.insert(schema.jobs).values({ companyId: company!.id, title, titleNorm: title.toLowerCase(), firstSeenAt: at(-30), lastSeenAt: at(-20), ...patch }).returning();
+      const [raw] = await db.insert(schema.rawPostings).values({ channelId: "fx-unseen", externalId: title, payloadJson: {}, fetchedAt: at(-30) }).returning();
+      await db.insert(schema.jobSources).values({ jobId: job!.id, rawPostingId: raw!.id, channelId: "fx-unseen", url: `https://jobs.example.test/${encodeURIComponent(title)}` });
+      return job!;
+    }
+
+    const candidates = async (skipWatched = false) => (await listJobsForLinkCheck(getDb(), 100, { unseen, skipWatched })).map((j) => j.id);
+
+    it("selects only overdue active jobs whose checks are due, leaving manual and phrase judgements alone", async () => {
+      const never = await add("Never checked");
+      const old = await add("Old check", { linkCheckedAt: at(-8) });
+      await add("Recent sighting", { lastSeenAt: at(-5) });
+      await add("Sighting boundary", { lastSeenAt: at(-14) });
+      await add("Recent check", { linkCheckedAt: at(-3) });
+      await add("Check boundary", { linkCheckedAt: at(-7) });
+      await add("Closed", { status: "closed" });
+      const closed = await add("Judged closed");
+      const open = await add("Judged open");
+      await setClosureOverride(getDb(), closed.id, "closed", null, now);
+      await setClosureOverride(getDb(), open.id, "open", null, now);
+      await add("Phrase", { status: "possibly_closed", linkCheckJson: { outcome: "phrase" } });
+      expect(await candidates()).toEqual([never.id, old.id]);
+      expect(await listJobsForLinkCheck(getDb(), 100)).toEqual([]);
+      expect(await listJobsForLinkCheck(getDb(), 0, { unseen })).toEqual([]);
+    });
+
+    it("skips watched jobs unless their recheck was unanswered, with the marker exception only when skipWatched is on", async () => {
+      const plain = await add("Plain watched");
+      const robots = await add("Robots", { linkCheckJson: { outcome: "robots" }, linkCheckedAt: at(-1) });
+      const unknown = await add("Unknown", { linkCheckJson: { outcome: "unknown", unseenCheckedAt: at(-8).toISOString() }, linkCheckedAt: at(-1) });
+      const recent = await add("Recent fallback", { linkCheckJson: { outcome: "robots", unseenCheckedAt: at(-2).toISOString() }, linkCheckedAt: at(-1) });
+      const boundary = await add("Fallback boundary", { linkCheckJson: { outcome: "unknown", unseenCheckedAt: at(-7).toISOString() }, linkCheckedAt: at(-1) });
+      for (const outcome of ["alive", "gone", "phrase"]) {
+        const job = await add(`Watched ${outcome}`, { linkCheckJson: { outcome } });
+        await addFavorite(getDb(), job.id);
+      }
+      for (const job of [plain, robots, unknown, recent, boundary]) await addFavorite(getDb(), job.id);
+      expect(await candidates(true)).toEqual([robots.id, unknown.id]);
+      const withoutSkip = await candidates(false);
+      expect(withoutSkip).toContain(plain.id);
+      expect(withoutSkip).not.toContain(robots.id);
+      expect(withoutSkip).not.toContain(unknown.id);
+      expect(withoutSkip).not.toContain(recent.id);
+      expect(withoutSkip).not.toContain(boundary.id);
+    });
+
+    it("orders never-checked possibly-closed jobs first, then rotates both kinds by check time with one shared limit", async () => {
+      const active = await add("Never active", { lastSeenAt: at(-25) });
+      const possible = await add("Never possible", { status: "possibly_closed" });
+      const oldest = await add("Oldest active", { linkCheckedAt: at(-10) });
+      const tiedActive = await add("Tied active", { linkCheckedAt: at(-8), lastSeenAt: at(-25) });
+      const tiedPossible = await add("Tied possible", { status: "possibly_closed", linkCheckedAt: at(-8) });
+      const laterSeen = await add("Later seen", { linkCheckedAt: at(-8), lastSeenAt: at(-19) });
+      const tiedId = await add("Later id", { linkCheckedAt: at(-8), lastSeenAt: at(-19) });
+      expect(await candidates()).toEqual([possible.id, active.id, oldest.id, tiedPossible.id, tiedActive.id, laterSeen.id, tiedId.id]);
+      expect((await listJobsForLinkCheck(getDb(), 4, { unseen })).map((j) => j.id)).toEqual([possible.id, active.id, oldest.id, tiedPossible.id]);
+      expect((await listJobsForLinkCheck(getDb(), 100)).map((j) => j.id)).toEqual([possible.id, tiedPossible.id]);
+    });
+
+    it.each([404, 200])("uses HTTP %s alone to decide status, writes the check time and leaves null evidence alone", async (status) => {
+      const job = await add("Unseen");
+      const result = await maintenance(now, fakeFetch(() => status).fetch, overrides);
+      const after = (await allJobs())[0]!;
+      expect(result).toMatchObject({ possiblyClosed: 0, linkChecked: 1, closed: status === 404 ? 1 : 0, alive: status === 200 ? 1 : 0, unseen: { checked: 1, closed: status === 404 ? 1 : 0, alive: status === 200 ? 1 : 0 } });
+      expect(after.status).toBe(status === 404 ? "closed" : "active");
+      expect(after.lastSeenAt).toEqual(status === 200 ? now : job.lastSeenAt);
+      expect(after.linkCheckedAt).toEqual(now);
+      expect(after.linkCheckJson).toBeNull();
+      expect((await maintenance(at(1), fakeFetch(() => status).fetch, overrides)).unseen.checked).toBe(0);
+    });
+
+    it.each([503, 403, "timeout"])("keeps HTTP %s unanswered, waits the interval, then checks again", async (status) => {
+      const job = await add("Unanswered");
+      const fetch: FetchLike = status === "timeout" ? async () => { throw new DOMException("request timed out", "TimeoutError"); } : fakeFetch(() => Number(status)).fetch;
+      const result = await maintenance(now, fetch, overrides);
+      expect(result.unseen).toEqual({ checked: 1, closed: 0, alive: 0 });
+      const after = (await allJobs())[0]!;
+      expect(after).toMatchObject({ status: "active", lastSeenAt: job.lastSeenAt, linkCheckedAt: now, linkCheckJson: null });
+      expect((await maintenance(at(6), fetch, overrides)).unseen.checked).toBe(0);
+      expect((await maintenance(at(7), fetch, overrides)).unseen.checked).toBe(0);
+      expect((await maintenance(at(8), fetch, overrides)).unseen.checked).toBe(1);
+      expect((await allJobs())[0]!.lastSeenAt).toEqual(job.lastSeenAt);
+      expect((await allJobs())[0]!.linkCheckJson).toBeNull();
+    });
+
+    it.each([404, 200])("checks a job whose only channel has only skipped runs (HTTP %s)", async (status) => {
+      await add("Skipped channel");
+      await insertRun("fx-unseen", at(-2), "skipped");
+      await insertRun("fx-unseen", at(-1), "skipped");
+      const result = await maintenance(now, fakeFetch(() => status).fetch, overrides);
+      expect(result).toMatchObject({ possiblyClosed: 0, unseen: { checked: 1, closed: status === 404 ? 1 : 0, alive: status === 200 ? 1 : 0 } });
+      expect((await allJobs())[0]!.status).toBe(status === 404 ? "closed" : "active");
+    });
+
+    it.each([true, false])("checks without any runs, even when the source is disabled = %s", async (disabled) => {
+      await add("Silent channel");
+      await getDb().update(schema.channels).set({ enabled: !disabled });
+      expect((await maintenance(now, fakeFetch(() => 404).fetch, overrides)).unseen).toEqual({ checked: 1, closed: 1, alive: 0 });
+    });
+
+    it("with after_days zero checks only the existing possibly-closed candidates", async () => {
+      await add("Unseen active");
+      await add("Possibly", { status: "possibly_closed" });
+      const result = await maintenance(now, fakeFetch(() => 404).fetch, (raw) => {
+        overrides(raw);
+        (raw.lifecycle as Record<string, unknown>).unseen_link_check_after_days = 0;
+      });
+      expect(result).toMatchObject({ linkChecked: 1, closed: 1, unseen: { checked: 0, closed: 0, alive: 0 } });
+      expect((await allJobs())[0]!.status).toBe("active");
+    });
+
+    it("counts both kinds in the totals and logs fallback counts once, sharing the cycle cap", async () => {
+      await add("Gone");
+      await add("Alive");
+      await add("Unknown");
+      await add("Possible", { status: "possibly_closed" });
+      const records: Array<{ message: string; fields: Record<string, unknown> }> = [];
+      const fetch = fakeFetch((url) => url.endsWith("Gone") || url.endsWith("Possible") ? 404 : url.endsWith("Alive") ? 200 : 503);
+      const runLogged = (limit: number) => runMaintenance(getDb(), {
+        config: pipelineWith((raw) => { overrides(raw); (raw.lifecycle as Record<string, unknown>).max_link_checks_per_cycle = limit; }),
+        http: createHttpClient({ settings: { timeoutMs: 1000, maxRetries: 0, backoffBaseMs: 1, backoffMaxMs: 1 }, fetch: fetch.fetch }),
+        logger: createLogger({ sink: (record) => records.push(record) }),
+        now: () => now,
+        resolveHost: async () => ["93.184.216.34"],
+      });
+      expect(await runLogged(3)).toMatchObject({ linkChecked: 3, closed: 2, alive: 1, unseen: { checked: 2, closed: 1, alive: 1 } });
+      expect(records.filter((r) => r.message === "unseen jobs' links checked").map((r) => r.fields)).toEqual([{ checked: 2, closed: 1, alive: 1 }]);
+      expect(records.some((r) => r.message === "possibly_closed links checked")).toBe(true);
+      expect((await runLogged(3)).unseen).toEqual({ checked: 1, closed: 0, alive: 0 });
+      records.length = 0;
+      expect((await runLogged(3)).unseen.checked).toBe(0);
+      expect(records.some((r) => r.message === "unseen jobs' links checked")).toBe(false);
+    });
+
+    it("adds the marker only to unanswered evidence, keeping other evidence and null unchanged", async () => {
+      for (const outcome of [null, "alive", "gone", "phrase", "robots", "unknown"]) {
+        const evidence = outcome === null ? null : { outcome, url: "https://jobs.example.test/evidence", at: at(-1).toISOString() };
+        const job = await add(`Evidence ${outcome}`, { linkCheckJson: evidence });
+        await recordUnseenCheck(getDb(), job.id, now);
+        const [after] = await getDb().select().from(schema.jobs).where(eq(schema.jobs.id, job.id));
+        expect(after!.linkCheckJson).toEqual(outcome === "robots" || outcome === "unknown" ? { ...evidence, unseenCheckedAt: now.toISOString() } : evidence);
+      }
+    });
   });
 });

@@ -124,9 +124,11 @@ describe.runIf(legacyText("pipeline") !== null)("pipeline.yaml: legacy -> migrat
     const { arbeitnow: arbeitnowPriority, ...priorities } = effective.apply_priority;
     expect(arbeitnowPriority).toBe(4);
     expect(priorities).toEqual(original.apply_priority);
-    // The watched-job recheck added `lifecycle.watch_recheck` (schema defaults when the file has none)
-    const { watch_recheck: _watchRecheck, ...lifecycle } = effective.lifecycle;
+    // Watched rechecks and unseen fallback checks have schema defaults when older files have none.
+    const { watch_recheck: _watchRecheck, unseen_link_check_after_days: unseenAfter, unseen_link_check_interval_days: unseenInterval, ...lifecycle } = effective.lifecycle;
     void _watchRecheck;
+    expect({ after: unseenAfter, interval: unseenInterval }).toEqual({ after: 14, interval: 7 });
+    expect(migrated.text).not.toMatch(/^\s*unseen_link_check_(after|interval)_days:/m);
     expect(lifecycle).toEqual(original.lifecycle);
     // `aliases` has a schema default
     expect(effective.skills).toEqual((original.skills as Json[]).map((skill) => ({ aliases: [], ...skill })));
