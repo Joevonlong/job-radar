@@ -162,7 +162,7 @@ AI trap detection has no tab of its own: its switch, mode and thresholds are in 
 ## Salary tab: salary level and salary lookup
 
 The "Salary" tab (after "Breakdown") edits `data/config/salary.yaml`: the benchmark (`benchmark.enabled`,
-`window_days`, `min_sample`, `include_ai_lookups`) and the salary lookup (`lookup.enabled`, `ttl_days`, `max_per_day`,
+`window_days`, `min_sample`) and the salary lookup (`lookup.enabled`, `ttl_days`, `max_per_day`,
 `timeout_seconds`). The role families, the salary-site links and the lookup's domain list and plausible range are edited
 in the YAML (Advanced tab). The lookup is off by default; which AI runs it is the task "Salary lookup" on the AI tab
 (default claude-cli, then the Anthropic API; only providers that can search the web are used, and codex-cli, if you add

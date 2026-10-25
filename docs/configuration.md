@@ -61,6 +61,15 @@ pnpm config:example               # list the example setups; `pnpm config:exampl
 
 web and runner also run `config:init` once at startup (filling in whatever is missing; the runner has the user directory read-only inside the container and does not need to write when the directory is already complete); step 4 of `scripts/ops/deploy.sh` runs `config:init` -> `config:migrate --write` -> `config:check` in turn.
 
+### Salary (`salary.yaml`)
+
+The salary benchmark uses only salaries stated in postings; AI lookups are only displayed. The `salary.yaml`
+configuration migration from `config_version: 1` to `2` removes `benchmark.include_ai_lookups` and its comment.
+`scripts/ops/deploy.sh` applies it automatically in step 4. For a manual upgrade, run `pnpm config:migrate` first to
+see what the step removes, then `pnpm config:migrate --write` to save it (originals go to `data/config/.backup/`).
+Older files are migrated in memory when loaded; adding this key to a v2 file fails validation as an unknown key.
+See [salary.md](salary.md) for the cards and [the changelog](../CHANGELOG.md) for upgrade and rollback notes.
+
 ### setup.yaml
 
 `setup.yaml` holds the state of the first-run setup (`completed_at`, `completed_by`, `steps`); the setup wizard and

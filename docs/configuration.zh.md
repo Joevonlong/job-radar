@@ -55,6 +55,14 @@ pnpm config:example               # 列出示例配置；`pnpm config:example <i
 
 web 和 runner 启动时也会自动做一次 `config:init`（缺什么补什么；runner 在容器里对用户目录只读，目录已满时不需要写）；`scripts/ops/deploy.sh` 第 4 步依次运行 `config:init` → `config:migrate --write` → `config:check`。
 
+### 薪资（`salary.yaml`）
+
+薪资基准只用岗位写明的薪资，AI 查询只用于显示。`salary.yaml` 从 `config_version: 1` 升到 `2` 的配置迁移会删除
+`benchmark.include_ai_lookups` 和它的注释。`scripts/ops/deploy.sh` 第 4 步会自动执行。手动升级时，先运行
+`pnpm config:migrate` 看这一步会删掉什么，再运行 `pnpm config:migrate --write` 写回（原文件保存在 `data/config/.backup/`）。
+旧文件加载时会在内存里迁移；在 v2 文件里加回这个键会因“未知键”而校验失败。卡片说明见 [salary.zh.md](salary.zh.md)，
+升级和回滚说明见[更新日志](../CHANGELOG.md)。
+
 ### setup.yaml
 
 `setup.yaml` 记录首次设置的状态（`completed_at`、`completed_by`、`steps`），由设置向导和 `pnpm run setup` 写入。全新安装时它是

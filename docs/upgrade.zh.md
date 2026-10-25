@@ -87,6 +87,22 @@ scripts/ops/deploy.sh --skip-pull
 
 ## 回滚
 
+从 `data/config/.backup/` 恢复配置或恢复数据库备份之前，先读 [CHANGELOG.md](../CHANGELOG.md) 里要离开的那个版本的回滚说明。
+
+**本版本的查薪资回滚要点。** 旧代码不会隐藏含 AI 数字的对比。
+
+- **(a) 首选：切换代码前，先用新代码重算。** 基准关闭时，临时把 `salary.yaml` 的 `benchmark.enabled` 改为 `true`，
+  运行 `pnpm salary:benchmark`，确认它打印出摘要且退出码为 0，再恢复原值。
+- **(b) 配置（必须）：** 无论是把 `salary.yaml` 的 `config_version` 改回旧代码的当前版本，还是从
+  `data/config/.backup/<时间戳>/` 恢复原文件，都要在**旧代码启动前**确认 `benchmark.include_ai_lookups` 已删掉或为
+  `false`。备份里可能写着 `true`；否则旧代码会把最新缓存结果仍是升级前旧行的查询重新计入。再升级时，对比会被隐藏，
+  直到重算。
+- **(c) 恢复了数据库备份，或 (a) 没做成：** `pre-deploy` 备份里的基准表还是升级前的，恢复它会覆盖 (a) 的重算结果。
+  在旧代码运行、`benchmark.include_ai_lookups` 已删掉或为 `false` 时，再运行一次 `pnpm salary:benchmark`
+  （基准关闭时同样临时打开、重算，再恢复原值）。在这次重算之前，旧代码可能显示含 AI 数字的旧对比。
+
+(a) 失败不阻止回滚；按 (c) 处理，并接受这次重算之前的显示窗口。
+
 回到上一个标签：
 
 ```bash

@@ -416,7 +416,7 @@ else
   say "user config directory data/config is empty (first layered deploy): the current config/ is copied over in full; from then on the web UI writes only to data/config"
 fi
 run "Read the pnpm config:init error; it only copies missing files and never overwrites" pnpm config:init
-run "A failed migration writes nothing: fix the file in data/config named in the error (a version newer than the code means the code was rolled back; restore from data/config/.backup/)" pnpm config:migrate --write
+run "A failed migration writes nothing: fix the file in data/config named in the error (a version newer than the code means the code was rolled back; restore from data/config/.backup/); read the rollback notes in CHANGELOG.md first" pnpm config:migrate --write
 run "Fix data/config/*.yaml as the error says (pnpm config:check names the file, the field and which layer it was read from)" pnpm config:check
 if [[ -f "$APP/.env" ]]; then say ".env exists"; else say "warning: .env does not exist: compose uses defaults, but Telegram and channel keys need it (cp .env.example .env and fill it in; see docs/deploy.md)"; fi
 run "The docker compose config has a syntax error: docker compose config shows where" docker compose -p "$PROJECT" config -q

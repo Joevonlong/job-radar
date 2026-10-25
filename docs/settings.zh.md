@@ -161,8 +161,8 @@ AI 陷阱检测没有自己的标签：开关、模式和阈值直接改 `traps.
 
 ## 薪资标签：薪资水平和查薪资
 
-"薪资"标签（在"拆解"之后）编辑 `data/config/salary.yaml`：基准（`benchmark.enabled`、`window_days`、`min_sample`、
-`include_ai_lookups`）和查薪资（`lookup.enabled`、`ttl_days`、`max_per_day`、`timeout_seconds`）。岗位族、薪资网站链接、
+"薪资"标签（在"拆解"之后）编辑 `data/config/salary.yaml`：基准（`benchmark.enabled`、`window_days`、`min_sample`）
+和查薪资（`lookup.enabled`、`ttl_days`、`max_per_day`、`timeout_seconds`）。岗位族、薪资网站链接、
 查询的域名清单和合理范围在 YAML 里改（"高级"标签）。查薪资默认关闭；由哪个 AI 来查，是 AI 标签里的任务"查薪资"（默认
 claude-cli，然后 Anthropic API；只用能搜索网页的 provider，codex-cli 如果你加上，它搜索时没有域名限制）。见
 [salary.zh.md](salary.zh.md)。
