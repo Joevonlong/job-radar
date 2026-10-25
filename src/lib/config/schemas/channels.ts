@@ -125,8 +125,13 @@ const smartrecruitersChannel = z.strictObject({
   country: z.string().regex(/^([a-z]{2})?$/, "must be a lower-case ISO 3166-1 alpha-2 code, or empty").optional(),
   /** Postings per list request (the API allows at most 100). */
   page_size: positiveInt.max(100),
-  /** The list lacks the description: fetch the detail of every kept posting (one request each). */
+  /** The list lacks the description: fetch details for kept postings, subject to the failure limit. */
   fetch_details: z.boolean(),
+  /**
+   * Failures in a row allowed per board per sweep; after that, remaining details are not requested
+   * this sweep. Stored postings keep their stored version; new ones are retried next sweep.
+   */
+  max_consecutive_detail_failures: positiveInt.default(3),
   title_prefilter: atsTitlePrefilter,
 });
 

@@ -11,8 +11,10 @@ import {
 export interface AtsBoardState {
   etag: string | null;
   filterFingerprint: string | null;
-  /** Ids handed over or already stored and still listed beyond the cap, from the response `etag` belongs to. */
+  /** Ids handed over or still listed and already stored beyond the cap or with missing details. */
   externalIds: string[];
+  /** Failed details, including prior failures skipped at the last 200; requested last next time. */
+  detailRetryIds: string[];
 }
 
 export interface AtsBoardStore {
@@ -27,7 +29,7 @@ export function createDbAtsBoardStore(db: Db): AtsBoardStore {
   return {
     async load(key) {
       const row = await getAtsBoard(db, key);
-      return row ? { etag: row.etag, filterFingerprint: row.filterFingerprint, externalIds: row.externalIds } : null;
+      return row ? { etag: row.etag, filterFingerprint: row.filterFingerprint, externalIds: row.externalIds, detailRetryIds: row.detailRetryIds } : null;
     },
     record: (key, update) => recordAtsBoardCheck(db, key, update),
     touch: (channelId, externalIds) => touchRawPostings(db, { channelId, externalIds }),
@@ -62,6 +64,7 @@ export function createMemoryAtsBoardStore(): AtsBoardStore & {
           etag: update.etag ?? null,
           filterFingerprint: update.filterFingerprint ?? null,
           externalIds: [...(update.externalIds ?? [])],
+          detailRetryIds: [...(update.detailRetryIds ?? [])],
         });
         for (const externalId of update.externalIds ?? []) stored.add(externalId);
       }

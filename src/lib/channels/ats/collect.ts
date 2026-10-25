@@ -1,6 +1,6 @@
 import type { z } from "zod";
 
-import { ChannelError, isAbortError } from "@/lib/channels/errors";
+import { ChannelError, isAbortError, type ChannelErrorCode } from "@/lib/channels/errors";
 import type {
   Channel,
   ChannelContext,
@@ -18,6 +18,9 @@ import type { AtsBoardStore } from "./store";
 
 // Format version of the stored validator; bumping it discards ETags and id lists remembered under older semantics.
 const BOARD_STATE_VERSION = "2";
+
+// A host-level refusal stops remaining details immediately, independently of the failure threshold.
+const HOST_LEVEL = new Set<ChannelErrorCode>(["blocked", "auth_expired", "rate_limited", "budget_exceeded"]);
 
 export type AtsId = "greenhouse" | "lever" | "ashby" | "personio" | "smartrecruiters";
 
@@ -43,6 +46,15 @@ export interface ListedPosting {
   postedAt: Date | null;
 }
 
+export interface AtsDetails<Settings> {
+  /** False when settings turn details off; the stage is skipped and list entries are handed over. */
+  enabled(settings: Settings): boolean;
+  /** Completes a kept posting; null means it closed meanwhile (404). Throws ChannelError on failure. */
+  enrich(ctx: ChannelContext, posting: unknown, company: CompanyEntry, settings: Settings): Promise<unknown | null>;
+  /** Detail failures in a row after which the rest of this board's details are skipped (validated settings). */
+  maxConsecutiveFailures(settings: Settings): number;
+}
+
 export interface AtsAdapter<Settings extends { title_prefilter: AtsTitlePrefilterSettings }> {
   readonly id: AtsId;
   /** Validates the channel's block of sources.yaml. */
@@ -58,10 +70,10 @@ export interface AtsAdapter<Settings extends { title_prefilter: AtsTitlePrefilte
   /** null when a posting has no usable id (it cannot be stored). */
   describe(posting: unknown): ListedPosting | null;
   /**
-   * Completes a kept posting before it is stored (the board list lacks the description). Called once
-   * per kept posting, after the title prefilter and per-board cap. null drops the posting (it closed in the meantime).
+   * Optional detail stage after the title prefilter and cap. Detail failures preserve stored payloads
+   * and keep postings seen; retry state prioritizes new postings before stored ones and prior failures.
    */
-  enrich?(ctx: ChannelContext, posting: unknown, company: CompanyEntry, settings: Settings): Promise<unknown | null>;
+  details?: AtsDetails<Settings>;
   /** Turn a stored payload (see envelope.ts) into the normalized shape; `ChannelError("parse")` on bad input. */
   parse(payload: unknown): NormalizedPostingDraft;
   /** The HTML parts of a stored payload (`Channel.descriptionHtml`); `[]` when it does not match. */
@@ -79,8 +91,11 @@ export interface BoardReport {
   fetched: number;
   /** Postings kept by the title prefilter and within max_results. */
   kept: number;
-  /** Already-stored postings beyond the cap refreshed as seen. */
+  /** Already-stored postings beyond the cap or missing details refreshed as seen. */
   touched?: number;
+  duplicates?: number;
+  detailFailed?: number;
+  detailSkipped?: number;
   errorCode?: string;
 }
 
@@ -118,7 +133,7 @@ interface SweepContext<S extends { title_prefilter: AtsTitlePrefilterSettings }>
   maxPerBoard: number;
 }
 
-/** Fetch one board (conditionally), apply the prefilter, and remember what the next request needs. */
+/** Fetch and filter a board, tolerate classified detail failures, and remember what the next request needs. */
 export async function collectBoard<S extends { title_prefilter: AtsTitlePrefilterSettings }>(
   sweep: SweepContext<S>,
   company: CompanyEntry,
@@ -193,37 +208,107 @@ export async function collectBoard<S extends { title_prefilter: AtsTitlePrefilte
     }
     keptPostings.push({ info, posting });
   }
-  if (duplicates > 0) ctx.logger.warn("ats board listed duplicate ids", { board: company.token, count: duplicates });
   // Refresh sightings before details: a later detail failure must not hide still-listed stored jobs.
-  const present = store && overCapIds.length > 0 ? await store.touch(adapter.id, overCapIds) : [];
-  const returned: RawPostingInput[] = [];
-  let detailed = 0;
-  for (const { info, posting } of keptPostings) {
-    let complete: unknown = posting;
-    if (adapter.enrich) {
+  const overCapPresent = store && overCapIds.length > 0 ? await store.touch(adapter.id, overCapIds) : [];
+  const present = new Set(overCapPresent);
+  const oldRetryIds = new Set(state?.detailRetryIds ?? []);
+  const failed = new Set<string>();
+  const skipped = new Set<string>();
+  const closed = new Set<string>();
+  const completed = new Map<string, unknown>();
+  let firstFailure: ChannelError | null = null;
+  let stoppedBy: ChannelError | null = null;
+  const details = adapter.details;
+  if (details?.enabled(sweep.settings)) {
+    const storedIds = new Set(state?.externalIds ?? []);
+    const priority = (id: string): number => oldRetryIds.has(id) ? 2 : storedIds.has(id) ? 1 : 0;
+    const ordered = state
+      ? [...keptPostings].sort((a, b) => priority(a.info.externalId) - priority(b.info.externalId))
+      : keptPostings;
+    const limit = details.maxConsecutiveFailures(sweep.settings);
+    let consecutive = 0;
+    let requested = 0;
+    for (const { info, posting } of ordered) {
+      const id = info.externalId;
+      if (stoppedBy) {
+        skipped.add(id);
+        continue;
+      }
       ctx.signal.throwIfAborted();
-      if (detailed > 0) await ctx.throttle();
-      detailed += 1;
-      const enriched = await adapter.enrich(ctx, posting, company, sweep.settings);
-      if (enriched === null) continue;
-      complete = enriched;
+      if (requested > 0) await ctx.throttle();
+      requested += 1;
+      let complete: unknown;
+      try {
+        complete = await details.enrich(ctx, posting, company, sweep.settings);
+      } catch (error) {
+        if (isAbortError(error) || ctx.signal.aborted) throw error;
+        if (!(error instanceof ChannelError)) throw error;
+        failed.add(id);
+        firstFailure ??= error;
+        if (HOST_LEVEL.has(error.code)) {
+          stoppedBy = error;
+          continue;
+        }
+        consecutive += 1;
+        if (consecutive >= limit) stoppedBy = error;
+        continue;
+      }
+      consecutive = 0;
+      if (complete === null) {
+        closed.add(id);
+        continue;
+      }
+      completed.set(id, complete);
     }
+    // The last detail may have been cancelled while its body was read.
+    ctx.signal.throwIfAborted();
+  }
+  const detailMissing = [...failed, ...skipped];
+  if (store && detailMissing.length > 0) {
+    for (const id of await store.touch(adapter.id, detailMissing)) present.add(id);
+  }
+  const detailRetryIds = [...failed, ...[...oldRetryIds].filter((id) => skipped.has(id))];
+  const firstMissing = detailMissing.some((id) => !present.has(id) && !oldRetryIds.has(id));
+  const returned: RawPostingInput[] = [];
+  // Request priority never changes the order in which the board's postings are handed over.
+  for (const { info, posting } of keptPostings) {
+    if (failed.has(info.externalId) || skipped.has(info.externalId) || closed.has(info.externalId)) continue;
+    const complete = completed.has(info.externalId) ? completed.get(info.externalId) : posting;
     returned.push({ externalId: info.externalId, url: info.url, payload: wrapPosting(source, complete), postedAt: info.postedAt });
   }
+  if (detailMissing.length > 0) {
+    ctx.logger.warn("ats board details missing", {
+      board: company.token,
+      failed: failed.size,
+      skipped: skipped.size,
+      code: firstFailure?.code,
+      ...(stoppedBy ? { stoppedBy: stoppedBy.code } : {}),
+    });
+  }
   if (unusable > 0) ctx.logger.warn("ats board postings without an id skipped", { board: company.token, count: unusable });
-  if (overCapIds.length > 0) ctx.logger.warn("ats board capped at max_results", { board: company.token, dropped: overCapIds.length, cap: sweep.maxPerBoard, touched: present.length });
+  if (overCapIds.length > 0) ctx.logger.warn("ats board capped at max_results", { board: company.token, dropped: overCapIds.length, cap: sweep.maxPerBoard, touched: overCapPresent.length });
   if (!fetched.complete) ctx.logger.warn("ats board answered with a partial response", { board: company.token });
 
   await recordQuietly(ctx, store, key, {
     status: "ok",
-    etag: fetched.etag,
+    etag: firstMissing ? null : fetched.etag,
     filterFingerprint: fingerprint,
     externalIds: [...new Set([...returned.map((p) => p.externalId), ...present])],
+    detailRetryIds,
     total: listed.length - duplicates,
     kept: keptPostings.length,
   });
   return {
-    report: { ...base, outcome: "changed", fetched: listed.length, kept: keptPostings.length, ...(present.length > 0 ? { touched: present.length } : {}) },
+    report: {
+      ...base,
+      outcome: "changed",
+      fetched: listed.length,
+      kept: keptPostings.length,
+      ...(present.size > 0 ? { touched: present.size } : {}),
+      ...(duplicates > 0 ? { duplicates } : {}),
+      ...(failed.size > 0 ? { detailFailed: failed.size } : {}),
+      ...(skipped.size > 0 ? { detailSkipped: skipped.size } : {}),
+    },
     postings: returned,
   };
 }
@@ -241,8 +326,9 @@ function parseSettings<S>(schema: z.ZodType<S>, extra: unknown, id: string): S {
  * An ATS channel: one sweep over every enabled board of `sources.yaml (ats_boards)` that uses this ATS. The
  * framework hands it the single keyword-less sweep query (`usesQueries: false`).
  *
- * C2 at board level: a board that fails (404, 5xx after retries, bad shape) does not stop the
- * others; the sweep only fails — with the first board's error — when every attempted board failed.
+ * A board whose list fails (404, 5xx after retries, bad shape) does not stop the others; the sweep
+ * only fails with the first board's error when every attempted board failed. Classified detail
+ * failures leave the board healthy, preserve stored payloads and sightings, and update retry state.
  */
 export function createAtsChannel<S extends { title_prefilter: AtsTitlePrefilterSettings }>(
   adapter: AtsAdapter<S>,

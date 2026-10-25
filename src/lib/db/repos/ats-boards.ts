@@ -26,6 +26,7 @@ export interface AtsBoardUpdate {
   etag?: string | null;
   filterFingerprint?: string;
   externalIds?: readonly string[];
+  detailRetryIds?: readonly string[];
   total?: number;
   kept?: number;
   errorCode?: string | null;
@@ -33,7 +34,7 @@ export interface AtsBoardUpdate {
 }
 
 /**
- * Record the outcome of one board check. `ok` replaces the validator, fingerprint, ids and counts
+ * Record the outcome of one board check. `ok` replaces the validator, fingerprint, ids, detail retries and counts
  * (a response without a usable ETag clears the old one); `not_modified` and `error` only stamp the
  * check, so a failing or unchanged board keeps its last known state (C2).
  */
@@ -44,6 +45,7 @@ export async function recordAtsBoardCheck(db: Db, key: AtsBoardKey, update: AtsB
       etag: update.etag ?? null,
       filterFingerprint: update.filterFingerprint ?? null,
       externalIds: [...(update.externalIds ?? [])],
+      detailRetryIds: [...(update.detailRetryIds ?? [])],
       lastStatus: "ok",
       lastErrorCode: null,
       lastCheckedAt: checkedAt,
