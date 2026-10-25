@@ -78,27 +78,27 @@ export async function recordAtsBoardCheck(db: Db, key: AtsBoardKey, update: AtsB
 }
 
 /**
- * A board answered 304: its postings are still open. Refresh `fetched_at` of the raw postings of
+ * A board still lists these postings (on a 200 or 304). Refresh `fetched_at` of the raw postings of
  * `channelId` with these external ids, so the lifecycle (last seen) does not age them out. Returns
- * how many rows were refreshed (fewer than `externalIds.length` means some were never stored).
+ * the external ids that exist and were refreshed; ids that were never stored are excluded.
  */
 export async function touchRawPostings(
   db: Db,
   input: { channelId: string; externalIds: readonly string[]; at?: Date },
-): Promise<number> {
-  if (input.externalIds.length === 0) return 0;
+): Promise<string[]> {
+  if (input.externalIds.length === 0) return [];
   const at = input.at ?? sql`now()`;
-  let touched = 0;
+  const present: string[] = [];
   const ids = [...input.externalIds];
   for (let i = 0; i < ids.length; i += 1000) {
     const rows = await db
       .update(rawPostings)
       .set({ fetchedAt: at })
       .where(and(eq(rawPostings.channelId, input.channelId), inArray(rawPostings.externalId, ids.slice(i, i + 1000))))
-      .returning({ id: rawPostings.id });
-    touched += rows.length;
+      .returning({ externalId: rawPostings.externalId });
+    present.push(...rows.map((row) => row.externalId));
   }
-  return touched;
+  return present;
 }
 
 /** Number of stored boards (diagnostics and tests). */

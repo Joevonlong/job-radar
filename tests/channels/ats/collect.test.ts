@@ -35,6 +35,7 @@ describe("greenhouse sweep", () => {
     expect(lastLog(logs, "ats board")).toEqual([
       { channel: "greenhouse", company: "Example Labs", board: "examplelabs", outcome: "changed", fetched: 6, kept: 4 },
     ]);
+    expect(lastLog(logs, "ats board listed duplicate ids")).toEqual([]);
     for (const p of postings) expect(rawPostingInputSchema.safeParse(p).success).toBe(true);
     // C1: the posting is stored verbatim inside the envelope
     const verbatim = (fixtureJson("greenhouse-board.json") as { jobs: unknown[] }).jobs[0];
@@ -58,13 +59,80 @@ describe("greenhouse sweep", () => {
     expect(await run([], (b) => { b.title_prefilter = { enabled: true, include_terms: ["Account Executive"], exclude_terms: [] }; })).toHaveLength(5);
   });
 
-  it("caps the postings kept per board at max_results", async () => {
+  it.each([2, 1, 0])("caps the postings kept per board at max_results with %i over-cap ids already stored", async (storedCount) => {
     const { fetch } = routedFetch([[GH_URL, response(200, fixtureJson("greenhouse-board.json"))]]);
     const channels = atsChannelsWith("greenhouse", (b) => { b.max_results = 2; });
     const { ctx, query, logs } = atsContext("greenhouse", fetch, { channels });
-    const postings = await greenhouse().channel.collect(query, ctx);
+    const { channel, store } = greenhouse();
+    const overCap = GH_KEPT.slice(2);
+    const present = overCap.slice(0, storedCount);
+    for (const id of present) store.stored.add(id);
+
+    const postings = await channel.collect(query, ctx);
+
     expect(postings.map((p) => p.externalId)).toEqual(GH_KEPT.slice(0, 2));
-    expect(lastLog(logs, "ats board capped at max_results")).toEqual([{ channel: "greenhouse", board: "examplelabs", dropped: 2, cap: 2 }]);
+    expect(store.touched).toEqual([overCap]);
+    expect(store.checks.at(-1)?.update).toMatchObject({ status: "ok", externalIds: [...GH_KEPT.slice(0, 2), ...present], total: 6, kept: 2 });
+    expect(lastLog(logs, "ats board capped at max_results")).toEqual([{ channel: "greenhouse", board: "examplelabs", dropped: 2, cap: 2, touched: storedCount }]);
+    expect(lastLog(logs, "ats board")).toEqual([
+      { channel: "greenhouse", company: "Example Labs", board: "examplelabs", outcome: "changed", fetched: 6, kept: 2, ...(storedCount > 0 ? { touched: storedCount } : {}) },
+    ]);
+  });
+
+  it("does not count an already-stored posting rejected by the title prefilter as seen", async () => {
+    const { channel, store } = greenhouse();
+    const rejected = "6186419004";
+    store.stored.add(rejected);
+    for (const id of GH_KEPT.slice(2)) store.stored.add(id);
+    const channels = atsChannelsWith("greenhouse", (b) => { b.max_results = 2; });
+    const { ctx, query } = atsContext("greenhouse", routedFetch([[GH_URL, response(200, fixtureJson("greenhouse-board.json"))]]).fetch, { channels });
+
+    await channel.collect(query, ctx);
+
+    expect(store.touched).toEqual([GH_KEPT.slice(2)]);
+    expect(store.touched.flat()).not.toContain(rejected);
+    expect(store.states.get("greenhouse:examplelabs")?.externalIds).toEqual(GH_KEPT);
+    expect(store.states.get("greenhouse:examplelabs")?.externalIds).not.toContain(rejected);
+  });
+
+  it("hands over a repeated id once and keeps its first occurrence", async () => {
+    const body = { jobs: [{ id: 7, title: "AI Engineer" }, { id: 7, title: "Machine Learning Engineer" }, { id: 8, title: "AI Engineer" }] };
+    const { ctx, query, logs } = atsContext("greenhouse", routedFetch([[GH_URL, response(200, body)]]).fetch);
+    const { channel, store } = greenhouse();
+
+    const postings = await channel.collect(query, ctx);
+
+    expect(postings.map((p) => p.externalId)).toEqual(["7", "8"]);
+    expect(postings[0]?.payload).toMatchObject({ posting: { title: "AI Engineer" } });
+    expect(store.checks.at(-1)?.update).toMatchObject({ total: 2, kept: 2, externalIds: ["7", "8"] });
+    expect(lastLog(logs, "ats board")[0]).toMatchObject({ fetched: 3, kept: 2 });
+    expect(logs.filter((l) => l.message === "ats board listed duplicate ids")).toMatchObject([
+      { level: "warn", fields: { channel: "greenhouse", board: "examplelabs", count: 1 } },
+    ]);
+  });
+
+  it("deduplicates before filtering and capping, while still counting postings without ids", async () => {
+    const body = { jobs: [
+      { id: 7, title: "Account Executive" },
+      { id: 7, title: "AI Engineer" },
+      { id: 8, title: "AI Engineer" },
+      { id: 9, title: "AI Engineer" },
+      { id: 9, title: "AI Engineer" },
+      { title: "AI Engineer" },
+    ] };
+    const channels = atsChannelsWith("greenhouse", (b) => { b.max_results = 1; });
+    const { ctx, query, logs } = atsContext("greenhouse", routedFetch([[GH_URL, response(200, body)]]).fetch, { channels });
+    const { channel, store } = greenhouse();
+    store.stored.add("7");
+    store.stored.add("9");
+
+    const postings = await channel.collect(query, ctx);
+
+    expect(postings.map((p) => p.externalId)).toEqual(["8"]);
+    expect(store.touched).toEqual([["9"]]);
+    expect(store.checks.at(-1)?.update).toMatchObject({ total: 4, kept: 1, externalIds: ["8", "9"] });
+    expect(lastLog(logs, "ats board listed duplicate ids")).toEqual([{ channel: "greenhouse", board: "examplelabs", count: 2 }]);
+    expect(lastLog(logs, "ats board capped at max_results")).toEqual([{ channel: "greenhouse", board: "examplelabs", dropped: 1, cap: 1, touched: 1 }]);
   });
 
   it("only visits enabled boards of its own ATS, pausing between boards", async () => {
@@ -124,9 +192,11 @@ describe("conditional requests (ETag)", () => {
     const first = atsContext("greenhouse", routedFetch([[GH_URL, ok()]]).fetch);
     await channel.collect(first.query, first.ctx);
 
-    const second = atsContext("greenhouse", routedFetch([[GH_URL, response(304)]]).fetch);
+    const calls = routedFetch([[GH_URL, response(304)]]);
+    const second = atsContext("greenhouse", calls.fetch);
     const postings = await channel.collect(second.query, second.ctx); // does not throw
     expect(postings).toEqual([]);
+    expect(calls.requests).toHaveLength(1);
     expect(store.touched.at(-1)).toEqual(GH_KEPT); // still seen, so the lifecycle must not age them out
     expect(store.checks.at(-1)).toMatchObject({ update: { status: "not_modified" } });
     expect(store.states.get("greenhouse:examplelabs")?.etag).toBe('W/"v1"'); // validator kept
@@ -134,6 +204,24 @@ describe("conditional requests (ETag)", () => {
       { channel: "greenhouse", company: "Example Labs", board: "examplelabs", outcome: "not_modified", fetched: 0, kept: 0 },
     ]);
     expect(lastLog(second.logs, "ats sweep done")[0]).toMatchObject({ boards: 1, failedBoards: 0 });
+  });
+
+  it.each([2, 1, 0])("keeps %i stored over-cap ids seen on a later 304 without refetching", async (storedCount) => {
+    const { channel, store } = greenhouse();
+    const present = GH_KEPT.slice(2, 2 + storedCount);
+    for (const id of present) store.stored.add(id);
+    const channels = atsChannelsWith("greenhouse", (b) => { b.max_results = 2; });
+    const calls = routedFetch([[GH_URL, (req) => req.headers["If-None-Match"] ? response(304) : ok()]]);
+    const first = atsContext("greenhouse", calls.fetch, { channels });
+    await channel.collect(first.query, first.ctx);
+
+    const second = atsContext("greenhouse", calls.fetch, { channels });
+    expect(await channel.collect(second.query, second.ctx)).toEqual([]);
+
+    expect(calls.requests).toHaveLength(2);
+    expect(calls.requests[1]?.headers["If-None-Match"]).toBe('W/"v1"');
+    expect(store.touched.at(-1)).toEqual([...GH_KEPT.slice(0, 2), ...present]);
+    expect(store.checks.at(-1)?.update).toEqual({ status: "not_modified" });
   });
 
   it("a 304 in a sweep with other boards does not stop them", async () => {
@@ -180,6 +268,22 @@ describe("conditional requests (ETag)", () => {
     expect(calls.requests.map((r) => "If-None-Match" in r.headers)).toEqual([true, false]);
     expect(postings.map((p) => p.externalId)).toEqual(GH_KEPT);
     expect(lastLog(second.logs, "ats board unchanged but stored postings are missing; refetching")).toHaveLength(1);
+  });
+
+  it("discards validators remembered under the old fingerprint format", async () => {
+    const { channel, store } = greenhouse();
+    const first = atsContext("greenhouse", routedFetch([[GH_URL, ok()]]).fetch);
+    await channel.collect(first.query, first.ctx);
+    const state = store.states.get("greenhouse:examplelabs");
+    expect(state?.filterFingerprint).toMatch(/^2:/);
+    if (!state?.filterFingerprint) throw new Error("missing board fingerprint");
+    store.states.set("greenhouse:examplelabs", { ...state, filterFingerprint: state.filterFingerprint.slice(2) });
+
+    const calls = routedFetch([[GH_URL, ok()]]);
+    const second = atsContext("greenhouse", calls.fetch);
+    expect((await channel.collect(second.query, second.ctx)).map((p) => p.externalId)).toEqual(GH_KEPT);
+    expect(calls.requests).toHaveLength(1);
+    expect(calls.requests[0]?.headers).not.toHaveProperty("If-None-Match");
   });
 
   it("does not keep a validator from a partial (206) response", async () => {

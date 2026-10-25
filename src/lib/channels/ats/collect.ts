@@ -16,6 +16,9 @@ import { wrapPosting, type AtsSource } from "./envelope";
 import { createTitlePrefilter, type TitlePrefilter } from "./prefilter";
 import type { AtsBoardStore } from "./store";
 
+// Format version of the stored validator; bumping it discards ETags and id lists remembered under older semantics.
+const BOARD_STATE_VERSION = "2";
+
 export type AtsId = "greenhouse" | "lever" | "ashby" | "personio" | "smartrecruiters";
 
 /** The parts of the config an ATS sweep reads. */
@@ -56,7 +59,7 @@ export interface AtsAdapter<Settings extends { title_prefilter: AtsTitlePrefilte
   describe(posting: unknown): ListedPosting | null;
   /**
    * Completes a kept posting before it is stored (the board list lacks the description). Called once
-   * per kept posting, after the title prefilter. null drops the posting (it closed in the meantime).
+   * per kept posting, after the title prefilter and per-board cap. null drops the posting (it closed in the meantime).
    */
   enrich?(ctx: ChannelContext, posting: unknown, company: CompanyEntry, settings: Settings): Promise<unknown | null>;
   /** Turn a stored payload (see envelope.ts) into the normalized shape; `ChannelError("parse")` on bad input. */
@@ -74,8 +77,10 @@ export interface BoardReport {
   outcome: BoardOutcome;
   /** Postings the board returned (0 for a 304: nothing was fetched). */
   fetched: number;
-  /** Postings kept by the title prefilter (and the per-board cap). */
+  /** Postings kept by the title prefilter and within max_results. */
   kept: number;
+  /** Already-stored postings beyond the cap refreshed as seen. */
+  touched?: number;
   errorCode?: string;
 }
 
@@ -121,7 +126,7 @@ export async function collectBoard<S extends { title_prefilter: AtsTitlePrefilte
   const { adapter, ctx, store, prefilter } = sweep;
   const key = { ats: adapter.id, token: company.token };
   const url = adapter.boardUrl(company, sweep.settings);
-  const fingerprint = `${prefilter.fingerprint(company.name)}:${sweep.maxPerBoard}`;
+  const fingerprint = `${BOARD_STATE_VERSION}:${prefilter.fingerprint(company.name)}:${sweep.maxPerBoard}`;
   const base = { company: company.name, board: company.token };
 
   const state = store ? await store.load(key) : null;
@@ -138,7 +143,7 @@ export async function collectBoard<S extends { title_prefilter: AtsTitlePrefilte
     // out postings by last-seen time). If any of them never reached raw_postings (an earlier cycle
     // died between our request and the store), a 304 would hide them for good: ask again, unconditionally.
     const present = await store.touch(adapter.id, state.externalIds);
-    if (present >= state.externalIds.length) {
+    if (present.length >= state.externalIds.length) {
       await recordQuietly(ctx, store, key, { status: "not_modified" });
       return { report: { ...base, outcome: "not_modified", fetched: 0, kept: 0 }, postings: [] };
     }
@@ -165,23 +170,33 @@ export async function collectBoard<S extends { title_prefilter: AtsTitlePrefilte
     ...(company.region ? { region: company.region } : {}),
   };
   const keptPostings: Array<{ info: ListedPosting; posting: unknown }> = [];
+  const listedIds = new Set<string>();
+  const overCapIds: string[] = [];
   let unusable = 0;
-  let truncated = 0;
+  let duplicates = 0;
   for (const posting of listed) {
     const info = adapter.describe(posting);
     if (!info) {
       unusable += 1;
       continue;
     }
+    if (listedIds.has(info.externalId)) {
+      duplicates += 1;
+      continue;
+    }
+    listedIds.add(info.externalId);
     // a posting without a title cannot be judged: keep it, the pipeline flags it parse_failed
     if (info.title !== null && !prefilter.decide(info.title, company.name).keep) continue;
     if (keptPostings.length >= sweep.maxPerBoard) {
-      truncated += 1;
+      overCapIds.push(info.externalId);
       continue;
     }
     keptPostings.push({ info, posting });
   }
-  const kept: RawPostingInput[] = [];
+  if (duplicates > 0) ctx.logger.warn("ats board listed duplicate ids", { board: company.token, count: duplicates });
+  // Refresh sightings before details: a later detail failure must not hide still-listed stored jobs.
+  const present = store && overCapIds.length > 0 ? await store.touch(adapter.id, overCapIds) : [];
+  const returned: RawPostingInput[] = [];
   let detailed = 0;
   for (const { info, posting } of keptPostings) {
     let complete: unknown = posting;
@@ -193,21 +208,24 @@ export async function collectBoard<S extends { title_prefilter: AtsTitlePrefilte
       if (enriched === null) continue;
       complete = enriched;
     }
-    kept.push({ externalId: info.externalId, url: info.url, payload: wrapPosting(source, complete), postedAt: info.postedAt });
+    returned.push({ externalId: info.externalId, url: info.url, payload: wrapPosting(source, complete), postedAt: info.postedAt });
   }
   if (unusable > 0) ctx.logger.warn("ats board postings without an id skipped", { board: company.token, count: unusable });
-  if (truncated > 0) ctx.logger.warn("ats board capped at max_results", { board: company.token, dropped: truncated, cap: sweep.maxPerBoard });
+  if (overCapIds.length > 0) ctx.logger.warn("ats board capped at max_results", { board: company.token, dropped: overCapIds.length, cap: sweep.maxPerBoard, touched: present.length });
   if (!fetched.complete) ctx.logger.warn("ats board answered with a partial response", { board: company.token });
 
   await recordQuietly(ctx, store, key, {
     status: "ok",
     etag: fetched.etag,
     filterFingerprint: fingerprint,
-    externalIds: kept.map((k) => k.externalId),
-    total: listed.length,
-    kept: kept.length,
+    externalIds: [...new Set([...returned.map((p) => p.externalId), ...present])],
+    total: listed.length - duplicates,
+    kept: keptPostings.length,
   });
-  return { report: { ...base, outcome: "changed", fetched: listed.length, kept: kept.length }, postings: kept };
+  return {
+    report: { ...base, outcome: "changed", fetched: listed.length, kept: keptPostings.length, ...(present.length > 0 ? { touched: present.length } : {}) },
+    postings: returned,
+  };
 }
 
 function parseSettings<S>(schema: z.ZodType<S>, extra: unknown, id: string): S {

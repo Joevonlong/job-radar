@@ -186,15 +186,16 @@ export const atsBoards = pgTable(
     etag: text("etag"),
     /** Hash of everything that decided which postings were kept; a changed value invalidates the ETag. */
     filterFingerprint: text("filter_fingerprint"),
-    /** External ids of the postings kept from the response `etag` belongs to (raw_postings.external_id). */
+    /** Ids handed over from the last 200 plus already-stored ids the board still listed beyond the cap (raw_postings.external_id). */
     externalIds: text("external_ids").array().notNull().default(sql`'{}'::text[]`),
     lastStatus: text("last_status").notNull(),
     lastErrorCode: text("last_error_code"),
     lastCheckedAt: timestamptz("last_checked_at").notNull().defaultNow(),
     /** Last time the board answered with new content (200). */
     lastChangedAt: timestamptz("last_changed_at"),
-    /** Postings the board returned / kept by the title prefilter, at the last 200. */
+    /** Distinct postings listed at the last 200. */
     lastTotal: integer("last_total").notNull().default(0),
+    /** Postings that passed the title prefilter and fit within the cap at the last 200. */
     lastKept: integer("last_kept").notNull().default(0),
     /** Checks in a row that failed (reset by a 200 or 304). Display only: it never stops a board or a channel. */
     consecutiveFailures: integer("consecutive_failures").notNull().default(0),

@@ -267,7 +267,7 @@ sources:
     enabled: true
     monthly_budget_usd: 0
     throttle: { min_delay_ms: 300, max_delay_ms: 1000 }
-    max_results: 500 # max results kept per board (after prefiltering)
+    max_results: 500 # max postings stored per board per run (after prefiltering); stored jobs beyond it that the board still lists count as seen
     api_base_url: "https://boards-api.greenhouse.io"
     # Title prefilter: a board returns all its open jobs; only those whose title matches a search.yaml keyword (or whose company is in watched_companies in interests.yaml) are stored.
     # include_terms: extra title words to keep besides the search.yaml keywords; exclude_terms: title words that drop a job (watched companies are exempt). Words match as whole words, case-insensitive.
@@ -281,7 +281,7 @@ sources:
     enabled: true
     monthly_budget_usd: 0
     throttle: { min_delay_ms: 300, max_delay_ms: 1000 }
-    max_results: 500 # max results kept per board (after prefiltering)
+    max_results: 500 # max postings stored per board per run (after prefiltering); stored jobs beyond it that the board still lists count as seen
     api_base_url: "https://api.lever.co"
     # Host used for boards with region: eu in ats_boards
     eu_api_base_url: "https://api.eu.lever.co"
@@ -295,7 +295,7 @@ sources:
     enabled: true
     monthly_budget_usd: 0
     throttle: { min_delay_ms: 300, max_delay_ms: 1000 }
-    max_results: 500 # max results kept per board (after prefiltering)
+    max_results: 500 # max postings stored per board per run (after prefiltering); stored jobs beyond it that the board still lists count as seen
     api_base_url: "https://api.ashbyhq.com" # GET /posting-api/job-board/{token}
     include_compensation: true # include the salary range (salary field)
     title_prefilter:
@@ -307,7 +307,7 @@ sources:
     enabled: true
     monthly_budget_usd: 0
     throttle: { min_delay_ms: 300, max_delay_ms: 1000 }
-    max_results: 500
+    max_results: 500 # max postings stored per board per run (after prefiltering); stored jobs beyond it that the board still lists count as seen
     # Company careers site; {token} is replaced with the ats_boards token (the company's Personio subdomain); the job list is at <site>/xml
     api_base_url: "https://{token}.jobs.personio.de"
     language: en # en | de: the ?language= param of the xml; if the company has no version in that language, Personio returns its default language
@@ -320,7 +320,7 @@ sources:
     enabled: true
     monthly_budget_usd: 0
     throttle: { min_delay_ms: 300, max_delay_ms: 1000 }
-    max_results: 500
+    max_results: 500 # max postings stored per board per run (after prefiltering); stored jobs beyond it that the board still lists count as seen
     api_base_url: "https://api.smartrecruiters.com" # GET /v1/companies/{token}/postings (token is case-sensitive)
     # country: de # only jobs in this country (big companies' boards are global); unset = the market's country, empty string = all
     page_size: 100 # per-page size of the list (API max 100)

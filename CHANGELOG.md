@@ -107,6 +107,9 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **Company career board scans:** `max_results` no longer hides stored jobs that the board still lists, which could
+  mark them possibly closed after a week. The registry's "kept" count now means postings that passed the prefilter and
+  fit within the cap. **Upgrade:** the first run after upgrading re-reads every board once (cached ETags are discarded).
 - **A job marked "no longer accepting applications" stays marked when its posting is parsed again or another channel
   merges into it:** the pipeline reset such a job to active (and made it eligible for scoring and push) whenever a
   source returned a changed posting or a new channel's copy. It now applies the same rule as the "seen again" step of
