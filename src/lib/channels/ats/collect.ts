@@ -162,7 +162,15 @@ export async function collectBoard<S extends { title_prefilter: AtsTitlePrefilte
     const present = await store.touch(adapter.id, state.externalIds);
     if (present.length >= state.externalIds.length) {
       await recordQuietly(ctx, store, key, { status: "not_modified" });
-      return { report: { ...base, outcome: "not_modified", fetched: 0, kept: 0 }, postings: [] };
+      const count = state.detailRetryIds.length;
+      if (count > 0) ctx.logger.warn("ats board still has unresolved details", { board: company.token, count });
+      return {
+        report: { ...base, outcome: "not_modified", fetched: 0, kept: 0 },
+        postings: [],
+        ...(count > 0 ? {
+          detailFailure: new ChannelError("unknown", `${count} posting details are still missing from an earlier sweep`, { retryable: false }),
+        } : {}),
+      };
     }
     ctx.logger.warn("ats board unchanged but stored postings are missing; refetching", { board: company.token });
     etag = null;
