@@ -6,10 +6,11 @@ import { createStepstoneChannel } from "@/lib/channels/stepstone";
 import type { FetchLike } from "@/lib/channels/http";
 import { ChannelRegistry } from "@/lib/channels/registry";
 import { registerBuiltinCycleSteps } from "@/lib/cycle/builtin-steps";
-import { runCycle } from "@/lib/cycle/run-cycle";
+import { runCycle, type RunCycleOptions } from "@/lib/cycle/run-cycle";
 import { resetCycleSteps } from "@/lib/cycle/steps";
 import { closeDb, getDb, listJobSources, listRawPostingsForChannel, listRunsForCycle, schema } from "@/lib/db";
 import { runMigrations } from "@/lib/db/migrate";
+import { createReadOnlyDb, type ReadOnlyDb } from "@/lib/db/read-only-client";
 import type { PipelineResult } from "@/lib/pipeline";
 
 import { channelsWith, shippedSearch } from "../channels/helpers";
@@ -19,10 +20,12 @@ import { config, quietLogger } from "../cycle/helpers";
 
 const url = inject("testDatabaseUrl");
 const NOW = new Date("2026-10-07T12:00:00Z");
+let ro: ReadOnlyDb;
 
 beforeAll(async () => {
   process.env.DATABASE_URL = url;
   await runMigrations();
+  ro = createReadOnlyDb({ url });
 });
 
 const resetTables = () => getDb().execute(sql`truncate table jobs, companies, raw_postings, runs, cycles, channels restart identity cascade`);
@@ -41,6 +44,7 @@ afterEach(() => {
 });
 
 afterAll(async () => {
+  await ro?.close();
   await resetTables();
   await closeDb();
 });
@@ -70,7 +74,7 @@ function boards(calls: string[]): FetchLike {
   };
 }
 
-function cycle(fetch: FetchLike, channelIds: string[]) {
+function cycle(fetch: FetchLike, channelIds: string[], extra: Partial<RunCycleOptions> = {}) {
   const registry = new ChannelRegistry();
   registry.register(createStepstoneChannel({ now: () => NOW }));
   registry.register(createXingChannel({ now: () => NOW }));
@@ -82,7 +86,7 @@ function cycle(fetch: FetchLike, channelIds: string[]) {
     }
   });
   const search = { ...shippedSearch(), keyword_groups: { engineering: ["AI Engineer"] }, locations: ["Berlin"], remote_scope: "none" as const };
-  return runCycle("manual", { registry, config: { ...config(), channels, search }, logger: quietLogger, sleep: async () => {}, channelIds, fetch });
+  return runCycle("manual", { registry, config: { ...config(), channels, search }, logger: quietLogger, sleep: async () => {}, channelIds, fetch, ...extra });
 }
 
 describe("runCycle with the stepstone and xing channels", () => {
@@ -142,5 +146,29 @@ describe("runCycle with the stepstone and xing channels", () => {
     expect(runs.find((r) => r.channelId === "xing")).toMatchObject({ status: "succeeded", fetched: 2 });
     expect(calls.some((c) => c.startsWith("www.xing.com"))).toBe(true);
     expect(await listRawPostingsForChannel(getDb(), "stepstone")).toHaveLength(0);
+  });
+
+  it("a dry run reuses stored StepStone details and only requests details that are still missing", async () => {
+    const calls: string[] = [];
+    await cycle(boards(calls), ["stepstone"]);
+    const before = await listRawPostingsForChannel(getDb(), "stepstone");
+    expect(before).toHaveLength(5);
+    const missing = await getDb().execute<{ external_id: string }>(sql`
+      select external_id from raw_postings
+      where channel_id = 'stepstone' and payload_json -> 'detail' = 'null'::jsonb
+      order by external_id`);
+    const missingIds = missing.map((row) => row.external_id);
+    expect(missingIds).toEqual(["90000002", "90000008"]);
+    const storedIds = before.map((row) => row.externalId).filter((id) => !missingIds.includes(id));
+    expect(storedIds).toHaveLength(3);
+    calls.length = 0;
+
+    await cycle(boards(calls), ["stepstone"], { dryRun: true, db: ro.db });
+
+    expect(calls.filter((call) => call.startsWith("www.stepstone.de/jobs/"))).toHaveLength(1);
+    const detailIds = calls.filter((call) => call.includes("/stellenangebote--")).map((call) => /-(\d+)-inline\.html$/.exec(call)?.[1]).sort();
+    expect(detailIds).toEqual(missingIds);
+    for (const id of storedIds) expect(detailIds).not.toContain(id);
+    expect(await listRawPostingsForChannel(getDb(), "stepstone")).toEqual(before);
   });
 });
