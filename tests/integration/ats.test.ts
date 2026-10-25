@@ -317,6 +317,157 @@ describe("runCycle with the greenhouse channel", () => {
 
 describe("runCycle with the smartrecruiters channel", () => {
   it.each([
+    { name: "[regression guard] persists retry ids when the only board loses every detail and the run fails", mixed: false },
+    { name: "[regression guard] persists retry ids and healthy postings when a mixed round succeeds", mixed: true },
+  ])("$name", async ({ mixed }) => {
+    const db = getDb();
+    const boardA = company({ name: "First Labs", ats: "smartrecruiters", token: "FirstLabs" });
+    const boardB = company({ name: "Second Labs", ats: "smartrecruiters", token: "SecondLabs" });
+    const baseA = "https://api.smartrecruiters.com/v1/companies/FirstLabs/postings";
+    const baseB = "https://api.smartrecruiters.com/v1/companies/SecondLabs/postings";
+    const postingsA = ["a1", "a2"].map((id) => ({ id, name: "AI Engineer", company: { identifier: boardA.token } }));
+    const postingB = { id: "b-present", name: "AI Engineer", company: { identifier: boardB.token } };
+    const { fetch, requests } = routedFetch([
+      [`${baseA}?`, response(200, { totalFound: 2, content: postingsA }, { ETag: 'W/"a"' })],
+      [`${baseA}/`, response(500, "detail unavailable")],
+      [`${baseB}?`, response(200, { totalFound: 1, content: [postingB] })],
+      [`${baseB}/b-present`, response(200, postingB)],
+    ]);
+
+    const result = await cycle(fetch, {
+      smartrecruitersBoards: mixed ? [boardA, boardB] : [boardA], at: new Date("2026-10-07T12:00:00Z"),
+    });
+    if (result.cycleId === null) throw new Error("missing cycle");
+    const runs = await listRunsForCycle(db, result.cycleId);
+    expect(result.status).toBe(mixed ? "succeeded" : "failed");
+    expect(runs).toHaveLength(1);
+    expect(runs[0]).toMatchObject({
+      channelId: "smartrecruiters", status: mixed ? "succeeded" : "failed", interrupted: false,
+      errorCode: mixed ? null : "network", fetched: mixed ? 1 : 0, newCount: mixed ? 1 : 0,
+    });
+    if (!mixed) expect(runs[0]?.error).toContain("HTTP 500");
+    const rememberedA = await getAtsBoard(db, { ats: "smartrecruiters", token: boardA.token });
+    expect(rememberedA).toMatchObject({
+      lastStatus: "ok", lastErrorCode: null, consecutiveFailures: 0,
+      etag: null, externalIds: [], detailRetryIds: ["a1", "a2"], lastTotal: 2, lastKept: 2,
+    });
+    expect(rememberedA?.lastOkAt).toBeInstanceOf(Date);
+    const stored = await listRawPostingsForChannel(db, "smartrecruiters");
+    if (mixed) {
+      expect(stored).toMatchObject([{
+        externalId: "b-present", runId: runs[0]?.id,
+        payloadJson: { source: { ats: "smartrecruiters", token: boardB.token, companyName: boardB.name }, posting: postingB },
+      }]);
+      expect(await getAtsBoard(db, { ats: "smartrecruiters", token: boardB.token })).toMatchObject({
+        lastStatus: "ok", externalIds: ["b-present"], detailRetryIds: [],
+      });
+    } else {
+      expect(stored).toEqual([]);
+      expect(await getAtsBoard(db, { ats: "smartrecruiters", token: boardB.token })).toBeNull();
+    }
+    expect(requests.map((r) => r.url)).toEqual([
+      `${baseA}?limit=100&offset=0&country=de`, `${baseA}/a1`, `${baseA}/a2`,
+      ...(mixed ? [`${baseB}?limit=100&offset=0&country=de`, `${baseB}/b-present`] : []),
+    ]);
+  });
+
+  it.each([
+    { name: "keeps a stale job live through two 304 rounds with unresolved stored details on another board", stored: true },
+    { name: "keeps a stale job live after two failed 200 reads and a 304 for never-stored details on another board", stored: false },
+  ])("$name", async ({ stored }) => {
+    const db = getDb();
+    const old = new Date("2026-09-07T12:00:00Z");
+    const boardA = company({ name: "First Labs", ats: "smartrecruiters", token: "FirstLabs" });
+    const boardB = company({ name: "Second Labs", ats: "smartrecruiters", token: "SecondLabs" });
+    const postingA = { id: "a1", name: "AI Engineer", company: { identifier: boardA.token } };
+    const payloadA = { source: { ats: "smartrecruiters", token: boardA.token, companyName: boardA.name }, posting: postingA };
+    const stalePayload = {
+      source: { ats: "smartrecruiters", token: boardB.token, companyName: boardB.name },
+      posting: { id: "b-stale", name: "AI Engineer", company: { identifier: boardB.token } },
+    };
+    await db.insert(schema.channels).values({ id: "smartrecruiters", family: "ats", kind: "ats" });
+    await upsertRawPostings(db, {
+      channelId: "smartrecruiters", runId: null, fetchedAt: old,
+      items: [
+        { externalId: "b-stale", url: null, payload: stalePayload },
+        ...(stored ? [{ externalId: "a1", url: null, payload: payloadA }] : []),
+      ],
+    });
+    const raw = (await listRawPostingsForChannel(db, "smartrecruiters")).find((p) => p.externalId === "b-stale");
+    if (!raw) throw new Error("missing stale posting");
+    const [employer] = await db.insert(schema.companies).values({ name: boardB.name, nameNorm: "second labs" }).returning({ id: schema.companies.id });
+    if (!employer) throw new Error("missing company");
+    const [job] = await db.insert(schema.jobs).values({
+      companyId: employer.id, title: "AI Engineer", titleNorm: "ai engineer", status: "active", firstSeenAt: old, lastSeenAt: old,
+    }).returning({ id: schema.jobs.id });
+    if (!job) throw new Error("missing job");
+    await db.insert(schema.jobSources).values({ jobId: job.id, rawPostingId: raw.id, channelId: "smartrecruiters" });
+    await recordAtsBoardCheck(db, { ats: "smartrecruiters", token: boardB.token }, {
+      status: "ok", etag: 'W/"old-b"', externalIds: ["b-stale"], total: 1, kept: 1, checkedAt: old,
+    });
+    if (stored) {
+      await recordAtsBoardCheck(db, { ats: "smartrecruiters", token: boardA.token }, {
+        status: "ok", etag: null, externalIds: ["a1"], total: 1, kept: 1, checkedAt: old,
+      });
+    }
+
+    const baseA = "https://api.smartrecruiters.com/v1/companies/FirstLabs/postings";
+    const baseB = "https://api.smartrecruiters.com/v1/companies/SecondLabs/postings";
+    const etag = 'W/"a"';
+    const { fetch, requests } = routedFetch([
+      [`${baseA}?`, ({ headers }) => headers["If-None-Match"] === etag
+        ? response(304)
+        : response(200, { totalFound: 1, content: [postingA] }, { ETag: etag })],
+      [`${baseA}/a1`, response(500, "detail unavailable")],
+      [`${baseB}?`, response(503, "list unavailable")],
+    ]);
+    const rounds = [
+      { at: new Date("2026-10-07T12:00:00Z"), unchanged: false, validator: undefined, savedEtag: stored ? etag : null },
+      { at: new Date("2026-10-08T12:00:00Z"), unchanged: stored, validator: stored ? etag : undefined, savedEtag: etag },
+      { at: new Date("2026-10-09T12:00:00Z"), unchanged: true, validator: etag, savedEtag: etag },
+    ];
+    for (const { at, unchanged, validator, savedEtag } of rounds) {
+      const before = requests.length;
+      // Each clock is after expiry and beyond the breaker's cooldown, so all three sweeps reach both boards.
+      const result = await cycle(fetch, { smartrecruitersBoards: [boardA, boardB], at });
+      if (result.cycleId === null) throw new Error("missing cycle");
+      // Run timestamps have database defaults; pin each one so a false success would count as closure evidence.
+      await db.update(schema.runs).set({ startedAt: at, finishedAt: at }).where(eq(schema.runs.cycleId, result.cycleId));
+      const runs = await listRunsForCycle(db, result.cycleId);
+      expect(result.status).toBe("failed");
+      // a non-retryable failure (the 304 round) is followed by a skipped row: no channel is left for the query this cycle
+      expect(runs.map((run) => run.status)).toEqual(unchanged ? ["failed", "skipped"] : ["failed"]);
+      expect(runs[0]).toMatchObject({
+        channelId: "smartrecruiters", status: "failed", interrupted: false, fetched: 0, newCount: 0,
+        errorCode: unchanged ? "unknown" : "network", startedAt: at, finishedAt: at,
+      });
+      expect(runs[0]?.error).toContain(unchanged ? "1 posting details are still missing from an earlier sweep" : "HTTP 500");
+      expect(requests.slice(before).map((r) => r.url)).toEqual([
+        `${baseA}?limit=100&offset=0&country=de`, ...(!unchanged ? [`${baseA}/a1`] : []), `${baseB}?limit=100&offset=0&country=de`,
+      ]);
+      expect(requests[before]?.headers["If-None-Match"]).toBe(validator);
+      expect(await getAtsBoard(db, { ats: "smartrecruiters", token: boardA.token })).toMatchObject({
+        lastStatus: unchanged ? "not_modified" : "ok", lastErrorCode: null, consecutiveFailures: 0,
+        etag: savedEtag, externalIds: stored ? ["a1"] : [], detailRetryIds: ["a1"], lastTotal: 1, lastKept: 1,
+      });
+      expect(await getAtsBoard(db, { ats: "smartrecruiters", token: boardB.token })).toMatchObject({
+        lastStatus: "error", lastErrorCode: "network", externalIds: ["b-stale"], lastOkAt: old,
+      });
+      const rawPostings = await listRawPostingsForChannel(db, "smartrecruiters");
+      expect(rawPostings).toHaveLength(stored ? 2 : 1);
+      expect(rawPostings.find((p) => p.id === raw.id)).toMatchObject({ payloadJson: stalePayload, fetchedAt: old });
+      if (stored) expect(rawPostings.find((p) => p.externalId === "a1")).toMatchObject({ payloadJson: payloadA, fetchedAt: at });
+      else expect(rawPostings.find((p) => p.externalId === "a1")).toBeUndefined();
+      expect(await touchJobsSeen(db)).toEqual({ seen: 0, reopened: 0 });
+      const closed = await markJobsPossiblyClosed(db, { now: at, days: 7 });
+      expect(closed).not.toContain(job.id);
+      expect(closed).toEqual([]);
+      const [after] = await db.select().from(schema.jobs).where(eq(schema.jobs.id, job.id));
+      expect(after).toMatchObject({ status: "active", lastSeenAt: old });
+    }
+  });
+
+  it.each([
     { name: "does not close a stale job when one board loses every detail and the other list fails", healthy: false, goodDetail: false },
     { name: "stores an interrupted sweep's postings without closing a stale job on the other failing board", healthy: false, goodDetail: true },
     { name: "[regression guard] marks a stale job absent from its board when both boards are healthy", healthy: true, goodDetail: true },

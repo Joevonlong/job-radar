@@ -126,11 +126,11 @@ describe("smartrecruiters sweep", () => {
     expect(requests.filter((r) => r.url.includes("offset="))).toHaveLength(2);
   });
 
-  it("answers 304 on the first page with an unchanged board: no further requests, postings touched", async () => {
+  it("[regression guard] answers 304 with no unresolved details: no further requests, postings touched", async () => {
     const { channel: c, store } = channel();
     const first = atsContext("smartrecruiters", routes().fetch, { channels: aiChannels() });
     await c.collect(first.query, first.ctx);
-    expect(store.states.get("smartrecruiters:ExampleLabs")).toMatchObject({ etag: 'W/"list-v1"', externalIds: ["744000000000001", "744000000000003"] });
+    expect(store.states.get(BOARD_KEY)).toMatchObject({ etag: 'W/"list-v1"', externalIds: ["744000000000001", "744000000000003"], detailRetryIds: [] });
 
     const second = routedFetch([[LIST_URL, response(304)]]);
     const b = atsContext("smartrecruiters", second.fetch, { channels: aiChannels() });
@@ -140,6 +140,102 @@ describe("smartrecruiters sweep", () => {
     // fetch would otherwise add "Cache-Control: no-cache", which SmartRecruiters answers with 200 (verified live)
     expect(second.requests[0]?.headers["Cache-Control"]).toBe("max-age=0");
     expect(store.touched.at(-1)).toEqual(["744000000000001", "744000000000003"]);
+    expect(store.checks.at(-1)?.update).toEqual({ status: "not_modified" });
+    expect(store.states.get(BOARD_KEY)?.detailRetryIds).toEqual([]);
+    expect(b.logs.find((l) => l.message === "ats board still has unresolved details")).toBeUndefined();
+    expect(b.logs.find((l) => l.message === "ats sweep done")?.fields).not.toHaveProperty("detailFailedBoards");
+  });
+
+  it.each([
+    { name: "rejects every 304 with unresolved stored details until a successful 200 clears them", stored: true, healthyOther: false },
+    { name: "rejects every 304 with unresolved never-stored details until a successful 200 clears them", stored: false, healthyOther: false },
+    { name: "returns a healthy board's postings while another board has unresolved details on 304", stored: true, healthyOther: true },
+  ])("$name", async ({ stored, healthyOther }) => {
+    const other = company({ name: "Other Labs", ats: "smartrecruiters", token: "OtherLabs" });
+    const otherBase = "https://api.smartrecruiters.com/v1/companies/OtherLabs/postings";
+    const otherListUrl = `${otherBase}?limit=100&offset=0&country=de`;
+    const ids = ["a1", "a2"];
+    const body = inlineList(ids);
+    const otherBody = inlineList(["b-good"], other.token);
+    let etag = 'W/"unresolved"';
+    let detailsAvailable = false;
+    const { fetch, requests } = routedFetch([
+      [LIST_URL, ({ headers }) => headers["If-None-Match"] === etag ? response(304) : response(200, body, { ETag: etag })],
+      [`${BASE}/`, ({ url }) => detailsAvailable
+        ? response(200, body.content.find((p) => p.id === url.slice(BASE.length + 1)))
+        : response(500, "detail unavailable")],
+      [otherListUrl, response(200, otherBody)],
+      [`${otherBase}/b-good`, response(200, otherBody.content[0])],
+    ]);
+    const deps = depsWith(inputs(healthyOther ? [sr, other] : [sr]));
+    const c = createSmartrecruitersChannel(deps);
+    const store = deps.memory;
+    if (stored) for (const id of ids) store.stored.add(id);
+    const healthyPostings = healthyOther
+      ? [{ externalId: "b-good", payload: { source: { token: other.token }, posting: otherBody.content[0] } }]
+      : [];
+    // A never-stored first miss clears the validator; a second failed 200 retains it.
+    for (let round = 0; round < (stored ? 1 : 2); round += 1) {
+      const first = atsContext("smartrecruiters", fetch, { channels: aiChannels() });
+      const collection = c.collect(first.query, first.ctx);
+      if (healthyOther) await expect(collection).resolves.toMatchObject(healthyPostings);
+      else await expect(collection).rejects.toMatchObject({ name: "ChannelError", code: "network", status: 500 });
+      expect(store.states.get(BOARD_KEY)).toMatchObject({
+        etag: stored || round > 0 ? etag : null, externalIds: stored ? ids : [], detailRetryIds: ids,
+      });
+    }
+
+    for (const at of ["2026-10-08T12:00:00Z", "2026-10-09T12:00:00Z"]) {
+      vi.setSystemTime(new Date(at));
+      const before = requests.length;
+      const touched = [...store.touched];
+      const state = structuredClone(store.states.get(BOARD_KEY));
+      const unchanged = atsContext("smartrecruiters", fetch, { channels: aiChannels() });
+      const collection = c.collect(unchanged.query, unchanged.ctx);
+      if (healthyOther) {
+        await expect(collection).resolves.toMatchObject(healthyPostings);
+      } else {
+        await expect(collection).rejects.toBeInstanceOf(ChannelError);
+        await expect(collection).rejects.toMatchObject({
+          name: "ChannelError", code: "unknown", retryable: false,
+          message: "2 posting details are still missing from an earlier sweep",
+        });
+      }
+      expect(requests.slice(before).map((r) => r.url)).toEqual([
+        LIST_URL, ...(healthyOther ? [otherListUrl, `${otherBase}/b-good`] : []),
+      ]);
+      expect(requests[before]?.headers["If-None-Match"]).toBe(etag);
+      expect(store.checks.filter((check) => check.key.token === sr.token).at(-1)?.update).toEqual({ status: "not_modified" });
+      expect(store.states.get(BOARD_KEY)).toEqual(state);
+      expect(store.touched).toEqual([...touched, stored ? ids : []]);
+      expect(unchanged.logs.find((l) => l.message === "ats board still has unresolved details")).toMatchObject({
+        level: "warn", fields: { board: sr.token, count: 2 },
+      });
+      expect(unchanged.logs.find((l) => l.message === "ats board" && l.fields.board === sr.token)?.fields).toEqual({
+        channel: "smartrecruiters", company: sr.name, board: sr.token, outcome: "not_modified", fetched: 0, kept: 0,
+      });
+      expect(unchanged.logs.find((l) => l.message === "ats sweep done")?.fields).toMatchObject({
+        boards: healthyOther ? 2 : 1, failedBoards: 0, detailFailedBoards: 1, postings: healthyOther ? 1 : 0,
+      });
+    }
+
+    etag = 'W/"resolved"';
+    detailsAvailable = true;
+    const recovered = atsContext("smartrecruiters", fetch, { channels: aiChannels() });
+    await expect(c.collect(recovered.query, recovered.ctx)).resolves.toMatchObject([
+      ...ids.map((externalId) => ({ externalId })), ...healthyPostings,
+    ]);
+    expect(store.states.get(BOARD_KEY)).toMatchObject({ etag, externalIds: ids, detailRetryIds: [] });
+    expect(store.checks.filter((check) => check.key.token === sr.token).at(-1)?.update).toMatchObject({ status: "ok", detailRetryIds: [] });
+    expect(recovered.logs.find((l) => l.message === "ats sweep done")?.fields).not.toHaveProperty("detailFailedBoards");
+
+    const unchanged = atsContext("smartrecruiters", fetch, { channels: aiChannels() });
+    await expect(c.collect(unchanged.query, unchanged.ctx)).resolves.toMatchObject(healthyPostings);
+    expect(store.checks.filter((check) => check.key.token === sr.token).at(-1)?.update).toEqual({ status: "not_modified" });
+    expect(store.states.get(BOARD_KEY)?.detailRetryIds).toEqual([]);
+    expect(store.touched.at(-1)).toEqual(ids);
+    expect(unchanged.logs.find((l) => l.message === "ats board still has unresolved details")).toBeUndefined();
+    expect(unchanged.logs.find((l) => l.message === "ats sweep done")?.fields).not.toHaveProperty("detailFailedBoards");
   });
 
   it("skips a posting that closed between the list and its detail (404)", async () => {
