@@ -188,7 +188,7 @@ export const atsBoards = pgTable(
     filterFingerprint: text("filter_fingerprint"),
     /** Ids from the last complete list read: handed over plus still-listed stored ids beyond the cap or missing details (raw_postings.external_id). */
     externalIds: text("external_ids").array().notNull().default(sql`'{}'::text[]`),
-    /** Ids whose details failed at the last 200, including prior failures skipped then; requested last next time. */
+    /** Ids whose details are unresolved after the latest content read (complete, short or failed list); a partial read keeps earlier ids; requested last next time. */
     detailRetryIds: text("detail_retry_ids").array().notNull().default(sql`'{}'::text[]`),
     lastStatus: text("last_status").notNull(),
     lastErrorCode: text("last_error_code"),

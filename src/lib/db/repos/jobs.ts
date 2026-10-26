@@ -152,7 +152,8 @@ export async function touchJobsSeen(db: Executor): Promise<SeenResult> {
 /**
  * Active jobs no source has returned for `days` days become `possibly_closed` only when every source
  * channel completed a successful run after the job fell overdue. An ATS source whose board was checked
- * since then also needs a complete board read after that point, in a run with the normal search window.
+ * since then also needs a complete board read after that point, in a successful run with the normal search
+ * window so its returned postings were persisted.
  * Non-ATS sources are unaffected; removed or disabled boards stop blocking once their last check falls
  * before the overdue point. Returns the ids that changed.
  */
@@ -176,7 +177,7 @@ export async function markJobsPossiblyClosed(db: Executor, input: { now: Date; d
       )
       and not exists (
         -- an ATS source whose board was checked after the job fell overdue but has not been read
-        -- completely since then by a run that kept the normal search window
+        -- completely since then by a successful run that kept the normal search window
         select 1 from job_sources js
         join raw_postings rp on rp.id = js.raw_posting_id
         join ats_boards b on b.ats = rp.channel_id and b.token = rp.payload_json #>> '{source,token}'
@@ -184,9 +185,9 @@ export async function markJobsPossiblyClosed(db: Executor, input: { now: Date; d
           and b.last_checked_at >= jobs.last_seen_at + make_interval(days => ${input.days})
           and (b.last_ok_at is null
                or b.last_ok_at < jobs.last_seen_at + make_interval(days => ${input.days})
-               or (select r.window_extended from runs r
+               or (select r.window_extended = false and r.status = 'succeeded' from runs r
                    where r.channel_id = b.ats and r.started_at <= b.last_ok_at
-                   order by r.started_at desc limit 1) is not false)
+                   order by r.started_at desc limit 1) is not true)
       )
     returning id
   `);

@@ -20,6 +20,14 @@ export async function getAtsBoard(db: Db, key: AtsBoardKey): Promise<AtsBoardRow
   return row ?? null;
 }
 
+/** Discard legacy complete-read evidence and its validator without changing any other board state. */
+export async function invalidateAtsBoardEvidence(db: Db, key: AtsBoardKey): Promise<void> {
+  await db
+    .update(atsBoards)
+    .set({ lastOkAt: null, etag: null })
+    .where(and(eq(atsBoards.ats, key.ats), eq(atsBoards.token, key.token)));
+}
+
 export interface AtsBoardUpdate {
   status: AtsBoardStatus;
   /** Only meaningful for `ok`; every other status leaves the stored validator alone. */

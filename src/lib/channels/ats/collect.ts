@@ -159,6 +159,14 @@ export async function collectBoard<S extends { title_prefilter: AtsTitlePrefilte
   const base = { company: company.name, board: company.token };
 
   const state = store ? await store.load(key) : null;
+  if (store && state && !state.filterFingerprint?.startsWith(`${BOARD_STATE_VERSION}:`)) {
+    // A rolled-back build can write legacy evidence after the one-shot reset migration has already run.
+    try {
+      await store.invalidateEvidence(key);
+    } catch (error) {
+      ctx.logger.warn("could not invalidate ats board evidence", { board: key.token, error: errorMessage(error) });
+    }
+  }
   // an ETag earned under other filter rules would hide postings the new rules want
   let etag = state && state.filterFingerprint === fingerprint ? state.etag : null;
 
@@ -291,7 +299,10 @@ export async function collectBoard<S extends { title_prefilter: AtsTitlePrefilte
   if (store && detailMissing.length > 0) {
     for (const id of await store.touch(adapter.id, detailMissing)) present.add(id);
   }
-  const detailRetryIds = [...failed, ...[...oldRetryIds].filter((id) => skipped.has(id))];
+  // Only a complete list can resolve earlier retries; partial lists may omit still-unresolved ids.
+  const detailRetryIds = fetched.incomplete || fetched.shortfall
+    ? [...new Set([...oldRetryIds, ...failed, ...skipped])]
+    : [...failed, ...[...oldRetryIds].filter((id) => skipped.has(id))];
   const firstMissing = detailMissing.some((id) => !present.has(id) && !oldRetryIds.has(id));
   const returned: RawPostingInput[] = [];
   // Request priority never changes the order in which the board's postings are handed over.

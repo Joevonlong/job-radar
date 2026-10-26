@@ -1,6 +1,7 @@
 import type { Db } from "@/lib/db/client";
 import {
   getAtsBoard,
+  invalidateAtsBoardEvidence,
   recordAtsBoardCheck,
   touchRawPostings,
   type AtsBoardKey,
@@ -13,12 +14,14 @@ export interface AtsBoardState {
   filterFingerprint: string | null;
   /** Ids from the last complete list: handed over or still listed and already stored beyond the cap or with missing details. */
   externalIds: string[];
-  /** Failed or skipped details from the latest content read, including a short or failed list; requested last next time. */
+  /** Ids whose details are unresolved after the latest content read (complete, short or failed list); a partial read keeps earlier ids; requested last next time. */
   detailRetryIds: string[];
 }
 
 export interface AtsBoardStore {
   load(key: AtsBoardKey): Promise<AtsBoardState | null>;
+  /** Clear complete-read evidence and the validator without changing other board state. */
+  invalidateEvidence(key: AtsBoardKey): Promise<void>;
   record(key: AtsBoardKey, update: AtsBoardUpdate): Promise<void>;
   /** Mark the stored raw postings with these ids as seen now; returns the external ids that exist. */
   touch(channelId: string, externalIds: readonly string[]): Promise<string[]>;
@@ -31,6 +34,7 @@ export function createDbAtsBoardStore(db: Db): AtsBoardStore {
       const row = await getAtsBoard(db, key);
       return row ? { etag: row.etag, filterFingerprint: row.filterFingerprint, externalIds: row.externalIds, detailRetryIds: row.detailRetryIds } : null;
     },
+    invalidateEvidence: (key) => invalidateAtsBoardEvidence(db, key),
     record: (key, update) => recordAtsBoardCheck(db, key, update),
     touch: (channelId, externalIds) => touchRawPostings(db, { channelId, externalIds }),
   };
@@ -40,22 +44,30 @@ export function createDbAtsBoardStore(db: Db): AtsBoardStore {
 export function createMemoryAtsBoardStore(): AtsBoardStore & {
   states: Map<string, AtsBoardState>;
   checks: Array<{ key: AtsBoardKey; update: AtsBoardUpdate }>;
+  invalidated: AtsBoardKey[];
   /** External ids that count as stored in raw_postings (for `touch`). */
   stored: Set<string>;
   touched: string[][];
 } {
   const states = new Map<string, AtsBoardState>();
   const checks: Array<{ key: AtsBoardKey; update: AtsBoardUpdate }> = [];
+  const invalidated: AtsBoardKey[] = [];
   const stored = new Set<string>();
   const touched: string[][] = [];
   const id = (key: AtsBoardKey): string => `${key.ats}:${key.token}`;
   return {
     states,
     checks,
+    invalidated,
     stored,
     touched,
     async load(key) {
       return states.get(id(key)) ?? null;
+    },
+    async invalidateEvidence(key) {
+      invalidated.push(key);
+      const state = states.get(id(key));
+      if (state) states.set(id(key), { ...state, etag: null });
     },
     async record(key, update) {
       checks.push({ key, update });
