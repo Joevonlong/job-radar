@@ -1,0 +1,335 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+
+import { and, eq, sql } from "drizzle-orm";
+import postgres from "postgres";
+import { afterAll, beforeAll, beforeEach, describe, expect, inject, it } from "vitest";
+
+import { createDbAtsBoardStore, createSmartrecruitersChannel } from "@/lib/channels/ats";
+import type { FetchLike } from "@/lib/channels/http";
+import { ChannelRegistry } from "@/lib/channels/registry";
+import { runCycle } from "@/lib/cycle/run-cycle";
+import { closeDb, createConnection, getAtsBoard, getDb, listRunsForCycle, schema, touchRawPostings, type Db } from "@/lib/db";
+import { runMigrations } from "@/lib/db/migrate";
+import { recordAtsBoardCheck } from "@/lib/db/repos/ats-boards";
+import { markJobsPossiblyClosed } from "@/lib/db/repos/jobs";
+
+import { atsChannelsWith, company, depsWith, fixtureJson, inputs, response, routedFetch } from "../channels/ats/helpers";
+import { config, quietLogger } from "../cycle/helpers";
+import { checkedName } from "../helpers/isolated-db";
+
+const url = inject("testDatabaseUrl");
+const now = new Date("2026-10-07T12:00:00Z");
+const lastSeen = new Date("2026-09-07T12:00:00Z"); // 30 days before now; overdue on September 14.
+const oldOk = new Date("2026-09-10T12:00:00Z");
+const normalRun = new Date("2026-10-06T11:00:00Z");
+const checked = new Date("2026-10-06T12:00:00Z");
+const earlyRun = new Date("2026-09-20T11:00:00Z");
+const middleOk = new Date("2026-09-20T12:00:00Z");
+
+beforeAll(async () => {
+  process.env.DATABASE_URL = url;
+  await runMigrations();
+});
+
+beforeEach(async () => {
+  await getDb().execute(sql`truncate table ats_boards, raw_postings, runs, cycles, channels, jobs, companies restart identity cascade`);
+});
+
+afterAll(async () => {
+  await closeDb();
+});
+
+async function channel(db: Db, id: string) {
+  await db.insert(schema.channels).values({ id, family: "ats", kind: "api" }).onConflictDoNothing();
+}
+
+async function successfulRun(db: Db, channelId: string, startedAt = normalRun, windowExtended = false) {
+  await channel(db, channelId);
+  const finishedAt = new Date(startedAt.getTime() + 60_000);
+  const [cycle] = await db.insert(schema.cycles).values({ kind: "manual", status: "succeeded", startedAt, finishedAt }).returning();
+  const [run] = await db.insert(schema.runs).values({
+    cycleId: cycle!.id, channelId, status: "succeeded", startedAt, finishedAt, windowExtended,
+  }).returning();
+  return run!;
+}
+
+async function source(db: Db, jobId: number, externalId: string, channelId: string, token?: string) {
+  await channel(db, channelId);
+  const [raw] = await db.insert(schema.rawPostings).values({
+    channelId, externalId, fetchedAt: lastSeen,
+    payloadJson: { source: { ats: channelId, ...(token === undefined ? {} : { token }) }, posting: { id: externalId } },
+  }).returning();
+  await db.insert(schema.jobSources).values({ jobId, rawPostingId: raw!.id, channelId, firstSeenAt: lastSeen });
+  return raw!;
+}
+
+async function overdueJob(db: Db, name: string, token: string | undefined, channelId = "greenhouse") {
+  const [employer] = await db.insert(schema.companies).values({ name, nameNorm: name.toLowerCase() }).returning();
+  const [job] = await db.insert(schema.jobs).values({
+    companyId: employer!.id, title: "Overdue role", titleNorm: "overdue role", status: "active",
+    firstSeenAt: lastSeen, lastSeenAt: lastSeen,
+  }).returning();
+  await source(db, job!.id, name, channelId, token);
+  return job!.id;
+}
+
+async function boardState(db: Db, token: string, values: Partial<typeof schema.atsBoards.$inferInsert> = {}) {
+  const [row] = await db.insert(schema.atsBoards).values({
+    ats: "greenhouse", token, lastStatus: "error", lastErrorCode: "network", consecutiveFailures: 1,
+    lastCheckedAt: checked, lastChangedAt: oldOk, lastOkAt: oldOk, etag: 'W/"old"',
+    filterFingerprint: "previous-filter", externalIds: ["still-listed"], detailRetryIds: [], lastTotal: 1, lastKept: 1,
+    ...values,
+  }).returning();
+  return row!;
+}
+
+async function activeAgain(db: Db, jobId: number) {
+  // Let a positive control run independently even if the negative assertion already exposed a premature closure.
+  await db.update(schema.jobs).set({ status: "active" }).where(eq(schema.jobs.id, jobId));
+}
+
+describe("per-board evidence for possibly closed ATS jobs", () => {
+  it("a successful Greenhouse round closes only the job whose own board was read completely", async () => {
+    const db = getDb();
+    const x = await overdueJob(db, "absent-x", "X");
+    const y = await overdueJob(db, "absent-y", "Y");
+    await successfulRun(db, "greenhouse");
+    await boardState(db, "X");
+    await boardState(db, "Y", { lastStatus: "ok", lastErrorCode: null, consecutiveFailures: 0, lastOkAt: checked });
+
+    expect.soft(await markJobsPossiblyClosed(db, { now, days: 7 })).toEqual([y]);
+    expect.soft((await db.select().from(schema.jobs).where(eq(schema.jobs.id, x)))[0]).toMatchObject({ status: "active", lastSeenAt: lastSeen });
+
+    await activeAgain(db, x);
+    await db.update(schema.atsBoards).set({ lastStatus: "ok", lastErrorCode: null, consecutiveFailures: 0, lastOkAt: checked })
+      .where(and(eq(schema.atsBoards.ats, "greenhouse"), eq(schema.atsBoards.token, "X")));
+    expect.soft(await markJobsPossiblyClosed(db, { now, days: 7 })).toEqual([x]);
+  });
+
+  it.each([
+    { name: "a short board read", lastStatus: "short", lastOkAt: oldOk },
+    { name: "a checked board with no complete read", lastStatus: "error", lastOkAt: null },
+  ])("$name cannot close its overdue job", async ({ lastStatus, lastOkAt }) => {
+    const db = getDb();
+    const jobId = await overdueJob(db, "absent-x", "X");
+    await successfulRun(db, "greenhouse");
+    await boardState(db, "X", { lastStatus, lastOkAt });
+
+    expect(await markJobsPossiblyClosed(db, { now, days: 7 })).toEqual([]);
+    expect((await db.select().from(schema.jobs).where(eq(schema.jobs.id, jobId)))[0]?.status).toBe("active");
+  });
+
+  it("a removed board ages out as before while a board still being checked blocks closure", async () => {
+    const db = getDb();
+    const removed = await overdueJob(db, "removed-x", "X");
+    await overdueJob(db, "checked-y", "Y");
+    await successfulRun(db, "greenhouse");
+    await boardState(db, "X", { lastCheckedAt: oldOk });
+    await boardState(db, "Y");
+
+    expect(await markJobsPossiblyClosed(db, { now, days: 7 })).toEqual([removed]);
+  });
+
+  it("a non-ATS source still needs its own successful run and cannot overrule a failing ATS board", async () => {
+    const db = getDb();
+    const blocked = await overdueJob(db, "failed-x", "X");
+    const complete = await overdueJob(db, "complete-y", "Y");
+    await source(db, blocked, "external-x", "external-board", "X");
+    await source(db, complete, "external-y", "external-board", "X");
+    await boardState(db, "X");
+    await boardState(db, "Y", { lastStatus: "ok", lastOkAt: checked });
+    await successfulRun(db, "greenhouse");
+
+    expect.soft(await markJobsPossiblyClosed(db, { now, days: 7 })).toEqual([]);
+    await successfulRun(db, "external-board");
+    expect.soft(await markJobsPossiblyClosed(db, { now, days: 7 })).toEqual([complete]);
+  });
+
+  it("an ATS payload without source.token keeps the channel rule while a matching token uses board evidence", async () => {
+    const db = getDb();
+    await overdueJob(db, "known-board", "X");
+    const tokenless = await overdueJob(db, "unknown-board", undefined);
+    await boardState(db, "X");
+    expect.soft(await markJobsPossiblyClosed(db, { now, days: 7 })).toEqual([]);
+
+    await successfulRun(db, "greenhouse");
+    expect.soft(await markJobsPossiblyClosed(db, { now, days: 7 })).toEqual([tokenless]);
+  });
+
+  it("associates the complete read with its extended run rather than a later normal run where the board failed", async () => {
+    const db = getDb();
+    const jobId = await overdueJob(db, "absent-x", "X");
+    const extended = await successfulRun(db, "greenhouse", earlyRun, true);
+    await successfulRun(db, "greenhouse", normalRun, false);
+    await boardState(db, "X", { lastCheckedAt: checked, lastOkAt: middleOk });
+
+    expect.soft(await markJobsPossiblyClosed(db, { now, days: 7 })).toEqual([]);
+
+    await activeAgain(db, jobId);
+    await db.update(schema.runs).set({ windowExtended: false }).where(eq(schema.runs.id, extended.id));
+    expect.soft(await markJobsPossiblyClosed(db, { now, days: 7 })).toEqual([jobId]);
+  });
+
+  it("a last complete read with no channel run at or before it is not closure evidence", async () => {
+    const db = getDb();
+    await overdueJob(db, "absent-x", "X");
+    await successfulRun(db, "greenhouse", normalRun);
+    await boardState(db, "X", { lastOkAt: middleOk });
+
+    expect(await markJobsPossiblyClosed(db, { now, days: 7 })).toEqual([]);
+  });
+});
+
+const srBoard = company({ name: "Example Labs", ats: "smartrecruiters", token: "ExampleLabs" });
+const srBase = "https://api.smartrecruiters.com/v1/companies/ExampleLabs/postings";
+const srList = fixtureJson("smartrecruiters-list.json") as { totalFound: number; content: Array<{ id: string }> };
+const details = [1, 2, 3].map((number) => fixtureJson(`smartrecruiters-detail-${number}.json`) as { id: string });
+
+/** The SR runCycle harness from ats.test.ts, with an explicit database for the upgrade scenario. */
+async function cycle(fetch: FetchLike, options: { db?: Db; at?: Date } = {}) {
+  const db = options.db ?? getDb();
+  const at = options.at ?? now;
+  const store = createDbAtsBoardStore(db);
+  store.touch = (channelId, externalIds) => touchRawPostings(db, { channelId, externalIds, at });
+  store.record = (key, update) => recordAtsBoardCheck(db, key, { ...update, checkedAt: at });
+  const channels = atsChannelsWith("smartrecruiters", (settings) => {
+    settings.enabled = true;
+    settings.api_base_url = "https://api.smartrecruiters.com";
+    settings.country = "de";
+    settings.page_size = 100;
+    settings.fetch_details = true;
+    settings.max_consecutive_detail_failures = 3;
+    settings.max_results = 10;
+    settings.title_prefilter = { enabled: false, include_terms: [], exclude_terms: [] };
+  });
+  channels.http.max_retries = 0;
+  channels.circuit_breaker = { failures: 2, cooldown_hours: 1 };
+  const registry = new ChannelRegistry();
+  registry.register(createSmartrecruitersChannel(depsWith(inputs([srBoard]), store)));
+  const result = await runCycle("manual", {
+    db, registry, config: { ...config(), channels }, logger: quietLogger, sleep: async () => {},
+    channelIds: ["smartrecruiters"], fetch, now: () => at,
+  });
+  expect(result.cycleId).not.toBeNull();
+  // The production repositories intentionally use the database clock; arrange the run/evidence ordering explicitly.
+  await db.update(schema.runs).set({ startedAt: at, finishedAt: at }).where(eq(schema.runs.cycleId, result.cycleId!));
+  return result;
+}
+
+describe("SmartRecruiters detail evidence through the real channel", () => {
+  it.each([false, true])("unresolved details and the following 304 preserve evidence (previous complete read: %s)", async (existing) => {
+    const db = getDb();
+    const absent = await overdueJob(db, "absent-sr", srBoard.token, "smartrecruiters");
+    await successfulRun(db, "smartrecruiters");
+    // A previously stored detail permits the list ETag to survive the failed detail, so the next sweep really uses 304.
+    await db.insert(schema.rawPostings).values({
+      channelId: "smartrecruiters", externalId: details[0]!.id, fetchedAt: lastSeen,
+      payloadJson: { source: { ats: "smartrecruiters", token: srBoard.token }, posting: details[0] },
+    });
+    if (existing) await boardState(db, srBoard.token, { ats: "smartrecruiters", lastOkAt: oldOk });
+    const etag = 'W/"unresolved"';
+    const { fetch, requests } = routedFetch([
+      [`${srBase}?`, ({ headers }) => headers["If-None-Match"] === etag ? response(304) : response(200, srList, { ETag: etag })],
+      [`${srBase}/${details[0]!.id}`, response(500, "detail unavailable")],
+      [`${srBase}/${details[1]!.id}`, response(200, details[1])],
+      [`${srBase}/${details[2]!.id}`, response(200, details[2])],
+    ]);
+    const first = await cycle(fetch);
+    expect(await listRunsForCycle(db, first.cycleId!)).toMatchObject([{ status: "partial", interrupted: true, fetched: 2 }]);
+    expect.soft(await getAtsBoard(db, { ats: "smartrecruiters", token: srBoard.token })).toMatchObject({
+      lastStatus: "ok", lastOkAt: existing ? oldOk : null, lastCheckedAt: now, etag, detailRetryIds: [details[0]!.id],
+    });
+    expect.soft(await markJobsPossiblyClosed(db, { now, days: 7 })).toEqual([]);
+
+    await activeAgain(db, absent);
+    const next = new Date("2026-10-08T12:00:00Z");
+    const before304 = requests.length;
+    const second = await cycle(fetch, { at: next });
+    expect.soft((await listRunsForCycle(db, second.cycleId!))[0]).toMatchObject({ status: "failed", fetched: 0 });
+    expect.soft(requests.slice(before304)).toMatchObject([{ url: `${srBase}?limit=100&offset=0&country=de`, headers: { "If-None-Match": etag } }]);
+    expect.soft(requests.slice(before304)).toHaveLength(1);
+    expect.soft(await getAtsBoard(db, { ats: "smartrecruiters", token: srBoard.token })).toMatchObject({
+      lastStatus: "not_modified", lastOkAt: existing ? oldOk : null, lastCheckedAt: next, detailRetryIds: [details[0]!.id],
+    });
+    expect.soft(await markJobsPossiblyClosed(db, { now: next, days: 7 })).toEqual([]);
+  });
+});
+
+describe("upgrading legacy ATS board evidence", () => {
+  it("clears legacy evidence and the validator until a complete post-upgrade sweep can close an absent job", async () => {
+    const admin = new URL(url);
+    const name = checkedName(`${admin.pathname.slice(1)}_m36`);
+    const adminSql = postgres(admin.toString(), { max: 1, onnotice: () => {} });
+    const folder = fs.mkdtempSync(path.join(os.tmpdir(), "job-radar-ats-evidence-mig-"));
+    try {
+      await adminSql.unsafe(`create database "${name}"`);
+      const target = new URL(url);
+      target.pathname = `/${name}`;
+      fs.cpSync(path.resolve("drizzle"), folder, { recursive: true });
+      const journalFile = path.join(folder, "meta", "_journal.json");
+      const journal = JSON.parse(fs.readFileSync(journalFile, "utf8")) as { entries: Array<{ idx: number; tag: string }> };
+      const added = journal.entries.find((entry) => entry.tag === "0036_ats_board_evidence_reset");
+      expect(added).toBeDefined();
+      if (!added) return; // The assertion is the red result when the migration has not been authored yet.
+      fs.writeFileSync(journalFile, JSON.stringify({ ...journal, entries: journal.entries.filter((entry) => entry.idx < added.idx) }));
+      await runMigrations({ url: target.toString(), migrationsFolder: folder });
+
+      // runCycle holds one connection for its advisory lock while the collector uses the pool.
+      const connection = createConnection(target.toString(), { max: 3 });
+      try {
+        const db = connection.db;
+        const absent = await overdueJob(db, "D", srBoard.token, "smartrecruiters");
+        await successfulRun(db, "smartrecruiters");
+        await db.insert(schema.rawPostings).values({
+          channelId: "smartrecruiters", externalId: details[0]!.id, fetchedAt: checked,
+          payloadJson: { source: { ats: "smartrecruiters", token: srBoard.token }, posting: details[0] },
+        });
+        const before = await boardState(db, srBoard.token, {
+          ats: "smartrecruiters", filterFingerprint: "2:x:10", etag: 'W/"p1"', lastOkAt: checked,
+          lastChangedAt: checked, externalIds: [details[0]!.id], lastTotal: 2, lastKept: 1,
+        });
+        fs.writeFileSync(journalFile, JSON.stringify({ ...journal, entries: journal.entries.filter((entry) => entry.idx <= added.idx) }));
+        await runMigrations({ url: target.toString(), migrationsFolder: folder });
+        expect.soft(await getAtsBoard(db, { ats: "smartrecruiters", token: srBoard.token })).toEqual({ ...before, lastOkAt: null, etag: null });
+
+        let complete = false;
+        const { fetch, requests } = routedFetch([
+          [`${srBase}?limit=100&offset=0`, ({ headers }) => headers["If-None-Match"] === 'W/"p1"'
+            ? response(304)
+            : response(200, { totalFound: 2, content: srList.content.slice(0, 1) }, { ETag: 'W/"p1"' })],
+          [`${srBase}?limit=100&offset=1`, () => complete
+            ? response(200, { content: srList.content.slice(2) })
+            : response(429, "page unavailable")],
+          [`${srBase}/${details[0]!.id}`, response(200, details[0])],
+          [`${srBase}/${details[2]!.id}`, response(200, details[2])],
+        ]);
+        const interrupted = await cycle(fetch, { db });
+        expect.soft((await listRunsForCycle(db, interrupted.cycleId!))[0]).toMatchObject({ status: "partial", interrupted: true });
+        expect.soft(requests[0]?.headers["If-None-Match"]).toBeUndefined();
+        expect.soft(requests.some((request) => request.url.includes("offset=1"))).toBe(true);
+        expect.soft(await getAtsBoard(db, { ats: "smartrecruiters", token: srBoard.token })).toMatchObject({ lastStatus: "error", lastOkAt: null, etag: null });
+        expect.soft(await markJobsPossiblyClosed(db, { now, days: 7 })).toEqual([]);
+
+        await activeAgain(db, absent);
+        complete = true;
+        const next = new Date("2026-10-08T12:00:00Z");
+        const start = requests.length;
+        const finished = await cycle(fetch, { db, at: next });
+        expect.soft(await listRunsForCycle(db, finished.cycleId!)).toMatchObject([{ status: "succeeded", interrupted: false }]);
+        expect.soft(requests[start]?.headers["If-None-Match"]).toBeUndefined();
+        const remembered = await getAtsBoard(db, { ats: "smartrecruiters", token: srBoard.token });
+        expect.soft(remembered).toMatchObject({ lastStatus: "ok", lastOkAt: next, etag: 'W/"p1"', detailRetryIds: [] });
+        expect.soft(remembered?.externalIds).not.toContain("D");
+        expect.soft(await markJobsPossiblyClosed(db, { now: next, days: 7 })).toEqual([absent]);
+      } finally {
+        await connection.sql.end({ timeout: 2 });
+      }
+    } finally {
+      await adminSql.unsafe(`drop database if exists "${name}" with (force)`);
+      await adminSql.end({ timeout: 2 });
+      fs.rmSync(folder, { recursive: true, force: true });
+    }
+  }, 180_000);
+});

@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createSmartrecruitersChannel, smartrecruitersAdapter } from "@/lib/channels/ats";
 import { wrapPosting } from "@/lib/channels/ats/envelope";
 import { ChannelError, PartialCollectError } from "@/lib/channels/errors";
-import { normalizedPostingDraftSchema, type RawPostingInput } from "@/lib/channels/types";
+import { normalizedPostingDraftSchema, type HttpResponse, type RawPostingInput } from "@/lib/channels/types";
 
 import { atsChannelsWith, atsContext, company, depsWith, fixtureJson, inputs, response, routedFetch } from "./helpers";
 
@@ -15,6 +15,11 @@ const list = () => fixtureJson("smartrecruiters-list.json") as { totalFound: num
 const detail = (n: number) => fixtureJson(`smartrecruiters-detail-${n}.json`);
 const source = { ats: "smartrecruiters", token: "ExampleLabs", companyName: "Example Labs" } as const;
 const BOARD_KEY = "smartrecruiters:ExampleLabs";
+const PAGE_URL = `${BASE}?limit=2&offset=0&country=de`;
+const NEXT_PAGE_URL = `${BASE}?limit=2&offset=2&country=de`;
+const otherSr = company({ name: "Other Labs", ats: "smartrecruiters", token: "OtherLabs" });
+const OTHER_BASE = "https://api.smartrecruiters.com/v1/companies/OtherLabs/postings";
+const OTHER_PAGE_URL = `${OTHER_BASE}?limit=2&offset=0&country=de`;
 
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ["Date"] });
@@ -30,8 +35,8 @@ function inlineList(ids: string[], token = sr.token) {
   };
 }
 
-function channel() {
-  const deps = depsWith(inputs([sr]));
+function channel(companies = [sr]) {
+  const deps = depsWith(inputs(companies));
   return { channel: createSmartrecruitersChannel(deps), store: deps.memory };
 }
 
@@ -60,11 +65,29 @@ const routes = (listAnswer = response(200, list(), { ETag: 'W/"list-v1"' })) =>
     [`${BASE}/744000000000003`, response(200, detail(3))],
   ]);
 
+const pagedChannels = (pageSize = 2) => aiChannels((b) => {
+  b.page_size = pageSize;
+  b.country = "de";
+  b.fetch_details = true;
+});
+
+const firstPage = () => response(200, {
+  totalFound: 3,
+  content: [list().content[0], list().content[2]],
+}, { ETag: 'W/"incomplete-list"' });
+
+const pagedRoutes = (nextPage: HttpResponse) => routedFetch([
+  [PAGE_URL, firstPage()],
+  [NEXT_PAGE_URL, nextPage],
+  [`${BASE}/744000000000001`, response(200, detail(1))],
+  [`${BASE}/744000000000003`, response(200, detail(3))],
+]);
+
 describe("smartrecruiters sweep", () => {
   it("lists the board, prefilters by title, and fetches the detail of every kept posting", async () => {
     const { fetch, requests } = routes();
     const { ctx, query, logs, sleeps } = atsContext("smartrecruiters", fetch, { channels: aiChannels() });
-    const { channel: c } = channel();
+    const { channel: c, store } = channel();
     const postings = await c.collect(query, ctx);
 
     // "Sales Manager" is dropped by the title prefilter, so its detail is never requested
@@ -81,6 +104,7 @@ describe("smartrecruiters sweep", () => {
     // the stored payload is the detail, in the envelope (C1)
     expect(postings[0]?.payload).toEqual({ source, posting: detail(1) });
     for (const p of postings) expect(normalizedPostingDraftSchema.parse(c.parse(p.payload)).companyName).toBe("Example Labs");
+    expect(store.checks.at(-1)?.update).toMatchObject({ status: "ok", completeRead: true, detailRetryIds: [] });
   });
 
   it("filters by the configured country, and an empty country asks for every country", async () => {
@@ -115,15 +139,271 @@ describe("smartrecruiters sweep", () => {
     expect(store.states.get("smartrecruiters:ExampleLabs")?.etag).toBe('W/"p1"');
   });
 
-  it("does not loop forever when the board lists fewer postings than it announces", async () => {
+  it("records a short board after exactly two requests when three postings are listed out of five announced", async () => {
     const { fetch, requests } = routedFetch([
-      ["offset=0", response(200, { totalFound: 5, content: list().content.slice(0, 3) })],
+      ["offset=0", response(200, { totalFound: 5, content: list().content }, { ETag: 'W/"short"' })],
       ["offset=3", response(200, { totalFound: 5, content: [] })],
-      [`${BASE}/`, response(200, detail(1))],
+      [`${BASE}/744000000000001`, response(200, detail(1))],
+      [`${BASE}/744000000000003`, response(200, detail(3))],
     ]);
-    const { ctx, query } = atsContext("smartrecruiters", fetch, { channels: aiChannels() });
-    await channel().channel.collect(query, ctx);
+    const { ctx, query, logs } = atsContext("smartrecruiters", fetch, { channels: aiChannels() });
+    const { channel: c, store } = channel();
+
+    await expect(c.collect(query, ctx)).resolves.toMatchObject([
+      { externalId: "744000000000001" }, { externalId: "744000000000003" },
+    ]);
+
     expect(requests.filter((r) => r.url.includes("offset="))).toHaveLength(2);
+    expect(store.checks).toEqual([{ key: { ats: "smartrecruiters", token: sr.token }, update: { status: "short", detailRetryIds: [] } }]);
+    expect(store.states.has(BOARD_KEY)).toBe(false);
+    expect(logs.find((l) => l.message === "ats board listed fewer than announced")).toMatchObject({
+      level: "warn", fields: { board: sr.token, listed: 3, announced: 5 },
+    });
+    expect(logs.find((l) => l.message === "ats board")?.fields).toMatchObject({ outcome: "short", fetched: 3, kept: 2 });
+    expect(logs.find((l) => l.message === "ats sweep done")?.fields).toMatchObject({ failedBoards: 0, softBoards: 1, postings: 2 });
+  });
+
+  it.each([
+    { details: "resolved", failedDetail: false },
+    { details: "still missing", failedDetail: true },
+  ])("returns both boards' available details after a later 503 and preserves complete state with retries $details", async ({ failedDetail }) => {
+    const otherBody = inlineList(["other-good"], otherSr.token);
+    const { fetch, requests } = routedFetch([
+      [PAGE_URL, firstPage()],
+      [NEXT_PAGE_URL, response(503, "list unavailable")],
+      [`${BASE}/744000000000001`, response(200, detail(1))],
+      [`${BASE}/744000000000003`, failedDetail ? response(500, "detail unavailable") : response(200, detail(3))],
+      [OTHER_PAGE_URL, response(200, otherBody)],
+      [`${OTHER_BASE}/other-good`, response(200, otherBody.content[0])],
+    ]);
+    const { ctx, query, logs } = atsContext("smartrecruiters", fetch, { channels: pagedChannels() });
+    const { channel: c, store } = channel([sr, otherSr]);
+    const oldState = {
+      etag: 'W/"last-complete"', filterFingerprint: "old-rules",
+      externalIds: ["old-only", "744000000000003"], detailRetryIds: ["old-retry"],
+    };
+    store.states.set(BOARD_KEY, structuredClone(oldState));
+    store.stored.add("744000000000003");
+
+    await expect(c.collect(query, ctx)).resolves.toMatchObject([
+      { externalId: "744000000000001", payload: { source, posting: detail(1) } },
+      ...(failedDetail ? [] : [{ externalId: "744000000000003", payload: { source, posting: detail(3) } }]),
+      { externalId: "other-good", payload: { source: { token: otherSr.token }, posting: otherBody.content[0] } },
+    ]);
+
+    const detailRetryIds = failedDetail ? ["744000000000003"] : [];
+    expect(store.checks[0]).toEqual({
+      key: { ats: "smartrecruiters", token: sr.token },
+      update: { status: "error", errorCode: "network", detailRetryIds },
+    });
+    expect(store.states.get(BOARD_KEY)).toEqual({ ...oldState, detailRetryIds });
+    expect(store.checks[1]?.update).toMatchObject({ status: "ok", completeRead: true });
+    expect(requests.map((r) => r.url)).toEqual([
+      PAGE_URL, NEXT_PAGE_URL, `${BASE}/744000000000001`, `${BASE}/744000000000003`,
+      OTHER_PAGE_URL, `${OTHER_BASE}/other-good`,
+    ]);
+    expect(logs.find((l) => l.message === "ats board read only in part")).toMatchObject({
+      level: "warn", fields: { board: sr.token, code: "network", listed: 2, kept: 2 },
+    });
+    expect(logs.find((l) => l.message === "ats board" && l.fields.board === sr.token)?.fields).toMatchObject({ outcome: "incomplete" });
+    expect(logs.find((l) => l.message === "ats board not found")).toBeUndefined();
+    expect(logs.find((l) => l.message === "ats sweep done")?.fields).toMatchObject({ boards: 2, failedBoards: 1, postings: failedDetail ? 2 : 3 });
+  });
+
+  it.each([
+    { failure: "503", answer: () => response(503, "list unavailable"), code: "network" },
+    { failure: "wrong shape", answer: () => response(200, { totalFound: 3, content: "invalid" }), code: "parse" },
+  ])("rejects with detailed first-page postings when the next list page has $failure", async ({ answer, code }) => {
+    const { fetch, requests } = pagedRoutes(answer());
+    const { ctx, query } = atsContext("smartrecruiters", fetch, { channels: pagedChannels() });
+    const { channel: c, store } = channel();
+    const collection = c.collect(query, ctx);
+
+    await expect(collection).rejects.toBeInstanceOf(PartialCollectError);
+    await expect(collection).rejects.toMatchObject({
+      cause: { name: "ChannelError", code },
+      postings: [
+        { externalId: "744000000000001", payload: { source, posting: detail(1) } },
+        { externalId: "744000000000003", payload: { source, posting: detail(3) } },
+      ],
+    });
+    expect(requests.map((r) => r.url)).toEqual([PAGE_URL, NEXT_PAGE_URL, `${BASE}/744000000000001`, `${BASE}/744000000000003`]);
+    expect(store.checks.at(-1)?.update).toEqual({ status: "error", errorCode: code, detailRetryIds: [] });
+    expect(store.states.has(BOARD_KEY)).toBe(false);
+  });
+
+  it("returns first-page postings normally but records an error when a later list page answers 404", async () => {
+    const { fetch } = pagedRoutes(response(404, "page disappeared"));
+    const { ctx, query, logs } = atsContext("smartrecruiters", fetch, { channels: pagedChannels() });
+    const { channel: c, store } = channel();
+
+    await expect(c.collect(query, ctx)).resolves.toMatchObject([
+      { externalId: "744000000000001", payload: { posting: detail(1) } },
+      { externalId: "744000000000003", payload: { posting: detail(3) } },
+    ]);
+
+    expect(store.checks.at(-1)?.update).toEqual({ status: "error", errorCode: "unknown", detailRetryIds: [] });
+    expect(store.states.has(BOARD_KEY)).toBe(false);
+    expect(logs.find((l) => l.message === "ats board")?.fields).toMatchObject({ outcome: "incomplete", fetched: 2, kept: 2 });
+    expect(logs.find((l) => l.message === "ats board not found")).toBeUndefined();
+    expect(logs.find((l) => l.message === "ats sweep done")?.fields).toMatchObject({ failedBoards: 0, softBoards: 1, postings: 2 });
+  });
+
+  it.each([
+    { outcome: "short", later404: false },
+    { outcome: "error", later404: true },
+  ])("resolves an empty prefiltered sweep while recording $outcome for an incomplete list", async ({ outcome, later404 }) => {
+    const body = inlineList(later404 ? ["filtered-a", "filtered-b"] : ["filtered-a", "filtered-b", "filtered-b"]);
+    const firstUrl = `${BASE}?limit=3&offset=0&country=de`;
+    const nextUrl = `${BASE}?limit=3&offset=2&country=de`;
+    const { fetch, requests } = routedFetch([
+      [firstUrl, response(200, {
+        totalFound: 3,
+        content: body.content.map((p) => ({ ...p, name: "Sales Manager" })),
+      }, { ETag: 'W/"filtered-incomplete"' })],
+      [nextUrl, response(404, "page disappeared")],
+    ]);
+    const { ctx, query, logs } = atsContext("smartrecruiters", fetch, { channels: pagedChannels(3) });
+    const { channel: c, store } = channel();
+
+    await expect(c.collect(query, ctx)).resolves.toEqual([]);
+
+    expect(store.checks.at(-1)?.update).toEqual({
+      status: outcome, ...(later404 ? { errorCode: "unknown" } : {}), detailRetryIds: [],
+    });
+    expect(store.checks.some((check) => check.update.status === "ok")).toBe(false);
+    expect(store.states.has(BOARD_KEY)).toBe(false);
+    expect(requests.map((r) => r.url)).toEqual(later404 ? [firstUrl, nextUrl] : [firstUrl]);
+    expect(logs.find((l) => l.message === "ats sweep done")?.fields).toMatchObject({ failedBoards: 0, softBoards: 1, postings: 0 });
+  });
+
+  it("counts distinct ids across pages as short while advancing offsets by raw entries and handing duplicates over once", async () => {
+    const body = inlineList(["a", "b", "c"]);
+    const { fetch, requests } = routedFetch([
+      [PAGE_URL, response(200, { totalFound: 4, content: body.content.slice(0, 2) }, { ETag: 'W/"duplicates"' })],
+      [NEXT_PAGE_URL, response(200, { totalFound: 4, content: body.content.slice(1) })],
+      [`${BASE}/`, ({ url }) => response(200, body.content.find((p) => p.id === url.slice(BASE.length + 1)))],
+    ]);
+    const { ctx, query, logs } = atsContext("smartrecruiters", fetch, { channels: pagedChannels() });
+    const { channel: c, store } = channel();
+    const oldState = { etag: 'W/"complete"', filterFingerprint: "previous-rules", externalIds: ["old"], detailRetryIds: ["b"] };
+    store.states.set(BOARD_KEY, structuredClone(oldState));
+
+    await expect(c.collect(query, ctx)).resolves.toMatchObject([
+      { externalId: "a" }, { externalId: "b" }, { externalId: "c" },
+    ]);
+
+    expect(requests.filter((r) => r.url.includes("offset=")).map((r) => r.url)).toEqual([PAGE_URL, NEXT_PAGE_URL]);
+    expect(requests.filter((r) => r.url === `${BASE}/b`)).toHaveLength(1);
+    expect(store.checks.at(-1)?.update).toEqual({ status: "short", detailRetryIds: [] });
+    expect(store.states.get(BOARD_KEY)).toEqual({ ...oldState, detailRetryIds: [] });
+    expect(logs.find((l) => l.message === "ats board listed fewer than announced")?.fields).toMatchObject({ listed: 3, announced: 4 });
+    expect(logs.find((l) => l.message === "ats board")?.fields).toMatchObject({ outcome: "short", duplicates: 1 });
+  });
+
+  it.each(["first", "later"])("propagates cancellation while reading the %s list page body without recording state", async (page) => {
+    const abort = new AbortController();
+    const abortError = new DOMException("cancelled while reading list", "AbortError");
+    const cancelledPage = {
+      ...response(200, { totalFound: 3, content: [] }),
+      json: async () => { abort.abort(abortError); throw abortError; },
+    };
+    const { fetch, requests } = routedFetch([
+      [PAGE_URL, page === "first" ? cancelledPage : firstPage()],
+      [NEXT_PAGE_URL, cancelledPage],
+    ]);
+    const { ctx, query } = atsContext("smartrecruiters", fetch, { channels: pagedChannels(), signal: abort.signal });
+    const { channel: c, store } = channel();
+
+    await expect(c.collect(query, ctx)).rejects.toBe(abortError);
+
+    expect(abort.signal.aborted).toBe(true);
+    expect(requests.map((r) => r.url)).toEqual(page === "first" ? [PAGE_URL] : [PAGE_URL, NEXT_PAGE_URL]);
+    expect(store.checks).toEqual([]);
+    expect(store.states.size).toBe(0);
+    expect(store.touched).toEqual([]);
+  });
+
+  it("preserves a later list body stream's network error as the cause of the partial collection", async () => {
+    const networkError = new ChannelError("network", "list stream interrupted", { retryable: true });
+    const { fetch } = pagedRoutes({
+      ...response(200, { totalFound: 3, content: [] }),
+      json: async () => { throw networkError; },
+    });
+    const { ctx, query } = atsContext("smartrecruiters", fetch, { channels: pagedChannels() });
+    const { channel: c, store } = channel();
+    const collection = c.collect(query, ctx);
+
+    await expect(collection).rejects.toBeInstanceOf(PartialCollectError);
+    await expect(collection).rejects.toMatchObject({
+      cause: { code: "network", retryable: true },
+      postings: [
+        { externalId: "744000000000001", payload: { posting: detail(1) } },
+        { externalId: "744000000000003", payload: { posting: detail(3) } },
+      ],
+    });
+    await expect(collection).rejects.toHaveProperty("cause", networkError);
+    expect(store.checks.at(-1)?.update).toEqual({ status: "error", errorCode: "network", detailRetryIds: [] });
+  });
+
+  it("keeps the first missing-board failure whether a later hard failure has postings or not", async () => {
+    // The empty case must stay a plain ChannelError; the case with content must retain that same first cause.
+    for (const hasPostings of [false, true]) {
+      const body = inlineList(["other-good"], otherSr.token);
+      const { fetch } = routedFetch([
+        [PAGE_URL, response(404, "board missing")],
+        [OTHER_PAGE_URL, hasPostings ? response(200, { ...body, totalFound: 2 }) : response(503, "list unavailable")],
+        [`${OTHER_BASE}?limit=2&offset=1`, response(200, { content: "invalid" })],
+        [`${OTHER_BASE}/other-good`, response(200, body.content[0])],
+      ]);
+      const { ctx, query } = atsContext("smartrecruiters", fetch, { channels: pagedChannels() });
+      const { channel: c, store } = channel([sr, otherSr]);
+      const collection = c.collect(query, ctx);
+      const missingBoard = { name: "ChannelError", code: "unknown", status: 404, retryable: false, message: expect.stringContaining(sr.token) };
+
+      if (hasPostings) {
+        await expect(collection).rejects.toBeInstanceOf(PartialCollectError);
+        await expect(collection).rejects.toMatchObject({
+          cause: missingBoard,
+          postings: [{ externalId: "other-good", payload: { source: { token: otherSr.token }, posting: body.content[0] } }],
+        });
+      } else {
+        await expect(collection).rejects.toBeInstanceOf(ChannelError);
+        await expect(collection).rejects.not.toBeInstanceOf(PartialCollectError);
+        await expect(collection).rejects.toMatchObject(missingBoard);
+      }
+      expect(store.checks.map((check) => check.update)).toEqual([
+        { status: "error", errorCode: "not_found" },
+        hasPostings ? { status: "error", errorCode: "parse", detailRetryIds: [] } : { status: "error", errorCode: "network" },
+      ]);
+    }
+  });
+
+  it("returns both boards' postings when a later-page network failure shares a sweep with a short board", async () => {
+    const otherBody = inlineList(["other-good"], otherSr.token);
+    const { fetch } = routedFetch([
+      [PAGE_URL, firstPage()],
+      [NEXT_PAGE_URL, response(503, "list unavailable")],
+      [`${BASE}/744000000000001`, response(200, detail(1))],
+      [`${BASE}/744000000000003`, response(200, detail(3))],
+      [OTHER_PAGE_URL, response(200, { ...otherBody, totalFound: 2 })],
+      [`${OTHER_BASE}?limit=2&offset=1`, response(200, { totalFound: 2, content: [] })],
+      [`${OTHER_BASE}/other-good`, response(200, otherBody.content[0])],
+    ]);
+    const { ctx, query, logs } = atsContext("smartrecruiters", fetch, { channels: pagedChannels() });
+    const { channel: c, store } = channel([sr, otherSr]);
+
+    await expect(c.collect(query, ctx)).resolves.toMatchObject([
+      { externalId: "744000000000001", payload: { posting: detail(1) } },
+      { externalId: "744000000000003", payload: { posting: detail(3) } },
+      { externalId: "other-good", payload: { posting: otherBody.content[0] } },
+    ]);
+
+    expect(store.checks.map((check) => check.update)).toEqual([
+      { status: "error", errorCode: "network", detailRetryIds: [] },
+      { status: "short", detailRetryIds: [] },
+    ]);
+    expect(logs.find((l) => l.message === "ats sweep done")?.fields).toMatchObject({ boards: 2, failedBoards: 1, softBoards: 1, postings: 3 });
   });
 
   it("[regression guard] answers 304 with no unresolved details: no further requests, postings touched", async () => {
@@ -140,7 +420,7 @@ describe("smartrecruiters sweep", () => {
     // fetch would otherwise add "Cache-Control: no-cache", which SmartRecruiters answers with 200 (verified live)
     expect(second.requests[0]?.headers["Cache-Control"]).toBe("max-age=0");
     expect(store.touched.at(-1)).toEqual(["744000000000001", "744000000000003"]);
-    expect(store.checks.at(-1)?.update).toEqual({ status: "not_modified" });
+    expect(store.checks.at(-1)?.update).toEqual({ status: "not_modified", completeRead: true });
     expect(store.states.get(BOARD_KEY)?.detailRetryIds).toEqual([]);
     expect(b.logs.find((l) => l.message === "ats board still has unresolved details")).toBeUndefined();
     expect(b.logs.find((l) => l.message === "ats sweep done")?.fields).not.toHaveProperty("detailFailedBoards");
@@ -205,7 +485,7 @@ describe("smartrecruiters sweep", () => {
         LIST_URL, ...(healthyOther ? [otherListUrl, `${otherBase}/b-good`] : []),
       ]);
       expect(requests[before]?.headers["If-None-Match"]).toBe(etag);
-      expect(store.checks.filter((check) => check.key.token === sr.token).at(-1)?.update).toEqual({ status: "not_modified" });
+      expect(store.checks.filter((check) => check.key.token === sr.token).at(-1)?.update).toEqual({ status: "not_modified", completeRead: false });
       expect(store.states.get(BOARD_KEY)).toEqual(state);
       expect(store.touched).toEqual([...touched, stored ? ids : []]);
       expect(unchanged.logs.find((l) => l.message === "ats board still has unresolved details")).toMatchObject({
@@ -226,12 +506,12 @@ describe("smartrecruiters sweep", () => {
       ...ids.map((externalId) => ({ externalId })), ...healthyPostings,
     ]);
     expect(store.states.get(BOARD_KEY)).toMatchObject({ etag, externalIds: ids, detailRetryIds: [] });
-    expect(store.checks.filter((check) => check.key.token === sr.token).at(-1)?.update).toMatchObject({ status: "ok", detailRetryIds: [] });
+    expect(store.checks.filter((check) => check.key.token === sr.token).at(-1)?.update).toMatchObject({ status: "ok", completeRead: true, detailRetryIds: [] });
     expect(recovered.logs.find((l) => l.message === "ats sweep done")?.fields).not.toHaveProperty("detailFailedBoards");
 
     const unchanged = atsContext("smartrecruiters", fetch, { channels: aiChannels() });
     await expect(c.collect(unchanged.query, unchanged.ctx)).resolves.toMatchObject(healthyPostings);
-    expect(store.checks.filter((check) => check.key.token === sr.token).at(-1)?.update).toEqual({ status: "not_modified" });
+    expect(store.checks.filter((check) => check.key.token === sr.token).at(-1)?.update).toEqual({ status: "not_modified", completeRead: true });
     expect(store.states.get(BOARD_KEY)?.detailRetryIds).toEqual([]);
     expect(store.touched.at(-1)).toEqual(ids);
     expect(unchanged.logs.find((l) => l.message === "ats board still has unresolved details")).toBeUndefined();
@@ -343,7 +623,7 @@ describe("smartrecruiters sweep", () => {
     expect(requests.map((r) => r.url)).toEqual([LIST_URL, `${BASE}/744000000000001`, `${BASE}/744000000000003`]);
     expect(store.touched).toEqual([["744000000000001"]]);
     expect(store.checks.at(-1)?.update).toMatchObject({
-      status: "ok", etag, externalIds, detailRetryIds: ["744000000000001"], total: 3, kept: 2,
+      status: "ok", completeRead: false, etag, externalIds, detailRetryIds: ["744000000000001"], total: 3, kept: 2,
     });
     expect(store.states.get(BOARD_KEY)).toMatchObject({ etag, externalIds, detailRetryIds: ["744000000000001"] });
     const warning = logs.find((l) => l.message === "ats board details missing");
