@@ -86,6 +86,17 @@ test("cron boxes carry a reading of what they mean; the interface tab says the w
   await expect(page.getByTestId("ack-ui")).toHaveAttribute("data-state", "web");
 });
 
+test("the remote scope option names what it keeps, a hint explains it and the field says what it decides", async ({ page }) => {
+  await open(page, "search");
+  const card = page.getByTestId("settings-card-search");
+  const scope = card.getByTestId("remote-scope-kind");
+  await expect(scope.locator("option[value=home_country]")).toHaveText("能从德国远程（含面向欧盟 / 欧洲 / EMEA / 全球的远程岗）");
+  await expect(card.getByTestId("remote-scope-hint")).toBeVisible();
+  await expect(card).toContainText("过滤用的是“我的画像”里的同名设置");
+  await scope.selectOption("worldwide");
+  await expect(card.getByTestId("remote-scope-hint")).toContainText("所有远程岗都保留");
+});
+
 test("change a search keyword and save: the YAML keeps its comments and the runner confirms the reload", async ({ page }) => {
   await open(page, "search");
   const card = page.getByTestId("settings-card-search");

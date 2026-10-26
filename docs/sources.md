@@ -62,6 +62,8 @@ when the board reports that its list is unchanged. Their saved title and descrip
 until they are back within the cap. Postings beyond the cap that have never been stored are not added.
 The registry's "kept" count means postings that passed the title prefilter and fit within the cap.
 
+A watched company's board is read whole: the title prefilter keeps every posting of it. The board's `name` and the watch-list entry are compared by the company key (case, legal forms such as GmbH or Inc., and `pipeline.yaml` aliases ignored), the same key the push step uses, so "Acme GmbH" on the watch list matches a board named "Acme". Name a board like the company so that `/interests` stops showing "No job board configured" for it; a watched company without a board is only found by the searches for your cities. A board whose watched status changes because of this (a list entry that now matches its name) is read again once, whatever its stored ETag says.
+
 A stored posting dropped by the title prefilter does **not** count as seen.
 After you narrow your keywords, it ages out as usual unless another source sees it.
 

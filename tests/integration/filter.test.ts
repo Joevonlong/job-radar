@@ -6,13 +6,16 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, inject, i
 import { setFilterOverrideAction } from "@/app/jobs/[id]/filter-actions";
 import { createLogger } from "@/lib/channels/logger";
 import { ChannelRegistry } from "@/lib/channels/registry";
-import { ensureProfileFiles, getConfigPath, reloadConfig, setOnProfileSaved } from "@/lib/config";
+import { ensureProfileFiles, getConfigPath, loadConfig, reloadConfig, resetConfigCache, setOnProfileSaved, writeConfig } from "@/lib/config";
 import { registerBuiltinCycleSteps } from "@/lib/cycle/builtin-steps";
 import { runCycle } from "@/lib/cycle/run-cycle";
 import { resetCycleSteps } from "@/lib/cycle/steps";
 import { clearFilterOverride, closeDb, getDb, getFilterOverride, listJobs, listProfileSnapshots, listTodayJobs, schema, setFilterOverride } from "@/lib/db";
 import { runMigrations } from "@/lib/db/migrate";
-import { filterStep, refilterJob, runFilter, currentPreferences, type FilterRunResult } from "@/lib/filter";
+import { currentWatchedCompanies, filterStep, refilterJob, runFilter, currentPreferences, type FilterRunResult } from "@/lib/filter";
+import { buildWatchedCompanyKeys } from "@/lib/companies/marks";
+import { listPushCandidates } from "@/lib/db";
+import { selectForPush } from "@/lib/notify/select";
 import { preferencesConfigToDraft } from "@/lib/profile/draft";
 import { saveProfile } from "@/lib/profile/service";
 
@@ -51,12 +54,15 @@ afterEach(() => {
 });
 
 let seq = 0;
-async function addJob(over: Partial<typeof schema.jobs.$inferInsert> & { company?: string } = {}) {
+async function addJob(over: Partial<typeof schema.jobs.$inferInsert> & { company?: string; nameNorm?: string; watched?: boolean } = {}) {
   const db = getDb();
   seq += 1;
-  const { company: companyName, ...rest } = over;
+  const { company: companyName, nameNorm, watched, ...rest } = over;
   const name = companyName ?? `Acme ${seq}`;
-  const [company] = await db.insert(schema.companies).values({ name, nameNorm: `acme-${seq}-${Math.random()}` }).returning();
+  const [company] = await db
+    .insert(schema.companies)
+    .values({ name, nameNorm: nameNorm ?? `acme-${seq}-${Math.random()}`, ...(watched === undefined ? {} : { watched }) })
+    .returning();
   if (!company) throw new Error("company");
   const [job] = await db
     .insert(schema.jobs)
@@ -284,6 +290,123 @@ describe("user override", () => {
     expect(await rowsOf(garching.id)).toMatchObject([{ filterResult: "passed", filterReasons: [] }]);
     expect(await rowsOf(germany.id)).toMatchObject([{ filterResult: "passed", filterReasons: ["location_country_level:Germany"] }]);
     expect(await rowsOf(us.id)).toMatchObject([{ filterResult: "filtered_out", filterReasons: ["remote_out_of_scope:Remote - Washington D.C."] }]);
+  });
+});
+
+describe("watched companies keep their on-site jobs anywhere in the home country", () => {
+  const hamburgLocation = [{ label: "Hamburg", city: "Hamburg", countryCode: "DE", isPrimary: true }];
+  const setWatched = async (names: string[]) => {
+    await writeConfig("interests", { ...loadConfig("interests"), watched_companies: names });
+  };
+  const hamburgJob = () => addJob({ company: "Orbitrail AG", nameNorm: "orbitrail", workplace: "onsite", locationsJson: hamburgLocation });
+
+  it("follows the watch list: in, out and back, updating the result in place", async () => {
+    const job = await hamburgJob();
+    await runStep();
+    expect(await rowsOf(job.id)).toMatchObject([{ filterResult: "filtered_out", filterReasons: ["location_not_allowed:Hamburg"] }]);
+
+    await setWatched(["Orbitrail GmbH"]); // another legal form: the same company key
+    const watched = await runStep();
+    expect(watched).toMatchObject({ evaluated: 1, created: 0, updated: 1, passed: 1 });
+    expect(watched.byReason).toEqual({ watched_company_location: 1 });
+    expect(await rowsOf(job.id)).toMatchObject([{ filterResult: "passed", filterReasons: ["watched_company_location:Hamburg"] }]);
+
+    await setWatched([]);
+    expect(await runStep()).toMatchObject({ updated: 1, filteredOut: 1 });
+    expect(await rowsOf(job.id)).toMatchObject([{ filterResult: "filtered_out", filterReasons: ["location_not_allowed:Hamburg"] }]);
+  });
+
+  it("the database flag alone watches a company", async () => {
+    const job = await addJob({ company: "Flagged Corp", nameNorm: "flagged", watched: true, workplace: "hybrid", locationsJson: hamburgLocation });
+    await runStep();
+    expect(await rowsOf(job.id)).toMatchObject([{ filterResult: "passed", filterReasons: ["watched_company_location:Hamburg"] }]);
+  });
+
+  it("does not keep a place whose country is unknown, nor a place in another country", async () => {
+    await setWatched(["Orbitrail", "Globex"]);
+    const sf = await addJob({ company: "Orbitrail AG", nameNorm: "orbitrail", workplace: "onsite", locationsJson: [{ label: "San Francisco", city: null, countryCode: null, isPrimary: true }] });
+    const london = await addJob({ company: "Globex", nameNorm: "globex", workplace: "onsite", locationsJson: [{ label: "London", city: "London", countryCode: "GB", isPrimary: true }] });
+    await runStep();
+    expect(await rowsOf(sf.id)).toMatchObject([{ filterResult: "filtered_out", filterReasons: ["location_not_allowed:San Francisco"] }]);
+    expect(await rowsOf(london.id)).toMatchObject([{ filterResult: "filtered_out", filterReasons: ["location_not_allowed:London"] }]);
+  });
+
+  it("runFilter reads the watch list itself and takes a list passed to it instead", async () => {
+    const job = await hamburgJob();
+    await setWatched(["Orbitrail"]);
+    const db = getDb();
+    const current = await currentPreferences(db);
+    const base = { preferences: current.preferences, snapshotId: current.snapshot.id, pipeline: shippedPipeline(), me: null };
+    await runFilter(db, { ...base, watchedCompanies: [] });
+    expect(await rowsOf(job.id)).toMatchObject([{ filterResult: "filtered_out" }]);
+    const again = await runFilter(db, base);
+    expect(again).toMatchObject({ updated: 1, passed: 1 });
+    expect(await rowsOf(job.id)).toMatchObject([{ filterResult: "passed", filterReasons: ["watched_company_location:Hamburg"] }]);
+    // the single-job path (the detail page's button) judges alike
+    await setWatched([]);
+    expect(await refilterJob(getDb(), job.id)).toEqual({ filterResult: "filtered_out", filterReasons: ["location_not_allowed:Hamburg"] });
+  });
+
+  it("the push step selects the kept job, and the user's exclude still wins", async () => {
+    const job = await hamburgJob();
+    await setWatched(["Orbitrail"]);
+    await runStep();
+    const pipeline = shippedPipeline();
+    const select = async () => {
+      const candidates = await listPushCandidates(getDb(), { since: new Date(Date.now() - 86_400_000) });
+      return selectForPush(candidates, {
+        config: { push_min_score: 70, push_min_score_high_value: 60, max_per_cycle: 10 },
+        watchedKeys: buildWatchedCompanyKeys(loadConfig("interests").watched_companies, pipeline),
+        alreadyNotified: new Set(),
+      }).selected.map((item) => item.candidate.jobId);
+    };
+    expect(await select()).toEqual([job.id]);
+    await setFilterOverride(getDb(), job.id, "exclude");
+    await runStep();
+    expect(await select()).toEqual([]);
+  });
+
+  it("an unreadable watch list counts as empty, with a warning; the database flag still works", async () => {
+    const flagged = await addJob({ company: "Flagged Corp", nameNorm: "flagged", watched: true, workplace: "onsite", locationsJson: hamburgLocation });
+    const listed = await hamburgJob();
+    await setWatched(["Orbitrail"]);
+    fs.writeFileSync(getConfigPath("interests"), "watched_companies: [unclosed\n");
+    resetConfigCache(); // a file edited by hand while no process has it cached
+    const warnings: string[] = [];
+    const logger = createLogger({ sink: (entry) => void (entry.level === "warn" && warnings.push(entry.message)) });
+    expect(currentWatchedCompanies(logger)).toEqual([]);
+    expect(warnings).toHaveLength(1);
+    const db = getDb();
+    const current = await currentPreferences(db);
+    await runFilter(db, { preferences: current.preferences, snapshotId: current.snapshot.id, pipeline: shippedPipeline(), me: null, logger });
+    expect(await rowsOf(flagged.id)).toMatchObject([{ filterResult: "passed", filterReasons: ["watched_company_location:Hamburg"] }]);
+    expect(await rowsOf(listed.id)).toMatchObject([{ filterResult: "filtered_out" }]);
+  });
+
+  it("a watch list that turns unreadable while a good one is cached keeps the cached list, with a warning; the database flag still works", async () => {
+    const flagged = await addJob({ company: "Flagged Corp", nameNorm: "flagged", watched: true, workplace: "onsite", locationsJson: hamburgLocation });
+    const listed = await hamburgJob();
+    await setWatched(["Orbitrail"]);
+    expect(currentWatchedCompanies()).toEqual(["Orbitrail"]); // cached
+    vi.stubEnv("JOB_RADAR_CONFIG_POLL_MS", "1");
+    const warn = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      fs.writeFileSync(getConfigPath("interests"), "watched_companies: [unclosed\n");
+      await new Promise((resolve) => setTimeout(resolve, 20)); // past the poll interval: the next read looks at the file
+      const logged: string[] = [];
+      const logger = createLogger({ sink: (entry) => void logged.push(entry.message) });
+      expect(currentWatchedCompanies(logger)).toEqual(["Orbitrail"]);
+      expect(logged).toEqual([]); // loadConfig itself kept the last good value
+      expect(warn.mock.calls.map((call) => String(call[0])).join("\n")).toMatch(/keeping the last valid value/);
+      const db = getDb();
+      const current = await currentPreferences(db);
+      await runFilter(db, { preferences: current.preferences, snapshotId: current.snapshot.id, pipeline: shippedPipeline(), me: null, logger });
+      expect(await rowsOf(flagged.id)).toMatchObject([{ filterResult: "passed", filterReasons: ["watched_company_location:Hamburg"] }]);
+      expect(await rowsOf(listed.id)).toMatchObject([{ filterResult: "passed", filterReasons: ["watched_company_location:Hamburg"] }]); // still on the cached list
+    } finally {
+      warn.mockRestore();
+      vi.unstubAllEnvs();
+    }
   });
 });
 

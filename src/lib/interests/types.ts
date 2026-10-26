@@ -53,6 +53,8 @@ export interface WatchedCompanyView {
   name: string;
   /** Company of the database it matches, and its jobs; null while no such company was collected yet. */
   match: { name: string; jobCount: number } | null;
+  /** An enabled ATS board carries this company (its jobs are collected in every city); false = only the city queries find it. */
+  hasBoard: boolean;
 }
 
 /** Longest autocomplete list. */

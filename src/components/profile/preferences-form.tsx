@@ -28,7 +28,7 @@ import { DealBreakersCard } from "./deal-breakers-card";
 import { Field, TagInput, describedBy, fieldErrorMap } from "./fields";
 import { FloorPreview } from "./floor-preview";
 import { FormCard } from "./form-card";
-import { MarketFields, draftCountryName } from "./market-fields";
+import { MarketFields, draftCountryName, draftHomeRegion } from "./market-fields";
 import { RemoteScopeField } from "./remote-scope-field";
 
 interface PreferencesFormProps {
@@ -174,6 +174,7 @@ export function PreferencesForm({ initial, hash, state, pending, onSave, salarie
             onChange={(next) => patch({ remote_scope: next })}
             options={market.scopeOptions}
             countryName={draftCountryName(market, draft.market)}
+            homeRegion={draftHomeRegion(market, draft.market)}
             invalid={errors.has("remote_scope")}
             describedBy={describedBy(ids.remote, false, errors.get("remote_scope"))}
             namespace="profile"

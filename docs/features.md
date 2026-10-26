@@ -142,7 +142,7 @@ Demo data throughout: the companies and jobs are invented. To click around the s
 | Filters and saved views | Score, signal, source, city, remote, language requirement, salary, status, date. Save a combination and switch to it on Today. |
 | Sort and catch up | Click a column header on Jobs to sort by score, salary or freshness. Jobs you haven't opened yet are bold with a dot; show "Unseen only", "Mark all as seen", and a divider marks what's new since your last visit. |
 | Market packs | A neutral default plus a Germany / EU pack (local job boards, German-level rules, EUR). For another country, copy a pack. [Market packs](market-packs.md) |
-| Watched companies | New jobs from companies you watch skip the push threshold, even before they have a score. |
+| Watched companies | New jobs from companies you watch skip the push threshold, even before they have a score, and their on-site and hybrid jobs are kept in any city of your country. |
 
 **AI reads for you**
 

@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 
-import type { AtsTitlePrefilterSettings } from "@/lib/config";
+import type { AtsTitlePrefilterSettings, PipelineConfig } from "@/lib/config";
+import { resolveCompanyName } from "@/lib/pipeline/company";
 
 /**
  * Title prefilter of the ATS channels. A board returns every open posting; only titles that
@@ -22,6 +23,8 @@ export interface TitlePrefilterInput {
   keywordGroups: Readonly<Record<string, readonly string[]>>;
   /** `interests.yaml: watched_companies` (company names). */
   watchedCompanies: readonly string[];
+  /** pipeline.yaml: company names are compared by the push step's company key (legal form and aliases ignored). */
+  pipeline: PipelineConfig;
 }
 
 export interface TitlePrefilter {
@@ -52,17 +55,15 @@ export function compileTermMatcher(terms: readonly string[]): RegExp | null {
   return new RegExp(`(?<!${WORD_CHAR})(?:${sources.join("|")})(?!${WORD_CHAR})`, "iu");
 }
 
-function normalizeName(name: string): string {
-  return name.trim().toLowerCase();
-}
-
 export function createTitlePrefilter(input: TitlePrefilterInput): TitlePrefilter {
   const { settings } = input;
   const keywords = [...new Set(Object.values(input.keywordGroups).flat())].sort();
   const keywordMatcher = compileTermMatcher(keywords);
   const includeMatcher = compileTermMatcher(settings.include_terms);
   const excludeMatcher = compileTermMatcher(settings.exclude_terms);
-  const watched = new Set(input.watchedCompanies.map(normalizeName));
+  const keyOf = (name: string): string => resolveCompanyName(name, input.pipeline).nameNorm;
+  // an empty key (a name of only a legal form or without Latin letters) watches nothing
+  const watched = new Set(input.watchedCompanies.map(keyOf).filter((key) => key !== ""));
 
   return {
     fingerprint(companyName) {
@@ -71,13 +72,13 @@ export function createTitlePrefilter(input: TitlePrefilterInput): TitlePrefilter
         keywords,
         [...settings.include_terms].sort(),
         [...settings.exclude_terms].sort(),
-        watched.has(normalizeName(companyName)),
+        watched.has(keyOf(companyName)),
       ]);
       return createHash("sha256").update(canonical).digest("hex").slice(0, 32);
     },
     decide(title, companyName) {
       if (!settings.enabled) return { keep: true, reason: "disabled" };
-      if (watched.has(normalizeName(companyName))) return { keep: true, reason: "watched" };
+      if (watched.has(keyOf(companyName))) return { keep: true, reason: "watched" };
       if (excludeMatcher?.test(title)) return { keep: false, reason: "excluded" };
       if (keywordMatcher?.test(title)) return { keep: true, reason: "keyword" };
       if (includeMatcher?.test(title)) return { keep: true, reason: "include_term" };

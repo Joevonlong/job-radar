@@ -225,6 +225,8 @@
       "empty": "还没有关注的公司。",
       "matched": "匹配：{name} · {count, plural, other {# 个岗位}}",
       "unmatched": "数据库里还没有这家公司的岗位，出现后自动生效",
+      "noBoard": "没有配置招聘看板：只能靠目标城市的查询采到。",
+      "noBoardLink": "添加看板",
       "remove": "移除 {name}",
       "addedToast": "已关注「{name}」",
       "removedToast": "已取消关注「{name}」"
@@ -640,7 +642,7 @@
       "remoteScope": {
         "none": "不接受 remote",
         "worldwide": "全球",
-        "home_country": "本国内（市场所在国家）",
+        "home_country": "能从市场所在国家远程（含所在区域或全球的远程岗）",
         "region": "指定区域内"
       },
       "seniority": {
@@ -801,6 +803,7 @@
       "location_unknown": "岗位没写明城市",
       "remote_scope_description": "远程岗位，地点在你的范围外（{detail}），但正文写明可以在本国或所在区域受雇",
       "location_country_level": "地点只写到国家或区域（{detail}），岗位可能在其中任何地方",
+      "watched_company_location": "关注公司：{detail} 不在目标城市，但在本国，按关注公司保留",
       "override_keep": "你选择了保留这条",
       "override_exclude": "你选择了排除这条"
     }
@@ -1869,7 +1872,7 @@
       "remoteScope": {
         "none": "不接受 remote",
         "worldwide": "全球",
-        "home_country": "本国内（市场所在国家）",
+        "home_country": "能从市场所在国家远程（含所在区域或全球的远程岗）",
         "region": "指定区域内"
       },
       "breakdownMode": {
@@ -1948,7 +1951,7 @@
       },
       "remote_scope": {
         "label": "远程范围",
-        "hint": "远程岗位接受的范围。"
+        "hint": "远程岗位接受的范围。这里决定远程查询用什么地点去搜；过滤用的是“我的画像”里的同名设置。"
       },
       "window_morning": {
         "label": "早轮回看时间窗（小时）",
@@ -4871,7 +4874,19 @@
   },
   "market": {
     "scope": {
-      "homeCountry": "本国内（{country}）",
+      "homeCountryRemote": "能从{country}远程（含面向{region} / 全球的远程岗）",
+      "homeCountryRemoteNoRegion": "能从{country}远程",
+      "homeRegionShort": {
+        "eu": "欧盟 / 欧洲 / EMEA"
+      },
+      "thisCountry": "本国",
+      "kindHint": {
+        "none": "不收远程岗，除非岗位地点在你的目标城市。",
+        "home_country": "保留：地点在{country}、写明面向{region}或全球的远程岗；正文写明可从{country} / {region}远程的也保留。排除：只写了别的国家（如 Remote - Spain）或标题写明只招美国等地区的。没写在哪里招的保留并标注。",
+        "home_countryNoRegion": "保留：地点在{country}或面向全球的远程岗；正文写明可从{country}远程的也保留。排除：只写了别的国家（如 Remote - Spain）或标题写明只招其他地区的。没写在哪里招的保留并标注。",
+        "worldwide": "所有远程岗都保留，不管在哪里招。",
+        "region": "保留：地点在所选区域或国家、或面向全球的远程岗；正文写明在这些地方招的也保留。排除：只写了其他国家，或标题写明只招别处的。没写在哪里招的保留并标注。"
+      },
       "regions": "区域和国家",
       "search": "搜索区域或国家",
       "none": "还没有选",

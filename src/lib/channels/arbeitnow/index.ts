@@ -1,4 +1,5 @@
 import { arbeitnowSettingsSchema, loadConfig, type ArbeitnowSettings, type InterestsConfig, type SearchConfig } from "@/lib/config";
+import { loadPipeline } from "@/lib/market";
 
 import { issuePaths } from "../ats/envelope";
 import { createTitlePrefilter } from "../ats/prefilter";
@@ -68,6 +69,7 @@ async function sweep(
     settings: settings.title_prefilter,
     keywordGroups: inputs.search.keyword_groups,
     watchedCompanies: inputs.interests.watched_companies,
+    pipeline: loadPipeline(),
   });
   const windowStart = (deps.now?.() ?? new Date()).getTime() - query.windowHours * 3_600_000;
   const cap = Math.min(query.maxResults, ctx.settings.maxResults);

@@ -78,6 +78,7 @@ function filterJob(over: Partial<FilterJob>): FilterJob {
     companyName: "Northwind Labs GmbH",
     companyAliases: [],
     companyBlacklisted: false,
+    companyWatched: false,
     locations: [],
     workplace: "hybrid",
     seniority: "senior",

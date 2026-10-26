@@ -317,6 +317,9 @@ test("watched companies: autocomplete from the companies table, add and remove",
   await option.click();
   await expect(card.getByTestId("watched-item")).toHaveCount(1);
   await expect(card.getByTestId("watched-item")).toContainText("Orbitrail AG");
+  // no ATS board is configured for it: the panel says so and links to the registry
+  await expect(card.getByTestId("watched-no-board")).toContainText("没有配置招聘看板");
+  await expect(card.getByTestId("watched-no-board").getByRole("link", { name: "添加看板" })).toHaveAttribute("href", "/sources/registry");
   // (whether the entry matches a company row is covered by the integration test: the seed's name keys are not the pipeline's)
   await expect.poll(read).toMatch(/watched_companies:\n {2}- Orbitrail AG\n/);
 

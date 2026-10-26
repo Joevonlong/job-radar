@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import { applyOverride, evaluateJob, parseFilterReason, wholeWordPattern } from "@/lib/filter";
 
-import { pipelineWith, pipelineWithPack } from "../pipeline/helpers";
+import { normalizeLocation } from "@/lib/pipeline/geography";
+
+import { fixtureMarket, pipelineWith, pipelineWithPack, shippedPipeline } from "../pipeline/helpers";
 import { filterWith, job, loc, prefs, salary } from "./helpers";
 
 const run = (j: ReturnType<typeof job>, filter = filterWith()) => evaluateJob(j, filter);
@@ -411,5 +413,169 @@ describe("helpers", () => {
   it("matches whole words only", () => {
     expect(wholeWordPattern("go").test("ago")).toBe(false);
     expect(wholeWordPattern("go").test("Go, Rust")).toBe(true);
+  });
+});
+
+describe("remote scope home_country: what it keeps (rules unchanged)", () => {
+  const market = fixtureMarket();
+  const remote = (label: string, title = "Applied AI Engineer", description: string | null = "Build LLM features for our platform.") =>
+    job({ title, description, workplace: "remote", locations: [normalizeLocation(label, market)] });
+  const homeCountry = filterWith(prefs((raw) => (raw.remote_scope = "home_country")));
+
+  it.each([
+    ["Remote - Berlin", []],
+    ["Munich (Remote)", []],
+    ["Germany (Remote)", ["location_country_level:Germany (Remote)"]],
+    ["Remote, Deutschland", null],
+    ["Remote - EU", []],
+    ["Europe", []],
+    ["EMEA", []],
+    ["EEA", []],
+    ["Europa", []],
+    ["Remote - Worldwide", []],
+    ["Anywhere", []],
+    ["Global", []],
+    ["weltweit", []],
+  ])("keeps %s", (label, reasons) => {
+    const verdict = run(remote(label), homeCountry);
+    expect(verdict.result).toBe("passed");
+    // the country-level note names the stored place; the other rows carry no note
+    if (reasons !== null) expect(verdict.reasons.map((r) => r.split(":", 1)[0])).toEqual(reasons.map((r) => r.split(":", 1)[0]));
+  });
+
+  it.each(["Remote - Spain", "Remote, UK", "Austria", "Remote - USA", "Americas", "APAC", "Austin, TX"])("excludes %s", (label) => {
+    const verdict = run(remote(label), homeCountry);
+    expect(verdict.result).toBe("filtered_out");
+    expect(verdict.reasons.map((r) => r.split(":", 1)[0])).toEqual(["remote_out_of_scope"]);
+  });
+
+  it("keeps an outside place when the description says it hires in Europe, noted", () => {
+    const verdict = run(remote("Remote - Spain", "Applied AI Engineer", "This is a remote from anywhere in Europe role."), homeCountry);
+    expect(verdict.result).toBe("passed");
+    expect(verdict.reasons.map((r) => r.split(":", 1)[0])).toEqual(["remote_scope_description"]);
+  });
+
+  it("excludes by the title marker even when the title also says nothing in scope; an in-scope region in the title wins", () => {
+    expect(run(remote("Germany", "AI Engineer - US"), homeCountry).reasons).toEqual(["remote_out_of_scope:US"]);
+    expect(run(remote("Germany", "AI Engineer (EMEA / Americas)"), homeCountry).result).toBe("passed");
+  });
+
+  it("keeps a remote job that does not say where, noted", () => {
+    expect(run(remote("Remote"), homeCountry)).toEqual({ result: "passed", reasons: ["remote_scope_unknown"] });
+    expect(run(job({ workplace: "remote", locations: [] }), homeCountry)).toEqual({ result: "passed", reasons: ["remote_scope_unknown"] });
+  });
+
+  it("has the same rules in the generic market (no region: only the home country and worldwide)", () => {
+    const genericMarket = fixtureMarket({ pack: "generic", country: "DE", currency: "EUR", home_language: "de" });
+    const generic = filterWith(prefs((raw) => (raw.remote_scope = "home_country")), shippedPipeline(genericMarket));
+    const place = (label: string) => job({ workplace: "remote", locations: [normalizeLocation(label, genericMarket)] });
+    expect(run(place("Germany (Remote)"), generic).result).toBe("passed");
+    expect(run(place("Remote - Worldwide"), generic).result).toBe("passed");
+    expect(run(place("Remote - Spain"), generic).result).toBe("filtered_out");
+  });
+});
+
+describe("watched companies keep their on-site jobs anywhere in the home country", () => {
+  const watchedFilter = (...names: string[]) => filterWith(prefs(), shippedPipeline(), names);
+  const at = (...locations: ReturnType<typeof loc>[]) => job({ companyName: "Acme GmbH", companyNameNorm: "acme", workplace: "onsite", locations });
+  // through the real location reading: the city table says Hamburg is in Germany
+  const hamburg = normalizeLocation("Hamburg", fixtureMarket());
+
+  it("reads Hamburg as a German city", () => {
+    expect(hamburg).toMatchObject({ city: "Hamburg", countryCode: "DE" });
+  });
+
+  it("never watches a company through an empty key", () => {
+    const empty = filterWith(prefs(), shippedPipeline(), ["日本電気"]);
+    expect(run({ ...at(hamburg), companyNameNorm: null }, empty).reasons).toEqual(["location_not_allowed:Hamburg"]);
+    expect(run({ ...at(hamburg), companyNameNorm: "" }, empty).reasons).toEqual(["location_not_allowed:Hamburg"]);
+    expect(run({ ...at(hamburg), companyNameNorm: undefined }, empty).reasons).toEqual(["location_not_allowed:Hamburg"]);
+    // the database flag still watches
+    expect(run({ ...at(hamburg), companyNameNorm: "", companyWatched: true }, empty).result).toBe("passed");
+  });
+
+  it("keeps Hamburg for a watched company, noting why; the same job of an unwatched company is excluded", () => {
+    expect(run(at(hamburg), watchedFilter("Acme"))).toEqual({ result: "passed", reasons: ["watched_company_location:Hamburg"] });
+    expect(run(at(hamburg), watchedFilter())).toEqual({ result: "filtered_out", reasons: ["location_not_allowed:Hamburg"] });
+    expect(run(at(hamburg), watchedFilter("Other"))).toEqual({ result: "filtered_out", reasons: ["location_not_allowed:Hamburg"] });
+  });
+
+  it("reads the watch list by the push step's key: legal form and case do not matter", () => {
+    expect(run(at(hamburg), watchedFilter("acme GmbH")).result).toBe("passed");
+    expect(run(at(hamburg), watchedFilter("ACME")).result).toBe("passed");
+    expect(run(at(hamburg), watchedFilter("Acme AI")).result).toBe("filtered_out");
+  });
+
+  it("watches by the database flag alone", () => {
+    expect(run({ ...at(hamburg), companyWatched: true }, watchedFilter())).toEqual({ result: "passed", reasons: ["watched_company_location:Hamburg"] });
+  });
+
+  it("works for hybrid and unknown work modes too", () => {
+    for (const workplace of ["hybrid", "unknown"] as const) {
+      expect(run({ ...at(hamburg), workplace }, watchedFilter("Acme")).reasons).toEqual(["watched_company_location:Hamburg"]);
+    }
+  });
+
+  it("keeps a town whose country is stated by the source", () => {
+    expect(run(at(loc("Walldorf, Germany", "Walldorf", "DE")), watchedFilter("Acme")).reasons).toEqual(["watched_company_location:Walldorf"]);
+  });
+
+  it("keeps a job when any one of its places is in the home country", () => {
+    expect(run(at(hamburg, loc("London, UK", "London", "GB")), watchedFilter("Acme")).reasons).toEqual(["watched_company_location:Hamburg"]);
+    expect(run(at(loc("London, UK", "London", "GB"), hamburg), watchedFilter("Acme")).reasons).toEqual(["watched_company_location:Hamburg"]);
+  });
+
+  it("does not keep a place in another country", () => {
+    expect(run(at(loc("London", "London", "GB")), watchedFilter("Acme")).reasons).toEqual(["location_not_allowed:London"]);
+  });
+
+  // a place the data does not tie to the home country is not kept: the board is collected whole and the push step ignores the score
+  it.each([
+    ["San Francisco", "San Francisco"],
+    ["Bengaluru", "Bengaluru"],
+    ["Walldorf", "Walldorf"],
+  ])("does not keep %s when no country can be read", (label, place) => {
+    const location = normalizeLocation(label, fixtureMarket());
+    expect(location.countryCode).toBeNull();
+    expect(run(at(location), watchedFilter("Acme"))).toEqual({ result: "filtered_out", reasons: [`location_not_allowed:${place}`] });
+  });
+
+  it("keeps an on-site job that names only the country when the policy says exclude", () => {
+    const strict = pipelineWith((raw) => ((raw.filter as { country_level: { onsite_policy: string } }).country_level.onsite_policy = "exclude"));
+    const germany = [loc("Germany", "Germany", "DE")];
+    expect(run(at(...germany), filterWith(prefs(), strict, ["Acme"]))).toEqual({ result: "passed", reasons: ["watched_company_location:Germany"] });
+    expect(run(at(...germany), filterWith(prefs(), strict))).toEqual({ result: "filtered_out", reasons: ["location_not_allowed:Germany"] });
+    // a place the filter keeps anyway gets no extra note
+    expect(run({ ...at(...germany), workplace: "hybrid" }, filterWith(prefs(), strict, ["Acme"])).reasons).toEqual(["location_country_level:Germany"]);
+  });
+
+  it("adds no note where the job is kept anyway", () => {
+    expect(run(at(loc("Berlin", "Berlin", "DE")), watchedFilter("Acme"))).toEqual({ result: "passed", reasons: [] });
+    expect(run(at(), watchedFilter("Acme")).reasons).toEqual(["location_unknown"]);
+    expect(run(at(loc("Home Office", null, null)), watchedFilter("Acme")).reasons).toEqual(["location_unknown"]);
+  });
+
+  it("changes only the location check", () => {
+    const f = watchedFilter("Acme");
+    expect(run({ ...at(hamburg), workplace: "onsite" }, filterWith(prefs((raw) => (raw.workplace = ["remote"])), shippedPipeline(), ["Acme"])).reasons).toEqual(["workplace_not_wanted:onsite"]);
+    expect(run({ ...at(hamburg), salary: salary(1000, 2000) }, f).reasons).toEqual(["salary_below_floor:2000"]);
+    expect(run({ ...at(hamburg), contract: "student" }, f).reasons).toEqual(["student_role"]);
+    const senior = filterWith(prefs((raw) => (raw.seniority = "senior")), shippedPipeline(), ["Acme"]);
+    expect(run({ ...at(hamburg), seniority: "entry" }, senior).reasons).toEqual(["seniority_mismatch:entry"]);
+    expect(run({ ...at(hamburg), companyBlacklisted: true }, f).reasons).toEqual(["blacklist_company:Acme GmbH"]);
+    expect(run({ ...at(hamburg), title: "Intern" }, filterWith(prefs((raw) => (raw.exclude_keywords = ["Intern"])), shippedPipeline(), ["Acme"])).reasons).toEqual(["blacklist_keyword:Intern"]);
+    expect(run(at(hamburg), f).result).toBe("passed");
+    // a deal-breaker still vetoes a watched company's job
+    const withVeto = filterWith(prefs((raw) => (raw.deal_breakers = [{ id: "rust", label: "Rust", type: "phrase", terms: ["Rust"] }])), shippedPipeline(), ["Acme"]);
+    // (the veto itself comes from dealBreakerVetoes, covered in deal-breakers.test.ts; here it is handed in)
+    expect(evaluateJob(at(hamburg), withVeto, null, ["rust"])).toEqual({ result: "filtered_out", reasons: ["deal_breaker:rust"] });
+    expect(evaluateJob(at(hamburg), withVeto, null, [])).toEqual({ result: "passed", reasons: ["watched_company_location:Hamburg"] });
+    expect(applyOverride(run(at(hamburg), f), "exclude")).toEqual({ result: "filtered_out", reasons: ["override_exclude"] });
+  });
+
+  it("leaves remote jobs to the remote scope", () => {
+    const f = watchedFilter("Acme");
+    expect(run({ ...at(loc("Remote - Spain", null, "ES")), workplace: "remote" }, f).reasons).toEqual(["remote_out_of_scope:Remote - Spain"]);
+    expect(run({ ...at(loc("Hamburg", "Hamburg", "DE")), workplace: "remote" }, f)).toEqual({ result: "passed", reasons: [] });
   });
 });

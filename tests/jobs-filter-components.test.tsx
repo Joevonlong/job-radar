@@ -104,11 +104,25 @@ describe("row filter notes", () => {
     expect(screen.getByText(/only a country or region \(Germany\)/)).toBeInTheDocument();
   });
 
+  it("says on the row why a watched company's job outside the target cities was kept (en and zh)", () => {
+    const { rerender } = render(wrap(<MainCell job={item(["watched_company_location:Hamburg"])} />));
+    expect(screen.getByText(/Watched company: Hamburg is not one of your cities but is in your home country/)).toBeInTheDocument();
+    rerender(wrap(<MainCell job={item(["watched_company_location:Hamburg"])} />, "zh"));
+    expect(screen.getByText(/关注公司：Hamburg 不在目标城市，但在本国，按关注公司保留/)).toBeInTheDocument();
+  });
+
   it("shows no note for a clean job and the rule reasons for a filtered one", () => {
     const { container, rerender } = render(wrap(<MainCell job={item([])} />));
     expect(container.querySelector("[data-slot=filter-notes]")).toBeNull();
     rerender(wrap(<MainCell job={item(["override_exclude"], "filtered_out")} />));
     expect(container.querySelector("[data-slot=filter-reasons]")).toHaveTextContent("You excluded this job");
+  });
+});
+
+describe("FilterNotice watched-company note", () => {
+  it("is shown next to the button for a kept job", () => {
+    render(wrap(<FilterNotice jobId={411} rank={{ filterResult: "passed", filterReasons: ["watched_company_location:Hamburg"] }} />));
+    expect(screen.getByTestId("filter-note")).toHaveTextContent("Watched company: Hamburg is not one of your cities but is in your home country, so the job is kept");
   });
 });
 

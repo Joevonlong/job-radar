@@ -23,7 +23,7 @@ export const EXCLUDE_REASON_CODES = [
 export type ExcludeReasonCode = (typeof EXCLUDE_REASON_CODES)[number];
 
 /** Notes on a job that was kept: something the posting does not say (C3), so the filter did not decide on it. */
-export const NOTE_CODES = ["remote_scope_unknown", "remote_scope_description", "location_unknown", "location_country_level", "override_keep"] as const;
+export const NOTE_CODES = ["remote_scope_unknown", "remote_scope_description", "location_unknown", "location_country_level", "watched_company_location", "override_keep"] as const;
 export type NoteCode = (typeof NOTE_CODES)[number];
 
 export type FilterReasonCode = ExcludeReasonCode | NoteCode;

@@ -17,6 +17,8 @@ export interface FilterCandidate {
   companyNameNorm: string | null;
   companyAliases: string[];
   companyBlacklisted: boolean;
+  /** `companies.watched`: the user watches the company (the watch list of interests.yaml is read separately). */
+  companyWatched: boolean;
   /** `jobs.german_level_required` (the pipeline's rule reading; what a language gate reads). */
   germanLevel: string;
 }
@@ -37,6 +39,7 @@ export async function listFilterCandidates(db: Executor, input: { afterId: numbe
       companyNameNorm: companies.nameNorm,
       companyAliases: companies.aliases,
       companyBlacklisted: companies.blacklisted,
+      companyWatched: companies.watched,
       germanLevel: jobs.germanLevelRequired,
     })
     .from(jobs)

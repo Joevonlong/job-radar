@@ -81,6 +81,8 @@ describe.runIf(legacyText("pipeline") !== null)("pipeline.yaml: legacy -> migrat
   const WORD_LISTS = new Set(["company.legal_suffixes", "company.agency_names", "filter.eu_countries", "filter.remote.outside_state_codes"]);
   /** v1 wrote one regex that the packs split in two (same alternatives): compared by what it matches only. */
   const REWRITTEN = new Set(["filter.generic_location_patterns"]);
+  /** Entries the packs gained after the move; v1 never had them. */
+  const ADDED_SINCE: Record<string, readonly string[]> = { "company.legal_suffixes": ["pbc"] };
 
   it("migrates in two steps (the market move, then the new channel family) and a second run changes nothing", () => {
     expect(migrated.steps).toBe(2);
@@ -94,7 +96,7 @@ describe.runIf(legacyText("pipeline") !== null)("pipeline.yaml: legacy -> migrat
     const now = new Set(lists[key]);
     if (REWRITTEN.has(key)) return;
     expect(old.filter((entry) => !now.has(entry))).toEqual([]);
-    if (WORD_LISTS.has(key)) expect([...now].filter((entry) => !old.includes(entry))).toEqual([]);
+    if (WORD_LISTS.has(key)) expect([...now].filter((entry) => !old.includes(entry) && !(ADDED_SINCE[key] ?? []).includes(entry))).toEqual([]);
   });
 
   it.each(Object.keys(lists).filter((key) => !WORD_LISTS.has(key)))("%s: matches exactly the same texts", (key) => {

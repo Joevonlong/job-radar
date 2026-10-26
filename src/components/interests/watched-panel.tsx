@@ -1,6 +1,7 @@
 "use client";
 
 import { Plus } from "lucide-react";
+import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { useEffect, useId, useRef, useState, useTransition, type FormEvent, type KeyboardEvent } from "react";
 import { toastTone } from "@/lib/toast";
@@ -183,6 +184,14 @@ export function WatchedPanel({ watched }: { watched: WatchedCompanyView[] }) {
                 <span className="text-ink-3 font-mono text-data-sm">
                   {company.match ? t("matched", { name: company.match.name, count: company.match.jobCount }) : t("unmatched")}
                 </span>
+                {company.hasBoard ? null : (
+                  <span className="text-ink-3 font-mono text-data-sm" data-testid="watched-no-board">
+                    {t("noBoard")}{" "}
+                    <Link href="/sources/registry" className="underline underline-offset-4">
+                      {t("noBoardLink")}
+                    </Link>
+                  </span>
+                )}
               </li>
             ))}
           </ul>
