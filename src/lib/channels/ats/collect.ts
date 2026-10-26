@@ -1,3 +1,9 @@
+/**
+ * Shared ATS sweeps retain postings from complete and partial board reads. Each board is READ-COMPLETE,
+ * SOFT (a short list, later-page 404, or non-200 2xx), or FAILED (a hard list error or unresolved details).
+ * Only an all-FAILED sweep throws its first failed board's cause, wrapped in PartialCollectError when
+ * postings were collected. A READ-COMPLETE or SOFT board lets the sweep return normally.
+ */
 import type { z } from "zod";
 
 import { ChannelError, isAbortError, PartialCollectError, type ChannelErrorCode } from "@/lib/channels/errors";
@@ -18,7 +24,7 @@ import { createTitlePrefilter, type TitlePrefilter } from "./prefilter";
 import type { AtsBoardStore } from "./store";
 
 // Format version of the stored validator; bumping it discards ETags and id lists remembered under older semantics.
-const BOARD_STATE_VERSION = "2";
+const BOARD_STATE_VERSION = "3";
 
 // A host-level refusal stops remaining details immediately, independently of the failure threshold.
 const HOST_LEVEL = new Set<ChannelErrorCode>(["blocked", "auth_expired", "rate_limited", "budget_exceeded"]);
@@ -63,7 +69,10 @@ export interface AtsAdapter<Settings extends { title_prefilter: AtsTitlePrefilte
   boardUrl(company: CompanyEntry, settings: Settings): string;
   /**
    * Replaces the default conditional JSON GET of `boardUrl` for boards that are not one JSON
-   * document (XML, paged lists). Must honour `etag` the same way `fetchBoardJson` does.
+   * document (XML, paged lists). Honour `etag` as `fetchBoardJson` does, retain content read before
+   * a later-page failure, and report mutually exclusive `incomplete` or `shortfall` metadata.
+   * `complete` is true only when neither is present; return an ETag only for a complete list.
+   * Rethrow cancellation before classifying failures. List completeness does not cover details.
    */
   fetchBoard?(ctx: ChannelContext, company: CompanyEntry, settings: Settings, etag: string | null): Promise<BoardFetch>;
   /** The postings of a board response (`ChannelError("parse")` when the shape is wrong). */
@@ -81,7 +90,7 @@ export interface AtsAdapter<Settings extends { title_prefilter: AtsTitlePrefilte
   descriptionHtml?(payload: unknown): DescriptionHtmlFragment[];
 }
 
-export type BoardOutcome = "changed" | "not_modified" | "not_found" | "error";
+export type BoardOutcome = "changed" | "not_modified" | "not_found" | "error" | "incomplete" | "short";
 
 /** What happened to one board in a sweep (logged per board; also the unit the tests look at). */
 export interface BoardReport {
@@ -103,9 +112,11 @@ export interface BoardReport {
 export interface BoardCollection {
   report: BoardReport;
   postings: RawPostingInput[];
-  /** The failure behind an `error` / `not_found` report. */
+  /** The list failure behind an `error`, `not_found`, `incomplete`, or `short` report. */
   failure?: ChannelError;
-  /** First detail failure: the board stays healthy, but counts as failed for the sweep outcome. */
+  /** The list failure alone is soft; unresolved details still make the board FAILED. */
+  soft?: boolean;
+  /** First unresolved detail failure: prevents a complete read and makes the board FAILED. */
   detailFailure?: ChannelError;
 }
 
@@ -136,7 +147,7 @@ interface SweepContext<S extends { title_prefilter: AtsTitlePrefilterSettings }>
   maxPerBoard: number;
 }
 
-/** Fetch and filter a board, tolerate classified detail failures, and remember what the next request needs. */
+/** Keep available postings and sightings, record list completeness and detail retries, and report failures to the sweep. */
 export async function collectBoard<S extends { title_prefilter: AtsTitlePrefilterSettings }>(
   sweep: SweepContext<S>,
   company: CompanyEntry,
@@ -155,6 +166,7 @@ export async function collectBoard<S extends { title_prefilter: AtsTitlePrefilte
     adapter.fetchBoard ? adapter.fetchBoard(ctx, company, sweep.settings, validator) : fetchBoardJson(ctx, url, validator);
 
   let fetched = await fetchOnce(etag);
+  ctx.signal.throwIfAborted();
 
   if (fetched.kind === "not_modified" && state && store) {
     // The board is unchanged, so its postings are still open: keep them "seen" (the lifecycle ages
@@ -162,7 +174,7 @@ export async function collectBoard<S extends { title_prefilter: AtsTitlePrefilte
     // died between our request and the store), a 304 would hide them for good: ask again, unconditionally.
     const present = await store.touch(adapter.id, state.externalIds);
     if (present.length >= state.externalIds.length) {
-      await recordQuietly(ctx, store, key, { status: "not_modified" });
+      await recordQuietly(ctx, store, key, { status: "not_modified", completeRead: state.detailRetryIds.length === 0 });
       const count = state.detailRetryIds.length;
       if (count > 0) ctx.logger.warn("ats board still has unresolved details", { board: company.token, count });
       return {
@@ -176,6 +188,7 @@ export async function collectBoard<S extends { title_prefilter: AtsTitlePrefilte
     ctx.logger.warn("ats board unchanged but stored postings are missing; refetching", { board: company.token });
     etag = null;
     fetched = await fetchOnce(null);
+    ctx.signal.throwIfAborted();
   }
 
   if (fetched.kind === "not_found") {
@@ -298,18 +311,7 @@ export async function collectBoard<S extends { title_prefilter: AtsTitlePrefilte
   }
   if (unusable > 0) ctx.logger.warn("ats board postings without an id skipped", { board: company.token, count: unusable });
   if (overCapIds.length > 0) ctx.logger.warn("ats board capped at max_results", { board: company.token, dropped: overCapIds.length, cap: sweep.maxPerBoard, touched: overCapPresent.length });
-  if (!fetched.complete) ctx.logger.warn("ats board answered with a partial response", { board: company.token });
-
-  await recordQuietly(ctx, store, key, {
-    status: "ok",
-    etag: firstMissing ? null : fetched.etag,
-    filterFingerprint: fingerprint,
-    externalIds: [...new Set([...returned.map((p) => p.externalId), ...present])],
-    detailRetryIds,
-    total: listed.length - duplicates,
-    kept: keptPostings.length,
-  });
-  return {
+  const result: BoardCollection = {
     report: {
       ...base,
       outcome: "changed",
@@ -323,6 +325,34 @@ export async function collectBoard<S extends { title_prefilter: AtsTitlePrefilte
     postings: returned,
     ...(firstFailure ? { detailFailure: firstFailure } : {}),
   };
+  if (fetched.incomplete) {
+    const { cause, soft } = fetched.incomplete;
+    await recordQuietly(ctx, store, key, { status: "error", errorCode: cause.code, detailRetryIds });
+    ctx.logger.warn("ats board read only in part", { board: company.token, code: cause.code, listed: listed.length, kept: keptPostings.length });
+    return { ...result, report: { ...result.report, outcome: "incomplete" }, failure: cause, soft };
+  }
+  if (fetched.shortfall) {
+    const { listed, announced } = fetched.shortfall;
+    await recordQuietly(ctx, store, key, { status: "short", detailRetryIds });
+    ctx.logger.warn("ats board listed fewer than announced", { board: company.token, listed, announced });
+    return {
+      ...result,
+      report: { ...result.report, outcome: "short" },
+      failure: new ChannelError("unknown", `board listed ${listed} of ${announced} announced postings`),
+      soft: true,
+    };
+  }
+  await recordQuietly(ctx, store, key, {
+    status: "ok",
+    completeRead: detailMissing.length === 0,
+    etag: firstMissing ? null : fetched.etag,
+    filterFingerprint: fingerprint,
+    externalIds: [...new Set([...returned.map((p) => p.externalId), ...present])],
+    detailRetryIds,
+    total: listed.length - duplicates,
+    kept: keptPostings.length,
+  });
+  return result;
 }
 
 function parseSettings<S>(schema: z.ZodType<S>, extra: unknown, id: string): S {
@@ -338,10 +368,13 @@ function parseSettings<S>(schema: z.ZodType<S>, extra: unknown, id: string): S {
  * An ATS channel: one sweep over every enabled board of `sources.yaml (ats_boards)` that uses this ATS. The
  * framework hands it the single keyword-less sweep query (`usesQueries: false`).
  *
- * List or classified detail failures do not stop the other boards. Detail failures leave board state
- * healthy, preserve stored payloads and sightings, and update retry state, but count as failed boards
- * for the sweep outcome. When every attempted board has a failure, throw the first error, preserving
- * any collected postings in PartialCollectError. A mixed round with a fully healthy board returns normally.
+ * Each attempted board is READ-COMPLETE (a complete list with resolved details, or a 304 with no
+ * retries), SOFT (a short list, later-page 404, or non-200 2xx), or FAILED (a hard list failure,
+ * including a missing board, or any unresolved details). Detail failures override soft list outcomes.
+ * Failures preserve available postings and sightings and do not stop other boards. If every board
+ * is FAILED, throw the first FAILED board's cause, wrapped in PartialCollectError when postings were
+ * collected. Otherwise return all collected postings, even when that list is empty. Soft failures
+ * are logged but never thrown.
  */
 export function createAtsChannel<S extends { title_prefilter: AtsTitlePrefilterSettings }>(
   adapter: AtsAdapter<S>,
@@ -383,6 +416,7 @@ export function createAtsChannel<S extends { title_prefilter: AtsTitlePrefilterS
       const postings: RawPostingInput[] = [];
       const failures: ChannelError[] = [];
       let detailFailedBoards = 0;
+      let softBoards = 0;
       let attempted = 0;
       for (const company of companies) {
         ctx.signal.throwIfAborted();
@@ -400,14 +434,17 @@ export function createAtsChannel<S extends { title_prefilter: AtsTitlePrefilterS
           continue;
         }
         const { report } = result;
-        if (result.failure) {
+        if (result.failure && !result.soft) {
           failures.push(result.failure);
+        } else if (result.detailFailure) {
+          failures.push(result.detailFailure);
+          detailFailedBoards += 1;
+        } else if (result.soft) {
+          softBoards += 1;
+        }
+        if (report.outcome === "not_found") {
           ctx.logger.warn("ats board not found", { company: report.company, board: report.board });
         } else {
-          if (result.detailFailure) {
-            failures.push(result.detailFailure);
-            detailFailedBoards += 1;
-          }
           ctx.logger.info("ats board", { ...report });
         }
         postings.push(...result.postings);
@@ -418,6 +455,7 @@ export function createAtsChannel<S extends { title_prefilter: AtsTitlePrefilterS
         boards: attempted,
         failedBoards: failures.length - detailFailedBoards,
         ...(detailFailedBoards > 0 ? { detailFailedBoards } : {}),
+        ...(softBoards > 0 ? { softBoards } : {}),
         postings: postings.length,
       });
       const [first] = failures;

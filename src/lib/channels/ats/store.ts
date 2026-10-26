@@ -7,13 +7,13 @@ import {
   type AtsBoardUpdate,
 } from "@/lib/db/repos/ats-boards";
 
-/** What the channel remembers of a board between cycles. */
+/** Last complete-list state and latest detail retries remembered between cycles. */
 export interface AtsBoardState {
   etag: string | null;
   filterFingerprint: string | null;
-  /** Ids handed over or still listed and already stored beyond the cap or with missing details. */
+  /** Ids from the last complete list: handed over or still listed and already stored beyond the cap or with missing details. */
   externalIds: string[];
-  /** Failed details, including prior failures skipped at the last 200; requested last next time. */
+  /** Failed or skipped details from the latest content read, including a short or failed list; requested last next time. */
   detailRetryIds: string[];
 }
 
@@ -36,7 +36,7 @@ export function createDbAtsBoardStore(db: Db): AtsBoardStore {
   };
 }
 
-/** In-memory store for unit tests. */
+/** In-memory store for unit tests; partial reads can update retries only on an existing complete-list state. */
 export function createMemoryAtsBoardStore(): AtsBoardStore & {
   states: Map<string, AtsBoardState>;
   checks: Array<{ key: AtsBoardKey; update: AtsBoardUpdate }>;
@@ -67,6 +67,9 @@ export function createMemoryAtsBoardStore(): AtsBoardStore & {
           detailRetryIds: [...(update.detailRetryIds ?? [])],
         });
         for (const externalId of update.externalIds ?? []) stored.add(externalId);
+      } else if ((update.status === "short" || update.status === "error") && update.detailRetryIds !== undefined) {
+        const state = states.get(id(key));
+        if (state) states.set(id(key), { ...state, detailRetryIds: [...update.detailRetryIds] });
       }
     },
     async touch(_channelId, externalIds) {
