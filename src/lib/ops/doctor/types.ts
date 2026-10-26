@@ -102,6 +102,10 @@ export interface DoctorProbes {
   listDir(directory: string): Promise<string[] | null>;
   /** The defaults and user config directories (overrides, pending migrations). Never throws. */
   configLayers(): Promise<ConfigLayersState>;
+  /** Upgrade freeze marker present (including an unreadable marker). Never returns its token. */
+  configFrozen(): Promise<boolean>;
+  /** Write leases or guard directories with an owner older than the configured threshold. Returns paths, never tokens. */
+  staleConfigWriteLocks(staleSeconds: number): Promise<string[]>;
   /** traps.yaml and the trap counts (`stats` null when the tables are not migrated). Throws when the database cannot be read. */
   traps(now: Date): Promise<TrapsProbe>;
   /** mcp.yaml: whether the MCP server is switched on and which tools (or why the file cannot be read). Never throws. */

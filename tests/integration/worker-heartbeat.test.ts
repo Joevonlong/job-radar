@@ -87,11 +87,11 @@ const now = (url = iso.url): string => {
   return String(r.json.now);
 };
 
-async function startHolder(url: string): Promise<{ pid: number; vitest: boolean }> {
+async function startHolder(url: string, hostOverride?: string, applicationBytes?: number): Promise<{ pid: number; host: string; vitest: boolean }> {
   const record = path.join(tmp, `holder-${holders.length}.json`);
   const child = spawn(process.execPath, ["--import", loader, holderScript], {
     cwd: repo,
-    env: { ...process.env, DATABASE_URL: url, RECORD_FILE: record },
+    env: { ...process.env, DATABASE_URL: url, RECORD_FILE: record, TEST_WORKER_HOST: hostOverride, TEST_WORKER_APPLICATION_BYTES: applicationBytes?.toString() },
     stdio: ["ignore", "ignore", "pipe"],
   });
   holders.push(child);
@@ -102,12 +102,52 @@ async function startHolder(url: string): Promise<{ pid: number; vitest: boolean 
     if (child.exitCode !== null || Date.now() > until) throw new Error(`lock holder did not start: ${stderr}`);
     await new Promise((r) => setTimeout(r, 50));
   }
-  const rec = JSON.parse(fs.readFileSync(record, "utf8")) as { pid: number; acquired: boolean; vitest: boolean };
+  const rec = JSON.parse(fs.readFileSync(record, "utf8")) as { pid: number; host: string; acquired: boolean; vitest: boolean };
   expect(rec.acquired).toBe(true);
-  return { pid: rec.pid, vitest: rec.vitest };
+  return { pid: rec.pid, host: rec.host, vitest: rec.vitest };
 }
 const heartbeat = (): Promise<unknown> => writeHeartbeat(conn.db, HEARTBEAT_PROCESS.aiWorker);
 const host = os.hostname();
+
+describe("worker-heartbeat.ts --holder", () => {
+  const holderArgs = ["--holder", "--pid", "4242", "--host", host];
+  it("reports no holder without taking the lock", () => {
+    expect(probe(holderArgs, iso.url)).toMatchObject({ status: 0, json: { status: "none" } });
+    expect(probe(holderArgs, iso.url)).toMatchObject({ status: 0, json: { status: "none" } });
+  });
+
+  it("compares the expected holder without needing a heartbeat or report", async () => {
+    const holder = await startHolder(iso.url);
+    expect(probe(["--holder", "--pid", String(holder.pid), "--host", host], iso.url)).toMatchObject({ status: 0, json: { status: "expected" } });
+    expect(probe(["--holder", "--pid", String(holder.pid + 1), "--host", host], iso.url)).toMatchObject({ status: 0, json: { status: "other" } });
+  });
+
+  it.each(["exactly full", "truncated"])("recognizes a long host whose application_name is %s", async (shape) => {
+    const holder = await startHolder(iso.url, "h".repeat(80), shape === "exactly full" ? 63 : undefined);
+    const expectedHost = holder.host;
+    const application = instanceApplicationName("ai-worker", holder.pid, expectedHost);
+    expect(Buffer.byteLength(application)).toBe(63);
+    // The probe must build this worker-published value, never reverse-parse its possibly truncated host.
+    expect(probe(["--holder", "--pid", String(holder.pid), "--host", expectedHost], iso.url)).toMatchObject({ status: 0, json: { status: "expected" } });
+    expect(probe(["--holder", "--pid", String(holder.pid), "--host", "elsewhere.invalid"], iso.url)).toMatchObject({ status: 0, json: { status: "other" } });
+  });
+
+  it("reports unknown when the holder's session is hidden from the probing role", async () => {
+    await startHolder(otherRoleUrl);
+    expect(probe(holderArgs, iso.url)).toMatchObject({ status: 1, json: { status: "unknown", reason: "holder-not-visible" } });
+  });
+
+  it("reports unknown with no database URL, an unreachable database, or unrelated mode arguments", () => {
+    for (const [args, url] of [
+      [holderArgs, ""],
+      [holderArgs, "postgres://unused:x@127.0.0.1:1/jobradar_test_absent"],
+      [["--holder", "--pid", "1"], iso.url],
+      [["--holder", "--now"], iso.url],
+    ] as const) {
+      expect(probe([...args], url)).toMatchObject({ status: 1, json: { status: "unknown", reason: "error" } });
+    }
+  });
+});
 
 describe("worker-heartbeat.ts --now", () => {
   it("prints the database clock in UTC with microseconds", () => {

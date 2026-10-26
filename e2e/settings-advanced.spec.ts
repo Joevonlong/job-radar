@@ -160,7 +160,7 @@ test("a product default file: the first save needs a confirmation and creates th
   await dialog.getByTestId("override-confirm").click();
   await dialog.getByTestId("preview-confirm").click();
   await expect(page.getByTestId("advanced-state")).toContainText("没有未保存");
-  expect(fs.existsSync(file("pipeline.yaml"))).toBe(true);
+  await expect.poll(() => fs.existsSync(file("pipeline.yaml"))).toBe(true);
   expect(read("pipeline.yaml")).toContain("# my comment");
   await expect(page.getByTestId("advanced-file-source-pipeline")).toContainText("已覆盖默认");
 

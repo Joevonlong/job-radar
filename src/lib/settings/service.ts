@@ -158,6 +158,7 @@ export async function saveSettings(rawRequest: unknown): Promise<SettingsActionS
     await validated.write(baseHash);
     return { status: "saved", tab, nonce: Date.now() };
   } catch (error) {
+    if (error instanceof ConfigError && error.kind === "frozen") return failed(tab, "frozen");
     if (error instanceof ConfigError && error.kind === "stale") return failed(tab, "stale");
     if (error instanceof ConfigError && error.kind === "protected") return failed(tab, "protectedKeys");
     return failed(tab, "writeFailed");

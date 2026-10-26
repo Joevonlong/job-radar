@@ -24,6 +24,10 @@ beforeEach(() => {
   put(path.join(dirs.config, "sources.yaml"), "proxies: [secret]\n", 0o600);
   put(path.join(dirs.config, "editor/nested.yaml"), "nested: 1\n");
   put(path.join(dirs.config, ".backup/schedule.yaml.1"), "old original\n");
+  put(path.join(dirs.config, ".upgrade-freeze"), "marker");
+  put(path.join(dirs.config, ".write.lock.guard.pending-fixture/owner"), "owner");
+  put(path.join(dirs.config, ".write.lock"), "lock");
+  put(path.join(dirs.profile, ".write.lock"), "lock");
   put(path.join(dirs.config, ".web-session-secret"), "do-not-archive\n", 0o600);
   put(path.join(dirs.config, "ai.yaml.partial"), "half written\n");
   put(path.join(dirs.profile, "me.yaml"), "name: Test\n");

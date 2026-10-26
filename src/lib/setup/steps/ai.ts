@@ -8,7 +8,7 @@ import { aiSchema, checkAiAgainstCatalog, writeConfig, type AiConfig, type Catal
 
 import { aiInputSchema, type AiInput } from "../inputs";
 import { stepError, type SetupFieldError, type SetupStepResult } from "../types";
-import { editable, finishStep, readFresh, zodSetupErrors } from "./common";
+import { editable, finishStep, readFresh, zodSetupErrors, setupFrozen, setupWriteError } from "./common";
 
 /** Providers that have a strong model next to the default one. */
 export const STRONG_MODEL_PROVIDERS: readonly AiProviderIdChoice[] = ["claude-cli", "anthropic"];
@@ -52,6 +52,8 @@ export function applyAiInput(current: AiConfig, input: AiInput): AiConfig {
 }
 
 export async function saveAiStep(raw: unknown): Promise<SetupStepResult> {
+  const frozen = setupFrozen("ai");
+  if (frozen) return frozen;
   const parsed = aiInputSchema.safeParse(raw);
   if (!parsed.success) return stepError("ai", "invalidPayload");
   if (parsed.data.order !== undefined && parsed.data.order.length === 0) return stepError("ai", null, [{ path: "order", ns: "setup", key: "orderEmpty" }]);
@@ -70,8 +72,8 @@ export async function saveAiStep(raw: unknown): Promise<SetupStepResult> {
   }
   try {
     await writeConfig("ai", next.data);
-  } catch {
-    return stepError("ai", "writeFailed");
+  } catch (error) {
+    return stepError("ai", setupWriteError(error));
   }
   return finishStep("ai");
 }

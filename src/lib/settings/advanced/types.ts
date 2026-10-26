@@ -63,6 +63,7 @@ export type AdvancedFailure =
   | { status: "needs_confirm" }
   /** The text changes a protected key (the live check reports which one; this is the write's own refusal). */
   | { status: "protected" }
+  | { status: "frozen" }
   | { status: "failed" };
 
 export type AdvancedSaveResult = { status: "saved"; hash: string; layer: AdvancedLayer; text: string; backup: boolean } | AdvancedFailure;

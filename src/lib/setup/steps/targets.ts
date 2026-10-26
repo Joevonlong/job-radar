@@ -11,7 +11,7 @@ import { saveProfile } from "@/lib/profile/service";
 import { planKeywordGroups, type KeywordGroups } from "../keywords";
 import { targetsInputSchema } from "../inputs";
 import { stepError, type SetupFieldError, type SetupStepResult } from "../types";
-import { editable, finishStep, profileFieldErrors, profileSaveProblem, readFresh, zodSetupErrors } from "./common";
+import { editable, finishStep, profileFieldErrors, profileSaveProblem, readFresh, zodSetupErrors, setupFrozen, setupWriteError } from "./common";
 
 /** The market step owns these preferences fields; their errors are not this step's. */
 const NOT_MINE = /^(market(\.|$)|locations$|remote_scope$)/;
@@ -28,6 +28,8 @@ export function shippedKeywordGroups(): KeywordGroups | null {
 }
 
 export async function saveTargetsStep(raw: unknown): Promise<SetupStepResult> {
+  const frozen = setupFrozen("targets");
+  if (frozen) return frozen;
   const parsed = targetsInputSchema.safeParse(raw);
   if (!parsed.success) return stepError("targets", "invalidPayload");
   try {
@@ -55,8 +57,8 @@ export async function saveTargetsStep(raw: unknown): Promise<SetupStepResult> {
   if (plan.mode !== "none") {
     try {
       await writeConfig("search", nextSearch.data);
-    } catch {
-      return stepError("targets", "writeFailed");
+    } catch (error) {
+      return stepError("targets", setupWriteError(error));
     }
   }
   return finishStep("targets");

@@ -9,7 +9,12 @@ const ME_FILE = path.join(PROFILE_DIR, "me.yaml");
 const PREFS_FILE = path.join(PROFILE_DIR, "preferences.yaml");
 
 function read(file: string): string {
-  return fs.readFileSync(file, "utf8");
+  try {
+    return fs.readFileSync(file, "utf8");
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") return "";
+    throw error;
+  }
 }
 
 async function open(page: Page) {
@@ -22,7 +27,7 @@ async function open(page: Page) {
 test.describe.configure({ mode: "serial" });
 
 test.beforeEach(() => {
-  // Start every test from the shipped template (the page copies it back on the next load).
+  // Start every test from the shipped template in memory; the first save creates the file from it.
   fs.rmSync(ME_FILE, { force: true });
   fs.rmSync(PREFS_FILE, { force: true });
 });
@@ -37,8 +42,8 @@ test("edit, save and roll back the preferences; the YAML keeps its comments", as
   await prefs.getByLabel("排除的公司").press("Enter");
   await prefs.getByRole("button", { name: "保存", exact: true }).click();
   await expect(page.getByText("已保存")).toBeVisible();
+  await expect.poll(() => read(PREFS_FILE)).toContain("# 年薪底线");
   const baseline = read(PREFS_FILE);
-  expect(baseline).toContain("# 年薪底线");
 
   // Language level (about me), excluded keyword and salary floor (what I want).
   await me.getByRole("combobox", { name: "等级" }).nth(1).selectOption("C1");
@@ -168,7 +173,7 @@ test("floor preview: dragging the slider moves the count live and writes nothing
 test("invalid input shows a field error and leaves the file unchanged", async ({ page }) => {
   await open(page);
   const prefs = page.getByTestId("preferences-card");
-  // Make sure the file exists before taking the reference text.
+  // Capture the current text (empty before the first save).
   const before = read(PREFS_FILE);
 
   const salary = prefs.getByLabel("年薪底线");

@@ -10,6 +10,7 @@ import {
   displayConfigPath,
   displayConfigPathForWeb,
   ensureConfigFiles,
+  getDefaultConfigPath,
   getAppRoot,
   getConfigPath,
   inspectConfigLayers,
@@ -17,6 +18,7 @@ import {
   isExistingInstall,
   loadConfig,
   readConfigText,
+  readProfileText,
   reloadConfig,
   resolveConfigPath,
   SHIPPED_CONFIG_NAMES,
@@ -99,9 +101,14 @@ describe("resolution: the user file wins, else the shipped default", () => {
     expect(() => readConfigText("ui")).toThrow(expect.objectContaining({ kind: "missing", filePath: user("ui.yaml") }));
   });
 
-  it("profile files are not layered: they live in the profile directory only", () => {
-    expect(configLayer("me")).toBe("missing");
-    expect(resolveConfigPath("me")).toBe(path.join(dirs().profileDir, "me.yaml"));
+  it("missing profile files read their shipped templates without creating user files", () => {
+    for (const name of ["me", "preferences"] as const) {
+      expect(getDefaultConfigPath(name)).toBeNull();
+      expect(configLayer(name)).toBe("missing");
+      expect(resolveConfigPath(name)).toBe(path.join(dirs().profileDir, `${name}.yaml`));
+      expect(readProfileText(name)).toBe(read(shipped(`profile.example/${name}.yaml`)));
+      expect(fs.existsSync(getConfigPath(name))).toBe(false);
+    }
   });
 
   it("a write goes to the user directory only: the first save starts from the default (its comments) and the defaults never change", async () => {

@@ -50,6 +50,13 @@ and the project uses [Semantic Versioning](https://semver.org/).
   on and wait for a cycle or recompute manually; the command does not recompute while it is off. Installations whose
   comparisons contained no AI figures are unaffected. Users who had AI lookups enabled in the benchmark lose the AI
   part of the sample count.
+- **Upgrades no longer rewrite your configuration while an older AI worker may still read it.** `scripts/ops/deploy.sh`
+  freezes settings writes after its read-only checks and writes migrated config only after the new ai-worker is
+  confirmed (step `config-write`); settings saves are refused meanwhile. A deploy that stops after the new containers
+  start keeps the freeze on purpose: `pnpm run doctor` reports `config.freeze`, and deploying again resumes it (manual
+  recovery: [docs/upgrade.md](docs/upgrade.md#settings-during-an-upgrade)). Stop manually started `pnpm ai-worker`
+  processes before deploying. **Rollback:** `config:init` adds `deploy.config_write_lock_*` keys to `schedule.yaml`,
+  which older versions reject; restore the `schedule.yaml` backup from `data/config/.backup/` before starting older code.
 
 **Rolling back past the release that made AI salary lookups reference-only (`salary.yaml` `config_version: 2`).** Older code does not hide comparisons containing AI figures.
 
@@ -225,6 +232,8 @@ A failure in (a) does not block rollback: follow (c) and accept the display wind
   and no longer fail when the font download does. The pages look the same (same families, weights, character coverage
   and loading). The Dockerfile compiles with `RUN --network=none`, so every image build proves it. The font licences
   (SIL OFL 1.1) are in `licenses/fonts/` and in the web image.
+- Upgrades could migrate user configuration while the old AI worker was still running and reading it. Config and profile
+  writes now take a cross-process lock, and deploys gate config writes on the new worker being confirmed.
 
 ### Security
 

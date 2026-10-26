@@ -3,9 +3,11 @@ import fs from "node:fs";
 import { parseDocument, type Document } from "yaml";
 
 import { ConfigError, zodIssues } from "./errors";
+import { isExistingInstall } from "./install";
+import { EXISTING_INSTALL_LANGUAGE_YAML } from "./migrations/language/existing-install";
 import { migrateConfigDocument, withoutConfigVersion, type DocumentMigrationResult } from "./migrations/version";
-import { getDefaultsDir, getPollIntervalMs, getUserConfigPath, resolveConfigPath } from "./paths";
-import { CONFIG_NAMES, configRegistry, type ConfigName, type ConfigValue } from "./registry";
+import { getDefaultsDir, getPollIntervalMs, getUserConfigPath, resolveConfigPath, resolveConfigReadPath } from "./paths";
+import { CONFIG_NAMES, configRegistry, isProfileName, type ConfigName, type ConfigValue, type ProfileName } from "./registry";
 
 interface CacheEntry {
   value: unknown;
@@ -61,7 +63,17 @@ export function configSourcePath(name: ConfigName): string {
  * Read the raw YAML text of a config file (user file first, then the shipped default). Throws ConfigError(missing | read).
  */
 export function readConfigText(name: ConfigName): string {
-  const filePath = resolveConfigPath(name);
+  // Startup fills can be deferred by an upgrade freeze. Keep the same install-specific default until it is written.
+  if (name === "language" && !fs.existsSync(/*turbopackIgnore: true*/ getUserConfigPath(name)) && isExistingInstall()) return EXISTING_INSTALL_LANGUAGE_YAML;
+  return readTextAt(name, resolveConfigPath(name));
+}
+
+/** Runtime profile readers can use a template without changing raw-file inspection, layers, doctor or watcher state. */
+export function readProfileText(name: ProfileName): string {
+  return readTextAt(name, resolveConfigReadPath(name));
+}
+
+function readTextAt(name: ConfigName, filePath: string): string {
   try {
     return fs.readFileSync(/*turbopackIgnore: true*/ filePath, "utf8");
   } catch (err) {
@@ -73,6 +85,10 @@ export function readConfigText(name: ConfigName): string {
       detail: code === "ENOENT" ? undefined : code || "read error",
     });
   }
+}
+
+function readForLoad(name: ConfigName): string {
+  return isProfileName(name) ? readProfileText(name) : readConfigText(name);
 }
 
 /** Parse YAML text into a document; throws ConfigError(yaml) naming the line, never the contents. */
@@ -119,8 +135,8 @@ export function parseConfigTextWithVersion<N extends ConfigName>(name: N, text: 
 
 /** Re-read the file, validate and replace the cache entry. On failure the previous cache entry is kept. */
 export function reloadConfig<N extends ConfigName>(name: N): ConfigValue<N> {
-  const text = readConfigText(name);
-  const value = deepFreeze(parseConfigText(name, text, configSourcePath(name)));
+  const text = readForLoad(name);
+  const value = deepFreeze(parseConfigText(name, text, resolveConfigReadPath(name)));
   setEntry(name, value, text);
   return value;
 }
@@ -207,13 +223,13 @@ function refreshCacheEntries(reportOnce: boolean): ConfigRefreshResult {
     // What was read, to tell "the same bad content again" from a new one; a file that cannot be read has no text.
     let badContent = "";
     try {
-      const text = readConfigText(name);
+      const text = readForLoad(name);
       if (text === hit.text) {
         reportedBad.delete(name);
         continue;
       }
       badContent = text;
-      const value = deepFreeze(parseConfigText(name, text, configSourcePath(name)));
+      const value = deepFreeze(parseConfigText(name, text, resolveConfigReadPath(name)));
       cache.set(key, { value, text });
       reportedBad.delete(name);
       changed.push(name);

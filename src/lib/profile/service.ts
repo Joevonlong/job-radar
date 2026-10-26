@@ -5,7 +5,7 @@
  */
 import { z } from "zod";
 
-import { ConfigError, ensureProfileFiles, parseConfigText, readConfigText, writeConfig, type ProfileName } from "@/lib/config";
+import { ConfigError, parseConfigText, readProfileText, writeConfig, type ProfileName } from "@/lib/config";
 import { meSchema } from "@/lib/config/schemas/me";
 import { preferencesSchema } from "@/lib/config/schemas/preferences";
 import { getDb, getProfileSnapshot, hashProfileYaml } from "@/lib/db";
@@ -29,8 +29,7 @@ function saved(kind: ProfileName): ProfileActionState {
 }
 
 async function currentHash(kind: ProfileName): Promise<string> {
-  await ensureProfileFiles();
-  return hashProfileYaml(readConfigText(kind));
+  return hashProfileYaml(readProfileText(kind));
 }
 
 /** pipeline.yaml `filter.deal_breakers`, or null when pipeline.yaml cannot be read (its own settings tab reports that). */
@@ -95,7 +94,7 @@ async function write(kind: ProfileName, candidate: unknown, baseHash: string | u
     }
     return saved(kind);
   } catch (error) {
-    if (error instanceof ConfigError) return failed(kind, error.kind === "stale" ? "stale" : "writeFailed");
+    if (error instanceof ConfigError) return failed(kind, error.kind === "frozen" ? "frozen" : error.kind === "stale" ? "stale" : "writeFailed");
     const after = await currentHash(kind).catch(() => before);
     return failed(kind, after !== before ? "snapshotFailed" : "writeFailed");
   }

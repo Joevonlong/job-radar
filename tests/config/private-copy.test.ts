@@ -1,6 +1,5 @@
 // @vitest-environment node
 import fs from "node:fs";
-import fsp from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -58,14 +57,21 @@ describe("copyPrivateIfMissing (seeded config and profile files)", () => {
     const source = path.join(dir, "me.yaml");
     fs.writeFileSync(source, "name: x\n");
     const target = path.join(dir, "copy.yaml");
-    const realOpen = fsp.open.bind(fsp);
-    const open = vi.spyOn(fsp, "open").mockImplementation(async (...args: Parameters<typeof fsp.open>) => {
-      const handle = await realOpen(...args);
-      handle.writeFile = () => Promise.reject(Object.assign(new Error("no space left on device"), { code: "ENOSPC" }));
-      return handle;
+    const realOpen = fs.openSync;
+    const realWrite = fs.writeFileSync;
+    let targetFd = -1;
+    const open = vi.spyOn(fs, "openSync").mockImplementation((...args: Parameters<typeof fs.openSync>) => {
+      const fd = realOpen(...args);
+      if (args[0] === target) targetFd = fd;
+      return fd;
     });
-    await expect(copyPrivateIfMissing(source, target)).rejects.toThrow(/no space/);
-    open.mockRestore();
+    const write = vi.spyOn(fs, "writeFileSync").mockImplementation((...args: Parameters<typeof fs.writeFileSync>) => {
+      if (args[0] === targetFd) throw Object.assign(new Error("no space left on device"), { code: "ENOSPC" });
+      return realWrite(...args);
+    });
+    try {
+      await expect(copyPrivateIfMissing(source, target)).rejects.toThrow(/no space/);
+    } finally { open.mockRestore(); write.mockRestore(); }
     expect(fs.existsSync(target)).toBe(false);
     expect(await copyPrivateIfMissing(source, target)).toBe(true);
     expect(fs.readFileSync(target, "utf8")).toBe("name: x\n");

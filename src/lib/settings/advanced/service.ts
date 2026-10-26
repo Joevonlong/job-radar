@@ -94,6 +94,7 @@ export async function previewAdvanced(rawRequest: unknown): Promise<AdvancedPrev
 
 function failureOf(name: ConfigName, error: unknown): AdvancedFailure {
   if (error instanceof ConfigError) {
+    if (error.kind === "frozen") return { status: "frozen" };
     if (error.kind === "stale") return { status: "stale", current: currentState(name) };
     if (error.kind === "too_large") return { status: "too_large" };
     if (error.kind === "protected") return { status: "protected" };

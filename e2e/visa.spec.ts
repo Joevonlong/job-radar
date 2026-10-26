@@ -13,6 +13,7 @@ import { expect, test, type Page } from "./fixtures";
  */
 const PROFILE_DIR = process.env.E2E_PROFILE_DIR ?? "";
 const ME_FILE = path.join(PROFILE_DIR, "me.yaml");
+const DEFAULTS_DIR = process.env.E2E_DEFAULTS_DIR ?? path.resolve("tests/fixtures/config/defaults");
 
 const OFFERED = /Machine Learning Engineer, Perception/;
 const PERMIT = /Research Engineer, Evaluation/;
@@ -21,9 +22,11 @@ const UNCLEAR = /Applied Scientist, Clinical NLP/;
 test.describe.configure({ mode: "serial" });
 test.afterAll(() => fs.rmSync(ME_FILE, { force: true }));
 
-/** me.yaml from the template (opening /me writes it), with `needs_visa_sponsorship` set. */
+/** Seed me.yaml explicitly from the template, with `needs_visa_sponsorship` set. */
 async function needsSponsorship(page: Page, value: boolean) {
   fs.rmSync(ME_FILE, { force: true });
+  fs.mkdirSync(PROFILE_DIR, { recursive: true });
+  fs.copyFileSync(path.join(DEFAULTS_DIR, "profile.example", "me.yaml"), ME_FILE);
   await page.goto("/me");
   await page.waitForLoadState("networkidle");
   await expect.poll(() => fs.existsSync(ME_FILE)).toBe(true);

@@ -11,7 +11,7 @@ import { saveAtsBoard, setSourceEnabled, type RegistryActionState } from "@/lib/
 import { sourcesInputSchema } from "../inputs";
 import { readSetupState } from "../state";
 import { stepError, type SetupFieldError, type SetupFormError, type SetupStepResult } from "../types";
-import { finishStep, readFresh } from "./common";
+import { finishStep, readFresh, setupFrozen } from "./common";
 
 /** The "recommended for you" read is a sub-switch of the LinkedIn session, not a source of its own. */
 const SUB_SWITCHES: readonly ConfiguredChannelId[] = ["linkedin-session:recommended"];
@@ -52,6 +52,8 @@ function registryProblem(state: RegistryActionState): SetupFormError | "needsPar
 const sameBoard = (a: { ats: string; token: string }, b: { ats: string; token: string }): boolean => a.ats === b.ats && a.token.toLowerCase() === b.token.toLowerCase();
 
 export async function saveSourcesStep(raw: unknown): Promise<SetupStepResult> {
+  const frozen = setupFrozen("sources");
+  if (frozen) return frozen;
   const parsed = sourcesInputSchema.safeParse(raw);
   if (!parsed.success) return stepError("sources", "invalidPayload");
   const config = readFresh("channels");

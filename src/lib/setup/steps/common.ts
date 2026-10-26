@@ -1,7 +1,8 @@
 /** Helpers every step service shares (server only). */
 import type { z } from "zod";
 
-import { ConfigError, reloadConfig, type ConfigName, type ConfigValue } from "@/lib/config";
+import { ConfigError, getConfigDir, reloadConfig, type ConfigName, type ConfigValue } from "@/lib/config";
+import { assertConfigWritable } from "@/lib/config/write-lock";
 import type { FieldError } from "@/lib/profile/draft";
 import type { ProfileActionState } from "@/lib/profile/types";
 
@@ -20,7 +21,7 @@ export function profileFieldErrors(errors: readonly FieldError[]): SetupFieldErr
 export function profileSaveProblem(step: SetupStepId, state: ProfileActionState): SetupStepResult | null {
   if (state.status !== "error") return null;
   if (state.formError === "snapshotFailed") return null;
-  const formError: SetupFormError | null = state.formError === null ? null : state.formError === "invalidPayload" ? "invalidPayload" : "writeFailed";
+  const formError: SetupFormError | null = state.formError === null ? null : state.formError === "frozen" ? "frozen" : state.formError === "invalidPayload" ? "invalidPayload" : "writeFailed";
   return stepError(step, formError, profileFieldErrors(state.fieldErrors));
 }
 
@@ -55,5 +56,21 @@ export function zodSetupErrors(error: z.ZodError, pathOf: (issuePath: ReadonlyAr
 /** Record the step as done; a setup.yaml that cannot be written is reported (the config itself is saved). */
 export async function finishStep(step: SetupStepId): Promise<SetupStepResult> {
   const marked = await markStep(step, "done");
-  return marked.ok ? { status: "saved", step } : stepError(step, "setupUnreadable");
+  return marked.ok ? { status: "saved", step } : stepError(step, marked.reason === "frozen" ? "frozen" : "setupUnreadable");
+}
+
+/** Preserve the upgrade refusal in both the CLI and browser wizard. */
+export function setupWriteError(error: unknown): SetupFormError {
+  return error instanceof ConfigError && error.kind === "frozen" ? "frozen" : "writeFailed";
+}
+
+/** Early feedback for the wizard; the lowest-level writer still checks inside its lock. */
+export function setupFrozen(step: SetupStepId): SetupStepResult | null {
+  try {
+    assertConfigWritable(getConfigDir());
+    return null;
+  } catch (error) {
+    if (!(error instanceof ConfigError) || error.kind !== "frozen") throw error;
+    return stepError(step, "frozen");
+  }
 }

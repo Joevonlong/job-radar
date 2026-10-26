@@ -121,6 +121,10 @@ doctor:
 # Docker cleanup on deploy: scripts/ops/deploy.sh runs it after the services start; --no-prune skips it.
 # Only clears build cache and dangling images; never touches data volumes (the database lives there) and never deletes images in use.
 deploy:
+  # Same-host write locks check PID and process generation; foreign hosts/namespaces recover after the stale threshold.
+  config_write_lock_stale_seconds: 300
+  config_write_lock_wait_seconds: 10
+  config_write_lock_retry_ms: 50
   # Prune the Docker build cache, keeping build_cache_keep_gb GB of the most recently used (docker builder prune --max-used-space)
   prune_build_cache: true
   # 0 = clear all unused build cache (the next build is slower)

@@ -8,6 +8,9 @@ import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
 
+import { ConfigError } from "./errors";
+import { getTranslator } from "../i18n/node";
+import { assertConfigWritable, commitConfigWrite, withConfigWriteLock } from "./write-lock";
 import { isExistingInstall } from "./install";
 import { EXISTING_INSTALL_LANGUAGE_YAML } from "./migrations/language/existing-install";
 import { getConfigDir, getDefaultsDir } from "./paths";
@@ -55,14 +58,17 @@ async function copyIfMissing(source: string, target: string): Promise<boolean> {
 
 /** Write `text` to `target` unless `target` exists. True when it wrote. */
 async function writeIfMissing(target: string, text: string): Promise<boolean> {
-  try {
-    await fsp.writeFile(/*turbopackIgnore: true*/ target, text, { encoding: "utf8", flag: "wx", mode: 0o600 });
-    return true;
-  } catch (err) {
-    const code = err instanceof Error && "code" in err ? err.code : undefined;
-    if (code === "EEXIST") return false;
-    throw err;
-  }
+  if (fs.existsSync(/*turbopackIgnore: true*/ target)) return false;
+  return withConfigWriteLock(target, () => commitConfigWrite(target, () => {
+    try {
+      fs.writeFileSync(/*turbopackIgnore: true*/ target, text, { encoding: "utf8", flag: "wx", mode: 0o600 });
+      return true;
+    } catch (err) {
+      const code = err instanceof Error && "code" in err ? err.code : undefined;
+      if (code === "EEXIST") return false;
+      throw err;
+    }
+  }));
 }
 
 /** setup.yaml of an install from before the setup wizard: completed, so it never opens the wizard or pauses the runner. */
@@ -82,6 +88,17 @@ export function existingInstallSetupYaml(now: Date): string {
  * Never overwrites. Does nothing (and needs no write access) when every file is already there.
  */
 export async function ensureConfigFiles(options: EnsureConfigOptions = {}): Promise<EnsureConfigResult[]> {
+  try {
+    assertConfigWritable(getConfigDir());
+    return await fillConfigFiles(options);
+  } catch (error) {
+    if (!(error instanceof ConfigError) || error.kind !== "frozen") throw error;
+    console.info(getTranslator("configOps", "cli")("fillsSkipped"));
+    return [];
+  }
+}
+
+async function fillConfigFiles(options: EnsureConfigOptions): Promise<EnsureConfigResult[]> {
   const userDir = getConfigDir();
   const defaultsDir = getDefaultsDir();
   const from = options.from === undefined ? defaultsDir : path.resolve(options.from);

@@ -1,5 +1,5 @@
 import type { DealBreakerNotice } from "@/components/jobs/filter-notice";
-import { parseConfigText, readConfigText, type MeConfig, type PreferencesConfig } from "@/lib/config";
+import { parseConfigText, readProfileText, type MeConfig, type PreferencesConfig } from "@/lib/config";
 import type { GermanLevel } from "@/lib/domain/types";
 import { explainDealBreaker, type DealBreakerExplanation } from "@/lib/filter/deal-breakers";
 import { vmTimeBox } from "@/lib/filter/time-box";
@@ -14,7 +14,7 @@ import { visaRulesFor } from "@/lib/visa/rules";
  */
 function preferencesOrNull(): PreferencesConfig | null {
   try {
-    return parseConfigText("preferences", readConfigText("preferences"));
+    return parseConfigText("preferences", readProfileText("preferences"));
   } catch {
     return null;
   }
@@ -22,7 +22,7 @@ function preferencesOrNull(): PreferencesConfig | null {
 
 function meOrNull(): MeConfig | null {
   try {
-    return parseConfigText("me", readConfigText("me"));
+    return parseConfigText("me", readProfileText("me"));
   } catch {
     return null;
   }

@@ -31,6 +31,7 @@ export {
   parseConfigText,
   parseConfigTextWithVersion,
   readConfigText,
+  readProfileText,
   refreshConfigCache,
   reloadConfig,
   resetConfigCache,

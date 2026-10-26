@@ -18,19 +18,26 @@ import { applyConfigMigrations, displayConfigPath, planConfigMigrations } from "
 
 async function main(): Promise<number> {
   let write = false;
+  let json = false;
   try {
-    const { values } = parseArgs({ options: { write: { type: "boolean" }, help: { type: "boolean", short: "h" } }, strict: true });
+    const { values } = parseArgs({ options: { write: { type: "boolean" }, json: { type: "boolean" }, help: { type: "boolean", short: "h" } }, strict: true });
     if (values.help) {
-      console.log("Usage: pnpm config:migrate [--write]");
+      console.log("Usage: pnpm config:migrate [--write | --json]");
       return 0;
     }
     write = values.write ?? false;
+    json = values.json ?? false;
+    if (write && json) return 2;
   } catch (error) {
     console.error(`config:migrate: ${error instanceof Error ? error.message : "bad arguments"}`);
     return 2;
   }
 
   const plan = planConfigMigrations();
+  if (json) {
+    console.log(JSON.stringify({ pending: plan.pending.length, problems: plan.problems.length }));
+    return plan.problems.length > 0 ? 1 : 0;
+  }
   for (const problem of plan.problems) console.log(`✗ ${displayConfigPath(problem.path)}: ${problem.message}`);
   if (plan.problems.length > 0) {
     console.log(`\n${plan.problems.length} file(s) cannot be migrated: fix them first (nothing was written)`);

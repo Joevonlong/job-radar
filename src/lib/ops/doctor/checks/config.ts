@@ -101,5 +101,26 @@ export const configMarketCheck: DoctorCheck = {
   },
 };
 
-export const CONFIG_CHECKS: readonly DoctorCheck[] = [configLayersCheck, configMarketCheck];
+const freezeSpec = { id: "config.freeze", group: "data" } as const;
+
+export const configFreezeCheck: DoctorCheck = {
+  ...freezeSpec,
+  async run(ctx) {
+    const { t } = ctx;
+    const pieces: Piece[] = [];
+    if (!await ctx.probes.configFrozen()) pieces.push({ status: "ok", detail: t("checks.config.freeze.none") });
+    else {
+      const lock = await ctx.probes.releasesLock(ctx.appRoot);
+      const active = lock.present && (lock.records.some((entry) => entry.kind === "record" && entry.alive) ||
+        (lock.owner !== null && lock.owner.token === ctx.env.JOB_RADAR_RELEASES_LOCK_TOKEN));
+      pieces.push(active ? { status: "ok", detail: t("checks.config.freeze.active") } :
+        { status: "warn", detail: t("checks.config.freeze.leftover"), hint: t("checks.config.freeze.hint") });
+    }
+    const locks = await ctx.probes.staleConfigWriteLocks(ctx.config.schedule.deploy.config_write_lock_stale_seconds);
+    if (locks.length > 0) pieces.push({ status: "warn", detail: t("checks.config.freeze.staleLocks", { files: joinList(ctx, locks) }), hint: t("checks.config.freeze.staleLocksHint") });
+    return merge(ctx, freezeSpec, pieces);
+  },
+};
+
+export const CONFIG_CHECKS: readonly DoctorCheck[] = [configLayersCheck, configMarketCheck, configFreezeCheck];
 export const LANGUAGE_CHECKS: readonly DoctorCheck[] = [languageConfigCheck];

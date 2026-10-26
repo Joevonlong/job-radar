@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { spawnSync } from "node:child_process";
+import { runConfigScript } from "./run-script";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -43,8 +43,6 @@ describe("the scraping channels ship switched off (new installs; existing user f
   });
 });
 
-const appRoot = path.resolve(import.meta.dirname, "../..");
-const tsx = path.join(appRoot, "node_modules", ".bin", "tsx");
 
 describe("the config scripts (pnpm config:init / config:migrate / config:check)", () => {
   let tmp: TempConfig;
@@ -54,15 +52,26 @@ describe("the config scripts (pnpm config:init / config:migrate / config:check)"
   });
   afterEach(() => tmp.cleanup());
 
-  const run = (script: string, ...args: string[]) => {
-    const result = spawnSync(tsx, [path.join("scripts", script), ...args], {
-      cwd: appRoot,
-      env: { ...process.env, JOB_RADAR_DEFAULTS_DIR: tmp.defaultsDir, JOB_RADAR_CONFIG_DIR: tmp.configDir, JOB_RADAR_PROFILE_DIR: tmp.profileDir },
-      encoding: "utf8",
-      timeout: 60_000,
-    });
-    return { status: result.status, out: `${result.stdout}${result.stderr}` };
-  };
+  const run = (script: string, ...args: string[]) => runConfigScript(tmp, script, args);
+
+  it("keeps absolute directory overrides in CLI output even inside the app root", () => {
+    // Node canonicalizes the bundled module's path. Match it explicitly so symlinked temp directories cannot hide this case.
+    const root = fs.realpathSync(tmp.root);
+    const env = {
+      JOB_RADAR_DEFAULTS_DIR: path.join(root, "defaults"),
+      JOB_RADAR_CONFIG_DIR: path.join(root, "config"),
+      JOB_RADAR_PROFILE_DIR: path.join(root, "profile"),
+    };
+    const init = runConfigScript(tmp, "config-init.ts", [], env);
+    expect(init.status, init.out).toBe(0);
+    expect(init.out).toContain(`+ ${path.join(env.JOB_RADAR_CONFIG_DIR, "ai.yaml")}`);
+    expect(init.out).toContain(`+ ${path.join(env.JOB_RADAR_PROFILE_DIR, "me.yaml")}  (from the template)`);
+
+    fs.writeFileSync(path.join(env.JOB_RADAR_DEFAULTS_DIR, "notify.yaml"), "push_min_score: [oops\n");
+    const check = runConfigScript(tmp, "config-check.ts", [], env);
+    expect(check.status, check.out).toBe(1);
+    expect(check.out).toContain(`✗ ${path.join(env.JOB_RADAR_DEFAULTS_DIR, "notify.yaml")} (default, not in use)`);
+  });
 
   it("init fills the user and profile directories once; migrate and check then pass", () => {
     const first = run("config-init.ts");

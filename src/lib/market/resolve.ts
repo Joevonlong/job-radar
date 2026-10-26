@@ -132,8 +132,8 @@ export function resolveMarket(settings: MarketSettings, loader: (id: string) => 
 }
 
 /**
- * preferences.yaml `market`: the profile file, or the template it is created from while it does not exist yet
- * (`ensureProfileFiles` copies the template on the first cycle). Throws MarketUnresolvedError when it cannot be read.
+ * preferences.yaml `market`: the saved profile, or its template in memory while the file is missing. Never creates
+ * profile files. Throws MarketUnresolvedError when it cannot be read.
  */
 export function readMarketSettings(): MarketSettings {
   try {

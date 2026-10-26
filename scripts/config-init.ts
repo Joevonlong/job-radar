@@ -21,6 +21,7 @@ import { parseArgs } from "node:util";
 
 import { displayConfigPath, ensureConfigFiles, ensureProfileFiles, getAppRoot, getConfigDir, getDefaultsDir, getProfileDir } from "../src/lib/config";
 import { ensureDbPassword } from "../src/lib/ops/db-password";
+import { assertConfigWritable } from "../src/lib/config/write-lock";
 
 async function main(): Promise<number> {
   let from: string | undefined;
@@ -39,6 +40,7 @@ async function main(): Promise<number> {
     console.error(`config:init: --from ${from} is not a directory`);
     return 2;
   }
+  assertConfigWritable(getConfigDir());
   console.log(`defaults: ${displayConfigPath(getDefaultsDir())}`);
   console.log(`user:     ${displayConfigPath(getConfigDir())}`);
   console.log(`profile:  ${displayConfigPath(getProfileDir())}`);

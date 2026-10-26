@@ -33,6 +33,10 @@ beforeAll(() => {
   write(path.join(app, "config/schedule.yaml"), "timezone: Etc/GMT+12\n");
   write(path.join(app, "data/config/schedule.yaml"), "timezone: Pacific/Kiritimati\n");
   write(path.join(app, "data/config/.backup/2026-10-09T10-00-00Z/schedule.yaml"), "old\n");
+  write(path.join(app, "data/config/.upgrade-freeze"), "marker");
+  write(path.join(app, "data/config/.write.lock.guard.pending-fixture/owner"), "owner");
+  write(path.join(app, "data/config/.write.lock"), "lock");
+  write(path.join(app, "data/profile/.write.lock"), "lock");
   write(path.join(app, "data/config/.web-session-secret"), "signing-secret\n", 0o600);
   write(path.join(app, "data/profile/me.yaml"), "summary: x\n");
   // a tar that records the environment it was started with, then does the real work
@@ -78,6 +82,8 @@ describe("scripts/ops/backup.sh", () => {
     expect(listing).toContain("data/config/schedule.yaml");
     expect(listing).toContain("data/profile/me.yaml");
     expect(listing).not.toContain(".backup");
+    expect(listing).not.toContain(".upgrade-freeze");
+    expect(listing).not.toContain(".write.lock");
     expect(listing).not.toContain("web-session-secret"); // the signing secret of the login cookie is re-created, never archived
   });
 

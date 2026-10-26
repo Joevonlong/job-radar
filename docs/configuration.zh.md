@@ -42,6 +42,8 @@ Job Radar 的所有设置都是 YAML，分两层：
 画像文件 `me.yaml` 和 `preferences.yaml` 在 `data/profile/` 里，在 `/me` 页编辑。`preferences.yaml` 里可选的 `deal_breakers` 列表
 （在任何 AI 调用之前否决岗位的规则）见 [deal-breakers.zh.md](deal-breakers.zh.md)；它的上限在 `pipeline.yaml: filter.deal_breakers`。
 
+运行时的 profile 读取可在内存里使用 `config/profile.example/`，不创建用户文件。原文检查、doctor 和 watcher 仍区分缺失文件与已保存文件；模板不属于默认配置层。
+
 ## 命令
 
 ```bash
@@ -53,12 +55,14 @@ pnpm config:check                 # 校验两层（默认目录的文件即使�
 pnpm config:example               # 列出示例配置；`pnpm config:example <id> [--dry-run]` 套用其中一个（见下文）
 ```
 
-web 和 runner 启动时也会自动做一次 `config:init`（缺什么补什么；runner 在容器里对用户目录只读，目录已满时不需要写）；`scripts/ops/deploy.sh` 第 4 步依次运行 `config:init` → `config:migrate --write` → `config:check`。
+web 和 runner 启动时会补缺，升级冻结期间跳过补缺。已有安装在 `scripts/ops/deploy.sh` 第 4 步先预览迁移、在内存里运行 `config:check` 并检查 compose config，通过后才冻结写入；第 11 步 `config-write` 核对 worker 持有者及宿主进程后才补缺、写迁移。首装在第 4 步运行 `config:init`，不冻结。不支持冻结协议的旧目标沿用第 4 步写盘的旧流程，见[回退说明](upgrade.zh.md#downgrade-pre-config-freeze)。
+
+只有认识冻结协议的 web 版本从第 4 步起拒绝保存。首次部署本版本时，旧 web 会一直运行到第 8 步；它仍写旧格式文件，没有危害。等待 `config-write` 补文件期间，读取方会按当前安装状态选择默认值，例如已有安装的语言默认值。
 
 ### 薪资（`salary.yaml`）
 
 薪资基准只用岗位写明的薪资，AI 查询只用于显示。`salary.yaml` 从 `config_version: 1` 升到 `2` 的配置迁移会删除
-`benchmark.include_ai_lookups` 和它的注释。`scripts/ops/deploy.sh` 第 4 步会自动执行。手动升级时，先运行
+`benchmark.include_ai_lookups` 和它的注释。`scripts/ops/deploy.sh` 第 4 步预览，第 11 步 `config-write` 才写盘。手动升级时，先停掉旧消费者，再运行
 `pnpm config:migrate` 看这一步会删掉什么，再运行 `pnpm config:migrate --write` 写回（原文件保存在 `data/config/.backup/`）。
 旧文件加载时会在内存里迁移；在 v2 文件里加回这个键会因“未知键”而校验失败。卡片说明见 [salary.zh.md](salary.zh.md)，
 升级和回滚说明见[更新日志](../CHANGELOG.md)。
@@ -233,7 +237,7 @@ ai-worker 的发布目录和切换由 `schedule.yaml` 里的四个键控制。�
 |---|---|---|
 | `deploy.ai_worker_releases_keep` | 3 | 切换后保留的发布目录个数，含当前安装的和上一个（至少 2） |
 | `deploy.ai_worker_stop_timeout_seconds` | 60 | worker 的 launchd `ExitTimeOut` / systemd `TimeoutStopSec`（至少 10） |
-| `deploy.ai_worker_swap_timeout_seconds` | 120 | 切换中每一段等待的上限（至少停止超时 + 10），也是第 12 步等待的上限（`--settle` 可覆盖） |
+| `deploy.ai_worker_swap_timeout_seconds` | 120 | 切换中每一段等待的上限（至少停止超时 + 10），也是第 11 步等待的上限（`--settle` 可覆盖） |
 | `doctor.shipped_report_skew_seconds` | 2 | `config.shipped` 核对容器报告时容许的 Docker 与数据库时钟差 |
 
 细节见 [deploy.zh.md](deploy.zh.md)《ai-worker 从发布目录运行》。
@@ -349,4 +353,8 @@ JD 里关于签证赞助的说法（见 [visa-sponsorship.zh.md](visa-sponsorshi
 
 ## 从单目录切换
 
-旧版本的线上配置就是 git 里的 `config/`。升级到分层配置时，`scripts/ops/deploy.sh` 第 4 步看到 `data/config/` 是空的，`pnpm config:init` 就把当时 `config/` 里的全部 user 文件复制过去（此时默认配置就是旧线上配置，和 `pnpm config:init --from config` 结果相同）。之后网页只写 `data/config/`，`config/` 回到"产品默认值"的角色，不会再让 checkout 变脏。详见 [`deploy.zh.md`](deploy.zh.md) 第 4、5 节。
+旧版本的线上配置就是 git 里的 `config/`。切换代码前先单独保留这份线上目录；停掉旧消费者后，用 `pnpm config:init --from <保留的旧配置目录>` 导入，再让部署补缺。已有安装现在在第 4 步先预览和校验再冻结，第 11 步 `config-write` 排除旧 worker 后才补缺和写迁移。之后网页只写 `data/config/`，`config/` 存放产品默认值。详见 [`deploy.zh.md`](deploy.zh.md) 第 4、5 节与 [upgrade.zh.md](upgrade.zh.md)。
+
+### 升级写入保护
+
+`pnpm ops:freeze --target <commit>` 冻结配置与 profile 写入；`pnpm ops:unfreeze` 在同一套跨进程写锁内删除标记，并提示先运行 `pnpm config:init`，再运行 `pnpm config:migrate --write`。先确认没有旧消费者再手工解除。第 8 步启动容器之前失败或中断，部署只自动解除本次全新创建的冻结；接管的标记必须等 `config-write` 通过消费者检查或用户运行 `ops:unfreeze` 才会解除。尝试 `up` 后失败或中断则保留所有标记。认识冻结协议的 web 在冻结期间拒绝保存；首次升级的旧 web 到第 8 步之前仍写无害的旧格式文件。doctor 用 `config.freeze` 检查遗留标记和超过过期阈值的写锁及 guard 持有者。遗留锁在下次写入时自动接管；若保存持续失败，确认持有者不再写入后删除锁文件或 guard 内的持有者文件。`pnpm config:migrate --json` 只读返回待迁移和问题数量。锁的时限由 `schedule.yaml` 的 `deploy.config_write_lock_stale_seconds`、`config_write_lock_wait_seconds`、`config_write_lock_retry_ms` 配置（默认 300 秒、10 秒、50 毫秒）。同主机持有者记录随机进程 ID 与进程启动时间；PID 重用或 token 已遗弃时立即接管，活跃持有者不接管。其他主机或命名空间仅在超过过期阈值后接管，最终提交再次核对锁的所有权。恢复与长驻进程重启见 [upgrade.zh.md](upgrade.zh.md#升级期间的设置)。
