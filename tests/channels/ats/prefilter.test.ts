@@ -64,10 +64,17 @@ describe("createTitlePrefilter", () => {
   });
 
   it("compares company names by the push step's key: legal form and spelling do not matter", () => {
-    const f = filter({}, ["Anthropic Inc", "Acme GmbH"]);
+    const f = filter({}, ["Anthropic PBC", "Acme GmbH"]);
     expect(f.decide("Account Executive", "Anthropic")).toEqual({ keep: true, reason: "watched" });
     expect(f.decide("Account Executive", "acme")).toEqual({ keep: true, reason: "watched" });
     expect(f.decide("Account Executive", "Acme AI")).toEqual({ keep: false, reason: "no_match" });
+  });
+
+  it("never treats a name with an empty key as watched", () => {
+    // a name without Latin letters resolves to an empty key; it must not watch every board whose name does too
+    const f = filter({}, ["日本電気", ""]);
+    expect(f.decide("Account Executive", "東京工業")).toEqual({ keep: false, reason: "no_match" });
+    expect(f.fingerprint("東京工業")).toBe(filter({}, []).fingerprint("東京工業"));
   });
 
   it("include_terms keep extra titles; exclude_terms drop even keyword matches", () => {
@@ -96,10 +103,10 @@ describe("createTitlePrefilter", () => {
   });
 
   it("changes a board's fingerprint only when whether it is watched changes", () => {
-    // "Anthropic Inc" in the list and a board named "Anthropic": the board turns watched, so it is read again
-    expect(filter({}, ["Anthropic Inc"]).fingerprint("Anthropic")).not.toBe(filter({}, []).fingerprint("Anthropic"));
+    // "Anthropic PBC" in the list and a board named "Anthropic": the board turns watched, so it is read again
+    expect(filter({}, ["Anthropic PBC"]).fingerprint("Anthropic")).not.toBe(filter({}, []).fingerprint("Anthropic"));
     // a spelling change of the list that leaves the board watched keeps the stored validator
-    expect(filter({}, ["Anthropic Inc"]).fingerprint("Anthropic")).toBe(filter({}, ["anthropic"]).fingerprint("Anthropic"));
+    expect(filter({}, ["Anthropic PBC"]).fingerprint("Anthropic")).toBe(filter({}, ["anthropic"]).fingerprint("Anthropic"));
     // another company joining the list does not touch this board
     expect(filter({}, ["Anthropic", "Acme"]).fingerprint("Other")).toBe(filter({}, ["Anthropic"]).fingerprint("Other"));
   });

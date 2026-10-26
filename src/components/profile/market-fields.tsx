@@ -49,12 +49,18 @@ export function draftCountryName(market: MarketView, draft: MarketDraft): string
 }
 
 /**
- * The home region for the draft: the saved market's region while the draft keeps its home country, else null (a region
- * of another country is not known here, and the scope then names no region).
+ * The home region of the draft market, worked out as the market resolver does: the pack's own `region` while the draft
+ * keeps the pack's country, else the first named region that contains the draft's country (DE -> AT is still the EU).
+ * Null when the draft names no country or no region holds it.
  */
 export function draftHomeRegion(market: MarketView, draft: MarketDraft): MarketView["homeRegion"] {
-  const code = draft.country !== "" ? draft.country : (market.packs.find((p) => p.id === draft.pack)?.country ?? "");
-  return code !== "" && code === market.country ? market.homeRegion : null;
+  const pack = market.packs.find((p) => p.id === draft.pack);
+  const country = draft.country !== "" ? draft.country : (pack?.country ?? "");
+  if (country === "") return null;
+  const packRegion = pack?.region != null && (pack.country === null || pack.country === country) ? pack.region : null;
+  const choice = packRegion !== null ? market.regionChoices.find((r) => r.id === packRegion) : market.regionChoices.find((r) => r.countries.includes(country));
+  if (choice !== undefined) return { id: choice.id, name: choice.name };
+  return packRegion !== null ? { id: packRegion, name: packRegion } : null;
 }
 
 const sameMarket = (a: MarketDraft, b: MarketDraft): boolean => a.pack === b.pack && a.country === b.country && a.currency === b.currency && a.home_language === b.home_language;

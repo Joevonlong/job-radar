@@ -10,9 +10,9 @@ const board = (name: string, enabled = true) => ({ name, enabled });
 
 describe("watchedCompanyBoards", () => {
   it("marks a company with an enabled board of the same company key", () => {
-    const result = watchedCompanyBoards(["Anthropic Inc", "Google", "OpenAI"], [board("Anthropic"), board("openai")], pipeline);
+    const result = watchedCompanyBoards(["Anthropic PBC", "Google", "OpenAI"], [board("Anthropic"), board("openai")], pipeline);
     expect(result).toEqual([
-      { name: "Anthropic Inc", key: "anthropic", hasBoard: true },
+      { name: "Anthropic PBC", key: "anthropic", hasBoard: true },
       { name: "Google", key: "google", hasBoard: false },
       { name: "OpenAI", key: "openai", hasBoard: true },
     ]);

@@ -29,6 +29,8 @@ export interface PackOption {
   country: string | null;
   currency: string | null;
   language: string | null;
+  /** The named region the pack puts its country in (`region` of pack.yaml), or null. */
+  region: string | null;
   /** The pack has requirement rules for its language (the local-language step can be on). */
   languageRules: boolean;
 }
@@ -63,6 +65,8 @@ export interface MarketView {
   scopeOptions: ScopeOption[];
   /** The named region the home country belongs to (what "remote in the home region" means), with its name in the page's language; null when it has none. */
   homeRegion: { id: string; name: string } | null;
+  /** The named regions with their countries, names in the page's language: what a draft market's home region is worked out from (`draftHomeRegion`). */
+  regionChoices: Array<{ id: string; name: string; countries: string[] }>;
 }
 
 /** The symbol a currency is written with in a locale ("€", "US$" -> "$" with `narrowSymbol`). */
@@ -98,7 +102,7 @@ function packList(): PackOption[] {
     try {
       const pack = loadPack(id);
       const { meta } = pack;
-      return [{ id, name: meta.name, country: meta.country ?? null, currency: meta.currency ?? null, language: meta.language ?? null, languageRules: pack.language.requirement !== undefined }];
+      return [{ id, name: meta.name, country: meta.country ?? null, currency: meta.currency ?? null, language: meta.language ?? null, region: meta.region ?? null, languageRules: pack.language.requirement !== undefined }];
     } catch {
       return [];
     }
@@ -191,6 +195,7 @@ export function marketViewOf(market: Market, locale: string, regionLabel: (id: s
     languageName: languageDisplayName(market.homeLanguage, locale),
     languageStep: market.language !== null,
     scopeOptions: [...regions, ...countries],
+    regionChoices: Object.entries(market.regions).map(([id, region]) => ({ id, name: regionLabel(id) ?? region.name, countries: [...region.countries] })),
     homeRegion: market.homeRegion === null ? null : { id: market.homeRegion, name: regionLabel(market.homeRegion) ?? market.regions[market.homeRegion]?.name ?? market.homeRegion },
   };
 }
@@ -219,6 +224,7 @@ export function loadMarketView(locale: string, regionLabel: (id: string) => stri
       languageStep: false,
       scopeOptions: [],
       homeRegion: null,
+      regionChoices: [],
     };
   }
 }

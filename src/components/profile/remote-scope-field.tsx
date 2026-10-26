@@ -46,7 +46,8 @@ export function RemoteScopeField({ id, value, onChange, options, countryName, ho
   // "EU / Europe / EMEA" for the EU, else the region's own name
   const regionText = homeRegion === null ? "" : homeRegion.id === "eu" ? tm("scope.homeRegionShort.eu") : homeRegion.name;
   const country = countryName !== "" ? countryName : tm("scope.thisCountry");
-  const homeCountryLabel = countryName === "" ? t("options.remoteScope.home_country") : homeRegion === null ? tm("scope.homeCountryRemoteNoRegion", { country }) : tm("scope.homeCountryRemote", { country, region: regionText });
+  // no country name (the pack names none yet): "your home country" stands in, and the region part appears only when there is a region
+  const homeCountryLabel = homeRegion === null ? tm("scope.homeCountryRemoteNoRegion", { country }) : tm("scope.homeCountryRemote", { country, region: regionText });
   const kindHint =
     kind === "home_country" ? (homeRegion === null ? tm("scope.kindHint.home_countryNoRegion", { country }) : tm("scope.kindHint.home_country", { country, region: regionText })) : tm(`scope.kindHint.${kind}`);
   const selectable = [...options.map((o) => ({ value: o.value, label: o.label, group: tm(`scope.groups.${o.group}`) })), ...regions.filter((r) => !options.some((o) => o.value === r)).map((r) => ({ value: r, label: r, stale: true }))];

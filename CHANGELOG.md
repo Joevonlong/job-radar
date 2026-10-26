@@ -108,7 +108,6 @@ A failure in (a) does not block rollback: follow (c) and accept the display wind
   relaxed (a place without a country, such as "San Francisco", still does not count); remote jobs, other filters,
   scoring and push rules are unchanged. The job is noted "Watched company: Hamburg is not one of your cities but is in
   your home country, so the job is kept". `/interests` marks watched companies that have no ATS board.
-
 - **Query rotation:** collection starts with the queries waiting longest on its starting channel, so limited budgets reach the tail across cycles. Budget stops that already spent quota or money count as a turn, even with zero results; refusals before any request do not. `collect.query_rotation: false` restores config order; dry runs and history read failures use config order. Run records include usage and requested windows, and completed units report rotation summaries. Budgets and base windows stay unchanged.
 - **Fallback link checks for unseen jobs:** active jobs no source has returned for 14 days get a direct link check,
   regardless of channel runs. Only the links decide whether to close them; unanswered checks wait 7 days before trying

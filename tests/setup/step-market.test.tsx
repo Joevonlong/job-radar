@@ -20,7 +20,7 @@ const market: MarketView = {
   error: null,
   packId: "generic",
   packName: "Generic",
-  packs: [{ id: "generic", name: "Generic", country: null, currency: null, language: null, languageRules: false }],
+  packs: [{ id: "generic", name: "Generic", country: null, currency: null, language: null, region: null, languageRules: false }],
   countryOptions: [
     { value: "DE", label: "Germany" },
     { value: "US", label: "United States" },
@@ -42,6 +42,7 @@ const market: MarketView = {
   languageStep: false,
   scopeOptions: [],
   homeRegion: null,
+  regionChoices: [],
 };
 
 /** A country table in which ZZ has no entry at all, US has a currency but no city, DE has both. */

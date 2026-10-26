@@ -478,7 +478,21 @@ describe("remote scope home_country: what it keeps (rules unchanged)", () => {
 describe("watched companies keep their on-site jobs anywhere in the home country", () => {
   const watchedFilter = (...names: string[]) => filterWith(prefs(), shippedPipeline(), names);
   const at = (...locations: ReturnType<typeof loc>[]) => job({ companyName: "Acme GmbH", companyNameNorm: "acme", workplace: "onsite", locations });
-  const hamburg = loc("Hamburg", "Hamburg", "DE");
+  // through the real location reading: the city table says Hamburg is in Germany
+  const hamburg = normalizeLocation("Hamburg", fixtureMarket());
+
+  it("reads Hamburg as a German city", () => {
+    expect(hamburg).toMatchObject({ city: "Hamburg", countryCode: "DE" });
+  });
+
+  it("never watches a company through an empty key", () => {
+    const empty = filterWith(prefs(), shippedPipeline(), ["日本電気"]);
+    expect(run({ ...at(hamburg), companyNameNorm: null }, empty).reasons).toEqual(["location_not_allowed:Hamburg"]);
+    expect(run({ ...at(hamburg), companyNameNorm: "" }, empty).reasons).toEqual(["location_not_allowed:Hamburg"]);
+    expect(run({ ...at(hamburg), companyNameNorm: undefined }, empty).reasons).toEqual(["location_not_allowed:Hamburg"]);
+    // the database flag still watches
+    expect(run({ ...at(hamburg), companyNameNorm: "", companyWatched: true }, empty).result).toBe("passed");
+  });
 
   it("keeps Hamburg for a watched company, noting why; the same job of an unwatched company is excluded", () => {
     expect(run(at(hamburg), watchedFilter("Acme"))).toEqual({ result: "passed", reasons: ["watched_company_location:Hamburg"] });
@@ -551,6 +565,11 @@ describe("watched companies keep their on-site jobs anywhere in the home country
     expect(run({ ...at(hamburg), companyBlacklisted: true }, f).reasons).toEqual(["blacklist_company:Acme GmbH"]);
     expect(run({ ...at(hamburg), title: "Intern" }, filterWith(prefs((raw) => (raw.exclude_keywords = ["Intern"])), shippedPipeline(), ["Acme"])).reasons).toEqual(["blacklist_keyword:Intern"]);
     expect(run(at(hamburg), f).result).toBe("passed");
+    // a deal-breaker still vetoes a watched company's job
+    const withVeto = filterWith(prefs((raw) => (raw.deal_breakers = [{ id: "rust", label: "Rust", type: "phrase", terms: ["Rust"] }])), shippedPipeline(), ["Acme"]);
+    // (the veto itself comes from dealBreakerVetoes, covered in deal-breakers.test.ts; here it is handed in)
+    expect(evaluateJob(at(hamburg), withVeto, null, ["rust"])).toEqual({ result: "filtered_out", reasons: ["deal_breaker:rust"] });
+    expect(evaluateJob(at(hamburg), withVeto, null, [])).toEqual({ result: "passed", reasons: ["watched_company_location:Hamburg"] });
     expect(applyOverride(run(at(hamburg), f), "exclude")).toEqual({ result: "filtered_out", reasons: ["override_exclude"] });
   });
 

@@ -20,6 +20,14 @@ describe("company marks", () => {
     expect(isCompanyWatched({ watched: false, nameNorm: "other" }, keys)).toBe(false);
   });
 
+  it("an entry that resolves to an empty key watches nothing", () => {
+    const keys = buildWatchedCompanyKeys(["日本電気", "  ", "Acme"], pipeline);
+    expect([...keys]).toEqual(["acme"]);
+    // a company without a key (name_norm empty) is not watched by it; the DB flag still watches
+    expect(isCompanyWatched({ watched: false, nameNorm: "" }, keys)).toBe(false);
+    expect(isCompanyWatched({ watched: true, nameNorm: "" }, keys)).toBe(true);
+  });
+
   it("excludes by DB flag, display name or normalized persisted alias", () => {
     expect(isCompanyExcluded({ ...row, blacklisted: true }, new Set(), suffixes)).toBe(true);
     for (const name of ["ACME GmbH", "Oldbrand", "Oldbrand GmbH", "Legacy GmbH"]) {

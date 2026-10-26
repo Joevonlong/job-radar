@@ -62,11 +62,6 @@ describe("RemoteScopeField: what the home-country choice says", () => {
     expect(screen.getByRole("option", { name: "Remote from Germany (incl. Nordics / worldwide remote)" })).toBeInTheDocument();
   });
 
-  it("falls back to the plain wording while the pack names no country", () => {
-    field({ countryName: "" });
-    expect(screen.getByRole("option", { name: /^Remote from the market's country/ })).toBeInTheDocument();
-  });
-
   it("uses the same wording on the settings page", () => {
     field({ namespace: "settings" });
     expect(screen.getByRole("option", { name: "Remote from Germany (incl. EU / Europe / EMEA / worldwide remote)" })).toBeInTheDocument();
@@ -110,19 +105,50 @@ describe("draftHomeRegion", () => {
     country: "DE",
     homeRegion: EU,
     packs: [
-      { id: "de", name: "Germany", country: "DE", currency: "EUR", language: "de", languageRules: true },
-      { id: "fr", name: "France", country: "FR", currency: "EUR", language: "fr", languageRules: false },
+      { id: "de", name: "Germany", country: "DE", currency: "EUR", language: "de", region: "eu", languageRules: true },
+      { id: "fr", name: "France", country: "FR", currency: "EUR", language: "fr", region: null, languageRules: false },
+      { id: "generic", name: "Generic", country: null, currency: null, language: null, region: null, languageRules: false },
+    ],
+    regionChoices: [
+      { id: "eu", name: "European Union", countries: ["DE", "AT", "FR"] },
+      { id: "dach", name: "DACH", countries: ["DE", "AT", "CH"] },
     ],
   } as unknown as MarketView;
+  const draft = (pack: string, country = "") => ({ pack, country, currency: "", home_language: "" });
 
-  it("keeps the saved region while the draft keeps the home country", () => {
-    expect(draftHomeRegion(market, { pack: "de", country: "", currency: "", home_language: "" })).toEqual(EU);
-    expect(draftHomeRegion(market, { pack: "de", country: "DE", currency: "", home_language: "" })).toEqual(EU);
+  it("uses the pack's region while the draft keeps the pack's country", () => {
+    expect(draftHomeRegion(market, draft("de"))).toEqual(EU);
+    expect(draftHomeRegion(market, draft("de", "DE"))).toEqual(EU);
   });
 
-  it("names no region for another country or when no country is known", () => {
-    expect(draftHomeRegion(market, { pack: "de", country: "AT", currency: "", home_language: "" })).toBeNull();
-    expect(draftHomeRegion(market, { pack: "fr", country: "", currency: "", home_language: "" })).toBeNull();
-    expect(draftHomeRegion(market, { pack: "none", country: "", currency: "", home_language: "" })).toBeNull();
+  it("follows the draft's country: DE to AT is still the EU, a country outside every region has none", () => {
+    expect(draftHomeRegion(market, draft("de", "AT"))).toEqual(EU);
+    expect(draftHomeRegion(market, draft("de", "CH"))).toEqual({ id: "dach", name: "DACH" });
+    expect(draftHomeRegion(market, draft("de", "US"))).toBeNull();
+  });
+
+  it("follows the draft's pack: another pack's country, or the generic pack with a chosen country", () => {
+    expect(draftHomeRegion(market, draft("fr"))).toEqual(EU);
+    expect(draftHomeRegion(market, draft("generic", "AT"))).toEqual(EU);
+    expect(draftHomeRegion(market, draft("generic", "US"))).toBeNull();
+  });
+
+  it("has no region without any country", () => {
+    expect(draftHomeRegion(market, draft("generic"))).toBeNull();
+    expect(draftHomeRegion(market, draft("missing"))).toBeNull();
+  });
+});
+
+describe("RemoteScopeField without a country name", () => {
+  it("stands in 'your home country' and names no region when there is none", () => {
+    field({ countryName: "", homeRegion: null });
+    const option = screen.getByRole("option", { name: "Remote from your home country" });
+    expect(option.textContent).not.toMatch(/region|EU|Europe/i);
+    expect(screen.getByTestId("remote-scope-hint").textContent).not.toMatch(/EU \/ Europe/);
+  });
+
+  it("names the region when there is one", () => {
+    field({ countryName: "" });
+    expect(screen.getByRole("option", { name: "Remote from your home country (incl. EU / Europe / EMEA / worldwide remote)" })).toBeInTheDocument();
   });
 });

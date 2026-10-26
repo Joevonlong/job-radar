@@ -382,6 +382,32 @@ describe("watched companies keep their on-site jobs anywhere in the home country
     expect(await rowsOf(flagged.id)).toMatchObject([{ filterResult: "passed", filterReasons: ["watched_company_location:Hamburg"] }]);
     expect(await rowsOf(listed.id)).toMatchObject([{ filterResult: "filtered_out" }]);
   });
+
+  it("a watch list that turns unreadable while a good one is cached keeps the cached list, with a warning; the database flag still works", async () => {
+    const flagged = await addJob({ company: "Flagged Corp", nameNorm: "flagged", watched: true, workplace: "onsite", locationsJson: hamburgLocation });
+    const listed = await hamburgJob();
+    await setWatched(["Orbitrail"]);
+    expect(currentWatchedCompanies()).toEqual(["Orbitrail"]); // cached
+    vi.stubEnv("JOB_RADAR_CONFIG_POLL_MS", "1");
+    const warn = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      fs.writeFileSync(getConfigPath("interests"), "watched_companies: [unclosed\n");
+      await new Promise((resolve) => setTimeout(resolve, 20)); // past the poll interval: the next read looks at the file
+      const logged: string[] = [];
+      const logger = createLogger({ sink: (entry) => void logged.push(entry.message) });
+      expect(currentWatchedCompanies(logger)).toEqual(["Orbitrail"]);
+      expect(logged).toEqual([]); // loadConfig itself kept the last good value
+      expect(warn.mock.calls.map((call) => String(call[0])).join("\n")).toMatch(/keeping the last valid value/);
+      const db = getDb();
+      const current = await currentPreferences(db);
+      await runFilter(db, { preferences: current.preferences, snapshotId: current.snapshot.id, pipeline: shippedPipeline(), me: null, logger });
+      expect(await rowsOf(flagged.id)).toMatchObject([{ filterResult: "passed", filterReasons: ["watched_company_location:Hamburg"] }]);
+      expect(await rowsOf(listed.id)).toMatchObject([{ filterResult: "passed", filterReasons: ["watched_company_location:Hamburg"] }]); // still on the cached list
+    } finally {
+      warn.mockRestore();
+      vi.unstubAllEnvs();
+    }
+  });
 });
 
 describe("in the processing cycle", () => {

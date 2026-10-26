@@ -15,8 +15,8 @@ import zh from "../../messages/zh.json";
 const action = vi.hoisted(() => ({ enableMarketChannelsAction: vi.fn(async () => ({ status: "done", outcome: "enabled" })) }));
 vi.mock("@/app/me/actions", () => action);
 
-const LOCAL: PackOption = { id: "xx", name: "Example", country: "DE", currency: "EUR", language: "de", languageRules: true };
-const GENERIC: PackOption = { id: "generic", name: "Generic", country: null, currency: null, language: null, languageRules: false };
+const LOCAL: PackOption = { id: "xx", name: "Example", country: "DE", currency: "EUR", language: "de", region: "eu", languageRules: true };
+const GENERIC: PackOption = { id: "generic", name: "Generic", country: null, currency: null, language: null, region: null, languageRules: false };
 
 function view(over: Partial<MarketView> = {}): MarketView {
   return {
@@ -43,6 +43,7 @@ function view(over: Partial<MarketView> = {}): MarketView {
     languageStep: true,
     scopeOptions: [],
     homeRegion: null,
+    regionChoices: [],
     ...over,
   };
 }
