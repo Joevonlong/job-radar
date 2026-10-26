@@ -11,7 +11,7 @@ import { backupConfigText } from "./editor-backup";
 import { hashConfigText } from "./hash";
 import { configSourcePath, loadConfig, primeConfigCache, readConfigText, readProfileText, reloadConfig } from "./load";
 import { CONFIG_VERSION_KEY, currentConfigVersion, documentConfigVersion, migrateConfigDocument, stampConfigVersion, withoutConfigVersion } from "./migrations/version";
-import { configLayer, getDefaultConfigPath, getUserConfigPath, type ConfigLayer } from "./paths";
+import { configLayer, getDefaultConfigPath, getProfileExampleDir, getUserConfigPath, type ConfigLayer } from "./paths";
 import { pruneRedundantKeys } from "./overlay";
 import { notifyProfileSaved } from "./profile";
 import { assertProtectedUnchanged } from "./protected-check";
@@ -300,7 +300,7 @@ function backupsKeep(): number {
 /**
  * Validate `value`, then write it to the user's config file (always the user directory, never the defaults).
  * The existing YAML document is updated in place (comments survive); when the user has no copy yet, the shipped default
- * is the starting document, so its comments carry over. The file is replaced atomically and the cache is refreshed.
+ * or profile template is the starting document, so its comments carry over. The file is replaced atomically and the cache is refreshed.
  * Profile files additionally trigger the `setOnProfileSaved` hook (errors from the hook propagate after the file was
  * written). Invalid values throw ConfigError and leave the file untouched; so does a value that changes a protected key
  * (`protected-keys.ts`, kind `protected`).
@@ -358,7 +358,7 @@ async function writeValidated<N extends ConfigName>(name: N, filePath: string, p
     if (baseHash !== undefined && currentTextHash(name) !== baseHash) throw new ConfigError({ configName: name, filePath, kind: "stale" });
   };
   assertUnchanged();
-  const shippedPath = getDefaultConfigPath(name);
+  const shippedPath = isProfileName(name) ? path.join(getProfileExampleDir(), configRegistry[name].file) : getDefaultConfigPath(name);
   const userText = await readIfExists(filePath);
   const existing = userText ?? (shippedPath === null ? null : await readIfExists(shippedPath));
   const existingPath = userText === null && shippedPath !== null ? shippedPath : filePath;

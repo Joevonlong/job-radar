@@ -2,7 +2,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { parse, stringify } from "yaml";
 
 import {
@@ -10,6 +10,7 @@ import {
   ensureProfileFiles,
   hashConfigText,
   loadConfig,
+  readProfileText,
   reloadConfig,
   resetConfigCache,
   setOnProfileSaved,
@@ -18,7 +19,7 @@ import {
 } from "@/lib/config";
 
 import { atomicWrite, withFileLock } from "@/lib/config/write";
-import { withConfigWriteLock, WRITE_LOCK_FILE } from "@/lib/config/write-lock";
+import { freezeConfig, withConfigWriteLock, WRITE_LOCK_FILE } from "@/lib/config/write-lock";
 
 import { makeTempConfig, type TempConfig } from "./helpers";
 
@@ -28,6 +29,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   setOnProfileSaved(null);
+  vi.unstubAllEnvs();
   tmp.cleanup();
 });
 
@@ -331,6 +333,33 @@ describe("lists keep their comments with their entries", () => {
 });
 
 describe("profile files", () => {
+  it.each([
+    { name: "me", frozen: false },
+    { name: "preferences", frozen: false },
+    { name: "me", frozen: true },
+    { name: "preferences", frozen: true },
+  ] as const)("first saves edit the $name template document and keep its comments: token-authorized=$frozen", async ({ name, frozen }) => {
+    if (frozen) {
+      const token = "1".repeat(32);
+      await freezeConfig("a".repeat(40), token);
+      vi.stubEnv("JOB_RADAR_UPGRADE_FREEZE_TOKEN", token);
+    }
+    const source = path.join(tmp.defaultsDir, "profile.example", `${name}.yaml`);
+    const template = `# Keep this template header\n${fs.readFileSync(source, "utf8")}`;
+    fs.writeFileSync(source, template);
+    const value = name === "me" ? { ...loadConfig("me"), city: "Sample City" } : { ...loadConfig("preferences"), salary_floor_year: loadConfig("preferences").salary_floor_year + 1 };
+    expect(fs.existsSync(path.join(tmp.profileDir, `${name}.yaml`))).toBe(false);
+
+    await writeConfig(name, value, { baseHash: hashConfigText(readProfileText(name)) });
+
+    const text = read(tmp.profileDir, `${name}.yaml`);
+    for (const comment of template.split("\n").filter((line) => line.trim().startsWith("#"))) expect(text).toContain(comment.trim());
+    for (const flow of template.split("\n").filter((line) => /^\s*[\w_]+: \[.*\]\s*(#.*)?$/.test(line))) expect(text).toContain(flow);
+    expect(reloadConfig(name)).toEqual(value);
+    expect(fs.readFileSync(source, "utf8")).toBe(template);
+    expect(fs.statSync(path.join(tmp.profileDir, `${name}.yaml`)).mode & 0o777).toBe(0o600);
+  });
+
   it("does not acquire a directory lock when every profile file already exists", async () => {
     await ensureProfileFiles();
     let entered = () => {};

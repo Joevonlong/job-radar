@@ -123,8 +123,14 @@ export function resolveConfigReadPath(name: ConfigName): string {
   return file;
 }
 
-/** A path for people to read: relative to the app root when inside it (`data/config/ai.yaml`), else absolute. */
+/** Relative inside the app root (`data/config/ai.yaml`), except explicitly absolute directory overrides stay absolute. */
 export function displayConfigPath(file: string): string {
+  for (const key of ["JOB_RADAR_DEFAULTS_DIR", "JOB_RADAR_CONFIG_DIR", "JOB_RADAR_PROFILE_DIR"]) {
+    const dir = process.env[key]?.trim();
+    if (!dir || !path.isAbsolute(dir)) continue;
+    const relative = path.relative(dir, file);
+    if (relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative)) return file;
+  }
   const relative = path.relative(getAppRoot(), file);
   return relative === "" || relative.startsWith("..") || path.isAbsolute(relative) ? file : relative;
 }

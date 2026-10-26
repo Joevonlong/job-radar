@@ -54,6 +54,25 @@ describe("the config scripts (pnpm config:init / config:migrate / config:check)"
 
   const run = (script: string, ...args: string[]) => runConfigScript(tmp, script, args);
 
+  it("keeps absolute directory overrides in CLI output even inside the app root", () => {
+    // Node canonicalizes the bundled module's path. Match it explicitly so symlinked temp directories cannot hide this case.
+    const root = fs.realpathSync(tmp.root);
+    const env = {
+      JOB_RADAR_DEFAULTS_DIR: path.join(root, "defaults"),
+      JOB_RADAR_CONFIG_DIR: path.join(root, "config"),
+      JOB_RADAR_PROFILE_DIR: path.join(root, "profile"),
+    };
+    const init = runConfigScript(tmp, "config-init.ts", [], env);
+    expect(init.status, init.out).toBe(0);
+    expect(init.out).toContain(`+ ${path.join(env.JOB_RADAR_CONFIG_DIR, "ai.yaml")}`);
+    expect(init.out).toContain(`+ ${path.join(env.JOB_RADAR_PROFILE_DIR, "me.yaml")}  (from the template)`);
+
+    fs.writeFileSync(path.join(env.JOB_RADAR_DEFAULTS_DIR, "notify.yaml"), "push_min_score: [oops\n");
+    const check = runConfigScript(tmp, "config-check.ts", [], env);
+    expect(check.status, check.out).toBe(1);
+    expect(check.out).toContain(`✗ ${path.join(env.JOB_RADAR_DEFAULTS_DIR, "notify.yaml")} (default, not in use)`);
+  });
+
   it("init fills the user and profile directories once; migrate and check then pass", () => {
     const first = run("config-init.ts");
     expect(first.status, first.out).toBe(0);

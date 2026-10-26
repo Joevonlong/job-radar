@@ -7,6 +7,7 @@ import { expect, test } from "./fixtures";
 // United States drops the local-language step, writes amounts in dollars and folds the German job boards away.
 const PROFILE_DIR = process.env.E2E_PROFILE_DIR ?? "";
 const PREFS_FILE = path.join(PROFILE_DIR, "preferences.yaml");
+const DEFAULTS_DIR = process.env.E2E_DEFAULTS_DIR ?? path.resolve("tests/fixtures/config/defaults");
 
 test.describe.configure({ mode: "serial" });
 
@@ -43,7 +44,8 @@ test("switching to the generic pack in the US: no German filter, dollars, the Ge
   // the generic pack names no country: saving without one is refused, field by field
   await prefs.getByRole("button", { name: "保存", exact: true }).click();
   await expect(prefs.getByRole("alert").first()).toBeVisible();
-  expect(fs.readFileSync(PREFS_FILE, "utf8")).toMatch(/pack: de/);
+  const currentFile = fs.existsSync(PREFS_FILE) ? PREFS_FILE : path.join(DEFAULTS_DIR, "profile.example", "preferences.yaml");
+  expect(fs.readFileSync(currentFile, "utf8")).toMatch(/pack: de/);
 
   await page.getByTestId("market-country").selectOption("US");
   // no home region in this market: the choice names the country only
@@ -52,7 +54,7 @@ test("switching to the generic pack in the US: no German filter, dollars, the Ge
   await page.getByTestId("market-language").fill("en");
   await expect(page.getByTestId("market-language-step")).toHaveAttribute("data-on", "false");
   await prefs.getByRole("button", { name: "保存", exact: true }).click();
-  await expect.poll(() => fs.readFileSync(PREFS_FILE, "utf8")).toMatch(/pack: generic/);
+  await expect.poll(() => fs.existsSync(PREFS_FILE) ? fs.readFileSync(PREFS_FILE, "utf8") : "").toMatch(/pack: generic/);
   expect(fs.readFileSync(PREFS_FILE, "utf8")).toMatch(/country: US/);
 
   await page.reload();

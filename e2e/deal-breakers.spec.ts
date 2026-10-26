@@ -13,6 +13,7 @@ import postgres from "postgres";
  */
 const PROFILE_DIR = process.env.E2E_PROFILE_DIR ?? "";
 const PREFS_FILE = path.join(PROFILE_DIR, "preferences.yaml");
+const DEFAULTS_DIR = process.env.E2E_DEFAULTS_DIR ?? path.resolve("tests/fixtures/config/defaults");
 const E2E_URL = process.env.E2E_DATABASE_URL ?? "";
 
 test.describe.configure({ mode: "serial" });
@@ -49,7 +50,7 @@ test("the card adds a language gate, counts what it would veto and saves it", as
   await expect.poll(async () => Number(await preview.getAttribute("data-count"))).toBeGreaterThanOrEqual(1);
 
   await page.getByTestId("preferences-card").getByRole("button", { name: "保存", exact: true }).click();
-  await expect.poll(() => fs.readFileSync(PREFS_FILE, "utf8")).toMatch(/type: language_gate/);
+  await expect.poll(() => fs.existsSync(PREFS_FILE) ? fs.readFileSync(PREFS_FILE, "utf8") : "").toMatch(/type: language_gate/);
   const saved = fs.readFileSync(PREFS_FILE, "utf8");
   expect(saved).not.toMatch(/at_least/);
 
@@ -59,8 +60,10 @@ test("the card adds a language gate, counts what it would veto and saves it", as
 });
 
 test("a vetoed job names the rule, quotes the posting and shows both levels; Keep anyway is offered", async ({ page, context, baseURL }) => {
-  // the template exists once /me has been opened
+  // Seed the template explicitly before the hand edit; opening /me only reads it in memory.
   await openMe(page);
+  fs.mkdirSync(PROFILE_DIR, { recursive: true });
+  fs.copyFileSync(path.join(DEFAULTS_DIR, "profile.example", "preferences.yaml"), PREFS_FILE);
   fs.appendFileSync(PREFS_FILE, "\ndeal_breakers:\n  - id: german-gate\n    label: 德语高于我的水平\n    type: language_gate\n");
 
   const sql = postgres(E2E_URL, { max: 1, onnotice: () => {} });
