@@ -145,6 +145,7 @@ describe("error formatting", () => {
 
   it("reports a missing file", () => {
     resetConfigCache();
+    fs.rmSync(path.join(tmp.defaultsDir, "profile.example/me.yaml"));
     const err = catchError(() => loadConfig("me"));
     expect(err.kind).toBe("missing");
     expect(err.filePath).toBe(path.join(tmp.profileDir, "me.yaml"));

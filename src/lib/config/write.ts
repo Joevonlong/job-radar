@@ -9,7 +9,7 @@ import { Document, isMap, isNode, isScalar, isSeq, parse, parseDocument, type YA
 import { ConfigError, zodIssues } from "./errors";
 import { backupConfigText } from "./editor-backup";
 import { hashConfigText } from "./hash";
-import { configSourcePath, loadConfig, primeConfigCache, readConfigText, reloadConfig } from "./load";
+import { configSourcePath, loadConfig, primeConfigCache, readConfigText, readProfileText, reloadConfig } from "./load";
 import { CONFIG_VERSION_KEY, currentConfigVersion, documentConfigVersion, migrateConfigDocument, stampConfigVersion, withoutConfigVersion } from "./migrations/version";
 import { configLayer, getDefaultConfigPath, getUserConfigPath, type ConfigLayer } from "./paths";
 import { pruneRedundantKeys } from "./overlay";
@@ -18,6 +18,7 @@ import { assertProtectedUnchanged } from "./protected-check";
 import { configRegistry, isProfileName, type ConfigName, type ConfigValue } from "./registry";
 import { CONFIG_EDITOR_DEFAULTS } from "./schemas/ui";
 import { validateConfigText } from "./validate-text";
+import { commitConfigWrite, withConfigWriteLock } from "./write-lock";
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -239,8 +240,7 @@ const fileLocks = new Map<string, Promise<unknown>>();
 
 /**
  * Run `task` while holding the in-process lock of `file` (the web serves Server Actions concurrently: two saves of the
- * same file must not interleave their stale check, backup and rename). Separate processes are not covered; the runner
- * never writes the files the forms write.
+ * same file must not interleave their stale check, backup and rename). The directory lock inside it also covers other processes.
  */
 export async function withFileLock<T>(file: string, task: () => Promise<T>): Promise<T> {
   const key = path.resolve(file);
@@ -259,28 +259,33 @@ export async function withFileLock<T>(file: string, task: () => Promise<T>): Pro
  * Write via a temp file in the same directory + rename, so readers never see a partial file (creates the directory).
  * The temp file is created with mode 0600 (never readable by others, not even for a moment) and the result keeps it.
  * `beforeRename` runs after the temp file is complete and right before the rename; a throw there leaves the file as it
- * was (the temp file is removed).
+ * was (the temp file is removed). `checkFresh` is synchronous and runs inside the fenced commit, immediately before rename.
  */
-export async function atomicWrite(file: string, text: string, beforeRename?: () => void | Promise<void>): Promise<void> {
-  const dir = path.dirname(file);
-  await fsp.mkdir(dir, { recursive: true });
-  const tmp = path.join(dir, `.${path.basename(file)}.${process.pid}.${randomBytes(4).toString("hex")}.tmp`);
-  try {
-    const handle = await fsp.open(tmp, "wx", CONFIG_FILE_MODE);
+export async function atomicWrite(file: string, text: string, beforeRename?: () => void | Promise<void>, checkFresh?: () => void): Promise<void> {
+  return withConfigWriteLock(file, async () => {
+    const dir = path.dirname(file);
+    await fsp.mkdir(dir, { recursive: true });
+    const tmp = path.join(dir, `.${path.basename(file)}.${process.pid}.${randomBytes(4).toString("hex")}.tmp`);
     try {
-      // the umask can only take bits away; chmod makes 0600 exact even under an unusual umask
-      await handle.chmod(CONFIG_FILE_MODE);
-      await handle.writeFile(text, "utf8");
-      await handle.sync();
-    } finally {
-      await handle.close();
+      const handle = await fsp.open(tmp, "wx", CONFIG_FILE_MODE);
+      try {
+        // the umask can only take bits away; chmod makes 0600 exact even under an unusual umask
+        await handle.chmod(CONFIG_FILE_MODE);
+        await handle.writeFile(text, "utf8");
+        await handle.sync();
+      } finally {
+        await handle.close();
+      }
+      if (beforeRename !== undefined) await beforeRename();
+      await commitConfigWrite(file, () => {
+        checkFresh?.();
+        fs.renameSync(tmp, file);
+      });
+    } catch (err) {
+      await fsp.rm(tmp, { force: true });
+      throw err;
     }
-    if (beforeRename !== undefined) await beforeRename();
-    await fsp.rename(tmp, file);
-  } catch (err) {
-    await fsp.rm(tmp, { force: true });
-    throw err;
-  }
+  });
 }
 
 /** ui.yaml `config_editor.backups_keep`, or its default when ui.yaml cannot be read. */
@@ -315,14 +320,21 @@ export async function writeConfig<N extends ConfigName>(name: N, value: ConfigVa
     throw new ConfigError({ configName: name, filePath, kind: "schema", issues: zodIssues(result.error) });
   }
   const parsed = result.data as ConfigValue<N>;
-  assertProtectedUnchanged(name, parsed);
-  return withFileLock(filePath, () => writeValidated(name, filePath, parsed, options.baseHash));
+  return withFileLock(filePath, async () => {
+    const text = await withConfigWriteLock(filePath, () => {
+      assertProtectedUnchanged(name, parsed);
+      return writeValidated(name, filePath, parsed, options.baseHash);
+    });
+    // Keep same-file notifications ordered in this process, but never hold a directory lease over DB/network work.
+    if (isProfileName(name)) await notifyProfileSaved(name, text);
+    return parsed;
+  });
 }
 
 /** The hash of the file the app reads for `name` now ("" when it is missing or unreadable), as the forms compute it. */
 function currentTextHash(name: ConfigName): string {
   try {
-    return hashConfigText(readConfigText(name));
+    return hashConfigText(isProfileName(name) ? readProfileText(name) : readConfigText(name));
   } catch {
     return "";
   }
@@ -341,7 +353,7 @@ function existingKeys(name: ConfigName, existingText: string | null, existingPat
   }
 }
 
-async function writeValidated<N extends ConfigName>(name: N, filePath: string, parsed: ConfigValue<N>, baseHash: string | undefined): Promise<ConfigValue<N>> {
+async function writeValidated<N extends ConfigName>(name: N, filePath: string, parsed: ConfigValue<N>, baseHash: string | undefined): Promise<string> {
   const assertUnchanged = (): void => {
     if (baseHash !== undefined && currentTextHash(name) !== baseHash) throw new ConfigError({ configName: name, filePath, kind: "stale" });
   };
@@ -360,10 +372,9 @@ async function writeValidated<N extends ConfigName>(name: N, filePath: string, p
     if (readsBackAs(name, text, parsed)) break;
   }
   if (userText !== null && userText !== text && !isProfileName(name)) await backupConfigText(name, userText, backupsKeep());
-  await atomicWrite(filePath, text, assertUnchanged);
+  await atomicWrite(filePath, text, undefined, assertUnchanged);
   primeConfigCache(name, parsed, text);
-  if (isProfileName(name)) await notifyProfileSaved(name, text);
-  return parsed;
+  return text;
 }
 
 // ---------------------------------------------------------------- the advanced editor
@@ -424,15 +435,15 @@ export async function writeConfigText(name: ConfigName, text: string, options: T
   if (!checked.ok) {
     throw new ConfigError({ configName: name, filePath, kind: checked.issues[0]?.source === "yaml" ? "yaml" : "schema", issues: checked.issues.map((issue) => ({ path: issue.path, message: issue.message })) });
   }
-  assertProtectedUnchanged(name, checked.value);
-  return withFileLock(filePath, async () => {
+  return withFileLock(filePath, () => withConfigWriteLock(filePath, async () => {
+    assertProtectedUnchanged(name, checked.value);
     const currentText = assertFresh(name, options);
     const hadUserFile = fs.existsSync(/*turbopackIgnore: true*/ filePath);
     const backup = hadUserFile ? await backupConfigText(name, currentText, options.backupsKeep, options.now) : null;
-    await atomicWrite(filePath, text, () => void assertFresh(name, options));
+    await atomicWrite(filePath, text, undefined, () => void assertFresh(name, options));
     primeConfigCache(name, checked.value, text);
     return { backup, layer: "user" as const };
-  });
+  }));
 }
 
 /**
@@ -447,18 +458,20 @@ export async function resetConfigToDefault(name: ConfigName, options: TextBase &
   if (shippedPath === null) throw new ConfigError({ configName: name, filePath, kind: "missing" });
   const shippedText = await readIfExists(shippedPath);
   if (shippedText === null) throw new ConfigError({ configName: name, filePath: shippedPath, kind: "missing" });
-  return withFileLock(filePath, async (): Promise<TextWriteResult> => {
+  return withFileLock(filePath, () => withConfigWriteLock(filePath, async (): Promise<TextWriteResult> => {
     const currentText = assertFresh(name, options);
     const hadUserFile = fs.existsSync(/*turbopackIgnore: true*/ filePath);
     const backup = hadUserFile ? await backupConfigText(name, currentText, options.backupsKeep, options.now) : null;
     if (configRegistry[name].kind === "shipped") {
-      assertFresh(name, options);
-      await fsp.rm(filePath, { force: true });
+      await commitConfigWrite(filePath, () => {
+        assertFresh(name, options);
+        fs.rmSync(filePath, { force: true });
+      });
       reloadConfig(name);
       return { backup, layer: "default" };
     }
-    await atomicWrite(filePath, shippedText, () => void assertFresh(name, options));
+    await atomicWrite(filePath, shippedText, undefined, () => void assertFresh(name, options));
     reloadConfig(name);
     return { backup, layer: "user" };
-  });
+  }));
 }

@@ -17,7 +17,8 @@ import {
   type ProfileName,
 } from "@/lib/config";
 
-import { withFileLock } from "@/lib/config/write";
+import { atomicWrite, withFileLock } from "@/lib/config/write";
+import { withConfigWriteLock, WRITE_LOCK_FILE } from "@/lib/config/write-lock";
 
 import { makeTempConfig, type TempConfig } from "./helpers";
 
@@ -330,6 +331,39 @@ describe("lists keep their comments with their entries", () => {
 });
 
 describe("profile files", () => {
+  it("does not acquire a directory lock when every profile file already exists", async () => {
+    await ensureProfileFiles();
+    let entered = () => {};
+    let release = () => {};
+    const ready = new Promise<void>((resolve) => { entered = resolve; });
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const holding = withConfigWriteLock(path.join(tmp.profileDir, "me.yaml"), async () => { entered(); await gate; });
+    await ready;
+    try {
+      expect((await ensureProfileFiles()).every((r) => !r.created)).toBe(true);
+    } finally { release(); await holding; }
+  });
+
+  it("releases the directory lock before waiting for the profile snapshot hook", async () => {
+    await ensureProfileFiles();
+    let entered = () => {};
+    let release = () => {};
+    const ready = new Promise<void>((resolve) => { entered = resolve; });
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    let lockedDuringHook = true;
+    setOnProfileSaved(async () => {
+      lockedDuringHook = fs.existsSync(path.join(tmp.profileDir, WRITE_LOCK_FILE));
+      entered(); await gate;
+    });
+    const writing = writeConfig("me", { ...loadConfig("me"), summary: "Updated profile." });
+    await ready;
+    try {
+      expect(lockedDuringHook).toBe(false);
+      await atomicWrite(path.join(tmp.profileDir, "other.yaml"), "saved: true\n");
+      expect(read(tmp.profileDir, "me.yaml")).toContain("Updated profile.");
+    } finally { release(); await writing; }
+  });
+
   it("ensureProfileFiles copies the templates and never overwrites", async () => {
     const first = await ensureProfileFiles();
     expect(first.map((r) => [r.name, r.created])).toEqual([

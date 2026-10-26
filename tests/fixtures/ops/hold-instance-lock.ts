@@ -5,12 +5,16 @@
  * database guard applies here too), then waits until SIGTERM, releases and exits 0.
  */
 import fs from "node:fs";
+import os from "node:os";
 
 import { acquireInstanceLock } from "../../../src/lib/db/instance-lock";
 
 const record = process.env.RECORD_FILE ?? "";
+const requestedBytes = Number(process.env.TEST_WORKER_APPLICATION_BYTES ?? "0");
+const host = requestedBytes > 0 ? "h".repeat(requestedBytes - Buffer.byteLength(`job-radar ai-worker pid=${process.pid} host=`)) : process.env.TEST_WORKER_HOST;
+if (host) os.hostname = () => host;
 const result = await acquireInstanceLock(process.env.DATABASE_URL ?? "", { name: "ai-worker", connectTimeoutSeconds: 10 });
-fs.writeFileSync(record, `${JSON.stringify({ pid: process.pid, acquired: result.acquired, vitest: (process.env.VITEST ?? "") !== "" })}\n`);
+fs.writeFileSync(record, `${JSON.stringify({ pid: process.pid, host: os.hostname(), acquired: result.acquired, vitest: (process.env.VITEST ?? "") !== "" })}\n`);
 if (!result.acquired) process.exit(3);
 const lock = result.lock;
 const keepAlive = setInterval(() => {}, 60_000);

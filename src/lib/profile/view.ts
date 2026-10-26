@@ -1,5 +1,5 @@
 /** Data for the /me page (server only): both profile files, their history and the stale-score count. */
-import { diffYaml, ensureProfileFiles, reloadConfig, readConfigText, type ProfileName } from "@/lib/config";
+import { diffYaml, reloadConfig, readProfileText, type ProfileName } from "@/lib/config";
 import { countStaleScores, getDb, hashProfileYaml, listProfileSnapshots, type ProfileSnapshot } from "@/lib/db";
 
 import {
@@ -47,7 +47,7 @@ async function loadSection<D>(
   let hash = "";
   let currentHash: string | null = null;
   try {
-    hash = hashProfileYaml(readConfigText(kind));
+    hash = hashProfileYaml(readProfileText(kind));
     currentHash = hash;
   } catch {
     // unreadable file: reported through loadError below
@@ -61,8 +61,6 @@ async function loadSection<D>(
 }
 
 export async function loadProfilePage(): Promise<ProfilePageData> {
-  await ensureProfileFiles();
-
   let dbAvailable = true;
   let staleScores = 0;
   let meSnapshots: ProfileSnapshot[] = [];

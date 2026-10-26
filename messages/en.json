@@ -701,7 +701,8 @@
       "snapshotFailed": "The file was saved, but the history snapshot could not be recorded (database down?).",
       "snapshotNotFound": "That snapshot no longer exists.",
       "snapshotInvalid": "This old version no longer matches the current format and cannot be restored.",
-      "stale": "This file was changed elsewhere (another tab or by hand) after you opened it. The form now shows the saved values; your changes were not saved."
+      "stale": "This file was changed elsewhere (another tab or by hand) after you opened it. The form now shows the saved values; your changes were not saved.",
+      "frozen": "An upgrade is in progress. Try saving again later. If no deploy is running, deploy again or run `pnpm ops:unfreeze`."
     },
     "loadError": {
       "title": "Cannot read {file}",
@@ -1745,7 +1746,8 @@
       "otherErrors": "These problems have no field of their own:",
       "catalogUnreadable": "The model catalog cannot be read: fix models.yaml first",
       "protectedKeys": "This change touches a locked key (a command, an API host or a credential path). Locked keys can only be changed by editing the config file by hand.",
-      "stale": "This file was changed elsewhere (another tab, the advanced editor or by hand) after you opened it. The form now shows the saved values; your changes were not saved."
+      "stale": "This file was changed elsewhere (another tab, the advanced editor or by hand) after you opened it. The form now shows the saved values; your changes were not saved.",
+      "frozen": "An upgrade is in progress. Try saving again later. If no deploy is running, deploy again or run `pnpm ops:unfreeze`."
     },
     "loadError": {
       "title": "Cannot read {file}",
@@ -3133,7 +3135,8 @@
         "invalidPayload": "The submitted data is malformed; reload the page and try again.",
         "unreadable": "ui.yaml or notify.yaml cannot be read right now: fix it in the advanced editor first.",
         "writeFailed": "Could not save: {file} is unchanged and no other file was written.",
-        "partial": "{saved} was saved, but {file} could not be written: it is still the old one. Save again."
+        "partial": "{saved} was saved, but {file} could not be written: it is still the old one. Save again.",
+        "frozen": "An upgrade is in progress. Try saving again later. If no deploy is running, deploy again or run `pnpm ops:unfreeze`."
       }
     },
     "notifyReminderLink": "The timeouts of \"Interested\" and \"Applied\" are now set in the Workflow tab.",
@@ -3172,7 +3175,8 @@
         "too_large": "The text is too long (limit {max} bytes, ui.yaml config_editor.max_bytes).",
         "needs_confirm": "This is a product default file: the first save must be confirmed, it creates a whole-file override.",
         "failed": "Could not save; the file is unchanged.",
-        "protected": "This text changes a locked key (a command, an API host or a credential path). Edit the file by hand to change it."
+        "protected": "This text changes a locked key (a command, an API host or a credential path). Edit the file by hand to change it.",
+        "frozen": "An upgrade is in progress. Try saving again later. If no deploy is running, deploy again or run `pnpm ops:unfreeze`."
       },
       "files": {
         "label": "Config files",
@@ -5505,6 +5509,15 @@
           "otherReleaseHint": "Expected right after a worker-only rollback; otherwise a deploy stopped before the worker step. Run scripts/ops/deploy.sh so the worker runs the checked-out commit (docs/upgrade.md)",
           "starting": "{process}: the service (pid {pid}) has not taken the worker lock or written a heartbeat since it did; its report follows its first heartbeat",
           "startingHint": "Run the doctor again in a minute"
+        },
+        "freeze": {
+          "none": "Settings are not frozen",
+          "active": "Settings are frozen while a deploy is running",
+          "leftover": "Settings are still frozen, but no deploy holds the deployment lock",
+          "hint": "Deploy again, or first confirm that no old processes remain, then run pnpm ops:unfreeze and pnpm config:migrate --write.",
+          "staleLocks": "Config write-lock owners older than the stale threshold: {files}",
+          "staleLocksHint": "Abandoned locks are taken over automatically on the next write. If saves keep failing, confirm the owner is no longer writing, then remove the reported lock file or the owner file inside the guard directory.",
+          "title": "Upgrade settings freeze"
         }
       },
       "i18n": {
@@ -5829,7 +5842,8 @@
       "configUnreadable": "A config file this step writes cannot be read. Fix it under Settings → Advanced first.",
       "catalogUnreadable": "models.yaml cannot be read, so no model can be checked.",
       "setupUnreadable": "Saved, but setup.yaml could not be updated, so this step is not marked. Run pnpm run doctor.",
-      "databaseUnavailable": "The database is not reachable; nothing was requested."
+      "databaseUnavailable": "The database is not reachable; nothing was requested.",
+      "frozen": "An upgrade is in progress. Try saving again later. If no deploy is running, deploy again or run `pnpm ops:unfreeze`."
     },
     "env": {
       "set": "set",
@@ -6459,5 +6473,11 @@
       "title": "Quoted by a fit reason or gap",
       "legend": "Reason"
     }
+  },
+  "configOps": {
+    "fillsSkipped": "Upgrade in progress: missing config/profile files were not created.",
+    "frozen": "Settings are frozen for the upgrade.",
+    "unfrozen": "Settings are unfrozen. Next run: pnpm config:init, then pnpm config:migrate --write",
+    "failed": "Could not change the upgrade freeze. Check the target commit, write permissions and write lock; retry."
   }
 }

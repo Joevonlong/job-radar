@@ -1,6 +1,6 @@
 import type { CycleStepContext, StepResult } from "@/lib/cycle/steps";
 import { registerCycleStep } from "@/lib/cycle/steps";
-import { ensureProfileFiles, loadConfig, parseConfigText, readConfigText, type MeConfig, type PipelineConfig, type PreferencesConfig } from "@/lib/config";
+import { loadConfig, parseConfigText, readProfileText, type MeConfig, type PipelineConfig, type PreferencesConfig } from "@/lib/config";
 import { loadPipeline } from "@/lib/market";
 import type { Db } from "@/lib/db/client";
 import {
@@ -195,10 +195,10 @@ export interface CurrentPreferences {
   me: MeConfig | null;
 }
 
-/** me.yaml as it is now, or null when it is missing or invalid (only a language gate needs it; the other rules go on). */
+/** me.yaml now, its template when missing, or null when unreadable/invalid (only the language gate needs it). */
 export function currentMe(): MeConfig | null {
   try {
-    return parseConfigText("me", readConfigText("me"));
+    return parseConfigText("me", readProfileText("me"));
   } catch {
     return null;
   }
@@ -210,8 +210,7 @@ export function currentMe(): MeConfig | null {
  * scores of other snapshots stale).
  */
 export async function currentPreferences(db: Db): Promise<CurrentPreferences> {
-  await ensureProfileFiles(); // a first cycle before the profile page was ever opened starts from the template
-  const text = readConfigText("preferences");
+  const text = readProfileText("preferences");
   const preferences = parseConfigText("preferences", text);
   const snapshot = await snapshotForProfileText(db, "preferences", text);
   return { preferences, snapshot, me: currentMe() };

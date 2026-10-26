@@ -19,7 +19,7 @@ export interface WorkflowFieldError {
 }
 
 /** Whole-panel problems. `partial`: the first file was written and the second was not (`failedFile` says which one is still old). */
-export type WorkflowFormError = "invalidPayload" | "unreadable" | "writeFailed" | "partial";
+export type WorkflowFormError = "invalidPayload" | "unreadable" | "writeFailed" | "partial" | "frozen";
 
 export type WorkflowFile = "ui" | "notify";
 

@@ -52,6 +52,8 @@
     "mcp:serve": "node --env-file-if-exists=.env --import tsx scripts/mcp-serve.ts",
     "setup": "node --env-file-if-exists=.env --import tsx scripts/setup.ts",
     "migrate:run": "node --env-file-if-exists=.env --import tsx scripts/migrate-run.ts",
+    "ops:freeze": "node --import tsx scripts/ops-freeze.ts",
+    "ops:unfreeze": "node --import tsx scripts/ops-freeze.ts --unfreeze",
     "ops:drain": "node --env-file-if-exists=.env --import tsx scripts/ops-drain.ts",
     "ops:worker-heartbeat": "node --import tsx scripts/ops/worker-heartbeat.ts",
     "cycle:run": "node --env-file-if-exists=.env --import tsx scripts/cycle-run.ts",

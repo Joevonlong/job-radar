@@ -13,7 +13,7 @@ import { saveProfile } from "@/lib/profile/service";
 import { cleanTitles } from "../keywords";
 import { marketInputSchema } from "../inputs";
 import { stepError, type SetupFieldError, type SetupStepResult } from "../types";
-import { editable, finishStep, profileFieldErrors, profileSaveProblem, readFresh, zodSetupErrors } from "./common";
+import { editable, finishStep, profileFieldErrors, profileSaveProblem, readFresh, zodSetupErrors, setupFrozen, setupWriteError } from "./common";
 
 /** The fields of the market step (the other preferences fields are reported by the targets step). */
 const MARKET_PATHS = /^(market(\.|$)|locations$|remote_scope$)/;
@@ -28,6 +28,8 @@ function marketProblems(draftMarket: unknown): FieldError[] {
 }
 
 export async function saveMarketStep(raw: unknown): Promise<SetupStepResult> {
+  const frozen = setupFrozen("market");
+  if (frozen) return frozen;
   const parsed = marketInputSchema.safeParse(raw);
   if (!parsed.success) return stepError("market", "invalidPayload");
   const input = parsed.data;
@@ -72,8 +74,8 @@ export async function saveMarketStep(raw: unknown): Promise<SetupStepResult> {
   try {
     await writeConfig("search", nextSearch.data);
     await writeConfig("schedule", nextSchedule.data);
-  } catch {
-    return stepError("market", "writeFailed");
+  } catch (error) {
+    return stepError("market", setupWriteError(error));
   }
   return finishStep("market");
 }

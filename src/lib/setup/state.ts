@@ -118,15 +118,15 @@ function baseForWrite(now: Date): SetupConfig | null {
   return { completed_at: null, completed_by: null, steps: {} };
 }
 
-export type SetupWriteResult = { ok: true; state: SetupConfig } | { ok: false; reason: "unreadable" | "write_failed" };
+export type SetupWriteResult = { ok: true; state: SetupConfig } | { ok: false; reason: "unreadable" | "write_failed" | "frozen" };
 
 async function write(next: SetupConfig): Promise<SetupWriteResult> {
   try {
     const state = await writeConfig("setup", next);
     resetSetupStateCache();
     return { ok: true, state };
-  } catch {
-    return { ok: false, reason: "write_failed" };
+  } catch (error) {
+    return { ok: false, reason: error instanceof ConfigError && error.kind === "frozen" ? "frozen" : "write_failed" };
   }
 }
 

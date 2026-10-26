@@ -6,7 +6,8 @@ import path from "node:path";
 
 import { z } from "zod";
 
-import { getAppRoot, inspectConfigLayers, loadConfig } from "@/lib/config";
+import { upgradeFreezePath, WRITE_LOCK_FILE } from "@/lib/config/write-lock";
+import { getAppRoot, getConfigDir, getProfileDir, inspectConfigLayers, loadConfig } from "@/lib/config";
 import { getDb, getDbNow, pingDb, readAppliedMigrations } from "@/lib/db";
 import { getSql } from "@/lib/db/client";
 import { workerReceipt } from "@/lib/db/repos/ai-worker-evidence";
@@ -256,6 +257,20 @@ export function createRealProbes(options: RealProbeOptions): DoctorProbes {
     setup: async () => readSetupState(),
     aiWorkerReceipt: (pid) => workerReceipt({ sql: getSql(), db: getDb() }, { pid, host: os.hostname(), since: "1970-01-01T00:00:00.000000Z" }),
     shippedConfigReports: () => readShippedConfigReports(getDb()),
+    configFrozen: async () => lstat(upgradeFreezePath()).then(() => true, (error: NodeJS.ErrnoException) => error.code !== "ENOENT"),
+    async staleConfigWriteLocks(staleSeconds) {
+      const cutoff = options.now().getTime() - staleSeconds * 1000;
+      const stale = async (file: string): Promise<boolean> => lstat(file).then((info) => info.mtimeMs < cutoff, () => false);
+      const files: string[] = [];
+      for (const dir of [getConfigDir(), getProfileDir()]) {
+        const lock = path.join(dir, WRITE_LOCK_FILE);
+        if (await stale(lock)) files.push(lock);
+        const guard = `${lock}.guard`;
+        const owners = await readdir(guard).catch(() => []);
+        if ((await Promise.all(owners.map((name) => stale(path.join(guard, name))))).some(Boolean)) files.push(guard);
+      }
+      return files;
+    },
     releasesLock: (main) => readReleasesLock(main),
   };
 }

@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { spawnSync } from "node:child_process";
+import { runConfigScript } from "./run-script";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -43,8 +43,6 @@ describe("the scraping channels ship switched off (new installs; existing user f
   });
 });
 
-const appRoot = path.resolve(import.meta.dirname, "../..");
-const tsx = path.join(appRoot, "node_modules", ".bin", "tsx");
 
 describe("the config scripts (pnpm config:init / config:migrate / config:check)", () => {
   let tmp: TempConfig;
@@ -54,15 +52,7 @@ describe("the config scripts (pnpm config:init / config:migrate / config:check)"
   });
   afterEach(() => tmp.cleanup());
 
-  const run = (script: string, ...args: string[]) => {
-    const result = spawnSync(tsx, [path.join("scripts", script), ...args], {
-      cwd: appRoot,
-      env: { ...process.env, JOB_RADAR_DEFAULTS_DIR: tmp.defaultsDir, JOB_RADAR_CONFIG_DIR: tmp.configDir, JOB_RADAR_PROFILE_DIR: tmp.profileDir },
-      encoding: "utf8",
-      timeout: 60_000,
-    });
-    return { status: result.status, out: `${result.stdout}${result.stderr}` };
-  };
+  const run = (script: string, ...args: string[]) => runConfigScript(tmp, script, args);
 
   it("init fills the user and profile directories once; migrate and check then pass", () => {
     const first = run("config-init.ts");

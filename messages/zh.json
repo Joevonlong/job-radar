@@ -701,7 +701,8 @@
       "snapshotFailed": "文件已保存，但历史快照没有记录成功（数据库不可用？）。",
       "snapshotNotFound": "找不到这个快照。",
       "snapshotInvalid": "这个旧版本不符合当前的格式，无法回滚。",
-      "stale": "打开表单后，这个文件在别处被改过（另一个标签页或手工编辑）。表单已显示保存的值，你的修改没有保存。"
+      "stale": "打开表单后，这个文件在别处被改过（另一个标签页或手工编辑）。表单已显示保存的值，你的修改没有保存。",
+      "frozen": "正在升级，稍后再保存。如果没有部署在进行，再部署一次，或运行 `pnpm ops:unfreeze`。"
     },
     "loadError": {
       "title": "无法读取 {file}",
@@ -1745,7 +1746,8 @@
       "otherErrors": "还有这些问题没有对应的输入框：",
       "catalogUnreadable": "模型目录读不了，先修好 models.yaml",
       "protectedKeys": "这次修改涉及受保护的键（命令、API 地址或凭据路径）。受保护的键只能手动编辑配置文件来改。",
-      "stale": "打开表单后，这个文件在别处被改过（另一个标签页、高级编辑器或手工编辑）。表单已显示保存的值，你的修改没有保存。"
+      "stale": "打开表单后，这个文件在别处被改过（另一个标签页、高级编辑器或手工编辑）。表单已显示保存的值，你的修改没有保存。",
+      "frozen": "正在升级，稍后再保存。如果没有部署在进行，再部署一次，或运行 `pnpm ops:unfreeze`。"
     },
     "loadError": {
       "title": "无法读取 {file}",
@@ -3133,7 +3135,8 @@
         "invalidPayload": "提交的数据格式不对，请刷新页面后重试。",
         "unreadable": "ui.yaml 或 notify.yaml 现在无法读取：请先在高级编辑器里修好它。",
         "writeFailed": "保存失败：{file} 没有改动，其他文件也没有写。",
-        "partial": "{saved} 已保存，但 {file} 没有写成功：它还是旧的。请再保存一次。"
+        "partial": "{saved} 已保存，但 {file} 没有写成功：它还是旧的。请再保存一次。",
+        "frozen": "正在升级，稍后再保存。如果没有部署在进行，再部署一次，或运行 `pnpm ops:unfreeze`。"
       }
     },
     "notifyReminderLink": "“感兴趣”和“已申请”的超时天数现在在「申请流程」标签里设置。",
@@ -3172,7 +3175,8 @@
         "too_large": "文本太长（上限 {max} 字节，ui.yaml 的 config_editor.max_bytes）。",
         "needs_confirm": "这是产品默认文件：第一次保存要先确认会生成整份覆盖文件。",
         "failed": "保存失败，文件没有改动。",
-        "protected": "这段文本修改了受保护的键（命令、API 地址或凭据路径）。请手动编辑文件来改。"
+        "protected": "这段文本修改了受保护的键（命令、API 地址或凭据路径）。请手动编辑文件来改。",
+        "frozen": "正在升级，稍后再保存。如果没有部署在进行，再部署一次，或运行 `pnpm ops:unfreeze`。"
       },
       "files": {
         "label": "配置文件",
@@ -5505,6 +5509,15 @@
           "otherReleaseHint": "刚做过“只回滚 worker”时是正常的；否则是某次部署在 worker 步骤之前停下了。运行 scripts/ops/deploy.sh，让 worker 运行 checkout 的提交（docs/upgrade.zh.md）",
           "starting": "{process}：服务（pid {pid}）还没拿到 worker 锁，或拿到锁后还没写入心跳；配置报告会在第一次心跳之后写入",
           "startingHint": "过一分钟再运行 doctor"
+        },
+        "freeze": {
+          "none": "设置未冻结",
+          "active": "部署正在运行，设置写入已冻结",
+          "leftover": "没有部署持有部署锁，但设置写入仍然冻结",
+          "hint": "再部署一次，或先确认没有旧进程，再运行 pnpm ops:unfreeze 和 pnpm config:migrate --write。",
+          "staleLocks": "配置写锁持有者已超过过期阈值：{files}",
+          "staleLocksHint": "遗留锁会在下次写入时自动接管。如果保存持续失败，先确认持有者不再写入，再删除提示的锁文件或 guard 目录内的持有者文件。",
+          "title": "升级设置冻结"
         }
       },
       "i18n": {
@@ -5829,7 +5842,8 @@
       "configUnreadable": "这一步要写的配置文件读不了，请先到“设置 → 高级”修好。",
       "catalogUnreadable": "models.yaml 读不了，没法核对模型。",
       "setupUnreadable": "已保存，但 setup.yaml 没能更新，这一步没有标记。运行 pnpm run doctor 查看。",
-      "databaseUnavailable": "连不上数据库，没有提交请求。"
+      "databaseUnavailable": "连不上数据库，没有提交请求。",
+      "frozen": "正在升级，稍后再保存。如果没有部署在进行，再部署一次，或运行 `pnpm ops:unfreeze`。"
     },
     "env": {
       "set": "已设置",
@@ -6459,5 +6473,11 @@
       "title": "匹配理由或差距引用的原文",
       "legend": "理由"
     }
+  },
+  "configOps": {
+    "fillsSkipped": "正在升级：跳过补齐配置和个人资料文件。",
+    "frozen": "升级期间已冻结设置写入。",
+    "unfrozen": "已解除冻结。下一步先运行 pnpm config:init，再运行 pnpm config:migrate --write",
+    "failed": "无法更改升级冻结。检查目标提交、写入权限和写锁后重试。"
   }
 }

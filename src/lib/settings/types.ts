@@ -9,6 +9,7 @@ export type SettingsFormErrorKey =
   | "unreadable"
   /** Nothing was written. */
   | "writeFailed"
+  | "frozen"
   /** models.yaml cannot be read, so the models of ai.yaml cannot be checked. */
   | "catalogUnreadable"
   /** The save would change a protected key (an API host, a command, a credential path): those are edited by hand in the file. */

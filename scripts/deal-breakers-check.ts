@@ -12,7 +12,7 @@ import { parseArgs } from "node:util";
 
 import { z } from "zod";
 
-import { parseConfigText, readConfigText } from "../src/lib/config";
+import { parseConfigText, readProfileText } from "../src/lib/config";
 import { closeDb, getDb } from "../src/lib/db";
 import { currentMe } from "../src/lib/filter";
 import { loadPipeline } from "../src/lib/market";
@@ -28,7 +28,7 @@ async function main(): Promise<void> {
   const { values } = parseArgs({ options: { id: { type: "string" }, limit: { type: "string" }, json: { type: "boolean" } }, strict: true });
   const args = argsSchema.parse(values);
   const pipeline = loadPipeline();
-  const preferences = parseConfigText("preferences", readConfigText("preferences"));
+  const preferences = parseConfigText("preferences", readProfileText("preferences"));
   const rules = preferences.deal_breakers;
   if (args.id !== undefined && !rules.some((rule) => rule.id === args.id)) throw new Error(`no deal-breaker with id "${args.id}" in preferences.yaml`);
   const warnMs = pipeline.filter.deal_breakers.rule_warn_ms;

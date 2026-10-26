@@ -1,6 +1,5 @@
 // @vitest-environment node
 import fs from "node:fs";
-import fsp from "node:fs/promises";
 import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -81,8 +80,8 @@ describe("saveWorkflow", () => {
   });
 
   it("says which file is still old when the second write fails (ui.yaml was written)", async () => {
-    const realRename = fsp.rename.bind(fsp);
-    vi.spyOn(fsp, "rename").mockImplementation(async (from, to) => {
+    const realRename = fs.renameSync;
+    vi.spyOn(fs, "renameSync").mockImplementation((from, to) => {
       if (String(to).endsWith("notify.yaml")) throw new Error("disk full");
       return realRename(from, to);
     });

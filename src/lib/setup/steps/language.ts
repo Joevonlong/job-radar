@@ -8,7 +8,7 @@ import { isLanguageCode } from "@/lib/i18n/languages";
 
 import { languageInputSchema } from "../inputs";
 import { stepError, type SetupFieldError, type SetupStepResult } from "../types";
-import { editable, finishStep, readFresh } from "./common";
+import { editable, finishStep, readFresh, setupFrozen, setupWriteError } from "./common";
 
 export interface LanguageDefaults {
   uiDefault: Locale | null;
@@ -34,8 +34,8 @@ async function writeLanguage(next: LanguageConfig, fieldOf: (path: ReadonlyArray
   try {
     await writeConfig("language", checked.data);
     return null;
-  } catch {
-    return stepError(step, "writeFailed");
+  } catch (error) {
+    return stepError(step, setupWriteError(error));
   }
 }
 
@@ -72,6 +72,8 @@ export function localeFromAcceptLanguage(header: string | null): Locale | null {
 
 /** Validate and save the languages (the caller sets the interface language cookie on success). */
 export async function saveLanguageStep(raw: unknown): Promise<SetupStepResult & { locale?: Locale }> {
+  const frozen = setupFrozen("language");
+  if (frozen) return frozen;
   const parsed = languageInputSchema.safeParse(raw);
   if (!parsed.success) return stepError("language", "invalidPayload");
   const input = parsed.data;

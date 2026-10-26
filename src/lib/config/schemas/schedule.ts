@@ -134,9 +134,13 @@ const deploy = z.strictObject({
   /**
    * Upper bound of each wait while the install script swaps the worker (old process gone, new one with database
    * evidence, and the same on rollback); at least ai_worker_stop_timeout_seconds + 10.
-   * Also the longest wait of deploy.sh step 12 (`--settle` overrides it).
+   * Also the longest wait of deploy.sh step 11 (`--settle` overrides it).
    */
   ai_worker_swap_timeout_seconds: positiveInt.default(120),
+  /** Same-host write locks check PID and process generation; foreign hosts/namespaces use the stale threshold. */
+  config_write_lock_stale_seconds: positiveInt.default(300),
+  config_write_lock_wait_seconds: z.number().positive().default(10),
+  config_write_lock_retry_ms: positiveInt.default(50),
 }).superRefine((value, ctx) => {
   if (value.ai_worker_swap_timeout_seconds < value.ai_worker_stop_timeout_seconds + 10) {
     ctx.addIssue({
@@ -158,6 +162,9 @@ const DEPLOY_DEFAULTS: DeployConfig = {
   ai_worker_releases_keep: 3,
   ai_worker_stop_timeout_seconds: 60,
   ai_worker_swap_timeout_seconds: 120,
+  config_write_lock_stale_seconds: 300,
+  config_write_lock_wait_seconds: 10,
+  config_write_lock_retry_ms: 50,
 };
 
 /** The manual buttons of /sources and /settings (run a channel now, test a channel / AI provider / Telegram). */

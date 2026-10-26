@@ -61,6 +61,9 @@ describe("schedule.yaml: deploy block and the internal-disk / storage doctor key
       ai_worker_releases_keep: 3,
       ai_worker_stop_timeout_seconds: 60,
       ai_worker_swap_timeout_seconds: 120,
+      config_write_lock_stale_seconds: 300,
+      config_write_lock_wait_seconds: 10,
+      config_write_lock_retry_ms: 50,
     });
     expect(parsed.doctor).toMatchObject({ internal_min_free_disk_gb: 10, internal_warn_free_disk_gb: 30, storage_guide: "docs/host-setup.md" });
   });

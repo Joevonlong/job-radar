@@ -20,8 +20,8 @@ export const PROFILE_MEMBER_ROOT = "data/profile";
 
 /** Directory names never archived: the config migrator's originals. */
 const EXCLUDED_DIRECTORIES: ReadonlySet<string> = new Set([".backup"]);
-/** File names never archived: secrets that can be re-created (the web session secret signs login cookies). */
-const EXCLUDED_FILES: ReadonlySet<string> = new Set([".web-session-secret"]);
+/** File names never archived: secrets that can be re-created and transient coordination state (upgrade freeze and writer locks). */
+const EXCLUDED_FILES: ReadonlySet<string> = new Set([".web-session-secret", ".upgrade-freeze", ".write.lock"]);
 
 export class ConfigArchiveError extends Error {
   constructor(message: string) {
@@ -46,6 +46,7 @@ async function walk(dir: string, memberRoot: string, out: Candidate[]): Promise<
     throw error;
   }
   for (const name of entries.sort()) {
+    if (name === ".write.lock.guard" || name.startsWith(".write.lock.guard.")) continue;
     const file = path.join(dir, name);
     const member = `${memberRoot}/${name}`;
     const info = await lstat(file).catch(() => null);
@@ -89,7 +90,7 @@ export interface ConfigArchiveResult {
 }
 
 /**
- * Write `data/config` and `data/profile` (without `.backup/`, `.web-session-secret` and symlinks) as a gzip tar, using the
+ * Write `data/config` and `data/profile` (without `.backup/`, `.web-session-secret`, `.upgrade-freeze`, `.write.lock` and symlinks) as a gzip tar, using the
  * same `.partial` -> fsync -> 0600 -> rename steps as the dump, then read it back (gunzip, count the members) so a bad
  * archive is reported now, not at restore time. Throws ConfigArchiveError; nothing is left behind on failure.
  */

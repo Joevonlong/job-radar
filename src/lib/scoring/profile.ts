@@ -1,4 +1,4 @@
-import { ConfigError, ensureProfileFiles, parseConfigText, readConfigText, type MeConfig, type PreferencesConfig } from "@/lib/config";
+import { ConfigError, parseConfigText, readConfigText, readProfileText, type MeConfig, type PreferencesConfig } from "@/lib/config";
 import type { Db } from "@/lib/db/client";
 import { getLatestProfileSnapshot, hashProfileYaml, type ProfileSnapshot } from "@/lib/db/repos/profile-snapshots";
 import { snapshotForProfileText } from "@/lib/profile/snapshots";
@@ -13,21 +13,12 @@ export interface ScoringProfile {
 
 /**
  * Read both profile files from disk (not from the config cache, so the text that is hashed is the
- * text that is used). A missing file is created from `config/profile.example` first.
+ * text that is used). A missing file is read from `config/profile.example` in memory.
  */
 export async function readScoringProfile(): Promise<ScoringProfile> {
-  const read = () => {
-    const meYaml = readConfigText("me");
-    const preferencesYaml = readConfigText("preferences");
-    return { me: parseConfigText("me", meYaml), preferences: parseConfigText("preferences", preferencesYaml), meYaml, preferencesYaml };
-  };
-  try {
-    return read();
-  } catch (error) {
-    if (!(error instanceof ConfigError) || error.kind !== "missing") throw error;
-    await ensureProfileFiles();
-    return read();
-  }
+  const meYaml = readProfileText("me");
+  const preferencesYaml = readProfileText("preferences");
+  return { me: parseConfigText("me", meYaml), preferences: parseConfigText("preferences", preferencesYaml), meYaml, preferencesYaml };
 }
 
 /** The me.yaml fields scoring needs at least one of. */
@@ -53,8 +44,8 @@ export interface ProfileReadiness {
 }
 
 /**
- * me.yaml read from disk now, for the pages and the doctor. A missing file counts as empty (scoring would
- * create it from the empty example); a file that cannot be parsed returns null (the /me page shows that error).
+ * me.yaml read from disk now, for the pages and the doctor. A missing user file counts as incomplete even when runtime
+ * readers can use a template; a file that cannot be parsed returns null (the /me page shows that error).
  * Never writes anything.
  */
 export function readProfileReadiness(): ProfileReadiness | null {

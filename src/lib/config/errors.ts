@@ -6,7 +6,7 @@ import type { ZodError } from "zod";
  * `too_large`: the text is longer than `ui.yaml: config_editor.max_bytes`.
  * `protected`: the write would change a protected key (`protected-keys.ts`); those are edited by hand in the file.
  */
-export type ConfigErrorKind = "missing" | "read" | "yaml" | "schema" | "version" | "stale" | "too_large" | "protected";
+export type ConfigErrorKind = "missing" | "read" | "yaml" | "schema" | "version" | "stale" | "too_large" | "protected" | "busy" | "frozen";
 
 export interface ConfigIssue {
   /** Dotted field path, e.g. `cycles.weekend.cron`. Empty string = the document root. */
@@ -59,6 +59,8 @@ function formatMessage(
     stale: `Config "${configName}" changed on disk since it was opened`,
     too_large: `Config "${configName}" text is too large`,
     protected: `Config "${configName}" has protected keys that can only be changed by editing the file by hand (or with JOB_RADAR_ALLOW_WEB_EDIT_PROTECTED=1)`,
+    busy: `Config "${configName}" is being written by another process`,
+    frozen: `Config "${configName}" is frozen during an upgrade`,
   }[kind];
   const lines = [`${head} (${filePath})${detail ? `: ${detail}` : ""}`];
   for (const issue of issues.slice(0, MAX_ISSUES_IN_MESSAGE)) {

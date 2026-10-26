@@ -87,13 +87,13 @@ export async function saveWorkflow(rawRequest: unknown): Promise<WorkflowActionS
   // ui.yaml first, then notify.yaml: say which one did not make it
   try {
     await writeConfig("ui", uiResult.data);
-  } catch {
-    return failed("writeFailed", [], "ui");
+  } catch (error) {
+    return failed(error instanceof ConfigError && error.kind === "frozen" ? "frozen" : "writeFailed", [], "ui");
   }
   try {
     await writeConfig("notify", notifyResult.data);
-  } catch {
-    return failed("partial", [], "notify");
+  } catch (error) {
+    return failed(error instanceof ConfigError && error.kind === "frozen" ? "frozen" : "partial", [], "notify");
   }
   return { status: "saved", nonce: Date.now() };
 }

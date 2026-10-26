@@ -181,3 +181,5 @@ tar -xzf data/backups/<name>.config.tgz -C .
 - **Same disk**: the backups and the database are on the same disk, so they protect against mistakes, not against a failing disk. Copy `data/backups/` somewhere else on a schedule.
 - **Permissions**: backup files and config archives are created readable by their owner only (`0600`), because they hold your whole database and your settings.
 - **Disk space**: see `ls -lh` for the size of each backup; 14 + 8 backups (plus up to 5 safety backups of each kind) is about 22 times that size or more, so keep an eye on `df -h` as the data grows.
+
+Config archives from both scheduled backups and `scripts/ops/backup.sh` exclude `.upgrade-freeze` and `.write.lock`, so restoring them cannot restore an upgrade freeze or writer lock.

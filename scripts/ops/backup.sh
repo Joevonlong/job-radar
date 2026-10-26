@@ -90,7 +90,7 @@ if [[ ${#config_dirs[@]} -gt 0 ]]; then
   config_archive="${final%.dump}.config.tgz"
   # COPYFILE_DISABLE: macOS tar would write AppleDouble `._*` members for files with extended attributes (com.apple.provenance);
   # `--no-xattrs` alone does not stop them, and GNU tar on Linux then refuses the archive when it is restored there
-  if COPYFILE_DISABLE=1 tar -czf "$config_archive.partial" --exclude 'data/config/.backup' --exclude '.web-session-secret' -C "$app" "${config_dirs[@]}" && chmod 600 "$config_archive.partial" && mv "$config_archive.partial" "$config_archive"; then
+  if COPYFILE_DISABLE=1 tar -czf "$config_archive.partial" --exclude 'data/config/.backup' --exclude '.web-session-secret' --exclude '.upgrade-freeze' --exclude '.write.lock' --exclude '.write.lock.guard*' -C "$app" "${config_dirs[@]}" && chmod 600 "$config_archive.partial" && mv "$config_archive.partial" "$config_archive"; then
     echo "config written: $config_archive (${config_dirs[*]})"
   else
     rm -f "$config_archive.partial"

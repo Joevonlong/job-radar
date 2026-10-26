@@ -5,7 +5,7 @@
 import { consentKind, type ConsentKind } from "@/lib/channels/access";
 import { CHANNEL_GROUP } from "@/lib/sources/registry/entries";
 import { AI_PROVIDER_CONFIG_KEYS, AI_PROVIDER_IDS, AI_PROVIDER_KIND, type AiProviderIdChoice, type AiProviderKindChoice } from "@/lib/config/ai-options";
-import { ATS_KINDS, ensureProfileFiles, type AiConfig, type ChannelsConfig } from "@/lib/config";
+import { ATS_KINDS, type AiConfig, type ChannelsConfig } from "@/lib/config";
 import { getDb, getDbNow, getLatestHeartbeat } from "@/lib/db";
 import type { Locale } from "@/i18n/locale";
 import { GENERIC_PACK_ID, listPackIds, loadMarket, loadPack } from "@/lib/market";
@@ -309,11 +309,6 @@ export function readinessOf(input: { channels: ChannelsConfig | null; ai: AiConf
 
 export async function loadSetupView(options: { locale: Locale; acceptLanguage: Locale | null }): Promise<SetupView> {
   const status = readSetupState();
-  try {
-    await ensureProfileFiles();
-  } catch {
-    // a read-only profile directory: the steps report the unreadable file
-  }
   const steps = stepStates(status.state?.steps ?? {});
   const channels = readFresh("channels");
   const ai = readFresh("ai");

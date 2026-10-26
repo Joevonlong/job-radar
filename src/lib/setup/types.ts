@@ -32,6 +32,7 @@ export const SETUP_FORM_ERRORS = [
   "invalidPayload",
   /** Nothing was written. */
   "writeFailed",
+  "frozen",
   /** The profile file was written but its history snapshot was not (database down). */
   "snapshotFailed",
   /** me.yaml / preferences.yaml cannot be read: fix it on /me first. */

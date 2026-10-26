@@ -5,11 +5,15 @@
  *   DATABASE_URL=<url> node --import <tsx loader> scripts/ops/worker-heartbeat.ts --now
  *   DATABASE_URL=<url> node --import <tsx loader> scripts/ops/worker-heartbeat.ts --evidence --pid P --host H --since T
  *   DATABASE_URL=<url> node --import <tsx loader> scripts/ops/worker-heartbeat.ts --receipt --pid P --host H --since T
+ *   DATABASE_URL=<url> node --import <tsx loader> scripts/ops/worker-heartbeat.ts --holder --pid P --host H
  *
  * The database is only the one named by DATABASE_URL in the environment, which the caller sets explicitly (the URL it
  * writes into the service definition): no .env is read here, and an empty DATABASE_URL exits 1. Prints one JSON line
  * (never the URL).
  *
+ *   --holder     compare the current holder with --pid P --host H using the worker's truncated application_name:
+ *                {status:"expected"}, {status:"none"} or {status:"other"}; exit 0.
+ *                Hidden holder or query failure: {status:"unknown",...}; exit 1. Never takes the lock.
  *   --now        the database clock, UTC with microseconds: {"now":"…"}; exit 0, or 1 when it cannot be read
  *   --evidence   does worker P on host H hold the instance lock, with an ai-worker heartbeat at or after max(T, the lock
  *                connection's start)? exit 0 = found, 2 = not yet, 1 = cannot tell (database unreachable, the holder's
@@ -22,6 +26,7 @@ import { createConnection } from "../../src/lib/db/client";
 import { dbNow, workerEvidence, workerReceipt, workerEvidenceSchema, type EvidenceConnection } from "../../src/lib/db/repos/ai-worker-evidence";
 import { redact } from "../../src/lib/ops/doctor/helpers";
 import { withTimeout } from "../../src/lib/ops/timeout";
+import { workerHolder, workerHolderSchema } from "../../src/lib/db/repos/ai-worker-holder";
 
 /** Upper bound for one run (connect, queries); the callers poll again after it. */
 const RUN_TIMEOUT_MS = 20_000;
@@ -37,7 +42,19 @@ interface Mode {
 }
 
 // One row per mode: a later mode (e.g. a lock-holder probe) is one more row here.
-const MODES: Record<"now" | "evidence" | "receipt", Mode> = {
+const MODES: Record<"now" | "evidence" | "receipt" | "holder", Mode> = {
+  holder: {
+    needs: ["pid", "host"],
+    check: (v) => {
+      if (!/^[1-9][0-9]*$/.test(v.pid ?? "") || !Number.isSafeInteger(Number(v.pid))) return "--pid needs a positive whole number";
+      if (!/^\S+$/.test(v.host ?? "")) return "--host needs a host name";
+      return null;
+    },
+    run: async (conn, v) => {
+      const result = workerHolderSchema.parse(await workerHolder(conn, { pid: Number(v.pid), host: v.host ?? "" }));
+      return { json: result, exit: result.status === "unknown" ? 1 : 0 };
+    },
+  },
   now: {
     needs: [],
     check: () => null,
@@ -73,13 +90,14 @@ const fail = (detail: string): number => {
 };
 
 async function main(): Promise<number> {
-  let parsed: { values: Values & { now?: boolean; evidence?: boolean; receipt?: boolean } };
+  let parsed: { values: Values & { now?: boolean; evidence?: boolean; receipt?: boolean; holder?: boolean } };
   try {
     parsed = parseArgs({
       options: {
         now: { type: "boolean" },
         evidence: { type: "boolean" },
         receipt: { type: "boolean" },
+        holder: { type: "boolean" },
         pid: { type: "string" },
         host: { type: "string" },
         since: { type: "string" },

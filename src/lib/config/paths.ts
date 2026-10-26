@@ -83,7 +83,7 @@ export function getUserConfigPath(name: ConfigName): string {
   return path.join(entry.location === "config" ? getConfigDir() : getProfileDir(), entry.file);
 }
 
-/** The shipped copy of a config in the defaults directory; null for the profile files (they have templates, not defaults). */
+/** The shipped config default; profiles have templates, not a default config layer. */
 export function getDefaultConfigPath(name: ConfigName): string | null {
   const entry = configRegistry[name];
   return entry.location === "config" ? path.join(/*turbopackIgnore: true*/ getDefaultsDir(), entry.file) : null;
@@ -110,6 +110,17 @@ export function configLayer(name: ConfigName): ConfigLayer {
  */
 export function resolveConfigPath(name: ConfigName): string {
   return configLayer(name) === "default" ? (getDefaultConfigPath(name) ?? getUserConfigPath(name)) : getUserConfigPath(name);
+}
+
+/** Reader-only profile fallback: keep missing-file/layer/override semantics separate from loading a usable template. */
+export function resolveConfigReadPath(name: ConfigName): string {
+  const file = resolveConfigPath(name);
+  const entry = configRegistry[name];
+  if (entry.location === "profile" && !fs.existsSync(/*turbopackIgnore: true*/ file)) {
+    const template = path.join(getProfileExampleDir(), entry.file);
+    if (fs.existsSync(/*turbopackIgnore: true*/ template)) return template;
+  }
+  return file;
 }
 
 /** A path for people to read: relative to the app root when inside it (`data/config/ai.yaml`), else absolute. */

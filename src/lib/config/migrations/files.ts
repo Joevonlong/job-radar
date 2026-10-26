@@ -10,6 +10,7 @@ import { ConfigError } from "../errors";
 import { parseConfigDocument, resetConfigCache, validateConfigValue } from "../load";
 import { getConfigDir, getUserConfigPath } from "../paths";
 import { CONFIG_NAMES, isProfileName, type ConfigName } from "../registry";
+import { assertConfigWritable, withUserDirectoryLocks } from "../write-lock";
 import { atomicWrite, restoreFlowPadding } from "../write";
 
 import { migrateConfigDocument } from "./version";
@@ -105,19 +106,35 @@ export interface AppliedConfigMigrations {
  * (reported as not written) rather than overwritten.
  */
 export async function applyConfigMigrations(plan: ConfigMigrationPlan, now: Date = new Date()): Promise<AppliedConfigMigrations> {
-  if (plan.pending.length === 0) return { backupDir: null, written: [] };
-  const backupDir = configBackupDir(now);
-  const fresh = plan.pending.filter((item) => fs.readFileSync(/*turbopackIgnore: true*/ item.path, "utf8") === item.before);
-  for (const item of fresh) {
-    const target = path.join(backupDir, isProfileName(item.name) ? "profile" : "", path.basename(item.path));
-    await fsp.mkdir(/*turbopackIgnore: true*/ path.dirname(target), { recursive: true });
-    await fsp.writeFile(/*turbopackIgnore: true*/ target, item.before, { encoding: "utf8", mode: 0o600 });
-  }
-  const written: string[] = [];
-  for (const item of fresh) {
-    await atomicWrite(item.path, item.after);
-    written.push(item.path);
-  }
-  resetConfigCache();
-  return { backupDir: fresh.length > 0 ? backupDir : null, written };
+  return withUserDirectoryLocks(async () => {
+    assertConfigWritable(getConfigDir());
+    if (plan.pending.length === 0) return { backupDir: null, written: [] };
+    const backupDir = configBackupDir(now);
+    const fresh = plan.pending.filter(matchesOriginal);
+    for (const item of fresh) {
+      const target = path.join(backupDir, isProfileName(item.name) ? "profile" : "", path.basename(item.path));
+      await fsp.mkdir(/*turbopackIgnore: true*/ path.dirname(target), { recursive: true });
+      await fsp.writeFile(/*turbopackIgnore: true*/ target, item.before, { encoding: "utf8", mode: 0o600 });
+    }
+    const written: string[] = [];
+    for (const item of fresh) {
+      try {
+        await atomicWrite(item.path, item.after, undefined, () => {
+          if (!matchesOriginal(item)) {
+            throw new ConfigError({ configName: item.name, filePath: item.path, kind: "stale" });
+          }
+        });
+        written.push(item.path);
+      } catch (error) {
+        if (!(error instanceof ConfigError) || error.kind !== "stale") throw error;
+      }
+    }
+    resetConfigCache();
+    return { backupDir: fresh.length > 0 ? backupDir : null, written };
+  });
+}
+
+/** A removed or unreadable file is stale too; never recreate it from the preview. */
+function matchesOriginal(item: FileMigration): boolean {
+  try { return fs.readFileSync(/*turbopackIgnore: true*/ item.path, "utf8") === item.before; } catch { return false; }
 }

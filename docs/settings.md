@@ -209,3 +209,5 @@ manual_triggers:
 - The units in number inputs (hours, milliseconds, k€ ...) come from the key name and are written in the field, so you do not need to read the label.
 - With unsaved changes, clicking a sidebar link or a page in the command palette pops up "Stay / Discard changes"; refreshing or closing the tab uses the browser's own prompt. The browser's back button is not intercepted.
 - On save only the parts you changed are touched: `{ a: 1 }` / `[a, b]` styles already in the file stay as they are, and empty lists produced by schema defaults (`exclude: []`) are not written into the file.
+
+During deployment, web versions that know the freeze refuse settings, advanced editor, profile and wizard saves from step 4 with an upgrade message. On the first deploy of this version, the older web runs until step 8 and still writes harmless old-format files. Retry afterwards; for a leftover freeze see [upgrade.md](upgrade.md#settings-during-an-upgrade).

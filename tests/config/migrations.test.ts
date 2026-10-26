@@ -1,5 +1,6 @@
 // @vitest-environment node
 import fs from "node:fs";
+import fsp from "node:fs/promises";
 import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -219,5 +220,28 @@ describe("writeConfig and versions", () => {
     const before = read("ui.yaml");
     await expect(writeConfig("ui", value)).rejects.toMatchObject({ kind: "version" });
     expect(read("ui.yaml")).toBe(before);
+  });
+});
+
+describe("migration freshness inside the write lock", () => {
+  it("does not overwrite a save injected after the initial freshness check", async () => {
+    writeOldUi(); stampDefaults();
+    const plan = planConfigMigrations(["ui"]);
+    const original = fsp.writeFile;
+    let inserted = false;
+    const spy = vi.spyOn(fsp, "writeFile").mockImplementation(async (...args) => {
+      await original(...args);
+      if (!inserted && String(args[0]).includes(`${path.sep}.backup${path.sep}`)) {
+        inserted = true;
+        await writeConfig("ui", { ...loadConfig("ui"), ticker_max_items: 17 });
+      }
+    });
+    try {
+      const result = await applyConfigMigrations(plan);
+      expect(inserted).toBe(true);
+      expect(result.written).toEqual([]);
+      expect(reloadConfig("ui").ticker_max_items).toBe(17);
+      expect(read("ui.yaml")).not.toBe(plan.pending[0]?.after);
+    } finally { spy.mockRestore(); }
   });
 });

@@ -25,19 +25,42 @@ scripts/ops/deploy.sh --ref v2.0.0           # 正式升级
 1. **预检**：取部署锁（同一时间只有一次部署），检查 git、docker、node、pnpm 已安装、Docker 正在运行；已跟踪的文件有未提交的改动时拒绝运行（`--skip-pull` 也一样）。
 2. **检出**：获取标签和分支并切换到 `--ref`（发布目录之前的版本在检出目录移动之前就被拒绝，见[下面](#downgrade-pre-release-dir)）。从这里开始，部署只用这个提交。
 3. 按锁文件**安装**依赖。
-4. **配置**：创建 `data/` 目录，复制你还没有的配置文件，迁移格式有变化的配置文件（原件保存在 `data/config/.backup/`）。
+4. **配置**：创建 `data/` 目录。已有安装先预览配置迁移、在内存中校验新 schema 并检查 compose config，通过后才冻结设置写入，不补齐或迁移用户文件。真正的首装照常执行 `config:init`，不冻结。
 5. **备份**：数据库在运行时先做一个 `pre-deploy` 备份到 `data/backups/`。备份失败会中止升级。
 6. 从这个提交的 `git archive` **构建**镜像：镜像里正好是已提交的文件，包括 `config/` 里的出厂默认配置，检出目录里的其他东西都进不去。
 7. **发布目录**：构建 ai-worker 的发布目录 `data/releases/ai-worker/<提交>/`（这个提交的文件加生产依赖，只读），worker 因此不会从一个之后会被 `git pull` 改掉的检出目录运行。
 8. **排空并重启**：有限时间内等待正在运行的周期结束，然后重建容器并等待它们健康。
 9. **迁移**数据库（runner 启动时也会做）。有待执行的迁移时会先做一份 `premigrate` 备份，备份失败就不迁移。
 10. **ai-worker**：把主机 AI worker 服务（macOS 上是 launchd 代理，Linux 上是 systemd 用户单元 `job-radar-ai-worker.service`）切换到第 7 步的发布目录，新 worker 起不来时放回上一个（没有 systemd 用户管理器时不安装任何东西，脚本会说明）。
-11. **清理**：释放部署锁，然后清理 Docker 构建缓存和悬空镜像（不动数据卷）。
-12. **doctor**：`pnpm run doctor` 报告需要关注的事项。
+11. **config-write**：先用实例锁、心跳和配置报告确认目标服务 PID，再扫描宿主进程并比较实例锁持有者。只有持有者就是目标发布目录的服务 PID，或没有持有者也没有安装服务，并且进程扫描成功、没有其他 worker，才执行 `config:init` 和 `config:migrate --write`。重新规划检查跳过的写入，确认没有旧消费者后解除冻结。首装没有冻结 token，跳过门禁；不支持冻结协议的旧目标也跳过此步，沿用第 4 步写盘流程。
+12. **清理**：释放部署锁，然后清理 Docker 构建缓存和悬空镜像（不动数据卷）。
+13. **doctor**：`pnpm run doctor` 报告需要关注的事项。
 
 按 Ctrl-C 或关掉终端时，正在运行的那一步会先跑完再停（退出码 130、143 或 129）；再运行一次脚本就能完成升级。细节见 [deploy.zh.md](deploy.zh.md)《中断部署》。
 
 细节和选项见 [deploy.zh.md](deploy.zh.md)。
+
+### 升级期间的设置
+
+第 4 步先完成只读检查，再创建或接管冻结。之后直到第 11 步 `config-write`，只有认识冻结协议的 web 版本会拒绝设置、高级编辑器、个人资料和向导保存。首次部署本版本时，旧 web 一直运行到第 8 步，它的保存仍写旧格式文件，没有危害。`data/config/` 或 `data/profile/` 有 YAML、已有冻结标记、ai-worker 服务已安装、compose 有运行中的服务，任一项成立就是已有安装；真正的首装不冻结，并跳过 config-write 门禁。冻结时启动补文件会跳过且不抛错，缺失的 profile 在内存里读取 `config/profile.example/` 模板，不写盘。等待 `config-write` 生成文件时，读取方按当前安装状态选择默认值，包括已有安装的语言默认值。
+
+标记 `data/config/.upgrade-freeze` 保存随机 token、目标提交和开始时间。只有显式带匹配的 `JOB_RADAR_UPGRADE_FREEZE_TOKEN` 的部署配置命令能绕过冻结；token 不打印，也不传给 web、runner 或 worker。所有写入都使用跨进程 `.write.lock` 短锁，多目录时先 config 后 profile；新鲜度和冻结检查都在锁内。同主机持有者除主机与 PID 外还记录进程代际（随机进程 ID 与启动时间）；PID 重用或 token 已不在本进程持有集合中时立即接管，活跃持有者不接管。其他主机或命名空间超过 300 秒才可接管。最多等待 10 秒后报 busy（可在 `schedule.yaml` 的 `deploy.config_write_lock_*` 调整），最终提交再次核对锁的所有权。
+
+部署前先停止手工启动的旧 `pnpm ai-worker`。持有者是其他进程、看不见持有者、数据库不可达或服务仍指向旧发布目录时，不写配置、保留冻结并退出 2。`--no-ai-worker` 也检查持有者和服务定义的发布路径，只有目标服务 PID，或没有持有者且没有安装服务，才能写。`--settle 0` 不等待 receipt，采用同样的检查：服务必须指向目标发布目录，PID 必须持有实例锁且在检查前后不变，进程扫描必须排除其他 worker。写入失败或重新规划仍有待迁移文件也退出 2；一旦排除了旧消费者，即使需要手动重试也会删除标记。
+
+没有实例锁持有者还不够：手工 worker 的数据库连接断开后，进程仍可能存活并重新取锁。macOS 和 Linux 都用 `ps -A -o pid=,args=` 扫描，只匹配 node/tsx 执行本安装（含发布目录）内的 `src/ai-worker/index.ts` 入口。相对路径通过进程 cwd 判断归属（macOS 用 `lsof -a -d cwd -p PID -Fn`，Linux 用 `/proc/PID/cwd`）；编辑器和其他检出目录的 worker 不计入，归属不明则阻止写入。除已确认目标服务 PID 外还有本安装的其他 worker 就阻止写入，并列出这些 PID；扫描失败也阻止写入。`--no-ai-worker` 同样需要此扫描。`--holder --pid <预期 PID> --host <主机>` 使用 worker 相同的函数构造并比较最多 63 字节的应用名，不反向解析可能截断的主机名。
+
+第 8 步尝试 `up` 之前失败或收到 INT/TERM/HUP，部署会带自己的 token 执行 `ops:unfreeze --owned`，只自动解除本次全新创建的冻结。从前次接管的标记即使在 `up` 前也必须保留，只有 `config-write` 通过消费者检查或用户运行 `pnpm ops:unfreeze` 才会删除。从 `up` 开始，失败或中断则保留所有标记。部署在 `config-write` 前不补文件、不写迁移，文件格式仍兼容旧代码，旧 web 的保存也仍写旧格式。再次部署即可继续。没有部署持有部署锁却遗留标记，或 `data/config/`、`data/profile/` 的写锁或 guard 持有者超过过期阈值时，doctor 的 `config.freeze` 会告警。遗留锁在下次写入时自动接管；若保存持续失败，先确认持有者不再写入，再删除锁文件或 guard 内的持有者文件。手工恢复前先确认没有旧消费者，再运行：
+
+```bash
+pnpm ops:unfreeze
+pnpm config:init
+pnpm config:migrate --write
+```
+
+`pnpm ops:freeze --target <commit>` 在同一套写锁中创建或接管标记；`pnpm ops:unfreeze` 在锁中删除标记，并提示先运行 `pnpm config:init`，再运行 `pnpm config:migrate --write`。备份排除冻结标记和 `.write.lock`。自动化可用 `pnpm config:migrate --json` 只读查询待迁移和问题数量。
+
+部署后重启部署脚本管不到的宿主长驻进程，例如 `pnpm mcp:serve`。成功写配置后再回退代码，仍需从 `data/config/.backup/` 恢复兼容原件。用 `--skip-pull` 运行不认识标记的旧版部署脚本时，标记可能留下；旧代码忽略它，下次新版部署脚本会接管。较新的配置仍然不能直接给旧代码读。
 
 ### Linux：从容器以 root 运行的旧版本升级
 
@@ -119,8 +142,15 @@ scripts/ops/restore.sh data/backups/<那个 pre-deploy 备份> --target jobradar
 恢复会把被替换的库保留为 `jobradar_before_restore_<时间戳>`，所以可以撤销；命令见 [backup-restore.zh.md](backup-restore.zh.md) 第 4 节。runner 在迁移前做的 `premigrate` 备份同样可用。
 
 如果你离开的那个版本迁移过某个配置文件，旧代码会认为它“太新”（`pnpm run doctor` 的 `config.layers` 会提示）：把 `data/config/.backup/<时间戳>/` 里的原件复制回 `data/config/`。
+这也涵盖 `config:init` 写进 `schedule.yaml` 的 `deploy.config_write_lock_*` 新键：即使配置版本未变，旧版本也会拒绝这些未知键。启动旧代码前恢复兼容的 `schedule.yaml` 备份。
 
 更多见 [deploy.zh.md](deploy.zh.md)（第 5 节）和 [backup-restore.zh.md](backup-restore.zh.md)。要重新跟随 `main`：`git switch main && scripts/ops/deploy.sh`。
+
+<a id="downgrade-pre-config-freeze"></a>
+
+### 回退到不支持配置冻结的发布
+
+`--ref` 移动检出目录前，正在运行的脚本先检查目标 `scripts/ops/deploy.sh` 的 `# capability: config-freeze` 标记。没有标记的目标沿用旧的第 4 步：`config:init`、`config:migrate --write`、`config:check`；跳过创建冻结和后续 `config-write`，不会调用旧版没有的命令。遗留 `.upgrade-freeze` 标记逐字保留并报告：旧代码忽略它，下次支持协议的升级接管它。用旧脚本 `--skip-pull` 同样不碰标记。启动旧代码前先恢复兼容配置原件；冻结标记不能让旧代码读取新格式。
 
 **只回滚 ai-worker**（应急，比如新 worker 出问题、其他都正常）：之前的发布目录还保留着（`deploy.ai_worker_releases_keep`），所以
 

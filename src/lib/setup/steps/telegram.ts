@@ -8,10 +8,12 @@ import { notifySchema, writeConfig } from "@/lib/config";
 import { isSet, TELEGRAM_ENV, type EnvSource } from "../env";
 import { telegramInputSchema } from "../inputs";
 import { stepError, type SetupStepResult } from "../types";
-import { editable, finishStep, readFresh } from "./common";
+import { editable, finishStep, readFresh, setupFrozen, setupWriteError } from "./common";
 import { writeNotifyLocale } from "./language";
 
 export async function saveTelegramStep(raw: unknown): Promise<SetupStepResult> {
+  const frozen = setupFrozen("telegram");
+  if (frozen) return frozen;
   const parsed = telegramInputSchema.safeParse(raw);
   if (!parsed.success) return stepError("telegram", "invalidPayload");
   const notify = readFresh("notify");
@@ -26,8 +28,8 @@ export async function saveTelegramStep(raw: unknown): Promise<SetupStepResult> {
   }
   try {
     if (notify.telegram.enabled !== parsed.data.enabled) await writeConfig("notify", checked.data);
-  } catch {
-    return stepError("telegram", "writeFailed");
+  } catch (error) {
+    return stepError("telegram", setupWriteError(error));
   }
   return finishStep("telegram");
 }

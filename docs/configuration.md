@@ -45,6 +45,8 @@ Market packs (`config/packs/<id>/`: countries, cities, local-language rules) are
 The profile files `me.yaml` and `preferences.yaml` live in `data/profile/` and are edited on `/me`. The optional
 `deal_breakers` list of `preferences.yaml` (rules that veto a job before any AI call) is described in
 [deal-breakers.md](deal-breakers.md); its limits are in `pipeline.yaml: filter.deal_breakers`.
+Runtime profile readers can use `config/profile.example/` without creating a file. Raw-file checks, the doctor and
+watcher still distinguish a missing user profile from a saved one; templates do not become a default config layer.
 
 ## Commands
 
@@ -59,13 +61,22 @@ pnpm config:check                 # validate both layers (default-directory file
 pnpm config:example               # list the example setups; `pnpm config:example <id> [--dry-run]` applies one (see below)
 ```
 
-web and runner also run `config:init` once at startup (filling in whatever is missing; the runner has the user directory read-only inside the container and does not need to write when the directory is already complete); step 4 of `scripts/ops/deploy.sh` runs `config:init` -> `config:migrate --write` -> `config:check` in turn.
+The web and runner fill missing files at startup, skipping fills during an upgrade freeze. For existing installs,
+step 4 of `scripts/ops/deploy.sh` previews migrations, runs `config:check` in memory and checks compose config before
+freezing writes. Step 11,
+`config-write`, fills and migrates user files only after checking the worker holder and host processes. A first install
+runs `config:init` at step 4 without a freeze. Targets without the freeze capability use their older step-4 write flow
+(see [downgrades](upgrade.md#downgrade-pre-config-freeze)).
+Only freeze-aware web versions refuse saves from step 4. On the first deployment of this version, the older web keeps
+running until step 8; any saves it makes still use the old format and are harmless. Install-specific defaults, such as
+the language of an existing install, are selected at read time while their files await `config-write`.
 
 ### Salary (`salary.yaml`)
 
 The salary benchmark uses only salaries stated in postings; AI lookups are only displayed. The `salary.yaml`
 configuration migration from `config_version: 1` to `2` removes `benchmark.include_ai_lookups` and its comment.
-`scripts/ops/deploy.sh` applies it automatically in step 4. For a manual upgrade, run `pnpm config:migrate` first to
+`scripts/ops/deploy.sh` previews it in step 4 and writes it in step 11 (`config-write`). For a manual upgrade, stop old
+consumers and run `pnpm config:migrate` first to
 see what the step removes, then `pnpm config:migrate --write` to save it (originals go to `data/config/.backup/`).
 Older files are migrated in memory when loaded; adding this key to a v2 file fails validation as an unknown key.
 See [salary.md](salary.md) for the cards and [the changelog](../CHANGELOG.md) for upgrade and rollback notes.
@@ -332,7 +343,7 @@ not know them, see [upgrade.md](upgrade.md#downgrade-pre-release-dir)):
 |---|---|---|
 | `deploy.ai_worker_releases_keep` | 3 | Release directories kept after a switch, the installed and the previous one included (at least 2) |
 | `deploy.ai_worker_stop_timeout_seconds` | 60 | launchd `ExitTimeOut` / systemd `TimeoutStopSec` of the worker (at least 10) |
-| `deploy.ai_worker_swap_timeout_seconds` | 120 | Longest wait of each phase of a switch (at least the stop timeout + 10), and the step 12 wait cap (`--settle` overrides it) |
+| `deploy.ai_worker_swap_timeout_seconds` | 120 | Longest wait of each phase of a switch (at least the stop timeout + 10), and the step 11 wait cap (`--settle` overrides it) |
 | `doctor.shipped_report_skew_seconds` | 2 | Clock difference allowed between Docker and the database when `config.shipped` matches a container's report |
 
 Details: [deploy.md](deploy.md), "The ai-worker runs from a release directory".
@@ -471,4 +482,27 @@ Every backup, the runner's daily one (`backup.config_archive`, on by default) an
 
 ## Switching from a single directory
 
-Older versions kept the live configuration in git as `config/`. When upgrading to layered configuration, step 4 of `scripts/ops/deploy.sh` sees that `data/config/` is empty, and `pnpm config:init` copies all user files from the then-current `config/` there (at that moment the defaults are the old live configuration, so the result equals `pnpm config:init --from config`). From then on the web app only writes `data/config/`, and `config/` goes back to being the "product defaults" and no longer dirties the checkout. See sections 4 and 5 of [`deploy.md`](deploy.md) for details.
+Older versions kept the live configuration in git as `config/`. Preserve a separate copy of that live directory before
+switching code. With old consumers stopped, import it using `pnpm config:init --from <saved-old-config-dir>` before
+deploy fills missing user files. Existing installs preview and validate before freezing at step 4; step 11 (`config-write`) fills
+missing files and writes migrations after excluding old workers. From then on the web app writes `data/config/`, and
+`config/` holds product defaults. See sections 4 and 5 of [`deploy.md`](deploy.md) and [upgrade.md](upgrade.md).
+
+### Upgrade write protection
+
+`pnpm ops:freeze --target <commit>` freezes config/profile writes for an upgrade; `pnpm ops:unfreeze` removes the marker
+under the same cross-process write locks and prints `pnpm config:init`, then `pnpm config:migrate --write`. Use it only
+after confirming no old consumers remain. Before step 8 starts containers, a failure or interrupt automatically removes
+only a freeze this run created fresh. A taken-over marker stays until `config-write` passes the consumer checks or the
+user runs `ops:unfreeze`; once `up` has been attempted, failures and interrupts keep every marker. Freeze-aware web versions show
+an upgrade message on saves while frozen; the older web on the first upgrade continues writing harmless old-format files
+until step 8. The doctor
+checks leftover markers and write leases/guard owners older than the stale threshold with `config.freeze`. Abandoned
+locks are taken over automatically on the next write; if saves keep failing, confirm the owner is no longer writing,
+then remove the lock file or guard owner. `pnpm config:migrate --json` reports pending/problem counts without writing.
+Lock timing is configured by `schedule.yaml` `deploy.config_write_lock_stale_seconds`, `config_write_lock_wait_seconds`
+and `config_write_lock_retry_ms` (defaults: 300 seconds, 10 seconds, 50 milliseconds). Same-host owners carry a random
+process ID and process start time; a reused PID or abandoned token is recovered immediately, while live owners stay busy.
+A foreign host/namespace can be taken over only after the stale threshold.
+The final commit checks lock ownership again.
+See [upgrade.md](upgrade.md#settings-during-an-upgrade) for recovery and host-process restarts.

@@ -11,6 +11,7 @@ export type FormErrorKey =
   | "invalidPayload"
   /** Nothing was written. */
   | "writeFailed"
+  | "frozen"
   /** The file was written but the history/snapshot step failed (database down?). */
   | "snapshotFailed"
   | "snapshotNotFound"
