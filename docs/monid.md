@@ -55,13 +55,17 @@ charges are booked even if they slightly exceed the local budget; the dashboard 
 
 Accounting happens before output validation or parsing, using `billedUnits` or the raw item count before deduplication
 and local filtering. The USD amount is the maximum of settled `cost.value`, `billing.reportedCost` and
-`billing.actualCost` (billing values are USD microdollars, divided by one million). Explicit zero settlements stay zero.
-`billing.calculatedCost` is used only when there is no settled amount, with a warning. If amounts are absent or
+`billing.actualCost` across all responses for the run, including a 409 stop body and subsequent GETs
+(billing values are USD microdollars, divided by one million). Explicit zero settlements stay zero when no larger
+settlement was observed. The latest valid `billing.calculatedCost` is used only when no settled amount was observed,
+with a warning. Cost extraction also applies to responses with an unknown status. If amounts are absent or
 malformed, the channel estimates from billed units or delivered items plus the flat fee; an empty successful run
 still pays that fee. Failed, timed-out or unresolved runs without settlement or billed units use the full requested
-limit conservatively, as does a successful response whose output is not an array. A normal terminal `BLOCKED` or
-`STOPPED` response with no billing information is booked as zero. During cancellation, a terminal response without
-usable cost fields is charged at the full requested limit conservatively, including `BLOCKED` and `STOPPED`.
+limit conservatively. A `COMPLETED` response with output that is not an array and no usable amounts or billed units
+also uses the full limit unless a valid non-2xx, non-404 provider error is confirmed; missing or invalid
+`providerResponse` is conservative too. A normal terminal `BLOCKED` or `STOPPED` response with no billing information
+is booked as zero. During cancellation, if no valid settled or calculated cost was observed in any response, the full
+requested limit is charged conservatively, including when cleanup returns `BLOCKED` or `STOPPED`.
 
 An asynchronous run is polled to a final status. A timeout sends one stop request, then continues polling during
 `stop_grace_ms`; a 409 stop response is rechecked because the run may already have completed or still be running.
@@ -69,6 +73,15 @@ Completed results are retained and charged normally. An unresolved stop or lost 
 the requested limit and logged with the run ID when available. Cancelling a cycle sends an independent, short-timeout
 stop request and records settlement or a conservative estimate before propagating cancellation. A billable run is
 never retried automatically. Earlier results from a split query survive a later failure or budget stop.
+
+The HTTP 502 → non-retryable `unknown` and HTTP 503 → `budget_exceeded` mappings apply to the **initial run request**.
+A fully read HTTP 503 rejection means execution was refused (for example, an inactive wallet) and is not charged.
+Other POST 5xx responses, including 502, are charged conservatively at the full requested limit when no usable cost
+was observed. Unreadable or truncated POST responses are still charged conservatively, including HTTP 503.
+Once a run is accepted, polling HTTP 408, 429 and 5xx is transient: the run is recovered
+or stopped first. Persistent 502/503 through the deadline and stop grace period ends in a retryable `network` failure.
+If polling fails non-transiently before a stop was requested, the client sends one best-effort independent stop with
+a short timeout before giving up; the original failure and once-only accounting are preserved.
 
 Raw items are retained even when parsing fails. Items without a LinkedIn job ID use a stable `unidentified:<sha256>`
 quarantine ID and are marked `parse_failed`; they never merge with real LinkedIn jobs.

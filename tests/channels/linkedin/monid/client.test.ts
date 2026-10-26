@@ -8,6 +8,8 @@ import jobs from "../../../fixtures/monid/harvestapi-jobs.json";
 import responses from "../../../fixtures/monid/responses.json";
 import { completed, FAKE_KEY, harness, query, response, settings, type Answer } from "./helpers";
 
+const micro = (value: number) => ({ value, unit: "MICRO_DOLLAR", currency: "USD" });
+
 describe("Monid run flow", () => {
   it("runs once, then polls at the configured interval until completed", async () => {
     const h = await harness([response(202, responses.accepted), response(200, responses.running), response(200, completed({ output: jobs }))]);
@@ -60,7 +62,7 @@ describe("Monid run flow", () => {
     expect(h.logs.some((l) => l.message === "retrying request")).toBe(true);
   });
 
-  it.each([429, 500, 502, 503, 504])("keeps a paid run alive through GET %i until it completes and bills once", async (status) => {
+  it.each([408, 429, 500, 502, 503, 504])("keeps a paid run alive through GET %i until it completes and bills once", async (status) => {
     const h = await harness([response(202, responses.accepted), response(status, { status: "error" }), response(200, completed({ output: jobs }))]);
     const consume = vi.spyOn(h.ctx.budget, "consume");
     expect(await h.channel.collect(query(), h.ctx)).toHaveLength(2);
@@ -92,18 +94,102 @@ describe("Monid run flow", () => {
 
   it.each([402, 503])("maps an unknown status string on POST HTTP %i by transport status", async (status) => {
     const h = await harness([response(status, { status: "error", runId: "run_example" })]);
-    await expect(h.channel.collect(query(), h.ctx)).rejects.toMatchObject({ code: "budget_exceeded" });
+    const consume = vi.spyOn(h.ctx.budget, "consume");
+    await expect(h.channel.collect(query(), h.ctx)).rejects.toMatchObject({ code: "budget_exceeded", retryable: false, tripsCircuit: false });
+    expect(consume).not.toHaveBeenCalled();
     expect(h.ctx.budget.snapshot().usd).toBe(0);
     expect(h.requests).toHaveLength(1);
   });
 
-  it.each([200, 202])("rejects an unknown status on POST HTTP %i and conservatively bills once", async (status) => {
+  it.each([200, 202])("rejects an unknown status on POST HTTP %i while retaining its explicit zero settlement", async (status) => {
     const h = await harness([response(status, { status: "FUTURE_STATUS", runId: "run_example", cost: { value: 0, currency: "USD" } })]);
     const consume = vi.spyOn(h.ctx.budget, "consume");
     await expect(h.channel.collect(query(), h.ctx)).rejects.toMatchObject({ code: "parse", retryable: false });
     expect(consume).toHaveBeenCalledOnce();
-    expect(h.ctx.budget.snapshot().usd).toBe(0.011);
+    expect(h.ctx.budget.snapshot().usd).toBe(0);
     expect(h.requests).toHaveLength(1);
+  });
+
+  it.each([
+    [{ cost: { value: 0.5, currency: "USD" } }, 0.5],
+    [{ billing: { calculatedCost: micro(4000) } }, 0.004],
+    [{}, 0.011],
+  ] as const)("accounts an unknown polling status independently of status validation: %j", async (fields, usd) => {
+    const h = await harness([response(202, responses.accepted), response(200, { status: "FUTURE_STATUS", ...fields }), response(202, responses.stopping)]);
+    const consume = vi.spyOn(h.ctx.budget, "consume");
+    await expect(h.channel.collect(query(), h.ctx)).rejects.toMatchObject({ code: "parse", retryable: false });
+    expect(consume).toHaveBeenCalledExactlyOnceWith(0, { costUsd: usd, allowOverspend: true });
+  });
+
+  it("merges settlements observed before the final response without losing the delivered count", async () => {
+    const h = await harness([
+      response(202, { ...responses.accepted, billing: { reportedCost: micro(500000) } }),
+      response(200, { ...responses.running, billing: { calculatedCost: micro(4000) } }),
+      response(200, completed({ output: jobs, billing: { actualCost: micro(0) } })),
+    ]);
+    const consume = vi.spyOn(h.ctx.budget, "consume");
+    expect(await h.channel.collect(query(), h.ctx)).toHaveLength(2);
+    expect(consume).toHaveBeenCalledExactlyOnceWith(2, { costUsd: 0.5, allowOverspend: true });
+  });
+
+  it("keeps the latest calculated cost from polling when the final response has no cost", async () => {
+    const h = await harness([
+      response(202, responses.accepted), response(200, { ...responses.running, billing: { calculatedCost: micro(8000) } }),
+      response(200, completed({ output: jobs, billing: undefined })),
+    ]);
+    const consume = vi.spyOn(h.ctx.budget, "consume");
+    expect(await h.channel.collect(query(), h.ctx)).toHaveLength(2);
+    expect(consume).toHaveBeenCalledExactlyOnceWith(2, { costUsd: 0.008, allowOverspend: true });
+  });
+
+  it.each([
+    [401, "auth_expired"], [402, "budget_exceeded"], [403, "blocked"], [400, "unknown"], [404, "unknown"], [409, "unknown"], [418, "unknown"],
+  ] as const)("best-effort stops an accepted run independently after GET %i, preserving its failure and accounting", async (status, code) => {
+    const h = await harness([response(202, responses.accepted), response(status, responses.error), response(202, responses.stopping)]);
+    const request = vi.spyOn(h.ctx.http, "request");
+    const consume = vi.spyOn(h.ctx.budget, "consume");
+    await expect(h.channel.collect(query(), h.ctx)).rejects.toMatchObject({ code, retryable: false });
+    expect(h.requests.map((r) => [r.method, r.path])).toEqual([
+      ["POST", "/v1/run"], ["GET", "/v1/runs/run_example"], ["POST", "/v1/runs/run_example/stop"],
+    ]);
+    expect(request).toHaveBeenCalledTimes(2);
+    expect(consume).toHaveBeenCalledExactlyOnceWith(0, { costUsd: 0.011, allowOverspend: true });
+  });
+
+  it("preserves the original poll failure when the independent stop fails without retrying", async () => {
+    const h = await harness([response(202, responses.accepted), response(401, responses.error), new TypeError("stop disconnected")]);
+    const consume = vi.spyOn(h.ctx.budget, "consume");
+    await expect(h.channel.collect(query(), h.ctx)).rejects.toMatchObject({ code: "auth_expired", retryable: false, status: 401 });
+    expect(h.requests.map((r) => r.method)).toEqual(["POST", "GET", "POST"]);
+    expect(consume).toHaveBeenCalledExactlyOnceWith(0, { costUsd: 0.011, allowOverspend: true });
+  });
+
+  it.each([
+    response(401, "invalid JSON"),
+    { ...response(401, {}), text: async () => { throw new TypeError("error body disconnected"); } },
+  ])("stops after a non-transient polling HTTP status even when its body is unreadable: %j", async (failure) => {
+    const h = await harness([response(202, responses.accepted), failure, response(202, responses.stopping)]);
+    const consume = vi.spyOn(h.ctx.budget, "consume");
+    await expect(h.channel.collect(query(), h.ctx)).rejects.toMatchObject({ code: "auth_expired", retryable: false, status: 401 });
+    expect(h.requests.map((r) => r.method)).toEqual(["POST", "GET", "POST"]);
+    expect(consume).toHaveBeenCalledExactlyOnceWith(0, { costUsd: 0.011, allowOverspend: true });
+  });
+
+  it("finishes the independent failure stop and accounts once before propagating a concurrent cancellation", async () => {
+    const reason = new DOMException("Cycle cancelled during cleanup", "AbortError");
+    const h = await harness([
+      response(202, responses.accepted), response(401, responses.error),
+      (request) => {
+        h.controller.abort(reason);
+        expect(request.signal.aborted).toBe(false);
+        expect(request.redirect).toBe("error");
+        return response(202, responses.stopping);
+      },
+    ]);
+    const consume = vi.spyOn(h.ctx.budget, "consume");
+    await expect(h.channel.collect(query(), h.ctx)).rejects.toBe(reason);
+    expect(h.requests.map((r) => r.method)).toEqual(["POST", "GET", "POST"]);
+    expect(consume).toHaveBeenCalledExactlyOnceWith(0, { costUsd: 0.011, allowOverspend: true });
   });
 
   it("rejects an unknown polling status with a parse failure and conservative accounting", async () => {
@@ -146,10 +232,13 @@ describe("Monid run flow", () => {
     expect(h.requests).toHaveLength(1);
   });
 
-  it("charges conservatively for an oversized rejection body whose end was never read", async () => {
-    const h = await harness([response(401, "x".repeat(MAX_RESPONSE_CHARS + 1))]);
+  it.each([401, 503])("charges conservatively for an oversized HTTP %i rejection body whose end was never read", async (status) => {
+    const h = await harness([response(status, "x".repeat(MAX_RESPONSE_CHARS + 1))]);
+    const consume = vi.spyOn(h.ctx.budget, "consume");
     await expect(h.channel.collect(query(), h.ctx)).rejects.toMatchObject({ code: "parse" });
+    expect(consume).toHaveBeenCalledExactlyOnceWith(0, { costUsd: 0.011, allowOverspend: true });
     expect(h.ctx.budget.snapshot().usd).toBe(0.011);
+    expect(h.requests).toHaveLength(1);
   });
 
   it("warns when the accepted price is higher than configured", async () => {
@@ -161,6 +250,42 @@ describe("Monid run flow", () => {
 
 describe("timeout and stop", () => {
   const quick = () => settings({ timeout_ms: 5 });
+
+  it.each([408, 502, 503])("persistent GET %i reaches stop and grace before a retryable failure with one conservative charge", async (status) => {
+    const h = await harness([
+      response(202, responses.accepted), response(status, responses.error), response(status, responses.error),
+      response(202, responses.stopping), response(status, responses.error),
+    ], { settings: settings({ timeout_ms: 15 }) });
+    const consume = vi.spyOn(h.ctx.budget, "consume");
+    await expect(h.channel.collect(query(), h.ctx)).rejects.toMatchObject({ code: "network", retryable: true });
+    expect(h.requests.map((r) => [r.method, r.path])).toEqual([
+      ["POST", "/v1/run"], ["GET", "/v1/runs/run_example"], ["GET", "/v1/runs/run_example"],
+      ["POST", "/v1/runs/run_example/stop"], ["GET", "/v1/runs/run_example"],
+    ]);
+    expect(h.sleeps).toEqual([5, 5, 5, 5, 5]);
+    expect(consume).toHaveBeenCalledExactlyOnceWith(0, { costUsd: 0.011, allowOverspend: true });
+  });
+
+  it("bounds an independent stop after a non-transient poll failure with its own short timeout", async () => {
+    vi.useFakeTimers();
+    try {
+      const h = await harness([
+        response(202, responses.accepted), response(401, responses.error),
+        (request) => new Promise((_resolve, reject) => {
+          request.signal.addEventListener("abort", () => reject(new DOMException("Cleanup timed out", "AbortError")), { once: true });
+        }),
+      ], { now: () => new Date(), sleep: defaultSleep });
+      const consume = vi.spyOn(h.ctx.budget, "consume");
+      const outcome = h.channel.collect(query(), h.ctx).catch((error: unknown) => error);
+      await vi.advanceTimersByTimeAsync(10);
+      expect(await outcome).toMatchObject({ code: "auth_expired", status: 401 });
+      expect(h.requests.map((r) => r.method)).toEqual(["POST", "GET", "POST"]);
+      expect(h.controller.signal.aborted).toBe(false);
+      expect(consume).toHaveBeenCalledExactlyOnceWith(0, { costUsd: 0.011, allowOverspend: true });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 
   it("keeps transient GET failures until the deadline, then stops and uses the grace result", async () => {
     const h = await harness([response(202, responses.accepted), response(503, responses.error), response(429, responses.error),
@@ -307,6 +432,31 @@ describe("timeout and stop", () => {
     const consume = vi.spyOn(h.ctx.budget, "consume");
     expect(await h.channel.collect(query(), h.ctx)).toHaveLength(2);
     expect(consume).toHaveBeenCalledExactlyOnceWith(2, { costUsd: 0.004, allowOverspend: true });
+  });
+
+  it.each([
+    [{ calculatedCost: micro(4000) }, { reportedCost: micro(500000) }, 0.5],
+    [{ reportedCost: micro(500000) }, { actualCost: micro(0) }, 0.5],
+    [{ reportedCost: micro(500000) }, { reportedCost: micro(4000) }, 0.5],
+    [{ calculatedCost: micro(4000) }, { calculatedCost: micro(2000) }, 0.002],
+  ] as const)("merges 409 billing with later GET billing and consumes exactly once: %j -> %j", async (before, after, usd) => {
+    const h = await harness([
+      response(202, responses.accepted), response(409, completed({ billing: before })),
+      response(200, completed({ output: jobs, billing: after })),
+    ], { settings: quick() });
+    const consume = vi.spyOn(h.ctx.budget, "consume");
+    expect(await h.channel.collect(query(), h.ctx)).toHaveLength(2);
+    expect(consume).toHaveBeenCalledExactlyOnceWith(2, { costUsd: usd, allowOverspend: true });
+  });
+
+  it("retains a settlement in a 409 body with an unknown status before rechecking", async () => {
+    const h = await harness([
+      response(202, responses.accepted), response(409, { status: "FUTURE_STATUS", cost: { value: 0.5, currency: "USD" } }),
+      response(200, completed({ output: jobs, billing: { actualCost: micro(0) } })),
+    ], { settings: quick() });
+    const consume = vi.spyOn(h.ctx.budget, "consume");
+    expect(await h.channel.collect(query(), h.ctx)).toHaveLength(2);
+    expect(consume).toHaveBeenCalledExactlyOnceWith(2, { costUsd: 0.5, allowOverspend: true });
   });
 
   it("charges the full configured limit on grace expiry and logs the run id", async () => {

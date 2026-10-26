@@ -100,6 +100,13 @@ describe("Monid channel accounting", () => {
     expect(h.logs).toContainEqual(expect.objectContaining({ level: "warn", fields: { runId: "run_example", limit: 10 } }));
   });
 
+  it.each([undefined, {}, { httpStatus: "200" }])("charges the limit before rejecting uncountable output with an invalid provider response: %j", async (providerResponse) => {
+    const h = await harness([response(200, completed({ providerResponse, output: {}, billing: undefined, billedUnits: undefined }))]);
+    const consume = vi.spyOn(h.ctx.budget, "consume");
+    await expect(h.channel.collect(query(), h.ctx)).rejects.toMatchObject({ code: "parse", retryable: false });
+    expect(consume).toHaveBeenCalledExactlyOnceWith(0, { costUsd: 0.011, allowOverspend: true });
+  });
+
   it("keeps raw counts before dedupe, local date filtering and skipping provider error items", async () => {
     const old = { ...jobs[1], postedDate: "2026-10-24T08:00:00Z" };
     const h = await harness([response(200, unsettled([jobs[0], jobs[0], old, { error: "Fictional provider error" }]))]);
@@ -181,11 +188,12 @@ describe("partial split results", () => {
     expect(h.ctx.budget.snapshot().usd).toBe(0.002);
   });
 
-  it("does not call a remote budget refusal planned, and never bills it twice", async () => {
+  it("keeps a remote 503 budget refusal unplanned without charging the refused run", async () => {
     const h = await harness([response(200, unsettled([jobs[0]])), response(503, { error: "Wallet inactive" })]);
     const consume = vi.spyOn(h.ctx.budget, "consume");
     await expect(h.channel.collect(splitQuery(), h.ctx)).rejects.toMatchObject({ planned: false, cause: { code: "budget_exceeded" }, postings: [{ externalId: "4385163817" }] });
-    expect(consume).toHaveBeenCalledOnce();
-    expect(h.ctx.budget.snapshot().usd).toBe(0.002);
+    expect(consume).toHaveBeenCalledExactlyOnceWith(1, { costUsd: 0.002, allowOverspend: true });
+    expect(h.ctx.budget.snapshot()).toMatchObject({ records: 1, usd: 0.002 });
+    expect(h.requests).toHaveLength(2);
   });
 });

@@ -30,7 +30,8 @@ registry    来源清单页的统计窗口、判定阈值、导入大小上限�
 默认 LinkedIn 级联为 `linkedin-brightdata` → `linkedin-apify` → `linkedin-monid` → `linkedin-session` →
 `linkedin-guest`。[Monid](monid.zh.md) 使用 `MONID_API_KEY` 和独立的预充值钱包，没有 key 时跳过且不记失败。
 其默认 5 美元预算受全局付费上限约束。sources 配置版本 4 只对旧默认顺序自动插入；自定义顺序和子集保持不变，
-需要时在 `/settings` 自行添加。
+新块默认停用。自定义级联迁移后若要使用，须同时在 `/settings` 将 `linkedin-monid` 加入级联，并设置
+`linkedin.monid.enabled: true`。
 
 ## 3. 七种状态怎么判
 

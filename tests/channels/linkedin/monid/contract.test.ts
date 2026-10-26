@@ -82,6 +82,26 @@ describe("Monid billing", () => {
     expect(cost({ providerResponse: { httpStatus: 200 }, output: {}, billedUnits: 2 }))
       .toMatchObject({ costUsd: 0.003, units: 2 });
   });
+
+  it.each([undefined, null, {}, { httpStatus: "200" }, { httpStatus: 0 }, { httpStatus: 600 }, { httpStatus: 200 }, { httpStatus: 404 }])
+    ("uses the limit for uncountable completed output unless a provider error is confirmed: %j", (providerResponse) => {
+      expect(cost({ providerResponse, output: {} }))
+        .toMatchObject({ costUsd: 0.011, source: "estimate", conservative: true });
+    });
+
+  it.each([400, 403, 429, 500, 503])("keeps the existing estimate for a confirmed provider HTTP %i error", (httpStatus) => {
+    expect(cost({ providerResponse: { httpStatus }, output: {} }))
+      .toMatchObject({ costUsd: 0.001, source: "estimate", conservative: false });
+  });
+
+  it.each([
+    [{ cost: { value: 0.5, currency: "USD" } }, 0.5, "settled", false],
+    [{ billing: { actualCost: micro(0), reportedCost: micro(500000) } }, 0.5, "settled", false],
+    [{ billing: { calculatedCost: micro(4000) } }, 0.004, "calculated", false],
+    [{}, 0.011, "estimate", true],
+  ] as const)("extracts billing before validating an unknown terminal status: %j", (fields, costUsd, source, conservative) => {
+    expect(calculateRunCost({ status: "FUTURE_STATUS", ...fields }, 10, pricing)).toMatchObject({ costUsd, source, conservative });
+  });
 });
 
 describe("Monid response classification", () => {

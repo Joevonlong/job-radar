@@ -30,7 +30,9 @@ Keys under `registry:` can only be changed in the YAML: `window_days` (stats win
 The default LinkedIn cascade is `linkedin-brightdata` → `linkedin-apify` → `linkedin-monid` → `linkedin-session` →
 `linkedin-guest`. [Monid](monid.md) uses `MONID_API_KEY` and a separate prepaid wallet; without a key it is skipped
 without a failure. Its USD 5 default budget shares the global paid cap. Upgrading to sources config version 4 inserts
-it only into the previous default order; customized orders and subsets stay unchanged (add it in `/settings` if wanted).
+it only into the previous default order; customized orders and subsets stay unchanged and the new block is disabled.
+To use it after a customized-cascade migration, both add `linkedin-monid` to the cascade in `/settings` and set
+`linkedin.monid.enabled: true`.
 
 ## 3. How the seven statuses are decided
 

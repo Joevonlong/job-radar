@@ -77,6 +77,9 @@ const runFields = {
   output: z.unknown().optional(),
   price: z.unknown().optional(),
 };
+/** Cost extraction must survive unknown statuses and malformed run identifiers. */
+export const runCostSchema = z.object(runFields).omit({ runId: true, price: true }).extend({ status: z.unknown().optional() });
+export type MonidCostObservation = z.infer<typeof runCostSchema>;
 const runStatusSchema = z.enum(["READY", "RUNNING", "STOPPING", "COMPLETED", "FAILED", "TIMED_OUT", "BLOCKED", "STOPPED"]);
 export const runResponseSchema = z.object({ ...runFields, status: runStatusSchema });
 export type MonidRun = z.infer<typeof runResponseSchema>;
@@ -133,7 +136,7 @@ export interface RunCost {
 }
 
 /** Pure billing precedence, including explicit zero settlements and per-terminal-state estimates. */
-export function calculateRunCost(run: MonidRun, limit: number, pricing: MonidPricing): RunCost {
+export function calculateRunCost(run: MonidCostObservation, limit: number, pricing: MonidPricing): RunCost {
   const count = Array.isArray(run.output) ? run.output.length : 0;
   const invalidFields: string[] = [];
   const units = billedUnitsSchema.safeParse(run.billedUnits);
@@ -162,7 +165,9 @@ export function calculateRunCost(run: MonidRun, limit: number, pricing: MonidPri
   if (units.success) return result(estimate(units.data), "estimate");
   if (run.status === "COMPLETED") {
     const provider = providerResponseSchema.safeParse(run.providerResponse);
-    if (!Array.isArray(run.output) && provider.success && provider.data.httpStatus >= 200 && provider.data.httpStatus < 300) {
+    const providerError = provider.success && provider.data.httpStatus !== 404 &&
+      (provider.data.httpStatus < 200 || provider.data.httpStatus >= 300);
+    if (!Array.isArray(run.output) && !providerError) {
       return result(estimate(limit), "estimate", true);
     }
     return result(estimate(count), "estimate");

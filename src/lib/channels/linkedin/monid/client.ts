@@ -3,16 +3,17 @@ import { ChannelError, InfrastructureError } from "../../errors";
 import { abortReason, createHttpClient, defaultSleep, readTextUpTo, type FetchLike, type SleepFn } from "../../http";
 import type { ChannelContext, HttpClient, HttpResponse } from "../../types";
 import {
-  acceptedRunSchema, calculateRunCost, errorForResponse, errorResponseSchema, isTerminal, MAX_RESPONSE_CHARS,
-  outputSchema, priceSchema, providerResponseSchema, runResponseSchema, stopAcceptedSchema,
-  validateFinalInput, type MonidRun, type MonidSettings,
+  acceptedRunSchema, billedUnitsSchema, calculateRunCost, errorForResponse, errorResponseSchema, isTerminal, MAX_RESPONSE_CHARS,
+  outputSchema, priceSchema, providerResponseSchema, runCostSchema, runResponseSchema, stopAcceptedSchema,
+  validateFinalInput, type MonidCostObservation, type MonidRun, type MonidSettings, type RunCost,
 } from "./contract";
 
 /** POSTs are never retried; GETs leave ordinary 5xx to the HTTP layer's backoff. */
 const ALLOW_POST_STATUS = Array.from({ length: 200 }, (_, index) => index + 400);
 const ALLOW_POLL_STATUS = [400, 401, 402, 403, 404, 408, 409, 429, 502, 503];
 const NOT_EXECUTED_STATUS = [400, 401, 402, 403, 404, 409, 429, 503];
-const isTransientPollStatus = (status: number | undefined): boolean => status === 429 || (status !== undefined && status >= 500);
+const isTransientPollStatus = (status: number | undefined): boolean => status === 408 || status === 429 || (status !== undefined && status >= 500);
+type ObserveRun = (body: unknown) => void;
 
 export interface MonidClientOptions {
   ctx: ChannelContext;
@@ -60,7 +61,7 @@ export class MonidClient {
     }
   }
 
-  private async stop(runId: string, independent: boolean): Promise<{ conflict: boolean; run: MonidRun | null }> {
+  private async stop(runId: string, independent: boolean, observe: ObserveRun): Promise<{ conflict: boolean; run: MonidRun | null }> {
     const { ctx, settings, stopFetch } = this.options;
     // Both limits are configurable. With the default settings this cleanup has its own five-second timeout.
     const timeoutMs = Math.min(settings.poll_interval_ms, settings.stop_grace_ms);
@@ -78,6 +79,7 @@ export class MonidClient {
       if (response.status !== 409 || (!independent && ctx.signal.aborted)) throw error;
       return { conflict: true, run: null };
     }
+    observe(body);
     const run = runResponseSchema.safeParse(body);
     if (run.success && isTerminal(run.data.status)) return { conflict: response.status === 409, run: run.data };
     if (response.status === 409) return { conflict: true, run: null };
@@ -87,7 +89,7 @@ export class MonidClient {
     return { conflict: false, run: null };
   }
 
-  private async poll(runId: string, deadline: number, immediate = false): Promise<MonidRun | null> {
+  private async poll(runId: string, deadline: number, observe: ObserveRun, immediate = false): Promise<MonidRun | null> {
     const { ctx, settings } = this.options;
     for (;;) {
       ctx.signal.throwIfAborted();
@@ -117,6 +119,9 @@ export class MonidClient {
       } catch (error) {
         ctx.signal.throwIfAborted();
         if (this.now() >= deadline) return null;
+        if (httpStatus !== undefined && httpStatus >= 400 && !isTransientPollStatus(httpStatus)) {
+          throw errorForResponse(httpStatus, {}) ?? error;
+        }
         if (isTransientPollStatus(httpStatus) || (error instanceof ChannelError &&
           (error.code === "network" || error.code === "rate_limited" || isTransientPollStatus(error.status)))) continue;
         throw error;
@@ -124,6 +129,7 @@ export class MonidClient {
         clearTimeout(timer);
       }
       if (result === null) return null;
+      observe(result.body);
       const parsed = runResponseSchema.safeParse(result.body);
       if (parsed.success && isTerminal(parsed.data.status)) return { ...parsed.data, runId };
       if (parsed.success || isTransientPollStatus(result.status)) continue;
@@ -142,29 +148,40 @@ export class MonidClient {
     let runId: string | undefined;
     let accounted = false;
     let rejected = false;
-    let observedTerminal: MonidRun | null = null;
+    let stopRequested = false;
+    let observedCost: RunCost | null = null;
+    let observedUnits: number | undefined;
+    let observedCount: number | undefined;
+    const invalidFields = new Set<string>();
     const fields = (): Record<string, unknown> => runId === undefined ? {} : { runId: runId.replaceAll(apiKey, "[redacted]") };
-    const observe = (run: MonidRun): void => {
-      if (!isTerminal(run.status)) return;
-      const cost = calculateRunCost(run, limit, settings);
-      if (cost.source === "settled" || (cost.source === "calculated" && observedTerminal === null)) observedTerminal = run;
+    const observe: ObserveRun = (body) => {
+      const parsed = runCostSchema.safeParse(body);
+      if (!parsed.success) return;
+      const cost = calculateRunCost(parsed.data, limit, settings);
+      for (const field of cost.invalidFields) invalidFields.add(field);
+      const units = billedUnitsSchema.safeParse(parsed.data.billedUnits);
+      if (units.success) observedUnits = units.data;
+      if (Array.isArray(parsed.data.output)) observedCount = parsed.data.output.length;
+      // Settlements accumulate across responses; calculated amounts only track the latest usable fallback.
+      if ((cost.source === "settled" && (observedCost?.source !== "settled" || cost.costUsd > observedCost.costUsd)) ||
+        (cost.source === "calculated" && observedCost?.source !== "settled")) observedCost = cost;
     };
 
-    const record = async (run: MonidRun): Promise<void> => {
+    const record = async (run: MonidCostObservation): Promise<void> => {
       observe(run);
-      const cost = calculateRunCost(observedTerminal ?? run, limit, settings);
-      const invalidFields = [...new Set([...cost.invalidFields, ...calculateRunCost(run, limit, settings).invalidFields])];
+      const cost = observedCost ?? calculateRunCost(run, limit, settings);
+      const units = observedUnits ?? observedCount ?? cost.units;
       // A failed usage write must not trigger a second attempt to consume the same bill.
       accounted = true;
       try {
-        await ctx.budget.consume(cost.units, { costUsd: cost.costUsd, allowOverspend: true });
+        await ctx.budget.consume(units, { costUsd: cost.costUsd, allowOverspend: true });
       } catch (error) {
         throw new InfrastructureError("could not record Monid usage", error);
       }
-      if (invalidFields.length > 0) ctx.logger.warn("monid cost fields could not be parsed", { ...fields(), fields: invalidFields });
+      if (invalidFields.size > 0) ctx.logger.warn("monid cost fields could not be parsed", { ...fields(), fields: [...invalidFields] });
       if (cost.source === "calculated") ctx.logger.warn("monid using calculated cost without settled fields", fields());
       if (cost.conservative) ctx.logger.warn("monid run outcome uncertain; charged the configured limit", { ...fields(), limit });
-      ctx.logger.info("monid run usage recorded", { ...fields(), units: cost.units, usd: cost.costUsd });
+      ctx.logger.info("monid run usage recorded", { ...fields(), units, usd: cost.costUsd });
     };
     const finish = async (run: MonidRun, httpStatus = 200): Promise<unknown[]> => {
       runId = run.runId ?? runId;
@@ -185,6 +202,7 @@ export class MonidClient {
         maxRetries: 0, timeoutMs: settings.timeout_ms, allowStatus: ALLOW_POST_STATUS, redirect: "error",
       });
       const body = await this.body(response);
+      observe(body);
       // An unreadable/truncated response cannot prove that the paid request was refused.
       rejected = NOT_EXECUTED_STATUS.includes(response.status);
       const terminal = runResponseSchema.safeParse(body);
@@ -203,18 +221,18 @@ export class MonidClient {
       if (price.success && (price.data.amount > settings.price_per_1k_usd / 1000 || (price.data.flatFee ?? 0) > settings.flat_fee_usd)) {
         ctx.logger.warn("monid advertised price exceeds configured price", { ...fields(), amount: price.data.amount, flatFee: price.data.flatFee });
       }
-      const run = await this.poll(runId, startedAt + settings.timeout_ms);
+      const run = await this.poll(runId, startedAt + settings.timeout_ms, observe);
       if (run) return await finish(run);
       let final: MonidRun | null;
       let pollingGrace = false;
       try {
-        const stopped = await this.stop(runId, false);
-        if (stopped.run) observe({ ...stopped.run, runId });
+        stopRequested = true;
+        const stopped = await this.stop(runId, false, observe);
         // A 409 always needs a fresh GET: the run may have completed, or may still be un-stoppable.
         if (stopped.run && !stopped.conflict) final = { ...stopped.run, runId };
         else {
           pollingGrace = true;
-          final = await this.poll(runId, this.now() + settings.stop_grace_ms, stopped.conflict);
+          final = await this.poll(runId, this.now() + settings.stop_grace_ms, observe, stopped.conflict);
         }
       } catch (error) {
         if (ctx.signal.aborted) throw error;
@@ -230,17 +248,26 @@ export class MonidClient {
           let final: MonidRun | null = null;
           if (runId !== undefined) {
             try {
-              final = (await this.stop(runId, true)).run;
+              final = (await this.stop(runId, true, observe)).run;
             } catch {
               ctx.logger.warn("monid cancellation stop failed", fields());
             }
           }
           const cost = final ? calculateRunCost(final, limit, settings) : null;
-          await record(final && cost && cost.source !== "estimate" ? { ...final, runId } : { status: "TIMED_OUT" });
+          await record(final && cost && cost.source !== "estimate" ? final : { status: "TIMED_OUT" });
         }
         throw abortReason(ctx.signal);
       }
-      if (!accounted && (!rejected || runId !== undefined)) await record({ status: "TIMED_OUT" });
+      if (!accounted && runId !== undefined && !stopRequested && error instanceof ChannelError && !error.retryable) {
+        stopRequested = true;
+        try {
+          await this.stop(runId, true, observe);
+        } catch {
+          ctx.logger.warn("monid failure stop failed", fields());
+        }
+      }
+      if (!accounted && (!rejected || runId !== undefined || observedCost !== null)) await record({ status: "TIMED_OUT" });
+      if (ctx.signal.aborted) throw abortReason(ctx.signal);
       // The HTTP layer's cause may contain transport details or echoed credentials. Keep only classification.
       if (error instanceof ChannelError) throw new ChannelError(error.code, error.message.replaceAll(apiKey, "[redacted]"), {
         retryable: error.retryable, status: error.status, retryAfterMs: error.retryAfterMs, tripsCircuit: error.tripsCircuit,
