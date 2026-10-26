@@ -664,7 +664,8 @@
     },
     "tags": {
       "placeholder": "输入后按 Enter 添加",
-      "remove": "移除 {value}"
+      "remove": "移除 {value}",
+      "duplicate": "已在列表里：{value}"
     },
     "actions": {
       "save": "保存",

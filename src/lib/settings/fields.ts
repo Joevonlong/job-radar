@@ -76,6 +76,13 @@ export interface FieldDef {
   localeOptions?: boolean;
   /** text / tags: every value is a language code (`en`, `pt-BR`); the form flags a bad one while typing and blocks the save. */
   languageCode?: boolean;
+  /**
+   * tags / numberList: how the tag box treats an entry that is already in the list. `insensitive` (tags default) ignores case,
+   * `exact` compares the text as typed (numberList default), `none` allows repeats (a list where a repeat means something).
+   */
+  dedupe?: "insensitive" | "exact" | "none";
+  /** tags: a comma ends an entry (default). Off for fields whose entries are whole sentences. */
+  commitOnComma?: boolean;
   /** A protected key (`config/protected-keys.ts`): shown read-only, changed only by editing the file. Set by `SETTINGS_SECTIONS`. */
   locked?: boolean;
 }
@@ -213,6 +220,8 @@ const bool = (path: string, label: FieldLabelId, extra: Partial<FieldDef> = {}):
 const int = (path: string, label: FieldLabelId, extra: Partial<FieldDef> = {}): FieldDef => ({ path, kind: "int", label, ...extra });
 const num = (path: string, label: FieldLabelId, extra: Partial<FieldDef> = {}): FieldDef => ({ path, kind: "number", label, ...extra });
 const text = (path: string, label: FieldLabelId, extra: Partial<FieldDef> = {}): FieldDef => ({ path, kind: "text", label, ...extra });
+/** A scoring criterion is a whole sentence that may contain commas: only Enter (or leaving the box) ends it. */
+const NO_COMMA: Partial<FieldDef> = { commitOnComma: false };
 const tags = (path: string, label: FieldLabelId, extra: Partial<FieldDef> = {}): FieldDef => ({ path, kind: "tags", label, ...extra });
 
 // ---------------------------------------------------------------- schedule
@@ -661,7 +670,7 @@ const aiSections: SectionDef[] = [
     id: "scoring_criteria",
     block: "scoring",
     title: { section: "ai_scoring_criteria" },
-    fields: [tags("scoring.criteria.priorities", "scoring_criteria_priorities"), tags("scoring.criteria.dealbreakers", "scoring_criteria_dealbreakers"), tags("scoring.criteria.nice_to_have", "scoring_criteria_nice")],
+    fields: [tags("scoring.criteria.priorities", "scoring_criteria_priorities", NO_COMMA), tags("scoring.criteria.dealbreakers", "scoring_criteria_dealbreakers", NO_COMMA), tags("scoring.criteria.nice_to_have", "scoring_criteria_nice", NO_COMMA)],
   },
   // Reason sources: off by default (output tokens); neither key re-scores
   {
@@ -704,7 +713,7 @@ const aiSections: SectionDef[] = [
     title: { section: "ai_priority_seniority" },
     fields: [
       bool("scoring.priority.seniority_from_preferences", "priority_seniority_follow"),
-      { path: "scoring.priority.seniority_distance_fit", kind: "numberList", label: "priority_seniority_distance" },
+      { path: "scoring.priority.seniority_distance_fit", kind: "numberList", label: "priority_seniority_distance", dedupe: "none" },
       ...PRIORITY_SENIORITY.map((key) => num(`scoring.priority.seniority_fit.${key}`, `priority_seniority_${key}`)),
     ],
   },

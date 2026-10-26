@@ -664,7 +664,8 @@
     },
     "tags": {
       "placeholder": "Type and press Enter to add",
-      "remove": "Remove {value}"
+      "remove": "Remove {value}",
+      "duplicate": "Already in the list: {value}"
     },
     "actions": {
       "save": "Save",

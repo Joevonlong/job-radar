@@ -153,6 +153,12 @@ test("edit a T2 keyword and its weight: the YAML changes and the rank values are
   await t2.getByLabel("词", { exact: true }).fill("Anteile");
   await t2.getByLabel("词", { exact: true }).press("Enter");
   await expect(t2.getByText("Anteile", { exact: true })).toBeVisible();
+  // a repeat is refused with a notice and the text stays
+  await t2.getByLabel("词", { exact: true }).fill("anteile");
+  await t2.getByLabel("词", { exact: true }).press("Enter");
+  await expect(t2.getByTestId("tag-duplicate").first()).toHaveText("已在列表里：Anteile");
+  await expect(t2.getByText("Anteile", { exact: true })).toHaveCount(1);
+  await t2.getByLabel("词", { exact: true }).fill("");
   const weight = t2.getByLabel("权重", { exact: true });
   await expect(weight).toHaveValue("8");
   await weight.fill("2");

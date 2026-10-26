@@ -479,6 +479,25 @@ test.describe("mobile (390px)", () => {
   });
 });
 
+test("AI tab: a scoring criterion with commas is added as one sentence and saved", async ({ page }) => {
+  const sentence = "A small team, real users, and a direct line to the founders";
+  await open(page, "ai");
+  const priorities = page.getByTestId("settings-card-ai").getByLabel("最看重", { exact: true });
+  await priorities.fill(sentence);
+  await priorities.press("Enter");
+  await expect(page.locator('[data-slot="filter-chip"]', { hasText: sentence })).toHaveCount(1);
+  // the same sentence in other case is a repeat
+  await priorities.fill(sentence.toLowerCase());
+  await priorities.press("Enter");
+  await expect(page.locator('[data-slot="filter-chip"]', { hasText: sentence })).toHaveCount(1);
+  await expect(priorities.locator("..").getByTestId("tag-duplicate")).toContainText("已在列表里");
+  await priorities.fill("");
+  await save(page, "ai");
+  await expect(page.getByText("已保存")).toBeVisible();
+  const saved = parse(read("ai")) as { scoring: { criteria: { priorities: string[] } } };
+  expect(saved.scoring.criteria.priorities).toEqual([sentence]);
+});
+
 for (const width of [390, 1280, 1920]) {
   test(`a long scoring priority wraps inside its chip at ${width}px instead of being cut off`, async ({ page }) => {
     const sentence = "I want to work on the product side of machine learning with real users, a small team and a direct line to the people who decide what gets built next";

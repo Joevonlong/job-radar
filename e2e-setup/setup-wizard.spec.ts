@@ -147,6 +147,11 @@ test("profile: the summary is written to me.yaml (with a history snapshot)", asy
 test("targets: the preview says the example keywords are replaced, and they are", async () => {
   await page.locator("#setup-targets-titles").fill("Data Engineer");
   await page.locator("#setup-targets-titles").press("Enter");
+  // the same title again (other case) is refused with a notice, not added twice
+  await page.locator("#setup-targets-titles").fill("data engineer");
+  await page.locator("#setup-targets-titles").press("Enter");
+  await expect(page.locator("#setup-targets-titles").locator("..").getByTestId("tag-duplicate")).toHaveText("已在列表里：Data Engineer");
+  await page.locator("#setup-targets-titles").fill("");
   await expect(page.getByTestId("setup-keyword-preview")).toHaveAttribute("data-mode", "replace");
   const titles = (profile("preferences") as { target_titles: string[] }).target_titles;
   await save("sources");
