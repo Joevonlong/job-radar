@@ -6,7 +6,7 @@
 
 **本页与流水线绑定。** `pnpm ci:docs-check`（包含在 `scripts/validate.sh` 里，也是流水线自己的 `ci-docs` 任务）会在下列情况下失败：workflow 里的某个任务或步骤在本页没有对应小节；本页写了已经不存在的任务或步骤；[ci.md](ci.md)（英文主版）和本页列出的任务、步骤不一致。改流水线，就要在同一个 PR 里同时改 `docs/ci.md` 和本页。标题的写法见末尾“让本页保持准确”。
 
-耗时是 GitHub 托管的 `ubuntu-24.04` runner（2 核）上的典型值，每个 PR 的运行摘要里有实际数字。本页有意不写测试数量和 action 版本号：它们随每个 PR 或 Dependabot 升级而变，以 workflow 文件和测试目录为准。
+耗时是 GitHub 托管的 `ubuntu-24.04` runner（4 核、16 GB 内存）上的典型值，每个 PR 的运行摘要里有实际数字。本页有意不写测试数量和 action 版本号：它们随每个 PR 或 Dependabot 升级而变，以 workflow 文件和测试目录为准。
 
 ## 总览
 
@@ -17,33 +17,36 @@ flowchart LR
   PR --> static
   PR --> unit
   changes -- 代码有改动 --> integration
+  changes -- 代码有改动 --> worker-switch
   changes -- 代码有改动 --> e2e
   changes -- 代码有改动 --> linux-smoke
-  changes -- 部署相关有改动 --> upgrade-transition
+  changes -- 部署或工具链有改动 --> upgrade-transition
   changes --> ci-ok
   ci-docs --> ci-ok
   static --> ci-ok
   unit --> ci-ok
   integration --> ci-ok
+  worker-switch --> ci-ok
   e2e --> ci-ok
   linux-smoke --> ci-ok
   upgrade-transition --> ci-ok
   ci-ok --> merge([唯一需要的必过检查])
 ```
 
-所有任务并行，总时长取决于最慢的那个（端到端任务，约 10 到 12 分钟），而不是相加。`ci-ok` 是分支保护应当要求的唯一检查：只有分类器选中的所有任务都成功，它才通过。
+所有任务并行，总时长取决于最慢的那个。worker-switch 和 transition 各自在一个 runner 内同时运行两个进程；保留这种形态前，需要对比真实运行的耗时、内存、磁盘采样。`ci-ok` 是分支保护应当要求的唯一检查：只有分类器选中的所有任务都成功，它才通过。
 
 跑哪些任务由 `changes` 任务按改动内容决定：
 
 | 改动 | 运行的任务 |
 |---|---|
-| 只改文档的 PR（`*.md`、`*.html`、图片；`tests/`、`src/`、`public/` 下的文件不算文档） | `changes`（含文档链接检查）、`ci-docs`、`static`、`unit`、`ci-ok`。有些单元测试会读文档（链接目标、图片大小），所以 `unit` 要跑。 |
-| 其他 PR（代码、脚本、配置、`tests/`、`src/`、`public/` 下任何文件、workflow、Dockerfile） | 上面的再加 `integration`、`e2e`、`linux-smoke` |
+| 只改文档的 PR（`*.md`、`*.html`、图片；工具链路径和 `tests/`、`src/`、`public/` 下的文件不算文档） | `changes`（含文档链接检查）、`ci-docs`、`static`、`unit`、`ci-ok`。有些单元测试会读文档（链接目标、图片大小），所以 `unit` 要跑。 |
+| 其他 PR（代码、脚本、配置、`tests/`、`src/`、`public/` 下任何文件、workflow、Dockerfile） | 上面的再加 `integration`、`worker-switch`、`e2e`、`linux-smoke` |
 | 改到部署相关文件的 PR（`scripts/ops/`、`src/ai-worker/`、`compose.yaml`、`Dockerfile`、`tests/transition/`、`tests/ops/sim/`） | 上面的再加 `upgrade-transition` |
+| 依赖或工具链 PR（`package.json`、锁文件、workspace 文件、`.github/**`、根测试配置、Node 版本文件） | 全部（`full=true`、`transition=true`），包括默认顺序集成 |
 | 推送到 `main` | 无论改了什么，一律全部；`integration` 还会按默认文件顺序再跑一遍 |
 | 手动运行（`workflow_dispatch`） | 全部，同推送到 `main` |
 
-没被选中的任务（只改文档的 PR 上的 `integration`、`e2e`、`linux-smoke`）显示为 skipped，`ci-ok` 只接受这种情况；必须运行却被跳过、取消或失败的任务会让 `ci-ok` 失败。
+没被选中的任务（只改文档的 PR 上的 `integration`、`worker-switch`、`e2e`、`linux-smoke`）显示为 skipped，`ci-ok` 只接受这种情况；必须运行却被跳过、取消或失败的任务会让 `ci-ok` 失败。
 
 workflow 级设置：`permissions: contents: read`（任何任务都不能写仓库；来自 fork 的 PR 没有密钥）；每个 ref 一个 `concurrency` 组（新的推送会取消 PR 上较早的运行，但不会取消 `main` 上的运行）；每个任务和步骤都有 `timeout-minutes`，卡住的步骤会失败，而不是挂几个小时。
 
@@ -71,11 +74,11 @@ workflow 级设置：`permissions: contents: read`（任何任务都不能写仓
 
 只对 pull request 分类，写出其他任务读取的三个输出：
 
-- `code`：只要有一个改动文件不是文档（`*.md`、`*.html`、`png`、`jpg`、`svg`、`gif`）就是 `true`。`tests/`、`src/`、`public/` 下的任何文件都算代码，即使是 HTML、SVG 或图片：测试会读自己的 fixture，应用也自带图片和页面。脚本、YAML、Dockerfile、workflow 同样是代码。`code` 选中 `integration`、`e2e` 和 `linux-smoke`；`static` 和 `unit` 无论如何都跑（单元测试会读文档，这里也不维护“哪些测试读哪些文件”的清单，免得过时）。
-- `full`：推送到 `main` 和手动运行时为 `true`，会多跑一遍默认顺序的集成测试。
-- `transition`：有改动路径以 `scripts/ops/`、`src/ai-worker/`、`tests/transition/`、`tests/ops/sim/` 开头，或者是 `compose.yaml`、`Dockerfile` 时为 `true`，选中 `upgrade-transition`。
+- `code`：只要有一个改动文件不是文档（`*.md`、`*.html`、`png`、`jpg`、`svg`、`gif`）就是 `true`。`tests/`、`src/`、`public/` 下的任何文件都算代码，即使是 HTML、SVG 或图片：测试会读自己的 fixture，应用也自带图片和页面。脚本、YAML、Dockerfile、workflow 同样是代码。`code` 选中 `integration`、`worker-switch`、`e2e` 和 `linux-smoke`；`static` 和 `unit` 无论如何都跑（单元测试会读文档，这里也不维护“哪些测试读哪些文件”的清单，免得过时）。工具链规则优先于文档扩展名。
+- `full`：推送到 `main`、手动运行、依赖或工具链 PR 为 `true`，会多跑一遍默认顺序的集成测试。工具链路径包括 `package.json`（含 `engines.node`）、`pnpm-lock.yaml`、`pnpm-workspace.yaml`、`.github/` 下所有文件、根目录的 `vitest*.ts` / `playwright*.ts`、`.nvmrc`、`.node-version`，同时强制 `code=true`、`transition=true`；`.github/` 下的 Markdown 也一样。
+- `transition`：有改动路径以 `scripts/ops/`、`src/ai-worker/`、`tests/transition/`、`tests/ops/sim/` 开头，或者是 `compose.yaml`、`Dockerfile`、上面的工具链输入时为 `true`，选中 `upgrade-transition`。
 
-推送到 `main` 和手动运行完全不分类：两者都写 `code=true`、`full=true`、`transition=true`。`main` 上的提交就是要部署的内容，所以只改文档的推送不能留下一次什么都没检查的运行。PR 的对比范围是 `base...head`，不做改名检测，所以被移动的文件新旧路径都会计入。算不出差异时这一步会失败（`ci-ok` 随之失败），不会悄悄当作“没改动”。手动复现：`git diff --name-only --no-renames origin/main...HEAD`，再看有没有不是 `*.md`、`*.html` 或图片的路径，或以 `tests/`、`src/`、`public/` 开头的路径。
+推送到 `main` 和手动运行完全不分类：两者都写 `code=true`、`full=true`、`transition=true`。`main` 上的提交就是要部署的内容，所以只改文档的推送不能留下一次什么都没检查的运行。PR 的对比范围是 `base...head`，不做改名检测，所以被移动的文件新旧路径都会计入。算不出差异时这一步会失败（`ci-ok` 随之失败），不会悄悄当作“没改动”。`tests/ci-classifier.test.ts` 提取并执行此脚本，用表驱动用例验证纯文档、混合、删除、改名、工具链、运维、未知路径。手动复现：`git diff --name-only --no-renames origin/main...HEAD`，再看有没有不是 `*.md`、`*.html` 或图片的路径，或以 `tests/`、`src/`、`public/` 开头的路径。
 
 #### Documentation links
 
@@ -205,7 +208,7 @@ Vitest 单元测试：`tests/**`（除 `tests/integration/`）下的所有测试
 
 ### Job `integration`
 
-需要真实 PostgreSQL 17 的测试：仓库层与迁移、周期与队列、控制请求、ai-worker、仪表盘查询、用真实 `pg_dump` / `pg_restore` 的备份。`tests/integration/` 下的文件，通过 `vitest.integration.config.ts` 运行（node 环境，文件依次运行，因为共用一个在每个文件前后都被清空的数据库）。上限 45 分钟，通常 3 到 4 分钟，另加 worker 替换测试约 16 分钟。
+需要真实 PostgreSQL 17 的测试：仓库层与迁移、周期与队列、控制请求、ai-worker、仪表盘查询、用真实 `pg_dump` / `pg_restore` 的备份。`tests/integration/` 下的文件，通过 `vitest.integration.config.ts` 运行（node 环境，文件依次运行，因为共用一个在每个文件前后都被清空的数据库）。两个 worker 替换测试文件移到 `worker-switch` 任务。上限 45 分钟；默认顺序和打乱顺序仍依次运行。
 
 任务带一个 `postgres:17` service 容器，环境变量 `DATABASE_URL=postgres://postgres:postgres@localhost:5432/postgres`。该角色可以建库：每次运行创建一个唯一命名的数据库（`tests/integration/global-setup.ts`），结束时删除，服务器上其他东西不受影响。这些测试没有默认服务器：没设 `DATABASE_URL` 时运行立即停止并打印一次性容器的命令，所以本地运行不可能连到你自己安装的数据库。`REQUIRE_PG_TOOLS=1` 让备份测试在缺客户端工具时失败而不是跳过。
 
@@ -231,15 +234,11 @@ Vitest 单元测试：`tests/**`（除 `tests/integration/`）下的所有测试
 
 #### Integration tests (default order)
 
-`pnpm test:integration --reporter=verbose`，只在 `full` 为 true 时运行（推送到 `main`、手动运行）。verbose reporter 会在每个文件开始时打印它，卡住的文件因此能被点名。两个 worker 替换测试文件不在这里跑（`--exclude`），它们有下面单独的一步。上限 15 分钟。本地怎么跑见 [本地跑完整流水线](#本地跑完整流水线)。
+`pnpm test:integration --reporter=verbose`，只在 `full` 为 true 时运行（推送到 `main`、手动运行、依赖或工具链 PR）。verbose reporter 会在每个文件开始时打印它，卡住的文件因此能被点名。两个 worker 替换测试文件不在这里跑（`--exclude`），它们有下面独立的任务。上限 15 分钟。本地怎么跑见 [本地跑完整流水线](#本地跑完整流水线)。
 
 #### Integration tests (shuffled file order)
 
-用 `--sequence.shuffle.files --sequence.seed=<seed>` 跑同一套测试；seed 以 `::notice::` 注解打印（`integration file order seed: N`）。PR 只跑这种顺序：它能发现依赖其他文件遗留状态的文件，固定顺序会掩盖这类问题。复现失败：用注解里的 seed 运行 `pnpm test:integration --sequence.shuffle.files --sequence.seed=<seed>`。这里同样不跑两个 worker 替换测试文件。上限 15 分钟。
-
-#### Worker switch and uninstall tests (service-manager simulator)
-
-`tests/integration/ai-worker-swap.test.ts` 和 `tests/integration/uninstall-ai-worker.test.ts`，按默认顺序跑一次：`scripts/ops/install-ai-worker.sh`（在发布目录之间替换、回滚、信号、数据库 URL 各种写法）和 `uninstall-ai-worker.sh`，对着服务管理器模拟器 `tests/ops/sim`（`launchctl` 和 `systemctl --user` 的替身，真的启动进程，状态存在一个 JSON 文件里），launchd 和 systemd 各一套。假 worker（`tests/fixtures/release/fake-worker.mjs`）在独立的数据库里拿锁、写 heartbeat。大多数用例要等停止或证据超时（脚本的下限：10 秒和停止时间加 10 秒），所以这一步约 16 分钟，只跑一次，不在两种顺序里各跑一遍。上限 25 分钟。本地：同样的命令加一个一次性数据库；不会真的安装任何东西（临时的 `HOME` 和 `XDG_CONFIG_HOME`）。
+用 `--sequence.shuffle.files --sequence.seed=<seed>` 跑同一套测试；seed 以 `::notice::` 注解打印（`integration file order seed: N`）。其他 PR 只跑这种顺序：它能发现依赖其他文件遗留状态的文件，固定顺序会掩盖这类问题。复现失败：用注解里的 seed 运行 `pnpm test:integration --sequence.shuffle.files --sequence.seed=<seed>`。这里同样不跑两个 worker 替换测试文件。上限 15 分钟。
 
 #### Set up the lowest Node.js of engines.node
 
@@ -249,9 +248,54 @@ Vitest 单元测试：`tests/**`（除 `tests/integration/`）下的所有测试
 
 在临时目录的一个 clone 里，用 `scripts/ops/prepare-release.sh --offline` 为当前提交建发布目录（安装依赖那一步之后 pnpm store 里已经有全部包），再像 ai-worker 服务那样，在发布目录里经守卫和 tsx loader 加载其中一个 `.ts` 模块（tsx 从发布目录的 `tsconfig.json` 读路径别名）。退出码不为 0，或者 stderr 里有 `module.register called`（tsx 走了 hook 线程那条路，守卫会拒绝），这一步就失败。上限 5 分钟。本地：切到 Node 22.23.4，在临时目录里执行 workflow 里同样的命令，`--root` 绝不要指向你安装用的 checkout。
 
+### Job `worker-switch`
+
+与 `integration` 的条件完全相同：每个代码 PR、推送到 main、手动运行都执行，不另做路径门控。
+`tests/integration/ai-worker-swap.test.ts` 和 `tests/integration/uninstall-ai-worker.test.ts` 用真实安装、替换、卸载脚本对服务管理器模拟器 `tests/ops/sim` 测试，假 worker 会拿数据库 advisory lock、写 heartbeat。一个任务同时启动两个独立 Vitest 进程，分别测两种管理器。任务上限 45 分钟；拆分后的实际耗时和资源占用需在 CI 测量。
+
+PostgreSQL 17 service、`DATABASE_URL`、必须可用的 pg 工具包装和依赖准备与 `integration` 相同。每个进程的全局 setup 创建独立数据库，额外隔离的数据库和角色名带 PID、随机后缀。每个假安装使用独立的 `mkdtemp` 目录、`HOME`、XDG 和模拟器状态。这些测试不监听端口，advisory lock 属于各自数据库；各进程内部仍逐文件运行（`fileParallelism: false`）。
+
+#### Check out the repository
+
+`actions/checkout`。
+
+#### Set up pnpm
+
+`pnpm/action-setup`。
+
+#### Set up Node.js
+
+`actions/setup-node`，Node 22，pnpm store 缓存。
+
+#### Install dependencies
+
+`pnpm install --frozen-lockfile`。
+
+#### Provide PostgreSQL 17 client tools
+
+与 `integration` 相同：`pg_dump`、`pg_restore` 链接到 `scripts/ops/pg-docker.sh`，并检查版本。
+
+#### Start worker switch shards
+
+后台同时启动 `SWAP_MANAGERS=systemd`、`SWAP_MANAGERS=launchd` 两个进程，用 verbose reporter 运行两个测试文件。每个包装进程有独立进程组、日志、PID 和原子发布的退出码文件，放在新建的 runner 临时目录里。步骤上限 2 分钟，启动前打印 `df -h`、`free -h`。
+
+`SWAP_MANAGERS` 也接受逗号列表（去空格、重复项只跑一次）；未设置时两个都跑，本地原行为不变。空值或未知项在收集阶段抛错。标题不带管理器的那组实际用 systemd，只在选中 systemd 时注册，因此恰好跑一次。不用测试名筛选。本地连一次性 Postgres 后，把 `SWAP_MANAGERS=systemd` 放在 `pnpm test:integration --reporter=verbose tests/integration/ai-worker-swap.test.ts tests/integration/uninstall-ai-worker.test.ts` 前；改成 `launchd` 跑另一份，取消变量跑完整套件。
+
+#### Worker switch (systemd)
+
+只等 systemd 自己的退出码文件。步骤上限 25 分钟，内部截止时间从启动算起 24 分钟。缺 PID/状态、包装进程退出却没写状态、超时、非法状态或退出码非零都会失败并打印完整日志；成功打印末 100 行。开始、等待中每分钟、退出时打印磁盘和空闲内存。只要没有取消，前面失败后仍运行，保证另一分片也有结论。
+
+#### Worker switch (launchd)
+
+独立等待 launchd 的结果，同样上限 25 分钟，使用同一个从启动算起的截止时间。systemd 失败不妨碍它报告结果，也不会误用 systemd 的退出码文件。
+
+#### Clean up worker switch shards
+
+`always()` 运行，步骤上限 5 分钟。向两个已登记的进程组发 TERM，给最多 90 秒退出，再杀掉残留进程组。启动、等待步骤取消时也转发 TERM；清理期间再收到信号不会打断宽限期。包装进程等子进程清理完才写状态。Actions 最先发出的 INT 转成 TERM，因为后台 bash 子进程可能忽略 INT。
+
 ### Job `e2e`
 
-Playwright 浏览器测试，对生产构建（`pnpm build` 再 `pnpm start`）、一次性的 PostgreSQL 17 service 和替身 runner（`scripts/e2e-runner.ts`：心跳、配置确认、控制请求轮询，使“立即运行一轮”和“配置已保存”无需真实采集器即可工作）运行。没有 AI 提供方，没有职位通道，除 localhost 外没有网络。`e2e/` 下的 spec，另有 `e2e-setup/` 的 spec。上限 20 分钟，总共通常 10 到 12 分钟。任务跑在 runner 主机上，不在 Playwright 容器镜像里（实测镜像更慢）。
+Playwright 浏览器测试，对生产构建（`pnpm build` 再 `pnpm start`）、一次性的 PostgreSQL 17 service 和替身 runner（`scripts/e2e-runner.ts`：心跳、配置确认、控制请求轮询，使“立即运行一轮”和“配置已保存”无需真实采集器即可工作）运行。没有 AI 提供方，没有职位通道，除 localhost 外没有网络。`e2e/` 下的 spec，另有 `e2e-setup/` 的 spec。上限 25 分钟，总共通常 10 到 12 分钟。任务跑在 runner 主机上，不在 Playwright 容器镜像里（实测镜像更慢）。
 
 环境：`DATABASE_URL` 指向 service（本地运行必须自己设 `DATABASE_URL` 或 `E2E_ADMIN_DATABASE_URL`：没有默认地址）；`scripts/e2e-prepare.ts` 拒绝任何名字不以 `jobradar_e2e` 开头的数据库，它创建数据库 `jobradar_e2e_3100`（名字随 `E2E_PORT`），应用迁移，加载仪表盘种子（虚构职位），并用 `tests/fixtures/config/defaults/` 的冻结 fixture 填充全新的配置和 profile 目录。`E2E_PORT=3100` 是服务端口；`E2E_SKIP_BUILD=1` 告诉 web server 命令不要再构建。
 
@@ -259,7 +303,7 @@ Playwright 浏览器测试，对生产构建（`pnpm build` 再 `pnpm start`）�
 
 project 的规划在 `e2e/projects.ts`（由 `tests/e2e-projects.test.ts` 做单元测试，它还用 `playwright test --list` 核对点名的 spec 只跑它自己）。
 
-- `chromium` 让大部分 spec 完全并行（2 核 runner 上 2 个 worker），各用自己的浏览器 context。它忽略所有会写共享配置的 spec，以及所有带 `@exclusive` 标签的测试。
+- `chromium` 让大部分 spec 完全并行（4 核 runner 上 2 个 worker），各用自己的浏览器 context。它忽略所有会写共享配置的 spec，以及所有带 `@exclusive` 标签的测试。
 - `chromium-exclusive` 在 `chromium` 全部结束后，一次一个（`workers: 1`）运行带 `@exclusive` 标签的测试。所有 spec 共用一个预置数据的数据库，并行的 spec 一边跑一边改它：打开详情页会把岗位标为已看，访问“今日”会移动“上次访问”标记，有的测试会忽略、关闭、收藏岗位（再改回去），scoring spec 会临时插入一个岗位。改动每个页面都会读的状态（访问标记、所有岗位的已看记录：`list-today.spec.ts`），或比较整个列表计数的测试（`dashboard.spec.ts` 里 `/jobs` 筛选的计数、`filter.spec.ts` 的已过滤开关、`insights.spec.ts` 的头部数字）要加这个标签。只改一个岗位的测试用一个别的 spec 不碰的岗位、事后改回，并只对这个岗位断言，它留在并行 project 里。
 - 会改写同一个共享配置目录里文件的 spec（settings、language、breakdown、resume、interests、sources、market）会互相破坏，或破坏并行 spec 里读取这些设置的断言（Sources 页的 AI 卡片、界面语言）。所以它们作为单 spec 的 project，用 `dependencies` 串成链，一个接一个，且在 `chromium-exclusive` 全部结束之后才开始。按顺序如下：
   - 配置链：`chromium-config-settings`、`-settings-invalid`、`-language`、`-breakdown`、`-resume`。
@@ -318,7 +362,7 @@ Ubuntu runner 通常已经提供 Chrome 所需的共享库。先检查可避免�
 
 #### End-to-end tests
 
-`pnpm test:e2e --workers=2 --fail-on-flaky-tests`：如上所述的主测试集所有 project。web server 命令先运行 `scripts/e2e-prepare.ts`，再 `pnpm start -p 3100 -H 127.0.0.1`。只有重试才通过的测试会让任务失败；重试仍会为报告记录 trace。上限 12 分钟。本地：先起一个一次性数据库（下文的 postgres 容器），`pnpm build`，然后 `E2E_PORT=3100 E2E_SKIP_BUILD=1 pnpm test:e2e`；`E2E_PORT=<端口>` 让一次运行有自己的数据库和目录，多个检出可以并排运行，但**同一台机器同一时间只跑一套完整 e2e**：并行的完整运行会互相抢资源，产生并非真实失败的超时。开发时只跑受影响的 spec（`pnpm test:e2e e2e/pipeline.spec.ts`、几个文件，或 `e2e/dashboard.spec.ts:206` 只跑一个测试；只跑这些，web server 和替身 runner 照常启动），完整套件留给 CI。常见失败原因：定位器随界面文案变了（spec 以英文运行）；写共享配置的 spec 没加进 `SERIAL_CHAIN`；计数整个列表或改共享数据的测试没加 `@exclusive` 标签；只有 2 个 worker 才暴露的竞态（trace 里能看到）。
+`pnpm test:e2e --workers=2 --fail-on-flaky-tests`：如上所述的主测试集所有 project。web server 命令先运行 `scripts/e2e-prepare.ts`，再 `pnpm start -p 3100 -H 127.0.0.1`。只有重试才通过的测试会让任务失败；重试仍会为报告记录 trace。上限 15 分钟。本地：先起一个一次性数据库（下文的 postgres 容器），`pnpm build`，然后 `E2E_PORT=3100 E2E_SKIP_BUILD=1 pnpm test:e2e`；`E2E_PORT=<端口>` 让一次运行有自己的数据库和目录，多个检出可以并排运行，但**同一台机器同一时间只跑一套完整 e2e**：并行的完整运行会互相抢资源，产生并非真实失败的超时。开发时只跑受影响的 spec（`pnpm test:e2e e2e/pipeline.spec.ts`、几个文件，或 `e2e/dashboard.spec.ts:206` 只跑一个测试；只跑这些，web server 和替身 runner 照常启动），完整套件留给 CI。常见失败原因：定位器随界面文案变了（spec 以英文运行）；写共享配置的 spec 没加进 `SERIAL_CHAIN`；计数整个列表或改共享数据的测试没加 `@exclusive` 标签；只有 2 个 worker 才暴露的竞态（trace 里能看到）。
 
 #### Setup wizard end-to-end tests
 
@@ -382,7 +426,7 @@ Linux 从零首次运行：在 Ubuntu runner 上用一份空的检出，按随�
 
 ### Job `upgrade-transition`
 
-用真 Docker 和每个版本自己的 deploy、install、uninstall 脚本测升级迁移，ai-worker 跑在模拟的 systemd 下（`tests/transition/run.sh`）。`changes` 设了 `transition` 时运行（改到部署相关文件的 PR、每次推送到 `main`、手动运行）。没有 service 容器：脚本的每个 compose 项目自带数据库。上限 120 分钟，要构建镜像大约十次。
+用真 Docker 和每个版本自己的 deploy、install、uninstall 脚本测升级迁移，ai-worker 跑在模拟的 systemd 下（`tests/transition/run.sh`）。`changes` 设了 `transition` 时运行（改到部署相关文件或工具链的 PR、每次推送到 `main`、手动运行）。没有 service 容器：脚本的每个 compose 项目自带数据库。上限 120 分钟，要构建镜像大约十次。
 
 #### Check out the repository
 
@@ -400,23 +444,42 @@ Linux 从零首次运行：在 Ubuntu runner 上用一份空的检出，按随�
 
 `pnpm install --frozen-lockfile`（发布目录从这个 pnpm store 安装依赖）。
 
-#### Upgrade transition scenarios
+#### Start transition scenarios
 
-`bash tests/transition/run.sh "$RUNNER_TEMP/transition"`。在临时目录下的 clone 里运行，每个 clone 有自己的 compose 项目（`jrtransition-<随机>-*`）、端口、卷和数据库密码，定时周期关闭：
+后台同时运行独立的 `bash tests/transition/run.sh --scenarios A <产物目录-A>`、`--scenarios B <产物目录-B>`，步骤上限 2 分钟。两个 runner 临时产物目录不同，避免 `collect_artifacts` 的固定文件名覆盖。每次调用创建独立随机 `RUN_ID`、临时根目录、compose 项目前缀、HOME/XDG、模拟器状态；镜像名随项目区分，deploy 都带 `--no-prune`，共享 Docker 层缓存。端口通过绑定临时端口后释放选取，两个进程之间仍有很小的绑定/释放竞态，需要在真实运行观察。
+
+启动前打印 `df -h`、`free -h`、`docker system df`；每个等待步骤开始、等待中每分钟、退出时也打印。比较内存/磁盘采样和耗时；并发构建若资源不足或没有收益，改为两台 runner 的任务。
+
+#### Transition scenario A
+
+只等 A 自己原子发布的退出码文件；步骤上限 105 分钟，内部截止时间从启动算起 104 分钟。缺状态、包装进程退出却没有状态、超时、非零或非法状态都会失败并打印完整日志；成功打印末 100 行。没有取消时，前面失败后也继续报告结果。在独立 clone 的 compose 项目（`jrtransition-<随机>-*`）、端口、卷、密码下运行，定时周期关闭：
 
 - A：62d7ad9，然后按文档逐跳升级（4dd8d03、2656364、b3f69b0、检出的提交），每跳用该版本的 `deploy.sh --skip-pull`；升到 2656364 前先停 web 和 runner；最后一跳前按 `docs/upgrade.md` 的首次升级步骤做（卸载旧 worker，确认已停，停 web 和 runner，检出，部署）。
+
+#### Transition scenario B
+
+独立等待 B，上限同为 105 分钟，用同一个从启动算起的截止时间。B 自己建立起始版本；D、C、E 依赖它的状态，因此仍在 B 进程内执行：
+
 - B：62d7ad9；新的 `install-ai-worker.sh --release` 换上一个启动就抛错的发布，必须回滚到从 checkout 安装的 worker；换上正常的发布则成功；然后严格停止，部署检出的提交。
 - D：runner 镜像构建失败的部署（构建参数 `FAIL_RUNNER_BUILD=1`）不改任何容器、镜像和 worker，也不留锁；去掉参数再部署成功。
 - C：tsx loader 坏掉的发布被回滚。
 - E：应急恢复上一个发布；doctor 报告 release != HEAD。最后卸载。
 
-每一步之后：web 和 runner 容器里的 `/app/config` 等于所部署提交的 `config/`（逐文件 sha256）；worker 的 MainPID 在预期目录里运行，`install-ai-worker.sh --print-release` 一致；worker 完成一个 `run_ai` 请求；doctor 的 JSON（`--only config.shipped --only ops`）有 shipped config 检查，从发布目录版本起确认各进程的报告，并且没有锁和替换备份。安全措施：开始前清掉调用方环境里所有 compose、docker 和数据库相关变量（`COMPOSE_*`、`DOCKER_HOST`、`JOBRADAR_*`、`JOB_RADAR_*`、`POSTGRES_*`、`PG*`、`DATABASE_URL`，以及 compose 文件里插值用到的每个变量名），它们因此无法覆盖项目的 `.env`（`tests/transition/clean-env.sh`）。docker 包装（`tests/transition/docker-guard.sh`）放行只读命令；会改动东西的 compose 命令只对脚本自己的项目执行，而且要先让同一条命令的 `docker compose config` 通过 `tests/transition/compose-check.mjs`（每个卷都带本次运行的前缀且不是 external，每个 bind mount 和构建上下文都在本次运行的目录里，没有 `container_name`，只发布为该项目登记的端口）；`down`、prune 和 `volume rm` 一律拒绝。清理时用同样的方式检查配置和容器的挂载，执行不带 `-v` 的 `down`，只删除名字带项目前缀的卷。`launchctl` 和 `systemctl` 必须指向模拟器。`tests/ops/transition-guard.test.ts` 用假的 docker 测这些防护。上限 105 分钟。本地（Linux 或 macOS，Docker 带 compose v2）：同样的命令；结束时删除临时目录和脚本自己的 compose 项目、镜像、卷。
+每一步之后：web 和 runner 容器里的 `/app/config` 等于所部署提交的 `config/`（逐文件 sha256）；worker 的 MainPID 在预期目录里运行，`install-ai-worker.sh --print-release` 一致；worker 完成一个 `run_ai` 请求；doctor 的 JSON（`--only config.shipped --only ops`）有 shipped config 检查，从发布目录版本起确认各进程的报告，并且没有锁和替换备份。安全措施：开始前清掉调用方环境里所有 compose、docker 和数据库相关变量（`COMPOSE_*`、`DOCKER_HOST`、`JOBRADAR_*`、`JOB_RADAR_*`、`POSTGRES_*`、`PG*`、`DATABASE_URL`，以及 compose 文件里插值用到的每个变量名），它们因此无法覆盖项目的 `.env`（`tests/transition/clean-env.sh`）。docker 包装（`tests/transition/docker-guard.sh`）放行只读命令；会改动东西的 compose 命令只对脚本自己的项目执行，而且要先让同一条命令的 `docker compose config` 通过 `tests/transition/compose-check.mjs`（每个卷都带本次运行的前缀且不是 external，每个 bind mount 和构建上下文都在本次运行的目录里，没有 `container_name`，只发布为该项目登记的端口）；`down`、prune 和 `volume rm` 一律拒绝。清理时用同样的方式检查配置和容器的挂载，执行不带 `-v` 的 `down`，只删除名字带项目前缀的卷。`launchctl` 和 `systemctl` 必须指向模拟器。`tests/ops/transition-guard.test.ts` 用假的 docker 测这些防护。这些检查对两个场景都适用。本地（Linux 或 macOS，Docker 带 compose v2）：分别运行两个命令并传不同产物目录；结束时删除临时目录和脚本自己的 compose 项目、镜像、卷。
 
 不覆盖：launchd（集成测试在 launchd 模拟器上测替换；真 launchd 靠手动演练），以及 `deploy.sh` 自己的 git pull（每跳先检出提交再用 `--skip-pull`）。不在 Linux 上时跳过 doctor 把 worker 报告和 systemd 对照的那部分。
 
-#### Upload the transition logs
+#### Clean up transition scenarios
 
-只在前面某一步失败时：worker 日志、模拟器的调用记录和每一步的输出，作为 artifact `upgrade-transition-logs`（保留 7 天）。
+`always()` 运行，上限 5 分钟。包括取消时都向两个进程组发 TERM，让各自 `run.sh` 的 trap 收集产物、停止模拟器、清理经过防护检查的 compose 项目。给最多 240 秒，再杀残留进程组。启动、等待步骤取消时也转发 TERM；清理期间第二次信号不打断宽限期。包装进程等子进程清理结束后才发布状态。
+
+#### Upload the transition logs (scenario A)
+
+启动成功后总是运行，失败、取消也包括：上传 A 的包装日志和独立产物目录（worker 日志、模拟器调用、每步输出），产物名 `upgrade-transition-logs-A`，保留 7 天。
+
+#### Upload the transition logs (scenario B)
+
+同样上传 B 的独立包装日志和产物目录，产物名 `upgrade-transition-logs-B`，保留 7 天。
 
 ### Job `ci-ok`
 
@@ -424,7 +487,7 @@ Linux 从零首次运行：在 Ubuntu runner 上用一份空的检出，按随�
 
 #### All selected checks passed
 
-读取 `needs` 的结果（`jq`）：`changes`、`ci-docs`、`static`、`unit` 必须始终成功（被跳过算失败，不算通过）；`integration`、`e2e`、`linux-smoke` 在 `changes` 选中代码时必须成功，否则必须是 skipped；`upgrade-transition` 按 `transition` 同样处理。其他任何组合（包括必须运行却被跳过或取消的任务）都会打印各任务结果和 `::error::a selected check did not succeed`。它变红时，先看它打印的各任务结果，再打开对应任务。
+读取 `needs` 的结果（`jq`）：`changes`、`ci-docs`、`static`、`unit` 必须始终成功（被跳过算失败，不算通过）；`integration`、`worker-switch`、`e2e`、`linux-smoke` 在 `changes` 选中代码时必须成功，否则必须是 skipped；`upgrade-transition` 按 `transition` 同样处理。其他任何组合（包括必须运行却被跳过或取消的任务）都会打印各任务结果和 `::error::a selected check did not succeed`。它变红时，先看它打印的各任务结果，再打开对应任务。
 
 ## Dependabot
 
@@ -436,7 +499,7 @@ Linux 从零首次运行：在 Ubuntu runner 上用一份空的检出，按随�
 | `pip` | `/jobspy` | 最多 3 个未关闭 PR；sidecar 的 Python 依赖 |
 | `github-actions` | `/` | 最多 3 个未关闭 PR；workflow 里固定的 action 版本 |
 
-Dependabot 的 PR 和其他 PR 跑同一条流水线。action 升级会改 `.github/`，因此算代码，会跑全部任务；如果它改了步骤名，`ci-docs` 会失败，直到本页更新。本页不写 action 版本号，所以单纯升级版本不需要改文档。
+Dependabot 的 PR 和其他 PR 跑同一条流水线。action 升级会改 `.github/`，因此选中全量覆盖、跑全部任务；如果它改了步骤名，`ci-docs` 会失败，直到本页更新。本页不写 action 版本号，所以单纯升级版本不需要改文档。
 
 workflow 里的每个 `uses:` 都固定到完整的 40 位 commit SHA，行尾注释写 release 标签（`uses: actions/checkout@<sha> # vX.Y.Z`），因为标签可以被移动到别的代码上。Dependabot 的 `github-actions` 生态系统认识这种写法，会同时更新 SHA 和注释。新增 action 时，先把标签解析成 commit（annotated tag 要解引用）再固定。
 
@@ -466,8 +529,12 @@ pnpm exec drizzle-kit generate < /dev/null && git status --porcelain -- drizzle 
 
 # 任务：integration（需要大版本 17 的 pg_dump / pg_restore，见该任务的步骤）
 export PG_DUMP_PATH=/path/to/pg_dump PG_RESTORE_PATH=/path/to/pg_restore REQUIRE_PG_TOOLS=1
-pnpm test:integration --reporter=verbose
-pnpm test:integration --sequence.shuffle.files --sequence.seed=$RANDOM
+pnpm test:integration --reporter=verbose --exclude "tests/integration/ai-worker-swap.test.ts" --exclude "tests/integration/uninstall-ai-worker.test.ts"
+pnpm test:integration --sequence.shuffle.files --sequence.seed=$RANDOM --exclude "tests/integration/ai-worker-swap.test.ts" --exclude "tests/integration/uninstall-ai-worker.test.ts"
+
+# 任务：worker-switch（CI 同时后台启动；本地在这里依次运行）
+SWAP_MANAGERS=systemd pnpm test:integration --reporter=verbose tests/integration/ai-worker-swap.test.ts tests/integration/uninstall-ai-worker.test.ts
+SWAP_MANAGERS=launchd pnpm test:integration --reporter=verbose tests/integration/ai-worker-swap.test.ts tests/integration/uninstall-ai-worker.test.ts
 
 # 任务：e2e（本机同一时间只跑一套完整 e2e）
 pnpm exec playwright install chromium
