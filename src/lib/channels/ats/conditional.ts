@@ -1,10 +1,14 @@
-import { ChannelError } from "@/lib/channels/errors";
+import { ChannelError, isAbortError } from "@/lib/channels/errors";
 import type { ChannelContext } from "@/lib/channels/types";
 
 /** Conditional board requests (ported from legacy `http-conditional.ts`): ETag / If-None-Match over `ctx.http`. */
 
 const USER_AGENT = "JobRadar/0.1 (personal job search)";
 
+/**
+ * A conditional list read. Content keeps every page read before an interruption; `incomplete`
+ * and `shortfall` are mutually exclusive. Only a complete list may supply a reusable ETag.
+ */
 export type BoardFetch =
   /** 304: the board has not changed since the request's validator. Says nothing about its postings. */
   | { kind: "not_modified" }
@@ -15,8 +19,12 @@ export type BoardFetch =
       body: unknown;
       /** Validator to send next time; null when the response was partial or carried none. */
       etag: string | null;
-      /** false for a 206: the body must not be treated as the whole board. */
+      /** True exactly when neither `incomplete` nor `shortfall` is present. */
       complete: boolean;
+      /** A list request failed; soft for a later-page 404 or a non-200 2xx response. */
+      incomplete?: { cause: ChannelError; soft: boolean };
+      /** Every page answered, but fewer distinct postings were listed than announced. */
+      shortfall?: { listed: number; announced: number };
     };
 
 export function conditionalHeaders(etag: string | null, accept = "application/json"): Record<string, string> {
@@ -51,11 +59,24 @@ export async function fetchBoard(ctx: ChannelContext, url: string, etag: string 
   try {
     body = format.decode(await response.text());
   } catch (error) {
+    // Preserve classified body-stream failures and let cancellation propagate.
+    if (error instanceof ChannelError || isAbortError(error) || ctx.signal.aborted) throw error;
     throw new ChannelError("parse", `response from ${new URL(url).host} could not be decoded`, { cause: error });
   }
   const complete = response.status === 200;
   const header = response.headers.get("etag");
-  return { kind: "content", body, etag: complete && header !== null && header.trim() !== "" ? header : null, complete };
+  return {
+    kind: "content",
+    body,
+    etag: complete && header !== null && header.trim() !== "" ? header : null,
+    complete,
+    ...(!complete ? {
+      incomplete: {
+        cause: new ChannelError("unknown", `partial response (HTTP ${response.status})`, { status: response.status }),
+        soft: true,
+      },
+    } : {}),
+  };
 }
 
 /** GET a board's JSON, sending `If-None-Match` when `etag` is given. */

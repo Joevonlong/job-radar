@@ -253,6 +253,13 @@
       "when": 1792945552539,
       "tag": "0035_ats_detail_retry",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1792986621433,
+      "tag": "0036_ats_board_evidence_reset",
+      "breakpoints": true
     }
   ]
 }

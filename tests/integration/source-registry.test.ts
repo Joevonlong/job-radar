@@ -6,6 +6,7 @@ import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";
 
 import { closeDb, getAtsBoard, getBoardSeenCounts, getChannelWindowStats, getDb, getRuntimeState, listBoardHealth, listSourceRegistryRows, recordAtsBoardCheck, schema, syncSourceRegistryRows, upsertRawPostings } from "@/lib/db";
 import { runMigrations } from "@/lib/db/migrate";
+import { BOARD_STATE_VERSION } from "@/lib/db/repos/ats-boards";
 import { readRegistrySyncState, syncSourceRegistry } from "@/lib/sources/registry/sync";
 import { hashConfigText } from "@/lib/config";
 
@@ -44,7 +45,7 @@ describe("recordAtsBoardCheck keeps the failure streak and last_ok_at", () => {
     const t = (n: number) => new Date(`2026-10-0${n}T00:00:00Z`);
     await recordAtsBoardCheck(db, key, { status: "error", errorCode: "network", checkedAt: t(1) });
     expect(await getAtsBoard(db, key)).toMatchObject({ consecutiveFailures: 1, lastOkAt: null });
-    await recordAtsBoardCheck(db, key, { status: "ok", etag: null, total: 3, kept: 1, checkedAt: t(2) });
+    await recordAtsBoardCheck(db, key, { status: "ok", etag: null, filterFingerprint: `${BOARD_STATE_VERSION}:streak`, total: 3, kept: 1, checkedAt: t(2) });
     expect(await getAtsBoard(db, key)).toMatchObject({ consecutiveFailures: 0, lastOkAt: t(2) });
     await recordAtsBoardCheck(db, key, { status: "error", errorCode: "not_found", checkedAt: t(3) });
     await recordAtsBoardCheck(db, key, { status: "error", errorCode: "not_found", checkedAt: t(4) });

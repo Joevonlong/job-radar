@@ -16,9 +16,12 @@ import { htmlToText } from "./text";
  * the postings (paged, no description); `GET /v1/companies/{id}/postings/{postingId}` has the ad
  * text. The first page carries the ETag and `totalFound`, which changes whenever a posting opens or
  * closes, so a 304 on the first page means the whole board is unchanged. An unknown company id is
- * not a 404: the API answers with an empty list. Detail failures keep the board healthy: stored
- * postings stay seen with their old payload, and retry state controls request order and whether
- * the list validator can be reused. Consecutive failures or a host refusal stop remaining details.
+ * not a 404: the API answers with an empty list. Pages after the first may be cut short by a request
+ * failure, a 404, or a malformed page; previously read entries are kept for filtering and details.
+ * A list with missing pages or fewer distinct postings than announced never replaces complete-list
+ * state or supplies an ETag. Detail failures keep stored postings seen with their old payload and
+ * prevent a complete read; retry state controls request order and validator reuse. Consecutive
+ * failures or a host refusal stop remaining details. Unresolved details fail the board for the sweep.
  */
 
 type Settings = z.infer<typeof smartrecruitersChannelSchema>;
@@ -107,6 +110,8 @@ async function fetchJson(ctx: ChannelContext, url: string, etag: string | null):
   try {
     body = await response.json();
   } catch (error) {
+    // Body-stream failures keep their channel code, and cancellation must still propagate.
+    if (error instanceof ChannelError || isAbortError(error) || ctx.signal.aborted) throw error;
     throw new ChannelError("parse", `response from ${new URL(url).host} is not valid JSON`, { cause: error });
   }
   const header = response.headers.get("etag");
@@ -117,7 +122,7 @@ function shapeError(error: z.ZodError): ChannelError {
   return new ChannelError("parse", `smartrecruiters board response does not match the expected shape (${issuePaths(error)})`);
 }
 
-/** Every page of the list, newest first. Only the first request is conditional. */
+/** Read the list newest first, retaining earlier pages if a later one fails. Only the first request is conditional. */
 async function fetchBoard(ctx: ChannelContext, company: CompanyEntry, settings: Settings, etag: string | null): Promise<BoardFetch> {
   const first = await fetchJson(ctx, pageUrl(company, settings, 0), etag);
   if (first.status === 404) return { kind: "not_found" };
@@ -129,18 +134,64 @@ async function fetchBoard(ctx: ChannelContext, company: CompanyEntry, settings: 
   if (!head.success) throw shapeError(head.error);
   const content = [...head.data.content];
   const total = head.data.totalFound;
+  let incomplete: Extract<BoardFetch, { kind: "content" }>["incomplete"] = first.status === 200 ? undefined : {
+    cause: new ChannelError("unknown", `partial response (HTTP ${first.status})`, { status: first.status }),
+    soft: true,
+  };
   let lastPage = head.data.content.length;
-  while (lastPage > 0 && content.length < total) {
+  while (!incomplete && lastPage > 0 && content.length < total) {
     ctx.signal.throwIfAborted();
     await ctx.throttle();
-    const next = await fetchJson(ctx, pageUrl(company, settings, content.length), null);
-    if (next.status === 404) break;
+    let next: Awaited<ReturnType<typeof fetchJson>>;
+    try {
+      next = await fetchJson(ctx, pageUrl(company, settings, content.length), null);
+    } catch (error) {
+      if (isAbortError(error) || ctx.signal.aborted) throw error;
+      if (!(error instanceof ChannelError)) throw error;
+      incomplete = { cause: error, soft: false };
+      break;
+    }
+    if (next.status === 404) {
+      incomplete = {
+        cause: new ChannelError("unknown", `list page at offset ${content.length} answered 404`, { status: 404, retryable: false }),
+        soft: true,
+      };
+      break;
+    }
     const page = listSchema.safeParse(next.body);
-    if (!page.success) throw shapeError(page.error);
+    if (!page.success) {
+      incomplete = { cause: shapeError(page.error), soft: false };
+      break;
+    }
     lastPage = page.data.content.length;
     content.push(...page.data.content);
+    if (next.status !== 200) {
+      incomplete = {
+        cause: new ChannelError("unknown", `partial response (HTTP ${next.status})`, { status: next.status }),
+        soft: true,
+      };
+    }
   }
-  return { kind: "content", body: { totalFound: total, content }, etag: first.etag, complete: content.length >= total };
+  const ids = new Set<string>();
+  let distinct = 0;
+  for (const posting of content) {
+    const id = typeof posting === "object" && posting !== null && "id" in posting ? posting.id : undefined;
+    if (typeof id !== "string") distinct += 1;
+    else if (!ids.has(id)) {
+      ids.add(id);
+      distinct += 1;
+    }
+  }
+  const shortfall = !incomplete && distinct < total ? { listed: distinct, announced: total } : undefined;
+  const complete = incomplete === undefined && shortfall === undefined;
+  return {
+    kind: "content",
+    body: { totalFound: total, content },
+    etag: complete ? first.etag : null,
+    complete,
+    ...(incomplete ? { incomplete } : {}),
+    ...(shortfall ? { shortfall } : {}),
+  };
 }
 
 async function enrich(ctx: ChannelContext, posting: unknown, company: CompanyEntry, settings: Settings): Promise<unknown> {

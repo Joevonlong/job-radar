@@ -208,7 +208,7 @@ describe("conditional requests (ETag)", () => {
     expect(postings).toEqual([]);
     expect(calls.requests).toHaveLength(1);
     expect(store.touched.at(-1)).toEqual(GH_KEPT); // still seen, so the lifecycle must not age them out
-    expect(store.checks.at(-1)).toMatchObject({ update: { status: "not_modified" } });
+    expect(store.checks.at(-1)).toMatchObject({ update: { status: "not_modified", completeRead: true } });
     expect(store.states.get("greenhouse:examplelabs")?.etag).toBe('W/"v1"'); // validator kept
     expect(lastLog(second.logs, "ats board")).toEqual([
       { channel: "greenhouse", company: "Example Labs", board: "examplelabs", outcome: "not_modified", fetched: 0, kept: 0 },
@@ -231,7 +231,7 @@ describe("conditional requests (ETag)", () => {
     expect(calls.requests).toHaveLength(2);
     expect(calls.requests[1]?.headers["If-None-Match"]).toBe('W/"v1"');
     expect(store.touched.at(-1)).toEqual([...GH_KEPT.slice(0, 2), ...present]);
-    expect(store.checks.at(-1)?.update).toEqual({ status: "not_modified" });
+    expect(store.checks.at(-1)?.update).toEqual({ status: "not_modified", completeRead: true });
   });
 
   it("a 304 in a sweep with other boards does not stop them", async () => {
@@ -280,30 +280,93 @@ describe("conditional requests (ETag)", () => {
     expect(lastLog(second.logs, "ats board unchanged but stored postings are missing; refetching")).toHaveLength(1);
   });
 
-  it("discards validators remembered under the old fingerprint format", async () => {
-    const { channel, store } = greenhouse();
+  it.each(["2", null])("invalidates legacy evidence before requesting a board with fingerprint version %s", async (version) => {
+    const { channel, store: memory } = greenhouse();
+    const store: typeof memory & { invalidated?: Array<{ ats: string; token: string }> } = memory;
+    const key = { ats: "greenhouse", token: gh.token };
+    // Neither a new board nor one already using the current version needs evidence invalidation.
     const first = atsContext("greenhouse", routedFetch([[GH_URL, ok()]]).fetch);
     await channel.collect(first.query, first.ctx);
+    expect(store.invalidated ?? []).toEqual([]);
+    const current = atsContext("greenhouse", routedFetch([[GH_URL, response(304)]]).fetch);
+    await expect(channel.collect(current.query, current.ctx)).resolves.toEqual([]);
+    expect(store.invalidated ?? []).toEqual([]);
     const state = store.states.get("greenhouse:examplelabs");
-    expect(state?.filterFingerprint).toMatch(/^2:/);
     if (!state?.filterFingerprint) throw new Error("missing board fingerprint");
-    store.states.set("greenhouse:examplelabs", { ...state, filterFingerprint: state.filterFingerprint.slice(2) });
+    const rules = state.filterFingerprint.replace(/^\d+:/, "");
+    const legacy = { ...state, filterFingerprint: version === null ? null : `${version}:${rules}` };
+    store.states.set("greenhouse:examplelabs", legacy);
 
-    const calls = routedFetch([[GH_URL, ok()]]);
+    let invalidatedAtRequest: Array<{ ats: string; token: string }> = [];
+    let stateAtRequest: typeof state | undefined;
+    const calls = routedFetch([[GH_URL, () => {
+      invalidatedAtRequest = [...(store.invalidated ?? [])];
+      stateAtRequest = structuredClone(store.states.get("greenhouse:examplelabs"));
+      return response(503, "list unavailable");
+    }]]);
     const second = atsContext("greenhouse", calls.fetch);
-    expect((await channel.collect(second.query, second.ctx)).map((p) => p.externalId)).toEqual(GH_KEPT);
+    await expect(channel.collect(second.query, second.ctx)).rejects.toMatchObject({ code: "network", status: 503 });
+    expect.soft(store.invalidated ?? []).toEqual([key]);
+    expect.soft(invalidatedAtRequest).toEqual([key]);
+    expect.soft(stateAtRequest).toEqual({ ...legacy, etag: null });
+    expect.soft(store.states.get("greenhouse:examplelabs")).toEqual({ ...legacy, etag: null });
     expect(calls.requests).toHaveLength(1);
     expect(calls.requests[0]?.headers).not.toHaveProperty("If-None-Match");
   });
 
-  it("does not keep a validator from a partial (206) response", async () => {
+  it("sends a validator with a 3: fingerprint when the filter rules still match", async () => {
+    const { channel, store } = greenhouse();
+    const first = atsContext("greenhouse", routedFetch([[GH_URL, ok()]]).fetch);
+    await channel.collect(first.query, first.ctx);
+    const state = store.states.get("greenhouse:examplelabs");
+    if (!state?.filterFingerprint) throw new Error("missing board fingerprint");
+    const rules = state.filterFingerprint.replace(/^\d+:/, "");
+    store.states.set("greenhouse:examplelabs", { ...state, filterFingerprint: `3:${rules}` });
+
+    const calls = routedFetch([[GH_URL, (req) => req.headers["If-None-Match"] ? response(304) : ok()]]);
+    const second = atsContext("greenhouse", calls.fetch);
+    const postings = await channel.collect(second.query, second.ctx);
+
+    expect(calls.requests).toHaveLength(1);
+    expect(calls.requests[0]?.headers["If-None-Match"]).toBe('W/"v1"');
+    expect(postings).toEqual([]);
+    expect(store.checks.at(-1)?.update).toEqual({ status: "not_modified", completeRead: true });
+  });
+
+  it("returns partial (206) postings normally while recording an error and preserving complete board state", async () => {
     const { fetch } = routedFetch([[GH_URL, response(206, fixtureJson("greenhouse-board.json"), { ETag: 'W/"partial"' })]]);
     const { ctx, query, logs } = atsContext("greenhouse", fetch);
     const { channel, store } = greenhouse();
-    const postings = await channel.collect(query, ctx);
-    expect(postings).toHaveLength(4);
-    expect(store.states.get("greenhouse:examplelabs")?.etag).toBeNull();
-    expect(lastLog(logs, "ats board answered with a partial response")).toHaveLength(1);
+    const oldState = { etag: 'W/"complete"', filterFingerprint: "3:previous-rules:10", externalIds: ["old"], detailRetryIds: ["retry"] };
+    store.states.set("greenhouse:examplelabs", structuredClone(oldState));
+
+    await expect(channel.collect(query, ctx)).resolves.toMatchObject(GH_KEPT.map((externalId) => ({ externalId })));
+
+    expect(store.checks.at(-1)?.update).toEqual({ status: "error", errorCode: "unknown", detailRetryIds: ["retry"] });
+    expect(store.states.get("greenhouse:examplelabs")).toEqual(oldState);
+    expect(logs.find((l) => l.message === "ats board read only in part")).toMatchObject({
+      level: "warn", fields: { board: gh.token, code: "unknown", listed: 6, kept: 4 },
+    });
+    expect(lastLog(logs, "ats board")[0]).toMatchObject({ outcome: "incomplete", fetched: 6, kept: 4 });
+    expect(lastLog(logs, "ats sweep done")[0]).toMatchObject({ boards: 1, failedBoards: 0, softBoards: 1, postings: 4 });
+  });
+
+  it("resolves an empty sweep when every posting in a partial (206) response is prefiltered out", async () => {
+    const { fetch, requests } = routedFetch([[GH_URL, response(206, {
+      jobs: [{ id: 7, title: "Sales Manager" }, { id: 8, title: "Sales Manager" }],
+    }, { ETag: 'W/"partial"' })]]);
+    const channels = atsChannelsWith("greenhouse", (b) => {
+      b.title_prefilter = { enabled: true, include_terms: ["AI"], exclude_terms: ["Sales Manager"] };
+    });
+    const { ctx, query, logs } = atsContext("greenhouse", fetch, { channels });
+    const { channel, store } = greenhouse();
+
+    await expect(channel.collect(query, ctx)).resolves.toEqual([]);
+
+    expect(store.checks.at(-1)?.update).toEqual({ status: "error", errorCode: "unknown", detailRetryIds: [] });
+    expect(store.states.has("greenhouse:examplelabs")).toBe(false);
+    expect(requests).toHaveLength(1);
+    expect(lastLog(logs, "ats sweep done")[0]).toMatchObject({ boards: 1, failedBoards: 0, softBoards: 1, postings: 0 });
   });
 
   it("a response without an ETag header stores no validator", async () => {
@@ -349,18 +412,17 @@ describe("board failures (C2)", () => {
     expect(lastLog(logs, "ats sweep done")[0]).toMatchObject({ boards: 2, failedBoards: 1, postings: 1 });
   });
 
-  it("a server error or a bad shape on one board does not stop the others, and keeps its old ETag", async () => {
+  it("a server error or a bad shape preserves the failed board's ETag while the other board completes normally", async () => {
     const { channel, store } = greenhouse({ companies: two });
-    store.states.set("greenhouse:examplelabs", { etag: 'W/"old"', filterFingerprint: "old", externalIds: ["1"], detailRetryIds: [] });
+    store.states.set("greenhouse:examplelabs", { etag: 'W/"old"', filterFingerprint: "3:previous-rules:10", externalIds: ["1"], detailRetryIds: [] });
     const { fetch } = routedFetch([
-      ["/examplelabs/", response(503, "unavailable")],
+      ["/examplelabs/", response(500, "unavailable")],
       ["/second/", response(200, { jobs: [{ id: 5, title: "AI Engineer" }] })],
     ]);
     const { ctx, query } = atsContext("greenhouse", fetch);
     expect((await channel.collect(query, ctx)).map((p) => p.externalId)).toEqual(["5"]);
     expect(store.states.get("greenhouse:examplelabs")?.etag).toBe('W/"old"');
     expect(store.checks[0]?.update).toMatchObject({ status: "error", errorCode: "network" });
-
     const bad = routedFetch([
       ["/examplelabs/", response(200, { unexpected: true })],
       ["/second/", response(200, { jobs: [] })],
@@ -368,6 +430,10 @@ describe("board failures (C2)", () => {
     const b = atsContext("greenhouse", bad.fetch);
     await expect(channel.collect(b.query, b.ctx)).resolves.toEqual([]);
     expect(store.checks.at(-2)?.update).toMatchObject({ status: "error", errorCode: "parse" });
+    expect(store.checks[1]).toMatchObject({
+      key: { ats: "greenhouse", token: "second" },
+      update: { status: "ok", completeRead: true, externalIds: ["5"] },
+    });
   });
 
   it("fails the sweep with the first board's error only when every board failed", async () => {
@@ -402,6 +468,23 @@ describe("board failures (C2)", () => {
     const { ctx, query, logs } = atsContext("greenhouse", fetch);
     expect(await greenhouse({ store }).channel.collect(query, ctx)).toHaveLength(4);
     expect(lastLog(logs, "could not record ats board state").length).toBeGreaterThan(0);
+  });
+
+  it("continues collecting and logs an evidence invalidation failure", async () => {
+    const store = Object.assign(createMemoryAtsBoardStore(), {
+      invalidateEvidence: async () => { throw new Error("evidence store unavailable"); },
+    });
+    store.states.set("greenhouse:examplelabs", {
+      etag: 'W/"legacy"', filterFingerprint: "2:previous-filter:10", externalIds: ["old"], detailRetryIds: [],
+    });
+    const { fetch } = routedFetch([[GH_URL, response(200, fixtureJson("greenhouse-board.json"))]]);
+    const { ctx, query, logs } = atsContext("greenhouse", fetch);
+
+    expect((await greenhouse({ store }).channel.collect(query, ctx)).map((posting) => posting.externalId)).toEqual(GH_KEPT);
+    expect(store.checks.at(-1)?.update).toMatchObject({ status: "ok", completeRead: true });
+    expect(logs.filter((log) => log.level === "warn").map((log) => log.fields)).toContainEqual(expect.objectContaining({
+      board: gh.token, error: "evidence store unavailable",
+    }));
   });
 });
 

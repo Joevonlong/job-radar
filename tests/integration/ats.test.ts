@@ -13,7 +13,7 @@ import type { CompanyEntry } from "@/lib/config";
 import { runCycle } from "@/lib/cycle/run-cycle";
 import { closeDb, createConnection, getAtsBoard, getChannelRows, getDb, listRawPostingsForChannel, listRunsForCycle, schema, touchRawPostings, upsertRawPostings } from "@/lib/db";
 import { runMigrations } from "@/lib/db/migrate";
-import { recordAtsBoardCheck } from "@/lib/db/repos/ats-boards";
+import { recordAtsBoardCheck, type AtsBoardUpdate } from "@/lib/db/repos/ats-boards";
 import { markJobsPossiblyClosed, touchJobsSeen } from "@/lib/db/repos/jobs";
 
 import { atsChannelsWith, company, depsWith, fixtureJson, inputs, neutralChannels, response, routedFetch } from "../channels/ats/helpers";
@@ -53,12 +53,15 @@ function conditionalBoard(etag: string, body: unknown = fixtureJson("greenhouse-
   };
 }
 
-function cycle(fetch: FetchLike, options: { maxResults?: number; at?: Date; smartrecruitersBoards?: CompanyEntry[] } = {}) {
+function cycle(fetch: FetchLike, options: { maxResults?: number; at?: Date; greenhouseBoards?: CompanyEntry[]; smartrecruitersBoards?: CompanyEntry[]; signal?: AbortSignal } = {}) {
   const db = getDb();
   const store = createDbAtsBoardStore(db);
   const at = options.at;
   // Pin the raw-posting refresh clock while exercising the real database update.
-  if (at) store.touch = (channelId, externalIds) => touchRawPostings(db, { channelId, externalIds, at });
+  if (at) {
+    store.touch = (channelId, externalIds) => touchRawPostings(db, { channelId, externalIds, at });
+    store.record = (key, update) => recordAtsBoardCheck(db, key, { ...update, checkedAt: at });
+  }
   const channelId = options.smartrecruitersBoards ? "smartrecruiters" : "greenhouse";
   const channels = options.smartrecruitersBoards
     ? atsChannelsWith("smartrecruiters", (b) => {
@@ -74,16 +77,17 @@ function cycle(fetch: FetchLike, options: { maxResults?: number; at?: Date; smar
     : options.maxResults === undefined
     ? neutralChannels()
     : atsChannelsWith("greenhouse", (b) => { b.max_results = options.maxResults; });
-  if (options.smartrecruitersBoards) {
+  if (options.smartrecruitersBoards || options.greenhouseBoards) {
     channels.http.max_retries = 0;
     channels.circuit_breaker = { failures: 2, cooldown_hours: 1 };
   }
   const registry = new ChannelRegistry();
   const createChannel = options.smartrecruitersBoards ? createSmartrecruitersChannel : createGreenhouseChannel;
-  registry.register(createChannel(depsWith(inputs(options.smartrecruitersBoards ?? [board]), store)));
+  registry.register(createChannel(depsWith(inputs(options.smartrecruitersBoards ?? options.greenhouseBoards ?? [board]), store)));
   return runCycle("manual", {
     registry, config: { ...config(), channels }, logger: quietLogger, sleep: async () => {}, channelIds: [channelId], fetch,
     ...(at ? { now: () => at } : {}),
+    ...(options.signal ? { signal: options.signal } : {}),
   });
 }
 
@@ -152,6 +156,136 @@ describe("ats board migrations", () => {
 });
 
 describe("ats_boards and raw posting touch", () => {
+  const old = new Date("2026-09-07T12:00:00Z");
+  const checkedAt = new Date("2026-10-07T12:00:00Z");
+
+  async function previousBoard(token: string, values: Partial<typeof schema.atsBoards.$inferInsert> = {}) {
+    const [row] = await getDb().insert(schema.atsBoards).values({
+      ats: "smartrecruiters", token, etag: 'W/"complete"', filterFingerprint: "3:x:10",
+      externalIds: ["stored"], detailRetryIds: ["previous-retry"], lastTotal: 8, lastKept: 1,
+      lastStatus: "error", lastErrorCode: "network", consecutiveFailures: 3,
+      lastCheckedAt: old, lastChangedAt: old, lastOkAt: old,
+      ...values,
+    }).returning();
+    if (!row) throw new Error("missing previous board");
+    return row;
+  }
+
+  describe.each(["2:x:10", null, "3:x:10"])("stored evidence fingerprint %s", (filterFingerprint) => {
+    const recentOk = new Date("2026-10-06T12:00:00Z");
+
+    it.each(["ok", "not_modified", "short", "error"] as const)("%s without a complete read keeps only current-version evidence", async (status) => {
+      const db = getDb();
+      const key = { ats: "smartrecruiters", token: "IncompleteEvidence" };
+      const before = await previousBoard(key.token, { filterFingerprint, lastOkAt: recentOk });
+      const update: AtsBoardUpdate = {
+        status, checkedAt, ...(status === "ok" || status === "not_modified" ? { completeRead: false } : {}),
+        etag: 'W/"new-list"', filterFingerprint: "3:new-filter:10", externalIds: ["new-stored"],
+        detailRetryIds: ["new-retry"], total: 9, kept: 2, errorCode: "parse",
+      };
+
+      await recordAtsBoardCheck(db, key, update);
+
+      // The previous fingerprint governs evidence even when this check replaces it with the current version.
+      expect(await getAtsBoard(db, key)).toEqual({
+        ...before,
+        ...(status === "ok" ? {
+          etag: update.etag, filterFingerprint: update.filterFingerprint, externalIds: update.externalIds,
+          detailRetryIds: update.detailRetryIds, lastTotal: 9, lastKept: 2, lastChangedAt: checkedAt,
+        } : status === "not_modified" ? {} : { detailRetryIds: update.detailRetryIds }),
+        lastStatus: status, lastCheckedAt: checkedAt, lastErrorCode: status === "error" ? "parse" : null,
+        consecutiveFailures: status === "error" ? 4 : status === "short" ? 3 : 0,
+        lastOkAt: filterFingerprint === "3:x:10" ? recentOk : null,
+      });
+    });
+
+    it.each(["ok", "not_modified"] as const)("%s complete reads advance evidence", async (status) => {
+      const db = getDb();
+      for (const completeRead of [true, undefined]) {
+        const key = { ats: "smartrecruiters", token: `CompleteEvidence-${String(completeRead)}` };
+        await previousBoard(key.token, { filterFingerprint, lastOkAt: recentOk });
+
+        await recordAtsBoardCheck(db, key, {
+          status, checkedAt, ...(completeRead === undefined ? {} : { completeRead }),
+          filterFingerprint: "3:new-filter:10",
+        });
+
+        expect.soft(await getAtsBoard(db, key), `completeRead=${String(completeRead)}`).toMatchObject({
+          lastStatus: status, lastCheckedAt: checkedAt, lastOkAt: checkedAt,
+        });
+      }
+    });
+  });
+
+  it.each([true, false])("a short read only stamps the check and replaces retries (existing board: %s)", async (existing) => {
+    const db = getDb();
+    const key = { ats: "smartrecruiters", token: "ShortList" };
+    const before = existing ? await previousBoard(key.token) : null;
+    // Exercise the new status against the old implementation too: failure must be a row assertion, not a type error.
+    const update = {
+      status: "short", checkedAt, detailRetryIds: ["missing-detail"], errorCode: "ignored",
+      etag: 'W/"partial"', filterFingerprint: "partial-filter", externalIds: ["partial"], total: 2, kept: 2,
+    } as unknown as AtsBoardUpdate;
+    await recordAtsBoardCheck(db, key, update);
+    expect(await getAtsBoard(db, key)).toEqual({
+      ...(before ?? {
+        ...key, etag: null, filterFingerprint: null, externalIds: [], lastChangedAt: null,
+        lastTotal: 0, lastKept: 0, consecutiveFailures: 0, lastOkAt: null,
+      }),
+      lastStatus: "short", lastCheckedAt: checkedAt, lastErrorCode: null, detailRetryIds: ["missing-detail"],
+    });
+  });
+
+  it.each([true, false])("an error replaces supplied retries without replacing complete state (existing board: %s)", async (existing) => {
+    const db = getDb();
+    const key = { ats: "smartrecruiters", token: "FailedList" };
+    const before = existing ? await previousBoard(key.token) : null;
+    await recordAtsBoardCheck(db, key, {
+      status: "error", checkedAt, errorCode: "parse", detailRetryIds: ["retry-next"],
+      etag: 'W/"partial"', filterFingerprint: "partial-filter", externalIds: ["partial"], total: 2, kept: 2,
+    });
+    expect(await getAtsBoard(db, key)).toEqual({
+      ...(before ?? {
+        ...key, etag: null, filterFingerprint: null, externalIds: [], lastChangedAt: null,
+        lastTotal: 0, lastKept: 0, lastOkAt: null,
+      }),
+      lastStatus: "error", lastCheckedAt: checkedAt, lastErrorCode: "parse",
+      consecutiveFailures: existing ? 4 : 1, detailRetryIds: ["retry-next"],
+    });
+  });
+
+  it.each([
+    { status: "ok" as const, existing: true },
+    { status: "ok" as const, existing: false },
+    { status: "not_modified" as const, existing: true },
+    { status: "not_modified" as const, existing: false },
+  ])("$status advances evidence only for complete reads (existing board: $existing)", async ({ status, existing }) => {
+    const db = getDb();
+    // Explicit true and the legacy default remain complete; false must preserve old evidence or NULL.
+    for (const completeRead of [true, undefined, false]) {
+      const key = { ats: "smartrecruiters", token: `Evidence-${String(completeRead)}` };
+      const before = existing ? await previousBoard(key.token) : null;
+      const update = {
+        status, checkedAt, ...(completeRead === undefined ? {} : { completeRead }),
+        etag: 'W/"new-list"', filterFingerprint: "new-filter", externalIds: ["new-stored"],
+        detailRetryIds: ["new-retry"], total: 9, kept: 2,
+      };
+      await recordAtsBoardCheck(db, key, update);
+      expect.soft(await getAtsBoard(db, key), `completeRead=${String(completeRead)}`).toEqual({
+        ...(before ?? {
+          ...key, etag: null, filterFingerprint: null, externalIds: [], detailRetryIds: [],
+          lastChangedAt: null, lastTotal: 0, lastKept: 0,
+        }),
+        ...(status === "ok" ? {
+          etag: update.etag, filterFingerprint: update.filterFingerprint, externalIds: update.externalIds,
+          detailRetryIds: update.detailRetryIds, lastTotal: 9, lastKept: 2, lastChangedAt: checkedAt,
+        } : {}),
+        lastStatus: status, lastCheckedAt: checkedAt, lastErrorCode: null, consecutiveFailures: 0,
+        lastOkAt: completeRead === false ? before?.lastOkAt ?? null : checkedAt,
+      });
+    }
+  });
+
   it("persists retry ids on ok, preserves them on unchanged or failed checks, and clears them on an ok without retry ids", async () => {
     const db = getDb();
     const key = { ats: "smartrecruiters", token: "ExampleLabs" };
@@ -313,9 +447,175 @@ describe("runCycle with the greenhouse channel", () => {
     expect(await getAtsBoard(getDb(), { ats: "greenhouse", token: "examplelabs" })).toMatchObject({ etag: 'W/"v1"', lastStatus: "error", lastErrorCode: "not_found" });
     expect(await listRawPostingsForChannel(getDb(), "greenhouse")).toHaveLength(4);
   });
+
+  it("keeps a failed Greenhouse board's job active after an earlier complete read was cancelled before persistence", async () => {
+    const db = getDb();
+    const old = new Date("2026-09-07T12:00:00Z");
+    const boards = [
+      company({ name: "First Labs", ats: "greenhouse", token: "X" }),
+      company({ name: "Second Labs", ats: "greenhouse", token: "Y" }),
+    ];
+    const key = { ats: "greenhouse", token: "X" };
+    await db.insert(schema.channels).values({ id: "greenhouse", family: "ats", kind: "ats" });
+    const [employer] = await db.insert(schema.companies).values({ name: "First Labs", nameNorm: "first labs" }).returning();
+    const [job] = await db.insert(schema.jobs).values({
+      companyId: employer!.id, title: "Overdue role", titleNorm: "overdue role", status: "active",
+      firstSeenAt: old, lastSeenAt: old,
+    }).returning();
+    const [raw] = await db.insert(schema.rawPostings).values({
+      channelId: "greenhouse", externalId: "stale-x", fetchedAt: old,
+      payloadJson: { source: { ats: "greenhouse", token: "X" }, posting: { id: "stale-x" } },
+    }).returning();
+    await db.insert(schema.jobSources).values({ jobId: job!.id, rawPostingId: raw!.id, channelId: "greenhouse", firstSeenAt: old });
+    await recordAtsBoardCheck(db, key, {
+      status: "ok", checkedAt: old, filterFingerprint: "3:previous-filter:10", externalIds: ["stale-x"], total: 1, kept: 1,
+    });
+
+    async function round(fetch: FetchLike, at: Date, signal?: AbortSignal) {
+      const result = await cycle(fetch, { greenhouseBoards: boards, at, ...(signal ? { signal } : {}) });
+      expect(result.cycleId).not.toBeNull();
+      await db.update(schema.runs).set({ startedAt: at, finishedAt: at }).where(eq(schema.runs.cycleId, result.cycleId!));
+      return { result, runs: await listRunsForCycle(db, result.cycleId!) };
+    }
+
+    const mixed = routedFetch([
+      ["/v1/boards/X/jobs", response(500, "list unavailable")],
+      ["/v1/boards/Y/jobs", response(200, { jobs: [] })],
+    ]);
+    const initialAt = new Date("2026-10-07T12:00:00Z");
+    const initial = await round(mixed.fetch, initialAt);
+    expect(initial.result.status).toBe("succeeded");
+    expect(initial.runs).toMatchObject([{ status: "succeeded", windowExtended: false }]);
+    expect(await getAtsBoard(db, key)).toMatchObject({ lastStatus: "error", lastCheckedAt: initialAt, lastOkAt: old });
+    expect(await getAtsBoard(db, { ats: "greenhouse", token: "Y" })).toMatchObject({ lastStatus: "ok", lastOkAt: initialAt });
+    expect(await markJobsPossiblyClosed(db, { now: initialAt, days: 7 })).toEqual([]);
+
+    const controller = new AbortController();
+    const cancelled = routedFetch([
+      ["/v1/boards/X/jobs", response(200, { jobs: [{ id: 101, title: "AI Engineer" }] })],
+      ["/v1/boards/Y/jobs", {
+        ...response(200, { jobs: [] }),
+        text: async () => {
+          controller.abort();
+          controller.signal.throwIfAborted();
+          return "";
+        },
+      }],
+    ]);
+    const cancelledAt = new Date("2026-10-08T12:00:00Z");
+    const reading = await round(cancelled.fetch, cancelledAt, controller.signal);
+    expect(reading.result.summary.aborted).toBe(true);
+    expect(reading.runs).toMatchObject([{ status: "failed", error: "cancelled", fetched: 0, windowExtended: false }]);
+    expect(cancelled.requests.map((request) => new URL(request.url).pathname)).toEqual(["/v1/boards/X/jobs", "/v1/boards/Y/jobs"]);
+    expect(await getAtsBoard(db, key)).toMatchObject({ lastStatus: "ok", lastOkAt: cancelledAt, externalIds: ["101"] });
+    // X's complete read was recorded, but cancellation on Y prevented all returned postings from being persisted.
+    expect(await listRawPostingsForChannel(db, "greenhouse")).toEqual([raw]);
+
+    const failedAt = new Date("2026-10-09T12:00:00Z");
+    const failed = await round(mixed.fetch, failedAt);
+    expect(failed.result.status).toBe("succeeded");
+    expect(failed.runs).toMatchObject([{ status: "succeeded", windowExtended: false }]);
+    expect(await getAtsBoard(db, key)).toMatchObject({ lastStatus: "error", lastCheckedAt: failedAt, lastOkAt: cancelledAt });
+    expect(await getAtsBoard(db, { ats: "greenhouse", token: "Y" })).toMatchObject({ lastStatus: "ok", lastOkAt: failedAt });
+    expect.soft(await markJobsPossiblyClosed(db, { now: failedAt, days: 7 })).toEqual([]);
+    expect.soft((await db.select().from(schema.jobs).where(eq(schema.jobs.id, job!.id)))[0]).toMatchObject({ status: "active", lastSeenAt: old });
+
+    await db.update(schema.jobs).set({ status: "active" }).where(eq(schema.jobs.id, job!.id));
+    const completeAt = new Date("2026-10-10T12:00:00Z");
+    const complete = await round(routedFetch([
+      ["/v1/boards/X/jobs", response(200, { jobs: [] })],
+      ["/v1/boards/Y/jobs", response(200, { jobs: [] })],
+    ]).fetch, completeAt);
+    expect(complete.runs).toMatchObject([{ status: "succeeded", windowExtended: false }]);
+    expect(await getAtsBoard(db, key)).toMatchObject({ lastStatus: "ok", lastOkAt: completeAt, externalIds: [] });
+    expect(await markJobsPossiblyClosed(db, { now: completeAt, days: 7 })).toEqual([job!.id]);
+  });
 });
 
 describe("runCycle with the smartrecruiters channel", () => {
+  const srBoard = company({ name: "Example Labs", ats: "smartrecruiters", token: "ExampleLabs" });
+  const srBase = "https://api.smartrecruiters.com/v1/companies/ExampleLabs/postings";
+  const now = new Date("2026-10-07T12:00:00Z");
+  const old = new Date("2026-09-07T12:00:00Z");
+  const firstDetail = fixtureJson("smartrecruiters-detail-1.json") as { id: string };
+  const list = fixtureJson("smartrecruiters-list.json") as { content: unknown[] };
+  const pageOne = { totalFound: 2, content: list.content.slice(0, 1) };
+
+  function interruptedBoard(kind: "rate_limited" | "parse") {
+    return routedFetch([
+      [`${srBase}?limit=100&offset=0`, response(200, pageOne, { ETag: 'W/"p1"' })],
+      [`${srBase}?limit=100&offset=1`, kind === "rate_limited" ? response(429, "slow down") : response(200, { content: "wrong shape" })],
+      [`${srBase}/${firstDetail.id}`, response(200, firstDetail)],
+    ]);
+  }
+
+  it.each(["rate_limited", "parse"] as const)("stores page one and records an interrupted run when page two fails with %s", async (code) => {
+    const db = getDb();
+    await db.insert(schema.channels).values({ id: "smartrecruiters", family: "ats", kind: "ats" });
+    const [employer] = await db.insert(schema.companies).values({ name: srBoard.name, nameNorm: "example labs" }).returning();
+    const [job] = await db.insert(schema.jobs).values({
+      companyId: employer!.id, title: "Overdue role", titleNorm: "overdue role", firstSeenAt: old, lastSeenAt: old,
+    }).returning();
+    const [raw] = await db.insert(schema.rawPostings).values({
+      channelId: "smartrecruiters", externalId: "overdue", fetchedAt: old,
+      payloadJson: { source: { ats: "smartrecruiters", token: srBoard.token }, posting: { id: "overdue" } },
+    }).returning();
+    await db.insert(schema.jobSources).values({ jobId: job!.id, rawPostingId: raw!.id, channelId: "smartrecruiters", firstSeenAt: old });
+    await db.insert(schema.atsBoards).values({
+      ats: "smartrecruiters", token: srBoard.token, lastStatus: "ok", lastCheckedAt: old, lastOkAt: old,
+      filterFingerprint: "3:previous-filter:10", externalIds: ["overdue"],
+    });
+
+    const { fetch, requests } = interruptedBoard(code);
+    const result = await cycle(fetch, { smartrecruitersBoards: [srBoard], at: now });
+    expect(result.cycleId).not.toBeNull();
+    await db.update(schema.runs).set({ startedAt: now, finishedAt: now }).where(eq(schema.runs.cycleId, result.cycleId!));
+    const runs = await listRunsForCycle(db, result.cycleId!);
+    expect.soft(runs[0]).toMatchObject({ status: "partial", interrupted: true, errorCode: code, fetched: 1, newCount: 1 });
+    expect.soft((await getChannelRows(db, ["smartrecruiters"]))[0]).toMatchObject({ consecutiveFailures: 1, lastErrorCode: code });
+    expect.soft(await getAtsBoard(db, { ats: "smartrecruiters", token: srBoard.token })).toMatchObject({ lastStatus: "error", lastErrorCode: code, lastOkAt: old });
+    const stored = await listRawPostingsForChannel(db, "smartrecruiters");
+    expect.soft(stored.find((posting) => posting.externalId === firstDetail.id)).toMatchObject({
+      runId: runs[0]?.id, payloadJson: { source: { ats: "smartrecruiters", token: srBoard.token }, posting: firstDetail },
+    });
+    expect.soft(requests.map((request) => request.url)).toEqual([
+      `${srBase}?limit=100&offset=0&country=de`, `${srBase}?limit=100&offset=1&country=de`, `${srBase}/${firstDetail.id}`,
+    ]);
+    expect.soft(await markJobsPossiblyClosed(db, { now, days: 7 })).toEqual([]);
+  });
+
+  it("cancels during page two without crediting the breaker or storing page one", async () => {
+    const db = getDb();
+    await db.insert(schema.channels).values({
+      id: "smartrecruiters", family: "ats", kind: "ats", consecutiveFailures: 1,
+      lastErrorCode: "network", health: "degraded", lastSuccessAt: old,
+    });
+    const breakerBefore = (await getChannelRows(db, ["smartrecruiters"]))[0];
+    const controller = new AbortController();
+    const { fetch, requests } = routedFetch([
+      [`${srBase}?limit=100&offset=0`, response(200, pageOne)],
+      [`${srBase}?limit=100&offset=1`, {
+        ...response(200),
+        json: async () => {
+          controller.abort();
+          controller.signal.throwIfAborted();
+          return null;
+        },
+      }],
+    ]);
+    const result = await cycle(fetch, {
+      smartrecruitersBoards: [srBoard], at: new Date("2026-10-08T12:00:00Z"), signal: controller.signal,
+    });
+    expect.soft(await listRunsForCycle(db, result.cycleId!)).toMatchObject([{ status: "failed", error: "cancelled", interrupted: false, fetched: 0 }]);
+    expect.soft(result.summary.aborted).toBe(true);
+    expect.soft((await getChannelRows(db, ["smartrecruiters"]))[0]).toEqual(breakerBefore);
+    expect.soft(await getAtsBoard(db, { ats: "smartrecruiters", token: srBoard.token })).toBeNull();
+    expect.soft(await listRawPostingsForChannel(db, "smartrecruiters")).toEqual([]);
+    expect.soft(requests.map((request) => request.url)).toEqual([
+      `${srBase}?limit=100&offset=0&country=de`, `${srBase}?limit=100&offset=1&country=de`,
+    ]);
+  });
+
   it.each([
     { name: "[regression guard] persists retry ids when the only board loses every detail and the run fails", mixed: false },
     { name: "[regression guard] persists retry ids and healthy postings when a mixed round succeeds", mixed: true },
@@ -351,7 +651,7 @@ describe("runCycle with the smartrecruiters channel", () => {
       lastStatus: "ok", lastErrorCode: null, consecutiveFailures: 0,
       etag: null, externalIds: [], detailRetryIds: ["a1", "a2"], lastTotal: 2, lastKept: 2,
     });
-    expect(rememberedA?.lastOkAt).toBeInstanceOf(Date);
+    expect(rememberedA?.lastOkAt).toBeNull();
     const stored = await listRawPostingsForChannel(db, "smartrecruiters");
     if (mixed) {
       expect(stored).toMatchObject([{
@@ -403,7 +703,7 @@ describe("runCycle with the smartrecruiters channel", () => {
     if (!job) throw new Error("missing job");
     await db.insert(schema.jobSources).values({ jobId: job.id, rawPostingId: raw.id, channelId: "smartrecruiters" });
     await recordAtsBoardCheck(db, { ats: "smartrecruiters", token: boardB.token }, {
-      status: "ok", etag: 'W/"old-b"', externalIds: ["b-stale"], total: 1, kept: 1, checkedAt: old,
+      status: "ok", etag: 'W/"old-b"', filterFingerprint: "3:previous-filter:10", externalIds: ["b-stale"], total: 1, kept: 1, checkedAt: old,
     });
     if (stored) {
       await recordAtsBoardCheck(db, { ats: "smartrecruiters", token: boardA.token }, {
@@ -496,7 +796,7 @@ describe("runCycle with the smartrecruiters channel", () => {
     if (!job) throw new Error("missing job");
     await db.insert(schema.jobSources).values({ jobId: job.id, rawPostingId: raw.id, channelId: "smartrecruiters" });
     await recordAtsBoardCheck(db, { ats: "smartrecruiters", token: boardB.token }, {
-      status: "ok", etag: 'W/"old-b"', externalIds: ["b-stale"], total: 1, kept: 1, checkedAt: old,
+      status: "ok", etag: 'W/"old-b"', filterFingerprint: "3:previous-filter:10", externalIds: ["b-stale"], total: 1, kept: 1, checkedAt: old,
     });
 
     const baseA = "https://api.smartrecruiters.com/v1/companies/FirstLabs/postings";
@@ -536,7 +836,7 @@ describe("runCycle with the smartrecruiters channel", () => {
     expect(rememberedA).toMatchObject({
       lastStatus: "ok", lastErrorCode: null, consecutiveFailures: 0, detailRetryIds: healthy ? [] : goodDetail ? ["a1"] : ["a1", "a2"],
     });
-    expect(rememberedA?.lastOkAt).toBeInstanceOf(Date);
+    expect(rememberedA?.lastOkAt).toEqual(healthy ? expect.any(Date) : null);
     expect(await getAtsBoard(db, { ats: "smartrecruiters", token: boardB.token })).toMatchObject(
       healthy ? { lastStatus: "ok", externalIds: ["b-present"] } : { lastStatus: "error", lastErrorCode: "network", externalIds: ["b-stale"], lastOkAt: old },
     );

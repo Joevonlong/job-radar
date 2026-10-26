@@ -182,26 +182,26 @@ export const atsBoards = pgTable(
   {
     ats: text("ats").notNull(),
     token: text("token").notNull(),
-    /** List validator sent as `If-None-Match`; cleared when a never-stored detail needs its first retry. NULL = no usable validator. */
+    /** Validator from the last complete list read, sent as `If-None-Match`; cleared for a never-stored detail's first retry. NULL = unusable. */
     etag: text("etag"),
-    /** Hash of everything that decided which postings were kept; a changed value invalidates the ETag. */
+    /** Hash of what decided which postings were kept at the last complete list read; a changed value invalidates the ETag. */
     filterFingerprint: text("filter_fingerprint"),
-    /** Ids handed over from the last 200 plus still-listed stored ids beyond the cap or missing details (raw_postings.external_id). */
+    /** Ids from the last complete list read: handed over plus still-listed stored ids beyond the cap or missing details (raw_postings.external_id). */
     externalIds: text("external_ids").array().notNull().default(sql`'{}'::text[]`),
-    /** Ids whose details failed at the last 200, including prior failures skipped then; requested last next time. */
+    /** Ids whose details are unresolved after the latest content read (complete, short or failed list); a partial read keeps earlier ids; requested last next time. */
     detailRetryIds: text("detail_retry_ids").array().notNull().default(sql`'{}'::text[]`),
     lastStatus: text("last_status").notNull(),
     lastErrorCode: text("last_error_code"),
     lastCheckedAt: timestamptz("last_checked_at").notNull().defaultNow(),
-    /** Last time the board answered with new content (200). */
+    /** Last complete list read with new content (200); a `short` check is stamped but never counts as a complete read. */
     lastChangedAt: timestamptz("last_changed_at"),
-    /** Distinct postings listed at the last 200. */
+    /** Distinct postings listed at the last complete list read. */
     lastTotal: integer("last_total").notNull().default(0),
-    /** Postings that passed the title prefilter and fit within the cap at the last 200. */
+    /** Postings that passed the title prefilter and fit within the cap at the last complete list read. */
     lastKept: integer("last_kept").notNull().default(0),
-    /** Checks in a row that failed (reset by a 200 or 304). Display only: it never stops a board or a channel. */
+    /** Errors since the last complete list or 304, even with unresolved details; `short` leaves this unchanged. Display only. */
     consecutiveFailures: integer("consecutive_failures").notNull().default(0),
-    /** Last time the board answered 200 or 304. */
+    /** Last complete read; advanced only by a complete 200 with no unresolved details or a 304 with an empty retry list. */
     lastOkAt: timestamptz("last_ok_at"),
   },
   (t) => [primaryKey({ columns: [t.ats, t.token] })],
