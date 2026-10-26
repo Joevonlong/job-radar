@@ -16,6 +16,7 @@ import { salary002 } from "./salary/002-drop-include-ai-lookups";
 import { search002 } from "./search/002-market";
 import { sources002 } from "./sources/002-market";
 import { sources003 } from "./sources/003-arbeitnow";
+import { sources004 } from "./sources/004-monid";
 import type { ConfigMigration } from "./types";
 import { ui002 } from "./ui/002-visibility-blocks";
 
@@ -27,7 +28,7 @@ export const CONFIG_MIGRATIONS: Readonly<Partial<Record<ConfigName, readonly Con
   ui: [ui002],
   preferences: [preferences002],
   search: [search002],
-  channels: [sources002, sources003],
+  channels: [sources002, sources003, sources004],
   pipeline: [pipeline002, pipeline003],
   ai: [ai002],
   insights: [insights002],

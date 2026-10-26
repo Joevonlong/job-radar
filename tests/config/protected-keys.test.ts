@@ -32,6 +32,8 @@ describe("the protected key list", () => {
     expect(isProtectedPath("resume", "claude_command")).toBe(true);
     expect(isProtectedPath("ai", "providers.codex_cli.trim_context")).toBe(true);
     expect(isProtectedPath("channels", "linkedin.apify.actor_id")).toBe(true);
+    for (const key of ["provider", "endpoint", "api_base_url"]) expect(isProtectedPath("channels", `linkedin.monid.${key}`)).toBe(true);
+    expect(isProtectedPath("channels", "linkedin.monid.input_template")).toBe(false);
     expect(isProtectedPath("channels", "jobspy.proxies")).toBe(true);
     for (const key of ["resume_kit_path", "master_resume_path", "pdf_dir", "jd_export_dir", "jd_export_host_dir"]) expect(isProtectedPath("resume", key), key).toBe(true);
   });

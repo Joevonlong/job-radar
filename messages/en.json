@@ -2470,6 +2470,30 @@
         "label": "Run timeout (seconds)",
         "hint": "Apify limits a synchronous run to 300 s; a timeout counts as a retryable failure."
       },
+      "monid_provider": {
+        "label": "Monid provider",
+        "hint": "Provider behind the Monid endpoint. Edit in sources.yaml; changing the output format also needs a matching parser."
+      },
+      "monid_endpoint": {
+        "label": "Monid endpoint",
+        "hint": "LinkedIn job endpoint, such as /harvestapi/linkedin-job-search. Edit in sources.yaml."
+      },
+      "monid_price_per_1k": {
+        "label": "Price per 1000 results (USD)",
+        "hint": "Configured Monid price used to limit results before sending; actual charges are recorded even above the local budget."
+      },
+      "monid_flat_fee": {
+        "label": "Flat fee per run (USD)",
+        "hint": "Charged for each run, including each split keyword query."
+      },
+      "monid_timeout": {
+        "label": "Run timeout (ms)",
+        "hint": "After this time, request a stop and poll during the stop grace period."
+      },
+      "monid_stop_grace": {
+        "label": "Stop grace period (ms)",
+        "hint": "Wait for a final status after stopping. Unresolved runs are accounted for at the full requested limit."
+      },
       "apify_country_name": {
         "label": "Country name",
         "hint": "Appended to a city for located queries, for example Berlin, Germany. Empty = the market country's English name."
@@ -3394,6 +3418,7 @@
       "okReason": "—",
       "runCost": "cost {cost}",
       "notConfiguredHintApify": "Set APIFY_TOKEN in .env (and linkedin.apify.actor_id in sources.yaml); until then the cascade skips this channel.",
+      "notConfiguredHintMonid": "Set MONID_API_KEY in .env; until then the cascade skips this channel without recording a failure.",
       "login": {
         "missing": "Not logged in",
         "valid": "Login valid",
@@ -4430,6 +4455,7 @@
       "loginMissing": "LinkedIn not logged in",
       "loginExpired": "LinkedIn login expired",
       "missingApify": "missing APIFY_TOKEN or actor_id",
+      "missingMonid": "missing MONID_API_KEY",
       "notConfigured": "not configured",
       "neverChecked": "not checked yet (next cycle does)",
       "boardFailing": "{count} failures in a row: {error}",

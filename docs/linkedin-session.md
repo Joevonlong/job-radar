@@ -1,13 +1,13 @@
 # LinkedIn session channel (Playwright)
 
-The `linkedin-session` channel uses **your own LinkedIn login session** (a Playwright browser) to read LinkedIn's job search pages and job detail pages. It is position 3 of the LinkedIn cascade (Bright Data -> Apify -> session -> guest). There is also a side channel, `linkedin-session:recommended`: it reads "Jobs recommended for you" once a day and does not take part in the cascade.
+The `linkedin-session` channel uses **your own LinkedIn login session** (a Playwright browser) to read LinkedIn's job search pages and job detail pages. It is position 4 of the LinkedIn cascade (Bright Data -> Apify -> Monid -> session -> guest). There is also a side channel, `linkedin-session:recommended`: it reads "Jobs recommended for you" once a day and does not take part in the cascade.
 
 It is **read-only**: it opens pages and reads them; it does not like, apply, message, follow or fill in any form. On a login page or verification page (checkpoint / CAPTCHA / security verification) it stops immediately, opens the circuit breaker and sends a Telegram alert, and **never tries to get through automatically**: you complete the verification yourself in a normal browser.
 
 > Status: code and tests are complete, but there has been no smoke test with a real logged-in session yet; you need to run `pnpm auth:linkedin` and log in once first (see "Live smoke test"). The page selectors were written from the public structure of LinkedIn's logged-in pages and tested with saved HTML fixtures; they have not yet been verified against a real logged-in session.
 
 ## Risk notice
-- Reading LinkedIn automatically with a login session violates its user agreement; it may restrict or suspend your account. That is why it is off by default, the request volume is small (see below), it is read-only, and it stops immediately on verification. Whether to turn it on is your decision; the other channels in the cascade (Bright Data / Apify / guest) do not depend on it.
+- Reading LinkedIn automatically with a login session violates its user agreement; it may restrict or suspend your account. That is why it is off by default, the request volume is small (see below), it is read-only, and it stops immediately on verification. Whether to turn it on is your decision; the other channels in the cascade (Bright Data / Apify / Monid / guest) do not depend on it.
 - The login file `.auth/linkedin.json` holds session cookies, equivalent to being logged in: do not commit it (gitignored), permissions 600, do not send it to anyone, do not put it in an image. If it leaks, sign out of all devices under LinkedIn "Settings -> Sign in & security -> Where you're signed in".
 
 ## First-time setup
@@ -47,7 +47,7 @@ It is **read-only**: it opens pages and reads them; it does not like, apply, mes
 
 ## How it works
 - **Search**: each query = one keyword group of `search.yaml` x one city (or remote). URL: `/jobs/search/?keywords="A" OR "B"&location=<city, country>&f_TPR=r<lookback seconds>&sortBy=DD`, with `f_WT=2` added for remote. After opening, it scrolls the list so every card renders, reads each card's job id, title, company, location and posting time; then for jobs not in the database it opens `/jobs/view/<id>/` and reads the JSON-LD `JobPosting` plus the salary, work arrangement, employment type, applicant count and JD on the page.
-- **Id and dedup**: the job id is LinkedIn's numeric id, the same as the Bright Data / Apify / guest channels, so the same job fetched through different channels is merged into one.
+- **Id and dedup**: the job id is LinkedIn's numeric id, the same as the Bright Data / Apify / Monid / guest channels, so the same job fetched through different channels is merged into one.
 - **Raw data**: what is stored is the fields read from the page, and the JD is saved as HTML so a later `pnpm reprocess` can re-parse it. Cookies, request headers and whole-page HTML are not stored.
 - **Login state** (`/sources`): **Not logged in** (no login file or no session cookie), **Valid**, **Expired** (the cookie expired, or the channel was taken to a login / verification page and you have not logged in again yet). It recovers automatically after you rerun `pnpm auth:linkedin`. The "last success" time is shown on the channel card.
 - **Missing login file**: `isConfigured` is false, the cascade skips session and the next channel (guest) takes over; "recommended for you" does not run.

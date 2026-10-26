@@ -17,7 +17,7 @@ export const monidSettingsSchema = z.strictObject({
   api_base_url: z.url({ protocol: /^https?$/ }),
   provider: z.string().trim().min(1),
   endpoint: z.string().trim().startsWith("/").min(2),
-  price_per_1k_usd: z.number().nonnegative(),
+  price_per_1k_usd: z.number().positive(),
   flat_fee_usd: z.number().nonnegative(),
   poll_interval_ms: z.number().int().positive(),
   timeout_ms: z.number().int().positive(),
@@ -77,9 +77,10 @@ const runFields = {
   output: z.unknown().optional(),
   price: z.unknown().optional(),
 };
-export const runResponseSchema = z.object({ ...runFields, status: z.string().trim().min(1) });
+const runStatusSchema = z.enum(["READY", "RUNNING", "STOPPING", "COMPLETED", "FAILED", "TIMED_OUT", "BLOCKED", "STOPPED"]);
+export const runResponseSchema = z.object({ ...runFields, status: runStatusSchema });
 export type MonidRun = z.infer<typeof runResponseSchema>;
-export const acceptedRunSchema = z.object({ ...runFields, runId: runIdSchema, status: z.string().trim().min(1).optional() });
+export const acceptedRunSchema = z.object({ ...runFields, runId: runIdSchema, status: runStatusSchema.optional() });
 export const stopAcceptedSchema = z.object({ ...runFields, status: z.literal("STOPPING") });
 export const errorResponseSchema = z.object({
   error: z.union([z.string(), z.object({ code: z.string().optional(), message: z.string().optional() })]).optional(),
@@ -90,7 +91,7 @@ export const stopConflictSchema = z.union([runResponseSchema, errorResponseSchem
 export const outputSchema = z.array(z.unknown());
 
 export function isTerminal(status: string): boolean {
-  return !["READY", "RUNNING", "STOPPING"].includes(status);
+  return ["COMPLETED", "FAILED", "TIMED_OUT", "BLOCKED", "STOPPED"].includes(status);
 }
 
 /** Status in the JSON body takes precedence over HTTP, including a 200 BLOCKED response. */
@@ -110,6 +111,7 @@ export function errorForResponse(httpStatus: number, body: unknown): ChannelErro
     }
     if (status === "STOPPED") return new ChannelError("network", "Monid run stopped before completion", { retryable: true });
     if (isTerminal(status)) return new ChannelError("network", "Monid run failed or timed out", { retryable: true });
+    return null;
   }
   if (httpStatus === 402 || httpStatus === 503) return new BudgetExceededError("channel", "Monid wallet needs credit or activation");
   if (httpStatus === 401) return new ChannelError("auth_expired", "Monid API key is invalid", { status: httpStatus });
@@ -118,7 +120,8 @@ export function errorForResponse(httpStatus: number, body: unknown): ChannelErro
   if (httpStatus === 408 || (httpStatus >= 500 && httpStatus !== 502)) {
     return new ChannelError("network", "Monid request failed", { status: httpStatus, retryable: true });
   }
-  return httpStatus >= 400 ? new ChannelError("unknown", "Monid request rejected", { status: httpStatus, retryable: false }) : null;
+  if (httpStatus >= 400) return new ChannelError("unknown", "Monid request rejected", { status: httpStatus, retryable: false });
+  return acceptedRunSchema.safeParse(body).success ? null : new ChannelError("parse", "Monid response has no known run status");
 }
 
 export interface RunCost {
@@ -153,12 +156,17 @@ export function calculateRunCost(run: MonidRun, limit: number, pricing: MonidPri
   const result = (costUsd: number, source: RunCost["source"], conservative = false): RunCost => ({
     costUsd, units: units.success ? units.data : count, source, invalidFields, conservative,
   });
-  const invalidCost = (): boolean => invalidFields.some((field) => field !== "billedUnits");
-  if (!invalidCost() && settled.length > 0) return result(Math.max(...settled), "settled");
-  if (!invalidCost() && parsedCalculated.success) return result(parsedCalculated.data.value / 1e6, "calculated");
+  if (settled.length > 0) return result(Math.max(...settled), "settled");
+  if (parsedCalculated.success) return result(parsedCalculated.data.value / 1e6, "calculated");
   const estimate = (items: number): number => items * pricing.price_per_1k_usd / 1000 + pricing.flat_fee_usd;
   if (units.success) return result(estimate(units.data), "estimate");
-  if (run.status === "COMPLETED") return result(estimate(count), "estimate");
+  if (run.status === "COMPLETED") {
+    const provider = providerResponseSchema.safeParse(run.providerResponse);
+    if (!Array.isArray(run.output) && provider.success && provider.data.httpStatus >= 200 && provider.data.httpStatus < 300) {
+      return result(estimate(limit), "estimate", true);
+    }
+    return result(estimate(count), "estimate");
+  }
   if (run.status === "BLOCKED" || run.status === "STOPPED") return result(0, "estimate");
   return result(estimate(limit), "estimate", true);
 }

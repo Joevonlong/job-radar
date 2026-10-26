@@ -151,6 +151,13 @@ describe("buildSourcesView", () => {
     expect(flagged({})).toEqual([]);
   });
 
+  it("marks Monid without its key as not configured on its card and cascade step", () => {
+    const view = buildSourcesView(input({ monidConfigured: false, env: { MONID_API_KEY: " " } }));
+    expect(view.cards.find((card) => card.id === "linkedin-monid")).toMatchObject({ notConfigured: true, missingEnv: ["MONID_API_KEY"] });
+    expect(view.cascade.entries.find((entry) => entry.id === "linkedin-monid")).toMatchObject({ notConfigured: true });
+    expect(buildSourcesView(input({ monidConfigured: true })).cards.find((card) => card.id === "linkedin-monid")?.notConfigured).toBe(false);
+  });
+
   it("marks tavily as not configured only when the key is known to be missing", () => {
     const flagged = (extra: Partial<SourcesViewInput>) => buildSourcesView(input(extra)).cards.filter((c) => c.notConfigured).map((c) => c.id);
     expect(flagged({ tavilyConfigured: false })).toEqual(["tavily"]);

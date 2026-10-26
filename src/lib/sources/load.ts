@@ -24,6 +24,7 @@ import { BRAVE_API_KEY_ENV } from "@/lib/channels/discovery/brave";
 import { TAVILY_API_KEY_ENV } from "@/lib/channels/discovery/tavily";
 import { BRIGHTDATA_API_KEY_ENV } from "@/lib/channels/linkedin/brightdata/contract";
 import { APIFY_TOKEN_ENV } from "@/lib/channels/linkedin/apify/contract";
+import { MONID_API_KEY_ENV } from "@/lib/channels/linkedin/monid/contract";
 import { GMAIL_APP_PASSWORD_ENV, GMAIL_USER_ENV } from "@/lib/channels/email";
 import { JSEARCH_API_KEY_ENV } from "@/lib/channels/jsearch";
 import { readAuthFileInfo, resolveAuthFile } from "@/lib/channels/linkedin/session/auth-file";
@@ -133,6 +134,7 @@ export async function loadSourcesView(at?: Date): Promise<SourcesView> {
     tavilyConfigured: (process.env[TAVILY_API_KEY_ENV] ?? "").trim() !== "",
     aiWorker,
     apifyConfigured: (process.env[APIFY_TOKEN_ENV] ?? "").trim() !== "" && channelsConfig.linkedin.apify.actor_id.trim() !== "",
+    monidConfigured: (process.env[MONID_API_KEY_ENV] ?? "").trim() !== "",
     brightdataConfigured: (process.env[BRIGHTDATA_API_KEY_ENV] ?? "").trim() !== "",
     jsearchConfigured: (process.env[JSEARCH_API_KEY_ENV] ?? "").trim() !== "",
     gmailConfigured: (process.env[GMAIL_USER_ENV] ?? "").trim() !== "" && (process.env[GMAIL_APP_PASSWORD_ENV] ?? "").trim() !== "",

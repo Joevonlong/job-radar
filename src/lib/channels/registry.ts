@@ -3,7 +3,7 @@ import { loadMarket } from "@/lib/market/resolve";
 
 import type { Channel, ChannelRuntimeSettings } from "./types";
 
-type LinkedinKey = "brightdata" | "apify" | "session" | "guest";
+type LinkedinKey = "brightdata" | "apify" | "monid" | "session" | "guest";
 type SourceKey = keyof ChannelsConfig["sources"];
 
 /** Which view of its config block a channel uses; `recommended` = the "recommended for you" side channel of `linkedin.session`. */
@@ -20,6 +20,7 @@ export type ChannelConfigRef =
 export const CHANNEL_CONFIG_TABLE = {
   "linkedin-brightdata": { section: "linkedin", key: "brightdata" },
   "linkedin-apify": { section: "linkedin", key: "apify" },
+  "linkedin-monid": { section: "linkedin", key: "monid" },
   "linkedin-session": { section: "linkedin", key: "session" },
   "linkedin-session:recommended": { section: "linkedin", key: "session", view: "recommended" },
   "linkedin-guest": { section: "linkedin", key: "guest" },

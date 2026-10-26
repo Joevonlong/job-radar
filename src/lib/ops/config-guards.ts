@@ -67,6 +67,7 @@ export function configGuardFindings(configs: GuardConfigs, env: Readonly<Record<
       { service: "tavily", url: sources.tavily.api_base_url, subject: "sources.yaml sources.tavily.api_base_url", used: sources.tavily.enabled },
       { service: "brave", url: sources.brave.api_base_url, subject: "sources.yaml sources.brave.api_base_url", used: sources.brave.enabled },
       { service: "apify", url: linkedin.apify.api_base_url, subject: "sources.yaml linkedin.apify.api_base_url", used: linkedin.apify.enabled },
+      { service: "monid", url: linkedin.monid.api_base_url, subject: "sources.yaml linkedin.monid.api_base_url", used: linkedin.monid.enabled },
     );
   }
   // A changed URL is reported even while its provider / channel is off: switching it on would send the key there.

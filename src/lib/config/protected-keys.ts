@@ -47,6 +47,10 @@ export const PROTECTED_KEYS: Readonly<Partial<Record<ConfigName, readonly string
     "jobspy.proxies",
     // the Apify actor run with the account's token (and billed to it)
     "linkedin.apify.actor_id",
+    // the provider and endpoint run with the Monid workspace key (and billed to its wallet)
+    "linkedin.monid.provider",
+    "linkedin.monid.endpoint",
+    "linkedin.monid.api_base_url",
     // the IMAP server the Gmail app password is sent to
     "sources.gmail.host",
     "sources.gmail.port",

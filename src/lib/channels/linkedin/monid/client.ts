@@ -4,12 +4,15 @@ import { abortReason, createHttpClient, defaultSleep, readTextUpTo, type FetchLi
 import type { ChannelContext, HttpClient, HttpResponse } from "../../types";
 import {
   acceptedRunSchema, calculateRunCost, errorForResponse, errorResponseSchema, isTerminal, MAX_RESPONSE_CHARS,
-  outputSchema, priceSchema, providerResponseSchema, runResponseSchema, stopAcceptedSchema, stopConflictSchema,
+  outputSchema, priceSchema, providerResponseSchema, runResponseSchema, stopAcceptedSchema,
   validateFinalInput, type MonidRun, type MonidSettings,
 } from "./contract";
 
-/** Read error bodies ourselves: in particular 502 must not be retried as an ordinary HTTP 5xx. */
-const ALLOW_STATUS = Array.from({ length: 200 }, (_, index) => index + 400);
+/** POSTs are never retried; GETs leave ordinary 5xx to the HTTP layer's backoff. */
+const ALLOW_POST_STATUS = Array.from({ length: 200 }, (_, index) => index + 400);
+const ALLOW_POLL_STATUS = [400, 401, 402, 403, 404, 408, 409, 429, 502, 503];
+const NOT_EXECUTED_STATUS = [400, 401, 402, 403, 404, 409, 429, 503];
+const isTransientPollStatus = (status: number | undefined): boolean => status === 429 || (status !== undefined && status >= 500);
 
 export interface MonidClientOptions {
   ctx: ChannelContext;
@@ -66,12 +69,18 @@ export class MonidClient {
       ...(stopFetch ? { fetch: stopFetch } : {}),
     }) : ctx.http;
     const response = await http.request(this.url(`${this.runPath(runId)}/stop`), {
-      method: "POST", headers: this.headers(), maxRetries: 0, timeoutMs, redirect: "error", allowStatus: ALLOW_STATUS,
+      method: "POST", headers: this.headers(), maxRetries: 0, timeoutMs, redirect: "error", allowStatus: ALLOW_POST_STATUS,
     });
-    const body = await this.body(response);
+    let body: unknown;
+    try {
+      body = await this.body(response);
+    } catch (error) {
+      if (response.status !== 409 || (!independent && ctx.signal.aborted)) throw error;
+      return { conflict: true, run: null };
+    }
     const run = runResponseSchema.safeParse(body);
     if (run.success && isTerminal(run.data.status)) return { conflict: response.status === 409, run: run.data };
-    if (response.status === 409 && stopConflictSchema.safeParse(body).success) return { conflict: true, run: null };
+    if (response.status === 409) return { conflict: true, run: null };
     const failure = errorForResponse(response.status, body);
     if (failure) throw failure;
     if (response.status !== 202 || !stopAcceptedSchema.safeParse(body).success) throw new ChannelError("parse", "Monid stop response has an unexpected shape");
@@ -92,19 +101,24 @@ export class MonidClient {
         timer = setTimeout(() => { controller.abort(); resolve(null); }, remaining);
       });
       let result: { status: number; body: unknown } | null;
+      let httpStatus: number | undefined;
       try {
         // Bound the complete GET (including its body and HTTP backoff), rather than each retry independently.
         result = await Promise.race([
           (async () => {
             const response = await ctx.http.request(this.url(this.runPath(runId)), {
-              headers: this.headers(), allowStatus: ALLOW_STATUS, redirect: "error", timeoutMs: remaining, signal: controller.signal,
+              headers: this.headers(), allowStatus: ALLOW_POLL_STATUS, redirect: "error", timeoutMs: remaining, signal: controller.signal,
             });
+            httpStatus = response.status;
             return { status: response.status, body: await this.body(response) };
           })(),
           expired,
         ]);
       } catch (error) {
-        if (!ctx.signal.aborted && this.now() >= deadline) return null;
+        ctx.signal.throwIfAborted();
+        if (this.now() >= deadline) return null;
+        if (isTransientPollStatus(httpStatus) || (error instanceof ChannelError &&
+          (error.code === "network" || error.code === "rate_limited" || isTransientPollStatus(error.status)))) continue;
         throw error;
       } finally {
         clearTimeout(timer);
@@ -112,6 +126,7 @@ export class MonidClient {
       if (result === null) return null;
       const parsed = runResponseSchema.safeParse(result.body);
       if (parsed.success && isTerminal(parsed.data.status)) return { ...parsed.data, runId };
+      if (parsed.success || isTransientPollStatus(result.status)) continue;
       const failure = errorForResponse(result.status, result.body);
       if (failure) throw failure;
       if (!parsed.success) throw new ChannelError("parse", "Monid polling response has no valid status");
@@ -127,10 +142,18 @@ export class MonidClient {
     let runId: string | undefined;
     let accounted = false;
     let rejected = false;
+    let observedTerminal: MonidRun | null = null;
     const fields = (): Record<string, unknown> => runId === undefined ? {} : { runId: runId.replaceAll(apiKey, "[redacted]") };
+    const observe = (run: MonidRun): void => {
+      if (!isTerminal(run.status)) return;
+      const cost = calculateRunCost(run, limit, settings);
+      if (cost.source === "settled" || (cost.source === "calculated" && observedTerminal === null)) observedTerminal = run;
+    };
 
     const record = async (run: MonidRun): Promise<void> => {
-      const cost = calculateRunCost(run, limit, settings);
+      observe(run);
+      const cost = calculateRunCost(observedTerminal ?? run, limit, settings);
+      const invalidFields = [...new Set([...cost.invalidFields, ...calculateRunCost(run, limit, settings).invalidFields])];
       // A failed usage write must not trigger a second attempt to consume the same bill.
       accounted = true;
       try {
@@ -138,7 +161,7 @@ export class MonidClient {
       } catch (error) {
         throw new InfrastructureError("could not record Monid usage", error);
       }
-      if (cost.invalidFields.length > 0) ctx.logger.warn("monid cost fields could not be parsed; estimating", { ...fields(), fields: cost.invalidFields });
+      if (invalidFields.length > 0) ctx.logger.warn("monid cost fields could not be parsed", { ...fields(), fields: invalidFields });
       if (cost.source === "calculated") ctx.logger.warn("monid using calculated cost without settled fields", fields());
       if (cost.conservative) ctx.logger.warn("monid run outcome uncertain; charged the configured limit", { ...fields(), limit });
       ctx.logger.info("monid run usage recorded", { ...fields(), units: cost.units, usd: cost.costUsd });
@@ -159,10 +182,11 @@ export class MonidClient {
     try {
       const response = await ctx.http.request(this.url("/v1/run"), {
         method: "POST", headers: this.headers(), body: JSON.stringify({ provider: settings.provider, endpoint: settings.endpoint, input }),
-        maxRetries: 0, timeoutMs: settings.timeout_ms, allowStatus: ALLOW_STATUS, redirect: "error",
+        maxRetries: 0, timeoutMs: settings.timeout_ms, allowStatus: ALLOW_POST_STATUS, redirect: "error",
       });
-      rejected = response.status >= 400;
       const body = await this.body(response);
+      // An unreadable/truncated response cannot prove that the paid request was refused.
+      rejected = NOT_EXECUTED_STATUS.includes(response.status);
       const terminal = runResponseSchema.safeParse(body);
       if (terminal.success && isTerminal(terminal.data.status)) return await finish(terminal.data, response.status);
       const failure = errorForResponse(response.status, body);
@@ -185,6 +209,7 @@ export class MonidClient {
       let pollingGrace = false;
       try {
         const stopped = await this.stop(runId, false);
+        if (stopped.run) observe({ ...stopped.run, runId });
         // A 409 always needs a fresh GET: the run may have completed, or may still be un-stoppable.
         if (stopped.run && !stopped.conflict) final = { ...stopped.run, runId };
         else {

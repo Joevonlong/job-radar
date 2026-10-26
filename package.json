@@ -72,6 +72,7 @@
     "smoke:signals": "node --env-file-if-exists=.env --import tsx scripts/signals-smoke.ts",
     "smoke:brightdata": "node --env-file-if-exists=.env --import tsx scripts/smoke-brightdata.ts",
     "smoke:apify": "node --env-file-if-exists=.env --import tsx scripts/smoke-apify.ts",
+    "smoke:monid": "node --env-file-if-exists=.env --import tsx scripts/smoke-monid.ts",
     "smoke:jsearch": "node --env-file-if-exists=.env --import tsx scripts/smoke-jsearch.ts",
     "auth:linkedin": "node --env-file-if-exists=.env --import tsx scripts/auth-linkedin.ts",
     "web:password": "tsx scripts/web-password.ts",

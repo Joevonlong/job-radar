@@ -113,7 +113,7 @@ Job Radar 是一个跑在你自己电脑上的岗位推送。
 
 | | |
 |---|---|
-| 多个来源 | LinkedIn（游客搜索；可选：你自己的登录态（实验性，尚未用真实登录验证过），或付费的 Bright Data / Apify）、Indeed、StepStone、XING、Arbeitsagentur、Arbeitnow、通过 JSearch 的 Google Jobs、Greenhouse / Lever / Ashby / Personio / SmartRecruiters 上的公司招聘页、Gmail 职位提醒邮件。[全部来源](sources.zh.md) |
+| 多个来源 | LinkedIn（游客搜索；可选：你自己的登录态（实验性，尚未用真实登录验证过），或付费的 Bright Data / Apify / Monid）、Indeed、StepStone、XING、Arbeitsagentur、Arbeitnow、通过 JSearch 的 Google Jobs、Greenhouse / Lever / Ashby / Personio / SmartRecruiters 上的公司招聘页、Gmail 职位提醒邮件。[全部来源](sources.zh.md) |
 | 先征得你同意 | 抓取网站的来源和用你自己 LinkedIn 登录的来源，新安装时都是关闭的；开启时先提示风险，要你确认。[抓取](sources.zh.md#抓取) |
 | 互相隔离 | 一个来源挂了不影响整轮；每个来源都有熔断和可选的月预算。 |
 | 一个岗位只出现一次 | 跨来源的近似重复合成一条，所有来源链接都保留。 |

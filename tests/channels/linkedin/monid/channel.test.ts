@@ -65,6 +65,15 @@ describe("Monid channel accounting", () => {
     expect(h.requests).toHaveLength(0);
   });
 
+  it.each([0, -1])("refuses nonpositive headroom before running even with tiny positive prices: %s", async (usdLeft) => {
+    const h = await harness([], { settings: settings({ price_per_1k_usd: 0.0000001, flat_fee_usd: 0 }) });
+    const snapshot = h.ctx.budget.snapshot();
+    vi.spyOn(h.ctx.budget, "snapshot").mockReturnValue({ ...snapshot, usdLeft });
+    await expect(h.channel.collect(query(), h.ctx)).rejects.toBeInstanceOf(BudgetExceededError);
+    expect(h.requests).toHaveLength(0);
+    expect(h.ctx.budget.snapshot().usd).toBe(0);
+  });
+
   it("records actual bills even when settlement exceeds the local or global budget", async () => {
     const h = await harness([response(200, completed({ output: jobs, cost: { value: 0.04, currency: "USD" } }))],
       { settings: settings({ monthly_budget_usd: 0.02 }), globalCapUsd: 0.015 });
@@ -80,6 +89,15 @@ describe("Monid channel accounting", () => {
       await expect(h.channel.collect(query(), h.ctx)).rejects.toMatchObject({ code: run.providerResponse.httpStatus === 500 ? "network" : "parse" });
       expect(h.ctx.budget.snapshot()).toMatchObject({ records: 7, usd: 0.003 });
     }
+  });
+
+  it.each([undefined, null, {}, "invalid output"])("charges the limit once before rejecting uncountable successful output: %j", async (output) => {
+    const h = await harness([response(200, completed({ output, billing: undefined, billedUnits: undefined }))]);
+    const consume = vi.spyOn(h.ctx.budget, "consume");
+    await expect(h.channel.collect(query(), h.ctx)).rejects.toMatchObject({ code: "parse", retryable: false });
+    expect(consume).toHaveBeenCalledExactlyOnceWith(0, { costUsd: 0.011, allowOverspend: true });
+    expect(h.ctx.budget.snapshot().usd).toBe(0.011);
+    expect(h.logs).toContainEqual(expect.objectContaining({ level: "warn", fields: { runId: "run_example", limit: 10 } }));
   });
 
   it("keeps raw counts before dedupe, local date filtering and skipping provider error items", async () => {
@@ -115,7 +133,7 @@ describe("Monid channel accounting", () => {
   });
 
   it.each([
-    [{ status: "FAILED" }, 0.011], [{ status: "TIMED_OUT" }, 0.011], [{ status: "FUTURE_TERMINAL" }, 0.011],
+    [{ status: "FAILED" }, 0.011], [{ status: "TIMED_OUT" }, 0.011],
     [{ status: "BLOCKED" }, 0], [{ status: "STOPPED" }, 0],
   ])("estimates terminal %j according to its state", async (run, usd) => {
     const h = await harness([response(200, run)]);
@@ -127,7 +145,8 @@ describe("Monid channel accounting", () => {
     const micro = (value: number) => ({ value, unit: "MICRO_DOLLAR", currency: "USD" });
     for (const [billing, expected, warning] of [
       [{ calculatedCost: micro(4000) }, 0.004, "monid using calculated cost without settled fields"],
-      [{ actualCost: { value: 9, unit: "UNKNOWN", currency: "USD" } }, 0.003, "monid cost fields could not be parsed; estimating"],
+      [{ actualCost: { value: 9, unit: "UNKNOWN", currency: "USD" } }, 0.003, "monid cost fields could not be parsed"],
+      [{ calculatedCost: "invalid", reportedCost: micro(4000), actualCost: micro(0) }, 0.004, "monid cost fields could not be parsed"],
       [{ calculatedCost: micro(3000), actualCost: micro(0), reportedCost: micro(0) }, 0, null],
     ] as const) {
       const h = await harness([response(200, completed({ billing, output: jobs }))]);

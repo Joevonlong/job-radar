@@ -5,12 +5,14 @@ import { BRAVE_API_KEY_ENV } from "@/lib/channels/discovery/brave";
 import { TAVILY_API_KEY_ENV } from "@/lib/channels/discovery/tavily";
 import { JSEARCH_API_KEY_ENV } from "@/lib/channels/jsearch";
 import { APIFY_TOKEN_ENV } from "@/lib/channels/linkedin/apify/contract";
+import { MONID_API_KEY_ENV } from "@/lib/channels/linkedin/monid/contract";
 import { BRIGHTDATA_API_KEY_ENV } from "@/lib/channels/linkedin/brightdata/contract";
 
 /** Environment variables a channel needs before it can do anything (names only; values are never read into a report). */
 export const CHANNEL_REQUIRED_ENV: Readonly<Record<string, readonly string[]>> = {
   "linkedin-brightdata": [BRIGHTDATA_API_KEY_ENV],
   "linkedin-apify": [APIFY_TOKEN_ENV],
+  "linkedin-monid": [MONID_API_KEY_ENV],
   brave: [BRAVE_API_KEY_ENV],
   tavily: [TAVILY_API_KEY_ENV],
   jsearch: [JSEARCH_API_KEY_ENV],

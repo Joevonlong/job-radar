@@ -29,9 +29,9 @@ describe("linkedin.session config", () => {
     expect(() => readSessionSettings({ enabled: true })).toThrow(/incomplete/);
   });
 
-  it("the cascade lists the session channel third, and both session channels read their settings from the one block", () => {
+  it("the cascade lists the session channel fourth, and both session channels read their settings from the one block", () => {
     const config = shippedChannels();
-    expect(config.linkedin.cascade).toEqual(["linkedin-brightdata", "linkedin-apify", "linkedin-session", "linkedin-guest"]);
+    expect(config.linkedin.cascade).toEqual(["linkedin-brightdata", "linkedin-apify", "linkedin-monid", "linkedin-session", "linkedin-guest"]);
     expect(settingsFromConfig(LINKEDIN_SESSION_ID, config)).toMatchObject({ enabled: false, maxResults: 50, monthlyBudgetUsd: 0, throttle: { minDelayMs: 3000, maxDelayMs: 8000 } });
     expect(settingsFromConfig(LINKEDIN_SESSION_RECOMMENDED_ID, config)).toMatchObject({ enabled: false, maxResults: 25 });
   });

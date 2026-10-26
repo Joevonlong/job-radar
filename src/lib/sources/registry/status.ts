@@ -26,6 +26,7 @@ export type RegistryReasonKey =
   | "loginMissing"
   | "loginExpired"
   | "missingApify"
+  | "missingMonid"
   | "notConfigured"
   | "neverChecked"
   | "boardFailing"
@@ -123,6 +124,7 @@ function missingReason(card: SourceCard): RegistryReason {
   if (card.login?.status === "missing") return { key: "loginMissing" };
   if (card.login?.status === "expired") return { key: "loginExpired" };
   if (card.id === "linkedin-apify") return { key: "missingApify" };
+  if (card.id === "linkedin-monid") return { key: "missingMonid" };
   return { key: "notConfigured" };
 }
 

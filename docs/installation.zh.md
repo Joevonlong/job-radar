@@ -71,7 +71,7 @@ git checkout v2.0.1          # 推荐：停在发布版本上（从新到旧列�
 cp .env.example .env
 ```
 
-要放密钥的时候才需要 `.env`：Telegram bot token、AI 的 API key、付费或需要 key 的来源（JSearch、Tavily、Bright Data、Apify、
+要放密钥的时候才需要 `.env`：Telegram bot token、AI 的 API key、付费或需要 key 的来源（JSearch、Tavily、Bright Data、Apify、Monid、
 Gmail）、换一个数据库密码、给看板加额外的主机名。每个变量在 `.env.example` 里都有说明。`.env` 被 git 忽略：不要提交它，
 也不要把内容贴到任何地方。
 
@@ -80,7 +80,7 @@ Gmail）、换一个数据库密码、给看板加额外的主机名。每个变
 | Arbeitsagentur、Arbeitnow、公司招聘页 | 不需要 | [sources.zh.md](sources.zh.md) |
 | Indeed、StepStone、XING、LinkedIn 游客搜索 | 不需要；新安装时关闭，打开时要你确认服务条款风险 | [sources.zh.md](sources.zh.md#抓取) |
 | 用你自己登录态的 LinkedIn | 不需要：用 `pnpm auth:linkedin` 登录一次（默认关闭，先看风险说明） | [linkedin-session.zh.md](linkedin-session.zh.md) |
-| 经 Bright Data / Apify 的 LinkedIn（付费） | `BRIGHT_DATA_API_KEY` / `APIFY_TOKEN` | [brightdata.zh.md](brightdata.zh.md)、[apify.zh.md](apify.zh.md) |
+| 经 Bright Data / Apify / Monid 的 LinkedIn（付费） | `BRIGHT_DATA_API_KEY` / `APIFY_TOKEN` / `MONID_API_KEY` | [brightdata.zh.md](brightdata.zh.md)、[apify.zh.md](apify.zh.md)、[monid.zh.md](monid.zh.md) |
 | 经 JSearch 的 Google Jobs | `JSEARCH_API_KEY` | [jsearch.zh.md](jsearch.zh.md) |
 | Gmail 职位提醒邮件 | `GMAIL_USER`、`GMAIL_APP_PASSWORD` | [gmail-alerts.zh.md](gmail-alerts.zh.md) |
 | 发现新的公司招聘页 | `TAVILY_API_KEY` | [tavily.zh.md](tavily.zh.md) |
@@ -278,7 +278,7 @@ pnpm run doctor
 `pnpm run doctor`：单写 `pnpm doctor` 是 pnpm 自己的命令。退出码：0 全部 ✅，1 有 ⚠️，2 有 ❌，3 doctor 本身没能运行。
 
 刚装好时有几项会给警告，等你配好就没了：Tailscale 和公开地址（⚠️）；出厂就开着的付费渠道（`linkedin-brightdata`、
-`linkedin-apify`、`tavily`），在你填 key 或关掉之前；上一轮和上次备份，在第一轮、第一次备份之前；worker 在终端里跑而没装成服务时还有
+`linkedin-apify`、`linkedin-monid`、`tavily`），在你填 key 或关掉之前；上一轮和上次备份，在第一轮、第一次备份之前；worker 在终端里跑而没装成服务时还有
 `aiworker.launchd`（在 Linux 上这一项读的是 systemd 用户单元）。LinkedIn 是可选的：一个 LinkedIn 渠道都没设置时，LinkedIn 那一行会这么写，
 仍是 ✅。在 Linux 上，`data/` 下有文件不归 `PUID` 所有时，`data.ownership` 会警告。没打开的 Telegram
 推送不会报。浏览器里 `/sources` 页显示同样的健康状态，包括 AI worker 卡片。

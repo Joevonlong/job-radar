@@ -121,7 +121,7 @@ translation:
 - **CLI 命令**：`providers.claude_cli.command` 必须是 `claude`（在 `PATH` 上查找）或以 `/claude` 结尾的绝对路径，`providers.codex_cli.command` 必须是 `codex` 或以 `/codex` 结尾的绝对路径（Windows 上也可以是 `.exe` / `.cmd`）。相对路径和别的程序一律不启动；这个 provider 算作不可用并给出原因（`/sources`、`pnpm ai:probe`），doctor 的 `config.guards` 报 ❌。所以包装脚本也得叫 `claude` / `codex`（例如放在 `PATH` 上它自己的目录里）。
 - **模型名**：claude-cli 和 codex-cli 的模型名只能含字母、数字和 `._:/[]-`，且不能以 `-` 开头，所以模型名永远不会被当成命令行选项。
 - **codex 的 `config_overrides`**：只认上面的白名单键，且值必须是 `false`。
-- **接收凭据的主机**：DeepSeek 和 MiMo 的 key（`providers.*.base_url`）、Telegram bot token（`notify.yaml telegram.api_base_url`），以及 JSearch、Tavily、Brave、Apify 的 key（`sources.yaml` 的 `api_base_url`）只通过 https 发往厂商自己的主机（`api.deepseek.com`、`api.xiaomimimo.com`、`api.telegram.org`、`jsearch.p.rapidapi.com`、`api.tavily.com`、`api.search.brave.com`、`api.apify.com`）；Gmail 登录（`sources.yaml sources.gmail`）只发往 `imap.gmail.com` 的 993 端口且 `secure: true`。这些请求不跟随重定向。别的地址会被拒绝：该 provider 不可用、不发 Telegram、该渠道这一轮失败，什么都不会发出去。确实在用代理或网关时，在 `.env` 里设 `JOB_RADAR_ALLOW_CUSTOM_ENDPOINTS=1`（ai-worker 和容器都读得到）；之后每个自定义主机都会被使用并在日志里警告，变量设着的时候 doctor 也一直给警告。
+- **接收凭据的主机**：DeepSeek 和 MiMo 的 key（`providers.*.base_url`）、Telegram bot token（`notify.yaml telegram.api_base_url`），以及 JSearch、Tavily、Brave、Apify、Monid 的 key（`sources.yaml` 的 `api_base_url`）只通过 https 发往厂商自己的主机（`api.deepseek.com`、`api.xiaomimimo.com`、`api.telegram.org`、`jsearch.p.rapidapi.com`、`api.tavily.com`、`api.search.brave.com`、`api.apify.com`、`api.monid.ai`）；Gmail 登录（`sources.yaml sources.gmail`）只发往 `imap.gmail.com` 的 993 端口且 `secure: true`。这些请求不跟随重定向。别的地址会被拒绝：该 provider 不可用、不发 Telegram、该渠道这一轮失败，什么都不会发出去。确实在用代理或网关时，在 `.env` 里设 `JOB_RADAR_ALLOW_CUSTOM_ENDPOINTS=1`（ai-worker 和容器都读得到）；之后每个自定义主机都会被使用并在日志里警告，变量设着的时候 doctor 也一直给警告。
 
 ## 只能有一个 ai-worker
 

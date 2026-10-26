@@ -2470,6 +2470,30 @@
         "label": "运行超时（秒）",
         "hint": "Apify 同步运行上限 300 秒；超时记为可重试的失败。"
       },
+      "monid_provider": {
+        "label": "Monid 供应商",
+        "hint": "Monid 接口背后的供应商，只能在 sources.yaml 中修改；输出形状改变时也需要相应解析器。"
+      },
+      "monid_endpoint": {
+        "label": "Monid 接口",
+        "hint": "LinkedIn 岗位接口，例如 /harvestapi/linkedin-job-search。只能在 sources.yaml 中修改。"
+      },
+      "monid_price_per_1k": {
+        "label": "每 1000 条价格（美元）",
+        "hint": "请求前按此价格限制条数；实际扣费即使超出本地预算也照常记账。"
+      },
+      "monid_flat_fee": {
+        "label": "每次运行固定费用（美元）",
+        "hint": "每次运行单独收取，拆分关键词后的每次查询也各收一次。"
+      },
+      "monid_timeout": {
+        "label": "运行超时（毫秒）",
+        "hint": "超时后请求停止，并在停止宽限期内继续轮询。"
+      },
+      "monid_stop_grace": {
+        "label": "停止宽限期（毫秒）",
+        "hint": "请求停止后等待终态；无法确认的运行按请求条数上限保守记账。"
+      },
       "apify_country_name": {
         "label": "国家名称",
         "hint": "城市查询时附在城市后面，例如 Berlin, Germany；留空 = 市场国家的英文名。"
@@ -3394,6 +3418,7 @@
       "okReason": "—",
       "runCost": "费用 {cost}",
       "notConfiguredHintApify": "在 .env 里设置 APIFY_TOKEN（并在 sources.yaml 填 linkedin.apify.actor_id）；在此之前级联会跳过这个通道。",
+      "notConfiguredHintMonid": "在 .env 中设置 MONID_API_KEY；在此之前级联会跳过该通道，不记失败。",
       "login": {
         "missing": "未登录",
         "valid": "登录有效",
@@ -4430,6 +4455,7 @@
       "loginMissing": "LinkedIn 未登录",
       "loginExpired": "LinkedIn 登录已过期",
       "missingApify": "缺 APIFY_TOKEN 或 actor_id",
+      "missingMonid": "缺 MONID_API_KEY",
       "notConfigured": "还没配置",
       "neverChecked": "还没检查过（下一轮会检查）",
       "boardFailing": "连续 {count} 次失败：{error}",

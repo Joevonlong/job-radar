@@ -246,7 +246,7 @@ function otherSettings(config: ChannelsConfig): Record<string, unknown> {
   delete rest.ats_boards;
   delete rest.sources;
   const linkedin = rest.linkedin;
-  if (isRecord(linkedin)) for (const key of ["brightdata", "apify", "session", "guest"]) delete linkedin[key];
+  if (isRecord(linkedin)) for (const key of ["brightdata", "apify", "monid", "session", "guest"]) delete linkedin[key];
   const jobspy = rest.jobspy;
   if (isRecord(jobspy)) delete jobspy.proxies;
   return rest;

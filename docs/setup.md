@@ -43,6 +43,10 @@ does all of it: see [telegram.md](telegram.md#1-set-it-up-with-one-command). The
 to `claude` / `codex` or LinkedIn for you: see [host-setup.md](host-setup.md), [ai-providers.md](ai-providers.md) and
 [linkedin-session.md](linkedin-session.md).
 
+The default LinkedIn order is Bright Data → Apify → Monid → session → guest. The paid fallbacks need
+`BRIGHT_DATA_API_KEY`, `APIFY_TOKEN` and `MONID_API_KEY` respectively; missing keys are skipped without failures.
+[Monid setup](monid.md) covers its separate prepaid wallet and recommended workspace spend cap.
+
 Not part of the wizard (links on the review step): signal categories, push thresholds, the processing schedule and the
 application workflow (Settings → Workflow, `/interests`).
 

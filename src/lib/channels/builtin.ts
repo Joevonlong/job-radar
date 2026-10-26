@@ -11,6 +11,7 @@ import { loadConfig } from "@/lib/config";
 
 import { createApifyChannel } from "./linkedin/apify";
 import { createBrightDataChannel } from "./linkedin/brightdata";
+import { createMonidChannel } from "./linkedin/monid";
 import { createSessionChannels } from "./linkedin/session";
 import type { ChannelRegistry } from "./registry";
 
@@ -40,7 +41,8 @@ export function registerBuiltinChannels(registry: ChannelRegistry): void {
       pricePer1kUsd: () => loadConfig("channels").linkedin.apify.price_per_1k_usd,
     }),
   );
-  // Third in the LinkedIn cascade (the user's own logged-in browser, read-only) and the once-a-day "recommended for you" read.
+  registry.register(createMonidChannel({ pricePer1kUsd: () => loadConfig("channels").linkedin.monid.price_per_1k_usd }));
+  // Fourth in the LinkedIn cascade (the user's own logged-in browser, read-only) and the once-a-day "recommended for you" read.
   // Without .auth/linkedin.json both are "not configured" and do nothing.
   const linkedinSession = createSessionChannels();
   registry.register(linkedinSession.session);

@@ -10,7 +10,7 @@ describe("CHANNEL_CONFIG_TABLE", () => {
   it("maps every block of sources.yaml to exactly one channel id", () => {
     const config = shippedChannels();
     const expected = [
-      ...["brightdata", "apify", "session", "guest"].map((k) => `linkedin.${k}`),
+      ...["brightdata", "apify", "monid", "session", "guest"].map((k) => `linkedin.${k}`),
       ...Object.keys(config.sources).map((k) => `sources.${k}`),
     ].sort();
     // the "recommended for you" side channel is a second channel on the linkedin.session block
@@ -20,6 +20,7 @@ describe("CHANNEL_CONFIG_TABLE", () => {
 
   it("uses the documented ids for LinkedIn and the config key for sources", () => {
     expect(CHANNEL_CONFIG_TABLE["linkedin-brightdata"]).toEqual({ section: "linkedin", key: "brightdata" });
+    expect(CHANNEL_CONFIG_TABLE["linkedin-monid"]).toEqual({ section: "linkedin", key: "monid" });
     expect(CHANNEL_CONFIG_TABLE["linkedin-guest"]).toEqual({ section: "linkedin", key: "guest" });
     expect(CHANNEL_CONFIG_TABLE["linkedin-session:recommended"]).toEqual({ section: "linkedin", key: "session", view: "recommended" });
     expect(CHANNEL_CONFIG_TABLE.arbeitsagentur).toEqual({ section: "sources", key: "arbeitsagentur" });
@@ -44,6 +45,7 @@ describe("settingsFromConfig", () => {
       throttle: { minDelayMs: 500, maxDelayMs: 1500 },
     });
     expect(settingsFromConfig("linkedin-apify", config)).toMatchObject({ enabled: true, monthlyBudgetUsd: 10, freeRecordsPerMonth: 0 }); // on; without APIFY_TOKEN the cascade skips it
+    expect(settingsFromConfig("linkedin-monid", config)).toMatchObject({ enabled: true, monthlyBudgetUsd: 5, freeRecordsPerMonth: 0 });
     expect(settingsFromConfig("linkedin-session", config).enabled).toBe(false);
     expect(settingsFromConfig("arbeitsagentur", config)).toMatchObject({ enabled: true, freeRecordsPerMonth: 0, monthlyBudgetUsd: 0 });
   });
@@ -51,6 +53,15 @@ describe("settingsFromConfig", () => {
   it("exposes the raw block for channel-specific keys", () => {
     expect(settingsFromConfig("linkedin-apify", config).extra).toHaveProperty("actor_id");
     expect(settingsFromConfig("linkedin-session", config).extra).toHaveProperty("recommended_daily");
+  });
+});
+
+describe("Monid budget validation", () => {
+  it("rejects a channel budget above the global cap", () => {
+    expect(() => channelsWith((raw) => {
+      const linkedin = raw.linkedin as Record<string, Record<string, unknown>>;
+      linkedin.monid!.monthly_budget_usd = Number(raw.paid_total_monthly_budget_usd) + 1;
+    })).toThrow(/must not exceed paid_total_monthly_budget_usd/);
   });
 });
 

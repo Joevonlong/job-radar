@@ -76,7 +76,7 @@ export interface SourceCard {
   otherMarket: boolean;
   /** `markets` of sources.yaml; empty = every market. */
   markets: string[];
-  /** The channel needs credentials that are not set (`brave` / `tavily` without their API key: it runs but does nothing; `jsearch` without `JSEARCH_API_KEY`: it sends no request; `linkedin-apify` without `APIFY_TOKEN` or an actor id, `linkedin-brightdata` without its key: the cascade skips it). */
+  /** The channel needs credentials that are not set (`brave` / `tavily` without their API key: it runs but does nothing; `jsearch` without `JSEARCH_API_KEY`: it sends no request; `linkedin-apify` without `APIFY_TOKEN` or an actor id, `linkedin-monid` / `linkedin-brightdata` without their keys: the cascade skips them). */
   notConfigured: boolean;
   /** Names of the environment variables this channel needs and lacks (names only; empty when none, or when the caller passed no environment). */
   missingEnv: string[];
@@ -228,6 +228,8 @@ export interface SourcesViewInput {
   aiWorker: AiWorkerStatus;
   /** `APIFY_TOKEN` and `linkedin.apify.actor_id` are set (default: yes, so no "not configured" badge). */
   apifyConfigured?: boolean;
+  /** `MONID_API_KEY` is set (default: yes, like `braveConfigured`). */
+  monidConfigured?: boolean;
   /** `BRIGHT_DATA_API_KEY` is set (default: yes, like `braveConfigured`). */
   brightdataConfigured?: boolean;
   /** `JSEARCH_API_KEY` is set (default: yes, like `braveConfigured`). */
@@ -252,10 +254,11 @@ function isSessionChannel(id: string): boolean {
   return id === "linkedin-session" || id === "linkedin-session:recommended";
 }
 
-function notConfigured(id: string, input: Pick<SourcesViewInput, "braveConfigured" | "tavilyConfigured" | "apifyConfigured" | "brightdataConfigured" | "jsearchConfigured" | "gmailConfigured">): boolean {
+function notConfigured(id: string, input: Pick<SourcesViewInput, "braveConfigured" | "tavilyConfigured" | "apifyConfigured" | "monidConfigured" | "brightdataConfigured" | "jsearchConfigured" | "gmailConfigured">): boolean {
   if (id === "brave") return input.braveConfigured === false;
   if (id === "tavily") return input.tavilyConfigured === false;
   if (id === "linkedin-apify") return input.apifyConfigured === false;
+  if (id === "linkedin-monid") return input.monidConfigured === false;
   if (id === "linkedin-brightdata") return input.brightdataConfigured === false;
   if (id === "jsearch") return input.jsearchConfigured === false;
   if (id === "gmail-alerts") return input.gmailConfigured === false;

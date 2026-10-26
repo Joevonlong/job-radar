@@ -32,15 +32,16 @@ describe("Monid run flow", () => {
   });
 
   it.each([
-    [401, "auth_expired", false], [402, "budget_exceeded", false], [403, "blocked", false], [400, "unknown", false],
-    [404, "unknown", false], [408, "network", true], [429, "rate_limited", true], [502, "unknown", false], [503, "budget_exceeded", false],
-  ] as const)("reads HTTP %i bodies and does not retry the billable POST", async (status, code, retryable) => {
+    [401, "auth_expired", false, 0], [402, "budget_exceeded", false, 0], [403, "blocked", false, 0], [400, "unknown", false, 0],
+    [404, "unknown", false, 0], [408, "network", true, 0.011], [409, "unknown", false, 0],
+    [429, "rate_limited", true, 0], [502, "unknown", false, 0.011], [503, "budget_exceeded", false, 0],
+  ] as const)("reads HTTP %i bodies and does not retry the billable POST", async (status, code, retryable, usd) => {
     const read = vi.fn(async () => JSON.stringify({ error: FAKE_KEY }));
     const h = await harness([{ ...response(status, {}), text: read }]);
     await expect(h.channel.collect(query(), h.ctx)).rejects.toMatchObject({ code, retryable });
     expect(read).toHaveBeenCalledOnce();
     expect(h.requests).toHaveLength(1);
-    expect(h.ctx.budget.snapshot().usd).toBe(0);
+    expect(h.ctx.budget.snapshot().usd).toBe(usd);
     expect(JSON.stringify(h.logs)).not.toContain(FAKE_KEY);
   });
 
@@ -57,6 +58,66 @@ describe("Monid run flow", () => {
     expect(h.requests.filter((r) => r.method === "POST")).toHaveLength(1);
     expect(h.requests.filter((r) => r.method === "GET")).toHaveLength(2);
     expect(h.logs.some((l) => l.message === "retrying request")).toBe(true);
+  });
+
+  it.each([429, 500, 502, 503, 504])("keeps a paid run alive through GET %i until it completes and bills once", async (status) => {
+    const h = await harness([response(202, responses.accepted), response(status, { status: "error" }), response(200, completed({ output: jobs }))]);
+    const consume = vi.spyOn(h.ctx.budget, "consume");
+    expect(await h.channel.collect(query(), h.ctx)).toHaveLength(2);
+    expect(consume).toHaveBeenCalledExactlyOnceWith(2, { costUsd: 0.003, allowOverspend: true });
+    expect(h.ctx.budget.snapshot().usd).toBe(0.003);
+    expect(h.requests.map((r) => r.method)).toEqual(["POST", "GET", "GET"]);
+    if (status === 500 || status === 504) expect(h.logs.some((l) => l.message === "retrying request" && l.fields?.status === status)).toBe(true);
+  });
+
+  it("continues polling after the HTTP layer exhausts network retries before the deadline", async () => {
+    const disconnected = new TypeError("GET connection lost");
+    const h = await harness([response(202, responses.accepted), disconnected, disconnected, disconnected, response(200, completed({ output: jobs }))],
+      { settings: settings({ timeout_ms: 100 }) });
+    const consume = vi.spyOn(h.ctx.budget, "consume");
+    expect(await h.channel.collect(query(), h.ctx)).toHaveLength(2);
+    expect(h.requests.map((r) => r.method)).toEqual(["POST", "GET", "GET", "GET", "GET"]);
+    expect(consume).toHaveBeenCalledOnce();
+    expect(h.ctx.budget.snapshot().usd).toBe(0.003);
+  });
+
+  it("keeps polling when a transient error body is unreadable", async () => {
+    const h = await harness([response(202, responses.accepted),
+      { ...response(503, {}), text: async () => { throw new TypeError("GET body disconnected"); } }, response(200, completed({ output: jobs }))]);
+    const consume = vi.spyOn(h.ctx.budget, "consume");
+    expect(await h.channel.collect(query(), h.ctx)).toHaveLength(2);
+    expect(consume).toHaveBeenCalledOnce();
+    expect(h.ctx.budget.snapshot().usd).toBe(0.003);
+  });
+
+  it.each([402, 503])("maps an unknown status string on POST HTTP %i by transport status", async (status) => {
+    const h = await harness([response(status, { status: "error", runId: "run_example" })]);
+    await expect(h.channel.collect(query(), h.ctx)).rejects.toMatchObject({ code: "budget_exceeded" });
+    expect(h.ctx.budget.snapshot().usd).toBe(0);
+    expect(h.requests).toHaveLength(1);
+  });
+
+  it.each([200, 202])("rejects an unknown status on POST HTTP %i and conservatively bills once", async (status) => {
+    const h = await harness([response(status, { status: "FUTURE_STATUS", runId: "run_example", cost: { value: 0, currency: "USD" } })]);
+    const consume = vi.spyOn(h.ctx.budget, "consume");
+    await expect(h.channel.collect(query(), h.ctx)).rejects.toMatchObject({ code: "parse", retryable: false });
+    expect(consume).toHaveBeenCalledOnce();
+    expect(h.ctx.budget.snapshot().usd).toBe(0.011);
+    expect(h.requests).toHaveLength(1);
+  });
+
+  it("rejects an unknown polling status with a parse failure and conservative accounting", async () => {
+    const h = await harness([response(202, responses.accepted), response(200, { status: "error" })]);
+    await expect(h.channel.collect(query(), h.ctx)).rejects.toMatchObject({ code: "parse", retryable: false });
+    expect(h.ctx.budget.snapshot().usd).toBe(0.011);
+  });
+
+  it.each([500, 502, 504])("conservatively charges a POST HTTP %i with no run settlement, without retrying", async (status) => {
+    const h = await harness([response(status, responses.error)]);
+    const consume = vi.spyOn(h.ctx.budget, "consume");
+    await expect(h.channel.collect(query(), h.ctx)).rejects.toMatchObject({ code: status === 502 ? "unknown" : "network" });
+    expect(consume).toHaveBeenCalledExactlyOnceWith(0, { costUsd: 0.011, allowOverspend: true });
+    expect(h.requests).toHaveLength(1);
   });
 
   it("classifies a missing run as non-retryable and conservatively charges the accepted run", async () => {
@@ -76,11 +137,19 @@ describe("Monid run flow", () => {
     expect(String(error)).not.toContain(FAKE_KEY);
   });
 
-  it("charges conservatively when the initial POST times out while reading its body", async () => {
-    const h = await harness([{ ...response(202, {}), text: async () => { throw new TypeError("body disconnected"); } }]);
+  it.each([202, 400, 401, 402, 403, 404, 409, 429, 500, 502, 503, 504])("charges conservatively when the POST HTTP %i body cannot be read completely", async (status) => {
+    const h = await harness([{ ...response(status, {}), text: async () => { throw new TypeError("body disconnected"); } }]);
+    const consume = vi.spyOn(h.ctx.budget, "consume");
     await expect(h.channel.collect(query(), h.ctx)).rejects.toMatchObject({ code: "network", retryable: true });
     expect(h.ctx.budget.snapshot().usd).toBe(0.011);
+    expect(consume).toHaveBeenCalledOnce();
     expect(h.requests).toHaveLength(1);
+  });
+
+  it("charges conservatively for an oversized rejection body whose end was never read", async () => {
+    const h = await harness([response(401, "x".repeat(MAX_RESPONSE_CHARS + 1))]);
+    await expect(h.channel.collect(query(), h.ctx)).rejects.toMatchObject({ code: "parse" });
+    expect(h.ctx.budget.snapshot().usd).toBe(0.011);
   });
 
   it("warns when the accepted price is higher than configured", async () => {
@@ -92,6 +161,17 @@ describe("Monid run flow", () => {
 
 describe("timeout and stop", () => {
   const quick = () => settings({ timeout_ms: 5 });
+
+  it("keeps transient GET failures until the deadline, then stops and uses the grace result", async () => {
+    const h = await harness([response(202, responses.accepted), response(503, responses.error), response(429, responses.error),
+      response(202, responses.stopping), response(200, completed({ output: jobs }))], { settings: settings({ timeout_ms: 15 }) });
+    const consume = vi.spyOn(h.ctx.budget, "consume");
+    expect(await h.channel.collect(query(), h.ctx)).toHaveLength(2);
+    expect(h.requests.map((r) => r.method)).toEqual(["POST", "GET", "GET", "POST", "GET"]);
+    expect(h.requests[3]?.path).toBe("/v1/runs/run_example/stop");
+    expect(consume).toHaveBeenCalledOnce();
+    expect(h.ctx.budget.snapshot().usd).toBe(0.003);
+  });
 
   it("reaches stop at the absolute deadline when a GET hangs, instead of retrying past it", async () => {
     vi.useFakeTimers();
@@ -136,6 +216,27 @@ describe("timeout and stop", () => {
     }
   });
 
+  it("bounds a hanging re-GET after 409 and retains the observed settlement at grace expiry", async () => {
+    vi.useFakeTimers();
+    try {
+      const h = await harness([
+        response(202, responses.accepted), response(409, completed({ cost: { value: 0.004, currency: "USD" } })),
+        (request) => new Promise((_resolve, reject) => {
+          request.signal.addEventListener("abort", () => reject(new DOMException("GET timed out", "AbortError")), { once: true });
+        }),
+      ], { settings: quick(), now: () => new Date(), sleep: defaultSleep });
+      const consume = vi.spyOn(h.ctx.budget, "consume");
+      const outcome = h.channel.collect(query(), h.ctx).catch((error: unknown) => error);
+      await vi.advanceTimersByTimeAsync(20);
+      expect(await outcome).toMatchObject({ code: "network", retryable: true });
+      expect(h.requests.map((r) => r.method)).toEqual(["POST", "POST", "GET"]);
+      expect(consume).toHaveBeenCalledExactlyOnceWith(2, { costUsd: 0.004, allowOverspend: true });
+      expect(h.ctx.budget.snapshot().usd).toBe(0.004);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("times out, stops, and retains a subsequently completed and billed result", async () => {
     const h = await harness([response(202, responses.accepted), response(202, responses.stopping), response(200, completed({ output: jobs }))], { settings: quick() });
     expect(await h.channel.collect(query(), h.ctx)).toHaveLength(2);
@@ -167,6 +268,47 @@ describe("timeout and stop", () => {
     expect(h.ctx.budget.snapshot().usd).toBe(0.003);
   });
 
+  it.each([{}, { status: "error" }, "invalid JSON"])("re-GETs after 409 even when the stop body is neither a run nor a standard error: %j", async (body) => {
+    const h = await harness([response(202, responses.accepted), response(409, body), response(200, completed({ output: jobs }))], { settings: quick() });
+    expect(await h.channel.collect(query(), h.ctx)).toHaveLength(2);
+    expect(h.requests.map((r) => r.method)).toEqual(["POST", "POST", "GET"]);
+    expect(h.ctx.budget.snapshot().usd).toBe(0.003);
+  });
+
+  it.each([
+    [response(200, "invalid JSON"), "network"],
+    [response(404, responses.error), "unknown"],
+    [response(200, responses.running), "network"],
+    [new TypeError("GET disconnected"), "network"],
+  ] as const)("retains a 409 terminal settlement when re-GET cannot recover the run: %j", async (next, code) => {
+    const h = await harness([response(202, responses.accepted), response(409, completed({ cost: { value: 0.004, currency: "USD" } })), next], { settings: quick() });
+    const consume = vi.spyOn(h.ctx.budget, "consume");
+    await expect(h.channel.collect(query(), h.ctx)).rejects.toMatchObject({ code });
+    expect(h.requests[2]?.method).toBe("GET");
+    expect(consume).toHaveBeenCalledExactlyOnceWith(2, { costUsd: 0.004, allowOverspend: true });
+    expect(h.ctx.budget.snapshot().usd).toBe(0.004);
+  });
+
+  it("retains a 409 zero settlement if re-GET is cancelled and the independent stop has no cost", async () => {
+    const reason = new DOMException("Cycle cancelled", "AbortError");
+    const h = await harness([
+      response(202, responses.accepted), response(409, completed({ cost: { value: 0, currency: "USD" }, billing: undefined })),
+      () => { h.controller.abort(reason); throw reason; }, response(200, responses.stopped),
+    ], { settings: quick() });
+    const consume = vi.spyOn(h.ctx.budget, "consume");
+    await expect(h.channel.collect(query(), h.ctx)).rejects.toBe(reason);
+    expect(consume).toHaveBeenCalledExactlyOnceWith(2, { costUsd: 0, allowOverspend: true });
+    expect(h.ctx.budget.snapshot().usd).toBe(0);
+  });
+
+  it("retains the earlier settlement if re-GET returns a terminal body without billing", async () => {
+    const h = await harness([response(202, responses.accepted), response(409, completed({ cost: { value: 0.004, currency: "USD" } })),
+      response(200, completed({ output: jobs, cost: undefined, billing: undefined }))], { settings: quick() });
+    const consume = vi.spyOn(h.ctx.budget, "consume");
+    expect(await h.channel.collect(query(), h.ctx)).toHaveLength(2);
+    expect(consume).toHaveBeenCalledExactlyOnceWith(2, { costUsd: 0.004, allowOverspend: true });
+  });
+
   it("charges the full configured limit on grace expiry and logs the run id", async () => {
     const h = await harness([response(202, responses.accepted), response(202, responses.stopping), response(200, responses.running)], { settings: quick() });
     await expect(h.channel.collect(query(), h.ctx)).rejects.toMatchObject({ code: "network", retryable: true });
@@ -195,6 +337,19 @@ describe("timeout and stop", () => {
 });
 
 describe("cancellation and credential safety", () => {
+  it.each(["BLOCKED", "STOPPED"])("conservatively charges cancellation with no cost fields even after terminal %s", async (status) => {
+    const reason = new DOMException("Cancelled cycle", "AbortError");
+    let cancel = () => {};
+    const h = await harness([response(202, responses.accepted), response(200, { status })], {
+      sleep: async () => { cancel(); throw reason; },
+    });
+    cancel = () => h.controller.abort(reason);
+    const consume = vi.spyOn(h.ctx.budget, "consume");
+    await expect(h.channel.collect(query(), h.ctx)).rejects.toBe(reason);
+    expect(consume).toHaveBeenCalledExactlyOnceWith(0, { costUsd: 0.011, allowOverspend: true });
+    expect(h.ctx.budget.snapshot().usd).toBe(0.011);
+  });
+
   it("gives the independent cancellation stop its own short timeout", async () => {
     vi.useFakeTimers();
     try {

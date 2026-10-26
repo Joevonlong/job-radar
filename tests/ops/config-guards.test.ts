@@ -19,6 +19,17 @@ const channels = (edit: (raw: Record<string, Record<string, Record<string, unkno
 };
 
 describe("config guard findings", () => {
+  it("reports a custom Monid endpoint even while the channel is disabled", () => {
+    const value = channels((raw) => {
+      raw.linkedin!.monid!.enabled = false;
+      raw.linkedin!.monid!.api_base_url = "https://monid-proxy.example";
+    });
+    expect(configGuardFindings({ ai: pinnedAi(), channels: value }, {})).toMatchObject([
+      { kind: "endpoint_refused", subject: "sources.yaml linkedin.monid.api_base_url" },
+    ]);
+    expect(configGuardFindings({ ai: pinnedAi(), channels: value }, { JOB_RADAR_ALLOW_CUSTOM_ENDPOINTS: "1" }).map((finding) => finding.kind)).toEqual(["custom_endpoints_env", "endpoint_custom"]);
+  });
+
   it("a default setup has none", () => {
     expect(configGuardFindings({ ai: pinnedAi(), notify: notify(), channels: channels() }, {})).toEqual([]);
   });

@@ -57,6 +57,8 @@ export function useRegistryText(timeZone: string) {
         return t("reason.loginExpired");
       case "missingApify":
         return t("reason.missingApify");
+      case "missingMonid":
+        return t("reason.missingMonid");
       case "notConfigured":
         return t("reason.notConfigured");
       case "neverChecked":

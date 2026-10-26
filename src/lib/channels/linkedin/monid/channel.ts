@@ -53,8 +53,9 @@ export function createMonidChannel(options: MonidChannelOptions): Channel {
         try {
           ctx.signal.throwIfAborted();
           if (index > 0) await ctx.throttle();
-          const limit = Math.min(perRunLimit, remaining, affordableItems(ctx.budget.snapshot().usdLeft, settings.price_per_1k_usd / 1000, settings.flat_fee_usd));
-          if (limit < 1) {
+          const usdLeft = ctx.budget.snapshot().usdLeft;
+          const limit = Math.min(perRunLimit, remaining, affordableItems(usdLeft, settings.price_per_1k_usd / 1000, settings.flat_fee_usd));
+          if (usdLeft <= 0 || limit < 1) {
             localBudgetStop = true;
             throw new BudgetExceededError("channel", "linkedin-monid: budget left does not cover a run and one result");
           }
