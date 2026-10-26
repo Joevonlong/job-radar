@@ -149,6 +149,66 @@ describe("TagInput: a repeated entry", () => {
     await waitFor(() => expect(notice()).toHaveTextContent("Already in the list: Alpha"));
   });
 
+  it("does not bring a notice back when the user types during the re-announce gap", () => {
+    vi.useFakeTimers();
+    renderTags({ initial: ["Alpha"] });
+    fireEvent.change(input(), { target: { value: "alpha" } });
+    fireEvent.keyDown(input(), { key: "Enter" });
+    fireEvent.keyDown(input(), { key: "Enter" });
+    expect(notice()).toHaveTextContent("");
+    fireEvent.change(input(), { target: { value: "alphas" } });
+    act(() => {
+      vi.advanceTimersByTime(500);
+    });
+    expect(notice()).toHaveTextContent("");
+  });
+
+  it("does not read the same notice again when the box is left with it already shown", () => {
+    vi.useFakeTimers();
+    renderTags({ initial: ["Alpha"] });
+    fireEvent.change(input(), { target: { value: "alpha" } });
+    fireEvent.keyDown(input(), { key: "Enter" });
+    fireEvent.blur(input());
+    expect(notice()).toHaveTextContent("Already in the list: Alpha");
+  });
+
+  it("clears both timers on unmount: no state update afterwards", () => {
+    vi.useFakeTimers();
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { unmount } = renderTags({ initial: ["Alpha"] });
+    fireEvent.change(input(), { target: { value: "alpha" } });
+    fireEvent.keyDown(input(), { key: "Enter" });
+    fireEvent.keyDown(input(), { key: "Enter" });
+    expect(vi.getTimerCount()).toBe(2);
+    unmount();
+    expect(vi.getTimerCount()).toBe(0);
+    act(() => {
+      vi.advanceTimersByTime(3000);
+    });
+    expect(errors).not.toHaveBeenCalled();
+    errors.mockRestore();
+  });
+
+  it("restarts the highlight when the same repeat is refused again", () => {
+    vi.useFakeTimers();
+    renderTags({ initial: ["Alpha", "Beta"] });
+    fireEvent.change(input(), { target: { value: "beta" } });
+    fireEvent.keyDown(input(), { key: "Enter" });
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+    fireEvent.keyDown(input(), { key: "Enter" });
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+    // 2 s after the first refusal but only 1 s after the second
+    expect(document.querySelector("[data-highlighted]")).toHaveTextContent("Beta");
+    act(() => {
+      vi.advanceTimersByTime(600);
+    });
+    expect(document.querySelector("[data-highlighted]")).toBeNull();
+  });
+
   it("clears the notice when the user keeps typing", async () => {
     const user = userEvent.setup();
     renderTags({ initial: ["Alpha"] });

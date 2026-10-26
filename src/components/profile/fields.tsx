@@ -138,6 +138,8 @@ export function TagInput({ id, values, onChange, invalid, describedBy: described
   }
 
   function refuse(existing: string, highlight: boolean) {
+    // leaving the box with the same repeat already named: nothing new to say, do not read it again
+    if (!highlight && duplicateOf === existing) return;
     if (noticeTimer.current !== null) clearTimeout(noticeTimer.current);
     if (duplicateOf === existing) {
       // same repeat again: empty the region first so the screen reader reads it again
@@ -218,14 +220,15 @@ export function TagInput({ id, values, onChange, invalid, describedBy: described
         aria-describedby={describedByIds}
         autoComplete="off"
         onChange={(event) => {
-          if (duplicateOf !== null) clearFeedback();
+          // unconditional: during the re-announce gap the notice is empty but its timer is still pending
+          clearFeedback();
           setPending(event.target.value);
         }}
         onKeyDown={onKeyDown}
         onBlur={() => commit(false)}
       />
       {/* always mounted with a reserved line, so a notice does not move the form; the input is not tied to it (it would be read twice) */}
-      <p id={`${id}-duplicate`} aria-live="polite" className="text-ink-2 text-body-sm min-h-5" data-testid="tag-duplicate">
+      <p aria-live="polite" className="text-ink-2 text-body-sm min-h-5" data-testid="tag-duplicate">
         {noticeValue !== null ? t("duplicate", { value: noticeValue }) : ""}
       </p>
     </div>

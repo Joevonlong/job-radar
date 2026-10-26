@@ -483,7 +483,10 @@ test("AI tab: a scoring criterion with commas is added as one sentence and saved
   const sentence = "A small team, real users, and a direct line to the founders";
   await open(page, "ai");
   const priorities = page.getByTestId("settings-card-ai").getByLabel("最看重", { exact: true });
-  await priorities.fill(sentence);
+  // typed key by key: a comma must not end the entry
+  await priorities.click();
+  await priorities.pressSequentially(sentence);
+  await expect(priorities).toHaveValue(sentence);
   await priorities.press("Enter");
   await expect(page.locator('[data-slot="filter-chip"]', { hasText: sentence })).toHaveCount(1);
   // the same sentence in other case is a repeat
