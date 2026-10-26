@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { spawn, spawnSync } from "node:child_process";
+import { spawn, spawnSync, type SpawnSyncOptions } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -22,9 +22,9 @@ const fakeWrapper = path.join(repoRoot, "tests/fixtures/ops/fake-deploy-prod.sh"
 const ownerFixture = fs.readFileSync(path.join(repoRoot, "tests/fixtures/ops/lock-owner-wrapper.txt"), "utf8");
 const FIXTURE_TOKEN = "0123456789abcdef0123456789abcdef";
 // Real subprocesses can be descheduled by parallel suites; these limits only catch hangs.
-const HANG_GUARD_MS = 120_000;
-// The largest case runs five deploys. Leave room for each inner guard plus cleanup.
-const TEST_TIMEOUT_MS = 6 * HANG_GUARD_MS;
+const HANG_GUARD_MS = 60_000;
+const CLEANUP_GUARD_MS = 10_000;
+const TEST_TIMEOUT_MS = 300_000;
 const PS_COMMAND =
   "ps -A -o pid,ppid,pgid,etime,command | grep -E '[d]ocker compose|[p]npm|[m]igrate|[c]onfig[:-]|[o]ps:drain|[p]repare-release|[i]nstall-ai-worker|[l]aunchctl|[s]ystemctl'";
 
@@ -46,6 +46,11 @@ const git = (cwd: string, ...args: string[]): string => {
 function write(file: string, content: string, mode = 0o644): void {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, content, { mode });
+}
+
+function replaceRequired(source: string, search: string, replacement: string): string {
+  expect(source).toContain(search);
+  return source.replaceAll(search, () => replacement);
 }
 
 const NO_FREEZE_TOKEN = `if [[ -n "\${JOB_RADAR_UPGRADE_FREEZE_TOKEN+x}" ]]; then echo 'unexpected upgrade token' >&2; exit 97; fi\n`;
@@ -77,7 +82,7 @@ releases_pid_alive() { echo "# pid_alive $1 inflight=$(ls "\${LOCK:-/nonexistent
 `;
 
 // Log inside the actual return branch: a positive predicate alone does not prove the wait stopped.
-const INTERRUPTED_WAIT_RETURN = 'ai_worker_interrupted && { echo "# receipt wait interrupted" >> "$DEPLOY_TEST_LOG"; return 1; }';
+const INTERRUPTED_WAIT_RETURN = 'ai_worker_interrupted && { echo "# receipt wait interrupted" >> "${DEPLOY_TEST_LOG:-/dev/null}"; return 1; }';
 
 // Hook snippets for the stubs (run with bash -c; DEPLOY_PID is deploy.sh's PID, WORK the checkout, LOCK the lock directory).
 const GIT_T = 'git -C "$WORK" -c user.name=t -c user.email=t@example.com';
@@ -96,29 +101,22 @@ beforeAll(() => {
   log = path.join(tmp, "calls.log");
   fs.mkdirSync(path.join(tmp, "home"));
   fs.mkdirSync(path.join(tmp, "wait-tmp"));
-  // Control rollback and child completion with files, after the child has installed its signal traps.
-  write(path.join(tmp, "blocking-stub.sh"), fs.readFileSync(blockingStub, "utf8")
-    .replace('log rollback; sleep "${BLOCK_ROLLBACK_SLEEP:-0}"; report; exit 1', `log rollback
-    if [[ -n "\${BLOCK_ROLLBACK_CONTINUE:-}" ]]; then
-      while [[ ! -e "$BLOCK_ROLLBACK_CONTINUE" ]]; do sleep 0.05; done
-    else sleep "\${BLOCK_ROLLBACK_SLEEP:-0}"; fi
-    report; exit 1`)
-    .replace('sleep "$BLOCK_GRANDCHILD"; log "grandchild done"', `log "grandchild ready"
-    if [[ -n "\${BLOCK_GRANDCHILD_CONTINUE:-}" ]]; then
-      while [[ ! -e "$BLOCK_GRANDCHILD_CONTINUE" ]]; do sleep 0.05; done
-    else sleep "$BLOCK_GRANDCHILD"; fi
-    log "grandchild done"`), 0o755);
+  write(path.join(tmp, "blocking-stub.sh"), fs.readFileSync(blockingStub, "utf8"), 0o755);
 
   git(tmp, "init", "--bare", "--initial-branch=main", origin);
   git(tmp, "clone", origin, work);
   realWork = fs.realpathSync(work);
   lockDir = path.join(realWork, "data/releases/ai-worker/.lock");
   buildDir = path.join(realWork, "data/build");
-  write(path.join(work, "scripts/ops/deploy.sh"), fs.readFileSync(realScript, "utf8").replace("set -euo pipefail", () => "set -euo pipefail\nexport DEPLOY_FIXTURE_PID=$$"), 0o755);
-  write(path.join(work, "scripts/ops/lib/proc.sh"), fs.readFileSync(path.join(realLib, "proc.sh"), "utf8"));
+  const realPs = spawnSync("bash", ["-c", "command -v ps"], { encoding: "utf8" }).stdout.trim();
+  write(path.join(work, "scripts/ops/deploy.sh"), replaceRequired(fs.readFileSync(realScript, "utf8"), "set -euo pipefail",
+    `set -euo pipefail\nexport DEPLOY_FIXTURE_PID=$$\nprintf '%s\\n' "$("${realPs}" -o pgid= -p $$ | tr -d ' ')" >> "$DEPLOY_TEST_GROUPS"`), 0o755);
+  // proc_run gives each step its own group. Record it before polling, so a timed-out run can kill all its steps.
+  write(path.join(work, "scripts/ops/lib/proc.sh"), replaceRequired(fs.readFileSync(path.join(realLib, "proc.sh"), "utf8"),
+    "PROC_PGID=$!;", 'PROC_PGID=$!; printf \'%s\\n\' "$PROC_PGID" >> "$DEPLOY_TEST_GROUPS";'));
   write(path.join(work, "scripts/ops/lib/releases.sh"), fs.readFileSync(path.join(realLib, "releases.sh"), "utf8") + RELEASE_LOGGER);
   write(path.join(work, "scripts/ops/lib/deploy-result.sh"), fs.readFileSync(path.join(realLib, "deploy-result.sh"), "utf8"));
-  write(path.join(work, "scripts/ops/lib/ai-worker.sh"), fs.readFileSync(path.join(realLib, "ai-worker.sh"), "utf8").replaceAll("ai_worker_interrupted && return 1", INTERRUPTED_WAIT_RETURN));
+  write(path.join(work, "scripts/ops/lib/ai-worker.sh"), replaceRequired(fs.readFileSync(path.join(realLib, "ai-worker.sh"), "utf8"), "ai_worker_interrupted && return 1", INTERRUPTED_WAIT_RETURN));
   write(path.join(work, "scripts/ops/backup.sh"), `${LOGGING_STUB("backup.sh")}exit \${BACKUP_EXIT:-0}\n`, 0o755);
   // the install stub carries the capability line deploy.sh --ref looks for in the target commit
   write(path.join(work, "scripts/ops/install-ai-worker.sh"), `${STEP_STUB("install-ai-worker.sh", "INSTALL")}# capability: ai-worker-release-dir\n`, 0o755);
@@ -133,7 +131,6 @@ beforeAll(() => {
   git(work, "push", "origin", "main");
 
   const realGit = spawnSync("bash", ["-c", "command -v git"], { encoding: "utf8" }).stdout.trim();
-  const realPs = spawnSync("bash", ["-c", "command -v ps"], { encoding: "utf8" }).stdout.trim();
   write(path.join(stubs, "ps"), `${LOGGING_STUB("ps")}
 if [[ "$*" == '-A -o pid=,args=' ]]; then
   if [[ -n "\${PROCESS_SCAN_HOOK:-}" ]]; then bash -c "$PROCESS_SCAN_HOOK"; fi
@@ -266,10 +263,12 @@ exit \${!var:-0}
   );
 }, HANG_GUARD_MS);
 
-afterAll(() => {
+afterAll(async () => {
+  for (const run of activeRuns) await stopDeploy(run);
   if (tmp && path.basename(tmp).startsWith("deploy-test-")) fs.rmSync(tmp, { recursive: true, force: true });
 }, HANG_GUARD_MS);
-afterEach(() => {
+afterEach(async () => {
+  for (const run of activeRuns) await stopDeploy(run);
   for (const dir of ["config", "profile"]) fs.rmSync(path.join(work, "data", dir), { recursive: true, force: true });
   fs.rmSync(path.join(tmp, "home/Library/LaunchAgents/io.jobradar.ai-worker.plist"), { force: true });
   fs.rmSync(path.join(tmp, "home/loaded"), { force: true });
@@ -323,55 +322,136 @@ function deployEnv(env: Record<string, string | undefined>): NodeJS.ProcessEnv {
   };
 }
 
-function deploy(args: string[], env: Record<string, string | undefined> = {}): Run {
-  resetLogs();
-  const result = spawnSync("bash", [path.join(work, "scripts/ops/deploy.sh"), ...args], {
-    cwd: work,
-    encoding: "utf8",
-    env: deployEnv(env),
-    timeout: HANG_GUARD_MS,
-  });
-  if (result.error) throw result.error;
-  return collect(result.status, `${result.stdout}${result.stderr}`);
+type ProcessScope = { pid: number; groupsFile: string; output: () => string };
+type RunningDeploy = ProcessScope & { done: Promise<Run>; ended: () => string | undefined };
+const activeRuns = new Set<RunningDeploy>();
+let runSequence = 0;
+
+function runFiles(): { groupsFile: string; output: () => string; fd: number } {
+  const prefix = path.join(tmp, `run-${++runSequence}`);
+  const groupsFile = `${prefix}.groups`;
+  const outputFile = `${prefix}.out`;
+  fs.writeFileSync(groupsFile, "");
+  return { groupsFile, output: () => fs.readFileSync(outputFile, "utf8"), fd: fs.openSync(outputFile, "w") };
 }
+
+function killRunGroups(run: ProcessScope): Set<number> {
+  const groups = new Set([run.pid, ...readLines(run.groupsFile).map(Number)].filter((id) => Number.isInteger(id) && id > 1));
+  for (const group of groups) {
+    try { process.kill(-group, "SIGKILL"); } catch (error) {
+      if (error instanceof Error && "code" in error) {
+        if (error.code === "ESRCH") continue;
+        // macOS returns EPERM for a zombie-only group. Confirm that no member can still run before ignoring it.
+        if (error.code === "EPERM" && !groupsRemain(new Set([group]))) continue;
+      }
+      throw new Error(`cannot terminate deploy process group ${group}:\n${run.output()}`, { cause: error });
+    }
+  }
+  return groups;
+}
+
+// A killed, orphaned process can briefly be a zombie; it cannot run or hold the fixture's files open.
+function groupsRemain(groups: Set<number>): boolean {
+  const ps = spawnSync("ps", ["-A", "-o", "pgid=,stat="], { encoding: "utf8", timeout: CLEANUP_GUARD_MS, killSignal: "SIGKILL" });
+  if (ps.error || ps.status !== 0) throw new Error(`cannot check deploy process groups: ${ps.error?.message ?? ps.stderr}`);
+  return ps.stdout.trim().split("\n").some((line) => {
+    const [group, state] = line.trim().split(/\s+/);
+    return groups.has(Number(group)) && !state?.startsWith("Z");
+  });
+}
+
+// File-backed output prevents inherited stdout/stderr pipes from keeping spawnSync blocked after SIGKILL.
+function runSync(command: string, args: string[], env: Record<string, string | undefined> = {}): Run {
+  resetLogs();
+  const files = runFiles();
+  let pid = -1;
+  try {
+    // Node 22's sync spawn supports detached (via normalizeSpawnArguments); @types/node omits the option.
+    const options: SpawnSyncOptions & { detached: boolean } = {
+      cwd: work,
+      env: { ...deployEnv(env), DEPLOY_TEST_GROUPS: files.groupsFile },
+      detached: true,
+      stdio: ["ignore", files.fd, files.fd],
+      timeout: HANG_GUARD_MS,
+      killSignal: "SIGKILL",
+    };
+    const result = spawnSync(command, args, options);
+    pid = result.pid;
+    if (result.error) throw new Error(`deploy failed: ${result.error.message}\n${files.output()}`, { cause: result.error });
+    return collect(result.status, files.output());
+  } finally {
+    fs.closeSync(files.fd);
+    const groups = killRunGroups({ pid, ...files });
+    const until = performance.now() + CLEANUP_GUARD_MS;
+    while (groupsRemain(groups)) {
+      if (performance.now() > until) throw new Error(`deploy groups did not exit: ${[...groups]}\n${files.output()}`);
+      spawnSync("sleep", ["0.05"], { timeout: CLEANUP_GUARD_MS, killSignal: "SIGKILL" });
+    }
+  }
+}
+
+const deploy = (args: string[], env: Record<string, string | undefined> = {}): Run =>
+  runSync("bash", [path.join(work, "scripts/ops/deploy.sh"), ...args], env);
 
 // deploy.sh in its own process group (spawn detached), so a test can signal the group like a terminal does.
-function startDeploy(command: string[], env: Record<string, string | undefined> = {}): { pid: number; done: Promise<Run>; output: () => string } {
+function startDeploy(command: string[], env: Record<string, string | undefined> = {}): RunningDeploy {
   resetLogs();
   fs.rmSync(path.join(tmp, "continue"), { force: true });
-  const child = spawn("bash", command, { cwd: work, env: deployEnv(env), detached: true, stdio: ["ignore", "pipe", "pipe"] });
-  let out = "";
-  child.stdout.on("data", (d: Buffer) => (out += d.toString()));
-  child.stderr.on("data", (d: Buffer) => (out += d.toString()));
-  const done = new Promise<Run>((resolve) => child.on("close", (code, signal) => resolve(collect(code ?? (signal ? -1 : null), out))));
-  return { pid: child.pid ?? -1, done, output: () => out };
+  const files = runFiles();
+  const child = spawn("bash", command, {
+    cwd: work, env: { ...deployEnv(env), DEPLOY_TEST_GROUPS: files.groupsFile }, detached: true, stdio: ["ignore", files.fd, files.fd],
+  });
+  fs.closeSync(files.fd);
+  let ended: string | undefined;
+  child.on("error", (error) => { ended = `deploy failed to start: ${error.message}`; });
+  child.on("exit", (code, signal) => { ended = `deploy exited (${signal ?? code})`; });
+  const done = new Promise<Run>((resolve) => child.on("close", (code, signal) => resolve(collect(code ?? (signal ? -1 : null), files.output()))));
+  const run = { pid: child.pid ?? -1, done, ended: () => ended, ...files };
+  activeRuns.add(run);
+  return run;
 }
 
-async function waitFor(what: string, cond: () => boolean): Promise<void> {
+async function stopDeploy(run: RunningDeploy): Promise<void> {
+  const groups = killRunGroups(run);
+  await run.done; // Reap the direct child before any test releases gates or removes fixture files.
+  const until = performance.now() + CLEANUP_GUARD_MS;
+  while (groupsRemain(groups)) {
+    if (performance.now() > until) throw new Error(`deploy groups did not exit: ${[...groups]}\n${run.output()}`);
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  activeRuns.delete(run);
+}
+
+async function waitFor(run: RunningDeploy, what: string, cond: () => boolean, { allowExited = false } = {}): Promise<void> {
   const until = performance.now() + HANG_GUARD_MS;
   while (!cond()) {
-    if (performance.now() > until) throw new Error(`timed out waiting for ${what}`);
+    if (run.ended() && !allowExited) throw new Error(`${run.ended()} while waiting for ${what}:\n${run.output()}`);
+    if (performance.now() > until) throw new Error(`timed out waiting for ${what}:\n${run.output()}`);
     await new Promise((r) => setTimeout(r, 50));
   }
 }
 
-const waitForSignal = (run: ReturnType<typeof startDeploy>): Promise<void> =>
-  waitFor("the deploy to record the signal", () => run.output().includes("stopping after this step"));
+const waitForSignal = (run: RunningDeploy): Promise<void> =>
+  waitFor(run, "the deploy to record the signal", () => run.output().includes("stopping after this step"));
 
-async function waitForDeploy(run: ReturnType<typeof startDeploy>): Promise<Run> {
+async function waitForDeploy(run: RunningDeploy): Promise<Run> {
   let guard: ReturnType<typeof setTimeout> | undefined;
+  let timedOut = false;
   try {
-    return await Promise.race([
+    const result = await Promise.race([
       run.done,
       new Promise<never>((_resolve, reject) => {
         guard = setTimeout(() => {
-          try { process.kill(-run.pid, "SIGKILL"); } catch { /* already ended */ }
+          timedOut = true;
           reject(new Error(`timed out waiting for the deploy to exit:\n${run.output()}`));
         }, HANG_GUARD_MS);
       }),
     ]);
+    if (result.status === null) throw new Error(`${run.ended()}\n${run.output()}`);
+    return result;
   } finally {
     clearTimeout(guard);
+    if (timedOut) await stopDeploy(run);
   }
 }
 const logHas = (text: string): boolean => readLines(log).some((l) => l.includes(text));
@@ -790,16 +870,16 @@ describe("scripts/ops/deploy.sh", { timeout: TEST_TIMEOUT_MS }, () => {
     expect(r.out).toContain("Docker is not running");
   });
 
-  it("maps the doctor's verdict: warnings are fine, failures give exit code 2, a crashed doctor is a failed step", () => {
-    expect(deploy(["--settle", "0"], { PNPM_doctor_EXIT: "1" })).toMatchObject({ status: 0, out: expect.stringContaining("The doctor reported warnings") });
-    const failed = deploy(["--settle", "0"], { PNPM_doctor_EXIT: "2" });
-    expect(failed.status).toBe(2);
-    expect(failed.out).toContain("the doctor reported problems");
-    const crashed = deploy(["--settle", "0"], { PNPM_doctor_EXIT: "3" });
-    expect(crashed.status).toBe(1);
-    expect(crashed.out).toContain("the doctor itself could not run");
-    expect(deploy(["--settle", "0"], { PNPM_doctor_EXIT: "0" }).status).toBe(0);
-    expect(deploy(["--settle", "0"], { PNPM_doctor_EXIT: "127" }).status).toBe(1);
+  it.each([
+    ["0", 0, "doctor passed everything"],
+    ["1", 0, "The doctor reported warnings"],
+    ["2", 2, "the doctor reported problems"],
+    ["3", 1, "the doctor itself could not run"],
+    ["127", 1, "the doctor itself could not run"],
+  ])("maps doctor exit %s to deploy exit %i", (doctor, status, message) => {
+    const r = deploy(["--settle", "0"], { PNPM_doctor_EXIT: String(doctor) });
+    expect(r.status, r.out).toBe(status);
+    expect(r.out).toContain(message);
   });
 
   it("the worker switch fails (rolled back:): exit 1 with the next steps, the lock is released, no prune, no doctor", () => {
@@ -1198,9 +1278,9 @@ describe("scripts/ops/deploy.sh: signals", { timeout: TEST_TIMEOUT_MS }, () => {
     ["SIGHUP", 129],
   ] as const)("%s during the build: the build finishes undisturbed, nothing further starts, then cleanup once, exit %i", async (signal, code) => {
     const base = head();
+    const run = startDeploy(deployCmd(), { BUILD_HOOK: BLOCK("build"), BLOCK_GRANDCHILD: "1" });
     try {
-      const run = startDeploy(deployCmd(), { BUILD_HOOK: BLOCK("build"), BLOCK_GRANDCHILD: "1" });
-      await waitFor("the build to start", () => logHas("# build started"));
+      await waitFor(run, "the build to start", () => logHas("# build started"));
       process.kill(-run.pid, signal);
       await waitForSignal(run);
       expect(logHas("# release")).toBe(false); // nothing is cleaned up while the step runs
@@ -1219,6 +1299,7 @@ describe("scripts/ops/deploy.sh: signals", { timeout: TEST_TIMEOUT_MS }, () => {
       expect(buildContexts()).toEqual([]);
       expect(fs.existsSync(lockDir)).toBe(false);
     } finally {
+      await stopDeploy(run);
       release();
       restore(base);
     }
@@ -1241,14 +1322,15 @@ describe("scripts/ops/deploy.sh: signals", { timeout: TEST_TIMEOUT_MS }, () => {
       BLOCK_GRANDCHILD_CONTINUE: grandchildContinue,
     });
     try {
-      await waitFor("the install and its grandchild to be ready", () => logHas("# install started") && logHas("# install grandchild ready"));
+      await waitFor(run, "the install and its grandchild to be ready", () => logHas("# install started") && logHas("# install grandchild ready"));
       process.kill(-run.pid, signal);
       // deploy.sh forwards it as TERM, once (fails here when deploy.sh calls the install without --cooperative)
-      await waitFor("the install to get TERM", () => logHas("# install signal TERM"));
+      await waitFor(run, "the install to get TERM", () => logHas("# install signal TERM"));
       process.kill(-run.pid, signal); // a second signal is only recorded
+      await waitForSignal(run);
       expect(fs.existsSync(lockDir)).toBe(true);
       release();
-      await waitFor("the install to finish rollback", () => logHas("# install exit"));
+      await waitFor(run, "the install to finish rollback", () => logHas("# install exit"));
       expect(logHas("# release")).toBe(false);
       expect(fs.existsSync(lockDir)).toBe(true);
       fs.writeFileSync(grandchildContinue, "");
@@ -1268,17 +1350,18 @@ describe("scripts/ops/deploy.sh: signals", { timeout: TEST_TIMEOUT_MS }, () => {
       expect(fs.existsSync(lockDir)).toBe(false);
       expect(buildContexts()).toEqual([]);
     } finally {
+      await stopDeploy(run);
       release();
       fs.writeFileSync(grandchildContinue, "");
-      try { await waitForDeploy(run); } finally { restore(base); }
+      restore(base);
     }
   });
 
   it("SIGHUP during the config step (it writes the user config): it finishes, then exit 129, no build", async () => {
     const base = head();
+    const run = startDeploy(deployCmd(), { PNPM_config_init_HOOK: BLOCK("config") });
     try {
-      const run = startDeploy(deployCmd(), { PNPM_config_init_HOOK: BLOCK("config") });
-      await waitFor("config:init to start", () => logHas("# config started"));
+      await waitFor(run, "config:init to start", () => logHas("# config started"));
       process.kill(-run.pid, "SIGHUP");
       await waitForSignal(run);
       release();
@@ -1291,6 +1374,7 @@ describe("scripts/ops/deploy.sh: signals", { timeout: TEST_TIMEOUT_MS }, () => {
       expect(r.calls.some((c) => c.endsWith(" build"))).toBe(false);
       expect(r.events.at(-1)).toBe("# release mine=1");
     } finally {
+      await stopDeploy(run);
       release();
       restore(base);
     }
@@ -1311,20 +1395,20 @@ describe("scripts/ops/deploy.sh: signals", { timeout: TEST_TIMEOUT_MS }, () => {
   it.each(["process group", "PID only"])("a signal to the %s during the receipt wait stops without running doctor", async (target) => {
     const base = head();
     installWorker();
-    const run = startDeploy([path.join(work, "scripts/ops/deploy.sh"), "--skip-pull", "--settle", "30"], { STUB_RECEIPT_EXIT: "2" });
+    // Ten times the guard: finishing within the guard proves cancellation cut the wait short.
+    const run = startDeploy([path.join(work, "scripts/ops/deploy.sh"), "--skip-pull", "--settle", "600"], { STUB_RECEIPT_EXIT: "2" });
     try {
-      await waitFor("the first receipt probe", () => logHas("--receipt"));
+      await waitFor(run, "the first receipt probe", () => logHas("--receipt"));
       process.kill(target === "PID only" ? run.pid : -run.pid, "SIGTERM");
       const r = await waitForDeploy(run);
       expect(r.status, r.out).toBe(143);
-      // Require the interruption branch, rather than timing the shell and Node's scheduling delays.
+      // Also require the interruption branch, without a narrow elapsed-time assertion.
       expect(r.events).toContain("# receipt wait interrupted");
       expect(r.calls).not.toContain("pnpm run doctor");
       expect(r.events.filter((e) => e.startsWith("# release"))).toEqual(["# release mine=1"]);
       expect(fs.readdirSync(path.join(tmp, "wait-tmp")).filter((f) => f.startsWith("deploy-wait."))).toEqual([]);
     } finally {
-      try { process.kill(-run.pid, "SIGKILL"); } catch { /* already ended */ }
-      await waitForDeploy(run);
+      await stopDeploy(run);
       restore(base);
     }
   });
@@ -1332,9 +1416,7 @@ describe("scripts/ops/deploy.sh: signals", { timeout: TEST_TIMEOUT_MS }, () => {
   describe("tostop in the terminal is refused in preflight", () => {
     const inPty = (command: string): string => {
       const args = process.platform === "darwin" ? ["-q", "/dev/null", "/bin/bash", "-c", command] : ["-qec", `/bin/bash -c '${command.replaceAll("'", "'\\''")}'`, "/dev/null"];
-      const r = spawnSync("script", args, { cwd: work, encoding: "utf8", env: deployEnv({}), stdio: ["ignore", "pipe", "pipe"], timeout: HANG_GUARD_MS });
-      if (r.error) throw r.error;
-      return `${r.stdout}${r.stderr}`;
+      return runSync("script", args).out;
     };
     const script = (): string => path.join(work, "scripts/ops/deploy.sh");
 
@@ -1392,11 +1474,8 @@ describe("scripts/ops/deploy.sh: the deploy lock and in-flight records", { timeo
     const base = head();
     fs.mkdirSync(path.dirname(lockDir), { recursive: true });
     try {
-      resetLogs();
       // umask 0222: the new .lock is not writable, so creating inflight/ in it fails (like a permission problem would).
-      const result = spawnSync("bash", ["-c", 'umask 0222; exec bash "$0" --skip-pull --settle 0', path.join(work, "scripts/ops/deploy.sh")], { cwd: work, encoding: "utf8", env: deployEnv({}), timeout: HANG_GUARD_MS });
-      if (result.error) throw result.error;
-      const r = collect(result.status, `${result.stdout}${result.stderr}`);
+      const r = runSync("bash", ["-c", 'umask 0222; exec bash "$0" --skip-pull --settle 0', path.join(work, "scripts/ops/deploy.sh")]);
       expect(r.status).toBe(1);
       expect(r.out).toContain("releases: could not initialise the lock (cannot create");
       expect(r.out).toContain("failed: could not initialise the deploy lock");
@@ -1553,11 +1632,11 @@ describe("scripts/ops/deploy.sh: the deploy lock and in-flight records", { timeo
 
   it("the calling script gets TERM and deploy.sh is then killed with -9: the kept lock's 3 wins over the signal's 143", async () => {
     const base = head();
+    const run = startDeploy([fakeWrapper, realLib, realWork, path.join(work, "scripts/ops/deploy.sh"), "--skip-pull", "--settle", "0"], {
+      BUILD_HOOK: `echo "# deploy pid=$DEPLOY_PID" >> "$DEPLOY_TEST_LOG"; ${BLOCK("build")}`,
+    });
     try {
-      const run = startDeploy([fakeWrapper, realLib, realWork, path.join(work, "scripts/ops/deploy.sh"), "--skip-pull", "--settle", "0"], {
-        BUILD_HOOK: `echo "# deploy pid=$DEPLOY_PID" >> "$DEPLOY_TEST_LOG"; ${BLOCK("build")}`,
-      });
-      await waitFor("the build to start", () => logHas("# build started"));
+      await waitFor(run, "the build to start", () => logHas("# build started"));
       const deployPid = Number(/# deploy pid=(\d+)/.exec(fs.readFileSync(log, "utf8"))?.[1]);
       process.kill(run.pid, "SIGTERM");
       await waitForSignal(run);
@@ -1569,6 +1648,7 @@ describe("scripts/ops/deploy.sh: the deploy lock and in-flight records", { timeo
       expect(r.status).toBe(3);
       expect(fs.existsSync(path.join(lockDir, "owner"))).toBe(true);
     } finally {
+      await stopDeploy(run);
       release();
       restore(base);
     }
@@ -1578,16 +1658,16 @@ describe("scripts/ops/deploy.sh: the deploy lock and in-flight records", { timeo
   // own that later reads the build context, logs its PID and blocks; the test then kills only the install with -9.
   const installKilledHook = (mark: string): string =>
     `source "$WORK/scripts/ops/lib/releases.sh"; releases_inflight_register "$WORK" install-ai-worker.sh || exit 9; ` +
-    `set -m; ( sleep 3; [[ -d "$LOCK" ]] && echo done > "${mark}" ) & set +m; echo "# install pid=$$" >> "$DEPLOY_TEST_LOG"; exec env ${BLOCK("install")}`;
+    `set -m; ( sleep 3; [[ -d "$LOCK" ]] && echo done > "${mark}" ) & printf '%s\\n' "$!" >> "$DEPLOY_TEST_GROUPS"; set +m; echo "# install pid=$$" >> "$DEPLOY_TEST_LOG"; exec env ${BLOCK("install")}`;
   const installPid = (): number => Number(/# install pid=(\d+)/.exec(fs.readFileSync(log, "utf8"))?.[1]);
 
   it("only the install is killed with -9: deploy.sh exits 1 (descendant exit not confirmed), the lock, its owner and the install's record stay; the next run is refused", async () => {
     const base = head();
     const mark = path.join(tmp, "install-grandchild-mark");
     fs.rmSync(mark, { force: true });
+    const run = startDeploy([path.join(work, "scripts/ops/deploy.sh"), "--skip-pull", "--settle", "0"], { INSTALL_HOOK: installKilledHook(mark), INSTALL_EXEC: "1" });
     try {
-      const run = startDeploy([path.join(work, "scripts/ops/deploy.sh"), "--skip-pull", "--settle", "0"], { INSTALL_HOOK: installKilledHook(mark), INSTALL_EXEC: "1" });
-      await waitFor("the install to start", () => logHas("# install started"));
+      await waitFor(run, "the install to start", () => logHas("# install started"));
       const pid = installPid();
       expect(fs.readdirSync(path.join(lockDir, "inflight"))).toContain(String(pid));
       process.kill(pid, "SIGKILL");
@@ -1607,8 +1687,9 @@ describe("scripts/ops/deploy.sh: the deploy lock and in-flight records", { timeo
       expect(next.gitCalls.some((c) => / (fetch|merge|pull) /.test(` ${c} `))).toBe(false);
 
       // the grandchild the killed install left behind still found the lock in place
-      await waitFor("the grandchild to finish", () => fs.existsSync(mark));
+      await waitFor(run, "the grandchild to finish", () => fs.existsSync(mark), { allowExited: true });
     } finally {
+      await stopDeploy(run);
       release();
       restore(base);
     }
@@ -1618,12 +1699,12 @@ describe("scripts/ops/deploy.sh: the deploy lock and in-flight records", { timeo
     const base = head();
     const mark = path.join(tmp, "install-grandchild-mark-helper");
     fs.rmSync(mark, { force: true });
+    const run = startDeploy([fakeWrapper, realLib, realWork, path.join(work, "scripts/ops/deploy.sh"), "--skip-pull", "--settle", "0"], {
+      INSTALL_HOOK: installKilledHook(mark),
+      INSTALL_EXEC: "1",
+    });
     try {
-      const run = startDeploy([fakeWrapper, realLib, realWork, path.join(work, "scripts/ops/deploy.sh"), "--skip-pull", "--settle", "0"], {
-        INSTALL_HOOK: installKilledHook(mark),
-        INSTALL_EXEC: "1",
-      });
-      await waitFor("the install to start", () => logHas("# install started"));
+      await waitFor(run, "the install to start", () => logHas("# install started"));
       const pid = installPid();
       process.kill(pid, "SIGKILL");
       const r = await waitForDeploy(run);
@@ -1634,8 +1715,9 @@ describe("scripts/ops/deploy.sh: the deploy lock and in-flight records", { timeo
       expect(fs.existsSync(path.join(lockDir, "owner"))).toBe(true);
       expect(fs.readdirSync(path.join(lockDir, "inflight"))).toContain(String(pid));
       expect(buildContexts()).toHaveLength(1);
-      await waitFor("the grandchild to finish", () => fs.existsSync(mark));
+      await waitFor(run, "the grandchild to finish", () => fs.existsSync(mark), { allowExited: true });
     } finally {
+      await stopDeploy(run);
       release();
       restore(base);
     }
@@ -1687,10 +1769,10 @@ describe("scripts/ops/deploy.sh: the deploy lock and in-flight records", { timeo
     const mark = path.join(tmp, "grandchild-mark");
     fs.rmSync(mark, { force: true });
     fs.rmSync(`${mark}.read`, { force: true });
-    const grandchild = `set -m; ( sleep 3; cat "$JOB_RADAR_BUILD_CONTEXT/package.json" > "${mark}.read" && echo done > "${mark}" ) & set +m; echo "# deploy pid=$DEPLOY_PID" >> "$DEPLOY_TEST_LOG"; ${BLOCK("build")}`;
+    const grandchild = `set -m; ( sleep 3; cat "$JOB_RADAR_BUILD_CONTEXT/package.json" > "${mark}.read" && echo done > "${mark}" ) & printf '%s\\n' "$!" >> "$DEPLOY_TEST_GROUPS"; set +m; echo "# deploy pid=$DEPLOY_PID" >> "$DEPLOY_TEST_LOG"; ${BLOCK("build")}`;
+    const run = startDeploy([fakeWrapper, realLib, realWork, path.join(work, "scripts/ops/deploy.sh"), "--skip-pull", "--settle", "0"], { BUILD_HOOK: grandchild });
     try {
-      const run = startDeploy([fakeWrapper, realLib, realWork, path.join(work, "scripts/ops/deploy.sh"), "--skip-pull", "--settle", "0"], { BUILD_HOOK: grandchild });
-      await waitFor("the build to start", () => logHas("# build started"));
+      await waitFor(run, "the build to start", () => logHas("# build started"));
       const deployPid = Number(/# deploy pid=(\d+)/.exec(fs.readFileSync(log, "utf8"))?.[1]);
       expect(fs.readdirSync(path.join(lockDir, "inflight"))).toContain(String(deployPid));
       process.kill(deployPid, "SIGKILL");
@@ -1711,9 +1793,10 @@ describe("scripts/ops/deploy.sh: the deploy lock and in-flight records", { timeo
       expect(next.gitCalls.some((c) => / (fetch|merge|pull) /.test(` ${c} `))).toBe(false);
       expect(buildContexts()).toEqual(context);
 
-      await waitFor("the grandchild to finish", () => fs.existsSync(mark));
+      await waitFor(run, "the grandchild to finish", () => fs.existsSync(mark), { allowExited: true });
       expect(fs.readFileSync(`${mark}.read`, "utf8")).toBe('{"name":"job-radar"}\n');
     } finally {
+      await stopDeploy(run);
       release();
       restore(base);
     }
