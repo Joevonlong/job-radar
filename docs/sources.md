@@ -46,6 +46,15 @@ A channel's status is the same result as the channel card on the `/sources` over
 "Possibly closed" is a hint based on time, not proof, and it is judged per channel, not per search query:
 
 - A job becomes possibly closed when no source has returned it for `possibly_closed_after_days` days (7 by default) **and** each channel it came from has had at least one successful run that started after those days had passed. Runs that failed, were skipped or were interrupted do not count, so a channel that was down never closes its jobs.
+- A job from a company ATS board additionally needs that board to have been read completely after the job fell overdue,
+  by a run with the normal search window, not a catch-up or backfill run. A complete read means the whole list was read
+  and, for SmartRecruiters, every kept posting's detail was fetched; an "unchanged" response also counts if the board
+  has no unresolved details. A board that is still configured but keeps failing, answers 404, lists fewer postings than
+  it announces or keeps having failing details blocks only its own jobs from being marked, until it is fixed or disabled.
+  A persistent 404 shows as an error in the registry; a persistently short list or failing details still shows OK,
+  but "Last success" stops moving. Removing a board from the config or disabling it stops its checks, and its jobs age
+  as before. After upgrading, each board's "Last success" is empty and its jobs are not marked until the board has been
+  read completely once.
 - An already-stored job still listed by a company ATS board counts as seen even when it falls beyond `max_results`.
   The cap alone does not make it possibly closed.
 - A search only returns postings inside its time window (`window_hours`; JSearch maps it onto its supported windows: today, 3 days, week, month; anything above a week becomes a month), so a query that does not return a job says nothing about whether it is closed. That is why a single query's result never marks a job by itself.
@@ -67,18 +76,28 @@ A watched company's board is read whole: the title prefilter keeps every posting
 A stored posting dropped by the title prefilter does **not** count as seen.
 After you narrow your keywords, it ages out as usual unless another source sees it.
 
+If a SmartRecruiters list page after the first fails or is malformed, the postings already read are kept and stored
+under the same filtering, cap and detail rules, and the board records an error. A later-page 404 or a partial answer
+(a successful HTTP response other than 200, such as 206) is also recorded, but does not by itself make the run fail;
+the log says `ats board read only in part`. If all pages answer but list fewer distinct postings than announced,
+the log says `ats board listed fewer than announced`, also without making the run fail. In all these cases the board
+keeps its previous validator, the list is re-read next time, and "Last success" does not move.
+
 For SmartRecruiters only, a failing detail request no longer marks the board as failed in the registry.
 A stored posting keeps its saved version and is refreshed as seen; a new posting is not stored and is retried in later sweeps, ahead of postings whose
 details already failed before; after a repeated failure, it is only retried once the board's list changes if the server
 answers 304 for the stored validator. Boards that do not answer 304 are re-read every sweep and retry then. After
 `sources.smartrecruiters.max_consecutive_detail_failures` failures in a row (default 3), or a host-level refusal
 (blocked, login/auth expired, rate limit, or budget), the board's remaining details are skipped for that sweep.
-The run outcome is unchanged: if every board of the ATS has a failed list or detail request in that sweep,
-the run is still recorded as interrupted when postings were collected, or failed otherwise, not as a success;
-a board with unresolved details from an earlier sweep that receives 304 keeps counting as failed for the run outcome
-until a full re-read resolves them.
-It is therefore not used to mark jobs as possibly closed. The registry still shows a board as OK when its list
-was read and its stored jobs were refreshed, even if a detail request failed.
+A board with unresolved details is not a complete read, so it never provides evidence for marking jobs possibly closed,
+while its stored jobs stay refreshed. This also applies when it receives 304 with details unresolved from an earlier sweep.
+
+For these board failures, the run is interrupted only when every attempted board of that ATS failed and postings were
+collected; with none collected, it is failed. Failed boards include a missing board, a failed or malformed later list
+page, and any board with unresolved details. A later-page 404, partial answer or short list alone does not count as a
+failed board, but unresolved details still do. If at least one attempted board avoids these failures, the run returns
+the postings normally. The registry still shows a board as OK when its list was read and stored jobs were refreshed,
+even if details failed or it listed fewer postings than announced; "Last success" only advances after a complete read.
 
 ## 4. What you can do on the page
 
@@ -168,7 +187,8 @@ earlier writes. Dry runs and the "Test" button keep config order without reading
 
 | You see | What to do |
 |---|---|
-| SmartRecruiters detail request fails | The board stays OK in the registry; `ats board details missing` logs failed and skipped counts. Stored jobs are refreshed as seen; new jobs are retried in later sweeps, but after a repeated failure only once the board's list changes if the server answers 304 for the stored validator; boards that do not answer 304 are re-read every sweep and retry then. Run outcomes are unchanged; a board with unresolved details from an earlier sweep that receives 304 keeps counting as failed for the run outcome until a full re-read resolves them. See [Company ATS boards](#company-ats-boards). For persistent refusals, check the careers page and network, or increase `sources.smartrecruiters.throttle` delays |
+| SmartRecruiters detail request fails | The board stays OK in the registry; `ats board details missing` logs failed and skipped counts. Stored jobs are refreshed as seen; new jobs are retried in later sweeps, but after a repeated failure only once the board's list changes if the server answers 304 for the stored validator; boards that do not answer 304 are re-read every sweep and retry then. Unresolved details, including on a 304, prevent a complete read: "Last success" does not move and that read is never evidence for possibly closed jobs. They also count as a board failure for the run outcome; the run is interrupted only if every attempted board of that ATS failed and postings were collected, or failed if none were collected. See [Company ATS boards](#company-ats-boards). For persistent refusals, check the careers page and network, or increase `sources.smartrecruiters.throttle` delays |
+| SmartRecruiters list stops part way | Postings already read are kept and stored under the usual filtering, cap and detail rules. A failed or malformed later page records a board error; the run is interrupted only if every attempted board of that ATS failed (including missing boards and unresolved details) and postings were collected, or failed if none were collected. A later-page 404 or partial non-200 success response logs `ats board read only in part`; fewer distinct postings than announced logs `ats board listed fewer than announced`. These alone do not fail the run. The previous validator is kept, the list is re-read next time, and "Last success" does not move. A short list still shows OK in the registry. Check the careers page and network; fix or disable a persistently affected board. See [Company ATS boards](#company-ats-boards) |
 | Company "N consecutive failures: board does not exist (404)" | The token is wrong or the company changed ATS: click "Open board" to look at the careers page, fix the token under "Edit", or "Delete" |
 | Company "not checked for N hours" | Its ATS channel is off or the breaker is open, or the runner is not running; look at the channel row |
 | Channel "breaker open until ..." | Consecutive failures reached `circuit_breaker.failures`; it tries once automatically when the cooldown expires; expand "Details" for the latest error code; being blocked usually means waiting or switching channels |

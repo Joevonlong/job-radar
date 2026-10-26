@@ -7,6 +7,14 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ### Upgrade notes
 
+- **Company ATS boards are read afresh after upgrading.** The migration clears every board's stored validator and
+  "Last success". The first round re-reads every enabled ATS board unconditionally: one request per Greenhouse, Lever,
+  Ashby or Personio board; for each SmartRecruiters board, its list pages plus one detail request per kept posting.
+  Requests are throttled; allow roughly a minute or two for the example pack. Until a board has been read completely
+  once, its "Last success" is empty and its jobs are not marked possibly closed. **Rollback:** older versions ignore
+  the detail retry column and write the timestamp again on their next successful check; the cleared values cause no
+  harm. Before rolling back past the version that introduced `sources.smartrecruiters.max_consecutive_detail_failures`,
+  remove that key if you set it yourself.
 - **The shipped config is now part of the images.** Upgrading from 2.0.1 or older with `scripts/ops/deploy.sh` yourself
   takes three commands once: `docker compose -p job-radar stop web runner`, then `git pull` (or `git fetch --tags && git
   checkout --detach <tag>`), then `scripts/ops/deploy.sh --skip-pull`. A plain `docker compose up -d` is not enough. Why,
@@ -164,6 +172,10 @@ A failure in (a) does not block rollback: follow (c) and accept the display wind
   highlights it. Enter and the comma no longer act while an input method is composing. Regular expressions and
   numbers are compared exactly, the seniority distance table still takes repeats, and a scoring criterion with commas
   is kept as one sentence.
+- **Partial company ATS board reads keep the postings already read.** Only complete reads count as evidence for
+  "possibly closed", checked separately for each board after its jobs fall overdue and using the normal search window.
+  A failing board, short list or unresolved details holds back only that board's jobs, while stored jobs that are still
+  listed stay refreshed. "Last success" advances only after a complete read.
 - **SmartRecruiters detail failures no longer mark the board as failed in the registry:** stored postings keep
   their saved version and are refreshed as seen; new postings are retried in later sweeps, but after a repeated failure
   only once the board's list changes if the server answers 304 for the stored validator. Boards that do not answer 304
