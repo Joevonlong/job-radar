@@ -36,12 +36,15 @@ test("the tavily card says it is not configured without an API key", async ({ pa
   await expect(page.locator('[data-testid="channel-card"][data-channel="ashby"]').getByTestId("not-configured")).toHaveCount(0);
 });
 
-test("the linkedin-apify card and its cascade entry say not configured without APIFY_TOKEN", async ({ page }) => {
+test("the paid LinkedIn cards and cascade entries say not configured without API keys", async ({ page }) => {
   await page.goto("/sources");
   await page.waitForLoadState("networkidle");
   await expect(page.locator('[data-testid="channel-card"][data-channel="linkedin-apify"]').getByTestId("not-configured")).toHaveText("未配置");
-  const entry = page.locator('[data-testid="cascade-entry"][data-channel="linkedin-apify"]');
-  await expect(entry.getByTestId("cascade-not-configured")).toHaveText("未配置");
+  await expect(page.locator('[data-testid="channel-card"][data-channel="linkedin-monid"]').getByTestId("not-configured")).toHaveText("未配置");
+  for (const id of ["linkedin-apify", "linkedin-monid"]) {
+    const entry = page.locator(`[data-testid="cascade-entry"][data-channel="${id}"]`);
+    await expect(entry.getByTestId("cascade-not-configured")).toHaveText("未配置");
+  }
   // Bright Data without BRIGHT_DATA_API_KEY is skipped the same way
   await expect(page.locator('[data-testid="cascade-entry"][data-channel="linkedin-brightdata"]').getByTestId("cascade-not-configured")).toHaveText("未配置");
 });
