@@ -280,7 +280,7 @@ export function FieldControl({ def, id, value, error, onChange, t, draft, catalo
     case "remoteScope":
       return (
         <Field id={id} label={label} {...(hint ? { hint } : {})} {...(errorText ? { errorText } : {})}>
-          <RemoteScopeField id={id} value={asText} onChange={onChange} options={scope.options} countryName={scope.countryName} invalid={invalid} describedBy={describedBy} namespace="settings" />
+          <RemoteScopeField id={id} value={asText} onChange={onChange} options={scope.options} countryName={scope.countryName} homeRegion={scope.homeRegion} invalid={invalid} describedBy={describedBy} namespace="settings" />
         </Field>
       );
     case "route": {

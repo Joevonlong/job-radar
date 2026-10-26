@@ -9,9 +9,10 @@
  */
 import { z } from "zod";
 
-import { ConfigError, interestsSchema, reloadConfig, writeConfig, type InterestsConfig } from "@/lib/config";
+import { ConfigError, interestsSchema, loadCompanies, reloadConfig, writeConfig, type InterestsConfig } from "@/lib/config";
 import { loadPipeline } from "@/lib/market";
 import { viewFiltersSchema, type SavedView } from "@/lib/config/schemas/interests";
+import { watchedCompanyBoards } from "@/lib/companies/watched-boards";
 import { getDb, listCompaniesWithJobCount, suggestCompanies } from "@/lib/db";
 import { resolveCompanyName } from "@/lib/pipeline/company";
 import { reconcileBonuses, rulesFingerprint, signalsPrompt } from "@/lib/signals";
@@ -265,7 +266,7 @@ export async function suggestCompanyNames(rawQuery: unknown): Promise<string[]> 
   }
 }
 
-/** The watched names with the company each one matches in the database. */
+/** The watched names with the company each one matches in the database, and whether an ATS board carries it. */
 export async function describeWatchedCompanies(names: readonly string[]): Promise<WatchedCompanyView[]> {
   const keys = names.map(companyKey);
   let found: Awaited<ReturnType<typeof listCompaniesWithJobCount>> = [];
@@ -275,8 +276,16 @@ export async function describeWatchedCompanies(names: readonly string[]): Promis
     // database unreachable: the list is shown without matches
   }
   const byKey = new Map(found.map((company) => [company.nameNorm, company]));
+  // sources.yaml unreadable: say nothing about boards (no hint) rather than claim there are none
+  let boardKeys: ReadonlyMap<string, boolean> | null = null;
+  try {
+    boardKeys = new Map(watchedCompanyBoards(names, loadCompanies().companies, loadPipeline()).map((entry) => [entry.key, entry.hasBoard]));
+  } catch {
+    boardKeys = null;
+  }
   return names.map((name, index) => {
-    const company = byKey.get(keys[index] ?? "");
-    return { name, match: company ? { name: company.name, jobCount: company.jobCount } : null };
+    const key = keys[index] ?? "";
+    const company = byKey.get(key);
+    return { name, match: company ? { name: company.name, jobCount: company.jobCount } : null, hasBoard: boardKeys === null ? true : (boardKeys.get(key) ?? false) };
   });
 }

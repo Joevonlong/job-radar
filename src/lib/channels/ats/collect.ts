@@ -10,6 +10,7 @@ import type {
   SearchQuery,
 } from "@/lib/channels/types";
 import type { AtsTitlePrefilterSettings, CompaniesConfig, CompanyEntry, InterestsConfig, SearchConfig } from "@/lib/config";
+import { loadPipeline } from "@/lib/market";
 
 import { fetchBoardJson, type BoardFetch } from "./conditional";
 import { wrapPosting, type AtsSource } from "./envelope";
@@ -374,6 +375,7 @@ export function createAtsChannel<S extends { title_prefilter: AtsTitlePrefilterS
           settings: settings.title_prefilter,
           keywordGroups: inputs.search.keyword_groups,
           watchedCompanies: inputs.interests.watched_companies,
+          pipeline: loadPipeline(),
         }),
         maxPerBoard: Math.min(query.maxResults, ctx.settings.maxResults),
       };

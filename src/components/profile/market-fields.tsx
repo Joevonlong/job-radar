@@ -48,6 +48,15 @@ export function draftCountryName(market: MarketView, draft: MarketDraft): string
   return market.countryOptions.find((o) => o.value === code)?.label ?? (code === market.country ? market.countryName : code);
 }
 
+/**
+ * The home region for the draft: the saved market's region while the draft keeps its home country, else null (a region
+ * of another country is not known here, and the scope then names no region).
+ */
+export function draftHomeRegion(market: MarketView, draft: MarketDraft): MarketView["homeRegion"] {
+  const code = draft.country !== "" ? draft.country : (market.packs.find((p) => p.id === draft.pack)?.country ?? "");
+  return code !== "" && code === market.country ? market.homeRegion : null;
+}
+
 const sameMarket = (a: MarketDraft, b: MarketDraft): boolean => a.pack === b.pack && a.country === b.country && a.currency === b.currency && a.home_language === b.home_language;
 
 /**

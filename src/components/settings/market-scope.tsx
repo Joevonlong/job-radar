@@ -8,9 +8,11 @@ import type { ScopeOption } from "@/lib/market/view";
 export interface MarketScopeChoices {
   options: readonly ScopeOption[];
   countryName: string;
+  /** The region the home country belongs to (see `MarketView.homeRegion`). */
+  homeRegion: { id: string; name: string } | null;
 }
 
-const MarketScopeContext = createContext<MarketScopeChoices>({ options: [], countryName: "" });
+const MarketScopeContext = createContext<MarketScopeChoices>({ options: [], countryName: "", homeRegion: null });
 
 export function MarketScopeProvider({ value, children }: { value: MarketScopeChoices; children: ReactNode }) {
   return <MarketScopeContext.Provider value={value}>{children}</MarketScopeContext.Provider>;

@@ -13,8 +13,8 @@ export function prefs(edit: (raw: Record<string, unknown>) => void = () => {}): 
   return configRegistry.preferences.schema.parse(raw);
 }
 
-export function filterWith(preferences: PreferencesConfig = prefs(), pipeline: PipelineConfig = shippedPipeline()): CompiledFilter {
-  return compileFilter(preferences, pipeline);
+export function filterWith(preferences: PreferencesConfig = prefs(), pipeline: PipelineConfig = shippedPipeline(), watchedCompanies: readonly string[] = []): CompiledFilter {
+  return compileFilter(preferences, pipeline, { me: null, watchedCompanies });
 }
 
 export const loc = (label: string, city: string | null = null, countryCode: string | null = null): JobLocation => ({ label, city, countryCode, isPrimary: false });
@@ -44,6 +44,7 @@ export function job(over: Partial<FilterJob> = {}): FilterJob {
     companyName: "Northwind Labs GmbH",
     companyAliases: [],
     companyBlacklisted: false,
+    companyWatched: false,
     locations: [loc("Berlin", "Berlin", "DE")],
     workplace: "hybrid",
     seniority: "senior",

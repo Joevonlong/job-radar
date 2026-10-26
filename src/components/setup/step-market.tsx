@@ -4,7 +4,7 @@ import { Plus } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useRef, useState } from "react";
 
-import { MarketFields, draftCountryName } from "@/components/profile/market-fields";
+import { MarketFields, draftCountryName, draftHomeRegion } from "@/components/profile/market-fields";
 import { Field, TagInput, describedBy } from "@/components/profile/fields";
 import { RemoteScopeField } from "@/components/profile/remote-scope-field";
 import { Button } from "@/components/ui/button";
@@ -123,6 +123,7 @@ export function StepMarket({ view, done, market }: StepMarketProps) {
             onChange={(next) => setDraft({ ...draft, remote_scope: next })}
             options={market.scopeOptions}
             countryName={draftCountryName(market, draft.market)}
+            homeRegion={draftHomeRegion(market, draft.market)}
             invalid={errors.has("remote_scope")}
             describedBy={describedBy(ids.remote, false, remoteError ?? errors.text("remote_scope"))}
             namespace="profile"

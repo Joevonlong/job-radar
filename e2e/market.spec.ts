@@ -21,6 +21,13 @@ test("the German market: language step on, euro, German boards in the source lis
   await expect(page.getByTestId("market-language-step")).toHaveAttribute("data-on", "true");
   await expect(page.getByTestId("market-language-step")).toContainText("德语");
   await expect(page.getByTestId("preferences-card").getByText("€", { exact: true })).toBeVisible();
+  // the remote scope says what the home-country choice keeps, and a line under the select explains the chosen kind
+  const scope = page.getByTestId("remote-scope-kind");
+  await expect(scope.locator("option[value=home_country]")).toHaveText("能从德国远程（含面向欧盟 / 欧洲 / EMEA / 全球的远程岗）");
+  await scope.selectOption("home_country");
+  await expect(page.getByTestId("remote-scope-hint")).toContainText("保留：地点在德国");
+  await scope.selectOption("none");
+  await expect(page.getByTestId("remote-scope-hint")).toContainText("不收远程岗");
 
   await page.goto("/");
   await expect(page.getByTestId("toggle-hide-german")).toContainText("德语");
@@ -39,6 +46,8 @@ test("switching to the generic pack in the US: no German filter, dollars, the Ge
   expect(fs.readFileSync(PREFS_FILE, "utf8")).toMatch(/pack: de/);
 
   await page.getByTestId("market-country").selectOption("US");
+  // no home region in this market: the choice names the country only
+  await expect(page.getByTestId("remote-scope-kind").locator("option[value=home_country]")).toHaveText("能从美国远程");
   await page.getByTestId("market-currency").selectOption("USD");
   await page.getByTestId("market-language").fill("en");
   await expect(page.getByTestId("market-language-step")).toHaveAttribute("data-on", "false");

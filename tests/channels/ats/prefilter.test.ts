@@ -5,12 +5,14 @@ import { configRegistry, type AtsTitlePrefilterSettings } from "@/lib/config";
 import { compileTermMatcher, createTitlePrefilter } from "@/lib/channels/ats/prefilter";
 
 import { shippedYaml } from "../../config/helpers";
+import { shippedPipeline } from "../../pipeline/helpers";
 
 const KEYWORDS = { engineering: ["AI Engineer", "Machine Learning Engineer"], german: ["KI-Entwickler"], fde: ["Forward Deployed Engineer"] };
+const PIPELINE = shippedPipeline();
 const SETTINGS: AtsTitlePrefilterSettings = { enabled: true, include_terms: [], exclude_terms: [] };
 
 function filter(overrides: Partial<AtsTitlePrefilterSettings> = {}, watched: string[] = []) {
-  return createTitlePrefilter({ settings: { ...SETTINGS, ...overrides }, keywordGroups: KEYWORDS, watchedCompanies: watched });
+  return createTitlePrefilter({ settings: { ...SETTINGS, ...overrides }, keywordGroups: KEYWORDS, watchedCompanies: watched, pipeline: PIPELINE });
 }
 
 describe("compileTermMatcher", () => {
@@ -61,6 +63,13 @@ describe("createTitlePrefilter", () => {
     expect(f.decide("Account Executive", "Other")).toEqual({ keep: false, reason: "no_match" });
   });
 
+  it("compares company names by the push step's key: legal form and spelling do not matter", () => {
+    const f = filter({}, ["Anthropic Inc", "Acme GmbH"]);
+    expect(f.decide("Account Executive", "Anthropic")).toEqual({ keep: true, reason: "watched" });
+    expect(f.decide("Account Executive", "acme")).toEqual({ keep: true, reason: "watched" });
+    expect(f.decide("Account Executive", "Acme AI")).toEqual({ keep: false, reason: "no_match" });
+  });
+
   it("include_terms keep extra titles; exclude_terms drop even keyword matches", () => {
     const f = filter({ include_terms: ["Data Scientist"], exclude_terms: ["Intern", "Werkstudent"] });
     expect(f.decide("Senior Data Scientist", "Acme")).toEqual({ keep: true, reason: "include_term" });
@@ -82,8 +91,17 @@ describe("createTitlePrefilter", () => {
     expect(filter({ exclude_terms: ["x"] }).fingerprint("Acme")).not.toBe(base);
     expect(filter({}, ["Acme"]).fingerprint("Acme")).not.toBe(base);
     expect(filter({}, ["Acme"]).fingerprint("Other")).toBe(base);
-    const moreKeywords = createTitlePrefilter({ settings: SETTINGS, keywordGroups: { ...KEYWORDS, extra: ["Data Engineer"] }, watchedCompanies: [] });
+    const moreKeywords = createTitlePrefilter({ settings: SETTINGS, keywordGroups: { ...KEYWORDS, extra: ["Data Engineer"] }, watchedCompanies: [], pipeline: PIPELINE });
     expect(moreKeywords.fingerprint("Acme")).not.toBe(base);
+  });
+
+  it("changes a board's fingerprint only when whether it is watched changes", () => {
+    // "Anthropic Inc" in the list and a board named "Anthropic": the board turns watched, so it is read again
+    expect(filter({}, ["Anthropic Inc"]).fingerprint("Anthropic")).not.toBe(filter({}, []).fingerprint("Anthropic"));
+    // a spelling change of the list that leaves the board watched keeps the stored validator
+    expect(filter({}, ["Anthropic Inc"]).fingerprint("Anthropic")).toBe(filter({}, ["anthropic"]).fingerprint("Anthropic"));
+    // another company joining the list does not touch this board
+    expect(filter({}, ["Anthropic", "Acme"]).fingerprint("Other")).toBe(filter({}, ["Anthropic"]).fingerprint("Other"));
   });
 });
 
@@ -97,6 +115,7 @@ describe("shipped title_prefilter defaults (sources.yaml)", () => {
         settings: channels.sources[id].title_prefilter,
         keywordGroups: search.keyword_groups,
         watchedCompanies: [],
+        pipeline: PIPELINE,
       });
       const keeps = (title: string) => f.decide(title, "Acme").keep;
 

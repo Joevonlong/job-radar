@@ -117,6 +117,7 @@ describe("language gate", () => {
       companyNameNorm: "example",
       companyAliases: [],
       companyBlacklisted: false,
+      companyWatched: false,
       // the stored rule reading wins over the text: the gate reads the column, it does not parse the description again
       germanLevel: "B1",
     };

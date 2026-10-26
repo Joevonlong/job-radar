@@ -225,6 +225,8 @@
       "empty": "No watched companies yet.",
       "matched": "Matches: {name} · {count, plural, one {# job} other {# jobs}}",
       "unmatched": "No job of this company in the database yet; it takes effect once one shows up",
+      "noBoard": "No job board configured: its jobs are only found through the queries for your target cities.",
+      "noBoardLink": "Add a board",
       "remove": "Remove {name}",
       "addedToast": "Now watching “{name}”",
       "removedToast": "Stopped watching “{name}”"
@@ -640,7 +642,7 @@
       "remoteScope": {
         "none": "No remote",
         "worldwide": "Worldwide",
-        "home_country": "Home country (the market's country)",
+        "home_country": "Remote from the market's country (incl. its wider region or worldwide remote)",
         "region": "Selected regions"
       },
       "seniority": {
@@ -800,6 +802,7 @@
       "location_unknown": "The posting does not name a city",
       "remote_scope_description": "Remote, located outside your scope ({detail}), but the description says it hires in your home country or region",
       "location_country_level": "The location is only a country or region ({detail}); the job may be anywhere in it",
+      "watched_company_location": "Watched company: {detail} is not one of your cities but is in your home country, so the job is kept",
       "override_keep": "You chose to keep this job",
       "override_exclude": "You excluded this job"
     }
@@ -1868,7 +1871,7 @@
       "remoteScope": {
         "none": "No remote",
         "worldwide": "Worldwide",
-        "home_country": "Home country (the market's country)",
+        "home_country": "Remote from the market's country (incl. its wider region or worldwide remote)",
         "region": "Selected regions"
       },
       "breakdownMode": {
@@ -1947,7 +1950,7 @@
       },
       "remote_scope": {
         "label": "Remote scope",
-        "hint": "Where a remote job may be open to."
+        "hint": "Where a remote job may be open to. This decides where remote queries search; the filter uses the setting of the same name in My profile."
       },
       "window_morning": {
         "label": "Morning look-back (hours)",
@@ -4870,7 +4873,19 @@
   },
   "market": {
     "scope": {
-      "homeCountry": "Home country ({country})",
+      "homeCountryRemote": "Remote from {country} (incl. {region} / worldwide remote)",
+      "homeCountryRemoteNoRegion": "Remote from {country}",
+      "homeRegionShort": {
+        "eu": "EU / Europe / EMEA"
+      },
+      "thisCountry": "your home country",
+      "kindHint": {
+        "none": "Remote jobs are excluded, unless the posting is located in one of your cities.",
+        "home_country": "Kept: located in {country}, or open to {region} or worldwide; also kept when the description says it hires from {country} or {region}. Excluded: only another country is named (for example Remote - Spain), or the title says it hires only in the US or another region. Postings that do not say where they hire are kept and flagged.",
+        "home_countryNoRegion": "Kept: located in {country} or open worldwide; also kept when the description says it hires from {country}. Excluded: only another country is named (for example Remote - Spain), or the title says it hires only in another region. Postings that do not say where they hire are kept and flagged.",
+        "worldwide": "Every remote job is kept, wherever it hires.",
+        "region": "Kept: located in a selected region or country, or open worldwide; also kept when the description says it hires there. Excluded: only other countries are named, or the title says it hires only elsewhere. Postings that do not say where they hire are kept and flagged."
+      },
       "regions": "Regions and countries",
       "search": "Search regions or countries",
       "none": "None picked yet",

@@ -2,7 +2,7 @@ import type { PipelineConfig, PreferencesConfig } from "@/lib/config";
 import type { GermanLevel, JobLocation, JobSalary } from "@/lib/domain/types";
 import { scopeCountries, scopeWidePatterns } from "@/lib/market/remote-scope";
 import type { Market } from "@/lib/market/types";
-import { buildBlacklistedCompanyKeys, isCompanyExcluded } from "@/lib/companies/marks";
+import { buildBlacklistedCompanyKeys, buildWatchedCompanyKeys, isCompanyExcluded, isCompanyWatched } from "@/lib/companies/marks";
 import { visaRulesFor } from "@/lib/visa/rules";
 
 import { compileDealBreakers, type CompiledDealBreakers, type DealBreakerMe } from "./deal-breakers";
@@ -26,6 +26,8 @@ export interface FilterJob {
   companyAliases: readonly string[];
   /** `companies.blacklisted`. */
   companyBlacklisted: boolean;
+  /** `companies.watched`: the user watches the company by the database flag (the watch list is `FilterContext.watchedCompanies`). */
+  companyWatched: boolean;
   locations: readonly JobLocation[];
   workplace: "onsite" | "hybrid" | "remote" | "unknown";
   seniority: string;
@@ -147,6 +149,8 @@ export interface CompiledFilter {
   descriptionInScope: readonly RegExp[];
   seniorities: readonly string[] | null;
   blacklistedCompanyKeys: ReadonlySet<string>;
+  /** Resolved keys of `interests.yaml: watched_companies` (the push step's keys). */
+  watchedCompanyKeys: ReadonlySet<string>;
   keywords: ReadonlyArray<{ keyword: string; pattern: RegExp }>;
   legalSuffixes: readonly string[];
   /** preferences.yaml `deal_breakers`, compiled. */
@@ -158,6 +162,8 @@ export interface CompiledFilter {
 export interface FilterContext {
   /** me.yaml (the user's languages, for a language gate); null = it cannot be read: such a gate does nothing. */
   me: DealBreakerMe | null;
+  /** `interests.yaml: watched_companies` (company names): a watched company's on-site jobs are kept anywhere in the home country. Default: none. */
+  watchedCompanies?: readonly string[];
 }
 
 const compilePatterns = (patterns: readonly string[]): RegExp[] => patterns.map((p) => new RegExp(p, "iu"));
@@ -225,6 +231,7 @@ export function compileFilter(preferences: PreferencesConfig, pipeline: Pipeline
     descriptionInScope: compilePatterns(cfg.remote.description_in_scope_patterns),
     seniorities,
     blacklistedCompanyKeys,
+    watchedCompanyKeys: buildWatchedCompanyKeys(context.watchedCompanies ?? [], pipeline),
     keywords: preferences.exclude_keywords.map((keyword) => ({ keyword, pattern: wholeWordPattern(keyword) })),
     legalSuffixes: pipeline.company.legal_suffixes,
     dealBreakers: compileDealBreakers(preferences.deal_breakers, { language: market.language?.code ?? null, me: context.me, limits: cfg.deal_breakers, visa: visaRulesFor(pipeline) }),
@@ -349,9 +356,19 @@ function checkLocation(job: FilterJob, filter: CompiledFilter, out: PartialVerdi
     out.notes.push(encodeReason("location_unknown"));
     return;
   }
+  // a watched company's jobs are kept in any city of the home country: only a location that states the home country counts
+  // (a place whose country cannot be read, "San Francisco", is stated but unknown to us, so it is not kept)
+  const watched = isCompanyWatched({ watched: job.companyWatched, nameNorm: job.companyNameNorm ?? "" }, filter.watchedCompanyKeys);
+  const keepWatched = (): boolean => {
+    const home = watched ? locations.find((l) => l.countryCode === filter.homeCountry) : undefined;
+    if (home === undefined) return false;
+    out.notes.push(encodeReason("watched_company_location", placeOf(home)));
+    return true;
+  };
   // a location that names only the country or a region ("Germany", "Bavaria") may still be an allowed city; one that names a place ("Bochum") is not
   if (countryLevel || regionLevel) {
     if (job.workplace === "onsite" && filter.countryLevelOnsitePolicy === "exclude") {
+      if (keepWatched()) return;
       out.excluded.push(encodeReason("location_not_allowed", placeOf((countryLevel ?? regionLevel) as JobLocation)));
       return;
     }
@@ -364,6 +381,7 @@ function checkLocation(job: FilterJob, filter: CompiledFilter, out: PartialVerdi
     out.notes.push(encodeReason("location_unknown"));
     return;
   }
+  if (keepWatched()) return;
   out.excluded.push(encodeReason("location_not_allowed", placeOf(locations[0] as JobLocation)));
 }
 

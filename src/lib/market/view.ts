@@ -61,6 +61,8 @@ export interface MarketView {
   languageStep: boolean;
   /** Regions first (named regions of the packs), then every country of the table. */
   scopeOptions: ScopeOption[];
+  /** The named region the home country belongs to (what "remote in the home region" means), with its name in the page's language; null when it has none. */
+  homeRegion: { id: string; name: string } | null;
 }
 
 /** The symbol a currency is written with in a locale ("€", "US$" -> "$" with `narrowSymbol`). */
@@ -189,6 +191,7 @@ export function marketViewOf(market: Market, locale: string, regionLabel: (id: s
     languageName: languageDisplayName(market.homeLanguage, locale),
     languageStep: market.language !== null,
     scopeOptions: [...regions, ...countries],
+    homeRegion: market.homeRegion === null ? null : { id: market.homeRegion, name: regionLabel(market.homeRegion) ?? market.regions[market.homeRegion]?.name ?? market.homeRegion },
   };
 }
 
@@ -215,6 +218,7 @@ export function loadMarketView(locale: string, regionLabel: (id: string) => stri
       languageName: "",
       languageStep: false,
       scopeOptions: [],
+      homeRegion: null,
     };
   }
 }

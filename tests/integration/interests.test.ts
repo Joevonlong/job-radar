@@ -4,7 +4,7 @@ import { eq, sql } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, inject, it } from "vitest";
 
 import { ChannelRegistry } from "@/lib/channels/registry";
-import { getConfigPath, loadConfig, reloadConfig, type NotifyConfig } from "@/lib/config";
+import { getConfigPath, loadConfig, reloadConfig, writeConfig, type NotifyConfig } from "@/lib/config";
 import { runCycle } from "@/lib/cycle/run-cycle";
 import { registerCycleStep, resetCycleSteps } from "@/lib/cycle/steps";
 import { closeDb, getDb, listTodayJobs, schema } from "@/lib/db";
@@ -337,8 +337,19 @@ describe("watched companies", () => {
     expect(await suggestCompanyNames(42)).toEqual([]);
 
     expect(await describeWatchedCompanies(["acme", "Unknown Inc"])).toEqual([
-      { name: "acme", match: { name: "Acme GmbH", jobCount: 2 } },
-      { name: "Unknown Inc", match: null },
+      { name: "acme", match: { name: "Acme GmbH", jobCount: 2 }, hasBoard: false },
+      { name: "Unknown Inc", match: null, hasBoard: false },
+    ]);
+  });
+
+  it("says which watched companies have an enabled ATS board, by the push step's company key", async () => {
+    const board = (name: string, token: string, enabled: boolean) => ({ name, ats: "greenhouse" as const, token, enabled });
+    await writeConfig("channels", { ...loadConfig("channels"), ats_boards: [board("Anthropic", "anthropic", true), board("Acme", "acme", false), board("Globex Corp", "globex", true)] });
+    expect(await describeWatchedCompanies(["Anthropic Inc", "Acme GmbH", "globex", "Google"])).toEqual([
+      { name: "Anthropic Inc", match: null, hasBoard: true },
+      { name: "Acme GmbH", match: null, hasBoard: false }, // the board is disabled
+      { name: "globex", match: null, hasBoard: true },
+      { name: "Google", match: null, hasBoard: false },
     ]);
   });
 

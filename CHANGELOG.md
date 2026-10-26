@@ -93,8 +93,21 @@ A failure in (a) does not block rollback: follow (c) and accept the display wind
   `data/logs/ai-worker.{out,err}.before-upgrade.log` after the next successful install.
 - `.dockerignore` leaves out everything `.gitignore` ignores, at any depth (editor folders, local demo and release-check
   files, nested `.env`, logs, test output), also for a build from the working tree (`pnpm stack:up`).
+- **The `home_country` remote scope says what it keeps** (rules unchanged): the option reads "Remote from Germany (incl.
+  EU / Europe / EMEA / worldwide remote)" (the region comes from the market pack; a market without one shows "Remote from
+  <country>"), and a line under the select explains what is kept and excluded for the chosen kind, on My profile, Settings
+  and in the setup wizard. The Settings hint says that it decides where remote searches look while the filter uses the
+  same setting in My profile. See [docs/usage.md](docs/usage.md#remote-jobs-and-watched-companies).
+- **Title prefilter of the ATS boards and Arbeitnow compares company names by the push step's key** (case, legal forms and
+  `pipeline.yaml` aliases ignored) instead of the exact spelling, so "Acme GmbH" on the watch list now matches a board
+  named "Acme". A board whose watched status changes because of this is read again once, whatever its stored ETag says.
 
 ### Added
+
+- **Watched companies keep their on-site and hybrid jobs in any city of your home country.** Only the location check is
+  relaxed (a place without a country, such as "San Francisco", still does not count); remote jobs, other filters,
+  scoring and push rules are unchanged. The job is noted "Watched company: Hamburg is not one of your cities but is in
+  your home country, so the job is kept". `/interests` marks watched companies that have no ATS board.
 
 - **Query rotation:** collection starts with the queries waiting longest on its starting channel, so limited budgets reach the tail across cycles. Budget stops that already spent quota or money count as a turn, even with zero results; refusals before any request do not. `collect.query_rotation: false` restores config order; dry runs and history read failures use config order. Run records include usage and requested windows, and completed units report rotation summaries. Budgets and base windows stay unchanged.
 - **Fallback link checks for unseen jobs:** active jobs no source has returned for 14 days get a direct link check,

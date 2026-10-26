@@ -34,7 +34,7 @@ pnpm run doctor --only config.market
 | 方面 | 行为 |
 |---|---|
 | 地点 | 写出国家的地点得到该国代码（`Remote - USA` → US，`Dublin, CA` → US）。本国国名前面的城市（`Gütersloh, Germany`）只在本国市场下读取。 |
-| 远程范围 | preferences.yaml 和 search.yaml 里写 `none`、`home_country`、`worldwide` 或 `{region: [eu, CH, …]}`（命名区域和 ISO 国家）。旧值：`eu_hire_in_de` = `home_country`，`eu_any` = `{region: [eu]}`。 |
+| 远程范围 | preferences.yaml 和 search.yaml 里写 `none`、`home_country`、`worldwide` 或 `{region: [eu, CH, …]}`（命名区域和 ISO 国家）。旧值：`eu_hire_in_de` = `home_country`，`eu_any` = `{region: [eu]}`。`home_country` 保留地点在本国的远程岗、写明包里 `region`（德国包：EU、Europe、EMEA、EEA）或全球的远程岗，显示为“能从德国远程（含面向欧盟 / 欧洲 / EMEA / 全球的远程岗）”；没有 `region` 的市场显示“能从某国远程”。逐行的结果见 [远程岗和关注公司](usage.zh.md#远程岗和关注公司)。 |
 | 本地语言 | 包里有该语言的要求规则、并且 `home_language` 就是这门语言时，才读岗位要求的等级；高于你在 me.yaml `languages` 里的等级会扣分（ai.yaml `scoring.language_penalty`）。否则这一步关闭：不读等级、不扣分、打分提示词不问这一项，页面也隐藏相关筛选和标签。 |
 | 基准货币 | 薪资底线、"最低年薪"筛选、统计和高薪门槛都用市场的货币。其他货币按 pipeline.yaml 的 `salary.fx_pivot` + `fx_rates` 换算；没有汇率的货币不参与比较。 |
 | 渠道 | sources.yaml 里写了 `markets: [DE]` 的渠道只在这些市场运行；在别的市场下折叠在"其他市场"里，不算失败。国家参数留空（`country`、`country_name`、`country_indeed`）、远程地点不写的键，都跟随市场。 |

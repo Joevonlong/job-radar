@@ -49,6 +49,7 @@ const usRemoteJob: FilterJob = {
   companyName: "Example",
   companyAliases: [],
   companyBlacklisted: false,
+  companyWatched: false,
   locations: [],
   workplace: "remote",
   seniority: "senior",

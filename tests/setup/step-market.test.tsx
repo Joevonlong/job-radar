@@ -41,6 +41,7 @@ const market: MarketView = {
   languageName: "English",
   languageStep: false,
   scopeOptions: [],
+  homeRegion: null,
 };
 
 /** A country table in which ZZ has no entry at all, US has a currency but no city, DE has both. */

@@ -42,6 +42,7 @@ function view(over: Partial<MarketView> = {}): MarketView {
     languageName: "German",
     languageStep: true,
     scopeOptions: [],
+    homeRegion: null,
     ...over,
   };
 }

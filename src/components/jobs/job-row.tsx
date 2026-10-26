@@ -189,7 +189,7 @@ function JobRowImpl({ job, favorite, seen, mode = "default", index, active, stag
   const filteredOut = job.rank?.filterResult === "filtered_out";
   const reasons = filteredOut ? (job.rank?.filterReasons ?? []) : [];
   // a kept job whose place is only a country or region (or whose remote scope the description decided): say so on the row
-  const notes = job.rank?.filterResult === "passed" ? job.rank.filterReasons.filter((r) => ["location_country_level", "remote_scope_description"].includes(parseFilterReason(r).code ?? "")) : [];
+  const notes = job.rank?.filterResult === "passed" ? job.rank.filterReasons.filter((r) => ["location_country_level", "remote_scope_description", "watched_company_location"].includes(parseFilterReason(r).code ?? "")) : [];
   const now = useMemo(() => new Date(viz.nowIso), [viz.nowIso]);
   const firstSeenAt = useMemo(() => new Date(now.getTime() - (job.firstSeenHours ?? 0) * 3_600_000), [now, job.firstSeenHours]);
   const canStar = statusAfterInterestKey(job.applicationStatus) !== null;

@@ -35,7 +35,7 @@ export default async function Page() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader title={t("title")} description={t("description")} />
-      <MarketScopeProvider value={{ options: market.scopeOptions, countryName: market.countryName }}>
+      <MarketScopeProvider value={{ options: market.scopeOptions, countryName: market.countryName, homeRegion: market.homeRegion }}>
         <SettingsEditor sections={data.sections} status={data.status} channelChoices={data.channelChoices} providerStates={data.providerStates} catalog={data.catalog} catalogError={data.catalogError} workflow={data.workflow} criteriaImpact={data.criteriaImpact} aiDisclosure={data.aiDisclosure} telegram={data.telegram} timezone={timezone} now={new Date().toISOString()} />
       </MarketScopeProvider>
       {passwordSet ? <SignOutEverywhere /> : null}

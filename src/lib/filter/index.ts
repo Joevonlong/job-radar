@@ -1,6 +1,6 @@
 import type { CycleStepContext, StepResult } from "@/lib/cycle/steps";
 import { registerCycleStep } from "@/lib/cycle/steps";
-import { ensureProfileFiles, parseConfigText, readConfigText, type MeConfig, type PipelineConfig, type PreferencesConfig } from "@/lib/config";
+import { ensureProfileFiles, loadConfig, parseConfigText, readConfigText, type MeConfig, type PipelineConfig, type PreferencesConfig } from "@/lib/config";
 import { loadPipeline } from "@/lib/market";
 import type { Db } from "@/lib/db/client";
 import {
@@ -63,6 +63,21 @@ export interface FilterOptions {
   signal?: AbortSignal;
   /** Where the user's patterns run (default `vmTimeBox`); tests pass their own. */
   timeBox?: TimeBox;
+  /** `interests.yaml: watched_companies`; default: read from the file (`currentWatchedCompanies`), so every caller judges alike. */
+  watchedCompanies?: readonly string[];
+}
+
+/**
+ * The watch list of interests.yaml as it is now. An unreadable file gives an empty list (and a warning): the database flag
+ * `companies.watched` still watches its companies.
+ */
+export function currentWatchedCompanies(logger?: ChannelLogger): string[] {
+  try {
+    return [...loadConfig("interests").watched_companies];
+  } catch (error) {
+    logger?.warn("watch list not read; only the watched flag of companies applies", { error: error instanceof Error ? error.message : String(error) });
+    return [];
+  }
 }
 
 /** `jobs` row -> the fields the rules read. */
@@ -74,6 +89,7 @@ export function toFilterJob(row: FilterCandidate): FilterJob {
     companyNameNorm: row.companyNameNorm,
     companyAliases: row.companyAliases,
     companyBlacklisted: row.companyBlacklisted,
+    companyWatched: row.companyWatched,
     locations: parseLocations(row.locationsJson),
     workplace: row.workplace,
     seniority: row.seniority,
@@ -113,7 +129,7 @@ const sameReasons = (a: readonly string[], b: readonly string[]): boolean => a.l
  * in place; when the preferences change the snapshot changes, so every job gets a new row.
  */
 export async function runFilter(db: Db, options: FilterOptions): Promise<FilterRunResult> {
-  const compiled: CompiledFilter = compileFilter(options.preferences, options.pipeline, { me: options.me });
+  const compiled: CompiledFilter = compileFilter(options.preferences, options.pipeline, { me: options.me, watchedCompanies: options.watchedCompanies ?? currentWatchedCompanies(options.logger) });
   const dealBreakers = startDealBreakerRun(compiled.dealBreakers, options.timeBox ?? vmTimeBox);
   const result: FilterRunResult = {
     snapshotId: options.snapshotId,

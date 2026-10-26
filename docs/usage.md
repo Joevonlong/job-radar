@@ -163,6 +163,33 @@ direction. Pagination uses `ui.yaml: companies.page_size` (50 by default).
   list counts entries in your profile's exclusion list, including companies with no visible jobs; database-only flags
   are not part of that count.
 
+### Remote jobs and watched companies
+
+Two rules decide where a job may be, besides your cities (`/me` → What I want).
+
+**Remote scope** (the select on `/me`, `/settings` and in the setup wizard; a hint under it explains the chosen kind). For the Germany pack, `home_country` reads "Remote from Germany (incl. EU / Europe / EMEA / worldwide remote)":
+
+| Remote job | Result |
+|---|---|
+| "Remote - Berlin", "Munich (Remote)" (a city of yours) | kept: your cities come first |
+| "Germany (Remote)" | kept, noted as a country-level place |
+| "Remote - EU", "Europe", "EMEA", "EEA", "Europa" | kept: the home region |
+| "Remote - Worldwide", "Anywhere", "Global", "weltweit" | kept |
+| "Remote - Spain", "Remote, UK", "Austria" | excluded: another country |
+| the same, but the description says it hires from anywhere in Europe or from Germany | kept, noted |
+| "Remote - USA", "Americas", "APAC", "Austin, TX" | excluded (the description can rescue it) |
+| a title such as "AI Engineer - US" or "(Americas)" | excluded; the description cannot rescue it. A title that also names EMEA or Europe is not excluded |
+| "Remote" without a place, or no location | kept, noted that it does not say where it hires |
+
+`none` drops remote jobs unless the posting names one of your cities, `worldwide` keeps all of them, and `region` keeps the places of the regions and countries you pick (plus worldwide). The scope in `/settings` decides where the remote searches look; the filter uses the one in My profile.
+
+**Watched companies keep their on-site and hybrid jobs in any city of your country.** For a company on the watch list (`/interests`, **Watch** on `/companies`, or the database flag), a job that is not remote passes the location check when at least one of its places is in your home country, whatever the city; the job is noted "Watched company: Hamburg is not one of your cities but is in your home country, so the job is kept". Only the location check is relaxed:
+
+- A place the source does not tie to your country does not count: "San Francisco", "Bengaluru" or a small town the city table does not know, with no country given by the source. Such a job is still excluded as "Location not on your list". Most sources give the country (Arbeitsagentur always, LinkedIn writes "…, Germany").
+- Remote jobs follow the remote scope above. Work mode, contract, student roles, salary floor, seniority, excluded keywords and companies, deal-breakers and your own keep / exclude decisions are unchanged, and so are scoring and the push rules.
+- The list is read on every filter run, so adding or removing a company changes its jobs on the next cycle. If `interests.yaml` cannot be read, the list counts as empty (a warning is logged) and only the database flag applies.
+- A company is only collected in every city when it has an ATS board (below) or a source returns its jobs: otherwise only the searches for your cities find them. `/interests` marks watched companies without a board.
+
 ### Sorting the list
 
 On `/jobs` the column heads **Rank value**, **Salary / yr** and **Freshness** sort the list (on a wide screen; the other columns do not sort):
