@@ -251,7 +251,15 @@ export function FieldControl({ def, id, value, error, onChange, t, draft, catalo
     case "numberList":
       return (
         <Field id={id} label={label} {...(hint ? { hint } : {})} {...(errorText ? { errorText } : {})}>
-          <TagInput id={id} values={asList.filter((v): v is string => typeof v === "string")} invalid={invalid} describedBy={describedBy} onChange={onChange} />
+          <TagInput
+            id={id}
+            values={asList.filter((v): v is string => typeof v === "string")}
+            invalid={invalid}
+            describedBy={describedBy}
+            onChange={onChange}
+            dedupe={def.dedupe ?? (def.kind === "numberList" ? "exact" : "insensitive")}
+            commitOnComma={def.commitOnComma ?? true}
+          />
         </Field>
       );
     case "ordered":

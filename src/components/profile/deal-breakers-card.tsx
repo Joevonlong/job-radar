@@ -261,7 +261,7 @@ export function DealBreakersCard({ baseId, rules, onChange, errors, userLevel, l
                     <TagInput id={`${id}-terms`} values={rule.terms} onChange={(next) => update(index, { terms: next })} invalid={err("terms") !== undefined} describedBy={describedBy(`${id}-terms`, true, err("terms"))} />
                   </Field>
                   <Field id={`${id}-patterns`} label={t("fields.patterns")} hint={t("fields.patternsHint")} error={err("patterns")}>
-                    <TagInput id={`${id}-patterns`} values={rule.patterns} onChange={(next) => update(index, { patterns: next })} invalid={err("patterns") !== undefined} describedBy={describedBy(`${id}-patterns`, true, err("patterns"))} />
+                    <TagInput id={`${id}-patterns`} values={rule.patterns} onChange={(next) => update(index, { patterns: next })} invalid={err("patterns") !== undefined} describedBy={describedBy(`${id}-patterns`, true, err("patterns"))} dedupe="exact" commitOnComma={false} />
                   </Field>
                   <div className="grid min-w-0 gap-3 sm:grid-cols-[12rem_minmax(0,1fr)]">
                     <Field id={`${id}-scope`} label={t("fields.scope")} error={err("scope")}>
@@ -274,7 +274,7 @@ export function DealBreakersCard({ baseId, rules, onChange, errors, userLevel, l
                       </Select>
                     </Field>
                     <Field id={`${id}-unless`} label={t("fields.unless")} hint={t("fields.unlessHint")} error={err("unless")}>
-                      <TagInput id={`${id}-unless`} values={rule.unless} onChange={(next) => update(index, { unless: next })} invalid={err("unless") !== undefined} describedBy={describedBy(`${id}-unless`, true, err("unless"))} />
+                      <TagInput id={`${id}-unless`} values={rule.unless} onChange={(next) => update(index, { unless: next })} invalid={err("unless") !== undefined} describedBy={describedBy(`${id}-unless`, true, err("unless"))} dedupe="exact" commitOnComma={false} />
                     </Field>
                   </div>
                 </>

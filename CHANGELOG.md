@@ -147,6 +147,11 @@ A failure in (a) does not block rollback: follow (c) and accept the display wind
 
 ### Fixed
 
+- **Tag boxes no longer swallow a repeated entry silently:** typing a title, keyword or city that is already in the list
+  (any case) now keeps the text, names the existing entry under the box ("Already in the list: ...") and briefly
+  highlights it. Enter and the comma no longer act while an input method is composing. Regular expressions and
+  numbers are compared exactly, the seniority distance table still takes repeats, and a scoring criterion with commas
+  is kept as one sentence.
 - **SmartRecruiters detail failures no longer mark the board as failed in the registry:** stored postings keep
   their saved version and are refreshed as seen; new postings are retried in later sweeps, but after a repeated failure
   only once the board's list changes if the server answers 304 for the stored validator. Boards that do not answer 304

@@ -86,6 +86,56 @@ test("edit, save and roll back the preferences; the YAML keeps its comments", as
   await expect(history.getByTestId("history-item").first()).toHaveAttribute("data-current", "true");
 });
 
+test("a repeated target title is refused with a notice, the text stays, and Enter does not submit", async ({ page }) => {
+  await open(page);
+  const prefs = page.getByTestId("preferences-card");
+  const titles = prefs.getByLabel("目标职位", { exact: true });
+  const box = titles.locator("..");
+  const chips = box.locator('[data-slot="filter-chip"]');
+  const before = await chips.count();
+  expect(before).toBeGreaterThan(0);
+
+  await titles.fill("ai engineer");
+  await titles.press("Enter");
+  await expect(chips).toHaveCount(before);
+  await expect(titles).toHaveValue("ai engineer");
+  await expect(box.getByTestId("tag-duplicate")).toHaveText("已在列表里：AI Engineer");
+  await expect(box.locator("[data-highlighted]")).toContainText("AI Engineer");
+  // nothing was saved by the Enter key
+  await expect(prefs.getByRole("button", { name: "保存", exact: true })).toBeDisabled();
+
+  // typing on clears the notice; a new title is added as usual
+  await titles.fill("Data Platform Engineer");
+  await expect(box.getByTestId("tag-duplicate")).toHaveText("");
+  await titles.press("Enter");
+  await expect(chips).toHaveCount(before + 1);
+  await expect(titles).toHaveValue("");
+});
+
+test("saving right after typing a new title keeps it; a repeated one is dropped and the other edits still save", async ({ page }) => {
+  await open(page);
+  const prefs = page.getByTestId("preferences-card");
+  const titles = prefs.getByLabel("目标职位", { exact: true });
+  const saveButton = prefs.getByRole("button", { name: "保存", exact: true });
+
+  // another field changed, then a new title typed and Save clicked without Enter
+  await prefs.getByLabel("年薪底线").fill("86000");
+  await titles.fill("Staff ML Engineer");
+  await saveButton.click();
+  await expect.poll(() => read(PREFS_FILE)).toMatch(/salary_floor_year: 86000/);
+  expect(read(PREFS_FILE)).toContain("Staff ML Engineer");
+
+  // a repeat typed this time: not added again, the salary edit still goes through
+  await page.reload();
+  await page.waitForLoadState("networkidle");
+  await prefs.getByLabel("年薪底线").fill("87000");
+  await titles.fill("staff ml engineer");
+  await saveButton.click();
+  await expect.poll(() => read(PREFS_FILE)).toMatch(/salary_floor_year: 87000/);
+  const saved = read(PREFS_FILE);
+  expect(saved.match(/Staff ML Engineer/gi)).toHaveLength(1);
+});
+
 test("floor preview: dragging the slider moves the count live and writes nothing until Save", async ({ page }) => {
   await open(page);
   const prefs = page.getByTestId("preferences-card");
