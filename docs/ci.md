@@ -464,15 +464,19 @@ worker, specs in order, because they walk one install through the wizard.
 `actions/cache` on `~/.cache/ms-playwright`, keyed on the runner OS and `pnpm-lock.yaml` (the browser build follows the
 locked `@playwright/test` version). Sets `steps.playwright-cache.outputs.cache-hit`.
 
-#### Install Playwright browser and system libraries
+#### Install Playwright browser
 
-`pnpm exec playwright install --with-deps chromium`, only on a cache miss. Downloads Chromium and installs the operating
-system libraries it needs (apt). Up to a minute.
+`pnpm exec playwright install chromium`, only on a cache miss. Downloads Chromium without installing system libraries.
+Limit 8 minutes.
 
-#### Install Playwright system libraries
+#### Playwright system libraries (installed only when the browser cannot start)
 
-`pnpm exec playwright install-deps chromium`, only on a cache hit: the cache holds the browser, not the operating system
-libraries, so those are installed on every run.
+On both cache hits and misses, a Node check uses `@playwright/test` to launch Chromium headless and close it (10-second
+launch timeout, 20-second total limit per check). A failure prints the error and runs `pnpm exec playwright install-deps
+chromium`, then repeats the check; a failed install or retry fails the step. The step retains its 8-minute limit.
+
+The Ubuntu runner generally already provides Chrome's shared libraries. Checking first avoids unnecessary apt calls,
+whose long-tail latency and occasional timeouts have failed otherwise healthy runs.
 
 #### Cache the Next build cache
 

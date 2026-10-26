@@ -363,6 +363,8 @@ jobs:
         timeout-minutes: 8
         run: pnpm install --frozen-lockfile
       # The browser build follows the locked @playwright/test version, so the lockfile is the cache key.
+      # Launch-check cached or downloaded Chromium first; only a failed check triggers apt. Avoiding unnecessary apt
+      # calls keeps their long-tail latency and occasional timeouts out of healthy e2e runs.
       - name: Cache Playwright browsers
         id: playwright-cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -370,15 +372,21 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
-      - name: Install Playwright browser and system libraries
+      - name: Install Playwright browser
         if: steps.playwright-cache.outputs.cache-hit != 'true'
         timeout-minutes: 8
-        run: pnpm exec playwright install --with-deps chromium
-      # The cache holds the browser only: the operating system libraries it needs are installed on every run.
-      - name: Install Playwright system libraries
-        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: pnpm exec playwright install chromium
+      - name: Playwright system libraries (installed only when the browser cannot start)
         timeout-minutes: 8
-        run: pnpm exec playwright install-deps chromium
+        run: |
+          check_chromium() {
+            node -e 'const { chromium } = require("@playwright/test"); const timer = setTimeout(() => { console.error("Chromium launch/close check timed out after 20s"); process.exit(1); }, 20_000); (async () => { const browser = await chromium.launch({ headless: true, timeout: 10_000 }); await browser.close(); clearTimeout(timer); console.log("Chromium launch/close check passed"); })().catch(error => { console.error(error); process.exit(1); });'
+          }
+          if ! check_chromium; then
+            echo "::warning::Chromium could not start; installing Playwright system libraries and retrying."
+            pnpm exec playwright install-deps chromium
+            check_chromium
+          fi
       # Next's incremental build cache only; the app is always built from the current source.
       - name: Cache the Next build cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
