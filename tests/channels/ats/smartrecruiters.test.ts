@@ -179,7 +179,7 @@ describe("smartrecruiters sweep", () => {
     const { ctx, query, logs } = atsContext("smartrecruiters", fetch, { channels: pagedChannels() });
     const { channel: c, store } = channel([sr, otherSr]);
     const oldState = {
-      etag: 'W/"last-complete"', filterFingerprint: "old-rules",
+      etag: 'W/"last-complete"', filterFingerprint: "3:previous-rules:10",
       externalIds: ["old-only", "744000000000003"], detailRetryIds: ["old-retry"],
     };
     store.states.set(BOARD_KEY, structuredClone(oldState));
@@ -191,7 +191,7 @@ describe("smartrecruiters sweep", () => {
       { externalId: "other-good", payload: { source: { token: otherSr.token }, posting: otherBody.content[0] } },
     ]);
 
-    const detailRetryIds = failedDetail ? ["744000000000003"] : [];
+    const detailRetryIds = failedDetail ? ["old-retry", "744000000000003"] : ["old-retry"];
     expect(store.checks[0]).toEqual({
       key: { ats: "smartrecruiters", token: sr.token },
       update: { status: "error", errorCode: "network", detailRetryIds },
@@ -286,7 +286,7 @@ describe("smartrecruiters sweep", () => {
     ]);
     const { ctx, query, logs } = atsContext("smartrecruiters", fetch, { channels: pagedChannels() });
     const { channel: c, store } = channel();
-    const oldState = { etag: 'W/"complete"', filterFingerprint: "previous-rules", externalIds: ["old"], detailRetryIds: ["b"] };
+    const oldState = { etag: 'W/"complete"', filterFingerprint: "3:previous-rules:10", externalIds: ["old"], detailRetryIds: ["b"] };
     store.states.set(BOARD_KEY, structuredClone(oldState));
 
     await expect(c.collect(query, ctx)).resolves.toMatchObject([
@@ -295,10 +295,100 @@ describe("smartrecruiters sweep", () => {
 
     expect(requests.filter((r) => r.url.includes("offset=")).map((r) => r.url)).toEqual([PAGE_URL, NEXT_PAGE_URL]);
     expect(requests.filter((r) => r.url === `${BASE}/b`)).toHaveLength(1);
-    expect(store.checks.at(-1)?.update).toEqual({ status: "short", detailRetryIds: [] });
-    expect(store.states.get(BOARD_KEY)).toEqual({ ...oldState, detailRetryIds: [] });
+    expect(store.checks.at(-1)?.update).toEqual({ status: "short", detailRetryIds: ["b"] });
+    expect(store.states.get(BOARD_KEY)).toEqual(oldState);
     expect(logs.find((l) => l.message === "ats board listed fewer than announced")?.fields).toMatchObject({ listed: 3, announced: 4 });
     expect(logs.find((l) => l.message === "ats board")?.fields).toMatchObject({ outcome: "short", duplicates: 1 });
+  });
+
+  it.each([
+    { outcome: "error", nextPage: () => response(503, "list unavailable") },
+    { outcome: "short", nextPage: () => response(200, { totalFound: 2, content: [] }) },
+  ])("keeps an unlisted detail retry through an incomplete read ($outcome) and rejects the following 304", async ({ outcome, nextPage }) => {
+    const body = inlineList(["a", "b"]);
+    const etag = 'W/"unresolved-list"';
+    const { channel: c, store } = channel();
+    store.stored.add("b");
+    const completeChannels = aiChannels((settings) => { settings.max_results = 10; });
+    const first = atsContext("smartrecruiters", routedFetch([
+      [LIST_URL, response(200, body, { ETag: etag })],
+      [`${BASE}/a`, response(200, body.content[0])],
+      [`${BASE}/b`, response(500, "detail unavailable")],
+    ]).fetch, { channels: completeChannels });
+
+    await expect(partialPostings(c.collect(first.query, first.ctx))).resolves.toMatchObject([{ externalId: "a" }]);
+    expect(store.states.get(BOARD_KEY)).toMatchObject({ etag, externalIds: ["a", "b"], detailRetryIds: ["b"] });
+    const remembered = structuredClone(store.states.get(BOARD_KEY));
+
+    vi.setSystemTime(new Date("2026-10-08T12:00:00Z"));
+    const partial = routedFetch([
+      [LIST_URL, response(200, { totalFound: 2, content: body.content.slice(0, 1) })],
+      [`${BASE}?limit=100&offset=1&country=de`, nextPage()],
+      [`${BASE}/a`, response(200, body.content[0])],
+    ]);
+    // Changing the cap makes this read unconditional without changing the remembered complete-list state.
+    const second = atsContext("smartrecruiters", partial.fetch, {
+      channels: aiChannels((settings) => { settings.max_results = 11; }),
+    });
+    const collection = c.collect(second.query, second.ctx);
+    if (outcome === "error") await expect(partialPostings(collection)).resolves.toMatchObject([{ externalId: "a" }]);
+    else await expect(collection).resolves.toMatchObject([{ externalId: "a" }]);
+    expect(partial.requests.map((request) => request.url)).toEqual([
+      LIST_URL, `${BASE}?limit=100&offset=1&country=de`, `${BASE}/a`,
+    ]);
+    expect(partial.requests[0]?.headers).not.toHaveProperty("If-None-Match");
+    expect.soft(store.checks.at(-1)?.update).toEqual({
+      status: outcome, ...(outcome === "error" ? { errorCode: "network" } : {}), detailRetryIds: ["b"],
+    });
+    expect.soft(store.states.get(BOARD_KEY)).toEqual(remembered);
+
+    vi.setSystemTime(new Date("2026-10-09T12:00:00Z"));
+    const unchanged = routedFetch([[LIST_URL, response(304)]]);
+    const third = atsContext("smartrecruiters", unchanged.fetch, { channels: completeChannels });
+    await expect.soft(c.collect(third.query, third.ctx)).rejects.toMatchObject({
+      name: "ChannelError", code: "unknown", retryable: false,
+      message: "1 posting details are still missing from an earlier sweep",
+    });
+    expect(unchanged.requests).toHaveLength(1);
+    expect(unchanged.requests[0]?.headers["If-None-Match"]).toBe(etag);
+    expect.soft(store.checks.at(-1)?.update).toEqual({ status: "not_modified", completeRead: false });
+    expect.soft(third.logs.find((log) => log.message === "ats sweep done")?.fields).toMatchObject({
+      failedBoards: 0, detailFailedBoards: 1, postings: 0,
+    });
+
+    // Only a complete list may finally remove an earlier retry that is no longer listed.
+    const recovered = atsContext("smartrecruiters", routedFetch([
+      [LIST_URL, response(200, inlineList(["a"]), { ETag: 'W/"resolved-list"' })],
+      [`${BASE}/a`, response(200, body.content[0])],
+    ]).fetch, { channels: completeChannels });
+    await expect(c.collect(recovered.query, recovered.ctx)).resolves.toMatchObject([{ externalId: "a" }]);
+    expect(store.checks.at(-1)?.update).toMatchObject({ status: "ok", completeRead: true, detailRetryIds: [] });
+  });
+
+  it.each([false, true])("retains skipped details after a partial list and the failure limit (existing state: %s)", async (existing) => {
+    const body = inlineList(["failed", "new-skipped", "old-retry"]);
+    const { channel: c, store } = channel();
+    if (existing) store.states.set(BOARD_KEY, {
+      etag: 'W/"complete"', filterFingerprint: "3:previous-rules:10", externalIds: [],
+      detailRetryIds: ["old-retry", "unlisted"],
+    });
+    const { fetch, requests } = routedFetch([
+      [LIST_URL, response(200, { ...body, totalFound: 4 })],
+      [`${BASE}?limit=100&offset=3&country=de`, response(503, "list unavailable")],
+      [`${BASE}/failed`, response(500, "detail unavailable")],
+    ]);
+    const { ctx, query, logs } = atsContext("smartrecruiters", fetch, {
+      channels: aiChannels((settings) => { settings.max_consecutive_detail_failures = 1; }),
+    });
+
+    await expect(c.collect(query, ctx)).rejects.toMatchObject({ name: "ChannelError", code: "network", status: 503 });
+    expect(requests.map((request) => request.url)).toEqual([
+      LIST_URL, `${BASE}?limit=100&offset=3&country=de`, `${BASE}/failed`,
+    ]);
+    expect(logs.find((log) => log.message === "ats board details missing")?.fields).toMatchObject({ failed: 1, skipped: 2 });
+    const detailRetryIds = existing ? ["old-retry", "unlisted", "failed", "new-skipped"] : ["failed", "new-skipped", "old-retry"];
+    expect(store.checks.at(-1)?.update).toEqual({ status: "error", errorCode: "network", detailRetryIds });
+    if (existing) expect(store.states.get(BOARD_KEY)?.detailRetryIds).toEqual(detailRetryIds);
   });
 
   it.each(["first", "later"])("propagates cancellation while reading the %s list page body without recording state", async (page) => {

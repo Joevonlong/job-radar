@@ -280,18 +280,36 @@ describe("conditional requests (ETag)", () => {
     expect(lastLog(second.logs, "ats board unchanged but stored postings are missing; refetching")).toHaveLength(1);
   });
 
-  it("discards validators remembered under the old fingerprint format with a 2: prefix", async () => {
-    const { channel, store } = greenhouse();
+  it.each(["2", null])("invalidates legacy evidence before requesting a board with fingerprint version %s", async (version) => {
+    const { channel, store: memory } = greenhouse();
+    const store: typeof memory & { invalidated?: Array<{ ats: string; token: string }> } = memory;
+    const key = { ats: "greenhouse", token: gh.token };
+    // Neither a new board nor one already using the current version needs evidence invalidation.
     const first = atsContext("greenhouse", routedFetch([[GH_URL, ok()]]).fetch);
     await channel.collect(first.query, first.ctx);
+    expect(store.invalidated ?? []).toEqual([]);
+    const current = atsContext("greenhouse", routedFetch([[GH_URL, response(304)]]).fetch);
+    await expect(channel.collect(current.query, current.ctx)).resolves.toEqual([]);
+    expect(store.invalidated ?? []).toEqual([]);
     const state = store.states.get("greenhouse:examplelabs");
     if (!state?.filterFingerprint) throw new Error("missing board fingerprint");
     const rules = state.filterFingerprint.replace(/^\d+:/, "");
-    store.states.set("greenhouse:examplelabs", { ...state, filterFingerprint: `2:${rules}` });
+    const legacy = { ...state, filterFingerprint: version === null ? null : `${version}:${rules}` };
+    store.states.set("greenhouse:examplelabs", legacy);
 
-    const calls = routedFetch([[GH_URL, ok()]]);
+    let invalidatedAtRequest: Array<{ ats: string; token: string }> = [];
+    let stateAtRequest: typeof state | undefined;
+    const calls = routedFetch([[GH_URL, () => {
+      invalidatedAtRequest = [...(store.invalidated ?? [])];
+      stateAtRequest = structuredClone(store.states.get("greenhouse:examplelabs"));
+      return response(503, "list unavailable");
+    }]]);
     const second = atsContext("greenhouse", calls.fetch);
-    expect((await channel.collect(second.query, second.ctx)).map((p) => p.externalId)).toEqual(GH_KEPT);
+    await expect(channel.collect(second.query, second.ctx)).rejects.toMatchObject({ code: "network", status: 503 });
+    expect.soft(store.invalidated ?? []).toEqual([key]);
+    expect.soft(invalidatedAtRequest).toEqual([key]);
+    expect.soft(stateAtRequest).toEqual({ ...legacy, etag: null });
+    expect.soft(store.states.get("greenhouse:examplelabs")).toEqual({ ...legacy, etag: null });
     expect(calls.requests).toHaveLength(1);
     expect(calls.requests[0]?.headers).not.toHaveProperty("If-None-Match");
   });
@@ -319,13 +337,13 @@ describe("conditional requests (ETag)", () => {
     const { fetch } = routedFetch([[GH_URL, response(206, fixtureJson("greenhouse-board.json"), { ETag: 'W/"partial"' })]]);
     const { ctx, query, logs } = atsContext("greenhouse", fetch);
     const { channel, store } = greenhouse();
-    const oldState = { etag: 'W/"complete"', filterFingerprint: "old-rules", externalIds: ["old"], detailRetryIds: ["retry"] };
+    const oldState = { etag: 'W/"complete"', filterFingerprint: "3:previous-rules:10", externalIds: ["old"], detailRetryIds: ["retry"] };
     store.states.set("greenhouse:examplelabs", structuredClone(oldState));
 
     await expect(channel.collect(query, ctx)).resolves.toMatchObject(GH_KEPT.map((externalId) => ({ externalId })));
 
-    expect(store.checks.at(-1)?.update).toEqual({ status: "error", errorCode: "unknown", detailRetryIds: [] });
-    expect(store.states.get("greenhouse:examplelabs")).toEqual({ ...oldState, detailRetryIds: [] });
+    expect(store.checks.at(-1)?.update).toEqual({ status: "error", errorCode: "unknown", detailRetryIds: ["retry"] });
+    expect(store.states.get("greenhouse:examplelabs")).toEqual(oldState);
     expect(logs.find((l) => l.message === "ats board read only in part")).toMatchObject({
       level: "warn", fields: { board: gh.token, code: "unknown", listed: 6, kept: 4 },
     });
@@ -396,7 +414,7 @@ describe("board failures (C2)", () => {
 
   it("a server error or a bad shape preserves the failed board's ETag while the other board completes normally", async () => {
     const { channel, store } = greenhouse({ companies: two });
-    store.states.set("greenhouse:examplelabs", { etag: 'W/"old"', filterFingerprint: "old", externalIds: ["1"], detailRetryIds: [] });
+    store.states.set("greenhouse:examplelabs", { etag: 'W/"old"', filterFingerprint: "3:previous-rules:10", externalIds: ["1"], detailRetryIds: [] });
     const { fetch } = routedFetch([
       ["/examplelabs/", response(500, "unavailable")],
       ["/second/", response(200, { jobs: [{ id: 5, title: "AI Engineer" }] })],
@@ -450,6 +468,23 @@ describe("board failures (C2)", () => {
     const { ctx, query, logs } = atsContext("greenhouse", fetch);
     expect(await greenhouse({ store }).channel.collect(query, ctx)).toHaveLength(4);
     expect(lastLog(logs, "could not record ats board state").length).toBeGreaterThan(0);
+  });
+
+  it("continues collecting and logs an evidence invalidation failure", async () => {
+    const store = Object.assign(createMemoryAtsBoardStore(), {
+      invalidateEvidence: async () => { throw new Error("evidence store unavailable"); },
+    });
+    store.states.set("greenhouse:examplelabs", {
+      etag: 'W/"legacy"', filterFingerprint: "2:previous-filter:10", externalIds: ["old"], detailRetryIds: [],
+    });
+    const { fetch } = routedFetch([[GH_URL, response(200, fixtureJson("greenhouse-board.json"))]]);
+    const { ctx, query, logs } = atsContext("greenhouse", fetch);
+
+    expect((await greenhouse({ store }).channel.collect(query, ctx)).map((posting) => posting.externalId)).toEqual(GH_KEPT);
+    expect(store.checks.at(-1)?.update).toMatchObject({ status: "ok", completeRead: true });
+    expect(logs.filter((log) => log.level === "warn").map((log) => log.fields)).toContainEqual(expect.objectContaining({
+      board: gh.token, error: "evidence store unavailable",
+    }));
   });
 });
 
