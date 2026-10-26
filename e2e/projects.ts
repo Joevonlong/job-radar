@@ -11,6 +11,8 @@ import path from "node:path";
  *     while they run (application status, closures, an inserted job), so they must not overlap any other test.
  *  3. The serial chain: one project per spec that rewrites a config file of the run (settings, interests, sources ...),
  *     each after the one before.
+ * With E2E_PART, "parallel" runs only the first two projects; "chain" runs only the serial chain, with no dependency
+ * on the exclusive project. Each CI part has its own database and config directory.
  *
  * A dependency project always runs in full (Playwright applies file filters to the projects it was asked for, not to
  * their dependencies). So when the command line names spec files, only the projects with a matching spec take part,
@@ -147,24 +149,29 @@ export interface ProjectPlan {
 
 /**
  * The projects for a run. `specs` are the spec files of the test directory (names relative to it), `testDir` its
- * absolute path, `filters` the command-line test filters ([] = the whole suite).
+ * absolute path, `filters` the command-line test filters ([] = the whole selected part), `part` the optional E2E_PART
+ * value (undefined = the full suite). Part selection happens before filtering, so filters never pull in another part.
  */
-export function planProjects(specs: readonly string[], testDir: string, filters: readonly string[]): ProjectPlan[] {
+export function planProjects(specs: readonly string[], testDir: string, filters: readonly string[], part?: string): ProjectPlan[] {
+  if (part !== undefined && part !== "parallel" && part !== "chain") {
+    throw new Error(`Invalid E2E_PART ${JSON.stringify(part)}: expected "parallel" or "chain", or leave it unset.`);
+  }
   const chainSpecs = new Set(SERIAL_CHAIN.map((entry) => entry.spec));
   const parallelSpecs = specs.filter((spec) => !chainSpecs.has(spec));
   const exclusive = new RegExp(EXCLUSIVE_TAG);
   const chainIgnore = exactly([...chainSpecs]);
 
-  const full: ProjectPlan[] = [
+  const parallel: ProjectPlan[] = [
     { name: "chromium", testIgnore: chainIgnore, grepInvert: exclusive, dependencies: [] },
     { name: "chromium-exclusive", testIgnore: chainIgnore, grep: exclusive, workers: 1, dependencies: ["chromium"] },
-    ...SERIAL_CHAIN.map((entry, i) => ({
-      name: entry.name,
-      testMatch: exactly([entry.spec]),
-      dependencies: [i === 0 ? "chromium-exclusive" : SERIAL_CHAIN[i - 1]!.name],
-    })),
   ];
-  if (filters.length === 0) return full;
+  const chain: ProjectPlan[] = SERIAL_CHAIN.map((entry, i) => ({
+    name: entry.name,
+    testMatch: exactly([entry.spec]),
+    dependencies: i > 0 ? [SERIAL_CHAIN[i - 1]!.name] : part === "chain" ? [] : ["chromium-exclusive"],
+  }));
+  const projects = part === "parallel" ? parallel : part === "chain" ? chain : [...parallel, ...chain];
+  if (filters.length === 0) return projects;
 
   const matching = (candidates: readonly string[]) =>
     candidates.filter((spec) => filters.some((filter) => filterMatches(filter, path.join(testDir, spec))));
@@ -172,7 +179,7 @@ export function planProjects(specs: readonly string[], testDir: string, filters:
   // projects are not chained and every filter applies to each (a test at that line runs, nothing else of its file).
   const chained = !filters.some((filter) => /:\d+(:\d+)?$/.test(filter));
   const selected: ProjectPlan[] = [];
-  for (const project of full) {
+  for (const project of projects) {
     const candidates = project.testMatch ? SERIAL_CHAIN.filter((e) => e.name === project.name).map((e) => e.spec) : parallelSpecs;
     const specsHere = matching(candidates);
     if (specsHere.length === 0) continue;

@@ -560,10 +560,15 @@ jobs:
   # The Playwright suite (e2e) against a production build, a throwaway Postgres and the stand-in runner
   # (scripts/e2e-runner.ts): no AI, no job channel, no network beyond localhost.
   e2e:
+    name: e2e (${{ matrix.part }})
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        part: [parallel, chain]
     # Measured: running in the Playwright container image was slower (54 s image pull, slower build and tests) than the
     # host runner with cached browsers, so it stays on the host.
     services:
@@ -644,18 +649,23 @@ jobs:
       # A test that only passes on its retry fails the job (the retry still records a trace for the report).
       - name: End-to-end tests
         timeout-minutes: 15
+        env:
+          E2E_PART: ${{ matrix.part }}
         run: pnpm test:e2e --workers=2 --fail-on-flaky-tests
       # The first-run setup wizard on a fresh install (empty config / profile directories, empty database, no stand-in
-      # runner): its own port, database and directories, after the main suite, on the same build.
+      # runner): its own port, database and directories, after the parallel part, on the same build.
       - name: Setup wizard end-to-end tests
+        if: matrix.part == 'parallel'
         timeout-minutes: 6
+        env:
+          E2E_PART: ${{ matrix.part }}
         run: pnpm test:e2e:setup --fail-on-flaky-tests
       - name: Upload the Playwright report and traces
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         timeout-minutes: 5
         with:
-          name: playwright-report
+          name: playwright-report-${{ matrix.part }}
           path: |
             playwright-report/
             playwright-report-setup/

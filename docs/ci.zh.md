@@ -18,7 +18,7 @@ flowchart LR
   PR --> unit
   changes -- 代码有改动 --> integration
   changes -- 代码有改动 --> worker-switch
-  changes -- 代码有改动 --> e2e
+  changes -- 代码有改动 --> e2e["e2e (parallel / chain)"]
   changes -- 代码有改动 --> linux-smoke
   changes -- 部署或工具链有改动 --> upgrade-transition
   changes --> ci-ok
@@ -54,7 +54,7 @@ workflow 级设置：`permissions: contents: read`（任何任务都不能写仓
 
 1. 打开 PR 的检查列表：只要有任务是红的，`ci-ok` 就是红的。要打开的是红色的那个任务。
 2. 任务里红色的步骤默认展开。PR 注解（`::error::` 行、Playwright 的 `github` reporter）也出现在 “Files changed” 页和运行摘要里。
-3. `e2e` 失败时，产物 `playwright-report`（保留 7 天）里有主测试集（`playwright-report/`）和设置向导测试集（`playwright-report-setup/`）的 HTML 报告以及失败测试的 trace：`pnpm exec playwright show-report playwright-report`（或 `playwright-report-setup`），单个 trace 用 `pnpm exec playwright show-trace <trace.zip>`。
+3. `e2e` 失败时，各部分分别上传 `playwright-report-parallel` 和 `playwright-report-chain`（保留 7 天），里面有该部分主测试集（`playwright-report/`）的 HTML 报告以及失败测试的 trace。parallel 部分还包含设置向导测试集（`playwright-report-setup/`）：`pnpm exec playwright show-report playwright-report`（或 `playwright-report-setup`），单个 trace 用 `pnpm exec playwright show-trace <trace.zip>`。
 4. 只有重试才通过的测试会让任务失败（`--fail-on-flaky-tests`），这是有意的：修掉不稳定的原因，不要重跑到变绿。
 5. 只有原因明显出在 runner 上（网络、缓存服务）时才点 “Re-run failed jobs”，不要用它绕过失败的测试。
 
@@ -295,7 +295,14 @@ PostgreSQL 17 service、`DATABASE_URL`、必须可用的 pg 工具包装和依�
 
 ### Job `e2e`
 
-Playwright 浏览器测试，对生产构建（`pnpm build` 再 `pnpm start`）、一次性的 PostgreSQL 17 service 和替身 runner（`scripts/e2e-runner.ts`：心跳、配置确认、控制请求轮询，使“立即运行一轮”和“配置已保存”无需真实采集器即可工作）运行。没有 AI 提供方，没有职位通道，除 localhost 外没有网络。`e2e/` 下的 spec，另有 `e2e-setup/` 的 spec。上限 25 分钟，总共通常 10 到 12 分钟。任务跑在 runner 主机上，不在 Playwright 容器镜像里（实测镜像更慢）。
+Playwright 浏览器测试，对生产构建（`pnpm build` 再 `pnpm start`）、一次性的 PostgreSQL 17 service 和替身 runner（`scripts/e2e-runner.ts`：心跳、配置确认、控制请求轮询，使“立即运行一轮”和“配置已保存”无需真实采集器即可工作）运行。没有 AI 提供方，没有职位通道，除 localhost 外没有网络。`e2e/` 下的 spec，另有 `e2e-setup/` 的 spec。矩阵任务 `e2e (parallel)` 和 `e2e (chain)` 同时运行，`fail-fast: false` 保证一部分失败不会取消另一部分。每个任务都有自己的 runner、生产构建、PostgreSQL service、种子数据库、配置和 profile 目录，各自上限 25 分钟。都跑在 runner 主机上，不在 Playwright 容器镜像里（实测镜像更慢）。
+
+测试步骤把矩阵值传给 `E2E_PART`：
+
+- `parallel`：先 `chromium`，再 `chromium-exclusive`，最后用 `playwright.setup.config.ts` 跑设置向导。向导步骤仅在 `matrix.part == 'parallel'` 时运行。
+- `chain`：只跑 `e2e/projects.ts` 的 `SERIAL_CHAIN`。链头不依赖 `chromium-exclusive`，之后每个 project 仍依赖前一个。独立的数据库和目录让这条链可以安全地与 parallel 部分同时运行。
+
+本地不设 `E2E_PART` 时保持原来的完整顺序：并行、exclusive、串行链。设成 `parallel`、`chain` 以外的值会报错。配好一次性数据库后，可用 `E2E_PART=chain pnpm test:e2e` 或 `E2E_PART=parallel pnpm test:e2e` 复现某一部分；后者只跑主测试集，需再执行 `pnpm test:e2e:setup` 才覆盖该 CI 任务的设置向导。
 
 环境：`DATABASE_URL` 指向 service（本地运行必须自己设 `DATABASE_URL` 或 `E2E_ADMIN_DATABASE_URL`：没有默认地址）；`scripts/e2e-prepare.ts` 拒绝任何名字不以 `jobradar_e2e` 开头的数据库，它创建数据库 `jobradar_e2e_3100`（名字随 `E2E_PORT`），应用迁移，加载仪表盘种子（虚构职位），并用 `tests/fixtures/config/defaults/` 的冻结 fixture 填充全新的配置和 profile 目录。`E2E_PORT=3100` 是服务端口；`E2E_SKIP_BUILD=1` 告诉 web server 命令不要再构建。
 
@@ -305,7 +312,7 @@ project 的规划在 `e2e/projects.ts`（由 `tests/e2e-projects.test.ts` 做单
 
 - `chromium` 让大部分 spec 完全并行（4 核 runner 上 2 个 worker），各用自己的浏览器 context。它忽略所有会写共享配置的 spec，以及所有带 `@exclusive` 标签的测试。
 - `chromium-exclusive` 在 `chromium` 全部结束后，一次一个（`workers: 1`）运行带 `@exclusive` 标签的测试。所有 spec 共用一个预置数据的数据库，并行的 spec 一边跑一边改它：打开详情页会把岗位标为已看，访问“今日”会移动“上次访问”标记，有的测试会忽略、关闭、收藏岗位（再改回去），scoring spec 会临时插入一个岗位。改动每个页面都会读的状态（访问标记、所有岗位的已看记录：`list-today.spec.ts`），或比较整个列表计数的测试（`dashboard.spec.ts` 里 `/jobs` 筛选的计数、`filter.spec.ts` 的已过滤开关、`insights.spec.ts` 的头部数字）要加这个标签。只改一个岗位的测试用一个别的 spec 不碰的岗位、事后改回，并只对这个岗位断言，它留在并行 project 里。
-- 会改写同一个共享配置目录里文件的 spec（settings、language、breakdown、resume、interests、sources、market）会互相破坏，或破坏并行 spec 里读取这些设置的断言（Sources 页的 AI 卡片、界面语言）。所以它们作为单 spec 的 project，用 `dependencies` 串成链，一个接一个，且在 `chromium-exclusive` 全部结束之后才开始。按顺序如下：
+- 会改写同一个共享配置目录里文件的 spec（settings、language、breakdown、resume、interests、sources、market）会互相破坏，或破坏并行 spec 里读取这些设置的断言（Sources 页的 AI 卡片、界面语言）。所以它们作为单 spec 的 project，用 `dependencies` 串成链，一个接一个。完整模式中要等 `chromium-exclusive` 全部结束才开始；`chain` 部分的链头直接开始。按顺序如下：
   - 配置链：`chromium-config-settings`、`-settings-invalid`、`-language`、`-breakdown`、`-resume`。
   - interests 链：`chromium-interests`、`chromium-interests-suggestions`、`chromium-multi-filters`、`chromium-companies`（都会把视图、接受的建议或关注公司存到唯一的 `interests.yaml`）。
   - sources 链：`chromium-sources-registry` 和 `chromium-sources-discovery`（都改写 `sources.yaml`）。
@@ -317,7 +324,7 @@ project 的规划在 `e2e/projects.ts`（由 `tests/e2e-projects.test.ts` 做单
 所以总时长不是“最慢 spec 除以 2”：这条链是有意串行的。
 - 新 spec 只要写配置目录里的任何文件，就必须加进 `e2e/projects.ts` 的 `SERIAL_CHAIN`（拥有自己的串行 project），否则会与其他 spec 并行而随机失败。新测试如果改共享的数据库状态或计数整个列表，加 `{ tag: EXCLUSIVE_TAG }`。
 - 每个 spec 都从 `e2e/fixtures.ts` 导入 `test` 和 `expect`，不直接从 `@playwright/test` 导入（否则 `pnpm lint` 报错；只导入类型可以）。它的页面不会在 Server Action 还没完成时离开：`goto`、`reload`、`goBack`、`goForward`、`close`、`context.close()` 和每个测试结束时，都先等到该 context 各页面发出的 action 请求的响应全部收完（最多 15 秒，超时就报错并写出是哪个 action）。没有这一步，乐观更新之后马上刷新会取消保存，刷新后的页面与刷新前矛盾。要用别的方式读已保存的状态（数据库、配置文件）时，先调用 `waitForServerActions(page)` 或轮询。`E2E_SERVER_ACTION_DELAY_MS=<毫秒>` 让每个 action 请求延迟这么久再发出，用来暴露保护没覆盖的导航路径和直接读取已存储状态（数据库）而没先等待的地方，让它们每次都失败；它抓不到绕开 fixture 的导入（那由 lint 规则管，动态导入以及 `playwright` / `playwright-core` 也在内）。未覆盖的范围：页面自己发起的整页导航（点链接、提交表单）、`page.setContent()`、`browser.close()`，以及测试从不关闭的 `browser.newContext()` 创建的 context（只有 `context` fixture 在测试结束时等待）。保护从 `fetch` 调用起才看得到 action，之前的瞬间很短但不在覆盖内，所以最后一个 action 结束后还要安静 400 毫秒；`e2e/server-action-guard.spec.ts` 测试这个保护本身。
-- 命令行上点名的 spec 文件（`pnpm test:e2e e2e/settings.spec.ts`）只跑它们自己：只有含匹配 spec 的 project 参与，每个都收窄到点名的 spec，顺序仍按上面。（Playwright 会完整运行依赖 project，没有这一步时，链上的 spec 会先把整个并行套件跑一遍。）带 `file:line` 时，选中的 project 不再串起来，只跑那几行的测试。`--project <名称>` 仍会先跑它的依赖；要单独跑加 `--no-deps`。
+- 命令行上点名的 spec 文件（`pnpm test:e2e e2e/settings.spec.ts`）只跑它们自己：只有含匹配 spec 的 project 参与，每个都收窄到点名的 spec，顺序仍按上面。（Playwright 会完整运行依赖 project，没有这一步时，链上的 spec 会先把整个并行套件跑一遍。）带 `file:line` 时，选中的 project 不再串起来，只跑那几行的测试。设了 `E2E_PART` 后，两种过滤都只在该部分内选取。`--project <名称>` 仍会先跑它的依赖。跑整条链应使用 `E2E_PART=chain`；`--no-deps` 会移除链的串行顺序。
 - CI 里 `retries` 是 1，reporter 是 `github`、`list`、`html`；`forbidOnly` 拒绝提交 `test.only`。
 
 **设置向导测试集（`playwright.setup.config.ts`）** 单独运行，因为它需要另一个世界：全新安装。它有自己的端口（`E2E_SETUP_PORT`，默认 3105）、自己的数据库（`jobradar_e2e_setup_<port>`，由 `scripts/e2e-prepare.ts --fresh` 删除、重建并只迁移不灌种子）、空的配置和 profile 目录，且没有替身 runner（请求的周期保持排队）。与主测试集不同，它不用冻结的 fixture：默认目录就是随包的 `config/`（含示例 profile），与首次 `docker compose up` 的起点完全一致，因此是产品契约测试，随包默认值的改动若破坏了首次运行体验，它会失败。1 个 worker、按顺序执行，因为这些 spec 在同一个安装上依次走完向导。
@@ -362,15 +369,15 @@ Ubuntu runner 通常已经提供 Chrome 所需的共享库。先检查可避免�
 
 #### End-to-end tests
 
-`pnpm test:e2e --workers=2 --fail-on-flaky-tests`：如上所述的主测试集所有 project。web server 命令先运行 `scripts/e2e-prepare.ts`，再 `pnpm start -p 3100 -H 127.0.0.1`。只有重试才通过的测试会让任务失败；重试仍会为报告记录 trace。上限 15 分钟。本地：先起一个一次性数据库（下文的 postgres 容器），`pnpm build`，然后 `E2E_PORT=3100 E2E_SKIP_BUILD=1 pnpm test:e2e`；`E2E_PORT=<端口>` 让一次运行有自己的数据库和目录，多个检出可以并排运行，但**同一台机器同一时间只跑一套完整 e2e**：并行的完整运行会互相抢资源，产生并非真实失败的超时。开发时只跑受影响的 spec（`pnpm test:e2e e2e/pipeline.spec.ts`、几个文件，或 `e2e/dashboard.spec.ts:206` 只跑一个测试；只跑这些，web server 和替身 runner 照常启动），完整套件留给 CI。常见失败原因：定位器随界面文案变了（spec 以英文运行）；写共享配置的 spec 没加进 `SERIAL_CHAIN`；计数整个列表或改共享数据的测试没加 `@exclusive` 标签；只有 2 个 worker 才暴露的竞态（trace 里能看到）。
+`pnpm test:e2e --workers=2 --fail-on-flaky-tests`，配合 `E2E_PART=${{ matrix.part }}`：运行该部分的主测试集 project（见上）。web server 命令先运行 `scripts/e2e-prepare.ts`，再 `pnpm start -p 3100 -H 127.0.0.1`。只有重试才通过的测试会让任务失败；重试仍会为报告记录 trace。上限 15 分钟。本地：先起一个一次性数据库（下文的 postgres 容器），`pnpm build`，然后 `E2E_PORT=3100 E2E_SKIP_BUILD=1 pnpm test:e2e`；`E2E_PORT=<端口>` 让一次运行有自己的数据库和目录，多个检出可以并排运行，但**同一台机器同一时间只跑一套完整 e2e**：并行的完整运行会互相抢资源，产生并非真实失败的超时。开发时只跑受影响的 spec（`pnpm test:e2e e2e/pipeline.spec.ts`、几个文件，或 `e2e/dashboard.spec.ts:206` 只跑一个测试；只跑这些，web server 和替身 runner 照常启动），完整套件留给 CI。常见失败原因：定位器随界面文案变了（spec 以英文运行）；写共享配置的 spec 没加进 `SERIAL_CHAIN`；计数整个列表或改共享数据的测试没加 `@exclusive` 标签；只有 2 个 worker 才暴露的竞态（trace 里能看到）。
 
 #### Setup wizard end-to-end tests
 
-`pnpm test:e2e:setup --fail-on-flaky-tests`，在主测试集之后、同一份构建上、用自己的服务、数据库和目录运行（见上）。上限 6 分钟，通常 1 到 2 分钟。报告目录：`playwright-report-setup/`。
+`pnpm test:e2e:setup --fail-on-flaky-tests`，只在 `parallel` 部分运行（`if: matrix.part == 'parallel'`），在该部分的主测试集之后、同一份构建上、用自己的服务、数据库和目录运行（见上）。上限 6 分钟，通常 1 到 2 分钟。报告目录：`playwright-report-setup/`。
 
 #### Upload the Playwright report and traces
 
-只在本任务有步骤失败时运行（`if: failure()`）：把 `playwright-report/`（主测试集）、`playwright-report-setup/`（设置向导测试集）和 `test-results/` 上传为产物 `playwright-report`，保留 7 天。从运行页下载，用 `pnpm exec playwright show-report <目录>` 打开报告。
+只在该矩阵任务有步骤失败时运行（`if: failure()`）：把 `playwright-report/`（该部分主测试集）、`playwright-report-setup/`（设置向导，只存在于 parallel 部分）和 `test-results/` 上传为产物 `playwright-report-${{ matrix.part }}`（即 `playwright-report-parallel` 或 `playwright-report-chain`），保留 7 天。从运行页下载，用 `pnpm exec playwright show-report <目录>` 打开报告。
 
 ### Job `linux-smoke`
 
@@ -487,7 +494,7 @@ B 使用同样的仅失败时上传条件，上传独立包装日志和产物目
 
 #### All selected checks passed
 
-读取 `needs` 的结果（`jq`）：`changes`、`ci-docs`、`static`、`unit` 必须始终成功（被跳过算失败，不算通过）；`integration`、`worker-switch`、`e2e`、`linux-smoke` 在 `changes` 选中代码时必须成功，否则必须是 skipped；`upgrade-transition` 按 `transition` 同样处理。其他任何组合（包括必须运行却被跳过或取消的任务）都会打印各任务结果和 `::error::a selected check did not succeed`。它变红时，先看它打印的各任务结果，再打开对应任务。
+读取 `needs` 的结果（`jq`）：`changes`、`ci-docs`、`static`、`unit` 必须始终成功（被跳过算失败，不算通过）；`integration`、`worker-switch`、`e2e`、`linux-smoke` 在 `changes` 选中代码时必须成功，否则必须是 skipped；`upgrade-transition` 按 `transition` 同样处理。`needs.e2e.result` 汇总两个矩阵任务：代码改动时两部分都必须成功，只改文档时整个矩阵必须跳过。其他任何组合（包括必须运行却被跳过或取消的任务）都会打印各任务结果和 `::error::a selected check did not succeed`。它变红时，先看它打印的各任务结果，再打开对应任务。
 
 ## Dependabot
 
@@ -536,11 +543,12 @@ pnpm test:integration --sequence.shuffle.files --sequence.seed=$RANDOM --exclude
 SWAP_MANAGERS=systemd pnpm test:integration --reporter=verbose tests/integration/ai-worker-swap.test.ts tests/integration/uninstall-ai-worker.test.ts
 SWAP_MANAGERS=launchd pnpm test:integration --reporter=verbose tests/integration/ai-worker-swap.test.ts tests/integration/uninstall-ai-worker.test.ts
 
-# 任务：e2e（本机同一时间只跑一套完整 e2e）
+# 任务：e2e（CI 使用独立 runner；本机依次复现两部分）
 pnpm exec playwright install chromium
 pnpm build
-E2E_PORT=3100 E2E_SKIP_BUILD=1 pnpm test:e2e --workers=2 --fail-on-flaky-tests
+E2E_PART=parallel E2E_PORT=3100 E2E_SKIP_BUILD=1 pnpm test:e2e --workers=2 --fail-on-flaky-tests
 E2E_PORT=3100 E2E_SKIP_BUILD=1 pnpm test:e2e:setup --fail-on-flaky-tests
+E2E_PART=chain E2E_PORT=3100 E2E_SKIP_BUILD=1 pnpm test:e2e --workers=2 --fail-on-flaky-tests
 
 # 任务：linux-smoke（Linux，只在新克隆里做：最后会 `docker compose down -v`；它会构建 web、runner、jobspy 三个镜像）
 printf 'PUID=%s\nPGID=%s\n' "$(id -u)" "$(id -g)" > .env && mkdir -p data/{config,profile,backups,exports,logs} .auth
