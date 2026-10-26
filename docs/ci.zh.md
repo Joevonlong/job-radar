@@ -298,13 +298,15 @@ project 的规划在 `e2e/projects.ts`（由 `tests/e2e-projects.test.ts` 做单
 
 `actions/cache`，缓存 `~/.cache/ms-playwright`，键为 runner 系统加 `pnpm-lock.yaml`（浏览器版本跟随锁定的 `@playwright/test`）。设置 `steps.playwright-cache.outputs.cache-hit`。
 
-#### Install Playwright browser and system libraries
+#### Install Playwright browser
 
-`pnpm exec playwright install --with-deps chromium`，只在缓存未命中时运行。下载 Chromium 并（用 apt）安装它需要的系统库。最多一分钟左右。
+`pnpm exec playwright install chromium`，只在缓存未命中时运行。只下载 Chromium，不安装系统库。上限 8 分钟。
 
-#### Install Playwright system libraries
+#### Playwright system libraries (installed only when the browser cannot start)
 
-`pnpm exec playwright install-deps chromium`，只在缓存命中时运行：缓存里只有浏览器，没有系统库，所以每次都要装系统库。
+缓存命中或未命中都会运行 Node 检查：通过 `@playwright/test` 以无头模式启动 Chromium 并关闭它（启动超时 10 秒，每次检查总时限 20 秒）。失败时输出错误，运行 `pnpm exec playwright install-deps chromium`，然后再次检查；安装失败或复查仍失败都会让该步骤失败。步骤保留 8 分钟上限。
+
+Ubuntu runner 通常已经提供 Chrome 所需的共享库。先检查可避免不必要的 apt 调用，减少其长尾延迟和偶发超时导致的运行失败。
 
 #### Cache the Next build cache
 
