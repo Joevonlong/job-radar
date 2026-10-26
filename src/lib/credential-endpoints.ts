@@ -22,6 +22,7 @@ export const CREDENTIAL_ENDPOINTS = {
   tavily: { setting: "sources.yaml sources.tavily.api_base_url", hosts: ["api.tavily.com"] },
   brave: { setting: "sources.yaml sources.brave.api_base_url", hosts: ["api.search.brave.com"] },
   apify: { setting: "sources.yaml linkedin.apify.api_base_url", hosts: ["api.apify.com"] },
+  monid: { setting: "sources.yaml linkedin.monid.api_base_url", hosts: ["api.monid.ai"] },
   /** IMAP, not https: checked by `checkImapEndpoint` (implicit TLS on port 993). */
   gmail: { setting: "sources.yaml sources.gmail host / port / secure", hosts: ["imap.gmail.com"] },
 } as const satisfies Record<string, { setting: string; hosts: readonly string[] }>;

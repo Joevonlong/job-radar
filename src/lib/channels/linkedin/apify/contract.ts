@@ -85,7 +85,7 @@ export interface TemplateValues {
 
 const PLACEHOLDER = /\{(keywords|location|limit|date_posted)\}/g;
 
-function fill(value: unknown, values: TemplateValues): unknown {
+function fill(value: unknown, values: Pick<TemplateValues, "keywords" | "location" | "limit" | "datePosted">): unknown {
   if (typeof value === "string") {
     // a string that is exactly "{limit}" becomes a number, so the actor's integer field stays an integer
     if (value === "{limit}") return values.limit;
@@ -116,14 +116,19 @@ function fill(value: unknown, values: TemplateValues): unknown {
 }
 
 /** The location sent to the actor: `City, Country` for a located query, the configured location for a remote one. */
-export function locationFor(query: SearchQuery, settings: ApifySettings, market: ChannelMarket): string {
+export function locationFor(query: SearchQuery, settings: Pick<ApifySettings, "remote_locations" | "country_name">, market: ChannelMarket): string {
   if (query.remote) return remoteLocationFor(query.remoteScope ?? "worldwide", settings.remote_locations, market);
   if (query.location === null) throw new Error("apify: a located query needs a location");
   return `${query.location}, ${settings.country_name || market.countryName}`;
 }
 
 /** The actor inputs for one query: one per keyword string (usually exactly one), from the configured template. */
-export function buildActorInputs(query: SearchQuery, settings: ApifySettings, limit: number, market: ChannelMarket): Array<Record<string, unknown>> {
+export function buildActorInputs(
+  query: SearchQuery,
+  settings: Pick<ApifySettings, "input_template" | "remote_input" | "date_posted" | "remote_locations" | "country_name">,
+  limit: number,
+  market: ChannelMarket,
+): Array<Record<string, unknown>> {
   const keywords = keywordStrings(query.keywords);
   if (keywords.length === 0) throw new Error("apify: the query has no keywords");
   const range = dateRangeFor(query.windowHours);

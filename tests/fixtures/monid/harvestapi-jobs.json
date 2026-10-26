@@ -1,0 +1,32 @@
+[
+  {
+    "id": "4385163817",
+    "title": "Platform Engineer",
+    "linkedinUrl": "https://www.linkedin.com/jobs/view/platform-engineer-4385163817",
+    "company": { "id": "example-company", "name": "Example Systems", "linkedinUrl": "https://www.linkedin.com/company/example-systems", "website": "https://example.com", "description": "Fictional software company" },
+    "location": { "linkedinText": "Example City, Germany", "parsed": { "countryCode": "de", "city": "Example City", "country": "Germany" } },
+    "postedDate": "2026-10-26T08:00:00.000Z",
+    "workplaceType": "hybrid",
+    "descriptionText": "Build reliable platform tools.\nCollaborate with the team.",
+    "descriptionHtml": "<p>Build reliable platform tools.</p><p>Collaborate with the team.</p>",
+    "employmentType": "Full-time",
+    "seniorityLevel": "Mid-Senior level",
+    "salary": { "text": "EUR 70,000 - 90,000 per year", "min": 70000, "max": 90000, "currency": "EUR", "payPeriod": "YEARLY", "providedByEmployer": true, "compensationSource": "EMPLOYER" },
+    "applyMethod": { "companyApplyUrl": "https://example.com/careers/platform" },
+    "applicants": 12,
+    "views": 30,
+    "expireAt": "2026-11-26T08:00:00.000Z",
+    "jobState": "LISTED"
+  },
+  {
+    "id": 4385163818,
+    "title": "Infrastructure Engineer",
+    "linkedinUrl": "https://www.linkedin.com/jobs/view/4385163818",
+    "company": { "name": "Sample Computing" },
+    "location": { "linkedinText": "Remote", "parsed": { "countryCode": "de" } },
+    "postedDate": "2026-10-26T07:00:00Z",
+    "descriptionText": "Maintain infrastructure.",
+    "workplaceType": "remote",
+    "salary": { "text": "Estimated EUR 80,000", "min": 80000, "currency": "EUR", "payPeriod": "YEARLY", "providedByEmployer": false }
+  }
+]
