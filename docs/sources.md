@@ -47,14 +47,18 @@ A channel's status is the same result as the channel card on the `/sources` over
 
 - A job becomes possibly closed when no source has returned it for `possibly_closed_after_days` days (7 by default) **and** each channel it came from has had at least one successful run that started after those days had passed. Runs that failed, were skipped or were interrupted do not count, so a channel that was down never closes its jobs.
 - A job from a company ATS board additionally needs that board to have been read completely after the job fell overdue,
-  by a run with the normal search window, not a catch-up or backfill run. A complete read means the whole list was read
-  and, for SmartRecruiters, every kept posting's detail was fetched; an "unchanged" response also counts if the board
-  has no unresolved details. A board that is still configured but keeps failing, answers 404, lists fewer postings than
-  it announces or keeps having failing details blocks only its own jobs from being marked, until it is fixed or disabled.
-  A persistent 404 shows as an error in the registry; a persistently short list or failing details still shows OK,
-  but "Last success" stops moving. Removing a board from the config or disabling it stops its checks, and its jobs age
-  as before. After upgrading, each board's "Last success" is empty and its jobs are not marked until the board has been
-  read completely once.
+  by a run that finished successfully with the normal search window, not a catch-up or backfill run (a run that was
+  cancelled or failed after reading the board does not count, because its postings were not saved). A complete read
+  means the whole list was read and, for SmartRecruiters with `fetch_details` on, every kept posting's detail was
+  fetched; with `fetch_details: false` a complete list is a complete read. An "unchanged" response also counts if the
+  board has no unresolved details. A board that is still configured but keeps failing, answers 404, lists fewer
+  postings than it announces or keeps having failing details blocks only its own jobs from being marked, until it is
+  fixed or disabled. A persistent 404 shows as an error in the registry; a persistently short list or failing details
+  still shows OK, but "Last success" stops moving. Removing a board from the config or disabling it stops its checks,
+  and its jobs age as before, with one limit: if the board was checked and failed after the job fell overdue and was
+  only then removed or disabled, that last check keeps blocking its jobs (fewer marks, never wrong ones), and only the
+  link check closes them. After upgrading, each board's "Last success" is empty and its jobs are not marked until the
+  board has been read completely once.
 - An already-stored job still listed by a company ATS board counts as seen even when it falls beyond `max_results`.
   The cap alone does not make it possibly closed.
 - A search only returns postings inside its time window (`window_hours`; JSearch maps it onto its supported windows: today, 3 days, week, month; anything above a week becomes a month), so a query that does not return a job says nothing about whether it is closed. That is why a single query's result never marks a job by itself.
