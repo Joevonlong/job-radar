@@ -96,10 +96,10 @@ describe("ConfigForm", () => {
     expect(screen.getByTestId("section-jobspy-google").tagName).toBe("DETAILS");
 
     const list = screen.getByTestId(/-list$/);
-    expect(within(list).getAllByRole("listitem").map((li) => li.getAttribute("data-value"))).toEqual(["linkedin-brightdata", "linkedin-apify", "linkedin-session", "linkedin-guest"]);
+    expect(within(list).getAllByRole("listitem").map((li) => li.getAttribute("data-value"))).toEqual(["linkedin-brightdata", "linkedin-apify", "linkedin-monid", "linkedin-session", "linkedin-guest"]);
     await user.click(screen.getByRole("button", { name: "Move linkedin-guest up" }));
     await user.click(screen.getByRole("button", { name: "Save" }));
-    expect(onSave.mock.calls[0]?.[0]["linkedin.cascade"]).toEqual(["linkedin-brightdata", "linkedin-apify", "linkedin-guest", "linkedin-session"]);
+    expect(onSave.mock.calls[0]?.[0]["linkedin.cascade"]).toEqual(["linkedin-brightdata", "linkedin-apify", "linkedin-monid", "linkedin-guest", "linkedin-session"]);
   });
 
   it("opens a channel section that holds an error", () => {

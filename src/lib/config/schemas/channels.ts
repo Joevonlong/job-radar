@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { CHANNEL_KINDS } from "@/lib/channels/types";
+import { monidSettingsSchema } from "@/lib/channels/linkedin/monid/contract";
 
 import { atsBoardsSchema } from "./companies";
 import { nonEmptyString, nonNegativeInt, nonNegativeNumber, positiveInt, stringList } from "./common";
@@ -360,6 +361,7 @@ export type SessionSettings = z.infer<typeof sessionSettingsSchema>;
 export const LINKEDIN_CHANNEL_IDS = [
   "linkedin-brightdata",
   "linkedin-apify",
+  "linkedin-monid",
   "linkedin-session",
   "linkedin-guest",
 ] as const;
@@ -537,6 +539,7 @@ export const channelsSchema = z
         /** Keys merged over `input_template` for remote queries. */
         remote_input: z.record(z.string(), z.unknown()),
       }),
+      monid: monidSettingsSchema,
       session: sessionSettingsSchema,
       guest: channel,
     }),
@@ -576,6 +579,7 @@ export const channelsSchema = z
     const budgets: Array<[Array<string>, number]> = [
       [["linkedin", "brightdata"], cfg.linkedin.brightdata.monthly_budget_usd],
       [["linkedin", "apify"], cfg.linkedin.apify.monthly_budget_usd],
+      [["linkedin", "monid"], cfg.linkedin.monid.monthly_budget_usd],
       [["linkedin", "session"], cfg.linkedin.session.monthly_budget_usd],
       [["linkedin", "guest"], cfg.linkedin.guest.monthly_budget_usd],
       ...Object.entries(cfg.sources).map(([id, c]): [Array<string>, number] => [

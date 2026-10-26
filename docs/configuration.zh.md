@@ -67,6 +67,14 @@ web 和 runner 启动时会补缺，升级冻结期间跳过补缺。已有安�
 旧文件加载时会在内存里迁移；在 v2 文件里加回这个键会因“未知键”而校验失败。卡片说明见 [salary.zh.md](salary.zh.md)，
 升级和回滚说明见[更新日志](../CHANGELOG.md)。
 
+### LinkedIn Monid（`sources.yaml`）
+
+默认级联为 Bright Data → Apify → Monid → session → guest。Monid 需要 `.env` 中的 `MONID_API_KEY`，
+供应商、接口名和 API 地址是受保护键。sources 迁移 **3 → 4** 补上配置块，预算为 `min(5, 全局上限)`，
+只在恰好是旧默认级联时插入；自定义顺序保持不变。回退到只支持版本 3 的代码前，先从
+`data/config/.backup/` 恢复 `sources.yaml`，或删掉 Monid 块和级联条目并将 `config_version` 改回 `3`。
+钱包设置、记账、冒烟和停止行为见 [Monid](monid.zh.md)。
+
 ### setup.yaml
 
 `setup.yaml` 记录首次设置的状态（`completed_at`、`completed_by`、`steps`），由设置向导和 `pnpm run setup` 写入。全新安装时它是
@@ -107,7 +115,7 @@ pnpm config:example ai-engineering-europe            # 套用：先把要改的�
 |---|---|
 | `ai.yaml` | `providers.*.command`（`claude` / `codex` 可执行文件）、`providers.*.base_url`（DeepSeek、MiMo）、`providers.codex_cli.config_overrides`、`providers.codex_cli.disable_features`、`providers.codex_cli.trim_context` |
 | `notify.yaml` | `telegram.api_base_url` |
-| `sources.yaml` | 所有 `base_url`、`api_base_url`、`eu_api_base_url`，`jobspy.url`，`jobspy.proxies`，`sources.gmail.host` / `port` / `secure`，`linkedin.session.site.auth_file`，`linkedin.apify.actor_id` |
+| `sources.yaml` | 所有 `base_url`、`api_base_url`、`eu_api_base_url`，`jobspy.url`，`jobspy.proxies`，`sources.gmail.host` / `port` / `secure`，`linkedin.session.site.auth_file`，`linkedin.apify.actor_id`，`linkedin.monid.provider`，`linkedin.monid.endpoint` |
 | `resume.yaml` | `claude_command`、`claude_args`、`resume_kit_path`、`master_resume_path`、`pdf_dir`、`jd_export_dir`、`jd_export_host_dir` |
 | `ui.yaml` | `web_access` 下的全部键（登录限制，见[网页访问](#网页访问可选口令监听地址和端口)） |
 
@@ -121,7 +129,7 @@ pnpm config:example ai-engineering-europe            # 套用：先把要改的�
 上面的锁定是 web 这一侧。ai-worker 和 runner 也不信任文件（它可能是手动改的，或者设了 `JOB_RADAR_ALLOW_WEB_EDIT_PROTECTED=1`），所以有几个值在使用的地方再检查一次，不管文件里写了什么（出厂值总能通过）：
 
 - `ai.yaml providers.claude_cli.command` / `providers.codex_cli.command` 必须是 `claude` / `codex` 这个可执行文件（裸名字或绝对路径）；`providers.codex_cli.config_overrides` 只保留设为 `false` 的裁剪上下文开关；不管 `disable_features` 和 `trim_context` 怎么写，codex 的工具限制始终生效。
-- 接收凭据的服务（DeepSeek、MiMo、Telegram、JSearch、Tavily、Brave、Apify）的 `base_url` / `api_base_url` 必须指向厂商自己的主机，`sources.gmail` 必须是带 TLS 的 `imap.gmail.com:993`，除非 `.env` 里设了 `JOB_RADAR_ALLOW_CUSTOM_ENDPOINTS=1`。带凭据的请求不跟随重定向。
+- 接收凭据的服务（DeepSeek、MiMo、Telegram、JSearch、Tavily、Brave、Apify、Monid）的 `base_url` / `api_base_url` 必须指向厂商自己的主机，`sources.gmail` 必须是带 TLS 的 `imap.gmail.com:993`，除非 `.env` 里设了 `JOB_RADAR_ALLOW_CUSTOM_ENDPOINTS=1`。带凭据的请求不跟随重定向。
 - claude / codex 的模型名必须是普通名字（没有空格，不以 `-` 开头）。
 
 两个放行开关互不相干：`JOB_RADAR_ALLOW_WEB_EDIT_PROTECTED=1` 只让 web 能写这些键，`JOB_RADAR_ALLOW_CUSTOM_ENDPOINTS=1` 让进程把凭据发往你自己的主机。检查不通过时会怎样，见 [ai-providers.zh.md](ai-providers.zh.md#ai-worker-不从-aiyaml-接受的东西)；doctor 的 `config.guards` 会列出每个被忽略或拒绝的值。

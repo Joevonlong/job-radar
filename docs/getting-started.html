@@ -400,7 +400,7 @@ pnpm run doctor</code></pre>
         <tr><th>Type</th><th>Channels</th><th>What to prepare</th></tr>
         <tr><td>Official APIs and public company feeds, on by default</td><td>Greenhouse, Lever, Ashby, Personio, SmartRecruiters; Federal Employment Agency (Germany market only)</td><td>Nothing to do; add the companies you care about under <code>ats_boards</code></td></tr>
         <tr><td>Scraping, <b>off by default</b></td><td>Indeed, StepStone (Germany pack), LinkedIn guest, XING</td><td>Their terms of service may forbid automated access. Switch one on only after reading <a href="sources.md#scraping">Scraping</a>; the wizard and /sources/registry ask you to confirm</td></tr>
-        <tr><td>Paid (monthly budget)</td><td>LinkedIn Bright Data, Apify, JSearch</td><td>Put the key in the <code>.env</code> file in the project directory and set a monthly budget in /settings; switch the channel off if you do not want it</td></tr>
+        <tr><td>Paid (monthly budget)</td><td>LinkedIn Bright Data, Apify, Monid, JSearch</td><td>Put the key in the <code>.env</code> file in the project directory and set a monthly budget in /settings; switch the channel off if you do not want it</td></tr>
         <tr><td>Discover new companies</td><td>Tavily (default) / Brave</td><td><code>TAVILY_API_KEY</code>, 1000 free calls per month</td></tr>
         <tr><td>Needs login</td><td>LinkedIn session (off by default, uses your own account), Gmail alert emails</td><td>See the <a href="linkedin-session.md">LinkedIn session</a> and <a href="gmail-alerts.md">Gmail alerts</a> guides; optional</td></tr>
       </table></div>

@@ -52,8 +52,8 @@ sources:
 describe("sources.yaml 2 -> 3", () => {
   it("brings a v2 file to what the shipped defaults hold, and it validates", () => {
     const { text, steps } = migrate("channels", v2("sources.yaml", ["sources", "arbeitnow"]));
-    expect(steps).toBe(1);
-    expect(text).toMatch(/^config_version: 3$/m);
+    expect(steps).toBe(2);
+    expect(text).toMatch(/^config_version: 4$/m);
     const shipped = parse(fs.readFileSync(path.join(FIXTURE_DEFAULTS_DIR, "sources.yaml"), "utf8")) as Record<string, unknown>;
     expect(parse(text)).toEqual(shipped);
     const value = validateConfigValue("channels", parse(text), "sources.yaml");

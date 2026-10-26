@@ -16,7 +16,7 @@
 
 # 所有付费采集通道每月合计花费的上限（美元）；各通道实际花费之和不得超过它，由预算控制执行。
 # （AI 费用另有上限，见 ai.yaml 的 monthly_api_budget_usd。）
-config_version: 3
+config_version: 4
 paid_total_monthly_budget_usd: 15
 
 # 熔断：连续失败 failures 次后，通道标为不可用，冷却 cooldown_hours 小时后再试
@@ -51,6 +51,7 @@ linkedin:
   cascade:
     - linkedin-brightdata
     - linkedin-apify
+    - linkedin-monid
     - linkedin-session
     - linkedin-guest
 
@@ -105,6 +106,35 @@ linkedin:
     remote_input:
       urlParam:
         - { key: f_WT, value: "2" }
+  # Monid LinkedIn fallback (docs/monid.md). Without MONID_API_KEY in .env the cascade skips it; no failure is recorded. Set a workspace spend cap in the Monid dashboard.
+  monid:
+    enabled: true
+    monthly_budget_usd: 5
+    throttle: { min_delay_ms: 1000, max_delay_ms: 3000 }
+    max_results: 300
+    api_base_url: https://api.monid.ai
+    provider: apify
+    endpoint: /harvestapi/linkedin-job-search
+    price_per_1k_usd: 1
+    flat_fee_usd: 0.001
+    poll_interval_ms: 5000
+    timeout_ms: 300000
+    stop_grace_ms: 60000
+    country_name: ""
+    remote_locations:
+      worldwide: Worldwide
+    date_posted: { day: 24h, week: week, month: month, any: "" }
+    input_template:
+      jobTitles:
+        - "{keywords}"
+      locations:
+        - "{location}"
+      maxItems: "{limit}"
+      postedLimit: "{date_posted}"
+      sortBy: date
+    remote_input:
+      workplaceType:
+        - remote
 
   session:
     # 级联第 3 位：用你自己的 LinkedIn 登录态（Playwright，只读）搜索岗位。需要先在宿主机运行 `pnpm auth:linkedin` 登录一次；

@@ -16,7 +16,7 @@ Every change made in the web UI is written back to `sources.yaml` (comments pres
 
 ```
 top         total paid budget, circuit breaker, concurrency, HTTP, size of the "Test" button (shared by all channels)
-linkedin    LinkedIn cascade order and the four LinkedIn channels
+linkedin    LinkedIn cascade order and the five LinkedIn channels
 jobspy      jobspy sidecar (shared by linkedin-guest, indeed, jobspy-google); proxies may contain credentials
 sources     other channels: job boards, search APIs, company ATS, board discovery, Gmail alert emails
 ats_boards  company ATS boards to collect: name, ats, token, enabled, optional region
@@ -26,6 +26,13 @@ registry    stats window, status thresholds, import size limit, "open board" URL
 Entry ids: a channel is its channel name (`greenhouse`, `gmail-alerts`, `linkedin-session:recommended`); a company is `board:<ats>:<token>` (`board:greenhouse:celonis`).
 
 Keys under `registry:` can only be changed in the YAML: `window_days` (stats window, 7 days), `board_failing_after` (how many consecutive failures count as failing, 2), `board_stale_hours` (how long without a check counts as degraded, 48), `import_max_bytes`, `board_page_urls`, and optionally `candidates_page_size` (how many "discovered boards" are listed at once; 10 if omitted; deliberately left out of the shipped file, because a default written there would be carried into the file on every save).
+
+The default LinkedIn cascade is `linkedin-brightdata` → `linkedin-apify` → `linkedin-monid` → `linkedin-session` →
+`linkedin-guest`. [Monid](monid.md) uses `MONID_API_KEY` and a separate prepaid wallet; without a key it is skipped
+without a failure. Its USD 5 default budget shares the global paid cap. Upgrading to sources config version 4 inserts
+it only into the previous default order; customized orders and subsets stay unchanged and the new block is disabled.
+To use it after a customized-cascade migration, both add `linkedin-monid` to the cascade in `/settings` and set
+`linkedin.monid.enabled: true`.
 
 ## 3. How the seven statuses are decided
 
@@ -144,7 +151,7 @@ first; removing a query leaves it out. Reordering queries only changes ties.
 
 A turn is any run except a skipped run with no postings, no recorded usage and no cost. Failures, cancellations and
 unfinished runs count, including orphaned runs later marked failed. A budget stop that spent quota or money counts even
-when it returned nothing, including an empty Apify sub-run that paid a start fee. A refusal before any request and the
+when it returned nothing, including an empty Apify or Monid sub-run that paid a start fee. A refusal before any request and the
 "no available channel" summary row do not advance the order. History has no age cutoff.
 
 The starting channel is the first currently available channel in the selected cascade, or the single channel of an
@@ -166,8 +173,8 @@ is null. Aborted or throwing units have no rotation summary.
 
 For the individual attempts, inspect the `runs` table in PostgreSQL (or `pnpm db:studio`):
 
-- `usage_units`: usage booked to the channel budget, such as JSearch requests or Bright Data / Apify records. Check `cost`
-  too: an empty Apify run can have zero usage units but a positive start fee.
+- `usage_units`: usage booked to the channel budget, such as JSearch requests or Bright Data / Apify / Monid records. Check `cost`
+  too: an empty Apify or Monid run can have zero usage units but a positive start fee.
 - `window_hours`: the window actually requested from the channel; null for a "no available channel" summary row.
 - `window_extended`: false for all attempts in this version; rotation does not extend windows.
 
@@ -238,7 +245,7 @@ for a new installation** and need your explicit consent to switch on.
 | Scraping | LinkedIn guest search (`linkedin-guest`), Indeed (`indeed`), StepStone (`stepstone`), XING (`xing`), Google Jobs via the sidecar (`jobspy-google`) | off | the site's terms may forbid it; your IP address can be rate limited or blocked |
 | Account automation | LinkedIn logged-in session (`linkedin-session`, `linkedin-session:recommended`) | off | uses your own account; the account can be restricted or banned |
 | Official APIs and public company feeds | Arbeitsagentur, [Arbeitnow](#arbeitnow), Greenhouse, Lever, Ashby, Personio, SmartRecruiters (on); JSearch, Gmail alerts, Tavily, Brave (need your key or account) | on, or off until you add a key | follow the provider's own terms and quotas |
-| Paid scraping services | Bright Data, Apify | on, but nothing happens without your token | a service scrapes for you; **this does not remove the terms-of-service risk**, which stays with you |
+| Paid scraping services | Bright Data, Apify, [Monid](monid.md) | on, but nothing happens without your token | a service scrapes for you; **this does not remove the terms-of-service risk**, which stays with you |
 
 How to switch one on:
 
@@ -266,7 +273,7 @@ and their pages change without notice. Job Radar is a personal tool: it throttle
 login wall, CAPTCHA or verification page, and stops using a source that keeps failing. You are responsible for how you
 use it: check the terms of every site you enable, keep volumes low, prefer official APIs and your own alert emails where
 you can, and don't republish collected data. The maintainers give no warranty and accept no liability for your use of
-third-party services. Paid services such as Bright Data or Apify scrape for you but don't remove the terms-of-service
+third-party services. Paid services such as Bright Data, Apify or Monid scrape for you but don't remove the terms-of-service
 risk.
 
 Job Radar is an independent project. It is not affiliated with, endorsed by or sponsored by any job board, employer or

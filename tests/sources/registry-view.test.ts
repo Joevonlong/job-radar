@@ -34,9 +34,9 @@ function view(overrides: Partial<Parameters<typeof buildRegistryView>[0]> = {}) 
 describe("buildRegistryView", () => {
   it("has a row for every channel and every board, and the counts add up", () => {
     const v = view();
-    expect(v.channels).toHaveLength(20);
+    expect(v.channels).toHaveLength(21);
     expect(v.boards).toHaveLength(config.ats_boards.length);
-    expect(v.total).toBe(20 + config.ats_boards.length);
+    expect(v.total).toBe(21 + config.ats_boards.length);
     expect(Object.values(v.counts).reduce((a, b) => a + b, 0)).toBe(v.total);
     expect(v.windowDays).toBe(7);
     expect(v.fromMirror).toBe(false);
@@ -170,8 +170,8 @@ describe("skipped runs, cascade standby, the recommended switch, one time basis"
   const own = (session: boolean) =>
     channelsWith((raw) => {
       const linkedin = raw.linkedin as Record<string, Record<string, unknown>>;
-      (linkedin as unknown as { cascade: string[] }).cascade = ["linkedin-brightdata", "linkedin-apify", "linkedin-session", "linkedin-guest"];
-      for (const key of ["brightdata", "apify", "session", "guest"] as const) (linkedin[key] as Record<string, unknown>).enabled = key === "session" ? session : true;
+      (linkedin as unknown as { cascade: string[] }).cascade = ["linkedin-brightdata", "linkedin-apify", "linkedin-monid", "linkedin-session", "linkedin-guest"];
+      for (const key of ["brightdata", "apify", "monid", "session", "guest"] as const) (linkedin[key] as Record<string, unknown>).enabled = key === "session" ? session : true;
       (linkedin.session as Record<string, unknown>).recommended_daily = true;
     });
   const build = (cfg: ReturnType<typeof own>, cards: ReturnType<typeof cardsFor>, stats = new Map<string, ReturnType<typeof windowStat>>()) =>
@@ -196,15 +196,17 @@ describe("skipped runs, cascade standby, the recommended switch, one time basis"
     const cfg = own(false);
     const cards = cardsFor({
       channelsConfig: cfg,
-      states: [state("linkedin-brightdata"), state("linkedin-apify"), state("linkedin-guest")],
+      states: [state("linkedin-brightdata"), state("linkedin-apify"), state("linkedin-monid"), state("linkedin-guest")],
       history: new Map([["linkedin-brightdata", [stat({ skipped: 0, succeeded: 1 })]]]),
       healthCycles: 14,
       apifyConfigured: true,
+      monidConfigured: true,
     });
     const v = build(cfg, cards);
     const status = (id: string) => v.channels.find((c) => c.id === id);
     expect(status("linkedin-brightdata")?.status).toBe("ok");
     expect(status("linkedin-apify")).toMatchObject({ status: "standby", reasons: [{ key: "cascadeStandby" }] });
+    expect(status("linkedin-monid")).toMatchObject({ status: "standby", reasons: [{ key: "cascadeStandby" }] });
     expect(status("linkedin-guest")?.status).toBe("standby");
     // the first step of the cascade has nothing before it: never standby
     const alone = build(cfg, cardsFor({ channelsConfig: cfg, states: [state("linkedin-brightdata")] }));

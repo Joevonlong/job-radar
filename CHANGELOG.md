@@ -7,6 +7,9 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ### Upgrade notes
 
+- **Monid LinkedIn fallback (sources config 3 → 4):** before rolling code back below this version, restore
+  `sources.yaml` from `data/config/.backup/`, or remove `linkedin.monid` and its cascade entry and set
+  `config_version: 3`. To switch it off without rolling back, set `linkedin.monid.enabled: false`.
 - **Company ATS boards are read afresh after upgrading.** The migration clears every board's stored validator and
   "Last success". The first round re-reads every enabled ATS board unconditionally: one request per Greenhouse, Lever,
   Ashby or Personio board; for each SmartRecruiters board, its list pages plus one detail request per kept posting.
@@ -119,6 +122,8 @@ A failure in (a) does not block rollback: follow (c) and accept the display wind
 
 ### Added
 
+- **Monid LinkedIn fallback:** an optional prepaid channel after Apify in the default LinkedIn cascade, with
+  per-run budget limits, polling, stop handling and billing recorded before parsing. See [docs/monid.md](docs/monid.md).
 - **Watched companies keep their on-site and hybrid jobs in any city of your home country.** Only the location check is
   relaxed (a place without a country, such as "San Francisco", still does not count); remote jobs, other filters,
   scoring and push rules are unchanged. The job is noted "Watched company: Hamburg is not one of your cities but is in

@@ -21,7 +21,7 @@ Score, ranking, the hard filter and the push threshold are **never changed by a 
 
 **Location**: hidden text that the job description holds (whitespace, line breaks and list bullets ignored) gets its offset in the description; otherwise the finding says "only on the source page" and names the payload field (for example `raw:posting.content@alt`).
 
-**Which sources have HTML**: greenhouse, lever, ashby, personio, smartrecruiters, arbeitnow, linkedin-session, linkedin-apify, linkedin-brightdata. stepstone, xing, jobspy (indeed / linkedin-guest / google), arbeitsagentur, jsearch and gmail-alerts **only deliver text**: for them only the instruction patterns and invisible characters work, hidden styles cannot be seen.
+**Which sources have HTML**: greenhouse, lever, ashby, personio, smartrecruiters, arbeitnow, linkedin-session, linkedin-apify, linkedin-monid, linkedin-brightdata. stepstone, xing, jobspy (indeed / linkedin-guest / google), arbeitsagentur, jsearch and gmail-alerts **only deliver text**: for them only the instruction patterns and invisible characters work, hidden styles cannot be seen.
 
 **Not detected**: hiding classes defined in external CSS (unless listed), text inside images, screenshots / OCR. The instruction patterns and the AI layer are the fallback for these.
 

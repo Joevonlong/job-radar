@@ -400,7 +400,7 @@ pnpm run doctor</code></pre>
         <tr><th>类型</th><th>通道</th><th>要准备什么</th></tr>
         <tr><td>官方 API 和公开的公司数据源，默认开</td><td>Greenhouse、Lever、Ashby、Personio、SmartRecruiters；劳工局（仅德国市场）</td><td>不用做什么；把你关心的公司加到 <code>ats_boards</code></td></tr>
         <tr><td>抓取类，<b>默认关</b></td><td>Indeed、StepStone（德国包）、LinkedIn guest、XING</td><td>它们的服务条款可能禁止自动访问。读过<a href="sources.zh.md#抓取">抓取</a>一节再打开；向导和 /sources/registry 会要你确认</td></tr>
-        <tr><td>付费（有月预算）</td><td>LinkedIn Bright Data、Apify、JSearch</td><td>把 key 写进项目目录下的 <code>.env</code>，在 /settings 设月预算；不想用就关掉</td></tr>
+        <tr><td>付费（有月预算）</td><td>LinkedIn Bright Data、Apify、Monid、JSearch</td><td>把 key 写进项目目录下的 <code>.env</code>，在 /settings 设月预算；不想用就关掉</td></tr>
         <tr><td>发现新公司</td><td>Tavily（默认）/ Brave</td><td><code>TAVILY_API_KEY</code>，每月免费 1000 次</td></tr>
         <tr><td>需要登录</td><td>LinkedIn 登录态（默认关，使用你自己的账号）、Gmail 提醒邮件</td><td>见 <a href="linkedin-session.zh.md">LinkedIn 登录态</a>、<a href="gmail-alerts.zh.md">Gmail 提醒</a> 手册，可选</td></tr>
       </table></div>

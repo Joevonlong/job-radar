@@ -16,7 +16,7 @@
 
 ```
 顶部        付费总预算、熔断、并发、HTTP、"测试"按钮的规模（所有通道共用）
-linkedin    LinkedIn 级联顺序和四个 LinkedIn 通道
+linkedin    LinkedIn 级联顺序和五个 LinkedIn 通道
 jobspy      jobspy sidecar（linkedin-guest、indeed、jobspy-google 共用）；proxies 可能含账号密码
 sources     其他通道：招聘网站、搜索 API、公司 ATS、board 发现、Gmail 提醒邮件
 ats_boards  要采集的公司 ATS board：name、ats、token、enabled、可选 region
@@ -26,6 +26,12 @@ registry    来源清单页的统计窗口、判定阈值、导入大小上限�
 条目 id：通道就是通道名（`greenhouse`、`gmail-alerts`、`linkedin-session:recommended`）；公司是 `board:<ats>:<token>`（`board:greenhouse:celonis`）。
 
 `registry:` 里的键只在 YAML 里改：`window_days`（统计窗口，7 天）、`board_failing_after`（连续失败几次算异常，2）、`board_stale_hours`（多久没检查算不稳，48）、`import_max_bytes`、`board_page_urls`，以及可选的 `candidates_page_size`（"发现的 board"一次列出几条，不写是 10；故意不写进随仓库的文件，因为写进去的默认值会被每次保存带进文件）。
+
+默认 LinkedIn 级联为 `linkedin-brightdata` → `linkedin-apify` → `linkedin-monid` → `linkedin-session` →
+`linkedin-guest`。[Monid](monid.zh.md) 使用 `MONID_API_KEY` 和独立的预充值钱包，没有 key 时跳过且不记失败。
+其默认 5 美元预算受全局付费上限约束。sources 配置版本 4 只对旧默认顺序自动插入；自定义顺序和子集保持不变，
+新块默认停用。自定义级联迁移后若要使用，须同时在 `/settings` 将 `linkedin-monid` 加入级联，并设置
+`linkedin.monid.enabled: true`。
 
 ## 3. 七种状态怎么判
 
@@ -136,7 +142,7 @@ pnpm sources:list [--type channel|ats_board] [--status failing ...] [--all] [--j
 删除的查询不再出现。调整查询顺序只影响并列时的先后。
 
 除“跳过且没有岗位、没有记录用量、没有花费”之外的运行都算轮到。失败、取消、未结束的运行都算，包括之后被清理为失败的孤儿运行。
-花了额度或钱的预算截停，即使没有返回岗位，也算轮到，包括只付了启动费、空返回的 Apify 子运行。
+花了额度或钱的预算截停，即使没有返回岗位，也算轮到，包括只付了启动费、空返回的 Apify 或 Monid 子运行。
 请求前就被拒绝，以及“没有可用通道”的汇总行，都不会推进顺序。历史没有时间下限。
 
 起始通道是选中级联里当前第一个可用通道，独立单元则是该通道本身。N 个查询的集合与起始通道不变时，一个查询两次轮到之间，
@@ -154,8 +160,8 @@ pnpm sources:list [--type channel|ats_board] [--status failing ...] [--all] [--j
 
 单次尝试的记录可在 PostgreSQL 的 `runs` 表中查看（也可以用 `pnpm db:studio`）：
 
-- `usage_units`：记到通道预算上的用量，例如 JSearch 的请求数、Bright Data / Apify 的条数。同时看 `cost`：
-  Apify 空返回的运行可能用量为零，却付了启动费。
+- `usage_units`：记到通道预算上的用量，例如 JSearch 的请求数、Bright Data / Apify / Monid 的条数。同时看 `cost`：
+  Apify 或 Monid 空返回的运行可能用量为零，却付了启动费。
 - `window_hours`：实际向通道请求的时间窗；“没有可用通道”的汇总行是 null。
 - `window_extended`：此版本的所有尝试都为 false；轮换不扩大窗口。
 
@@ -218,7 +224,7 @@ Arbeitnow（`arbeitnow`）是免费公开的招聘板接口：不要 key，不�
 | 抓取 | LinkedIn 游客搜索（`linkedin-guest`）、Indeed（`indeed`）、StepStone（`stepstone`）、XING（`xing`）、经 sidecar 的 Google Jobs（`jobspy-google`） | 关 | 网站条款可能禁止；你的 IP 可能被限流或封禁 |
 | 账号自动化 | LinkedIn 登录会话（`linkedin-session`、`linkedin-session:recommended`） | 关 | 使用你自己的账号；账号可能被限制或封禁 |
 | 官方 API 和公开的公司数据源 | Arbeitsagentur、[Arbeitnow](#arbeitnow)、Greenhouse、Lever、Ashby、Personio、SmartRecruiters（开）；JSearch、Gmail 提醒、Tavily、Brave（需要你的 key 或账号） | 开，或填 key 之前关 | 遵守各提供方自己的条款和配额 |
-| 付费抓取服务 | Bright Data、Apify | 开，但没有你的 token 就什么也不做 | 由服务替你抓取；**这并不能消除服务条款风险**，风险仍在你身上 |
+| 付费抓取服务 | Bright Data、Apify、[Monid](monid.zh.md) | 开，但没有你的 token 就什么也不做 | 由服务替你抓取；**这并不能消除服务条款风险**，风险仍在你身上 |
 
 怎么打开：
 
@@ -239,7 +245,7 @@ Arbeitnow（`arbeitnow`）是免费公开的招聘板接口：不要 key，不�
 部分来源读取公开网页或非官方接口。招聘网站的服务条款可能禁止自动访问，页面也会不经通知地改版。Job Radar 是个人工具：它限制请求频率，
 从不尝试绕过登录墙、验证码或验证页，来源持续失败时会停用它。使用方式由你自己负责：启用前查看每个网站的条款，保持低请求量，
 能用官方 API 和你自己的提醒邮件就优先用，不要再发布采集到的数据。维护者不提供任何担保，也不对你使用第三方服务承担责任。
-Bright Data、Apify 这类服务替你抓取，但服务条款的风险并不会因此消失。
+Bright Data、Apify、Monid 这类服务替你抓取，但服务条款的风险并不会因此消失。
 
 Job Radar 是独立项目，与它能读取或连接的任何招聘网站、雇主或服务均无关联，也未获其认可或赞助；所有商标归各自所有者（见
 [NOTICE](../NOTICE)）。测试夹具和演示数据都是合成的：雇主、编号、链接、联系人和岗位文本都是虚构的。

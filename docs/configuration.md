@@ -81,6 +81,15 @@ see what the step removes, then `pnpm config:migrate --write` to save it (origin
 Older files are migrated in memory when loaded; adding this key to a v2 file fails validation as an unknown key.
 See [salary.md](salary.md) for the cards and [the changelog](../CHANGELOG.md) for upgrade and rollback notes.
 
+### LinkedIn Monid (`sources.yaml`)
+
+The default cascade is Bright Data → Apify → Monid → session → guest. Monid needs `MONID_API_KEY` in `.env`;
+its provider, endpoint and API host are protected keys. The sources migration **3 → 4** adds its block with
+`monthly_budget_usd = min(5, global cap)` and inserts it only into the exact previous default cascade.
+Custom orders stay unchanged. Before rolling back to code that supports only version 3, restore `sources.yaml`
+from `data/config/.backup/`, or remove the Monid block and cascade entry and set `config_version: 3`.
+See [Monid](monid.md) for wallet setup, accounting, smoke and stops.
+
 ### setup.yaml
 
 `setup.yaml` holds the state of the first-run setup (`completed_at`, `completed_by`, `steps`); the setup wizard and
@@ -125,7 +134,7 @@ these keys; you edit them by hand in the file in your config directory:
 |---|---|
 | `ai.yaml` | `providers.*.command` (the `claude` / `codex` executables), `providers.*.base_url` (DeepSeek, MiMo), `providers.codex_cli.config_overrides`, `providers.codex_cli.disable_features`, `providers.codex_cli.trim_context` |
 | `notify.yaml` | `telegram.api_base_url` |
-| `sources.yaml` | every `base_url`, `api_base_url` and `eu_api_base_url`, `jobspy.url`, `jobspy.proxies`, `sources.gmail.host` / `port` / `secure`, `linkedin.session.site.auth_file`, `linkedin.apify.actor_id` |
+| `sources.yaml` | every `base_url`, `api_base_url` and `eu_api_base_url`, `jobspy.url`, `jobspy.proxies`, `sources.gmail.host` / `port` / `secure`, `linkedin.session.site.auth_file`, `linkedin.apify.actor_id`, `linkedin.monid.provider`, `linkedin.monid.endpoint` |
 | `resume.yaml` | `claude_command`, `claude_args`, `resume_kit_path`, `master_resume_path`, `pdf_dir`, `jd_export_dir`, `jd_export_host_dir` |
 | `ui.yaml` | everything under `web_access` (the login limits, see [Web access](#web-access-optional-password-bind-address-and-port)) |
 
@@ -149,7 +158,7 @@ file says (shipped values always pass):
   name or absolute path); `providers.codex_cli.config_overrides` keeps only the context switches set to `false`; the codex
   tool restrictions are always applied, whatever `disable_features` and `trim_context` say.
 - `base_url` / `api_base_url` of the services that receive a credential (DeepSeek, MiMo, Telegram, JSearch, Tavily, Brave,
-  Apify) must point to the vendor's own host, and `sources.gmail` to `imap.gmail.com:993` with TLS, unless
+  Apify, Monid) must point to the vendor's own host, and `sources.gmail` to `imap.gmail.com:993` with TLS, unless
   `JOB_RADAR_ALLOW_CUSTOM_ENDPOINTS=1` is set in `.env`. Credentialed requests never follow a redirect.
 - The claude / codex model names must be plain names (no spaces, not starting with `-`).
 

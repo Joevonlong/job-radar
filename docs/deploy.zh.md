@@ -20,7 +20,7 @@
 | ☐ 3 | 断电后自动开机、不休眠：`sudo pmset autorestart 1`、`sudo pmset -a sleep 0` | host-setup 第 3 节 | doctor 的「Mac 断电自启、不休眠」是 ✅ |
 | ☐ 4 | claude 和（或）codex 在宿主机上登录，或在 `.env` 里设置了 API key | host-setup 第 6 节 | 终端里 `claude auth status` 显示 `loggedIn: true`，`codex login status` 显示 Logged in |
 | ☐ 5 | Telegram：@BotFather 建 bot，token 和 chat id 写进 `.env`；`notify.yaml` 里 `telegram.enabled: true` | [telegram.zh.md](telegram.zh.md)、host-setup 第 6 节 | `pnpm telegram:test` 手机收到测试消息 |
-| ☐ 6 | 采集通道的 key（Bright Data、Apify、Tavily、JSearch、Gmail……）按需写进 `.env`，并确认各通道月预算 | 各通道的指南（[brightdata.zh.md](brightdata.zh.md)、[apify.zh.md](apify.zh.md) 等）；`.env.example` 有变量名 | doctor 的「采集通道与预算」里没有「缺 XXX」 |
+| ☐ 6 | 采集通道的 key（Bright Data、Apify、Monid、Tavily、JSearch、Gmail……）按需写进 `.env`，并确认各通道月预算 | 各通道的指南（[brightdata.zh.md](brightdata.zh.md)、[apify.zh.md](apify.zh.md)、[monid.zh.md](monid.zh.md) 等）；`.env.example` 有变量名 | doctor 的「采集通道与预算」里没有「缺 XXX」 |
 | ☐ 7 | 画像：`data/profile/me.yaml`、`preferences.yaml` 写好；配置：`pnpm config:init` 生成用户配置目录 `data/config/`（之后改配置都改这里，见 [configuration.zh.md](configuration.zh.md)） | `config/profile.example/` | `pnpm config:check` 全部通过 |
 | ☐ 8 | Tailscale：Mac 上打开并 Connect、勾选 Start at login；手机装同一账号；`tailscale serve --bg 3000`；把 `tailscale serve status` 里的地址写进 `notify.yaml: public_base_url` | host-setup 第 7 节 | 手机浏览器能打开那个地址；doctor 的「手机访问」三项都是 ✅ |
 | ☐ 9 | LinkedIn 登录态（可选，`linkedin-session` 通道上线后） | [linkedin-session.zh.md](linkedin-session.zh.md) | doctor 的「LinkedIn 级联可用，登录态」没有 ⚠️ |

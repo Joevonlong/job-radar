@@ -22,10 +22,11 @@ describe("channels.each", () => {
   });
 
   it("warns for an enabled channel whose key is missing and names the variable, not a value", async () => {
-    const ctx = makeContext({ env: { TAVILY_API_KEY: "", APIFY_TOKEN: undefined } });
+    const ctx = makeContext({ env: { TAVILY_API_KEY: "", APIFY_TOKEN: undefined, MONID_API_KEY: undefined } });
     const list = byId(await results(channelsCheck, ctx));
     expect(list.get("channels.tavily")).toMatchObject({ status: "warn", detail: expect.stringContaining("TAVILY_API_KEY") });
     expect(list.get("channels.linkedin-apify")?.detail).toContain("APIFY_TOKEN");
+    expect(list.get("channels.linkedin-monid")).toMatchObject({ status: "warn", detail: expect.stringContaining("MONID_API_KEY") });
     expect(list.get("channels.tavily")?.hint).toContain(".env");
     expect(list.get("channels.indeed")?.status).toBe("ok");
   });
@@ -95,6 +96,11 @@ describe("channels.each", () => {
     expect(byId(await results(channelsCheck, ctx)).get("channels.linkedin-apify")?.status).toBe("warn");
   });
 
+  it("shows Monid's own budget usage and exhaustion", async () => {
+    const ctx = makeContext(view({ usage: new Map([["linkedin-monid", { records: 4, usd: 5 }]]) }));
+    expect(byId(await results(channelsCheck, ctx)).get("channels.linkedin-monid")).toMatchObject({ status: "fail", detail: expect.stringContaining("$5.00 / $5.00") });
+  });
+
   it("free allowance: shows usage, warns near the end and past it", async () => {
     const at = async (records: number) => byId(await results(channelsCheck, makeContext(view({ usage: new Map([["linkedin-brightdata", { records, usd: 0 }]]) })))).get("channels.linkedin-brightdata");
     expect(await at(225)).toMatchObject({ status: "ok", detail: expect.stringContaining("免费额度 225 / 5000 条") });
@@ -105,7 +111,7 @@ describe("channels.each", () => {
   it("fails when no channel is enabled at all", async () => {
     const off = (raw: Record<string, unknown>) => {
       const l = raw.linkedin as Record<string, { enabled?: boolean }>;
-      for (const k of ["brightdata", "apify", "session", "guest"]) (l[k] as { enabled: boolean }).enabled = false;
+      for (const k of ["brightdata", "apify", "monid", "session", "guest"]) (l[k] as { enabled: boolean }).enabled = false;
       for (const v of Object.values(raw.sources as Record<string, { enabled?: boolean }>)) if ("enabled" in v) v.enabled = false;
       for (const k of ["indeed", "arbeitsagentur", "stepstone", "xing", "jsearch"]) {
         const section = (raw.sources as Record<string, { enabled: boolean }>)[k];
@@ -121,18 +127,18 @@ describe("channels.linkedin", () => {
   it("ok with a usable cascade; the session login is optional while disabled", async () => {
     const r = await only(linkedinCheck, makeContext());
     expect(r.status).toBe("ok");
-    expect(r.detail).toContain("linkedin-brightdata → linkedin-apify → linkedin-session → linkedin-guest");
+    expect(r.detail).toContain("linkedin-brightdata → linkedin-apify → linkedin-monid → linkedin-session → linkedin-guest");
     expect(r.detail).toContain("未启用，可选");
   });
   it("fails when nothing in the cascade is usable", async () => {
-    const ctx = makeContext({ env: { BRIGHT_DATA_API_KEY: "", APIFY_TOKEN: "" }, ...view({ states: states({ "linkedin-guest": { circuitState: "open", circuitOpenUntil: new Date("2026-10-08T00:00:00Z") } }) }) });
+    const ctx = makeContext({ env: { BRIGHT_DATA_API_KEY: "", APIFY_TOKEN: "", MONID_API_KEY: "" }, ...view({ states: states({ "linkedin-guest": { circuitState: "open", circuitOpenUntil: new Date("2026-10-08T00:00:00Z") } }) }) });
     const r = await only(linkedinCheck, ctx);
     expect(r.status).toBe("fail");
     expect(r.detail).toContain("都不能运行");
   });
   it("is not a failure when no LinkedIn channel is set up: the paid ones lack keys and the free ones are off", async () => {
     const guestOff = (raw: Record<string, unknown>) => ((raw.linkedin as { guest: { enabled: boolean } }).guest.enabled = false);
-    const ctx = makeContext({ channels: guestOff, env: { BRIGHT_DATA_API_KEY: "", APIFY_TOKEN: "" }, ...view({}, guestOff) });
+    const ctx = makeContext({ channels: guestOff, env: { BRIGHT_DATA_API_KEY: "", APIFY_TOKEN: "", MONID_API_KEY: "" }, ...view({}, guestOff) });
     const r = await only(linkedinCheck, ctx);
     expect(r.status).toBe("ok");
     expect(r.detail).toContain("没有设置好的通道");

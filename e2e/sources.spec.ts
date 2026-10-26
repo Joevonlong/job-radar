@@ -15,7 +15,7 @@ test("sources shows a card per channel with its circuit state, runs and budget",
   // one card per configured channel; the seeded broken one is open
   // implemented channels get a full card; the ones without code are compact rows in one closed section (same hooks)
   const cards = page.getByTestId("channel-card");
-  expect(await cards.count()).toBeGreaterThanOrEqual(17);
+  expect(await cards.count()).toBeGreaterThanOrEqual(18);
   await expect(page.locator('[data-testid="channel-card"]:not([data-compact])').first()).toBeVisible();
   const pending = page.getByTestId("pending-channels");
   await expect(pending.locator("details")).not.toHaveAttribute("open", "");
@@ -31,8 +31,13 @@ test("sources shows a card per channel with its circuit state, runs and budget",
 
   // the cascade, in order, and the channel that served the latest cycle
   const cascade = page.getByTestId("cascade-card");
-  await expect(cascade.getByTestId("cascade-entry")).toHaveCount(4);
-  await expect(cascade.getByTestId("cascade-entry").first()).toHaveAttribute("data-channel", "linkedin-brightdata");
+  await expect(cascade.getByTestId("cascade-entry")).toHaveCount(5);
+  const entries = cascade.getByTestId("cascade-entry");
+  const channelOrder = ["linkedin-brightdata", "linkedin-apify", "linkedin-monid", "linkedin-session", "linkedin-guest"];
+  for (const [index, id] of channelOrder.entries()) {
+    await expect(entries.nth(index)).toHaveAttribute("data-channel", id);
+  }
+  await expect(entries.locator(".src-step__n")).toHaveText(channelOrder);
   await expect(cascade.getByTestId("cascade-entry").first()).toHaveAttribute("data-served", "1");
   await expect(cascade.locator('[data-channel="linkedin-guest"]')).toContainText("跳过");
 
@@ -69,7 +74,9 @@ test("the summary has four health blocks and the cascade a quota battery per ste
   await expect(page.getByTestId("paid-card").getByRole("meter")).toHaveAttribute("aria-valuemin", "0");
   await expect(page.getByTestId("disk-card")).toBeVisible();
   const steps = page.getByTestId("cascade-card").getByTestId("cascade-entry");
-  await expect(steps).toHaveCount(4);
+  await expect(steps).toHaveCount(5);
+  await expect(steps.nth(2)).toHaveAttribute("data-channel", "linkedin-monid");
+  await expect(steps.nth(2).locator(".src-step__n")).toHaveText("linkedin-monid");
   await expect(steps.first()).toHaveAttribute("data-step", "on");
 });
 

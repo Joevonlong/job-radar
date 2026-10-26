@@ -96,7 +96,7 @@ export function shippedReports(
 /** A well-formed scrypt hash (all zero bytes; matches no password anyone would type). */
 export const HEALTHY_PASSWORD_HASH = "scrypt:131072:8:1:AAAAAAAAAAAAAAAAAAAAAA:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 
-export const FILE_KEYS = ["BRIGHT_DATA_API_KEY", "APIFY_TOKEN", "BRAVE_SEARCH_API_KEY", "TAVILY_API_KEY", "JSEARCH_API_KEY", "GMAIL_USER", "GMAIL_APP_PASSWORD"] as const;
+export const FILE_KEYS = ["BRIGHT_DATA_API_KEY", "APIFY_TOKEN", "MONID_API_KEY", "BRAVE_SEARCH_API_KEY", "TAVILY_API_KEY", "JSEARCH_API_KEY", "GMAIL_USER", "GMAIL_APP_PASSWORD"] as const;
 
 export function channelState(id: string, extra: Partial<ChannelStateRow> = {}): ChannelStateRow {
   return { id, family: id.startsWith("linkedin") ? "linkedin" : id, kind: "api", health: "healthy", circuitState: "closed", circuitOpenUntil: null, consecutiveFailures: 0, lastErrorCode: null, lastSuccessAt: ago(3600), ...extra };

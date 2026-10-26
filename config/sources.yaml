@@ -1,7 +1,7 @@
 # Source registry: every job collection source lives in this one file; the web page /sources/registry and `pnpm sources:list` read it.
 # Layout:
 #   top        total paid budget, circuit breaker, concurrency, HTTP, size of the "Test" button run (shared by all channels)
-#   linkedin   LinkedIn cascade order and the four LinkedIn channels
+#   linkedin   LinkedIn cascade order and the five LinkedIn channels
 #   jobspy     jobspy sidecar (shared by linkedin-guest, indeed, jobspy-google)
 #   sources    other channels: job boards, search APIs, company ATS, board discovery, Gmail alert emails
 #   ats_boards company ATS boards to collect (formerly companies.yaml)
@@ -15,9 +15,10 @@
 # monthly_budget_usd: paid allowance per month for the channel (USD); 0 = no paid usage allowed; no single channel may exceed paid_total_monthly_budget_usd.
 # throttle: random wait of min~max milliseconds between requests.  max_results: max results per request.
 
-# Monthly cap on the combined spend of all paid collection channels (USD); the channels' actual spend may not exceed it in total, enforced by the budget control.
+# Monthly cap used before starting paid collection runs (USD), shared by all paid channels.
+# Limits use configured prices; settled vendor charges are always recorded and may exceed the cap for one run.
 # (AI spend has its own cap: monthly_api_budget_usd in ai.yaml.)
-config_version: 3
+config_version: 4
 paid_total_monthly_budget_usd: 15
 
 # Circuit breaker: after failures consecutive failures a channel is marked unavailable (paused) and retried after cooldown_hours hours
@@ -54,6 +55,7 @@ linkedin:
   cascade:
     - linkedin-brightdata
     - linkedin-apify
+    - linkedin-monid
     - linkedin-session
     - linkedin-guest
 
@@ -105,8 +107,38 @@ linkedin:
       urlParam:
         - { key: f_WT, value: "2" }
 
+  monid:
+    # Cascade position 3. Without MONID_API_KEY in .env the channel shows "not configured" and the cascade skips it, with no failure recorded.
+    # Monid forwards to the provider below and bills your prepaid workspace wallet. Set a workspace spend cap in its dashboard (docs/monid.md).
+    enabled: true
+    monthly_budget_usd: 5
+    throttle: { min_delay_ms: 1000, max_delay_ms: 3000 }
+    max_results: 300
+    api_base_url: "https://api.monid.ai"
+    provider: apify
+    endpoint: /harvestapi/linkedin-job-search
+    # Local limits use these prices; Monid has no server-side run cost cap. Actual charges are recorded even if they exceed the local budget.
+    price_per_1k_usd: 1.0
+    flat_fee_usd: 0.001
+    poll_interval_ms: 5000
+    timeout_ms: 300000 # after this, request stop and keep polling during stop_grace_ms
+    stop_grace_ms: 60000 # no final status: conservatively account for the full requested limit
+    country_name: "" # empty = the market's country name
+    remote_locations:
+      worldwide: Worldwide
+    date_posted: { day: 24h, week: week, month: month, any: "" }
+    # One title and one location per run; {limit} becomes a positive integer equal to the budget-limited result cap.
+    input_template:
+      jobTitles: ["{keywords}"]
+      locations: ["{location}"]
+      maxItems: "{limit}"
+      postedLimit: "{date_posted}"
+      sortBy: date
+    remote_input:
+      workplaceType: [remote]
+
   session:
-    # Cascade position 3: searches jobs with your own LinkedIn login session (Playwright, read-only). Log in once first by running `pnpm auth:linkedin` on the host;
+    # Cascade position 4: searches jobs with your own LinkedIn login session (Playwright, read-only). Log in once first by running `pnpm auth:linkedin` on the host;
     # without a session (.auth/linkedin.json), /sources shows "not logged in" and the cascade skips it. On a login or verification page (checkpoint / CAPTCHA) it stops at once, trips the circuit breaker and sends a Telegram alert,
     # and never tries to get past it automatically. See docs/linkedin-session.md.
     enabled: false # turn on after logging in and confirming `pnpm cycle:run --channel linkedin-session --dry-run` works

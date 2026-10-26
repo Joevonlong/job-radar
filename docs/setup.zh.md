@@ -35,6 +35,10 @@
 `claude` / `codex` 或 LinkedIn：见 [host-setup.zh.md](host-setup.zh.md)、[ai-providers.zh.md](ai-providers.zh.md) 和
 [linkedin-session.zh.md](linkedin-session.zh.md)。
 
+默认 LinkedIn 顺序是 Bright Data → Apify → Monid → session → guest。三个付费通道分别需要
+`BRIGHT_DATA_API_KEY`、`APIFY_TOKEN` 和 `MONID_API_KEY`；缺 key 时跳过且不记失败。
+[Monid 设置](monid.zh.md)说明独立的预充值钱包，以及建议在后台设置的 workspace 花费上限。
+
 不在向导里（检查步骤给出链接）：信号类别、推送阈值、处理时间表和申请流程（设置 → 流程、`/interests`）。
 
 ## 设置完成之前

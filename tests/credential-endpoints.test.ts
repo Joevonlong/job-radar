@@ -11,6 +11,7 @@ describe("credential endpoints", () => {
     expect(checkCredentialEndpoint("mimo", "https://api.xiaomimimo.com/v1", {})).toEqual({ status: "default" });
     expect(checkCredentialEndpoint("telegram", "https://API.telegram.org/", {})).toEqual({ status: "default" });
     expect(checkCredentialEndpoint("jsearch", "https://jsearch.p.rapidapi.com", {})).toEqual({ status: "default" });
+    expect(checkCredentialEndpoint("monid", "https://api.monid.ai", {})).toEqual({ status: "default" });
   });
 
   it.each([
@@ -36,7 +37,7 @@ describe("credential endpoints", () => {
   });
 
   it("covers every service that sends a credential", () => {
-    expect(Object.keys(CREDENTIAL_ENDPOINTS).sort()).toEqual(["apify", "brave", "deepseek", "gmail", "jsearch", "mimo", "tavily", "telegram"]);
+    expect(Object.keys(CREDENTIAL_ENDPOINTS).sort()).toEqual(["apify", "brave", "deepseek", "gmail", "jsearch", "mimo", "monid", "tavily", "telegram"]);
   });
 });
 

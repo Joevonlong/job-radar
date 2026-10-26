@@ -228,7 +228,9 @@ test("reorder the LinkedIn cascade and switch a channel off; channels are collap
   await expect(brightdata.getByLabel("数据集 ID")).toHaveValue("gd_lpfll7v5hcqtkxl6l");
 
   const list = card.getByRole("list").filter({ has: page.getByRole("button", { name: "上移 linkedin-guest" }) });
-  await expect(list.getByRole("listitem")).toHaveCount(4);
+  await expect(list.getByRole("listitem")).toHaveCount(5);
+  await expect(list.getByRole("listitem").nth(2)).toHaveAttribute("data-value", "linkedin-monid");
+  await card.getByRole("button", { name: "上移 linkedin-guest" }).click();
   await card.getByRole("button", { name: "上移 linkedin-guest" }).click();
   await card.getByRole("button", { name: "上移 linkedin-guest" }).click();
   await expect(list.getByRole("listitem").nth(1)).toHaveAttribute("data-value", "linkedin-guest");
@@ -240,7 +242,7 @@ test("reorder the LinkedIn cascade and switch a channel off; channels are collap
   await indeedSwitch.click();
   await save(page, "channels");
 
-  await expect.poll(() => read("channels")).toMatch(/cascade:\n\s+- linkedin-brightdata\n\s+- linkedin-guest\n\s+- linkedin-apify\n\s+- linkedin-session\n/);
+  await expect.poll(() => read("channels")).toMatch(/cascade:\n\s+- linkedin-brightdata\n\s+- linkedin-guest\n\s+- linkedin-apify\n\s+- linkedin-monid\n\s+- linkedin-session\n/);
   const after = read("channels");
   expect(after).not.toBe(before);
   expect(after).toContain("# 采集通道");

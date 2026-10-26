@@ -122,7 +122,7 @@ Demo data throughout: the companies and jobs are invented. To click around the s
 
 | | |
 |---|---|
-| Many sources | LinkedIn (guest search; optional: your own logged-in session (experimental, not yet tested against a real login), or paid Bright Data / Apify), Indeed, StepStone, XING, Arbeitsagentur, Arbeitnow, Google Jobs via JSearch, company career pages on Greenhouse, Lever, Ashby, Personio and SmartRecruiters, job-alert emails from Gmail. [All sources](sources.md) |
+| Many sources | LinkedIn (guest search; optional: your own logged-in session (experimental, not yet tested against a real login), or paid Bright Data / Apify / Monid), Indeed, StepStone, XING, Arbeitsagentur, Arbeitnow, Google Jobs via JSearch, company career pages on Greenhouse, Lever, Ashby, Personio and SmartRecruiters, job-alert emails from Gmail. [All sources](sources.md) |
 | Your consent first | Sources that scrape a site or use your own LinkedIn login are off in a new install. Turning one on shows the risk and asks you to confirm. [Scraping](sources.md#scraping) |
 | Isolated | One source failing never stops a cycle. Each has a circuit breaker and an optional monthly budget. |
 | One job, not five | Near-duplicates across sources merge into one entry, with every source link kept. |

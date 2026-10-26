@@ -76,7 +76,7 @@ export async function ChannelCard({ card, timeZone, healthCycles, alertPercent }
             </EnabledBadge>
           ) : null}
           {card.notConfigured ? (
-            <Badge variant="gate-warn" title={t(card.id === "linkedin-apify" ? "card.notConfiguredHintApify" : card.id === "jsearch" ? "card.notConfiguredHintJsearch" : card.id === "gmail-alerts" ? "card.notConfiguredHintGmail" : "card.notConfiguredHint")} data-testid="not-configured">
+            <Badge variant="gate-warn" title={t(card.id === "linkedin-apify" ? "card.notConfiguredHintApify" : card.id === "linkedin-monid" ? "card.notConfiguredHintMonid" : card.id === "jsearch" ? "card.notConfiguredHintJsearch" : card.id === "gmail-alerts" ? "card.notConfiguredHintGmail" : "card.notConfiguredHint")} data-testid="not-configured">
               {t("card.notConfigured")}
             </Badge>
           ) : null}

@@ -158,7 +158,7 @@ export const HIDDEN_PATHS: Record<SettingsForm, readonly string[]> = {
   schedule: ["suggest.positive_statuses", "suggest.ignored_statuses", "suggest.min_positive_jobs", "suggest.max_positive_jobs", "suggest.max_ignored_jobs", "suggest.jd_max_chars", "suggest.min_evidence", "suggest.max_term_chars", "doctor", "deploy", "backup.keep_old_databases", "logging"],
   search: [],
   // Proxy URLs can carry credentials: edit them in the YAML, never render them in the page.
-  // The Apify actor's wire format (input template, look-back filter values) is actor-specific JSON-like data: edit it in the YAML.
+  // The Apify and Monid actors' wire formats (input template, look-back filter values) are actor-specific JSON-like data: edit it in the YAML.
   // The LinkedIn session channel's site and browser details (login file path, locations, timeouts, scrolling) are edited in the YAML.
   // The size of a channel test is edited in the YAML.
   // The ATS company boards (`ats_boards`) and the source registry settings (`registry`) are edited on /sources/registry or in the YAML.
@@ -170,6 +170,9 @@ export const HIDDEN_PATHS: Record<SettingsForm, readonly string[]> = {
     "linkedin.apify.date_posted",
     "linkedin.apify.input_template",
     "linkedin.apify.remote_input",
+    "linkedin.monid.date_posted",
+    "linkedin.monid.input_template",
+    "linkedin.monid.remote_input",
     "linkedin.session.site",
     "linkedin.session.browser",
     "linkedin.session.recommended_max_results",
@@ -214,7 +217,7 @@ export const HIDDEN_PATHS: Record<SettingsForm, readonly string[]> = {
 /** Time ranges of the AI usage page (mirrors the zod enum in the ui schema; the fields test compares them). */
 export const AI_USAGE_RANGES = ["today", "7d", "30d", "month"] as const;
 export const REMOTE_SCOPES = ["none", "home_country", "worldwide"] as const;
-export const LINKEDIN_CASCADE_OPTIONS = ["linkedin-brightdata", "linkedin-apify", "linkedin-session", "linkedin-guest"] as const;
+export const LINKEDIN_CASCADE_OPTIONS = ["linkedin-brightdata", "linkedin-apify", "linkedin-monid", "linkedin-session", "linkedin-guest"] as const;
 
 const bool = (path: string, label: FieldLabelId, extra: Partial<FieldDef> = {}): FieldDef => ({ path, kind: "bool", label, ...extra });
 const int = (path: string, label: FieldLabelId, extra: Partial<FieldDef> = {}): FieldDef => ({ path, kind: "int", label, ...extra });
@@ -389,6 +392,18 @@ const channelsSections: SectionDef[] = [
     int("linkedin.apify.timeout_secs", "apify_timeout"),
     text("linkedin.apify.country_name", "apify_country_name"),
     ...REMOTE_LOCATION_KEYS.map((key) => text(`linkedin.apify.remote_locations.${key}`, `remote_${key}`)),
+  ]),
+  channelSection("linkedin-monid", "linkedin.monid", [
+    text("linkedin.monid.provider", "monid_provider", { mono: true }),
+    text("linkedin.monid.endpoint", "monid_endpoint", { mono: true }),
+    text("linkedin.monid.api_base_url", "api_base_url", { mono: true }),
+    num("linkedin.monid.price_per_1k_usd", "monid_price_per_1k"),
+    num("linkedin.monid.flat_fee_usd", "monid_flat_fee"),
+    int("linkedin.monid.poll_interval_ms", "poll_interval"),
+    int("linkedin.monid.timeout_ms", "monid_timeout"),
+    int("linkedin.monid.stop_grace_ms", "monid_stop_grace"),
+    text("linkedin.monid.country_name", "apify_country_name"),
+    ...REMOTE_LOCATION_KEYS.map((key) => text(`linkedin.monid.remote_locations.${key}`, `remote_${key}`, { optional: true })),
   ]),
   channelSection("linkedin-session", "linkedin.session", [
     bool("linkedin.session.recommended_daily", "recommended_daily"),

@@ -26,6 +26,7 @@ const GROUP_MEMBERS: Record<Exclude<RegistryGroup, "linkedin">, readonly Configu
 export const CHANNEL_GROUP: Record<ConfiguredChannelId, RegistryGroup> = {
   "linkedin-brightdata": "linkedin",
   "linkedin-apify": "linkedin",
+  "linkedin-monid": "linkedin",
   "linkedin-session": "linkedin",
   "linkedin-session:recommended": "linkedin",
   "linkedin-guest": "linkedin",

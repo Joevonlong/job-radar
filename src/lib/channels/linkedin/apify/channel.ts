@@ -3,6 +3,7 @@ import { marketForChannel } from "../../market";
 import type { Channel, ChannelContext, RawPostingInput, SearchQuery } from "../../types";
 import { assertCredentialEndpoint } from "../../credential-endpoint";
 import { postedAtOf } from "../brightdata/parse";
+import { affordableItems } from "../budget";
 import { runActorSync } from "./client";
 import {
   APIFY_TOKEN_ENV,
@@ -18,7 +19,8 @@ import { apifyDescriptionHtml, parseApifyJob } from "./parse";
 
 export const LINKEDIN_APIFY_ID = "linkedin-apify";
 
-const EPSILON = 1e-9;
+export { affordableItems } from "../budget";
+
 const MS_PER_HOUR = 3_600_000;
 const MS_PER_DAY = 24 * MS_PER_HOUR;
 const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
@@ -41,16 +43,6 @@ function readSettings(ctx: ChannelContext): ApifySettings {
     throw new ChannelError("unknown", `sources.yaml linkedin.apify is incomplete (${paths.join(", ")})`, { retryable: false });
   }
   return parsed.data;
-}
-
-/**
- * How many dataset items one run may deliver so that it can never cost more than the budget left: the run's start
- * fee comes off first, then each item costs `perItemUsd`. 0 = not even the start fee and one item are affordable.
- */
-export function affordableItems(usdLeft: number, perItemUsd: number, startUsd: number): number {
-  if (usdLeft + EPSILON < startUsd + perItemUsd) return 0;
-  if (perItemUsd <= 0) return Number.POSITIVE_INFINITY;
-  return Math.floor((usdLeft - startUsd + EPSILON) / perItemUsd);
 }
 
 /** The moment after which a record counts as inside the window; a date-only `postedDate` is good until the end of its day. */

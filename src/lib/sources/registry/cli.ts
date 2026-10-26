@@ -87,6 +87,8 @@ export function reasonText(reason: RegistryReason, timeZone: string, text: Regis
       return r("reason.loginExpired");
     case "missingApify":
       return r("reason.missingApify");
+    case "missingMonid":
+      return r("reason.missingMonid");
     case "notConfigured":
       return r("reason.notConfigured");
     case "neverChecked":

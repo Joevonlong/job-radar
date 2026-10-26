@@ -78,7 +78,7 @@ cp .env.example .env
 ```
 
 You'll want `.env` when you add a secret: the Telegram bot token, an AI API key, keys for paid or keyed sources (JSearch,
-Tavily, Bright Data, Apify, Gmail), a different database password, or extra host names for the dashboard. `.env.example`
+Tavily, Bright Data, Apify, Monid, Gmail), a different database password, or extra host names for the dashboard. `.env.example`
 explains every variable. `.env` is ignored by git: never commit it, and never paste its contents anywhere.
 
 | Source or feature | Variables | Guide |
@@ -86,7 +86,7 @@ explains every variable. `.env` is ignored by git: never commit it, and never pa
 | Arbeitsagentur, Arbeitnow, company career pages | none | [sources.md](sources.md) |
 | Indeed, StepStone, XING, LinkedIn guest search | none; off in a new install, switching one on asks you to confirm the terms-of-service risk | [sources.md](sources.md#scraping) |
 | LinkedIn with your own session | none: a one-time login with `pnpm auth:linkedin` (off by default, read the risks first) | [linkedin-session.md](linkedin-session.md) |
-| LinkedIn via Bright Data / Apify (paid) | `BRIGHT_DATA_API_KEY` / `APIFY_TOKEN` | [brightdata.md](brightdata.md), [apify.md](apify.md) |
+| LinkedIn via Bright Data / Apify / Monid (paid) | `BRIGHT_DATA_API_KEY` / `APIFY_TOKEN` / `MONID_API_KEY` | [brightdata.md](brightdata.md), [apify.md](apify.md), [monid.md](monid.md) |
 | Google Jobs via JSearch | `JSEARCH_API_KEY` | [jsearch.md](jsearch.md) |
 | Job-alert emails from Gmail | `GMAIL_USER`, `GMAIL_APP_PASSWORD` | [gmail-alerts.md](gmail-alerts.md) |
 | Finding new company boards | `TAVILY_API_KEY` | [tavily.md](tavily.md) |
@@ -303,7 +303,7 @@ under each problem. It only reads: no AI call, no Telegram message, no cost. Spe
 `pnpm run doctor` is pnpm's own command. Exit codes: 0 all ✅, 1 some ⚠️, 2 some ❌, 3 the doctor could not run.
 
 On a first install a few items are expected to warn until you set them up: Tailscale and the public address (⚠️);
-the paid channels that ship switched on (`linkedin-brightdata`, `linkedin-apify`, `tavily`) until you add their key or
+the paid channels that ship switched on (`linkedin-brightdata`, `linkedin-apify`, `linkedin-monid`, `tavily`) until you add their key or
 switch them off; the last run and the last backup until the first ones have happened; and `aiworker.launchd` if you
 run the worker in a terminal instead of as a service (on Linux this check reads the systemd user unit). LinkedIn is
 optional: with no LinkedIn channel set up, the LinkedIn line says so and stays ✅. On Linux, `data.ownership` warns about files under `data/` that don't belong to `PUID`. A Telegram push you
