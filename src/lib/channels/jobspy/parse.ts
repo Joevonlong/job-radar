@@ -86,8 +86,10 @@ function countryCodeFromName(name: string): string | null {
   return countryByName.get(name.trim().toLowerCase()) ?? null;
 }
 
-function isRegionCode(code: string): boolean {
-  return /^[A-Z]{2}$/.test(code) && regions().of(code) !== code;
+/** Intl also knows obsolete aliases, reserved territories and groups that are not ISO country assignments. */
+export function isRegionCode(code: string): boolean {
+  return /^[A-Z]{2}$/.test(code) && !/^(?:AC|CP|CQ|DG|EA|EU|EZ|IC|QO|TA|UN|X[A-Z]|ZZ)$/.test(code) &&
+    new Intl.Locale(`und-${code}`).region === code && regions().of(code) !== code;
 }
 
 /**

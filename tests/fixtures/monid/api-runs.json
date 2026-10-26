@@ -1,0 +1,78 @@
+{
+  "accepted": {
+    "runId": "run_synthetic_shapes",
+    "provider": "apify",
+    "endpoint": "/harvestapi/linkedin-job-search",
+    "status": "RUNNING",
+    "price": {
+      "type": "PER_RESULT",
+      "amount": { "value": 0.001, "currency": "USD" },
+      "flatFee": { "value": 0.001, "currency": "USD" },
+      "notes": ["Synthetic per-result pricing with a run fee."]
+    },
+    "createdAt": "2026-10-20T09:00:00.000Z",
+    "hints": {
+      "poll the status and response": "GET /v1/runs/run_synthetic_shapes",
+      "stop the run": "POST /v1/runs/run_synthetic_shapes/stop"
+    }
+  },
+  "running": {
+    "runId": "run_synthetic_shapes",
+    "provider": "apify",
+    "providerName": "Apify",
+    "endpoint": "/harvestapi/linkedin-job-search",
+    "status": "RUNNING",
+    "stoppable": true,
+    "input": {
+      "body": {
+        "jobTitles": ["Synthetic Systems Engineer"],
+        "locations": ["Example Region"],
+        "maxItems": 2,
+        "postedLimit": "24h"
+      }
+    },
+    "price": {
+      "type": "PER_RESULT",
+      "amount": { "value": 0.001, "currency": "USD" },
+      "flatFee": { "value": 0.001, "currency": "USD" },
+      "notes": ["Synthetic per-result pricing with a run fee."]
+    },
+    "resultCount": 0,
+    "billedUnits": 0,
+    "createdAt": "2026-10-20T09:00:00.000Z",
+    "startedAt": "2026-10-20T09:00:01.000Z",
+    "hints": {
+      "poll the status and response": "GET /v1/runs/run_synthetic_shapes",
+      "stop the run": "POST /v1/runs/run_synthetic_shapes/stop"
+    }
+  },
+  "completed": {
+    "runId": "run_synthetic_shapes",
+    "provider": "apify",
+    "providerName": "Apify",
+    "endpoint": "/harvestapi/linkedin-job-search",
+    "status": "COMPLETED",
+    "input": {
+      "body": {
+        "jobTitles": ["Synthetic Systems Engineer"],
+        "locations": ["Example Region"],
+        "maxItems": 2,
+        "postedLimit": "24h"
+      }
+    },
+    "providerResponse": { "httpStatus": 200 },
+    "price": {
+      "type": "PER_RESULT",
+      "amount": { "value": 0.001, "currency": "USD" },
+      "flatFee": { "value": 0.001, "currency": "USD" },
+      "notes": ["Synthetic per-result pricing with a run fee."]
+    },
+    "cost": { "value": 0.003, "currency": "USD" },
+    "resultCount": 2,
+    "billedUnits": 2,
+    "createdAt": "2026-10-20T09:00:00.000Z",
+    "startedAt": "2026-10-20T09:00:01.000Z",
+    "completedAt": "2026-10-20T09:00:04.000Z",
+    "hints": { "retrieve the response later": "GET /v1/runs/run_synthetic_shapes" }
+  }
+}

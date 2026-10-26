@@ -4,6 +4,8 @@
  * pnpm smoke:monid --discover   (discover + inspect only; no billable run)
  * The package command loads .env. MONID_API_KEY is never printed and requests never follow redirects.
  */
+import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 
 import { z } from "zod";
@@ -12,21 +14,22 @@ import { BudgetTracker, monthKey } from "../src/lib/channels/budget";
 import { createChannelContext, httpSettingsFromConfig } from "../src/lib/channels/context";
 import { createHttpClient, readTextUpTo, type FetchLike } from "../src/lib/channels/http";
 import { buildActorInputs } from "../src/lib/channels/linkedin/apify/contract";
-import { acceptedRunSchema, createMonidChannel, MAX_RESPONSE_CHARS, MONID_API_KEY_ENV, priceSchema, runResponseSchema } from "../src/lib/channels/linkedin/monid";
+import { acceptedRunSchema, createMonidChannel, MAX_RESPONSE_CHARS, MONID_API_KEY_ENV, priceSchema, runResponseSchema, type MonidSettings } from "../src/lib/channels/linkedin/monid";
 import { createLogger } from "../src/lib/channels/logger";
 import { marketForChannel } from "../src/lib/channels/market";
 import { queryId } from "../src/lib/channels/query";
 import { settingsFromConfig } from "../src/lib/channels/registry";
 import { createMemoryStateStore } from "../src/lib/channels/store";
-import { normalizedPostingDraftSchema, type SearchQuery } from "../src/lib/channels/types";
+import { normalizedPostingDraftSchema, type HttpClient, type SearchQuery } from "../src/lib/channels/types";
 import { loadConfig } from "../src/lib/config";
 import { checkCredentialEndpoint } from "../src/lib/credential-endpoints";
 
 const HARD_LIMIT = 10;
-const endpointSchema = z.object({ provider: z.string().min(1), endpoint: z.string().startsWith("/"), price: priceSchema });
-const endpointsSchema = z.array(endpointSchema);
-const discoverySchema = z.union([endpointsSchema, z.object({ results: endpointsSchema }), z.object({ endpoints: endpointsSchema })]);
-const inspectionSchema = z.object({ price: priceSchema, stoppable: z.boolean().optional() });
+// Discovery and inspection also list matrix/tiered prices, which have no scalar amount.
+const priceTypeSchema = z.looseObject({ type: z.string().min(1) });
+const endpointSchema = z.object({ provider: z.string().min(1), endpoint: z.string().startsWith("/"), price: priceTypeSchema });
+const discoverySchema = z.union([z.array(z.unknown()), z.object({ results: z.array(z.unknown()) }), z.object({ endpoints: z.array(z.unknown()) })]);
+const inspectionSchema = z.object({ price: priceTypeSchema, stoppable: z.boolean().optional() });
 const diagnosticSchema = z.union([
   runResponseSchema.extend({ stoppable: z.boolean().optional() }),
   acceptedRunSchema.extend({ stoppable: z.boolean().optional() }),
@@ -38,6 +41,64 @@ const redact = (text: string): string => {
   return key ? text.replaceAll(key, "[redacted]") : text;
 };
 const print = (value: unknown): void => console.log(redact(JSON.stringify(value)));
+
+interface MonidSmokeDiagnostics {
+  http: HttpClient;
+  settings: MonidSettings;
+  headers: Record<string, string>;
+  print: (value: unknown) => void;
+  warn: (value: unknown) => void;
+}
+
+function priceDetails(price: z.infer<typeof priceTypeSchema>): Record<string, unknown> {
+  const parsed = priceSchema.safeParse(price);
+  return { priceType: price.type, ...(parsed.success && price.type === "PER_RESULT"
+    ? { amount: parsed.data.amount, flatFee: parsed.data.flatFee ?? null } : {}) };
+}
+
+export async function inspectMonidEndpoint(options: MonidSmokeDiagnostics, provider: string, endpoint: string) {
+  const { http, settings, headers, print, warn } = options;
+  const result = await http.json(new URL("/v1/inspect", settings.api_base_url).toString(), inspectionSchema, {
+    method: "POST", headers, body: JSON.stringify({ provider, endpoint }), redirect: "error", maxRetries: 0,
+  });
+  print({ provider, endpoint, price: result.price, ...priceDetails(result.price), stoppable: result.stoppable ?? null });
+  if (provider === settings.provider && endpoint === settings.endpoint) {
+    const parsed = priceSchema.safeParse(result.price);
+    if (!parsed.success || parsed.data.type !== "PER_RESULT") {
+      warn({ warning: "Monid inspected price is not a supported USD per-result price", provider, endpoint });
+    } else {
+      const inspected = { price_per_1k_usd: parsed.data.amount.value * 1000, flat_fee_usd: parsed.data.flatFee?.value ?? 0 };
+      if (inspected.price_per_1k_usd !== settings.price_per_1k_usd || inspected.flat_fee_usd !== settings.flat_fee_usd) {
+        warn({ warning: "Monid configured price differs from inspected price", provider, endpoint,
+          configured: { price_per_1k_usd: settings.price_per_1k_usd, flat_fee_usd: settings.flat_fee_usd }, inspected });
+      }
+    }
+  }
+  return result;
+}
+
+export async function discoverMonidEndpoints(options: MonidSmokeDiagnostics): Promise<number> {
+  const { http, settings, headers, print } = options;
+  const discovery = await http.json(new URL("/v1/discover", settings.api_base_url).toString(), discoverySchema, {
+    method: "POST", headers, body: JSON.stringify({ query: "linkedin jobs search", limit: HARD_LIMIT }), redirect: "error", maxRetries: 0,
+  });
+  const entries = Array.isArray(discovery) ? discovery : "results" in discovery ? discovery.results : discovery.endpoints;
+  const jobs = entries.flatMap((entry) => {
+    const parsed = endpointSchema.safeParse(entry);
+    if (!parsed.success || !/linkedin/i.test(parsed.data.endpoint) || !/job/i.test(parsed.data.endpoint)) return [];
+    if (parsed.data.price.type === "PER_RESULT" && !priceSchema.safeParse(parsed.data.price).success) return [];
+    return [parsed.data];
+  });
+  for (const entry of jobs) {
+    print({ provider: entry.provider, endpoint: entry.endpoint, price: entry.price, ...priceDetails(entry.price) });
+    await inspectMonidEndpoint(options, entry.provider, entry.endpoint);
+  }
+  if (!jobs.some((entry) => entry.provider === settings.provider && entry.endpoint === settings.endpoint)) {
+    await inspectMonidEndpoint(options, settings.provider, settings.endpoint);
+  }
+  print({ discoveredLinkedinJobEndpoints: jobs.length });
+  return jobs.length;
+}
 
 async function main(): Promise<number> {
   const { values } = parseArgs({ options: {
@@ -55,25 +116,11 @@ async function main(): Promise<number> {
   const logger = createLogger({ minLevel: "info", sink: print });
   const headers = { Authorization: `Bearer ${key}`, Accept: "application/json", "Content-Type": "application/json" };
   const http = createHttpClient({ settings: httpSettingsFromConfig(channels), signal, logger });
-  const inspect = async (provider: string, endpoint: string) => {
-    const result = await http.json(new URL("/v1/inspect", block.api_base_url).toString(), inspectionSchema, {
-      method: "POST", headers, body: JSON.stringify({ provider, endpoint }), redirect: "error", maxRetries: 0,
-    });
-    print({ provider, endpoint, price: result.price, priceType: result.price.type, stoppable: result.stoppable ?? null });
-    return result;
-  };
+  const diagnostics: MonidSmokeDiagnostics = { http, settings: block, headers, print,
+    warn: (value) => console.warn(redact(JSON.stringify(value))) };
 
   if (values.discover) {
-    const discovery = await http.json(new URL("/v1/discover", block.api_base_url).toString(), discoverySchema, {
-      method: "POST", headers, body: JSON.stringify({ query: "linkedin jobs search", limit: HARD_LIMIT }), redirect: "error", maxRetries: 0,
-    });
-    const endpoints = Array.isArray(discovery) ? discovery : "results" in discovery ? discovery.results : discovery.endpoints;
-    const jobs = endpoints.filter((entry) => /linkedin/i.test(entry.endpoint) && /job/i.test(entry.endpoint));
-    for (const entry of jobs) {
-      print({ provider: entry.provider, endpoint: entry.endpoint, price: entry.price, priceType: entry.price.type });
-      await inspect(entry.provider, entry.endpoint);
-    }
-    print({ discoveredLinkedinJobEndpoints: jobs.length });
+    await discoverMonidEndpoints(diagnostics);
     return 0;
   }
 
@@ -94,7 +141,7 @@ async function main(): Promise<number> {
   };
   const inputs = buildActorInputs(query, block, limit, marketForChannel());
   if (inputs.length !== 1) throw new Error("Choose a shorter keyword group: smoke permits exactly one run");
-  const inspection = await inspect(block.provider, block.endpoint);
+  const inspection = await inspectMonidEndpoint(diagnostics, block.provider, block.endpoint);
   print({ query: inputs[0], limit, windowHours, note: "One paid run; no database writes or persisted monthly usage" });
 
   // Capture only diagnostics; the channel still validates and accounts for every response itself.
@@ -153,7 +200,9 @@ async function main(): Promise<number> {
   return failed > 0 || oversizedOutput ? 1 : 0;
 }
 
-main().then((code) => { process.exitCode = code; }, (error: unknown) => {
-  console.error(redact(`smoke:monid: ${error instanceof Error ? error.message : "failed"}`));
-  process.exitCode = 1;
-});
+if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+  main().then((code) => { process.exitCode = code; }, (error: unknown) => {
+    console.error(redact(`smoke:monid: ${error instanceof Error ? error.message : "failed"}`));
+    process.exitCode = 1;
+  });
+}

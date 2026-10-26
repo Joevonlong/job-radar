@@ -38,7 +38,14 @@ export function monidProvider(output?: unknown[]) {
     if (target.pathname === "/v1/run" && method === "POST") {
       runs += 1;
       status = 202;
-      body = { runId: `run_test_${runs}`, status: "READY", price: { type: "PER_RESULT", amount: 0.001, flatFee: 0.001 } };
+      const request: unknown = JSON.parse(init.body ?? "null");
+      if (typeof request !== "object" || request === null || !("input" in request) ||
+        typeof request.input !== "object" || request.input === null || !("body" in request.input)) {
+        throw new Error("Expected the Monid actor input inside input.body");
+      }
+      body = { runId: `run_test_${runs}`, status: "RUNNING", price: {
+        type: "PER_RESULT", amount: { value: 0.001, currency: "USD" }, flatFee: { value: 0.001, currency: "USD" },
+      } };
     } else if (target.pathname === `/v1/runs/run_test_${runs}` && method === "GET") {
       const items = output ?? [monidJob(String(4386000000 + runs))];
       const microDollars = (items.length + 1) * 1000;

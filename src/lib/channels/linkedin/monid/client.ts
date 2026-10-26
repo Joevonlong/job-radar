@@ -198,7 +198,7 @@ export class MonidClient {
 
     try {
       const response = await ctx.http.request(this.url("/v1/run"), {
-        method: "POST", headers: this.headers(), body: JSON.stringify({ provider: settings.provider, endpoint: settings.endpoint, input }),
+        method: "POST", headers: this.headers(), body: JSON.stringify({ provider: settings.provider, endpoint: settings.endpoint, input: { body: input } }),
         maxRetries: 0, timeoutMs: settings.timeout_ms, allowStatus: ALLOW_POST_STATUS, redirect: "error",
       });
       const body = await this.body(response);
@@ -218,8 +218,9 @@ export class MonidClient {
       runId = accepted.data.runId;
       this.runPath(runId);
       const price = priceSchema.safeParse(accepted.data.price);
-      if (price.success && (price.data.amount > settings.price_per_1k_usd / 1000 || (price.data.flatFee ?? 0) > settings.flat_fee_usd)) {
-        ctx.logger.warn("monid advertised price exceeds configured price", { ...fields(), amount: price.data.amount, flatFee: price.data.flatFee });
+      if (price.success && price.data.type === "PER_RESULT" &&
+        (price.data.amount.value > settings.price_per_1k_usd / 1000 || (price.data.flatFee?.value ?? 0) > settings.flat_fee_usd)) {
+        ctx.logger.warn("monid advertised price exceeds configured price", { ...fields(), amount: price.data.amount.value, flatFee: price.data.flatFee?.value });
       }
       const run = await this.poll(runId, startedAt + settings.timeout_ms, observe);
       if (run) return await finish(run);

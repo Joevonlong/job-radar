@@ -44,11 +44,23 @@ Job Radar 不自动查询余额或充值；余额不足或钱包未激活时级�
 最终输入必须恰好有一个非空标题、一个非空地点，以及等于本次预算上限的正整数 `maxItems`。
 这个 actor 的零值表示不限分页，因此会在发送前拒绝。短于接口档位的时间窗还会在本地按 `postedDate` 过滤。
 远程方式只取岗位自身字段，只有发布者提供的薪资才进入薪资事实字段。
+地区标签（如 EMEA）原样保留；国家代码必须是已分配的 ISO 3166-1 alpha-2 代码，优先采用解析后的地点代码，
+`oo` 等占位符记为未知。
+
+`POST /v1/run` 发送 `{ "provider": "apify", "endpoint": "/harvestapi/linkedin-job-search", "input": { "body": <actor input> } }`。
+输入校验针对 `input.body` 内的 actor 输入本身；GET 运行响应也会回显这一层包装。Monid 还支持可选的
+`input.queryParams` 和 `input.pathParams`，这个 actor 不需要它们。
 
 ## 记账与停止
 
 **每次**发送前都按通道和全局剩余预算重新算条数，包含该次启动费。Monid 没有服务端的单次费用上限，
 本地条数限制依赖配置价格估算；实际账单即使略超本地预算也照记，后台花费上限是另一道保障。
+
+运行、inspect 及按条计费的 discover 价格采用嵌套金额对象：
+`{ "type": "PER_RESULT", "amount": { "value": 0.001, "currency": "USD" }, "flatFee": { "value": 0.001, "currency": "USD" }, "notes": [] }`。
+amount 是每条价格（每千条 1.0 美元），可选的 flatFee 是每次运行的启动费。允许额外字段，非 USD 金额不会当作
+美元处理。正常成功运行可以只用 `cost: { value, currency: "USD" }` 和 `billedUnits` 结算，不带 `billing` 对象；
+按上述价格，两条结果结算为 0.003 美元。
 
 拿到终态先记账，再校验输出和解析岗位。条数取 `billedUnits`，缺失时取去重和本地过滤前的原始条数。
 美元费用取同次运行所有响应中已结算的 `cost.value`、`billing.reportedCost`、`billing.actualCost` 的最大值，
@@ -91,7 +103,11 @@ pnpm smoke:monid --limit 5 --group targets --location "Example City"
 输出条数、`billedUnits`、`cost`、全部 `billing` 字段（含 `calculatedCost`）、`runId`、`stoppable`、
 输出形状和薪资来源标记。请对照 workspace 后台扣费记录，并核对 OR 标题是否符合搜索、`maxItems` 是否严格限制、
 `output` 是否数组，以及 `salary.providedByEmployer` / `compensationSource` 的真实取值。
-需要拆成多次运行的关键词组会被拒绝。`--discover` 列出 LinkedIn 岗位接口、价格及 `price.type`。
+需要拆成多次运行的关键词组会被拒绝。`--discover` 独立解析目录中的每一项，跳过未知形状，列出 LinkedIn 岗位接口
+的供应商与价格类型（包含矩阵、阶梯价格），按条计费时还输出单价和启动费，再逐一 inspect。
+当前配置的接口即使不在发现结果中也会被 inspect。两种模式都会在其检查价格与 `price_per_1k_usd` /
+`flat_fee_usd` 不一致时警告；按上述价格，这两个配置必须是 `1.0` / `0.001`。不支持的币种或计费模型会单独提示，
+不会与美元估价直接比较。
 
 ## 升级、停用与回退
 

@@ -1,5 +1,5 @@
 {
-  "accepted": { "runId": "run_example", "status": "READY", "price": { "type": "PER_RESULT", "amount": 0.001, "flatFee": 0.001 } },
+  "accepted": { "runId": "run_example", "status": "READY", "price": { "type": "PER_RESULT", "amount": { "value": 0.001, "currency": "USD" }, "flatFee": { "value": 0.001, "currency": "USD" } } },
   "running": { "runId": "run_example", "status": "RUNNING" },
   "completed": { "runId": "run_example", "status": "COMPLETED", "providerResponse": { "httpStatus": 200 }, "output": [], "billing": { "calculatedCost": { "value": 3000, "unit": "MICRO_DOLLAR", "currency": "USD" }, "reportedCost": { "value": 3000, "unit": "MICRO_DOLLAR", "currency": "USD" }, "actualCost": { "value": 0, "unit": "MICRO_DOLLAR", "currency": "USD" } }, "billedUnits": 2 },
   "blocked": { "status": "BLOCKED", "reason": "Workspace spending limit" },

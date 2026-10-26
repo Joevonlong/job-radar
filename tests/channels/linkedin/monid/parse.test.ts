@@ -9,10 +9,29 @@ import { monidDescriptionHtml, monidJobId, parseMonidJob, unidentifiedExternalId
 import { normalizedPostingDraftSchema } from "@/lib/channels/types";
 
 import jobs from "../../../fixtures/monid/harvestapi-jobs.json";
+import apiJobs from "../../../fixtures/monid/api-jobs.json";
 
 const job = jobs[0]!;
 
 describe("harvestapi postings", () => {
+  it("preserves a region-only label while treating the placeholder country as unknown", () => {
+    expect(parseMonidJob(apiJobs[0]).locations).toEqual([{ label: "EMEA", city: null, countryCode: null }]);
+  });
+
+  it.each(["oo", "ZZ", "EU", "EZ", "XK", "QO", "CQ", "UK", "AN", "USA", "", "123"])
+    ("rejects a country code that is not an assigned ISO alpha-2 code: %s", (countryCode) => {
+      expect(parseMonidJob({ ...job, location: { linkedinText: "Example Region", countryCode } }).locations)
+        .toEqual([{ label: "Example Region", city: null, countryCode: null }]);
+    });
+
+  it("prefers the parsed country code and uses the raw code only when the parsed code is absent", () => {
+    expect(parseMonidJob(apiJobs[1]).locations).toEqual([{ label: "Example City, Sweden", city: null, countryCode: "SE" }]);
+    expect(parseMonidJob({ ...job, location: { linkedinText: "Example City", countryCode: " us " } }).locations)
+      .toEqual([{ label: "Example City", city: null, countryCode: "US" }]);
+    expect(parseMonidJob({ ...job, location: { linkedinText: "Example Region", countryCode: "US", parsed: { countryCode: "oo" } } }).locations)
+      .toEqual([{ label: "Example Region", city: null, countryCode: null }]);
+  });
+
   it("maps fields without inferring the city or changing the raw payload", () => {
     const before = structuredClone(job);
     const draft = parseMonidJob(job);

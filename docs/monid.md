@@ -46,12 +46,24 @@ long groups split into separate runs. Every final input must contain exactly one
 location and a positive integer `maxItems` equal to that run's affordable limit. Zero would mean unlimited pages
 to the actor and is refused before sending. Shorter time windows are also filtered locally by `postedDate`.
 Remote facts come only from the posting, and only employer-provided salaries become salary facts.
+The location label is preserved even for regions such as EMEA; country codes must be assigned ISO 3166-1 alpha-2
+codes. The parsed location code takes precedence, while placeholders such as `oo` remain unknown.
+
+`POST /v1/run` sends `{ "provider": "apify", "endpoint": "/harvestapi/linkedin-job-search", "input": { "body": <actor input> } }`.
+Validation applies to the actor input inside `input.body`; GET run responses echo that wrapper. Monid also supports
+optional `input.queryParams` and `input.pathParams`, which this actor does not need.
 
 ## Accounting and stops
 
 Before **each** run, the channel recalculates headroom in its own and the global budget, including that run's flat fee.
 Monid has no server-side per-run cost cap: local result limits are estimates based on configured prices. Actual
 charges are booked even if they slightly exceed the local budget; the dashboard spend cap is the additional guard.
+
+Run, inspect and per-result discovery prices use nested money objects:
+`{ "type": "PER_RESULT", "amount": { "value": 0.001, "currency": "USD" }, "flatFee": { "value": 0.001, "currency": "USD" }, "notes": [] }`.
+The amount is per result (USD 1.0 per 1,000); the optional flat fee is per run. Extra fields are allowed, and non-USD
+money is never interpreted as USD. A normal successful run can settle with `cost: { value, currency: "USD" }` and
+`billedUnits` alone, without a `billing` object: two results at these prices settle at USD 0.003.
 
 Accounting happens before output validation or parsing, using `billedUnits` or the raw item count before deduplication
 and local filtering. The USD amount is the maximum of settled `cost.value`, `billing.reportedCost` and
@@ -99,7 +111,11 @@ It writes no database or persisted monthly usage. It prints counts, `billedUnits
 including `calculatedCost`, `runId`, `stoppable`, output shape and salary-source flags. Compare with the workspace's
 charge record. Check that OR titles match the intended search, `maxItems` is respected, output is an array, and
 `salary.providedByEmployer` / `compensationSource` match the provider's actual response. Groups requiring multiple
-runs are refused. `--discover` lists LinkedIn job endpoints and their prices, including `price.type`.
+runs are refused. `--discover` reads catalog entries independently, skips unknown shapes, lists LinkedIn job endpoints
+with provider and price type (including matrix/tiered prices), prints the per-result amount and flat fee, and inspects
+each endpoint. The configured endpoint is inspected even when it is absent from the discovery results. Both modes
+warn when its inspected USD per-result or flat price differs from `price_per_1k_usd` / `flat_fee_usd`; at the prices
+above, those settings must be `1.0` / `0.001`. Unsupported currencies or price models are reported without a USD comparison.
 
 ## Upgrade, disable and rollback
 

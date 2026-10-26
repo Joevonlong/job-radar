@@ -31,7 +31,7 @@ describe("Monid channel accounting", () => {
       response(200, unsettled(jobs)),
     ], { settings: settings({ monthly_budget_usd: 0.01 }) });
     expect(await h.channel.collect(splitQuery(), h.ctx)).toHaveLength(2);
-    expect(h.requests.map((r) => (r.body.input as Record<string, unknown>).maxItems)).toEqual([5, 2]);
+    expect(h.requests.map((r) => ((r.body.input as Record<string, unknown>).body as Record<string, unknown>).maxItems)).toEqual([5, 2]);
     expect(h.ctx.budget.snapshot()).toMatchObject({ records: 5, usd: 0.01 });
   });
 
@@ -44,7 +44,7 @@ describe("Monid channel accounting", () => {
   it("caps the first run to affordable items and refuses when one item is unaffordable", async () => {
     const h = await harness([response(200, unsettled([]))], { settings: settings({ monthly_budget_usd: 0.003 }) });
     await h.channel.collect(query(), h.ctx);
-    expect(h.requests[0]?.body.input).toMatchObject({ maxItems: 2 });
+    expect(h.requests[0]?.body.input).toEqual({ body: expect.objectContaining({ maxItems: 2 }) });
     expect(h.ctx.budget.snapshot().usd).toBe(0.001);
     const none = await harness([], { settings: settings({ monthly_budget_usd: 0.001 }) });
     await expect(none.channel.collect(query(), none.ctx)).rejects.toBeInstanceOf(BudgetExceededError);

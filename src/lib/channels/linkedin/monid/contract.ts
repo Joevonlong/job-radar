@@ -47,7 +47,7 @@ export function validateFinalInput(input: unknown, limit: number): void {
 
 export const runIdSchema = z.string().min(1).max(200).regex(/^[a-zA-Z0-9_-]+$/);
 export const billedUnitsSchema = z.number().int().nonnegative();
-export const dollarCostSchema = z.object({ value: z.number().nonnegative(), currency: z.literal("USD") });
+export const dollarCostSchema = z.looseObject({ value: z.number().nonnegative(), currency: z.literal("USD") });
 export const microDollarCostSchema = z.object({ value: z.number().nonnegative(), unit: z.literal("MICRO_DOLLAR"), currency: z.literal("USD") });
 const billingFieldsSchema = z.object({
   calculatedCost: z.unknown().optional(),
@@ -59,11 +59,11 @@ export const billingSchema = z.object({
   reportedCost: microDollarCostSchema.optional(),
   actualCost: microDollarCostSchema.optional(),
 });
-export const priceSchema = z.object({
+export const priceSchema = z.looseObject({
   type: z.string().min(1),
-  amount: z.number().nonnegative(),
-  flatFee: z.number().nonnegative().optional(),
-  currency: z.literal("USD").optional(),
+  amount: dollarCostSchema,
+  flatFee: dollarCostSchema.optional(),
+  notes: z.array(z.string()).optional(),
 });
 export const providerResponseSchema = z.object({ httpStatus: z.number().int().min(100).max(599) });
 

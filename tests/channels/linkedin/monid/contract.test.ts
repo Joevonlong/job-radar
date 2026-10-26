@@ -11,6 +11,7 @@ import {
   isTerminal,
   microDollarCostSchema,
   monidSettingsSchema,
+  priceSchema,
   runResponseSchema,
   stopAcceptedSchema,
   stopConflictSchema,
@@ -19,12 +20,44 @@ import {
 } from "@/lib/channels/linkedin/monid/contract";
 
 import responses from "../../../fixtures/monid/responses.json";
+import apiRuns from "../../../fixtures/monid/api-runs.json";
+import apiJobs from "../../../fixtures/monid/api-jobs.json";
 import { settings } from "./helpers";
 
 const pricing = { price_per_1k_usd: 1, flat_fee_usd: 0.001 };
 const micro = (value: number) => ({ value, unit: "MICRO_DOLLAR", currency: "USD" });
 const cost = (fields: Record<string, unknown> = {}, status: MonidRun["status"] = "COMPLETED", count = 2) =>
   calculateRunCost({ status, output: Array.from({ length: count }, () => ({})), ...fields }, 10, pricing);
+
+describe("Monid API shapes", () => {
+  it("accepts asynchronous run fields and settles dollar costs without a billing block", () => {
+    const completed = { ...apiRuns.completed, output: apiJobs };
+    expect(acceptedRunSchema.safeParse(apiRuns.accepted).success).toBe(true);
+    for (const [httpStatus, body] of [[202, apiRuns.accepted], [200, apiRuns.running], [200, apiRuns.completed], [200, completed]] as const) {
+      const run = runResponseSchema.parse(body);
+      expect(errorForResponse(httpStatus, body)).toBeNull();
+      expect(run).not.toHaveProperty("billing");
+      if (run.status === "COMPLETED") expect(calculateRunCost(run, 2, pricing)).toEqual({
+        costUsd: 0.003, units: 2, source: "settled", invalidFields: [], conservative: false,
+      });
+    }
+  });
+
+  it("accepts nested USD prices and extra fields", () => {
+    const price = { ...apiRuns.accepted.price, extra: true, amount: { ...apiRuns.accepted.price.amount, extra: true } };
+    expect(priceSchema.parse(price)).toEqual(price);
+    expect(priceSchema.safeParse({ ...price, flatFee: undefined }).success).toBe(true);
+  });
+
+  it.each([
+    { amount: 0.001 }, { flatFee: 0.001 },
+    { amount: { value: 0.001, currency: "EUR" } },
+    { flatFee: { value: 0.001, currency: "EUR" } },
+    { amount: { value: -1, currency: "USD" } },
+  ])("does not read an unsupported price as USD: %j", (fields) => {
+    expect(priceSchema.safeParse({ ...apiRuns.accepted.price, ...fields }).success).toBe(false);
+  });
+});
 
 describe("Monid billing", () => {
   it("takes the maximum settled value, retaining zeros and excluding calculatedCost", () => {

@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 
 import { ChannelError } from "../../errors";
+import { isRegionCode } from "../../jobspy/parse";
 import type { NormalizedPostingDraft } from "../../types";
 import { jobIdOf } from "../apify/contract";
 import { httpUrlOrNull, postedAtOf } from "../brightdata/parse";
@@ -104,7 +105,7 @@ export function parseMonidJob(payload: unknown): NormalizedPostingDraft {
   return {
     title: item.title,
     companyName: item.company.name,
-    locations: label ? [{ label, city: null, countryCode: countryCode && /^[A-Z]{2}$/.test(countryCode) ? countryCode : null }] : [],
+    locations: label ? [{ label, city: null, countryCode: countryCode && isRegionCode(countryCode) ? countryCode : null }] : [],
     workplace: workplace.success ? workplaceMap[workplace.data] : "unknown",
     contractHint: item.employmentType?.trim() || null,
     seniorityHint: item.seniorityLevel?.trim() || null,

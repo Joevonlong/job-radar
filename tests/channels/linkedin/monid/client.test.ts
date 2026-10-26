@@ -6,6 +6,8 @@ import { defaultSleep } from "@/lib/channels/http";
 
 import jobs from "../../../fixtures/monid/harvestapi-jobs.json";
 import responses from "../../../fixtures/monid/responses.json";
+import apiRuns from "../../../fixtures/monid/api-runs.json";
+import apiJobs from "../../../fixtures/monid/api-jobs.json";
 import { completed, FAKE_KEY, harness, query, response, settings, type Answer } from "./helpers";
 
 const micro = (value: number) => ({ value, unit: "MICRO_DOLLAR", currency: "USD" });
@@ -17,8 +19,31 @@ describe("Monid run flow", () => {
     expect(postings.map((p) => p.externalId)).toEqual(["4385163817", "4385163818"]);
     expect(h.requests.map((r) => [r.method, r.path])).toEqual([["POST", "/v1/run"], ["GET", "/v1/runs/run_example"], ["GET", "/v1/runs/run_example"]]);
     expect(h.sleeps).toEqual([5, 5]);
-    expect(h.requests[0]?.body).toMatchObject({ provider: "apify", endpoint: "/harvestapi/linkedin-job-search", input: { maxItems: 10 } });
+    expect(h.requests[0]?.body).toEqual({ provider: "apify", endpoint: "/harvestapi/linkedin-job-search", input: { body: {
+      jobTitles: ['"Platform Engineer" OR "Infrastructure Engineer"'], locations: ["Example City, Germany"],
+      maxItems: 10, postedLimit: "24h", sortBy: "date",
+    } } });
     expect(h.ctx.budget.snapshot()).toMatchObject({ records: 2, usd: 0.003 });
+  });
+
+  it("collects and parses two API-shaped items after RUNNING and settles once without billing", async () => {
+    const h = await harness([
+      response(202, apiRuns.accepted), response(200, apiRuns.running), response(200, { ...apiRuns.completed, output: apiJobs }),
+    ], { settings: settings({ country_name: "", input_template: apiRuns.running.input.body }) });
+    const consume = vi.spyOn(h.ctx.budget, "consume");
+    const postings = await h.channel.collect(query({ maxResults: 2 }), h.ctx);
+    expect(h.requests[0]?.body).toEqual({ provider: "apify", endpoint: "/harvestapi/linkedin-job-search", input: apiRuns.running.input });
+    expect(h.requests.map((r) => [r.method, r.path])).toEqual([
+      ["POST", "/v1/run"], ["GET", "/v1/runs/run_synthetic_shapes"], ["GET", "/v1/runs/run_synthetic_shapes"],
+    ]);
+    expect(postings.map((p) => p.externalId)).toEqual(["9000000001", "9000000002"]);
+    expect(postings.map((p) => h.channel.parse(p.payload))).toMatchObject([
+      { title: "Synthetic Systems Engineer", companyName: "Synthetic Workshop" },
+      { title: "Synthetic Tooling Engineer", companyName: "Synthetic Foundry" },
+    ]);
+    expect(consume).toHaveBeenCalledExactlyOnceWith(2, { costUsd: 0.003, allowOverspend: true });
+    expect(h.ctx.budget.snapshot()).toMatchObject({ records: 2, usd: 0.003 });
+    expect(h.logs.filter((entry) => entry.level === "warn")).toEqual([]);
   });
 
   it("handles synchronous 200 without polling", async () => {
@@ -241,10 +266,23 @@ describe("Monid run flow", () => {
     expect(h.requests).toHaveLength(1);
   });
 
-  it("warns when the accepted price is higher than configured", async () => {
-    const h = await harness([response(202, { ...responses.accepted, price: { type: "PER_RESULT", amount: 0.002 } }), response(200, completed())]);
+  it.each([
+    { ...apiRuns.accepted.price, amount: { value: 0.002, currency: "USD" } },
+    { ...apiRuns.accepted.price, flatFee: { value: 0.002, currency: "USD" } },
+  ])("warns when the accepted amount or flat fee is higher than configured: %j", async (price) => {
+    const h = await harness([response(202, { ...responses.accepted, price }), response(200, completed())]);
     await h.channel.collect(query(), h.ctx);
     expect(h.logs.some((l) => l.message === "monid advertised price exceeds configured price")).toBe(true);
+  });
+
+  it.each([
+    { ...apiRuns.accepted.price, amount: { value: 2, currency: "EUR" } },
+    { ...apiRuns.accepted.price, flatFee: { value: 1, currency: "EUR" } },
+    { type: "PER_CALL", amount: { value: 2, currency: "USD" } },
+  ])("does not compare an incompatible accepted price with configured USD per-result prices: %j", async (price) => {
+    const h = await harness([response(202, { ...apiRuns.accepted, price }), response(200, completed())]);
+    await h.channel.collect(query(), h.ctx);
+    expect(h.logs.some((l) => l.message === "monid advertised price exceeds configured price")).toBe(false);
   });
 });
 
