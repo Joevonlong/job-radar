@@ -16,15 +16,13 @@ import type {
   SearchQuery,
 } from "@/lib/channels/types";
 import type { AtsTitlePrefilterSettings, CompaniesConfig, CompanyEntry, InterestsConfig, SearchConfig } from "@/lib/config";
+import { BOARD_STATE_VERSION } from "@/lib/db/repos/ats-boards";
 import { loadPipeline } from "@/lib/market";
 
 import { fetchBoardJson, type BoardFetch } from "./conditional";
 import { wrapPosting, type AtsSource } from "./envelope";
 import { createTitlePrefilter, type TitlePrefilter } from "./prefilter";
 import type { AtsBoardStore } from "./store";
-
-// Format version of the stored validator; bumping it discards ETags and id lists remembered under older semantics.
-const BOARD_STATE_VERSION = "3";
 
 // A host-level refusal stops remaining details immediately, independently of the failure threshold.
 const HOST_LEVEL = new Set<ChannelErrorCode>(["blocked", "auth_expired", "rate_limited", "budget_exceeded"]);

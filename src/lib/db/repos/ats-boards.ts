@@ -3,6 +3,9 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import type { Db } from "../client";
 import { atsBoards, rawPostings } from "../schema";
 
+// Format version of the stored validator; bumping it discards ETags and id lists remembered under older semantics.
+export const BOARD_STATE_VERSION = "3";
+
 export type AtsBoardRow = typeof atsBoards.$inferSelect;
 export type AtsBoardStatus = "ok" | "not_modified" | "short" | "error";
 
@@ -36,7 +39,7 @@ export interface AtsBoardUpdate {
   externalIds?: readonly string[];
   /** Replaced by `ok`; `short` and `error` replace it only when supplied; `not_modified` leaves it alone. */
   detailRetryIds?: readonly string[];
-  /** Defaults to true for `ok` / `not_modified`; false preserves `last_ok_at` (NULL on a new row). Ignored otherwise. */
+  /** Defaults to true for `ok` / `not_modified`; false preserves only current-version `last_ok_at` (NULL on a new row). Ignored otherwise. */
   completeRead?: boolean;
   total?: number;
   kept?: number;
@@ -50,11 +53,18 @@ export interface AtsBoardUpdate {
  * `short` and `error` only stamp the check and replace retries when supplied. `ok` / `not_modified`
  * reset failures and advance `last_ok_at` unless `completeRead` is false because details remain unresolved.
  * `error` adds a failure; `short` preserves the failure count. Neither advances complete-read evidence.
+ * Checks without a complete read discard evidence from missing or outdated fingerprints.
  */
 export async function recordAtsBoardCheck(db: Db, key: AtsBoardKey, update: AtsBoardUpdate): Promise<void> {
   // Use the database clock for last_checked_at / last_ok_at on purpose: offline-evidence SQL joins them to runs.started_at.
   const checkedAt = update.checkedAt ?? sql`now()`;
   const completeRead = update.completeRead !== false;
+  // The earlier invalidation can fail: discard legacy evidence atomically using the pre-update fingerprint,
+  // even when this check replaces that fingerprint with the current version.
+  const retainedLastOkAt = sql`case
+    when ${atsBoards.filterFingerprint} like ${`${BOARD_STATE_VERSION}:%`} then ${atsBoards.lastOkAt}
+    else null
+  end`;
   if (update.status === "ok") {
     const values = {
       etag: update.etag ?? null,
@@ -74,7 +84,7 @@ export async function recordAtsBoardCheck(db: Db, key: AtsBoardKey, update: AtsB
       .values({ ...key, ...values, lastOkAt: completeRead ? checkedAt : null })
       .onConflictDoUpdate({
         target: [atsBoards.ats, atsBoards.token],
-        set: { ...values, ...(completeRead ? { lastOkAt: checkedAt } : {}) },
+        set: { ...values, lastOkAt: completeRead ? checkedAt : retainedLastOkAt },
       });
     return;
   }
@@ -97,7 +107,7 @@ export async function recordAtsBoardCheck(db: Db, key: AtsBoardKey, update: AtsB
         ...stamp,
         ...(failed ? { consecutiveFailures: sql`${atsBoards.consecutiveFailures} + 1` } : {}),
         ...(unchanged ? { consecutiveFailures: 0 } : {}),
-        ...(unchanged && completeRead ? { lastOkAt: checkedAt } : {}),
+        lastOkAt: unchanged && completeRead ? checkedAt : retainedLastOkAt,
       },
     });
 }
