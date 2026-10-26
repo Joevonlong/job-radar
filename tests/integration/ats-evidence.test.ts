@@ -6,7 +6,7 @@ import { and, eq, sql } from "drizzle-orm";
 import postgres from "postgres";
 import { afterAll, beforeAll, beforeEach, describe, expect, inject, it } from "vitest";
 
-import { createDbAtsBoardStore, createSmartrecruitersChannel } from "@/lib/channels/ats";
+import { createDbAtsBoardStore, createSmartrecruitersChannel, type AtsBoardStore } from "@/lib/channels/ats";
 import type { FetchLike } from "@/lib/channels/http";
 import { ChannelRegistry } from "@/lib/channels/registry";
 import type { CompanyEntry } from "@/lib/config";
@@ -210,10 +210,10 @@ const srList = fixtureJson("smartrecruiters-list.json") as { totalFound: number;
 const details = [1, 2, 3].map((number) => fixtureJson(`smartrecruiters-detail-${number}.json`) as { id: string });
 
 /** The SR runCycle harness from ats.test.ts, with an explicit database for the upgrade scenario. */
-async function cycle(fetch: FetchLike, options: { db?: Db; at?: Date; boards?: CompanyEntry[]; maxResults?: number } = {}) {
+async function cycle(fetch: FetchLike, options: { db?: Db; at?: Date; boards?: CompanyEntry[]; maxResults?: number; store?: AtsBoardStore } = {}) {
   const db = options.db ?? getDb();
   const at = options.at ?? now;
-  const store = createDbAtsBoardStore(db);
+  const store = options.store ?? createDbAtsBoardStore(db);
   store.touch = (channelId, externalIds) => touchRawPostings(db, { channelId, externalIds, at });
   store.record = (key, update) => recordAtsBoardCheck(db, key, { ...update, checkedAt: at });
   const channels = atsChannelsWith("smartrecruiters", (settings) => {
@@ -327,6 +327,67 @@ describe("SmartRecruiters detail evidence through the real channel", () => {
 });
 
 describe("upgrading legacy ATS board evidence", () => {
+  it.each([
+    { name: "list failure with failed invalidation", listFails: true, rounds: [now] },
+    { name: "detail retries with failed invalidation", listFails: false, rounds: [now, new Date("2026-10-08T12:00:00Z")] },
+  ])("$name", async ({ listFails, rounds }) => {
+    const db = getDb();
+    const absent = await overdueJob(db, "D", srBoard.token, "smartrecruiters");
+    await successfulRun(db, "smartrecruiters");
+    const key = { ats: "smartrecruiters", token: srBoard.token };
+    const legacy = await boardState(db, srBoard.token, {
+      ats: "smartrecruiters", filterFingerprint: "2:x:10", lastOkAt: checked,
+      lastStatus: "ok", lastErrorCode: null, consecutiveFailures: 0, externalIds: ["D"],
+    });
+    const other = company({ name: "Other Labs", ats: "smartrecruiters", token: "OtherLabs" });
+    const invalidations: string[] = [];
+    const store: AtsBoardStore = {
+      ...createDbAtsBoardStore(db),
+      async invalidateEvidence(boardKey) {
+        invalidations.push(boardKey.token);
+        throw new Error("injected evidence invalidation failure");
+      },
+    };
+    const { fetch, requests } = routedFetch([
+      [`${srBase}?`, listFails ? response(500, "list unavailable") : response(200, {
+        totalFound: 1, content: srList.content.slice(0, 1),
+      }, { ETag: 'W/"unresolved-list"' })],
+      [`${srBase}/${details[0]!.id}`, response(500, "detail unavailable")],
+      ["/companies/OtherLabs/postings?", response(200, { totalFound: 0, content: [] })],
+    ]);
+
+    for (const [round, at] of rounds.entries()) {
+      // Re-arm the second closure check even if the first round already exposed premature closure.
+      if (round > 0) await activeAgain(db, absent);
+      const requestStart = requests.length;
+      const result = await cycle(fetch, { boards: [srBoard, other], store, at });
+      expect(result.status).toBe("succeeded");
+      expect(await listRunsForCycle(db, result.cycleId!)).toMatchObject([
+        { channelId: "smartrecruiters", status: "succeeded", interrupted: false, windowExtended: false, fetched: 0 },
+      ]);
+      expect(invalidations).toEqual([srBoard.token]);
+      expect(requests.slice(requestStart).map((request) => request.url)).toEqual([
+        `${srBase}?limit=100&offset=0&country=de`,
+        ...(listFails ? [] : [`${srBase}/${details[0]!.id}`]),
+        "https://api.smartrecruiters.com/v1/companies/OtherLabs/postings?limit=100&offset=0&country=de",
+      ]);
+      const remembered = await getAtsBoard(db, key);
+      expect(remembered).toMatchObject({
+        lastStatus: listFails ? "error" : "ok", lastCheckedAt: at,
+        filterFingerprint: listFails ? legacy.filterFingerprint : expect.stringMatching(/^3:/),
+        detailRetryIds: listFails ? [] : [details[0]!.id],
+      });
+      expect(await getAtsBoard(db, { ats: "smartrecruiters", token: other.token })).toMatchObject({
+        lastStatus: "ok", lastOkAt: at,
+      });
+      expect.soft(remembered?.lastOkAt, `round ${round + 1}: legacy evidence is discarded`).toBeNull();
+      expect.soft(await markJobsPossiblyClosed(db, { now: at, days: 7 }), `round ${round + 1}: no premature closure`).toEqual([]);
+      expect.soft((await db.select().from(schema.jobs).where(eq(schema.jobs.id, absent)))[0], `round ${round + 1}: D stays active`).toMatchObject({
+        status: "active", lastSeenAt: lastSeen,
+      });
+    }
+  });
+
   it("invalidates evidence written by a rolled-back build after the reset migration has already run", async () => {
     const db = getDb();
     // The test database has already applied the evidence reset; an older build can write legacy state afterwards.

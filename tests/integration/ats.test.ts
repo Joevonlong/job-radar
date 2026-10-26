@@ -159,16 +159,63 @@ describe("ats_boards and raw posting touch", () => {
   const old = new Date("2026-09-07T12:00:00Z");
   const checkedAt = new Date("2026-10-07T12:00:00Z");
 
-  async function previousBoard(token: string) {
+  async function previousBoard(token: string, values: Partial<typeof schema.atsBoards.$inferInsert> = {}) {
     const [row] = await getDb().insert(schema.atsBoards).values({
-      ats: "smartrecruiters", token, etag: 'W/"complete"', filterFingerprint: "previous-filter",
+      ats: "smartrecruiters", token, etag: 'W/"complete"', filterFingerprint: "3:x:10",
       externalIds: ["stored"], detailRetryIds: ["previous-retry"], lastTotal: 8, lastKept: 1,
       lastStatus: "error", lastErrorCode: "network", consecutiveFailures: 3,
       lastCheckedAt: old, lastChangedAt: old, lastOkAt: old,
+      ...values,
     }).returning();
     if (!row) throw new Error("missing previous board");
     return row;
   }
+
+  describe.each(["2:x:10", null, "3:x:10"])("stored evidence fingerprint %s", (filterFingerprint) => {
+    const recentOk = new Date("2026-10-06T12:00:00Z");
+
+    it.each(["ok", "not_modified", "short", "error"] as const)("%s without a complete read keeps only current-version evidence", async (status) => {
+      const db = getDb();
+      const key = { ats: "smartrecruiters", token: "IncompleteEvidence" };
+      const before = await previousBoard(key.token, { filterFingerprint, lastOkAt: recentOk });
+      const update: AtsBoardUpdate = {
+        status, checkedAt, ...(status === "ok" || status === "not_modified" ? { completeRead: false } : {}),
+        etag: 'W/"new-list"', filterFingerprint: "3:new-filter:10", externalIds: ["new-stored"],
+        detailRetryIds: ["new-retry"], total: 9, kept: 2, errorCode: "parse",
+      };
+
+      await recordAtsBoardCheck(db, key, update);
+
+      // The previous fingerprint governs evidence even when this check replaces it with the current version.
+      expect(await getAtsBoard(db, key)).toEqual({
+        ...before,
+        ...(status === "ok" ? {
+          etag: update.etag, filterFingerprint: update.filterFingerprint, externalIds: update.externalIds,
+          detailRetryIds: update.detailRetryIds, lastTotal: 9, lastKept: 2, lastChangedAt: checkedAt,
+        } : status === "not_modified" ? {} : { detailRetryIds: update.detailRetryIds }),
+        lastStatus: status, lastCheckedAt: checkedAt, lastErrorCode: status === "error" ? "parse" : null,
+        consecutiveFailures: status === "error" ? 4 : status === "short" ? 3 : 0,
+        lastOkAt: filterFingerprint === "3:x:10" ? recentOk : null,
+      });
+    });
+
+    it.each(["ok", "not_modified"] as const)("%s complete reads advance evidence", async (status) => {
+      const db = getDb();
+      for (const completeRead of [true, undefined]) {
+        const key = { ats: "smartrecruiters", token: `CompleteEvidence-${String(completeRead)}` };
+        await previousBoard(key.token, { filterFingerprint, lastOkAt: recentOk });
+
+        await recordAtsBoardCheck(db, key, {
+          status, checkedAt, ...(completeRead === undefined ? {} : { completeRead }),
+          filterFingerprint: "3:new-filter:10",
+        });
+
+        expect.soft(await getAtsBoard(db, key), `completeRead=${String(completeRead)}`).toMatchObject({
+          lastStatus: status, lastCheckedAt: checkedAt, lastOkAt: checkedAt,
+        });
+      }
+    });
+  });
 
   it.each([true, false])("a short read only stamps the check and replaces retries (existing board: %s)", async (existing) => {
     const db = getDb();
