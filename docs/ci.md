@@ -106,9 +106,13 @@ Only a pull request is classified; it writes three outputs that the other jobs r
 
 A push to `main` and a manual run are not classified at all: they write `code=true`, `full=true` and `transition=true`. The commits on `main`
 are what gets deployed, so a documentation-only push must not end in a run that checked nothing. The range of a pull
-request is `base...head`, listed without rename detection, so a moved file counts with both its old and new path. If the diff cannot be computed the step fails (and so does `ci-ok`): there is no silent "nothing
-changed". `tests/ci-classifier.test.ts` extracts and executes this script with table-driven docs, mixed, deleted, renamed, toolchain, deployment and unknown-path cases. Run it by hand: `git diff --name-only --no-renames origin/main...HEAD`, then look for a path that is not `*.md`, `*.html` or
-an image, or that starts with `tests/`, `src/` or `public/`.
+request is `base...head`, listed without rename detection, so a moved file counts with both its old and new path.
+Paths are NUL-delimited (`git diff -z --name-only --no-renames`) and read individually from a temporary file, preserving
+non-ASCII names (including Markdown under `.github/`) and embedded newlines. If the diff cannot be computed the step
+fails (and so does `ci-ok`): there is no silent "nothing changed". `tests/ci-classifier.test.ts` extracts and executes
+this script with CI's default `bash -e` shell, table-driven cases and a real temporary Git repository covering a rename,
+deletion and non-ASCII path. Run it by hand: `git diff -z --name-only --no-renames origin/main...HEAD`, then inspect the
+NUL-delimited records using the rules above.
 
 #### Documentation links
 
@@ -400,7 +404,7 @@ The same `pg_dump` / `pg_restore` symlinks to `scripts/ops/pg-docker.sh` and ver
 
 Starts both processes in the background with `SWAP_MANAGERS=systemd` and `SWAP_MANAGERS=launchd`, the verbose reporter
 and both test files. Each wrapper has its own process group, log, PID and atomically published exit-code file in a fresh
-runner-temp directory. Limit 2 minutes. Prints `df -h` and `free -h` before launching.
+runner-temp directory. Limit 2 minutes. Prints `df -h` and `free -h` before launching; diagnostic failures are ignored.
 
 `SWAP_MANAGERS` also accepts a comma-separated list (whitespace is trimmed and duplicates run once). Unset means both
 managers, preserving local behavior. Empty or unknown entries throw during collection. The suite without a manager in
@@ -418,7 +422,8 @@ Change the value to `launchd`, or unset it for the original complete suite.
 Waits only for systemd's exit-code file. Limit 25 minutes, with a 24-minute deadline measured from launch. Missing
 PID/status, a dead wrapper without status, deadline expiry, invalid status or a nonzero exit fails and prints the full
 log; success prints the last 100 lines. Prints disk/free-memory snapshots at the start, every minute while waiting and
-on exit. Runs after a previous failure unless the run was cancelled, so one failed shard does not hide the other.
+on exit; each diagnostic command is non-fatal and cannot change the shard's result. Runs after a previous failure
+unless the run was cancelled, so one failed shard does not hide the other.
 
 #### Worker switch (launchd)
 
@@ -427,10 +432,12 @@ report success even when systemd fails; it never treats systemd's exit-code file
 
 #### Clean up worker switch shards
 
-Always runs, with a 5-minute step limit. Sends TERM to both recorded process groups, allows up to 90 seconds for them
-to exit, then kills remaining groups. Cancellation handlers in the launcher/waits also forward TERM; the cleanup
-handler preserves the grace period when another signal arrives. The wrappers wait for their children to finish before
-writing status. Actions' initial INT is translated to TERM because background bash children can ignore INT.
+Always runs, with a 5-minute step limit. The launcher, waits and cleanup atomically create a per-shard `.term-sent`
+marker directory before sending TERM, so each recorded group receives it at most once. Cleanup sends TERM only to
+groups without that marker and only waits for already-signalled groups. It allows up to 90 seconds in total from
+cleanup start before sending KILL to remaining groups, and ignores further cancellation signals during this grace
+period. The wrappers wait for their children to finish before writing status. Actions' initial INT is translated to
+TERM because background bash children can ignore INT.
 
 ### Job `e2e`
 
@@ -673,7 +680,10 @@ Always: `docker compose down -v --remove-orphans` on the throwaway runner.
 Upgrade transitions with real Docker and the real deploy, install and uninstall scripts of each version, the ai-worker
 under the systemd simulator (`tests/transition/run.sh`). Runs when `changes` sets `transition` (pull requests that touch
 the deploy side or toolchain, every push to `main`, manual runs). No service container: each compose project of the script runs its
-own database. Limit 120 minutes; it builds the images about ten times.
+own database. Limit 120 minutes; it builds the images about ten times. Setup and launch step caps total 25 minutes;
+the shared launch-time deadline is 65 minutes, with 66-minute caps on each wait (B gets no fresh execution budget).
+Allowing 2 minutes for both waits' reporting overhead, the 5-minute cleanup step (including its 240-second grace)
+and two 5-minute uploads gives a conservative 107-minute budget, leaving 13 minutes before the job limit.
 
 #### Check out the repository
 
@@ -701,12 +711,13 @@ compose-project prefix, HOME/XDG directories and simulator state; images have pr
 between the two processes remains possible and must be watched on real runs.
 
 Prints `df -h`, `free -h` and `docker system df` before launch. Each wait prints them at its start, every minute while
-waiting and on exit. Compare memory/disk samples and wall time: if concurrent builds exhaust resources or do not pay,
+waiting and on exit. Every diagnostic command is non-fatal and cannot change a shard's result. Compare memory/disk
+samples and wall time: if concurrent builds exhaust resources or do not pay,
 move the scenarios to separate runner jobs.
 
 #### Transition scenario A
 
-Waits only for A's atomically published exit-code file; limit 105 minutes, with a 104-minute deadline from launch.
+Waits only for A's atomically published exit-code file; limit 66 minutes, with a 65-minute deadline from launch.
 Missing status, a dead wrapper without status, deadline expiry or a nonzero/invalid status fails with the full log;
 success prints its last 100 lines. Waits run even after a previous failure, unless cancelled.
 In clones with isolated compose projects (`jrtransition-<random>-*`), ports, volumes and passwords, scheduled cycles off:
@@ -717,7 +728,7 @@ In clones with isolated compose projects (`jrtransition-<random>-*`), ports, vol
 
 #### Transition scenario B
 
-The same independent wait and 105-minute limit for B, with the same launch-time deadline. B builds its own starting
+The same independent wait and 66-minute limit for B, with the same launch-time deadline. B builds its own starting
 version and keeps D, C and E inside its process because they depend on its state:
 
 - B: 62d7ad9; the new `install-ai-worker.sh --release` of a release whose worker throws at start must roll back to the
@@ -750,19 +761,23 @@ match of the worker's report against systemd is skipped.
 
 #### Clean up transition scenarios
 
-Always runs, limit 5 minutes. Sends TERM to both process groups, including on cancellation, so each `run.sh` trap can
-collect artifacts, stop its simulator and tear down its guarded compose projects. Allows up to 240 seconds before
-killing any remaining group. Launcher/wait cancellation handlers forward TERM too; a second signal during cleanup
-does not end the grace period. The wrappers publish status only after their children finish cleanup.
+Always runs, limit 5 minutes. The launcher, waits and cleanup atomically create a per-shard `.term-sent` marker
+directory before forwarding TERM. Cleanup signals only groups without a marker and only waits for already-signalled
+groups: it never sends a second TERM while `run.sh` has reset traps to default during artifact collection and guarded
+compose teardown. It allows up to 240 seconds in total from cleanup start before sending KILL to any remaining group,
+and ignores further cancellation signals during the grace period. The wrappers publish status only after their
+children finish cleanup.
 
 #### Upload the transition logs (scenario A)
 
-Always after launch, including failure/cancellation: A's wrapper log and artifact directory (worker logs, simulator
-calls and per-step output), as `upgrade-transition-logs-A`, kept 7 days.
+Only when an earlier step failed and launch published its state directory, matching the original failure-only upload:
+A's wrapper log and artifact directory (worker logs, simulator calls and per-step output), as `upgrade-transition-logs-A`,
+kept 7 days. Success or cancellation alone does not trigger an upload.
 
 #### Upload the transition logs (scenario B)
 
-The same for B, as `upgrade-transition-logs-B`, from its separate wrapper log and artifact directory, kept 7 days.
+The same failure-only condition for B, as `upgrade-transition-logs-B`, from its separate wrapper log and artifact
+directory, kept 7 days.
 
 ### Job `ci-ok`
 

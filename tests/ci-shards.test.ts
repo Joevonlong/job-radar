@@ -30,15 +30,15 @@ async function until(check: () => boolean): Promise<void> {
 }
 
 /** Execute the exact YAML snippets. PATH stubs replace only external commands, never their process supervision. */
-function fixture(job: typeof jobs[number], firstMode: string, secondMode: string) {
+function fixture(job: typeof jobs[number], firstMode: string, secondMode: string, diagnosticStatus = 0) {
   const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "ci-shards-")));
   const bin = path.join(tmp, "bin");
   fs.mkdirSync(bin);
   const write = (file: string, text: string) => fs.writeFileSync(path.join(bin, file), text, { mode: 0o755 });
-  write("df", "#!/bin/sh\necho 'dummy disk snapshot'\n");
-  write("free", "#!/bin/sh\necho 'dummy memory snapshot'\n");
+  write("df", '#!/bin/sh\necho "dummy disk snapshot"\nexit "$DUMMY_DIAGNOSTIC_STATUS"\n');
+  write("free", '#!/bin/sh\necho "dummy memory snapshot"\nexit "$DUMMY_DIAGNOSTIC_STATUS"\n');
   write("cat", '#!/bin/bash\nif [[ "${1##*/}" == started ]]; then echo ready > "$DUMMY_ROOT/wait-ready"; fi\nexec /bin/cat "$@"\n');
-  write("docker", "#!/bin/sh\n[ \"$*\" = 'system df' ] || exit 99\necho 'dummy docker snapshot'\n");
+  write("docker", '#!/bin/sh\n[ "$*" = "system df" ] || exit 99\necho "dummy docker snapshot"\nexit "$DUMMY_DIAGNOSTIC_STATUS"\n');
   // Preserve bash -c for the wrapper, but replace run.sh with the same dummy used for pnpm.
   write("bash", '#!/bin/bash\nif [[ "$1" == tests/transition/run.sh ]]; then exec "$DUMMY_COMMAND" "$@"; fi\nexec /bin/bash "$@"\n');
   write("pnpm", '#!/bin/bash\nexec "$DUMMY_COMMAND" "$@"\n');
@@ -48,13 +48,25 @@ mode=$DUMMY_SECOND_MODE
 [[ "$shard" != "$DUMMY_FIRST_SHARD" ]] || mode=$DUMMY_FIRST_MODE
 printf '%s\\n' "$*" > "$DUMMY_ROOT/$shard.args"
 echo "dummy $shard log"
-trap 'echo cleaned > "$DUMMY_ROOT/$shard.cleaned"; exit 143' TERM
+cleanup() {
+  local rc=$?
+  # Match run.sh: reset signal traps before collecting artifacts and tearing down projects.
+  trap - EXIT INT TERM HUP
+  if [[ "$mode" == slow-cleanup ]]; then
+    echo cleaning > "$DUMMY_ROOT/$shard.cleaning"
+    sleep 2
+  fi
+  echo cleaned > "$DUMMY_ROOT/$shard.cleaned"
+  exit "$rc"
+}
+trap cleanup EXIT
+trap 'exit 143' TERM
 echo ready > "$DUMMY_ROOT/$shard.ready"
 case "$mode" in
   success) exit 0 ;;
   failure) exit 7 ;;
   missing) kill -KILL "$PPID" ;; # no wrapper remains to publish an exit-code file
-  block) ;;
+  block|slow-cleanup) ;;
   *) exit 99 ;;
 esac
 sleep 300 &
@@ -68,10 +80,16 @@ wait "$!"
     PATH: `${bin}:${process.env.PATH}`, RUNNER_TEMP: tmp, GITHUB_ENV: output,
     DUMMY_COMMAND: path.join(bin, "dummy"), DUMMY_ROOT: tmp,
     DUMMY_FIRST_SHARD: job.shards[0], DUMMY_FIRST_MODE: firstMode, DUMMY_SECOND_MODE: secondMode,
+    DUMMY_DIAGNOSTIC_STATUS: String(diagnosticStatus),
   };
   // The transition process must use its scenario argument even if a developer exported this local test filter.
   delete env.SWAP_MANAGERS;
-  const args = (name: string) => ["--noprofile", "--norc", "-e", "-o", "pipefail", "-c", snippet(job.job, name)];
+  const args = (name: string) => {
+    const file = path.join(tmp, `${name}.sh`);
+    fs.writeFileSync(file, snippet(job.job, name));
+    // ci.yml has no shell override: Actions runs bash -e {0}, without pipefail.
+    return ["-e", file];
+  };
   const run = (name: string) => spawnSync("/bin/bash", args(name), { env, encoding: "utf8", timeout: 15_000 });
   const start = run(job.start);
   expect(start.status, start.stdout + start.stderr).toBe(0);
@@ -113,6 +131,19 @@ wait "$!"
 }
 
 describe.each(jobs)("$job workflow processes", (job) => {
+  it.each(["success", "failure"])("keeps failed diagnostics out of a %s shard's result", async (mode) => {
+    const fx = fixture(job, mode, "success", 64);
+    try {
+      await until(fx.ready);
+      const first = fx.run(job.waits[0]!);
+      expect(first.status, first.stdout + first.stderr).toBe(mode === "success" ? 0 : 1);
+      expect(first.stdout).toContain(`dummy ${job.shards[0]} log`);
+      const second = fx.run(job.waits[1]!);
+      expect(second.status, second.stdout + second.stderr).toBe(0);
+      expect(second.stdout).toContain(`dummy ${job.shards[1]} log`);
+    } finally { fx.dispose(); }
+  });
+
   it("reports both a failed first shard and a successful second shard independently", async () => {
     const fx = fixture(job, "failure", "success");
     try {
@@ -171,6 +202,26 @@ describe.each(jobs)("$job workflow processes", (job) => {
       await until(() => fs.existsSync(path.join(fx.tmp, `${job.shards[0]}.cleaned`)));
       expect(fx.run(job.cleanup).status).toBe(0);
       for (const shard of job.shards) expect(fs.existsSync(path.join(fx.tmp, `${shard}.cleaned`))).toBe(true);
+    } finally { fx.dispose(); }
+  });
+
+  it("lets cancellation cleanup finish after the shard resets its signal traps", async () => {
+    const fx = fixture(job, "slow-cleanup", "slow-cleanup");
+    try {
+      await until(fx.ready);
+      const waiter = fx.waitProcess();
+      const done = new Promise<number | null>((resolve) => waiter.once("close", resolve));
+      await until(() => fs.existsSync(path.join(fx.tmp, "wait-ready")));
+      waiter.kill("SIGINT");
+      expect(await done).toBe(130);
+      await until(() => fs.existsSync(path.join(fx.tmp, `${job.shards[0]}.cleaning`)));
+      // Cleanup starts while the first shard has default TERM handling again.
+      const cleanup = fx.run(job.cleanup);
+      expect(cleanup.status, cleanup.stdout + cleanup.stderr).toBe(0);
+      for (const shard of job.shards) {
+        expect(fs.existsSync(path.join(fx.tmp, `${shard}.cleaned`))).toBe(true);
+        expect(fs.readFileSync(path.join(fx.state, `${shard}.exit`), "utf8").trim()).toBe("143");
+      }
     } finally { fx.dispose(); }
   });
 });

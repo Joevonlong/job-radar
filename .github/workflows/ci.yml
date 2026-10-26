@@ -65,22 +65,28 @@ jobs:
           # scripts, YAML, Dockerfiles, workflows.
           docs_re='\.(md|html|png|jpe?g|svg|gif)$'
           # Fails the job (and with it ci-ok) when the diff cannot be computed: no silent "nothing changed".
-          changed=$(git diff --name-only --no-renames "$PR_BASE...$PR_HEAD")
-          echo "$changed"
+          changed="$(mktemp "$RUNNER_TEMP/changed-paths.XXXXXX")"
+          trap 'rm -f -- "$changed"' EXIT
+          git diff -z --name-only --no-renames "$PR_BASE...$PR_HEAD" > "$changed"
           code=false
-          if grep -vE "$docs_re" <<< "$changed" | grep -q .; then code=true; fi
-          if grep -qE '^(tests|src|public)/' <<< "$changed"; then code=true; fi
           # The ai-worker's move between release directories (upgrade-transition) only when the deploy side changed.
           transition=false
-          if grep -qE '^(scripts/ops/|src/ai-worker/|tests/transition/|tests/ops/sim/)|^(compose\.yaml|Dockerfile)$' <<< "$changed"; then transition=true; fi
+          transition_re='^(scripts/ops/|src/ai-worker/|tests/transition/|tests/ops/sim/)|^(compose\.yaml|Dockerfile)$'
           # Dependency and toolchain inputs can affect every suite, including historical upgrades. Keep this rule here;
-          # tests/ci-classifier.test.ts executes this script with the same newline-separated diff format.
+          # tests/ci-classifier.test.ts executes this script with the same NUL-delimited diff format.
           full=false
-          if grep -qE '^(package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|vitest[^/]*\.ts|playwright[^/]*\.ts|\.nvmrc|\.node-version)$|^\.github/' <<< "$changed"; then
-            code=true
-            full=true
-            transition=true
-          fi
+          toolchain_re='^(package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|vitest[^/]*\.ts|playwright[^/]*\.ts|\.nvmrc|\.node-version)$|^\.github/'
+          # Shell variables cannot hold NULs. Read a file so git's failure reaches bash -e, with no process substitution.
+          while IFS= read -r -d '' file; do
+            printf '%s\n' "$file"
+            if [[ ! "$file" =~ $docs_re || "$file" =~ ^(tests|src|public)/ ]]; then code=true; fi
+            if [[ "$file" =~ $transition_re ]]; then transition=true; fi
+            if [[ "$file" =~ $toolchain_re ]]; then
+              code=true
+              full=true
+              transition=true
+            fi
+          done < "$changed"
           printf 'code=%s\nfull=%s\ntransition=%s\n' "$code" "$full" "$transition" >> "$GITHUB_OUTPUT"
           echo "product checks: $code, full: $full, transition: $transition"
       - name: Documentation links
@@ -391,14 +397,17 @@ jobs:
             for file in "$state/"*.pid; do
               [[ -f "$file" ]] || continue
               pid="$(cat "$file")"
-              [[ "$pid" =~ ^[1-9][0-9]*$ ]] && { kill -TERM -- "-$pid" 2>/dev/null || true; }
+              [[ "$pid" =~ ^[1-9][0-9]*$ ]] || continue
+              if mkdir "${file%.pid}.term-sent" 2>/dev/null; then
+                kill -TERM -- "-$pid" 2>/dev/null || true
+              fi
             done
           }
           trap 'stop_launchers; exit 130' INT
           trap 'stop_launchers; exit 143' TERM
           trap 'stop_launchers; exit 129' HUP
-          df -h
-          free -h
+          df -h || true
+          free -h || true
           for shard in systemd launchd; do
             set -m
             SWAP_MANAGERS="$shard" bash -c '
@@ -425,8 +434,8 @@ jobs:
         timeout-minutes: 25
         run: |
           resources() {
-            df -h
-            free -h
+            df -h || true
+            free -h || true
           }
           resources
           trap 'resources || true' EXIT
@@ -441,7 +450,13 @@ jobs:
           pid="$(cat "$prefix.pid")"
           [[ "$pid" =~ ^[1-9][0-9]*$ ]] || fail_wait "invalid process id"
           # Actions sends INT before TERM on cancel; forward TERM, which background bash children can trap.
-          forward_signal() { kill -TERM -- "-$pid" 2>/dev/null || true; exit "$1"; }
+          forward_signal() {
+            trap '' INT TERM HUP
+            if mkdir "$prefix.term-sent" 2>/dev/null; then
+              kill -TERM -- "-$pid" 2>/dev/null || true
+            fi
+            exit "$1"
+          }
           trap 'forward_signal 130' INT
           trap 'forward_signal 143' TERM
           trap 'forward_signal 129' HUP
@@ -466,8 +481,8 @@ jobs:
         timeout-minutes: 25
         run: |
           resources() {
-            df -h
-            free -h
+            df -h || true
+            free -h || true
           }
           resources
           trap 'resources || true' EXIT
@@ -482,7 +497,13 @@ jobs:
           pid="$(cat "$prefix.pid")"
           [[ "$pid" =~ ^[1-9][0-9]*$ ]] || fail_wait "invalid process id"
           # Actions sends INT before TERM on cancel; forward TERM, which background bash children can trap.
-          forward_signal() { kill -TERM -- "-$pid" 2>/dev/null || true; exit "$1"; }
+          forward_signal() {
+            trap '' INT TERM HUP
+            if mkdir "$prefix.term-sent" 2>/dev/null; then
+              kill -TERM -- "-$pid" 2>/dev/null || true
+            fi
+            exit "$1"
+          }
           trap 'forward_signal 130' INT
           trap 'forward_signal 143' TERM
           trap 'forward_signal 129' HUP
@@ -517,7 +538,10 @@ jobs:
               pid="$(cat "$file")"
               [[ "$pid" =~ ^[1-9][0-9]*$ ]] || continue
               pids+=("$pid")
-              kill -TERM -- "-$pid" 2>/dev/null || true
+              # Atomic per-shard marker: a launcher/wait may already have signalled this group.
+              if mkdir "${file%.pid}.term-sent" 2>/dev/null; then
+                kill -TERM -- "-$pid" 2>/dev/null || true
+              fi
             done
             deadline=$((SECONDS + 90))
             for pid in ${pids[@]+"${pids[@]}"}; do
@@ -735,6 +759,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.transition == 'true'
     runs-on: ubuntu-24.04
+    # Setup/launch <=25m + shared deadline 65m + reporting <=2m + cleanup 5m + uploads 10m = 107m (13m spare).
     timeout-minutes: 120
     steps:
       - name: Check out the repository
@@ -770,15 +795,18 @@ jobs:
             for file in "$state/"*.pid; do
               [[ -f "$file" ]] || continue
               pid="$(cat "$file")"
-              [[ "$pid" =~ ^[1-9][0-9]*$ ]] && { kill -TERM -- "-$pid" 2>/dev/null || true; }
+              [[ "$pid" =~ ^[1-9][0-9]*$ ]] || continue
+              if mkdir "${file%.pid}.term-sent" 2>/dev/null; then
+                kill -TERM -- "-$pid" 2>/dev/null || true
+              fi
             done
           }
           trap 'stop_launchers; exit 130' INT
           trap 'stop_launchers; exit 143' TERM
           trap 'stop_launchers; exit 129' HUP
-          df -h
-          free -h
-          docker system df
+          df -h || true
+          free -h || true
+          docker system df || true
           for shard in A B; do
             set -m
             bash -c '
@@ -802,12 +830,12 @@ jobs:
           done
       - name: Transition scenario A
         if: ${{ !cancelled() }}
-        timeout-minutes: 105
+        timeout-minutes: 66
         run: |
           resources() {
-            df -h
-            free -h
-            docker system df
+            df -h || true
+            free -h || true
+            docker system df || true
           }
           resources
           trap 'resources || true' EXIT
@@ -822,12 +850,18 @@ jobs:
           pid="$(cat "$prefix.pid")"
           [[ "$pid" =~ ^[1-9][0-9]*$ ]] || fail_wait "invalid process id"
           # Actions sends INT before TERM on cancel; forward TERM, which background bash children can trap.
-          forward_signal() { kill -TERM -- "-$pid" 2>/dev/null || true; exit "$1"; }
+          forward_signal() {
+            trap '' INT TERM HUP
+            if mkdir "$prefix.term-sent" 2>/dev/null; then
+              kill -TERM -- "-$pid" 2>/dev/null || true
+            fi
+            exit "$1"
+          }
           trap 'forward_signal 130' INT
           trap 'forward_signal 143' TERM
           trap 'forward_signal 129' HUP
           # An absolute deadline starts at launch, so the second wait never gets a fresh execution budget.
-          deadline=$(( $(cat "$state/started") + 104 * 60 ))
+          deadline=$(( $(cat "$state/started") + 65 * 60 ))
           sample=$((SECONDS + 60))
           while [[ ! -f "$prefix.exit" ]]; do
             if ! kill -0 "$pid" 2>/dev/null; then
@@ -844,12 +878,12 @@ jobs:
           tail -n 100 "$prefix.log"
       - name: Transition scenario B
         if: ${{ !cancelled() }}
-        timeout-minutes: 105
+        timeout-minutes: 66
         run: |
           resources() {
-            df -h
-            free -h
-            docker system df
+            df -h || true
+            free -h || true
+            docker system df || true
           }
           resources
           trap 'resources || true' EXIT
@@ -864,12 +898,18 @@ jobs:
           pid="$(cat "$prefix.pid")"
           [[ "$pid" =~ ^[1-9][0-9]*$ ]] || fail_wait "invalid process id"
           # Actions sends INT before TERM on cancel; forward TERM, which background bash children can trap.
-          forward_signal() { kill -TERM -- "-$pid" 2>/dev/null || true; exit "$1"; }
+          forward_signal() {
+            trap '' INT TERM HUP
+            if mkdir "$prefix.term-sent" 2>/dev/null; then
+              kill -TERM -- "-$pid" 2>/dev/null || true
+            fi
+            exit "$1"
+          }
           trap 'forward_signal 130' INT
           trap 'forward_signal 143' TERM
           trap 'forward_signal 129' HUP
           # An absolute deadline starts at launch, so the second wait never gets a fresh execution budget.
-          deadline=$(( $(cat "$state/started") + 104 * 60 ))
+          deadline=$(( $(cat "$state/started") + 65 * 60 ))
           sample=$((SECONDS + 60))
           while [[ ! -f "$prefix.exit" ]]; do
             if ! kill -0 "$pid" 2>/dev/null; then
@@ -899,7 +939,10 @@ jobs:
               pid="$(cat "$file")"
               [[ "$pid" =~ ^[1-9][0-9]*$ ]] || continue
               pids+=("$pid")
-              kill -TERM -- "-$pid" 2>/dev/null || true
+              # Atomic per-shard marker: run.sh resets TERM to default while collecting artifacts/tearing down.
+              if mkdir "${file%.pid}.term-sent" 2>/dev/null; then
+                kill -TERM -- "-$pid" 2>/dev/null || true
+              fi
             done
             deadline=$((SECONDS + 240))
             for pid in ${pids[@]+"${pids[@]}"}; do
@@ -915,7 +958,7 @@ jobs:
           trap 'cleanup_groups; exit 129' HUP
           cleanup_groups
       - name: Upload the transition logs (scenario A)
-        if: ${{ always() && env.TRANSITION_STATE != '' }}
+        if: ${{ failure() && env.TRANSITION_STATE != '' }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         timeout-minutes: 5
         with:
@@ -925,7 +968,7 @@ jobs:
             ${{ env.TRANSITION_STATE }}/A/artifacts/
           retention-days: 7
       - name: Upload the transition logs (scenario B)
-        if: ${{ always() && env.TRANSITION_STATE != '' }}
+        if: ${{ failure() && env.TRANSITION_STATE != '' }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         timeout-minutes: 5
         with:

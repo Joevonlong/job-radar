@@ -78,7 +78,7 @@ workflow 级设置：`permissions: contents: read`（任何任务都不能写仓
 - `full`：推送到 `main`、手动运行、依赖或工具链 PR 为 `true`，会多跑一遍默认顺序的集成测试。工具链路径包括 `package.json`（含 `engines.node`）、`pnpm-lock.yaml`、`pnpm-workspace.yaml`、`.github/` 下所有文件、根目录的 `vitest*.ts` / `playwright*.ts`、`.nvmrc`、`.node-version`，同时强制 `code=true`、`transition=true`；`.github/` 下的 Markdown 也一样。
 - `transition`：有改动路径以 `scripts/ops/`、`src/ai-worker/`、`tests/transition/`、`tests/ops/sim/` 开头，或者是 `compose.yaml`、`Dockerfile`、上面的工具链输入时为 `true`，选中 `upgrade-transition`。
 
-推送到 `main` 和手动运行完全不分类：两者都写 `code=true`、`full=true`、`transition=true`。`main` 上的提交就是要部署的内容，所以只改文档的推送不能留下一次什么都没检查的运行。PR 的对比范围是 `base...head`，不做改名检测，所以被移动的文件新旧路径都会计入。算不出差异时这一步会失败（`ci-ok` 随之失败），不会悄悄当作“没改动”。`tests/ci-classifier.test.ts` 提取并执行此脚本，用表驱动用例验证纯文档、混合、删除、改名、工具链、运维、未知路径。手动复现：`git diff --name-only --no-renames origin/main...HEAD`，再看有没有不是 `*.md`、`*.html` 或图片的路径，或以 `tests/`、`src/`、`public/` 开头的路径。
+推送到 `main` 和手动运行完全不分类：两者都写 `code=true`、`full=true`、`transition=true`。`main` 上的提交就是要部署的内容，所以只改文档的推送不能留下一次什么都没检查的运行。PR 的对比范围是 `base...head`，不做改名检测，所以被移动的文件新旧路径都会计入。用 `git diff -z --name-only --no-renames` 把 NUL 分隔的路径写入临时文件，再逐项读取，保留非 ASCII 名称（包括 `.github/` 下的中文 Markdown）和文件名内的换行。算不出差异时这一步会失败（`ci-ok` 随之失败），不会悄悄当作“没改动”。`tests/ci-classifier.test.ts` 用 CI 默认的 `bash -e` 提取并执行此脚本，包含表驱动用例和真实临时 Git 仓库的改名、删除、非 ASCII 路径测试。手动复现：`git diff -z --name-only --no-renames origin/main...HEAD`，按上面的规则检查 NUL 分隔的各条路径。
 
 #### Documentation links
 
@@ -277,13 +277,13 @@ PostgreSQL 17 service、`DATABASE_URL`、必须可用的 pg 工具包装和依�
 
 #### Start worker switch shards
 
-后台同时启动 `SWAP_MANAGERS=systemd`、`SWAP_MANAGERS=launchd` 两个进程，用 verbose reporter 运行两个测试文件。每个包装进程有独立进程组、日志、PID 和原子发布的退出码文件，放在新建的 runner 临时目录里。步骤上限 2 分钟，启动前打印 `df -h`、`free -h`。
+后台同时启动 `SWAP_MANAGERS=systemd`、`SWAP_MANAGERS=launchd` 两个进程，用 verbose reporter 运行两个测试文件。每个包装进程有独立进程组、日志、PID 和原子发布的退出码文件，放在新建的 runner 临时目录里。步骤上限 2 分钟，启动前打印 `df -h`、`free -h`；忽略诊断命令失败。
 
 `SWAP_MANAGERS` 也接受逗号列表（去空格、重复项只跑一次）；未设置时两个都跑，本地原行为不变。空值或未知项在收集阶段抛错。标题不带管理器的那组实际用 systemd，只在选中 systemd 时注册，因此恰好跑一次。不用测试名筛选。本地连一次性 Postgres 后，把 `SWAP_MANAGERS=systemd` 放在 `pnpm test:integration --reporter=verbose tests/integration/ai-worker-swap.test.ts tests/integration/uninstall-ai-worker.test.ts` 前；改成 `launchd` 跑另一份，取消变量跑完整套件。
 
 #### Worker switch (systemd)
 
-只等 systemd 自己的退出码文件。步骤上限 25 分钟，内部截止时间从启动算起 24 分钟。缺 PID/状态、包装进程退出却没写状态、超时、非法状态或退出码非零都会失败并打印完整日志；成功打印末 100 行。开始、等待中每分钟、退出时打印磁盘和空闲内存。只要没有取消，前面失败后仍运行，保证另一分片也有结论。
+只等 systemd 自己的退出码文件。步骤上限 25 分钟，内部截止时间从启动算起 24 分钟。缺 PID/状态、包装进程退出却没写状态、超时、非法状态或退出码非零都会失败并打印完整日志；成功打印末 100 行。开始、等待中每分钟、退出时打印磁盘和空闲内存；每条诊断命令失败都不影响分片结果。只要没有取消，前面失败后仍运行，保证另一分片也有结论。
 
 #### Worker switch (launchd)
 
@@ -291,7 +291,7 @@ PostgreSQL 17 service、`DATABASE_URL`、必须可用的 pg 工具包装和依�
 
 #### Clean up worker switch shards
 
-`always()` 运行，步骤上限 5 分钟。向两个已登记的进程组发 TERM，给最多 90 秒退出，再杀掉残留进程组。启动、等待步骤取消时也转发 TERM；清理期间再收到信号不会打断宽限期。包装进程等子进程清理完才写状态。Actions 最先发出的 INT 转成 TERM，因为后台 bash 子进程可能忽略 INT。
+`always()` 运行，步骤上限 5 分钟。启动、等待和清理步骤发 TERM 前，先为对应分片原子创建 `.term-sent` 标记目录，保证每个已登记进程组至多收到一次 TERM。清理只向没有标记的组发 TERM，对已有标记的组只等待；从清理开始合计给最多 90 秒，再向残留组发 KILL。宽限期内忽略后续取消信号。包装进程等子进程清理完才写状态。Actions 最先发出的 INT 转成 TERM，因为后台 bash 子进程可能忽略 INT。
 
 ### Job `e2e`
 
@@ -426,7 +426,7 @@ Linux 从零首次运行：在 Ubuntu runner 上用一份空的检出，按随�
 
 ### Job `upgrade-transition`
 
-用真 Docker 和每个版本自己的 deploy、install、uninstall 脚本测升级迁移，ai-worker 跑在模拟的 systemd 下（`tests/transition/run.sh`）。`changes` 设了 `transition` 时运行（改到部署相关文件或工具链的 PR、每次推送到 `main`、手动运行）。没有 service 容器：脚本的每个 compose 项目自带数据库。上限 120 分钟，要构建镜像大约十次。
+用真 Docker 和每个版本自己的 deploy、install、uninstall 脚本测升级迁移，ai-worker 跑在模拟的 systemd 下（`tests/transition/run.sh`）。`changes` 设了 `transition` 时运行（改到部署相关文件或工具链的 PR、每次推送到 `main`、手动运行）。没有 service 容器：脚本的每个 compose 项目自带数据库。上限 120 分钟，要构建镜像大约十次。准备和启动步骤上限合计 25 分钟；共享从启动算起的 65 分钟截止时间，每个等待步骤上限 66 分钟，B 不获得新执行预算。加上两次等待合计 2 分钟的结果报告余量、5 分钟清理（含 240 秒宽限期）、两次各 5 分钟上传，保守合计 107 分钟，离任务上限留出 13 分钟。
 
 #### Check out the repository
 
@@ -448,17 +448,17 @@ Linux 从零首次运行：在 Ubuntu runner 上用一份空的检出，按随�
 
 后台同时运行独立的 `bash tests/transition/run.sh --scenarios A <产物目录-A>`、`--scenarios B <产物目录-B>`，步骤上限 2 分钟。两个 runner 临时产物目录不同，避免 `collect_artifacts` 的固定文件名覆盖。每次调用创建独立随机 `RUN_ID`、临时根目录、compose 项目前缀、HOME/XDG、模拟器状态；镜像名随项目区分，deploy 都带 `--no-prune`，共享 Docker 层缓存。端口通过绑定临时端口后释放选取，两个进程之间仍有很小的绑定/释放竞态，需要在真实运行观察。
 
-启动前打印 `df -h`、`free -h`、`docker system df`；每个等待步骤开始、等待中每分钟、退出时也打印。比较内存/磁盘采样和耗时；并发构建若资源不足或没有收益，改为两台 runner 的任务。
+启动前打印 `df -h`、`free -h`、`docker system df`；每个等待步骤开始、等待中每分钟、退出时也打印。每条诊断命令失败都不影响分片结果。比较内存/磁盘采样和耗时；并发构建若资源不足或没有收益，改为两台 runner 的任务。
 
 #### Transition scenario A
 
-只等 A 自己原子发布的退出码文件；步骤上限 105 分钟，内部截止时间从启动算起 104 分钟。缺状态、包装进程退出却没有状态、超时、非零或非法状态都会失败并打印完整日志；成功打印末 100 行。没有取消时，前面失败后也继续报告结果。在独立 clone 的 compose 项目（`jrtransition-<随机>-*`）、端口、卷、密码下运行，定时周期关闭：
+只等 A 自己原子发布的退出码文件；步骤上限 66 分钟，内部截止时间从启动算起 65 分钟。缺状态、包装进程退出却没有状态、超时、非零或非法状态都会失败并打印完整日志；成功打印末 100 行。没有取消时，前面失败后也继续报告结果。在独立 clone 的 compose 项目（`jrtransition-<随机>-*`）、端口、卷、密码下运行，定时周期关闭：
 
 - A：62d7ad9，然后按文档逐跳升级（4dd8d03、2656364、b3f69b0、检出的提交），每跳用该版本的 `deploy.sh --skip-pull`；升到 2656364 前先停 web 和 runner；最后一跳前按 `docs/upgrade.md` 的首次升级步骤做（卸载旧 worker，确认已停，停 web 和 runner，检出，部署）。
 
 #### Transition scenario B
 
-独立等待 B，上限同为 105 分钟，用同一个从启动算起的截止时间。B 自己建立起始版本；D、C、E 依赖它的状态，因此仍在 B 进程内执行：
+独立等待 B，上限同为 66 分钟，用同一个从启动算起的截止时间。B 自己建立起始版本；D、C、E 依赖它的状态，因此仍在 B 进程内执行：
 
 - B：62d7ad9；新的 `install-ai-worker.sh --release` 换上一个启动就抛错的发布，必须回滚到从 checkout 安装的 worker；换上正常的发布则成功；然后严格停止，部署检出的提交。
 - D：runner 镜像构建失败的部署（构建参数 `FAIL_RUNNER_BUILD=1`）不改任何容器、镜像和 worker，也不留锁；去掉参数再部署成功。
@@ -471,15 +471,15 @@ Linux 从零首次运行：在 Ubuntu runner 上用一份空的检出，按随�
 
 #### Clean up transition scenarios
 
-`always()` 运行，上限 5 分钟。包括取消时都向两个进程组发 TERM，让各自 `run.sh` 的 trap 收集产物、停止模拟器、清理经过防护检查的 compose 项目。给最多 240 秒，再杀残留进程组。启动、等待步骤取消时也转发 TERM；清理期间第二次信号不打断宽限期。包装进程等子进程清理结束后才发布状态。
+`always()` 运行，上限 5 分钟。启动、等待和清理步骤转发 TERM 前，先为对应分片原子创建 `.term-sent` 标记目录。清理只向没有标记的组发 TERM，对已有标记的组只等待，避免 `run.sh` 在收集产物和清理经过防护检查的 compose 项目时已重置 traps、再收到 TERM 而中断。从清理开始合计给最多 240 秒，再向残留组发 KILL；宽限期内忽略后续取消信号。包装进程等子进程清理结束后才发布状态。
 
 #### Upload the transition logs (scenario A)
 
-启动成功后总是运行，失败、取消也包括：上传 A 的包装日志和独立产物目录（worker 日志、模拟器调用、每步输出），产物名 `upgrade-transition-logs-A`，保留 7 天。
+只在此前步骤失败、且启动步骤已发布状态目录时运行，恢复原来仅失败时上传的条件：上传 A 的包装日志和独立产物目录（worker 日志、模拟器调用、每步输出），产物名 `upgrade-transition-logs-A`，保留 7 天。单纯成功或取消不触发上传。
 
 #### Upload the transition logs (scenario B)
 
-同样上传 B 的独立包装日志和产物目录，产物名 `upgrade-transition-logs-B`，保留 7 天。
+B 使用同样的仅失败时上传条件，上传独立包装日志和产物目录，产物名 `upgrade-transition-logs-B`，保留 7 天。
 
 ### Job `ci-ok`
 
