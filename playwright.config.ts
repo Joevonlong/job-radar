@@ -44,12 +44,12 @@ process.env.E2E_WEB_PASSWORD = E2E_WEB_PASSWORD;
 // The projects (parallel, exclusive, then the serial chain of specs that rewrite a config file of the run) are planned
 // in e2e/projects.ts. Spec files named on the command line run alone, with just the projects they belong to: the
 // filters are read once in the main process and handed to the workers (which re-evaluate this file) through the
-// environment.
+// environment. E2E_PART optionally selects just the parallel/exclusive projects or the serial chain.
 if (process.env.E2E_SPEC_FILTERS === undefined) process.env.E2E_SPEC_FILTERS = JSON.stringify(specFiltersFromArgv(process.argv));
 const TEST_DIR = path.resolve(import.meta.dirname, "e2e");
 const SPEC_FILTERS = z.array(z.string()).parse(JSON.parse(process.env.E2E_SPEC_FILTERS));
 const SPEC_FILES = fs.readdirSync(TEST_DIR).filter((name) => name.endsWith(".spec.ts")).sort();
-const projects = planProjects(SPEC_FILES, TEST_DIR, SPEC_FILTERS).map((project) => ({ ...project, use: { ...devices["Desktop Chrome"] } }));
+const projects = planProjects(SPEC_FILES, TEST_DIR, SPEC_FILTERS, process.env.E2E_PART).map((project) => ({ ...project, use: { ...devices["Desktop Chrome"] } }));
 
 export default defineConfig({
   testDir: TEST_DIR,

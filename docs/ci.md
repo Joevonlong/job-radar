@@ -25,7 +25,7 @@ flowchart LR
   PR --> unit
   changes -- code changed --> integration
   changes -- code changed --> worker-switch
-  changes -- code changed --> e2e
+  changes -- code changed --> e2e["e2e (parallel / chain)"]
   changes -- code changed --> linux-smoke
   changes -- deploy side or toolchain changed --> upgrade-transition
   changes --> ci-ok
@@ -67,8 +67,9 @@ without secrets), a `concurrency` group per ref (a new push cancels the older ru
 1. Open the pull request, look at the checks list: `ci-ok` is red whenever any job is red. The red job is the one to open.
 2. In the job, the red step is expanded. Pull-request annotations (`::error::` lines, Playwright's `github` reporter) also
    appear on the "Files changed" tab and in the run summary.
-3. For `e2e` the artifact `playwright-report` (kept 7 days) holds the HTML report and the traces of failed tests of the
-   main suite (`playwright-report/`) and of the setup wizard suite (`playwright-report-setup/`); open one with
+3. For `e2e` the artifacts `playwright-report-parallel` and `playwright-report-chain` (kept 7 days) hold each failed
+   part's HTML report and traces (`playwright-report/`). The parallel part also includes the setup wizard suite
+   (`playwright-report-setup/`); open one with
    `pnpm exec playwright show-report playwright-report` (or `playwright-report-setup`), or a single trace with
    `pnpm exec playwright show-trace <trace.zip>`.
 4. A test that passed only on its retry fails the job on purpose (`--fail-on-flaky-tests`): fix the flakiness, do not
@@ -444,9 +445,23 @@ TERM because background bash children can ignore INT.
 The Playwright browser suite against a production build (`pnpm build` then `pnpm start`), a throwaway PostgreSQL 17 service
 and a stand-in runner (`scripts/e2e-runner.ts`: heartbeat, config acknowledgement and control-request polling, so
 "run a cycle now" and "config saved" work without a real collector). No AI provider, no job channel and no network
-beyond localhost. The specs under `e2e/` plus the ones in `e2e-setup/`. Limit 25 minutes, typically 10 to 12 minutes in
-total. The job runs in the runner host, not in the Playwright container image (measured: the image
-was slower).
+beyond localhost. The specs under `e2e/` plus the ones in `e2e-setup/`. Two matrix jobs, `e2e (parallel)` and
+`e2e (chain)`, run side by side with `fail-fast: false`, so a failure in one does not cancel the other. Each has its own
+runner, production build, PostgreSQL service, seeded database, config and profile directories, and a 25-minute limit.
+Both run on the runner host, not in the Playwright container image (measured: the image was slower).
+
+The test steps set `E2E_PART` from the matrix:
+
+- `parallel`: `chromium` followed by `chromium-exclusive`, then the setup wizard with `playwright.setup.config.ts`.
+  The setup wizard step runs only when `matrix.part == 'parallel'`.
+- `chain`: only the `SERIAL_CHAIN` projects in `e2e/projects.ts`. The first project has no dependency on
+  `chromium-exclusive`; each later project still depends on the previous one. The separate database and directories
+  let this chain run alongside the parallel part safely.
+
+With `E2E_PART` unset, local runs keep the full sequence: parallel, exclusive, then the chain. Any value other than
+`parallel` or `chain` is an error. With a disposable database configured, reproduce a part with
+`E2E_PART=chain pnpm test:e2e` or `E2E_PART=parallel pnpm test:e2e`; the latter command runs the main-suite part only,
+so also run `pnpm test:e2e:setup` to reproduce that CI job's setup wizard coverage.
 
 What the environment looks like: `DATABASE_URL` points at the service (a local run must set `DATABASE_URL` or
 `E2E_ADMIN_DATABASE_URL` itself: there is no default address); `scripts/e2e-prepare.ts`, which refuses any database whose
@@ -472,7 +487,8 @@ The projects are planned in `e2e/projects.ts` (unit-tested by `tests/e2e-project
 - The specs that rewrite a file of the one shared config directory (settings, language, breakdown, resume, interests,
   sources, market) would corrupt each other, or break the assertions of parallel specs that read those settings (the AI
   cards on the Sources page, the UI language). They therefore run as single-spec projects chained with `dependencies`, one
-  after another and only after `chromium-exclusive` has finished. First the config chain: `chromium-config-settings`,
+  after another. In full mode they start only after `chromium-exclusive` has finished; in the `chain` part the first
+  project starts immediately. First the config chain: `chromium-config-settings`,
   `-settings-invalid`, `-language`, `-breakdown`, `-resume`. Then the interests chain: `chromium-interests`,
   `chromium-interests-suggestions`, `chromium-multi-filters` and `chromium-companies` (save views, accepted suggestions or
   watched companies to the one `interests.yaml`). Then `chromium-sources-registry` and `chromium-sources-discovery` (both rewrite `sources.yaml`), then
@@ -500,8 +516,9 @@ The projects are planned in `e2e/projects.ts` (unit-tested by `tests/e2e-project
 - Spec files named on the command line (`pnpm test:e2e e2e/settings.spec.ts`) run alone: only the projects with a
   matching spec take part, each narrowed to the named specs and still in the order above. (Playwright runs a dependency
   project in full, so without this a chained spec would first run the whole parallel suite.) With a `file:line`
-  filter the selected projects are not chained, so only the tests at those lines run. `--project <name>` still runs that
-  project's dependencies; add `--no-deps` to run it alone.
+  filter the selected projects are not chained, so only the tests at those lines run. With `E2E_PART`, both kinds of
+  filter stay within that part. `--project <name>` still runs that project's dependencies. Use `E2E_PART=chain` to run
+  the chain; `--no-deps` would remove its serial ordering.
 - In CI `retries` is 1 and the reporters are `github`, `list` and `html`; `forbidOnly` rejects a committed `test.only`.
 
 **The setup wizard suite (`playwright.setup.config.ts`)** is a separate run because it needs a different world: a brand
@@ -560,7 +577,8 @@ catch (for instance a server/client boundary violation).
 
 #### End-to-end tests
 
-`pnpm test:e2e --workers=2 --fail-on-flaky-tests`: all projects of the main suite as described above. The web server
+`pnpm test:e2e --workers=2 --fail-on-flaky-tests`, with `E2E_PART=${{ matrix.part }}`: that part's main-suite projects
+as described above. The web server
 command first runs `scripts/e2e-prepare.ts`, then `pnpm start -p 3100 -H 127.0.0.1`. A test that only passed on its retry
 fails the job; the retry still records a trace for the report. Limit 15 minutes. Locally: start a disposable database (the
 postgres container of the section below), `pnpm build`, then
@@ -575,13 +593,15 @@ that counts a whole list or changes shared rows without the `@exclusive` tag, a 
 
 #### Setup wizard end-to-end tests
 
-`pnpm test:e2e:setup --fail-on-flaky-tests`, after the main suite on the same build, in its own server, database and
-directories (see above). Limit 6 minutes, typically 1 to 2. Report folder: `playwright-report-setup/`.
+`pnpm test:e2e:setup --fail-on-flaky-tests`, only in the `parallel` part (`if: matrix.part == 'parallel'`), after its
+main-suite projects on the same build, in its own server, database and directories (see above). Limit 6 minutes,
+typically 1 to 2. Report folder: `playwright-report-setup/`.
 
 #### Upload the Playwright report and traces
 
-Runs only when a step of the job failed (`if: failure()`): uploads `playwright-report/` (main suite),
-`playwright-report-setup/` (setup wizard suite) and `test-results/` as the artifact `playwright-report`, kept 7 days.
+Runs only when a step of the matrix job failed (`if: failure()`): uploads `playwright-report/` (that part's main-suite
+projects), `playwright-report-setup/` (setup wizard, present only in the parallel part) and `test-results/` as the artifact
+`playwright-report-${{ matrix.part }}` (`playwright-report-parallel` or `playwright-report-chain`), kept 7 days.
 Download it from the run page and open a report with `pnpm exec playwright show-report <folder>`.
 
 ### Job `linux-smoke`
@@ -788,7 +808,9 @@ skipped. Limit 5 minutes, a few seconds.
 
 Reads the `needs` results (`jq`): `changes`, `ci-docs`, `static` and `unit` must always have succeeded (a skipped one is a
 failure, not a pass); `integration`, `worker-switch`, `e2e` and `linux-smoke` must have succeeded when `changes` selected code and be
-skipped otherwise; `upgrade-transition` likewise with `transition`. Any other combination (including a job that must run and was skipped or cancelled) prints the per-job results and
+skipped otherwise; `upgrade-transition` likewise with `transition`. `needs.e2e.result` aggregates both matrix jobs, so
+both parts must succeed on code changes; the entire matrix must be skipped on documentation-only changes. Any other
+combination (including a job that must run and was skipped or cancelled) prints the per-job results and
 `::error::a selected check did not succeed`. When it is red, look at the per-job lines it prints first, then open that job.
 
 ## Dependabot
@@ -853,11 +875,12 @@ pnpm test:integration --sequence.shuffle.files --sequence.seed=$RANDOM --exclude
 SWAP_MANAGERS=systemd pnpm test:integration --reporter=verbose tests/integration/ai-worker-swap.test.ts tests/integration/uninstall-ai-worker.test.ts
 SWAP_MANAGERS=launchd pnpm test:integration --reporter=verbose tests/integration/ai-worker-swap.test.ts tests/integration/uninstall-ai-worker.test.ts
 
-# job: e2e (one full suite at a time on this machine)
+# job: e2e (CI uses separate runners; reproduce the parts serially on this machine)
 pnpm exec playwright install chromium
 pnpm build
-E2E_PORT=3100 E2E_SKIP_BUILD=1 pnpm test:e2e --workers=2 --fail-on-flaky-tests
+E2E_PART=parallel E2E_PORT=3100 E2E_SKIP_BUILD=1 pnpm test:e2e --workers=2 --fail-on-flaky-tests
 E2E_PORT=3100 E2E_SKIP_BUILD=1 pnpm test:e2e:setup --fail-on-flaky-tests
+E2E_PART=chain E2E_PORT=3100 E2E_SKIP_BUILD=1 pnpm test:e2e --workers=2 --fail-on-flaky-tests
 
 # job: linux-smoke (Linux, in a fresh clone only: it ends with `docker compose down -v`; it builds the web, runner
 # and jobspy images)

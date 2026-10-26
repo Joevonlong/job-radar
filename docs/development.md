@@ -119,12 +119,18 @@ seed any other name. Unit tests (`pnpm test`) need no database.
 `E2E_PORT=<port>` gives the e2e run its own database, config and profile directories, so several checkouts can run in
 parallel.
 
+CI splits the main e2e suite across two independent runners: `E2E_PART=parallel pnpm test:e2e` runs `chromium` then
+`chromium-exclusive`, and `E2E_PART=chain pnpm test:e2e` runs only the serial chain, keeping its dependency order. Only
+the parallel CI part also runs `pnpm test:e2e:setup`. Unset `E2E_PART` runs the complete main suite in its original order;
+any value other than `parallel` or `chain` is an error. File and line filters stay within the selected part.
+
 To run only some e2e tests, name them: `pnpm test:e2e e2e/list-today.spec.ts` (one file), several files, or
 `e2e/dashboard.spec.ts:206` (the test at that line). Only those tests run; the web server, the database preparation and
 the stand-in runner start as for the full suite. This works for every spec, including the ones in the serial chain
 (settings, interests, sources, market): `e2e/projects.ts` keeps just the projects with a named spec. `pnpm exec playwright
-test <file>` behaves the same. `--project <name>` also runs that project's dependencies (the whole parallel suite first);
-add `--no-deps` to skip them. `--grep` on its own does not narrow the dependencies (every project before a matching
+test <file>` behaves the same. `--project <name>` also runs that project's dependencies within the selected part (the
+whole parallel suite first in full mode). Use `E2E_PART=chain` for the serial chain; `--no-deps` removes its serial
+ordering. `--grep` on its own does not narrow the dependencies (every project before a matching
 one runs in full): name the file as well. The named files are read from the command line unless `E2E_SPEC_FILTERS` is set in the
 environment (a JSON list of filters, used to hand them to the workers): an exported value overrides the command line. The integration tests need `pg_dump` / `pg_restore` of the server's major version (17): set `PG_DUMP_PATH` /
 `PG_RESTORE_PATH`, or use `scripts/ops/pg-docker.sh` symlinked as `pg_dump` and `pg_restore` (what CI does).
