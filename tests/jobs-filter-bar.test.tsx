@@ -287,8 +287,10 @@ describe("FilterBar: company filter", () => {
     await userEvent.click(zalando);
     await userEvent.keyboard("{Escape}");
     await waitFor(() => expect(lastQuery()).toBe("?company=Zalando"));
-    expect(screen.getByTestId("filter-company")).toHaveTextContent(/^Zalando$/);
-    expect(screen.getByTestId("filter-chip")).toHaveTextContent(/^Company · Zalando×$/);
+    await waitFor(() => {
+      expect(screen.getByTestId("filter-company")).toHaveTextContent(/^Zalando$/);
+      expect(screen.getByTestId("filter-chip")).toHaveTextContent(/^Company · Zalando×$/);
+    });
     // no note: every company is listed
     expect(screen.queryByTestId("filter-company-note")).toBeNull();
   });
