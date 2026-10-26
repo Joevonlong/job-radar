@@ -3,8 +3,9 @@ import path from "node:path";
 
 import { afterAll, afterEach, beforeAll, describe, expect, inject, it } from "vitest";
 
-import { FakeInstall, type Manager, UNINSTALL } from "../helpers/fake-release";
+import { FakeInstall, UNINSTALL } from "../helpers/fake-release";
 import { createIsolatedDb, type IsolatedDb } from "../helpers/isolated-db";
+import { selectedSwapManagers } from "../helpers/swap-managers";
 
 /**
  * scripts/ops/uninstall-ai-worker.sh against the service-manager simulator (tests/ops/sim): the worker is installed with
@@ -14,6 +15,7 @@ import { createIsolatedDb, type IsolatedDb } from "../helpers/isolated-db";
 const L_DEFAULT = "io.jobradar.ai-worker";
 const L_LEGACY = "de.jobradar.ai-worker";
 const L_CUSTOM = "com.example.ai-worker";
+const managers = selectedSwapManagers(process.env.SWAP_MANAGERS);
 const SLOW = 120_000;
 
 let iso: IsolatedDb;
@@ -24,7 +26,7 @@ afterAll(async () => {
   await iso?.drop();
 });
 
-describe.each<Manager>(["systemd", "launchd"])("uninstall-ai-worker.sh (%s)", (manager) => {
+describe.each(managers)("uninstall-ai-worker.sh (%s)", (manager) => {
   let fx: FakeInstall;
   afterEach(async () => {
     await fx?.cleanup();

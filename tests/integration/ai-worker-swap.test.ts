@@ -5,8 +5,9 @@ import path from "node:path";
 import postgres from "postgres";
 import { afterAll, afterEach, beforeAll, describe, expect, inject, it } from "vitest";
 
-import { FakeInstall, type Manager } from "../helpers/fake-release";
+import { FakeInstall } from "../helpers/fake-release";
 import { createIsolatedDb, type IsolatedDb } from "../helpers/isolated-db";
+import { selectedSwapManagers } from "../helpers/swap-managers";
 
 /**
  * scripts/ops/install-ai-worker.sh switching the ai-worker between releases, against the service-manager simulator
@@ -19,6 +20,7 @@ import { createIsolatedDb, type IsolatedDb } from "../helpers/isolated-db";
 const L_DEFAULT = "io.jobradar.ai-worker";
 const L_LEGACY = "de.jobradar.ai-worker";
 const L_CUSTOM = "com.example.ai-worker";
+const managers = selectedSwapManagers(process.env.SWAP_MANAGERS);
 const SLOW = 150_000;
 const repoRoot = path.resolve(import.meta.dirname, "../..");
 
@@ -51,7 +53,7 @@ async function sessionsOn(url: string): Promise<number> {
   }
 }
 
-describe.each<Manager>(["systemd", "launchd"])("install-ai-worker.sh switch (%s)", (manager) => {
+describe.each(managers)("install-ai-worker.sh switch (%s)", (manager) => {
   let fx: FakeInstall;
   afterEach(async () => {
     await fx?.cleanup();
@@ -607,29 +609,31 @@ describe.each<Manager>(["systemd", "launchd"])("install-ai-worker.sh switch (%s)
   });
 });
 
-describe("install-ai-worker.sh without --release (prepare under the same lock)", () => {
-  let fx: FakeInstall;
-  let bin = "";
-  afterEach(async () => {
-    if (bin) fs.writeFileSync(path.join(fx.tmp, "continue"), "");
-    await fx?.cleanup();
-  });
+// These cases use systemd even though their suite title has no manager. Register them in exactly one shard.
+if (managers.includes("systemd")) {
+  describe("install-ai-worker.sh without --release (prepare under the same lock)", () => {
+    let fx: FakeInstall;
+    let bin = "";
+    afterEach(async () => {
+      if (bin) fs.writeFileSync(path.join(fx.tmp, "continue"), "");
+      await fx?.cleanup();
+    });
 
-  /** A main checkout whose HEAD is a release-shaped commit, and a pnpm stub that "installs" by linking tsx. */
-  function head(block = false): Record<string, string> {
-    fx = new FakeInstall("systemd");
-    const repo = path.resolve(import.meta.dirname, "../..");
-    fs.mkdirSync(path.join(fx.main, "src/ai-worker"), { recursive: true });
-    fs.writeFileSync(path.join(fx.main, "src/ai-worker/index.ts"), `import ${JSON.stringify(`file://${path.join(repo, "tests/fixtures/release/fake-worker.mjs")}`)};\n`);
-    fs.writeFileSync(path.join(fx.main, "tsconfig.json"), "{}\n");
-    fs.writeFileSync(path.join(fx.main, "package.json"), `${JSON.stringify({ name: "fake-main", type: "module", packageManager: "pnpm@9.8.7" }, null, 2)}\n`);
-    fx.commit("head release");
-    bin = path.join(fx.tmp, "bin");
-    fs.mkdirSync(bin);
-    const tsx = fs.realpathSync(path.join(repo, "node_modules/tsx"));
-    fs.writeFileSync(
-      path.join(bin, "pnpm"),
-      `#!/usr/bin/env bash
+    /** A main checkout whose HEAD is a release-shaped commit, and a pnpm stub that "installs" by linking tsx. */
+    function head(block = false): Record<string, string> {
+      fx = new FakeInstall("systemd");
+      const repo = path.resolve(import.meta.dirname, "../..");
+      fs.mkdirSync(path.join(fx.main, "src/ai-worker"), { recursive: true });
+      fs.writeFileSync(path.join(fx.main, "src/ai-worker/index.ts"), `import ${JSON.stringify(`file://${path.join(repo, "tests/fixtures/release/fake-worker.mjs")}`)};\n`);
+      fs.writeFileSync(path.join(fx.main, "tsconfig.json"), "{}\n");
+      fs.writeFileSync(path.join(fx.main, "package.json"), `${JSON.stringify({ name: "fake-main", type: "module", packageManager: "pnpm@9.8.7" }, null, 2)}\n`);
+      fx.commit("head release");
+      bin = path.join(fx.tmp, "bin");
+      fs.mkdirSync(bin);
+      const tsx = fs.realpathSync(path.join(repo, "node_modules/tsx"));
+      fs.writeFileSync(
+        path.join(bin, "pnpm"),
+        `#!/usr/bin/env bash
 if [[ "\${1:-}" == "--version" ]]; then echo 9.8.7; exit 0; fi
 [[ "\${1:-}" == install ]] || exit 0
 mkdir -p node_modules/.pnpm/dep && echo x > node_modules/.pnpm/dep/f.js && ln -s ${JSON.stringify(tsx)} node_modules/tsx
@@ -637,56 +641,57 @@ echo "pnpm install pgid=$(ps -o pgid= -p $$ | tr -d ' ') ppid=$PPID lock=$(ls ${
 ${block ? `while [[ ! -e ${JSON.stringify(path.join(fx.tmp, "continue"))} ]]; do sleep 0.05; done` : ""}
 exit 0
 `,
-      { mode: 0o755 },
-    );
-    return { ...fx.tmpEnv(), PATH: `${bin}:${fx.env().PATH ?? ""}` };
-  }
-  const pnpmLog = (): string => (fs.existsSync(path.join(fx.tmp, "pnpm.log")) ? fs.readFileSync(path.join(fx.tmp, "pnpm.log"), "utf8") : "");
+        { mode: 0o755 },
+      );
+      return { ...fx.tmpEnv(), PATH: `${bin}:${fx.env().PATH ?? ""}` };
+    }
+    const pnpmLog = (): string => (fs.existsSync(path.join(fx.tmp, "pnpm.log")) ? fs.readFileSync(path.join(fx.tmp, "pnpm.log"), "utf8") : "");
 
-  it("prepares HEAD under the install script's own lock (not blocked by itself), then installs it", () => {
-    const env = head();
-    const r = fx.install(["--database-url", iso.url], env);
-    expect(r.status, r.stderr + r.stdout).toBe(0);
-    expect(pnpmLog()).toContain("pnpm install");
-    // both the install script and prepare-release were registered while pnpm ran
-    expect(pnpmLog().match(/lock=(.*)$/m)?.[1]?.trim().split(" ").length).toBe(2);
-    expect(fx.starts().at(-1)?.release).toBe(fx.git("rev-parse", "HEAD"));
-    expect(fs.existsSync(fx.lockDir())).toBe(false);
-  }, SLOW);
+    it("prepares HEAD under the install script's own lock (not blocked by itself), then installs it", () => {
+      const env = head();
+      const r = fx.install(["--database-url", iso.url], env);
+      expect(r.status, r.stderr + r.stdout).toBe(0);
+      expect(pnpmLog()).toContain("pnpm install");
+      // both the install script and prepare-release were registered while pnpm ran
+      expect(pnpmLog().match(/lock=(.*)$/m)?.[1]?.trim().split(" ").length).toBe(2);
+      expect(fx.starts().at(-1)?.release).toBe(fx.git("rev-parse", "HEAD"));
+      expect(fs.existsSync(fx.lockDir())).toBe(false);
+    }, SLOW);
 
-  async function waitFor(cond: () => boolean): Promise<void> {
-    for (let i = 0; i < 600 && !cond(); i++) await new Promise((r) => setTimeout(r, 50));
-    expect(cond()).toBe(true);
-  }
+    async function waitFor(cond: () => boolean): Promise<void> {
+      for (let i = 0; i < 600 && !cond(); i++) await new Promise((r) => setTimeout(r, 50));
+      expect(cond()).toBe(true);
+    }
 
-  it("prepare killed with -9: exit 1 (not 3), not changed:, descendant exit not confirmed, the lock and prepare's record stay", async () => {
-    const env = head(true);
-    const run = fx.spawnInstall(["--database-url", iso.url], env);
-    await waitFor(() => pnpmLog().includes("pnpm install"));
-    const preparePid = Number(Object.entries(fx.inflight()).find(([, t]) => t.includes("script=prepare-release"))?.[0]);
-    expect(preparePid).toBeGreaterThan(0);
-    process.kill(preparePid, "SIGKILL");
-    await new Promise((r) => setTimeout(r, 500));
-    fs.writeFileSync(path.join(fx.tmp, "continue"), "");
-    const res = await run.done;
-    expect(res.code, res.out).toBe(1);
-    expect(res.out).toContain("not changed:");
-    expect(res.out).toContain("descendant exit not confirmed");
-    expect(Object.values(fx.inflight()).some((t) => t.includes("script=prepare-release"))).toBe(true);
-    expect(fx.starts()).toEqual([]);
-  }, SLOW);
+    it("prepare killed with -9: exit 1 (not 3), not changed:, descendant exit not confirmed, the lock and prepare's record stay", async () => {
+      const env = head(true);
+      const run = fx.spawnInstall(["--database-url", iso.url], env);
+      await waitFor(() => pnpmLog().includes("pnpm install"));
+      const preparePid = Number(Object.entries(fx.inflight()).find(([, t]) => t.includes("script=prepare-release"))?.[0]);
+      expect(preparePid).toBeGreaterThan(0);
+      process.kill(preparePid, "SIGKILL");
+      await new Promise((r) => setTimeout(r, 500));
+      fs.writeFileSync(path.join(fx.tmp, "continue"), "");
+      const res = await run.done;
+      expect(res.code, res.out).toBe(1);
+      expect(res.out).toContain("not changed:");
+      expect(res.out).toContain("descendant exit not confirmed");
+      expect(Object.values(fx.inflight()).some((t) => t.includes("script=prepare-release"))).toBe(true);
+      expect(fx.starts()).toEqual([]);
+    }, SLOW);
 
-  it("TERM to the install script while prepare runs: prepare finishes, nothing is switched, exit 143", async () => {
-    const env = head(true);
-    const run = fx.spawnInstall(["--database-url", iso.url], env);
-    await waitFor(() => pnpmLog().includes("pnpm install"));
-    process.kill(run.child.pid ?? 0, "SIGTERM");
-    await new Promise((r) => setTimeout(r, 300));
-    fs.writeFileSync(path.join(fx.tmp, "continue"), "");
-    const res = await run.done;
-    expect(res.code, res.out).toBe(143);
-    expect(res.out).toContain("not changed:");
-    expect(fx.starts()).toEqual([]);
-    expect(fs.existsSync(fx.lockDir())).toBe(false);
-  }, SLOW);
-});
+    it("TERM to the install script while prepare runs: prepare finishes, nothing is switched, exit 143", async () => {
+      const env = head(true);
+      const run = fx.spawnInstall(["--database-url", iso.url], env);
+      await waitFor(() => pnpmLog().includes("pnpm install"));
+      process.kill(run.child.pid ?? 0, "SIGTERM");
+      await new Promise((r) => setTimeout(r, 300));
+      fs.writeFileSync(path.join(fx.tmp, "continue"), "");
+      const res = await run.done;
+      expect(res.code, res.out).toBe(143);
+      expect(res.out).toContain("not changed:");
+      expect(fx.starts()).toEqual([]);
+      expect(fs.existsSync(fx.lockDir())).toBe(false);
+    }, SLOW);
+  });
+}
