@@ -7,8 +7,8 @@ import { useTranslations } from "next-intl";
 import { parseAsBoolean, parseAsString, useQueryState } from "nuqs";
 import { useEffect, useOptimistic, useRef, useState, useTransition } from "react";
 
-import { setApplicationStatusAction } from "@/app/jobs/[id]/actions";
-import { undoApplicationStatusAction } from "@/app/pipeline/actions";
+import { setApplicationStatusAction as rawSetApplicationStatusAction } from "@/app/jobs/[id]/actions";
+import { undoApplicationStatusAction as rawUndoApplicationStatusAction } from "@/app/pipeline/actions";
 import { Input } from "@/components/ui/input";
 import { LayoutGroup } from "@/components/viz";
 import { toastTone, toastUndo } from "@/lib/toast";
@@ -26,6 +26,10 @@ import { EagerKeyboardSensor } from "./keyboard-sensor";
 import { EndedColumn } from "./ended-column";
 import { HiddenColumn } from "./hidden-column";
 import type { BoardCard } from "./types";
+import { withActionFeedback } from "@/lib/actions/client";
+
+const setApplicationStatusAction = withActionFeedback(rawSetApplicationStatusAction)(() => ({ ok: false, error: "failed" }));
+const undoApplicationStatusAction = withActionFeedback(rawUndoApplicationStatusAction)(() => ({ ok: false, error: "failed" }));
 
 /** Pixels the pointer must travel before a press on a card becomes a drag (a click on the title or menu stays a click). */
 const DRAG_DISTANCE_PX = 8;

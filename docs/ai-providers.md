@@ -35,6 +35,19 @@ share one AI operation in the worker process. The first caller supplies the rout
 Joining a cycle's late work also inherits that work's deadline: if it runs out, retry to continue saved translation
 chunks. Provider limits still apply to both lanes: each translation chunk can wait for a codex concurrency slot.
 
+`run_ai` belongs to the batch lane; digest deferral uses the same lane-aware eligibility rules as request claims and queue positions.
+When several finished cycles are queued, the worker processes the AI work of each and combines their job notifications
+into the last claimable cycle's digest. A cycle that is still running cannot hold back that digest; alerts are sent
+immediately. If the digest fails or is deferred (including quiet hours), its undelivered window is saved in
+`runtime_state` (`notify:window:<cycleId>`). The request finishes and is never requeued for a digest
+retry. The next notify run inherits the earliest undelivered window: the next claimable successor, or the next cycle
+when no successor is queued. The original candidate window survives expiry and worker restarts; completed AI work is
+never repeated. A successful digest records its covered cycles in `notifications` and settles all covered windows and
+older request outcomes in the same transaction, preventing a later duplicate. When Telegram is disabled or credentials
+are missing, no new durable window is created; job candidates expire normally. Requests keep their normal claim order
+within each queue, so failed digests cannot starve translations or scoring. `--once` drains the claimable requests and exits, leaving any
+undelivered window for a later notify run.
+
 **Rule**: any request kind that calls an AI is claimed only by the ai-worker. There is exactly one list of kinds: `AI_CONTROL_REQUEST_KINDS` (`src/lib/db/repos/control-requests.ts`), and the real handlers are registered in one place, `registerAiControlHandlers()` (`src/lib/control/ai-handlers.ts`). To add a new kind (for example `run_suggest` or `score_jobs`): add the value to the database enum (migration) → add it to that list → register a handler. A unit test fails if the enum contains a kind that has not been classified.
 
 With `ai.yaml: execution: container` everything works the old way: the runner runs AI and push notifications itself inside the container, and also claims `translate_job` / `rescore_stale`. This requires you to put your subscription tokens or API keys into the container yourself (compose blanks these variables by default; to use them, write a `compose.override.yaml`). Not recommended.

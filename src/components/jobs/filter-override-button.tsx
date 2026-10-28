@@ -4,8 +4,11 @@ import { useTranslations } from "next-intl";
 import { useTransition } from "react";
 import { toast } from "sonner";
 
-import { setFilterOverrideAction } from "@/app/jobs/[id]/filter-actions";
+import { setFilterOverrideAction as rawSetFilterOverrideAction } from "@/app/jobs/[id]/filter-actions";
 import { Button } from "@/components/ui/button";
+import { withActionFeedback } from "@/lib/actions/client";
+
+const setFilterOverrideAction = withActionFeedback(rawSetFilterOverrideAction)(() => ({ ok: false, error: "failed" }));
 
 export type OverrideAction = "keep" | "exclude" | "clear";
 

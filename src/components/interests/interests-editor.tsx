@@ -5,7 +5,7 @@ import { useTranslations } from "next-intl";
 import { useState, useTransition } from "react";
 import { toastTone } from "@/lib/toast";
 
-import { previewCategoryAction, saveVocabularyAction } from "@/app/interests/actions";
+import { previewCategoryAction as rawPreviewCategoryAction, saveVocabularyAction as rawSaveVocabularyAction } from "@/app/interests/actions";
 import { IDLE_INTERESTS_STATE, type InterestsActionState } from "@/lib/interests/types";
 import type { InterestsPageData } from "@/lib/interests/view";
 import type { VocabularyDraft } from "@/lib/interests/vocabulary-draft";
@@ -13,6 +13,10 @@ import type { VocabularyDraft } from "@/lib/interests/vocabulary-draft";
 import { ViewsPanel } from "./views-panel";
 import { VocabularyForm } from "./vocabulary-form";
 import { WatchedPanel } from "./watched-panel";
+import { withActionFeedback } from "@/lib/actions/client";
+
+const previewCategoryAction = withActionFeedback(rawPreviewCategoryAction)(() => ({ status: "unavailable" }));
+const saveVocabularyAction = withActionFeedback(rawSaveVocabularyAction)(() => ({ status: "error", section: "vocabulary", nonce: Date.now(), formError: "writeFailed", fieldErrors: [] }));
 
 function LoadError({ message }: { message: string }) {
   const t = useTranslations("interests.loadError");

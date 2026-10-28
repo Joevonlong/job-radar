@@ -1,5 +1,6 @@
 "use server";
 
+import { logActionFailure } from "@/lib/logging/action-failure";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
@@ -42,6 +43,7 @@ function readAi(): AiConfig | null {
   try {
     return reloadConfig("ai");
   } catch (error) {
+    logActionFailure("readAi", error);
     if (error instanceof ConfigError) return null;
     throw error;
   }
@@ -58,7 +60,8 @@ export async function lookupSalaryAction(input: { jobId: number; force?: boolean
     if (outcome.state === "error") return { ok: false, error: outcome.error };
     if (outcome.state === "cached") return { ok: true, queued: false };
     return { ok: true, queued: true, requestId: outcome.requestId, usedToday: await countSalaryLookupRequests(db, new Date()) };
-  } catch {
+  } catch (error) {
+    logActionFailure("lookupSalaryAction", error);
     return { ok: false, error: "failed" };
   }
 }
@@ -78,7 +81,8 @@ export async function salaryLookupStatusAction(input: { jobId: number; requestId
     if (state.state === "failed") return { ok: false, error: state.error, detail: state.detail, resumeAt: state.resumeAt };
     revalidatePath(`/jobs/${parsed.data.jobId}`);
     return { ok: true, state: "done" };
-  } catch {
+  } catch (error) {
+    logActionFailure("salaryLookupStatusAction", error);
     return null;
   }
 }

@@ -1,5 +1,6 @@
 "use server";
 
+import { logActionFailure } from "@/lib/logging/action-failure";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
@@ -45,7 +46,8 @@ export async function saveNextActionAction(input: { jobId: number; nextAction: s
     if (!found) return { ok: false, error: "not_found" };
     revalidatePath("/pipeline");
     return { ok: true };
-  } catch {
+  } catch (error) {
+    logActionFailure("saveNextActionAction", error);
     return { ok: false, error: "failed" };
   }
 }
@@ -59,7 +61,8 @@ export async function setInterviewRoundsAction(input: { jobId: number; rounds: n
     if (rounds === null) return { ok: false, error: "not_found" };
     revalidatePath("/pipeline");
     return { ok: true, rounds };
-  } catch {
+  } catch (error) {
+    logActionFailure("setInterviewRoundsAction", error);
     return { ok: false, error: "failed" };
   }
 }
@@ -77,7 +80,8 @@ export async function undoApplicationStatusAction(input: { jobId: number; movedT
     const result = await revertApplicationStatus(db, parsed.data.jobId, { movedTo: parsed.data.movedTo, restoreTo: parsed.data.restoreTo });
     revalidatePath("/", "layout");
     return { ok: true, status: result.status };
-  } catch {
+  } catch (error) {
+    logActionFailure("undoApplicationStatusAction", error);
     return { ok: false, error: "failed" };
   }
 }

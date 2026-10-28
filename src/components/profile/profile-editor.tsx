@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useActionState, useEffect } from "react";
 import { toastTone } from "@/lib/toast";
 
-import { rollbackAction, saveMeAction, savePreferencesAction } from "@/app/me/actions";
+import { rollbackAction as rawRollbackAction, saveMeAction as rawSaveMeAction, savePreferencesAction as rawSavePreferencesAction } from "@/app/me/actions";
 import type { SalaryAxisScale } from "@/components/viz";
 import type { MarketView } from "@/lib/market/view";
 import type { MeDraft, PreferencesDraft } from "@/lib/profile/draft";
@@ -16,6 +16,11 @@ import { IDLE_ACTION_STATE, type ProfileSection } from "@/lib/profile/types";
 import { HistoryPanel } from "./history-panel";
 import { MeForm } from "./me-form";
 import { PreferencesForm } from "./preferences-form";
+import { withActionFeedback } from "@/lib/actions/client";
+
+const rollbackAction = withActionFeedback(rawRollbackAction)((previous) => previous);
+const saveMeAction = withActionFeedback(rawSaveMeAction)((previous) => previous);
+const savePreferencesAction = withActionFeedback(rawSavePreferencesAction)((previous) => previous);
 
 interface ProfileEditorProps {
   me: ProfileSection<MeDraft>;

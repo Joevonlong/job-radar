@@ -160,6 +160,8 @@ export interface DelegatedStepSummary {
   result?: unknown;
   error?: string;
   reason?: string;
+  /** Delegated AI checkpoint: the late phase finished too, so shutdown recovery must not repeat it. */
+  lateAiComplete?: true;
 }
 
 /**

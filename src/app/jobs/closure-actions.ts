@@ -1,5 +1,6 @@
 "use server";
 
+import { logActionFailure } from "@/lib/logging/action-failure";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
@@ -40,7 +41,8 @@ export async function closeJobAction(input: { jobId: number; note?: string | nul
     await markSeen(db, parsed.data.jobId, "action");
     refreshViews();
     return { ok: true, previous: serialise(previous) };
-  } catch {
+  } catch (error) {
+    logActionFailure("closeJobAction", error);
     return { ok: false, error: "failed" };
   }
 }
@@ -56,7 +58,8 @@ export async function reopenJobAction(input: { jobId: number }): Promise<Closure
     await markSeen(db, parsed.data.jobId, "action");
     refreshViews();
     return { ok: true, previous: serialise(previous) };
-  } catch {
+  } catch (error) {
+    logActionFailure("reopenJobAction", error);
     return { ok: false, error: "failed" };
   }
 }
@@ -72,7 +75,8 @@ export async function undoClosureAction(input: { jobId: number; previous: Previo
     else await restoreClosureOverride(db, parsed.data.jobId, { action: previous.action, note: previous.note, createdAt: new Date(previous.createdAt) });
     refreshViews();
     return { ok: true };
-  } catch {
+  } catch (error) {
+    logActionFailure("undoClosureAction", error);
     return { ok: false };
   }
 }

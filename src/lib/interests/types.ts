@@ -1,9 +1,11 @@
 import type { VocabularyFieldError } from "./vocabulary-draft";
+import type { ConfigWriteErrorKey } from "@/lib/config/errors";
 
 export type InterestsSection = "vocabulary" | "views" | "watched";
 
 /** Whole-form problems that are not tied to one field. */
 export type InterestsFormError =
+  | ConfigWriteErrorKey
   /** The browser sent something that is not a valid request. */
   | "invalidPayload"
   /** interests.yaml cannot be read or does not pass the schema. */

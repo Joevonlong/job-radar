@@ -6,7 +6,7 @@ import { PageHeader } from "@/components/shell/page-header";
 import { MarketScopeProvider } from "@/components/settings/market-scope";
 import { SettingsEditor } from "@/components/settings/settings-editor";
 import { SignOutEverywhere } from "@/components/settings/sign-out-everywhere";
-import { getSchedule } from "@/lib/dashboard/context";
+import { getDisplayTimeZone } from "@/lib/dashboard/context";
 import { isTranslatedRegion, loadMarketView } from "@/lib/market/view";
 import { readWebAccess } from "@/lib/security/web-access";
 import { loadSettingsPage } from "@/lib/settings/view";
@@ -24,12 +24,7 @@ export default async function Page() {
   const data = await loadSettingsPage();
   const tRegions = await getTranslations("market.regions");
   const market = loadMarketView(await getLocale(), (id) => (isTranslatedRegion(id) ? tRegions(id) : null));
-  let timezone = "UTC";
-  try {
-    timezone = getSchedule().timezone;
-  } catch {
-    // an invalid schedule.yaml is reported by its tab; times fall back to UTC
-  }
+  const timezone = getDisplayTimeZone();
   // the optional web password: "sign out everywhere" only means something when there is one
   const passwordSet = readWebAccess(await headers(), await cookies()).password !== null;
   return (

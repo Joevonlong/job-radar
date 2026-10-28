@@ -1,5 +1,6 @@
 "use server";
 
+import { logActionFailure } from "@/lib/logging/action-failure";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
@@ -31,7 +32,8 @@ export async function setGhostDismissAction(input: { jobId: number; action: stri
     const changed = action === "dismiss" ? await setGhostDismissed(db, jobId) : await clearGhostDismissed(db, jobId);
     revalidatePath("/", "layout");
     return { ok: true, changed };
-  } catch {
+  } catch (error) {
+    logActionFailure("setGhostDismissAction", error);
     return { ok: false, error: "failed" };
   }
 }

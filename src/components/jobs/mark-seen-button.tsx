@@ -5,9 +5,13 @@ import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 
-import { markAllSeenAction, undoMarkAllSeenAction } from "@/app/visit-actions";
+import { markAllSeenAction as rawMarkAllSeenAction, undoMarkAllSeenAction as rawUndoMarkAllSeenAction } from "@/app/visit-actions";
 import { Button } from "@/components/ui/button";
 import { toastTone, toastUndo } from "@/lib/toast";
+import { withActionFeedback } from "@/lib/actions/client";
+
+const markAllSeenAction = withActionFeedback(rawMarkAllSeenAction)(() => ({ ok: false }));
+const undoMarkAllSeenAction = withActionFeedback(rawUndoMarkAllSeenAction)(() => ({ ok: false }));
 
 /** What "mark all seen" covers: /jobs = every page of the list its URL selects; Today = the jobs of the view on screen. */
 export type MarkSeenTarget = { scope: "jobs"; query: string; renderedAt: string } | { scope: "list"; jobIds: number[] };

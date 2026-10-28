@@ -3,12 +3,12 @@
  * language (language.yaml `notify.locale`). The bot token and chat id are never read or written here: the wizard only
  * says whether TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID are set.
  */
-import { notifySchema, writeConfig } from "@/lib/config";
+import { mutateConfig } from "@/lib/config";
 
 import { isSet, TELEGRAM_ENV, type EnvSource } from "../env";
 import { telegramInputSchema } from "../inputs";
 import { stepError, type SetupStepResult } from "../types";
-import { editable, finishStep, readFresh, setupFrozen, setupWriteError } from "./common";
+import { finishStep, readFresh, setupFrozen, setupWriteError } from "./common";
 import { writeNotifyLocale } from "./language";
 
 export async function saveTelegramStep(raw: unknown): Promise<SetupStepResult> {
@@ -18,16 +18,12 @@ export async function saveTelegramStep(raw: unknown): Promise<SetupStepResult> {
   if (!parsed.success) return stepError("telegram", "invalidPayload");
   const notify = readFresh("notify");
   if (notify === null) return stepError("telegram", "configUnreadable");
-  const next = editable(notify);
-  next.telegram.enabled = parsed.data.enabled;
-  const checked = notifySchema.safeParse(next);
-  if (!checked.success) return stepError("telegram", "configUnreadable");
   if (parsed.data.notify_locale !== undefined) {
     const problem = await writeNotifyLocale(parsed.data.notify_locale);
     if (problem !== null) return problem;
   }
   try {
-    if (notify.telegram.enabled !== parsed.data.enabled) await writeConfig("notify", checked.data);
+    await mutateConfig("notify", (current) => current.telegram.enabled === parsed.data.enabled ? null : { ...current, telegram: { ...current.telegram, enabled: parsed.data.enabled } });
   } catch (error) {
     return stepError("telegram", setupWriteError(error));
   }
@@ -41,15 +37,9 @@ export async function saveTelegramStep(raw: unknown): Promise<SetupStepResult> {
  */
 export async function disableTelegramIfUnconfigured(env: EnvSource = process.env): Promise<boolean> {
   if (TELEGRAM_ENV.some((name) => isSet(env, name))) return false;
-  const notify = readFresh("notify");
-  if (notify === null || !notify.telegram.enabled) return false;
-  const next = editable(notify);
-  next.telegram.enabled = false;
-  const checked = notifySchema.safeParse(next);
-  if (!checked.success) return false;
   try {
-    await writeConfig("notify", checked.data);
-    return true;
+    const changed = await mutateConfig("notify", (current) => current.telegram.enabled ? { ...current, telegram: { ...current.telegram, enabled: false } } : null);
+    return changed !== null;
   } catch {
     return false;
   }

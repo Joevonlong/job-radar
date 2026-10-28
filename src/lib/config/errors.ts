@@ -1,5 +1,7 @@
 import type { ZodError } from "zod";
 
+import { configErrorDigest } from "./error-digest";
+
 /**
  * `version`: the file's `config_version` is newer than this code supports (a downgrade).
  * `stale`: the file changed on disk (or moved to another layer) since the editor read it.
@@ -7,6 +9,17 @@ import type { ZodError } from "zod";
  * `protected`: the write would change a protected key (`protected-keys.ts`); those are edited by hand in the file.
  */
 export type ConfigErrorKind = "missing" | "read" | "yaml" | "schema" | "version" | "stale" | "too_large" | "protected" | "busy" | "frozen";
+
+export type ConfigWriteErrorKey = "frozen" | "busy" | "stale" | "protected";
+
+/** Write refusals that callers can explain without exposing a path or an error message. */
+export function configErrorKey(error: unknown): ConfigWriteErrorKey | null {
+  if (!(error instanceof ConfigError)) return null;
+  switch (error.kind) {
+    case "frozen": case "busy": case "stale": case "protected": return error.kind;
+    default: return null;
+  }
+}
 
 export interface ConfigIssue {
   /** Dotted field path, e.g. `cycles.weekend.cron`. Empty string = the document root. */
@@ -21,6 +34,7 @@ const MAX_ISSUES_IN_MESSAGE = 20;
  * offending field paths; it never contains the file contents or field values.
  */
 export class ConfigError extends Error {
+  readonly digest: string;
   readonly configName: string;
   readonly filePath: string;
   readonly kind: ConfigErrorKind;
@@ -36,6 +50,7 @@ export class ConfigError extends Error {
     const issues = params.issues ?? [];
     super(formatMessage(params.configName, params.filePath, params.kind, issues, params.detail));
     this.name = "ConfigError";
+    this.digest = configErrorDigest(params.configName);
     this.configName = params.configName;
     this.filePath = params.filePath;
     this.kind = params.kind;

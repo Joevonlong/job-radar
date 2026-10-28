@@ -1,12 +1,12 @@
 /**
  * Setup step 4: what I am looking for. Writes preferences.yaml (titles, level, work modes, salary floor, contracts,
- * exclusions) through `saveProfile`, and search.yaml `keyword_groups` by the rule of `keywords.ts`.
+ * exclusions) through `savePreferencesPatch`, and search.yaml `keyword_groups` by the rule of `keywords.ts`.
  */
 import fs from "node:fs";
 
-import { ensureProfileFiles, getDefaultConfigPath, parseConfigText, preferencesSchema, searchSchema, writeConfig } from "@/lib/config";
+import { ensureProfileFiles, getDefaultConfigPath, mutateConfig, parseConfigText, preferencesSchema, searchSchema } from "@/lib/config";
 import { preferencesConfigToDraft, preferencesDraftToCandidate, toFieldErrors, type PreferencesDraft } from "@/lib/profile/draft";
-import { saveProfile } from "@/lib/profile/service";
+import { savePreferencesPatch } from "@/lib/profile/service";
 
 import { planKeywordGroups, type KeywordGroups } from "../keywords";
 import { targetsInputSchema } from "../inputs";
@@ -52,14 +52,15 @@ export async function saveTargetsStep(raw: unknown): Promise<SetupStepResult> {
   if (!nextSearch.success && !errors.some((e) => e.path === "target_titles")) errors.push(...zodSetupErrors(nextSearch.error, () => "target_titles"));
   if (errors.length > 0 || !nextSearch.success) return stepError("targets", null, errors);
 
-  const problem = profileSaveProblem("targets", await saveProfile("preferences", draft));
+  const problem = profileSaveProblem("targets", await savePreferencesPatch(parsed.data));
   if (problem !== null) return problem;
-  if (plan.mode !== "none") {
-    try {
-      await writeConfig("search", nextSearch.data);
-    } catch (error) {
-      return stepError("targets", setupWriteError(error));
-    }
+  try {
+    await mutateConfig("search", (current) => {
+      const latest = planKeywordGroups(current.keyword_groups, shippedKeywordGroups(), draft.target_titles);
+      return latest.mode === "none" ? null : { ...current, keyword_groups: latest.groups };
+    });
+  } catch (error) {
+    return stepError("targets", setupWriteError(error));
   }
   return finishStep("targets");
 }

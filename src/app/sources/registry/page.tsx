@@ -9,7 +9,7 @@ import { ExportMenu } from "@/components/sources/registry/export-menu";
 import { ImportDialog } from "@/components/sources/registry/import-dialog";
 import { RegistryExplorer, type ReadOnlyReason } from "@/components/sources/registry/registry-explorer";
 import { SourcesSubnav } from "@/components/sources/subnav";
-import { getSchedule } from "@/lib/dashboard/context";
+import { getDisplayTimeZone } from "@/lib/dashboard/context";
 import { loadBoardCandidates } from "@/lib/sources/candidates";
 import { loadRegistryPage, type RegistryPageData } from "@/lib/sources/registry/load";
 
@@ -23,7 +23,7 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export default async function Page() {
   const [t, tr, format] = await Promise.all([getTranslations("pages.sourcesRegistry"), getTranslations("sourcesRegistry"), getFormatter()]);
-  const timeZone = getSchedule().timezone;
+  const timeZone = getDisplayTimeZone();
   let data: RegistryPageData | null = null;
   try {
     data = await loadRegistryPage();

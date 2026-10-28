@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useState, useTransition } from "react";
 import { toastTone } from "@/lib/toast";
 
-import { approveSuggestionAction, rejectSuggestionAction, requestSuggestRunAction } from "@/app/interests/suggestion-actions";
+import { approveSuggestionAction as rawApproveSuggestionAction, rejectSuggestionAction as rawRejectSuggestionAction, requestSuggestRunAction as rawRequestSuggestRunAction } from "@/app/interests/suggestion-actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -17,6 +17,11 @@ import type { SuggestionActionState, SuggestionError, SuggestRunState } from "@/
 import type { SuggestionItemView, SuggestionsSectionData, SuggestRunView } from "@/lib/interests/suggestion-view";
 import { cn } from "@/lib/utils";
 import { INK_LINK } from "@/components/ui/ink-link";
+import { withActionFeedback } from "@/lib/actions/client";
+
+const approveSuggestionAction = withActionFeedback(rawApproveSuggestionAction)((id) => ({ status: "error", id: typeof id === "number" ? id : 0, nonce: Date.now(), error: "databaseUnavailable" }));
+const rejectSuggestionAction = withActionFeedback(rawRejectSuggestionAction)((id) => ({ status: "error", id: typeof id === "number" ? id : 0, nonce: Date.now(), error: "databaseUnavailable" }));
+const requestSuggestRunAction = withActionFeedback(rawRequestSuggestRunAction)(() => ({ status: "error", error: "databaseUnavailable", nonce: Date.now() }));
 
 type KindLabelKey = "kind.signal_word" | "kind.watched_company" | `kind.filter.${FilterAction}`;
 

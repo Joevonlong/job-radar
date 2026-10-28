@@ -96,7 +96,7 @@ export {
 } from "./registry";
 export * from "./schemas";
 export { watchConfig, type ConfigChangeEvent, type ConfigTarget, type WatchOptions } from "./watch";
-export { writeConfig, writeConfigText, resetConfigToDefault, type TextBase, type TextWriteOptions, type TextWriteResult } from "./write";
+export { mutateConfig, writeConfig, writeConfigText, resetConfigToDefault, type TextBase, type TextWriteOptions, type TextWriteResult } from "./write";
 export { backupConfigText, editorBackupRoot } from "./editor-backup";
 export { maskConfigText, restoreMaskedText, type RestoreResult } from "./secrets-mask";
 export { interestsWarnings, SLOW_PATTERN_MESSAGE, slowInterestPatterns, type InterestsWarning, type SlowInterestPattern } from "./interests-lint";

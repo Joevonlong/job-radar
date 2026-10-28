@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { useFormatter, useTranslations } from "next-intl";
 import { useState, useTransition, type ReactNode } from "react";
 
-import { breakdownJobAction, breakdownStatusAction, type BreakdownErrorKey, type BreakdownStatusResult } from "@/app/jobs/[id]/breakdown-actions";
+import { breakdownJobAction as rawBreakdownJobAction, breakdownStatusAction as rawBreakdownStatusAction, type BreakdownErrorKey, type BreakdownStatusResult } from "@/app/jobs/[id]/breakdown-actions";
 import { QueueHint } from "@/components/control/queue-hint";
 import { useControlRequest, type ControlRequestRead } from "@/components/control/use-control-request";
 import { Badge } from "@/components/ui/badge";
@@ -24,6 +24,10 @@ import { cn } from "@/lib/utils";
 
 import { JumpTag } from "./jump-tag";
 import { PlaceholderBox } from "./panel";
+import { callAction, withActionFeedback } from "@/lib/actions/client";
+
+const breakdownJobAction = withActionFeedback(rawBreakdownJobAction)(() => ({ ok: false, error: "failed" }));
+const breakdownStatusAction = (input: Parameters<typeof rawBreakdownStatusAction>[0]) => callAction(() => rawBreakdownStatusAction(input), () => null);
 
 export type BreakdownAvailability = "enabled" | "disabled" | "config_error";
 

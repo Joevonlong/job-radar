@@ -1,5 +1,6 @@
 "use server";
 
+import { logActionFailure } from "@/lib/logging/action-failure";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
@@ -48,7 +49,8 @@ export async function setFavoriteAction(input: { jobId: number; favorite: boolea
     const removed = await removeFavorite(db, parsed.data.jobId);
     refreshViews();
     return { ok: true, favorite: false, changed: removed !== null, removed: removed ? { note: removed.note, createdAt: removed.createdAt.toISOString() } : null };
-  } catch {
+  } catch (error) {
+    logActionFailure("setFavoriteAction", error);
     return { ok: false, error: "failed" };
   }
 }
@@ -63,7 +65,8 @@ export async function restoreFavoriteAction(input: { jobId: number; note: string
     await addFavorite(db, parsed.data.jobId, { note: parsed.data.note, createdAt: new Date(parsed.data.createdAt) });
     refreshViews();
     return { ok: true };
-  } catch {
+  } catch (error) {
+    logActionFailure("restoreFavoriteAction", error);
     return { ok: false, error: "failed" };
   }
 }
@@ -79,7 +82,8 @@ export async function saveFavoriteNoteAction(input: { jobId: number; note: strin
     if (!(await setFavoriteNote(db, parsed.data.jobId, note))) return { ok: false, error: "not_favorite" };
     revalidatePath("/favorites");
     return { ok: true, note };
-  } catch {
+  } catch (error) {
+    logActionFailure("saveFavoriteNoteAction", error);
     return { ok: false, error: "failed" };
   }
 }
