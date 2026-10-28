@@ -59,6 +59,7 @@ const storedAiSummarySchema = z.object({
   result: z.unknown().optional(),
   error: z.string().optional(),
   reason: z.string().optional(),
+  lateAiComplete: z.literal(true).optional(),
 });
 
 function storedAiSummary(summary: unknown): DelegatedStepSummary | null {
@@ -66,7 +67,7 @@ function storedAiSummary(summary: unknown): DelegatedStepSummary | null {
   if (!parsed.success) return null;
   for (const step of parsed.data.steps) {
     const ai = storedAiSummarySchema.safeParse(step);
-    if (ai.success) return ai.data;
+    if (ai.success && ai.data.reason !== "ai-worker stopped" && !z.object({ delegated: z.literal(true) }).safeParse(ai.data.result).success) return ai.data;
   }
   return null;
 }
@@ -115,9 +116,9 @@ export async function runDelegatedSteps(options: DelegatedRunOptions): Promise<D
   const now = options.now ?? (() => new Date());
   const ctx = await createStepContext(options, cycle);
   const summaries: DelegatedStepSummary[] = [];
-  // Resume a failed Telegram summary from the saved AI work; late work interrupted before completion still runs.
+  // Actual shutdown recovery resumes the saved phases. Digest failures themselves never requeue AI work.
   const retry = notificationRetryOf(ctx.results.notify);
-  const savedAi = retry ? storedAiSummary(cycle.summaryJson) : null;
+  const savedAi = storedAiSummary(cycle.summaryJson);
   for (const name of DELEGATED_STEP_NAMES) {
     if (name === "ai" && savedAi) {
       summaries.push(savedAi);
@@ -134,17 +135,19 @@ export async function runDelegatedSteps(options: DelegatedRunOptions): Promise<D
       const outcome = await fn(ctx);
       const result = outcome?.result;
       if (result !== undefined) (ctx.results as Partial<Record<CycleStepName, unknown>>)[name] = result;
-      summaries.push({ name, status: outcome?.status ?? "ok", durationMs: now().getTime() - started, ...(result === undefined ? {} : { result }) });
+      summaries.push({ name, status: outcome?.status ?? "ok", durationMs: now().getTime() - started, ...(result === undefined ? {} : { result }), ...(name === "ai" && options.signal.aborted ? { reason: "ai-worker stopped" } : {}) });
     } catch (error) {
       options.logger.error("delegated step failed", { cycle: cycle.id, step: name, error: errorText(error) });
-      summaries.push({ name, status: "failed", durationMs: now().getTime() - started, error: errorText(error) });
+      summaries.push({ name, status: "failed", durationMs: now().getTime() - started, error: errorText(error), ...(name === "ai" && options.signal.aborted ? { reason: "ai-worker stopped" } : {}) });
     }
+    // Persist completed main AI before notify can be interrupted or take a long time.
+    if (name === "ai") await applyDelegatedSteps(options.db, cycle.id, summaries);
   }
   // The push is out: record it now, translation may take a long time.
   await applyDelegatedSteps(options.db, cycle.id, summaries);
   const late = options.steps?.late ?? (options.steps?.ai ? undefined : aiLateStep);
   const aiSummary = summaries.find((s) => s.name === "ai");
-  if (late && aiSummary && (!savedAi || !retry?.lateAiComplete) && aiSummary.status !== "skipped" && !options.signal.aborted) {
+  if (late && aiSummary && !savedAi?.lateAiComplete && !retry?.lateAiComplete && aiSummary.status !== "skipped" && !options.signal.aborted) {
     const started = now().getTime();
     try {
       const outcome = await late(ctx);
@@ -158,6 +161,7 @@ export async function runDelegatedSteps(options: DelegatedRunOptions): Promise<D
       options.logger.error("delegated late ai step failed", { cycle: cycle.id, error: errorText(error) });
       aiSummary.status = aiSummary.status === "ok" ? "partial" : aiSummary.status;
     }
+    if (!options.signal.aborted) aiSummary.lateAiComplete = true;
   }
   const notifySummary = summaries.find((s) => s.name === "notify");
   const pendingRetry = notificationRetryOf(notifySummary?.result);

@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 
 import { eq, sql } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, inject, it } from "vitest";
@@ -256,6 +257,128 @@ describe("request kinds", () => {
 // ---------------------------------------------------------------- the worker side
 
 describe("the ai-worker handles run_ai", () => {
+  it("drains two slow failed digests and a new translation in normal order, then exits the once loop", async () => {
+    const config = aiConfig();
+    fs.writeFileSync(path.join(temp.configDir, "ai.yaml"), stringify({ ...config, host_worker: { ...config.host_worker, poll_seconds: 1 } }));
+    expect(loadConfig("ai").host_worker.poll_seconds).toBe(1);
+    const ai = fakeAi();
+    const steps = workerSteps(ai);
+    let attempts = 0;
+    steps.notify = createNotifyStep({
+      loadNotifyConfig: notifyCfg,
+      createRuntime: () => ({ chatId: CHAT, client: { ...telegram(), sendMessage: async () => {
+        attempts += 1;
+        await sleep(1_100); // longer than the old requeue interval
+        throw new Error("slow digest failure");
+      } } }),
+    });
+    registerBuiltinAiSubtasks();
+    registerControlHandler("run_ai", createRunAiHandler({ steps, registry: new ChannelRegistry() }));
+    registerControlHandler("translate_job", createTranslateJobHandler({ createRouter: () => ai.router }));
+    const first = await queueFinishedCycle(new Date());
+    const handled = [(await processNextControlRequest(hostWorker()))?.id];
+    const second = await queueFinishedCycle(new Date());
+    const jobId = await addJob("Translation");
+    const translate = await insertControlRequest(db(), { kind: "translate_job", payload: { jobId, force: true } });
+    let drained = false;
+    // The production --once drain loop, bounded so the regression fails instead of hanging the suite.
+    for (let i = 0; i < 4; i += 1) {
+      const next = await processNextControlRequest(hostWorker());
+      if (next === null) { drained = true; break; }
+      handled.push(next.id);
+    }
+    expect(handled).toEqual([first.request.id, second.request.id, translate.id]);
+    expect(drained).toBe(true);
+    expect(attempts).toBe(2);
+    expect(await getControlRequest(db(), translate.id)).toMatchObject({ status: "done" });
+    expect(await db().select().from(schema.translations)).toHaveLength(1);
+    expect(ai.tasks.filter((task) => task === "translate")).toHaveLength(2); // automatic work, then the forced request
+  });
+
+  it("settles a failed digest when its successor delivers the inherited window, with no later duplicate", async () => {
+    const now = new Date();
+    const first = await queueFinishedCycle(new Date(now.getTime() - 3_600_000));
+    await addJob("Alpha");
+    const ai = fakeAi();
+    registerBuiltinAiSubtasks();
+    registerControlHandler("run_ai", createRunAiHandler({ steps: workerSteps(ai), registry: new ChannelRegistry(), now: () => now }));
+    api.failNext("sendMessage", 500);
+    await processNextControlRequest(hostWorker());
+    const completedTasks = [...ai.tasks];
+    const successor = await queueFinishedCycle(now);
+    expect(await processNextControlRequest(hostWorker())).toMatchObject({ id: successor.request.id, status: "done", result: { notify: { pushed: 1 } } });
+    // Even after the old retry time, a completed predecessor must never be claimed or send again.
+    await db().update(schema.controlRequests).set({ result: sql`${schema.controlRequests.result} - 'notifyRetryAt'` }).where(eq(schema.controlRequests.id, first.request.id));
+    expect(await processNextControlRequest(hostWorker())).toBeNull();
+    expect(await getControlRequest(db(), first.request.id)).toMatchObject({ status: "done", result: { notify: { pending: false, deliveredByCycleId: successor.cycle.id } } });
+    expect(ai.tasks).toEqual(completedTasks);
+    const notifications = await db().select().from(schema.notifications);
+    expect(notifications.filter((n) => n.kind === "cycle_summary")).toMatchObject([{ cycleId: successor.cycle.id, payloadJson: { newJobs: 1, pushed: 1 } }]);
+    expect(notifications.filter((n) => n.kind === "job")).toHaveLength(1);
+    expect(api.of("sendMessage")).toHaveLength(3); // one failure, one summary, one card
+  });
+
+  it("delivers a failed last request once in the next cycle's notify after the candidate window expires", async () => {
+    let now = new Date();
+    const first = await queueFinishedCycle(new Date(now.getTime() - 3_600_000));
+    const jobId = await addJob("Alpha");
+    await db().update(schema.jobs).set({ firstSeenAt: new Date(now.getTime() - 30 * 60_000) }).where(eq(schema.jobs.id, jobId));
+    const ai = fakeAi();
+    const steps = workerSteps(ai);
+    registerBuiltinAiSubtasks();
+    registerControlHandler("run_ai", createRunAiHandler({ steps, registry: new ChannelRegistry(), now: () => now }));
+    api.failNext("sendMessage", 500);
+    await processNextControlRequest(hostWorker());
+    expect(await processNextControlRequest(hostWorker())).toBeNull();
+    const completedTasks = [...ai.tasks];
+    now = new Date(now.getTime() + (notifyCfg().candidate_window_hours + 1) * 3_600_000);
+    // A later container notify must inherit the durable window too, without claiming the old request.
+    registerCycleStep("ai", async () => {});
+    registerCycleStep("notify", steps.notify);
+    const next = await runCycle("manual", { registry: new ChannelRegistry(), config: cycleConfig(), logger: quietLogger, now: () => now, sleep: async () => {} });
+    expect(next.results.notify).toMatchObject({ jobs: { newJobs: 1, pushed: 1 } });
+    expect(await getControlRequest(db(), first.request.id)).toMatchObject({ status: "done", result: { notify: { pending: false, deliveredByCycleId: next.cycleId } } });
+    expect(ai.tasks).toEqual(completedTasks);
+    expect((await db().select().from(schema.notifications)).filter((n) => n.kind === "cycle_summary")).toHaveLength(1);
+    expect((await db().select().from(schema.notifications)).filter((n) => n.kind === "job")).toHaveLength(1);
+    expect(api.of("sendMessage")).toHaveLength(3);
+    // An inline delivery must also advance the next delegated digest's "new jobs" boundary.
+    const following = await queueFinishedCycle(new Date(now.getTime() + 60_000));
+    expect(await processNextControlRequest(hostWorker())).toMatchObject({ id: following.request.id, status: "done" });
+    const summaries = (await db().select().from(schema.notifications)).filter((n) => n.kind === "cycle_summary");
+    expect(summaries).toHaveLength(2);
+    expect(summaries.find((n) => n.cycleId === following.cycle.id)?.payloadJson).toMatchObject({ newJobs: 0, pushed: 0 });
+  });
+
+  it.each(["quiet_hours", "newer_cycle_pending", "not_configured"])("retains a deferred window beyond expiry (%s)", async (reason) => {
+    let now = new Date("2026-10-20T12:00:00Z");
+    const first = await queueFinishedCycle(new Date(now.getTime() - 3_600_000));
+    const jobId = await addJob("Deferred");
+    await db().update(schema.jobs).set({ firstSeenAt: new Date(now.getTime() - 30 * 60_000) }).where(eq(schema.jobs.id, jobId));
+    const successor = reason === "newer_cycle_pending" ? await queueFinishedCycle(now) : null;
+    const ai = fakeAi();
+    const steps = workerSteps(ai);
+    const deferred = createNotifyStep({
+      loadNotifyConfig: () => {
+        const config = notifyCfg();
+        if (reason === "quiet_hours") Object.assign(config.quiet_hours, { enabled: true, start: "00:00", end: "23:59" });
+        return config;
+      },
+      createRuntime: () => reason === "not_configured" ? null : { client: telegram(), chatId: CHAT },
+    });
+    registerBuiltinAiSubtasks();
+    registerControlHandler("run_ai", createRunAiHandler({ steps: { ...steps, notify: deferred }, registry: new ChannelRegistry(), now: () => now }));
+    expect(await processNextControlRequest(hostWorker())).toMatchObject({ id: first.request.id, status: "done", result: { notify: { pending: true } } });
+    expect(api.of("sendMessage")).toHaveLength(0);
+    now = new Date(now.getTime() + (notifyCfg().candidate_window_hours + 1) * 3_600_000);
+    const next = successor ?? await queueFinishedCycle(now);
+    registerControlHandler("run_ai", createRunAiHandler({ steps, registry: new ChannelRegistry(), now: () => now }));
+    expect(await processNextControlRequest(hostWorker())).toMatchObject({ id: next.request.id, status: "done", result: { notify: { pushed: 1 } } });
+    expect((await db().select().from(schema.notifications)).filter((n) => n.kind === "cycle_summary")).toMatchObject([{ payloadJson: { newJobs: 1, pushed: 1 } }]);
+    expect(await getControlRequest(db(), first.request.id)).toMatchObject({ status: "done", result: { notify: { pending: false, deliveredByCycleId: next.cycle.id } } });
+    expect(await db().execute(sql`select key from runtime_state where key like 'notify:window:%'`)).toHaveLength(0);
+  });
+
   it("sends the last claimable cycle's digest while a newer cycle is still running", async () => {
     const now = new Date();
     const current = await queueFinishedCycle(new Date(now.getTime() - 3_600_000));
@@ -272,7 +395,7 @@ describe("the ai-worker handles run_ai", () => {
     expect(api.of("sendMessage")).toHaveLength(2);
   });
 
-  it("does not defer a digest to a successor whose notification retry is not due", async () => {
+  it("ignores legacy retry timestamps and processes the successor in normal order", async () => {
     const now = new Date();
     const current = await queueFinishedCycle(new Date(now.getTime() - 2 * 3_600_000));
     const successor = await queueFinishedCycle(new Date(now.getTime() - 3_600_000));
@@ -280,12 +403,14 @@ describe("the ai-worker handles run_ai", () => {
     registerBuiltinAiSubtasks();
     registerControlHandler("run_ai", createRunAiHandler({ steps: workerSteps(fakeAi()), registry: new ChannelRegistry(), now: () => now }));
 
-    expect(await processNextControlRequest(hostWorker())).toMatchObject({ id: current.request.id, status: "done", result: { notify: { status: "ok" } } });
+    expect(await processNextControlRequest(hostWorker())).toMatchObject({ id: current.request.id, status: "done", result: { notify: { pending: true } } });
+    expect(api.of("sendMessage")).toHaveLength(0);
+    expect(await processNextControlRequest(hostWorker())).toMatchObject({ id: successor.request.id, status: "done", result: { notify: { pending: false } } });
     expect(api.of("sendMessage")).toHaveLength(1);
     expect(await processNextControlRequest(hostWorker())).toBeNull();
   });
 
-  it.each([false, true])("retries a failed final digest beyond the candidate window without repeating AI (newer cycle: %s)", async (newerCycle) => {
+  it.each([false, true])("retains a failed backlog through another failed notify and a worker restart (delegated successor: %s)", async (delegated) => {
     let now = new Date();
     const first = await queueFinishedCycle(new Date(now.getTime() - 2 * 3_600_000));
     const latest = await queueFinishedCycle(new Date(now.getTime() - 3_600_000));
@@ -299,42 +424,46 @@ describe("the ai-worker handles run_ai", () => {
     expect(await processNextControlRequest(hostWorker())).toMatchObject({ id: first.request.id, status: "done", result: { ai: { scored: 1 } } });
     expect(api.of("sendMessage")).toHaveLength(0);
     api.failNext("sendMessage", 500, undefined, 2);
-    expect(await processNextControlRequest(hostWorker())).toMatchObject({ id: latest.request.id, status: "pending", startedAt: null, finishedAt: null, result: { ai: { scored: 1, translated: 1 }, notify: { status: "partial" } } });
+    expect(await processNextControlRequest(hostWorker())).toMatchObject({ id: latest.request.id, status: "done", startedAt: expect.any(Date), finishedAt: expect.any(Date), result: { ai: { scored: 1, translated: 1 }, notify: { status: "partial", pending: true } } });
     const completedTasks = [...ai.tasks];
     expect(completedTasks.filter((task) => task === "score")).toHaveLength(2);
     expect((await db().select().from(schema.notifications)).filter((n) => n.kind === "cycle_summary")).toHaveLength(0);
-    expect(await processNextControlRequest(hostWorker())).toBeNull(); // wait until the retry is due, including in --once
+    expect(await processNextControlRequest(hostWorker())).toBeNull(); // --once exits with the delivery window retained
 
     now = new Date(now.getTime() + (notifyCfg().candidate_window_hours + 1) * 3_600_000);
-    const due = () => db().update(schema.controlRequests).set({ result: sql`${schema.controlRequests.result} - 'notifyRetryAt'` }).where(eq(schema.controlRequests.id, latest.request.id));
-    await due();
-    expect(await processNextControlRequest(hostWorker())).toMatchObject({ id: latest.request.id, status: "pending" });
-    expect(ai.tasks).toEqual(completedTasks);
-    expect(await processNextControlRequest(hostWorker())).toBeNull();
-
-    // A new worker resumes the persisted checkpoint; a later cycle cannot take away this failed digest's candidates.
+    // Rebuild the worker with a provider that rejects any repeated completed work.
     const restartedAi = fakeAi({ fail: new Error("completed AI must not run again") });
     resetControlHandlers();
-    registerControlHandler("run_ai", createRunAiHandler({ steps: workerSteps(restartedAi, config), registry: new ChannelRegistry(), now: () => now }));
-    const successor = newerCycle ? await queueFinishedCycle(now) : null;
-    await due();
-    if (!newerCycle) {
-      expect((await claimNextControlRequest(db(), ["run_ai"]))?.id).toBe(latest.request.id);
-      expect(await requeueInterruptedControlRequests(db(), { id: latest.request.id, reason: "worker restarted before retrying", maxRequeues: 3 })).toEqual({ requeued: 1, failed: 0 });
+    const steps = workerSteps(restartedAi, config);
+    registerControlHandler("run_ai", createRunAiHandler({ steps, registry: new ChannelRegistry(), now: () => now }));
+    const nextNotify = async () => {
+      if (delegated) {
+        const successor = await queueFinishedCycle(now);
+        await processNextControlRequest(hostWorker());
+        return successor.cycle.id;
+      }
+      registerCycleStep("ai", async () => {});
+      registerCycleStep("notify", steps.notify);
+      const cycle = await runCycle("manual", { registry: new ChannelRegistry(), config: cycleConfig(), logger: quietLogger, now: () => now, sleep: async () => {} });
+      return cycle.cycleId!;
+    };
+    await nextNotify(); // the second send fails too; it must retain the whole original backlog
+    expect((await db().select().from(schema.notifications)).filter((n) => n.kind === "cycle_summary")).toHaveLength(0);
+    const deliveredBy = await nextNotify();
+    for (const request of [first.request, latest.request]) {
+      expect(await getControlRequest(db(), request.id)).toMatchObject({ status: "done", result: { notify: { pending: false, deliveredByCycleId: deliveredBy } } });
     }
-    const sent = await processNextControlRequest(hostWorker());
-    expect(sent).toMatchObject({ id: latest.request.id, status: "done", result: { ai: { scored: 1, translated: 1 }, notify: { status: "ok", pushed: 2 } } });
-    expect(sent?.result).not.toHaveProperty("notifyRetryAt");
+    expect(ai.tasks).toEqual(completedTasks);
     expect(restartedAi.tasks).toEqual([]);
     const notifications = await db().select().from(schema.notifications);
-    expect(notifications.filter((n) => n.kind === "cycle_summary")).toMatchObject([{ cycleId: latest.cycle.id, payloadJson: { newJobs: 2, pushed: 2 } }]);
+    expect(notifications.filter((n) => n.kind === "cycle_summary")).toMatchObject([{ cycleId: deliveredBy, payloadJson: { newJobs: 2, pushed: 2 } }]);
     expect(notifications.filter((n) => n.kind === "job")).toHaveLength(2);
     expect(api.of("sendMessage")).toHaveLength(5); // two failures, then a summary and two jobs
-    if (successor) expect((await getControlRequest(db(), successor.request.id))?.status).toBe("pending");
-    else expect(await processNextControlRequest(hostWorker())).toBeNull();
+    expect(await processNextControlRequest(hostWorker())).toBeNull();
+    expect(await db().execute(sql`select key from runtime_state where key like 'notify:window:%'`)).toHaveLength(0);
   });
 
-  it("resumes unfinished translation after an interrupted digest without repeating completed main AI", async () => {
+  it.each([false, true])("resumes unfinished translation after an interrupted digest without repeating completed main AI (send failed: %s)", async (sendFailed) => {
     const shutdown = new AbortController();
     const ai = fakeAi();
     await addJob("Alpha");
@@ -349,29 +478,47 @@ describe("the ai-worker handles run_ai", () => {
         return result;
       } },
     }));
-    api.failNext("sendMessage", 500);
+    if (sendFailed) api.failNext("sendMessage", 500);
 
     expect(await processNextControlRequest({ ...hostWorker(), signal: shutdown.signal, maxRequeues: () => 3 })).toMatchObject({ status: "pending" });
     expect(ai.tasks.filter((task) => task === "score")).toHaveLength(1);
     expect(ai.tasks.filter((task) => task === "translate")).toHaveLength(0);
     const restartedAi = fakeAi();
     registerControlHandler("run_ai", createRunAiHandler({ steps: workerSteps(restartedAi), registry: new ChannelRegistry() }));
-    expect(await processNextControlRequest(hostWorker())).toMatchObject({ status: "done", result: { ai: { scored: 1, translated: 1 }, notify: { pushed: 1 } } });
+    expect(await processNextControlRequest(hostWorker())).toMatchObject({ status: "done", result: { ai: { scored: 1, translated: 1 }, notify: { status: "ok", pending: false } } });
     expect(restartedAi.tasks).toEqual(["translate"]);
     expect(await db().select().from(schema.translations)).toHaveLength(1);
   });
 
-  it("keeps a failed empty digest retryable even when no job failures can be counted", async () => {
+  it("retains a failed empty digest for the next notify even when no job failures can be counted", async () => {
     const current = await queueFinishedCycle(new Date());
     registerBuiltinAiSubtasks();
     registerControlHandler("run_ai", createRunAiHandler({ steps: workerSteps(fakeAi()), registry: new ChannelRegistry() }));
     api.failNext("sendMessage", 500);
 
-    expect(await processNextControlRequest(hostWorker())).toMatchObject({ id: current.request.id, status: "pending" });
+    expect(await processNextControlRequest(hostWorker())).toMatchObject({ id: current.request.id, status: "done", result: { notify: { pending: true } } });
     expect(await processNextControlRequest(hostWorker())).toBeNull();
-    await db().update(schema.controlRequests).set({ result: sql`${schema.controlRequests.result} - 'notifyRetryAt'` }).where(eq(schema.controlRequests.id, current.request.id));
-    expect(await processNextControlRequest(hostWorker())).toMatchObject({ id: current.request.id, status: "done", result: { notify: { status: "ok", pushed: 0 } } });
+    const successor = await queueFinishedCycle(new Date());
+    expect(await processNextControlRequest(hostWorker())).toMatchObject({ id: successor.request.id, status: "done", result: { notify: { status: "ok", pushed: 0, pending: false } } });
     expect((await db().select().from(schema.notifications)).filter((n) => n.kind === "cycle_summary")).toHaveLength(1);
+  });
+
+  it("resumes main AI when shutdown interrupted it before completion", async () => {
+    const shutdown = new AbortController();
+    const ai = fakeAi();
+    await addJob("Interrupted");
+    await queueFinishedCycle(new Date());
+    const steps = workerSteps(ai);
+    registerBuiltinAiSubtasks();
+    registerControlHandler("run_ai", createRunAiHandler({
+      steps: { ...steps, ai: async () => { shutdown.abort(); return { status: "partial", result: { subtasks: [] } }; } },
+      registry: new ChannelRegistry(),
+    }));
+    expect(await processNextControlRequest({ ...hostWorker(), signal: shutdown.signal, maxRequeues: () => 3 })).toMatchObject({ status: "pending" });
+    expect(ai.tasks).toEqual([]);
+    registerControlHandler("run_ai", createRunAiHandler({ steps, registry: new ChannelRegistry() }));
+    expect(await processNextControlRequest(hostWorker())).toMatchObject({ status: "done", result: { ai: { scored: 1, translated: 1 } } });
+    expect(ai.tasks.filter((task) => task === "score")).toHaveLength(1);
   });
 
   it("counts earlier backlog calls against a later historical cycle's real per-cycle quota", async () => {

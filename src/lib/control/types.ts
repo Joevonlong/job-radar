@@ -81,8 +81,7 @@ export interface ControlHandlerContext {
 
 /** What a handler reports; stored in `control_requests.result` (JSON, shown on the settings page). */
 export interface ControlOutcome {
-  /** `pending` keeps a notification retry in the queue until its result's `notifyRetryAt` (epoch milliseconds). */
-  status: "done" | "failed" | "pending";
+  status: "done" | "failed";
   result: Record<string, unknown>;
 }
 

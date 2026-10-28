@@ -265,7 +265,7 @@ describe("notify step: summary and job messages", () => {
 
     registerCycleStep("notify", createNotifyStep({ loadNotifyConfig: () => config(), createRuntime: () => null }));
     const missing = await cycle();
-    expect(stepResult(missing)).toEqual({ skipped: "not_configured" });
+    expect(stepResult(missing)).toMatchObject({ skipped: "not_configured", retry: { since: expect.any(String), startedAt: expect.any(String) } });
     expect(stepOf(missing)?.status).toBe("partial");
     expect(await notificationKinds()).toEqual([]);
   });

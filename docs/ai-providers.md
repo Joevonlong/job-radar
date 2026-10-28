@@ -25,10 +25,14 @@ Requests all live in the `control_requests` table. The runner and the ai-worker 
 
 When several finished cycles are queued, the worker processes the AI work of each and combines their job notifications
 into the last claimable cycle's digest. A cycle that is still running cannot hold back that digest; alerts are sent
-immediately. If sending the digest fails, the request stays pending and retries after `host_worker.poll_seconds`, without
-repeating completed AI work. Its original candidate window is retained even if delivery resumes much later or after a
-worker restart. `--once` exits when no request is claimable; a failed digest waiting for its retry time remains queued
-for the next worker run.
+immediately. If the digest fails or is deferred (including quiet hours or missing Telegram credentials), its undelivered
+window is saved in `runtime_state` (`notify:window:<cycleId>`). The request finishes and is never requeued for a digest
+retry. The next notify run inherits the earliest undelivered window: the next claimable successor, or the next cycle
+when no successor is queued. The original candidate window survives expiry and worker restarts; completed AI work is
+never repeated. A successful digest records its covered cycles in `notifications` and settles all covered windows and
+older request outcomes in the same transaction, preventing a later duplicate. Requests keep their normal claim order,
+so failed digests cannot starve translations or scoring. `--once` drains the claimable requests and exits, leaving any
+undelivered window for a later notify run.
 
 **Rule**: any request kind that calls an AI is claimed only by the ai-worker. There is exactly one list of kinds: `AI_CONTROL_REQUEST_KINDS` (`src/lib/db/repos/control-requests.ts`), and the real handlers are registered in one place, `registerAiControlHandlers()` (`src/lib/control/ai-handlers.ts`). To add a new kind (for example `run_suggest` or `score_jobs`): add the value to the database enum (migration) → add it to that list → register a handler. A unit test fails if the enum contains a kind that has not been classified.
 

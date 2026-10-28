@@ -1,6 +1,5 @@
 import { runDelegatedSteps, type DelegatedRunOptions } from "@/lib/cycle/delegated";
-import { loadConfig } from "@/lib/config";
-import { getDbNow, type DelegatedStepSummary } from "@/lib/db/repos/cycles";
+import type { DelegatedStepSummary } from "@/lib/db/repos/cycles";
 import { notificationRetryOf } from "@/lib/notify/step";
 
 import { runAiPayloadSchema, type ControlHandler } from "./types";
@@ -47,7 +46,7 @@ export function summarizeDelegatedSteps(steps: readonly DelegatedStepSummary[]):
       failedSubtasks: subtasks.filter((s) => s.status === "failed").length,
       ...(profileIncomplete ? { reason: "profile_incomplete", profileMissing: Array.isArray(missing) ? missing.filter((m) => typeof m === "string") : [] } : {}),
     },
-    notify: { status: notify?.status ?? "skipped", pushed: jobs ? num(jobs.pushed) : null },
+    notify: { status: notify?.status ?? "skipped", pushed: jobs ? num(jobs.pushed) : null, pending: notificationRetryOf(notify?.result) !== null },
   };
 }
 
@@ -74,11 +73,6 @@ export function createRunAiHandler(options: RunAiHandlerOptions = {}): ControlHa
     const result = { cycleId: run.cycle.id, ...summarizeDelegatedSteps(run.steps) };
     const ai = run.steps.find((s) => s.name === "ai");
     if (context.signal.aborted) return { status: "failed", result: { ...result, error: "aborted" } };
-    if (notificationRetryOf(run.steps.find((s) => s.name === "notify")?.result)) {
-      const retryMs = loadConfig("ai").host_worker.poll_seconds * 1000;
-      const notifyRetryAt = (await getDbNow(context.db)).getTime() + retryMs;
-      return { status: "pending", result: { ...result, notifyRetryAt } };
-    }
     // Nothing got through the AI step: the request failed, however the push went.
     if (ai?.status === "failed") return { status: "failed", result: { ...result, error: "ai_failed" } };
     return { status: "done", result };
