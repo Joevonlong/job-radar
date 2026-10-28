@@ -21,6 +21,7 @@ import {
 } from "@/lib/db";
 import { createProcessLogger } from "@/lib/logging/process-logger";
 
+import { cycleCovers } from "./cycle-coverage";
 import { runCyclePayloadSchema, scoreJobsPayloadSchema, testAiPayloadSchema, testChannelPayloadSchema, type ScoreJobsPayload } from "./types";
 import type { ControlActionState } from "./service-types";
 
@@ -38,14 +39,21 @@ const queued = (row: ControlRequest, existing: boolean): ControlActionState => (
   nonce: Date.now(),
 });
 
-/** Ask the runner for a `manual` cycle. `rawPayload` is untrusted. A cycle already requested and not finished is reused. */
+/**
+ * Ask the runner for a `manual` cycle. `rawPayload` is untrusted. An open request is reused only when it covers this one
+ * (every channel, or a superset of the channels asked for); otherwise a new request is queued, which the runner's serial
+ * poller takes up after the open one, so a click for one channel never swallows the click for another.
+ */
 export async function requestRunCycle(rawPayload: unknown): Promise<ControlActionState> {
   const payload = runCyclePayloadSchema.safeParse(rawPayload ?? {});
   if (!payload.success) return fail("invalidPayload");
   if (payload.data.channelIds?.some((id) => !isConfiguredChannelId(id))) return fail("unknownChannel");
   try {
     const db = getDb();
-    const open = await findOpenControlRequest(db, "run_cycle");
+    const open = (await listOpenControlRequests(db, "run_cycle")).find((row) => {
+      const stored = runCyclePayloadSchema.safeParse(row.payload ?? {});
+      return stored.success && cycleCovers(stored.data.channelIds, payload.data.channelIds);
+    });
     if (open) return queued(open, true);
     const row = await insertControlRequest(db, { kind: "run_cycle", payload: payload.data });
     log.info("manual request queued", { request: row.id, kind: row.kind, channels: payload.data.channelIds?.join(",") ?? "all" });

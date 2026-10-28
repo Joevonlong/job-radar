@@ -179,6 +179,15 @@ A failure in (a) does not block rollback: follow (c) and accept the display wind
 
 ### Fixed
 
+- **"Collect now" for one channel no longer swallows another click or a scheduled cycle:** an unfinished request is
+  reused only when it covers the channels asked for (a click for Greenhouse while Indeed is queued gets its own
+  request, which runs next, and the button no longer claims "the same request is already queued"). A scheduled cycle
+  that finds a cycle of only some channels running waits for it, at most `schedule.yaml`
+  `partial_cycle_wait.max_minutes` (default 60), and then runs, instead of being skipped; one that finds a cycle of
+  every channel running is still skipped. A manual request covered by a running cycle ends as done and shows that
+  cycle instead of "another cycle is running". The start-up catch-up and `pnpm run doctor` no longer count a cycle of
+  some channels as the slot's cycle. Before rolling back, remove `partial_cycle_wait` from `data/config/schedule.yaml`
+  if you added it.
 - **Tag boxes no longer swallow a repeated entry silently:** typing a title, keyword or city that is already in the list
   (any case) now keeps the text, names the existing entry under the box ("Already in the list: ...") and briefly
   highlights it. Enter and the comma no longer act while an input method is composing. Regular expressions and

@@ -8,12 +8,15 @@ import { registerFixtureChannel } from "@/lib/channels/fixture";
 import { defaultRegistry } from "@/lib/channels/registry";
 import { registerControlHandler, resetControlHandlers, processNextControlRequest, runControlPoller } from "@/lib/control";
 import { requestRescoreStale, requestRunCycle } from "@/lib/control/service";
+import { withCycleLock } from "@/lib/cycle/lock";
 import { resetCycleSteps } from "@/lib/cycle/steps";
 import {
   claimNextControlRequest,
   closeDb,
   countStaleScores,
+  createCycle,
   findOpenControlRequest,
+  finishCycle,
   getControlRequest,
   getDb,
   insertControlRequest,
@@ -243,6 +246,45 @@ describe("processNextControlRequest", () => {
     expect(new Set(runs.map((r) => r.channelId))).toEqual(new Set(["fixture"]));
   });
 
+  it("run_cycle is done, pointing at the running cycle, when that cycle covers it; one of other channels fails it", async () => {
+    registerFixtureChannel(defaultRegistry, { postings: [] });
+    const db = getDb();
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let holderId = 0;
+    // another process holds the cycle lock with a cycle of every channel (a scheduled one)
+    const holder = withCycleLock(db, "try", async () => {
+      const row = await createCycle(db, { kind: "weekday_morning", summary: { channelIds: null } });
+      holderId = row.id;
+      await gate;
+      await finishCycle(db, row.id, { status: "succeeded" });
+    });
+    while (holderId === 0) await sleep(20);
+    const covered = await insertControlRequest(db, { kind: "run_cycle", payload: { channelIds: ["fixture"] } });
+    expect(await processNextControlRequest(pollOptions())).toMatchObject({ id: covered.id, status: "done", result: { cycleId: holderId, coveredBy: holderId } });
+    release();
+    expect((await holder).acquired).toBe(true);
+
+    // a running cycle limited to other channels does not cover the request: it fails as before (a manual request never waits)
+    let releaseOther: () => void = () => {};
+    const otherGate = new Promise<void>((resolve) => {
+      releaseOther = resolve;
+    });
+    let otherId = 0;
+    const other = withCycleLock(db, "try", async () => {
+      otherId = (await createCycle(db, { kind: "manual", summary: { channelIds: ["indeed"] } })).id;
+      await otherGate;
+      await finishCycle(db, otherId, { status: "succeeded" });
+    });
+    while (otherId === 0) await sleep(20);
+    await insertControlRequest(db, { kind: "run_cycle", payload: { channelIds: ["fixture"] } });
+    expect(await processNextControlRequest(pollOptions())).toMatchObject({ status: "failed", result: { error: "another_cycle_running" } });
+    releaseOther();
+    await other;
+  });
+
   it("run_cycle with a payload it does not understand fails without running anything", async () => {
     await insertControlRequest(getDb(), { kind: "run_cycle", payload: { channelIds: "indeed" } });
     expect(await processNextControlRequest(pollOptions())).toMatchObject({ status: "failed", result: { error: "invalid_payload" } });
@@ -270,6 +312,28 @@ describe("web side: requestRunCycle / requestRescoreStale", () => {
     expect(await listControlRequests(getDb(), 10)).toHaveLength(1);
     await processNextControlRequest(pollOptions());
     expect(await requestRunCycle({})).toMatchObject({ status: "queued", existing: false });
+  });
+
+  it("reuses an open request only when it covers the new one; otherwise queues a second one", async () => {
+    // [indeed] open, then [greenhouse]: a request of its own
+    expect(await requestRunCycle({ channelIds: ["indeed"] })).toMatchObject({ status: "queued", existing: false });
+    expect(await requestRunCycle({ channelIds: ["greenhouse"] })).toMatchObject({ status: "queued", existing: false });
+    expect(await listControlRequests(getDb(), 10)).toHaveLength(2);
+    // [indeed] open, then every channel: a request of its own
+    expect(await requestRunCycle({})).toMatchObject({ status: "queued", existing: false });
+    expect(await listControlRequests(getDb(), 10)).toHaveLength(3);
+    // every channel open: anything reuses it
+    expect(await requestRunCycle({ channelIds: ["lever"] })).toMatchObject({ status: "queued", existing: true });
+    expect(await requestRunCycle({})).toMatchObject({ status: "queued", existing: true });
+    expect(await listControlRequests(getDb(), 10)).toHaveLength(3);
+  });
+
+  it("reuses an open request of more channels for a subset of them", async () => {
+    const first = await requestRunCycle({ channelIds: ["indeed", "greenhouse"] });
+    expect(first).toMatchObject({ status: "queued", existing: false });
+    expect(await requestRunCycle({ channelIds: ["greenhouse"] })).toMatchObject({ status: "queued", existing: true, request: first.status === "queued" ? first.request : -1 });
+    expect(await requestRunCycle({ channelIds: ["greenhouse", "lever"] })).toMatchObject({ status: "queued", existing: false });
+    expect(await listControlRequests(getDb(), 10)).toHaveLength(2);
   });
 
   it("validates the payload and the channel ids", async () => {

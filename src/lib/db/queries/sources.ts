@@ -4,7 +4,7 @@ import { readCycleSteps, type CycleStepStatus } from "@/lib/cycle/step-health";
 
 import type { Db } from "../client";
 import { aiUsage, channels, cycles, rawPostings, runs } from "../schema";
-import type { CycleKind } from "../repos/cycles";
+import { getLatestFullCycleStartedAt, readCycleChannelIds, type CycleKind } from "../repos/cycles";
 import type { RunStatus } from "../repos/runs";
 
 /** Data behind `/sources` and the progress line of `/settings`: plain reads, no interpretation. */
@@ -113,6 +113,11 @@ export interface LatestCycleRuns {
   steps?: CycleStepStatus[];
   /** Postings the cycle fetched that are still waiting for the pipeline. */
   unprocessed?: number;
+  /**
+   * Start of the newest cycle that ran for every channel (this one, or an earlier one when this one was limited to some
+   * channels); null when none has. What "was a scheduled slot missed" compares against.
+   */
+  lastFullCycleStartedAt?: Date | null;
 }
 
 /** The most recent cycle that actually ran (not `skipped`) with its runs folded per channel; null before the first cycle. */
@@ -145,7 +150,8 @@ export async function getLatestCycleRuns(db: Db): Promise<LatestCycleRuns | null
     .from(rawPostings)
     .where(and(eq(rawPostings.parseStatus, "pending"), inArray(rawPostings.runId, db.select({ id: runs.id }).from(runs).where(eq(runs.cycleId, cycle.id)))));
   const { summaryJson, ...rest } = cycle;
-  return { ...rest, channels: rows, steps: readCycleSteps(summaryJson), unprocessed: pending?.n ?? 0 };
+  const lastFullCycleStartedAt = readCycleChannelIds(summaryJson) === null ? cycle.startedAt : await getLatestFullCycleStartedAt(db);
+  return { ...rest, channels: rows, steps: readCycleSteps(summaryJson), unprocessed: pending?.n ?? 0, lastFullCycleStartedAt };
 }
 
 export interface MonthRunTotals {

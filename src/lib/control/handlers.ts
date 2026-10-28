@@ -5,7 +5,12 @@ import { testChannelHandler } from "./test-channel";
 import { testTelegramHandler } from "./test-telegram";
 import { runCyclePayloadSchema, type ControlHandler } from "./types";
 
-/** `run_cycle`: one `manual` cycle, optionally limited to the requested channels. */
+/**
+ * `run_cycle`: one `manual` cycle, optionally limited to the requested channels. When a running cycle already covers
+ * them (a scheduled cycle of every channel), the request is done and points at that cycle (`cycleId`, `coveredBy`): its
+ * progress is what the button shows. A running cycle that does not cover them (a `pnpm cycle:run --channel` of other
+ * channels) still fails the request with `another_cycle_running`; waiting for it would hold up the serial poller.
+ */
 export const runCycleHandler: ControlHandler = async (request, context) => {
   const payload = runCyclePayloadSchema.safeParse(request.payload);
   if (!payload.success) return { status: "failed", result: { error: "invalid_payload" } };
@@ -17,6 +22,11 @@ export const runCycleHandler: ControlHandler = async (request, context) => {
     ...(channelIds ? { channelIds } : {}),
   });
   const result = { cycleId: outcome.cycleId, cycleStatus: outcome.status, durationMs: outcome.summary.durationMs };
+  const coveredBy = outcome.summary.coveredBy ?? null;
+  if (outcome.status === "skipped" && coveredBy !== null) {
+    // the covering cycle was running when the lock was tried
+    return { status: "done", result: { ...result, cycleId: coveredBy, cycleStatus: "running", coveredBy, skippedCycleId: outcome.cycleId } };
+  }
   if (outcome.status === "skipped") return { status: "failed", result: { ...result, error: "another_cycle_running" } };
   if (outcome.status === "failed") return { status: "failed", result: { ...result, error: "cycle_failed" } };
   return { status: "done", result };

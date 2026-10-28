@@ -10,8 +10,9 @@ import { defaultRegistry, type ChannelRegistry } from "@/lib/channels/registry";
 import { createDbKnownPostings, createDbStateStore, createMemoryStateStore, type ChannelStateStore } from "@/lib/channels/store";
 import type { ChannelLogger, KnownPostings } from "@/lib/channels/types";
 import { freshenConfig, loadConfig, type ChannelsConfig, type ScheduleConfig, type SearchConfig } from "@/lib/config";
+import { cycleCovers } from "@/lib/control/cycle-coverage";
 import { getDb, type Db } from "@/lib/db/client";
-import { createCycle, createSkippedCycle, finishCycle, type CycleKind } from "@/lib/db/repos/cycles";
+import { createCycle, createSkippedCycle, finishCycle, listRunningCycles, type CycleKind } from "@/lib/db/repos/cycles";
 
 import { withCycleLock } from "./lock";
 import { listCycleSteps, type CycleStepName, type CycleStepContext } from "./steps";
@@ -58,12 +59,16 @@ export interface CycleSummary {
   version: 1;
   kind: CycleKind;
   windowKind: ScheduledCycleKind | null;
+  /** The channels the cycle was limited to (`RunCycleOptions.channelIds`); null = every enabled channel. */
+  channelIds: string[] | null;
   dryRun: boolean;
   startedAt: string;
   durationMs: number;
   aborted: boolean;
   steps: StepSummary[];
   reason?: string;
+  /** A skipped cycle: the running cycle that already covers its channels (null or absent: none known to). */
+  coveredBy?: number | null;
 }
 
 export type CycleStatus = "succeeded" | "partial" | "failed" | "skipped";
@@ -92,7 +97,10 @@ function errorText(error: unknown): string {
  * maintenance`, each timed and summarised in `cycles.summary_json`. A failing step does not stop the
  * later ones (they work from what is in the database). Only one cycle runs at a time across
  * processes (Postgres advisory lock); a second caller records a `skipped` cycle and returns —
- * or waits, when `schedule.skip_if_running` is false.
+ * or waits, when `schedule.skip_if_running` is false. With `skip_if_running`, a cycle other than a `manual` one that
+ * finds the lock held by a cycle limited to channels it needs as well (a "collect now" of one channel) waits for it
+ * instead, at most `schedule.partial_cycle_wait.max_minutes`, then runs; a skipped cycle names the running cycle that
+ * covers it in `summary.coveredBy`.
  */
 export async function runCycle(kind: CycleKind, options: RunCycleOptions = {}): Promise<CycleRunResult> {
   const dryRun = options.dryRun ?? false;
@@ -111,20 +119,25 @@ export async function runCycle(kind: CycleKind, options: RunCycleOptions = {}): 
     search: options.config?.search ?? loadConfig("search"),
     schedule: options.config?.schedule ?? loadConfig("schedule"),
   };
+  const channelIds = options.channelIds ? [...options.channelIds] : null;
   const baseSummary = {
     version: 1 as const,
     kind,
     windowKind: options.windowKind ?? null,
+    channelIds,
     dryRun,
     startedAt: now().toISOString(),
   };
 
   const execute = async (writeDb: Db | null, readDb: Db | null): Promise<CycleRunResult> => {
     const startedMs = now().getTime();
+    // a cycle that waited for the lock starts now, not when it was asked for
+    const runSummary = { ...baseSummary, startedAt: new Date(startedMs).toISOString() };
     const registry = options.registry ?? defaultRegistry;
     const store: ChannelStateStore = dryRun ? createMemoryStateStore(readDb ? createDbStateStore(readDb) : null) : createDbStateStore(writeDb as Db);
     const known = (channelId: string): KnownPostings => (readDb ? createDbKnownPostings(readDb, channelId) : NO_KNOWN_POSTINGS);
-    const cycleRow = !dryRun && writeDb ? await createCycle(writeDb, { kind }) : null;
+    // recorded at once: a cycle that finds the lock taken reads which channels this one covers
+    const cycleRow = !dryRun && writeDb ? await createCycle(writeDb, { kind, summary: runSummary }) : null;
     const signal = options.signal ?? new AbortController().signal;
     const steps: StepSummary[] = [];
     const results: Partial<Record<CycleStepName, unknown>> = {};
@@ -221,7 +234,7 @@ export async function runCycle(kind: CycleKind, options: RunCycleOptions = {}): 
     }
 
     const summary: CycleSummary = {
-      ...baseSummary,
+      ...runSummary,
       durationMs: now().getTime() - startedMs,
       aborted: signal.aborted,
       steps,
@@ -238,11 +251,53 @@ export async function runCycle(kind: CycleKind, options: RunCycleOptions = {}): 
   if (dryRun) return execute(null, db);
   if (db === null) throw new Error("runCycle: a database is required unless dryRun is set"); // unreachable (checked above); narrows the type
 
-  const locked = await withCycleLock(db, config.schedule.skip_if_running ? "try" : "wait", () => execute(db, db));
-  if (locked.acquired) return locked.value;
+  if (!config.schedule.skip_if_running) {
+    const locked = await withCycleLock(db, "wait", () => execute(db, db));
+    if (locked.acquired) return locked.value;
+  }
 
-  logger.warn("cycle skipped: another cycle is running", { kind });
-  const summary: CycleSummary = { ...baseSummary, durationMs: 0, aborted: false, steps: [], reason: "another cycle is running (lock held)" };
-  const row = await createSkippedCycle(db, { kind, summary });
-  return { cycleId: row.id, kind, status: "skipped", summary, results: {} };
+  const skip = async (reason: string, coveredBy: number | null): Promise<CycleRunResult> => {
+    logger.warn("cycle skipped: another cycle is running", { kind, coveredBy: coveredBy ?? "none" });
+    const summary: CycleSummary = { ...baseSummary, durationMs: 0, aborted: false, steps: [], reason, coveredBy };
+    const row = await createSkippedCycle(db, { kind, summary });
+    return { cycleId: row.id, kind, status: "skipped", summary, results: {} };
+  };
+  // A manual cycle never waits: the control poller is serial, so it would hold up every other request (its handler reports a covering cycle instead).
+  const wait = kind === "manual" ? null : config.schedule.partial_cycle_wait;
+  const signal = options.signal;
+  let deadline: number | null = null;
+  for (;;) {
+    const locked = await withCycleLock(db, "try", () => execute(db, db));
+    if (locked.acquired) return locked.value;
+    // A running cycle that does everything this one would (every channel, or a superset of its channels) makes it redundant.
+    const running = await listRunningCycles(db);
+    const covering = running.find((cycle) => cycleCovers(cycle.channelIds, channelIds));
+    if (covering !== undefined) return skip("another cycle is running (lock held)", covering.id);
+    if (wait === null || wait.max_minutes === 0) return skip("another cycle is running (lock held)", null);
+    // The holder is limited to other channels (or has not recorded its row yet): wait for it, re-checking every poll.
+    if (deadline === null) {
+      deadline = Date.now() + wait.max_minutes * 60_000;
+      logger.info("cycle waits: a cycle limited to some channels is running", { kind, running: running.map((cycle) => cycle.id).join(",") || "unknown" });
+    }
+    if (Date.now() >= deadline) return skip(`another cycle limited to some channels was still running after ${wait.max_minutes} min`, null);
+    if (!(await sleepUnlessAborted(Math.min(wait.poll_seconds * 1000, Math.max(0, deadline - Date.now())), signal))) {
+      return skip("cancelled while waiting for another cycle", null);
+    }
+  }
+}
+
+/** Wait `ms`; false when `signal` aborts first (the runner is shutting down). */
+function sleepUnlessAborted(ms: number, signal: AbortSignal | undefined): Promise<boolean> {
+  if (signal?.aborted) return Promise.resolve(false);
+  return new Promise((resolve) => {
+    const onAbort = (): void => {
+      clearTimeout(timer);
+      resolve(false);
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve(true);
+    }, ms);
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
 }

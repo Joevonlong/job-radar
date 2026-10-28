@@ -177,6 +177,22 @@ export type ManualTriggersConfig = z.infer<typeof manualTriggers>;
 
 const MANUAL_TRIGGERS_DEFAULTS: ManualTriggersConfig = { min_interval_seconds: 30 };
 
+/**
+ * A scheduled cycle that finds the cycle lock held by a cycle limited to some channels (a manual "collect now" of one
+ * channel, a `pnpm cycle:run --channel`) waits for it instead of being skipped, then runs. A cycle that covers every
+ * channel still makes it skip (`skip_if_running`).
+ */
+const partialCycleWait = z.strictObject({
+  /** The longest wait; a scheduled cycle that still finds the lock held after this long is recorded as skipped. 0 = do not wait (skip). */
+  max_minutes: nonNegativeInt,
+  /** How often the waiting cycle tries the lock again. */
+  poll_seconds: positiveInt,
+});
+
+export type PartialCycleWaitConfig = z.infer<typeof partialCycleWait>;
+
+const PARTIAL_CYCLE_WAIT_DEFAULTS: PartialCycleWaitConfig = { max_minutes: 60, poll_seconds: 15 };
+
 /** Application statuses the weekly interests suggestion reads: the enum of `application_status`. */
 const suggestStatus = z.enum(["new", "interested", "preparing", "applied", "interviewing", "offer", "rejected", "withdrawn", "archived"]);
 
@@ -267,6 +283,8 @@ export const scheduleSchema = z.strictObject({
   catch_up: z.boolean(),
   /** Skip a cycle when the previous one is still running (and log it). */
   skip_if_running: z.boolean(),
+  /** With `skip_if_running`: how a scheduled cycle waits for a running cycle limited to some channels; a file without the block gets the schema defaults. */
+  partial_cycle_wait: partialCycleWait.default(PARTIAL_CYCLE_WAIT_DEFAULTS),
   backup,
   /** How often the runner looks for requests the web app left in `control_requests` (manual cycle, re-score). */
   control_poll_seconds: positiveInt.default(5),
