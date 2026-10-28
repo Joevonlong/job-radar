@@ -5740,6 +5740,9 @@
     }
   },
   "cli": {
+    "reprocess": {
+      "needsReview": "  Jobs needing manual review (left as they are): {ids}"
+    },
     "sourcesList": {
       "heading": "Source registry {file} · {total} sources · {mirror}",
       "mirrorDbDown": "database not available",

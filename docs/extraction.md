@@ -91,6 +91,9 @@ now name another company it is left as it is; both kinds are listed by id at the
 to do when all your postings are in Latin script. When the old keys merged two cities written in another script (東京 and
 大阪), the retained job's locations are rebuilt from its remaining postings in the same transaction as the split. Each
 detached city's posting can then become its own job, including when the original job holds an application or favourite.
+Every linked raw posting is read, including pending postings and earlier parse failures. If any retained posting cannot
+be parsed now, the whole split for that job is skipped and its id is listed for manual review; all sources and locations
+stay intact. Fix parsing for that source before retrying the split.
 
 LinkedIn guest postings use the same numeric job id as the session and paid channels, so a title or location spelling
 change between those channels does not create another job. Upgrading removes the guest `li-` prefix from stored ids;
@@ -115,3 +118,6 @@ pnpm reprocess --split-merged   # once after upgrading, see "Company and title k
 ```
 
 (Run in the project directory.) A full run first clears the work arrangement, German level and agency flags on the jobs (with `--channel` it does not clear, it only adds), then puts the already parsed original text back to pending, and runs in turn `pipeline`, salary (re-reads the original text of all jobs with the current parser and corrects the stored salary, see [signals.md](signals.md); with `--channel` it is also all jobs), the hard filter, rule signals, salary-signal sync, bonuses, and the German penalty for already scored jobs; it does not collect and does not call the AI. The exit code is 1 when some jobs were deferred or a rule scan failed, and 2 for an argument error. For jobs whose description changed: rule signals are re-scanned, and the AI signal review and the translation are redone as needed in later processing cycles (this uses AI quota).
+
+Reprocessing holds the same exclusive database lock as a cycle. If that connection is lost, the filter and signal stages
+stop at their next cancellation check, without starting another batch or job, and the command exits with code 1.

@@ -201,6 +201,8 @@ A failure in (a) does not block rollback: follow (c) and accept the display wind
 
 ### Fixed
 
+- Splitting merged jobs preserves locations from every linked posting and reports unreadable sources for manual review;
+  reprocessing stops its filter and signal batches when the cycle lock is lost.
 - Fixed job identity repairs across cities, linked company mark removal, LinkedIn cross-channel duplicates, concurrent
   reprocessing and cycle interruption cleanup; reprocessing now shares the cycle's dedicated database lock.
 - Translation, breakdown and salary lookup keep polling after a temporary status read failure or invalid queue response; translation queue text also applies to container execution.

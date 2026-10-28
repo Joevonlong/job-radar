@@ -407,6 +407,60 @@ describe("what a recompute and a fold keep", () => {
 });
 
 describe("splitting leaves alone what the user acted on and what was merged for other reasons", () => {
+  it.each(["parsed", "pending", "parse_failed"] as const)("keeps every location and source for manual review when a retained %s posting cannot be parsed", async (parseStatus) => {
+    const registry = registryOf([
+      posting("t1", { title: "Engineer", city: "東京", country: "JP", description: "Tokyo office role" }),
+      posting("t2", { title: "Engineer", city: "東京", country: "JP", description: "Tokyo and Nagoya office role" }),
+      posting("o1", { title: "Engineer", city: "大阪", country: "JP", description: "Osaka office role" }),
+    ]);
+    await run(registry);
+    const [tokyo, osaka] = await allJobs();
+    await mergeAsVersion1(tokyo!.id, [osaka!.id]);
+    const locations = [...storedLocations(tokyo!), ...storedLocations(osaka!), { label: "名古屋", city: "名古屋", countryCode: "JP", isPrimary: false }];
+    await getDb().update(schema.jobs).set({ locationsJson: locations }).where(eq(schema.jobs.id, tokyo!.id));
+    // The linked posting originally supplied Tokyo + Nagoya, but its stored payload no longer parses.
+    await getDb().update(schema.rawPostings).set({ payloadJson: { id: "t2" }, parseStatus }).where(eq(schema.rawPostings.externalId, "t2"));
+    const jobsBefore = await allJobs();
+    const sourcesBefore = await allSources();
+    const rawBefore = await getDb().select().from(schema.rawPostings).orderBy(schema.rawPostings.id);
+
+    const split = await splitMergedJobsOf(getDb(), { config: pipelineConfig, registry, logger: quietLogger });
+
+    expect(split).toMatchObject({ jobsChecked: 1, jobsSplit: 0, sourcesUnlinked: 0, rawRequeued: 0, needsReview: [tokyo!.id] });
+    expect(await allJobs()).toEqual(jobsBefore);
+    expect(await allSources()).toEqual(sourcesBefore);
+    expect(await getDb().select().from(schema.rawPostings).orderBy(schema.rawPostings.id)).toEqual(rawBefore);
+  });
+
+  it.each(["pending", "parse_failed"] as const)("rebuilds locations from a retained %s posting that still parses", async (parseStatus) => {
+    const registry = registryOf([
+      posting("t1", { title: "Engineer", city: "東京", country: "JP", description: "Tokyo office role" }),
+      posting("n1", { title: "Engineer", city: "名古屋", country: "JP", description: "Nagoya office role" }),
+      posting("o1", { title: "Engineer", city: "大阪", country: "JP", description: "Osaka office role" }),
+    ]);
+    // One retained posting names both cities, so it shares the anchor's exact key.
+    const channel = registry.get("fx-keys")!;
+    const parse = channel.parse;
+    channel.parse = (payload) => {
+      const draft = parse(payload);
+      if (typeof payload === "object" && payload !== null && "id" in payload && payload.id === "n1") {
+        draft.locations.unshift({ label: "東京", city: "東京", countryCode: "JP" });
+      }
+      return draft;
+    };
+    await run(registry);
+    const [tokyo, osaka] = await allJobs();
+    await mergeAsVersion1(tokyo!.id, [osaka!.id]);
+    await getDb().update(schema.jobs).set({ locationsJson: [...storedLocations(tokyo!), ...storedLocations(osaka!)] }).where(eq(schema.jobs.id, tokyo!.id));
+    await getDb().update(schema.rawPostings).set({ parseStatus }).where(eq(schema.rawPostings.externalId, "n1"));
+
+    const split = await splitMergedJobsOf(getDb(), { config: pipelineConfig, registry, logger: quietLogger });
+
+    expect(split).toMatchObject({ jobsSplit: 1, sourcesUnlinked: 1, needsReview: [] });
+    const kept = (await allJobs()).find((job) => job.id === tokyo!.id)!;
+    expect(storedLocations(kept).map((location) => location.city)).toEqual(["東京", "名古屋"]);
+  });
+
   it.each([false, true])("splits old city collisions and rebuilds the retained job's locations (user state: %s)", async (acted) => {
     const registry = registryOf([
       posting("t1", { title: "Engineer", city: "東京", country: "JP", description: "Tokyo office role" }),

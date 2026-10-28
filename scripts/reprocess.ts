@@ -43,6 +43,7 @@ import { closeDb, getDb } from "../src/lib/db";
 import { resetRuleDerivedFacts } from "../src/lib/db/repos/jobs";
 import { requeueRawPostings } from "../src/lib/db/repos/raw-postings";
 import { currentPreferences, runFilter } from "../src/lib/filter";
+import { getTranslator } from "../src/lib/i18n/node";
 import { refreshStoredIdentityKeys, refreshStoredSalaries, runPipeline, splitMergedJobsOf } from "../src/lib/pipeline";
 import { recheckGerman, readScoringProfile } from "../src/lib/scoring";
 import { reconcileBonuses, revalueSignals, runRuleScan, syncSalarySignals } from "../src/lib/signals";
@@ -77,7 +78,7 @@ async function main(): Promise<number> {
         const split = await splitMergedJobsOf(db, { config: pipelineConfig, registry: defaultRegistry, logger, signal });
         console.log(`merged jobs: checked=${split.jobsChecked} split=${split.jobsSplit} postings detached=${split.sourcesUnlinked} postings put back to pending=${split.rawRequeued}`);
         if (split.splitWithUserState.length > 0) console.log(`  split jobs you had acted on (worth a look): ${split.splitWithUserState.join(", ")}`);
-        if (split.needsReview.length > 0) console.log(`  jobs you had acted on whose postings now name another company (left as they are): ${split.needsReview.join(", ")}`);
+        if (split.needsReview.length > 0) console.log(getTranslator("cli.reprocess", "cli")("needsReview", { ids: split.needsReview.join(", ") }));
       }
       signal.throwIfAborted();
       // Reading every posting again rebuilds these facts completely; with --channel only some postings come back,
@@ -97,17 +98,17 @@ async function main(): Promise<number> {
 
       signal.throwIfAborted();
       const { preferences, snapshot, me } = await currentPreferences(db);
-      const filter = await runFilter(db, { preferences, snapshotId: snapshot.id, pipeline: pipelineConfig, me, logger });
+      const filter = await runFilter(db, { preferences, snapshotId: snapshot.id, pipeline: pipelineConfig, me, logger, signal });
       console.log("filter:", JSON.stringify({ evaluated: filter.evaluated, created: filter.created, updated: filter.updated, passed: filter.passed, filteredOut: filter.filteredOut, byReason: filter.byReason }));
 
       signal.throwIfAborted();
-      const revalued = await revalueSignals(db, { interests, pipeline: pipelineConfig, batchSize: pipelineConfig.batch_size, force: true });
+      const revalued = await revalueSignals(db, { interests, pipeline: pipelineConfig, batchSize: pipelineConfig.batch_size, force: true, signal });
       console.log("amounts revalued:", JSON.stringify(revalued));
       signal.throwIfAborted();
-      const scan = await runRuleScan(db, { interests, pipeline: pipelineConfig, logger, batchSize: pipelineConfig.batch_size });
+      const scan = await runRuleScan(db, { interests, pipeline: pipelineConfig, logger, batchSize: pipelineConfig.batch_size, signal });
       console.log("rule scan:", JSON.stringify(scan));
       signal.throwIfAborted();
-      const salarySignals = await syncSalarySignals(db, { interests, pipeline: pipelineConfig, logger, batchSize: pipelineConfig.batch_size });
+      const salarySignals = await syncSalarySignals(db, { interests, pipeline: pipelineConfig, logger, batchSize: pipelineConfig.batch_size, signal });
       console.log("salary signals:", JSON.stringify(salarySignals));
       signal.throwIfAborted();
       const bonus = await reconcileBonuses(db, interests);

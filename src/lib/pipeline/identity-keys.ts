@@ -241,7 +241,7 @@ export interface SplitMergedResult {
   rawRequeued: number;
   /** Split jobs the user had acted on (application, favourite, override): worth a look. Their company is unchanged. */
   splitWithUserState: number[];
-  /** Jobs the user had acted on whose own postings name another company now: left where they are, worth a look. */
+  /** Jobs left unchanged for manual review: an unreadable linked posting or a company move that would affect user state. */
   needsReview: number[];
   aborted: boolean;
 }
@@ -311,18 +311,28 @@ export async function splitMergedJobs(db: Db, options: SplitMergedOptions): Prom
 
   let afterId = 0;
   for (;;) {
-    const batch = await listJobsWithRawPostings(db, { afterId, limit: config.batch_size });
+    const batch = await listJobsWithRawPostings(db, { afterId, limit: config.batch_size, includeUnparsed: true });
     if (batch.length === 0) break;
     const acted = await jobIdsWithUserState(db, batch.map((job) => job.jobId));
     for (const job of batch) {
       if (options.signal?.aborted) return { ...result, aborted: true };
       afterId = job.jobId;
+      const unreadable: number[] = [];
       const sources = job.sources.flatMap((source) => {
         const identity = options.identityOf(source.raw);
-        return identity === undefined ? [] : [{ rawId: source.raw.id, identity, v1: v1(identity), v2: v2(identity) }];
+        if (identity === undefined) {
+          unreadable.push(source.raw.id);
+          return [];
+        }
+        return [{ rawId: source.raw.id, identity, v1: v1(identity), v2: v2(identity) }];
       });
       if (!sources.some((source) => changedByVersion2(source.identity))) continue;
       result.jobsChecked += 1;
+      if (unreadable.length > 0) {
+        result.needsReview.push(job.jobId);
+        options.logger.warn("merged job left unchanged because linked postings could not be parsed", { jobId: job.jobId, rawPostingIds: unreadable });
+        continue;
+      }
 
       const ownCompany = companyKeyById.get(job.companyId);
       const ownTitle = normalizeTitle(job.title);

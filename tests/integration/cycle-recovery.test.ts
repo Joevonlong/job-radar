@@ -3,21 +3,23 @@ import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { eq, sql } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, beforeEach, expect, inject, it, vi } from "vitest";
+import { parseDocument } from "yaml";
 
 import { ChannelRegistry } from "@/lib/channels/registry";
 import { findCycleLockHolder, withCycleLock } from "@/lib/cycle/lock";
 import { runCycle } from "@/lib/cycle/run-cycle";
 import { registerCycleStep, resetCycleSteps } from "@/lib/cycle/steps";
-import { closeDb, countRunningCycles, createConnection, getDb, schema } from "@/lib/db";
+import { closeDb, countRunningCycles, createConnection, getDb } from "@/lib/db";
 import { runMigrations } from "@/lib/db/migrate";
+import { databaseTestSupport } from "@/lib/db/test-support";
 
 import { makeTempConfig, type TempConfig } from "../config/helpers";
 import { config, quietLogger } from "../cycle/helpers";
 
 const url = inject("testDatabaseUrl");
 const root = path.resolve(import.meta.dirname, "../..");
+const data = () => databaseTestSupport(getDb());
 let temp: TempConfig;
 beforeAll(async () => {
   process.env.DATABASE_URL = url;
@@ -40,6 +42,7 @@ function cli(script: string, imports: string[] = [], args: string[] = []) {
       JOB_RADAR_CONFIG_DIR: temp.configDir,
       JOB_RADAR_PROFILE_DIR: temp.profileDir,
       JOB_RADAR_CONFIG_POLL_MS: "0",
+      RUNNER_HEARTBEAT_SECONDS: "1",
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -55,22 +58,72 @@ function cli(script: string, imports: string[] = [], args: string[] = []) {
 }
 
 it("reprocess waits for the cycle lock before it resets any derived facts", async () => {
-  const [company] = await getDb().insert(schema.companies).values({ name: "Example", nameNorm: "example" }).returning();
-  await getDb().insert(schema.jobs).values({ companyId: company!.id, title: "Engineer", titleNorm: "engineer", workplace: "remote" });
+  const [company] = await data().insertCompany({ name: "Example", nameNorm: "example" });
+  await data().insertJob({ companyId: company!.id, title: "Engineer", titleNorm: "engineer", workplace: "remote" });
   let processRun: ReturnType<typeof cli> | undefined;
   try {
     await withCycleLock(getDb(), "try", async () => {
       processRun = cli("scripts/reprocess.ts");
       await vi.waitFor(async () => {
-        const [waiting] = await getDb().execute<{ n: number }>(sql`select count(*)::int as n from pg_locks l join pg_stat_activity a on a.pid = l.pid where l.locktype = 'advisory' and not l.granted and l.database = (select oid from pg_database where datname = current_database()) and a.application_name like ${`job-radar cycle pid=${processRun!.child.pid} %`}`);
-        expect(waiting?.n === 1 || processRun!.output().includes("work mode, German level and agency flag cleared")).toBe(true);
+        const waiting = await data().cycleLockWaiters(processRun!.child.pid);
+        expect(waiting === 1 || processRun!.output().includes("work mode, German level and agency flag cleared")).toBe(true);
       }, { timeout: 15_000 });
-      expect((await getDb().select().from(schema.jobs))[0]?.workplace).toBe("remote");
+      expect((await data().jobs())[0]?.workplace).toBe("remote");
     });
   } finally {
     if (processRun) expect(await processRun.finished, processRun.output()).toEqual({ code: 0, signal: null });
   }
-  expect((await getDb().select().from(schema.jobs))[0]?.workplace).toBe("unknown");
+  expect((await data().jobs())[0]?.workplace).toBe("unknown");
+}, 30_000);
+
+it("reprocess stops between filter batches when the lock connection is lost during a write", async () => {
+  const pipelineFile = path.join(temp.defaultsDir, "pipeline.yaml");
+  const pipeline = parseDocument(fs.readFileSync(pipelineFile, "utf8"));
+  pipeline.set("batch_size", 1);
+  fs.writeFileSync(pipelineFile, pipeline.toString());
+  const [company] = await data().insertCompany({ name: "Example", nameNorm: "example" });
+  for (const title of ["Engineer", "Designer"]) {
+    await data().insertJob({ companyId: company!.id, title, titleNorm: title.toLowerCase() });
+  }
+  await data().installFilterWriteGate();
+  const blocker = createConnection(url, { max: 1 });
+  let release = () => {};
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  let entered = () => {};
+  const ready = new Promise<void>((resolve) => { entered = resolve; });
+  const held = databaseTestSupport(blocker.db).holdFilterWrites(entered, gate);
+  let processRun: ReturnType<typeof cli> | undefined;
+  try {
+    await ready;
+    processRun = cli("scripts/reprocess.ts");
+    await vi.waitFor(async () => expect(await data().blockedFilterWrites()).toBe(1), { timeout: 15_000 });
+    const pid = await findCycleLockHolder(getDb());
+    expect(pid).not.toBeNull();
+    await data().terminateBackend(pid!);
+    // The next heartbeat reconnects and reacquires the lock, which cancels the old body even though it is still in SQL.
+    await vi.waitFor(async () => {
+      const nextPid = await findCycleLockHolder(getDb());
+      expect(nextPid).not.toBeNull();
+      expect(nextPid).not.toBe(pid);
+    }, { timeout: 5000 });
+    release();
+    await held;
+
+    expect(await processRun.finished, processRun.output()).toEqual({ code: 1, signal: null });
+    expect(await data().scores()).toHaveLength(1);
+    expect(processRun.output()).toContain('"evaluated":1');
+    expect(processRun.output()).toContain("cycle lock connection lost");
+    expect(processRun.output()).not.toContain("amounts revalued:");
+  } finally {
+    release();
+    await held;
+    if (processRun) {
+      if (processRun.child.exitCode === null && processRun.child.signalCode === null) processRun.child.kill("SIGKILL");
+      await processRun.finished;
+    }
+    await blocker.sql.end({ timeout: 5 });
+    await data().removeFilterWriteGate();
+  }
 }, 30_000);
 
 it.each(["SIGINT", "SIGTERM"] as const)("the real cycle CLI finishes its running row when it receives %s", async (signal) => {
@@ -85,7 +138,7 @@ registerCycleStep("collect", async (ctx) => {
     await vi.waitFor(() => expect(processRun.output()).toContain("collect waiting for abort"), { timeout: 15_000 });
     processRun.child.kill(signal);
     const exit = await processRun.finished;
-    const rows = await getDb().select().from(schema.cycles);
+    const rows = await data().cycles();
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ status: "failed", summaryJson: { aborted: true } });
     expect(rows[0]?.finishedAt).toBeInstanceOf(Date);
@@ -98,25 +151,21 @@ registerCycleStep("collect", async (ctx) => {
 }, 30_000);
 
 it("the next cycle recovers a row whose final database write failed, without restarting the runner", async () => {
-  await getDb().execute(sql`create sequence fail_cycle_finish_once`);
-  await getDb().execute(sql`create function fail_cycle_finish_once() returns trigger language plpgsql as $$ begin if old.status = 'running' and new.status <> 'running' and nextval('fail_cycle_finish_once') = 1 then raise exception 'test finish failure'; end if; return new; end $$`);
-  await getDb().execute(sql`create trigger fail_cycle_finish_once before update on cycles for each row execute function fail_cycle_finish_once()`);
+  await data().installFinishFailure();
   // No collectors or AI: exercise just the cycle row's lifecycle and its real finish write.
   for (const name of ["collect", "pipeline", "filter", "signals", "ai", "notify", "maintenance"] as const) registerCycleStep(name, async () => {});
   const run = () => runCycle("manual", { registry: new ChannelRegistry(), config: config(), logger: quietLogger });
   try {
     await expect(run()).rejects.toThrow();
-    const [orphan] = await getDb().select().from(schema.cycles);
+    const [orphan] = await data().cycles();
     expect(orphan?.status).toBe("running");
     expect((await run()).status).toBe("succeeded");
-    const [recovered] = await getDb().select().from(schema.cycles).where(eq(schema.cycles.id, orphan!.id));
+    const [recovered] = await data().cycle(orphan!.id);
     expect(recovered).toMatchObject({ status: "failed", summaryJson: { orphaned: expect.any(String) } });
     expect(recovered?.finishedAt).toBeInstanceOf(Date);
     expect(await countRunningCycles(getDb())).toBe(0);
   } finally {
-    await getDb().execute(sql`drop trigger fail_cycle_finish_once on cycles`);
-    await getDb().execute(sql`drop function fail_cycle_finish_once()`);
-    await getDb().execute(sql`drop sequence fail_cycle_finish_once`);
+    await data().removeFinishFailure();
   }
 });
 
@@ -137,7 +186,7 @@ it("losing the lock connection aborts the body and waits for it to settle before
   try {
     await ready;
     expect(await findCycleLockHolder(getDb())).toBe(pid);
-    await getDb().execute(sql`select pg_terminate_backend(${pid})`);
+    await data().terminateBackend(pid);
     await vi.waitFor(() => expect(signal?.aborted || settled).toBe(true), { timeout: 5000 });
     expect(settled).toBe(false);
     expect(signal?.aborted).toBe(true);
@@ -156,12 +205,11 @@ it("a cancelled lock wait stops without entering the body, and a one-connection 
   try {
     await withCycleLock(connection.db, "try", async () => {
       // The dedicated lock must not use up the application's only pool connection.
-      await connection.db.execute(sql`select 1`);
+      await databaseTestSupport(connection.db).ping();
       const waiting = withCycleLock(getDb(), "wait", async () => { entered = true; }, { signal: abort.signal });
       try {
         await vi.waitFor(async () => {
-          const [row] = await getDb().execute<{ n: number }>(sql`select count(*)::int as n from pg_locks where locktype = 'advisory' and not granted and database = (select oid from pg_database where datname = current_database())`);
-          expect(row?.n).toBe(1);
+          expect(await data().cycleLockWaiters()).toBe(1);
         }, { timeout: 5000 });
       } finally {
         abort.abort();
