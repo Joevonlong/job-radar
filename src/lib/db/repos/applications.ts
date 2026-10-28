@@ -3,6 +3,8 @@ import { and, asc, count, desc, eq, inArray, lt, sql } from "drizzle-orm";
 import type { Db } from "../client";
 import type { Executor } from "../executor";
 import { applicationEvents, applications, applicationStatusEnum, companies, jobs } from "../schema";
+import { PIPELINE_STATUSES } from "@/lib/dashboard/board";
+import { wakeDormantJob } from "./dormancy";
 
 export type Application = typeof applications.$inferSelect;
 export type ApplicationEvent = typeof applicationEvents.$inferSelect;
@@ -75,6 +77,7 @@ async function createApplication(
     .returning();
   if (!row) return null;
   await tx.insert(applicationEvents).values({ applicationId: row.id, fromStatus: null, toStatus: row.status, note: input.note ?? null });
+  if ((PIPELINE_STATUSES as readonly ApplicationStatus[]).includes(input.status)) await wakeDormantJob(tx, input.jobId);
   return row;
 }
 
@@ -104,12 +107,14 @@ export async function setApplicationStatus(
 
     const [existing] = await tx.select().from(applications).where(eq(applications.jobId, jobId)).for("update").limit(1);
     if (!existing) throw new Error(`setApplicationStatus: application of job ${jobId} vanished`);
+    if (existing.status === status && (PIPELINE_STATUSES as readonly ApplicationStatus[]).includes(status)) await wakeDormantJob(tx, jobId);
     if (existing.status === status) return { previous: existing.status, status, changed: false, applicationId: existing.id };
     if (allowFrom && !allowFrom.includes(existing.status)) {
       return { previous: existing.status, status, changed: false, applicationId: existing.id, rejected: true };
     }
 
     await tx.update(applications).set({ status, statusChangedAt: sql`now()` }).where(eq(applications.id, existing.id));
+    if ((PIPELINE_STATUSES as readonly ApplicationStatus[]).includes(status)) await wakeDormantJob(tx, jobId);
     await tx.insert(applicationEvents).values({ applicationId: existing.id, fromStatus: existing.status, toStatus: status, note: note ?? null });
     return { previous: existing.status, status, changed: true, applicationId: existing.id };
   });
@@ -154,6 +159,7 @@ export async function revertApplicationStatus(db: Executor, jobId: number, input
         // the clock of the status it returns to started when the event before this one was written
         const since = before && before.toStatus === restoreTo ? before.at : app.createdAt;
         await tx.update(applications).set({ status: restoreTo, statusChangedAt: since }).where(eq(applications.id, app.id));
+        if ((PIPELINE_STATUSES as readonly ApplicationStatus[]).includes(restoreTo)) await wakeDormantJob(tx, jobId);
         return { status: restoreTo, reverted: true, changed: true };
       }
     }

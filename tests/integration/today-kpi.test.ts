@@ -124,6 +124,19 @@ describe("listRecentCycleKpis: the numbers behind the summary blocks of Today", 
     expect(last).toMatchObject({ cycleId: summary?.id, fetched: summary?.fetched, passed: summary?.passedCount, qualified: summary?.qualifiedCount });
   });
 
+  it("keeps historical KPI counts working before the dormancy columns exist", async () => {
+    const { c1, c2 } = await build();
+    const rollback = new Error("deliberate rollback");
+    await expect(getDb().transaction(async (tx) => {
+      await tx.execute(sql`alter table jobs drop column dormant_at, drop column possibly_closed_at`);
+      const series = await listRecentCycleKpis(tx, { limit: 7, qualifiedMinRank: PUSH_LINE });
+      expect(series.map((point) => point.cycleId)).toEqual([c1.id, c2.id]);
+      expect(series[0]).toMatchObject({ fetched: 120, passed: 2, qualified: 1, salaryStated: 1, pushed: 1 });
+      expect(series[1]).toMatchObject({ fetched: 200, passed: 3, qualified: 2, salaryStated: 2, pushed: 2 });
+      throw rollback;
+    })).rejects.toBe(rollback);
+  });
+
   it("feeds the blocks: value, share of fetched, change against the previous cycle, series", async () => {
     await build();
     const blocks = buildKpiBlocks(await listRecentCycleKpis(getDb(), { limit: 7, qualifiedMinRank: PUSH_LINE }), 7);

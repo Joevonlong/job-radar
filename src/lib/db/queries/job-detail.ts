@@ -22,6 +22,8 @@ import { listMonthSalaryFigures } from "./jobs";
 import { asContract, asGermanLevel, asJobLanguage, parseLocations, parseSalary } from "./parse";
 import type { Contract, GermanLevel, JobLanguage, JobLocation, JobSalary, JobSignal, JobSourceRef, JobStatus, Workplace } from "./types";
 import { summariesOf } from "../summaries";
+import { dormancyReady } from "../repos/dormancy";
+import { dormantSql } from "./job-status";
 
 /** The newest score of a job with everything the detail page shows. */
 export interface JobScoreDetail {
@@ -176,22 +178,25 @@ export interface JobClosure {
   linkCheck: LinkCheckEvidence | null;
 }
 
-/** The columns of `jobs` the page reads (all but `link_check_json`, read apart so the page works before the migration). */
+/** The columns of `jobs` the page reads (all but the migration-gated closure and dormancy columns, read apart so the page works before the migration). */
 function detailColumns() {
-  const { linkCheckJson: _linkCheckJson, ...columns } = getTableColumns(jobs);
+  const { linkCheckJson: _linkCheckJson, dormantAt: _dormantAt, possiblyClosedAt: _possiblyClosedAt, ...columns } = getTableColumns(jobs);
   void _linkCheckJson;
+  void _dormantAt;
+  void _possiblyClosedAt;
   return columns;
 }
 
 /** The closed state of a job; before the migration the automatic status alone. */
 async function loadClosure(db: Db, id: number, autoStatus: JobStatus): Promise<{ status: JobStatus; closure: JobClosure }> {
   if (!(await uxTablesReady(db))) return { status: autoStatus, closure: { autoStatus, reason: closedReason(autoStatus, null, null), override: null, linkCheck: null } };
-  const [[check], override] = await Promise.all([db.select({ json: jobs.linkCheckJson }).from(jobs).where(eq(jobs.id, id)).limit(1), getClosureOverride(db, id)]);
+  const dormant = await dormancyReady(db);
+  const [[check], override] = await Promise.all([db.select({ json: jobs.linkCheckJson, dormant: dormantSql(dormant) }).from(jobs).where(eq(jobs.id, id)).limit(1), getClosureOverride(db, id)]);
   const linkCheck = parseLinkCheck(check?.json);
   const action = override?.action ?? null;
   return {
     status: effectiveJobStatus(autoStatus, action),
-    closure: { autoStatus, reason: closedReason(autoStatus, action, linkCheck?.outcome ?? null), override, linkCheck },
+    closure: { autoStatus, reason: closedReason(autoStatus, action, linkCheck?.outcome ?? null, check?.dormant ?? false), override, linkCheck },
   };
 }
 

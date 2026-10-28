@@ -5,6 +5,8 @@ import type { Executor } from "../executor";
 import { companies, jobBreakdowns, jobs, scores } from "../schema";
 
 import { descriptionHashSql } from "./translations";
+import { notDormantSql } from "../queries/job-status";
+import { dormancyReady } from "./dormancy";
 
 export type JobBreakdownRow = typeof jobBreakdowns.$inferSelect;
 
@@ -90,6 +92,7 @@ export async function listBreakdownCandidates(db: Executor, args: { minRank: num
         isNotNull(latest.rankValue),
         sql`${latest.rankValue} >= ${args.minRank}`,
         ne(jobs.status, "closed"),
+        notDormantSql(await dormancyReady(db)),
         isNotNull(jobs.description),
         sql`btrim(${jobs.description}) <> ''`,
         sql`(${jobBreakdowns.jobId} is null or ${jobBreakdowns.sourceHash} <> ${descriptionHashSql})`,

@@ -22,6 +22,7 @@ import { refreshIdentityKeysIfStale, splitMergedJobs, type IdentityKeyRefreshRes
 import { runMaintenance, type MaintenanceResult } from "./lifecycle";
 import { refreshSalariesIfStale, type SalaryRefreshResult } from "./refresh-salary";
 import { normalizeDraft, type NormalizedJob } from "./normalize";
+import { dormancyReady } from "@/lib/db/repos/dormancy";
 
 export { normalizeCompanyKey, resolveCompanyName } from "./company";
 export { runMaintenance, type MaintenanceResult } from "./lifecycle";
@@ -167,7 +168,7 @@ async function persist(db: Db, raw: RawPosting, normalized: NormalizedJob, famil
       await updateJob(tx, job.id, {
         ...merged,
         ...(wins ? { companyId: company.id } : {}),
-        ...(seenAgain ? { lastSeenAt: raw.fetchedAt, status: statusWhenSeenAgain(job) } : {}),
+        ...(seenAgain ? { lastSeenAt: raw.fetchedAt, status: statusWhenSeenAgain(job), ...(await dormancyReady(tx) ? { dormantAt: null } : {}) } : {}),
       });
       jobId = job.id;
     }

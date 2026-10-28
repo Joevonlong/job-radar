@@ -48,6 +48,43 @@ const eslintConfig = defineConfig([
       ],
     },
   },
+  {
+    files: ["src/**/*.{ts,tsx,mts,js}"],
+    ignores: ["src/lib/db/**"],
+    rules: {
+      "@typescript-eslint/no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "drizzle-orm",
+              message: "Import database packages only in src/lib/db/; use its queries or repos elsewhere.",
+              allowTypeImports: false,
+            },
+            {
+              name: "postgres",
+              message: "Import database packages only in src/lib/db/; use its queries or repos elsewhere.",
+              allowTypeImports: false,
+            },
+          ],
+          patterns: [
+            {
+              group: ["drizzle-orm/*"],
+              message: "Import database packages only in src/lib/db/; use its queries or repos elsewhere.",
+              allowTypeImports: false,
+            },
+          ],
+        },
+      ],
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "ImportExpression[source.value=/^(drizzle-orm|postgres)(\\/.*)?$/]",
+          message: "Import database packages only in src/lib/db/; use its queries or repos elsewhere.",
+        },
+      ],
+    },
+  },
   globalIgnores([".next/**", "out/**", "build/**", "dist/**", "next-env.d.ts", "playwright-report/**", "test-results/**", ".local-demo/**", "data/**"]),
 ]);
 

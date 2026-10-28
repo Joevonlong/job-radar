@@ -50,6 +50,12 @@ A channel's status is the same result as the channel card on the `/sources` over
 
 ### How jobs get marked possibly closed
 
+A job that has been possibly closed for `lifecycle.dormant_after_days` (30 by default) becomes dormant unless it is
+bookmarked, has a live application (`new` through `offer`) or has a user open/closed judgement. This normally means
+7 + 30 days without being listed; newly qualifying jobs get the full 30 days even after a long collection outage.
+Dormancy hides the job from default lists and automatic work, including ordinary link checks, without deleting it or
+changing its status. A source listing it again or a user choosing **Still open** brings it back. See [Closed jobs](usage.md#closed-jobs).
+
 "Possibly closed" is a hint based on time, not proof, and it is judged per channel, not per search query:
 
 - A job becomes possibly closed when no source has returned it for `possibly_closed_after_days` days (7 by default) **and** each channel it came from has had at least one successful run that started after those days had passed. Runs that failed, were skipped or were interrupted do not count, so a channel that was down never closes its jobs.

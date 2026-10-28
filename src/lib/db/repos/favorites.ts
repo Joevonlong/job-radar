@@ -2,6 +2,7 @@ import { eq, inArray, sql } from "drizzle-orm";
 
 import type { Executor } from "../executor";
 import { jobFavorites } from "../schema";
+import { wakeDormantJob } from "./dormancy";
 
 /** A job's star as the UI needs it. */
 export interface FavoriteState {
@@ -29,12 +30,15 @@ export async function getFavorite(db: Executor, jobId: number): Promise<Favorite
  * removed star with its old note and time (undo).
  */
 export async function addFavorite(db: Executor, jobId: number, restore?: { note: string | null; createdAt: Date }): Promise<{ changed: boolean }> {
-  const rows = await db
-    .insert(jobFavorites)
-    .values({ jobId, ...(restore ? { note: restore.note, createdAt: restore.createdAt } : {}) })
-    .onConflictDoNothing()
-    .returning({ jobId: jobFavorites.jobId });
-  return { changed: rows.length > 0 };
+  return db.transaction(async (tx) => {
+    const rows = await tx
+      .insert(jobFavorites)
+      .values({ jobId, ...(restore ? { note: restore.note, createdAt: restore.createdAt } : {}) })
+      .onConflictDoNothing()
+      .returning({ jobId: jobFavorites.jobId });
+    await wakeDormantJob(tx, jobId);
+    return { changed: rows.length > 0 };
+  });
 }
 
 /** Un-star a job; returns what the star held (for undo), null when there was none. */

@@ -39,6 +39,8 @@ import { exitProcess, installShutdown } from "@/lib/ops/shutdown";
 import { withTimeout } from "@/lib/ops/timeout";
 import { recordAllConfigLoaded, recordConfigLoaded } from "@/lib/settings/ack";
 import { createSetupGate } from "@/lib/setup/runner-gate";
+import { loadPipeline } from "@/lib/market/effective";
+import { wakeIneligibleDormantJobs } from "@/lib/db/repos/dormancy";
 
 import { runRunnerHeartbeats } from "./heartbeat";
 
@@ -150,6 +152,13 @@ async function main(): Promise<number> {
     });
   }
   log("migrations up to date");
+  try {
+    const { lifecycle } = await loadPipeline();
+    const woke = await wakeIneligibleDormantJobs(getDb(), { now: new Date(), possiblyClosedAfterDays: lifecycle.possibly_closed_after_days, dormantAfterDays: lifecycle.dormant_after_days });
+    if (woke > 0) log(`dormant jobs woke at startup: ${woke}`);
+  } catch (error) {
+    log(`could not sweep dormant jobs at startup: ${describe(error)}`);
+  }
 
   // Copy the user config files the user directory lacks from the defaults (never overwrites). In the container the
   // user directory is read-only for the runner (the web fills it); a full directory needs no write. Must not take the runner down.

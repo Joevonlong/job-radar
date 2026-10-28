@@ -3,6 +3,8 @@ import { and, asc, eq, inArray, sql } from "drizzle-orm";
 
 import type { Executor } from "../executor";
 import { companies, jobs, jobSources, jobTraps, rawPostings, scores, signalScans, trapScans } from "../schema";
+import { notDormantSql } from "../queries/job-status";
+import { dormancyReady } from "./dormancy";
 
 // ---------------------------------------------------------------- availability
 
@@ -55,7 +57,7 @@ const SOURCES_CTE = sql`src as (
 export async function listJobsToTrapScan(db: Executor, options: { rulesHash: string; limit: number; jobIds?: readonly number[] | null; force?: boolean }): Promise<TrapScanCandidate[]> {
   const ids = options.jobIds ?? null;
   if (ids !== null && ids.length === 0) return [];
-  const only = ids === null ? sql`true` : sql`j.id in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})`;
+  const only = ids === null ? notDormantSql(await dormancyReady(db), 'j') : sql`j.id in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})`;
   const outdated = options.force
     ? sql`true`
     : sql`(ts.job_id is null or ts.description_hash <> md5(coalesce(j.description, '')) or ts.sources_hash <> coalesce(src.sources_hash, md5('')) or ts.rules_hash <> ${options.rulesHash})`;

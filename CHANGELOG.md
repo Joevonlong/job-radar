@@ -7,6 +7,8 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ### Upgrade notes
 
+- **Jobs not listed for weeks leave automatic processing.** After 30 days possibly closed (normally 7 + 30 days unseen), unprotected jobs become dormant: default job lists, company counts, search and navigation badges shrink; badges also stop counting closed jobs. Find dormant jobs in the Closed or Possibly closed view, and choose Still open to wake them. No data is deleted. **Rollback:** remove `lifecycle.dormant_after_days` from your user `pipeline.yaml` if you added it (older strict schemas reject it); keep the nullable database columns. Older code shows these jobs again, and re-upgrading sweeps stale markers and user protection.
+
 - **Rolling back past interactive AI lanes:** queued automatic translations can fail on the older worker; the next
   cycle retries eligible jobs. To preserve the queued requests, remove their automatic-origin markers before rollback
   as described in [Roll back](docs/upgrade.md#roll-back). User requests retain their existing format.
@@ -215,6 +217,8 @@ A failure in (a) does not block rollback: follow (c) and accept the display wind
 
 - Runner heartbeat writes that finish after their timeout still count as healthy; sustained failures allow active work its configured cleanup grace period before restarting.
 - Jobspy scrape requests are sent only once after a timeout or server error; stalled runner heartbeat work is bounded, manual backups are verified before publication, deploy preflight explains why root is unsupported, and CLI checks recognize unavailable commands on a restricted PATH.
+- Keep the closing-phrase quote visible in job details when the job becomes dormant or another closure reason takes precedence.
+
 - Scoring views show the time-budget reason and remaining count even when preparation exhausts the budget before the first job is scored.
 - Splitting merged jobs preserves locations from every linked posting and reports unreadable sources for manual review;
   reprocessing stops its filter and signal batches when the cycle lock is lost.

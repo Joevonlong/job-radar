@@ -19,11 +19,11 @@ import {
   setClosureOverride,
   type JobFilters,
 } from "@/lib/db";
-import { effectiveStatusSql } from "@/lib/db/queries/job-status";
+import { closedReasonSql, effectivelyNotClosedSql, effectiveStatusSql } from "@/lib/db/queries/job-status";
 import { touchJobsSeen } from "@/lib/db/repos/jobs";
 import { resetUxTablesCache } from "@/lib/db/repos/ux-tables";
 import { runMigrations } from "@/lib/db/migrate";
-import { effectiveJobStatus, type AutoStatus, type ClosureAction } from "@/lib/jobs/closure";
+import { closedReason, effectiveJobStatus, type AutoStatus, type ClosureAction, type ClosedReason, type LinkCheckOutcome } from "@/lib/jobs/closure";
 
 /**
  * The user's closed / open judgement on top of the automatic status. Lists hide what shows as closed unless a status is
@@ -100,6 +100,8 @@ describe("lists", () => {
   it("/jobs hides what shows as closed by default, keeps possibly closed, and matches the status filter on what shows", async () => {
     const open = await addJob("Open", "active");
     const possibly = await addJob("Possibly", "possibly_closed");
+    const dormant = await addJob("Dormant", "possibly_closed");
+    await getDb().execute(sql`update jobs set dormant_at = '2026-10-11T08:00:00Z'::timestamptz where id = ${dormant}`);
     const gone = await addJob("Gone", "closed");
     const mine = await addJob("Mine", "active");
     const rescued = await addJob("Rescued", "closed");
@@ -107,12 +109,13 @@ describe("lists", () => {
     await setClosureOverride(getDb(), rescued, "open", null, NOW);
 
     expect(await listIds()).toEqual([open, possibly, rescued]);
-    expect(await listIds(closedView)).toEqual([possibly, gone, mine]);
+    expect(await listIds(closedView)).toEqual([possibly, dormant, gone, mine]);
     expect(await listIds({ statuses: ["active"] })).toEqual([open, rescued]);
-    expect(await countJobList(getDb(), { filters: closedView, timezone: TZ })).toBe(3);
+    expect(await countJobList(getDb(), { filters: closedView, timezone: TZ })).toBe(4);
     const cards = (await listJobs(getDb(), { filters: closedView, sort: "first_seen", dir: "asc", page: 1, pageSize: 50, timezone: TZ })).jobs;
     expect(cards.map((c) => [c.status, c.closedReason])).toEqual([
       ["possibly_closed", "possibly"],
+      ["possibly_closed", "dormant"],
       ["closed", "gone"],
       ["closed", "manual"],
     ]);
@@ -136,6 +139,25 @@ describe("lists", () => {
     expect((await listTodayJobs(getDb(), today)).map((j) => j.id)).toEqual([open]);
     expect((await listTodayJobs(getDb(), { ...today, extra: { statuses: ["closed"] } })).map((j) => j.id).sort()).toEqual([mine, gone].sort());
     expect((await listFavoriteJobs(getDb(), { sort: "starred" })).map((j) => j.id).sort()).toEqual([mine, gone].sort());
+  });
+
+  it("the SQL closure reasons agree with the pure rule in every combination, including an aliased jobs table", async () => {
+    const expected = new Map<number, ClosedReason | null>();
+    for (const auto of ["active", "possibly_closed", "closed"] as const)
+      for (const action of [null, "open", "closed"] as const)
+        for (const check of [null, "alive", "gone", "phrase", "unknown", "robots"] as const satisfies readonly (LinkCheckOutcome | null)[])
+          for (const dormant of [false, true]) {
+            const id = await addJob("Combination", auto, check ? { linkCheck: { outcome: check } } : {});
+            if (action) await setClosureOverride(getDb(), id, action, null, NOW);
+            if (dormant) await getDb().execute(sql`update jobs set dormant_at = '2026-10-11T08:00:00Z'::timestamptz where id = ${id}`);
+            expected.set(id, closedReason(auto, action, check, dormant));
+          }
+    const rows = await getDb().execute<{ id: string; reason: ClosedReason | null; listed: boolean; status: AutoStatus }>(sql`select j.id,
+      ${closedReasonSql(true, true, "j")} as reason, ${effectivelyNotClosedSql(true, "j")} as listed, ${effectiveStatusSql(true, "j")} as status from jobs j`);
+    for (const row of rows) {
+      expect(row.reason).toBe(expected.get(Number(row.id)));
+      expect(row.listed).toBe(row.status !== "closed");
+    }
   });
 
   it("the SQL rule agrees with effectiveJobStatus for every combination", async () => {
