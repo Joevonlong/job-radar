@@ -180,6 +180,8 @@ export interface HttpResponse {
   readonly headers: { get(name: string): string | null };
   text(): Promise<string>;
   json(): Promise<unknown>;
+  /** Discard an unused body and release its request timeout / cancellation listeners; absent on fakes. */
+  cancel?(): Promise<void>;
   /** The body as text, at most `maxBytes` of it (the rest is not downloaded); absent on fakes, which callers read with `text()`. */
   textUpTo?(maxBytes: number): Promise<{ text: string; truncated: boolean }>;
   /** The raw body stream of a real `fetch` response (read by `textUpTo`). */

@@ -70,7 +70,7 @@ function claimableKinds(kinds: readonly ControlRequestKind[] | undefined): reado
 
 /**
  * Claim the oldest pending request, run its handler and record the outcome. A handler that throws
- * (or a kind nobody handles) fails the request, never the runner. Returns the finished request,
+ * (or a kind nobody handles) fails the request, never the runner. Returns the finished request (done / failed),
  * or null when nothing was pending.
  */
 export async function processNextControlRequest(options: ControlPollOptions): Promise<ControlRequest | null> {

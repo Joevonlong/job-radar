@@ -36,6 +36,8 @@ export interface ChannelServices {
 export interface CycleStepContext {
   /** `id` is null in dry runs, which write nothing. */
   cycle: { id: number | null; kind: CycleKind };
+  /** Set by the ai-worker when these steps belong to a queued run_ai request. */
+  delegatedRequestId?: number;
   /** The scheduled kind a catch-up replaces (decides the look-back window). */
   windowKind: ScheduledCycleKind | null;
   dryRun: boolean;

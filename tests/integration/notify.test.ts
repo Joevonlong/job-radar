@@ -270,6 +270,15 @@ describe("notify step: summary and job messages", () => {
     expect(await notificationKinds()).toEqual([]);
   });
 
+  it("keeps no notification windows over two cycles while Telegram is unconfigured", async () => {
+    registerCycleStep("notify", createNotifyStep({ loadNotifyConfig: () => config(), createRuntime: () => null }));
+    for (let index = 0; index < 2; index += 1) {
+      const missing = await cycle();
+      expect(stepOf(missing)?.status).toBe("partial");
+    }
+    expect(await db().execute(sql`select key from runtime_state where key like 'notify:window:%'`)).toHaveLength(0);
+  });
+
   it("keeps jobs for a later cycle when Telegram fails, and retries them", async () => {
     await seedJob({ title: "Retry Role", rank: 90 });
     useStep(config());

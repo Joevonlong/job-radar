@@ -11,14 +11,15 @@ import { loadConfig, type AiConfig, type NotifyConfig } from "@/lib/config";
 import { loadPipeline } from "@/lib/market";
 import type { Db } from "@/lib/db/client";
 import { getCycle } from "@/lib/db/repos/cycles";
+import { getRunAiNotificationWindow } from "@/lib/db/repos/control-requests";
 import {
-  hasNotificationForCycle,
   listNotifiedJobIds,
   listPushCandidates,
   NOTIFICATION_KINDS,
   recordNotification,
   type PushCandidate,
 } from "@/lib/db/repos/notifications";
+import { hasDeliveredNotificationWindow, recordDigestDelivery, retainNotificationWindow, type DigestWindow } from "@/lib/db/repos/notification-windows";
 import type { CycleStepContext, CycleStepFn, StepResult } from "@/lib/cycle/steps";
 import { buildWatchedCompanyKeys } from "@/lib/companies/marks";
 import { isResumeKitConfigured } from "@/lib/resume/config";
@@ -38,7 +39,7 @@ import { trapsEnabled } from "@/lib/traps/settings";
 /**
  * The `notify` cycle step: alerts first (they ignore quiet hours), then — unless
  * it is quiet — one summary message and one message per selected job. Jobs that were not sent stay
- * candidates for `candidate_window_hours`, so quiet hours and late scores only delay a push.
+ * candidates for `candidate_window_hours`; failed or deferred digests retain their original window until delivery.
  */
 
 export interface NotifyStepOptions {
@@ -67,8 +68,19 @@ export interface NotifyJobsResult {
 export interface NotifyStepResult {
   skipped?: "disabled" | "not_configured" | "no_database";
   alerts?: AlertDelivery;
-  /** Job messages were held back (quiet hours) or already sent for this cycle. */
-  jobs?: NotifyJobsResult | { deferred: "quiet_hours" | "already_sent" };
+  /** A failed or deferred summary keeps its window; later notify runs inherit it independently of the queue. */
+  retry?: { since: string; startedAt: string; lateAiComplete?: true };
+  deliveredByCycleId?: number;
+  /** Job messages were held back (quiet hours or a newer queued run), or already sent for this cycle. */
+  jobs?: NotifyJobsResult | { deferred: "quiet_hours" | "already_sent" | "newer_cycle_pending" };
+}
+
+const notificationRetrySchema = z.object({ retry: z.object({ since: z.iso.datetime(), startedAt: z.iso.datetime(), lateAiComplete: z.literal(true).optional() }) });
+
+/** The saved window mirror, including the legacy AI phase checkpoint used during shutdown recovery. */
+export function notificationRetryOf(result: unknown): NotifyStepResult["retry"] | null {
+  const parsed = notificationRetrySchema.safeParse(result);
+  return parsed.success ? parsed.data.retry : null;
 }
 
 const failedSourcesSchema = z.object({
@@ -140,7 +152,7 @@ function describe(error: unknown): string {
   return isTelegramError(error) ? error.message : error instanceof Error ? `${error.name}: ${error.message}`.slice(0, 300) : "unexpected error";
 }
 
-async function sendJobs(deps: NotifyDeps, ctx: CycleStepContext, db: Db, cycleId: number, cycleStartedAt: Date, candidates: PushCandidate[]): Promise<{ jobs: NotifyJobsResult; summarySent: boolean }> {
+async function sendJobs(deps: NotifyDeps, ctx: CycleStepContext, db: Db, cycleId: number, digest: DigestWindow, candidates: PushCandidate[]): Promise<{ jobs: NotifyJobsResult; summarySent: boolean }> {
   const { config } = deps;
   const text = deps.text ?? notifyText();
   const pipeline = loadPipeline();
@@ -150,7 +162,7 @@ async function sendJobs(deps: NotifyDeps, ctx: CycleStepContext, db: Db, cycleId
   const catalog = loadSignalCatalog();
   const selection = selectForPush(candidates, { config, watchedKeys, alreadyNotified: notified });
 
-  const fresh = candidates.filter((c) => c.firstSeenAt.getTime() >= cycleStartedAt.getTime());
+  const fresh = candidates.filter((c) => c.firstSeenAt.getTime() >= digest.startedAt.getTime());
   // "qualified" = a job that passed the filter and reaches the push score (the same rule as the Today page): a new job of this
   // cycle, or one scored late in it (a backlog job pushed or cut by the cap this cycle), so "0 qualified · 2 pushed" cannot happen
   const reaches = (c: PushCandidate): boolean => c.score?.filterResult === "passed" && c.score.rankValue !== null && reachesPushScore(c.score.rankValue, hasHighSignal(c), config);
@@ -188,7 +200,7 @@ async function sendJobs(deps: NotifyDeps, ctx: CycleStepContext, db: Db, cycleId
         ...(quotaHeld ? { quotaHeld } : {}),
       }, text),
     });
-    await recordNotification(db, {
+    await recordDigestDelivery(db, digest, {
       kind: NOTIFICATION_KINDS.cycleSummary,
       cycleId,
       payload: { newJobs: jobs.newJobs, passedFilter: jobs.passedFilter, qualified, pushed: selection.selected.length },
@@ -254,6 +266,17 @@ export function createNotifyStep(options: NotifyStepOptions = {}): CycleStepFn {
     if (db === null || ctx.cycle.id === null) return { result: { skipped: "no_database" } satisfies NotifyStepResult };
     const runtime = (options.createRuntime ?? ((c: CycleStepContext, cfg: NotifyConfig) => createTelegramRuntime({ config: cfg, logger: c.logger, signal: c.signal })))(ctx, config);
     if (runtime === null) return { status: "partial", result: { skipped: "not_configured" } satisfies NotifyStepResult };
+    const savedRetry = notificationRetryOf(ctx.results.notify);
+    const delivered = await hasDeliveredNotificationWindow(db, ctx.cycle.id);
+    const cycle = await getCycle(db, ctx.cycle.id);
+    const queuedWindow = ctx.delegatedRequestId === undefined ? null : await getRunAiNotificationWindow(db, ctx.delegatedRequestId);
+    const digest = delivered ? null : await retainNotificationWindow(db, {
+      cycleId: ctx.cycle.id,
+      ...(ctx.delegatedRequestId === undefined ? {} : { requestId: ctx.delegatedRequestId }),
+      since: savedRetry ? new Date(savedRetry.since) : new Date(ctx.now().getTime() - config.candidate_window_hours * 3_600_000),
+      startedAt: savedRetry ? new Date(savedRetry.startedAt) : (queuedWindow?.startedAt ?? cycle?.startedAt ?? ctx.now()),
+    });
+    const retry = digest ? { ...savedRetry, since: digest.since.toISOString(), startedAt: digest.startedAt.toISOString() } : null;
 
     const deps: NotifyDeps = {
       db,
@@ -267,7 +290,7 @@ export function createNotifyStep(options: NotifyStepOptions = {}): CycleStepFn {
       ...(options.sleep ? { sleep: options.sleep } : {}),
       signal: ctx.signal,
     };
-    const result: NotifyStepResult = {};
+    const result: NotifyStepResult = retry ? { retry } : {};
     let status: "ok" | "partial" = "ok";
 
     // 1. alerts (not held back by quiet hours unless alerts_exempt is off)
@@ -307,23 +330,30 @@ export function createNotifyStep(options: NotifyStepOptions = {}): CycleStepFn {
     }
 
     // 2. jobs
+    if (delivered) {
+      result.jobs = { deferred: "already_sent" };
+      delete result.retry;
+      return { status, result };
+    }
     if (isQuietHours(ctx.now(), deps.timeZone, config.quiet_hours)) {
       ctx.logger.info("quiet hours: job messages are held back until a later cycle");
       result.jobs = { deferred: "quiet_hours" };
       return { status, result };
     }
-    if (await hasNotificationForCycle(db, NOTIFICATION_KINDS.cycleSummary, ctx.cycle.id)) {
-      result.jobs = { deferred: "already_sent" };
+    if (queuedWindow?.newerPending) {
+      result.jobs = { deferred: "newer_cycle_pending" };
       return { status, result };
     }
+    if (digest === null) return { status, result };
     try {
-      const cycle = await getCycle(db, ctx.cycle.id);
-      const startedAt = cycle?.startedAt ?? ctx.now();
-      const since = new Date(ctx.now().getTime() - config.candidate_window_hours * 3_600_000);
       const highValue = loadHighValuePolicy();
-      const candidates = await listPushCandidates(db, { since, isHighValue: (signal) => isHighValueSignal(signal, highValue) });
-      const sent = await sendJobs(deps, ctx, db, ctx.cycle.id, startedAt, candidates);
+      const candidates = await listPushCandidates(db, { since: digest.since, isHighValue: (signal) => isHighValueSignal(signal, highValue) });
+      const sent = await sendJobs(deps, ctx, db, ctx.cycle.id, digest, candidates);
       result.jobs = sent.jobs;
+      if (sent.summarySent) {
+        delete result.retry;
+        result.deliveredByCycleId = ctx.cycle.id;
+      }
       if (sent.jobs.failed > 0 || !sent.summarySent) status = "partial";
     } catch (error) {
       status = "partial";

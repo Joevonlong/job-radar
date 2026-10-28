@@ -45,14 +45,19 @@ export async function listCompaniesByNameNorm(db: Executor, nameNorms: readonly 
 
 /** Give a company another display name (and the key that goes with it); the old name is kept as an alias. */
 export async function renameCompany(db: Executor, id: number, input: { name: string; nameNorm: string; alias: string | null }): Promise<void> {
-  await db
-    .update(companies)
-    .set({
-      name: input.name,
-      nameNorm: input.nameNorm,
-      ...(input.alias ? { aliases: sql`case when ${input.alias}::text = any(${companies.aliases}) then ${companies.aliases} else array_append(${companies.aliases}, ${input.alias}::text) end` } : {}),
-    })
-    .where(eq(companies.id, id));
+  await db.transaction(async (tx) => {
+    const [before] = await tx.select({ nameNorm: companies.nameNorm }).from(companies).where(eq(companies.id, id)).for("update");
+    if (!before) return;
+    await tx
+      .update(companies)
+      .set({
+        name: input.name,
+        nameNorm: input.nameNorm,
+        ...(input.alias ? { aliases: sql`case when ${input.alias}::text = any(${companies.aliases}) then ${companies.aliases} else array_append(${companies.aliases}, ${input.alias}::text) end` } : {}),
+      })
+      .where(eq(companies.id, id));
+    if (before.nameNorm !== input.nameNorm) await moveSalaryLookups(tx, { fromCompanyId: id, toCompanyId: id, fromNorm: before.nameNorm, toNorm: input.nameNorm });
+  });
 }
 
 /**
@@ -61,13 +66,15 @@ export async function renameCompany(db: Executor, id: number, input: { name: str
  * the deleted row (cascade).
  */
 export async function mergeCompanyInto(db: Executor, fromId: number, toId: number): Promise<number> {
-  const rows = await db.select({ id: companies.id, nameNorm: companies.nameNorm }).from(companies).where(inArray(companies.id, [fromId, toId]));
-  const fromNorm = rows.find((row) => row.id === fromId)?.nameNorm;
-  const toNorm = rows.find((row) => row.id === toId)?.nameNorm;
-  if (fromNorm !== undefined && toNorm !== undefined) await moveSalaryLookups(db, { fromCompanyId: fromId, toCompanyId: toId, fromNorm, toNorm });
-  const moved = await db.update(jobs).set({ companyId: toId }).where(eq(jobs.companyId, fromId)).returning({ id: jobs.id });
-  await db.delete(companies).where(eq(companies.id, fromId));
-  return moved.length;
+  return db.transaction(async (tx) => {
+    const rows = await tx.select({ id: companies.id, nameNorm: companies.nameNorm }).from(companies).where(inArray(companies.id, [fromId, toId])).orderBy(asc(companies.id)).for("update");
+    const fromNorm = rows.find((row) => row.id === fromId)?.nameNorm;
+    const toNorm = rows.find((row) => row.id === toId)?.nameNorm;
+    if (fromNorm !== undefined && toNorm !== undefined) await moveSalaryLookups(tx, { fromCompanyId: fromId, toCompanyId: toId, fromNorm, toNorm });
+    const moved = await tx.update(jobs).set({ companyId: toId }).where(eq(jobs.companyId, fromId)).returning({ id: jobs.id });
+    await tx.delete(companies).where(eq(companies.id, fromId));
+    return moved.length;
+  });
 }
 
 /** Every company's id, display name, key, aliases and marks (for recomputing the keys when the key function changes). */

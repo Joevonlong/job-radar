@@ -1,5 +1,6 @@
 import { runDelegatedSteps, type DelegatedRunOptions } from "@/lib/cycle/delegated";
 import type { DelegatedStepSummary } from "@/lib/db/repos/cycles";
+import { notificationRetryOf } from "@/lib/notify/step";
 
 import { runAiPayloadSchema, type ControlHandler } from "./types";
 
@@ -45,7 +46,7 @@ export function summarizeDelegatedSteps(steps: readonly DelegatedStepSummary[]):
       failedSubtasks: subtasks.filter((s) => s.status === "failed").length,
       ...(profileIncomplete ? { reason: "profile_incomplete", profileMissing: Array.isArray(missing) ? missing.filter((m) => typeof m === "string") : [] } : {}),
     },
-    notify: { status: notify?.status ?? "skipped", pushed: jobs ? num(jobs.pushed) : null },
+    notify: { status: notify?.status ?? "skipped", pushed: jobs ? num(jobs.pushed) : null, pending: notificationRetryOf(notify?.result) !== null },
   };
 }
 
@@ -61,6 +62,7 @@ export function createRunAiHandler(options: RunAiHandlerOptions = {}): ControlHa
     const run = await runDelegatedSteps({
       db: context.db,
       cycleId: payload.data.cycleId,
+      requestId: request.id,
       signal: context.signal,
       logger: context.logger,
       ...(options.steps ? { steps: options.steps } : {}),
