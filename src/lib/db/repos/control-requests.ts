@@ -18,6 +18,8 @@ export const SETTINGS_REQUEST_KINDS = ["run_cycle", "rescore_stale", "score_jobs
  * `tests/ai-worker/units.test.ts` fails while a kind of the database enum is in neither list.
  */
 export const AI_CONTROL_REQUEST_KINDS = ["run_ai", "translate_job", "breakdown_job", "rescore_stale", "run_suggest", "score_jobs", "test_ai", "salary_lookup"] as const satisfies readonly ControlRequestKind[];
+/** User requests served independently of batch AI work. Automatic requests stay in the batch lane. */
+export const INTERACTIVE_CONTROL_REQUEST_KINDS = ["translate_job", "breakdown_job", "salary_lookup", "test_ai"] as const satisfies readonly (typeof AI_CONTROL_REQUEST_KINDS)[number][];
 /** The kinds that call no AI: the container runner's own work (the channel test and the Telegram test message). */
 export const NON_AI_CONTROL_REQUEST_KINDS = ["run_cycle", "test_channel", "test_telegram"] as const satisfies readonly ControlRequestKind[];
 /** The test buttons of /sources and /settings; their result is shown next to the button, not in the request list. */
@@ -69,16 +71,24 @@ export async function listOpenControlRequests(db: Db, kind: ControlRequestKind):
     .orderBy(controlRequests.id);
 }
 
-/**
- * Which claim queue a process takes its requests from. Today every process has one queue for all its kinds (`all`);
- * the filters below are written per queue so that the claim and the queue position always agree.
- */
-export type ControlLane = "all";
+/** The host worker splits interactive and batch work; the runner and --once keep one queue (`all`). */
+export type ControlLane = "interactive" | "batch" | "all";
+
+/** Pure counterpart of the SQL lane filter. Missing origin means user work, including older queued requests. */
+export function controlLaneOf(kind: ControlRequestKind, payload: unknown): Exclude<ControlLane, "all"> {
+  const auto = typeof payload === "object" && payload !== null && "origin" in payload && payload.origin === "auto";
+  return (INTERACTIVE_CONTROL_REQUEST_KINDS as readonly ControlRequestKind[]).includes(kind) && !auto ? "interactive" : "batch";
+}
 
 /** `and kind in (...)` for `kinds` (nothing: every kind) and `lane`. Shared by the claim and the queue position. */
 function laneFilter(kinds: readonly ControlRequestKind[] | undefined, lane: ControlLane): SQL {
   const kindFilter = kinds === undefined ? sql`` : sql`and kind in (${kindList(kinds)})`;
+  const interactive = sql`(kind in (${kindList(INTERACTIVE_CONTROL_REQUEST_KINDS)}) and coalesce(payload ->> 'origin', '') <> 'auto')`;
   switch (lane) {
+    case "interactive":
+      return sql`${kindFilter} and ${interactive}`;
+    case "batch":
+      return sql`${kindFilter} and not ${interactive}`;
     case "all":
       return kindFilter;
   }
@@ -226,6 +236,15 @@ export async function requeueInterruptedControlRequests(
 export async function getControlRequest(db: Db, id: number): Promise<ControlRequest | null> {
   const [row] = await db.select().from(controlRequests).where(eq(controlRequests.id, id)).limit(1);
   return row ?? null;
+}
+
+/** Promote a pending automatic request without changing its id or touching work already claimed. */
+export async function clearControlRequestOrigin(db: Db, id: number): Promise<boolean> {
+  const rows = await db.update(controlRequests)
+    .set({ payload: sql`${controlRequests.payload} - 'origin'` })
+    .where(and(eq(controlRequests.id, id), eq(controlRequests.status, "pending"), sql`${controlRequests.payload} ->> 'origin' = 'auto'`))
+    .returning({ id: controlRequests.id });
+  return rows.length > 0;
 }
 
 /** Newest first; `kinds` limits the list to those kinds. */

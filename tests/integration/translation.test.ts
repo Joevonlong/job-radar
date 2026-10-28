@@ -1,13 +1,16 @@
 import { eq, sql } from "drizzle-orm";
-import { afterAll, beforeAll, beforeEach, describe, expect, inject, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, inject, it, vi } from "vitest";
 
 import { createAiRouter, createDbUsageStore, registerAiSubtask, resetAiSubtasks, type AiRouter } from "@/lib/ai";
 import { createAiStep } from "@/lib/ai/step";
+import { processNextControlRequest, registerControlHandler, resetControlHandlers } from "@/lib/control";
+import { createTranslateJobHandler } from "@/lib/control/translate-job";
 import { createLogger } from "@/lib/channels/logger";
 import type { CycleStepContext } from "@/lib/cycle/steps";
-import { closeDb, getDb, getJobDetail, getTranslation, listTranslationCandidates, schema } from "@/lib/db";
+import { closeDb, getDb, getJobDetail, getTranslation, insertControlRequest, listTranslationCandidates, schema } from "@/lib/db";
 import { runMigrations } from "@/lib/db/migrate";
 import { descriptionHash } from "@/lib/translation/hash";
+import { splitIntoChunks } from "@/lib/translation/chunk";
 import { ensureTranslation, toJobTranslation } from "@/lib/translation/service";
 import { translateSubtask } from "@/lib/translation/subtask";
 
@@ -90,8 +93,10 @@ afterAll(async () => {
   await closeDb();
 });
 
-function fakeAi(reply = chinese): { router: AiRouter; calls: () => number } {
+function fakeAi(reply = chinese, beforeCall?: () => Promise<void>): { router: AiRouter; calls: () => number } {
   const { provider, transport } = scriptedProvider("codex-cli", [JSON.stringify({ translation: reply })]);
+  const call = transport.call;
+  transport.call = async (request) => { await beforeCall?.(); return call(request); };
   const router = createAiRouter({ config: pinnedAi(), providers: [provider], usage: createDbUsageStore(getDb()), now: () => NOW });
   return { router, calls: () => transport.calls.length };
 }
@@ -152,6 +157,72 @@ describe("one cycle's ai step with the translate sub-task (fake AI)", () => {
 });
 
 describe("ensureTranslation (what the translate button runs)", () => {
+  it.each([false, true])("merges the same target with first force=%s, router, settings and progress callback winning", async (force) => {
+    const first = fakeAi();
+    const later = fakeAi();
+    const onProgress = vi.fn();
+    const ignoredProgress = vi.fn();
+    const [a, b] = await Promise.all([
+      ensureTranslation(getDb(), first.router, ids.closed, { force, target: "zh", settings: { chunk_chars: 200, chunk_timeout_seconds: 90 }, onProgress }),
+      ensureTranslation(getDb(), later.router, ids.closed, { force: !force, target: "zh", settings: { chunk_chars: 1000, chunk_timeout_seconds: 1 }, onProgress: ignoredProgress }),
+    ]);
+    const chunks = splitIntoChunks(description("Closed".length), 200).length;
+    expect(a).toBe(b);
+    expect(first.calls()).toBe(chunks);
+    expect(onProgress).toHaveBeenCalledTimes(chunks);
+    expect(later.calls()).toBe(0);
+    expect(ignoredProgress).not.toHaveBeenCalled();
+  });
+
+  it("different target languages each call AI and store their own translation", async () => {
+    const first = fakeAi();
+    const other = fakeAi();
+    const [a, b] = await Promise.all([
+      ensureTranslation(getDb(), first.router, ids.closed, { target: "zh" }),
+      ensureTranslation(getDb(), other.router, ids.closed, { target: "de" }),
+    ]);
+    expect(a).not.toBe(b);
+    expect(first.calls()).toBe(1);
+    expect(other.calls()).toBe(1);
+    for (const lang of ["zh", "de"]) expect(await getTranslation(getDb(), ids.closed, lang)).not.toBeNull();
+  });
+
+  it("a real late subtask and interactive handler translate each chunk only once", async () => {
+    const entered = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    const joined = Promise.withResolvers<void>();
+    let first = true;
+    const lateAi = fakeAi(chinese, async () => {
+      if (first) { first = false; entered.resolve(); await release.promise; }
+    });
+    const interactiveAi = fakeAi();
+    const text = Array.from({ length: 8 }, (_, i) => description(i)).join("\n\n");
+    await getDb().update(schema.jobs).set({ description: text }).where(eq(schema.jobs.id, ids.top));
+    const config = pinnedAi((raw) => { raw.per_cycle_limit = 1; (raw.translation as Record<string, unknown>).chunk_chars = 500; });
+    resetAiSubtasks();
+    registerAiSubtask(translateSubtask);
+    registerControlHandler("translate_job", createTranslateJobHandler({ createRouter: () => { joined.resolve(); return interactiveAi.router; } }));
+    const step = createAiStep({ loadAiConfig: () => config, createRouter: () => lateAi.router, phase: "late" });
+    const ctx: CycleStepContext = { cycle: { id: null, kind: "manual" }, windowKind: null, dryRun: false, db: getDb(), signal: new AbortController().signal, logger, now: () => NOW, config: cycleConfig(), channels: undefined as never, results: {} };
+    const late = step(ctx);
+    let interactive: ReturnType<typeof processNextControlRequest> | undefined;
+    try {
+      await entered.promise;
+      await insertControlRequest(getDb(), { kind: "translate_job", payload: { jobId: ids.top, force: true } });
+      interactive = processNextControlRequest({ db: getDb(), signal: ctx.signal, logger, lane: "interactive" });
+      await joined.promise;
+    } finally {
+      release.resolve();
+      await late;
+      await interactive;
+      resetControlHandlers();
+      resetAiSubtasks();
+    }
+    expect(await interactive).toMatchObject({ status: "done" });
+    expect(lateAi.calls()).toBe(splitIntoChunks(text, 500).length);
+    expect(interactiveAi.calls()).toBe(0);
+  });
+
   it("translates on the first request, writes the cache and reads it on the second", async () => {
     const { router, calls } = fakeAi();
     const db = getDb();

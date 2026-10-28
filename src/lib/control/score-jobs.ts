@@ -11,15 +11,16 @@ export interface ScoreJobsHandlerOptions {
   createDeps?: (context: ControlHandlerContext) => ScoringDeps;
 }
 
-function summarize(result: ScoringResult, translationsQueued: number) {
+function summarize(result: ScoringResult, translationsQueued: number, selected: boolean) {
   return {
     scored: result.scored,
     translationsQueued,
     failed: result.failed,
     skipped: result.skipped,
-    // what is still waiting for a first score after this run
-    remaining: result.backlog.unscored,
+    // Selected jobs may need stale re-scores: count what the budget left of that selection, not only first scores.
+    remaining: selected && result.stopped === "time_budget" ? result.candidates - result.scored - result.failed : result.backlog.unscored,
     placeholder: false,
+    ...(result.stopped === "time_budget" ? { stopped: result.stopped } : {}),
   };
 }
 
@@ -34,7 +35,7 @@ async function followUpScores(db: Db, result: ScoringResult, minRank: number): P
   let queued = 0;
   for (const { jobId, rankValue } of result.scoredJobs) {
     if (rankValue === null || rankValue < minRank) continue;
-    const outcome = await requestTranslateJob(db, { jobId, force: false });
+    const outcome = await requestTranslateJob(db, { jobId, force: false, origin: "auto" });
     if (outcome.state === "queued" && !outcome.existing) queued += 1;
   }
   return queued;
@@ -53,8 +54,11 @@ export function createScoreJobsHandler(options: ScoreJobsHandlerOptions = {}): C
     const deps = options.createDeps
       ? options.createDeps(context)
       : createScoringDeps({ db: context.db, logger: context.logger, timeZone: loadConfig("schedule").timezone, signal: context.signal });
-    const result = "jobIds" in payload.data ? await scoreJobs(deps, payload.data.jobIds) : await scoreBacklog(deps);
-    const summary = summarize(result, await followUpScores(context.db, result, deps.config.translate_auto_min_score));
+    const minutes = deps.config.cycle_budget_minutes;
+    const deadline = minutes > 0 ? new Date(deps.now().getTime() + minutes * 60_000) : null;
+    const scoring = { ...deps, deadline };
+    const result = "jobIds" in payload.data ? await scoreJobs(scoring, payload.data.jobIds) : await scoreBacklog(scoring);
+    const summary = summarize(result, await followUpScores(context.db, result, deps.config.translate_auto_min_score), "jobIds" in payload.data);
     // Nothing could be scored: say why. No AI provider could be used (then every tried posting failed too),
     // some postings failed, the profile is incomplete (which fields), or the run was cancelled.
     if (result.scored === 0 && result.stopped === "ai_unavailable") return { status: "failed", result: { ...summary, error: "score_ai_unavailable" } };

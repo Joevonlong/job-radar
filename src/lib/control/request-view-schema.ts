@@ -30,7 +30,7 @@ export const controlQueueViewSchema = z.object({
 });
 export type ControlQueueView = z.infer<typeof controlQueueViewSchema>;
 
-/** Why a scoring request stopped early although it is done: the time budget ran out (an unknown value reads as none). */
+/** Why a scoring request stopped early, including before the first score: the time budget ran out (an unknown value reads as none). */
 export const SCORING_STOPPED_VALUES = ["time_budget"] as const;
 export const scoringStoppedSchema = z.enum(SCORING_STOPPED_VALUES).optional().catch(undefined);
 
