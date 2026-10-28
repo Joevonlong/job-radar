@@ -11,7 +11,7 @@ export type ControlRequestStage = "pending" | "running";
  * One read of a waiting request, as a component's `read` maps its server answer:
  * - `null`: nothing could be read this time (a dropped connection, a server error): the next tick reads again;
  * - `missing`: the request does not exist, or is not this page's: final, reported once through `onFailed(null)`;
- * - `waiting`: still pending or running, with its queue view and the component's own payload (the translation's partial text);
+ * - `waiting`: still pending, running or following a covering cycle, with its queue view and the component's own payload;
  * - `done` / `failed`: final, with the component's payload.
  */
 export type ControlRequestRead<W, D, F> =

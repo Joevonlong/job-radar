@@ -66,6 +66,17 @@ describe("cycle.last", () => {
     const late = withCycle(cycle({ startedAt: new Date("2026-10-06T15:00:30Z"), kind: "weekday_evening" }), { now: new Date("2026-10-07T06:31:00Z") });
     expect((await only(lastCycleCheck, late)).status).toBe("fail");
   });
+  it("does not let a cycle limited to some channels stand in for a missed slot", async () => {
+    // the latest cycle is a manual collect of one channel after the 07:00 slot; the last full cycle is from the day before
+    const partial = cycle({ kind: "manual", startedAt: new Date("2026-10-07T05:30:00Z"), lastFullCycleStartedAt: new Date("2026-10-06T15:00:30Z") });
+    const r = await only(lastCycleCheck, withCycle(partial));
+    expect(r.status).toBe("fail");
+    expect(r.detail).toContain("错过了 2026-10-07 07:00");
+    // a full cycle after the slot is fine
+    expect((await only(lastCycleCheck, withCycle(cycle({ lastFullCycleStartedAt: new Date("2026-10-07T05:00:30Z") })))).status).toBe("ok");
+    // no full cycle ever: the slot is missed
+    expect((await only(lastCycleCheck, withCycle(cycle({ kind: "manual", lastFullCycleStartedAt: null })))).status).toBe("fail");
+  });
   it("a running cycle is fine", async () => {
     expect((await only(lastCycleCheck, withCycle(cycle({ status: "running", finishedAt: null })))).detail).toContain("还在运行");
   });

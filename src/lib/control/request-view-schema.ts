@@ -54,6 +54,8 @@ export const requestResultViewSchema = z.object({
   messageId: z.number().int().optional(),
   cycleId: z.number().int().nullable().optional(),
   cycleStatus: z.string().optional(),
+  /** `run_cycle` done without a cycle of its own: the running cycle that covers its channels (also `cycleId`). */
+  coveredBy: z.number().int().optional(),
   /** `quota_guard` failures: when Job Radar's AI usage cap is expected to let the AI work again (null = not known). */
   resumeAt: iso.nullable().optional().catch(undefined),
   /** `score_jobs`: postings scored / failed, and what still waits afterwards. */
@@ -91,6 +93,11 @@ export type RequestResultView = z.infer<typeof requestResultViewSchema>;
 
 export function isOpenRequest(view: Pick<ControlRequestView, "status">): boolean {
   return view.status === "pending" || view.status === "running";
+}
+
+/** A `run_cycle` request done because a running cycle covers it, while that cycle still runs: its progress is still worth polling. */
+export function followsCoveringCycle(view: Pick<ControlRequestView, "status" | "result" | "cycle">): boolean {
+  return view.status === "done" && view.result.coveredBy !== undefined && view.cycle?.status === "running";
 }
 
 /** A stored `resumeAt` (ISO) as the pages use it; anything else is null. */

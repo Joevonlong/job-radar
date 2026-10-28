@@ -2,18 +2,24 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { sql } from "drizzle-orm";
+import YAML from "yaml";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, inject, it, vi } from "vitest";
 
 import { registerFixtureChannel } from "@/lib/channels/fixture";
 import { defaultRegistry } from "@/lib/channels/registry";
 import { registerControlHandler, resetControlHandlers, processNextControlRequest, runControlPoller } from "@/lib/control";
 import { requestRescoreStale, requestRunCycle } from "@/lib/control/service";
+import { loadConfig, resetConfigCache } from "@/lib/config";
+import { withCycleLock } from "@/lib/cycle/lock";
+import { startWaitingForLock } from "@/lib/cycle/lock-waiters";
 import { resetCycleSteps } from "@/lib/cycle/steps";
 import {
   claimNextControlRequest,
   closeDb,
   countStaleScores,
+  createCycle,
   findOpenControlRequest,
+  finishCycle,
   getControlRequest,
   getDb,
   insertControlRequest,
@@ -243,6 +249,71 @@ describe("processNextControlRequest", () => {
     expect(new Set(runs.map((r) => r.channelId))).toEqual(new Set(["fixture"]));
   });
 
+  /** Another process holds the cycle lock with a cycle limited to `channelIds` (null: every channel) while `fn` runs. */
+  async function holdLock(channelIds: string[] | null, fn: (id: number) => Promise<void>) {
+    const db = getDb();
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let id = 0;
+    const held = withCycleLock(db, "try", async (holder) => {
+      const row = await createCycle(db, { kind: channelIds === null ? "weekday_morning" : "manual", summary: { channelIds, lockPid: holder.pid } });
+      id = row.id;
+      await gate;
+      await finishCycle(db, row.id, { status: "succeeded" });
+    });
+    try {
+      const deadline = Date.now() + 5000;
+      while (id === 0 && Date.now() < deadline) await sleep(20);
+      expect(id).toBeGreaterThan(0); // a lock leaked by an earlier test would leave it at 0
+      await fn(id);
+    } finally {
+      release();
+      expect((await held).acquired).toBe(true);
+    }
+  }
+
+  it("run_cycle is done, pointing at the running cycle, when that cycle covers it; one of other channels fails it", async () => {
+    registerFixtureChannel(defaultRegistry, { postings: [] });
+    const db = getDb();
+    await holdLock(null, async (id) => {
+      const covered = await insertControlRequest(db, { kind: "run_cycle", payload: { channelIds: ["fixture"] } });
+      expect(await processNextControlRequest(pollOptions())).toMatchObject({ id: covered.id, status: "done", result: { cycleId: id, coveredBy: id } });
+    });
+
+    // a running cycle limited to other channels does not cover the request: it fails as before (a manual request never waits)
+    await holdLock(["indeed"], async () => {
+      await insertControlRequest(db, { kind: "run_cycle", payload: { channelIds: ["fixture"] } });
+      expect(await processNextControlRequest(pollOptions())).toMatchObject({ status: "failed", result: { error: "another_cycle_running" } });
+    });
+  });
+
+  it("run_cycle is not covered by a row a crash left `running`, only by the cycle that holds the lock", async () => {
+    registerFixtureChannel(defaultRegistry, { postings: [] });
+    const db = getDb();
+    // an interrupted CLI cycle of every channel, newer than nothing that holds the lock
+    await db.insert(schema.cycles).values({ kind: "manual", status: "running", summaryJson: { channelIds: null } });
+    await holdLock(["indeed"], async () => {
+      await insertControlRequest(db, { kind: "run_cycle", payload: { channelIds: ["fixture"] } });
+      expect(await processNextControlRequest(pollOptions())).toMatchObject({ status: "failed", result: { error: "another_cycle_running" } });
+    });
+  });
+
+  it("claims no run_cycle while a cycle of this process waits for the lock; other requests still run", async () => {
+    const db = getDb();
+    const cycleRequest = await insertControlRequest(db, { kind: "run_cycle", payload: { channelIds: ["indeed"] } });
+    const rescore = await insertControlRequest(db, { kind: "rescore_stale" });
+    const stopWaiting = startWaitingForLock();
+    try {
+      expect(await processNextControlRequest(pollOptions())).toMatchObject({ id: rescore.id, status: "done" });
+      expect(await processNextControlRequest(pollOptions())).toBeNull();
+    } finally {
+      stopWaiting();
+    }
+    expect((await getControlRequest(db, cycleRequest.id))?.status).toBe("pending");
+  });
+
   it("run_cycle with a payload it does not understand fails without running anything", async () => {
     await insertControlRequest(getDb(), { kind: "run_cycle", payload: { channelIds: "indeed" } });
     expect(await processNextControlRequest(pollOptions())).toMatchObject({ status: "failed", result: { error: "invalid_payload" } });
@@ -270,6 +341,46 @@ describe("web side: requestRunCycle / requestRescoreStale", () => {
     expect(await listControlRequests(getDb(), 10)).toHaveLength(1);
     await processNextControlRequest(pollOptions());
     expect(await requestRunCycle({})).toMatchObject({ status: "queued", existing: false });
+  });
+
+  it("reuses an open request only when it covers the new one; otherwise queues a second one", async () => {
+    // [indeed] open, then [greenhouse]: a request of its own
+    expect(await requestRunCycle({ channelIds: ["indeed"] })).toMatchObject({ status: "queued", existing: false });
+    expect(await requestRunCycle({ channelIds: ["greenhouse"] })).toMatchObject({ status: "queued", existing: false });
+    expect(await listControlRequests(getDb(), 10)).toHaveLength(2);
+    // [indeed] open, then every channel: a request of its own
+    expect(await requestRunCycle({})).toMatchObject({ status: "queued", existing: false });
+    expect(await listControlRequests(getDb(), 10)).toHaveLength(3);
+    // every channel open: anything reuses it
+    expect(await requestRunCycle({ channelIds: ["lever"] })).toMatchObject({ status: "queued", existing: true });
+    expect(await requestRunCycle({})).toMatchObject({ status: "queued", existing: true });
+    expect(await listControlRequests(getDb(), 10)).toHaveLength(3);
+  });
+
+  it("reuses an open request of more channels for a subset of them", async () => {
+    const first = await requestRunCycle({ channelIds: ["indeed", "greenhouse"] });
+    expect(first).toMatchObject({ status: "queued", existing: false });
+    expect(await requestRunCycle({ channelIds: ["greenhouse"] })).toMatchObject({ status: "queued", existing: true, request: first.status === "queued" ? first.request : -1 });
+    expect(await requestRunCycle({ channelIds: ["greenhouse", "lever"] })).toMatchObject({ status: "queued", existing: false });
+    expect(await listControlRequests(getDb(), 10)).toHaveLength(2);
+  });
+
+  it("does not reuse a request of every channel for a later source of the LinkedIn cascade", async () => {
+    // the test's own cascade: guest first, session as its fallback
+    const file = path.join(temp.configDir, "sources.yaml");
+    const doc = YAML.parseDocument(fs.readFileSync(file, "utf8"));
+    doc.setIn(["linkedin", "cascade"], ["linkedin-guest", "linkedin-session"]);
+    fs.writeFileSync(file, doc.toString());
+    resetConfigCache();
+    const [first, later] = ["linkedin-guest", "linkedin-session"];
+    expect(loadConfig("channels").linkedin.cascade).toEqual([first, later]);
+    expect(await requestRunCycle({})).toMatchObject({ status: "queued", existing: false });
+    // a full cycle collects LinkedIn with the first source only
+    expect(await requestRunCycle({ channelIds: [later] })).toMatchObject({ status: "queued", existing: false });
+    expect(await requestRunCycle({ channelIds: [first] })).toMatchObject({ status: "queued", existing: true });
+    // the request of the later source covers a second click on it
+    expect(await requestRunCycle({ channelIds: [later] })).toMatchObject({ status: "queued", existing: true });
+    expect(await listControlRequests(getDb(), 10)).toHaveLength(2);
   });
 
   it("validates the payload and the channel ids", async () => {

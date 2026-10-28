@@ -6,7 +6,7 @@ import { useState, useTransition } from "react";
 
 import { runChannelNowAction, testAiAction, testChannelAction, testTelegramAction } from "@/app/control-actions";
 import { Button } from "@/components/ui/button";
-import type { ControlQueueView, ControlRequestView } from "@/lib/control/request-view-schema";
+import { followsCoveringCycle, isOpenRequest, type ControlQueueView, type ControlRequestView } from "@/lib/control/request-view-schema";
 import { IDLE_CONTROL_STATE, type ControlActionState } from "@/lib/control/service-types";
 import { formatClock } from "@/lib/format/clock";
 import { cn } from "@/lib/utils";
@@ -96,7 +96,9 @@ export function TriggerButton({ kind, target = "", disabled = false, disabledHin
       if (queuedId !== null) setFinished({ id: queuedId, view });
     },
   });
-  const open = queuedId !== null && ended === null;
+  const view = ended ? ended.view : wait.waiting;
+  // A covered request is already done, so the button is free while the hook follows the covering cycle.
+  const open = queuedId !== null && ended === null && (view === null || isOpenRequest(view));
   const Icon = ICON[kind];
 
   const send = () => {
@@ -105,7 +107,7 @@ export function TriggerButton({ kind, target = "", disabled = false, disabledHin
   };
 
   return (
-    <div className={cn("flex min-w-0 flex-col gap-1.5", className)} data-testid={`trigger-${kind}`} data-target={target || undefined} data-state={pending || open ? "busy" : ended ? (ended.view?.status ?? "failed") : "idle"}>
+    <div className={cn("flex min-w-0 flex-col gap-1.5", className)} data-testid={`trigger-${kind}`} data-target={target || undefined} data-state={pending || open ? "busy" : (view?.status ?? (ended ? "failed" : "idle"))}>
       <div className="flex flex-wrap items-center gap-2">
         <Button type="button" size="xs" variant={variant} disabled={disabled || pending || open || confirming} onClick={confirm ? () => setConfirming(true) : send} data-testid={`trigger-${kind}-button`}>
           {pending || open ? <Loader2 aria-hidden className="animate-spin" /> : <Icon aria-hidden />}
@@ -124,7 +126,7 @@ export function TriggerButton({ kind, target = "", disabled = false, disabledHin
         ) : null}
       </div>
       {disabled && disabledHint ? <p className="text-muted-foreground text-xs">{disabledHint}</p> : null}
-      <Outcome kind={kind} state={state} open={open} view={ended ? ended.view : wait.waiting} finished={ended !== null} stage={wait.stage} queue={wait.queue} timeZone={timeZone} />
+      <Outcome kind={kind} state={state} open={open} view={view} finished={ended !== null} stage={wait.stage} queue={wait.queue} timeZone={timeZone} />
     </div>
   );
 }
@@ -154,6 +156,13 @@ function Outcome({ kind, state, open, view, finished, stage, queue, timeZone }: 
     );
   }
   if (state.status !== "queued") return null;
+  if (kind === "runChannel" && view?.cycle && followsCoveringCycle(view)) {
+    return (
+      <p role="status" className="text-muted-foreground text-xs" data-testid="trigger-outcome" data-outcome="covered">
+        {t("done.runChannelCovered", { id: view.cycle.id, finished: view.cycle.runsFinished, total: view.cycle.runsTotal, fetched: view.cycle.fetched })}
+      </p>
+    );
+  }
   if (open) {
     // the process comes from the queue view (`kinds.ts` with ai.yaml `execution`), never from the button's kind
     const worker = queue?.worker.process === "runner" ? "runner" : "aiWorker";
