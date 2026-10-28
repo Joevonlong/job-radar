@@ -100,12 +100,11 @@ function RequestRow({ request, timezone, aiRunning }: { request: ControlRequestV
       {request.jobIds ? <p className="text-muted-foreground font-mono text-xs break-words">{t("jobs", { jobs: request.jobIds.map((id) => `#${id}`).join(", ") })}</p> : null}
       {request.channelIds ? <p className="text-muted-foreground font-mono text-xs break-words">{t("channels", { channels: request.channelIds.join(", ") })}</p> : null}
       {detail ? <p className="text-muted-foreground text-xs">{detail}</p> : null}
-      {request.status === "done" && request.stopped === "time_budget" ? (
+      {request.stopped === "time_budget" ? (
         <p className="text-muted-foreground text-xs" data-testid="control-request-time-budget">
           {t("timeBudget", { remaining: request.remaining ?? 0 })}
         </p>
-      ) : null}
-      {request.status === "failed" ? (
+      ) : request.status === "failed" ? (
         <p className="text-destructive text-xs">
           {errorCode ? t(`error.${errorCode}`, { time: request.resumeAt ? formatClock(format, request.resumeAt, timezone) : "none" }) : t("error.unknown")}
         </p>

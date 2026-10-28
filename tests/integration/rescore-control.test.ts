@@ -21,13 +21,14 @@ const url = inject("testDatabaseUrl");
 const NOW = new Date("2026-10-07T10:00:00Z");
 
 /** A fake provider: answers every posting with a valid score, or fails when told to. No real CLI or API is reachable. */
-function fakeAi(fail: Error | null = null) {
+function fakeAi(fail: Error | null = null, onCall: () => void = () => {}) {
   const calls: string[] = [];
   const transport: AiTransport = {
     id: "claude-cli",
     availability: () => ({ available: true }),
     async call(request: AiTransportRequest) {
       calls.push(/^Title: (.*)$/m.exec(request.user)?.[1] ?? "?");
+      onCall();
       if (fail) throw fail;
       return { text: answer({ score: 77 }), model: "fake-model", usage: { tokensIn: 100, tokensOut: 20 } };
     },
@@ -81,6 +82,31 @@ afterAll(async () => {
 });
 
 describe("the rescore_stale control request", () => {
+  it.each([1, 0])("stops between jobs at its %i minute budget; zero leaves the run unlimited", async (minutes) => {
+    await staleJobs();
+    let now = NOW.getTime();
+    const fake = fakeAi(null, () => { now += 60_000; });
+    const config = aiConfig((raw) => { raw.cycle_budget_minutes = minutes; (raw.scoring as Record<string, unknown>).concurrency = 1; });
+    registerControlHandler("rescore_stale", createRescoreStaleHandler({ createDeps: () => ({ ...deps(fake.router), config, now: () => new Date(now) }) }));
+    await insertControlRequest(getDb(), { kind: "rescore_stale" });
+    const done = await processNextControlRequest(pollOptions());
+    expect(done).toMatchObject({ status: "done", result: { scored: minutes ? 1 : 2, failed: 0, remaining: minutes ? 1 : 0, ...(minutes ? { stopped: "time_budget" } : {}) } });
+    expect(fake.calls).toHaveLength(minutes ? 1 : 2);
+    if (!minutes) expect(done?.result).not.toHaveProperty("stopped");
+    expect((await loadControlStatus(getDb())).requests[0]).toMatchObject({ remaining: minutes ? 1 : 0, ...(minutes ? { stopped: "time_budget" } : {}) });
+  });
+
+  it("expires during setup without starting a score or counting a failure", async () => {
+    await staleJobs();
+    let now = NOW.getTime();
+    const fake = fakeAi();
+    const config = aiConfig((raw) => { raw.cycle_budget_minutes = 1; });
+    registerControlHandler("rescore_stale", createRescoreStaleHandler({ createDeps: () => ({ ...deps(fake.router, async () => { now += 60_000; return profile(); }), config, now: () => new Date(now) }) }));
+    await insertControlRequest(getDb(), { kind: "rescore_stale" });
+    expect(await processNextControlRequest(pollOptions())).toMatchObject({ status: "failed", result: { error: "rescore_stopped", stopped: "time_budget", scored: 0, failed: 0, remaining: 2 } });
+    expect(fake.calls).toHaveLength(0);
+  });
+
   it("without the runner's handler nothing re-scores: the default only acknowledges", async () => {
     await staleJobs();
     await insertControlRequest(getDb(), { kind: "rescore_stale" });

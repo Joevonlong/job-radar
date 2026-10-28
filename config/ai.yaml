@@ -169,6 +169,7 @@ quota_guard:
       cycle_request_cap: 399
 
 # Max minutes of AI work (scoring, signals) per run; the rest waits for the next run; 0 = unlimited. Push goes out right after scoring; translation comes after push.
+# Also limits control requests to re-score stale jobs or score the backlog / selected jobs, stopping between jobs.
 cycle_budget_minutes: 30
 # Budget for a run with no new jobs (only working through the backlog); 0 = unlimited
 idle_cycle_budget_minutes: 10

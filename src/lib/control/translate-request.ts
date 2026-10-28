@@ -4,7 +4,7 @@
  * state. Server only; the Server Actions in `app/jobs/[id]/actions.ts` are the callers.
  */
 import type { Db } from "@/lib/db/client";
-import { findLatestJobControlRequest, findOpenTranslateRequest, getControlRequest, insertControlRequest } from "@/lib/db/repos/control-requests";
+import { clearControlRequestOrigin, findLatestJobControlRequest, findOpenTranslateRequest, getControlRequest, insertControlRequest } from "@/lib/db/repos/control-requests";
 import { getJobForTranslation, getTranslation, getTranslationProgress } from "@/lib/db/repos/translations";
 import { TRANSLATION_FAILURE_CODES, type TranslationFailureCode } from "@/lib/translation/errors";
 import { isTranslationStale } from "@/lib/translation/hash";
@@ -34,7 +34,7 @@ export type TranslateRequestOutcome =
   | { state: "error"; error: "not_found" | "no_description" | "same_language" };
 
 /** A current cached translation is returned as it is; otherwise a `translate_job` request is queued (an open one for the same job is reused). */
-export async function requestTranslateJob(db: Db, input: { jobId: number; force: boolean }): Promise<TranslateRequestOutcome> {
+export async function requestTranslateJob(db: Db, input: { jobId: number; force: boolean; origin: "user" | "auto" }): Promise<TranslateRequestOutcome> {
   const job = await getJobForTranslation(db, input.jobId);
   if (!job) return { state: "error", error: "not_found" };
   if (job.description === null || job.description.trim() === "") return { state: "error", error: "no_description" };
@@ -45,8 +45,11 @@ export async function requestTranslateJob(db: Db, input: { jobId: number; force:
     if (cached && !isTranslationStale(cached.sourceHash, job.description)) return { state: "cached", translation: toJobTranslation(cached, job.description) };
   }
   const open = await findOpenTranslateRequest(db, input.jobId);
-  if (open) return { state: "queued", requestId: open.id, existing: true };
-  const created = await insertControlRequest(db, { kind: "translate_job", payload: { jobId: input.jobId, force: input.force } });
+  if (open) {
+    if (input.origin === "user") await clearControlRequestOrigin(db, open.id);
+    return { state: "queued", requestId: open.id, existing: true };
+  }
+  const created = await insertControlRequest(db, { kind: "translate_job", payload: { jobId: input.jobId, force: input.force, ...(input.origin === "auto" ? { origin: "auto" } : {}) } });
   return { state: "queued", requestId: created.id, existing: false };
 }
 

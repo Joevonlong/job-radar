@@ -146,7 +146,7 @@ export async function translateJobAction(input: { jobId: number; force?: boolean
   const parsed = translateInputSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "invalid" };
   try {
-    const outcome = await requestTranslateJob(getDb(), { jobId: parsed.data.jobId, force: parsed.data.force ?? false });
+    const outcome = await requestTranslateJob(getDb(), { jobId: parsed.data.jobId, force: parsed.data.force ?? false, origin: "user" });
     if (outcome.state === "error") return { ok: false, error: outcome.error };
     if (outcome.state === "cached") return { ok: true, queued: false, cached: true, translation: toPayload(outcome.translation) };
     return { ok: true, queued: true, requestId: outcome.requestId };
