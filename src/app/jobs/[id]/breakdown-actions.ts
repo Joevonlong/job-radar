@@ -26,6 +26,8 @@ export type BreakdownActionResult =
   | { ok: false; error: BreakdownErrorKey };
 
 export type BreakdownStatusResult =
+  /** The state could not be read this time; the browser retries. */
+  | null
   /** `queue`: where the request stands (position, what the worker is doing, whether it is alive). */
   | { ok: true; state: "waiting"; stage: "pending" | "running"; queue: ControlQueueView | null }
   | { ok: true; state: "done" }
@@ -57,6 +59,6 @@ export async function breakdownStatusAction(input: { jobId: number; requestId: n
     revalidatePath(`/jobs/${parsed.data.jobId}`);
     return { ok: true, state: "done" };
   } catch {
-    return { ok: false, error: "failed" };
+    return null;
   }
 }

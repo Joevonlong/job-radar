@@ -15,7 +15,7 @@ import { INK_LINK } from "@/components/ui/ink-link";
 import { SkillOverlap } from "@/components/viz/skill-overlap";
 import { REQUIREMENT_LEVELS, type RequirementLevel } from "@/lib/breakdown/constants";
 import type { InitialBreakdownRequest } from "@/lib/control/breakdown-request";
-import type { ControlQueueView } from "@/lib/control/request-view-schema";
+import { controlQueueViewSchema, type ControlQueueView } from "@/lib/control/request-view-schema";
 import type { BreakdownQuote, BreakdownView, BreakdownViewItem, BreakdownViewTech } from "@/lib/breakdown/view";
 import { formatClock } from "@/lib/format/clock";
 import { toastTone } from "@/lib/toast";
@@ -54,8 +54,12 @@ type StatusFailure = Extract<BreakdownStatusResult, { ok: false }>;
 /** The status action's answer in the shape `useControlRequest` reads. */
 async function readBreakdown(jobId: number, requestId: number): Promise<ControlRequestRead<null, null, StatusFailure>> {
   const result = await breakdownStatusAction({ jobId, requestId });
-  if (!result.ok) return { state: "failed", failed: result };
-  if (result.state === "waiting") return { state: "waiting", stage: result.stage, queue: result.queue, waiting: null };
+  if (result === null) return null;
+  if (!result.ok) return result.error === "not_found" ? { state: "missing" } : { state: "failed", failed: result };
+  if (result.state === "waiting") {
+    const queue = controlQueueViewSchema.nullable().safeParse(result.queue);
+    return queue.success ? { state: "waiting", stage: result.stage, queue: queue.data, waiting: null } : null;
+  }
   return { state: "done", done: null };
 }
 

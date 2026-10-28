@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { INK_LINK } from "@/components/ui/ink-link";
 import { useAppLocale } from "@/components/viz/intl";
 import type { AiProviderId } from "@/lib/ai/types";
-import type { ControlQueueView } from "@/lib/control/request-view-schema";
+import { controlQueueViewSchema, type ControlQueueView } from "@/lib/control/request-view-schema";
 import type { InitialSalaryRequest } from "@/lib/control/salary-request";
 import { formatClock } from "@/lib/format/clock";
 import { formatSalary } from "@/lib/format/numbers";
@@ -52,8 +52,12 @@ type StatusFailure = Extract<SalaryLookupStatusResult, { ok: false }>;
 /** The status action's answer in the shape `useControlRequest` reads. */
 async function readLookup(jobId: number, requestId: number): Promise<ControlRequestRead<null, null, StatusFailure>> {
   const result = await salaryLookupStatusAction({ jobId, requestId });
-  if (!result.ok) return { state: "failed", failed: result };
-  if (result.state === "waiting") return { state: "waiting", stage: result.stage, queue: result.queue, waiting: null };
+  if (result === null) return null;
+  if (!result.ok) return result.error === "not_found" ? { state: "missing" } : { state: "failed", failed: result };
+  if (result.state === "waiting") {
+    const queue = controlQueueViewSchema.nullable().safeParse(result.queue);
+    return queue.success ? { state: "waiting", stage: result.stage, queue: queue.data, waiting: null } : null;
+  }
   return { state: "done", done: null };
 }
 type CardState = "disabled" | "no_web_provider" | "config_error" | "not_ready" | "ready" | "waiting" | "failed" | "done";

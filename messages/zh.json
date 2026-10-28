@@ -1494,7 +1494,7 @@
     "retranslate": "重新翻译",
     "translating": "翻译中…",
     "loading": "正在用 AI 翻译 JD，可能需要一分钟，期间可以先看原文。",
-    "queued": "请求已排队，轮到它时这台 Mac 上的 AI worker 就会处理，期间可以先看原文。",
+    "queued": "请求已排队，轮到它时就会处理，期间可以先看原文。",
     "done": "JD 已翻译",
     "loadedFromCache": "翻译已经存在",
     "stale": "这份翻译之后 JD 原文有更新，下面的内容可能已过期。",

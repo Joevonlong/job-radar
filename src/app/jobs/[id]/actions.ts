@@ -120,6 +120,8 @@ export type TranslateActionResult =
   | { ok: false; error: TranslateErrorKey };
 
 export type TranslateStatusResult =
+  /** The state could not be read this time; the browser retries. */
+  | null
   /** `queue`: where the request stands (position, what the worker is doing, whether it is alive). */
   | { ok: true; state: "waiting"; stage: "pending" | "running"; partial: PartialPayload | null; queue: ControlQueueView | null }
   | { ok: true; state: "done"; translation: TranslationPayload }
@@ -165,7 +167,7 @@ export async function translateStatusAction(input: { jobId: number; requestId: n
     revalidatePath(`/jobs/${parsed.data.jobId}`);
     return { ok: true, state: "done", translation: toPayload(state.translation) };
   } catch {
-    return { ok: false, error: "failed" };
+    return null;
   }
 }
 

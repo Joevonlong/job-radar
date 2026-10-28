@@ -198,6 +198,8 @@ A failure in (a) does not block rollback: follow (c) and accept the display wind
 
 ### Fixed
 
+- Translation, breakdown and salary lookup keep polling after a temporary status read failure or invalid queue response; translation queue text also applies to container execution.
+
 - **Company names and job titles in non-Latin scripts no longer merge different jobs:** "Яндекс" and "株式会社メルカリ"
   were one company, and different Japanese, Chinese, Greek, Cyrillic or Hebrew titles at one employer and city were one
   job (and so were one role's postings in two cities written in another script), because their matching keys were empty.

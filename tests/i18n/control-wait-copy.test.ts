@@ -43,6 +43,10 @@ describe.each(LOCALES)("waiting copy (%s)", (locale) => {
     for (const key of REMOVED_KEYS) expect(messages.has(key), key).toBe(false);
   });
 
+  it("keeps the translation queue copy independent of the claiming process", () => {
+    expect(messages.get("translation.queued")).not.toMatch(/Mac|ai[ -]?worker|runner/i);
+  });
+
   it("names every control request kind", () => {
     for (const kind of CONTROL_REQUEST_KINDS) {
       const value = messages.get(`settings.control.requests.kind.${kind}`);

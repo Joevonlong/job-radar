@@ -125,7 +125,7 @@ describe("TranslationPanel", () => {
     render(wrap(<TranslationPanel target={EN_TARGET} jobId={9} hasDescription initial={null} timeZone="Europe/Berlin" />));
     await userEvent.click(screen.getByTestId("translate-button"));
     expect(screen.getByTestId("translation-loading")).toHaveAttribute("data-stage", "pending");
-    expect(screen.getByTestId("translation-loading")).toHaveTextContent("The request is queued for the AI worker on this Mac");
+    expect(screen.getByTestId("translation-loading")).toHaveTextContent("The request is queued and runs when its turn comes");
     await waitFor(() => expect(screen.getByTestId("translation-loading")).toHaveAttribute("data-stage", "running"));
     await waitFor(() => expect(screen.getByText("排队后的译文。")).toBeInTheDocument());
     expect(translateStatusAction).toHaveBeenCalledWith({ jobId: 9, requestId: 41 });
@@ -139,6 +139,25 @@ describe("TranslationPanel", () => {
     await userEvent.click(screen.getByTestId("translate-button"));
     await waitFor(() => expect(screen.getByTestId("translation-error")).toHaveTextContent("No AI provider is available"));
     expect(screen.getByTestId("translate-button")).toBeEnabled();
+  });
+
+  it.each(["unreadable", "invalid queue"])("retries an %s status and keeps the last queue until completion", async (reason) => {
+    let release: () => void = () => {};
+    const released = new Promise<void>((resolve) => (release = resolve));
+    translateStatusAction
+      .mockResolvedValueOnce(reason === "unreadable" ? null : { ok: true, state: "waiting", stage: "pending", partial: null, queue: queue({ ahead: -1 }) })
+      .mockImplementation(async () => {
+        await released;
+        return { ok: true, state: "done", translation: view({ content: "恢复后的译文。" }) };
+      });
+    render(wrap(<TranslationPanel target={EN_TARGET} jobId={9} hasDescription initial={null} initialRequest={{ requestId: 5, stage: "pending", queue: queue({ ahead: 2 }) }} timeZone="Europe/Berlin" />));
+    await waitFor(() => expect(translateStatusAction).toHaveBeenCalledTimes(2));
+    expect(screen.getByTestId("queue-hint-ahead")).toHaveTextContent("2 requests ahead of it.");
+    expect(screen.queryByTestId("translation-error")).toBeNull();
+    release();
+    await waitFor(() => expect(screen.getByText("恢复后的译文。")).toBeInTheDocument());
+    expect(screen.queryByTestId("translation-loading")).toBeNull();
+    expect(translateStatusAction).toHaveBeenCalledTimes(2);
   });
 
   it("waiting: shows how many requests are ahead and what the ai-worker is doing, then its own start once it runs", async () => {

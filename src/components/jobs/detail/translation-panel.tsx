@@ -8,7 +8,7 @@ import { translateJobAction, translateStatusAction, type PartialPayload, type Tr
 import { QueueHint } from "@/components/control/queue-hint";
 import { useControlRequest, type ControlRequestRead } from "@/components/control/use-control-request";
 import { Button } from "@/components/ui/button";
-import type { ControlQueueView } from "@/lib/control/request-view-schema";
+import { controlQueueViewSchema, type ControlQueueView } from "@/lib/control/request-view-schema";
 import { formatClock } from "@/lib/format/clock";
 import { parseTranslation, type MarkerCategories, type TranslationSegment } from "@/lib/translation/render";
 import { toastTone } from "@/lib/toast";
@@ -65,8 +65,12 @@ type TranslateRead = ControlRequestRead<{ partial: PartialPayload | null }, Tran
 /** The status action's answer in the shape `useControlRequest` reads. */
 async function readTranslation(jobId: number, requestId: number): Promise<TranslateRead> {
   const result = await translateStatusAction({ jobId, requestId });
-  if (!result.ok) return { state: "failed", failed: result };
-  if (result.state === "waiting") return { state: "waiting", stage: result.stage, queue: result.queue, waiting: { partial: result.partial } };
+  if (result === null) return null;
+  if (!result.ok) return result.error === "not_found" ? { state: "missing" } : { state: "failed", failed: result };
+  if (result.state === "waiting") {
+    const queue = controlQueueViewSchema.nullable().safeParse(result.queue);
+    return queue.success ? { state: "waiting", stage: result.stage, queue: queue.data, waiting: { partial: result.partial } } : null;
+  }
   return { state: "done", done: result.translation };
 }
 

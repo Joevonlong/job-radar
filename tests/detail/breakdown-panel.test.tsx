@@ -129,6 +129,25 @@ describe("BreakdownPanel states", () => {
     expect(screen.getByTestId("jd-breakdown-button")).toHaveTextContent("Retry");
   });
 
+  it.each(["unreadable", "invalid queue"])("retries an %s status and keeps the last queue until completion", async (reason) => {
+    let release: () => void = () => {};
+    const released = new Promise<void>((resolve) => (release = resolve));
+    breakdownStatusAction
+      .mockResolvedValueOnce(reason === "unreadable" ? null : { ok: true, state: "waiting", stage: "pending", queue: queue({ ahead: -1 }) })
+      .mockImplementation(async () => {
+        await released;
+        return { ok: true, state: "done" };
+      });
+    render(wrap(<BreakdownPanel {...props({ initialRequest: { state: "waiting", requestId: 37, stage: "pending", queue: queue({ ahead: 2 }) } })} />));
+    await waitFor(() => expect(breakdownStatusAction).toHaveBeenCalledTimes(2));
+    expect(screen.getByTestId("queue-hint-ahead")).toHaveTextContent("2 requests ahead of it.");
+    expect(state()).toBe("waiting");
+    expect(screen.queryByRole("alert")).toBeNull();
+    release();
+    await waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
+    expect(breakdownStatusAction).toHaveBeenCalledTimes(2);
+  });
+
   it("an already current result just refreshes the page", async () => {
     breakdownJobAction.mockResolvedValue({ ok: true, queued: false });
     render(wrap(<BreakdownPanel {...props()} />));

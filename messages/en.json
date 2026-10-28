@@ -1494,7 +1494,7 @@
     "retranslate": "Translate again",
     "translating": "Translating…",
     "loading": "Translating the JD with AI. This can take a minute; you can keep reading the original.",
-    "queued": "The request is queued for the AI worker on this Mac and runs when it gets there; you can keep reading the original.",
+    "queued": "The request is queued and runs when its turn comes; you can keep reading the original.",
     "done": "The JD was translated",
     "loadedFromCache": "The translation was already available",
     "stale": "The JD changed after this translation was made. The text below may be outdated.",

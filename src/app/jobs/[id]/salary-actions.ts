@@ -31,6 +31,8 @@ export type SalaryLookupActionResult =
   | { ok: false; error: SalaryActionErrorKey };
 
 export type SalaryLookupStatusResult =
+  /** The state could not be read this time; the browser retries. */
+  | null
   /** `queue`: where the request stands (position, what the worker is doing, whether it is alive). */
   | { ok: true; state: "waiting"; stage: "pending" | "running"; queue: ControlQueueView | null }
   | { ok: true; state: "done" }
@@ -77,6 +79,6 @@ export async function salaryLookupStatusAction(input: { jobId: number; requestId
     revalidatePath(`/jobs/${parsed.data.jobId}`);
     return { ok: true, state: "done" };
   } catch {
-    return { ok: false, error: "failed" };
+    return null;
   }
 }
