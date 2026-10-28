@@ -360,6 +360,25 @@ describe("what a recompute and a fold keep", () => {
     expect((await jobTitled("Product Designer")).companyId).toBe(companies[1]!.id);
   });
 
+  it("the new key and the row for the Latin spelling are written together: an interruption leaves both or neither", async () => {
+    const full = "Mercari, Inc. (株式会社メルカリ)";
+    await run(registryOf([posting("m1", { company: full, title: "Backend Engineer" })]));
+    await writeVersion1Keys();
+    const db = getDb();
+    await db.update(schema.companies).set({ blacklisted: true }).where(eq(schema.companies.name, full));
+    await db.execute(sql`create function block_company_insert() returns trigger language plpgsql as $$ begin raise exception 'interrupted for the test'; end $$`);
+    await db.execute(sql`create trigger block_company_insert before insert on companies for each row execute function block_company_insert()`);
+    try {
+      await expect(refreshIdentityKeysIfStale(db, { config: pipelineConfig, logger: quietLogger })).rejects.toThrow();
+      expect((await allCompanies()).map((c) => [c.name, c.nameNorm, c.blacklisted])).toEqual([[full, "mercari", true]]);
+    } finally {
+      await db.execute(sql`drop trigger block_company_insert on companies`);
+      await db.execute(sql`drop function block_company_insert()`);
+    }
+    expect(await refreshIdentityKeysIfStale(db, { config: pipelineConfig, logger: quietLogger })).toMatchObject({ companiesRekeyed: 1, companiesKeptUnderLatinKey: 1 });
+    expect((await allCompanies()).map((c) => [c.nameNorm, c.blacklisted])).toEqual([["mercari-inc-株式会社メルカリ", true], ["mercari", true]]);
+  });
+
   it("files nothing while the keys cannot be recomputed, and catches up once they can", async () => {
     await run(registryOf([posting("y1", { company: "Яндекс", title: "Разработчик", description: "Search backend in C++" })]));
     await writeVersion1Keys();
@@ -387,18 +406,12 @@ describe("what a recompute and a fold keep", () => {
 });
 
 describe("splitting leaves alone what the user acted on and what was merged for other reasons", () => {
-  it("two Japanese cities at one company and title are two jobs, and a merge of them is split", async () => {
-    const registry = registryOf([
+  it("two Japanese cities at one company and title are two jobs", async () => {
+    // (jobs an older version merged across such cities are not split yet: the merged job lists both cities)
+    await run(registryOf([
       posting("t1", { company: "Mercari Inc.", title: "エンジニア", city: "東京", country: "JP", description: "Tokyo office role" }),
       posting("o1", { company: "Mercari Inc.", title: "エンジニア", city: "大阪", country: "JP", description: "Osaka office role" }),
-    ]);
-    await run(registry);
-    const [tokyo, osaka] = (await allJobs()).map((job) => job.id) as [number, number];
-    expect(osaka).toBeDefined();
-    await mergeAsVersion1(tokyo, [osaka]);
-    await writeVersion1Keys();
-    const { split } = await reprocessSplitMerged(registry);
-    expect(split).toMatchObject({ jobsSplit: 1, sourcesUnlinked: 1 });
+    ]));
     expect(await allJobs()).toHaveLength(2);
   });
 

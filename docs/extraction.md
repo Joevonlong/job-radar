@@ -74,20 +74,22 @@ recomputes the stored keys once, before it files new postings:
 - if the keys cannot be recomputed (a database error), the cycle files no postings: they stay pending, the pipeline step
   is reported as failed and the next cycle tries again. `pnpm reprocess` stops with exit code 1 in that case.
 
-Jobs that the old keys had already merged by mistake (two employers under one company, two roles under one title, two
-cities in another script) stay merged until you run this once:
+Jobs that the old keys had already merged by mistake (two employers under one company, two roles under one title) stay
+merged until you run this once:
 
 ```bash
 pnpm reprocess --split-merged
 ```
 
-It checks every job that has a posting whose company, title or city key changed and detaches only the postings the old
-keys had matched to it and the new ones do not (postings merged as the same posting from another source, or by an almost
+It checks every job that has a posting whose company or title key changed and detaches only the postings the old keys
+had matched to it and the new ones do not (postings merged as the same posting from another source, or by an almost
 identical description, stay). Then it reprocesses as usual: each detached posting becomes a job of its own under its own
 company (or joins the job it really belongs to). The job itself keeps its status, application, notes, favourite and
 score. A job you acted on (application, favourite, filter or closure decision) never changes company: when its own postings
 now name another company it is left as it is; both kinds are listed by id at the end of the run, worth a look. Nothing
-to do when all your postings are in Latin script.
+to do when all your postings are in Latin script. Not handled yet: a job that older versions merged from postings of the
+same company and title in two cities written in another script (東京 and 大阪) stays one job, because it lists both cities;
+new postings of such cities are kept apart.
 
 ## Location on source rows
 

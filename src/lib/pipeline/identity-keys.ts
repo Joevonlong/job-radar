@@ -144,7 +144,6 @@ export async function refreshIdentityKeys(db: Db, options: IdentityKeyRefreshOpt
     const next = normalizeCompanyKey(row.name, suffixes);
     if (next !== row.nameNorm) pending.set(row.id, { from: row.nameNorm, to: next });
   }
-  const rekeyed: number[] = [];
   while (pending.size > 0) {
     let progressed = false;
     for (const [id, move] of pending) {
@@ -152,35 +151,36 @@ export async function refreshIdentityKeys(db: Db, options: IdentityKeyRefreshOpt
       const holder = idByKey.get(move.to);
       if (holder !== undefined && pending.has(holder)) continue; // that row moves away first
       if (holder === undefined) {
-        const changed = await db.transaction((tx) => setCompanyNameNorm(tx, id, move.from, move.to));
-        if (!changed) throw new Error(`company ${id} changed its key while the keys were recomputed`);
+        const row = rowById.get(id)!;
+        // a marked company named in two scripts keeps its marks for its Latin spelling: the row for that spelling is made in
+        // the same transaction as the new key, so an interruption leaves both or neither
+        const keepLatin =
+          move.from !== "" && (row.watched || row.blacklisted) && hasNonLatinLetter(row.name) && ![...pending.values()].some((other) => other.to === move.from);
+        const latinName = keepLatin ? (latinSpelling(row.name, move.from, suffixes) ?? row.name) : null;
+        const sibling = await db.transaction(async (tx) => {
+          if (!(await setCompanyNameNorm(tx, id, move.from, move.to))) throw new Error(`company ${id} changed its key while the keys were recomputed`);
+          if (latinName === null) return null;
+          const created = await insertCompanyIfAbsent(tx, { name: latinName, nameNorm: move.from, aliases: latinName === row.name ? [] : [row.name], watched: row.watched, blacklisted: row.blacklisted });
+          if (created !== null && latinName !== row.name) await addCompanyAlias(tx, id, latinName);
+          return created;
+        });
         idByKey.set(move.to, id);
-        rekeyed.push(id);
         result.companiesRekeyed += 1;
+        if (idByKey.get(move.from) === id) idByKey.delete(move.from);
+        if (sibling !== null) {
+          idByKey.set(move.from, sibling);
+          result.companiesKeptUnderLatinKey += 1;
+          options.logger.warn("a marked company with a name in two scripts now has a row per spelling", { company: row.name, latinSpelling: latinName });
+        }
       } else {
         await db.transaction((tx) => foldCompanyInto(tx, id, holder));
         result.companiesFolded += 1;
+        if (idByKey.get(move.from) === id) idByKey.delete(move.from);
       }
-      if (idByKey.get(move.from) === id) idByKey.delete(move.from);
       pending.delete(id);
       progressed = true;
     }
     if (!progressed) throw new Error(`company keys wait for each other (${pending.size} companies)`);
-  }
-
-  for (const id of rekeyed) {
-    const row = rowById.get(id)!;
-    if (row.nameNorm === "" || !(row.watched || row.blacklisted) || !hasNonLatinLetter(row.name) || idByKey.has(row.nameNorm)) continue;
-    const latinName = latinSpelling(row.name, row.nameNorm, suffixes) ?? row.name;
-    const sibling = await db.transaction(async (tx) => {
-      const created = await insertCompanyIfAbsent(tx, { name: latinName, nameNorm: row.nameNorm, aliases: latinName === row.name ? [] : [row.name], watched: row.watched, blacklisted: row.blacklisted });
-      if (created !== null && latinName !== row.name) await addCompanyAlias(tx, id, latinName);
-      return created;
-    });
-    if (sibling === null) continue;
-    idByKey.set(row.nameNorm, sibling);
-    result.companiesKeptUnderLatinKey += 1;
-    options.logger.warn("a marked company with a name in two scripts now has a row per spelling", { company: row.name, latinSpelling: latinName });
   }
 
   let afterId = 0;
