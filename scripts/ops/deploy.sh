@@ -20,7 +20,8 @@
 #                  and its config-freeze capability is detected before checkout
 #   3  install     pnpm install --frozen-lockfile
 #   4  config      data/ folders exist; existing installs: pnpm config:migrate (preview only), pnpm config:check in memory,
-#                  compose config, then pnpm ops:freeze; first install: config:init without a freeze; .env present
+#                  compose config (refuse core dependencies on jobspy), then pnpm ops:freeze; first install: config:init
+#                  without a freeze; .env present
 #                  targets without config-freeze use config:init + config:migrate --write here, leaving old markers alone
 #   5  backup      scripts/ops/backup.sh --label pre-deploy (only when the db is already running)
 #   6  build       git archive of the target commit into data/build/<commit>-<pid>, then docker compose -p job-radar build
@@ -477,6 +478,30 @@ fi
 run "Fix data/config/*.yaml as the error says (pnpm config:check names the file, the field and which layer it was read from)" pnpm config:check
 if [[ -f "$APP/.env" ]]; then say ".env exists"; else say "warning: .env does not exist: compose uses defaults, but Telegram and channel keys need it (cp .env.example .env and fill it in; see docs/deploy.md)"; fi
 run "The docker compose config has a syntax error: docker compose config shows where" docker compose -p "$PROJECT" config -q
+# Removing a dependency in compose.yaml does not remove an entry merged from a user's override. Even required:false
+# pulls the sidecar into the core up --wait, so refuse every such entry before a freeze or service replacement.
+# Consume the resolved model privately: it may contain secrets from env_file; only fixed dependency paths leave Node.
+echo "  \$ docker compose -p $PROJECT config --format json (check core dependencies on jobspy)"
+if [[ "$DRY_RUN" -eq 0 ]]; then
+  if ! jobspy_dependencies="$(compose config --format json | node -e '
+    const { readFileSync } = require("node:fs");
+    const { z } = require("zod");
+    try {
+      const service = z.object({ depends_on: z.record(z.string(), z.unknown()).optional() });
+      const schema = z.object({ services: z.object({ db: service, web: service, runner: service }) });
+      const { services } = schema.parse(JSON.parse(readFileSync(0, "utf8")));
+      process.stdout.write(Object.entries(services)
+        .filter(([, config]) => Object.hasOwn(config.depends_on ?? {}, "jobspy"))
+        .map(([name]) => name + ".depends_on.jobspy").join(", "));
+    } catch {
+      process.exitCode = 1;
+    }
+  ')"; then
+    fail_step "cannot inspect the resolved Compose dependencies" "Check docker compose -p $PROJECT config -q and the Node dependency installation, then retry; no settings were frozen by this run"
+  elif [[ -n "$jobspy_dependencies" ]]; then
+    fail_step "the resolved Compose config still contains $jobspy_dependencies" "Remove those jobspy dependency entries from compose.override.yaml (or the active Compose override), keeping the db dependencies, then run deploy again; required: false still pulls jobspy into the core up --wait"
+  fi
+fi
 if [[ "$CONFIG_FREEZE_SUPPORTED" == 1 && "$EXISTING_INSTALL" == 1 ]]; then
   echo "  \$ pnpm ops:freeze --target $TARGET"
   if [[ "$DRY_RUN" == 0 ]]; then
@@ -562,6 +587,7 @@ if [[ "$DRY_RUN" -eq 0 ]]; then
 fi
 echo "  \$ docker compose -p $PROJECT up -d --no-deps --wait --wait-timeout $WAIT_TIMEOUT jobspy"
 if [[ "$DRY_RUN" -eq 0 ]]; then
+  assert_target
   proc_check_stop; jobspy_code=0
   proc_run docker compose -p "$PROJECT" up -d --no-deps --wait --wait-timeout "$WAIT_TIMEOUT" jobspy || jobspy_code=$?; proc_check_stop
   if (( jobspy_code != 0 )); then

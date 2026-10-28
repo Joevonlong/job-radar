@@ -258,6 +258,18 @@ scripts/ops/deploy.sh               # 或跟随 main：拉最新 main、备份�
 
 升级后跑一次 `pnpm run doctor`，确认没有新的 ❌。
 
+### Compose 覆盖文件与 jobspy sidecar
+
+升级前，从已有的 `compose.override.yaml`（或其他生效的 Compose 覆盖文件）中删除
+`services.runner.depends_on.jobspy`，保留对 `db` 的依赖。如果你给 `db` 或 `web` 也加了对 `jobspy` 的依赖，
+同样删除。Compose 会合并依赖映射，因此出厂 `compose.yaml` 删除了这项，也不会消除覆盖文件中的旧依赖。
+即使设为 `required: false`，仍可能把 sidecar 带进核心服务的 `up --wait`。
+
+第 4 步会检查 `docker compose -p <project> config --format json`，发现这些依赖时，**在冻结设置或重启服务前拒绝部署**。
+报错会列出需要删除的条目，脚本不会修改你的覆盖文件。删除相应条目后重新部署，这样 sidecar 不健康就不会阻断数据库迁移、
+ai-worker 切换或配置写入。doctor 只有在当前市场实际启用了依赖 sidecar 的通道时，才把 sidecar 故障视为问题；
+被 `markets` 限制排除的通道不需要 sidecar。
+
 ### 配置分层之后
 
 - 线上配置是 `data/config/`（不进 git），网页只写这里；`config/` 是随代码发布的默认配置，打进 web、runner 镜像，所以它的改动随构建并重启容器的那次部署（第 6、8 步）生效，单独 `git pull` 不会生效。默认配置变了也只影响用户目录里**没有**的文件（`models.yaml`、`pipeline.yaml` 这类 `shipped` 文件，除非你覆盖了它们）。所以主 checkout 不会再因为网页保存而变脏，部署也不会再因此拒绝 pull。

@@ -1,12 +1,14 @@
 // @vitest-environment node
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { createIndeedChannel, createJobspyGoogleChannel, createLinkedinGuestChannel, JOBSPY_CHANNEL_IDS } from "@/lib/channels/jobspy";
+import * as marketResolve from "@/lib/market/resolve";
 import { composeServicesCheck, dbConnectCheck, dockerDaemonCheck, migrationsCheck, runnerHeartbeatCheck, webCheck } from "@/lib/ops/doctor/checks/stack";
 import { parseComposePs } from "@/lib/ops/doctor/shared";
 import { SkipCheck } from "@/lib/ops/doctor";
 
 import { ago, composeJson, httpDown, httpOk, makeContext, only, ran, results, sourcesView } from "./helpers";
+import { fixtureMarket } from "../../pipeline/helpers";
 
 const DOCKER_INFO = "docker info --format {{.ServerVersion}}";
 const COMPOSE_PS = "docker compose -p job-radar ps -a --format json";
@@ -100,6 +102,42 @@ describe("compose.<service>", () => {
       }
       const map = await byService(makeContext({ channels: jobspyOff, commands: { [COMPOSE_PS]: ran(composeJson({ runner: { Health: "unhealthy" } })) } }));
       expect(map.get("compose.runner")?.status).toBe("fail");
+    });
+
+    it.each(["guest", "indeed", "jobspy_google"])("%s needs the sidecar only when enabled for the current market", async (on) => {
+      const currentMarket = vi.spyOn(marketResolve, "loadMarket").mockReturnValue(fixtureMarket({ pack: "generic", country: "US", currency: "USD", home_language: "en" }));
+      try {
+        for (const [markets, status] of [[["FR"], "warn"], [["US"], "fail"], [undefined, "fail"]] as const) {
+          const channels = (raw: Record<string, unknown>): void => {
+            jobspyOff(raw);
+            const block = on === "guest" ? (raw.linkedin as Record<string, Record<string, unknown>>).guest : (raw.sources as Record<string, Record<string, unknown>>)[on];
+            block!.enabled = true;
+            block!.markets = markets;
+          };
+          const map = await byService(makeContext({ channels, commands: { [COMPOSE_PS]: ran(composeJson({ jobspy: { Health: "unhealthy" } })) } }));
+          expect(map.get("compose.jobspy")?.status, JSON.stringify(markets)).toBe(status);
+        }
+      } finally {
+        currentMarket.mockRestore();
+      }
+    });
+
+    it("market-bound channels do not need the sidecar while the market cannot be resolved", async () => {
+      const currentMarket = vi.spyOn(marketResolve, "loadMarket").mockImplementation(() => { throw new Error("market is unresolved"); });
+      try {
+        const channels = (raw: Record<string, unknown>): void => {
+          const linkedin = raw.linkedin as Record<string, Record<string, unknown>>;
+          const sources = raw.sources as Record<string, Record<string, unknown>>;
+          for (const block of [linkedin.guest!, sources.indeed!, sources.jobspy_google!]) {
+            block.enabled = true;
+            block.markets = ["US"];
+          }
+        };
+        const map = await byService(makeContext({ channels, commands: { [COMPOSE_PS]: ran(composeJson({ jobspy: { Health: "unhealthy" } })) } }));
+        expect(map.get("compose.jobspy")?.status).toBe("warn");
+      } finally {
+        currentMarket.mockRestore();
+      }
     });
 
     it("a port published beyond loopback stays a failure", async () => {

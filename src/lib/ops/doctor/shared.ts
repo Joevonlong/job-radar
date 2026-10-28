@@ -3,7 +3,7 @@ import { z } from "zod";
 
 import { JOBSPY_CHANNEL_IDS } from "@/lib/channels/jobspy/channels";
 import { resolveJobspyUrl } from "@/lib/channels/jobspy/client";
-import { CHANNEL_CONFIG_TABLE, type ChannelConfigRef } from "@/lib/channels/registry";
+import { settingsFromConfig } from "@/lib/channels/registry";
 import type { SourcesView } from "@/lib/sources/view";
 
 import { cached, extractJson } from "./helpers";
@@ -167,11 +167,7 @@ export function loadTailscale(ctx: DoctorContext): Promise<TailscaleState> {
   });
 }
 
-/** Whether a channel that uses the jobspy sidecar is switched on (`enabled` in the effective sources.yaml). */
+/** Whether a channel that uses the jobspy sidecar is enabled for the resolved market, as in the runner. */
 export function jobspyInUse(ctx: DoctorContext): boolean {
-  const config = ctx.config.channels;
-  return JOBSPY_CHANNEL_IDS.some((id) => {
-    const ref: ChannelConfigRef = CHANNEL_CONFIG_TABLE[id];
-    return (ref.section === "linkedin" ? config.linkedin[ref.key] : config.sources[ref.key]).enabled;
-  });
+  return JOBSPY_CHANNEL_IDS.some((id) => settingsFromConfig(id, ctx.config.channels).enabled);
 }

@@ -181,6 +181,23 @@ if [[ "$*" == *" config -q" ]]; then
   if [[ -n "\${COMPOSE_CONFIG_HOOK:-}" ]]; then bash -c "$COMPOSE_CONFIG_HOOK"; fi
   exit \${COMPOSE_CONFIG_EXIT:-0}
 fi
+if [[ "$*" == *" config --format json" ]]; then
+  if [[ -n "\${COMPOSE_MODEL_OUTPUT:-}" ]]; then printf '%s\\n' "$COMPOSE_MODEL_OUTPUT"; exit \${COMPOSE_MODEL_EXIT:-0}; fi
+  # Resolve the dependency maps of the fixture override, preserving the base db dependencies like Compose does.
+  NODE_PATH="${repoRoot}/node_modules" "${process.execPath}" -e '
+    const fs = require("node:fs");
+    const services = { db: {}, web: { depends_on: { db: { condition: "service_healthy" } } }, runner: { depends_on: { db: { condition: "service_healthy" } } } };
+    const file = process.env.WORK + "/compose.override.yaml";
+    if (fs.existsSync(file)) {
+      const override = require("yaml").parse(fs.readFileSync(file, "utf8"));
+      for (const [name, service] of Object.entries(services)) {
+        Object.assign(service.depends_on ??= {}, override.services?.[name]?.depends_on);
+      }
+    }
+    process.stdout.write(JSON.stringify({ services }));
+  ' || exit $?
+  exit \${COMPOSE_MODEL_EXIT:-0}
+fi
 if [[ "$*" == *"ps --status running --services"* ]]; then [[ "\${DB_RUNNING:-0}" == "1" ]] && echo db; exit 0; fi
 if [[ "$1" == compose && "\${*: -1}" == build ]]; then
   echo "\${JOB_RADAR_BUILD_CONTEXT:-<unset>}" >> "$DEPLOY_TEST_LOG.ctx"
@@ -208,7 +225,10 @@ exit 0
     0o755,
   );
   write(path.join(stubs, "launchctl"), `${LOGGING_STUB("launchctl")}if [[ -n "\${SERVICE_PROBE_HOOK:-}" ]] && grep -q -- ' --holder' "$DEPLOY_TEST_LOG"; then bash -c "$SERVICE_PROBE_HOOK"; fi\n[[ "$1" == print && -e "$HOME/loaded" ]] && { echo "pid = 4242"; exit 0; }\nexit 113\n`, 0o755);
-  write(path.join(stubs, "node"), `${LOGGING_STUB("node")}
+  write(path.join(stubs, "node"), `#!/usr/bin/env bash
+${NO_FREEZE_TOKEN}
+if [[ "\${1:-}" == -e ]]; then NODE_PATH="${repoRoot}/node_modules" exec "${process.execPath}" "$@"; fi
+echo "node $*" >> "$DEPLOY_TEST_LOG"
 case " $* " in
   *" --holder "*)
     if [[ -n "\${HOLDER_HOOK:-}" ]]; then bash -c "$HOLDER_HOOK"; fi
@@ -689,6 +709,7 @@ describe("scripts/ops/deploy.sh", { timeout: TEST_TIMEOUT_MS }, () => {
       "pnpm config:migrate",
       "pnpm config:check",
       "docker compose -p radar-test config -q",
+      "docker compose -p radar-test config --format json",
       `pnpm ops:freeze --target ${head()}`,
       "backup.sh --label pre-deploy",
       "docker compose -p radar-test build",
@@ -1224,10 +1245,29 @@ describe("scripts/ops/deploy.sh: the target commit is fixed", { timeout: TEST_TI
     }
   });
 
-  it("HEAD moves during compose up: the check before the migration stops it", () => {
+  it.each([
+    ["HEAD moves", MOVE_HEAD],
+    ["a tracked file changes", TOUCH_TRACKED],
+  ])("%s during core compose up: the check before the sidecar stops it", (_label, hook) => {
     const base = head();
     try {
-      const r = deploy(["--skip-pull", "--settle", "0"], { UP_HOOK: MOVE_HEAD });
+      const r = deploy(["--skip-pull", "--settle", "0"], { DB_RUNNING: "1", UP_HOOK: hook });
+      expect(r.status).toBe(1);
+      expect(r.out).toContain('step 8/13 "up: start and wait until healthy (at most 300 s)" failed: checkout moved during deploy');
+      expect(r.calls).toContain("docker compose -p radar-test up -d --wait --wait-timeout 300 db web runner");
+      expect(r.calls.some((c) => c.endsWith(" jobspy"))).toBe(false);
+      expect(r.calls).not.toContain("pnpm migrate:run");
+      expect(r.calls).not.toContain("pnpm ops:unfreeze --owned");
+      expect(fs.existsSync(path.join(work, "data/config/.upgrade-freeze"))).toBe(true);
+    } finally {
+      restore(base);
+    }
+  });
+
+  it("HEAD moves during sidecar compose up: the check before the migration stops it", () => {
+    const base = head();
+    try {
+      const r = deploy(["--skip-pull", "--settle", "0"], { UP_JOBSPY_HOOK: MOVE_HEAD });
       expect(r.status).toBe(1);
       expect(r.out).toContain('step 9/13 "migrate: database migrations" failed: checkout moved during deploy');
       expect(r.calls).not.toContain("pnpm migrate:run");
@@ -1945,6 +1985,7 @@ describe("deploy configuration freeze and delayed writes", { timeout: TEST_TIMEO
     expect(r.calls.indexOf("pnpm config:migrate")).toBeLessThan(freeze);
     expect(r.calls.indexOf("pnpm config:check")).toBeLessThan(freeze);
     expect(r.calls.indexOf("docker compose -p radar-test config -q")).toBeLessThan(freeze);
+    expect(r.calls.indexOf("docker compose -p radar-test config --format json")).toBeLessThan(freeze);
     if (kind === "marker") expect(r.calls).not.toContain("pnpm ops:unfreeze --owned");
     else expect(r.calls).toContain("pnpm ops:unfreeze --owned");
     expect(fs.existsSync(marker())).toBe(kind === "marker");
@@ -1952,6 +1993,47 @@ describe("deploy configuration freeze and delayed writes", { timeout: TEST_TIMEO
     expect(taken.token).toMatch(/^[0-9a-f]{32}$/);
     expect(taken.token).not.toBe(FIXTURE_TOKEN);
     fs.rmSync(path.join(work, "taken-freeze"));
+  });
+
+  it.each([
+    ["runner", "service_healthy", true],
+    ["runner", "service_started", false],
+    ["web", "service_healthy", true],
+    ["db", "service_healthy", true],
+  ])("refuses a legacy %s dependency on jobspy (%s, required=%s) from a Compose override before freezing", (service, condition, required) => {
+    existing();
+    const override = path.join(work, "compose.override.yaml");
+    const saved = `services:\n  ${service}:\n    depends_on:\n      jobspy:\n        condition: ${condition}\n        required: ${required}\n`;
+    write(override, saved);
+    try {
+      const r = deploy(args, { UP_JOBSPY_EXIT: "1" });
+      expect(r.status, r.out).toBe(1);
+      expect(r.out).toContain('step 4/13 "config:');
+      expect(r.out).toContain(`${service}.depends_on.jobspy`);
+      expect(r.out).toContain("Remove");
+      expect(r.out).toContain("compose.override.yaml");
+      expect(r.calls).toContain("docker compose -p radar-test config --format json");
+      expect(r.calls.some((c) => /^pnpm ops:(?:un)?freeze/.test(c) || c.includes(" build") || c.includes(" up "))).toBe(false);
+      assertUntouched(r, false);
+      expect(fs.readFileSync(override, "utf8")).toBe(saved);
+    } finally {
+      fs.rmSync(override);
+    }
+  });
+
+  it.each([
+    { title: "failed Compose model command", env: { COMPOSE_MODEL_EXIT: "1" } },
+    { title: "malformed Compose JSON", env: { COMPOSE_MODEL_OUTPUT: "not json" } },
+    { title: "unexpected Compose model shape", env: { COMPOSE_MODEL_OUTPUT: '{"services":{"runner":{"depends_on":["jobspy"]}}}' } },
+  ])("$title refuses the deploy before freezing without printing model values", ({ env }) => {
+    existing();
+    const r = deploy(args, env);
+    expect(r.status, r.out).toBe(1);
+    expect(r.out).toContain('step 4/13 "config:');
+    expect(r.out).toContain("cannot inspect the resolved Compose dependencies");
+    expect(r.out).not.toContain(env.COMPOSE_MODEL_OUTPUT ?? '"services"');
+    expect(r.calls.some((c) => /^pnpm ops:(?:un)?freeze/.test(c) || c.includes(" build") || c.includes(" up "))).toBe(false);
+    assertUntouched(r, false);
   });
 
   it.each([

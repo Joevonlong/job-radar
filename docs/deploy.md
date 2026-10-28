@@ -317,6 +317,19 @@ Before upgrading the script automatically takes a `jobradar-manual-…-pre-deplo
 
 After upgrading run `pnpm run doctor` and confirm there are no new ❌.
 
+### Compose overrides and the jobspy sidecar
+
+Before upgrading, remove `services.runner.depends_on.jobspy` from an existing `compose.override.yaml` (or any other
+active Compose override). Keep the dependency on `db`. Also remove a dependency on `jobspy` from `db` or `web`, if
+you added one. Compose merges dependency maps, so removing the entry from the shipped `compose.yaml` does not remove
+your override. Even `required: false` can pull the sidecar into the core services' `up --wait`.
+
+Step 4 checks `docker compose -p <project> config --format json` and refuses these dependencies **before freezing
+settings or restarting services**. It names the entries to remove; it does not edit your overrides. Remove those entries
+and run the deploy again, so an unhealthy sidecar cannot block migrations, the ai-worker switch or config writes.
+The doctor treats a failed sidecar as a problem only when a channel that uses it is effectively enabled for the current
+market; a channel excluded by its `markets` restriction does not need the sidecar.
+
 ### With layered config
 
 - The live configuration is `data/config/` (not in git) and the web UI only writes there. `config/` holds the defaults shipped with the code; they are built into the web and runner images, so a change reaches the containers with the deploy that builds and restarts them (steps 6 and 8), not with a `git pull` alone. A changed default only affects files that are **not** in the user directory (`shipped` files such as `models.yaml` and `pipeline.yaml`, unless you overrode them). So the main checkout no longer becomes dirty because of a save in the web UI, and a deployment no longer refuses to pull for that reason.

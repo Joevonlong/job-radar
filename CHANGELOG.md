@@ -7,6 +7,10 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ### Upgrade notes
 
+- **Remove legacy jobspy dependencies from Compose overrides.** Delete `services.runner.depends_on.jobspy` from your
+  `compose.override.yaml` (and any jobspy dependency you added to `db` or `web`), keeping the database dependencies.
+  Deploy now refuses these merged dependencies before freezing settings, so an unhealthy optional sidecar cannot
+  block the core deployment. See [the upgrade note](docs/deploy.md#compose-overrides-and-the-jobspy-sidecar).
 - **Company and title keys are recomputed once.** The first cycle after upgrading (or `pnpm reprocess`) gives stored
   companies and jobs whose names are written in a non-Latin script, or contain letters such as Ø, Ł, Æ or ß, their new
   keys before new postings are filed. German company names with ß are re-keyed once (ß now reads as ss, as in titles:
