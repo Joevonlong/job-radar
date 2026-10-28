@@ -310,7 +310,7 @@ To save a JD as a file: "Tailor resume" on the detail page exports it to `data/e
 | `pnpm ai:probe --provider <provider> --model <model id>` | After adding a new model to `data/config/models.yaml`, send one tiny request with it before choosing it on the settings page (`--model` requires exactly one `--provider`; without `--model` it shows whether each provider is available right now) |
 | `pnpm sources:list` | List all collection sources and their health (`--status failing`, `--json`, `--strict`), see `sources.md` |
 | `pnpm telegram:test` | Send a test message to confirm Telegram works |
-| `pnpm reprocess` | After rules change, re-parse already stored jobs with the new rules |
+| `pnpm reprocess` | After rules change, re-parse already stored jobs with the new rules (`--split-merged`: separate jobs that older versions merged because of names in a non-Latin script, see [extraction.md](extraction.md#company-and-title-keys)) |
 | `pnpm db:studio` | Open Drizzle Studio to browse database tables in the browser |
 | `scripts/ops/backup.sh` / `scripts/ops/restore.sh` | Manual backup and restore (see `backup-restore.md`) |
 

@@ -4,6 +4,7 @@ import { loadConfig, type PipelineConfig } from "@/lib/config";
 import { loadPipeline } from "@/lib/market";
 import { LEGACY_BASE_CURRENCY, type Contract, type GermanLevel, type StoredJobSalary } from "@/lib/domain/types";
 import { resolveCompanyName } from "@/lib/pipeline/company";
+import { normalizeTitle } from "@/lib/pipeline/normalize";
 import { BREAKDOWN_PROMPT_VERSION } from "@/lib/ai/prompts/breakdown";
 import { breakdownContentSchema, type BreakdownContent } from "@/lib/breakdown/content";
 import { registryRowsFromConfig } from "@/lib/sources/registry/entries";
@@ -959,7 +960,7 @@ async function insertSeed(db: Executor, input: { now: Date; tz: string; pipeline
         .values({
           companyId: companyId.get(companyKey(job.company, pipeline)) as number,
           title: job.title,
-          titleNorm: normalizeName(job.title),
+          titleNorm: normalizeTitle(job.title), // the pipeline's own title key, so seeded jobs match like collected ones
           locationsJson: job.cities.map((city, index) => ({ label: `${city}, Germany`, city, countryCode: "DE", isPrimary: index === 0 })),
           workplace: job.workplace,
           seniority: job.seniority ?? "unknown",

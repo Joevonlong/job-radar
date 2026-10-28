@@ -4,8 +4,6 @@
  * allowed to, `web-tasks.ts`); the answer is checked in code (`lookup-verify.ts`) and stored in `salary_lookups` (C3:
  * an estimate with sources, never a fact of the job).
  */
-import { createHash } from "node:crypto";
-
 import { AiProviderError } from "@/lib/ai/errors";
 import { buildSalaryPrompt, salaryLookupOutputSchema, SALARY_PROMPT_VERSION } from "@/lib/ai/prompts/salary";
 import type { AiRouter } from "@/lib/ai/router";
@@ -13,36 +11,16 @@ import { webAccessAllowed, webLimits } from "@/lib/ai/web-tasks";
 import type { ChannelLogger } from "@/lib/channels/types";
 import type { SalaryConfig } from "@/lib/config";
 import type { Db } from "@/lib/db/client";
-import { findLatestSalaryLookup, getJobForSalaryLookup, insertSalaryLookup, type JobForSalaryLookup } from "@/lib/db/repos/salary-lookups";
+import { findLatestSalaryLookup, getJobForSalaryLookup, insertSalaryLookup } from "@/lib/db/repos/salary-lookups";
 import type { FxTable } from "@/lib/market/currency";
 import { TRANSLATION_FAILURE_CODES } from "@/lib/translation/errors";
 
 import { compileFamilies } from "./families";
+import { salaryLookupKey } from "./lookup-key";
 import { verifySalaryLookup } from "./lookup-verify";
 import type { SalaryLookupQuery } from "./lookup-types";
 
-const keyPart = (text: string | null): string =>
-  (text ?? "")
-    .normalize("NFKD")
-    .replace(/[̀-ͯ]/g, "")
-    .toLowerCase()
-    .replace(/[|\s]+/g, " ")
-    .trim() || "-";
-
-/** The longest lookup key (the request payload accepts up to 600 characters). */
-export const LOOKUP_KEY_MAX = 400;
-
-/**
- * The cache key of a lookup: normalised company, role family, title, seniority, country and city. Two postings of the same
- * role at the same company and place share one lookup; another city or title is a new one. A key longer than
- * `LOOKUP_KEY_MAX` keeps its start and gets a hash of the whole key, so long names stay distinct and within the request payload's limit.
- */
-export function salaryLookupKey(job: Pick<JobForSalaryLookup, "companyNorm" | "titleNorm" | "seniority" | "location">, family: string | null): string {
-  const key = [keyPart(job.companyNorm), family ?? "-", keyPart(job.titleNorm), keyPart(job.seniority), keyPart(job.location?.countryCode ?? null), keyPart(job.location?.city ?? null)].join("|");
-  if (key.length <= LOOKUP_KEY_MAX) return key;
-  return `${key.slice(0, LOOKUP_KEY_MAX - 17)}#${createHash("sha256").update(key).digest("hex").slice(0, 16)}`;
-}
-
+export { LOOKUP_KEY_MAX, salaryLookupKey } from "./lookup-key";
 
 /** Error codes the lookup card has labels for: the AI failure classes (as for translations) plus the request-level ones. */
 export const SALARY_ERROR_CODES = [...TRANSLATION_FAILURE_CODES, "disabled", "config_error", "not_found", "no_web_provider", "quota", "aborted", "invalid_payload", "handler_error", "no_handler"] as const;

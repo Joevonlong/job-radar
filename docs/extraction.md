@@ -48,6 +48,49 @@ The `contract` section: student / internship is judged only from the title and t
 
 When the same job has differently written company names in different sources ("SIV.AG" / "SIV.AG - Service für Informationsverarbeitung AG", "Allianz in Deutschland" / "Allianz Kunde und Markt GmbH"), duplicates used to be searched for only under the same company name, so merges were missed. Now two postings are merged only if the company names are related (one is a word-prefix of the other, or the first word is the same), the titles are identical, and the SimHash distance is ≤ `dedupe.cross_company_simhash_max_distance` (default 14, wider than the same-company `simhash_max_distance`, because the same JD has different boilerplate on StepStone and LinkedIn). Duplicates already in the database are not merged retroactively; this only applies to jobs that come in afterwards.
 
+## Company and title keys
+
+Postings are matched to the same job (and to the same company) by keys: the company key is the company name in lower case
+with accents and legal forms (GmbH, Inc. ...) removed, the title key the title in lower case without gender markers
+("(m/w/d)") and punctuation; the exact match also compares the city. All three keep the letters and digits of every
+script, so "Яндекс", "株式会社メルカリ" and "Ørsted A/S" each have a key of their own, "バックエンドエンジニア" and
+"プロダクトデザイナー" at the same company are two jobs, and so are the same role in 東京 and in 大阪. Only the accents of Latin,
+Greek and Cyrillic letters are folded ("é" = "e"); the marks that are part of a letter in other scripts stay (Devanagari
+and Thai vowel signs, the Japanese voicing marks: ジム and シム are different words). ß reads as ss, so "Straße GmbH" and
+"Strasse GmbH" are one company. A company name without any letter or digit keys as itself; a title without any is never
+used to match two postings (only the same-source and SimHash checks can merge it).
+
+Versions before this one kept only the letters a–z and digits: a name, title or city written in another script
+(Cyrillic, Greek, Hebrew, Arabic, CJK ...) keyed as nothing, or as its Latin part only ("シニアAIエンジニア" as "ai"), and
+letters such as Ø, Ł, Æ or ß in company names were dropped. **After upgrading**, the first cycle (or `pnpm reprocess`)
+recomputes the stored keys once, before it files new postings:
+
+- only keys the new rule changes are touched; German company names with ß are re-keyed once. A database whose names and
+  titles are only in Latin script without such letters is not changed at all;
+- two companies that now have the same key are folded into one: jobs, salary lookups, aliases, ATS board and watched /
+  blacklisted marks are kept; cached salary lookups follow the new company and title keys;
+- a watched or blacklisted company whose name mixes scripts ("Mercari, Inc. (株式会社メルカリ)") used to share its key with its
+  Latin spelling ("Mercari Inc."); it gets a second row with the same marks for that spelling, so both stay marked;
+- if the keys cannot be recomputed (a database error), the cycle files no postings: they stay pending, the pipeline step
+  is reported as failed and the next cycle tries again. `pnpm reprocess` stops with exit code 1 in that case.
+
+Jobs that the old keys had already merged by mistake (two employers under one company, two roles under one title) stay
+merged until you run this once:
+
+```bash
+pnpm reprocess --split-merged
+```
+
+It checks every job that has a posting whose company or title key changed and detaches only the postings the old keys
+had matched to it and the new ones do not (postings merged as the same posting from another source, or by an almost
+identical description, stay). Then it reprocesses as usual: each detached posting becomes a job of its own under its own
+company (or joins the job it really belongs to). The job itself keeps its status, application, notes, favourite and
+score. A job you acted on (application, favourite, filter or closure decision) never changes company: when its own postings
+now name another company it is left as it is; both kinds are listed by id at the end of the run, worth a look. Nothing
+to do when all your postings are in Latin script. Not handled yet: a job that older versions merged from postings of the
+same company and title in two cities written in another script (東京 and 大阪) stays one job, because it lists both cities;
+new postings of such cities are kept apart.
+
 ## Location on source rows
 
 Each row of the source section on a job's detail page shows the location that source itself wrote (`job_sources.location_label`; `pnpm reprocess` fills in the location of existing sources). When a job is merged from several postings of the same company's ATS (for example the various Databricks offices), this is what tells the rows apart.
@@ -62,6 +105,7 @@ Each row of the source section on a job's detail page shows the location that so
 ```bash
 pnpm reprocess            # all channels
 pnpm reprocess --channel linkedin-brightdata
+pnpm reprocess --split-merged   # once after upgrading, see "Company and title keys"
 ```
 
 (Run in the project directory.) A full run first clears the work arrangement, German level and agency flags on the jobs (with `--channel` it does not clear, it only adds), then puts the already parsed original text back to pending, and runs in turn `pipeline`, salary (re-reads the original text of all jobs with the current parser and corrects the stored salary, see [signals.md](signals.md); with `--channel` it is also all jobs), the hard filter, rule signals, salary-signal sync, bonuses, and the German penalty for already scored jobs; it does not collect and does not call the AI. The exit code is 1 when some jobs were deferred or a rule scan failed, and 2 for an argument error. For jobs whose description changed: rule signals are re-scanned, and the AI signal review and the translation are redone as needed in later processing cycles (this uses AI quota).
