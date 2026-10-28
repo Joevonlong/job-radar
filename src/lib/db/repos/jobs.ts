@@ -40,6 +40,23 @@ export async function updateJob(db: Executor, id: number, patch: JobPatch): Prom
   await db.update(jobs).set(patch).where(eq(jobs.id, id));
 }
 
+/** The next `limit` jobs above `afterId` with their title and title key (for recomputing the keys when the key function changes). */
+export async function listJobTitleKeys(db: Executor, input: { afterId: number; limit: number }): Promise<Array<Pick<Job, "id" | "title" | "titleNorm">>> {
+  return db
+    .select({ id: jobs.id, title: jobs.title, titleNorm: jobs.titleNorm })
+    .from(jobs)
+    .where(sql`${jobs.id} > ${input.afterId}`)
+    .orderBy(asc(jobs.id))
+    .limit(input.limit);
+}
+
+/** Store new title keys, one `update` for all rows. */
+export async function setJobTitleNorms(db: Executor, rows: ReadonlyArray<{ id: number; titleNorm: string }>): Promise<void> {
+  if (rows.length === 0) return;
+  const values = sql.join(rows.map((row) => sql`(${row.id}::bigint, ${row.titleNorm}::text)`), sql`, `);
+  await db.execute(sql`update jobs set title_norm = v.title_norm from (values ${values}) as v(id, title_norm) where jobs.id = v.id`);
+}
+
 /**
  * Forget the facts the pipeline's rules read out of the text (work mode, German level, contract, agency flag),
  * so a re-read of every raw posting starts from nothing: merging never replaces a known value by

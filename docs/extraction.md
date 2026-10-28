@@ -48,6 +48,34 @@ The `contract` section: student / internship is judged only from the title and t
 
 When the same job has differently written company names in different sources ("SIV.AG" / "SIV.AG - Service für Informationsverarbeitung AG", "Allianz in Deutschland" / "Allianz Kunde und Markt GmbH"), duplicates used to be searched for only under the same company name, so merges were missed. Now two postings are merged only if the company names are related (one is a word-prefix of the other, or the first word is the same), the titles are identical, and the SimHash distance is ≤ `dedupe.cross_company_simhash_max_distance` (default 14, wider than the same-company `simhash_max_distance`, because the same JD has different boilerplate on StepStone and LinkedIn). Duplicates already in the database are not merged retroactively; this only applies to jobs that come in afterwards.
 
+## Company and title keys
+
+Postings are matched to the same job (and to the same company) by keys: the company key is the company name in lower case
+with accents and legal forms (GmbH, Inc. ...) removed, the title key the title in lower case without gender markers
+("(m/w/d)") and punctuation. Both keep the letters and digits of every script, so "Яндекс", "株式会社メルカリ" and
+"Ørsted A/S" each have a key of their own, and "バックエンドエンジニア" and "プロダクトデザイナー" at the same company are two
+jobs. A company name without any letter or digit keys as itself; a title without any is never used to match two postings
+(only the same-source and SimHash checks can merge it).
+
+Versions before this one kept only the letters a–z and digits: a name or title written in another script (Cyrillic,
+Greek, Hebrew, Arabic, CJK ...) keyed as nothing, or as its Latin part only ("シニアAIエンジニア" as "ai"), and letters such as
+Ø, Ł, Æ or ß in company names were dropped. **After upgrading**, the first cycle (or `pnpm reprocess`) recomputes the
+stored keys once, before it files new postings: only keys the new rule changes are touched; two companies that now have
+the same key are folded into one (aliases, ATS board and watched / blacklisted marks are kept). A database whose names and
+titles are only in Latin script without such letters is not changed at all.
+
+Jobs that the old keys had already merged by mistake (two employers under one company, two roles under one title) stay
+merged until you run this once:
+
+```bash
+pnpm reprocess --split-merged
+```
+
+It checks every job that has a posting whose company or title key changed, detaches the postings of another company or
+title from it, and then reprocesses as usual: each detached posting becomes a job of its own under its own company (or
+joins the job it really belongs to). The job itself keeps its status, notes and score. Nothing to do when all your
+postings are in Latin script.
+
 ## Location on source rows
 
 Each row of the source section on a job's detail page shows the location that source itself wrote (`job_sources.location_label`; `pnpm reprocess` fills in the location of existing sources). When a job is merged from several postings of the same company's ATS (for example the various Databricks offices), this is what tells the rows apart.
@@ -62,6 +90,7 @@ Each row of the source section on a job's detail page shows the location that so
 ```bash
 pnpm reprocess            # all channels
 pnpm reprocess --channel linkedin-brightdata
+pnpm reprocess --split-merged   # once after upgrading, see "Company and title keys"
 ```
 
 (Run in the project directory.) A full run first clears the work arrangement, German level and agency flags on the jobs (with `--channel` it does not clear, it only adds), then puts the already parsed original text back to pending, and runs in turn `pipeline`, salary (re-reads the original text of all jobs with the current parser and corrects the stored salary, see [signals.md](signals.md); with `--channel` it is also all jobs), the hard filter, rule signals, salary-signal sync, bonuses, and the German penalty for already scored jobs; it does not collect and does not call the AI. The exit code is 1 when some jobs were deferred or a rule scan failed, and 2 for an argument error. For jobs whose description changed: rule signals are re-scanned, and the AI signal review and the translation are redone as needed in later processing cycles (this uses AI quota).

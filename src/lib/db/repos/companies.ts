@@ -61,6 +61,38 @@ export async function mergeCompanyInto(db: Executor, fromId: number, toId: numbe
   return moved.length;
 }
 
+/** Every company's id, display name and key (for recomputing the keys when the key function changes). */
+export async function listCompanyKeys(db: Executor): Promise<Array<Pick<Company, "id" | "name" | "nameNorm">>> {
+  return db.select({ id: companies.id, name: companies.name, nameNorm: companies.nameNorm }).from(companies).orderBy(asc(companies.id));
+}
+
+/** Store another key for the company (its display name stays). */
+export async function setCompanyNameNorm(db: Executor, id: number, nameNorm: string): Promise<void> {
+  await db.update(companies).set({ nameNorm }).where(eq(companies.id, id));
+}
+
+/**
+ * Fold company `fromId` into `toId` (two rows that one key now names): the target keeps its name and key, takes the other
+ * row's name and aliases as aliases, its ATS board when it has none, and its watched / blacklisted marks; then the jobs move
+ * and `fromId` is deleted (`mergeCompanyInto`). Run it in a transaction.
+ */
+export async function foldCompanyInto(db: Executor, fromId: number, toId: number): Promise<number> {
+  const [from] = await db.select().from(companies).where(eq(companies.id, fromId)).limit(1);
+  if (!from) return 0;
+  const spellings = sql.join([from.name, ...from.aliases].map((spelling) => sql`${spelling}::text`), sql`, `);
+  await db
+    .update(companies)
+    .set({
+      aliases: sql`${companies.aliases} || array(select distinct t.x from unnest(array[${spellings}]) as t(x) where t.x <> all(${companies.aliases}) and t.x <> ${companies.name})`,
+      atsKind: sql`coalesce(${companies.atsKind}, ${from.atsKind}::text)`,
+      atsToken: sql`case when ${companies.atsKind} is null then ${from.atsToken}::text else ${companies.atsToken} end`,
+      watched: sql`${companies.watched} or ${from.watched}`,
+      blacklisted: sql`${companies.blacklisted} or ${from.blacklisted}`,
+    })
+    .where(eq(companies.id, toId));
+  return mergeCompanyInto(db, fromId, toId);
+}
+
 export interface CompanySuggestion {
   name: string;
   /** Jobs of this company in the database. */

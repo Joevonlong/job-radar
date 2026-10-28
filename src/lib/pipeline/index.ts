@@ -18,6 +18,7 @@ import { loadBaseCurrency } from "@/lib/signals/floor";
 import { resolveCompanyName } from "./company";
 import { syncCompanyDisplayNames } from "./company-names";
 import { fieldsOf, fieldsOfJob, findMatchingJob, mergeJobFields, type MatchKind } from "./dedupe";
+import { refreshIdentityKeysIfStale, splitMergedJobs, type IdentityKeyRefreshResult, type SplitMergedResult } from "./identity-keys";
 import { runMaintenance, type MaintenanceResult } from "./lifecycle";
 import { refreshSalariesIfStale, type SalaryRefreshResult } from "./refresh-salary";
 import { normalizeDraft, type NormalizedJob } from "./normalize";
@@ -26,6 +27,7 @@ export { normalizeCompanyKey, resolveCompanyName } from "./company";
 export { runMaintenance, type MaintenanceResult } from "./lifecycle";
 export { normalizeDraft, normalizeTitle, type NormalizedJob } from "./normalize";
 export { refreshSalaries, refreshSalariesIfStale, salaryFingerprint, type SalaryRefreshResult } from "./refresh-salary";
+export { refreshIdentityKeys, refreshIdentityKeysIfStale, type IdentityKeyRefreshResult, type SplitMergedResult } from "./identity-keys";
 
 /** Longest error text kept in a log line or a result sample. */
 const MAX_REASON_CHARS = 300;
@@ -274,8 +276,40 @@ export async function refreshStoredSalaries(db: Db, options: PipelineOptions & {
   });
 }
 
+/**
+ * Recompute the stored company and title keys once per key version (see `refreshIdentityKeysIfStale`), before any posting is
+ * matched with the new keys. Never fails: a problem is logged and the keys are tried again next time.
+ */
+export async function refreshStoredIdentityKeys(db: Db, options: Pick<PipelineOptions, "config" | "logger" | "signal"> & { force?: boolean }): Promise<IdentityKeyRefreshResult | null> {
+  try {
+    return await refreshIdentityKeysIfStale(db, {
+      config: options.config,
+      logger: options.logger,
+      ...(options.signal ? { signal: options.signal } : {}),
+      ...(options.force ? { force: true } : {}),
+    });
+  } catch (error) {
+    options.logger.warn("company and title keys could not be recomputed", { error: describeError(error) });
+    return null;
+  }
+}
+
+/** `splitMergedJobs` with the pipeline's own reading of each raw posting (`pnpm reprocess --split-merged`). */
+export async function splitMergedJobsOf(db: Db, options: PipelineOptions): Promise<SplitMergedResult> {
+  return splitMergedJobs(db, {
+    config: options.config,
+    logger: options.logger,
+    ...(options.signal ? { signal: options.signal } : {}),
+    identityOf: (raw) => {
+      const prepared = parseAndNormalize(raw, options);
+      return prepared.ok ? { companyName: prepared.normalized.companyName, title: prepared.normalized.title } : undefined;
+    },
+  });
+}
+
 export async function pipelineStep(ctx: CycleStepContext): Promise<StepResult> {
   const db = requireDb(ctx);
+  await refreshStoredIdentityKeys(db, { config: loadPipeline(), logger: ctx.logger, signal: ctx.signal });
   // the display names of config/sources.yaml (ats_boards) reach companies that were created before a name was corrected
   try {
     const names = await syncCompanyDisplayNames(db, { companies: loadCompanies().companies, pipeline: loadPipeline() });

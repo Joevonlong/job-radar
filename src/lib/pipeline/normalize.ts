@@ -39,19 +39,20 @@ export interface NormalizedJob {
 const GENDER_MARKER = /[([]?\s*\b(?:[mwfdxi*]\s*[/|\\]\s*[mwfdxi*](?:\s*[/|\\]\s*[mwfdxi*])?|all\s+genders?|gn)\b\s*[)\]]?/giu;
 
 /**
- * Title key for matching the same posting across sources: lower case, accents folded, gender
- * markers ("(m/w/d)") and punctuation removed, whitespace collapsed.
+ * Title key for matching the same posting across sources: lower case, accents folded (NFKD, combining marks removed),
+ * gender markers ("(m/w/d)") removed, letters and digits of every script (and `+`, `#`) kept, everything else a single
+ * space. A title without any letter or digit keys as "", which never identifies a job (see `findMatchingJob`).
  */
 export function normalizeTitle(title: string): string {
   return title
     .replace(/ß/g, "ss")
     .normalize("NFKD")
-    .replace(/[̀-ͯ]/g, "")
+    .replace(/\p{M}/gu, "")
     .replace(GENDER_MARKER, " ")
     .replace(/[:*/]in(?:nen)?\b/giu, "")
     .toLowerCase()
     .replace(/&/g, " and ")
-    .replace(/[^a-z0-9+#]+/g, " ")
+    .replace(/[^\p{L}\p{N}+#]+/gu, " ")
     .trim()
     .replace(/\s+/g, " ");
 }
