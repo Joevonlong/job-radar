@@ -43,7 +43,7 @@ export async function withCycleLock<T>(db: Db, mode: "try" | "wait", fn: (holder
 export async function findCycleLockHolder(db: Db): Promise<number | null> {
   const [k1, k2] = CYCLE_LOCK_KEY;
   const rows = await db.execute<{ pid: number }>(
-    sql`select pid from pg_locks where locktype = 'advisory' and granted and classid = ${k1}::int::oid and objid = ${k2}::int::oid and objsubid = 2 limit 1`,
+    sql`select pid from pg_locks where locktype = 'advisory' and granted and database = (select oid from pg_database where datname = current_database()) and classid = ${k1}::int::oid and objid = ${k2}::int::oid and objsubid = 2 limit 1`,
   );
   return rows[0] === undefined ? null : Number(rows[0].pid);
 }

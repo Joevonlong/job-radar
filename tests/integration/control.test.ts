@@ -249,8 +249,8 @@ describe("processNextControlRequest", () => {
     expect(new Set(runs.map((r) => r.channelId))).toEqual(new Set(["fixture"]));
   });
 
-  /** Another process holds the cycle lock with a cycle limited to `channelIds` (null: every channel) until `release()`. */
-  async function holdLock(channelIds: string[] | null) {
+  /** Another process holds the cycle lock with a cycle limited to `channelIds` (null: every channel) while `fn` runs. */
+  async function holdLock(channelIds: string[] | null, fn: (id: number) => Promise<void>) {
     const db = getDb();
     let release: () => void = () => {};
     const gate = new Promise<void>((resolve) => {
@@ -263,31 +263,30 @@ describe("processNextControlRequest", () => {
       await gate;
       await finishCycle(db, row.id, { status: "succeeded" });
     });
-    const deadline = Date.now() + 5000;
-    while (id === 0 && Date.now() < deadline) await sleep(20);
-    expect(id).toBeGreaterThan(0); // a lock leaked by an earlier test would leave it at 0
-    return {
-      id,
-      release: async () => {
-        release();
-        expect((await held).acquired).toBe(true);
-      },
-    };
+    try {
+      const deadline = Date.now() + 5000;
+      while (id === 0 && Date.now() < deadline) await sleep(20);
+      expect(id).toBeGreaterThan(0); // a lock leaked by an earlier test would leave it at 0
+      await fn(id);
+    } finally {
+      release();
+      expect((await held).acquired).toBe(true);
+    }
   }
 
   it("run_cycle is done, pointing at the running cycle, when that cycle covers it; one of other channels fails it", async () => {
     registerFixtureChannel(defaultRegistry, { postings: [] });
     const db = getDb();
-    const full = await holdLock(null);
-    const covered = await insertControlRequest(db, { kind: "run_cycle", payload: { channelIds: ["fixture"] } });
-    expect(await processNextControlRequest(pollOptions())).toMatchObject({ id: covered.id, status: "done", result: { cycleId: full.id, coveredBy: full.id } });
-    await full.release();
+    await holdLock(null, async (id) => {
+      const covered = await insertControlRequest(db, { kind: "run_cycle", payload: { channelIds: ["fixture"] } });
+      expect(await processNextControlRequest(pollOptions())).toMatchObject({ id: covered.id, status: "done", result: { cycleId: id, coveredBy: id } });
+    });
 
     // a running cycle limited to other channels does not cover the request: it fails as before (a manual request never waits)
-    const other = await holdLock(["indeed"]);
-    await insertControlRequest(db, { kind: "run_cycle", payload: { channelIds: ["fixture"] } });
-    expect(await processNextControlRequest(pollOptions())).toMatchObject({ status: "failed", result: { error: "another_cycle_running" } });
-    await other.release();
+    await holdLock(["indeed"], async () => {
+      await insertControlRequest(db, { kind: "run_cycle", payload: { channelIds: ["fixture"] } });
+      expect(await processNextControlRequest(pollOptions())).toMatchObject({ status: "failed", result: { error: "another_cycle_running" } });
+    });
   });
 
   it("run_cycle is not covered by a row a crash left `running`, only by the cycle that holds the lock", async () => {
@@ -295,10 +294,10 @@ describe("processNextControlRequest", () => {
     const db = getDb();
     // an interrupted CLI cycle of every channel, newer than nothing that holds the lock
     await db.insert(schema.cycles).values({ kind: "manual", status: "running", summaryJson: { channelIds: null } });
-    const other = await holdLock(["indeed"]);
-    await insertControlRequest(db, { kind: "run_cycle", payload: { channelIds: ["fixture"] } });
-    expect(await processNextControlRequest(pollOptions())).toMatchObject({ status: "failed", result: { error: "another_cycle_running" } });
-    await other.release();
+    await holdLock(["indeed"], async () => {
+      await insertControlRequest(db, { kind: "run_cycle", payload: { channelIds: ["fixture"] } });
+      expect(await processNextControlRequest(pollOptions())).toMatchObject({ status: "failed", result: { error: "another_cycle_running" } });
+    });
   });
 
   it("claims no run_cycle while a cycle of this process waits for the lock; other requests still run", async () => {

@@ -5,10 +5,11 @@ import type { CascadeSpec } from "@/lib/channels/cascade";
 import { registerFixtureChannel, type FixturePosting } from "@/lib/channels/fixture";
 import { ChannelRegistry } from "@/lib/channels/registry";
 import type { ChannelsConfig } from "@/lib/config";
+import { findCycleLockHolder, withCycleLock } from "@/lib/cycle/lock";
 import { isCycleWaitingForLock } from "@/lib/cycle/lock-waiters";
 import { runCycle, type RunCycleOptions } from "@/lib/cycle/run-cycle";
 import { registerCycleStep, resetCycleSteps } from "@/lib/cycle/steps";
-import { closeDb, getDb, schema } from "@/lib/db";
+import { closeDb, createConnection, getDb, schema } from "@/lib/db";
 import { runMigrations } from "@/lib/db/migrate";
 import {
   countRunningCycles,
@@ -363,6 +364,28 @@ describe("budget persistence", () => {
 });
 
 describe("concurrency guard", () => {
+  it("ignores a cycle lock in another database and identifies the holder in this database", async () => {
+    const db = getDb();
+    const otherUrl = new URL(url);
+    const otherName = `${otherUrl.pathname.slice(1)}_cycle_lock`;
+    otherUrl.pathname = `/${otherName}`;
+    await db.execute(sql`create database ${sql.identifier(otherName)}`);
+    const other = createConnection(otherUrl.toString(), { max: 1 });
+    try {
+      const foreign = await withCycleLock(other.db, "try", async () => {
+        expect(await findCycleLockHolder(db)).toBeNull();
+        const local = await withCycleLock(db, "try", async (holder) => {
+          expect(await findCycleLockHolder(db)).toBe(holder.pid);
+        });
+        expect(local.acquired).toBe(true);
+      });
+      expect(foreign.acquired).toBe(true);
+    } finally {
+      await other.sql.end({ timeout: 5 });
+      await db.execute(sql`drop database ${sql.identifier(otherName)}`);
+    }
+  });
+
   it("lets only one of two simultaneous cycles run; the other is recorded as skipped", async () => {
     const registry = new ChannelRegistry();
     // The channel is held on a gate (not a timer), so the winner keeps the lock for exactly as long as
