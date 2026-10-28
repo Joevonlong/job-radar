@@ -174,7 +174,7 @@ claude-cli，然后 Anthropic API；只用能搜索网页的 provider，codex-cl
 | 按钮 | 位置 | 请求 | 谁执行 | 做什么 |
 |---|---|---|---|---|
 | 立即跑一轮 | `/settings?tab=actions` 手动操作 | `run_cycle` | runner | 一个手动轮，可以只勾选部分通道 |
-| 立即采集 | `/sources` 通道卡片 | `run_cycle`（只带这个通道） | runner | 这个通道跑一轮完整采集（写入岗位，计入预算）。未完成的请求只有覆盖这个通道时才复用（它采全部通道，或者包含这个通道）；别的通道的请求在跑时，这次另建一个请求，排在它后面执行。runner 领取时如果正在运行的一轮已经覆盖这个通道（采全部通道的定时轮次），请求立即记为完成，显示那一轮；正在运行的是别的通道的一轮时，以"另一轮正在运行"失败 |
+| 立即采集 | `/sources` 通道卡片 | `run_cycle`（只带这个通道） | runner | 这个通道跑一轮完整采集（写入岗位，计入预算）。未完成的请求只有覆盖这个通道时才复用（它采全部通道，或者包含这个通道；LinkedIn 级联里靠后的来源，只有级联以它打头的请求才算）；别的通道的请求在跑时，这次另建一个请求，排在它后面执行。runner 领取时如果正在运行的一轮已经覆盖这个通道（采全部通道的定时轮次），请求立即记为完成，按钮跟着那一轮显示进度（“由正在运行的第 … 轮覆盖”）直到它结束；正在运行的是别的通道的一轮时，以"另一轮正在运行"失败 |
 | 测试 | `/sources` 通道卡片 | `test_channel` | runner | 只跑第一个查询（ATS 类是整板扫描），最多取 `sources.yaml: test_channel.max_results` 条（默认 5），在内存里解析，显示抓到 / 解析成功的条数和前几条标题；**不写**岗位、原文、运行记录、用量和熔断状态。有一轮正在跑、通道已关闭、未配置、本月预算用完时不测。`test_channel.excluded_kinds`（默认 `paid`、`session`）里的通道没有测试按钮：付费通道按条计费，LinkedIn 登录态有每日页数上限，请用"立即采集"。超过 `timeout_seconds`（默认 120）记为 `timeout`。发现类通道（tavily、brave）不抓岗位：测试最多发 `test_channel.max_queries`（默认 1）次搜索，成功即显示"抓到 0 条"（接口可用），发现的 board 不保存，所用额度不计入本月用量 |
 | 测试 | `/sources` AI provider 健康度 | `test_ai` | ai-worker（`execution: container` 时是 runner） | 和 `pnpm ai:probe` 一样的极小请求，走正常路由但只试这一个 provider：已关闭、冷却中、到每日上限、缺 key、API 月预算用完都会直接拒绝。计入当天请求数和健康记录，用量记在 `ai_usage`（任务名 `probe`，`/sources` 的 AI 用量里显示为"测试"）。结果显示实际模型、耗时和 token |
 | 发送 Telegram 测试消息 | `/settings?tab=actions` 手动操作 | `test_telegram` | runner | 点击后要再点一次"发送"确认；即使 `notify.yaml: telegram.enabled` 还是 false 也会发，用来确认 bot token 和 chat id |

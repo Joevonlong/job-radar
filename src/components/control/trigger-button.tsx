@@ -6,7 +6,7 @@ import { useCallback, useEffect, useState, useTransition } from "react";
 
 import { runChannelNowAction, testAiAction, testChannelAction, testTelegramAction } from "@/app/control-actions";
 import { Button } from "@/components/ui/button";
-import { controlRequestViewSchema, isOpenRequest, type ControlRequestView } from "@/lib/control/request-view-schema";
+import { controlRequestViewSchema, followsCoveringCycle, isOpenRequest, type ControlRequestView } from "@/lib/control/request-view-schema";
 import { IDLE_CONTROL_STATE, type ControlActionState } from "@/lib/control/service-types";
 import { formatClock } from "@/lib/format/clock";
 import { STATUS_POLL_MS, TRIGGER_WAIT_MAX_MS } from "@/lib/settings/constants";
@@ -50,7 +50,7 @@ function call(kind: TriggerKind, target: string): Promise<ControlActionState> {
   }
 }
 
-/** Poll one request until it is finished (or the page gave up waiting). */
+/** Poll one request until it is finished (or the page gave up waiting); a request covered by a running cycle until that cycle is. */
 function useRequestView(requestId: number | null): { view: ControlRequestView | null; gaveUp: boolean } {
   // keyed by the request: a new request starts from "nothing known yet" without resetting state in the effect
   const [polled, setPolled] = useState<{ id: number; view: ControlRequestView | null; gaveUp: boolean } | null>(null);
@@ -75,7 +75,7 @@ function useRequestView(requestId: number | null): { view: ControlRequestView | 
       const next = await load(requestId);
       if (stopped) return;
       if (next) setPolled({ id: requestId, view: next, gaveUp: false });
-      if (next && !isOpenRequest(next)) return;
+      if (next && !isOpenRequest(next) && !followsCoveringCycle(next)) return;
       if (Date.now() - started > TRIGGER_WAIT_MAX_MS) {
         setPolled((current) => ({ id: requestId, view: current?.id === requestId ? current.view : null, gaveUp: true }));
         return;
@@ -229,6 +229,13 @@ function Outcome({ kind, state, view, gaveUp, timeZone }: { kind: TriggerKind; s
         </p>
       );
     case "runChannel":
+      if (view.cycle && followsCoveringCycle(view)) {
+        return (
+          <p role="status" className="text-muted-foreground text-xs" data-testid="trigger-outcome" data-outcome="covered">
+            {t("done.runChannelCovered", { id: view.cycle.id, finished: view.cycle.runsFinished, total: view.cycle.runsTotal, fetched: view.cycle.fetched })}
+          </p>
+        );
+      }
       return (
         <p role="status" className="text-success-text text-xs" data-testid="trigger-outcome" data-outcome="done">
           {view.cycle

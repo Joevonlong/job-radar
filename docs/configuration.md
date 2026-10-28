@@ -474,11 +474,16 @@ or the start-up catch-up) that finds another cycle running decides by what that 
 | `partial_cycle_wait.poll_seconds` | 15 | How often the waiting cycle tries again |
 
 The block is not in the shipped file (it is shown there as a comment); add it to `data/config/schedule.yaml` only to
-change it, with both keys. A manual cycle never waits: the runner takes requests one at a time, so a waiting one would hold up
+change it (a key left out keeps its default). While a scheduled cycle waits, the runner starts no other manual cycle
+(other buttons still run), so a row of "Collect now" clicks cannot keep it waiting; the queued clicks it covers end
+as done once it runs. A manual cycle never waits: the runner takes requests one at a time, so a waiting one would hold up
 the other buttons. When a running cycle already covers a manual request (a scheduled cycle of every channel), the
 request ends as done and the button shows that cycle; otherwise it fails with "another cycle is running" as before.
 The catch-up at start-up and `pnpm run doctor` (`cycle.last`) count only cycles of every channel when they look for a
-missed slot.
+missed slot. A waiting cycle has no row yet: a deploy that drains the runner meanwhile does not wait for it (the
+catch-up runs it after the restart), and if it waits longer than `doctor.cycle_grace_minutes`, `cycle.last` reports
+the slot as missed until it starts. LinkedIn sources form a cascade, and a cycle of every channel collects with its
+first available source only, so a "Collect now" of a later source in the cascade is never covered by it.
 
 Before rolling back to a version without `partial_cycle_wait`, remove the block from `data/config/schedule.yaml`:
 older versions reject unknown keys.

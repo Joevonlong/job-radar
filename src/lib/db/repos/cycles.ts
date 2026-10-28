@@ -64,14 +64,22 @@ export async function createSkippedCycle(db: Db, input: { kind: CycleKind; summa
   return row;
 }
 
-/** The cycles `running` right now, newest first, with the channels each is limited to (null = every channel). */
-export async function listRunningCycles(db: Db): Promise<Array<{ id: number; kind: CycleKind; channelIds: string[] | null }>> {
+/**
+ * The cycles `running` right now, newest first, with the channels each is limited to (null = every channel) and the
+ * backend pid of the cycle-lock transaction it recorded when it started (null: not recorded). A row a crash left behind
+ * is `running` too; only the one whose pid holds the lock is the running cycle.
+ */
+export async function listRunningCycles(db: Db): Promise<Array<{ id: number; kind: CycleKind; channelIds: string[] | null; lockPid: number | null }>> {
   const rows = await db
     .select({ id: cycles.id, kind: cycles.kind, summaryJson: cycles.summaryJson })
     .from(cycles)
     .where(eq(cycles.status, "running"))
-    .orderBy(desc(cycles.startedAt), desc(cycles.id));
-  return rows.map((row) => ({ id: row.id, kind: row.kind, channelIds: readCycleChannelIds(row.summaryJson) }));
+    .orderBy(desc(cycles.id));
+  return rows.map((row) => {
+    const summary = row.summaryJson;
+    const pid = typeof summary === "object" && summary !== null && "lockPid" in summary ? summary.lockPid : null;
+    return { id: row.id, kind: row.kind, channelIds: readCycleChannelIds(summary), lockPid: typeof pid === "number" && Number.isInteger(pid) ? pid : null };
+  });
 }
 
 /** Start of the newest cycle that ran for every channel (skipped cycles and cycles limited to some channels do not count), or null. */

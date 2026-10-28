@@ -5,6 +5,7 @@ import type { CascadeSpec } from "@/lib/channels/cascade";
 import { registerFixtureChannel, type FixturePosting } from "@/lib/channels/fixture";
 import { ChannelRegistry } from "@/lib/channels/registry";
 import type { ChannelsConfig } from "@/lib/config";
+import { isCycleWaitingForLock } from "@/lib/cycle/lock-waiters";
 import { runCycle, type RunCycleOptions } from "@/lib/cycle/run-cycle";
 import { registerCycleStep, resetCycleSteps } from "@/lib/cycle/steps";
 import { closeDb, getDb, schema } from "@/lib/db";
@@ -485,6 +486,75 @@ describe("concurrency guard", () => {
       await manual;
       expect(scheduled.status).toBe("skipped");
       expect(scheduled.summary.coveredBy).toBeNull();
+    });
+
+    it("does not take a row a crash left `running` for the running cycle: it waits for the cycle that holds the lock", async () => {
+      // an interrupted CLI cycle of every channel, still `running`
+      await getDb().insert(schema.cycles).values({ kind: "manual", status: "running", summaryJson: { channelIds: null } });
+      const { registry, slow, release } = gatedRegistry();
+      const manual = run(registry, { channelIds: ["indeed"] });
+      await untilCalled(slow);
+      let settled = false;
+      const scheduled = runCycle("weekday_morning", { registry, config: waitingConfig(1), logger: quietLogger, sleep: async () => {} }).finally(() => {
+        settled = true;
+      });
+      await new Promise((resolve) => setTimeout(resolve, 1200));
+      expect(settled).toBe(false);
+      release();
+      expect((await manual).status).toBe("succeeded");
+      expect((await scheduled).status).toBe("succeeded");
+    });
+
+    it("tells the control poller that it waits, until it has the lock", async () => {
+      const { registry, slow, release } = gatedRegistry();
+      const manual = run(registry, { channelIds: ["indeed"] });
+      await untilCalled(slow);
+      expect(isCycleWaitingForLock()).toBe(false);
+      const scheduled = runCycle("weekday_morning", { registry, config: waitingConfig(1), logger: quietLogger, sleep: async () => {} });
+      const deadline = Date.now() + 5000;
+      while (!isCycleWaitingForLock() && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(isCycleWaitingForLock()).toBe(true);
+      release();
+      await manual;
+      expect((await scheduled).status).toBe("succeeded");
+      expect(isCycleWaitingForLock()).toBe(false);
+    });
+
+    it("stops waiting and records a skip when the runner shuts down", async () => {
+      const { registry, slow, release } = gatedRegistry();
+      const manual = run(registry, { channelIds: ["indeed"] });
+      await untilCalled(slow);
+      const abort = new AbortController();
+      const started = Date.now();
+      const scheduled = runCycle("weekday_morning", { registry, config: waitingConfig(1), logger: quietLogger, sleep: async () => {}, signal: abort.signal });
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      abort.abort();
+      const result = await scheduled;
+      expect(Date.now() - started).toBeLessThan(1500);
+      expect(result.status).toBe("skipped");
+      expect(result.summary.reason).toContain("cancelled");
+      expect(isCycleWaitingForLock()).toBe(false);
+      release();
+      await manual;
+      expect(await getDb().select().from(schema.cycles).where(eq(schema.cycles.kind, "weekday_morning"))).toEqual([expect.objectContaining({ status: "skipped" })]);
+    });
+
+    it("gives up after partial_cycle_wait.max_minutes and records a skip", async () => {
+      const { registry, slow, release } = gatedRegistry();
+      const manual = run(registry, { channelIds: ["indeed"] });
+      await untilCalled(slow);
+      // a clock that jumps by every sleep: one minute of waiting without waiting a minute
+      let fake = 0;
+      const sleeps: number[] = [];
+      const lockWait = { now: () => fake, sleep: async (ms: number) => { sleeps.push(ms); fake += ms; return true; } };
+      const config15 = { ...config(), schedule: { ...config().schedule, partial_cycle_wait: { max_minutes: 1, poll_seconds: 25 } } };
+      const result = await runCycle("weekday_morning", { registry, config: config15, logger: quietLogger, sleep: async () => {}, lockWait });
+      release();
+      await manual;
+      expect(result.status).toBe("skipped");
+      expect(result.summary.reason).toContain("after 1 min");
+      expect(sleeps).toEqual([25_000, 25_000, 10_000]);
+      expect(isCycleWaitingForLock()).toBe(false);
     });
 
     it("a manual cycle never waits: one limited to other channels is skipped without a covering cycle", async () => {

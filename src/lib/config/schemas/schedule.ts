@@ -184,9 +184,9 @@ const MANUAL_TRIGGERS_DEFAULTS: ManualTriggersConfig = { min_interval_seconds: 3
  */
 const partialCycleWait = z.strictObject({
   /** The longest wait; a scheduled cycle that still finds the lock held after this long is recorded as skipped. 0 = do not wait (skip). */
-  max_minutes: nonNegativeInt,
+  max_minutes: nonNegativeInt.default(60),
   /** How often the waiting cycle tries the lock again. */
-  poll_seconds: positiveInt,
+  poll_seconds: positiveInt.default(15),
 });
 
 export type PartialCycleWaitConfig = z.infer<typeof partialCycleWait>;

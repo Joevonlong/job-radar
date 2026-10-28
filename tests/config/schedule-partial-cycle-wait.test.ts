@@ -16,6 +16,11 @@ describe("schedule.yaml partial_cycle_wait", () => {
     expect(schema.parse(raw).partial_cycle_wait).toEqual({ max_minutes: 60, poll_seconds: 15 });
   });
 
+  it("defaults each key on its own", () => {
+    expect(schema.parse(withWait({ max_minutes: 10 })).partial_cycle_wait).toEqual({ max_minutes: 10, poll_seconds: 15 });
+    expect(schema.parse(withWait({ poll_seconds: 5 })).partial_cycle_wait).toEqual({ max_minutes: 60, poll_seconds: 5 });
+  });
+
   it("accepts 0 minutes (do not wait)", () => {
     expect(schema.parse(withWait({ max_minutes: 0, poll_seconds: 5 })).partial_cycle_wait).toEqual({ max_minutes: 0, poll_seconds: 5 });
   });
@@ -24,7 +29,6 @@ describe("schedule.yaml partial_cycle_wait", () => {
     [{ max_minutes: -1, poll_seconds: 5 }, "partial_cycle_wait.max_minutes"],
     [{ max_minutes: 1.5, poll_seconds: 5 }, "partial_cycle_wait.max_minutes"],
     [{ max_minutes: 10, poll_seconds: 0 }, "partial_cycle_wait.poll_seconds"],
-    [{ max_minutes: 10 }, "partial_cycle_wait.poll_seconds"],
     [{ max_minutes: 10, poll_seconds: 5, extra: true }, "partial_cycle_wait"],
   ])("refuses %j, on %s", (value, path) => {
     const result = schema.safeParse(withWait(value));
