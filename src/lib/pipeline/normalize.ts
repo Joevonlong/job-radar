@@ -45,7 +45,7 @@ const GENDER_MARKER = /[([]?\s*\b(?:[mwfdxi*]\s*[/|\\]\s*[mwfdxi*](?:\s*[/|\\]\s
  */
 export function normalizeTitle(title: string): string {
   return title
-    .replace(/ß/g, "ss")
+    .replace(/[ßẞ]/g, "ss")
     .normalize("NFKD")
     .replace(/\p{M}/gu, "")
     .replace(GENDER_MARKER, " ")

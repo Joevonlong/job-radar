@@ -62,12 +62,21 @@ function latinOnly(text: string, extra: RegExp | null): boolean {
 describe("identity keys in Latin script are unchanged", () => {
   const corpus = [...new Set([...TABLE_INPUTS, ...fixtureStrings()])];
 
-  it("company keys equal the previous version for every Latin-script fixture string", () => {
+  it("company keys equal the previous version for every Latin-script fixture string without ß", () => {
     // a name without any letter or digit ("!!!", "💰") keyed as "" before; it has its own key now (tested below)
     const latin = corpus.filter((text) => latinOnly(text, null) && legacyCompanyKey(text, suffixes) !== "");
     expect(latin.length).toBeGreaterThan(5000);
     const differing = latin.filter((text) => companyKey(text) !== legacyCompanyKey(text, suffixes));
     expect(differing).toEqual([]);
+  });
+
+  it("company names with ß differ from the previous version only by ß -> ss (it was a word break: \"stra-e\")", () => {
+    const withSharpS = corpus.filter((text) => /[ßẞ]/.test(text) && latinOnly(text.replace(/[ßẞ]/g, "ss"), null));
+    expect(withSharpS.length).toBeGreaterThan(5);
+    for (const text of withSharpS) expect(companyKey(text)).toBe(legacyCompanyKey(text.replace(/[ßẞ]/g, "ss"), suffixes));
+    expect(companyKey("Straße GmbH")).toBe(companyKey("Strasse GmbH"));
+    expect(companyKey("Straße GmbH")).toBe("strasse");
+    expect(companyKey("GROẞHANDEL AG")).toBe("grosshandel");
   });
 
   it("title keys equal the previous version for every Latin-script fixture string", () => {
@@ -79,6 +88,7 @@ describe("identity keys in Latin script are unchanged", () => {
 
   it("the existing key rules still hold", () => {
     expect(normalizeTitle("Größe & Übung Engineer")).toBe("grosse and ubung engineer");
+    expect(normalizeTitle("Straßenbau Ingenieur")).toBe(normalizeTitle("Strassenbau Ingenieur"));
     expect(normalizeTitle("KI-Entwickler*in (m/w/d)")).toBe("ki entwickler");
     expect(companyKey("SIGNAL Works, G.m.b.H.")).toBe("signal-works");
     expect(companyKey("Beispiel GmbH & Co. KG")).toBe("beispiel");

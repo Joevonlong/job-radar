@@ -9,8 +9,9 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 - **Company and title keys are recomputed once.** The first cycle after upgrading (or `pnpm reprocess`) gives stored
   companies and jobs whose names are written in a non-Latin script, or contain letters such as Ø, Ł, Æ or ß, their new
-  keys before new postings are filed; companies that now share a key are folded into one. Nothing changes when all names
-  and titles are plain Latin script. Jobs the old keys had already merged stay merged until you run
+  keys before new postings are filed; companies that now share a key are folded into one. German company names with ß
+  are re-keyed once too (ß now reads as ss, as in titles: "Straße GmbH" and "Strasse GmbH" share a key; no merges
+  are expected unless both spellings are stored). Nothing else changes when all names and titles are plain Latin script. Jobs the old keys had already merged stay merged until you run
   `pnpm reprocess --split-merged` once ([docs/extraction.md](docs/extraction.md#company-and-title-keys)). **Rollback:**
   older versions file new postings with such names under the empty key again; after upgrading back, run
   `pnpm reprocess --split-merged`.
@@ -189,7 +190,7 @@ A failure in (a) does not block rollback: follow (c) and accept the display wind
 - **Company names and job titles in non-Latin scripts no longer merge different jobs:** "Яндекс" and "株式会社メルカリ"
   were one company, and different Japanese, Chinese, Greek, Cyrillic or Hebrew titles at one employer and city were one
   job, because their matching keys were empty. The keys now keep the letters and digits of every script (letters such as
-  Ø, Ł, Æ and ß in company names are kept too); a title without any letter or digit never matches by title. See
+  Ø, Ł and Æ in company names are kept too, ß reads as ss); a title without any letter or digit never matches by title. See
   [docs/extraction.md](docs/extraction.md#company-and-title-keys).
 - **Tag boxes no longer swallow a repeated entry silently:** typing a title, keyword or city that is already in the list
   (any case) now keeps the text, names the existing entry under the box ("Already in the list: ...") and briefly

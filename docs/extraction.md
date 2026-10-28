@@ -59,10 +59,11 @@ jobs. A company name without any letter or digit keys as itself; a title without
 
 Versions before this one kept only the letters a–z and digits: a name or title written in another script (Cyrillic,
 Greek, Hebrew, Arabic, CJK ...) keyed as nothing, or as its Latin part only ("シニアAIエンジニア" as "ai"), and letters such as
-Ø, Ł, Æ or ß in company names were dropped. **After upgrading**, the first cycle (or `pnpm reprocess`) recomputes the
+Ø, Ł, Æ or ß in company names were dropped (ß now reads as ss in both keys, so "Straße GmbH" and "Strasse GmbH" are
+one company). **After upgrading**, the first cycle (or `pnpm reprocess`) recomputes the
 stored keys once, before it files new postings: only keys the new rule changes are touched; two companies that now have
-the same key are folded into one (aliases, ATS board and watched / blacklisted marks are kept). A database whose names and
-titles are only in Latin script without such letters is not changed at all.
+the same key are folded into one (aliases, ATS board and watched / blacklisted marks are kept). German company names with ß are
+re-keyed once. A database whose names and titles are only in Latin script without such letters is not changed at all.
 
 Jobs that the old keys had already merged by mistake (two employers under one company, two roles under one title) stay
 merged until you run this once:
