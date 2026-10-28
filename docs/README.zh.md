@@ -45,6 +45,5 @@
 | [linkedin-session.zh.md](linkedin-session.zh.md) | `pnpm auth:linkedin`、每日页面上限、遇到验证页怎么办 |
 | [jsearch.zh.md](jsearch.zh.md)、[tavily.zh.md](tavily.zh.md)、[apify.zh.md](apify.zh.md)、[brightdata.zh.md](brightdata.zh.md)、[monid.zh.md](monid.zh.md) | 需要 key 或付费的通道：key、额度和预算 |
 | [development.md](development.md) | 给贡献者：代码结构、测试、e2e、约定（英文） |
-| [query-performance.zh.md](query-performance.zh.md) | 查询指纹、SQL 等价验证、一年种子性能测量 |
 | [roadmap.zh.md](roadmap.zh.md) | 后续版本计划做的事 |
 | [ci.zh.md](ci.zh.md) | CI 流水线逐任务逐步骤说明：每步做什么、为什么、耗时、本地复现、怎么读失败、e2e 的 project、Dependabot、发布检查 |

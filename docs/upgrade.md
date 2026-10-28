@@ -194,6 +194,22 @@ project directory:
 If the deploy stops before step 10, the worker stays stopped: fix the cause and run step 5 again. A switch that ends in
 `rolled back:` leaves nothing installed here (there was nothing before): read the reason, fix it, deploy again.
 
+### Upgrading with change fingerprints
+
+The change-fingerprint migration adds nullable storage columns and indexes. Adding the columns does not rewrite job or
+raw-posting tables, and the migration does not backfill them. Index creation still takes table locks: keep the normal
+pre-migration backup and let the deploy finish before starting manual cycles. Job details and ordinary worker reads
+continue to work while the database is waiting for the migration.
+
+Old rows are correct immediately: missing fingerprints are computed on read. Maintenance fills at most
+`pipeline.yaml: batch_size` rows in each of the jobs and raw-posting tables per cycle, in separate committed batches;
+rows locked by other writers wait for a later cycle. Large histories may take several cycles to reach the faster reads.
+The first hard-filter run also evaluates uncached inputs; subsequent cycles skip unchanged inputs.
+
+For a code rollback, leave the added columns, indexes and triggers in place; no config edits or database restore are
+needed for this change. The triggers keep fingerprints correct for source writes by older versions and invalidate cached
+filter results when an older writer changes a verdict or its reasons. Re-upgrading safely re-evaluates those results.
+
 ## Roll back
 
 Before restoring config from `data/config/.backup/` or restoring a database backup, read the rollback notes in

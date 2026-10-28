@@ -6,7 +6,6 @@ import { loadConfig, parseConfigText, readProfileText, type MeConfig, type Pipel
 import { loadPipeline } from "@/lib/market";
 import type { Db } from "@/lib/db/client";
 import {
-  getFilterOverrides,
   getFilterResults,
   insertFilterResults,
   listFilterCandidates,
@@ -161,7 +160,7 @@ export async function runFilter(db: Db, options: FilterOptions): Promise<FilterR
 
     const ids = batch.map((j) => j.id);
     const stored = await getFilterResults(db, options.snapshotId, ids);
-    const overrides = await getFilterOverrides(db, ids);
+    const overrides = new Map(batch.flatMap((row) => row.filterOverride ? [[row.id, row.filterOverride] as const] : []));
     const fresh: NewFilterResult[] = [];
     const verdicts = evaluateBatch(batch, compiled, dealBreakers, overrides, stored);
     // A timed-out rule preserves previous vetoes; retry those inputs next cycle instead of caching a partial judgement.

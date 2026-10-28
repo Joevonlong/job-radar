@@ -53,13 +53,13 @@ function ghostInputHashSql(options: GhostCheckListOptions): SQL {
   const payloadChannels = textArray(options.payloadChannels);
   const sources = sql`coalesce((
     select string_agg(concat_ws('|', s.channel_id, r.external_id,
-      case when s.channel_id = any(${payloadChannels}) then r.payload_fingerprint else '' end,
+      case when s.channel_id = any(${payloadChannels}) then coalesce(r.payload_fingerprint, r.payload_hash, md5(r.payload_json::text)) else '' end,
       extract(epoch from s.first_seen_at)::text, coalesce(s.location_label, ''), s.priority::text), ',' order by s.id)
     from job_sources s join raw_postings r on r.id = s.raw_posting_id
     where s.job_id = j.id), '')`;
   const breakdown = sql`coalesce((select concat_ws('|', b.source_hash, b.prompt_version, md5(b.content::text)) from job_breakdowns b where b.job_id = j.id), '')`;
   const trusted = sql`(coalesce(c.name_norm, '') = any(${textArray(options.trustedKeys)}))::text`;
-  return sql`md5(concat_ws(':', j.description_md5, j.status::text, extract(epoch from j.first_seen_at)::text, ${options.rulesHash}::text, ${trusted}, ${sources}, ${breakdown}, ${spans}))`;
+  return sql`md5(concat_ws(':', coalesce(j.description_md5, md5(coalesce(j.description, ''))), j.status::text, extract(epoch from j.first_seen_at)::text, ${options.rulesHash}::text, ${trusted}, ${sources}, ${breakdown}, ${spans}))`;
 }
 
 /**

@@ -1,15 +1,21 @@
 import { eq, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
-import { afterAll, expect, inject, it } from "vitest";
+import { afterAll, expect, inject, it, vi } from "vitest";
 
 import * as schema from "@/lib/db/schema";
+import * as filterDb from "@/lib/db";
 import { listFilterCandidates } from "@/lib/db/repos/filter-results";
 import { setFilterOverride, clearFilterOverride } from "@/lib/db/repos/filter-overrides";
 import { runFilter } from "@/lib/filter";
 
 import { prefs } from "../filter/helpers";
 import { shippedPipeline } from "../pipeline/helpers";
+
+vi.mock("@/lib/db", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/db")>();
+  return { ...actual, listFilterCandidates: vi.fn(actual.listFilterCandidates) };
+});
 
 const client = postgres(inject("testDatabaseUrl"), { max: 1, onnotice: () => {} });
 const db = drizzle(client, { schema });
@@ -107,4 +113,40 @@ it("distinguishes a missing description from an empty description in remote-scop
   await db.update(schema.jobs).set({ description: null }).where(eq(schema.jobs.id, rows[0]!.id));
   expect(await runFilter(db, input)).toMatchObject({ evaluated: 1 });
   expect(await db.select().from(schema.scores).where(eq(schema.scores.jobId, rows[0]!.id))).toMatchObject([{ filterResult: "filtered_out" }]);
+});
+
+it("invalidates cached verdicts changed by old code during rollback, including reasons alone", async () => {
+  const { rows, run } = await fixture();
+  await run();
+  const id = rows[0]!.id;
+  // Old code changes the input and writes the verdict without naming either new hash column.
+  await db.update(schema.jobs).set({ contract: "student" }).where(eq(schema.jobs.id, id));
+  await db.execute(sql`update scores set filter_result = 'filtered_out', filter_reasons = array['old-rule'] where job_id = ${id}`);
+  expect(await db.select().from(schema.scores).where(eq(schema.scores.jobId, id))).toMatchObject([{ filterInputHash: null, filterConfigHash: null }]);
+  await db.update(schema.jobs).set({ contract: "permanent" }).where(eq(schema.jobs.id, id));
+  expect(await run()).toMatchObject({ evaluated: 1 });
+  expect(await db.select().from(schema.scores).where(eq(schema.scores.jobId, id))).toMatchObject([{ filterResult: "passed" }]);
+  await db.execute(sql`update scores set filter_reasons = array['old-reason-only'] where job_id = ${id}`);
+  expect(await db.select().from(schema.scores).where(eq(schema.scores.jobId, id))).toMatchObject([{ filterInputHash: null, filterConfigHash: null }]);
+  expect(await run()).toMatchObject({ evaluated: 1 });
+  expect(await run()).toMatchObject({ evaluated: 0 });
+});
+
+it.each([true, false])("evaluates the override read with its fingerprint when keep/undo interleaves (%s)", async (initialKeep) => {
+  const { rows, company, run } = await fixture();
+  const id = rows[0]!.id;
+  await db.update(schema.companies).set({ blacklisted: true }).where(eq(schema.companies.id, company.id));
+  if (initialKeep) await setFilterOverride(db, id, "keep");
+  vi.mocked(filterDb.listFilterCandidates).mockImplementationOnce(async (executor, input) => {
+    const selected = await listFilterCandidates(executor, input);
+    // A second request commits after the candidate SELECT and before the filter evaluates it.
+    if (initialKeep) await clearFilterOverride(db, id);
+    else await setFilterOverride(db, id, "keep");
+    return selected;
+  });
+  await run();
+  expect(await db.select().from(schema.scores).where(eq(schema.scores.jobId, id))).toMatchObject([{ filterResult: initialKeep ? "passed" : "filtered_out" }]);
+  expect(await run()).toMatchObject({ evaluated: 1 });
+  expect(await db.select().from(schema.scores).where(eq(schema.scores.jobId, id))).toMatchObject([{ filterResult: initialKeep ? "filtered_out" : "passed" }]);
+  expect(await run()).toMatchObject({ evaluated: 0 });
 });

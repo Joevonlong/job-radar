@@ -1,5 +1,5 @@
 {
-  "id": "c6331f6b-a3f3-429e-b5be-e019ad990223",
+  "id": "2dcd15f1-1b51-455f-8662-3a71f7d72ec6",
   "prevId": "6c48298b-c470-44d9-a57e-10824e80da27",
   "version": "7",
   "dialect": "postgresql",
@@ -2059,31 +2059,19 @@
           "name": "description_md5",
           "type": "text",
           "primaryKey": false,
-          "notNull": false,
-          "generated": {
-            "as": "md5(coalesce(description, ''))",
-            "type": "stored"
-          }
+          "notNull": false
         },
         "description_has_text": {
           "name": "description_has_text",
           "type": "boolean",
           "primaryKey": false,
-          "notNull": false,
-          "generated": {
-            "as": "description is not null and btrim(description) <> ''",
-            "type": "stored"
-          }
+          "notNull": false
         },
         "salary_md5": {
           "name": "salary_md5",
           "type": "text",
           "primaryKey": false,
-          "notNull": false,
-          "generated": {
-            "as": "md5(coalesce(salary_json::text, ''))",
-            "type": "stored"
-          }
+          "notNull": false
         },
         "language": {
           "name": "language",
@@ -2527,11 +2515,7 @@
           "name": "payload_fingerprint",
           "type": "text",
           "primaryKey": false,
-          "notNull": false,
-          "generated": {
-            "as": "coalesce(payload_hash, md5(payload_json::text))",
-            "type": "stored"
-          }
+          "notNull": false
         },
         "fetched_at": {
           "name": "fetched_at",

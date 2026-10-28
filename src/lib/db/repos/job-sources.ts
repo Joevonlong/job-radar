@@ -2,6 +2,7 @@ import { and, asc, eq, gt, inArray, ne, sql } from "drizzle-orm";
 
 import type { Executor } from "../executor";
 import { jobSources, jobs, rawPostings } from "../schema";
+import { rawPostingColumns, type RawPosting } from "./raw-postings";
 
 export type JobSource = typeof jobSources.$inferSelect;
 
@@ -53,7 +54,7 @@ export interface JobWithRawPostings {
   titleNorm: string;
   salaryJson: unknown;
   /** Linked raw postings, with the apply-link priority of each; parsed only unless `includeUnparsed` is set. */
-  sources: Array<{ priority: number; raw: typeof rawPostings.$inferSelect }>;
+  sources: Array<{ priority: number; raw: RawPosting }>;
 }
 
 /** The next `limit` jobs with an id above `afterId`, with parsed postings by default or every linked posting for a repair. */
@@ -66,7 +67,7 @@ export async function listJobsWithRawPostings(db: Executor, input: { afterId: nu
     .limit(input.limit);
   if (jobRows.length === 0) return [];
   const sourceRows = await db
-    .select({ jobId: jobSources.jobId, priority: jobSources.priority, raw: rawPostings })
+    .select({ jobId: jobSources.jobId, priority: jobSources.priority, raw: rawPostingColumns() })
     .from(jobSources)
     .innerJoin(rawPostings, eq(rawPostings.id, jobSources.rawPostingId))
     .where(and(inArray(jobSources.jobId, jobRows.map((j) => j.id)), input.includeUnparsed ? undefined : eq(rawPostings.parseStatus, "parsed")))

@@ -163,7 +163,7 @@ export const rawPostings = pgTable(
     /** SHA-256 of the canonical JSON payload: a re-fetched posting is re-parsed only if this changed. */
     payloadHash: text("payload_hash"),
     /** Preserve the legacy fallback fingerprint without reading the payload during change detection. */
-    payloadFingerprint: text("payload_fingerprint").generatedAlwaysAs(sql`coalesce(payload_hash, md5(payload_json::text))`),
+    payloadFingerprint: text("payload_fingerprint"),
     /** Last time the posting was returned by its channel (the first fetch for rows seen once). */
     fetchedAt: timestamptz("fetched_at").notNull().defaultNow(),
     parseStatus: parseStatusEnum("parse_status").notNull().default("pending"),
@@ -320,10 +320,10 @@ export const jobs = pgTable(
     contract: text("contract").notNull().default("unknown"),
     salaryJson: jsonb("salary_json"),
     description: text("description"),
-    /** Fingerprints are maintained on writes, including direct SQL updates and reprocessing. */
-    descriptionMd5: text("description_md5").generatedAlwaysAs(sql`md5(coalesce(description, ''))`),
-    descriptionHasText: boolean("description_has_text").generatedAlwaysAs(sql`description is not null and btrim(description) <> ''`),
-    salaryMd5: text("salary_md5").generatedAlwaysAs(sql`md5(coalesce(salary_json::text, ''))`),
+    /** Database triggers maintain these on source writes; NULL on old rows means compute on read. */
+    descriptionMd5: text("description_md5"),
+    descriptionHasText: boolean("description_has_text"),
+    salaryMd5: text("salary_md5"),
     language: text("language").notNull().default("unknown"),
     germanLevelRequired: text("german_level_required").notNull().default("unknown"),
     postedAt: timestamptz("posted_at"),

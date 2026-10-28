@@ -47,7 +47,7 @@ it("preserves every change-detection relation for missing, current and changed s
       }
       for (const scope of [{}, { jobIds: ids }, { jobIds: [] }]) {
         const actual = await listFilterCandidates(db, { afterId: 0, limit, ...scope });
-        expect(actual.map(({ inputHash, ...row }) => { void inputHash; return row; })).toEqual(await oldListFilterCandidates(db, { afterId: 0, limit, ...scope }));
+        expect(actual.map(({ inputHash, filterOverride, ...row }) => { void [inputHash, filterOverride]; return row; })).toEqual(await oldListFilterCandidates(db, { afterId: 0, limit, ...scope }));
       }
     }
   }
@@ -67,5 +67,9 @@ it("preserves every change-detection relation for missing, current and changed s
   await db.update(schema.trapScans).set({ spansHash: "other-spans" });
   await db.update(schema.jobGhost).set({ recheckAt: now });
   await db.delete(schema.jobSources).where(eq(schema.jobSources.jobId, jobs[1]!.id));
+  await compare();
+  // Rows that predate the migration remain correct without a blocking backfill.
+  await db.update(schema.jobs).set({ descriptionMd5: null, descriptionHasText: null, salaryMd5: null });
+  await db.update(schema.rawPostings).set({ payloadFingerprint: null });
   await compare();
 });

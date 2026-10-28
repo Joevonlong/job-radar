@@ -23,6 +23,7 @@ import { runMaintenance, type MaintenanceResult } from "./lifecycle";
 import { refreshSalariesIfStale, type SalaryRefreshResult } from "./refresh-salary";
 import { normalizeDraft, type NormalizedJob } from "./normalize";
 import { dormancyReady } from "@/lib/db/repos/dormancy";
+import { backfillChangeFingerprints } from "@/lib/db/repos/change-fingerprints";
 
 export { normalizeCompanyKey, resolveCompanyName } from "./company";
 export { runMaintenance, type MaintenanceResult } from "./lifecycle";
@@ -387,7 +388,8 @@ export async function maintenanceStep(ctx: CycleStepContext): Promise<StepResult
       watched: { enabled: checks.enabled, extraPhrases: checks.extra_phrases },
       ...(resolveHost ? { resolveHost } : {}),
     });
-    return { result };
+    const fingerprints = ctx.signal.aborted ? undefined : await backfillChangeFingerprints(requireDb(ctx), config.batch_size);
+    return { result: { ...result, fingerprints } };
   } finally {
     await ownFetch?.close();
   }

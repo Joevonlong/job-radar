@@ -105,7 +105,7 @@ export interface JobDetail {
   ghost: GhostOfJob | null;
 }
 
-type ScoreRow = Omit<typeof scores.$inferSelect, "reasonEvidence"> & { reasonEvidence?: unknown };
+type ScoreRow = Omit<typeof scores.$inferSelect, "reasonEvidence" | "filterInputHash" | "filterConfigHash"> & { reasonEvidence?: unknown };
 
 /**
  * The score row the detail page shows: the newest one, except that a newest row which passed the
@@ -149,11 +149,11 @@ export async function getFilterFloors(db: Db, jobIds: readonly number[]): Promis
   return out;
 }
 
-/** The columns of `scores` the page reads: all of them once `reason_evidence` exists, all but that one before the migration. */
+/** Internal filter hashes are never needed by the page, including before their migration. */
 async function scoreColumns(db: Db) {
-  const { reasonEvidence: _reasonEvidence, ...rest } = getTableColumns(scores);
-  void _reasonEvidence;
-  return (await reasonEvidenceColumnReady(db)) ? getTableColumns(scores) : rest;
+  const { reasonEvidence, filterInputHash, filterConfigHash, ...rest } = getTableColumns(scores);
+  void [filterInputHash, filterConfigHash];
+  return (await reasonEvidenceColumnReady(db)) ? { ...rest, reasonEvidence } : rest;
 }
 
 async function displayedScore(db: Db, jobId: number): Promise<ScoreRow | null> {
@@ -180,10 +180,8 @@ export interface JobClosure {
 
 /** The columns of `jobs` the page reads (all but the migration-gated closure and dormancy columns, read apart so the page works before the migration). */
 function detailColumns() {
-  const { linkCheckJson: _linkCheckJson, dormantAt: _dormantAt, possiblyClosedAt: _possiblyClosedAt, ...columns } = getTableColumns(jobs);
-  void _linkCheckJson;
-  void _dormantAt;
-  void _possiblyClosedAt;
+  const { linkCheckJson, dormantAt, possiblyClosedAt, searchTsv, descriptionMd5, descriptionHasText, salaryMd5, ...columns } = getTableColumns(jobs);
+  void [linkCheckJson, dormantAt, possiblyClosedAt, searchTsv, descriptionMd5, descriptionHasText, salaryMd5];
   return columns;
 }
 

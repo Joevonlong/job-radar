@@ -51,7 +51,8 @@ it("detects signal and trap changes with stored fingerprints, equivalent to the 
       and (ts.job_id is null or ts.description_hash <> md5(coalesce(j.description, '')) or ts.sources_hash <> coalesce(src.sources_hash, md5('')) or ts.rules_hash <> 'rules')
       order by (ts.job_id is null) desc, j.first_seen_at desc, j.id desc limit 20`);
     expect(traps).toEqual(oldTraps.map((r) => ({ jobId: Number(r.id), descriptionHash: r.description_hash, sourcesHash: r.sources_hash, fresh: r.fresh })));
-    expect(detectionSql).not.toMatch(/md5\((?:coalesce\()?j\.description|md5\((?:coalesce\()?j\.salary_json|rp\.payload_json/);
+    expect(detectionSql).toContain("coalesce(j.description_md5,");
+    expect(detectionSql).toContain("coalesce(rp.payload_fingerprint,");
   }
 });
 
