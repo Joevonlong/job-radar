@@ -1,5 +1,5 @@
 {
-  "id": "fa23db9f-232b-47ca-90da-12902f962a6e",
+  "id": "f0d2ec89-79ea-4188-a1f4-9f1a729143ef",
   "prevId": "7879b21c-c55b-4f8f-9193-51396e552a7c",
   "version": "7",
   "dialect": "postgresql",
@@ -14,15 +14,15 @@
           "primaryKey": true,
           "notNull": true,
           "identity": {
+            "type": "always",
             "name": "ai_usage_id_seq",
+            "schema": "public",
             "increment": "1",
+            "startWith": "1",
             "minValue": "1",
             "maxValue": "9223372036854775807",
-            "startWith": "1",
             "cache": "1",
-            "cycle": false,
-            "schema": "public",
-            "type": "always"
+            "cycle": false
           }
         },
         "provider": {
@@ -136,9 +136,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "ai_usage_job_id_idx": {
           "name": "ai_usage_job_id_idx",
@@ -151,24 +151,24 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "ai_usage_job_id_jobs_id_fk": {
           "name": "ai_usage_job_id_jobs_id_fk",
           "tableFrom": "ai_usage",
+          "tableTo": "jobs",
           "columnsFrom": [
             "job_id"
           ],
-          "tableTo": "jobs",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "set null"
+          "onDelete": "set null",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -187,15 +187,15 @@
           "primaryKey": true,
           "notNull": true,
           "identity": {
+            "type": "always",
             "name": "application_events_id_seq",
+            "schema": "public",
             "increment": "1",
+            "startWith": "1",
             "minValue": "1",
             "maxValue": "9223372036854775807",
-            "startWith": "1",
             "cache": "1",
-            "cycle": false,
-            "schema": "public",
-            "type": "always"
+            "cycle": false
           }
         },
         "application_id": {
@@ -250,24 +250,24 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "application_events_application_id_applications_id_fk": {
           "name": "application_events_application_id_applications_id_fk",
           "tableFrom": "application_events",
+          "tableTo": "applications",
           "columnsFrom": [
             "application_id"
           ],
-          "tableTo": "applications",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -286,15 +286,15 @@
           "primaryKey": true,
           "notNull": true,
           "identity": {
+            "type": "always",
             "name": "applications_id_seq",
+            "schema": "public",
             "increment": "1",
+            "startWith": "1",
             "minValue": "1",
             "maxValue": "9223372036854775807",
-            "startWith": "1",
             "cache": "1",
-            "cycle": false,
-            "schema": "public",
-            "type": "always"
+            "cycle": false
           }
         },
         "job_id": {
@@ -369,34 +369,34 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "applications_job_id_jobs_id_fk": {
           "name": "applications_job_id_jobs_id_fk",
           "tableFrom": "applications",
+          "tableTo": "jobs",
           "columnsFrom": [
             "job_id"
           ],
-          "tableTo": "jobs",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "applications_job_id_uq": {
           "name": "applications_job_id_uq",
+          "nullsNotDistinct": false,
           "columns": [
             "job_id"
-          ],
-          "nullsNotDistinct": false
+          ]
         }
       },
       "policies": {},
@@ -413,15 +413,15 @@
           "primaryKey": true,
           "notNull": true,
           "identity": {
+            "type": "always",
             "name": "ats_board_candidates_id_seq",
+            "schema": "public",
             "increment": "1",
+            "startWith": "1",
             "minValue": "1",
             "maxValue": "9223372036854775807",
-            "startWith": "1",
             "cache": "1",
-            "cycle": false,
-            "schema": "public",
-            "type": "always"
+            "cycle": false
           }
         },
         "ats": {
@@ -489,11 +489,11 @@
       "uniqueConstraints": {
         "ats_board_candidates_ats_token_key": {
           "name": "ats_board_candidates_ats_token_key",
+          "nullsNotDistinct": false,
           "columns": [
             "ats",
             "token"
-          ],
-          "nullsNotDistinct": false
+          ]
         }
       },
       "policies": {},
@@ -719,15 +719,15 @@
           "primaryKey": true,
           "notNull": true,
           "identity": {
+            "type": "always",
             "name": "companies_id_seq",
+            "schema": "public",
             "increment": "1",
+            "startWith": "1",
             "minValue": "1",
             "maxValue": "9223372036854775807",
-            "startWith": "1",
             "cache": "1",
-            "cycle": false,
-            "schema": "public",
-            "type": "always"
+            "cycle": false
           }
         },
         "name": {
@@ -789,10 +789,10 @@
       "uniqueConstraints": {
         "companies_name_norm_uq": {
           "name": "companies_name_norm_uq",
+          "nullsNotDistinct": false,
           "columns": [
             "name_norm"
-          ],
-          "nullsNotDistinct": false
+          ]
         }
       },
       "policies": {},
@@ -809,15 +809,15 @@
           "primaryKey": true,
           "notNull": true,
           "identity": {
+            "type": "always",
             "name": "control_requests_id_seq",
+            "schema": "public",
             "increment": "1",
+            "startWith": "1",
             "minValue": "1",
             "maxValue": "9223372036854775807",
-            "startWith": "1",
             "cache": "1",
-            "cycle": false,
-            "schema": "public",
-            "type": "always"
+            "cycle": false
           }
         },
         "kind": {
@@ -886,9 +886,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {},
@@ -908,15 +908,15 @@
           "primaryKey": true,
           "notNull": true,
           "identity": {
+            "type": "always",
             "name": "cycles_id_seq",
+            "schema": "public",
             "increment": "1",
+            "startWith": "1",
             "minValue": "1",
             "maxValue": "9223372036854775807",
-            "startWith": "1",
             "cache": "1",
-            "cycle": false,
-            "schema": "public",
-            "type": "always"
+            "cycle": false
           }
         },
         "kind": {
@@ -966,9 +966,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {},
@@ -1027,9 +1027,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {},
@@ -1049,15 +1049,15 @@
           "primaryKey": true,
           "notNull": true,
           "identity": {
+            "type": "always",
             "name": "interest_suggestions_id_seq",
+            "schema": "public",
             "increment": "1",
+            "startWith": "1",
             "minValue": "1",
             "maxValue": "9223372036854775807",
-            "startWith": "1",
             "cache": "1",
-            "cycle": false,
-            "schema": "public",
-            "type": "always"
+            "cycle": false
           }
         },
         "kind": {
@@ -1112,9 +1112,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {},
@@ -1122,10 +1122,10 @@
       "uniqueConstraints": {
         "interest_suggestions_dedupe_key_uq": {
           "name": "interest_suggestions_dedupe_key_uq",
+          "nullsNotDistinct": false,
           "columns": [
             "dedupe_key"
-          ],
-          "nullsNotDistinct": false
+          ]
         }
       },
       "policies": {},
@@ -1198,15 +1198,15 @@
         "job_breakdowns_job_id_jobs_id_fk": {
           "name": "job_breakdowns_job_id_jobs_id_fk",
           "tableFrom": "job_breakdowns",
+          "tableTo": "jobs",
           "columnsFrom": [
             "job_id"
           ],
-          "tableTo": "jobs",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -1251,15 +1251,15 @@
         "job_closure_overrides_job_id_jobs_id_fk": {
           "name": "job_closure_overrides_job_id_jobs_id_fk",
           "tableFrom": "job_closure_overrides",
+          "tableTo": "jobs",
           "columnsFrom": [
             "job_id"
           ],
-          "tableTo": "jobs",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -1304,24 +1304,24 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "job_favorites_job_id_jobs_id_fk": {
           "name": "job_favorites_job_id_jobs_id_fk",
           "tableFrom": "job_favorites",
+          "tableTo": "jobs",
           "columnsFrom": [
             "job_id"
           ],
-          "tableTo": "jobs",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -1360,15 +1360,15 @@
         "job_filter_overrides_job_id_jobs_id_fk": {
           "name": "job_filter_overrides_job_id_jobs_id_fk",
           "tableFrom": "job_filter_overrides",
+          "tableTo": "jobs",
           "columnsFrom": [
             "job_id"
           ],
-          "tableTo": "jobs",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -1450,25 +1450,25 @@
             }
           ],
           "isUnique": false,
-          "with": {},
-          "method": "btree",
           "where": "\"job_ghost\".\"level\" <> 'none'",
-          "concurrently": false
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
         "job_ghost_job_id_jobs_id_fk": {
           "name": "job_ghost_job_id_jobs_id_fk",
           "tableFrom": "job_ghost",
+          "tableTo": "jobs",
           "columnsFrom": [
             "job_id"
           ],
-          "tableTo": "jobs",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -1525,24 +1525,24 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "job_seen_job_id_jobs_id_fk": {
           "name": "job_seen_job_id_jobs_id_fk",
           "tableFrom": "job_seen",
+          "tableTo": "jobs",
           "columnsFrom": [
             "job_id"
           ],
-          "tableTo": "jobs",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -1561,15 +1561,15 @@
           "primaryKey": true,
           "notNull": true,
           "identity": {
+            "type": "always",
             "name": "job_sources_id_seq",
+            "schema": "public",
             "increment": "1",
+            "startWith": "1",
             "minValue": "1",
             "maxValue": "9223372036854775807",
-            "startWith": "1",
             "cache": "1",
-            "cycle": false,
-            "schema": "public",
-            "type": "always"
+            "cycle": false
           }
         },
         "job_id": {
@@ -1635,61 +1635,61 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "job_sources_job_id_jobs_id_fk": {
           "name": "job_sources_job_id_jobs_id_fk",
           "tableFrom": "job_sources",
+          "tableTo": "jobs",
           "columnsFrom": [
             "job_id"
           ],
-          "tableTo": "jobs",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "job_sources_raw_posting_id_raw_postings_id_fk": {
           "name": "job_sources_raw_posting_id_raw_postings_id_fk",
           "tableFrom": "job_sources",
+          "tableTo": "raw_postings",
           "columnsFrom": [
             "raw_posting_id"
           ],
-          "tableTo": "raw_postings",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "job_sources_channel_id_channels_id_fk": {
           "name": "job_sources_channel_id_channels_id_fk",
           "tableFrom": "job_sources",
+          "tableTo": "channels",
           "columnsFrom": [
             "channel_id"
           ],
-          "tableTo": "channels",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "job_sources_job_raw_posting_uq": {
           "name": "job_sources_job_raw_posting_uq",
+          "nullsNotDistinct": false,
           "columns": [
             "job_id",
             "raw_posting_id"
-          ],
-          "nullsNotDistinct": false
+          ]
         }
       },
       "policies": {},
@@ -1706,15 +1706,15 @@
           "primaryKey": true,
           "notNull": true,
           "identity": {
+            "type": "always",
             "name": "job_traps_id_seq",
+            "schema": "public",
             "increment": "1",
+            "startWith": "1",
             "minValue": "1",
             "maxValue": "9223372036854775807",
-            "startWith": "1",
             "cache": "1",
-            "cycle": false,
-            "schema": "public",
-            "type": "always"
+            "cycle": false
           }
         },
         "job_id": {
@@ -1832,37 +1832,37 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "job_traps_job_id_jobs_id_fk": {
           "name": "job_traps_job_id_jobs_id_fk",
           "tableFrom": "job_traps",
+          "tableTo": "jobs",
           "columnsFrom": [
             "job_id"
           ],
-          "tableTo": "jobs",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "job_traps_raw_posting_id_raw_postings_id_fk": {
           "name": "job_traps_raw_posting_id_raw_postings_id_fk",
           "tableFrom": "job_traps",
+          "tableTo": "raw_postings",
           "columnsFrom": [
             "raw_posting_id"
           ],
-          "tableTo": "raw_postings",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "set null"
+          "onDelete": "set null",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -1922,15 +1922,15 @@
         "job_visa_job_id_jobs_id_fk": {
           "name": "job_visa_job_id_jobs_id_fk",
           "tableFrom": "job_visa",
+          "tableTo": "jobs",
           "columnsFrom": [
             "job_id"
           ],
-          "tableTo": "jobs",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -1958,15 +1958,15 @@
           "primaryKey": true,
           "notNull": true,
           "identity": {
+            "type": "always",
             "name": "jobs_id_seq",
+            "schema": "public",
             "increment": "1",
+            "startWith": "1",
             "minValue": "1",
             "maxValue": "9223372036854775807",
-            "startWith": "1",
             "cache": "1",
-            "cycle": false,
-            "schema": "public",
-            "type": "always"
+            "cycle": false
           }
         },
         "company_id": {
@@ -2108,8 +2108,8 @@
           "primaryKey": false,
           "notNull": false,
           "generated": {
-            "type": "stored",
-            "as": "to_tsvector('simple', coalesce(title, '') || ' ' || coalesce(description, ''))"
+            "as": "to_tsvector('simple', coalesce(title, '') || ' ' || coalesce(description, ''))",
+            "type": "stored"
           }
         }
       },
@@ -2125,9 +2125,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "jobs_status_last_seen_idx": {
           "name": "jobs_status_last_seen_idx",
@@ -2146,9 +2146,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "jobs_title_norm_idx": {
           "name": "jobs_title_norm_idx",
@@ -2161,9 +2161,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "jobs_simhash_idx": {
           "name": "jobs_simhash_idx",
@@ -2176,9 +2176,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "jobs_search_tsv_idx": {
           "name": "jobs_search_tsv_idx",
@@ -2191,24 +2191,39 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "gin",
-          "concurrently": false
+          "with": {}
+        },
+        "jobs_first_seen_at_idx": {
+          "name": "jobs_first_seen_at_idx",
+          "columns": [
+            {
+              "expression": "first_seen_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
         "jobs_company_id_companies_id_fk": {
           "name": "jobs_company_id_companies_id_fk",
           "tableFrom": "jobs",
+          "tableTo": "companies",
           "columnsFrom": [
             "company_id"
           ],
-          "tableTo": "companies",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -2227,15 +2242,15 @@
           "primaryKey": true,
           "notNull": true,
           "identity": {
+            "type": "always",
             "name": "notifications_id_seq",
+            "schema": "public",
             "increment": "1",
+            "startWith": "1",
             "minValue": "1",
             "maxValue": "9223372036854775807",
-            "startWith": "1",
             "cache": "1",
-            "cycle": false,
-            "schema": "public",
-            "type": "always"
+            "cycle": false
           }
         },
         "kind": {
@@ -2281,24 +2296,24 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "notifications_cycle_id_cycles_id_fk": {
           "name": "notifications_cycle_id_cycles_id_fk",
           "tableFrom": "notifications",
+          "tableTo": "cycles",
           "columnsFrom": [
             "cycle_id"
           ],
-          "tableTo": "cycles",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "set null"
+          "onDelete": "set null",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -2317,15 +2332,15 @@
           "primaryKey": true,
           "notNull": true,
           "identity": {
+            "type": "always",
             "name": "profile_snapshots_id_seq",
+            "schema": "public",
             "increment": "1",
+            "startWith": "1",
             "minValue": "1",
             "maxValue": "9223372036854775807",
-            "startWith": "1",
             "cache": "1",
-            "cycle": false,
-            "schema": "public",
-            "type": "always"
+            "cycle": false
           }
         },
         "kind": {
@@ -2361,11 +2376,11 @@
       "uniqueConstraints": {
         "profile_snapshots_kind_hash_uq": {
           "name": "profile_snapshots_kind_hash_uq",
+          "nullsNotDistinct": false,
           "columns": [
             "kind",
             "hash"
-          ],
-          "nullsNotDistinct": false
+          ]
         }
       },
       "policies": {},
@@ -2382,15 +2397,15 @@
           "primaryKey": true,
           "notNull": true,
           "identity": {
+            "type": "always",
             "name": "raw_postings_id_seq",
+            "schema": "public",
             "increment": "1",
+            "startWith": "1",
             "minValue": "1",
             "maxValue": "9223372036854775807",
-            "startWith": "1",
             "cache": "1",
-            "cycle": false,
-            "schema": "public",
-            "type": "always"
+            "cycle": false
           }
         },
         "channel_id": {
@@ -2463,9 +2478,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "raw_postings_run_id_idx": {
           "name": "raw_postings_run_id_idx",
@@ -2478,48 +2493,48 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "raw_postings_channel_id_channels_id_fk": {
           "name": "raw_postings_channel_id_channels_id_fk",
           "tableFrom": "raw_postings",
+          "tableTo": "channels",
           "columnsFrom": [
             "channel_id"
           ],
-          "tableTo": "channels",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "raw_postings_run_id_runs_id_fk": {
           "name": "raw_postings_run_id_runs_id_fk",
           "tableFrom": "raw_postings",
+          "tableTo": "runs",
           "columnsFrom": [
             "run_id"
           ],
-          "tableTo": "runs",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "set null"
+          "onDelete": "set null",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "raw_postings_channel_external_uq": {
           "name": "raw_postings_channel_external_uq",
+          "nullsNotDistinct": false,
           "columns": [
             "channel_id",
             "external_id"
-          ],
-          "nullsNotDistinct": false
+          ]
         }
       },
       "policies": {},
@@ -2536,15 +2551,15 @@
           "primaryKey": true,
           "notNull": true,
           "identity": {
+            "type": "always",
             "name": "runner_heartbeats_id_seq",
+            "schema": "public",
             "increment": "1",
+            "startWith": "1",
             "minValue": "1",
             "maxValue": "9223372036854775807",
-            "startWith": "1",
             "cache": "1",
-            "cycle": false,
-            "schema": "public",
-            "type": "always"
+            "cycle": false
           }
         },
         "process": {
@@ -2573,9 +2588,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {},
@@ -2595,15 +2610,15 @@
           "primaryKey": true,
           "notNull": true,
           "identity": {
+            "type": "always",
             "name": "runs_id_seq",
+            "schema": "public",
             "increment": "1",
+            "startWith": "1",
             "minValue": "1",
             "maxValue": "9223372036854775807",
-            "startWith": "1",
             "cache": "1",
-            "cycle": false,
-            "schema": "public",
-            "type": "always"
+            "cycle": false
           }
         },
         "cycle_id": {
@@ -2718,9 +2733,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "runs_channel_started_idx": {
           "name": "runs_channel_started_idx",
@@ -2739,9 +2754,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "runs_channel_query_started_idx": {
           "name": "runs_channel_query_started_idx",
@@ -2796,37 +2811,37 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "runs_cycle_id_cycles_id_fk": {
           "name": "runs_cycle_id_cycles_id_fk",
           "tableFrom": "runs",
+          "tableTo": "cycles",
           "columnsFrom": [
             "cycle_id"
           ],
-          "tableTo": "cycles",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "set null"
+          "onDelete": "set null",
+          "onUpdate": "no action"
         },
         "runs_channel_id_channels_id_fk": {
           "name": "runs_channel_id_channels_id_fk",
           "tableFrom": "runs",
+          "tableTo": "channels",
           "columnsFrom": [
             "channel_id"
           ],
-          "tableTo": "channels",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -2877,15 +2892,15 @@
           "primaryKey": true,
           "notNull": true,
           "identity": {
+            "type": "always",
             "name": "salary_benchmarks_id_seq",
+            "schema": "public",
             "increment": "1",
+            "startWith": "1",
             "minValue": "1",
             "maxValue": "9223372036854775807",
-            "startWith": "1",
             "cache": "1",
-            "cycle": false,
-            "schema": "public",
-            "type": "always"
+            "cycle": false
           }
         },
         "role_family": {
@@ -2987,9 +3002,9 @@
             }
           ],
           "isUnique": true,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {},
@@ -3009,15 +3024,15 @@
           "primaryKey": true,
           "notNull": true,
           "identity": {
+            "type": "always",
             "name": "salary_lookups_id_seq",
+            "schema": "public",
             "increment": "1",
+            "startWith": "1",
             "minValue": "1",
             "maxValue": "9223372036854775807",
-            "startWith": "1",
             "cache": "1",
-            "cycle": false,
-            "schema": "public",
-            "type": "always"
+            "cycle": false
           }
         },
         "company_id": {
@@ -3112,9 +3127,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "salary_lookups_fetched_idx": {
           "name": "salary_lookups_fetched_idx",
@@ -3127,9 +3142,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "salary_lookups_job_idx": {
           "name": "salary_lookups_job_idx",
@@ -3142,9 +3157,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "salary_lookups_company_idx": {
           "name": "salary_lookups_company_idx",
@@ -3157,37 +3172,37 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "salary_lookups_company_id_companies_id_fk": {
           "name": "salary_lookups_company_id_companies_id_fk",
           "tableFrom": "salary_lookups",
+          "tableTo": "companies",
           "columnsFrom": [
             "company_id"
           ],
-          "tableTo": "companies",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "salary_lookups_job_id_jobs_id_fk": {
           "name": "salary_lookups_job_id_jobs_id_fk",
           "tableFrom": "salary_lookups",
+          "tableTo": "jobs",
           "columnsFrom": [
             "job_id"
           ],
-          "tableTo": "jobs",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "set null"
+          "onDelete": "set null",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -3206,15 +3221,15 @@
           "primaryKey": true,
           "notNull": true,
           "identity": {
+            "type": "always",
             "name": "scores_id_seq",
+            "schema": "public",
             "increment": "1",
+            "startWith": "1",
             "minValue": "1",
             "maxValue": "9223372036854775807",
-            "startWith": "1",
             "cache": "1",
-            "cycle": false,
-            "schema": "public",
-            "type": "always"
+            "cycle": false
           }
         },
         "job_id": {
@@ -3389,9 +3404,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "scores_rank_value_idx": {
           "name": "scores_rank_value_idx",
@@ -3404,9 +3419,79 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
+        },
+        "scores_scored_at_idx": {
+          "name": "scores_scored_at_idx",
+          "columns": [
+            {
+              "expression": "scored_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "scores_job_latest_idx": {
+          "name": "scores_job_latest_idx",
+          "columns": [
+            {
+              "expression": "job_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "first"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "first"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "scores_job_latest_scored_idx": {
+          "name": "scores_job_latest_scored_idx",
+          "columns": [
+            {
+              "expression": "job_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "first"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "first"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"scores\".\"score\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         },
         "scores_job_snapshot_uq": {
           "name": "scores_job_snapshot_uq",
@@ -3425,38 +3510,38 @@
             }
           ],
           "isUnique": true,
-          "with": {},
-          "method": "btree",
           "where": "\"scores\".\"profile_snapshot_id\" is not null",
-          "concurrently": false
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
         "scores_job_id_jobs_id_fk": {
           "name": "scores_job_id_jobs_id_fk",
           "tableFrom": "scores",
+          "tableTo": "jobs",
           "columnsFrom": [
             "job_id"
           ],
-          "tableTo": "jobs",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "scores_profile_snapshot_id_profile_snapshots_id_fk": {
           "name": "scores_profile_snapshot_id_profile_snapshots_id_fk",
           "tableFrom": "scores",
+          "tableTo": "profile_snapshots",
           "columnsFrom": [
             "profile_snapshot_id"
           ],
-          "tableTo": "profile_snapshots",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -3548,15 +3633,15 @@
         "signal_scans_job_id_jobs_id_fk": {
           "name": "signal_scans_job_id_jobs_id_fk",
           "tableFrom": "signal_scans",
+          "tableTo": "jobs",
           "columnsFrom": [
             "job_id"
           ],
-          "tableTo": "jobs",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -3575,15 +3660,15 @@
           "primaryKey": true,
           "notNull": true,
           "identity": {
+            "type": "always",
             "name": "signals_id_seq",
+            "schema": "public",
             "increment": "1",
+            "startWith": "1",
             "minValue": "1",
             "maxValue": "9223372036854775807",
-            "startWith": "1",
             "cache": "1",
-            "cycle": false,
-            "schema": "public",
-            "type": "always"
+            "cycle": false
           }
         },
         "job_id": {
@@ -3657,24 +3742,24 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "signals_job_id_jobs_id_fk": {
           "name": "signals_job_id_jobs_id_fk",
           "tableFrom": "signals",
+          "tableTo": "jobs",
           "columnsFrom": [
             "job_id"
           ],
-          "tableTo": "jobs",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -3791,9 +3876,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {},
@@ -3862,15 +3947,15 @@
         "translation_progress_job_id_jobs_id_fk": {
           "name": "translation_progress_job_id_jobs_id_fk",
           "tableFrom": "translation_progress",
+          "tableTo": "jobs",
           "columnsFrom": [
             "job_id"
           ],
-          "tableTo": "jobs",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -3934,15 +4019,15 @@
         "translations_job_id_jobs_id_fk": {
           "name": "translations_job_id_jobs_id_fk",
           "tableFrom": "translations",
+          "tableTo": "jobs",
           "columnsFrom": [
             "job_id"
           ],
-          "tableTo": "jobs",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -4070,25 +4155,25 @@
             }
           ],
           "isUnique": false,
-          "with": {},
-          "method": "btree",
           "where": "\"trap_scans\".\"trap_count\" > 0",
-          "concurrently": false
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
         "trap_scans_job_id_jobs_id_fk": {
           "name": "trap_scans_job_id_jobs_id_fk",
           "tableFrom": "trap_scans",
+          "tableTo": "jobs",
           "columnsFrom": [
             "job_id"
           ],
-          "tableTo": "jobs",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -4305,10 +4390,10 @@
     }
   },
   "schemas": {},
-  "views": {},
   "sequences": {},
   "roles": {},
   "policies": {},
+  "views": {},
   "_meta": {
     "columns": {},
     "schemas": {},

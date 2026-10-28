@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { requestTranslateJob, readTranslateRequest, type TranslateErrorCode } from "@/lib/control/translate-request";
+import type { ControlQueueView } from "@/lib/control/request-view-schema";
 import { requestScoreJobs, type ControlActionState } from "@/lib/control/service";
 import { MARK_APPLIED_FROM } from "@/lib/dashboard/apply";
 import { NOTES_MAX_CHARS } from "@/lib/dashboard/limits";
@@ -119,7 +120,10 @@ export type TranslateActionResult =
   | { ok: false; error: TranslateErrorKey };
 
 export type TranslateStatusResult =
-  | { ok: true; state: "waiting"; stage: "pending" | "running"; partial: PartialPayload | null }
+  /** The state could not be read this time; the browser retries. */
+  | null
+  /** `queue`: where the request stands (position, what the worker is doing, whether it is alive). */
+  | { ok: true; state: "waiting"; stage: "pending" | "running"; partial: PartialPayload | null; queue: ControlQueueView | null }
   | { ok: true; state: "done"; translation: TranslationPayload }
   /** `detail`: which provider failed how (no JD text); `partial`: what is saved, a retry continues from there. */
   | { ok: false; error: TranslateErrorKey; detail?: string | null; partial?: PartialPayload | null; resumeAt?: string | null };
@@ -157,19 +161,20 @@ export async function translateStatusAction(input: { jobId: number; requestId: n
   if (!parsed.success) return { ok: false, error: "invalid" };
   try {
     const state = await readTranslateRequest(getDb(), parsed.data);
-    if (state === null) return { ok: false, error: "not_found" };
-    if (state.state === "waiting") return { ok: true, state: "waiting", stage: state.stage, partial: toPartial(state.partial) };
+    if (state.state === "missing") return { ok: false, error: "not_found" };
+    if (state.state === "waiting") return { ok: true, state: "waiting", stage: state.stage, partial: toPartial(state.partial), queue: state.queue };
     if (state.state === "failed") return { ok: false, error: state.error, detail: state.detail, partial: toPartial(state.partial), resumeAt: state.resumeAt };
     revalidatePath(`/jobs/${parsed.data.jobId}`);
     return { ok: true, state: "done", translation: toPayload(state.translation) };
   } catch {
-    return { ok: false, error: "failed" };
+    return null;
   }
 }
 
 /**
- * "Score now" on a job that waits for its AI score: leaves a `score_jobs` request for the runner (the
- * web app never calls the AI for scoring itself) and returns what the page polls for.
+ * "Score now" on a job that waits for its AI score: leaves a `score_jobs` request for the process that scores (the
+ * ai-worker, or the runner with `execution: container`; the web app never calls the AI for scoring itself) and returns
+ * the request the button polls at `/api/control/requests/<id>`.
  */
 export async function scoreJobNowAction(input: { jobId: number }): Promise<ControlActionState> {
   const parsed = z.object({ jobId: jobIdSchema }).safeParse(input);

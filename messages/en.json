@@ -93,7 +93,8 @@
       "tooMany": "At most {max} categories",
       "nameRequired": "Enter a name in at least one language",
       "iconTooLong": "An icon has at most 2 characters",
-      "color": "Pick a colour of the palette"
+      "color": "Pick a colour of the palette",
+      "slowPattern": "Too slow on a long test text: give each + and * an upper limit, as in [a-z]'{1,40}' or .'{0,40}'"
     },
     "list": {
       "row": "{label} {n}",
@@ -1213,7 +1214,6 @@
         "button": "Score now",
         "requesting": "Requesting…",
         "scoring": "Scoring…",
-        "runnerDown": "The runner is not responding; the request runs when it is back.",
         "errors": {
           "invalidPayload": "The request had the wrong shape, reload the page.",
           "nothingToScore": "This job does not need a score right now.",
@@ -1495,7 +1495,7 @@
     "retranslate": "Translate again",
     "translating": "Translating…",
     "loading": "Translating the JD with AI. This can take a minute; you can keep reading the original.",
-    "queued": "The request is queued. The AI worker on this Mac picks it up within a few seconds; you can keep reading the original.",
+    "queued": "The request is queued and runs when its turn comes; you can keep reading the original.",
     "done": "The JD was translated",
     "loadedFromCache": "The translation was already available",
     "stale": "The JD changed after this translation was made. The text below may be outdated.",
@@ -1522,7 +1522,6 @@
       "budget": "The monthly budget for the AI API is used up.",
       "quota_guard": "Job Radar's own AI usage cap is reached (only its own calls count). {time, select, none {It continues by itself later.} other {Available again after {time}.}}",
       "aborted": "The AI worker was stopped while translating. Try again.",
-      "waitTimeout": "The translation did not finish in time. The AI worker on this Mac may be offline: check the AI worker card on the Sources page, then try again.",
       "same_language": "This JD is already written in {language}: there is nothing to translate."
     }
   },
@@ -3009,7 +3008,14 @@
           "run_cycle": "Manual cycle",
           "rescore_stale": "Re-score stale",
           "run_suggest": "Interest suggestions",
-          "score_jobs": "Score jobs"
+          "score_jobs": "Score jobs",
+          "run_ai": "AI stage of a cycle",
+          "translate_job": "Translation",
+          "breakdown_job": "Job breakdown",
+          "test_channel": "Channel test",
+          "test_ai": "AI test",
+          "test_telegram": "Telegram test",
+          "salary_lookup": "Salary lookup"
         },
         "status": {
           "pending": "Queued",
@@ -3043,6 +3049,7 @@
           "quota_guard": "Not run: Job Radar's own AI usage cap is reached (only its own calls count). {time, select, none {It continues by itself later.} other {Available again after {time}.}}"
         },
         "scoreResult": "Scoring finished: {scored} scored, {failed} failed",
+        "timeBudget": "Stopped at the time budget: {remaining} still to score.",
         "jobs": "Jobs: {jobs}"
       },
       "backlog": {
@@ -3184,6 +3191,7 @@
       "reason": {
         "unknownKey": "unknown key (maybe a typo)",
         "missing": "this key is missing",
+        "slowPattern": "too slow on a long test text: give each + and * an upper limit, as in [a-z]'{1,40}' or .'{0,40}'",
         "protected": "locked key: edit {file} by hand to change it"
       },
       "previewSave": "Preview and save",
@@ -3793,7 +3801,7 @@
     "run": {
       "button": "Look for suggestions now",
       "requesting": "Requesting...",
-      "queued": "Requested. Whoever runs the AI picks it up within seconds.",
+      "queued": "Requested. It runs when the process that does the AI work gets to it.",
       "existing": "A request is already waiting or running.",
       "hint": "Runs automatically once a week (schedule.yaml, suggest)."
     },
@@ -3854,13 +3862,10 @@
       "tooSoon": "Requested a moment ago; try again in {seconds} s."
     },
     "existing": "A request that covers this channel is already queued or running; waiting for its result.",
+    "queued": "Queued…",
     "pending": {
       "runner": "Queued, waiting for the runner…",
       "aiWorker": "Queued, waiting for the ai-worker on the host…"
-    },
-    "stillWaiting": {
-      "runner": "No result after 10 minutes: the runner may not be running (see the runner line at the top of /settings).",
-      "aiWorker": "No result after 10 minutes: the ai-worker may be offline (see the ai-worker card on /sources)."
     },
     "running": "Running…",
     "runningCycle": "Cycle {id}: {finished} / {total} queries done, {fetched} fetched",
@@ -3891,6 +3896,14 @@
       "runChannelNoCycle": "Done",
       "runChannelCovered": "Covered by the running cycle {id}: {finished} of {total} runs finished, {fetched} fetched"
     }
+  },
+  "controlQueue": {
+    "ahead": "{count, plural, =0 {Next in line.} one {# request ahead of it.} other {# requests ahead of it.}}",
+    "running": "{process, select, runner {The runner} other {The ai-worker}} is working on “{kind}”, started {time}.",
+    "self": "Running since {time}, for {minutes, plural, =0 {less than a minute} one {# minute} other {# minutes}}.",
+    "offline": "{process, select, runner {The runner} other {The ai-worker}} is offline ({age, select, never {no heartbeat yet} other {last heartbeat {age} ago}}). The request stays queued and runs when it is back.",
+    "noProcess": "No process takes this request with the current execution setting (ai.yaml).",
+    "sourcesLink": "Check the Sources page"
   },
   "viz": {
     "undisclosed": "Not disclosed",
@@ -4242,7 +4255,6 @@
     "done": "Breakdown ready",
     "empty": "The AI found nothing in the JD to break down.",
     "outdated": "This breakdown is in an older format and cannot be shown.",
-    "sourcesLink": "Open Sources",
     "stale": {
       "jd": "The JD changed since",
       "prompt": "Made with an older prompt",
@@ -4314,8 +4326,7 @@
       "failed": "The breakdown failed. Please try again.",
       "invalid_payload": "The request was not valid.",
       "handler_error": "Something went wrong handling the request. Try again.",
-      "no_handler": "No process handles breakdown requests (is the ai-worker running?).",
-      "waitTimeout": "The ai-worker has not answered. Check on the Sources page whether it is online."
+      "no_handler": "No process handles breakdown requests (is the ai-worker running?)."
     }
   },
   "sourcesRegistry": {
@@ -6310,8 +6321,7 @@
       "sourceRef": "source {n}",
       "notesHeading": "Notes",
       "dropped": "{n, plural, one {# item was} other {# items were}} dropped (no source, a bad link or an implausible figure).",
-      "done": "Salary lookup finished",
-      "sourcesLink": "Sources page"
+      "done": "Salary lookup finished"
     },
     "error": {
       "invalid": "Invalid request",
@@ -6334,8 +6344,7 @@
       "failed": "The lookup failed. Please try again.",
       "invalid_payload": "The request was not valid.",
       "handler_error": "Something went wrong handling the request. Try again.",
-      "no_handler": "No process handles salary lookups (is the ai-worker running?).",
-      "waitTimeout": "The ai-worker has not answered. Check on the Sources page whether it is online."
+      "no_handler": "No process handles salary lookups (is the ai-worker running?)."
     },
     "cli": {
       "usage": "pnpm salary:benchmark [--json]\n\nRebuilds the salary benchmark from the postings in the database and prints its groups.",

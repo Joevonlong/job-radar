@@ -75,6 +75,7 @@ import { readInitialBreakdownRequest } from "@/lib/control/breakdown-request";
 import { readInitialTranslateRequest, readPartialTranslation } from "@/lib/control/translate-request";
 import { toJobTranslation } from "@/lib/translation/service";
 import { loadConfig, reloadConfig, type AiConfig, type MeConfig } from "@/lib/config";
+import { createProcessLogger } from "@/lib/logging/process-logger";
 import { loadPipeline } from "@/lib/market";
 import { salaryAxisScale } from "@/components/viz/salary-shared";
 import { readResumeConfig } from "@/lib/resume/config";
@@ -82,6 +83,7 @@ import { readProfileReadiness } from "@/lib/scoring/profile";
 import { listPdfs } from "@/lib/resume/paths";
 import { bonusPolicy, isHighPayAmount, otherRegionOfAmount, signalBonus } from "@/lib/signals/bonus";
 import { buildCatalog, toCategoryViews } from "@/lib/signals/catalog";
+import { sharedSignalPatternGuard } from "@/lib/signals/pattern-guard";
 import { findQuoteTerm } from "@/lib/signals/rules";
 import { loadBaseCurrency, loadSalaryFloor } from "@/lib/signals/floor";
 import { cn } from "@/lib/utils";
@@ -91,6 +93,9 @@ import { readSalarySettings } from "@/lib/salary/settings";
 import { getSalaryContext } from "@/lib/salary/view";
 
 type Params = Promise<{ id: string }>;
+
+/** A user pattern of interests.yaml too slow for the probe is left out of the quote marks, with a warning. */
+const patternLog = createProcessLogger({ fields: { component: "job-page" } });
 
 function parseJobId(raw: string): number | null {
   return /^\d{1,15}$/.test(raw) && Number(raw) > 0 ? Number(raw) : null;
@@ -191,6 +196,7 @@ export default async function JobDetailPage({ params }: { params: Params }) {
     me = null; // me.yaml cannot be read: the checks say "not set" instead of guessing
   }
   const aliases = buildSkillAliasMap(loadPipeline().skills);
+  const patternGuard = sharedSignalPatternGuard(interests.limits, patternLog);
   const mySkills = me?.skills.map((skill) => skill.name) ?? [];
   const skillMatches = matchSkills(job.skills, profileSkillKeys(mySkills, aliases), aliases);
   const german = germanCheck(job.germanLevelRequired, userGermanLabelOrNull());
@@ -285,7 +291,7 @@ export default async function JobDetailPage({ params }: { params: Params }) {
     ...s,
     belowFloor: s.tier === policy.amountId && !isHighPayAmount(s.value, policy),
     otherRegion: s.tier === policy.amountId ? otherRegionOfAmount(s.value) : null,
-    term: findQuoteTerm(s.quote, s.tier, interests),
+    term: findQuoteTerm(s.quote, s.tier, interests, patternGuard),
     quoteIndex: index,
     inJd: inJd[index] ?? false,
   }));

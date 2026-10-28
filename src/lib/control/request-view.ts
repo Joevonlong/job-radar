@@ -1,10 +1,11 @@
 /** Server side of `/api/control/requests/<id>`: one request of a trigger button, with its outcome. */
 import { findManualCycleSince, getControlRequest, getCycleProgress, TEST_CONTROL_REQUEST_KINDS, type ControlRequestKind, type Db } from "@/lib/db";
 
+import { loadQueueView } from "./queue-view";
 import { controlRequestViewSchema, requestResultViewSchema, type ControlRequestView } from "./request-view-schema";
 
-/** The kinds a trigger button may poll: a (channel) cycle and the tests. */
-const POLLABLE: readonly ControlRequestKind[] = ["run_cycle", ...TEST_CONTROL_REQUEST_KINDS];
+/** The kinds a button may poll: a (channel) cycle, the tests, and "score now" on a job page. */
+const POLLABLE: readonly ControlRequestKind[] = ["run_cycle", ...TEST_CONTROL_REQUEST_KINDS, "score_jobs"];
 
 const iso = (date: Date | null): string | null => (date ? date.toISOString() : null);
 
@@ -35,5 +36,6 @@ export async function loadControlRequestView(db: Db, id: number): Promise<Contro
     finishedAt: iso(request.finishedAt),
     result,
     cycle,
+    queue: await loadQueueView(db, request),
   });
 }

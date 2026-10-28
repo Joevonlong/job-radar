@@ -15,6 +15,7 @@ import { createHash } from "node:crypto";
 
 import { signalsPromptSpec, type PromptCategory, type SignalsPromptSpec } from "@/lib/ai/prompts/signals";
 import type { AmountCategory, InterestsConfig, KeywordCategory, PipelineConfig, SignalCategory, TagCategory } from "@/lib/config";
+import type { SIGNAL_PROBE_DEFAULTS } from "@/lib/config/schemas/interests";
 
 import { buildCatalog } from "./catalog";
 
@@ -64,7 +65,9 @@ function legacyShape(interests: Pick<InterestsConfig, "signals" | "limits">, mar
   const amount: AmountCategory = t1;
   const tags: TagCategory = tag;
   const words = (category: KeywordCategory) => ({ keywords: category.keywords, patterns: category.patterns, exclude: category.exclude });
-  const { per_category_max, ...limits } = interests.limits;
+  // the pattern time limits came later and change nothing the rules find: left out, so the hash stays
+  const { per_category_max, pattern_probe_chars: probeChars, pattern_probe_ms: probeMs, pattern_probe_retry_ms: retryMs, pattern_job_ms: jobMs, ...limits } = interests.limits;
+  void [probeChars, probeMs, retryMs, jobMs];
   return {
     signals: {
       T1: {
@@ -118,10 +121,10 @@ function extractionPart(category: SignalCategory, marketCurrency: string): unkno
  * throw away every AI review for them; `revalueSignals` updates the stored amounts in place instead.
  */
 /** The limits that change what the rules extract: `preview_jobs` and `preview_time_budget_ms` (the /interests preview only) are left out, so they never trigger a rescan. */
-function extractionLimits(limits: InterestsConfig["limits"]): Omit<InterestsConfig["limits"], "preview_jobs" | "preview_time_budget_ms"> {
-  const { preview_jobs: previewJobs, preview_time_budget_ms: previewBudget, ...rest } = limits;
-  void previewJobs;
-  void previewBudget;
+/** The limits that change what the rules find (the preview's and the pattern time limits do not: they are left out). */
+function extractionLimits(limits: InterestsConfig["limits"]): Omit<InterestsConfig["limits"], "preview_jobs" | "preview_time_budget_ms" | keyof typeof SIGNAL_PROBE_DEFAULTS> {
+  const { preview_jobs: previewJobs, preview_time_budget_ms: previewBudget, pattern_probe_chars: probeChars, pattern_probe_ms: probeMs, pattern_probe_retry_ms: retryMs, pattern_job_ms: jobMs, ...rest } = limits;
+  void [previewJobs, previewBudget, probeChars, probeMs, retryMs, jobMs];
   return rest;
 }
 

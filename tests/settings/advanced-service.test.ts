@@ -5,6 +5,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { ADVANCED_NAMES, advancedNameOfStem, advancedStem, loadAdvancedFile, loadAdvancedIndex } from "@/lib/settings/advanced/view";
+import { SLOW_PATTERN_MESSAGE } from "@/lib/config/interests-lint";
 import { previewAdvanced, resetAdvanced, saveAdvanced, validateAdvanced } from "@/lib/settings/advanced/service";
 
 import { makeTempConfig, type TempConfig } from "../config/helpers";
@@ -60,6 +61,21 @@ describe("the file list", () => {
 });
 
 describe("save", () => {
+  it.each(["(\\w+\\s*)*budget", "(\\d+)+x", "(\\d+[.,]?)+\\s*k"])("refuses a slow interests.yaml pattern at its line and leaves the file unchanged: %s", async (pattern) => {
+    const data = opened("interests");
+    const before = userText("interests.yaml");
+    const text = data.text.replace(/(- id: T2\n(?:[ \t]+.*\n)*?([ \t]+)patterns:\n)/, `$1$2  - ${JSON.stringify(pattern)}\n`);
+    expect(text).not.toBe(data.text);
+    const live = await validateAdvanced({ file: "interests", text });
+    expect(live.ok).toBe(false);
+    const result = await saveAdvanced({ file: "interests", text, baseHash: data.hash, baseLayer: data.layer, confirmOverride: false });
+    expect(result.status).toBe("invalid");
+    if (result.status !== "invalid") return;
+    expect(result.issues).toEqual([expect.objectContaining({ path: expect.stringMatching(/^signals\.categories\[\d+\]\.patterns\[0\]$/), message: SLOW_PATTERN_MESSAGE, source: "schema", exact: true })]);
+    expect(text.split("\n")[result.issues[0]!.line - 1]).toContain(JSON.stringify(pattern));
+    expect(userText("interests.yaml")).toBe(before);
+  });
+
   it("writes the text verbatim, backs the old one up and reports the new hash", async () => {
     const data = opened("notify");
     const text = `${data.text}\n# kept comment\n`;

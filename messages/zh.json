@@ -93,7 +93,8 @@
       "tooMany": "最多 {max} 个类别",
       "nameRequired": "至少填一种语言的名称",
       "iconTooLong": "图标最多 2 个字",
-      "color": "颜色只能从调色板里选"
+      "color": "颜色只能从调色板里选",
+      "slowPattern": "太慢：在长测试文本上超时。请给每个 + 和 * 设上限，例如 [a-z]'{1,40}' 或 .'{0,40}'"
     },
     "list": {
       "row": "{label} {n}",
@@ -1213,7 +1214,6 @@
         "button": "立即打分",
         "requesting": "正在请求…",
         "scoring": "打分中…",
-        "runnerDown": "runner 没有响应，请求会在它恢复后执行。",
         "errors": {
           "invalidPayload": "请求格式不对，请刷新页面。",
           "nothingToScore": "这个岗位现在不需要打分。",
@@ -1495,7 +1495,7 @@
     "retranslate": "重新翻译",
     "translating": "翻译中…",
     "loading": "正在用 AI 翻译 JD，可能需要一分钟，期间可以先看原文。",
-    "queued": "请求已排队，这台 Mac 上的 AI worker 会在几秒内接手，期间可以先看原文。",
+    "queued": "请求已排队，轮到它时就会处理，期间可以先看原文。",
     "done": "JD 已翻译",
     "loadedFromCache": "翻译已经存在",
     "stale": "这份翻译之后 JD 原文有更新，下面的内容可能已过期。",
@@ -1522,7 +1522,6 @@
       "budget": "本月 AI API 预算已用完。",
       "quota_guard": "已达 Job Radar 的 AI 用量上限（只统计 Job Radar 自己的调用）。{time, select, none {稍后会自动继续。} other {{time} 后可用。}}",
       "aborted": "翻译时 AI worker 被停止了，请重试。",
-      "waitTimeout": "翻译在限定时间内没有完成。这台 Mac 上的 AI worker 可能没有运行：到「来源」页看 AI worker 卡片，然后重试。",
       "same_language": "这份 JD 本来就是{language}，不需要翻译。"
     }
   },
@@ -3009,7 +3008,14 @@
           "run_cycle": "手动轮",
           "rescore_stale": "重打过期分数",
           "run_suggest": "兴趣建议",
-          "score_jobs": "给岗位打分"
+          "score_jobs": "给岗位打分",
+          "run_ai": "一轮的 AI 阶段",
+          "translate_job": "翻译",
+          "breakdown_job": "岗位拆解",
+          "test_channel": "测试通道",
+          "test_ai": "测试 AI",
+          "test_telegram": "测试 Telegram",
+          "salary_lookup": "查薪资"
         },
         "status": {
           "pending": "排队中",
@@ -3043,6 +3049,7 @@
           "quota_guard": "没有执行：已达 Job Radar 的 AI 用量上限（只统计 Job Radar 自己的调用）。{time, select, none {稍后会自动继续。} other {{time} 后可用。}}"
         },
         "scoreResult": "打分完成：{scored} 条成功，{failed} 条失败",
+        "timeBudget": "到了时间预算，还剩 {remaining} 条没打分。",
         "jobs": "岗位：{jobs}"
       },
       "backlog": {
@@ -3184,6 +3191,7 @@
       "reason": {
         "unknownKey": "未知的键（可能是拼写错了）",
         "missing": "缺少这个键",
+        "slowPattern": "太慢：在长测试文本上超时。请给每个 + 和 * 设上限，例如 [a-z]'{1,40}' 或 .'{0,40}'",
         "protected": "受保护的键：请手动编辑 {file} 来修改"
       },
       "previewSave": "预览并保存",
@@ -3793,7 +3801,7 @@
     "run": {
       "button": "现在就找建议",
       "requesting": "请求中…",
-      "queued": "已请求，跑 AI 的进程几秒内会接手。",
+      "queued": "已请求，轮到它时跑 AI 的进程就会处理。",
       "existing": "已有一个请求在排队或运行。",
       "hint": "每周自动跑一次（schedule.yaml 的 suggest）。"
     },
@@ -3854,13 +3862,10 @@
       "tooSoon": "刚刚请求过，{seconds} 秒后可以再试。"
     },
     "existing": "已有覆盖这个通道的请求在排队或执行，正在等它的结果。",
+    "queued": "已排队…",
     "pending": {
       "runner": "已排队，等待 runner 取走…",
       "aiWorker": "已排队，等待宿主机上的 ai-worker 取走…"
-    },
-    "stillWaiting": {
-      "runner": "等了 10 分钟还没有结果：runner 可能没在运行（见 /settings 顶部的 runner 状态）。",
-      "aiWorker": "等了 10 分钟还没有结果：ai-worker 可能离线（见 /sources 的 ai-worker 卡片）。"
     },
     "running": "进行中…",
     "runningCycle": "第 {id} 轮：{finished} / {total} 个查询已结束，抓取 {fetched} 条",
@@ -3891,6 +3896,14 @@
       "runChannelNoCycle": "已完成",
       "runChannelCovered": "由正在运行的第 {id} 轮覆盖：{total} 个运行已完成 {finished} 个，抓取 {fetched} 条"
     }
+  },
+  "controlQueue": {
+    "ahead": "{count, plural, =0 {下一个就轮到它。} other {前面还有 # 个请求。}}",
+    "running": "{process, select, runner {runner} other {ai-worker}} 正在做「{kind}」，{time} 开始。",
+    "self": "处理中，{time} 开始，已进行 {minutes, plural, =0 {不到 1 分钟} other {# 分钟}}。",
+    "offline": "{process, select, runner {runner} other {ai-worker}} 离线（{age, select, never {还没有心跳} other {最后心跳在 {age}前}}）。请求会留在队列里，它恢复后照常执行。",
+    "noProcess": "按现在的执行位置设置（ai.yaml），没有进程会处理这个请求。",
+    "sourcesLink": "去来源页查看"
   },
   "viz": {
     "undisclosed": "未披露",
@@ -4242,7 +4255,6 @@
     "done": "拆解完成",
     "empty": "AI 没在 JD 里找到可以拆解的内容。",
     "outdated": "这份拆解是旧版本的格式，无法显示。",
-    "sourcesLink": "去来源页看看",
     "stale": {
       "jd": "JD 在拆解后改过",
       "prompt": "用旧版提示词拆解",
@@ -4314,8 +4326,7 @@
       "failed": "拆解失败，请重试。",
       "invalid_payload": "请求内容不合法。",
       "handler_error": "处理请求时出错，请重试。",
-      "no_handler": "没有进程处理拆解请求（ai-worker 没有运行？）。",
-      "waitTimeout": "ai-worker 一直没有响应，去来源页看看它是否在线。"
+      "no_handler": "没有进程处理拆解请求（ai-worker 没有运行？）。"
     }
   },
   "sourcesRegistry": {
@@ -6310,8 +6321,7 @@
       "sourceRef": "来源 {n}",
       "notesHeading": "备注",
       "dropped": "丢弃了 {n} 条（没有来源、链接不合格或数字不合理）。",
-      "done": "薪资查询完成",
-      "sourcesLink": "来源页"
+      "done": "薪资查询完成"
     },
     "error": {
       "invalid": "请求无效",
@@ -6334,8 +6344,7 @@
       "failed": "查询失败，请重试。",
       "invalid_payload": "请求内容不合法。",
       "handler_error": "处理请求时出错，请重试。",
-      "no_handler": "没有进程处理查薪资请求（ai-worker 没有运行？）。",
-      "waitTimeout": "ai-worker 一直没有响应，去来源页看看它是否在线。"
+      "no_handler": "没有进程处理查薪资请求（ai-worker 没有运行？）。"
     },
     "cli": {
       "usage": "pnpm salary:benchmark [--json]\n\n用库里的岗位重算薪资基准，并打印各组。",
