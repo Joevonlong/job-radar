@@ -53,7 +53,7 @@ scripts/ops/deploy.sh
 | 5 backup | db 已经在运行就先做一份 `pre-deploy` 备份（第一次部署跳过） | 备份失败时不继续升级 |
 | 6 build | 把第 2 步固定的提交用 `git archive` 解到 `data/build/<提交>-<pid>/`，以这个目录为构建上下文（`JOB_RADAR_BUILD_CONTEXT`）运行 `docker compose -p job-radar build`。镜像里正好是已提交的文件，包括 `config/` 里的出厂默认配置 | 磁盘满 |
 | 7 release | `scripts/ops/prepare-release.sh <提交> --root <检出目录>`：构建 ai-worker 的发布目录 `data/releases/ai-worker/<提交>/`（该提交的 `git archive` 加生产依赖，只读）；已经存在且完整就跳过 | 网络或磁盘（安装依赖） |
-| 8 up | 先 `pnpm ops:drain`：有轮次正在运行就等它结束（最长 `schedule.yaml: deploy.drain_timeout_seconds`，900 秒），因为重建 runner 会打断它。然后 `docker compose up -d --wait`：db / web / runner / jobspy 都要变成 healthy（最长 300 秒） | 某个服务起不来：脚本会列出 `docker compose ps` 和看日志的命令。等完了轮次还在跑只打印警告（`pnpm ops:drain` 退出码 1），没能检查（退出码 3：配置或数据库出错，或某个查询卡住）也只打印警告：部署继续，runner 启动时的补跑会重跑那个定时时段 |
+| 8 up | 先 `pnpm ops:drain`：有轮次正在运行就等它结束（最长 `schedule.yaml: deploy.drain_timeout_seconds`，900 秒），因为重建 runner 会打断它。然后 `docker compose up -d --wait db web runner`：这三个要变成 healthy（最长 300 秒）。再单独启动 jobspy sidecar（`up -d --no-deps --wait jobspy`） | db、web 或 runner 起不来：脚本会列出 `docker compose ps` 和看日志的命令。jobspy sidecar 没变成 healthy 不会让部署停下：脚本打印警告和看它日志的命令，第 9 到 13 步照常执行（没有服务依赖 sidecar，用到它的通道 `linkedin-guest`、`indeed`、`jobspy-google` 默认都关闭）。之后第 13 步的 doctor 在这些通道有一个开着时把它算作问题（退出码 2），否则只算警告。等完了轮次还在跑只打印警告（`pnpm ops:drain` 退出码 1），没能检查（退出码 3：配置或数据库出错，或某个查询卡住）也只打印警告：部署继续，runner 启动时的补跑会重跑那个定时时段 |
 | 9 migrate | `pnpm migrate:run`（runner 启动时也会自动迁移，这里是确认；已是最新则什么都不做）。有待执行的迁移时先做一份 `premigrate` 备份（数据库加配置压缩包），备份失败就不迁移（`schedule.yaml` 的 `backup.pre_migrate`） | 迁移 SQL 有问题；迁移前备份失败 |
 | 10 ai-worker | `scripts/ops/install-ai-worker.sh --release data/releases/ai-worker/<提交>`：把 ai-worker（macOS 上是 launchd agent，Linux 上是 systemd 用户单元 `job-radar-ai-worker.service`）切换到第 7 步的发布目录；新 worker 拿不出证据时回滚到上一个（见下面“ai-worker 从发布目录运行”）。它正在处理的 AI 请求（比如给一整轮打分的 `run_ai`）不会丢：回到队列，重启后接着跑（见下面“被重启打断的工作”） | 输出以 `not changed:`（什么都没动）、`rolled back:`（上一个 worker 又在运行）或 `ROLLBACK FAILED:`（按消息处理）开头；`claude` / `codex` 不在 PATH 里 |
 | 11 config-write | 用实例锁、心跳和配置报告确认目标服务 PID，扫描宿主机 worker 进程，并通过 `worker-heartbeat.ts --holder --pid <预期 PID> --host <主机>` 比较持有者。持有者匹配目标服务 PID，或没有持有者且未安装服务，并且进程扫描成功、没有其他 worker，才带 token 执行 `config:init` 和 `config:migrate --write`，重新规划后解除冻结。首装无 token，跳过门禁；`--settle 0` 与 `--no-ai-worker` 一样核对服务发布路径、PID、持有者及进程扫描，不等待 receipt。 | 旧的或未知持有者、其他 worker PID、进程扫描失败：不写、保留冻结、退出 2；已排除旧消费者但写入失败或跳过：解除冻结、退出 2 |
@@ -184,7 +184,7 @@ pnpm run doctor --lang zh    # 用另一种语言输出报告（默认：languag
 | id | 检查 | ❌ / ⚠️ 的意思和第一步 |
 |---|---|---|
 | `docker.daemon` | Docker 在运行 | ❌ Docker Desktop 没起来：`open -a Docker` |
-| `compose.db` `compose.web` `compose.runner` `compose.jobspy` | compose 项目 `job-radar` 的四个服务在运行且 healthy；端口只绑在 127.0.0.1 | ❌ 容器停了或 unhealthy：看日志命令（`docker compose -p job-radar logs --tail 100 <服务>`）；端口绑到了 0.0.0.0 也是 ❌（违反只绑本机的规则），除非 `JOB_RADAR_WEB_BIND` 有意开放 web **并且**设了网页口令（没设口令：❌，提示先设口令）。web 发布到了回环以外、`JOB_RADAR_WEB_BIND` 却没设或是回环地址，也是 ❌：本机免登录仍然开着，要把 `JOB_RADAR_WEB_BIND` 设成发布的地址。⚠️：服务在宿主机上以进程方式运行（UAT 或 `pnpm runner`），不是 compose 容器——能用，但重启后不会自己回来 |
+| `compose.db` `compose.web` `compose.runner` `compose.jobspy` | compose 项目 `job-radar` 的四个服务在运行且 healthy；端口只绑在 127.0.0.1 | ❌ 容器停了或 unhealthy：看日志命令（`docker compose -p job-radar logs --tail 100 <服务>`）；`compose.jobspy` 在用到 sidecar 的通道（`linkedin-guest`、`indeed`、`jobspy-google`）都没开时只算 ⚠️；端口绑到了 0.0.0.0 也是 ❌（违反只绑本机的规则），除非 `JOB_RADAR_WEB_BIND` 有意开放 web **并且**设了网页口令（没设口令：❌，提示先设口令）。web 发布到了回环以外、`JOB_RADAR_WEB_BIND` 却没设或是回环地址，也是 ❌：本机免登录仍然开着，要把 `JOB_RADAR_WEB_BIND` 设成发布的地址。⚠️：服务在宿主机上以进程方式运行（UAT 或 `pnpm runner`），不是 compose 容器——能用，但重启后不会自己回来 |
 | `compose.project` | compose 项目的容器是从这份检出启动的（`com.docker.compose.project.working_dir`） | ⚠️ 另一份检出用同一个项目名运行着容器：两者会接管彼此的容器并共用数据库卷。给第二个实例起自己的名字，见 [multiple-instances.zh.md](multiple-instances.zh.md) |
 | `web.http` | 宿主机访问 `doctor.web_url` 的 `/api/health` 返回 200，数据库 ok | ❌ web 没起来或连不上数据库 |
 | `db.connect` | 宿主机能连上数据库（`DATABASE_URL`，没设就按 `.env` 里的 `POSTGRES_*` 和 `DB_HOST_PORT` 拼） | ❌ db 没起来，或 `.env` 里的口令不对 |
@@ -257,6 +257,21 @@ scripts/ops/deploy.sh               # 或跟随 main：拉最新 main、备份�
 升级前脚本会自动做一份 `jobradar-manual-…-pre-deploy.dump` 备份（手动备份不会被自动清理）。升级期间 web 和 runner 会重启几十秒；轮次正在运行时重启 runner 会让这一轮中断，下次启动时 `catch_up` 会补跑。想避开轮次：早轮 07:00、晚轮 17:00（工作日）、周末 09:00，在两轮之间升级。
 
 升级后跑一次 `pnpm run doctor`，确认没有新的 ❌。
+
+### Compose 覆盖文件与 jobspy sidecar
+
+升级前，从已有的 `compose.override.yaml`（或其他生效的 Compose 覆盖文件）中删除
+`services.runner.depends_on.jobspy`，保留对 `db` 的依赖。如果你给 `db` 或 `web` 也加了对 `jobspy` 的依赖，
+同样删除。Compose 会合并依赖映射，因此出厂 `compose.yaml` 删除了这项，也不会消除覆盖文件中的旧依赖。
+即使设为 `required: false`，仍可能把 sidecar 带进核心服务的 `up --wait`。
+
+第 4 步会将 `docker compose -p <project> config --format json` 与目标提交自身的 `compose.yaml` 对比，发现覆盖文件新增的依赖时，**在冻结设置或重启服务前拒绝部署**。
+报错会列出需要删除的条目，脚本不会修改你的覆盖文件。删除相应条目后重新部署，这样 sidecar 不健康就不会阻断数据库迁移、
+ai-worker 切换或配置写入。doctor 只有在当前市场实际启用了依赖 sidecar 的通道时，才把 sidecar 故障视为问题；
+被 `markets` 限制排除的通道不需要 sidecar。
+
+受支持的旧目标（例如通过 `--ref` 回滚的版本）若自身的 `compose.yaml` 仍依赖 jobspy，会打印简短说明并允许部署。
+它保留该目标原有的依赖行为：sidecar 不健康仍可能阻断这次部署。
 
 ### 配置分层之后
 

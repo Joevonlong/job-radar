@@ -15,11 +15,19 @@ updates:
     ignore:
       - dependency-name: "@types/node"
         update-types: ["version-update:semver-major"]
+  # pip-compile layout: Dependabot changes a pin in requirements*.in and regenerates the hashed requirements*.txt from it
   - package-ecosystem: pip
     directory: /jobspy
     schedule:
       interval: weekly
     open-pull-requests-limit: 3
+  # The digest-pinned base image of jobspy/Dockerfile. The root Dockerfile's FROM lines take their tags from ARGs (the
+  # Node major checked against engines, the Playwright version that must match @playwright/test), which this cannot update.
+  - package-ecosystem: docker
+    directory: /jobspy
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 2
   - package-ecosystem: github-actions
     directory: /
     schedule:

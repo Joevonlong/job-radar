@@ -4,11 +4,14 @@ import { Loader2, Sparkles } from "lucide-react";
 import { useFormatter, useTranslations } from "next-intl";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 
 import { scoreJobNowAction as rawScoreJobNowAction } from "@/app/jobs/[id]/actions";
-import { useControlStatus } from "@/components/settings/use-control-status";
+import { QueueHint } from "@/components/control/queue-hint";
+import { readRequestView } from "@/components/control/read-request-view";
+import { useControlRequest } from "@/components/control/use-control-request";
 import { Button } from "@/components/ui/button";
+import type { ControlRequestView } from "@/lib/control/request-view-schema";
 import { IDLE_CONTROL_STATE, type ControlActionState } from "@/lib/control/service-types";
 import { formatClock } from "@/lib/format/clock";
 import type { ProfileScoringField } from "@/lib/scoring/profile";
@@ -19,41 +22,51 @@ const scoreJobNowAction = withActionFeedback(rawScoreJobNowAction)(() => ({ stat
 
 const ERROR_CODES = ["invalid_payload", "score_failed", "score_stopped", "score_profile_incomplete", "score_ai_unavailable", "quota_guard", "handler_error", "no_handler"] as const;
 
+/** How a request of this button ended: its final view, or null when it is gone. */
+interface Finished {
+  id: number;
+  view: ControlRequestView | null;
+}
+
 /**
- * "Score now" for a job that waits for its AI score: asks the runner for a `score_jobs` request for this
- * job, polls the request like the settings controls do and refreshes the page when the score is there.
+ * "Score now" for a job that waits for its AI score: leaves a `score_jobs` request for this job, follows that request at
+ * `/api/control/requests/<id>` (its place in the queue, and whether the process that scores, the ai-worker or with
+ * `execution: container` the runner, is alive) and refreshes the page when the score is there.
  * With an incomplete profile scoring cannot start: the button is off and says why, with a link to /me.
  */
 export function ScoreNowButton({ jobId, profileMissing = [], timeZone }: { jobId: number; profileMissing?: readonly ProfileScoringField[]; timeZone?: string }) {
   const t = useTranslations("dashboard.detail.scoreNow");
   const tProfile = useTranslations("profile.incomplete");
+  const tRequests = useTranslations("settings.control.requests");
   const format = useFormatter();
   const router = useRouter();
-  const { status, refresh } = useControlStatus(null);
   const [state, setState] = useState<ControlActionState>(IDLE_CONTROL_STATE);
   const [pending, startTransition] = useTransition();
-  const refreshed = useRef<number | null>(null);
+  const [finished, setFinished] = useState<Finished | null>(null);
 
-  const requestId = state.status === "queued" ? state.request : null;
-  const request = requestId === null ? null : (status?.requests.find((r) => r.id === requestId) ?? null);
-  const open = requestId !== null && (request === null || request.status === "pending" || request.status === "running");
-  const failed = request?.status === "failed";
-
-  useEffect(() => {
-    if (request?.status === "done" && refreshed.current !== request.id) {
-      refreshed.current = request.id;
+  const queuedId = state.status === "queued" ? state.request : null;
+  const ended = finished !== null && finished.id === queuedId ? finished : null;
+  const wait = useControlRequest({
+    requestId: ended ? null : queuedId,
+    read: readRequestView,
+    onDone: (view) => {
+      setFinished({ id: view.id, view });
       router.refresh();
-    }
-  }, [request, router]);
+    },
+    onFailed: (view) => {
+      if (queuedId !== null) setFinished({ id: queuedId, view });
+    },
+  });
+  const open = queuedId !== null && ended === null;
+  const failed = ended !== null && ended.view?.status !== "done";
+  const result = ended?.view?.result;
 
   const click = () =>
     startTransition(async () => {
       setState(await scoreJobNowAction({ jobId }));
-      refresh();
     });
 
-  const errorCode = failed ? ERROR_CODES.find((code) => code === request?.error) : undefined;
-  const runnerDown = open && status !== null && !status.heartbeat.online;
+  const errorCode = failed ? ERROR_CODES.find((code) => code === result?.error) : undefined;
   const blocked = profileMissing.length > 0;
   const profileLink = (
     <Link href="/me" className={INK_LINK} data-testid="score-now-profile-link">
@@ -78,14 +91,14 @@ export function ScoreNowButton({ jobId, profileMissing = [], timeZone }: { jobId
           {t(`errors.${state.error}`)}
         </p>
       ) : null}
-      {runnerDown ? (
-        <p role="status" className="text-warning-text text-xs">
-          {t("runnerDown")}
+      {open ? <QueueHint queue={wait.queue} stage={wait.stage} timeZone={timeZone} className="text-muted-foreground text-xs" /> : null}
+      {result?.stopped === "time_budget" ? (
+        <p role="status" className="text-muted-foreground text-xs" data-testid="score-now-time-budget">
+          {tRequests("timeBudget", { remaining: result.remaining ?? 0 })}
         </p>
-      ) : null}
-      {failed ? (
-        <p role="alert" className="text-destructive text-xs">
-          {errorCode ? t(`failure.${errorCode}`, { time: request?.resumeAt ? formatClock(format, request.resumeAt, timeZone) : "none" }) : t("failure.unknown")}
+      ) : failed ? (
+        <p role="alert" className="text-destructive text-xs" data-testid="score-now-failed">
+          {errorCode ? t(`failure.${errorCode}`, { time: result?.resumeAt ? formatClock(format, result.resumeAt, timeZone) : "none" }) : t("failure.unknown")}
           {errorCode === "score_profile_incomplete" ? <> {profileLink}</> : null}
         </p>
       ) : null}

@@ -147,12 +147,15 @@ const stopWatching = watchConfig(
   { pollMs: 300, debounceMs: 50 },
 );
 
-// What the settings, sources and interests pages offer (the AI test belongs to the ai-worker: answered here too). The other AI requests (scoring, translation, ...) belong to the host ai-worker, which e2e does not run.
+// What the settings, sources and interests pages offer, plus the ai-worker's AI test, breakdown and salary lookup (answered
+// here with stand-ins). The other AI requests (scoring, translation, ...) belong to the host ai-worker, which e2e does not run.
 const poller = runControlPoller({ db, signal: abort.signal, logger: createLogger({ sink: () => {} }), kinds: () => ["run_cycle", "rescore_stale", "run_suggest", "test_channel", "test_telegram", "test_ai", "breakdown_job", "salary_lookup"], pollSeconds: () => POLL_SECONDS });
 
 log("ready");
 while (!abort.signal.aborted) {
   await writeHeartbeat(db, "runner").catch(() => {});
+  // it answers requests of the ai-worker too, so it beats for it: the waiting buttons judge "offline" by that heartbeat
+  await writeHeartbeat(db, "ai-worker").catch(() => {});
   await sleep(HEARTBEAT_MS, undefined, { signal: abort.signal }).catch(() => {});
 }
 stopWatching();

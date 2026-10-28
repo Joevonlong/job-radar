@@ -564,8 +564,8 @@ describe.each(managers)("install-ai-worker.sh switch (%s)", (manager) => {
       const stubs = path.join(fx.tmp, "deploy-stubs");
       fs.mkdirSync(stubs, { recursive: true });
       const log = path.join(fx.tmp, "deploy-stubs.log");
-      for (const tool of ["docker", "pnpm"]) fs.writeFileSync(path.join(stubs, tool), `#!/usr/bin/env bash\necho "${tool} $*" >> "${log}"\nexit 0\n`, { mode: 0o755 });
-      const env = { ...fx.tmpEnv(), PATH: `${stubs}:${fx.env().PATH ?? ""}` };
+      for (const tool of ["docker", "pnpm"]) fs.writeFileSync(path.join(stubs, tool), `#!/usr/bin/env bash\necho "${tool} $*" >> "${log}"\nif [[ "$*" == *" config --format json" ]]; then printf '%s\\n' '{"services":{"db":{},"web":{},"runner":{}}}'; fi\nexit 0\n`, { mode: 0o755 });
+      const env = { ...fx.tmpEnv(), NODE_PATH: path.join(repoRoot, "node_modules"), PATH: `${stubs}:${fx.env().PATH ?? ""}` };
       const child = spawn("bash", [path.join(fx.main, "scripts/ops/deploy.sh"), "--skip-pull", "--no-backup", "--no-prune", "--no-drain", "--settle", "0"], {
         cwd: fx.main,
         env: fx.env(env),

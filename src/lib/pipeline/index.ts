@@ -9,7 +9,7 @@ import type { Db } from "@/lib/db/client";
 import { getOrCreateCompany } from "@/lib/db/repos/companies";
 import { bestOtherPriority, getJobSourceByRawPosting, upsertJobSource } from "@/lib/db/repos/job-sources";
 import { getJob, insertJob, statusWhenSeenAgain, updateJob, type Job } from "@/lib/db/repos/jobs";
-import { listPendingRawPostings, markRawParseFailed, markRawParsed, type RawPosting } from "@/lib/db/repos/raw-postings";
+import { listPendingRawPostings, lockPendingRawPosting, markRawParseFailed, markRawParsed, type RawPosting } from "@/lib/db/repos/raw-postings";
 import type { CycleStepContext, StepResult } from "@/lib/cycle/steps";
 import { registerCycleStep } from "@/lib/cycle/steps";
 import { refreshSalaryBenchmark, type BenchmarkRefreshResult } from "@/lib/salary/benchmark";
@@ -81,6 +81,7 @@ function describeDraftIssues(error: { issues: ReadonlyArray<{ path: ReadonlyArra
 }
 
 type Outcome =
+  | { kind: "skipped" }
   | { kind: "created" }
   | { kind: "merged"; by: MatchKind }
   | { kind: "updated" }
@@ -116,6 +117,7 @@ async function persist(db: Db, raw: RawPosting, normalized: NormalizedJob, famil
   const { config } = options;
   const priority = config.apply_priority[family as keyof PipelineConfig["apply_priority"]];
   return db.transaction(async (tx): Promise<Outcome> => {
+    if (!(await lockPendingRawPosting(tx, raw))) return { kind: "skipped" };
     const company = await getOrCreateCompany(tx, resolveCompanyName(normalized.companyName, config));
     const existingSource = await getJobSourceByRawPosting(tx, raw.id);
 
@@ -237,6 +239,7 @@ export async function runPipeline(db: Db, options: PipelineOptions): Promise<Pip
 
       try {
         const outcome = await persist(db, raw, prepared.normalized, prepared.family, options);
+        if (outcome.kind === "skipped") continue;
         result.parsed += 1;
         if (outcome.kind === "created") result.created += 1;
         else if (outcome.kind === "merged") result.merged[outcome.by] += 1;
@@ -308,7 +311,7 @@ export async function splitMergedJobsOf(db: Db, options: PipelineOptions): Promi
       const prepared = parseAndNormalize(raw, options);
       if (!prepared.ok) return undefined;
       const { companyName, title, locations } = prepared.normalized;
-      return { companyName, title, cities: locations.flatMap((location) => (location.city ? [location.city] : [])) };
+      return { companyName, title, locations, cities: locations.flatMap((location) => (location.city ? [location.city] : [])) };
     },
   });
 }

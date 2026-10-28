@@ -2,12 +2,14 @@
 
 import { Languages, Loader2, RefreshCw } from "lucide-react";
 import { useFormatter, useTranslations } from "next-intl";
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 
-import { translateJobAction as rawTranslateJobAction, translateStatusAction as rawTranslateStatusAction, type PartialPayload, type TranslateErrorKey } from "@/app/jobs/[id]/actions";
+import { translateJobAction as rawTranslateJobAction, translateStatusAction as rawTranslateStatusAction, type PartialPayload, type TranslateErrorKey, type TranslateStatusResult, type TranslationPayload } from "@/app/jobs/[id]/actions";
+import { QueueHint } from "@/components/control/queue-hint";
+import { useControlRequest, type ControlRequestRead } from "@/components/control/use-control-request";
 import { Button } from "@/components/ui/button";
+import { controlQueueViewSchema, type ControlQueueView } from "@/lib/control/request-view-schema";
 import { formatClock } from "@/lib/format/clock";
-import { STATUS_POLL_MS, TRANSLATE_WAIT_MAX_MS } from "@/lib/settings/constants";
 import { parseTranslation, type MarkerCategories, type TranslationSegment } from "@/lib/translation/render";
 import { toastTone } from "@/lib/toast";
 import { cn } from "@/lib/utils";
@@ -54,10 +56,26 @@ export interface PartialView extends PartialPayload {
   errorDetail?: string | null;
 }
 
-/** A translation left for the ai-worker: the tab asks for its state until it is done. */
+/** A translation left for the ai-worker: the tab asks for its state until it is done. `queue`: where it stood when the page was rendered. */
 interface WaitingRequest {
   requestId: number;
   stage: "pending" | "running";
+  queue?: ControlQueueView | null;
+}
+
+type StatusFailure = Extract<TranslateStatusResult, { ok: false }>;
+type TranslateRead = ControlRequestRead<{ partial: PartialPayload | null }, TranslationPayload, StatusFailure>;
+
+/** The status action's answer in the shape `useControlRequest` reads. */
+async function readTranslation(jobId: number, requestId: number): Promise<TranslateRead> {
+  const result = await translateStatusAction({ jobId, requestId });
+  if (result === null) return null;
+  if (!result.ok) return result.error === "not_found" ? { state: "missing" } : { state: "failed", failed: result };
+  if (result.state === "waiting") {
+    const queue = controlQueueViewSchema.nullable().safeParse(result.queue);
+    return queue.success ? { state: "waiting", stage: result.stage, queue: queue.data, waiting: { partial: result.partial } } : null;
+  }
+  return { state: "done", done: result.translation };
 }
 
 /**
@@ -68,7 +86,7 @@ export function TranslationPanel({ jobId, hasDescription, initial, initialPartia
   const t = useTranslations("translation");
   const format = useFormatter();
   const [translation, setTranslation] = useState<TranslationView | null>(initial);
-  const [error, setError] = useState<{ key: TranslateErrorKey | "waitTimeout"; detail: string | null; resumeAt?: string | null } | null>(
+  const [error, setError] = useState<{ key: TranslateErrorKey; detail: string | null; resumeAt?: string | null } | null>(
     initialPartial?.errorCode ? { key: initialPartial.errorCode as TranslateErrorKey, detail: initialPartial.errorDetail ?? null } : null,
   );
   // the time Job Radar's AI usage cap is expected to let the AI work again (a `quota_guard` failure); "none" = not known
@@ -85,60 +103,36 @@ export function TranslationPanel({ jobId, hasDescription, initial, initialPartia
     setTranslation(initial);
   }
 
-  const shownPartial = translation === null ? partial : null;
-  const blocks = useMemo(() => (translation ? parseTranslation(translation.content, categories) : []), [translation, categories]);
-  const partialBlocks = useMemo(() => (shownPartial && shownPartial.content !== "" ? parseTranslation(shownPartial.content, categories) : []), [shownPartial, categories]);
-  const highlighted = blocks.some((block) => (block.type === "paragraph" ? block.segments.some((s) => s.tier) : block.type === "list" ? block.items.some((item) => item.some((s) => s.tier)) : false));
-
-  const fail = (key: TranslateErrorKey | "waitTimeout", detail: string | null = null, resumeAt: string | null = null): void => {
+  const fail = (key: TranslateErrorKey, detail: string | null = null, resumeAt: string | null = null): void => {
     setError({ key, detail, resumeAt });
     toastTone("error", t(`error.${key}`, { language: target.name, time: resumeTime(resumeAt) }));
   };
 
-  // Poll the queued request until the ai-worker has finished it (or the wait limit is up).
-  useEffect(() => {
-    if (requestId === null) return;
-    let stopped = false;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const startedAt = Date.now();
-    const poll = async (): Promise<void> => {
-      let result: Awaited<ReturnType<typeof translateStatusAction>> | null = null;
-      try {
-        result = await translateStatusAction({ jobId, requestId });
-      } catch {
-        result = null; // a dropped connection: try again until the limit
-      }
-      if (stopped) return;
-      if (result?.ok && result.state === "waiting") {
-        setWaiting((current) => (current?.requestId === requestId && current.stage !== result.stage ? { requestId, stage: result.stage } : current));
-        if (result.partial) setPartial(result.partial);
-      } else if (result?.ok) {
-        setTranslation(result.translation);
-        setPartial(null);
-        setWaiting(null);
-        toastTone("success", t("done"));
-        return;
-      } else if (result) {
-        setWaiting(null);
-        if (result.partial) setPartial(result.partial);
-        fail(result.error, result.detail ?? null, result.resumeAt ?? null);
-        return;
-      }
-      if (Date.now() - startedAt >= TRANSLATE_WAIT_MAX_MS) {
-        setWaiting(null);
-        fail("waitTimeout");
-        return;
-      }
-      timer = setTimeout(() => void poll(), STATUS_POLL_MS);
-    };
-    timer = setTimeout(() => void poll(), STATUS_POLL_MS);
-    return () => {
-      stopped = true;
-      if (timer !== undefined) clearTimeout(timer);
-    };
-    // `fail` and `t` only read the current messages
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [requestId, jobId]);
+  // Follow the queued request until the ai-worker has finished it: no wait limit, the queue hint says when the worker is offline.
+  const wait = useControlRequest({
+    requestId,
+    initialStage: waiting?.stage,
+    initialQueue: waiting?.queue ?? null,
+    read: (id) => readTranslation(jobId, id),
+    onDone: (done) => {
+      setTranslation(done);
+      setPartial(null);
+      setWaiting(null);
+      toastTone("success", t("done"));
+    },
+    onFailed: (failed, last) => {
+      setWaiting(null);
+      const kept = failed?.partial ?? last?.partial ?? null;
+      if (kept) setPartial(kept);
+      fail(failed?.error ?? "not_found", failed?.detail ?? null, failed?.resumeAt ?? null);
+    },
+  });
+  const stage = waiting ? wait.stage : null;
+
+  const shownPartial = translation === null ? (wait.waiting?.partial ?? partial) : null;
+  const blocks = useMemo(() => (translation ? parseTranslation(translation.content, categories) : []), [translation, categories]);
+  const partialBlocks = useMemo(() => (shownPartial && shownPartial.content !== "" ? parseTranslation(shownPartial.content, categories) : []), [shownPartial, categories]);
+  const highlighted = blocks.some((block) => (block.type === "paragraph" ? block.segments.some((s) => s.tier) : block.type === "list" ? block.items.some((item) => item.some((s) => s.tier)) : false));
 
   const busy = pending || waiting !== null;
 
@@ -218,15 +212,16 @@ export function TranslationPanel({ jobId, hasDescription, initial, initialPartia
       )}
 
       {busy ? (
-        <p role="status" className="text-muted-foreground flex items-center gap-2 text-sm" data-testid="translation-loading" data-stage={waiting?.stage ?? "requesting"}>
+        <p role="status" className="text-muted-foreground flex items-center gap-2 text-sm" data-testid="translation-loading" data-stage={stage ?? "requesting"}>
           <Loader2 className="size-4 animate-spin" aria-hidden />{" "}
-          {shownPartial && shownPartial.total > 0 && waiting?.stage !== "pending"
+          {shownPartial && shownPartial.total > 0 && stage !== "pending"
             ? t("progress", { done: shownPartial.done, total: shownPartial.total })
-            : waiting?.stage === "pending"
+            : stage === "pending"
               ? t("queued")
               : t("loading")}
         </p>
       ) : null}
+      {busy ? <QueueHint queue={wait.queue} stage={stage} timeZone={timeZone} /> : null}
       {error && !busy ? (
         <div role="alert" className="text-destructive text-sm [overflow-wrap:anywhere]" data-testid="translation-error">
           <p>{t(`error.${error.key}`, { language: target.name, time: resumeTime(error.resumeAt) })}</p>

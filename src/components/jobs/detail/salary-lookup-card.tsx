@@ -4,22 +4,23 @@ import { ExternalLink, Loader2, RefreshCw, Search } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useFormatter, useTranslations } from "next-intl";
-import { useEffect, useState, useTransition, type ReactNode } from "react";
+import { useState, useTransition, type ReactNode } from "react";
 
-import { lookupSalaryAction as rawLookupSalaryAction, salaryLookupStatusAction as rawSalaryLookupStatusAction, type SalaryActionErrorKey } from "@/app/jobs/[id]/salary-actions";
+import { lookupSalaryAction as rawLookupSalaryAction, salaryLookupStatusAction as rawSalaryLookupStatusAction, type SalaryActionErrorKey, type SalaryLookupStatusResult } from "@/app/jobs/[id]/salary-actions";
+import { QueueHint } from "@/components/control/queue-hint";
+import { useControlRequest, type ControlRequestRead } from "@/components/control/use-control-request";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { INK_LINK } from "@/components/ui/ink-link";
 import { useAppLocale } from "@/components/viz/intl";
 import type { AiProviderId } from "@/lib/ai/types";
+import { controlQueueViewSchema, type ControlQueueView } from "@/lib/control/request-view-schema";
 import type { InitialSalaryRequest } from "@/lib/control/salary-request";
 import { formatClock } from "@/lib/format/clock";
 import { formatSalary } from "@/lib/format/numbers";
-import { SALARY_LOOKUP_WAIT_MAX_MS } from "@/lib/salary/constants";
 import type { SalaryBand, SalarySource } from "@/lib/salary/lookup-types";
 import { percentileIn } from "@/lib/salary/percentile";
 import type { LookupAvailability, SalaryLookupView } from "@/lib/salary/view";
-import { STATUS_POLL_MS } from "@/lib/settings/constants";
 import { toastTone } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 
@@ -49,7 +50,20 @@ export interface SalaryLookupCardProps {
   timeZone: string;
 }
 
-type ErrorKey = SalaryActionErrorKey | "waitTimeout";
+type ErrorKey = SalaryActionErrorKey;
+type StatusFailure = Extract<SalaryLookupStatusResult, { ok: false }>;
+
+/** The status action's answer in the shape `useControlRequest` reads. */
+async function readLookup(jobId: number, requestId: number): Promise<ControlRequestRead<null, null, StatusFailure>> {
+  const result = await salaryLookupStatusAction({ jobId, requestId });
+  if (result === null) return null;
+  if (!result.ok) return result.error === "not_found" ? { state: "missing" } : { state: "failed", failed: result };
+  if (result.state === "waiting") {
+    const queue = controlQueueViewSchema.nullable().safeParse(result.queue);
+    return queue.success ? { state: "waiting", stage: result.stage, queue: queue.data, waiting: null } : null;
+  }
+  return { state: "done", done: null };
+}
 type CardState = "disabled" | "no_web_provider" | "config_error" | "not_ready" | "ready" | "waiting" | "failed" | "done";
 
 const KNOWN_SENIORITIES = ["entry", "mid", "senior", "lead"] as const;
@@ -97,8 +111,8 @@ export function SalaryLookupCard(props: SalaryLookupCardProps) {
     initialRequest?.state === "failed" ? { key: initialRequest.error, detail: initialRequest.detail, resumeAt: initialRequest.resumeAt } : null,
   );
   const [pending, startTransition] = useTransition();
-  const [waiting, setWaiting] = useState<{ requestId: number; stage: "pending" | "running" } | null>(
-    initialRequest?.state === "waiting" ? { requestId: initialRequest.requestId, stage: initialRequest.stage } : null,
+  const [waiting, setWaiting] = useState<{ requestId: number; stage: "pending" | "running"; queue?: ControlQueueView | null } | null>(
+    initialRequest?.state === "waiting" ? { requestId: initialRequest.requestId, stage: initialRequest.stage, queue: initialRequest.queue } : null,
   );
   const requestId = waiting?.requestId ?? null;
 
@@ -133,46 +147,23 @@ export function SalaryLookupCard(props: SalaryLookupCardProps) {
     toastTone("error", errorText(key, resumeAt));
   };
 
-  useEffect(() => {
-    if (requestId === null) return;
-    let stopped = false;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const startedAt = Date.now();
-    const poll = async (): Promise<void> => {
-      let result: Awaited<ReturnType<typeof salaryLookupStatusAction>> | null = null;
-      try {
-        result = await salaryLookupStatusAction({ jobId, requestId });
-      } catch {
-        result = null; // a dropped connection: try again until the limit
-      }
-      if (stopped) return;
-      if (result?.ok && result.state === "waiting") {
-        setWaiting((current) => (current?.requestId === requestId && current.stage !== result.stage ? { requestId, stage: result.stage } : current));
-      } else if (result?.ok) {
-        setWaiting(null);
-        toastTone("success", t("done"));
-        router.refresh();
-        return;
-      } else if (result) {
-        setWaiting(null);
-        fail(result.error, result.detail ?? null, result.resumeAt ?? null);
-        return;
-      }
-      if (Date.now() - startedAt >= SALARY_LOOKUP_WAIT_MAX_MS) {
-        setWaiting(null);
-        fail("waitTimeout");
-        return;
-      }
-      timer = setTimeout(() => void poll(), STATUS_POLL_MS);
-    };
-    timer = setTimeout(() => void poll(), STATUS_POLL_MS);
-    return () => {
-      stopped = true;
-      if (timer !== undefined) clearTimeout(timer);
-    };
-    // `fail`, `t` and `router` only read the current messages / navigation
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [requestId, jobId]);
+  // Follow the queued request until the ai-worker has finished it: no wait limit, the queue hint says when the worker is offline.
+  const wait = useControlRequest({
+    requestId,
+    initialStage: waiting?.stage,
+    initialQueue: waiting?.queue ?? null,
+    read: (id) => readLookup(jobId, id),
+    onDone: () => {
+      setWaiting(null);
+      toastTone("success", t("done"));
+      router.refresh();
+    },
+    onFailed: (failed) => {
+      setWaiting(null);
+      fail(failed?.error ?? "not_found", failed?.detail ?? null, failed?.resumeAt ?? null);
+    },
+  });
+  const stage = waiting ? wait.stage : null;
 
   const busy = pending || waiting !== null;
   const run = (force: boolean): void => {
@@ -201,7 +192,7 @@ export function SalaryLookupCard(props: SalaryLookupCardProps) {
   const button = (label: string, force: boolean, testId: string, primary: boolean) => (
     <Button type="button" variant={primary ? "primary" : "outline"} size={primary ? "md" : "sm"} onClick={() => run(force)} disabled={busy || blocked} aria-busy={busy} aria-describedby={blocked ? "salary-lookup-quota" : undefined} data-testid={testId} data-blocked={blocked ? "quota" : undefined}>
       {busy ? <Loader2 className="animate-spin" aria-hidden /> : force ? <RefreshCw aria-hidden /> : <Search aria-hidden />}
-      {busy ? (waiting?.stage === "running" ? t("running") : t("requesting")) : label}
+      {busy ? (stage === "running" ? t("running") : t("requesting")) : label}
     </Button>
   );
 
@@ -210,14 +201,6 @@ export function SalaryLookupCard(props: SalaryLookupCardProps) {
       <div role="alert" className="text-bad text-body-sm [overflow-wrap:anywhere]" data-testid="salary-lookup-error" data-error={error.key}>
         <p className="font-semibold">
           {errorText(error.key, error.resumeAt ?? null)}
-          {error.key === "waitTimeout" ? (
-            <>
-              {" "}
-              <Link href="/sources" className={INK_LINK}>
-                {t("sourcesLink")}
-              </Link>
-            </>
-          ) : null}
         </p>
         {error.detail ? <p className="text-ink-3 text-data mt-0.5 font-mono">{error.detail}</p> : null}
       </div>
@@ -284,10 +267,11 @@ export function SalaryLookupCard(props: SalaryLookupCardProps) {
   return (
     <div className="flex flex-col gap-3.5" data-testid="salary-lookup-card" data-state={state} data-job-id={jobId}>
       {busy && !latest ? (
-        <p role="status" className="text-ink-2 text-body-sm flex items-center gap-2" data-testid="salary-lookup-loading" data-stage={waiting?.stage ?? "requesting"}>
-          <Loader2 className="size-4 animate-spin" aria-hidden /> {waiting?.stage === "running" ? t("running") : t("requesting")} · {t("waitingHint")}
+        <p role="status" className="text-ink-2 text-body-sm flex items-center gap-2" data-testid="salary-lookup-loading" data-stage={stage ?? "requesting"}>
+          <Loader2 className="size-4 animate-spin" aria-hidden /> {stage === "running" ? t("running") : t("requesting")} · {t("waitingHint")}
         </p>
       ) : null}
+      {busy && !latest ? <QueueHint queue={wait.queue} stage={stage} timeZone={props.timeZone} /> : null}
       {intro}
       {latest ? (
         <LookupResult
@@ -304,9 +288,12 @@ export function SalaryLookupCard(props: SalaryLookupCardProps) {
           busy={busy}
           waitingLine={
             busy ? (
-              <p role="status" className="text-ink-2 text-body-sm flex items-center gap-2" data-testid="salary-lookup-loading" data-stage={waiting?.stage ?? "requesting"}>
-                <Loader2 className="size-4 animate-spin" aria-hidden /> {waiting?.stage === "running" ? t("running") : t("requesting")} · {t("waitingHint")}
-              </p>
+              <>
+                <p role="status" className="text-ink-2 text-body-sm flex items-center gap-2" data-testid="salary-lookup-loading" data-stage={stage ?? "requesting"}>
+                  <Loader2 className="size-4 animate-spin" aria-hidden /> {stage === "running" ? t("running") : t("requesting")} · {t("waitingHint")}
+                </p>
+                <QueueHint queue={wait.queue} stage={stage} timeZone={props.timeZone} />
+              </>
             ) : null
           }
           errorBlock={errorBlock}

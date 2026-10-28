@@ -1,0 +1,5 @@
+# The sidecar's direct dependencies, each pinned. Edit this file, then regenerate requirements.txt (every package,
+# indirect ones included, with hashes) as docs/development.md says; the image and CI install only requirements.txt.
+fastapi==0.142.4
+uvicorn==0.54.0
+python-jobspy==1.4.1

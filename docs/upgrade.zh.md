@@ -112,6 +112,18 @@ scripts/ops/deploy.sh --skip-pull
 
 从 `data/config/.backup/` 恢复配置或恢复数据库备份之前，先读 [CHANGELOG.md](../CHANGELOG.md) 里要离开的那个版本的回滚说明。
 
+**回滚到交互 AI 通道之前。** 排队中的自动翻译带 `origin: "auto"`，旧 worker 会以 `invalid_payload` 拒绝这些请求；
+下一轮 late 翻译阶段会重新处理符合条件的岗位。用户请求仍是原来的载荷格式。升级期间从容器执行切回宿主机、
+宿主机 worker 仍是旧代码时，也可能短暂出现同样情况。这项改动没有数据库迁移或新配置键。
+
+要让这些排队中的翻译继续由旧 worker 处理，回滚前先停掉 ai-worker 和 runner，在安装实例的数据库执行以下 SQL，
+再启动旧进程：
+
+```sql
+update control_requests set payload = payload - 'origin'
+where kind = 'translate_job' and status = 'pending' and payload ->> 'origin' = 'auto';
+```
+
 **回滚到 AI 查薪资改为仅供参考（`salary.yaml` 的 `config_version: 2`）之前的版本。** 旧代码不会隐藏含 AI 数字的对比。
 
 - **(a) 首选：切换代码前，先用新代码重算。** 基准关闭时，临时把 `salary.yaml` 的 `benchmark.enabled` 改为 `true`，

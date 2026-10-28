@@ -17,7 +17,15 @@ interface Connection {
  * Lazy singleton pool. Stored on `globalThis` so Next.js dev-mode module reloads
  * do not open a new pool on every edit.
  */
-const globalForDb = globalThis as typeof globalThis & { __jobRadarDb?: Connection };
+const globalForDb = globalThis as typeof globalThis & { __jobRadarDb?: Connection; __jobRadarDbUrls?: WeakMap<Db, string> };
+const connectionUrls = globalForDb.__jobRadarDbUrls ??= new WeakMap<Db, string>();
+
+/** Connection metadata for database helpers that need a dedicated session against the same database as this pool. */
+export function databaseUrlFor(db: Db): string {
+  const url = connectionUrls.get(db);
+  if (!url) throw new Error("a dedicated session requires a database pool created by createConnection");
+  return url;
+}
 
 /** Create an independent connection (used by the singleton, migrations and tests). */
 export function createConnection(url: string, options: { max?: number; connectTimeoutSeconds?: number; readOnly?: boolean } = {}): Connection {
@@ -32,7 +40,9 @@ export function createConnection(url: string, options: { max?: number; connectTi
     // read-only tools: the server itself refuses every write in this session
     ...(options.readOnly ? { connection: { default_transaction_read_only: true } } : {}),
   });
-  return { sql, db: drizzle(sql, { schema }) };
+  const db = drizzle(sql, { schema });
+  connectionUrls.set(db, url);
+  return { sql, db };
 }
 
 /** DB_CONNECT_TIMEOUT_SECONDS for connections created without an explicit timeout (tests, scripts); 5 when unset or invalid. */

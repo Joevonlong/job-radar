@@ -197,7 +197,7 @@ describe("translate_job reports progress and the cause", () => {
     registerControlHandler("translate_job", createTranslateJobHandler({ createRouter: () => router(codex), settings: SETTINGS }));
     const options = { db: db(), signal: new AbortController().signal, logger, kinds: () => aiWorkerRequestKinds("host") };
 
-    const first = await requestTranslateJob(db(), { jobId, force: false });
+    const first = await requestTranslateJob(db(), { jobId, force: false, origin: "user" });
     if (first.state !== "queued") throw new Error("expected a queued request");
     expect(await processNextControlRequest(options)).toMatchObject({ status: "failed", result: { error: "timeout", done: 2, total: 4, detail: "codex-cli: timeout" } });
     const state = await readTranslateRequest(db(), { requestId: first.requestId, jobId });
@@ -206,7 +206,7 @@ describe("translate_job reports progress and the cause", () => {
     // retry: a new request, only the missing pieces are translated
     broken = false;
     codex.pieces.length = 0;
-    const second = await requestTranslateJob(db(), { jobId, force: false });
+    const second = await requestTranslateJob(db(), { jobId, force: false, origin: "user" });
     if (second.state !== "queued") throw new Error("expected a queued request");
     expect(second.requestId).not.toBe(first.requestId);
     expect(await processNextControlRequest(options)).toMatchObject({ status: "done" });
@@ -217,10 +217,10 @@ describe("translate_job reports progress and the cause", () => {
 
   it("while the request runs the page can read how many pieces are done", async () => {
     const jobId = await addJob();
-    const queued = await requestTranslateJob(db(), { jobId, force: false });
+    const queued = await requestTranslateJob(db(), { jobId, force: false, origin: "user" });
     if (queued.state !== "queued") throw new Error("expected a queued request");
     // no piece yet
-    expect(await readTranslateRequest(db(), { requestId: queued.requestId, jobId })).toEqual({ state: "waiting", stage: "pending", partial: null });
+    expect(await readTranslateRequest(db(), { requestId: queued.requestId, jobId })).toMatchObject({ state: "waiting", stage: "pending", partial: null });
     // The provider holds the third piece until the test lets it go, and says when it got there: the first two
     // pieces are saved by then (each is saved before the next one starts), so one read is enough, no polling.
     const gate = { release: () => {}, reached: () => {} };

@@ -27,7 +27,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { registerBuiltinChannels } from "@/lib/channels/builtin";
 import { defaultRegistry } from "@/lib/channels/registry";
 import { loadConfig, watchConfig } from "@/lib/config";
-import { runControlPoller, processNextControlRequest, aiWorkerRequestKinds } from "@/lib/control";
+import { startControlLanes, processNextControlRequest, aiWorkerRequestKinds } from "@/lib/control";
 import { registerAiControlHandlers } from "@/lib/control/ai-handlers";
 import { codexVersionWarning, readCodexVersion } from "@/lib/ai/providers/codex-version";
 import { registerBuiltinAiSubtasks } from "@/lib/cycle/builtin-steps";
@@ -259,7 +259,7 @@ async function main(): Promise<number> {
     }
   })();
 
-  const poller = runControlPoller({
+  const poller = startControlLanes({
     db,
     signal: abort.signal,
     logger,
@@ -268,7 +268,7 @@ async function main(): Promise<number> {
     pollSeconds: () => loadConfig("ai").host_worker.poll_seconds,
     maxPerRound: () => loadConfig("ai").host_worker.max_requests_per_poll,
   });
-  log(`polling for ${kinds().join(", ")} every ${ai.host_worker.poll_seconds}s, heartbeat every ${ai.host_worker.heartbeat_seconds}s`);
+  log(`polling interactive and batch lanes for ${kinds().join(", ")} every ${ai.host_worker.poll_seconds}s, heartbeat every ${ai.host_worker.heartbeat_seconds}s`);
 
   await poller; // returns once SIGTERM / SIGINT aborted and the request in flight has finished (or was queued again)
   await heartbeats;

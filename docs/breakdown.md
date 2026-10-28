@@ -40,7 +40,7 @@ Location: the main column of the detail page, between "Match reasons / gaps" and
 | Config unreadable | `breakdown.yaml` is invalid | Run `pnpm config:check` |
 | No JD text | The source gave no description | Cannot be broken down |
 | Ready to break down | Enabled, has a JD, no result yet | Click "Break down this job" |
-| Queued / Breaking down | The request is in the queue / the ai-worker is processing it | Wait; after 10 minutes with no response it prompts you to check on the sources page whether the ai-worker is online |
+| Queued / Breaking down | The request is in the queue / the ai-worker is processing it | Wait; the card shows how many requests are ahead and what the ai-worker is doing, or since when it runs. If the ai-worker has no fresh heartbeat, the card says it is offline (with a link to the Sources page) and keeps waiting |
 | Failed | See the table below | Look at the reason, click "Retry" |
 | Broken down | There is a result for the current version | Click a tag / "Source" to jump to the JD text |
 | Stale | The JD changed after the breakdown, or it was broken down with an old prompt version | The result is shown as usual with a badge at the top; click "Break down again" |

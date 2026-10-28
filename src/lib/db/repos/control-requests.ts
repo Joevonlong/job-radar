@@ -18,6 +18,8 @@ export const SETTINGS_REQUEST_KINDS = ["run_cycle", "rescore_stale", "score_jobs
  * `tests/ai-worker/units.test.ts` fails while a kind of the database enum is in neither list.
  */
 export const AI_CONTROL_REQUEST_KINDS = ["run_ai", "translate_job", "breakdown_job", "rescore_stale", "run_suggest", "score_jobs", "test_ai", "salary_lookup"] as const satisfies readonly ControlRequestKind[];
+/** User requests served independently of batch AI work. Automatic requests stay in the batch lane. */
+export const INTERACTIVE_CONTROL_REQUEST_KINDS = ["translate_job", "breakdown_job", "salary_lookup", "test_ai"] as const satisfies readonly (typeof AI_CONTROL_REQUEST_KINDS)[number][];
 /** The kinds that call no AI: the container runner's own work (the channel test and the Telegram test message). */
 export const NON_AI_CONTROL_REQUEST_KINDS = ["run_cycle", "test_channel", "test_telegram"] as const satisfies readonly ControlRequestKind[];
 /** The test buttons of /sources and /settings; their result is shown next to the button, not in the request list. */
@@ -69,26 +71,56 @@ export async function listOpenControlRequests(db: Db, kind: ControlRequestKind):
     .orderBy(controlRequests.id);
 }
 
+/** The host worker splits interactive and batch work; the runner and --once keep one queue (`all`). */
+export type ControlLane = "interactive" | "batch" | "all";
+
+/** Pure counterpart of the SQL lane filter. Missing origin means user work, including older queued requests. */
+export function controlLaneOf(kind: ControlRequestKind, payload: unknown): Exclude<ControlLane, "all"> {
+  const auto = typeof payload === "object" && payload !== null && "origin" in payload && payload.origin === "auto";
+  return (INTERACTIVE_CONTROL_REQUEST_KINDS as readonly ControlRequestKind[]).includes(kind) && !auto ? "interactive" : "batch";
+}
+
+/** `and kind in (...)` for `kinds` (nothing: every kind) and `lane`. Shared by the claim and the queue position. */
+function laneFilter(kinds: readonly ControlRequestKind[] | undefined, lane: ControlLane): SQL {
+  const kindFilter = kinds === undefined ? sql`` : sql`and kind in (${kindList(kinds)})`;
+  const interactive = sql`(kind in (${kindList(INTERACTIVE_CONTROL_REQUEST_KINDS)}) and coalesce(payload ->> 'origin', '') <> 'auto')`;
+  switch (lane) {
+    case "interactive":
+      return sql`${kindFilter} and ${interactive}`;
+    case "batch":
+      return sql`${kindFilter} and not ${interactive}`;
+    case "all":
+      return kindFilter;
+  }
+}
+
+/**
+ * The conditions under which a pending row may be claimed now (without `status = 'pending'` itself): its kind and lane,
+ * and for a `run_ai` request a cycle that is no longer `running` (the cycle writes its own summary last). One fragment,
+ * so `claimNextControlRequest` and `describeControlQueue` can never disagree.
+ */
+function claimableFilter(kinds: readonly ControlRequestKind[] | undefined, lane: ControlLane): SQL {
+  return sql`${laneFilter(kinds, lane)}
+        and not (
+          kind = 'run_ai'
+          and exists (select 1 from cycles c where c.id = nullif(payload ->> 'cycleId', '')::int and c.status = 'running')
+        )`;
+}
+
 /**
  * Take the oldest pending request (of one of `kinds`, default every kind): it becomes `running` in the
  * same statement, so two runners (or two polls) can never take the same one (`for update skip locked`).
  * Null when nothing is pending. The runner and the ai-worker pass their own kinds, so neither takes
  * the other's work. A `run_ai` request is only claimable once the cycle it names is no longer `running`.
  */
-export async function claimNextControlRequest(db: Db, kinds?: readonly ControlRequestKind[]): Promise<ControlRequest | null> {
+export async function claimNextControlRequest(db: Db, kinds?: readonly ControlRequestKind[], options: { lane?: ControlLane } = {}): Promise<ControlRequest | null> {
   if (kinds !== undefined && kinds.length === 0) return null;
-  const kindFilter = kinds === undefined ? sql`` : sql`and kind in (${kindList(kinds)})`;
   const rows = await db.execute<Record<string, unknown>>(sql`
     update control_requests
     set status = 'running', started_at = now()
     where id = (
       select id from control_requests
-      where status = 'pending' ${kindFilter}
-        -- a run_ai request waits until its cycle has finished: the cycle writes its own summary last
-        and not (
-          kind = 'run_ai'
-          and exists (select 1 from cycles c where c.id = nullif(payload ->> 'cycleId', '')::int and c.status = 'running')
-        )
+      where status = 'pending' ${claimableFilter(kinds, options.lane ?? "all")}
       order by id
       for update skip locked
       limit 1
@@ -103,6 +135,50 @@ export async function claimNextControlRequest(db: Db, kinds?: readonly ControlRe
     .where(eq(controlRequests.id, Number(id)))
     .limit(1);
   return row ?? null;
+}
+
+/** Where one request stands in the queue of the process that claims it (see `describeControlQueue`). */
+export interface ControlQueuePosition {
+  /** Pending requests of the same queue that will be claimed before this one (claimable now, smaller id). */
+  ahead: number;
+  /** The other request of the same queue that has been running longest, or null when none runs. */
+  running: { kind: ControlRequestKind; since: Date } | null;
+  /** When this request was claimed (null while it is pending). */
+  startedAt: Date | null;
+}
+
+/**
+ * The queue position of request `requestId` among the requests of `kinds` (the claiming process's kinds) in `lane`. `ahead`
+ * uses the claim's own filter (`claimableFilter`) plus `id < requestId`, so it counts what the claim takes first; a request
+ * claimed meanwhile, or a `run_ai` whose cycle ends and that then goes first, makes it a snapshot. Null when there is no such request.
+ */
+export async function describeControlQueue(
+  db: Db,
+  input: { requestId: number; kinds: readonly ControlRequestKind[]; lane?: ControlLane },
+): Promise<ControlQueuePosition | null> {
+  const lane = input.lane ?? "all";
+  const empty = input.kinds.length === 0;
+  const rows = await db.execute<{ started_at: string | Date | null; ahead: number | string | null; running_kind: string | null; running_since: string | Date | null }>(sql`
+    select
+      r.started_at,
+      ${empty ? sql`0` : sql`(select count(*)::int from control_requests where status = 'pending' and id < r.id ${claimableFilter(input.kinds, lane)})`} as ahead,
+      run.kind::text as running_kind,
+      run.started_at as running_since
+    from control_requests r
+    left join lateral (
+      select kind, started_at from control_requests
+      where ${empty ? sql`false` : sql`status = 'running' and id <> r.id ${laneFilter(input.kinds, lane)}`}
+      order by started_at nulls last, id
+      limit 1
+    ) run on true
+    where r.id = ${input.requestId}
+  `);
+  const row = rows[0];
+  if (!row) return null;
+  const date = (value: string | Date | null): Date | null => (value === null ? null : new Date(value));
+  const since = date(row.running_since);
+  const running = row.running_kind !== null && since !== null ? { kind: row.running_kind as ControlRequestKind, since } : null;
+  return { ahead: Number(row.ahead ?? 0), running, startedAt: date(row.started_at) };
 }
 
 export async function finishControlRequest(
@@ -160,6 +236,15 @@ export async function requeueInterruptedControlRequests(
 export async function getControlRequest(db: Db, id: number): Promise<ControlRequest | null> {
   const [row] = await db.select().from(controlRequests).where(eq(controlRequests.id, id)).limit(1);
   return row ?? null;
+}
+
+/** Promote a pending automatic request without changing its id or touching work already claimed. */
+export async function clearControlRequestOrigin(db: Db, id: number): Promise<boolean> {
+  const rows = await db.update(controlRequests)
+    .set({ payload: sql`${controlRequests.payload} - 'origin'` })
+    .where(and(eq(controlRequests.id, id), eq(controlRequests.status, "pending"), sql`${controlRequests.payload} ->> 'origin' = 'auto'`))
+    .returning({ id: controlRequests.id });
+  return rows.length > 0;
 }
 
 /** Newest first; `kinds` limits the list to those kinds. */

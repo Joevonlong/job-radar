@@ -468,6 +468,12 @@ or the start-up catch-up) that finds another cycle running decides by what that 
   longer costs the morning's full collection. It waits at most `partial_cycle_wait.max_minutes` and is recorded as
   skipped if the lock is still held then.
 
+`pnpm reprocess` waits for the same lock before changing stored facts and holds it through the complete reprocess.
+While it runs, collection cycles follow the same skip/wait policy. The lock has a dedicated database connection and is
+checked on `RUNNER_HEARTBEAT_SECONDS`; losing that connection cancels the current work, and the caller waits for it to
+stop before returning. A CLI cycle handles Ctrl-C and SIGTERM by cancelling its steps and finishing its row as failed.
+Each new cycle also recovers unfinished rows left by a crashed CLI or a failed final write, without a runner restart.
+
 | Key | Default | Meaning |
 |---|---|---|
 | `partial_cycle_wait.max_minutes` | 60 | Longest wait for a running cycle of only some channels; 0 = do not wait (skip it as before) |

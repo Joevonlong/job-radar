@@ -41,7 +41,8 @@ describe("collect", () => {
     const raw = await channel.collect(query({ maxResults: 100 }), ctx);
     expect(calls[0]?.body).toMatchObject({ site, location: "Berlin", hours_old: 24 });
     expect(raw).toHaveLength(fixture.jobs.length);
-    expect(raw[0]).toMatchObject({ externalId: fixture.jobs[0]?.id });
+    const expectedId = String(fixture.jobs[0]?.id);
+    expect(raw[0]).toMatchObject({ externalId: site === "linkedin" ? expectedId.replace(/^li-/, "") : expectedId });
     const parsed = raw.flatMap((r) => {
       try {
         return [channel.parse(r.payload)];
@@ -56,6 +57,17 @@ describe("collect", () => {
     const { ctx } = jobspyContext(() => httpResponse(200, loadJobspyFixture("indeed")));
     const raw = await createIndeedChannel({ settings: () => settings }).collect(query({ maxResults: 2 }), ctx);
     expect(raw).toHaveLength(2);
+  });
+
+  it("normalizes guest LinkedIn ids before deduplicating and leaves the stored payload untouched", async () => {
+    const jobs = [
+      { id: "li-4476000001", site: "linkedin", title: "first" },
+      { id: "4476000001", site: "linkedin", title: "duplicate" },
+    ];
+    const { ctx } = jobspyContext(() => httpResponse(200, { site: "linkedin", count: 2, jobs }));
+    const raw = await createLinkedinGuestChannel({ settings: () => settings }).collect(query(), ctx);
+    expect(raw).toHaveLength(1);
+    expect(raw[0]).toMatchObject({ externalId: "4476000001", payload: jobs[0] });
   });
 
   it("propagates the sidecar's rate limit as rate_limited", async () => {

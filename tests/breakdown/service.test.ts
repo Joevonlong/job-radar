@@ -30,6 +30,36 @@ beforeEach(() => {
 });
 
 describe("runBreakdown", () => {
+  it.each([false, true])("merges concurrent work in the same language; the first force=%s and router win", async (force) => {
+    const first = router(good());
+    const later = router(good());
+    const a = runBreakdown(db, first.router, 7, { force, settings, outputLanguage: "zh" });
+    const b = runBreakdown(db, later.router, 7, { force: !force, settings: { ...settings, timeout_seconds: 1 }, outputLanguage: "zh" });
+    const [one, two] = await Promise.all([a, b]);
+    expect(one).toBe(two);
+    expect(first.run).toHaveBeenCalledTimes(1);
+    expect(later.run).not.toHaveBeenCalled();
+    expect(repo.upsertJobBreakdown).toHaveBeenCalledTimes(1);
+  });
+
+  it("resolves the default language before merging and keeps different languages separate", async () => {
+    const first = router(good());
+    const later = router(good());
+    const { aiOutputLanguage } = await import("@/lib/i18n/config");
+    const [a, b] = await Promise.all([
+      runBreakdown(db, first.router, 7, { force: false, settings }),
+      runBreakdown(db, later.router, 7, { force: true, settings, outputLanguage: aiOutputLanguage() }),
+    ]);
+    expect(a).toBe(b);
+    expect(later.run).not.toHaveBeenCalled();
+    first.run.mockClear();
+    await Promise.all([
+      runBreakdown(db, first.router, 7, { force: true, settings, outputLanguage: "en" }),
+      runBreakdown(db, first.router, 7, { force: true, settings, outputLanguage: "zh" }),
+    ]);
+    expect(first.run).toHaveBeenCalledTimes(2);
+  });
+
   it("fails for an unknown job and a job without a JD, without calling the AI", async () => {
     const { router: r, run } = router(good());
     repo.getJobForBreakdown.mockResolvedValueOnce(null);

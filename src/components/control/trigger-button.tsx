@@ -2,21 +2,25 @@
 
 import { FlaskConical, Loader2, Play, Send } from "lucide-react";
 import { useFormatter, useTranslations } from "next-intl";
-import { useCallback, useEffect, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 
 import { runChannelNowAction as rawRunChannelNowAction, testAiAction as rawTestAiAction, testChannelAction as rawTestChannelAction, testTelegramAction as rawTestTelegramAction } from "@/app/control-actions";
 import { Button } from "@/components/ui/button";
-import { controlRequestViewSchema, followsCoveringCycle, isOpenRequest, type ControlRequestView } from "@/lib/control/request-view-schema";
+import { followsCoveringCycle, isOpenRequest, type ControlQueueView, type ControlRequestView } from "@/lib/control/request-view-schema";
 import { IDLE_CONTROL_STATE, type ControlActionState } from "@/lib/control/service-types";
 import { formatClock } from "@/lib/format/clock";
-import { STATUS_POLL_MS, TRIGGER_WAIT_MAX_MS } from "@/lib/settings/constants";
 import { cn } from "@/lib/utils";
 import { withActionFeedback } from "@/lib/actions/client";
+
+import { QueueHint } from "./queue-hint";
+import { readRequestView } from "./read-request-view";
+import { useControlRequest, type ControlRequestStage } from "./use-control-request";
 
 const runChannelNowAction = withActionFeedback(rawRunChannelNowAction)(() => ({ status: "error", error: "databaseUnavailable", nonce: Date.now() }));
 const testAiAction = withActionFeedback(rawTestAiAction)(() => ({ status: "error", error: "databaseUnavailable", nonce: Date.now() }));
 const testChannelAction = withActionFeedback(rawTestChannelAction)(() => ({ status: "error", error: "databaseUnavailable", nonce: Date.now() }));
 const testTelegramAction = withActionFeedback(rawTestTelegramAction)(() => ({ status: "error", error: "databaseUnavailable", nonce: Date.now() }));
+
 
 /** What a trigger button asks for. */
 export type TriggerKind = "runChannel" | "testChannel" | "testAi" | "testTelegram";
@@ -56,47 +60,10 @@ function call(kind: TriggerKind, target: string): Promise<ControlActionState> {
   }
 }
 
-/** Poll one request until it is finished (or the page gave up waiting); a request covered by a running cycle until that cycle is. */
-function useRequestView(requestId: number | null): { view: ControlRequestView | null; gaveUp: boolean } {
-  // keyed by the request: a new request starts from "nothing known yet" without resetting state in the effect
-  const [polled, setPolled] = useState<{ id: number; view: ControlRequestView | null; gaveUp: boolean } | null>(null);
-
-  const load = useCallback(async (id: number): Promise<ControlRequestView | null> => {
-    try {
-      const response = await fetch(`/api/control/requests/${id}`, { cache: "no-store" });
-      if (!response.ok) return null;
-      const parsed = controlRequestViewSchema.safeParse(await response.json());
-      return parsed.success ? parsed.data : null;
-    } catch {
-      return null; // the next poll retries
-    }
-  }, []);
-
-  useEffect(() => {
-    if (requestId === null) return;
-    let stopped = false;
-    const started = Date.now();
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const tick = async (): Promise<void> => {
-      const next = await load(requestId);
-      if (stopped) return;
-      if (next) setPolled({ id: requestId, view: next, gaveUp: false });
-      if (next && !isOpenRequest(next) && !followsCoveringCycle(next)) return;
-      if (Date.now() - started > TRIGGER_WAIT_MAX_MS) {
-        setPolled((current) => ({ id: requestId, view: current?.id === requestId ? current.view : null, gaveUp: true }));
-        return;
-      }
-      timer = setTimeout(() => void tick(), STATUS_POLL_MS);
-    };
-    void tick();
-    return () => {
-      stopped = true;
-      if (timer !== undefined) clearTimeout(timer);
-    };
-  }, [requestId, load]);
-
-  const current = polled !== null && polled.id === requestId ? polled : null;
-  return { view: current?.view ?? null, gaveUp: current?.gaveUp ?? false };
+/** The outcome of one finished request: its view, or null when the request is gone. */
+interface Finished {
+  id: number;
+  view: ControlRequestView | null;
 }
 
 interface TriggerButtonProps {
@@ -124,9 +91,21 @@ export function TriggerButton({ kind, target = "", disabled = false, disabledHin
   const [state, setState] = useState<ControlActionState>(IDLE_CONTROL_STATE);
   const [pending, startTransition] = useTransition();
   const [confirming, setConfirming] = useState(false);
-  const requestId = state.status === "queued" ? state.request : null;
-  const { view, gaveUp } = useRequestView(requestId);
-  const open = requestId !== null && !gaveUp && (view === null || isOpenRequest(view));
+  const queuedId = state.status === "queued" ? state.request : null;
+  // keyed by the request, like the hook: a new request starts from "not finished" without a reset in an effect
+  const [finished, setFinished] = useState<Finished | null>(null);
+  const ended = finished !== null && finished.id === queuedId ? finished : null;
+  const wait = useControlRequest({
+    requestId: ended ? null : queuedId,
+    read: readRequestView,
+    onDone: (view) => setFinished({ id: view.id, view }),
+    onFailed: (view) => {
+      if (queuedId !== null) setFinished({ id: queuedId, view });
+    },
+  });
+  const view = ended ? ended.view : wait.waiting;
+  // A covered request is already done, so the button is free while the hook follows the covering cycle.
+  const open = queuedId !== null && ended === null && (view === null || isOpenRequest(view));
   const Icon = ICON[kind];
 
   const send = () => {
@@ -135,7 +114,7 @@ export function TriggerButton({ kind, target = "", disabled = false, disabledHin
   };
 
   return (
-    <div className={cn("flex min-w-0 flex-col gap-1.5", className)} data-testid={`trigger-${kind}`} data-target={target || undefined} data-state={pending || open ? "busy" : (view?.status ?? "idle")}>
+    <div className={cn("flex min-w-0 flex-col gap-1.5", className)} data-testid={`trigger-${kind}`} data-target={target || undefined} data-state={pending || open ? "busy" : (view?.status ?? (ended ? "failed" : "idle"))}>
       <div className="flex flex-wrap items-center gap-2">
         <Button type="button" size="xs" variant={variant} disabled={disabled || pending || open || confirming} onClick={confirm ? () => setConfirming(true) : send} data-testid={`trigger-${kind}-button`}>
           {pending || open ? <Loader2 aria-hidden className="animate-spin" /> : <Icon aria-hidden />}
@@ -154,12 +133,25 @@ export function TriggerButton({ kind, target = "", disabled = false, disabledHin
         ) : null}
       </div>
       {disabled && disabledHint ? <p className="text-muted-foreground text-xs">{disabledHint}</p> : null}
-      <Outcome kind={kind} state={state} view={view} gaveUp={gaveUp} timeZone={timeZone} />
+      <Outcome kind={kind} state={state} open={open} view={view} finished={ended !== null} stage={wait.stage} queue={wait.queue} timeZone={timeZone} />
     </div>
   );
 }
 
-function Outcome({ kind, state, view, gaveUp, timeZone }: { kind: TriggerKind; state: ControlActionState; view: ControlRequestView | null; gaveUp: boolean; timeZone?: string | undefined }) {
+interface OutcomeProps {
+  kind: TriggerKind;
+  state: ControlActionState;
+  /** The request is queued or running (not finished, not gone). */
+  open: boolean;
+  /** The newest view: while open the last one polled, after the end the final one (null: not read yet, or gone). */
+  view: ControlRequestView | null;
+  finished: boolean;
+  stage: ControlRequestStage | null;
+  queue: ControlQueueView | null;
+  timeZone?: string | undefined;
+}
+
+function Outcome({ kind, state, open, view, finished, stage, queue, timeZone }: OutcomeProps) {
   const t = useTranslations("trigger");
   const tCycle = useTranslations("dashboard.cycle");
   const format = useFormatter();
@@ -171,26 +163,41 @@ function Outcome({ kind, state, view, gaveUp, timeZone }: { kind: TriggerKind; s
     );
   }
   if (state.status !== "queued") return null;
-  const worker = kind === "testAi" ? "aiWorker" : "runner";
-  if (gaveUp && (view === null || isOpenRequest(view))) {
+  if (kind === "runChannel" && view?.cycle && followsCoveringCycle(view)) {
     return (
-      <p role="status" className="text-warning-text text-xs" data-testid="trigger-outcome" data-outcome="waiting">
-        {t(`stillWaiting.${worker}`)}
+      <p role="status" className="text-muted-foreground text-xs" data-testid="trigger-outcome" data-outcome="covered">
+        {t("done.runChannelCovered", { id: view.cycle.id, finished: view.cycle.runsFinished, total: view.cycle.runsTotal, fetched: view.cycle.fetched })}
       </p>
     );
   }
-  if (view === null || view.status === "pending") {
+  if (open) {
+    // the process comes from the queue view (`kinds.ts` with ai.yaml `execution`), never from the button's kind
+    const worker = queue?.worker.process === "runner" ? "runner" : "aiWorker";
+    const hint = <QueueHint queue={queue} stage={stage} timeZone={timeZone} className="text-muted-foreground text-xs" />;
+    if (stage === "running") {
+      const cycle = view?.cycle ?? null;
+      return (
+        <div className="flex flex-col gap-0.5">
+          <p role="status" className="text-muted-foreground text-xs" data-testid="trigger-outcome" data-outcome="running">
+            {cycle ? t("runningCycle", { id: cycle.id, finished: cycle.runsFinished, total: cycle.runsTotal, fetched: cycle.fetched }) : t("running")}
+          </p>
+          {hint}
+        </div>
+      );
+    }
     return (
-      <p role="status" className="text-muted-foreground text-xs" data-testid="trigger-outcome" data-outcome="pending">
-        {state.existing ? t("existing") : t(`pending.${worker}`)}
-      </p>
+      <div className="flex flex-col gap-0.5">
+        <p role="status" className="text-muted-foreground text-xs" data-testid="trigger-outcome" data-outcome="pending" data-process={queue?.worker.process ?? undefined}>
+          {state.existing ? t("existing") : queue ? t(`pending.${worker}`) : t("queued")}
+        </p>
+        {hint}
+      </div>
     );
   }
-  if (view.status === "running") {
-    const cycle = view.cycle;
+  if (!finished || view === null) {
     return (
-      <p role="status" className="text-muted-foreground text-xs" data-testid="trigger-outcome" data-outcome="running">
-        {cycle ? t("runningCycle", { id: cycle.id, finished: cycle.runsFinished, total: cycle.runsTotal, fetched: cycle.fetched }) : t("running")}
+      <p role="alert" className="text-destructive text-xs" data-testid="trigger-outcome" data-outcome="failed" data-error="">
+        {t("failed.unknown")}
       </p>
     );
   }
@@ -235,13 +242,6 @@ function Outcome({ kind, state, view, gaveUp, timeZone }: { kind: TriggerKind; s
         </p>
       );
     case "runChannel":
-      if (view.cycle && followsCoveringCycle(view)) {
-        return (
-          <p role="status" className="text-muted-foreground text-xs" data-testid="trigger-outcome" data-outcome="covered">
-            {t("done.runChannelCovered", { id: view.cycle.id, finished: view.cycle.runsFinished, total: view.cycle.runsTotal, fetched: view.cycle.fetched })}
-          </p>
-        );
-      }
       return (
         <p role="status" className="text-success-text text-xs" data-testid="trigger-outcome" data-outcome="done">
           {view.cycle

@@ -22,6 +22,15 @@ AI 可以走订阅命令行（`claude`、`codex`）、按量计费的 API key，
 
 请求都在表 `control_requests` 里；runner 和 ai-worker 各自只领自己那几种（`src/lib/control/kinds.ts`），所以谁重启都不会把对方正在做的事标成失败。`run_ai` 要等它指向的那一轮结束后才会被领走（那一轮最后才写 cycle 摘要）。worker 做完把真实的 `ai` 和 `notify` 两段写回那一轮的摘要，替换容器里留下的 `delegated` 占位。
 
+宿主机 ai-worker 独立轮询两条通道，每条同时处理一个请求。用户点的翻译、拆解、查薪资和测试 AI 走交互通道，
+批量打分和轮次任务走批量通道。打分后的跟进翻译带 `origin: "auto"`，留在批量通道；没有 origin 就当作用户请求，
+网页不会写 origin 字段。点击翻译时，如果复用的是尚未开始的自动请求，就删除标记，把同一个请求提升到交互通道；
+已在运行的请求不改。排队提示只统计所在通道。容器 runner 和 `ai-worker --once` 仍按请求顺序处理同一条队列。
+
+同一进程里，同岗位、同目标语言的并发翻译，以及同岗位、同输出语言的并发拆解，共享一次 AI 工作。
+router、强制刷新和其他选项以先到者为准。合并进轮次 late 阶段时也会继承它的 deadline：预算耗尽后，
+重试可以接着翻译已经保存的分块。两条通道仍共用 provider 限额，每个翻译分块都可能等待 codex 并发槽位。
+
 **规则**：任何会调用 AI 的请求种类只由 ai-worker 领取。种类清单只有一份：`AI_CONTROL_REQUEST_KINDS`（`src/lib/db/repos/control-requests.ts`），真实 handler 在 `registerAiControlHandlers()`（`src/lib/control/ai-handlers.ts`）一处注册。新增一种（例如 `run_suggest`、`score_jobs`）：数据库枚举加值（迁移）→ 加进该清单 → 注册 handler；单元测试会在枚举里有未归类的种类时失败。
 
 `ai.yaml: execution: container` 时一切照旧：runner 自己在容器里跑 AI 和推送，并领 `translate_job` / `rescore_stale`；这需要你自己把订阅令牌或 API key 放进容器（compose 里默认把这些变量置空，要用就写 `compose.override.yaml`），不推荐。
@@ -67,7 +76,7 @@ translation:
 - **开关和每日上限**：每个 `providers.<名字>` 都有 `enabled`（false = 路由不会试它）和 `daily_request_cap`（每天最多多少次模型调用，失败的也算；0 = 不限）。默认 claude-cli 100 次/天、codex-cli 200 次/天，API provider 不限（仍受 `monthly_api_budget_usd` 约束）。API 层按 `api_order` 依次尝试，默认 `[anthropic, deepseek, mimo]`。"一天"按 `schedule.yaml` 的时区。
 - **冷却**：provider 报额度 / 会话上限 / 限流（"hit your session limit"、"usage limit"、429 等）时，所有进程（runner、ai-worker）都会跳过它，直到错误信息里写的恢复时间；解析不出来就冷却 `cooldown.default_minutes`（默认 60 分钟），最长 `cooldown.max_minutes`。状态存在 `runtime_state`（键 `ai_provider:<名字>`），不需要迁移。恢复时间按 ai-worker 所在机器的本地时区理解。
 - **用量上限（订阅 CLI）**：`quota_guard` 是 Job Radar 自己对 claude-cli、codex-cli 调用频率的限制。它**只统计 Job Radar 自己的调用**（`ai_usage`，失败的也算）；订阅和你自己在终端、网页里的使用共用，这部分它看不到，所以它只会比真实上限晚触发，不会提前（真实上限先到了，仍由上面的冷却接住）。每个 CLI（`quota_guard.providers.codex_cli` / `claude_cli`）有两项：`hard_requests` 是滚动窗口 `window_hours`（默认 5）内的调用数，达到后该 CLI 对所有任务暂停（包括你自己点的），等足够多的调用滑出窗口再继续（降到 `resume_ratio` × `hard_requests` 以下，默认 0.8）；`cycle_request_cap` 限制一轮处理的调用数，这一轮剩下的留到下一轮。**你主动发起的请求（立即打分、翻译、拆解、查薪资、测试）不受每轮上限约束**，只在窗口满时受限。被上限跳过时，任务**不会改走付费 API**（`fallthrough_to_api: false`，默认）；上面的错误冷却照旧可以落到 API。填 0 关闭该项；`enabled: false` 关闭整个上限（行为回到没有它之前）。窗口满或 provider 报告限制时 Telegram 发一条告警，恢复可用时再发一条（`notify_recovery`）；状态持续不会重发（`alert_dedupe_hours` 只防状态来回抖动）。每轮上限不发告警，推送摘要最后一行写明有几个新岗位等打分、预计什么时候处理。状态存在 `runtime_state`（键 `ai_quota:<名字>`），不需要迁移。默认值 = 维护者自己用量中见过的最大值 × 1.5（codex-cli 窗口 861 / 每轮 554，claude-cli 399 / 399）。各人的订阅档位不同，请在设置页（AI 标签的“限额”块）调整；`pnpm ai:usage-stats` 只读地打印你自己的最大值和建议上限。
-- **每轮时间预算**：`cycle_budget_minutes`（默认 30）限制一轮里打分、信号占用的时间，超过就留到下一轮；这一轮没有新岗位时用 `idle_cycle_budget_minutes`（默认 10）。0 = 不限。所有 provider 都在冷却 / 关闭 / 到上限时，AI 步骤直接跳过（cycle 摘要里写明原因）。
+- **时间预算**：`cycle_budget_minutes`（默认 30）限制一轮里打分、信号占用的时间，超过就留到下一轮；这一轮没有新岗位时用 `idle_cycle_budget_minutes`（默认 10）。`cycle_budget_minutes` 也限制每次重打过期分数、打分积压或指定岗位的控制请求：开始下一条前检查预算，已经开始的岗位会走完 provider 回退链，因此可能多用这一条的耗时。设置页和“立即打分”会显示预算用尽及剩余岗位数。修改预算后，下一个请求使用新值。0 = 不限。所有 provider 都在冷却 / 关闭 / 到上限时，AI 步骤直接跳过（cycle 摘要里写明原因）。
 - **任务 `breakdown`**：岗位拆解，默认沿用全局顺序（codex 优先，理由同翻译：输出长，订阅 CLI 没有 4096 输出上限）；可用 `tasks.breakdown.order` 单独排，codex 推理强度用 `reasoning_effort_by_task.breakdown`。默认关闭，见 [breakdown.zh.md](breakdown.zh.md)。
 - **任务 `salary_lookup`**：按需查薪资（[salary.zh.md](salary.zh.md)），是**唯一**可以用工具（网页搜索）的 AI 调用。默认顺序 `[claude-cli, anthropic]`；只尝试能搜网页的 provider（DeepSeek、MiMo 跳过）；允许搜网页的任务清单写死在代码里（`src/lib/ai/web-tasks.ts`），任何设置都不能让别的任务上网。可以把 codex-cli 加进 `tasks.salary_lookup.order`，但它的网页搜索不能限定域名（设置页会提示）。
 - **推送先于翻译**：ai-worker 先做打分和信号，然后立刻推送，最后才翻译（翻译标了 `late`，不影响推送内容）。

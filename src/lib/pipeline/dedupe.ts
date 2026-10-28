@@ -171,7 +171,7 @@ export function salaryRank(salary: unknown): number {
   return (salary as { qualityStatus?: unknown }).qualityStatus === "valid" ? 2 : 1;
 }
 
-function unionLocations(first: readonly JobLocation[], second: readonly JobLocation[]): JobLocation[] {
+export function unionLocations(first: readonly JobLocation[], second: readonly JobLocation[]): JobLocation[] {
   const seen = new Set<string>();
   const merged: JobLocation[] = [];
   for (const location of [...first, ...second]) {

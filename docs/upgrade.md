@@ -199,6 +199,19 @@ If the deploy stops before step 10, the worker stays stopped: fix the cause and 
 Before restoring config from `data/config/.backup/` or restoring a database backup, read the rollback notes in
 [CHANGELOG.md](../CHANGELOG.md) for the version you are leaving.
 
+**Rolling back past interactive AI lanes.** Queued automatic translations carry `origin: "auto"`. An older worker
+rejects those requests with `invalid_payload`; the next cycle's late translation stage picks up eligible jobs again.
+User requests keep their old payload format. The same brief window can occur when switching from container to host
+execution during an upgrade while the host worker still runs older code. No database migration or new config key is involved.
+
+To keep those queued translations usable by the older worker, stop the ai-worker and runner before the rollback,
+then run this SQL against the installation's database before starting the older processes:
+
+```sql
+update control_requests set payload = payload - 'origin'
+where kind = 'translate_job' and status = 'pending' and payload ->> 'origin' = 'auto';
+```
+
 **Rolling back past the release that made AI salary lookups reference-only (`salary.yaml` `config_version: 2`).** Older code does not hide comparisons containing AI figures.
 
 - **(a) Preferred: recompute with the new code before switching.** If the benchmark is off, temporarily set
