@@ -140,3 +140,70 @@ describe("Dockerfile", () => {
     expect(dockerfile).toMatch(/AS runner\b/);
   });
 });
+
+describe("jobspy/Dockerfile and the sidecar's lock files", () => {
+  const jobspy = (file: string): string => readFileSync(path.join(root, "jobspy", file), "utf8");
+  const sidecar = jobspy("Dockerfile");
+  const normalize = (name: string): string => name.toLowerCase().replace(/[-_.]+/g, "-");
+  /** `name==version` lines of a requirements file (comments, options and hash lines left out). */
+  const pins = (text: string): Map<string, string> =>
+    new Map([...text.matchAll(/^([A-Za-z0-9][A-Za-z0-9._-]*)==([^\s;\\]+)/gm)].map((m) => [normalize(m[1]!), m[2]!]));
+  /** One entry per pinned package: the `name==version` line and the `--hash` lines that continue it. */
+  const entries = (text: string): string[] => text.split(/\n(?=[A-Za-z0-9])/).filter((block) => /^[A-Za-z0-9]/.test(block));
+
+  it("starts from the Python base image pinned by digest", () => {
+    const from = sidecar.match(/^FROM .*$/gm) ?? [];
+    expect(from).toHaveLength(1);
+    expect(from[0]).toMatch(/^FROM python:3\.12-slim@sha256:[0-9a-f]{64}$/);
+  });
+
+  it("installs only the lock file, with --require-hashes", () => {
+    expect(sidecar).toMatch(/^COPY requirements\.txt \.$/m);
+    const installs = sidecar.match(/pip install.*$/gm) ?? [];
+    expect(installs).toEqual(["pip install --require-hashes -r requirements.txt"]);
+    expect(sidecar.search(/^RUN pip install/m)).toBeLessThan(sidecar.search(/^USER /m));
+  });
+
+  it("CI installs the dev lock file with --require-hashes too", () => {
+    const ci = readFileSync(path.join(root, ".github/workflows/ci.yml"), "utf8");
+    const installs = ci.match(/pip install .*$/gm) ?? [];
+    expect(installs).toEqual(["pip install --require-hashes -r requirements-dev.txt"]);
+  });
+
+  describe.each([
+    ["requirements.in", "requirements.txt"],
+    ["requirements-dev.in", "requirements-dev.txt"],
+  ])("%s -> %s", (input, lock) => {
+    const locked = jobspy(lock);
+
+    it("the lock pins every package with at least one sha256 hash", () => {
+      const all = entries(locked);
+      expect(all.length).toBeGreaterThan(pins(jobspy(input)).size);
+      for (const entry of all) {
+        expect(entry, entry.split("\n")[0]).toMatch(/^[A-Za-z0-9][A-Za-z0-9._-]*==\S+/);
+        expect(entry, entry.split("\n")[0]).toMatch(/--hash=sha256:[0-9a-f]{64}/);
+      }
+      expect(locked).not.toMatch(/^\s*-e /m);
+    });
+
+    it("was regenerated after the last change: every pin of the input is the version in the lock", () => {
+      const direct = pins(jobspy(input));
+      expect(direct.size).toBeGreaterThan(0);
+      const resolved = pins(locked);
+      for (const [name, version] of direct) expect(resolved.get(name), name).toBe(version);
+    });
+  });
+
+  it("the dev lock keeps every runtime package at the version the image installs", () => {
+    const runtime = pins(jobspy("requirements.txt"));
+    const dev = pins(jobspy("requirements-dev.txt"));
+    for (const [name, version] of runtime) expect(dev.get(name), name).toBe(version);
+  });
+
+  it("the build context holds the lock file, not the inputs or the dev lock", () => {
+    const ignore = jobspy(".dockerignore");
+    expect(ignore).toMatch(/^\*\.in$/m);
+    expect(ignore).toMatch(/^requirements-dev\.txt$/m);
+    expect(ignore).not.toMatch(/^requirements\.txt$/m);
+  });
+});

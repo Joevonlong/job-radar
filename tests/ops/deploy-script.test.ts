@@ -122,6 +122,7 @@ beforeAll(() => {
   write(path.join(work, "scripts/ops/install-ai-worker.sh"), `${STEP_STUB("install-ai-worker.sh", "INSTALL")}# capability: ai-worker-release-dir\n`, 0o755);
   write(path.join(work, "scripts/ops/prepare-release.sh"), STEP_STUB("prepare-release.sh", "PREPARE"), 0o755);
   write(path.join(work, "package.json"), '{"name":"job-radar"}\n');
+  write(path.join(work, "compose.yaml"), "services:\n  db: {}\n  web:\n    depends_on:\n      db:\n        condition: service_healthy\n  runner:\n    depends_on:\n      db:\n        condition: service_healthy\n");
   write(path.join(work, "config/schedule.yaml"), "timezone: Europe/Berlin\ndoctor:\n  compose_project: radar-test\n  web_url: http://137.0.0.1:3000\n");
   write(path.join(work, "src/app.ts"), "export {};\n");
   write(path.join(work, "bin/tool.sh"), "echo tool\n", 0o644);
@@ -181,12 +182,34 @@ if [[ "$*" == *" config -q" ]]; then
   if [[ -n "\${COMPOSE_CONFIG_HOOK:-}" ]]; then bash -c "$COMPOSE_CONFIG_HOOK"; fi
   exit \${COMPOSE_CONFIG_EXIT:-0}
 fi
+if [[ "$*" == *" config --format json" ]]; then
+  if [[ -n "\${COMPOSE_MODEL_OUTPUT:-}" ]]; then printf '%s\\n' "$COMPOSE_MODEL_OUTPUT"; exit \${COMPOSE_MODEL_EXIT:-0}; fi
+  # Resolve the target and override dependency maps like Compose does.
+  NODE_PATH="${repoRoot}/node_modules" "${process.execPath}" -e '
+    const fs = require("node:fs");
+    const services = require("yaml").parse(fs.readFileSync(process.env.WORK + "/compose.yaml", "utf8")).services;
+    const file = process.env.WORK + "/compose.override.yaml";
+    if (fs.existsSync(file)) {
+      const override = require("yaml").parse(fs.readFileSync(file, "utf8"));
+      for (const [name, service] of Object.entries(services)) {
+        Object.assign(service.depends_on ??= {}, override.services?.[name]?.depends_on);
+      }
+    }
+    process.stdout.write(JSON.stringify({ services }));
+  ' || exit $?
+  exit \${COMPOSE_MODEL_EXIT:-0}
+fi
 if [[ "$*" == *"ps --status running --services"* ]]; then [[ "\${DB_RUNNING:-0}" == "1" ]] && echo db; exit 0; fi
 if [[ "$1" == compose && "\${*: -1}" == build ]]; then
   echo "\${JOB_RADAR_BUILD_CONTEXT:-<unset>}" >> "$DEPLOY_TEST_LOG.ctx"
   if [[ -n "\${BUILD_HOOK:-}" ]]; then bash -c "$BUILD_HOOK" || exit $?; fi
   if [[ -n "\${DEPLOY_TEST_CTX_COPY:-}" ]]; then rm -rf "$DEPLOY_TEST_CTX_COPY"; cp -Rp "$JOB_RADAR_BUILD_CONTEXT" "$DEPLOY_TEST_CTX_COPY"; fi
   exit \${BUILD_EXIT:-0}
+fi
+# \`up … jobspy\` (the sidecar on its own): UP_JOBSPY_HOOK, UP_JOBSPY_EXIT; every other \`up\`: UP_HOOK, UP_EXIT.
+if [[ "$*" == *" up "* && "\${*: -1}" == jobspy ]]; then
+  if [[ -n "\${UP_JOBSPY_HOOK:-}" ]]; then bash -c "$UP_JOBSPY_HOOK"; fi
+  exit \${UP_JOBSPY_EXIT:-0}
 fi
 if [[ "$*" == *" up "* ]]; then
   echo "\${JOB_RADAR_BUILD_CONTEXT:-<unset>}" >> "$DEPLOY_TEST_LOG.ctx"
@@ -203,7 +226,10 @@ exit 0
     0o755,
   );
   write(path.join(stubs, "launchctl"), `${LOGGING_STUB("launchctl")}if [[ -n "\${SERVICE_PROBE_HOOK:-}" ]] && grep -q -- ' --holder' "$DEPLOY_TEST_LOG"; then bash -c "$SERVICE_PROBE_HOOK"; fi\n[[ "$1" == print && -e "$HOME/loaded" ]] && { echo "pid = 4242"; exit 0; }\nexit 113\n`, 0o755);
-  write(path.join(stubs, "node"), `${LOGGING_STUB("node")}
+  write(path.join(stubs, "node"), `#!/usr/bin/env bash
+${NO_FREEZE_TOKEN}
+if [[ "\${1:-}" == -e ]]; then NODE_PATH="${repoRoot}/node_modules" exec "${process.execPath}" "$@"; fi
+echo "node $*" >> "$DEPLOY_TEST_LOG"
 case " $* " in
   *" --holder "*)
     if [[ -n "\${HOLDER_HOOK:-}" ]]; then bash -c "$HOLDER_HOOK"; fi
@@ -545,7 +571,8 @@ describe("scripts/ops/deploy.sh", { timeout: TEST_TIMEOUT_MS }, () => {
       "$ docker compose -p radar-test build",
       "$ scripts/ops/prepare-release.sh ",
       "$ pnpm ops:drain",
-      "$ docker compose -p radar-test up -d --wait --wait-timeout 300",
+      "$ docker compose -p radar-test up -d --wait --wait-timeout 300 db web runner",
+      "$ docker compose -p radar-test up -d --no-deps --wait --wait-timeout 300 jobspy",
       "$ pnpm migrate:run",
       "$ scripts/ops/install-ai-worker.sh --release ",
       "the deploy lock is released here, and the build context removed",
@@ -581,7 +608,8 @@ describe("scripts/ops/deploy.sh", { timeout: TEST_TIMEOUT_MS }, () => {
     expect(r.out).not.toContain("git fetch");
     expect(r.out).toContain("--no-backup: skipped");
     expect(r.out).toContain("--no-ai-worker: skipped");
-    expect(r.out).toContain("up -d --wait --wait-timeout 45");
+    expect(r.out).toContain("up -d --wait --wait-timeout 45 db web runner");
+    expect(r.out).toContain("up -d --no-deps --wait --wait-timeout 45 jobspy");
     expect(r.out).toContain("--no-ai-worker: no wait for the ai-worker");
     expect(r.out).not.toContain("sleep");
   });
@@ -682,12 +710,14 @@ describe("scripts/ops/deploy.sh", { timeout: TEST_TIMEOUT_MS }, () => {
       "pnpm config:migrate",
       "pnpm config:check",
       "docker compose -p radar-test config -q",
+      "docker compose -p radar-test config --format json",
       `pnpm ops:freeze --target ${head()}`,
       "backup.sh --label pre-deploy",
       "docker compose -p radar-test build",
       `prepare-release.sh ${head()} --root ${realWork}`,
       "pnpm ops:drain",
-      "docker compose -p radar-test up -d --wait --wait-timeout 300",
+      "docker compose -p radar-test up -d --wait --wait-timeout 300 db web runner",
+      "docker compose -p radar-test up -d --no-deps --wait --wait-timeout 300 jobspy",
       "pnpm migrate:run",
       `install-ai-worker.sh --release ${realWork}/data/releases/ai-worker/${head()} --root ${realWork}`,
       "ps -A -o pid=,args=",
@@ -766,7 +796,7 @@ describe("scripts/ops/deploy.sh", { timeout: TEST_TIMEOUT_MS }, () => {
     expect(r.status).toBe(0);
     const calls = r.calls.filter((c) => !c.startsWith("docker compose -p radar-test ps"));
     expect(calls.indexOf("pnpm ops:drain --timeout 60")).toBeGreaterThan(calls.indexOf("docker compose -p radar-test build"));
-    expect(calls.indexOf("pnpm ops:drain --timeout 60")).toBeLessThan(calls.indexOf("docker compose -p radar-test up -d --wait --wait-timeout 300"));
+    expect(calls.indexOf("pnpm ops:drain --timeout 60")).toBeLessThan(calls.indexOf("docker compose -p radar-test up -d --wait --wait-timeout 300 db web runner"));
     expect(r.out).toContain("running AI requests are not waited for, they are queued again after the restart");
     expect(r.out).toContain("an AI request it is running (for example run_ai) goes back to the queue");
 
@@ -782,7 +812,7 @@ describe("scripts/ops/deploy.sh", { timeout: TEST_TIMEOUT_MS }, () => {
     const r = deploy(["--settle", "0", "--skip-pull"], { DB_RUNNING: "1", PNPM_ops_drain_EXIT: "1" });
     expect(r.status).toBe(0);
     expect(r.out).toContain("warning: a cycle is still running after the wait; the deploy continues");
-    expect(r.calls).toContain("docker compose -p radar-test up -d --wait --wait-timeout 300");
+    expect(r.calls).toContain("docker compose -p radar-test up -d --wait --wait-timeout 300 db web runner");
     expect(r.calls).toContain("pnpm run doctor");
     const unknown = deploy(["--settle", "0", "--skip-pull"], { DB_RUNNING: "1", PNPM_ops_drain_EXIT: "2" });
     expect(unknown.status).toBe(0);
@@ -805,9 +835,42 @@ describe("scripts/ops/deploy.sh", { timeout: TEST_TIMEOUT_MS }, () => {
   it("stops at the first failing step and says why (services never turn healthy)", () => {
     const r = deploy(["--settle", "0"], { DB_RUNNING: "1", UP_EXIT: "1" });
     expect(r.status).toBe(1);
-    expect(r.out).toContain('step 8/13 "up: start and wait until healthy (at most 300 s)" failed: not all services became healthy within 300 s');
+    expect(r.out).toContain('step 8/13 "up: start and wait until healthy (at most 300 s)" failed: not all of db, web and runner became healthy within 300 s');
     expect(r.out).toContain("What to do: docker compose -p radar-test logs --tail 100");
     expect(r.calls.some((c) => c.startsWith("pnpm migrate:run") || c.startsWith("install-ai-worker.sh") || c === "pnpm run doctor")).toBe(false);
+  });
+
+  it.each([
+    ["the doctor reports it as a problem (a channel that uses the sidecar is on): needs attention", "2", 2, "Deploy complete, but the doctor reported problems"],
+    ["the doctor only warns (no such channel is on): deployed", "1", 0, "The doctor reported warnings"],
+  ])("a jobspy sidecar that does not turn healthy only warns: migrate, ai-worker, config-write, prune and doctor still run; %s", (_title, doctorExit, status, verdict) => {
+    const r = deploy(["--settle", "0"], { DB_RUNNING: "1", UP_JOBSPY_EXIT: "1", PNPM_doctor_EXIT: doctorExit });
+    expect(r.status, r.out).toBe(status);
+    expect(r.out).toContain("the jobspy sidecar did not become healthy within 300 s; the deploy goes on");
+    expect(r.out).toContain("docker compose -p radar-test logs --tail 100 jobspy");
+    expect(r.out).not.toContain('step 8/13 "up');
+    expect(r.out).toContain(verdict);
+    const order = [
+      "docker compose -p radar-test up -d --wait --wait-timeout 300 db web runner",
+      "docker compose -p radar-test up -d --no-deps --wait --wait-timeout 300 jobspy",
+      "pnpm migrate:run",
+      `install-ai-worker.sh --release ${realWork}/data/releases/ai-worker/${head()} --root ${realWork}`,
+      "pnpm config:init",
+      "pnpm config:migrate --write",
+      "pnpm ops:unfreeze --owned",
+      "docker image prune -f",
+      "pnpm run doctor",
+    ];
+    const at = order.map((call) => r.calls.indexOf(call));
+    expect(at.every((i) => i >= 0), JSON.stringify(r.calls)).toBe(true);
+    expect([...at].sort((a, b) => a - b)).toEqual(at);
+    expect(fs.existsSync(path.join(work, "data/config/.upgrade-freeze"))).toBe(false);
+  });
+
+  it("db, web or runner not turning healthy still stops the deploy before the sidecar is started", () => {
+    const r = deploy(["--settle", "0"], { DB_RUNNING: "1", UP_EXIT: "1" });
+    expect(r.status).toBe(1);
+    expect(r.calls.some((c) => c.endsWith(" jobspy"))).toBe(false);
   });
 
   it("stops when config:check fails, before the build", () => {
@@ -933,6 +996,39 @@ describe("scripts/ops/deploy.sh", { timeout: TEST_TIMEOUT_MS }, () => {
     }
   });
   describe("--ref", () => {
+    it.each([false, true])("allows an old target dependency on jobspy, but refuses dependencies added by overrides: override=%s", (override) => {
+      const base = head();
+      const other = path.join(tmp, `legacy-compose-${override}`);
+      git(tmp, "clone", origin, other);
+      const composeFile = path.join(other, "compose.yaml");
+      write(composeFile, fs.readFileSync(composeFile, "utf8") + "      jobspy:\n        condition: service_healthy\n");
+      git(other, "add", "compose.yaml");
+      git(other, "commit", "-m", "legacy sidecar dependency");
+      const ref = `legacy-compose-${override}`;
+      git(other, "tag", ref);
+      git(other, "push", "origin", ref);
+      const overrideFile = path.join(work, "compose.override.yaml");
+      if (override) write(overrideFile, "services:\n  web:\n    depends_on:\n      jobspy:\n        condition: service_healthy\n");
+      try {
+        const r = deploy(["--ref", ref, "--settle", "0"]);
+        expect(r.status, r.out).toBe(override ? 1 : 0);
+        if (override) {
+          expect(r.out).toContain("web.depends_on.jobspy");
+          expect(r.out).toContain("Remove");
+          expect(r.calls.some((c) => /^pnpm ops:freeze/.test(c) || c.includes(" build") || c.includes(" up "))).toBe(false);
+        } else {
+          expect(r.out).toContain("target compose.yaml depends on jobspy");
+          expect(r.out).not.toContain("Remove");
+          expect(r.calls).toContain("docker compose -p radar-test up -d --wait --wait-timeout 300 db web runner");
+          expect(r.calls).toContain("pnpm migrate:run");
+          expect(r.calls).toContain("pnpm run doctor");
+        }
+      } finally {
+        if (override) fs.rmSync(overrideFile);
+        restore(base);
+      }
+    });
+
     it.each([false, true])("detects freeze capability before checkout and uses the target's config protocol: supported=%s", (supported) => {
       const base = head();
       const other = path.join(tmp, `freeze-capability-${supported}`);
@@ -1183,10 +1279,29 @@ describe("scripts/ops/deploy.sh: the target commit is fixed", { timeout: TEST_TI
     }
   });
 
-  it("HEAD moves during compose up: the check before the migration stops it", () => {
+  it.each([
+    ["HEAD moves", MOVE_HEAD],
+    ["a tracked file changes", TOUCH_TRACKED],
+  ])("%s during core compose up: the check before the sidecar stops it", (_label, hook) => {
     const base = head();
     try {
-      const r = deploy(["--skip-pull", "--settle", "0"], { UP_HOOK: MOVE_HEAD });
+      const r = deploy(["--skip-pull", "--settle", "0"], { DB_RUNNING: "1", UP_HOOK: hook });
+      expect(r.status).toBe(1);
+      expect(r.out).toContain('step 8/13 "up: start and wait until healthy (at most 300 s)" failed: checkout moved during deploy');
+      expect(r.calls).toContain("docker compose -p radar-test up -d --wait --wait-timeout 300 db web runner");
+      expect(r.calls.some((c) => c.endsWith(" jobspy"))).toBe(false);
+      expect(r.calls).not.toContain("pnpm migrate:run");
+      expect(r.calls).not.toContain("pnpm ops:unfreeze --owned");
+      expect(fs.existsSync(path.join(work, "data/config/.upgrade-freeze"))).toBe(true);
+    } finally {
+      restore(base);
+    }
+  });
+
+  it("HEAD moves during sidecar compose up: the check before the migration stops it", () => {
+    const base = head();
+    try {
+      const r = deploy(["--skip-pull", "--settle", "0"], { UP_JOBSPY_HOOK: MOVE_HEAD });
       expect(r.status).toBe(1);
       expect(r.out).toContain('step 9/13 "migrate: database migrations" failed: checkout moved during deploy');
       expect(r.calls).not.toContain("pnpm migrate:run");
@@ -1904,6 +2019,7 @@ describe("deploy configuration freeze and delayed writes", { timeout: TEST_TIMEO
     expect(r.calls.indexOf("pnpm config:migrate")).toBeLessThan(freeze);
     expect(r.calls.indexOf("pnpm config:check")).toBeLessThan(freeze);
     expect(r.calls.indexOf("docker compose -p radar-test config -q")).toBeLessThan(freeze);
+    expect(r.calls.indexOf("docker compose -p radar-test config --format json")).toBeLessThan(freeze);
     if (kind === "marker") expect(r.calls).not.toContain("pnpm ops:unfreeze --owned");
     else expect(r.calls).toContain("pnpm ops:unfreeze --owned");
     expect(fs.existsSync(marker())).toBe(kind === "marker");
@@ -1911,6 +2027,77 @@ describe("deploy configuration freeze and delayed writes", { timeout: TEST_TIMEO
     expect(taken.token).toMatch(/^[0-9a-f]{32}$/);
     expect(taken.token).not.toBe(FIXTURE_TOKEN);
     fs.rmSync(path.join(work, "taken-freeze"));
+  });
+
+  it.each([
+    ["runner", "service_healthy", true],
+    ["runner", "service_started", false],
+    ["web", "service_healthy", true],
+    ["db", "service_healthy", true],
+  ])("refuses a legacy %s dependency on jobspy (%s, required=%s) from a Compose override before freezing", (service, condition, required) => {
+    existing();
+    const override = path.join(work, "compose.override.yaml");
+    const saved = `services:\n  ${service}:\n    depends_on:\n      jobspy:\n        condition: ${condition}\n        required: ${required}\n`;
+    write(override, saved);
+    try {
+      const r = deploy(args, { UP_JOBSPY_EXIT: "1" });
+      expect(r.status, r.out).toBe(1);
+      expect(r.out).toContain('step 4/13 "config:');
+      expect(r.out).toContain(`${service}.depends_on.jobspy`);
+      expect(r.out).toContain("Remove");
+      expect(r.out).toContain("compose.override.yaml");
+      expect(r.calls).toContain("docker compose -p radar-test config --format json");
+      expect(r.calls.some((c) => /^pnpm ops:(?:un)?freeze/.test(c) || c.includes(" build") || c.includes(" up "))).toBe(false);
+      assertUntouched(r, false);
+      expect(fs.readFileSync(override, "utf8")).toBe(saved);
+    } finally {
+      fs.rmSync(override);
+    }
+  });
+
+  it.each([
+    ["missing", null],
+    ["invalid YAML", "services: ["],
+    ["invalid schema", "services: {}\n"],
+  ])("an own Compose file that is %s grants no exemption for resolved jobspy dependencies", (_title, content) => {
+    existing();
+    const base = head();
+    const composeFile = path.join(work, "compose.yaml");
+    try {
+      if (content === null) fs.rmSync(composeFile);
+      else write(composeFile, content);
+      git(work, "add", "compose.yaml");
+      git(work, "commit", "-m", "compose inspection fixture");
+      for (const dependency of [false, true]) {
+        const model = { services: { db: {}, web: {}, runner: dependency ? { depends_on: { jobspy: { required: false } } } : {} } };
+        const r = deploy(args, { COMPOSE_MODEL_OUTPUT: JSON.stringify(model) });
+        expect(r.status, r.out).toBe(dependency ? 1 : 0);
+        expect(r.out).not.toContain("cannot inspect the resolved Compose dependencies");
+        if (dependency) {
+          expect(r.out).toContain("runner.depends_on.jobspy");
+          expect(r.calls.some((c) => /^pnpm ops:freeze/.test(c) || c.includes(" build") || c.includes(" up "))).toBe(false);
+        } else {
+          expect(r.calls).toContain("pnpm migrate:run");
+        }
+      }
+    } finally {
+      restore(base);
+    }
+  });
+
+  it.each([
+    { title: "failed Compose model command", env: { COMPOSE_MODEL_EXIT: "1" } },
+    { title: "malformed Compose JSON", env: { COMPOSE_MODEL_OUTPUT: "not json" } },
+    { title: "unexpected Compose model shape", env: { COMPOSE_MODEL_OUTPUT: '{"services":{"runner":{"depends_on":["jobspy"]}}}' } },
+  ])("$title refuses the deploy before freezing without printing model values", ({ env }) => {
+    existing();
+    const r = deploy(args, env);
+    expect(r.status, r.out).toBe(1);
+    expect(r.out).toContain('step 4/13 "config:');
+    expect(r.out).toContain("cannot inspect the resolved Compose dependencies");
+    expect(r.out).not.toContain(env.COMPOSE_MODEL_OUTPUT ?? '"services"');
+    expect(r.calls.some((c) => /^pnpm ops:(?:un)?freeze/.test(c) || c.includes(" build") || c.includes(" up "))).toBe(false);
+    assertUntouched(r, false);
   });
 
   it.each([

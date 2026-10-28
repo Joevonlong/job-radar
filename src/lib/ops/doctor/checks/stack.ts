@@ -5,7 +5,7 @@ import { isLoopbackBind, WEB_BIND_ENV } from "@/lib/security/local-request";
 import { readPasswordSetting } from "@/lib/security/password";
 
 import { ageSeconds, fail, joinList, ok, warn } from "../helpers";
-import { dbUp, jobspyBaseUrl, loadCompose, loadSources, loadWebHealth, tryLoadSources, type ComposeContainer } from "../shared";
+import { dbUp, jobspyBaseUrl, jobspyInUse, loadCompose, loadSources, loadWebHealth, tryLoadSources, type ComposeContainer } from "../shared";
 import { SkipCheck, type CheckOutcome, type DoctorCheck, type DoctorContext } from "../types";
 
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "::1", "localhost"]);
@@ -47,9 +47,14 @@ async function hostEvidence(ctx: DoctorContext, service: string): Promise<string
   return null;
 }
 
-function composeResult(ctx: DoctorContext, service: string, containers: readonly ComposeContainer[], dockerReason: string | null, evidence: string | null): CheckOutcome {
+/**
+ * `inUse` false: nothing needs the service right now (the jobspy sidecar while every channel that uses it is off), so a
+ * missing, stopped or unhealthy container is a warning. A port published beyond loopback stays a failure.
+ */
+function composeResult(ctx: DoctorContext, service: string, containers: readonly ComposeContainer[], dockerReason: string | null, evidence: string | null, inUse: boolean): CheckOutcome {
   const { t } = ctx;
   const spec = { id: `compose.${service}`, group: "stack", title: t("checks.compose.serviceTitle", { service }) } as const;
+  const down = (detail: string, hint: string): CheckOutcome => (inUse ? fail(spec, detail, hint) : warn(spec, t("checks.compose.notInUse", { detail }), hint));
   const logs = `docker compose -p ${ctx.settings.compose_project} logs --tail 100 ${service}`;
   const mine = containers.filter((c) => c.service === service);
   const running = mine.find((c) => c.state === "running");
@@ -62,8 +67,8 @@ function composeResult(ctx: DoctorContext, service: string, containers: readonly
     const state = dockerReason ?? t("checks.compose.noContainer", { project: ctx.settings.compose_project });
     const stoodIn = standIn(state);
     if (stoodIn !== null) return stoodIn;
-    if (dockerReason !== null) return fail(spec, t("checks.compose.missingOnHost", { reason: dockerReason }), t("checks.compose.missingOnHostHint"));
-    return fail(spec, state, t("checks.compose.missingHint"));
+    if (dockerReason !== null) return down(t("checks.compose.missingOnHost", { reason: dockerReason }), t("checks.compose.missingOnHostHint"));
+    return down(state, t("checks.compose.missingHint"));
   }
   if (running === undefined) {
     const stoodIn = standIn(t("checks.compose.containerState", { state: container.state }));
@@ -86,9 +91,9 @@ function composeResult(ctx: DoctorContext, service: string, containers: readonly
 
   if (container.state !== "running") {
     const detail = container.exitCode !== null && container.exitCode !== 0 ? t("checks.compose.stoppedWithExit", { state: container.state, code: container.exitCode }) : t("checks.compose.stopped", { state: container.state });
-    return fail(spec, detail, t("checks.compose.stoppedHint", { logs, service }));
+    return down(detail, t("checks.compose.stoppedHint", { logs, service }));
   }
-  if (container.health === "unhealthy") return fail(spec, t("checks.compose.unhealthy"), t("checks.compose.unhealthyHint", { logs, service }));
+  if (container.health === "unhealthy") return down(t("checks.compose.unhealthy"), t("checks.compose.unhealthyHint", { logs, service }));
   if (container.health === "starting") return warn(spec, t("checks.compose.starting"), t("checks.compose.startingHint", { logs }));
   const state = container.health === "healthy" ? t("checks.compose.runningHealthy") : t("checks.compose.runningNoHealthcheck");
   if (container.published.length === 0) return ok(spec, state);
@@ -105,7 +110,7 @@ export const composeServicesCheck: DoctorCheck = {
       const containers = compose.available ? compose.containers : [];
       const isRunning = containers.some((c) => c.service === service && c.state === "running");
       const evidence = isRunning ? null : await hostEvidence(ctx, service);
-      results.push(composeResult(ctx, service, containers, compose.available ? null : compose.reason, evidence));
+      results.push(composeResult(ctx, service, containers, compose.available ? null : compose.reason, evidence, service !== "jobspy" || jobspyInUse(ctx)));
     }
     return results;
   },

@@ -7,6 +7,11 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ### Upgrade notes
 
+- **Remove legacy jobspy dependencies from Compose overrides.** Delete `services.runner.depends_on.jobspy` from your
+  `compose.override.yaml` (and any jobspy dependency you added to `db` or `web`), keeping the database dependencies.
+  Deploy now refuses dependencies added by overrides before freezing settings, so an unhealthy optional sidecar cannot
+  block the core deployment. Supported older targets whose own `compose.yaml` depends on jobspy remain deployable,
+  with a note that sidecar health may still block them. See [the upgrade note](docs/deploy.md#compose-overrides-and-the-jobspy-sidecar).
 - **Company and title keys are recomputed once.** The first cycle after upgrading (or `pnpm reprocess`) gives stored
   companies and jobs whose names are written in a non-Latin script, or contain letters such as Ø, Ł, Æ or ß, their new
   keys before new postings are filed. German company names with ß are re-keyed once (ß now reads as ss, as in titles:
@@ -205,6 +210,11 @@ A failure in (a) does not block rollback: follow (c) and accept the display wind
   reprocessing stops its filter and signal batches when the cycle lock is lost.
 - Fixed job identity repairs across cities, linked company mark removal, LinkedIn cross-channel duplicates, concurrent
   reprocessing and cycle interruption cleanup; reprocessing now shares the cycle's dedicated database lock.
+- **A broken jobspy sidecar no longer stops a deploy halfway:** the runner no longer waits for the sidecar, and
+  `scripts/ops/deploy.sh` starts db, web and runner first, then the sidecar on its own. When the sidecar does not turn
+  healthy the deploy warns and still runs the migration, the ai-worker switch and the config writes; the doctor reports it
+  as a problem only while `linkedin-guest`, `indeed` or `jobspy-google` is on (otherwise a warning). The sidecar image
+  now installs every Python package at a locked version with hashes, from a digest-pinned base image.
 - Translation, breakdown and salary lookup keep polling after a temporary status read failure or invalid queue response; translation queue text also applies to container execution.
 
 - **A slow interest pattern no longer freezes the app:** a pattern of a signal category that backtracks badly on long

@@ -173,8 +173,10 @@ services:
     depends_on:
       db:
         condition: service_healthy
-      jobspy:
-        condition: service_healthy
+    # No dependency on jobspy, on purpose: every channel that uses the sidecar is off by default, and a sidecar that does
+    # not start or turns unhealthy must not keep the runner (and every other channel) down. Requests to it then fail as
+    # network errors that the channel's circuit breaker handles. (Even `condition: service_started, required: false`
+    # would pull jobspy into `up --wait runner`, which then fails on it.) scripts/ops/deploy.sh starts jobspy on its own.
     # Reads the newest runner heartbeat (the runner writes one every RUNNER_HEARTBEAT_SECONDS) and exits 1
     # when it is older than RUNNER_HEALTH_MAX_AGE_SECONDS, i.e. when the runner hangs or cannot reach the db.
     # Docker only marks the container `unhealthy` (see `docker compose ps`); `restart:` reacts to exits, not to this.
