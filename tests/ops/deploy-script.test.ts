@@ -188,6 +188,11 @@ if [[ "$1" == compose && "\${*: -1}" == build ]]; then
   if [[ -n "\${DEPLOY_TEST_CTX_COPY:-}" ]]; then rm -rf "$DEPLOY_TEST_CTX_COPY"; cp -Rp "$JOB_RADAR_BUILD_CONTEXT" "$DEPLOY_TEST_CTX_COPY"; fi
   exit \${BUILD_EXIT:-0}
 fi
+# \`up … jobspy\` (the sidecar on its own): UP_JOBSPY_HOOK, UP_JOBSPY_EXIT; every other \`up\`: UP_HOOK, UP_EXIT.
+if [[ "$*" == *" up "* && "\${*: -1}" == jobspy ]]; then
+  if [[ -n "\${UP_JOBSPY_HOOK:-}" ]]; then bash -c "$UP_JOBSPY_HOOK"; fi
+  exit \${UP_JOBSPY_EXIT:-0}
+fi
 if [[ "$*" == *" up "* ]]; then
   echo "\${JOB_RADAR_BUILD_CONTEXT:-<unset>}" >> "$DEPLOY_TEST_LOG.ctx"
   if [[ -n "\${UP_HOOK:-}" ]]; then bash -c "$UP_HOOK"; fi
@@ -545,7 +550,8 @@ describe("scripts/ops/deploy.sh", { timeout: TEST_TIMEOUT_MS }, () => {
       "$ docker compose -p radar-test build",
       "$ scripts/ops/prepare-release.sh ",
       "$ pnpm ops:drain",
-      "$ docker compose -p radar-test up -d --wait --wait-timeout 300",
+      "$ docker compose -p radar-test up -d --wait --wait-timeout 300 db web runner",
+      "$ docker compose -p radar-test up -d --no-deps --wait --wait-timeout 300 jobspy",
       "$ pnpm migrate:run",
       "$ scripts/ops/install-ai-worker.sh --release ",
       "the deploy lock is released here, and the build context removed",
@@ -581,7 +587,8 @@ describe("scripts/ops/deploy.sh", { timeout: TEST_TIMEOUT_MS }, () => {
     expect(r.out).not.toContain("git fetch");
     expect(r.out).toContain("--no-backup: skipped");
     expect(r.out).toContain("--no-ai-worker: skipped");
-    expect(r.out).toContain("up -d --wait --wait-timeout 45");
+    expect(r.out).toContain("up -d --wait --wait-timeout 45 db web runner");
+    expect(r.out).toContain("up -d --no-deps --wait --wait-timeout 45 jobspy");
     expect(r.out).toContain("--no-ai-worker: no wait for the ai-worker");
     expect(r.out).not.toContain("sleep");
   });
@@ -687,7 +694,8 @@ describe("scripts/ops/deploy.sh", { timeout: TEST_TIMEOUT_MS }, () => {
       "docker compose -p radar-test build",
       `prepare-release.sh ${head()} --root ${realWork}`,
       "pnpm ops:drain",
-      "docker compose -p radar-test up -d --wait --wait-timeout 300",
+      "docker compose -p radar-test up -d --wait --wait-timeout 300 db web runner",
+      "docker compose -p radar-test up -d --no-deps --wait --wait-timeout 300 jobspy",
       "pnpm migrate:run",
       `install-ai-worker.sh --release ${realWork}/data/releases/ai-worker/${head()} --root ${realWork}`,
       "ps -A -o pid=,args=",
@@ -766,7 +774,7 @@ describe("scripts/ops/deploy.sh", { timeout: TEST_TIMEOUT_MS }, () => {
     expect(r.status).toBe(0);
     const calls = r.calls.filter((c) => !c.startsWith("docker compose -p radar-test ps"));
     expect(calls.indexOf("pnpm ops:drain --timeout 60")).toBeGreaterThan(calls.indexOf("docker compose -p radar-test build"));
-    expect(calls.indexOf("pnpm ops:drain --timeout 60")).toBeLessThan(calls.indexOf("docker compose -p radar-test up -d --wait --wait-timeout 300"));
+    expect(calls.indexOf("pnpm ops:drain --timeout 60")).toBeLessThan(calls.indexOf("docker compose -p radar-test up -d --wait --wait-timeout 300 db web runner"));
     expect(r.out).toContain("running AI requests are not waited for, they are queued again after the restart");
     expect(r.out).toContain("an AI request it is running (for example run_ai) goes back to the queue");
 
@@ -782,7 +790,7 @@ describe("scripts/ops/deploy.sh", { timeout: TEST_TIMEOUT_MS }, () => {
     const r = deploy(["--settle", "0", "--skip-pull"], { DB_RUNNING: "1", PNPM_ops_drain_EXIT: "1" });
     expect(r.status).toBe(0);
     expect(r.out).toContain("warning: a cycle is still running after the wait; the deploy continues");
-    expect(r.calls).toContain("docker compose -p radar-test up -d --wait --wait-timeout 300");
+    expect(r.calls).toContain("docker compose -p radar-test up -d --wait --wait-timeout 300 db web runner");
     expect(r.calls).toContain("pnpm run doctor");
     const unknown = deploy(["--settle", "0", "--skip-pull"], { DB_RUNNING: "1", PNPM_ops_drain_EXIT: "2" });
     expect(unknown.status).toBe(0);
@@ -805,9 +813,42 @@ describe("scripts/ops/deploy.sh", { timeout: TEST_TIMEOUT_MS }, () => {
   it("stops at the first failing step and says why (services never turn healthy)", () => {
     const r = deploy(["--settle", "0"], { DB_RUNNING: "1", UP_EXIT: "1" });
     expect(r.status).toBe(1);
-    expect(r.out).toContain('step 8/13 "up: start and wait until healthy (at most 300 s)" failed: not all services became healthy within 300 s');
+    expect(r.out).toContain('step 8/13 "up: start and wait until healthy (at most 300 s)" failed: not all of db, web and runner became healthy within 300 s');
     expect(r.out).toContain("What to do: docker compose -p radar-test logs --tail 100");
     expect(r.calls.some((c) => c.startsWith("pnpm migrate:run") || c.startsWith("install-ai-worker.sh") || c === "pnpm run doctor")).toBe(false);
+  });
+
+  it.each([
+    ["the doctor reports it as a problem (a channel that uses the sidecar is on): needs attention", "2", 2, "Deploy complete, but the doctor reported problems"],
+    ["the doctor only warns (no such channel is on): deployed", "1", 0, "The doctor reported warnings"],
+  ])("a jobspy sidecar that does not turn healthy only warns: migrate, ai-worker, config-write, prune and doctor still run; %s", (_title, doctorExit, status, verdict) => {
+    const r = deploy(["--settle", "0"], { DB_RUNNING: "1", UP_JOBSPY_EXIT: "1", PNPM_doctor_EXIT: doctorExit });
+    expect(r.status, r.out).toBe(status);
+    expect(r.out).toContain("the jobspy sidecar did not become healthy within 300 s; the deploy goes on");
+    expect(r.out).toContain("docker compose -p radar-test logs --tail 100 jobspy");
+    expect(r.out).not.toContain('step 8/13 "up');
+    expect(r.out).toContain(verdict);
+    const order = [
+      "docker compose -p radar-test up -d --wait --wait-timeout 300 db web runner",
+      "docker compose -p radar-test up -d --no-deps --wait --wait-timeout 300 jobspy",
+      "pnpm migrate:run",
+      `install-ai-worker.sh --release ${realWork}/data/releases/ai-worker/${head()} --root ${realWork}`,
+      "pnpm config:init",
+      "pnpm config:migrate --write",
+      "pnpm ops:unfreeze --owned",
+      "docker image prune -f",
+      "pnpm run doctor",
+    ];
+    const at = order.map((call) => r.calls.indexOf(call));
+    expect(at.every((i) => i >= 0), JSON.stringify(r.calls)).toBe(true);
+    expect([...at].sort((a, b) => a - b)).toEqual(at);
+    expect(fs.existsSync(path.join(work, "data/config/.upgrade-freeze"))).toBe(false);
+  });
+
+  it("db, web or runner not turning healthy still stops the deploy before the sidecar is started", () => {
+    const r = deploy(["--settle", "0"], { DB_RUNNING: "1", UP_EXIT: "1" });
+    expect(r.status).toBe(1);
+    expect(r.calls.some((c) => c.endsWith(" jobspy"))).toBe(false);
   });
 
   it("stops when config:check fails, before the build", () => {

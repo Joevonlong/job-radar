@@ -148,6 +148,36 @@ What the CI runs, job by job, and how to run it locally: [ci.md](ci.md). Changin
 Edit `src/lib/db/schema.ts`, then `pnpm db:generate --name <slug>` and commit the generated SQL. CI fails when the
 schema and `drizzle/` disagree. The runner applies migrations at start-up.
 
+## The jobspy sidecar's dependencies
+
+You edit two files: `jobspy/requirements.in` (the sidecar's direct dependencies, each pinned with `==`) and
+`jobspy/requirements-dev.in` (the test tools on top). The lock files `jobspy/requirements.txt` and
+`jobspy/requirements-dev.txt` are generated from them by pip-compile (pip-tools): every package, indirect ones included,
+at a fixed version with the hashes of its files. Never edit them by hand. The image (`jobspy/Dockerfile`) and CI install
+them with `pip install --require-hashes`, so a build gets exactly the versions CI tested, and pip refuses a file whose hash
+changed or a package the lock does not list. The dev lock is constrained by the runtime one (`-c requirements.txt`), so
+the tests run the image's versions. A unit test (`tests/dockerfile.test.ts`) fails when a pin in `requirements.in` is not
+the version in the lock, i.e. when the lock was not regenerated.
+
+After changing an `.in` file, regenerate both lock files with Python 3.12 (the image's version), runtime first:
+
+```sh
+python3.12 -m venv /tmp/pip-tools && /tmp/pip-tools/bin/pip install pip-tools
+cd jobspy
+/tmp/pip-tools/bin/pip-compile --generate-hashes --allow-unsafe --strip-extras --output-file requirements.txt requirements.in
+/tmp/pip-tools/bin/pip-compile --generate-hashes --allow-unsafe --strip-extras --output-file requirements-dev.txt requirements-dev.in
+```
+
+Without options pip-compile keeps the versions already in the lock files; `--upgrade-package <name>` (or `--upgrade`)
+moves indirect dependencies to newer releases. It downloads every file of every pinned release to hash it, so the first
+run takes a few minutes. Dependabot (`pip`, `/jobspy`) works in this layout: its pull requests change the pin in the `.in`
+file and regenerate the lock files.
+
+The base image in `jobspy/Dockerfile` is pinned by digest (`python:3.12-slim@sha256:…`), so a rebuild starts from the
+same Python and Debian packages; Dependabot (`docker`, `/jobspy`) proposes the next digest. The root `Dockerfile` keeps
+its tags (`node:${NODE_VERSION}-slim`, the Playwright image of `PLAYWRIGHT_VERSION`): the build checks the Node version
+against `engines.node`, and a unit test ties the Playwright image to `@playwright/test`.
+
 ## Before a public release
 
 `scripts/release-check.sh` scans the working tree and the whole commit history for secrets (gitleaks, through Docker), for

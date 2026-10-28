@@ -29,8 +29,9 @@
 #   7  release     scripts/ops/prepare-release.sh <target commit>: the read-only release directory of the host ai-worker,
 #                  data/releases/ai-worker/<commit> (reused when it is already there); the running worker is not touched
 #   8  up          pnpm ops:drain (wait, bounded by schedule.yaml deploy.drain_timeout_seconds, for a running cycle to finish:
-#                  recreating the runner would cut it off), then docker compose -p job-radar up -d --wait (db / web / runner /
-#                  jobspy must turn healthy)
+#                  recreating the runner would cut it off), then docker compose -p job-radar up -d --wait db web runner (they
+#                  must turn healthy), then up -d --no-deps --wait jobspy on its own: a sidecar that does not turn healthy
+#                  only warns, the later steps still run, and the doctor (step 13) decides whether it needs attention
 #   9  migrate     pnpm migrate:run (the runner migrates at start-up too; this checks it and is a no-op then)
 #   10 ai-worker   scripts/ops/install-ai-worker.sh --release data/releases/ai-worker/<commit>: switches the service (a
 #                  launchd agent on macOS, a systemd user unit on Linux) to that release; the new worker must show evidence
@@ -545,14 +546,27 @@ else
     esac
   fi
 fi
-echo "  \$ docker compose -p $PROJECT up -d --wait --wait-timeout $WAIT_TIMEOUT"
+# The core services first: only they can stop the deploy. The jobspy sidecar comes on its own afterwards (nothing
+# depends on it, and every channel that uses it is off by default): when it does not turn healthy the deploy warns and
+# goes on, so the migration, the ai-worker switch and the config writes still run. Whether that needs attention is the
+# doctor's verdict at the end (compose.jobspy: a problem while a channel that uses the sidecar is on, else a warning).
+echo "  \$ docker compose -p $PROJECT up -d --wait --wait-timeout $WAIT_TIMEOUT db web runner"
 if [[ "$DRY_RUN" -eq 0 ]]; then
   assert_target
   proc_check_stop; up_code=0; UP_STARTED=1
-  proc_run docker compose -p "$PROJECT" up -d --wait --wait-timeout "$WAIT_TIMEOUT" || up_code=$?; proc_check_stop
+  proc_run docker compose -p "$PROJECT" up -d --wait --wait-timeout "$WAIT_TIMEOUT" db web runner || up_code=$?; proc_check_stop
   if (( up_code != 0 )); then
     compose ps >&2 || true
-    fail_step "not all services became healthy within ${WAIT_TIMEOUT} s" "docker compose -p $PROJECT logs --tail 100 <db|web|runner|jobspy> shows which one and why; after fixing it, run this script again"
+    fail_step "not all of db, web and runner became healthy within ${WAIT_TIMEOUT} s" "docker compose -p $PROJECT logs --tail 100 <db|web|runner> shows which one and why; after fixing it, run this script again"
+  fi
+fi
+echo "  \$ docker compose -p $PROJECT up -d --no-deps --wait --wait-timeout $WAIT_TIMEOUT jobspy"
+if [[ "$DRY_RUN" -eq 0 ]]; then
+  proc_check_stop; jobspy_code=0
+  proc_run docker compose -p "$PROJECT" up -d --no-deps --wait --wait-timeout "$WAIT_TIMEOUT" jobspy || jobspy_code=$?; proc_check_stop
+  if (( jobspy_code != 0 )); then
+    echo "deploy: ⚠ the jobspy sidecar did not become healthy within ${WAIT_TIMEOUT} s; the deploy goes on (db, web and runner run without it)." >&2
+    echo "  Only the scraping channels linkedin-guest, indeed and jobspy-google use it (all off by default); while one of them is on, the doctor below reports it as a problem. docker compose -p $PROJECT logs --tail 100 jobspy shows why." >&2
   fi
   compose ps
 fi

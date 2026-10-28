@@ -179,6 +179,11 @@ A failure in (a) does not block rollback: follow (c) and accept the display wind
 
 ### Fixed
 
+- **A broken jobspy sidecar no longer stops a deploy halfway:** the runner no longer waits for the sidecar, and
+  `scripts/ops/deploy.sh` starts db, web and runner first, then the sidecar on its own. When the sidecar does not turn
+  healthy the deploy warns and still runs the migration, the ai-worker switch and the config writes; the doctor reports it
+  as a problem only while `linkedin-guest`, `indeed` or `jobspy-google` is on (otherwise a warning). The sidecar image
+  now installs every Python package at a locked version with hashes, from a digest-pinned base image.
 - **Tag boxes no longer swallow a repeated entry silently:** typing a title, keyword or city that is already in the list
   (any case) now keeps the text, names the existing entry under the box ("Already in the list: ...") and briefly
   highlights it. Enter and the comma no longer act while an input method is composing. Regular expressions and

@@ -193,7 +193,8 @@ jobs:
       - name: Install jobspy sidecar dependencies
         timeout-minutes: 8
         working-directory: jobspy
-        run: python -m pip install -r requirements-dev.txt
+        # the lock file (every package with its hashes) generated from requirements-dev.in: see docs/development.md
+        run: python -m pip install --require-hashes -r requirements-dev.txt
       - name: Jobspy sidecar tests
         timeout-minutes: 10
         working-directory: jobspy
@@ -746,6 +747,16 @@ jobs:
       - name: Docker build context leaves out what .gitignore ignores
         timeout-minutes: 5
         run: bash tests/ops/gitignore-coverage.sh
+      - name: The runner restarts healthy with the sidecar stopped
+        timeout-minutes: 4
+        run: |
+          # Every channel that uses the jobspy sidecar is off by default: the runner must not depend on it.
+          docker compose stop jobspy
+          docker compose restart runner
+          docker compose up -d --no-recreate --wait --wait-timeout 180 runner
+          running="$(docker compose ps --status running --services)"
+          echo "$running"
+          if grep -qx jobspy <<< "$running"; then echo "::error::starting the runner started the jobspy sidecar too"; exit 1; fi
       - name: Container logs on failure
         if: failure()
         timeout-minutes: 2
