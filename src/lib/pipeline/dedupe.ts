@@ -63,7 +63,7 @@ export interface MatchInput {
 /**
  * The existing job a new posting belongs to, if any, trying in order:
  * 1. same source: a posting with the same external id from the same channel family;
- * 2. exact key: same company, same normalized title, same city;
+ * 2. exact key: same company, same normalized title, same city (never for an empty title key);
  * 3. SimHash: same company and description SimHash within `dedupe.simhash_max_distance` bits.
  * 4. related company: another company whose name is a variant of this one's (see `relatedCompanyKeys`), same
  *    normalized title and a SimHash within `dedupe.cross_company_simhash_max_distance` (counted as `simhash`).
@@ -77,9 +77,12 @@ export async function findMatchingJob(db: Executor, input: MatchInput, config: P
   });
   if (sameSource) return { job: sameSource, kind: "same_source" };
 
-  const candidates = await listJobsByCompanyTitle(db, input.companyId, input.normalized.titleNorm);
-  const exact = candidates.find((job) => sameCity(storedLocations(job), input.normalized.locations));
-  if (exact) return { job: exact, kind: "exact_key" };
+  // a title without letters or digits keys as "": that says nothing about which job it is, so only the other passes can match it
+  if (input.normalized.titleNorm !== "") {
+    const candidates = await listJobsByCompanyTitle(db, input.companyId, input.normalized.titleNorm);
+    const exact = candidates.find((job) => sameCity(storedLocations(job), input.normalized.locations));
+    if (exact) return { job: exact, kind: "exact_key" };
+  }
 
   const hash = input.normalized.simhash;
   if (hash !== null) {
@@ -91,7 +94,7 @@ export async function findMatchingJob(db: Executor, input: MatchInput, config: P
       }
     }
   }
-  if (hash !== null) {
+  if (hash !== null && input.normalized.titleNorm !== "") {
     const companyKey = resolveCompanyName(input.companyName, config).nameNorm;
     for (const candidate of await listJobsOfOtherCompaniesByTitle(db, input.companyId, input.normalized.titleNorm)) {
       if (candidate.simhash === null || !relatedCompanyKeys(companyKey, candidate.companyNameNorm)) continue;

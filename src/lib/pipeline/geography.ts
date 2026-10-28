@@ -1,6 +1,8 @@
 import type { JobLocation } from "@/lib/domain/types";
 import type { Market } from "@/lib/market/types";
 
+import { foldDiacritics } from "./fold";
+
 /**
  * Location normalization, ported from the legacy `normalize.ts` (the tables come from the market packs). City
  * names are canonicalised so the same city spelled differently by two sources (München / Munich) gives the same dedupe
@@ -162,15 +164,16 @@ export function normalizeDraftLocations(locations: readonly DraftLocation[], mar
   return result;
 }
 
-/** Lower-case ASCII slug (accents folded, ß -> ss). */
+/**
+ * Lower-case slug: ß as ss, diacritics folded (`foldDiacritics`), letters and digits of every script kept ("東京" stays
+ * "東京", it is not the empty slug of every other city in another script), runs of anything else one "-".
+ */
 export function slugify(value: string): string {
-  return value
-    .replace(/ß/g, "ss")
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
+  return foldDiacritics(value.replace(/[ßẞ]/g, "ss"))
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/[^\p{L}\p{M}\p{N}]+/gu, "-")
     .replace(/^-|-$/g, "")
+    .normalize("NFC")
     .slice(0, 72);
 }
 

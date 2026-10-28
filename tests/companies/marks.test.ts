@@ -20,9 +20,9 @@ describe("company marks", () => {
     expect(isCompanyWatched({ watched: false, nameNorm: "other" }, keys)).toBe(false);
   });
 
-  it("an entry that resolves to an empty key watches nothing", () => {
+  it("an entry that resolves to an empty key watches nothing; a name in another script has a key of its own", () => {
     const keys = buildWatchedCompanyKeys(["日本電気", "  ", "Acme"], pipeline);
-    expect([...keys]).toEqual(["acme"]);
+    expect([...keys]).toEqual(["日本電気", "acme"]);
     // a company without a key (name_norm empty) is not watched by it; the DB flag still watches
     expect(isCompanyWatched({ watched: false, nameNorm: "" }, keys)).toBe(false);
     expect(isCompanyWatched({ watched: true, nameNorm: "" }, keys)).toBe(true);
