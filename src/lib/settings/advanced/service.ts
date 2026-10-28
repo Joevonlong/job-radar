@@ -21,9 +21,9 @@ import {
   validateConfigText,
   writeConfigText,
   type ConfigName,
+  type ValidateOptions,
 } from "@/lib/config";
-import { loadPipeline } from "@/lib/market";
-import { signalPatternIsFast, signalProbeLimits } from "@/lib/signals/pattern-guard";
+import { signalPatternIsFast } from "@/lib/signals/pattern-guard";
 
 import type { AdvancedFailure, AdvancedLayer, AdvancedPreview, AdvancedResetResult, AdvancedSaveResult, AdvancedValidation } from "./types";
 import { advancedNameOfStem, editorLimits } from "./view";
@@ -41,17 +41,10 @@ const saveSchema = z.strictObject({ file: stemSchema, text: textSchema, baseHash
 const resetSchema = z.strictObject({ file: stemSchema, baseHash: z.string().max(80), baseLayer: layerSchema });
 
 /**
- * The checks of a save besides the schema: interests.yaml patterns that are too slow on the probe's test texts are issues
- * (the rules would leave them out of every scan). Without a readable pipeline.yaml (its limits) they are not checked.
+ * The checks of a save besides the schema: interests.yaml patterns that are too slow on the probe's test texts (with the
+ * text's own limits) are issues; the rules would leave them out of every scan.
  */
-function validateOptions(name: ConfigName): { checkProtected: true; isPatternFast?: (pattern: string) => boolean } {
-  if (name !== "interests") return { checkProtected: true };
-  try {
-    return { checkProtected: true, isPatternFast: signalPatternIsFast(signalProbeLimits(loadPipeline())) };
-  } catch {
-    return { checkProtected: true };
-  }
-}
+const validateOptions = (name: ConfigName): ValidateOptions => (name === "interests" ? { checkProtected: true, interestsProbe: (limits) => signalPatternIsFast(limits) } : { checkProtected: true });
 
 function currentText(name: ConfigName): string {
   try {

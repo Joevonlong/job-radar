@@ -13,7 +13,7 @@ import type { TimeBox } from "@/lib/filter/deal-breakers";
 import { vmTimeBox } from "@/lib/filter/time-box";
 import { createProcessLogger } from "@/lib/logging/process-logger";
 import { loadPipeline } from "@/lib/market";
-import { findCandidates, signalPatternGuard, signalProbeLimits, signalsPrompt, type RuleCandidate } from "@/lib/signals";
+import { findCandidates, signalPatternGuard, signalsPrompt } from "@/lib/signals";
 import { compileSignalRules } from "@/lib/signals/rules";
 
 import { slowPatternErrors } from "./pattern-check";
@@ -84,7 +84,7 @@ function perCycleLimit(): number | null {
 export interface PreviewOptions {
   /** Clock in milliseconds (tests). */
   now?: () => number;
-  /** Where the rules run on each job (default `vmTimeBox`, which interrupts a running expression). */
+  /** Where the loop over the jobs runs (default `vmTimeBox`, which interrupts a running expression). */
   timeBox?: TimeBox;
 }
 
@@ -128,25 +128,27 @@ export async function previewCategory(raw: unknown, options: PreviewOptions = {}
     let scanned = 0;
     let truncated = false;
     const samples: CategoryPreviewSample[] = [];
-    // compiled (and probed) once, outside the time box of a job
-    const guard = signalPatternGuard(signalProbeLimits(pipeline), log, timeBox);
+    // compiled (and probed, in boxes of its own) before the loop's time box
+    const guard = signalPatternGuard(next.limits, log);
     compileSignalRules(single, guard);
-    // the draft's patterns run in the web process: each job in a time box that ends at the budget, so one slow
-    // expression cannot hold the process past it
+    // the draft's patterns run in the web process: the whole loop runs in one time box that ends at the budget, so a slow
+    // expression cannot hold the process past it (one box: each box costs about a millisecond); the deadline is also
+    // checked before each job. The counts are kept up to the job that was running when the box stopped.
     const deadline = now() + next.limits.preview_time_budget_ms;
-    for (const job of jobs) {
-      const left = deadline - now();
-      let found: RuleCandidate[] = [];
-      if (left <= 0 || !timeBox(() => (found = findCandidates(job.description, single, pipeline, guard)), left)) {
-        truncated = true;
-        break;
+    const finished = timeBox(() => {
+      for (const job of jobs) {
+        if (now() >= deadline) {
+          truncated = true;
+          return;
+        }
+        const first = findCandidates(job.description, single, pipeline, guard).find((candidate) => candidate.tier === category.id);
+        scanned += 1;
+        if (first === undefined) continue;
+        hits += 1;
+        if (samples.length < PREVIEW_SAMPLES) samples.push({ jobId: job.id, title: job.title, quote: first.quote });
       }
-      scanned += 1;
-      const first = found.find((candidate) => candidate.tier === category.id);
-      if (first === undefined) continue;
-      hits += 1;
-      if (samples.length < PREVIEW_SAMPLES) samples.push({ jobId: job.id, title: job.title, quote: first.quote });
-    }
+    }, next.limits.preview_time_budget_ms);
+    if (!finished) truncated = true;
     return { status: "ok", scanned, truncated, hits, samples, review: await estimateReview(current, next) };
   } catch {
     return { status: "unavailable" };

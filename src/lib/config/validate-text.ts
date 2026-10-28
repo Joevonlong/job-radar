@@ -43,10 +43,10 @@ export interface ValidateOptions {
   /** Also report protected keys whose value differs from the file on disk and the shipped default (the web's editor). */
   checkProtected?: boolean;
   /**
-   * The server's probe of a user pattern (`signalPatternIsFast`): interests.yaml patterns it refuses are issues with the
-   * message `SLOW_PATTERN_MESSAGE` (the web's editor). Absent = not checked.
+   * The server's probe of a user pattern with the file's own limits (`signalPatternIsFast`): interests.yaml patterns it
+   * refuses are issues with the message `SLOW_PATTERN_MESSAGE` (the web's editor, `pnpm config:check`). Absent = not checked.
    */
-  isPatternFast?: (pattern: string) => boolean;
+  interestsProbe?: (limits: ConfigValue<"interests">["limits"]) => (pattern: string) => boolean;
 }
 
 /** Most issues listed (a badly broken file would otherwise list hundreds). */
@@ -201,8 +201,9 @@ export function validateConfigText<N extends ConfigName>(name: N, text: string, 
         : { path: cross.path, message: cross.message, line: 1, col: 1, exact: false, source: "catalog", file: cross.file };
     (cross.severity === "error" ? issues : warnings).push(located);
   }
-  if (name === "interests" && options.isPatternFast) {
-    for (const slow of slowInterestPatterns(value as ConfigValue<"interests">, options.isPatternFast)) issues.push(issueAt(doc, lineCounter, "schema", slow.path, SLOW_PATTERN_MESSAGE));
+  if (name === "interests" && options.interestsProbe) {
+    const interests = value as ConfigValue<"interests">;
+    for (const slow of slowInterestPatterns(interests, options.interestsProbe(interests.limits))) issues.push(issueAt(doc, lineCounter, "schema", slow.path, SLOW_PATTERN_MESSAGE));
   }
   if (options.checkProtected === true) {
     for (const segments of protectedChanges(name, value)) issues.push(issueAt(doc, lineCounter, "protected", segments, PROTECTED_KEY_MESSAGE));

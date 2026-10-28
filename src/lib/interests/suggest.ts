@@ -28,7 +28,7 @@ import { findExistingDedupeKeys, insertSuggestions, listSuggestionSourceJobs, ty
 import { resolveCompanyName } from "@/lib/pipeline/company";
 import { cleanDescriptionsForAi } from "@/lib/traps/clean";
 import { categoryLabel } from "@/lib/signals/catalog";
-import { signalPatternIsFast, signalProbeLimits } from "@/lib/signals/pattern-guard";
+import { signalPatternIsFast } from "@/lib/signals/pattern-guard";
 
 import { selectCandidates } from "./suggest-select";
 import { sendSuggestionsNotice, type SuggestionsNotice } from "./suggest-notify";
@@ -155,7 +155,7 @@ export async function runSuggest(deps: SuggestDeps): Promise<SuggestSummary> {
     throw error;
   }
 
-  const isPatternFast = signalPatternIsFast(signalProbeLimits(pipeline));
+  const isPatternFast = signalPatternIsFast(interests.limits);
   const validation = validateSuggestions(answer.value, { positive, ignored, interests, preferences, config, normalizeCompany, output, isPatternFast });
   const seen = await findExistingDedupeKeys(deps.db, validation.accepted.map((s) => s.dedupeKey));
   const fresh = validation.accepted.filter((s) => !seen.has(s.dedupeKey));

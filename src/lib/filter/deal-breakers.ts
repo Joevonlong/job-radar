@@ -267,14 +267,34 @@ function visaRefusal(job: DealBreakerJob, rule: CompiledVisa): { quote: string; 
   return evidence ? { quote: evidence.quote, offset: evidence.offset, kind: evidence.kind } : null;
 }
 
+/**
+ * How long a run of digits or of whitespace is in the test texts. Real text has short runs (an order number, an IBAN, the
+ * spaces of a layout), and a pattern that backtracks exponentially on them (`(\d+)+x`, `(\d+[.,]?)+\s*k`) takes seconds
+ * at 30 characters already; repeated runs of this length show that, while a pattern that is merely quadratic in the run
+ * (`\d+\s*k`) stays fast, as it is on real text.
+ */
+const PROBE_RUN_CHARS = 64;
+
+/** `run` repeated, each copy closed by "!" (which nothing expects), up to `length` characters. */
+const runs = (run: string, length: number): string => `${run}!`.repeat(Math.ceil(length / (run.length + 1))).slice(0, length);
+
 /** Test texts as long as the text a pattern searches: a long line without a match is where backtracking shows. */
 function probeTexts(source: string, length: number): string[] {
   const filler = "Lorem ipsum 100 % vor Ort, dolor-sit_amet 42 Reisetätigkeit ";
-  const texts = ["a".repeat(Math.max(0, length - 1)) + "!", filler.repeat(Math.ceil(length / filler.length)).slice(0, length)];
+  const texts = [
+    "a".repeat(Math.max(0, length - 1)) + "!",
+    filler.repeat(Math.ceil(length / filler.length)).slice(0, length),
+    // the classes \d and \s, which the letters the pattern names below never stand for
+    runs("1".repeat(PROBE_RUN_CHARS), length),
+    runs(" ".repeat(PROBE_RUN_CHARS), length),
+  ];
   // the letters and digits the pattern names, each repeated: `(a|a)+` and its kind fail on these
   const chars = [...new Set(source.toLowerCase().replace(/\\./gu, "").match(/[\p{L}\p{N}]/gu) ?? [])].filter((char) => char !== "a").slice(0, 6);
   for (const char of chars) texts.push(char.repeat(Math.max(0, length - 1)) + "!");
-  return texts;
+  // and the pattern's own text at the end: a text without a literal the pattern needs ("€", "Tsd") is refused at once by
+  // the engine's quick check, while a real description has that literal somewhere else
+  const tail = ` ${source}`;
+  return texts.map((text) => text.slice(0, Math.max(0, length - tail.length)) + tail);
 }
 
 /**

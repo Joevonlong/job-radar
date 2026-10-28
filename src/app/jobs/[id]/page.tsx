@@ -83,7 +83,7 @@ import { readProfileReadiness } from "@/lib/scoring/profile";
 import { listPdfs } from "@/lib/resume/paths";
 import { bonusPolicy, isHighPayAmount, otherRegionOfAmount, signalBonus } from "@/lib/signals/bonus";
 import { buildCatalog, toCategoryViews } from "@/lib/signals/catalog";
-import { sharedSignalPatternGuard, signalProbeLimits } from "@/lib/signals/pattern-guard";
+import { sharedSignalPatternGuard } from "@/lib/signals/pattern-guard";
 import { findQuoteTerm } from "@/lib/signals/rules";
 import { loadBaseCurrency, loadSalaryFloor } from "@/lib/signals/floor";
 import { cn } from "@/lib/utils";
@@ -195,9 +195,8 @@ export default async function JobDetailPage({ params }: { params: Params }) {
   } catch {
     me = null; // me.yaml cannot be read: the checks say "not set" instead of guessing
   }
-  const pipeline = loadPipeline();
-  const aliases = buildSkillAliasMap(pipeline.skills);
-  const patternGuard = sharedSignalPatternGuard(signalProbeLimits(pipeline), patternLog);
+  const aliases = buildSkillAliasMap(loadPipeline().skills);
+  const patternGuard = sharedSignalPatternGuard(interests.limits, patternLog);
   const mySkills = me?.skills.map((skill) => skill.name) ?? [];
   const skillMatches = matchSkills(job.skills, profileSkillKeys(mySkills, aliases), aliases);
   const german = germanCheck(job.germanLevelRequired, userGermanLabelOrNull());
