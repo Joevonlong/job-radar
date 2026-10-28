@@ -17,6 +17,7 @@ import { hasHighValueSignal, policyCurrency, type HighValuePolicy } from "./sign
 import { parseSalary } from "./parse";
 import type { JobCard } from "./types";
 import type { JobSalary } from "@/lib/domain/types";
+import { dormancyReady } from "../repos/dormancy";
 
 /** `hasHighValueSignal`, or false without a policy. */
 function highValueSql(db: Db, policy: HighValuePolicy | null | undefined): SQL {
@@ -267,7 +268,7 @@ export async function listTodayJobs(db: Db, options: TodayOptions): Promise<JobC
 
   const rows: CardRow[] = await db
     .with(latest)
-    .select(cardColumns(latest, ux))
+    .select(cardColumns(latest, ux, await dormancyReady(db)))
     .from(jobs)
     .innerJoin(companies, eq(companies.id, jobs.companyId))
     .leftJoin(latest, eq(latest.jobId, jobs.id))

@@ -320,6 +320,10 @@ export const jobs = pgTable(
     firstSeenAt: timestamptz("first_seen_at").notNull().defaultNow(),
     lastSeenAt: timestamptz("last_seen_at").notNull().defaultNow(),
     status: jobStatusEnum("status").notNull().default("active"),
+    /** Meaningful only while possibly closed and later than last_seen_at. */
+    dormantAt: timestamptz("dormant_at"),
+    /** When the automatic lifecycle last entered possibly_closed; older rows use last_seen_at plus the grace period. */
+    possiblyClosedAt: timestamptz("possibly_closed_at"),
     /** 64-bit SimHash of the description as a 16-char hex string (NULL for descriptions too short to hash). */
     simhash: text("simhash"),
     /** The poster is a recruiter / staffing agency rather than the employer (rule-based, see pipeline.yaml). */

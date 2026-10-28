@@ -9,6 +9,8 @@ profile → What I want → Deal-breakers**, or by hand in `data/profile/prefere
 They run in the hard filter, next to the salary floor and the blacklist. A vetoed job costs no AI call, because only jobs
 that pass the hard filter are scored.
 
+Preview counts and ordinary filter runs exclude dormant jobs. An explicit keep/exclude action on the detail page still re-evaluates that job. Waking a job lets the next filter run create its result under the current preferences.
+
 ## What happens to a vetoed job
 
 - The job is **not deleted**. It is hidden from the lists like any other filtered job, and **Show filtered** shows it with

@@ -7,6 +7,8 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ### Upgrade notes
 
+- **Jobs not listed for weeks leave automatic processing.** After 30 days possibly closed (normally 7 + 30 days unseen), unprotected jobs become dormant: default job lists, company counts, search and navigation badges shrink; badges also stop counting closed jobs. Find dormant jobs in the Closed or Possibly closed view, and choose Still open to wake them. No data is deleted. **Rollback:** remove `lifecycle.dormant_after_days` from your user `pipeline.yaml` if you added it (older strict schemas reject it); keep the nullable database columns. Older code shows these jobs again, and re-upgrading sweeps stale markers and user protection.
+
 - **Company and title keys are recomputed once.** The first cycle after upgrading (or `pnpm reprocess`) gives stored
   companies and jobs whose names are written in a non-Latin script, or contain letters such as Ø, Ł, Æ or ß, their new
   keys before new postings are filed. German company names with ß are re-keyed once (ß now reads as ss, as in titles:

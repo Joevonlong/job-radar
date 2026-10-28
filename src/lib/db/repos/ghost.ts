@@ -10,6 +10,8 @@ import { GHOST_LEVELS, ghostReasonListSchema, isDismissActive, type GhostFilter,
 import type { Executor } from "../executor";
 import { companies, jobBreakdowns, jobGhost, jobs, jobSources, rawPostings } from "../schema";
 import { checkTableReady } from "./job-checks";
+import { notDormantSql } from "../queries/job-status";
+import { dormancyReady } from "./dormancy";
 
 // ---------------------------------------------------------------- the check
 
@@ -69,7 +71,7 @@ export async function listJobsToGhostCheck(db: Executor, options: GhostCheckList
   const ids = options.jobIds ?? null;
   if (ids !== null && ids.length === 0) return [];
   const hash = ghostInputHashSql(options);
-  const only = ids === null ? sql`j.status <> 'closed'` : sql`j.id in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})`;
+  const only = ids === null ? sql`j.status <> 'closed' and ${notDormantSql(await dormancyReady(db), 'j')}` : sql`j.id in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})`;
   const outdated = options.force ? sql`true` : sql`(g.job_id is null or g.input_hash <> ${hash} or (g.recheck_at is not null and g.recheck_at <= ${options.now.toISOString()}::timestamptz))`;
   const trapJoin = options.withTrapSpans ? sql`left join trap_scans ts on ts.job_id = j.id` : sql``;
   const rows = await db.execute<{ id: string | number; input_hash: string; fresh: boolean }>(sql`
@@ -328,7 +330,7 @@ export async function countGhostStats(db: Executor): Promise<GhostStats | null> 
     select g.level, (g.level <> 'none' and ${DISMISS_ACTIVE}) as dismissed, count(*) as n
     from jobs j
     left join job_ghost g on g.job_id = j.id
-    where j.status <> 'closed'
+    where j.status <> 'closed' and ${notDormantSql(await dormancyReady(db), 'j')}
     group by 1, 2
   `);
   const stats: GhostStats = { byLevel: { none: 0, watch: 0, likely: 0 }, dismissed: 0, unchecked: 0, total: 0 };

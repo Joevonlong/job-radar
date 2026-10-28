@@ -4,6 +4,7 @@ import { useClosedHint } from "@/components/jobs/status-chip";
 
 import { ClosureAnswers } from "./close-job-button";
 import type { JobClosure } from "@/lib/db/queries/job-detail";
+import { isPossiblyClosedReason } from "@/lib/jobs/closure";
 
 interface ClosureNoticeProps {
   jobId: number;
@@ -33,6 +34,7 @@ export function ClosureNotice({ jobId, title, closure, lastSeenAt, timezone }: C
   return (
     <div className="text-ink-2 text-body-sm flex flex-col gap-0.5" data-testid="closure-notice" data-reason={closure.reason ?? undefined}>
       {hint && closure.reason !== "manual" ? <p data-testid="closure-hint">{hint}</p> : null}
+      {closure.reason === "dormant" ? <p data-testid="closure-last-listed">{t("lastListed", { date: format.dateTime(lastSeenAt, { dateStyle: "medium", timeZone: timezone }) })}</p> : null}
       {manual && override.note ? <p data-testid="closure-note">{t("noteShown", { note: override.note })}</p> : null}
       {stillListed ? (
         <p data-testid="closure-still-listed">{t("stillListed", { date: format.dateTime(lastSeenAt, { dateStyle: "medium", timeZone: timezone }) })}</p>
@@ -50,7 +52,7 @@ export function ClosureNotice({ jobId, title, closure, lastSeenAt, timezone }: C
           ) : null}
         </p>
       ) : null}
-      {closure.reason === "manual" || closure.reason === "phrase" || closure.reason === "possibly" ? (
+      {closure.reason === "manual" || isPossiblyClosedReason(closure.reason) ? (
         <div className="mt-1 flex flex-wrap gap-1.5">
           <ClosureAnswers jobId={jobId} title={title} reason={closure.reason} note={manual ? override.note : null} />
         </div>

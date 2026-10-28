@@ -150,7 +150,7 @@ export const jobDetailDto = z.strictObject({
   seniority: z.string(),
   language: z.string(),
   last_seen_at: iso,
-  /** Why the job shows as (possibly) closed; null when open. */
+  /** Why it shows as closed: manual / gone / dormant / phrase / possibly; null when open. */
   closed_reason: z.string().nullable(),
   signals: z.array(signalDto),
   /** Trap counts of the job's last scan; null before the first scan. */

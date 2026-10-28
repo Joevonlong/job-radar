@@ -280,6 +280,7 @@ ai-worker 的发布目录和切换由 `schedule.yaml` 里的四个键控制。�
 | 文件 | 键 | 默认 | 含义 |
 |---|---|---|---|
 | `pipeline.yaml`（shipped） | `lifecycle.possibly_closed_after_days` | 7 | 连续未见这么多天，且每个来源通道在到期后都有成功运行，才标为可能已关闭 |
+| | `lifecycle.dormant_after_days` | 30 | 可能已关闭满这么多天后休眠；整数 0–3650。0 为关闭，下一次 maintenance 清扫时唤醒已有休眠岗位。可选，缺省时由 schema 提供默认值；出厂文件只含注释 |
 | | `lifecycle.unseen_link_check_after_days` | 14 | 有效岗位连续未见这么多天就直接兜底检查链接，不依赖通道运行记录；0 为关闭。可选，缺省时由 schema 提供默认值 |
 | | `lifecycle.unseen_link_check_interval_days` | 7 | 同一岗位两次兜底检查的最少间隔天数。可选，缺省时由 schema 提供默认值 |
 | | `lifecycle.max_link_checks_per_cycle` | 20 | 可能已关闭和长期未见的有效岗位共用的每轮链接检查上限 |
@@ -294,6 +295,11 @@ ai-worker 的发布目录和切换由 `schedule.yaml` 里的四个键控制。�
 | | `job_checks.closed_recheck.extra_phrases` | `[]` | 你自己的短语（正则，不区分大小写），与市场包的 `closed_posting.phrases` 合并。只接受安全的子集：文字、字符类、多选 `(a\|b)`、`\b`、可选部分 `?`（最多 8 个）和最多 5 次的 `{n,m}`，长度不超过 200；不允许 `*`、`+`、`{n,}` 和反向引用。写错或不安全的正则 `pnpm config:check` 会报出路径。只搜页面可见文字的前 200,000 个字符，每页最多 250 毫秒（超时的页面记为"未查"） |
 
 `ui.yaml` 这一段在 YAML 或高级编辑器里改（没有表单）。旧版本不认识它：回退前先删掉。
+
+休眠键只有 schema 默认值，无需升级配置版本或迁移文件，`config:migrate --to-full` 不会把它写进用户文件。
+回退前，如果手动在用户 `pipeline.yaml` 写过 `lifecycle.dormant_after_days`，请先移除；旧版 strict schema 不接受它。
+数据库迁移保留即可，旧代码忽略可空标记，休眠岗位重新可见；再升级时会清扫遗留标记并恢复保护。
+
 
 ## 幽灵岗位检查（`pipeline.yaml` + `ui.yaml`）
 

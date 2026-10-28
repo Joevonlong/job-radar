@@ -1,10 +1,13 @@
-import { and, asc, eq, inArray, isNotNull, isNull, lt, ne, not, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, eq, getTableColumns, inArray, isNotNull, isNull, lt, ne, not, or, sql, type SQL } from "drizzle-orm";
+import type { PgColumn } from "drizzle-orm/pg-core";
 
 import { FOLLOWING_STATUSES } from "@/lib/applications/following";
 import type { LinkCheckEvidence } from "@/lib/jobs/link-check-evidence";
 
 import type { Executor } from "../executor";
 import { applications, channels, companies, jobClosureOverrides, jobFavorites, jobFilterOverrides, jobSources, jobs, rawPostings } from "../schema";
+import { dormancyReady, jobReadColumns } from "./dormancy";
+import { notDormantSql } from "../queries/job-status";
 
 export type Job = typeof jobs.$inferSelect;
 export type NewJob = typeof jobs.$inferInsert;
@@ -26,11 +29,25 @@ export function statusWhenSeenAgain(job: Pick<Job, "status" | "linkCheckJson">):
 }
 
 export async function getJob(db: Executor, id: number): Promise<Job | null> {
-  const [row] = await db.select().from(jobs).where(eq(jobs.id, id)).limit(1);
+  const [row] = await db.select(await jobReadColumns(db)).from(jobs).where(eq(jobs.id, id)).limit(1);
   return row ?? null;
 }
 
 export async function insertJob(db: Executor, values: NewJob): Promise<Job> {
+  if (!(await dormancyReady(db))) {
+    // Drizzle's insert builder lists even omitted columns as DEFAULT. Before the migration,
+    // explicitly name only legacy columns, keeping their own encoders and database defaults.
+    const columns: Record<string, PgColumn> = getTableColumns(jobs);
+    const entries = Object.entries(values).filter(([key, value]) => value !== undefined && key in columns && key !== "dormantAt" && key !== "possiblyClosedAt" && key !== "searchTsv");
+    return db.transaction(async (tx) => {
+      const [inserted] = await tx.execute<{ id: string | number }>(sql`insert into ${jobs}
+        (${sql.join(entries.map(([key]) => sql.identifier(columns[key]!.name)), sql`, `)})
+        values (${sql.join(entries.map(([key, value]) => sql.param(value, columns[key])), sql`, `)}) returning id`);
+      const row = inserted ? await getJob(tx, Number(inserted.id)) : null;
+      if (!row) throw new Error("insertJob: insert returned no row");
+      return row;
+    });
+  }
   const [row] = await db.insert(jobs).values(values).returning();
   if (!row) throw new Error("insertJob: insert returned no row");
   return row;
@@ -114,7 +131,7 @@ export async function findJobByFamilyExternalId(
 /** Jobs of one company with this normalized title (cross-source exact-key candidates). */
 export async function listJobsByCompanyTitle(db: Executor, companyId: number, titleNorm: string): Promise<Job[]> {
   return db
-    .select()
+    .select(await jobReadColumns(db))
     .from(jobs)
     .where(and(eq(jobs.companyId, companyId), eq(jobs.titleNorm, titleNorm)))
     .orderBy(asc(jobs.id));
@@ -156,6 +173,7 @@ export interface SeenResult {
  * active again. Never moves `last_seen_at` backwards. Jobs are updated, never deleted.
  */
 export async function touchJobsSeen(db: Executor): Promise<SeenResult> {
+  const dormant = await dormancyReady(db);
   const rows = await db.execute<{ seen: number; reopened: number }>(sql`
     with latest as (
       select js.job_id, max(r.fetched_at) as seen
@@ -174,6 +192,7 @@ export async function touchJobsSeen(db: Executor): Promise<SeenResult> {
       -- a job whose posting says it no longer takes applications stays possibly closed (the source may still list it)
       set last_seen_at = c.seen,
           status = case when j.status = 'possibly_closed' and j.link_check_json->>'outcome' = ${PHRASE_OUTCOME} then j.status else 'active' end
+          ${dormant ? sql`, dormant_at = null` : sql``}
       from changed c
       where j.id = c.id
       returning j.id, j.status
@@ -198,6 +217,7 @@ export async function markJobsPossiblyClosed(db: Executor, input: { now: Date; d
   const rows = await db.execute<{ id: string }>(sql`
     update jobs
     set status = 'possibly_closed'
+      ${await dormancyReady(db) ? sql`, possibly_closed_at = ${input.now.toISOString()}::timestamptz` : sql``}
     where status = 'active'
       and last_seen_at < ${cutoff.toISOString()}::timestamptz
       and exists (select 1 from job_sources js where js.job_id = jobs.id)
@@ -284,9 +304,9 @@ export async function listJobsForLinkCheck(db: Executor, limit: number, options:
     ? sql`case when ${jobs.status} = 'active' and ${lastRecheckUnansweredSql()} then (${jobs.linkCheckJson}->>'unseenCheckedAt')::timestamptz else ${jobs.linkCheckedAt} end`
     : jobs.linkCheckedAt;
   return db
-    .select()
+    .select(await jobReadColumns(db))
     .from(jobs)
-    .where(and(status, not(hasClosureOverrideSql()), options.unseen ? undefined : phraseExcluded, options.skipWatched ? or(not(watchedSql()), lastRecheckUnansweredSql()) : undefined))
+    .where(and(status, notDormantSql(await dormancyReady(db)), not(hasClosureOverrideSql()), options.unseen ? undefined : phraseExcluded, options.skipWatched ? or(not(watchedSql()), lastRecheckUnansweredSql()) : undefined))
     .orderBy(sql`${lastPlainCheck} asc nulls first`, ...(options.unseen ? [sql`(${jobs.status} = 'possibly_closed') desc`] : []), asc(jobs.lastSeenAt), asc(jobs.id))
     .limit(limit);
 }
@@ -299,6 +319,7 @@ export async function recordLinkCheck(db: Executor, id: number, input: { outcome
     patch.status = "active";
     patch.lastSeenAt = input.at;
   }
+  if (input.outcome !== "unknown" && await dormancyReady(db)) patch.dormantAt = null;
   await updateJob(db, id, patch);
 }
 
@@ -360,12 +381,15 @@ export async function recordWatchedCheck(db: Executor, id: number, evidence: Lin
     evidence.outcome === "unknown" || evidence.outcome === "robots"
       ? sql`(case when link_check_json->>'outcome' in ('gone', 'phrase') then link_check_json else ${freshEvidence} end)`
       : freshEvidence;
+  const dormant = await dormancyReady(db);
   await db.execute(sql`
     update jobs
     set link_checked_at = ${at.toISOString()}::timestamptz,
         status = ${status},
         last_seen_at = ${lastSeen},
         link_check_json = ${evidenceSql}
+        ${dormant && (evidence.outcome === "alive" || evidence.outcome === "gone") ? sql`, dormant_at = null` : sql``}
+        ${dormant && evidence.outcome === "phrase" ? sql`, possibly_closed_at = case when jobs.status <> 'possibly_closed' then ${at.toISOString()}::timestamptz else possibly_closed_at end` : sql``}
     where id = ${id}
   `);
 }

@@ -2,6 +2,8 @@
 
 The `signals` step of a processing cycle, and the `signals` subtask under the `ai` step, pick compensation signals out of the JD, each with a quote from the original text. The categories, word lists, weights and caps are all in `interests.yaml` of the user config directory.
 
+The /interests recent-job preview and AI re-review cost estimate exclude dormant jobs. Rule scans, salary synchronization and bonus reconciliation also skip them; after waking, the next cycle catches up. Stored results remain visible in explicit status views.
+
 ## Signal categories
 
 Signals are grouped into **categories**. On `/interests` you can add, delete, rename and reorder them (at most 12), or edit `signals.categories` in `interests.yaml` directly. The order of the list is the order they are shown and sorted in. Every category has a kind:

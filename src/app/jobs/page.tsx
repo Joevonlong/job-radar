@@ -151,6 +151,7 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
           offLabel={tClosed("filter", { count: closedCount })}
           onLabel={tClosed("filter", { count: closedCount })}
           removeLabel={tClosed("filterRemove")}
+          title={tClosed("filterHint")}
           testId="toggle-closed"
         />
         <SaveViewButton />

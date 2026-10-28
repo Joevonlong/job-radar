@@ -2,6 +2,8 @@ import { and, asc, eq, inArray, sql } from "drizzle-orm";
 
 import type { Executor } from "../executor";
 import { scores, signalScans, signals } from "../schema";
+import { notDormantSql } from "../queries/job-status";
+import { dormancyReady } from "./dormancy";
 
 /** A signal to store; `SignalDraft` of `@/lib/signals` fits. C7: the quote is never empty. */
 export interface SignalInsert {
@@ -87,6 +89,7 @@ export async function listJobsToScan(db: Executor, options: { rulesHash: string;
     from jobs j
     left join signal_scans s on s.job_id = j.id
     where j.id > ${options.afterId}
+      and ${notDormantSql(await dormancyReady(db), 'j')}
       and j.description is not null and btrim(j.description) <> ''
       and (s.job_id is null or s.description_hash <> md5(j.description) or s.rules_hash <> ${options.rulesHash})
     order by j.id
@@ -155,11 +158,12 @@ export interface ReviewCandidate {
 }
 
 /** The conditions of `listJobsToReview` (`countJobsToReview` counts with the same ones). */
-function reviewConditions(options: { promptVersion: string; withoutCandidates: boolean; jobIds?: readonly number[] }) {
+function reviewConditions(dormant: boolean, options: { promptVersion: string; withoutCandidates: boolean; jobIds?: readonly number[] }) {
   const only = options.jobIds ? sql`and j.id in (${sql.join(options.jobIds.map((id) => sql`${id}`), sql`, `)})` : sql``;
   return sql`s.description_hash = md5(j.description)
       and (s.ai_description_hash is null or s.ai_description_hash <> s.description_hash or s.ai_prompt_version is distinct from ${options.promptVersion})
       and j.status in ('active', 'possibly_closed')
+      and ${options.jobIds ? sql`true` : notDormantSql(dormant, 'j')}
       and not exists (
         select 1 from (select filter_result from scores sc where sc.job_id = j.id order by sc.created_at desc, sc.id desc limit 1) latest
         where latest.filter_result = 'filtered_out'
@@ -180,7 +184,7 @@ export async function listJobsToReview(
     select j.id, j.title, j.description, j.salary_json, s.candidate_count
     from jobs j
     join signal_scans s on s.job_id = j.id
-    where ${reviewConditions(options)}
+    where ${reviewConditions(await dormancyReady(db), options)}
     order by (s.candidate_count > 0) desc, j.first_seen_at desc, j.id desc
     limit ${options.limit}
   `);
@@ -197,7 +201,7 @@ export async function countJobsToReview(db: Executor, options: { promptVersion: 
     select count(*) as n
     from jobs j
     join signal_scans s on s.job_id = j.id
-    where ${reviewConditions(options)}
+    where ${reviewConditions(await dormancyReady(db), options)}
   `);
   return Number(Array.from(rows)[0]?.n ?? 0);
 }
@@ -217,6 +221,7 @@ export async function listRecentJobsForPreview(db: Executor, limit: number): Pro
     select j.id, j.title, j.description
     from jobs j
     where j.status in ('active', 'possibly_closed')
+      and ${notDormantSql(await dormancyReady(db), 'j')}
       and j.description is not null and btrim(j.description) <> ''
       and not exists (
         select 1 from (select filter_result from scores sc where sc.job_id = j.id order by sc.created_at desc, sc.id desc limit 1) latest
@@ -261,6 +266,7 @@ export async function listJobsToSyncSalary(db: Executor, options: { afterId: num
     from jobs j
     join signal_scans s on s.job_id = j.id
     where j.id > ${options.afterId}
+      and ${notDormantSql(await dormancyReady(db), 'j')}
       and j.description is not null and btrim(j.description) <> ''
       and s.description_hash = md5(j.description)
       and s.salary_hash is distinct from md5(coalesce(j.salary_json::text, ''))
@@ -344,11 +350,12 @@ export async function listBonusRows(db: Executor): Promise<BonusRow[]> {
   }>(sql`
     select s.job_id, t.signals, s.id as score_id, s.score, s.signal_bonus, s.rank_value
     from scores s
+    join jobs j on j.id = s.job_id
     left join (
       select job_id, jsonb_agg(jsonb_build_object('tier', tier, 'value', value_json)) as signals
       from signals group by job_id
     ) t on t.job_id = s.job_id
-    where t.job_id is not null or s.signal_bonus <> 0
+    where (t.job_id is not null or s.signal_bonus <> 0) and ${notDormantSql(await dormancyReady(db), 'j')}
   `);
   return Array.from(rows, (r) => ({
     jobId: Number(r.job_id),

@@ -9,7 +9,7 @@ import { closeJobAction, reopenJobAction, undoClosureAction, type ClosureActionR
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
-import { CLOSURE_NOTE_MAX, type ClosedReason } from "@/lib/jobs/closure";
+import { CLOSURE_NOTE_MAX, isPossiblyClosedReason, type ClosedReason } from "@/lib/jobs/closure";
 import { toastTone, toastUndo } from "@/lib/toast";
 
 interface ClosureProps {
@@ -110,7 +110,7 @@ export function CloseJobButton({ jobId, title, reason, note }: ClosureProps) {
       </Button>
     );
   }
-  const possibly = reason === "phrase" || reason === "possibly";
+  const possibly = isPossiblyClosedReason(reason);
   return (
     <CloseForm
       note={note}
@@ -130,7 +130,7 @@ export function CloseJobButton({ jobId, title, reason, note }: ClosureProps) {
 export function ClosureAnswers({ jobId, title, reason, note }: ClosureProps) {
   const t = useTranslations("dashboard.closed");
   const { pending, close, reopen } = useClosure({ jobId, title });
-  if (reason === "phrase" || reason === "possibly") {
+  if (isPossiblyClosedReason(reason)) {
     return (
       <Button type="button" variant="outline" size="sm" disabled={pending} onClick={() => reopen("keptOpenToast")} data-testid="detail-keep-open">
         <RotateCcw aria-hidden /> {t("keepOpen")}
