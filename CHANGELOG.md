@@ -7,6 +7,9 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ### Upgrade notes
 
+- **Rolling back past interactive AI lanes:** queued automatic translations can fail on the older worker; the next
+  cycle retries eligible jobs. To preserve the queued requests, remove their automatic-origin markers before rollback
+  as described in [Roll back](docs/upgrade.md#roll-back). User requests retain their existing format.
 - **Company and title keys are recomputed once.** The first cycle after upgrading (or `pnpm reprocess`) gives stored
   companies and jobs whose names are written in a non-Latin script, or contain letters such as Ø, Ł, Æ or ß, their new
   keys before new postings are filed. German company names with ß are re-keyed once (ß now reads as ss, as in titles:
@@ -91,6 +94,10 @@ A failure in (a) does not block rollback: follow (c) and accept the display wind
 
 ### Changed
 
+- **Interactive AI requests have their own lane:** translation, breakdown, salary lookup and AI tests can start while
+  a batch runs. Automatic follow-up translations stay in batch; clicking Translate promotes one that is still queued.
+  Concurrent work for the same job and language shares one AI operation. Manual scoring uses the existing time budget,
+  finishes work already started and shows how many jobs remain when the budget stops it.
 - **Waiting buttons follow the process's heartbeat instead of a fixed time limit:** translate, break down, salary
   lookup, the test and "collect now" buttons and "Score now" on a job page keep waiting as long as the process that
   claims the request is alive, instead of giving up after 10 or 12 minutes (the request ran anyway). While a request

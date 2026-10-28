@@ -166,7 +166,7 @@ describe("the translate tab's state after a reload", () => {
   it("an open translate request resumes the waiting state; none or a finished one does not", async () => {
     const jobId = await addJob("Reload translate");
     expect(await readInitialTranslateRequest(db(), jobId)).toBeNull();
-    const queued = await requestTranslateJob(db(), { jobId, force: false });
+    const queued = await requestTranslateJob(db(), { jobId, force: false, origin: "user" });
     if (queued.state !== "queued") throw new Error("expected a queued request");
     expect(await readInitialTranslateRequest(db(), jobId)).toMatchObject({ requestId: queued.requestId, stage: "pending", queue: { ahead: 0 } });
     await db().update(schema.controlRequests).set({ status: "running" }).where(eq(schema.controlRequests.id, queued.requestId));

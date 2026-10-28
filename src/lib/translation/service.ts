@@ -1,6 +1,7 @@
 import { AiProviderError } from "@/lib/ai/errors";
 import type { AiRouter } from "@/lib/ai/router";
 import type { AiProviderId } from "@/lib/ai/types";
+import { singleFlight } from "@/lib/async/single-flight";
 import type { ChannelLogger } from "@/lib/channels/types";
 import { loadConfig } from "@/lib/config";
 import { translationTarget } from "@/lib/i18n/config";
@@ -58,7 +59,7 @@ export interface EnsureTranslationOptions {
 }
 
 /** Requests in flight, so a double click (or a cycle running at the same time) pays for one translation. */
-const inFlight = new Map<number, Promise<EnsureTranslationResult>>();
+const inFlight = singleFlight<string, EnsureTranslationResult>();
 
 /**
  * The cached translation of a job into the target language when it is current, otherwise a new one from the AI, written to
@@ -68,13 +69,8 @@ const inFlight = new Map<number, Promise<EnsureTranslationResult>>();
  * a cancel throws `AiProviderError("aborted")`.
  */
 export function ensureTranslation(db: Executor, router: AiRouter, jobId: number, options: EnsureTranslationOptions = {}): Promise<EnsureTranslationResult> {
-  const running = inFlight.get(jobId);
-  if (running) return running;
-  const promise = run(db, router, jobId, options).finally(() => {
-    inFlight.delete(jobId);
-  });
-  inFlight.set(jobId, promise);
-  return promise;
+  const target = options.target ?? translationTarget();
+  return inFlight(`${jobId}:${target}`, () => run(db, router, jobId, { ...options, target }));
 }
 
 /** The two ai.yaml numbers the translation needs (`ai.yaml: translation`). */

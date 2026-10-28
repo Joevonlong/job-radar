@@ -19,8 +19,10 @@ export function createRescoreStaleHandler(options: RescoreHandlerOptions = {}): 
     const deps = options.createDeps
       ? options.createDeps(context)
       : createScoringDeps({ db: context.db, logger: context.logger, timeZone: loadConfig("schedule").timezone, signal: context.signal });
-    const result = await rescoreStale(deps);
-    const summary = { scored: result.scored, failed: result.failed, remaining: result.backlog.stale, placeholder: false };
+    const minutes = deps.config.cycle_budget_minutes;
+    const deadline = minutes > 0 ? new Date(deps.now().getTime() + minutes * 60_000) : null;
+    const result = await rescoreStale({ ...deps, deadline });
+    const summary = { scored: result.scored, failed: result.failed, remaining: result.backlog.stale, placeholder: false, ...(result.stopped === "time_budget" ? { stopped: result.stopped } : {}) };
     // Nothing could be scored: say why. No AI provider could be used (then every tried posting failed too),
     // some postings failed, the profile is incomplete (which fields), or the run was cancelled.
     if (result.scored === 0 && result.stopped === "ai_unavailable") return { status: "failed", result: { ...summary, error: "rescore_ai_unavailable" } };

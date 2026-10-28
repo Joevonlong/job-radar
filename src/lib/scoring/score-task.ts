@@ -52,6 +52,8 @@ export interface ScoringDeps {
   config: AiConfig;
   logger: ChannelLogger;
   now: () => Date;
+  /** Stop before starting another job at this time. In-flight calls keep their full fallback chain. */
+  deadline?: Date | null;
   signal?: AbortSignal;
   /** Where the profile comes from (default: the YAML files on disk). Tests inject one. */
   loadProfile?: () => Promise<ScoringProfile>;
@@ -98,7 +100,7 @@ export interface ScoringResult {
   backlog: { unscored: number; stale: number };
   /** Postings scored per provider. */
   providers: Record<string, number>;
-  /** Why the run stopped early or did not start: `profile_incomplete`, `market_unresolved`, `ai_unavailable`, `quota_guard`, `cancelled`. */
+  /** Why the run stopped early or did not start: `profile_incomplete`, `market_unresolved`, `ai_unavailable`, `quota_guard`, `time_budget`, `cancelled`. */
   stopped?: string;
   /** With `stopped: "quota_guard"`: when the usage cap is expected to let the AI work again (ISO; null = the next cycle). */
   quotaResumeAt?: string | null;
@@ -352,6 +354,11 @@ export async function runScoring(deps: ScoringDeps, options: ScoringOptions): Pr
   const tried = new Set<number>();
   const worker = async (): Promise<void> => {
     while (result.stopped === undefined && !deps.signal?.aborted) {
+      if (next >= candidates.length) return;
+      if (deps.deadline && deps.now().getTime() >= deps.deadline.getTime()) {
+        result.stopped = "time_budget";
+        return;
+      }
       const candidate = candidates[next++];
       if (candidate === undefined) return;
       try {
@@ -419,7 +426,7 @@ export async function scoreJobs(deps: ScoringDeps, jobIds: readonly number[]): P
 }
 
 /** Router + logger wiring for callers outside a cycle (the runner's control handler). */
-export function createScoringDeps(input: { db: Db; logger: ChannelLogger; timeZone: string; signal?: AbortSignal; now?: () => Date; config?: AiConfig }): ScoringDeps {
+export function createScoringDeps(input: { db: Db; logger: ChannelLogger; timeZone: string; signal?: AbortSignal; now?: () => Date; config?: AiConfig; deadline?: Date | null }): ScoringDeps {
   const config = input.config ?? loadConfig("ai");
   const now = input.now ?? (() => new Date());
   return {
@@ -427,8 +434,10 @@ export function createScoringDeps(input: { db: Db; logger: ChannelLogger; timeZo
     config,
     logger: input.logger,
     now,
+    deadline: input.deadline,
     ...(input.signal ? { signal: input.signal } : {}),
-    // a request the user made: the shared cooldowns and the usage cap's window apply, the per-cycle cap does not
+    // No router deadline: a started job keeps its fallbacks; only the scoring loop stops between jobs.
+    // A request the user made: the shared cooldowns and the usage cap's window apply, the per-cycle cap does not.
     router: createAiRouter({
       config,
       providers: createDefaultProviders(config, { logger: input.logger }),

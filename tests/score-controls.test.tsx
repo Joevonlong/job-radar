@@ -155,6 +155,14 @@ describe("ScoreNowButton (job detail)", () => {
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
+  it("shows the time-budget remainder in Chinese", async () => {
+    scoreJobNowAction.mockResolvedValue({ status: "queued", request: 5, kind: "score_jobs", existing: false, nonce: 1 });
+    served = polled({ status: "done", finishedAt: NOW, queue: null, result: { scored: 1, remaining: 6, stopped: "time_budget" } });
+    render(wrap(<ScoreNowButton jobId={7} />, "zh"));
+    await userEvent.click(screen.getByRole("button", { name: "立即打分" }));
+    await waitFor(() => expect(screen.getByTestId("score-now-time-budget")).toHaveTextContent("到了时间预算，还剩 6 条没打分。"));
+  });
+
   it("is off with the reason and a link to /me while the profile is incomplete", () => {
     render(wrap(<ScoreNowButton jobId={7} profileMissing={["summary", "skills"]} />, "zh"));
     expect(screen.getByRole("button", { name: "立即打分" })).toBeDisabled();
@@ -219,6 +227,11 @@ describe("ActionsPanel: score the backlog", () => {
     const parsed = controlStatusSchema.parse({ ...status(), requests: [{ ...request({ status: "done" }), stopped: "something_new", remaining: 2 }] });
     expect(parsed.requests[0]).toMatchObject({ remaining: 2 });
     expect(parsed.requests[0]?.stopped).toBeUndefined();
+  });
+
+  it("shows a scoring request's budget remainder in Chinese", () => {
+    render(wrap(<ActionsPanel status={status({ requests: [request({ kind: "rescore_stale", status: "done", remaining: 12, stopped: "time_budget" })] })} onRequested={() => {}} channelChoices={[]} timezone="Europe/Berlin" />, "zh"));
+    expect(screen.getByTestId("control-request-time-budget")).toHaveTextContent("到了时间预算，还剩 12 条没打分。");
   });
 
   it("lists the request with its jobs and its outcome", () => {
