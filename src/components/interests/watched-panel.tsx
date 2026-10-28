@@ -6,12 +6,17 @@ import { useTranslations } from "next-intl";
 import { useEffect, useId, useRef, useState, useTransition, type FormEvent, type KeyboardEvent } from "react";
 import { toastTone } from "@/lib/toast";
 
-import { addWatchedCompanyAction, removeWatchedCompanyAction, suggestCompaniesAction } from "@/app/interests/actions";
+import { addWatchedCompanyAction as rawAddWatchedCompanyAction, removeWatchedCompanyAction as rawRemoveWatchedCompanyAction, suggestCompaniesAction as rawSuggestCompaniesAction } from "@/app/interests/actions";
 import { FilterChip } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import type { InterestsActionState, InterestsFormError, WatchedCompanyView } from "@/lib/interests/types";
+import { withActionFeedback } from "@/lib/actions/client";
+
+const addWatchedCompanyAction = withActionFeedback(rawAddWatchedCompanyAction)(() => ({ status: "error", section: "watched", nonce: Date.now(), formError: "writeFailed", fieldErrors: [] }));
+const removeWatchedCompanyAction = withActionFeedback(rawRemoveWatchedCompanyAction)(() => ({ status: "error", section: "watched", nonce: Date.now(), formError: "writeFailed", fieldErrors: [] }));
+const suggestCompaniesAction = withActionFeedback(rawSuggestCompaniesAction)(() => ([]));
 
 /** How long typing waits before the suggestions are asked for. */
 const SUGGEST_DEBOUNCE_MS = 200;

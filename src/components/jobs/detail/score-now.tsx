@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
-import { scoreJobNowAction } from "@/app/jobs/[id]/actions";
+import { scoreJobNowAction as rawScoreJobNowAction } from "@/app/jobs/[id]/actions";
 import { QueueHint } from "@/components/control/queue-hint";
 import { readRequestView } from "@/components/control/read-request-view";
 import { useControlRequest } from "@/components/control/use-control-request";
@@ -16,6 +16,9 @@ import { IDLE_CONTROL_STATE, type ControlActionState } from "@/lib/control/servi
 import { formatClock } from "@/lib/format/clock";
 import type { ProfileScoringField } from "@/lib/scoring/profile";
 import { INK_LINK } from "@/components/ui/ink-link";
+import { withActionFeedback } from "@/lib/actions/client";
+
+const scoreJobNowAction = withActionFeedback(rawScoreJobNowAction)(() => ({ status: "error", error: "databaseUnavailable", nonce: Date.now() }));
 
 const ERROR_CODES = ["invalid_payload", "score_failed", "score_stopped", "score_profile_incomplete", "score_ai_unavailable", "quota_guard", "handler_error", "no_handler"] as const;
 

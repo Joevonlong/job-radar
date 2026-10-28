@@ -182,6 +182,13 @@ Runner healthcheck: every 30 seconds the container runs `node dist/healthcheck.m
 
 Note: `unhealthy` is only a status. Docker's `restart: unless-stopped` restarts only when the process exits, not because of unhealthy. If the runner is `unhealthy`: first `docker compose logs --tail 100 runner` to see why, then `docker compose restart runner`.
 
+The runner also has its own watchdog: it stops waiting for a heartbeat write after `RUNNER_HEARTBEAT_SECONDS`.
+A successful write clears the failure window even if it finishes after that timeout. Continuous failures without a
+successful write for twice `RUNNER_HEALTH_MAX_AGE_SECONDS` start a shutdown so Docker can restart it. Active work is
+aborted and gets up to `ai.yaml: host_worker.shutdown_grace_seconds` to clean up before a forced exit.
+Heartbeat pruning and the ai-worker check use the same per-step timeout; their failure is logged without blocking later
+heartbeats. These timeouts stop waiting for a query; they do not cancel a query already running in Postgres.
+
 Log rotation: all services use the json-file driver, with at most `LOG_MAX_FILE` files per service (default 5), each at most `LOG_MAX_SIZE` (default 10m); both can be changed in `.env`.
 
 Day-to-day checks for the AI worker: the AI worker card on the `/sources` page (heartbeat, number of queued AI requests, result of the latest `run_ai`); on the command line `launchctl print gui/$(id -u)/io.jobradar.ai-worker`. Logs are in `data/logs/`, and the worker rotates them by size automatically (see section 6b), so you do not need to clean them by hand.

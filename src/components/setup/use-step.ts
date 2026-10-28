@@ -4,11 +4,15 @@ import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useState, useTransition } from "react";
 
-import { saveSetupStepAction, skipSetupStepAction } from "@/app/setup/actions";
+import { saveSetupStepAction as rawSaveSetupStepAction, skipSetupStepAction as rawSkipSetupStepAction } from "@/app/setup/actions";
 import type { FieldError } from "@/lib/profile/draft";
 import { toastTone } from "@/lib/toast";
 import { nextStepOf, type SetupStepId } from "@/lib/setup/steps";
 import { IDLE_SETUP_STATE, type SetupActionState, type SetupFieldError } from "@/lib/setup/types";
+import { withActionFeedback } from "@/lib/actions/client";
+
+const saveSetupStepAction = withActionFeedback(rawSaveSetupStepAction)(() => ({ status: "error", step: "review", fieldErrors: [], formError: "writeFailed", nonce: Date.now() }));
+const skipSetupStepAction = withActionFeedback(rawSkipSetupStepAction)(() => ({ status: "error", step: "review", fieldErrors: [], formError: "writeFailed", nonce: Date.now() }));
 
 /** The URL of a step of the wizard. */
 export const stepHref = (step: SetupStepId): string => `/setup?step=${step}`;

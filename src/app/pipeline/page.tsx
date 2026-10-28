@@ -9,7 +9,7 @@ import { readHiddenSettings } from "@/lib/applications/hidden";
 import { boardLayout } from "@/lib/applications/visibility";
 import { loadConfig } from "@/lib/config";
 import { countInPipeline, overdueThresholds } from "@/lib/dashboard/board";
-import { getSchedule } from "@/lib/dashboard/context";
+import { getDisplayTimeZone } from "@/lib/dashboard/context";
 import { getDb, listPipelineEntries } from "@/lib/db";
 import { visaVisible } from "@/lib/visa/settings";
 
@@ -24,7 +24,7 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function PipelinePage() {
   const t = await getTranslations("pages.pipeline");
   const tPipeline = await getTranslations("pipeline");
-  const { timezone } = getSchedule();
+  const timezone = getDisplayTimeZone();
   const notify = loadConfig("notify");
   const thresholds = overdueThresholds(notify);
 

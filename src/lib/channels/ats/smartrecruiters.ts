@@ -105,7 +105,10 @@ function pageUrl(company: CompanyEntry, settings: Settings, offset: number): str
 
 async function fetchJson(ctx: ChannelContext, url: string, etag: string | null): Promise<{ status: number; etag: string | null; body: unknown }> {
   const response = await ctx.http.request(url, { headers: conditionalHeaders(etag), allowStatus: [304, 404] });
-  if (response.status === 304 || response.status === 404) return { status: response.status, etag: null, body: null };
+  if (response.status === 304 || response.status === 404) {
+    await response.cancel?.();
+    return { status: response.status, etag: null, body: null };
+  }
   let body: unknown;
   try {
     body = await response.json();

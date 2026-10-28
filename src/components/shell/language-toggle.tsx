@@ -6,8 +6,11 @@ import { useLocale, useTranslations } from "next-intl";
 
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { setLocale } from "@/i18n/actions";
+import { setLocale as rawSetLocale } from "@/i18n/actions";
 import { LOCALE_META, LOCALES, intlTag, resolveLocale, type Locale } from "@/i18n/locale";
+import { withActionFeedback } from "@/lib/actions/client";
+
+const setLocale = withActionFeedback(rawSetLocale)(() => (undefined));
 
 /**
  * The interface language. With two languages one click switches to the other (the button shows its name); with more,

@@ -31,6 +31,15 @@ AI 可以走订阅命令行（`claude`、`codex`）、按量计费的 API key，
 router、强制刷新和其他选项以先到者为准。合并进轮次 late 阶段时也会继承它的 deadline：预算耗尽后，
 重试可以接着翻译已经保存的分块。两条通道仍共用 provider 限额，每个翻译分块都可能等待 codex 并发槽位。
 
+`run_ai` 属于批量通道；摘要是否延后，也使用领取请求和计算排队位置时相同的通道感知规则。
+多轮已结束的周期排队时，worker 会逐轮处理 AI 工作，把岗位通知合并到最后一个可领取周期的摘要中；仍在运行的周期不会挡住这份摘要，告警仍会立即发送。
+摘要发送失败或被延后（包括静默时段）时，未送达窗口保存在 `runtime_state`（`notify:window:<cycleId>`）中。
+请求会结束，不会为了重试摘要而重新入队。下一次 notify 会接续最早未送达的窗口：有可领取的后继就由后继接续，没有就留给下一周期。
+原来的岗位候选窗口在过期或 worker 重启后仍保留，已完成的 AI 工作不会重复执行。摘要成功后，在同一事务中把覆盖的周期记入 `notifications`，
+并结清所有已覆盖窗口和旧请求的通知状态，避免旧窗口再次补发。Telegram 未启用或凭据未配置时，不会新建持久窗口；岗位候选仍按正常期限过期。
+请求在各自队列中始终按正常顺序领取，失败摘要不会让翻译、打分请求一直等待。
+`--once` 处理完可领取请求后退出，未送达窗口留给后续 notify。
+
 **规则**：任何会调用 AI 的请求种类只由 ai-worker 领取。种类清单只有一份：`AI_CONTROL_REQUEST_KINDS`（`src/lib/db/repos/control-requests.ts`），真实 handler 在 `registerAiControlHandlers()`（`src/lib/control/ai-handlers.ts`）一处注册。新增一种（例如 `run_suggest`、`score_jobs`）：数据库枚举加值（迁移）→ 加进该清单 → 注册 handler；单元测试会在枚举里有未归类的种类时失败。
 
 `ai.yaml: execution: container` 时一切照旧：runner 自己在容器里跑 AI 和推送，并领 `translate_job` / `rescore_stale`；这需要你自己把订阅令牌或 API key 放进容器（compose 里默认把这些变量置空，要用就写 `compose.override.yaml`），不推荐。

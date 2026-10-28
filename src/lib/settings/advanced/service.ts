@@ -24,6 +24,7 @@ import {
   type ValidateOptions,
 } from "@/lib/config";
 import { signalPatternIsFast } from "@/lib/signals/pattern-guard";
+import { logActionFailure } from "@/lib/logging/action-failure";
 
 import type { AdvancedFailure, AdvancedLayer, AdvancedPreview, AdvancedResetResult, AdvancedSaveResult, AdvancedValidation } from "./types";
 import { advancedNameOfStem, editorLimits } from "./view";
@@ -133,6 +134,7 @@ export async function saveAdvanced(rawRequest: unknown): Promise<AdvancedSaveRes
     const state = currentState(name);
     return { status: "saved", hash: state.hash, layer: written.layer, text: state.text, backup: written.backup !== null };
   } catch (error) {
+    logActionFailure("saveAdvanced", error);
     return failureOf(name, error);
   }
 }
@@ -146,6 +148,7 @@ export async function resetAdvanced(rawRequest: unknown): Promise<AdvancedResetR
     const state = currentState(name);
     return { status: "reset", hash: state.hash, layer: result.layer, text: state.text, backup: result.backup !== null };
   } catch (error) {
+    logActionFailure("resetAdvanced", error);
     return failureOf(name, error);
   }
 }

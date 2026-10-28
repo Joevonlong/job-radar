@@ -6,7 +6,7 @@ import { useQueryStates } from "nuqs";
 import { useId, useState, useTransition } from "react";
 import { toast } from "sonner";
 
-import { saveViewAction } from "@/app/interests/actions";
+import { saveViewAction as rawSaveViewAction } from "@/app/interests/actions";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -14,6 +14,9 @@ import type { InterestsFormError } from "@/lib/interests/types";
 import { hasViewFilters, viewFiltersFromParams } from "@/lib/interests/view-filters";
 import { withLegacyKeys } from "@/lib/jobs/search-params";
 import { jobsSearchParsers } from "@/lib/jobs/search-params";
+import { withActionFeedback } from "@/lib/actions/client";
+
+const saveViewAction = withActionFeedback(rawSaveViewAction)(() => ({ status: "error", section: "views", nonce: Date.now(), formError: "writeFailed", fieldErrors: [] }));
 
 const MAX_NAME_CHARS = 60;
 

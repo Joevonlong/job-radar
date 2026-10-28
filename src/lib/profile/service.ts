@@ -5,21 +5,24 @@
  */
 import { z } from "zod";
 
-import { ConfigError, parseConfigText, readProfileText, writeConfig, type ProfileName } from "@/lib/config";
+import { ConfigError, mutateConfig, parseConfigText, readProfileText, writeConfig, type ProfileName } from "@/lib/config";
 import { meSchema } from "@/lib/config/schemas/me";
-import { preferencesSchema } from "@/lib/config/schemas/preferences";
+import { preferencesSchema, type PreferencesConfig } from "@/lib/config/schemas/preferences";
 import { getDb, getProfileSnapshot, hashProfileYaml } from "@/lib/db";
 import { dealBreakerLimitProblems, slowPatternProblems } from "@/lib/filter/deal-breakers";
 import { vmTimeBox } from "@/lib/filter/time-box";
+import { logActionFailure } from "@/lib/logging/action-failure";
 import { loadPipeline, marketSettingsProblems } from "@/lib/market";
 
 import {
   meDraftSchema,
   meDraftToCandidate,
   preferencesDraftSchema,
+  preferencesConfigToDraft,
   preferencesDraftToCandidate,
   toFieldErrors,
   type FieldError,
+  type PreferencesDraft,
 } from "./draft";
 import { registerProfileSnapshotHook } from "./snapshots";
 import type { FormErrorKey, ProfileActionState } from "./types";
@@ -45,59 +48,60 @@ async function failed(kind: ProfileName, formError: FormErrorKey | null, fieldEr
   return { status: "error", kind, baseHash: await currentHash(kind), fieldErrors, formError };
 }
 
+function preferencesProblems(value: PreferencesConfig): FieldError[] {
+  const problems = marketSettingsProblems(value.market);
+  if (problems.length > 0) return problems.map((p): FieldError => ({ path: `market.${p.field}`, ...(p.problem === "missing" ? { key: "required" } : p.problem === "unknown" ? { key: "invalidChoice" } : { key: "invalid", params: { message: p.detail ?? "" } }) }));
+  const limits = dealBreakerLimits();
+  const tooBig = limits === null ? [] : dealBreakerLimitProblems(value.deal_breakers, limits);
+  if (tooBig.length > 0) return tooBig.map((p): FieldError => ({ path: ["deal_breakers", ...p.path.slice(0, 2)].join("."), key: p.kind === "too_many_rules" ? "tooMany" : "tooLong", params: { max: p.max } }));
+  const slow = limits === null ? [] : slowPatternProblems(value.deal_breakers, limits, vmTimeBox);
+  return slow.map((p): FieldError => ({ path: ["deal_breakers", ...p.path.slice(0, 2)].join("."), key: "slowPattern", params: { kind: "probe" } }));
+}
+
 /**
  * Validate `candidate` against the config schema and write it. Invalid values come back as field
  * errors with the file untouched; a failed write is told apart from a written file whose snapshot
  * step failed (`writeConfig` throws after the file was written only when the snapshot hook fails).
  */
-async function write(kind: ProfileName, candidate: unknown, baseHash: string | undefined): Promise<ProfileActionState> {
+async function write(kind: ProfileName, candidate: unknown, baseHash: string | undefined, update?: (current: PreferencesConfig) => unknown): Promise<ProfileActionState> {
   const options = baseHash === undefined ? {} : { baseHash };
   registerProfileSnapshotHook();
-  const before = await currentHash(kind);
+  let before = await currentHash(kind);
   try {
     if (kind === "me") {
       const result = meSchema.safeParse(candidate);
       if (!result.success) return failed(kind, null, toFieldErrors(result.error));
       await writeConfig("me", result.data, options);
     } else {
-      const result = preferencesSchema.safeParse(candidate);
-      if (!result.success) return failed(kind, null, toFieldErrors(result.error));
-      // A market that cannot be resolved would stop every market step, so it is not saved
-      const problems = marketSettingsProblems(result.data.market);
-      if (problems.length > 0) {
-        return failed(
-          kind,
-          null,
-          problems.map((p): FieldError => ({ path: `market.${p.field}`, ...(p.problem === "missing" ? { key: "required" } : p.problem === "unknown" ? { key: "invalidChoice" } : { key: "invalid", params: { message: p.detail ?? "" } }) })),
-        );
+      let errors: FieldError[] = [];
+      const validate = (value: unknown): PreferencesConfig | null => {
+        const result = preferencesSchema.safeParse(value);
+        errors = result.success ? preferencesProblems(result.data) : toFieldErrors(result.error);
+        return result.success && errors.length === 0 ? result.data : null;
+      };
+      if (update) {
+        await mutateConfig("preferences", (current) => {
+          before = hashProfileYaml(readProfileText(kind));
+          return validate(update(current));
+        });
+      } else {
+        const value = validate(candidate);
+        if (value !== null) await writeConfig("preferences", value, options);
       }
-      // the limits of pipeline.yaml (`filter.deal_breakers`): more rules or longer patterns than it allows are not saved
-      const limits = dealBreakerLimits();
-      const tooBig = limits === null ? [] : dealBreakerLimitProblems(result.data.deal_breakers, limits);
-      if (tooBig.length > 0) {
-        return failed(
-          kind,
-          null,
-          tooBig.map((p): FieldError => ({ path: ["deal_breakers", ...p.path.slice(0, 2)].join("."), key: p.kind === "too_many_rules" ? "tooMany" : "tooLong", params: { max: p.max } })),
-        );
-      }
-      // a pattern that is too slow on the test texts would be left out of every filter run: not saved
-      const slow = limits === null ? [] : slowPatternProblems(result.data.deal_breakers, limits, vmTimeBox);
-      if (slow.length > 0) {
-        return failed(
-          kind,
-          null,
-          slow.map((p): FieldError => ({ path: ["deal_breakers", ...p.path.slice(0, 2)].join("."), key: "slowPattern", params: { kind: "probe" } })),
-        );
-      }
-      await writeConfig("preferences", result.data, options);
+      if (errors.length > 0) return failed(kind, null, errors);
     }
     return saved(kind);
   } catch (error) {
+    logActionFailure("saveProfile", error);
     if (error instanceof ConfigError) return failed(kind, error.kind === "frozen" ? "frozen" : error.kind === "stale" ? "stale" : "writeFailed");
     const after = await currentHash(kind).catch(() => before);
     return failed(kind, after !== before ? "snapshotFailed" : "writeFailed");
   }
+}
+
+/** Wizard steps own only part of preferences; merge their fields into the current profile under its write locks. */
+export function savePreferencesPatch(patch: Partial<PreferencesDraft>): Promise<ProfileActionState> {
+  return write("preferences", undefined, undefined, (current) => preferencesDraftToCandidate({ ...preferencesConfigToDraft(current), ...patch }));
 }
 
 /**
@@ -139,7 +143,8 @@ export async function rollbackProfile(request: unknown): Promise<ProfileActionSt
   let snapshot;
   try {
     snapshot = await getProfileSnapshot(getDb(), kind, snapshotId);
-  } catch {
+  } catch (error) {
+    logActionFailure("rollbackProfile", error);
     return failed(kind, "writeFailed");
   }
   if (!snapshot) return failed(kind, "snapshotNotFound");

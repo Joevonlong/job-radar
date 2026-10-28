@@ -34,13 +34,15 @@ import {
 } from "@/lib/ops";
 import { sendAiWorkerOfflineAlert, sendCycleIncompleteAlert, startNotifyPoller } from "@/lib/notify";
 import { isAckName } from "@/lib/settings/tabs";
-import { createHeartbeatWatchdog } from "@/lib/ops/heartbeat-watchdog";
 import { createShippedConfigReporter } from "@/lib/ops/shipped-config";
 import { exitProcess, installShutdown } from "@/lib/ops/shutdown";
+import { withTimeout } from "@/lib/ops/timeout";
 import { recordAllConfigLoaded, recordConfigLoaded } from "@/lib/settings/ack";
 import { createSetupGate } from "@/lib/setup/runner-gate";
 import { loadPipeline } from "@/lib/market/effective";
 import { wakeIneligibleDormantJobs } from "@/lib/db/repos/dormancy";
+
+import { runRunnerHeartbeats } from "./heartbeat";
 
 const PROCESS_NAME = "runner";
 const PRUNE_EVERY_MS = 60 * 60 * 1000;
@@ -113,7 +115,7 @@ async function main(): Promise<number> {
     // already exists on a database that has data; a failed write is ignored, the watchdog below starts after the migrations).
     const beat = async (): Promise<void> => {
       try {
-        await writeHeartbeat(getDb(), PROCESS_NAME);
+        await withTimeout(writeHeartbeat(getDb(), PROCESS_NAME), env.RUNNER_HEARTBEAT_SECONDS * 1000, "heartbeat write");
       } catch {
         // not fatal
       }
@@ -439,36 +441,25 @@ async function main(): Promise<number> {
   const intervalMs = env.RUNNER_HEARTBEAT_SECONDS * 1000;
   const retentionMs = env.RUNNER_HEARTBEAT_RETENTION_HOURS * 60 * 60 * 1000;
   let lastPruneAt = 0;
-  const watchdog = createHeartbeatWatchdog({ maxFailureSeconds: env.RUNNER_HEALTH_MAX_AGE_SECONDS * 2 });
-
   log(`heartbeat every ${env.RUNNER_HEARTBEAT_SECONDS}s`);
-  while (!abort.signal.aborted) {
-    try {
-      await writeHeartbeat(db, PROCESS_NAME);
-      watchdog.succeeded();
+  await runRunnerHeartbeats({
+    signal: abort.signal,
+    intervalMs,
+    maxFailureSeconds: env.RUNNER_HEALTH_MAX_AGE_SECONDS * 2,
+    writeHeartbeat: () => writeHeartbeat(db, PROCESS_NAME),
+    pruneHeartbeats: async () => {
       if (Date.now() - lastPruneAt >= PRUNE_EVERY_MS) {
         const pruned = await pruneHeartbeats(db, new Date(Date.now() - retentionMs));
         lastPruneAt = Date.now();
         if (pruned > 0) log(`pruned ${pruned} old heartbeats`);
       }
-    } catch (error) {
-      // A transient database error must not kill the runner; the stale heartbeat is the signal.
-      log(`heartbeat failed: ${error instanceof Error ? error.name : "unknown error"}`);
-      // ...but not forever: Docker restarts a container that exits, not one that is merely unhealthy (ARCH-5).
-      if (watchdog.failed()) {
-        log(`no heartbeat could be written for ${env.RUNNER_HEALTH_MAX_AGE_SECONDS * 2}s; exiting so that Docker restarts the runner`);
-        exitProcess(1);
-      }
-    }
-    // Its own step: a failed report is only a warning and never counts as a failed heartbeat.
-    await shippedConfig.report();
-    await watchAiWorker();
-    try {
-      await sleep(intervalMs, undefined, { signal: abort.signal });
-    } catch {
-      // aborted: leave the loop
-    }
-  }
+    },
+    reportConfig: () => shippedConfig.report(),
+    watchAiWorker,
+    sleep: async () => { await sleep(intervalMs, undefined, { signal: abort.signal }); },
+    log,
+    shutdown,
+  });
 
   scheduler.stop();
   backups.stop();

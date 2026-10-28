@@ -1,5 +1,6 @@
 "use server";
 
+import { logActionFailure } from "@/lib/logging/action-failure";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
@@ -56,7 +57,8 @@ export async function exportResumeKitAction(input: { jobId: number }): Promise<E
     refreshViews();
     const { statusChange } = result;
     return { ok: true, jdPath: result.jdPath, command: result.command, status: statusChange.rejected ? (statusChange.previous ?? "new") : statusChange.status, statusChanged: statusChange.changed };
-  } catch {
+  } catch (error) {
+    logActionFailure("exportResumeKitAction", error);
     return { ok: false, error: "failed" };
   }
 }
@@ -75,7 +77,8 @@ export async function attachResumePdfAction(input: { jobId: number; path: string
     await setApplicationResumePath(db, parsed.data.jobId, pdf.path);
     refreshViews();
     return { ok: true, path: pdf.path, name: pdfDisplayName(pdf.path) };
-  } catch {
+  } catch (error) {
+    logActionFailure("attachResumePdfAction", error);
     return { ok: false, error: "failed" };
   }
 }
@@ -90,7 +93,8 @@ export async function detachResumePdfAction(input: { jobId: number }): Promise<D
     await setApplicationResumePath(db, parsed.data.jobId, null);
     refreshViews();
     return { ok: true };
-  } catch {
+  } catch (error) {
+    logActionFailure("detachResumePdfAction", error);
     return { ok: false, error: "failed" };
   }
 }

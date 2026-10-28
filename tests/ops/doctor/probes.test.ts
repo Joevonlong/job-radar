@@ -22,6 +22,26 @@ describe("runCommand", () => {
   it("a command that is not installed is `missing`", async () => {
     expect(await runCommand("definitely-not-a-command-jr", [], 10_000)).toEqual({ kind: "missing" });
   });
+  it.each([false, true])("EACCES during PATH lookup is missing (detached=%s)", async (detached) => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "doctor-command-"));
+    try {
+      fs.writeFileSync(path.join(dir, "unavailable-cli"), "#!/bin/sh\n", { mode: 0o600 });
+      expect(await runCommand("unavailable-cli", [], 1000, { detached, env: { NODE_ENV: "test", PATH: dir } })).toEqual({ kind: "missing" });
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+  it.skipIf(process.getuid?.() === 0).each([false, true])("an unreadable PATH directory does not hide a missing command (detached=%s)", async (detached) => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "doctor-command-"));
+    const blocked = path.join(dir, "blocked");
+    fs.mkdirSync(blocked, { mode: 0o000 });
+    try {
+      expect(await runCommand("absent-cli", [], 1000, { detached, env: { NODE_ENV: "test", PATH: `${blocked}${path.delimiter}${dir}` } })).toEqual({ kind: "missing" });
+    } finally {
+      fs.chmodSync(blocked, 0o700);
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
   it("a command that runs too long is killed and reported as `timeout`", async () => {
     expect(await runCommand(NODE, ["-e", "setTimeout(() => {}, 20000)"], 300)).toEqual({ kind: "timeout" });
   });

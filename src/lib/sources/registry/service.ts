@@ -1,8 +1,9 @@
 /**
  * The only code that writes config/sources.yaml on behalf of the registry page: switches, board add / edit /
  * delete and imports. Every function validates its untrusted input with zod, re-reads the file, changes one thing, writes
- * through `writeConfig` (comments stay) and mirrors the result into `source_registry`.
+ * through the shared config writer (comments stay) and mirrors the result into `source_registry`.
  */
+import { logActionFailure } from "@/lib/logging/action-failure";
 import { parse, parseDocument } from "yaml";
 import { z } from "zod";
 
@@ -11,11 +12,14 @@ import {
   ConfigError,
   atsBoardEntrySchema,
   channelsSchema,
+  configErrorKey,
   hashConfigText,
+  mutateConfig,
   readConfigText,
   reloadConfig,
   writeConfig,
   type ChannelsConfig,
+  type ConfigWriteErrorKey,
 } from "@/lib/config";
 import { consentKind, type ConsentKind } from "@/lib/channels/access";
 import { getDb } from "@/lib/db";
@@ -36,7 +40,7 @@ import {
 } from "./import";
 import { syncSourceRegistry } from "./sync";
 
-export type RegistryErrorKey = "invalid" | "unknown_entry" | "config_invalid" | "write_failed" | "stale" | "no_changes" | "database_unavailable" | "needs_parent" | "consent_required";
+export type RegistryErrorKey = "invalid" | "unknown_entry" | "config_invalid" | "write_failed" | "no_changes" | "database_unavailable" | "needs_parent" | "consent_required" | ConfigWriteErrorKey;
 
 export interface FieldError {
   path: string;
@@ -53,31 +57,35 @@ const fail = (error: RegistryErrorKey, fieldErrors?: FieldError[]): RegistryActi
 async function mirror(config: ChannelsConfig): Promise<void> {
   try {
     await syncSourceRegistry(getDb(), { config, text: readConfigText("channels") });
-  } catch {
+  } catch (error) {
+    logActionFailure("mirror", error);
     // the page shows "mirror out of sync" until the next sync
   }
 }
 
-type Loaded = { ok: true; config: ChannelsConfig } | { ok: false; state: RegistryActionState };
-
-function loadCurrent(): Loaded {
-  try {
-    return { ok: true, config: reloadConfig("channels") };
-  } catch (error) {
-    if (error instanceof ConfigError) return { ok: false, state: fail("config_invalid") };
-    throw error;
-  }
+function writeFailure(error: unknown): RegistryActionState {
+  return fail(configErrorKey(error) ?? (error instanceof ConfigError ? "config_invalid" : "write_failed"));
 }
 
-async function write(next: ChannelsConfig): Promise<RegistryActionState | null> {
+/** A refused edit returns its state without writing; a successful edit supplies its next value and result. */
+async function change(action: string, edit: (current: ChannelsConfig) => RegistryActionState | { next: ChannelsConfig; state: RegistryActionState }): Promise<RegistryActionState> {
+  let state: RegistryActionState = fail("no_changes");
   try {
-    await writeConfig("channels", next);
+    const next = await mutateConfig("channels", (current) => {
+      const edited = edit(current);
+      if ("status" in edited) {
+        state = edited;
+        return null;
+      }
+      state = edited.state;
+      return edited.next;
+    });
+    if (next !== null) await mirror(next);
+    return state;
   } catch (error) {
-    if (error instanceof ConfigError) return fail(error.kind === "schema" ? "invalid" : "write_failed");
-    return fail("write_failed");
+    logActionFailure(action, error);
+    return writeFailure(error);
   }
-  await mirror(next);
-  return null;
 }
 
 // ---------------------------------------------------------------- switches
@@ -101,18 +109,16 @@ function setAt(root: Record<string, unknown>, path: readonly (string | number)[]
 export async function setSourceEnabled(raw: unknown): Promise<RegistryActionState> {
   const request = enabledRequest.safeParse(raw);
   if (!request.success) return fail("invalid");
-  const loaded = loadCurrent();
-  if (!loaded.ok) return loaded.state;
-  const entry = buildRegistryEntries(loaded.config).find((e) => e.id === request.data.id);
-  if (!entry) return fail("unknown_entry");
-  if (request.data.enabled && !entry.enabled && consentKind(entry.id) !== null && request.data.acknowledged !== true) return fail("consent_required");
-  const next = structuredClone(loaded.config) as ChannelsConfig;
-  if (!setAt(next as unknown as Record<string, unknown>, entry.enabledPath, request.data.enabled)) return fail("unknown_entry");
-  // A switch whose effective value depends on another key (the "recommended for you" read needs the LinkedIn session) must
-  // not report success for a write that changes nothing the user can see.
-  if (buildRegistryEntries(next).find((e) => e.id === entry.id)?.enabled !== request.data.enabled) return fail("needs_parent");
-  const failure = await write(next);
-  return failure ?? { status: "done", outcome: request.data.enabled ? "enabled" : "disabled" };
+  return change("setSourceEnabled", (current) => {
+    const entry = buildRegistryEntries(current).find((e) => e.id === request.data.id);
+    if (!entry) return fail("unknown_entry");
+    if (request.data.enabled && !entry.enabled && consentKind(entry.id) !== null && request.data.acknowledged !== true) return fail("consent_required");
+    const next = structuredClone(current) as ChannelsConfig;
+    if (!setAt(next as unknown as Record<string, unknown>, entry.enabledPath, request.data.enabled)) return fail("unknown_entry");
+    // A switch whose effective value depends on another key must not claim to change nothing the user can see.
+    if (buildRegistryEntries(next).find((e) => e.id === entry.id)?.enabled !== request.data.enabled) return fail("needs_parent");
+    return { next, state: { status: "done", outcome: request.data.enabled ? "enabled" : "disabled" } };
+  });
 }
 
 /**
@@ -123,16 +129,15 @@ export async function setSourceEnabled(raw: unknown): Promise<RegistryActionStat
 export async function enableMarketChannels(defaultChannels: readonly string[]): Promise<RegistryActionState> {
   const ids = z.array(z.string().min(1).max(200)).max(50).safeParse(defaultChannels);
   if (!ids.success) return fail("invalid");
-  const loaded = loadCurrent();
-  if (!loaded.ok) return loaded.state;
-  const next = structuredClone(loaded.config) as ChannelsConfig;
-  const off = buildRegistryEntries(next).filter((e) => e.type === "channel" && ids.data.includes(e.id) && !e.enabled);
-  const skipped = off.filter((e) => consentKind(e.id) !== null).map((e) => e.id);
-  const entries = off.filter((e) => consentKind(e.id) === null);
-  if (entries.length === 0) return { ...fail("no_changes"), ...(skipped.length > 0 ? { skipped } : {}) };
-  for (const entry of entries) setAt(next as unknown as Record<string, unknown>, entry.enabledPath, true);
-  const failure = await write(next);
-  return failure ?? { status: "done", outcome: "enabled", ...(skipped.length > 0 ? { skipped } : {}) };
+  return change("enableMarketChannels", (current) => {
+    const next = structuredClone(current) as ChannelsConfig;
+    const off = buildRegistryEntries(next).filter((e) => e.type === "channel" && ids.data.includes(e.id) && !e.enabled);
+    const skipped = off.filter((e) => consentKind(e.id) !== null).map((e) => e.id);
+    const entries = off.filter((e) => consentKind(e.id) === null);
+    if (entries.length === 0) return { ...fail("no_changes"), ...(skipped.length > 0 ? { skipped } : {}) };
+    for (const entry of entries) setAt(next as unknown as Record<string, unknown>, entry.enabledPath, true);
+    return { next, state: { status: "done", outcome: "enabled", ...(skipped.length > 0 ? { skipped } : {}) } };
+  });
 }
 
 // ---------------------------------------------------------------- boards
@@ -166,40 +171,38 @@ export async function saveAtsBoard(raw: unknown): Promise<RegistryActionState> {
   if (!entry.success) {
     return fail("invalid", entry.error.issues.map((issue) => ({ path: String(issue.path[0] ?? ""), message: issue.message })));
   }
-  const loaded = loadCurrent();
-  if (!loaded.ok) return loaded.state;
-  const boards = [...loaded.config.ats_boards];
-  let outcome: "board_added" | "board_updated" = "board_added";
-  if (original) {
-    const index = boards.findIndex((b) => sameBoard(b, original));
-    if (index === -1) return fail("unknown_entry");
-    boards[index] = entry.data;
-    outcome = "board_updated";
-  } else {
-    boards.push(entry.data);
-  }
-  const next: ChannelsConfig = { ...loaded.config, ats_boards: boards };
-  const check = channelsSchema.safeParse(next);
-  if (!check.success) {
-    return fail(
-      "invalid",
-      check.error.issues.map((issue) => ({ path: fieldOf(`ats_boards.${issue.path.slice(1).join(".")}`) || "token", message: issue.message })),
-    );
-  }
-  const failure = await write(next);
-  return failure ?? { status: "done", outcome };
+  return change("saveAtsBoard", (current) => {
+    const boards = [...current.ats_boards];
+    let outcome: "board_added" | "board_updated" = "board_added";
+    if (original) {
+      const index = boards.findIndex((b) => sameBoard(b, original));
+      if (index === -1) return fail("unknown_entry");
+      boards[index] = entry.data;
+      outcome = "board_updated";
+    } else {
+      boards.push(entry.data);
+    }
+    const next: ChannelsConfig = { ...current, ats_boards: boards };
+    const check = channelsSchema.safeParse(next);
+    if (!check.success) {
+      return fail(
+        "invalid",
+        check.error.issues.map((issue) => ({ path: fieldOf(`ats_boards.${issue.path.slice(1).join(".")}`) || "token", message: issue.message })),
+      );
+    }
+    return { next, state: { status: "done", outcome } };
+  });
 }
 
 /** Delete a board from `ats_boards` (the postings already collected stay). */
 export async function removeAtsBoard(raw: unknown): Promise<RegistryActionState> {
   const request = boardKeySchema.safeParse(raw);
   if (!request.success) return fail("invalid");
-  const loaded = loadCurrent();
-  if (!loaded.ok) return loaded.state;
-  const boards = loaded.config.ats_boards.filter((b) => !sameBoard(b, request.data));
-  if (boards.length === loaded.config.ats_boards.length) return fail("unknown_entry");
-  const failure = await write({ ...loaded.config, ats_boards: boards });
-  return failure ?? { status: "done", outcome: "board_removed" };
+  return change("removeAtsBoard", (current) => {
+    const boards = current.ats_boards.filter((b) => !sameBoard(b, request.data));
+    if (boards.length === current.ats_boards.length) return fail("unknown_entry");
+    return { next: { ...current, ats_boards: boards }, state: { status: "done", outcome: "board_removed" } };
+  });
 }
 
 // ---------------------------------------------------------------- import
@@ -235,7 +238,8 @@ function salvageProxies(text: string): string[] {
     const jobspy = typeof doc === "object" && doc !== null ? (doc as Record<string, unknown>).jobspy : null;
     const proxies = typeof jobspy === "object" && jobspy !== null ? (jobspy as Record<string, unknown>).proxies : null;
     return Array.isArray(proxies) ? proxies.filter((p): p is string => typeof p === "string") : [];
-  } catch {
+  } catch (error) {
+    logActionFailure("salvageProxies", error);
     return [];
   }
 }
@@ -248,7 +252,8 @@ function plan(input: z.infer<typeof importRequest>): Planned {
   let baseText: string;
   try {
     baseText = readConfigText("channels");
-  } catch {
+  } catch (error) {
+    logActionFailure("plan", error);
     return { ok: false, state: { status: "error", error: "config_invalid", issues: [{ path: "", code: "missing_file", message: "sources.yaml is missing" }] } };
   }
   const baseHash = hashConfigText(baseText);
@@ -256,6 +261,7 @@ function plan(input: z.infer<typeof importRequest>): Planned {
   try {
     current = reloadConfig("channels");
   } catch (error) {
+    logActionFailure("plan", error);
     if (!(error instanceof ConfigError)) throw error;
   }
   const maxBytes = current?.registry.import_max_bytes ?? 524288;
@@ -309,8 +315,15 @@ export async function applySourcesImport(raw: unknown): Promise<RegistryActionSt
   if (planned.plan.changes.length === 0 && !planned.repair) return fail("no_changes");
   // an import must not switch on a scraping or account channel without the acknowledgement the switch itself asks for
   if (consentChannelsOf(planned.plan.changes).length > 0 && request.data.acknowledged !== true) return fail("consent_required");
-  const failure = await write(planned.next);
-  return failure ?? { status: "done", outcome: "imported" };
+  try {
+    // Planning also supports repairing invalid YAML; the preview hash fences that read under the write locks.
+    await writeConfig("channels", planned.next, { baseHash: request.data.baseHash });
+    await mirror(planned.next);
+    return { status: "done", outcome: "imported" };
+  } catch (error) {
+    logActionFailure("applySourcesImport", error);
+    return writeFailure(error);
+  }
 }
 
 // ---------------------------------------------------------------- export
@@ -327,7 +340,8 @@ export function exportSources(format: "yaml" | "json", options: { now: Date; tim
   let text: string;
   try {
     text = readConfigText("channels");
-  } catch {
+  } catch (error) {
+    logActionFailure("exportSources", error);
     return { error: "missing" };
   }
   if (format === "yaml") {
@@ -338,7 +352,8 @@ export function exportSources(format: "yaml" | "json", options: { now: Date; tim
     if (doc.errors.length > 0) return { error: "config_invalid" };
     const config = reloadConfig("channels");
     return { body: `${JSON.stringify(maskProxyCredentials(config), null, 2)}\n`, contentType: "application/json; charset=utf-8", filename: `${base}.json` };
-  } catch {
+  } catch (error) {
+    logActionFailure("exportSources", error);
     return { error: "config_invalid" };
   }
 }

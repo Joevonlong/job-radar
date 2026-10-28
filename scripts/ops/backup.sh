@@ -77,6 +77,16 @@ if [[ ! -s "$partial" ]] || [[ "$(head -c 5 "$partial")" != "PGDMP" ]]; then
 fi
 
 chmod 600 "$partial"
+# Use the container's matching Postgres client to check the table of contents before publishing the dump.
+if ! docker compose exec -T db pg_restore --list < "$partial" > /dev/null; then
+  echo "pg_restore could not read the archive; nothing was kept" >&2
+  exit 1
+fi
+# No file argument: supported by both the macOS and Linux sync commands.
+if ! sync; then
+  echo "could not flush the backup to disk; nothing was kept" >&2
+  exit 1
+fi
 mv "$partial" "$final"
 trap - EXIT
 bytes="$(wc -c < "$final" | tr -d ' ')"

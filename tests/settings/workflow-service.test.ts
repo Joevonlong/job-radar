@@ -96,4 +96,11 @@ describe("saveWorkflow", () => {
     fs.writeFileSync(path.join(tmp.configDir, "ui.yaml"), "a: [oops\n");
     expect(await saveWorkflow(request())).toMatchObject({ status: "error", formError: "unreadable" });
   });
+
+  it("an unreadable notify.yaml prevents the first file from being written", async () => {
+    const uiBefore = fs.readFileSync(path.join(tmp.configDir, "ui.yaml"), "utf8");
+    fs.writeFileSync(path.join(tmp.configDir, "notify.yaml"), "a: [oops\n");
+    expect(await saveWorkflow(request())).toMatchObject({ status: "error", formError: "unreadable" });
+    expect(fs.readFileSync(path.join(tmp.configDir, "ui.yaml"), "utf8")).toBe(uiBefore);
+  });
 });

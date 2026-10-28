@@ -4,12 +4,16 @@ import { useTranslations } from "next-intl";
 import { parseAsString, useQueryState } from "nuqs";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 
-import { loadAdvancedFileAction, loadAdvancedIndexAction } from "@/app/settings/actions";
+import { loadAdvancedFileAction as rawLoadAdvancedFileAction, loadAdvancedIndexAction as rawLoadAdvancedIndexAction } from "@/app/settings/actions";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import type { AdvancedFileData, AdvancedFileEntry, AdvancedLoad } from "@/lib/settings/advanced/types";
 
 import { FileEditor } from "./file-editor";
 import { FileList } from "./file-list";
+import { withActionFeedback } from "@/lib/actions/client";
+
+const loadAdvancedFileAction = withActionFeedback(rawLoadAdvancedFileAction)(() => ({ ok: false, reason: "unreadable" }));
+const loadAdvancedIndexAction = withActionFeedback(rawLoadAdvancedIndexAction)(() => ([]));
 
 interface AdvancedPanelProps {
   /** The runner's "loaded hh:mm" line for a file (by its `?file=` name); null = none. */

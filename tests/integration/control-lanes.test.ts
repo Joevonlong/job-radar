@@ -13,6 +13,8 @@ import { requestSalaryLookup } from "@/lib/control/salary-request";
 import { requestTestAi } from "@/lib/control/service";
 import { requestTranslateJob } from "@/lib/control/translate-request";
 import { claimNextControlRequest, closeDb, CONTROL_REQUEST_KINDS, controlLaneOf, getControlRequest, getDb, insertControlRequest, listControlRequests, schema, type ControlLane, type ControlRequest } from "@/lib/db";
+import { getRunAiNotificationWindow } from "@/lib/db/repos/control-requests";
+import { createCycle, finishCycle } from "@/lib/db/repos/cycles";
 
 import { makeTempConfig, type TempConfig } from "../config/helpers";
 import { quietLogger } from "../cycle/helpers";
@@ -55,6 +57,28 @@ async function job(): Promise<number> {
 }
 
 describe("control lane claim semantics", () => {
+  it("defers a digest only to a successor that the batch lane can claim", async () => {
+    const currentCycle = await createCycle(db(), { kind: "manual" });
+    await finishCycle(db(), currentCycle.id, { status: "succeeded" });
+    const current = await insertControlRequest(db(), { kind: "run_ai", payload: { cycleId: currentCycle.id } });
+    expect(await claimNextControlRequest(db(), kinds(), { lane: "batch" })).toMatchObject({ id: current.id });
+
+    const interactive = await insertControlRequest(db(), { kind: "translate_job", payload: { jobId: 1 } });
+    const automatic = await insertControlRequest(db(), { kind: "translate_job", payload: { jobId: 2, origin: "auto" } });
+    const successorCycle = await createCycle(db(), { kind: "manual" });
+    const successor = await insertControlRequest(db(), { kind: "run_ai", payload: { cycleId: successorCycle.id } });
+    expect(await getRunAiNotificationWindow(db(), current.id)).toMatchObject({ newerPending: false });
+    expect(await claimNextControlRequest(db(), kinds(), { lane: "interactive" })).toMatchObject({ id: interactive.id });
+    expect(await claimNextControlRequest(db(), kinds(), { lane: "batch" })).toMatchObject({ id: automatic.id });
+    expect(await claimNextControlRequest(db(), kinds(), { lane: "batch" })).toBeNull();
+
+    await finishCycle(db(), successorCycle.id, { status: "succeeded" });
+    expect(await getRunAiNotificationWindow(db(), current.id)).toMatchObject({ newerPending: true });
+    expect(await claimNextControlRequest(db(), kinds(), { lane: "interactive" })).toBeNull();
+    expect(await claimNextControlRequest(db(), kinds(), { lane: "batch" })).toMatchObject({ id: successor.id });
+    expect(await getRunAiNotificationWindow(db(), current.id)).toMatchObject({ newerPending: false });
+  });
+
   it("SQL matches the pure classifier for every kind and origin, and each request belongs to only one lane", async () => {
     const rows: ControlRequest[] = [];
     for (const kind of CONTROL_REQUEST_KINDS) {

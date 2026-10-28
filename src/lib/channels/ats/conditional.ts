@@ -50,6 +50,7 @@ const JSON_FORMAT: BoardFormat = { accept: "application/json", decode: (text) =>
 /** GET a board, sending `If-None-Match` when `etag` is given. Other failures throw a classified `ChannelError`. */
 export async function fetchBoard(ctx: ChannelContext, url: string, etag: string | null, format: BoardFormat): Promise<BoardFetch> {
   const response = await ctx.http.request(url, { headers: conditionalHeaders(etag, format.accept), allowStatus: [304, 404] });
+  if (response.status === 304 || response.status === 404) await response.cancel?.();
   if (response.status === 404) return { kind: "not_found" };
   if (response.status === 304) {
     if (etag === null) throw new ChannelError("unknown", "HTTP 304 without a conditional request", { status: 304 });

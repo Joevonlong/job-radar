@@ -84,6 +84,10 @@ in that language, else the AI output language, else English.
 
 Quiet hours (`quiet_hours`, default 22:00-07:00, in the timezone of `schedule.yaml`): summaries and job messages wait until the first cycle after quiet hours ends (after a job first appears, or after it gets a score, it remains a candidate for `candidate_window_hours` (48) hours: an older job that got its score late through "Score now" or backlog scoring will also be pushed in the next cycle if it reaches the threshold); alerts are not affected by default (`alerts_exempt`); an application reminder that falls inside quiet hours waits until quiet hours end.
 
+When the host ai-worker recovers with several cycles queued, every cycle still runs its AI work with its usual limits.
+Earlier cycles send alerts as usual; their summary and job messages wait for the newest queued cycle. That digest counts
+new jobs from the oldest cycle since the last delivered digest, within the candidate window, so the backlog gets one summary.
+
 ## 3. Buttons
 | Button | Application status | Notes |
 |---|---|---|

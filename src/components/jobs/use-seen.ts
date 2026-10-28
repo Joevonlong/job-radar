@@ -2,8 +2,12 @@
 
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 
-import { markSeenAction, markUnseenAction } from "@/app/visit-actions";
+import { markSeenAction as rawMarkSeenAction, markUnseenAction as rawMarkUnseenAction } from "@/app/visit-actions";
 import { forgetSeenNotes, noteSeenLocally, seenNotesSnapshot, subscribeSeenNotes } from "@/lib/dashboard/seen-local";
+import { withActionFeedback } from "@/lib/actions/client";
+
+const markSeenAction = withActionFeedback(rawMarkSeenAction)(() => ({ ok: false }));
+const markUnseenAction = withActionFeedback(rawMarkUnseenAction)(() => ({ ok: false }));
 
 export interface SeenSubject {
   id: number;

@@ -66,6 +66,9 @@ What happens on a click:
 4. The result is stored and shown for `lookup.ttl_days` days to every job of the same company, role family, seniority
    and place without asking again. "Look up again" asks anyway.
 
+When an ATS board's company name is corrected, cached lookups follow the renamed company or move to the merged company
+with their cache keys. Their sources, provider and original expiry stay intact; a name correction does not require another lookup.
+
 Limits:
 
 - `lookup.max_per_day`: lookups per 24 hours (every request counts, a failed one too; a cached answer does not). Once they are used up, the button on the job page is disabled until earlier lookups pass 24 hours.

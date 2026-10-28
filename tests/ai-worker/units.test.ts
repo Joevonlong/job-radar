@@ -151,8 +151,8 @@ describe("reading what the runner stored and the worker reports", () => {
       { name: "ai", status: "partial", durationMs: 1, result: { subtasks: [{ name: "score", status: "ok", result: { scored: 3 } }, { name: "signals", status: "failed" }, { name: "translate", status: "ok", result: { translated: 2 } }] } },
       { name: "notify", status: "ok", durationMs: 1, result: { jobs: { pushed: 1 } } },
     ]);
-    expect(summary).toEqual({ ai: { status: "partial", scored: 3, translated: 2, failedSubtasks: 1 }, notify: { status: "ok", pushed: 1 } });
-    expect(summarizeDelegatedSteps([])).toEqual({ ai: { status: "skipped", scored: null, translated: null, failedSubtasks: 0 }, notify: { status: "skipped", pushed: null } });
+    expect(summary).toEqual({ ai: { status: "partial", scored: 3, translated: 2, failedSubtasks: 1 }, notify: { status: "ok", pushed: 1, pending: false } });
+    expect(summarizeDelegatedSteps([])).toEqual({ ai: { status: "skipped", scored: null, translated: null, failedSubtasks: 0 }, notify: { status: "skipped", pushed: null, pending: false } });
   });
 
   it("summarizeDelegatedSteps names a scoring skip for an incomplete profile instead of 'ok, scored 0'", () => {

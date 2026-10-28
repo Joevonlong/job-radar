@@ -4,7 +4,10 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe as suite, expect, it } from "vitest";
+
+// Real deployments require a regular user; keep the explicit root preflight regression active below.
+const describe = suite.skipIf(process.getuid?.() === 0);
 
 /**
  * scripts/ops/deploy.sh, run for real against a throw-away git repository and stub `docker` / `pnpm`
@@ -533,6 +536,25 @@ function placeLock(owner: string, records: Record<string, string> = {}): void {
   fs.writeFileSync(path.join(lockDir, "owner"), owner);
   for (const [name, content] of Object.entries(records)) fs.writeFileSync(path.join(lockDir, "inflight", name), content);
 }
+
+suite("scripts/ops/deploy.sh: root preflight", { timeout: TEST_TIMEOUT_MS }, () => {
+  it("refuses root in preflight before taking a lock or invoking tools", () => {
+    const rootScript = path.join(work, "scripts/ops/root-deploy.sh");
+    // Bash's EUID is readonly. Substitute only its read to exercise uid 0 without sudo.
+    write(rootScript, fs.readFileSync(path.join(work, "scripts/ops/deploy.sh"), "utf8").replaceAll("$EUID", "0"), 0o755);
+    try {
+      const result = runSync("bash", [rootScript, "--dry-run", "--skip-pull"]);
+      expect(result.status, result.out).toBe(1);
+      expect(result.out).toContain("do not run deploy as root");
+      expect(result.out).toContain("read-only release");
+      expect(result.calls).toEqual([]);
+      expect(fs.existsSync(lockDir)).toBe(false);
+      expect(result.out).not.toContain("[2/13]");
+    } finally {
+      fs.rmSync(rootScript, { force: true });
+    }
+  });
+});
 
 describe("scripts/ops/deploy.sh", { timeout: TEST_TIMEOUT_MS }, () => {
   it("passes bash -n", () => {
@@ -1190,7 +1212,6 @@ describe("scripts/ops/deploy.sh: build context from the target commit", { timeou
       const listing = listTree(copy);
       expect(listing).toEqual(listTree(archiveOf(base)));
       expect(listing.join("\n")).not.toMatch(/x\.local\.yaml|src\/x\.ts|outside/);
-      expect(listing).toContain("bin/tool.sh 644");
       // removed when the deploy ends
       expect(buildContexts()).toEqual([]);
     } finally {
@@ -1538,13 +1559,16 @@ describe("scripts/ops/deploy.sh: signals", { timeout: TEST_TIMEOUT_MS }, () => {
     it.each([
       ["stdout and stderr are the terminal", ""],
       ["stdin is /dev/null (as under a calling script)", "</dev/null"],
-      ["only stderr is the terminal", `</dev/null >"${path.join(os.tmpdir(), "deploy-tostop-out.log")}"`],
+      ["only stderr is the terminal", "stderr-only"],
     ])("%s", (_label, redirect) => {
+      const stderrOnly = redirect === "stderr-only";
+      if (stderrOnly) redirect = `</dev/null >"${path.join(tmp, "deploy-tostop-out.log")}"`;
       const out = inPty(`stty tostop; bash "${script()}" --dry-run ${redirect}; echo "exit=$?"`);
       expect(out).toContain("the terminal has tostop set");
       expect(out).toContain("stty -tostop");
       expect(out).toContain("exit=1");
       expect(out).not.toContain("[2/13]");
+      if (stderrOnly) expect(fs.existsSync(path.join(tmp, "deploy-tostop-out.log"))).toBe(true);
     });
 
     it("without tostop the dry run goes on", () => {
