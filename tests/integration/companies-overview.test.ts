@@ -113,6 +113,17 @@ describe("company overview sorting and pagination", () => {
 });
 
 describe("company overview scope", () => {
+  it("omits companies whose only visible jobs are dormant and removes dormant jobs from shared counts", async () => {
+    const alone = await addCompany("Dormant Company");
+    const mixed = await addCompany("Mixed Company");
+    const old = await addJob(alone, { status: "possibly_closed" });
+    const older = await addJob(mixed, { status: "possibly_closed" });
+    await addJob(mixed);
+    for (const id of [old, older]) await getDb().update(schema.jobs).set({ dormantAt: new Date("2026-10-20T00:00:00Z") }).where(eq(schema.jobs.id, id));
+    const result = await overview();
+    expect(result.rows.map((row) => [row.id, row.jobCount])).toEqual([[mixed, 1]]);
+  });
+
   it("matches the default jobs list, including unscored, possibly closed, reopened and stale-score fallback jobs", async () => {
     const companyId = await addCompany("Acme");
     await addJob(companyId);

@@ -2,6 +2,8 @@ import { and, asc, eq, gt, inArray, isNotNull, ne } from "drizzle-orm";
 
 import type { Executor } from "../executor";
 import { companies, jobs, scores } from "../schema";
+import { notDormantSql } from "../queries/job-status";
+import { dormancyReady } from "./dormancy";
 
 /** A job with what the hard filter reads of it. */
 export interface FilterCandidate {
@@ -44,7 +46,7 @@ export async function listFilterCandidates(db: Executor, input: { afterId: numbe
     })
     .from(jobs)
     .innerJoin(companies, eq(companies.id, jobs.companyId))
-    .where(and(gt(jobs.id, input.afterId), ne(jobs.status, "closed"), input.jobIds ? inArray(jobs.id, [...input.jobIds]) : undefined))
+    .where(and(gt(jobs.id, input.afterId), ne(jobs.status, "closed"), input.jobIds ? inArray(jobs.id, [...input.jobIds]) : notDormantSql(await dormancyReady(db))))
     .orderBy(asc(jobs.id))
     .limit(input.limit);
 }

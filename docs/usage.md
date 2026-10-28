@@ -143,10 +143,12 @@ The "Company" filter on `/jobs` is a multi-select like city (several companies =
 - A company that was renamed or merged since a view was saved can show as selected with no jobs; pick it again in the drop-down.
 - When one company is stored twice (an alias added later: the old row and the new row both exist), its name picks both rows, so the list after the click can hold more jobs than the number shown next to that row in the drop-down.
 
+Command-palette job search (⌘K / Ctrl K) also leaves out dormant jobs.
+
 ### Companies overview
 
 Open **Companies** (`/companies`) from the sidebar, phone menu or command palette. It lists companies with jobs visible
-in the default `/jobs` list: hard-filtered and closed jobs do not count; unscored, possibly closed and manually reopened
+in the default `/jobs` list: hard-filtered, closed and dormant jobs do not count; unscored, possibly closed and manually reopened
 jobs follow the same rules as `/jobs`. Each row shows the open-job count, highest current rank value and most recent
 first-seen time (in the configured timezone). Search by company name; click a sortable column again to reverse its
 direction. On phones, use the sort selector and arrow button above the cards. Missing scores stay last in either
@@ -216,11 +218,24 @@ Every job remembers whether you have looked at it, so after opening a few and go
 
 ### Closed jobs
 
+**Not listed for weeks** is a yellow hint for dormant jobs, still `possibly_closed`. After 30 days possibly closed
+(`pipeline.yaml: lifecycle.dormant_after_days`), they leave the default jobs list, company overview, command-palette
+search and automatic processing. With the normal 7-day unseen grace period this is about 37 days since a source last
+listed them; a source held back by incomplete collection gets the full 30 days after it first qualifies as possibly closed.
+Find them with **Closed (N)** or the **Possibly closed** status filter; the detail shows the last listing date, **Still open**
+and **Confirm closed**. A source listing them again, or choosing **Still open**, wakes them. Dormant jobs no longer receive
+ordinary link checks. Bookmarks, any user open/closed judgement and applications in `new` through `offer` protect jobs
+from dormancy; rejected, withdrawn and ignored applications and hard-filter overrides do not. Nothing is deleted.
+Any stored closing-phrase quote stays in the detail page's evidence row, including after the job becomes dormant.
+Stored scores and other results remain visible in explicit status views; after waking, the next filter and signal steps
+catch up to the current preferences. The jobs badge excludes dormant and effectively closed jobs; today's badge also
+excludes jobs closed today, so the list, company and badge numbers can become smaller after upgrading.
+
 A job can close in two ways: the app finds out, or you tell it.
 
 - **You mark it**: "Mark as closed" on the detail page (with an optional note of up to 200 characters, shown on the page afterwards), the fourth button on a list row (⊘), or `c` on a row. The toast has "Undo", which puts back exactly what was there before. Marking a job closed also marks it seen. "Reopen" (the same button / key) brings it back; your judgement holds until you change it, even when a source lists the job again (the detail page then says "A source still listed this job on …", so you can reopen it).
 - **The app finds out**: a job no source has returned for `possibly_closed_after_days` days (7), while each of its channels has had a successful run since then, is **possibly closed** (yellow tag). This is a time-based hint, not proof: searches only return postings inside their time window, so not showing up in one query means little. The link check decides: a live link reopens the job (except one the page itself marked as no longer accepting applications), it is closed only when every link checked returns 404 / 410, and a job seen again by any source becomes active again (unless the page says it no longer accepts applications, or you closed it yourself) (see [Sources](sources.md#how-jobs-get-marked-possibly-closed)). Active jobs no source has returned for `unseen_link_check_after_days` days (14) also get a direct link check, regardless of channel runs, at least `unseen_link_check_interval_days` days (7) apart; they get no yellow tag, and an unanswered check leaves them active. This fallback is the plain link check (HEAD, then GET when needed, with its own User-Agent); it does not read robots.txt and also reaches watched jobs whose recheck got no answer, including when robots.txt forbade the page. Jobs you **starred** or **follow** (application status interested, preparing, applied, interviewing or offer) also get their posting page rechecked every 72 hours (at most 10 per cycle): 404 / 410 → **taken down at the source**; a sentence such as "no longer accepting applications" / "Stelle ist bereits besetzt" in the visible text of the page → **source says no longer accepting**, which only marks the job possibly closed, with the sentence and a short quote kept as evidence (hover the tag, or read it under the detail page's header, with a link to the checked page). Confirm it with "Confirm closed", or answer "Still open" (that sticks: later checks no longer hide it).
-- **Where closed jobs go**: Today and `/jobs` hide jobs that show as closed unless you pick a job status in the filters; possibly closed ones stay in the list with their yellow tag. **Closed (N)** next to the result count on `/jobs` is the job-status filter "closed + possibly closed" (it is `?status=closed&status=possibly_closed` in the URL and can be saved in a view like any filter). Favorites keep listing every job, with its tag. Jobs you closed are not scored and not pushed to Telegram.
+- **Where closed jobs go**: Today and `/jobs` hide jobs that show as closed unless you pick a job status in the filters; possibly closed ones stay with their yellow tag until they become dormant. **Closed (N)** next to the result count on `/jobs` is the job-status filter "closed + possibly closed" (it is `?status=closed&status=possibly_closed` in the URL and can be saved in a view like any filter). Favorites keep listing every job, with its tag. Jobs you closed are not scored and not pushed to Telegram.
 - **How the recheck behaves**: it reads one page per job like a careful reader: its own User-Agent (`JobRadar/2 …`), robots.txt obeyed (a page robots.txt forbids is not fetched and stays "not checked"), one request per site every 3 seconds, at most 1 MiB read, only the visible text is searched (scripts, hidden elements, navigation, sidebars such as "other jobs" and footers are ignored; at most the first 200,000 characters). Only public web addresses are requested: a link or a redirect to this machine, the Docker network or the local network is not followed, a redirect chain ends after 5 hops, and a redirect to another site is followed only when that site's robots.txt allows it. A page that answers normally opens a possibly closed job again. If neither the recheck nor the fallback gets an answer, for example because a page requires a login or refuses bots, mark the job closed yourself when needed. The phrases come from the market packs (`closed_posting.phrases` in `rules.yaml`, see `market-packs.md`); add your own in `ui.yaml` (`job_checks.closed_recheck.extra_phrases`), or switch the recheck off there (`enabled: false`). Rates and sizes are in `pipeline.yaml` (`lifecycle.watch_recheck`, see `configuration.md`).
 - Rollback: an older version ignores your closed / open judgements and the stored evidence, but rejects the `job_checks` block in `ui.yaml`: remove it before rolling back.
 

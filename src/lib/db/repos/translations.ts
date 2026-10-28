@@ -4,6 +4,8 @@ import type { Executor } from "../executor";
 import { z } from "zod";
 
 import { jobs, scores, signals, translationProgress, translations } from "../schema";
+import { notDormantSql } from "../queries/job-status";
+import { dormancyReady } from "./dormancy";
 
 export interface StoredTranslation {
   jobId: number;
@@ -74,6 +76,7 @@ export async function listTranslationCandidates(db: Executor, args: { lang: stri
         isNotNull(latest.rankValue),
         sql`${latest.rankValue} >= ${args.minRank}`,
         ne(jobs.status, "closed"),
+        notDormantSql(await dormancyReady(db)),
         isNotNull(jobs.description),
         sql`btrim(${jobs.description}) <> ''`,
         sql`(${translations.jobId} is null or ${translations.sourceHash} <> ${descriptionHashSql})`,

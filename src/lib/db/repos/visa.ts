@@ -10,6 +10,8 @@ import { visaEvidenceListSchema, visaKindOf, type VisaEvidence, type VisaKind, t
 import type { Executor } from "../executor";
 import { companies, jobs, jobVisa } from "../schema";
 import { checkTableReady } from "./job-checks";
+import { notDormantSql } from "../queries/job-status";
+import { dormancyReady } from "./dormancy";
 
 // ---------------------------------------------------------------- the scan
 
@@ -51,7 +53,7 @@ export async function listJobsToVisaScan(db: Executor, options: VisaScanListOpti
   const ids = options.jobIds ?? null;
   if (ids !== null && ids.length === 0) return [];
   const hash = visaInputHashSql(options.rulesHash, options.withTrapSpans);
-  const only = ids === null ? sql`j.status <> 'closed'` : sql`j.id in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})`;
+  const only = ids === null ? sql`j.status <> 'closed' and ${notDormantSql(await dormancyReady(db), 'j')}` : sql`j.id in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})`;
   const outdated = options.force ? sql`true` : sql`(v.job_id is null or v.input_hash <> ${hash})`;
   const trapJoin = options.withTrapSpans ? sql`left join trap_scans ts on ts.job_id = j.id` : sql``;
   const rows = await db.execute<{ id: string | number; input_hash: string; fresh: boolean }>(sql`
@@ -179,7 +181,7 @@ export async function countVisaStats(db: Executor): Promise<VisaStats | null> {
     select v.status, case when v.status = 'not_offered' then coalesce((select e ->> 'kind' from jsonb_array_elements(v.evidence) e where e ->> 'status' = 'not_offered' limit 1), 'no_sponsorship') end as kind, count(*) as n
     from jobs j
     left join job_visa v on v.job_id = j.id
-    where j.status <> 'closed'
+    where j.status <> 'closed' and ${notDormantSql(await dormancyReady(db), 'j')}
     group by 1, 2
   `);
   const stats: VisaStats = { byStatus: { offered: 0, not_offered: 0, unclear: 0, not_mentioned: 0 }, notOfferedByKind: { no_sponsorship: 0, permit_required: 0 }, unchecked: 0 };

@@ -97,6 +97,16 @@ afterAll(async () => {
 });
 
 describe("search_jobs", () => {
+  it("search hides a dormant job while get_job preserves its status and explains the reason", async () => {
+    const id = await jobId({ company: "Maplewick Research" });
+    const client = await connect();
+    const searched = await call<SearchJobsOutput>(client, "search_jobs", { query: "Maplewick" });
+    expect(searched.structured.total).toBe(0);
+    const detail = await call<GetJobOutput>(client, "get_job", { job_id: id });
+    expect(detail.isError).toBe(false);
+    expect(detail.structured.job).toMatchObject({ status: "possibly_closed", closed_reason: "dormant" });
+  });
+
   it("returns ranked cards without JD text, filtered jobs or closed jobs, and logs one line", async () => {
     const client = await connect();
     const { structured, text, isError } = await call<SearchJobsOutput>(client, "search_jobs", { limit: 100 });

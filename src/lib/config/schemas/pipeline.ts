@@ -175,6 +175,8 @@ export const pipelineSchema = z.strictObject({
   }),
 
   lifecycle: z.strictObject({
+    /** Days possibly closed before leaving automatic processing; zero disables dormancy at the next sweep. */
+    dormant_after_days: z.number().int().min(0).max(3650).default(30),
     /** An active job no source has returned for this many days becomes `possibly_closed`. */
     possibly_closed_after_days: positiveInt,
     /** An active job no source has returned for this many days gets its link checked directly; 0 = off. */

@@ -7,6 +7,10 @@ This guide deploys Job Radar onto a host for real and explains how to confirm it
 - Upgrade and rollback: sections 4 and 5.
 - 7-day unattended acceptance: section 6. Keep your own log (for example `unattended-<date>.md`).
 
+Run deployment as the installation's regular user, without `sudo`. Preflight refuses root before taking the deploy lock:
+root bypasses the ai-worker release directory's read-only checks, and the worker needs that user's launchd agent or
+systemd user service. The same requirement applies to `--dry-run` and `--no-ai-worker`.
+
 Convention: steps marked **[You do this]** can only be done by you personally (clicking system dialogs, typing passwords, logging in to accounts, pasting tokens); an agent cannot and should not do them for you. Write tokens and passwords only into `.env` or the respective login screens. Never paste them into a chat and never commit them to git. Commands run in the project directory (the one that contains `package.json`, `compose.yaml`, `config/` and `data/`) unless stated otherwise.
 
 ## 1. Checklist before the first deployment  **[You do this]**

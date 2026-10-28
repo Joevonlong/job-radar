@@ -3,12 +3,15 @@ import { sql } from "drizzle-orm";
 import { PIPELINE_STATUSES } from "@/lib/dashboard/board";
 
 import type { Db } from "../client";
+import { dormancyReady } from "../repos/dormancy";
+import { uxTablesReady } from "../repos/ux-tables";
+import { effectivelyNotClosedSql, notDormantSql } from "./job-status";
 
 /** The numbers behind the nav badges (sidebar and phone drawer). */
 export interface NavCounts {
   /** Jobs first seen today (calendar day in the schedule's time zone) that the Today list shows: not filtered out, not ignored. */
   today: number;
-  /** Jobs the /jobs list shows without any filter: everything the hard filter did not remove. */
+  /** Jobs the /jobs list shows without any filter: not filtered out, effectively closed or dormant. */
   jobs: number;
   /** Applications in the pipeline: not ended, `new` included (the one definition is `PIPELINE_STATUSES` in `lib/dashboard/board`, shared with the board). */
   pipeline: number;
@@ -23,6 +26,7 @@ export interface NavCounts {
  * `latest_score`: the filter result always comes from the newest row).
  */
 export async function getNavCounts(db: Db, options: { now: Date; timezone: string }): Promise<NavCounts> {
+  const [ux, dormant] = await Promise.all([uxTablesReady(db), dormancyReady(db)]);
   const rows = await db.execute<{ today: number; jobs: number; pipeline: number; favorites: number; sources_alert: number }>(sql`
     with newest as (
       select distinct on (job_id) job_id, filter_result
@@ -37,7 +41,8 @@ export async function getNavCounts(db: Db, options: { now: Date; timezone: strin
              exists (select 1 from applications a where a.job_id = j.id and a.status = 'archived') as ignored
       from jobs j
       left join newest n on n.job_id = j.id
-      where n.filter_result is null or n.filter_result <> 'filtered_out'
+      where (n.filter_result is null or n.filter_result <> 'filtered_out')
+        and ${effectivelyNotClosedSql(ux, "j")} and ${notDormantSql(dormant, "j")}
     )
     select
       (select count(*) from listed, day where not listed.ignored and listed.first_seen_at >= day.start_at and listed.first_seen_at < day.start_at + interval '1 day')::int as today,

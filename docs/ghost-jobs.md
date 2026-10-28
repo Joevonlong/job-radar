@@ -10,6 +10,8 @@ mean the job is not real.
 The check is **off by default**. Preview it first (`pnpm ghost:check --json`, below: it reads every open job and writes
 nothing), then turn it on in `ui.yaml` when the share of marked jobs looks right for your market.
 
+Automatic scans and the statistics exclude dormant jobs. An explicit request naming job ids can still check them; stored marks remain available on the detail page.
+
 ## The signals
 
 Each signal adds points; the points come from `pipeline.yaml: job_checks.ghost` (defaults below).

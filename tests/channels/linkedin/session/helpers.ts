@@ -2,6 +2,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
+import { afterEach } from "vitest";
+
 import { BudgetTracker } from "@/lib/channels/budget";
 import { createChannelContext } from "@/lib/channels/context";
 import { writeAuthFile } from "@/lib/channels/linkedin/session/auth-file";
@@ -36,8 +38,16 @@ export function loggedInState(options: { expires?: number } = {}): unknown {
   };
 }
 
+const tempDirs = new Set<string>();
+afterEach(() => {
+  for (const dir of tempDirs) fs.rmSync(dir, { recursive: true, force: true });
+  tempDirs.clear();
+});
+
 export function tempDir(): string {
-  return fs.mkdtempSync(path.join(os.tmpdir(), "jobradar-linkedin-session-"));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "jobradar-linkedin-session-"));
+  tempDirs.add(dir);
+  return dir;
 }
 
 /** An auth file path in a fresh temp dir; the file exists (logged in) unless `login` is false. */

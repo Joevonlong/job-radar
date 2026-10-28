@@ -15,10 +15,12 @@ import { closeDb, createConnection, getAtsBoard, getChannelRows, getDb, listRawP
 import { runMigrations } from "@/lib/db/migrate";
 import { recordAtsBoardCheck, type AtsBoardUpdate } from "@/lib/db/repos/ats-boards";
 import { markJobsPossiblyClosed, touchJobsSeen } from "@/lib/db/repos/jobs";
+import { runMaintenance } from "@/lib/pipeline";
 
 import { atsChannelsWith, company, depsWith, fixtureJson, inputs, neutralChannels, response, routedFetch } from "../channels/ats/helpers";
 import { config, quietLogger } from "../cycle/helpers";
 import { checkedName } from "../helpers/isolated-db";
+import { pipelineWith } from "../pipeline/helpers";
 
 const url = inject("testDatabaseUrl");
 
@@ -368,6 +370,49 @@ describe("runCycle with the greenhouse channel", () => {
     const raw2 = await listRawPostingsForChannel(getDb(), "greenhouse");
     expect(raw2).toHaveLength(4); // nothing disappeared
     expect(raw2.every((r) => r.fetchedAt.getTime() > long.getTime())).toBe(true); // still "seen"
+  });
+
+  it.each([false, true])("an ATS 304 refresh wakes a dormant job through maintenance, preserving phrase = %s", async (phrase) => {
+    const db = getDb();
+    const remote = conditionalBoard('W/"returning"');
+    expect((await cycle(remote.fetch)).status).toBe("succeeded");
+    const [raw] = await listRawPostingsForChannel(db, "greenhouse");
+    // Start from the collector's database timestamp; only the later check's clock advances.
+    const listedAt = raw!.fetchedAt;
+    const dormantAt = new Date(listedAt.getTime() + 60 * 86_400_000);
+    const returnedAt = new Date(dormantAt.getTime() + 86_400_000);
+    const [employer] = await db.insert(schema.companies).values({ name: "Example Labs", nameNorm: "example labs" }).returning();
+    const [job] = await db.insert(schema.jobs).values({
+      companyId: employer!.id, title: "Engineer", titleNorm: "engineer", status: "active",
+      firstSeenAt: raw!.fetchedAt, lastSeenAt: raw!.fetchedAt,
+      ...(phrase ? { linkCheckJson: { outcome: "phrase" } } : {}),
+    }).returning();
+    await db.insert(schema.jobSources).values({ jobId: job!.id, rawPostingId: raw!.id, channelId: "greenhouse", firstSeenAt: raw!.fetchedAt });
+    const pipeline = pipelineWith((value) => {
+      Object.assign(value.lifecycle as object, { possibly_closed_after_days: 7, dormant_after_days: 30, max_link_checks_per_cycle: 0 });
+    });
+    const maintain = (at: Date) => runMaintenance(db, {
+      config: pipeline, now: () => at, logger: quietLogger,
+      http: { request: async () => { throw new Error("unexpected link check"); }, json: async () => { throw new Error("unexpected link check"); } },
+    });
+    // Let maintenance copy the full database timestamp before setting up the aged possibly-closed state.
+    await maintain(listedAt);
+    await db.update(schema.jobs).set({ status: "possibly_closed", possiblyClosedAt: listedAt }).where(eq(schema.jobs.id, job!.id));
+    expect(await maintain(dormantAt)).toMatchObject({ seen: 0, dormant: { marked: 1, woke: 0 } });
+    const readJob = async () => (await db.select().from(schema.jobs).where(eq(schema.jobs.id, job!.id)))[0]!;
+    expect(await readJob()).toMatchObject({ dormantAt, lastSeenAt: listedAt });
+
+    const returned = await cycle(remote.fetch, { at: returnedAt });
+    expect(remote.sent).toEqual([undefined, 'W/"returning"']);
+    expect(returned.status).toBe("succeeded");
+    expect(await listRunsForCycle(db, returned.cycleId!)).toMatchObject([{ status: "succeeded", fetched: 0, newCount: 0 }]);
+    expect(await getAtsBoard(db, { ats: "greenhouse", token: "examplelabs" })).toMatchObject({ lastStatus: "not_modified" });
+    const refreshed = (await listRawPostingsForChannel(db, "greenhouse")).find((row) => row.id === raw!.id);
+    expect(refreshed).toMatchObject({ fetchedAt: returnedAt, payloadJson: raw!.payloadJson });
+    expect(await readJob()).toMatchObject({ dormantAt, lastSeenAt: listedAt });
+
+    expect(await maintain(returnedAt)).toMatchObject({ seen: 1, reopened: phrase ? 0 : 1, dormant: { marked: 0, woke: 0 } });
+    expect(await readJob()).toMatchObject({ dormantAt: null, lastSeenAt: returnedAt, status: phrase ? "possibly_closed" : "active" });
   });
 
   it("refetches when the raw postings behind a stored ETag are gone", async () => {

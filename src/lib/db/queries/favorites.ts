@@ -6,6 +6,7 @@ import { companies, jobFavorites, jobs } from "../schema";
 import { uxTablesReady } from "../repos/ux-tables";
 import { cardColumns, hydrateCards, latestScoreCte, type CardRow } from "./job-cards";
 import type { JobCard } from "./types";
+import { dormancyReady } from "../repos/dormancy";
 
 /**
  * Every starred job, with no filter at all: closed, possibly closed, hard-filtered and ignored jobs are listed too,
@@ -20,7 +21,7 @@ export async function listFavoriteJobs(db: Db, options: { sort: FavoriteSort; vi
       : [desc(jobFavorites.createdAt), desc(jobs.id)];
   const rows: CardRow[] = await db
     .with(latest)
-    .select(cardColumns(latest, ux))
+    .select(cardColumns(latest, ux, await dormancyReady(db)))
     .from(jobFavorites)
     .innerJoin(jobs, eq(jobs.id, jobFavorites.jobId))
     .innerJoin(companies, eq(companies.id, jobs.companyId))

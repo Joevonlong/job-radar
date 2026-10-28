@@ -327,6 +327,9 @@ remove_stale_build_contexts() {
 echo "Job Radar deploy  checkout: $ROOT  project: $PROJECT$([[ "$DRY_RUN" -eq 1 ]] && echo '  [dry-run: prints only, changes nothing]')"
 
 step "preflight: terminal, deploy lock, tools, Docker, clean checkout, external volume"
+if [[ "$EUID" -eq 0 ]]; then
+  fail_step "do not run deploy as root: root bypasses the read-only release checks, and the ai-worker needs a user service" "Run this script as the installation's regular user, without sudo (see docs/host-setup.md)"
+fi
 # With tostop set, a process group that is not in the foreground stops as soon as it writes to the terminal, and every step
 # runs in its own group: the deploy would wait forever.
 if proc_tostop_set; then

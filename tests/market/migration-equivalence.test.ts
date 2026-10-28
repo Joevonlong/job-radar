@@ -127,8 +127,10 @@ describe.runIf(legacyText("pipeline") !== null)("pipeline.yaml: legacy -> migrat
     expect(arbeitnowPriority).toBe(4);
     expect(priorities).toEqual(original.apply_priority);
     // Watched rechecks and unseen fallback checks have schema defaults when older files have none.
-    const { watch_recheck: _watchRecheck, unseen_link_check_after_days: unseenAfter, unseen_link_check_interval_days: unseenInterval, ...lifecycle } = effective.lifecycle;
+    const { dormant_after_days: dormantAfter, watch_recheck: _watchRecheck, unseen_link_check_after_days: unseenAfter, unseen_link_check_interval_days: unseenInterval, ...lifecycle } = effective.lifecycle;
     void _watchRecheck;
+    expect(dormantAfter).toBe(30);
+    expect(migrated.text).not.toMatch(/^\s*dormant_after_days:/m);
     expect({ after: unseenAfter, interval: unseenInterval }).toEqual({ after: 14, interval: 7 });
     expect(migrated.text).not.toMatch(/^\s*unseen_link_check_(after|interval)_days:/m);
     expect(lifecycle).toEqual(original.lifecycle);

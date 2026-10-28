@@ -41,7 +41,7 @@ flowchart LR
 |---|---|
 | 只改文档的 PR（`*.md`、`*.html`、图片；工具链路径和 `tests/`、`src/`、`public/` 下的文件不算文档） | `changes`（含文档链接检查）、`ci-docs`、`static`、`unit`、`ci-ok`。有些单元测试会读文档（链接目标、图片大小），所以 `unit` 要跑。 |
 | 其他 PR（代码、脚本、配置、`tests/`、`src/`、`public/` 下任何文件、workflow、Dockerfile） | 上面的再加 `integration`、`worker-switch`、`e2e`、`linux-smoke` |
-| 改到部署相关文件的 PR（`scripts/ops/`、`src/ai-worker/`、`compose.yaml`、`Dockerfile`、`tests/transition/`、`tests/ops/sim/`） | 上面的再加 `upgrade-transition` |
+| 改到部署相关文件的 PR（`scripts/ops/`、直接位于 `scripts/` 下的 `*.ts`、`src/lib/ops/`、`src/lib/config/migrations/`、`src/ai-worker/`、`compose.yaml`、`Dockerfile`、`tests/transition/`、`tests/ops/sim/`） | 上面的再加 `upgrade-transition` |
 | 依赖或工具链 PR（`package.json`、锁文件、workspace 文件、`.github/**`、根测试配置、Node 版本文件） | 全部（`full=true`、`transition=true`），包括默认顺序集成 |
 | 推送到 `main` | 无论改了什么，一律全部；`integration` 还会按默认文件顺序再跑一遍 |
 | 手动运行（`workflow_dispatch`） | 全部，同推送到 `main` |
@@ -76,7 +76,7 @@ workflow 级设置：`permissions: contents: read`（任何任务都不能写仓
 
 - `code`：只要有一个改动文件不是文档（`*.md`、`*.html`、`png`、`jpg`、`svg`、`gif`）就是 `true`。`tests/`、`src/`、`public/` 下的任何文件都算代码，即使是 HTML、SVG 或图片：测试会读自己的 fixture，应用也自带图片和页面。脚本、YAML、Dockerfile、workflow 同样是代码。`code` 选中 `integration`、`worker-switch`、`e2e` 和 `linux-smoke`；`static` 和 `unit` 无论如何都跑（单元测试会读文档，这里也不维护“哪些测试读哪些文件”的清单，免得过时）。工具链规则优先于文档扩展名。
 - `full`：推送到 `main`、手动运行、依赖或工具链 PR 为 `true`，会多跑一遍默认顺序的集成测试。工具链路径包括 `package.json`（含 `engines.node`）、`pnpm-lock.yaml`、`pnpm-workspace.yaml`、`.github/` 下所有文件、根目录的 `vitest*.ts` / `playwright*.ts`、`.nvmrc`、`.node-version`，同时强制 `code=true`、`transition=true`；`.github/` 下的 Markdown 也一样。
-- `transition`：有改动路径以 `scripts/ops/`、`src/ai-worker/`、`tests/transition/`、`tests/ops/sim/` 开头，或者是 `compose.yaml`、`Dockerfile`、上面的工具链输入时为 `true`，选中 `upgrade-transition`。
+- `transition`：有改动路径以 `scripts/ops/`、`src/lib/ops/`、`src/lib/config/migrations/`、`src/ai-worker/`、`tests/transition/`、`tests/ops/sim/` 开头，或者是直接位于 `scripts/` 下的 TypeScript 脚本、`compose.yaml`、`Dockerfile`、上面的工具链输入时为 `true`，选中 `upgrade-transition`。这覆盖部署使用的 drain/freeze 入口和旧安装的配置迁移。只改 `src/runner/`、`jobspy/` 或 `drizzle/` 时仍由 `linux-smoke` 检查启动，不额外选中 transition 测试。
 
 推送到 `main` 和手动运行完全不分类：两者都写 `code=true`、`full=true`、`transition=true`。`main` 上的提交就是要部署的内容，所以只改文档的推送不能留下一次什么都没检查的运行。PR 的对比范围是 `base...head`，不做改名检测，所以被移动的文件新旧路径都会计入。用 `git diff -z --name-only --no-renames` 把 NUL 分隔的路径写入临时文件，再逐项读取，保留非 ASCII 名称（包括 `.github/` 下的中文 Markdown）和文件名内的换行。算不出差异时这一步会失败（`ci-ok` 随之失败），不会悄悄当作“没改动”。`tests/ci-classifier.test.ts` 用 CI 默认的 `bash -e` 提取并执行此脚本，包含表驱动用例和真实临时 Git 仓库的改名、删除、非 ASCII 路径测试。手动复现：`git diff -z --name-only --no-renames origin/main...HEAD`，按上面的规则检查 NUL 分隔的各条路径。
 

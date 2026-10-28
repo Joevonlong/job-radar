@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
 
-import { closedReason, effectiveJobStatus, type AutoStatus, type ClosureAction } from "@/lib/jobs/closure";
+import { closedReason, effectiveJobStatus, isPossiblyClosedReason, type AutoStatus, type ClosureAction } from "@/lib/jobs/closure";
 import { parseLinkCheck } from "@/lib/jobs/link-check-evidence";
 
 const AUTO: readonly AutoStatus[] = ["active", "possibly_closed", "closed"];
@@ -25,6 +25,14 @@ describe("effectiveJobStatus", () => {
 });
 
 describe("closedReason", () => {
+  it("puts dormancy after user judgement and a takedown, before phrase evidence", () => {
+    expect(closedReason("possibly_closed", null, "phrase", true)).toBe("dormant");
+    expect(closedReason("possibly_closed", null, null, true)).toBe("dormant");
+    expect(closedReason("possibly_closed", "closed", "phrase", true)).toBe("manual");
+    expect(closedReason("possibly_closed", "open", "phrase", true)).toBeNull();
+    expect(closedReason("closed", null, "phrase", true)).toBe("gone");
+    expect(closedReason("active", null, null, true)).toBeNull();
+  });
   it("names the user's close, the takedown, the phrase and the plain possibly closed; nothing for an open job", () => {
     for (const auto of AUTO) expect(closedReason(auto, "closed", null)).toBe("manual");
     for (const auto of AUTO) expect(closedReason(auto, "open", "phrase")).toBeNull();
@@ -35,6 +43,11 @@ describe("closedReason", () => {
     expect(closedReason("possibly_closed", null, null)).toBe("possibly");
     expect(closedReason("active", null, "alive")).toBeNull();
   });
+});
+
+it("recognizes every possibly-closed reason for the confirmation buttons", () => {
+  for (const reason of ["possibly", "phrase", "dormant"] as const) expect(isPossiblyClosedReason(reason)).toBe(true);
+  for (const reason of [null, "manual", "gone"] as const) expect(isPossiblyClosedReason(reason)).toBe(false);
 });
 
 describe("parseLinkCheck", () => {

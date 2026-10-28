@@ -76,9 +76,11 @@ Other MCP clients work the same way: a stdio server, command `pnpm`, arguments `
 
 | Tool | What it does |
 |---|---|
-| `search_jobs` | Ranked job cards, filtered like the jobs list: `query` (title, company, location, JD), `city`, `workplace`, `min_rank`, `min_annual_salary` (in the market's base currency), `since` / `until` (first seen, `YYYY-MM-DD`), `application_status`, `sort` (`rank`, `posted`, `first_seen`), `limit`. Jobs the hard filter removed and closed jobs are left out. No JD text. |
+| `search_jobs` | Ranked job cards, filtered like the jobs list: `query` (title, company, location, JD), `city`, `workplace`, `min_rank`, `min_annual_salary` (in the market's base currency), `since` / `until` (first seen, `YYYY-MM-DD`), `application_status`, `sort` (`rank`, `posted`, `first_seen`), `limit`. Jobs the hard filter removed, closed jobs and dormant jobs not listed for weeks are left out. No JD text. |
 | `get_job` | One job (`job_id`) in detail: everything above plus seniority, language, the signals with their quotes, the number of AI traps found, your application, and the cleaned JD. |
 | `list_applications` | Your applications, best rank first; `status` filters; `stale_only: true` lists only the ones waiting longer than the daily reminder's thresholds (`notify.yaml: reminders.interested_days` / `applied_days`), the longest waiting first. |
+
+`get_job` still returns dormant jobs: `status` stays `possibly_closed`, and `closed_reason` is `dormant`.
 
 "What is new today" is `search_jobs` with `since` = today and `sort` = `rank`, plus `list_applications` with `stale_only`.
 

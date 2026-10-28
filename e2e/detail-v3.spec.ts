@@ -293,3 +293,36 @@ test.describe("job detail: closing a job", () => {
     }
   });
 });
+
+for (const locale of ["en", "zh"] as const) {
+  test(`a dormant detail explains its last listing and Still open restores it (${locale})`, async ({ page, context, baseURL }) => {
+    if (!baseURL) throw new Error("The e2e run must configure baseURL");
+    await context.addCookies([{ name: "NEXT_LOCALE", value: locale, url: baseURL }]);
+    const sql = postgres(process.env.E2E_DATABASE_URL ?? "", { max: 1, onnotice: () => {} });
+    await sql`select pg_advisory_lock(119)`;
+    const [job] = await sql<{ id: string }[]>`select id from jobs where title = 'Research Engineer, Document Retrieval'`;
+    const id = Number(job!.id);
+    try {
+      await sql`delete from job_closure_overrides where job_id = ${id}`;
+      await sql`update jobs set dormant_at = now() - interval '1 day' where id = ${id}`;
+      await page.setViewportSize({ width: 375, height: 844 });
+      await page.goto(`/jobs/${id}`);
+      await expect(page.getByTestId("closure-notice")).toHaveAttribute("data-reason", "dormant");
+      await expect(page.getByTestId("closure-hint")).toContainText(locale === "en" ? "No source has listed" : "已经数周");
+      await expect(page.getByTestId("closure-last-listed")).toContainText(locale === "en" ? "Last listed by a source on" : "最后一次被来源列出");
+      await expect(page.getByTestId("detail-close")).toContainText(locale === "en" ? "Confirm closed" : "确认已关闭");
+      await expect(page.getByTestId("detail-keep-open")).toContainText(locale === "en" ? "Still open" : "仍在招");
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+      await page.getByTestId("detail-keep-open").click();
+      await expect(page.getByTestId("closure-notice")).toHaveCount(0);
+      await expect.poll(async () => (await sql`select dormant_at from jobs where id = ${id}`)[0]!.dormant_at).toBeNull();
+      await page.goto("/jobs?q=Document+Retrieval");
+      await expect(listRow(page, id)).toBeVisible();
+    } finally {
+      await sql`delete from job_closure_overrides where job_id = ${id}`;
+      await sql`update jobs set dormant_at = now() - interval '1 day' where id = ${id}`;
+      await sql`select pg_advisory_unlock(119)`;
+      await sql.end({ timeout: 5 });
+    }
+  });
+}
