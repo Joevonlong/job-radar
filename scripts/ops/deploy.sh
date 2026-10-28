@@ -486,7 +486,6 @@ echo "  \$ docker compose -p $PROJECT config --format json (check core dependenc
 if [[ "$DRY_RUN" -eq 0 ]]; then
   if ! jobspy_dependencies="$(compose config --format json | node -e '
     const { readFileSync } = require("node:fs");
-    const { execFileSync } = require("node:child_process");
     const { z } = require("zod");
     try {
       const service = z.object({ depends_on: z.record(z.string(), z.unknown()).optional() });
@@ -494,11 +493,15 @@ if [[ "$DRY_RUN" -eq 0 ]]; then
       const { services } = schema.parse(JSON.parse(readFileSync(0, "utf8")));
       const targetService = z.object({ depends_on: z.union([z.array(z.string()), z.record(z.string(), z.unknown())]).optional() });
       const targetSchema = z.object({ services: z.object({ db: targetService, web: targetService, runner: targetService }) });
-      const target = targetSchema.parse(require("yaml").parse(execFileSync("git",
-        ["-C", process.argv[1], "show", process.argv[2] + ":compose.yaml"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] })));
+      let target;
+      try {
+        // Step 4 has checked out and verified TARGET already. An unreadable own file grants no exemptions:
+        // every resolved jobspy dependency is still refused unless the target explicitly declares it.
+        target = targetSchema.parse(require("yaml").parse(readFileSync(process.argv[1] + "/compose.yaml", "utf8")));
+      } catch {}
       const dependencies = Object.entries(services).filter(([, config]) => Object.hasOwn(config.depends_on ?? {}, "jobspy"));
       const overrides = dependencies.filter(([name]) => {
-        const own = target.services[name].depends_on ?? {};
+        const own = target?.services[name].depends_on ?? {};
         return !(Array.isArray(own) ? own.includes("jobspy") : Object.hasOwn(own, "jobspy"));
       });
       process.stdout.write(overrides.length ? overrides.map(([name]) => name + ".depends_on.jobspy").join(", ")
@@ -506,7 +509,7 @@ if [[ "$DRY_RUN" -eq 0 ]]; then
     } catch {
       process.exitCode = 1;
     }
-  ' "$APP" "$TARGET")"; then
+  ' "$APP")"; then
     fail_step "cannot inspect the resolved Compose dependencies" "Check docker compose -p $PROJECT config -q and the Node dependency installation, then retry; no settings were frozen by this run"
   elif [[ "$jobspy_dependencies" == target ]]; then
     say "target compose.yaml depends on jobspy: keeping its original dependency behaviour; sidecar health may block this target's deployment"

@@ -2056,6 +2056,36 @@ describe("deploy configuration freeze and delayed writes", { timeout: TEST_TIMEO
   });
 
   it.each([
+    ["missing", null],
+    ["invalid YAML", "services: ["],
+    ["invalid schema", "services: {}\n"],
+  ])("an own Compose file that is %s grants no exemption for resolved jobspy dependencies", (_title, content) => {
+    existing();
+    const base = head();
+    const composeFile = path.join(work, "compose.yaml");
+    try {
+      if (content === null) fs.rmSync(composeFile);
+      else write(composeFile, content);
+      git(work, "add", "compose.yaml");
+      git(work, "commit", "-m", "compose inspection fixture");
+      for (const dependency of [false, true]) {
+        const model = { services: { db: {}, web: {}, runner: dependency ? { depends_on: { jobspy: { required: false } } } : {} } };
+        const r = deploy(args, { COMPOSE_MODEL_OUTPUT: JSON.stringify(model) });
+        expect(r.status, r.out).toBe(dependency ? 1 : 0);
+        expect(r.out).not.toContain("cannot inspect the resolved Compose dependencies");
+        if (dependency) {
+          expect(r.out).toContain("runner.depends_on.jobspy");
+          expect(r.calls.some((c) => /^pnpm ops:freeze/.test(c) || c.includes(" build") || c.includes(" up "))).toBe(false);
+        } else {
+          expect(r.calls).toContain("pnpm migrate:run");
+        }
+      }
+    } finally {
+      restore(base);
+    }
+  });
+
+  it.each([
     { title: "failed Compose model command", env: { COMPOSE_MODEL_EXIT: "1" } },
     { title: "malformed Compose JSON", env: { COMPOSE_MODEL_OUTPUT: "not json" } },
     { title: "unexpected Compose model shape", env: { COMPOSE_MODEL_OUTPUT: '{"services":{"runner":{"depends_on":["jobspy"]}}}' } },
