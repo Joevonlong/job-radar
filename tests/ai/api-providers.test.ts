@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { z } from "zod";
 
 import { toJsonSchema } from "@/lib/ai/schema-to-json";
-import { createAnthropicProvider } from "@/lib/ai/providers/anthropic";
+import { createAnthropicProvider, createAnthropicTransport } from "@/lib/ai/providers/anthropic";
 import { createOpenAiCompatibleProvider, createOpenAiCompatibleTransport, embedSchema } from "@/lib/ai/providers/openai-compatible";
 
 import { pinnedAi } from "./helpers";
@@ -148,35 +148,74 @@ describe("openai-compatible provider", () => {
 });
 
 describe("anthropic provider", () => {
-  const message = (input: unknown, model = "claude-haiku-4-5") =>
+  const reply = (content: unknown[], stopReason: string | null, model = "claude-haiku-4-5") =>
     new Response(
       JSON.stringify({
         id: "msg_1",
         type: "message",
         role: "assistant",
         model,
-        content: [{ type: "tool_use", id: "tu_1", name: "respond", input }],
-        stop_reason: "tool_use",
+        content,
+        stop_reason: stopReason,
         stop_sequence: null,
         usage: { input_tokens: 40, output_tokens: 7, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 },
       }),
       { status: 200, headers: { "content-type": "application/json" } },
     );
+  const message = (input: unknown, model = "claude-haiku-4-5") => reply([{ type: "tool_use", id: "tu_1", name: "respond", input }], "tool_use", model);
 
   const make = (fetchImpl: typeof fetch, apiKey = KEY) =>
     createAnthropicProvider({ config: config.providers.anthropic, apiKey, timeoutMs: 5000, maxOutputTokens: 512, fetch: fetchImpl });
 
-  it("forces one tool whose schema is the JSON Schema and validates the tool input", async () => {
+  it("uses automatic tool choice with the respond schema and validates its input", async () => {
     const { fetch: f, seen } = fakeFetch(() => message({ answer: "ok" }));
     const result = await make(f).run("score", prompt, schema);
     expect(result).toMatchObject({ value: { answer: "ok" }, provider: "anthropic", model: "claude-haiku-4-5", usage: { tokensIn: 40, tokensOut: 7 } });
     const body = seen[0]?.body;
     expect(body?.model).toBe("claude-haiku-4-5");
-    expect(body?.tool_choice).toEqual({ type: "tool", name: "respond" });
-    expect(body?.thinking).toEqual({ type: "disabled" });
-    expect(body?.system).toBe(prompt.system);
-    expect((body?.tools as Array<{ input_schema: { type: string } }>)[0]?.input_schema.type).toBe("object");
+    expect(body?.tool_choice).toEqual({ type: "auto" });
+    expect(body).not.toHaveProperty("thinking");
+    expect(body).not.toHaveProperty("effort");
+    expect(body).not.toHaveProperty("output_config");
+    expect(body?.system).toBe(`${prompt.system}\n\nAnswer only by calling the respond tool.`);
+    expect(body?.tools).toEqual([expect.objectContaining({ name: "respond", input_schema: toJsonSchema(schema) })]);
     expect(seen[0]?.headers.get("x-api-key")).toBe(KEY);
+  });
+
+  it("extracts the respond input after thinking and other content", async () => {
+    const { fetch: f, seen } = fakeFetch(() =>
+      reply([
+        { type: "thinking", thinking: "Considering the answer.", signature: "test-signature" },
+        { type: "text", text: '{"answer":"wrong"}' },
+        { type: "tool_use", id: "tu_other", name: "other", input: { answer: "wrong" } },
+        { type: "tool_use", id: "tu_1", name: "respond", input: { answer: "ok" } },
+      ], "tool_use"),
+    );
+    expect((await make(f).run("score", prompt, schema)).value).toEqual({ answer: "ok" });
+    expect(seen).toHaveLength(1);
+  });
+
+  it.each([
+    { behavior: "joins and trims text blocks when respond is missing", content: [{ type: "text", text: "\n  First line." }, { type: "text", text: "Second line.  \n" }], stopReason: "end_turn", text: "First line.\nSecond line." },
+    { behavior: "reports the stop reason for a whitespace-only reply", content: [{ type: "text", text: " \n" }], stopReason: "max_tokens", text: "(no answer; stop_reason max_tokens)" },
+    { behavior: "reports the stop reason when only thinking is present", content: [{ type: "thinking", thinking: "Considering the answer.", signature: "test-signature" }], stopReason: "end_turn", text: "(no answer; stop_reason end_turn)" },
+    { behavior: "handles an empty reply with an unknown stop reason", content: [], stopReason: null, text: "(no answer; stop_reason ?)" },
+  ])("$behavior", async ({ content, stopReason, text }) => {
+    const { fetch: f } = fakeFetch(() => reply(content, stopReason));
+    const transport = createAnthropicTransport({ config: config.providers.anthropic, apiKey: KEY, timeoutMs: 5000, maxOutputTokens: 512, fetch: f });
+    expect(await transport.call({ task: "score", ...prompt, jsonSchema: toJsonSchema(schema), strong: false })).toMatchObject({ text, usage: { tokensIn: 40, tokensOut: 7 } });
+  });
+
+  it("retries a text-only reply with validation feedback and counts both calls", async () => {
+    let n = 0;
+    const { fetch: f, seen } = fakeFetch(() => n++ === 0 ? reply([{ type: "text", text: "  No structured answer.\n" }], "end_turn") : message({ answer: "ok" }));
+    const result = await make(f).run("score", prompt, schema);
+    expect(result).toMatchObject({ value: { answer: "ok" }, usage: { tokensIn: 80, tokensOut: 14 } });
+    expect(seen).toHaveLength(2);
+    const retryUser = (seen[1]?.body.messages as Array<{ content: string }>)[0]?.content ?? "";
+    expect(retryUser).toContain("rejected by validation");
+    expect(retryUser).toContain("Previous reply:\nNo structured answer.\nProblems:");
+    expect(seen[1]?.body.system).toBe(seen[0]?.body.system);
   });
 
   it("a model on the request overrides model / strong_model", async () => {
