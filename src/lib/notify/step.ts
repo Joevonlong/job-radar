@@ -11,6 +11,7 @@ import { loadConfig, type AiConfig, type NotifyConfig } from "@/lib/config";
 import { loadPipeline } from "@/lib/market";
 import type { Db } from "@/lib/db/client";
 import { getCycle } from "@/lib/db/repos/cycles";
+import { getRunAiNotificationWindow } from "@/lib/db/repos/control-requests";
 import {
   hasNotificationForCycle,
   listNotifiedJobIds,
@@ -67,8 +68,8 @@ export interface NotifyJobsResult {
 export interface NotifyStepResult {
   skipped?: "disabled" | "not_configured" | "no_database";
   alerts?: AlertDelivery;
-  /** Job messages were held back (quiet hours) or already sent for this cycle. */
-  jobs?: NotifyJobsResult | { deferred: "quiet_hours" | "already_sent" };
+  /** Job messages were held back (quiet hours or a newer queued run), or already sent for this cycle. */
+  jobs?: NotifyJobsResult | { deferred: "quiet_hours" | "already_sent" | "newer_cycle_pending" };
 }
 
 const failedSourcesSchema = z.object({
@@ -318,7 +319,15 @@ export function createNotifyStep(options: NotifyStepOptions = {}): CycleStepFn {
     }
     try {
       const cycle = await getCycle(db, ctx.cycle.id);
-      const startedAt = cycle?.startedAt ?? ctx.now();
+      let startedAt = cycle?.startedAt ?? ctx.now();
+      if (ctx.delegatedRequestId !== undefined) {
+        const window = await getRunAiNotificationWindow(db, ctx.delegatedRequestId);
+        if (window.newerPending) {
+          result.jobs = { deferred: "newer_cycle_pending" };
+          return { status, result };
+        }
+        startedAt = window.startedAt ?? startedAt;
+      }
       const since = new Date(ctx.now().getTime() - config.candidate_window_hours * 3_600_000);
       const highValue = loadHighValuePolicy();
       const candidates = await listPushCandidates(db, { since, isHighValue: (signal) => isHighValueSignal(signal, highValue) });

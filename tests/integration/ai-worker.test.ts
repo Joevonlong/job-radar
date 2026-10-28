@@ -116,11 +116,11 @@ const notifyCfg = () =>
   });
 const telegram = () => createTelegramClient({ token: FAKE_TOKEN, baseUrl: api.url, requestTimeoutMs: 3000, maxRetries: 0, sleep: async () => {} });
 
-function workerSteps(ai: ReturnType<typeof fakeAi>) {
+function workerSteps(ai: ReturnType<typeof fakeAi>, config = aiConfig()) {
   return {
     // like the real worker: the part the push needs, then the push, then the late sub-tasks (translation)
-    ai: createAiStep({ createRouter: () => ai.router, loadAiConfig: () => aiConfig(), phase: "main" }),
-    late: createAiStep({ createRouter: () => ai.router, loadAiConfig: () => aiConfig(), phase: "late" }),
+    ai: createAiStep({ createRouter: () => ai.router, loadAiConfig: () => config, phase: "main" }),
+    late: createAiStep({ createRouter: () => ai.router, loadAiConfig: () => config, phase: "late" }),
     notify: createNotifyStep({ loadNotifyConfig: notifyCfg, createRuntime: () => ({ client: telegram(), chatId: CHAT }), sleep: async () => {} }),
   };
 }
@@ -146,6 +146,13 @@ const hostWorker = () => pollOptions(() => aiWorkerRequestKinds("host"));
 async function runnerCycle() {
   registerBuiltinCycleSteps();
   return runCycle("manual", { registry: new ChannelRegistry(), config: cycleConfig(), logger: quietLogger, sleep: async () => {} });
+}
+
+async function queueFinishedCycle(startedAt: Date) {
+  const cycle = await createCycle(db(), { kind: "manual", startedAt });
+  await finishCycle(db(), cycle.id, { status: "succeeded", summary: { steps: [] } });
+  const request = await insertControlRequest(db(), { kind: "run_ai", payload: { cycleId: cycle.id } });
+  return { cycle, request };
 }
 
 // ---------------------------------------------------------------- the runner side
@@ -246,6 +253,65 @@ describe("request kinds", () => {
 // ---------------------------------------------------------------- the worker side
 
 describe("the ai-worker handles run_ai", () => {
+  it.each(["string id", "extra field"])("does not defer a valid digest to a newer request with an invalid payload (%s)", async (invalid) => {
+    const now = new Date("2026-10-20T12:00:00Z");
+    const current = await queueFinishedCycle(now);
+    await insertControlRequest(db(), {
+      kind: "run_ai",
+      payload: invalid === "string id" ? { cycleId: String(current.cycle.id) } : { cycleId: current.cycle.id, unexpected: true },
+    });
+    registerBuiltinAiSubtasks();
+    registerControlHandler("run_ai", createRunAiHandler({ steps: workerSteps(fakeAi()), registry: new ChannelRegistry(), now: () => now }));
+
+    expect(await processNextControlRequest(hostWorker())).toMatchObject({ id: current.request.id, status: "done" });
+    expect((await db().select().from(schema.notifications)).filter((n) => n.kind === "cycle_summary")).toMatchObject([{ cycleId: current.cycle.id }]);
+    expect(api.of("sendMessage")).toHaveLength(1);
+  });
+
+  it("scores every backlogged cycle, sends alerts immediately, and delivers one digest covering the whole backlog", async () => {
+    const now = new Date("2026-10-20T12:00:00Z");
+    const first = await queueFinishedCycle(new Date("2026-10-20T10:00:00Z"));
+    const latest = await queueFinishedCycle(new Date("2026-10-20T11:00:00Z"));
+    const jobs = [await addJob("Alpha"), await addJob("Beta")];
+    for (const [index, id] of jobs.entries()) await db().update(schema.jobs).set({ firstSeenAt: new Date(`2026-10-20T${index === 0 ? "10" : "11"}:30:00Z`) }).where(eq(schema.jobs.id, id));
+    await db().insert(schema.notifications).values({ kind: "alert.backup", payloadJson: { title: "Backup failed", detail: "Example failure" }, sentAt: null });
+    const ai = fakeAi();
+    const config = { ...aiConfig(), per_cycle_limit: 1 };
+    registerBuiltinAiSubtasks();
+    registerControlHandler("run_ai", createRunAiHandler({ steps: workerSteps(ai, config), registry: new ChannelRegistry(), now: () => now }));
+
+    expect(await processNextControlRequest(hostWorker())).toMatchObject({ id: first.request.id, status: "done", result: { ai: { scored: 1 } } });
+    const intermediate = await db().select().from(schema.notifications);
+    expect(intermediate.filter((n) => n.kind === "cycle_summary")).toHaveLength(0);
+    expect(intermediate.find((n) => n.kind === "alert.backup")?.sentAt).toEqual(now);
+    expect(api.of("sendMessage")).toHaveLength(1);
+
+    expect(await processNextControlRequest(hostWorker())).toMatchObject({ id: latest.request.id, status: "done", result: { ai: { scored: 1 }, notify: { pushed: 2 } } });
+    expect((await db().select().from(schema.scores)).map((s) => s.score)).toEqual([77, 77]);
+    expect(ai.tasks.filter((task) => task === "score")).toHaveLength(2);
+    const notifications = await db().select().from(schema.notifications);
+    expect(notifications.filter((n) => n.kind === "cycle_summary")).toMatchObject([{ cycleId: latest.cycle.id, payloadJson: { newJobs: 2, pushed: 2 } }]);
+    expect(notifications.filter((n) => n.kind === "job")).toHaveLength(2);
+    expect(api.of("sendMessage")).toHaveLength(4);
+  });
+
+  it("starts the next digest window after the last delivered delegated digest", async () => {
+    const now = new Date("2026-10-20T12:00:00Z");
+    const previous = await queueFinishedCycle(new Date("2026-10-20T10:00:00Z"));
+    await db().update(schema.controlRequests).set({ status: "done" }).where(eq(schema.controlRequests.id, previous.request.id));
+    await db().insert(schema.notifications).values({ kind: "cycle_summary", cycleId: previous.cycle.id, sentAt: new Date("2026-10-20T10:45:00Z") });
+    const current = await queueFinishedCycle(new Date("2026-10-20T11:00:00Z"));
+    const jobs = [await addJob("Earlier"), await addJob("Current")];
+    for (const [index, id] of jobs.entries()) await db().update(schema.jobs).set({ firstSeenAt: new Date(`2026-10-20T${index === 0 ? "10" : "11"}:30:00Z`) }).where(eq(schema.jobs.id, id));
+    registerBuiltinAiSubtasks();
+    registerControlHandler("run_ai", createRunAiHandler({ steps: workerSteps(fakeAi()), registry: new ChannelRegistry(), now: () => now }));
+
+    expect(await processNextControlRequest(hostWorker())).toMatchObject({ id: current.request.id, status: "done" });
+    const summaries = (await db().select().from(schema.notifications)).filter((n) => n.kind === "cycle_summary");
+    expect(summaries).toHaveLength(2);
+    expect(summaries.find((n) => n.cycleId === current.cycle.id)?.payloadJson).toMatchObject({ newJobs: 1 });
+  });
+
   it("scores, translates and pushes for the delegated cycle and writes both outcomes into its summary", async () => {
     const ai = fakeAi();
     registerBuiltinAiSubtasks();

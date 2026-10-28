@@ -1,6 +1,9 @@
+import fs from "node:fs";
+import path from "node:path";
+
 import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, inject, it, vi } from "vitest";
-import { stringify } from "yaml";
+import { parseDocument, stringify } from "yaml";
 
 import { createAiRouter, createDbUsageStore } from "@/lib/ai";
 import { SALARY_PROMPT_VERSION } from "@/lib/ai/prompts/salary";
@@ -25,8 +28,10 @@ import { defaultContext } from "@/lib/mcp/server";
 import { mcpTranslator } from "@/lib/mcp/text";
 import { searchJobs } from "@/lib/mcp/tools/search-jobs";
 import { compileFamilies } from "@/lib/salary/families";
+import { syncCompanyDisplayNames } from "@/lib/pipeline/company-names";
 
 import { pinnedAi, scriptedProvider } from "../ai/helpers";
+import { makeTempConfig } from "../config/helpers";
 import { quietLogger } from "../cycle/helpers";
 import { prefs } from "../filter/helpers";
 import { shippedPipeline } from "../pipeline/helpers";
@@ -250,6 +255,44 @@ describe("old benchmark read guard", () => {
 });
 
 describe("lookup", () => {
+  it.each([
+    { change: "rename", long: false }, { change: "merge", long: false },
+    { change: "rename", long: true }, { change: "merge", long: true },
+  ])("reuses the paid lookup after an ATS company $change (shortened key: $long) without another provider call", async ({ change, long }) => {
+    const temp = makeTempConfig();
+    try {
+      const salaryFile = path.join(temp.defaultsDir, "salary.yaml");
+      const salaryDoc = parseDocument(fs.readFileSync(salaryFile, "utf8"));
+      salaryDoc.set("role_families", salaryDoc.createNode(config().role_families));
+      fs.writeFileSync(salaryFile, salaryDoc.toString());
+      const title = long ? "ML Engineer ".repeat(50).trim() : "ML Engineer";
+      const jobId = await add("acmelabs", title, null);
+      const { router: r, providers, ai } = router([answer()]);
+      const opts = { force: false, config: config(), currency: "EUR", fx: FX, logger: quietLogger, now: () => NOW };
+      const first = await runSalaryLookup(db(), r, jobId, opts);
+      if (first.status !== "done") throw new Error("expected a paid lookup");
+      const [before] = await db().select().from(schema.salaryLookups);
+      if (change === "merge") await getOrCreateCompany(db(), { name: "Acme Labs", nameNorm: "acme-labs" });
+
+      expect(await syncCompanyDisplayNames(db(), {
+        companies: [{ name: "Acme Labs", token: "acmelabs", ats: "greenhouse", enabled: true }],
+        pipeline: shippedPipeline(),
+      })).toEqual({ renamed: change === "rename" ? 1 : 0, merged: change === "merge" ? 1 : 0 });
+
+      expect(await runSalaryLookup(db(), r, jobId, opts)).toMatchObject({ status: "done", cached: true, lookupId: first.lookupId });
+      expect(providers[0]?.transport.calls).toHaveLength(1);
+      const job = await getJobForSalaryLookup(db(), jobId);
+      expect(job?.companyNorm).toBe("acme-labs");
+      expect(await db().select().from(schema.salaryLookups)).toMatchObject([{
+        ...before, companyId: job!.companyId,
+        lookupKey: long ? expect.stringMatching(/^acme-labs\|ml_engineer\|.*#[0-9a-f]{16}$/) : "acme-labs|ml_engineer|ml engineer|senior|de|berlin",
+      }]);
+      expect((await getSalaryContext(db(), { jobId, figure: null, currency: "EUR", salary: config(), ai, locale: "en", now: NOW }))?.lookup.latest?.id).toBe(first.lookupId);
+    } finally {
+      temp.cleanup();
+    }
+  });
+
   it("runs on a web provider only, stores the checked result, serves the cache within the TTL and counts searches in ai_usage", async () => {
     const jobId = await add("Acme", "ML Engineer", [90000, 110000]);
     const { router: r, providers } = router([{ text: answer(), tokensIn: 100, tokensOut: 50, webSearches: 3 }], ["deepseek", "anthropic"]);

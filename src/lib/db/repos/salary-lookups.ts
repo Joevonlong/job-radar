@@ -1,9 +1,10 @@
 /** Reads and writes of `salary_lookups` and the `salary_lookup` requests around them (C9). */
 import { and, desc, eq, gte, inArray, sql } from "drizzle-orm";
 
-import { rekeySalaryLookupKey } from "@/lib/salary/lookup-key";
+import { rekeySalaryLookupKey, salaryLookupKey } from "@/lib/salary/lookup-key";
 import { salaryLookupResultSchema, type SalaryLookupResult } from "@/lib/salary/lookup-types";
 import { jobLocationSchema, type JobLocation } from "@/lib/domain/types";
+import { loadConfig } from "@/lib/config";
 
 import type { Executor } from "../executor";
 import { companies, controlRequests, jobs, salaryLookups } from "../schema";
@@ -178,14 +179,33 @@ export async function findLatestSalaryLookupRequest(db: Executor, input: { looku
  */
 export async function moveSalaryLookups(db: Executor, input: { fromCompanyId: number; toCompanyId: number; fromNorm: string; toNorm: string }): Promise<number> {
   const rows = await db.select({ id: salaryLookups.id, lookupKey: salaryLookups.lookupKey }).from(salaryLookups).where(eq(salaryLookups.companyId, input.fromCompanyId));
+  let reconstructed: Map<string, string> | undefined;
   for (const row of rows) {
-    const lookupKey = input.fromNorm === input.toNorm ? null : rekeySalaryLookupKey(row.lookupKey, "company", input.fromNorm, input.toNorm);
+    let lookupKey = input.fromNorm === input.toNorm ? null : rekeySalaryLookupKey(row.lookupKey, "company", input.fromNorm, input.toNorm);
+    if (lookupKey === null && input.fromNorm !== input.toNorm) {
+      // A shortened key's hash covers every field. Rebuild it from the company's jobs and require an exact old-key
+      // match before changing it; this also keeps a shared lookup whose originating job has since been deleted.
+      reconstructed ??= await reconstructCompanyLookupKeys(db, input);
+      lookupKey = reconstructed.get(row.lookupKey) ?? null;
+    }
     await db
       .update(salaryLookups)
       .set({ companyId: input.toCompanyId, ...(lookupKey !== null ? { lookupKey } : {}) })
       .where(eq(salaryLookups.id, row.id));
   }
   return rows.length;
+}
+
+async function reconstructCompanyLookupKeys(db: Executor, input: { fromCompanyId: number; fromNorm: string; toNorm: string }): Promise<Map<string, string>> {
+  const families = [null, ...loadConfig("salary").role_families.map((family) => family.id)];
+  const companyJobs = await db.select({ titleNorm: jobs.titleNorm, seniority: jobs.seniority, locations: jobs.locationsJson }).from(jobs).where(eq(jobs.companyId, input.fromCompanyId));
+  const keys = new Map<string, string>();
+  for (const row of companyJobs) {
+    const first = Array.isArray(row.locations) && row.locations.length > 0 ? jobLocationSchema.safeParse(row.locations[0]) : null;
+    const job = { companyNorm: input.fromNorm, titleNorm: row.titleNorm, seniority: row.seniority, location: first?.success ? first.data : null };
+    for (const family of families) keys.set(salaryLookupKey(job, family), salaryLookupKey({ ...job, companyNorm: input.toNorm }, family));
+  }
+  return keys;
 }
 
 /** The cache keys of the jobs' lookups after their title keys changed (`from` -> `to` per job). */

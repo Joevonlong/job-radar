@@ -1,4 +1,6 @@
 // @vitest-environment node
+import { getEventListeners } from "node:events";
+
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 
@@ -194,6 +196,35 @@ describe("error mapping", () => {
 });
 
 describe("timeouts and cancellation", () => {
+  it.each([200, 404])("releases both outer signals when an unread %i response times out", async (status) => {
+    vi.useFakeTimers();
+    const cycle = new AbortController();
+    const request = new AbortController();
+    const { fetch } = scripted(response(status));
+    const { http } = client(fetch, {}, { signal: cycle.signal });
+
+    await http.request(URL_OK, { signal: request.signal, allowStatus: [404] });
+    await vi.advanceTimersByTimeAsync(SETTINGS.timeoutMs);
+
+    expect(getEventListeners(cycle.signal, "abort")).toHaveLength(0);
+    expect(getEventListeners(request.signal, "abort")).toHaveLength(0);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("releases the other signal and timeout when an unread response is cancelled", async () => {
+    vi.useFakeTimers();
+    const cycle = new AbortController();
+    const request = new AbortController();
+    const { fetch } = scripted(response(200));
+    const { http } = client(fetch, {}, { signal: cycle.signal });
+
+    await http.request(URL_OK, { signal: request.signal });
+    request.abort();
+
+    expect(getEventListeners(cycle.signal, "abort")).toHaveLength(0);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it("times out a hanging request as a retryable network error", async () => {
     vi.useFakeTimers();
     const hanging: FetchLike = (_url, init) =>

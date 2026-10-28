@@ -206,6 +206,8 @@ A failure in (a) does not block rollback: follow (c) and accept the display wind
 
 ### Fixed
 
+- Recovering the AI worker sends one digest for queued cycles while keeping every cycle's AI work and alerts; company
+  name corrections preserve paid salary caches, and ignored HTTP bodies release their cancellation listeners.
 - Splitting merged jobs preserves locations from every linked posting and reports unreadable sources for manual review;
   reprocessing stops its filter and signal batches when the cycle lock is lost.
 - Fixed job identity repairs across cities, linked company mark removal, LinkedIn cross-channel duplicates, concurrent

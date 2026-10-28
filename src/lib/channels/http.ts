@@ -131,23 +131,30 @@ export function createHttpClient(options: HttpClientOptions): HttpClient {
     const controller = new AbortController();
     let timedOut = false;
     const timeoutMs = init.timeoutMs ?? settings.timeoutMs;
-    const timer = setTimeout(() => {
-      timedOut = true;
-      controller.abort();
-    }, timeoutMs);
-    // Never keep the process alive just for a request timeout.
-    (timer as { unref?: () => void }).unref?.();
-
     const outer = [options.signal, init.signal].filter((s): s is AbortSignal => s !== undefined);
-    const onOuterAbort = (): void => controller.abort();
-    for (const signal of outer) {
-      if (signal.aborted) controller.abort();
-      else signal.addEventListener("abort", onOuterAbort, { once: true });
-    }
     const cleanup = (): void => {
       clearTimeout(timer);
       for (const signal of outer) signal.removeEventListener("abort", onOuterAbort);
     };
+    const onOuterAbort = (): void => {
+      controller.abort();
+      cleanup();
+    };
+    const timer = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+      cleanup();
+    }, timeoutMs);
+    // Never keep the process alive just for a request timeout.
+    (timer as { unref?: () => void }).unref?.();
+
+    for (const signal of outer) {
+      if (signal.aborted) {
+        onOuterAbort();
+        break;
+      }
+      signal.addEventListener("abort", onOuterAbort, { once: true });
+    }
 
     try {
       const response = await doFetch(url, {
@@ -181,6 +188,13 @@ export function createHttpClient(options: HttpClientOptions): HttpClient {
         status: response.status,
         ok: response.ok,
         headers: response.headers,
+        cancel: async () => {
+          try {
+            await response.body?.cancel();
+          } finally {
+            cleanup();
+          }
+        },
         text: () => read("text", () => response.text()),
         json: () => read("json", () => response.json()),
         textUpTo: (maxBytes: number) => read("text", () => readTextUpTo(response, maxBytes)),

@@ -18,6 +18,8 @@ export const DELEGATED_STEP_NAMES = ["ai", "notify"] as const satisfies readonly
 export interface DelegatedRunOptions {
   db: Db;
   cycleId: number;
+  /** The queued run whose notification may be covered by a newer run. */
+  requestId?: number;
   signal: AbortSignal;
   logger: ChannelLogger;
   now?: () => Date;
@@ -67,6 +69,7 @@ async function createStepContext(options: DelegatedRunOptions, cycle: Cycle): Pr
   });
   return {
     cycle: { id: cycle.id, kind: cycle.kind },
+    ...(options.requestId === undefined ? {} : { delegatedRequestId: options.requestId }),
     windowKind: null,
     dryRun: false,
     db: options.db,

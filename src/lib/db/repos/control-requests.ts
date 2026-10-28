@@ -70,6 +70,31 @@ export async function listOpenControlRequests(db: Db, kind: ControlRequestKind):
 }
 
 /**
+ * A newer open run_ai holds back this run's job messages, without skipping any AI work. The final digest starts at
+ * the oldest delegated cycle after the last delivered digest, so runs that deferred their push still count as new.
+ * Match the whole payload against a cycle's valid request shape: malformed requests must not suppress a valid digest.
+ */
+export async function getRunAiNotificationWindow(db: Db, requestId: number): Promise<{ newerPending: boolean; startedAt: Date | null }> {
+  const [row] = await db.execute<{ newer_pending: boolean; started_at: Date | string | null }>(sql`
+    with delegated as (
+      select r.id, r.status, c.id as cycle_id, c.started_at
+      from control_requests r
+      join cycles c on r.payload = jsonb_build_object('cycleId', c.id)
+      where r.kind = 'run_ai'
+    ), last_digest as (
+      select coalesce(max(d.id), 0) as request_id
+      from delegated d
+      join notifications n on n.cycle_id = d.cycle_id
+      where d.id < ${requestId} and n.kind = 'cycle_summary' and n.sent_at is not null
+    )
+    select
+      exists(select 1 from delegated where id > ${requestId} and status in ('pending', 'running')) as newer_pending,
+      (select min(started_at) from delegated where id <= ${requestId} and id > (select request_id from last_digest)) as started_at
+  `);
+  return { newerPending: row?.newer_pending ?? false, startedAt: row?.started_at ? new Date(row.started_at) : null };
+}
+
+/**
  * Which claim queue a process takes its requests from. Today every process has one queue for all its kinds (`all`);
  * the filters below are written per queue so that the claim and the queue position always agree.
  */

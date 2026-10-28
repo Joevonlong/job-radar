@@ -61,6 +61,7 @@ export function createRunAiHandler(options: RunAiHandlerOptions = {}): ControlHa
     const run = await runDelegatedSteps({
       db: context.db,
       cycleId: payload.data.cycleId,
+      requestId: request.id,
       signal: context.signal,
       logger: context.logger,
       ...(options.steps ? { steps: options.steps } : {}),
