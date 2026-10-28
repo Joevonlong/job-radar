@@ -5,12 +5,17 @@ import { useTranslations } from "next-intl";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 
-import { attachResumePdfAction, detachResumePdfAction, exportResumeKitAction, type ExportResumeResult } from "@/app/jobs/[id]/resume-actions";
+import { attachResumePdfAction as rawAttachResumePdfAction, detachResumePdfAction as rawDetachResumePdfAction, exportResumeKitAction as rawExportResumeKitAction, type ExportResumeResult } from "@/app/jobs/[id]/resume-actions";
 import { PlaceholderBox } from "@/components/jobs/detail/panel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 import { ResumeChip } from "./resume-chip";
+import { withActionFeedback } from "@/lib/actions/client";
+
+const attachResumePdfAction = withActionFeedback(rawAttachResumePdfAction)(() => ({ ok: false, error: "failed" }));
+const detachResumePdfAction = withActionFeedback(rawDetachResumePdfAction)(() => ({ ok: false, error: "failed" }));
+const exportResumeKitAction = withActionFeedback(rawExportResumeKitAction)(() => ({ ok: false, error: "failed" }));
 
 interface ResumePanelProps {
   jobId: number;

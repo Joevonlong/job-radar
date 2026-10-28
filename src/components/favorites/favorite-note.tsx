@@ -4,10 +4,13 @@ import { Star } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useRef, useState } from "react";
 
-import { saveFavoriteNoteAction } from "@/app/favorites/actions";
+import { saveFavoriteNoteAction as rawSaveFavoriteNoteAction } from "@/app/favorites/actions";
 import { Input } from "@/components/ui/input";
 import { FAVORITE_NOTE_MAX_CHARS } from "@/lib/dashboard/limits";
 import { toastTone } from "@/lib/toast";
+import { withActionFeedback } from "@/lib/actions/client";
+
+const saveFavoriteNoteAction = withActionFeedback(rawSaveFavoriteNoteAction)(() => ({ ok: false, error: "failed" }));
 
 interface FavoriteNoteProps {
   jobId: number;

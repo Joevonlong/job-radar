@@ -5,7 +5,7 @@ import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useActionState, useEffect, useId, useState, useTransition, type FormEvent, type ReactNode } from "react";
 
-import { saveWorkflowAction } from "@/app/settings/actions";
+import { saveWorkflowAction as rawSaveWorkflowAction } from "@/app/settings/actions";
 import { Field } from "@/components/profile/fields";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -18,6 +18,9 @@ import { toastTone } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 
 import { SaveBar } from "../save-bar";
+import { withActionFeedback } from "@/lib/actions/client";
+
+const saveWorkflowAction = withActionFeedback(rawSaveWorkflowAction)((previous) => previous);
 
 /** Statuses that have a timeout of their own (notify.yaml `reminders`): the others have none (not built). */
 const TIMEOUT_FIELD: Partial<Record<ApplicationStatus, "interestedDays" | "appliedDays">> = { interested: "interestedDays", applied: "appliedDays" };

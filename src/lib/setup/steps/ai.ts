@@ -4,7 +4,7 @@
  * catalog problems this save introduces block it (an older problem elsewhere in ai.yaml is the settings page's business).
  */
 import { AI_PROVIDER_CONFIG_KEYS, AI_PROVIDER_IDS, type AiProviderIdChoice } from "@/lib/config/ai-options";
-import { aiSchema, checkAiAgainstCatalog, writeConfig, type AiConfig, type CatalogIssue } from "@/lib/config";
+import { aiSchema, checkAiAgainstCatalog, mutateConfig, type AiConfig, type CatalogIssue } from "@/lib/config";
 
 import { aiInputSchema, type AiInput } from "../inputs";
 import { stepError, type SetupFieldError, type SetupStepResult } from "../types";
@@ -62,18 +62,25 @@ export async function saveAiStep(raw: unknown): Promise<SetupStepResult> {
   const catalog = readFresh("models");
   if (catalog === null) return stepError("ai", "catalogUnreadable");
 
-  const next = aiSchema.safeParse(applyAiInput(current, parsed.data));
-  if (!next.success) return stepError("ai", null, zodSetupErrors(next.error, fieldOf));
-  const before = new Set(checkAiAgainstCatalog(current, catalog).map(issueKey));
-  const introduced = checkAiAgainstCatalog(next.data, catalog).filter((issue) => issue.severity === "error" && !before.has(issueKey(issue)));
-  if (introduced.length > 0) {
-    const errors: SetupFieldError[] = introduced.map((issue) => ({ path: fieldOf(issue.path), ns: "setup", key: issue.code === "not_in_catalog" ? "notInCatalog" : "invalid", params: { model: issue.model, message: issue.message } }));
-    return stepError("ai", null, errors);
-  }
+  let problem: SetupStepResult | null = null;
   try {
-    await writeConfig("ai", next.data);
+    await mutateConfig("ai", (latest) => {
+      const next = aiSchema.safeParse(applyAiInput(latest, parsed.data));
+      if (!next.success) {
+        problem = stepError("ai", null, zodSetupErrors(next.error, fieldOf));
+        return null;
+      }
+      const before = new Set(checkAiAgainstCatalog(latest, catalog).map(issueKey));
+      const introduced = checkAiAgainstCatalog(next.data, catalog).filter((issue) => issue.severity === "error" && !before.has(issueKey(issue)));
+      if (introduced.length > 0) {
+        const errors: SetupFieldError[] = introduced.map((issue) => ({ path: fieldOf(issue.path), ns: "setup", key: issue.code === "not_in_catalog" ? "notInCatalog" : "invalid", params: { model: issue.model, message: issue.message } }));
+        problem = stepError("ai", null, errors);
+        return null;
+      }
+      return next.data;
+    });
   } catch (error) {
     return stepError("ai", setupWriteError(error));
   }
-  return finishStep("ai");
+  return problem ?? finishStep("ai");
 }

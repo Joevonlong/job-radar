@@ -7,9 +7,9 @@ import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useTransition } from "react";
 
-import { setApplicationStatusAction } from "@/app/jobs/[id]/actions";
-import { closeJobAction, reopenJobAction, undoClosureAction } from "@/app/jobs/closure-actions";
-import { undoApplicationStatusAction } from "@/app/pipeline/actions";
+import { setApplicationStatusAction as rawSetApplicationStatusAction } from "@/app/jobs/[id]/actions";
+import { closeJobAction as rawCloseJobAction, reopenJobAction as rawReopenJobAction, undoClosureAction as rawUndoClosureAction } from "@/app/jobs/closure-actions";
+import { undoApplicationStatusAction as rawUndoApplicationStatusAction } from "@/app/pipeline/actions";
 import { useFavoriteToggle } from "@/components/favorites/use-favorite-toggle";
 import { useHiddenStatuses } from "@/components/applications/visibility-context";
 import { isStatusOffered } from "@/lib/applications/visibility";
@@ -28,6 +28,13 @@ import type { JobListItem } from "./types";
 import { useSeenState } from "./use-seen";
 
 import "./jobs.css";
+import { withActionFeedback } from "@/lib/actions/client";
+
+const setApplicationStatusAction = withActionFeedback(rawSetApplicationStatusAction)(() => ({ ok: false, error: "failed" }));
+const closeJobAction = withActionFeedback(rawCloseJobAction)(() => ({ ok: false, error: "failed" }));
+const reopenJobAction = withActionFeedback(rawReopenJobAction)(() => ({ ok: false, error: "failed" }));
+const undoClosureAction = withActionFeedback(rawUndoClosureAction)(() => ({ ok: false }));
+const undoApplicationStatusAction = withActionFeedback(rawUndoApplicationStatusAction)(() => ({ ok: false, error: "failed" }));
 
 export type { JobListViz } from "./job-row";
 

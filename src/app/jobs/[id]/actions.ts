@@ -1,5 +1,6 @@
 "use server";
 
+import { logActionFailure } from "@/lib/logging/action-failure";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
@@ -47,7 +48,8 @@ export async function setApplicationStatusAction(input: { jobId: number; status:
     const change = await setApplicationStatus(db, parsed.data.jobId, parsed.data.status);
     refreshViews();
     return { ok: true, previous: change.previous, status: change.status, changed: change.changed };
-  } catch {
+  } catch (error) {
+    logActionFailure("setApplicationStatusAction", error);
     return { ok: false, error: "failed" };
   }
 }
@@ -73,7 +75,8 @@ export async function markAppliedAction(input: { jobId: number }): Promise<MarkA
     if (change.rejected) return { ok: false, error: "not_allowed" };
     refreshViews();
     return { ok: true, previous: change.previous, status: "applied", changed: change.changed };
-  } catch {
+  } catch (error) {
+    logActionFailure("markAppliedAction", error);
     return { ok: false, error: "failed" };
   }
 }
@@ -88,7 +91,8 @@ export async function saveApplicationNotesAction(input: { jobId: number; notes: 
     await setApplicationNotes(db, parsed.data.jobId, parsed.data.notes);
     refreshViews();
     return { ok: true };
-  } catch {
+  } catch (error) {
+    logActionFailure("saveApplicationNotesAction", error);
     return { ok: false, error: "failed" };
   }
 }
@@ -150,7 +154,8 @@ export async function translateJobAction(input: { jobId: number; force?: boolean
     if (outcome.state === "error") return { ok: false, error: outcome.error };
     if (outcome.state === "cached") return { ok: true, queued: false, cached: true, translation: toPayload(outcome.translation) };
     return { ok: true, queued: true, requestId: outcome.requestId };
-  } catch {
+  } catch (error) {
+    logActionFailure("translateJobAction", error);
     return { ok: false, error: "failed" };
   }
 }
@@ -166,7 +171,8 @@ export async function translateStatusAction(input: { jobId: number; requestId: n
     if (state.state === "failed") return { ok: false, error: state.error, detail: state.detail, partial: toPartial(state.partial), resumeAt: state.resumeAt };
     revalidatePath(`/jobs/${parsed.data.jobId}`);
     return { ok: true, state: "done", translation: toPayload(state.translation) };
-  } catch {
+  } catch (error) {
+    logActionFailure("translateStatusAction", error);
     return null;
   }
 }

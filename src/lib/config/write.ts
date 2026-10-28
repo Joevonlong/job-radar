@@ -331,6 +331,29 @@ export async function writeConfig<N extends ConfigName>(name: N, value: ConfigVa
   });
 }
 
+/**
+ * Read, transform and write under both write locks, including the upgrade-freeze check before the read.
+ * Return null from the synchronous transform to leave the file unchanged. Profile notifications run after
+ * releasing the directory lease, in the same order as the writes of this process.
+ */
+export async function mutateConfig<N extends ConfigName>(name: N, update: (current: ConfigValue<N>) => ConfigValue<N> | null): Promise<ConfigValue<N> | null> {
+  const filePath = getUserConfigPath(name);
+  return withFileLock(filePath, async () => {
+    const result = await withConfigWriteLock(filePath, async () => {
+      const next = update(reloadConfig(name));
+      if (next === null) return null;
+      const checked = configRegistry[name].schema.safeParse(next);
+      if (!checked.success) throw new ConfigError({ configName: name, filePath, kind: "schema", issues: zodIssues(checked.error) });
+      const value = checked.data as ConfigValue<N>;
+      assertProtectedUnchanged(name, value);
+      const text = await writeValidated(name, filePath, value, undefined);
+      return { value, text };
+    });
+    if (result !== null && isProfileName(name)) await notifyProfileSaved(name, result.text);
+    return result?.value ?? null;
+  });
+}
+
 /** The hash of the file the app reads for `name` now ("" when it is missing or unreadable), as the forms compute it. */
 function currentTextHash(name: ConfigName): string {
   try {

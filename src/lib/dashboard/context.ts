@@ -4,3 +4,12 @@ import { loadConfig } from "@/lib/config";
 export function getSchedule() {
   return loadConfig("schedule");
 }
+
+/** A broken schedule must not prevent displaying stored data or repairing settings. */
+export function getDisplayTimeZone(): string {
+  try {
+    return getSchedule().timezone;
+  } catch {
+    return "UTC";
+  }
+}

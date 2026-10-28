@@ -4,7 +4,7 @@ import { NextIntlClientProvider } from "next-intl";
 import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("@/app/me/actions", () => ({ enableMarketChannelsAction: vi.fn(), saveProfileAction: vi.fn() }));
+vi.mock("@/app/me/actions", () => ({ enableMarketChannelsAction: vi.fn(), saveProfileAction: vi.fn(), previewDealBreakersAction: vi.fn(), syncSearchLocationsAction: vi.fn() }));
 vi.mock("@/app/setup/actions", () => ({ saveSetupStepAction: vi.fn(), skipSetupStepAction: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn(), replace: vi.fn() }) }));
 vi.mock("sonner", () => ({ toast: Object.assign(vi.fn(), { error: vi.fn(), success: vi.fn(), info: vi.fn() }) }));

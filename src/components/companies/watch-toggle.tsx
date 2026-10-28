@@ -5,10 +5,14 @@ import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useTransition } from "react";
 
-import { addWatchedCompanyAction, removeWatchedCompaniesAction } from "@/app/interests/actions";
+import { addWatchedCompanyAction as rawAddWatchedCompanyAction, removeWatchedCompaniesAction as rawRemoveWatchedCompaniesAction } from "@/app/interests/actions";
 import { Button } from "@/components/ui/button";
 import type { CompanyOverviewItem } from "@/lib/companies/overview";
 import { toastTone } from "@/lib/toast";
+import { withActionFeedback } from "@/lib/actions/client";
+
+const addWatchedCompanyAction = withActionFeedback(rawAddWatchedCompanyAction)(() => ({ status: "error", section: "watched", nonce: Date.now(), formError: "writeFailed", fieldErrors: [] }));
+const removeWatchedCompaniesAction = withActionFeedback(rawRemoveWatchedCompaniesAction)(() => ({ status: "error", section: "watched", nonce: Date.now(), formError: "writeFailed", fieldErrors: [] }));
 
 export function WatchToggle({ row }: { row: Pick<CompanyOverviewItem, "name" | "watched" | "watchedEntries" | "watchedByFlagOnly" | "companyFlagWatched" | "watchable"> }) {
   const t = useTranslations("companies");

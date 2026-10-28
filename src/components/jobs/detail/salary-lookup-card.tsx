@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { useFormatter, useTranslations } from "next-intl";
 import { useState, useTransition, type ReactNode } from "react";
 
-import { lookupSalaryAction, salaryLookupStatusAction, type SalaryActionErrorKey, type SalaryLookupStatusResult } from "@/app/jobs/[id]/salary-actions";
+import { lookupSalaryAction as rawLookupSalaryAction, salaryLookupStatusAction as rawSalaryLookupStatusAction, type SalaryActionErrorKey, type SalaryLookupStatusResult } from "@/app/jobs/[id]/salary-actions";
 import { QueueHint } from "@/components/control/queue-hint";
 import { useControlRequest, type ControlRequestRead } from "@/components/control/use-control-request";
 import { Badge } from "@/components/ui/badge";
@@ -25,6 +25,10 @@ import { toastTone } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 
 import { PlaceholderBox } from "./panel";
+import { callAction, withActionFeedback } from "@/lib/actions/client";
+
+const lookupSalaryAction = withActionFeedback(rawLookupSalaryAction)(() => ({ ok: false, error: "failed" }));
+const salaryLookupStatusAction = (input: Parameters<typeof rawSalaryLookupStatusAction>[0]) => callAction(() => rawSalaryLookupStatusAction(input), () => null);
 
 export interface SalaryLookupCardProps {
   jobId: number;

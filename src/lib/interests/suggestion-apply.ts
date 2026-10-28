@@ -1,12 +1,13 @@
 /**
  * Approving and rejecting interest suggestions. Approving is the only place a suggestion changes a config
- * file, and always through `writeConfig` (comments kept, atomic replace, validated, profile snapshot hook for
+ * file, and always through the shared config mutator (comments kept, atomic replace, validated, profile snapshot hook for
  * preferences.yaml). Server Actions in `app/interests/suggestion-actions.ts` are thin wrappers around these
  * functions; whatever arrives here is untrusted and checked with zod (C6).
  */
+import { logActionFailure } from "@/lib/logging/action-failure";
 import { z } from "zod";
 
-import { ConfigError, ensureProfileFiles, reloadConfig, writeConfig, type InterestsConfig, type PreferencesConfig } from "@/lib/config";
+import { ConfigError, configErrorKey, ensureProfileFiles, mutateConfig, reloadConfig, type InterestsConfig, type PreferencesConfig } from "@/lib/config";
 import { loadPipeline } from "@/lib/market";
 import { getDb } from "@/lib/db";
 import { decideSuggestion, getSuggestion, reopenSuggestion } from "@/lib/db/repos/interest-suggestions";
@@ -15,7 +16,7 @@ import { registerProfileSnapshotHook } from "@/lib/profile/snapshots";
 import { reconcileBonuses } from "@/lib/signals";
 
 import { normalizeTerm, suggestedCategoryId, suggestionPayloadSchema, suggestedValue, type SuggestionPayload } from "./suggestion";
-import type { SuggestionActionState, SuggestionRecompute } from "./suggestion-types";
+import type { SuggestionActionState, SuggestionError, SuggestionRecompute } from "./suggestion-types";
 
 // ---------------------------------------------------------------- the change itself (pure)
 
@@ -89,15 +90,6 @@ export function applySuggestion(payload: SuggestionPayload, current: ConfigPair,
 
 // ---------------------------------------------------------------- plumbing
 
-let queue: Promise<unknown> = Promise.resolve();
-
-/** Config changes of this process run one after another (read, change, write must not interleave). */
-function exclusive<T>(task: () => Promise<T>): Promise<T> {
-  const run = queue.then(task, task);
-  queue = run.catch(() => undefined);
-  return run;
-}
-
 const idSchema = z.number().int().positive();
 const nonce = (): number => Date.now();
 
@@ -107,18 +99,32 @@ function normalizer(): (name: string) => string {
   try {
     const pipeline = loadPipeline();
     return (name) => resolveCompanyName(name, pipeline).nameNorm;
-  } catch {
+  } catch (error) {
+    logActionFailure("normalizer", error);
     return normalizeTerm;
   }
 }
 
-/** Write the changed files. interests.yaml first; if preferences.yaml then fails, the first write stays (it is harmless on its own). */
-async function writeChanges(applied: AppliedSuggestion): Promise<void> {
-  if (applied.interestsChanged) await writeConfig("interests", applied.interests);
-  if (applied.preferencesChanged) {
+/** Every suggestion changes one file; read that file only after taking its write locks. */
+async function writeChanges(payload: SuggestionPayload): Promise<AppliedSuggestion> {
+  const outcome: { applied?: AppliedSuggestion } = {};
+  const normalize = normalizer();
+  if (payload.kind === "filter") {
     registerProfileSnapshotHook();
-    await writeConfig("preferences", applied.preferences);
+    await mutateConfig("preferences", (preferences) => {
+      const applied = applySuggestion(payload, { interests: reloadConfig("interests"), preferences }, normalize);
+      outcome.applied = applied;
+      return applied.preferencesChanged ? applied.preferences : null;
+    });
+  } else {
+    await mutateConfig("interests", (interests) => {
+      const applied = applySuggestion(payload, { interests, preferences: reloadConfig("preferences") }, normalize);
+      outcome.applied = applied;
+      return applied.interestsChanged ? applied.interests : null;
+    });
   }
+  if (outcome.applied === undefined) throw new Error("suggestion was not applied");
+  return outcome.applied;
 }
 
 /**
@@ -134,7 +140,8 @@ async function recompute(applied: AppliedSuggestion, payload: SuggestionPayload)
   try {
     const result = await reconcileBonuses(getDb(), applied.interests);
     return { reconciled: true, checked: result.checked, updated: result.updated, rescanPending, rescorePending };
-  } catch {
+  } catch (error) {
+    logActionFailure("recompute", error);
     return { reconciled: false, checked: 0, updated: 0, rescanPending, rescorePending };
   }
 }
@@ -154,7 +161,8 @@ export async function approveSuggestion(rawId: unknown): Promise<SuggestionActio
   let row;
   try {
     row = await getSuggestion(db, id);
-  } catch {
+  } catch (error) {
+    logActionFailure("approveSuggestion", error);
     return failed(id, "databaseUnavailable");
   }
   if (!row) return failed(id, "notFound");
@@ -162,24 +170,25 @@ export async function approveSuggestion(rawId: unknown): Promise<SuggestionActio
   const payload = suggestionPayloadSchema.safeParse(row.payloadJson);
   if (!payload.success) return failed(id, "unreadableSuggestion");
 
-  const claimed = await decideSuggestion(db, id, "approved").catch(() => undefined);
+  const claimed = await decideSuggestion(db, id, "approved").catch((error: unknown) => {
+    logActionFailure("approveSuggestion", error);
+    return undefined;
+  });
   if (claimed === undefined) return failed(id, "databaseUnavailable");
   if (claimed === null) return failed(id, "alreadyDecided");
 
-  const outcome = await exclusive(async (): Promise<AppliedSuggestion | "unreadable" | "writeFailed" | "categoryMissing"> => {
+  const outcome = await (async (): Promise<AppliedSuggestion | SuggestionError> => {
     try {
       await ensureProfileFiles();
-      const current = { interests: reloadConfig("interests"), preferences: reloadConfig("preferences") };
-      const applied = applySuggestion(payload.data, current, normalizer());
-      await writeChanges(applied);
-      return applied;
+      return await writeChanges(payload.data);
     } catch (error) {
+      logActionFailure("approveSuggestion", error);
       if (error instanceof SuggestionCategoryMissing) return "categoryMissing";
-      return error instanceof ConfigError && error.kind !== "schema" ? "unreadable" : "writeFailed";
+      return configErrorKey(error) ?? (error instanceof ConfigError && error.kind !== "schema" ? "unreadable" : "writeFailed");
     }
-  });
+  })();
   if (typeof outcome === "string") {
-    await reopenSuggestion(db, id).catch(() => undefined);
+    await reopenSuggestion(db, id).catch((error: unknown) => logActionFailure("reopenSuggestion", error));
     return failed(id, outcome);
   }
   const changed = outcome.interestsChanged || outcome.preferencesChanged;
@@ -196,7 +205,8 @@ export async function rejectSuggestion(rawId: unknown): Promise<SuggestionAction
     if (!row) return failed(id, "notFound");
     if ((await decideSuggestion(getDb(), id, "rejected")) === null) return failed(id, "alreadyDecided");
     return { status: "rejected", id, nonce: nonce() };
-  } catch {
+  } catch (error) {
+    logActionFailure("rejectSuggestion", error);
     return failed(id, "databaseUnavailable");
   }
 }

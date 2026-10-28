@@ -6,7 +6,7 @@ import { ProfileIncompleteBanner } from "@/components/profile/profile-incomplete
 import { PageHeader } from "@/components/shell/page-header";
 import { salaryAxisScale, type SalaryAxisScale } from "@/components/viz";
 import { reloadConfig } from "@/lib/config";
-import { getSchedule } from "@/lib/dashboard/context";
+import { getDisplayTimeZone } from "@/lib/dashboard/context";
 import { userGermanLabelOrNull } from "@/lib/dashboard/german";
 import { countUnscoredJobs, getDb, listMonthSalaryFigures, listMonthStatedSalaries } from "@/lib/db";
 import { summarizeMonthSalaries } from "@/lib/domain/salary";
@@ -34,12 +34,7 @@ export default async function Page() {
   const profileMissing = readProfileReadiness()?.missing ?? [];
   const waiting = profileMissing.length > 0 ? await countUnscoredJobs(getDb()).catch(() => null) : null;
   // The floor preview counts this month's stated salaries; without the database it simply has none.
-  let timezone = "UTC";
-  try {
-    timezone = getSchedule().timezone;
-  } catch {
-    // an invalid schedule.yaml is reported by its settings tab; the month then starts in UTC
-  }
+  const timezone = getDisplayTimeZone();
   const tMarket = await getTranslations("market.regions");
   const market = loadMarketView(await getLocale(), (id) => (isTranslatedRegion(id) ? tMarket(id) : null));
   const salaries = data.dbAvailable ? await listMonthStatedSalaries(getDb(), { timezone, currency: market.currency }).catch(() => []) : [];

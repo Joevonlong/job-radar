@@ -3,13 +3,16 @@
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 
-import { previewAdvancedAction } from "@/app/settings/actions";
+import { previewAdvancedAction as rawPreviewAdvancedAction } from "@/app/settings/actions";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { AdvancedLayer, AdvancedPreview, AdvancedPreviewAgainst } from "@/lib/settings/advanced/types";
 
 import { ChangedPaths, DiffView } from "./diff-view";
 import { OverrideWarning } from "./override-warning";
+import { withActionFeedback } from "@/lib/actions/client";
+
+const previewAdvancedAction = withActionFeedback(rawPreviewAdvancedAction)(() => (null));
 
 interface PreviewDialogProps {
   open: boolean;

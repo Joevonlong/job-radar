@@ -1,4 +1,5 @@
 /** State of the suggestion Server Actions as the client sees it. No server imports: shared with the components. */
+import type { ConfigWriteErrorKey } from "@/lib/config/errors";
 
 export interface SuggestionRecompute {
   /** The ranking was recomputed (bonus and rank value of the scored jobs). */
@@ -12,6 +13,7 @@ export interface SuggestionRecompute {
 }
 
 export type SuggestionError =
+  | ConfigWriteErrorKey
   | "invalidPayload"
   | "notFound"
   | "alreadyDecided"

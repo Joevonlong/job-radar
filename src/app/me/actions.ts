@@ -1,5 +1,6 @@
 "use server";
 
+import { logActionFailure } from "@/lib/logging/action-failure";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
@@ -52,7 +53,8 @@ export async function enableMarketChannelsAction(): Promise<RegistryActionState>
   let ids: readonly string[];
   try {
     ids = loadMarket().defaultChannels;
-  } catch {
+  } catch (error) {
+    logActionFailure("enableMarketChannelsAction", error);
     return { status: "error", error: "config_invalid" };
   }
   const result = await enableMarketChannels(ids);
@@ -86,7 +88,8 @@ export async function previewDealBreakersAction(drafts: unknown): Promise<DealBr
   try {
     const preview = await previewDealBreakerDrafts(getDb(), parsed.data, { pipeline: loadPipeline(), me: currentMe(), sampleLimit: PREVIEW_SAMPLES });
     return { status: "done", ...preview };
-  } catch {
+  } catch (error) {
+    logActionFailure("previewDealBreakersAction", error);
     // no database, or pipeline.yaml / the market cannot be read: the card says the preview is unavailable
     return { status: "error", error: "unavailable" };
   }

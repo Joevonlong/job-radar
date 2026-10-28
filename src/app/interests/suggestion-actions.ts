@@ -1,5 +1,6 @@
 "use server";
 
+import { logActionFailure } from "@/lib/logging/action-failure";
 import { revalidatePath } from "next/cache";
 
 import { getDb } from "@/lib/db";
@@ -36,7 +37,8 @@ export async function requestSuggestRunAction(): Promise<SuggestRunState> {
     const { id, existing } = await enqueueSuggestRequest(getDb());
     revalidatePath("/interests");
     return { status: "queued", request: id, existing, nonce: Date.now() };
-  } catch {
+  } catch (error) {
+    logActionFailure("requestSuggestRunAction", error);
     return { status: "error", error: "databaseUnavailable", nonce: Date.now() };
   }
 }

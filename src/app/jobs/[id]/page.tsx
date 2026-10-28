@@ -44,7 +44,7 @@ import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { loadTargetPlaces } from "@/lib/dashboard/target-places";
 import { pickApplyTarget, postingLink, safeHttpUrl } from "@/lib/dashboard/apply";
-import { getSchedule } from "@/lib/dashboard/context";
+import { getDisplayTimeZone } from "@/lib/dashboard/context";
 import { germanCheck } from "@/lib/dashboard/german-check";
 import { userGermanLabelOrNull } from "@/lib/dashboard/german";
 import { floorCheck } from "@/lib/dashboard/floor-check";
@@ -123,7 +123,7 @@ export default async function JobDetailPage({ params }: { params: Params }) {
     getFormatter(),
     getLocale(),
   ]);
-  const { timezone } = getSchedule();
+  const timezone = getDisplayTimeZone();
   const uiLocale = resolveLocale(locale);
   // Translations are made into language.yaml's translation.target; a JD already in that language has no translation tab
   const languages = languageSettings({ fresh: true });

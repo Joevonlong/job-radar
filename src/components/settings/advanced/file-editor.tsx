@@ -4,7 +4,7 @@ import { Eraser, Lock, Save, Undo2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 
-import { resetAdvancedAction, saveAdvancedAction, validateAdvancedAction } from "@/app/settings/actions";
+import { resetAdvancedAction as rawResetAdvancedAction, saveAdvancedAction as rawSaveAdvancedAction, validateAdvancedAction as rawValidateAdvancedAction } from "@/app/settings/actions";
 import { Button } from "@/components/ui/button";
 import { SLOW_PATTERN_MESSAGE } from "@/lib/config/interests-lint";
 import { registerUnsaved } from "@/lib/shell/unsaved";
@@ -17,6 +17,11 @@ import { OverrideWarning } from "./override-warning";
 import { PreviewDialog } from "./preview-dialog";
 import { ResetDialog } from "./reset-dialog";
 import { YamlTextarea, type YamlTextareaHandle } from "./yaml-textarea";
+import { withActionFeedback } from "@/lib/actions/client";
+
+const resetAdvancedAction = withActionFeedback(rawResetAdvancedAction)(() => ({ status: "failed" }));
+const saveAdvancedAction = withActionFeedback(rawSaveAdvancedAction)(() => ({ status: "failed" }));
+const validateAdvancedAction = withActionFeedback(rawValidateAdvancedAction)(() => ({ ok: false, issues: [], warnings: [] }));
 
 /** The text is checked on the server this long after the last key stroke. */
 const VALIDATE_DEBOUNCE_MS = 400;

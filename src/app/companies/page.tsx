@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { loadCompanyOverview } from "@/lib/companies/overview";
 import { serializeCompaniesParams } from "@/lib/companies/search-params";
-import { getSchedule } from "@/lib/dashboard/context";
+import { getDisplayTimeZone } from "@/lib/dashboard/context";
 import { MAX_FILTER_VALUE_CHARS } from "@/lib/jobs/constants";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -21,7 +21,7 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function CompaniesPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const [overview, t, tPage] = await Promise.all([loadCompanyOverview(searchParams), getTranslations("companies"), getTranslations("pages.companies")]);
   const { rows, params, total, page, pageCount, excludedCount } = overview;
-  const { timezone } = getSchedule();
+  const timezone = getDisplayTimeZone();
 
   return (
     <div data-wide className="flex min-w-0 flex-col gap-sp-4">

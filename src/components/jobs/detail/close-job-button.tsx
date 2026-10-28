@@ -5,12 +5,17 @@ import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { useId, useState, useTransition, type ReactNode } from "react";
 
-import { closeJobAction, reopenJobAction, undoClosureAction, type ClosureActionResult } from "@/app/jobs/closure-actions";
+import { closeJobAction as rawCloseJobAction, reopenJobAction as rawReopenJobAction, undoClosureAction as rawUndoClosureAction, type ClosureActionResult } from "@/app/jobs/closure-actions";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
 import { CLOSURE_NOTE_MAX, isPossiblyClosedReason, type ClosedReason } from "@/lib/jobs/closure";
 import { toastTone, toastUndo } from "@/lib/toast";
+import { withActionFeedback } from "@/lib/actions/client";
+
+const closeJobAction = withActionFeedback(rawCloseJobAction)(() => ({ ok: false, error: "failed" }));
+const reopenJobAction = withActionFeedback(rawReopenJobAction)(() => ({ ok: false, error: "failed" }));
+const undoClosureAction = withActionFeedback(rawUndoClosureAction)(() => ({ ok: false }));
 
 interface ClosureProps {
   jobId: number;
