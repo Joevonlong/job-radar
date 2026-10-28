@@ -357,7 +357,31 @@ export async function listBonusRows(db: Executor): Promise<BonusRow[]> {
   }));
 }
 
-/** Set the bonus (and, when the row has a match score, the rank value) of a `scores` row. */
-export async function setScoreBonus(db: Executor, scoreId: number, values: { signalBonus: number; rankValue: number | null }): Promise<void> {
-  await db.update(scores).set({ signalBonus: values.signalBonus, rankValue: values.rankValue }).where(eq(scores.id, scoreId));
+/** The new bonus (and, when the row has a match score, the rank value) of a `scores` row. */
+export interface ScoreBonusUpdate {
+  scoreId: number;
+  signalBonus: number;
+  rankValue: number | null;
+}
+
+/** Rows per statement of `setScoreBonuses`. */
+const BONUS_CHUNK = 500;
+
+/** A Postgres array literal of numbers (`null` for a missing value), sent as one parameter. */
+const numberArray = (values: ReadonlyArray<number | null>): string => `{${values.map((v) => (v === null ? "NULL" : String(v))).join(",")}}`;
+
+/** Write the bonuses (and rank values) of many `scores` rows: one statement per `BONUS_CHUNK` rows, not one per row. */
+export async function setScoreBonuses(db: Executor, updates: readonly ScoreBonusUpdate[]): Promise<void> {
+  for (let i = 0; i < updates.length; i += BONUS_CHUNK) {
+    const part = updates.slice(i, i + BONUS_CHUNK);
+    await db.execute(sql`
+      update ${scores} set signal_bonus = v.signal_bonus, rank_value = v.rank_value
+      from (
+        select unnest(${numberArray(part.map((u) => u.scoreId))}::bigint[]) as id,
+          unnest(${numberArray(part.map((u) => u.signalBonus))}::numeric[]) as signal_bonus,
+          unnest(${numberArray(part.map((u) => u.rankValue))}::numeric[]) as rank_value
+      ) v
+      where ${scores.id} = v.id
+    `);
+  }
 }

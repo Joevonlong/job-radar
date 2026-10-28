@@ -80,6 +80,9 @@ A failure in (a) does not block rollback: follow (c) and accept the display wind
 
 ### Changed
 
+- **Faster on a large database:** the Today page reads the scores and cycle counts of its few jobs through indexes
+  instead of scoring every job; the /jobs city list places each distinct location once; recalculating score bonuses
+  after an interests change writes in batches. A migration adds four indexes; results are unchanged.
 - **AI salary lookups are only displayed:** they never count in the salary benchmark or any filter; the benchmark uses
   only salaries stated in postings. The Salary tab's switch to count AI lookups is removed and the benchmark card shows
   only "sample n". Lookup cards label the company level and every band "AI estimate (unverified)", identify "AI's own
