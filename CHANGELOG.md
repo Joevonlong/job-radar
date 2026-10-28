@@ -7,6 +7,17 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ### Upgrade notes
 
+- **Company and title keys are recomputed once.** The first cycle after upgrading (or `pnpm reprocess`) gives stored
+  companies and jobs whose names are written in a non-Latin script, or contain letters such as Ø, Ł, Æ or ß, their new
+  keys before new postings are filed. German company names with ß are re-keyed once (ß now reads as ss, as in titles:
+  "Straße GmbH" and "Strasse GmbH" share a key; nothing is merged unless both spellings are stored). Companies that now
+  share a key are folded into one, keeping their jobs, salary lookups, aliases and marks; cached salary lookups follow the
+  new keys. A watched or blacklisted company whose name mixes scripts gets a second row with the same marks for its Latin
+  spelling. Nothing else changes when all names and titles are plain Latin script. If the keys cannot be recomputed, the
+  cycle files no postings until they can (the pipeline step fails visibly). Jobs the old keys had already merged stay
+  merged until you run `pnpm reprocess --split-merged` once; it lists the jobs you had acted on that it split or left
+  alone ([docs/extraction.md](docs/extraction.md#company-and-title-keys)). **Rollback:** older versions file new postings
+  with such names under the empty key again; after upgrading back, run `pnpm reprocess --split-merged`.
 - **Monid LinkedIn fallback (sources config 3 → 4):** before rolling code back below this version, restore
   `sources.yaml` from `data/config/.backup/`, or remove `linkedin.monid` and its cascade entry and set
   `config_version: 3`. To switch it off without rolling back, set `linkedin.monid.enabled: false`.
@@ -187,6 +198,13 @@ A failure in (a) does not block rollback: follow (c) and accept the display wind
 
 ### Fixed
 
+- **Company names and job titles in non-Latin scripts no longer merge different jobs:** "Яндекс" and "株式会社メルカリ"
+  were one company, and different Japanese, Chinese, Greek, Cyrillic or Hebrew titles at one employer and city were one
+  job (and so were one role's postings in two cities written in another script), because their matching keys were empty.
+  The keys now keep the letters and digits of every script, with the marks that belong to a letter (Devanagari, Thai,
+  Japanese voicing marks); letters such as Ø, Ł and Æ in company names are kept too, ß reads as ss; a title without any
+  letter or digit never matches by title. See
+  [docs/extraction.md](docs/extraction.md#company-and-title-keys).
 - **Arbeitsagentur, StepStone and XING keep a query's list results when a detail request fails.** A throttled,
   blocked or login-refused detail request now stops further detail requests and stores every posting the search already
   read, recording the run as interrupted with that error; before, the whole query's results were lost. A single
