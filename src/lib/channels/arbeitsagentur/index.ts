@@ -1,6 +1,6 @@
 import { arbeitsagenturSettingsSchema, type ArbeitsagenturSettings } from "@/lib/config";
 
-import { checkDetailsReadable } from "../details";
+import { detailLayoutError } from "../details";
 import { ChannelError, settlePostings } from "../errors";
 import { loadKnownDetails, storedDetailOf } from "../known";
 import type { Channel, ChannelContext, RawPostingInput, SearchQuery } from "../types";
@@ -123,12 +123,13 @@ async function collect(query: SearchQuery, ctx: ChannelContext): Promise<RawPost
         break;
       }
     }
+    // every detail unreadable: the API changed. The list results are still handed on, with that failure
+    interrupted ??= detailLayoutError(ctx.logger, "arbeitsagentur", query.id, { attempted, parseFailures, maxPerQuery: settings.max_details_per_query });
     if (interrupted && !reuse) {
       const missing = selected.filter((i) => !details.has(i.referenznummer)).map((i) => i.referenznummer);
       for (const [id, detail] of await loadKnownDetails(ctx, { enabled: true, externalIds: missing, detailOf })) details.set(id, detail);
     }
   }
-  checkDetailsReadable(ctx.logger, "arbeitsagentur", query.id, { attempted, parseFailures });
 
   const postings = selected.map((item): RawPostingInput => {
     const payload: BaPayload = { list: item, detail: details.get(item.referenznummer) ?? null };

@@ -1,6 +1,6 @@
 import { stepstoneSettingsSchema, type StepstoneSettings } from "@/lib/config";
 
-import { checkDetailsReadable } from "../details";
+import { detailLayoutError } from "../details";
 import { ChannelError, settlePostings } from "../errors";
 import type { Channel, ChannelContext, RawPostingInput, SearchQuery } from "../types";
 import { createCycleCache } from "../web/cache";
@@ -144,6 +144,8 @@ export function createStepstoneChannel(deps: StepstoneDeps = {}): Channel {
           interrupted = error;
         }
       }
+      // every posting page unreadable: the layout changed. The list results are still handed on, with that failure
+      interrupted ??= detailLayoutError(ctx.logger, "stepstone", query.id, { attempted, parseFailures, maxPerQuery: settings.max_details_per_query });
       if (interrupted && !reuse) {
         const missing = selected.filter((i) => !details.has(i.id)).map((i) => String(i.id));
         const stored = await loadKnownDetails(ctx, { enabled: true, externalIds: missing, detailOf });
@@ -153,7 +155,6 @@ export function createStepstoneChannel(deps: StepstoneDeps = {}): Channel {
         }
       }
     }
-    checkDetailsReadable(ctx.logger, "stepstone", query.id, { attempted, parseFailures });
 
     const postings = selected.flatMap((item): RawPostingInput[] => {
       const url = postingUrl(settings, item);

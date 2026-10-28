@@ -385,7 +385,7 @@ describe("collect", () => {
       expect(calls).toHaveLength(2); // a failing site ends the detail round
     });
 
-    it("keeps the list data when one posting page cannot be read, but fails when none can (layout change)", async () => {
+    it("keeps the list data when one posting page cannot be read, and hands it on with a parse failure when none can (layout change)", async () => {
       const brokenOne: Handler = (call, n) =>
         call.url.pathname.includes("90000001") ? htmlResponse(200, "<html>nothing</html>") : site()(call, n);
       const { postings } = await collectAll({}, searchQuery(), brokenOne);
@@ -394,7 +394,10 @@ describe("collect", () => {
 
       const brokenAll: Handler = (call, n) => (call.url.pathname.startsWith("/stellenangebote") ? htmlResponse(200, "<html>nothing</html>") : site()(call, n));
       const channel = createStepstoneChannel({ now: () => NOW });
-      await expect(channel.collect(searchQuery(), makeContext(brokenAll, extra()).ctx)).rejects.toMatchObject({ code: "parse" });
+      const error = await channel.collect(searchQuery(), makeContext(brokenAll, extra()).ctx).catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(PartialCollectError);
+      expect((error as PartialCollectError).cause.code).toBe("parse");
+      expect((error as PartialCollectError).postings).toHaveLength(5);
     });
 
     describe("a posting page fails", () => {
@@ -455,17 +458,36 @@ describe("collect", () => {
       });
 
       it("keeps the list data and warns when the only posting page to read cannot be read", async () => {
-        const { postings, calls, records } = await collectAll({ max_details_per_query: 1 }, searchQuery(), unreadable);
-        expect(postings).toHaveLength(5);
-        expect(postings.every((p) => detailOf(p) === null)).toBe(true);
-        expect(calls).toHaveLength(1 + 1);
-        expect(records.some((r) => r.level === "warn" && /too few/.test(r.message))).toBe(true);
+        const full = await collectAll({}, searchQuery());
+        const someDetail = full.postings.map(detailOf).find((d) => d !== null);
+        // every posting but the last is stored with a detail: one posting page is left to open
+        const stored = new Map(full.postings.slice(0, -1).map((p) => [p.externalId, { ...(p.payload as object), detail: someDetail }]));
+        const made = makeContext(unreadable, extra(), { known: { payloads: async () => stored } });
+        const postings = await createStepstoneChannel({ now: () => NOW }).collect(searchQuery(), made.ctx);
+        expect(made.calls).toHaveLength(1 + 1);
+        expect(postings.map((p) => p.externalId)).toEqual(full.postings.map((p) => p.externalId));
+        expect(detailOf(postings.at(-1)!)).toBeNull();
+        expect(made.records.some((r) => r.level === "warn" && /too few/.test(r.message))).toBe(true);
       });
 
-      it("fails with parse once enough posting pages were tried and none could be read (layout change)", async () => {
-        const made = makeContext(unreadable, extra({ max_details_per_query: MIN_DETAILS_FOR_LAYOUT_CHECK }));
-        await expect(createStepstoneChannel({ now: () => NOW }).collect(searchQuery(), made.ctx)).rejects.toMatchObject({ code: "parse" });
-        expect(made.calls).toHaveLength(1 + MIN_DETAILS_FOR_LAYOUT_CHECK);
+      const layoutChange = async (maxDetails: number) => {
+        const made = makeContext(unreadable, extra({ max_details_per_query: maxDetails }));
+        const error = await createStepstoneChannel({ now: () => NOW }).collect(searchQuery(), made.ctx).catch((e: unknown) => e);
+        expect(error).toBeInstanceOf(PartialCollectError);
+        const partial = error as PartialCollectError;
+        expect(partial.cause).toBeInstanceOf(ChannelError);
+        expect(partial.cause.code).toBe("parse");
+        expect(partial.postings).toHaveLength(5);
+        expect(partial.postings.every((p) => detailOf(p) === null)).toBe(true);
+        expect(made.calls).toHaveLength(1 + maxDetails);
+      };
+
+      it("hands the list results on with a parse failure once enough posting pages were tried and none could be read (layout change)", async () => {
+        await layoutChange(MIN_DETAILS_FOR_LAYOUT_CHECK);
+      });
+
+      it("takes a max_details_per_query below the minimum as the sample when every page it allows is unreadable", async () => {
+        await layoutChange(MIN_DETAILS_FOR_LAYOUT_CHECK - 1);
       });
     });
 

@@ -330,21 +330,43 @@ describe("collect: a detail request fails", () => {
     expect(records.some((r) => r.level === "warn" && r.fields.code === "parse")).toBe(true);
   });
 
-  it("fails with parse when no detail of a large enough sample can be read (the API changed)", async () => {
+  const unreadable = (): Handler => {
     const list = api();
-    const { ctx } = makeContext((call, n) => (isSearch(call) ? list(call, n) : response(200, UNREADABLE)), { max_details_per_query: MIN_DETAILS_FOR_LAYOUT_CHECK });
+    return (call, n) => (isSearch(call) ? list(call, n) : response(200, UNREADABLE));
+  };
+  const layoutChange = async (ctx: ChannelContext, details: number) => {
     const error = await arbeitsagenturChannel.collect(query(), ctx).catch((e: unknown) => e);
-    expect(error).toBeInstanceOf(ChannelError);
-    expect((error as ChannelError).code).toBe("parse");
+    expect(error).toBeInstanceOf(PartialCollectError);
+    const partial = error as PartialCollectError;
+    expect(partial.cause).toBeInstanceOf(ChannelError);
+    expect(partial.cause.code).toBe("parse");
+    expect(partial.postings.map((p) => p.externalId)).toEqual(REFS);
+    expect(partial.postings.every((p) => detailOf(p.payload) === null)).toBe(true);
+    expect(partial.cause.message).toContain(`none of the ${details} detail pages`);
+  };
+
+  it("hands the list results on with a parse failure when no detail of a large enough sample can be read (the API changed)", async () => {
+    const { ctx, calls } = makeContext(unreadable(), { max_details_per_query: MIN_DETAILS_FOR_LAYOUT_CHECK });
+    await layoutChange(ctx, MIN_DETAILS_FOR_LAYOUT_CHECK);
+    expect(calls.filter((c) => !isSearch(c))).toHaveLength(MIN_DETAILS_FOR_LAYOUT_CHECK);
+  });
+
+  it("takes a max_details_per_query below the minimum as the sample when every detail it allows is unreadable", async () => {
+    const { ctx, calls } = makeContext(unreadable(), { max_details_per_query: MIN_DETAILS_FOR_LAYOUT_CHECK - 1 });
+    await layoutChange(ctx, MIN_DETAILS_FOR_LAYOUT_CHECK - 1);
+    expect(calls.filter((c) => !isSearch(c))).toHaveLength(MIN_DETAILS_FOR_LAYOUT_CHECK - 1);
   });
 
   it("keeps the list data and warns when too few details were tried to tell a changed API", async () => {
     const records: LogRecord[] = [];
-    const list = api();
-    const { ctx } = makeContext((call, n) => (isSearch(call) ? list(call, n) : response(200, UNREADABLE)), { max_details_per_query: MIN_DETAILS_FOR_LAYOUT_CHECK - 1 }, { records });
+    // every posting but the last is stored with its detail: one detail request is left
+    const stored = new Map(ITEMS.slice(0, -1).map((item) => [String(item.referenznummer), { list: item, detail: DETAIL_MULTI }]));
+    const known: KnownPostings = { payloads: async () => stored };
+    const { ctx, calls } = makeContext(unreadable(), {}, { records, known });
     const result = await arbeitsagenturChannel.collect(query(), ctx);
+    expect(calls.filter((c) => !isSearch(c))).toHaveLength(1);
     expect(result.map((p) => p.externalId)).toEqual(REFS);
-    expect(result.every((p) => detailOf(p.payload) === null)).toBe(true);
+    expect(detailOf(result.at(-1)?.payload)).toBeNull();
     expect(records.some((r) => r.level === "warn" && /too few/.test(r.message))).toBe(true);
   });
 
