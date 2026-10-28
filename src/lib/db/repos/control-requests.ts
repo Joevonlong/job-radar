@@ -70,14 +70,14 @@ export async function listOpenControlRequests(db: Db, kind: ControlRequestKind):
 }
 
 /**
- * A newer open run_ai holds back this run's job messages, without skipping any AI work. The final digest starts at
+ * A newer claimable run_ai holds back this run's job messages, without skipping any AI work. The final digest starts at
  * the oldest delegated cycle after the last delivered digest, so runs that deferred their push still count as new.
  * Match the whole payload against a cycle's valid request shape: malformed requests must not suppress a valid digest.
  */
 export async function getRunAiNotificationWindow(db: Db, requestId: number): Promise<{ newerPending: boolean; startedAt: Date | null }> {
   const [row] = await db.execute<{ newer_pending: boolean; started_at: Date | string | null }>(sql`
     with delegated as (
-      select r.id, r.status, c.id as cycle_id, c.started_at
+      select r.id, r.kind, r.status, r.payload, r.result, c.id as cycle_id, c.started_at
       from control_requests r
       join cycles c on r.payload = jsonb_build_object('cycleId', c.id)
       where r.kind = 'run_ai'
@@ -88,7 +88,10 @@ export async function getRunAiNotificationWindow(db: Db, requestId: number): Pro
       where d.id < ${requestId} and n.kind = 'cycle_summary' and n.sent_at is not null
     )
     select
-      exists(select 1 from delegated where id > ${requestId} and status in ('pending', 'running')) as newer_pending,
+      exists(
+        select 1 from delegated
+        where id > ${requestId} and status = 'pending' ${claimableFilter(["run_ai"], "all")}
+      ) as newer_pending,
       (select min(started_at) from delegated where id <= ${requestId} and id > (select request_id from last_digest)) as started_at
   `);
   return { newerPending: row?.newer_pending ?? false, startedAt: row?.started_at ? new Date(row.started_at) : null };
@@ -111,15 +114,19 @@ function laneFilter(kinds: readonly ControlRequestKind[] | undefined, lane: Cont
 
 /**
  * The conditions under which a pending row may be claimed now (without `status = 'pending'` itself): its kind and lane,
- * and for a `run_ai` request a cycle that is no longer `running` (the cycle writes its own summary last). One fragment,
- * so `claimNextControlRequest` and `describeControlQueue` can never disagree.
+ * and for a `run_ai` request a cycle that is no longer `running` (the cycle writes its own summary last) and a
+ * notification retry that is due. One fragment shared by claims, queue positions and digest deferral.
  */
 function claimableFilter(kinds: readonly ControlRequestKind[] | undefined, lane: ControlLane): SQL {
   return sql`${laneFilter(kinds, lane)}
         and not (
           kind = 'run_ai'
           and exists (select 1 from cycles c where c.id = nullif(payload ->> 'cycleId', '')::int and c.status = 'running')
-        )`;
+        )
+        and case when kind = 'run_ai' and jsonb_typeof(result -> 'notifyRetryAt') = 'number'
+          then result -> 'notifyRetryAt' <= to_jsonb(extract(epoch from now()) * 1000)
+          else true
+        end`;
 }
 
 /**
@@ -199,11 +206,16 @@ export async function describeControlQueue(
 export async function finishControlRequest(
   db: Db,
   id: number,
-  input: { status: Extract<ControlRequestStatus, "done" | "failed">; result?: unknown },
+  input: { status: Extract<ControlRequestStatus, "done" | "failed" | "pending">; result?: unknown },
 ): Promise<ControlRequest | null> {
   const [row] = await db
     .update(controlRequests)
-    .set({ status: input.status, result: input.result ?? null, finishedAt: sql`now()` })
+    .set({
+      status: input.status,
+      result: input.result ?? null,
+      finishedAt: input.status === "pending" ? null : sql`now()`,
+      ...(input.status === "pending" ? { startedAt: null } : {}),
+    })
     .where(eq(controlRequests.id, id))
     .returning();
   return row ?? null;

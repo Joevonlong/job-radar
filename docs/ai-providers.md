@@ -23,6 +23,13 @@ but yourself. Usage and cost: [ai-usage.md](ai-usage.md).
 
 Requests all live in the `control_requests` table. The runner and the ai-worker each claim only their own kinds (`src/lib/control/kinds.ts`), so restarting one never marks the other's in-flight work as failed. A `run_ai` request is only claimed after the cycle it points to has finished (the cycle summary is written last). When the worker is done it writes the real `ai` and `notify` sections back into that cycle's summary, replacing the `delegated` placeholder the container left behind.
 
+When several finished cycles are queued, the worker processes the AI work of each and combines their job notifications
+into the last claimable cycle's digest. A cycle that is still running cannot hold back that digest; alerts are sent
+immediately. If sending the digest fails, the request stays pending and retries after `host_worker.poll_seconds`, without
+repeating completed AI work. Its original candidate window is retained even if delivery resumes much later or after a
+worker restart. `--once` exits when no request is claimable; a failed digest waiting for its retry time remains queued
+for the next worker run.
+
 **Rule**: any request kind that calls an AI is claimed only by the ai-worker. There is exactly one list of kinds: `AI_CONTROL_REQUEST_KINDS` (`src/lib/db/repos/control-requests.ts`), and the real handlers are registered in one place, `registerAiControlHandlers()` (`src/lib/control/ai-handlers.ts`). To add a new kind (for example `run_suggest` or `score_jobs`): add the value to the database enum (migration) → add it to that list → register a handler. A unit test fails if the enum contains a kind that has not been classified.
 
 With `ai.yaml: execution: container` everything works the old way: the runner runs AI and push notifications itself inside the container, and also claims `translate_job` / `rescore_stale`. This requires you to put your subscription tokens or API keys into the container yourself (compose blanks these variables by default; to use them, write a `compose.override.yaml`). Not recommended.

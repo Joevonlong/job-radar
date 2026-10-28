@@ -68,8 +68,18 @@ export interface NotifyJobsResult {
 export interface NotifyStepResult {
   skipped?: "disabled" | "not_configured" | "no_database";
   alerts?: AlertDelivery;
+  /** A failed summary keeps its original window until delivery, even if the normal candidate window expires. */
+  retry?: { since: string; startedAt: string; lateAiComplete?: true };
   /** Job messages were held back (quiet hours or a newer queued run), or already sent for this cycle. */
   jobs?: NotifyJobsResult | { deferred: "quiet_hours" | "already_sent" | "newer_cycle_pending" };
+}
+
+const notificationRetrySchema = z.object({ retry: z.object({ since: z.iso.datetime(), startedAt: z.iso.datetime(), lateAiComplete: z.literal(true).optional() }) });
+
+/** The durable notification checkpoint of a delegated run, validated when the worker resumes it. */
+export function notificationRetryOf(result: unknown): NotifyStepResult["retry"] | null {
+  const parsed = notificationRetrySchema.safeParse(result);
+  return parsed.success ? parsed.data.retry : null;
 }
 
 const failedSourcesSchema = z.object({
@@ -253,8 +263,9 @@ export function createNotifyStep(options: NotifyStepOptions = {}): CycleStepFn {
     if (!config.telegram.enabled) return { result: { skipped: "disabled" } satisfies NotifyStepResult };
     const db = ctx.db ?? null;
     if (db === null || ctx.cycle.id === null) return { result: { skipped: "no_database" } satisfies NotifyStepResult };
+    const retry = notificationRetryOf(ctx.results.notify);
     const runtime = (options.createRuntime ?? ((c: CycleStepContext, cfg: NotifyConfig) => createTelegramRuntime({ config: cfg, logger: c.logger, signal: c.signal })))(ctx, config);
-    if (runtime === null) return { status: "partial", result: { skipped: "not_configured" } satisfies NotifyStepResult };
+    if (runtime === null) return { status: "partial", result: { skipped: "not_configured", ...(retry ? { retry } : {}) } satisfies NotifyStepResult };
 
     const deps: NotifyDeps = {
       db,
@@ -268,7 +279,7 @@ export function createNotifyStep(options: NotifyStepOptions = {}): CycleStepFn {
       ...(options.sleep ? { sleep: options.sleep } : {}),
       signal: ctx.signal,
     };
-    const result: NotifyStepResult = {};
+    const result: NotifyStepResult = retry ? { retry } : {};
     let status: "ok" | "partial" = "ok";
 
     // 1. alerts (not held back by quiet hours unless alerts_exempt is off)
@@ -315,27 +326,32 @@ export function createNotifyStep(options: NotifyStepOptions = {}): CycleStepFn {
     }
     if (await hasNotificationForCycle(db, NOTIFICATION_KINDS.cycleSummary, ctx.cycle.id)) {
       result.jobs = { deferred: "already_sent" };
+      delete result.retry;
       return { status, result };
     }
+    const since = retry ? new Date(retry.since) : new Date(ctx.now().getTime() - config.candidate_window_hours * 3_600_000);
+    let startedAt = retry ? new Date(retry.startedAt) : ctx.now();
     try {
       const cycle = await getCycle(db, ctx.cycle.id);
-      let startedAt = cycle?.startedAt ?? ctx.now();
+      if (!retry) startedAt = cycle?.startedAt ?? startedAt;
       if (ctx.delegatedRequestId !== undefined) {
         const window = await getRunAiNotificationWindow(db, ctx.delegatedRequestId);
-        if (window.newerPending) {
+        if (window.newerPending && !retry) {
           result.jobs = { deferred: "newer_cycle_pending" };
           return { status, result };
         }
-        startedAt = window.startedAt ?? startedAt;
+        if (!retry) startedAt = window.startedAt ?? startedAt;
       }
-      const since = new Date(ctx.now().getTime() - config.candidate_window_hours * 3_600_000);
+      result.retry = { ...retry, since: since.toISOString(), startedAt: startedAt.toISOString() };
       const highValue = loadHighValuePolicy();
       const candidates = await listPushCandidates(db, { since, isHighValue: (signal) => isHighValueSignal(signal, highValue) });
       const sent = await sendJobs(deps, ctx, db, ctx.cycle.id, startedAt, candidates);
       result.jobs = sent.jobs;
+      if (sent.summarySent) delete result.retry;
       if (sent.jobs.failed > 0 || !sent.summarySent) status = "partial";
     } catch (error) {
       status = "partial";
+      result.retry = { ...retry, since: since.toISOString(), startedAt: startedAt.toISOString() };
       ctx.logger.error("job notifications failed", { error: describe(error) });
     }
     return { status, result };

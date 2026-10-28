@@ -67,7 +67,7 @@ function claimableKinds(kinds: readonly ControlRequestKind[] | undefined): reado
 
 /**
  * Claim the oldest pending request, run its handler and record the outcome. A handler that throws
- * (or a kind nobody handles) fails the request, never the runner. Returns the finished request,
+ * (or a kind nobody handles) fails the request, never the runner. Returns the updated request (pending for a retry),
  * or null when nothing was pending.
  */
 export async function processNextControlRequest(options: ControlPollOptions): Promise<ControlRequest | null> {
@@ -101,7 +101,7 @@ export async function processNextControlRequest(options: ControlPollOptions): Pr
     }
   }
   const finished = await finishControlRequest(db, request.id, outcome);
-  log.info("control request finished", { status: outcome.status });
+  log.info(outcome.status === "pending" ? "control request queued for retry" : "control request finished", { status: outcome.status });
   return finished;
 }
 

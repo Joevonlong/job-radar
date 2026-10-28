@@ -22,6 +22,11 @@ AI 可以走订阅命令行（`claude`、`codex`）、按量计费的 API key，
 
 请求都在表 `control_requests` 里；runner 和 ai-worker 各自只领自己那几种（`src/lib/control/kinds.ts`），所以谁重启都不会把对方正在做的事标成失败。`run_ai` 要等它指向的那一轮结束后才会被领走（那一轮最后才写 cycle 摘要）。worker 做完把真实的 `ai` 和 `notify` 两段写回那一轮的摘要，替换容器里留下的 `delegated` 占位。
 
+多轮已结束的周期排队时，worker 会逐轮处理 AI 工作，把岗位通知合并到最后一个可领取周期的摘要中；仍在运行的周期不会挡住这份摘要，告警仍会立即发送。
+摘要发送失败后，请求保留为待处理，经过 `host_worker.poll_seconds` 后重试，已完成的 AI 工作不会重复执行。
+重试保留原来的岗位候选窗口，即使很久以后才恢复发送或 worker 重启，也不会因窗口过期漏掉原来的候选岗位。
+`--once` 在没有可领取请求时退出；等待重试时间的失败摘要仍留在队列中，由下次启动的 worker 继续处理。
+
 **规则**：任何会调用 AI 的请求种类只由 ai-worker 领取。种类清单只有一份：`AI_CONTROL_REQUEST_KINDS`（`src/lib/db/repos/control-requests.ts`），真实 handler 在 `registerAiControlHandlers()`（`src/lib/control/ai-handlers.ts`）一处注册。新增一种（例如 `run_suggest`、`score_jobs`）：数据库枚举加值（迁移）→ 加进该清单 → 注册 handler；单元测试会在枚举里有未归类的种类时失败。
 
 `ai.yaml: execution: container` 时一切照旧：runner 自己在容器里跑 AI 和推送，并领 `translate_job` / `rescore_stale`；这需要你自己把订阅令牌或 API key 放进容器（compose 里默认把这些变量置空，要用就写 `compose.override.yaml`），不推荐。
