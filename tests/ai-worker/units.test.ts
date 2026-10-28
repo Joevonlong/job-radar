@@ -79,6 +79,9 @@ describe("which process takes which request", () => {
     expect(runAiPayloadSchema.safeParse({ cycleId: 3, extra: 1 }).success).toBe(false);
     expect(translateJobPayloadSchema.parse({ jobId: 4 })).toEqual({ jobId: 4, force: false });
     expect(translateJobPayloadSchema.safeParse({ jobId: "4" }).success).toBe(false);
+    expect(translateJobPayloadSchema.parse({ jobId: 4, origin: "auto" })).toEqual({ jobId: 4, force: false, origin: "auto" });
+    expect(translateJobPayloadSchema.safeParse({ jobId: 4, origin: "user" }).success).toBe(false);
+    expect(translateJobPayloadSchema.safeParse({ jobId: 4, origin: "auto", extra: 1 }).success).toBe(false);
   });
 });
 

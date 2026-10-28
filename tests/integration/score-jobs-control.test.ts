@@ -1,39 +1,48 @@
+import fs from "node:fs";
+import path from "node:path";
+
 import { eq, sql } from "drizzle-orm";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, inject, it } from "vitest";
-import { stringify } from "yaml";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, inject, it, vi } from "vitest";
+import { parseDocument, stringify } from "yaml";
+import { z } from "zod";
 
 import { AiProviderError } from "@/lib/ai/errors";
 import { createProvider } from "@/lib/ai/provider";
+import * as providers from "@/lib/ai/providers";
 import { createMemoryQuotaStore } from "@/lib/ai/quota-guard";
 import { createAiRouter } from "@/lib/ai/router";
 import type { AiTransport, AiTransportRequest } from "@/lib/ai/types";
 import { processNextControlRequest, registerControlHandler, resetControlHandlers } from "@/lib/control";
 import { createScoreJobsHandler } from "@/lib/control/score-jobs";
+import { loadConfig } from "@/lib/config";
 import { requestScoreJobs } from "@/lib/control/service";
-import { closeDb, countUnscoredJobs, getDb, insertControlRequest, listControlRequests, schema } from "@/lib/db";
+import { claimNextControlRequest, closeDb, countUnscoredJobs, getDb, insertControlRequest, listControlRequests, markScoresStaleExcept, schema } from "@/lib/db";
 import { runMigrations } from "@/lib/db/migrate";
-import { currentPreferencesSnapshotId, type ScoringDeps, type ScoringProfile } from "@/lib/scoring";
+import { createScoringDeps, currentPreferencesSnapshotId, runScoring, type ScoringDeps, type ScoringProfile } from "@/lib/scoring";
 import { loadControlStatus } from "@/lib/settings/status";
 
 import { usageEntry } from "../ai/helpers";
+import { makeTempConfig, type TempConfig } from "../config/helpers";
 import { quietLogger } from "../cycle/helpers";
 import { aiConfig, answer, examplePreferences, exampleMe } from "../scoring/helpers";
 
 const url = inject("testDatabaseUrl");
 const NOW = new Date("2026-10-07T10:00:00Z");
 
-function fakeAi(fail: Error | null = null, score = 66) {
+function fakeAi(fail: Error | null = null, score = 66, onCall: () => void = () => {}) {
   const calls: string[] = [];
   const transport: AiTransport = {
     id: "claude-cli",
     availability: () => ({ available: true }),
     async call(request: AiTransportRequest) {
       calls.push(/^Title: (.*)$/m.exec(request.user)?.[1] ?? "?");
+      onCall();
       if (fail) throw fail;
       return { text: answer({ score }), model: "fake-model", usage: { tokensIn: 100, tokensOut: 20 } };
     },
   };
-  return { calls, router: createAiRouter({ config: aiConfig(), providers: [createProvider(transport)], usage: null }) };
+  const provider = createProvider(transport);
+  return { calls, provider, router: createAiRouter({ config: aiConfig(), providers: [provider], usage: null }) };
 }
 
 const profile = (): ScoringProfile => ({ me: exampleMe(), preferences: examplePreferences(), meYaml: stringify(exampleMe()), preferencesYaml: stringify(examplePreferences()) });
@@ -67,11 +76,13 @@ beforeAll(async () => {
   await runMigrations();
 });
 
+let temp: TempConfig;
 beforeEach(async () => {
+  temp = makeTempConfig();
   await getDb().execute(sql`truncate table control_requests, scores, jobs, companies, profile_snapshots, ai_usage, applications restart identity cascade`);
 });
 
-afterEach(() => resetControlHandlers());
+afterEach(() => { resetControlHandlers(); vi.restoreAllMocks(); temp.cleanup(); });
 
 afterAll(async () => {
   await getDb().execute(sql`truncate table control_requests, scores, jobs, companies, profile_snapshots, ai_usage, applications restart identity cascade`);
@@ -116,6 +127,79 @@ describe("asking for scores from the web side", () => {
 });
 
 describe("the score_jobs control request", () => {
+  it("the dependency factory keeps the loop deadline away from the router so a started job can finish", async () => {
+    const fake = fakeAi();
+    vi.spyOn(providers, "createDefaultProviders").mockReturnValue([fake.provider]);
+    const deadline = new Date(NOW.getTime() - 1);
+    const created = createScoringDeps({ db: getDb(), logger: quietLogger, timeZone: "UTC", now: () => NOW, deadline, config: aiConfig() });
+    expect(created.deadline).toBe(deadline);
+    const result = await created.router.run("score", { system: "Score the example", user: "Example role" }, z.object({ score: z.number() }));
+    expect(result.value.score).toBe(66);
+    expect(fake.calls).toHaveLength(1);
+  });
+
+  it.each([1, 0])("uses the configured time budget before starting another job; %i minutes (zero is unlimited)", async (minutes) => {
+    let now = NOW.getTime();
+    const config = aiConfig((raw) => { raw.cycle_budget_minutes = minutes; (raw.scoring as Record<string, unknown>).concurrency = 1; });
+    const fake = fakeAi(null, 66, () => { now += 60_000; });
+    registerControlHandler("score_jobs", createScoreJobsHandler({ createDeps: () => ({ ...deps(fake.router, config), now: () => new Date(now) }) }));
+    for (const title of ["First", "Second", "Third"]) await addJob(title);
+    await requestScoreJobs({ backlog: true });
+    const finished = await processNextControlRequest(pollOptions());
+    expect(finished).toMatchObject({ status: "done", result: { scored: minutes ? 1 : 3, failed: 0, remaining: minutes ? 2 : 0, ...(minutes ? { stopped: "time_budget" } : {}) } });
+    expect(fake.calls).toHaveLength(minutes ? 1 : 3);
+    if (!minutes) expect(finished?.result).not.toHaveProperty("stopped");
+    const shown = (await loadControlStatus(getDb())).requests[0];
+    expect(shown).toMatchObject({ remaining: minutes ? 2 : 0, ...(minutes ? { stopped: "time_budget" } : {}) });
+  });
+
+  it("an exhausted budget before the first job keeps the existing stopped error without counting a failure", async () => {
+    let now = NOW.getTime();
+    const config = aiConfig((raw) => { raw.cycle_budget_minutes = 1; });
+    const fake = fakeAi();
+    registerControlHandler("score_jobs", createScoreJobsHandler({ createDeps: () => ({ ...deps(fake.router, config), now: () => new Date(now), loadProfile: async () => { now += 60_000; return profile(); } }) }));
+    const id = await addJob("Waiting");
+    await requestScoreJobs({ jobIds: [id] });
+    expect(await processNextControlRequest(pollOptions())).toMatchObject({ status: "failed", result: { error: "score_stopped", stopped: "time_budget", scored: 0, failed: 0, remaining: 1 } });
+    expect(fake.calls).toHaveLength(0);
+  });
+
+  it("counts selected stale scores left by the budget even when no job waits for a first score", async () => {
+    const ids = [await addJob("First"), await addJob("Second")];
+    await runScoring(deps(fakeAi().router), { limit: 2 });
+    await markScoresStaleExcept(getDb(), 987654321);
+    expect(await countUnscoredJobs(getDb())).toBe(0);
+    let now = NOW.getTime();
+    const config = aiConfig((raw) => { raw.cycle_budget_minutes = 1; (raw.scoring as Record<string, unknown>).concurrency = 1; });
+    const fake = fakeAi(null, 66, () => { now += 60_000; });
+    registerControlHandler("score_jobs", createScoreJobsHandler({ createDeps: () => ({ ...deps(fake.router, config), now: () => new Date(now) }) }));
+    await requestScoreJobs({ jobIds: ids });
+    expect(await processNextControlRequest(pollOptions())).toMatchObject({ status: "done", result: { scored: 1, failed: 0, remaining: 1, stopped: "time_budget" } });
+    expect((await loadControlStatus(getDb())).requests[0]).toMatchObject({ remaining: 1, stopped: "time_budget" });
+  });
+
+  it("the next request uses a hot-reloaded budget", async () => {
+    const file = path.join(temp.configDir, "ai.yaml");
+    const writeBudget = (minutes: number) => {
+      const doc = parseDocument(fs.readFileSync(file, "utf8"));
+      doc.set("cycle_budget_minutes", minutes);
+      doc.setIn(["scoring", "concurrency"], 1);
+      fs.writeFileSync(file, doc.toString());
+    };
+    let now = NOW.getTime();
+    const fake = fakeAi(null, 66, () => { now += 60_000; });
+    registerControlHandler("score_jobs", createScoreJobsHandler({ createDeps: () => ({ ...deps(fake.router, loadConfig("ai")), now: () => new Date(now) }) }));
+    for (const title of ["First", "Second", "Third"]) await addJob(title);
+    writeBudget(1);
+    await requestScoreJobs({ backlog: true });
+    expect(await processNextControlRequest(pollOptions())).toMatchObject({ result: { scored: 1, stopped: "time_budget", remaining: 2 } });
+    writeBudget(0);
+    await requestScoreJobs({ backlog: true });
+    const done = await processNextControlRequest(pollOptions());
+    expect(done).toMatchObject({ status: "done", result: { scored: 2, remaining: 0 } });
+    expect(done?.result).not.toHaveProperty("stopped");
+  });
+
   it("without the ai-worker's handler nothing is scored: the request fails visibly", async () => {
     const id = await addJob("Waiting");
     await insertControlRequest(getDb(), { kind: "score_jobs", payload: { jobIds: [id] } });
@@ -170,7 +254,8 @@ describe("the score_jobs control request", () => {
     await requestScoreJobs({ jobIds: [good] });
     expect(await processNextControlRequest(pollOptions())).toMatchObject({ status: "done", result: { scored: 1, translationsQueued: 1 } });
     const translate = (await listControlRequests(getDb(), 10)).filter((r) => r.kind === "translate_job");
-    expect(translate.map((r) => r.payload)).toEqual([{ jobId: good, force: false }]);
+    expect(translate.map((r) => r.payload)).toEqual([{ jobId: good, force: false, origin: "auto" }]);
+    expect(await claimNextControlRequest(getDb(), undefined, { lane: "interactive" })).toBeNull();
 
     // below the minimum: nothing is queued (the first translation is taken care of meanwhile)
     await getDb().update(schema.controlRequests).set({ status: "done" }).where(eq(schema.controlRequests.kind, "translate_job"));

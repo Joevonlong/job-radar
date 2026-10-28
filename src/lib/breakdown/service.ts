@@ -2,6 +2,7 @@
 import { breakdownOutputSchema, buildBreakdownPrompt, BREAKDOWN_PROMPT_VERSION } from "@/lib/ai/prompts/breakdown";
 import { aiOutputLanguage } from "@/lib/i18n/config";
 import type { AiRouter } from "@/lib/ai/router";
+import { singleFlight } from "@/lib/async/single-flight";
 import type { ChannelLogger } from "@/lib/channels/types";
 import type { BreakdownConfig } from "@/lib/config";
 import type { Db } from "@/lib/db/client";
@@ -30,7 +31,14 @@ export interface BreakdownRunOptions {
  * Break one job down. AI errors (`AiUnavailableError`, `AiProviderError`) are thrown as they are; the caller classifies them.
  * Only the title, the company and the JD go to the AI (C5); every item is checked against the JD (C7) before it is saved.
  */
-export async function runBreakdown(db: Db, router: AiRouter, jobId: number, opts: BreakdownRunOptions): Promise<BreakdownRunOutcome> {
+export function runBreakdown(db: Db, router: AiRouter, jobId: number, opts: BreakdownRunOptions): Promise<BreakdownRunOutcome> {
+  const outputLanguage = opts.outputLanguage ?? aiOutputLanguage();
+  return inFlight(`${jobId}:${outputLanguage}`, () => run(db, router, jobId, { ...opts, outputLanguage }));
+}
+
+const inFlight = singleFlight<string, BreakdownRunOutcome>();
+
+async function run(db: Db, router: AiRouter, jobId: number, opts: BreakdownRunOptions & { outputLanguage: string }): Promise<BreakdownRunOutcome> {
   const job = await getJobForBreakdown(db, jobId);
   if (!job) return { status: "failed", error: "not_found" };
   const description = job.description;
@@ -45,7 +53,7 @@ export async function runBreakdown(db: Db, router: AiRouter, jobId: number, opts
   }
 
   // Written in language.yaml's ai.output; a breakdown in another language is marked on the page, not re-run by itself
-  const outputLanguage = opts.outputLanguage ?? aiOutputLanguage();
+  const outputLanguage = opts.outputLanguage;
   // The AI reads the JD without hidden text and instructions to an AI; its quotes are checked against the stored JD
   const forAi = (await cleanDescriptionForAi(db, { jobId, description }, opts.logger ? { logger: opts.logger } : {})) ?? description;
   const prompt = buildBreakdownPrompt({

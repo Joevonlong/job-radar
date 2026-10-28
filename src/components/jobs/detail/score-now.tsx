@@ -89,12 +89,11 @@ export function ScoreNowButton({ jobId, profileMissing = [], timeZone }: { jobId
         </p>
       ) : null}
       {open ? <QueueHint queue={wait.queue} stage={wait.stage} timeZone={timeZone} className="text-muted-foreground text-xs" /> : null}
-      {ended?.view?.status === "done" && result?.stopped === "time_budget" ? (
+      {result?.stopped === "time_budget" ? (
         <p role="status" className="text-muted-foreground text-xs" data-testid="score-now-time-budget">
           {tRequests("timeBudget", { remaining: result.remaining ?? 0 })}
         </p>
-      ) : null}
-      {failed ? (
+      ) : failed ? (
         <p role="alert" className="text-destructive text-xs" data-testid="score-now-failed">
           {errorCode ? t(`failure.${errorCode}`, { time: result?.resumeAt ? formatClock(format, result.resumeAt, timeZone) : "none" }) : t("failure.unknown")}
           {errorCode === "score_profile_incomplete" ? <> {profileLink}</> : null}
