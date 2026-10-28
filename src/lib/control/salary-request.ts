@@ -15,7 +15,8 @@ import { findLatestSalaryLookup, findLatestSalaryLookupRequest, getJobForSalaryL
 import { createProcessLogger } from "@/lib/logging/process-logger";
 import { compileFamilies } from "@/lib/salary/families";
 import { salaryLookupKey, SALARY_ERROR_CODES, type SalaryErrorCode } from "@/lib/salary/lookup";
-import { resumeAtOf } from "./request-view-schema";
+import { loadQueueView } from "./queue-view";
+import { resumeAtOf, type ControlQueueView } from "./request-view-schema";
 
 const log = createProcessLogger({ fields: { component: "control" } });
 
@@ -58,20 +59,23 @@ export async function requestSalaryLookup(
 }
 
 export type SalaryRequestState =
-  | { state: "waiting"; stage: "pending" | "running" }
+  /** `queue`: where the request stands (position, what the worker is doing, whether it is alive). */
+  | { state: "waiting"; stage: "pending" | "running"; queue: ControlQueueView | null }
   | { state: "done" }
-  | { state: "failed"; error: SalaryErrorCode; detail: string | null; resumeAt: string | null };
+  | { state: "failed"; error: SalaryErrorCode; detail: string | null; resumeAt: string | null }
+  /** There is no such request, or it is neither this job's nor one of the same lookup key. */
+  | { state: "missing" };
 
 /**
  * Where a queued lookup stands. The request must be this job's, or one for the same lookup key (another posting of the same
  * role joined it): a request id alone never reveals another job's request.
  */
-export async function readSalaryLookupRequest(db: Db, input: { requestId: number; jobId: number; lookupKey?: string }): Promise<SalaryRequestState | null> {
+export async function readSalaryLookupRequest(db: Db, input: { requestId: number; jobId: number; lookupKey?: string }): Promise<SalaryRequestState> {
   const request = await getControlRequest(db, input.requestId);
   const payload = typeof request?.payload === "object" && request.payload !== null ? (request.payload as { jobId?: unknown; lookupKey?: unknown }) : {};
   const mine = payload.jobId === input.jobId || (input.lookupKey !== undefined && payload.lookupKey === input.lookupKey);
-  if (!request || request.kind !== "salary_lookup" || !mine) return null;
-  if (request.status === "pending" || request.status === "running") return { state: "waiting", stage: request.status };
+  if (!request || request.kind !== "salary_lookup" || !mine) return { state: "missing" };
+  if (request.status === "pending" || request.status === "running") return { state: "waiting", stage: request.status, queue: await loadQueueView(db, request) };
   if (request.status === "failed") {
     const result = typeof request.result === "object" && request.result !== null ? (request.result as { error?: unknown; detail?: unknown; resumeAt?: unknown }) : {};
     return {
@@ -86,7 +90,7 @@ export async function readSalaryLookupRequest(db: Db, input: { requestId: number
 }
 
 export type InitialSalaryRequest =
-  | { state: "waiting"; requestId: number; stage: "pending" | "running" }
+  | { state: "waiting"; requestId: number; stage: "pending" | "running"; queue: ControlQueueView | null }
   | { state: "failed"; error: SalaryErrorCode; detail: string | null; resumeAt?: string | null };
 
 /** What the lookup card starts with after a reload: an open request waits again; a failure newer than the shown result is shown. */
@@ -94,8 +98,8 @@ export async function readInitialSalaryRequest(db: Db, input: { jobId: number; l
   const request = await findLatestSalaryLookupRequest(db, input);
   if (!request) return null;
   const state = await readSalaryLookupRequest(db, { requestId: request.id, jobId: input.jobId, lookupKey: input.lookupKey });
-  if (state?.state === "waiting") return { state: "waiting", requestId: request.id, stage: state.stage };
-  if (state?.state !== "failed") return null;
+  if (state.state === "waiting") return { state: "waiting", requestId: request.id, stage: state.stage, queue: state.queue };
+  if (state.state !== "failed") return null;
   if (input.fetchedAt !== null && request.finishedAt !== null && request.finishedAt <= input.fetchedAt) return null;
   return state;
 }

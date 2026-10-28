@@ -17,6 +17,8 @@ import {
   type Db,
 } from "@/lib/db";
 
+import { scoringStoppedSchema } from "@/lib/control/request-view-schema";
+
 import { ackState, diskConfigHash, readConfigAcks, type ConfigAck } from "./ack";
 import { HEARTBEAT_STALE_FACTOR, RECENT_REQUESTS } from "./constants";
 import { controlStatusSchema, type ConfigAckView, type ControlRequestView, type ControlStatus } from "./status-schema";
@@ -33,6 +35,9 @@ const resultSchema = z
     failed: z.number().int().optional(),
     placeholder: z.boolean().optional(),
     resumeAt: z.iso.datetime().nullable().optional().catch(undefined),
+    /** Scoring requests: what still waits afterwards, and why a request that is done stopped early (an unknown value reads as none). */
+    remaining: z.number().int().nonnegative().optional().catch(undefined),
+    stopped: scoringStoppedSchema,
   })
   .passthrough();
 
@@ -77,6 +82,8 @@ async function requestView(db: Db, request: SettingsRequest): Promise<ControlReq
     failed: result.success ? (result.data.failed ?? null) : null,
     placeholder: result.success ? (result.data.placeholder ?? false) : false,
     ...(result.success && result.data.resumeAt !== undefined ? { resumeAt: result.data.resumeAt } : {}),
+    ...(result.success && result.data.remaining !== undefined ? { remaining: result.data.remaining } : {}),
+    ...(result.success && result.data.stopped !== undefined ? { stopped: result.data.stopped } : {}),
     cycle: cycleId === null ? null : progressView(await getCycleProgress(db, cycleId)),
   };
 }

@@ -435,8 +435,8 @@ describe("requests: queue, join, quota, state", () => {
     registerControlHandler("salary_lookup", createSalaryLookupHandler({ createRouter: () => r, loadSettings: () => config(), loadMoney: () => ({ currency: "EUR", fx: FX }) }));
     const queued = await requestSalaryLookup(db(), { jobId, force: false, salary: config(), ai: pinnedAi(), now: NOW });
     if (queued.state !== "queued") throw new Error("not queued");
-    expect(await readSalaryLookupRequest(db(), { requestId: queued.requestId, jobId })).toEqual({ state: "waiting", stage: "pending" });
-    expect(await readSalaryLookupRequest(db(), { requestId: queued.requestId, jobId: other })).toBeNull();
+    expect(await readSalaryLookupRequest(db(), { requestId: queued.requestId, jobId })).toMatchObject({ state: "waiting", stage: "pending", queue: { ahead: 0 } });
+    expect(await readSalaryLookupRequest(db(), { requestId: queued.requestId, jobId: other })).toEqual({ state: "missing" });
     await processNextControlRequest({ db: db(), signal: new AbortController().signal, logger: quietLogger, kinds: () => ["salary_lookup"] });
     expect(await readSalaryLookupRequest(db(), { requestId: queued.requestId, jobId })).toEqual({ state: "done" });
     const job = await getJobForSalaryLookup(db(), jobId);

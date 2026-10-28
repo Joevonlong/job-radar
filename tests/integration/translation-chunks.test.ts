@@ -220,7 +220,7 @@ describe("translate_job reports progress and the cause", () => {
     const queued = await requestTranslateJob(db(), { jobId, force: false });
     if (queued.state !== "queued") throw new Error("expected a queued request");
     // no piece yet
-    expect(await readTranslateRequest(db(), { requestId: queued.requestId, jobId })).toEqual({ state: "waiting", stage: "pending", partial: null });
+    expect(await readTranslateRequest(db(), { requestId: queued.requestId, jobId })).toMatchObject({ state: "waiting", stage: "pending", partial: null });
     // The provider holds the third piece until the test lets it go, and says when it got there: the first two
     // pieces are saved by then (each is saved before the next one starts), so one read is enough, no polling.
     const gate = { release: () => {}, reached: () => {} };
