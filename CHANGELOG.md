@@ -91,6 +91,9 @@ A failure in (a) does not block rollback: follow (c) and accept the display wind
 
 ### Changed
 
+- **Faster on a large database:** the Today page reads the scores and cycle counts of its few jobs through indexes
+  instead of scoring every job; the /jobs city list places each distinct location once; recalculating score bonuses
+  after an interests change writes in batches. A migration adds four indexes; results are unchanged.
 - **AI salary lookups are only displayed:** they never count in the salary benchmark or any filter; the benchmark uses
   only salaries stated in postings. The Salary tab's switch to count AI lookups is removed and the benchmark card shows
   only "sample n". Lookup cards label the company level and every band "AI estimate (unverified)", identify "AI's own
@@ -208,6 +211,16 @@ A failure in (a) does not block rollback: follow (c) and accept the display wind
   unreadable detail only costs its description (Arbeitsagentur also accepts detail fields sent as null). "Page layout
   changed" is reported only when none of at least 3 detail requests of a query (all of them, when
   `max_details_per_query` is lower) could be read, and the list results are then stored as well.
+- **"Collect now" for one channel no longer swallows another click or a scheduled cycle:** an unfinished request is
+  reused only when it covers the channels asked for (a click for Greenhouse while Indeed is queued gets its own
+  request, which runs next; a LinkedIn fallback after the first one in the cascade is covered only by a request that
+  names it), and the button says "a request that covers this channel" instead of "the same request". A scheduled
+  cycle that finds a cycle of only some channels running waits for it, at most `schedule.yaml`
+  `partial_cycle_wait.max_minutes` (default 60), and then runs, instead of being skipped; one that finds a cycle of
+  every channel running is still skipped. A manual request covered by a running cycle ends as done and the button
+  follows that cycle until it finishes, instead of "another cycle is running". The start-up catch-up and
+  `pnpm run doctor` no longer count a cycle of some channels as the slot's cycle. Before rolling back, remove
+  `partial_cycle_wait` from `data/config/schedule.yaml` if you added it.
 - **Tag boxes no longer swallow a repeated entry silently:** typing a title, keyword or city that is already in the list
   (any case) now keeps the text, names the existing entry under the box ("Already in the list: ...") and briefly
   highlights it. Enter and the comma no longer act while an input method is composing. Regular expressions and

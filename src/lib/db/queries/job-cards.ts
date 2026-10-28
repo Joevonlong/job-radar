@@ -1,4 +1,5 @@
-import { asc, desc, eq, inArray, isNotNull, notInArray, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, notInArray, sql, type SQL } from "drizzle-orm";
+import type { SubqueryWithSelection } from "drizzle-orm/pg-core";
 
 import type { Db } from "../client";
 import { getApplicationStatuses } from "../repos/applications";
@@ -18,72 +19,108 @@ import { summariesOf } from "../summaries";
 /** numeric columns come back as text through a raw `case` expression */
 const nullableNumber = (value: unknown): number | null => (value === null || value === undefined ? null : Number(value));
 
+/** The columns of the newest `scores` row of a job that the lists read. */
+const newestColumns = () => ({
+  jobId: scores.jobId,
+  filterResult: scores.filterResult,
+  filterReasons: scores.filterReasons,
+  score: scores.score,
+  rankValue: scores.rankValue,
+  signalBonus: scores.signalBonus,
+  stale: scores.stale,
+  germanLevel: scores.germanLevel,
+  summaries: scores.summaries,
+  summaryZh: scores.summaryZh,
+  summaryEn: scores.summaryEn,
+  outputLang: scores.outputLang,
+});
+
+/** The columns of the newest `scores` row of a job that has an AI score (the stale fallback). */
+const scoredColumns = () => ({
+  jobId: scores.jobId,
+  score: scores.score,
+  rankValue: scores.rankValue,
+  signalBonus: scores.signalBonus,
+  germanLevel: scores.germanLevel,
+  summaries: scores.summaries,
+  summaryZh: scores.summaryZh,
+  summaryEn: scores.summaryEn,
+  outputLang: scores.outputLang,
+});
+
+/** "Newest" for a job's `scores` rows: the latest created, the higher id on a tie. */
+const newestFirst = () => [desc(scores.createdAt), desc(scores.id)] as const;
+
+/** What a job shows as its score, from its newest row and its newest scored row (see `latestScoreCte`). */
+function latestColumns(newest: SubqueryWithSelection<ReturnType<typeof newestColumns>, "newest_score">, scored: SubqueryWithSelection<ReturnType<typeof scoredColumns>, "scored_score">) {
+  const fallback = sql`(${newest.score} is null and ${newest.filterResult} = 'passed' and ${scored.jobId} is not null)`;
+  return {
+    jobId: newest.jobId,
+    filterResult: newest.filterResult,
+    filterReasons: newest.filterReasons,
+    rankValue: sql<number | null>`case when ${fallback} then ${scored.rankValue} else ${newest.rankValue} end`.mapWith(nullableNumber).as("rank_value"),
+    score: sql<number | null>`case when ${fallback} then ${scored.score} else ${newest.score} end`.as("score"),
+    signalBonus: sql<number>`case when ${fallback} then ${scored.signalBonus} else ${newest.signalBonus} end`.mapWith(Number).as("signal_bonus"),
+    stale: sql<boolean>`case when ${fallback} then true else (${newest.score} is not null and ${newest.stale}) end`.as("stale"),
+    germanLevel: sql<string | null>`case when ${fallback} then ${scored.germanLevel} else ${newest.germanLevel} end`.as("german_level"),
+    summaryZh: sql<string | null>`case when ${fallback} then ${scored.summaryZh} else ${newest.summaryZh} end`.as("summary_zh"),
+    summaryEn: sql<string | null>`case when ${fallback} then ${scored.summaryEn} else ${newest.summaryEn} end`.as("summary_en"),
+    summaries: sql<unknown>`case when ${fallback} then ${scored.summaries} else ${newest.summaries} end`.as("summaries"),
+    outputLang: sql<string | null>`case when ${fallback} then ${scored.outputLang} else ${newest.outputLang} end`.as("output_lang"),
+  };
+}
+
 /**
  * What a job shows as its score, as a CTE the list queries left-join: the newest `scores` row, except
  * that a newest row which passed the hard filter but has no AI score yet (a profile change made a new
  * snapshot row that is waiting to be scored) shows the newest row that does have a score, marked
  * stale, so the lists never go blank after the user edits a profile. The filter result and reasons
  * always come from the newest row.
+ *
+ * The CTE works out the score of every job at once: the right shape for the /jobs list, which sorts all
+ * its jobs by rank. A query over a few jobs (Today, a cycle) uses `latestScoreLateral` instead.
  */
 export function latestScoreCte(db: Db) {
-  const order = [desc(scores.createdAt), desc(scores.id)] as const;
   const newest = db
-    .selectDistinctOn([scores.jobId], {
-      jobId: scores.jobId,
-      filterResult: scores.filterResult,
-      filterReasons: scores.filterReasons,
-      score: scores.score,
-      rankValue: scores.rankValue,
-      signalBonus: scores.signalBonus,
-      stale: scores.stale,
-      germanLevel: scores.germanLevel,
-      summaries: scores.summaries,
-      summaryZh: scores.summaryZh,
-      summaryEn: scores.summaryEn,
-      outputLang: scores.outputLang,
-    })
+    .selectDistinctOn([scores.jobId], newestColumns())
     .from(scores)
-    .orderBy(scores.jobId, ...order)
+    .orderBy(scores.jobId, ...newestFirst())
     .as("newest_score");
   const scored = db
-    .selectDistinctOn([scores.jobId], {
-      jobId: scores.jobId,
-      score: scores.score,
-      rankValue: scores.rankValue,
-      signalBonus: scores.signalBonus,
-      germanLevel: scores.germanLevel,
-      summaries: scores.summaries,
-      summaryZh: scores.summaryZh,
-      summaryEn: scores.summaryEn,
-      outputLang: scores.outputLang,
-    })
+    .selectDistinctOn([scores.jobId], scoredColumns())
     .from(scores)
     .where(isNotNull(scores.score))
-    .orderBy(scores.jobId, ...order)
+    .orderBy(scores.jobId, ...newestFirst())
     .as("scored_score");
-  const fallback = sql`(${newest.score} is null and ${newest.filterResult} = 'passed' and ${scored.jobId} is not null)`;
-  return db.$with("latest_score").as(
-    db
-      .select({
-        jobId: newest.jobId,
-        filterResult: newest.filterResult,
-        filterReasons: newest.filterReasons,
-        rankValue: sql<number | null>`case when ${fallback} then ${scored.rankValue} else ${newest.rankValue} end`.mapWith(nullableNumber).as("rank_value"),
-        score: sql<number | null>`case when ${fallback} then ${scored.score} else ${newest.score} end`.as("score"),
-        signalBonus: sql<number>`case when ${fallback} then ${scored.signalBonus} else ${newest.signalBonus} end`.mapWith(Number).as("signal_bonus"),
-        stale: sql<boolean>`case when ${fallback} then true else (${newest.score} is not null and ${newest.stale}) end`.as("stale"),
-        germanLevel: sql<string | null>`case when ${fallback} then ${scored.germanLevel} else ${newest.germanLevel} end`.as("german_level"),
-        summaryZh: sql<string | null>`case when ${fallback} then ${scored.summaryZh} else ${newest.summaryZh} end`.as("summary_zh"),
-        summaryEn: sql<string | null>`case when ${fallback} then ${scored.summaryEn} else ${newest.summaryEn} end`.as("summary_en"),
-        summaries: sql<unknown>`case when ${fallback} then ${scored.summaries} else ${newest.summaries} end`.as("summaries"),
-        outputLang: sql<string | null>`case when ${fallback} then ${scored.outputLang} else ${newest.outputLang} end`.as("output_lang"),
-      })
-      .from(newest)
-      .leftJoin(scored, eq(scored.jobId, newest.jobId)),
-  );
+  return db.$with("latest_score").as(db.select(latestColumns(newest, scored)).from(newest).leftJoin(scored, eq(scored.jobId, newest.jobId)));
 }
 
-export type LatestScore = ReturnType<typeof latestScoreCte>;
+/**
+ * The same score as `latestScoreCte` for the job of the current row of `jobs`, as a subquery to join with
+ * `leftJoinLateral` on true: two index lookups per job (`scores_job_latest_idx`,
+ * `scores_job_latest_scored_idx`) instead of the score of every job. For queries that select few jobs; a
+ * job without `scores` rows gets nulls, as with the CTE.
+ */
+export function latestScoreLateral(db: Db) {
+  const newest = db
+    .select(newestColumns())
+    .from(scores)
+    .where(eq(scores.jobId, jobs.id))
+    .orderBy(...newestFirst())
+    .limit(1)
+    .as("newest_score");
+  const scored = db
+    .select(scoredColumns())
+    .from(scores)
+    .where(and(eq(scores.jobId, jobs.id), isNotNull(scores.score)))
+    .orderBy(...newestFirst())
+    .limit(1)
+    .as("scored_score");
+  return db.select(latestColumns(newest, scored)).from(newest).leftJoin(scored, eq(scored.jobId, newest.jobId)).as("latest_score");
+}
+
+/** Either form of the latest score: the helpers below read the same columns from both. */
+export type LatestScore = ReturnType<typeof latestScoreCte> | ReturnType<typeof latestScoreLateral>;
 
 /**
  * The German level a job requires as the dashboard shows it: the one the scoring settled on (rule

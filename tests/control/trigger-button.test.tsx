@@ -85,6 +85,27 @@ describe("TriggerButton", () => {
     expect(alert).toHaveTextContent("(auth)");
   });
 
+  it("follows the running cycle that covers a collect request until that cycle finishes", async () => {
+    const user = userEvent.setup();
+    actions.runChannelNowAction.mockResolvedValue({ status: "queued", request: 11, kind: "run_cycle", existing: false, nonce: 1 });
+    const progress = { id: 42, runsTotal: 6, runsFinished: 2, fetched: 30, newCount: 3 };
+    served = view({ id: 11, kind: "run_cycle", result: { cycleId: 42, coveredBy: 42 }, cycle: { ...progress, status: "running" } });
+    render(wrap(<TriggerButton kind="runChannel" target="indeed" />));
+    await user.click(screen.getByRole("button", { name: "Collect now" }));
+    const covered = await screen.findByText("Covered by the running cycle 42: 2 of 6 runs finished, 30 fetched");
+    expect(covered).toHaveAttribute("data-outcome", "covered");
+    // the request itself is done: the button is free again
+    expect(screen.getByRole("button", { name: "Collect now" })).toBeEnabled();
+    const calls = vi.mocked(fetch).mock.calls.length;
+    served = view({ id: 11, kind: "run_cycle", result: { cycleId: 42, coveredBy: 42 }, cycle: { ...progress, runsFinished: 6, fetched: 55, newCount: 7, status: "succeeded" } });
+    expect(await screen.findByText(/Cycle 42: .*55 fetched, 7 new/, undefined, { timeout: 6000 })).toHaveAttribute("data-outcome", "done");
+    expect(vi.mocked(fetch).mock.calls.length).toBeGreaterThan(calls);
+    // and it stops polling once the cycle has finished
+    const after = vi.mocked(fetch).mock.calls.length;
+    await new Promise((resolve) => setTimeout(resolve, 2500));
+    expect(vi.mocked(fetch).mock.calls.length).toBe(after);
+  }, 15_000);
+
   it("is off when disabled and says why", () => {
     render(wrap(<TriggerButton kind="runChannel" target="xing" disabled disabledHint="switched off" />));
     expect(screen.getByRole("button", { name: "Collect now" })).toBeDisabled();

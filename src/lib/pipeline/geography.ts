@@ -29,6 +29,8 @@ export interface Geography {
   countryRules: ReadonlyArray<readonly [RegExp, string]>;
   /** "Austin, TX": state codes after a comma, a dash or a slash, per country (case-sensitive). */
   subdivisionRules: ReadonlyArray<readonly [RegExp, string]>;
+  /** The country rules, then the subdivision rules, with the `g` flag: every mention in a text (`matchAll`). */
+  mentionRules: ReadonlyArray<readonly [RegExp, string]>;
   /** The home country's names as whole words (explicit city extraction). */
   homeName: RegExp | null;
   nonCityLabel: RegExp | null;
@@ -61,6 +63,7 @@ export function compileGeography(market: Market): Geography {
     cityCountries: new Set(cityPatterns.map(([, , country]) => country)),
     countryRules,
     subdivisionRules,
+    mentionRules: [...countryRules, ...subdivisionRules].map(([pattern, country]) => [new RegExp(pattern.source, pattern.flags.includes("g") ? pattern.flags : `${pattern.flags}g`), country] as const),
     homeName: home ? new RegExp(namePattern([home.name, ...home.aliases]), "iu") : null,
     nonCityLabel: market.nonCityLabels.length > 0 ? new RegExp(`^(?:${market.nonCityLabels.join("|")})(?:\\b|\\s)`, "iu") : null,
     nonCityWords: market.nonCityWords.map((p) => new RegExp(p, "iu")),
@@ -90,14 +93,13 @@ function explicitHomeCity(raw: string, geo: Geography): string | null {
  */
 function outsideCityTable(raw: string, geo: Geography): string | undefined {
   let last: { end: number; country: string } | null = null;
-  const consider = (pattern: RegExp, country: string): void => {
-    for (const m of raw.matchAll(new RegExp(pattern.source, pattern.flags.includes("g") ? pattern.flags : `${pattern.flags}g`))) {
+  // matchAll works on a copy of the pattern: the shared one keeps its lastIndex
+  for (const [pattern, country] of geo.mentionRules) {
+    for (const m of raw.matchAll(pattern)) {
       const end = m.index + m[0].length;
       if (last === null || end > last.end) last = { end, country };
     }
-  };
-  for (const [pattern, country] of geo.countryRules) consider(pattern, country);
-  for (const [pattern, country] of geo.subdivisionRules) consider(pattern, country);
+  }
   const found = last as { end: number; country: string } | null;
   if (geo.market.resolveWorldCountries) return found !== null && !geo.cityCountries.has(found.country) ? found.country : undefined;
   // before the market packs: any mention of a country outside the city table's countries leaves the location without a country

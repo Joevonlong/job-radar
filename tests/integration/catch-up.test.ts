@@ -90,6 +90,30 @@ describe("runner start after a day of downtime (catch-up)", () => {
     expect((await decideCatchUp(db, hourlySchedule(), now)).missed).toBeNull();
   });
 
+  it("still catches up when the only cycle since the slot was limited to some channels (a manual collect of one channel)", async () => {
+    const db = getDb();
+    const now = new Date();
+    const last = await createCycle(db, { kind: "weekday_morning", startedAt: new Date(now.getTime() - 25 * HOUR) });
+    await finishCycle(db, last.id, { status: "succeeded" });
+    // what "collect now" on /sources leaves behind: a manual cycle of one channel
+    const registry = new ChannelRegistry();
+    registerFixtureChannel(registry, { id: "indeed" });
+    const partial = await runCycle("manual", { registry, config: config(), logger: quietLogger, channelIds: ["indeed"], sleep: async () => {} });
+    expect(partial.status).toBe("succeeded");
+
+    const decision = await decideCatchUp(db, hourlySchedule(), new Date());
+    expect(decision.lastCycleStartedAt?.getTime()).toBe(last.startedAt.getTime());
+    expect(decision.missed?.kind).toBe("weekday_morning");
+  });
+
+  it("catches up when a cycle limited to some channels is the only one ever", async () => {
+    const db = getDb();
+    await createCycle(db, { kind: "manual", startedAt: new Date(Date.now() - 1000), summary: { channelIds: ["indeed"] } });
+    const decision = await decideCatchUp(db, hourlySchedule(), new Date());
+    expect(decision.lastCycleStartedAt).toBeNull();
+    expect(decision.missed?.kind).toBe("weekday_morning");
+  });
+
   it("does nothing when catch_up is switched off in schedule.yaml", async () => {
     const db = getDb();
     const decision = await decideCatchUp(db, hourlySchedule(false), new Date());

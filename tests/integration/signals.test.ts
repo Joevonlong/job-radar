@@ -211,6 +211,23 @@ describe("score bonus", () => {
     expect((await getDb().select().from(schema.scores).where(eq(schema.scores.jobId, job)))[0]).toMatchObject({ signalBonus: 10, rankValue: 70 });
   });
 
+  it("writes a change of many rows in batches: every row gets its bonus and rank value, the untouched ones keep theirs", async () => {
+    const interests = shippedInterests();
+    const job = await newJob("Many rows", "Equity for everyone, competitive salary package.", { scoreRow: false });
+    const other = await newJob("No signals", "Build things.", { scoreRow: false });
+    // more rows than one statement takes (rows without a snapshot are not bound by the unique index), with and without a match score
+    const many = Array.from({ length: 1234 }, (_, i) => ({ jobId: job, filterResult: "passed" as const, score: i % 3 === 0 ? null : i % 101, rankValue: i % 3 === 0 ? 33.5 : null }));
+    await getDb().insert(schema.scores).values(many);
+    await getDb().insert(schema.scores).values({ jobId: other, filterResult: "passed", score: 40, rankValue: 40 });
+    await runRuleScan(getDb(), scanOptions(interests));
+
+    expect(await reconcileBonuses(getDb(), interests)).toEqual({ checked: 1234, updated: 1234 });
+    const rows = await getDb().select().from(schema.scores).where(eq(schema.scores.jobId, job)).orderBy(schema.scores.id);
+    expect(rows.map((r) => [r.signalBonus, r.rankValue])).toEqual(many.map((m) => [11, m.score === null ? 33.5 : m.score + 11])); // T2 8 + T3 3
+    expect((await getDb().select().from(schema.scores).where(eq(schema.scores.jobId, other)))[0]).toMatchObject({ signalBonus: 0, rankValue: 40 });
+    expect(await reconcileBonuses(getDb(), interests)).toEqual({ checked: 1234, updated: 0 });
+  });
+
   it("drops the bonus again when the signals disappear", async () => {
     const interests = shippedInterests();
     const job = await newJob("Scored", "Equity for everyone.");

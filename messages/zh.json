@@ -2994,7 +2994,7 @@
         "hint": "画像改动后旧分数会被标为过期；由 ai-worker 重新打分。"
       },
       "queued": "已请求，等待 runner 取走。",
-      "existing": "已经有一个同样的请求在排队或执行，没有重复创建。",
+      "existing": "已经有一个覆盖这次操作的请求在排队或执行，没有重复创建。",
       "errors": {
         "invalidPayload": "请求格式不对，请刷新页面。",
         "unknownChannel": "包含不认识的通道。",
@@ -3855,7 +3855,7 @@
       "databaseUnavailable": "数据库不可用，请求没有创建。",
       "tooSoon": "刚刚请求过，{seconds} 秒后可以再试。"
     },
-    "existing": "同样的请求已经在排队或执行，正在等它的结果。",
+    "existing": "已有覆盖这个通道的请求在排队或执行，正在等它的结果。",
     "pending": {
       "runner": "已排队，等待 runner 取走…",
       "aiWorker": "已排队，等待宿主机上的 ai-worker 取走…"
@@ -3890,7 +3890,8 @@
       "testAi": "可用：{model}，{seconds} 秒，token {tokensIn} / {tokensOut}",
       "testTelegram": "已发送（消息 #{id}）",
       "runChannel": "第 {id} 轮：{state}，抓取 {fetched} 条，新增 {fresh} 条",
-      "runChannelNoCycle": "已完成"
+      "runChannelNoCycle": "已完成",
+      "runChannelCovered": "由正在运行的第 {id} 轮覆盖：{total} 个运行已完成 {finished} 个，抓取 {fetched} 条"
     }
   },
   "viz": {
