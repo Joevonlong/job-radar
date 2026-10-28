@@ -233,10 +233,12 @@ describe("anthropic web search", () => {
   };
   const make = (f: typeof fetch) => createAnthropicProvider({ config: config.providers.anthropic, apiKey: "sk-test-0123456789abcdef", timeoutMs: 5000, maxOutputTokens: 512, fetch: f });
 
-  it("another task still forces the respond tool and gets no web_search tool", async () => {
+  it("another task offers only respond with automatic tool choice", async () => {
     const { fetch: f, seen } = fake([() => reply([answer({ answer: "ok" })], "tool_use")]);
     await make(f).run("score", prompt, schema, { web: webLimits(["levels.fyi"], 4) });
-    expect(seen[0]?.body.tool_choice).toEqual({ type: "tool", name: "respond" });
+    expect(seen[0]?.body.tool_choice).toEqual({ type: "auto" });
+    expect(seen[0]?.body).not.toHaveProperty("thinking");
+    expect(seen[0]?.body.system).toBe(`${prompt.system}\n\nAnswer only by calling the respond tool.`);
     expect((seen[0]?.body.tools as Array<{ name: string }>).map((t) => t.name)).toEqual(["respond"]);
   });
 
@@ -247,11 +249,29 @@ describe("anthropic web search", () => {
     expect(result.value).toEqual({ answer: "ok" });
     expect(result.usage.webSearches).toBe(3);
     expect(seen[0]?.body.tool_choice).toEqual({ type: "auto" });
+    expect(seen[0]?.body).not.toHaveProperty("thinking");
+    expect(seen[0]?.body).not.toHaveProperty("effort");
+    expect(seen[0]?.body).not.toHaveProperty("output_config");
+    expect(seen[0]?.body.system).toBe(`${prompt.system}\n\nAnswer only by calling the respond tool.`);
     expect(seen[0]?.body.tools).toEqual([
       expect.objectContaining({ name: "respond" }),
       { type: "web_search_20250305", name: "web_search", max_uses: 5, allowed_domains: ["levels.fyi"] },
     ]);
     expect(limits.budget.remaining).toBe(2);
+  });
+
+  it("extracts respond after thinking and search content", async () => {
+    const { fetch: f, seen } = fake([
+      () => reply([
+        { type: "thinking", thinking: "Considering the search results.", signature: "test-signature" },
+        { type: "server_tool_use", id: "search_1", name: "web_search", input: { query: "salary" } },
+        { type: "text", text: '{"answer":"wrong"}' },
+        answer({ answer: "ok" }),
+      ], "tool_use", 1),
+    ]);
+    const result = await make(f).run("salary_lookup", prompt, schema, { web: webLimits(["levels.fyi"], 2) });
+    expect(result).toMatchObject({ value: { answer: "ok" }, usage: { webSearches: 1 } });
+    expect(seen).toHaveLength(1);
   });
 
   it("refuses salary_lookup without any usable domain instead of searching without a limit", async () => {
@@ -261,13 +281,18 @@ describe("anthropic web search", () => {
   });
 
   it("continues a paused turn with what is left of the budget, and never beyond it", async () => {
-    const paused = () => reply([{ type: "text", text: "searching" }], "pause_turn", 2);
+    const pausedContent = [
+      { type: "thinking", thinking: "Considering search results.", signature: "test-signature" },
+      { type: "text", text: "searching" },
+    ];
+    const paused = () => reply(pausedContent, "pause_turn", 2);
     const { fetch: f, seen } = fake([paused, () => reply([answer({ answer: "ok" })], "tool_use", 1)]);
     const limits = webLimits(["levels.fyi"], 3);
     expect((await make(f).run("salary_lookup", prompt, schema, { web: limits })).value).toEqual({ answer: "ok" });
     expect(seen).toHaveLength(2);
     expect((seen[1]?.body.tools as Array<{ max_uses?: number }>)[1]?.max_uses).toBe(1);
-    expect(seen[1]?.body.messages).toHaveLength(2); // the paused assistant turn goes back
+    expect(seen[1]?.body.messages).toEqual([{ role: "user", content: prompt.user }, { role: "assistant", content: pausedContent }]);
+    expect(seen[1]?.body).not.toHaveProperty("thinking");
     expect(limits.budget.remaining).toBe(0);
 
     // a run that keeps pausing stops after MAX_PAUSE_CONTINUATIONS continuations; no answer -> the validation retry
@@ -280,6 +305,11 @@ describe("anthropic web search", () => {
     const { fetch: f, seen } = fake([() => reply([{ type: "text", text: "no answer" }], "end_turn", 2), () => reply([answer({ answer: "ok" })], "tool_use")]);
     await make(f).run("salary_lookup", prompt, schema, { web: webLimits(["levels.fyi"], 2) });
     expect(seen).toHaveLength(2);
+    const retryUser = (seen[1]?.body.messages as Array<{ content: string }>)[0]?.content ?? "";
+    expect(retryUser).toContain("rejected by validation");
+    expect(retryUser).toContain("Previous reply:\nno answer\nProblems:");
+    expect(seen[1]?.body.tool_choice).toEqual({ type: "auto" });
+    expect(seen[1]?.body).not.toHaveProperty("thinking");
     expect((seen[1]?.body.tools as Array<{ name: string }>).map((t) => t.name)).toEqual(["respond"]);
   });
 });

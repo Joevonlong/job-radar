@@ -8,8 +8,9 @@ import { createProvider } from "../provider";
 import type { AiAvailability, AiProvider, AiTokenUsage, AiTransport, AiTransportRequest, AiTransportResponse } from "../types";
 import { safeDomains, webAccessAllowed } from "../web-tasks";
 
-/** The single tool the model is forced to call; its input is the structured answer. */
+/** The tool whose input is the structured answer. */
 const TOOL_NAME = "respond";
+const RESPOND_INSTRUCTION = "Answer only by calling the respond tool.";
 /** A web task's turn the API paused (`stop_reason: pause_turn`) is continued at most this many times. */
 export const MAX_PAUSE_CONTINUATIONS = 4;
 
@@ -41,7 +42,8 @@ function classify(error: unknown): AiProviderError {
 
 /**
  * anthropic: the official SDK. Structured output through tool use: one tool whose `input_schema` is the
- * JSON Schema, `tool_choice` forces it, and thinking is switched off (forced tool use is incompatible with it).
+ * JSON Schema, automatic tool choice, and a system instruction to answer with `respond`. Thinking configuration
+ * is omitted for model compatibility.
  * The SDK's own retry is disabled; fallback and the validation retry are the router's business.
  */
 export function createAnthropicTransport(options: AnthropicOptions): AiTransport {
@@ -73,24 +75,15 @@ export function createAnthropicTransport(options: AnthropicOptions): AiTransport
           {
             model,
             max_tokens: options.maxOutputTokens,
-            system: request.system,
+            system: `${request.system}\n\n${RESPOND_INSTRUCTION}`,
             messages: [{ role: "user", content: request.user }],
-            tools: [
-              {
-                name: TOOL_NAME,
-                description: "Return the answer. The input must match the schema exactly.",
-                input_schema: request.jsonSchema,
-              },
-            ],
-            tool_choice: { type: "tool", name: TOOL_NAME },
-            thinking: { type: "disabled" },
+            tools: [respondTool(request)],
+            tool_choice: { type: "auto" },
           },
           { ...(request.signal ? { signal: request.signal } : {}), ...(request.timeoutMs !== undefined ? { timeout: request.timeoutMs } : {}) },
         );
-        const toolUse = message.content.find((block) => block.type === "tool_use" && block.name === TOOL_NAME);
-        if (toolUse?.type !== "tool_use") throw new AiProviderError("anthropic", "invalid_output", `no tool call in the reply (stop_reason ${message.stop_reason ?? "?"})`);
         return {
-          text: JSON.stringify(toolUse.input),
+          text: extractAnswer(message),
           model: message.model,
           usage: {
             tokensIn: message.usage.input_tokens + (message.usage.cache_creation_input_tokens ?? 0) + (message.usage.cache_read_input_tokens ?? 0),
@@ -111,6 +104,18 @@ const respondTool = (request: AiTransportRequest): ToolUnion => ({
   description: "Return the answer. The input must match the schema exactly.",
   input_schema: request.jsonSchema,
 });
+
+function extractAnswer(message: Message): string {
+  const toolUse = message.content.find((block) => block.type === "tool_use" && block.name === TOOL_NAME);
+  const text =
+    toolUse?.type === "tool_use"
+      ? JSON.stringify(toolUse.input)
+      : message.content
+          .flatMap((block) => (block.type === "text" ? [block.text] : []))
+          .join("\n")
+          .trim();
+  return text === "" ? `(no answer; stop_reason ${message.stop_reason ?? "?"})` : text;
+}
 
 function addMessageUsage(total: AiTokenUsage, message: Message): void {
   const usage = message.usage;
@@ -148,7 +153,7 @@ async function callWithWebSearch(client: Anthropic, request: AiTransportRequest,
       if (turn > 0 && left <= 0) break;
       const tools = toolsFor(left);
       message = await client.messages.create(
-        { model, max_tokens: maxTokens, system: request.system, messages, tools, tool_choice: { type: "auto" }, thinking: { type: "disabled" } },
+        { model, max_tokens: maxTokens, system: `${request.system}\n\n${RESPOND_INSTRUCTION}`, messages, tools, tool_choice: { type: "auto" } },
         { ...(request.signal ? { signal: request.signal } : {}), ...(request.timeoutMs !== undefined ? { timeout: request.timeoutMs } : {}) },
       );
       const before = usage.webSearches ?? 0;
@@ -163,15 +168,7 @@ async function callWithWebSearch(client: Anthropic, request: AiTransportRequest,
     throw classify(error);
   }
   if (!message) throw new AiProviderError("anthropic", "provider_error", "no reply");
-  const toolUse = message.content.find((block) => block.type === "tool_use" && block.name === TOOL_NAME);
-  const text =
-    toolUse?.type === "tool_use"
-      ? JSON.stringify(toolUse.input)
-      : message.content
-          .flatMap((block) => (block.type === "text" ? [block.text] : []))
-          .join("\n")
-          .trim();
-  return { text: text === "" ? `(no answer; stop_reason ${message.stop_reason ?? "?"})` : text, model: message.model, usage };
+  return { text: extractAnswer(message), model: message.model, usage };
 }
 
 export function createAnthropicProvider(options: AnthropicOptions): AiProvider {
