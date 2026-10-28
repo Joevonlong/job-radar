@@ -4,13 +4,19 @@ import { FlaskConical, Loader2, Play, Send } from "lucide-react";
 import { useFormatter, useTranslations } from "next-intl";
 import { useCallback, useEffect, useState, useTransition } from "react";
 
-import { runChannelNowAction, testAiAction, testChannelAction, testTelegramAction } from "@/app/control-actions";
+import { runChannelNowAction as rawRunChannelNowAction, testAiAction as rawTestAiAction, testChannelAction as rawTestChannelAction, testTelegramAction as rawTestTelegramAction } from "@/app/control-actions";
 import { Button } from "@/components/ui/button";
 import { controlRequestViewSchema, followsCoveringCycle, isOpenRequest, type ControlRequestView } from "@/lib/control/request-view-schema";
 import { IDLE_CONTROL_STATE, type ControlActionState } from "@/lib/control/service-types";
 import { formatClock } from "@/lib/format/clock";
 import { STATUS_POLL_MS, TRIGGER_WAIT_MAX_MS } from "@/lib/settings/constants";
 import { cn } from "@/lib/utils";
+import { withActionFeedback } from "@/lib/actions/client";
+
+const runChannelNowAction = withActionFeedback(rawRunChannelNowAction)(() => ({ status: "error", error: "databaseUnavailable", nonce: Date.now() }));
+const testAiAction = withActionFeedback(rawTestAiAction)(() => ({ status: "error", error: "databaseUnavailable", nonce: Date.now() }));
+const testChannelAction = withActionFeedback(rawTestChannelAction)(() => ({ status: "error", error: "databaseUnavailable", nonce: Date.now() }));
+const testTelegramAction = withActionFeedback(rawTestTelegramAction)(() => ({ status: "error", error: "databaseUnavailable", nonce: Date.now() }));
 
 /** What a trigger button asks for. */
 export type TriggerKind = "runChannel" | "testChannel" | "testAi" | "testTelegram";

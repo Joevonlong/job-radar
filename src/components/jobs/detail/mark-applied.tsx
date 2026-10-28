@@ -4,8 +4,8 @@ import { Check } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useTransition } from "react";
 
-import { markAppliedAction } from "@/app/jobs/[id]/actions";
-import { undoApplicationStatusAction } from "@/app/pipeline/actions";
+import { markAppliedAction as rawMarkAppliedAction } from "@/app/jobs/[id]/actions";
+import { undoApplicationStatusAction as rawUndoApplicationStatusAction } from "@/app/pipeline/actions";
 import { useHiddenStatuses } from "@/components/applications/visibility-context";
 import { isStatusOffered } from "@/lib/applications/visibility";
 import { buttonVariants } from "@/components/ui/button";
@@ -13,6 +13,10 @@ import { MARK_APPLIED_FROM } from "@/lib/dashboard/apply";
 import type { ApplicationStatus } from "@/lib/db/repos/applications";
 import { toastTone, toastUndo } from "@/lib/toast";
 import { cn } from "@/lib/utils";
+import { withActionFeedback } from "@/lib/actions/client";
+
+const markAppliedAction = withActionFeedback(rawMarkAppliedAction)(() => ({ ok: false, error: "failed" }));
+const undoApplicationStatusAction = withActionFeedback(rawUndoApplicationStatusAction)(() => ({ ok: false, error: "failed" }));
 
 interface MarkAppliedButtonProps {
   jobId: number;

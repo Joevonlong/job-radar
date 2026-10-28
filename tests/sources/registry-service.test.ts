@@ -93,6 +93,13 @@ describe("setSourceEnabled", () => {
     expect(text()).toBe(before);
     expect(sync.syncSourceRegistry).not.toHaveBeenCalled();
   });
+
+  it("reports an invalid current schema as a config problem before editing", async () => {
+    setKeys({ "sources.indeed.enabled": "invalid" });
+    const before = text();
+    expect(await setSourceEnabled({ id: "indeed", enabled: false })).toEqual({ status: "error", error: "config_invalid" });
+    expect(text()).toBe(before);
+  });
 });
 
 describe("enableMarketChannels", () => {

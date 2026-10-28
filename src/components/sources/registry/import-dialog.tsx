@@ -4,7 +4,7 @@ import { FileUp, Loader2, Upload } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useId, useRef, useState, useTransition } from "react";
 
-import { applySourcesImportAction, previewSourcesImportAction } from "@/app/sources/registry/actions";
+import { applySourcesImportAction as rawApplySourcesImportAction, previewSourcesImportAction as rawPreviewSourcesImportAction } from "@/app/sources/registry/actions";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DocLink } from "@/components/ui/doc-link";
@@ -14,6 +14,10 @@ import { Textarea } from "@/components/ui/textarea";
 import type { ImportChange, ImportFormat, ImportIssue, ImportMode } from "@/lib/sources/registry/import";
 import type { ImportPreviewState } from "@/lib/sources/registry/service";
 import { toastTone } from "@/lib/toast";
+import { withActionFeedback } from "@/lib/actions/client";
+
+const applySourcesImportAction = withActionFeedback(rawApplySourcesImportAction)(() => ({ status: "error", error: "write_failed" }));
+const previewSourcesImportAction = withActionFeedback(rawPreviewSourcesImportAction)(() => ({ status: "error", error: "write_failed", issues: [] }));
 
 type Preview = Extract<ImportPreviewState, { status: "preview" }>;
 

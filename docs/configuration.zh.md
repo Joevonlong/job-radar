@@ -381,4 +381,6 @@ JD 里关于签证赞助的说法（见 [visa-sponsorship.zh.md](visa-sponsorshi
 
 ### 升级写入保护
 
+来源开关与看板、发现的看板候选、搜索城市同步、工作流设置和兴趣编辑都在文件锁与跨进程目录锁内读取当前值，同时修改不同字段会保留彼此的更新。读取前先检查升级冻结；冻结或锁忙会显示对应提示。薪资设置表单与其他设置表单、来源导入一样，会拒绝覆盖预览后已被改动的文件。
+
 `pnpm ops:freeze --target <commit>` 冻结配置与 profile 写入；`pnpm ops:unfreeze` 在同一套跨进程写锁内删除标记，并提示先运行 `pnpm config:init`，再运行 `pnpm config:migrate --write`。先确认没有旧消费者再手工解除。第 8 步启动容器之前失败或中断，部署只自动解除本次全新创建的冻结；接管的标记必须等 `config-write` 通过消费者检查或用户运行 `ops:unfreeze` 才会解除。尝试 `up` 后失败或中断则保留所有标记。认识冻结协议的 web 在冻结期间拒绝保存；首次升级的旧 web 到第 8 步之前仍写无害的旧格式文件。doctor 用 `config.freeze` 检查遗留标记和超过过期阈值的写锁及 guard 持有者。遗留锁在下次写入时自动接管；若保存持续失败，确认持有者不再写入后删除锁文件或 guard 内的持有者文件。`pnpm config:migrate --json` 只读返回待迁移和问题数量。锁的时限由 `schedule.yaml` 的 `deploy.config_write_lock_stale_seconds`、`config_write_lock_wait_seconds`、`config_write_lock_retry_ms` 配置（默认 300 秒、10 秒、50 毫秒）。同主机持有者记录随机进程 ID 与进程启动时间；PID 重用或 token 已遗弃时立即接管，活跃持有者不接管。其他主机或命名空间仅在超过过期阈值后接管，最终提交再次核对锁的所有权。恢复与长驻进程重启见 [upgrade.zh.md](upgrade.zh.md#升级期间的设置)。

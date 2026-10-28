@@ -2,8 +2,11 @@
 
 import { useEffect } from "react";
 
-import { markSeenAction } from "@/app/visit-actions";
+import { markSeenAction as rawMarkSeenAction } from "@/app/visit-actions";
 import { noteSeenLocally } from "@/lib/dashboard/seen-local";
+import { withActionFeedback } from "@/lib/actions/client";
+
+const markSeenAction = withActionFeedback(rawMarkSeenAction)(() => ({ ok: false }));
 
 /**
  * The job is on screen, so it is seen. Runs in the browser once the detail page is shown, never while the server renders it:

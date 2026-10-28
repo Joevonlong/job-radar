@@ -5,8 +5,8 @@ import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { useOptimistic, useState, useTransition } from "react";
 
-import { saveApplicationNotesAction } from "@/app/jobs/[id]/actions";
-import { saveNextActionAction, setInterviewRoundsAction } from "@/app/pipeline/actions";
+import { saveApplicationNotesAction as rawSaveApplicationNotesAction } from "@/app/jobs/[id]/actions";
+import { saveNextActionAction as rawSaveNextActionAction, setInterviewRoundsAction as rawSetInterviewRoundsAction } from "@/app/pipeline/actions";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/native-select";
@@ -25,6 +25,11 @@ import { SalaryChip } from "./salary-chip";
 import { timelineLines } from "./timeline-lines";
 import { COLUMN_COLOR } from "./status-colors";
 import type { BoardCard } from "./types";
+import { withActionFeedback } from "@/lib/actions/client";
+
+const saveApplicationNotesAction = withActionFeedback(rawSaveApplicationNotesAction)(() => ({ ok: false, error: "failed" }));
+const saveNextActionAction = withActionFeedback(rawSaveNextActionAction)(() => ({ ok: false, error: "failed" }));
+const setInterviewRoundsAction = withActionFeedback(rawSetInterviewRoundsAction)(() => ({ ok: false, error: "failed" }));
 
 interface CardDrawerProps {
   /** The card shown; null = closed. */

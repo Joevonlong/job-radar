@@ -7,7 +7,7 @@ import { useState, useTransition } from "react";
 
 import { AiRunStatus } from "@/components/ai-run-status";
 import { TriggerButton } from "@/components/control/trigger-button";
-import { rescoreStaleAction, runCycleAction, scoreJobsAction } from "@/app/settings/actions";
+import { rescoreStaleAction as rawRescoreStaleAction, runCycleAction as rawRunCycleAction, scoreJobsAction as rawScoreJobsAction } from "@/app/settings/actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -17,6 +17,11 @@ import { ageParts } from "@/lib/settings/age";
 import type { ControlRequestView, ControlStatus } from "@/lib/settings/status-schema";
 import { cn } from "@/lib/utils";
 import { INK_LINK } from "@/components/ui/ink-link";
+import { withActionFeedback } from "@/lib/actions/client";
+
+const rescoreStaleAction = withActionFeedback(rawRescoreStaleAction)(() => ({ status: "error", error: "databaseUnavailable", nonce: Date.now() }));
+const runCycleAction = withActionFeedback(rawRunCycleAction)(() => ({ status: "error", error: "databaseUnavailable", nonce: Date.now() }));
+const scoreJobsAction = withActionFeedback(rawScoreJobsAction)(() => ({ status: "error", error: "databaseUnavailable", nonce: Date.now() }));
 
 const ERROR_CODES = ["invalid_payload", "another_cycle_running", "cycle_failed", "handler_error", "no_handler", "rescore_failed", "rescore_stopped", "rescore_profile_incomplete", "rescore_ai_unavailable", "score_failed", "score_stopped", "score_profile_incomplete", "score_ai_unavailable", "quota_guard"] as const;
 

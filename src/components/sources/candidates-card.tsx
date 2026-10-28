@@ -5,7 +5,7 @@ import { useFormatter, useTranslations } from "next-intl";
 import { useQueryStates } from "nuqs";
 import { useState, useTransition } from "react";
 
-import { addBoardCandidateAction, dismissBoardCandidateAction } from "@/app/sources/actions";
+import { addBoardCandidateAction as rawAddBoardCandidateAction, dismissBoardCandidateAction as rawDismissBoardCandidateAction } from "@/app/sources/actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,6 +14,10 @@ import { filterCandidates } from "@/lib/sources/registry/filter";
 import { REGISTRY_QUERY_MAX, registryParsers } from "@/lib/sources/registry/params";
 
 import { formatWhen } from "./format";
+import { withActionFeedback } from "@/lib/actions/client";
+
+const addBoardCandidateAction = withActionFeedback(rawAddBoardCandidateAction)(() => ({ status: "error", error: "write_failed" }));
+const dismissBoardCandidateAction = withActionFeedback(rawDismissBoardCandidateAction)(() => ({ status: "error", error: "write_failed" }));
 
 type Feedback = { tone: "ok" | "error"; text: string } | null;
 

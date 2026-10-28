@@ -4,7 +4,8 @@ import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useId, useState, useTransition } from "react";
 
-import { syncSearchLocationsAction } from "@/app/me/actions";
+import { syncSearchLocationsAction as rawSyncSearchLocationsAction } from "@/app/me/actions";
+import type { ConfigWriteErrorKey } from "@/lib/config/errors";
 
 import type { SalaryAxisScale } from "@/components/viz";
 import { Button } from "@/components/ui/button";
@@ -30,6 +31,9 @@ import { FloorPreview } from "./floor-preview";
 import { FormCard } from "./form-card";
 import { MarketFields, draftCountryName, draftHomeRegion } from "./market-fields";
 import { RemoteScopeField } from "./remote-scope-field";
+import { withActionFeedback } from "@/lib/actions/client";
+
+const syncSearchLocationsAction = withActionFeedback(rawSyncSearchLocationsAction)(() => ({ status: "error", error: "write_failed" }));
 
 interface PreferencesFormProps {
   initial: PreferencesDraft;
@@ -59,7 +63,7 @@ export function PreferencesForm({ initial, hash, state, pending, onSave, salarie
   const dirtyCount = changedPaths(draft, initial).length;
   const [searchCities, setSearchCities] = useState<readonly string[]>(searchLocations);
   const [syncing, startSync] = useTransition();
-  const [syncResult, setSyncResult] = useState<"done" | "error" | null>(null);
+  const [syncResult, setSyncResult] = useState<"done" | "error" | ConfigWriteErrorKey | null>(null);
   const searchDiffers = draft.locations.length > 0 && !sameLocations(draft.locations, searchCities);
 
   function patch(next: Partial<PreferencesDraft>) {
@@ -126,7 +130,7 @@ export function PreferencesForm({ initial, hash, state, pending, onSave, salarie
                     startSync(async () => {
                       const result = await syncSearchLocationsAction(draft.locations);
                       if (result.status === "done") setSearchCities(result.locations);
-                      setSyncResult(result.status === "done" ? "done" : "error");
+                      setSyncResult(result.status === "done" ? "done" : ["frozen", "busy", "stale", "protected"].includes(result.error) ? result.error as ConfigWriteErrorKey : "error");
                     })
                   }
                 >
@@ -140,7 +144,7 @@ export function PreferencesForm({ initial, hash, state, pending, onSave, salarie
           ) : null}
           {syncResult !== null ? (
             <p role="status" className={syncResult === "done" ? undefined : "text-bad font-bold"}>
-              {syncResult === "done" ? t("fields.searchCities.done") : t("fields.searchCities.failed")}
+              {t(`fields.searchCities.${syncResult === "error" ? "failed" : syncResult}`)}
             </p>
           ) : null}
         </div>

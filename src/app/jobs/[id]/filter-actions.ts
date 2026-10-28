@@ -1,9 +1,10 @@
 "use server";
 
+import { logActionFailure } from "@/lib/logging/action-failure";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
-import { createLogger } from "@/lib/channels/logger";
+import { createProcessLogger } from "@/lib/logging/process-logger";
 import { clearFilterOverride, getDb, jobExists, setFilterOverride } from "@/lib/db";
 import { refilterJob } from "@/lib/filter";
 
@@ -33,10 +34,11 @@ export async function setFilterOverrideAction(input: { jobId: number; action: st
     if (!(await jobExists(db, jobId))) return { ok: false, error: "not_found" };
     if (action === "clear") await clearFilterOverride(db, jobId);
     else await setFilterOverride(db, jobId, action);
-    const result = await refilterJob(db, jobId, createLogger({ minLevel: "warn" }));
+    const result = await refilterJob(db, jobId, createProcessLogger());
     revalidatePath("/", "layout");
     return { ok: true, filterResult: result?.filterResult ?? null };
-  } catch {
+  } catch (error) {
+    logActionFailure("setFilterOverrideAction", error);
     return { ok: false, error: "failed" };
   }
 }

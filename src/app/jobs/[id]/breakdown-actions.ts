@@ -1,5 +1,6 @@
 "use server";
 
+import { logActionFailure } from "@/lib/logging/action-failure";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
@@ -38,7 +39,8 @@ export async function breakdownJobAction(input: { jobId: number; force?: boolean
     if (outcome.state === "error") return { ok: false, error: outcome.error };
     if (outcome.state === "cached") return { ok: true, queued: false };
     return { ok: true, queued: true, requestId: outcome.requestId };
-  } catch {
+  } catch (error) {
+    logActionFailure("breakdownJobAction", error);
     return { ok: false, error: "failed" };
   }
 }
@@ -54,7 +56,8 @@ export async function breakdownStatusAction(input: { jobId: number; requestId: n
     if (state.state === "failed") return { ok: false, error: state.error, detail: state.detail, resumeAt: state.resumeAt };
     revalidatePath(`/jobs/${parsed.data.jobId}`);
     return { ok: true, state: "done" };
-  } catch {
+  } catch (error) {
+    logActionFailure("breakdownStatusAction", error);
     return { ok: false, error: "failed" };
   }
 }

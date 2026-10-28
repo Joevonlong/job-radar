@@ -6,13 +6,16 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 
-import { scoreJobNowAction } from "@/app/jobs/[id]/actions";
+import { scoreJobNowAction as rawScoreJobNowAction } from "@/app/jobs/[id]/actions";
 import { useControlStatus } from "@/components/settings/use-control-status";
 import { Button } from "@/components/ui/button";
 import { IDLE_CONTROL_STATE, type ControlActionState } from "@/lib/control/service-types";
 import { formatClock } from "@/lib/format/clock";
 import type { ProfileScoringField } from "@/lib/scoring/profile";
 import { INK_LINK } from "@/components/ui/ink-link";
+import { withActionFeedback } from "@/lib/actions/client";
+
+const scoreJobNowAction = withActionFeedback(rawScoreJobNowAction)(() => ({ status: "error", error: "databaseUnavailable", nonce: Date.now() }));
 
 const ERROR_CODES = ["invalid_payload", "score_failed", "score_stopped", "score_profile_incomplete", "score_ai_unavailable", "quota_guard", "handler_error", "no_handler"] as const;
 

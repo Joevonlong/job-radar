@@ -193,6 +193,7 @@ A failure in (a) does not block rollback: follow (c) and accept the display wind
 
 ### Fixed
 
+- Web actions recover from outdated tabs, invalid config pages name the file and link to its editor, concurrent settings edits keep unrelated changes, upgrade freezes show the right message, and caught action failures leave safe diagnostics in the web log.
 - **A slow interest pattern no longer freezes the app:** a pattern of a signal category that backtracks badly on long
   text (such as `(\w+\s*)*budget`) is refused when saving on /interests or in the file editor; in a file edited by hand
   the signal scan, the AI review and the suggestions leave it out with a warning naming its category, and "Try on recent

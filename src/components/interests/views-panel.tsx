@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useState, useTransition, type FormEvent } from "react";
 import { toastTone } from "@/lib/toast";
 
-import { deleteViewAction, renameViewAction, setDefaultViewAction } from "@/app/interests/actions";
+import { deleteViewAction as rawDeleteViewAction, renameViewAction as rawRenameViewAction, setDefaultViewAction as rawSetDefaultViewAction } from "@/app/interests/actions";
 import { useBaseCurrency, useLocalLanguageName } from "@/components/base-currency";
 import { Badge } from "@/components/ui/badge";
 import { Sparkline } from "@/components/viz";
@@ -21,6 +21,11 @@ import { APPLICATION_FILTER_STATUSES, JOB_STATUSES, JOB_WORKPLACES } from "@/lib
 import { MULTI_FILTER_KEYS, type MultiFilterKey } from "@/lib/jobs/filter-keys";
 import { currencyPrefix } from "@/lib/format/numbers";
 import { jobsListHref } from "@/lib/jobs/search-params";
+import { withActionFeedback } from "@/lib/actions/client";
+
+const deleteViewAction = withActionFeedback(rawDeleteViewAction)(() => ({ status: "error", section: "views", nonce: Date.now(), formError: "writeFailed", fieldErrors: [] }));
+const renameViewAction = withActionFeedback(rawRenameViewAction)(() => ({ status: "error", section: "views", nonce: Date.now(), formError: "writeFailed", fieldErrors: [] }));
+const setDefaultViewAction = withActionFeedback(rawSetDefaultViewAction)(() => ({ status: "error", section: "views", nonce: Date.now(), formError: "writeFailed", fieldErrors: [] }));
 
 const MAX_NAME_CHARS = 60;
 

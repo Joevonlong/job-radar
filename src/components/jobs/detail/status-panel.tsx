@@ -3,7 +3,7 @@
 import { useTranslations } from "next-intl";
 import { useState, useTransition } from "react";
 
-import { saveApplicationNotesAction, setApplicationStatusAction } from "@/app/jobs/[id]/actions";
+import { saveApplicationNotesAction as rawSaveApplicationNotesAction, setApplicationStatusAction as rawSetApplicationStatusAction } from "@/app/jobs/[id]/actions";
 import { Button } from "@/components/ui/button";
 import { NativeSelect } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
@@ -14,6 +14,10 @@ import { ALL_APPLICATION_STATUSES, statusChoices } from "@/lib/applications/visi
 import type { ApplicationStatus } from "@/lib/db/repos/applications";
 import { toastTone } from "@/lib/toast";
 import { cn } from "@/lib/utils";
+import { withActionFeedback } from "@/lib/actions/client";
+
+const saveApplicationNotesAction = withActionFeedback(rawSaveApplicationNotesAction)(() => ({ ok: false, error: "failed" }));
+const setApplicationStatusAction = withActionFeedback(rawSetApplicationStatusAction)(() => ({ ok: false, error: "failed" }));
 
 export interface HistoryEntry {
   id: number;

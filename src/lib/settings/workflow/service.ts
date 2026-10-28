@@ -3,10 +3,11 @@
  * notify.yaml. Both files are validated first; only then ui.yaml and notify.yaml are written, one after the other. When the
  * second write fails the first stays written, and the answer says which file is still old.
  */
+import { logActionFailure } from "@/lib/logging/action-failure";
 import { z } from "zod";
 
 import { HIDEABLE_CONTRACTS, HIDEABLE_STATUSES, HIDEABLE_WORKPLACES } from "@/lib/applications/visibility";
-import { ConfigError, notifySchema, reloadConfig, uiSchema, writeConfig } from "@/lib/config";
+import { ConfigError, configErrorKey, mutateConfig, notifySchema, reloadConfig, uiSchema } from "@/lib/config";
 
 import { settingsIssueKey, toNumber } from "../draft";
 import type { WorkflowActionState, WorkflowField, WorkflowFieldError, WorkflowFile } from "./types";
@@ -40,16 +41,6 @@ export async function saveWorkflow(rawRequest: unknown): Promise<WorkflowActionS
   if (!request.success) return failed("invalidPayload");
   const { data } = request;
 
-  let ui;
-  let notify;
-  try {
-    ui = reloadConfig("ui");
-    notify = reloadConfig("notify");
-  } catch (error) {
-    if (error instanceof ConfigError) return failed("unreadable");
-    throw error;
-  }
-
   const errors: WorkflowFieldError[] = [];
   const statuses = listOf(data.hiddenStatuses, HIDEABLE_STATUSES);
   const workplaces = listOf(data.hiddenWorkplaces, HIDEABLE_WORKPLACES);
@@ -59,17 +50,15 @@ export async function saveWorkflow(rawRequest: unknown): Promise<WorkflowActionS
   if (!contracts.ok) errors.push({ field: "hiddenContracts", key: "invalidChoice" });
 
   const candidateUi = {
-    ...ui,
     applications: { hidden_statuses: statuses.ok ? statuses.value : [] },
-    // the other `filters` keys (the company drop-down) are not on this form: kept as they are
-    filters: { ...ui.filters, hidden_workplaces: workplaces.ok ? workplaces.value : [], hidden_contracts: contracts.ok ? contracts.value : [] },
+    filters: { hidden_workplaces: workplaces.ok ? workplaces.value : [], hidden_contracts: contracts.ok ? contracts.value : [] },
   };
   const candidateNotify = {
-    ...notify,
-    reminders: { ...notify.reminders, interested_days: toNumber(data.interestedDays) ?? Number.NaN, applied_days: toNumber(data.appliedDays) ?? Number.NaN },
+    reminders: { interested_days: toNumber(data.interestedDays) ?? Number.NaN, applied_days: toNumber(data.appliedDays) ?? Number.NaN },
   };
-  const uiResult = uiSchema.safeParse(candidateUi);
-  const notifyResult = notifySchema.safeParse(candidateNotify);
+  // Validate both sets of submitted fields before writing either file. Unedited fields are read in the write locks.
+  const uiResult = z.object({ applications: uiSchema.shape.applications, filters: uiSchema.shape.filters }).safeParse(candidateUi);
+  const notifyResult = z.object({ reminders: notifySchema.shape.reminders.pick({ interested_days: true, applied_days: true }) }).safeParse(candidateNotify);
   if (!uiResult.success) {
     for (const issue of uiResult.error.issues) {
       const field: WorkflowField = issue.path[0] === "filters" ? (issue.path[1] === "hidden_contracts" ? "hiddenContracts" : "hiddenWorkplaces") : "hiddenStatuses";
@@ -86,14 +75,24 @@ export async function saveWorkflow(rawRequest: unknown): Promise<WorkflowActionS
 
   // ui.yaml first, then notify.yaml: say which one did not make it
   try {
-    await writeConfig("ui", uiResult.data);
+    await mutateConfig("ui", (current) => {
+      // Both files must be readable before the first write; the directory lease protects this preflight too.
+      reloadConfig("notify");
+      return {
+        ...current,
+        applications: uiResult.data.applications,
+        filters: { ...current.filters, hidden_workplaces: uiResult.data.filters.hidden_workplaces, hidden_contracts: uiResult.data.filters.hidden_contracts },
+      };
+    });
   } catch (error) {
-    return failed(error instanceof ConfigError && error.kind === "frozen" ? "frozen" : "writeFailed", [], "ui");
+    logActionFailure("saveWorkflow", error);
+    return failed(configErrorKey(error) ?? (error instanceof ConfigError ? "unreadable" : "writeFailed"), [], "ui");
   }
   try {
-    await writeConfig("notify", notifyResult.data);
+    await mutateConfig("notify", (current) => ({ ...current, reminders: { ...current.reminders, ...notifyResult.data.reminders } }));
   } catch (error) {
-    return failed(error instanceof ConfigError && error.kind === "frozen" ? "frozen" : "partial", [], "notify");
+    logActionFailure("saveWorkflow", error);
+    return failed(configErrorKey(error) ?? "partial", [], "notify");
   }
   return { status: "saved", nonce: Date.now() };
 }

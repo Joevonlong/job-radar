@@ -4,7 +4,7 @@ import { Languages, Loader2, RefreshCw } from "lucide-react";
 import { useFormatter, useTranslations } from "next-intl";
 import { useEffect, useMemo, useState, useTransition } from "react";
 
-import { translateJobAction, translateStatusAction, type PartialPayload, type TranslateErrorKey } from "@/app/jobs/[id]/actions";
+import { translateJobAction as rawTranslateJobAction, translateStatusAction as rawTranslateStatusAction, type PartialPayload, type TranslateErrorKey } from "@/app/jobs/[id]/actions";
 import { Button } from "@/components/ui/button";
 import { formatClock } from "@/lib/format/clock";
 import { STATUS_POLL_MS, TRANSLATE_WAIT_MAX_MS } from "@/lib/settings/constants";
@@ -14,6 +14,10 @@ import { cn } from "@/lib/utils";
 
 import { markClass } from "./marks";
 import { PlaceholderBox } from "./panel";
+import { callAction, withActionFeedback } from "@/lib/actions/client";
+
+const translateJobAction = withActionFeedback(rawTranslateJobAction)(() => ({ ok: false, error: "failed" }));
+const translateStatusAction = (input: Parameters<typeof rawTranslateStatusAction>[0]) => callAction(() => rawTranslateStatusAction(input), () => null);
 
 const NO_CATEGORIES: MarkerCategories = [];
 

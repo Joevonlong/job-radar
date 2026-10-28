@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useState, useTransition } from "react";
 
-import { finishSetupAction, runFirstCycleAction } from "@/app/setup/actions";
+import { finishSetupAction as rawFinishSetupAction, runFirstCycleAction as rawRunFirstCycleAction } from "@/app/setup/actions";
 import { useControlStatus } from "@/components/settings/use-control-status";
 import { Button } from "@/components/ui/button";
 import { INK_LINK } from "@/components/ui/ink-link";
@@ -21,6 +21,10 @@ import { cn } from "@/lib/utils";
 
 import { StepFrame } from "./step-frame";
 import { stepHref } from "./use-step";
+import { withActionFeedback } from "@/lib/actions/client";
+
+const finishSetupAction = withActionFeedback(rawFinishSetupAction)(() => ({ status: "error", step: "review", fieldErrors: [], formError: "writeFailed", nonce: Date.now() }));
+const runFirstCycleAction = withActionFeedback(rawRunFirstCycleAction)(() => ({ status: "error", error: "databaseUnavailable", nonce: Date.now() }));
 
 const STATUS_ICON = { ok: CheckCircle2, warn: CircleAlert, fail: XCircle } as const;
 /** The settings that are not part of the wizard. */

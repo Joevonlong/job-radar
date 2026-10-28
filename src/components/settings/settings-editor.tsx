@@ -7,7 +7,7 @@ import { parseAsString, parseAsStringLiteral, useQueryState } from "nuqs";
 import { useActionState, useEffect } from "react";
 import { toastTone } from "@/lib/toast";
 
-import { saveSettingsAction } from "@/app/settings/actions";
+import { saveSettingsAction as rawSaveSettingsAction } from "@/app/settings/actions";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { AiDisclosureRow } from "@/lib/ai/disclosure";
 import type { ControlStatus } from "@/lib/settings/status-schema";
@@ -27,6 +27,9 @@ import { AdvancedPanel } from "./advanced/advanced-panel";
 import { ConfigForm, type ProviderStates } from "./config-form";
 import { useControlStatus } from "./use-control-status";
 import { WorkflowPanel } from "./workflow/workflow-panel";
+import { withActionFeedback } from "@/lib/actions/client";
+
+const saveSettingsAction = withActionFeedback(rawSaveSettingsAction)((previous) => previous);
 
 interface SettingsEditorProps {
   sections: SettingsSection[];

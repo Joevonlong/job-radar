@@ -17,7 +17,7 @@ import { DiskNotice } from "@/components/sources/disk-notice";
 import { SummaryStrip } from "@/components/sources/summary-strip";
 import { PageHeader } from "@/components/shell/page-header";
 import { getDb } from "@/lib/db";
-import { getSchedule } from "@/lib/dashboard/context";
+import { getDisplayTimeZone } from "@/lib/dashboard/context";
 import { loadDiskStatus } from "@/lib/ops/disk";
 import { loadBoardCandidates } from "@/lib/sources/candidates";
 import { loadSourcesView } from "@/lib/sources/load";
@@ -40,7 +40,7 @@ export default async function Page() {
     view = null;
   }
   const candidates = view === null ? null : await loadBoardCandidates();
-  const timeZone = getSchedule().timezone;
+  const timeZone = getDisplayTimeZone();
   const disk = view === null ? null : await loadDiskStatus(getDb());
 
   return (

@@ -9,6 +9,8 @@ import { planProjects, specFiltersFromArgv } from "./e2e/projects";
 import { requireTestAdminDatabaseUrl } from "./scripts/test-database";
 
 const PORT = Number(process.env.E2E_PORT ?? 3100);
+// The page-error spec needs a fresh web process with no last-good schedule in its config cache.
+const INVALID_CONFIG = z.enum(["schedule"]).optional().parse(process.env.E2E_INVALID_CONFIG);
 // With E2E_PORT set explicitly, the database and the two directories default to names derived from it, so runs on
 // different ports (e.g. one per git worktree) never share state. Without it the fixed names below apply.
 const PORT_SUFFIX = process.env.E2E_PORT ? `_${PORT}` : "";
@@ -54,7 +56,7 @@ const projects = planProjects(SPEC_FILES, TEST_DIR, SPEC_FILTERS, process.env.E2
 export default defineConfig({
   testDir: TEST_DIR,
   // Starts a stand-in runner (heartbeat, config acknowledgement, control requests) after the web server is up.
-  globalSetup: "./e2e/global-setup.ts",
+  globalSetup: INVALID_CONFIG ? undefined : "./e2e/global-setup.ts",
   fullyParallel: true,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 1 : 0,
@@ -67,7 +69,7 @@ export default defineConfig({
   projects,
   webServer: {
     // CI builds in its own step and sets E2E_SKIP_BUILD, so the app is built once per run.
-    command: `tsx scripts/e2e-prepare.ts && ${process.env.E2E_SKIP_BUILD ? "" : "pnpm build && "}pnpm start -p ${PORT} -H 127.0.0.1`,
+    command: `tsx scripts/e2e-prepare.ts && ${process.env.E2E_SKIP_BUILD ? "" : "pnpm build && "}${INVALID_CONFIG ? "tsx e2e/invalid-config.ts && " : ""}pnpm start -p ${PORT} -H 127.0.0.1`,
     env: {
       DATABASE_URL: E2E_DATABASE_URL,
       E2E_ADMIN_DATABASE_URL: ADMIN_DATABASE_URL,
@@ -78,8 +80,8 @@ export default defineConfig({
       JOB_RADAR_CONFIG_POLL_MS: "500",
       JOB_RADAR_WEB_PASSWORD: E2E_WEB_PASSWORD,
     },
-    url: `http://127.0.0.1:${PORT}`,
-    reuseExistingServer: !process.env.CI,
+    url: `http://127.0.0.1:${PORT}${INVALID_CONFIG ? "/api/health" : ""}`,
+    reuseExistingServer: !INVALID_CONFIG && !process.env.CI,
     timeout: 240_000,
   },
 });
