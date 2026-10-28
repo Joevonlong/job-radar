@@ -24,7 +24,8 @@ Notes for contributors. See also [CONTRIBUTING.md](../CONTRIBUTING.md) and the r
 7. Signals must carry a quote from the job description.
 8. Thresholds, budgets, times, keywords, countries, currencies and user-visible text are configuration or messages,
    never hard-coded. Tests build the configuration they need; they never assert values of the shipped `config/*.yaml`.
-9. Database access only in `src/lib/db/`.
+9. Database access only in `src/lib/db/`. Lint enforces that static, type-only and dynamic imports of `drizzle-orm` and
+   `postgres` stay inside this directory under `src/`.
 
 ## Running things
 
