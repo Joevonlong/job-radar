@@ -226,6 +226,7 @@ Find them with **Closed (N)** or the **Possibly closed** status filter; the deta
 and **Confirm closed**. A source listing them again, or choosing **Still open**, wakes them. Dormant jobs no longer receive
 ordinary link checks. Bookmarks, any user open/closed judgement and applications in `new` through `offer` protect jobs
 from dormancy; rejected, withdrawn and ignored applications and hard-filter overrides do not. Nothing is deleted.
+Any stored closing-phrase quote stays in the detail page's evidence row, including after the job becomes dormant.
 Stored scores and other results remain visible in explicit status views; after waking, the next filter and signal steps
 catch up to the current preferences. The jobs badge excludes dormant and effectively closed jobs; today's badge also
 excludes jobs closed today, so the list, company and badge numbers can become smaller after upgrading.

@@ -24,7 +24,8 @@ export function ClosureNotice({ jobId, title, closure, lastSeenAt, timezone }: C
   const t = useTranslations("dashboard.closed");
   const format = useFormatter();
   const evidence = closure.linkCheck;
-  const hint = useClosedHint(closure.reason, evidence);
+  // The quote belongs to the evidence row, even when another reason takes precedence.
+  const hint = useClosedHint(closure.reason, evidence && { ...evidence, quote: null });
   const override = closure.override;
   const manual = override?.action === "closed";
   const stillListed = manual && lastSeenAt.getTime() > override.createdAt.getTime();
@@ -42,6 +43,7 @@ export function ClosureNotice({ jobId, title, closure, lastSeenAt, timezone }: C
       {evidence ? (
         <p className="font-mono text-data" data-testid="closure-checked">
           {t("checkedOn", { when: format.dateTime(new Date(evidence.at), { dateStyle: "medium", timeStyle: "short", timeZone: timezone }) })}
+          {evidence.outcome === "phrase" && evidence.quote ? <> · <q>{evidence.quote}</q></> : null}
           {checkedUrl ? (
             <>
               {" · "}

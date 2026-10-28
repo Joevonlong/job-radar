@@ -203,6 +203,8 @@ A failure in (a) does not block rollback: follow (c) and accept the display wind
 
 ### Fixed
 
+- Keep the closing-phrase quote visible in job details when the job becomes dormant or another closure reason takes precedence.
+
 - Translation, breakdown and salary lookup keep polling after a temporary status read failure or invalid queue response; translation queue text also applies to container execution.
 
 - **A slow interest pattern no longer freezes the app:** a pattern of a signal category that backtracks badly on long
