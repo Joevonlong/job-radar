@@ -7,7 +7,7 @@
 import { loadConfig, type AiConfig } from "@/lib/config";
 import type { Db } from "@/lib/db/client";
 import { getDbNow } from "@/lib/db/repos/cycles";
-import { describeControlQueue, type ControlQueuePosition, type ControlRequest, type ControlRequestKind } from "@/lib/db/repos/control-requests";
+import { controlLaneOf, describeControlQueue, type ControlQueuePosition, type ControlRequest, type ControlRequestKind } from "@/lib/db/repos/control-requests";
 import { getLatestHeartbeat } from "@/lib/db/repos/heartbeats";
 import { computeHeartbeatAgeSeconds } from "@/lib/health";
 import { isWorkerOnline } from "@/lib/ops/ai-worker";
@@ -70,7 +70,7 @@ export function buildQueueView(input: {
  */
 export async function loadQueueView(
   db: Db,
-  request: Pick<ControlRequest, "id" | "kind" | "status">,
+  request: Pick<ControlRequest, "id" | "kind" | "status" | "payload">,
   options: { ai?: Pick<AiConfig, "execution" | "host_worker">; now?: Date } = {},
 ): Promise<ControlQueueView | null> {
   if (request.status !== "pending" && request.status !== "running") return null;
@@ -78,7 +78,7 @@ export async function loadQueueView(
   const process = requestProcessOf(request.kind, ai.execution);
   const [now, position, heartbeat] = await Promise.all([
     options.now ?? getDbNow(db),
-    describeControlQueue(db, { requestId: request.id, kinds: process === null ? [] : processKinds(process, ai.execution) }),
+    describeControlQueue(db, { requestId: request.id, kinds: process === null ? [] : processKinds(process, ai.execution), lane: process === "ai-worker" ? controlLaneOf(request.kind, request.payload) : "all" }),
     process === null ? null : getLatestHeartbeat(db, process),
   ]);
   return buildQueueView({ status: request.status, process, position, heartbeatAt: heartbeat?.at ?? null, now, offlineAfterSeconds: ai.host_worker.offline_after_seconds });

@@ -7,6 +7,9 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ### Upgrade notes
 
+- **Rolling back past interactive AI lanes:** queued automatic translations can fail on the older worker; the next
+  cycle retries eligible jobs. To preserve the queued requests, remove their automatic-origin markers before rollback
+  as described in [Roll back](docs/upgrade.md#roll-back). User requests retain their existing format.
 - **Remove legacy jobspy dependencies from Compose overrides.** Delete `services.runner.depends_on.jobspy` from your
   `compose.override.yaml` (and any jobspy dependency you added to `db` or `web`), keeping the database dependencies.
   Deploy now refuses dependencies added by overrides before freezing settings, so an unhealthy optional sidecar cannot
@@ -96,6 +99,10 @@ A failure in (a) does not block rollback: follow (c) and accept the display wind
 
 ### Changed
 
+- **Interactive AI requests have their own lane:** translation, breakdown, salary lookup and AI tests can start while
+  a batch runs. Automatic follow-up translations stay in batch; clicking Translate promotes one that is still queued.
+  Concurrent work for the same job and language shares one AI operation. Manual scoring uses the existing time budget,
+  finishes work already started and shows how many jobs remain when the budget stops it.
 - **Waiting buttons follow the process's heartbeat instead of a fixed time limit:** translate, break down, salary
   lookup, the test and "collect now" buttons and "Score now" on a job page keep waiting as long as the process that
   claims the request is alive, instead of giving up after 10 or 12 minutes (the request ran anyway). While a request
@@ -206,6 +213,7 @@ A failure in (a) does not block rollback: follow (c) and accept the display wind
 
 ### Fixed
 
+- Scoring views show the time-budget reason and remaining count even when preparation exhausts the budget before the first job is scored.
 - Splitting merged jobs preserves locations from every linked posting and reports unreadable sources for manual review;
   reprocessing stops its filter and signal batches when the cycle lock is lost.
 - Fixed job identity repairs across cities, linked company mark removal, LinkedIn cross-channel duplicates, concurrent

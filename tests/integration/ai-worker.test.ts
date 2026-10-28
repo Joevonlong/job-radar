@@ -11,7 +11,7 @@ import { createAiRouter } from "@/lib/ai/router";
 import { createAiStep, registerAiSubtask, resetAiSubtasks } from "@/lib/ai/step";
 import type { AiTransport, AiTransportRequest } from "@/lib/ai/types";
 import { ChannelRegistry } from "@/lib/channels/registry";
-import { aiWorkerRequestKinds, processNextControlRequest, registerControlHandler, resetControlHandlers, runnerRequestKinds } from "@/lib/control";
+import { aiWorkerRequestKinds, processNextControlRequest, registerControlHandler, resetControlHandlers, runnerRequestKinds, startControlLanes } from "@/lib/control";
 import { createRunAiHandler } from "@/lib/control/run-ai";
 import { requestRescoreStale } from "@/lib/control/service";
 import { createTranslateJobHandler } from "@/lib/control/translate-job";
@@ -141,6 +141,44 @@ async function addJob(title: string, description = `We are hiring a ${title} to 
 
 const pollOptions = (kinds: () => ReturnType<typeof aiWorkerRequestKinds>) => ({ db: db(), signal: new AbortController().signal, logger: quietLogger, kinds });
 const hostWorker = () => pollOptions(() => aiWorkerRequestKinds("host"));
+
+describe("worker control lanes and shutdown", () => {
+  it.each(["breakdown_job", "test_ai", "salary_lookup"] as const)("abort waits for both lanes and applies the requeue policy by id: %s", async (kind) => {
+    const batch = await insertControlRequest(db(), { kind: "run_ai" });
+    const interactive = await insertControlRequest(db(), { kind });
+    const batchStarted = Promise.withResolvers<void>();
+    const interactiveStarted = Promise.withResolvers<void>();
+    const abort = new AbortController();
+    for (const [requestKind, started] of [["run_ai", batchStarted], [kind, interactiveStarted]] as const) {
+      registerControlHandler(requestKind, async (_request, { signal }) => {
+        started.resolve();
+        await new Promise<void>((resolve) => { signal.addEventListener("abort", () => resolve(), { once: true }); });
+        return { status: "failed", result: { error: "aborted" } };
+      });
+    }
+    const poller = startControlLanes({ ...hostWorker(), signal: abort.signal, maxRequeues: () => 3, pollSeconds: () => 1 });
+    try {
+      await Promise.all([batchStarted.promise, interactiveStarted.promise]);
+    } finally {
+      abort.abort();
+      await poller;
+    }
+    expect(await getControlRequest(db(), batch.id)).toMatchObject({ status: "pending", startedAt: null, result: { interruptions: 1 } });
+    expect(await getControlRequest(db(), interactive.id)).toMatchObject(kind === "breakdown_job"
+      ? { status: "pending", startedAt: null, result: { interruptions: 1 } }
+      : { status: "failed", result: { error: "aborted" } });
+  });
+
+  it("the once-mode drain still processes all kinds in id order without lane selection", async () => {
+    const rows = [];
+    for (const kind of ["run_ai", "translate_job", "score_jobs", "breakdown_job"] as const) {
+      registerControlHandler(kind, async () => ({ status: "done", result: {} }));
+      rows.push(await insertControlRequest(db(), { kind }));
+    }
+    for (const row of rows) expect(await processNextControlRequest(hostWorker())).toMatchObject({ id: row.id, status: "done" });
+    expect(await processNextControlRequest(hostWorker())).toBeNull();
+  });
+});
 
 /** Registers exactly what the container runner registers for `ai` + `notify` and runs one cycle without channels. */
 async function runnerCycle() {
@@ -363,10 +401,10 @@ describe("the ai-worker handles translate_job and rescore_stale", () => {
     const jobId = await addJob("Alpha");
     registerControlHandler("translate_job", createTranslateJobHandler({ createRouter: () => ai.router }));
 
-    const queued = await requestTranslateJob(db(), { jobId, force: false });
+    const queued = await requestTranslateJob(db(), { jobId, force: false, origin: "user" });
     expect(queued).toMatchObject({ state: "queued", existing: false });
     if (queued.state !== "queued") throw new Error("expected a queued request");
-    expect(await requestTranslateJob(db(), { jobId, force: false })).toMatchObject({ state: "queued", requestId: queued.requestId, existing: true });
+    expect(await requestTranslateJob(db(), { jobId, force: false, origin: "user" })).toMatchObject({ state: "queued", requestId: queued.requestId, existing: true });
     expect(await readTranslateRequest(db(), { requestId: queued.requestId, jobId })).toMatchObject({ state: "waiting", stage: "pending", partial: null, queue: { ahead: 0 } });
     // another job's page cannot read this request
     expect(await readTranslateRequest(db(), { requestId: queued.requestId, jobId: jobId + 1 })).toEqual({ state: "missing" });
@@ -379,19 +417,19 @@ describe("the ai-worker handles translate_job and rescore_stale", () => {
     expect(ai.tasks).toEqual(["translate"]);
 
     // now a current translation exists: no new request, no AI
-    expect(await requestTranslateJob(db(), { jobId, force: false })).toMatchObject({ state: "cached" });
-    expect(await requestTranslateJob(db(), { jobId, force: true })).toMatchObject({ state: "queued", existing: false });
+    expect(await requestTranslateJob(db(), { jobId, force: false, origin: "user" })).toMatchObject({ state: "cached" });
+    expect(await requestTranslateJob(db(), { jobId, force: true, origin: "user" })).toMatchObject({ state: "queued", existing: false });
   });
 
   it("translate_job: refuses what cannot be translated and reports a provider outage with its code", async () => {
-    expect(await requestTranslateJob(db(), { jobId: 9999, force: false })).toEqual({ state: "error", error: "not_found" });
+    expect(await requestTranslateJob(db(), { jobId: 9999, force: false, origin: "user" })).toEqual({ state: "error", error: "not_found" });
     const empty = await addJob("Empty", "   ");
-    expect(await requestTranslateJob(db(), { jobId: empty, force: false })).toEqual({ state: "error", error: "no_description" });
+    expect(await requestTranslateJob(db(), { jobId: empty, force: false, origin: "user" })).toEqual({ state: "error", error: "no_description" });
 
     const down = fakeAi({ fail: new AiProviderError("claude-cli", "auth", "login expired") });
     registerControlHandler("translate_job", createTranslateJobHandler({ createRouter: () => down.router }));
     const jobId = await addJob("Alpha");
-    const queued = await requestTranslateJob(db(), { jobId, force: false });
+    const queued = await requestTranslateJob(db(), { jobId, force: false, origin: "user" });
     if (queued.state !== "queued") throw new Error("expected a queued request");
     expect(await processNextControlRequest(hostWorker())).toMatchObject({ status: "failed", result: { error: "auth" } });
     expect(await readTranslateRequest(db(), { requestId: queued.requestId, jobId })).toMatchObject({ state: "failed", error: "auth", partial: { done: 0 } });
