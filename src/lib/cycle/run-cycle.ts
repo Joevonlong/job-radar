@@ -12,9 +12,9 @@ import type { ChannelLogger, KnownPostings } from "@/lib/channels/types";
 import { freshenConfig, loadConfig, type ChannelsConfig, type ScheduleConfig, type SearchConfig } from "@/lib/config";
 import { cycleCovers } from "@/lib/control/cycle-coverage";
 import { getDb, type Db } from "@/lib/db/client";
-import { createCycle, createSkippedCycle, finishCycle, listRunningCycles, type CycleKind } from "@/lib/db/repos/cycles";
+import { createCycle, createSkippedCycle, failOrphanedCycles, finishCycle, listRunningCycles, type CycleKind } from "@/lib/db/repos/cycles";
 
-import { findCycleLockHolder, withCycleLock } from "./lock";
+import { findCycleLockHolder, withCycleLock, type CycleLockHolder } from "./lock";
 import { startWaitingForLock } from "./lock-waiters";
 import { listCycleSteps, type CycleStepName, type CycleStepContext } from "./steps";
 
@@ -110,7 +110,7 @@ function errorText(error: unknown): string {
  * finds the lock held by a cycle limited to channels it needs as well (a "collect now" of one channel) waits for it
  * instead, at most `schedule.partial_cycle_wait.max_minutes`, then runs; a skipped cycle names the running cycle that
  * covers it in `summary.coveredBy`. The running cycle is the one that holds the lock (its row records the lock
- * transaction's backend pid), not just any row left `running`.
+ * session's backend pid), not just any row left `running`.
  */
 export async function runCycle(kind: CycleKind, options: RunCycleOptions = {}): Promise<CycleRunResult> {
   const dryRun = options.dryRun ?? false;
@@ -139,7 +139,15 @@ export async function runCycle(kind: CycleKind, options: RunCycleOptions = {}): 
     startedAt: now().toISOString(),
   };
 
-  const execute = async (writeDb: Db | null, readDb: Db | null, lockPid?: number): Promise<CycleRunResult> => {
+  const execute = async (writeDb: Db | null, readDb: Db | null, holder?: CycleLockHolder): Promise<CycleRunResult> => {
+    const signal = holder?.signal ?? options.signal ?? new AbortController().signal;
+    // Owning the lock proves that the previous body ended. Recover a crashed CLI or a failed finish write before
+    // creating this cycle, so channel tests, deployment drain and delegated work do not wait for a runner restart.
+    if (writeDb && !dryRun) {
+      signal.throwIfAborted();
+      await failOrphanedCycles(writeDb, "previous cycle ended without finishing its row");
+    }
+    const lockPid = holder?.pid;
     const startedMs = now().getTime();
     // a cycle that waited for the lock starts now, not when it was asked for
     const runSummary = { ...baseSummary, startedAt: new Date(startedMs).toISOString() };
@@ -148,7 +156,6 @@ export async function runCycle(kind: CycleKind, options: RunCycleOptions = {}): 
     const known = (channelId: string): KnownPostings => (readDb ? createDbKnownPostings(readDb, channelId) : NO_KNOWN_POSTINGS);
     // recorded at once: a cycle that finds the lock taken reads which channels this one covers, and whether it is the holder
     const cycleRow = !dryRun && writeDb ? await createCycle(writeDb, { kind, summary: { ...runSummary, ...(lockPid ? { lockPid } : {}) } }) : null;
-    const signal = options.signal ?? new AbortController().signal;
     const steps: StepSummary[] = [];
     const results: Partial<Record<CycleStepName, unknown>> = {};
     let finalStatus: Exclude<CycleStatus, "skipped"> = "failed";
@@ -262,7 +269,7 @@ export async function runCycle(kind: CycleKind, options: RunCycleOptions = {}): 
   if (db === null) throw new Error("runCycle: a database is required unless dryRun is set"); // unreachable (checked above); narrows the type
 
   if (!config.schedule.skip_if_running) {
-    const locked = await withCycleLock(db, "wait", (holder) => execute(db, db, holder.pid));
+    const locked = await withCycleLock(db, "wait", (holder) => execute(db, db, holder), { signal: options.signal });
     if (locked.acquired) return locked.value;
   }
 
@@ -292,10 +299,10 @@ export async function runCycle(kind: CycleKind, options: RunCycleOptions = {}): 
           config.search = loadConfig("search");
           config.schedule = loadConfig("schedule");
         }
-        return execute(db, db, holder.pid);
-      });
+        return execute(db, db, holder);
+      }, { signal: options.signal });
       if (locked.acquired) return locked.value;
-      // Only the cycle whose lock transaction holds the lock counts: a row a crash left `running` covers nothing.
+      // Only the cycle whose dedicated session holds the lock counts: a row a crash left `running` covers nothing.
       const holderPid = await findCycleLockHolder(db);
       if (holderPid === null && lockJustFreed < 3) {
         lockJustFreed += 1; // released between the try and the look: try again at once

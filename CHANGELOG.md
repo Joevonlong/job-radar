@@ -206,6 +206,10 @@ A failure in (a) does not block rollback: follow (c) and accept the display wind
 
 ### Fixed
 
+- Splitting merged jobs preserves locations from every linked posting and reports unreadable sources for manual review;
+  reprocessing stops its filter and signal batches when the cycle lock is lost.
+- Fixed job identity repairs across cities, linked company mark removal, LinkedIn cross-channel duplicates, concurrent
+  reprocessing and cycle interruption cleanup; reprocessing now shares the cycle's dedicated database lock.
 - **A broken jobspy sidecar no longer stops a deploy halfway:** the runner no longer waits for the sidecar, and
   `scripts/ops/deploy.sh` starts db, web and runner first, then the sidecar on its own. When the sidecar does not turn
   healthy the deploy warns and still runs the migration, the ai-worker switch and the config writes; the doctor reports it

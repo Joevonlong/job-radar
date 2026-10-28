@@ -95,13 +95,16 @@ export async function findJobByFamilyExternalId(
   db: Executor,
   input: { family: string; externalId: string; excludeRawPostingId: number },
 ): Promise<Job | null> {
+  // A partial upgrade may already hold both guest spellings. Match legacy ids too without discarding either raw payload.
+  const canonicalId = input.family === "linkedin" ? input.externalId.replace(/^li-/, "") : input.externalId;
+  const externalIds = input.family === "linkedin" ? [canonicalId, `li-${canonicalId}`] : [canonicalId];
   const [row] = await db
     .select({ jobId: jobSources.jobId })
     .from(jobSources)
     .innerJoin(rawPostings, eq(rawPostings.id, jobSources.rawPostingId))
     .where(
       and(
-        eq(rawPostings.externalId, input.externalId),
+        inArray(rawPostings.externalId, externalIds),
         sql`${rawPostings.id} <> ${input.excludeRawPostingId}`,
         inArray(rawPostings.channelId, db.select({ id: channels.id }).from(channels).where(eq(channels.family, input.family))),
       ),

@@ -5741,6 +5741,9 @@
     }
   },
   "cli": {
+    "reprocess": {
+      "needsReview": "  需要人工复核的岗位（保持原样）：{ids}"
+    },
     "sourcesList": {
       "heading": "来源清单 {file} · {total} 个来源 · {mirror}",
       "mirrorDbDown": "数据库不可用",

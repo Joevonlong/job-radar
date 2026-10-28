@@ -3,12 +3,14 @@ import type { PipelineConfig } from "@/lib/config";
 import type { Db } from "@/lib/db/client";
 import { addCompanyAlias, foldCompanyInto, insertCompanyIfAbsent, listCompanyKeys, setCompanyNameNorm } from "@/lib/db/repos/companies";
 import { listJobsWithRawPostings, unlinkJobSources } from "@/lib/db/repos/job-sources";
-import { jobIdsWithUserState, listJobTitleKeys, setJobTitleNorms } from "@/lib/db/repos/jobs";
+import { jobIdsWithUserState, listJobTitleKeys, setJobTitleNorms, updateJob } from "@/lib/db/repos/jobs";
 import { requeueRawPostingsById, type RawPosting } from "@/lib/db/repos/raw-postings";
 import { getRuntimeState, setRuntimeState } from "@/lib/db/repos/runtime-state";
 import { rekeySalaryLookupTitles } from "@/lib/db/repos/salary-lookups";
+import type { JobLocation } from "@/lib/domain/types";
 
 import { normalizeCompanyKey, resolveCompanyName } from "./company";
+import { unionLocations } from "./dedupe";
 import { slugify } from "./geography";
 import { normalizeTitle } from "./normalize";
 
@@ -239,7 +241,7 @@ export interface SplitMergedResult {
   rawRequeued: number;
   /** Split jobs the user had acted on (application, favourite, override): worth a look. Their company is unchanged. */
   splitWithUserState: number[];
-  /** Jobs the user had acted on whose own postings name another company now: left where they are, worth a look. */
+  /** Jobs left unchanged for manual review: an unreadable linked posting or a company move that would affect user state. */
   needsReview: number[];
   aborted: boolean;
 }
@@ -247,6 +249,7 @@ export interface SplitMergedResult {
 export interface PostingIdentity {
   companyName: string;
   title: string;
+  locations: JobLocation[];
   /** The posting's cities (normalized, as the exact match compares them). */
   cities: string[];
 }
@@ -308,18 +311,28 @@ export async function splitMergedJobs(db: Db, options: SplitMergedOptions): Prom
 
   let afterId = 0;
   for (;;) {
-    const batch = await listJobsWithRawPostings(db, { afterId, limit: config.batch_size });
+    const batch = await listJobsWithRawPostings(db, { afterId, limit: config.batch_size, includeUnparsed: true });
     if (batch.length === 0) break;
     const acted = await jobIdsWithUserState(db, batch.map((job) => job.jobId));
     for (const job of batch) {
       if (options.signal?.aborted) return { ...result, aborted: true };
       afterId = job.jobId;
+      const unreadable: number[] = [];
       const sources = job.sources.flatMap((source) => {
         const identity = options.identityOf(source.raw);
-        return identity === undefined ? [] : [{ rawId: source.raw.id, identity, v1: v1(identity), v2: v2(identity) }];
+        if (identity === undefined) {
+          unreadable.push(source.raw.id);
+          return [];
+        }
+        return [{ rawId: source.raw.id, identity, v1: v1(identity), v2: v2(identity) }];
       });
       if (!sources.some((source) => changedByVersion2(source.identity))) continue;
       result.jobsChecked += 1;
+      if (unreadable.length > 0) {
+        result.needsReview.push(job.jobId);
+        options.logger.warn("merged job left unchanged because linked postings could not be parsed", { jobId: job.jobId, rawPostingIds: unreadable });
+        continue;
+      }
 
       const ownCompany = companyKeyById.get(job.companyId);
       const ownTitle = normalizeTitle(job.title);
@@ -338,6 +351,11 @@ export async function splitMergedJobs(db: Db, options: SplitMergedOptions): Prom
       await db.transaction(async (tx) => {
         if (detached.length > 0) {
           result.sourcesUnlinked += await unlinkJobSources(tx, job.jobId, detached);
+          // Locations accumulate during normal merges. Leaving a detached source's city here would make the exact-key
+          // pass file it straight back into this job. Rebuild from every retained source, in apply-link priority order.
+          const removed = new Set(detached);
+          const locations = sources.filter((source) => !removed.has(source.rawId)).reduce<JobLocation[]>((all, source) => unionLocations(all, source.identity.locations), []);
+          await updateJob(tx, job.jobId, { locationsJson: locations });
           result.jobsSplit += 1;
           if (userState) result.splitWithUserState.push(job.jobId);
         }
