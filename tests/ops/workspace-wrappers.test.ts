@@ -10,13 +10,26 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
  * The workspace's thin wrappers (scripts/<name>.sh -> job-radar/scripts/ops/<name>.sh) must behave exactly like the product
  * scripts: same arguments, same output, same exit codes. They only exist while the product sits inside the workspace
  * repository, so the whole suite is skipped in a standalone product checkout.
+ * The product can be at <workspace>/job-radar or <workspace>/.claude/worktrees/<id>.
+ * JOB_RADAR_TEST_WORKSPACE_DIR overrides discovery (relative paths resolve from cwd); point it at an empty directory
+ * to exercise the standalone skip without falling back to the surrounding workspace.
  */
-const workspace = path.resolve(import.meta.dirname, "../../..");
-const productOps = path.resolve(import.meta.dirname, "../../scripts/ops");
+const productRoot = path.resolve(import.meta.dirname, "../..");
+const productParent = path.dirname(productRoot);
+const inWorkerWorktree = path.basename(productParent) === "worktrees" && path.basename(path.dirname(productParent)) === ".claude";
+const workspace = path.resolve(
+  process.env.JOB_RADAR_TEST_WORKSPACE_DIR ?? (inWorkerWorktree ? path.resolve(productParent, "../..") : productParent),
+);
+const productOps = path.join(productRoot, "scripts/ops");
 const productLib = path.join(productOps, "lib");
 const wrapperDir = path.join(workspace, "scripts");
 const names = ["deploy", "backup", "restore", "install-ai-worker", "uninstall-ai-worker"];
 const present = names.every((n) => fs.existsSync(path.join(wrapperDir, `${n}.sh`)));
+
+if (!present) {
+  console.warn(`Skipping workspace wrappers: required scripts/<name>.sh files were not found in ${workspace}. `
+    + "Standalone product checkouts do not include these wrappers; set JOB_RADAR_TEST_WORKSPACE_DIR to override discovery.");
+}
 
 let tmp = "";
 let ws = "";
