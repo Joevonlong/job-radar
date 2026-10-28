@@ -1,6 +1,8 @@
 import { spawnSync } from "node:child_process";
+import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 
 import postgres from "postgres";
 import { afterAll, afterEach, beforeAll, describe, expect, inject, it } from "vitest";
@@ -60,6 +62,37 @@ function runWorkerOnce(): { status: number | null; output: string } {
 }
 
 describe("single-instance lock (ai-worker)", () => {
+  it("acquires by URL without application path aliases, as a standalone worker does", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "instance-lock-loader-"));
+    const tsconfig = path.join(tmp, "tsconfig.json");
+    fs.writeFileSync(tsconfig, JSON.stringify({ compilerOptions: { module: "esnext", target: "es2022" } }));
+    try {
+      const result = spawnSync(process.execPath, [
+        "--import", pathToFileURL(path.join(APP_ROOT, "node_modules/tsx/dist/loader.mjs")).href,
+        "--input-type=module", "--eval", `
+          import { acquireInstanceLock } from ${JSON.stringify(pathToFileURL(path.join(APP_ROOT, "src/lib/db/instance-lock.ts")).href)};
+          const result = await acquireInstanceLock(process.env.DATABASE_URL, { name: "ai-worker" });
+          if (!result.acquired) throw new Error("lock not acquired");
+          try {
+            console.log(await result.lock.check());
+          } finally {
+            await result.lock.release();
+          }
+        `,
+      ], {
+        cwd: tmp,
+        env: { NODE_ENV: "test", DATABASE_URL: url, VITEST: "true", TSX_TSCONFIG_PATH: tsconfig },
+        encoding: "utf8",
+        timeout: 15_000,
+        killSignal: "SIGKILL",
+      });
+      expect(result.status, result.stderr).toBe(0);
+      expect(result.stdout.trim()).toBe("held");
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
   it("the first process gets it, a second one is refused and told who holds it", async () => {
     const first = await take();
     expect(first.acquired).toBe(true);

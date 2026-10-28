@@ -2,7 +2,7 @@ import os from "node:os";
 
 import postgres, { type Sql } from "postgres";
 
-import { databaseUrlFor, type Db } from "./client";
+import type { Db } from "./client";
 import { assertTestDatabase } from "./test-guard";
 
 /**
@@ -104,7 +104,10 @@ async function holderOf(sql: Sql, k1: number, k2: number): Promise<LockHolder | 
  */
 export async function acquireInstanceLock(database: string | Db, options: AcquireOptions): Promise<AcquireResult> {
   if (options.signal?.aborted) return { acquired: false, holder: null };
-  const url = typeof database === "string" ? database : databaseUrlFor(database);
+  // URL callers do not need the application pool, schema or path aliases.
+  const url = typeof database === "string" ? database : (await import("./client")).databaseUrlFor(database);
+  // Cancellation can arrive while the pool module loads.
+  if (options.signal?.aborted) return { acquired: false, holder: null };
   const [k1, k2] = options.key ?? AI_WORKER_LOCK_KEY;
   assertTestDatabase(url);
   const sql = postgres(url, {
