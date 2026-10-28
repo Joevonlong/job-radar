@@ -94,7 +94,7 @@ export async function findMatchingJob(db: Executor, input: MatchInput, config: P
       }
     }
   }
-  if (hash !== null) {
+  if (hash !== null && input.normalized.titleNorm !== "") {
     const companyKey = resolveCompanyName(input.companyName, config).nameNorm;
     for (const candidate of await listJobsOfOtherCompaniesByTitle(db, input.companyId, input.normalized.titleNorm)) {
       if (candidate.simhash === null || !relatedCompanyKeys(companyKey, candidate.companyNameNorm)) continue;

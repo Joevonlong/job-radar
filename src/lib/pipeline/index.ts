@@ -276,21 +276,25 @@ export async function refreshStoredSalaries(db: Db, options: PipelineOptions & {
   });
 }
 
+/** `ok`: the stored keys are current (`result` null: nothing was due). Not `ok`: the recompute failed or was stopped. */
+export type IdentityKeyRefresh = { ok: true; result: IdentityKeyRefreshResult | null } | { ok: false; error: string };
+
 /**
  * Recompute the stored company and title keys once per key version (see `refreshIdentityKeysIfStale`), before any posting is
- * matched with the new keys. Never fails: a problem is logged and the keys are tried again next time.
+ * matched with the new keys. Never throws: a failure is logged and returned, and the caller must not file postings then.
  */
-export async function refreshStoredIdentityKeys(db: Db, options: Pick<PipelineOptions, "config" | "logger" | "signal"> & { force?: boolean }): Promise<IdentityKeyRefreshResult | null> {
+export async function refreshStoredIdentityKeys(db: Db, options: Pick<PipelineOptions, "config" | "logger" | "signal"> & { force?: boolean }): Promise<IdentityKeyRefresh> {
   try {
-    return await refreshIdentityKeysIfStale(db, {
+    const result = await refreshIdentityKeysIfStale(db, {
       config: options.config,
       logger: options.logger,
       ...(options.signal ? { signal: options.signal } : {}),
       ...(options.force ? { force: true } : {}),
     });
+    return result?.aborted ? { ok: false, error: "aborted" } : { ok: true, result };
   } catch (error) {
     options.logger.warn("company and title keys could not be recomputed", { error: describeError(error) });
-    return null;
+    return { ok: false, error: describeError(error).slice(0, MAX_REASON_CHARS) };
   }
 }
 
@@ -302,14 +306,20 @@ export async function splitMergedJobsOf(db: Db, options: PipelineOptions): Promi
     ...(options.signal ? { signal: options.signal } : {}),
     identityOf: (raw) => {
       const prepared = parseAndNormalize(raw, options);
-      return prepared.ok ? { companyName: prepared.normalized.companyName, title: prepared.normalized.title } : undefined;
+      if (!prepared.ok) return undefined;
+      const { companyName, title, locations } = prepared.normalized;
+      return { companyName, title, cities: locations.flatMap((location) => (location.city ? [location.city] : [])) };
     },
   });
 }
 
 export async function pipelineStep(ctx: CycleStepContext): Promise<StepResult> {
   const db = requireDb(ctx);
-  await refreshStoredIdentityKeys(db, { config: loadPipeline(), logger: ctx.logger, signal: ctx.signal });
+  // Filing with the new keys against a table that still holds old ones would create companies and jobs next to the stored
+  // ones, and such duplicates are never merged afterwards. So when the keys cannot be brought up to date, nothing is filed:
+  // the postings stay `pending` (stored, C1), the step fails visibly, and the next cycle tries again.
+  const keys = await refreshStoredIdentityKeys(db, { config: loadPipeline(), logger: ctx.logger, signal: ctx.signal });
+  if (!keys.ok) return { status: "failed", result: { identityKeys: { error: keys.error }, filed: 0 } };
   // the display names of config/sources.yaml (ats_boards) reach companies that were created before a name was corrected
   try {
     const names = await syncCompanyDisplayNames(db, { companies: loadCompanies().companies, pipeline: loadPipeline() });

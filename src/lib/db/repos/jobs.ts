@@ -4,7 +4,7 @@ import { FOLLOWING_STATUSES } from "@/lib/applications/following";
 import type { LinkCheckEvidence } from "@/lib/jobs/link-check-evidence";
 
 import type { Executor } from "../executor";
-import { applications, channels, companies, jobClosureOverrides, jobFavorites, jobSources, jobs, rawPostings } from "../schema";
+import { applications, channels, companies, jobClosureOverrides, jobFavorites, jobFilterOverrides, jobSources, jobs, rawPostings } from "../schema";
 
 export type Job = typeof jobs.$inferSelect;
 export type NewJob = typeof jobs.$inferInsert;
@@ -50,11 +50,30 @@ export async function listJobTitleKeys(db: Executor, input: { afterId: number; l
     .limit(input.limit);
 }
 
-/** Store new title keys, one `update` for all rows. */
-export async function setJobTitleNorms(db: Executor, rows: ReadonlyArray<{ id: number; titleNorm: string }>): Promise<void> {
-  if (rows.length === 0) return;
-  const values = sql.join(rows.map((row) => sql`(${row.id}::bigint, ${row.titleNorm}::text)`), sql`, `);
-  await db.execute(sql`update jobs set title_norm = v.title_norm from (values ${values}) as v(id, title_norm) where jobs.id = v.id`);
+/**
+ * Store new title keys, one `update` for all rows; a row whose title changed since it was read keeps its key (the writer of
+ * the new title wrote its key). Returns the ids that changed.
+ */
+export async function setJobTitleNorms(db: Executor, rows: ReadonlyArray<{ id: number; title: string; titleNorm: string }>): Promise<number[]> {
+  if (rows.length === 0) return [];
+  const values = sql.join(rows.map((row) => sql`(${row.id}::bigint, ${row.title}::text, ${row.titleNorm}::text)`), sql`, `);
+  const changed = await db.execute<{ id: string | number }>(
+    sql`update jobs set title_norm = v.title_norm from (values ${values}) as v(id, title, title_norm) where jobs.id = v.id and jobs.title = v.title returning jobs.id`,
+  );
+  return [...changed].map((row) => Number(row.id));
+}
+
+/** Of these jobs, the ones with something the user did on them: an application (status, notes), a favourite, a filter or closure override. */
+export async function jobIdsWithUserState(db: Executor, ids: readonly number[]): Promise<Set<number>> {
+  if (ids.length === 0) return new Set();
+  const list = [...ids];
+  const found = await Promise.all([
+    db.select({ id: applications.jobId }).from(applications).where(inArray(applications.jobId, list)),
+    db.select({ id: jobFavorites.jobId }).from(jobFavorites).where(inArray(jobFavorites.jobId, list)),
+    db.select({ id: jobFilterOverrides.jobId }).from(jobFilterOverrides).where(inArray(jobFilterOverrides.jobId, list)),
+    db.select({ id: jobClosureOverrides.jobId }).from(jobClosureOverrides).where(inArray(jobClosureOverrides.jobId, list)),
+  ]);
+  return new Set(found.flat().map((row) => row.id));
 }
 
 /**

@@ -5,7 +5,9 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { normalizeCompanyKey, resolveCompanyName } from "@/lib/pipeline/company";
-import { legacyCompanyKey, legacyTitleKey } from "@/lib/pipeline/identity-keys";
+import { slugify } from "@/lib/pipeline/geography";
+import { legacyCitySlug, legacyCompanyKey, legacyTitleKey } from "@/lib/pipeline/identity-keys";
+import { rekeySalaryLookupKey, salaryLookupKey } from "@/lib/salary/lookup-key";
 import { normalizeTitle } from "@/lib/pipeline/normalize";
 
 import { pipelineWith, shippedPipeline } from "./helpers";
@@ -86,6 +88,11 @@ describe("identity keys in Latin script are unchanged", () => {
     expect(differing).toEqual([]);
   });
 
+  it("city slugs equal the previous version for every Latin-script fixture string", () => {
+    const latin = corpus.filter((text) => latinOnly(text, /ß/));
+    expect(latin.filter((text) => slugify(text) !== legacyCitySlug(text))).toEqual([]);
+  });
+
   it("the existing key rules still hold", () => {
     expect(normalizeTitle("Größe & Übung Engineer")).toBe("grosse and ubung engineer");
     expect(normalizeTitle("Straßenbau Ingenieur")).toBe(normalizeTitle("Strassenbau Ingenieur"));
@@ -156,5 +163,32 @@ describe("identity keys in other scripts", () => {
     expect(resolveCompanyName("Яндекс", withAlias).name).toBe("Yandex");
     // with key version 1 the alias keyed as "", so every name without Latin letters resolved to that company
     expect(resolveCompanyName("株式会社メルカリ", withAlias)).toEqual({ name: "株式会社メルカリ", nameNorm: "株式会社メルカリ", aliases: [] });
+  });
+});
+
+describe("city slugs in other scripts", () => {
+  it("are non-empty and different", () => {
+    const cities = ["東京", "大阪", "Москва", "Αθήνα", "서울", "תל אביב"];
+    const slugs = cities.map(slugify);
+    for (const slug of slugs) expect(slug).not.toBe("");
+    expect(new Set(slugs).size).toBe(cities.length);
+  });
+});
+
+describe("salary lookup keys follow a recomputed key", () => {
+  const job = { companyNorm: "", titleNorm: "", seniority: "unknown", location: { label: "Berlin", city: "Berlin", countryCode: "DE", isPrimary: true } };
+
+  it("rewrites the company or the title part", () => {
+    const key = salaryLookupKey(job, null);
+    expect(key).toBe("-|-|-|unknown|de|berlin");
+    const company = rekeySalaryLookupKey(key, "company", "", "яндекс");
+    expect(company).toBe(salaryLookupKey({ ...job, companyNorm: "яндекс" }, null));
+    expect(rekeySalaryLookupKey(company!, "title", "", "разработчик")).toBe(salaryLookupKey({ ...job, companyNorm: "яндекс", titleNorm: "разработчик" }, null));
+  });
+
+  it("leaves a key that does not hold the old value, and a shortened one", () => {
+    expect(rekeySalaryLookupKey("acme|-|-|unknown|de|berlin", "company", "other", "x")).toBeNull();
+    const long = salaryLookupKey({ ...job, companyNorm: "acme", titleNorm: "very long title ".repeat(40) }, null);
+    expect(rekeySalaryLookupKey(long, "company", "acme", "acme-labs")).toBeNull();
   });
 });

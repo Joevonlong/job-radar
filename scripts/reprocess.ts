@@ -66,10 +66,16 @@ async function main(): Promise<number> {
     const interests = loadConfig("interests");
     // --split-merged recomputes the keys even when this key version already did (rows a rolled-back version wrote since)
     const keys = await refreshStoredIdentityKeys(db, { config: pipelineConfig, logger, force: splitMerged });
-    if (keys) console.log("company and title keys:", JSON.stringify(keys));
+    if (!keys.ok) {
+      console.error(`reprocess: the company and title keys could not be recomputed (${keys.error}); nothing was reprocessed`);
+      return 1;
+    }
+    if (keys.result) console.log("company and title keys:", JSON.stringify(keys.result));
     if (splitMerged) {
       const split = await splitMergedJobsOf(db, { config: pipelineConfig, registry: defaultRegistry, logger });
       console.log(`merged jobs: checked=${split.jobsChecked} split=${split.jobsSplit} postings detached=${split.sourcesUnlinked} postings put back to pending=${split.rawRequeued}`);
+      if (split.splitWithUserState.length > 0) console.log(`  split jobs you had acted on (worth a look): ${split.splitWithUserState.join(", ")}`);
+      if (split.needsReview.length > 0) console.log(`  jobs you had acted on whose postings now name another company (left as they are): ${split.needsReview.join(", ")}`);
     }
     // Reading every posting again rebuilds these facts completely; with --channel only some postings come back,
     // so the other channels' jobs keep what they have (and old wrong flags stay until a full reprocess).

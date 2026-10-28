@@ -9,6 +9,7 @@ import { resetCycleSteps } from "@/lib/cycle/steps";
 import { closeDb, getDb, schema } from "@/lib/db";
 import { runMigrations } from "@/lib/db/migrate";
 import { getRuntimeState } from "@/lib/db/repos/runtime-state";
+import { syncCompanyDisplayNames } from "@/lib/pipeline/company-names";
 import { refreshIdentityKeysIfStale, refreshStoredIdentityKeys, runPipeline, splitMergedJobsOf } from "@/lib/pipeline";
 import { IDENTITY_KEYS_STATE_KEY, IDENTITY_KEYS_VERSION, legacyCompanyKey, legacyTitleKey } from "@/lib/pipeline/identity-keys";
 
@@ -46,6 +47,18 @@ const suffixes = pipelineConfig.company.legal_suffixes;
 const allJobs = () => getDb().select().from(schema.jobs).orderBy(schema.jobs.id);
 const allCompanies = () => getDb().select().from(schema.companies).orderBy(schema.companies.id);
 const allSources = () => getDb().select().from(schema.jobSources).orderBy(schema.jobSources.id);
+const allLookups = () => getDb().select().from(schema.salaryLookups).orderBy(schema.salaryLookups.id);
+const companyNamed = async (name: string) => (await allCompanies()).find((c) => c.name === name)!;
+const jobTitled = async (title: string) => (await allJobs()).find((job) => job.title === title)!;
+
+/** A finished salary lookup of the job, as the ai-worker stores it. */
+async function insertLookup(jobId: number, companyId: number, lookupKey: string): Promise<number> {
+  const [row] = await getDb()
+    .insert(schema.salaryLookups)
+    .values({ companyId, jobId, lookupKey, status: "done", promptVersion: "salary-v1", expiresAt: new Date(Date.now() + 86_400_000) })
+    .returning({ id: schema.salaryLookups.id });
+  return row!.id;
+}
 const forgetKeyVersion = () => getDb().delete(schema.runtimeState).where(eq(schema.runtimeState.key, IDENTITY_KEYS_STATE_KEY));
 
 /** What `pnpm reprocess --split-merged` does before its pipeline run, then that run (only the pending postings). */
@@ -163,7 +176,7 @@ describe("recomputing the stored keys after the upgrade", () => {
     expect(before.jobs).toHaveLength(4);
 
     const result = await refreshIdentityKeysIfStale(getDb(), { config: pipelineConfig, logger: quietLogger });
-    expect(result).toEqual({ companiesRekeyed: 0, companiesFolded: 0, jobsRekeyed: 0, aborted: false });
+    expect(result).toEqual({ companiesRekeyed: 0, companiesFolded: 0, companiesKeptUnderLatinKey: 0, jobsRekeyed: 0, aborted: false });
     const split = await splitMergedJobsOf(getDb(), { config: pipelineConfig, registry, logger: quietLogger });
     expect(split).toMatchObject({ jobsChecked: 0, jobsSplit: 0, sourcesUnlinked: 0, rawRequeued: 0 });
 
@@ -191,7 +204,7 @@ describe("recomputing the stored keys after the upgrade", () => {
     const yandexJob = (await allJobs()).find((job) => job.title === "Разработчик")!;
 
     const result = await refreshIdentityKeysIfStale(db, { config: pipelineConfig, logger: quietLogger });
-    expect(result).toEqual({ companiesRekeyed: 1, companiesFolded: 2, jobsRekeyed: 3, aborted: false });
+    expect(result).toEqual({ companiesRekeyed: 1, companiesFolded: 2, companiesKeptUnderLatinKey: 0, jobsRekeyed: 3, aborted: false });
 
     const companies = await allCompanies();
     expect(companies.map((c) => [c.name, c.nameNorm])).toEqual([
@@ -214,7 +227,7 @@ describe("recomputing the stored keys after the upgrade", () => {
 
     // once per key version; a forced run finds nothing more to do
     expect(await refreshIdentityKeysIfStale(db, { config: pipelineConfig, logger: quietLogger })).toBeNull();
-    expect(await refreshIdentityKeysIfStale(db, { config: pipelineConfig, logger: quietLogger, force: true })).toEqual({ companiesRekeyed: 0, companiesFolded: 0, jobsRekeyed: 0, aborted: false });
+    expect(await refreshIdentityKeysIfStale(db, { config: pipelineConfig, logger: quietLogger, force: true })).toEqual({ companiesRekeyed: 0, companiesFolded: 0, companiesKeptUnderLatinKey: 0, jobsRekeyed: 0, aborted: false });
   });
 
   it("the cycle's pipeline step recomputes the keys before it files new postings", async () => {
@@ -246,9 +259,10 @@ describe("splitting what key version 1 merged (reprocess --split-merged)", () =>
     expect((await allJobs()).map((job) => [job.id, job.titleNorm])).toEqual([[j1, ""], [j3, "ai"]]);
 
     const { keys, split, pipeline } = await reprocessSplitMerged(registry);
-    expect(keys?.jobsRekeyed).toBe(2);
-    expect(split).toMatchObject({ jobsChecked: 2, jobsSplit: 2, sourcesUnlinked: 2, rawRequeued: 4 });
-    expect(pipeline).toMatchObject({ processed: 4, created: 2, updated: 2 });
+    expect(keys).toMatchObject({ ok: true, result: { jobsRekeyed: 2 } });
+    expect(split).toMatchObject({ jobsChecked: 2, jobsSplit: 2, sourcesUnlinked: 2, rawRequeued: 2, splitWithUserState: [], needsReview: [] });
+    // only the detached postings are filed again; the postings that stay are not touched
+    expect(pipeline).toMatchObject({ processed: 2, created: 2 });
 
     const jobs = await allJobs();
     expect(jobs).toHaveLength(4);
@@ -272,7 +286,7 @@ describe("splitting what key version 1 merged (reprocess --split-merged)", () =>
     expect((await allCompanies()).map((c) => [c.name, c.nameNorm])).toEqual([["Яндекс", ""]]);
 
     const { split } = await reprocessSplitMerged(registry);
-    expect(split).toMatchObject({ jobsChecked: 1, jobsSplit: 1, sourcesUnlinked: 2, rawRequeued: 3 });
+    expect(split).toMatchObject({ jobsChecked: 1, jobsSplit: 1, sourcesUnlinked: 2, rawRequeued: 2 });
 
     const companies = await allCompanies();
     expect(companies.map((c) => [c.name, c.nameNorm])).toEqual([
@@ -286,5 +300,155 @@ describe("splitting what key version 1 merged (reprocess --split-merged)", () =>
       ["デザイナー", "株式会社メルカリ"],
     ]);
     expect(jobs[0]!.id).toBe(yandex);
+  });
+});
+
+describe("what a recompute and a fold keep", () => {
+  it("a folded company's salary lookups move to the company it is folded into, with the new keys", async () => {
+    await run(registryOf([posting("g1", { company: "Grossmann GmbH", title: "Data Engineer" }), posting("g2", { company: "Großmann GmbH", title: "ML Engineer" })]));
+    // version 1 filed "Großmann GmbH" under "gro-mann", a company of its own
+    const db = getDb();
+    const ml = await jobTitled("ML Engineer");
+    const [old] = await db.insert(schema.companies).values({ name: "Großmann GmbH", nameNorm: "gro-mann" }).returning();
+    await db.update(schema.jobs).set({ companyId: old!.id }).where(eq(schema.jobs.id, ml.id));
+    const lookup = await insertLookup(ml.id, old!.id, "gro-mann|ml_engineer|ml engineer|unknown|de|berlin");
+    await forgetKeyVersion();
+
+    expect(await refreshIdentityKeysIfStale(db, { config: pipelineConfig, logger: quietLogger })).toMatchObject({ companiesFolded: 1 });
+    const target = await companyNamed("Grossmann GmbH");
+    expect(await allLookups()).toMatchObject([{ id: lookup, companyId: target.id, jobId: ml.id, lookupKey: "grossmann|ml_engineer|ml engineer|unknown|de|berlin" }]);
+    expect(target.aliases).toEqual(["Großmann GmbH"]);
+  });
+
+  it("a recomputed company and title take their salary lookups' keys along", async () => {
+    await run(registryOf([posting("y1", { company: "Яндекс", title: "Разработчик", description: "Search backend in C++" })]));
+    await writeVersion1Keys();
+    const job = await jobTitled("Разработчик");
+    const lookup = await insertLookup(job.id, job.companyId, "-|-|-|unknown|de|berlin");
+    await refreshIdentityKeysIfStale(getDb(), { config: pipelineConfig, logger: quietLogger });
+    expect(await allLookups()).toMatchObject([{ id: lookup, companyId: job.companyId, lookupKey: "яндекс|-|разработчик|unknown|de|berlin" }]);
+  });
+
+  it("merging a board's token row into its company (display names) keeps the token row's lookups", async () => {
+    await run(registryOf([posting("d1", { company: "databricks", title: "Data Engineer" })]));
+    const db = getDb();
+    const token = await companyNamed("databricks");
+    const [proper] = await db.insert(schema.companies).values({ name: "Databricks Labs", nameNorm: "databricks-labs" }).returning();
+    const job = await jobTitled("Data Engineer");
+    const lookup = await insertLookup(job.id, token.id, "databricks|-|data engineer|unknown|de|berlin");
+    const result = await syncCompanyDisplayNames(db, { companies: [{ name: "Databricks Labs", token: "databricks", ats: "greenhouse" } as never], pipeline: pipelineConfig });
+    expect(result.merged).toBe(1);
+    expect(await allLookups()).toMatchObject([{ id: lookup, companyId: proper!.id, lookupKey: "databricks-labs|-|data engineer|unknown|de|berlin" }]);
+  });
+
+  it("a blacklisted company named in two scripts stays blacklisted for its Latin spelling", async () => {
+    const full = "Mercari, Inc. (株式会社メルカリ)";
+    await run(registryOf([posting("m1", { company: full, title: "Backend Engineer" })]));
+    await writeVersion1Keys();
+    const db = getDb();
+    expect((await allCompanies()).map((c) => [c.name, c.nameNorm])).toEqual([[full, "mercari"]]);
+    await db.update(schema.companies).set({ blacklisted: true }).where(eq(schema.companies.name, full));
+
+    expect(await refreshIdentityKeysIfStale(db, { config: pipelineConfig, logger: quietLogger })).toMatchObject({ companiesRekeyed: 1, companiesKeptUnderLatinKey: 1 });
+    // a posting with the Latin spelling alone, and one with the full spelling: both land on a blacklisted row
+    await run(registryOf([posting("m1", { company: full, title: "Backend Engineer" }), posting("m2", { company: "Mercari Inc.", title: "Product Designer" })]));
+    const companies = await allCompanies();
+    expect(companies.map((c) => [c.name, c.nameNorm, c.blacklisted, c.aliases])).toEqual([
+      [full, "mercari-inc-株式会社メルカリ", true, ["Mercari, Inc."]],
+      ["Mercari, Inc.", "mercari", true, [full]],
+    ]);
+    expect((await jobTitled("Product Designer")).companyId).toBe(companies[1]!.id);
+  });
+
+  it("files nothing while the keys cannot be recomputed, and catches up once they can", async () => {
+    await run(registryOf([posting("y1", { company: "Яндекс", title: "Разработчик", description: "Search backend in C++" })]));
+    await writeVersion1Keys();
+    const db = getDb();
+    await db.execute(sql`create function block_company_keys() returns trigger language plpgsql as $$ begin raise exception 'blocked for the test'; end $$`);
+    await db.execute(sql`create trigger block_company_keys before update on companies for each row execute function block_company_keys()`);
+    try {
+      const registry = registryOf([posting("y1", { company: "Яндекс", title: "Разработчик", description: "Search backend in C++" }), posting("y2", { company: "Яндекс", title: "Аналитик", description: "Metrics and dashboards" })]);
+      const cycle = await run(registry);
+      expect(cycle.results.pipeline).toMatchObject({ filed: 0 });
+      expect(await allJobs()).toHaveLength(1);
+      expect((await allCompanies()).map((c) => c.nameNorm)).toEqual([""]);
+      const pending = await db.select().from(schema.rawPostings).where(eq(schema.rawPostings.parseStatus, "pending"));
+      expect(pending).toHaveLength(1);
+      // pnpm reprocess refuses in the same state (the same function decides)
+      expect(await refreshStoredIdentityKeys(db, { config: pipelineConfig, logger: quietLogger, force: true })).toMatchObject({ ok: false });
+    } finally {
+      await db.execute(sql`drop trigger block_company_keys on companies`);
+      await db.execute(sql`drop function block_company_keys()`);
+    }
+    await run(registryOf([posting("y1", { company: "Яндекс", title: "Разработчик", description: "Search backend in C++" }), posting("y2", { company: "Яндекс", title: "Аналитик", description: "Metrics and dashboards" })]));
+    expect((await allCompanies()).map((c) => [c.name, c.nameNorm])).toEqual([["Яндекс", "яндекс"]]);
+    expect((await allJobs()).map((job) => job.titleNorm)).toEqual(["разработчик", "аналитик"]);
+  });
+});
+
+describe("splitting leaves alone what the user acted on and what was merged for other reasons", () => {
+  it("two Japanese cities at one company and title are two jobs, and a merge of them is split", async () => {
+    const registry = registryOf([
+      posting("t1", { company: "Mercari Inc.", title: "エンジニア", city: "東京", country: "JP", description: "Tokyo office role" }),
+      posting("o1", { company: "Mercari Inc.", title: "エンジニア", city: "大阪", country: "JP", description: "Osaka office role" }),
+    ]);
+    await run(registry);
+    const [tokyo, osaka] = (await allJobs()).map((job) => job.id) as [number, number];
+    expect(osaka).toBeDefined();
+    await mergeAsVersion1(tokyo, [osaka]);
+    await writeVersion1Keys();
+    const { split } = await reprocessSplitMerged(registry);
+    expect(split).toMatchObject({ jobsSplit: 1, sourcesUnlinked: 1 });
+    expect(await allJobs()).toHaveLength(2);
+  });
+
+  it("a job the user applied to keeps its company and application; a merge by SimHash is not split", async () => {
+    const registry = registryOf([
+      posting("y1", { company: "Яндекс", title: "Разработчик", description: "Search backend in C++" }),
+      posting("m1", { company: "株式会社メルカリ", title: "エンジニア", description: "Marketplace payments in Go" }),
+      posting("p1", { company: "Acme GmbH", title: "Platform Engineer", description: "Run the platform" }),
+      posting("p2", { company: "Acme GmbH", title: "Platform Engineer (Remote)", description: "Run the platform" }),
+    ]);
+    await run(registry);
+    const db = getDb();
+    const yandex = await jobTitled("Разработчик");
+    const mercari = await jobTitled("エンジニア");
+    // version 1: one company "", both postings on one job that took the Mercari title (the winning posting)
+    await mergeAsVersion1(yandex.id, [mercari.id], true);
+    await db.update(schema.jobs).set({ title: "エンジニア" }).where(eq(schema.jobs.id, yandex.id));
+    await db.insert(schema.applications).values({ jobId: yandex.id, status: "applied", notesMd: "called them" });
+    // two Latin postings merged by SimHash (a different title): never split, never requeued
+    const platform = (await allJobs()).filter((job) => job.title.startsWith("Platform Engineer"));
+    if (platform.length === 2) await mergeAsVersion1(platform[0]!.id, [platform[1]!.id]);
+    await writeVersion1Keys();
+    const companyBefore = (await allJobs()).find((job) => job.id === yandex.id)!.companyId;
+
+    const { split } = await reprocessSplitMerged(registry);
+    expect(split.needsReview).toEqual([yandex.id]);
+    expect(split.sourcesUnlinked).toBe(0);
+    const after = (await allJobs()).find((job) => job.id === yandex.id)!;
+    expect(after.companyId).toBe(companyBefore);
+    expect(await db.select().from(schema.applications)).toMatchObject([{ jobId: yandex.id, notesMd: "called them" }]);
+    const platformSources = (await allSources()).filter((source) => source.jobId === platform[0]!.id);
+    expect(platformSources).toHaveLength(2);
+  });
+
+  it("a job the user acted on loses only the postings the old keys merged into it", async () => {
+    const registry = registryOf([
+      posting("a1", { company: "Mercari Inc.", title: "バックエンドエンジニア", description: "Go microservices payments backend platform team" }),
+      posting("a2", { company: "Mercari Inc.", title: "プロダクトデザイナー", description: "Figma user research mobile app design system" }),
+    ]);
+    await run(registry);
+    const [j1, j2] = (await allJobs()).map((job) => job.id) as [number, number];
+    await mergeAsVersion1(j1, [j2]);
+    await getDb().insert(schema.jobFavorites).values({ jobId: j1 });
+    await writeVersion1Keys();
+    const companyBefore = (await allJobs())[0]!.companyId;
+    const { split } = await reprocessSplitMerged(registry);
+    expect(split).toMatchObject({ jobsSplit: 1, sourcesUnlinked: 1, splitWithUserState: [j1] });
+    const jobs = await allJobs();
+    expect(jobs.map((job) => job.id)).toContain(j1);
+    expect(jobs.find((job) => job.id === j1)!.companyId).toBe(companyBefore);
+    expect(jobs).toHaveLength(2);
   });
 });
