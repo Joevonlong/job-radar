@@ -397,6 +397,7 @@ Radar, undo those by hand. Your `claude` and `codex` logins are yours and stay. 
 | `docker compose` rejects `env_file` or `required` | Your Compose is older than 2.24. Update Docker Desktop or the compose plugin. |
 | A port is already in use | Pick other ports in `.env`: `JOB_RADAR_WEB_PORT` for the dashboard (default 3000), `DB_HOST_PORT` for the database (default 5433). Then `docker compose up -d`. |
 | A tab says the app was updated | It called an action from the previous version. The page reloads with the current version; try the action again. The browser still asks before discarding unsaved edits. |
+| A trigger could not reach the server | Check your network and retry. The request may already have reached the server; this notice does not diagnose a database failure. |
 | A page names an invalid config file | Use its **Open the advanced editor** link to repair the named file under Settings → Advanced, then retry. Pages that only need the schedule for displaying times fall back to UTC. |
 | An action fails without a config explanation | Check `docker compose logs web`: caught failures log the action name, error type and filesystem or database error code, without the error message or submitted data. |
 | The wizard says it couldn't save (Linux) | `data/` doesn't belong to the user the containers run as. Set `PUID` / `PGID` in `.env` to `id -u` / `id -g`, run `sudo chown -R "$(id -u):$(id -g)" data .auth` once, then `docker compose up -d`. The doctor's `data.ownership` check lists what's wrong. |

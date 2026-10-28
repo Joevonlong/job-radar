@@ -3887,6 +3887,7 @@
       "nothingStale": "No stale scores.",
       "nothingToScore": "No job waits for a score.",
       "databaseUnavailable": "The database is unavailable; nothing was requested.",
+      "transportFailed": "Could not reach the server. Check your connection and try again; the request may already have been received.",
       "tooSoon": "Requested a moment ago; try again in {seconds} s."
     },
     "existing": "A request that covers this channel is already queued or running; waiting for its result.",

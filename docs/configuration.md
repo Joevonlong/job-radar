@@ -538,9 +538,10 @@ missing files and writes migrations after excluding old workers. From then on th
 ### Upgrade write protection
 
 Source switches and boards, discovered board candidates, search-city synchronization, workflow settings and interest
-edits read their current values inside both the file lock and the cross-process directory lock. Concurrent changes to
+edits, including setup wizard settings and progress, read their current values inside both the file lock and the cross-process directory lock. Concurrent changes to
 different fields are kept; a freeze is checked before that read. A frozen or busy save is reported explicitly. The
 salary settings form, like the other settings forms and source imports, refuses a file changed since its preview.
+Wizard market and target saves merge only their own preference fields; profile history is recorded after releasing the directory lock.
 
 `pnpm ops:freeze --target <commit>` freezes config/profile writes for an upgrade; `pnpm ops:unfreeze` removes the marker
 under the same cross-process write locks and prints `pnpm config:init`, then `pnpm config:migrate --write`. Use it only

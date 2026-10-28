@@ -3887,6 +3887,7 @@
       "nothingStale": "没有需要重打的分数。",
       "nothingToScore": "没有需要打分的岗位。",
       "databaseUnavailable": "数据库不可用，请求没有创建。",
+      "transportFailed": "连不上服务器，请检查网络后重试；请求可能已经送达。",
       "tooSoon": "刚刚请求过，{seconds} 秒后可以再试。"
     },
     "existing": "已有覆盖这个通道的请求在排队或执行，正在等它的结果。",

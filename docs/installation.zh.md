@@ -362,6 +362,7 @@ cd .. && rm -rf job-radar
 | `docker compose` 不认 `env_file` 或 `required` | 你的 Compose 低于 2.24，升级 Docker Desktop 或 compose 插件。 |
 | 端口被占用 | 在 `.env` 里换端口：看板用 `JOB_RADAR_WEB_PORT`（默认 3000），数据库用 `DB_HOST_PORT`（默认 5433）。然后 `docker compose up -d`。 |
 | 标签页提示应用已更新 | 它调用了旧版本的操作。页面会重新加载当前版本，请再操作一次；如果有未保存的改动，浏览器仍会先询问是否丢弃。 |
+| 触发按钮提示连不上服务器 | 检查网络后重试。请求可能已经送达服务器，这条提示不能判断数据库是否可用。 |
 | 页面提示某个配置文件无效 | 点击**打开高级编辑器**，在设置 → 高级编辑器中修复该文件后重试。只用时区显示时间的页面会回退到 UTC。 |
 | 操作失败，但没有配置错误说明 | 查看 `docker compose logs web`：捕获的失败会记录操作名、错误类型和文件系统或数据库错误码，不记录错误消息或提交的数据。 |
 | 向导提示保存失败（Linux） | `data/` 不归容器运行的那个用户所有。在 `.env` 里把 `PUID` / `PGID` 设成 `id -u` / `id -g`，执行一次 `sudo chown -R "$(id -u):$(id -g)" data .auth`，再 `docker compose up -d`。doctor 的 `data.ownership` 会列出哪里不对。 |

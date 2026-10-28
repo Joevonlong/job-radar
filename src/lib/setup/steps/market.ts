@@ -1,14 +1,14 @@
 /**
- * Setup step 2: the market. Writes preferences.yaml `market`, `locations`, `remote_scope` (through `saveProfile`, so the
+ * Setup step 2: the market. Writes preferences.yaml `market`, `locations`, `remote_scope` (through `savePreferencesPatch`, so the
  * profile history gets a snapshot), search.yaml `locations` / `remote_scope` and schedule.yaml `timezone`. Everything is
  * validated before the first write, so a bad time zone never leaves half a market behind. Switching the pack's local
  * channels on is the sources step's job (it pre-selects the pack's `default_channels`).
  */
-import { ensureProfileFiles, isValidTimeZone, preferencesSchema, scheduleSchema, searchSchema, writeConfig } from "@/lib/config";
+import { ensureProfileFiles, isValidTimeZone, mutateConfig, preferencesSchema, scheduleSchema, searchSchema } from "@/lib/config";
 import { marketSettingsProblems } from "@/lib/market";
 import { parseRemoteScopeKey } from "@/lib/market/remote-scope";
 import { preferencesConfigToDraft, preferencesDraftToCandidate, toFieldErrors, type FieldError, type PreferencesDraft } from "@/lib/profile/draft";
-import { saveProfile } from "@/lib/profile/service";
+import { savePreferencesPatch } from "@/lib/profile/service";
 
 import { cleanTitles } from "../keywords";
 import { marketInputSchema } from "../inputs";
@@ -68,12 +68,12 @@ export async function saveMarketStep(raw: unknown): Promise<SetupStepResult> {
 
   if (errors.length > 0 || !nextSearch.success || !nextSchedule.success) return stepError("market", null, errors);
 
-  const saved = await saveProfile("preferences", draft);
+  const saved = await savePreferencesPatch({ market: input.market, locations, remote_scope: input.remote_scope });
   const problem = profileSaveProblem("market", saved);
   if (problem !== null) return problem;
   try {
-    await writeConfig("search", nextSearch.data);
-    await writeConfig("schedule", nextSchedule.data);
+    await mutateConfig("search", (current) => ({ ...current, locations, remote_scope: nextSearch.data.remote_scope }));
+    await mutateConfig("schedule", (current) => ({ ...current, timezone: nextSchedule.data.timezone }));
   } catch (error) {
     return stepError("market", setupWriteError(error));
   }

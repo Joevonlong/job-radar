@@ -213,7 +213,7 @@ A failure in (a) does not block rollback: follow (c) and accept the display wind
 
 ### Fixed
 
-- Web actions recover from outdated tabs, invalid config pages name the file and link to its editor, concurrent settings edits keep unrelated changes, upgrade freezes show the right message, and caught action failures leave safe diagnostics in the web log.
+- Web actions recover from outdated tabs, invalid config pages name the file and link to its editor, concurrent settings and setup-wizard edits keep unrelated changes, upgrade freezes show the right message, trigger buttons say when the server cannot be reached, and caught action failures leave safe diagnostics in the web log.
 - Scoring views show the time-budget reason and remaining count even when preparation exhausts the budget before the first job is scored.
 - Splitting merged jobs preserves locations from every linked posting and reports unreadable sources for manual review;
   reprocessing stops its filter and signal batches when the cycle lock is lost.

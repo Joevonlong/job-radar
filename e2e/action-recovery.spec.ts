@@ -56,6 +56,8 @@ test("a failed action connection shows a retry notice and keeps the page open", 
   });
   await channel.getByTestId("trigger-testChannel-button").click();
   await expect(page.getByText(zh.dashboard.error.actionFailed, { exact: true })).toBeVisible();
+  await expect(channel.getByTestId("trigger-outcome")).toHaveText(zh.trigger.refused.transportFailed);
+  await expect(page.getByText(zh.trigger.refused.databaseUnavailable, { exact: true })).toHaveCount(0);
   await expect(page.getByTestId("page-error")).toHaveCount(0);
   await expect(page.getByRole("heading", { level: 1, name: zh.pages.sources.title, exact: true })).toBeVisible();
 });

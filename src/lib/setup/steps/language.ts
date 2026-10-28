@@ -2,7 +2,7 @@
  * Setup step 1: languages. Writes language.yaml: `ui.default_locale`, `ai.output`, `translation.target`; the
  * Server Action also sets the language cookie, so the wizard switches at once. The Telegram step sets `notify.locale`.
  */
-import { languageSchema, writeConfig, type LanguageConfig } from "@/lib/config";
+import { languageSchema, mutateConfig, type LanguageConfig } from "@/lib/config";
 import { LOCALES, type Locale } from "@/i18n/locale";
 import { isLanguageCode } from "@/lib/i18n/languages";
 
@@ -25,15 +25,19 @@ export function readLanguageDefaults(): LanguageDefaults {
 }
 
 /** Validate `next` with the language.yaml schema and write it; zod issues come back as field errors of the step. */
-async function writeLanguage(next: LanguageConfig, fieldOf: (path: ReadonlyArray<PropertyKey>) => string, step: "language" | "telegram"): Promise<SetupStepResult | null> {
-  const checked = languageSchema.safeParse(next);
-  if (!checked.success) {
-    const errors = checked.error.issues.map((issue): SetupFieldError => ({ path: fieldOf(issue.path), ns: "setup", key: "invalid", params: { message: issue.message } }));
-    return stepError(step, null, errors);
-  }
+async function writeLanguage(update: (current: LanguageConfig) => LanguageConfig | null, fieldOf: (path: ReadonlyArray<PropertyKey>) => string, step: "language" | "telegram"): Promise<SetupStepResult | null> {
+  let problem: SetupStepResult | null = null;
   try {
-    await writeConfig("language", checked.data);
-    return null;
+    await mutateConfig("language", (current) => {
+      const next = update(editable(current));
+      if (next === null) return null;
+      const checked = languageSchema.safeParse(next);
+      if (checked.success) return checked.data;
+      const errors = checked.error.issues.map((issue): SetupFieldError => ({ path: fieldOf(issue.path), ns: "setup", key: "invalid", params: { message: issue.message } }));
+      problem = stepError(step, null, errors);
+      return null;
+    });
+    return problem;
   } catch (error) {
     return stepError(step, setupWriteError(error));
   }
@@ -43,10 +47,11 @@ async function writeLanguage(next: LanguageConfig, fieldOf: (path: ReadonlyArray
 export async function writeNotifyLocale(locale: Locale | null): Promise<SetupStepResult | null> {
   const current = readFresh("language");
   if (current === null) return stepError("telegram", "configUnreadable");
-  if (current.notify.locale === locale) return null;
-  const next = editable(current);
-  next.notify.locale = locale;
-  return writeLanguage(next, () => "notify_locale", "telegram");
+  return writeLanguage((next) => {
+    if (next.notify.locale === locale) return null;
+    next.notify.locale = locale;
+    return next;
+  }, () => "notify_locale", "telegram");
 }
 
 /** The first interface language an `Accept-Language` header asks for; null when it names none of ours. */
@@ -86,15 +91,16 @@ export async function saveLanguageStep(raw: unknown): Promise<SetupStepResult & 
 
   const current = readFresh("language");
   if (current === null) return stepError("language", "configUnreadable");
-  const next = editable(current);
-  next.ui.default_locale = input.ui_locale;
-  if (aiOutput !== undefined) {
-    next.ai.output = aiOutput;
-    // the extra summary languages must not repeat the output language
-    next.ai.summary_also = next.ai.summary_also.filter((code) => code !== aiOutput);
-  }
-  if (target !== undefined) next.translation.target = target;
-  const problem = await writeLanguage(next, (path) => (path[0] === "translation" ? "translation_target" : path[0] === "ai" ? "ai_output" : "ui_locale"), "language");
+  const problem = await writeLanguage((next) => {
+    next.ui.default_locale = input.ui_locale;
+    if (aiOutput !== undefined) {
+      next.ai.output = aiOutput;
+      // the extra summary languages must not repeat the output language
+      next.ai.summary_also = next.ai.summary_also.filter((code) => code !== aiOutput);
+    }
+    if (target !== undefined) next.translation.target = target;
+    return next;
+  }, (path) => (path[0] === "translation" ? "translation_target" : path[0] === "ai" ? "ai_output" : "ui_locale"), "language");
   if (problem !== null) return problem;
   const result = await finishStep("language");
   return result.status === "saved" ? { ...result, locale: input.ui_locale } : result;
