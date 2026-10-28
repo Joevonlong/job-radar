@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, exists, getTableColumns, gte, inArray, isNull, lte, ne, not, notExists, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, count, desc, eq, exists, gte, inArray, isNull, lte, ne, not, notExists, or, sql, type SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { z } from "zod";
 
@@ -397,7 +397,7 @@ export async function listRecentCycleKpis(db: Db, options: CycleSummaryOptions &
     .where(and(gte(firstSeen.firstSeenAt, cycles.startedAt), sql`${firstSeen.firstSeenAt} <= ${windowEnd}`))
     .unionAll(db.select({ id: scores.jobId }).from(scores).where(and(gte(scores.scoredAt, cycles.startedAt), sql`${scores.scoredAt} <= ${windowEnd}`)));
   // named like the table, so the columns the counts read (`jobs.salary_json`, the signal checks, the latest score) are the handled jobs'
-  const handled = db.select(getTableColumns(jobs)).from(jobs).where(inArray(jobs.id, handledIds)).as("jobs");
+  const handled = db.select({ id: jobs.id, salaryJson: jobs.salaryJson }).from(jobs).where(inArray(jobs.id, handledIds)).as("jobs");
   const qualifies =
     qualifiedMinRank === null
       ? sql`false`
