@@ -1,15 +1,16 @@
 /**
  * Interests editing. The only code behind `/interests` and "save view" on `/jobs` that writes
- * `config/interests.yaml`, and always through `writeConfig` (comments are preserved, the file is
+ * `config/interests.yaml`, and always through the shared config mutator (comments are preserved, the file is
  * replaced atomically). Server Actions in `app/interests/actions.ts` are thin wrappers around these
  * functions; everything arriving here is untrusted and validated with zod (C6).
  *
  * Every change re-reads the file first and changes only its own part, so saving the vocabulary never
- * touches views or watched companies and the other way round. Changes are serialized inside the process.
+ * touches views or watched companies and the other way round. File and directory locks serialize all writers.
  */
+import { logActionFailure } from "@/lib/logging/action-failure";
 import { z } from "zod";
 
-import { ConfigError, interestsSchema, loadCompanies, reloadConfig, writeConfig, type InterestsConfig } from "@/lib/config";
+import { ConfigError, configErrorKey, interestsSchema, loadCompanies, mutateConfig, type InterestsConfig } from "@/lib/config";
 import { loadPipeline } from "@/lib/market";
 import { viewFiltersSchema, type SavedView } from "@/lib/config/schemas/interests";
 import { watchedCompanyBoards } from "@/lib/companies/watched-boards";
@@ -28,15 +29,6 @@ export const MAX_COMPANY_NAME_CHARS = 120;
 
 // ---------------------------------------------------------------- plumbing
 
-let queue: Promise<unknown> = Promise.resolve();
-
-/** Run `task` after every earlier change has finished. */
-function exclusive<T>(task: () => Promise<T>): Promise<T> {
-  const run = queue.then(task, task);
-  queue = run.catch(() => undefined);
-  return run;
-}
-
 const saved = (section: InterestsSection, extra: { id?: string; recompute?: RecomputeOutcome } = {}): InterestsActionState => ({ status: "saved", section, nonce: Date.now(), ...extra });
 const failed = (section: InterestsSection, formError: InterestsFormError | null, fieldErrors: Extract<InterestsActionState, { status: "error" }>["fieldErrors"] = []): InterestsActionState => ({
   status: "error",
@@ -46,32 +38,28 @@ const failed = (section: InterestsSection, formError: InterestsFormError | null,
   fieldErrors,
 });
 
-/** The file as it is on disk now, or null when it is missing or invalid. */
-function readCurrent(): InterestsConfig | null {
-  try {
-    return reloadConfig("interests");
-  } catch (error) {
-    if (error instanceof ConfigError) return null;
-    throw error;
-  }
-}
+const changeError = (error: unknown): InterestsFormError => configErrorKey(error) ?? (error instanceof ConfigError ? "unreadable" : "writeFailed");
 
 type Edit = (current: InterestsConfig) => { next: InterestsConfig; id?: string } | InterestsFormError;
 
 /** Read, edit, validate and write interests.yaml. `edit` returns the new config or the reason it refuses. */
 async function change(section: InterestsSection, edit: Edit): Promise<InterestsActionState> {
-  return exclusive(async () => {
-    const current = readCurrent();
-    if (current === null) return failed(section, "unreadable");
-    const edited = edit(current);
-    if (typeof edited === "string") return failed(section, edited);
-    try {
-      await writeConfig("interests", edited.next);
-      return saved(section, edited.id === undefined ? {} : { id: edited.id });
-    } catch {
-      return failed(section, "writeFailed");
-    }
-  });
+  const outcome: { error?: InterestsFormError; id?: string } = {};
+  try {
+    const next = await mutateConfig("interests", (current) => {
+      const edited = edit(current);
+      if (typeof edited === "string") {
+        outcome.error = edited;
+        return null;
+      }
+      outcome.id = edited.id;
+      return edited.next;
+    });
+    return next === null ? failed(section, outcome.error ?? "writeFailed") : saved(section, outcome.id === undefined ? {} : { id: outcome.id });
+  } catch (error) {
+    logActionFailure(`interests.${section}`, error);
+    return failed(section, changeError(error));
+  }
 }
 
 // ---------------------------------------------------------------- vocabulary
@@ -81,7 +69,8 @@ function rulesChanged(before: InterestsConfig, after: InterestsConfig): boolean 
   try {
     const pipeline = loadPipeline();
     return rulesFingerprint(before, pipeline) !== rulesFingerprint(after, pipeline);
-  } catch {
+  } catch (error) {
+    logActionFailure("rulesChanged", error);
     return JSON.stringify([before.signals, before.limits]) !== JSON.stringify([after.signals, after.limits]);
   }
 }
@@ -106,7 +95,8 @@ async function recompute(before: InterestsConfig, after: InterestsConfig): Promi
   try {
     const result = await reconcileBonuses(getDb(), after);
     return { reconciled: true, checked: result.checked, updated: result.updated, rescanPending, reviewPending, reviewEstimate };
-  } catch {
+  } catch (error) {
+    logActionFailure("recompute", error);
     return { reconciled: false, checked: 0, updated: 0, rescanPending, reviewPending, reviewEstimate };
   }
 }
@@ -115,26 +105,36 @@ async function recompute(before: InterestsConfig, after: InterestsConfig): Promi
 export async function saveVocabulary(rawDraft: unknown): Promise<InterestsActionState> {
   const draft = vocabularyDraftSchema.safeParse(rawDraft);
   if (!draft.success) return failed("vocabulary", "invalidPayload");
-  const outcome = await exclusive(async (): Promise<InterestsActionState | { before: InterestsConfig; after: InterestsConfig }> => {
-    const current = readCurrent();
-    if (current === null) return failed("vocabulary", "unreadable");
-    const merged = draftToCandidate(draft.data, current);
-    if (typeof merged === "string") return failed("vocabulary", merged);
-    const { candidate, draftPath, fieldErrors } = merged;
-    const validated = interestsSchema.safeParse(candidate);
-    if (!validated.success || fieldErrors.length > 0) return failed("vocabulary", null, [...fieldErrors, ...(validated.success ? [] : toFieldErrors(validated.error, draftPath))]);
-    // a pattern that is too slow on the probe's test texts would be left out of every scan: not saved
-    const slow = slowPatternErrors(validated.data, draftPath);
-    if (slow.length > 0) return failed("vocabulary", null, slow);
-    try {
-      await writeConfig("interests", validated.data);
-    } catch {
-      return failed("vocabulary", "writeFailed");
-    }
-    return { before: current, after: validated.data };
-  });
-  if ("status" in outcome) return outcome;
-  return saved("vocabulary", { recompute: await recompute(outcome.before, outcome.after) });
+  const outcome: { before?: InterestsConfig; failure?: InterestsActionState } = {};
+  let after: InterestsConfig | null;
+  try {
+    after = await mutateConfig("interests", (current) => {
+      outcome.before = current;
+      const merged = draftToCandidate(draft.data, current);
+      if (typeof merged === "string") {
+        outcome.failure = failed("vocabulary", merged);
+        return null;
+      }
+      const { candidate, draftPath, fieldErrors } = merged;
+      const validated = interestsSchema.safeParse(candidate);
+      if (!validated.success || fieldErrors.length > 0) {
+        outcome.failure = failed("vocabulary", null, [...fieldErrors, ...(validated.success ? [] : toFieldErrors(validated.error, draftPath))]);
+        return null;
+      }
+      // a pattern that is too slow on the probe's test texts would be left out of every scan: not saved
+      const slow = slowPatternErrors(validated.data, draftPath);
+      if (slow.length > 0) {
+        outcome.failure = failed("vocabulary", null, slow);
+        return null;
+      }
+      return validated.data;
+    });
+  } catch (error) {
+    logActionFailure("saveVocabulary", error);
+    return failed("vocabulary", changeError(error));
+  }
+  if (after === null || outcome.before === undefined) return outcome.failure ?? failed("vocabulary", "writeFailed");
+  return saved("vocabulary", { recompute: await recompute(outcome.before, after) });
 }
 
 // ---------------------------------------------------------------- views
@@ -218,7 +218,8 @@ const companySchema = z.strictObject({ name: z.string() });
 function companyKey(name: string): string {
   try {
     return resolveCompanyName(name, loadPipeline()).nameNorm;
-  } catch {
+  } catch (error) {
+    logActionFailure("companyKey", error);
     return name.trim().toLowerCase();
   }
 }
@@ -265,7 +266,8 @@ export async function suggestCompanyNames(rawQuery: unknown): Promise<string[]> 
   if (!query.success) return [];
   try {
     return (await suggestCompanies(getDb(), query.data, COMPANY_SUGGESTION_LIMIT)).map((company) => company.name);
-  } catch {
+  } catch (error) {
+    logActionFailure("suggestCompanyNames", error);
     return [];
   }
 }
@@ -276,7 +278,8 @@ export async function describeWatchedCompanies(names: readonly string[]): Promis
   let found: Awaited<ReturnType<typeof listCompaniesWithJobCount>> = [];
   try {
     found = await listCompaniesWithJobCount(getDb(), keys);
-  } catch {
+  } catch (error) {
+    logActionFailure("describeWatchedCompanies", error);
     // database unreachable: the list is shown without matches
   }
   const byKey = new Map(found.map((company) => [company.nameNorm, company]));
@@ -284,7 +287,8 @@ export async function describeWatchedCompanies(names: readonly string[]): Promis
   let boardKeys: ReadonlyMap<string, boolean> | null = null;
   try {
     boardKeys = new Map(watchedCompanyBoards(names, loadCompanies().companies, loadPipeline()).map((entry) => [entry.key, entry.hasBoard]));
-  } catch {
+  } catch (error) {
+    logActionFailure("describeWatchedCompanies", error);
     boardKeys = null;
   }
   return names.map((name, index) => {

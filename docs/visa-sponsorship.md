@@ -5,6 +5,8 @@
 Job Radar reads what each job description says about visa sponsorship or a work permit and shows it with the posting's own
 words. It runs on rules only (no AI call, no tokens) and never changes a score, a rank or a notification.
 
+Automatic scans and the statistics exclude dormant jobs. An explicit request naming job ids can still check them; stored visa evidence remains available on the detail page.
+
 ## What "visa sponsorship" means in a German posting
 
 Germany has no register of sponsoring employers like the UK. A non-EU candidate usually applies for the EU Blue Card or a

@@ -4,7 +4,7 @@ import { Loader2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useId, useState, useTransition } from "react";
 
-import { removeAtsBoardAction, saveAtsBoardAction } from "@/app/sources/registry/actions";
+import { removeAtsBoardAction as rawRemoveAtsBoardAction, saveAtsBoardAction as rawSaveAtsBoardAction } from "@/app/sources/registry/actions";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -15,6 +15,10 @@ import type { AtsKind } from "@/lib/sources/registry/entries";
 import type { FieldError } from "@/lib/sources/registry/service";
 import type { BoardRow } from "@/lib/sources/registry/view";
 import { toastTone } from "@/lib/toast";
+import { withActionFeedback } from "@/lib/actions/client";
+
+const removeAtsBoardAction = withActionFeedback(rawRemoveAtsBoardAction)(() => ({ status: "error", error: "write_failed" }));
+const saveAtsBoardAction = withActionFeedback(rawSaveAtsBoardAction)(() => ({ status: "error", error: "write_failed" }));
 
 type Region = "global" | "eu";
 

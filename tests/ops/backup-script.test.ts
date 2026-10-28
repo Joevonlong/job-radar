@@ -47,11 +47,28 @@ beforeAll(() => {
     `#!/usr/bin/env bash
 if [[ "$*" == *"ps --status running --services"* ]]; then echo db; exit 0; fi
 if [[ "$*" == *to_char* ]]; then [[ "\${STUB_NO_STAMP:-}" == 1 ]] || echo 20300102-030405; exit 0; fi
-if [[ "$*" == *"exec -T db"* ]]; then printf 'PGDMP-custom-body'; exit 0; fi
+if [[ "$*" == *pg_dump* ]]; then
+  echo pg_dump >> "\${STUB_BACKUP_LOG:-/dev/null}"
+  if [[ "\${STUB_TRUNCATED:-}" == 1 ]]; then printf 'PGDMP'; else printf 'PGDMP-custom-body'; fi
+  exit "\${STUB_DUMP_EXIT:-0}"
+fi
+if [[ "$*" == *"pg_restore --list"* ]]; then
+  echo pg_restore >> "\${STUB_BACKUP_LOG:-/dev/null}"
+  [[ "$(cat)" == PGDMP-custom-body ]] || { echo 'invalid archive' >&2; exit 1; }
+  exit 0
+fi
 exit 0
 `,
     0o755,
   );
+  write(path.join(stubs, "sync"), `#!/usr/bin/env bash
+echo sync >> "\${STUB_BACKUP_LOG:-/dev/null}"
+if [[ -n "\${STUB_BACKUP_LOG:-}" ]]; then
+  # Only a .partial may exist until verification and the flush have both succeeded.
+  for file in "$STUB_OUTPUT"/*.dump; do [[ ! -e "$file" ]] || exit 99; done
+fi
+exit "\${STUB_SYNC_EXIT:-0}"
+`, 0o755);
 });
 
 afterAll(() => fs.rmSync(tmp, { recursive: true, force: true }));
@@ -66,6 +83,36 @@ const backup = (...args: string[]) =>
 describe("scripts/ops/backup.sh", () => {
   it("passes bash -n", () => {
     expect(spawnSync("bash", ["-n", realScript]).status).toBe(0);
+  });
+
+  function checkedBackup(env: Record<string, string | undefined> = {}) {
+    const directory = fs.mkdtempSync(path.join(tmp, "checked-"));
+    const log = path.join(directory, "calls.log");
+    const result = spawnSync("bash", [path.join(app, "scripts/ops/backup.sh"), "--dir", directory], {
+      encoding: "utf8", timeout: 30_000,
+      env: { ...process.env, PATH: `${stubs}:${process.env.PATH ?? ""}`, STUB_BACKUP_LOG: log, STUB_OUTPUT: directory, ...env },
+    });
+    return { ...result, files: fs.readdirSync(directory), calls: fs.readFileSync(log, "utf8").trim().split("\n") };
+  }
+
+  it("verifies the archive inside the db container and flushes it before publishing", () => {
+    const result = checkedBackup();
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.calls).toEqual(["pg_dump", "pg_restore", "sync"]);
+    expect(result.files.filter((file) => file.endsWith(".dump"))).toHaveLength(1);
+    expect(result.files.some((file) => file.endsWith(".partial"))).toBe(false);
+  });
+
+  it.each([
+    { name: "a truncated archive with a valid magic header", env: { STUB_TRUNCATED: "1" }, calls: ["pg_dump", "pg_restore"] },
+    { name: "a failed pg_dump", env: { STUB_DUMP_EXIT: "1" }, calls: ["pg_dump"] },
+    { name: "a failed disk flush", env: { STUB_SYNC_EXIT: "1" }, calls: ["pg_dump", "pg_restore", "sync"] },
+  ])("keeps no dump or partial after $name", ({ env, calls }) => {
+    const result = checkedBackup(env);
+    expect(result.status, result.stderr).not.toBe(0);
+    expect(result.calls).toEqual(calls);
+    expect(result.files.filter((file) => file !== "calls.log")).toEqual([]);
+    expect(result.stdout).not.toContain("backup written:");
   });
 
   it("names the dump in the time zone of the user's schedule.yaml and archives data/config + data/profile next to it", () => {

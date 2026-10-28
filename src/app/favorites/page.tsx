@@ -8,7 +8,7 @@ import { KeyHints } from "@/components/jobs/key-hints";
 import { toListItems } from "@/components/jobs/to-list-items";
 import { PageHeader } from "@/components/shell/page-header";
 import { loadConfig } from "@/lib/config";
-import { getSchedule } from "@/lib/dashboard/context";
+import { getDisplayTimeZone } from "@/lib/dashboard/context";
 import { loadListViz } from "@/lib/dashboard/list-viz";
 import { getDb, getFilterFloors, listFavoriteJobs, listMonthSalaryFigures } from "@/lib/db";
 import { salaryFilteredIds } from "@/lib/jobs/filter-floors";
@@ -27,7 +27,7 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function FavoritesPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const params = await loadFavoritesSearchParams(searchParams);
   const [t, tf] = await Promise.all([getTranslations("pages.favorites"), getTranslations("favorites.page")]);
-  const { timezone } = getSchedule();
+  const timezone = getDisplayTimeZone();
   const now = new Date();
   const db = getDb();
   const visa = visaVisible();

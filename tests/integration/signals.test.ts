@@ -81,7 +81,7 @@ const richAnswer = (request: AiTransportRequest) => ({
  * A job as the pipeline and the hard filter leave it: the job plus its `scores` row (what the filter step
  * creates; it has no match score yet). `scoreRow: false` leaves the job without one.
  */
-async function newJob(title: string, description: string | null, opts: { status?: "active" | "closed"; companyName?: string; scoreRow?: boolean } = {}): Promise<number> {
+async function newJob(title: string, description: string | null, opts: { status?: "active" | "possibly_closed" | "closed"; companyName?: string; scoreRow?: boolean } = {}): Promise<number> {
   const db = getDb();
   const [company] = await db
     .insert(schema.companies)
@@ -553,4 +553,24 @@ describe("cycle wiring", () => {
     void plain;
     void onlyT3;
   });
+});
+
+it("leaves dormant bonuses untouched and reconciles the bonus and rank after waking", async () => {
+  const active = await newJob("Active", JD_RICH);
+  const sleeping = await newJob("Dormant", JD_RICH, { status: "possibly_closed" });
+  await getDb().update(schema.jobs).set({ lastSeenAt: new Date("2026-07-01T00:00:00Z"), dormantAt: new Date("2026-09-01T00:00:00Z") }).where(eq(schema.jobs.id, sleeping));
+  for (const id of [active, sleeping]) {
+    await giveScore(id, 60);
+    await getDb().insert(schema.signals).values({ jobId: id, tier: "T2", kind: "equity", quote: "equity", extractor: "rule" });
+  }
+  const interests = shippedInterests();
+  expect(await reconcileBonuses(getDb(), interests, null, "EUR")).toEqual({ checked: 1, updated: 1 });
+  const [before] = await getDb().select().from(schema.scores).where(eq(schema.scores.jobId, sleeping));
+  expect(Number(before!.signalBonus)).toBe(0);
+  await getDb().update(schema.jobs).set({ dormantAt: null }).where(eq(schema.jobs.id, sleeping));
+  expect(await reconcileBonuses(getDb(), interests, null, "EUR")).toEqual({ checked: 2, updated: 1 });
+  const [awake] = await getDb().select().from(schema.scores).where(eq(schema.scores.jobId, sleeping));
+  const [expected] = await getDb().select().from(schema.scores).where(eq(schema.scores.jobId, active));
+  expect([awake!.signalBonus, awake!.rankValue]).toEqual([expected!.signalBonus, expected!.rankValue]);
+  expect(Number(awake!.signalBonus)).toBeGreaterThan(0);
 });

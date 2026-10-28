@@ -32,8 +32,8 @@ export type ServeOutcome<T> =
  * Picks, per query, the first usable channel of a family: enabled, within budget, circuit not open,
  * and not already given up on this cycle. A channel that fails with a budget error or a
  * non-retryable error (blocked, auth expired, parse, unknown) is unusable for the rest of the cycle
- * and the same query goes to the next channel. A retryable failure (retries are already exhausted
- * by `ctx.http`) fails the query; repeated ones are handled by the circuit breaker, which makes the
+ * and the same query goes to the next channel. A retryable failure (any retries allowed by the channel
+ * are already exhausted by `ctx.http`) fails the query; repeated ones are handled by the circuit breaker, which makes the
  * channel unavailable for later queries and cycles.
  *
  * One instance per cycle (it remembers which channels failed).

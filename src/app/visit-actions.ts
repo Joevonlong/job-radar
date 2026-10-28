@@ -1,5 +1,6 @@
 "use server";
 
+import { logActionFailure } from "@/lib/logging/action-failure";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
@@ -22,7 +23,8 @@ function refreshLists(): void {
 export async function recordVisitAction(): Promise<void> {
   try {
     await recordVisit(getDb(), new Date());
-  } catch {
+  } catch (error) {
+    logActionFailure("recordVisitAction", error);
     // a missing marker only means the divider is off; never break the page over it
   }
 }
@@ -44,7 +46,8 @@ export async function markSeenAction(input: { jobId: number; via: string }): Pro
     const changed = await markSeen(getDb(), parsed.data.jobId, parsed.data.via);
     if (changed) refreshLists();
     return { ok: true, changed };
-  } catch {
+  } catch (error) {
+    logActionFailure("markSeenAction", error);
     // a foreign key miss (no such job) or the table not migrated yet: the bold stays, nothing else breaks
     return { ok: false };
   }
@@ -58,7 +61,8 @@ export async function markUnseenAction(input: { jobId: number }): Promise<SeenAc
     const changed = await markUnseen(getDb(), parsed.data.jobId);
     if (changed) refreshLists();
     return { ok: true, changed };
-  } catch {
+  } catch (error) {
+    logActionFailure("markUnseenAction", error);
     return { ok: false };
   }
 }
@@ -101,7 +105,8 @@ export async function markAllSeenAction(input: { scope: "jobs"; query: string; r
     const count = await markSeenIds(db, ids, at);
     if (count > 0) refreshLists();
     return { ok: true, count, at: at.toISOString() };
-  } catch {
+  } catch (error) {
+    logActionFailure("markAllSeenAction", error);
     return { ok: false };
   }
 }
@@ -114,7 +119,8 @@ export async function undoMarkAllSeenAction(input: { at: string }): Promise<{ ok
     await undoBulkSeen(getDb(), new Date(parsed.data.at));
     refreshLists();
     return { ok: true };
-  } catch {
+  } catch (error) {
+    logActionFailure("undoMarkAllSeenAction", error);
     return { ok: false };
   }
 }

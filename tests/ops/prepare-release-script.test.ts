@@ -5,7 +5,10 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe as suite, expect, it } from "vitest";
+
+// Root bypasses the read-only checks; production deploys must run as a regular user.
+const describe = suite.skipIf(process.getuid?.() === 0);
 
 /**
  * scripts/ops/prepare-release.sh against a throw-away checkout in a temp directory (never a real one). `pnpm` and `tar`
@@ -438,7 +441,7 @@ exit 1
   const inRelease = (): string => path.join(rdir(), "c".repeat(40));
   const darwin = process.platform === "darwin";
 
-  describe.runIf(darwin)("an install script without --print-release, launchd (plutil decodes the plist)", () => {
+  suite.runIf(darwin)("an install script without --print-release, launchd (plutil decodes the plist)", () => {
     it("a plist whose working directory is a release directory: kept (exit 1)", () => {
       installed("io.jobradar.ai-worker", plistXml(inRelease()));
       expectKept(preOption(), "names a release directory");

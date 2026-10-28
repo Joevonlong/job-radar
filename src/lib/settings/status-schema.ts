@@ -41,7 +41,7 @@ const requestSchema = z.object({
   resumeAt: iso.nullable().optional(),
   /** Scoring requests: the postings still waiting afterwards. */
   remaining: z.number().int().nonnegative().optional().catch(undefined),
-  /** `time_budget`: a scoring request that is done stopped at `ai.yaml: cycle_budget_minutes` (an unknown value reads as none). */
+  /** `time_budget`: scoring stopped at `ai.yaml: cycle_budget_minutes`, even before the first score (an unknown value reads as none). */
   stopped: scoringStoppedSchema,
   cycle: cycleProgressSchema.nullable(),
 });

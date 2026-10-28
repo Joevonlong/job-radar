@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState, useTransition } from "react";
 
-import { skipWizardAction } from "@/app/setup/actions";
+import { skipWizardAction as rawSkipWizardAction } from "@/app/setup/actions";
 import { Button } from "@/components/ui/button";
 import { INK_LINK } from "@/components/ui/ink-link";
 import type { MarketView } from "@/lib/market/view";
@@ -26,6 +26,9 @@ import { StepSources } from "./step-sources";
 import { StepTargets } from "./step-targets";
 import { StepTelegram } from "./step-telegram";
 import { Stepper } from "./stepper";
+import { withActionFeedback } from "@/lib/actions/client";
+
+const skipWizardAction = withActionFeedback(rawSkipWizardAction)(() => ({ status: "error", step: "review", fieldErrors: [], formError: "writeFailed", nonce: Date.now() }));
 
 interface SetupWizardProps {
   view: SetupView;

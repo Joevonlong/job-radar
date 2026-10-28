@@ -5,7 +5,7 @@ import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useEffect, useId, useRef, useState } from "react";
 
-import { previewDealBreakersAction, type DealBreakerPreviewResult } from "@/app/me/actions";
+import { previewDealBreakersAction as rawPreviewDealBreakersAction, type DealBreakerPreviewResult } from "@/app/me/actions";
 import { Button } from "@/components/ui/button";
 import { INK_LINK } from "@/components/ui/ink-link";
 import { Input } from "@/components/ui/input";
@@ -20,6 +20,9 @@ import type { DraftPreviewRule } from "@/lib/profile/deal-breaker-preview";
 import { DocLink } from "@/components/ui/doc-link";
 
 import { ErrorText, Field, TagInput, describedBy } from "./fields";
+import { withActionFeedback } from "@/lib/actions/client";
+
+const previewDealBreakersAction = withActionFeedback(rawPreviewDealBreakersAction)(() => ({ status: "error", error: "unavailable" }));
 
 /** Wait this long after the last edit before counting again (the count reads every job that is not closed). */
 const PREVIEW_DEBOUNCE_MS = 500;

@@ -8,7 +8,7 @@
  */
 import fs from "node:fs";
 
-import { ConfigError, getConfigDir, getDefaultConfigPath, getUserConfigPath, isExistingInstall, parseConfigText, writeConfig, type SetupConfig } from "@/lib/config";
+import { ConfigError, getConfigDir, getDefaultConfigPath, getUserConfigPath, isExistingInstall, mutateConfig, parseConfigText, type SetupConfig } from "@/lib/config";
 
 import { type SetupCompletedBy, type SetupStepId, type SetupStepStatus } from "./steps";
 
@@ -120,21 +120,27 @@ function baseForWrite(now: Date): SetupConfig | null {
 
 export type SetupWriteResult = { ok: true; state: SetupConfig } | { ok: false; reason: "unreadable" | "write_failed" | "frozen" };
 
-async function write(next: SetupConfig): Promise<SetupWriteResult> {
+async function write(now: Date, update: (base: SetupConfig) => SetupConfig | null): Promise<SetupWriteResult> {
   try {
-    const state = await writeConfig("setup", next);
+    let state: SetupConfig | null = null;
+    await mutateConfig("setup", () => {
+      resetSetupStateCache();
+      const base = baseForWrite(now);
+      if (base === null) return null;
+      const next = update(base);
+      state = next ?? base;
+      return next;
+    });
     resetSetupStateCache();
-    return { ok: true, state };
+    return state === null ? { ok: false, reason: "unreadable" } : { ok: true, state };
   } catch (error) {
-    return { ok: false, reason: error instanceof ConfigError && error.kind === "frozen" ? "frozen" : "write_failed" };
+    return { ok: false, reason: error instanceof ConfigError ? error.kind === "frozen" ? "frozen" : ["missing", "yaml", "schema", "version"].includes(error.kind) ? "unreadable" : "write_failed" : "write_failed" };
   }
 }
 
 /** Record what happened to one step (`done` after a save, `skipped` when passed over). */
 export async function markStep(id: SetupStepId, status: SetupStepStatus, now: Date = new Date()): Promise<SetupWriteResult> {
-  const base = baseForWrite(now);
-  if (base === null) return { ok: false, reason: "unreadable" };
-  return write({ ...base, steps: { ...base.steps, [id]: { status, at: now.toISOString() } } });
+  return write(now, (base) => ({ ...base, steps: { ...base.steps, [id]: { status, at: now.toISOString() } } }));
 }
 
 /**
@@ -142,8 +148,5 @@ export async function markStep(id: SetupStepId, status: SetupStepStatus, now: Da
  * from the settings page and pressing "finish" changes nothing).
  */
 export async function completeSetup(by: SetupCompletedBy, now: Date = new Date()): Promise<SetupWriteResult> {
-  const base = baseForWrite(now);
-  if (base === null) return { ok: false, reason: "unreadable" };
-  if (base.completed_at !== null && readSetupState().source === "user") return { ok: true, state: base };
-  return write({ ...base, completed_at: base.completed_at ?? now.toISOString(), completed_by: base.completed_by ?? by });
+  return write(now, (base) => base.completed_at !== null && readSetupState().source === "user" ? null : { ...base, completed_at: base.completed_at ?? now.toISOString(), completed_by: base.completed_by ?? by });
 }

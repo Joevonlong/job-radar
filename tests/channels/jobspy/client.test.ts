@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { ChannelError } from "@/lib/channels/errors";
 import {
@@ -95,6 +95,27 @@ describe("searchJobspy", () => {
     const error = await searchJobspy(ctx, settings, request).catch((e: unknown) => e);
     expect(error).toBeInstanceOf(ChannelError);
     expect(error).toMatchObject({ code: "rate_limited", status: 429 });
+    expect(calls).toHaveLength(1);
+  });
+
+  it("does not start another scrape after a timed-out POST", async () => {
+    vi.useFakeTimers();
+    try {
+      const { ctx, calls } = jobspyContext((_call, signal) => new Promise((_resolve, reject) => {
+        signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+      }));
+      const result = searchJobspy(ctx, { ...settings, timeout_ms: 10 }, request).catch((error: unknown) => error);
+      await vi.advanceTimersByTimeAsync(50);
+      expect(await result).toMatchObject({ code: "network" });
+      expect(calls).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not start another scrape after a plain HTTP 500", async () => {
+    const { ctx, calls } = jobspyContext(() => httpResponse(500, "internal server error"));
+    await expect(searchJobspy(ctx, settings, request)).rejects.toMatchObject({ code: "network" });
     expect(calls).toHaveLength(1);
   });
 

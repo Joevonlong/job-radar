@@ -4,13 +4,16 @@ import { Ellipsis } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useTransition } from "react";
 
-import { markUnseenAction } from "@/app/visit-actions";
+import { markUnseenAction as rawMarkUnseenAction } from "@/app/visit-actions";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { noteSeenLocally } from "@/lib/dashboard/seen-local";
 import { toastTone } from "@/lib/toast";
 
 import { useFilterOverride, type OverrideAction } from "../filter-override-button";
+import { withActionFeedback } from "@/lib/actions/client";
+
+const markUnseenAction = withActionFeedback(rawMarkUnseenAction)(() => ({ ok: false }));
 
 /**
  * The "more" menu at the end of the header's action row: the optional filter decision of a job that passed ("过滤这条") lives here

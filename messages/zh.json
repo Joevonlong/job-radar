@@ -75,7 +75,11 @@
       "alreadyWatched": "这家公司已经在关注列表里。",
       "watchedNotFound": "关注列表里没有这家公司，可能已被移除。",
       "categoryMissing": "页面上的类别和文件不一致（文件可能刚被改过）。请刷新页面后再改。",
-      "unknownRetired": "要删除的类别在文件里不存在。请刷新页面后再改。"
+      "unknownRetired": "要删除的类别在文件里不存在。请刷新页面后再改。",
+      "frozen": "正在升级，配置暂时不能保存，请稍后再试。",
+      "busy": "另一个进程正在保存配置，请稍后再试。",
+      "stale": "配置已在别处更改，请刷新后重试。",
+      "protected": "此更改涉及受保护的配置项，请直接编辑配置文件。"
     },
     "errors": {
       "required": "必填",
@@ -596,7 +600,11 @@
         "sync": "同时用这些地点搜索",
         "link": "修改搜索城市",
         "done": "搜索城市已更新：之后的轮次会搜索这些地点。",
-        "failed": "没能更新搜索城市。"
+        "failed": "没能更新搜索城市。",
+        "frozen": "正在升级，配置暂时不能保存，请稍后再试。",
+        "busy": "另一个进程正在保存配置，请稍后再试。",
+        "stale": "配置已在别处更改，请刷新后重试。",
+        "protected": "此更改涉及受保护的配置项，请直接编辑配置文件。"
       },
       "workplace": {
         "label": "工作方式"
@@ -1298,8 +1306,17 @@
     },
     "error": {
       "title": "页面加载失败",
-      "description": "通常是数据库没有启动或连不上。确认 db 容器在运行（docker compose up -d db）后重试。",
-      "retry": "重试"
+      "description": "加载页面时出错了。请重试；如果问题持续，请查看 Web 服务日志。",
+      "retry": "重试",
+      "configTitle": "配置文件加载失败",
+      "configDescription": "{file} 无效或无法读取。请前往设置 → 高级编辑器修复后重试。",
+      "configFile": "某个配置文件",
+      "repair": "打开高级编辑器",
+      "updatedTitle": "应用已更新",
+      "updatedDescription": "此标签页在应用更新前打开，请重新加载页面后再操作。",
+      "reload": "重新加载页面",
+      "actionFailed": "操作未能连接到应用，请检查网络后重试。",
+      "updatedToast": "应用已更新，页面已重新加载，请重新执行刚才的操作。"
     },
     "kpi": {
       "label": "本轮汇总",
@@ -1343,13 +1360,15 @@
         "manual": "你标记的已关闭",
         "gone": "来源已下架",
         "phrase": "来源写明不再接收",
-        "possibly": "可能已关闭"
+        "possibly": "可能已关闭",
+        "dormant": "数周未被列出"
       },
       "reasonHint": {
         "manual": "你把这个岗位标记为已关闭。",
         "gone": "{when}检查时原帖返回 {status}（已下架）。",
         "phrase": "原帖写着“{quote}”（{when}检查）。",
-        "possibly": "有一段时间没有任何来源再列出这个岗位。"
+        "possibly": "有一段时间没有任何来源再列出这个岗位。",
+        "dormant": "已经数周没有任何来源列出这个岗位，所以它不进默认岗位列表，也不参加自动处理；有来源重新列出时会自动恢复。"
       },
       "evidenceLink": "检查的页面",
       "markClosed": "标记为已关闭",
@@ -1376,7 +1395,9 @@
       "srHint": "：{hint}",
       "editNote": "编辑备注",
       "addNote": "添加备注",
-      "saveNote": "保存备注"
+      "saveNote": "保存备注",
+      "lastListed": "最后一次被来源列出：{date}。",
+      "filterHint": "已关闭、可能已关闭和数周未被列出的岗位"
     }
   },
   "pipeline": {
@@ -3167,7 +3188,10 @@
         "unreadable": "ui.yaml 或 notify.yaml 现在无法读取：请先在高级编辑器里修好它。",
         "writeFailed": "保存失败：{file} 没有改动，其他文件也没有写。",
         "partial": "{saved} 已保存，但 {file} 没有写成功：它还是旧的。请再保存一次。",
-        "frozen": "正在升级，稍后再保存。如果没有部署在进行，再部署一次，或运行 `pnpm ops:unfreeze`。"
+        "frozen": "正在升级，稍后再保存。如果没有部署在进行，再部署一次，或运行 `pnpm ops:unfreeze`。",
+        "busy": "另一个进程正在保存配置，请稍后再试。",
+        "stale": "配置已在别处更改，请刷新后重试。",
+        "protected": "此更改涉及受保护的配置项，请直接编辑配置文件。"
       }
     },
     "notifyReminderLink": "“感兴趣”和“已申请”的超时天数现在在「申请流程」标签里设置。",
@@ -3515,7 +3539,11 @@
         "unknown_candidate": "这个 board 已不在列表里。",
         "config_invalid": "sources.yaml 有错误，先修好再加入。",
         "write_failed": "无法写入 sources.yaml。",
-        "database_unavailable": "数据库没有响应。"
+        "database_unavailable": "数据库没有响应。",
+        "frozen": "正在升级，配置暂时不能保存，请稍后再试。",
+        "busy": "另一个进程正在保存配置，请稍后再试。",
+        "stale": "配置已在别处更改，请刷新后重试。",
+        "protected": "此更改涉及受保护的配置项，请直接编辑配置文件。"
       }
     },
     "aiHealth": {
@@ -3827,7 +3855,11 @@
       "unreadable": "配置文件无法读取或不合法，没有改动。请到 /settings 或直接改 YAML。",
       "writeFailed": "配置文件写入失败，没有改动，建议仍在待审批。",
       "databaseUnavailable": "数据库不可用。",
-      "categoryMissing": "这条建议要加入的信号类别已经删除，没有改动。可以先恢复这个类别，或者直接拒绝。"
+      "categoryMissing": "这条建议要加入的信号类别已经删除，没有改动。可以先恢复这个类别，或者直接拒绝。",
+      "frozen": "正在升级，配置暂时不能保存，请稍后再试。",
+      "busy": "另一个进程正在保存配置，请稍后再试。",
+      "stale": "配置已在别处更改，请刷新后重试。",
+      "protected": "此更改涉及受保护的配置项，请直接编辑配置文件。"
     }
   },
   "aiRun": {
@@ -3859,6 +3891,7 @@
       "nothingStale": "没有需要重打的分数。",
       "nothingToScore": "没有需要打分的岗位。",
       "databaseUnavailable": "数据库不可用，请求没有创建。",
+      "transportFailed": "连不上服务器，请检查网络后重试；请求可能已经送达。",
       "tooSoon": "刚刚请求过，{seconds} 秒后可以再试。"
     },
     "existing": "已有覆盖这个通道的请求在排队或执行，正在等它的结果。",
@@ -4493,7 +4526,10 @@
       "no_changes": "和当前文件相同，没有要应用的改动。",
       "database_unavailable": "数据库没有响应。",
       "needs_parent": "先启用 linkedin-session，这个开关才会生效。",
-      "consent_required": "这个渠道需要你先确认服务条款风险说明。请在来源页用开关开启。"
+      "consent_required": "这个渠道需要你先确认服务条款风险说明。请在来源页用开关开启。",
+      "frozen": "正在升级，配置暂时不能保存，请稍后再试。",
+      "busy": "另一个进程正在保存配置，请稍后再试。",
+      "protected": "此更改涉及受保护的配置项，请直接编辑配置文件。"
     },
     "toast": {
       "enabled": "已启用 {name}",
@@ -4538,7 +4574,10 @@
         "no_changes": "和当前文件相同，没有要应用的改动。",
         "database_unavailable": "数据库没有响应。",
         "needs_parent": "先启用 linkedin-session，这个开关才会生效。",
-        "consent_required": "这个渠道需要你先确认服务条款风险说明。请在来源页用开关开启。"
+        "consent_required": "这个渠道需要你先确认服务条款风险说明。请在来源页用开关开启。",
+        "frozen": "正在升级，配置暂时不能保存，请稍后再试。",
+        "busy": "另一个进程正在保存配置，请稍后再试。",
+        "protected": "此更改涉及受保护的配置项，请直接编辑配置文件。"
       }
     },
     "import": {
@@ -4632,7 +4671,10 @@
         "no_changes": "和当前文件相同，没有要应用的改动。",
         "database_unavailable": "数据库没有响应。",
         "needs_parent": "先启用 linkedin-session，这个开关才会生效。",
-        "consent_required": "这个渠道需要你先确认服务条款风险说明。请在来源页用开关开启。"
+        "consent_required": "这个渠道需要你先确认服务条款风险说明。请在来源页用开关开启。",
+        "frozen": "正在升级，配置暂时不能保存，请稍后再试。",
+        "busy": "另一个进程正在保存配置，请稍后再试。",
+        "protected": "此更改涉及受保护的配置项，请直接编辑配置文件。"
       },
       "consent": {
         "title": "这次导入会开启带服务条款风险的渠道：{channels}。",
@@ -6382,7 +6424,7 @@
     "tools": {
       "search_jobs": {
         "title": "搜索岗位",
-        "description": "搜索 Job Radar 收集到的岗位：按关键词、城市、办公方式、最低排名分、最低年薪、首次发现日期和申请状态筛选。按排名返回岗位卡片（事实字段、链接、分数与排名），不含 JD 正文；单个岗位的详情用 get_job。被硬过滤去掉的和已关闭的岗位不返回。问“今天有什么新的”时传 since = 今天、sort = rank。"
+        "description": "搜索 Job Radar 收集到的岗位：按关键词、城市、办公方式、最低排名分、最低年薪、首次发现日期和申请状态筛选。按排名返回岗位卡片（事实字段、链接、分数与排名），不含 JD 正文；单个岗位的详情用 get_job。被硬过滤去掉的和已关闭及数周未被任何来源列出的岗位不返回。问“今天有什么新的”时传 since = 今天、sort = rank。"
       },
       "get_job": {
         "title": "查看岗位",

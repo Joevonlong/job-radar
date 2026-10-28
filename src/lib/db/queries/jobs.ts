@@ -14,6 +14,8 @@ import { cardColumns, hideGermanLevels, hydrateCards, latestScoreCte, type CardR
 import { annualBaseFigureSql, baseBoundSql, comparableSalaryWhere } from "./salary-figure";
 import { hasHighValueSignal, policyCurrency, type HighValuePolicy } from "./signal-filter";
 import type { JobCard, JobStatus, Workplace } from "./types";
+import { notDormantSql } from "./job-status";
+import { dormancyReady } from "../repos/dormancy";
 
 
 /** Longest search text the query accepts (longer input is cut, not rejected). */
@@ -242,17 +244,17 @@ export function jobOrderBy(sort: JobSort, dir: SortDir, latest: LatestScore, cur
 
 /**
  * The WHERE of the /jobs list: the filters plus the default hiding: hard-filtered jobs unless asked for, and jobs that show as
- * closed unless a job-status filter is chosen (possibly closed ones stay). One definition for the list, its counts, "mark all seen" and
+ * closed or dormant unless a job-status filter is chosen. One definition for the list, its counts, "mark all seen" and
  * the job counts of the company drop-down (`listCompanyFilterOptions`, with no filters: the list as /jobs opens).
  */
-export function jobListWhere(db: Db, filters: JobFilters, timezone: string, latest: LatestScore, ux: boolean): SQL | undefined {
+export async function jobListWhere(db: Db, filters: JobFilters, timezone: string, latest: LatestScore, ux: boolean): Promise<SQL | undefined> {
   const hideFiltered = filters.filteredOnly
     ? eq(latest.filterResult, "filtered_out")
     : filters.includeFiltered
       ? undefined
       : or(isNull(latest.filterResult), ne(latest.filterResult, "filtered_out"));
   const hideClosed = filters.statuses && filters.statuses.length > 0 ? undefined : sql`${effectiveStatusSql(ux)} <> 'closed'`;
-  return and(buildJobConditions(db, filters, timezone, latest, ux), hideFiltered, hideClosed);
+  return and(buildJobConditions(db, filters, timezone, latest, ux), hideFiltered, hideClosed, filters.statuses?.length ? undefined : notDormantSql(await dormancyReady(db)));
 }
 
 /** How many jobs the /jobs list holds under `filters` (the "Closed (N)" switch counts with its own status filter). */
@@ -265,7 +267,7 @@ export async function countJobList(db: Db, options: { filters: JobFilters; timez
     .from(jobs)
     .innerJoin(companies, eq(companies.id, jobs.companyId))
     .leftJoin(latest, eq(latest.jobId, jobs.id))
-    .where(jobListWhere(db, options.filters, options.timezone, latest, ux));
+    .where(await jobListWhere(db, options.filters, options.timezone, latest, ux));
   return row?.count ?? 0;
 }
 
@@ -273,7 +275,7 @@ export async function countJobList(db: Db, options: { filters: JobFilters; timez
 export async function listJobs(db: Db, options: ListJobsOptions): Promise<JobPage> {
   const latest = latestScoreCte(db);
   const ux = await uxTablesReady(db);
-  const where = jobListWhere(db, options.filters, options.timezone, latest, ux);
+  const where = await jobListWhere(db, options.filters, options.timezone, latest, ux);
   const pageSize = Math.max(1, options.pageSize);
 
   const [countRow] = await db
@@ -291,7 +293,7 @@ export async function listJobs(db: Db, options: ListJobsOptions): Promise<JobPag
 
   const rows: CardRow[] = await db
     .with(latest)
-    .select(cardColumns(latest, ux))
+    .select(cardColumns(latest, ux, await dormancyReady(db)))
     .from(jobs)
     .innerJoin(companies, eq(companies.id, jobs.companyId))
     .leftJoin(latest, eq(latest.jobId, jobs.id))
@@ -323,7 +325,7 @@ export async function countJobListSeen(db: Db, options: { filters: JobFilters; t
     .from(jobs)
     .innerJoin(companies, eq(companies.id, jobs.companyId))
     .leftJoin(latest, eq(latest.jobId, jobs.id))
-    .where(jobListWhere(db, options.filters, options.timezone, latest, ux));
+    .where(await jobListWhere(db, options.filters, options.timezone, latest, ux));
   return { unseen: row?.unseen ?? 0, newSince: row?.newSince ?? 0 };
 }
 
@@ -339,7 +341,7 @@ export async function listUnseenJobIds(db: Db, options: { filters: JobFilters; t
     .leftJoin(latest, eq(latest.jobId, jobs.id))
     .where(
       and(
-        jobListWhere(db, options.filters, options.timezone, latest, true),
+        await jobListWhere(db, options.filters, options.timezone, latest, true),
         not(seenSql()),
         // Only jobs that were already there when the page was drawn (one that arrived since was never on screen)
         options.firstSeenUpTo ? lte(jobs.firstSeenAt, options.firstSeenUpTo) : undefined,
@@ -410,7 +412,7 @@ export async function listCompanyFilterOptions(db: Db, options: { limit: number;
     .from(jobs)
     .innerJoin(companies, eq(companies.id, jobs.companyId))
     .leftJoin(latest, eq(latest.jobId, jobs.id))
-    .where(and(jobListWhere(db, {}, options.timezone, latest, ux), sql`char_length(${companies.name}) <= ${MAX_FILTER_VALUE_CHARS}`, sql`btrim(${companies.name}) <> ''`))
+    .where(and(await jobListWhere(db, {}, options.timezone, latest, ux), sql`char_length(${companies.name}) <= ${MAX_FILTER_VALUE_CHARS}`, sql`btrim(${companies.name}) <> ''`))
     .groupBy(companies.name)
     .orderBy(desc(jobCount), asc(companies.name))
     .limit(Math.max(1, options.limit));

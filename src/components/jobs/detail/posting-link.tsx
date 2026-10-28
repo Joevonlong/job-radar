@@ -1,7 +1,10 @@
 "use client";
 
-import { markSeenAction } from "@/app/visit-actions";
+import { markSeenAction as rawMarkSeenAction } from "@/app/visit-actions";
 import { noteSeenLocally } from "@/lib/dashboard/seen-local";
+import { withActionFeedback } from "@/lib/actions/client";
+
+const markSeenAction = withActionFeedback(rawMarkSeenAction)(() => ({ ok: false }));
 
 /** A link to the original posting (opens in a new tab as before); following it (click or middle click) also marks the job seen. */
 export function PostingLink({ jobId, href, className, testId, ariaLabel, children }: { jobId: number; href: string; className?: string; testId?: string; ariaLabel?: string; children: React.ReactNode }) {

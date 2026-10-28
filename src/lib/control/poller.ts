@@ -14,6 +14,7 @@ import {
   requeueInterruptedControlRequests,
   type ControlRequest,
   type ControlRequestKind,
+  type ControlLane,
 } from "@/lib/db/repos/control-requests";
 
 import { getControlHandler } from "./handlers";
@@ -32,6 +33,8 @@ export interface ControlPollOptions {
   db: Db;
   signal: AbortSignal;
   logger: ChannelLogger;
+  /** Omitted: one queue for all kinds (runner and --once). */
+  lane?: ControlLane;
   /**
    * The kinds this process may claim, asked again for every claim (a hot-reloaded `ai.yaml: execution` takes effect
    * at once). Omitted: every kind. The runner and the ai-worker each pass their own.
@@ -72,7 +75,7 @@ function claimableKinds(kinds: readonly ControlRequestKind[] | undefined): reado
  */
 export async function processNextControlRequest(options: ControlPollOptions): Promise<ControlRequest | null> {
   const { db, signal, logger } = options;
-  const request = await claimNextControlRequest(db, claimableKinds(options.kinds?.()));
+  const request = await claimNextControlRequest(db, claimableKinds(options.kinds?.()), { lane: options.lane });
   if (!request) return null;
   const log = logger.child({ controlRequest: request.id, kind: request.kind });
   log.info("control request started");

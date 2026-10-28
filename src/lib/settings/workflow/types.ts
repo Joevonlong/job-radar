@@ -1,4 +1,5 @@
 import type { SettingsErrorKey } from "../draft";
+import type { ConfigWriteErrorKey } from "@/lib/config/errors";
 
 /** The fields of the workflow panel, for error messages. */
 export type WorkflowField = "interestedDays" | "appliedDays" | "hiddenStatuses" | "hiddenWorkplaces" | "hiddenContracts";
@@ -19,7 +20,7 @@ export interface WorkflowFieldError {
 }
 
 /** Whole-panel problems. `partial`: the first file was written and the second was not (`failedFile` says which one is still old). */
-export type WorkflowFormError = "invalidPayload" | "unreadable" | "writeFailed" | "partial" | "frozen";
+export type WorkflowFormError = "invalidPayload" | "unreadable" | "writeFailed" | "partial" | ConfigWriteErrorKey;
 
 export type WorkflowFile = "ui" | "notify";
 

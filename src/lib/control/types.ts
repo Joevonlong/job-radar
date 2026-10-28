@@ -23,6 +23,8 @@ export type RunAiPayload = z.infer<typeof runAiPayloadSchema>;
 /** Payload of a `translate_job` request (the translate button on the job page). */
 export const translateJobPayloadSchema = z.strictObject({
   jobId: z.number().int().positive(),
+  /** Only automatic follow-up translations write this marker; web requests keep the legacy payload. */
+  origin: z.literal("auto").optional(),
   /** Translate again although a current translation exists (the "outdated" case). */
   force: z.boolean().default(false),
 });

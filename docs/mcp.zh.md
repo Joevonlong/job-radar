@@ -67,9 +67,11 @@ claude mcp add job-radar -- pnpm --silent --dir /absolute/path/to/job-radar mcp:
 
 | 工具 | 作用 |
 |---|---|
-| `search_jobs` | 按排名返回岗位卡片，过滤方式和岗位列表一样：`query`（职位名、公司、地点、JD）、`city`、`workplace`、`min_rank`、`min_annual_salary`（市场基准货币）、`since` / `until`（首次发现日期，`YYYY-MM-DD`）、`application_status`、`sort`（`rank`、`posted`、`first_seen`）、`limit`。被硬过滤去掉的和已关闭的岗位不返回。不含 JD 正文。 |
+| `search_jobs` | 按排名返回岗位卡片，过滤方式和岗位列表一样：`query`（职位名、公司、地点、JD）、`city`、`workplace`、`min_rank`、`min_annual_salary`（市场基准货币）、`since` / `until`（首次发现日期，`YYYY-MM-DD`）、`application_status`、`sort`（`rank`、`posted`、`first_seen`）、`limit`。被硬过滤去掉的、已关闭和数周未被列出的休眠岗位不返回。不含 JD 正文。 |
 | `get_job` | 一个岗位（`job_id`）的详情：上面所有字段，加上资历、语言、带引用的信号、发现的 AI 陷阱数量、你的申请，以及清洗后的 JD。 |
 | `list_applications` | 你的申请，排名高的在前；`status` 过滤；`stale_only: true` 只列超过每日提醒阈值（`notify.yaml: reminders.interested_days` / `applied_days`）还没动静的，等得最久的在前。 |
+
+`get_job` 仍能返回休眠岗位：`status` 仍是 `possibly_closed`，`closed_reason` 为 `dormant`。
 
 "今天有什么新的"就是 `search_jobs`（`since` = 今天，`sort` = `rank`）加 `list_applications`（`stale_only`）。
 

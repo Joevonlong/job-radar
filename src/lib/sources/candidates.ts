@@ -1,12 +1,13 @@
 /**
  * Board candidates of web-search discovery as `/sources` shows them, and the two things the
- * user can do with one: put it into `ats_boards` of `config/sources.yaml` (through `writeConfig`, the only code
- * that edits that file from the web app) or dismiss it.
+ * user can do with one: put it into `ats_boards` of `config/sources.yaml` through the shared config mutator,
+ * or dismiss it.
  */
+import { logActionFailure } from "@/lib/logging/action-failure";
 import { z } from "zod";
 
 import { boardKey } from "@/lib/channels/discovery/boards";
-import { ATS_KINDS, ConfigError, readConfigText, reloadConfig, writeConfig, type CompaniesConfig } from "@/lib/config";
+import { ATS_KINDS, ConfigError, configErrorKey, mutateConfig, readConfigText, reloadConfig, type CompaniesConfig, type ConfigWriteErrorKey } from "@/lib/config";
 import { getDb, listBoardCandidates, setBoardCandidateStatus, type BoardCandidateRow } from "@/lib/db";
 
 import { syncSourceRegistry } from "./registry/sync";
@@ -61,7 +62,8 @@ export function toCandidateViews(rows: readonly BoardCandidateRow[], companies: 
 export async function loadBoardCandidates(): Promise<CandidateView[] | null> {
   try {
     return toCandidateViews(await listBoardCandidates(getDb(), "new"), { companies: reloadConfig("channels").ats_boards });
-  } catch {
+  } catch (error) {
+    logActionFailure("loadBoardCandidates", error);
     return null;
   }
 }
@@ -73,7 +75,7 @@ export const candidateKeySchema = z.strictObject({
 
 export type CandidateActionState =
   | { status: "done"; outcome: "added" | "already_listed" | "dismissed" }
-  | { status: "error"; error: "invalid" | "unknown_candidate" | "config_invalid" | "write_failed" | "database_unavailable" };
+  | { status: "error"; error: "invalid" | "unknown_candidate" | "config_invalid" | "write_failed" | "database_unavailable" | ConfigWriteErrorKey };
 
 const fail = (error: Extract<CandidateActionState, { status: "error" }>["error"]): CandidateActionState => ({ status: "error", error });
 
@@ -84,42 +86,40 @@ export async function addBoardCandidate(raw: unknown): Promise<CandidateActionSt
   let row: BoardCandidateRow | undefined;
   try {
     row = (await listBoardCandidates(getDb(), "new")).find((r) => r.ats === key.data.ats && r.token === key.data.token);
-  } catch {
+  } catch (error) {
+    logActionFailure("addBoardCandidate", error);
     return fail("database_unavailable");
   }
   if (!row) return fail("unknown_candidate");
 
-  let current: ReturnType<typeof reloadConfig<"channels">>;
-  try {
-    current = reloadConfig("channels");
-  } catch (error) {
-    if (error instanceof ConfigError) return fail("config_invalid");
-    throw error;
-  }
   let outcome: "added" | "already_listed" = "already_listed";
-  if (!current.ats_boards.some((c) => boardKey(c.ats, c.token) === boardKey(key.data.ats, key.data.token))) {
-    try {
-      await writeConfig("channels", {
+  try {
+    const candidate = row;
+    const changed = await mutateConfig("channels", (current) => {
+      if (current.ats_boards.some((c) => boardKey(c.ats, c.token) === boardKey(key.data.ats, key.data.token))) return null;
+      return {
         ...current,
-        ats_boards: [
-          ...current.ats_boards,
-          { name: candidateName(row.token), ats: key.data.ats, token: row.token, enabled: true, ...(key.data.ats === "lever" && row.region === "eu" ? { region: "eu" as const } : {}) },
-        ],
-      });
-    } catch {
-      return fail("write_failed");
-    }
-    outcome = "added";
+        ats_boards: [...current.ats_boards, { name: candidateName(candidate.token), ats: key.data.ats, token: candidate.token, enabled: true, ...(key.data.ats === "lever" && candidate.region === "eu" ? { region: "eu" as const } : {}) }],
+      };
+    });
+    outcome = changed === null ? "already_listed" : "added";
+  } catch (error) {
+    logActionFailure("addBoardCandidate", error);
+    return fail(configErrorKey(error) ?? (error instanceof ConfigError ? "config_invalid" : "write_failed"));
+  }
+  if (outcome === "added") {
     // keep the database mirror of sources.yaml in step (a failure is caught up by the next page load or runner reload)
     try {
       await syncSourceRegistry(getDb(), { config: reloadConfig("channels"), text: readConfigText("channels") });
-    } catch {
+    } catch (error) {
+      logActionFailure("addBoardCandidate", error);
       // mirror out of sync until then
     }
   }
   try {
     await setBoardCandidateStatus(getDb(), key.data, "added");
-  } catch {
+  } catch (error) {
+    logActionFailure("addBoardCandidate", error);
     return fail("database_unavailable");
   }
   return { status: "done", outcome };
@@ -131,7 +131,8 @@ export async function dismissBoardCandidate(raw: unknown): Promise<CandidateActi
   if (!key.success) return fail("invalid");
   try {
     return (await setBoardCandidateStatus(getDb(), key.data, "dismissed")) ? { status: "done", outcome: "dismissed" } : fail("unknown_candidate");
-  } catch {
+  } catch (error) {
+    logActionFailure("dismissBoardCandidate", error);
     return fail("database_unavailable");
   }
 }

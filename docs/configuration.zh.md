@@ -280,6 +280,7 @@ ai-worker 的发布目录和切换由 `schedule.yaml` 里的四个键控制。�
 | 文件 | 键 | 默认 | 含义 |
 |---|---|---|---|
 | `pipeline.yaml`（shipped） | `lifecycle.possibly_closed_after_days` | 7 | 连续未见这么多天，且每个来源通道在到期后都有成功运行，才标为可能已关闭 |
+| | `lifecycle.dormant_after_days` | 30 | 可能已关闭满这么多天后休眠；整数 0–3650。0 为关闭，下一次 maintenance 清扫时唤醒已有休眠岗位。可选，缺省时由 schema 提供默认值；出厂文件只含注释 |
 | | `lifecycle.unseen_link_check_after_days` | 14 | 有效岗位连续未见这么多天就直接兜底检查链接，不依赖通道运行记录；0 为关闭。可选，缺省时由 schema 提供默认值 |
 | | `lifecycle.unseen_link_check_interval_days` | 7 | 同一岗位两次兜底检查的最少间隔天数。可选，缺省时由 schema 提供默认值 |
 | | `lifecycle.max_link_checks_per_cycle` | 20 | 可能已关闭和长期未见的有效岗位共用的每轮链接检查上限 |
@@ -294,6 +295,11 @@ ai-worker 的发布目录和切换由 `schedule.yaml` 里的四个键控制。�
 | | `job_checks.closed_recheck.extra_phrases` | `[]` | 你自己的短语（正则，不区分大小写），与市场包的 `closed_posting.phrases` 合并。只接受安全的子集：文字、字符类、多选 `(a\|b)`、`\b`、可选部分 `?`（最多 8 个）和最多 5 次的 `{n,m}`，长度不超过 200；不允许 `*`、`+`、`{n,}` 和反向引用。写错或不安全的正则 `pnpm config:check` 会报出路径。只搜页面可见文字的前 200,000 个字符，每页最多 250 毫秒（超时的页面记为"未查"） |
 
 `ui.yaml` 这一段在 YAML 或高级编辑器里改（没有表单）。旧版本不认识它：回退前先删掉。
+
+休眠键只有 schema 默认值，无需升级配置版本或迁移文件，`config:migrate --to-full` 不会把它写进用户文件。
+回退前，如果手动在用户 `pipeline.yaml` 写过 `lifecycle.dormant_after_days`，请先移除；旧版 strict schema 不接受它。
+数据库迁移保留即可，旧代码忽略可空标记，休眠岗位重新可见；再升级时会清扫遗留标记并恢复保护。
+
 
 ## 幽灵岗位检查（`pipeline.yaml` + `ui.yaml`）
 
@@ -385,5 +391,7 @@ CLI 轮次收到 Ctrl-C 或 SIGTERM 时会取消步骤，把这一轮结束为�
 旧版本的线上配置就是 git 里的 `config/`。切换代码前先单独保留这份线上目录；停掉旧消费者后，用 `pnpm config:init --from <保留的旧配置目录>` 导入，再让部署补缺。已有安装现在在第 4 步先预览和校验再冻结，第 11 步 `config-write` 排除旧 worker 后才补缺和写迁移。之后网页只写 `data/config/`，`config/` 存放产品默认值。详见 [`deploy.zh.md`](deploy.zh.md) 第 4、5 节与 [upgrade.zh.md](upgrade.zh.md)。
 
 ### 升级写入保护
+
+来源开关与看板、发现的看板候选、搜索城市同步、工作流设置、兴趣编辑，以及设置向导的配置和进度，都在文件锁与跨进程目录锁内读取当前值，同时修改不同字段会保留彼此的更新。读取前先检查升级冻结；冻结或锁忙会显示对应提示。薪资设置表单与其他设置表单、来源导入一样，会拒绝覆盖预览后已被改动的文件。向导的市场与目标步骤只合并各自负责的偏好字段，画像历史在释放目录锁后记录。
 
 `pnpm ops:freeze --target <commit>` 冻结配置与 profile 写入；`pnpm ops:unfreeze` 在同一套跨进程写锁内删除标记，并提示先运行 `pnpm config:init`，再运行 `pnpm config:migrate --write`。先确认没有旧消费者再手工解除。第 8 步启动容器之前失败或中断，部署只自动解除本次全新创建的冻结；接管的标记必须等 `config-write` 通过消费者检查或用户运行 `ops:unfreeze` 才会解除。尝试 `up` 后失败或中断则保留所有标记。认识冻结协议的 web 在冻结期间拒绝保存；首次升级的旧 web 到第 8 步之前仍写无害的旧格式文件。doctor 用 `config.freeze` 检查遗留标记和超过过期阈值的写锁及 guard 持有者。遗留锁在下次写入时自动接管；若保存持续失败，确认持有者不再写入后删除锁文件或 guard 内的持有者文件。`pnpm config:migrate --json` 只读返回待迁移和问题数量。锁的时限由 `schedule.yaml` 的 `deploy.config_write_lock_stale_seconds`、`config_write_lock_wait_seconds`、`config_write_lock_retry_ms` 配置（默认 300 秒、10 秒、50 毫秒）。同主机持有者记录随机进程 ID 与进程启动时间；PID 重用或 token 已遗弃时立即接管，活跃持有者不接管。其他主机或命名空间仅在超过过期阈值后接管，最终提交再次核对锁的所有权。恢复与长驻进程重启见 [upgrade.zh.md](upgrade.zh.md#升级期间的设置)。

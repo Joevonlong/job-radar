@@ -75,7 +75,11 @@
       "alreadyWatched": "This company is already on the watch list.",
       "watchedNotFound": "This company is not on the watch list; it may have been removed.",
       "categoryMissing": "The categories on the page do not match the file (it may have just changed). Reload the page and try again.",
-      "unknownRetired": "A category to delete is not in the file. Reload the page and try again."
+      "unknownRetired": "A category to delete is not in the file. Reload the page and try again.",
+      "frozen": "An upgrade is in progress. Try saving again later.",
+      "busy": "Another process is saving settings. Try again shortly.",
+      "stale": "This file changed elsewhere. Reload and try again.",
+      "protected": "This change touches a locked key. Edit the config file by hand to change it."
     },
     "errors": {
       "required": "Required",
@@ -596,7 +600,11 @@
         "sync": "Search these places too",
         "link": "Edit search cities",
         "done": "Search cities updated: the next cycles search these places.",
-        "failed": "Could not update the search cities."
+        "failed": "Could not update the search cities.",
+        "frozen": "An upgrade is in progress. Try saving again later.",
+        "busy": "Another process is saving settings. Try again shortly.",
+        "stale": "This file changed elsewhere. Reload and try again.",
+        "protected": "This change touches a locked key. Edit the config file by hand to change it."
       },
       "workplace": {
         "label": "Workplace"
@@ -1298,8 +1306,17 @@
     },
     "error": {
       "title": "The page could not load",
-      "description": "Most often the database is not running or not reachable. Make sure the db container is up (docker compose up -d db), then retry.",
-      "retry": "Retry"
+      "description": "Something went wrong while loading this page. Retry, or check the web service logs if it keeps happening.",
+      "retry": "Retry",
+      "configTitle": "A configuration file could not be loaded",
+      "configDescription": "{file} is invalid or unreadable. Open Settings → Advanced to repair it, then retry.",
+      "configFile": "A configuration file",
+      "repair": "Open the advanced editor",
+      "updatedTitle": "The app has been updated",
+      "updatedDescription": "This tab was opened before an update. Reload it, then try the action again.",
+      "reload": "Reload the page",
+      "actionFailed": "The action could not reach the app. Check your connection and try again.",
+      "updatedToast": "The app was updated. The page has reloaded; try your action again."
     },
     "kpi": {
       "label": "This cycle at a glance",
@@ -1343,13 +1360,15 @@
         "manual": "Closed by you",
         "gone": "Taken down at the source",
         "phrase": "Source says no longer accepting",
-        "possibly": "Possibly closed"
+        "possibly": "Possibly closed",
+        "dormant": "Not listed for weeks"
       },
       "reasonHint": {
         "manual": "You marked this job closed.",
         "gone": "The posting answered {status} (gone) when it was checked on {when}.",
         "phrase": "The posting says “{quote}” (checked {when}).",
-        "possibly": "No source has listed this job for a while."
+        "possibly": "No source has listed this job for a while.",
+        "dormant": "No source has listed this job for weeks, so it is left out of the job list and the automatic steps. It comes back by itself when a source lists it again."
       },
       "evidenceLink": "Checked page",
       "markClosed": "Mark as closed",
@@ -1376,7 +1395,9 @@
       "srHint": ": {hint}",
       "editNote": "Edit note",
       "addNote": "Add a note",
-      "saveNote": "Save note"
+      "saveNote": "Save note",
+      "lastListed": "Last listed by a source on {date}.",
+      "filterHint": "Closed, possibly closed and not listed for weeks"
     }
   },
   "pipeline": {
@@ -3167,7 +3188,10 @@
         "unreadable": "ui.yaml or notify.yaml cannot be read right now: fix it in the advanced editor first.",
         "writeFailed": "Could not save: {file} is unchanged and no other file was written.",
         "partial": "{saved} was saved, but {file} could not be written: it is still the old one. Save again.",
-        "frozen": "An upgrade is in progress. Try saving again later. If no deploy is running, deploy again or run `pnpm ops:unfreeze`."
+        "frozen": "An upgrade is in progress. Try saving again later. If no deploy is running, deploy again or run `pnpm ops:unfreeze`.",
+        "busy": "Another process is saving settings. Try again shortly.",
+        "stale": "This file changed elsewhere. Reload and try again.",
+        "protected": "This change touches a locked key. Edit the config file by hand to change it."
       }
     },
     "notifyReminderLink": "The timeouts of \"Interested\" and \"Applied\" are now set in the Workflow tab.",
@@ -3515,7 +3539,11 @@
         "unknown_candidate": "This board is no longer listed.",
         "config_invalid": "sources.yaml has errors; fix it before adding boards.",
         "write_failed": "sources.yaml could not be written.",
-        "database_unavailable": "The database is not responding."
+        "database_unavailable": "The database is not responding.",
+        "frozen": "An upgrade is in progress. Try saving again later.",
+        "busy": "Another process is saving settings. Try again shortly.",
+        "stale": "This file changed elsewhere. Reload and try again.",
+        "protected": "This change touches a locked key. Edit the config file by hand to change it."
       }
     },
     "aiHealth": {
@@ -3827,7 +3855,11 @@
       "unreadable": "A config file could not be read or is invalid, so nothing was changed. Fix it on /settings or in the YAML.",
       "writeFailed": "The config file could not be written, so nothing was changed. The suggestion is still pending.",
       "databaseUnavailable": "The database is unavailable.",
-      "categoryMissing": "The signal category this word goes into was deleted, so nothing was changed. Restore the category first, or reject the suggestion."
+      "categoryMissing": "The signal category this word goes into was deleted, so nothing was changed. Restore the category first, or reject the suggestion.",
+      "frozen": "An upgrade is in progress. Try saving again later.",
+      "busy": "Another process is saving settings. Try again shortly.",
+      "stale": "This file changed elsewhere. Reload and try again.",
+      "protected": "This change touches a locked key. Edit the config file by hand to change it."
     }
   },
   "aiRun": {
@@ -3859,6 +3891,7 @@
       "nothingStale": "No stale scores.",
       "nothingToScore": "No job waits for a score.",
       "databaseUnavailable": "The database is unavailable; nothing was requested.",
+      "transportFailed": "Could not reach the server. Check your connection and try again; the request may already have been received.",
       "tooSoon": "Requested a moment ago; try again in {seconds} s."
     },
     "existing": "A request that covers this channel is already queued or running; waiting for its result.",
@@ -4493,7 +4526,10 @@
       "no_changes": "Same as the current file: nothing to apply.",
       "database_unavailable": "The database is not responding.",
       "needs_parent": "Turn on linkedin-session first, or this switch has no effect.",
-      "consent_required": "This channel needs you to confirm the terms-of-service notice first. Use the switch on the sources page."
+      "consent_required": "This channel needs you to confirm the terms-of-service notice first. Use the switch on the sources page.",
+      "frozen": "An upgrade is in progress. Try saving again later.",
+      "busy": "Another process is saving settings. Try again shortly.",
+      "protected": "This change touches a locked key. Edit the config file by hand to change it."
     },
     "toast": {
       "enabled": "{name} enabled",
@@ -4538,7 +4574,10 @@
         "no_changes": "Same as the current file: nothing to apply.",
         "database_unavailable": "The database is not responding.",
         "needs_parent": "Turn on linkedin-session first, or this switch has no effect.",
-        "consent_required": "This channel needs you to confirm the terms-of-service notice first. Use the switch on the sources page."
+        "consent_required": "This channel needs you to confirm the terms-of-service notice first. Use the switch on the sources page.",
+        "frozen": "An upgrade is in progress. Try saving again later.",
+        "busy": "Another process is saving settings. Try again shortly.",
+        "protected": "This change touches a locked key. Edit the config file by hand to change it."
       }
     },
     "import": {
@@ -4632,7 +4671,10 @@
         "no_changes": "Same as the current file: nothing to apply.",
         "database_unavailable": "The database is not responding.",
         "needs_parent": "Turn on linkedin-session first, or this switch has no effect.",
-        "consent_required": "This channel needs you to confirm the terms-of-service notice first. Use the switch on the sources page."
+        "consent_required": "This channel needs you to confirm the terms-of-service notice first. Use the switch on the sources page.",
+        "frozen": "An upgrade is in progress. Try saving again later.",
+        "busy": "Another process is saving settings. Try again shortly.",
+        "protected": "This change touches a locked key. Edit the config file by hand to change it."
       },
       "consent": {
         "title": "This import switches on channels that carry a terms-of-service risk: {channels}.",
@@ -6382,7 +6424,7 @@
     "tools": {
       "search_jobs": {
         "title": "Search jobs",
-        "description": "Search the jobs Job Radar collected: by keyword, city, work mode, minimum rank, minimum yearly salary, first-seen date and application status. Returns ranked job cards (facts, links, score and rank) without the JD text; use get_job for one job's details. Jobs the hard filter removed and closed jobs are left out. For \"what is new today\", pass since = today and sort = rank."
+        "description": "Search the jobs Job Radar collected: by keyword, city, work mode, minimum rank, minimum yearly salary, first-seen date and application status. Returns ranked job cards (facts, links, score and rank) without the JD text; use get_job for one job's details. Jobs the hard filter removed, closed jobs and jobs not listed by any source for weeks are left out. For \"what is new today\", pass since = today and sort = rank."
       },
       "get_job": {
         "title": "Get one job",

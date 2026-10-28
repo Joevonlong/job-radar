@@ -3,13 +3,16 @@
 import { useTranslations } from "next-intl";
 import { useState, useTransition } from "react";
 
-import { setSourceEnabledAction } from "@/app/sources/registry/actions";
+import { setSourceEnabledAction as rawSetSourceEnabledAction } from "@/app/sources/registry/actions";
 import { Button } from "@/components/ui/button";
 import { DocLink } from "@/components/ui/doc-link";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
 import type { ConsentKind } from "@/lib/channels/access";
 import { toastTone } from "@/lib/toast";
+import { withActionFeedback } from "@/lib/actions/client";
+
+const setSourceEnabledAction = withActionFeedback(rawSetSourceEnabledAction)(() => ({ status: "error", error: "write_failed" }));
 
 /**
  * The on/off switch of a channel or a board. It flips at once and writes `enabled` of the entry into sources.yaml;

@@ -3,6 +3,7 @@
  * through `writeConfig` (comments are preserved, the file is replaced atomically). The Server
  * Action in `app/settings/actions.ts` is a thin wrapper around `saveSettings`.
  */
+import { logActionFailure } from "@/lib/logging/action-failure";
 import { z } from "zod";
 
 import {
@@ -42,7 +43,8 @@ const requestSchema = z.strictObject({
 function currentHash(tab: SettingsForm): string {
   try {
     return hashConfigText(readConfigText(tab));
-  } catch {
+  } catch (error) {
+    logActionFailure("currentHash", error);
     return "";
   }
 }
@@ -56,6 +58,7 @@ function loadCurrent(tab: SettingsForm): unknown {
   try {
     return reloadConfig(tab);
   } catch (error) {
+    logActionFailure("loadCurrent", error);
     if (error instanceof ConfigError) return null;
     throw error;
   }
@@ -90,6 +93,7 @@ function validate(tab: SettingsForm, candidate: unknown): Validated {
       try {
         catalog = reloadConfig("models");
       } catch (error) {
+        logActionFailure("validate", error);
         if (error instanceof ConfigError) return { ok: false, fieldErrors: [], formError: "catalogUnreadable" };
         throw error;
       }
@@ -103,7 +107,7 @@ function validate(tab: SettingsForm, candidate: unknown): Validated {
     }
     case "salary": {
       const result = salarySchema.safeParse(candidate);
-      return result.success ? { ok: true, write: () => writeConfig("salary", result.data) } : { ok: false, error: result.error };
+      return result.success ? { ok: true, write: (baseHash) => writeConfig("salary", result.data, { baseHash }) } : { ok: false, error: result.error };
     }
     case "notify": {
       const result = notifySchema.safeParse(candidate);
@@ -158,6 +162,7 @@ export async function saveSettings(rawRequest: unknown): Promise<SettingsActionS
     await validated.write(baseHash);
     return { status: "saved", tab, nonce: Date.now() };
   } catch (error) {
+    logActionFailure("saveSettings", error);
     if (error instanceof ConfigError && error.kind === "frozen") return failed(tab, "frozen");
     if (error instanceof ConfigError && error.kind === "stale") return failed(tab, "stale");
     if (error instanceof ConfigError && error.kind === "protected") return failed(tab, "protectedKeys");

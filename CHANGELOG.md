@@ -7,6 +7,11 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ### Upgrade notes
 
+- **Jobs not listed for weeks leave automatic processing.** After 30 days possibly closed (normally 7 + 30 days unseen), unprotected jobs become dormant: default job lists, company counts, search and navigation badges shrink; badges also stop counting closed jobs. Find dormant jobs in the Closed or Possibly closed view, and choose Still open to wake them. No data is deleted. **Rollback:** remove `lifecycle.dormant_after_days` from your user `pipeline.yaml` if you added it (older strict schemas reject it); keep the nullable database columns. Older code shows these jobs again, and re-upgrading sweeps stale markers and user protection.
+
+- **Rolling back past interactive AI lanes:** queued automatic translations can fail on the older worker; the next
+  cycle retries eligible jobs. To preserve the queued requests, remove their automatic-origin markers before rollback
+  as described in [Roll back](docs/upgrade.md#roll-back). User requests retain their existing format.
 - **Remove legacy jobspy dependencies from Compose overrides.** Delete `services.runner.depends_on.jobspy` from your
   `compose.override.yaml` (and any jobspy dependency you added to `db` or `web`), keeping the database dependencies.
   Deploy now refuses dependencies added by overrides before freezing settings, so an unhealthy optional sidecar cannot
@@ -96,6 +101,10 @@ A failure in (a) does not block rollback: follow (c) and accept the display wind
 
 ### Changed
 
+- **Interactive AI requests have their own lane:** translation, breakdown, salary lookup and AI tests can start while
+  a batch runs. Automatic follow-up translations stay in batch; clicking Translate promotes one that is still queued.
+  Concurrent work for the same job and language shares one AI operation. Manual scoring uses the existing time budget,
+  finishes work already started and shows how many jobs remain when the budget stops it.
 - **Waiting buttons follow the process's heartbeat instead of a fixed time limit:** translate, break down, salary
   lookup, the test and "collect now" buttons and "Score now" on a job page keep waiting as long as the process that
   claims the request is alive, instead of giving up after 10 or 12 minutes (the request ran anyway). While a request
@@ -208,6 +217,12 @@ A failure in (a) does not block rollback: follow (c) and accept the display wind
 
 - Recovering the AI worker sends one digest for queued cycles while keeping every cycle's AI work and alerts; company
   name corrections preserve paid salary caches, and ignored HTTP bodies release their cancellation listeners.
+- Web actions recover from outdated tabs, invalid config pages name the file and link to its editor, concurrent settings and setup-wizard edits keep unrelated changes, upgrade freezes show the right message, trigger buttons say when the server cannot be reached, and caught action failures leave safe diagnostics in the web log.
+- Runner heartbeat writes that finish after their timeout still count as healthy; sustained failures allow active work its configured cleanup grace period before restarting.
+- Jobspy scrape requests are sent only once after a timeout or server error; stalled runner heartbeat work is bounded, manual backups are verified before publication, deploy preflight explains why root is unsupported, and CLI checks recognize unavailable commands on a restricted PATH.
+- Keep the closing-phrase quote visible in job details when the job becomes dormant or another closure reason takes precedence.
+
+- Scoring views show the time-budget reason and remaining count even when preparation exhausts the budget before the first job is scored.
 - Splitting merged jobs preserves locations from every linked posting and reports unreadable sources for manual review;
   reprocessing stops its filter and signal batches when the cycle lock is lost.
 - Fixed job identity repairs across cities, linked company mark removal, LinkedIn cross-channel duplicates, concurrent

@@ -9,6 +9,7 @@ import type { ReactNode } from "react";
 
 import { BaseCurrencyProvider } from "@/components/base-currency";
 import { AppShell } from "@/components/shell/app-shell";
+import { ActionFeedback } from "@/components/shell/action-feedback";
 import { intlTag, resolveLocale } from "@/i18n/locale";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -121,6 +122,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
                   <AppShell access={access}>{children}</AppShell>
                 </NuqsAdapter>
                 <Toaster />
+                <ActionFeedback />
               </TooltipProvider>
             </BaseCurrencyProvider>
           </NextIntlClientProvider>

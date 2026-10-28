@@ -54,7 +54,7 @@ export async function listCompanyOverview(db: Db, options: CompanyOverviewOption
     })
       .from(jobs)
       .leftJoin(latest, eq(latest.jobId, jobs.id))
-      .where(jobListWhere(db, {}, options.timezone, latest, ux))
+      .where(await jobListWhere(db, {}, options.timezone, latest, ux))
       .groupBy(jobs.companyId),
   );
   const q = options.q.trim();

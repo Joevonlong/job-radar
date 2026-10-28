@@ -38,12 +38,12 @@ export interface RecordedCall {
 }
 
 /** A context whose fetch answers with `respond` and records the calls. */
-export function jobspyContext(respond: (call: RecordedCall) => HttpResponse | Promise<HttpResponse>): { ctx: ChannelContext; calls: RecordedCall[] } {
+export function jobspyContext(respond: (call: RecordedCall, signal: AbortSignal) => HttpResponse | Promise<HttpResponse>): { ctx: ChannelContext; calls: RecordedCall[] } {
   const calls: RecordedCall[] = [];
   const fetch: FetchLike = async (url, init) => {
     const call: RecordedCall = { url, method: init.method, body: init.body === undefined ? undefined : (JSON.parse(init.body) as unknown) };
     calls.push(call);
-    return respond(call);
+    return respond(call, init.signal);
   };
   const ctx = createChannelContext({
     channelId: "stub",

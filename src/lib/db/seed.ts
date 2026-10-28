@@ -157,6 +157,7 @@ interface SeedJob {
   at: number;
   postedHoursBeforeSeen?: number | null;
   status?: "active" | "possibly_closed" | "closed";
+  dormant?: boolean;
   sources: string[];
   /** Fake match score; the rank value adds the signal bonus. Omitted = unscored. */
   match?: number;
@@ -558,6 +559,21 @@ const SEED_JOBS: readonly SeedJob[] = [
     postedHoursBeforeSeen: 12,
     sources: ["xing"],
     match: 49,
+  },
+  {
+    key: "maplewick-dormant",
+    company: "Maplewick Research",
+    title: "Research Engineer, Document Retrieval",
+    cities: ["Hamburg"],
+    workplace: "hybrid",
+    contract: "permanent",
+    offer: ["Research time and a learning budget."],
+    day: 60,
+    at: 0.4,
+    status: "possibly_closed",
+    dormant: true,
+    sources: ["greenhouse"],
+    match: 64,
   },
   {
     key: "aurelia-closed",
@@ -975,6 +991,7 @@ async function insertSeed(db: Executor, input: { now: Date; tz: string; pipeline
           firstSeenAt: seenAt,
           lastSeenAt: lastSeen,
           status: job.status ?? "active",
+          ...(job.dormant ? { possiblyClosedAt: new Date(lastSeen.getTime() + pipeline.lifecycle.possibly_closed_after_days * DAY_MS), dormantAt: new Date(now.getTime() - DAY_MS) } : {}),
         })
         .returning({ id: jobs.id });
       if (!row) throw new Error(`seed: job ${job.key} was not created`);

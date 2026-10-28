@@ -394,6 +394,7 @@ the link-check settings shared by possibly-closed and unseen active jobs.
 | File | Key | Default | Meaning |
 |---|---|---|---|
 | `pipeline.yaml` (shipped) | `lifecycle.possibly_closed_after_days` | 7 | Days unseen before marking possibly closed, only when every source channel has had a successful run since the deadline |
+| | `lifecycle.dormant_after_days` | 30 | Days possibly closed before dormancy; integer 0–3650. 0 disables it and wakes existing dormant jobs at the next maintenance sweep. Optional, supplied by the schema when absent; the shipped file contains only a comment |
 | | `lifecycle.unseen_link_check_after_days` | 14 | Days unseen before an active job gets a direct fallback link check, regardless of channel runs; 0 = off. Optional, supplied by the schema when absent |
 | | `lifecycle.unseen_link_check_interval_days` | 7 | Least days between fallback checks of the same job. Optional, supplied by the schema when absent |
 | | `lifecycle.max_link_checks_per_cycle` | 20 | Shared per-cycle cap for possibly-closed and unseen active jobs' link checks |
@@ -409,6 +410,12 @@ the link-check settings shared by possibly-closed and unseen active jobs.
 
 The `ui.yaml` block is edited in the YAML or the advanced editor (no form). An older version rejects it: remove it before
 rolling back.
+
+Dormancy needs no config version bump or file migration: the new optional key has only a schema default and is not
+written into user files by `config:migrate --to-full`. To roll back, remove `lifecycle.dormant_after_days` from your
+user `pipeline.yaml` if you added it: older strict schemas reject it. Keep the database migration; older code ignores
+the nullable markers and shows dormant jobs again. Re-upgrading sweeps stale markers and restores protection.
+
 
 ## Ghost job check (`pipeline.yaml` + `ui.yaml`)
 
@@ -536,6 +543,12 @@ missing files and writes migrations after excluding old workers. From then on th
 `config/` holds product defaults. See sections 4 and 5 of [`deploy.md`](deploy.md) and [upgrade.md](upgrade.md).
 
 ### Upgrade write protection
+
+Source switches and boards, discovered board candidates, search-city synchronization, workflow settings and interest
+edits, including setup wizard settings and progress, read their current values inside both the file lock and the cross-process directory lock. Concurrent changes to
+different fields are kept; a freeze is checked before that read. A frozen or busy save is reported explicitly. The
+salary settings form, like the other settings forms and source imports, refuses a file changed since its preview.
+Wizard market and target saves merge only their own preference fields; profile history is recorded after releasing the directory lock.
 
 `pnpm ops:freeze --target <commit>` freezes config/profile writes for an upgrade; `pnpm ops:unfreeze` removes the marker
 under the same cross-process write locks and prints `pnpm config:init`, then `pnpm config:migrate --write`. Use it only

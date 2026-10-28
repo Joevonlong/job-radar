@@ -50,7 +50,7 @@ Which jobs run depends on what the change touches (decided by the `changes` job)
 |---|---|
 | Pull request that changes only documentation (`*.md`, `*.html`, images; excludes toolchain paths and anything under `tests/`, `src/` or `public/`) | `changes` (with the documentation link check), `ci-docs`, `static`, `unit`, `ci-ok`. Several unit tests read the documentation (link targets, picture sizes), so they run. |
 | Any other pull request (code, scripts, config, anything under `tests/`, `src/` or `public/`, workflows, Dockerfiles) | the above plus `integration`, `worker-switch`, `e2e` and `linux-smoke` |
-| Pull request that touches the deploy side (`scripts/ops/`, `src/ai-worker/`, `compose.yaml`, `Dockerfile`, `tests/transition/`, `tests/ops/sim/`) | the above plus `upgrade-transition` |
+| Pull request that touches the deploy side (`scripts/ops/`, root `scripts/*.ts`, `src/lib/ops/`, `src/lib/config/migrations/`, `src/ai-worker/`, `compose.yaml`, `Dockerfile`, `tests/transition/`, `tests/ops/sim/`) | the above plus `upgrade-transition` |
 | Dependency/toolchain pull request (`package.json`, lock/workspace files, `.github/**`, root test configs, Node version files) | everything (`full=true`, `transition=true`), including default-order integration |
 | Push to `main` | always everything, whatever the pushed commits touch; `integration` also runs the default file order |
 | Manual run (`workflow_dispatch`) | everything, like a push to `main` |
@@ -102,8 +102,11 @@ Only a pull request is classified; it writes three outputs that the other jobs r
   run either way (the unit tests read the documentation, and no list of "which tests read which file" is kept that
   could go stale). Toolchain paths take precedence over documentation extensions.
 - `full`: `true` on pushes to `main`, manual runs and dependency/toolchain pull requests; it adds the default-order integration run. Toolchain paths are `package.json` (including `engines.node`), `pnpm-lock.yaml`, `pnpm-workspace.yaml`, anything under `.github/`, root `vitest*.ts` / `playwright*.ts`, `.nvmrc` and `.node-version`. They also force `code=true` and `transition=true`, including Markdown under `.github/`.
-- `transition`: `true` when a changed path starts with `scripts/ops/`, `src/ai-worker/`, `tests/transition/` or
-  `tests/ops/sim/`, or is `compose.yaml` or `Dockerfile`, or touches the toolchain inputs above; it selects `upgrade-transition`.
+- `transition`: `true` when a changed path starts with `scripts/ops/`, `src/lib/ops/`, `src/lib/config/migrations/`,
+  `src/ai-worker/`, `tests/transition/` or `tests/ops/sim/`, is a TypeScript script directly under `scripts/`,
+  is `compose.yaml` or `Dockerfile`, or touches the toolchain inputs above; it selects `upgrade-transition`.
+  This includes the deploy's drain/freeze entry points and config migrations of existing installations. Changes only to
+  `src/runner/`, `jobspy/` or `drizzle/` still use `linux-smoke` for startup coverage without selecting the transition suite.
 
 A push to `main` and a manual run are not classified at all: they write `code=true`, `full=true` and `transition=true`. The commits on `main`
 are what gets deployed, so a documentation-only push must not end in a run that checked nothing. The range of a pull

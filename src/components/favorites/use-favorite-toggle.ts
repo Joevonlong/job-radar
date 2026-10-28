@@ -3,8 +3,12 @@
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { restoreFavoriteAction, setFavoriteAction } from "@/app/favorites/actions";
+import { restoreFavoriteAction as rawRestoreFavoriteAction, setFavoriteAction as rawSetFavoriteAction } from "@/app/favorites/actions";
 import { toastTone, toastUndo } from "@/lib/toast";
+import { withActionFeedback } from "@/lib/actions/client";
+
+const restoreFavoriteAction = withActionFeedback(rawRestoreFavoriteAction)(() => ({ ok: false, error: "failed" }));
+const setFavoriteAction = withActionFeedback(rawSetFavoriteAction)(() => ({ ok: false, error: "failed" }));
 
 export interface FavoriteSubject {
   id: number;

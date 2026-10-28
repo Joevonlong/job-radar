@@ -4,8 +4,11 @@ import { useTranslations } from "next-intl";
 import { useTransition } from "react";
 import { toast } from "sonner";
 
-import { setGhostDismissAction } from "@/app/jobs/[id]/ghost-actions";
+import { setGhostDismissAction as rawSetGhostDismissAction } from "@/app/jobs/[id]/ghost-actions";
 import { Button } from "@/components/ui/button";
+import { withActionFeedback } from "@/lib/actions/client";
+
+const setGhostDismissAction = withActionFeedback(rawSetGhostDismissAction)(() => ({ ok: false, error: "failed" }));
 
 /** "Not a ghost job" (dismiss the mark) or "Undo" (take the dismissal back) on the checks card's ghost job row. */
 export function GhostDismissButton({ jobId, action }: { jobId: number; action: "dismiss" | "clear" }) {

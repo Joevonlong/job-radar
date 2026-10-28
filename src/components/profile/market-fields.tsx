@@ -3,7 +3,7 @@
 import { useLocale, useTranslations } from "next-intl";
 import { useState, useTransition } from "react";
 
-import { enableMarketChannelsAction } from "@/app/me/actions";
+import { enableMarketChannelsAction as rawEnableMarketChannelsAction } from "@/app/me/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -12,6 +12,9 @@ import type { MarketView, PackOption } from "@/lib/market/view";
 import type { FieldError, MarketDraft } from "@/lib/profile/draft";
 
 import { Field, describedBy } from "./fields";
+import { withActionFeedback } from "@/lib/actions/client";
+
+const enableMarketChannelsAction = withActionFeedback(rawEnableMarketChannelsAction)(() => ({ status: "error", error: "write_failed" }));
 
 interface MarketFieldsProps {
   baseId: string;

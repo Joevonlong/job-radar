@@ -60,7 +60,11 @@ scripts/ops/backup.sh                    # data/backups/jobradar-manual-YYYYMMDD
 scripts/ops/backup.sh --label before-x   # with a label in the name: ...-before-x.dump
 ```
 
-The script needs only Docker (pg_dump runs inside the db container, so you do not need Postgres on the host). Manual backups are named `manual` and are **never pruned by the automatic retention policy**; delete them yourself when you no longer need them.
+The script needs only Docker (pg_dump runs inside the db container, so you do not need Postgres on the host). Before
+renaming the `.partial` file it checks the archive's table of contents with the same container's `pg_restore --list`,
+then calls the host's `sync` to flush it to disk. A failed dump, unreadable archive or failed flush removes the partial
+file and stops the backup (and a deployment waiting for it). This check does not replace a full restore drill.
+Manual backups are named `manual` and are **never pruned by the automatic retention policy**; delete them yourself when you no longer need them.
 
 The configuration is kept as well: `scripts/ops/backup.sh` writes a same-named `….config.tgz` next to the `.dump`, containing the user config directory `data/config/` (without `.backup/` and `.web-session-secret`) and the profile `data/profile/`. They are not in the database and not in git, so this is one of the only copies of them. The runner's daily backup writes the same archive (see section 1).
 

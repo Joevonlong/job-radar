@@ -4,16 +4,29 @@ import { FlaskConical, Loader2, Play, Send } from "lucide-react";
 import { useFormatter, useTranslations } from "next-intl";
 import { useState, useTransition } from "react";
 
-import { runChannelNowAction, testAiAction, testChannelAction, testTelegramAction } from "@/app/control-actions";
+import { runChannelNowAction as rawRunChannelNowAction, testAiAction as rawTestAiAction, testChannelAction as rawTestChannelAction, testTelegramAction as rawTestTelegramAction } from "@/app/control-actions";
 import { Button } from "@/components/ui/button";
 import { followsCoveringCycle, isOpenRequest, type ControlQueueView, type ControlRequestView } from "@/lib/control/request-view-schema";
 import { IDLE_CONTROL_STATE, type ControlActionState } from "@/lib/control/service-types";
 import { formatClock } from "@/lib/format/clock";
 import { cn } from "@/lib/utils";
+import { withActionFeedback } from "@/lib/actions/client";
 
 import { QueueHint } from "./queue-hint";
 import { readRequestView } from "./read-request-view";
 import { useControlRequest, type ControlRequestStage } from "./use-control-request";
+
+type TriggerActionState = ControlActionState | { status: "error"; error: "transportFailed"; nonce: number };
+
+function withTriggerFeedback<Args extends unknown[]>(action: (...args: Args) => Promise<ControlActionState>): (...args: Args) => Promise<TriggerActionState> {
+  return withActionFeedback<Args, TriggerActionState>(action)(() => ({ status: "error", error: "transportFailed", nonce: Date.now() }));
+}
+
+const runChannelNowAction = withTriggerFeedback(rawRunChannelNowAction);
+const testAiAction = withTriggerFeedback(rawTestAiAction);
+const testChannelAction = withTriggerFeedback(rawTestChannelAction);
+const testTelegramAction = withTriggerFeedback(rawTestTelegramAction);
+
 
 /** What a trigger button asks for. */
 export type TriggerKind = "runChannel" | "testChannel" | "testAi" | "testTelegram";
@@ -40,7 +53,7 @@ const RESULT_ERRORS = [
   "invalid_payload",
 ] as const;
 
-function call(kind: TriggerKind, target: string): Promise<ControlActionState> {
+function call(kind: TriggerKind, target: string): Promise<TriggerActionState> {
   switch (kind) {
     case "runChannel":
       return runChannelNowAction(target);
@@ -81,7 +94,7 @@ interface TriggerButtonProps {
  */
 export function TriggerButton({ kind, target = "", disabled = false, disabledHint, confirm = false, variant = "outline", className, timeZone }: TriggerButtonProps) {
   const t = useTranslations("trigger");
-  const [state, setState] = useState<ControlActionState>(IDLE_CONTROL_STATE);
+  const [state, setState] = useState<TriggerActionState>(IDLE_CONTROL_STATE);
   const [pending, startTransition] = useTransition();
   const [confirming, setConfirming] = useState(false);
   const queuedId = state.status === "queued" ? state.request : null;
@@ -133,7 +146,7 @@ export function TriggerButton({ kind, target = "", disabled = false, disabledHin
 
 interface OutcomeProps {
   kind: TriggerKind;
-  state: ControlActionState;
+  state: TriggerActionState;
   /** The request is queued or running (not finished, not gone). */
   open: boolean;
   /** The newest view: while open the last one polled, after the end the final one (null: not read yet, or gone). */

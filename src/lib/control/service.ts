@@ -2,6 +2,7 @@
  * Web side of the control channel: validates what the browser asks for and leaves a row in
  * `control_requests`. The runner does the work (see `poller.ts`); this module never runs a cycle.
  */
+import { logActionFailure } from "@/lib/logging/action-failure";
 import { isConfiguredChannelId } from "@/lib/channels/registry";
 import { loadConfig } from "@/lib/config";
 import {
@@ -43,7 +44,8 @@ const queued = (row: ControlRequest, existing: boolean): ControlActionState => (
 function currentCascades(): CoverageCascade[] | null {
   try {
     return [{ order: loadConfig("channels").linkedin.cascade }];
-  } catch {
+  } catch (error) {
+    logActionFailure("currentCascades", error);
     return null;
   }
 }
@@ -70,7 +72,8 @@ export async function requestRunCycle(rawPayload: unknown): Promise<ControlActio
     const row = await insertControlRequest(db, { kind: "run_cycle", payload: payload.data });
     log.info("manual request queued", { request: row.id, kind: row.kind, channels: payload.data.channelIds?.join(",") ?? "all" });
     return queued(row, false);
-  } catch {
+  } catch (error) {
+    logActionFailure("requestRunCycle", error);
     return fail("databaseUnavailable");
   }
 }
@@ -83,7 +86,8 @@ export async function requestRescoreStale(): Promise<ControlActionState> {
     if (open) return queued(open, true);
     if ((await countStaleScores(db)) === 0) return fail("nothingStale");
     return queued(await insertControlRequest(db, { kind: "rescore_stale" }), false);
-  } catch {
+  } catch (error) {
+    logActionFailure("requestRescoreStale", error);
     return fail("databaseUnavailable");
   }
 }
@@ -117,7 +121,8 @@ export async function requestScoreJobs(rawPayload: unknown): Promise<ControlActi
       if (!waiting.some(Boolean)) return fail("nothingToScore");
     }
     return queued(await insertControlRequest(db, { kind: "score_jobs", payload: payload.data }), false);
-  } catch {
+  } catch (error) {
+    logActionFailure("requestScoreJobs", error);
     return fail("databaseUnavailable");
   }
 }
@@ -154,7 +159,8 @@ export async function requestTestChannel(rawPayload: unknown): Promise<ControlAc
   const { channelId } = payload.data;
   try {
     return await requestTest(getDb(), "test_channel", { channelId }, (stored) => testChannelPayloadSchema.safeParse(stored).data?.channelId === channelId);
-  } catch {
+  } catch (error) {
+    logActionFailure("requestTestChannel", error);
     return fail("databaseUnavailable");
   }
 }
@@ -166,7 +172,8 @@ export async function requestTestAi(rawPayload: unknown): Promise<ControlActionS
   const { provider } = payload.data;
   try {
     return await requestTest(getDb(), "test_ai", { provider }, (stored) => testAiPayloadSchema.safeParse(stored).data?.provider === provider);
-  } catch {
+  } catch (error) {
+    logActionFailure("requestTestAi", error);
     return fail("databaseUnavailable");
   }
 }
@@ -175,7 +182,8 @@ export async function requestTestAi(rawPayload: unknown): Promise<ControlActionS
 export async function requestTestTelegram(): Promise<ControlActionState> {
   try {
     return await requestTest(getDb(), "test_telegram", {}, () => true);
-  } catch {
+  } catch (error) {
+    logActionFailure("requestTestTelegram", error);
     return fail("databaseUnavailable");
   }
 }

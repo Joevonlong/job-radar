@@ -27,7 +27,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/app/jobs/closure-actions", () => ({ closeJobAction: mocks.closeJobAction, reopenJobAction: mocks.reopenJobAction, undoClosureAction: mocks.undoClosureAction }));
 vi.mock("@/app/jobs/[id]/actions", () => ({ setApplicationStatusAction: mocks.setApplicationStatusAction }));
 vi.mock("@/app/pipeline/actions", () => ({ undoApplicationStatusAction: mocks.undoApplicationStatusAction }));
-vi.mock("@/app/favorites/actions", () => ({ setFavoriteAction: mocks.setFavoriteAction, restoreFavoriteAction: mocks.restoreFavoriteAction }));
+vi.mock("@/app/favorites/actions", () => ({ setFavoriteAction: mocks.setFavoriteAction, restoreFavoriteAction: mocks.restoreFavoriteAction, saveFavoriteNoteAction: vi.fn() }));
 vi.mock("@/app/visit-actions", () => ({ markSeenAction: mocks.markSeenAction, markUnseenAction: mocks.markUnseenAction }));
 vi.mock("@/lib/toast", () => ({ toastTone: mocks.toastTone, toastUndo: mocks.toastUndo }));
 vi.mock("@/components/jobs/job-view-transition", async () => {
