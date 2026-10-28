@@ -91,29 +91,47 @@ function otherCity(row: CityRow, market: Market): string | null {
   return first === "" ? null : first;
 }
 
+/** Where one stored location goes: a target city, another city (its key), or nowhere (a region, a country, no place). */
+type Placement = { key: string; target: boolean } | null;
+
 /**
  * Group the stored locations by city. Target cities come first in the order of `config.targets` (only
  * those with jobs), then the others, most jobs first; regions and country-level values are left out.
+ * Where a location goes depends only on its (city, label, country code), and most jobs share a few
+ * places, so each distinct one is placed once.
  */
 export function buildCityGroups(rows: readonly CityRow[], config: CityGroupConfig): CityGroup[] {
   const targets = compileTargets(config);
   const nonCities = compileNonCities(config);
   const groups = new Map<string, { key: string; target: boolean; jobs: Set<number>; members: Set<string>; spellings: Map<string, number> }>();
+  const placements = new Map<string, Placement>();
+  // `otherCity` reads only the city value
+  const otherCities = new Map<string, string | null>();
 
-  for (const row of rows) {
+  const place = (row: CityRow): Placement => {
     const text = [foldText(row.city), foldText(row.label)];
     const target = inHomeOrUnstated(row, config.market) ? targets.find((t) => text.some((value) => value !== "" && t.patterns.some((pattern) => pattern.test(value)))) : undefined;
-    let key: string;
-    if (target) {
-      key = target.key;
-    } else {
-      if (nonCities.some((pattern) => pattern.test(foldText(row.city)))) continue;
-      const city = otherCity(row, config.market);
-      if (city === null) continue;
-      key = city;
+    if (target) return { key: target.key, target: true };
+    if (nonCities.some((pattern) => pattern.test(foldText(row.city)))) return null;
+    let city = otherCities.get(row.city);
+    if (city === undefined) {
+      city = otherCity(row, config.market);
+      otherCities.set(row.city, city);
     }
+    return city === null ? null : { key: city, target: false };
+  };
+
+  for (const row of rows) {
+    const tuple = JSON.stringify([row.city, row.label, row.countryCode]);
+    let placement = placements.get(tuple);
+    if (placement === undefined) {
+      placement = place(row);
+      placements.set(tuple, placement);
+    }
+    if (placement === null) continue;
+    const { key, target } = placement;
     const id = foldText(key);
-    const group = groups.get(id) ?? { key, target: target !== undefined, jobs: new Set<number>(), members: new Set<string>(), spellings: new Map<string, number>() };
+    const group = groups.get(id) ?? { key, target, jobs: new Set<number>(), members: new Set<string>(), spellings: new Map<string, number>() };
     group.jobs.add(row.jobId);
     group.members.add(row.city);
     group.spellings.set(key, (group.spellings.get(key) ?? 0) + 1);

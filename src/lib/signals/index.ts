@@ -22,7 +22,8 @@ import {
   replaceSalarySignals,
   saveAiReview,
   saveRuleScan,
-  setScoreBonus,
+  setScoreBonuses,
+  type ScoreBonusUpdate,
   setSignalValue,
 } from "@/lib/db/repos/signals";
 import { listRuntimeState, setRuntimeState } from "@/lib/db/repos/runtime-state";
@@ -260,15 +261,15 @@ export async function reconcileBonuses(
   if (baseCurrency === null) return { checked: 0, updated: 0 };
   const policy = bonusPolicy(interests, salaryFloorEur, baseCurrency);
   const rows = await listBonusRows(db);
-  const result: BonusReconcileResult = { checked: rows.length, updated: 0 };
+  const updates: ScoreBonusUpdate[] = [];
   for (const row of rows) {
     const bonus = signalBonus(row.signals, interests, policy).bonus;
     const rank = row.score.score === null ? row.score.rankValue : computeRankValue(row.score.score, bonus, interests.bonus_cap);
     if (row.score.signalBonus === bonus && row.score.rankValue === rank) continue;
-    await setScoreBonus(db, row.score.id, { signalBonus: bonus, rankValue: rank });
-    result.updated += 1;
+    updates.push({ scoreId: row.score.id, signalBonus: bonus, rankValue: rank });
   }
-  return result;
+  await setScoreBonuses(db, updates);
+  return { checked: rows.length, updated: updates.length };
 }
 
 // ---------------------------------------------------------------- AI review
