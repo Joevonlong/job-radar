@@ -146,7 +146,7 @@ own, so the time a pattern may take is limited in three places:
 | `max_pattern_chars` | 200 | length of one term or pattern (at most 500) |
 | `match_text_max_chars` | 20,000 | characters of a description that are searched |
 | `rule_warn_ms` | 200 | `pnpm deal-breakers:check` warns about a rule slower than this over all open jobs |
-| `match_ms` | 100 | one pattern on one test text (also the patterns of interests.yaml, see [signals](signals.md#how-to-write-the-word-lists)), and the explanation on a job page |
+| `match_ms` | 100 | one deal-breaker pattern on one test text, and the explanation on a job page |
 | `rule_budget_ms` | 2,000 | one rule over all jobs in one filter run or one preview |
 | `preview_ms` | 3,000 | the whole preview on the card |
 

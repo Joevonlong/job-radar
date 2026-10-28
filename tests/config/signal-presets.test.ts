@@ -5,9 +5,11 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { configRegistry, interestsSchema, parseConfigText, type InterestsConfig } from "@/lib/config";
+import { SIGNAL_PROBE_DEFAULTS } from "@/lib/config/schemas/interests";
 import { signalPresetsSchema, type SignalPreset } from "@/lib/config/schemas/signal-presets";
 import { presetToDraft } from "@/lib/interests/presets";
 import { configToDraft, draftToCandidate, newCategoryDraft } from "@/lib/interests/vocabulary-draft";
+import { signalPatternIsFast } from "@/lib/signals/pattern-guard";
 
 import { FIXTURE_DEFAULTS_DIR, REPO_DEFAULTS_DIR, shippedYaml } from "./helpers";
 import { candidatesOf, shippedInterests } from "../signals/helpers";
@@ -37,6 +39,21 @@ describe("signal-presets.yaml", () => {
       expect(() => parseConfigText("signalPresets", fs.readFileSync(file, "utf8"), file)).not.toThrow();
     }
     expect(configRegistry.signalPresets.kind).toBe("shipped");
+  });
+
+  it("every shipped and fixture preset pattern and exclusion passes the interest probe in every language", () => {
+    const isFast = signalPatternIsFast({ ...SIGNAL_PROBE_DEFAULTS });
+    for (const dir of [REPO_DEFAULTS_DIR, FIXTURE_DEFAULTS_DIR]) {
+      const file = path.join(dir, "signal-presets.yaml");
+      const { presets } = parseConfigText("signalPresets", fs.readFileSync(file, "utf8"), file);
+      for (const preset of presets) {
+        for (const field of ["patterns", "exclude"] as const) {
+          for (const [language, patterns] of Object.entries(preset[field])) {
+            for (const pattern of patterns) expect(isFast(pattern), `${preset.id}.${field}.${language}: ${pattern}`).toBe(true);
+          }
+        }
+      }
+    }
   });
 
   it("rejects duplicate ids, a bad language code, a broken pattern and a preset without a name", () => {

@@ -288,13 +288,19 @@ function probeTexts(source: string, length: number): string[] {
     runs("1".repeat(PROBE_RUN_CHARS), length),
     runs(" ".repeat(PROBE_RUN_CHARS), length),
   ];
+  const withTail = [runs("a".repeat(PROBE_RUN_CHARS), length), ...texts.slice(2)];
   // the letters and digits the pattern names, each repeated: `(a|a)+` and its kind fail on these
   const chars = [...new Set(source.toLowerCase().replace(/\\./gu, "").match(/[\p{L}\p{N}]/gu) ?? [])].filter((char) => char !== "a").slice(0, 6);
-  for (const char of chars) texts.push(char.repeat(Math.max(0, length - 1)) + "!");
+  for (const char of chars) {
+    texts.push(char.repeat(Math.max(0, length - 1)) + "!");
+    withTail.push(runs(char.repeat(PROBE_RUN_CHARS), length));
+  }
   // and the pattern's own text at the end: a text without a literal the pattern needs ("€", "Tsd") is refused at once by
-  // the engine's quick check, while a real description has that literal somewhere else
+  // the engine's quick check, while a real description has that literal somewhere else. Keep the original texts too:
+  // adding a required literal may make a slow pattern match immediately. Only separated short runs get the tail, so an
+  // ordinary pattern such as `\p{Lu}{6,}!` does not backtrack over a synthetic 20,000-letter run missing its final "!".
   const tail = ` ${source}`;
-  return texts.map((text) => text.slice(0, Math.max(0, length - tail.length)) + tail);
+  return [...texts, ...withTail.map((text) => text.slice(0, Math.max(0, length - tail.length)) + tail)];
 }
 
 /**

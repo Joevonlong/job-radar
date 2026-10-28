@@ -3,12 +3,13 @@
  * review estimate counts exactly what `listJobsToReview` would hand the AI.
  */
 import { sql } from "drizzle-orm";
-import { afterAll, beforeAll, beforeEach, describe, expect, inject, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, inject, it, vi } from "vitest";
 
 import { reloadConfig } from "@/lib/config";
 import { closeDb, getDb, schema } from "@/lib/db";
 import { runMigrations } from "@/lib/db/migrate";
 import { countJobsToReview, listJobsToReview, listRecentJobsForPreview } from "@/lib/db/repos/signals";
+import { vmTimeBox } from "@/lib/filter/time-box";
 import { previewCategory } from "@/lib/interests/preview";
 import { configToDraft, newCategoryDraft } from "@/lib/interests/vocabulary-draft";
 import { loadPipeline } from "@/lib/market";
@@ -131,6 +132,19 @@ describe("previewCategory", () => {
     expect(result.hits).toBe(1);
   });
 
+  it("runs a multi-job preview in one time box and counts all completed jobs", async () => {
+    await newJob("A", "Benefits: unlimited tokens for every engineer.");
+    await newJob("B", "We build payment software.");
+    await newJob("C", "Perks: unlimited tokens and a laptop.");
+    const before = await tableCounts();
+    const timeBox = vi.fn(vmTimeBox);
+    const result = await previewCategory({ draft: draftWithPerk(), categoryId: "perk" }, { timeBox });
+    expect(result).toMatchObject({ status: "ok", scanned: 3, hits: 2, truncated: false });
+    expect(timeBox).toHaveBeenCalledTimes(1);
+    expect(timeBox).toHaveBeenCalledWith(expect.any(Function), reloadConfig("interests").limits.preview_time_budget_ms);
+    expect(await tableCounts()).toEqual(before);
+  });
+
   it("reports the draft's own errors, and refuses an unknown category or a malformed request", async () => {
     const bad = draftWithPerk({ aiDefinition: "" });
     const result = await previewCategory({ draft: bad, categoryId: "perk" });
@@ -178,7 +192,7 @@ describe("a user pattern with catastrophic backtracking", () => {
   const SLOW = "(\\w+\\s*)*budget";
   const SENTENCE = "Wir bieten eine tolle Arbeitsumgebung.";
 
-  it("the rule scan leaves it out with a warning naming the category: done in under a second, the category's words still hit", async () => {
+  it("the rule scan leaves it out with a warning naming the category, and the category's words still hit", async () => {
     const job = await newJob("A", `${SENTENCE} We offer equity.`);
     const interests = shippedInterests((raw) => {
       (rawCategory(raw, "T2").patterns as string[]).push(SLOW);
@@ -187,7 +201,7 @@ describe("a user pattern with catastrophic backtracking", () => {
     const logger = createLogger({ sink: (record) => records.push(record) });
     const start = performance.now();
     const result = await runRuleScan(getDb(), { interests, pipeline: loadPipeline(), logger, batchSize: 50 });
-    expect(performance.now() - start).toBeLessThan(1000);
+    expect(performance.now() - start).toBeLessThan(3000);
     expect(result).toMatchObject({ scanned: 1, failed: 0 });
     expect((await listSignalsOfJob(getDb(), job)).some((row) => row.tier === "T2")).toBe(true);
     const warnings = records.filter((record) => record.level === "warn");
@@ -206,20 +220,24 @@ describe("a user pattern with catastrophic backtracking", () => {
     draft.categories[index]!.patterns.push(SLOW);
     const start = performance.now();
     const result = await previewCategory({ draft, categoryId: "T2" });
-    expect(performance.now() - start).toBeLessThan(1000);
+    expect(performance.now() - start).toBeLessThan(3000);
     expect(result).toEqual({ status: "invalid", fieldErrors: [{ path: `categories.${index}.patterns.${draft.categories[index]!.patterns.length - 1}`, key: "slowPattern" }] });
   });
 
-  it("the preview runs each job in a time box: a pattern the probe lets through but that is slow on one job ends at the budget", async () => {
-    // fast on the probe's test texts, exponential on a long run of digits without an x
-    await newJob("Slow", `Order number ${"1".repeat(29)}y`);
+  it("the preview stops a running expression at the shared budget and keeps only completed jobs", async () => {
+    // The literal prefix is absent from the test texts, but this JD triggers exponential backtracking.
+    await newJob("Slow", `ticket:${"1".repeat(80)}!`);
     await newJob("Fine", "Perks: unlimited tokens.");
     const draft = draftWithPerk();
-    draft.categories.at(-1)!.patterns = ["(\\d+)+x"];
+    draft.categories.at(-1)!.patterns = ["\\bticket:(\\d+)+x\\b"];
     const budget = reloadConfig("interests").limits.preview_time_budget_ms;
+    const before = await tableCounts();
+    const timeBox = vi.fn(vmTimeBox);
     const start = performance.now();
-    const result = await previewCategory({ draft, categoryId: "perk" });
-    expect(performance.now() - start).toBeLessThan(budget + 1000);
-    expect(result).toMatchObject({ status: "ok", truncated: true });
+    const result = await previewCategory({ draft, categoryId: "perk" }, { timeBox });
+    expect(performance.now() - start).toBeLessThan(budget + 3000);
+    expect(result).toMatchObject({ status: "ok", scanned: 1, hits: 1, truncated: true, samples: [{ title: "Fine" }] });
+    expect(timeBox).toHaveBeenCalledTimes(1);
+    expect(await tableCounts()).toEqual(before);
   });
 });

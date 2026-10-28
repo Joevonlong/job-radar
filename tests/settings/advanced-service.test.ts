@@ -61,10 +61,10 @@ describe("the file list", () => {
 });
 
 describe("save", () => {
-  it("refuses an interests.yaml pattern that is too slow on the probe's test texts, at its line; the file is unchanged", async () => {
+  it.each(["(\\w+\\s*)*budget", "(\\d+)+x", "(\\d+[.,]?)+\\s*k"])("refuses a slow interests.yaml pattern at its line and leaves the file unchanged: %s", async (pattern) => {
     const data = opened("interests");
     const before = userText("interests.yaml");
-    const text = data.text.replace(/(- id: T2\n(?:[ \t]+.*\n)*?([ \t]+)patterns:\n)/, `$1$2  - "(\\\\w+\\\\s*)*budget"\n`);
+    const text = data.text.replace(/(- id: T2\n(?:[ \t]+.*\n)*?([ \t]+)patterns:\n)/, `$1$2  - ${JSON.stringify(pattern)}\n`);
     expect(text).not.toBe(data.text);
     const live = await validateAdvanced({ file: "interests", text });
     expect(live.ok).toBe(false);
@@ -72,7 +72,7 @@ describe("save", () => {
     expect(result.status).toBe("invalid");
     if (result.status !== "invalid") return;
     expect(result.issues).toEqual([expect.objectContaining({ path: expect.stringMatching(/^signals\.categories\[\d+\]\.patterns\[0\]$/), message: SLOW_PATTERN_MESSAGE, source: "schema", exact: true })]);
-    expect(text.split("\n")[result.issues[0]!.line - 1]).toContain("budget");
+    expect(text.split("\n")[result.issues[0]!.line - 1]).toContain(JSON.stringify(pattern));
     expect(userText("interests.yaml")).toBe(before);
   });
 

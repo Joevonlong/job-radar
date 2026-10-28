@@ -29,7 +29,7 @@ export function interestsWarnings(config: Pick<InterestsConfig, "signals" | "lim
 }
 
 /** The message of an interests.yaml pattern that is too slow on the probe's test texts (the file editor shows its own text for it). */
-export const SLOW_PATTERN_MESSAGE = "too slow on a long test text (pipeline.yaml filter.deal_breakers.match_ms): give each + and * an upper limit";
+export const SLOW_PATTERN_MESSAGE = "too slow on a long test text (interests.yaml limits.pattern_probe_ms / limits.pattern_probe_retry_ms): give each + and * an upper limit";
 
 /** A pattern of an active category that fails the probe; `path` is inside interests.yaml (a `tag_patterns` entry: its `pattern`). */
 export interface SlowInterestPattern {

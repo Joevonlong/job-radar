@@ -139,16 +139,38 @@ The `salary` section of `pipeline.yaml`:
 
 - `keywords`: literal words, whole-word, case-insensitive.
 - `patterns`: regular expressions (`iu` flags), for inflections and combined phrasings (German word endings, "competitive … salary").
-- Every pattern (`patterns`, `exclude`, `tag_patterns`) is first tried on a few long test texts without a match, with the
-  limits of `pipeline.yaml: filter.deal_breakers` (`match_text_max_chars` characters, `match_ms` per text, the same check as
-  the [deal-breakers](deal-breakers.md#limits)). A pattern that is too slow there, such as `(\w+\s*)*budget`, can hold
-  the process on one description: the form and the file editor refuse to save it ("Too slow on a long test text"); in a
-  file edited by hand the rules leave it out, and the log names its category. Give each `+` and `*` an upper limit
-  (`[a-z]{1,40}`, `.{0,40}`) and avoid a repeated group that repeats inside.
+- Every pattern (`patterns`, `exclude`, `tag_patterns`) is first tried on long test texts, including runs of digits and
+  whitespace, with the independent [interest pattern limits](#interest-pattern-limits). A pattern that is too slow there,
+  such as `(\w+\s*)*budget` or `(\d+[.,]?)+\s*k`, is retried with a larger budget for a busy machine. If it fails again,
+  the form and the file editor refuse to save it ("Too slow on a long test text"); in a file edited by hand the rules leave
+  it out, and the log names its category. The verdict is kept for the process's lifetime (within a bounded cache); changing
+  the pattern or probe limits tests it afresh. Give each `+` and `*` an upper limit (`[a-z]{1,40}`, `.{0,40}`) and avoid a
+  repeated group that repeats inside.
 - `exclude`: if the start of a hit falls inside one of these matches (within the hit range, or within `limits.exclude_lookbehind_chars` characters before it), the hit is discarded; for example "diversity, equity and inclusion" is not equity, and the amount in "bonus of €25,000" is not salary.
 - `amount.assume_currency` (amount category): when an amount has no currency and the same sentence has a salary word, this currency is assumed and the detail page says so; set it to `null` to discard such amounts.
 - An amount in another currency keeps its original currency, and an annual salary in the market's base currency is also given using the reference rates in `pipeline.yaml: salary.fx_pivot` + `fx_rates` (currencies without a rate are not converted); the salary floor, the "minimum annual salary" filter, the stats page and the amount category's threshold all use this base-currency figure (see [market-packs.md](market-packs.md)).
 - Hourly, daily and monthly pay are converted to annual using `salary.periods_per_year` (hour 2080, day 260, month 12); a single amount in the JD body "with a currency and an explicit hour/day/week/month period" ("Rate: 18 USD per hour") counts as salary even without a salary word, so it also goes through the salary floor.
+
+## Interest pattern limits
+
+Set these optional keys under `limits:` in `interests.yaml`. They are independent of the deal-breaker limits in
+`pipeline.yaml`; changing those does not weaken interest checks. Missing keys use schema defaults, so existing files
+need no migration. Saving another setting leaves absent keys absent when their values equal the defaults; explicit
+keys and overrides are kept, as described in [configuration](configuration.md#which-copy-is-read).
+
+| Key | Default | Minimum | Meaning |
+|---|---|---|---|
+| `pattern_probe_chars` | 20,000 | 2,000 | Characters per probe text; the real JD is still searched in full |
+| `pattern_probe_ms` | 100 ms | 10 ms | Time for one pattern on one probe text |
+| `pattern_probe_retry_ms` | 400 ms | 10 ms | Time per probe text on the second attempt after a timeout |
+| `pattern_job_ms` | 1,000 ms | 50 ms | Total rule matching time on one JD in the signal scan or AI review |
+
+If a pattern passes the probe but runs too long on a real JD, the per-job time box interrupts it and logs the job id
+and budget. The signal scan counts that job as failed and saves no scan or partial signals; the AI review skips it before
+calling a provider, keeps its stored signals and leaves its review pending. Both continue with the next job and retry
+the timed-out job in a later cycle. The preview uses one time box for all selected jobs, with
+`preview_time_budget_ms` (default 1,500 ms); when interrupted, it reports partial results from completed jobs only.
+Probe validation runs before that preview matching budget starts.
 
 ## Pay that may be for another region
 
