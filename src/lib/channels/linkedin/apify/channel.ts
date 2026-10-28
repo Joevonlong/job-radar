@@ -16,14 +16,13 @@ import {
   type ApifySettings,
 } from "./contract";
 import { apifyDescriptionHtml, parseApifyJob } from "./parse";
+import { postedBefore } from "./posted-date";
 
 export const LINKEDIN_APIFY_ID = "linkedin-apify";
 
 export { affordableItems } from "../budget";
 
 const MS_PER_HOUR = 3_600_000;
-const MS_PER_DAY = 24 * MS_PER_HOUR;
-const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
 
 export interface ApifyChannelOptions {
   /** `linkedin.apify.actor_id`. A getter so a config reload takes effect without re-registering; used for the "not configured" check. */
@@ -43,15 +42,6 @@ function readSettings(ctx: ChannelContext): ApifySettings {
     throw new ChannelError("unknown", `sources.yaml linkedin.apify is incomplete (${paths.join(", ")})`, { retryable: false });
   }
   return parsed.data;
-}
-
-/** The moment after which a record counts as inside the window; a date-only `postedDate` is good until the end of its day. */
-function postedBefore(postedDate: unknown, cutoff: number): boolean {
-  if (typeof postedDate !== "string") return false;
-  const at = postedAtOf(postedDate);
-  if (at === null) return false;
-  const end = DATE_ONLY.test(postedDate.trim()) ? at.getTime() + MS_PER_DAY : at.getTime();
-  return end < cutoff;
 }
 
 /**
@@ -145,7 +135,8 @@ export function createApifyChannel(options: ApifyChannelOptions): Channel {
 
       // Local time window for ranges shorter than LinkedIn's discrete one (the actor filters by day / week / month only).
       const { rangeHours } = dateRangeFor(query.windowHours);
-      const cutoff = query.windowHours < rangeHours ? now().getTime() - query.windowHours * MS_PER_HOUR : null;
+      const observedAt = now().getTime();
+      const cutoff = query.windowHours < rangeHours ? observedAt - query.windowHours * MS_PER_HOUR : null;
 
       const seen = new Set<string>();
       const out: RawPostingInput[] = [];
@@ -159,7 +150,7 @@ export function createApifyChannel(options: ApifyChannelOptions): Channel {
         }
         if (seen.has(externalId)) continue;
         seen.add(externalId);
-        if (cutoff !== null && postedBefore(record.postedDate, cutoff)) {
+        if (cutoff !== null && postedBefore(record, cutoff, observedAt)) {
           outsideWindow += 1;
           continue;
         }
