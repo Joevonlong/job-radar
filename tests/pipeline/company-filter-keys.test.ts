@@ -43,7 +43,11 @@ describe("companyFilterKeys", () => {
   });
 
   it("drops an empty key", () => {
-    expect(keys("!!!")).toEqual([]);
+    expect(keys("  ")).toEqual([]);
+  });
+
+  it("a name without letters or digits is its own key, not the empty one", () => {
+    expect(keys("!!!")).toEqual(["!!!"]);
   });
 });
 

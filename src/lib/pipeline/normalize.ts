@@ -10,6 +10,7 @@ import { detectLanguage, extractGermanLevel } from "./language";
 import { normalizeSalary } from "./salary";
 import { cleanTitle, stripHtml } from "./sanitize";
 import { simhash } from "./simhash";
+import { foldDiacritics } from "./fold";
 import { extractSkills } from "./skills";
 import { extractWorkplace, workplaceOverridingRemoteLabel } from "./workplace";
 
@@ -39,19 +40,19 @@ export interface NormalizedJob {
 const GENDER_MARKER = /[([]?\s*\b(?:[mwfdxi*]\s*[/|\\]\s*[mwfdxi*](?:\s*[/|\\]\s*[mwfdxi*])?|all\s+genders?|gn)\b\s*[)\]]?/giu;
 
 /**
- * Title key for matching the same posting across sources: lower case, accents folded, gender
- * markers ("(m/w/d)") and punctuation removed, whitespace collapsed.
+ * Title key for matching the same posting across sources: lower case, ß as ss, diacritics folded (`foldDiacritics`), gender
+ * markers ("(m/w/d)") removed, letters (with the marks of their script) and digits of every script (and `+`, `#`) kept,
+ * everything else a single space. A title without any letter or digit keys as "", which never identifies a job (see
+ * `findMatchingJob`).
  */
 export function normalizeTitle(title: string): string {
-  return title
-    .replace(/ß/g, "ss")
-    .normalize("NFKD")
-    .replace(/[̀-ͯ]/g, "")
+  return foldDiacritics(title.replace(/[ßẞ]/g, "ss"))
     .replace(GENDER_MARKER, " ")
     .replace(/[:*/]in(?:nen)?\b/giu, "")
     .toLowerCase()
     .replace(/&/g, " and ")
-    .replace(/[^a-z0-9+#]+/g, " ")
+    .replace(/[^\p{L}\p{M}\p{N}+#]+/gu, " ")
+    .normalize("NFC")
     .trim()
     .replace(/\s+/g, " ");
 }
