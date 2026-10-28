@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { scoringStoppedSchema } from "@/lib/control/request-view-schema";
+
 import { ACK_NAMES } from "./tabs";
 
 /**
@@ -37,6 +39,10 @@ const requestSchema = z.object({
   placeholder: z.boolean(),
   /** `error: "quota_guard"`: when Job Radar's AI usage cap is expected to let the AI work again (null = not known). */
   resumeAt: iso.nullable().optional(),
+  /** Scoring requests: the postings still waiting afterwards. */
+  remaining: z.number().int().nonnegative().optional().catch(undefined),
+  /** `time_budget`: a scoring request that is done stopped at `ai.yaml: cycle_budget_minutes` (an unknown value reads as none). */
+  stopped: scoringStoppedSchema,
   cycle: cycleProgressSchema.nullable(),
 });
 

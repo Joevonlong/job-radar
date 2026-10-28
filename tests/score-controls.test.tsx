@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { NextIntlClientProvider } from "next-intl";
 import type { ReactNode } from "react";
@@ -6,7 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ScoreNowButton } from "@/components/jobs/detail/score-now";
 import { ActionsPanel } from "@/components/settings/actions-panel";
-import type { ControlRequestView, ControlStatus } from "@/lib/settings/status-schema";
+import type { ControlQueueView, ControlRequestView as PolledRequest } from "@/lib/control/request-view-schema";
+import { controlStatusSchema, type ControlRequestView, type ControlStatus } from "@/lib/settings/status-schema";
 
 import en from "../messages/en.json";
 import zh from "../messages/zh.json";
@@ -15,6 +16,7 @@ const { scoreJobNowAction, scoreJobsAction, refresh } = vi.hoisted(() => ({ scor
 vi.mock("@/app/jobs/[id]/actions", () => ({ scoreJobNowAction }));
 vi.mock("@/app/settings/actions", () => ({ scoreJobsAction, runCycleAction: vi.fn(), rescoreStaleAction: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }));
+vi.mock("@/lib/settings/constants", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/settings/constants")>()), STATUS_POLL_MS: 10 }));
 
 const wrap = (node: ReactNode, locale: "en" | "zh" = "en") => (
   <NextIntlClientProvider locale={locale} messages={locale === "en" ? en : zh} timeZone="Europe/Berlin">
@@ -51,51 +53,106 @@ const status = (over: Partial<ControlStatus> = {}): ControlStatus => ({
   ...over,
 });
 
-let served: ControlStatus = status();
+const queue = (over: Partial<ControlQueueView> = {}, worker: Partial<ControlQueueView["worker"]> = {}): ControlQueueView => ({
+  ahead: 0,
+  running: null,
+  startedAt: null,
+  now: NOW,
+  ...over,
+  worker: { process: "ai-worker", online: true, heartbeatAgeSeconds: 3, ...worker },
+});
+/** The score_jobs request as `/api/control/requests/5` serves it to the button. */
+const polled = (over: Partial<PolledRequest> = {}): PolledRequest => ({
+  id: 5,
+  kind: "score_jobs",
+  status: "pending",
+  requestedAt: NOW,
+  startedAt: null,
+  finishedAt: null,
+  result: {},
+  cycle: null,
+  queue: queue(),
+  ...over,
+});
+
+let served: PolledRequest = polled();
 beforeEach(() => {
   scoreJobNowAction.mockReset();
   scoreJobsAction.mockReset();
   refresh.mockReset();
-  served = status();
+  served = polled();
   vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify(served), { status: 200 })));
 });
 afterEach(() => vi.unstubAllGlobals());
 
 describe("ScoreNowButton (job detail)", () => {
-  it("asks for the score of this job, shows it is scoring and refreshes the page when the request is done", async () => {
+  it("asks for the score of this job, polls that request, shows it is scoring and refreshes the page when it is done", async () => {
     scoreJobNowAction.mockResolvedValue({ status: "queued", request: 5, kind: "score_jobs", existing: false, nonce: 1 });
-    served = status({ requests: [request({ status: "running" })] });
+    served = polled({ status: "running", startedAt: NOW });
     render(wrap(<ScoreNowButton jobId={7} />));
     await userEvent.click(screen.getByRole("button", { name: "Score now" }));
     expect(scoreJobNowAction).toHaveBeenCalledWith({ jobId: 7 });
     await waitFor(() => expect(screen.getByRole("button", { name: "Scoring…" })).toBeDisabled());
+    expect(fetch).toHaveBeenCalledWith("/api/control/requests/5", { cache: "no-store" });
     expect(refresh).not.toHaveBeenCalled();
 
-    served = status({ requests: [request({ status: "done", scored: 1, failed: 0 })] });
-    // the next poll (every 2 s) sees the finished request
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 2300));
-    });
+    served = polled({ status: "done", startedAt: NOW, finishedAt: NOW, result: { scored: 1, failed: 0 }, queue: null });
     await waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
-  }, 10_000);
+  });
 
-  it("says so when the runner is not answering", async () => {
+  it("queued: the requests ahead and what the ai-worker is doing", async () => {
     scoreJobNowAction.mockResolvedValue({ status: "queued", request: 5, kind: "score_jobs", existing: false, nonce: 1 });
-    served = status({ heartbeat: { at: NOW, ageSeconds: 900, online: false }, requests: [request()] });
+    served = polled({ queue: queue({ ahead: 4, running: { kind: "run_ai", since: "2026-10-28T11:20:00.000Z" } }) });
+    render(wrap(<ScoreNowButton jobId={7} timeZone="Europe/Berlin" />));
+    await userEvent.click(screen.getByRole("button", { name: "Score now" }));
+    await waitFor(() => expect(screen.getByTestId("queue-hint-ahead")).toHaveTextContent("4 requests ahead of it."));
+    expect(screen.getByTestId("queue-hint-running")).toHaveTextContent("The ai-worker is working on “AI stage of a cycle”, started 12:20.");
+  });
+
+  it("host: an offline ai-worker is said so (the runner's heartbeat plays no part), with a link to /sources", async () => {
+    scoreJobNowAction.mockResolvedValue({ status: "queued", request: 5, kind: "score_jobs", existing: false, nonce: 1 });
+    served = polled({ queue: queue({}, { process: "ai-worker", online: false, heartbeatAgeSeconds: 900 }) });
     render(wrap(<ScoreNowButton jobId={7} />));
     await userEvent.click(screen.getByRole("button", { name: "Score now" }));
-    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("The runner is not responding"));
+    await waitFor(() => expect(screen.getByTestId("queue-hint-offline")).toHaveTextContent("The ai-worker is offline (last heartbeat 15 min ago)."));
+    expect(screen.getByTestId("queue-hint-sources")).toHaveAttribute("href", "/sources");
+    await waitFor(() => expect(screen.getByRole("button", { name: "Scoring…" })).toBeDisabled());
+  });
+
+  it("host: an online ai-worker shows no offline line", async () => {
+    scoreJobNowAction.mockResolvedValue({ status: "queued", request: 5, kind: "score_jobs", existing: false, nonce: 1 });
+    served = polled({ queue: queue({ ahead: 1 }) });
+    render(wrap(<ScoreNowButton jobId={7} />));
+    await userEvent.click(screen.getByRole("button", { name: "Score now" }));
+    await waitFor(() => expect(screen.getByTestId("queue-hint-ahead")).toBeInTheDocument());
+    expect(screen.queryByTestId("queue-hint-offline")).toBeNull();
   });
 
   it("shows why a request failed, and lets the user try again", async () => {
     scoreJobNowAction.mockResolvedValue({ status: "queued", request: 5, kind: "score_jobs", existing: false, nonce: 1 });
-    served = status({ requests: [request({ status: "failed", error: "score_failed" })] });
+    served = polled({ status: "failed", finishedAt: NOW, result: { error: "score_failed" }, queue: null });
     render(wrap(<ScoreNowButton jobId={7} />));
     await userEvent.click(screen.getByRole("button", { name: "Score now" }));
     await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Scoring failed, see the ai-worker log"));
-    // the failure can show while the click's transition is still "Requesting…": wait for the button to come back
     await waitFor(() => expect(screen.getByRole("button", { name: "Score now" })).toBeEnabled());
     expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it("a done request stopped at the time budget says how many are left; an unknown stop reason is ignored", async () => {
+    scoreJobNowAction.mockResolvedValue({ status: "queued", request: 5, kind: "score_jobs", existing: false, nonce: 1 });
+    served = { ...polled({ status: "done", finishedAt: NOW, queue: null }), result: { scored: 1, failed: 0, remaining: 6, stopped: "time_budget" } };
+    const first = render(wrap(<ScoreNowButton jobId={7} />));
+    await userEvent.click(screen.getByRole("button", { name: "Score now" }));
+    await waitFor(() => expect(screen.getByTestId("score-now-time-budget")).toHaveTextContent("Stopped at the time budget: 6 still to score."));
+    first.unmount();
+
+    // a stop reason this page does not know (a newer worker) parses as none, not as an error
+    vi.mocked(fetch).mockImplementation(async () => new Response(JSON.stringify({ ...polled({ status: "done", finishedAt: NOW, queue: null }), result: { scored: 1, remaining: 2, stopped: "something_new" } }), { status: 200 }));
+    render(wrap(<ScoreNowButton jobId={7} />));
+    await userEvent.click(screen.getByRole("button", { name: "Score now" }));
+    await waitFor(() => expect(refresh).toHaveBeenCalledTimes(2));
+    expect(screen.queryByTestId("score-now-time-budget")).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 
   it("is off with the reason and a link to /me while the profile is incomplete", () => {
@@ -112,7 +169,7 @@ describe("ScoreNowButton (job detail)", () => {
     ["score_ai_unavailable", "no AI provider is available"],
   ])("names the exact reason of a failed request: %s", async (error, text) => {
     scoreJobNowAction.mockResolvedValue({ status: "queued", request: 5, kind: "score_jobs", existing: false, nonce: 1 });
-    served = status({ requests: [request({ status: "failed", error })] });
+    served = polled({ status: "failed", finishedAt: NOW, result: { error }, queue: null });
     render(wrap(<ScoreNowButton jobId={7} />));
     await userEvent.click(screen.getByRole("button", { name: "Score now" }));
     await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent(text));
@@ -149,6 +206,19 @@ describe("ActionsPanel: score the backlog", () => {
 
     render(panel(status({ unscoredJobs: 5, requests: [request({ jobIds: null, status: "running" })] })));
     expect(screen.getByTestId("score-backlog-button")).toBeDisabled();
+  });
+
+  it("a done request stopped at the time budget says how many are left; an unknown stop reason shows nothing", () => {
+    const { unmount } = render(panel(status({ requests: [request({ kind: "rescore_stale", jobIds: null, status: "done", scored: 4, failed: 0, remaining: 12, stopped: "time_budget" })] })));
+    expect(screen.getByTestId("control-request-time-budget")).toHaveTextContent("Stopped at the time budget: 12 still to score.");
+    expect(screen.getByTestId("control-request")).toHaveTextContent("Re-score finished: 4 scored, 0 failed");
+    unmount();
+    render(panel(status({ requests: [request({ status: "done", scored: 1, failed: 0, remaining: 3 })] })));
+    expect(screen.queryByTestId("control-request-time-budget")).toBeNull();
+    // the browser's schema reads a stop reason it does not know as none
+    const parsed = controlStatusSchema.parse({ ...status(), requests: [{ ...request({ status: "done" }), stopped: "something_new", remaining: 2 }] });
+    expect(parsed.requests[0]).toMatchObject({ remaining: 2 });
+    expect(parsed.requests[0]?.stopped).toBeUndefined();
   });
 
   it("lists the request with its jobs and its outcome", () => {

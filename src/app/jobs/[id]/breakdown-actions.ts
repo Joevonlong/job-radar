@@ -5,6 +5,7 @@ import { z } from "zod";
 
 import { readBreakdownSettings } from "@/lib/breakdown/settings";
 import { readBreakdownRequest, requestBreakdownJob, type BreakdownErrorCode } from "@/lib/control/breakdown-request";
+import type { ControlQueueView } from "@/lib/control/request-view-schema";
 import { getDb } from "@/lib/db";
 
 /**
@@ -25,7 +26,10 @@ export type BreakdownActionResult =
   | { ok: false; error: BreakdownErrorKey };
 
 export type BreakdownStatusResult =
-  | { ok: true; state: "waiting"; stage: "pending" | "running" }
+  /** The state could not be read this time; the browser retries. */
+  | null
+  /** `queue`: where the request stands (position, what the worker is doing, whether it is alive). */
+  | { ok: true; state: "waiting"; stage: "pending" | "running"; queue: ControlQueueView | null }
   | { ok: true; state: "done" }
   | { ok: false; error: BreakdownErrorKey; detail?: string | null; resumeAt?: string | null };
 
@@ -49,12 +53,12 @@ export async function breakdownStatusAction(input: { jobId: number; requestId: n
   if (!parsed.success) return { ok: false, error: "invalid" };
   try {
     const state = await readBreakdownRequest(getDb(), parsed.data);
-    if (state === null) return { ok: false, error: "not_found" };
-    if (state.state === "waiting") return { ok: true, state: "waiting", stage: state.stage };
+    if (state.state === "missing") return { ok: false, error: "not_found" };
+    if (state.state === "waiting") return { ok: true, state: "waiting", stage: state.stage, queue: state.queue };
     if (state.state === "failed") return { ok: false, error: state.error, detail: state.detail, resumeAt: state.resumeAt };
     revalidatePath(`/jobs/${parsed.data.jobId}`);
     return { ok: true, state: "done" };
   } catch {
-    return { ok: false, error: "failed" };
+    return null;
   }
 }

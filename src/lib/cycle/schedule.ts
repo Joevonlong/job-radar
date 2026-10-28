@@ -43,8 +43,8 @@ export function findMissedCycle(now: Date, schedule: ScheduleConfig, lastCycleSt
 
 /**
  * Catch-up decision (pure): the kind of the most recent scheduled cycle that should have started by
- * `now` but has not — no cycle (of any kind) started at or after its slot — or null when nothing is
- * overdue. `lastCycleStartedAt` is the start of the latest cycle that actually ran.
+ * `now` but has not — no cycle of every channel started at or after its slot — or null when nothing is
+ * overdue. `lastCycleStartedAt` is the start of the latest cycle of every channel that actually ran.
  */
 export function missedCycle(now: Date, schedule: ScheduleConfig, lastCycleStartedAt: Date | null): ScheduledCycleKind | null {
   return findMissedCycle(now, schedule, lastCycleStartedAt)?.kind ?? null;

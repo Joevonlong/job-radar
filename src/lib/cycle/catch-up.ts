@@ -15,7 +15,8 @@ export interface CatchUpDecision {
 
 /**
  * Runner start-up decision: did a scheduled cycle fall in the gap while the runner was off? Reads the
- * newest started cycle from the database and compares it with the latest slot of each enabled cycle.
+ * newest started cycle of every channel from the database (one limited to some channels did not do a slot's work) and
+ * compares it with the latest slot of each enabled cycle.
  */
 export async function decideCatchUp(db: Db, schedule: ScheduleConfig, now: Date): Promise<CatchUpDecision> {
   if (!schedule.catch_up) return { missed: null, lastCycleStartedAt: null, disabled: true };

@@ -4,9 +4,11 @@ import { AiProviderError } from "@/lib/ai/errors";
 import { isAbortError } from "@/lib/channels/errors";
 import type { ChannelLogger } from "@/lib/channels/types";
 import { freshenConfig } from "@/lib/config/fresh";
+import { isCycleWaitingForLock } from "@/lib/cycle/lock-waiters";
 import type { Db } from "@/lib/db/client";
 import {
   claimNextControlRequest,
+  CONTROL_REQUEST_KINDS,
   finishControlRequest,
   getControlRequest,
   requeueInterruptedControlRequests,
@@ -54,13 +56,23 @@ export function failedBecauseAborted(outcome: ControlOutcome, thrown: unknown, s
 }
 
 /**
+ * The kinds to claim now: `kinds` (undefined = every kind), but no `run_cycle` while a cycle of this process waits for the
+ * cycle lock (`lock-waiters.ts`): a manual cycle started now would take the lock from it again. Once that cycle runs, the
+ * queued ones it covers end as done, the others run after it.
+ */
+function claimableKinds(kinds: readonly ControlRequestKind[] | undefined): readonly ControlRequestKind[] | undefined {
+  if (!isCycleWaitingForLock()) return kinds;
+  return (kinds ?? CONTROL_REQUEST_KINDS).filter((kind) => kind !== "run_cycle");
+}
+
+/**
  * Claim the oldest pending request, run its handler and record the outcome. A handler that throws
  * (or a kind nobody handles) fails the request, never the runner. Returns the finished request,
  * or null when nothing was pending.
  */
 export async function processNextControlRequest(options: ControlPollOptions): Promise<ControlRequest | null> {
   const { db, signal, logger } = options;
-  const request = await claimNextControlRequest(db, options.kinds?.());
+  const request = await claimNextControlRequest(db, claimableKinds(options.kinds?.()));
   if (!request) return null;
   const log = logger.child({ controlRequest: request.id, kind: request.kind });
   log.info("control request started");

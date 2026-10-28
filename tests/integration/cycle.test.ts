@@ -5,9 +5,11 @@ import type { CascadeSpec } from "@/lib/channels/cascade";
 import { registerFixtureChannel, type FixturePosting } from "@/lib/channels/fixture";
 import { ChannelRegistry } from "@/lib/channels/registry";
 import type { ChannelsConfig } from "@/lib/config";
+import { findCycleLockHolder, withCycleLock } from "@/lib/cycle/lock";
+import { isCycleWaitingForLock } from "@/lib/cycle/lock-waiters";
 import { runCycle, type RunCycleOptions } from "@/lib/cycle/run-cycle";
 import { registerCycleStep, resetCycleSteps } from "@/lib/cycle/steps";
-import { closeDb, getDb, schema } from "@/lib/db";
+import { closeDb, createConnection, getDb, schema } from "@/lib/db";
 import { runMigrations } from "@/lib/db/migrate";
 import {
   countRunningCycles,
@@ -362,6 +364,28 @@ describe("budget persistence", () => {
 });
 
 describe("concurrency guard", () => {
+  it("ignores a cycle lock in another database and identifies the holder in this database", async () => {
+    const db = getDb();
+    const otherUrl = new URL(url);
+    const otherName = `${otherUrl.pathname.slice(1)}_cycle_lock`;
+    otherUrl.pathname = `/${otherName}`;
+    await db.execute(sql`create database ${sql.identifier(otherName)}`);
+    const other = createConnection(otherUrl.toString(), { max: 1 });
+    try {
+      const foreign = await withCycleLock(other.db, "try", async () => {
+        expect(await findCycleLockHolder(db)).toBeNull();
+        const local = await withCycleLock(db, "try", async (holder) => {
+          expect(await findCycleLockHolder(db)).toBe(holder.pid);
+        });
+        expect(local.acquired).toBe(true);
+      });
+      expect(foreign.acquired).toBe(true);
+    } finally {
+      await other.sql.end({ timeout: 5 });
+      await db.execute(sql`drop database ${sql.identifier(otherName)}`);
+    }
+  });
+
   it("lets only one of two simultaneous cycles run; the other is recorded as skipped", async () => {
     const registry = new ChannelRegistry();
     // The channel is held on a gate (not a timer), so the winner keeps the lock for exactly as long as
@@ -406,6 +430,166 @@ describe("concurrency guard", () => {
     // committed its finish, so the second cycle cannot have started earlier. Id order is the tie-breaker.
     expect(second?.startedAt.getTime()).toBeGreaterThanOrEqual(first?.finishedAt?.getTime() ?? Infinity);
     expect(second?.id).toBeGreaterThan(first?.id ?? Infinity);
+  });
+
+  describe("a scheduled cycle that finds the lock taken", () => {
+    const waitingConfig = (maxMinutes: number) => ({ ...config(), schedule: { ...config().schedule, partial_cycle_wait: { max_minutes: maxMinutes, poll_seconds: 1 } } });
+    // a failed expectation must not leave a cycle holding the lock for the next test
+    const gates: Array<() => void> = [];
+    afterEach(() => {
+      for (const open of gates.splice(0)) open();
+    });
+    /** `indeed` is held on a gate; `greenhouse` answers at once. */
+    function gatedRegistry() {
+      const registry = new ChannelRegistry();
+      let release: () => void = () => {};
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      gates.push(() => release());
+      const slow = probeChannel("indeed", { usesQueries: false, gate });
+      const other = probeChannel("greenhouse", { usesQueries: false });
+      registry.register(slow, { settings: settings() });
+      registry.register(other, { settings: settings() });
+      return { registry, slow, other, release: () => release() };
+    }
+    async function untilCalled(channel: { calls: unknown[] }): Promise<void> {
+      const deadline = Date.now() + 5000;
+      while (channel.calls.length === 0 && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(channel.calls.length).toBeGreaterThan(0);
+    }
+
+    it("waits for a manual cycle limited to one channel and then runs every channel", async () => {
+      const { registry, slow, other, release } = gatedRegistry();
+      const manual = run(registry, { channelIds: ["indeed"] });
+      await untilCalled(slow);
+      let settled = false;
+      const scheduled = runCycle("weekday_morning", { registry, config: waitingConfig(1), logger: quietLogger, sleep: async () => {} }).finally(() => {
+        settled = true;
+      });
+      // it keeps trying the lock (every poll_seconds) instead of recording a skip
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      expect(settled).toBe(false);
+      release();
+      const [m, s] = await Promise.all([manual, scheduled]);
+      expect(m.status).toBe("succeeded");
+      expect(m.summary.channelIds).toEqual(["indeed"]);
+      expect(s.status).toBe("succeeded");
+      expect(s.summary.channelIds).toBeNull();
+      expect(slow.calls).toHaveLength(2);
+      expect(other.calls).toHaveLength(1);
+      const rows = await getDb().select().from(schema.cycles).orderBy(schema.cycles.id);
+      expect(rows.map((r) => [r.kind, r.status])).toEqual([
+        ["manual", "succeeded"],
+        ["weekday_morning", "succeeded"],
+      ]);
+      expect((rows[0]?.summaryJson as { channelIds: unknown }).channelIds).toEqual(["indeed"]);
+    });
+
+    it("is skipped, naming the running cycle, when that cycle covers every channel", async () => {
+      const { registry, slow, release } = gatedRegistry();
+      const full = run(registry);
+      await untilCalled(slow);
+      const [running] = await getDb().select().from(schema.cycles).where(eq(schema.cycles.status, "running"));
+      const scheduled = await runCycle("weekday_morning", { registry, config: waitingConfig(1), logger: quietLogger, sleep: async () => {} });
+      release();
+      expect((await full).status).toBe("succeeded");
+      expect(scheduled.status).toBe("skipped");
+      expect(scheduled.summary.coveredBy).toBe(running?.id);
+      expect((await getCycle(getDb(), scheduled.cycleId as number))?.summaryJson).toMatchObject({ coveredBy: running?.id, channelIds: null });
+      expect(slow.calls).toHaveLength(1);
+    });
+
+    it("is skipped at once when partial_cycle_wait.max_minutes is 0", async () => {
+      const { registry, slow, release } = gatedRegistry();
+      const manual = run(registry, { channelIds: ["indeed"] });
+      await untilCalled(slow);
+      const scheduled = await runCycle("weekday_morning", { registry, config: waitingConfig(0), logger: quietLogger, sleep: async () => {} });
+      release();
+      await manual;
+      expect(scheduled.status).toBe("skipped");
+      expect(scheduled.summary.coveredBy).toBeNull();
+    });
+
+    it("does not take a row a crash left `running` for the running cycle: it waits for the cycle that holds the lock", async () => {
+      // an interrupted CLI cycle of every channel, still `running`
+      await getDb().insert(schema.cycles).values({ kind: "manual", status: "running", summaryJson: { channelIds: null } });
+      const { registry, slow, release } = gatedRegistry();
+      const manual = run(registry, { channelIds: ["indeed"] });
+      await untilCalled(slow);
+      let settled = false;
+      const scheduled = runCycle("weekday_morning", { registry, config: waitingConfig(1), logger: quietLogger, sleep: async () => {} }).finally(() => {
+        settled = true;
+      });
+      await new Promise((resolve) => setTimeout(resolve, 1200));
+      expect(settled).toBe(false);
+      release();
+      expect((await manual).status).toBe("succeeded");
+      expect((await scheduled).status).toBe("succeeded");
+    });
+
+    it("tells the control poller that it waits, until it has the lock", async () => {
+      const { registry, slow, release } = gatedRegistry();
+      const manual = run(registry, { channelIds: ["indeed"] });
+      await untilCalled(slow);
+      expect(isCycleWaitingForLock()).toBe(false);
+      const scheduled = runCycle("weekday_morning", { registry, config: waitingConfig(1), logger: quietLogger, sleep: async () => {} });
+      const deadline = Date.now() + 5000;
+      while (!isCycleWaitingForLock() && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(isCycleWaitingForLock()).toBe(true);
+      release();
+      await manual;
+      expect((await scheduled).status).toBe("succeeded");
+      expect(isCycleWaitingForLock()).toBe(false);
+    });
+
+    it("stops waiting and records a skip when the runner shuts down", async () => {
+      const { registry, slow, release } = gatedRegistry();
+      const manual = run(registry, { channelIds: ["indeed"] });
+      await untilCalled(slow);
+      const abort = new AbortController();
+      const started = Date.now();
+      const scheduled = runCycle("weekday_morning", { registry, config: waitingConfig(1), logger: quietLogger, sleep: async () => {}, signal: abort.signal });
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      abort.abort();
+      const result = await scheduled;
+      expect(Date.now() - started).toBeLessThan(1500);
+      expect(result.status).toBe("skipped");
+      expect(result.summary.reason).toContain("cancelled");
+      expect(isCycleWaitingForLock()).toBe(false);
+      release();
+      await manual;
+      expect(await getDb().select().from(schema.cycles).where(eq(schema.cycles.kind, "weekday_morning"))).toEqual([expect.objectContaining({ status: "skipped" })]);
+    });
+
+    it("gives up after partial_cycle_wait.max_minutes and records a skip", async () => {
+      const { registry, slow, release } = gatedRegistry();
+      const manual = run(registry, { channelIds: ["indeed"] });
+      await untilCalled(slow);
+      // a clock that jumps by every sleep: one minute of waiting without waiting a minute
+      let fake = 0;
+      const sleeps: number[] = [];
+      const lockWait = { now: () => fake, sleep: async (ms: number) => { sleeps.push(ms); fake += ms; return true; } };
+      const config15 = { ...config(), schedule: { ...config().schedule, partial_cycle_wait: { max_minutes: 1, poll_seconds: 25 } } };
+      const result = await runCycle("weekday_morning", { registry, config: config15, logger: quietLogger, sleep: async () => {}, lockWait });
+      release();
+      await manual;
+      expect(result.status).toBe("skipped");
+      expect(result.summary.reason).toContain("after 1 min");
+      expect(sleeps).toEqual([25_000, 25_000, 10_000]);
+      expect(isCycleWaitingForLock()).toBe(false);
+    });
+
+    it("a manual cycle never waits: one limited to other channels is skipped without a covering cycle", async () => {
+      const { registry, slow, release } = gatedRegistry();
+      const manual = run(registry, { channelIds: ["indeed"] });
+      await untilCalled(slow);
+      const second = await run(registry, { channelIds: ["greenhouse"], config: waitingConfig(1) });
+      release();
+      await manual;
+      expect(second.status).toBe("skipped");
+      expect(second.summary.coveredBy).toBeNull();
+    });
   });
 
   it("releases the lock when a cycle fails, so the next one runs", async () => {
@@ -479,6 +663,22 @@ describe("orphaned cycles", () => {
     await db.execute(sql`truncate table cycles restart identity cascade`);
     await add("2026-10-09T11:00:00Z", "failed", { aborted: true });
     expect(await getLatestRunStartedAt(db)).toBeNull();
+  });
+
+  it("the catch-up and the orphan sweep keep a cycle limited to some channels apart from a full one", async () => {
+    const db = getDb();
+    const at = (iso: string) => new Date(iso);
+    await db.insert(schema.cycles).values({ kind: "weekday_morning", status: "succeeded", startedAt: at("2026-10-09T06:00:00Z"), summaryJson: { channelIds: null } });
+    await db.insert(schema.cycles).values({ kind: "manual", status: "succeeded", startedAt: at("2026-10-09T07:00:00Z"), summaryJson: { channelIds: ["indeed"] } });
+    expect(await getLatestRunStartedAt(db)).toEqual(at("2026-10-09T06:00:00Z"));
+    // a manual cycle of every channel counts
+    await db.insert(schema.cycles).values({ kind: "manual", status: "succeeded", startedAt: at("2026-10-09T08:00:00Z"), summaryJson: { channelIds: null } });
+    expect(await getLatestRunStartedAt(db)).toEqual(at("2026-10-09T08:00:00Z"));
+    // a partial cycle a crash left running keeps its channels when swept
+    const [left] = await db.insert(schema.cycles).values({ kind: "manual", status: "running", startedAt: at("2026-10-09T09:00:00Z"), summaryJson: { channelIds: ["indeed"] } }).returning();
+    await failOrphanedCycles(db, "runner restarted");
+    expect((await getCycle(db, left?.id ?? 0))?.summaryJson).toEqual({ channelIds: ["indeed"], orphaned: "runner restarted" });
+    expect(await getLatestRunStartedAt(db)).toEqual(at("2026-10-09T08:00:00Z"));
   });
 
   it("counts the running cycles a deploy waits for", async () => {

@@ -267,14 +267,40 @@ function visaRefusal(job: DealBreakerJob, rule: CompiledVisa): { quote: string; 
   return evidence ? { quote: evidence.quote, offset: evidence.offset, kind: evidence.kind } : null;
 }
 
+/**
+ * How long a run of digits or of whitespace is in the test texts. Real text has short runs (an order number, an IBAN, the
+ * spaces of a layout), and a pattern that backtracks exponentially on them (`(\d+)+x`, `(\d+[.,]?)+\s*k`) takes seconds
+ * at 30 characters already; repeated runs of this length show that, while a pattern that is merely quadratic in the run
+ * (`\d+\s*k`) stays fast, as it is on real text.
+ */
+const PROBE_RUN_CHARS = 64;
+
+/** `run` repeated, each copy closed by "!" (which nothing expects), up to `length` characters. */
+const runs = (run: string, length: number): string => `${run}!`.repeat(Math.ceil(length / (run.length + 1))).slice(0, length);
+
 /** Test texts as long as the text a pattern searches: a long line without a match is where backtracking shows. */
 function probeTexts(source: string, length: number): string[] {
   const filler = "Lorem ipsum 100 % vor Ort, dolor-sit_amet 42 Reisetätigkeit ";
-  const texts = ["a".repeat(Math.max(0, length - 1)) + "!", filler.repeat(Math.ceil(length / filler.length)).slice(0, length)];
+  const texts = [
+    "a".repeat(Math.max(0, length - 1)) + "!",
+    filler.repeat(Math.ceil(length / filler.length)).slice(0, length),
+    // the classes \d and \s, which the letters the pattern names below never stand for
+    runs("1".repeat(PROBE_RUN_CHARS), length),
+    runs(" ".repeat(PROBE_RUN_CHARS), length),
+  ];
+  const withTail = [runs("a".repeat(PROBE_RUN_CHARS), length), ...texts.slice(2)];
   // the letters and digits the pattern names, each repeated: `(a|a)+` and its kind fail on these
   const chars = [...new Set(source.toLowerCase().replace(/\\./gu, "").match(/[\p{L}\p{N}]/gu) ?? [])].filter((char) => char !== "a").slice(0, 6);
-  for (const char of chars) texts.push(char.repeat(Math.max(0, length - 1)) + "!");
-  return texts;
+  for (const char of chars) {
+    texts.push(char.repeat(Math.max(0, length - 1)) + "!");
+    withTail.push(runs(char.repeat(PROBE_RUN_CHARS), length));
+  }
+  // and the pattern's own text at the end: a text without a literal the pattern needs ("€", "Tsd") is refused at once by
+  // the engine's quick check, while a real description has that literal somewhere else. Keep the original texts too:
+  // adding a required literal may make a slow pattern match immediately. Only separated short runs get the tail, so an
+  // ordinary pattern such as `\p{Lu}{6,}!` does not backtrack over a synthetic 20,000-letter run missing its final "!".
+  const tail = ` ${source}`;
+  return [...texts, ...withTail.map((text) => text.slice(0, Math.max(0, length - tail.length)) + tail)];
 }
 
 /**
@@ -284,14 +310,18 @@ function probeTexts(source: string, length: number): string[] {
 const probeCache = new Set<string>();
 const PROBE_CACHE_MAX = 512;
 
+/** The limits the probe reads: the length of a test text and the time one pattern may take on it. */
+export type PatternProbeLimits = Pick<DealBreakerLimits, "match_text_max_chars" | "match_ms">;
+
 /**
  * Whether `pattern` finishes on every test text within `limits.match_ms` each: a pattern (flags "giu") is run the way a rule
- * scans a text (every match), an `unless` pattern (flags "iu") the way it tests a sentence.
+ * scans a text (every match), an `unless` pattern (flags "iu") the way it tests a sentence. A `signal` pattern (an
+ * interests.yaml pattern) is compiled as the signal rules compile it (flags "giu", always with `u`) and scanned like a pattern.
  */
-export function patternIsFast(pattern: string, use: "pattern" | "unless", limits: DealBreakerLimits, timeBox: TimeBox): boolean {
+export function patternIsFast(pattern: string, use: "pattern" | "unless" | "signal", limits: PatternProbeLimits, timeBox: TimeBox): boolean {
   const key = `${use}\u0000${limits.match_text_max_chars}\u0000${limits.match_ms}\u0000${pattern}`;
   if (probeCache.has(key)) return true;
-  const regexp = userRegExp(pattern, use === "pattern" ? "giu" : "iu");
+  const regexp = use === "signal" ? new RegExp(pattern, "giu") : userRegExp(pattern, use === "pattern" ? "giu" : "iu");
   const fast = probeTexts(pattern, limits.match_text_max_chars).every((text) =>
     timeBox(() => {
       if (use === "unless") {

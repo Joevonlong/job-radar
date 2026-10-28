@@ -9,6 +9,11 @@ import { nonEmptyString, nonNegativeInt, nonNegativeNumber, positiveInt, stringL
 /** Flags used when pattern strings are compiled. */
 export const SIGNAL_REGEX_FLAGS = "iu";
 
+/** Defaults of the pattern limits in interests.yaml `limits` (only in the schema: a file without them gets these). */
+export const SIGNAL_PROBE_DEFAULTS = { pattern_probe_chars: 20_000, pattern_probe_ms: 100, pattern_probe_retry_ms: 400, pattern_job_ms: 1000 } as const;
+/** The lowest values the schema accepts: below them the probe stops telling slow patterns from fast ones. */
+export const SIGNAL_PROBE_MIN = { chars: 2000, ms: 10, jobMs: 50 } as const;
+
 const regexString = nonEmptyString.refine((source) => {
   try {
     new RegExp(source, SIGNAL_REGEX_FLAGS);
@@ -274,8 +279,19 @@ export const interestsSchema = z.strictObject({
       preview_jobs: positiveInt.max(2000).default(500),
       /** The preview stops after this many milliseconds of rule matching and reports the jobs it got through (it runs in the web process). */
       preview_time_budget_ms: positiveInt.max(10000).default(1500),
+      /**
+       * Every user pattern (`patterns`, `exclude`, `tag_patterns`) is first tried on test texts this long (characters):
+       * a long line without a match is where catastrophic backtracking shows.
+       */
+      pattern_probe_chars: positiveInt.min(SIGNAL_PROBE_MIN.chars).default(SIGNAL_PROBE_DEFAULTS.pattern_probe_chars),
+      /** Longest one pattern may take on one test text (ms); slower: tried once more with `pattern_probe_retry_ms`. */
+      pattern_probe_ms: positiveInt.min(SIGNAL_PROBE_MIN.ms).default(SIGNAL_PROBE_DEFAULTS.pattern_probe_ms),
+      /** The second try's limit (ms), for a machine that was busy: slower again, the pattern is refused on save and left out of the rules. */
+      pattern_probe_retry_ms: positiveInt.min(SIGNAL_PROBE_MIN.ms).default(SIGNAL_PROBE_DEFAULTS.pattern_probe_retry_ms),
+      /** Longest the rules may take on one job description in the signal scan and the AI review (ms); slower: that job is left for the next cycle. */
+      pattern_job_ms: positiveInt.min(SIGNAL_PROBE_MIN.jobMs).default(SIGNAL_PROBE_DEFAULTS.pattern_job_ms),
     })
-    .default({ quote_max_chars: 280, per_category_max: 3, tags_max: 12, exclude_lookbehind_chars: 30, ai_max_jd_chars: 12000, ai_review_without_candidates: true, ai_stop_after_failures: 3, preview_jobs: 500, preview_time_budget_ms: 1500 }),
+    .default({ quote_max_chars: 280, per_category_max: 3, tags_max: 12, exclude_lookbehind_chars: 30, ai_max_jd_chars: 12000, ai_review_without_candidates: true, ai_stop_after_failures: 3, preview_jobs: 500, preview_time_budget_ms: 1500, ...SIGNAL_PROBE_DEFAULTS }),
   /** Max total bonus (sum of the category weights) added to the match score. */
   bonus_cap: nonNegativeNumber,
   views: z.array(savedView).superRefine((views, ctx) => {
