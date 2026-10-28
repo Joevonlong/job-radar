@@ -62,7 +62,7 @@ export function createTitlePrefilter(input: TitlePrefilterInput): TitlePrefilter
   const includeMatcher = compileTermMatcher(settings.include_terms);
   const excludeMatcher = compileTermMatcher(settings.exclude_terms);
   const keyOf = (name: string): string => resolveCompanyName(name, input.pipeline).nameNorm;
-  // an empty key (a name of only a legal form or without Latin letters) watches nothing
+  // an empty key (an empty name) watches nothing
   const watched = new Set(input.watchedCompanies.map(keyOf).filter((key) => key !== ""));
 
   return {

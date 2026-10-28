@@ -48,6 +48,9 @@ export async function bestOtherPriority(db: Executor, jobId: number, rawPostingI
 
 export interface JobWithRawPostings {
   jobId: number;
+  companyId: number;
+  title: string;
+  titleNorm: string;
   salaryJson: unknown;
   /** The raw postings the job was built from (parsed ones), with the apply-link priority of each. */
   sources: Array<{ priority: number; raw: typeof rawPostings.$inferSelect }>;
@@ -56,7 +59,7 @@ export interface JobWithRawPostings {
 /** The next `limit` jobs with an id above `afterId`, each with its parsed raw postings (for re-reading them with new code). */
 export async function listJobsWithRawPostings(db: Executor, input: { afterId: number; limit: number }): Promise<JobWithRawPostings[]> {
   const jobRows = await db
-    .select({ id: jobs.id, salaryJson: jobs.salaryJson })
+    .select({ id: jobs.id, companyId: jobs.companyId, title: jobs.title, titleNorm: jobs.titleNorm, salaryJson: jobs.salaryJson })
     .from(jobs)
     .where(gt(jobs.id, input.afterId))
     .orderBy(asc(jobs.id))
@@ -70,7 +73,20 @@ export async function listJobsWithRawPostings(db: Executor, input: { afterId: nu
     .orderBy(asc(jobSources.priority), asc(rawPostings.id));
   return jobRows.map((job) => ({
     jobId: job.id,
+    companyId: job.companyId,
+    title: job.title,
+    titleNorm: job.titleNorm,
     salaryJson: job.salaryJson,
     sources: sourceRows.filter((s) => s.jobId === job.id).map(({ priority, raw }) => ({ priority, raw })),
   }));
+}
+
+/** Detach these raw postings from the job (the job and the postings stay). Returns the number of rows removed. */
+export async function unlinkJobSources(db: Executor, jobId: number, rawPostingIds: readonly number[]): Promise<number> {
+  if (rawPostingIds.length === 0) return 0;
+  const rows = await db
+    .delete(jobSources)
+    .where(and(eq(jobSources.jobId, jobId), inArray(jobSources.rawPostingId, [...rawPostingIds])))
+    .returning({ id: jobSources.id });
+  return rows.length;
 }

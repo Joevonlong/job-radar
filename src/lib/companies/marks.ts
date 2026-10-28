@@ -3,7 +3,7 @@ import { companyFilterKeys, normalizeCompanyKey, resolveCompanyName, type Compan
 
 /**
  * The push rule uses only resolved watch-list keys and the stored name_norm. A name that resolves to an empty key
- * (only a legal form, or no Latin letters) watches nothing: an empty key would match every company without one.
+ * (an empty entry) watches nothing: an empty key would match every company without one.
  */
 export function buildWatchedCompanyKeys(watchedCompanies: readonly string[], pipeline: PipelineConfig): ReadonlySet<string> {
   return new Set(watchedCompanies.map((name) => resolveCompanyName(name, pipeline).nameNorm).filter((key) => key !== ""));
