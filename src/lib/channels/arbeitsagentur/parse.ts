@@ -1,12 +1,13 @@
 import { ChannelError } from "../errors";
 import type { NormalizedPostingDraft } from "../types";
 import { redactContacts } from "./redact";
-import { payloadSchema, type BaDetail, type BaLocation, type BaSearchItem } from "./schema";
+import { payloadSchema, type BaDetail, type BaDetailLocation } from "./schema";
 
 /** Public page of a posting on arbeitsagentur.de; `{refnr}` is appended. */
 export const JOB_PAGE_URL = "https://www.arbeitsagentur.de/jobsuche/jobdetail";
 
-type Posting = BaSearchItem & Partial<BaDetail>;
+/** List item and detail merged: a detail field that is absent or null leaves the list value in place. */
+type Posting = { [K in keyof BaDetail]: Exclude<BaDetail[K], null> };
 
 /** `land` as the API spells it (upper case, umlauts transliterated) → ISO 3166-1 alpha-2. */
 const COUNTRY_CODES: Readonly<Record<string, string>> = {
@@ -39,18 +40,18 @@ const OFFER_TYPE_HINTS: Readonly<Record<string, string>> = {
   SELBSTAENDIGKEIT: "self-employed",
 };
 
-function clean(value: string | undefined): string | undefined {
+function clean(value: string | null | undefined): string | undefined {
   const text = value?.replace(/[\s ]+/g, " ").trim();
   return text ? text : undefined;
 }
 
-export function toDate(value: string | undefined): Date | null {
+export function toDate(value: string | null | undefined): Date | null {
   if (!value) return null;
   const date = new Date(/^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T00:00:00Z` : value);
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
-function httpUrlOrNull(value: string | undefined): string | null {
+function httpUrlOrNull(value: string | null | undefined): string | null {
   if (!value) return null;
   try {
     const url = new URL(value.trim());
@@ -60,7 +61,7 @@ function httpUrlOrNull(value: string | undefined): string | null {
   }
 }
 
-function countryCode(land: string | undefined): string | null {
+function countryCode(land: string | null | undefined): string | null {
   if (!land) return null;
   const key = land
     .toUpperCase()
@@ -81,7 +82,7 @@ function titleCase(text: string): string {
     .join(" ");
 }
 
-function mapLocations(locations: readonly BaLocation[]): NormalizedPostingDraft["locations"] {
+function mapLocations(locations: readonly BaDetailLocation[]): NormalizedPostingDraft["locations"] {
   const seen = new Set<string>();
   const out: NormalizedPostingDraft["locations"] = [];
   for (const location of locations) {
@@ -149,8 +150,8 @@ export function parseArbeitsagenturPayload(payload: unknown): NormalizedPostingD
     throw new ChannelError("parse", `arbeitsagentur payload does not match the expected shape (${paths.join(", ")})`);
   }
   const { list, detail } = parsed.data;
-  // the detail record is the fuller one; the list item fills what it leaves out
-  const p: Posting = { ...list, ...(detail ? Object.fromEntries(Object.entries(detail).filter(([, v]) => v !== undefined)) : {}) };
+  // the detail record is the fuller one; the list item fills what it leaves out or sends as null
+  const p: Posting = { ...list, ...(detail ? Object.fromEntries(Object.entries(detail).filter(([, v]) => v !== undefined && v !== null)) : {}) };
 
   const title = clean(p.stellenangebotsTitel);
   if (!title) throw new ChannelError("parse", "arbeitsagentur posting has no title");
