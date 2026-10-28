@@ -264,6 +264,8 @@ export function createNotifyStep(options: NotifyStepOptions = {}): CycleStepFn {
     if (!config.telegram.enabled) return { result: { skipped: "disabled" } satisfies NotifyStepResult };
     const db = ctx.db ?? null;
     if (db === null || ctx.cycle.id === null) return { result: { skipped: "no_database" } satisfies NotifyStepResult };
+    const runtime = (options.createRuntime ?? ((c: CycleStepContext, cfg: NotifyConfig) => createTelegramRuntime({ config: cfg, logger: c.logger, signal: c.signal })))(ctx, config);
+    if (runtime === null) return { status: "partial", result: { skipped: "not_configured" } satisfies NotifyStepResult };
     const savedRetry = notificationRetryOf(ctx.results.notify);
     const delivered = await hasDeliveredNotificationWindow(db, ctx.cycle.id);
     const cycle = await getCycle(db, ctx.cycle.id);
@@ -275,8 +277,6 @@ export function createNotifyStep(options: NotifyStepOptions = {}): CycleStepFn {
       startedAt: savedRetry ? new Date(savedRetry.startedAt) : (queuedWindow?.startedAt ?? cycle?.startedAt ?? ctx.now()),
     });
     const retry = digest ? { ...savedRetry, since: digest.since.toISOString(), startedAt: digest.startedAt.toISOString() } : null;
-    const runtime = (options.createRuntime ?? ((c: CycleStepContext, cfg: NotifyConfig) => createTelegramRuntime({ config: cfg, logger: c.logger, signal: c.signal })))(ctx, config);
-    if (runtime === null) return { status: "partial", result: { skipped: "not_configured", ...(retry ? { retry } : {}) } satisfies NotifyStepResult };
 
     const deps: NotifyDeps = {
       db,

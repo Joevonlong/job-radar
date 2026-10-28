@@ -350,7 +350,7 @@ describe("the ai-worker handles run_ai", () => {
     expect(summaries.find((n) => n.cycleId === following.cycle.id)?.payloadJson).toMatchObject({ newJobs: 0, pushed: 0 });
   });
 
-  it.each(["quiet_hours", "newer_cycle_pending", "not_configured"])("retains a deferred window beyond expiry (%s)", async (reason) => {
+  it.each(["quiet_hours", "newer_cycle_pending"])("retains a deferred window beyond expiry (%s)", async (reason) => {
     let now = new Date("2026-10-20T12:00:00Z");
     const first = await queueFinishedCycle(new Date(now.getTime() - 3_600_000));
     const jobId = await addJob("Deferred");
@@ -364,7 +364,7 @@ describe("the ai-worker handles run_ai", () => {
         if (reason === "quiet_hours") Object.assign(config.quiet_hours, { enabled: true, start: "00:00", end: "23:59" });
         return config;
       },
-      createRuntime: () => reason === "not_configured" ? null : { client: telegram(), chatId: CHAT },
+      createRuntime: () => ({ client: telegram(), chatId: CHAT }),
     });
     registerBuiltinAiSubtasks();
     registerControlHandler("run_ai", createRunAiHandler({ steps: { ...steps, notify: deferred }, registry: new ChannelRegistry(), now: () => now }));
@@ -377,6 +377,27 @@ describe("the ai-worker handles run_ai", () => {
     expect((await db().select().from(schema.notifications)).filter((n) => n.kind === "cycle_summary")).toMatchObject([{ payloadJson: { newJobs: 1, pushed: 1 } }]);
     expect(await getControlRequest(db(), first.request.id)).toMatchObject({ status: "done", result: { notify: { pending: false, deliveredByCycleId: next.cycle.id } } });
     expect(await db().execute(sql`select key from runtime_state where key like 'notify:window:%'`)).toHaveLength(0);
+  });
+
+  it("lets candidates expire while Telegram is unconfigured", async () => {
+    let now = new Date();
+    const first = await queueFinishedCycle(new Date(now.getTime() - 3_600_000));
+    const jobId = await addJob("Expired");
+    await db().update(schema.jobs).set({ firstSeenAt: new Date(now.getTime() - 30 * 60_000) }).where(eq(schema.jobs.id, jobId));
+    const steps = workerSteps(fakeAi());
+    const unconfigured = createNotifyStep({ loadNotifyConfig: notifyCfg, createRuntime: () => null });
+    registerBuiltinAiSubtasks();
+    registerControlHandler("run_ai", createRunAiHandler({ steps: { ...steps, notify: unconfigured }, registry: new ChannelRegistry(), now: () => now }));
+    expect(await processNextControlRequest(hostWorker())).toMatchObject({ id: first.request.id, status: "done", result: { notify: { pending: false } } });
+    expect(api.of("sendMessage")).toHaveLength(0);
+    expect(await db().execute(sql`select key from runtime_state where key like 'notify:window:%'`)).toHaveLength(0);
+
+    now = new Date(now.getTime() + (notifyCfg().candidate_window_hours + 1) * 3_600_000);
+    const next = await queueFinishedCycle(now);
+    registerControlHandler("run_ai", createRunAiHandler({ steps, registry: new ChannelRegistry(), now: () => now }));
+    expect(await processNextControlRequest(hostWorker())).toMatchObject({ id: next.request.id, status: "done", result: { notify: { pushed: 0 } } });
+    expect((await db().select().from(schema.notifications)).filter((n) => n.kind === "job")).toHaveLength(0);
+    expect((await db().select().from(schema.notifications)).filter((n) => n.kind === "cycle_summary")).toMatchObject([{ payloadJson: { newJobs: 0, pushed: 0 } }]);
   });
 
   it("sends the last claimable cycle's digest while a newer cycle is still running", async () => {
