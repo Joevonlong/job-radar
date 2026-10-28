@@ -17,6 +17,7 @@ import { getDb, listCompaniesWithJobCount, suggestCompanies } from "@/lib/db";
 import { resolveCompanyName } from "@/lib/pipeline/company";
 import { reconcileBonuses, rulesFingerprint, signalsPrompt } from "@/lib/signals";
 
+import { slowPatternErrors } from "./pattern-check";
 import { estimateReview } from "./preview";
 import { hasViewFilters, slugifyViewId } from "./view-filters";
 import { COMPANY_SUGGESTION_LIMIT, type InterestsActionState, type InterestsFormError, type InterestsSection, type RecomputeOutcome, type WatchedCompanyView } from "./types";
@@ -122,6 +123,9 @@ export async function saveVocabulary(rawDraft: unknown): Promise<InterestsAction
     const { candidate, draftPath, fieldErrors } = merged;
     const validated = interestsSchema.safeParse(candidate);
     if (!validated.success || fieldErrors.length > 0) return failed("vocabulary", null, [...fieldErrors, ...(validated.success ? [] : toFieldErrors(validated.error, draftPath))]);
+    // a pattern that is too slow on the probe's test texts would be left out of every scan: not saved
+    const slow = slowPatternErrors(validated.data, draftPath);
+    if (slow.length > 0) return failed("vocabulary", null, slow);
     try {
       await writeConfig("interests", validated.data);
     } catch {

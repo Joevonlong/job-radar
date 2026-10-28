@@ -5,12 +5,14 @@ import { createProvider } from "@/lib/ai/provider";
 import { createAiRouter } from "@/lib/ai/router";
 import { createAiStep, registerAiSubtask, resetAiSubtasks } from "@/lib/ai/step";
 import type { AiTransport, AiTransportRequest } from "@/lib/ai/types";
+import { createLogger, type LogRecord } from "@/lib/channels/logger";
 import type { InterestsConfig } from "@/lib/config";
 import type { CycleStepContext } from "@/lib/cycle/steps";
 import { closeDb, getDb, schema } from "@/lib/db";
 import { runMigrations } from "@/lib/db/migrate";
 import { getSignalScan, listJobsToReview, listSignalsOfJob, saveAiReview } from "@/lib/db/repos/signals";
 import { highValuePolicy, reconcileBonuses, revalueSignals, runAiReview, runRuleScan, signalsAiSubtask, signalsStep } from "@/lib/signals";
+import { signalPatternIsFast } from "@/lib/signals/pattern-guard";
 import { getJobDetail, listJobs, listTodayJobs } from "@/lib/db";
 
 import { config as cycleConfig, quietLogger } from "../cycle/helpers";
@@ -30,6 +32,16 @@ const JD_RICH = [
 ].join("\n");
 const JD_PLAIN = "Build things with a great team in Berlin. No money talk here.";
 const JD_DEI = "We value diversity, equity and inclusion. Join our team.";
+/** Passes the test texts, but backtracks on a JD that has the literal prefix followed by a long number. */
+const JOB_SLOW_PATTERN = "\\bticket:(\\d+)+x\\b";
+const JOB_SLOW_DESCRIPTION = `Equity for everyone.\nticket:${"1".repeat(80)}!`;
+
+function withJobBudget() {
+  return shippedInterests((raw) => {
+    (rawCategory(raw, "T2").patterns as string[]).push(JOB_SLOW_PATTERN);
+    (raw.limits as Record<string, unknown>).pattern_job_ms = 50;
+  });
+}
 
 /** An AI that answers from a script keyed on the JD it is shown; records every call. */
 function fakeAi(answer: (request: AiTransportRequest) => unknown) {
@@ -142,6 +154,27 @@ describe("rule scan", () => {
     });
     expect((await runRuleScan(getDb(), scanOptions(edited))).scanned).toBe(1);
   });
+
+  it("interrupts a pattern the probe accepts, warns, keeps the job pending, and scans the next job", async () => {
+    const slow = await newJob("Slow", JOB_SLOW_DESCRIPTION);
+    const fine = await newJob("Fine", "Equity for everyone.");
+    const interests = withJobBudget();
+    expect(signalPatternIsFast(interests.limits)(JOB_SLOW_PATTERN)).toBe(true);
+    const records: LogRecord[] = [];
+    const logger = createLogger({ sink: (record) => records.push(record) });
+    const start = performance.now();
+    const result = await runRuleScan(getDb(), { ...scanOptions(interests), logger });
+    expect(performance.now() - start).toBeLessThan(3000);
+    expect(result).toMatchObject({ scanned: 1, failed: 1, withSignals: 1, aborted: false });
+    expect(records.filter((record) => record.level === "warn")).toEqual([
+      expect.objectContaining({ fields: { jobId: slow, ms: 50 } }),
+    ]);
+    expect(await getSignalScan(getDb(), slow)).toBeNull();
+    expect(await listSignalsOfJob(getDb(), slow)).toEqual([]);
+    expect(await tiersOf(fine)).toContain("T2:rule");
+    // A timeout never marks a job as scanned; only it is tried again in the next cycle.
+    expect(await runRuleScan(getDb(), scanOptions(interests))).toMatchObject({ scanned: 0, failed: 1 });
+  });
 });
 
 describe("score bonus", () => {
@@ -176,6 +209,23 @@ describe("score bonus", () => {
     });
     expect((await reconcileBonuses(getDb(), heavier)).updated).toBe(1);
     expect((await getDb().select().from(schema.scores).where(eq(schema.scores.jobId, job)))[0]).toMatchObject({ signalBonus: 10, rankValue: 70 });
+  });
+
+  it("writes a change of many rows in batches: every row gets its bonus and rank value, the untouched ones keep theirs", async () => {
+    const interests = shippedInterests();
+    const job = await newJob("Many rows", "Equity for everyone, competitive salary package.", { scoreRow: false });
+    const other = await newJob("No signals", "Build things.", { scoreRow: false });
+    // more rows than one statement takes (rows without a snapshot are not bound by the unique index), with and without a match score
+    const many = Array.from({ length: 1234 }, (_, i) => ({ jobId: job, filterResult: "passed" as const, score: i % 3 === 0 ? null : i % 101, rankValue: i % 3 === 0 ? 33.5 : null }));
+    await getDb().insert(schema.scores).values(many);
+    await getDb().insert(schema.scores).values({ jobId: other, filterResult: "passed", score: 40, rankValue: 40 });
+    await runRuleScan(getDb(), scanOptions(interests));
+
+    expect(await reconcileBonuses(getDb(), interests)).toEqual({ checked: 1234, updated: 1234 });
+    const rows = await getDb().select().from(schema.scores).where(eq(schema.scores.jobId, job)).orderBy(schema.scores.id);
+    expect(rows.map((r) => [r.signalBonus, r.rankValue])).toEqual(many.map((m) => [11, m.score === null ? 33.5 : m.score + 11])); // T2 8 + T3 3
+    expect((await getDb().select().from(schema.scores).where(eq(schema.scores.jobId, other)))[0]).toMatchObject({ signalBonus: 0, rankValue: 40 });
+    expect(await reconcileBonuses(getDb(), interests)).toEqual({ checked: 1234, updated: 0 });
   });
 
   it("drops the bonus again when the signals disappear", async () => {
@@ -347,6 +397,32 @@ describe("AI review with a fake provider", () => {
     expect(review?.aiDescriptionHash).toBe(review?.descriptionHash);
     expect(await listSignalsOfJob(getDb(), filtered)).toHaveLength(2); // rule signals only, never sent to the AI
     expect((await getSignalScan(getDb(), closed))?.aiScannedAt).toBeNull();
+  });
+
+  it("interrupts a pattern the probe accepts before calling the AI, preserves rule signals, and reviews the next job", async () => {
+    const slow = await newJob("Slow", JOB_SLOW_DESCRIPTION);
+    const fine = await newJob("Fine", "Equity for everyone.");
+    await runRuleScan(getDb(), scanOptions());
+    const original = await listSignalsOfJob(getDb(), slow);
+    const interests = withJobBudget();
+    expect(signalPatternIsFast(interests.limits)(JOB_SLOW_PATTERN)).toBe(true);
+    const records: LogRecord[] = [];
+    const logger = createLogger({ sink: (record) => records.push(record) });
+    const ai = fakeAi(() => ({ signals: [], rejected: [] }));
+    const start = performance.now();
+    const result = await runAiReview(getDb(), { router: ai.router, interests, pipeline, logger, limit: 80 });
+    expect(performance.now() - start).toBeLessThan(3000);
+    expect(result).toMatchObject({ reviewed: 1, skipped: 1, failed: 0, stopped: null });
+    expect(ai.calls).toHaveLength(1);
+    expect(ai.calls[0]?.user).not.toContain("ticket:");
+    expect(records.filter((record) => record.level === "warn")).toEqual([
+      expect.objectContaining({ fields: { jobId: slow, ms: 50 } }),
+    ]);
+    expect(await listSignalsOfJob(getDb(), slow)).toEqual(original);
+    expect((await getSignalScan(getDb(), slow))?.aiScannedAt).toBeNull();
+    expect((await getSignalScan(getDb(), fine))?.aiScannedAt).not.toBeNull();
+    expect(await runAiReview(getDb(), { router: ai.router, interests, pipeline, logger: quietLogger, limit: 80 })).toMatchObject({ reviewed: 0, skipped: 1 });
+    expect(ai.calls).toHaveLength(1);
   });
 
   it("does not ask again for a reviewed job; a changed JD or prompt version asks again", async () => {

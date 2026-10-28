@@ -9,10 +9,17 @@ import { z } from "zod";
 import { ConfigError, interestsSchema, reloadConfig, type InterestsConfig } from "@/lib/config";
 import { getDb } from "@/lib/db";
 import { countJobsToReview, listRecentJobsForPreview } from "@/lib/db/repos/signals";
+import type { TimeBox } from "@/lib/filter/deal-breakers";
+import { vmTimeBox } from "@/lib/filter/time-box";
+import { createProcessLogger } from "@/lib/logging/process-logger";
 import { loadPipeline } from "@/lib/market";
-import { findCandidates, signalsPrompt } from "@/lib/signals";
+import { findCandidates, signalPatternGuard, signalsPrompt } from "@/lib/signals";
+import { compileSignalRules } from "@/lib/signals/rules";
 
+import { slowPatternErrors } from "./pattern-check";
 import { draftToCandidate, toFieldErrors, vocabularyDraftSchema, type VocabularyFieldError } from "./vocabulary-draft";
+
+const log = createProcessLogger({ fields: { component: "interests-preview" } });
 
 /** Quoted samples the preview shows at most. */
 export const PREVIEW_SAMPLES = 3;
@@ -77,6 +84,8 @@ function perCycleLimit(): number | null {
 export interface PreviewOptions {
   /** Clock in milliseconds (tests). */
   now?: () => number;
+  /** Where the loop over the jobs runs (default `vmTimeBox`, which interrupts a running expression). */
+  timeBox?: TimeBox;
 }
 
 /** Run the preview for an untrusted request. Never throws for bad input. */
@@ -93,8 +102,9 @@ export async function previewCategory(raw: unknown, options: PreviewOptions = {}
   const merged = draftToCandidate(draft, current);
   if (typeof merged === "string") return { status: "invalidPayload" };
   const validated = interestsSchema.safeParse(merged.candidate);
-  if (!validated.success || merged.fieldErrors.length > 0) {
-    const all = [...merged.fieldErrors, ...(validated.success ? [] : toFieldErrors(validated.error, merged.draftPath))];
+  // the checks of a save, the slow patterns too (`slowPatternErrors`)
+  const all = !validated.success || merged.fieldErrors.length > 0 ? [...merged.fieldErrors, ...(validated.success ? [] : toFieldErrors(validated.error, merged.draftPath))] : slowPatternErrors(validated.data, merged.draftPath);
+  if (!validated.success || all.length > 0) {
     const own = `categories.${index}`;
     return { status: "invalid", fieldErrors: [...all.filter((e) => e.path === own || e.path.startsWith(`${own}.`)), ...all.filter((e) => !(e.path === own || e.path.startsWith(`${own}.`)))] };
   }
@@ -110,6 +120,7 @@ export async function previewCategory(raw: unknown, options: PreviewOptions = {}
   }
   // only this category: its hits are not cut by the others, and the rules of the others do not run
   const single = { signals: { ...next.signals, categories: [category] }, limits: next.limits };
+  const timeBox = options.timeBox ?? vmTimeBox;
   try {
     const db = getDb();
     const jobs = await listRecentJobsForPreview(db, next.limits.preview_jobs);
@@ -117,20 +128,27 @@ export async function previewCategory(raw: unknown, options: PreviewOptions = {}
     let scanned = 0;
     let truncated = false;
     const samples: CategoryPreviewSample[] = [];
-    // the draft's patterns run synchronously in the web process: stop at the time budget, checked before each job
+    // compiled (and probed, in boxes of its own) before the loop's time box
+    const guard = signalPatternGuard(next.limits, log);
+    compileSignalRules(single, guard);
+    // the draft's patterns run in the web process: the whole loop runs in one time box that ends at the budget, so a slow
+    // expression cannot hold the process past it (one box: each box costs about a millisecond); the deadline is also
+    // checked before each job. The counts are kept up to the job that was running when the box stopped.
     const deadline = now() + next.limits.preview_time_budget_ms;
-    for (const job of jobs) {
-      if (now() >= deadline) {
-        truncated = true;
-        break;
+    const finished = timeBox(() => {
+      for (const job of jobs) {
+        if (now() >= deadline) {
+          truncated = true;
+          return;
+        }
+        const first = findCandidates(job.description, single, pipeline, guard).find((candidate) => candidate.tier === category.id);
+        scanned += 1;
+        if (first === undefined) continue;
+        hits += 1;
+        if (samples.length < PREVIEW_SAMPLES) samples.push({ jobId: job.id, title: job.title, quote: first.quote });
       }
-      scanned += 1;
-      const found = findCandidates(job.description, single, pipeline).filter((candidate) => candidate.tier === category.id);
-      const first = found[0];
-      if (first === undefined) continue;
-      hits += 1;
-      if (samples.length < PREVIEW_SAMPLES) samples.push({ jobId: job.id, title: job.title, quote: first.quote });
-    }
+    }, next.limits.preview_time_budget_ms);
+    if (!finished) truncated = true;
     return { status: "ok", scanned, truncated, hits, samples, review: await estimateReview(current, next) };
   } catch {
     return { status: "unavailable" };

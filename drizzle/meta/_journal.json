@@ -264,6 +264,13 @@
     {
       "idx": 37,
       "version": "7",
+      "when": 1793186278327,
+      "tag": "0037_hot_path_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
       "when": 1793203492316,
       "tag": "0037_job_dormant",
       "breakpoints": true

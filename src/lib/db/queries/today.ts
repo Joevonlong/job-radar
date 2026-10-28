@@ -1,4 +1,5 @@
-import { and, asc, count, desc, eq, exists, gte, inArray, isNull, lte, ne, not, notExists, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, count, desc, eq, exists, getTableColumns, gte, inArray, isNull, lte, ne, not, notExists, or, sql, type SQL } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { z } from "zod";
 
 import type { CycleKpiCounts } from "@/lib/dashboard/kpi";
@@ -11,7 +12,7 @@ import type { RunStatus } from "../repos/runs";
 import { uxTablesReady } from "../repos/ux-tables";
 import { FOLLOWING_STATUSES } from "@/lib/applications/following";
 import { effectiveStatusSql, manuallyClosedSql } from "./job-status";
-import { cardColumns, hideGermanLevels, hydrateCards, latestScoreCte, type CardRow } from "./job-cards";
+import { cardColumns, hideGermanLevels, hydrateCards, latestScoreLateral, type CardRow, type LatestScore } from "./job-cards";
 import { buildJobConditions, hasListableSalary, type JobFilters } from "./jobs";
 import { hasHighValueSignal, policyCurrency, type HighValuePolicy } from "./signal-filter";
 import { parseSalary } from "./parse";
@@ -178,23 +179,27 @@ async function summarizeCycle(db: Db, cycle: typeof cycles.$inferSelect, options
     newCount = row?.n ?? 0;
   }
 
-  const latest = latestScoreCte(db);
+  const latest = latestScoreLateral(db);
   const qualifiedMinRank = options.qualifiedMinRank ?? null;
   const qualifiedMinRankWithSignals = options.qualifiedMinRankWithSignals ?? qualifiedMinRank;
   const qualifies =
     qualifiedMinRank === null
       ? sql`false`
       : sql`(${latest.rankValue} >= ${qualifiedMinRank} or (${latest.rankValue} >= ${qualifiedMinRankWithSignals} and ${highValueSql(db, options.highValue)}))`;
+  // the cycle's own new jobs, and backlog jobs the AI scored during it ("0 qualified · 2 pushed" for a backlog cycle)
+  const handled = db
+    .select({ id: jobs.id })
+    .from(jobs)
+    .where(inWindow)
+    .unionAll(db.select({ id: scores.jobId }).from(scores).where(and(gte(scores.scoredAt, cycle.startedAt), lte(scores.scoredAt, windowEnd))));
   const [outcome] = await db
-    .with(latest)
     .select({
       passed: sql<number>`count(*) filter (where ${latest.filterResult} = 'passed')`.mapWith(Number),
       qualified: sql<number>`count(*) filter (where ${latest.filterResult} = 'passed' and ${qualifies})`.mapWith(Number),
     })
     .from(jobs)
-    .leftJoin(latest, eq(latest.jobId, jobs.id))
-    // the cycle's own new jobs, and backlog jobs the AI scored during it ("0 qualified · 2 pushed" for a backlog cycle)
-    .where(or(inWindow, sql`exists (select 1 from ${scores} where ${scores.jobId} = ${jobs.id} and ${gte(scores.scoredAt, cycle.startedAt)} and ${lte(scores.scoredAt, windowEnd)})`));
+    .leftJoinLateral(latest, sql`true`)
+    .where(inArray(jobs.id, handled));
 
   return {
     id: cycle.id,
@@ -261,24 +266,23 @@ export interface TodayOptions {
  * status `archived`) are hidden, and so are filtered-out ones unless asked for.
  */
 export async function listTodayJobs(db: Db, options: TodayOptions): Promise<JobCard[]> {
-  const latest = latestScoreCte(db);
+  const latest = latestScoreLateral(db);
   const ux = await uxTablesReady(db);
   const conditions = todayConditions(db, options, latest, ux);
   if (options.quick) conditions.push(quickCondition(db, latest, options.quick, options.quickLines ?? { qualifiedMinRank: null, qualifiedMinRankWithSignals: null }, options.highValue));
 
   const rows: CardRow[] = await db
-    .with(latest)
     .select(cardColumns(latest, ux, await dormancyReady(db)))
     .from(jobs)
     .innerJoin(companies, eq(companies.id, jobs.companyId))
-    .leftJoin(latest, eq(latest.jobId, jobs.id))
+    .leftJoinLateral(latest, sql`true`)
     .where(and(...conditions))
     .orderBy(sql`coalesce(${latest.filterResult} = 'filtered_out', false) asc`, sql`${latest.rankValue} desc nulls last`, sql`${jobs.postedAt} desc nulls last`, desc(jobs.firstSeenAt), desc(jobs.id));
   return hydrateCards(db, rows, { visa: options.visa ?? true, ghost: options.ghost === true });
 }
 
 /** The conditions that select the Today list (the window, ignored / filtered-out jobs, the toggles and the saved view's filters); the quick view is added by the caller. */
-function todayConditions(db: Db, options: TodayOptions, latest: ReturnType<typeof latestScoreCte>, ux: boolean): SQL[] {
+function todayConditions(db: Db, options: TodayOptions, latest: LatestScore, ux: boolean): SQL[] {
   const { start: dayStart, end: dayEnd } = dayBounds(options.now, options.timezone);
 
   const today = and(sql`${jobs.firstSeenAt} >= ${dayStart}`, sql`${jobs.firstSeenAt} < ${dayEnd}`);
@@ -307,7 +311,7 @@ export const QUICK_VIEWS = ["all", "high", "salary", "following"] as const;
 export type QuickView = (typeof QUICK_VIEWS)[number];
 
 
-function quickCondition(db: Db, latest: ReturnType<typeof latestScoreCte>, view: Exclude<QuickView, "all">, lines: QuickLines, policy?: HighValuePolicy | null): SQL {
+function quickCondition(db: Db, latest: LatestScore, view: Exclude<QuickView, "all">, lines: QuickLines, policy?: HighValuePolicy | null): SQL {
   switch (view) {
     case "high": {
       // the same rule as the summary block "at or above the push line" and the Telegram push
@@ -332,10 +336,9 @@ export interface QuickLines {
  * quick views. A saved view has its own count (`countTodayJobs`).
  */
 export async function countTodayQuickViews(db: Db, options: Omit<TodayOptions, "extra" | "quick"> & { quickLines: QuickLines }): Promise<Record<QuickView, number>> {
-  const latest = latestScoreCte(db);
+  const latest = latestScoreLateral(db);
   const conditions = todayConditions(db, options, latest, await uxTablesReady(db));
   const [row] = await db
-    .with(latest)
     .select({
       all: sql<number>`count(*)`.mapWith(Number),
       high: sql<number>`count(*) filter (where ${quickCondition(db, latest, "high", options.quickLines, options.highValue)})`.mapWith(Number),
@@ -343,19 +346,18 @@ export async function countTodayQuickViews(db: Db, options: Omit<TodayOptions, "
       following: sql<number>`count(*) filter (where ${quickCondition(db, latest, "following", options.quickLines, options.highValue)})`.mapWith(Number),
     })
     .from(jobs)
-    .leftJoin(latest, eq(latest.jobId, jobs.id))
+    .leftJoinLateral(latest, sql`true`)
     .where(and(...conditions));
   return { all: row?.all ?? 0, high: row?.high ?? 0, salary: row?.salary ?? 0, following: row?.following ?? 0 };
 }
 
 /** The number of jobs `listTodayJobs` would list for these options (a saved view's tab). */
 export async function countTodayJobs(db: Db, options: TodayOptions): Promise<number> {
-  const latest = latestScoreCte(db);
+  const latest = latestScoreLateral(db);
   const [row] = await db
-    .with(latest)
     .select({ n: sql<number>`count(*)`.mapWith(Number) })
     .from(jobs)
-    .leftJoin(latest, eq(latest.jobId, jobs.id))
+    .leftJoinLateral(latest, sql`true`)
     .where(and(...todayConditions(db, options, latest, await uxTablesReady(db))));
   return row?.n ?? 0;
 }
@@ -381,20 +383,26 @@ export async function listRecentCycleKpis(db: Db, options: CycleSummaryOptions &
     .limit(Math.max(1, options.limit));
   if (recent.length === 0) return [];
 
-  const latest = latestScoreCte(db);
+  const latest = latestScoreLateral(db);
   const qualifiedMinRank = options.qualifiedMinRank ?? null;
   const qualifiedMinRankWithSignals = options.qualifiedMinRankWithSignals ?? qualifiedMinRank;
   const windowEnd = sql`coalesce(${cycles.finishedAt}, now())`;
-  const handled = or(
-    and(gte(jobs.firstSeenAt, cycles.startedAt), sql`${jobs.firstSeenAt} <= ${windowEnd}`),
-    sql`exists (select 1 from ${scores} where ${scores.jobId} = ${jobs.id} and ${scores.scoredAt} >= ${cycles.startedAt} and ${scores.scoredAt} <= ${windowEnd})`,
-  );
+  // Per cycle, the jobs first seen in its window or scored during it, each once (`in` dedupes). Collected from the two
+  // indexes (`jobs_first_seen_at_idx`, `scores_scored_at_idx`) per cycle: an `or exists` join condition can only be checked
+  // for every (cycle, job) pair. `union all`, not `union`: with `union` the planner scans all jobs for every cycle.
+  const firstSeen = alias(jobs, "first_seen");
+  const handledIds = db
+    .select({ id: firstSeen.id })
+    .from(firstSeen)
+    .where(and(gte(firstSeen.firstSeenAt, cycles.startedAt), sql`${firstSeen.firstSeenAt} <= ${windowEnd}`))
+    .unionAll(db.select({ id: scores.jobId }).from(scores).where(and(gte(scores.scoredAt, cycles.startedAt), sql`${scores.scoredAt} <= ${windowEnd}`)));
+  // named like the table, so the columns the counts read (`jobs.salary_json`, the signal checks, the latest score) are the handled jobs'
+  const handled = db.select(getTableColumns(jobs)).from(jobs).where(inArray(jobs.id, handledIds)).as("jobs");
   const qualifies =
     qualifiedMinRank === null
       ? sql`false`
       : sql`(${latest.rankValue} >= ${qualifiedMinRank} or (${latest.rankValue} >= ${qualifiedMinRankWithSignals} and ${highValueSql(db, options.highValue)}))`;
   const rows = await db
-    .with(latest)
     .select({
       id: cycles.id,
       startedAt: cycles.startedAt,
@@ -407,8 +415,8 @@ export async function listRecentCycleKpis(db: Db, options: CycleSummaryOptions &
       summaryJson: cycles.summaryJson,
     })
     .from(cycles)
-    .leftJoin(jobs, handled)
-    .leftJoin(latest, eq(latest.jobId, jobs.id))
+    .leftJoinLateral(handled, sql`true`)
+    .leftJoinLateral(latest, sql`true`)
     .where(inArray(
       cycles.id,
       recent.map((row) => row.id),
@@ -446,15 +454,14 @@ export interface CycleNewJob {
  * scrolls them. At most `limit`.
  */
 export async function listCycleNewJobs(db: Db, cycle: { startedAt: Date; finishedAt: Date | null }, limit: number): Promise<CycleNewJob[]> {
-  const latest = latestScoreCte(db);
+  const latest = latestScoreLateral(db);
   const ux = await uxTablesReady(db);
   const windowEnd = cycle.finishedAt ?? sql`now()`;
   const rows = await db
-    .with(latest)
     .select({ id: jobs.id, title: jobs.title, companyName: companies.name, salaryJson: jobs.salaryJson, rankValue: latest.rankValue })
     .from(jobs)
     .innerJoin(companies, eq(companies.id, jobs.companyId))
-    .leftJoin(latest, eq(latest.jobId, jobs.id))
+    .leftJoinLateral(latest, sql`true`)
     .where(
       and(
         gte(jobs.firstSeenAt, cycle.startedAt),

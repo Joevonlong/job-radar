@@ -349,6 +349,8 @@ export const jobs = pgTable(
     index("jobs_title_norm_idx").on(t.titleNorm),
     index("jobs_simhash_idx").on(t.simhash),
     index("jobs_search_tsv_idx").using("gin", t.searchTsv),
+    /** The jobs a cycle created (first seen inside its window): the Today page and its cycle counts. */
+    index("jobs_first_seen_at_idx").on(t.firstSeenAt),
   ],
 );
 
@@ -501,6 +503,16 @@ export const scores = pgTable(
   (t) => [
     index("scores_job_id_idx").on(t.jobId),
     index("scores_rank_value_idx").on(t.rankValue),
+    /** The jobs the AI scored inside a cycle's window (the Today page's cycle counts). */
+    index("scores_scored_at_idx").on(t.scoredAt),
+    /**
+     * The newest row of one job, and its newest row with a score: the latest score of a few jobs (`latestScoreLateral`).
+     * NULLS FIRST is what `order by ... desc` means, so the index serves it (drizzle writes NULLS LAST otherwise).
+     */
+    index("scores_job_latest_idx").on(t.jobId, t.createdAt.desc().nullsFirst(), t.id.desc().nullsFirst()),
+    index("scores_job_latest_scored_idx")
+      .on(t.jobId, t.createdAt.desc().nullsFirst(), t.id.desc().nullsFirst())
+      .where(sql`${t.score} is not null`),
     /** One result per (job, profile snapshot); rows without a snapshot (seed data) are not constrained. */
     uniqueIndex("scores_job_snapshot_uq")
       .on(t.jobId, t.profileSnapshotId)

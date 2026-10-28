@@ -21,6 +21,11 @@ cycles:
 catch_up: true
 # If the previous run is still going, skip the new run and log it
 skip_if_running: true
+# Exception: a scheduled run that finds a run of only some channels going (a "Collect now" on /sources) waits for it,
+# at most max_minutes (0 = skip it as above), trying again every poll_seconds, and then runs. Defaults shown; uncomment to change.
+# partial_cycle_wait:
+#   max_minutes: 60
+#   poll_seconds: 15
 
 # Database backup: the runner runs pg_dump once a day per cron (same timezone as above),
 # writing data/backups/jobradar-YYYYMMDD-HHMMSS.dump. Restore steps in docs/backup-restore.md.

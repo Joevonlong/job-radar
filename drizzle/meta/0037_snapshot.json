@@ -1,5 +1,5 @@
 {
-  "id": "7131b864-4749-4658-b1b9-f8cf291a19aa",
+  "id": "f0d2ec89-79ea-4188-a1f4-9f1a729143ef",
   "prevId": "7879b21c-c55b-4f8f-9193-51396e552a7c",
   "version": "7",
   "dialect": "postgresql",
@@ -2070,18 +2070,6 @@
           "notNull": true,
           "default": "'active'"
         },
-        "dormant_at": {
-          "name": "dormant_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "possibly_closed_at": {
-          "name": "possibly_closed_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
         "simhash": {
           "name": "simhash",
           "type": "text",
@@ -2205,6 +2193,21 @@
           "isUnique": false,
           "concurrently": false,
           "method": "gin",
+          "with": {}
+        },
+        "jobs_first_seen_at_idx": {
+          "name": "jobs_first_seen_at_idx",
+          "columns": [
+            {
+              "expression": "first_seen_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
           "with": {}
         }
       },
@@ -3416,6 +3419,76 @@
             }
           ],
           "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "scores_scored_at_idx": {
+          "name": "scores_scored_at_idx",
+          "columns": [
+            {
+              "expression": "scored_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "scores_job_latest_idx": {
+          "name": "scores_job_latest_idx",
+          "columns": [
+            {
+              "expression": "job_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "first"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "first"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "scores_job_latest_scored_idx": {
+          "name": "scores_job_latest_scored_idx",
+          "columns": [
+            {
+              "expression": "job_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "first"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "first"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"scores\".\"score\" is not null",
           "concurrently": false,
           "method": "btree",
           "with": {}

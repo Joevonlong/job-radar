@@ -5,15 +5,26 @@ import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SalaryLookupCard, type SalaryLookupCardProps } from "@/components/jobs/detail/salary-lookup-card";
+import type { ControlQueueView } from "@/lib/control/request-view-schema";
 import { salaryLookupResultSchema } from "@/lib/salary/lookup-types";
 import type { SalaryLookupView } from "@/lib/salary/view";
 import en from "../../messages/en.json";
 import zh from "../../messages/zh.json";
 
-const { lookupSalaryAction, salaryLookupStatusAction } = vi.hoisted(() => ({ lookupSalaryAction: vi.fn(), salaryLookupStatusAction: vi.fn() }));
+const { lookupSalaryAction, salaryLookupStatusAction, refresh } = vi.hoisted(() => ({ lookupSalaryAction: vi.fn(), salaryLookupStatusAction: vi.fn(), refresh: vi.fn() }));
 vi.mock("@/app/jobs/[id]/salary-actions", () => ({ lookupSalaryAction, salaryLookupStatusAction }));
-vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+vi.mock("@/lib/settings/constants", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/settings/constants")>()), STATUS_POLL_MS: 10 }));
+
+const queue = (over: Partial<ControlQueueView> = {}, worker: Partial<ControlQueueView["worker"]> = {}): ControlQueueView => ({
+  ahead: 0,
+  running: null,
+  startedAt: null,
+  now: "2026-10-28T12:00:00.000Z",
+  ...over,
+  worker: { process: "ai-worker", online: true, heartbeatAgeSeconds: 3, ...worker },
+});
 
 const wrap = (node: ReactNode, locale: "en" | "zh" = "en") => (
   <NextIntlClientProvider locale={locale} messages={locale === "en" ? en : zh} timeZone="Europe/Berlin">
@@ -65,16 +76,62 @@ function lookup(over: Partial<SalaryLookupView> = {}): SalaryLookupView {
 beforeEach(() => {
   lookupSalaryAction.mockReset();
   salaryLookupStatusAction.mockReset();
+  refresh.mockReset();
 });
 
 describe("SalaryLookupCard", () => {
+  it.each(["unreadable", "invalid queue"])("retries an %s status and keeps the last queue until completion", async (reason) => {
+    let release: () => void = () => {};
+    const released = new Promise<void>((resolve) => (release = resolve));
+    salaryLookupStatusAction
+      .mockResolvedValueOnce(reason === "unreadable" ? null : { ok: true, state: "waiting", stage: "pending", queue: queue({ ahead: -1 }) })
+      .mockImplementation(async () => {
+        await released;
+        return { ok: true, state: "done" };
+      });
+    render(wrap(<SalaryLookupCard {...props({ initialRequest: { state: "waiting", requestId: 12, stage: "pending", queue: queue({ ahead: 2 }) } })} />));
+    await waitFor(() => expect(salaryLookupStatusAction).toHaveBeenCalledTimes(2));
+    expect(screen.getByTestId("queue-hint-ahead")).toHaveTextContent("2 requests ahead of it.");
+    expect(screen.getByTestId("salary-lookup-card")).toHaveAttribute("data-state", "waiting");
+    expect(screen.queryByTestId("salary-lookup-error")).toBeNull();
+    release();
+    await waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
+    expect(salaryLookupStatusAction).toHaveBeenCalledTimes(2);
+  });
+
   it("counts a queued lookup at once, without a reload", async () => {
     lookupSalaryAction.mockResolvedValue({ ok: true, queued: true, requestId: 11, usedToday: 1 });
-    salaryLookupStatusAction.mockResolvedValue({ ok: true, state: "waiting", stage: "pending" });
+    salaryLookupStatusAction.mockResolvedValue({ ok: true, state: "waiting", stage: "pending", queue: queue() });
     render(wrap(<SalaryLookupCard {...props()} />));
     expect(screen.getByTestId("salary-lookup-quota")).toHaveAttribute("data-used", "0");
     await userEvent.click(screen.getByTestId("salary-lookup-button"));
     await waitFor(() => expect(screen.getByTestId("salary-lookup-quota")).toHaveAttribute("data-used", "1"));
+  });
+
+  it("waiting: how many requests are ahead and what the ai-worker is doing, with the start time", async () => {
+    lookupSalaryAction.mockResolvedValue({ ok: true, queued: true, requestId: 11, usedToday: 1 });
+    salaryLookupStatusAction.mockResolvedValue({ ok: true, state: "waiting", stage: "pending", queue: queue({ ahead: 1, running: { kind: "translate_job", since: "2026-10-28T11:58:00.000Z" } }) });
+    render(wrap(<SalaryLookupCard {...props()} />));
+    await userEvent.click(screen.getByTestId("salary-lookup-button"));
+    await waitFor(() => expect(screen.getByTestId("queue-hint-ahead")).toHaveTextContent("1 request ahead of it."));
+    expect(screen.getByTestId("queue-hint-running")).toHaveTextContent("The ai-worker is working on “Translation”, started 12:58.");
+    expect(screen.getByTestId("salary-lookup-card")).toHaveAttribute("data-state", "waiting");
+  });
+
+  it("a refresh over a shown result: the queue lines show under the result while it runs", async () => {
+    salaryLookupStatusAction.mockResolvedValue({ ok: true, state: "waiting", stage: "running", queue: queue({ startedAt: "2026-10-28T11:57:00.000Z" }) });
+    render(wrap(<SalaryLookupCard {...props({ latest: lookup(), initialRequest: { state: "waiting", requestId: 12, stage: "running", queue: null } })} />));
+    await waitFor(() => expect(screen.getByTestId("queue-hint-self")).toHaveTextContent("Running since 12:57, for 3 minutes."));
+  });
+
+  it("offline: a line with the last heartbeat and a link to /sources; the card stays waiting and keeps polling", async () => {
+    salaryLookupStatusAction.mockResolvedValue({ ok: true, state: "waiting", stage: "pending", queue: queue({}, { online: false, heartbeatAgeSeconds: 600 }) });
+    render(wrap(<SalaryLookupCard {...props({ initialRequest: { state: "waiting", requestId: 12, stage: "pending", queue: queue({}, { online: false, heartbeatAgeSeconds: 600 }) } })} />, "zh"));
+    expect(screen.getByTestId("queue-hint-offline")).toHaveTextContent("ai-worker 离线（最后心跳在 10 分钟前）");
+    expect(within(screen.getByTestId("queue-hint-offline")).getByRole("link")).toHaveAttribute("href", "/sources");
+    await waitFor(() => expect(salaryLookupStatusAction.mock.calls.length).toBeGreaterThan(2));
+    expect(screen.getByTestId("salary-lookup-card")).toHaveAttribute("data-state", "waiting");
+    expect(screen.queryByTestId("salary-lookup-error")).toBeNull();
   });
 
   it("with the daily limit used up the button is disabled, says why and offers no retry", () => {

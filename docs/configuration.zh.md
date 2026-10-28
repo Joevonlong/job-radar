@@ -345,6 +345,22 @@ JD 里关于签证赞助的说法（见 [visa-sponsorship.zh.md](visa-sponsorshi
 
 旧版本不认 `ui.yaml` 里的 `job_checks.visa`：回滚前删掉。
 
+## 轮次重叠（`schedule.yaml` 的 `skip_if_running`、`partial_cycle_wait`）
+
+同一时间只跑一轮。`skip_if_running: true`（默认）时，定时轮次（早轮、晚轮、周末轮，或启动时的补跑）发现另一轮正在运行，按那一轮覆盖的范围决定：
+
+- 正在运行的那一轮采集全部通道：定时轮次记为跳过（再跑只是重复），摘要里写明是哪一轮。
+- 正在运行的那一轮只采部分通道（`/sources` 的“立即采集”、只勾了部分通道的手动轮次、`pnpm cycle:run --channel`）：定时轮次等它结束后再跑，所以 07:00 前不久点一下不会再丢掉早上的整轮采集。最多等 `partial_cycle_wait.max_minutes`，到时锁还被占着就记为跳过。
+
+| 键 | 默认 | 含义 |
+|---|---|---|
+| `partial_cycle_wait.max_minutes` | 60 | 等待只采部分通道的那一轮最多多久；0 = 不等（照旧跳过） |
+| `partial_cycle_wait.poll_seconds` | 15 | 等待时每隔多久再试一次 |
+
+出厂文件里没有这一段（只以注释给出）；要改时才加到 `data/config/schedule.yaml`（没写的键用默认值）。定时轮次等待期间，runner 不启动别的手动轮次（其他按钮照常执行），所以连续点几次“立即采集”不会让它一直等下去；它开跑后，排队中被它覆盖的请求记为完成。手动轮次从不等待：runner 一次处理一个请求，等着的请求会挡住其他按钮。正在运行的那一轮已经覆盖了手动请求时（全部通道的定时轮次），请求记为完成，按钮显示那一轮；否则照旧以“另一轮正在运行”失败。启动时的补跑和 `pnpm run doctor`（`cycle.last`）判断有没有错过时段时，只算采了全部通道的轮次。等待中的轮次还没有记录行：这时部署排空 runner 不会等它（重启后由补跑执行）；等待超过 `doctor.cycle_grace_minutes` 时，`cycle.last` 在它开跑前会报这个时段错过了。LinkedIn 来源组成级联，采全部通道的一轮只用级联里第一个可用的来源，所以级联里靠后的来源的“立即采集”不会被它覆盖。
+
+回退到不认识 `partial_cycle_wait` 的版本之前，先删掉 `data/config/schedule.yaml` 里的这一段：旧版本拒绝未知的键。
+
 ## 日志级别（`schedule.yaml` 的 `logging.level`、`JOB_RADAR_LOG_LEVEL`）
 
 网页、runner、ai-worker 和 `pnpm cycle:run` 默认按 `info` 记日志。`debug` 会多记诊断记录：AI 提供方的检查、路由跳过的提供方、HTTP 重试、别的聊天发来的 Telegram 消息。

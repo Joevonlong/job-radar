@@ -13,9 +13,9 @@ import { Banner } from "./banner";
  */
 export async function HeartbeatBanner({ runner, aiWorker }: { runner: SourcesView["runner"]; aiWorker: AiWorkerStatus }) {
   const aiExpected = aiWorker.execution !== "container";
-  const runnerDown = !runner.online;
+  const runnerOffline = !runner.online;
   const aiDown = aiExpected && !aiWorker.online;
-  if (!runnerDown && !aiDown) return null;
+  if (!runnerOffline && !aiDown) return null;
   const [t, tAge] = await Promise.all([getTranslations("sources.heartbeat"), getTranslations("settings.control.age")]);
   const age = (seconds: number): string => {
     const parts = ageParts(seconds);
@@ -23,9 +23,9 @@ export async function HeartbeatBanner({ runner, aiWorker }: { runner: SourcesVie
   };
 
   return (
-    <Banner tone="warn" testId="heartbeat-warning" data-runner={runnerDown ? "down" : "ok"} data-ai-worker={aiDown ? "down" : "ok"}>
+    <Banner tone="warn" testId="heartbeat-warning" data-runner={runnerOffline ? "down" : "ok"} data-ai-worker={aiDown ? "down" : "ok"}>
       <ul className="flex flex-col gap-1">
-        {runnerDown ? (
+        {runnerOffline ? (
           <li data-testid="heartbeat-runner">{runner.ageSeconds === null ? t("runnerNever") : t("runnerStale", { age: age(runner.ageSeconds) })}</li>
         ) : null}
         {aiDown ? (

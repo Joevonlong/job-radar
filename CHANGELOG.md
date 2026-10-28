@@ -93,6 +93,17 @@ A failure in (a) does not block rollback: follow (c) and accept the display wind
 
 ### Changed
 
+- **Waiting buttons follow the process's heartbeat instead of a fixed time limit:** translate, break down, salary
+  lookup, the test and "collect now" buttons and "Score now" on a job page keep waiting as long as the process that
+  claims the request is alive, instead of giving up after 10 or 12 minutes (the request ran anyway). While a request
+  waits they show how many requests are ahead of it and what the process is working on, since when; while it runs,
+  its start and how long it has been running; and when the ai-worker (or the runner) has no fresh heartbeat, that it
+  is offline, with a link to the Sources page. "Score now" now judges the ai-worker, which scores with
+  `execution: host`, not the runner. The request list on /settings shows "stopped at the time budget, N still to score"
+  for a scoring request that reports it.
+- **Faster on a large database:** the Today page reads the scores and cycle counts of its few jobs through indexes
+  instead of scoring every job; the /jobs city list places each distinct location once; recalculating score bonuses
+  after an interests change writes in batches. A migration adds four indexes; results are unchanged.
 - **AI salary lookups are only displayed:** they never count in the salary benchmark or any filter; the benchmark uses
   only salaries stated in postings. The Salary tab's switch to count AI lookups is removed and the benchmark card shows
   only "sample n". Lookup cards label the company level and every band "AI estimate (unverified)", identify "AI's own
@@ -192,6 +203,13 @@ A failure in (a) does not block rollback: follow (c) and accept the display wind
 
 ### Fixed
 
+- Translation, breakdown and salary lookup keep polling after a temporary status read failure or invalid queue response; translation queue text also applies to container execution.
+
+- **A slow interest pattern no longer freezes the app:** a pattern of a signal category that backtracks badly on long
+  text (such as `(\w+\s*)*budget`) is refused when saving on /interests or in the file editor; in a file edited by hand
+  the signal scan, the AI review and the suggestions leave it out with a warning naming its category, and "Try on recent
+  jobs" stops a slow job at its time budget. Independent interest limits also bound matching on each job in the signal
+  scan and AI review, and a preview uses one shared time budget for all jobs.
 - **Company names and job titles in non-Latin scripts no longer merge different jobs:** "Яндекс" and "株式会社メルカリ"
   were one company, and different Japanese, Chinese, Greek, Cyrillic or Hebrew titles at one employer and city were one
   job (and so were one role's postings in two cities written in another script), because their matching keys were empty.
@@ -205,6 +223,16 @@ A failure in (a) does not block rollback: follow (c) and accept the display wind
   unreadable detail only costs its description (Arbeitsagentur also accepts detail fields sent as null). "Page layout
   changed" is reported only when none of at least 3 detail requests of a query (all of them, when
   `max_details_per_query` is lower) could be read, and the list results are then stored as well.
+- **"Collect now" for one channel no longer swallows another click or a scheduled cycle:** an unfinished request is
+  reused only when it covers the channels asked for (a click for Greenhouse while Indeed is queued gets its own
+  request, which runs next; a LinkedIn fallback after the first one in the cascade is covered only by a request that
+  names it), and the button says "a request that covers this channel" instead of "the same request". A scheduled
+  cycle that finds a cycle of only some channels running waits for it, at most `schedule.yaml`
+  `partial_cycle_wait.max_minutes` (default 60), and then runs, instead of being skipped; one that finds a cycle of
+  every channel running is still skipped. A manual request covered by a running cycle ends as done and the button
+  follows that cycle through the shared waiting controls until it finishes, then shows its final counts. The start-up
+  catch-up and `pnpm run doctor` no longer count a cycle of some channels as the slot's cycle. Before rolling back, remove
+  `partial_cycle_wait` from `data/config/schedule.yaml` if you added it.
 - **Tag boxes no longer swallow a repeated entry silently:** typing a title, keyword or city that is already in the list
   (any case) now keeps the text, names the existing entry under the box ("Already in the list: ...") and briefly
   highlights it. Enter and the comma no longer act while an input method is composing. Regular expressions and

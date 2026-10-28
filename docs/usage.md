@@ -20,7 +20,10 @@ Processing cycles run automatically per `data/config/schedule.yaml` (in its `tim
 | Evening | Weekdays 17:00 |
 | Weekend | Saturday and Sunday 09:00 |
 
-If the host was off or asleep and missed a cycle, the runner runs one catch-up cycle on startup (`catch_up`).
+If the host was off or asleep and missed a cycle, the runner runs one catch-up cycle on startup (`catch_up`). A
+"Collect now" of one channel does not count as the slot's cycle. A scheduled cycle that starts while such a cycle of
+only some channels is running waits for it and then runs; one that finds a cycle of every channel running is skipped
+(see "Overlapping cycles" in [configuration.md](configuration.md)).
 
 ### Starting and stopping by hand
 

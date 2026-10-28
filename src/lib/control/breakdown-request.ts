@@ -10,7 +10,8 @@ import { findLatestJobControlRequest, findOpenJobControlRequest, getControlReque
 import { createProcessLogger } from "@/lib/logging/process-logger";
 import { TRANSLATION_FAILURE_CODES } from "@/lib/translation/errors";
 import { descriptionHash } from "@/lib/translation/hash";
-import { resumeAtOf } from "./request-view-schema";
+import { loadQueueView } from "./queue-view";
+import { resumeAtOf, type ControlQueueView } from "./request-view-schema";
 
 const log = createProcessLogger({ fields: { component: "control" } });
 
@@ -53,17 +54,20 @@ export async function requestBreakdownJob(db: Db, input: { jobId: number; force:
 }
 
 export type BreakdownRequestState =
-  | { state: "waiting"; stage: "pending" | "running" }
+  /** `queue`: where the request stands (position, what the worker is doing, whether it is alive). */
+  | { state: "waiting"; stage: "pending" | "running"; queue: ControlQueueView | null }
   | { state: "done" }
   /** `resumeAt`: with `quota_guard`, when Job Radar's AI usage cap is expected to let the AI work again (ISO; null = not known). */
-  | { state: "failed"; error: BreakdownErrorCode; detail: string | null; resumeAt: string | null };
+  | { state: "failed"; error: BreakdownErrorCode; detail: string | null; resumeAt: string | null }
+  /** There is no such request, or it is not this job's. */
+  | { state: "missing" };
 
-/** Where a queued breakdown stands. `jobId` must be the request's job: a request id alone never reveals another job's request. Null: no such request. */
-export async function readBreakdownRequest(db: Db, input: { requestId: number; jobId: number }): Promise<BreakdownRequestState | null> {
+/** Where a queued breakdown stands. `jobId` must be the request's job: a request id alone never reveals another job's request. */
+export async function readBreakdownRequest(db: Db, input: { requestId: number; jobId: number }): Promise<BreakdownRequestState> {
   const request = await getControlRequest(db, input.requestId);
   const payload = typeof request?.payload === "object" && request.payload !== null ? (request.payload as { jobId?: unknown }) : {};
-  if (!request || request.kind !== "breakdown_job" || payload.jobId !== input.jobId) return null;
-  if (request.status === "pending" || request.status === "running") return { state: "waiting", stage: request.status };
+  if (!request || request.kind !== "breakdown_job" || payload.jobId !== input.jobId) return { state: "missing" };
+  if (request.status === "pending" || request.status === "running") return { state: "waiting", stage: request.status, queue: await loadQueueView(db, request) };
   if (request.status === "failed") {
     const result = typeof request.result === "object" && request.result !== null ? (request.result as { error?: unknown; detail?: unknown; resumeAt?: unknown }) : {};
     return {
@@ -78,7 +82,7 @@ export async function readBreakdownRequest(db: Db, input: { requestId: number; j
 
 /** What the card starts with after a page load, from the job's newest `breakdown_job` request (null: nothing to resume). */
 export type InitialBreakdownRequest =
-  | { state: "waiting"; requestId: number; stage: "pending" | "running" }
+  | { state: "waiting"; requestId: number; stage: "pending" | "running"; queue: ControlQueueView | null }
   | { state: "failed"; error: BreakdownErrorCode; detail: string | null; resumeAt?: string | null };
 
 /**
@@ -89,8 +93,8 @@ export async function readInitialBreakdownRequest(db: Db, jobId: number, analyze
   const request = await findLatestJobControlRequest(db, "breakdown_job", jobId);
   if (!request) return null;
   const state = await readBreakdownRequest(db, { requestId: request.id, jobId });
-  if (state?.state === "waiting") return { state: "waiting", requestId: request.id, stage: state.stage };
-  if (state?.state !== "failed") return null;
+  if (state.state === "waiting") return { state: "waiting", requestId: request.id, stage: state.stage, queue: state.queue };
+  if (state.state !== "failed") return null;
   if (analyzedAt !== null && request.finishedAt !== null && request.finishedAt <= analyzedAt) return null;
   return state;
 }

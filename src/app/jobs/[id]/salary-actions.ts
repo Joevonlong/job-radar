@@ -5,6 +5,7 @@ import { z } from "zod";
 
 import { ConfigError, reloadConfig, type AiConfig } from "@/lib/config";
 import { readSalaryLookupRequest, requestSalaryLookup } from "@/lib/control/salary-request";
+import type { ControlQueueView } from "@/lib/control/request-view-schema";
 import { getDb } from "@/lib/db";
 import { countSalaryLookupRequests, getJobForSalaryLookup } from "@/lib/db/repos/salary-lookups";
 import { compileFamilies } from "@/lib/salary/families";
@@ -30,7 +31,10 @@ export type SalaryLookupActionResult =
   | { ok: false; error: SalaryActionErrorKey };
 
 export type SalaryLookupStatusResult =
-  | { ok: true; state: "waiting"; stage: "pending" | "running" }
+  /** The state could not be read this time; the browser retries. */
+  | null
+  /** `queue`: where the request stands (position, what the worker is doing, whether it is alive). */
+  | { ok: true; state: "waiting"; stage: "pending" | "running"; queue: ControlQueueView | null }
   | { ok: true; state: "done" }
   | { ok: false; error: SalaryActionErrorKey; detail?: string | null; resumeAt?: string | null };
 
@@ -69,12 +73,12 @@ export async function salaryLookupStatusAction(input: { jobId: number; requestId
     const job = settings.state === "ok" ? await getJobForSalaryLookup(db, parsed.data.jobId) : null;
     const lookupKey = job && settings.state === "ok" ? salaryLookupKey(job, compileFamilies(settings.config.role_families).familyOf(job.title)) : undefined;
     const state = await readSalaryLookupRequest(db, { ...parsed.data, ...(lookupKey ? { lookupKey } : {}) });
-    if (state === null) return { ok: false, error: "not_found" };
-    if (state.state === "waiting") return { ok: true, state: "waiting", stage: state.stage };
+    if (state.state === "missing") return { ok: false, error: "not_found" };
+    if (state.state === "waiting") return { ok: true, state: "waiting", stage: state.stage, queue: state.queue };
     if (state.state === "failed") return { ok: false, error: state.error, detail: state.detail, resumeAt: state.resumeAt };
     revalidatePath(`/jobs/${parsed.data.jobId}`);
     return { ok: true, state: "done" };
   } catch {
-    return { ok: false, error: "failed" };
+    return null;
   }
 }

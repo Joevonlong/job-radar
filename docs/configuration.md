@@ -463,6 +463,38 @@ the defaults below apply. The patterns live in the market packs (`rules.yaml` `v
 
 An older version rejects `job_checks.visa` in `ui.yaml`: remove it before rolling back.
 
+## Overlapping cycles (`schedule.yaml` `skip_if_running`, `partial_cycle_wait`)
+
+Only one cycle runs at a time. With `skip_if_running: true` (the default) a scheduled cycle (morning, evening, weekend,
+or the start-up catch-up) that finds another cycle running decides by what that cycle covers:
+
+- The running cycle collects every channel: the scheduled one is recorded as skipped (it would only repeat the work), and
+  its summary names the running cycle.
+- The running cycle collects only some channels ("Collect now" on `/sources`, a manual cycle with only some channels
+  ticked, `pnpm cycle:run --channel`): the scheduled one waits for it and then runs, so a click shortly before 07:00 no
+  longer costs the morning's full collection. It waits at most `partial_cycle_wait.max_minutes` and is recorded as
+  skipped if the lock is still held then.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `partial_cycle_wait.max_minutes` | 60 | Longest wait for a running cycle of only some channels; 0 = do not wait (skip it as before) |
+| `partial_cycle_wait.poll_seconds` | 15 | How often the waiting cycle tries again |
+
+The block is not in the shipped file (it is shown there as a comment); add it to `data/config/schedule.yaml` only to
+change it (a key left out keeps its default). While a scheduled cycle waits, the runner starts no other manual cycle
+(other buttons still run), so a row of "Collect now" clicks cannot keep it waiting; the queued clicks it covers end
+as done once it runs. A manual cycle never waits: the runner takes requests one at a time, so a waiting one would hold up
+the other buttons. When a running cycle already covers a manual request (a scheduled cycle of every channel), the
+request ends as done and the button shows that cycle; otherwise it fails with "another cycle is running" as before.
+The catch-up at start-up and `pnpm run doctor` (`cycle.last`) count only cycles of every channel when they look for a
+missed slot. A waiting cycle has no row yet: a deploy that drains the runner meanwhile does not wait for it (the
+catch-up runs it after the restart), and if it waits longer than `doctor.cycle_grace_minutes`, `cycle.last` reports
+the slot as missed until it starts. LinkedIn sources form a cascade, and a cycle of every channel collects with its
+first available source only, so a "Collect now" of a later source in the cascade is never covered by it.
+
+Before rolling back to a version without `partial_cycle_wait`, remove the block from `data/config/schedule.yaml`:
+older versions reject unknown keys.
+
 ## Log level (`schedule.yaml` `logging.level`, `JOB_RADAR_LOG_LEVEL`)
 
 The web app, the runner, the ai-worker and `pnpm cycle:run` log at `info` unless told otherwise. `debug` adds the
