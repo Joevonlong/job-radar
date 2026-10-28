@@ -1,5 +1,6 @@
 import { arbeitsagenturSettingsSchema, type ArbeitsagenturSettings } from "@/lib/config";
 
+import { checkDetailsReadable } from "../details";
 import { ChannelError, settlePostings } from "../errors";
 import { loadKnownDetails, storedDetailOf } from "../known";
 import type { Channel, ChannelContext, RawPostingInput, SearchQuery } from "../types";
@@ -88,32 +89,46 @@ async function collect(query: SearchQuery, ctx: ChannelContext): Promise<RawPost
 
   // ---- details: the job description lives only there
   const details = new Map<string, BaDetail>();
+  let attempted = 0;
+  let parseFailures = 0;
   let reused = 0;
   if (settings.fetch_details) {
     // postings already stored keep their stored detail; only the others cost a request
-    const known = await loadKnownDetails(ctx, {
-      // an interrupted query never overwrites a stored detail with none, whatever reuse_known_details says
-      enabled: settings.reuse_known_details || interrupted !== null,
-      externalIds: selected.map((item) => item.referenznummer),
-      detailOf: storedDetailOf<BaDetail>(payloadSchema),
-    });
+    // an interrupted query never overwrites a stored detail with none, whatever reuse_known_details says
+    const reuse = settings.reuse_known_details || interrupted !== null;
+    const detailOf = storedDetailOf<BaDetail>(payloadSchema);
+    const known = await loadKnownDetails(ctx, { enabled: reuse, externalIds: selected.map((item) => item.referenznummer), detailOf });
     for (const [id, detail] of known) details.set(id, detail);
     reused = known.size;
     // after a failure no further request goes out: the stored details are kept, the rest stays list data
     const toFetch = interrupted ? [] : selected.filter((i) => !known.has(i.referenznummer)).slice(0, settings.max_details_per_query);
     for (const item of toFetch) {
       await pace();
+      attempted += 1;
       try {
         const detail = await fetchDetail(ctx, settings, item.referenznummer);
         if (detail) details.set(item.referenznummer, redactedDetail(detail));
       } catch (error) {
-        // a throttled or blocked API ends the query (the framework backs off); a flaky one only costs the descriptions
-        if (!(error instanceof ChannelError) || error.code !== "network") throw error;
+        if (!(error instanceof ChannelError)) throw error;
+        // an odd record only costs its own description
+        if (error.code === "parse") {
+          parseFailures += 1;
+          ctx.logger.warn("job detail not readable, continuing with list data", { query: query.id, code: error.code });
+          continue;
+        }
+        // a flaky API only costs the descriptions; a throttled or blocked one also ends the query, and the
+        // framework backs off. Either way the list results read so far are kept (handed on with the failure below)
         ctx.logger.warn("job details unavailable, continuing with list data", { query: query.id, code: error.code, status: error.status });
+        if (error.code !== "network") interrupted = error;
         break;
       }
     }
+    if (interrupted && !reuse) {
+      const missing = selected.filter((i) => !details.has(i.referenznummer)).map((i) => i.referenznummer);
+      for (const [id, detail] of await loadKnownDetails(ctx, { enabled: true, externalIds: missing, detailOf })) details.set(id, detail);
+    }
   }
+  checkDetailsReadable(ctx.logger, "arbeitsagentur", query.id, { attempted, parseFailures });
 
   const postings = selected.map((item): RawPostingInput => {
     const payload: BaPayload = { list: item, detail: details.get(item.referenznummer) ?? null };

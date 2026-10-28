@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
 
+import { MIN_DETAILS_FOR_LAYOUT_CHECK } from "@/lib/channels/details";
 import { ChannelError, PartialCollectError } from "@/lib/channels/errors";
 import { registerBuiltinChannels } from "@/lib/channels/builtin";
 import { ChannelRegistry, settingsFromConfig } from "@/lib/channels/registry";
@@ -8,7 +9,7 @@ import { ageFacet, fetchDetail, fetchSearchPage, MAX_SLUG_LENGTH, postingUrl, se
 import { createStepstoneChannel } from "@/lib/channels/stepstone";
 import { parseLocations, parseStepstonePayload } from "@/lib/channels/stepstone/parse";
 import { payloadSchema, type StepstonePayload } from "@/lib/channels/stepstone/schema";
-import { normalizedPostingDraftSchema, type ChannelContext, type RawPostingInput } from "@/lib/channels/types";
+import { normalizedPostingDraftSchema, type ChannelContext, type HttpResponse, type RawPostingInput } from "@/lib/channels/types";
 import { stepstoneSettingsSchema } from "@/lib/config";
 
 import { channelsWith, failingHttp, interruption, INTERRUPTIONS, shippedChannels, type Interruption } from "./helpers";
@@ -359,11 +360,14 @@ describe("collect", () => {
       expect(made.calls).toHaveLength(1);
     });
 
-    it("ends the query when a posting page is blocked", async () => {
+    it("ends the query when a posting page is blocked, handing on the list data with the block", async () => {
       const handler: Handler = (call, n) => (call.url.pathname.startsWith("/stellenangebote") ? htmlResponse(403, "denied") : site()(call, n));
       const channel = createStepstoneChannel({ now: () => NOW });
       const made = makeContext(handler, extra());
-      await expect(channel.collect(searchQuery(), made.ctx)).rejects.toMatchObject({ code: "blocked" });
+      const error = await channel.collect(searchQuery(), made.ctx).catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(PartialCollectError);
+      expect((error as PartialCollectError).cause.code).toBe("blocked");
+      expect((error as PartialCollectError).postings).toHaveLength(5);
       expect(made.calls).toHaveLength(2); // the search and the first posting page, then it stops
     });
 
@@ -391,6 +395,78 @@ describe("collect", () => {
       const brokenAll: Handler = (call, n) => (call.url.pathname.startsWith("/stellenangebote") ? htmlResponse(200, "<html>nothing</html>") : site()(call, n));
       const channel = createStepstoneChannel({ now: () => NOW });
       await expect(channel.collect(searchQuery(), makeContext(brokenAll, extra()).ctx)).rejects.toMatchObject({ code: "parse" });
+    });
+
+    describe("a posting page fails", () => {
+      const UNREADABLE = "<html>nothing</html>";
+      const isPostingPage = (call: { url: URL }) => call.url.pathname.startsWith("/stellenangebote");
+      /** site(), except that the `nth` posting page request (1-based) gets `answer`. */
+      const nthPage = (nth: number, answer: () => HttpResponse): Handler => {
+        let pages = 0;
+        return (call, n) => {
+          if (!isPostingPage(call)) return site()(call, n);
+          pages += 1;
+          return pages === nth ? answer() : site()(call, n);
+        };
+      };
+      const unreadable: Handler = (call, n) => (isPostingPage(call) ? htmlResponse(200, UNREADABLE) : site()(call, n));
+      const detailOf = (posting: RawPostingInput) => payloadSchema.parse(posting.payload).detail;
+      const STOPS = [
+        { status: 429, code: "rate_limited" },
+        { status: 403, code: "blocked" },
+        { status: 401, code: "auth_expired" },
+      ] as const;
+
+      for (const { status, code } of STOPS) {
+        it(`hands over every search result when the 2nd posting page answers ${status}, opens no further page and keeps ${code}`, async () => {
+          const full = await collectAll();
+          const made = makeContext(nthPage(2, () => htmlResponse(status, "denied")), extra());
+          const error = await createStepstoneChannel({ now: () => NOW }).collect(searchQuery(), made.ctx).catch((e: unknown) => e);
+          expect(error).toBeInstanceOf(PartialCollectError);
+          const partial = error as PartialCollectError;
+          expect(partial.cause).toBeInstanceOf(ChannelError);
+          expect(partial.cause).toMatchObject({ code, status });
+          expect(partial.postings.map((p) => p.externalId)).toEqual(full.postings.map((p) => p.externalId));
+          expect(partial.postings[0]?.payload).toEqual(full.postings[0]?.payload);
+          expect(partial.postings.slice(1).every((p) => detailOf(p) === null)).toBe(true);
+          expect(made.calls).toHaveLength(1 + 2);
+        });
+      }
+
+      it("keeps the stored detail of a known posting when the pages stop, with reuse_known_details off", async () => {
+        const full = await collectAll();
+        const stored = new Map(full.postings.filter((p) => p.externalId === "90000003").map((p) => [p.externalId, p.payload]));
+        const made = makeContext(nthPage(2, () => htmlResponse(429, "slow down")), extra({ reuse_known_details: false }), { known: { payloads: async () => stored } });
+        const error = await createStepstoneChannel({ now: () => NOW }).collect(searchQuery(), made.ctx).catch((e: unknown) => e);
+        expect(error).toBeInstanceOf(PartialCollectError);
+        const partial = error as PartialCollectError;
+        expect(partial.cause.code).toBe("rate_limited");
+        expect(partial.postings.find((p) => p.externalId === "90000003")?.payload).toEqual(stored.get("90000003"));
+        expect(made.calls).toHaveLength(1 + 2);
+      });
+
+      it("reads on past an unreadable 2nd posting page and keeps every search result", async () => {
+        const full = await collectAll();
+        const { postings, calls } = await collectAll({}, searchQuery(), nthPage(2, () => htmlResponse(200, UNREADABLE)));
+        expect(postings.map((p) => p.externalId)).toEqual(full.postings.map((p) => p.externalId));
+        expect(detailOf(postings[1]!)).toBeNull();
+        expect(postings.map((p) => p.payload)).toEqual(full.postings.map((p) => p.payload));
+        expect(calls).toHaveLength(full.calls.length);
+      });
+
+      it("keeps the list data and warns when the only posting page to read cannot be read", async () => {
+        const { postings, calls, records } = await collectAll({ max_details_per_query: 1 }, searchQuery(), unreadable);
+        expect(postings).toHaveLength(5);
+        expect(postings.every((p) => detailOf(p) === null)).toBe(true);
+        expect(calls).toHaveLength(1 + 1);
+        expect(records.some((r) => r.level === "warn" && /too few/.test(r.message))).toBe(true);
+      });
+
+      it("fails with parse once enough posting pages were tried and none could be read (layout change)", async () => {
+        const made = makeContext(unreadable, extra({ max_details_per_query: MIN_DETAILS_FOR_LAYOUT_CHECK }));
+        await expect(createStepstoneChannel({ now: () => NOW }).collect(searchQuery(), made.ctx)).rejects.toMatchObject({ code: "parse" });
+        expect(made.calls).toHaveLength(1 + MIN_DETAILS_FOR_LAYOUT_CHECK);
+      });
     });
 
     describe("a later page or keyword fails", () => {

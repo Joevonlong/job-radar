@@ -1,5 +1,6 @@
 import { xingSettingsSchema, type XingSettings } from "@/lib/config";
 
+import { checkDetailsReadable } from "../details";
 import { ChannelError, settlePostings } from "../errors";
 import type { Channel, ChannelContext, RawPostingInput, SearchQuery } from "../types";
 import { createCycleCache } from "../web/cache";
@@ -88,12 +89,10 @@ export function createXingChannel(deps: XingDeps = {}): Channel {
     let reused = 0;
     if (settings.fetch_details) {
       // postings already stored keep their stored detail; only the others open their page
-      const known = await loadKnownDetails(ctx, {
-        // an interrupted query never overwrites a stored detail with none, whatever reuse_known_details says
-        enabled: settings.reuse_known_details || interrupted !== null,
-        externalIds: selected.map(postingId),
-        detailOf: storedDetailOf<XingDetail>(payloadSchema),
-      });
+      // an interrupted query never overwrites a stored detail with none, whatever reuse_known_details says
+      const reuse = settings.reuse_known_details || interrupted !== null;
+      const detailOf = storedDetailOf<XingDetail>(payloadSchema);
+      const known = await loadKnownDetails(ctx, { enabled: reuse, externalIds: selected.map(postingId), detailOf });
       for (const [id, detail] of known) details.set(id, detail);
       reused = known.size;
       const toFetch = selected.filter((i) => !known.has(postingId(i))).slice(0, settings.max_details_per_query);
@@ -116,20 +115,28 @@ export function createXingChannel(deps: XingDeps = {}): Channel {
           if (detail) details.set(id, detail);
         } catch (error) {
           if (!(error instanceof ChannelError)) throw error;
-          // a block or a throttle ends the query; a flaky or changed page only costs that description
+          // a flaky or changed page only costs that description
           if (error.code === "network") {
             ctx.logger.warn("posting page unavailable, continuing with list data", { query: query.id, code: error.code, status: error.status });
             break;
           }
-          if (error.code !== "parse") throw error;
-          parseFailures += 1;
-          ctx.logger.warn("posting page not readable, continuing with list data", { query: query.id, code: error.code });
+          if (error.code === "parse") {
+            parseFailures += 1;
+            ctx.logger.warn("posting page not readable, continuing with list data", { query: query.id, code: error.code });
+            continue;
+          }
+          // a block or a throttle ends the query (the framework backs off); the list results read so far are kept
+          // and handed on with the failure
+          ctx.logger.warn("posting pages refused, continuing with list data", { query: query.id, code: error.code, status: error.status });
+          interrupted = error;
         }
       }
+      if (interrupted && !reuse) {
+        const missing = selected.filter((i) => !details.has(postingId(i))).map(postingId);
+        for (const [id, detail] of await loadKnownDetails(ctx, { enabled: true, externalIds: missing, detailOf })) details.set(id, detail);
+      }
     }
-    if (attempted > 0 && parseFailures === attempted) {
-      throw new ChannelError("parse", "xing: none of the posting pages could be read (page layout changed?)");
-    }
+    checkDetailsReadable(ctx.logger, "xing", query.id, { attempted, parseFailures });
 
     const postings = selected.flatMap((item): RawPostingInput[] => {
       const url = postingUrl(settings, item);

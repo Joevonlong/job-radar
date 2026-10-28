@@ -10,6 +10,7 @@ import { redactContacts } from "@/lib/channels/arbeitsagentur/redact";
 import { parseArbeitsagenturPayload } from "@/lib/channels/arbeitsagentur/parse";
 import { createChannelContext } from "@/lib/channels/context";
 import { ChannelError, PartialCollectError } from "@/lib/channels/errors";
+import { MIN_DETAILS_FOR_LAYOUT_CHECK } from "@/lib/channels/details";
 import { createLogger, type LogRecord } from "@/lib/channels/logger";
 import { queryId } from "@/lib/channels/query";
 import { ChannelRegistry, settingsFromConfig } from "@/lib/channels/registry";
@@ -268,6 +269,104 @@ describe("collect: list and details", () => {
     const { ctx } = makeContext(api(), { fetch_details: false });
     const result = await arbeitsagenturChannel.collect(query(), { ...ctx, budget: { ...ctx.budget, consume } });
     expect(consume).toHaveBeenCalledWith(result.length);
+  });
+});
+
+describe("collect: a detail request fails", () => {
+  const REFS = ITEMS.map((i) => i.referenznummer);
+  const UNREADABLE = { stellenangebotsTitel: 42 };
+  /** api(), except that the `nth` detail request (1-based) gets `answer`. */
+  const nthDetail = (nth: number, answer: () => HttpResponse): Handler => {
+    const base = api();
+    let details = 0;
+    return (call, n) => {
+      if (isSearch(call)) return base(call, n);
+      details += 1;
+      return details === nth ? answer() : base(call, n);
+    };
+  };
+  const detailOf = (payload: unknown): unknown => (payload as { detail: unknown }).detail;
+
+  const STOPS = [
+    { status: 429, code: "rate_limited" },
+    { status: 403, code: "blocked" },
+    { status: 401, code: "auth_expired" },
+  ] as const;
+  for (const { status, code } of STOPS) {
+    it(`hands over every search result when the 2nd detail answers ${status}, asks for no more details and keeps ${code}`, async () => {
+      const { ctx, calls } = makeContext(nthDetail(2, () => response(status, "")));
+      const error = await arbeitsagenturChannel.collect(query(), ctx).catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(PartialCollectError);
+      const partial = error as PartialCollectError;
+      expect(partial.cause).toBeInstanceOf(ChannelError);
+      expect(partial.cause).toMatchObject({ code, status });
+      expect(partial.postings.map((p) => p.externalId)).toEqual(REFS);
+      expect(partial.postings[0]?.payload).toEqual({ list: ITEMS[0], detail: DETAIL_MULTI });
+      expect(partial.postings.slice(1).every((p) => detailOf(p.payload) === null)).toBe(true);
+      expect(calls.filter((c) => !isSearch(c))).toHaveLength(2);
+    });
+  }
+
+  it("keeps the stored detail of a known posting when the details stop, with reuse_known_details off", async () => {
+    const known: KnownPostings = { payloads: async () => new Map([[REF_SALARY, { list: ITEMS[3], detail: DETAIL_SALARY }]]) };
+    const { ctx, calls } = makeContext(nthDetail(2, () => response(429, "")), { reuse_known_details: false }, { known });
+    const error = await arbeitsagenturChannel.collect(query(), ctx).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(PartialCollectError);
+    const partial = error as PartialCollectError;
+    expect(partial.cause.code).toBe("rate_limited");
+    expect(partial.postings.map((p) => detailOf(p.payload))).toEqual([DETAIL_MULTI, null, null, DETAIL_SALARY, null]);
+    expect(calls.filter((c) => !isSearch(c))).toHaveLength(2);
+  });
+
+  it("counts an unreadable detail and reads on: every search result is kept", async () => {
+    const records: LogRecord[] = [];
+    const { ctx, calls } = makeContext(nthDetail(2, () => response(200, UNREADABLE)), {}, { records });
+    const result = await arbeitsagenturChannel.collect(query(), ctx);
+    expect(result.map((p) => p.externalId)).toEqual(REFS);
+    expect(result[0]?.payload).toEqual({ list: ITEMS[0], detail: DETAIL_MULTI });
+    expect(result[1]?.payload).toEqual({ list: ITEMS[1], detail: null });
+    expect(result[3]?.payload).toEqual({ list: ITEMS[3], detail: DETAIL_SALARY });
+    expect(calls.filter((c) => !isSearch(c))).toHaveLength(ITEMS.length);
+    expect(records.some((r) => r.level === "warn" && r.fields.code === "parse")).toBe(true);
+  });
+
+  it("fails with parse when no detail of a large enough sample can be read (the API changed)", async () => {
+    const list = api();
+    const { ctx } = makeContext((call, n) => (isSearch(call) ? list(call, n) : response(200, UNREADABLE)), { max_details_per_query: MIN_DETAILS_FOR_LAYOUT_CHECK });
+    const error = await arbeitsagenturChannel.collect(query(), ctx).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ChannelError);
+    expect((error as ChannelError).code).toBe("parse");
+  });
+
+  it("keeps the list data and warns when too few details were tried to tell a changed API", async () => {
+    const records: LogRecord[] = [];
+    const list = api();
+    const { ctx } = makeContext((call, n) => (isSearch(call) ? list(call, n) : response(200, UNREADABLE)), { max_details_per_query: MIN_DETAILS_FOR_LAYOUT_CHECK - 1 }, { records });
+    const result = await arbeitsagenturChannel.collect(query(), ctx);
+    expect(result.map((p) => p.externalId)).toEqual(REFS);
+    expect(result.every((p) => detailOf(p.payload) === null)).toBe(true);
+    expect(records.some((r) => r.level === "warn" && /too few/.test(r.message))).toBe(true);
+  });
+
+  it("accepts a detail that sends null for optional fields, stores it as sent and reads null as not stated", async () => {
+    const detail = {
+      ...DETAIL_MULTI,
+      firma: null,
+      homeofficemoeglich: null,
+      verguetungsangabe: null,
+      externeURL: null,
+      stellenlokationen: [{ adresse: { ort: "Hannover", plz: null, land: null }, breite: null, laenge: 9.75 }],
+      veroeffentlichungszeitraum: { von: null },
+    };
+    const { ctx } = makeContext(api({ details: { [REF_MULTI]: detail } }));
+    const result = await arbeitsagenturChannel.collect(query(), ctx);
+    expect(result[0]?.payload).toEqual({ list: ITEMS[0], detail });
+    const withoutNulls = JSON.parse(JSON.stringify(detail, (_key, value: unknown) => (value === null ? undefined : value))) as unknown;
+    const draft = parseArbeitsagenturPayload(result[0]?.payload);
+    expect(draft).toEqual(parseArbeitsagenturPayload({ list: ITEMS[0], detail: withoutNulls }));
+    expect(draft.companyName).toBe("Praxissoft Nord GmbH");
+    expect(draft.workplace).toBe("hybrid");
+    expect(draft.locations).toEqual([{ label: "Hannover", city: "Hannover", countryCode: null }]);
   });
 });
 
@@ -563,12 +662,13 @@ describe("error classification and retries", () => {
     expect((await code(ctx)).code).toBe("parse");
   });
 
-  it("propagates throttling on a detail request instead of swallowing it", async () => {
+  it("passes throttling on a detail request on instead of swallowing it, with the list results", async () => {
     const list = api();
     const { ctx } = makeContext((call, n) => (isSearch(call) ? list(call, n) : response(429, "")));
     const error = await arbeitsagenturChannel.collect(query(), ctx).catch((e: unknown) => e);
-    expect(error).toBeInstanceOf(ChannelError);
-    expect((error as ChannelError).code).toBe("rate_limited");
+    expect(error).toBeInstanceOf(PartialCollectError);
+    expect((error as PartialCollectError).cause.code).toBe("rate_limited");
+    expect((error as PartialCollectError).postings).toHaveLength(ITEMS.length);
   });
 
   it("rejects unusable channel settings with a clear error", async () => {
