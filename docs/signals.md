@@ -69,7 +69,7 @@ on; use `nice_to_have` for a vague preference.
 5. **Try on recent jobs**: runs the words and patterns over the newest `limits.preview_jobs` open jobs (default 500), shows
    how many jobs they hit with up to three quoted examples, and how many jobs the AI will review again after saving and in
    about how many cycles. No AI is called and nothing is saved. The check stops after `limits.preview_time_budget_ms`
-   (default 1500 ms) and then marks the result as partial.
+   (default 1500 ms) and then marks the result as partial; a single slow job is interrupted at that time too.
 6. **Save**. The notice repeats the review estimate.
 
 **How it matches.** The rules find candidates from the words (no AI cost). The AI review of every unfiltered open job
@@ -139,6 +139,12 @@ The `salary` section of `pipeline.yaml`:
 
 - `keywords`: literal words, whole-word, case-insensitive.
 - `patterns`: regular expressions (`iu` flags), for inflections and combined phrasings (German word endings, "competitive … salary").
+- Every pattern (`patterns`, `exclude`, `tag_patterns`) is first tried on a few long test texts without a match, with the
+  limits of `pipeline.yaml: filter.deal_breakers` (`match_text_max_chars` characters, `match_ms` per text, the same check as
+  the [deal-breakers](deal-breakers.md#limits)). A pattern that is too slow there, such as `(\w+\s*)*budget`, can hold
+  the process on one description: the form and the file editor refuse to save it ("Too slow on a long test text"); in a
+  file edited by hand the rules leave it out, and the log names its category. Give each `+` and `*` an upper limit
+  (`[a-z]{1,40}`, `.{0,40}`) and avoid a repeated group that repeats inside.
 - `exclude`: if the start of a hit falls inside one of these matches (within the hit range, or within `limits.exclude_lookbehind_chars` characters before it), the hit is discarded; for example "diversity, equity and inclusion" is not equity, and the amount in "bonus of €25,000" is not salary.
 - `amount.assume_currency` (amount category): when an amount has no currency and the same sentence has a salary word, this currency is assumed and the detail page says so; set it to `null` to discard such amounts.
 - An amount in another currency keeps its original currency, and an annual salary in the market's base currency is also given using the reference rates in `pipeline.yaml: salary.fx_pivot` + `fx_rates` (currencies without a rate are not converted); the salary floor, the "minimum annual salary" filter, the stats page and the amount category's threshold all use this base-currency figure (see [market-packs.md](market-packs.md)).

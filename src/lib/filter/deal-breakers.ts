@@ -284,14 +284,18 @@ function probeTexts(source: string, length: number): string[] {
 const probeCache = new Set<string>();
 const PROBE_CACHE_MAX = 512;
 
+/** The limits the probe reads: the length of a test text and the time one pattern may take on it. */
+export type PatternProbeLimits = Pick<DealBreakerLimits, "match_text_max_chars" | "match_ms">;
+
 /**
  * Whether `pattern` finishes on every test text within `limits.match_ms` each: a pattern (flags "giu") is run the way a rule
- * scans a text (every match), an `unless` pattern (flags "iu") the way it tests a sentence.
+ * scans a text (every match), an `unless` pattern (flags "iu") the way it tests a sentence. A `signal` pattern (an
+ * interests.yaml pattern) is compiled as the signal rules compile it (flags "giu", always with `u`) and scanned like a pattern.
  */
-export function patternIsFast(pattern: string, use: "pattern" | "unless", limits: DealBreakerLimits, timeBox: TimeBox): boolean {
+export function patternIsFast(pattern: string, use: "pattern" | "unless" | "signal", limits: PatternProbeLimits, timeBox: TimeBox): boolean {
   const key = `${use}\u0000${limits.match_text_max_chars}\u0000${limits.match_ms}\u0000${pattern}`;
   if (probeCache.has(key)) return true;
-  const regexp = userRegExp(pattern, use === "pattern" ? "giu" : "iu");
+  const regexp = use === "signal" ? new RegExp(pattern, "giu") : userRegExp(pattern, use === "pattern" ? "giu" : "iu");
   const fast = probeTexts(pattern, limits.match_text_max_chars).every((text) =>
     timeBox(() => {
       if (use === "unless") {

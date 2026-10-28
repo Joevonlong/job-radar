@@ -27,3 +27,37 @@ export function interestsWarnings(config: Pick<InterestsConfig, "signals" | "lim
   });
   return warnings;
 }
+
+/** The message of an interests.yaml pattern that is too slow on the probe's test texts (the file editor shows its own text for it). */
+export const SLOW_PATTERN_MESSAGE = "too slow on a long test text (pipeline.yaml filter.deal_breakers.match_ms): give each + and * an upper limit";
+
+/** A pattern of an active category that fails the probe; `path` is inside interests.yaml (a `tag_patterns` entry: its `pattern`). */
+export interface SlowInterestPattern {
+  categoryId: string;
+  path: Array<string | number>;
+}
+
+/**
+ * The user patterns (`patterns`, `exclude`, `tag_patterns`) of the active categories that `isFast` refuses. `isFast` is the
+ * server's probe (`signalPatternIsFast`, which runs each pattern on long test texts in a time box); saving refuses these.
+ */
+export function slowInterestPatterns(config: Pick<InterestsConfig, "signals">, isFast: (pattern: string) => boolean): SlowInterestPattern[] {
+  const slow: SlowInterestPattern[] = [];
+  config.signals.categories.forEach((category, index) => {
+    const at = ["signals", "categories", index];
+    const check = (field: "patterns" | "exclude", sources: readonly string[]): void => {
+      sources.forEach((source, position) => {
+        if (!isFast(source)) slow.push({ categoryId: category.id, path: [...at, field, position] });
+      });
+    };
+    if (category.kind === "tag") {
+      category.tag_patterns.forEach((entry, position) => {
+        if (!isFast(entry.pattern)) slow.push({ categoryId: category.id, path: [...at, "tag_patterns", position, "pattern"] });
+      });
+      return;
+    }
+    check("patterns", category.patterns);
+    check("exclude", category.exclude);
+  });
+  return slow;
+}

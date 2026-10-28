@@ -179,6 +179,11 @@ A failure in (a) does not block rollback: follow (c) and accept the display wind
 
 ### Fixed
 
+- **A slow interest pattern no longer freezes the app:** a pattern of a signal category that backtracks badly on long
+  text (such as `(\w+\s*)*budget`) is refused when saving on /interests or in the file editor; in a file edited by hand
+  the signal scan, the AI review and the suggestions leave it out with a warning naming its category, and "Try on recent
+  jobs" stops a slow job at its time budget.
+
 - **Tag boxes no longer swallow a repeated entry silently:** typing a title, keyword or city that is already in the list
   (any case) now keeps the text, names the existing entry under the box ("Already in the list: ...") and briefly
   highlights it. Enter and the comma no longer act while an input method is composing. Regular expressions and

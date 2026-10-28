@@ -148,6 +148,23 @@ describe("saveVocabulary", () => {
     expect(await saveVocabulary({ nope: true })).toMatchObject({ status: "error", formError: "invalidPayload" });
   });
 
+  it("refuses a pattern that is too slow on the probe's test texts (slowPattern) and leaves the file untouched", async () => {
+    const draft = configToDraft(loadConfig("interests"));
+    const t2 = draft.categories.findIndex((category) => category.id === "T2");
+    const tag = draft.categories.findIndex((category) => category.id === "tag");
+    cat(draft, "T2").patterns.push("(\\w+\\s*)*budget");
+    cat(draft, "tag").tagPatterns.push({ name: "Learning budget", pattern: "(?:\\w+\\s?)+budget" });
+    const before = yaml();
+    const result = await saveVocabulary(draft);
+    expect(result).toMatchObject({ status: "error", section: "vocabulary", formError: null });
+    if (result.status !== "error") return;
+    expect(result.fieldErrors).toEqual([
+      { path: `categories.${t2}.patterns.${cat(draft, "T2").patterns.length - 1}`, key: "slowPattern" },
+      { path: `categories.${tag}.tagPatterns.${cat(draft, "tag").tagPatterns.length - 1}.pattern`, key: "slowPattern" },
+    ]);
+    expect(yaml()).toBe(before);
+  });
+
   it("keeps views and watched companies that were saved in between", async () => {
     await addWatchedCompany({ name: "Acme" });
     const draft = configToDraft(loadConfig("interests")); // read before the view exists

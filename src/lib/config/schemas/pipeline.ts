@@ -403,7 +403,8 @@ export const pipelineSchema = z.strictObject({
         rule_warn_ms: positiveInt.default(DEAL_BREAKER_DEFAULTS.rule_warn_ms),
         /**
          * Longest one pattern may take on one of the test texts a rule is tried on before it runs (a long line without a match;
-         * slower: the rule is left out as too slow), and on one job when a page explains a veto (ms).
+         * slower: the rule is left out as too slow), and on one job when a page explains a veto (ms). The patterns of
+         * interests.yaml are tried the same way, on texts `match_text_max_chars` long (slower: refused on save, left out of a run).
          */
         match_ms: positiveInt.default(DEAL_BREAKER_DEFAULTS.match_ms),
         /** Time one rule may take over all jobs in one filter run or one preview; a rule that uses it up stops for the rest of the run (ms). */

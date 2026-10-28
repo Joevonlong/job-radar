@@ -65,7 +65,7 @@
 4. **权重**（分数，受封顶限制）和**高价值信号**。
 5. **在最近的岗位上试试**：用词和正则扫一遍最新的 `limits.preview_jobs` 个在架岗位（默认 500），显示命中了几个岗位和最多
    三条原文样例，以及保存后约多少个岗位会重新送 AI 审核、按每轮上限约需几轮。不调用 AI，不保存任何东西。检查最多跑
-   `limits.preview_time_budget_ms`（默认 1500 毫秒），超时就把结果标为部分结果。
+   `limits.preview_time_budget_ms`（默认 1500 毫秒），超时就把结果标为部分结果；单条很慢的岗位也会在这个时间点被中断。
 6. **保存**。保存后的提示会再给一次重审估算。
 
 **怎么匹配。** 规则层用词表找候选（不花 AI）。AI 审核每个未被过滤的在架岗位时，按每个类别的定义读 JD：确认或否决候选，
@@ -132,6 +132,10 @@ JD 或词表变了会重新扫描（只替换当前启用类别的信号）；�
 
 - `keywords`：字面词，整词、不区分大小写。
 - `patterns`：正则（`iu` 标志），用于变形和组合说法（德语词尾、"competitive … salary"）。
+- 每个正则（`patterns`、`exclude`、`tag_patterns`）都会先在几段没有匹配的长测试文本上试跑，限制用 `pipeline.yaml: filter.deal_breakers`
+  的值（文本长 `match_text_max_chars` 个字符，每段最多 `match_ms`，与[一票否决](deal-breakers.zh.md#上限)的检查相同）。在这里太慢的正则
+  （例如 `(\w+\s*)*budget`）可能在一条 JD 上卡住整个进程：表单和高级编辑器拒绝保存（“太慢：在长测试文本上超时”）；手改的文件里，
+  规则会跳过它，并在日志里写明所属类别。请给每个 `+` 和 `*` 设上限（`[a-z]{1,40}`、`.{0,40}`），不要写里面又有重复的重复分组。
 - `exclude`：某个命中的起点落在这些匹配里（命中范围之内，或之前 `limits.exclude_lookbehind_chars` 个字符以内）就丢弃——例如 "diversity, equity and inclusion" 不是股权，"bonus of €25,000" 里的金额不是薪资。
 - `amount.assume_currency`（金额类）：金额没写币种、同一句里有薪资词时按这个币种处理，并在详情页标注；设为 `null` 则丢弃这类金额。
 - 其他货币的金额保留原币种，同时按 `pipeline.yaml: salary.fx_pivot` + `fx_rates` 的参考汇率给出市场基准货币的年薪（没有汇率的币种不折算）；薪资底线、"最低年薪"筛选、统计页和金额类的门槛都用这个基准货币年薪（见 [market-packs.zh.md](market-packs.zh.md)）。

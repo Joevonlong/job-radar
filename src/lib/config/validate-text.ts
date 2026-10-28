@@ -10,7 +10,7 @@ import { isMap, isNode, isScalar, LineCounter, parseDocument, type Document } fr
 import type { ZodError } from "zod";
 
 import { parseConfigText, readConfigText } from "./load";
-import { interestsWarnings } from "./interests-lint";
+import { interestsWarnings, SLOW_PATTERN_MESSAGE, slowInterestPatterns } from "./interests-lint";
 import { checkAiAgainstCatalog } from "./model-catalog";
 import { documentConfigVersion, currentConfigVersion, CONFIG_VERSION_KEY, withoutConfigVersion } from "./migrations/version";
 import { PROTECTED_KEY_MESSAGE, protectedChanges } from "./protected-check";
@@ -42,6 +42,11 @@ export interface ValidateOptions {
   readOther?: <M extends ConfigName>(name: M) => ConfigValue<M> | null;
   /** Also report protected keys whose value differs from the file on disk and the shipped default (the web's editor). */
   checkProtected?: boolean;
+  /**
+   * The server's probe of a user pattern (`signalPatternIsFast`): interests.yaml patterns it refuses are issues with the
+   * message `SLOW_PATTERN_MESSAGE` (the web's editor). Absent = not checked.
+   */
+  isPatternFast?: (pattern: string) => boolean;
 }
 
 /** Most issues listed (a badly broken file would otherwise list hundreds). */
@@ -195,6 +200,9 @@ export function validateConfigText<N extends ConfigName>(name: N, text: string, 
         ? issueAt(doc, lineCounter, "catalog", cross.where, cross.message)
         : { path: cross.path, message: cross.message, line: 1, col: 1, exact: false, source: "catalog", file: cross.file };
     (cross.severity === "error" ? issues : warnings).push(located);
+  }
+  if (name === "interests" && options.isPatternFast) {
+    for (const slow of slowInterestPatterns(value as ConfigValue<"interests">, options.isPatternFast)) issues.push(issueAt(doc, lineCounter, "schema", slow.path, SLOW_PATTERN_MESSAGE));
   }
   if (options.checkProtected === true) {
     for (const segments of protectedChanges(name, value)) issues.push(issueAt(doc, lineCounter, "protected", segments, PROTECTED_KEY_MESSAGE));

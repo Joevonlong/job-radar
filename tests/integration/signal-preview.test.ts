@@ -12,7 +12,7 @@ import { countJobsToReview, listJobsToReview, listRecentJobsForPreview } from "@
 import { previewCategory } from "@/lib/interests/preview";
 import { configToDraft, newCategoryDraft } from "@/lib/interests/vocabulary-draft";
 import { loadPipeline } from "@/lib/market";
-import { findCandidates, runRuleScan, signalsPrompt } from "@/lib/signals";
+import { findCandidates, rulesFingerprint, runRuleScan, signalsPrompt } from "@/lib/signals";
 
 import { createProvider } from "@/lib/ai/provider";
 import { createAiRouter } from "@/lib/ai/router";
@@ -20,9 +20,11 @@ import type { AiTransport } from "@/lib/ai/types";
 import { listSignalsOfJob } from "@/lib/db/repos/signals";
 import { reconcileBonuses, runAiReview } from "@/lib/signals";
 
+import { createLogger, type LogRecord } from "@/lib/channels/logger";
+
 import { pinnedAi } from "../ai/helpers";
 import { quietLogger } from "../cycle/helpers";
-import { rawCategories, shippedInterests } from "../signals/helpers";
+import { rawCategories, rawCategory, shippedInterests } from "../signals/helpers";
 
 const url = inject("testDatabaseUrl");
 
@@ -168,5 +170,56 @@ describe("a category with only an AI definition (no words)", () => {
     const bonus = await getDb().execute<{ job_id: string; signal_bonus: number }>(sql`select job_id, signal_bonus from scores order by job_id`);
     const byJob = new Map(Array.from(bonus, (row) => [Number(row.job_id), Number(row.signal_bonus)]));
     expect((byJob.get(good) ?? 0) - (byJob.get(bad) ?? 0)).toBeGreaterThanOrEqual(4);
+  });
+});
+
+describe("a user pattern with catastrophic backtracking", () => {
+  /** Looks harmless, backtracks exponentially on a run of words without "budget" (seconds on 38 characters). */
+  const SLOW = "(\\w+\\s*)*budget";
+  const SENTENCE = "Wir bieten eine tolle Arbeitsumgebung.";
+
+  it("the rule scan leaves it out with a warning naming the category: done in under a second, the category's words still hit", async () => {
+    const job = await newJob("A", `${SENTENCE} We offer equity.`);
+    const interests = shippedInterests((raw) => {
+      (rawCategory(raw, "T2").patterns as string[]).push(SLOW);
+    });
+    const records: LogRecord[] = [];
+    const logger = createLogger({ sink: (record) => records.push(record) });
+    const start = performance.now();
+    const result = await runRuleScan(getDb(), { interests, pipeline: loadPipeline(), logger, batchSize: 50 });
+    expect(performance.now() - start).toBeLessThan(1000);
+    expect(result).toMatchObject({ scanned: 1, failed: 0 });
+    expect((await listSignalsOfJob(getDb(), job)).some((row) => row.tier === "T2")).toBe(true);
+    const warnings = records.filter((record) => record.level === "warn");
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]?.fields).toMatchObject({ category: "T2", field: "patterns" });
+    // scanned without the pattern: not marked as scanned with the full rules, so it is scanned again once the pattern runs
+    const scans = await getDb().execute<{ rules_hash: string }>(sql`select rules_hash from signal_scans where job_id = ${job}`);
+    expect(Array.from(scans).map((row) => row.rules_hash)).not.toContain(rulesFingerprint(interests, loadPipeline()));
+    expect(await runRuleScan(getDb(), { interests, pipeline: loadPipeline(), logger: quietLogger, batchSize: 50 })).toMatchObject({ scanned: 0 });
+  });
+
+  it("the preview reports it as the save would (slowPattern), without running it", async () => {
+    await newJob("A", `${SENTENCE} We offer equity.`);
+    const draft = configToDraft(reloadConfig("interests"));
+    const index = draft.categories.findIndex((category) => category.id === "T2");
+    draft.categories[index]!.patterns.push(SLOW);
+    const start = performance.now();
+    const result = await previewCategory({ draft, categoryId: "T2" });
+    expect(performance.now() - start).toBeLessThan(1000);
+    expect(result).toEqual({ status: "invalid", fieldErrors: [{ path: `categories.${index}.patterns.${draft.categories[index]!.patterns.length - 1}`, key: "slowPattern" }] });
+  });
+
+  it("the preview runs each job in a time box: a pattern the probe lets through but that is slow on one job ends at the budget", async () => {
+    // fast on the probe's test texts, exponential on a long run of digits without an x
+    await newJob("Slow", `Order number ${"1".repeat(29)}y`);
+    await newJob("Fine", "Perks: unlimited tokens.");
+    const draft = draftWithPerk();
+    draft.categories.at(-1)!.patterns = ["(\\d+)+x"];
+    const budget = reloadConfig("interests").limits.preview_time_budget_ms;
+    const start = performance.now();
+    const result = await previewCategory({ draft, categoryId: "perk" });
+    expect(performance.now() - start).toBeLessThan(budget + 1000);
+    expect(result).toMatchObject({ status: "ok", truncated: true });
   });
 });

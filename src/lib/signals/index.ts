@@ -38,8 +38,9 @@ import { bonusPolicy, signalBonus } from "./bonus";
 import { buildCatalog } from "./catalog";
 import { rulesFingerprint, signalsPrompt } from "./fingerprint";
 import { loadBaseCurrency, loadSalaryFloor } from "./floor";
+import { signalPatternGuard, signalProbeLimits } from "./pattern-guard";
 import { mergeAiReview, numberCandidates, toPromptCandidates, type ReviewStats } from "./review";
-import { findCandidates, type RuleCandidate } from "./rules";
+import { compileSignalRules, findCandidates, type RuleCandidate, type SignalPatternGuard, type SlowSignalPattern } from "./rules";
 import { isSalaryDerived, salaryDraft, withSalarySignal } from "./salary-signal";
 import { signalAmountSchema, type SignalDraft } from "./types";
 
@@ -47,7 +48,8 @@ export { annualEurTop, bonusPolicy, highValuePolicy, isHighPayAmount, isHighPayS
 export { buildCatalog, categoryLabel, toCategoryView, toCategoryViews, type CategoryView, type SignalCatalog } from "./catalog";
 export { promptCategories, rulesFingerprint, signalsPrompt } from "./fingerprint";
 export { loadBaseCurrency, loadBonusPolicy, loadHighValuePolicy, loadSalaryFloor, loadSignalCatalog } from "./floor";
-export { findCandidates, findQuoteTerm, type RuleCandidate } from "./rules";
+export { findCandidates, findQuoteTerm, type RuleCandidate, type SignalPatternGuard, type SlowSignalPattern } from "./rules";
+export { sharedSignalPatternGuard, signalPatternGuard, signalPatternIsFast, signalProbeLimits } from "./pattern-guard";
 export { mergeAiReview } from "./review";
 export { locateQuote, sentenceAround } from "./quote";
 export { isSalaryDerived, salaryDraft, withSalarySignal } from "./salary-signal";
@@ -151,8 +153,21 @@ export function withoutTrapCandidates(candidates: RuleCandidate[], spans: readon
 export async function runRuleScan(db: Db, options: RuleScanOptions): Promise<RuleScanResult> {
   const { interests, pipeline, logger } = options;
   const result: RuleScanResult = { scanned: 0, withSignals: 0, signals: 0, failed: 0, aborted: false };
-  const rulesHash = rulesFingerprint(interests, pipeline);
   const activeIds = buildCatalog(interests).categories.map((category) => category.id);
+  // a user pattern too slow on the probe's test texts is left out of this run, with a warning; the jobs scanned without it
+  // carry a rules hash of their own, so they are scanned again once it runs
+  const left: SlowSignalPattern[] = [];
+  const warned = signalPatternGuard(signalProbeLimits(pipeline), logger);
+  const guard: SignalPatternGuard = {
+    isFast: warned.isFast,
+    onSlow: (slow) => {
+      left.push(slow);
+      warned.onSlow?.(slow);
+    },
+  };
+  compileSignalRules(interests, guard);
+  const fingerprint = rulesFingerprint(interests, pipeline);
+  const rulesHash = left.length === 0 ? fingerprint : md5(JSON.stringify([fingerprint, left.map((slow) => [slow.categoryId, slow.field, slow.index])]));
   let afterId = 0;
   for (;;) {
     const batch = await listJobsToScan(db, { rulesHash, afterId, limit: options.batchSize });
@@ -165,7 +180,7 @@ export async function runRuleScan(db: Db, options: RuleScanOptions): Promise<Rul
       }
       afterId = job.id;
       try {
-        const candidates = withoutTrapCandidates(findCandidates(job.description, interests, pipeline), trapSpans.get(job.id));
+        const candidates = withoutTrapCandidates(findCandidates(job.description, interests, pipeline, guard), trapSpans.get(job.id));
         const salarySignal = salaryDraft(parseSalary(job.salaryJson), job.description, interests, pipeline);
         const drafts = withSalarySignal(salarySignal, ruleDrafts(candidates));
         await saveRuleScan(db, {
@@ -320,6 +335,7 @@ export async function runAiReview(db: Db, options: AiReviewOptions): Promise<AiR
     ...(options.jobIds ? { jobIds: options.jobIds } : {}),
   });
   let failuresInRow = 0;
+  const guard = signalPatternGuard(signalProbeLimits(pipeline), logger);
   // The AI reads the JD without hidden text and instructions to an AI; its quotes are still checked against the real JD
   const trapSpans = await loadTrapSpans(db, jobs.map((j) => ({ jobId: j.id, description: j.description })), { logger });
   const forAi = await cleanDescriptionsForAi(db, jobs.map((j) => ({ jobId: j.id, description: j.description })), { logger });
@@ -328,7 +344,7 @@ export async function runAiReview(db: Db, options: AiReviewOptions): Promise<AiR
       result.stopped = "cancelled";
       break;
     }
-    const candidates = withoutTrapCandidates(findCandidates(job.description, interests, pipeline), trapSpans.get(job.id));
+    const candidates = withoutTrapCandidates(findCandidates(job.description, interests, pipeline, guard), trapSpans.get(job.id));
     const numbered = numberCandidates(candidates);
     const prompt = buildSignalsPrompt({
       title: job.title,

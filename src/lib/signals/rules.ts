@@ -50,20 +50,51 @@ function termRegex(term: string): RegExp {
 
 const patternRegex = (source: string): RegExp => new RegExp(source, "giu");
 
-const cache = new WeakMap<object, CompiledSignalRules>();
+/** A user pattern of a category: where it stands in the category (`tag_patterns`: the entry's `pattern`). */
+export interface SlowSignalPattern {
+  categoryId: string;
+  field: "patterns" | "exclude" | "tag_patterns";
+  index: number;
+  pattern: string;
+}
 
-/** The active categories of interests.yaml compiled once per loaded config object (a hot reload yields a new object). */
-export function compileSignalRules(config: Pick<InterestsConfig, "signals">): CompiledSignalRules {
-  const hit = cache.get(config.signals);
+/**
+ * How the user's patterns (`patterns`, `exclude`, `tag_patterns`; keywords and tags are literal) are tried before they run:
+ * `isFast` is the probe, a pattern it refuses is left out and reported to `onSlow`. The server's guard is
+ * `signalPatternGuard` (the deal-breakers' probe in `vmTimeBox`); this module has no time box of its own, because the job
+ * page's code reaches it. Without a guard every pattern runs.
+ */
+export interface SignalPatternGuard {
+  isFast: (pattern: string) => boolean;
+  onSlow?: (slow: SlowSignalPattern) => void;
+}
+
+const cache = new WeakMap<object, CompiledSignalRules>();
+const guardedCache = new WeakMap<object, WeakMap<SignalPatternGuard, CompiledSignalRules>>();
+
+/**
+ * The active categories of interests.yaml compiled once per loaded config object (a hot reload yields a new object), and
+ * once per `guard`: with a guard, a pattern that fails its probe is left out (the category's other words and patterns still run).
+ */
+export function compileSignalRules(config: Pick<InterestsConfig, "signals">, guard?: SignalPatternGuard): CompiledSignalRules {
+  const guarded = guard ? (guardedCache.get(config.signals) ?? new WeakMap<SignalPatternGuard, CompiledSignalRules>()) : null;
+  const hit = guard && guarded ? guarded.get(guard) : cache.get(config.signals);
   if (hit) return hit;
+  const usable = (categoryId: string, field: SlowSignalPattern["field"], index: number, pattern: string): boolean => {
+    if (!guard || guard.isFast(pattern)) return true;
+    guard.onSlow?.({ categoryId, field, index, pattern });
+    return false;
+  };
+  const fast = (categoryId: string, field: "patterns" | "exclude", sources: readonly string[]): RegExp[] =>
+    sources.filter((source, index) => usable(categoryId, field, index, source)).map(patternRegex);
   const catalog = buildCatalog(config);
   const compiled: CompiledSignalRules = { amount: null, keyword: [], tags: [], order: catalog.order };
   for (const category of catalog.categories) {
     if (category.kind === "amount") {
       compiled.amount = {
         id: category.id,
-        patterns: category.patterns.map(patternRegex),
-        exclude: category.exclude.map(patternRegex),
+        patterns: fast(category.id, "patterns", category.patterns),
+        exclude: fast(category.id, "exclude", category.exclude),
         aiConfirmOnly: category.ai_confirm_only === true,
         minAnnualEur: category.amount.min_annual,
         assumeCurrency: category.amount.assume_currency,
@@ -72,18 +103,24 @@ export function compileSignalRules(config: Pick<InterestsConfig, "signals">): Co
       compiled.keyword.push({
         id: category.id,
         kind: catalog.kindOf(category.id),
-        hits: [...category.keywords.map(termRegex), ...category.patterns.map(patternRegex)],
-        exclude: category.exclude.map(patternRegex),
+        hits: [...category.keywords.map(termRegex), ...fast(category.id, "patterns", category.patterns)],
+        exclude: fast(category.id, "exclude", category.exclude),
         aiConfirmOnly: category.ai_confirm_only === true,
       });
     } else {
       compiled.tags.push({
         id: category.id,
-        entries: [...category.tags.map((name) => ({ name, pattern: termRegex(name) })), ...category.tag_patterns.map((p) => ({ name: p.name, pattern: patternRegex(p.pattern) }))],
+        entries: [
+          ...category.tags.map((name) => ({ name, pattern: termRegex(name) })),
+          ...category.tag_patterns.filter((p, index) => usable(category.id, "tag_patterns", index, p.pattern)).map((p) => ({ name: p.name, pattern: patternRegex(p.pattern) })),
+        ],
       });
     }
   }
-  cache.set(config.signals, compiled);
+  if (guard && guarded) {
+    guarded.set(guard, compiled);
+    guardedCache.set(config.signals, guarded);
+  } else cache.set(config.signals, compiled);
   return compiled;
 }
 
@@ -126,10 +163,11 @@ function isExcluded(text: string, hit: Span, exclude: readonly RegExp[], lookbeh
  * Every signal candidate in a JD, by the active categories of interests.yaml: amounts (parsed, converted to a year,
  * below-minimum ones dropped), keyword hits and tags, each with its quoted sentence. At most `limits.per_category_max`
  * per category and one per sentence and category; tags one per name, at most `limits.tags_max` per tag category.
- * Pure and deterministic; no AI. Candidates of `ai_confirm_only` categories are marked, not removed.
+ * Pure and deterministic; no AI. Candidates of `ai_confirm_only` categories are marked, not removed. The server passes a
+ * `guard` (`signalPatternGuard`): a user pattern too slow on its test texts is left out.
  */
-export function findCandidates(description: string, config: Pick<InterestsConfig, "signals" | "limits">, pipeline: PipelineConfig): RuleCandidate[] {
-  const rules = compileSignalRules(config);
+export function findCandidates(description: string, config: Pick<InterestsConfig, "signals" | "limits">, pipeline: PipelineConfig, guard?: SignalPatternGuard): RuleCandidate[] {
+  const rules = compileSignalRules(config, guard);
   const { limits } = config;
   const salaryContext = compileRules(pipeline).salaryContext;
   const out: RuleCandidate[] = [];
@@ -212,10 +250,11 @@ function findAmounts(
 /**
  * Where the term that makes `quote` a signal of category `tier` stands in the quote (the amount, the keyword): what
  * the detail page keeps visible when it shortens a long quote. The vocabulary is looked up again in the quote, so it
- * also works for a quote the AI found. Null for tags, unknown categories and when nothing in the quote hits.
+ * also works for a quote the AI found. Null for tags, unknown categories and when nothing in the quote hits. The server
+ * passes a `guard` (`sharedSignalPatternGuard`), as for `findCandidates`.
  */
-export function findQuoteTerm(quote: string, tier: SignalCategoryId, config: Pick<InterestsConfig, "signals">): Span | null {
-  const rules = compileSignalRules(config);
+export function findQuoteTerm(quote: string, tier: SignalCategoryId, config: Pick<InterestsConfig, "signals">, guard?: SignalPatternGuard): Span | null {
+  const rules = compileSignalRules(config, guard);
   const isAmount = rules.amount?.id === tier;
   const patterns = isAmount ? rules.amount?.patterns : rules.keyword.find((category) => category.id === tier)?.hits;
   if (!patterns) return null;
