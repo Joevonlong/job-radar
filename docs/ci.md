@@ -246,8 +246,12 @@ and the journal in `drizzle/meta`. Do not edit generated SQL by hand to silence 
 
 #### Install jobspy sidecar dependencies
 
-`python -m pip install -r requirements-dev.txt` in `jobspy/`. Installs the sidecar's runtime and test dependencies.
-Locally use a virtual environment: `python3.12 -m venv .venv && .venv/bin/pip install -r jobspy/requirements-dev.txt`.
+`python -m pip install --require-hashes -r requirements-dev.txt` in `jobspy/`. Installs the sidecar's runtime and test
+dependencies from the lock file: every package, indirect ones included, at a fixed version with its hashes, generated
+from `requirements-dev.in` (the runtime versions are those of `requirements.txt`, which the image installs the same way;
+see [development.md](development.md#the-jobspy-sidecars-dependencies)). A failure that names a hash or a missing
+package means a lock file was edited by hand or not regenerated after an `.in` change.
+Locally use a virtual environment: `python3.12 -m venv .venv && .venv/bin/pip install --require-hashes -r jobspy/requirements-dev.txt`.
 
 #### Jobspy sidecar tests
 
@@ -687,6 +691,14 @@ allowlist with their reasons. A failure names the leaked samples: add the entry 
 (`**/`) when `.gitignore` matches it at any depth. Deploys build from `git archive` and never see ignored files; this
 covers `pnpm stack:up` and a plain `docker compose build`. About 10 seconds.
 
+#### The runner restarts healthy with the sidecar stopped
+
+`docker compose stop jobspy`, `docker compose restart runner`, then `docker compose up -d --no-recreate --wait
+--wait-timeout 180 runner`: the runner must turn healthy again while the sidecar is down, and starting it must not start
+the sidecar (it is not among the running services afterwards). Every channel that uses the sidecar is off by default, so
+the runner does not depend on it in `compose.yaml`, and `scripts/ops/deploy.sh` starts it on its own; a failure means
+that dependency came back. About a minute (the runner's healthcheck interval).
+
 #### Container logs on failure
 
 Only when an earlier step failed: `docker compose ps -a` and the last 200 log lines of every service.
@@ -815,12 +827,13 @@ combination (including a job that must run and was skipped or cancelled) prints 
 
 ## Dependabot
 
-`.github/dependabot.yml` opens weekly pull requests for three ecosystems:
+`.github/dependabot.yml` opens weekly pull requests for four ecosystems:
 
 | Ecosystem | Directory | Notes |
 |---|---|---|
 | `npm` | `/` | at most 5 open PRs; the font packages (`@fontsource/*`, `@fontsource-variable/*`) in a PR of their own (a font update changes how every page looks: compare the pages before merging), other minor and patch updates grouped into one PR; major `@types/node` updates ignored (the types follow the Node major in `engines`) |
-| `pip` | `/jobspy` | at most 3 open PRs; the sidecar's Python dependencies |
+| `pip` | `/jobspy` | at most 3 open PRs; the sidecar's Python dependencies, in the pip-compile layout: a PR changes a pin in `requirements*.in` and regenerates the hashed lock files `requirements*.txt` |
+| `docker` | `/jobspy` | at most 2 open PRs; the digest of the base image in `jobspy/Dockerfile` (the root `Dockerfile` takes its image tags from build arguments, which Dependabot cannot update) |
 | `github-actions` | `/` | at most 3 open PRs; the action versions pinned in the workflows |
 
 Dependabot PRs run the same pipeline as any other. An action bump changes `.github/`, so it selects full coverage and runs
@@ -864,7 +877,7 @@ scripts/validate.sh            # shell syntax, i18n, lint, typecheck, unit tests
 pnpm build:runner
 bash tests/ops/proc-lib/cases.sh   # the CI also runs it in the pinned bash:3.2 and bash:5.2 images (see the job)
 pnpm exec drizzle-kit generate < /dev/null && git status --porcelain -- drizzle   # must print nothing
-(cd jobspy && python3.12 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt && .venv/bin/python -m pytest -q)
+(cd jobspy && python3.12 -m venv .venv && .venv/bin/pip install --require-hashes -r requirements-dev.txt && .venv/bin/python -m pytest -q)
 
 # job: integration (needs pg_dump / pg_restore of major version 17, see the job's step)
 export PG_DUMP_PATH=/path/to/pg_dump PG_RESTORE_PATH=/path/to/pg_restore REQUIRE_PG_TOOLS=1

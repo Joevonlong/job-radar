@@ -1,0 +1,6 @@
+# The test tools on top of the runtime dependencies. Edit this file, then regenerate requirements-dev.txt as
+# docs/development.md says. The constraint keeps every shared package at the version the image installs.
+-c requirements.txt
+-r requirements.in
+pytest==9.1.1
+httpx2==2.13.1
