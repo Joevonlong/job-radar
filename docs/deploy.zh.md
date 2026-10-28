@@ -1,5 +1,7 @@
 # 部署、升级、回滚和 7 天无人值守验收
 
+请用安装 Job Radar 的普通用户运行部署，不要加 `sudo`。预检会在获取部署锁之前拒绝 root：root 能绕过 ai-worker 发布目录的只读检查，worker 也需要该用户的 launchd agent 或 systemd 用户服务。`--dry-run` 和 `--no-ai-worker` 同样适用。
+
 这份指南把 Job Radar 真正部署到一台主机上，并说明怎么确认它在无人值守地正常运行。与主机相关的步骤（Docker Desktop、电源设置、launchd）按 macOS 写；Linux 或 Windows（WSL2）请看[平台说明](installation.zh.md#macoslinuxwindows)，并使用与平台无关的部分（部署脚本、doctor、升级和回滚）。
 
 - 第一次部署：先做第 1 节的清单，再运行第 2 节的 `scripts/ops/deploy.sh`。

@@ -262,6 +262,10 @@ Existing installations keep their `data/config/sources.yaml` exactly as it is; o
 off. `jobspy.linkedin_fetch_description` (one more request per LinkedIn job to read the full description) is off by default as
 well.
 
+Each jobspy search POST is sent once, including on timeout or HTTP 500. The sidecar may keep scraping after the client
+stops waiting, so retrying that POST would start another complete scrape. Failures still feed the channel's circuit
+breaker; the shared HTTP retry setting does not repeat these scrape requests.
+
 If you switch scraping channels on: read the terms of every site, keep volumes low (few keywords, few cities, the
 default schedule), do not republish collected data, and prefer official APIs, company career boards and your own job-alert
 emails. You are responsible for how you use them.

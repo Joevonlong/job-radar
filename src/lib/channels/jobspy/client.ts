@@ -153,6 +153,8 @@ export async function searchJobspy(ctx: ChannelContext, settings: JobspySettings
     body: JSON.stringify(request),
     allowStatus: SIDECAR_ERROR_STATUSES,
     timeoutMs: settings.timeout_ms,
+    // The sidecar may keep scraping after a client timeout; repeating the POST starts the whole scrape again.
+    maxRetries: 0,
   });
   let body: unknown;
   try {

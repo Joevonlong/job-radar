@@ -71,7 +71,7 @@ jobs:
           code=false
           # The ai-worker's move between release directories (upgrade-transition) only when the deploy side changed.
           transition=false
-          transition_re='^(scripts/ops/|src/ai-worker/|tests/transition/|tests/ops/sim/)|^(compose\.yaml|Dockerfile)$'
+          transition_re='^(scripts/ops/|src/lib/ops/|src/lib/config/migrations/|src/ai-worker/|tests/transition/|tests/ops/sim/)|^scripts/[^/]+\.ts$|^(compose\.yaml|Dockerfile)$'
           # Dependency and toolchain inputs can affect every suite, including historical upgrades. Keep this rule here;
           # tests/ci-classifier.test.ts executes this script with the same NUL-delimited diff format.
           full=false

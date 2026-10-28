@@ -97,7 +97,7 @@ export interface RunCommandOptions {
   closeGraceMs?: number;
 }
 
-/** Run a command to completion (time-out in ms). `ENOENT` is "missing", a kill by the time-out is "timeout"; a non-zero exit is a normal outcome. */
+/** Run a command to completion (time-out in ms). `ENOENT` / `EACCES` is "missing", a kill by the time-out is "timeout"; a non-zero exit is a normal outcome. */
 export function runCommand(command: string, args: readonly string[], timeoutMs: number, options: RunCommandOptions = {}): Promise<CommandOutcome> {
   if (options.detached) return runDetached(command, args, timeoutMs, options);
   return new Promise((resolve) => {
@@ -108,7 +108,7 @@ export function runCommand(command: string, args: readonly string[], timeoutMs: 
         return;
       }
       const code: unknown = (error as NodeJS.ErrnoException).code;
-      if (code === "ENOENT") resolve({ kind: "missing" });
+      if (code === "ENOENT" || code === "EACCES") resolve({ kind: "missing" });
       else if (error.killed || code === "ETIMEDOUT") resolve({ kind: "timeout" });
       else resolve({ kind: "ran", exitCode: typeof code === "number" ? code : null, stdout, stderr });
     });
@@ -166,7 +166,7 @@ function runDetached(command: string, args: readonly string[], timeoutMs: number
         later(closeGraceMs, () => settle(result()));
       });
     });
-    child.on("error", (error: NodeJS.ErrnoException) => settle(error.code === "ENOENT" ? { kind: "missing" } : { kind: "ran", exitCode: null, stdout, stderr: stderr || error.message }));
+    child.on("error", (error: NodeJS.ErrnoException) => settle(error.code === "ENOENT" || error.code === "EACCES" ? { kind: "missing" } : { kind: "ran", exitCode: null, stdout, stderr: stderr || error.message }));
     child.on("exit", (code) => {
       exitCode = code;
       later(closeGraceMs, () => settle(result()));
