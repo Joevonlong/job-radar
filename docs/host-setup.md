@@ -182,8 +182,10 @@ Runner healthcheck: every 30 seconds the container runs `node dist/healthcheck.m
 
 Note: `unhealthy` is only a status. Docker's `restart: unless-stopped` restarts only when the process exits, not because of unhealthy. If the runner is `unhealthy`: first `docker compose logs --tail 100 runner` to see why, then `docker compose restart runner`.
 
-The runner also has its own watchdog: a heartbeat write that lasts longer than `RUNNER_HEARTBEAT_SECONDS` counts as a
-failed write. Continuous failures for twice `RUNNER_HEALTH_MAX_AGE_SECONDS` make it exit so Docker can restart it.
+The runner also has its own watchdog: it stops waiting for a heartbeat write after `RUNNER_HEARTBEAT_SECONDS`.
+A successful write clears the failure window even if it finishes after that timeout. Continuous failures without a
+successful write for twice `RUNNER_HEALTH_MAX_AGE_SECONDS` start a shutdown so Docker can restart it. Active work is
+aborted and gets up to `ai.yaml: host_worker.shutdown_grace_seconds` to clean up before a forced exit.
 Heartbeat pruning and the ai-worker check use the same per-step timeout; their failure is logged without blocking later
 heartbeats. These timeouts stop waiting for a query; they do not cancel a query already running in Postgres.
 

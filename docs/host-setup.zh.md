@@ -177,7 +177,7 @@ runner healthcheck：容器里每 30 秒执行一次 `node dist/healthcheck.mjs`
 
 注意：`unhealthy` 只是状态，Docker 的 `restart: unless-stopped` 只在进程退出时重启，不会因为 unhealthy 重启。看到 runner 是 `unhealthy`：先 `docker compose logs --tail 100 runner` 看原因，再 `docker compose restart runner`。
 
-runner 还有自己的 watchdog：心跳写入超过 `RUNNER_HEARTBEAT_SECONDS` 就算一次失败。连续失败达到 `RUNNER_HEALTH_MAX_AGE_SECONDS` 的两倍时，进程主动退出，让 Docker 重启。清理旧心跳和检查 ai-worker 也各自使用同样的超时；失败会记日志，不会阻塞后续心跳。这些超时只停止等待，不会取消 Postgres 中已经开始的查询。
+runner 还有自己的 watchdog：心跳写入超过 `RUNNER_HEARTBEAT_SECONDS` 就停止等待；即使写入在超时后才成功，也会重置失败窗口。持续失败、没有一次成功写入达到 `RUNNER_HEALTH_MAX_AGE_SECONDS` 的两倍时，进程开始关闭，让 Docker 重启。正在运行的任务会收到中止信号，最多有 `ai.yaml: host_worker.shutdown_grace_seconds` 的时间收尾，超出才强制退出。清理旧心跳和检查 ai-worker 也各自使用同样的超时；失败会记日志，不会阻塞后续心跳。这些超时只停止等待，不会取消 Postgres 中已经开始的查询。
 
 日志轮转：所有服务用 json-file 驱动，每个服务最多 `LOG_MAX_FILE`（默认 5）个文件、每个最大 `LOG_MAX_SIZE`（默认 10m），在 `.env` 里可以改。
 

@@ -1,4 +1,5 @@
 import { createHeartbeatWatchdog } from "@/lib/ops/heartbeat-watchdog";
+import type { Shutdown } from "@/lib/ops/shutdown";
 import { withTimeout } from "@/lib/ops/timeout";
 
 interface HeartbeatLoopOptions {
@@ -11,7 +12,7 @@ interface HeartbeatLoopOptions {
   watchAiWorker: () => Promise<void>;
   sleep: () => Promise<void>;
   log: (message: string) => void;
-  exit: (code: number) => void;
+  shutdown: Pick<Shutdown, "begin">;
 }
 
 /** Run the runner's liveness checks separately from collection and control requests. */
@@ -19,8 +20,9 @@ export async function runRunnerHeartbeats(options: HeartbeatLoopOptions): Promis
   const watchdog = createHeartbeatWatchdog({ maxFailureSeconds: options.maxFailureSeconds });
   while (!options.signal.aborted) {
     try {
-      await withTimeout(options.writeHeartbeat(), options.intervalMs, "heartbeat write");
-      watchdog.succeeded();
+      // A timeout stops waiting, but the write can still land and restore liveness later.
+      const written = options.writeHeartbeat().then(() => watchdog.succeeded());
+      await withTimeout(written, options.intervalMs, "heartbeat write");
       try {
         await withTimeout(options.pruneHeartbeats(), options.intervalMs, "heartbeat prune");
       } catch (error) {
@@ -29,8 +31,7 @@ export async function runRunnerHeartbeats(options: HeartbeatLoopOptions): Promis
     } catch (error) {
       options.log(`heartbeat failed: ${error instanceof Error ? error.name : "unknown error"}`);
       if (watchdog.failed()) {
-        options.log(`no heartbeat could be written for ${options.maxFailureSeconds}s; exiting so that Docker restarts the runner`);
-        options.exit(1);
+        options.shutdown.begin(`no heartbeat could be written for ${options.maxFailureSeconds}s; exiting so that Docker restarts the runner`, 1);
         return;
       }
     }

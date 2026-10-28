@@ -449,7 +449,7 @@ async function main(): Promise<number> {
     watchAiWorker,
     sleep: async () => { await sleep(intervalMs, undefined, { signal: abort.signal }); },
     log,
-    exit: exitProcess,
+    shutdown,
   });
 
   scheduler.stop();

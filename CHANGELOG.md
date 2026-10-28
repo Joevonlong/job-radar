@@ -206,6 +206,7 @@ A failure in (a) does not block rollback: follow (c) and accept the display wind
 
 ### Fixed
 
+- Runner heartbeat writes that finish after their timeout still count as healthy; sustained failures allow active work its configured cleanup grace period before restarting.
 - Jobspy scrape requests are sent only once after a timeout or server error; stalled runner heartbeat work is bounded, manual backups are verified before publication, deploy preflight explains why root is unsupported, and CLI checks recognize unavailable commands on a restricted PATH.
 - **A broken jobspy sidecar no longer stops a deploy halfway:** the runner no longer waits for the sidecar, and
   `scripts/ops/deploy.sh` starts db, web and runner first, then the sidecar on its own. When the sidecar does not turn
