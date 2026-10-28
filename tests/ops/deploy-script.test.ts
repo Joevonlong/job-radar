@@ -122,6 +122,7 @@ beforeAll(() => {
   write(path.join(work, "scripts/ops/install-ai-worker.sh"), `${STEP_STUB("install-ai-worker.sh", "INSTALL")}# capability: ai-worker-release-dir\n`, 0o755);
   write(path.join(work, "scripts/ops/prepare-release.sh"), STEP_STUB("prepare-release.sh", "PREPARE"), 0o755);
   write(path.join(work, "package.json"), '{"name":"job-radar"}\n');
+  write(path.join(work, "compose.yaml"), "services:\n  db: {}\n  web:\n    depends_on:\n      db:\n        condition: service_healthy\n  runner:\n    depends_on:\n      db:\n        condition: service_healthy\n");
   write(path.join(work, "config/schedule.yaml"), "timezone: Europe/Berlin\ndoctor:\n  compose_project: radar-test\n  web_url: http://137.0.0.1:3000\n");
   write(path.join(work, "src/app.ts"), "export {};\n");
   write(path.join(work, "bin/tool.sh"), "echo tool\n", 0o644);
@@ -183,10 +184,10 @@ if [[ "$*" == *" config -q" ]]; then
 fi
 if [[ "$*" == *" config --format json" ]]; then
   if [[ -n "\${COMPOSE_MODEL_OUTPUT:-}" ]]; then printf '%s\\n' "$COMPOSE_MODEL_OUTPUT"; exit \${COMPOSE_MODEL_EXIT:-0}; fi
-  # Resolve the dependency maps of the fixture override, preserving the base db dependencies like Compose does.
+  # Resolve the target and override dependency maps like Compose does.
   NODE_PATH="${repoRoot}/node_modules" "${process.execPath}" -e '
     const fs = require("node:fs");
-    const services = { db: {}, web: { depends_on: { db: { condition: "service_healthy" } } }, runner: { depends_on: { db: { condition: "service_healthy" } } } };
+    const services = require("yaml").parse(fs.readFileSync(process.env.WORK + "/compose.yaml", "utf8")).services;
     const file = process.env.WORK + "/compose.override.yaml";
     if (fs.existsSync(file)) {
       const override = require("yaml").parse(fs.readFileSync(file, "utf8"));
@@ -995,6 +996,39 @@ describe("scripts/ops/deploy.sh", { timeout: TEST_TIMEOUT_MS }, () => {
     }
   });
   describe("--ref", () => {
+    it.each([false, true])("allows an old target dependency on jobspy, but refuses dependencies added by overrides: override=%s", (override) => {
+      const base = head();
+      const other = path.join(tmp, `legacy-compose-${override}`);
+      git(tmp, "clone", origin, other);
+      const composeFile = path.join(other, "compose.yaml");
+      write(composeFile, fs.readFileSync(composeFile, "utf8") + "      jobspy:\n        condition: service_healthy\n");
+      git(other, "add", "compose.yaml");
+      git(other, "commit", "-m", "legacy sidecar dependency");
+      const ref = `legacy-compose-${override}`;
+      git(other, "tag", ref);
+      git(other, "push", "origin", ref);
+      const overrideFile = path.join(work, "compose.override.yaml");
+      if (override) write(overrideFile, "services:\n  web:\n    depends_on:\n      jobspy:\n        condition: service_healthy\n");
+      try {
+        const r = deploy(["--ref", ref, "--settle", "0"]);
+        expect(r.status, r.out).toBe(override ? 1 : 0);
+        if (override) {
+          expect(r.out).toContain("web.depends_on.jobspy");
+          expect(r.out).toContain("Remove");
+          expect(r.calls.some((c) => /^pnpm ops:freeze/.test(c) || c.includes(" build") || c.includes(" up "))).toBe(false);
+        } else {
+          expect(r.out).toContain("target compose.yaml depends on jobspy");
+          expect(r.out).not.toContain("Remove");
+          expect(r.calls).toContain("docker compose -p radar-test up -d --wait --wait-timeout 300 db web runner");
+          expect(r.calls).toContain("pnpm migrate:run");
+          expect(r.calls).toContain("pnpm run doctor");
+        }
+      } finally {
+        if (override) fs.rmSync(overrideFile);
+        restore(base);
+      }
+    });
+
     it.each([false, true])("detects freeze capability before checkout and uses the target's config protocol: supported=%s", (supported) => {
       const base = head();
       const other = path.join(tmp, `freeze-capability-${supported}`);

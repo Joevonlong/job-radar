@@ -20,7 +20,7 @@
 #                  and its config-freeze capability is detected before checkout
 #   3  install     pnpm install --frozen-lockfile
 #   4  config      data/ folders exist; existing installs: pnpm config:migrate (preview only), pnpm config:check in memory,
-#                  compose config (refuse core dependencies on jobspy), then pnpm ops:freeze; first install: config:init
+#                  compose config (refuse jobspy dependencies added by overrides), then pnpm ops:freeze; first install: config:init
 #                  without a freeze; .env present
 #                  targets without config-freeze use config:init + config:migrate --write here, leaving old markers alone
 #   5  backup      scripts/ops/backup.sh --label pre-deploy (only when the db is already running)
@@ -479,25 +479,37 @@ run "Fix data/config/*.yaml as the error says (pnpm config:check names the file,
 if [[ -f "$APP/.env" ]]; then say ".env exists"; else say "warning: .env does not exist: compose uses defaults, but Telegram and channel keys need it (cp .env.example .env and fill it in; see docs/deploy.md)"; fi
 run "The docker compose config has a syntax error: docker compose config shows where" docker compose -p "$PROJECT" config -q
 # Removing a dependency in compose.yaml does not remove an entry merged from a user's override. Even required:false
-# pulls the sidecar into the core up --wait, so refuse every such entry before a freeze or service replacement.
+# pulls the sidecar into the core up --wait. Refuse entries added by overrides before a freeze or service replacement,
+# but allow a supported old target whose own compose.yaml still has the dependency.
 # Consume the resolved model privately: it may contain secrets from env_file; only fixed dependency paths leave Node.
 echo "  \$ docker compose -p $PROJECT config --format json (check core dependencies on jobspy)"
 if [[ "$DRY_RUN" -eq 0 ]]; then
   if ! jobspy_dependencies="$(compose config --format json | node -e '
     const { readFileSync } = require("node:fs");
+    const { execFileSync } = require("node:child_process");
     const { z } = require("zod");
     try {
       const service = z.object({ depends_on: z.record(z.string(), z.unknown()).optional() });
       const schema = z.object({ services: z.object({ db: service, web: service, runner: service }) });
       const { services } = schema.parse(JSON.parse(readFileSync(0, "utf8")));
-      process.stdout.write(Object.entries(services)
-        .filter(([, config]) => Object.hasOwn(config.depends_on ?? {}, "jobspy"))
-        .map(([name]) => name + ".depends_on.jobspy").join(", "));
+      const targetService = z.object({ depends_on: z.union([z.array(z.string()), z.record(z.string(), z.unknown())]).optional() });
+      const targetSchema = z.object({ services: z.object({ db: targetService, web: targetService, runner: targetService }) });
+      const target = targetSchema.parse(require("yaml").parse(execFileSync("git",
+        ["-C", process.argv[1], "show", process.argv[2] + ":compose.yaml"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] })));
+      const dependencies = Object.entries(services).filter(([, config]) => Object.hasOwn(config.depends_on ?? {}, "jobspy"));
+      const overrides = dependencies.filter(([name]) => {
+        const own = target.services[name].depends_on ?? {};
+        return !(Array.isArray(own) ? own.includes("jobspy") : Object.hasOwn(own, "jobspy"));
+      });
+      process.stdout.write(overrides.length ? overrides.map(([name]) => name + ".depends_on.jobspy").join(", ")
+        : dependencies.length ? "target" : "");
     } catch {
       process.exitCode = 1;
     }
-  ')"; then
+  ' "$APP" "$TARGET")"; then
     fail_step "cannot inspect the resolved Compose dependencies" "Check docker compose -p $PROJECT config -q and the Node dependency installation, then retry; no settings were frozen by this run"
+  elif [[ "$jobspy_dependencies" == target ]]; then
+    say "target compose.yaml depends on jobspy: keeping its original dependency behaviour; sidecar health may block this target's deployment"
   elif [[ -n "$jobspy_dependencies" ]]; then
     fail_step "the resolved Compose config still contains $jobspy_dependencies" "Remove those jobspy dependency entries from compose.override.yaml (or the active Compose override), keeping the db dependencies, then run deploy again; required: false still pulls jobspy into the core up --wait"
   fi

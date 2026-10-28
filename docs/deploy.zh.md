@@ -265,10 +265,13 @@ scripts/ops/deploy.sh               # 或跟随 main：拉最新 main、备份�
 同样删除。Compose 会合并依赖映射，因此出厂 `compose.yaml` 删除了这项，也不会消除覆盖文件中的旧依赖。
 即使设为 `required: false`，仍可能把 sidecar 带进核心服务的 `up --wait`。
 
-第 4 步会检查 `docker compose -p <project> config --format json`，发现这些依赖时，**在冻结设置或重启服务前拒绝部署**。
+第 4 步会将 `docker compose -p <project> config --format json` 与目标提交自身的 `compose.yaml` 对比，发现覆盖文件新增的依赖时，**在冻结设置或重启服务前拒绝部署**。
 报错会列出需要删除的条目，脚本不会修改你的覆盖文件。删除相应条目后重新部署，这样 sidecar 不健康就不会阻断数据库迁移、
 ai-worker 切换或配置写入。doctor 只有在当前市场实际启用了依赖 sidecar 的通道时，才把 sidecar 故障视为问题；
 被 `markets` 限制排除的通道不需要 sidecar。
+
+受支持的旧目标（例如通过 `--ref` 回滚的版本）若自身的 `compose.yaml` 仍依赖 jobspy，会打印简短说明并允许部署。
+它保留该目标原有的依赖行为：sidecar 不健康仍可能阻断这次部署。
 
 ### 配置分层之后
 

@@ -324,11 +324,15 @@ active Compose override). Keep the dependency on `db`. Also remove a dependency 
 you added one. Compose merges dependency maps, so removing the entry from the shipped `compose.yaml` does not remove
 your override. Even `required: false` can pull the sidecar into the core services' `up --wait`.
 
-Step 4 checks `docker compose -p <project> config --format json` and refuses these dependencies **before freezing
-settings or restarting services**. It names the entries to remove; it does not edit your overrides. Remove those entries
+Step 4 checks `docker compose -p <project> config --format json` against the target commit's own `compose.yaml` and
+refuses dependencies added by overrides **before freezing settings or restarting services**. It names the entries to
+remove; it does not edit your overrides. Remove those entries
 and run the deploy again, so an unhealthy sidecar cannot block migrations, the ai-worker switch or config writes.
 The doctor treats a failed sidecar as a problem only when a channel that uses it is effectively enabled for the current
 market; a channel excluded by its `markets` restriction does not need the sidecar.
+
+A supported older target (for example a `--ref` rollback) whose own `compose.yaml` depends on jobspy is allowed with a
+short note. It keeps that target's dependency behaviour: an unhealthy sidecar may still block its deployment.
 
 ### With layered config
 
