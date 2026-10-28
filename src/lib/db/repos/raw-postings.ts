@@ -172,6 +172,17 @@ export async function requeueRawPostings(db: Executor, channelIds: readonly stri
   return rows.length;
 }
 
+/** Put these raw postings back to `pending` (parsed or failed ones; a pending one stays). Returns the number changed. */
+export async function requeueRawPostingsById(db: Executor, ids: readonly number[]): Promise<number> {
+  if (ids.length === 0) return 0;
+  const rows = await db
+    .update(rawPostings)
+    .set({ parseStatus: "pending", parseError: null })
+    .where(and(inArray(rawPostings.parseStatus, ["parsed", "parse_failed"]), inArray(rawPostings.id, [...ids])))
+    .returning({ id: rawPostings.id });
+  return rows.length;
+}
+
 /**
  * The stored payloads of postings with these external ids among `channelIds` (earlier channel ids win when more than one holds the id).
  * Used by channels that re-deliver a posting they already hold instead of reading its page again: the same payload keeps the

@@ -23,6 +23,11 @@
  * reset in step 1 is skipped: the other channels' jobs keep what they have, so old wrong work mode / German /
  * agency flags stay until a full reprocess. Salaries (step 3) are re-read for all jobs either way.
  *
+ * Before step 1 the stored company and title keys are brought to the current key version (once per version; a cycle does
+ * the same). Option `--split-merged`: then jobs that older keys merged by mistake (company or title names in a non-Latin
+ * script, which used to key as "") are separated first: their postings of another company or title are detached and all
+ * their postings go back to `pending`, so step 2 files each under its own company and title (`splitMergedJobs`).
+ *
  * Exit code 0 = done, 1 = some postings were deferred or a rule scan failed, 2 = bad arguments.
  * DATABASE_URL decides which database; `.env` is loaded by the pnpm script.
  */
@@ -37,15 +42,17 @@ import { closeDb, getDb } from "../src/lib/db";
 import { resetRuleDerivedFacts } from "../src/lib/db/repos/jobs";
 import { requeueRawPostings } from "../src/lib/db/repos/raw-postings";
 import { currentPreferences, runFilter } from "../src/lib/filter";
-import { refreshStoredSalaries, runPipeline } from "../src/lib/pipeline";
+import { refreshStoredIdentityKeys, refreshStoredSalaries, runPipeline, splitMergedJobsOf } from "../src/lib/pipeline";
 import { recheckGerman, readScoringProfile } from "../src/lib/scoring";
 import { reconcileBonuses, revalueSignals, runRuleScan, syncSalarySignals } from "../src/lib/signals";
 
 async function main(): Promise<number> {
   let channels: string[];
+  let splitMerged: boolean;
   try {
-    const { values } = parseArgs({ options: { channel: { type: "string", multiple: true } }, strict: true });
+    const { values } = parseArgs({ options: { channel: { type: "string", multiple: true }, "split-merged": { type: "boolean" } }, strict: true });
     channels = values.channel ?? [];
+    splitMerged = values["split-merged"] ?? false;
   } catch (error) {
     console.error(`reprocess: ${error instanceof Error ? error.message : "bad arguments"}`);
     return 2;
@@ -57,6 +64,19 @@ async function main(): Promise<number> {
   try {
     const pipelineConfig = loadPipeline();
     const interests = loadConfig("interests");
+    // --split-merged recomputes the keys even when this key version already did (rows a rolled-back version wrote since)
+    const keys = await refreshStoredIdentityKeys(db, { config: pipelineConfig, logger, force: splitMerged });
+    if (!keys.ok) {
+      console.error(`reprocess: the company and title keys could not be recomputed (${keys.error}); nothing was reprocessed`);
+      return 1;
+    }
+    if (keys.result) console.log("company and title keys:", JSON.stringify(keys.result));
+    if (splitMerged) {
+      const split = await splitMergedJobsOf(db, { config: pipelineConfig, registry: defaultRegistry, logger });
+      console.log(`merged jobs: checked=${split.jobsChecked} split=${split.jobsSplit} postings detached=${split.sourcesUnlinked} postings put back to pending=${split.rawRequeued}`);
+      if (split.splitWithUserState.length > 0) console.log(`  split jobs you had acted on (worth a look): ${split.splitWithUserState.join(", ")}`);
+      if (split.needsReview.length > 0) console.log(`  jobs you had acted on whose postings now name another company (left as they are): ${split.needsReview.join(", ")}`);
+    }
     // Reading every posting again rebuilds these facts completely; with --channel only some postings come back,
     // so the other channels' jobs keep what they have (and old wrong flags stay until a full reprocess).
     if (channels.length === 0) console.log(`work mode, German level and agency flag cleared on ${await resetRuleDerivedFacts(db)} jobs (rebuilt from the raw postings next)`);

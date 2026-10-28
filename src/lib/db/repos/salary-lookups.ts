@@ -1,6 +1,7 @@
 /** Reads and writes of `salary_lookups` and the `salary_lookup` requests around them (C9). */
 import { and, desc, eq, gte, inArray, sql } from "drizzle-orm";
 
+import { rekeySalaryLookupKey } from "@/lib/salary/lookup-key";
 import { salaryLookupResultSchema, type SalaryLookupResult } from "@/lib/salary/lookup-types";
 import { jobLocationSchema, type JobLocation } from "@/lib/domain/types";
 
@@ -168,4 +169,40 @@ export async function findLatestSalaryLookupRequest(db: Executor, input: { looku
     .orderBy(desc(controlRequests.id))
     .limit(1);
   return latest ?? null;
+}
+
+/**
+ * The lookups of company `fromCompanyId` after its key changed from `fromNorm` to `toNorm`, or after it was folded into
+ * `toCompanyId`: they move to that company and their cache keys follow the new company key (`rekeySalaryLookupKey`), so a
+ * paid lookup is neither deleted with the old row nor lost to the new key. Returns the number of lookups moved.
+ */
+export async function moveSalaryLookups(db: Executor, input: { fromCompanyId: number; toCompanyId: number; fromNorm: string; toNorm: string }): Promise<number> {
+  const rows = await db.select({ id: salaryLookups.id, lookupKey: salaryLookups.lookupKey }).from(salaryLookups).where(eq(salaryLookups.companyId, input.fromCompanyId));
+  for (const row of rows) {
+    const lookupKey = input.fromNorm === input.toNorm ? null : rekeySalaryLookupKey(row.lookupKey, "company", input.fromNorm, input.toNorm);
+    await db
+      .update(salaryLookups)
+      .set({ companyId: input.toCompanyId, ...(lookupKey !== null ? { lookupKey } : {}) })
+      .where(eq(salaryLookups.id, row.id));
+  }
+  return rows.length;
+}
+
+/** The cache keys of the jobs' lookups after their title keys changed (`from` -> `to` per job). */
+export async function rekeySalaryLookupTitles(db: Executor, changes: ReadonlyArray<{ jobId: number; from: string; to: string }>): Promise<number> {
+  if (changes.length === 0) return 0;
+  const byJob = new Map(changes.map((change) => [change.jobId, change]));
+  const rows = await db
+    .select({ id: salaryLookups.id, jobId: salaryLookups.jobId, lookupKey: salaryLookups.lookupKey })
+    .from(salaryLookups)
+    .where(inArray(salaryLookups.jobId, [...byJob.keys()]));
+  let changed = 0;
+  for (const row of rows) {
+    const change = row.jobId === null ? undefined : byJob.get(row.jobId);
+    const lookupKey = change ? rekeySalaryLookupKey(row.lookupKey, "title", change.from, change.to) : null;
+    if (lookupKey === null) continue;
+    await db.update(salaryLookups).set({ lookupKey }).where(eq(salaryLookups.id, row.id));
+    changed += 1;
+  }
+  return changed;
 }
