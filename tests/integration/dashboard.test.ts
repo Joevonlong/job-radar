@@ -72,14 +72,20 @@ describe("seed", () => {
     const result = await seedDatabase(getDb(), { now: NOW, timezone: TZ });
     expect(result.replacedJobs).toBe(Number(before?.jobs));
     expect(await count()).toEqual(before);
-    expect(Number(before?.jobs)).toBe(23);
+    // 23 regular fixtures (including Maplewick's dormant role), plus the salary-origin job.
+    expect(Number(before?.jobs)).toBe(24);
+    const dormant = await getDb().select({ title: schema.jobs.title, status: schema.jobs.status })
+      .from(schema.jobs).where(sql`${schema.jobs.dormantAt} is not null`);
+    expect(dormant).toEqual([{ title: "Research Engineer, Document Retrieval", status: "possibly_closed" }]);
   });
 
   it("stores the company keys the pipeline computes, so seeded companies round-trip", async () => {
     const db = getDb();
     const pipeline = loadPipeline();
     const rows = await db.select({ name: schema.companies.name, nameNorm: schema.companies.nameNorm }).from(schema.companies);
-    expect(rows).toHaveLength(22);
+    // Maplewick adds one company; the salary-origin job reuses its target's company.
+    expect(rows).toHaveLength(23);
+    expect(rows).toContainEqual({ name: "Maplewick Research", nameNorm: "maplewick-research" });
     for (const row of rows) expect(row.nameNorm, row.name).toBe(resolveCompanyName(row.name, pipeline).nameNorm);
     // the legal form is not part of the key
     expect(rows.find((row) => row.name === "Orbitrail AG")?.nameNorm).toBe("orbitrail");
@@ -183,8 +189,15 @@ describe("listJobs", () => {
     expect(freelance.jobs.map((j) => j.title)).toEqual(["Freelance ML Engineer (6 months)"]);
 
     const closed = await listJobs(getDb(), base({ filters: { statuses: ["possibly_closed"] } }));
-    expect(closed.total).toBe(2);
+    // An explicit status filter includes the dormant example; the default list hides it.
+    expect(closed.total).toBe(3);
+    expect(closed.jobs.map((j) => j.title).sort()).toEqual([
+      "Computer Vision Engineer", "Research Engineer, Document Retrieval", "Security Engineer, Cloud",
+    ]);
     expect(closed.jobs.every((j) => j.status === "possibly_closed")).toBe(true);
+    expect(closed.jobs.find((j) => j.title === "Research Engineer, Document Retrieval")?.closedReason).toBe("dormant");
+    const defaultList = await listJobs(getDb(), base());
+    expect(defaultList.jobs.map((j) => j.title)).not.toContain("Research Engineer, Document Retrieval");
 
     const paid = await listJobs(getDb(), base({ filters: { salaryDisclosed: true } }));
     expect(paid.jobs.length).toBeGreaterThan(0);
