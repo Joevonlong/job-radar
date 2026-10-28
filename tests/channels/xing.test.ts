@@ -3,12 +3,13 @@ import { describe, expect, it } from "vitest";
 
 import { registerBuiltinChannels } from "@/lib/channels/builtin";
 import { ChannelError, PartialCollectError } from "@/lib/channels/errors";
+import { MIN_DETAILS_FOR_LAYOUT_CHECK } from "@/lib/channels/details";
 import { ChannelRegistry, settingsFromConfig } from "@/lib/channels/registry";
 import { createXingChannel } from "@/lib/channels/xing";
 import { fetchDetail, fetchSearchPage, PAGE_SIZE, postingId, postingUrl, searchUrl } from "@/lib/channels/xing/client";
 import { parseXingPayload } from "@/lib/channels/xing/parse";
 import { payloadSchema, type XingPayload } from "@/lib/channels/xing/schema";
-import { normalizedPostingDraftSchema, type ChannelContext } from "@/lib/channels/types";
+import { normalizedPostingDraftSchema, type ChannelContext, type HttpResponse, type RawPostingInput } from "@/lib/channels/types";
 import { xingSettingsSchema } from "@/lib/config";
 
 import { channelsWith, failingHttp, interruption, INTERRUPTIONS, shippedChannels, type Interruption } from "./helpers";
@@ -363,11 +364,14 @@ describe("collect", () => {
       expect(made.calls).toHaveLength(1);
     });
 
-    it("ends the query when a posting page is blocked", async () => {
+    it("ends the query when a posting page is blocked, handing on the list data with the block", async () => {
       const handler: Handler = (call, n) => (call.url.pathname.startsWith("/jobs/search") ? site()(call, n) : htmlResponse(403, "denied"));
       const channel = createXingChannel({ now: () => NOW });
       const made = makeContext(handler, extra());
-      await expect(channel.collect(searchQuery(), made.ctx)).rejects.toMatchObject({ code: "blocked" });
+      const error = await channel.collect(searchQuery(), made.ctx).catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(PartialCollectError);
+      expect((error as PartialCollectError).cause.code).toBe("blocked");
+      expect((error as PartialCollectError).postings).toHaveLength(2);
       expect(made.calls).toHaveLength(2);
     });
 
@@ -385,13 +389,112 @@ describe("collect", () => {
       expect(calls).toHaveLength(2);
     });
 
-    it("keeps the list data when one posting page cannot be read, but fails when none can", async () => {
+    it("keeps the list data when one posting page cannot be read, and hands it on with a parse failure when none can", async () => {
       const brokenOne: Handler = (call, n) => (call.url.pathname.endsWith("90100004") ? htmlResponse(200, "<html>nothing</html>") : site()(call, n));
       const { postings } = await collectAll({}, searchQuery(), brokenOne);
       expect(postings).toHaveLength(2);
       const brokenAll: Handler = (call, n) => (call.url.pathname.startsWith("/jobs/search") ? site()(call, n) : htmlResponse(200, "<html>nothing</html>"));
       const channel = createXingChannel({ now: () => NOW });
-      await expect(channel.collect(searchQuery({ windowHours: 5000 }), makeContext(brokenAll, extra()).ctx)).rejects.toMatchObject({ code: "parse" });
+      const error = await channel.collect(searchQuery({ windowHours: 5000 }), makeContext(brokenAll, extra()).ctx).catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(PartialCollectError);
+      expect((error as PartialCollectError).cause.code).toBe("parse");
+      expect((error as PartialCollectError).postings).toHaveLength(5);
+    });
+
+    describe("a posting page fails", () => {
+      const UNREADABLE = "<html>nothing</html>";
+      /** Every posting of the fixture page but the November 2025 one, so several pages are opened. */
+      const wide = () => searchQuery({ windowHours: 5000 });
+      const isPostingPage = (call: { url: URL }) => !call.url.pathname.startsWith("/jobs/search");
+      /** site(), except that the `nth` posting page request (1-based) gets `answer`. */
+      const nthPage = (nth: number, answer: () => HttpResponse): Handler => {
+        let pages = 0;
+        return (call, n) => {
+          if (!isPostingPage(call)) return site()(call, n);
+          pages += 1;
+          return pages === nth ? answer() : site()(call, n);
+        };
+      };
+      const unreadable: Handler = (call, n) => (isPostingPage(call) ? htmlResponse(200, UNREADABLE) : site()(call, n));
+      const detailOf = (posting: RawPostingInput) => payloadSchema.parse(posting.payload).detail;
+      const STOPS = [
+        { status: 429, code: "rate_limited" },
+        { status: 403, code: "blocked" },
+        { status: 401, code: "auth_expired" },
+      ] as const;
+
+      for (const { status, code } of STOPS) {
+        it(`hands over every search result when the 2nd posting page answers ${status}, opens no further page and keeps ${code}`, async () => {
+          const full = await collectAll({}, wide());
+          expect(full.postings.slice(2).some((p) => detailOf(p) !== null)).toBe(true);
+          const made = makeContext(nthPage(2, () => htmlResponse(status, "denied")), extra());
+          const error = await createXingChannel({ now: () => NOW }).collect(wide(), made.ctx).catch((e: unknown) => e);
+          expect(error).toBeInstanceOf(PartialCollectError);
+          const partial = error as PartialCollectError;
+          expect(partial.cause).toBeInstanceOf(ChannelError);
+          expect(partial.cause).toMatchObject({ code, status });
+          expect(partial.postings.map((p) => p.externalId)).toEqual(full.postings.map((p) => p.externalId));
+          expect(partial.postings[0]?.payload).toEqual(full.postings[0]?.payload);
+          expect(partial.postings.slice(1).every((p) => detailOf(p) === null)).toBe(true);
+          expect(made.calls).toHaveLength(1 + 2);
+        });
+      }
+
+      it("keeps the stored detail of a known posting when the pages stop, with reuse_known_details off", async () => {
+        const full = await collectAll({}, wide());
+        const last = full.postings.at(-1)!;
+        expect(detailOf(last)).not.toBeNull();
+        const stored = new Map([[last.externalId, last.payload]]);
+        const made = makeContext(nthPage(2, () => htmlResponse(429, "slow")), extra({ reuse_known_details: false }), { known: { payloads: async () => stored } });
+        const error = await createXingChannel({ now: () => NOW }).collect(wide(), made.ctx).catch((e: unknown) => e);
+        expect(error).toBeInstanceOf(PartialCollectError);
+        const partial = error as PartialCollectError;
+        expect(partial.cause.code).toBe("rate_limited");
+        expect(partial.postings.find((p) => p.externalId === last.externalId)?.payload).toEqual(last.payload);
+        expect(made.calls).toHaveLength(1 + 2);
+      });
+
+      it("reads on past an unreadable 2nd posting page and keeps every search result", async () => {
+        const full = await collectAll({}, wide());
+        const { postings, calls } = await collectAll({}, wide(), nthPage(2, () => htmlResponse(200, UNREADABLE)));
+        expect(postings.map((p) => p.externalId)).toEqual(full.postings.map((p) => p.externalId));
+        expect(detailOf(postings[1]!)).toBeNull();
+        expect(postings.filter((_, i) => i !== 1).map((p) => p.payload)).toEqual(full.postings.filter((_, i) => i !== 1).map((p) => p.payload));
+        expect(calls).toHaveLength(full.calls.length);
+      });
+
+      it("keeps the list data and warns when the only posting page to read cannot be read", async () => {
+        const full = await collectAll({}, wide());
+        const someDetail = full.postings.map(detailOf).find((d) => d !== null);
+        // every posting but the last is stored with a detail: one posting page is left to open
+        const stored = new Map(full.postings.slice(0, -1).map((p) => [p.externalId, { ...(p.payload as object), detail: someDetail }]));
+        const made = makeContext(unreadable, extra(), { known: { payloads: async () => stored } });
+        const postings = await createXingChannel({ now: () => NOW }).collect(wide(), made.ctx);
+        expect(made.calls).toHaveLength(1 + 1);
+        expect(postings.map((p) => p.externalId)).toEqual(full.postings.map((p) => p.externalId));
+        expect(detailOf(postings.at(-1)!)).toBeNull();
+        expect(made.records.some((r) => r.level === "warn" && /too few/.test(r.message))).toBe(true);
+      });
+
+      const layoutChange = async (maxDetails: number) => {
+        const made = makeContext(unreadable, extra({ max_details_per_query: maxDetails }));
+        const error = await createXingChannel({ now: () => NOW }).collect(wide(), made.ctx).catch((e: unknown) => e);
+        expect(error).toBeInstanceOf(PartialCollectError);
+        const partial = error as PartialCollectError;
+        expect(partial.cause).toBeInstanceOf(ChannelError);
+        expect(partial.cause.code).toBe("parse");
+        expect(partial.postings).toHaveLength(5);
+        expect(partial.postings.every((p) => detailOf(p) === null)).toBe(true);
+        expect(made.calls).toHaveLength(1 + maxDetails);
+      };
+
+      it("hands the list results on with a parse failure once enough posting pages were tried and none could be read (layout change)", async () => {
+        await layoutChange(MIN_DETAILS_FOR_LAYOUT_CHECK);
+      });
+
+      it("takes a max_details_per_query below the minimum as the sample when every page it allows is unreadable", async () => {
+        await layoutChange(MIN_DETAILS_FOR_LAYOUT_CHECK - 1);
+      });
     });
 
     describe("a later page or keyword fails", () => {

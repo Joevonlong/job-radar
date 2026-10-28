@@ -1,5 +1,6 @@
 import { stepstoneSettingsSchema, type StepstoneSettings } from "@/lib/config";
 
+import { detailLayoutError } from "../details";
 import { ChannelError, settlePostings } from "../errors";
 import type { Channel, ChannelContext, RawPostingInput, SearchQuery } from "../types";
 import { createCycleCache } from "../web/cache";
@@ -98,12 +99,10 @@ export function createStepstoneChannel(deps: StepstoneDeps = {}): Channel {
     let reused = 0;
     if (settings.fetch_details) {
       // postings already stored keep their stored detail; only the others open their page
-      const known = await loadKnownDetails(ctx, {
-        // an interrupted query never overwrites a stored detail with none, whatever reuse_known_details says
-        enabled: settings.reuse_known_details || interrupted !== null,
-        externalIds: selected.map((item) => String(item.id)),
-        detailOf: storedDetailOf<StepstoneDetail>(payloadSchema),
-      });
+      // an interrupted query never overwrites a stored detail with none, whatever reuse_known_details says
+      const reuse = settings.reuse_known_details || interrupted !== null;
+      const detailOf = storedDetailOf<StepstoneDetail>(payloadSchema);
+      const known = await loadKnownDetails(ctx, { enabled: reuse, externalIds: selected.map((item) => String(item.id)), detailOf });
       for (const item of selected) {
         const stored = known.get(String(item.id));
         if (stored) details.set(item.id, stored);
@@ -129,19 +128,32 @@ export function createStepstoneChannel(deps: StepstoneDeps = {}): Channel {
           if (detail) details.set(item.id, detail);
         } catch (error) {
           if (!(error instanceof ChannelError)) throw error;
-          // a block or a throttle ends the query; a flaky or changed page only costs that description
+          // a flaky or changed page only costs that description
           if (error.code === "network") {
             ctx.logger.warn("posting page unavailable, continuing with list data", { query: query.id, code: error.code, status: error.status });
             break;
           }
-          if (error.code !== "parse") throw error;
-          parseFailures += 1;
-          ctx.logger.warn("posting page not readable, continuing with list data", { query: query.id, code: error.code });
+          if (error.code === "parse") {
+            parseFailures += 1;
+            ctx.logger.warn("posting page not readable, continuing with list data", { query: query.id, code: error.code });
+            continue;
+          }
+          // a block or a throttle ends the query (the framework backs off); the list results read so far are kept
+          // and handed on with the failure
+          ctx.logger.warn("posting pages refused, continuing with list data", { query: query.id, code: error.code, status: error.status });
+          interrupted = error;
         }
       }
-    }
-    if (attempted > 0 && parseFailures === attempted) {
-      throw new ChannelError("parse", "stepstone: none of the posting pages could be read (page layout changed?)");
+      // every posting page unreadable: the layout changed. The list results are still handed on, with that failure
+      interrupted ??= detailLayoutError(ctx.logger, "stepstone", query.id, { attempted, parseFailures, maxPerQuery: settings.max_details_per_query });
+      if (interrupted && !reuse) {
+        const missing = selected.filter((i) => !details.has(i.id)).map((i) => String(i.id));
+        const stored = await loadKnownDetails(ctx, { enabled: true, externalIds: missing, detailOf });
+        for (const item of selected) {
+          const detail = stored.get(String(item.id));
+          if (detail) details.set(item.id, detail);
+        }
+      }
     }
 
     const postings = selected.flatMap((item): RawPostingInput[] => {
