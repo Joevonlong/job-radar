@@ -2993,7 +2993,7 @@
         "hint": "Scores go stale when the profile changes; the ai-worker re-scores them."
       },
       "queued": "Requested, waiting for the runner to pick it up.",
-      "existing": "An identical request is already waiting or running; no duplicate was created.",
+      "existing": "A request that covers this one is already waiting or running; no duplicate was created.",
       "errors": {
         "invalidPayload": "The request has the wrong shape. Reload the page.",
         "unknownChannel": "Contains a channel that does not exist.",
@@ -3853,7 +3853,7 @@
       "databaseUnavailable": "The database is unavailable; nothing was requested.",
       "tooSoon": "Requested a moment ago; try again in {seconds} s."
     },
-    "existing": "The same request is already queued or running; waiting for its result.",
+    "existing": "A request that covers this channel is already queued or running; waiting for its result.",
     "pending": {
       "runner": "Queued, waiting for the runner…",
       "aiWorker": "Queued, waiting for the ai-worker on the host…"
@@ -3888,7 +3888,8 @@
       "testAi": "Works: {model}, {seconds} s, tokens {tokensIn} / {tokensOut}",
       "testTelegram": "Sent (message #{id})",
       "runChannel": "Cycle {id}: {state}, {fetched} fetched, {fresh} new",
-      "runChannelNoCycle": "Done"
+      "runChannelNoCycle": "Done",
+      "runChannelCovered": "Covered by the running cycle {id}: {finished} of {total} runs finished, {fetched} fetched"
     }
   },
   "viz": {

@@ -41,7 +41,8 @@ export const lastCycleCheck: DoctorCheck = {
     }
 
     if (setupPending) return merge(ctx, lastSpec, [...pieces, { status: "ok", detail: t("checks.cycle.last.setupWaiting") }]);
-    const missed = findMissedCycle(ctx.now, schedule, latest.startedAt);
+    // only a cycle of every channel did a slot's work: a "collect now" of one channel since does not count
+    const missed = findMissedCycle(ctx.now, schedule, latest.lastFullCycleStartedAt === undefined ? latest.startedAt : latest.lastFullCycleStartedAt);
     if (missed !== null && ageSeconds(missed.slot, ctx.now) > ctx.settings.cycle_grace_minutes * 60) {
       pieces.push({
         status: "fail",

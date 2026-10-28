@@ -1,4 +1,4 @@
-import { desc, eq, ne, sql } from "drizzle-orm";
+import { and, desc, eq, ne, not, sql } from "drizzle-orm";
 
 import type { Db } from "../client";
 import { cycles, runs } from "../schema";
@@ -7,10 +7,25 @@ export type Cycle = typeof cycles.$inferSelect;
 export type CycleKind = Cycle["kind"];
 export type CycleStatus = Cycle["status"];
 
-export async function createCycle(db: Db, input: { kind: CycleKind; startedAt?: Date }): Promise<Cycle> {
+/**
+ * A cycle that ran for some channels only: its summary names them (`summary_json.channelIds`, written when the cycle
+ * starts). Cycles without the list (every channel, and rows from before it was recorded) are full cycles.
+ */
+const isPartialCycle = sql<boolean>`(case when jsonb_typeof(${cycles.summaryJson} -> 'channelIds') = 'array' then jsonb_array_length(${cycles.summaryJson} -> 'channelIds') > 0 else false end)`;
+
+/** The `channelIds` a cycle summary names; anything but a non-empty list of strings counts as "every channel" (null). */
+export function readCycleChannelIds(summary: unknown): string[] | null {
+  if (typeof summary !== "object" || summary === null || !("channelIds" in summary)) return null;
+  const ids: unknown = summary.channelIds;
+  if (!Array.isArray(ids) || ids.length === 0 || !ids.every((id): id is string => typeof id === "string")) return null;
+  return ids;
+}
+
+/** `summary` is written at once, so a running cycle already tells which channels it covers (`listRunningCycles`). */
+export async function createCycle(db: Db, input: { kind: CycleKind; startedAt?: Date; summary?: unknown }): Promise<Cycle> {
   const [row] = await db
     .insert(cycles)
-    .values({ kind: input.kind, ...(input.startedAt ? { startedAt: input.startedAt } : {}) })
+    .values({ kind: input.kind, ...(input.startedAt ? { startedAt: input.startedAt } : {}), ...(input.summary === undefined ? {} : { summaryJson: input.summary }) })
     .returning();
   if (!row) throw new Error("createCycle: insert returned no row");
   return row;
@@ -49,8 +64,35 @@ export async function createSkippedCycle(db: Db, input: { kind: CycleKind; summa
   return row;
 }
 
-/** Start time of the most recent cycle that actually ran (skipped cycles do not count), or null. */
-/** The database clock. Use it, not `new Date()`, wherever a time is compared with a stored timestamp. */
+/**
+ * The cycles `running` right now, newest first, with the channels each is limited to (null = every channel) and the
+ * backend pid of the cycle-lock transaction it recorded when it started (null: not recorded). A row a crash left behind
+ * is `running` too; only the one whose pid holds the lock is the running cycle.
+ */
+export async function listRunningCycles(db: Db): Promise<Array<{ id: number; kind: CycleKind; channelIds: string[] | null; lockPid: number | null }>> {
+  const rows = await db
+    .select({ id: cycles.id, kind: cycles.kind, summaryJson: cycles.summaryJson })
+    .from(cycles)
+    .where(eq(cycles.status, "running"))
+    .orderBy(desc(cycles.id));
+  return rows.map((row) => {
+    const summary = row.summaryJson;
+    const pid = typeof summary === "object" && summary !== null && "lockPid" in summary ? summary.lockPid : null;
+    return { id: row.id, kind: row.kind, channelIds: readCycleChannelIds(summary), lockPid: typeof pid === "number" && Number.isInteger(pid) ? pid : null };
+  });
+}
+
+/** Start of the newest cycle that ran for every channel (skipped cycles and cycles limited to some channels do not count), or null. */
+export async function getLatestFullCycleStartedAt(db: Db): Promise<Date | null> {
+  const [row] = await db
+    .select({ startedAt: cycles.startedAt })
+    .from(cycles)
+    .where(and(ne(cycles.status, "skipped"), not(isPartialCycle)))
+    .orderBy(desc(cycles.startedAt), desc(cycles.id))
+    .limit(1);
+  return row?.startedAt ?? null;
+}
+
 /** Whether a cycle is running right now (a channel test waits for the next quiet moment). */
 export async function isCycleRunning(db: Db): Promise<boolean> {
   const [row] = await db.select({ id: cycles.id }).from(cycles).where(eq(cycles.status, "running")).limit(1);
@@ -63,6 +105,7 @@ export async function countRunningCycles(db: Db): Promise<number> {
   return row?.n ?? 0;
 }
 
+/** The database clock. Use it, not `new Date()`, wherever a time is compared with a stored timestamp. */
 export async function getDbNow(db: Db): Promise<Date> {
   const [row] = await db.execute<{ now: Date }>(sql`select now() as now`);
   if (!row) throw new Error("getDbNow: no row returned");
@@ -70,7 +113,8 @@ export async function getDbNow(db: Db): Promise<Date> {
 }
 
 /**
- * Start of the newest cycle that ran (skipped ones do not count), for the runner's catch-up. When the newest one was
+ * Start of the newest cycle that ran for every channel (skipped ones and ones limited to some channels, such as a manual
+ * "collect now" of one channel, do not count: they did not do the slot's work), for the runner's catch-up. When the newest one was
  * interrupted (a shutdown cut it off, `summary_json.aborted`, or a dead runner left it behind, `summary_json.orphaned`), the
  * cycle before it is the reference instead, so a deploy that restarted the runner mid-cycle gets that slot run again at
  * start-up. Only once: when the cycle before was interrupted too (the re-run died as well, say a cycle that crashes the
@@ -81,7 +125,7 @@ export async function getLatestRunStartedAt(db: Db): Promise<Date | null> {
   const [latest, previous] = await db
     .select({ startedAt: cycles.startedAt, interrupted })
     .from(cycles)
-    .where(ne(cycles.status, "skipped"))
+    .where(and(ne(cycles.status, "skipped"), not(isPartialCycle)))
     .orderBy(desc(cycles.startedAt), desc(cycles.id))
     .limit(2);
   if (latest === undefined) return null;
@@ -91,12 +135,13 @@ export async function getLatestRunStartedAt(db: Db): Promise<Date | null> {
 
 /**
  * Mark cycles (and their runs) still `running` as failed. Only call while holding the cycle lock:
- * then nothing is running and those rows are leftovers of a crashed process.
+ * then nothing is running and those rows are leftovers of a crashed process. The summary written at the start (the
+ * channels the cycle covered) is kept, with `orphaned` added.
  */
 export async function failOrphanedCycles(db: Db, reason: string): Promise<{ cycles: number; runs: number }> {
   const failedCycles = await db
     .update(cycles)
-    .set({ status: "failed", finishedAt: sql`now()`, summaryJson: sql`jsonb_build_object('orphaned', ${reason}::text)` })
+    .set({ status: "failed", finishedAt: sql`now()`, summaryJson: sql`coalesce(${cycles.summaryJson}, '{}'::jsonb) || jsonb_build_object('orphaned', ${reason}::text)` })
     .where(eq(cycles.status, "running"))
     .returning({ id: cycles.id });
   const failedRuns = await db
