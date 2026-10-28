@@ -1,5 +1,6 @@
 import { setTimeout as sleep } from "node:timers/promises";
 
+import { sql } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, inject, it } from "vitest";
 
 import { createLogger } from "@/lib/channels/logger";
@@ -11,7 +12,7 @@ import { loadQueueView } from "@/lib/control/queue-view";
 import { requestSalaryLookup } from "@/lib/control/salary-request";
 import { requestTestAi } from "@/lib/control/service";
 import { requestTranslateJob } from "@/lib/control/translate-request";
-import { claimNextControlRequest, closeDb, CONTROL_REQUEST_KINDS, controlLaneOf, finishControlRequest, getControlRequest, getDb, insertControlRequest, listControlRequests, schema, type ControlLane, type ControlRequest } from "@/lib/db";
+import { claimNextControlRequest, closeDb, CONTROL_REQUEST_KINDS, controlLaneOf, getControlRequest, getDb, insertControlRequest, listControlRequests, schema, type ControlLane, type ControlRequest } from "@/lib/db";
 
 import { makeTempConfig, type TempConfig } from "../config/helpers";
 import { quietLogger } from "../cycle/helpers";
@@ -32,6 +33,19 @@ async function waitForStatus(id: number, status: ControlRequest["status"], timeo
     await sleep(20);
   }
   throw new Error(`request did not reach ${status}`);
+}
+
+async function waitForBlockedPromotion(blockerPid: number): Promise<void> {
+  const end = Date.now() + 8000;
+  while (Date.now() < end) {
+    const rows = await db().execute(sql`
+      select pid from pg_stat_activity
+      where datname = current_database() and ${blockerPid} = any(pg_blocking_pids(pid))
+    `);
+    if (rows.length > 0) return;
+    await sleep(20);
+  }
+  throw new Error("promotion did not wait on the claim transaction");
 }
 
 async function job(): Promise<number> {
@@ -127,22 +141,45 @@ describe("automatic translations and user requests", () => {
     expect((await claimNextControlRequest(db(), kinds(), { lane: "interactive" }))?.id ?? null).toBe(running ? null : queued.requestId);
   });
 
-  it("promotion racing both claimers never duplicates a request or changes work already claimed", async () => {
+  it("promotion first holds the row against both claimers, then only the interactive lane can claim it", async () => {
     const jobId = await job();
-    for (let i = 0; i < 20; i += 1) {
-      const queued = await requestTranslateJob(db(), { jobId, force: false, origin: "auto" });
-      if (queued.state !== "queued") throw new Error("expected queued translation");
-      const [, batch, interactive] = await Promise.all([
-        requestTranslateJob(db(), { jobId, force: false, origin: "user" }),
-        claimNextControlRequest(db(), kinds(), { lane: "batch" }),
-        claimNextControlRequest(db(), kinds(), { lane: "interactive" }),
-      ]);
-      const later = await claimNextControlRequest(db(), kinds());
-      const claims = [batch, interactive, later].filter((r) => r !== null);
-      expect(claims.map((r) => r.id)).toEqual([queued.requestId]);
-      if (batch) expect((await getControlRequest(db(), batch.id))?.payload).toEqual({ jobId, force: false, origin: "auto" });
-      if (interactive) expect(interactive.payload).toEqual({ jobId, force: false });
-      await finishControlRequest(db(), queued.requestId, { status: "done" });
+    const queued = await requestTranslateJob(db(), { jobId, force: false, origin: "auto" });
+    if (queued.state !== "queued") throw new Error("expected queued translation");
+    await db().transaction(async (tx) => {
+      expect(await requestTranslateJob(tx, { jobId, force: true, origin: "user" })).toEqual({ ...queued, existing: true });
+      // The promotion holds the row lock until commit; neither lane can claim it yet.
+      expect(await claimNextControlRequest(db(), kinds(), { lane: "batch" })).toBeNull();
+      expect(await claimNextControlRequest(db(), kinds(), { lane: "interactive" })).toBeNull();
+    });
+    expect(await claimNextControlRequest(db(), kinds(), { lane: "batch" })).toBeNull();
+    expect(await claimNextControlRequest(db(), kinds(), { lane: "interactive" })).toMatchObject({ id: queued.requestId, status: "running", payload: { jobId, force: false } });
+    expect(await claimNextControlRequest(db(), kinds())).toBeNull();
+    expect((await listControlRequests(db(), 10)).map((row) => row.id)).toEqual([queued.requestId]);
+  });
+
+  it("claim first blocks promotion until commit, then the pending-only update leaves running work unchanged", async () => {
+    const jobId = await job();
+    const queued = await requestTranslateJob(db(), { jobId, force: false, origin: "auto" });
+    if (queued.state !== "queued") throw new Error("expected queued translation");
+    let promotion: ReturnType<typeof requestTranslateJob> | undefined;
+    try {
+      await db().transaction(async (tx) => {
+        const [holder] = await tx.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`);
+        expect(await claimNextControlRequest(tx, kinds(), { lane: "batch" })).toMatchObject({ id: queued.requestId, status: "running", payload: { jobId, force: false, origin: "auto" } });
+        promotion = requestTranslateJob(db(), { jobId, force: true, origin: "user" });
+        // Observe rejections immediately while the test waits for the database lock.
+        void promotion.catch(() => {});
+        await waitForBlockedPromotion(holder!.pid);
+        expect(await claimNextControlRequest(db(), kinds(), { lane: "batch" })).toBeNull();
+        expect(await claimNextControlRequest(db(), kinds(), { lane: "interactive" })).toBeNull();
+      });
+      expect(await promotion).toEqual({ ...queued, existing: true });
+      expect(await getControlRequest(db(), queued.requestId)).toMatchObject({ status: "running", payload: { jobId, force: false, origin: "auto" } });
+      expect(await claimNextControlRequest(db(), kinds())).toBeNull();
+      expect((await listControlRequests(db(), 10)).map((row) => row.id)).toEqual([queued.requestId]);
+    } finally {
+      // A failed assertion rolls back the holder too; always drain the waiting promotion.
+      if (promotion) await Promise.allSettled([promotion]);
     }
   });
 });

@@ -138,29 +138,29 @@ describe("ScoreNowButton (job detail)", () => {
     expect(refresh).not.toHaveBeenCalled();
   });
 
-  it("a done request stopped at the time budget says how many are left; an unknown stop reason is ignored", async () => {
+  it.each(["en", "zh"] as const)("a budget exhausted during preparation explains the one remaining job instead of a generic failure (%s)", async (locale) => {
     scoreJobNowAction.mockResolvedValue({ status: "queued", request: 5, kind: "score_jobs", existing: false, nonce: 1 });
-    served = { ...polled({ status: "done", finishedAt: NOW, queue: null }), result: { scored: 1, failed: 0, remaining: 6, stopped: "time_budget" } };
-    const first = render(wrap(<ScoreNowButton jobId={7} />));
-    await userEvent.click(screen.getByRole("button", { name: "Score now" }));
-    await waitFor(() => expect(screen.getByTestId("score-now-time-budget")).toHaveTextContent("Stopped at the time budget: 6 still to score."));
-    first.unmount();
-
-    // a stop reason this page does not know (a newer worker) parses as none, not as an error
-    vi.mocked(fetch).mockImplementation(async () => new Response(JSON.stringify({ ...polled({ status: "done", finishedAt: NOW, queue: null }), result: { scored: 1, remaining: 2, stopped: "something_new" } }), { status: 200 }));
-    render(wrap(<ScoreNowButton jobId={7} />));
-    await userEvent.click(screen.getByRole("button", { name: "Score now" }));
-    await waitFor(() => expect(refresh).toHaveBeenCalledTimes(2));
-    expect(screen.queryByTestId("score-now-time-budget")).toBeNull();
+    served = polled({ status: "failed", startedAt: NOW, finishedAt: NOW, queue: null, result: { error: "score_stopped", scored: 0, failed: 0, remaining: 1, stopped: "time_budget" } });
+    render(wrap(<ScoreNowButton jobId={7} />, locale));
+    const button = screen.getByRole("button", { name: locale === "en" ? "Score now" : "立即打分" });
+    await userEvent.click(button);
+    expect(scoreJobNowAction).toHaveBeenCalledWith({ jobId: 7 });
+    await waitFor(() => expect(screen.getByTestId("score-now-time-budget")).toHaveTextContent(locale === "en" ? "Stopped at the time budget: 1 still to score." : "到了时间预算，还剩 1 条没打分。"));
     expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByTestId("score-now-failed")).toBeNull();
+    expect(button).toBeEnabled();
+    expect(refresh).not.toHaveBeenCalled();
   });
 
-  it("shows the time-budget remainder in Chinese", async () => {
+  it("ignores an unknown stop reason from a newer worker", async () => {
     scoreJobNowAction.mockResolvedValue({ status: "queued", request: 5, kind: "score_jobs", existing: false, nonce: 1 });
-    served = polled({ status: "done", finishedAt: NOW, queue: null, result: { scored: 1, remaining: 6, stopped: "time_budget" } });
-    render(wrap(<ScoreNowButton jobId={7} />, "zh"));
-    await userEvent.click(screen.getByRole("button", { name: "立即打分" }));
-    await waitFor(() => expect(screen.getByTestId("score-now-time-budget")).toHaveTextContent("到了时间预算，还剩 6 条没打分。"));
+    // a stop reason this page does not know (a newer worker) parses as none, not as an error
+    vi.mocked(fetch).mockImplementation(async () => new Response(JSON.stringify({ ...polled({ status: "done", finishedAt: NOW, queue: null }), result: { scored: 1, failed: 0, remaining: 0, stopped: "something_new" } }), { status: 200 }));
+    render(wrap(<ScoreNowButton jobId={7} />));
+    await userEvent.click(screen.getByRole("button", { name: "Score now" }));
+    await waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
+    expect(screen.queryByTestId("score-now-time-budget")).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 
   it("is off with the reason and a link to /me while the profile is incomplete", () => {
@@ -232,6 +232,19 @@ describe("ActionsPanel: score the backlog", () => {
   it("shows a scoring request's budget remainder in Chinese", () => {
     render(wrap(<ActionsPanel status={status({ requests: [request({ kind: "rescore_stale", status: "done", remaining: 12, stopped: "time_budget" })] })} onRequested={() => {}} channelChoices={[]} timezone="Europe/Berlin" />, "zh"));
     expect(screen.getByTestId("control-request-time-budget")).toHaveTextContent("到了时间预算，还剩 12 条没打分。");
+  });
+
+  it.each(["score_jobs", "rescore_stale"] as const)("a %s budget exhausted during preparation takes priority over the generic stopped error", (kind) => {
+    const remaining = kind === "score_jobs" ? 1 : 12;
+    const stopped = status({ requests: [request({ kind, status: "failed", startedAt: NOW, finishedAt: NOW, jobIds: kind === "score_jobs" ? [7] : null, error: kind === "score_jobs" ? "score_stopped" : "rescore_stopped", scored: 0, failed: 0, remaining, stopped: "time_budget" })] });
+    const { unmount } = render(panel(stopped));
+    expect(screen.getByTestId("control-request-time-budget")).toHaveTextContent(`Stopped at the time budget: ${remaining} still to score.`);
+    expect(screen.getByTestId("control-request")).not.toHaveTextContent("cancelled or AI unavailable");
+    unmount();
+
+    render(wrap(<ActionsPanel status={stopped} onRequested={() => {}} channelChoices={[]} timezone="Europe/Berlin" />, "zh"));
+    expect(screen.getByTestId("control-request-time-budget")).toHaveTextContent(`到了时间预算，还剩 ${remaining} 条没打分。`);
+    expect(screen.getByTestId("control-request")).not.toHaveTextContent("被取消或 AI 不可用");
   });
 
   it("lists the request with its jobs and its outcome", () => {
