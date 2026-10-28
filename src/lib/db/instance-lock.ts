@@ -2,6 +2,7 @@ import os from "node:os";
 
 import postgres, { type Sql } from "postgres";
 
+import { databaseUrlFor, type Db } from "./client";
 import { assertTestDatabase } from "./test-guard";
 
 /**
@@ -22,6 +23,8 @@ export interface LockHolder {
 }
 
 export interface InstanceLock {
+  /** Backend of the dedicated session that acquired the lock. */
+  pid: number;
   /**
    * Is the lock still ours? `held`: yes. `reacquired`: the connection had dropped (database restart) and the lock was
    * taken again. `lost`: another process holds it now; the caller should stop. `unknown`: the database cannot be
@@ -38,6 +41,9 @@ export interface AcquireOptions {
   name: string;
   key?: readonly [number, number];
   connectTimeoutSeconds?: number;
+  mode?: "try" | "wait";
+  /** Cancels acquisition only. Once acquired, the caller keeps the session until its work settles. */
+  signal?: AbortSignal;
 }
 
 /** Queries `check` tries before it answers "unknown". */
@@ -96,7 +102,9 @@ async function holderOf(sql: Sql, k1: number, k2: number): Promise<LockHolder | 
  * Take the lock on a dedicated connection (no idle timeout, no lifetime limit: closing it would drop the lock), or
  * report who holds it. Throws only when the database cannot be reached.
  */
-export async function acquireInstanceLock(url: string, options: AcquireOptions): Promise<AcquireResult> {
+export async function acquireInstanceLock(database: string | Db, options: AcquireOptions): Promise<AcquireResult> {
+  if (options.signal?.aborted) return { acquired: false, holder: null };
+  const url = typeof database === "string" ? database : databaseUrlFor(database);
   const [k1, k2] = options.key ?? AI_WORKER_LOCK_KEY;
   assertTestDatabase(url);
   const sql = postgres(url, {
@@ -108,13 +116,23 @@ export async function acquireInstanceLock(url: string, options: AcquireOptions):
     onnotice: () => {},
   });
   let locked: boolean;
+  let pid: number;
+  const cancel = (): void => { void sql.end({ timeout: 0 }).catch(() => {}); };
+  options.signal?.addEventListener("abort", cancel, { once: true });
   try {
-    locked = await tryLock(sql, k1, k2);
+    const rows = options.mode === "wait"
+      ? await sql<{ locked: boolean; pid: number }[]>`select true as locked, pg_backend_pid() as pid, pg_advisory_lock(${k1}::int, ${k2}::int)`
+      : await sql<{ locked: boolean; pid: number }[]>`select pg_try_advisory_lock(${k1}::int, ${k2}::int) as locked, pg_backend_pid() as pid`;
+    locked = rows[0]?.locked === true;
+    pid = rows[0]?.pid ?? 0;
   } catch (error) {
     await sql.end({ timeout: 5 }).catch(() => {});
+    if (options.signal?.aborted) return { acquired: false, holder: null };
     throw error;
+  } finally {
+    options.signal?.removeEventListener("abort", cancel);
   }
-  if (!locked) {
+  if (!locked || options.signal?.aborted) {
     const holder = await holderOf(sql, k1, k2);
     await sql.end({ timeout: 5 }).catch(() => {});
     return { acquired: false, holder };
@@ -123,6 +141,7 @@ export async function acquireInstanceLock(url: string, options: AcquireOptions):
   return {
     acquired: true,
     lock: {
+      pid,
       async check() {
         if (released) return "lost";
         const look = async (): Promise<"held" | "reacquired" | "lost"> => {

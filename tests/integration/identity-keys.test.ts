@@ -10,6 +10,7 @@ import { closeDb, getDb, schema } from "@/lib/db";
 import { runMigrations } from "@/lib/db/migrate";
 import { getRuntimeState } from "@/lib/db/repos/runtime-state";
 import { syncCompanyDisplayNames } from "@/lib/pipeline/company-names";
+import { storedLocations } from "@/lib/pipeline/dedupe";
 import { refreshIdentityKeysIfStale, refreshStoredIdentityKeys, runPipeline, splitMergedJobsOf } from "@/lib/pipeline";
 import { IDENTITY_KEYS_STATE_KEY, IDENTITY_KEYS_VERSION, legacyCompanyKey, legacyTitleKey } from "@/lib/pipeline/identity-keys";
 
@@ -406,8 +407,62 @@ describe("what a recompute and a fold keep", () => {
 });
 
 describe("splitting leaves alone what the user acted on and what was merged for other reasons", () => {
+  it.each([false, true])("splits old city collisions and rebuilds the retained job's locations (user state: %s)", async (acted) => {
+    const registry = registryOf([
+      posting("t1", { title: "Engineer", city: "東京", country: "JP", description: "Tokyo office role" }),
+      posting("t2", { title: "Engineer", city: "東京", country: "JP", description: "Tokyo office role" }),
+      posting("o1", { title: "Engineer", city: "大阪", country: "JP", description: "Osaka office role" }),
+    ]);
+    await run(registry);
+    const [tokyo, osaka] = await allJobs();
+    expect(tokyo).toBeDefined();
+    expect(osaka).toBeDefined();
+    await mergeAsVersion1(tokyo!.id, [osaka!.id]);
+    await getDb().update(schema.jobs).set({ locationsJson: [...storedLocations(tokyo!), ...storedLocations(osaka!)] }).where(eq(schema.jobs.id, tokyo!.id));
+    if (acted) {
+      await getDb().insert(schema.jobFavorites).values({ jobId: tokyo!.id });
+      await getDb().insert(schema.applications).values({ jobId: tokyo!.id, status: "applied", notesMd: "keep this application" });
+    }
+
+    const repaired = await reprocessSplitMerged(registry);
+    expect(repaired.split).toMatchObject({ jobsSplit: 1, sourcesUnlinked: 1 });
+    expect(repaired.pipeline.created).toBe(1);
+    const jobs = await allJobs();
+    expect(jobs).toHaveLength(2);
+    expect(jobs.find((job) => job.id === tokyo!.id)?.locationsJson).toMatchObject([{ city: "東京", isPrimary: true }]);
+    expect(jobs.find((job) => job.id !== tokyo!.id)?.locationsJson).toMatchObject([{ city: "大阪", isPrimary: true }]);
+    expect((await allSources()).filter((source) => source.jobId === tokyo!.id)).toHaveLength(2);
+    if (acted) {
+      expect(await getDb().select().from(schema.jobFavorites)).toMatchObject([{ jobId: tokyo!.id }]);
+      expect(await getDb().select().from(schema.applications)).toMatchObject([{ jobId: tokyo!.id, notesMd: "keep this application" }]);
+    }
+    const again = await reprocessSplitMerged(registry);
+    expect(again.split).toMatchObject({ jobsSplit: 0, sourcesUnlinked: 0 });
+    expect(await allJobs()).toHaveLength(2);
+  });
+
+  it.each(["watched", "blacklisted"] as const)("clearing %s on either spelling clears its reciprocal alias only", async (mark) => {
+    const full = "Example, Inc. (株式会社サンプル)";
+    await run(registryOf([posting("mixed", { company: full, title: "Engineer" })]));
+    await writeVersion1Keys();
+    await getDb().update(schema.companies).set({ watched: true, blacklisted: true }).where(eq(schema.companies.name, full));
+    await refreshIdentityKeysIfStale(getDb(), { config: pipelineConfig, logger: quietLogger });
+    const siblings = await allCompanies();
+    expect(siblings).toHaveLength(2);
+    // Sharing an alias in one direction is not enough to share marks.
+    const [unrelated] = await getDb().insert(schema.companies).values({ name: "Other", nameNorm: "other", aliases: [full], watched: true, blacklisted: true }).returning();
+    for (const sibling of siblings) {
+      await getDb().update(schema.companies).set({ [mark]: true }).where(inArray(schema.companies.id, siblings.map((row) => row.id)));
+      await getDb().update(schema.companies).set({ [mark]: false }).where(eq(schema.companies.id, sibling.id));
+      const rows = await allCompanies();
+      expect(rows.filter((row) => row.id !== unrelated!.id).map((row) => row[mark])).toEqual([false, false]);
+      expect(rows.find((row) => row.id === unrelated!.id)?.[mark]).toBe(true);
+      const otherMark = mark === "watched" ? "blacklisted" : "watched";
+      expect(rows.every((row) => row[otherMark])).toBe(true);
+    }
+  });
+
   it("two Japanese cities at one company and title are two jobs", async () => {
-    // (jobs an older version merged across such cities are not split yet: the merged job lists both cities)
     await run(registryOf([
       posting("t1", { company: "Mercari Inc.", title: "エンジニア", city: "東京", country: "JP", description: "Tokyo office role" }),
       posting("o1", { company: "Mercari Inc.", title: "エンジニア", city: "大阪", country: "JP", description: "Osaka office role" }),
