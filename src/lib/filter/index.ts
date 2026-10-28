@@ -58,7 +58,7 @@ export interface FilterOptions {
   pipeline: PipelineConfig;
   /** me.yaml for a language gate (`currentPreferences().me`); null when it cannot be read: a gate without `at_least` then does nothing and is reported. */
   me: DealBreakerMe | null;
-  /** Force these jobs (the user changed a decision); default: only changed inputs. */
+  /** Force these jobs (the user changed a decision); default: changed inputs, or all eligible jobs for timed deal-breakers. */
   jobIds?: readonly number[];
   logger?: ChannelLogger;
   signal?: AbortSignal;
@@ -124,10 +124,11 @@ export function evaluateBatch(
 const sameReasons = (a: readonly string[], b: readonly string[]): boolean => a.length === b.length && a.every((value, i) => value === b[i]);
 
 /**
- * Evaluate changed jobs that are not closed against the preferences and store one result per (job,
+ * Evaluate eligible jobs against the preferences and store one result per (job,
  * profile snapshot) in `scores`. Idempotent: a second run with the same snapshot and the same jobs
- * writes nothing. Jobs that changed since (a source delivered new details) get their result updated
- * in place; when the preferences change the snapshot changes, so every job gets a new row.
+ * skips unchanged inputs unless deal-breakers need to run under a time budget. Jobs that changed since
+ * (a source delivered new details) get their result updated in place; when the preferences change
+ * the snapshot changes, so every job gets a new row.
  */
 export async function runFilter(db: Db, options: FilterOptions): Promise<FilterRunResult> {
   const watchedCompanies = options.watchedCompanies ?? currentWatchedCompanies(options.logger);
@@ -135,6 +136,9 @@ export async function runFilter(db: Db, options: FilterOptions): Promise<FilterR
   const configHash = createHash("sha256").update(JSON.stringify([1, options.preferences, options.pipeline, options.me, watchedCompanies])).digest("hex");
   const compiled: CompiledFilter = compileFilter(options.preferences, options.pipeline, { me: options.me, watchedCompanies });
   const dealBreakers = startDealBreakerRun(compiled.dealBreakers, options.timeBox ?? vmTimeBox);
+  // Phrase and visa rule health depends on this run's time budget, which an input fingerprint cannot predict.
+  // Read unchanged jobs too so timeouts are reported and previous vetoes survive any incomplete evaluation.
+  const skipUnchanged = compiled.dealBreakers.rules.every(({ rule }) => rule.type === "language_gate");
   const result: FilterRunResult = {
     snapshotId: options.snapshotId,
     evaluated: 0,
@@ -154,7 +158,7 @@ export async function runFilter(db: Db, options: FilterOptions): Promise<FilterR
       result.aborted = true;
       break;
     }
-    const batch = await listFilterCandidates(db, { afterId, limit: options.pipeline.batch_size, jobIds: options.jobIds, snapshotId: options.snapshotId, configHash });
+    const batch = await listFilterCandidates(db, { afterId, limit: options.pipeline.batch_size, jobIds: options.jobIds, snapshotId: options.snapshotId, configHash: skipUnchanged ? configHash : undefined });
     if (batch.length === 0) break;
     afterId = batch[batch.length - 1]?.id ?? afterId;
 

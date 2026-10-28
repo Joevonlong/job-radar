@@ -13,6 +13,7 @@ import type { CompanyEntry } from "@/lib/config";
 import { runCycle } from "@/lib/cycle/run-cycle";
 import { closeDb, createConnection, getAtsBoard, getChannelRows, getDb, listRawPostingsForChannel, listRunsForCycle, schema, touchRawPostings, upsertRawPostings } from "@/lib/db";
 import { runMigrations } from "@/lib/db/migrate";
+import { rawPostingColumns } from "@/lib/db/repos/raw-postings";
 import { recordAtsBoardCheck, type AtsBoardUpdate } from "@/lib/db/repos/ats-boards";
 import { markJobsPossiblyClosed, touchJobsSeen } from "@/lib/db/repos/jobs";
 import { runMaintenance } from "@/lib/pipeline";
@@ -510,7 +511,7 @@ describe("runCycle with the greenhouse channel", () => {
     const [raw] = await db.insert(schema.rawPostings).values({
       channelId: "greenhouse", externalId: "stale-x", fetchedAt: old,
       payloadJson: { source: { ats: "greenhouse", token: "X" }, posting: { id: "stale-x" } },
-    }).returning();
+    }).returning(rawPostingColumns());
     await db.insert(schema.jobSources).values({ jobId: job!.id, rawPostingId: raw!.id, channelId: "greenhouse", firstSeenAt: old });
     await recordAtsBoardCheck(db, key, {
       status: "ok", checkedAt: old, filterFingerprint: "3:previous-filter:10", externalIds: ["stale-x"], total: 1, kept: 1,

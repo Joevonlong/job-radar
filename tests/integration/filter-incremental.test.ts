@@ -91,11 +91,44 @@ it("retries partial deal-breaker judgements and keeps AI fields when updating fi
   expect(await runFilter(db, input)).toMatchObject({ evaluated: 2 });
   const complete = { ...input, timeBox: (work: () => void) => { work(); return true; } };
   expect(await runFilter(db, complete)).toMatchObject({ evaluated: 2 });
-  expect(await runFilter(db, complete)).toMatchObject({ evaluated: 0 });
+  // Timed rules must judge unchanged jobs too: a later run can run out of budget without an input change.
+  expect(await runFilter(db, complete)).toMatchObject({ evaluated: 2 });
   await db.update(schema.scores).set({ score: 80, aiScore: 85, signalBonus: 2, rankValue: 82, model: "fixture" }).where(eq(schema.scores.jobId, rows[0]!.id));
   await db.update(schema.jobs).set({ title: "New title" }).where(eq(schema.jobs.id, rows[0]!.id));
-  expect(await runFilter(db, complete)).toMatchObject({ evaluated: 1 });
+  expect(await runFilter(db, complete)).toMatchObject({ evaluated: 2 });
   expect(await db.select().from(schema.scores).where(eq(schema.scores.jobId, rows[0]!.id))).toMatchObject([{ score: 80, aiScore: 85, signalBonus: 2, rankValue: 82, model: "fixture" }]);
+});
+
+it.each(["phrase", "visa_not_offered"] as const)("reports a later %s timeout for unchanged jobs and recovers without losing stored vetoes", async (type) => {
+  const { rows, options } = await fixture();
+  const preferences = prefs((raw) => {
+    raw.deal_breakers = [type === "phrase"
+      ? { id: "timed-rule", label: "On-site", type, patterns: ["fully on-site"] }
+      : { id: "timed-rule", label: "Visa refusal", type }];
+  });
+  await db.update(schema.jobs).set({ description: "Fully on-site. We are unable to offer visa sponsorship for this role." }).where(eq(schema.jobs.id, rows[0]!.id));
+  const input = {
+    ...options, preferences, me: { languages: [], needs_visa_sponsorship: true },
+    pipeline: { ...options.pipeline, batch_size: 1 },
+    timeBox: (work: () => void) => { work(); return true; },
+  };
+  expect(await runFilter(db, input)).toMatchObject({ evaluated: 2, filteredOut: 1, dealBreakerWarnings: [] });
+  const verdicts = () => db.select({ jobId: schema.scores.jobId, result: schema.scores.filterResult, reasons: schema.scores.filterReasons }).from(schema.scores).orderBy(schema.scores.jobId);
+  const before = await verdicts();
+
+  const stopped = await runFilter(db, { ...input, timeBox: () => false });
+  expect(stopped.dealBreakerWarnings).toEqual([{ id: "timed-rule", code: "too_slow" }]);
+  expect(stopped).toMatchObject({ evaluated: 2, updated: 0, unchanged: 2 });
+  expect(await verdicts()).toEqual(before);
+  expect(await db.select({ input: schema.scores.filterInputHash, config: schema.scores.filterConfigHash }).from(schema.scores)).toEqual([{ input: null, config: null }, { input: null, config: null }]);
+  expect(await runFilter(db, input)).toMatchObject({ evaluated: 2, updated: 0, filteredOut: 1, dealBreakerWarnings: [] });
+  expect(await verdicts()).toEqual(before);
+
+  await db.update(schema.jobs).set({ description: "Build software." }).where(eq(schema.jobs.id, rows[0]!.id));
+  expect(await runFilter(db, input)).toMatchObject({ evaluated: 2, updated: 1, filteredOut: 0, dealBreakerWarnings: [] });
+  const withoutTimedRules = { ...input, preferences: prefs() };
+  expect(await runFilter(db, withoutTimedRules)).toMatchObject({ evaluated: 2 });
+  expect(await runFilter(db, withoutTimedRules)).toMatchObject({ evaluated: 0 });
 });
 
 it("distinguishes a missing description from an empty description in remote-scope rules", async () => {

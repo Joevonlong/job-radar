@@ -59,11 +59,13 @@ async function successfulRun(db: Db, channelId: string, startedAt = normalRun, w
 
 async function source(db: Db, jobId: number, externalId: string, channelId: string, token?: string) {
   await channel(db, channelId);
-  const [raw] = await db.insert(schema.rawPostings).values({
-    channelId, externalId, fetchedAt: lastSeen,
-    payloadJson: { source: { ats: channelId, ...(token === undefined ? {} : { token }) }, posting: { id: externalId } },
-  }).returning();
-  await db.insert(schema.jobSources).values({ jobId, rawPostingId: raw!.id, channelId, firstSeenAt: lastSeen });
+  const payload = { source: { ats: channelId, ...(token === undefined ? {} : { token }) }, posting: { id: externalId } };
+  // This fixture also runs before fingerprint columns exist; even omitted Drizzle fields enter an INSERT as DEFAULT.
+  const [raw] = await db.execute<{ id: string }>(sql`
+    insert into raw_postings (channel_id, external_id, fetched_at, payload_json)
+    values (${channelId}, ${externalId}, ${lastSeen.toISOString()}::timestamptz, ${JSON.stringify(payload)}::jsonb)
+    returning id`);
+  await db.insert(schema.jobSources).values({ jobId, rawPostingId: Number(raw!.id), channelId, firstSeenAt: lastSeen });
   return raw!;
 }
 
@@ -466,10 +468,9 @@ describe("upgrading legacy ATS board evidence", () => {
         const db = connection.db;
         const absent = await overdueJob(db, "D", srBoard.token, "smartrecruiters");
         await successfulRun(db, "smartrecruiters");
-        await db.insert(schema.rawPostings).values({
-          channelId: "smartrecruiters", externalId: details[0]!.id, fetchedAt: checked,
-          payloadJson: { source: { ats: "smartrecruiters", token: srBoard.token }, posting: details[0] },
-        });
+        const payload = { source: { ats: "smartrecruiters", token: srBoard.token }, posting: details[0] };
+        await db.execute(sql`insert into raw_postings (channel_id, external_id, fetched_at, payload_json)
+          values ('smartrecruiters', ${details[0]!.id}, ${checked.toISOString()}::timestamptz, ${JSON.stringify(payload)}::jsonb)`);
         const before = await boardState(db, srBoard.token, {
           ats: "smartrecruiters", filterFingerprint: "2:x:10", etag: 'W/"p1"', lastOkAt: checked,
           lastChangedAt: checked, externalIds: [details[0]!.id], lastTotal: 2, lastKept: 1,
@@ -477,6 +478,9 @@ describe("upgrading legacy ATS board evidence", () => {
         fs.writeFileSync(journalFile, JSON.stringify({ ...journal, entries: journal.entries.filter((entry) => entry.idx <= added.idx) }));
         await runMigrations({ url: target.toString(), migrationsFolder: folder });
         expect.soft(await getAtsBoard(db, { ats: "smartrecruiters", token: srBoard.token })).toEqual({ ...before, lastOkAt: null, etag: null });
+
+        // A current runner applies all pending migrations before collecting; keep the reset assertion above isolated.
+        await runMigrations({ url: target.toString() });
 
         let complete = false;
         const { fetch, requests } = routedFetch([

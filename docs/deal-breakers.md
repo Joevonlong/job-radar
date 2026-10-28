@@ -136,7 +136,8 @@ own, so the time a pattern may take is limited in three places:
   `rule_budget_ms` in one filter run; a rule that uses it up is stopped for the rest of that run. A job such a rule did not
   judge keeps the veto it had from the rule before, so a busy machine never lets a vetoed job through. Both cases show as
   `too_slow` in the filter step's result (`dealBreakerWarnings`), the step counts as partial on the runs view, and the
-  runner log names the rule.
+  runner log names the rule. Phrase and visa rules recheck eligible jobs even when their inputs are unchanged, so a later
+  timeout is still reported; without these timed rules, unchanged inputs can skip evaluation.
 - **On the pages.** The card's preview stops after `preview_ms` and then says how many jobs it counted; the job page gives
   up explaining a veto after `match_ms`.
 
