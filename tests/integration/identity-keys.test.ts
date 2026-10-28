@@ -209,7 +209,7 @@ describe("recomputing the stored keys after the upgrade", () => {
     expect((await allJobs()).find((job) => job.id === yandexJob.id)!.companyId).toBe(early!.id);
     expect((await allJobs()).filter((job) => job.title === "Platform Engineer").map((job) => job.companyId)).toEqual([acme.id]);
     expect((await allJobs()).map((job) => job.titleNorm)).toEqual([
-      "applied ai engineer", "ki entwickler", "c++ engineer", "grosse and ubung engineer", "разработчик", "ingeniør", "シニアaiエンシニア", "platform engineer",
+      "applied ai engineer", "ki entwickler", "c++ engineer", "grosse and ubung engineer", "разработчик", "ingeniør", "シニアaiエンジニア", "platform engineer",
     ]);
 
     // once per key version; a forced run finds nothing more to do

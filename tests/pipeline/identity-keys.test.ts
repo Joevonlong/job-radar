@@ -123,6 +123,19 @@ describe("identity keys in other scripts", () => {
     expect(normalizeTitle("Μηχανικός Λογισμικού (m/w/d)")).toBe("μηχανικος λογισμικου");
   });
 
+  it("marks that belong to the letter stay: words of Devanagari, Thai and Japanese do not collide", () => {
+    for (const [a, b] of [["कमल", "कमला"], ["राम", "रम"], ["กิน", "กัน"], ["ジム", "シム"], ["バイト", "ハイト"]] as const) {
+      expect(normalizeTitle(a)).not.toBe(normalizeTitle(b));
+      expect(companyKey(a)).not.toBe(companyKey(b));
+    }
+    expect(normalizeTitle("バックエンドエンジニア")).toBe("バックエンドエンジニア");
+    // half-width katakana and its voicing mark compose to the full-width letter
+    expect(normalizeTitle("ｴﾝｼﾞﾆｱ")).toBe("エンジニア");
+    // diacritics on Greek and Cyrillic letters still fold
+    expect(normalizeTitle("Μηχανικός")).toBe(normalizeTitle("Μηχανικος"));
+    expect(companyKey("Ёлка")).toBe(companyKey("Елка"));
+  });
+
   it("the gender markers and legal forms around them still go", () => {
     expect(normalizeTitle("Разработчик (m/w/d)")).toBe(normalizeTitle("Разработчик"));
     expect(companyKey("Яндекс GmbH")).toBe("яндекс");

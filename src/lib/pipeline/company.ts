@@ -1,26 +1,26 @@
 import type { PipelineConfig } from "@/lib/config";
 import { MAX_FILTER_VALUE_CHARS } from "@/lib/jobs/constants";
 
+import { foldDiacritics } from "./fold";
 import { compileRules, matchesAny } from "./rules";
 
 /**
- * Company-name key (ported from the legacy `normalizeCompanyKey`): ß as ss (like the title key), accents folded (NFKD, combining marks removed), lower case,
- * letters and digits of every script kept and everything else a word break, trailing legal forms (GmbH, AG, SE, Inc.,
+ * Company-name key (ported from the legacy `normalizeCompanyKey`): ß as ss (like the title key), diacritics folded
+ * (`foldDiacritics`), lower case, letters (with the marks of their script) and digits of every script kept and everything
+ * else a word break, trailing legal forms (GmbH, AG, SE, Inc.,
  * "GmbH & Co. KG" ...) dropped, words joined with hyphens. Parent / subsidiary / brand names are never merged heuristically:
  * "Acme AI" and "Acme" stay different; only the alias table of pipeline.yaml joins different spellings. A name without any
  * letter or digit (only punctuation or emoji) keys as itself in lower case, so it never shares the empty key with another one.
  */
 export function normalizeCompanyKey(name: string, legalSuffixes: readonly string[]): string {
   const suffixes = new Set(legalSuffixes.map((s) => s.toLowerCase()));
-  const words = name
-    .replace(/[ßẞ]/g, "ss")
-    .normalize("NFKD")
-    .replace(/\p{M}/gu, "")
+  const words = foldDiacritics(name.replace(/[ßẞ]/g, "ss"))
     .toLocaleLowerCase("en")
     .replace(/&/g, " and ")
     // "g.m.b.h." -> "gmbh": a dot after a single letter joins the letters
     .replace(/\b([a-z])\./g, "$1")
-    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .replace(/[^\p{L}\p{M}\p{N}]+/gu, " ")
+    .normalize("NFC")
     .trim()
     .split(/\s+/)
     .filter(Boolean);
