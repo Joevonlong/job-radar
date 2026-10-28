@@ -5153,6 +5153,7 @@
         "stoppedHint": "Read the log: {logs}; once fixed, docker compose up -d {service}",
         "unhealthy": "Running, but the healthcheck says unhealthy",
         "unhealthyHint": "{logs}; then docker compose restart {service}",
+        "notInUse": "{detail}; no channel that uses it is on (linkedin-guest, indeed, jobspy-google), so nothing needs it yet",
         "starting": "Running, the healthcheck is still starting",
         "startingHint": "Wait a minute or two and run pnpm run doctor again; if it stays like this, read the log: {logs}",
         "runningHealthy": "Running, healthy",

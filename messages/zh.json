@@ -5153,6 +5153,7 @@
         "stoppedHint": "看日志：{logs}；修好后 docker compose up -d {service}",
         "unhealthy": "运行中，但 healthcheck 是 unhealthy",
         "unhealthyHint": "{logs}；然后 docker compose restart {service}",
+        "notInUse": "{detail}；用到它的通道（linkedin-guest、indeed、jobspy-google）都没开，暂时没有谁需要它",
         "starting": "运行中，healthcheck 还在 starting",
         "startingHint": "等一两分钟再运行 pnpm run doctor；一直不好就看日志：{logs}",
         "runningHealthy": "运行中，healthy",

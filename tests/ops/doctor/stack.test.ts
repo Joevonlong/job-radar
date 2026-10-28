@@ -1,11 +1,14 @@
 // @vitest-environment node
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
+import { createIndeedChannel, createJobspyGoogleChannel, createLinkedinGuestChannel, JOBSPY_CHANNEL_IDS } from "@/lib/channels/jobspy";
+import * as marketResolve from "@/lib/market/resolve";
 import { composeServicesCheck, dbConnectCheck, dockerDaemonCheck, migrationsCheck, runnerHeartbeatCheck, webCheck } from "@/lib/ops/doctor/checks/stack";
 import { parseComposePs } from "@/lib/ops/doctor/shared";
 import { SkipCheck } from "@/lib/ops/doctor";
 
 import { ago, composeJson, httpDown, httpOk, makeContext, only, ran, results, sourcesView } from "./helpers";
+import { fixtureMarket } from "../../pipeline/helpers";
 
 const DOCKER_INFO = "docker info --format {{.ServerVersion}}";
 const COMPOSE_PS = "docker compose -p job-radar ps -a --format json";
@@ -62,6 +65,86 @@ describe("compose.<service>", () => {
     const map = await byService(makeContext({ commands: { [COMPOSE_PS]: ran(composeJson({ jobspy: null })) }, probes: { http: async (url) => (url.includes("8000") ? httpDown() : httpOk('{"db":"ok"}')) } }));
     expect(map.get("compose.jobspy")).toMatchObject({ status: "fail", detail: "compose 项目 job-radar 里没有这个容器" });
     expect(map.get("compose.jobspy")?.hint).toContain("scripts/ops/deploy.sh");
+  });
+
+  describe("jobspy while no channel that uses it is on", () => {
+    const jobspyOff = (channels: Record<string, unknown>): void => {
+      const linkedin = channels.linkedin as Record<string, Record<string, unknown>>;
+      const sources = channels.sources as Record<string, Record<string, unknown>>;
+      linkedin.guest!.enabled = false;
+      sources.indeed!.enabled = false;
+      sources.jobspy_google!.enabled = false;
+    };
+    const sidecarDown = { http: async (url: string) => (url.includes("8000") ? httpDown() : httpOk('{"db":"ok"}')) };
+
+    it("the list of sidecar channels is the one the jobspy module registers", () => {
+      expect([createLinkedinGuestChannel(), createIndeedChannel(), createJobspyGoogleChannel()].map((c) => c.id)).toEqual([...JOBSPY_CHANNEL_IDS]);
+    });
+
+    it("an unhealthy, stopped or missing sidecar is a warning that says nothing needs it", async () => {
+      for (const jobspy of [{ Health: "unhealthy" }, { State: "restarting", Health: "", ExitCode: 3 }, null]) {
+        const map = await byService(makeContext({ channels: jobspyOff, commands: { [COMPOSE_PS]: ran(composeJson({ jobspy })) }, probes: sidecarDown }));
+        expect(map.get("compose.jobspy")?.status, JSON.stringify(jobspy)).toBe("warn");
+        expect(map.get("compose.jobspy")?.detail).toContain("linkedin-guest、indeed、jobspy-google");
+        expect(map.get("compose.jobspy")?.hint).toBeTruthy();
+      }
+    });
+
+    it("a single channel switched on makes it a failure again; other services always fail", async () => {
+      for (const on of ["guest", "indeed", "jobspy_google"]) {
+        const channels = (raw: Record<string, unknown>): void => {
+          jobspyOff(raw);
+          const block = on === "guest" ? (raw.linkedin as Record<string, Record<string, unknown>>).guest : (raw.sources as Record<string, Record<string, unknown>>)[on];
+          block!.enabled = true;
+        };
+        const map = await byService(makeContext({ channels, commands: { [COMPOSE_PS]: ran(composeJson({ jobspy: { Health: "unhealthy" } })) } }));
+        expect(map.get("compose.jobspy")?.status, on).toBe("fail");
+      }
+      const map = await byService(makeContext({ channels: jobspyOff, commands: { [COMPOSE_PS]: ran(composeJson({ runner: { Health: "unhealthy" } })) } }));
+      expect(map.get("compose.runner")?.status).toBe("fail");
+    });
+
+    it.each(["guest", "indeed", "jobspy_google"])("%s needs the sidecar only when enabled for the current market", async (on) => {
+      const currentMarket = vi.spyOn(marketResolve, "loadMarket").mockReturnValue(fixtureMarket({ pack: "generic", country: "US", currency: "USD", home_language: "en" }));
+      try {
+        for (const [markets, status] of [[["FR"], "warn"], [["US"], "fail"], [undefined, "fail"]] as const) {
+          const channels = (raw: Record<string, unknown>): void => {
+            jobspyOff(raw);
+            const block = on === "guest" ? (raw.linkedin as Record<string, Record<string, unknown>>).guest : (raw.sources as Record<string, Record<string, unknown>>)[on];
+            block!.enabled = true;
+            block!.markets = markets;
+          };
+          const map = await byService(makeContext({ channels, commands: { [COMPOSE_PS]: ran(composeJson({ jobspy: { Health: "unhealthy" } })) } }));
+          expect(map.get("compose.jobspy")?.status, JSON.stringify(markets)).toBe(status);
+        }
+      } finally {
+        currentMarket.mockRestore();
+      }
+    });
+
+    it("market-bound channels do not need the sidecar while the market cannot be resolved", async () => {
+      const currentMarket = vi.spyOn(marketResolve, "loadMarket").mockImplementation(() => { throw new Error("market is unresolved"); });
+      try {
+        const channels = (raw: Record<string, unknown>): void => {
+          const linkedin = raw.linkedin as Record<string, Record<string, unknown>>;
+          const sources = raw.sources as Record<string, Record<string, unknown>>;
+          for (const block of [linkedin.guest!, sources.indeed!, sources.jobspy_google!]) {
+            block.enabled = true;
+            block.markets = ["US"];
+          }
+        };
+        const map = await byService(makeContext({ channels, commands: { [COMPOSE_PS]: ran(composeJson({ jobspy: { Health: "unhealthy" } })) } }));
+        expect(map.get("compose.jobspy")?.status).toBe("warn");
+      } finally {
+        currentMarket.mockRestore();
+      }
+    });
+
+    it("a port published beyond loopback stays a failure", async () => {
+      const exposed = { Publishers: [{ URL: "0.0.0.0", TargetPort: 8000, PublishedPort: 8000 }] };
+      const map = await byService(makeContext({ channels: jobspyOff, commands: { [COMPOSE_PS]: ran(composeJson({ jobspy: exposed })) } }));
+      expect(map.get("compose.jobspy")?.status).toBe("fail");
+    });
   });
 
   it("host processes instead of compose: warns (not fails) when web, runner and jobspy answer on the host", async () => {

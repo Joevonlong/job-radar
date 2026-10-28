@@ -174,7 +174,7 @@ workflow 级设置：`permissions: contents: read`（任何任务都不能写仓
 
 #### Install jobspy sidecar dependencies
 
-在 `jobspy/` 里 `python -m pip install -r requirements-dev.txt`，安装 sidecar 的运行依赖和测试依赖。本地请用虚拟环境：`python3.12 -m venv .venv && .venv/bin/pip install -r jobspy/requirements-dev.txt`。
+在 `jobspy/` 里 `python -m pip install --require-hashes -r requirements-dev.txt`，从锁文件安装 sidecar 的运行依赖和测试依赖：每个包（包括间接依赖）都是固定版本并带哈希，由 `requirements-dev.in` 生成（运行依赖的版本和 `requirements.txt` 一致，镜像也同样这样安装；见 [development.md](development.md#the-jobspy-sidecars-dependencies)）。报错提到哈希或缺少某个包，说明有人手改了锁文件，或者改了 `.in` 之后没有重新生成。本地请用虚拟环境：`python3.12 -m venv .venv && .venv/bin/pip install --require-hashes -r jobspy/requirements-dev.txt`。
 
 #### Jobspy sidecar tests
 
@@ -423,6 +423,10 @@ Linux 从零首次运行：在 Ubuntu runner 上用一份空的检出，按随�
 
 `bash tests/ops/gitignore-coverage.sh`。在一个放了 `.gitignore`、`.dockerignore` 副本的临时目录里，把 `.gitignore` 的每个条目变成根目录和子目录各一个样本文件（展开规则写在脚本开头；每个样本都先用 `git check-ignore` 确认 git 确实忽略它），用 `tests/fixtures/docker/context-list.Dockerfile`（`node:${{NODE_VERSION}}-slim`，`NODE_VERSION` 取自 Dockerfile，并在构建日志里核对）列出两个构建上下文，任何样本出现在上下文里就失败。否定条目（`!.env.example`、`data/` 的占位文件）在白名单里，各写明原因。失败时会列出漏进去的样本：把条目加进 `.dockerignore`，`.gitignore` 在任意深度匹配的，用 `**/` 写法。部署从 `git archive` 构建，看不到被忽略的文件；这一步覆盖的是 `pnpm stack:up` 和直接 `docker compose build`。约 10 秒。
 
+#### The runner restarts healthy with the sidecar stopped
+
+`docker compose stop jobspy`、`docker compose restart runner`，再 `docker compose up -d --no-recreate --wait --wait-timeout 180 runner`：sidecar 停着的时候，runner 也必须重新变成 healthy，而且启动 runner 不能把 sidecar 一起拉起来（之后它不在运行中的服务里）。用到 sidecar 的通道默认都关闭，所以 `compose.yaml` 里 runner 不依赖它，`scripts/ops/deploy.sh` 单独启动它；这一步失败说明这个依赖又被加回来了。约一分钟（runner 的 healthcheck 间隔）。
+
 #### Container logs on failure
 
 仅当前面的步骤失败时运行：`docker compose ps -a` 和每个服务最后 200 行日志。
@@ -498,12 +502,13 @@ B 使用同样的仅失败时上传条件，上传独立包装日志和产物目
 
 ## Dependabot
 
-`.github/dependabot.yml` 每周为三个生态系统开 PR：
+`.github/dependabot.yml` 每周为四个生态系统开 PR：
 
 | 生态系统 | 目录 | 说明 |
 |---|---|---|
 | `npm` | `/` | 最多 5 个未关闭 PR；字体包（`@fontsource/*`、`@fontsource-variable/*`）单独一个 PR（字体升级会改变所有页面的样子：合并前对比页面），其他 minor 和 patch 更新合并成一个 PR；忽略 `@types/node` 的 major 更新（类型跟随 `engines` 里的 Node 大版本） |
-| `pip` | `/jobspy` | 最多 3 个未关闭 PR；sidecar 的 Python 依赖 |
+| `pip` | `/jobspy` | 最多 3 个未关闭 PR；sidecar 的 Python 依赖，按 pip-compile 的布局：PR 改 `requirements*.in` 里的版本，并重新生成带哈希的锁文件 `requirements*.txt` |
+| `docker` | `/jobspy` | 最多 2 个未关闭 PR；`jobspy/Dockerfile` 基础镜像的 digest（根目录的 `Dockerfile` 用构建参数拼镜像标签，Dependabot 改不了） |
 | `github-actions` | `/` | 最多 3 个未关闭 PR；workflow 里固定的 action 版本 |
 
 Dependabot 的 PR 和其他 PR 跑同一条流水线。action 升级会改 `.github/`，因此选中全量覆盖、跑全部任务；如果它改了步骤名，`ci-docs` 会失败，直到本页更新。本页不写 action 版本号，所以单纯升级版本不需要改文档。
@@ -532,7 +537,7 @@ scripts/validate.sh            # shell 语法、i18n、lint、typecheck、单元
 pnpm build:runner
 bash tests/ops/proc-lib/cases.sh   # CI 另在固定 digest 的 bash:3.2、bash:5.2 镜像里各跑一遍（见该任务）
 pnpm exec drizzle-kit generate < /dev/null && git status --porcelain -- drizzle   # 必须没有输出
-(cd jobspy && python3.12 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt && .venv/bin/python -m pytest -q)
+(cd jobspy && python3.12 -m venv .venv && .venv/bin/pip install --require-hashes -r requirements-dev.txt && .venv/bin/python -m pytest -q)
 
 # 任务：integration（需要大版本 17 的 pg_dump / pg_restore，见该任务的步骤）
 export PG_DUMP_PATH=/path/to/pg_dump PG_RESTORE_PATH=/path/to/pg_restore REQUIRE_PG_TOOLS=1

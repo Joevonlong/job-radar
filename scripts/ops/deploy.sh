@@ -20,7 +20,8 @@
 #                  and its config-freeze capability is detected before checkout
 #   3  install     pnpm install --frozen-lockfile
 #   4  config      data/ folders exist; existing installs: pnpm config:migrate (preview only), pnpm config:check in memory,
-#                  compose config, then pnpm ops:freeze; first install: config:init without a freeze; .env present
+#                  compose config (refuse jobspy dependencies added by overrides), then pnpm ops:freeze; first install: config:init
+#                  without a freeze; .env present
 #                  targets without config-freeze use config:init + config:migrate --write here, leaving old markers alone
 #   5  backup      scripts/ops/backup.sh --label pre-deploy (only when the db is already running)
 #   6  build       git archive of the target commit into data/build/<commit>-<pid>, then docker compose -p job-radar build
@@ -29,8 +30,9 @@
 #   7  release     scripts/ops/prepare-release.sh <target commit>: the read-only release directory of the host ai-worker,
 #                  data/releases/ai-worker/<commit> (reused when it is already there); the running worker is not touched
 #   8  up          pnpm ops:drain (wait, bounded by schedule.yaml deploy.drain_timeout_seconds, for a running cycle to finish:
-#                  recreating the runner would cut it off), then docker compose -p job-radar up -d --wait (db / web / runner /
-#                  jobspy must turn healthy)
+#                  recreating the runner would cut it off), then docker compose -p job-radar up -d --wait db web runner (they
+#                  must turn healthy), then up -d --no-deps --wait jobspy on its own: a sidecar that does not turn healthy
+#                  only warns, the later steps still run, and the doctor (step 13) decides whether it needs attention
 #   9  migrate     pnpm migrate:run (the runner migrates at start-up too; this checks it and is a no-op then)
 #   10 ai-worker   scripts/ops/install-ai-worker.sh --release data/releases/ai-worker/<commit>: switches the service (a
 #                  launchd agent on macOS, a systemd user unit on Linux) to that release; the new worker must show evidence
@@ -476,6 +478,45 @@ fi
 run "Fix data/config/*.yaml as the error says (pnpm config:check names the file, the field and which layer it was read from)" pnpm config:check
 if [[ -f "$APP/.env" ]]; then say ".env exists"; else say "warning: .env does not exist: compose uses defaults, but Telegram and channel keys need it (cp .env.example .env and fill it in; see docs/deploy.md)"; fi
 run "The docker compose config has a syntax error: docker compose config shows where" docker compose -p "$PROJECT" config -q
+# Removing a dependency in compose.yaml does not remove an entry merged from a user's override. Even required:false
+# pulls the sidecar into the core up --wait. Refuse entries added by overrides before a freeze or service replacement,
+# but allow a supported old target whose own compose.yaml still has the dependency.
+# Consume the resolved model privately: it may contain secrets from env_file; only fixed dependency paths leave Node.
+echo "  \$ docker compose -p $PROJECT config --format json (check core dependencies on jobspy)"
+if [[ "$DRY_RUN" -eq 0 ]]; then
+  if ! jobspy_dependencies="$(compose config --format json | node -e '
+    const { readFileSync } = require("node:fs");
+    const { z } = require("zod");
+    try {
+      const service = z.object({ depends_on: z.record(z.string(), z.unknown()).optional() });
+      const schema = z.object({ services: z.object({ db: service, web: service, runner: service }) });
+      const { services } = schema.parse(JSON.parse(readFileSync(0, "utf8")));
+      const targetService = z.object({ depends_on: z.union([z.array(z.string()), z.record(z.string(), z.unknown())]).optional() });
+      const targetSchema = z.object({ services: z.object({ db: targetService, web: targetService, runner: targetService }) });
+      let target;
+      try {
+        // Step 4 has checked out and verified TARGET already. An unreadable own file grants no exemptions:
+        // every resolved jobspy dependency is still refused unless the target explicitly declares it.
+        target = targetSchema.parse(require("yaml").parse(readFileSync(process.argv[1] + "/compose.yaml", "utf8")));
+      } catch {}
+      const dependencies = Object.entries(services).filter(([, config]) => Object.hasOwn(config.depends_on ?? {}, "jobspy"));
+      const overrides = dependencies.filter(([name]) => {
+        const own = target?.services[name].depends_on ?? {};
+        return !(Array.isArray(own) ? own.includes("jobspy") : Object.hasOwn(own, "jobspy"));
+      });
+      process.stdout.write(overrides.length ? overrides.map(([name]) => name + ".depends_on.jobspy").join(", ")
+        : dependencies.length ? "target" : "");
+    } catch {
+      process.exitCode = 1;
+    }
+  ' "$APP")"; then
+    fail_step "cannot inspect the resolved Compose dependencies" "Check docker compose -p $PROJECT config -q and the Node dependency installation, then retry; no settings were frozen by this run"
+  elif [[ "$jobspy_dependencies" == target ]]; then
+    say "target compose.yaml depends on jobspy: keeping its original dependency behaviour; sidecar health may block this target's deployment"
+  elif [[ -n "$jobspy_dependencies" ]]; then
+    fail_step "the resolved Compose config still contains $jobspy_dependencies" "Remove those jobspy dependency entries from compose.override.yaml (or the active Compose override), keeping the db dependencies, then run deploy again; required: false still pulls jobspy into the core up --wait"
+  fi
+fi
 if [[ "$CONFIG_FREEZE_SUPPORTED" == 1 && "$EXISTING_INSTALL" == 1 ]]; then
   echo "  \$ pnpm ops:freeze --target $TARGET"
   if [[ "$DRY_RUN" == 0 ]]; then
@@ -545,14 +586,28 @@ else
     esac
   fi
 fi
-echo "  \$ docker compose -p $PROJECT up -d --wait --wait-timeout $WAIT_TIMEOUT"
+# The core services first: only they can stop the deploy. The jobspy sidecar comes on its own afterwards (nothing
+# depends on it, and every channel that uses it is off by default): when it does not turn healthy the deploy warns and
+# goes on, so the migration, the ai-worker switch and the config writes still run. Whether that needs attention is the
+# doctor's verdict at the end (compose.jobspy: a problem while a channel that uses the sidecar is on, else a warning).
+echo "  \$ docker compose -p $PROJECT up -d --wait --wait-timeout $WAIT_TIMEOUT db web runner"
 if [[ "$DRY_RUN" -eq 0 ]]; then
   assert_target
   proc_check_stop; up_code=0; UP_STARTED=1
-  proc_run docker compose -p "$PROJECT" up -d --wait --wait-timeout "$WAIT_TIMEOUT" || up_code=$?; proc_check_stop
+  proc_run docker compose -p "$PROJECT" up -d --wait --wait-timeout "$WAIT_TIMEOUT" db web runner || up_code=$?; proc_check_stop
   if (( up_code != 0 )); then
     compose ps >&2 || true
-    fail_step "not all services became healthy within ${WAIT_TIMEOUT} s" "docker compose -p $PROJECT logs --tail 100 <db|web|runner|jobspy> shows which one and why; after fixing it, run this script again"
+    fail_step "not all of db, web and runner became healthy within ${WAIT_TIMEOUT} s" "docker compose -p $PROJECT logs --tail 100 <db|web|runner> shows which one and why; after fixing it, run this script again"
+  fi
+fi
+echo "  \$ docker compose -p $PROJECT up -d --no-deps --wait --wait-timeout $WAIT_TIMEOUT jobspy"
+if [[ "$DRY_RUN" -eq 0 ]]; then
+  assert_target
+  proc_check_stop; jobspy_code=0
+  proc_run docker compose -p "$PROJECT" up -d --no-deps --wait --wait-timeout "$WAIT_TIMEOUT" jobspy || jobspy_code=$?; proc_check_stop
+  if (( jobspy_code != 0 )); then
+    echo "deploy: ⚠ the jobspy sidecar did not become healthy within ${WAIT_TIMEOUT} s; the deploy goes on (db, web and runner run without it)." >&2
+    echo "  Only the scraping channels linkedin-guest, indeed and jobspy-google use it (all off by default); while one of them is on, the doctor below reports it as a problem. docker compose -p $PROJECT logs --tail 100 jobspy shows why." >&2
   fi
   compose ps
 fi
