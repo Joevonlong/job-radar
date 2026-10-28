@@ -48,6 +48,23 @@ describe("runProcess (real child processes)", () => {
     await expect(runProcess({ ...base, command: "definitely-not-a-command-xyz", args: [], stdin: "" })).rejects.toMatchObject({ kind: "not_found" });
   });
 
+  it("reports an unavailable command when PATH lookup returns EACCES", async () => {
+    fs.writeFileSync(path.join(dir, "unavailable-cli"), "#!/bin/sh\n", { mode: 0o600 });
+    await expect(runProcess({ ...base, env: { PATH: dir }, command: "unavailable-cli", args: [], stdin: "" }))
+      .rejects.toMatchObject({ kind: "not_found", message: "EACCES" });
+  });
+
+  it.skipIf(process.getuid?.() === 0)("reports a missing command even when PATH includes an unreadable directory", async () => {
+    const blocked = path.join(dir, "blocked");
+    fs.mkdirSync(blocked, { mode: 0o000 });
+    try {
+      await expect(runProcess({ ...base, env: { PATH: `${blocked}${path.delimiter}${dir}` }, command: "absent-cli", args: [], stdin: "" }))
+        .rejects.toMatchObject({ kind: "not_found", message: "EACCES" });
+    } finally {
+      fs.chmodSync(blocked, 0o700);
+    }
+  });
+
   it("does not choke on a child that exits without reading stdin", async () => {
     const result = await runProcess({ ...base, command: node, args: ["-e", "process.exit(0)"], stdin: "x".repeat(2_000_000) });
     expect(result.exitCode).toBe(0);

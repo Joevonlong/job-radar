@@ -88,7 +88,8 @@ export const runProcess: ProcessRunner = (spec) =>
     child.stdout.on("data", (chunk: Buffer) => collect(chunk, "out"));
     child.stderr.on("data", (chunk: Buffer) => collect(chunk, "err"));
     child.on("error", (error: NodeJS.ErrnoException) => {
-      finish(() => reject(new ProcessError(error.code === "ENOENT" ? "not_found" : "spawn", error.code ?? "spawn failed")));
+      // PATH lookup can return EACCES for an unreadable directory even when the command is absent.
+      finish(() => reject(new ProcessError(error.code === "ENOENT" || error.code === "EACCES" ? "not_found" : "spawn", error.code ?? "spawn failed")));
     });
     child.on("close", (exitCode) => {
       finish(() => (failure ? reject(failure) : resolve({ stdout, stderr, exitCode })));

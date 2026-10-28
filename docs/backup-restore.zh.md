@@ -60,7 +60,7 @@ scripts/ops/backup.sh                    # data/backups/jobradar-manual-YYYYMMDD
 scripts/ops/backup.sh --label before-x   # 名字里带标签：...-before-x.dump
 ```
 
-脚本只需要 Docker（pg_dump 在 db 容器里执行，宿主机上不用装 Postgres）。手动备份用 `manual` 命名，**不会被自动保留策略清理**，不要了自己删。
+脚本只需要 Docker（pg_dump 在 db 容器里执行，宿主机上不用装 Postgres）。在重命名 `.partial` 文件前，先用同一容器里的 `pg_restore --list` 检查归档目录，再调用宿主机的 `sync` 刷盘。导出失败、归档不可读或刷盘失败时，删除临时文件并停止备份（等待备份的部署也会停止）。这项检查不能替代完整的恢复演练。手动备份用 `manual` 命名，**不会被自动保留策略清理**，不要了自己删。
 
 配置也一起留：`scripts/ops/backup.sh` 在 `.dump` 旁边写一个同名的 `….config.tgz`，里面是用户配置目录 `data/config/`（不含 `.backup/` 和 `.web-session-secret`）和画像 `data/profile/`。它们不在数据库里，也不在 git 里，这是它们仅有的副本之一。runner 每天的备份写的是同样的压缩包（见第 1 节）。
 

@@ -73,10 +73,10 @@ describe("CI change classification", () => {
     ...["package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", ".github/workflows/ci.yml", ".github/dependabot.yml", ".github/README.md", ".github/说明.md", "vitest.config.ts", "vitest.integration.config.ts", "playwright.config.ts", "playwright.setup.config.ts", ".nvmrc", ".node-version"].map((file) => ({
       name: `toolchain: ${file}`, paths: [file], code: true, full: true, transition: true,
     })),
-    ...["scripts/ops/deploy.sh", "src/ai-worker/index.ts", "tests/transition/run.sh", "tests/ops/sim/systemctl", "Dockerfile", "compose.yaml"].map((file) => ({
+    ...["scripts/ops/deploy.sh", "scripts/ops-drain.ts", "scripts/ops-freeze.ts", "scripts/config-migrate.ts", "src/lib/ops/drain.ts", "src/lib/config/migrations/search.ts", "src/ai-worker/index.ts", "tests/transition/run.sh", "tests/ops/sim/systemctl", "Dockerfile", "compose.yaml"].map((file) => ({
       name: `deployment: ${file}`, paths: [file], code: true, full: false, transition: true,
     })),
-    ...["tests/fixtures/example.html", "src/example.svg", "public/example.png", "unrecognised/path", "future.config.yaml"].map((file) => ({
+    ...["tests/fixtures/example.html", "src/example.svg", "public/example.png", "unrecognised/path", "future.config.yaml", "scripts/nested/helper.ts", "src/runner/index.ts", "jobspy/app.py", "drizzle/migration.sql"].map((file) => ({
       name: `code or unknown: ${file}`, paths: [file], code: true, full: false, transition: false,
     })),
   ];

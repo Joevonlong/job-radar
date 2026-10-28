@@ -215,6 +215,8 @@ A failure in (a) does not block rollback: follow (c) and accept the display wind
 
 ### Fixed
 
+- Runner heartbeat writes that finish after their timeout still count as healthy; sustained failures allow active work its configured cleanup grace period before restarting.
+- Jobspy scrape requests are sent only once after a timeout or server error; stalled runner heartbeat work is bounded, manual backups are verified before publication, deploy preflight explains why root is unsupported, and CLI checks recognize unavailable commands on a restricted PATH.
 - Keep the closing-phrase quote visible in job details when the job becomes dormant or another closure reason takes precedence.
 
 - Scoring views show the time-budget reason and remaining count even when preparation exhausts the budget before the first job is scored.
