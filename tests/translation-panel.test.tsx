@@ -5,22 +5,19 @@ import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TranslationPanel, type TranslationView } from "@/components/jobs/detail/translation-panel";
+import type { ControlQueueView } from "@/lib/control/request-view-schema";
 import en from "../messages/en.json";
 import zh from "../messages/zh.json";
 
 /** How the English interface names the Chinese target language (the page passes it in). */
 const EN_TARGET = { name: "Chinese", lang: "zh-CN" };
 
-const { translateJobAction, translateStatusAction, limits } = vi.hoisted(() => ({ translateJobAction: vi.fn(), translateStatusAction: vi.fn(), limits: { waitMaxMs: 30_000 } }));
+const { translateJobAction, translateStatusAction } = vi.hoisted(() => ({ translateJobAction: vi.fn(), translateStatusAction: vi.fn() }));
 vi.mock("@/app/jobs/[id]/actions", () => ({ translateJobAction, translateStatusAction }));
-// the tab polls the queued request: poll fast. The give-up time is long (a loaded machine must not trip it); only the
-// test of the give-up itself shortens it.
+// the tab polls the queued request: poll fast (there is no wait limit; the queue view says when the worker is offline)
 vi.mock("@/lib/settings/constants", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/settings/constants")>()),
   STATUS_POLL_MS: 10,
-  get TRANSLATE_WAIT_MAX_MS() {
-    return limits.waitMaxMs;
-  },
 }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
@@ -41,7 +38,16 @@ const view = (over: Partial<TranslationView> = {}): TranslationView => ({
 beforeEach(() => {
   translateJobAction.mockReset();
   translateStatusAction.mockReset();
-  limits.waitMaxMs = 30_000;
+});
+
+/** A queue view as the status action returns it (times in UTC; the panel shows them in Europe/Berlin, UTC+1 in late October). */
+const queue = (over: Partial<ControlQueueView> = {}, worker: Partial<ControlQueueView["worker"]> = {}): ControlQueueView => ({
+  ahead: 0,
+  running: null,
+  startedAt: null,
+  now: "2026-10-28T12:00:00.000Z",
+  ...over,
+  worker: { process: "ai-worker", online: true, heartbeatAgeSeconds: 3, ...worker },
 });
 
 const done = (translation: TranslationView) => ({ ok: true, queued: false, cached: false, translation });
@@ -113,13 +119,13 @@ describe("TranslationPanel", () => {
   it("queues the request for the ai-worker, shows it as waiting and then runs, and polls until the translation is there", async () => {
     translateJobAction.mockResolvedValue({ ok: true, queued: true, requestId: 41 });
     translateStatusAction
-      .mockResolvedValueOnce({ ok: true, state: "waiting", stage: "pending" })
-      .mockResolvedValueOnce({ ok: true, state: "waiting", stage: "running" })
+      .mockResolvedValueOnce({ ok: true, state: "waiting", stage: "pending", partial: null, queue: queue() })
+      .mockResolvedValueOnce({ ok: true, state: "waiting", stage: "running", partial: null, queue: queue() })
       .mockResolvedValue({ ok: true, state: "done", translation: view({ content: "排队后的译文。" }) });
     render(wrap(<TranslationPanel target={EN_TARGET} jobId={9} hasDescription initial={null} timeZone="Europe/Berlin" />));
     await userEvent.click(screen.getByTestId("translate-button"));
     expect(screen.getByTestId("translation-loading")).toHaveAttribute("data-stage", "pending");
-    expect(screen.getByTestId("translation-loading")).toHaveTextContent("The AI worker on this Mac picks it up");
+    expect(screen.getByTestId("translation-loading")).toHaveTextContent("The request is queued for the AI worker on this Mac");
     await waitFor(() => expect(screen.getByTestId("translation-loading")).toHaveAttribute("data-stage", "running"));
     await waitFor(() => expect(screen.getByText("排队后的译文。")).toBeInTheDocument());
     expect(translateStatusAction).toHaveBeenCalledWith({ jobId: 9, requestId: 41 });
@@ -135,14 +141,53 @@ describe("TranslationPanel", () => {
     expect(screen.getByTestId("translate-button")).toBeEnabled();
   });
 
-  it("gives up after the wait limit and points at the AI worker, surviving a dropped connection while polling", async () => {
-    limits.waitMaxMs = 150;
+  it("waiting: shows how many requests are ahead and what the ai-worker is doing, then its own start once it runs", async () => {
     translateJobAction.mockResolvedValue({ ok: true, queued: true, requestId: 5 });
-    translateStatusAction.mockRejectedValueOnce(new Error("network")).mockResolvedValue({ ok: true, state: "waiting", stage: "pending" });
+    let release: () => void = () => {};
+    const released = new Promise<void>((resolve) => (release = resolve));
+    translateStatusAction
+      .mockResolvedValueOnce({ ok: true, state: "waiting", stage: "pending", partial: null, queue: queue({ ahead: 2, running: { kind: "run_ai", since: "2026-10-28T11:15:00.000Z" } }) })
+      .mockImplementation(async () => {
+        await released;
+        return { ok: true, state: "waiting", stage: "running", partial: null, queue: queue({ startedAt: "2026-10-28T11:48:00.000Z" }) };
+      });
     render(wrap(<TranslationPanel target={EN_TARGET} jobId={9} hasDescription initial={null} timeZone="Europe/Berlin" />));
     await userEvent.click(screen.getByTestId("translate-button"));
-    await waitFor(() => expect(screen.getByTestId("translation-error")).toHaveTextContent("AI worker on this Mac may be offline"), { timeout: 2000 });
-    expect(translateStatusAction.mock.calls.length).toBeGreaterThan(2);
+    await waitFor(() => expect(screen.getByTestId("queue-hint-ahead")).toHaveTextContent("2 requests ahead of it."));
+    expect(screen.getByTestId("queue-hint-running")).toHaveTextContent("The ai-worker is working on “AI stage of a cycle”, started 12:15.");
+    expect(screen.getByTestId("queue-hint")).toHaveAttribute("role", "status");
+    release();
+    await waitFor(() => expect(screen.getByTestId("queue-hint-self")).toHaveTextContent("Running since 12:48, for 12 minutes."));
+    expect(screen.queryByTestId("queue-hint-ahead")).toBeNull();
+  });
+
+  it("offline: a line with the last heartbeat and a link to /sources; the tab keeps its waiting state and keeps polling", async () => {
+    translateJobAction.mockResolvedValue({ ok: true, queued: true, requestId: 5 });
+    translateStatusAction.mockRejectedValueOnce(new Error("network")).mockResolvedValue({ ok: true, state: "waiting", stage: "pending", partial: null, queue: queue({}, { online: false, heartbeatAgeSeconds: 900 }) });
+    render(wrap(<TranslationPanel target={EN_TARGET} jobId={9} hasDescription initial={null} timeZone="Europe/Berlin" />));
+    await userEvent.click(screen.getByTestId("translate-button"));
+    await waitFor(() => expect(screen.getByTestId("queue-hint-offline")).toHaveTextContent("The ai-worker is offline (last heartbeat 15 min ago)."));
+    expect(screen.getByTestId("queue-hint-sources")).toHaveAttribute("href", "/sources");
+    expect(screen.getByTestId("translation-loading")).toHaveAttribute("data-stage", "pending");
+    const calls = translateStatusAction.mock.calls.length;
+    await waitFor(() => expect(translateStatusAction.mock.calls.length).toBeGreaterThan(calls + 2));
+    expect(screen.queryByTestId("translation-error")).toBeNull();
+  });
+
+  it("with no heartbeat at all the worker is offline at once, after a reload too (the queue the page was rendered with)", () => {
+    translateStatusAction.mockReturnValue(new Promise(() => {}));
+    render(wrap(<TranslationPanel target={EN_TARGET} jobId={9} hasDescription initial={null} initialRequest={{ requestId: 5, stage: "pending", queue: queue({ ahead: 1 }, { online: false, heartbeatAgeSeconds: null }) }} timeZone="Europe/Berlin" />));
+    expect(screen.getByTestId("queue-hint-offline")).toHaveTextContent("The ai-worker is offline (no heartbeat yet).");
+    expect(screen.getByTestId("queue-hint-ahead")).toHaveTextContent("1 request ahead of it.");
+  });
+
+  it("the partial text shows while the request still waits, also in Chinese", async () => {
+    translateJobAction.mockResolvedValue({ ok: true, queued: true, requestId: 8 });
+    translateStatusAction.mockResolvedValue({ ok: true, state: "waiting", stage: "running", partial: { content: "第一段译文。", done: 1, total: 3 }, queue: queue({ startedAt: "2026-10-28T11:59:30.000Z" }) });
+    render(wrap(<TranslationPanel target={{ name: "中文", lang: "zh-CN" }} jobId={9} hasDescription initial={null} timeZone="Europe/Berlin" />, "zh"));
+    await userEvent.click(screen.getByTestId("translate-button"));
+    await waitFor(() => expect(screen.getByTestId("translation-partial-body")).toHaveTextContent("第一段译文。"));
+    expect(screen.getByTestId("queue-hint-self")).toHaveTextContent("处理中，12:59 开始，已进行 不到 1 分钟。");
   });
 
   it("shows how far a queued translation is, with the pieces done so far", async () => {
@@ -152,8 +197,8 @@ describe("TranslationPanel", () => {
     let release: () => void = () => {};
     const released = new Promise<void>((resolve) => (release = resolve));
     translateStatusAction
-      .mockResolvedValueOnce({ ok: true, state: "waiting", stage: "running", partial: { content: "第一段译文。", done: 1, total: 4 } })
-      .mockResolvedValueOnce({ ok: true, state: "waiting", stage: "running", partial: { content: "第一段译文。\n\n第二段译文。", done: 2, total: 4 } })
+      .mockResolvedValueOnce({ ok: true, state: "waiting", stage: "running", partial: { content: "第一段译文。", done: 1, total: 4 }, queue: queue() })
+      .mockResolvedValueOnce({ ok: true, state: "waiting", stage: "running", partial: { content: "第一段译文。\n\n第二段译文。", done: 2, total: 4 }, queue: queue() })
       .mockImplementation(async () => {
         await released;
         return { ok: true, state: "done", translation: view({ content: "全部译文。" }) };

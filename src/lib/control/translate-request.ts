@@ -14,7 +14,8 @@ import { languageSettings, translationTarget } from "@/lib/i18n/config";
 /** The translation target as the web sees it now (no watcher in the web app: read the small file fresh). */
 const currentTarget = (): string => translationTarget(languageSettings({ fresh: true }));
 import { sameLanguage } from "@/lib/i18n/languages";
-import { resumeAtOf } from "./request-view-schema";
+import { loadQueueView } from "./queue-view";
+import { resumeAtOf, type ControlQueueView } from "./request-view-schema";
 
 /** Error codes the translation tab has labels for: the real cause of a failure (`TranslationFailureCode`) plus the request-level ones. */
 export type TranslateErrorCode = TranslationFailureCode | "not_found" | "no_description" | "same_language" | "aborted";
@@ -50,18 +51,23 @@ export async function requestTranslateJob(db: Db, input: { jobId: number; force:
 }
 
 export type TranslateRequestState =
-  /** `partial`: how far the translation is (pieces done / total) and the text so far; null before the first piece. */
-  | { state: "waiting"; stage: "pending" | "running"; partial: PartialTranslation | null }
+  /** `partial`: how far the translation is (pieces done / total) and the text so far; null before the first piece. `queue`: where the request stands. */
+  | { state: "waiting"; stage: "pending" | "running"; partial: PartialTranslation | null; queue: ControlQueueView | null }
   | { state: "done"; translation: JobTranslation }
   /** `resumeAt`: with `quota_guard`, when Job Radar's AI usage cap is expected to let the AI work again (ISO; null = not known). */
-  | { state: "failed"; error: TranslateErrorCode; detail: string | null; partial: PartialTranslation | null; resumeAt: string | null };
+  | { state: "failed"; error: TranslateErrorCode; detail: string | null; partial: PartialTranslation | null; resumeAt: string | null }
+  /** There is no such request, or it is not this job's. */
+  | { state: "missing" };
 
 /** Where a queued translation stands. `jobId` must be the request's job: a request id alone never reveals another job's translation. */
-export async function readTranslateRequest(db: Db, input: { requestId: number; jobId: number }): Promise<TranslateRequestState | null> {
+export async function readTranslateRequest(db: Db, input: { requestId: number; jobId: number }): Promise<TranslateRequestState> {
   const request = await getControlRequest(db, input.requestId);
   const payload = typeof request?.payload === "object" && request.payload !== null ? (request.payload as { jobId?: unknown }) : {};
-  if (!request || request.kind !== "translate_job" || payload.jobId !== input.jobId) return null;
-  if (request.status === "pending" || request.status === "running") return { state: "waiting", stage: request.status, partial: await readPartialTranslation(db, input.jobId) };
+  if (!request || request.kind !== "translate_job" || payload.jobId !== input.jobId) return { state: "missing" };
+  if (request.status === "pending" || request.status === "running") {
+    const [partial, queue] = await Promise.all([readPartialTranslation(db, input.jobId), loadQueueView(db, request)]);
+    return { state: "waiting", stage: request.status, partial, queue };
+  }
   if (request.status === "failed") {
     const result = typeof request.result === "object" && request.result !== null ? (request.result as { error?: unknown; detail?: unknown; resumeAt?: unknown }) : {};
     return {
@@ -79,8 +85,8 @@ export async function readTranslateRequest(db: Db, input: { requestId: number; j
 }
 
 /** What the translate tab starts with after a page load: an open `translate_job` request means it waits again and polls. */
-export async function readInitialTranslateRequest(db: Db, jobId: number): Promise<{ requestId: number; stage: "pending" | "running" } | null> {
+export async function readInitialTranslateRequest(db: Db, jobId: number): Promise<{ requestId: number; stage: "pending" | "running"; queue: ControlQueueView | null } | null> {
   const request = await findLatestJobControlRequest(db, "translate_job", jobId);
-  if (request?.status === "pending" || request?.status === "running") return { requestId: request.id, stage: request.status };
+  if (request?.status === "pending" || request?.status === "running") return { requestId: request.id, stage: request.status, queue: await loadQueueView(db, request) };
   return null;
 }

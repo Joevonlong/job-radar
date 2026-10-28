@@ -4,18 +4,20 @@ import { Loader2, Quote, RefreshCw, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useFormatter, useTranslations } from "next-intl";
-import { useEffect, useState, useTransition, type ReactNode } from "react";
+import { useState, useTransition, type ReactNode } from "react";
 
-import { breakdownJobAction, breakdownStatusAction, type BreakdownErrorKey } from "@/app/jobs/[id]/breakdown-actions";
+import { breakdownJobAction, breakdownStatusAction, type BreakdownErrorKey, type BreakdownStatusResult } from "@/app/jobs/[id]/breakdown-actions";
+import { QueueHint } from "@/components/control/queue-hint";
+import { useControlRequest, type ControlRequestRead } from "@/components/control/use-control-request";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { INK_LINK } from "@/components/ui/ink-link";
 import { SkillOverlap } from "@/components/viz/skill-overlap";
 import { REQUIREMENT_LEVELS, type RequirementLevel } from "@/lib/breakdown/constants";
 import type { InitialBreakdownRequest } from "@/lib/control/breakdown-request";
+import type { ControlQueueView } from "@/lib/control/request-view-schema";
 import type { BreakdownQuote, BreakdownView, BreakdownViewItem, BreakdownViewTech } from "@/lib/breakdown/view";
 import { formatClock } from "@/lib/format/clock";
-import { BREAKDOWN_WAIT_MAX_MS, STATUS_POLL_MS } from "@/lib/settings/constants";
 import { toastTone } from "@/lib/toast";
 import { bcp47 } from "@/lib/i18n/languages";
 import { cn } from "@/lib/utils";
@@ -40,10 +42,21 @@ export interface BreakdownPanelProps {
 
 type PanelState = "disabled" | "config_error" | "no_description" | "ready" | "waiting" | "failed" | "done" | "outdated" | "empty";
 
-/** A breakdown left for the ai-worker: the card asks for its state until it is done. */
+/** A breakdown left for the ai-worker: the card asks for its state until it is done. `queue`: where it stood when the page was rendered. */
 interface WaitingRequest {
   requestId: number;
   stage: "pending" | "running";
+  queue?: ControlQueueView | null;
+}
+
+type StatusFailure = Extract<BreakdownStatusResult, { ok: false }>;
+
+/** The status action's answer in the shape `useControlRequest` reads. */
+async function readBreakdown(jobId: number, requestId: number): Promise<ControlRequestRead<null, null, StatusFailure>> {
+  const result = await breakdownStatusAction({ jobId, requestId });
+  if (!result.ok) return { state: "failed", failed: result };
+  if (result.state === "waiting") return { state: "waiting", stage: result.stage, queue: result.queue, waiting: null };
+  return { state: "done", done: null };
 }
 
 function Cap({ children }: { children: ReactNode }) {
@@ -59,13 +72,13 @@ export function BreakdownPanel({ jobId, availability, hasDescription, view, init
   const t = useTranslations("jdBreakdown");
   const format = useFormatter();
   const router = useRouter();
-  const [error, setError] = useState<{ key: BreakdownErrorKey | "waitTimeout"; detail: string | null; resumeAt?: string | null } | null>(
+  const [error, setError] = useState<{ key: BreakdownErrorKey; detail: string | null; resumeAt?: string | null } | null>(
     initialRequest?.state === "failed" ? { key: initialRequest.error, detail: initialRequest.detail, resumeAt: initialRequest.resumeAt } : null,
   );
   // the time Job Radar's AI usage cap is expected to let the AI work again (a `quota_guard` failure); "none" = not known
   const resumeTime = (resumeAt: string | null | undefined): string => (resumeAt ? formatClock(format, resumeAt, timeZone) : "none");
   const [pending, startTransition] = useTransition();
-  const [waiting, setWaiting] = useState<WaitingRequest | null>(initialRequest?.state === "waiting" ? { requestId: initialRequest.requestId, stage: initialRequest.stage } : null);
+  const [waiting, setWaiting] = useState<WaitingRequest | null>(initialRequest?.state === "waiting" ? { requestId: initialRequest.requestId, stage: initialRequest.stage, queue: initialRequest.queue } : null);
   const requestId = waiting?.requestId ?? null;
 
   // A fresh result from the server (the request finished, or a cycle made one): stop waiting.
@@ -77,52 +90,28 @@ export function BreakdownPanel({ jobId, availability, hasDescription, view, init
     setError(null);
   }
 
-  const fail = (key: BreakdownErrorKey | "waitTimeout", detail: string | null = null, resumeAt: string | null = null): void => {
+  const fail = (key: BreakdownErrorKey, detail: string | null = null, resumeAt: string | null = null): void => {
     setError({ key, detail, resumeAt });
     toastTone("error", t(`error.${key}`, { time: resumeTime(resumeAt) }));
   };
 
-  // Poll the queued request until the ai-worker has finished it (or the wait limit is up).
-  useEffect(() => {
-    if (requestId === null) return;
-    let stopped = false;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const startedAt = Date.now();
-    const poll = async (): Promise<void> => {
-      let result: Awaited<ReturnType<typeof breakdownStatusAction>> | null = null;
-      try {
-        result = await breakdownStatusAction({ jobId, requestId });
-      } catch {
-        result = null; // a dropped connection: try again until the limit
-      }
-      if (stopped) return;
-      if (result?.ok && result.state === "waiting") {
-        setWaiting((current) => (current?.requestId === requestId && current.stage !== result.stage ? { requestId, stage: result.stage } : current));
-      } else if (result?.ok) {
-        setWaiting(null);
-        toastTone("success", t("done"));
-        router.refresh();
-        return;
-      } else if (result) {
-        setWaiting(null);
-        fail(result.error, result.detail ?? null, result.resumeAt ?? null);
-        return;
-      }
-      if (Date.now() - startedAt >= BREAKDOWN_WAIT_MAX_MS) {
-        setWaiting(null);
-        fail("waitTimeout");
-        return;
-      }
-      timer = setTimeout(() => void poll(), STATUS_POLL_MS);
-    };
-    timer = setTimeout(() => void poll(), STATUS_POLL_MS);
-    return () => {
-      stopped = true;
-      if (timer !== undefined) clearTimeout(timer);
-    };
-    // `fail`, `t` and `router` only read the current messages / navigation
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [requestId, jobId]);
+  // Follow the queued request until the ai-worker has finished it: no wait limit, the queue hint says when the worker is offline.
+  const wait = useControlRequest({
+    requestId,
+    initialStage: waiting?.stage,
+    initialQueue: waiting?.queue ?? null,
+    read: (id) => readBreakdown(jobId, id),
+    onDone: () => {
+      setWaiting(null);
+      toastTone("success", t("done"));
+      router.refresh();
+    },
+    onFailed: (failed) => {
+      setWaiting(null);
+      fail(failed?.error ?? "not_found", failed?.detail ?? null, failed?.resumeAt ?? null);
+    },
+  });
+  const stage = waiting ? wait.stage : null;
 
   const busy = pending || waiting !== null;
 
@@ -155,7 +144,7 @@ export function BreakdownPanel({ jobId, availability, hasDescription, view, init
   const button = (label: string, kind: "primary" | "outline", force: boolean, testId: string, icon: "spark" | "refresh") => (
     <Button type="button" variant={kind === "primary" ? "primary" : "outline"} size={kind === "primary" ? "md" : "sm"} onClick={() => run(force)} disabled={busy} aria-busy={busy} data-testid={testId}>
       {busy ? <Loader2 className="animate-spin" aria-hidden /> : icon === "refresh" ? <RefreshCw aria-hidden /> : <Sparkles aria-hidden />}
-      {busy ? (waiting?.stage === "running" ? t("running") : t("requesting")) : label}
+      {busy ? (stage === "running" ? t("running") : t("requesting")) : label}
     </Button>
   );
   /** Re-run control of a shown result: a button, or a grey line when the feature is off. */
@@ -165,14 +154,6 @@ export function BreakdownPanel({ jobId, availability, hasDescription, view, init
     <div role="alert" className="text-bad text-body-sm [overflow-wrap:anywhere]" data-testid="jd-breakdown-error">
       <p className="font-semibold">
         {t(`error.${error.key}`, { time: resumeTime(error.resumeAt) })}
-        {error.key === "waitTimeout" ? (
-          <>
-            {" "}
-            <Link href="/sources" className={INK_LINK}>
-              {t("sourcesLink")}
-            </Link>
-          </>
-        ) : null}
       </p>
       {error.detail ? (
         <p className="text-ink-3 text-data mt-0.5 font-mono" data-testid="jd-breakdown-error-detail">
@@ -183,7 +164,7 @@ export function BreakdownPanel({ jobId, availability, hasDescription, view, init
   ) : null;
 
   const waitingBlock = busy ? (
-    <div role="status" className="flex flex-col gap-2.5" data-testid="jd-breakdown-loading" data-stage={waiting?.stage ?? "requesting"}>
+    <div role="status" className="flex flex-col gap-2.5" data-testid="jd-breakdown-loading" data-stage={stage ?? "requesting"}>
       <div className="flex flex-wrap items-center gap-2">
         {button(t("button"), "primary", false, "jd-breakdown-button", "spark")}
       </div>
@@ -195,6 +176,7 @@ export function BreakdownPanel({ jobId, availability, hasDescription, view, init
       <p className="text-ink-2 text-body-sm">{t("waitingHint")}</p>
     </div>
   ) : null;
+  const queueHint = busy ? <QueueHint queue={wait.queue} stage={stage} timeZone={timeZone} /> : null;
 
   let body: ReactNode;
   switch (state) {
@@ -236,7 +218,8 @@ export function BreakdownPanel({ jobId, availability, hasDescription, view, init
   return (
     <div className="flex flex-col gap-3.5" data-testid="jd-breakdown-panel" data-state={state} data-job-id={jobId}>
       {state === "waiting" && !hasResult ? waitingBlock : null}
-      {state === "waiting" && hasResult ? <p role="status" className="text-ink-2 text-body-sm flex items-center gap-2" data-testid="jd-breakdown-loading" data-stage={waiting?.stage ?? "requesting"}><Loader2 className="size-4 animate-spin" aria-hidden /> {waiting?.stage === "running" ? t("running") : t("requesting")} · {t("waitingHint")}</p> : null}
+      {state === "waiting" && hasResult ? <p role="status" className="text-ink-2 text-body-sm flex items-center gap-2" data-testid="jd-breakdown-loading" data-stage={stage ?? "requesting"}><Loader2 className="size-4 animate-spin" aria-hidden /> {stage === "running" ? t("running") : t("requesting")} · {t("waitingHint")}</p> : null}
+      {state === "waiting" ? queueHint : null}
       {body}
       {state === "failed" && hasResult ? errorBlock : null}
 

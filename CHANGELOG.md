@@ -80,6 +80,14 @@ A failure in (a) does not block rollback: follow (c) and accept the display wind
 
 ### Changed
 
+- **Waiting buttons follow the process's heartbeat instead of a fixed time limit:** translate, break down, salary
+  lookup, the test and "collect now" buttons and "Score now" on a job page keep waiting as long as the process that
+  claims the request is alive, instead of giving up after 10 or 12 minutes (the request ran anyway). While a request
+  waits they show how many requests are ahead of it and what the process is working on, since when; while it runs,
+  its start and how long it has been running; and when the ai-worker (or the runner) has no fresh heartbeat, that it
+  is offline, with a link to the Sources page. "Score now" now judges the ai-worker, which scores with
+  `execution: host`, not the runner. The request list on /settings shows "stopped at the time budget, N still to score"
+  for a scoring request that reports it.
 - **AI salary lookups are only displayed:** they never count in the salary benchmark or any filter; the benchmark uses
   only salaries stated in postings. The Salary tab's switch to count AI lookups is removed and the benchmark card shows
   only "sample n". Lookup cards label the company level and every band "AI estimate (unverified)", identify "AI's own

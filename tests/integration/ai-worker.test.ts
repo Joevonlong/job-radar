@@ -367,9 +367,9 @@ describe("the ai-worker handles translate_job and rescore_stale", () => {
     expect(queued).toMatchObject({ state: "queued", existing: false });
     if (queued.state !== "queued") throw new Error("expected a queued request");
     expect(await requestTranslateJob(db(), { jobId, force: false })).toMatchObject({ state: "queued", requestId: queued.requestId, existing: true });
-    expect(await readTranslateRequest(db(), { requestId: queued.requestId, jobId })).toEqual({ state: "waiting", stage: "pending", partial: null });
+    expect(await readTranslateRequest(db(), { requestId: queued.requestId, jobId })).toMatchObject({ state: "waiting", stage: "pending", partial: null, queue: { ahead: 0 } });
     // another job's page cannot read this request
-    expect(await readTranslateRequest(db(), { requestId: queued.requestId, jobId: jobId + 1 })).toBeNull();
+    expect(await readTranslateRequest(db(), { requestId: queued.requestId, jobId: jobId + 1 })).toEqual({ state: "missing" });
 
     // the runner (host mode) leaves it alone
     expect(await processNextControlRequest(pollOptions(() => runnerRequestKinds("host")))).toBeNull();

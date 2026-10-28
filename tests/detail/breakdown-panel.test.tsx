@@ -7,19 +7,17 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { BreakdownPanel, type BreakdownPanelProps } from "@/components/jobs/detail/breakdown-panel";
 import { JD_JUMP_EVENT } from "@/components/jobs/detail/marks";
 import type { BreakdownView } from "@/lib/breakdown/view";
+import type { ControlQueueView } from "@/lib/control/request-view-schema";
 
 import en from "../../messages/en.json";
 import zh from "../../messages/zh.json";
 
-const { breakdownJobAction, breakdownStatusAction, refresh, limits } = vi.hoisted(() => ({ breakdownJobAction: vi.fn(), breakdownStatusAction: vi.fn(), refresh: vi.fn(), limits: { waitMaxMs: 30_000 } }));
+const { breakdownJobAction, breakdownStatusAction, refresh } = vi.hoisted(() => ({ breakdownJobAction: vi.fn(), breakdownStatusAction: vi.fn(), refresh: vi.fn() }));
 vi.mock("@/app/jobs/[id]/breakdown-actions", () => ({ breakdownJobAction, breakdownStatusAction }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }));
 vi.mock("@/lib/settings/constants", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/settings/constants")>()),
   STATUS_POLL_MS: 10,
-  get BREAKDOWN_WAIT_MAX_MS() {
-    return limits.waitMaxMs;
-  },
 }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
@@ -64,7 +62,15 @@ beforeEach(() => {
   breakdownJobAction.mockReset();
   breakdownStatusAction.mockReset();
   refresh.mockReset();
-  limits.waitMaxMs = 30_000;
+});
+
+const queue = (over: Partial<ControlQueueView> = {}, worker: Partial<ControlQueueView["worker"]> = {}): ControlQueueView => ({
+  ahead: 0,
+  running: null,
+  startedAt: null,
+  now: "2026-10-28T12:00:00.000Z",
+  ...over,
+  worker: { process: "ai-worker", online: true, heartbeatAgeSeconds: 3, ...worker },
 });
 
 describe("BreakdownPanel states", () => {
@@ -94,7 +100,7 @@ describe("BreakdownPanel states", () => {
 
   it("ready: the button queues a request, shows waiting, then refreshes when the request is done", async () => {
     breakdownJobAction.mockResolvedValue({ ok: true, queued: true, requestId: 41 });
-    breakdownStatusAction.mockResolvedValueOnce({ ok: true, state: "waiting", stage: "pending" }).mockResolvedValueOnce({ ok: true, state: "waiting", stage: "running" }).mockResolvedValue({ ok: true, state: "done" });
+    breakdownStatusAction.mockResolvedValueOnce({ ok: true, state: "waiting", stage: "pending", queue: queue() }).mockResolvedValueOnce({ ok: true, state: "waiting", stage: "running", queue: queue() }).mockResolvedValue({ ok: true, state: "done" });
     render(wrap(<BreakdownPanel {...props()} />));
     expect(state()).toBe("ready");
     await userEvent.click(screen.getByTestId("jd-breakdown-button"));
@@ -108,8 +114,8 @@ describe("BreakdownPanel states", () => {
   });
 
   it("resumes waiting from the server's unfinished request after a reload and polls it", async () => {
-    breakdownStatusAction.mockResolvedValueOnce({ ok: true, state: "waiting", stage: "running" }).mockResolvedValue({ ok: true, state: "done" });
-    render(wrap(<BreakdownPanel {...props({ initialRequest: { state: "waiting", requestId: 37, stage: "pending" } })} />));
+    breakdownStatusAction.mockResolvedValueOnce({ ok: true, state: "waiting", stage: "running", queue: queue() }).mockResolvedValue({ ok: true, state: "done" });
+    render(wrap(<BreakdownPanel {...props({ initialRequest: { state: "waiting", requestId: 37, stage: "pending", queue: queue({ ahead: 1 }) } })} />));
     expect(state()).toBe("waiting");
     expect(screen.getByTestId("jd-breakdown-button")).toBeDisabled();
     await waitFor(() => expect(breakdownStatusAction).toHaveBeenCalledWith({ jobId: 7, requestId: 37 }));
@@ -151,14 +157,35 @@ describe("BreakdownPanel states", () => {
     await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("turned off"));
   });
 
-  it("gives up after the wait limit and links to /sources", async () => {
-    limits.waitMaxMs = 120;
+  it("waiting: how many requests are ahead and what the ai-worker is doing, with the start time", async () => {
     breakdownJobAction.mockResolvedValue({ ok: true, queued: true, requestId: 5 });
-    breakdownStatusAction.mockRejectedValueOnce(new Error("network")).mockResolvedValue({ ok: true, state: "waiting", stage: "pending" });
+    breakdownStatusAction.mockResolvedValue({ ok: true, state: "waiting", stage: "pending", queue: queue({ ahead: 3, running: { kind: "score_jobs", since: "2026-10-28T11:05:00.000Z" } }) });
     render(wrap(<BreakdownPanel {...props()} />));
     await userEvent.click(screen.getByTestId("jd-breakdown-button"));
-    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("has not answered"), { timeout: 2000 });
-    expect(within(screen.getByRole("alert")).getByRole("link")).toHaveAttribute("href", "/sources");
+    await waitFor(() => expect(screen.getByTestId("queue-hint-ahead")).toHaveTextContent("3 requests ahead of it."));
+    expect(screen.getByTestId("queue-hint-running")).toHaveTextContent("The ai-worker is working on “Score jobs”, started 12:05.");
+    expect(state()).toBe("waiting");
+  });
+
+  it("running: its own start and how long it has been running", async () => {
+    breakdownStatusAction.mockResolvedValue({ ok: true, state: "waiting", stage: "running", queue: queue({ startedAt: "2026-10-28T10:30:00.000Z" }) });
+    render(wrap(<BreakdownPanel {...props({ initialRequest: { state: "waiting", requestId: 37, stage: "running", queue: null } })} />));
+    await waitFor(() => expect(screen.getByTestId("queue-hint-self")).toHaveTextContent("Running since 11:30, for 90 minutes."));
+  });
+
+  it("offline: no give-up; a line with the last heartbeat and a link to /sources, the state stays waiting while it polls", async () => {
+    breakdownJobAction.mockResolvedValue({ ok: true, queued: true, requestId: 5 });
+    breakdownStatusAction.mockRejectedValueOnce(new Error("network")).mockResolvedValue({ ok: true, state: "waiting", stage: "pending", queue: queue({ ahead: 0 }, { online: false, heartbeatAgeSeconds: 7300 }) });
+    render(wrap(<BreakdownPanel {...props()} />));
+    await userEvent.click(screen.getByTestId("jd-breakdown-button"));
+    await waitFor(() => expect(screen.getByTestId("queue-hint-offline")).toHaveTextContent("The ai-worker is offline (last heartbeat 2 h ago)."));
+    expect(within(screen.getByTestId("queue-hint-offline")).getByRole("link")).toHaveAttribute("href", "/sources");
+    expect(screen.getByTestId("queue-hint-ahead")).toHaveTextContent("Next in line.");
+    expect(state()).toBe("waiting");
+    const calls = breakdownStatusAction.mock.calls.length;
+    await waitFor(() => expect(breakdownStatusAction.mock.calls.length).toBeGreaterThan(calls + 2));
+    expect(state()).toBe("waiting");
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 
   it("outdated format and empty result offer a re-run", async () => {

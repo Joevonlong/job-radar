@@ -96,8 +96,8 @@ describe("the breakdown request chain (web -> ai-worker -> web)", () => {
     expect(queued).toMatchObject({ state: "queued", existing: false });
     if (queued.state !== "queued") throw new Error("expected queued");
     expect(await requestBreakdownJob(db(), { jobId, force: false, settings: okState() })).toMatchObject({ state: "queued", requestId: queued.requestId, existing: true });
-    expect(await readBreakdownRequest(db(), { requestId: queued.requestId, jobId })).toEqual({ state: "waiting", stage: "pending" });
-    expect(await readBreakdownRequest(db(), { requestId: queued.requestId, jobId: jobId + 1 })).toBeNull();
+    expect(await readBreakdownRequest(db(), { requestId: queued.requestId, jobId })).toMatchObject({ state: "waiting", stage: "pending", queue: { ahead: 0, running: null } });
+    expect(await readBreakdownRequest(db(), { requestId: queued.requestId, jobId: jobId + 1 })).toEqual({ state: "missing" });
 
     expect(await claimNextControlRequest(db(), runnerRequestKinds("host"))).toBeNull();
     expect(aiWorkerRequestKinds("host")).toContain("breakdown_job");
@@ -146,7 +146,7 @@ describe("the card's state after a reload", () => {
     expect(await readInitialBreakdownRequest(db(), jobId, null)).toBeNull();
     const queued = await requestBreakdownJob(db(), { jobId, force: false, settings: okState() });
     if (queued.state !== "queued") throw new Error("expected a queued request");
-    expect(await readInitialBreakdownRequest(db(), jobId, null)).toEqual({ state: "waiting", requestId: queued.requestId, stage: "pending" });
+    expect(await readInitialBreakdownRequest(db(), jobId, null)).toMatchObject({ state: "waiting", requestId: queued.requestId, stage: "pending", queue: { ahead: 0 } });
     await db().update(schema.controlRequests).set({ status: "running" }).where(eq(schema.controlRequests.id, queued.requestId));
     expect(await readInitialBreakdownRequest(db(), jobId, null)).toMatchObject({ state: "waiting", stage: "running" });
     // another job's open request never leaks over
@@ -168,9 +168,9 @@ describe("the translate tab's state after a reload", () => {
     expect(await readInitialTranslateRequest(db(), jobId)).toBeNull();
     const queued = await requestTranslateJob(db(), { jobId, force: false });
     if (queued.state !== "queued") throw new Error("expected a queued request");
-    expect(await readInitialTranslateRequest(db(), jobId)).toEqual({ requestId: queued.requestId, stage: "pending" });
+    expect(await readInitialTranslateRequest(db(), jobId)).toMatchObject({ requestId: queued.requestId, stage: "pending", queue: { ahead: 0 } });
     await db().update(schema.controlRequests).set({ status: "running" }).where(eq(schema.controlRequests.id, queued.requestId));
-    expect(await readInitialTranslateRequest(db(), jobId)).toEqual({ requestId: queued.requestId, stage: "running" });
+    expect(await readInitialTranslateRequest(db(), jobId)).toMatchObject({ requestId: queued.requestId, stage: "running", queue: { ahead: 0 } });
     await db().update(schema.controlRequests).set({ status: "done" }).where(eq(schema.controlRequests.id, queued.requestId));
     expect(await readInitialTranslateRequest(db(), jobId)).toBeNull();
   });
