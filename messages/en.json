@@ -1343,13 +1343,15 @@
         "manual": "Closed by you",
         "gone": "Taken down at the source",
         "phrase": "Source says no longer accepting",
-        "possibly": "Possibly closed"
+        "possibly": "Possibly closed",
+        "dormant": "Not listed for weeks"
       },
       "reasonHint": {
         "manual": "You marked this job closed.",
         "gone": "The posting answered {status} (gone) when it was checked on {when}.",
         "phrase": "The posting says “{quote}” (checked {when}).",
-        "possibly": "No source has listed this job for a while."
+        "possibly": "No source has listed this job for a while.",
+        "dormant": "No source has listed this job for weeks, so it is left out of the job list and the automatic steps. It comes back by itself when a source lists it again."
       },
       "evidenceLink": "Checked page",
       "markClosed": "Mark as closed",
@@ -1376,7 +1378,9 @@
       "srHint": ": {hint}",
       "editNote": "Edit note",
       "addNote": "Add a note",
-      "saveNote": "Save note"
+      "saveNote": "Save note",
+      "lastListed": "Last listed by a source on {date}.",
+      "filterHint": "Closed, possibly closed and not listed for weeks"
     }
   },
   "pipeline": {
@@ -6382,7 +6386,7 @@
     "tools": {
       "search_jobs": {
         "title": "Search jobs",
-        "description": "Search the jobs Job Radar collected: by keyword, city, work mode, minimum rank, minimum yearly salary, first-seen date and application status. Returns ranked job cards (facts, links, score and rank) without the JD text; use get_job for one job's details. Jobs the hard filter removed and closed jobs are left out. For \"what is new today\", pass since = today and sort = rank."
+        "description": "Search the jobs Job Radar collected: by keyword, city, work mode, minimum rank, minimum yearly salary, first-seen date and application status. Returns ranked job cards (facts, links, score and rank) without the JD text; use get_job for one job's details. Jobs the hard filter removed, closed jobs and jobs not listed by any source for weeks are left out. For \"what is new today\", pass since = today and sort = rank."
       },
       "get_job": {
         "title": "Get one job",

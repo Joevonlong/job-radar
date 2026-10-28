@@ -16,6 +16,7 @@ dedupe:
   simhash_min_words: 30
 
 lifecycle:
+  # dormant_after_days is optional (schema default 30); 0 wakes dormant jobs at the next maintenance sweep.
   # Not returned by any source for this many consecutive days → possibly_closed (only channels that ran successfully during that period count, so a channel outage never closes jobs)
   possibly_closed_after_days: 7
   # unseen_link_check_after_days: active jobs no source returned for this many days get a direct link check (default 14; 0 = off).

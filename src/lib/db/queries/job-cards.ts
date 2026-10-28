@@ -139,7 +139,7 @@ export function hideGermanLevels(latest: LatestScore, levels: readonly string[])
  * Columns of `jobs` + company name + latest score the card needs; select them with these. `ux`: the seen / closure tables exist
  * (`uxTablesReady`); before the migration every job reads as seen.
  */
-export function cardColumns(latest: LatestScore, ux = true) {
+export function cardColumns(latest: LatestScore, ux = true, dormant = false) {
   return {
     id: jobs.id,
     title: jobs.title,
@@ -151,7 +151,7 @@ export function cardColumns(latest: LatestScore, ux = true) {
     isAgency: jobs.isAgency,
     germanLevelRequired: resolvedGermanLevel(latest),
     status: effectiveStatusSql(ux),
-    closedReason: closedReasonSql(ux),
+    closedReason: closedReasonSql(ux, dormant),
     linkCheckJson: ux ? sql<unknown>`${jobs.linkCheckJson}` : sql<unknown>`null`,
     postedAt: jobs.postedAt,
     firstSeenAt: jobs.firstSeenAt,

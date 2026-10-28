@@ -14,6 +14,7 @@ import { runCycle } from "@/lib/cycle/run-cycle";
 import { closeDb, createConnection, getAtsBoard, getDb, listRunsForCycle, schema, touchRawPostings, type Db } from "@/lib/db";
 import { runMigrations } from "@/lib/db/migrate";
 import { recordAtsBoardCheck } from "@/lib/db/repos/ats-boards";
+import { resetDormancyCache } from "@/lib/db/repos/dormancy";
 import { markJobsPossiblyClosed } from "@/lib/db/repos/jobs";
 
 import { atsChannelsWith, company, depsWith, fixtureJson, inputs, response, routedFetch } from "../channels/ats/helpers";
@@ -68,12 +69,14 @@ async function source(db: Db, jobId: number, externalId: string, channelId: stri
 
 async function overdueJob(db: Db, name: string, token: string | undefined, channelId = "greenhouse") {
   const [employer] = await db.insert(schema.companies).values({ name, nameNorm: name.toLowerCase() }).returning();
-  const [job] = await db.insert(schema.jobs).values({
-    companyId: employer!.id, title: "Overdue role", titleNorm: "overdue role", status: "active",
-    firstSeenAt: lastSeen, lastSeenAt: lastSeen,
-  }).returning();
-  await source(db, job!.id, name, channelId, token);
-  return job!.id;
+  // This fixture also runs before the dormancy migration: name only columns present in that schema.
+  const [job] = await db.execute<{ id: string }>(sql`
+    insert into jobs (company_id, title, title_norm, status, first_seen_at, last_seen_at)
+    values (${employer!.id}, 'Overdue role', 'overdue role', 'active', ${lastSeen.toISOString()}::timestamptz, ${lastSeen.toISOString()}::timestamptz)
+    returning id`);
+  const id = Number(job!.id);
+  await source(db, id, name, channelId, token);
+  return id;
 }
 
 async function boardState(db: Db, token: string, values: Partial<typeof schema.atsBoards.$inferInsert> = {}) {
@@ -458,6 +461,8 @@ describe("upgrading legacy ATS board evidence", () => {
       // runCycle holds one connection for its advisory lock while the collector uses the pool.
       const connection = createConnection(target.toString(), { max: 3 });
       try {
+        // The other tests use the current schema; this database must probe its own capabilities.
+        resetDormancyCache();
         const db = connection.db;
         const absent = await overdueJob(db, "D", srBoard.token, "smartrecruiters");
         await successfulRun(db, "smartrecruiters");
@@ -503,6 +508,7 @@ describe("upgrading legacy ATS board evidence", () => {
         expect.soft(remembered?.externalIds).not.toContain("D");
         expect.soft(await markJobsPossiblyClosed(db, { now: next, days: 7 })).toEqual([absent]);
       } finally {
+        resetDormancyCache();
         await connection.sql.end({ timeout: 2 });
       }
     } finally {

@@ -8,6 +8,7 @@ import type { SleepFn } from "@/lib/channels/http";
 
 import { checkLink, combineLinkStatuses, type LinkStatus } from "./link-check";
 import { compilePhrases, createWatchedChecker } from "./recheck";
+import { markJobsDormant, wakeIneligibleDormantJobs } from "@/lib/db/repos/dormancy";
 
 /** What the recheck of watched jobs did this run. */
 export interface WatchedRecheckResult {
@@ -30,6 +31,8 @@ export interface MaintenanceResult {
   reopened: number;
   /** Active jobs no source returned for `possibly_closed_after_days` days. */
   possiblyClosed: number;
+  /** Woke counts the sweep only; sightings stay in seen / reopened. */
+  dormant: { marked: number; woke: number };
   linkChecked: number;
   /** Link checks that found the posting gone (404 / 410): the job is now `closed`. */
   closed: number;
@@ -75,7 +78,7 @@ export async function runMaintenance(db: Db, options: MaintenanceOptions): Promi
   const now = options.now();
   const watchedOn = options.watched?.enabled === true;
   const userAgent = config.lifecycle.watch_recheck.user_agent;
-  const result: MaintenanceResult = { seen: 0, reopened: 0, possiblyClosed: 0, linkChecked: 0, closed: 0, alive: 0, unseen: { checked: 0, closed: 0, alive: 0 }, watched: null, aborted: false };
+  const result: MaintenanceResult = { seen: 0, reopened: 0, possiblyClosed: 0, dormant: { marked: 0, woke: 0 }, linkChecked: 0, closed: 0, alive: 0, unseen: { checked: 0, closed: 0, alive: 0 }, watched: null, aborted: false };
 
   const touched = await touchJobsSeen(db);
   result.seen = touched.seen;
@@ -84,6 +87,12 @@ export async function runMaintenance(db: Db, options: MaintenanceOptions): Promi
   const overdue = await markJobsPossiblyClosed(db, { now, days: config.lifecycle.possibly_closed_after_days });
   result.possiblyClosed = overdue.length;
   if (overdue.length > 0) logger.info("jobs marked possibly_closed", { count: overdue.length });
+
+  const dormancy = { now, possiblyClosedAfterDays: config.lifecycle.possibly_closed_after_days, dormantAfterDays: config.lifecycle.dormant_after_days };
+  result.dormant.marked = await markJobsDormant(db, dormancy);
+  result.dormant.woke = await wakeIneligibleDormantJobs(db, dormancy);
+  if (result.dormant.marked > 0) logger.info("jobs marked dormant", { count: result.dormant.marked });
+  if (result.dormant.woke > 0) logger.info("dormant jobs woke", { count: result.dormant.woke });
 
   let skipped = 0;
   // Watched jobs use their own recheck below (robots.txt obeyed), with a plain link fallback when the last recheck got no answer.

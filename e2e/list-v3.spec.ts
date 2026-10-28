@@ -268,3 +268,21 @@ test.describe("closing jobs on /jobs", () => {
     }
   });
 });
+
+for (const locale of ["en", "zh"] as const) {
+  test(`dormant jobs appear only in the closed view with an accessible explanation (${locale})`, async ({ page, context, baseURL }) => {
+    if (!baseURL) throw new Error("The e2e run must configure baseURL");
+    await context.addCookies([{ name: "NEXT_LOCALE", value: locale, url: baseURL }]);
+    await open(page, "/jobs?q=Document+Retrieval");
+    await expect(listRows(page)).toHaveCount(0);
+    const toggle = page.getByTestId("toggle-closed");
+    await expect(toggle).toHaveAttribute("title", locale === "en" ? "Closed, possibly closed and not listed for weeks" : "已关闭、可能已关闭和数周未被列出的岗位");
+    await toggle.click();
+    const row = listRows(page).filter({ hasText: "Research Engineer, Document Retrieval" });
+    const chip = row.locator('[data-slot="job-status-chip"]');
+    await expect(chip).toHaveAttribute("data-reason", "dormant");
+    await expect(chip).toContainText(locale === "en" ? "Not listed for weeks" : "数周未被列出");
+    await expect(chip).toHaveAttribute("title", locale === "en" ? /No source has listed/ : /已经数周/);
+    await expect(chip.locator(".sr-only")).toContainText(locale === "en" ? "No source has listed" : "已经数周");
+  });
+}

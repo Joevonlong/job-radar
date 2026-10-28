@@ -1,3 +1,4 @@
+import { previewDealBreakers } from "@/lib/profile/deal-breaker-preview";
 import fs from "node:fs";
 
 import { and, asc, eq } from "drizzle-orm";
@@ -100,6 +101,24 @@ const salaryJson = (max: number) => ({
 });
 
 describe("filter step", () => {
+  it("skips dormant jobs across preference snapshots, supports explicit refiltering and fills results after waking", async () => {
+    await addJob();
+    const sleeping = await addJob({ status: "possibly_closed", lastSeenAt: new Date("2026-07-01T00:00:00Z"), dormantAt: new Date("2026-09-01T00:00:00Z") });
+    expect(await runStep()).toMatchObject({ evaluated: 1, created: 1 });
+    expect(await runStep()).toMatchObject({ evaluated: 1, created: 0, unchanged: 1 });
+    const preview = await previewDealBreakers(getDb(), [], { pipeline: shippedPipeline(), me: null, sampleLimit: 3 });
+    expect(preview.total).toBe(1);
+    await setFloor(91000);
+    expect(await runStep()).toMatchObject({ evaluated: 1, created: 1 });
+    expect(await rowsOf(sleeping.id)).toHaveLength(0);
+    expect(await refilterJob(getDb(), sleeping.id)).not.toBeNull();
+    expect(await rowsOf(sleeping.id)).toHaveLength(1);
+    await setFloor(92000);
+    expect(await runStep()).toMatchObject({ evaluated: 1, created: 1 });
+    await getDb().update(schema.jobs).set({ dormantAt: null, status: "active" }).where(eq(schema.jobs.id, sleeping.id));
+    expect(await runStep()).toMatchObject({ evaluated: 2, created: 1 });
+  });
+
   it("stores one result per job under a snapshot of the current preferences", async () => {
     const ok = await addJob();
     const student = await addJob({ contract: "student" });

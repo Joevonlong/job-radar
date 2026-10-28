@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, exists, getTableColumns, gte, inArray, isNull, lte, ne, not, notExists, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, count, desc, eq, exists, gte, inArray, isNull, lte, ne, not, notExists, or, sql, type SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { z } from "zod";
 
@@ -18,6 +18,7 @@ import { hasHighValueSignal, policyCurrency, type HighValuePolicy } from "./sign
 import { parseSalary } from "./parse";
 import type { JobCard } from "./types";
 import type { JobSalary } from "@/lib/domain/types";
+import { dormancyReady } from "../repos/dormancy";
 
 /** `hasHighValueSignal`, or false without a policy. */
 function highValueSql(db: Db, policy: HighValuePolicy | null | undefined): SQL {
@@ -271,7 +272,7 @@ export async function listTodayJobs(db: Db, options: TodayOptions): Promise<JobC
   if (options.quick) conditions.push(quickCondition(db, latest, options.quick, options.quickLines ?? { qualifiedMinRank: null, qualifiedMinRankWithSignals: null }, options.highValue));
 
   const rows: CardRow[] = await db
-    .select(cardColumns(latest, ux))
+    .select(cardColumns(latest, ux, await dormancyReady(db)))
     .from(jobs)
     .innerJoin(companies, eq(companies.id, jobs.companyId))
     .leftJoinLateral(latest, sql`true`)
@@ -396,7 +397,7 @@ export async function listRecentCycleKpis(db: Db, options: CycleSummaryOptions &
     .where(and(gte(firstSeen.firstSeenAt, cycles.startedAt), sql`${firstSeen.firstSeenAt} <= ${windowEnd}`))
     .unionAll(db.select({ id: scores.jobId }).from(scores).where(and(gte(scores.scoredAt, cycles.startedAt), sql`${scores.scoredAt} <= ${windowEnd}`)));
   // named like the table, so the columns the counts read (`jobs.salary_json`, the signal checks, the latest score) are the handled jobs'
-  const handled = db.select(getTableColumns(jobs)).from(jobs).where(inArray(jobs.id, handledIds)).as("jobs");
+  const handled = db.select({ id: jobs.id, salaryJson: jobs.salaryJson }).from(jobs).where(inArray(jobs.id, handledIds)).as("jobs");
   const qualifies =
     qualifiedMinRank === null
       ? sql`false`
