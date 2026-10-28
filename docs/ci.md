@@ -24,15 +24,17 @@ flowchart LR
   PR --> static
   PR --> unit
   changes -- code changed --> integration
+  changes -- code changed --> integration-shuffled["integration (shuffled)"]
   changes -- code changed --> worker-switch
   changes -- code changed --> e2e["e2e (parallel / chain)"]
   changes -- code changed --> linux-smoke
-  changes -- deploy side or toolchain changed --> upgrade-transition
+  changes -- deploy side or toolchain changed --> upgrade-transition["upgrade-transition (A / B)"]
   changes --> ci-ok
   ci-docs --> ci-ok
   static --> ci-ok
   unit --> ci-ok
   integration --> ci-ok
+  integration-shuffled --> ci-ok
   worker-switch --> ci-ok
   e2e --> ci-ok
   linux-smoke --> ci-ok
@@ -40,22 +42,23 @@ flowchart LR
   ci-ok --> merge([the one required check])
 ```
 
-All jobs run side by side; the run takes as long as the slowest one rather than the sum. Worker-switch and transition
-shards share a runner within each job; compare wall time, memory and disk samples on real runs before keeping this shape. `ci-ok` is the single check a branch protection rule should require: it passes only when every job the
-classifier selected succeeded.
+All jobs run side by side; the run takes as long as the slowest one rather than the sum. Worker-switch shards share
+one runner; the default and shuffled integration passes and the two transition scenarios each have separate runners.
+`ci-ok` is the single check a branch protection rule should require: it passes only when every job the classifier
+selected succeeded.
 
 Which jobs run depends on what the change touches (decided by the `changes` job):
 
 | Change | Jobs that run |
 |---|---|
 | Pull request that changes only documentation (`*.md`, `*.html`, images; excludes toolchain paths and anything under `tests/`, `src/` or `public/`) | `changes` (with the documentation link check), `ci-docs`, `static`, `unit`, `ci-ok`. Several unit tests read the documentation (link targets, picture sizes), so they run. |
-| Any other pull request (code, scripts, config, anything under `tests/`, `src/` or `public/`, workflows, Dockerfiles) | the above plus `integration`, `worker-switch`, `e2e` and `linux-smoke` |
-| Pull request that touches the deploy side (`scripts/ops/`, root `scripts/*.ts`, `src/lib/ops/`, `src/lib/config/migrations/`, `src/ai-worker/`, `compose.yaml`, `Dockerfile`, `tests/transition/`, `tests/ops/sim/`) | the above plus `upgrade-transition` |
+| Any other pull request (code, scripts, config, anything under `tests/`, `src/` or `public/`, workflows, Dockerfiles) | the above plus `integration`, `integration-shuffled` (`integration (shuffled)`), `worker-switch`, `e2e` and `linux-smoke` |
+| Pull request that touches the deploy side (`scripts/ops/`, root `scripts/*.ts`, `src/lib/ops/`, `src/lib/config/migrations/`, `src/ai-worker/`, `compose.yaml`, `Dockerfile`, `tests/transition/`, `tests/ops/sim/`) | the above plus `upgrade-transition (A)` and `upgrade-transition (B)` |
 | Dependency/toolchain pull request (`package.json`, lock/workspace files, `.github/**`, root test configs, Node version files) | everything (`full=true`, `transition=true`), including default-order integration |
 | Push to `main` | always everything, whatever the pushed commits touch; `integration` also runs the default file order |
 | Manual run (`workflow_dispatch`) | everything, like a push to `main` |
 
-A job the classifier did not select (`integration`, `worker-switch`, `e2e`, `linux-smoke` on a documentation-only pull request) shows as
+A job the classifier did not select (`integration`, `integration-shuffled`, `worker-switch`, `e2e`, `linux-smoke` on a documentation-only pull request) shows as
 "skipped" and `ci-ok` accepts exactly that; a job that must run and was skipped, cancelled or failed makes `ci-ok` fail.
 
 Workflow-level settings: `permissions: contents: read` (no job can write to the repository; pull requests from forks run
@@ -98,7 +101,7 @@ Only a pull request is classified; it writes three outputs that the other jobs r
 - `code`: `true` unless every changed file is documentation (`*.md`, `*.html`, `png`, `jpg`, `svg`, `gif`). Anything
   under `tests/`, `src/` or `public/` is code even when it is an HTML file, an SVG or an image: the tests read their
   fixtures and the app ships its own pictures and pages. Scripts, YAML,
-  Dockerfiles and workflows are code as well. `code` selects `integration`, `worker-switch`, `e2e` and `linux-smoke`; `static` and `unit`
+  Dockerfiles and workflows are code as well. `code` selects `integration`, `integration-shuffled`, `worker-switch`, `e2e` and `linux-smoke`; `static` and `unit`
   run either way (the unit tests read the documentation, and no list of "which tests read which file" is kept that
   could go stale). Toolchain paths take precedence over documentation extensions.
 - `full`: `true` on pushes to `main`, manual runs and dependency/toolchain pull requests; it adds the default-order integration run. Toolchain paths are `package.json` (including `engines.node`), `pnpm-lock.yaml`, `pnpm-workspace.yaml`, anything under `.github/`, root `vitest*.ts` / `playwright*.ts`, `.nvmrc` and `.node-version`. They also force `code=true` and `transition=true`, including Markdown under `.github/`.
@@ -308,7 +311,8 @@ Tests that need a real PostgreSQL 17: repositories and migrations, the cycle and
 ai-worker, the dashboard queries, backups with the real `pg_dump` / `pg_restore`. The files under
 `tests/integration/`, run through `vitest.integration.config.ts` (node environment, files one after another because they share one
 database that is emptied before and after every file). The two worker switch files run in `worker-switch` instead.
-Limit 45 minutes; the default and shuffled orders remain sequential.
+Limit 45 minutes. This job keeps the default-order pass (only when `full=true`) and the lowest-Node release-module
+checks. The shuffled pass runs concurrently in `integration-shuffled`, on its own runner and PostgreSQL service.
 
 The job has a `postgres:17` service container and the environment `DATABASE_URL=postgres://postgres:postgres@localhost:5432/postgres`.
 The role may create databases: every run creates a uniquely named database (`tests/integration/global-setup.ts`) and
@@ -350,14 +354,6 @@ reporter prints each file as it starts, so a hung file is named. The two worker 
 they have their own job below. Limit 15 minutes. Run locally with a database as
 described in [Running the whole pipeline locally](#running-the-whole-pipeline-locally).
 
-#### Integration tests (shuffled file order)
-
-Runs the same suite with `--sequence.shuffle.files --sequence.seed=<seed>`; the seed is printed as a `::notice::`
-annotation (`integration file order seed: N`). Other pull requests run only this order: it finds files that depend on
-another file's leftovers, which a fixed order hides. To reproduce a failure, run
-`pnpm test:integration --sequence.shuffle.files --sequence.seed=<seed>` with the seed from the annotation. The two worker
-switch files are left out here too. Limit 15 minutes.
-
 #### Set up the lowest Node.js of engines.node
 
 `actions/setup-node` again, now with Node 22.23.4, the lowest version `engines.node` (`>=22.23.4 <23`) allows. The host
@@ -373,6 +369,41 @@ modules through the release guard and the tsx loader from inside the release dir
 when stderr says `module.register called` (tsx would have taken the hooks-thread path, which the guard refuses). Limit 5
 minutes. Locally, with Node 22.23.4 active: the same commands from the workflow, in a temporary directory, never with
 `--root` pointing at your installation's checkout.
+
+### Job `integration-shuffled`
+
+The `integration (shuffled)` job runs on every code change, with the same `changes` gate, 45-minute limit,
+PostgreSQL 17 service, environment, dependency setup and required client tools as `integration`. It has its own runner
+and runs alongside the default-order and lowest-Node checks; no test selection or seed behavior changes.
+
+#### Check out the repository
+
+`actions/checkout`.
+
+#### Set up pnpm
+
+`pnpm/action-setup`.
+
+#### Set up Node.js
+
+`actions/setup-node`, Node 22, pnpm store cache.
+
+#### Install dependencies
+
+`pnpm install --frozen-lockfile`.
+
+#### Provide PostgreSQL 17 client tools
+
+Uses the same `scripts/ops/pg-docker.sh` symlinks and version checks as `integration` above, against this job's own
+PostgreSQL 17 service. Limit 5 minutes; the client tools remain required, so backup tests cannot silently skip.
+
+#### Integration tests (shuffled file order)
+
+Runs the same suite with `--sequence.shuffle.files --sequence.seed=<seed>`; the seed is printed as a `::notice::`
+annotation (`integration file order seed: N`). Other pull requests run only this order: it finds files that depend on
+another file's leftovers, which a fixed order hides. To reproduce a failure, run
+`pnpm test:integration --sequence.shuffle.files --sequence.seed=<seed>` with the seed from the annotation. The two worker
+switch files are left out here too. Limit 15 minutes.
 
 ### Job `worker-switch`
 
@@ -714,11 +745,12 @@ Always: `docker compose down -v --remove-orphans` on the throwaway runner.
 
 Upgrade transitions with real Docker and the real deploy, install and uninstall scripts of each version, the ai-worker
 under the systemd simulator (`tests/transition/run.sh`). Runs when `changes` sets `transition` (pull requests that touch
-the deploy side or toolchain, every push to `main`, manual runs). No service container: each compose project of the script runs its
-own database. Limit 120 minutes; it builds the images about ten times. Setup and launch step caps total 25 minutes;
-the shared launch-time deadline is 65 minutes, with 66-minute caps on each wait (B gets no fresh execution budget).
-Allowing 2 minutes for both waits' reporting overhead, the 5-minute cleanup step (including its 240-second grace)
-and two 5-minute uploads gives a conservative 107-minute budget, leaving 13 minutes before the job limit.
+the deploy side or toolchain, every push to `main`, manual runs). The matrix creates `upgrade-transition (A)` and
+`upgrade-transition (B)` on separate runners with `fail-fast: false`: one failure does not cancel the other.
+No service container: each compose project of the script runs its own database. Each leg keeps the 120-minute job limit,
+65-minute launch-time deadline and 66-minute wait cap. Setup and launch caps total 25 minutes; allowing 1 minute for
+reporting, 5 minutes for cleanup (including its 240-second grace), and one 5-minute upload gives a conservative
+101-minute budget per leg, leaving 19 minutes before the job limit.
 
 #### Check out the repository
 
@@ -738,20 +770,18 @@ and two 5-minute uploads gives a conservative 107-minute budget, leaving 13 minu
 
 #### Start transition scenarios
 
-Starts two independent `bash tests/transition/run.sh --scenarios A <artifacts-A>` and `--scenarios B <artifacts-B>`
-processes in the background. Limit 2 minutes. Separate runner-temp artifact directories prevent `collect_artifacts`'s
-fixed filenames from overwriting one another. Each process creates its own random `RUN_ID`, temporary root,
-compose-project prefix, HOME/XDG directories and simulator state; images have project-specific names and deploys use
-`--no-prune`. Docker layer cache is shared. Ports are chosen through ephemeral local binds; a small bind/release race
-between the two processes remains possible and must be watched on real runs.
+Starts only the matrix-selected scenario in the background: `bash tests/transition/run.sh --scenarios A <artifacts-A>`
+or `--scenarios B <artifacts-B>`, using `SCENARIO` from `matrix.scenario`. Limit 2 minutes. Each leg has its own runner,
+Docker daemon and layer cache, runner-temp artifacts, random `RUN_ID`, temporary root, compose-project prefix,
+HOME/XDG directories and simulator state. Images have project-specific names and deploys use `--no-prune`.
 
-Prints `df -h`, `free -h` and `docker system df` before launch. Each wait prints them at its start, every minute while
-waiting and on exit. Every diagnostic command is non-fatal and cannot change a shard's result. Compare memory/disk
-samples and wall time: if concurrent builds exhaust resources or do not pay,
-move the scenarios to separate runner jobs.
+Prints `df -h`, `free -h` and `docker system df` before launch. Each selected wait prints them at its start, every
+minute while waiting and on exit. Every diagnostic command is non-fatal and cannot change a scenario's result.
+Measure the wall-clock gain on hosted runs: A and B previously competed for resources on one runner.
 
 #### Transition scenario A
 
+Runs only in `upgrade-transition (A)` (`matrix.scenario == 'A'`), with the exact step name `Transition scenario A`.
 Waits only for A's atomically published exit-code file; limit 66 minutes, with a 65-minute deadline from launch.
 Missing status, a dead wrapper without status, deadline expiry or a nonzero/invalid status fails with the full log;
 success prints its last 100 lines. Waits run even after a previous failure, unless cancelled.
@@ -763,7 +793,8 @@ In clones with isolated compose projects (`jrtransition-<random>-*`), ports, vol
 
 #### Transition scenario B
 
-The same independent wait and 66-minute limit for B, with the same launch-time deadline. B builds its own starting
+Runs only in `upgrade-transition (B)` (`matrix.scenario == 'B'`), with the exact step name `Transition scenario B`.
+The same independent wait and 66-minute limit for B, measured from its own launch. B builds its own starting
 version and keeps D, C and E inside its process because they depend on its state:
 
 - B: 62d7ad9; the new `install-ai-worker.sh --release` of a release whose worker throws at start must roll back to the
@@ -805,13 +836,15 @@ children finish cleanup.
 
 #### Upload the transition logs (scenario A)
 
-Only when an earlier step failed and launch published its state directory, matching the original failure-only upload:
+Only in the A leg when an earlier step failed and launch published its state directory
+(`failure() && matrix.scenario == 'A' && env.TRANSITION_STATE != ''`):
 A's wrapper log and artifact directory (worker logs, simulator calls and per-step output), as `upgrade-transition-logs-A`,
 kept 7 days. Success or cancellation alone does not trigger an upload.
 
 #### Upload the transition logs (scenario B)
 
-The same failure-only condition for B, as `upgrade-transition-logs-B`, from its separate wrapper log and artifact
+Only in the B leg (`failure() && matrix.scenario == 'B' && env.TRANSITION_STATE != ''`),
+as `upgrade-transition-logs-B`, from its separate wrapper log and artifact
 directory, kept 7 days.
 
 ### Job `ci-ok`
@@ -822,9 +855,10 @@ skipped. Limit 5 minutes, a few seconds.
 #### All selected checks passed
 
 Reads the `needs` results (`jq`): `changes`, `ci-docs`, `static` and `unit` must always have succeeded (a skipped one is a
-failure, not a pass); `integration`, `worker-switch`, `e2e` and `linux-smoke` must have succeeded when `changes` selected code and be
-skipped otherwise; `upgrade-transition` likewise with `transition`. `needs.e2e.result` aggregates both matrix jobs, so
-both parts must succeed on code changes; the entire matrix must be skipped on documentation-only changes. Any other
+failure, not a pass); `integration`, `integration-shuffled`, `worker-switch`, `e2e` and `linux-smoke` must have succeeded
+when `changes` selected code and be skipped otherwise; `upgrade-transition` likewise with `transition`. `needs["upgrade-transition"].result` aggregates its
+matrix: both legs must succeed when selected, and the entire matrix must be skipped otherwise. `needs.e2e.result`
+aggregates both e2e matrix jobs, so both parts must succeed on code changes; the entire matrix must be skipped on documentation-only changes. Any other
 combination (including a job that must run and was skipped or cancelled) prints the per-job results and
 `::error::a selected check did not succeed`. When it is red, look at the per-job lines it prints first, then open that job.
 
@@ -882,7 +916,7 @@ bash tests/ops/proc-lib/cases.sh   # the CI also runs it in the pinned bash:3.2 
 pnpm exec drizzle-kit generate < /dev/null && git status --porcelain -- drizzle   # must print nothing
 (cd jobspy && python3.12 -m venv .venv && .venv/bin/pip install --require-hashes -r requirements-dev.txt && .venv/bin/python -m pytest -q)
 
-# job: integration (needs pg_dump / pg_restore of major version 17, see the job's step)
+# jobs: integration and integration-shuffled (separate CI runners; run locally in sequence; pg tools major 17)
 export PG_DUMP_PATH=/path/to/pg_dump PG_RESTORE_PATH=/path/to/pg_restore REQUIRE_PG_TOOLS=1
 pnpm test:integration --reporter=verbose --exclude "tests/integration/ai-worker-swap.test.ts" --exclude "tests/integration/uninstall-ai-worker.test.ts"
 pnpm test:integration --sequence.shuffle.files --sequence.seed=$RANDOM --exclude "tests/integration/ai-worker-swap.test.ts" --exclude "tests/integration/uninstall-ai-worker.test.ts"

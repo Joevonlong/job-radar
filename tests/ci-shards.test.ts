@@ -14,7 +14,7 @@ const workflow = z.object({ jobs: z.record(z.string(), z.object({
 
 const jobs = [
   { job: "worker-switch", start: "Start worker switch shards", waits: ["Worker switch (systemd)", "Worker switch (launchd)"], cleanup: "Clean up worker switch shards", state: "WORKER_SWITCH_STATE", shards: ["systemd", "launchd"] },
-  { job: "upgrade-transition", start: "Start transition scenarios", waits: ["Transition scenario A", "Transition scenario B"], cleanup: "Clean up transition scenarios", state: "TRANSITION_STATE", shards: ["A", "B"] },
+  ...["A", "B"].map((scenario) => ({ job: "upgrade-transition", start: "Start transition scenarios", waits: [`Transition scenario ${scenario}`], cleanup: "Clean up transition scenarios", state: "TRANSITION_STATE", shards: [scenario] })),
 ];
 
 function snippet(job: string, name: string): string {
@@ -81,6 +81,7 @@ wait "$!"
     DUMMY_COMMAND: path.join(bin, "dummy"), DUMMY_ROOT: tmp,
     DUMMY_FIRST_SHARD: job.shards[0], DUMMY_FIRST_MODE: firstMode, DUMMY_SECOND_MODE: secondMode,
     DUMMY_DIAGNOSTIC_STATUS: String(diagnosticStatus),
+    SCENARIO: job.shards[0],
   };
   // The transition process must use its scenario argument even if a developer exported this local test filter.
   delete env.SWAP_MANAGERS;
@@ -138,13 +139,15 @@ describe.each(jobs)("$job workflow processes", (job) => {
       const first = fx.run(job.waits[0]!);
       expect(first.status, first.stdout + first.stderr).toBe(mode === "success" ? 0 : 1);
       expect(first.stdout).toContain(`dummy ${job.shards[0]} log`);
-      const second = fx.run(job.waits[1]!);
-      expect(second.status, second.stdout + second.stderr).toBe(0);
-      expect(second.stdout).toContain(`dummy ${job.shards[1]} log`);
+      if (job.waits.length > 1) {
+        const second = fx.run(job.waits[1]!);
+        expect(second.status, second.stdout + second.stderr).toBe(0);
+        expect(second.stdout).toContain(`dummy ${job.shards[1]} log`);
+      }
     } finally { fx.dispose(); }
   });
 
-  it("reports both a failed first shard and a successful second shard independently", async () => {
+  it("reports a failed shard independently and launches only the selected scenarios", async () => {
     const fx = fixture(job, "failure", "success");
     try {
       await until(fx.ready);
@@ -152,27 +155,32 @@ describe.each(jobs)("$job workflow processes", (job) => {
       expect(first.status, first.stdout + first.stderr).toBe(1);
       expect(first.stdout).toContain("exit code 7");
       expect(first.stdout).toContain(`dummy ${job.shards[0]} log`);
-      const second = fx.run(job.waits[1]!);
-      expect(second.status, second.stdout + second.stderr).toBe(0);
-      expect(second.stdout).toContain(`dummy ${job.shards[1]} log`);
-      expect(second.stdout).not.toContain(`dummy ${job.shards[0]} log`);
+      if (job.waits.length > 1) {
+        const second = fx.run(job.waits[1]!);
+        expect(second.status, second.stdout + second.stderr).toBe(0);
+        expect(second.stdout).toContain(`dummy ${job.shards[1]} log`);
+        expect(second.stdout).not.toContain(`dummy ${job.shards[0]} log`);
+      }
       if (job.job === "upgrade-transition") {
-        for (const shard of job.shards) {
-          expect(fs.readFileSync(path.join(fx.tmp, `${shard}.args`), "utf8")).toContain(`--scenarios ${shard} ${fx.state}/${shard}/artifacts`);
-        }
+        const scenario = job.shards[0]!;
+        expect(fs.readFileSync(path.join(fx.tmp, `${scenario}.args`), "utf8")).toContain(`--scenarios ${scenario} ${fx.state}/${scenario}/artifacts`);
+        const other = scenario === "A" ? "B" : "A";
+        expect(fs.existsSync(path.join(fx.tmp, `${other}.args`))).toBe(false);
       }
     } finally { fx.dispose(); }
   });
 
-  it("does not wait for the other shard and rejects a missing exit-code file", async () => {
-    const fx = fixture(job, "success", "missing");
+  it("rejects a missing exit-code file without depending on another shard", async () => {
+    const multiple = job.shards.length > 1;
+    const fx = fixture(job, multiple ? "success" : "missing", "missing");
     try {
       await until(fx.ready);
-      expect(fx.run(job.waits[0]!).status).toBe(0);
-      const missing = fx.run(job.waits[1]!);
+      if (multiple) expect(fx.run(job.waits[0]!).status).toBe(0);
+      const index = multiple ? 1 : 0;
+      const missing = fx.run(job.waits[index]!);
       expect(missing.status, missing.stdout + missing.stderr).toBe(1);
       expect(missing.stdout).toContain("without an exit-code file");
-      expect(fs.existsSync(path.join(fx.state, `${job.shards[1]}.exit`))).toBe(false);
+      expect(fs.existsSync(path.join(fx.state, `${job.shards[index]}.exit`))).toBe(false);
     } finally { fx.dispose(); }
   });
 
@@ -189,7 +197,7 @@ describe.each(jobs)("$job workflow processes", (job) => {
     } finally { fx.dispose(); }
   });
 
-  it("forwards cancellation to a shard's trap and cleanup stops the other process group", async () => {
+  it("forwards cancellation to a shard's trap and cleanup stops all process groups", async () => {
     const fx = fixture(job, "block", "block");
     try {
       await until(fx.ready);
