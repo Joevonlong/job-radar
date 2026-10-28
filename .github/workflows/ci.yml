@@ -16,7 +16,7 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # The checks of scripts/validate.sh run as separate jobs side by side (static, unit test shards, integration, e2e,
-# worker-switch, linux-smoke), so the run takes as long as the slowest job instead of the sum. `ci-ok` sums them up into one check.
+# integration-shuffled, worker-switch, linux-smoke), so the run takes as long as the slowest job instead of the sum. `ci-ok` sums them up into one check.
 # Runners are pinned to ubuntu-24.04 (ubuntu-latest moves to Ubuntu 26 from 2026-10-19); move deliberately, with the
 # Playwright system libraries and the pg client wrappers checked on the new image.
 #
@@ -24,11 +24,14 @@ concurrency:
 # src/ and public/, counts as code):
 #   docs-only PR        changes (classification + documentation link check), ci-docs, static (+ jobspy), unit
 #                       (the unit tests read the documentation and the fixtures)
-#   code PR             the above plus integration (shuffled file order), worker-switch, e2e, linux-smoke
-#   deploy-side PR      the above plus upgrade-transition (scripts/ops/, src/ai-worker/, compose.yaml, Dockerfile changed)
+#   code PR             the above plus integration, integration (shuffled), worker-switch, e2e, linux-smoke
+#   deploy-side PR      the above plus upgrade-transition (A) and upgrade-transition (B) (deploy-side files changed)
 #   toolchain PR        everything, including default-order integration and upgrade-transition
 #   push to main        always everything, whatever the pushed commits touch; integration also runs in default order
 #   manual run          everything
+# Stable job / step names (transition names are required by the deploy gate):
+#   integration / Integration tests (default order); integration (shuffled) / Integration tests (shuffled file order)
+#   upgrade-transition (A) / Transition scenario A; upgrade-transition (B) / Transition scenario B
 jobs:
   # Decides which checks run, and checks the relative links of the documentation for every change.
   # Every path that is not documentation (scripts, config, CI) counts as code.
@@ -236,7 +239,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-24.04
-    # Default and shuffled orders stay sequential; worker switch tests run in their own job below.
+    # The shuffled order runs on its own runner; worker switch tests have their own job below.
     timeout-minutes: 45
     env:
       PG_DUMP_PATH: ${{ github.workspace }}/../pgbin/pg_dump
@@ -289,20 +292,11 @@ jobs:
           "$PG_DUMP_PATH" --version
           "$PG_RESTORE_PATH" --version
       # Main, manual and toolchain runs use the default order too; other pull requests use the shuffled order only.
-      # Re-run a failure locally with
-      # `pnpm test:integration --sequence.shuffle.files --sequence.seed=<seed>`.
       - name: Integration tests (default order)
         if: needs.changes.outputs.full == 'true'
         # A stalled run once sat here silently for over an hour; fail early and name the file that hangs.
         timeout-minutes: 15
         run: pnpm test:integration --reporter=verbose --exclude "tests/integration/ai-worker-swap.test.ts" --exclude "tests/integration/uninstall-ai-worker.test.ts"
-      - name: Integration tests (shuffled file order)
-        timeout-minutes: 15
-        run: |
-          seed=$((RANDOM * 32768 + RANDOM))
-          echo "::notice::integration file order seed: $seed"
-          pnpm test:integration --reporter=verbose --sequence.shuffle.files --sequence.seed="$seed" \
-            --exclude "tests/integration/ai-worker-swap.test.ts" --exclude "tests/integration/uninstall-ai-worker.test.ts"
       # engines.node allows Node 22.23.4 and later 22.x: the host ai-worker's release guard needs the synchronous module
       # hooks, which tsx only takes from 22.22.3 on; 22.23.4 is the floor with the security fixes of the 2026-10-21 Node
       # release. The Node above is the newest 22.x; the lowest allowed one is checked here, on a release directory built
@@ -327,6 +321,71 @@ jobs:
           cat "$root/stderr.txt"
           if [[ "$rc" -ne 0 ]]; then echo "::error::loading a release module with Node $(node --version) exited $rc"; exit 1; fi
           if grep -q "module.register called" "$root/stderr.txt"; then echo "::error::tsx took the module.register path"; exit 1; fi
+
+  integration-shuffled:
+    name: integration (shuffled)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      PG_DUMP_PATH: ${{ github.workspace }}/../pgbin/pg_dump
+      PG_RESTORE_PATH: ${{ github.workspace }}/../pgbin/pg_restore
+      # The real dump/restore tests fail instead of skipping when the client tools are missing.
+      REQUIRE_PG_TOOLS: "1"
+      # Throwaway service container; each run creates and drops its own uniquely named database.
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        timeout-minutes: 5
+      - name: Set up pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+        timeout-minutes: 5
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        timeout-minutes: 5
+        with:
+          node-version: "22"
+          check-latest: true
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - name: Install dependencies
+        timeout-minutes: 8
+        run: pnpm install --frozen-lockfile
+      # The backup tests run the real pg_dump / pg_restore, whose major version must match the postgres:17 service.
+      # They come from the postgres:17 image (already pulled for the service) instead of apt.postgresql.org, which once
+      # hung this step for an hour. The wrappers run the tool in a --network host container, so localhost:5432 works.
+      - name: Provide PostgreSQL 17 client tools
+        timeout-minutes: 5
+        run: |
+          mkdir -p "$(dirname "$PG_DUMP_PATH")"
+          ln -sf "$GITHUB_WORKSPACE/scripts/ops/pg-docker.sh" "$PG_DUMP_PATH"
+          ln -sf "$GITHUB_WORKSPACE/scripts/ops/pg-docker.sh" "$PG_RESTORE_PATH"
+          "$PG_DUMP_PATH" --version
+          "$PG_RESTORE_PATH" --version
+      # Re-run a failure locally with the printed seed.
+      - name: Integration tests (shuffled file order)
+        timeout-minutes: 15
+        run: |
+          seed=$((RANDOM * 32768 + RANDOM))
+          echo "::notice::integration file order seed: $seed"
+          pnpm test:integration --reporter=verbose --sequence.shuffle.files --sequence.seed="$seed" \
+            --exclude "tests/integration/ai-worker-swap.test.ts" --exclude "tests/integration/uninstall-ai-worker.test.ts"
 
   # Each manager runs once in an independent process. No path gating: every code change exercises both.
   worker-switch:
@@ -774,13 +833,20 @@ jobs:
   # whose runner image fails to build changes nothing; C, a release with a broken loader is rolled back; E, the
   # emergency restore of the previous release; then the uninstall. After each step: /app/config of the containers,
   # the worker's directory, --print-release, a run_ai request and the doctor. Each project runs its own database.
-  # Two independent processes share the runner and Docker layer cache, with separate run ids and artifact directories.
+  # Each matrix leg has its own runner, Docker daemon, run id and artifact directory.
   # Runs when the deploy side or toolchain changes, and on main or a manual run.
   upgrade-transition:
+    name: upgrade-transition (${{ matrix.scenario }})
     needs: changes
     if: needs.changes.outputs.transition == 'true'
     runs-on: ubuntu-24.04
-    # Setup/launch <=25m + shared deadline 65m + reporting <=2m + cleanup 5m + uploads 10m = 107m (13m spare).
+    strategy:
+      fail-fast: false
+      matrix:
+        scenario: [A, B]
+    env:
+      SCENARIO: ${{ matrix.scenario }}
+    # Per leg: setup/launch <=25m + deadline 65m + reporting <=1m + cleanup 5m + upload 5m = 101m (19m spare).
     timeout-minutes: 120
     steps:
       - name: Check out the repository
@@ -828,7 +894,7 @@ jobs:
           df -h || true
           free -h || true
           docker system df || true
-          for shard in A B; do
+          for shard in "$SCENARIO"; do
             set -m
             bash -c '
               set -uo pipefail
@@ -850,7 +916,7 @@ jobs:
             set +m
           done
       - name: Transition scenario A
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && matrix.scenario == 'A' }}
         timeout-minutes: 66
         run: |
           resources() {
@@ -881,7 +947,7 @@ jobs:
           trap 'forward_signal 130' INT
           trap 'forward_signal 143' TERM
           trap 'forward_signal 129' HUP
-          # An absolute deadline starts at launch, so the second wait never gets a fresh execution budget.
+          # The absolute deadline starts at launch, including any delay before this wait.
           deadline=$(( $(cat "$state/started") + 65 * 60 ))
           sample=$((SECONDS + 60))
           while [[ ! -f "$prefix.exit" ]]; do
@@ -898,7 +964,7 @@ jobs:
           [[ "$rc" == 0 ]] || fail_wait "exit code $rc"
           tail -n 100 "$prefix.log"
       - name: Transition scenario B
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && matrix.scenario == 'B' }}
         timeout-minutes: 66
         run: |
           resources() {
@@ -929,7 +995,7 @@ jobs:
           trap 'forward_signal 130' INT
           trap 'forward_signal 143' TERM
           trap 'forward_signal 129' HUP
-          # An absolute deadline starts at launch, so the second wait never gets a fresh execution budget.
+          # The absolute deadline starts at launch, including any delay before this wait.
           deadline=$(( $(cat "$state/started") + 65 * 60 ))
           sample=$((SECONDS + 60))
           while [[ ! -f "$prefix.exit" ]]; do
@@ -979,7 +1045,7 @@ jobs:
           trap 'cleanup_groups; exit 129' HUP
           cleanup_groups
       - name: Upload the transition logs (scenario A)
-        if: ${{ failure() && env.TRANSITION_STATE != '' }}
+        if: ${{ failure() && matrix.scenario == 'A' && env.TRANSITION_STATE != '' }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         timeout-minutes: 5
         with:
@@ -989,7 +1055,7 @@ jobs:
             ${{ env.TRANSITION_STATE }}/A/artifacts/
           retention-days: 7
       - name: Upload the transition logs (scenario B)
-        if: ${{ failure() && env.TRANSITION_STATE != '' }}
+        if: ${{ failure() && matrix.scenario == 'B' && env.TRANSITION_STATE != '' }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         timeout-minutes: 5
         with:
@@ -1002,7 +1068,7 @@ jobs:
   # The single check to require: every job the classifier selected must have succeeded; only the jobs it deselected
   # may be skipped. changes, ci-docs, static and unit run for every change.
   ci-ok:
-    needs: [changes, ci-docs, static, unit, integration, worker-switch, e2e, linux-smoke, upgrade-transition]
+    needs: [changes, ci-docs, static, unit, integration, integration-shuffled, worker-switch, e2e, linux-smoke, upgrade-transition]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -1019,7 +1085,7 @@ jobs:
           for job in changes ci-docs static unit; do
             [[ $(jq -r ".\"$job\".result" <<< "$NEEDS") == success ]] || fail=1
           done
-          for job in integration worker-switch e2e linux-smoke; do
+          for job in integration integration-shuffled worker-switch e2e linux-smoke; do
             r=$(jq -r ".\"$job\".result" <<< "$NEEDS")
             if [[ "$code" == true ]]; then [[ "$r" == success ]] || fail=1; else [[ "$r" == skipped ]] || fail=1; fi
           done
