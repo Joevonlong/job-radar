@@ -5,8 +5,8 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 /**
- * Where the processes report their shipped config. The loops live inline in each entry point's `main()`, so these are
- * structural checks of the source: removing a call (or moving it out of its loop) fails here.
+ * Where the processes report their shipped config. These structural checks cover entry-point wiring;
+ * runner-heartbeat.test.ts also executes the extracted loop to check reporting on every iteration.
  */
 const ROOT = path.resolve(import.meta.dirname, "../..");
 
@@ -28,14 +28,15 @@ function between(source: string, start: string, end: string): string {
 }
 
 describe("shipped config report call sites", () => {
-  it("runner: reports at start-up and in every heartbeat iteration", () => {
+  it("runner: reports at start-up and wires the reporter into the heartbeat loop", () => {
     const source = code("src/runner/index.ts");
     expect(source).toMatch(/createShippedConfigReporter\(\{\s*process: "runner",/);
     // start-up: before the channels are registered
     expect(between(source, "createShippedConfigReporter(", "registerBuiltinChannels(")).toContain("await shippedConfig.report();");
-    // the heartbeat loop: after the heartbeat write, before the sleep, inside the same loop
-    const loop = between(source, "while (!abort.signal.aborted) {\n    try {\n      await writeHeartbeat(db, PROCESS_NAME);", "await sleep(intervalMs");
-    expect(loop).toContain("await shippedConfig.report();");
+    // Check the actual loop invocation, not an unrelated report call elsewhere in main().
+    expect(source).toContain('import { runRunnerHeartbeats } from "./heartbeat";');
+    const loop = between(source, "await runRunnerHeartbeats({", "\n  });");
+    expect(loop).toContain("reportConfig: () => shippedConfig.report(),");
   });
 
   it("ai-worker: reports in every heartbeat iteration", () => {

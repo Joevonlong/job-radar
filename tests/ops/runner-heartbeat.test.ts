@@ -12,6 +12,50 @@ describe("runner heartbeat loop", () => {
   const intervalMs = 10;
   const maxFailureSeconds = 0.06;
 
+  it.each(["none", "writeHeartbeat", "pruneHeartbeats", "reportConfig"] as const)(
+    "awaits a config report in every iteration with a transient failure in %s",
+    async (failure) => {
+      const abort = new AbortController();
+      const events: string[] = [];
+      const shutdown = { begin: vi.fn() };
+      let iteration = 0;
+      const reportConfig = vi.fn(async () => {
+        // Yield so the event order also detects a report that is called without awaiting it.
+        await Promise.resolve();
+        events.push("report");
+        // The real reporter resolves false on failure; it never throws.
+        return !(failure === "reportConfig" && iteration === 1);
+      });
+
+      await runRunnerHeartbeats({
+        signal: abort.signal, intervalMs, maxFailureSeconds, shutdown, log: vi.fn(),
+        writeHeartbeat: async () => {
+          iteration++;
+          events.push("write");
+          if (failure === "writeHeartbeat" && iteration === 1) throw new Error("temporary write failure");
+        },
+        pruneHeartbeats: async () => {
+          if (failure === "pruneHeartbeats" && iteration === 1) throw new Error("temporary prune failure");
+        },
+        reportConfig,
+        watchAiWorker: async () => { events.push("watch"); },
+        sleep: async () => {
+          events.push("sleep");
+          if (iteration === 3) abort.abort();
+        },
+      });
+
+      expect(iteration).toBe(3);
+      expect(reportConfig).toHaveBeenCalledTimes(3);
+      expect(events).toEqual([
+        "write", "report", "watch", "sleep",
+        "write", "report", "watch", "sleep",
+        "write", "report", "watch", "sleep",
+      ]);
+      expect(shutdown.begin).not.toHaveBeenCalled();
+    },
+  );
+
   async function stalledLoop(step: "writeHeartbeat" | "pruneHeartbeats" | "watchAiWorker") {
     const abort = new AbortController();
     const stalled = Promise.withResolvers<void>();
