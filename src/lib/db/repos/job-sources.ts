@@ -52,12 +52,12 @@ export interface JobWithRawPostings {
   title: string;
   titleNorm: string;
   salaryJson: unknown;
-  /** The raw postings the job was built from (parsed ones), with the apply-link priority of each. */
+  /** Linked raw postings, with the apply-link priority of each; parsed only unless `includeUnparsed` is set. */
   sources: Array<{ priority: number; raw: typeof rawPostings.$inferSelect }>;
 }
 
-/** The next `limit` jobs with an id above `afterId`, each with its parsed raw postings (for re-reading them with new code). */
-export async function listJobsWithRawPostings(db: Executor, input: { afterId: number; limit: number }): Promise<JobWithRawPostings[]> {
+/** The next `limit` jobs with an id above `afterId`, with parsed postings by default or every linked posting for a repair. */
+export async function listJobsWithRawPostings(db: Executor, input: { afterId: number; limit: number; includeUnparsed?: boolean }): Promise<JobWithRawPostings[]> {
   const jobRows = await db
     .select({ id: jobs.id, companyId: jobs.companyId, title: jobs.title, titleNorm: jobs.titleNorm, salaryJson: jobs.salaryJson })
     .from(jobs)
@@ -69,7 +69,7 @@ export async function listJobsWithRawPostings(db: Executor, input: { afterId: nu
     .select({ jobId: jobSources.jobId, priority: jobSources.priority, raw: rawPostings })
     .from(jobSources)
     .innerJoin(rawPostings, eq(rawPostings.id, jobSources.rawPostingId))
-    .where(and(inArray(jobSources.jobId, jobRows.map((j) => j.id)), eq(rawPostings.parseStatus, "parsed")))
+    .where(and(inArray(jobSources.jobId, jobRows.map((j) => j.id)), input.includeUnparsed ? undefined : eq(rawPostings.parseStatus, "parsed")))
     .orderBy(asc(jobSources.priority), asc(rawPostings.id));
   return jobRows.map((job) => ({
     jobId: job.id,

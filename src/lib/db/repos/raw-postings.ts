@@ -150,6 +150,12 @@ export async function markRawParsed(db: Executor, id: number): Promise<void> {
   await db.update(rawPostings).set({ parseStatus: "parsed", parseError: null }).where(eq(rawPostings.id, id));
 }
 
+/** Serialize writers of one posting inside persist's transaction; a completed or replaced snapshot must not be filed. */
+export async function lockPendingRawPosting(db: Executor, raw: Pick<RawPosting, "id" | "payloadHash">): Promise<boolean> {
+  const [row] = await db.select({ status: rawPostings.parseStatus, hash: rawPostings.payloadHash }).from(rawPostings).where(eq(rawPostings.id, raw.id)).for("update");
+  return row?.status === "pending" && row.hash === raw.payloadHash;
+}
+
 /** C1: the payload stays; the reason is recorded. */
 export async function markRawParseFailed(db: Executor, id: number, reason: string): Promise<void> {
   await db

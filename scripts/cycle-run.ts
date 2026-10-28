@@ -27,6 +27,7 @@ import { registerBuiltinAiSubtasks, registerBuiltinCycleSteps } from "../src/lib
 import type { CollectResult } from "../src/lib/cycle/collect";
 import { runCycle } from "../src/lib/cycle/run-cycle";
 import { createProcessLogger } from "../src/lib/logging/process-logger";
+import { installShutdown } from "../src/lib/ops/shutdown";
 import type { MaintenanceResult, PipelineResult } from "../src/lib/pipeline";
 
 const KINDS = cycleKindEnum.enumValues;
@@ -102,8 +103,15 @@ async function main(): Promise<number> {
   }
 
   const logger = createProcessLogger();
+  const abort = new AbortController();
+  const shutdown = installShutdown({
+    abort,
+    log: (message) => logger.info(message),
+    graceMs: () => loadConfig("ai").host_worker.shutdown_grace_seconds * 1000,
+    exit: (code) => process.exit(code),
+  });
   try {
-    const result = await runCycle(kindArg, { dryRun, db, logger, ...(channelIds.length > 0 ? { channelIds } : {}) });
+    const result = await runCycle(kindArg, { dryRun, db, logger, signal: abort.signal, ...(channelIds.length > 0 ? { channelIds } : {}) });
     const collect = result.results.collect as CollectResult | undefined;
     const prefix = dryRun ? "[dry-run] " : "";
     console.log(`${prefix}cycle ${result.kind}${result.cycleId === null ? "" : ` #${result.cycleId}`}: ${result.status} in ${result.summary.durationMs} ms`);
@@ -144,8 +152,12 @@ async function main(): Promise<number> {
     }
     return result.status === "failed" ? 1 : result.status === "skipped" ? 3 : 0;
   } finally {
-    await readOnly?.close();
-    await closeDb();
+    try {
+      await readOnly?.close();
+      await closeDb();
+    } finally {
+      shutdown.dispose();
+    }
   }
 }
 

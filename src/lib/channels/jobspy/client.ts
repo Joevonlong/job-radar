@@ -195,17 +195,18 @@ function postedAtOf(value: unknown): Date | null {
 
 /**
  * Sidecar jobs → raw postings, verbatim apart from private keys. `externalId` is jobspy's id
- * (`li-…`, `in-…`, `go-…`), falling back to the job URL; postings with neither are dropped, and
- * a repeated id keeps its first occurrence.
+ * (`in-…`, `go-…`; LinkedIn's `li-` prefix is removed to match the other LinkedIn channels), falling back to the job URL.
+ * Postings with neither are dropped; a repeated id keeps its first occurrence.
  */
-export function rawPostingsFromJobs(jobs: readonly Record<string, unknown>[], ctx: Pick<ChannelContext, "logger">): RawPostingInput[] {
+export function rawPostingsFromJobs(jobs: readonly Record<string, unknown>[], ctx: Pick<ChannelContext, "logger">, site?: JobspySite): RawPostingInput[] {
   const seen = new Set<string>();
   const out: RawPostingInput[] = [];
   let dropped = 0;
   for (const job of jobs) {
     const payload = Object.fromEntries(Object.entries(job).filter(([key]) => !isPrivateKey(key)));
     const url = text(payload.job_url);
-    const externalId = text(payload.id) ?? url;
+    const id = text(payload.id);
+    const externalId = (site === "linkedin" ? id?.replace(/^li-/, "") : id) || url;
     if (externalId === null) {
       dropped += 1;
       continue;
@@ -227,5 +228,5 @@ export async function collectFromJobspy(
 ): Promise<RawPostingInput[]> {
   const request = buildSearchRequest(site, query, settings);
   const response = await searchJobspy(ctx, settings, request);
-  return rawPostingsFromJobs(response.jobs, ctx).slice(0, query.maxResults);
+  return rawPostingsFromJobs(response.jobs, ctx, site).slice(0, query.maxResults);
 }

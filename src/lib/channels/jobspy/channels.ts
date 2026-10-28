@@ -4,6 +4,9 @@ import type { Channel, ChannelFamily, ChannelKind } from "../types";
 import { collectFromJobspy, resolveJobspySettings, type JobspySettings, type JobspySite } from "./client";
 import { parseJobspyPosting } from "./parse";
 
+/** The channels backed by the sidecar (the compose service `jobspy`); each registered below. */
+export const JOBSPY_CHANNEL_IDS = ["linkedin-guest", "indeed", "jobspy-google"] as const;
+
 export interface JobspyChannelOptions {
   /** Sidecar settings. Default: `sources.yaml: jobspy` with `JOBSPY_URL` applied, read at collect time. */
   settings?: () => JobspySettings;
