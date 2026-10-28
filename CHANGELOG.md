@@ -183,7 +183,12 @@ A failure in (a) does not block rollback: follow (c) and accept the display wind
   text (such as `(\w+\s*)*budget`) is refused when saving on /interests or in the file editor; in a file edited by hand
   the signal scan, the AI review and the suggestions leave it out with a warning naming its category, and "Try on recent
   jobs" stops a slow job at its time budget.
-
+- **Arbeitsagentur, StepStone and XING keep a query's list results when a detail request fails.** A throttled,
+  blocked or login-refused detail request now stops further detail requests and stores every posting the search already
+  read, recording the run as interrupted with that error; before, the whole query's results were lost. A single
+  unreadable detail only costs its description (Arbeitsagentur also accepts detail fields sent as null). "Page layout
+  changed" is reported only when none of at least 3 detail requests of a query (all of them, when
+  `max_details_per_query` is lower) could be read, and the list results are then stored as well.
 - **Tag boxes no longer swallow a repeated entry silently:** typing a title, keyword or city that is already in the list
   (any case) now keeps the text, names the existing entry under the box ("Already in the list: ...") and briefly
   highlights it. Enter and the comma no longer act while an input method is composing. Regular expressions and
