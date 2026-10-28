@@ -101,6 +101,8 @@ A failure in (a) does not block rollback: follow (c) and accept the display wind
 
 ### Changed
 
+- Repeated cycles skip unchanged hard-filter inputs and use stored change fingerprints; source history and monthly usage reads transfer less data and use matching indexes.
+
 - **Interactive AI requests have their own lane:** translation, breakdown, salary lookup and AI tests can start while
   a batch runs. Automatic follow-up translations stay in batch; clicking Translate promotes one that is still queued.
   Concurrent work for the same job and language shares one AI operation. Manual scoring uses the existing time budget,

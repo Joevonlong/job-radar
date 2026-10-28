@@ -85,13 +85,13 @@ export interface ScanCandidate {
  */
 export async function listJobsToScan(db: Executor, options: { rulesHash: string; afterId: number; limit: number }): Promise<ScanCandidate[]> {
   const rows = await db.execute<{ id: string; title: string; description: string; salary_json: unknown; salary_hash: string }>(sql`
-    select j.id, j.title, j.description, j.salary_json, md5(coalesce(j.salary_json::text, '')) as salary_hash
+    select j.id, j.title, j.description, j.salary_json, j.salary_md5 as salary_hash
     from jobs j
     left join signal_scans s on s.job_id = j.id
     where j.id > ${options.afterId}
       and ${notDormantSql(await dormancyReady(db), 'j')}
-      and j.description is not null and btrim(j.description) <> ''
-      and (s.job_id is null or s.description_hash <> md5(j.description) or s.rules_hash <> ${options.rulesHash})
+      and j.description_has_text
+      and (s.job_id is null or s.description_hash <> j.description_md5 or s.rules_hash <> ${options.rulesHash})
     order by j.id
     limit ${options.limit}
   `);
@@ -262,14 +262,14 @@ export async function setSignalValue(db: Executor, id: number, value: unknown): 
 /** A job whose JD is scanned but whose salary changed since (or was never looked at): only its salary signal is out of date. */
 export async function listJobsToSyncSalary(db: Executor, options: { afterId: number; limit: number }): Promise<ScanCandidate[]> {
   const rows = await db.execute<{ id: string; title: string; description: string; salary_json: unknown; salary_hash: string }>(sql`
-    select j.id, j.title, j.description, j.salary_json, md5(coalesce(j.salary_json::text, '')) as salary_hash
+    select j.id, j.title, j.description, j.salary_json, j.salary_md5 as salary_hash
     from jobs j
     join signal_scans s on s.job_id = j.id
     where j.id > ${options.afterId}
       and ${notDormantSql(await dormancyReady(db), 'j')}
-      and j.description is not null and btrim(j.description) <> ''
-      and s.description_hash = md5(j.description)
-      and s.salary_hash is distinct from md5(coalesce(j.salary_json::text, ''))
+      and j.description_has_text
+      and s.description_hash = j.description_md5
+      and s.salary_hash is distinct from j.salary_md5
     order by j.id
     limit ${options.limit}
   `);

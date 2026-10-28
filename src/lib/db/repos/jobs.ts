@@ -9,7 +9,7 @@ import { applications, channels, companies, jobClosureOverrides, jobFavorites, j
 import { dormancyReady, jobReadColumns } from "./dormancy";
 import { notDormantSql } from "../queries/job-status";
 
-export type Job = typeof jobs.$inferSelect;
+export type Job = Omit<typeof jobs.$inferSelect, "searchTsv" | "descriptionMd5" | "descriptionHasText" | "salaryMd5">;
 export type NewJob = typeof jobs.$inferInsert;
 export type JobPatch = Partial<Omit<NewJob, "id" | "searchTsv">>;
 export type JobStatus = Job["status"];
@@ -48,7 +48,7 @@ export async function insertJob(db: Executor, values: NewJob): Promise<Job> {
       return row;
     });
   }
-  const [row] = await db.insert(jobs).values(values).returning();
+  const [row] = await db.insert(jobs).values(values).returning(await jobReadColumns(db));
   if (!row) throw new Error("insertJob: insert returned no row");
   return row;
 }

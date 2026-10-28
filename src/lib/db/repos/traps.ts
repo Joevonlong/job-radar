@@ -42,14 +42,6 @@ export interface TrapScanCandidate {
   fresh: boolean;
 }
 
-const SOURCES_CTE = sql`src as (
-    select js.job_id,
-      md5(coalesce(string_agg(js.raw_posting_id::text || ':' || coalesce(rp.payload_hash, md5(rp.payload_json::text)), ',' order by js.raw_posting_id), '')) as sources_hash
-    from job_sources js
-    join raw_postings rp on rp.id = js.raw_posting_id
-    group by js.job_id
-  )`;
-
 /**
  * Jobs whose trap scan is missing or out of date (the JD, a source payload or the rules changed): never-scanned jobs first, newest
  * first. `jobIds` limits the list to these jobs; `force` lists them even when their scan is current.
@@ -60,13 +52,16 @@ export async function listJobsToTrapScan(db: Executor, options: { rulesHash: str
   const only = ids === null ? notDormantSql(await dormancyReady(db), 'j') : sql`j.id in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})`;
   const outdated = options.force
     ? sql`true`
-    : sql`(ts.job_id is null or ts.description_hash <> md5(coalesce(j.description, '')) or ts.sources_hash <> coalesce(src.sources_hash, md5('')) or ts.rules_hash <> ${options.rulesHash})`;
+    : sql`(ts.job_id is null or ts.description_hash <> j.description_md5 or ts.sources_hash <> coalesce(src.sources_hash, md5('')) or ts.rules_hash <> ${options.rulesHash})`;
   const rows = await db.execute<{ id: string | number; description_hash: string; sources_hash: string; fresh: boolean }>(sql`
-    with ${SOURCES_CTE}
-    select j.id, md5(coalesce(j.description, '')) as description_hash, coalesce(src.sources_hash, md5('')) as sources_hash, (ts.job_id is null) as fresh
+    select j.id, j.description_md5 as description_hash, coalesce(src.sources_hash, md5('')) as sources_hash, (ts.job_id is null) as fresh
     from jobs j
-    left join src on src.job_id = j.id
     left join trap_scans ts on ts.job_id = j.id
+    left join lateral (
+      select md5(coalesce(string_agg(js.raw_posting_id::text || ':' || rp.payload_fingerprint, ',' order by js.raw_posting_id), '')) as sources_hash
+      from job_sources js join raw_postings rp on rp.id = js.raw_posting_id
+      where js.job_id = j.id
+    ) src on true
     where ${only} and ${outdated}
     order by (ts.job_id is null) desc, j.first_seen_at desc, j.id desc
     limit ${options.limit}

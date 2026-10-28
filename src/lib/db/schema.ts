@@ -140,6 +140,9 @@ export const runs = pgTable(
   (t) => [
     index("runs_cycle_id_idx").on(t.cycleId),
     index("runs_channel_started_idx").on(t.channelId, t.startedAt),
+    index("runs_channel_recent_idx").on(t.channelId, t.startedAt.desc().nullsFirst(), t.id.desc().nullsFirst()),
+    index("runs_started_at_idx").on(t.startedAt),
+    index("runs_channel_status_started_idx").on(t.channelId, t.status, t.startedAt),
     // covers the query history read (`getQueryRunHistory`): it has no time bound, so it must be an index-only scan; the
     // columns its filters read are trailing key columns because drizzle cannot declare INCLUDE
     index("runs_channel_query_started_idx").on(t.channelId, t.queryHash, t.startedAt, t.status, t.fetched, t.usageUnits, t.cost, t.interrupted),
@@ -159,6 +162,8 @@ export const rawPostings = pgTable(
     payloadJson: jsonb("payload_json").notNull(),
     /** SHA-256 of the canonical JSON payload: a re-fetched posting is re-parsed only if this changed. */
     payloadHash: text("payload_hash"),
+    /** Preserve the legacy fallback fingerprint without reading the payload during change detection. */
+    payloadFingerprint: text("payload_fingerprint").generatedAlwaysAs(sql`coalesce(payload_hash, md5(payload_json::text))`),
     /** Last time the posting was returned by its channel (the first fetch for rows seen once). */
     fetchedAt: timestamptz("fetched_at").notNull().defaultNow(),
     parseStatus: parseStatusEnum("parse_status").notNull().default("pending"),
@@ -169,6 +174,7 @@ export const rawPostings = pgTable(
   (t) => [
     unique("raw_postings_channel_external_uq").on(t.channelId, t.externalId),
     index("raw_postings_parse_status_idx").on(t.parseStatus),
+    index("raw_postings_pending_id_idx").on(t.id).where(sql`${t.parseStatus} = 'pending'`),
     index("raw_postings_run_id_idx").on(t.runId),
   ],
 );
@@ -314,6 +320,10 @@ export const jobs = pgTable(
     contract: text("contract").notNull().default("unknown"),
     salaryJson: jsonb("salary_json"),
     description: text("description"),
+    /** Fingerprints are maintained on writes, including direct SQL updates and reprocessing. */
+    descriptionMd5: text("description_md5").generatedAlwaysAs(sql`md5(coalesce(description, ''))`),
+    descriptionHasText: boolean("description_has_text").generatedAlwaysAs(sql`description is not null and btrim(description) <> ''`),
+    salaryMd5: text("salary_md5").generatedAlwaysAs(sql`md5(coalesce(salary_json::text, ''))`),
     language: text("language").notNull().default("unknown"),
     germanLevelRequired: text("german_level_required").notNull().default("unknown"),
     postedAt: timestamptz("posted_at"),
@@ -463,6 +473,9 @@ export const scores = pgTable(
     model: text("model"),
     filterResult: filterResultEnum("filter_result").notNull(),
     filterReasons: text("filter_reasons").array().notNull().default(sql`'{}'::text[]`),
+    /** Inputs actually evaluated by the hard filter; null means a retry/backfill is required. */
+    filterInputHash: text("filter_input_hash"),
+    filterConfigHash: text("filter_config_hash"),
     /**
      * The match score after the German deduction: `ai_score - german_penalty`, within 0..100.
      * NULL until the AI has scored the job (filtered-out jobs are never scored).
@@ -928,7 +941,10 @@ export const notifications = pgTable(
     sentAt: timestamptz("sent_at"),
     telegramMessageId: bigint("telegram_message_id", { mode: "number" }),
   },
-  (t) => [index("notifications_cycle_id_idx").on(t.cycleId)],
+  (t) => [
+    index("notifications_cycle_id_idx").on(t.cycleId),
+    index("notifications_job_id_idx").on(sql`(${t.payloadJson} ->> 'jobId')`).where(sql`${t.kind} in ('job', 'job_overflow')`),
+  ],
 );
 
 /**
@@ -985,7 +1001,10 @@ export const controlRequests = pgTable(
     startedAt: timestamptz("started_at"),
     finishedAt: timestamptz("finished_at"),
   },
-  (t) => [index("control_requests_status_idx").on(t.status, t.id)],
+  (t) => [
+    index("control_requests_status_idx").on(t.status, t.id),
+    index("control_requests_job_id_idx").on(t.kind, sql`(${t.payload} ->> 'jobId')`, t.id),
+  ],
 );
 
 /**

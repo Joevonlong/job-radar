@@ -49,5 +49,6 @@ mock-ups.
 | [linkedin-session.md](linkedin-session.md) | `pnpm auth:linkedin`, daily page limits, what to do on a verification page |
 | [jsearch.md](jsearch.md), [tavily.md](tavily.md), [apify.md](apify.md), [brightdata.md](brightdata.md), [monid.md](monid.md) | Keys, quotas and budgets of the paid or keyed channels |
 | [development.md](development.md) | For contributors: code layout, tests, e2e, conventions |
+| [query-performance.md](query-performance.md) | Query fingerprints, SQL equivalence checks and one-year fixture measurements |
 | [roadmap.md](roadmap.md) | What is planned for upcoming releases |
 | [ci.md](ci.md) | The CI pipeline explained job by job and step by step: what each runs and why, timings, running it locally, reading failures, e2e projects, Dependabot, release check |

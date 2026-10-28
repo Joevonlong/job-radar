@@ -1,7 +1,7 @@
-import { and, asc, eq, gt, inArray, isNotNull, ne } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, isNotNull, ne, sql } from "drizzle-orm";
 
 import type { Executor } from "../executor";
-import { companies, jobs, scores } from "../schema";
+import { companies, jobFilterOverrides, jobs, scores } from "../schema";
 import { notDormantSql } from "../queries/job-status";
 import { dormancyReady } from "./dormancy";
 
@@ -23,10 +23,22 @@ export interface FilterCandidate {
   companyWatched: boolean;
   /** `jobs.german_level_required` (the pipeline's rule reading; what a language gate reads). */
   germanLevel: string;
+  /** Fingerprint of the exact job/company/override inputs read with this candidate. */
+  inputHash?: string;
 }
 
+// The description and salary are already hashed on write; a steady cycle never detoasts the JD.
+const inputHash = sql<string>`md5(jsonb_build_array(${jobs.title}, ${jobs.descriptionMd5}, ${jobs.description} is null, ${jobs.workplace},
+  ${jobs.seniority}, ${jobs.contract}, ${jobs.locationsJson}, ${jobs.salaryMd5}, ${jobs.germanLevelRequired},
+  ${companies.name}, ${companies.nameNorm}, ${companies.aliases}, ${companies.blacklisted}, ${companies.watched},
+  ${jobFilterOverrides.action})::text)`;
+
 /** Jobs that are not closed, by id, after `afterId` (keyset paging: the table can change between batches); `jobIds` limits it to those jobs. */
-export async function listFilterCandidates(db: Executor, input: { afterId: number; limit: number; jobIds?: readonly number[] }): Promise<FilterCandidate[]> {
+export async function listFilterCandidates(db: Executor, input: { afterId: number; limit: number; jobIds?: readonly number[]; snapshotId?: number; configHash?: string }): Promise<FilterCandidate[]> {
+  const changed = input.snapshotId !== undefined && input.configHash !== undefined && !input.jobIds
+    ? sql`not exists (select 1 from scores sc where sc.job_id = ${jobs.id} and sc.profile_snapshot_id = ${input.snapshotId}
+        and sc.filter_config_hash = ${input.configHash} and sc.filter_input_hash = ${inputHash})`
+    : undefined;
   return db
     .select({
       id: jobs.id,
@@ -43,10 +55,12 @@ export async function listFilterCandidates(db: Executor, input: { afterId: numbe
       companyBlacklisted: companies.blacklisted,
       companyWatched: companies.watched,
       germanLevel: jobs.germanLevelRequired,
+      inputHash,
     })
     .from(jobs)
     .innerJoin(companies, eq(companies.id, jobs.companyId))
-    .where(and(gt(jobs.id, input.afterId), ne(jobs.status, "closed"), input.jobIds ? inArray(jobs.id, [...input.jobIds]) : notDormantSql(await dormancyReady(db))))
+    .leftJoin(jobFilterOverrides, eq(jobFilterOverrides.jobId, jobs.id))
+    .where(and(gt(jobs.id, input.afterId), ne(jobs.status, "closed"), input.jobIds ? inArray(jobs.id, [...input.jobIds]) : notDormantSql(await dormancyReady(db)), changed))
     .orderBy(asc(jobs.id))
     .limit(input.limit);
 }
@@ -74,6 +88,8 @@ export interface NewFilterResult {
   jobId: number;
   filterResult: "passed" | "filtered_out";
   filterReasons: string[];
+  filterInputHash?: string | null;
+  filterConfigHash?: string | null;
 }
 
 /**
@@ -84,13 +100,13 @@ export async function insertFilterResults(db: Executor, snapshotId: number, rows
   if (rows.length === 0) return 0;
   const written = await db
     .insert(scores)
-    .values(rows.map((r) => ({ jobId: r.jobId, profileSnapshotId: snapshotId, filterResult: r.filterResult, filterReasons: r.filterReasons })))
+    .values(rows.map((r) => ({ ...r, profileSnapshotId: snapshotId })))
     .onConflictDoNothing({ target: [scores.jobId, scores.profileSnapshotId], where: isNotNull(scores.profileSnapshotId) })
     .returning({ id: scores.id });
   return written.length;
 }
 
 /** Replace the filter result of an existing row (the job changed). The AI fields of the row are left alone. */
-export async function updateFilterResult(db: Executor, scoreId: number, result: Pick<NewFilterResult, "filterResult" | "filterReasons">): Promise<void> {
-  await db.update(scores).set({ filterResult: result.filterResult, filterReasons: result.filterReasons }).where(eq(scores.id, scoreId));
+export async function updateFilterResult(db: Executor, scoreId: number, result: Omit<NewFilterResult, "jobId">): Promise<void> {
+  await db.update(scores).set(result).where(eq(scores.id, scoreId));
 }

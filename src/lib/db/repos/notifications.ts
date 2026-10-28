@@ -9,6 +9,8 @@ import { loadTrapCounts } from "./traps";
 import { summariesOf } from "../summaries";
 import { effectivelyActiveSql } from "../queries/job-status";
 import { uxTablesReady } from "./ux-tables";
+import { jobReadColumns } from "./dormancy";
+import type { Job } from "./jobs";
 
 /**
  * `notifications` rows. The table has no dedicated key column, so the key of an
@@ -217,7 +219,7 @@ export type HighValueCheck = (signal: { tier: string; value: unknown }) => boole
 
 async function assembleCandidates(
   db: Executor,
-  rows: Array<{ job: typeof jobs.$inferSelect; company: typeof companies.$inferSelect }>,
+  rows: Array<{ job: Job; company: typeof companies.$inferSelect }>,
   isHighValue?: HighValueCheck,
 ): Promise<PushCandidate[]> {
   if (rows.length === 0) return [];
@@ -289,7 +291,7 @@ export async function listPushCandidates(db: Executor, input: { since: Date; isH
   // written out with table names: a column interpolated into a subquery can render without its table (UAT r2 P2-5)
   const scoredSince = sql`exists (select 1 from scores sc where sc.job_id = "jobs"."id" and sc.scored_at >= ${input.since.toISOString()})`;
   const rows = await db
-    .select({ job: jobs, company: companies })
+    .select({ job: await jobReadColumns(db), company: companies })
     .from(jobs)
     .innerJoin(companies, eq(companies.id, jobs.companyId))
     .where(and(effectivelyActiveSql(await uxTablesReady(db)), or(gte(jobs.firstSeenAt, input.since), scoredSince), eq(companies.blacklisted, false)))
@@ -300,7 +302,7 @@ export async function listPushCandidates(db: Executor, input: { since: Date; isH
 /** One job in the same shape (rebuilding a message after a button press); null when the job does not exist. */
 export async function getPushCandidate(db: Executor, jobId: number): Promise<PushCandidate | null> {
   const rows = await db
-    .select({ job: jobs, company: companies })
+    .select({ job: await jobReadColumns(db), company: companies })
     .from(jobs)
     .innerJoin(companies, eq(companies.id, jobs.companyId))
     .where(eq(jobs.id, jobId))

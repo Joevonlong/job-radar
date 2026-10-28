@@ -2,6 +2,7 @@ import { and, asc, count, eq, gte, inArray, sql } from "drizzle-orm";
 
 import type { Db } from "../client";
 import { aiUsage, cycles } from "../schema";
+import { calendarMonthSql } from "../month-window";
 
 /** A row to write; `null` token fields mean "the provider did not report it" (never 0). */
 export interface AiUsageInsert {
@@ -56,7 +57,7 @@ export async function sumAiCostForMonth(db: Db, args: { month: string; timeZone:
     .where(
       and(
         inArray(aiUsage.provider, [...args.providers]),
-        sql`to_char(${aiUsage.at} at time zone ${args.timeZone}, 'YYYY-MM') = ${args.month}`,
+        calendarMonthSql(aiUsage.at, args),
       ),
     );
   return Number(row?.total ?? 0);

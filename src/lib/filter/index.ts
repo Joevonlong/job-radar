@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import type { CycleStepContext, StepResult } from "@/lib/cycle/steps";
 import { registerCycleStep } from "@/lib/cycle/steps";
 import { loadConfig, parseConfigText, readProfileText, type MeConfig, type PipelineConfig, type PreferencesConfig } from "@/lib/config";
@@ -57,7 +59,7 @@ export interface FilterOptions {
   pipeline: PipelineConfig;
   /** me.yaml for a language gate (`currentPreferences().me`); null when it cannot be read: a gate without `at_least` then does nothing and is reported. */
   me: DealBreakerMe | null;
-  /** Only these jobs (the user changed the decision about one job); default: every job. */
+  /** Force these jobs (the user changed a decision); default: only changed inputs. */
   jobIds?: readonly number[];
   logger?: ChannelLogger;
   signal?: AbortSignal;
@@ -123,13 +125,16 @@ export function evaluateBatch(
 const sameReasons = (a: readonly string[], b: readonly string[]): boolean => a.length === b.length && a.every((value, i) => value === b[i]);
 
 /**
- * Evaluate every job that is not closed against the preferences and store one result per (job,
+ * Evaluate changed jobs that are not closed against the preferences and store one result per (job,
  * profile snapshot) in `scores`. Idempotent: a second run with the same snapshot and the same jobs
  * writes nothing. Jobs that changed since (a source delivered new details) get their result updated
  * in place; when the preferences change the snapshot changes, so every job gets a new row.
  */
 export async function runFilter(db: Db, options: FilterOptions): Promise<FilterRunResult> {
-  const compiled: CompiledFilter = compileFilter(options.preferences, options.pipeline, { me: options.me, watchedCompanies: options.watchedCompanies ?? currentWatchedCompanies(options.logger) });
+  const watchedCompanies = options.watchedCompanies ?? currentWatchedCompanies(options.logger);
+  // Version the evaluator along with all configuration it reads, including inputs outside the preference snapshot.
+  const configHash = createHash("sha256").update(JSON.stringify([1, options.preferences, options.pipeline, options.me, watchedCompanies])).digest("hex");
+  const compiled: CompiledFilter = compileFilter(options.preferences, options.pipeline, { me: options.me, watchedCompanies });
   const dealBreakers = startDealBreakerRun(compiled.dealBreakers, options.timeBox ?? vmTimeBox);
   const result: FilterRunResult = {
     snapshotId: options.snapshotId,
@@ -150,7 +155,7 @@ export async function runFilter(db: Db, options: FilterOptions): Promise<FilterR
       result.aborted = true;
       break;
     }
-    const batch = await listFilterCandidates(db, { afterId, limit: options.pipeline.batch_size, jobIds: options.jobIds });
+    const batch = await listFilterCandidates(db, { afterId, limit: options.pipeline.batch_size, jobIds: options.jobIds, snapshotId: options.snapshotId, configHash });
     if (batch.length === 0) break;
     afterId = batch[batch.length - 1]?.id ?? afterId;
 
@@ -159,6 +164,8 @@ export async function runFilter(db: Db, options: FilterOptions): Promise<FilterR
     const overrides = await getFilterOverrides(db, ids);
     const fresh: NewFilterResult[] = [];
     const verdicts = evaluateBatch(batch, compiled, dealBreakers, overrides, stored);
+    // A timed-out rule preserves previous vetoes; retry those inputs next cycle instead of caching a partial judgement.
+    const complete = !dealBreakers.warnings.some((warning) => warning.code === "too_slow");
     for (const [i, row] of batch.entries()) {
       const verdict = verdicts[i];
       if (!verdict) continue;
@@ -171,13 +178,13 @@ export async function runFilter(db: Db, options: FilterOptions): Promise<FilterR
       }
 
       const existing = stored.get(row.id);
+      const state = { filterResult: verdict.result, filterReasons: verdict.reasons, filterInputHash: complete ? row.inputHash : null, filterConfigHash: complete ? configHash : null };
       if (!existing) {
-        fresh.push({ jobId: row.id, filterResult: verdict.result, filterReasons: verdict.reasons });
-      } else if (existing.filterResult !== verdict.result || !sameReasons(existing.filterReasons, verdict.reasons)) {
-        await updateFilterResult(db, existing.scoreId, { filterResult: verdict.result, filterReasons: verdict.reasons });
-        result.updated += 1;
+        fresh.push({ jobId: row.id, ...state });
       } else {
-        result.unchanged += 1;
+        await updateFilterResult(db, existing.scoreId, state);
+        if (existing.filterResult !== verdict.result || !sameReasons(existing.filterReasons, verdict.reasons)) result.updated += 1;
+        else result.unchanged += 1;
       }
     }
     result.created += await insertFilterResults(db, options.snapshotId, fresh);

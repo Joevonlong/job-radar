@@ -107,7 +107,7 @@ export async function upsertRawPostings(
         .onConflictDoUpdate({
           target: [rawPostings.channelId, rawPostings.externalId],
           set: {
-            payloadJson: sql`excluded.payload_json`,
+            payloadJson: sql`case when ${rawPostings.payloadHash} is distinct from excluded.payload_hash then excluded.payload_json else ${rawPostings.payloadJson} end`,
             url: sql`coalesce(excluded.url, ${rawPostings.url})`,
             fetchedAt: sql`excluded.fetched_at`,
             runId: sql`excluded.run_id`,
