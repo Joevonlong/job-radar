@@ -25,7 +25,9 @@ export function resetDormancyCache(): void {
 
 /** Full job reads also work for CLI callers during the migration window. */
 export async function jobReadColumns(db: Executor) {
-  const { dormantAt, possiblyClosedAt, ...columns } = getTableColumns(jobs);
+  const { dormantAt, possiblyClosedAt, searchTsv, descriptionMd5, descriptionHasText, salaryMd5, ...columns } = getTableColumns(jobs);
+  // Derived storage columns are internal to queries, not part of the domain job transferred to callers.
+  void [searchTsv, descriptionMd5, descriptionHasText, salaryMd5];
   const available = await dormancyReady(db);
   return { ...columns, dormantAt: available ? dormantAt : sql<Date | null>`null`, possiblyClosedAt: available ? possiblyClosedAt : sql<Date | null>`null` };
 }

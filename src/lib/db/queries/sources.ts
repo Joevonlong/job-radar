@@ -1,8 +1,9 @@
-import { and, asc, desc, eq, gt, gte, inArray, lte, ne, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, inArray, ne, or, sql } from "drizzle-orm";
 
 import { readCycleSteps, type CycleStepStatus } from "@/lib/cycle/step-health";
 
 import type { Db } from "../client";
+import { calendarMonthSql } from "../month-window";
 import { aiUsage, channels, cycles, rawPostings, runs } from "../schema";
 import { getLatestFullCycleStartedAt, readCycleChannelIds, type CycleKind } from "../repos/cycles";
 import type { RunStatus } from "../repos/runs";
@@ -56,7 +57,8 @@ export interface RecentRun {
 
 /** The newest `perChannel` runs of every channel, newest first within a channel. */
 export async function listRecentRunsByChannel(db: Db, perChannel: number): Promise<Map<string, RecentRun[]>> {
-  const ranked = db
+  if (perChannel <= 0) return new Map();
+  const recent = db
     .select({
       id: runs.id,
       channelId: runs.channelId,
@@ -70,18 +72,21 @@ export async function listRecentRunsByChannel(db: Db, perChannel: number): Promi
       errorCode: runs.errorCode,
       error: runs.error,
       interrupted: runs.interrupted,
-      rank: sql<number>`row_number() over (partition by ${runs.channelId} order by ${runs.startedAt} desc, ${runs.id} desc)`.as("rank"),
     })
     .from(runs)
-    .as("ranked");
+    .where(eq(runs.channelId, channels.id))
+    .orderBy(desc(runs.startedAt), desc(runs.id))
+    .limit(perChannel)
+    .as("recent");
   const rows = await db
-    .select()
-    .from(ranked)
-    .where(lte(ranked.rank, perChannel))
-    .orderBy(asc(ranked.channelId), desc(ranked.startedAt), desc(ranked.id));
+    .select({ id: recent.id, channelId: recent.channelId, cycleId: recent.cycleId, startedAt: recent.startedAt,
+      finishedAt: recent.finishedAt, status: recent.status, fetched: recent.fetched, newCount: recent.newCount,
+      cost: recent.cost, errorCode: recent.errorCode, error: recent.error, interrupted: recent.interrupted })
+    .from(channels)
+    .innerJoinLateral(recent, sql`true`)
+    .orderBy(asc(channels.id), desc(recent.startedAt), desc(recent.id));
   const byChannel = new Map<string, RecentRun[]>();
-  for (const { rank: _rank, channelId, ...run } of rows) {
-    void _rank;
+  for (const { channelId, ...run } of rows) {
     const list = byChannel.get(channelId) ?? [];
     list.push(run);
     byChannel.set(channelId, list);
@@ -178,7 +183,7 @@ export async function getMonthRunTotals(db: Db, args: { month: string; timeZone:
     })
     .from(runs)
     // a skipped run counts when it stored postings (a query that stopped at its budget after some of its requests)
-    .where(and(sql`to_char(${runs.startedAt} at time zone ${args.timeZone}, 'YYYY-MM') = ${args.month}`, or(ne(runs.status, "skipped"), gt(runs.fetched, 0))))
+    .where(and(calendarMonthSql(runs.startedAt, args), or(ne(runs.status, "skipped"), gt(runs.fetched, 0))))
     .groupBy(runs.channelId);
   return new Map(rows.map(({ channelId, ...totals }) => [channelId, totals]));
 }
@@ -204,7 +209,7 @@ export async function getAiUsageForMonth(db: Db, args: { month: string; timeZone
       costUsd: sql<string>`coalesce(sum(${aiUsage.costEstimate}), 0)`,
     })
     .from(aiUsage)
-    .where(sql`to_char(${aiUsage.at} at time zone ${args.timeZone}, 'YYYY-MM') = ${args.month}`)
+    .where(calendarMonthSql(aiUsage.at, args))
     .groupBy(aiUsage.provider, aiUsage.task)
     .orderBy(asc(aiUsage.provider), asc(aiUsage.task));
   return rows.map((row) => ({ ...row, tokensIn: Number(row.tokensIn), tokensOut: Number(row.tokensOut), costUsd: Number(row.costUsd) }));

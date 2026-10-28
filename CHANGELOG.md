@@ -101,6 +101,8 @@ A failure in (a) does not block rollback: follow (c) and accept the display wind
 
 ### Changed
 
+- Repeated cycles skip unchanged hard-filter inputs and use stored change fingerprints; source history and monthly usage reads transfer less data and use matching indexes. **Upgrade:** nullable fingerprint columns need no table rewrite or migration-time backfill; maintenance fills bounded batches while reads compute missing values. Index creation still takes table locks. **Rollback:** keep the added columns and triggers; old-code source writes stay correct and changed filter verdicts invalidate the cache. See [upgrade notes](docs/upgrade.md#upgrading-with-change-fingerprints).
+
 - **Interactive AI requests have their own lane:** translation, breakdown, salary lookup and AI tests can start while
   a batch runs. Automatic follow-up translations stay in batch; clicking Translate promotes one that is still queued.
   Concurrent work for the same job and language shares one AI operation. Manual scoring uses the existing time budget,
@@ -215,6 +217,7 @@ A failure in (a) does not block rollback: follow (c) and accept the display wind
 
 ### Fixed
 
+- Phrase and visa deal-breakers still report later timeouts for unchanged jobs, preserving stored vetoes until the rules can evaluate them again.
 - Recovering the AI worker sends one digest for queued cycles while keeping every cycle's AI work and alerts; company
   name corrections preserve paid salary caches, and ignored HTTP bodies release their cancellation listeners.
 - Web actions recover from outdated tabs, invalid config pages name the file and link to its editor, concurrent settings and setup-wizard edits keep unrelated changes, upgrade freezes show the right message, trigger buttons say when the server cannot be reached, and caught action failures leave safe diagnostics in the web log.

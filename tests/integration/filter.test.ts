@@ -105,7 +105,7 @@ describe("filter step", () => {
     await addJob();
     const sleeping = await addJob({ status: "possibly_closed", lastSeenAt: new Date("2026-07-01T00:00:00Z"), dormantAt: new Date("2026-09-01T00:00:00Z") });
     expect(await runStep()).toMatchObject({ evaluated: 1, created: 1 });
-    expect(await runStep()).toMatchObject({ evaluated: 1, created: 0, unchanged: 1 });
+    expect(await runStep()).toMatchObject({ evaluated: 0, created: 0, unchanged: 0 });
     const preview = await previewDealBreakers(getDb(), [], { pipeline: shippedPipeline(), me: null, sampleLimit: 3 });
     expect(preview.total).toBe(1);
     await setFloor(91000);
@@ -116,7 +116,7 @@ describe("filter step", () => {
     await setFloor(92000);
     expect(await runStep()).toMatchObject({ evaluated: 1, created: 1 });
     await getDb().update(schema.jobs).set({ dormantAt: null, status: "active" }).where(eq(schema.jobs.id, sleeping.id));
-    expect(await runStep()).toMatchObject({ evaluated: 2, created: 1 });
+    expect(await runStep()).toMatchObject({ evaluated: 1, created: 1 });
   });
 
   it("stores one result per job under a snapshot of the current preferences", async () => {
@@ -146,7 +146,7 @@ describe("filter step", () => {
     await runStep();
     const before = await getDb().select().from(schema.scores).orderBy(asc(schema.scores.id));
     const again = await runStep();
-    expect(again).toMatchObject({ evaluated: 2, created: 0, updated: 0, unchanged: 2 });
+    expect(again).toMatchObject({ evaluated: 0, created: 0, updated: 0, unchanged: 0 });
     const after = await getDb().select().from(schema.scores).orderBy(asc(schema.scores.id));
     expect(after).toEqual(before);
     expect(await rowsOf(a.id)).toHaveLength(1);

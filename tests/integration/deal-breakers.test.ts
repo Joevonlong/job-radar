@@ -133,7 +133,7 @@ describe("the filter step applies deal-breakers", () => {
     expect(await snapshots()).toHaveLength(1);
 
     const again = await runStep();
-    expect(again).toMatchObject({ created: 0, updated: 0, unchanged: 4 });
+    expect(again).toMatchObject({ evaluated: 0, created: 0, updated: 0, unchanged: 0 });
   });
 
   it("reads jobs.german_level_required only, never the AI's reading of the level", async () => {
@@ -342,6 +342,7 @@ describe("slow patterns and unusable rules are bounded and reported", () => {
     const { preferences, snapshot, me } = await currentPreferences(getDb());
     const second = await runFilter(getDb(), { preferences, snapshotId: snapshot.id, pipeline: loadPipeline(), me, timeBox: timeBox() });
     expect(second.dealBreakerWarnings).toEqual([{ id: "onsite", code: "too_slow" }]);
+    expect(second.evaluated).toBe(2);
     expect(second.updated).toBe(0);
     const rows = await rowsOf(vetoed.id);
     expect(rows).toHaveLength(1);

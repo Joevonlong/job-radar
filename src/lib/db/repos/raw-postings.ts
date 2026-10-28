@@ -1,12 +1,19 @@
 import { createHash } from "node:crypto";
 
-import { and, asc, eq, gt, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, getTableColumns, gt, inArray, sql } from "drizzle-orm";
 
 import type { Db } from "../client";
 import type { Executor } from "../executor";
 import { rawPostings } from "../schema";
 
-export type RawPosting = typeof rawPostings.$inferSelect;
+export type RawPosting = Omit<typeof rawPostings.$inferSelect, "payloadFingerprint">;
+
+/** Domain reads stay compatible while the runner has not applied the fingerprint migration yet. */
+export function rawPostingColumns() {
+  const { payloadFingerprint, ...columns } = getTableColumns(rawPostings);
+  void payloadFingerprint;
+  return columns;
+}
 
 export interface RawUpsertItem {
   externalId: string;
@@ -107,7 +114,7 @@ export async function upsertRawPostings(
         .onConflictDoUpdate({
           target: [rawPostings.channelId, rawPostings.externalId],
           set: {
-            payloadJson: sql`excluded.payload_json`,
+            payloadJson: sql`case when ${rawPostings.payloadHash} is distinct from excluded.payload_hash then excluded.payload_json else ${rawPostings.payloadJson} end`,
             url: sql`coalesce(excluded.url, ${rawPostings.url})`,
             fetchedAt: sql`excluded.fetched_at`,
             runId: sql`excluded.run_id`,
@@ -122,7 +129,7 @@ export async function upsertRawPostings(
 }
 
 export async function listRawPostingsForChannel(db: Db, channelId: string): Promise<RawPosting[]> {
-  return db.select().from(rawPostings).where(eq(rawPostings.channelId, channelId)).orderBy(rawPostings.id);
+  return db.select(rawPostingColumns()).from(rawPostings).where(eq(rawPostings.channelId, channelId)).orderBy(rawPostings.id);
 }
 
 export async function setRawParseStatus(
@@ -139,7 +146,7 @@ const MAX_PARSE_ERROR_CHARS = 500;
 /** The next `limit` pending postings with an id above `afterId`, oldest first (pipeline). */
 export async function listPendingRawPostings(db: Executor, input: { afterId: number; limit: number }): Promise<RawPosting[]> {
   return db
-    .select()
+    .select(rawPostingColumns())
     .from(rawPostings)
     .where(and(eq(rawPostings.parseStatus, "pending"), gt(rawPostings.id, input.afterId)))
     .orderBy(asc(rawPostings.id))

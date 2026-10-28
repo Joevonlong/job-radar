@@ -9,8 +9,8 @@ import { applications, channels, companies, jobClosureOverrides, jobFavorites, j
 import { dormancyReady, jobReadColumns } from "./dormancy";
 import { notDormantSql } from "../queries/job-status";
 
-export type Job = typeof jobs.$inferSelect;
-export type NewJob = typeof jobs.$inferInsert;
+export type Job = Omit<typeof jobs.$inferSelect, "searchTsv" | "descriptionMd5" | "descriptionHasText" | "salaryMd5">;
+export type NewJob = Omit<typeof jobs.$inferInsert, "descriptionMd5" | "descriptionHasText" | "salaryMd5">;
 export type JobPatch = Partial<Omit<NewJob, "id" | "searchTsv">>;
 export type JobStatus = Job["status"];
 
@@ -34,23 +34,20 @@ export async function getJob(db: Executor, id: number): Promise<Job | null> {
 }
 
 export async function insertJob(db: Executor, values: NewJob): Promise<Job> {
-  if (!(await dormancyReady(db))) {
-    // Drizzle's insert builder lists even omitted columns as DEFAULT. Before the migration,
-    // explicitly name only legacy columns, keeping their own encoders and database defaults.
-    const columns: Record<string, PgColumn> = getTableColumns(jobs);
-    const entries = Object.entries(values).filter(([key, value]) => value !== undefined && key in columns && key !== "dormantAt" && key !== "possiblyClosedAt" && key !== "searchTsv");
-    return db.transaction(async (tx) => {
-      const [inserted] = await tx.execute<{ id: string | number }>(sql`insert into ${jobs}
-        (${sql.join(entries.map(([key]) => sql.identifier(columns[key]!.name)), sql`, `)})
-        values (${sql.join(entries.map(([key, value]) => sql.param(value, columns[key])), sql`, `)}) returning id`);
-      const row = inserted ? await getJob(tx, Number(inserted.id)) : null;
-      if (!row) throw new Error("insertJob: insert returned no row");
-      return row;
-    });
-  }
-  const [row] = await db.insert(jobs).values(values).returning();
-  if (!row) throw new Error("insertJob: insert returned no row");
-  return row;
+  // Drizzle lists omitted nullable columns as DEFAULT too. Name only supplied domain columns so
+  // a web/worker request can insert before the runner has added the internal fingerprint columns.
+  const columns: Record<string, PgColumn> = getTableColumns(jobs);
+  const dormant = await dormancyReady(db);
+  const internal = new Set(["descriptionMd5", "descriptionHasText", "salaryMd5", "searchTsv", ...(!dormant ? ["dormantAt", "possiblyClosedAt"] : [])]);
+  const entries = Object.entries(values).filter(([key, value]) => value !== undefined && key in columns && !internal.has(key));
+  return db.transaction(async (tx) => {
+    const [inserted] = await tx.execute<{ id: string | number }>(sql`insert into ${jobs}
+      (${sql.join(entries.map(([key]) => sql.identifier(columns[key]!.name)), sql`, `)})
+      values (${sql.join(entries.map(([key, value]) => sql.param(value, columns[key])), sql`, `)}) returning id`);
+    const row = inserted ? await getJob(tx, Number(inserted.id)) : null;
+    if (!row) throw new Error("insertJob: insert returned no row");
+    return row;
+  });
 }
 
 export async function updateJob(db: Executor, id: number, patch: JobPatch): Promise<void> {

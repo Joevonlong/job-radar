@@ -41,7 +41,7 @@ export interface VisaScanListOptions {
  */
 function visaInputHashSql(rulesHash: string, withTrapSpans: boolean): SQL {
   const spans = withTrapSpans ? sql`coalesce(ts.spans_hash, '')` : sql`''`;
-  return sql`md5(concat_ws(':', md5(coalesce(j.description, '')), ${rulesHash}::text, coalesce(c.name_norm, ''), ${spans}))`;
+  return sql`md5(concat_ws(':', coalesce(j.description_md5, md5(coalesce(j.description, ''))), ${rulesHash}::text, coalesce(c.name_norm, ''), ${spans}))`;
 }
 
 /**
