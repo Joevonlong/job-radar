@@ -318,7 +318,8 @@ export type VocabularyErrorKey =
   | "tooMany"
   | "nameRequired"
   | "iconTooLong"
-  | "color";
+  | "color"
+  | "slowPattern";
 
 export interface VocabularyFieldError {
   /** Draft-space path: `bonusCap`, `categories.2.weight`, `categories.1.keywords`, `categories.0.patterns.3`, `categories.4.tagPatterns.0.pattern` ... */

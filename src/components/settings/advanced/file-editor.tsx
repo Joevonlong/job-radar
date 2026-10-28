@@ -6,6 +6,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNod
 
 import { resetAdvancedAction, saveAdvancedAction, validateAdvancedAction } from "@/app/settings/actions";
 import { Button } from "@/components/ui/button";
+import { SLOW_PATTERN_MESSAGE } from "@/lib/config/interests-lint";
 import { registerUnsaved } from "@/lib/shell/unsaved";
 import type { AdvancedFailure, AdvancedFileData, AdvancedLayer, TextIssue } from "@/lib/settings/advanced/types";
 import { toastTone } from "@/lib/toast";
@@ -86,6 +87,7 @@ export function FileEditor({ data, ack, onChanged }: FileEditorProps) {
     (issue: TextIssue): string => {
       if (issue.message === "unknown key") return t("reason.unknownKey");
       if (issue.message === "proxies_changed") return t("failure.proxies_changed");
+      if (issue.message === SLOW_PATTERN_MESSAGE) return t("reason.slowPattern");
       if (issue.source === "protected") return t("reason.protected", { file });
       if (/received undefined$/.test(issue.message)) return t("reason.missing");
       return issue.message;

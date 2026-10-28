@@ -52,6 +52,11 @@ export interface ValidationContext {
   normalizeCompany: (name: string) => string;
   /** The languages the reasons were asked in (default: the reference, Chinese with English). */
   output?: ScoreOutputLanguages;
+  /**
+   * The probe of the user's patterns (the server's `signalPatternIsFast`): a pattern it refuses is not used for the
+   * "already listed" check, the way the rules leave it out. Absent = every pattern is used.
+   */
+  isPatternFast?: (pattern: string) => boolean;
 }
 
 /** Longest reason kept; the model is asked for one sentence. */
@@ -94,7 +99,7 @@ function evidenceOf(job: SuggestionSourceJob, quote?: string): SuggestionEvidenc
 }
 
 /** Terms already in interests.yaml: a keyword or tag of a keyword / tag category, or text one of their patterns already matches. */
-function listedSignalTerms(interests: ValidationContext["interests"]): { literals: Set<string>; patterns: RegExp[] } {
+function listedSignalTerms(interests: ValidationContext["interests"], isPatternFast: (pattern: string) => boolean): { literals: Set<string>; patterns: RegExp[] } {
   const literals = new Set<string>();
   const sources: string[] = [];
   for (const category of interests.signals.categories) {
@@ -111,6 +116,7 @@ function listedSignalTerms(interests: ValidationContext["interests"]): { literal
   }
   const patterns: RegExp[] = [];
   for (const source of sources) {
+    if (!isPatternFast(source)) continue;
     try {
       patterns.push(new RegExp(source, SIGNAL_REGEX_FLAGS));
     } catch {
@@ -136,7 +142,7 @@ export function validateSuggestions(output: SuggestOutput, context: ValidationCo
   const positiveById = new Map(context.positive.map((job) => [job.jobId, job]));
   const ignoredById = new Map(context.ignored.map((job) => [job.jobId, job]));
   const quoteMax = context.interests.limits.quote_max_chars;
-  const listed = listedSignalTerms(context.interests);
+  const listed = listedSignalTerms(context.interests, context.isPatternFast ?? (() => true));
   const candidates: ValidatedSuggestion[] = [];
 
   const push = (payload: SuggestionPayload): void => {

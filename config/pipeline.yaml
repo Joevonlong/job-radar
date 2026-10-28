@@ -487,7 +487,7 @@ filter:
   #   max_pattern_chars: 200       # longest term, pattern or unless entry (at most 500)
   #   match_text_max_chars: 20000  # how much of a description is searched
   #   rule_warn_ms: 200            # pnpm deal-breakers:check warns when one rule takes longer over all open jobs
-  #   match_ms: 100                # a pattern slower than this on a test text (a long line without a match) is left out
+  #   match_ms: 100                # a deal-breaker pattern slower than this on a test text (a long line without a match) is left out
   #   rule_budget_ms: 2000         # time one rule may take in one filter run; a rule that uses it up stops for that run
   #   preview_ms: 3000             # longest the /me preview may take before it shows what it counted so far
 
