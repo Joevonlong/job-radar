@@ -129,7 +129,7 @@ deal_breakers:
 | `max_pattern_chars` | 200 | 单个词或正则的长度（最多 500） |
 | `match_text_max_chars` | 20000 | 正文读取的字符数 |
 | `rule_warn_ms` | 200 | `pnpm deal-breakers:check` 对在全部未关闭岗位上超过这个耗时的规则给出警告 |
-| `match_ms` | 100 | 一个正则在一段测试文本上的耗时，以及岗位页上的解释 |
+| `match_ms` | 100 | 一票否决的一个正则在一段测试文本上的耗时，以及岗位页上的解释 |
 | `rule_budget_ms` | 2000 | 一条规则在一轮过滤或一次预览里的总耗时 |
 | `preview_ms` | 3000 | 卡片上整个预览的耗时 |
 

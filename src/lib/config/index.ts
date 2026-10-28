@@ -99,5 +99,5 @@ export { watchConfig, type ConfigChangeEvent, type ConfigTarget, type WatchOptio
 export { writeConfig, writeConfigText, resetConfigToDefault, type TextBase, type TextWriteOptions, type TextWriteResult } from "./write";
 export { backupConfigText, editorBackupRoot } from "./editor-backup";
 export { maskConfigText, restoreMaskedText, type RestoreResult } from "./secrets-mask";
-export { interestsWarnings, type InterestsWarning } from "./interests-lint";
+export { interestsWarnings, SLOW_PATTERN_MESSAGE, slowInterestPatterns, type InterestsWarning, type SlowInterestPattern } from "./interests-lint";
 export { locatePath, MAX_TEXT_ISSUES, validateConfigText, type IssueSource, type TextIssue, type ValidateOptions, type ValidateResult } from "./validate-text";

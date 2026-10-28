@@ -21,7 +21,9 @@ import {
   validateConfigText,
   writeConfigText,
   type ConfigName,
+  type ValidateOptions,
 } from "@/lib/config";
+import { signalPatternIsFast } from "@/lib/signals/pattern-guard";
 
 import type { AdvancedFailure, AdvancedLayer, AdvancedPreview, AdvancedResetResult, AdvancedSaveResult, AdvancedValidation } from "./types";
 import { advancedNameOfStem, editorLimits } from "./view";
@@ -37,6 +39,12 @@ const validateSchema = z.strictObject({ file: stemSchema, text: textSchema });
 const previewSchema = z.strictObject({ file: stemSchema, text: textSchema, against: z.enum(["saved", "default"]), baseHash: z.string().max(80).optional(), baseLayer: layerSchema.optional() });
 const saveSchema = z.strictObject({ file: stemSchema, text: textSchema, baseHash: z.string().max(80), baseLayer: layerSchema, confirmOverride: z.boolean() });
 const resetSchema = z.strictObject({ file: stemSchema, baseHash: z.string().max(80), baseLayer: layerSchema });
+
+/**
+ * The checks of a save besides the schema: interests.yaml patterns that are too slow on the probe's test texts (with the
+ * text's own limits) are issues; the rules would leave them out of every scan.
+ */
+const validateOptions = (name: ConfigName): ValidateOptions => (name === "interests" ? { checkProtected: true, interestsProbe: (limits) => signalPatternIsFast(limits) } : { checkProtected: true });
 
 function currentText(name: ConfigName): string {
   try {
@@ -63,7 +71,7 @@ export async function validateAdvanced(rawRequest: unknown): Promise<AdvancedVal
   if (!request.success || name === null) return { ok: false, issues: [{ path: "", message: "invalid request", line: 1, col: 1, exact: false, source: "yaml" }], warnings: [] };
   const text = unmasked(name, request.data.text);
   if (!text.ok) return { ok: false, issues: [{ path: "jobspy.proxies", message: "proxies_changed", line: 1, col: 1, exact: false, source: "schema" }], warnings: [] };
-  const result = validateConfigText(name, text.text, { checkProtected: true });
+  const result = validateConfigText(name, text.text, validateOptions(name));
   return result.ok ? { ok: true, issues: [], warnings: result.warnings } : { ok: false, issues: result.issues, warnings: [] };
 }
 
@@ -118,7 +126,7 @@ export async function saveAdvanced(rawRequest: unknown): Promise<AdvancedSaveRes
   const text = unmasked(name, request.data.text);
   if (!text.ok) return text.failure;
   // the issues come from the same validation the live check ran
-  const checked = validateConfigText(name, text.text, { checkProtected: true });
+  const checked = validateConfigText(name, text.text, validateOptions(name));
   if (!checked.ok && Buffer.byteLength(text.text, "utf8") <= limits.maxBytes) return { status: "invalid", issues: checked.issues };
   try {
     const written = await writeConfigText(name, text.text, { baseHash, baseLayer, maxBytes: limits.maxBytes, backupsKeep: limits.backupsKeep });

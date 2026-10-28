@@ -203,6 +203,11 @@ A failure in (a) does not block rollback: follow (c) and accept the display wind
 
 - Translation, breakdown and salary lookup keep polling after a temporary status read failure or invalid queue response; translation queue text also applies to container execution.
 
+- **A slow interest pattern no longer freezes the app:** a pattern of a signal category that backtracks badly on long
+  text (such as `(\w+\s*)*budget`) is refused when saving on /interests or in the file editor; in a file edited by hand
+  the signal scan, the AI review and the suggestions leave it out with a warning naming its category, and "Try on recent
+  jobs" stops a slow job at its time budget. Independent interest limits also bound matching on each job in the signal
+  scan and AI review, and a preview uses one shared time budget for all jobs.
 - **Company names and job titles in non-Latin scripts no longer merge different jobs:** "Яндекс" and "株式会社メルカリ"
   were one company, and different Japanese, Chinese, Greek, Cyrillic or Hebrew titles at one employer and city were one
   job (and so were one role's postings in two cities written in another script), because their matching keys were empty.

@@ -93,7 +93,8 @@
       "tooMany": "最多 {max} 个类别",
       "nameRequired": "至少填一种语言的名称",
       "iconTooLong": "图标最多 2 个字",
-      "color": "颜色只能从调色板里选"
+      "color": "颜色只能从调色板里选",
+      "slowPattern": "太慢：在长测试文本上超时。请给每个 + 和 * 设上限，例如 [a-z]'{1,40}' 或 .'{0,40}'"
     },
     "list": {
       "row": "{label} {n}",
@@ -3190,6 +3191,7 @@
       "reason": {
         "unknownKey": "未知的键（可能是拼写错了）",
         "missing": "缺少这个键",
+        "slowPattern": "太慢：在长测试文本上超时。请给每个 + 和 * 设上限，例如 [a-z]'{1,40}' 或 .'{0,40}'",
         "protected": "受保护的键：请手动编辑 {file} 来修改"
       },
       "previewSave": "预览并保存",

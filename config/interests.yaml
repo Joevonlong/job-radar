@@ -160,6 +160,8 @@ limits:
   preview_jobs: 500
   # The preview stops after this many milliseconds and shows how far it got (it runs in the web server, so a slow pattern must not hold it up)
   preview_time_budget_ms: 1500
+  # Pattern probe and per-job budgets use schema defaults when absent; see docs/signals.md#interest-pattern-limits.
+  # Optional overrides: pattern_probe_chars, pattern_probe_ms, pattern_probe_retry_ms, pattern_job_ms.
 
 # Saved filter views: "Save current filters as view" on /jobs; rename, set default, delete on /interests; the Today page shows them as tabs at the top.
 # filters use the /jobs URL params (without sort, page): q, source, city, workplace (onsite|hybrid|remote|unknown),

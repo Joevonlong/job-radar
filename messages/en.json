@@ -93,7 +93,8 @@
       "tooMany": "At most {max} categories",
       "nameRequired": "Enter a name in at least one language",
       "iconTooLong": "An icon has at most 2 characters",
-      "color": "Pick a colour of the palette"
+      "color": "Pick a colour of the palette",
+      "slowPattern": "Too slow on a long test text: give each + and * an upper limit, as in [a-z]'{1,40}' or .'{0,40}'"
     },
     "list": {
       "row": "{label} {n}",
@@ -3190,6 +3191,7 @@
       "reason": {
         "unknownKey": "unknown key (maybe a typo)",
         "missing": "this key is missing",
+        "slowPattern": "too slow on a long test text: give each + and * an upper limit, as in [a-z]'{1,40}' or .'{0,40}'",
         "protected": "locked key: edit {file} by hand to change it"
       },
       "previewSave": "Preview and save",
