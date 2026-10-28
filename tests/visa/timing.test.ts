@@ -15,8 +15,10 @@ import { shippedPipeline } from "../pipeline/helpers";
  *
  * Each shape is checked in CPU time of this thread (the least of three measurements; wall time grows several times over on a busy
  * machine) in two steps: first a bound at one size (failing there stops the case, so slow code fails in seconds instead of running
- * the larger sizes), then the growth from a quarter of that size to the size, at most 8 times the time (linear ≈ 4, quadratic ≈
- * 16). The bounds are about ten times the time measured here and a tenth of what reading with the square of the hits took.
+ * the larger sizes), then the growth from an eighth of that size to the size, at most 24 times the time (linear ≈ 8, quadratic ≈
+ * 64). This wider gap tolerates more variation in CPU cost while separating quadratic growth further from the limit. Interleaving
+ * the small and large samples reduces the effect of a change in load between sizes, with the same three measurements per size.
+ * The bounds are about ten times the time measured here and a tenth of what reading with the square of the hits took.
  */
 const rules = visaRulesFor(shippedPipeline());
 
@@ -28,7 +30,7 @@ interface Shape {
   /** The text for a size `n`: `n` repeats (the list shape: a heading and items both growing with `n`). */
   make: (n: number) => string;
   status: VisaStatus;
-  /** The size checked against `bound` (CPU milliseconds); the growth is checked from a quarter of it to it. */
+  /** The size checked against `bound` (CPU milliseconds); the growth is checked from an eighth of it to it. */
   n: number;
   bound: number;
 }
@@ -54,12 +56,15 @@ describe("visa check timing", () => {
     const ms = leastCpuTime(() => void detectVisa(text, rules), { giveUpAbove: 3 * bound });
     expect(ms, `CPU ms at ${n}`).toBeLessThan(bound);
     expect(detectVisa(text, rules).status).toBe(status);
-    const [small, large] = [n / 4, n].map((size) => {
-      const sized = make(size);
-      expect(detectVisa(sized, rules).status).toBe(status);
-      return leastCpuTime(() => void detectVisa(sized, rules));
-    }) as [number, number];
-    expect(large / small, `CPU ms ${large.toFixed(1)} at ${n} / ${small.toFixed(1)} at ${n / 4}`).toBeLessThanOrEqual(8);
+    const smallText = make(n / 8);
+    expect(detectVisa(smallText, rules).status).toBe(status);
+    let small = Infinity;
+    let large = Infinity;
+    for (let sample = 0; sample < 3; sample += 1) {
+      small = Math.min(small, leastCpuTime(() => void detectVisa(smallText, rules), { runs: 1 }));
+      large = Math.min(large, leastCpuTime(() => void detectVisa(text, rules), { runs: 1 }));
+    }
+    expect(large / small, `CPU ms ${large.toFixed(1)} at ${n} / ${small.toFixed(1)} at ${n / 8}`).toBeLessThanOrEqual(24);
   });
 });
 
