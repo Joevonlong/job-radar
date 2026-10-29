@@ -31,6 +31,7 @@ import { resolveDockerDataLocation } from "../docker-data";
 import { readReleasesLock } from "../releases-lock";
 import { redact } from "./helpers";
 import { resolveHostDatabaseUrl } from "./database-url";
+import { probeDeliveries } from "./deliveries";
 import { enabledTools, readMcpSettings } from "@/lib/mcp/settings";
 
 import type { CommandOutcome, DiskSpace, DoctorContext, DoctorProbes, HttpOutcome, McpProbe, OwnershipScan, TrapsProbe } from "./types";
@@ -232,6 +233,7 @@ export function createRealProbes(options: RealProbeOptions): DoctorProbes {
     unscoredJobs: () => countUnscoredJobs(getDb()),
     traps: (now) => probeTraps(now),
     mcp: async () => probeMcp(),
+    deliveries: () => probeDeliveries(),
     profile: async () => readProfileReadiness(),
     async backups(directory) {
       try {

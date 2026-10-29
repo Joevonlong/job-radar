@@ -15,7 +15,7 @@ import {
   type ApifySettings,
 } from "./contract";
 import { apifyDescriptionHtml, parseApifyJob } from "./parse";
-import { postedAtOf, postedBefore } from "./posted-date";
+import { postedAtOf, postedDateEvidence } from "./posted-date";
 
 export const LINKEDIN_APIFY_ID = "linkedin-apify";
 
@@ -86,7 +86,7 @@ export function createApifyChannel(options: ApifyChannelOptions): Channel {
       if (total < runs) throw new BudgetExceededError("channel", `${LINKEDIN_APIFY_ID}: budget leaves room for fewer results than runs`);
       const perRunLimit = Math.max(1, Math.floor(total / runs));
 
-      const delivered: Record<string, unknown>[] = [];
+      const delivered: { record: Record<string, unknown>; ordinal: number | undefined }[] = [];
       let billedItems = 0;
       let billedUsd = 0;
       for (let index = 0; index < runs; index += 1) {
@@ -97,7 +97,7 @@ export function createApifyChannel(options: ApifyChannelOptions): Channel {
           if (limit < 1) throw new BudgetExceededError("channel", `${LINKEDIN_APIFY_ID}: budget exhausted after ${index} of ${runs} runs`);
           const runInput = buildActorInputs(query, settings, limit, market)[index];
           if (runInput === undefined) throw new Error("apify: missing actor input");
-          const items = await runActorSync({
+          const { items, ordinals } = await runActorSync({
             ctx,
             token,
             url: runSyncUrl({
@@ -111,7 +111,19 @@ export function createApifyChannel(options: ApifyChannelOptions): Channel {
             input: runInput,
             timeoutSecs: settings.timeout_secs,
           });
-          const records = items.filter((item): item is Record<string, unknown> => typeof item === "object" && item !== null && !Array.isArray(item) && !isErrorItem(item));
+          const records: { record: Record<string, unknown>; ordinal: number | undefined }[] = [];
+          for (const [itemIndex, item] of items.entries()) {
+            const ordinal = ordinals[itemIndex];
+            const record = typeof item === "object" && item !== null && !Array.isArray(item) ? item as Record<string, unknown> : null;
+            const errorItem = isErrorItem(item);
+            if (record === null || errorItem) {
+              if (ordinal !== undefined) ctx.deliveries.drop(ordinal, errorItem ? "provider_error" : "no_identity", {
+                externalId: record === null ? null : jobIdOfRecord(record),
+              });
+              continue;
+            }
+            records.push({ record, ordinal });
+          }
           // Billed usage is never dropped: every delivered item counts, and so does the run's start fee, even for an empty run.
           const costUsd = startUsd + records.length * perItemUsd;
           await ctx.budget.consume(records.length, { costUsd, allowOverspend: true });
@@ -139,21 +151,29 @@ export function createApifyChannel(options: ApifyChannelOptions): Channel {
       const { rangeHours } = dateRangeFor(query.windowHours);
       const observedAt = now().getTime();
       const cutoff = query.windowHours < rangeHours ? observedAt - query.windowHours * MS_PER_HOUR : null;
+      ctx.deliveries.setWindowCutoff(cutoff);
 
       const seen = new Set<string>();
       const out: RawPostingInput[] = [];
       let outsideWindow = 0;
       let noIdentity = 0;
-      for (const record of delivered) {
+      for (const { record, ordinal } of delivered) {
+        const { end, flags } = postedDateEvidence(record, observedAt);
+        if (ordinal !== undefined) ctx.deliveries.flag(ordinal, flags);
         const externalId = jobIdOfRecord(record);
         if (externalId === null) {
           noIdentity += 1;
+          if (ordinal !== undefined) ctx.deliveries.drop(ordinal, "no_identity", { externalId });
           continue;
         }
-        if (seen.has(externalId)) continue;
+        if (seen.has(externalId)) {
+          if (ordinal !== undefined) ctx.deliveries.drop(ordinal, "duplicate_in_run", { externalId });
+          continue;
+        }
         seen.add(externalId);
-        if (cutoff !== null && postedBefore(record, cutoff, observedAt)) {
+        if (cutoff !== null && end !== null && end < cutoff) {
           outsideWindow += 1;
+          if (ordinal !== undefined) ctx.deliveries.drop(ordinal, "outside_window", { externalId });
           continue;
         }
         out.push({
@@ -161,6 +181,7 @@ export function createApifyChannel(options: ApifyChannelOptions): Channel {
           url: typeof record.url === "string" ? record.url : null,
           payload: record,
           postedAt: postedAtOf(record.postedDate),
+          ...(ordinal === undefined ? {} : { deliveryOrdinal: ordinal }),
         });
       }
       if (outsideWindow > 0 || noIdentity > 0) ctx.logger.info("apify records not stored", { outsideWindow, noIdentity });

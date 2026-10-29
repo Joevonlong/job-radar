@@ -2,7 +2,7 @@ import { BudgetExceededError, ChannelError } from "../../errors";
 import type { SleepFn } from "../../http";
 import { marketForChannel } from "../../market";
 import type { Channel, ChannelContext, RawPostingInput, SearchQuery } from "../../types";
-import { postedDateEnd } from "../date-window";
+import { postedDateEvidence } from "../date-window";
 import { BrightDataClient } from "./client";
 import {
   BRIGHTDATA_API_KEY_ENV,
@@ -99,7 +99,19 @@ export function createBrightDataChannel(options: BrightDataChannelOptions): Chan
 
       // Every non-error record was billed, whatever happens to it below.
       const providerErrors = snapshot.items.filter(isProviderErrorRecord).length;
-      const delivered = snapshot.items.filter((item): item is Record<string, unknown> => typeof item === "object" && item !== null && !isProviderErrorRecord(item));
+      const delivered: { record: Record<string, unknown>; ordinal: number | undefined }[] = [];
+      for (const [itemIndex, item] of snapshot.items.entries()) {
+        const ordinal = snapshot.ordinals[itemIndex];
+        const record = typeof item === "object" && item !== null ? item as Record<string, unknown> : null;
+        const providerError = isProviderErrorRecord(item);
+        if (record === null || providerError) {
+          const id = record?.job_posting_id;
+          const externalId = typeof id === "string" || typeof id === "number" ? String(id).trim() || null : null;
+          if (ordinal !== undefined) ctx.deliveries.drop(ordinal, providerError ? "provider_error" : "no_identity", { externalId });
+          continue;
+        }
+        delivered.push({ record, ordinal });
+      }
       // Billed usage is never dropped: a snapshot bigger than the budget (the provider ignored the limit) is recorded in
       // full; the channel then has no headroom left and the cascade moves on for the following queries.
       const usage = await ctx.budget.consume(delivered.length, { allowOverspend: true });
@@ -121,28 +133,36 @@ export function createBrightDataChannel(options: BrightDataChannelOptions): Chan
       // Local time window for ranges shorter than the provider's discrete one.
       const { rangeHours } = timeRangeFor(query.windowHours);
       const cutoff = query.windowHours < rangeHours ? now().getTime() - query.windowHours * 3_600_000 : null;
+      ctx.deliveries.setWindowCutoff(cutoff);
 
       const seen = new Set<string>();
       const out: RawPostingInput[] = [];
       let outsideWindow = 0;
       let noIdentity = 0;
-      for (const record of delivered) {
+      for (const { record, ordinal } of delivered) {
+        const postedDate = typeof record.job_posted_date === "string" ? record.job_posted_date : null;
+        const postedAt = postedAtOf(postedDate);
+        const { end, flags } = postedDateEvidence(postedDate, postedAt);
+        if (ordinal !== undefined) ctx.deliveries.flag(ordinal, flags);
         const id = record.job_posting_id;
         const externalId = typeof id === "string" || typeof id === "number" ? String(id).trim() : "";
         if (externalId === "") {
           noIdentity += 1;
+          if (ordinal !== undefined) ctx.deliveries.drop(ordinal, "no_identity", { externalId: null });
           continue;
         }
-        if (seen.has(externalId)) continue;
+        if (seen.has(externalId)) {
+          if (ordinal !== undefined) ctx.deliveries.drop(ordinal, "duplicate_in_run", { externalId });
+          continue;
+        }
         seen.add(externalId);
-        const postedDate = typeof record.job_posted_date === "string" ? record.job_posted_date : null;
-        const postedAt = postedAtOf(postedDate);
-        const end = postedDateEnd(postedDate, postedAt);
         if (cutoff !== null && end !== null && end < cutoff) {
           outsideWindow += 1;
+          if (ordinal !== undefined) ctx.deliveries.drop(ordinal, "outside_window", { externalId });
           continue;
         }
-        out.push({ externalId, url: typeof record.url === "string" ? record.url : null, payload: record, postedAt });
+        out.push({ externalId, url: typeof record.url === "string" ? record.url : null, payload: record, postedAt,
+          ...(ordinal === undefined ? {} : { deliveryOrdinal: ordinal }) });
       }
       if (outsideWindow > 0 || noIdentity > 0) {
         ctx.logger.info("bright data records not stored", { outsideWindow, noIdentity });

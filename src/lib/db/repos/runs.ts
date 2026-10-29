@@ -1,7 +1,9 @@
 import { eq, sql } from "drizzle-orm";
 
 import type { Db } from "../client";
+import type { Executor } from "../executor";
 import { runs } from "../schema";
+import { setLocalWriteTimeout } from "../write-timeout";
 
 export type Run = typeof runs.$inferSelect;
 export type RunStatus = Run["status"];
@@ -24,21 +26,30 @@ export async function createRun(
   return row;
 }
 
-export async function finishRun(
-  db: Db,
-  id: number,
-  input: {
-    status: Exclude<RunStatus, "running">;
-    fetched?: number;
-    newCount?: number;
-    cost?: number;
-    usageUnits?: number;
-    error?: string | null;
-    errorCode?: string | null;
-    /** The query failed after some pages; what they returned was stored. */
-    interrupted?: boolean;
-  },
-): Promise<Run | null> {
+export interface FinishRunFields {
+  status: Exclude<RunStatus, "running">;
+  fetched?: number;
+  newCount?: number;
+  cost?: number;
+  usageUnits?: number;
+  error?: string | null;
+  errorCode?: string | null;
+  /** The query failed after some pages; what they returned was stored. */
+  interrupted?: boolean;
+}
+
+export async function finishRun(db: Db, id: number, input: FinishRunFields, writeTimeoutMs?: number): Promise<Run | null> {
+  if (writeTimeoutMs !== undefined) {
+    return db.transaction(async (tx) => {
+      await setLocalWriteTimeout(tx, writeTimeoutMs);
+      return finishRunWithExecutor(tx, id, input);
+    });
+  }
+  return finishRunWithExecutor(db, id, input);
+}
+
+/** Shared finish fields for a standalone update or an enclosing repository transaction. */
+export async function finishRunWithExecutor(db: Executor, id: number, input: FinishRunFields): Promise<Run | null> {
   const [row] = await db
     .update(runs)
     .set({

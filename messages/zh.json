@@ -5764,6 +5764,14 @@
           "off": "未打开（mcp.yaml 的 enabled: false，默认）",
           "configError": "mcp.yaml 读不出来：{problem}",
           "configHint": "pnpm config:check 会指出是哪一项"
+        },
+        "deliveries": {
+          "title": "交付账本",
+          "notReady": "交付账本尚未就绪",
+          "bytes": "交付原文留存：{bytes} 字节（告警阈值：{limit} 字节）",
+          "hint": "在用户配置 delivery-audit.yaml 中调低 retention.days，或检查大体积响应的来源。runner 只修剪过期记录；doctor 不删除任何内容。",
+          "configError": "无法读取 delivery-audit.yaml：{problem}",
+          "configHint": "使用 pnpm config:check 检查 delivery-audit.yaml。"
         }
       },
       "setup": {
@@ -6588,5 +6596,23 @@
     "frozen": "升级期间已冻结设置写入。",
     "unfrozen": "已解除冻结。下一步先运行 pnpm config:init，再运行 pnpm config:migrate --write",
     "failed": "无法更改升级冻结。检查目标提交、写入权限和写锁后重试。"
+  },
+  "deliveries": {
+    "notReady": "交付账本尚未就绪",
+    "notFound": "未找到该运行",
+    "incomplete": "尝试未完成",
+    "completed": "尝试已完成",
+    "notKept": "该次原文未留存",
+    "none": "无",
+    "unknown": "未知",
+    "run": "运行 {id}：{state}",
+    "summary": "账本：{ledger}；交付数：{delivered}；计费单位：{billed}；不同 ID 数：{distinct}；窗口截止：{cutoff}",
+    "dispositions": "处置：{counts}",
+    "flags": "标记：{counts}",
+    "mismatch": "对账差异：{codes}",
+    "item": "#{ordinal} 批次={batch} 处置={disposition} 标记={flags} 字节={bytes} 哈希={hash}",
+    "externalId": "外部 ID：{id}",
+    "usage": "用法：pnpm deliveries:show --run ID [--disposition CODE]... [--payload] [--json] [--lang en|zh]",
+    "failed": "无法读取交付账本"
   }
 }

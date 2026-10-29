@@ -5,6 +5,7 @@ import { createMemoryHealthStore } from "@/lib/ai/health";
 import { createMemoryQuotaStore } from "@/lib/ai/quota-guard";
 import { createMemoryUsageStore } from "@/lib/ai/usage";
 import { ChannelError } from "@/lib/channels/errors";
+import { NO_DELIVERIES } from "@/lib/channels/delivery";
 import { registerFixtureChannel } from "@/lib/channels/fixture";
 import { ChannelRegistry } from "@/lib/channels/registry";
 import { createMemoryStateStore } from "@/lib/channels/store";
@@ -66,6 +67,18 @@ describe("test_channel", () => {
 
     const busy = createTestChannelHandler({ ...base(), registry, cycleRunning: async () => true });
     expect((await busy(request("test_channel", { channelId: "arbeitsagentur" }), context())).result.error).toBe("another_cycle_running");
+  });
+
+  it("gives channel tests a no-op delivery recorder without touching the database", async () => {
+    const registry = new ChannelRegistry();
+    const channel = registerFixtureChannel(registry, { id: "arbeitsagentur" });
+    channel.collect = async (_query, ctx) => {
+      expect(ctx.deliveries).toBe(NO_DELIVERIES);
+      expect(ctx.deliveries.received({ batch: ctx.deliveries.beginBatch(), items: [{ id: "test-receipt" }] })).toEqual([]);
+      return [];
+    };
+    const outcome = await createTestChannelHandler({ ...base(), registry })(request("test_channel", { channelId: "arbeitsagentur" }), context());
+    expect(outcome).toMatchObject({ status: "done", result: { fetched: 0 } });
   });
 
   it("refuses a paid channel with no budget left (when not excluded)", async () => {

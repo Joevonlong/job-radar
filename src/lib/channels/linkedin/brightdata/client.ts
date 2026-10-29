@@ -34,6 +34,7 @@ export interface Snapshot {
   snapshotId: string;
   /** Items exactly as delivered (job records and provider error records). */
   items: unknown[];
+  ordinals: (number | undefined)[];
 }
 
 /** Parse a snapshot body: a JSON array, or (when the provider ignores `format=json`) NDJSON. */
@@ -122,25 +123,41 @@ export class BrightDataClient {
     return false;
   }
 
-  private async download(snapshotId: string): Promise<unknown[] | null> {
+  private async download(snapshotId: string, batch: number): Promise<Pick<Snapshot, "items" | "ordinals"> | null> {
     const response = await this.get(snapshotUrl(snapshotId, this.origin), NOT_READY_STATUSES);
     if ((NOT_READY_STATUSES as readonly number[]).includes(response.status)) return null;
     const text = await response.text();
-    if (text.length > MAX_RESPONSE_CHARS) throw new ChannelError("parse", "Bright Data snapshot exceeds the size limit");
-    return parseSnapshotBody(text);
+    const { deliveries } = this.options.ctx;
+    const unparsed = () => {
+      for (const ordinal of deliveries.received({ batch, text })) deliveries.drop(ordinal, "unparsed_response");
+    };
+    if (text.length > MAX_RESPONSE_CHARS) {
+      unparsed();
+      throw new ChannelError("parse", "Bright Data snapshot exceeds the size limit");
+    }
+    let items: unknown[];
+    try {
+      items = parseSnapshotBody(text);
+    } catch (error) {
+      unparsed();
+      throw error;
+    }
+    const ordinals = deliveries.received({ batch, items });
+    return { items, ordinals: items.map((_, index) => ordinals[index]) };
   }
 
   /** Trigger, wait until ready (or time out), download. */
   async run(inputs: readonly DiscoveryInput[], limitPerInput: number): Promise<Snapshot> {
     const { ctx, pollIntervalMs, timeoutMs } = this.options;
+    const batch = ctx.deliveries.beginBatch();
     const startedAt = this.now();
     const snapshotId = await this.trigger(inputs, limitPerInput);
     ctx.logger.info("bright data snapshot triggered", { inputs: inputs.length, limitPerInput });
 
     for (;;) {
       if (await this.isReady(snapshotId)) {
-        const items = await this.download(snapshotId);
-        if (items !== null) return { snapshotId, items };
+        const snapshot = await this.download(snapshotId, batch);
+        if (snapshot !== null) return { snapshotId, ...snapshot };
       }
       if (this.now() - startedAt + pollIntervalMs > timeoutMs) {
         // the snapshot keeps building at the provider (results are kept for 30 days): log its id so it can be fetched later

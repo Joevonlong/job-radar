@@ -32,6 +32,8 @@
 - 数据集没有"远程/混合/到岗"字段，`workplace` 由 pipeline 读 JD 文字得出（见[岗位信息提取](extraction.zh.md)），读不到就是 `unknown`（不推测）。
 - 描述：`job_summary` 是一整段纯文本，末尾带 "Show more Show less"；`job_description_formatted` 是带段落和列表的 HTML，已加进请求的字段，解析时优先用它。老的采集记录没有这个字段，由 pipeline 整理（`pipeline.yaml: description`）。
 
+没有写成原始岗位的记录仍保存在[交付账本](sources.zh.md#付费交付账本)中。
+
 ## 线上冒烟
 ```bash
 pnpm smoke:brightdata            # 读 .env；一个查询，最多 10 条

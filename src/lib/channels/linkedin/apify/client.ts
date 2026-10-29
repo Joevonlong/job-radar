@@ -23,8 +23,9 @@ export interface RunActorOptions {
  * classified by `ctx.http` (401 auth, 403 blocked, 408/5xx network, 429 rate limited, other 4xx non-retryable);
  * 402 (no credit left at Apify) is a budget failure so the cascade moves on.
  */
-export async function runActorSync(options: RunActorOptions): Promise<unknown[]> {
+export async function runActorSync(options: RunActorOptions): Promise<{ items: unknown[]; ordinals: (number | undefined)[] }> {
   const { ctx } = options;
+  const batch = ctx.deliveries.beginBatch();
   const response = await ctx.http.request(options.url, {
     method: "POST",
     headers: { Authorization: `Bearer ${options.token}`, Accept: "application/json", "Content-Type": "application/json" },
@@ -39,13 +40,24 @@ export async function runActorSync(options: RunActorOptions): Promise<unknown[]>
     throw new BudgetExceededError("channel", "Apify answered 402: the Apify account has no credit or usage left");
   }
   const text = await response.text();
-  if (text.length > MAX_RESPONSE_CHARS) throw new ChannelError("parse", "Apify dataset exceeds the size limit");
+  const unparsed = () => {
+    for (const ordinal of ctx.deliveries.received({ batch, text })) ctx.deliveries.drop(ordinal, "unparsed_response");
+  };
+  if (text.length > MAX_RESPONSE_CHARS) {
+    unparsed();
+    throw new ChannelError("parse", "Apify dataset exceeds the size limit");
+  }
   let body: unknown;
   try {
     body = text.trim() === "" ? [] : JSON.parse(text);
   } catch (error) {
+    unparsed();
     throw new ChannelError("parse", "Apify response is not valid JSON", { cause: error });
   }
-  if (!Array.isArray(body)) throw new ChannelError("parse", "Apify response is not a JSON array of dataset items");
-  return body;
+  if (!Array.isArray(body)) {
+    unparsed();
+    throw new ChannelError("parse", "Apify response is not a JSON array of dataset items");
+  }
+  const ordinals = ctx.deliveries.received({ batch, items: body });
+  return { items: body, ordinals: body.map((_, index) => ordinals[index]) };
 }

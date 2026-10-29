@@ -1,0 +1,13 @@
+config_version: 1
+scope:
+  channel_kinds: [paid]
+  exclude_channels: []
+checkpoint:
+  write_timeout_ms: 5000
+retention:
+  days: 45
+  warn_bytes: 524288000
+prune:
+  every_minutes: 60
+  batch_size: 2000
+  statement_timeout_ms: 5000

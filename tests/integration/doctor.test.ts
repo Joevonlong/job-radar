@@ -9,6 +9,10 @@ import { createCycle, finishCycle } from "@/lib/db/repos/cycles";
 import { ALL_CHECKS, runDoctor, type CommandOutcome, type DoctorContext } from "@/lib/ops/doctor";
 import { readJournal } from "@/lib/db/migration-journal";
 import { createRealContext } from "@/lib/ops/doctor/probes";
+import { probeDeliveries } from "@/lib/ops/doctor/deliveries";
+import { deliveryCheck } from "@/lib/ops/doctor/checks/deliveries";
+import { finishRunWithDeliveries, resetDeliveryTablesCache } from "@/lib/db/repos/deliveries";
+import { createRun } from "@/lib/db/repos/runs";
 
 const url = inject("testDatabaseUrl");
 const migrationsDir = path.resolve(import.meta.dirname, "../../drizzle");
@@ -32,6 +36,34 @@ async function context(): Promise<DoctorContext> {
 }
 
 describe("doctor against a real database", () => {
+  it("only reports ledger size, leaving every receipt and summary unchanged", async () => {
+    resetDeliveryTablesCache();
+    const db = getDb();
+    const channelId = "doctor-delivery-test";
+    await db.execute(sql`insert into channels (id, family, kind) values (${channelId}, 'linkedin', 'paid')`);
+    const runId = (await createRun(db, { channelId })).id;
+    await finishRunWithDeliveries(db, {
+      runId, channelId, ledger: "client", windowCutoffAt: null, expected: { delivered: 1 }, run: { status: "succeeded" },
+      items: [{ ordinal: 0, batch: 1, disposition: "no_identity", externalId: null, flags: [], confirmed: false,
+        payloadHash: "doctor-receipt-hash", payloadBytes: 100, payloadJson: { text: "private source" }, payloadText: null,
+        receivedAt: new Date("2026-01-01T00:00:00Z") }],
+    });
+    const snapshot = async () => ({
+      items: await db.execute(sql`select id, payload_hash, to_jsonb(delivery_items) as content from delivery_items order by id`),
+      // Summaries have run_id rather than id, and no payload_hash; hash their complete content instead.
+      summaries: await db.execute(sql`select run_id as id, md5(to_jsonb(run_deliveries)::text) as payload_hash, to_jsonb(run_deliveries) as content from run_deliveries order by run_id`),
+    });
+    const before = await snapshot();
+    expect(before.items).toHaveLength(1);
+    expect(before.summaries).toHaveLength(1);
+    for (const [warnBytes, status] of [[101, "ok"], [100, "ok"], [99, "warn"]] as const) {
+      const ctx = await context();
+      ctx.probes.deliveries = () => probeDeliveries({ db, loadConfig: () => ({ retention: { days: 1, warn_bytes: warnBytes } }) });
+      const report = await runDoctor(ctx, [deliveryCheck]);
+      expect(report.checks[0]?.status).toBe(status);
+      expect(await snapshot()).toEqual(before);
+    }
+  });
   it("migrations: what the journal ships equals what the migrator applied", async () => {
     const [expected, applied] = [await readJournal(migrationsDir), await readAppliedMigrations(getDb())];
     expect(expected?.count).toBeGreaterThan(0);

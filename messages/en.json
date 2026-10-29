@@ -5764,6 +5764,14 @@
           "off": "Off (mcp.yaml enabled: false, the default)",
           "configError": "mcp.yaml cannot be read: {problem}",
           "configHint": "pnpm config:check shows which setting"
+        },
+        "deliveries": {
+          "title": "Delivery ledger",
+          "notReady": "Delivery ledger is not set up yet",
+          "bytes": "Retained delivery payloads: {bytes} bytes (warning threshold: {limit} bytes)",
+          "hint": "Lower retention.days in your user copy of delivery-audit.yaml, or inspect the source of large responses. The runner only prunes expired receipts; doctor does not delete anything.",
+          "configError": "Cannot read delivery-audit.yaml: {problem}",
+          "configHint": "Check delivery-audit.yaml with pnpm config:check."
         }
       },
       "setup": {
@@ -6588,5 +6596,23 @@
     "frozen": "Settings are frozen for the upgrade.",
     "unfrozen": "Settings are unfrozen. Next run: pnpm config:init, then pnpm config:migrate --write",
     "failed": "Could not change the upgrade freeze. Check the target commit, write permissions and write lock; retry."
+  },
+  "deliveries": {
+    "notReady": "Delivery ledger is not set up yet",
+    "notFound": "Run not found",
+    "incomplete": "attempt not completed",
+    "completed": "attempt completed",
+    "notKept": "payload of this delivery not kept",
+    "none": "none",
+    "unknown": "unknown",
+    "run": "Run {id}: {state}",
+    "summary": "Ledger: {ledger}; delivered: {delivered}; billed units: {billed}; distinct ids: {distinct}; window cutoff: {cutoff}",
+    "dispositions": "Dispositions: {counts}",
+    "flags": "Flags: {counts}",
+    "mismatch": "Mismatch: {codes}",
+    "item": "#{ordinal} batch={batch} disposition={disposition} flags={flags} bytes={bytes} hash={hash}",
+    "externalId": "External id: {id}",
+    "usage": "Usage: pnpm deliveries:show --run ID [--disposition CODE]... [--payload] [--json] [--lang en|zh]",
+    "failed": "Could not read the delivery ledger"
   }
 }

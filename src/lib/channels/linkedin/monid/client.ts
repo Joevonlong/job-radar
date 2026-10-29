@@ -50,18 +50,27 @@ export class MonidClient {
     return `/v1/runs/${encodeURIComponent(runId)}`;
   }
 
-  private async body(response: HttpResponse): Promise<unknown> {
+  private async body(response: HttpResponse, batch: number): Promise<unknown> {
     const read = response.textUpTo ? await response.textUpTo(MAX_RESPONSE_CHARS) : await readTextUpTo(response, MAX_RESPONSE_CHARS);
-    if (read.truncated || read.text.length > MAX_RESPONSE_CHARS) throw new ChannelError("parse", "Monid response exceeds the size limit");
+    const unparsed = () => {
+      for (const ordinal of this.options.ctx.deliveries.received({ batch, text: read.text, truncated: read.truncated })) {
+        this.options.ctx.deliveries.drop(ordinal, "unparsed_response", { flags: read.truncated ? ["body_truncated"] : [] });
+      }
+    };
+    if (read.truncated || read.text.length > MAX_RESPONSE_CHARS) {
+      unparsed();
+      throw new ChannelError("parse", "Monid response exceeds the size limit");
+    }
     try {
       return JSON.parse(read.text) as unknown;
     } catch {
+      unparsed();
       // A JSON syntax error can include a fragment of the body; never retain it as a cause.
       throw new ChannelError("parse", "Monid response is not valid JSON");
     }
   }
 
-  private async stop(runId: string, independent: boolean, observe: ObserveRun): Promise<{ conflict: boolean; run: MonidRun | null }> {
+  private async stop(runId: string, independent: boolean, observe: ObserveRun, batch: number): Promise<{ conflict: boolean; run: MonidRun | null }> {
     const { ctx, settings, stopFetch } = this.options;
     // Both limits are configurable. With the default settings this cleanup has its own five-second timeout.
     const timeoutMs = Math.min(settings.poll_interval_ms, settings.stop_grace_ms);
@@ -74,7 +83,7 @@ export class MonidClient {
     });
     let body: unknown;
     try {
-      body = await this.body(response);
+      body = await this.body(response, batch);
     } catch (error) {
       if (response.status !== 409 || (!independent && ctx.signal.aborted)) throw error;
       return { conflict: true, run: null };
@@ -89,7 +98,7 @@ export class MonidClient {
     return { conflict: false, run: null };
   }
 
-  private async poll(runId: string, deadline: number, observe: ObserveRun, immediate = false): Promise<MonidRun | null> {
+  private async poll(runId: string, deadline: number, observe: ObserveRun, batch: number, immediate = false): Promise<MonidRun | null> {
     const { ctx, settings } = this.options;
     for (;;) {
       ctx.signal.throwIfAborted();
@@ -112,7 +121,7 @@ export class MonidClient {
               headers: this.headers(), allowStatus: ALLOW_POLL_STATUS, redirect: "error", timeoutMs: remaining, signal: controller.signal,
             });
             httpStatus = response.status;
-            return { status: response.status, body: await this.body(response) };
+            return { status: response.status, body: await this.body(response, batch) };
           })(),
           expired,
         ]);
@@ -139,8 +148,9 @@ export class MonidClient {
     }
   }
 
-  async run(input: Record<string, unknown>, limit: number): Promise<unknown[]> {
+  async run(input: Record<string, unknown>, limit: number): Promise<{ items: unknown[]; ordinals: (number | undefined)[] }> {
     const { ctx, settings, apiKey } = this.options;
+    const batch = ctx.deliveries.beginBatch();
     validateFinalInput(input, limit);
     assertCredentialEndpoint("monid", settings.api_base_url, ctx, this.options.environment ?? process.env);
     ctx.signal.throwIfAborted();
@@ -155,6 +165,14 @@ export class MonidClient {
     const invalidFields = new Set<string>();
     const fields = (): Record<string, unknown> => runId === undefined ? {} : { runId: runId.replaceAll(apiKey, "[redacted]") };
     const observe: ObserveRun = (body) => {
+      if (typeof body === "object" && body !== null && "output" in body) {
+        if (Array.isArray(body.output)) ctx.deliveries.received({ batch, items: body.output });
+        else {
+          for (const ordinal of ctx.deliveries.received({ batch, items: [body.output] })) {
+            ctx.deliveries.drop(ordinal, "unparsed_response");
+          }
+        }
+      }
       const parsed = runCostSchema.safeParse(body);
       if (!parsed.success) return;
       const cost = calculateRunCost(parsed.data, limit, settings);
@@ -183,17 +201,20 @@ export class MonidClient {
       if (cost.conservative) ctx.logger.warn("monid run outcome uncertain; charged the configured limit", { ...fields(), limit });
       ctx.logger.info("monid run usage recorded", { ...fields(), units, usd: cost.costUsd });
     };
-    const finish = async (run: MonidRun, httpStatus = 200): Promise<unknown[]> => {
+    const finish = async (run: MonidRun, httpStatus = 200): Promise<{ items: unknown[]; ordinals: (number | undefined)[] }> => {
+      const ordinals = Array.isArray(run.output) ? ctx.deliveries.received({ batch, items: run.output }) : [];
       runId = run.runId ?? runId;
       await record(run);
       ctx.signal.throwIfAborted();
       const failure = errorForResponse(httpStatus, run);
       if (failure) throw failure;
       const provider = providerResponseSchema.safeParse(run.providerResponse);
-      if (provider.success && provider.data.httpStatus === 404) return [];
+      if (provider.success && provider.data.httpStatus === 404) return { items: [], ordinals: [] };
       const output = outputSchema.safeParse(run.output);
-      if (!output.success) throw new ChannelError("parse", "Monid output is not an array of harvestapi items");
-      return output.data;
+      if (!output.success) {
+        throw new ChannelError("parse", "Monid output is not an array of harvestapi items");
+      }
+      return { items: output.data, ordinals: output.data.map((_, index) => ordinals[index]) };
     };
 
     try {
@@ -201,7 +222,7 @@ export class MonidClient {
         method: "POST", headers: this.headers(), body: JSON.stringify({ provider: settings.provider, endpoint: settings.endpoint, input: { body: input } }),
         maxRetries: 0, timeoutMs: settings.timeout_ms, allowStatus: ALLOW_POST_STATUS, redirect: "error",
       });
-      const body = await this.body(response);
+      const body = await this.body(response, batch);
       observe(body);
       // An unreadable/truncated response cannot prove that the paid request was refused.
       rejected = NOT_EXECUTED_STATUS.includes(response.status);
@@ -222,18 +243,18 @@ export class MonidClient {
         (price.data.amount.value > settings.price_per_1k_usd / 1000 || (price.data.flatFee?.value ?? 0) > settings.flat_fee_usd)) {
         ctx.logger.warn("monid advertised price exceeds configured price", { ...fields(), amount: price.data.amount.value, flatFee: price.data.flatFee?.value });
       }
-      const run = await this.poll(runId, startedAt + settings.timeout_ms, observe);
+      const run = await this.poll(runId, startedAt + settings.timeout_ms, observe, batch);
       if (run) return await finish(run);
       let final: MonidRun | null;
       let pollingGrace = false;
       try {
         stopRequested = true;
-        const stopped = await this.stop(runId, false, observe);
+        const stopped = await this.stop(runId, false, observe, batch);
         // A 409 always needs a fresh GET: the run may have completed, or may still be un-stoppable.
         if (stopped.run && !stopped.conflict) final = { ...stopped.run, runId };
         else {
           pollingGrace = true;
-          final = await this.poll(runId, this.now() + settings.stop_grace_ms, observe, stopped.conflict);
+          final = await this.poll(runId, this.now() + settings.stop_grace_ms, observe, batch, stopped.conflict);
         }
       } catch (error) {
         if (ctx.signal.aborted) throw error;
@@ -249,7 +270,7 @@ export class MonidClient {
           let final: MonidRun | null = null;
           if (runId !== undefined) {
             try {
-              final = (await this.stop(runId, true, observe)).run;
+              final = (await this.stop(runId, true, observe, batch)).run;
             } catch {
               ctx.logger.warn("monid cancellation stop failed", fields());
             }
@@ -262,7 +283,7 @@ export class MonidClient {
       if (!accounted && runId !== undefined && !stopRequested && error instanceof ChannelError && !error.retryable) {
         stopRequested = true;
         try {
-          await this.stop(runId, true, observe);
+          await this.stop(runId, true, observe, batch);
         } catch {
           ctx.logger.warn("monid failure stop failed", fields());
         }

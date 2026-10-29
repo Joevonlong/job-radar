@@ -315,6 +315,7 @@ SQL
 | `pnpm config:check` | 改完 `data/config/*.yaml` 或画像后检查格式（含 `ai.yaml` ↔ `models.yaml` 的跨文件检查） |
 | `pnpm ai:probe --provider <服务商> --model <模型 id>` | 新模型加进 `data/config/models.yaml` 后，先用它发一次极小请求再去设置页选（`--model` 必须配且只配一个 `--provider`；不带 `--model` 时看各 provider 此刻是否可用） |
 | `pnpm sources:list` | 列出所有采集来源和健康状态（`--status failing`、`--json`、`--strict`），见 `sources.zh.md` |
+| `pnpm deliveries:show --run <id>` | 查看付费运行的交付账本和用量，见[来源](sources.zh.md#付费交付账本) |
 | `pnpm telegram:test` | 发一条测试消息，确认 Telegram 通 |
 | `pnpm reprocess` | 规则改了以后，按新规则重新解析已入库的岗位（`--split-merged`：拆开旧版本因非拉丁文字名字而合并的岗位，见 [extraction.zh.md](extraction.zh.md#公司和标题的匹配键)） |
 | `pnpm db:studio` | 打开 Drizzle Studio，在浏览器里翻数据库表 |

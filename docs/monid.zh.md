@@ -100,6 +100,8 @@ POST 响应体读取失败或被截断时仍保守记账，包括 HTTP 503。
 解析失败的原文同样保留。取不到 LinkedIn job ID 时用稳定的 `unidentified:<sha256>` 隔离 ID 存储，
 并标为 `parse_failed`，不会和正常 LinkedIn 岗位合并。
 
+本地过滤掉的记录仍保存在[交付账本](sources.zh.md#付费交付账本)中。
+
 ## 冒烟测试
 
 ```bash

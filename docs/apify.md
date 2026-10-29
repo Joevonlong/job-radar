@@ -36,6 +36,8 @@ The `linkedin-apify` channel takes over the main LinkedIn search after the Brigh
 - A run is sent only once, with no retry (a retry would bill twice); three consecutive failures open the breaker, and it tries again after 24 hours.
 - `external_id` is LinkedIn's numeric job id, the same as Bright Data, so the same job obtained through the two channels is merged into one.
 
+Records filtered out locally remain in the [delivery ledger](sources.md#paid-delivery-ledger).
+
 ## Posting dates and local time windows
 
 When the requested window is narrower than the actor's day/week/month filter, the channel also filters locally.

@@ -108,6 +108,8 @@ a short timeout before giving up; the original failure and once-only accounting 
 Raw items are retained even when parsing fails. Items without a LinkedIn job ID use a stable `unidentified:<sha256>`
 quarantine ID and are marked `parse_failed`; they never merge with real LinkedIn jobs.
 
+Records filtered out locally remain in the [delivery ledger](sources.md#paid-delivery-ledger).
+
 ## Smoke test
 
 ```bash

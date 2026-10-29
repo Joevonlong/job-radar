@@ -74,6 +74,8 @@ export interface MigrationStatus {
  * (probes.ts); tests pass fakes, so no check ever needs Docker, a database or a network.
  */
 export interface DoctorProbes {
+  /** Retained delivery payload bytes and the configured warning threshold; never prunes. */
+  deliveries(): Promise<import("./deliveries").DeliveryProbe>;
   /** Run `command args` (time-out from `doctor.command_timeout_seconds`); never throws. */
   run(command: string, args: readonly string[]): Promise<CommandOutcome>;
   /** GET `url` (time-out from `doctor.probe_timeout_seconds`); never throws. */

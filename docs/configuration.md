@@ -107,6 +107,24 @@ Custom orders stay unchanged. Before rolling back to code that supports only ver
 from `data/config/.backup/`, or remove the Monid block and cascade entry and set `config_version: 3`.
 See [Monid](monid.md) for wallet setup, accounting, smoke and stops.
 
+### Paid delivery ledger (`delivery-audit.yaml`)
+
+This shipped file controls the [paid delivery ledger](sources.md#paid-delivery-ledger). To change it, copy the whole file to `data/config/delivery-audit.yaml`; your copy replaces the shipped file as a whole.
+
+| Key | Shipped value | Meaning |
+|---|---|---|
+| `config_version` | `1` | Configuration version. |
+| `scope.channel_kinds` | `[paid]` | Channel kinds covered. |
+| `scope.exclude_channels` | `[]` | Channel IDs excluded from the scope. |
+| `checkpoint.write_timeout_ms` | `5000` | Database statement and lock wait limit in milliseconds for ledger writes. Failure finalization rolls back before a standalone run-close fallback, which gets the same limit. |
+| `retention.days` | `45` | Retention for ledger items only; never raw postings. Run summaries remain. |
+| `retention.warn_bytes` | `524288000` | Retained payload bytes above which doctor warns and the runner can prune expired items early. |
+| `prune.every_minutes` | `60` | Regular pruning interval. |
+| `prune.batch_size` | `2000` | Maximum expired items deleted per statement. |
+| `prune.statement_timeout_ms` | `5000` | Timeout per pruning statement in milliseconds. |
+
+The threshold never skips new items or deletes unexpired ones. Database backups grow with the ledger: roughly 135 MB for 1,500 paid records a day over 45 days, depending on how many payloads are retained; one malformed provider response can add tens of MB.
+
 ### setup.yaml
 
 `setup.yaml` holds the state of the first-run setup (`completed_at`, `completed_by`, `steps`); the setup wizard and

@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { SearchConfig } from "@/lib/config";
 
 import type { CycleKind } from "@/lib/db/repos/cycles";
+import type { DeliveryRecorder } from "./delivery";
 
 /**
  * Channel framework contracts. Every collection channel implements
@@ -69,6 +70,7 @@ export const rawPostingInputSchema = z.object({
   payload: z.unknown().refine(isJsonSerializable, "payload must be JSON-serializable"),
   /** Publication time when the source gives one. A hint for the pipeline; not stored separately. */
   postedAt: z.date().nullable().optional(),
+  deliveryOrdinal: z.number().int().nonnegative().optional(),
 });
 export type RawPostingInput = z.infer<typeof rawPostingInputSchema>;
 
@@ -263,6 +265,8 @@ export interface ChannelContext {
   settings: ChannelRuntimeSettings;
   /** Already stored postings of this channel. Empty in dry runs without a database and in tests that do not seed it. */
   known: KnownPostings;
+  /** Provider receipts for the attempt's audit ledger. */
+  deliveries: DeliveryRecorder;
 }
 
 // ---------------------------------------------------------------- the channel

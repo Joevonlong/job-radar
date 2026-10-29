@@ -1,6 +1,7 @@
 import type { ChannelsConfig } from "@/lib/config";
 import type { CycleKind } from "@/lib/db/repos/cycles";
 
+import { NO_DELIVERIES, type DeliveryRecorder } from "./delivery";
 import { defaultSleep, createHttpClient, type FetchLike, type HttpSettings, type SleepFn } from "./http";
 import { silentLogger } from "./logger";
 import type { ChannelBudget, ChannelContext, ChannelLogger, ChannelRuntimeSettings, KnownPostings } from "./types";
@@ -45,6 +46,7 @@ export interface ChannelContextOptions {
   logger?: ChannelLogger;
   /** Stored postings of the channel; defaults to none. */
   known?: KnownPostings;
+  deliveries?: DeliveryRecorder;
   fetch?: FetchLike;
   sleep?: SleepFn;
   random?: () => number;
@@ -74,5 +76,6 @@ export function createChannelContext(options: ChannelContextOptions): ChannelCon
     cycle: options.cycle,
     settings: options.settings,
     known: options.known ?? NO_KNOWN_POSTINGS,
+    deliveries: options.deliveries ?? NO_DELIVERIES,
   };
 }

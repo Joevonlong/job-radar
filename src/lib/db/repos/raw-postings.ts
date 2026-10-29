@@ -1,6 +1,6 @@
-import { createHash } from "node:crypto";
-
 import { and, asc, eq, getTableColumns, gt, inArray, sql } from "drizzle-orm";
+
+import { hashPayload } from "@/lib/channels/payload-hash";
 
 import type { Db } from "../client";
 import type { Executor } from "../executor";
@@ -31,21 +31,7 @@ export interface RawUpsertResult {
   unchanged: number;
 }
 
-/** Keys sorted recursively so equal payloads hash equally whatever order the source used. */
-function canonicalJson(value: unknown): string {
-  if (value === null || typeof value !== "object") return JSON.stringify(value) ?? "null";
-  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
-  const entries = Object.entries(value as Record<string, unknown>)
-    .filter(([, v]) => v !== undefined)
-    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
-  return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${canonicalJson(v)}`).join(",")}}`;
-}
-
-/** SHA-256 (hex) over the canonical JSON form of a payload, after a JSON round trip (Dates → strings, undefined dropped). */
-export function hashPayload(payload: unknown): string {
-  const normalized: unknown = JSON.parse(JSON.stringify(payload));
-  return createHash("sha256").update(canonicalJson(normalized)).digest("hex");
-}
+export { hashPayload } from "@/lib/channels/payload-hash";
 
 const CHUNK = 500;
 
@@ -61,71 +47,86 @@ function chunks<T>(items: readonly T[], size: number): T[][] {
  * payload hash changed, so an unchanged posting that is already parsed is not parsed again.
  * Duplicate external ids within one batch collapse to the last one.
  */
-export async function upsertRawPostings(
-  db: Db,
-  input: { channelId: string; runId: number | null; items: readonly RawUpsertItem[]; fetchedAt?: Date },
-): Promise<RawUpsertResult> {
+export async function upsertRawPostings(db: Db, input: RawUpsertInput): Promise<RawUpsertResult> {
+  if (input.items.length === 0) return { inserted: 0, changed: 0, unchanged: 0 };
+  const { result } = await db.transaction((tx) => upsertRawPostingsWithExecutor(tx, input));
+  return result;
+}
+
+interface RawUpsertInput {
+  channelId: string;
+  runId: number | null;
+  items: readonly RawUpsertItem[];
+  fetchedAt?: Date;
+}
+
+/** Shared write path for callers already inside a transaction; ids refer to the actual upserted rows. */
+export async function upsertRawPostingsWithExecutor(
+  db: Executor,
+  input: RawUpsertInput,
+): Promise<{ result: RawUpsertResult; ids: Map<string, number> }> {
   const byId = new Map<string, RawUpsertItem & { hash: string }>();
   for (const item of input.items) {
     byId.set(item.externalId, { ...item, payload: JSON.parse(JSON.stringify(item.payload)), hash: hashPayload(item.payload) });
   }
   const items = [...byId.values()];
   const result: RawUpsertResult = { inserted: 0, changed: 0, unchanged: 0 };
-  if (items.length === 0) return result;
+  const ids = new Map<string, number>();
+  if (items.length === 0) return { result, ids };
   const fetchedAt = input.fetchedAt ?? sql`now()`; // database clock, like the other defaults
 
-  await db.transaction(async (tx) => {
-    const existing = new Map<string, string | null>();
-    for (const part of chunks(items, 1000)) {
-      const rows = await tx
-        .select({ externalId: rawPostings.externalId, hash: rawPostings.payloadHash })
-        .from(rawPostings)
-        .where(
-          and(
-            eq(rawPostings.channelId, input.channelId),
-            inArray(
-              rawPostings.externalId,
-              part.map((i) => i.externalId),
-            ),
+  const existing = new Map<string, string | null>();
+  for (const part of chunks(items, 1000)) {
+    const rows = await db
+      .select({ externalId: rawPostings.externalId, hash: rawPostings.payloadHash })
+      .from(rawPostings)
+      .where(
+        and(
+          eq(rawPostings.channelId, input.channelId),
+          inArray(
+            rawPostings.externalId,
+            part.map((i) => i.externalId),
           ),
-        );
-      for (const row of rows) existing.set(row.externalId, row.hash);
-    }
-    for (const item of items) {
-      if (!existing.has(item.externalId)) result.inserted += 1;
-      else if (existing.get(item.externalId) === item.hash) result.unchanged += 1;
-      else result.changed += 1;
-    }
+        ),
+      );
+    for (const row of rows) existing.set(row.externalId, row.hash);
+  }
+  for (const item of items) {
+    if (!existing.has(item.externalId)) result.inserted += 1;
+    else if (existing.get(item.externalId) === item.hash) result.unchanged += 1;
+    else result.changed += 1;
+  }
 
-    for (const part of chunks(items, CHUNK)) {
-      await tx
-        .insert(rawPostings)
-        .values(
-          part.map((i) => ({
-            channelId: input.channelId,
-            externalId: i.externalId,
-            url: i.url,
-            payloadJson: i.payload,
-            payloadHash: i.hash,
-            fetchedAt,
-            runId: input.runId,
-          })),
-        )
-        .onConflictDoUpdate({
-          target: [rawPostings.channelId, rawPostings.externalId],
-          set: {
-            payloadJson: sql`case when ${rawPostings.payloadHash} is distinct from excluded.payload_hash then excluded.payload_json else ${rawPostings.payloadJson} end`,
-            url: sql`coalesce(excluded.url, ${rawPostings.url})`,
-            fetchedAt: sql`excluded.fetched_at`,
-            runId: sql`excluded.run_id`,
-            parseStatus: sql`case when ${rawPostings.payloadHash} is distinct from excluded.payload_hash then 'pending'::parse_status else ${rawPostings.parseStatus} end`,
-            parseError: sql`case when ${rawPostings.payloadHash} is distinct from excluded.payload_hash then null else ${rawPostings.parseError} end`,
-            payloadHash: sql`excluded.payload_hash`,
-          },
-        });
-    }
-  });
-  return result;
+  for (const part of chunks(items, CHUNK)) {
+    const rows = await db
+      .insert(rawPostings)
+      .values(
+        part.map((i) => ({
+          channelId: input.channelId,
+          externalId: i.externalId,
+          url: i.url,
+          payloadJson: i.payload,
+          payloadHash: i.hash,
+          fetchedAt,
+          runId: input.runId,
+        })),
+      )
+      .onConflictDoUpdate({
+        target: [rawPostings.channelId, rawPostings.externalId],
+        set: {
+          payloadJson: sql`case when ${rawPostings.payloadHash} is distinct from excluded.payload_hash then excluded.payload_json else ${rawPostings.payloadJson} end`,
+          url: sql`coalesce(excluded.url, ${rawPostings.url})`,
+          fetchedAt: sql`excluded.fetched_at`,
+          runId: sql`excluded.run_id`,
+          parseStatus: sql`case when ${rawPostings.payloadHash} is distinct from excluded.payload_hash then 'pending'::parse_status else ${rawPostings.parseStatus} end`,
+          parseError: sql`case when ${rawPostings.payloadHash} is distinct from excluded.payload_hash then null else ${rawPostings.parseError} end`,
+          payloadHash: sql`excluded.payload_hash`,
+        },
+      })
+      .returning({ id: rawPostings.id, externalId: rawPostings.externalId });
+    for (const row of rows) ids.set(row.externalId, row.id);
+  }
+  return { result, ids };
 }
 
 export async function listRawPostingsForChannel(db: Db, channelId: string): Promise<RawPosting[]> {

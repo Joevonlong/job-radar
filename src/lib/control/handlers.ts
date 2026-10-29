@@ -21,6 +21,11 @@ export const runCycleHandler: ControlHandler = async (request, context) => {
     logger: context.logger,
     ...(channelIds ? { channelIds } : {}),
   });
+  try {
+    context.onCycleFinished?.(outcome.summary);
+  } catch {
+    context.logger.warn("cycle maintenance failed");
+  }
   const result = { cycleId: outcome.cycleId, cycleStatus: outcome.status, durationMs: outcome.summary.durationMs };
   const coveredBy = outcome.summary.coveredBy ?? null;
   if (outcome.status === "skipped" && coveredBy !== null) {

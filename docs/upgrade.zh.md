@@ -130,6 +130,8 @@ scripts/ops/deploy.sh --skip-pull
 
 从 `data/config/.backup/` 恢复配置或恢复数据库备份之前，先读 [CHANGELOG.md](../CHANGELOG.md) 里要离开的那个版本的回滚说明。
 
+**付费交付账本：**迁移只新增两张表。可以安全回滚：旧代码会忽略这两张表和新的 `delivery-audit.yaml` 文件。
+
 设置 `collect.max_catch_up_hours: 0` 会停止新的变宽运行，但历史记录不会自行过期。要安全回滚，请使用在
 `markJobsPossiblyClosed` 中保留 `and not r.window_extended` 的构建版本；否则，一些岗位可能被标为可能已关闭，
 并在下次被发现时重新打开。启动不认识补窗键的代码前，从用户 `data/config/sources.yaml` 中删除
