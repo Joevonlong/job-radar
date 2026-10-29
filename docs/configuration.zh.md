@@ -30,7 +30,7 @@ Job Radar 的所有设置都是 YAML，分两层：
 | 类 | 文件 | 首次初始化 | 产品升级时 |
 |---|---|---|---|
 | `user` | schedule、search、sources、ai、notify、interests、ui、breakdown、resume、insights、language、setup、salary（[salary.zh.md](salary.zh.md)）、mcp（[mcp.zh.md](mcp.zh.md)） | 从默认目录复制到用户目录，之后归你 | 不会自动改你的文件；格式变化由迁移（`config_version`）带过去 |
-| `shipped` | models（模型目录和价格）、pipeline（解析规则、城市和技能表）、signal-presets（`/interests`“新增类别”对话框的预设，见 [signals.zh.md](signals.zh.md#添加你自己的兴趣点)） | 不复制，一直读默认目录的 | 跟着产品更新 |
+| `shipped` | models（模型目录和价格）、pipeline（解析规则、城市和技能表）、pipeline-board（看板布局和卡片显示）、signal-presets（`/interests`“新增类别”对话框的预设，见 [signals.zh.md](signals.zh.md#添加你自己的兴趣点)） | 不复制，一直读默认目录的 | 跟着产品更新 |
 
 产品升级新增的 `user` 文件会在下次启动时从默认目录复制过来；如果用户目录里本来就有配置（老安装），可以改为写入保持原有行为的版本
 （`language.yaml`：中文，见 [languages.zh.md](languages.zh.md)）。初始化向导用同一个"老安装"判断。
@@ -43,6 +43,24 @@ Job Radar 的所有设置都是 YAML，分两层：
 （在任何 AI 调用之前否决岗位的规则）见 [deal-breakers.zh.md](deal-breakers.zh.md)；它的上限在 `pipeline.yaml: filter.deal_breakers`。
 
 运行时的 profile 读取可在内存里使用 `config/profile.example/`，不创建用户文件。原文检查、doctor 和 watcher 仍区分缺失文件与已保存文件；模板不属于默认配置层。
+
+## 申请看板（`pipeline-board.yaml`）
+
+这是 `config_version: 1` 的 shipped 文件。现有安装直接读取默认目录，无需迁移。
+需要自定义时，将整份文件复制到用户配置目录；该副本会覆盖以后随产品发布的更新。
+六个键全部必填；未知键、无效密度和超出下列范围的值会被拒绝，错误包含字段路径。
+
+| 键 | 出厂值 | 允许值 | 用途 |
+|---|---|---|---|
+| `density.default` | `compact` | `compact`、`comfortable` | 默认卡片密度 |
+| `density.remember_days` | `365` | 整数 1–3650 | 密度选择保留天数 |
+| `compact.title_lines` | `2` | 整数 1–4 | 紧凑卡片标题最多行数 |
+| `compact.next_action_lines` | `1` | 整数 1–3 | 紧凑卡片下一步最多行数 |
+| `layout.column_min_width_rem` | `14` | 10–24 | 桌面列最小宽度，单位 rem |
+| `layout.board_min_height_rem` | `24` | 12–60 | 矮屏看板最低高度，单位 rem |
+
+`layout.*` 已生效。`density.*` 和 `compact.*` 已校验并预留，将随卡片密度功能启用。
+目前卡片保持现有布局，不写密度 cookie。
 
 ## 命令
 

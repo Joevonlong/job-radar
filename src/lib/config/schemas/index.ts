@@ -10,6 +10,7 @@ export * from "./me";
 export * from "./models";
 export * from "./notify";
 export * from "./pipeline";
+export * from "./pipeline-board";
 export * from "./preferences";
 export * from "./resume";
 export * from "./salary";

@@ -1,0 +1,14 @@
+# Display settings for the application board. A user copy replaces this entire file.
+config_version: 1
+
+# Reserved for card density controls; validated now, used when card density is available.
+density:
+  default: compact # compact | comfortable
+  remember_days: 365 # Integer, 1–3650 days
+compact:
+  title_lines: 2 # Integer, 1–4 lines
+  next_action_lines: 1 # Integer, 1–3 lines
+
+layout:
+  column_min_width_rem: 14 # Desktop column width floor, 10–24 rem
+  board_min_height_rem: 24 # Short-screen board height floor, 12–60 rem

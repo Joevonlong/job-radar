@@ -16,6 +16,7 @@ const FILES: Record<ConfigName, string> = {
   notify: "notify.yaml",
   interests: "interests.yaml",
   pipeline: "pipeline.yaml",
+  pipelineBoard: "pipeline-board.yaml",
   resume: "resume.yaml",
   insights: "insights.yaml",
   ui: "ui.yaml",
