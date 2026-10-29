@@ -131,6 +131,7 @@ pnpm config:init --from <dir>     # copy from another directory (for migrating a
 pnpm config:migrate               # list the files to migrate and their diffs, write nothing
 pnpm config:migrate --write       # migrate: first back up the original files to data/config/.backup/<timestamp>/, then write
 pnpm config:check                 # validate both layers (default-directory files must be valid even when overridden), print which layer each file is read from and the shipped config identity
+pnpm config:check --effective     # per file: the layer it is read from and a hash of its effective value (`--json` for a machine-readable list; see below)
 pnpm config:example               # list the example setups; `pnpm config:example <id> [--dry-run]` applies one (see below)
 ```
 
@@ -408,6 +409,22 @@ backups, `ui.yaml: config_editor.backups_keep` copies per file).
 - A file **newer than the code** (the code was rolled back): an explicit error (`ConfigError`, doctor shows a red failure), no guessing. Upgrade the code, or take the pre-migration file back from `data/config/.backup/<timestamp>/`.
 - Files in the defaults directory ship with the product and are always at the current version (checked by `config:check`).
 
+### Comparing the effective config (`config:check --effective`)
+
+`pnpm config:check --effective` prints one line per config file: where it is read from (`user` / `default`) and a
+canonical hash of the value the loader makes of it (after migrating in memory, validating and filling in defaults). Key
+order, comments, quoting and `config_version` do not change the hash; a different value does. Run it before and after
+an upgrade or a hand edit: equal hashes mean the same effective config. A file that does not load is marked `✗` with
+the error (file and field, never the contents) and the command exits 1. `--json` prints
+`{"files": [{name, file, layer, hash, error}]}`.
+
+### YAML tags
+
+A tag the parser does not know (`!foo`, a misspelt `!unset`, `!!int x`) is an error naming its line, in every reader
+of config files: the loader, the settings page and the advanced editor, migrations, examples and the sources import.
+Earlier versions only warned and read the value as a string. The tag `!unset` is reserved for a later version and is
+refused with "not supported by this version".
+
 Writing a migration (for developers): in `src/lib/config/migrations/<file name>/NNN-slug.ts`, export a `{ from, to, description?, migrate(doc) }` (`to = from + 1`; `migrate` edits the yaml `Document` in place, keeps comments, and does no I/O), register it in order in `CONFIG_MIGRATIONS` in `migrations/index.ts`, and change the default-directory copy of the file to the new format with the new `config_version`. The contract is in `src/lib/config/migrations/types.ts`.
 
 ## Shipped config identity
@@ -641,6 +658,13 @@ older versions reject unknown keys.
 ## Backup
 
 Every backup, the runner's daily one (`backup.config_archive`, on by default) and `scripts/ops/backup.sh`, leaves a `….config.tgz` (`data/config` + `data/profile`, without `.backup/` and the sign-in key `.web-session-secret`) next to the database dump. The `backup` section of `schedule.yaml` also has `pre_migrate` (take a backup before a database migration), `keep_system` (how many safety backups of each kind to keep) and `keep_old_databases` (how many databases replaced by a restore to keep). `.env` and `.auth/` are in no backup. See [`backup-restore.md`](backup-restore.md), including "Restoring the configuration".
+
+`scripts/ops/backup.sh` and `restore.sh` read `schedule.yaml` through the app's loader. When that cannot run (no node, no
+`node_modules`) or the file is invalid, a strict shell reader takes over for `timezone` (and `restore.sh` for
+`backup.max_age_hours`). Write `timezone` as `Region/City` (`Europe/Berlin`, `America/Argentina/Buenos_Aires`) or
+`UTC`. The shell reader is stricter than the loader: one-part names the loader accepts, such as `Japan`, `GMT` or
+`EST5EDT`, are unclear to it, and `backup.sh` then names that backup in UTC (with a warning). Only this fallback is
+affected; the runner and the loader read those names as before.
 
 ## Switching from a single directory
 
