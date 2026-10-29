@@ -1242,7 +1242,8 @@
           "nothingStale": "This job does not need a score right now.",
           "tooSoon": "Requested a moment ago; try again shortly.",
           "backfillOverLimit": "Backfill exceeds the configured maximum.",
-          "cycleBusy": "A run is already queued or running; try again when it is over"
+          "cycleBusy": "A run is already queued or running; try again when it is over.",
+          "configUnavailable": "A config file cannot be read, so nothing was requested. Fix it under Settings → Advanced."
         },
         "failure": {
           "invalid_payload": "The request had the wrong shape",
@@ -3069,7 +3070,8 @@
         "nothingToScore": "Nothing waits for a score.",
         "tooSoon": "Requested a moment ago; try again shortly.",
         "backfillOverLimit": "Backfill exceeds the configured maximum.",
-        "cycleBusy": "A run is already queued or running; try again when it is over"
+        "cycleBusy": "A run is already queued or running; try again when it is over.",
+        "configUnavailable": "A config file cannot be read, so nothing was requested. Fix it under Settings → Advanced."
       },
       "requests": {
         "title": "Recent requests",
@@ -3104,6 +3106,7 @@
         "error": {
           "invalid_payload": "The request had the wrong shape",
           "another_cycle_running": "Another cycle was running, nothing was done",
+          "backfill_over_limit": "The backfill limit was lowered before it ran; nothing was collected",
           "cycle_failed": "The cycle failed",
           "handler_error": "An error occurred, see the runner log",
           "no_handler": "The runner does not know this request",
@@ -3969,7 +3972,8 @@
       "transportFailed": "Could not reach the server. Check your connection and try again; the request may already have been received.",
       "tooSoon": "Requested a moment ago; try again in {seconds} s.",
       "backfillOverLimit": "Backfill exceeds the configured maximum ({max} h).",
-      "cycleBusy": "A run is already queued or running; try again when it is over"
+      "cycleBusy": "A run is already queued or running; try again when it is over.",
+      "configUnavailable": "A config file cannot be read (sources.yaml?), so the backfill limit is unknown; nothing was requested. Fix it under Settings → Advanced."
     },
     "existing": "A request that covers this channel is already queued or running; waiting for its result.",
     "queued": "Queued…",

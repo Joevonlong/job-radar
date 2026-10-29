@@ -8,15 +8,17 @@
  * code: the heartbeat, the "config loaded" acknowledgement (watchConfig + recordConfigLoaded) and the
  * control-request poller. Its `run_cycle` handler is a stub that takes a moment and reports success
  * without creating a cycle row, so a test run does not change what the dashboard e2e sees as "the
- * latest cycle". Backfills stay open until their test removes the request. The real handler is covered by tests/integration/control.test.ts.
+ * latest cycle". A backfill ends by itself too (see BACKFILL_GATE_LOCK). The real handler is covered by tests/integration/control.test.ts.
  */
 import { setTimeout as sleep } from "node:timers/promises";
+
+import { sql } from "drizzle-orm";
 
 import { createLogger } from "../src/lib/channels/logger";
 import { loadConfig, readConfigText, watchConfig } from "../src/lib/config";
 import { syncSourceRegistry } from "../src/lib/sources/registry/sync";
 import { registerControlHandler, runControlPoller } from "../src/lib/control";
-import { closeDb, getControlRequest, getDb, writeHeartbeat } from "../src/lib/db";
+import { closeDb, getDb, writeHeartbeat } from "../src/lib/db";
 import { getJobForBreakdown, upsertJobBreakdown } from "../src/lib/db/repos/breakdowns";
 import { BREAKDOWN_PROMPT_VERSION } from "../src/lib/ai/prompts/breakdown";
 import { runCyclePayloadSchema, breakdownJobPayloadSchema } from "../src/lib/control/types";
@@ -37,6 +39,13 @@ const HEARTBEAT_MS = 1000;
 const POLL_SECONDS = 1;
 /** How long a stub test "runs": long enough for a test to see the pending / running state. */
 const STUB_TEST_MS = 800;
+/**
+ * A stub backfill runs STUB_CYCLE_MS, then waits for this advisory lock (shared) before it ends as done: e2e/sources.spec.ts
+ * holds it while it checks that a second backfill is refused. The wait ends after BACKFILL_GATE_TIMEOUT whatever happens,
+ * so a test that died holding it cannot keep the stand-in's queue busy.
+ */
+const BACKFILL_GATE_LOCK = 121;
+const BACKFILL_GATE_TIMEOUT = "30s";
 
 // the parent may be gone when the last lines are written: that is not an error
 process.stdout.on("error", () => {});
@@ -50,9 +59,15 @@ for (const signal of ["SIGTERM", "SIGINT"] as const) process.on(signal, () => ab
 registerControlHandler("run_cycle", async (request) => {
   const payload = runCyclePayloadSchema.safeParse(request.payload);
   if (payload.success && payload.data.backfillHours !== undefined) {
-    // No collector runs here. Keep backfills open until their test cleans up, so busy assertions cannot race the stub.
-    while (!abort.signal.aborted && (await getControlRequest(db, request.id))?.status === "running") await sleep(STUB_TEST_MS);
-    return { status: "failed", result: { error: "aborted" } };
+    // No collector runs here: the stub only takes its time, then ends like a cycle that collected nothing.
+    await sleep(STUB_CYCLE_MS);
+    await db
+      .transaction(async (tx) => {
+        await tx.execute(sql.raw(`set local lock_timeout = '${BACKFILL_GATE_TIMEOUT}'`));
+        await tx.execute(sql`select pg_advisory_xact_lock_shared(${BACKFILL_GATE_LOCK})`);
+      })
+      .catch(() => {});
+    return { status: "done", result: { cycleId: null, cycleStatus: "succeeded", durationMs: STUB_CYCLE_MS, backfillHours: payload.data.backfillHours } };
   }
   await sleep(STUB_CYCLE_MS);
   return { status: "done", result: { cycleId: null, cycleStatus: "succeeded", durationMs: STUB_CYCLE_MS } };

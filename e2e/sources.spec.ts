@@ -113,20 +113,32 @@ test("the AI provider card names each provider's default model", async ({ page }
 });
 
 test("a cascade backfill queues two days and refuses a second open run", async ({ page }) => {
-  // This run's disposable database only. The stand-in leaves backfills open until this test removes its request.
+  // may wait for the other run_cycle test's turn first
+  test.slow();
+  // This run's disposable database only. Advisory lock 120: settings.spec's "run a cycle now" queues run_cycle requests too, and an
+  // open one refuses a backfill (a backfill would disable that button), so the two tests take turns. Lock 121 keeps the stand-in's
+  // backfill open while the second one is refused (scripts/e2e-runner.ts BACKFILL_GATE_LOCK); once it is free the stand-in ends it.
   const url = process.env.E2E_DATABASE_URL;
   if (!url) throw new Error("E2E_DATABASE_URL is required");
   const sql = postgres(url, { max: 1, onnotice: () => {} });
-  const [before] = await sql<{ id: number }[]>`select coalesce(max(id), 0)::int as id from control_requests`;
-  const beforeId = before?.id ?? 0;
+  const backfillsOpen = async () => (await sql<{ n: number }[]>`
+    select count(*)::int as n from control_requests where kind = 'run_cycle' and payload ? 'backfillHours' and status in ('pending', 'running')
+  `)[0]?.n ?? 0;
   let releaseRead: () => void = () => {};
   const readGate = new Promise<void>((resolve) => { releaseRead = resolve; });
-  await page.route("**/api/control/requests/*", async (route) => {
-    // Observe the action's queued acknowledgement before following runner progress.
-    await readGate;
-    await route.continue();
-  });
+  let gated = false;
+  let beforeId = 0;
   try {
+    await sql`select pg_advisory_lock(120)`;
+    await sql`select pg_advisory_lock(121)`;
+    gated = true;
+    const [before] = await sql<{ id: number }[]>`select coalesce(max(id), 0)::int as id from control_requests`;
+    beforeId = before?.id ?? 0;
+    await page.route("**/api/control/requests/*", async (route) => {
+      // Observe the action's queued acknowledgement before following runner progress.
+      await readGate;
+      await route.continue();
+    });
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto("/sources");
     const cascade = page.getByTestId("cascade-card");
@@ -137,7 +149,7 @@ test("a cascade backfill queues two days and refuses a second open run", async (
     await expect(cascade.getByTestId("trigger-outcome")).toHaveAttribute("data-outcome", "pending");
     await waitForServerActions(page);
     const [request] = await sql<{ id: number; payload: { backfillHours: number; channelIds: string[] } }[]>`
-      select id, payload from control_requests where kind = 'run_cycle' and payload ->> 'backfillHours' = '48' order by id desc limit 1
+      select id, payload from control_requests where id > ${beforeId} and kind = 'run_cycle' and payload ->> 'backfillHours' = '48' order by id desc limit 1
     `;
     expect(request).toBeDefined();
     expect(request?.payload.backfillHours).toBe(48);
@@ -148,12 +160,20 @@ test("a cascade backfill queues two days and refuses a second open run", async (
     await cascade.getByRole("button", { name: "补抓…", exact: true }).click();
     await cascade.getByTestId("trigger-backfill-button").click();
     await expect(cascade.getByRole("alert")).toHaveText("已有采集任务排队或运行中，请等它结束后再试。");
+    await waitForServerActions(page);
+    await sql`select pg_advisory_unlock(121)`;
+    gated = false;
+    // the stand-in ends the backfill by itself once the gate is free
+    await expect.poll(async () => (await sql<{ status: string }[]>`select status::text from control_requests where id = ${request?.id ?? 0}`)[0]?.status, { timeout: 20_000 }).toBe("done");
   } finally {
     releaseRead();
     try {
       await waitForServerActions(page);
     } finally {
       try {
+        if (gated) await sql`select pg_advisory_unlock(121)`;
+        // leave no backfill behind for settings.spec's request list: wait for the stand-in to end it, then remove it
+        await expect.poll(backfillsOpen, { timeout: 40_000 }).toBe(0);
         await sql`delete from control_requests where id > ${beforeId} and kind = 'run_cycle' and payload ? 'backfillHours'`;
       } finally {
         await sql.end({ timeout: 5 });

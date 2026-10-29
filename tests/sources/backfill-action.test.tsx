@@ -4,6 +4,7 @@ import { NextIntlClientProvider } from "next-intl";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { BackfillAction } from "@/components/sources/backfill-action";
+import { BackfillGapLink } from "@/components/sources/backfill-gap-link";
 import type { ControlRequestView } from "@/lib/control/request-view-schema";
 import type { BackfillOptions } from "@/lib/sources/backfill";
 
@@ -75,4 +76,20 @@ it("supports keyboard opening, collapse and Chinese labels without losing the pa
   expect(screen.getByTestId("backfill-cost")).toHaveTextContent(zh.sources.backfill.noPaid);
   await user.click(screen.getByRole("button", { name: "补抓…" }));
   expect(screen.getByLabelText("补抓范围", { exact: true })).not.toBeVisible();
+});
+it("the rotation line's gap link opens and focuses the panel of its own card only", async () => {
+  render(
+    <NextIntlClientProvider locale="en" messages={en}>
+      <BackfillGapLink targetId="backfill-test">{en.sources.backfill.gap}</BackfillGapLink>
+      <BackfillAction id="backfill-test" options={options} />
+      <BackfillAction id="backfill-other" options={options} />
+    </NextIntlClientProvider>,
+  );
+  const [own, other] = screen.getAllByRole("button", { name: "Backfill…" });
+  expect(own).toHaveAttribute("aria-expanded", "false");
+  await userEvent.setup().click(screen.getByRole("link", { name: en.sources.backfill.gap }));
+  expect(own).toHaveAttribute("aria-expanded", "true");
+  expect(own).toHaveFocus();
+  expect(other).toHaveAttribute("aria-expanded", "false");
+  expect(screen.getByRole("link", { name: en.sources.backfill.gap })).toHaveAttribute("href", "#backfill-test");
 });

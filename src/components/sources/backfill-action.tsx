@@ -1,7 +1,7 @@
 "use client";
 
 import { useLocale, useTranslations } from "next-intl";
-import { useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
 
 import { TriggerButton } from "@/components/control/trigger-button";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,9 @@ import { NativeSelect } from "@/components/ui/native-select";
 import { resolveLocale } from "@/i18n/locale";
 import { formatInteger } from "@/lib/format/numbers";
 import { backfillPresets, type BackfillOptions } from "@/lib/sources/backfill";
+
+/** Window event whose `detail` is the id of the Backfill button to open (the rotation line's "backfill this gap" link). */
+export const OPEN_BACKFILL_EVENT = "job-radar:open-backfill";
 
 /** An inline confirmation panel; keeping it mounted preserves request progress when collapsed. */
 export function BackfillAction({ id, options }: { id: string; options: BackfillOptions }) {
@@ -21,6 +24,15 @@ export function BackfillAction({ id, options }: { id: string; options: BackfillO
   const [expanded, setExpanded] = useState(false);
   const [hours, setHours] = useState(presets[0]!);
   const [scope, setScope] = useState("local");
+  useEffect(() => {
+    const open = (event: Event) => {
+      if (!(event instanceof CustomEvent) || event.detail !== id) return;
+      setExpanded(true);
+      document.getElementById(id)?.focus();
+    };
+    window.addEventListener(OPEN_BACKFILL_EVENT, open);
+    return () => window.removeEventListener(OPEN_BACKFILL_EVENT, open);
+  }, [id]);
   const cost = scope === "all" ? options.all : options.local;
   const number = (value: number) => formatInteger(value, locale);
   return (

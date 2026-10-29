@@ -5,6 +5,8 @@ import { formatInteger } from "@/lib/format/numbers";
 import type { RotationStatus } from "@/lib/sources/rotation-status";
 import { cn } from "@/lib/utils";
 
+import { BackfillGapLink } from "./backfill-gap-link";
+
 /** Awaited by both server cards so the same line and warning stay together. */
 export async function RotationStatusLine({ rotation, cascade = false, backfillId }: { rotation: RotationStatus; cascade?: boolean; backfillId?: string }) {
   const [t, remote, localeId, backfill] = await Promise.all([getTranslations("sources.rotation"), getTranslations("settings.options.remoteScope"), getLocale(), getTranslations("sources.backfill")]);
@@ -25,7 +27,7 @@ export async function RotationStatusLine({ rotation, cascade = false, backfillId
     <div className={cn("min-w-0 text-data [overflow-wrap:anywhere]", rotation.overCap > 0 ? "text-warning-text" : "text-ink-2")}
       data-testid="rotation-status" data-queries={rotation.queries} data-never-run={rotation.neverRun} data-over-cap={rotation.overCap} data-sort-channel={rotation.sortChannel ?? ""}>
       <p>{parts.join(" · ")}</p>
-      {rotation.overCap > 0 ? <p className="mt-1" data-testid="rotation-warning">{t("overCap", { count: rotation.overCap, number: number(rotation.overCap), hours: number(rotation.maxCatchUpHours) })}{backfillId ? <> <a href={`#${backfillId}`} className="underline underline-offset-4 focus-visible:outline-bw">{backfill("gap")}</a></> : null}</p> : null}
+      {rotation.overCap > 0 ? <p className="mt-1" data-testid="rotation-warning">{t("overCap", { count: rotation.overCap, number: number(rotation.overCap), hours: number(rotation.maxCatchUpHours) })}{backfillId ? <> <BackfillGapLink targetId={backfillId}>{backfill("gap")}</BackfillGapLink></> : null}</p> : null}
     </div>
   );
 }

@@ -1242,7 +1242,8 @@
           "nothingStale": "这个岗位现在不需要打分。",
           "tooSoon": "刚刚请求过，请稍后再试。",
           "backfillOverLimit": "补抓范围超过配置上限。",
-          "cycleBusy": "已有采集任务排队或运行中，请等它结束后再试。"
+          "cycleBusy": "已有采集任务排队或运行中，请等它结束后再试。",
+          "configUnavailable": "配置文件读不了，没有提交请求。请先到“设置 → 高级”修好。"
         },
         "failure": {
           "invalid_payload": "请求格式不对",
@@ -3069,7 +3070,8 @@
         "nothingToScore": "没有需要打分的岗位。",
         "tooSoon": "刚刚请求过，请稍后再试。",
         "backfillOverLimit": "补抓范围超过配置上限。",
-        "cycleBusy": "已有采集任务排队或运行中，请等它结束后再试。"
+        "cycleBusy": "已有采集任务排队或运行中，请等它结束后再试。",
+        "configUnavailable": "配置文件读不了，没有提交请求。请先到“设置 → 高级”修好。"
       },
       "requests": {
         "title": "最近的请求",
@@ -3104,6 +3106,7 @@
         "error": {
           "invalid_payload": "请求格式不对",
           "another_cycle_running": "另一轮正在运行，这次没有执行",
+          "backfill_over_limit": "执行前补抓上限被调低，这次没有采集",
           "cycle_failed": "这一轮失败了",
           "handler_error": "执行出错，详情见 runner 日志",
           "no_handler": "runner 不认识这个请求",
@@ -3969,7 +3972,8 @@
       "transportFailed": "连不上服务器，请检查网络后重试；请求可能已经送达。",
       "tooSoon": "刚刚请求过，{seconds} 秒后可以再试。",
       "backfillOverLimit": "补抓范围超过配置上限（{max} 小时）。",
-      "cycleBusy": "已有采集任务排队或运行中，请等它结束后再试。"
+      "cycleBusy": "已有采集任务排队或运行中，请等它结束后再试。",
+      "configUnavailable": "配置文件读不了（sources.yaml？），无法确认补抓上限，没有提交请求。请先到“设置 → 高级”修好。"
     },
     "existing": "已有覆盖这个通道的请求在排队或执行，正在等它的结果。",
     "queued": "已排队…",

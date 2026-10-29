@@ -23,7 +23,7 @@ const rescoreStaleAction = withActionFeedback(rawRescoreStaleAction)(() => ({ st
 const runCycleAction = withActionFeedback(rawRunCycleAction)(() => ({ status: "error", error: "databaseUnavailable", nonce: Date.now() }));
 const scoreJobsAction = withActionFeedback(rawScoreJobsAction)(() => ({ status: "error", error: "databaseUnavailable", nonce: Date.now() }));
 
-const ERROR_CODES = ["invalid_payload", "another_cycle_running", "cycle_failed", "handler_error", "no_handler", "rescore_failed", "rescore_stopped", "rescore_profile_incomplete", "rescore_ai_unavailable", "score_failed", "score_stopped", "score_profile_incomplete", "score_ai_unavailable", "quota_guard"] as const;
+const ERROR_CODES = ["invalid_payload", "another_cycle_running", "backfill_over_limit", "cycle_failed", "handler_error", "no_handler", "rescore_failed", "rescore_stopped", "rescore_profile_incomplete", "rescore_ai_unavailable", "score_failed", "score_stopped", "score_profile_incomplete", "score_ai_unavailable", "quota_guard"] as const;
 
 function useAgeText() {
   const t = useTranslations("settings.control.age");

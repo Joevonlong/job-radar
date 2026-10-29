@@ -1,8 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { expect, test, type Page } from "./fixtures";
+import postgres from "postgres";
 import { parse } from "yaml";
+
+import { expect, test, type Page } from "./fixtures";
 
 /**
  * Settings page against the disposable database and a private copy of config/ (see
@@ -252,6 +254,22 @@ test("reorder the LinkedIn cascade and switch a channel off; channels are collap
 });
 
 test("run a cycle now: the request shows up, runs and completes", async ({ page }) => {
+  // may wait for the other run_cycle test's turn first
+  test.slow();
+  // Advisory lock 120: sources.spec's backfill test queues run_cycle requests too (an open one would be joined or would refuse
+  // the other), so the two tests take turns. Released when the lock's connection ends.
+  const url = process.env.E2E_DATABASE_URL;
+  if (!url) throw new Error("E2E_DATABASE_URL is required");
+  const lock = postgres(url, { max: 1, onnotice: () => {} });
+  try {
+    await lock`select pg_advisory_lock(120)`;
+    await runCycleNow(page);
+  } finally {
+    await lock.end({ timeout: 5 });
+  }
+});
+
+async function runCycleNow(page: Page): Promise<void> {
   await open(page, "actions");
   const button = page.getByRole("button", { name: "立即跑一轮" });
   await expect(button).toBeEnabled();
@@ -272,7 +290,7 @@ test("run a cycle now: the request shows up, runs and completes", async ({ page 
   await button.click();
   await expect(requests.getByTestId("control-request")).toHaveCount(2);
   await expect(requests.getByTestId("control-request").first()).toHaveAttribute("data-status", "done", { timeout: 20_000 });
-});
+}
 
 test("re-score stale scores: the button shows the count and the request completes (the stand-in runner cannot re-score)", async ({ page }) => {
   await open(page, "actions");
