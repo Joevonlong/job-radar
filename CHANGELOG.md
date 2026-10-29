@@ -328,6 +328,7 @@ A failure in (a) does not block rollback: follow (c) and accept the display wind
 
 ### Security
 
+- Update Undici, Zod and Mailparser's Nodemailer dependency to patched versions, including transitive Undici 7.x.
 - **AI salary figures cannot affect benchmarks or filters.** Job Radar has not checked the figures or sources given by
   the AI. Old benchmark tables containing any AI figures are hidden in full until recomputed from postings; a failed
   recomputation leaves them hidden. Source links on the configured salary-site list are still unverified.
