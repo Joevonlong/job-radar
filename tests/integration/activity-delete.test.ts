@@ -30,7 +30,7 @@ async function deleteAllBatches(scope: ActivityDeleteScope, asOf: Date) {
   const result = { roots: 0, events: 0 };
   for (let count = 0; count < 100; count++) {
     const before = await activityCount();
-    const batch = await deleteActivityBatch(connection.db, { scope, asOf, liveness, batchSize: 1 });
+    const batch = await deleteActivityBatch(connection.db, { scope, asOf, liveness, batchSize: 1, rootsPerBatch: 1 });
     const after = await activityCount();
     expect(before - after).toBeLessThanOrEqual(1);
     result.roots += batch.roots; result.events += batch.events;
@@ -113,7 +113,7 @@ describe("activity deletion", () => {
     const root = activityRow({ status: "ok", startedAt: READ_AT });
     const child = activityRow({ rootId: root.id, parentId: root.id });
     await writeActivityBatch(db, { roots: [root], spans: [root, child], events: [activityEvent(child)], batchSize: 1 });
-    const options = { scope: { kind: "root", rootId: root.id } as const, asOf: new Date(), liveness, batchSize: 1 };
+    const options = { scope: { kind: "root", rootId: root.id } as const, asOf: new Date(), liveness, batchSize: 1, rootsPerBatch: 1 };
     expect(await deleteActivityBatch(db, options)).toEqual({ roots: 0, events: 1, found: true });
     expect(await db.select().from(activitySpans)).toHaveLength(2);
     expect(await deleteActivityBatch(db, options)).toEqual({ roots: 0, events: 0, found: true });

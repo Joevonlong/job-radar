@@ -157,7 +157,7 @@ This shipped tuning file controls the [activity log](sources.md#activity-log). C
 | `retention.max_events` | Event cap; the oldest inactive entries are removed when it is exceeded. |
 | `capture` | Per-span event capture limit. |
 | `writer` | Queue, batching, flush, timeout and retry tuning. |
-| `prune` | Reconciliation and pruning interval and batch size. |
+| `prune` | Reconciliation and pruning interval, rows per transaction and entries per transaction. |
 | `ui` | Pagination, refresh, initial range and deletion time budget. |
 | `liveness` | Heartbeat freshness and startup grace for detecting active processes. |
 

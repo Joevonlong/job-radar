@@ -7066,6 +7066,7 @@
       "working": "Working…",
       "partial": "Partially complete: {roots} entries and {events} events deleted so far.",
       "continue": "Continue",
+      "nothing": "Nothing was deleted: these entries started running again or were already removed after the preview.",
       "error": {
         "failed": "Deletion could not be completed. Try again.",
         "invalid": "Check the dates or entry and preview again.",

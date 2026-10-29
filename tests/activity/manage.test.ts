@@ -73,7 +73,16 @@ describe("activity delete service", () => {
     vi.mocked(deleteActivityBatch).mockResolvedValueOnce({ roots: 0, events: 2, found: true }).mockResolvedValueOnce({ roots: 1, events: 0, found: true }).mockResolvedValueOnce({ roots: 0, events: 0, found: false });
     expect(await executeDelete(db, { scope: "all", asOf: "2026-10-20T12:00:00Z" })).toEqual({ status: "done", roots: 1, events: 2 });
     expect(deleteActivityBatch).toHaveBeenCalledTimes(3);
-    expect(deleteActivityBatch).toHaveBeenCalledWith(db, expect.objectContaining({ batchSize: settings.prune.batch_size, asOf: new Date("2026-10-20T12:00:00Z") }));
+    expect(deleteActivityBatch).toHaveBeenCalledWith(db, expect.objectContaining({ batchSize: settings.prune.batch_size, rootsPerBatch: settings.prune.roots_per_batch, asOf: new Date("2026-10-20T12:00:00Z") }));
+  });
+  it("never deletes past the server's now, whatever asOf the client sends", async () => {
+    ready();
+    vi.mocked(deleteActivityBatch).mockResolvedValue({ roots: 0, events: 0, found: false });
+    const before = Date.now();
+    await executeDelete(db, { scope: "all", asOf: "2999-01-01T00:00:00Z" });
+    const cutoff = vi.mocked(deleteActivityBatch).mock.calls[0]![1].asOf.getTime();
+    expect(cutoff).toBeGreaterThanOrEqual(before);
+    expect(cutoff).toBeLessThanOrEqual(Date.now());
   });
   it("returns partial at the budget and can resume using the same cutoff", async () => {
     const settings = ready(); settings.ui.delete_budget_ms = 1;

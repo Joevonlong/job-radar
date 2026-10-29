@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, isNull, ne, sql, type SQL, type SQLWrapper } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, sql, type SQL, type SQLWrapper } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
 import type { ActivityBatch, ActivityProcess } from "@/lib/activity/types";
@@ -135,54 +135,107 @@ export async function reconcileActivitySpans(db: Db, liveness: ActivityLiveness)
 }
 
 export interface ActivityPruneOptions {
-  days: number; maxEvents: number; batchSize: number; liveness: ActivityLiveness;
+  days: number; maxEvents: number; batchSize: number; rootsPerBatch: number; liveness: ActivityLiveness;
 }
-export interface ActivityPruneBatch { roots: number; events: number; nextRootId: string | null; found: boolean }
+export interface ActivityPruneBatch { roots: number; events: number; nextRootIds: string[] | null; found: boolean }
+
+type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
+
+function checkBatchOptions(batchSize: number, rootsPerBatch: number): void {
+  if (!Number.isSafeInteger(batchSize) || batchSize <= 0) throw new RangeError("invalid batch size");
+  if (!Number.isSafeInteger(rootsPerBatch) || rootsPerBatch <= 0) throw new RangeError("invalid roots per batch");
+}
 
 /**
- * Lock one root, delete at most batchSize rows (events, child spans, then the root). A large tree is continued by id
- * even if deleting its first batch brought the total below the cap. The FK and root lock serialize late writers.
+ * The root-selection predicates (activeRootCondition) are costly enough for the planner to JIT-compile them, which
+ * takes longer than the whole batch; turn JIT off for this transaction only.
  */
-export async function pruneActivityBatch(db: Db, options: ActivityPruneOptions & { phase: "days" | "events"; rootId?: string }): Promise<ActivityPruneBatch> {
+async function withoutJit(tx: Tx): Promise<void> {
+  await tx.execute(sql`set local jit = off`);
+}
+
+/**
+ * Spend at most `budget` rows on the locked roots, in their given order: events first, then child spans of roots whose
+ * events are gone, then the roots themselves once their trees are empty. Only root_id is a span FK; parent_id and
+ * event.span_id deliberately have no FK, so keeping a root until last makes any child deletion order safe and avoids a
+ * large final cascade.
+ */
+async function removeRootTrees(tx: Tx, rootIds: string[], budget: number): Promise<{ roots: number; events: number; left: string[] }> {
+  const ordered = sql`unnest(array[${sql.join(rootIds.map((id) => sql`${id}`), sql`, `)}]::uuid[]) with ordinality as r(id, ord)`;
+  const events = await tx.execute<{ id: string }>(sql`delete from activity_events where id in (
+    select e.id from ${ordered} join activity_events e on e.root_id = r.id order by r.ord, e.at, e.id limit ${budget}
+  ) returning id`);
+  let left = budget - events.length;
+  const removed = new Set<string>();
+  if (left > 0) {
+    const children = await tx.execute<{ id: string }>(sql`delete from activity_spans where id in (
+      select s.id from ${ordered} join activity_spans s on s.root_id = r.id and s.id <> r.id
+      where not exists (select 1 from activity_events e where e.root_id = r.id)
+      order by r.ord, s.id limit ${left}
+    ) returning id`);
+    left -= children.length;
+  }
+  if (left > 0) {
+    const roots = await tx.execute<{ id: string }>(sql`delete from activity_spans where id in (
+      select r.id from ${ordered}
+      where not exists (select 1 from activity_events e where e.root_id = r.id)
+        and not exists (select 1 from activity_spans s where s.root_id = r.id and s.id <> r.id)
+      order by r.ord limit ${left}
+    ) returning id`);
+    for (const row of roots) removed.add(row.id);
+  }
+  return { roots: removed.size, events: events.length, left: rootIds.filter((id) => !removed.has(id)) };
+}
+
+/**
+ * Lock up to rootsPerBatch inactive roots (skipping roots another transaction holds) and delete at most batchSize rows
+ * from them. Roots left unfinished are continued by id first, so a large tree is finished even if deleting part of it
+ * brought the total below the cap. The FK and root locks serialize late writers.
+ */
+export async function pruneActivityBatch(db: Db, options: ActivityPruneOptions & { phase: "days" | "events"; rootIds?: string[] }): Promise<ActivityPruneBatch> {
+  checkBatchOptions(options.batchSize, options.rootsPerBatch);
   return db.transaction(async (tx) => {
+    await withoutJit(tx);
     const t = activitySpans;
-    const candidate = options.rootId ? eq(t.id, options.rootId) : options.phase === "days"
-      ? sql`${t.lastActivityAt} < now() - ${options.days} * interval '1 day'`
-      : sql`(select count(*) from activity_events) > ${options.maxEvents}`;
-    const [root] = await tx.select({ id: t.id }).from(t)
+    const lock = (candidate: SQL | undefined) => tx.select({ id: t.id }).from(t)
       .where(and(isNull(t.parentId), eq(t.id, t.rootId), sql`not ${activeRootCondition(t, options.liveness)}`, candidate))
-      .orderBy(asc(t.lastActivityAt), asc(t.id)).limit(1).for("update");
-    if (!root) return { roots: 0, events: 0, nextRootId: null, found: false };
-    const ids = await tx.select({ id: activityEvents.id }).from(activityEvents).where(eq(activityEvents.rootId, root.id))
-      .orderBy(asc(activityEvents.at), asc(activityEvents.id)).limit(options.batchSize);
-    const deleted = ids.length ? await tx.delete(activityEvents).where(inArray(activityEvents.id, ids.map((row) => row.id))).returning({ id: activityEvents.id }) : [];
-    const remaining = await tx.select({ id: activityEvents.id }).from(activityEvents).where(eq(activityEvents.rootId, root.id)).limit(1);
-    if (remaining.length) return { roots: 0, events: deleted.length, nextRootId: root.id, found: true };
-    const budget = options.batchSize - deleted.length;
-    if (!budget) return { roots: 0, events: deleted.length, nextRootId: root.id, found: true };
-    // Only root_id is a span FK; parent_id and event.span_id deliberately have no FK.
-    // Keeping the locked root makes any child deletion order safe and avoids a large final cascade.
-    const children = await tx.select({ id: t.id }).from(t).where(and(eq(t.rootId, root.id), ne(t.id, root.id)))
-      .orderBy(asc(t.id)).limit(budget);
-    if (children.length) await tx.delete(t).where(inArray(t.id, children.map((row) => row.id)));
-    const remainingChildren = await tx.select({ id: t.id }).from(t).where(and(eq(t.rootId, root.id), ne(t.id, root.id))).limit(1);
-    if (remainingChildren.length || children.length === budget) return { roots: 0, events: deleted.length, nextRootId: root.id, found: true };
-    await tx.delete(t).where(eq(t.id, root.id));
-    return { roots: 1, events: deleted.length, nextRootId: null, found: true };
+      .orderBy(asc(t.lastActivityAt), asc(t.id)).limit(options.rootsPerBatch).for("update", { skipLocked: true });
+    let ids = options.rootIds?.length ? (await lock(inArray(t.id, options.rootIds))).map((row) => row.id) : [];
+    if (!ids.length && options.phase === "days") {
+      ids = (await lock(sql`${t.lastActivityAt} < now() - ${options.days} * interval '1 day'`)).map((row) => row.id);
+    } else if (!ids.length) {
+      const [total] = await tx.execute<{ n: number }>(sql`select count(*)::int as n from activity_events`);
+      const excess = (total?.n ?? 0) - options.maxEvents;
+      if (excess > 0) {
+        // Take the oldest roots until their events cover the excess, so one batch does not overshoot the cap.
+        const candidates = (await lock(undefined)).map((row) => row.id);
+        const counts = candidates.length ? await tx.execute<{ id: string; n: number }>(sql`select r.id, (select count(*) from activity_events e where e.root_id = r.id)::int as n
+          from unnest(array[${sql.join(candidates.map((id) => sql`${id}`), sql`, `)}]::uuid[]) with ordinality as r(id, ord) order by r.ord`) : [];
+        let covered = 0;
+        for (const row of counts) {
+          if (covered >= excess) break;
+          ids.push(row.id);
+          covered += row.n;
+        }
+      }
+    }
+    if (!ids.length) return { roots: 0, events: 0, nextRootIds: null, found: false };
+    const result = await removeRootTrees(tx, ids, options.batchSize);
+    return { roots: result.roots, events: result.events, nextRootIds: result.left.length ? result.left : null, found: true };
   });
 }
 
 export async function pruneActivity(db: Db, options: ActivityPruneOptions & { deadlineForBatch?: (work: () => Promise<ActivityPruneBatch>) => Promise<ActivityPruneBatch> }): Promise<{ roots: number; events: number }> {
   const total = { roots: 0, events: 0 };
   for (const phase of ["days", "events"] as const) {
-    let rootId: string | undefined;
+    let rootIds: string[] | undefined;
     while (true) {
-      const work = () => pruneActivityBatch(db, { ...options, phase, rootId });
+      const work = () => pruneActivityBatch(db, { ...options, phase, rootIds });
       const batch = await (options.deadlineForBatch ? options.deadlineForBatch(work) : work());
       total.roots += batch.roots;
       total.events += batch.events;
       if (!batch.found) break;
-      rootId = batch.nextRootId ?? undefined;
+      rootIds = batch.nextRootIds ?? undefined;
     }
   }
   return total;
@@ -194,34 +247,27 @@ export type ActivityDeleteScope =
   | { kind: "all" };
 export interface ActivityDeleteBatch { roots: number; events: number; found: boolean }
 
-/** Lock one eligible root and spend the row budget on events, children, then the root. Only activity tables mutate. */
+/**
+ * Lock up to rootsPerBatch eligible roots, newest first along activity_spans_roots_started_idx, skipping roots another
+ * transaction holds, and spend the row budget on their events, children, then the roots. Only activity tables mutate.
+ */
 export async function deleteActivityBatch(db: Db, options: {
-  scope: ActivityDeleteScope; asOf: Date; liveness: ActivityLiveness; batchSize: number;
+  scope: ActivityDeleteScope; asOf: Date; liveness: ActivityLiveness; batchSize: number; rootsPerBatch: number;
 }): Promise<ActivityDeleteBatch> {
-  if (!Number.isSafeInteger(options.batchSize) || options.batchSize <= 0) throw new RangeError("invalid batch size");
+  checkBatchOptions(options.batchSize, options.rootsPerBatch);
   return db.transaction(async (tx) => {
+    await withoutJit(tx);
     const t = activitySpans;
     const { scope } = options;
     const candidate = scope.kind === "root" ? eq(t.id, scope.rootId) : scope.kind === "range"
       ? and(scope.from === null ? undefined : sql`${t.startedAt}>=${scope.from.toISOString()}::timestamptz`, sql`${t.startedAt}<${scope.to.toISOString()}::timestamptz`)
       : sql`true`;
-    const [root] = await tx.select({ id: t.id }).from(t).where(and(
+    const roots = await tx.select({ id: t.id }).from(t).where(and(
       isNull(t.parentId), eq(t.id, t.rootId), sql`${t.startedAt}<=${options.asOf.toISOString()}::timestamptz`,
       sql`not ${activeRootCondition(t, options.liveness)}`, candidate,
-    )).orderBy(asc(t.startedAt), asc(t.id)).limit(1).for("update");
-    if (!root) return { roots: 0, events: 0, found: false };
-    const ids = await tx.select({ id: activityEvents.id }).from(activityEvents).where(eq(activityEvents.rootId, root.id))
-      .orderBy(asc(activityEvents.at), asc(activityEvents.id)).limit(options.batchSize);
-    const deleted = ids.length ? await tx.delete(activityEvents).where(inArray(activityEvents.id, ids.map((row) => row.id))).returning({ id: activityEvents.id }) : [];
-    let budget = options.batchSize - deleted.length;
-    if (!budget) return { roots: 0, events: deleted.length, found: true };
-    // Events have been exhausted before spending any remaining budget on child spans.
-    const children = await tx.select({ id: t.id }).from(t).where(and(eq(t.rootId, root.id), ne(t.id, root.id)))
-      .orderBy(asc(t.id)).limit(budget);
-    if (children.length) await tx.delete(t).where(inArray(t.id, children.map((row) => row.id)));
-    budget -= children.length;
-    if (!budget) return { roots: 0, events: deleted.length, found: true };
-    await tx.delete(t).where(eq(t.id, root.id));
-    return { roots: 1, events: deleted.length, found: true };
+    )).orderBy(desc(t.startedAt), desc(t.id)).limit(options.rootsPerBatch).for("update", { skipLocked: true });
+    if (!roots.length) return { roots: 0, events: 0, found: false };
+    const result = await removeRootTrees(tx, roots.map((row) => row.id), options.batchSize);
+    return { roots: result.roots, events: result.events, found: true };
   });
 }

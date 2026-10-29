@@ -1,4 +1,4 @@
-import { eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, inject, it } from "vitest";
 import { createConnection } from "@/lib/db/client";
 import { getActivityRoot, listActivityEvents, listActivityRoots, listQueryRows } from "@/lib/db/queries/activity";
@@ -159,10 +159,15 @@ describe("activity read queries", () => {
     await db.insert(activitySpans).values(activityRow({ name: "system.startup", status: "ok", startedAt: now }));
     expect((await getActivityRoot(db, root.id, liveness))?.root).toMatchObject({ active: false, newerStartup: true });
   });
-  it("takes the latest run_ai request rather than an older pending one", async () => {
+  it("shows AI work as in progress while any run_ai request of the cycle is live, like the active check", async () => {
     const db = connection.db;
     const fixture = await seedActivityReadFixture(db);
     await db.insert(controlRequests).values({ kind: "run_ai", payload: { cycleId: fixture.cycle.id }, status: "done", requestedAt: new Date(READ_AT.getTime() + 100) });
-    expect((await getActivityRoot(db, fixture.root.id, liveness))?.root.runAi).toEqual({ status: "done" });
+    const pending = await getActivityRoot(db, fixture.root.id, liveness);
+    expect(pending?.root).toMatchObject({ active: true, runAi: { status: "pending" } });
+    await db.insert(controlRequests).values({ kind: "run_ai", payload: { cycleId: fixture.cycle.id }, status: "running", requestedAt: new Date(READ_AT.getTime() - 100) });
+    expect((await getActivityRoot(db, fixture.root.id, liveness))?.root.runAi).toEqual({ status: "running" });
+    await db.update(controlRequests).set({ status: "done" }).where(and(eq(controlRequests.kind, "run_ai"), inArray(controlRequests.status, ["pending", "running"])));
+    expect((await getActivityRoot(db, fixture.root.id, liveness))?.root).toMatchObject({ active: false, runAi: { status: "done" } });
   });
 });

@@ -143,7 +143,9 @@ function rootsCte(liveness: ActivityLiveness, filter: ActivityRootFilter = {}): 
       r.cycle_id::float8 as "cycleId", c.status as "cycleStatus", ai.status as "runAiStatus",
       r.control_request_id::float8 as "controlRequestId", cr.kind as "requestKind", cr.status as "requestStatus",
       cr.result ->> 'error' as "requestErrorCode",
-      coalesce(attempt.rank=1,false) as "isCurrentAttempt",
+      (r.scope='request' and r.control_request_id is not null and not exists (select 1 from activity_spans newer
+        where newer.scope='request' and newer.parent_id is null and newer.id=newer.root_id
+          and newer.control_request_id=r.control_request_id and (newer.started_at,newer.id)>(r.started_at,r.id))) as "isCurrentAttempt",
       (select extract(epoch from (now()-max(hb.at)))::float8 from runner_heartbeats hb where hb.process=r.process) as "latestHeartbeatAgeSeconds",
       exists(select 1 from activity_spans startup where startup.parent_id is null and startup.name='system.startup'
         and startup.process=r.process and startup.started_at>r.started_at) as "newerStartup",
@@ -152,10 +154,9 @@ function rootsCte(liveness: ActivityLiveness, filter: ActivityRootFilter = {}): 
     from activity_spans r
     left join cycles c on c.id=r.cycle_id
     left join control_requests cr on cr.id=r.control_request_id
-    left join (select id, row_number() over (partition by control_request_id order by started_at desc,id desc) as rank
-      from activity_spans where scope='request' and parent_id is null and id=root_id and control_request_id is not null) attempt on attempt.id=r.id
+    -- Same rule as activeRootCondition: any running run_ai shows AI running, else any pending one AI queued, else the latest.
     left join lateral (select status from control_requests ai where ai.kind='run_ai' and ai.payload ->> 'cycleId'=r.cycle_id::text
-      order by ai.requested_at desc,ai.id desc limit 1) ai on r.scope='cycle'
+      order by (ai.status='running') desc,(ai.status='pending') desc,ai.requested_at desc,ai.id desc limit 1) ai on r.scope='cycle'
     left join lateral (select id,name,progress_done,progress_total from activity_spans s where s.root_id=r.id and s.name like 'step.%'
       and s.status='running' order by s.started_at desc,s.id desc limit 1) step on true
     left join lateral (select name,progress_done,progress_total from activity_spans s where s.root_id=r.id and s.parent_id=step.id

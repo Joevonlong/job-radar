@@ -50,4 +50,19 @@ describe("activity deletion dialog", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("Deletion could not be completed.");
     expect(execute).toHaveBeenCalledWith({ scope: "range", from: "2026-10-01", to: "2026-10-29", asOf });
   });
+  it("says nothing was deleted when the previewed entries became active, instead of leaving silently", async () => {
+    preview.mockResolvedValue({ status: "ok", asOf, roots: 1, events: 3, skippedActive: 0 });
+    execute.mockResolvedValue({ status: "done", roots: 0, events: 0 });
+    mount("root");
+    fireEvent.click(screen.getByTestId("activity-log-delete-root"));
+    fireEvent.click(screen.getByRole("button", { name: "Preview deletion" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Confirm deletion" }));
+    expect(await screen.findByTestId("activity-log-delete-nothing")).toHaveTextContent("Nothing was deleted");
+    expect(screen.getByRole("dialog")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Confirm deletion" })).not.toBeInTheDocument();
+    expect(replace).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(refresh).toHaveBeenCalledOnce();
+  });
 });

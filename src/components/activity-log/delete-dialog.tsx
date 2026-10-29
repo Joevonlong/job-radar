@@ -24,6 +24,7 @@ export function DeleteDialog({ scope, rootId, today }: { scope: "root" | "range"
   const [preview, setPreview] = useState<Preview | null>(null);
   const [deleted, setDeleted] = useState({ roots: 0, events: 0 });
   const [partial, setPartial] = useState(false);
+  const [nothing, setNothing] = useState(false);
   const [error, setError] = useState<"failed" | "invalid" | "not_ready" | null>(null);
   const [pending, startTransition] = useTransition();
   const confirm = useRef<HTMLButtonElement>(null);
@@ -32,7 +33,8 @@ export function DeleteDialog({ scope, rootId, today }: { scope: "root" | "range"
   function changeOpen(value: boolean) {
     if (pending) return;
     setOpen(value);
-    if (value) { setPreview(null); setPartial(false); setError(null); setDeleted({ roots: 0, events: 0 }); setFrom(""); setTo(today); }
+    if (!value && nothing) router.refresh();
+    if (value) { setPreview(null); setPartial(false); setNothing(false); setError(null); setDeleted({ roots: 0, events: 0 }); setFrom(""); setTo(today); }
   }
   function prepare() {
     startTransition(async () => {
@@ -52,8 +54,11 @@ export function DeleteDialog({ scope, rootId, today }: { scope: "root" | "range"
       try {
         const result = await executeActivityDeleteAction({ ...preview.input, asOf: preview.asOf });
         if (result.status === "done" || result.status === "partial") {
-          setDeleted((previous) => ({ roots: previous.roots + result.roots, events: previous.events + result.events }));
+          const total = { roots: deleted.roots + result.roots, events: deleted.events + result.events };
+          setDeleted(total);
           if (result.status === "partial") setPartial(true);
+          // Everything previewed became active or vanished: say so instead of silently closing.
+          else if (!total.roots && !total.events && preview.roots + preview.events > 0) { setPartial(false); setNothing(true); }
           else { setOpen(false); if (scope === "root") router.replace("/sources/logs"); router.refresh(); }
         } else setError(result.status);
       } catch { setError("failed"); }
@@ -72,11 +77,12 @@ export function DeleteDialog({ scope, rootId, today }: { scope: "root" | "range"
         <div aria-live="polite" aria-atomic="true" className="grid gap-sp-2 text-body-sm" data-testid="activity-log-delete-preview">
           {preview ? <><p>{t("preview", numbers(preview))}</p><p>{t("skipped", { count: formatInteger(preview.skippedActive, locale) })}</p></> : null}
           {partial ? <p data-testid="activity-log-delete-partial">{t("partial", numbers(deleted))}</p> : null}
+          {nothing ? <p data-testid="activity-log-delete-nothing">{t("nothing")}</p> : null}
         </div>
         {error ? <p role="alert">{t(`error.${error}`)}</p> : null}
         <DialogFooter>
           <DialogClose asChild><Button disabled={pending}>{t("cancel")}</Button></DialogClose>
-          {preview ? <Button ref={confirm} variant="destructive" disabled={pending} onClick={execute} data-testid="activity-log-delete-confirm">{pending ? t("working") : partial ? t("continue") : t("confirm")}</Button>
+          {nothing ? null : preview ? <Button ref={confirm} variant="destructive" disabled={pending} onClick={execute} data-testid="activity-log-delete-confirm">{pending ? t("working") : partial ? t("continue") : t("confirm")}</Button>
             : <Button disabled={pending || (scope === "range" && (!to || Boolean(from && from > to)))} onClick={prepare} data-testid="activity-log-delete-prepare">{pending ? t("working") : t("prepare")}</Button>}
         </DialogFooter>
       </DialogContent>

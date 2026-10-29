@@ -51,7 +51,7 @@ describe("activity reconciliation", () => {
     for (const span of [live, liveStep, liveTask, runningRoot, runningStep]) expect(rows.find((row) => row.id === span.id)).toMatchObject({ status: "running", reasonCode: null });
     expect(await active(root.id)).toBe(true);
     // Retention still protects the entire root, even after its stale spans were reconciled.
-    expect(await pruneActivity(connection.db, { days: 1, maxEvents: 0, batchSize: 2, liveness })).toEqual({ roots: 0, events: 0 });
+    expect(await pruneActivity(connection.db, { days: 1, maxEvents: 0, batchSize: 2, rootsPerBatch: 2, liveness })).toEqual({ roots: 0, events: 0 });
     expect(await connection.db.select().from(activitySpans)).toHaveLength(rows.length);
     await connection.db.update(controlRequests).set({ status: "done" }).where(eq(controlRequests.id, request.id));
     expect(await reconcileActivitySpans(connection.db, liveness)).toBe(3);
@@ -89,7 +89,7 @@ describe("activity reconciliation", () => {
       settings.enabled = true; await recorder.flush(); await reenabling;
       expect(await active(root.id)).toBe(false);
       expect((await connection.db.select().from(activitySpans).where(eq(activitySpans.parentId, root.id)))[0]).toMatchObject({ status: "interrupted", reasonCode: "not_recorded" });
-      await pruneActivity(connection.db, { days: 1, maxEvents: 100, batchSize: 2, liveness });
+      await pruneActivity(connection.db, { days: 1, maxEvents: 100, batchSize: 2, rootsPerBatch: 2, liveness });
       expect(await connection.db.select().from(activitySpans).where(eq(activitySpans.id, root.id))).toHaveLength(0);
     } finally { await recorder.close(); }
   });
@@ -102,7 +102,7 @@ describe("system root liveness uses database time", () => {
     await connection.db.insert(runnerHeartbeats).values({ process: "runner", at: new Date(at.getTime() - 10_000) });
     expect(await active(root.id)).toBe(true);
     expect(await reconcileActivitySpans(connection.db, liveness)).toBe(0);
-    expect(await pruneActivity(connection.db, { days: 1, maxEvents: 1, batchSize: 1, liveness })).toEqual({ roots: 0, events: 0 });
+    expect(await pruneActivity(connection.db, { days: 1, maxEvents: 1, batchSize: 1, rootsPerBatch: 2, liveness })).toEqual({ roots: 0, events: 0 });
   });
   it("interrupts a task whose post-start heartbeat later became stale", async () => {
     const at = await dbNow();
@@ -142,7 +142,7 @@ describe("activity retention", () => {
     await writeActivityBatch(connection.db, { roots: [], spans: [], events: [activityEvent(root)], batchSize });
     let previous = children.length + 2; // spans, root and one event
     let batches = 0;
-    const deleted = await pruneActivity(connection.db, { days: 1, maxEvents: 0, batchSize, liveness,
+    const deleted = await pruneActivity(connection.db, { days: 1, maxEvents: 0, batchSize, rootsPerBatch: 2, liveness,
       deadlineForBatch: async (work) => {
         const batch = await withTimeout(work(), settings.writer.flush_deadline_ms, "test prune batch");
         if (!batch.found) return batch;
@@ -176,9 +176,9 @@ describe("activity retention", () => {
     const root = activityRow({ scope: "cycle", name: "cycle", cycleId: cycle.id, lastActivityAt: new Date(at.getTime() - 3 * 86_400_000) });
     const child = activityRow({ rootId: root.id, parentId: root.id, lastActivityAt: root.lastActivityAt });
     await write([root, child], 3);
-    const options = { days: 1, maxEvents: 100, batchSize: 2, liveness, phase: "days" as const };
+    const options = { days: 1, maxEvents: 100, batchSize: 2, rootsPerBatch: 2, liveness, phase: "days" as const };
     const first = await pruneActivityBatch(connection.db, options);
-    expect(first).toMatchObject({ roots: 0, events: 2, nextRootId: root.id });
+    expect(first).toMatchObject({ roots: 0, events: 2, nextRootIds: [root.id] });
     const rest = await pruneActivity(connection.db, options);
     expect(rest).toEqual({ roots: 1, events: 4 });
     expect(await counts()).toEqual(before); expect(await getAiUsageGroups(connection.db, usageOptions, ["anthropic"])).toEqual(usageBefore);
@@ -191,7 +191,7 @@ describe("activity retention", () => {
     const recent = activityRow({ status: "ok", lastActivityAt: new Date(at.getTime() - 1000) });
     await write([activeRoot, oldest, recent], 3);
     const batches: number[] = [];
-    const deleted = await pruneActivity(connection.db, { days: 1, maxEvents: 7, batchSize: 2, liveness,
+    const deleted = await pruneActivity(connection.db, { days: 1, maxEvents: 7, batchSize: 2, rootsPerBatch: 2, liveness,
       deadlineForBatch: async (work) => { const batch = await work(); batches.push(batch.events); return batch; },
     });
     expect(deleted).toEqual({ roots: 1, events: 3 }); expect(batches.every((count) => count <= 2)).toBe(true);

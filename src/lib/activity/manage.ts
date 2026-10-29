@@ -70,10 +70,14 @@ export async function executeDelete(db: Db, input: unknown): Promise<ExecuteDele
   const { config, liveness } = settings();
   const { asOf, ...scopeInput } = parsed.data;
   const scope = resolveActivityDeleteScope(scopeInput, loadConfig("schedule").timezone);
+  // A client-supplied asOf can only narrow the deletion: entries started after the server's now are never in scope.
+  const cutoff = new Date(Math.min(Date.parse(asOf), Date.now()));
   const started = performance.now();
   const total = { roots: 0, events: 0 };
   do {
-    const batch = await deleteActivityBatch(db, { scope, asOf: new Date(asOf), liveness, batchSize: config.prune.batch_size });
+    const batch = await deleteActivityBatch(db, {
+      scope, asOf: cutoff, liveness, batchSize: config.prune.batch_size, rootsPerBatch: config.prune.roots_per_batch,
+    });
     total.roots += batch.roots;
     total.events += batch.events;
     if (!batch.found) return { status: "done", ...total };

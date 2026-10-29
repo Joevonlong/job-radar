@@ -10,7 +10,7 @@ import { activitySettings } from "./helpers";
 vi.mock("@/lib/db/repos/activity", async (original) => ({
   ...await original<typeof import("@/lib/db/repos/activity")>(),
   activityTablesReady: vi.fn(async () => true), closeStaleSpans: vi.fn(async () => 0), reconcileActivitySpans: vi.fn(async () => 0),
-  pruneActivityBatch: vi.fn(async () => ({ roots: 0, events: 0, found: false, nextRootId: null })),
+  pruneActivityBatch: vi.fn(async () => ({ roots: 0, events: 0, found: false, nextRootIds: null })),
 }));
 let recorder: ActivityRecorder;
 const settings = activitySettings();
@@ -22,7 +22,7 @@ beforeEach(() => {
   vi.mocked(activityTablesReady).mockResolvedValue(true);
   vi.mocked(closeStaleSpans).mockResolvedValue(0);
   vi.mocked(reconcileActivitySpans).mockResolvedValue(0);
-  vi.mocked(pruneActivityBatch).mockResolvedValue({ roots: 0, events: 0, found: false, nextRootId: null });
+  vi.mocked(pruneActivityBatch).mockResolvedValue({ roots: 0, events: 0, found: false, nextRootIds: null });
   const db = {} as Db;
   recorder = createActivityRecorder({ db, process: "runner", autoFlush: false, loadSettings: () => settings, warn, writeBatch,
     openConnection: () => ({ db, sql: { end } }) as unknown as ReturnType<typeof openActivityConnection>,
@@ -61,10 +61,10 @@ it("gives each prune batch its own deadline and records only nonempty summaries"
   expect(writeBatch).not.toHaveBeenCalled();
   vi.mocked(pruneActivityBatch).mockImplementationOnce(async () => {
     await new Promise((resolve) => setTimeout(resolve, 60));
-    return { roots: 0, events: 2, found: true, nextRootId: "11111111-1111-4111-8111-111111111111" };
+    return { roots: 0, events: 2, found: true, nextRootIds: ["11111111-1111-4111-8111-111111111111"] };
   }).mockImplementationOnce(async () => {
     await new Promise((resolve) => setTimeout(resolve, 60));
-    return { roots: 1, events: 1, found: true, nextRootId: null };
+    return { roots: 1, events: 1, found: true, nextRootIds: null };
   });
   const pruning = pruneActivityLog(recorder);
   await vi.advanceTimersByTimeAsync(120); await pruning;
