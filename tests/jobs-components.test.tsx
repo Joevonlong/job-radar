@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { NextIntlClientProvider } from "next-intl";
 import type { ReactNode } from "react";
 import { describe, expect, it } from "vitest";
@@ -11,6 +12,61 @@ import { VisaBadge } from "@/components/jobs/visa-badge";
 import en from "../messages/en.json";
 import { listSignal } from "./signals/helpers";
 import { BaseCurrencyProvider } from "@/components/base-currency";
+import { ScopeSwitch } from "@/components/jobs/scope-switch";
+import { loadJobsSearchParams } from "@/lib/jobs/search-params";
+
+describe("scope switch", () => {
+  const show = (query: string) => render(wrap(<ScopeSwitch params={loadJobsSearchParams(query)} archiveCount={7} />));
+  const queryOf = (scope: string) => new URL(screen.getByTestId(`scope-${scope}`).getAttribute("href")!, "https://example.test").searchParams;
+
+  it("writes explicit scope and removes page on every link, leaving archive sort implicit", () => {
+    show("?q=engineer&status=closed&page=3");
+    expect(screen.getByTestId("scope-all")).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByTestId("scope-archive")).toHaveTextContent("Archive (7)");
+    for (const scope of ["current", "archive", "all"]) {
+      expect(queryOf(scope).get("scope")).toBe(scope);
+      expect(queryOf(scope).has("page")).toBe(false);
+      expect(queryOf(scope).has("sort")).toBe(false);
+      expect(queryOf(scope).get("q")).toBe("engineer");
+      expect(queryOf(scope).get("status")).toBe("closed");
+    }
+  });
+
+  it("clears reasons outside archive, and last-listed sort and direction only on Current", () => {
+    show("?scope=archive&reason=gone&sort=last_listed&dir=asc&page=2");
+    expect(screen.getByTestId("scope-archive")).toHaveAttribute("aria-current", "page");
+    expect(queryOf("archive").get("reason")).toBe("gone");
+    expect(queryOf("archive").get("sort")).toBe("last_listed");
+    for (const scope of ["current", "all"]) expect(queryOf(scope).has("reason")).toBe(false);
+    expect(queryOf("current").has("sort")).toBe(false);
+    expect(queryOf("current").has("dir")).toBe(false);
+    expect(queryOf("all").get("sort")).toBe("last_listed");
+    expect(queryOf("all").get("dir")).toBe("asc");
+  });
+
+  it("preserves another explicit sort and direction on every destination", () => {
+    show("?sort=salary&dir=asc");
+    for (const scope of ["current", "archive", "all"]) {
+      expect(queryOf(scope).get("sort")).toBe("salary");
+      expect(queryOf(scope).get("dir")).toBe("asc");
+    }
+  });
+
+  it("pins Current despite a closed status and supports arrow, home and end keys", async () => {
+    show("?scope=current&status=closed");
+    const user = userEvent.setup();
+    await user.tab();
+    expect(screen.getByTestId("scope-current")).toHaveFocus();
+    await user.keyboard("{ArrowRight}");
+    expect(screen.getByTestId("scope-archive")).toHaveFocus();
+    await user.keyboard("{End}");
+    expect(screen.getByTestId("scope-all")).toHaveFocus();
+    await user.keyboard("{ArrowRight}");
+    expect(screen.getByTestId("scope-current")).toHaveFocus();
+    await user.keyboard("{ArrowLeft}{Home}");
+    expect(screen.getByTestId("scope-current")).toHaveFocus();
+  });
+});
 
 const wrap = (node: ReactNode) => (
   <BaseCurrencyProvider currency="EUR" language="de">

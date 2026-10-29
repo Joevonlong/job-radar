@@ -7,7 +7,7 @@ import { getFavoriteStates } from "../repos/favorites";
 import { seenSql } from "../repos/seen";
 import { parseLinkCheck } from "@/lib/jobs/link-check-evidence";
 import { ghostTrustedKeys } from "@/lib/ghost/settings";
-import { closedReasonSql, effectiveStatusSql } from "./job-status";
+import { closedReasonSql, effectiveStatusSql, lastListedSql } from "./job-status";
 import { loadGhostLevels } from "../repos/ghost";
 import { loadTrapCounts } from "../repos/traps";
 import { loadVisaStatuses } from "../repos/visa";
@@ -156,6 +156,7 @@ export function cardColumns(latest: LatestScore, ux = true, dormant = false) {
     postedAt: jobs.postedAt,
     firstSeenAt: jobs.firstSeenAt,
     lastSeenAt: jobs.lastSeenAt,
+    lastListedAt: lastListedSql(),
     salaryJson: jobs.salaryJson,
     skills: jobs.skills,
     rankValue: latest.rankValue,
@@ -188,6 +189,7 @@ export type CardRow = {
   postedAt: Date | null;
   firstSeenAt: Date;
   lastSeenAt: Date;
+  lastListedAt: Date | null;
   salaryJson: unknown;
   skills: string[];
   rankValue: number | null;
@@ -307,6 +309,7 @@ export async function hydrateCards(db: Db, rows: readonly CardRow[], options: Hy
     postedAt: row.postedAt,
     firstSeenAt: row.firstSeenAt,
     lastSeenAt: row.lastSeenAt,
+    lastListedAt: row.lastListedAt,
     salaryDisclosed: row.salaryJson !== null && row.salaryJson !== undefined,
     salary: parseSalary(row.salaryJson),
     skills: row.skills ?? [],

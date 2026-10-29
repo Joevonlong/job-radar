@@ -6,8 +6,9 @@
 import { sql, type SQL } from "drizzle-orm";
 
 import type { ClosedReason } from "@/lib/jobs/closure";
+import type { JobScope } from "@/lib/jobs/constants";
 
-import { jobClosureOverrides, jobs } from "../schema";
+import { jobClosureOverrides, jobSources, jobs, rawPostings } from "../schema";
 import type { JobStatus } from "./types";
 
 // written with the table name: a column interpolated into a subquery can render without its table (see notifications.ts)
@@ -45,6 +46,24 @@ export function dormantSql(ready: boolean, alias?: string): SQL<boolean> {
 
 export function notDormantSql(ready: boolean, alias?: string): SQL<boolean> {
   return ready ? sql<boolean>`not ${dormantSql(ready, alias)}` : sql<boolean>`true`;
+}
+
+/** Current is exactly the legacy list's two hiding conditions; archive is its complement; all adds no condition. */
+export function jobScopeSql(scope: JobScope, ux: boolean, dormantReady: boolean, alias?: string): SQL<boolean> | undefined {
+  if (scope === "all") return undefined;
+  if (scope === "archive") return sql<boolean>`(${effectiveStatusSql(ux, alias)} = 'closed' or ${dormantSql(dormantReady, alias)})`;
+  return sql<boolean>`(${effectiveStatusSql(ux, alias)} <> 'closed' and ${notDormantSql(dormantReady, alias)})`;
+}
+
+/**
+ * Newest fetch of a source posting, never the link-check-updated last_seen_at; no source means null.
+ * A later migration can read a stored last_listed_at with this subquery as fallback when the column is unavailable or null.
+ * Qualify every column explicitly so a single-table selection and an aliased outer job remain safe.
+ */
+export function lastListedSql(alias?: string): SQL<Date | null> {
+  return sql<Date | null>`(select max(${jobColumn(rawPostings.fetchedAt.name, "r")})
+    from ${jobSources} js join ${rawPostings} r on ${jobColumn(rawPostings.id.name, "r")} = ${jobColumn(jobSources.rawPostingId.name, "js")}
+    where ${jobColumn(jobSources.jobId.name, "js")} = ${jobColumn("id", alias)})`.mapWith(rawPostings.fetchedAt);
 }
 
 /** The same priority as closedReason: manual, gone, dormant, phrase, possibly. */

@@ -31,6 +31,9 @@ There is no automatic retention for the database tables above yet: raw postings,
 requests and profile snapshots stay until you remove the database. Back up and keep `data/` out of cloud-synced or shared
 folders: it holds all of the above. Backup files and the exported JD files contain personal data.
 
+Archiving and dormancy delete nothing: jobs, postings, scores, translations and analyses stay on this machine.
+Any future retention period would be off by default.
+
 ## What leaves your machine
 
 | Who | What | When | How to stop it |

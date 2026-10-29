@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { createSerializer } from "nuqs/server";
 
-import type { SavedView } from "@/lib/config/schemas/interests";
+import { viewFiltersSchema, type SavedView } from "@/lib/config/schemas/interests";
 import { jobsSearchParsers, loadJobsSearchParams } from "@/lib/jobs/search-params";
 import { activeFilterKeys, filterValues, hasViewFilters, resolveTodayView, sameFilters, slugifyViewId, todayHref, viewFiltersFromParams, viewFiltersToParams } from "@/lib/interests/view-filters";
 
@@ -12,6 +12,16 @@ const loadJobsSearchParamsSync = (query: string) => loadJobsSearchParams(query);
 const view = (id: string, over: Partial<SavedView> = {}): SavedView => ({ id, name: id, default: false, filters: { city: "Berlin" }, ...over });
 
 describe("view filters <-> /jobs URL state", () => {
+  it("never reads or writes scope and archive reasons, preserving legacy status-only views", () => {
+    const params = loadJobsSearchParams("?scope=archive&reason=gone&reason=manual&status=closed&sort=last_listed");
+    expect(viewFiltersFromParams(params)).toEqual({ status: "closed" });
+    const view = { status: "closed" as const, scope: "archive", reason: ["gone"] };
+    const urlParams = viewFiltersToParams(view);
+    expect(urlParams).not.toHaveProperty("scope");
+    expect(urlParams).not.toHaveProperty("reason");
+    expect(serialize("/jobs", urlParams)).toBe("/jobs?status=closed");
+    expect(viewFiltersSchema.safeParse(view).success).toBe(false);
+  });
   it("keeps only the filters that are set", async () => {
     const params = await loadJobsSearchParams("?q=%20rust%20&city=Berlin&workplace=remote&salary=true&hideLang=false&sort=posted&page=3");
     expect(viewFiltersFromParams(params)).toEqual({ q: "rust", city: "Berlin", workplace: "remote", salary: true });

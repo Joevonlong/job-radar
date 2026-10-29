@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import type { InterestsFormError } from "@/lib/interests/types";
 import { hasViewFilters, viewFiltersFromParams } from "@/lib/interests/view-filters";
 import { withLegacyKeys } from "@/lib/jobs/search-params";
+import { resolveJobScope } from "@/lib/jobs/scope";
 import { jobsSearchParsers } from "@/lib/jobs/search-params";
 import { withActionFeedback } from "@/lib/actions/client";
 
@@ -23,6 +24,7 @@ const MAX_NAME_CHARS = 60;
 /** "Save the current filters as a view" on /jobs: names the filters now in the URL and stores them in interests.yaml. */
 export function SaveViewButton() {
   const t = useTranslations("interests.saveView");
+  const tScope = useTranslations("dashboard.jobs.scope");
   const tErrors = useTranslations("interests.formErrors");
   const [params] = useQueryStates(jobsSearchParsers);
   const filters = viewFiltersFromParams(withLegacyKeys(params));
@@ -77,6 +79,9 @@ export function SaveViewButton() {
             <DialogTitle>{t("title")}</DialogTitle>
             <DialogDescription>{t("description")}</DialogDescription>
           </DialogHeader>
+          {resolveJobScope(params.scope, params.status) !== "current" ? (
+            <p className="text-ink-2 text-body-sm" data-testid="save-view-scope-hint">{tScope("notSaved")}</p>
+          ) : null}
           <div className="flex flex-col gap-1.5">
             <label htmlFor={nameId} className="text-sm font-medium">
               {t("name")}

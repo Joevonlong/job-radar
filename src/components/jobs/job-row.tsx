@@ -14,6 +14,7 @@ import { scoreTone } from "@/lib/dashboard/score";
 import { effectiveStatus, statusAfterIgnoreKey, statusAfterInterestKey } from "@/lib/dashboard/status";
 import { parseFilterReason } from "@/lib/filter/reasons";
 import { UNKNOWN } from "@/lib/format/numbers";
+import { isArchivedReason } from "@/lib/jobs/scope";
 import { companyJobsHref } from "@/lib/jobs/company-link";
 
 import { CompanyMark } from "./company-mark";
@@ -234,6 +235,9 @@ function JobRowImpl({ job, favorite, seen, mode = "default", index, active, stag
             <div className="jb-sub">
               <CompanyName name={job.companyName} tabIndex={tabIndex} /> · {place}
             </div>
+            {isArchivedReason(job.closedReason) ? (
+              <div className="font-mono text-data-sm text-ink-2" data-testid="row-last-listed" title={job.timeTitle}>{job.timeLabel}</div>
+            ) : null}
             {job.summary ? (
               <div className="jb-sum" data-slot="job-summary" title={job.summary}>
                 {job.summary}

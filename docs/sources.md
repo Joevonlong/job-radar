@@ -50,11 +50,15 @@ A channel's status is the same result as the channel card on the `/sources` over
 
 ### How jobs get marked possibly closed
 
+**Last listed** is the newest fetch time across all source postings linked to a job. Link checks do not count, even
+when an alive response advances the job's last-seen time. The archive sorts by this source date and shows it for closed
+and dormant jobs; a missing source date is shown as not recorded.
+
 A job that has been possibly closed for `lifecycle.dormant_after_days` (30 by default) becomes dormant unless it is
 bookmarked, has a live application (`new` through `offer`) or has a user open/closed judgement. This normally means
 7 + 30 days without being listed; newly qualifying jobs get the full 30 days even after a long collection outage.
 Dormancy hides the job from default lists and automatic work, including ordinary link checks, without deleting it or
-changing its status. A source listing it again or a user choosing **Still open** brings it back. See [Closed jobs](usage.md#closed-jobs).
+changing its status. A source listing it again or a user choosing **Still open** brings it back. See [Closed jobs and the archive](usage.md#closed-jobs-and-the-archive).
 
 "Possibly closed" is a hint based on time, not proof, and it is judged per channel, not per search query:
 

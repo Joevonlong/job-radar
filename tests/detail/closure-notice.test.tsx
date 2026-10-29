@@ -19,7 +19,7 @@ describe.each(["en", "zh"] as const)("closure evidence in %s", (locale) => {
   };
   const show = (reason: JobClosure["reason"], evidence: JobClosure["linkCheck"] = linkCheck) => render(
     <NextIntlClientProvider locale={locale} messages={locale === "en" ? en : zh} timeZone="UTC">
-      <ClosureNotice jobId={1} title="Engineer" closure={{ autoStatus: "possibly_closed", reason, override: null, linkCheck: evidence }} lastSeenAt={new Date("2026-08-01T12:00:00Z")} timezone="UTC" />
+      <ClosureNotice jobId={1} title="Engineer" closure={{ autoStatus: "possibly_closed", reason, override: null, linkCheck: evidence }} lastListedAt={new Date("2026-08-01T12:00:00Z")} timezone="UTC" />
     </NextIntlClientProvider>,
   );
 
@@ -38,5 +38,26 @@ describe.each(["en", "zh"] as const)("closure evidence in %s", (locale) => {
   it("does not show a stale quote when the latest check found the page alive", () => {
     show("dormant", { ...linkCheck, outcome: "alive" });
     expect(screen.getByTestId("closure-checked")).not.toHaveTextContent(quote);
+  });
+
+  it.each(["manual", "gone", "dormant"] as const)("shows the source listing date for %s", (reason) => {
+    show(reason);
+    expect(screen.getByTestId("closure-last-listed")).toHaveTextContent("2026");
+  });
+
+  it("only says still listed when a source fetch is newer than the manual override", () => {
+    const closure: JobClosure = { autoStatus: "active", reason: "manual", override: { action: "closed", note: null, createdAt: new Date("2026-09-01T12:00:00Z") }, linkCheck: { ...linkCheck, outcome: "alive" } };
+    const notice = (lastListedAt: Date | null) => (
+      <NextIntlClientProvider locale={locale} messages={locale === "en" ? en : zh} timeZone="UTC">
+        <ClosureNotice jobId={1} title="Engineer" closure={closure} lastListedAt={lastListedAt} timezone="UTC" />
+      </NextIntlClientProvider>
+    );
+    const { rerender } = render(notice(new Date("2026-08-01T12:00:00Z")));
+    expect(screen.queryByTestId("closure-still-listed")).toBeNull();
+    rerender(notice(new Date("2026-10-01T12:00:00Z")));
+    expect(screen.getByTestId("closure-still-listed")).toBeInTheDocument();
+    rerender(notice(null));
+    expect(screen.queryByTestId("closure-still-listed")).toBeNull();
+    expect(screen.getByTestId("closure-last-listed")).toHaveTextContent(locale === "en" ? en.dashboard.jobs.lastListedUnknown : zh.dashboard.jobs.lastListedUnknown);
   });
 });

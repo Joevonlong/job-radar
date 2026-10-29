@@ -19,7 +19,7 @@ export const VIEW_TOGGLE_KEYS = TOGGLE_FILTER_KEYS.filter(isViewKey);
 type FilterParams = Pick<JobsSearchParams, ViewFilterKey>;
 
 /** The values of a multi filter of a view, in the order they were written: a scalar is a one-element list, absent is empty. */
-export function filterValues<K extends MultiFilterKey>(filters: ViewFilters, key: K): MultiValue<K>[] {
+export function filterValues<K extends Exclude<MultiFilterKey, NonViewFilterKey>>(filters: ViewFilters, key: K): MultiValue<K>[] {
   const value = filters[key] as MultiValue<K> | MultiValue<K>[] | undefined;
   if (value === undefined) return [];
   return Array.isArray(value) ? [...value] : [value];
@@ -36,6 +36,7 @@ export function viewFiltersFromParams(params: Partial<FilterParams>): ViewFilter
   // Enum filters are written in their canonical order, whatever order the URL listed them in.
   const multi: Record<string, string | string[]> = {};
   for (const key of MULTI_FILTER_KEYS) {
+    if (!isViewKey(key)) continue;
     const picked = (params[key] ?? []) as MultiValue<typeof key>[];
     if (picked.length === 0) continue;
     const values = sortMultiValues(key, picked) as string[];
@@ -94,7 +95,7 @@ export function hasViewFilters(filters: ViewFilters): boolean {
 /** A filter value in the form two views are compared by: multi filters as lists (enums in canonical order, free text as written). */
 function comparable(filters: ViewFilters, key: ViewFilterKey): unknown {
   if ((MULTI_FILTER_KEYS as readonly string[]).includes(key)) {
-    const multiKey = key as MultiFilterKey;
+    const multiKey = key as Exclude<MultiFilterKey, NonViewFilterKey>;
     return sortMultiValues(multiKey, filterValues(filters, multiKey));
   }
   return filters[key];

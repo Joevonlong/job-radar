@@ -1,6 +1,44 @@
 import { describe, expect, it } from "vitest";
 
-import { columnOfSort, dirParam, effectiveDir, flipDir, nextSortParams } from "@/lib/jobs/sort";
+import { JOB_SCOPES, JOB_SORTS } from "@/lib/jobs/constants";
+import { resolveJobScope } from "@/lib/jobs/scope";
+import { loadJobsSearchParams } from "@/lib/jobs/search-params";
+import { columnOfSort, dirParam, effectiveDir, flipDir, nextSortParams, resolveSort } from "@/lib/jobs/sort";
+
+describe("resolved list sort", () => {
+  const fromUrl = (query: string) => {
+    const params = loadJobsSearchParams(query);
+    return resolveSort({ sort: params.sort, q: params.q, scope: resolveJobScope(params.scope, params.status) });
+  };
+
+  it("honours every explicit sort ahead of search text and scope defaults", () => {
+    for (const sort of JOB_SORTS) for (const scope of JOB_SCOPES) {
+      expect(resolveSort({ sort, q: "engineer", scope })).toBe(sort);
+    }
+  });
+
+  it("leaves the relevance step empty, then defaults archive to last listed and other scopes to rank", () => {
+    for (const q of [null, "", "engineer"]) for (const scope of JOB_SCOPES) {
+      expect(resolveSort({ sort: null, q, scope })).toBe(scope === "archive" ? "last_listed" : "rank");
+    }
+    expect(fromUrl("?scope=archive")).toBe("last_listed");
+    expect(fromUrl("?scope=archive&q=engineer&sort=invalid")).toBe("last_listed");
+    expect(fromUrl("?sort=invalid")).toBe("rank");
+  });
+
+  it("distinguishes explicit rank from absent sort in the archive", () => {
+    expect(fromUrl("?scope=archive&sort=rank")).toBe("rank");
+    expect(fromUrl("?scope=archive")).toBe("last_listed");
+    expect(loadJobsSearchParams("").sort).toBeNull();
+    expect(loadJobsSearchParams("?sort=rank").sort).toBe("rank");
+  });
+
+  it("last listed has descending direction and no column head", () => {
+    expect(effectiveDir("last_listed", null)).toBe("desc");
+    expect(columnOfSort("last_listed")).toBeNull();
+    expect(nextSortParams("score", { sort: "last_listed", dir: null })).toEqual({ sort: "rank", dir: null, page: 1 });
+  });
+});
 
 describe("column-head sort", () => {
   it("reads a missing direction as the sort's default (descending for every sort)", () => {

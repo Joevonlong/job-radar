@@ -29,7 +29,7 @@ const setDefaultViewAction = withActionFeedback(rawSetDefaultViewAction)(() => (
 
 const MAX_NAME_CHARS = 60;
 
-const isMultiKey = (key: ViewFilterKey): key is MultiFilterKey => (MULTI_FILTER_KEYS as readonly string[]).includes(key);
+const isMultiKey = (key: ViewFilterKey): key is Extract<MultiFilterKey, ViewFilterKey> => (MULTI_FILTER_KEYS as readonly string[]).includes(key);
 
 function FilterChips({ view }: { view: SavedView }) {
   const t = useTranslations("interests.filters");
@@ -46,7 +46,7 @@ function FilterChips({ view }: { view: SavedView }) {
   const keys = activeFilterKeys(view.filters);
   if (keys.length === 0) return <span className="text-ink-3 text-body-sm">{t("none")}</span>;
   /** One picked value as the /jobs filter bar names it. */
-  const valueLabel = (key: MultiFilterKey, raw: string): string => {
+  const valueLabel = (key: Extract<MultiFilterKey, ViewFilterKey>, raw: string): string => {
     switch (key) {
       case "source": {
         const family = knownFamily(raw);

@@ -388,12 +388,33 @@ describe("FilterBar: high-value signals only", () => {
 });
 
 describe("FilterBar: sort direction", () => {
+  it("uses the archive default even for a direct link with search text and invalid sort", () => {
+    renderBar("?scope=archive&q=engineer&sort=invalid");
+    expect(screen.getByTestId("filter-sort")).toHaveTextContent("Last listed");
+    expect(screen.getByTestId("filter-sort-dir")).toHaveAttribute("data-dir", "desc");
+  });
+
+  it.each(["", "?scope=archive"])("writes an explicit non-default sort and removes the resolved default (%s)", async (query) => {
+    const { lastQuery } = renderBar(query);
+    const choose = async (value: string) => {
+      await userEvent.click(screen.getByTestId("filter-sort"));
+      await userEvent.click(screen.getAllByTestId("filter-sort-option").find((o) => o.getAttribute("data-value") === value)!);
+    };
+    await choose("salary");
+    await waitFor(() => expect(new URLSearchParams(lastQuery()).get("sort")).toBe("salary"));
+    if (query) {
+      await choose("rank");
+      await waitFor(() => expect(new URLSearchParams(lastQuery()).get("sort")).toBe("rank"));
+    }
+    await choose(query ? "last_listed" : "rank");
+    await waitFor(() => expect(lastQuery()).toBe(query));
+  });
   it("offers the salary sort next to the score and a new sort drops the direction", async () => {
     const { lastQuery } = renderBar("?sort=first_seen&dir=asc&page=2");
     const user = userEvent.setup();
     await user.click(screen.getByTestId("filter-sort"));
     const options = await screen.findAllByTestId("filter-sort-option");
-    expect(options.map((o) => o.getAttribute("data-value"))).toEqual(["rank", "salary", "first_seen", "posted"]);
+    expect(options.map((o) => o.getAttribute("data-value"))).toEqual(["rank", "salary", "first_seen", "posted", "last_listed"]);
     await user.click(options[1]!);
     await waitFor(() => expect(lastQuery()).toBe("?sort=salary"));
   });
@@ -414,6 +435,37 @@ describe("FilterBar: sort direction", () => {
   it("speaks Chinese", () => {
     renderBar("?sort=rank&dir=asc", "zh");
     expect(screen.getByTestId("filter-sort-dir")).toHaveAccessibleName("升序（低的在前），点击改为降序");
+  });
+});
+
+describe("FilterBar: scope and reasons", () => {
+  it.each(["?scope=archive", "?scope=all", "?status=closed"])("offers reasons outside resolved Current (%s)", async (query) => {
+    renderBar(query);
+    await userEvent.click(screen.getByTestId("filter-reason"));
+    expect(screen.getAllByTestId("filter-reason-option").map((o) => o.getAttribute("data-value"))).toEqual(["manual", "gone", "dormant"]);
+    expect(screen.getAllByTestId("filter-reason-option")[0]).toHaveTextContent("Closed by you");
+  });
+
+  it.each(["", "?scope=current&status=closed"])("hides the reason control in Current but keeps a removable chip (%s)", async (query) => {
+    const { lastQuery } = renderBar(`${query}${query ? "&" : "?"}reason=gone`);
+    expect(screen.queryByTestId("filter-reason")).toBeNull();
+    expect(screen.getByRole("button", { name: "Remove filter Reason: Taken down at the source" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Remove filter Reason: Taken down at the source" }));
+    await waitFor(() => expect(lastQuery()).toBe(query));
+  });
+
+  it("writes multiple reasons, and clear removes them and status while keeping scope", async () => {
+    const { lastQuery } = renderBar("?scope=all&status=closed&page=2");
+    await userEvent.click(screen.getByTestId("filter-reason"));
+    for (const value of ["gone", "manual"]) {
+      const option = screen.getAllByTestId("filter-reason-option").find((o) => o.getAttribute("data-value") === value)!;
+      await userEvent.click(option);
+      await waitFor(() => expect(option).toHaveAttribute("aria-checked", "true"));
+    }
+    await userEvent.keyboard("{Escape}");
+    await waitFor(() => expect(new URLSearchParams(lastQuery()).getAll("reason")).toEqual(["manual", "gone"]));
+    await userEvent.click(screen.getByTestId("filter-clear"));
+    await waitFor(() => expect(lastQuery()).toBe("?scope=all"));
   });
 });
 

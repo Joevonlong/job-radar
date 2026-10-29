@@ -1,6 +1,6 @@
 import { createLoader, createMultiParser, createParser, createSerializer, parseAsBoolean, parseAsInteger, parseAsString, parseAsStringLiteral, type inferParserType } from "nuqs/server";
 
-import { FAVORITE_SORTS, JOB_SORTS, MIN_SALARY_MAX, MIN_SCORE_MAX, GHOST_FILTERS, SORT_DIRS, TRAP_FILTERS, VISA_FILTERS } from "./constants";
+import { FAVORITE_SORTS, JOB_SCOPES, JOB_SORTS, MIN_SALARY_MAX, MIN_SCORE_MAX, GHOST_FILTERS, SORT_DIRS, TRAP_FILTERS, VISA_FILTERS } from "./constants";
 import { FILTER_KEYS, NUMBER_FILTER_KEYS, type FilterKey, type MultiFilterKey } from "./filter-keys";
 import { cleanMultiValues, type MultiValue } from "./filter-values";
 
@@ -52,6 +52,8 @@ function parseAsMultiValues<K extends MultiFilterKey>(key: K) {
 }
 
 export const jobsSearchParsers = {
+  /** No default: absent scope preserves legacy status links; explicit scope intersects status. Not a filter or saved-view key. */
+  scope: parseAsStringLiteral(JOB_SCOPES),
   q: parseAsString,
   /** Source family (`channels.family`). */
   source: parseAsMultiValues("source"),
@@ -61,6 +63,7 @@ export const jobsSearchParsers = {
   workplace: parseAsMultiValues("workplace"),
   contract: parseAsMultiValues("contract"),
   status: parseAsMultiValues("status"),
+  reason: parseAsMultiValues("reason"),
   /** Application statuses (`new` = no application yet). `archived` = ignored. */
   app: parseAsMultiValues("app"),
   /** Rank value at least this (unscored and filtered-out jobs have none and drop out). */
@@ -98,7 +101,8 @@ export const jobsSearchParsers = {
   fav: parseAsBoolean,
   /** Only jobs not looked at yet. Not stored in saved views. */
   unseen: parseAsBoolean,
-  sort: parseAsStringLiteral(JOB_SORTS).withDefault("rank"),
+  /** Preserve explicit rank versus absent/invalid; every reader uses resolveSort with the resolved scope and q. */
+  sort: parseAsStringLiteral(JOB_SORTS),
   /** The sort's direction; absent (or invalid) = the sort's default (`DEFAULT_SORT_DIR`). Not a filter: never counted, never in a saved view. */
   dir: parseAsStringLiteral(SORT_DIRS),
   page: parseAsInteger.withDefault(1),

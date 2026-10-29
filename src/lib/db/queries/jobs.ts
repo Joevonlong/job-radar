@@ -3,18 +3,18 @@ import { and, asc, count, desc, eq, exists, ilike, inArray, isNull, lte, ne, not
 import type { Db } from "../client";
 import { applications, channels, companies, jobFavorites, jobSources, jobs, jobVisa, trapScans } from "../schema";
 import type { MonthSalaryFigure } from "@/lib/domain/salary";
-import { DEFAULT_SORT_DIR, MAX_FILTER_VALUE_CHARS, type ApplicationFilterStatus, type GhostFilter, type JobSort, type SortDir, type TrapFilter, type VisaFilter } from "@/lib/jobs/constants";
+import { DEFAULT_SORT_DIR, MAX_FILTER_VALUE_CHARS, type ApplicationFilterStatus, type ArchiveReason, type GhostFilter, type JobScope, type JobSort, type SortDir, type TrapFilter, type VisaFilter } from "@/lib/jobs/constants";
+import { resolveJobScope } from "@/lib/jobs/scope";
 import { ghostTrustedKeys } from "@/lib/ghost/settings";
 
 import { ghostFilterCondition } from "../repos/ghost";
 import { seenSql } from "../repos/seen";
 import { uxTablesReady } from "../repos/ux-tables";
-import { effectiveStatusSql } from "./job-status";
+import { closedReasonSql, effectiveStatusSql, jobScopeSql, lastListedSql } from "./job-status";
 import { cardColumns, hideGermanLevels, hydrateCards, latestScoreCte, type CardRow, type LatestScore } from "./job-cards";
 import { annualBaseFigureSql, baseBoundSql, comparableSalaryWhere } from "./salary-figure";
 import { hasHighValueSignal, policyCurrency, type HighValuePolicy } from "./signal-filter";
 import type { JobCard, JobStatus, Workplace } from "./types";
-import { notDormantSql } from "./job-status";
 import { dormancyReady } from "../repos/dormancy";
 
 
@@ -22,6 +22,10 @@ import { dormancyReady } from "../repos/dormancy";
 const MAX_SEARCH_CHARS = 200;
 
 export interface JobFilters {
+  /** Null/absent keeps the legacy rule (current without statuses, all with statuses); explicit scope intersects statuses. */
+  scope?: JobScope | null;
+  /** Effective closure reasons, OR within this list and intersected with scope and every other filter; empty/null = no filter. */
+  closedReasons?: readonly ArchiveReason[] | null;
   /** Free text: full text over title + description (`search_tsv`), plus title / company substring. */
   q?: string | null;
   /** Spellings of `q` that also match the location field (the search "München" finds "Munich"); default: `q` alone. */
@@ -222,10 +226,12 @@ export function buildJobConditions(db: Db, filters: JobFilters, timezone: string
  * bound; the detail page's median uses the same figure); a salary marked possibly another region's pay comes after every comparable
  * one; under review, unstated or worked out in another base currency = none.
  */
-export function jobOrderBy(sort: JobSort, dir: SortDir, latest: LatestScore, currency: string): SQL[] {
+export function jobOrderBy(sort: JobSort, dir: SortDir, latest: LatestScore, currency: string, lastListed: SQL<Date | null>): SQL[] {
   const way = sql.raw(dir === "asc" ? "asc" : "desc");
   const filteredLast = sql`coalesce(${latest.filterResult} = 'filtered_out', false) asc`;
   switch (sort) {
+    case "last_listed":
+      return [sql`${lastListed} ${way} nulls last`, sql`${jobs.id} ${way}`];
     case "rank":
       return [filteredLast, sql`${latest.rankValue} ${way} nulls last`, sql`${jobs.postedAt} desc nulls last`, desc(jobs.firstSeenAt), desc(jobs.id)];
     case "posted":
@@ -243,8 +249,9 @@ export function jobOrderBy(sort: JobSort, dir: SortDir, latest: LatestScore, cur
 }
 
 /**
- * The WHERE of the /jobs list: the filters plus the default hiding: hard-filtered jobs unless asked for, and jobs that show as
- * closed or dormant unless a job-status filter is chosen. One definition for the list, its counts, "mark all seen" and
+ * The WHERE of /jobs: hard-filtered jobs stay hidden unless asked for; explicit scope intersects every filter, including status.
+ * Absent scope keeps the legacy rule: current without statuses, all with statuses. Future search matching belongs in
+ * buildJobConditions, without changing this scope composition. One definition for the list, counts, "mark all seen" and
  * the job counts of the company drop-down (`listCompanyFilterOptions`, with no filters: the list as /jobs opens).
  */
 export async function jobListWhere(db: Db, filters: JobFilters, timezone: string, latest: LatestScore, ux: boolean): Promise<SQL | undefined> {
@@ -253,11 +260,13 @@ export async function jobListWhere(db: Db, filters: JobFilters, timezone: string
     : filters.includeFiltered
       ? undefined
       : or(isNull(latest.filterResult), ne(latest.filterResult, "filtered_out"));
-  const hideClosed = filters.statuses && filters.statuses.length > 0 ? undefined : sql`${effectiveStatusSql(ux)} <> 'closed'`;
-  return and(buildJobConditions(db, filters, timezone, latest, ux), hideFiltered, hideClosed, filters.statuses?.length ? undefined : notDormantSql(await dormancyReady(db)));
+  const dormant = await dormancyReady(db);
+  const scope = jobScopeSql(resolveJobScope(filters.scope, filters.statuses), ux, dormant);
+  const reasons = filters.closedReasons?.length ? inArray(closedReasonSql(ux, dormant), [...filters.closedReasons]) : undefined;
+  return and(buildJobConditions(db, filters, timezone, latest, ux), hideFiltered, scope, reasons);
 }
 
-/** How many jobs the /jobs list holds under `filters` (the "Closed (N)" switch counts with its own status filter). */
+/** How many jobs /jobs holds under filters; the archive switch replaces only scope, retaining all other filters. */
 export async function countJobList(db: Db, options: { filters: JobFilters; timezone: string }): Promise<number> {
   const latest = latestScoreCte(db);
   const ux = await uxTablesReady(db);
@@ -289,7 +298,7 @@ export async function listJobs(db: Db, options: ListJobsOptions): Promise<JobPag
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
   const page = Math.min(Math.max(1, Math.floor(options.page)), pageCount);
 
-  const orderBy = jobOrderBy(options.sort, options.dir ?? DEFAULT_SORT_DIR[options.sort], latest, policyCurrency(options.filters));
+  const orderBy = jobOrderBy(options.sort, options.dir ?? DEFAULT_SORT_DIR[options.sort], latest, policyCurrency(options.filters), lastListedSql());
 
   const rows: CardRow[] = await db
     .with(latest)

@@ -106,6 +106,8 @@ A failure in (a) does not block rollback: follow (c) and accept the display wind
 
 ### Changed
 
+- `/jobs` now has Current / Archive / All scopes, archive reason filters and last-listed sorting from source fetches. Old `status=` links and saved views keep working. Jobs, postings, scores, translations and analyses are never automatically deleted. No database migration is required; rolling back restores the former list controls without data changes.
+
 - Repeated cycles skip unchanged hard-filter inputs and use stored change fingerprints; source history and monthly usage reads transfer less data and use matching indexes. **Upgrade:** nullable fingerprint columns need no table rewrite or migration-time backfill; maintenance fills bounded batches while reads compute missing values. Index creation still takes table locks. **Rollback:** keep the added columns and triggers; old-code source writes stay correct and changed filter verdicts invalidate the cache. See [upgrade notes](docs/upgrade.md#upgrading-with-change-fingerprints).
 
 - **Interactive AI requests have their own lane:** translation, breakdown, salary lookup and AI tests can start while

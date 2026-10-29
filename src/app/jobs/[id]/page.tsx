@@ -367,7 +367,7 @@ export default async function JobDetailPage({ params }: { params: Params }) {
             </Meta>
             <Meta label={t("meta.status")}>{tDash(`jobStatus.${job.status}`)}</Meta>
           </dl>
-          <ClosureNotice jobId={job.id} title={job.title} closure={job.closure} lastSeenAt={job.lastSeenAt} timezone={timezone} />
+          <ClosureNotice jobId={job.id} title={job.title} closure={job.closure} lastListedAt={job.lastListedAt} timezone={timezone} />
           <HeaderTags signals={activeSignals} categories={categories} salaryDisclosed={job.salaryDisclosed} germanLevelRequired={job.germanLevelRequired} isAgency={job.isAgency} contract={job.contract} languageName={languageName} />
         </div>
         {/* the actions have a row of their own under the three columns at xl: the left column is 422px wide there, and the five buttons (four in English with a longer wording) never fit it in one line */}

@@ -73,6 +73,8 @@ export interface JobCard {
   postedAt: Date | null;
   firstSeenAt: Date;
   lastSeenAt: Date;
+  /** Newest source posting fetch; link checks do not change it. */
+  lastListedAt: Date | null;
   /** `salary_json` is present. When false the posting does not state a salary (C3). */
   salaryDisclosed: boolean;
   /** The parsed salary; null when none is stated, or when the stored JSON is not readable. */
