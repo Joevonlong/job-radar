@@ -1,0 +1,37 @@
+# 搜索条件（docs/plan.md §4.1）。每个关键词组用 OR 合并成一次查询，再按城市各查一次。
+keyword_groups:
+  # 工程类
+  engineering:
+    - Software Engineer
+    - Backend Engineer
+    - Frontend Engineer
+    - Data Engineer
+    - Platform Engineer
+    - DevOps Engineer
+    - Machine Learning Engineer
+  # Solutions 类
+  solutions:
+    - Solutions Engineer
+    - Solutions Architect
+    - Technical Consultant
+    - Customer Engineer
+  # 德语岗位名
+  german:
+    - Softwareentwickler
+    - Datenanalyst
+
+locations:
+  - Hamburg
+  - Köln
+
+# 远程岗位范围：none | eu_hire_in_de（欧盟范围远程且可在德国受雇）| eu_any | worldwide
+remote_scope: eu_hire_in_de
+
+# 各轮的回看时间窗（小时）。键对应 schedule.yaml：weekday_morning → morning，weekday_evening → evening，weekend → weekend
+window_hours:
+  morning: 24
+  evening: 10
+  weekend: 24
+
+# 每个关键词组、每个城市最多取多少条
+max_per_group_per_location: 40

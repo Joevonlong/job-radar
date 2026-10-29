@@ -1,0 +1,121 @@
+{
+  "sha": "12415ee351f46a86b448dedae21406db9542988a",
+  "set": "defaults",
+  "files": {
+    "schedule": {
+      "layer": "default",
+      "hash": "30c55bd3346984a112ac57b5a85e1ad58560709161b927c9b24a13fce40c12d3",
+      "valid": true
+    },
+    "search": {
+      "layer": "default",
+      "hash": "ace2d0988c055e88f554391ed9b5baf9cef208957676cfd9272828fd0456257a",
+      "valid": true
+    },
+    "channels": {
+      "layer": "default",
+      "hash": "fc1b9153c1e6bdaafb15f3f0842debf9a6e9ff70d98a4d46ece5dc32cc469847",
+      "valid": true
+    },
+    "ai": {
+      "layer": "default",
+      "hash": "d7a0c75da26716a2c5af52a3574e7ef5c316a2491f4455b5fca8d8cd426be3fb",
+      "valid": true
+    },
+    "breakdown": {
+      "layer": "default",
+      "hash": "8797c68fba4297cfabdf8c68576fff71ea7419b437cb99fc95f5d67e3b6837fb",
+      "valid": true
+    },
+    "models": {
+      "layer": "default",
+      "hash": "42afee269ce117e2bee603d4b6d535997b31534fe752a85ecad917a75a29998a",
+      "valid": true
+    },
+    "notify": {
+      "layer": "default",
+      "hash": "64f91539d4178430a0b535e557bf50a1fbb2b8d829477cc89db12949a73a28ac",
+      "valid": true
+    },
+    "interests": {
+      "layer": "default",
+      "hash": "a69d8246b876feccdcf1fcb3335789de938641dc01e2035c01aef3b3dd2e1fff",
+      "valid": true
+    },
+    "pipeline": {
+      "layer": "default",
+      "hash": "43c6918085d58f71a32b7d900f05c0457daaffeb8fa28d3b0a120fcefe678e5a",
+      "valid": true
+    },
+    "pipelineBoard": {
+      "layer": "default",
+      "hash": "64dfc65de639b389e8ddf11d5f5ada60d675761dc90c080390b589e93acc90ed",
+      "valid": true
+    },
+    "resume": {
+      "layer": "default",
+      "hash": "10e80e6cf22d1e3a1f594b4528b16f8eb156010259ac6fb8b405b044e32ffb27",
+      "valid": true
+    },
+    "insights": {
+      "layer": "default",
+      "hash": "9433f9dc29418f3f6f7a78f10f894c09f24870e65f172ce231967c15e9d0129b",
+      "valid": true
+    },
+    "ui": {
+      "layer": "default",
+      "hash": "1ffc530119737c54ef8448d141c714cd77164ddc0c878ac0fbdc9d90640a70df",
+      "valid": true
+    },
+    "language": {
+      "layer": "default",
+      "hash": "f16c9a761930973ef55eadf3618cad144ad5a506048d8f5ea0935076201db800",
+      "valid": true
+    },
+    "setup": {
+      "layer": "default",
+      "hash": "f5943b6a04c298c3c4a3b6add67dc9946533df85a77005dc15185f893646c954",
+      "valid": true
+    },
+    "traps": {
+      "layer": "default",
+      "hash": "4ca97d2d96f109b65c2eb322c53931c3eb9ff490ac66edf3e58f9fb197caa515",
+      "valid": true
+    },
+    "salary": {
+      "layer": "default",
+      "hash": "3adb443f725dfd68bf0e4e88abd52e795d95c472173c040ba41ef36cf824b27a",
+      "valid": true
+    },
+    "signalPresets": {
+      "layer": "default",
+      "hash": "823dbb7602e146b018a2ec3689fa56718d998eb542282d0743560978e077ab2f",
+      "valid": true
+    },
+    "deliveryAudit": {
+      "layer": "default",
+      "hash": "6b03e4200e2e694b43b2ffaec4991c6d0d98df258d2bb886bc0a6ca17ebb7886",
+      "valid": true
+    },
+    "mcp": {
+      "layer": "default",
+      "hash": "8c677480ee42a1e90b63d0b817bfed77947c73cf5facf0be0d893c43d674262d",
+      "valid": true
+    },
+    "activityLog": {
+      "layer": "default",
+      "hash": "ecee8d2467ba8b0c9cd07c7833c7517532c761d56efb3ddedb070df447e90516",
+      "valid": true
+    },
+    "me": {
+      "layer": "missing",
+      "hash": null,
+      "valid": true
+    },
+    "preferences": {
+      "layer": "missing",
+      "hash": null,
+      "valid": true
+    }
+  }
+}

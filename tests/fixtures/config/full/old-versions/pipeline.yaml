@@ -1,0 +1,796 @@
+# 处理流水线（：归一、去重、岗位生命周期。
+# 带 "正则" 的列表按大小写不敏感、Unicode 模式匹配；写错的正则会在 pnpm config:check 里报错。
+
+# 每次从数据库取多少条 pending 的 raw 来解析；步骤会一直取到没有 pending 为止
+batch_size: 200
+
+dedupe:
+  # 同一公司的两条岗位，JD 正文的 64 位 SimHash 海明距离 ≤ 该值就归并（2026-10 用 621 条真实岗位复核，维持 3，依据见 dev-notes/research/simhash-threshold-2026-10.md；复核命令 pnpm simhash:analyze）
+  simhash_max_distance: 3
+  # 公司名不同但相关（一个名字是另一个的词前缀，或首词相同："SIV.AG" / "SIV.AG - Service für …"、"Allianz in Deutschland" / "Allianz Kunde und Markt GmbH"）、标题相同时，海明距离 ≤ 该值也归并（同一 JD 在不同渠道的样板文字不同，所以比同公司宽）
+  cross_company_simhash_max_distance: 14
+  # 每个 shingle 的词数
+  simhash_shingle_words: 3
+  # 正文少于这么多词就不算 SimHash（太短，不同岗位会撞）
+  simhash_min_words: 30
+
+lifecycle:
+  # 所有来源连续这么多天没有再返回 → possibly_closed（只统计这期间成功跑过的通道，见 C2）
+  possibly_closed_after_days: 7
+  # 每轮最多检查多少个 possibly_closed 岗位的原链接（404 / 410 → closed）
+  max_link_checks_per_cycle: 20
+  link_check_timeout_ms: 10000
+
+# "去申请"链接优先级，数字越小越优先：公司 ATS 1 > LinkedIn 2 > StepStone / XING / Indeed 3 > 聚合源 4
+apply_priority:
+  ats: 1
+  linkedin: 2
+  stepstone: 3
+  xing: 3
+  indeed: 3
+  manual: 3
+  arbeitsagentur: 4
+  google: 4
+  email: 4
+
+company:
+  # 公司名末尾的法律形式，归一时去掉（小写；标点先去掉，所以 G.m.b.H. 也会命中 gmbh）
+  legal_suffixes:
+    - gmbh
+    - mbh
+    - ag
+    - se
+    - kg
+    - kgaa
+    - ug
+    - ohg
+    - gbr
+    - ev
+    - co
+    - inc
+    - incorporated
+    - llc
+    - llp
+    - ltd
+    - limited
+    - plc
+    - corp
+    - corporation
+    - sarl
+    - sas
+    - sa
+    - bv
+    - nv
+    - ab
+    - oy
+    - srl
+    - spa
+    - pty
+  # 规范名称 -> 其他写法；归一后命中任一写法的公司并入规范名称那一家
+  aliases:
+    "Google": ["Alphabet", "Google Germany", "Google Deutschland"]
+    "Meta": ["Meta Platforms", "Facebook"]
+  # 已知的猎头 / 中介公司名（忽略法律形式）；其岗位带"中介"标记
+  agency_names:
+    - Hays
+    - Randstad
+    - Adecco
+    - Robert Half
+    - Michael Page
+    - Page Personnel
+    - Experis
+    - Gulp
+    - Amoria Bond
+    - Darwin Recruitment
+    - Harvey Nash
+    - Jack & Jill
+    - Acceler8 Talent
+    - Findr
+    - AI Futures
+    - Haystack
+    - Rocken
+    - Instaffo
+    - Optimus Search
+
+agency:
+  # 匹配公司名
+  company_name_patterns:
+    - personalberatung
+    - personalvermittlung
+    - personaldienstleist
+    - personalmanagement
+    - \bzeitarbeit
+    - \brecruit(?:ing|ment|er|ers)?\b
+    - \bstaffing\b
+    - \bheadhunt
+    - \btalent (?:solutions|partners|acquisition)\b
+    - \bexecutive search\b
+  # 匹配标题和正文：猎头代发的措辞（"受客户委托"、"我在为一家公司招人"）。咨询公司写的 "our clients" 不算，所以这里只列代发招聘的说法
+  text_patterns:
+    - für unseren kunden
+    - für (?:unseren|meinen|einen unserer) mandanten
+    - im auftrag (?:unseres|eines|meines|unserer) (?:kunden|kundin|mandanten|klienten|auftraggebers)
+    - im auftrag eines? unserer (?:kunden|mandanten)
+    - für einen? (?:unserer |meiner )?(?:kunden|mandanten|klienten|auftraggeber)\b
+    - unser(?:e)? (?:kunde|kundin|mandant|auftraggeber) (?:ist|sucht|bietet)\b
+    - on behalf of (?:one of )?(?:our|my) (?:\w+ ){0,2}(?:clients?|customers?)
+    - on behalf of an? (?:\w+ ){0,2}(?:client|customer)
+    - we are recruiting on behalf
+    - (?:hiring|recruiting|searching|looking) on behalf of\b
+    - \bim kundenauftrag\b
+    - \bim auftrag (?:eines|einer|von) (?:kunden|kundin|unseres|unserer)
+    - \b(?:für|fuer) (?:einen|eine) (?:unserer )?(?:renommierten |namhaften )?(?:kunden|kundin)\b
+    - our client (?:is|are) (?:a|an|looking)
+    - our client,\s+an?\b
+    - exclusively (?:retained|engaged|instructed)
+    - (?:has|have) been (?:retained|instructed) (?:by|to)\b
+    - \b(?:i['’]m|i am) (?:currently )?(?:hiring|recruiting|searching for|looking to (?:hire|recruit))\b
+    - \bwe(?:['’]re| are) (?:currently )?(?:supporting|partnering with|representing|working with|helping) (?:a|an|one of) (?:[\w&-]+[ ,]+){0,6}(?:company|startup|start-up|scale-?up|business|firm|organi[sz]ation|client|customer)
+    - \brecruitment (?:agency|consultancy|firm)\b
+    - \bstaffing (?:agency|firm)\b
+    - \bexecutive search (?:firm|consultancy)\b
+    - \bheadhunter
+    - \bpersonalberatung\b
+    - \bpersonalvermittlung\b
+    - \bpersonaldienstleister\b
+    - \bexecutive search\b
+  # 同一句里还有这些词，说明是雇主在拒绝中介（"we do not accept unsolicited CVs from recruitment agencies"），不算
+  exclude_context_chars: 120
+  exclude_context_patterns:
+    - \bunsolicited\b
+    - \b(?:do|does|will|would|can) not (?:accept|consider|respond|reply|take)\b
+    - \b(?:don['’]t|doesn['’]t|won['’]t|cannot|can['’]t) (?:accept|consider|respond|reply|take)\b
+    - \bno (?:agencies|recruiters|headhunters|agency)\b
+    - \bagency submissions?\b
+    - \bunaufgefordert\w*
+    - \bkeine\b[^.\n]{0,60}\b(?:personalberat|personalvermittl|personaldienstleist|headhunter|agentur)
+    - \bnicht (?:akzeptier|annehmen|berücksichtig)
+    - \bohne (?:personalberat|personalvermittl|personaldienstleist|agentur)
+
+description:
+  # 采集残留：描述末尾的界面文字（LinkedIn 的 "Show more Show less"），只在文本末尾匹配并删掉
+  trailing_ui_patterns:
+    - (?:\s*(?:show more|show less|mehr anzeigen|weniger anzeigen|voir plus|voir moins))+\s*$
+  # 整段没有任何换行的长描述（Bright Data 的 LinkedIn 摘要）：按标题和句子恢复段落。只加换行，不改任何文字
+  restore:
+    # 少于这么多字符的描述不动
+    min_chars: 600
+    # 一个段落写到至少这么长之后，在下一个句子结尾处换段
+    paragraph_chars: 450
+    # 这些短语（首字母大写，出现在句首或后面跟冒号）另起一段
+    section_headings:
+      - What You'll Do
+      - What You’ll Do
+      - What You'll Be Doing
+      - What You’ll Be Doing
+      - What You Will Do
+      - What You'll Bring
+      - What You’ll Bring
+      - What You Will Bring
+      - What You'll Need
+      - What We're Looking For
+      - What We’re Looking For
+      - What We Offer
+      - What We Offer You
+      - What You Get
+      - Who You Are
+      - Who We Are
+      - About the Role
+      - About the Team
+      - About You
+      - About Us
+      - About the Company
+      - The Role
+      - The Opportunity
+      - The Candidate
+      - Your Role
+      - Your Profile
+      - Your Responsibilities
+      - Your Tasks
+      - Your Skills
+      - Key Responsibilities
+      - Responsibilities
+      - Requirements
+      - Qualifications
+      - Minimum Qualifications
+      - Preferred Qualifications
+      - Nice to Have
+      - Nice-to-Have
+      - Bonus Points
+      - Benefits
+      - Perks
+      - Why Join Us
+      - Why You'll Love It
+      - Company Description
+      - Job Description
+      - Deine Aufgaben
+      - Ihre Aufgaben
+      - Dein Profil
+      - Ihr Profil
+      - Das bringst du mit
+      - Das bringen Sie mit
+      - Was du mitbringst
+      - Was Sie mitbringen
+      - Wir bieten
+      - Wir bieten dir
+      - Wir bieten Ihnen
+      - Unser Angebot
+      - Das erwartet dich
+      - Das erwartet Sie
+      - Über uns
+      - Über Uns
+      - Deine Vorteile
+      - Ihre Vorteile
+      - Anforderungen
+      - Aufgaben
+      - Qualifikationen
+    abbreviations: [e.g, i.e, etc, vs, approx, incl, inc, ltd, mr, mrs, ms, dr, prof, no, z.b, d.h, u.a, p.a, bzw, ca, ggf, inkl, evtl, usw, vgl, nr, tel, str, mio, mrd, sr, jr]
+    # 被抓取时压成行内文字的列表符号；每个符号前后换成换行加 "- "
+    bullet_glyphs: ["•", "●", "▪", "◦", "→", "➢", "✓", "✔", "►"]
+
+workplace:
+  # 办公方式（onsite / hybrid / remote）：来源没有给时才从文字里读，只读文字明说的，不推测（C3）。
+  # head：标题、地点文字、合同提示，各自单独匹配（短，所以宽松）；head 里只出现一种方式就用它。
+  # text：描述正文（严格：福利列表里的 "Remote Working Furniture"、"100% remote work option during pregnancy" 这类不算）。
+  # 同一段文字里出现两种以上方式（"remote 或 hybrid"）就保持 unknown，不选边。
+  # negation_patterns：正文里的命中，如果同一句里它前面 negation_window_chars 个字符内有否定词（"is not available as fully remote"），就不算。
+  negation_window_chars: 40
+  negation_patterns:
+    - \b(?:not|no|never|without|cannot|can['’]t|don['’]t|do not|doesn['’]t|does not|isn['’]t|is not|aren['’]t|are not|won['’]t|will not)\b
+    - \b(?:nicht|kein\w*|ohne|nie|niemals)\b
+  head:
+    remote:
+      - \bremote\b(?!\s+(?:sensing|monitoring|support|desktop|access|control)\b)
+      - \bhome[\s-]?office\b(?!\s*(?:möglich|option))
+      - \bfully[\s-]remote\b
+    hybrid:
+      - \bhybrid(?:e[nrsm]?)?\b(?![\s-]+(?:professional|deployment|cloud|infrastructure))
+      - \bhome[\s-]?office\s*(?:möglich|option)
+    onsite:
+      - \bon-?site\b
+      - \bvor ort\b
+      - \bpräsenz\b
+  text:
+    remote:
+      - (?<!\boder\s)\b(?:100\s?%|fully|completely|totally|full)[\s-]+(?:remote|home[\s-]?office)\b(?!\s+(?:work(?:ing)?\s+)?(?:options?|possibilit\w*|möglichkeit\w*))
+      - \bremote[\s-]first\b
+      - \bremote[\s-]only\b
+      - \b(?:this|the)\s+(?:role|position|job|opportunity)\s+is\s+(?:fully\s+|100\s?%\s+)?remote\b
+      - \ba\s+(?:fully\s+)?remote\s+(?:role|position|job|opportunity)\b
+      - \bwork(?:ing)?\s+(?:model|mode|type|arrangement|location)\s*:\s*(?:fully\s+)?remote\b
+      - \bworkplace\s+type\s*:\s*remote\b
+      - '#li-remote\b'
+      - \b(?:vollständig|komplett|voll|ausschließlich)\s+remote\b
+      - \bremote[\s-]stelle\b
+      - \bausschließlich\s+(?:im\s+)?(?:home[\s-]?office|homeoffice)\b
+      - \b(?:location|standort|arbeitsort|ort)\s*:[^\n]{0,60}[-–|,(]\s*(?:fully\s+)?remote\b
+      - \(\s*(?:fully\s+|100\s?%\s+)?remote\s*\)
+    hybrid:
+      - \bhybrid(?:e[nrsm]?)?[\s-]+(?:work\w*|arbeit\w*|modell\w*|model\w*|basis|position|role|setup|set-up|schedule|workplace|policy|office|mode|modus|environment|arbeitsweise|arbeitsplatz|setting|approach|capacity|structure|arrangement)\b
+      - \bhybrid(?:modell|modus|arbeit\w*)
+      - \(\s*hybrid\s*\)
+      - \b(?:location|standort|arbeitsort|ort)\s*:[^\n]{0,60}\bhybrid\b
+      - \bwir arbeiten (?:flexibel,\s*)?hybrid\b
+      - \b(?:office|büro)\s+(?:oder|und)\s+(?:remote|(?:im\s+)?home[\s-]?office|mobil)\b
+      - \b(?:office|in-person|on-?site)\s+(?:or|and)\s+(?:remotely|remote|from home|home[\s-]?office)\b
+      - \bmix of (?:working )?(?:in the )?(?:office|büro) and (?:working )?(?:from )?(?:home[\s-]?office|remote|home)\b
+      - \bbürotage\b
+      - \bmobilarbeit\b
+      - \bmobil\s+arbeiten\b
+      - \bmobile\s+work\b
+      - \bwork[\s-]from[\s-]home[\w/ ]{0,15}\boptions?\b
+      - \bhybrid\s*/\s*remote\b|\bremote\s*/\s*hybrid\b|\bhybrid[\s-]remote\b
+      - '#li-hybrid\b'
+      - \b(?:working|work|arbeits)[\s-]*(?:model|mode|type|modell|weise)\s*:\s*hybrid\b
+      - \bworkplace\s+type\s*:\s*hybrid\b
+      - (?:^|\n)\s*[-–•]?\s*hybrid\b
+      - \b(?:\d+|one|two|three|four|five|ein|zwei|drei|vier|fünf)\s+(?:days?|tage?n?)\s+(?:(?:per|a|each|pro)\s+(?:week|month|woche|monat)\s+)?(?:in|at|from)\s+(?:the\s+|our\s+|unserem\s+|unserer\s+)?(?:office|büro|home|homeoffice|home office)\b
+      - \b(?:\d+|one|two|three|four|five|ein|zwei|drei|vier|fünf)\s+(?:days?|tage?n?)\s+(?:of\s+)?(?:working\s+)?(?:from\s+home|home[\s-]?office|remote|office|büro)\b
+      - \b(?:in|im)\s+(?:the\s+|unserem\s+)?(?:office|büro)\s+(?:at least\s+|mindestens\s+)?(?:\d+|one|two|three|four|zwei|drei|vier)\s+(?:days?|tage)
+      - \b(?:mindestens|at least)\s+(?:\d+|one|two|three|zwei|drei|vier|einmal|zweimal|dreimal)\s*(?:mal|x|days?|tage)?\s+(?:die\s+woche|pro\s+woche|per\s+week|a\s+week)\b[^.\n]{0,50}(?:büro|office)
+      - \bremote\s+days\b
+      - \b(?:team|office|anchor)[\s-]days?\b
+      - \bremote\s+working\s+model\b
+      - \bhome[\s-]?office\s*(?:möglich|optionen?|ist möglich|anteil|regelung|tage)\b
+      - \b(?:option|möglichkeit)\s+(?:auf|zum|zu|für|des)\s+[„"“]?(?:mobile[snm]?\s+arbeit\w*|home[\s-]?office|remote|homeoffice)
+      - \bmobile[snm]?\s+arbeit\w*
+      - \bmobile\s+working\b
+      - \bteilweise\s+(?:im\s+)?(?:home[\s-]?office|remote)\b
+      - \bwork\s+from\s+home\s+(?:option|up to|\d)
+      - \b(?:up to|bis zu)\s+\w+\s+days?\s+(?:per\s+\w+\s+)?(?:of\s+)?(?:working\s+)?(?:from\s+home|remote)
+    onsite:
+      - \(\s*on-?site\s*\)
+      - \b(?:location|standort|arbeitsort|ort)\s*:[^\n]{0,60}[-–|,(]\s*(?:fully\s+)?on-?site\b
+      - \bwork(?:ing)?\s+on-?site\b
+      - \boffice[\s-]first[\s-](?:kultur|culture)\b
+      - \bwe work from our (?:\w+ )?office\b
+      - \bworkplace\s+type\s*:\s*on-?site\b
+      - \bwork(?:ing)?\s+(?:model|mode|type|arrangement)\s*:\s*on-?site\b
+      - \b100\s?%\s*(?:on-?site|präsenz|vor ort)
+      - '#li-onsite\b'
+      - \b(?:fully|full)[\s-]+on-?site\b
+      - \bon-?site\s+(?:role|position|job|only|based)\b
+      - \b(?:this|the)\s+(?:role|position|job)\s+is\s+(?:fully\s+)?on-?site\b
+      - \boffice[\s-]based\s+(?:role|position|job)\b
+      - \bpräsenzstelle\b
+      - \bvollständig\s+vor\s+ort\b
+      - \bausschließlich\s+vor\s+ort\b
+      - \b(?:arbeit|arbeiten|tätigkeit|einsatz|arbeitsort)\s*:?\s+vor\s+ort\b
+
+contract:
+  # 学生 / 实习 / 学徒（只看标题和合同提示，正文里的 "Praktikum" 常是别的意思）
+  student:
+    - \bwerkstudent
+    - praktik(?:um|ant)
+    - \bpflichtpraktik
+    - \bausbildung\b
+    - \bauszubildende
+    - \bazubi\b
+    - \bduales? studium\b
+    - \bthesis\b
+    - abschlussarbeit
+    - \b(?:master|bachelor)arbeit
+    - \bintern(?:ship)?\b
+    - \bworking student\b
+  # 劳务派遣：只认 Arbeitnehmerüberlassung / Zeitarbeit 本身。"Personaldienstleister" 只说明发布者是中介，
+  # 中介代招（Personalvermittlung）是直接受雇于客户公司，按 Q12 保留并打"中介"标签（见 agency）
+  temp_agency:
+    - \bzeitarbeit
+    - arbeitnehmerüberlassung
+    - arbeitnehmerueberlassung
+    - \btemp(?:orary)? (?:agency|staffing)\b
+  # 写明是中介代招、直接受雇于客户（"Vertragsart: Personalvermittlung"、"Direktvermittlung"）：不算劳务派遣，
+  # 即使中介的公司简介里提到了 Zeitarbeit。只认明确的说法，单独出现的 "Personalvermittlung" 不算
+  direct_hire:
+    - \b(?:vertragsart|anstellungsart|beschäftigungsart|art der anstellung|anstellungsverhältnis|employment type|contract type)\s*:\s*(?:personalvermittlung|direktvermittlung|direct hire|direct placement)\b
+    - \bdirektvermittlung\b
+    - \bim rahmen (?:der|einer) (?:direkten )?personalvermittlung\b
+    - \b(?:direkte|feste) (?:festanstellung|anstellung|einstellung) (?:bei|beim) (?:unserem|unserer|unseren|dem|der) (?:kunden|kundin|mandanten|auftraggeber)
+  # 自由职业
+  freelance:
+    - \bfreelanc
+    - \bfreiberuf
+    - \bcontractor\b
+    - \bfreie[rn]? mitarbeit
+  fixed_term:
+    - \bbefristet
+    - \bfixed[- ]term\b
+    - \btemporary (?:contract|position|role)\b
+    - \btime[- ]limited (?:contract|position)\b
+    - \bzeitvertrag\b
+    - \bbefristete[nrs]? (?:vertrag|stelle|anstellung|arbeitsvertrag)
+    - \bmaternity (?:cover|leave replacement)\b
+    - \bmutterschaftsvertretung\b
+    - \b(?:employment|job|contract)[\s-]*(?:type)?\s*:\s*(?:fixed[- ]term|temporary)\b
+    - elternzeitvertretung
+  permanent:
+    - \bunbefristet
+    - \bfestanstellung\b
+    - \bpermanent (?:contract|position|role|employment|basis|full[- ]time|employee)\b
+    - \bopen[- ]ended (?:contract|employment|position)\b
+    - \bunbefristete[nrs]? (?:vertrag|stelle|anstellung|arbeitsvertrag)
+    - \bdauerstelle\b
+    - \bfeste anstellung\b
+    # 带标签的雇佣字段："Employment Type: Permanent"。Vollzeit / full-time 说的是工时不是合同期限，不算
+    - \b(?:employment|job|contract|position)[\s-]*(?:type)?\s*:\s*(?:permanent|festanstellung)\b
+    # 标签行里任意位置写明 permanent（"Employment: Full-time, permanent"）；"Employment Type: Full time / regular" 的 regular 只在雇佣类型标签后算
+    - \b(?:employment|job|contract|position)[\s-]*(?:type)?\s*:[^\n:]{0,40}\b(?:permanent|festanstellung|unbefristet)\b
+    - \bemployment[\s-]*type\s*:[^\n:]{0,40}\bregular\b
+    - \bindefinite[- ](?:term|period|duration|contract)\b
+    - \bcontract(?:ual)? (?:is )?(?:of )?indefinite\b
+    - \b(?:art der anstellung|anstellungsart|beschäftigungsart|vertragsart|anstellungsverhältnis)\s*:\s*(?:unbefristet|festanstellung|permanent)
+
+language:
+  # 少于这么多词就不从正文判断语言，改用通道给的提示，再不行就是 unknown
+  min_words_for_detection: 25
+  # 德语等级短语与 "German" 一词的最大距离（字符数）；超过就不算在说德语
+  german_level_max_distance: 40
+  # 德语等级短语。显式的 CEFR 写法（German C1、Deutsch B2、B2 German）由代码直接提取，不在这里。
+  # 同一个分句里离 "German" 最近的短语生效；距离相同取靠前的规则。
+  german_level_rules:
+    - { pattern: 'native[\s-]+(?:level[\s-]+)?(?:german|deutsch)|(?:german|deutsch)\w*\s+(?:as\s+)?(?:a\s+)?(?:native|mother[\s-]tongue)|muttersprach|mother[\s-]tongue', level: C2 }
+    - { pattern: 'fließend|fliessend|verhandlungssicher|business[\s-]fluent|\bfluent|sehr gute|very good|excellent|exzellent|ausgezeichnet|hervorragend|perfekt|perfect|\bproficien', level: C1 }
+    - { pattern: '\bgut(?:e|en|er|es)?\b|\bgood\b|\bsolid|\bsolide|\bstrong\b|fundiert|working (?:knowledge|proficiency)', level: B2 }
+    - { pattern: 'conversational|konversation|intermediate|gewisse|\bsome\b', level: B1 }
+    - { pattern: 'grundkenntnis|grundlagen|\bbasic|elementary|basiskenntnis', level: A2 }
+  # 这些词离 "German" 不超过这么多字符（同一分句里），德语就是"加分项"：等级记为 preferred（不扣分）。
+  # 只看附近而不是整个分句：没有标点的 LinkedIn 描述里一个分句可能是整段话（例如 "…ist ein Plus (Backend) … Verhandlungssicheres Deutsch"）
+  german_optional_max_distance: 60
+  german_optional_patterns:
+    - \bplus\b
+    - nice[- ]to[- ]have
+    - von vorteil
+    - wünschenswert
+    - \badvantag
+    - \bbonus\b
+    - \bideally\b
+    - idealerweise
+    - \basset\b
+    - \bbeneficial\b
+    - \bpreferred\b(?!\s+(?:qualifications?|skills?|requirements?|experience))
+    - \bpreferabl[ey]\b
+    - \bdesirable\b
+    - \bbevorzugt\b
+    - \bpluspunkt
+    - nicht zwingend
+    - gerne gesehen
+    - would be (?:a )?(?:great|nice|helpful)
+  # "German, Spanish, French or Italian are a plus"：逗号把 German 和后面的 "are a plus" 隔开了，只要中间全是这些语言名和连接词，后面的加分词仍算在 German 头上
+  german_list_languages: [english, spanish, french, italian, dutch, polish, portuguese, russian, chinese, japanese, englisch, spanisch, französisch, italienisch, niederländisch, polnisch, portugiesisch, russisch]
+  # 含有 "German" 字样但说的不是语言的词组：先抹掉再找德语（"German citizen"、"German defence company"）
+  german_ignore_patterns:
+    - \bgerman(?:y['’]s)?[\s-]+(?:citizen\w*|national\w*|passport|work permit)
+    - \bdeutsch\w*\s+(?:staatsbürger\w*|staatsangehörig\w*)
+    - \bgerman[\s-]+(?:market|customers?|clients?|compan(?:y|ies)|subsidiar\w+|entit(?:y|ies)|offices?|team|law|legal|legislation|tax|authorit\w+|regulations?|labou?r|defen[cs]e|automotive|industry|economy|government|bundeswehr|armed forces)\b
+  # 德语出现在这些标题之后（最近的标题决定）就是加分项：preferred；german_required_section_patterns 里的其他标题把"加分项部分"结束
+  german_preferred_section_patterns:
+    - \bpreferred\s+(?:qualifications?|skills?|requirements?|experience)\b
+    - \bnice[- ]to[- ]haves?\b
+    - \bbonus\s+(?:points?|qualifications?|skills?)\b
+    - \b(?:desirable|desired)\s+(?:qualifications?|skills?|experience)\b
+    - '\bwünschenswert\s*:'
+    - '\bvon vorteil\s*:'
+    - \bextra points\b
+    - \bwhat would make you stand out\b
+  german_required_section_patterns:
+    - \b(?:minimum|basic|required|essential|must[- ]haves?)\b[\w\s]{0,30}?\b(?:qualifications?|requirements?|skills?|experience)\b
+    - \brequirements?\b
+    - \bqualifications?\b
+    - \bwhat you(?:['’]ll| will)? (?:bring|need|have)\b
+    - \bwho you are\b
+    - \bwhat we(?:['’]re| are) looking for\b
+    - \bdein profil\b
+    - \bihr profil\b
+    - \bdas bringst du mit\b
+    - \bwas du mitbringst\b
+    - \bwas sie mitbringen\b
+    - \banforderungen\b
+    - \bqualifikationen?\b
+    - \bvoraussetzungen\b
+    - \bresponsibilit\w+
+    - \bwhat we offer\b
+    - \bbenefits\b
+    - \bwir bieten\b
+    - \babout us\b
+    - \bdeine aufgaben\b
+    - \bihre aufgaben\b
+  # 这些词出现在同一个分句里，说明德语是硬性要求，加分项标题不生效
+  german_required_patterns:
+    - \brequired\b
+    - \bmandatory\b
+    - \bmust\b
+    - \bessential\b
+    - \berforderlich\b
+    - \bzwingend\b
+    - \bvoraussetzung\b
+    - \bvorausgesetzt\b
+    - \bnotwendig\b
+    - \bunbedingt\b
+  # 德语出现在加分项标题之后多少字符以内才算在那个部分里
+  german_section_max_distance: 300
+  # "不要求德语" 的说法：等级记为 none（和 preferred 都不扣分；none 是岗位明说不需要）
+  german_not_required_patterns:
+    - no german (?:is )?(?:required|needed|necessary)
+    - german (?:is )?not (?:required|needed|necessary|mandatory)
+    - without (?:any )?german
+    - keine deutschkenntnisse
+    - ohne deutschkenntnisse
+    - deutschkenntnisse (?:sind )?nicht (?:erforderlich|notwendig|nötig)
+    - no knowledge of german
+  # "C1 von Vorteil, B2-Niveau ist ausreichend"：加分项之后同一句里 "某等级 + 这些词" 说明该等级才是最低要求
+  german_sufficient_patterns:
+    - \bausreichend\b
+    - \bgenügt\b
+    - \bgenuegt\b
+    - \breicht\b
+    - \bsufficient\b
+    - \benough\b
+    - \bis fine\b
+    - \bis ok(?:ay)?\b
+
+salary:
+  # 换算成每年的系数：月 12；周 52；日 260（5 天 × 52 周）；时 2080（8 小时 × 260 天）。全部按税前、不含假期折算。
+  periods_per_year:
+    year: 1
+    month: 12
+    week: 52
+    day: 260
+    hour: 2080
+  # 非欧元币种折成 EUR 的汇率（1 单位外币 = 多少 EUR；参考汇率，2026-10 手动填写，变化大时再改）。
+  # 表里没有的币种保留原币种、不折算（不编造汇率，C3）。折算后的欧元年薪用于薪资底线、"最低年薪"筛选、统计页和 T1 门槛。
+  fx_to_eur:
+    USD: 0.86
+    GBP: 1.15
+    CHF: 1.07
+    SEK: 0.09
+    NOK: 0.085
+    DKK: 0.134
+    PLN: 0.235
+    CZK: 0.041
+  # 只写了数字没写周期时：金额 ≥ 该值按年薪处理（并标记 PERIOD_ASSUMED_YEAR），否则周期保持未知
+  assume_annual_from: 20000
+  # 折算后的年薪超出这个范围就标记为待复核
+  plausible_annual:
+    min: 10000
+    max: 1000000
+  # 写明的金额（按写明的周期，不是年化）超出这个范围就标记待复核。"€60/month" 是话费补贴，不是月薪
+  plausible_per_period:
+    year: { min: 10000, max: 1000000 }
+    month: { min: 800, max: 100000 }
+    week: { min: 200, max: 20000 }
+    day: { min: 50, max: 5000 }
+    hour: { min: 8, max: 500 }
+  # 正文里的薪资：金额旁边必须有这些词之一（距离见 context_window_chars）
+  description_context_patterns:
+    - \bsalary\b
+    - \bgehalt\b
+    - \bvergütung\b
+    - \bcompensation\b
+    - \bjahresgehalt\b
+    - \bbruttojahr
+    - \bremuneration\b
+    - \bpay range\b
+    - \bbase pay\b
+    - \bbase salary\b
+    - \bgrundgehalt\b
+    - \bbruttogehalt\b
+    - \bjahresvergütung\b
+    - \bsalary range\b
+    - \bgehaltsrahmen\b
+    - \bgehaltsspanne\b
+    - \bote\b
+    - \bon-target earnings\b
+    - \bbase range\b
+    - \bpay band\b
+    - \bsalary band\b
+    - \bgehaltsband\b
+    - \bpay scale\b
+  # 金额离最近的薪资词最多多少字符才算薪资（没有薪资词时，写明周期的区间 "€80,000 - €120,000 gross a year"、
+  # 带币种和时/日/周/月周期的单个金额 "Rate: 18 USD per hour" 也算）
+  context_window_chars: 120
+  # 金额旁边出现这些词，说明它是福利（搬家补贴、学习预算、设备、假期、话费、公司融资……）不是薪资；
+  # 薪资词和这些词都在窗口里时，离金额更近的那个说了算（"Salary: €80,000 plus relocation" 仍是薪资）
+  negative_context_patterns:
+    - \brelocation\b
+    - \bumzug
+    - \ballowances?\b
+    - \bzuschuss
+    - \bzuschüsse
+    - \bbudget
+    - \blearning\b
+    - \bweiterbildung
+    - \btraining\b
+    - \bconference
+    - \beducation\b
+    - \bequipment\b
+    - \bhardware\b
+    - \blaptop\b
+    - \bworkstation\b
+    - \bvacation\b
+    - \bholidays?\b
+    - \burlaub
+    - \bpension\b
+    - \bbav\b
+    - \binsurance\b
+    - \bversicherung
+    - \bgym\b
+    - \bfitness\b
+    - \bwellness\b
+    - \bwell-?being\b
+    - \bphone\b
+    - \binternet\b
+    - \bhandy\b
+    - \bmobilfunk
+    - \bchild\s?care\b
+    - \bkita\b
+    - \bkinderbetreuung
+    - \bmeals?\b
+    - \blunch\b
+    - \bverpflegung
+    - \bvoucher
+    - \bgutschein
+    - \breferral\b
+    - \bsign(?:ing)?[- ]on\b
+    - \bsigning bonus\b
+    - \bretention bonus\b
+    - \bwelcome bonus\b
+    - \bwillkommensbonus\b
+    - \braised\b
+    - \bfunding\b
+    - \bseries [a-e]\b
+    - \bvaluation\b
+    - \brevenue\b
+    - \bturnover\b
+    - \bumsatz\b
+    - \bper diem\b
+    - \bspesen\b
+    - \btravel\b
+    - \bfahrtkosten\b
+    - \bcommut
+    - \bjobticket\b
+    - \bdeutschlandticket\b
+  # 看这些词的范围（金额两侧各多少字符）
+  negative_context_window_chars: 50
+  # 本地币种：其他币种的金额标"可能是其他地区的薪资"（柏林岗位写的美元区间多半是纽约的），
+  # 照样折成欧元年薪做底线检查，但 T1 加分按 interests.yaml 的 signals.T1.other_region_weight
+  local_currencies: [EUR]
+  # 正文里出现这些说法时，写明的薪资（哪怕是欧元）也标"可能是其他地区的薪资"
+  other_region_patterns:
+    - \bU\.?S\.? benefits\b
+    - \brates? (?:vary|differ|varies|differs) (?:per|by) (?:country|location|region)\b
+    - \bfor the location for which it has been posted\b
+    - \b(?:pay|salary|compensation|base) (?:range|scale|band)s?\b[^.\n]{0,80}\b(?:in|for) (?:the )?(?:U\.?S\.?A?|United States|New York|NYC|San Francisco|Bay Area|California|Colorado|Washington|Canada|UK|United Kingdom|London|Switzerland|Zurich)\b
+    - \b(?:U\.?S\.?|United States|New York|NYC|San Francisco|California|Colorado|UK|London)[- ]based (?:candidates|employees|roles?)\b[^.\n]{0,60}\b(?:pay|salary|compensation|base)\b
+  # 写明的金额含浮动部分（OTE = on-target earnings，底薪 + 目标奖金）：详情页标"OTE（含浮动）"，不当底薪看
+  variable_patterns:
+    - \bOTE\b
+    - \bon[- ]target[- ](?:earnings|earning|income|compensation|pay)\b
+    - \bon[- ]target[- ]e\b
+
+# 技能标签（标题 + 正文）。name 是展示名，pattern 是正则。
+# aliases（可选）：me.yaml 里同一个技能的其他写法；岗位列表的"技能重合"用它和画像比对（大小写、空格、连字符、单复数不敏感，不影响打标签）。
+skills:
+  - { name: Python, pattern: '\bpython\b', aliases: [Python3, Python 3] }
+  - { name: PyTorch, pattern: '\bpytorch\b' }
+  - { name: TensorFlow, pattern: '\btensorflow\b', aliases: [TF] }
+  - { name: Kubernetes, pattern: '\bkubernetes\b|\bk8s\b', aliases: [k8s] }
+  - { name: LLMs, pattern: '\bllms?\b|large language model', aliases: [Large Language Models, Generative AI, GenAI] }
+  - { name: NLP, pattern: '\bnlp\b|natural language processing', aliases: [Natural Language Processing] }
+  - { name: MLOps, pattern: '\bmlops\b' }
+  - { name: AWS, pattern: '\baws\b', aliases: [Amazon Web Services] }
+  - { name: GCP, pattern: '\bgcp\b|google cloud', aliases: [Google Cloud, Google Cloud Platform] }
+  - { name: Azure, pattern: '\bazure\b' }
+  - { name: JAX, pattern: '\bjax\b' }
+  - { name: Hugging Face, pattern: '\bhugging\s*face\b', aliases: [HuggingFace, HF] }
+  - { name: Transformers, pattern: '\btransformers?\b' }
+  - { name: Vector databases, pattern: '\bvector (?:data)?bases?\b|\bvector stores?\b', aliases: [Vector DB, Vector DBs, Vector stores, Vector search] }
+  - { name: MLflow, pattern: '\bmlflow\b' }
+  - { name: RAG, pattern: '\brag\b|retrieval[- ]augmented', aliases: [Retrieval Augmented Generation] }
+  - { name: LangChain, pattern: '\blangchain\b' }
+
+# 硬过滤（。你自己的条件（城市、薪资底线、合同、黑名单）写在 data/profile/preferences.yaml，这里只放规则的辅助数据。
+filter:
+  # 规范城市名 -> 其他写法。preferences.yaml 的 locations 里写了某个城市，它的所有写法都算允许的地点
+  city_aliases:
+    Berlin: []
+    München: [Munich, Muenchen]
+  # 都市圈：preferences.yaml 的某个城市（或其别名）-> 算作该城市的近郊 / 周边城镇。
+  # 地点的城市字段或标签里出现该城市本身（含 LinkedIn 写法 "Berlin Metropolitan Area"、"Greater Munich Metropolitan Area"、"Munich, Bavaria, Germany"、"Poing bei München"）或下面任一城镇，就当作目标城市。
+  # 城镇名按整词匹配，忽略大小写和变音（ü/ue、ß/ss）；同一个镇有多种写法就都列出来
+  metro_areas:
+    Berlin:
+      - Potsdam
+      - Schönefeld
+      - Teltow
+      - Kleinmachnow
+      - Stahnsdorf
+      - Hennigsdorf
+      - Falkensee
+      - Oranienburg
+      - Bernau
+      - Ahrensfelde
+      - Hoppegarten
+      - Neuenhagen
+      - Blankenfelde-Mahlow
+      - Königs Wusterhausen
+      - Wildau
+      - Ludwigsfelde
+      - Großbeeren
+      - Brandenburg Metropolitan
+      - Greater Berlin
+      - Metropolregion Berlin
+    München:
+      - Garching
+      - Unterföhring
+      - Ismaning
+      - Oberhaching
+      - Unterschleißheim
+      - Planegg
+      - Martinsried
+      - Gräfelfing
+      - Freising
+      - Ottobrunn
+      - Taufkirchen
+      - Poing
+      - Haar
+      - Aschheim
+      - Feldkirchen
+      - Neubiberg
+      - Grasbrunn
+      - Hallbergmoos
+      - Eching
+      - Oberschleißheim
+      - Grünwald
+      - Pullach
+      - Putzbrunn
+      - Vaterstetten
+      - Parsdorf
+      - Kirchheim bei München
+      - Dachau
+      - Germering
+      - Puchheim
+      - Starnberg
+      - Erding
+      - Allershausen
+      - Greater Munich
+      - Metropolregion München
+  # 太粗、看不出在哪的区域：preferences.yaml 的城市 -> 包含它的州 / 区域。只写这个区域的地点保留并标"地点只到国家/区域层面"
+  metro_regions:
+    Berlin: [Brandenburg]
+    München: [Bavaria, Bayern, Upper Bavaria, Oberbayern]
+  # 地点文字只写了国家（"Germany"、"Deutschland"、"bundesweit"）：整段文字要完全匹配。
+  # 远程 / 混合 / 办公方式未知的岗位一律保留并标 location_country_level；纯 onsite 岗位按 onsite_policy 处理：
+  #   keep_note = 也保留并标注（岗位可能在德国任何地方，交给 AI 打分和你自己判断，默认）；exclude = 过滤掉
+  country_level:
+    patterns:
+      - ^\W*(?:germany|deutschland|deutschlandweit|bundesweit|nationwide|german)\W*$
+      - ^\W*(?:germany|deutschland)\W*(?:\((?:remote|hybrid|onsite|on-site)\))?\W*$
+    onsite_policy: keep_note
+  # 地点文字没有指向具体地方（"Home Office"、"multiple locations"）：这种岗位可能就在允许的城市，保留并标"地点不明"。有具体地名（"Bochum"）但不是允许的城市就过滤
+  generic_location_patterns:
+    - ^\W*(?:home ?office|homeoffice|multiple locations|various locations|several locations|mehrere standorte|flexible|flexibel|remotely in)\W*$
+  # 欧盟成员国（ISO 代码），remote_scope 为 eu_any 时用
+  eu_countries: [AT, BE, BG, HR, CY, CZ, DK, EE, FI, FR, DE, GR, HU, IE, IT, LV, LT, LU, MT, NL, PL, PT, RO, SK, SI, ES, SE]
+  remote:
+    # 远程岗位的地点写 "欧盟 / 欧洲范围"：remote_scope 为 eu_hire_in_de / eu_any 时算在范围内
+    eu_wide_patterns:
+      - \beu\b
+      - \beuropean union\b
+      - \beurope\b
+      - \beea\b
+      - \bemea\b
+      - \beuropa\b
+    # 远程岗位的地点写 "全球"：除 remote_scope 为 none 外都算在范围内
+    worldwide_patterns:
+      - \bworldwide\b
+      - \bglobal(?:ly)?\b
+      - \banywhere\b
+      - \bweltweit\b
+    # 没有国家代码、但文字明确指向欧盟 / 欧洲以外的地区或地名：不在范围内（美国州名和城市、加拿大、拉美、亚太、中东、非洲）
+    outside_patterns:
+      - \busa\b
+      - \bu\.s\.
+      - \bunited states\b
+      - \bthe us\b
+      - \bnorth america\b
+      - \bamericas?\b
+      - \blatam\b
+      - \bcanada\b
+      - \bapac\b
+      - \basia\b
+      - \bindia\b
+      - \bsingapore\b
+      - \baustralia\b
+      - \bnew zealand\b
+      - \bmiddle east\b
+      - \bafrica\b
+      - \b(?:colombia|mexico|brazil|brasil|argentina|chile|peru|uruguay|costa rica|panama|ecuador|venezuela|bolivia|paraguay|guatemala)\b
+      - \b(?:japan|tokyo|korea|seoul|china|beijing|shanghai|hong kong|taiwan|vietnam|thailand|bangkok|malaysia|kuala lumpur|indonesia|philippines|manila|pakistan|bangladesh|sri lanka)\b
+      - \b(?:israel|tel aviv|saudi|riyadh|dubai|uae|emirates|qatar|egypt|nigeria|kenya|south africa|morocco|ghana)\b
+      - \b(?:toronto|vancouver|montreal|ottawa|ontario|british columbia|quebec|alberta)\b
+      - \b(?:new york|san francisco|los angeles|seattle|austin|boston|denver|chicago|atlanta|dallas|houston|miami|washington|mountain view|palo alto|san jose|san diego|portland|philadelphia|phoenix|salt lake|raleigh|pittsburgh|minneapolis|detroit|nashville|charlotte|brooklyn|cambridge, ma|boulder|sunnyvale|menlo park|redwood city|bellevue|arlington|reston|mclean|edison)\b
+      - \b(?:alabama|alaska|arizona|arkansas|california|colorado|connecticut|delaware|florida|hawaii|idaho|illinois|indiana|iowa|kansas|kentucky|louisiana|maine|maryland|massachusetts|michigan|minnesota|mississippi|missouri|montana|nebraska|nevada|new hampshire|new jersey|new mexico|north carolina|north dakota|ohio|oklahoma|oregon|pennsylvania|rhode island|south carolina|south dakota|tennessee|texas|utah|vermont|virginia|wisconsin|wyoming)\b
+      - \b(?:east coast|west coast|midwest|northeast|southeast|southwest|northwest|central) - (?:united states|us|usa)\b
+    # 远程岗位标题里的地区标记（"Staff AI Engineer - US"、"FDE - US East Coast"、"(Americas)"）：只招这些地区，
+    # 不管地点和正文怎么写都判不在范围内；标题同时写了 eu_wide / worldwide 的地区（"EMEA / Americas"）时不算
+    title_outside_patterns:
+      - '(?:^|[-–—|,(/:])\s*(?:us|usa|u\.s\.(?:a\.)?|united states|north america|americas|latam|latin america|canada|apac|asia|india|brazil|mexico|australia)(?:\s+(?:east|west|central)(?:\s+coast)?)?(?:\s+(?:remote|only|based))?\s*(?:$|[-–—|,)/])'
+      - \b(?:us|u\.s\.) (?:east|west|central) coast\b
+      - \b(?:east|west) coast\b
+      - \b(?:us|usa|u\.s\.|canada)[- ](?:based|only|remote)\b
+    # 美国州代码："Austin, TX"、"Remote - NY"（区分大小写，只在逗号 / 破折号 / 斜杠后；DE 是德国，不放进来）
+    outside_state_codes: [AL, AK, AZ, AR, CA, CO, CT, FL, GA, HI, ID, IL, IN, IA, KS, KY, LA, MA, MD, MI, MN, MS, MO, MT, NE, NV, NH, NJ, NM, NY, NC, ND, OH, OK, OR, PA, RI, SC, SD, TN, TX, UT, VT, VA, WA, WV, WI, WY, DC]
+    # 正文里写明岗位可以在德国 / 欧盟 / 欧洲受雇：地点在范围外的远程岗位也保留并标注（要求 "remote / hire / based / work" 等词与地区靠得很近，避免 "customers across Europe" 这类误判）
+    description_in_scope_patterns:
+      - \b(?:remote(?:ly)?|work(?:ing)? remotely|work from (?:home|anywhere)|home ?office)\W{0,3}(?:from|within|in|across|throughout)\s+(?:anywhere\s+in\s+)?(?:the\s+)?(?:germany|deutschland|eu|european union|europe|eea)\b
+      - \b(?:germany|deutschland|eu|european union|europe|eea)[- ](?:wide|remote)\b
+      - \b(?:hir(?:e|ing)|employ(?:ing|ment)?|candidates?|residents?)\b[^.\n]{0,30}\b(?:in|within|across|throughout)\s+(?:the\s+)?(?:germany|deutschland|eu|european union|europe|eea)\b
+      - \b(?:hir(?:e|ing)|candidates?|apply from|work from|employees? in)\b[^.\n]{0,80}\b(?:germany|deutschland)\b
+      - \b(?:deutschlandweit|bundesweit)\b[^.\n]{0,30}\b(?:remote|home ?office|mobil)
+      - \bremote\b[^.\n]{0,15}\b(?:aus|in|innerhalb)\s+(?:deutschland|der eu|europa)\b
+  # preferences.yaml 的 seniority（不是 all 时）-> 匹配的岗位级别；岗位没写级别（unknown）就保留
+  seniority_map:
+    entry: [intern, junior]
+    mid: [mid]
+    senior: [senior, staff, principal]
+    lead: [lead, manager, staff, principal]

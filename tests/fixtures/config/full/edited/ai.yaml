@@ -1,0 +1,210 @@
+# AI provider 层。密钥只放在 .env，不要写在这里。
+
+# AI 在哪里执行：
+#   host      容器里的 runner 只写一个 run_ai 请求，由宿主机上的 ai-worker（launchd）用本机 claude / codex 订阅执行
+#             AI 步骤和 notify 步骤；容器里不需要任何 AI 凭证（默认）
+#   container runner 自己在容器里执行（需要把订阅令牌或 API key 放进容器，不推荐）
+config_version: 2
+execution: host
+
+# 宿主机 ai-worker（pnpm ai-worker）
+host_worker:
+  # 每隔多少秒看一次请求队列
+  poll_seconds: 5
+  # 每次最多处理多少个请求，其余留到下一次
+  max_requests_per_poll: 10
+  # 心跳间隔（秒）
+  heartbeat_seconds: 15
+  # 超过多少秒没有心跳就算离线：/sources 显示离线，runner 发 Telegram 告警
+  offline_after_seconds: 180
+  # 宿主机磁盘剩余空间多少分钟量一次（量的是 doctor 的 disk.docker 那个卷，即 Docker Desktop 存数据的地方）；/sources 的低空间提示用它
+  disk_check_minutes: 10
+  # ai-worker 自己的日志（launchd 装的那份写在外置盘 data/logs/）：超过这么多 MB 就轮转成 .1、.2 ……
+  log_max_mb: 10
+  # 保留多少份旧日志（.1 最新）；0 = 只清空，不留旧的
+  log_keep: 3
+  # 收到 SIGTERM 后最多等多少秒让当前请求和数据库连接收尾；超时就记一条错误并强制退出，让 launchd 重启它。再收到一次信号会立刻退出
+  shutdown_grace_seconds: 30
+  # 一次心跳写入或一次磁盘测量最多等多少秒；超时就放弃这一次并记日志，心跳循环不会被卡住
+  step_timeout_seconds: 20
+  # Docker Desktop 的数据目录（绝对路径），/sources 的低空间提示量这个卷。不写 = ai-worker 自己去读 Docker 的设置文件，
+  # 而 launchd 下读它可能被 macOS 隐私授权弹窗一直卡住。pnpm run doctor 会打印该填的值；填了就不再读那个文件
+  # docker_data_path: /path/to/docker-data
+
+# 全局顺序：先试 codex-cli，再 claude-cli，最后走 API 层（顺序见 api_order）。
+# claude 订阅的额度和你自己交互使用 Claude 共用，所以默认放在 codex 后面，并限制每天的请求数（providers.*.daily_request_cap）。
+order: [codex-cli, claude-cli, api]
+api_order: [deepseek, anthropic, mimo]
+
+providers:
+  # 订阅 CLI：在临时空目录里以非交互方式运行，不开工具、不写文件；费用按 0 计（订阅）。
+  # 每个 provider 都有 enabled（false = 路由不会试它）和 daily_request_cap（每天最多多少次模型调用，含失败的；0 = 不限，按 schedule.yaml 的时区算一天）。
+  # 模型目录：每个 provider 有哪些模型、单价多少，写在 models.yaml（文件开头有"新模型上线"步骤）；这里只选用哪个：
+  # model / strong_model 必须是 models.yaml 里这个 provider 下的模型（/settings 的模型下拉只列它们）。
+  claude_cli:
+    enabled: true
+    daily_request_cap: 50
+    command: claude
+    model: claude-haiku-4-5
+    strong_model: claude-sonnet-5-5
+    timeout_seconds: 120
+  codex_cli:
+    enabled: true
+    daily_request_cap: 0
+    command: codex
+    # model: 不写就用 CLI 内置的默认模型（0.160.1 是 gpt-6.1-sol）。调用带 --ignore-user-config，
+    # 所以 ~/.codex/config.toml 里选的模型不生效；实际用的模型会记在 ai_usage 里。
+    # G8：推理强度。打分、信号、翻译用 low 足够，快很多；可按任务覆盖，例如 { translate: low }。
+    reasoning_effort: low
+    reasoning_effort_by_task: {}
+    # G0：精简 Codex 的 agent 上下文。每次调用输入 token 约 1.6 万 -> 约 0.3 万（实测 0.160.1）。false = 旧行为。
+    trim_context: true
+    # 每次调用关掉的 Codex feature，以 -c features.<名字>=false 传入（--disable 遇到未知名字会直接退出，-c 会忽略）。
+    disable_features: [shell_tool, unified_exec, multi_agent, plugins, apps, memories, image_generation, browser_use, computer_use, in_app_browser, view_image, tool_suggest, skill_search, goals, sleep_tool, hooks, workspace_dependencies, worktrees, code_mode_host, mentions_v2, realtime_conversation]
+    # 额外的 -c 覆盖：键 -> TOML 值（字符串要带引号）。键只允许小写字母、数字、下划线和点。
+    config_overrides:
+      web_search: '"disabled"'
+      skills.include_instructions: "false"
+      agents.enabled: "false"
+      include_permissions_instructions: "false"
+      include_environment_context: "false"
+      include_collaboration_mode_instructions: "false"
+      include_apps_instructions: "false"
+    # G7：同一进程里同时运行的 codex 调用数；多个进程共用 ~/.codex/auth.json，刷新 token 时可能撞车。
+    max_concurrency: 3
+    # 第一次遇到登录（auth）错误时等这么多秒再重试一次，仍失败才判定登录过期；0 = 不重试。
+    auth_retry_seconds: 5
+    # G6：参数集验证过的 codex 版本。装的是别的版本只提醒（ai:probe、ai-worker 启动日志），不阻断。升级清单见 docs/ai-providers.md。
+    verified_version: "0.160.1"
+    timeout_seconds: 180
+  anthropic:
+    enabled: true
+    daily_request_cap: 0
+    model: claude-haiku-4-5
+    strong_model: claude-sonnet-5-5
+  deepseek:
+    enabled: true
+    daily_request_cap: 0
+    base_url: https://api.deepseek.com
+    model: deepseek-v4-flash
+    # DeepSeek 同样只有 JSON mode：schema 写进 prompt
+    json_mode_only: true
+  mimo:
+    enabled: true
+    daily_request_cap: 0
+    base_url: https://api.xiaomimimo.com/v1
+    model: mimo-v2.5-pro
+    # MiMo 只有 JSON mode，没有 json_schema
+    json_mode_only: true
+
+# 五种任务默认都按全局顺序；需要时给某个任务加 order 覆盖，例如：
+#   translate:
+#     order: [deepseek, api]
+# 任务覆盖还可以加 models: {服务商: 模型}，只能给这个任务自己的 order 里直接列出的服务商指定，例如：
+#     models: {claude-cli: claude-sonnet-5-5}
+# 拆解也可以在这里加 breakdown: {order: [...]}，不写就沿用全局顺序
+tasks:
+  score: {order: [codex-cli]}
+  signals: {order: [codex-cli]}
+  # 实测：claude-cli 翻 2500 字一段常超过 90 秒，codex-cli 更快，所以翻译先用 codex
+  translate:
+    order: [codex-cli, claude-cli, api]
+  summarize: {order: [codex-cli]}
+  suggest: {order: [codex-cli]}
+
+# API provider 的请求超时（秒）和单次最大输出 token
+api_timeout_seconds: 60
+max_output_tokens: 4096
+
+# 冷却：provider 报额度 / 会话上限 / 限流时，所有进程（runner、ai-worker）都跳过它，
+# 直到错误信息里写的恢复时间；解析不出来就冷却 default_minutes；最长不超过 max_minutes。
+cooldown:
+  default_minutes: 60
+  max_minutes: 360
+
+# 一轮 AI 工作（打分、信号）最多占多少分钟，超过就留到下一轮；0 = 不限。推送在打分之后马上发，翻译放在推送之后。
+cycle_budget_minutes: 30
+# 这一轮没有新岗位（只是在消化积压）时的预算；0 = 不限
+idle_cycle_budget_minutes: 10
+
+# 每轮最多处理多少条岗位
+per_cycle_limit: 80
+# 每月付费 API 费用上限（美元）
+monthly_api_budget_usd: 10
+# 分数 ≥ 此值的岗位自动翻译成中文
+translate_auto_min_score: 70
+
+# 中文翻译
+translation:
+  # JD 按段落切成最长这么多字符的片段，一片一个请求；每片翻完立刻存下，失败重试只补没翻完的片
+  chunk_chars: 2500
+  # 一个 provider 翻一片最多等多少秒（盖过 providers.*.timeout_seconds）。超时就换下一个 provider，
+  # 并且这条 JD 剩下的片不再试这个慢 provider
+  chunk_timeout_seconds: 90
+  # 固定译法：原文术语 -> 译文（写成和原文一样 = 保留英文）。同一个职位名每次翻译成同一个说法；
+  # 只有出现在该片文本里的术语会发给 AI。不区分大小写
+  glossary:
+    Forward Deployed Engineer: Forward Deployed Engineer
+    Forward Deployed Software Engineer: Forward Deployed Software Engineer
+    Solutions Engineer: Solutions Engineer
+    Staff Engineer: Staff-Ingenieur
+    Customer Engineer: Customer Engineer
+    Developer Advocate: Developer Advocate
+    Machine Learning Engineer: Machine Learning Engineer
+    AI Engineer: AI Engineer
+
+# 打分
+scoring:
+  # 发给 AI 的 JD 最多多少字符；更长的保留开头和结尾（德语要求常写在结尾）
+  jd_max_chars: 6000
+  # 截断时，开头占的比例（其余取自结尾）
+  jd_head_share: 0.7
+  # 同时打分的岗位数（CLI 订阅 provider 不宜太高）
+  concurrency: 3
+  # 岗位要求的德语高于 me.yaml 里的德语等级时，从匹配分里扣的分数；没写的等级不扣。
+  # 由代码在 prompt 之外计算，保证每次一致。
+  language_penalty:
+    B2: 5
+    C1: 20
+    C2: 25
+  # 一次"给未打分岗位打分"请求（/settings）最多打多少条。每轮的 per_cycle_limit 不变，这是单独的积压预算。
+  backlog_per_run: 40
+  # 打分顺序：先用不花 AI 的相关度预打分排序，再从高到低送给 AI。
+  # 预打分 = 各项权重 x 该项得分（0..1）之和，减去德语差距；只用来排顺序，不显示。
+  priority:
+    weights:
+      title: 40 # 标题命中目标职位（preferences.yaml）或搜索关键词（search.yaml）
+      signals: 25 # 薪酬信号：已存的信号加分 / interests.yaml 的 bonus_cap（T1/T2 优先）
+      location: 15 # 在想去的城市最高；周边、远程次之
+      seniority: 10 # 级别匹配，见 seniority_fit
+      recency: 10 # 越新越靠前，见 recency_days
+      language_gap: 10 # 要求的德语高于 me.yaml 时扣分（与 german_penalty 成比例）
+    # search.yaml 关键词组里的词，相对目标职位的标题匹配系数（1 = 一样）
+    keyword_group_factor: 0.9
+    # 词都在标题里但不相邻（"Senior Android Engineer - AI Product" 对 "AI Product Engineer"）
+    all_words_match: 0.8
+    # 至少一半的词在标题里：此系数 x 命中词的比例
+    partial_match: 0.5
+    # 单独命中这些词不算部分匹配（"Cooling Flow Design Engineer" 对 "AI Engineer"）
+    generic_title_words: [engineer, engineers, engineering, developer, entwickler, entwicklerin, manager, specialist, consultant, architect, analyst, associate, lead, solutions]
+    seniority_fit:
+      intern: 0
+      junior: 0.2
+      mid: 0.7
+      senior: 1
+      staff: 1
+      principal: 0.9
+      lead: 0.8
+      manager: 0.5
+      unknown: 0.6
+    location_fit:
+      exact: 1 # 地点写的是 preferences.yaml 的城市
+      nearby: 0.6 # 周边地点
+      remote: 0.7 # 远程且在范围内（含只写国家的 "Germany (Remote)"、JD 写明可在德国受雇的）
+      country_level: 0.5 # 非远程、地点只写到国家（"Germany"）
+      other: 0.3 # 其他
+      unclear: 0.1 # 过滤时标了"远程范围不明"或"地点不明"（"Remote - Virginia"），多半不在德国；只写国家的不算不明
+    # 地点不明的岗位（上面的 unclear）整体优先度再乘这个系数：它们多半不在德国
+    unclear_location_factor: 0.7
+    # 发布超过这么多天的岗位不再得时效分，之前线性衰减
+    recency_days: 14

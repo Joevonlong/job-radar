@@ -1,0 +1,46 @@
+# 搜索条件。每个关键词组用 OR 合并成一次查询，再按城市各查一次。
+config_version: 2
+keyword_groups:
+  platform:
+    - Platform Engineer
+  # 工程类
+  engineering:
+    - AI Engineer
+    - Applied AI Engineer
+    - LLM Engineer
+    - GenAI Engineer
+    - Machine Learning Engineer
+    - AI Agent Engineer
+    - AI Product Engineer
+    - Agentic Engineer
+    - AI Enablement Engineer
+    - Developer Productivity Engineer
+  # FDE 与 Solutions 类
+  fde_solutions:
+    - Forward Deployed Engineer
+    - AI Solutions Engineer
+    - AI Solutions Architect
+    - AI Deployment Engineer
+    - AI Customer Engineer
+    - AI Transformation
+    - AI Consultant
+  # 德语岗位名
+  german:
+    - KI Engineer
+    - KI-Entwickler
+
+locations:
+  - Berlin
+  - München
+
+# 远程岗位范围：none | home_country（本国受雇）| worldwide | {region: [eu, CH …]}（这些区域或国家内受雇）
+remote_scope: home_country
+
+# 各轮的回看时间窗（小时）。键对应 schedule.yaml：weekday_morning → morning，weekday_evening → evening，weekend → weekend
+window_hours:
+  morning: 24
+  evening: 10
+  weekend: 24
+
+# 每个关键词组、每个城市最多取多少条
+max_per_group_per_location: 40

@@ -18,7 +18,7 @@ export interface EffectiveEntry {
   hash: string | null;
   /** The first line of the error (names the file and the field, never the contents); null when it loads. */
   error: string | null;
-  /** The validated value, for the golden files. */
+  /** The validated value (null when it is missing or invalid). */
   value: unknown;
 }
 

@@ -11,7 +11,7 @@ import { parseConfigYaml, parseConfigYamlDocument } from "@/lib/config/yaml-opti
 import { FIXTURE_DEFAULTS_DIR } from "./helpers";
 
 /** A config file of the fixture defaults, parsed and migrated (in memory). */
-export function migratedDocument(name: ConfigName, text: string, filePath = configRegistry[name].file): Document {
+export function migratedDocument(name: ConfigName, text: string, filePath: string = configRegistry[name].file): Document {
   const doc = parseConfigDocument(name, text, filePath);
   migrateConfigDocument(name, doc, filePath);
   return doc;

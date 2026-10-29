@@ -1,0 +1,486 @@
+# 来源清单：所有岗位采集来源都在这一个文件里；网页 /sources/registry 和 `pnpm sources:list` 读的就是它。
+# 结构：
+#   顶部       付费总预算、熔断、并发、HTTP、"测试"按钮的规模（所有通道共用）
+#   linkedin   LinkedIn 级联顺序和四个 LinkedIn 通道
+#   jobspy     jobspy sidecar（linkedin-guest、indeed、jobspy-google 共用）
+#   sources    其他通道：招聘网站、搜索 API、公司 ATS、board 发现、Gmail 提醒邮件
+#   ats_boards 要采集的公司 ATS board（原 companies.yaml）
+#   registry   来源清单页的统计窗口、判定阈值、导入上限
+# 条目 id：通道就是通道名（greenhouse、gmail-alerts、linkedin-session:recommended）；公司是 board:<ats>:<token>（board:greenhouse:celonis）。
+# 网页上的修改（开关、公司增删改、导入）都写回这个文件，注释会保留；数据库表 source_registry 是它的镜像（runner 约 5 秒内同步）。
+# 不要在这里写密钥（放 .env）。jobspy.proxies 可能含账号密码：网页不显示，导出时打码，导入时不改。
+
+# 采集通道（docs/plan.md §4）。未实现或需要额外配置的通道默认关闭。
+# monthly_budget_usd：该通道每月可花的付费额度（美元），0 表示不允许产生付费用量；单个通道不能超过 paid_total_monthly_budget_usd。
+# throttle：每次请求之间随机等待 min~max 毫秒。 max_results：单次请求最多取多少条。
+
+# 所有付费采集通道每月合计花费的上限（美元）；各通道实际花费之和不得超过它，由预算控制执行。
+# （AI 费用另有上限，见 ai.yaml 的 monthly_api_budget_usd。）
+paid_total_monthly_budget_usd: 15
+
+# 熔断：连续失败 failures 次后，通道标为不可用，冷却 cooldown_hours 小时后再试
+circuit_breaker:
+  failures: 3
+  cooldown_hours: 24
+
+# 采集步骤：并行采集的通道数（LinkedIn 级联整体算一个）；通道内部的查询始终串行
+collect:
+  concurrency: 3
+
+# 通道 ctx.http 的默认值：单次请求超时、重试次数（网络错误 / 5xx / 429，尊重 Retry-After）、指数退避的起点和上限
+http:
+  timeout_ms: 30000
+  max_retries: 3
+  backoff_base_ms: 1000
+  backoff_max_ms: 30000
+
+# /sources 通道卡片上的"测试"：runner 只跑第一个查询、最多取 max_results 条，只在内存里解析，
+# 不写岗位、运行记录、用量和熔断状态。有一轮正在跑、预算用完或未配置时不测。
+test_channel:
+  max_results: 5
+  # 发现类通道（tavily、brave）测试时最多发几次搜索（每次都扣额度）；只看接口是否可用，发现的 board 不保存
+  max_queries: 1
+  # 超过多少秒没结束就放弃
+  timeout_seconds: 120
+  # 不提供测试的通道类型：paid 每条都计费，session（LinkedIn 登录态）有每日页数上限；它们用"立即采集"
+  excluded_kinds: [paid, session]
+
+linkedin:
+  # 级联：主搜索每轮只用排在最前且"可用"（已启用、预算未用完、未熔断）的一个
+  cascade:
+    - linkedin-brightdata
+    - linkedin-apify
+    - linkedin-session
+    - linkedin-guest
+
+  brightdata:
+    enabled: true
+    monthly_budget_usd: 5 # 只计超出免费额度之后的花费
+    throttle: { min_delay_ms: 500, max_delay_ms: 1500 }
+    max_results: 300
+    # 每月免费条数，先用完免费额度再产生费用
+    free_records_per_month: 5000
+    dataset_id: gd_lpfll7v5hcqtkxl6l # "LinkedIn job listings - discover by keyword"
+    cost_per_1k_usd: 1.5 # 超出免费额度后每 1000 条的价格；0 表示按免费处理
+    poll_interval_ms: 3000 # snapshot 进度的轮询间隔
+    # 从触发到下载完成（snapshot 构建 + 下载）合计最长等待多久；超时记为可重试的失败，并在日志里写出 snapshot id（供应商保留 30 天，可事后取回）
+    timeout_ms: 600000
+    country: DE # 所有城市查询用的国家代码
+    # 远程查询（search.yaml 的 remote_scope）用的 location
+    remote_locations:
+      eu_hire_in_de: Germany
+      eu_any: European Union
+      worldwide: Worldwide
+
+  apify:
+    # 级联第 2 位。没有 .env 的 APIFY_TOKEN（或 actor_id 为空）时通道显示"未配置"，级联直接跳过它，不产生失败记录。
+    # actor 选型和价格依据见 research/linkedin-apify-actors-2026-10.md；换 actor 只需改 actor_id、价格和 input_template。
+    enabled: true
+    monthly_budget_usd: 10
+    throttle: { min_delay_ms: 1000, max_delay_ms: 3000 }
+    max_results: 300
+    actor_id: valig/linkedin-jobs-scraper
+    api_base_url: "https://api.apify.com" # POST /v2/acts/{actor}/run-sync-get-dataset-items
+    # 记账：每条结果的价格 + 每次运行一次的启动费（Free 档价格：$0.40 / 1000 条，启动 $0.001 / GB）。价格以 actor 页面 Pricing 为准，套餐不同会有折扣
+    price_per_1k_usd: 0.4
+    run_start_usd: 0.001
+    memory_mb: 1024 # 单次运行的内存；启动费按 GB 计
+    timeout_secs: 300 # 单次运行超时；同步接口上限 300 秒，超过 Apify 返回 408（记为可重试的失败）
+    country_name: Germany # 城市查询的地点 = "<城市>, <国家>"
+    # 远程查询（search.yaml 的 remote_scope）用的 location
+    remote_locations:
+      eu_hire_in_de: Germany
+      eu_any: European Union
+      worldwide: Worldwide
+    # 该 actor 的"发布时间"过滤写法（LinkedIn f_TPR）：窗口 ≤24 小时 / ≤7 天 / ≤30 天 / 更长（空 = 不带这个键）
+    date_posted: { day: r86400, week: r604800, month: r2592000, any: "" }
+    # actor 输入模板：{keywords}（关键词组用 "A" OR "B" 合并）、{location}、{date_posted}、{limit}（整串是 "{limit}" 时变成数字）
+    input_template:
+      keywords: "{keywords}"
+      location: "{location}"
+      datePosted: "{date_posted}"
+      limit: "{limit}"
+    # 远程查询在模板上叠加的键：LinkedIn 的 f_WT=2 是"远程"工作方式
+    remote_input:
+      urlParam:
+        - { key: f_WT, value: "2" }
+
+  session:
+    # 级联第 3 位：用你自己的 LinkedIn 登录态（Playwright，只读）搜索岗位。需要先在宿主机运行 `pnpm auth:linkedin` 登录一次；
+    # 没有登录态（.auth/linkedin.json）时 /sources 显示"未登录"，级联直接跳过它。遇到登录页或验证页（checkpoint / CAPTCHA）立即停止、熔断并发 Telegram，
+    # 绝不尝试自动通过。说明见 spec/guides/linkedin-session.md。
+    enabled: false # 登录并确认 `pnpm cycle:run --channel linkedin-session --dry-run` 正常后再打开
+    monthly_budget_usd: 0
+    throttle: { min_delay_ms: 3000, max_delay_ms: 8000 } # 两次页面加载之间随机等待
+    max_results: 50 # 每个查询最多读多少条（再受 search.yaml 的 max_per_group_per_location 限制）
+    # "为你推荐"旁路（通道 linkedin-session:recommended）：每天固定跑 1 次，不参与级联；时间见 schedule.yaml 的 linkedin_recommended
+    recommended_daily: true
+    recommended_max_results: 25
+    daily_request_limit: 200 # 每个自然日（schedule.yaml 的时区）最多加载多少个 LinkedIn 页面（搜索页、详情页、推荐页合计）；用完后级联换下一个通道
+    max_pages: 2 # 每个查询最多翻几页搜索结果（每页约 25 条）
+    fetch_details: true # 是否为每条新岗位再打开详情页（JD 正文、薪资、办公方式、申请人数）；库里已有的岗位不再打开
+    site:
+      base_url: https://www.linkedin.com
+      auth_file: .auth/linkedin.json # 登录态文件，相对运行目录（runner 容器里是 /app/.auth，只读挂载）；不提交、权限 600
+      country_name: Germany # 城市查询的地点 = "<城市>, <国家>"
+      # 远程查询（search.yaml 的 remote_scope）用的 location
+      remote_locations:
+        eu_hire_in_de: Germany
+        eu_any: European Union
+        worldwide: Worldwide
+    browser:
+      headless: true # 无界面运行；`pnpm auth:linkedin` 登录时总是有界面
+      navigation_timeout_ms: 30000 # 单个页面加载超时
+      render_wait_ms: 1500 # 页面加载后等待渲染（单页应用）的时间
+      scroll_steps: 6 # 搜索结果和推荐列表只渲染可见的卡片：向下滚动几次把整页加载出来
+      scroll_pause_ms: 400 # 每次滚动之间的停顿
+      locale: en-US # 浏览器语言（LinkedIn 界面语言跟随它；相对时间文字中英文都能解析）
+      block_resources: [image, font, media] # 不加载这些类型的资源，省流量也更像读文字
+      user_agent: "" # 留空 = 浏览器自带的 User-Agent
+
+  guest:
+    enabled: true # jobspy 访问未登录接口：免费，最容易被 429
+    monthly_budget_usd: 0
+    throttle: { min_delay_ms: 2000, max_delay_ms: 6000 }
+    max_results: 100
+
+# python-jobspy sidecar：linkedin-guest、indeed、jobspy-google 共用。
+# 环境变量 JOBSPY_URL 优先于 url（compose 里给 runner 设为 http://jobspy:8000；本机直接跑 uvicorn 时用下面的默认值）。
+jobspy:
+  url: http://127.0.0.1:8000
+  timeout_ms: 180000 # 一次搜索（含逐条抓 LinkedIn 描述）可能要几十秒
+  country_indeed: germany
+  linkedin_fetch_description: true # 逐条抓 LinkedIn 描述：多一次请求，更容易 429；关掉则 LinkedIn 岗位没有正文
+  # 远程查询用的地点（对应 search.yaml 的 remote_scope）；空字符串 = 不限地点
+  remote_location:
+    eu_hire_in_de: Germany
+    eu_any: European Union
+    worldwide: ""
+  # 代理列表（轮换），默认空 = 直连。代理 URL 可能含账号密码：不要提交真实值
+  proxies: []
+
+# 其他来源（docs/plan.md §4.2、§4.3）
+sources:
+  arbeitsagentur:
+    enabled: true
+    monthly_budget_usd: 0
+    throttle: { min_delay_ms: 500, max_delay_ms: 1500 }
+    max_results: 100
+    # Jobsuche API (rest.arbeitsagentur.de, docs: https://jobsuche.api.bund.dev/)；搜索走 /pc/v6/jobs，详情走 /pc/v4/jobdetails/{base64(refnr)}
+    base_url: https://rest.arbeitsagentur.de/jobboerse/jobsuche-service
+    # 公开的客户端 key（BA 官方文档里就是这个值），不是机密，所以可以留在 YAML 里
+    api_key: jobboerse-jobsuche
+    radius_km: 30 # 城市周边半径
+    page_size: 50 # 每页条数
+    fetch_details: true # 是否为每条岗位再取详情（JD 正文只在详情里）
+    max_details_per_query: 25 # 每个查询最多取多少条详情
+    reuse_known_details: true # 库里已有详情的岗位不再取详情，沿用库里的；false 则每轮都重取
+    # 远程查询：不带城市，搜全德国；只保留岗位声明可以居家办公（homeofficemoeglich）的。false 则保留全部结果
+    remote_requires_home_office: true
+    remote_max_pages: 4 # 过滤时每个关键词最多翻多少页（大多数结果是到岗岗位）
+  indeed:
+    enabled: true
+    monthly_budget_usd: 0
+    throttle: { min_delay_ms: 2000, max_delay_ms: 5000 }
+    max_results: 100
+  # StepStone / XING：公开搜索页里内嵌的 JSON，纯 HTTP，不需要浏览器、不登录。遇到 403 / 验证页立即停（blocked），不重试。
+  # 搜索结果是宽松匹配：只保留标题命中本次查询关键词或 include_terms 的岗位（详见 title_prefilter），其余不抓详情。
+  stepstone:
+    enabled: true # 2026-10 实测约 75 次请求无验证码、无限流
+    monthly_budget_usd: 0
+    throttle: { min_delay_ms: 3000, max_delay_ms: 8000 }
+    max_results: 50
+    base_url: https://www.stepstone.de
+    user_agent: "JobRadar/0.1 (personal job search)"
+    radius_km: 30 # 城市周边半径
+    max_pages: 2 # 每个关键词最多翻几页（每页 25 条，按发布时间排序）
+    fetch_details: true # 是否为每条岗位再取详情页（JD 正文只在详情页里）
+    max_details_per_query: 25
+    reuse_known_details: true # 库里已有详情的岗位不再打开详情页，沿用库里的
+    title_prefilter:
+      enabled: true
+      # 标题含这些词（整词匹配）的岗位，即使没命中本次查询的关键词也保留
+      include_terms: [AI, ML, KI, LLM, GenAI, Machine Learning, Applied Scientist, Forward Deployed]
+      # 标题含这些词的岗位一律丢弃（学生岗、实习）
+      exclude_terms: [Werkstudent, Working Student, Intern, Internship, Praktikum, Praktikant]
+  xing:
+    enabled: false # 默认关闭：XING 的 robots.txt 不允许抓 /jobs/search/（见 research/stepstone-xing-access-2026-10.md）
+    monthly_budget_usd: 0
+    throttle: { min_delay_ms: 3000, max_delay_ms: 8000 }
+    max_results: 50
+    base_url: https://www.xing.com
+    user_agent: "JobRadar/0.1 (personal job search)"
+    radius_km: 30
+    max_pages: 3 # 每个关键词最多翻几页（每页 20 条；XING 按相关度排序，没有时间筛选，只能事后按发布时间过滤，所以多翻一页）
+    fetch_details: true
+    max_details_per_query: 25
+    reuse_known_details: true # 同 stepstone
+    # XING 的"完全远程"筛选值（搜索 URL 的 remoteOption 参数）；带哈希后缀，XING 改了就要更新
+    remote_option_id: FULL_REMOTE.050e26
+    title_prefilter:
+      enabled: true
+      include_terms: [AI, ML, KI, LLM, GenAI, Machine Learning, Applied Scientist, Forward Deployed]
+      exclude_terms: [Werkstudent, Working Student, Intern, Internship, Praktikum, Praktikant]
+  jsearch:
+    enabled: false # M5：JSearch（Google for Jobs，RapidAPI）。需要 .env 的 JSEARCH_API_KEY（见 spec/guides/jsearch.md）；没有 key 时通道显示"未配置"，不发任何请求
+    monthly_budget_usd: 0 # 只计超出 monthly_request_limit 之后的花费（overage_cost_per_request_usd × 请求数）
+    throttle: { min_delay_ms: 500, max_delay_ms: 1500 }
+    max_results: 50
+    api_base_url: "https://jsearch.p.rapidapi.com" # GET /search（岗位）、/job-details；域名同时作为 X-RapidAPI-Host
+    country: de # country= 参数（小写 ISO 国家码）
+    language: "" # language= 参数（小写 ISO 639-1）；留空 = 该国的主要语言
+    pages_per_query: 1 # num_pages：每个查询读几页（每页 10 条，每页算一次请求）
+    keywords_per_query: 1 # search.yaml 每个关键词组取前几个词各查一次（每个词每个城市一次请求，免费档每月只有 200 次）
+    monthly_request_limit: 200 # RapidAPI 套餐每月包含的请求数（免费档 200）；用完后通道不再发请求
+    overage_cost_per_request_usd: 0 # 超出 monthly_request_limit 后每次请求的价格（付费档约 0.003）；0 = 超出后一律不发
+    pace_requests: true # 把月请求数按日历均摊：月初几轮用不完全月额度
+    fetch_details: false # 搜索结果没有正文时才取 /job-details（每条 1 次请求）
+    max_details_per_query: 5 # 每个查询最多取多少条详情
+    # 非官网直链的"去申请"链接按这个发布者顺序挑（不区分大小写）；官网直链（is_direct 或域名与雇主官网一致）永远优先，不在表里的发布者排最后
+    apply_publisher_preference: [LinkedIn, StepStone, XING, Indeed]
+    rate_limit_retries: 2 # 每秒 / 每分钟限流（429）后最多再试几次，每次先等一个 throttle 间隔；月配额用完的 429 不重试
+  greenhouse:
+    enabled: true
+    monthly_budget_usd: 0
+    throttle: { min_delay_ms: 300, max_delay_ms: 1000 }
+    max_results: 500 # 每个 board 最多保留多少条（预筛之后）
+    api_base_url: "https://boards-api.greenhouse.io"
+    # 标题预筛：board 返回全部在招岗位，只有标题命中 search.yaml 关键词（或公司在 interests.yaml 的 watched_companies 里）才入库。
+    # include_terms：除 search.yaml 关键词外，额外保留的标题词；exclude_terms：命中就丢弃的标题词（关注公司不受影响）。词按整词、不区分大小写匹配。
+    title_prefilter:
+      enabled: true
+      # 标题含这些词（整词匹配，AI/ML 这类斜杠写法也算）的岗位，即使没命中 search.yaml 关键词也保留
+      include_terms: [AI, ML, KI, LLM, GenAI, Machine Learning, Applied Scientist, Forward Deployed]
+      # 标题含这些词的岗位一律丢弃（学生岗、实习），关注公司不受影响
+      exclude_terms: [Werkstudent, Working Student, Intern, Internship, Praktikum, Praktikant]
+  lever:
+    enabled: true
+    monthly_budget_usd: 0
+    throttle: { min_delay_ms: 300, max_delay_ms: 1000 }
+    max_results: 500 # 每个 board 最多保留多少条（预筛之后）
+    api_base_url: "https://api.lever.co"
+    # ats_boards 里写了 region: eu 的 board 用这个 host
+    eu_api_base_url: "https://api.eu.lever.co"
+    title_prefilter:
+      enabled: true
+      # 标题含这些词（整词匹配，AI/ML 这类斜杠写法也算）的岗位，即使没命中 search.yaml 关键词也保留
+      include_terms: [AI, ML, KI, LLM, GenAI, Machine Learning, Applied Scientist, Forward Deployed]
+      # 标题含这些词的岗位一律丢弃（学生岗、实习），关注公司不受影响
+      exclude_terms: [Werkstudent, Working Student, Intern, Internship, Praktikum, Praktikant]
+  ashby:
+    enabled: true
+    monthly_budget_usd: 0
+    throttle: { min_delay_ms: 300, max_delay_ms: 1000 }
+    max_results: 500 # 每个 board 最多保留多少条（预筛之后）
+    api_base_url: "https://api.ashbyhq.com" # GET /posting-api/job-board/{token}
+    include_compensation: true # 带上薪资区间（salary 字段）
+    title_prefilter:
+      enabled: true
+      # 与 greenhouse 相同：标题命中 search.yaml 关键词、include_terms，或公司在 watched_companies 里才入库；exclude_terms 命中即丢弃
+      include_terms: [AI, ML, KI, LLM, GenAI, Machine Learning, Applied Scientist, Forward Deployed]
+      exclude_terms: [Werkstudent, Working Student, Intern, Internship, Praktikum, Praktikant]
+  personio:
+    enabled: true
+    monthly_budget_usd: 0
+    throttle: { min_delay_ms: 300, max_delay_ms: 1000 }
+    max_results: 500
+    # 公司招聘站；{token} 换成 ats_boards 的 token（公司在 Personio 的子域名），岗位列表在 <站点>/xml
+    api_base_url: "https://{token}.jobs.personio.de"
+    language: en # en | de：xml 的 ?language= 参数；公司没有该语言版本时 Personio 返回它的默认语言
+    title_prefilter:
+      enabled: true
+      # 与 greenhouse 相同：标题命中 search.yaml 关键词、include_terms，或公司在 watched_companies 里才入库；exclude_terms 命中即丢弃
+      include_terms: [AI, ML, KI, LLM, GenAI, Machine Learning, Applied Scientist, Forward Deployed]
+      exclude_terms: [Werkstudent, Working Student, Intern, Internship, Praktikum, Praktikant]
+  smartrecruiters:
+    enabled: true
+    monthly_budget_usd: 0
+    throttle: { min_delay_ms: 300, max_delay_ms: 1000 }
+    max_results: 500
+    api_base_url: "https://api.smartrecruiters.com" # GET /v1/companies/{token}/postings（token 区分大小写）
+    country: de # 只取这个国家的岗位（大公司的 board 是全球的）；留空 = 全部
+    page_size: 100 # 列表每页条数（API 上限 100）
+    fetch_details: true # 列表没有正文：预筛之后每个岗位再取一次详情
+    title_prefilter:
+      enabled: true
+      # 与 greenhouse 相同：标题命中 search.yaml 关键词、include_terms，或公司在 watched_companies 里才入库；exclude_terms 命中即丢弃
+      include_terms: [AI, ML, KI, LLM, GenAI, Machine Learning, Applied Scientist, Forward Deployed]
+      exclude_terms: [Werkstudent, Working Student, Intern, Internship, Praktikum, Praktikant]
+  tavily:
+    enabled: true # 默认的 ATS board 发现通道；没有 TAVILY_API_KEY 时显示"未配置"，不会搜索（见 spec/guides/tavily.md）
+    monthly_budget_usd: 0 # 只计超出 monthly_credit_limit 之后的花费（credit_cost_usd × 额度）
+    throttle: { min_delay_ms: 500, max_delay_ms: 1000 }
+    max_results: 20 # 每次搜索取多少条（Tavily 上限 20）
+    api_base_url: "https://api.tavily.com" # POST /search，Authorization: Bearer
+    search_depth: basic # basic / fast / ultra-fast 每次 1 个额度，advanced 每次 2 个
+    keywords_per_query: 2 # 每个关键词组取前几个词，用 OR 连成一个查询
+    interval_hours: 24 # 距上次发现不足这么多小时不再搜索（每天一次）
+    max_queries_per_run: 30 # 每次最多搜索多少次（5 种 ATS × 关键词组 × 城市）；30 次 × 每月约 30 天 ≈ 900 个额度，在免费额度内
+    monthly_credit_limit: 1000 # Tavily 套餐每月包含的额度（免费档 1000）；用完后通道不再搜索
+    credit_cost_usd: 0 # 超出 monthly_credit_limit 后每个额度的价格（按量付费约 0.008）；0 = 超出后一律不搜
+  brave:
+    enabled: false # 已被 tavily 取代，默认关闭；要用就设置 BRAVE_SEARCH_API_KEY 并改成 true，两个通道不要同时开（会重复搜索）
+    monthly_budget_usd: 0
+    throttle: { min_delay_ms: 1000, max_delay_ms: 2000 } # 免费套餐每秒 1 次请求
+    max_results: 20 # 每次搜索取多少条（Brave 上限 20）
+    api_base_url: "https://api.search.brave.com"
+    country: DE
+    safesearch: strict
+    interval_hours: 20 # 距上次发现不足这么多小时不再搜索（每天一次）
+    max_queries_per_run: 40 # 每次最多搜索多少次（5 种 ATS × 关键词组 × 城市，免费套餐每月 2000 次）
+  jobspy_google:
+    enabled: false # jobspy 的 Google Jobs 抓取不稳定，默认关闭
+    monthly_budget_usd: 0
+    throttle: { min_delay_ms: 3000, max_delay_ms: 8000 }
+    max_results: 50
+  gmail:
+    enabled: false # M5：读取各平台的提醒邮件，需要应用专用密码（.env 的 GMAIL_USER / GMAIL_APP_PASSWORD，见 spec/guides/gmail-alerts.md）
+    monthly_budget_usd: 0
+    throttle: { min_delay_ms: 0, max_delay_ms: 0 }
+    max_results: 200 # 单轮最多产出多少条岗位（所有邮件合计）
+    host: imap.gmail.com
+    port: 993
+    secure: true # 隐式 TLS；只有连本地测试服务器时才关
+    label: JobAlerts # 只读这一个标签（只读打开，不标已读、不移动、不删除）
+    max_messages_per_cycle: 50 # 每轮最多读多少封（新的优先），读不完的留到下一轮
+    lookback_days: 14 # 只看最近这么多天收到的邮件
+    timeout_ms: 30000 # 连接 / 问候 / 套接字超时
+    # 发件人域名（@ 之后的部分，含子域名）→ 对应平台的解析器
+    senders:
+      linkedin: [linkedin.com]
+      stepstone: [stepstone.de, stepstone.com, stepstone.at]
+      indeed: [indeed.com]
+      xing: [xing.com]
+
+# ATS 公司清单（docs/plan.md §4.2）。
+# 由旧项目 eu-ai-jobs-tracker/config/automatic-sources.json 转换而来（共 79 家 Greenhouse / Lever board）。
+# ats：greenhouse | lever | ashby | personio | smartrecruiters；token 是公开 API 里的 board 标识（smartrecruiters 的 token 区分大小写）。
+# region（可选，只对 lever 有效）：global（默认，api.lever.co）| eu（api.eu.lever.co，jobs.eu.lever.co 上的 board）。
+# name：显示名（列表和详情页里的公司名，按它归一后和其他来源的同名公司合并）；别写成 token 的小写形式。
+# enabled：是否采集。关注公司（新岗位单独推送）只在 interests.yaml 的 watched_companies 里写，按公司名匹配（不区分大小写）。
+ats_boards:
+  - { name: "Pipewerk", ats: lever, token: "pipewerk", enabled: true }
+  - { name: "Nordwerk", ats: lever, token: "nordwerk", enabled: true }
+  - { name: "Südwerk", ats: lever, token: "suedwerk", enabled: true }
+  - { name: "Sprachwerk", ats: lever, token: "sprachwerk", enabled: true }
+  - { name: "Ostwerk", ats: lever, token: "ostwerk", enabled: true }
+  - { name: "Westwerk", ats: greenhouse, token: "westwerk", enabled: true }
+  - { name: "Talwerk", ats: greenhouse, token: "talwerk", enabled: true }
+  - { name: "Flusswerk", ats: greenhouse, token: "flusswerk", enabled: true }
+  - { name: "Werbenetz", ats: greenhouse, token: "werbenetz", enabled: true }
+  - { name: "Zellwerk", ats: greenhouse, token: "zellwerk", enabled: true }
+  - { name: "Datenhaus", ats: greenhouse, token: "datenhaus", enabled: true }
+  - { name: "Waldwerk", ats: greenhouse, token: "waldwerk", enabled: true }
+  - { name: "Gegensprech", ats: greenhouse, token: "gegensprech", enabled: true }
+  - { name: "Feldwerk", ats: lever, token: "feldwerk", enabled: true }
+  - { name: "Fahrwelle", ats: ashby, token: "fahrwelle", enabled: true }
+  - { name: "Sternwerk", ats: greenhouse, token: "sternwerk", enabled: true }
+  - { name: "Mondwerk", ats: greenhouse, token: "mondwerk", enabled: true }
+  - { name: "Sonnewerk", ats: greenhouse, token: "sonnewerk", enabled: true }
+  - { name: "Windwerk", ats: greenhouse, token: "windwerk", enabled: true }
+  - { name: "Formgleich Labs", ats: greenhouse, token: "formgleichlabs", enabled: true }
+  - { name: "Wellewerk", ats: greenhouse, token: "wellewerk", enabled: true }
+  - { name: "Ankerwerk", ats: greenhouse, token: "ankerwerk", enabled: true }
+  - { name: "Brückewerk", ats: greenhouse, token: "brueckewerk", enabled: true }
+  - { name: "Turmwerk", ats: greenhouse, token: "turmwerk", enabled: true }
+  - { name: "Hafenwerk", ats: greenhouse, token: "hafenwerk", enabled: true }
+  - { name: "Lindewerk", ats: greenhouse, token: "lindewerk", enabled: true }
+  - { name: "Eichewerk", ats: greenhouse, token: "eichewerk", enabled: true }
+  - { name: "Birkewerk", ats: greenhouse, token: "birkewerk", enabled: true }
+  - { name: "Kieselwerk", ats: greenhouse, token: "kieselwerk", enabled: true }
+  - { name: "Granitwerk", ats: lever, token: "granitwerk", enabled: true }
+  - { name: "Bernsteinwerk", ats: greenhouse, token: "bernsteinwerk", enabled: true }
+  - { name: "Kupferwerk", ats: greenhouse, token: "kupferwerk", enabled: true }
+  - { name: "Klingen Health", ats: lever, token: "klingenhealth", enabled: true }
+  - { name: "Silberwerk", ats: ashby, token: "silberwerk", enabled: true }
+  - { name: "Messingwerk", ats: greenhouse, token: "messingwerk", enabled: true }
+  - { name: "Nebelwerk", ats: greenhouse, token: "nebelwerk", enabled: true }
+  - { name: "Streifen", ats: greenhouse, token: "streifen", enabled: true }
+  - { name: "Frostwerk", ats: greenhouse, token: "frostwerk", enabled: true }
+  - { name: "Glutwerk", ats: greenhouse, token: "glutwerk", enabled: true }
+  - { name: "Nordlabs", ats: greenhouse, token: "nordlabs", enabled: true }
+  - { name: "Südlabs", ats: greenhouse, token: "suedlabs", enabled: true }
+  - { name: "Ostlabs", ats: greenhouse, token: "ostlabs", enabled: true }
+  - { name: "Westlabs", ats: greenhouse, token: "westlabs", enabled: true }
+  - { name: "Berglabs", ats: greenhouse, token: "berglabs", enabled: true }
+  - { name: "Tallabs", ats: greenhouse, token: "tallabs", enabled: true }
+  - { name: "Flusslabs", ats: greenhouse, token: "flusslabs", enabled: true }
+  - { name: "Waldlabs", ats: lever, token: "waldlabs", enabled: true }
+  - { name: "Feldlabs", ats: lever, token: "feldlabs", enabled: true }
+  - { name: "Sternlabs", ats: greenhouse, token: "sternlabs", enabled: true }
+  - { name: "Mondlabs", ats: greenhouse, token: "mondlabs", enabled: true }
+  - { name: "Sonnelabs", ats: greenhouse, token: "sonnelabs", enabled: true }
+  - { name: "Windlabs", ats: greenhouse, token: "windlabs", enabled: true }
+  - { name: "Lieferfix", ats: greenhouse, token: "lieferfix", enabled: true }
+  - { name: "Wellelabs", ats: greenhouse, token: "wellelabs", enabled: true }
+  - { name: "Ankerlabs", ats: lever, token: "ankerlabs", enabled: true }
+  - { name: "Brückelabs", ats: greenhouse, token: "brueckelabs", enabled: true }
+  - { name: "Turmlabs", ats: greenhouse, token: "turmlabs", enabled: true }
+  - { name: "Hafenlabs", ats: greenhouse, token: "hafenlabs", enabled: true }
+  - { name: "Lindelabs", ats: greenhouse, token: "lindelabs", enabled: true }
+  - { name: "Eichelabs", ats: greenhouse, token: "eichelabs", enabled: true }
+  - { name: "Birkelabs", ats: greenhouse, token: "birkelabs", enabled: true }
+  - { name: "Kiesellabs", ats: lever, token: "kiesellabs", enabled: true }
+  - { name: "Granitlabs", ats: lever, token: "granitlabs", enabled: true }
+  - { name: "Bernsteinlabs", ats: lever, token: "bernsteinlabs", enabled: true }
+  - { name: "Kupferlabs", ats: greenhouse, token: "kupferlabs", enabled: true }
+  - { name: "Silberlabs", ats: lever, token: "silberlabs", enabled: true }
+  - { name: "Messinglabs", ats: greenhouse, token: "messinglabs", enabled: true }
+  - { name: "Nebellabs", ats: greenhouse, token: "nebellabs", enabled: true }
+  - { name: "Frostlabs", ats: greenhouse, token: "frostlabs", enabled: true }
+  - { name: "Glutlabs", ats: lever, token: "glutlabs", enabled: true }
+  - { name: "Nordsoft", ats: greenhouse, token: "nordsoft", enabled: true }
+  - { name: "Südsoft", ats: greenhouse, token: "suedsoft", enabled: true }
+  - { name: "Ostsoft", ats: greenhouse, token: "ostsoft", enabled: true }
+  - { name: "Westsoft", ats: greenhouse, token: "westsoft", enabled: true }
+  - { name: "Bergsoft", ats: greenhouse, token: "bergsoft", enabled: true }
+  - { name: "Talsoft", ats: greenhouse, token: "talsoft", enabled: true }
+  - { name: "Flusssoft", ats: greenhouse, token: "flusssoft", enabled: true }
+  - { name: "Waldsoft", ats: ashby, token: "waldsoft", enabled: true }
+  - { name: "Feldsoft", ats: smartrecruiters, token: "Feldsoft", enabled: true }
+  # Ashby / Personio / SmartRecruiters（2026-10 逐个实测 board 可访问）
+  - { name: "Sternsoft", ats: ashby, token: "sternsoft", enabled: true }
+  - { name: "Helmwerk", ats: ashby, token: "helmwerk", enabled: true }
+  - { name: "Mondsoft", ats: ashby, token: "mondsoft", enabled: true }
+  - { name: "Tiefwort", ats: ashby, token: "tiefwort", enabled: true }
+  - { name: "Sonnesoft", ats: ashby, token: "sonnesoft", enabled: true }
+  - { name: "Windsoft", ats: ashby, token: "windsoft", enabled: true }
+  - { name: "Wellesoft", ats: ashby, token: "wellesoft", enabled: true }
+  - { name: "Ankersoft", ats: ashby, token: "ankersoft", enabled: true }
+  - { name: "Brückesoft", ats: personio, token: "brueckesoft", enabled: true }
+  - { name: "Turmsoft", ats: personio, token: "turmsoft", enabled: true }
+  - { name: "Nerven Robotics", ats: personio, token: "nerven-robotics", enabled: true }
+  - { name: "Hafensoft", ats: personio, token: "hafensoft", enabled: true }
+  - { name: "Lindesoft", ats: personio, token: "lindesoft", enabled: true }
+  - { name: "Eichesoft", ats: personio, token: "eichesoft", enabled: true }
+  - { name: "Jedwerk", ats: personio, token: "jedwerk", enabled: true }
+  - { name: "Birkesoft", ats: personio, token: "birkesoft", enabled: true }
+  - { name: "Bergwerk", ats: smartrecruiters, token: "BergwerkGroup", enabled: true }
+  - { name: "Kieselsoft", ats: smartrecruiters, token: "Kieselsoft", enabled: true }
+  - { name: "Granitsoft", ats: smartrecruiters, token: "Granitsoft", enabled: true }
+  - { name: "Heilkraut Pharmacy", ats: smartrecruiters, token: "Heilkraut-Pharmacy", enabled: true }
+  - { name: "Bernsteinsoft", ats: smartrecruiters, token: "Bernsteinsoft", enabled: true }
+  - { name: "Kupfersoft", ats: smartrecruiters, token: "Kupfersoft", enabled: true }
+  - { name: "Fahrmiete", ats: smartrecruiters, token: "Fahrmiete", enabled: true }
+  - { name: "Silbersoft", ats: smartrecruiters, token: "Silbersoft", enabled: true }
+
+# 来源清单页（/sources/registry）和 pnpm sources:list 的设置；只在这个文件里改，网页上不显示。
+registry:
+  # 来源清单页和 pnpm sources:list 的"近 N 天"统计窗口（天）
+  window_days: 7
+  # ATS 公司连续失败几次算"异常"；次数不到算"不稳"
+  board_failing_after: 2
+  # 启用的公司超过多少小时没被检查算"不稳"（通道关闭、熔断或没跑）
+  board_stale_hours: 48
+  # 来源清单"导入"的文件大小上限（字节）
+  import_max_bytes: 524288
+  # （可选）"发现的 board" 一次列出几条，其余点"显示更多"；不写就是 10
+  # candidates_page_size: 10
+  # 公司表"打开 board"链接的招聘页地址，{token} 换成公司的 token；Lever EU board 用 lever_eu
+  board_page_urls:
+    greenhouse: "https://job-boards.greenhouse.io/{token}"
+    lever: "https://jobs.lever.co/{token}"
+    lever_eu: "https://jobs.eu.lever.co/{token}"
+    ashby: "https://jobs.ashbyhq.com/{token}"
+    personio: "https://{token}.jobs.personio.de"
+    smartrecruiters: "https://jobs.smartrecruiters.com/{token}"
