@@ -1,13 +1,15 @@
 "use client";
 
 import { FlaskConical, Loader2, Play, Send } from "lucide-react";
-import { useFormatter, useTranslations } from "next-intl";
+import { useFormatter, useLocale, useTranslations } from "next-intl";
 import { useState, useTransition } from "react";
 
-import { runChannelNowAction as rawRunChannelNowAction, testAiAction as rawTestAiAction, testChannelAction as rawTestChannelAction, testTelegramAction as rawTestTelegramAction } from "@/app/control-actions";
+import { backfillAction as rawBackfillAction, runChannelNowAction as rawRunChannelNowAction, testAiAction as rawTestAiAction, testChannelAction as rawTestChannelAction, testTelegramAction as rawTestTelegramAction } from "@/app/control-actions";
 import { Button } from "@/components/ui/button";
 import { followsCoveringCycle, isOpenRequest, type ControlQueueView, type ControlRequestView } from "@/lib/control/request-view-schema";
 import { IDLE_CONTROL_STATE, type ControlActionState } from "@/lib/control/service-types";
+import { resolveLocale } from "@/i18n/locale";
+import { formatInteger } from "@/lib/format/numbers";
 import { formatClock } from "@/lib/format/clock";
 import { cn } from "@/lib/utils";
 import { withActionFeedback } from "@/lib/actions/client";
@@ -22,6 +24,7 @@ function withTriggerFeedback<Args extends unknown[]>(action: (...args: Args) => 
   return withActionFeedback<Args, TriggerActionState>(action)(() => ({ status: "error", error: "transportFailed", nonce: Date.now() }));
 }
 
+const backfillAction = withTriggerFeedback((payload: unknown) => rawBackfillAction(payload));
 const runChannelNowAction = withTriggerFeedback(rawRunChannelNowAction);
 const testAiAction = withTriggerFeedback(rawTestAiAction);
 const testChannelAction = withTriggerFeedback(rawTestChannelAction);
@@ -29,12 +32,13 @@ const testTelegramAction = withTriggerFeedback(rawTestTelegramAction);
 
 
 /** What a trigger button asks for. */
-export type TriggerKind = "runChannel" | "testChannel" | "testAi" | "testTelegram";
+export type TriggerKind = "backfill" | "runChannel" | "testChannel" | "testAi" | "testTelegram";
 
-const ICON = { runChannel: Play, testChannel: FlaskConical, testAi: FlaskConical, testTelegram: Send } as const;
+const ICON = { backfill: Play, runChannel: Play, testChannel: FlaskConical, testAi: FlaskConical, testTelegram: Send } as const;
 
 /** Error codes of a finished request that have their own message; anything else reads "failed". */
 const RESULT_ERRORS = [
+  "backfill_over_limit",
   "another_cycle_running",
   "cycle_failed",
   "unknown_channel",
@@ -53,10 +57,12 @@ const RESULT_ERRORS = [
   "invalid_payload",
 ] as const;
 
-function call(kind: TriggerKind, target: string): Promise<TriggerActionState> {
+function call(kind: TriggerKind, target: string, backfillPayload?: { backfillHours: number; channelIds?: string[] }): Promise<TriggerActionState> {
   switch (kind) {
     case "runChannel":
       return runChannelNowAction(target);
+    case "backfill":
+      return backfillAction(backfillPayload);
     case "testChannel":
       return testChannelAction({ channelId: target });
     case "testAi":
@@ -74,6 +80,7 @@ interface Finished {
 
 interface TriggerButtonProps {
   kind: TriggerKind;
+  backfillPayload?: { backfillHours: number; channelIds?: string[] };
   /** Channel id (`runChannel`, `testChannel`) or provider id (`testAi`); unused for `testTelegram`. */
   target?: string;
   disabled?: boolean;
@@ -92,7 +99,7 @@ interface TriggerButtonProps {
  * under the button. The button stays off while its request is open; the server reuses an open request and refuses a
  * repeat within `schedule.yaml: manual_triggers.min_interval_seconds`.
  */
-export function TriggerButton({ kind, target = "", disabled = false, disabledHint, confirm = false, variant = "outline", className, timeZone }: TriggerButtonProps) {
+export function TriggerButton({ kind, backfillPayload, target = "", disabled = false, disabledHint, confirm = false, variant = "outline", className, timeZone }: TriggerButtonProps) {
   const t = useTranslations("trigger");
   const [state, setState] = useState<TriggerActionState>(IDLE_CONTROL_STATE);
   const [pending, startTransition] = useTransition();
@@ -116,14 +123,14 @@ export function TriggerButton({ kind, target = "", disabled = false, disabledHin
 
   const send = () => {
     setConfirming(false);
-    startTransition(async () => setState(await call(kind, target)));
+    startTransition(async () => setState(await call(kind, target, backfillPayload)));
   };
 
   return (
     <div className={cn("flex min-w-0 flex-col gap-1.5", className)} data-testid={`trigger-${kind}`} data-target={target || undefined} data-state={pending || open ? "busy" : (view?.status ?? (ended ? "failed" : "idle"))}>
       <div className="flex flex-wrap items-center gap-2">
         <Button type="button" size="xs" variant={variant} disabled={disabled || pending || open || confirming} onClick={confirm ? () => setConfirming(true) : send} data-testid={`trigger-${kind}-button`}>
-          {pending || open ? <Loader2 aria-hidden className="animate-spin" /> : <Icon aria-hidden />}
+          {pending || open ? <Loader2 aria-hidden className="animate-spin motion-reduce:animate-none" /> : <Icon aria-hidden />}
           {t(`button.${kind}`)}
         </Button>
         {confirming ? (
@@ -161,10 +168,11 @@ function Outcome({ kind, state, open, view, finished, stage, queue, timeZone }: 
   const t = useTranslations("trigger");
   const tCycle = useTranslations("dashboard.cycle");
   const format = useFormatter();
+  const locale = resolveLocale(useLocale());
   if (state.status === "error") {
     return (
       <p role="alert" className="text-destructive text-xs" data-testid="trigger-outcome" data-outcome="refused">
-        {state.error === "tooSoon" ? t("refused.tooSoon", { seconds: state.retryAfterSeconds ?? 1 }) : t(`refused.${state.error}`)}
+        {state.error === "tooSoon" ? t("refused.tooSoon", { seconds: state.retryAfterSeconds ?? 1 }) : state.error === "backfillOverLimit" ? t("refused.backfillOverLimit", { max: formatInteger(state.maxBackfillHours, locale) }) : t(`refused.${state.error}`)}
       </p>
     );
   }
@@ -213,7 +221,7 @@ function Outcome({ kind, state, open, view, finished, stage, queue, timeZone }: 
     const detail = result.errorCode ?? result.errorKind;
     return (
       <p role="alert" className="text-destructive text-xs" data-testid="trigger-outcome" data-outcome="failed" data-error={result.error ?? ""}>
-        {code ? t(`failed.${code}`, { time: result.resumeAt ? formatClock(format, result.resumeAt, timeZone) : "none" }) : t("failed.unknown")}
+        {code ? t(`failed.${code}`, { max: formatInteger(result.maxBackfillHours, locale), time: result.resumeAt ? formatClock(format, result.resumeAt, timeZone) : "none" }) : t("failed.unknown")}
         {detail ? <span className="ml-1 font-mono">({detail})</span> : null}
       </p>
     );
@@ -247,6 +255,7 @@ function Outcome({ kind, state, open, view, finished, stage, queue, timeZone }: 
           {t("done.testTelegram", { id: result.messageId ?? 0 })}
         </p>
       );
+    case "backfill":
     case "runChannel":
       return (
         <p role="status" className="text-success-text text-xs" data-testid="trigger-outcome" data-outcome="done">

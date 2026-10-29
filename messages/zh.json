@@ -1240,7 +1240,10 @@
           "databaseUnavailable": "数据库不可用，请求没有创建。",
           "unknownChannel": "请求格式不对，请刷新页面。",
           "nothingStale": "这个岗位现在不需要打分。",
-          "tooSoon": "刚刚请求过，请稍后再试。"
+          "tooSoon": "刚刚请求过，请稍后再试。",
+          "backfillOverLimit": "补抓范围超过配置上限。",
+          "cycleBusy": "已有采集任务排队或运行中，请等它结束后再试。",
+          "configUnavailable": "配置文件读不了，没有提交请求。请先到“设置 → 高级”修好。"
         },
         "failure": {
           "invalid_payload": "请求格式不对",
@@ -3065,7 +3068,10 @@
         "nothingStale": "没有需要重打的分数。",
         "databaseUnavailable": "数据库不可用，请求没有创建。",
         "nothingToScore": "没有需要打分的岗位。",
-        "tooSoon": "刚刚请求过，请稍后再试。"
+        "tooSoon": "刚刚请求过，请稍后再试。",
+        "backfillOverLimit": "补抓范围超过配置上限。",
+        "cycleBusy": "已有采集任务排队或运行中，请等它结束后再试。",
+        "configUnavailable": "配置文件读不了，没有提交请求。请先到“设置 → 高级”修好。"
       },
       "requests": {
         "title": "最近的请求",
@@ -3100,6 +3106,7 @@
         "error": {
           "invalid_payload": "请求格式不对",
           "another_cycle_running": "另一轮正在运行，这次没有执行",
+          "backfill_over_limit": "执行前补抓上限被调低，这次没有采集",
           "cycle_failed": "这一轮失败了",
           "handler_error": "执行出错，详情见 runner 日志",
           "no_handler": "runner 不认识这个请求",
@@ -3652,6 +3659,21 @@
       "remote": "远程",
       "remoteRegion": "远程 · {scope}",
       "overCap": "{count, plural, other {{number} 个查询}}等待超过补窗上限（{hours} 小时）：这段时间的新岗位可能已错过。可以提高预算或减少查询。"
+    },
+    "backfill": {
+      "button": "补抓…",
+      "gap": "补抓这段空窗…",
+      "range": "补抓范围",
+      "scope": "通道范围",
+      "hours": "补抓最近 {number} 小时",
+      "days": "{count, plural, other {补抓最近 {number} 天}}",
+      "thisChannel": "当前通道",
+      "thisCascade": "当前级联",
+      "allChannels": "全部通道",
+      "paid": "按条计费的通道：{channels}。扩大时间窗口可能增加每次查询抓取的条数。",
+      "noPaid": "本次没有按条计费的通道参与。",
+      "jsearch": "JSearch 仍受均摊预算限制：每次查询和每日限额继续生效；被拒绝的查询会记为跳过。",
+      "confirmation": "提交一次手动运行。现有预算、页面上限和熔断规则继续生效。"
     }
   },
   "insights": {
@@ -3932,7 +3954,8 @@
       "runChannel": "立即采集",
       "testChannel": "测试",
       "testAi": "测试",
-      "testTelegram": "发送 Telegram 测试消息"
+      "testTelegram": "发送 Telegram 测试消息",
+      "backfill": "确认补抓"
     },
     "confirm": {
       "testTelegram": "确定发一条测试消息到 Telegram？",
@@ -3947,7 +3970,10 @@
       "nothingToScore": "没有需要打分的岗位。",
       "databaseUnavailable": "数据库不可用，请求没有创建。",
       "transportFailed": "连不上服务器，请检查网络后重试；请求可能已经送达。",
-      "tooSoon": "刚刚请求过，{seconds} 秒后可以再试。"
+      "tooSoon": "刚刚请求过，{seconds} 秒后可以再试。",
+      "backfillOverLimit": "补抓范围超过配置上限（{max} 小时）。",
+      "cycleBusy": "已有采集任务排队或运行中，请等它结束后再试。",
+      "configUnavailable": "配置文件读不了（sources.yaml？），无法确认补抓上限，没有提交请求。请先到“设置 → 高级”修好。"
     },
     "existing": "已有覆盖这个通道的请求在排队或执行，正在等它的结果。",
     "queued": "已排队…",
@@ -3974,7 +4000,8 @@
       "handler_error": "执行出错，详情见日志",
       "invalid_payload": "请求格式不对",
       "unknown": "失败",
-      "quota_guard": "已达 Job Radar 的 AI 用量上限，这个 provider 暂停使用。{time, select, none {稍后会自动继续。} other {{time} 后可用。}}"
+      "quota_guard": "已达 Job Radar 的 AI 用量上限，这个 provider 暂停使用。{time, select, none {稍后会自动继续。} other {{time} 后可用。}}",
+      "backfill_over_limit": "执行前补抓上限已改变（最多 {max} 小时），请缩小范围后重新提交。"
     },
     "done": {
       "testChannel": "抓到 {fetched} 条，解析成功 {parsed} 条（{seconds} 秒，没有保存）",

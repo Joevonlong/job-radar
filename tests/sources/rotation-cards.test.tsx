@@ -16,12 +16,13 @@ vi.mock("@/app/control-actions", () => ({ runChannelNowAction: vi.fn(), testChan
 import { CascadeCard } from "@/components/sources/cascade-card";
 import { ChannelCard } from "@/components/sources/channel-card";
 import type { RotationStatus } from "@/lib/sources/rotation-status";
+import type { BackfillOptions } from "@/lib/sources/backfill";
 import type { SourceCard } from "@/lib/sources/view";
 
 const normal: RotationStatus = { sortChannel: "linkedin-guest", queries: 9, neverRun: 2, oldestWaitHours: 31,
   oldestWaiting: { id: "old", keywordGroup: "targets", location: "Berlin", remoteScope: null }, overCap: 0, maxCatchUpHours: 168 };
 
-async function show(kind: "cascade" | "channel", rotation?: RotationStatus, locale: "en" | "zh" = "en") {
+async function show(kind: "cascade" | "channel", rotation?: RotationStatus, locale: "en" | "zh" = "en", backfill?: BackfillOptions) {
   state.locale = locale;
   const card: SourceCard = {
     id: "indeed", family: "indeed", kind: "api", testable: true, registered: true, enabled: true, otherMarket: false,
@@ -31,8 +32,8 @@ async function show(kind: "cascade" | "channel", rotation?: RotationStatus, loca
     ...(rotation ? { rotation } : {}),
   };
   const ui = kind === "channel"
-    ? await ChannelCard({ card, timeZone: "UTC", healthCycles: 1, alertPercent: 80 })
-    : await CascadeCard({ cascade: { entries: [], servedBy: [], ...(rotation ? { rotation } : {}) }, hasCycle: false, alertPercent: 80 });
+    ? await ChannelCard({ card, timeZone: "UTC", healthCycles: 1, alertPercent: 80, ...(backfill ? { backfill } : {}) })
+    : await CascadeCard({ cascade: { entries: [], servedBy: [], ...(rotation ? { rotation } : {}) }, hasCycle: false, alertPercent: 80, ...(backfill ? { backfill } : {}) });
   return render(<NextIntlClientProvider locale={locale} messages={{ en, zh }[locale]}>{ui}</NextIntlClientProvider>);
 }
 
@@ -90,3 +91,17 @@ it.each(["en", "zh"] as const)("says no cascade channel can take queries now and
   expect(line).not.toHaveTextContent(locale === "en" ? "longest wait" : "等得最久");
   expect(line).toHaveAttribute("data-sort-channel", "");
 });
+
+const backfillOptions: BackfillOptions = { maxHours: 72, cascade: false, channelIds: ["indeed"], local: { paidChannels: [], jsearch: false }, all: { paidChannels: ["linkedin-apify"], jsearch: true } };
+for (const kind of ["cascade", "channel"] as const) {
+  it(`${kind} keeps backfill available without rotation history`, async () => {
+    await show(kind, undefined, "en", backfillOptions);
+    expect(screen.getByRole("button", { name: "Backfill…" })).toBeVisible();
+    expect(screen.queryByTestId("rotation-status")).not.toBeInTheDocument();
+  });
+  it(`${kind} links the over-cap hint to its own backfill control`, async () => {
+    await show(kind, { ...normal, overCap: 2 }, "en", backfillOptions);
+    const id = screen.getByRole("button", { name: "Backfill…" }).id;
+    expect(screen.getByRole("link", { name: "Backfill this gap…" })).toHaveAttribute("href", `#${id}`);
+  });
+}

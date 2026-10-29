@@ -1,6 +1,7 @@
 import { and, desc, eq, inArray, sql, type SQL } from "drizzle-orm";
 
 import type { Db } from "../client";
+import type { Executor } from "../executor";
 import { controlRequests } from "../schema";
 
 export type ControlRequest = typeof controlRequests.$inferSelect;
@@ -34,7 +35,7 @@ export const NOT_REQUEUED_CONTROL_REQUEST_KINDS = [...TEST_CONTROL_REQUEST_KINDS
 /** Statuses in which a request still waits for, or is held by, the runner. */
 export const OPEN_CONTROL_STATUSES = ["pending", "running"] as const satisfies readonly ControlRequestStatus[];
 
-export async function insertControlRequest(db: Db, input: { kind: ControlRequestKind; payload?: unknown }): Promise<ControlRequest> {
+export async function insertControlRequest(db: Executor, input: { kind: ControlRequestKind; payload?: unknown }): Promise<ControlRequest> {
   const [row] = await db
     .insert(controlRequests)
     .values({ kind: input.kind, payload: input.payload ?? {} })
@@ -63,12 +64,39 @@ function kindList(kinds: readonly ControlRequestKind[]): SQL {
 }
 
 /** Every request of `kind` that is still pending or running, oldest first. */
-export async function listOpenControlRequests(db: Db, kind: ControlRequestKind): Promise<ControlRequest[]> {
+export async function listOpenControlRequests(db: Executor, kind: ControlRequestKind): Promise<ControlRequest[]> {
   return db
     .select()
     .from(controlRequests)
     .where(and(eq(controlRequests.kind, kind), inArray(controlRequests.status, [...OPEN_CONTROL_STATUSES])))
     .orderBy(controlRequests.id);
+}
+
+/** Advisory lock key of queueing a `run_cycle` request (any constant; only this code takes it). */
+export const RUN_CYCLE_QUEUE_LOCK = 118_002;
+
+export type RunCycleQueueing =
+  | { state: "queued"; row: ControlRequest }
+  | { state: "existing"; row: ControlRequest }
+  | { state: "busy" };
+
+/**
+ * Queue a `run_cycle` request: the open ones are read and the new row inserted in one transaction under an advisory lock,
+ * so two requests at once never both see an empty queue. `exclusive` (a backfill): any open run_cycle refuses it (`busy`).
+ * Otherwise `reuse` may pick an open request to join instead of inserting one.
+ */
+export async function queueRunCycleRequest(
+  db: Executor,
+  input: { payload: unknown; exclusive: boolean; reuse?: (open: readonly ControlRequest[]) => ControlRequest | undefined },
+): Promise<RunCycleQueueing> {
+  return db.transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(${RUN_CYCLE_QUEUE_LOCK})`);
+    const open = await listOpenControlRequests(tx, "run_cycle");
+    if (input.exclusive && open.length > 0) return { state: "busy" };
+    const existing = input.reuse?.(open);
+    if (existing) return { state: "existing", row: existing };
+    return { state: "queued", row: await insertControlRequest(tx, { kind: "run_cycle", payload: input.payload }) };
+  });
 }
 
 /**

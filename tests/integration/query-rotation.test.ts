@@ -128,6 +128,19 @@ function setupJsearch() {
 }
 
 describe("query rotation across cycles", () => {
+  it("moves a query served by a backfill to the back on the next cycle", async () => {
+    const test = fixtureCycles();
+    test.cfg.search.window_hours = { morning: 24, evening: 24, weekend: 24 };
+    test.cfg.channels.collect.max_catch_up_hours = 0;
+    const ids = buildQueries(test.cfg.search, "manual").map((query) => query.id);
+    const first = await test.run({ backfillHours: 36, limit: 1 });
+    expect(first.rows[0]).toMatchObject({ queryHash: ids[0], status: "succeeded", windowHours: 36, windowExtended: true });
+    expect(first.result.summary.backfillHours).toBe(36);
+    const second = await test.run();
+    expect(second.rows.map((row) => row.queryHash)).toEqual([...ids.slice(1), ids[0]]);
+    expect(second.result.summary).not.toHaveProperty("backfillHours");
+  });
+
   it.each([true, false])("serves two queries per cycle with rotation enabled = %s", async (enabled) => {
     const search = searchFor({
       engineering: ["Platform Engineer"],

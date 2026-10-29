@@ -13,10 +13,13 @@ export type ControlActionState =
     }
   | {
       status: "error";
-      error: "invalidPayload" | "unknownChannel" | "nothingStale" | "nothingToScore" | "databaseUnavailable" | "tooSoon";
+      /** `cycleBusy`: a run is already queued or running. `configUnavailable`: a config file the request depends on cannot be read. */
+      error: "invalidPayload" | "unknownChannel" | "nothingStale" | "nothingToScore" | "databaseUnavailable" | "tooSoon" | "backfillOverLimit" | "cycleBusy" | "configUnavailable";
       nonce: number;
       /** `tooSoon`: seconds until the same request may be made again. */
       retryAfterSeconds?: number;
+      /** `backfillOverLimit`: configured maximum. */
+      maxBackfillHours?: number;
     };
 
 export const IDLE_CONTROL_STATE: ControlActionState = { status: "idle" };

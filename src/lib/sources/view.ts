@@ -166,6 +166,7 @@ export interface AiProviderModel {
 const POLICY_KEY = { "claude-cli": "claude_cli", "codex-cli": "codex_cli", anthropic: "anthropic", deepseek: "deepseek", mimo: "mimo" } as const;
 
 export interface SourcesView {
+  maxBackfillHours: number;
   month: string;
   cards: SourceCard[];
   cascade: { rotation?: RotationStatus; entries: CascadeEntry[]; /** Channels that served at least one query in the latest cycle, in cascade order. */ servedBy: string[] };
@@ -472,6 +473,7 @@ export function buildSourcesView(input: SourcesViewInput): SourcesView {
 
   const ageSeconds = computeHeartbeatAgeSeconds(input.lastHeartbeatAt, input.now);
   return {
+    maxBackfillHours: input.channelsConfig.collect.max_backfill_hours,
     month: input.month,
     cards,
     cascade: { ...(cascadeRotation ? { rotation: cascadeRotation } : {}), entries, servedBy: entries.filter((e) => (e.latest?.succeeded ?? 0) > 0).map((e) => e.id) },

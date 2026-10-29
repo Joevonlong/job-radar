@@ -82,6 +82,32 @@ function setup(fake: FakeProvider) {
 }
 
 describe("Bright Data budget -> LinkedIn cascade", () => {
+  it("a guest-only backfill creates no paid run rows or paid usage", async () => {
+    const registry = new ChannelRegistry();
+    const paid = [BRIGHT, "linkedin-apify", "jsearch"].map((id) => registerFixtureChannel(registry, {
+      id, family: id === "jsearch" ? "google" : "linkedin", kind: "paid", postings: [],
+      costPerRecordUsd: 0.01, settings: { monthlyBudgetUsd: 10 },
+    }));
+    const guest = registerFixtureChannel(registry, { id: "linkedin-guest", family: "linkedin", kind: "guest", postings: [] });
+    const cfg = config({ search: {
+      ...pinnedSearch(), keyword_groups: { engineering: ["Platform Engineer"] },
+      locations: ["Test City"], remote_scope: "none", window_hours: { morning: 24, evening: 24, weekend: 24 },
+    } });
+    const result = await runCycle("manual", {
+      registry, cascades: [{ family: "linkedin", order: [BRIGHT, "linkedin-apify", guest.id] }], config: cfg,
+      channelIds: [guest.id], backfillHours: 36, logger: quietLogger, now: () => NOW, sleep: async () => {},
+      fetch: async () => { throw new Error("unexpected outbound request"); },
+    });
+    expect(result.status).toBe("succeeded");
+    expect(await listRunsForCycle(getDb(), result.cycleId as number)).toEqual([expect.objectContaining({ channelId: guest.id, windowHours: 36, windowExtended: true })]);
+    const usage = await getMonthUsage(getDb(), MONTH);
+    for (const channel of paid) {
+      expect(channel.seen).toEqual([]);
+      expect(usage.has(channel.id)).toBe(false);
+    }
+    expect(guest.seen).toHaveLength(1);
+  });
+
   it("rotates Bright Data's one-query allowance, then follows the guest's own history when it starts", async () => {
     const guestId = "linkedin-guest";
     const apifyId = "linkedin-apify";

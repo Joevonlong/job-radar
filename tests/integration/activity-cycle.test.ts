@@ -49,6 +49,22 @@ function run(registry = fixtureRegistry(), options: RunCycleOptions = {}) {
 }
 
 describe("cycle activity persistence", () => {
+  it.each([undefined, 36])("records the backfill window only when set: backfillHours=%s", async (backfillHours) => {
+    const outcome = await run(undefined, backfillHours === undefined ? {} : { backfillHours });
+    expect(outcome.status).toBe("succeeded");
+    await activity.flush();
+    const { spans, events } = await activityRows(connection.db);
+    const rootId = rootIdForCycle(outcome.cycleId!);
+    expect(spans.find((span) => span.id === rootId)).toMatchObject({ name: "cycle", parentId: null, status: "ok" });
+    const notes = events.filter((event) => event.code === "backfill");
+    if (backfillHours === undefined) expect(notes).toEqual([]);
+    else {
+      expect(notes).toHaveLength(1);
+      expect(notes[0]).toMatchObject({ rootId, spanId: rootId, level: "info" });
+      expect(notes[0]!.params).toEqual({ hours: backfillHours });
+    }
+  });
+
   it.each(["quota_guard", "no_provider_available", "unknown private reason"])("records whole-step skips in the runner with safe reasons: %s", async (skipped) => {
     const result = { subtasks: [], skipped };
     registerCycleStep("ai", async () => ({ result }));

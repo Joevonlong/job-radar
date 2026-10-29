@@ -105,6 +105,44 @@ async function expectRotation(result: CycleRunResult, unit: string, expected: Pi
 }
 
 describe("catch-up attempt windows", () => {
+  it.each([
+    { backfill: 36, gap: 50, cap: 168, supports: true, hours: 50, capped: 0 },
+    { backfill: 36, gap: 1, cap: 168, supports: true, hours: 36, capped: 0 },
+    { backfill: 12, gap: 1, cap: 168, supports: true, hours: 24, capped: 0 },
+    { backfill: 36, gap: 50, cap: 168, supports: false, hours: 36, capped: 0 },
+    { backfill: 36, gap: 50, cap: 0, supports: true, hours: 36, capped: 0 },
+    { backfill: 72, gap: 240, cap: 48, supports: true, hours: 72, capped: 1 },
+    // a backfill over the whole gap leaves nothing cut short by the catch-up limit
+    { backfill: 240, gap: 240, cap: 48, supports: true, hours: 240, capped: 0 },
+    { backfill: 300, gap: 240, cap: 48, supports: true, hours: 300, capped: 0 },
+  ])("manual backfill uses the maximum window: $backfill hours, gap $gap, cap $cap, catch-up supported $supports", async ({ backfill, gap, cap, supports, hours, capped }) => {
+    const cfg = catchUpConfig();
+    cfg.channels.collect.max_catch_up_hours = cap;
+    const registry = new ChannelRegistry();
+    const fixture = registerFixtureChannel(registry, { postings: [], supportsCatchUp: () => supports });
+    const [query] = buildQueries(cfg.search, "manual");
+    expect(query!.windowHours).toBe(24);
+    await seedHistory(fixture, query!, gap);
+    const result = await run(registry, cfg, "manual", { backfillHours: backfill });
+    expect(fixture.seen).toEqual([{ ...query, windowHours: hours }]);
+    expect(await rowsOf(result)).toEqual([expect.objectContaining({ queryHash: query!.id, windowHours: hours, windowExtended: hours > 24 })]);
+    expect(result.summary.backfillHours).toBe(backfill);
+    await expectRotation(result, fixture.id, { stretched: hours > 24 ? 1 : 0, maxWindowHours: hours, capped });
+  });
+
+  it.each([1, 240])("keeps a channel without keyword queries at its base window in a backfill (gap %s hours)", async (gap) => {
+    const cfg = catchUpConfig();
+    const registry = new ChannelRegistry();
+    const fixture = registerFixtureChannel(registry, { postings: [], usesQueries: false, supportsCatchUp: () => false });
+    const query = buildSweepQuery(cfg.search, "manual");
+    await seedHistory(fixture, query, gap);
+    const result = await run(registry, cfg, "manual", { backfillHours: 72 });
+    expect(fixture.seen).toEqual([expect.objectContaining({ id: query.id, windowHours: query.windowHours })]);
+    expect(await rowsOf(result)).toEqual([expect.objectContaining({ queryHash: query.id, windowHours: query.windowHours, windowExtended: false })]);
+    expect(result.summary.backfillHours).toBe(72);
+    await expectRotation(result, fixture.id, { stretched: 0, maxWindowHours: query.windowHours, capped: 0 });
+  });
+
   it("keeps a real Greenhouse sweep at the base window after a 240-hour gap", async () => {
     const cfg = catchUpConfig();
     cfg.channels = {
@@ -143,7 +181,7 @@ describe("catch-up attempt windows", () => {
     const fixture = registerFixtureChannel(registry, { postings: [] });
     const [query] = buildQueries(cfg.search, "weekday_evening");
     const result = await run(registry, cfg);
-    expect(fixture.seen).toEqual([query]);
+    expect(fixture.seen).toEqual([expect.objectContaining({ id: query.id, windowHours: query.windowHours })]);
     expect(await rowsOf(result)).toEqual([expect.objectContaining({ queryHash: query!.id, status: "succeeded", windowHours: 10, windowExtended: false })]);
     await expectRotation(result, fixture.id, { stretched: 0, maxWindowHours: 10, capped: 0 });
   });
@@ -215,7 +253,7 @@ describe("catch-up attempt windows", () => {
     await seedHistory(fixture, query!, 72, { status: "failed" });
     await seedHistory(fixture, query!, 1, { status: "skipped", fetched: 2, usageUnits: 0 });
     const result = await run(registry, cfg);
-    expect(fixture.seen).toEqual([query]);
+    expect(fixture.seen).toEqual([expect.objectContaining({ id: query.id, windowHours: query.windowHours })]);
     expect(await rowsOf(result)).toEqual([expect.objectContaining({ windowHours: 10, windowExtended: false })]);
     await expectRotation(result, fixture.id, { stretched: 0, maxWindowHours: 10, capped: 0 });
   });
@@ -260,7 +298,7 @@ describe("catch-up attempt windows", () => {
     const [query] = buildQueries(cfg.search, "weekday_evening");
     await seedHistory(fixture, query!, 48);
     const result = await run(registry, cfg);
-    expect(fixture.seen).toEqual([query]);
+    expect(fixture.seen).toEqual([expect.objectContaining({ id: query.id, windowHours: query.windowHours })]);
     expect(await rowsOf(result)).toEqual([expect.objectContaining({ windowHours: 10, windowExtended: false })]);
     await expectRotation(result, fixture.id, { stretched: 0, maxWindowHours: 10, capped: 1 });
   });
@@ -343,7 +381,7 @@ describe("catch-up attempt windows", () => {
     const before = await getDb().select().from(schema.runs);
     const result = await run(registry, cfg, "weekday_evening", { dryRun: true, db: getDb() });
     expect(result.cycleId).toBeNull();
-    expect(fixture.seen).toEqual([query]);
+    expect(fixture.seen).toEqual([expect.objectContaining({ id: query.id, windowHours: query.windowHours })]);
     expect(await getDb().select().from(schema.runs)).toEqual(before);
     await expectRotation(result, fixture.id, { stretched: 0, maxWindowHours: 10, capped: 0 });
   });
@@ -356,7 +394,7 @@ describe("catch-up attempt windows", () => {
     await seedHistory(fixture, query!, 240);
     vi.spyOn(runRepo, "getQueryRunHistory").mockRejectedValue(new Error("test: history read failed"));
     const result = await run(registry, cfg);
-    expect(fixture.seen).toEqual([query]);
+    expect(fixture.seen).toEqual([expect.objectContaining({ id: query.id, windowHours: query.windowHours })]);
     expect(collectOf(result).rotation[fixture.id]?.historyUnavailable).toBe(true);
     expect(await rowsOf(result)).toEqual([expect.objectContaining({ windowHours: 10, windowExtended: false })]);
     await expectRotation(result, fixture.id, { stretched: 0, maxWindowHours: 10, capped: 0 });
@@ -381,6 +419,22 @@ function jsearchSetup(now = NOW) {
 }
 
 describe("catch-up preserves provider spending controls", () => {
+  it.each([undefined, 36])("preserves JSearch's paced refusal with backfillHours=%s", async (backfillHours) => {
+    const { cfg, registry, channel } = jsearchSetup();
+    await upsertChannelRows(getDb(), [{ id: channel.id, family: channel.family, kind: channel.kind, enabled: true }]);
+    await addMonthUsage(getDb(), channel.id, MONTH, { records: 46, usd: 0 });
+    const fetch = vi.fn(async () => response(200, SEARCH_EMPTY));
+    const result = await run(registry, cfg, "manual", { fetch, ...(backfillHours === undefined ? {} : { backfillHours }) });
+    expect(fetch).not.toHaveBeenCalled();
+    const rows = await rowsOf(result);
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toMatchObject({ status: "skipped", errorCode: "budget_exceeded", fetched: 0, usageUnits: 0, windowHours: backfillHours ?? 24, windowExtended: backfillHours !== undefined });
+    expect(Number(rows[0]!.cost)).toBe(0);
+    expect(rows[0]!.error).toContain("paced share");
+    expect(rows[1]).toMatchObject({ status: "skipped", windowHours: null, windowExtended: false });
+    expect((await getMonthUsage(getDb(), MONTH)).get(channel.id)).toEqual({ records: 46, usd: 0 });
+  });
+
   it("widens JSearch to 3days while limiting details to the configured number of job ids", async () => {
     const { cfg, registry, channel } = jsearchSetup();
     const [query] = buildQueries(cfg.search, "weekday_evening");

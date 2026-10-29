@@ -1,5 +1,7 @@
 "use server";
 
+import { runCyclePayloadSchema } from "@/lib/control/types";
+
 import { requestRunCycle, requestTestAi, requestTestChannel, requestTestTelegram, type ControlActionState } from "@/lib/control/service";
 
 // The trigger buttons of /sources and /settings. Server Actions are public POST endpoints: everything arriving
@@ -23,4 +25,11 @@ export async function testAiAction(payload: unknown): Promise<ControlActionState
 /** "Send a Telegram test message" (the page asks for a confirmation first). */
 export async function testTelegramAction(): Promise<ControlActionState> {
   return requestTestTelegram();
+}
+
+/** A manual backfill: accept only its window and optional channel scope. */
+export async function backfillAction(payload: unknown): Promise<ControlActionState> {
+  const parsed = runCyclePayloadSchema.required({ backfillHours: true }).safeParse(payload);
+  if (!parsed.success) return { status: "error", error: "invalidPayload", nonce: Date.now() };
+  return requestRunCycle(parsed.data);
 }

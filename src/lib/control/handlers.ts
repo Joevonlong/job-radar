@@ -1,4 +1,5 @@
 import { runCycle } from "@/lib/cycle/run-cycle";
+import { freshenConfig, loadConfig } from "@/lib/config";
 import type { ControlRequestKind } from "@/lib/db/repos/control-requests";
 
 import { testChannelHandler } from "./test-channel";
@@ -10,11 +11,17 @@ import { runCyclePayloadSchema, type ControlHandler } from "./types";
  * them (a scheduled cycle of every channel), the request is done and points at that cycle (`cycleId`, `coveredBy`): its
  * progress is what the button shows. A running cycle that does not cover them (a `pnpm cycle:run --channel` of other
  * channels) still fails the request with `another_cycle_running`; waiting for it would hold up the serial poller.
+ * A backfill rechecks the configured limit before creating a cycle and can never be covered by a running cycle.
  */
 export const runCycleHandler: ControlHandler = async (request, context) => {
   const payload = runCyclePayloadSchema.safeParse(request.payload);
   if (!payload.success) return { status: "failed", result: { error: "invalid_payload" } };
-  const { channelIds } = payload.data;
+  const { channelIds, backfillHours } = payload.data;
+  if (backfillHours !== undefined) {
+    freshenConfig(context.logger);
+    const maxBackfillHours = loadConfig("channels").collect.max_backfill_hours;
+    if (backfillHours > maxBackfillHours) return { status: "failed", result: { error: "backfill_over_limit", backfillHours, maxBackfillHours } };
+  }
   const outcome = await runCycle("manual", {
     db: context.db,
     activity: context.recorder,
@@ -23,15 +30,17 @@ export const runCycleHandler: ControlHandler = async (request, context) => {
     signal: context.signal,
     logger: context.logger,
     ...(channelIds ? { channelIds } : {}),
+    ...(backfillHours !== undefined ? { backfillHours } : {}),
   });
   try {
     context.onCycleFinished?.(outcome.summary);
   } catch {
     context.logger.warn("cycle maintenance failed");
   }
-  const result = { cycleId: outcome.cycleId, cycleStatus: outcome.status, durationMs: outcome.summary.durationMs };
+  const result = { cycleId: outcome.cycleId, cycleStatus: outcome.status, durationMs: outcome.summary.durationMs, ...(backfillHours !== undefined ? { backfillHours } : {}) };
   const coveredBy = outcome.summary.coveredBy ?? null;
   if (outcome.status === "skipped" && coveredBy !== null) {
+    if (backfillHours !== undefined) return { status: "failed", result: { ...result, coveredBy, error: "another_cycle_running" } };
     // the covering cycle was running when the lock was tried
     return { status: "done", result: { ...result, cycleId: coveredBy, cycleStatus: "running", coveredBy, skippedCycleId: outcome.cycleId } };
   }

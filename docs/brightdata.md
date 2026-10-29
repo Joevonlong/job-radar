@@ -24,8 +24,8 @@ The `linkedin-brightdata` channel fetches LinkedIn jobs through the Bright Data 
 
 - **Catch-up:** Bright Data always keeps the base window; automatic [catch-up](sources.md#catch-up-windows) is disabled
   because its date ranges are coarse and results are not newest first. It will be enabled only after exact-window
-  requests and newest-first results under the channel's active settings have been measured. A stretched window in a
-  future manual backfill could fetch more records per query and increase per-record charges.
+  requests and newest-first results under the channel's active settings have been measured. A manual
+  backfill can fetch more records per query and increase per-record charges.
 - Each query = one trigger: keyword groups merged as `"A" OR "B"` (automatically split into several inputs over 200 characters), x one city (or remote location).
 - Time window: <= 24 hours -> `Past 24 hours`, <= 7 days -> `Past week`, <= 30 days -> `Past month`. Windows shorter than the vendor's tiers (for example 10 hours) are filtered locally by `job_posted_date`; jobs without a posting date are kept. Bare `YYYY-MM-DD` dates have day precision and are dropped only when date + 24 hours is before the cutoff; ISO timestamps are compared at their exact time.
 - Only valid full calendar dates and ISO instants become `postedAt`. Invalid dates such as `2026-02-30` stay unknown (`null`) in collection and normalization; the raw payload is kept unchanged.

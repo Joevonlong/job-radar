@@ -230,6 +230,10 @@ some jobs may be marked possibly closed and reopened on their next sighting. Bef
 the catch-up keys, remove `collect.max_catch_up_hours` and `collect.catch_up_tolerance_hours` from your user
 `data/config/sources.yaml`.
 
+**Manual backfill:** before rolling back, let open backfill requests finish or mark them failed. Older code rejects a
+`run_cycle` payload containing `backfillHours` with `invalid_payload`. Remove `collect.max_backfill_hours` from your user
+`data/config/sources.yaml` before starting older code.
+
 **Rolling back past interactive AI lanes.** Queued automatic translations carry `origin: "auto"`. An older worker
 rejects those requests with `invalid_payload`; the next cycle's late translation stage picks up eligible jobs again.
 User requests keep their old payload format. The same brief window can occur when switching from container to host

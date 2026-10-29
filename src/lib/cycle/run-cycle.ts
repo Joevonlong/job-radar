@@ -32,6 +32,8 @@ export interface RunCycleOptions {
   dryRun?: boolean;
   /** For a `catchup`: the scheduled kind it replaces, which decides the look-back window. */
   windowKind?: ScheduledCycleKind;
+  /** Manual backfill look-back in hours; each query's window is at least this. */
+  backfillHours?: number;
   /** Cancels the cycle (runner shutdown): pending steps are skipped, in-flight requests aborted. */
   signal?: AbortSignal;
   /**
@@ -75,6 +77,8 @@ export interface CycleSummary {
   version: 1;
   kind: CycleKind;
   windowKind: ScheduledCycleKind | null;
+  /** Manual backfill look-back in hours, when requested. */
+  backfillHours?: number;
   /** The channels the cycle was limited to (`RunCycleOptions.channelIds`); null = every enabled channel. */
   channelIds: string[] | null;
   dryRun: boolean;
@@ -142,6 +146,7 @@ export async function runCycle(kind: CycleKind, options: RunCycleOptions = {}): 
     version: 1 as const,
     kind,
     windowKind: options.windowKind ?? null,
+    ...(options.backfillHours !== undefined ? { backfillHours: options.backfillHours } : {}),
     channelIds,
     dryRun,
     startedAt: now().toISOString(),
@@ -165,6 +170,7 @@ export async function runCycle(kind: CycleKind, options: RunCycleOptions = {}): 
     // recorded at once: a cycle that finds the lock taken reads which channels this one covers, and whether it is the holder
     const cycleRow = !dryRun && writeDb ? await createCycle(writeDb, { kind, summary: { ...runSummary, ...(lockPid ? { lockPid } : {}) } }) : null;
     const root = cycleRow ? recorder.cycleRoot(cycleRow.id, { requestId: options.activityRequestId }) : noopRecorder.cycleRoot(0);
+    if (options.backfillHours !== undefined) root.note("info", "backfill", { hours: options.backfillHours });
     const rootScope = spanScope(root, "interrupted", "not_recorded");
     try {
       if (cycleRow) options.onCycleRootCreated?.();
@@ -202,6 +208,7 @@ export async function runCycle(kind: CycleKind, options: RunCycleOptions = {}): 
         const stepContext: CycleStepContext = {
           cycle: { id: cycleRow?.id ?? null, kind },
           windowKind: options.windowKind ?? null,
+          ...(options.backfillHours !== undefined ? { backfillHours: options.backfillHours } : {}),
           dryRun,
           db: writeDb,
           signal,
@@ -301,6 +308,7 @@ export async function runCycle(kind: CycleKind, options: RunCycleOptions = {}): 
     const summary: CycleSummary = { ...baseSummary, durationMs: 0, aborted: false, steps: [], reason, coveredBy };
     const row = await createSkippedCycle(db, { kind, summary });
     const root = recorder.cycleRoot(row.id, { requestId: options.activityRequestId });
+    if (options.backfillHours !== undefined) root.note("info", "backfill", { hours: options.backfillHours });
     try {
       options.onCycleRootCreated?.();
       if (coveredBy !== null) root.note("info", "covered_by", { cycle_id: coveredBy });
