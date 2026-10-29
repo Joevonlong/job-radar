@@ -13,6 +13,7 @@ function fixture() {
     payloadBytes: vi.fn(async () => 0),
     prune: vi.fn(async () => 2),
     log: vi.fn(),
+    onPruned: vi.fn(),
   };
   return { deps, config, service: createDeliveryPruner(deps), advance: (ms: number) => { time = new Date(time.getTime() + ms); } };
 }
@@ -76,6 +77,24 @@ describe("delivery pruning", () => {
     await expect(service.afterCollect()).resolves.toBeUndefined();
     await expect(service.tick()).resolves.toBeUndefined();
     expect(JSON.stringify(deps.log.mock.calls)).not.toContain("private");
+  });
+
+  it("records only successful nonempty prunes and isolates recording failures", async () => {
+    const { service, deps, advance } = fixture();
+    await service.tick();
+    expect(deps.onPruned).toHaveBeenCalledExactlyOnceWith(2);
+    advance(600_000);
+    deps.prune.mockResolvedValueOnce(0);
+    await service.tick();
+    advance(600_000);
+    deps.prune.mockRejectedValueOnce(new Error("private"));
+    await service.tick();
+    expect(deps.onPruned).toHaveBeenCalledTimes(1);
+    advance(600_000);
+    deps.onPruned.mockImplementation(() => { throw new Error("private recorder"); });
+    deps.log.mockClear();
+    await expect(service.tick()).resolves.toBeUndefined();
+    expect(deps.log).toHaveBeenCalledExactlyOnceWith("pruned 2 delivery items");
   });
 
   it("serializes periodic and post-collect work", async () => {

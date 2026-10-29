@@ -233,6 +233,11 @@ async function main(): Promise<number> {
     now: () => new Date(), loadConfig: () => loadConfig("deliveryAudit"),
     tablesReady: () => deliveryTablesReady(db), payloadBytes: () => deliveryPayloadBytes(db),
     prune: (input) => pruneDeliveryItems(db, input), log,
+    onPruned: (deleted) => {
+      const span = activity.systemRoot("system.delivery_prune");
+      try { span.note("info", "pruned", { items: deleted }); }
+      finally { span.finish("ok"); }
+    },
   });
   const startCycle = (kind: CycleKind, options: RunCycleOptions = {}): void => {
     log(`starting ${kind} cycle`);

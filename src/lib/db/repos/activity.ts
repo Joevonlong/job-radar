@@ -187,3 +187,41 @@ export async function pruneActivity(db: Db, options: ActivityPruneOptions & { de
   }
   return total;
 }
+
+export type ActivityDeleteScope =
+  | { kind: "root"; rootId: string }
+  | { kind: "range"; from: Date | null; to: Date }
+  | { kind: "all" };
+export interface ActivityDeleteBatch { roots: number; events: number; found: boolean }
+
+/** Lock one eligible root and spend the row budget on events, children, then the root. Only activity tables mutate. */
+export async function deleteActivityBatch(db: Db, options: {
+  scope: ActivityDeleteScope; asOf: Date; liveness: ActivityLiveness; batchSize: number;
+}): Promise<ActivityDeleteBatch> {
+  if (!Number.isSafeInteger(options.batchSize) || options.batchSize <= 0) throw new RangeError("invalid batch size");
+  return db.transaction(async (tx) => {
+    const t = activitySpans;
+    const { scope } = options;
+    const candidate = scope.kind === "root" ? eq(t.id, scope.rootId) : scope.kind === "range"
+      ? and(scope.from === null ? undefined : sql`${t.startedAt}>=${scope.from.toISOString()}::timestamptz`, sql`${t.startedAt}<${scope.to.toISOString()}::timestamptz`)
+      : sql`true`;
+    const [root] = await tx.select({ id: t.id }).from(t).where(and(
+      isNull(t.parentId), eq(t.id, t.rootId), sql`${t.startedAt}<=${options.asOf.toISOString()}::timestamptz`,
+      sql`not ${activeRootCondition(t, options.liveness)}`, candidate,
+    )).orderBy(asc(t.startedAt), asc(t.id)).limit(1).for("update");
+    if (!root) return { roots: 0, events: 0, found: false };
+    const ids = await tx.select({ id: activityEvents.id }).from(activityEvents).where(eq(activityEvents.rootId, root.id))
+      .orderBy(asc(activityEvents.at), asc(activityEvents.id)).limit(options.batchSize);
+    const deleted = ids.length ? await tx.delete(activityEvents).where(inArray(activityEvents.id, ids.map((row) => row.id))).returning({ id: activityEvents.id }) : [];
+    let budget = options.batchSize - deleted.length;
+    if (!budget) return { roots: 0, events: deleted.length, found: true };
+    // Events have been exhausted before spending any remaining budget on child spans.
+    const children = await tx.select({ id: t.id }).from(t).where(and(eq(t.rootId, root.id), ne(t.id, root.id)))
+      .orderBy(asc(t.id)).limit(budget);
+    if (children.length) await tx.delete(t).where(inArray(t.id, children.map((row) => row.id)));
+    budget -= children.length;
+    if (!budget) return { roots: 0, events: deleted.length, found: true };
+    await tx.delete(t).where(eq(t.id, root.id));
+    return { roots: 1, events: deleted.length, found: true };
+  });
+}
