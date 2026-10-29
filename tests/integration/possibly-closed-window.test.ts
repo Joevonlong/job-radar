@@ -101,7 +101,7 @@ describe("absence evidence from search windows", () => {
       const [run] = await getDb().select().from(schema.runs).where(eq(schema.runs.cycleId, cycle.cycleId!));
       expect(run).toMatchObject({ status: "succeeded", windowHours: Math.max(24, hours ?? 0), windowExtended: (hours ?? 0) > 24 });
       await getDb().update(schema.rawPostings).set({ fetchedAt: NOW }).where(eq(schema.rawPostings.runId, run!.id));
-      const result = await runMaintenance(getDb(), {
+      const result = await runMaintenance(getDb(), { relist: { minGapDays: 9 },
         config: maintenanceConfig, logger: quietLogger, now: () => NOW,
         http: createHttpClient({ settings: { timeoutMs: 1000, maxRetries: 0, backoffBaseMs: 1, backoffMaxMs: 1 }, fetch }),
       });
