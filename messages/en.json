@@ -6786,6 +6786,7 @@
       "orphans_marked": "Interrupted work marked",
       "spans_reconciled": "Activity records reconciled",
       "pruned": "Activity records pruned",
+      "backfill": "Manual backfill",
       "reminder_counts": "Reminder counts"
     },
     "reason": {
@@ -6793,6 +6794,7 @@
       "cycle_cancelled": "Cycle cancelled",
       "another_cycle_running": "Another cycle is running",
       "covered_by_running_cycle": "Covered by a running cycle",
+      "backfill_over_limit": "Backfill range over the configured limit",
       "mixed": "Several reasons",
       "not_registered": "Channel not registered",
       "disabled": "Disabled",
@@ -6867,6 +6869,10 @@
       "error": "Operation error"
     },
     "error": {
+      "backfill_over_limit": "Backfill range over the configured limit",
+      "backfillOverLimit": "Backfill range over the configured limit",
+      "cycleBusy": "A run was already queued or running",
+      "configUnavailable": "Configuration could not be read",
       "not_recorded": "Result not recorded",
       "cycle_cancelled": "Cycle cancelled",
       "another_cycle_running": "Another cycle is running",
@@ -7049,7 +7055,8 @@
       "failed": "Failed",
       "skipped": "Skipped",
       "removed": "Removed",
-      "requeued": "Re-queued"
+      "requeued": "Re-queued",
+      "hours": "Hours"
     },
     "delete": {
       "root": "Delete this entry",

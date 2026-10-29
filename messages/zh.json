@@ -6786,6 +6786,7 @@
       "orphans_marked": "已标记中断任务",
       "spans_reconciled": "已核对操作记录",
       "pruned": "已修剪操作记录",
+      "backfill": "手动补抓",
       "reminder_counts": "提醒数量"
     },
     "reason": {
@@ -6793,6 +6794,7 @@
       "cycle_cancelled": "采集轮次已取消",
       "another_cycle_running": "另一轮采集正在进行",
       "covered_by_running_cycle": "已被正在运行的轮次覆盖",
+      "backfill_over_limit": "补抓范围超过配置上限",
       "mixed": "多种原因",
       "not_registered": "通道未注册",
       "disabled": "已关闭",
@@ -6867,6 +6869,10 @@
       "error": "操作出错"
     },
     "error": {
+      "backfill_over_limit": "补抓范围超过配置上限",
+      "backfillOverLimit": "补抓范围超过配置上限",
+      "cycleBusy": "已有采集任务排队或运行中",
+      "configUnavailable": "配置读取失败",
       "not_recorded": "结果未记录",
       "cycle_cancelled": "采集轮次已取消",
       "another_cycle_running": "另一轮采集正在进行",
@@ -7049,7 +7055,8 @@
       "failed": "失败",
       "skipped": "已跳过",
       "removed": "已删除",
-      "requeued": "已重新排队"
+      "requeued": "已重新排队",
+      "hours": "小时数"
     },
     "delete": {
       "root": "删除本条",
