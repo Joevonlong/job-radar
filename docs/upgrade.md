@@ -222,10 +222,11 @@ filter results when an older writer changes a verdict or its reasons. Re-upgradi
 Before restoring config from `data/config/.backup/` or restoring a database backup, read the rollback notes in
 [CHANGELOG.md](../CHANGELOG.md) for the version you are leaving.
 
-Before rolling back past catch-up windows, set `collect.max_catch_up_hours: 0` and wait
-`lifecycle.possibly_closed_after_days` days (7 by default) to avoid older code counting recent stretched runs as
-possibly-closed evidence. Then remove `collect.max_catch_up_hours` and `collect.catch_up_tolerance_hours` from your
-user `data/config/sources.yaml` before starting code that does not know these keys.
+Setting `collect.max_catch_up_hours: 0` stops new stretched runs, but historical ones do not expire on their own.
+For a safe rollback, use a build that retains `and not r.window_extended` in `markJobsPossiblyClosed`; otherwise,
+some jobs may be marked possibly closed and reopened on their next sighting. Before starting code that does not know
+the catch-up keys, remove `collect.max_catch_up_hours` and `collect.catch_up_tolerance_hours` from your user
+`data/config/sources.yaml`.
 
 **Rolling back past interactive AI lanes.** Queued automatic translations carry `origin: "auto"`. An older worker
 rejects those requests with `invalid_payload`; the next cycle's late translation stage picks up eligible jobs again.

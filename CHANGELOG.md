@@ -7,9 +7,10 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ### Upgrade notes
 
-- **Rolling back past catch-up windows:** set `collect.max_catch_up_hours: 0` and wait
-  `lifecycle.possibly_closed_after_days` days (7 by default) to avoid older code counting recent stretched runs as
-  possibly-closed evidence. Before starting the older code, remove `collect.max_catch_up_hours` and
+- **Rolling back past catch-up windows:** setting `collect.max_catch_up_hours: 0` stops new stretched runs, but history
+  does not expire on its own. For a safe rollback, use a build that retains `and not r.window_extended` in
+  `markJobsPossiblyClosed`; otherwise some jobs may be marked possibly closed and reopened on their next sighting.
+  Before starting code that does not know the catch-up keys, remove `collect.max_catch_up_hours` and
   `collect.catch_up_tolerance_hours` from your user `data/config/sources.yaml`.
 - **Jobs not listed for weeks leave automatic processing.** After 30 days possibly closed (normally 7 + 30 days unseen), unprotected jobs become dormant: default job lists, company counts, search and navigation badges shrink; badges also stop counting closed jobs. Find dormant jobs in the Closed or Possibly closed view, and choose Still open to wake them. No data is deleted. **Rollback:** remove `lifecycle.dormant_after_days` from your user `pipeline.yaml` if you added it (older strict schemas reject it); keep the nullable database columns. Older code shows these jobs again, and re-upgrading sweeps stale markers and user protection.
 

@@ -228,8 +228,9 @@ JSearch、guest 等不按新到旧排序的通道，只返回较长时段里的�
 
 干跑和读取历史失败时使用基础窗口。单次尝试看 `runs.window_hours`、`runs.window_extended`；汇总看上文的
 `rotation.stretched`、`rotation.maxWindowHours`、`rotation.capped`。
-变宽的运行不作为[可能已关闭的证据](#岗位怎样被标为可能已关闭)。回滚前先关闭补窗，按[回滚说明](upgrade.zh.md#回滚)
-等待足够时间，然后删掉这两个补窗键，再启动不认识它们的旧代码，避免旧代码把最近的变宽运行算作证据。
+变宽的运行不作为[可能已关闭的证据](#岗位怎样被标为可能已关闭)。关闭补窗会停止新的变宽运行，但历史记录不会自行过期。
+要安全回滚，请在 `markJobsPossiblyClosed` 中保留 `and not r.window_extended`；否则，一些岗位可能被标为可能已关闭，
+并在下次被发现时重新打开。启动不认识这两个补窗键的代码前请删除它们；见[回滚说明](upgrade.zh.md#回滚)。
 
 ## 6. 常见异常怎么处理
 

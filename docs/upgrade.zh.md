@@ -130,9 +130,10 @@ scripts/ops/deploy.sh --skip-pull
 
 从 `data/config/.backup/` 恢复配置或恢复数据库备份之前，先读 [CHANGELOG.md](../CHANGELOG.md) 里要离开的那个版本的回滚说明。
 
-回滚到补窗之前的版本前，先设 `collect.max_catch_up_hours: 0`，再等待 `lifecycle.possibly_closed_after_days` 天（默认 7），
-避免旧代码把最近的变宽运行当作“可能已关闭”的证据。之后，从用户 `data/config/sources.yaml` 中删除
-`collect.max_catch_up_hours` 和 `collect.catch_up_tolerance_hours`，再启动不认识这些键的旧代码。
+设置 `collect.max_catch_up_hours: 0` 会停止新的变宽运行，但历史记录不会自行过期。要安全回滚，请使用在
+`markJobsPossiblyClosed` 中保留 `and not r.window_extended` 的构建版本；否则，一些岗位可能被标为可能已关闭，
+并在下次被发现时重新打开。启动不认识补窗键的代码前，从用户 `data/config/sources.yaml` 中删除
+`collect.max_catch_up_hours` 和 `collect.catch_up_tolerance_hours`。
 
 **回滚到交互 AI 通道之前。** 排队中的自动翻译带 `origin: "auto"`，旧 worker 会以 `invalid_payload` 拒绝这些请求；
 下一轮 late 翻译阶段会重新处理符合条件的岗位。用户请求仍是原来的载荷格式。升级期间从容器执行切回宿主机、

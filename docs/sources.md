@@ -256,8 +256,10 @@ Three limits of the coverage history remain:
 Dry runs and history read failures use base windows. Inspect `runs.window_hours` and `runs.window_extended` for each
 attempt, and `rotation.stretched`, `rotation.maxWindowHours` and `rotation.capped` in the summary described above.
 Stretched runs do not count toward [possibly-closed evidence](#how-jobs-get-marked-possibly-closed).
-Before rolling back, disable catch-up and follow the waiting period in [Roll back](upgrade.md#roll-back), then remove
-both catch-up keys before starting code that does not know them. This keeps older code from counting recent stretched runs.
+Turning catch-up off stops new stretched runs, but historical ones do not expire on their own. For a safe rollback,
+retain `and not r.window_extended` in `markJobsPossiblyClosed`; otherwise some jobs may be marked possibly closed and
+reopened on their next sighting. Remove both catch-up keys before starting code that does not know them; see
+[Roll back](upgrade.md#roll-back).
 
 ## 6. Handling common failures
 
