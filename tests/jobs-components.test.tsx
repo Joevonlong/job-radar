@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { NextIntlClientProvider } from "next-intl";
 import type { ReactNode } from "react";
@@ -21,7 +21,7 @@ describe("scope switch", () => {
 
   it("writes explicit scope and removes page on every link, leaving archive sort implicit", () => {
     show("?q=engineer&status=closed&page=3");
-    expect(screen.getByTestId("scope-all")).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("link", { name: "All" })).toHaveAttribute("aria-current", "page");
     expect(screen.getByTestId("scope-archive")).toHaveTextContent("Archive (7)");
     for (const scope of ["current", "archive", "all"]) {
       expect(queryOf(scope).get("scope")).toBe(scope);
@@ -52,19 +52,20 @@ describe("scope switch", () => {
     }
   });
 
-  it("pins Current despite a closed status and supports arrow, home and end keys", async () => {
+  it("pins Current despite a closed status and puts every scope link in native Tab order", async () => {
     show("?scope=current&status=closed");
+    const navigation = screen.getByRole("navigation", { name: "Job scope" });
+    const links = within(navigation).getAllByRole("link");
+    expect(links).toHaveLength(3);
+    expect(within(navigation).getByRole("link", { current: "page" })).toHaveTextContent("Current");
     const user = userEvent.setup();
-    await user.tab();
-    expect(screen.getByTestId("scope-current")).toHaveFocus();
-    await user.keyboard("{ArrowRight}");
-    expect(screen.getByTestId("scope-archive")).toHaveFocus();
-    await user.keyboard("{End}");
-    expect(screen.getByTestId("scope-all")).toHaveFocus();
-    await user.keyboard("{ArrowRight}");
-    expect(screen.getByTestId("scope-current")).toHaveFocus();
-    await user.keyboard("{ArrowLeft}{Home}");
-    expect(screen.getByTestId("scope-current")).toHaveFocus();
+    for (const link of links) {
+      await user.tab();
+      expect(link).toHaveFocus();
+    }
+    await user.tab({ shift: true });
+    expect(within(navigation).getByRole("link", { name: "Archive (7)" })).toHaveFocus();
+    expect(links.filter((link) => link.hasAttribute("aria-current"))).toHaveLength(1);
   });
 });
 

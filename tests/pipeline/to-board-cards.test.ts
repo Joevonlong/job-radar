@@ -13,7 +13,7 @@ function entry(status: PipelineEntry["application"]["status"], appliedAt: Date |
   return {
     job: {
       id: 1, title: "Observatory engineer", companyId: 1, companyName: "Moonfern", locations: [], workplace: "unknown", contract: "unknown", isAgency: false, germanLevelRequired: "unknown", status: "active", closedReason: null, linkCheck: null,
-      postedAt: null, firstSeenAt: now, lastSeenAt: now, salaryDisclosed: false, salary: null, skills: [], sources: [], applicationStatus: status, favorite: null, rank: null, summary: null, signals: [], seen: false,
+      postedAt: null, firstSeenAt: now, lastSeenAt: now, lastListedAt: null, salaryDisclosed: false, salary: null, skills: [], sources: [], applicationStatus: status, favorite: null, rank: null, summary: null, signals: [], seen: false,
     },
     application: { id: 1, jobId: 1, status, statusChangedAt: new Date("2026-06-01T23:30:00Z"), nextAction: null, nextActionAt: new Date("2026-06-01T12:00:00Z"), notesMd: null, resumeVariantPath: null, interviewRounds: 0, createdAt: new Date("2020-01-01T12:00:00Z") },
     events: appliedAt ? [{ id: 1, applicationId: 1, fromStatus: null, toStatus: "applied", at: appliedAt, note: null }] : [],

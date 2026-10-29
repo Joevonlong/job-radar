@@ -13,30 +13,15 @@ export function ScopeSwitch({ params, archiveCount }: { params: JobsSearchParams
   const t = useTranslations("dashboard.jobs.scope");
   const active = resolveJobScope(params.scope, params.status);
   return (
-    <div
-      role="tablist"
+    <nav
       aria-label={t("label")}
       data-testid="scope-switch"
       className="grid w-full max-w-full grid-cols-3 rounded-btn border-bw border-border bg-card shadow-e2 sm:w-fit"
-      onKeyDown={(event) => {
-        const tabs = Array.from(event.currentTarget.querySelectorAll<HTMLAnchorElement>('[role="tab"]'));
-        const index = tabs.indexOf(event.target as HTMLAnchorElement);
-        if (index < 0) return;
-        const next = event.key === "ArrowRight" ? (index + 1) % tabs.length
-          : event.key === "ArrowLeft" ? (index + tabs.length - 1) % tabs.length
-            : event.key === "Home" ? 0 : event.key === "End" ? tabs.length - 1 : null;
-        if (next === null) return;
-        event.preventDefault();
-        tabs[next]?.focus();
-      }}
     >
       {JOB_SCOPES.map((scope) => (
         <Link
           key={scope}
-          role="tab"
-          aria-selected={active === scope}
           aria-current={active === scope ? "page" : undefined}
-          tabIndex={active === scope ? 0 : -1}
           data-testid={`scope-${scope}`}
           title={scope === "archive" ? t("archiveHint") : undefined}
           href={jobsListHref({
@@ -52,6 +37,6 @@ export function ScopeSwitch({ params, archiveCount }: { params: JobsSearchParams
           {scope === "archive" ? t("archive", { count: archiveCount }) : t(scope)}
         </Link>
       ))}
-    </div>
+    </nav>
   );
 }

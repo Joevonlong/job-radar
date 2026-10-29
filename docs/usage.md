@@ -225,6 +225,9 @@ jobs (your judgement takes precedence) and dormant jobs. Undormant possibly-clos
 closing phrase, stay in Current. The two scopes do not overlap; All combines them under the same filters. The archive
 count follows your search and other filters, and **Mark all as seen** covers every page of the selected scope.
 
+The scope options are navigation links: use Tab or Shift+Tab to focus each option and Enter to open it. The active
+scope is announced as the current page.
+
 Choosing a scope writes `scope=current`, `scope=archive` or `scope=all`. Status filters then intersect that scope:
 Current + Closed is empty, and removing the status chip returns to Current. **Clear filters** keeps the scope. Old links
 without `scope`, including `?status=closed&status=possibly_closed`, and saved views keep their previous results: selecting
