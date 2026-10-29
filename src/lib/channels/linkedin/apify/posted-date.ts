@@ -1,7 +1,5 @@
 import { z } from "zod";
 
-import { postedAtOf } from "../brightdata/parse";
-
 const MS_PER_HOUR = 3_600_000;
 const MS_PER_DAY = 24 * MS_PER_HOUR;
 const RELATIVE_UNITS_MS: Readonly<Record<string, number>> = {
@@ -21,6 +19,18 @@ const dateSchema = z.iso.date();
 const instantSchema = z.iso.datetime({ offset: true });
 const ISO_TIME = /T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})$/;
 
+/** Only a valid full calendar date or an ISO instant can become an Apify posting time. */
+export function postedAtOf(value: unknown): Date | null {
+  if (typeof value !== "string") return null;
+  const text = value.trim();
+  const dateOnly = dateSchema.safeParse(text).success;
+  if (!dateOnly && !instantSchema.safeParse(text).success) return null;
+  const ms = Date.parse(text);
+  if (!Number.isFinite(ms)) return null;
+  const at = new Date(ms);
+  return !dateOnly || at.toISOString().slice(0, 10) === text ? at : null;
+}
+
 function relativeAge(value: string | null | undefined): { count: number; unitMs: number } | null {
   const match = /^(\d+)\s+(second|minute|hour|day|week)s?\s+ago$/i.exec(value ?? "");
   if (!match?.[1] || !match[2]) return null;
@@ -31,7 +41,7 @@ function relativeAge(value: string | null | undefined): { count: number; unitMs:
 
 /**
  * Apify can serialize a day as ISO midnight. Only a consistent seconds/minutes/hours label confirms that midnight
- * is hour-precise. A recognizable conflicting label also removes confidence in a non-midnight time. Relative text
+ * is hour-precise. A present but unparseable or conflicting label also removes confidence in a non-midnight time. Relative text
  * supplies a rounded age interval, never a replacement postedAt; keep the source date and raw payload unchanged.
  */
 export function postedBefore(record: Record<string, unknown>, cutoff: number, observedAt: number): boolean {
@@ -40,8 +50,6 @@ export function postedBefore(record: Record<string, unknown>, cutoff: number, ob
   if (at === null) return false;
   const timestamp = at.getTime();
   if (dateSchema.safeParse(postedDate).success) return timestamp + MS_PER_DAY < cutoff;
-  // Other date formats cannot establish time precision or an unambiguous source calendar day.
-  if (!instantSchema.safeParse(postedDate).success) return false;
   const time = ISO_TIME.exec(postedDate ?? "");
   if (!time) return false;
   const timeOfDay = Number(time[1]) * MS_PER_HOUR + Number(time[2]) * 60_000 + Number(time[3] ?? 0) * 1000 + at.getUTCMilliseconds();
@@ -50,7 +58,7 @@ export function postedBefore(record: Record<string, unknown>, cutoff: number, ob
   const agrees = relative !== null && Math.floor((observedAt - timestamp) / relative.unitMs) === relative.count;
   const exact = timeOfDay === 0
     ? agrees && relative !== null && relative.unitMs <= MS_PER_HOUR
-    : relative === null || agrees;
+    : postedTimeAgo === undefined || agrees;
   // The source's offset is retained: subtract its stated time-of-day, not the converted UTC time-of-day.
   const end = exact ? timestamp : timestamp - timeOfDay + MS_PER_DAY;
   return end < cutoff;

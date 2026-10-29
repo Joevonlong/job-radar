@@ -187,7 +187,7 @@ export const jobItemSchema = z.looseObject({
   description: optionalText,
   descriptionHtml: optionalText,
   salary: optionalText,
-  postedDate: optionalText,
+  postedDate: optionalText.catch(null),
   contractType: optionalText,
   experienceLevel: optionalText,
   applyType: optionalText,

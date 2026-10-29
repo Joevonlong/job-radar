@@ -1,8 +1,9 @@
 import { ChannelError } from "../../errors";
 import { parseLocation } from "../../jobspy/parse";
 import type { NormalizedPostingDraft } from "../../types";
-import { httpUrlOrNull, plainText, postedAtOf } from "../brightdata/parse";
+import { httpUrlOrNull, plainText } from "../brightdata/parse";
 import { jobIdOf, jobItemSchema, type JobItem } from "./contract";
+import { postedAtOf } from "./posted-date";
 
 const LINKEDIN_JOB_URL = "https://www.linkedin.com/jobs/view/";
 
@@ -17,8 +18,8 @@ export function readJobItem(payload: unknown): JobItem {
 }
 
 /**
- * Turn one Apify LinkedIn job record into the normalized draft. Shares the Bright Data helpers (plain text, URL
- * and date handling) and the LinkedIn job id, so the same job delivered by either channel dedupes as one.
+ * Turn one Apify LinkedIn job record into the normalized draft. Shares the Bright Data plain-text and URL helpers
+ * and the LinkedIn job id, so the same job delivered by either channel dedupes as one.
  */
 export function parseApifyJob(payload: unknown): NormalizedPostingDraft {
   const item = readJobItem(payload);

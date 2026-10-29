@@ -2,7 +2,6 @@ import { BudgetExceededError, ChannelError, InfrastructureError, isAbortError } 
 import { marketForChannel } from "../../market";
 import type { Channel, ChannelContext, RawPostingInput, SearchQuery } from "../../types";
 import { assertCredentialEndpoint } from "../../credential-endpoint";
-import { postedAtOf } from "../brightdata/parse";
 import { affordableItems } from "../budget";
 import { runActorSync } from "./client";
 import {
@@ -16,7 +15,7 @@ import {
   type ApifySettings,
 } from "./contract";
 import { apifyDescriptionHtml, parseApifyJob } from "./parse";
-import { postedBefore } from "./posted-date";
+import { postedAtOf, postedBefore } from "./posted-date";
 
 export const LINKEDIN_APIFY_ID = "linkedin-apify";
 
@@ -158,7 +157,7 @@ export function createApifyChannel(options: ApifyChannelOptions): Channel {
           externalId,
           url: typeof record.url === "string" ? record.url : null,
           payload: record,
-          postedAt: typeof record.postedDate === "string" ? postedAtOf(record.postedDate) : null,
+          postedAt: postedAtOf(record.postedDate),
         });
       }
       if (outsideWindow > 0 || noIdentity > 0) ctx.logger.info("apify records not stored", { outsideWindow, noIdentity });

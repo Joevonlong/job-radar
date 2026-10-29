@@ -42,15 +42,17 @@ actor's day filter without an additional local cutoff. The local comparison resp
 | Bare date (`YYYY-MM-DD`) | Day precision; exclude only when the whole supplied day is before the cutoff |
 | ISO midnight with a consistent `postedTimeAgo` in seconds, minutes or hours | Exact timestamp |
 | ISO midnight with missing, invalid, unsupported, conflicting or day/week-only relative text | Day precision |
-| Non-midnight ISO timestamp with no recognizable conflict | Exact timestamp |
-| Non-midnight ISO timestamp conflicting with a recognized relative label | Day precision, using the supplied date |
+| Non-midnight ISO timestamp with an absent or consistent relative label | Exact timestamp |
+| Non-midnight ISO timestamp with a present but invalid, unsupported or conflicting relative label | Day precision, using the supplied date |
 | Missing/invalid date or an unrecognized date format | Keep it; the time fields cannot establish that it is outside the window |
 
 Relative labels are checked at collection time using their stated unit: “5 hours ago” means an age of at least
 5 and less than 6 hours. They are never converted into a stored posting time. A placeholder such as
 `2026-10-26T00:00:00.000Z` paired with “1 minute ago” therefore stays eligible when its day overlaps the window.
-The raw payload and supplied date remain unchanged; bare dates still store as UTC midnight, and ISO timestamps
-keep their supplied instant. The day-end allowance is only for filtering. This rule is specific to Apify.
+The raw payload remains unchanged. Only valid full calendar dates and ISO instants become `postedAt`: bare dates
+store as UTC midnight, and ISO timestamps keep their supplied instant. Unsupported or invalid dates such as
+`2026-10` and `2026-02-30` leave `postedAt` unknown (`null`). The day-end allowance is only for filtering. This rule
+is specific to Apify.
 
 ## Live smoke test
 ```bash
