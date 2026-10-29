@@ -19,7 +19,7 @@ const dateSchema = z.iso.date();
 const instantSchema = z.iso.datetime({ offset: true });
 const ISO_TIME = /T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})$/;
 
-/** Only a valid full calendar date or an ISO instant can become an Apify posting time. */
+/** Only a valid full calendar date or an ISO instant can become a LinkedIn provider's posting time. */
 export function postedAtOf(value: unknown): Date | null {
   if (typeof value !== "string") return null;
   const text = value.trim();

@@ -131,6 +131,45 @@ describe("collect", () => {
     expect(ctx.budget.snapshot().records).toBe(records.length);
   });
 
+  it.each([10, 24])("preserves invalid bare dates as unknown in collection and normalization (%i-hour window)", async (windowHours) => {
+    const records = ["2026-02-30", "2026-02-29", "2026-04-31", " 2026-02-30 "].map((job_posted_date, index) => ({
+      ...(snapshot[0] as object), job_posting_id: String(1000 + index), job_posted_date,
+    }));
+    const channel = createBrightDataChannel({
+      costPer1kUsd: () => 1.5,
+      environment: ENV,
+      now: () => new Date("2026-03-02T16:00:00Z"),
+      sleep: async () => {},
+    });
+    const { ctx } = await harness(channel, fakeProvider({ records }));
+    const out = await channel.collect(berlinQuery({ windowHours }), ctx);
+
+    expect.soft(out.map((posting) => posting.payload)).toEqual(records);
+    for (const posting of out) {
+      expect.soft(posting.postedAt).toBeNull();
+      expect.soft(channel.parse(posting.payload).postedAt).toBeNull();
+    }
+    expect(out.map((posting) => posting.payload)).toEqual(records);
+    expect(ctx.budget.snapshot().records).toBe(records.length);
+  });
+
+  it("preserves a valid leap day in collection and normalization", async () => {
+    const record = { ...(snapshot[0] as object), job_posted_date: "2024-02-29" };
+    const channel = createBrightDataChannel({
+      costPer1kUsd: () => 1.5,
+      environment: ENV,
+      now: () => new Date("2024-02-29T16:00:00Z"),
+      sleep: async () => {},
+    });
+    const { ctx } = await harness(channel, fakeProvider({ records: [record] }));
+    const out = await channel.collect(berlinQuery({ windowHours: 10 }), ctx);
+
+    expect(out).toHaveLength(1);
+    expect(out[0]?.postedAt?.toISOString()).toBe("2024-02-29T00:00:00.000Z");
+    expect(channel.parse(out[0]?.payload).postedAt?.toISOString()).toBe("2024-02-29T00:00:00.000Z");
+    expect(out[0]?.payload).toEqual(record);
+  });
+
   it("answers an empty snapshot with no postings and no usage", async () => {
     const channel = makeChannel();
     const { ctx } = await harness(channel, fakeProvider({ records: [] }));

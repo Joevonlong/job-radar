@@ -120,6 +120,33 @@ describe("Monid channel accounting", () => {
     expect(await h.channel.collect(query({ windowHours: 18 }), h.ctx)).toHaveLength(2);
   });
 
+  it.each([10, 24])("preserves invalid bare dates as unknown in collection and normalization (%i-hour window)", async (windowHours) => {
+    const records = ["2026-02-30", "2026-02-29", "2026-04-31", " 2026-02-30 "].map((postedDate, index) => ({
+      ...jobs[0], id: String(1000000000 + index), postedDate,
+    }));
+    const h = await harness([response(200, unsettled(records))], { now: () => new Date("2026-03-02T16:00:00Z") });
+    const postings = await h.channel.collect(query({ windowHours }), h.ctx);
+
+    expect.soft(postings.map((posting) => posting.payload)).toEqual(records);
+    for (const posting of postings) {
+      expect.soft(posting.postedAt).toBeNull();
+      expect.soft(h.channel.parse(posting.payload).postedAt).toBeNull();
+    }
+    expect(postings.map((posting) => posting.payload)).toEqual(records);
+    expect(h.ctx.budget.snapshot().records).toBe(records.length);
+  });
+
+  it("preserves a valid leap day in collection and normalization", async () => {
+    const record = { ...jobs[0], postedDate: "2024-02-29" };
+    const h = await harness([response(200, unsettled([record]))], { now: () => new Date("2024-02-29T16:00:00Z") });
+    const postings = await h.channel.collect(query({ windowHours: 10 }), h.ctx);
+
+    expect(postings).toHaveLength(1);
+    expect(postings[0]?.postedAt?.toISOString()).toBe("2024-02-29T00:00:00.000Z");
+    expect(h.channel.parse(postings[0]?.payload).postedAt?.toISOString()).toBe("2024-02-29T00:00:00.000Z");
+    expect(postings[0]?.payload).toEqual(record);
+  });
+
   it("retains malformed and unidentified items verbatim so parsing can fail after persistence", async () => {
     const broken = { ...jobs[0], title: "" };
     const unidentified = { title: "Unidentified role", company: { name: "Example" }, postedDate: "2020-01-01" };

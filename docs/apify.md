@@ -51,8 +51,8 @@ Relative labels are checked at collection time using their stated unit: “5 hou
 `2026-10-26T00:00:00.000Z` paired with “1 minute ago” therefore stays eligible when its day overlaps the window.
 The raw payload remains unchanged. Only valid full calendar dates and ISO instants become `postedAt`: bare dates
 store as UTC midnight, and ISO timestamps keep their supplied instant. Unsupported or invalid dates such as
-`2026-10` and `2026-02-30` leave `postedAt` unknown (`null`). The day-end allowance is only for filtering. This rule
-is specific to Apify.
+`2026-10` and `2026-02-30` leave `postedAt` unknown (`null`). The day-end allowance is only for filtering. Relative-label
+precision handling is specific to Apify; date validation is shared with Bright Data and Monid.
 
 ## Live smoke test
 ```bash

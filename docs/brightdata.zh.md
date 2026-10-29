@@ -23,6 +23,7 @@
 ## 它怎么工作
 - 每个查询 = 一次 trigger：关键词组用 `"A" OR "B"` 合并（超过 200 字符自动拆成多个 input），× 一个城市（或远程 location）。
 - 时间窗：≤ 24 小时 → `Past 24 hours`，≤ 7 天 → `Past week`，≤ 30 天 → `Past month`。比供应商档位更短的窗口（例如 10 小时）在本地按 `job_posted_date` 过滤；没有发布时间的岗位保留。只有日期的 `YYYY-MM-DD` 按天处理，仅在日期加 24 小时早于窗口起点时丢弃；ISO 时间戳仍按精确时刻比较。
+- 只有有效的完整日历日期和 ISO 时刻才会写入 `postedAt`。`2026-02-30` 等无效日期在采集和标准化时均记为未知（`null`），原始 payload 原样保留。
 - 用量按 snapshot 实际送达的条数记账：已计费的用量绝不丢弃，被本地时间窗过滤掉的、重复的也计入（它们不写入 raw_postings）。触发前按剩余免费条数和剩余美元换算出 `limit_per_input`，正常不会超预算；预算已空时直接 `budget_exceeded`，同一个查询改用级联里的下一个通道。如果供应商不遵守 limit、送来超出预算的 snapshot，这些记录照常入库、实际用量照实记账，之后该通道本月没有余量，后续查询由级联里的下一个通道接手。
 - 数据集没有"远程/混合/到岗"字段，`workplace` 由 pipeline 读 JD 文字得出（见[岗位信息提取](extraction.zh.md)），读不到就是 `unknown`（不推测）。
 - 描述：`job_summary` 是一整段纯文本，末尾带 "Show more Show less"；`job_description_formatted` 是带段落和列表的 HTML，已加进请求的字段，解析时优先用它。老的采集记录没有这个字段，由 pipeline 整理（`pipeline.yaml: description`）。

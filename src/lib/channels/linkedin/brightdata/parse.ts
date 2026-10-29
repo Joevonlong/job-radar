@@ -2,7 +2,10 @@ import { currencyCodeOf } from "../../currency";
 import { ChannelError } from "../../errors";
 import type { NormalizedPostingDraft } from "../../types";
 import { SALARY_PERIODS } from "../../types";
+import { postedAtOf } from "../apify/posted-date";
 import { jobRecordSchema, type JobRecord } from "./contract";
+
+export { postedAtOf };
 
 const ENTITIES: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " " };
 
@@ -103,12 +106,6 @@ function salaryOf(job: JobRecord, rawText: string | null): NormalizedPostingDraf
     period,
     raw: rawText ?? JSON.stringify({ currency, min, max, period }),
   };
-}
-
-export function postedAtOf(value: string | null | undefined): Date | null {
-  if (!value) return null;
-  const ms = Date.parse(value);
-  return Number.isFinite(ms) ? new Date(ms) : null;
 }
 
 /** Validate one raw record (C6) without transforming it. Throws `ChannelError("parse")`. */

@@ -45,6 +45,8 @@ Templates, remote overrides and look-back values are edited in YAML. Keywords in
 long groups split into separate runs. Every final input must contain exactly one nonempty title, one nonempty
 location and a positive integer `maxItems` equal to that run's affordable limit. Zero would mean unlimited pages
 to the actor and is refused before sending. Shorter time windows are also filtered locally by `postedDate`.
+Only valid full calendar dates and ISO instants become `postedAt`. Invalid dates such as `2026-02-30` stay unknown
+(`null`) in collection and normalization; the raw payload is kept unchanged.
 Remote facts come only from the posting, and only employer-provided salaries become salary facts.
 The location label is preserved even for regions such as EMEA; country codes must be assigned ISO 3166-1 alpha-2
 codes. The parsed location code takes precedence, while placeholders such as `oo` remain unknown.
