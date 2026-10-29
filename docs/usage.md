@@ -300,7 +300,12 @@ After each cycle, qualified new jobs (rank value >= 70, or >= 60 with a high-val
 pnpm cycle:run                                  # run one full cycle: collect -> process -> AI -> push
 pnpm cycle:run --channel arbeitsagentur         # run just one channel
 pnpm cycle:run --channel <id> --dry-run         # collect and parse in memory, write nothing
+pnpm cycle:run --backfill 2d --channel linkedin-guest  # queue a manual backfill for the runner
 ```
+
+`--backfill <N>h|<N>d` accepts integer hours or days (1–720 hours, also limited by
+`collect.max_backfill_hours`). It only queues a request, requires `--kind manual` (the default), and cannot be combined
+with `--dry-run`. Follow it on `/sources` or the `/settings` request queue; see [Manual backfill](sources.md#manual-backfill).
 
 For a full cycle, you can also click "Run a cycle now" on the "Manual actions" tab of `/settings`.
 

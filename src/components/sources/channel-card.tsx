@@ -12,6 +12,8 @@ import type { SourceCard } from "@/lib/sources/view";
 import { cn } from "@/lib/utils";
 
 import "./sources.css";
+import type { BackfillOptions } from "@/lib/sources/backfill";
+import { BackfillAction } from "./backfill-action";
 import { RotationStatusLine } from "./rotation-status";
 import { formatUsd, formatWhen } from "./format";
 import { EnabledBadge } from "./enabled-badge";
@@ -34,7 +36,7 @@ const hasAttribution = (id: string): id is keyof typeof ATTRIBUTIONS => Object.h
 const loginHint = (status: "missing" | "valid" | "expired"): "hintMissing" | "hintValid" | "hintExpired" => (status === "missing" ? "hintMissing" : status === "valid" ? "hintValid" : "hintExpired");
 
 /** One channel: light, this cycle's count with its trend, the health strip of the last cycles, switches, this month's usage against its budget, and its last runs. */
-export async function ChannelCard({ card, timeZone, healthCycles, alertPercent }: { card: SourceCard; timeZone: string; healthCycles: number; alertPercent: number }) {
+export async function ChannelCard({ card, timeZone, healthCycles, alertPercent, backfill }: { card: SourceCard; timeZone: string; healthCycles: number; alertPercent: number; backfill?: BackfillOptions }) {
   const [t, tCycle, format] = await Promise.all([getTranslations("sources"), getTranslations("dashboard.cycle"), getFormatter()]);
   const { usage } = card;
   const bad = card.circuit !== null && card.circuit.state !== "closed";
@@ -121,7 +123,8 @@ export async function ChannelCard({ card, timeZone, healthCycles, alertPercent }
             {detail}
           </span>
         </p>
-        {card.rotation ? await RotationStatusLine({ rotation: card.rotation }) : null}
+        {card.rotation ? await RotationStatusLine({ rotation: card.rotation, ...(backfill ? { backfillId: `backfill-${card.id}` } : {}) }) : null}
+        {backfill ? <BackfillAction id={`backfill-${card.id}`} options={backfill} /> : null}
         {attribution ? (
           <p className="text-ink-2 text-data" data-testid="channel-attribution">
             {t.rich(attribution.message, {

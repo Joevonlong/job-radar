@@ -477,8 +477,10 @@ export const channelsSchema = z
         max_catch_up_hours: nonNegativeInt.max(MAX_WINDOW_HOURS).default(168),
         /** Extend only when the coverage gap exceeds the base window by this many hours. */
         catch_up_tolerance_hours: nonNegativeInt.max(72).default(6),
+        /** Upper limit of a manual backfill in hours, checked at request and execution; independent of max_catch_up_hours so backfill works with catch-up off. */
+        max_backfill_hours: positiveInt.max(MAX_WINDOW_HOURS).default(168),
       })
-      .default({ concurrency: 3, query_rotation: true, max_catch_up_hours: 168, catch_up_tolerance_hours: 6 }),
+      .default({ concurrency: 3, query_rotation: true, max_catch_up_hours: 168, catch_up_tolerance_hours: 6, max_backfill_hours: 168 }),
     http: httpSettings.default({ timeout_ms: 30000, max_retries: 3, backoff_base_ms: 1000, backoff_max_ms: 30000 }),
     /** The channel test; a file without the block gets the defaults of the shipped YAML. */
     test_channel: testChannel.default(TEST_CHANNEL_DEFAULTS),

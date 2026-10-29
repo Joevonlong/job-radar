@@ -1240,7 +1240,9 @@
           "databaseUnavailable": "The database is unavailable; no request was made.",
           "unknownChannel": "The request had the wrong shape, reload the page.",
           "nothingStale": "This job does not need a score right now.",
-          "tooSoon": "Requested a moment ago; try again shortly."
+          "tooSoon": "Requested a moment ago; try again shortly.",
+          "backfillOverLimit": "Backfill exceeds the configured maximum.",
+          "cycleBusy": "A run is already queued or running; try again when it is over"
         },
         "failure": {
           "invalid_payload": "The request had the wrong shape",
@@ -3065,7 +3067,9 @@
         "nothingStale": "Nothing to re-score.",
         "databaseUnavailable": "The database is unavailable, the request was not created.",
         "nothingToScore": "Nothing waits for a score.",
-        "tooSoon": "Requested a moment ago; try again shortly."
+        "tooSoon": "Requested a moment ago; try again shortly.",
+        "backfillOverLimit": "Backfill exceeds the configured maximum.",
+        "cycleBusy": "A run is already queued or running; try again when it is over"
       },
       "requests": {
         "title": "Recent requests",
@@ -3652,6 +3656,21 @@
       "remote": "Remote",
       "remoteRegion": "Remote · {scope}",
       "overCap": "{count, plural, one {{number} query waited} other {{number} queries waited}} longer than the catch-up limit ({hours} h): new jobs from that gap may have been missed. Raise the budget or use fewer queries."
+    },
+    "backfill": {
+      "button": "Backfill…",
+      "gap": "Backfill this gap…",
+      "range": "Look back",
+      "scope": "Scope",
+      "hours": "Last {number} h",
+      "days": "Last {number} {count, plural, one {day} other {days}}",
+      "thisChannel": "This channel",
+      "thisCascade": "This cascade",
+      "allChannels": "All channels",
+      "paid": "Per-record billed channels: {channels}. A wider window can fetch more records per query.",
+      "noPaid": "No per-record billed channel takes part.",
+      "jsearch": "JSearch stays within its spread budget: per-query and daily limits apply; refused queries are recorded as skipped.",
+      "confirmation": "Queue one manual run. Existing budgets, page limits and circuit breakers still apply."
     }
   },
   "insights": {
@@ -3932,7 +3951,8 @@
       "runChannel": "Collect now",
       "testChannel": "Test",
       "testAi": "Test",
-      "testTelegram": "Send a Telegram test message"
+      "testTelegram": "Send a Telegram test message",
+      "backfill": "Queue backfill"
     },
     "confirm": {
       "testTelegram": "Send a test message to Telegram?",
@@ -3947,7 +3967,9 @@
       "nothingToScore": "No job waits for a score.",
       "databaseUnavailable": "The database is unavailable; nothing was requested.",
       "transportFailed": "Could not reach the server. Check your connection and try again; the request may already have been received.",
-      "tooSoon": "Requested a moment ago; try again in {seconds} s."
+      "tooSoon": "Requested a moment ago; try again in {seconds} s.",
+      "backfillOverLimit": "Backfill exceeds the configured maximum ({max} h).",
+      "cycleBusy": "A run is already queued or running; try again when it is over"
     },
     "existing": "A request that covers this channel is already queued or running; waiting for its result.",
     "queued": "Queued…",
@@ -3974,7 +3996,8 @@
       "handler_error": "It failed; see the log",
       "invalid_payload": "Malformed request",
       "unknown": "Failed",
-      "quota_guard": "Job Radar's own AI usage cap holds this provider back. {time, select, none {It continues by itself later.} other {Available again after {time}.}}"
+      "quota_guard": "Job Radar's own AI usage cap holds this provider back. {time, select, none {It continues by itself later.} other {Available again after {time}.}}",
+      "backfill_over_limit": "The configured backfill limit changed before execution (maximum {max} h). Queue a smaller backfill."
     },
     "done": {
       "testChannel": "{fetched} fetched, {parsed} parsed ({seconds} s, nothing stored)",

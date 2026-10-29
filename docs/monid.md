@@ -59,7 +59,7 @@ optional `input.queryParams` and `input.pathParams`, which this actor does not n
 
 Monid always keeps the base window; automatic [catch-up](sources.md#catch-up-windows) is disabled because its date ranges
 are coarse and results are not newest first. It will be enabled only after exact-window requests and newest-first
-results under the channel's active settings have been measured. A stretched window in a future manual backfill could
+results under the channel's active settings have been measured. A manual backfill can
 fetch more records per query and increase per-record charges.
 
 ## Accounting and stops

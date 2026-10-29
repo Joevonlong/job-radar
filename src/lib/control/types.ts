@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { AI_PROVIDER_IDS } from "@/lib/ai/types";
 import type { ChannelLogger } from "@/lib/channels/types";
+import { MAX_WINDOW_HOURS } from "@/lib/config/schemas/channels";
 import type { Db } from "@/lib/db/client";
 import type { CycleSummary } from "@/lib/cycle/run-cycle";
 import type { ControlRequest } from "@/lib/db/repos/control-requests";
@@ -10,6 +11,8 @@ import type { ControlRequest } from "@/lib/db/repos/control-requests";
 /** Payload of a `run_cycle` request: run only these channels (default: every enabled channel). */
 export const runCyclePayloadSchema = z.strictObject({
   channelIds: z.array(z.string().trim().min(1).max(64)).min(1).max(50).optional(),
+  /** Only the hard bound; requestRunCycle and runCycleHandler check the configured max_backfill_hours. */
+  backfillHours: z.number().int().min(1).max(MAX_WINDOW_HOURS).optional(),
 });
 export type RunCyclePayload = z.infer<typeof runCyclePayloadSchema>;
 

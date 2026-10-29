@@ -316,6 +316,36 @@ retain `and not r.window_extended` in `markJobsPossiblyClosed`; otherwise some j
 reopened on their next sighting. Remove both catch-up keys before starting code that does not know them; see
 [Roll back](upgrade.md#roll-back).
 
+### Manual backfill
+
+A manual backfill queues one manual run. Each query uses the largest of the requested backfill window, its automatic
+catch-up window and the manual base window. `collect.max_backfill_hours` caps the requested window (default 168 hours,
+range 1–720), independently of `max_catch_up_hours`. The service checks it when queuing and the runner checks again
+before execution; lowering the cap while a request waits can refuse that request.
+
+On `/sources`, choose **Backfill…** below the rotation status on a keyword channel or the LinkedIn cascade. Choose a
+range and either this channel / this cascade or all channels, review the listed per-record billed channels, then confirm.
+The control is also available when the rotation line is hidden. To avoid paid usage, select only free channels such as
+`linkedin-guest` with the CLI:
+
+```bash
+pnpm cycle:run --backfill 2d --channel linkedin-guest
+pnpm cycle:run --backfill 36h
+```
+
+`--backfill <N>h|<N>d` accepts positive integers up to 720 hours (one day = 24 hours), only with `--kind manual` and
+without `--dry-run`. It only queues a request; the runner executes it. Follow the button's queued / running outcome on
+`/sources`, or the request queue on `/settings` → Manual actions after submitting from the CLI.
+
+A backfill is refused while a run is queued or running. A plain **Collect now** can join a queued backfill when its
+scope is covered. Budget rules stay unchanged: pre-request checks, JSearch's spread budget (per-query and daily limits),
+session daily page limits and circuit breakers still apply. Refused queries are recorded as skipped; rotation continues
+next cycle. Per-record billed channels can fetch more records per query with a wider window, increasing charges.
+
+Served queries move to the back of the rotation, as in normal runs; a backfill does not promise to serve every query.
+A widened run is not evidence for marking jobs possibly closed. A backfill window at or below the base window counts
+like a normal run when no automatic catch-up widens it.
+
 ## 6. Handling common failures
 
 | You see | What to do |

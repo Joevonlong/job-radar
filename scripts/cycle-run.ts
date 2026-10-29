@@ -2,8 +2,9 @@
  * Run one processing cycle by hand.
  *
  *   pnpm cycle:run [--kind manual|weekday_morning|weekday_evening|weekend|catchup]
- *                  [--channel <id>]... [--dry-run]
+ *                  [--channel <id>]... [--dry-run] [--backfill <N>h|<N>d]
  *
+ * --backfill queues a manual request for the runner; it cannot be combined with --dry-run or a non-manual kind.
  * --dry-run collects and parses in memory only: no cycle, run, raw posting, usage or circuit writes. When the database
  * (DATABASE_URL, or the local compose default) is reachable and migrated it is opened read-only and the dry run starts
  * from the persisted month usage, circuit state and stored postings, admitting requests like a real run would. Its
@@ -20,6 +21,8 @@ import { registerBuiltinChannels } from "../src/lib/channels/builtin";
 import { FIXTURE_CHANNEL_ID, registerFixtureChannel } from "../src/lib/channels/fixture";
 import { defaultRegistry } from "../src/lib/channels/registry";
 import { loadConfig } from "../src/lib/config";
+import { parseBackfillArg, submitBackfill, validateBackfillCliArgs } from "../src/lib/control/backfill-arg";
+import { requestRunCycle } from "../src/lib/control/service";
 import { closeDb, getDb, type Db } from "../src/lib/db";
 import { probeCycleState } from "../src/lib/db/health";
 import { createReadOnlyDb, type ReadOnlyDb } from "../src/lib/db/read-only-client";
@@ -44,11 +47,12 @@ function isKind(value: string): value is Kind {
 }
 
 async function main(): Promise<number> {
-  let values: { kind?: string; channel?: string[]; "dry-run"?: boolean; help?: boolean };
+  let values: { kind?: string; backfill?: string; channel?: string[]; "dry-run"?: boolean; help?: boolean };
   try {
     ({ values } = parseArgs({
       options: {
         kind: { type: "string" },
+        backfill: { type: "string" },
         channel: { type: "string", multiple: true },
         "dry-run": { type: "boolean" },
         help: { type: "boolean", short: "h" },
@@ -59,13 +63,19 @@ async function main(): Promise<number> {
     return fail(error instanceof Error ? error.message : "bad arguments");
   }
   if (values.help) {
-    console.log("Usage: pnpm cycle:run [--kind <kind>] [--channel <id>]... [--dry-run]\nKinds: " + KINDS.join(", "));
+    console.log("Usage: pnpm cycle:run [--kind <kind>] [--channel <id>]... [--dry-run] [--backfill <N>h|<N>d]\nKinds: " + KINDS.join(", ") + "\nBackfill: queue a manual run for the runner (integer hours or days, at most 720 h); no --dry-run or non-manual --kind.");
     return 0;
   }
   const kindArg = values.kind ?? "manual";
   if (!isKind(kindArg)) return fail(`unknown --kind "${kindArg}" (one of: ${KINDS.join(", ")})`);
   const dryRun = values["dry-run"] ?? false;
   const channelIds = values.channel ?? [];
+  const backfillHours = values.backfill === undefined ? null : parseBackfillArg(values.backfill);
+  if (values.backfill !== undefined) {
+    if (backfillHours === null) return fail("--backfill requires integer hours or days in the range 1..720 h (for example 36h or 3d)");
+    const error = validateBackfillCliArgs({ dryRun, kind: kindArg });
+    if (error) return fail(error);
+  }
 
   registerBuiltinChannels(defaultRegistry);
   registerBuiltinCycleSteps();
@@ -82,6 +92,14 @@ async function main(): Promise<number> {
       return fail(`unknown channel "${id}" (registered: ${known.length > 0 ? known.join(", ") : "none"})`);
     }
     if (!defaultRegistry.isEnabled(id, channelsConfig)) return fail(`channel "${id}" is disabled in config/sources.yaml`);
+  }
+
+  if (backfillHours !== null) {
+    try {
+      return await submitBackfill({ hours: backfillHours, channelIds }, { request: requestRunCycle, out: console.log, err: console.error });
+    } finally {
+      await closeDb();
+    }
   }
 
   let db: Db | null = null;

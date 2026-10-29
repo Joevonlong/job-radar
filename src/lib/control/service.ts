@@ -55,6 +55,7 @@ function currentCascades(): CoverageCascade[] | null {
  * (every channel, or a superset of the channels asked for; a LinkedIn fallback source only when that request would lead
  * the cascade with it, see `cycleCovers`); otherwise a new request is queued, which the runner's serial poller takes up
  * after the open one, so a click for one channel never swallows the click for another.
+ * A backfill must fit the configured limit and requires no queued or running cycle request; it is never reused.
  */
 export async function requestRunCycle(rawPayload: unknown): Promise<ControlActionState> {
   const payload = runCyclePayloadSchema.safeParse(rawPayload ?? {});
@@ -62,6 +63,14 @@ export async function requestRunCycle(rawPayload: unknown): Promise<ControlActio
   if (payload.data.channelIds?.some((id) => !isConfiguredChannelId(id))) return fail("unknownChannel");
   try {
     const db = getDb();
+    if (payload.data.backfillHours !== undefined) {
+      const maxBackfillHours = loadConfig("channels").collect.max_backfill_hours;
+      if (payload.data.backfillHours > maxBackfillHours) return { status: "error", error: "backfillOverLimit", maxBackfillHours, nonce: Date.now() };
+      if ((await listOpenControlRequests(db, "run_cycle")).length > 0) return fail("cycleBusy");
+      const row = await insertControlRequest(db, { kind: "run_cycle", payload: payload.data });
+      log.info("manual request queued", { request: row.id, kind: row.kind, channels: payload.data.channelIds?.join(",") ?? "all", backfillHours: payload.data.backfillHours });
+      return queued(row, false);
+    }
     const cascades = currentCascades();
     // without the cascades nothing can be judged covered: queue a request of its own
     const open = cascades === null ? undefined : (await listOpenControlRequests(db, "run_cycle")).find((row) => {

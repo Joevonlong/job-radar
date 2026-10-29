@@ -16,6 +16,8 @@ import { PendingChannels } from "@/components/sources/pending-channels";
 import { DiskNotice } from "@/components/sources/disk-notice";
 import { SummaryStrip } from "@/components/sources/summary-strip";
 import { PageHeader } from "@/components/shell/page-header";
+import { channelUsesQueries } from "@/lib/channels/registry";
+import { backfillCost } from "@/lib/sources/backfill";
 import { getDb } from "@/lib/db";
 import { getDisplayTimeZone } from "@/lib/dashboard/context";
 import { loadDiskStatus } from "@/lib/ops/disk";
@@ -55,12 +57,19 @@ export default async function Page() {
           <DiskNotice disk={disk} />
           <HeartbeatBanner runner={view.runner} aiWorker={view.aiWorker} />
           <SummaryStrip view={view} disk={disk} timeZone={timeZone} aiWorker={<AiWorkerCard worker={view.aiWorker} timeZone={timeZone} />} />
-          <CascadeCard cascade={view.cascade} hasCycle={view.latestCycle !== null} alertPercent={view.budgetAlertPercent} />
+          <CascadeCard cascade={view.cascade} hasCycle={view.latestCycle !== null} alertPercent={view.budgetAlertPercent}
+            backfill={{
+              maxHours: view.maxBackfillHours, cascade: true, channelIds: view.cascade.entries.map((entry) => entry.id),
+              local: backfillCost(view, view.cascade.entries.filter((entry) => entry.enabled).map((entry) => entry.id)), all: backfillCost(view),
+            }} />
           <section aria-label={tSources("page.channels")} className="grid items-start gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {view.cards
               .filter((card) => card.registered && !card.otherMarket)
               .map((card) => (
-                <ChannelCard key={card.id} card={card} timeZone={timeZone} healthCycles={view.healthCycles} alertPercent={view.budgetAlertPercent} />
+                <ChannelCard key={card.id} card={card} timeZone={timeZone} healthCycles={view.healthCycles} alertPercent={view.budgetAlertPercent}
+                  {...(card.enabled && card.registered && channelUsesQueries(card.id) && !view.cascade.entries.some((entry) => entry.id === card.id) ? {
+                    backfill: { maxHours: view.maxBackfillHours, cascade: false, channelIds: [card.id], local: backfillCost(view, [card.id]), all: backfillCost(view) },
+                  } : {})} />
               ))}
           </section>
           <PendingChannels cards={view.cards.filter((card) => !card.registered && !card.otherMarket)} />

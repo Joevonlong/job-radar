@@ -105,6 +105,28 @@ async function expectRotation(result: CycleRunResult, unit: string, expected: Pi
 }
 
 describe("catch-up attempt windows", () => {
+  it.each([
+    { backfill: 36, gap: 50, cap: 168, supports: true, hours: 50, capped: 0 },
+    { backfill: 36, gap: 1, cap: 168, supports: true, hours: 36, capped: 0 },
+    { backfill: 12, gap: 1, cap: 168, supports: true, hours: 24, capped: 0 },
+    { backfill: 36, gap: 50, cap: 168, supports: false, hours: 36, capped: 0 },
+    { backfill: 36, gap: 50, cap: 0, supports: true, hours: 36, capped: 0 },
+    { backfill: 72, gap: 240, cap: 48, supports: true, hours: 72, capped: 1 },
+  ])("manual backfill uses the maximum window: $backfill hours, gap $gap, cap $cap, catch-up supported $supports", async ({ backfill, gap, cap, supports, hours, capped }) => {
+    const cfg = catchUpConfig();
+    cfg.channels.collect.max_catch_up_hours = cap;
+    const registry = new ChannelRegistry();
+    const fixture = registerFixtureChannel(registry, { postings: [], supportsCatchUp: () => supports });
+    const [query] = buildQueries(cfg.search, "manual");
+    expect(query!.windowHours).toBe(24);
+    await seedHistory(fixture, query!, gap);
+    const result = await run(registry, cfg, "manual", { backfillHours: backfill });
+    expect(fixture.seen).toEqual([{ ...query, windowHours: hours }]);
+    expect(await rowsOf(result)).toEqual([expect.objectContaining({ queryHash: query!.id, windowHours: hours, windowExtended: hours > 24 })]);
+    expect(result.summary.backfillHours).toBe(backfill);
+    await expectRotation(result, fixture.id, { stretched: hours > 24 ? 1 : 0, maxWindowHours: hours, capped });
+  });
+
   it("keeps a real Greenhouse sweep at the base window after a 240-hour gap", async () => {
     const cfg = catchUpConfig();
     cfg.channels = {
@@ -381,6 +403,22 @@ function jsearchSetup(now = NOW) {
 }
 
 describe("catch-up preserves provider spending controls", () => {
+  it.each([undefined, 36])("preserves JSearch's paced refusal with backfillHours=%s", async (backfillHours) => {
+    const { cfg, registry, channel } = jsearchSetup();
+    await upsertChannelRows(getDb(), [{ id: channel.id, family: channel.family, kind: channel.kind, enabled: true }]);
+    await addMonthUsage(getDb(), channel.id, MONTH, { records: 46, usd: 0 });
+    const fetch = vi.fn(async () => response(200, SEARCH_EMPTY));
+    const result = await run(registry, cfg, "manual", { fetch, ...(backfillHours === undefined ? {} : { backfillHours }) });
+    expect(fetch).not.toHaveBeenCalled();
+    const rows = await rowsOf(result);
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toMatchObject({ status: "skipped", errorCode: "budget_exceeded", fetched: 0, usageUnits: 0, windowHours: backfillHours ?? 24, windowExtended: backfillHours !== undefined });
+    expect(Number(rows[0]!.cost)).toBe(0);
+    expect(rows[0]!.error).toContain("paced share");
+    expect(rows[1]).toMatchObject({ status: "skipped", windowHours: null, windowExtended: false });
+    expect((await getMonthUsage(getDb(), MONTH)).get(channel.id)).toEqual({ records: 46, usd: 0 });
+  });
+
   it("widens JSearch to 3days while limiting details to the configured number of job ids", async () => {
     const { cfg, registry, channel } = jsearchSetup();
     const [query] = buildQueries(cfg.search, "weekday_evening");

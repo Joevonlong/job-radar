@@ -32,6 +32,8 @@ export interface RunCycleOptions {
   dryRun?: boolean;
   /** For a `catchup`: the scheduled kind it replaces, which decides the look-back window. */
   windowKind?: ScheduledCycleKind;
+  /** Manual backfill look-back in hours; each query's window is at least this. */
+  backfillHours?: number;
   /** Cancels the cycle (runner shutdown): pending steps are skipped, in-flight requests aborted. */
   signal?: AbortSignal;
   /**
@@ -75,6 +77,8 @@ export interface CycleSummary {
   version: 1;
   kind: CycleKind;
   windowKind: ScheduledCycleKind | null;
+  /** Manual backfill look-back in hours, when requested. */
+  backfillHours?: number;
   /** The channels the cycle was limited to (`RunCycleOptions.channelIds`); null = every enabled channel. */
   channelIds: string[] | null;
   dryRun: boolean;
@@ -142,6 +146,7 @@ export async function runCycle(kind: CycleKind, options: RunCycleOptions = {}): 
     version: 1 as const,
     kind,
     windowKind: options.windowKind ?? null,
+    ...(options.backfillHours !== undefined ? { backfillHours: options.backfillHours } : {}),
     channelIds,
     dryRun,
     startedAt: now().toISOString(),
@@ -202,6 +207,7 @@ export async function runCycle(kind: CycleKind, options: RunCycleOptions = {}): 
         const stepContext: CycleStepContext = {
           cycle: { id: cycleRow?.id ?? null, kind },
           windowKind: options.windowKind ?? null,
+          ...(options.backfillHours !== undefined ? { backfillHours: options.backfillHours } : {}),
           dryRun,
           db: writeDb,
           signal,

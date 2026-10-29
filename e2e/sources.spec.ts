@@ -1,4 +1,6 @@
-import { expect, test } from "./fixtures";
+import postgres from "postgres";
+
+import { expect, test, waitForServerActions } from "./fixtures";
 
 /** /sources on the seeded e2e database (see src/lib/db/seed.ts): the dashboard's fictional cycles and runs. The UI is Chinese by default. */
 test("sources shows a card per channel with its circuit state, runs and budget", async ({ page }) => {
@@ -108,4 +110,54 @@ test("the AI provider card names each provider's default model", async ({ page }
   // 390px: the second line does not widen the page
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+});
+
+test("a cascade backfill queues two days and refuses a second open run", async ({ page }) => {
+  // This run's disposable database only. The stand-in leaves backfills open until this test removes its request.
+  const url = process.env.E2E_DATABASE_URL;
+  if (!url) throw new Error("E2E_DATABASE_URL is required");
+  const sql = postgres(url, { max: 1, onnotice: () => {} });
+  const [before] = await sql<{ id: number }[]>`select coalesce(max(id), 0)::int as id from control_requests`;
+  const beforeId = before?.id ?? 0;
+  let releaseRead: () => void = () => {};
+  const readGate = new Promise<void>((resolve) => { releaseRead = resolve; });
+  await page.route("**/api/control/requests/*", async (route) => {
+    // Observe the action's queued acknowledgement before following runner progress.
+    await readGate;
+    await route.continue();
+  });
+  try {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/sources");
+    const cascade = page.getByTestId("cascade-card");
+    await cascade.getByRole("button", { name: "补抓…", exact: true }).click();
+    await cascade.getByLabel("补抓范围", { exact: true }).selectOption("48");
+    await cascade.getByLabel("通道范围", { exact: true }).selectOption("local");
+    await cascade.getByTestId("trigger-backfill-button").click();
+    await expect(cascade.getByTestId("trigger-outcome")).toHaveAttribute("data-outcome", "pending");
+    await waitForServerActions(page);
+    const [request] = await sql<{ id: number; payload: { backfillHours: number; channelIds: string[] } }[]>`
+      select id, payload from control_requests where kind = 'run_cycle' and payload ->> 'backfillHours' = '48' order by id desc limit 1
+    `;
+    expect(request).toBeDefined();
+    expect(request?.payload.backfillHours).toBe(48);
+    expect(request?.payload.channelIds).toEqual(await cascade.getByTestId("cascade-entry").evaluateAll((entries) => entries.map((entry) => entry.getAttribute("data-channel"))));
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+    releaseRead();
+    await page.reload();
+    await cascade.getByRole("button", { name: "补抓…", exact: true }).click();
+    await cascade.getByTestId("trigger-backfill-button").click();
+    await expect(cascade.getByRole("alert")).toHaveText("已有采集任务排队或运行中，请等它结束后再试。");
+  } finally {
+    releaseRead();
+    try {
+      await waitForServerActions(page);
+    } finally {
+      try {
+        await sql`delete from control_requests where id > ${beforeId} and kind = 'run_cycle' and payload ? 'backfillHours'`;
+      } finally {
+        await sql.end({ timeout: 5 });
+      }
+    }
+  }
 });

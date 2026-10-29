@@ -32,7 +32,7 @@ function input(): SourcesViewInput {
   config.linkedin.cascade = ["linkedin-guest"];
   config.linkedin.guest.enabled = true;
   config.sources.indeed.enabled = true;
-  config.collect = { concurrency: 1, query_rotation: true, max_catch_up_hours: 168, catch_up_tolerance_hours: 6 };
+  config.collect = { concurrency: 1, query_rotation: true, max_catch_up_hours: 168, catch_up_tolerance_hours: 6, max_backfill_hours: 168 };
   config.paid_total_monthly_budget_usd = 20;
   return {
     now: NOW, month: "2026-10", channelsConfig: config, aiConfig: { monthly_api_budget_usd: 10 },

@@ -8,7 +8,7 @@
  * code: the heartbeat, the "config loaded" acknowledgement (watchConfig + recordConfigLoaded) and the
  * control-request poller. Its `run_cycle` handler is a stub that takes a moment and reports success
  * without creating a cycle row, so a test run does not change what the dashboard e2e sees as "the
- * latest cycle". The real handler is covered by tests/integration/control.test.ts.
+ * latest cycle". Backfills stay open until their test removes the request. The real handler is covered by tests/integration/control.test.ts.
  */
 import { setTimeout as sleep } from "node:timers/promises";
 
@@ -16,10 +16,10 @@ import { createLogger } from "../src/lib/channels/logger";
 import { loadConfig, readConfigText, watchConfig } from "../src/lib/config";
 import { syncSourceRegistry } from "../src/lib/sources/registry/sync";
 import { registerControlHandler, runControlPoller } from "../src/lib/control";
-import { closeDb, getDb, writeHeartbeat } from "../src/lib/db";
+import { closeDb, getControlRequest, getDb, writeHeartbeat } from "../src/lib/db";
 import { getJobForBreakdown, upsertJobBreakdown } from "../src/lib/db/repos/breakdowns";
 import { BREAKDOWN_PROMPT_VERSION } from "../src/lib/ai/prompts/breakdown";
-import { breakdownJobPayloadSchema } from "../src/lib/control/types";
+import { runCyclePayloadSchema, breakdownJobPayloadSchema } from "../src/lib/control/types";
 import { descriptionHash } from "../src/lib/translation/hash";
 import { runMigrations } from "../src/lib/db/migrate";
 import { recordAllConfigLoaded, recordConfigLoaded } from "../src/lib/settings/ack";
@@ -47,7 +47,13 @@ const db = getDb();
 const abort = new AbortController();
 for (const signal of ["SIGTERM", "SIGINT"] as const) process.on(signal, () => abort.abort());
 
-registerControlHandler("run_cycle", async () => {
+registerControlHandler("run_cycle", async (request) => {
+  const payload = runCyclePayloadSchema.safeParse(request.payload);
+  if (payload.success && payload.data.backfillHours !== undefined) {
+    // No collector runs here. Keep backfills open until their test cleans up, so busy assertions cannot race the stub.
+    while (!abort.signal.aborted && (await getControlRequest(db, request.id))?.status === "running") await sleep(STUB_TEST_MS);
+    return { status: "failed", result: { error: "aborted" } };
+  }
   await sleep(STUB_CYCLE_MS);
   return { status: "done", result: { cycleId: null, cycleStatus: "succeeded", durationMs: STUB_CYCLE_MS } };
 });

@@ -373,3 +373,9 @@ describe("buildSourcesView: history, quota and the alert line", () => {
     expect(quotas.get("linkedin-guest")).toEqual({ kind: "none" });
   });
 });
+
+it("passes the configured manual backfill cap to the sources controls", () => {
+  const data = input();
+  data.channelsConfig.collect.max_backfill_hours = 37;
+  expect(buildSourcesView(data).maxBackfillHours).toBe(37);
+});

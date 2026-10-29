@@ -156,6 +156,7 @@ export async function mapWithConcurrency<T>(items: readonly T[], limit: number, 
  */
 export async function collectStep(ctx: CycleStepContext): Promise<StepResult> {
   const { config, channels: services } = ctx;
+  if (ctx.backfillHours !== undefined) ctx.logger.info("manual backfill", { hours: ctx.backfillHours, channels: services.selected?.join(",") ?? "all" });
   const registry = services.registry;
   const isSelected = (id: string): boolean => services.selected === null || services.selected.includes(id);
 
@@ -280,7 +281,8 @@ export async function collectStep(ctx: CycleStepContext): Promise<StepResult> {
       toleranceHours: config.channels.collect.catch_up_tolerance_hours,
       autoCatchUp,
     });
-    const effective = capQuery({ ...query, windowHours: window.hours }, settings.maxResults);
+    const hours = Math.max(window.hours, ctx.backfillHours ?? 0);
+    const effective = capQuery({ ...query, windowHours: hours }, settings.maxResults);
     let runId: number | null = null;
     if (!ctx.dryRun) {
       try {

@@ -6,6 +6,8 @@ import { Battery } from "@/components/viz";
 import type { CascadeEntry, SourcesView } from "@/lib/sources/view";
 
 import "./sources.css";
+import type { BackfillOptions } from "@/lib/sources/backfill";
+import { BackfillAction } from "./backfill-action";
 import { RotationStatusLine } from "./rotation-status";
 import { EnabledBadge } from "./enabled-badge";
 import { formatUsd } from "./format";
@@ -19,7 +21,7 @@ function stepState(entry: CascadeEntry, served: boolean): StepState {
 }
 
 /** The LinkedIn cascade as a chain: the step that served the latest cycle is yellow, a tripped step is dashed, every step shows its quota. */
-export async function CascadeCard({ cascade, hasCycle, alertPercent }: { cascade: SourcesView["cascade"]; hasCycle: boolean; alertPercent: number }) {
+export async function CascadeCard({ cascade, hasCycle, alertPercent, backfill }: { cascade: SourcesView["cascade"]; hasCycle: boolean; alertPercent: number; backfill?: BackfillOptions }) {
   const [t, tCard, tBudget, format] = await Promise.all([getTranslations("sources.cascade"), getTranslations("sources.card"), getTranslations("sources.budget"), getFormatter()]);
   const anyLatest = cascade.entries.some((e) => e.latest !== null);
   return (
@@ -31,7 +33,8 @@ export async function CascadeCard({ cascade, hasCycle, alertPercent }: { cascade
         <CardDescription>{t("hint")}</CardDescription>
       </CardHeader>
       <CardContent className="gap-4 px-4 py-5">
-        {cascade.rotation ? await RotationStatusLine({ rotation: cascade.rotation, cascade: true }) : null}
+        {cascade.rotation ? await RotationStatusLine({ rotation: cascade.rotation, cascade: true, ...(backfill ? { backfillId: "backfill-cascade" } : {}) }) : null}
+        {backfill ? <BackfillAction id="backfill-cascade" options={backfill} /> : null}
         <ol className="src-chain">
           {cascade.entries.map((entry) => {
             const served = cascade.servedBy.includes(entry.id);

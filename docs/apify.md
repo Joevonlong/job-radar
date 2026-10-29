@@ -28,8 +28,8 @@ The `linkedin-apify` channel takes over the main LinkedIn search after the Brigh
 
 - **Catch-up:** Apify always keeps the base window; automatic [catch-up](sources.md#catch-up-windows) is disabled
   because its date ranges are coarse and results are not newest first. It will be enabled only after exact-window
-  requests and newest-first results under the channel's active settings have been measured. A stretched window in a
-  future manual backfill could fetch more records per query and increase per-record charges.
+  requests and newest-first results under the channel's active settings have been measured. A manual
+  backfill can fetch more records per query and increase per-record charges.
 - Each query = one synchronous run: `POST /v2/acts/<actor>/run-sync-get-dataset-items` (201 on success, 408 after 300 seconds, 402 when there is no credit). Keyword groups are merged as `"A" OR "B"` (over 200 characters it is split into several runs sharing the limit).
 - Before triggering, the maximum number of results this run may request is computed from the remaining monthly budget (start fee deducted first), and sent to Apify as the hard caps `maxItems`/`maxTotalChargeUsd`; if the budget cannot cover one run plus one result it is `budget_exceeded` directly, and the same query goes to the next channel in the cascade.
 - Accounting = start fee + results actually delivered x unit price; every result that was billed (duplicates and ones dropped by the local time window included) counts toward the channel's monthly usage and the global paid cap.

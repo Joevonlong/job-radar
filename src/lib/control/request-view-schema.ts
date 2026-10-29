@@ -37,6 +37,8 @@ export const scoringStoppedSchema = z.enum(SCORING_STOPPED_VALUES).optional().ca
 export const requestResultViewSchema = z.object({
   /** Error code of a failed request (`another_cycle_running`, `channel_test_failed`, ...). */
   error: z.string().optional(),
+  /** Configured limit returned when a queued backfill is refused at execution. */
+  maxBackfillHours: count.optional(),
   /** `test_channel`: the channel's error class (`network`, `blocked`, `timeout`, ...). */
   errorCode: z.string().optional(),
   /** `test_ai` / `test_telegram`: the provider's or the bot's error kind (`auth`, `rate_limited`, `network`, ...). */

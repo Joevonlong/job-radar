@@ -42,6 +42,8 @@ export interface CycleStepContext {
   delegatedRequestId?: number;
   /** The scheduled kind a catch-up replaces (decides the look-back window). */
   windowKind: ScheduledCycleKind | null;
+  /** Manual backfill look-back in hours; each query's window is at least this. */
+  backfillHours?: number;
   dryRun: boolean;
   /** null in every dry run (a dry run writes nothing; it reads persisted state only through channels.store and channels.known). */
   db: Db | null;
