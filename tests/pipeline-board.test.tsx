@@ -10,6 +10,8 @@ import { Board } from "@/components/pipeline/board";
 import { LiftedCard } from "@/components/pipeline/card";
 import { HiddenStatusesProvider } from "@/components/applications/visibility-context";
 import type { BoardCard } from "@/components/pipeline/types";
+import { showsAppliedDate } from "@/lib/dashboard/board";
+import type { BoardDensity } from "@/lib/dashboard/density";
 import type { ApplicationStatus } from "@/lib/db/repos/applications";
 
 import en from "../messages/en.json";
@@ -54,6 +56,8 @@ function card(id: number, company: string, status: ApplicationStatus, over: Part
     jobId: id,
     job: job(id, company, `${company} role`),
     status,
+    appliedDate: showsAppliedDate(status, null) ? "none" : null,
+    statusDate: { iso: "2026-10-07T12:00:00.000Z", label: "Oct 7", full: "2026-10-07 14:00" },
     salary: null,
     overdue: null,
     clock: status === "interested" ? { kind: "interested", days: 2, limitDays: 7 } : status === "applied" ? { kind: "applied", days: 3, limitDays: 14 } : null,
@@ -76,7 +80,7 @@ const CARDS: BoardCard[] = [
   card(6, "Zeta GmbH", "archived"),
 ];
 
-function renderBoard(cards: BoardCard[] = CARDS, locale: "en" | "zh" = "en", searchParams = "", hidden: string[] = []) {
+function renderBoard(cards: BoardCard[] = CARDS, locale: "en" | "zh" = "en", searchParams = "", hidden: string[] = [], density: BoardDensity = "compact") {
   const Adapter = withNuqsTestingAdapter({ searchParams });
   const wrap = (node: ReactNode) => (
     <Adapter>
@@ -88,7 +92,7 @@ function renderBoard(cards: BoardCard[] = CARDS, locale: "en" | "zh" = "en", sea
   return render(
     wrap(
       <HiddenStatusesProvider hidden={hidden}>
-        <Board cards={cards} pushLine={70} thresholds={{ interestedDays: 7, appliedDays: 14 }} />
+        <Board density={density} compact={{ title_lines: 2, next_action_lines: 1 }} rememberDays={30} cards={cards} pushLine={70} thresholds={{ interestedDays: 7, appliedDays: 14 }} />
       </HiddenStatusesProvider>,
     ),
   );
@@ -286,11 +290,11 @@ describe("Board", () => {
     const original = window.matchMedia;
     try {
       window.matchMedia = matchMedia(false);
-      const { unmount } = render(wrap(<LiftedCard card={CARDS[0]!} pushLine={70} />));
+      const { unmount } = render(wrap(<LiftedCard density="comfortable" card={CARDS[0]!} pushLine={70} />));
       expect(screen.getByTestId("card-lifted").style.transform).toContain("rotate(-3deg)");
       unmount();
       window.matchMedia = matchMedia(true);
-      render(wrap(<LiftedCard card={CARDS[0]!} pushLine={70} />));
+      render(wrap(<LiftedCard density="comfortable" card={CARDS[0]!} pushLine={70} />));
       expect(screen.getByTestId("card-lifted").style.transform).not.toContain("rotate(-3deg)");
     } finally {
       window.matchMedia = original;
@@ -425,5 +429,104 @@ describe("Board", () => {
     await userEvent.type(within(drawer).getByTestId("next-date-input"), "2026-12-24");
     await userEvent.click(within(drawer).getByTestId("next-action-save"));
     expect(actions.saveNextActionAction).toHaveBeenCalledWith({ jobId: 3, nextAction: "Send CV", nextActionDate: "2026-12-24" });
+  });
+});
+
+describe("card dates and density", () => {
+  const date = { iso: "2025-12-31T23:30:00.000Z", label: "Jan 1", full: "2026-01-01 00:30" };
+  for (const density of ["compact", "comfortable"] as const) {
+    it(`${density} preserves fields, hooks and meter semantics`, () => {
+      const entry = card(12, "Aurora", "applied", { appliedDate: date, interviewRounds: 2, nextAction: "Send the complete research proposal", nextActionDateLabel: "Oct 9", overdue: { kind: "applied", days: 20 }, clock: { kind: "applied", days: 20, limitDays: 14 } });
+      entry.job.favorite = true;
+      entry.job.jobStatus = "closed";
+      renderBoard([entry], "en", "", [], density);
+      const article = document.querySelector('[data-slot="pipeline-card"]')!;
+      expect(article).toHaveAttribute("data-density", density);
+      const node = within(article as HTMLElement);
+      for (const id of ["card-open", "card-handle", "card-status", "card-overdue", "card-next-date", "card-rounds", "card-dates", "card-applied-date", "card-status-date"]) expect(node.getByTestId(id)).toBeInTheDocument();
+      for (const slot of ["fav-mark", "card-salary", "job-status-chip"]) expect(article.querySelector(`[data-slot="${slot}"]`)).not.toBeNull();
+      expect(node.getByText("Aurora")).toBeInTheDocument();
+      expect(node.getByText("Send the complete research proposal")).toHaveAttribute("title", "Send the complete research proposal");
+      expect(node.getByTestId("card-open")).toHaveAttribute("title", entry.job.title);
+      expect(article.querySelector('[data-slot="card-next"]')).toBeInTheDocument();
+      expect(node.getByTestId("card-dates").tagName).toBe("DL");
+      expect(node.getByTestId("card-applied-date").querySelector("time")).toHaveAttribute("datetime", date.iso);
+      for (const [id, term, full, title, short] of [
+        ["card-applied-date", "First marked applied", date.full, `First marked applied: ${date.full}`, `Applied ${date.label}`],
+        ["card-status-date", "In this status since", "2026-10-07 14:00", "In this status since 2026-10-07 14:00", "Since Oct 7"],
+      ] as const) {
+        const field = node.getByTestId(id);
+        expect(field.querySelector("dt")?.textContent).toBe(term);
+        expect(field.querySelector("dt")).toHaveClass("sr-only");
+        const time = field.querySelector("dd > time")!;
+        expect(time).not.toHaveAttribute("aria-label");
+        expect(time).toHaveAttribute("title", title);
+        expect(within(time as HTMLElement).getByText(short)).toHaveAttribute("aria-hidden", "true");
+        expect(within(time as HTMLElement).getByText(full)).toHaveClass("sr-only");
+      }
+      const meter = node.getByRole("meter", { name: "Applied 20 days ago, no reply" });
+      expect(meter).toHaveAttribute("aria-valuetext", "6 days over (limit 14 days)");
+      const rounds = node.getByTestId("card-rounds");
+      expect(rounds.closest("dl")).toBeNull();
+      const jobStatus = article.querySelector('[data-slot="job-status-chip"]')!;
+      expect(jobStatus.closest("dl")).toBeNull();
+      if (density === "compact") {
+        const dateRow = node.getByTestId("card-dates").parentElement!;
+        expect(dateRow).toHaveClass("flex");
+        expect(rounds.parentElement?.parentElement).toBe(dateRow);
+        expect(jobStatus.parentElement?.parentElement).toBe(dateRow);
+        expect(dateRow.lastElementChild).toBe(rounds.parentElement);
+      }
+    });
+  }
+
+  it("renders a status date for all nine statuses and distinguishes absent applied history", () => {
+    renderBoard((["new", "interested", "preparing", "applied", "interviewing", "offer", "rejected", "withdrawn", "archived"] as const).map((status, i) => card(i + 20, `Company ${i}`, status)));
+    fireEvent.click(screen.getByTestId("ended-toggle"));
+    expect(screen.getAllByTestId("card-dates")).toHaveLength(9);
+    expect(screen.getAllByTestId("card-status-date")).toHaveLength(9);
+    expect(screen.getAllByTestId("card-applied-date")).toHaveLength(6);
+    expect(screen.getAllByText("Not recorded")).toHaveLength(6);
+  });
+
+  it("retains a real applied date after returning to preparing", () => {
+    renderBoard([card(1, "Aurora", "preparing", { appliedDate: date })]);
+    expect(screen.getByTestId("card-applied-date").querySelector("time")).toHaveAttribute("datetime", date.iso);
+  });
+
+  it("changes density in this browser without calling any action", async () => {
+    const cookie = vi.spyOn(document, "cookie", "set");
+    renderBoard();
+    await userEvent.click(within(screen.getByTestId("pipeline-density")).getByRole("radio", { name: "Comfortable" }));
+    expect(screen.getByTestId("board")).toHaveAttribute("data-density", "comfortable");
+    expect(cookie).toHaveBeenCalledWith("jr_board_density=comfortable; Path=/; Max-Age=2592000; SameSite=Lax");
+    for (const action of Object.values(actions)) expect(action).not.toHaveBeenCalled();
+    cookie.mockRestore();
+  });
+
+  it.each([null, "none"] as const)("first entry from %s has pending dates and a failed save restores the original status and dates", async (appliedDate) => {
+    let finish: (value: unknown) => void = () => undefined;
+    actions.setApplicationStatusAction.mockReturnValue(new Promise((resolve) => { finish = resolve; }));
+    renderBoard([card(3, "Gamma", "preparing", { appliedDate, statusDate: date })]);
+    await moveWithMenu("preparing", "applied");
+    expect(screen.getAllByText("Saving…")).toHaveLength(2);
+    expect(document.querySelector('[data-testid="card-dates"] time')).toBeNull();
+    await act(async () => finish({ ok: false, error: "failed" }));
+    expect(within(columnOf("preparing")).getByText("Gamma")).toBeInTheDocument();
+    expect(screen.queryByText("Saving…")).not.toBeInTheDocument();
+    expect(screen.getByTestId("card-status-date").querySelector("time")).toHaveAttribute("datetime", date.iso);
+    if (appliedDate === null) expect(screen.queryByTestId("card-applied-date")).not.toBeInTheDocument();
+    else expect(screen.getByTestId("card-applied-date")).toHaveTextContent("Not recorded");
+    expect(toasts.toastTone).toHaveBeenCalledWith("error", en.pipeline.error.failed);
+  });
+
+  it("keeps the recorded applied date while a move out of applied is saving", async () => {
+    let finish: (value: unknown) => void = () => undefined;
+    actions.setApplicationStatusAction.mockReturnValue(new Promise((resolve) => { finish = resolve; }));
+    renderBoard([card(2, "Aurora", "applied", { appliedDate: date })]);
+    await moveWithMenu("applied", "preparing");
+    expect(screen.getByTestId("card-status-date")).toHaveTextContent("Saving…");
+    expect(screen.getByTestId("card-applied-date").querySelector("time")).toHaveAttribute("datetime", date.iso);
+    await act(async () => finish({ ok: false, error: "failed" }));
   });
 });

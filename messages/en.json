@@ -1441,7 +1441,15 @@
       "moveFor": "Move to… · {company}",
       "moveTo": "Move to…",
       "dragFor": "Drag {company}",
-      "hiddenStatus": "{status} (hidden)"
+      "hiddenStatus": "{status} (hidden)",
+      "applied": "Applied {date}",
+      "appliedTerm": "First marked applied",
+      "appliedFull": "First marked applied: {date}",
+      "appliedNone": "Not recorded",
+      "since": "Since {date}",
+      "sinceTerm": "In this status since",
+      "sinceFull": "In this status since {date}",
+      "datePending": "Saving…"
     },
     "nextDefault": {
       "new": "Decide if interested",
@@ -1513,6 +1521,11 @@
     "hiddenColumn": {
       "label": "{status} · hidden · {count}",
       "summary": "hidden · {count}"
+    },
+    "density": {
+      "label": "Card density",
+      "compact": "Compact",
+      "comfortable": "Comfortable"
     }
   },
   "translation": {

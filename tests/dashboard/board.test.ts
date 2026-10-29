@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { BOARD_COLUMNS, CLOCK_SCALE, clockBar, columnOfStatus, ENDED_STATUSES, freshClockOf, countInPipeline, isEndedStatus, isInPipeline, PIPELINE_STATUSES, nextActionDateToTimestamp, overdueOf, overdueThresholds, stageClockOf, timestampToNextActionDate } from "@/lib/dashboard/board";
+import { firstAppliedAt, showsAppliedDate, BOARD_COLUMNS, CLOCK_SCALE, clockBar, columnOfStatus, ENDED_STATUSES, freshClockOf, countInPipeline, isEndedStatus, isInPipeline, PIPELINE_STATUSES, nextActionDateToTimestamp, overdueOf, overdueThresholds, stageClockOf, timestampToNextActionDate } from "@/lib/dashboard/board";
 import { parseConfigText, readConfigText } from "@/lib/config";
 import { APPLICATION_STATUSES } from "@/lib/db/repos/applications";
 
@@ -141,5 +141,34 @@ describe("overdueThresholds", () => {
     expect(overdueOf("interested", ago(9), now, after)).toBeNull();
     expect(overdueOf("applied", ago(16), now, after)).toBeNull();
     expect(overdueOf("applied", ago(21), now, after)).toEqual({ kind: "applied", days: 21 });
+  });
+});
+
+describe("recorded card dates", () => {
+  const early = new Date("2026-01-01T12:00:00Z");
+  const late = new Date("2026-02-01T12:00:00Z");
+  it("does not infer an applied date when there are no events or applied was skipped", () => {
+    expect(firstAppliedAt([])).toBeNull();
+    expect(firstAppliedAt([{ id: 1, toStatus: "interviewing", at: early }])).toBeNull();
+  });
+  it("includes creation directly in applied and takes the earliest of repeated entries without mutating the events", () => {
+    const events = [{ id: 3, fromStatus: "preparing", toStatus: "applied", at: late }, { id: 1, fromStatus: null, toStatus: "applied", at: early }] as const;
+    expect(firstAppliedAt([events[1]])).toBe(early);
+    expect(firstAppliedAt(events)).toBe(early);
+    expect(events[0].id).toBe(3);
+    expect(firstAppliedAt(events.filter((event) => event.id !== 1))).toBe(late);
+  });
+  it("recomputes after undo removes the applied event, without inferring from the remaining history", () => {
+    const events = [{ id: 1, toStatus: "interested", at: early }, { id: 2, toStatus: "applied", at: late }] as const;
+    expect(firstAppliedAt(events)).toBe(late);
+    expect(firstAppliedAt(events.filter((event) => event.id !== 2))).toBeNull();
+  });
+  it("breaks identical timestamps by the smaller event id", () => {
+    const same = new Date(early);
+    expect(firstAppliedAt([{ id: 2, toStatus: "applied", at: early }, { id: 1, toStatus: "applied", at: same }])).toBe(same);
+  });
+  it.each(APPLICATION_STATUSES)("%s shows missing history only in later stages, but retains a real date in every stage", (status) => {
+    expect(showsAppliedDate(status, null)).toBe(!["new", "interested", "preparing"].includes(status));
+    expect(showsAppliedDate(status, early)).toBe(true);
   });
 });

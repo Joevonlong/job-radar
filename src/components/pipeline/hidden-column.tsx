@@ -4,6 +4,7 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 import { useTranslations } from "next-intl";
 
 import type { ApplicationStatus } from "@/lib/db/repos/applications";
+import type { BoardDensity } from "@/lib/dashboard/density";
 import { cn } from "@/lib/utils";
 
 import { columnClass } from "./board-column";
@@ -17,6 +18,7 @@ interface HiddenColumnProps {
   cards: readonly BoardCard[];
   open: boolean;
   pushLine: number;
+  density: BoardDensity;
   settleId: number | null;
   onToggle: () => void;
   onOpen: (jobId: number) => void;
@@ -27,7 +29,7 @@ interface HiddenColumnProps {
  * A status the user hid in settings that still holds cards. Collapsed it is a narrow strip, "In interviews · hidden · 2";
  * opened it lists the cards (they stay draggable out and have the move menu) but is not a drop target: nothing can be moved in.
  */
-export function HiddenColumn({ status, cards, open, pushLine, settleId, onToggle, onOpen, onMove }: HiddenColumnProps) {
+export function HiddenColumn({ status, cards, open, density, pushLine, settleId, onToggle, onOpen, onMove }: HiddenColumnProps) {
   const ts = useTranslations("dashboard.status");
   const t = useTranslations("pipeline.hiddenColumn");
   const Chevron = open ? ChevronDown : ChevronRight;
@@ -51,7 +53,7 @@ export function HiddenColumn({ status, cards, open, pushLine, settleId, onToggle
         <ColumnScroll label={ts(status)}>
           <div role="group" aria-label={ts(status)} data-testid={`hidden-cards-${status}`} className="gap-sp-2 flex flex-col">
             {cards.map((card) => (
-              <DraggableCard key={card.jobId} card={card} pushLine={pushLine} settling={settleId === card.jobId} onOpen={onOpen} onMove={onMove} />
+              <DraggableCard key={card.jobId} card={card} density={density} pushLine={pushLine} settling={settleId === card.jobId} onOpen={onOpen} onMove={onMove} />
             ))}
           </div>
         </ColumnScroll>

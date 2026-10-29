@@ -5,17 +5,20 @@ import { ChevronLeft, ChevronRight, Search, X } from "lucide-react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { parseAsBoolean, parseAsString, useQueryState } from "nuqs";
-import { useEffect, useOptimistic, useRef, useState, useTransition } from "react";
+import { useEffect, useOptimistic, useRef, useState, useTransition, type CSSProperties } from "react";
 
 import { setApplicationStatusAction as rawSetApplicationStatusAction } from "@/app/jobs/[id]/actions";
 import { undoApplicationStatusAction as rawUndoApplicationStatusAction } from "@/app/pipeline/actions";
 import { Button } from "@/components/ui/button";
+import { Segmented, SegmentedItem } from "@/components/ui/segmented";
 import { Input } from "@/components/ui/input";
 import { LayoutGroup, motion } from "@/components/viz";
 import { toastTone, toastUndo } from "@/lib/toast";
 import type { BoardColumn } from "@/lib/dashboard/board";
 import { useHiddenStatuses } from "@/components/applications/visibility-context";
 import { ALL_APPLICATION_STATUSES, boardLayout } from "@/lib/applications/visibility";
+import type { PipelineBoardConfig } from "@/lib/config/schemas/pipeline-board";
+import { boardDensityCookie, resolveBoardDensity, type BoardDensity } from "@/lib/dashboard/density";
 import { columnOfStatus, countInPipeline, freshClockOf, type OverdueThresholds } from "@/lib/dashboard/board";
 import type { ApplicationStatus } from "@/lib/db/repos/applications";
 import { cn } from "@/lib/utils";
@@ -53,6 +56,9 @@ function matches(card: BoardCard, needle: string): boolean {
 
 interface BoardProps {
   cards: readonly BoardCard[];
+  density: BoardDensity;
+  compact: PipelineBoardConfig["compact"];
+  rememberDays: number;
   /** `notify.yaml: push_min_score`: the triangle on every card's score meter. */
   pushLine: number;
   /** notify.yaml `reminders`: a card moved into interested / applied starts a fresh clock against these. */
@@ -66,13 +72,21 @@ interface BoardProps {
  * sets the previous status through the same action. Filters live in the URL
  * (`?q=`, `?overdue=true`) and apply on the client: the whole board is a few dozen cards.
  */
-export function Board({ cards, pushLine, thresholds }: BoardProps) {
+export function Board({ cards, pushLine, thresholds, density: initialDensity, compact, rememberDays }: BoardProps) {
   const t = useTranslations("pipeline");
+  const [density, setDensity] = useState(initialDensity);
   const ts = useTranslations("dashboard.status");
   const [saving, startTransition] = useTransition();
   // the card moves at once; when the action is done the server's cards replace this state
-  const [shown, applyMove] = useOptimistic(cards, (state, move: { jobId: number; status: ApplicationStatus }) =>
-    state.map((card) => (card.jobId !== move.jobId ? card : { ...card, status: move.status, overdue: null, clock: freshClockOf(move.status, thresholds) })),
+  const [shown, applyMove] = useOptimistic(cards, (state, move: { jobId: number; status: ApplicationStatus }): readonly BoardCard[] =>
+    state.map((card) => card.jobId !== move.jobId ? card : {
+      ...card,
+      status: move.status,
+      statusDate: { pending: true },
+      appliedDate: move.status === "applied" && (card.appliedDate === null || card.appliedDate === "none") ? { pending: true } : card.appliedDate,
+      overdue: null,
+      clock: freshClockOf(move.status, thresholds),
+    }),
   );
   const [query, setQuery] = useQueryState("q", parseAsString.withDefault(""));
   const [overdueOnly, setOverdueOnly] = useQueryState("overdue", parseAsBoolean.withDefault(false));
@@ -237,7 +251,7 @@ export function Board({ cards, pushLine, thresholds }: BoardProps) {
   };
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-sp-4">
+    <div data-density={density} style={{ "--card-title-lines": compact.title_lines, "--card-next-lines": compact.next_action_lines } as CSSProperties} className="flex min-h-0 min-w-0 flex-1 flex-col gap-sp-4">
       <div role="search" aria-label={t("filters.label")} className="flex shrink-0 flex-wrap items-center gap-sp-2">
         <div className="relative w-full min-w-0 sm:w-72">
           <Search aria-hidden className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2" />
@@ -269,6 +283,14 @@ export function Board({ cards, pushLine, thresholds }: BoardProps) {
             {t("filters.clear")}
           </button>
         ) : null}
+        <Segmented aria-label={t("density.label")} data-testid="pipeline-density" value={density} onValueChange={(value) => {
+          const next = resolveBoardDensity(value, density);
+          setDensity(next);
+          document.cookie = boardDensityCookie(next, rememberDays);
+        }}>
+          <SegmentedItem value="compact">{t("density.compact")}</SegmentedItem>
+          <SegmentedItem value="comfortable">{t("density.comfortable")}</SegmentedItem>
+        </Segmented>
         <span className="text-muted-foreground ml-auto text-[13px]" role="status" data-testid="pipeline-count">
           {filtering ? t("filters.shown", { shown: visible.length, count: cards.length }) : ""}
         </span>
@@ -287,13 +309,13 @@ export function Board({ cards, pushLine, thresholds }: BoardProps) {
         </div>
       ) : (
         <DndContext id="pipeline-board-dnd" sensors={sensors} accessibility={{ announcements, screenReaderInstructions: { draggable: t("dnd.instructions") } }} collisionDetection={collisionDetection} onDragStart={onDragStart} onDragEnd={onDragEnd} onDragCancel={() => { keyboardTarget.current = null; setDragId(null); }}>
-          <motion.div layoutScroll ref={boardRef} role="region" aria-label={t("boardLabel")} tabIndex={0} data-testid="board" data-dragging={dragId !== null ? "true" : undefined} className="relative flex min-h-[var(--board-min-h)] flex-1 snap-x snap-proximity items-stretch gap-sp-3 overflow-x-auto overscroll-x-contain rounded-lg pb-sp-3 data-[dragging=true]:snap-none">
+          <motion.div layoutScroll ref={boardRef} role="region" aria-label={t("boardLabel")} tabIndex={0} data-testid="board" data-density={density} data-dragging={dragId !== null ? "true" : undefined} className="relative flex min-h-[var(--board-min-h)] flex-1 snap-x snap-proximity items-stretch gap-sp-3 overflow-x-auto overscroll-x-contain rounded-lg pb-sp-3 data-[dragging=true]:snap-none">
             <LayoutGroup id="pipeline-board">
               {layout.columns.map(({ column, mode }) => {
                 if (mode === "none") return null;
                 if (column === "ended") {
                   return (
-                    <EndedColumn key={column} cards={endedCards} dragging={dragId !== null} open={endedOpen} pushLine={pushLine} settleId={settleId} zones={layout.endedZones} hiddenWithCards={layout.endedHiddenWithCards} onToggle={() => setEndedOpen((value) => !value)} onOpen={openCard} onMove={move} />
+                    <EndedColumn key={column} cards={endedCards} dragging={dragId !== null} open={endedOpen} density={density} pushLine={pushLine} settleId={settleId} zones={layout.endedZones} hiddenWithCards={layout.endedHiddenWithCards} onToggle={() => setEndedOpen((value) => !value)} onOpen={openCard} onMove={move} />
                   );
                 }
                 if (mode === "collapsed") {
@@ -303,6 +325,7 @@ export function Board({ cards, pushLine, thresholds }: BoardProps) {
                       status={column}
                       cards={byColumn(column)}
                       open={openHidden.has(column)}
+                      density={density}
                       pushLine={pushLine}
                       settleId={settleId}
                       onToggle={() =>
@@ -317,11 +340,11 @@ export function Board({ cards, pushLine, thresholds }: BoardProps) {
                     />
                   );
                 }
-                return <StatusColumn key={column} status={column} cards={byColumn(column)} total={total} pushLine={pushLine} settleId={settleId} onOpen={openCard} onMove={move} />;
+                return <StatusColumn key={column} status={column} cards={byColumn(column)} total={total} density={density} pushLine={pushLine} settleId={settleId} onOpen={openCard} onMove={move} />;
               })}
             </LayoutGroup>
           </motion.div>
-          <DragOverlay dropAnimation={null}>{dragged ? <LiftedCard card={dragged} pushLine={pushLine} /> : null}</DragOverlay>
+          <DragOverlay dropAnimation={null}>{dragged ? <LiftedCard card={dragged} density={density} pushLine={pushLine} /> : null}</DragOverlay>
         </DndContext>
       )}
 

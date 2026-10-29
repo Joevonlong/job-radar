@@ -59,8 +59,7 @@ Job Radar 的所有设置都是 YAML，分两层：
 | `layout.column_min_width_rem` | `14` | 10–24 | 桌面列最小宽度，单位 rem |
 | `layout.board_min_height_rem` | `24` | 12–60 | 矮屏看板最低高度，单位 rem |
 
-`layout.*` 已生效。`density.*` 和 `compact.*` 已校验并预留，将随卡片密度功能启用。
-目前卡片保持现有布局，不写密度 cookie。
+所有键均已生效。紧凑卡片按配置限制标题和下一步行数，不缩小字号。工具栏切换密度后，在当前浏览器的 `jr_board_density` cookie 中保存 `density.remember_days` 天。cookie 缺失或非法时使用 `density.default`；首个响应由服务端按所选密度渲染。
 
 ## 命令
 

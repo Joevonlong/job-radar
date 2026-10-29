@@ -8,6 +8,7 @@ import { PercentBar } from "@/components/viz";
 import type { BoardColumn as ColumnId } from "@/lib/dashboard/board";
 import type { ApplicationStatus } from "@/lib/db/repos/applications";
 import { formatPercent, ratioPercent } from "@/lib/format/numbers";
+import type { BoardDensity } from "@/lib/dashboard/density";
 import { cn } from "@/lib/utils";
 
 import { DraggableCard } from "./card";
@@ -57,13 +58,14 @@ interface StatusColumnProps {
   /** Cards on the board (after filters): the column's share is `cards.length / total`. */
   total: number;
   pushLine: number;
+  density: BoardDensity;
   settleId: number | null;
   onOpen: (jobId: number) => void;
   onMove: (jobId: number, status: ApplicationStatus) => void;
 }
 
 /** A column of one status: head, share-of-pipeline bar, drop zone with the cards. */
-export function StatusColumn({ status, cards, total, pushLine, settleId, onOpen, onMove }: StatusColumnProps) {
+export function StatusColumn({ status, cards, total, density, pushLine, settleId, onOpen, onMove }: StatusColumnProps) {
   const ts = useTranslations("dashboard.status");
   const t = useTranslations("pipeline.column");
   const share = ratioPercent(cards.length, total);
@@ -74,7 +76,7 @@ export function StatusColumn({ status, cards, total, pushLine, settleId, onOpen,
       <PercentBar value={share} size="sm" tone={COLUMN_COLOR[status].tone} label={percent} ariaLabel={t("shareAria", { name: ts(status) })} className="w-full shrink-0" />
       <ColumnScroll label={ts(status)}>
         <DropZone id={status} label={ts(status)} testId={`drop-${status}`} className="min-h-full">
-          {cards.length === 0 ? <Empty /> : cards.map((card) => <DraggableCard key={card.jobId} card={card} pushLine={pushLine} settling={settleId === card.jobId} onOpen={onOpen} onMove={onMove} />)}
+          {cards.length === 0 ? <Empty /> : cards.map((card) => <DraggableCard key={card.jobId} card={card} density={density} pushLine={pushLine} settling={settleId === card.jobId} onOpen={onOpen} onMove={onMove} />)}
         </DropZone>
       </ColumnScroll>
     </section>

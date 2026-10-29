@@ -1441,7 +1441,15 @@
       "moveFor": "移动到… · {company}",
       "moveTo": "移动到…",
       "dragFor": "拖动 {company}",
-      "hiddenStatus": "{status}（已隐藏）"
+      "hiddenStatus": "{status}（已隐藏）",
+      "applied": "申请 {date}",
+      "appliedTerm": "首次标为已申请",
+      "appliedFull": "首次标为已申请：{date}",
+      "appliedNone": "未记录",
+      "since": "本状态自 {date}",
+      "sinceTerm": "进入当前状态",
+      "sinceFull": "进入当前状态：{date}",
+      "datePending": "保存中…"
     },
     "nextDefault": {
       "new": "决定是否感兴趣",
@@ -1513,6 +1521,11 @@
     "hiddenColumn": {
       "label": "{status} · 已隐藏 · {count}",
       "summary": "已隐藏 · {count}"
+    },
+    "density": {
+      "label": "卡片密度",
+      "compact": "紧凑",
+      "comfortable": "舒适"
     }
   },
   "translation": {

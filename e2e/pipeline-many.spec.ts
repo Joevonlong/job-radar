@@ -1,6 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import { BOARD_DENSITY_COOKIE } from "../src/lib/dashboard/density";
+
 import axe from "axe-core";
 import postgres from "postgres";
 import { parseDocument } from "yaml";
@@ -17,6 +19,7 @@ test.describe.configure({ mode: "serial" });
 test.use({ viewport: { width: 1440, height: 900 } });
 
 const COMPANY = "Moonfern Board Laboratory";
+const OLD_DATE = "2020-12-31T12:00:00.000Z";
 const COUNTS = { interested: 50, applied: 20, rejected: 20, withdrawn: 2, offer: 15 } as const;
 type SeedStatus = keyof typeof COUNTS;
 const seeds: Array<{ id: number; status: SeedStatus; index: number }> = [];
@@ -49,7 +52,7 @@ test.beforeAll(async () => {
     const [company] = await sql<{ id: number }[]>`insert into companies (name, name_norm) values (${COMPANY}, ${COMPANY.toLowerCase()}) returning id`;
     for (const status of Object.keys(COUNTS) as SeedStatus[]) {
       for (let index = 0; index < COUNTS[status]; index++) {
-        const title = `Moonfern ${status} role ${index + 1}${status === "interested" && index === 0 ? " — research systems for observatories, instruments, simulations and reliable scientific data workflows" : ""}`;
+        const title = `Moonfern ${status} role ${index + 1}${status === "interested" && index === 0 ? " — research systems for observatories, instruments, simulations and reliable scientific data workflows" : status === "interested" && index === 2 ? " — 面向科研观测站的可靠数据处理系统研发工程师，负责复杂中文界面与跨团队协作流程" : ""}`;
         const [job] = await sql<{ id: number }[]>`insert into jobs (company_id, title, title_norm, description, german_level_required) values (${company!.id}, ${title}, ${title.toLowerCase()}, 'Fictional board layout fixture.', 'none') returning id`;
         const id = job!.id;
         seeds.push({ id, status, index });
@@ -72,7 +75,13 @@ test.beforeEach(async () => {
     for (const status of Object.keys(COUNTS) as SeedStatus[]) {
       const ids = seeds.filter((seed) => seed.status === status).map((seed) => seed.id);
       await sql`update applications set status = ${status}, status_changed_at = now() - interval '1 day' where job_id = any(${ids}::bigint[])`;
+      await sql`delete from application_events where application_id in (select id from applications where job_id = any(${ids}::bigint[]))`;
+      const withEvents = status === "applied" ? ids.filter((id) => id !== seedId("applied", 0)) : ids;
+      await sql`insert into application_events (application_id, to_status, at) select id, status, status_changed_at from applications where job_id = any(${withEvents}::bigint[])`;
     }
+    await sql`update applications set status_changed_at = ${OLD_DATE}::timestamptz where job_id = ${seedId("applied", 1)}`;
+    await sql`update application_events set at = ${OLD_DATE}::timestamptz where application_id in (select id from applications where job_id = ${seedId("applied", 1)})`;
+    await sql`update applications set next_action = 'Prepare the complete research proposal and supporting evidence for the observatory review', next_action_at = '2026-12-24T12:00:00Z'::timestamptz where job_id = ${seedId("interested", 0)}`;
   } finally {
     await sql.end({ timeout: 5 });
   }
@@ -355,6 +364,7 @@ for (const edge of ["top", "bottom"] as const) {
 test("keyboard chooses rejected for a tall card in the collapsed offscreen ended column and returns focus", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await open(page);
+  await page.getByTestId("pipeline-density").getByRole("radio", { name: "舒适" }).click();
   const board = page.getByTestId("board"), id = seedId("interested", 0);
   await overflow(board, "x");
   expect((await box(card(page, id))).height).toBeGreaterThan(200);
@@ -460,4 +470,92 @@ test("many-card accessibility: named scroll regions, axe, and Tab reaches the fi
   await expect(target).toBeFocused();
   expect(await source.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
   await inside(last, source);
+});
+
+test("moving into applied and Undo restore both recorded dates", async ({ page }) => {
+  await open(page);
+  const id = seedId("interested", 15);
+  const source = card(page, id);
+  await source.scrollIntoViewIfNeeded();
+  const original = await source.getByTestId("card-dates").innerHTML();
+  expect(await source.getByTestId("card-applied-date").count()).toBe(0);
+  await source.getByTestId("card-status").click();
+  await page.getByTestId("card-move-applied").click();
+  await saved(page, id, "已申请");
+  await expect(source.getByTestId("card-applied-date").locator("time")).toHaveAttribute("datetime", /\d{4}-\d{2}-\d{2}T/);
+  const appliedIso = await source.getByTestId("card-applied-date").locator("time").getAttribute("datetime");
+  await expect(source.getByTestId("card-status-date").locator("time")).toHaveAttribute("datetime", appliedIso!);
+  await page.getByRole("button", { name: "撤销", exact: true }).click();
+  await expect(column(page, "interested").locator(`[data-job-id="${id}"]`)).toHaveCount(1);
+  await expect.poll(() => source.getByTestId("card-dates").innerHTML()).toBe(original);
+  await page.reload();
+  await expect.poll(() => card(page, id).getByTestId("card-dates").innerHTML()).toBe(original);
+});
+
+test("density defaults to compact and the first HTML response respects the remembered browser choice", async ({ page, context }) => {
+  await context.clearCookies({ name: BOARD_DENSITY_COOKIE });
+  await open(page);
+  await expect(page.getByTestId("board")).toHaveAttribute("data-density", "compact");
+  await page.getByTestId("pipeline-density").getByRole("radio", { name: "舒适" }).click();
+  await expect(page.getByTestId("board")).toHaveAttribute("data-density", "comfortable");
+  const cookie = (await context.cookies()).find((cookie) => cookie.name === BOARD_DENSITY_COOKIE);
+  expect(cookie).toMatchObject({ value: "comfortable", path: "/", sameSite: "Lax" });
+  const response = await page.reload();
+  expect(await response!.text()).toMatch(/<div[^>]*data-testid="board"[^>]*data-density="comfortable"/);
+  await expect(page.getByTestId("board")).toHaveAttribute("data-density", "comfortable");
+  await page.goto("/jobs");
+  const navigation = await page.goto(`/pipeline?q=${encodeURIComponent(COMPANY)}`);
+  expect(await navigation!.text()).toMatch(/<div[^>]*data-testid="board"[^>]*data-density="comfortable"/);
+  await expect(page.getByTestId("pipeline-density").getByRole("radio", { name: "舒适" })).toBeChecked();
+});
+
+test("compact clamps configured lines and keeps long, Chinese and cross-year content apart", async ({ page }) => {
+  await open(page);
+  await page.getByTestId("pipeline-density").getByRole("radio", { name: "紧凑" }).click();
+  const defaults = process.env.E2E_DEFAULTS_DIR;
+  if (!defaults) throw new Error("E2E_DEFAULTS_DIR is required");
+  const config = parseDocument(fs.readFileSync(path.join(defaults, "pipeline-board.yaml"), "utf8"));
+  const titleLines = Number(config.getIn(["compact", "title_lines"]));
+  const nextLines = Number(config.getIn(["compact", "next_action_lines"]));
+  const long = card(page, seedId("interested", 0));
+  for (const entry of [long, card(page, seedId("interested", 2)), card(page, seedId("applied", 1))]) {
+    await entry.scrollIntoViewIfNeeded();
+    const title = entry.getByTestId("card-open");
+    expect(await title.getAttribute("title")).toBe(await title.innerText());
+    expect(await title.evaluate((el) => getComputedStyle(el).webkitLineClamp)).toBe(String(titleLines));
+    const measurements = await title.evaluate((el) => ({ height: el.getBoundingClientRect().height, lineHeight: Number.parseFloat(getComputedStyle(el).lineHeight) }));
+    expect(measurements.height).toBeLessThanOrEqual(measurements.lineHeight * titleLines + 1);
+    const overlaps = await entry.evaluate((el) => {
+      const selectors = ['[data-testid="card-open"]', '[data-testid="card-handle"]', '[data-testid="card-dates"]', '[data-slot="card-salary"]', '[data-slot="card-next"]'];
+      const boxes = selectors.flatMap((selector) => { const node = el.querySelector(selector); return node ? [node.getBoundingClientRect()] : []; });
+      return boxes.some((a, i) => boxes.slice(i + 1).some((b) => Math.min(a.right, b.right) - Math.max(a.left, b.left) > 1 && Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 1));
+    });
+    expect(overlaps).toBe(false);
+  }
+  const next = long.locator('[data-slot="card-next"] b');
+  expect(await next.getAttribute("title")).toBe(await next.innerText());
+  expect(await next.evaluate((el) => getComputedStyle(el).webkitLineClamp)).toBe(String(nextLines));
+  await expect(card(page, seedId("applied", 1)).getByTestId("card-applied-date")).toContainText("2020");
+  await expect(card(page, seedId("applied", 0)).getByTestId("card-applied-date").locator("dd")).toHaveText("未记录");
+  await long.getByTestId("card-open").click();
+  await expect(page.getByTestId("card-drawer")).toContainText(await long.getByTestId("card-open").getAttribute("title") ?? "");
+});
+
+test("phone density toggle retains multi-card scrolling, full text and dates", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await open(page);
+  for (const [label, density] of [["舒适", "comfortable"], ["紧凑", "compact"]] as const) {
+    await page.getByTestId("pipeline-density").getByRole("radio", { name: label }).click();
+    await expect(page.getByTestId("board")).toHaveAttribute("data-density", density);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+    const source = scroll(page, "interested");
+    await overflow(source);
+    await source.evaluate((el) => { el.scrollTop = el.scrollHeight; });
+    const last = card(page, seedId("interested", 49));
+    await inside(last, source);
+    await expect(last.getByTestId("card-dates")).toBeVisible();
+    await last.getByTestId("card-open").click();
+    await expect(page.getByTestId("card-drawer")).toBeVisible();
+    await page.keyboard.press("Escape");
+  }
 });

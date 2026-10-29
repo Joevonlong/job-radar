@@ -114,3 +114,14 @@ export function formatDuration(milliseconds: Maybe, locale: Locale): string {
   if (hours > 0) return minutes > 0 ? `${part(hours, units.h)} ${part(minutes, units.m)}` : part(hours, units.h);
   return part(minutes, units.m);
 }
+
+/** Calendar label for recorded events: month/day this year, otherwise include the year, in the display zone. */
+export function formatEventDate(
+  format: { dateTime(value: Date, options: { month: "short"; day: "numeric"; year?: "numeric"; timeZone: string }): string },
+  date: Date,
+  now: Date,
+  timeZone: string,
+): string {
+  const sameYear = dayParts(date, timeZone).year === dayParts(now, timeZone).year;
+  return format.dateTime(date, { month: "short", day: "numeric", ...(sameYear ? {} : { year: "numeric" }), timeZone });
+}

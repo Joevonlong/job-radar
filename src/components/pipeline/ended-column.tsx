@@ -6,6 +6,7 @@ import { useTranslations } from "next-intl";
 import { PercentBar } from "@/components/viz";
 import { useAppLocale } from "@/components/viz/intl";
 import type { ApplicationStatus } from "@/lib/db/repos/applications";
+import type { BoardDensity } from "@/lib/dashboard/density";
 import { formatInteger, ratioPercent } from "@/lib/format/numbers";
 
 import { ColumnHead, columnClass, DropZone } from "./board-column";
@@ -19,6 +20,7 @@ interface EndedColumnProps {
   dragging: boolean;
   open: boolean;
   pushLine: number;
+  density: BoardDensity;
   settleId: number | null;
   onToggle: () => void;
   onOpen: (jobId: number) => void;
@@ -37,7 +39,7 @@ const ENDED_ORDER: readonly EndedStatus[] = ["rejected", "withdrawn", "archived"
  * share of the ended jobs), and "expand" for the cards. Dragging a card shows the three drop zones, one per status,
  * so the drop says which end state is meant.
  */
-export function EndedColumn({ cards, dragging, open, pushLine, settleId, onToggle, onOpen, onMove, zones, hiddenWithCards }: EndedColumnProps) {
+export function EndedColumn({ cards, dragging, open, density, pushLine, settleId, onToggle, onOpen, onMove, zones, hiddenWithCards }: EndedColumnProps) {
   const t = useTranslations("pipeline.column");
   const ts = useTranslations("dashboard.status");
   const locale = useAppLocale();
@@ -69,11 +71,11 @@ export function EndedColumn({ cards, dragging, open, pushLine, settleId, onToggl
                   </div>
                   {dropTarget ? (
                     <DropZone id={status} label={ts(status)} testId={`drop-${status}`}>
-                      {open ? inStatus.map((card) => <DraggableCard key={card.jobId} card={card} pushLine={pushLine} settling={settleId === card.jobId} onOpen={onOpen} onMove={onMove} />) : null}
+                      {open ? inStatus.map((card) => <DraggableCard key={card.jobId} card={card} density={density} pushLine={pushLine} settling={settleId === card.jobId} onOpen={onOpen} onMove={onMove} />) : null}
                     </DropZone>
                   ) : open ? (
                     <div role="group" aria-label={ts(status)} data-testid={`hidden-cards-${status}`} className="gap-sp-2 flex flex-col">
-                      {inStatus.map((card) => <DraggableCard key={card.jobId} card={card} pushLine={pushLine} settling={settleId === card.jobId} onOpen={onOpen} onMove={onMove} />)}
+                      {inStatus.map((card) => <DraggableCard key={card.jobId} card={card} density={density} pushLine={pushLine} settling={settleId === card.jobId} onOpen={onOpen} onMove={onMove} />)}
                     </div>
                   ) : null}
                 </div>

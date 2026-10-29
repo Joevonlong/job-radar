@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
 import { getTranslations } from "next-intl/server";
 import type { CSSProperties } from "react";
 
@@ -10,6 +11,7 @@ import { readHiddenSettings } from "@/lib/applications/hidden";
 import { boardLayout } from "@/lib/applications/visibility";
 import { loadConfig } from "@/lib/config";
 import { countInPipeline, overdueThresholds } from "@/lib/dashboard/board";
+import { BOARD_DENSITY_COOKIE, resolveBoardDensity } from "@/lib/dashboard/density";
 import { getDisplayTimeZone } from "@/lib/dashboard/context";
 import { getDb, listPipelineEntries } from "@/lib/db";
 import { visaVisible } from "@/lib/visa/settings";
@@ -27,7 +29,8 @@ export default async function PipelinePage() {
   const tPipeline = await getTranslations("pipeline");
   const timezone = getDisplayTimeZone();
   const notify = loadConfig("notify");
-  const { layout } = loadConfig("pipelineBoard");
+  const { layout, density, compact } = loadConfig("pipelineBoard");
+  const initialDensity = resolveBoardDensity((await cookies()).get(BOARD_DENSITY_COOKIE)?.value, density.default);
   const thresholds = overdueThresholds(notify);
 
   const hidden = readHiddenSettings().statuses;
@@ -51,7 +54,7 @@ export default async function PipelinePage() {
           </p>
         ) : null}
       </PageHeader>
-      <Board cards={cards} pushLine={notify.push_min_score} thresholds={thresholds} />
+      <Board density={initialDensity} compact={compact} rememberDays={density.remember_days} cards={cards} pushLine={notify.push_min_score} thresholds={thresholds} />
     </div>
     </HiddenStatusesProvider>
   );

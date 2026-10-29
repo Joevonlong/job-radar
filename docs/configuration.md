@@ -63,8 +63,7 @@ All six keys are required. Unknown keys, invalid densities and values outside th
 | `layout.column_min_width_rem` | `14` | 10–24 | Minimum desktop column width, in rem |
 | `layout.board_min_height_rem` | `24` | 12–60 | Minimum board height on short screens, in rem |
 
-The `layout.*` keys apply now. The `density.*` and `compact.*` keys are validated and reserved: they take effect when
-card density controls are introduced. Cards currently retain their existing layout; no density cookie is written.
+All keys apply to the board. Compact cards clamp the title and next action to the configured line counts without reducing font sizes. The toolbar switches density and stores `jr_board_density` in this browser for `density.remember_days` days. Missing or invalid cookies use `density.default`; the server renders the chosen density on the first response.
 
 ## Commands
 
