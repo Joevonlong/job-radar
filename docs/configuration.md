@@ -31,7 +31,7 @@ source needs which key: [installation.md](installation.md#2-optional-create-env)
 | Kind | Files | First-time setup | On product upgrade |
 |---|---|---|---|
 | `user` | schedule, search, sources, ai, notify, interests, ui, breakdown, resume, insights, language, setup, salary ([salary.md](salary.md)), mcp ([mcp.md](mcp.md)) | Copied from the defaults directory to the user directory, yours from then on | Your files are never changed automatically; format changes are carried over by migrations (`config_version`) |
-| `shipped` | models (model catalog and prices), pipeline (parsing rules, city and skill tables), pipeline-board (board layout and card display), signal-presets (the presets of the "Add category" dialog on `/interests`, see [signals.md](signals.md#add-your-own-interest-point)) | Not copied; always read from the defaults directory | Follows product updates |
+| `shipped` | models (model catalog and prices), pipeline (parsing rules, city and skill tables), pipeline-board (board layout and card display), job-archive (seen-again rules), signal-presets (the presets of the "Add category" dialog on `/interests`, see [signals.md](signals.md#add-your-own-interest-point)) | Not copied; always read from the defaults directory | Follows product updates |
 
 A `user` file that a product upgrade introduces is copied from the defaults on the next start; when the user directory
 already held configuration (an existing install), a file can be written with the behaviour the install had so far
@@ -47,6 +47,23 @@ The profile files `me.yaml` and `preferences.yaml` live in `data/profile/` and a
 [deal-breakers.md](deal-breakers.md); its limits are in `pipeline.yaml: filter.deal_breakers`.
 Runtime profile readers can use `config/profile.example/` without creating a file. Raw-file checks, the doctor and
 watcher still distinguish a missing user profile from a saved one; templates do not become a default config layer.
+
+## Seen again (`job-archive.yaml`)
+
+`config/job-archive.yaml` is a shipped file. To override it, copy the whole file to
+`data/config/job-archive.yaml`, keeping `config_version: 1`, and edit that copy. The user file replaces the shipped
+file as a whole; remove it to follow future shipped updates again. Both keys are required, and unknown keys or
+out-of-range values are rejected.
+
+| Key | Shipped value | Meaning |
+|---|---|---|
+| `relist.min_gap_days` | `14` | Integer 0–3650: minimum gap between source listings, with an observed absence in between. `0` disables recording relists but still maintains last listed. |
+| `relist.badge_days` | `14` | Integer 1–365: window for the Seen again tag, `/jobs?relisted=true` and Today's note. |
+
+These settings do not affect scoring/filter fingerprints or cause new AI work. If you roll back to code that does not
+maintain last listed and later upgrade again, temporarily set `relist.min_gap_days: 0` for one collection cycle to
+refresh the baseline, then restore your chosen value. Old code ignores this file and the added database columns;
+keep the columns when rolling back.
 
 ## Application board (`pipeline-board.yaml`)
 

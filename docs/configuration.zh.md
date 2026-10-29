@@ -30,7 +30,7 @@ Job Radar 的所有设置都是 YAML，分两层：
 | 类 | 文件 | 首次初始化 | 产品升级时 |
 |---|---|---|---|
 | `user` | schedule、search、sources、ai、notify、interests、ui、breakdown、resume、insights、language、setup、salary（[salary.zh.md](salary.zh.md)）、mcp（[mcp.zh.md](mcp.zh.md)） | 从默认目录复制到用户目录，之后归你 | 不会自动改你的文件；格式变化由迁移（`config_version`）带过去 |
-| `shipped` | models（模型目录和价格）、pipeline（解析规则、城市和技能表）、pipeline-board（看板布局和卡片显示）、signal-presets（`/interests`“新增类别”对话框的预设，见 [signals.zh.md](signals.zh.md#添加你自己的兴趣点)） | 不复制，一直读默认目录的 | 跟着产品更新 |
+| `shipped` | models（模型目录和价格）、pipeline（解析规则、城市和技能表）、pipeline-board（看板布局和卡片显示）、job-archive（再次出现规则）、signal-presets（`/interests`“新增类别”对话框的预设，见 [signals.zh.md](signals.zh.md#添加你自己的兴趣点)） | 不复制，一直读默认目录的 | 跟着产品更新 |
 
 产品升级新增的 `user` 文件会在下次启动时从默认目录复制过来；如果用户目录里本来就有配置（老安装），可以改为写入保持原有行为的版本
 （`language.yaml`：中文，见 [languages.zh.md](languages.zh.md)）。初始化向导用同一个"老安装"判断。
@@ -43,6 +43,21 @@ Job Radar 的所有设置都是 YAML，分两层：
 （在任何 AI 调用之前否决岗位的规则）见 [deal-breakers.zh.md](deal-breakers.zh.md)；它的上限在 `pipeline.yaml: filter.deal_breakers`。
 
 运行时的 profile 读取可在内存里使用 `config/profile.example/`，不创建用户文件。原文检查、doctor 和 watcher 仍区分缺失文件与已保存文件；模板不属于默认配置层。
+
+## 再次出现（`job-archive.yaml`）
+
+`config/job-archive.yaml` 是出厂文件。要覆盖，整份复制到 `data/config/job-archive.yaml`，保留
+`config_version: 1`，再修改用户副本。用户文件整份替换出厂文件；删除用户副本即可重新跟随产品更新。
+两个键都必填，未知键或越界值都会被拒绝。
+
+| 键 | 出厂值 | 含义 |
+|---|---|---|
+| `relist.min_gap_days` | `14` | 整数 0–3650：两次来源列出的最小间隔，期间还须观测到缺席。`0` 关闭再次出现记录，但继续维护最后列出。 |
+| `relist.badge_days` | `14` | 整数 1–365：再次出现标签、`/jobs?relisted=true` 筛选和 Today 提示的窗口。 |
+
+这两个设置不改变打分或硬过滤的配置指纹，也不会增加 AI 工作。若回退到不维护最后列出的旧代码后再次升级，
+先临时设 `relist.min_gap_days: 0` 跑一轮采集，刷新基线，再恢复选定值。旧代码忽略此文件和新增数据库列；
+回退时保留这些列。
 
 ## 申请看板（`pipeline-board.yaml`）
 

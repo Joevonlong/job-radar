@@ -43,6 +43,8 @@ export async function toListItems(
     visa?: boolean;
     /** Whether the ghost job marks show (`ghostEnabled`), when the page already knows; read here otherwise. */
     ghost?: boolean;
+    /** `job-archive.yaml: relist.badge_days`, when the page already loaded it. */
+    relistBadgeDays?: number;
   },
 ): Promise<JobListItem[]> {
   const interests = loadConfig("interests");
@@ -57,6 +59,7 @@ export async function toListItems(
   const showTraps = trapsEnabled();
   const showVisa = options.visa ?? visaVisible();
   const showGhost = options.ghost ?? ghostEnabled();
+  const badgeSince = new Date(options.now.getTime() - (options.relistBadgeDays ?? loadConfig("jobArchive").relist.badge_days) * 86_400_000);
   // the tooltip of the mark: its strongest reasons, short ("open 214 days · relisted under a new id")
   const ghostReasons = (top: NonNullable<JobCard["ghost"]>["top"]): string =>
     top
@@ -85,6 +88,13 @@ export async function toListItems(
       germanLevelRequired: card.germanLevelRequired,
       jobStatus: card.status,
       closedReason: card.closedReason,
+      ...(card.relistedAt && card.relistedAt >= badgeSince ? {
+        relisted: {
+          relative: format.relativeTime(card.relistedAt, options.now),
+          firstSeen: format.dateTime(card.firstSeenAt, { dateStyle: "medium", timeStyle: "short", timeZone: options.timezone }),
+          count: card.relistCount,
+        },
+      } : {}),
       closedEvidence: card.linkCheck ? { httpStatus: card.linkCheck.httpStatus, quote: card.linkCheck.quote, url: card.linkCheck.url, at: card.linkCheck.at } : null,
       salaryDisclosed: card.salaryDisclosed,
       salaryText: annualSalaryLabel(card.salary, locale),

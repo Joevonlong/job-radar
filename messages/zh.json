@@ -1352,6 +1352,16 @@
       "noSalary": "未披露",
       "runCountsWaiting": "{fetched} 抓取 · {waiting} 待处理"
     },
+    "relisted": {
+      "tag": "再次出现 · {relative}",
+      "hint": "本工具再次采集到，不等于雇主重新发布",
+      "todayNote": "{count} 个岗位再次出现",
+      "filterOn": "再次出现",
+      "filterOff": "再次出现",
+      "filterRemove": "显示所有岗位，不限再次出现时间",
+      "detail": "{date} 再次出现",
+      "title": "首次发现 {firstSeen} · 第 {count} 次再次出现"
+    },
     "seen": {
       "dot": "未看",
       "unseenCount": "{count} 条未看",

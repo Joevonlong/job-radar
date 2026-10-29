@@ -60,6 +60,17 @@ bookmarked, has a live application (`new` through `offer`) or has a user open/cl
 Dormancy hides the job from default lists and automatic work, including ordinary link checks, without deleting it or
 changing its status. A source listing it again or a user choosing **Still open** brings it back. See [Closed jobs and the archive](usage.md#closed-jobs-and-the-archive).
 
+**Seen again** uses source observations too. When a source lists a job at least `relist.min_gap_days` days after its last
+listing (14 days by default in `job-archive.yaml`), it counts only if absence was observed in between: at least one of
+its source channels completed a successful run, without an extended search window, that started after the previous
+listing and finished before this observation, in an earlier cycle. That run did not list the job. Other queries or
+sources in the same cycle do not prove absence; a channel outage alone never counts as seen again. The source
+posting's fetch time is recorded, even when parsing happens later. When last listed is missing, the first source
+observation establishes a baseline; it does not invent historical relists. Link checks, watched-job rechecks and user actions never update
+last listed or record a relist. Setting `relist.min_gap_days: 0` disables relist recording while maintaining last listed.
+This means collected again by this tool, not necessarily re-posted by the employer; first seen and posted dates stay
+unchanged, and manual closures and closing-phrase evidence keep their protection.
+
 "Possibly closed" is a hint based on time, not proof, and it is judged per channel, not per search query:
 
 - A job becomes possibly closed when no source has returned it for `possibly_closed_after_days` days (7 by default) **and** each channel it came from has had at least one successful run that started after those days had passed. Runs that failed, were skipped, were interrupted or had their window stretched beyond its base do not count, so a channel that was down never closes its jobs.

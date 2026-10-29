@@ -86,6 +86,8 @@ export interface JobListItem {
   closedReason?: ClosedReason | null;
   /** What the last recheck of its posting found (the tag's tooltip). */
   closedEvidence?: ClosedEvidence | null;
+  /** Source-observed relist inside the configured badge window; dates formatted on the server. */
+  relisted?: { relative: string; firstSeen: string; count: number };
   /** The user has opened it, its posting, or acted on its row. Absent = seen (lists built before the seen state). */
   seen?: boolean;
   /** "3 hours ago" for the posting time, or "seen 3 hours ago" when the source gave none. */

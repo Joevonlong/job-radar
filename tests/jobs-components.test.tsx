@@ -1,9 +1,13 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { NextIntlClientProvider } from "next-intl";
+import { createFormatter, createTranslator, NextIntlClientProvider } from "next-intl";
 import type { ReactNode } from "react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
+import { JobTags } from "@/components/jobs/job-tags";
+import { RelistedNote } from "@/components/jobs/relisted-note";
+import { toListItems } from "@/components/jobs/to-list-items";
+import type { JobCard } from "@/lib/db/queries/types";
 import { JobBadges } from "@/components/jobs/job-badges";
 import type { JobListItem } from "@/components/jobs/types";
 import { SignalBadge } from "@/components/jobs/signal-badge";
@@ -205,5 +209,74 @@ describe("AI trap badge", () => {
     expect(screen.queryByTestId("trap-badge")).toBeNull();
     render(wrap(<JobBadges job={item({ trapCount: 1 })} />));
     expect(screen.getByTestId("trap-badge")).toHaveTextContent(/^AI trap$/);
+  });
+});
+
+
+vi.mock("next-intl/server", () => ({
+  getFormatter: () => createFormatter({ locale: "en", timeZone: "UTC" }),
+  getLocale: () => "en",
+  getTranslations: (namespace: "dashboard" | "ghostJobs") => createTranslator({ locale: "en", messages: en, namespace }),
+}));
+
+const relistNow = new Date("2026-10-01T12:00:00Z");
+const relistCard = (relistedAt: Date | null, status: JobCard["status"] = "active"): JobCard => ({
+  id: 1, title: "Engineer", companyId: 1, companyName: "Example", locations: [], workplace: "unknown",
+  contract: "unknown", isAgency: false, germanLevelRequired: "unknown", status,
+  closedReason: status === "closed" ? "manual" : status === "possibly_closed" ? "phrase" : null,
+  linkCheck: null, postedAt: null, firstSeenAt: new Date("2026-08-01T12:00:00Z"), lastSeenAt: relistNow,
+  lastListedAt: relistedAt, relistedAt, relistCount: 2, salaryDisclosed: false, salary: null, skills: [],
+  sources: [], applicationStatus: null, favorite: null, rank: null, summary: null, signals: [], seen: true,
+});
+const relistItem = async (at: Date | null, status?: JobCard["status"]) => {
+  const [job] = await toListItems([relistCard(at, status)], { now: relistNow, timezone: "UTC", relistBadgeDays: 3, visa: false, ghost: false });
+  if (!job) throw new Error("Expected a list item");
+  return job;
+};
+
+describe("seen-again tag", () => {
+  it.each(["active", "closed", "possibly_closed"] as const)("shows at the window boundary for %s, with first seen, count and source-only meaning", async (status) => {
+    render(wrap(<JobTags job={await relistItem(new Date("2026-09-28T12:00:00Z"), status)} />));
+    expect(screen.getByTestId("relisted-tag")).toHaveTextContent("Seen again · 3 days ago");
+    const title = screen.getByTestId("relisted-tag").getAttribute("title");
+    expect(title).toContain("First seen Aug 1, 2026");
+    expect(title).toContain("Seen again #2");
+    expect(title).toContain(en.dashboard.relisted.hint);
+  });
+
+  it("hides just outside the configured window and when migration fallback supplies no relist", async () => {
+    const { rerender } = render(wrap(<JobTags job={await relistItem(new Date("2026-09-28T11:59:59Z"))} />));
+    expect(screen.queryByTestId("relisted-tag")).not.toBeInTheDocument();
+    rerender(wrap(<JobTags job={await relistItem(null)} />));
+    expect(screen.queryByTestId("relisted-tag")).not.toBeInTheDocument();
+  });
+
+  it("preserves first-seen freshness, new-since-visit and the usual time label", async () => {
+    const before = await relistItem(null);
+    const after = await relistItem(relistNow);
+    expect(after.firstSeenHours).toBe(before.firstSeenHours);
+    expect(after.isNew).toBe(before.isNew);
+    expect(after.timeLabel).toBe(before.timeLabel);
+    expect(after.timeTitle).toBe(before.timeTitle);
+  });
+});
+
+describe("seen-again Today note", () => {
+  it.each([
+    { filtered: false, hideLang: false, high: false },
+    { filtered: true, hideLang: true, high: true },
+    { filtered: true, hideLang: false, high: false },
+  ])("links to Current with relisted and the current visibility switches: %o", (toggles) => {
+    render(wrap(<RelistedNote count={2} {...toggles} />));
+    expect(screen.getByTestId("relisted-note")).toHaveTextContent("2 jobs seen again");
+    const query = new URL(screen.getByTestId("relisted-note-link").getAttribute("href")!, "https://example.test").searchParams;
+    expect(query.get("scope")).toBe("current");
+    expect(query.get("relisted")).toBe("true");
+    for (const key of ["filtered", "hideLang", "high"] as const) expect(query.get(key)).toBe(String(toggles[key]));
+  });
+
+  it("renders nothing for zero relists", () => {
+    render(wrap(<RelistedNote count={0} filtered={false} hideLang={false} high={false} />));
+    expect(screen.queryByTestId("relisted-note")).not.toBeInTheDocument();
   });
 });

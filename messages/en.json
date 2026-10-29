@@ -1352,6 +1352,16 @@
       "noSalary": "not disclosed",
       "runCountsWaiting": "{fetched} fetched · {waiting} waiting"
     },
+    "relisted": {
+      "tag": "Seen again · {relative}",
+      "hint": "Collected again by this tool, not necessarily re-posted by the employer",
+      "todayNote": "{count, plural, one {# job seen again} other {# jobs seen again}}",
+      "filterOn": "Seen again",
+      "filterOff": "Seen again",
+      "filterRemove": "Show jobs regardless of when seen again",
+      "detail": "{date} seen again",
+      "title": "First seen {firstSeen} · Seen again #{count}"
+    },
     "seen": {
       "dot": "Unseen",
       "unseenCount": "{count} unseen",

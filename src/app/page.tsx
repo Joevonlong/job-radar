@@ -14,6 +14,7 @@ import { FilteredToggle } from "@/components/jobs/filtered-toggle";
 import { JobList } from "@/components/jobs/job-list";
 import { KeyHints } from "@/components/jobs/key-hints";
 import { MarkSeenButton } from "@/components/jobs/mark-seen-button";
+import { RelistedNote } from "@/components/jobs/relisted-note";
 import { NewSinceVisitNote } from "@/components/jobs/new-since-visit-note";
 import { ViewTabs, type ViewTab } from "@/components/jobs/view-tabs";
 import { VisitTracker } from "@/components/jobs/visit-tracker";
@@ -30,7 +31,7 @@ import { loadCityGroups } from "@/lib/jobs/cities";
 import { needsCityGroups, resolveViewCompanyIds, toJobFilters } from "@/lib/jobs/job-filters";
 import { loadHighValuePolicy, loadSignalCatalog } from "@/lib/signals/floor";
 import { withLegacyKeys } from "@/lib/jobs/search-params";
-import { countTodayJobs, countTodayQuickViews, countUnscoredJobs, getDb, getDbNow, getFilterFloors, getLatestCycleSummary, getOpenAiRun, getVisitState, hasHighValueCategories, listCycleNewJobs, listMonthSalaryFigures, listRecentCycleKpis, listTodayCycleSummaries, listTodayJobs, type QuickView } from "@/lib/db";
+import { countTodayRelisted, countTodayJobs, countTodayQuickViews, countUnscoredJobs, getDb, getDbNow, getFilterFloors, getLatestCycleSummary, getOpenAiRun, getVisitState, hasHighValueCategories, listCycleNewJobs, listMonthSalaryFigures, listRecentCycleKpis, listTodayCycleSummaries, listTodayJobs, type QuickView } from "@/lib/db";
 import { processingFailed } from "@/lib/cycle/step-health";
 import { resolveTodayView, TODAY_ALL_VIEW, todayHref } from "@/lib/interests/view-filters";
 import { loadSavedViews } from "@/lib/interests/views";
@@ -106,9 +107,10 @@ export default async function TodayPage({ searchParams }: { searchParams: Promis
   const qualifiedMinRank = notify.push_min_score;
   const qualifiedMinRankWithSignals = notify.push_min_score_high_value;
   const ui = loadConfig("ui");
+  const relistBadgeDays = loadConfig("jobArchive").relist.badge_days;
   // the list needs the latest cycle: its new jobs are listed with today's
   const summary = await getLatestCycleSummary(db, { qualifiedMinRank, qualifiedMinRankWithSignals, highValue });
-  const [aiRun, dbNow, todayCycles, cycleKpis, salaryFigures, cards, visit] = await Promise.all([
+  const [aiRun, dbNow, todayCycles, cycleKpis, salaryFigures, cards, visit, relistedCount] = await Promise.all([
     getOpenAiRun(db),
     getDbNow(db),
     listTodayCycleSummaries(db, { now, timezone: schedule.timezone, qualifiedMinRank, qualifiedMinRankWithSignals, highValue }),
@@ -130,6 +132,16 @@ export default async function TodayPage({ searchParams }: { searchParams: Promis
       ghost,
     }),
     getVisitState(db),
+    countTodayRelisted(db, {
+      now,
+      timezone: schedule.timezone,
+      cycle: summary,
+      badgeSince: new Date(now.getTime() - relistBadgeDays * 86_400_000),
+      includeFiltered: filtered,
+      hideGermanLevels: hideLang ? germanLevelsToHide() : [],
+      highValueOnly: high,
+      highValue,
+    }),
   ]);
   // Scoring is paused while me.yaml has neither a summary nor skills; say so above everything else.
   const profile = readProfileReadiness();
@@ -138,7 +150,7 @@ export default async function TodayPage({ searchParams }: { searchParams: Promis
   const missingEnv = missingEnvOfEnabled(loadConfig("channels"), process.env, summary?.channels.map((c) => c.channelId) ?? []);
   const seenUpTo = effectiveSeenUpTo(visit, now);
   const filterFloors = await getFilterFloors(db, salaryFilteredIds(cards));
-  const items = await toListItems(cards, { now, timezone: schedule.timezone, filterFloors, seenUpTo, visa, ghost, monthSalaries: { figures: salaryFigures, minSample: ui.salary_stats.min_sample } });
+  const items = await toListItems(cards, { now, timezone: schedule.timezone, filterFloors, seenUpTo, relistBadgeDays, visa, ghost, monthSalaries: { figures: salaryFigures, minSample: ui.salary_stats.min_sample } });
   const kpiBlocks = buildKpiBlocks(cycleKpis, ui.trend_cycles);
   const cycleNewJobs = summary ? await listCycleNewJobs(db, summary, ui.ticker_max_items) : [];
   const cycleTime = summary ? format.dateTime(summary.startedAt, { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: schedule.timezone }) : "";
@@ -219,6 +231,7 @@ export default async function TodayPage({ searchParams }: { searchParams: Promis
         ) : null}
         <span className="inline-flex flex-wrap items-center gap-x-sp-3 gap-y-sp-2 md:ml-auto">
           {newCount > 0 ? <NewSinceVisitNote count={newCount} /> : null}
+          {relistedCount > 0 ? <RelistedNote count={relistedCount} filtered={filtered} hideLang={hideLang} high={high} /> : null}
           <MarkSeenButton count={unseenIds.length} target={{ scope: "list", jobIds: unseenIds }} />
         </span>
         <span className="font-mono text-data text-ink-2" role="status">
