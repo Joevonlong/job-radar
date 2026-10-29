@@ -97,6 +97,21 @@ test("all routes render a heading and highlight their nav entry", async ({ page 
   }
 });
 
+test("leaving the viewport-fitted pipeline restores document scrolling", async ({ page }) => {
+  await open(page, "/pipeline");
+  const main = page.getByRole("main");
+  const nav = page.getByRole("navigation", { name: "主导航" });
+  await expect(page.locator("[data-fit-viewport]")).toHaveCount(1);
+  await expect(main).toHaveCSS("overflow-y", "auto");
+
+  for (const [label, path] of [["岗位", "/jobs"], ["设置", "/settings"]]) {
+    await nav.getByRole("link", { name: label }).click();
+    await expect(page).toHaveURL(new RegExp(`${path}$`));
+    await expect(page.locator("[data-fit-viewport]")).toHaveCount(0);
+    await expect(main).toHaveCSS("overflow-y", "visible");
+  }
+});
+
 test("an unknown job id shows the not-found state inside the shell", async ({ page }) => {
   await page.goto("/jobs/999999999");
   await expect(page.getByTestId("job-not-found")).toBeVisible();
