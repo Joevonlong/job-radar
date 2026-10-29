@@ -108,6 +108,12 @@ scripts/ops/deploy.sh --skip-pull
 
 部署在第 10 步之前停下时，worker 仍然是停的：修好原因，重跑第 5 步。切换以 `rolled back:` 结束时，这里什么都没装（之前就没有）：看原因，修好后重新部署。
 
+### 带查询运行历史的升级
+
+运行用量迁移在同一个事务里为 `runs` 添加 `usage_units`、`window_hours`、`window_extended` 三列和一个索引。
+索引不是并发创建的：事务持有 `ACCESS EXCLUSIVE` 锁直到提交，建索引期间 `runs` 的读取和写入都会被阻塞。
+如果 `runs` 表很大，请等部署完成后再手动运行采集或打开 `/sources`。
+
 ### 带变更指纹的升级
 
 变更指纹迁移新增可空存储列和索引。添加列不会重写岗位或原始招聘表，迁移内也不回填历史行。创建索引仍会持有表锁：
@@ -123,6 +129,10 @@ scripts/ops/deploy.sh --skip-pull
 ## 回滚
 
 从 `data/config/.backup/` 恢复配置或恢复数据库备份之前，先读 [CHANGELOG.md](../CHANGELOG.md) 里要离开的那个版本的回滚说明。
+
+回滚到补窗之前的版本前，先设 `collect.max_catch_up_hours: 0`，再等待 `lifecycle.possibly_closed_after_days` 天（默认 7），
+避免旧代码把最近的变宽运行当作“可能已关闭”的证据。之后，从用户 `data/config/sources.yaml` 中删除
+`collect.max_catch_up_hours` 和 `collect.catch_up_tolerance_hours`，再启动不认识这些键的旧代码。
 
 **回滚到交互 AI 通道之前。** 排队中的自动翻译带 `origin: "auto"`，旧 worker 会以 `invalid_payload` 拒绝这些请求；
 下一轮 late 翻译阶段会重新处理符合条件的岗位。用户请求仍是原来的载荷格式。升级期间从容器执行切回宿主机、

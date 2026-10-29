@@ -194,6 +194,13 @@ project directory:
 If the deploy stops before step 10, the worker stays stopped: fix the cause and run step 5 again. A switch that ends in
 `rolled back:` leaves nothing installed here (there was nothing before): read the reason, fix it, deploy again.
 
+### Upgrading with query run history
+
+The run-usage migration adds `usage_units`, `window_hours` and `window_extended` plus an index to `runs` in one
+transaction. The index is not built concurrently: the transaction holds an `ACCESS EXCLUSIVE` lock until commit,
+blocking both reads and writes to `runs` while the index is built. On a large `runs` table, let the deploy finish before
+starting manual cycles or opening `/sources`.
+
 ### Upgrading with change fingerprints
 
 The change-fingerprint migration adds nullable storage columns and indexes. Adding the columns does not rewrite job or
@@ -214,6 +221,11 @@ filter results when an older writer changes a verdict or its reasons. Re-upgradi
 
 Before restoring config from `data/config/.backup/` or restoring a database backup, read the rollback notes in
 [CHANGELOG.md](../CHANGELOG.md) for the version you are leaving.
+
+Before rolling back past catch-up windows, set `collect.max_catch_up_hours: 0` and wait
+`lifecycle.possibly_closed_after_days` days (7 by default) to avoid older code counting recent stretched runs as
+possibly-closed evidence. Then remove `collect.max_catch_up_hours` and `collect.catch_up_tolerance_hours` from your
+user `data/config/sources.yaml` before starting code that does not know these keys.
 
 **Rolling back past interactive AI lanes.** Queued automatic translations carry `origin: "auto"`. An older worker
 rejects those requests with `invalid_payload`; the next cycle's late translation stage picks up eligible jobs again.
