@@ -59,6 +59,10 @@ Job Radar 的所有设置都是 YAML，分两层：
 先临时设 `relist.min_gap_days: 0` 跑一轮采集，刷新基线，再恢复选定值。旧代码忽略此文件和新增数据库列；
 回退时保留这些列。
 
+maintenance 连续 `relist.min_gap_days` 天或更久没有运行、而采集一直在跑时也一样：恢复后的第一次 maintenance 可能成批
+误记再次出现。在它运行前先临时设 `relist.min_gap_days: 0` 跑一轮，再恢复选定值。`pnpm reprocess` 重放的是已存的原帖，
+从不记录再次出现。
+
 ## 申请看板（`pipeline-board.yaml`）
 
 这是 `config_version: 1` 的 shipped 文件。现有安装直接读取默认目录，无需迁移。

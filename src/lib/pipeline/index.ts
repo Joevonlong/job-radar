@@ -47,6 +47,12 @@ export interface PipelineOptions {
   signal?: AbortSignal;
 }
 
+/**
+ * The relist rule for replaying stored postings (`pnpm reprocess`): they are observations already counted, not new ones,
+ * so the replay keeps last listed up to date but never records a relist.
+ */
+export const REPLAY_RELIST: PipelineOptions["relist"] = { minGapDays: 0 };
+
 export interface PipelineFailureSample {
   rawPostingId: number;
   channelId: string;

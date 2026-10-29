@@ -65,6 +65,10 @@ maintain last listed and later upgrade again, temporarily set `relist.min_gap_da
 refresh the baseline, then restore your chosen value. Old code ignores this file and the added database columns;
 keep the columns when rolling back.
 
+The same applies when maintenance has not run for `relist.min_gap_days` days or more while collection kept running:
+the first maintenance afterwards can record a batch of false relists. Before it runs, set `relist.min_gap_days: 0` for
+one cycle, then restore your chosen value. `pnpm reprocess` replays stored postings and never records a relist.
+
 ## Application board (`pipeline-board.yaml`)
 
 This shipped file has `config_version: 1`. Existing installations read it from the defaults directory without a migration.
