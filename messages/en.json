@@ -3010,6 +3010,14 @@
       "scoring_evidence_quote_min": {
         "label": "Shortest quote (characters)",
         "hint": "A quote with fewer characters (not counting spaces) is shown as Inferred: a word or two could match any spot in the JD."
+      },
+      "collect_query_rotation": {
+        "label": "Rotate queries",
+        "hint": "Start with queries waiting longest. Default: on. Turning this off hides rotation status on /sources; automatic catch-up remains enabled."
+      },
+      "collect_max_catch_up_hours": {
+        "label": "Catch-up limit (hours)",
+        "hint": "Maximum automatic look-back after missed coverage: 0–720 hours, default 168. Set 0 to disable catch-up; the base window never shrinks."
       }
     },
     "control": {
@@ -3624,6 +3632,16 @@
       "overview": "Overview",
       "registry": "Registry",
       "aiUsage": "AI usage"
+    },
+    "rotation": {
+      "queries": "{count, plural, one {{number} query} other {{number} queries}}",
+      "wait": "longest wait {hours} h ({group} · {place})",
+      "neverRun": "{count, plural, one {{number} never run} other {{number} never run}}",
+      "orderedBy": "ordered by {channel}",
+      "unavailable": "no channel can take queries now",
+      "remote": "Remote",
+      "remoteRegion": "Remote · {scope}",
+      "overCap": "{count, plural, one {{number} query waited} other {{number} queries waited}} longer than the catch-up limit ({hours} h): new jobs from that gap may have been missed. Raise the budget or use fewer queries."
     }
   },
   "insights": {

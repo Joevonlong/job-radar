@@ -31,6 +31,7 @@ test("sources shows a card per channel with its circuit state, runs and budget",
 
   // the cascade, in order, and the channel that served the latest cycle
   const cascade = page.getByTestId("cascade-card");
+  await expect(cascade.getByTestId("rotation-status")).toBeVisible();
   await expect(cascade.getByTestId("cascade-entry")).toHaveCount(5);
   const entries = cascade.getByTestId("cascade-entry");
   const channelOrder = ["linkedin-brightdata", "linkedin-apify", "linkedin-monid", "linkedin-session", "linkedin-guest"];

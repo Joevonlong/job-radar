@@ -6,6 +6,7 @@ import { Battery } from "@/components/viz";
 import type { CascadeEntry, SourcesView } from "@/lib/sources/view";
 
 import "./sources.css";
+import { RotationStatusLine } from "./rotation-status";
 import { EnabledBadge } from "./enabled-badge";
 import { formatUsd } from "./format";
 
@@ -30,6 +31,7 @@ export async function CascadeCard({ cascade, hasCycle, alertPercent }: { cascade
         <CardDescription>{t("hint")}</CardDescription>
       </CardHeader>
       <CardContent className="gap-4 px-4 py-5">
+        {cascade.rotation ? await RotationStatusLine({ rotation: cascade.rotation, cascade: true }) : null}
         <ol className="src-chain">
           {cascade.entries.map((entry) => {
             const served = cascade.servedBy.includes(entry.id);

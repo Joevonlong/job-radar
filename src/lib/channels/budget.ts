@@ -17,6 +17,22 @@ const roundUsd = (usd: number): number => Math.round(usd * 1e6) / 1e6;
 /** Tolerance when comparing floating point money. */
 const EPSILON = 1e-9;
 
+/** Whether free allowance or both monthly budgets cover one more record. Pure and read-only. */
+export function hasBudgetHeadroom(input: {
+  settings: Pick<ChannelRuntimeSettings, "freeRecordsPerMonth" | "monthlyBudgetUsd">;
+  usage: MonthUsage;
+  unitCostUsd: number;
+  globalUsedUsd: number;
+  globalCapUsd: number;
+}): boolean {
+  const { settings, usage, unitCostUsd, globalUsedUsd, globalCapUsd } = input;
+  if (Math.max(0, settings.freeRecordsPerMonth - usage.records) > 0) return true;
+  if (unitCostUsd <= 0) return true;
+  const channelLeft = roundUsd(settings.monthlyBudgetUsd - usage.usd);
+  const globalLeft = roundUsd(globalCapUsd - roundUsd(globalUsedUsd));
+  return Math.min(channelLeft, globalLeft) + EPSILON >= unitCostUsd;
+}
+
 export interface UsageStore {
   loadUsage(month: string): Promise<Map<string, MonthUsage>>;
   addUsage(channelId: string, month: string, delta: MonthUsage): Promise<void>;
@@ -88,11 +104,13 @@ export class BudgetTracker {
    * budget covers one billable record. Channels without `estimateCost` (or a zero price) are free and always can.
    */
   hasHeadroom(channel: Channel): boolean {
-    if (this.freeLeft(channel.id) > 0) return true;
-    const unitCost = channel.estimateCost?.(1) ?? 0;
-    if (unitCost <= 0) return true;
-    const left = this.usdLeft(channel.id);
-    return Math.min(left.channel, left.global) + EPSILON >= unitCost;
+    return hasBudgetHeadroom({
+      settings: this.settings(channel.id),
+      usage: this.used(channel.id),
+      unitCostUsd: channel.estimateCost?.(1) ?? 0,
+      globalUsedUsd: this.globalUsd(),
+      globalCapUsd: this.options.globalCapUsd,
+    });
   }
 
   /** A budget handle for one collect attempt of `channel`. */

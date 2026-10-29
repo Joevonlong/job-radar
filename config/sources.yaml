@@ -33,6 +33,7 @@ collect:
   # Set query_rotation: false to run queries in search.yaml order every cycle.
   # max_catch_up_hours defaults to 168 (0-720): automatic catch-up cap; 0 disables it, and the base window never shrinks.
   # catch_up_tolerance_hours defaults to 6 (0-72): extend only when the coverage gap exceeds the base window by this many hours.
+  # /sources shows each unit's rotation status; the settings page edits query_rotation and max_catch_up_hours.
 
 # Defaults for a channel's ctx.http: per-request timeout, retry count (network errors / 5xx / 429, honoring Retry-After), start and cap of exponential backoff
 http:

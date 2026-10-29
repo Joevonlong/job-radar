@@ -12,6 +12,7 @@ import type { SourceCard } from "@/lib/sources/view";
 import { cn } from "@/lib/utils";
 
 import "./sources.css";
+import { RotationStatusLine } from "./rotation-status";
 import { formatUsd, formatWhen } from "./format";
 import { EnabledBadge } from "./enabled-badge";
 import { UsageBar } from "./usage-bar";
@@ -120,6 +121,7 @@ export async function ChannelCard({ card, timeZone, healthCycles, alertPercent }
             {detail}
           </span>
         </p>
+        {card.rotation ? await RotationStatusLine({ rotation: card.rotation }) : null}
         {attribution ? (
           <p className="text-ink-2 text-data" data-testid="channel-attribution">
             {t.rich(attribution.message, {
