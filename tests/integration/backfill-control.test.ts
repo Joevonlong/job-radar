@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import { sql } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, inject, it } from "vitest";
 import { parseDocument } from "yaml";
 
@@ -9,12 +10,14 @@ import { buildQueries } from "@/lib/channels/query";
 import { defaultRegistry } from "@/lib/channels/registry";
 import { loadConfig, resetConfigCache } from "@/lib/config";
 import { runCycleHandler } from "@/lib/control/handlers";
-import { requestRunCycle } from "@/lib/control/service";
+import { requestRunCycle, type ControlActionState } from "@/lib/control/service";
 import { withCycleLock } from "@/lib/cycle/lock";
 import { resetCycleSteps } from "@/lib/cycle/steps";
 import { claimNextControlRequest, closeDb, createCycle, finishCycle, getControlRequest, getCycle, getDb, insertControlRequest, listControlRequests, listRunsForCycle, schema } from "@/lib/db";
 import { runMigrations } from "@/lib/db/migrate";
 import { upsertChannelRows } from "@/lib/db/repos/channels";
+import { RUN_CYCLE_QUEUE_LOCK } from "@/lib/db/repos/control-requests";
+import { databaseTestSupport } from "@/lib/db/test-support";
 
 import { makeTempConfig, type TempConfig } from "../config/helpers";
 import { pinnedSearch, quietLogger } from "../cycle/helpers";
@@ -81,11 +84,37 @@ describe("backfill request admission", () => {
     expect(await listControlRequests(getDb(), 10)).toHaveLength(1);
   });
 
-  it("uses the existing databaseUnavailable result when the config cannot be read", async () => {
+  it("refuses a backfill with configUnavailable when the config cannot be read", async () => {
     fs.writeFileSync(path.join(temp.configDir, "sources.yaml"), "collect: [invalid");
     resetConfigCache();
-    expect(await requestRunCycle({ backfillHours: 36 })).toMatchObject({ status: "error", error: "databaseUnavailable" });
+    expect(await requestRunCycle({ backfillHours: 36 })).toMatchObject({ status: "error", error: "configUnavailable" });
     expect(await listControlRequests(getDb(), 10)).toEqual([]);
+  });
+});
+
+describe("simultaneous run_cycle requests", () => {
+  it.each([
+    { name: "backfills only", payloads: [{ backfillHours: 36 }, { backfillHours: 48 }, { backfillHours: 24, channelIds: ["indeed"] }, { backfillHours: 12 }] },
+    { name: "backfills and plain requests", payloads: [{ backfillHours: 36 }, {}, { backfillHours: 48 }, {}] },
+  ])("queue one request from $name that wait for the same lock", async ({ payloads }) => {
+    const db = getDb();
+    const support = databaseTestSupport(db);
+    let pending: Promise<ControlActionState[]> | undefined;
+    await db.transaction(async (tx) => {
+      await tx.execute(sql`select pg_advisory_xact_lock(${RUN_CYCLE_QUEUE_LOCK})`);
+      pending = Promise.all(payloads.map((payload) => requestRunCycle(payload)));
+      // every request waits for the lock before it reads the queue
+      await expect.poll(() => support.cycleLockWaiters(), { timeout: 10_000 }).toBe(payloads.length);
+    });
+    const results = await pending!;
+    const rows = await listControlRequests(db, 10);
+    expect(rows).toHaveLength(1);
+    const created = results.filter((result) => result.status === "queued" && !result.existing);
+    expect(created).toEqual([expect.objectContaining({ request: rows[0]!.id })]);
+    for (const result of results) {
+      if (result.status === "queued") expect(result.request).toBe(rows[0]!.id);
+      else expect(result).toMatchObject({ status: "error", error: "cycleBusy" });
+    }
   });
 });
 

@@ -16,6 +16,7 @@ import {
   listControlRequests,
   listOpenControlRequests,
   OPEN_CONTROL_STATUSES,
+  queueRunCycleRequest,
   type ControlRequest,
   type ControlRequestKind,
   type Db,
@@ -55,32 +56,40 @@ function currentCascades(): CoverageCascade[] | null {
  * (every channel, or a superset of the channels asked for; a LinkedIn fallback source only when that request would lead
  * the cascade with it, see `cycleCovers`); otherwise a new request is queued, which the runner's serial poller takes up
  * after the open one, so a click for one channel never swallows the click for another.
- * A backfill must fit the configured limit and requires no queued or running cycle request; it is never reused.
+ * A backfill must fit the configured limit and requires no queued or running cycle request; it is never reused. A config file
+ * that cannot be read refuses a backfill with `configUnavailable` (the limit is unknown). The open requests are read and the new
+ * one inserted under one lock (`queueRunCycleRequest`), so two requests at once cannot both pass the busy check.
  */
 export async function requestRunCycle(rawPayload: unknown): Promise<ControlActionState> {
   const payload = runCyclePayloadSchema.safeParse(rawPayload ?? {});
   if (!payload.success) return fail("invalidPayload");
   if (payload.data.channelIds?.some((id) => !isConfiguredChannelId(id))) return fail("unknownChannel");
-  try {
-    const db = getDb();
-    if (payload.data.backfillHours !== undefined) {
-      const maxBackfillHours = loadConfig("channels").collect.max_backfill_hours;
-      if (payload.data.backfillHours > maxBackfillHours) return { status: "error", error: "backfillOverLimit", maxBackfillHours, nonce: Date.now() };
-      if ((await listOpenControlRequests(db, "run_cycle")).length > 0) return fail("cycleBusy");
-      const row = await insertControlRequest(db, { kind: "run_cycle", payload: payload.data });
-      log.info("manual request queued", { request: row.id, kind: row.kind, channels: payload.data.channelIds?.join(",") ?? "all", backfillHours: payload.data.backfillHours });
-      return queued(row, false);
+  const backfillHours = payload.data.backfillHours;
+  if (backfillHours !== undefined) {
+    let maxBackfillHours: number;
+    try {
+      maxBackfillHours = loadConfig("channels").collect.max_backfill_hours;
+    } catch (error) {
+      logActionFailure("requestRunCycle.config", error);
+      return fail("configUnavailable");
     }
-    const cascades = currentCascades();
-    // without the cascades nothing can be judged covered: queue a request of its own
-    const open = cascades === null ? undefined : (await listOpenControlRequests(db, "run_cycle")).find((row) => {
-      const stored = runCyclePayloadSchema.safeParse(row.payload ?? {});
-      return stored.success && cycleCovers(stored.data.channelIds, payload.data.channelIds, cascades);
+    if (backfillHours > maxBackfillHours) return { status: "error", error: "backfillOverLimit", maxBackfillHours, nonce: Date.now() };
+  }
+  // without the cascades nothing can be judged covered: queue a request of its own
+  const cascades = backfillHours === undefined ? currentCascades() : null;
+  try {
+    const outcome = await queueRunCycleRequest(getDb(), {
+      payload: payload.data,
+      exclusive: backfillHours !== undefined,
+      reuse: (open) => cascades === null ? undefined : open.find((row) => {
+        const stored = runCyclePayloadSchema.safeParse(row.payload ?? {});
+        return stored.success && cycleCovers(stored.data.channelIds, payload.data.channelIds, cascades);
+      }),
     });
-    if (open) return queued(open, true);
-    const row = await insertControlRequest(db, { kind: "run_cycle", payload: payload.data });
-    log.info("manual request queued", { request: row.id, kind: row.kind, channels: payload.data.channelIds?.join(",") ?? "all" });
-    return queued(row, false);
+    if (outcome.state === "busy") return fail("cycleBusy");
+    if (outcome.state === "existing") return queued(outcome.row, true);
+    log.info("manual request queued", { request: outcome.row.id, kind: outcome.row.kind, channels: payload.data.channelIds?.join(",") ?? "all", ...(backfillHours === undefined ? {} : { backfillHours }) });
+    return queued(outcome.row, false);
   } catch (error) {
     logActionFailure("requestRunCycle", error);
     return fail("databaseUnavailable");

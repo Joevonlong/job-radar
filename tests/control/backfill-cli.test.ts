@@ -26,7 +26,7 @@ describe("queue submission", () => {
     expect(out).toHaveBeenCalledWith("backfill request #42 queued (48 h); the runner executes it, follow it on /sources");
     expect(err).not.toHaveBeenCalled();
   });
-  it.each(["backfillOverLimit", "cycleBusy", "unknownChannel", "invalidPayload", "databaseUnavailable"] as const)("reports %s and fails", async (error) => {
+  it.each(["backfillOverLimit", "cycleBusy", "unknownChannel", "invalidPayload", "databaseUnavailable", "configUnavailable"] as const)("reports %s and fails", async (error) => {
     const err = vi.fn();
     expect(await submitBackfill({ hours: 48, channelIds: [] }, { request: async () => ({ status: "error", error, maxBackfillHours: 24, nonce: 1 }), out: vi.fn(), err })).toBe(1);
     expect(err).toHaveBeenCalledOnce();

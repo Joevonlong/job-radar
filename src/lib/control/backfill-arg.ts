@@ -39,6 +39,7 @@ export async function submitBackfill({ hours, channelIds }: { hours: number; cha
       nothingStale: "nothing stale to process",
       nothingToScore: "nothing to score",
       tooSoon: "a recent request is still cooling down",
+      configUnavailable: "sources.yaml cannot be read, so the backfill limit is unknown; fix the config first",
     };
     err(reasons[state.error]);
   } else err("backfill request was not queued");
