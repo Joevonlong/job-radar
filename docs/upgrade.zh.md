@@ -137,6 +137,9 @@ scripts/ops/deploy.sh --skip-pull
 并在下次被发现时重新打开。启动不认识补窗键的代码前，从用户 `data/config/sources.yaml` 中删除
 `collect.max_catch_up_hours` 和 `collect.catch_up_tolerance_hours`。
 
+**手动补抓：**回滚前先让尚未完成的补抓请求结束，或将其标记为失败。旧代码会以 `invalid_payload` 拒绝含有
+`backfillHours` 的 `run_cycle` 载荷。启动旧代码前，从用户 `data/config/sources.yaml` 中删除 `collect.max_backfill_hours`。
+
 **回滚到交互 AI 通道之前。** 排队中的自动翻译带 `origin: "auto"`，旧 worker 会以 `invalid_payload` 拒绝这些请求；
 下一轮 late 翻译阶段会重新处理符合条件的岗位。用户请求仍是原来的载荷格式。升级期间从容器执行切回宿主机、
 宿主机 worker 仍是旧代码时，也可能短暂出现同样情况。这项改动没有数据库迁移或新配置键。

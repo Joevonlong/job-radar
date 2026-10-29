@@ -269,7 +269,12 @@ Today 在今天或最近一轮窗口内有有效 active、未忽略的再次出�
 pnpm cycle:run                                  # 跑一轮完整的采集 → 处理 → AI → 推送
 pnpm cycle:run --channel arbeitsagentur         # 只跑一个通道
 pnpm cycle:run --channel <id> --dry-run         # 只在内存里采集、解析，不写库
+pnpm cycle:run --backfill 2d --channel linkedin-guest  # 将手动补抓加入队列，交由 runner 执行
 ```
+
+`--backfill <N>h|<N>d` 接受整数小时或天数（1–720 小时，还受 `collect.max_backfill_hours` 限制）。
+它只将请求加入队列，要求 `--kind manual`（默认值），且不能与 `--dry-run` 同用。
+可在 `/sources` 或 `/settings` 的请求队列中查看；见[手动补抓](sources.zh.md#手动补抓)。
 
 要完整跑一轮，也可以在 `/settings` 的"手动操作"标签点"立即跑一轮"。
 
