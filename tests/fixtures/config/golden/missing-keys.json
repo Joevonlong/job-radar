@@ -1,5 +1,5 @@
 {
-  "sha": "12415ee351f46a86b448dedae21406db9542988a",
+  "sha": "97afee4c8253258c647fd8e7a746503dd53bcc2b",
   "set": "missing-keys",
   "files": {
     "schedule": {
@@ -14,7 +14,7 @@
     },
     "channels": {
       "layer": "user",
-      "hash": "7e9ef7f3285904c5a79e9a25ffb65c7e381eeaa0962a7b7a90350b116265373b",
+      "hash": "1fdda216c61e53e936dbaa92b016394a844776830638c06289269c606b6a4819",
       "valid": true
     },
     "ai": {
@@ -105,6 +105,11 @@
     "activityLog": {
       "layer": "default",
       "hash": "ecee8d2467ba8b0c9cd07c7833c7517532c761d56efb3ddedb070df447e90516",
+      "valid": true
+    },
+    "jobArchive": {
+      "layer": "default",
+      "hash": "929e5bd9dd74ef1db4799fcff19bd5578f84f2049b4aa6dc72bb37c63bb70cf5",
       "valid": true
     },
     "me": {

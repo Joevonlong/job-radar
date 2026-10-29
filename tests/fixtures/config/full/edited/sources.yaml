@@ -27,6 +27,8 @@ circuit_breaker:
 # 采集步骤：并行采集的通道数（LinkedIn 级联整体算一个）；通道内部的查询始终串行
 collect:
   concurrency: 3
+  # a shorter manual backfill limit
+  max_backfill_hours: 72
 
 # 通道 ctx.http 的默认值：单次请求超时、重试次数（网络错误 / 5xx / 429，尊重 Retry-After）、指数退避的起点和上限
 http:

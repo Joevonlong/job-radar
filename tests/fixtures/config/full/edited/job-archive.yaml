@@ -1,0 +1,5 @@
+config_version: 1
+relist:
+  # a longer gap before a listing counts as seen again
+  min_gap_days: 21
+  badge_days: 14

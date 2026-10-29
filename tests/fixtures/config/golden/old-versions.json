@@ -1,5 +1,5 @@
 {
-  "sha": "12415ee351f46a86b448dedae21406db9542988a",
+  "sha": "97afee4c8253258c647fd8e7a746503dd53bcc2b",
   "set": "old-versions",
   "files": {
     "schedule": {
@@ -14,7 +14,7 @@
     },
     "channels": {
       "layer": "user",
-      "hash": "fc1b9153c1e6bdaafb15f3f0842debf9a6e9ff70d98a4d46ece5dc32cc469847",
+      "hash": "324fffe9663041799db02a24cf2a36349338a23bca7b2fee3c40f97137dbc808",
       "valid": true
     },
     "ai": {
@@ -105,6 +105,11 @@
     "activityLog": {
       "layer": "default",
       "hash": "ecee8d2467ba8b0c9cd07c7833c7517532c761d56efb3ddedb070df447e90516",
+      "valid": true
+    },
+    "jobArchive": {
+      "layer": "default",
+      "hash": "929e5bd9dd74ef1db4799fcff19bd5578f84f2049b4aa6dc72bb37c63bb70cf5",
       "valid": true
     },
     "me": {
