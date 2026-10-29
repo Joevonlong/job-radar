@@ -8,7 +8,7 @@ import { BudgetExceededError, ChannelError } from "@/lib/channels/errors";
 import { affordableRecords, createBrightDataChannel, keywordStrings, timeRangeFor } from "@/lib/channels/linkedin/brightdata";
 import { rawPostingInputSchema } from "@/lib/channels/types";
 
-import { ENV, berlinQuery, brightConfig, fakeProvider, harness, makeChannel } from "./helpers";
+import { ENV, berlinQuery, brightConfig, brightSettings, fakeProvider, harness, makeChannel } from "./helpers";
 
 const snapshot = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, "../../../fixtures/brightdata/snapshot-berlin.json"), "utf8")) as unknown[];
 
@@ -20,6 +20,13 @@ function brightdata(raw: Record<string, unknown>): Record<string, unknown> {
 }
 
 describe("channel identity", () => {
+  it.each([false, true])("declines automatic catch-up with extra settings = %s", (extra) => {
+    const channel = makeChannel();
+    const settings = brightSettings();
+    expect(channel.supportsCatchUp).toBeTypeOf("function");
+    expect(channel.supportsCatchUp?.(extra ? { ...settings, extra: { ...settings.extra, discover_by: "url" } } : settings)).toBe(false);
+  });
+
   it("is the paid LinkedIn channel with a per-1000 price", () => {
     const channel = makeChannel({ cost: 1.5 });
     expect(channel).toMatchObject({ id: "linkedin-brightdata", family: "linkedin", kind: "paid", usesQueries: true });

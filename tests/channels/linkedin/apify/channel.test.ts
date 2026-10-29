@@ -5,11 +5,18 @@ import { BudgetExceededError, ChannelError } from "@/lib/channels/errors";
 import { affordableItems, createApifyChannel, jobIdOfRecord } from "@/lib/channels/linkedin/apify";
 import { rawPostingInputSchema } from "@/lib/channels/types";
 
-import { ENV, FIXTURE_ITEMS, apifyConfig, berlinQuery, fakeApify, harness, makeChannel, response } from "./helpers";
+import { ENV, FIXTURE_ITEMS, apifyConfig, apifySettings, berlinQuery, fakeApify, harness, makeChannel, response } from "./helpers";
 
 const channelRows = (rows: Array<{ externalId: string }>): string[] => rows.map((r) => r.externalId);
 
 describe("channel identity", () => {
+  it.each([false, true])("declines automatic catch-up with extra settings = %s", (extra) => {
+    const channel = makeChannel();
+    const settings = apifySettings();
+    expect(channel.supportsCatchUp).toBeTypeOf("function");
+    expect(channel.supportsCatchUp?.(extra ? { ...settings, extra: { ...settings.extra, discover_by: "url" } } : settings)).toBe(false);
+  });
+
   it("is the paid LinkedIn channel with a per-1000 price", () => {
     const channel = makeChannel({ price: 0.4 });
     expect(channel).toMatchObject({ id: "linkedin-apify", family: "linkedin", kind: "paid", usesQueries: true });

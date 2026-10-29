@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
 
-import { familyHistory, orderQueries, rotationSummary, turnsOf } from "@/lib/channels/rotation";
+import { catchUpWindow, familyHistory, orderQueries, rotationSummary, turnsOf } from "@/lib/channels/rotation";
 import type { SearchQuery } from "@/lib/channels/types";
 import type { QueryRunHistoryRow } from "@/lib/db/repos/runs";
 
@@ -52,7 +52,7 @@ describe("history projections", () => {
 });
 
 describe("rotationSummary", () => {
-  const input = { queries, sortChannel: "paid", turns: new Map([["a", earlier], ["b", later]]), reached: 2, maxWindowHours: 24, historyUnavailable: false, now: new Date("2026-01-02T01:07:00Z") };
+  const input = { queries, sortChannel: "paid", turns: new Map([["a", earlier], ["b", later]]), reached: 2, stretched: 0, capped: 0, maxWindowHours: 24, historyUnavailable: false, now: new Date("2026-01-02T01:07:00Z") };
 
   it("reports starting history, reached queries, rounded oldest wait and the requested window", () => {
     expect(rotationSummary(input)).toEqual({
@@ -80,6 +80,79 @@ describe("rotationSummary", () => {
     expect(rotationSummary({ ...input, queries: [remote, query("b")], turns: new Map([["a", earlier], ["b", earlier]]) }).oldestWaiting)
       .toEqual({ id: "a", keywordGroup: "a", location: null, remoteScope: "home_country" });
   });
+});
+
+describe("catchUpWindow", () => {
+  const now = new Date("2026-10-18T09:30:00Z");
+  const defaults = { baseHours: 10, now, maxCatchUpHours: 168, toleranceHours: 6, autoCatchUp: true };
+
+  it("uses the base for a query without history", () => {
+    expect(catchUpWindow({ ...defaults, anchor: null })).toEqual({ hours: 10, capped: false });
+  });
+
+  it.each([
+    { name: "gap below base", gap: 4, hours: 10, capped: false },
+    { name: "gap at base", gap: 10, hours: 10, capped: false },
+    { name: "gap inside tolerance", gap: 15.5, hours: 10, capped: false },
+    { name: "gap exactly at base plus tolerance", gap: 16, hours: 10, capped: false },
+    { name: "gap just beyond tolerance", gap: 16.01, hours: 17, capped: false },
+    { name: "fractional gap rounds up", gap: 30.2, hours: 31, capped: false },
+    { name: "late cycle missed the morning cycle", gap: 24, hours: 24, capped: false },
+    { name: "gap exactly at cap", gap: 168, hours: 168, capped: false },
+    { name: "gap above cap", gap: 168.01, hours: 168, capped: true },
+    { name: "clock moved back", gap: -12, hours: 10, capped: false },
+  ])("$name", ({ gap, hours, capped }) => {
+    expect(catchUpWindow({ ...defaults, anchor: new Date(now.getTime() - gap * 3_600_000) })).toEqual({ hours, capped });
+  });
+
+  it("keeps a 24-hour weekend window from Saturday 09:00 to Sunday 09:30", () => {
+    expect(catchUpWindow({ ...defaults, baseHours: 24, anchor: new Date("2026-10-17T09:00:00Z") }))
+      .toEqual({ hours: 24, capped: false });
+  });
+
+  it.each([
+    { name: "zero cap disables catch-up", maxCatchUpHours: 0, autoCatchUp: true, capped: false },
+    { name: "cap below base never shrinks the window", maxCatchUpHours: 5, autoCatchUp: true, capped: true },
+    { name: "channel opts out even beyond the cap", maxCatchUpHours: 20, autoCatchUp: false, capped: false },
+  ])("$name", ({ maxCatchUpHours, autoCatchUp, capped }) => {
+    expect(catchUpWindow({ ...defaults, anchor: new Date(now.getTime() - 48 * 3_600_000), maxCatchUpHours, autoCatchUp }))
+      .toEqual({ hours: 10, capped });
+  });
+
+  it("does not report a cap unless it took the extension branch", () => {
+    expect(catchUpWindow({ ...defaults, anchor: new Date(now.getTime() - 12 * 3_600_000), maxCatchUpHours: 5 }))
+      .toEqual({ hours: 10, capped: false });
+  });
+
+  it("extends immediately beyond base when tolerance is zero", () => {
+    expect(catchUpWindow({ ...defaults, anchor: new Date(now.getTime() - 10.1 * 3_600_000), toleranceHours: 0 }))
+      .toEqual({ hours: 11, capped: false });
+  });
+});
+
+it.each([false, true])("reports supplied distinct stretched and capped counts with unavailable history = %s", (historyUnavailable) => {
+  expect(rotationSummary({
+    queries, sortChannel: "paid", turns: new Map(), reached: 3, stretched: 2, capped: 1,
+    maxWindowHours: 168, historyUnavailable, now: later,
+  })).toMatchObject({ stretched: 2, capped: 1, maxWindowHours: 168 });
+});
+
+it("breaks tied round timestamps by config order, allowing more than N - 1 other turns between repeats", () => {
+  const items = ["a", "b", "c"].map(query);
+  const turns = new Map<string, Date | null>();
+  const rounds: string[][] = [];
+  for (const [round, capacity] of [1, 3, 1, 1].entries()) {
+    const served = orderQueries(items, turns, true).slice(0, capacity);
+    rounds.push(ids(served));
+    // All turns in this round share one timestamp, including the second round's full sweep.
+    const at = new Date(earlier.getTime() + round * 3_600_000);
+    for (const q of served) turns.set(q.id, at);
+  }
+  expect(rounds).toEqual([["a"], ["b", "c", "a"], ["a"], ["b"]]);
+  const sequence = rounds.flat();
+  const otherTurns = sequence.lastIndexOf("b") - sequence.indexOf("b") - 1;
+  expect(otherTurns).toBe(3);
+  expect(otherTurns).toBeGreaterThan(items.length - 1);
 });
 
 function mulberry32(seed: number): () => number {
