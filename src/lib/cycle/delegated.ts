@@ -14,6 +14,7 @@ import { aiLateStep, aiMainStep } from "@/lib/ai/step";
 import { notificationRetryOf, notifyStep } from "@/lib/notify/step";
 
 import { cascadesFromConfig } from "./run-cycle";
+import { stepActivityOutcome } from "./step-activity";
 import type { CycleStepContext, CycleStepFn, CycleStepName } from "./steps";
 
 /** Steps of a cycle whose work moves to the ai-worker with `ai.yaml: execution: host`, in running order. */
@@ -140,8 +141,7 @@ export async function runDelegatedSteps(options: DelegatedRunOptions): Promise<D
       }
       try {
         const outcome = await fn({ ...ctx, activity: stepSpan });
-        const delegated = typeof outcome?.result === "object" && outcome.result !== null && "delegated" in outcome.result && outcome.result.delegated === true;
-        scope.set(delegated && (outcome?.status ?? "ok") === "ok" ? "skipped" : outcome?.status ?? "ok", delegated && (outcome?.status ?? "ok") === "ok" ? "delegated" : undefined);
+        scope.set(...stepActivityOutcome(outcome));
         const result = outcome?.result;
         if (result !== undefined) (ctx.results as Partial<Record<CycleStepName, unknown>>)[name] = result;
         summaries.push({ name, status: outcome?.status ?? "ok", durationMs: now().getTime() - started, ...(result === undefined ? {} : { result }), ...(name === "ai" && options.signal.aborted ? { reason: "ai-worker stopped" } : {}) });
@@ -168,7 +168,7 @@ export async function runDelegatedSteps(options: DelegatedRunOptions): Promise<D
       } else {
         try {
           const outcome = await late({ ...ctx, activity: stepSpan });
-          scope.set(outcome?.status ?? "ok");
+          scope.set(...stepActivityOutcome(outcome));
           aiSummary.durationMs += now().getTime() - started;
           const result = aiSummary.result as { subtasks?: unknown[] } | undefined;
           const lateResult = outcome?.result as { subtasks?: unknown[] } | undefined;

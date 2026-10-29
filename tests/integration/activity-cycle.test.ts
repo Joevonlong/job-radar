@@ -16,7 +16,9 @@ import { saveCircuitState, upsertChannelRows } from "@/lib/db/repos/channels";
 import { insertControlRequest } from "@/lib/db/repos/control-requests";
 import { listRunsForCycle } from "@/lib/db/repos/runs";
 import { activitySpans, rawPostings, runs } from "@/lib/db/schema";
+import { createNotifyStep } from "@/lib/notify/step";
 import { collectOf, quietLogger, settings } from "../cycle/helpers";
+import { notifyConfig } from "../notify/helpers";
 import { integrationActivitySettings } from "./activity-helpers";
 import { activityRows, activityText, HOOK_NOW, hookConfig, hookRecorder, isolateHookSteps, observeFinishes, resetHookTables } from "./activity-hook-helpers";
 
@@ -47,6 +49,60 @@ function run(registry = fixtureRegistry(), options: RunCycleOptions = {}) {
 }
 
 describe("cycle activity persistence", () => {
+  it.each(["quota_guard", "no_provider_available", "unknown private reason"])("records whole-step skips in the runner with safe reasons: %s", async (skipped) => {
+    const result = { subtasks: [], skipped };
+    registerCycleStep("ai", async () => ({ result }));
+    registerCycleStep("notify", createNotifyStep({ loadNotifyConfig: () => notifyConfig((raw) => { raw.telegram.enabled = false; }) }));
+    const outcome = await run();
+    expect(outcome.status).toBe("succeeded");
+    expect(outcome.results.ai).toEqual(result);
+    expect(outcome.summary.steps.find((s) => s.name === "ai")).toMatchObject({ status: "ok", result });
+    expect(outcome.summary.steps.find((s) => s.name === "notify")).toMatchObject({ status: "ok", result: { skipped: "disabled" } });
+    await activity.flush();
+    const { spans } = await activityRows(connection.db);
+    expect(spans.find((s) => s.name === "step.ai")).toMatchObject({ status: "skipped", reasonCode: skipped.startsWith("unknown") ? "other" : skipped });
+    expect(spans.find((s) => s.name === "step.notify")).toMatchObject({ status: "skipped", reasonCode: "disabled" });
+    expect(spans.every((s) => s.status !== "running" && s.finishedAt !== null)).toBe(true);
+    expect(await activityText(connection.db)).not.toContain("private reason");
+  });
+
+  it.each([
+    ["quota_guard", "no_provider_available"],
+    ["no_provider_available", "quota_guard"],
+    ["unknown private main", "unknown private late"],
+  ])("records delegated main and late skips without changing the summary: %s / %s", async (mainReason, lateReason) => {
+    registerCycleStep("ai", async () => ({ result: { delegated: true } }));
+    registerCycleStep("notify", async () => ({ result: { delegated: true } }));
+    const outcome = await run();
+    const worker = hookRecorder(connection.db, { process: "ai-worker" });
+    const result = { subtasks: [], skipped: mainReason };
+    try {
+      const delegated = await runDelegatedSteps({
+        db: connection.db, activity: worker.attachCycle(outcome.cycleId!), cycleId: outcome.cycleId!,
+        signal: new AbortController().signal, logger: quietLogger, registry: new ChannelRegistry(),
+        steps: {
+          ai: async () => ({ result }),
+          notify: createNotifyStep({ loadNotifyConfig: () => notifyConfig((raw) => { raw.telegram.enabled = false; }) }),
+          late: async () => ({ result: { subtasks: [], skipped: lateReason } }),
+        },
+      });
+      expect(delegated?.steps).toMatchObject([
+        { name: "ai", status: "ok", result, lateAiComplete: true },
+        { name: "notify", status: "ok", result: { skipped: "disabled" } },
+      ]);
+      await activity.flush();
+      await worker.flush();
+      const { spans } = await activityRows(connection.db);
+      const workerSteps = spans.filter((s) => s.process === "ai-worker");
+      expect(workerSteps).toHaveLength(3);
+      for (const [name, reason] of [["step.ai", mainReason], ["step.ai_late", lateReason], ["step.notify", "disabled"]]) {
+        expect(workerSteps.find((s) => s.name === name)).toMatchObject({ status: "skipped", reasonCode: reason!.startsWith("unknown") ? "other" : reason });
+      }
+      expect(workerSteps.every((s) => s.finishedAt !== null && s.rootId === rootIdForCycle(outcome.cycleId!))).toBe(true);
+      expect(await activityText(connection.db)).not.toContain("private");
+    } finally { await worker.close(); }
+  });
+
   it("persists one terminal root, seven terminal steps and query children with complete collect progress", async () => {
     const observed = observeFinishes(activity);
     const result = await run(undefined, { activity: observed.recorder });

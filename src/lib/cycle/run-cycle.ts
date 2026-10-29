@@ -18,11 +18,14 @@ import { createCycle, createSkippedCycle, failOrphanedCycles, finishCycle, listR
 
 import { findCycleLockHolder, withCycleLock, type CycleLockHolder } from "./lock";
 import { startWaitingForLock } from "./lock-waiters";
+import { stepActivityOutcome } from "./step-activity";
 import { listCycleSteps, type CycleStepName, type CycleStepContext } from "./steps";
 
 export interface RunCycleOptions {
   activity?: ActivityRecorder;
   activityRequestId?: number;
+  /** Hands request logging over to the cycle root, even if later setup or finish writes throw. */
+  onCycleRootCreated?: () => void;
   /** Only run these channels (the CLI's `--channel`). Disabled or unknown ids simply do nothing. */
   channelIds?: readonly string[];
   /** Collect and report in memory: no cycle, run, raw posting, usage or circuit writes; no lock; later steps skipped. */
@@ -164,6 +167,7 @@ export async function runCycle(kind: CycleKind, options: RunCycleOptions = {}): 
     const root = cycleRow ? recorder.cycleRoot(cycleRow.id, { requestId: options.activityRequestId }) : noopRecorder.cycleRoot(0);
     const rootScope = spanScope(root, "interrupted", "not_recorded");
     try {
+      if (cycleRow) options.onCycleRootCreated?.();
       const steps: StepSummary[] = [];
       const results: Partial<Record<CycleStepName, unknown>> = {};
       let finalStatus: Exclude<CycleStatus, "skipped"> = "failed";
@@ -239,8 +243,7 @@ export async function runCycle(kind: CycleKind, options: RunCycleOptions = {}): 
             }
             try {
               const outcome = await fn({ ...stepContext, activity: step });
-              const delegated = typeof outcome?.result === "object" && outcome.result !== null && "delegated" in outcome.result && outcome.result.delegated === true;
-              scope.set(delegated && (outcome?.status ?? "ok") === "ok" ? "skipped" : outcome?.status ?? "ok", delegated && (outcome?.status ?? "ok") === "ok" ? "delegated" : undefined);
+              scope.set(...stepActivityOutcome(outcome));
               if (outcome?.result !== undefined) results[name] = outcome.result;
               steps.push({
                 name,
@@ -299,6 +302,7 @@ export async function runCycle(kind: CycleKind, options: RunCycleOptions = {}): 
     const row = await createSkippedCycle(db, { kind, summary });
     const root = recorder.cycleRoot(row.id, { requestId: options.activityRequestId });
     try {
+      options.onCycleRootCreated?.();
       if (coveredBy !== null) root.note("info", "covered_by", { cycle_id: coveredBy });
       return { cycleId: row.id, kind, status: "skipped", summary, results: {} };
     } finally { root.finish("skipped", { reasonCode }); }

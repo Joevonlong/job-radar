@@ -16,6 +16,7 @@ export const REASON_CODES = [
   "not_recorded", "cycle_cancelled", "another_cycle_running", "covered_by_running_cycle", "mixed",
   "not_registered", "disabled", "not_configured", "budget_exceeded", "circuit_open",
   "delegated", "profile_incomplete", "dry_run", "no_database", "manual", "off", "no_tables",
+  "quota_guard", "no_provider_available", "no_request", "other",
 ] as const;
 
 export const spanScopeSchema = z.enum(SPAN_SCOPES);

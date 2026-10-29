@@ -5,6 +5,7 @@ import * as fresh from "@/lib/config/fresh";
 import * as handlers from "@/lib/control/handlers";
 import { processNextControlRequest } from "@/lib/control/poller";
 import type { ControlHandler } from "@/lib/control/types";
+import * as cycles from "@/lib/cycle/run-cycle";
 import type { Db } from "@/lib/db/client";
 import * as requests from "@/lib/db/repos/control-requests";
 import { fakeRecorder } from "./helpers";
@@ -63,6 +64,27 @@ describe("control attempt activity", () => {
     const test = setup();
     await test.run();
     expect(test.spans[0]).toMatchObject({ deferred: true, discards: 1, finishes: [] });
+  });
+  it.each([true, false])("discards a throwing run_cycle attempt only after its cycle root exists: %s", async (created) => {
+    vi.mocked(requests.claimNextControlRequest).mockResolvedValue(request("run_cycle", {}));
+    vi.mocked(handlers.getControlHandler).mockReturnValue(handlers.runCycleHandler);
+    vi.spyOn(cycles, "runCycle").mockImplementation(async (_kind, options) => {
+      if (created) {
+        const root = options!.activity!.cycleRoot(13, { requestId: options!.activityRequestId });
+        options!.onCycleRootCreated?.();
+        root.finish("failed");
+      }
+      throw new Error("injected cycle failure");
+    });
+    const test = setup();
+    expect(await test.run()).toMatchObject({ status: "failed", result: { error: "handler_error" } });
+    expect(test.spans[0]).toMatchObject({
+      deferred: true, discards: created ? 1 : 0,
+      finishes: created ? [] : [["failed", { reasonCode: "handler_error" }]],
+    });
+    const roots = test.spans.filter((span) => !span.parentId && span.discards === 0);
+    expect(roots).toHaveLength(1);
+    expect(roots[0]?.name).toBe(created ? "cycle" : "request.run_cycle");
   });
   it.each(["no_handler", "handler_error", "invalid_payload", "private https://private.test"])("records only the safe outcome code for %s", async (error) => {
     vi.mocked(handlers.getControlHandler).mockReturnValue(error === "no_handler" ? undefined : async () => {

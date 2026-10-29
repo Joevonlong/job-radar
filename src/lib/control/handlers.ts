@@ -19,11 +19,11 @@ export const runCycleHandler: ControlHandler = async (request, context) => {
     db: context.db,
     activity: context.recorder,
     activityRequestId: request.id,
+    onCycleRootCreated: () => context.activity?.discard(),
     signal: context.signal,
     logger: context.logger,
     ...(channelIds ? { channelIds } : {}),
   });
-  context.activity?.discard();
   try {
     context.onCycleFinished?.(outcome.summary);
   } catch {

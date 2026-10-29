@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, inject, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, inject, it, vi } from "vitest";
 import { rootIdForCycle, SAFE_ERROR_CODES } from "@/lib/activity";
 import type { ActivityRecorder } from "@/lib/activity/types";
 import { registerFixtureChannel } from "@/lib/channels/fixture";
@@ -8,7 +8,8 @@ import { withCycleLock } from "@/lib/cycle/lock";
 import { resetCycleSteps } from "@/lib/cycle/steps";
 import { createConnection } from "@/lib/db/client";
 import { CONTROL_REQUEST_KINDS, insertControlRequest } from "@/lib/db/repos/control-requests";
-import { createCycle, finishCycle } from "@/lib/db/repos/cycles";
+import * as cycleRepo from "@/lib/db/repos/cycles";
+import * as channelRepo from "@/lib/db/repos/channels";
 import { quietLogger } from "../cycle/helpers";
 import { activityRows, activityText, hookRecorder, isolateHookSteps, resetHookTables } from "./activity-hook-helpers";
 
@@ -22,7 +23,7 @@ beforeEach(async () => {
   activity = hookRecorder(connection.db);
   registerFixtureChannel(defaultRegistry, { postings: [], usesQueries: false });
 });
-afterEach(async () => { await activity.close(); resetControlHandlers(); resetCycleSteps(); defaultRegistry.unregister("fixture"); });
+afterEach(async () => { await activity.close(); resetControlHandlers(); resetCycleSteps(); defaultRegistry.unregister("fixture"); vi.restoreAllMocks(); });
 afterAll(async () => { await connection.sql.end(); });
 
 function poll(signal = new AbortController().signal) {
@@ -34,12 +35,12 @@ async function holdLock(channelIds: string[] | null, work: (cycleId: number) => 
   const ready = Promise.withResolvers<number>();
   const release = Promise.withResolvers<void>();
   const held = withCycleLock(connection.db, "try", async (holder) => {
-    const cycle = await createCycle(connection.db, {
+    const cycle = await cycleRepo.createCycle(connection.db, {
       kind: channelIds === null ? "weekday_morning" : "manual", summary: { channelIds, lockPid: holder.pid },
     });
     ready.resolve(cycle.id);
     await release.promise;
-    await finishCycle(connection.db, cycle.id, { status: "succeeded" });
+    await cycleRepo.finishCycle(connection.db, cycle.id, { status: "succeeded" });
   });
   // If acquiring the lock fails, reject promptly instead of waiting forever for ready.
   const notReady = held.then((): never => { throw new Error("test cycle lock was not acquired"); });
@@ -51,8 +52,8 @@ describe("control request activity persistence", () => {
   // Enumerate from the production registry so a newly registered kind automatically gets coverage.
   it.each(CONTROL_REQUEST_KINDS)("records one linked terminal request span for %s", async (kind) => {
     registerControlHandler(kind, async () => ({ status: "done", result: {} }));
-    const cycle = kind === "run_ai" ? await createCycle(connection.db, { kind: "manual" }) : null;
-    if (cycle) { activity.cycleRoot(cycle.id).finish("ok"); await finishCycle(connection.db, cycle.id, { status: "succeeded" }); }
+    const cycle = kind === "run_ai" ? await cycleRepo.createCycle(connection.db, { kind: "manual" }) : null;
+    if (cycle) { activity.cycleRoot(cycle.id).finish("ok"); await cycleRepo.finishCycle(connection.db, cycle.id, { status: "succeeded" }); }
     const request = await insertControlRequest(connection.db, { kind, payload: cycle ? { cycleId: cycle.id } : {} });
     expect(await poll()).toMatchObject({ id: request.id, status: "done" });
     await activity.flush();
@@ -120,6 +121,23 @@ describe("control request activity persistence", () => {
     expect(spans.some((s) => s.name === "request.run_cycle")).toBe(false);
     expect(spans.filter((s) => s.name === "collect.query")).toHaveLength(1);
     expect(spans.every((s) => s.status !== "running" && s.finishedAt !== null)).toBe(true);
+  });
+
+  it.each(["setup", "finish"] as const)("keeps only the cycle root when %s throws after root creation", async (failure) => {
+    const error = new Error("injected cycle failure");
+    if (failure === "setup") vi.spyOn(channelRepo, "upsertChannelRows").mockRejectedValueOnce(error);
+    else vi.spyOn(cycleRepo, "finishCycle").mockRejectedValueOnce(error);
+    const request = await insertControlRequest(connection.db, { kind: "run_cycle", payload: { channelIds: ["fixture"] } });
+    expect(await poll()).toMatchObject({ id: request.id, status: "failed", result: { error: "handler_error" } });
+    await activity.flush();
+    const { spans } = await activityRows(connection.db);
+    const roots = spans.filter((span) => span.parentId === null);
+    expect(roots).toHaveLength(1);
+    expect(roots[0]).toMatchObject({ name: "cycle", scope: "cycle", controlRequestId: request.id,
+      status: failure === "setup" ? "failed" : "interrupted", reasonCode: failure === "setup" ? "error" : "not_recorded" });
+    expect(roots[0]!.finishedAt).toBeInstanceOf(Date);
+    expect(spans.some((span) => span.name === "request.run_cycle")).toBe(false);
+    expect(spans.every((span) => span.status !== "running" && span.finishedAt !== null)).toBe(true);
   });
 
   it("records a covered run_cycle as one skipped linked cycle with a covering-cycle note", async () => {
