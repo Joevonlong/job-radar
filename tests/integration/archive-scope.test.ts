@@ -1,14 +1,14 @@
-import { and, desc, eq, isNull, ne, or, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import { afterAll, beforeAll, expect, inject, it } from "vitest";
 
 import { closeDb, countJobList, countJobListSeen, getDb, getJobDetail, listJobs, listUnseenJobIds, schema, type JobFilters } from "@/lib/db";
 import { latestScoreCte } from "@/lib/db/queries/job-cards";
 import { buildJobConditions } from "@/lib/db/queries/jobs";
-import { effectiveStatusSql, jobScopeSql, lastListedSql, notDormantSql } from "@/lib/db/queries/job-status";
+import { archiveReasonSql, closedReasonSql, dormantSql, effectiveStatusSql, jobScopeSql, lastListedSql, notDormantSql } from "@/lib/db/queries/job-status";
 import { resetDormancyCache } from "@/lib/db/repos/dormancy";
 import { recordLinkCheck } from "@/lib/db/repos/jobs";
 import { effectiveJobStatus } from "@/lib/jobs/closure";
-import { JOB_SCOPES, JOB_STATUSES, type JobSort, type SortDir } from "@/lib/jobs/constants";
+import { ARCHIVE_REASONS, JOB_SCOPES, JOB_STATUSES, type JobSort, type SortDir } from "@/lib/jobs/constants";
 import { resolveJobScope } from "@/lib/jobs/scope";
 import { loadJobsSearchParams } from "@/lib/jobs/search-params";
 import { resolveSort } from "@/lib/jobs/sort";
@@ -145,18 +145,43 @@ it("reads max source fetched_at in cards and details, unchanged after alive then
 });
 
 it("scope SQL matches the legacy TypeScript predicate across all status, override and dormancy combinations", async () => {
+  const sqlIds = (rows: { id: number | string }[]) => rows.map((row) => Number(row.id));
+  const combinations = [];
   for (const status of JOB_STATUSES) for (const override of [null, "open", "closed"] as const) {
-    for (const dormantAt of [null, ago(61), ago(60), ago(1)]) {
-      const job = await addJob({ status, dormantAt });
+    for (const dormantAt of [null, ago(61), ago(60), ago(1)]) for (const phrase of [false, true]) {
+      const job = await addJob({ status, dormantAt, linkCheckJson: phrase ? { outcome: "phrase" } : null });
       if (override) await getDb().insert(schema.jobClosureOverrides).values({ jobId: job.id, action: override });
-      for (const ux of [false, true]) for (const dormantReady of [false, true]) {
-        const isDormant = dormantReady && status === "possibly_closed" && dormantAt !== null && dormantAt > job.lastSeenAt;
-        const current = effectiveJobStatus(status, ux ? override : null) !== "closed" && !isDormant;
-        for (const scope of JOB_SCOPES) {
-          const condition = jobScopeSql(scope, ux, dormantReady, "j");
-          const [actual] = await getDb().execute<{ matches: boolean }>(sql`select ${condition ?? sql`true`} as matches from ${schema.jobs} j where j.id = ${job.id}`);
-          expect(actual?.matches, `${status}/${override}/${dormantAt?.toISOString()}/${ux}/${dormantReady}/${scope}`).toBe(scope === "all" || (scope === "current" ? current : !current));
-        }
+      combinations.push({ job, status, override, dormantAt });
+    }
+  }
+  const reasonSubsets = Array.from({ length: (1 << ARCHIVE_REASONS.length) - 1 }, (_, index) =>
+    ARCHIVE_REASONS.filter((_, bit) => ((index + 1) & (1 << bit)) !== 0));
+  for (const ux of [false, true]) for (const dormantReady of [false, true]) {
+    for (const alias of [undefined, "j"]) {
+      const from = alias ? sql`${schema.jobs} j` : sql`${schema.jobs}`;
+      const id = sql`${sql.identifier(alias ?? "jobs")}.id`;
+      expect(archiveReasonSql([], ux, dormantReady, alias)).toBeUndefined();
+      for (const scope of JOB_SCOPES) {
+        const condition = jobScopeSql(scope, ux, dormantReady, alias);
+        if (scope === "all") expect(condition).toBeUndefined();
+        const legacy = scope === "all" ? sql`true` : scope === "current"
+          ? sql`(${effectiveStatusSql(ux, alias)} <> 'closed' and ${notDormantSql(dormantReady, alias)})`
+          : sql`(${effectiveStatusSql(ux, alias)} = 'closed' or ${dormantSql(dormantReady, alias)})`;
+        const actual = await getDb().execute<{ id: number | string }>(sql`select ${id} as id from ${from} where ${condition ?? sql`true`}`);
+        const expected = await getDb().execute<{ id: number | string }>(sql`select ${id} as id from ${from} where ${legacy}`);
+        const context = `${ux}/${dormantReady}/${alias}/${scope}`;
+        expect(new Set(sqlIds(actual)), context).toEqual(new Set(sqlIds(expected)));
+        const typescript = combinations.filter(({ job, status, override, dormantAt }) => {
+          const isDormant = dormantReady && status === "possibly_closed" && dormantAt !== null && dormantAt > job.lastSeenAt;
+          const current = effectiveJobStatus(status, ux ? override : null) !== "closed" && !isDormant;
+          return scope === "all" || (scope === "current" ? current : !current);
+        });
+        expect(new Set(sqlIds(actual)), context).toEqual(new Set(typescript.map(({ job }) => job.id)));
+      }
+      for (const reasons of reasonSubsets) {
+        const actual = await getDb().execute<{ id: number | string }>(sql`select ${id} as id from ${from} where ${archiveReasonSql(reasons, ux, dormantReady, alias)}`);
+        const expected = await getDb().execute<{ id: number | string }>(sql`select ${id} as id from ${from} where ${inArray(closedReasonSql(ux, dormantReady, alias), reasons)}`);
+        expect(new Set(sqlIds(actual)), `${ux}/${dormantReady}/${alias}/${reasons.join(",")}`).toEqual(new Set(sqlIds(expected)));
       }
     }
   }

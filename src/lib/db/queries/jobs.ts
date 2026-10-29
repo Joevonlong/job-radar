@@ -10,7 +10,7 @@ import { ghostTrustedKeys } from "@/lib/ghost/settings";
 import { ghostFilterCondition } from "../repos/ghost";
 import { seenSql } from "../repos/seen";
 import { uxTablesReady } from "../repos/ux-tables";
-import { closedReasonSql, effectiveStatusSql, jobScopeSql, lastListedSql } from "./job-status";
+import { archiveReasonSql, effectiveStatusSql, jobScopeSql, lastListedSql } from "./job-status";
 import { cardColumns, hideGermanLevels, hydrateCards, latestScoreCte, type CardRow, type LatestScore } from "./job-cards";
 import { annualBaseFigureSql, baseBoundSql, comparableSalaryWhere } from "./salary-figure";
 import { hasHighValueSignal, policyCurrency, type HighValuePolicy } from "./signal-filter";
@@ -262,7 +262,7 @@ export async function jobListWhere(db: Db, filters: JobFilters, timezone: string
       : or(isNull(latest.filterResult), ne(latest.filterResult, "filtered_out"));
   const dormant = await dormancyReady(db);
   const scope = jobScopeSql(resolveJobScope(filters.scope, filters.statuses), ux, dormant);
-  const reasons = filters.closedReasons?.length ? inArray(closedReasonSql(ux, dormant), [...filters.closedReasons]) : undefined;
+  const reasons = archiveReasonSql(filters.closedReasons ?? [], ux, dormant);
   return and(buildJobConditions(db, filters, timezone, latest, ux), hideFiltered, scope, reasons);
 }
 
