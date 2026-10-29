@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, isNull, sql, type SQL, type SQLWrapper } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, ne, sql, type SQL, type SQLWrapper } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
 import type { ActivityBatch, ActivityProcess } from "@/lib/activity/types";
@@ -107,10 +107,29 @@ export function activeRootCondition(root: { [K in "id" | "scope" | "cycleId" | "
 export async function reconcileActivitySpans(db: Db, liveness: ActivityLiveness): Promise<number> {
   const root = alias(activitySpans, "activity_root");
   const rows = await db.execute<{ id: string }>(sql`
+    with recursive protected_ai(id, root_id) as (
+      select attempt.id, attempt.root_id from activity_spans attempt
+      join activity_spans cycle_root on cycle_root.id = attempt.root_id and cycle_root.scope = 'cycle'
+      join control_requests cr on cr.id = attempt.control_request_id
+      where attempt.name = 'request.run_ai' and cr.kind = 'run_ai' and cr.status in ('pending', 'running')
+        and cr.payload ->> 'cycleId' = cycle_root.cycle_id::text
+        and not exists (select 1 from activity_spans newer where newer.name = 'request.run_ai'
+          and newer.control_request_id = attempt.control_request_id
+          and (newer.started_at, newer.id) > (attempt.started_at, attempt.id))
+      union
+      select child.id, child.root_id from activity_spans child
+      join protected_ai parent on child.parent_id = parent.id and child.root_id = parent.root_id
+      where child.name <> 'request.run_ai'
+    )
     update ${activitySpans} set status = 'interrupted', reason_code = 'not_recorded', finished_at = now()
     where ${activitySpans.status} = 'running' and exists (
       select 1 from ${activitySpans} as ${root}
-      where ${root.id} = ${activitySpans.rootId} and not ${activeRootCondition(root, liveness)}
+      where ${root.id} = ${activitySpans.rootId} and (
+        (${root.scope} = 'cycle'
+          and not exists (select 1 from cycles c where c.id = ${root.cycleId} and c.status = 'running')
+          and not exists (select 1 from protected_ai live where live.id = ${activitySpans.id}))
+        or (${root.scope} <> 'cycle' and not ${activeRootCondition(root, liveness)})
+      )
     ) returning ${activitySpans.id}`);
   return rows.length;
 }
@@ -121,7 +140,7 @@ export interface ActivityPruneOptions {
 export interface ActivityPruneBatch { roots: number; events: number; nextRootId: string | null; found: boolean }
 
 /**
- * Lock one root, delete at most batchSize events, then remove the empty tree. A large tree is continued by id
+ * Lock one root, delete at most batchSize rows (events, child spans, then the root). A large tree is continued by id
  * even if deleting its first batch brought the total below the cap. The FK and root lock serialize late writers.
  */
 export async function pruneActivityBatch(db: Db, options: ActivityPruneOptions & { phase: "days" | "events"; rootId?: string }): Promise<ActivityPruneBatch> {
@@ -139,6 +158,15 @@ export async function pruneActivityBatch(db: Db, options: ActivityPruneOptions &
     const deleted = ids.length ? await tx.delete(activityEvents).where(inArray(activityEvents.id, ids.map((row) => row.id))).returning({ id: activityEvents.id }) : [];
     const remaining = await tx.select({ id: activityEvents.id }).from(activityEvents).where(eq(activityEvents.rootId, root.id)).limit(1);
     if (remaining.length) return { roots: 0, events: deleted.length, nextRootId: root.id, found: true };
+    const budget = options.batchSize - deleted.length;
+    if (!budget) return { roots: 0, events: deleted.length, nextRootId: root.id, found: true };
+    // Only root_id is a span FK; parent_id and event.span_id deliberately have no FK.
+    // Keeping the locked root makes any child deletion order safe and avoids a large final cascade.
+    const children = await tx.select({ id: t.id }).from(t).where(and(eq(t.rootId, root.id), ne(t.id, root.id)))
+      .orderBy(asc(t.id)).limit(budget);
+    if (children.length) await tx.delete(t).where(inArray(t.id, children.map((row) => row.id)));
+    const remainingChildren = await tx.select({ id: t.id }).from(t).where(and(eq(t.rootId, root.id), ne(t.id, root.id))).limit(1);
+    if (remainingChildren.length || children.length === budget) return { roots: 0, events: deleted.length, nextRootId: root.id, found: true };
     await tx.delete(t).where(eq(t.id, root.id));
     return { roots: 1, events: deleted.length, nextRootId: null, found: true };
   });

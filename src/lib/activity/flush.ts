@@ -19,6 +19,7 @@ export interface FlushDependencies {
 /** Serializes all work on the private pool, and destroys that pool when a client deadline expires. */
 export function createActivityFlusher(deps: FlushDependencies) {
   let connection: ReturnType<typeof openActivityConnection> | undefined;
+  let connectionOptions: Parameters<typeof openActivityConnection>[1] | undefined;
   let tail: Promise<unknown> = Promise.resolve();
   let flushing: Promise<void> | undefined;
   let closing: Promise<void> | undefined;
@@ -28,6 +29,7 @@ export function createActivityFlusher(deps: FlushDependencies) {
   const destroy = (): void => {
     const old = connection;
     connection = undefined;
+    connectionOptions = undefined;
     try { void old?.sql.end({ timeout: 0 }).catch(() => {}); } catch { /* Closing is best effort. */ }
   };
   const serial = <T>(work: () => Promise<T>): Promise<T> => {
@@ -40,11 +42,19 @@ export function createActivityFlusher(deps: FlushDependencies) {
     if (!settings || stopped) return undefined;
     try {
       return await withTimeout(Promise.resolve().then(async () => {
-        connection ??= (deps.openConnection ?? openActivityConnection)(deps.db, {
+        const options = {
           connectTimeoutSeconds: settings.writer.connect_timeout_seconds,
           statementTimeoutMs: settings.writer.statement_timeout_ms,
           lockTimeoutMs: settings.writer.lock_timeout_ms,
-        });
+        };
+        // run() owns a serial turn: a reload during a batch only affects the next operation.
+        if (connection && (connectionOptions?.connectTimeoutSeconds !== options.connectTimeoutSeconds
+          || connectionOptions?.statementTimeoutMs !== options.statementTimeoutMs
+          || connectionOptions?.lockTimeoutMs !== options.lockTimeoutMs)) destroy();
+        if (!connection) {
+          connection = (deps.openConnection ?? openActivityConnection)(deps.db, options);
+          connectionOptions = options;
+        }
         return work(connection.db);
       }), settings.writer.flush_deadline_ms, "activity");
     } catch (error) {

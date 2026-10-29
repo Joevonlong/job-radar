@@ -1,7 +1,7 @@
 import net from "node:net";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, inject, it, vi } from "vitest";
-import { createActivityRecorder } from "@/lib/activity/recorder";
+import { activityInternals, createActivityRecorder } from "@/lib/activity/recorder";
 import { closeStaleActivity, pruneActivityLog, reconcileActivity, startActivityMaintenance } from "@/lib/activity/maintenance";
 import type { ActivityRecorder } from "@/lib/activity/types";
 import { noopSpan } from "@/lib/activity/noop";
@@ -30,6 +30,35 @@ async function withActivityLock(work: () => Promise<void>): Promise<void> {
 }
 
 describe("activity failures stay isolated", () => {
+  it("applies reloaded statement timeouts to flush and maintenance sessions", async () => {
+    const settings = integrationActivitySettings();
+    const observed: number[] = [];
+    const timeoutIn = async (db: typeof connection.db) => {
+      const [row] = await db.execute<{ milliseconds: number }>(sql`select setting::int as milliseconds from pg_settings where name = 'statement_timeout'`);
+      return row.milliseconds;
+    };
+    const warn = vi.fn();
+    const recorder = createActivityRecorder({ db: connection.db, process: "runner", autoFlush: false, loadSettings: () => settings, warn,
+      writeBatch: async (db, batch) => { observed.push(await timeoutIn(db)); await writeActivityBatch(db, batch); },
+    });
+    try {
+      recorder.systemRoot("system.backup").finish("ok"); await recorder.flush();
+      expect(observed).toEqual([settings.writer.statement_timeout_ms]);
+      settings.writer.statement_timeout_ms = 250;
+      recorder.systemRoot("system.backup").finish("ok"); await recorder.flush();
+      expect(observed).toEqual([1000, settings.writer.statement_timeout_ms]);
+      const internal = activityInternals(recorder)!;
+      expect(await internal.runMaintenance(timeoutIn)).toBe(settings.writer.statement_timeout_ms);
+      // An actual statement longer than the new timeout is cancelled by Postgres, before the client deadline.
+      let code: string | undefined;
+      await internal.runMaintenance(async (db) => {
+        try { await db.execute(sql`select pg_sleep(${(settings.writer.statement_timeout_ms * 2) / 1000})`); }
+        catch (error) { code = (error as { cause?: { code?: string } }).cause?.code; throw error; }
+      });
+      expect(code).toBe("57014");
+      expect(warn).toHaveBeenCalledTimes(1);
+    } finally { await recorder.close(); }
+  });
   it.each([
     ["startup close-out", closeStaleActivity], ["reconciliation", reconcileActivity], ["pruning", pruneActivityLog], ["flush", (recorder: ActivityRecorder) => recorder.flush()],
   ] as const)("%s gives up on a table lock while business writes and heartbeats still work", async (_name, operation) => {

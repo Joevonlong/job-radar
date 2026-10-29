@@ -8,6 +8,7 @@ import { activeRootCondition, pruneActivity, pruneActivityBatch, reconcileActivi
 import { countTableRows } from "@/lib/db/repos/table-counts";
 import { getDbNow } from "@/lib/db/repos/cycles";
 import { getAiUsageGroups } from "@/lib/db/queries/ai-usage";
+import { withTimeout } from "@/lib/ops/timeout";
 import { activityEvents, activitySpans, aiUsage, channels, controlRequests, cycles, rawPostings, runnerHeartbeats, runs } from "@/lib/db/schema";
 import { activityEvent, activityRow, integrationActivitySettings, liveness } from "./activity-helpers";
 
@@ -28,16 +29,32 @@ async function active(id: string): Promise<boolean> {
 }
 
 describe("activity reconciliation", () => {
-  it("interrupts a finished cycle's tree, leaving running cycles and queued AI trees entirely untouched", async () => {
-    const inserted = await connection.db.insert(cycles).values([{ kind: "manual", status: "succeeded" }, { kind: "manual", status: "succeeded" }, { kind: "manual", status: "running" }]).returning();
-    const roots = inserted.map((cycle) => activityRow({ scope: "cycle", name: "cycle", cycleId: cycle.id }));
-    const children = roots.map((root) => activityRow({ scope: "cycle", name: "step.ai", rootId: root.id, parentId: root.id }));
-    await connection.db.insert(controlRequests).values({ kind: "run_ai", payload: { cycleId: inserted[1].id }, status: "pending" });
-    await write([...roots, ...children]);
-    expect(await reconcileActivitySpans(connection.db, liveness)).toBe(2);
+  it.each(["pending", "running"] as const)("protects only the current %s AI attempt subtree of a finished cycle", async (status) => {
+    const [finished, running] = await connection.db.insert(cycles).values([{ kind: "manual", status: "succeeded" }, { kind: "manual", status: "running" }]).returning();
+    const root = activityRow({ scope: "cycle", name: "cycle", cycleId: finished.id });
+    const runningRoot = activityRow({ scope: "cycle", name: "cycle", cycleId: running.id });
+    const collect = activityRow({ rootId: root.id, parentId: root.id, scope: "cycle", name: "step.collect" });
+    const [request] = await connection.db.insert(controlRequests).values({ kind: "run_ai", payload: { cycleId: finished.id }, status }).returning();
+    // Equal start times exercise the same id tie-break as request roots. Descendants carry no request link.
+    const at = await dbNow();
+    const [old, live] = [0, 1].map(() => activityRow({ rootId: root.id, parentId: root.id, scope: "cycle", name: "request.run_ai", controlRequestId: request.id, startedAt: at })).sort((a, b) => a.id.localeCompare(b.id));
+    const oldStep = activityRow({ rootId: root.id, parentId: old.id, scope: "cycle", name: "step.ai" });
+    const liveStep = activityRow({ rootId: root.id, parentId: live.id, scope: "cycle", name: "step.ai" });
+    const liveTask = activityRow({ rootId: root.id, parentId: liveStep.id, scope: "cycle", name: "ai.score" });
+    const runningStep = activityRow({ rootId: runningRoot.id, parentId: runningRoot.id, scope: "cycle", name: "step.collect" });
+    await write([root, collect, old, oldStep, live, liveStep, liveTask, runningRoot, runningStep]);
+    await writeActivityBatch(connection.db, { roots: [], spans: [], events: [activityEvent(root)], batchSize: 2 });
+    expect(await active(root.id)).toBe(true);
+    expect(await reconcileActivitySpans(connection.db, liveness)).toBe(4);
     const rows = await connection.db.select().from(activitySpans);
-    expect(rows.filter((row) => row.rootId === roots[0].id).every((row) => row.status === "interrupted" && row.reasonCode === "not_recorded")).toBe(true);
-    expect(rows.filter((row) => row.rootId !== roots[0].id).every((row) => row.status === "running" && row.reasonCode === null)).toBe(true);
+    for (const span of [root, collect, old, oldStep]) expect(rows.find((row) => row.id === span.id)).toMatchObject({ status: "interrupted", reasonCode: "not_recorded" });
+    for (const span of [live, liveStep, liveTask, runningRoot, runningStep]) expect(rows.find((row) => row.id === span.id)).toMatchObject({ status: "running", reasonCode: null });
+    expect(await active(root.id)).toBe(true);
+    // Retention still protects the entire root, even after its stale spans were reconciled.
+    expect(await pruneActivity(connection.db, { days: 1, maxEvents: 0, batchSize: 2, liveness })).toEqual({ roots: 0, events: 0 });
+    expect(await connection.db.select().from(activitySpans)).toHaveLength(rows.length);
+    await connection.db.update(controlRequests).set({ status: "done" }).where(eq(controlRequests.id, request.id));
+    expect(await reconcileActivitySpans(connection.db, liveness)).toBe(3);
   });
   it("recognizes numeric and string cycle ids without casting untrusted payloads", async () => {
     const [cycle] = await connection.db.insert(cycles).values({ kind: "manual", status: "succeeded" }).returning();
@@ -114,6 +131,36 @@ describe("system root liveness uses database time", () => {
 });
 
 describe("activity retention", () => {
+  it.each(["days", "events"] as const)("bounds child-span deletion per deadline while finishing a large tree selected by %s", async (phase) => {
+    const settings = integrationActivitySettings();
+    const batchSize = 3;
+    const at = await dbNow();
+    const root = activityRow({ status: "ok", lastActivityAt: phase === "days" ? new Date(at.getTime() - 3 * 86_400_000) : at });
+    const children: ActivitySpanWrite[] = [];
+    for (let i = 0; i < batchSize * 5; i++) children.push(activityRow({ rootId: root.id, parentId: children.at(-1)?.id ?? root.id, lastActivityAt: root.lastActivityAt }));
+    await write([root, ...children]);
+    await writeActivityBatch(connection.db, { roots: [], spans: [], events: [activityEvent(root)], batchSize });
+    let previous = children.length + 2; // spans, root and one event
+    let batches = 0;
+    const deleted = await pruneActivity(connection.db, { days: 1, maxEvents: 0, batchSize, liveness,
+      deadlineForBatch: async (work) => {
+        const batch = await withTimeout(work(), settings.writer.flush_deadline_ms, "test prune batch");
+        if (!batch.found) return batch;
+        batches++;
+        const spans = await connection.db.select().from(activitySpans);
+        const events = await connection.db.select().from(activityEvents);
+        const remaining = spans.length + events.length;
+        expect(previous - remaining).toBeGreaterThan(0);
+        expect(previous - remaining).toBeLessThanOrEqual(batchSize);
+        if (spans.length) expect(spans.some((span) => span.id === root.id)).toBe(true);
+        previous = remaining;
+        return batch;
+      },
+    });
+    expect(deleted).toEqual({ roots: 1, events: 1 });
+    expect(batches).toBeGreaterThan(1);
+    expect(previous).toBe(0);
+  });
   it("deletes old inactive trees in event-sized batches and leaves every business table unchanged", async () => {
     const at = await dbNow();
     await connection.db.insert(channels).values({ id: "fixture", family: "fixture", kind: "fixture" });

@@ -37,6 +37,29 @@ afterEach(async () => {
 });
 
 describe("activity recorder", () => {
+  it.each(["connect_timeout_seconds", "statement_timeout_ms", "lock_timeout_ms"] as const)("rebuilds changed %s only after the current batch finishes", async (key) => {
+    const { recorder, settings, writeBatch, openConnection, end } = setup();
+    let complete!: () => void;
+    writeBatch.mockImplementationOnce(() => new Promise<void>((done) => { complete = done; }));
+    const root = recorder.cycleRoot(1);
+    const pending = recorder.flush(); await vi.advanceTimersByTimeAsync(0);
+    expect(openConnection).toHaveBeenCalledTimes(1);
+    settings.writer[key] += 1;
+    root.progress(1); // Reload while the old connection still owns a batch.
+    expect(end).not.toHaveBeenCalled();
+    expect(openConnection).toHaveBeenCalledTimes(1);
+    complete(); await pending;
+    await recorder.flush();
+    expect(end).toHaveBeenCalledTimes(1);
+    expect(openConnection).toHaveBeenCalledTimes(2);
+    expect(openConnection).toHaveBeenLastCalledWith(expect.anything(), {
+      connectTimeoutSeconds: settings.writer.connect_timeout_seconds,
+      statementTimeoutMs: settings.writer.statement_timeout_ms,
+      lockTimeoutMs: settings.writer.lock_timeout_ms,
+    });
+    root.progress(2); await recorder.flush();
+    expect(openConnection).toHaveBeenCalledTimes(2);
+  });
   it("merges progress and keeps the first terminal state and time", async () => {
     const { recorder, batches } = setup();
     const root = recorder.cycleRoot(1);
