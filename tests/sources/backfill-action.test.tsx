@@ -69,8 +69,10 @@ it("supports keyboard opening, collapse and Chinese labels without losing the pa
   const user = userEvent.setup();
   await user.tab();
   await user.keyboard("{Enter}");
-  expect(screen.getByLabelText("补抓范围")).toBeVisible();
+  expect(screen.getByLabelText("补抓范围", { exact: true })).toBeVisible();
+  expect(screen.getByRole("combobox", { name: "补抓范围" })).toHaveAccessibleName("补抓范围");
+  expect(screen.getByLabelText("通道范围", { exact: true })).toBe(screen.getByRole("combobox", { name: "通道范围" }));
   expect(screen.getByTestId("backfill-cost")).toHaveTextContent(zh.sources.backfill.noPaid);
   await user.click(screen.getByRole("button", { name: "补抓…" }));
-  expect(screen.getByLabelText("补抓范围")).not.toBeVisible();
+  expect(screen.getByLabelText("补抓范围", { exact: true })).not.toBeVisible();
 });
