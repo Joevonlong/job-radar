@@ -1,6 +1,7 @@
 import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, inject } from "vitest";
 
+import { searchPlan } from "../fixtures/job-search";
 import {
   closeDb,
   getApplicationByJobId,
@@ -171,17 +172,18 @@ describe("listJobs", () => {
     expect(seen).toEqual([...seen].sort((a, b) => b - a));
   });
 
-  it("full-text search matches title, description and company", async () => {
-    const byTitle = await listJobs(getDb(), base({ filters: { q: "forward deployed" } }));
+  it("search matches summary by default and descriptions only when requested", async () => {
+    const byTitle = await listJobs(getDb(), base({ filters: { search: searchPlan("forward deployed") } }));
     expect(byTitle.jobs.map((j) => j.title)).toContain("Forward Deployed Engineer");
-    const byCompany = await listJobs(getDb(), base({ filters: { q: "quillfeath" } }));
+    const byCompany = await listJobs(getDb(), base({ filters: { search: searchPlan("quillfeath") } }));
     expect(byCompany.jobs.every((j) => j.companyName === "Quillfeather Labs")).toBe(true);
     expect(byCompany.total).toBe(1);
-    const byDescription = await listJobs(getDb(), base({ filters: { q: "Deutschlandticket" } }));
-    expect(byDescription.total).toBeGreaterThan(0);
-    expect((await listJobs(getDb(), base({ filters: { q: "zzzznothing" } }))).total).toBe(0);
-    // LIKE wildcards in the input are literal
-    expect((await listJobs(getDb(), base({ filters: { q: "%" } }))).total).toBe(0);
+    const byDescription = await listJobs(getDb(), base({ filters: { search: searchPlan("Deutschlandticket") } }));
+    expect(byDescription.total).toBe(0);
+    expect((await listJobs(getDb(), base({ filters: { search: searchPlan("Deutschlandticket"), searchIn: "all" } }))).total).toBeGreaterThan(0);
+    expect((await listJobs(getDb(), base({ filters: { search: searchPlan("zzzznothing") } }))).total).toBe(0);
+    // Punctuation alone has no usable search term
+    expect((await listJobs(getDb(), base({ filters: { search: searchPlan("%") } }))).total).toBe(0);
   });
 
   it("filters by source family", async () => {
@@ -234,7 +236,7 @@ describe("listJobs", () => {
   });
 
   it("attaches sources best-first, the application status and signals", async () => {
-    const { jobs } = await listJobs(getDb(), base({ filters: { q: "Forward Deployed" } }));
+    const { jobs } = await listJobs(getDb(), base({ filters: { search: searchPlan("Forward Deployed") } }));
     const job = jobs[0];
     expect(job?.sources.map((s) => s.priority)).toEqual([...(job?.sources.map((s) => s.priority) ?? [])].sort((a, b) => a - b));
     expect(job?.sources[0]?.family).toBe("ats");
@@ -552,7 +554,7 @@ describe("list filters", () => {
   });
 
   it("carries the AI summary of the newest score in both languages", async () => {
-    const [job] = (await listJobs(getDb(), base({ filters: { q: "Forward Deployed" } }))).jobs;
+    const [job] = (await listJobs(getDb(), base({ filters: { search: searchPlan("Forward Deployed") } }))).jobs;
     expect(job?.summary).toEqual({ texts: { zh: "Forward Deployed Engineer 的虚构摘要。", en: "Fictional summary for Forward Deployed Engineer." }, outputLang: "zh" });
     // a job without a score has no summary
     const unscored = (await listJobs(getDb(), base({ pageSize: 200 }))).jobs.find((j) => j.rank === null);

@@ -5,8 +5,8 @@ export function resolveSort(input: { sort: JobSort | null; q: string | null; sco
   // 1. A valid explicit sort always wins.
   if (input.sort !== null && JOB_SORTS.includes(input.sort)) return input.sort;
 
-  // 2. Reserved: a later full-text relevance sort inserts its usable-q check here, only here,
-  // without reordering the other steps. Empty for now: fall through without changing behaviour.
+  // 2. Search text defaults to relevance, ahead of scope defaults.
+  if (input.q?.trim()) return "relevance";
 
   // 3. The archive defaults to the newest source listing.
   if (input.scope === "archive") return "last_listed";
@@ -25,7 +25,7 @@ export type SortableColumn = keyof typeof SORTABLE_COLUMNS;
 
 /** The direction a list is really sorted in: the URL's `dir`, else the sort's default. */
 export function effectiveDir(sort: JobSort, dir: SortDir | null | undefined): SortDir {
-  return dir ?? DEFAULT_SORT_DIR[sort];
+  return sort === "relevance" ? "desc" : dir ?? DEFAULT_SORT_DIR[sort];
 }
 
 /** The other direction. */
@@ -35,7 +35,7 @@ export function flipDir(dir: SortDir): SortDir {
 
 /** `dir` as the URL writes it: the sort's default direction is left out (null), so `?sort=rank` stays the canonical link. */
 export function dirParam(sort: JobSort, dir: SortDir): SortDir | null {
-  return dir === DEFAULT_SORT_DIR[sort] ? null : dir;
+  return sort === "relevance" || dir === DEFAULT_SORT_DIR[sort] ? null : dir;
 }
 
 /**

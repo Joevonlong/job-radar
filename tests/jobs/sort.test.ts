@@ -17,12 +17,15 @@ describe("resolved list sort", () => {
     }
   });
 
-  it("leaves the relevance step empty, then defaults archive to last listed and other scopes to rank", () => {
-    for (const q of [null, "", "engineer"]) for (const scope of JOB_SCOPES) {
+  it("defaults search to relevance, then archive to last listed and other scopes to rank", () => {
+    for (const q of [null, "", "   "]) for (const scope of JOB_SCOPES) {
       expect(resolveSort({ sort: null, q, scope })).toBe(scope === "archive" ? "last_listed" : "rank");
     }
     expect(fromUrl("?scope=archive")).toBe("last_listed");
-    expect(fromUrl("?scope=archive&q=engineer&sort=invalid")).toBe("last_listed");
+    expect(fromUrl("?scope=archive&q=engineer&sort=invalid")).toBe("relevance");
+    expect(fromUrl("?q=engineer")).toBe("relevance");
+    expect(fromUrl("?q=engineer&sort=rank")).toBe("rank");
+    expect(fromUrl("?q=engineer&dir=asc")).toBe("relevance");
     expect(fromUrl("?sort=invalid")).toBe("rank");
   });
 
@@ -31,6 +34,14 @@ describe("resolved list sort", () => {
     expect(fromUrl("?scope=archive")).toBe("last_listed");
     expect(loadJobsSearchParams("").sort).toBeNull();
     expect(loadJobsSearchParams("?sort=rank").sort).toBe("rank");
+  });
+
+  it("relevance is descending regardless of dir and belongs to no column", () => {
+    for (const dir of [null, undefined, "asc", "desc"] as const) expect(effectiveDir("relevance", dir)).toBe("desc");
+    expect(dirParam("relevance", "asc")).toBeNull();
+    expect(dirParam("relevance", "desc")).toBeNull();
+    expect(columnOfSort("relevance")).toBeNull();
+    expect(nextSortParams("score", { sort: "relevance", dir: "asc" })).toEqual({ sort: "rank", dir: null, page: 1 });
   });
 
   it("last listed has descending direction and no column head", () => {

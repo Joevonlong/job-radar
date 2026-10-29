@@ -1,5 +1,5 @@
-/** Sort orders of /jobs: rank, publication, first seen, comparable annual salary and last source listing (the drop-down orders them itself). */
-export const JOB_SORTS = ["rank", "posted", "first_seen", "salary", "last_listed"] as const;
+/** Sort orders of /jobs (the drop-down orders them itself); relevance is fixed descending. */
+export const JOB_SORTS = ["relevance", "rank", "posted", "first_seen", "salary", "last_listed"] as const;
 export type JobSort = (typeof JOB_SORTS)[number];
 
 export const JOB_SCOPES = ["current", "archive", "all"] as const;
@@ -13,7 +13,7 @@ export const SORT_DIRS = ["asc", "desc"] as const;
 export type SortDir = (typeof SORT_DIRS)[number];
 
 /** The direction a sort takes when the URL does not say: best, highest-paid and newest first. A UI behaviour, not a threshold. */
-export const DEFAULT_SORT_DIR: Readonly<Record<JobSort, SortDir>> = { rank: "desc", posted: "desc", first_seen: "desc", salary: "desc", last_listed: "desc" };
+export const DEFAULT_SORT_DIR: Readonly<Record<JobSort, SortDir>> = { relevance: "desc", rank: "desc", posted: "desc", first_seen: "desc", salary: "desc", last_listed: "desc" };
 
 /** Sort orders of /favorites: when starred (newest first), or the rank value. */
 export const FAVORITE_SORTS = ["starred", "rank"] as const;

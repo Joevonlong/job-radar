@@ -1,22 +1,23 @@
+import { z } from "zod";
+
 import { getSchedule } from "@/lib/dashboard/context";
 import { getDb, listJobs } from "@/lib/db";
-import { searchLocationTerms } from "@/lib/jobs/cities";
+import { buildSearchPlan, jobSearchSettings } from "@/lib/jobs/search";
 
 // The ⌘K palette asks per keystroke: always the live database.
 export const dynamic = "force-dynamic";
 
-/** Most jobs the palette lists. */
-const MAX_RESULTS = 8;
-
 export async function GET(request: Request): Promise<Response> {
-  const q = new URL(request.url).searchParams.get("q")?.trim() ?? "";
-  if (q.length < 2) return Response.json({ jobs: [] }, { headers: { "Cache-Control": "no-store" } });
   try {
+    const settings = jobSearchSettings();
+    const input = z.object({ q: z.string().trim() }).safeParse({ q: new URL(request.url).searchParams.get("q") ?? "" });
+    const q = input.success ? input.data.q.slice(0, settings.query.max_chars) : "";
+    if (q.length < settings.palette.min_chars) return Response.json({ jobs: [] }, { headers: { "Cache-Control": "no-store" } });
     const page = await listJobs(getDb(), {
-      filters: { q, qLocationTerms: searchLocationTerms(q), includeFiltered: false },
-      sort: "rank",
+      filters: { search: buildSearchPlan(q), includeFiltered: false },
+      sort: "relevance",
       page: 1,
-      pageSize: MAX_RESULTS,
+      pageSize: settings.palette.limit,
       timezone: getSchedule().timezone,
     });
     const jobs = page.jobs.map((job) => ({ id: job.id, title: job.title, company: job.companyName, location: job.locations[0]?.label ?? null, rank: job.rank?.rankValue ?? null }));

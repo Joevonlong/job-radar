@@ -109,7 +109,7 @@ export function FilterBar({ options }: { options: FilterBarOptions }) {
   const apps = params.app ?? [];
   const hiddenStatuses = useHiddenStatuses();
   const scope = resolveJobScope(params.scope, params.status);
-  // Share the server priority, including the reserved relevance step; choosing its default keeps canonical URLs.
+  // Share the server priority; omit the default for the current query and scope from the URL.
   const sort = resolveSort({ sort: params.sort, q: params.q, scope });
   const defaultSort = resolveSort({ sort: null, q: params.q, scope });
   const sortDir = effectiveDir(sort, params.dir);
@@ -294,7 +294,7 @@ export function FilterBar({ options }: { options: FilterBarOptions }) {
               <SingleSelect
                 layout={layout}
                 label={t("sort")}
-                options={SORT_MENU.map((s) => ({ value: s, label: t(`sorts.${s}`) }))}
+                options={(params.q?.trim() ? ["relevance" as const, ...SORT_MENU] : SORT_MENU).map((s) => ({ value: s, label: t(`sorts.${s}`) }))}
                 value={sort}
                 onChange={(next) => {
                   const picked = JOB_SORTS.find((s) => s === next) ?? defaultSort;
@@ -305,7 +305,7 @@ export function FilterBar({ options }: { options: FilterBarOptions }) {
                 testId="filter-sort"
                 className="min-w-0 flex-1"
               />
-              <Button
+              {sort !== "relevance" ? <Button
                 type="button"
                 variant="outline"
                 size={layout === "inline" ? "icon-lg" : "icon"}
@@ -317,7 +317,7 @@ export function FilterBar({ options }: { options: FilterBarOptions }) {
                 onClick={() => setParams({ dir: dirParam(sort, flipDir(sortDir)), page: null })}
               >
                 {sortDir === "asc" ? <ArrowUp aria-hidden /> : <ArrowDown aria-hidden />}
-              </Button>
+              </Button> : null}
             </div>
           </div>
 

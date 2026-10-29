@@ -175,3 +175,13 @@ describe("multi-value filters in saved views", () => {
     expect(activeFilterKeys({ city: ["Berlin"], source: "ats" })).toEqual(["source", "city"]);
   });
 });
+
+it("never saves country or search scope and never adds either to view URLs", () => {
+  const params = loadJobsSearchParams("?q=AI&country=DE&searchIn=all");
+  const view = viewFiltersFromParams(params);
+  expect(view).toEqual({ q: "AI" });
+  expect(viewFiltersFromParams(loadJobsSearchParams("?country=DE&searchIn=all"))).toEqual({});
+  const restored = viewFiltersToParams(view);
+  expect(restored).not.toHaveProperty("country");
+  expect(restored).not.toHaveProperty("searchIn");
+});

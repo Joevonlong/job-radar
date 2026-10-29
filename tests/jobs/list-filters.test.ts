@@ -62,3 +62,8 @@ it("offers the standard filter visibility ignore rule before migration", () => {
   expect(countActiveFilters(params, relistFilterVisibility(false))).toBe(0);
   expect(countActiveFilters(params, relistFilterVisibility(true))).toBe(1);
 });
+
+it("carries URL-only search scope and countries around view conversion", async () => {
+  const params = loadJobsSearchParams("?q=AI&searchIn=all&country=de&country=FR");
+  expect(await jobsListFilters({} as Db, params, { cities: [], visa: false, ghost: false })).toMatchObject({ search: { status: "ok", terms: [{ text: "ai" }] }, searchIn: "all", countries: ["DE", "FR"] });
+});

@@ -4,6 +4,7 @@ const IDENTIFIER = /^[A-Za-z][A-Za-z0-9-]*(?:\.yaml)?$/;
 // Keep this client-safe module independent of the registry's server-side schema dependencies.
 const FILE_STEMS: Readonly<Record<string, string>> = {
   channels: "sources",
+  jobSearch: "job-search",
   pipelineBoard: "pipeline-board",
   signalPresets: "signal-presets",
   activityLog: "activity-log",

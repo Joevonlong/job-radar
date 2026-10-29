@@ -11,6 +11,7 @@ const FILES: Record<ConfigName, string> = {
   jobArchive: "job-archive.yaml",
   schedule: "schedule.yaml",
   search: "search.yaml",
+  jobSearch: "job-search.yaml",
   channels: "sources.yaml",
   ai: "ai.yaml",
   breakdown: "breakdown.yaml",

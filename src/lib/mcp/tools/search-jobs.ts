@@ -12,7 +12,7 @@ import { readTraps, resultLimit, truncationNotice } from "./shared";
 /** Longest search text and city name a call accepts. */
 export const MAX_QUERY_CHARS = 200;
 export const MAX_CITY_CHARS = 120;
-export const SEARCH_SORTS = ["rank", "posted", "first_seen"] as const;
+export const SEARCH_SORTS = ["relevance", "rank", "posted", "first_seen"] as const;
 
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 const isCalendarDay = (value: string): boolean => {
@@ -30,6 +30,8 @@ export function searchJobsInput(ctx: Pick<McpContext, "text">) {
       .describe(description);
   return z.strictObject({
     query: z.string().trim().min(1).max(MAX_QUERY_CHARS).optional().describe(t("params.query")),
+    search_in: z.enum(["summary", "all"]).optional().describe(t("params.searchIn")),
+    country: z.array(z.string().regex(/^[A-Za-z]{2}$/).transform((code) => code.toUpperCase())).min(1).max(20).optional().describe(t("params.country")),
     city: z.string().trim().min(1).max(MAX_CITY_CHARS).optional().describe(t("params.city")),
     workplace: z.array(z.enum(JOB_WORKPLACES)).min(1).max(JOB_WORKPLACES.length).optional().describe(t("params.workplace")),
     min_rank: z.number().min(0).max(100).optional().describe(t("params.minRank")),
@@ -51,9 +53,10 @@ export type SearchJobsArgs = z.infer<ReturnType<typeof searchJobsInput>>;
 export async function searchJobs(ctx: McpContext, args: SearchJobsArgs): Promise<SearchJobsOutput> {
   const filters: JobFilters = { includeFiltered: false };
   if (args.query) {
-    filters.q = args.query;
-    filters.qLocationTerms = ctx.locationTerms(args.query);
+    filters.search = ctx.searchPlan(args.query);
   }
+  filters.searchIn = args.search_in ?? "summary";
+  if (args.country) filters.countries = args.country;
   if (args.city) {
     filters.cities = [args.city];
     filters.cityMembers = await ctx.cityMembers(ctx.db, args.city);
@@ -69,7 +72,7 @@ export async function searchJobs(ctx: McpContext, args: SearchJobsArgs): Promise
   if (args.application_status) filters.applicationStatuses = args.application_status;
 
   const limit = resultLimit(ctx, args.limit);
-  const page = await listJobs(ctx.db, { filters, sort: args.sort ?? "rank", page: 1, pageSize: limit, timezone: ctx.timezone() });
+  const page = await listJobs(ctx.db, { filters, sort: args.sort ?? (args.query ? "relevance" : "rank"), page: 1, pageSize: limit, timezone: ctx.timezone() });
   const clean = shortFieldCleaner(readTraps(ctx));
   const jobs = page.jobs.map((card) => toJobCardDto(card, clean));
   const truncated = page.total > jobs.length;

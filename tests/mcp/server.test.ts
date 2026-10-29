@@ -10,6 +10,7 @@ import { errorCategory, runLogged, ToolFailure, type McpContext } from "@/lib/mc
 import { buildServer } from "@/lib/mcp/server";
 import { mcpTranslator } from "@/lib/mcp/text";
 
+import { searchPlan } from "../fixtures/job-search";
 import { trapSettings } from "../traps/helpers";
 
 /** A database that fails the test when touched: invalid arguments must never reach a query. */
@@ -29,7 +30,7 @@ function context(settings: Partial<McpConfig> = {}, lines: string[] = []): McpCo
     reminderDays: () => ({ interested: 7, applied: 14 }),
     baseCurrency: () => "EUR",
     cityMembers: async (_db, city) => [city],
-    locationTerms: (query) => [query],
+    searchPlan,
     text: mcpTranslator("en"),
     log: (line) => lines.push(line),
   };
@@ -67,7 +68,7 @@ describe("tools/list", () => {
       expect(tool.outputSchema).toBeDefined();
     }
     const search = tools.find((t) => t.name === "search_jobs");
-    expect(Object.keys((search?.inputSchema as { properties: object }).properties)).toEqual(["query", "city", "workplace", "min_rank", "min_annual_salary", "since", "until", "application_status", "sort", "limit"]);
+    expect(Object.keys((search?.inputSchema as { properties: object }).properties)).toEqual(["query", "search_in", "country", "city", "workplace", "min_rank", "min_annual_salary", "since", "until", "application_status", "sort", "limit"]);
     expect((search?.inputSchema as { additionalProperties?: unknown }).additionalProperties).toBe(false);
   });
   it("leaves out a tool mcp.yaml switches off", async () => {
@@ -88,6 +89,10 @@ describe("invalid arguments", () => {
     ["search_jobs", { city: "y".repeat(121) }, "city"],
     ["search_jobs", { workplace: ["moon"] }, "workplace"],
     ["search_jobs", { sort: "salary" }, "sort"],
+    ["search_jobs", { search_in: "jd" }, "search_in"],
+    ["search_jobs", { country: ["DEU"] }, "country"],
+    ["search_jobs", { country: [] }, "country"],
+    ["search_jobs", { country: Array.from({ length: 21 }, () => "DE") }, "country"],
     ["search_jobs", { delete: true }, "delete"],
     ["get_job", {}, "job_id"],
     ["get_job", { job_id: -3 }, "job_id"],

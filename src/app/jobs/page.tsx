@@ -83,13 +83,13 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
   const visibility: FilterVisibility = { ignore: [...(visaFilter ? [] : (["visa"] as const)), ...(ghostFilter ? [] : (["ghost"] as const)), ...(relistFilterVisibility(listing).ignore ?? [])] };
   const visit = await getVisitState(db);
   const seenUpTo = effectiveSeenUpTo(visit, now);
-  // Shared priority: explicit sort, reserved relevance step, archive last-listed default, then rank.
+  // Shared priority: explicit sort, search relevance, archive last-listed default, then rank.
   const sort = resolveSort({ sort: params.sort, q: params.q, scope: resolveJobScope(params.scope, params.status) });
   const [result, options, seenCounts, salaryFigures, archiveCount, companies] = await Promise.all([
     listJobs(db, {
       filters,
       sort,
-      dir: params.dir,
+      dir: sort === "relevance" ? null : params.dir,
       page: params.page,
       pageSize: JOBS_PAGE_SIZE,
       timezone,

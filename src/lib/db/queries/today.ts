@@ -230,7 +230,7 @@ async function countCyclePending(db: Db, cycleId: number): Promise<number> {
 }
 
 /** The filters of a saved view that the Today list takes on top of its own (the date range is today, the toggles have their own options). */
-export type TodayExtraFilters = Pick<JobFilters, "q" | "qLocationTerms" | "sources" | "companyIds" | "cities" | "cityMembers" | "workplaces" | "contracts" | "statuses" | "applicationStatuses" | "minRank" | "minAnnualSalary" | "salaryDisclosed" | "trap" | "visa" | "ghost">;
+export type TodayExtraFilters = Pick<JobFilters, "search" | "searchIn" | "countries" | "sources" | "companyIds" | "cities" | "cityMembers" | "workplaces" | "contracts" | "statuses" | "applicationStatuses" | "minRank" | "minAnnualSalary" | "salaryDisclosed" | "trap" | "visa" | "ghost">;
 
 export interface TodayOptions {
   /** "Now": the day is the calendar day of this instant in `timezone`. */

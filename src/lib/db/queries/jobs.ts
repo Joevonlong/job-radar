@@ -1,15 +1,17 @@
-import { and, asc, count, desc, eq, exists, ilike, inArray, isNull, lte, ne, not, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, count, desc, eq, exists, inArray, isNull, lte, ne, not, or, sql, type SQL } from "drizzle-orm";
 
 import type { Db } from "../client";
 import { applications, channels, companies, jobFavorites, jobSources, jobs, jobVisa, trapScans } from "../schema";
 import type { MonthSalaryFigure } from "@/lib/domain/salary";
 import { DEFAULT_SORT_DIR, MAX_FILTER_VALUE_CHARS, type ApplicationFilterStatus, type ArchiveReason, type GhostFilter, type JobScope, type JobSort, type SortDir, type TrapFilter, type VisaFilter } from "@/lib/jobs/constants";
+import type { SearchPlan } from "@/lib/jobs/search-query";
 import { resolveJobScope } from "@/lib/jobs/scope";
 import { ghostTrustedKeys } from "@/lib/ghost/settings";
 
 import { ghostFilterCondition } from "../repos/ghost";
 import { seenSql } from "../repos/seen";
 import { uxTablesReady } from "../repos/ux-tables";
+import { jobHasCountryIn, jobSearchCondition, jobSearchOrderBy } from "./job-search";
 import { archiveReasonSql, effectiveStatusSql, jobScopeSql, lastListedSql } from "./job-status";
 import { cardColumns, hideGermanLevels, hydrateCards, latestScoreCte, latestScoreLateral, type CardRow, type LatestScore } from "./job-cards";
 import { annualBaseFigureSql, baseBoundSql, comparableSalaryWhere } from "./salary-figure";
@@ -18,10 +20,6 @@ import type { JobCard, JobStatus, Workplace } from "./types";
 import { listingReady } from "../repos/listing";
 import { dormancyReady } from "../repos/dormancy";
 
-
-/** Longest search text the query accepts (longer input is cut, not rejected). */
-const MAX_SEARCH_CHARS = 200;
-
 export interface JobFilters {
   /** Latest qualifying relist falls within this badge window; ignored before the listing migration. */
   relistedSince?: Date | null;
@@ -29,10 +27,12 @@ export interface JobFilters {
   scope?: JobScope | null;
   /** Effective closure reasons, OR within this list and intersected with scope and every other filter; empty/null = no filter. */
   closedReasons?: readonly ArchiveReason[] | null;
-  /** Free text: full text over title + description (`search_tsv`), plus title / company substring. */
-  q?: string | null;
-  /** Spellings of `q` that also match the location field (the search "München" finds "Munich"); default: `q` alone. */
-  qLocationTerms?: readonly string[] | null;
+  /** Parsed search terms; null/absent leaves the list unsearched. */
+  search?: SearchPlan | null;
+  /** Absent/null searches summary fields; all also searches descriptions and current translations. */
+  searchIn?: "summary" | "all" | null;
+  /** Exact location country codes, OR within this list. */
+  countries?: readonly string[] | null;
   /** Source families (`channels.family`): the job has a source posting from a channel of any of these families. Empty / null = no filter; the same goes for the other lists below. */
   sources?: readonly string[] | null;
   /**
@@ -148,18 +148,9 @@ export function jobHasCityIn(members: readonly string[]): SQL {
 export function buildJobConditions(db: Db, filters: JobFilters, timezone: string, latest: LatestScore, ux = true): SQL | undefined {
   const conditions: SQL[] = [];
 
-  const q = filters.q?.trim().slice(0, MAX_SEARCH_CHARS);
-  if (q) {
-    const like = `%${escapeLike(q)}%`;
-    const locationTerms = filters.qLocationTerms && filters.qLocationTerms.length > 0 ? filters.qLocationTerms : [q];
-    const match = or(
-      sql`${jobs.searchTsv} @@ websearch_to_tsquery('simple', ${q})`,
-      ilike(jobs.title, like),
-      ilike(companies.name, like),
-      ...locationTerms.map((term) => sql`${jobs.locationsJson}::text ilike ${`%${escapeLike(term)}%`}`),
-    );
-    if (match) conditions.push(match);
-  }
+  const search = jobSearchCondition(filters.search, filters.searchIn);
+  if (search) conditions.push(search);
+  if (filters.countries?.length) conditions.push(jobHasCountryIn(filters.countries));
 
   if (filters.sources && filters.sources.length > 0) {
     conditions.push(
@@ -229,10 +220,14 @@ export function buildJobConditions(db: Db, filters: JobFilters, timezone: string
  * bound; the detail page's median uses the same figure); a salary marked possibly another region's pay comes after every comparable
  * one; under review, unstated or worked out in another base currency = none.
  */
-export function jobOrderBy(sort: JobSort, dir: SortDir, latest: LatestScore, currency: string, lastListed: SQL<Date | null>): SQL[] {
+export function jobOrderBy(sort: JobSort, dir: SortDir, latest: LatestScore, currency: string, lastListed: SQL<Date | null>, filters: Pick<JobFilters, "search" | "searchIn"> = {}): SQL[] {
   const way = sql.raw(dir === "asc" ? "asc" : "desc");
   const filteredLast = sql`coalesce(${latest.filterResult} = 'filtered_out', false) asc`;
   switch (sort) {
+    case "relevance":
+      if (filters.search?.status === "ok") return [...jobSearchOrderBy(filters.search, filters.searchIn), sql`${latest.rankValue} desc nulls last`, sql`${jobs.postedAt} desc nulls last`, desc(jobs.firstSeenAt), desc(jobs.id)];
+      return jobOrderBy("rank", "desc", latest, currency, lastListed);
+
     case "last_listed":
       return [sql`${lastListed} ${way} nulls last`, sql`${jobs.id} ${way}`];
     case "rank":
@@ -292,7 +287,7 @@ export async function listJobs(db: Db, options: ListJobsOptions): Promise<JobPag
   const pageSize = Math.max(1, options.pageSize);
   let page = Math.max(1, Math.floor(options.page));
 
-  const orderBy = jobOrderBy(options.sort, options.dir ?? DEFAULT_SORT_DIR[options.sort], latest, policyCurrency(options.filters), lastListedSql(await listingReady(db)));
+  const orderBy = jobOrderBy(options.sort, options.dir ?? DEFAULT_SORT_DIR[options.sort], latest, policyCurrency(options.filters), lastListedSql(await listingReady(db)), options.filters);
 
   // Count, sort and paginate ids before evaluating card columns and their subqueries. PostgreSQL also
   // inlines this single-use CTE and prunes its unused wide score columns (covered by EXPLAIN tests).

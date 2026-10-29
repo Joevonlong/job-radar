@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { buildCityGroups, cityMembers, locationSearchTerms, type CityRow } from "@/lib/jobs/city-groups";
+import { locationSearchTerms } from "@/lib/jobs/city-aliases";
+import { buildCityGroups, cityMembers, type CityRow } from "@/lib/jobs/city-groups";
 
 import { shippedPipeline } from "../pipeline/helpers";
 

@@ -199,7 +199,7 @@ const oneOrMany = <T extends z.ZodType>(item: T) =>
  * On the Today page the dates are ignored: Today is today.
  */
 export const viewFiltersSchema = z.strictObject({
-  /** Free text (title, company, full JD text). */
+  /** Free text (title, company name/aliases, city/location and recognized countries; no JD). */
   q: nonEmptyString.max(200).optional(),
   /** Source family (`channels.family`, e.g. linkedin). */
   source: oneOrMany(MULTI_VALUE_SCHEMAS.source).optional(),

@@ -3,6 +3,7 @@ import fs from "node:fs";
 import { eq, sql } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, inject, it } from "vitest";
 
+import { searchPlan } from "../fixtures/job-search";
 import { ChannelRegistry } from "@/lib/channels/registry";
 import { getConfigPath, loadConfig, reloadConfig, writeConfig, type NotifyConfig } from "@/lib/config";
 import { runCycle } from "@/lib/cycle/run-cycle";
@@ -326,7 +327,7 @@ describe("saved views", () => {
     expect(all.map((job) => job.title)).toEqual(["Köln Role", "Berlin Role"]);
     const berlin = await listTodayJobs(db(), { now, timezone: "UTC", extra: { cities: ["Berlin"] } });
     expect(berlin.map((job) => job.title)).toEqual(["Berlin Role"]);
-    const none = await listTodayJobs(db(), { now, timezone: "UTC", extra: { q: "rust" } });
+    const none = await listTodayJobs(db(), { now, timezone: "UTC", extra: { search: searchPlan("rust") } });
     expect(none).toEqual([]);
   });
 });

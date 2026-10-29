@@ -25,7 +25,7 @@ for (const locale of ["en", "zh"] as const) {
     });
 
     test("a direct archive link orders by source time, reason narrows it, and current clears last-listed sorting", async ({ page }) => {
-      await open(page, "/jobs?scope=archive&q=Maplewick");
+      await open(page, "/jobs?scope=archive&q=Maplewick&sort=last_listed");
       await expect(page.getByRole("group", { name: /^(Job scope|岗位范围)$/ }).getByRole("link", { name: /^(Archive|历史库)/ })).toHaveAttribute("aria-current", "true");
       await expect(page.getByTestId("filter-sort")).toContainText(locale === "en" ? "Last listed" : "最后列出");
       await expect(listRows(page)).toHaveCount(2);

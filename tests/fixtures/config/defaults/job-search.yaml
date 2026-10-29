@@ -1,0 +1,11 @@
+# Independent config fixture; tests must not depend on product defaults.
+query: {max_chars: 160, max_terms: 9, cjk_min_chars: 3}
+matching: {prefix_min_chars: 5}
+ranking:
+  weights: {title: 7, company: 4, location: 2, country: 2, description: 0.5, translation: 0.5}
+  prefix_factor: 0.5
+countries:
+  name_locales: [en, zh]
+  ambiguous_codes: [AI, IT, IN, ML] # the e2e seed searches "AI ..." and "... ML ..." titles
+  extra_aliases: {DE: [Deutschland]}
+palette: {min_chars: 3, limit: 6}

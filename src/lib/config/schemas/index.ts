@@ -5,6 +5,7 @@ export * from "./companies";
 export * from "./delivery-audit";
 export * from "./insights";
 export * from "./interests";
+export * from "./job-search";
 export * from "./language";
 export * from "./job-archive";
 export * from "./mcp";
