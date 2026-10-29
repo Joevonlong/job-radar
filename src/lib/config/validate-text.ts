@@ -6,7 +6,7 @@
  * Order: YAML syntax -> `config_version` (must equal the code's version) -> zod schema -> cross-file checks
  * (ai.yaml against the models.yaml catalog, both directions). A text that passes can be read by `loadConfig`.
  */
-import { isMap, isNode, isScalar, LineCounter, parseDocument, type Document } from "yaml";
+import { isMap, isNode, isScalar, LineCounter, type Document } from "yaml";
 import type { ZodError } from "zod";
 
 import { parseConfigText, readConfigText } from "./load";
@@ -15,6 +15,7 @@ import { checkAiAgainstCatalog } from "./model-catalog";
 import { documentConfigVersion, currentConfigVersion, CONFIG_VERSION_KEY, withoutConfigVersion } from "./migrations/version";
 import { PROTECTED_KEY_MESSAGE, protectedChanges } from "./protected-check";
 import { configRegistry, type ConfigName, type ConfigValue } from "./registry";
+import { parseConfigYamlDocument } from "./yaml-options";
 
 /** `protected`: the text changes a protected key (`protected-keys.ts`); only with `checkProtected`. */
 export type IssueSource = "yaml" | "version" | "schema" | "catalog" | "protected";
@@ -132,7 +133,7 @@ function yamlReason(message: string): string {
 
 export function validateConfigText<N extends ConfigName>(name: N, text: string, options: ValidateOptions = {}): ValidateResult<N> {
   const lineCounter = new LineCounter();
-  const doc = parseDocument(text, { uniqueKeys: true, lineCounter });
+  const doc = parseConfigYamlDocument(text, { lineCounter });
   const issues: TextIssue[] = [];
 
   if (doc.errors.length > 0) {

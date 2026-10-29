@@ -1,11 +1,12 @@
 /** Import and export of the source registry: parse -> validate -> plan the change -> (the service) write. Pure. */
-import { Document, parseDocument } from "yaml";
+import { Document } from "yaml";
 import { z } from "zod";
 
 import { atsBoardsSchema, channelsSchema, ConfigError, migrateConfigDocument, withoutConfigVersion, type ChannelsConfig } from "@/lib/config";
 import { changedPaths } from "@/lib/draft-diff";
 
 import { boardEntryId, buildRegistryEntries } from "./entries";
+import { parseConfigYamlDocument } from "@/lib/config/yaml-options";
 
 export const IMPORT_FORMATS = ["yaml", "json"] as const;
 export type ImportFormat = (typeof IMPORT_FORMATS)[number];
@@ -116,7 +117,7 @@ export function parseImportText(text: string, format: ImportFormat, maxBytes: nu
       return { ok: false, errors: [position ? { path: "", code: "invalid_json_at", values: { position: Number(position) }, message: `invalid JSON near character ${position}` } : { path: "", code: "invalid_json", message: "invalid JSON" }] };
     }
   }
-  const doc = parseDocument(text, { uniqueKeys: true });
+  const doc = parseConfigYamlDocument(text);
   if (doc.errors.length > 0) {
     return {
       ok: false,

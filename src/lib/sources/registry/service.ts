@@ -4,7 +4,7 @@
  * through the shared config writer (comments stay) and mirrors the result into `source_registry`.
  */
 import { logActionFailure } from "@/lib/logging/action-failure";
-import { parse, parseDocument } from "yaml";
+import { parseDocument } from "yaml";
 import { z } from "zod";
 
 import {
@@ -39,6 +39,7 @@ import {
   type ImportSummary,
 } from "./import";
 import { syncSourceRegistry } from "./sync";
+import { CONFIG_YAML_OPTIONS, parseConfigYamlDocument } from "@/lib/config/yaml-options";
 
 export type RegistryErrorKey = "invalid" | "unknown_entry" | "config_invalid" | "write_failed" | "no_changes" | "database_unavailable" | "needs_parent" | "consent_required" | ConfigWriteErrorKey;
 
@@ -234,7 +235,10 @@ export type ImportPreviewState =
 /** `jobspy.proxies` of a file that does not pass validation, read leniently (a repair must not drop it). */
 function salvageProxies(text: string): string[] {
   try {
-    const doc: unknown = parse(text);
+    // lenient on purpose (a repair keeps what it can): the shared tags, but an unresolved one does not stop the salvage
+    const parsed = parseDocument(text, CONFIG_YAML_OPTIONS);
+    if (parsed.errors.length > 0) return [];
+    const doc: unknown = parsed.toJS();
     const jobspy = typeof doc === "object" && doc !== null ? (doc as Record<string, unknown>).jobspy : null;
     const proxies = typeof jobspy === "object" && jobspy !== null ? (jobspy as Record<string, unknown>).proxies : null;
     return Array.isArray(proxies) ? proxies.filter((p): p is string => typeof p === "string") : [];
@@ -348,7 +352,7 @@ export function exportSources(format: "yaml" | "json", options: { now: Date; tim
     return { body: maskCredentialsInText(text), contentType: "application/yaml; charset=utf-8", filename: `${base}.yaml` };
   }
   try {
-    const doc = parseDocument(text, { uniqueKeys: true });
+    const doc = parseConfigYamlDocument(text);
     if (doc.errors.length > 0) return { error: "config_invalid" };
     const config = reloadConfig("channels");
     return { body: `${JSON.stringify(maskProxyCredentials(config), null, 2)}\n`, contentType: "application/json; charset=utf-8", filename: `${base}.json` };

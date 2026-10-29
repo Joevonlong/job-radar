@@ -3,11 +3,12 @@
  * shows them as `***:***@`, and a save puts the real text back at the same place. It never lets them be changed there:
  * credentials belong in the file itself (or `.env`), not in a web form.
  */
-import { isMap, isScalar, isSeq, parseDocument } from "yaml";
+import { isMap, isScalar, isSeq } from "yaml";
 
 import { maskCredentialsInText } from "@/lib/sources/registry/import";
 
 import type { ConfigName } from "./registry";
+import { parseConfigYamlDocument } from "./yaml-options";
 
 interface ProxyItem {
   start: number;
@@ -16,7 +17,7 @@ interface ProxyItem {
 
 /** Source ranges of the items of `jobspy.proxies` (null: the text does not parse, or has no such list). */
 function proxyItems(text: string): ProxyItem[] | null {
-  const doc = parseDocument(text, { uniqueKeys: true });
+  const doc = parseConfigYamlDocument(text);
   if (doc.errors.length > 0 || !isMap(doc.contents)) return null;
   const jobspy = doc.contents.get("jobspy", true);
   if (!isMap(jobspy)) return null;

@@ -4,7 +4,7 @@ import path from "node:path";
 import { randomBytes } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 
-import { Document, isMap, isNode, isScalar, isSeq, parse, parseDocument, type YAMLMap, type YAMLSeq } from "yaml";
+import { Document, isMap, isNode, isScalar, isSeq, type YAMLMap, type YAMLSeq } from "yaml";
 
 import { ConfigError, zodIssues } from "./errors";
 import { backupConfigText } from "./editor-backup";
@@ -16,6 +16,7 @@ import { pruneRedundantKeys } from "./overlay";
 import { notifyProfileSaved } from "./profile";
 import { assertProtectedUnchanged } from "./protected-check";
 import { configRegistry, isProfileName, type ConfigName, type ConfigValue } from "./registry";
+import { CONFIG_YAML_OPTIONS, parseConfigYaml, parseConfigYamlDocument } from "./yaml-options";
 import { CONFIG_EDITOR_DEFAULTS } from "./schemas/ui";
 import { validateConfigText } from "./validate-text";
 import { commitConfigWrite, withConfigWriteLock } from "./write-lock";
@@ -193,13 +194,13 @@ function renderYaml<N extends ConfigName>(name: N, existingText: string | null, 
   const current = currentConfigVersion(name);
   let doc: Document | null = null;
   if (existingText !== null) {
-    const parsed = parseDocument(existingText, { uniqueKeys: true });
+    const parsed = parseConfigYamlDocument(existingText);
     if (parsed.errors.length === 0 && parsed.contents !== null) doc = parsed;
   }
   if (doc !== null && isMap(doc.contents) && documentConfigVersion(doc) === null) doc.contents.delete(CONFIG_VERSION_KEY);
   if (doc !== null) migrateConfigDocument(name, doc, existingPath);
   if (doc === null) {
-    doc = new Document(value);
+    doc = new Document(value, CONFIG_YAML_OPTIONS);
     if (current > 1) stampConfigVersion(doc, current);
   } else {
     const hadVersion = isMap(doc.contents) && doc.contents.has(CONFIG_VERSION_KEY);
@@ -221,7 +222,7 @@ async function readIfExists(file: string): Promise<string | null> {
 
 function readsBackAs<N extends ConfigName>(name: N, text: string, expected: ConfigValue<N>): boolean {
   try {
-    const reparsed = configRegistry[name].schema.safeParse(withoutConfigVersion(parse(text)));
+    const reparsed = configRegistry[name].schema.safeParse(withoutConfigVersion(parseConfigYaml(text)));
     return reparsed.success && isDeepStrictEqual(reparsed.data, expected);
   } catch {
     return false;
@@ -367,7 +368,7 @@ function currentTextHash(name: ConfigName): string {
 function existingKeys(name: ConfigName, existingText: string | null, existingPath: string): unknown {
   if (existingText === null) return undefined;
   try {
-    const doc = parseDocument(existingText, { uniqueKeys: true });
+    const doc = parseConfigYamlDocument(existingText);
     if (doc.errors.length > 0 || doc.contents === null) return undefined;
     migrateConfigDocument(name, doc, existingPath);
     return withoutConfigVersion(doc.toJS());

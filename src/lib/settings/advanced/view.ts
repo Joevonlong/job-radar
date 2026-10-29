@@ -1,7 +1,6 @@
 /** Server side of the advanced editor: the file list, one file's text, the limits. Reads only. */
 import fs from "node:fs";
 
-import { parseDocument } from "yaml";
 
 import {
   CONFIG_EDITOR_DEFAULTS,
@@ -25,6 +24,7 @@ import {
 import { protectedEditAllowed, protectedPatterns } from "@/lib/config/protected-keys";
 
 import type { AdvancedFileEntry, AdvancedLayer, AdvancedLoad } from "./types";
+import { parseConfigYamlDocument } from "@/lib/config/yaml-options";
 
 /** The configs the editor lists: the layered ones (the profile files have their own pages). In the registry's order. */
 export const ADVANCED_NAMES: readonly ConfigName[] = CONFIG_NAMES.filter((name) => !isProfileName(name));
@@ -74,7 +74,7 @@ function entryOf(name: ConfigName): AdvancedFileEntry {
     const result = validateConfigText(name, read.text);
     valid = result.ok;
     if (!result.ok) firstProblem = firstLine(result.issues[0], "invalid");
-    const doc = parseDocument(read.text, { uniqueKeys: true });
+    const doc = parseConfigYamlDocument(read.text);
     const version = doc.errors.length === 0 ? documentConfigVersion(doc) : null;
     versionBehind = version !== null && version < currentConfigVersion(name);
   }
