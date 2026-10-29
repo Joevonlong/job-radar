@@ -50,6 +50,11 @@ describe("token contrast (small text, 4.5:1)", () => {
         expect(contrast(vars["on-signal"]!, vars[color]!), color).toBeGreaterThanOrEqual(4.5);
       }
     });
+    it(`${name}: card date row and both density control states`, () => {
+      expect(contrast(vars["ink-2"]!, vars["card-bg"]!)).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(vars["ink"]!, vars["card-bg"]!)).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(vars["bg"]!, vars["ink"]!)).toBeGreaterThanOrEqual(4.5);
+    });
     it(`${name}: every company mark fill has readable initials`, () => {
       // the picked class is the colour that renders: nothing else in jobs.css sets one on the mark (it did, and won)
       const markRule = fs.readFileSync(path.join(__dirname, "../../src/components/jobs/jobs.css"), "utf8").match(/\.jb-mark\s*\{([^}]*)\}/)?.[1] ?? "";

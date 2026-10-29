@@ -1,5 +1,8 @@
 import { eq, sql } from "drizzle-orm";
-import { afterAll, beforeAll, beforeEach, describe, expect, it, inject } from "vitest";
+import { createFormatter, createTranslator } from "next-intl";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, inject, vi } from "vitest";
+
+import { toBoardCards } from "@/components/pipeline/to-board-cards";
 
 import { countInPipeline, overdueOf } from "@/lib/dashboard/board";
 import {
@@ -18,6 +21,14 @@ import {
 } from "@/lib/db";
 import { runMigrations } from "@/lib/db/migrate";
 import { seedDatabase } from "@/lib/db/seed";
+
+import en from "../../messages/en.json";
+
+vi.mock("next-intl/server", () => ({
+  getFormatter: async () => createFormatter({ locale: "en", timeZone: "UTC" }),
+  getLocale: async () => "en",
+  getTranslations: async (namespace: "dashboard" | "ghostJobs") => createTranslator({ locale: "en", messages: en, namespace }),
+}));
 
 const url = inject("testDatabaseUrl");
 const TZ = "Europe/Berlin";
@@ -289,4 +300,33 @@ describe("overdue from the stored status time", () => {
     const after = await getApplicationByJobId(db, id);
     expect(after && before && after.statusChangedAt.getTime() > before.statusChangedAt.getTime()).toBe(true);
   });
+});
+
+it("derives the first applied date from the real move event and restores both dates on undo", async () => {
+  const db = getDb();
+  const id = await jobIdByTitle("Security Engineer, Cloud");
+  await setApplicationStatus(db, id, "interested");
+  const options = { now: NOW, timezone: TZ, thresholds: { interestedDays: 7, appliedDays: 14 } };
+  const readCard = async () => {
+    const entries = await listPipelineEntries(db);
+    const entry = entries.find((entry) => entry.job.id === id);
+    if (!entry) throw new Error("Missing test application");
+    const [card] = await toBoardCards([entry], options);
+    if (!card) throw new Error("Missing test card");
+    return { card, entry };
+  };
+  const before = await readCard();
+  expect(before.card.appliedDate).toBeNull();
+  await setApplicationStatus(db, id, "applied");
+  const moved = await readCard();
+  const event = moved.entry.events.find((event) => event.toStatus === "applied");
+  expect(event).toBeDefined();
+  expect(moved.card.appliedDate).toMatchObject({ iso: event!.at.toISOString() });
+  expect(moved.card.statusDate).toMatchObject({ iso: moved.entry.application.statusChangedAt.toISOString() });
+  const undone = await revertApplicationStatus(db, id, { movedTo: "applied", restoreTo: "interested" });
+  expect(undone.reverted).toBe(true);
+  const restored = await readCard();
+  expect(restored.card.appliedDate).toEqual(before.card.appliedDate);
+  expect(restored.card.statusDate).toEqual(before.card.statusDate);
+  expect(restored.entry.events).toEqual(before.entry.events);
 });

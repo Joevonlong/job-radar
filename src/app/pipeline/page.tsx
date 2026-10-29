@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
 import { getTranslations } from "next-intl/server";
+import type { CSSProperties } from "react";
 
 import { Board } from "@/components/pipeline/board";
 import { toBoardCards } from "@/components/pipeline/to-board-cards";
@@ -9,6 +11,7 @@ import { readHiddenSettings } from "@/lib/applications/hidden";
 import { boardLayout } from "@/lib/applications/visibility";
 import { loadConfig } from "@/lib/config";
 import { countInPipeline, overdueThresholds } from "@/lib/dashboard/board";
+import { BOARD_DENSITY_COOKIE, resolveBoardDensity } from "@/lib/dashboard/density";
 import { getDisplayTimeZone } from "@/lib/dashboard/context";
 import { getDb, listPipelineEntries } from "@/lib/db";
 import { visaVisible } from "@/lib/visa/settings";
@@ -26,6 +29,8 @@ export default async function PipelinePage() {
   const tPipeline = await getTranslations("pipeline");
   const timezone = getDisplayTimeZone();
   const notify = loadConfig("notify");
+  const { layout, density, compact } = loadConfig("pipelineBoard");
+  const initialDensity = resolveBoardDensity((await cookies()).get(BOARD_DENSITY_COOKIE)?.value, density.default);
   const thresholds = overdueThresholds(notify);
 
   const hidden = readHiddenSettings().statuses;
@@ -38,7 +43,7 @@ export default async function PipelinePage() {
 
   return (
     <HiddenStatusesProvider hidden={hidden}>
-    <div data-wide className="flex min-w-0 flex-col gap-4">
+    <div data-wide data-fit-viewport className="flex min-h-0 min-w-0 flex-1 flex-col gap-sp-4 [&>header]:shrink-0" style={{ "--board-min-h": `${layout.board_min_height_rem}rem`, "--board-col-min": `${layout.column_min_width_rem}rem` } as CSSProperties}>
       <PageHeader title={t("title")} description={t("description")}>
         <p className="text-muted-foreground text-sm" data-testid="pipeline-summary">
           {tPipeline("summary", { count: countInPipeline(cards), interested: thresholds.interestedDays, applied: thresholds.appliedDays })}
@@ -49,7 +54,7 @@ export default async function PipelinePage() {
           </p>
         ) : null}
       </PageHeader>
-      <Board cards={cards} pushLine={notify.push_min_score} thresholds={thresholds} />
+      <Board density={initialDensity} compact={compact} rememberDays={density.remember_days} cards={cards} pushLine={notify.push_min_score} thresholds={thresholds} />
     </div>
     </HiddenStatusesProvider>
   );

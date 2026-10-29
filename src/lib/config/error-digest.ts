@@ -9,6 +9,6 @@ export function configErrorDigest(name: string): string {
 export function configFileFromDigest(digest: string): string | null {
   const name = digest.slice(CONFIG_ERROR_DIGEST_PREFIX.length);
   if (!digest.startsWith(CONFIG_ERROR_DIGEST_PREFIX) || name.length > 60 || !IDENTIFIER.test(name)) return null;
-  const stem = name === "channels" ? "sources" : name === "signalPresets" ? "signal-presets" : name;
+  const stem = name === "channels" ? "sources" : name === "signalPresets" ? "signal-presets" : name === "pipelineBoard" ? "pipeline-board" : name;
   return stem.endsWith(".yaml") ? stem : `${stem}.yaml`;
 }

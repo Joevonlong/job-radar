@@ -1403,6 +1403,10 @@
   "pipeline": {
     "summary": "{count, plural, other {# 个岗位}}在流程中 · 感兴趣超过 {interested} 天、已申请超过 {applied} 天会标记超时",
     "boardLabel": "申请看板",
+    "nav": {
+      "prev": "上一列",
+      "next": "下一列"
+    },
     "empty": "还没有岗位进入申请流程。在今日或岗位页把岗位标为感兴趣，它就会出现在这里。",
     "emptyLink": "去看岗位",
     "moved": "{company} → {status}",
@@ -1420,6 +1424,7 @@
       "shown": "显示 {shown} / {count}"
     },
     "column": {
+      "scrollLabel": "{name} · 卡片",
       "empty": "暂无岗位",
       "ended": "已结束",
       "endedHint": "展开查看被拒、我放弃和已忽略的岗位",
@@ -1436,7 +1441,15 @@
       "moveFor": "移动到… · {company}",
       "moveTo": "移动到…",
       "dragFor": "拖动 {company}",
-      "hiddenStatus": "{status}（已隐藏）"
+      "hiddenStatus": "{status}（已隐藏）",
+      "applied": "申请 {date}",
+      "appliedTerm": "首次标为已申请",
+      "appliedFull": "首次标为已申请：{date}",
+      "appliedNone": "未记录",
+      "since": "本状态自 {date}",
+      "sinceTerm": "进入当前状态",
+      "sinceFull": "进入当前状态：{date}",
+      "datePending": "保存中…"
     },
     "nextDefault": {
       "new": "决定是否感兴趣",
@@ -1508,6 +1521,11 @@
     "hiddenColumn": {
       "label": "{status} · 已隐藏 · {count}",
       "summary": "已隐藏 · {count}"
+    },
+    "density": {
+      "label": "卡片密度",
+      "compact": "紧凑",
+      "comfortable": "舒适"
     }
   },
   "translation": {

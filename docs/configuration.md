@@ -31,7 +31,7 @@ source needs which key: [installation.md](installation.md#2-optional-create-env)
 | Kind | Files | First-time setup | On product upgrade |
 |---|---|---|---|
 | `user` | schedule, search, sources, ai, notify, interests, ui, breakdown, resume, insights, language, setup, salary ([salary.md](salary.md)), mcp ([mcp.md](mcp.md)) | Copied from the defaults directory to the user directory, yours from then on | Your files are never changed automatically; format changes are carried over by migrations (`config_version`) |
-| `shipped` | models (model catalog and prices), pipeline (parsing rules, city and skill tables), signal-presets (the presets of the "Add category" dialog on `/interests`, see [signals.md](signals.md#add-your-own-interest-point)) | Not copied; always read from the defaults directory | Follows product updates |
+| `shipped` | models (model catalog and prices), pipeline (parsing rules, city and skill tables), pipeline-board (board layout and card display), signal-presets (the presets of the "Add category" dialog on `/interests`, see [signals.md](signals.md#add-your-own-interest-point)) | Not copied; always read from the defaults directory | Follows product updates |
 
 A `user` file that a product upgrade introduces is copied from the defaults on the next start; when the user directory
 already held configuration (an existing install), a file can be written with the behaviour the install had so far
@@ -47,6 +47,23 @@ The profile files `me.yaml` and `preferences.yaml` live in `data/profile/` and a
 [deal-breakers.md](deal-breakers.md); its limits are in `pipeline.yaml: filter.deal_breakers`.
 Runtime profile readers can use `config/profile.example/` without creating a file. Raw-file checks, the doctor and
 watcher still distinguish a missing user profile from a saved one; templates do not become a default config layer.
+
+## Application board (`pipeline-board.yaml`)
+
+This shipped file has `config_version: 1`. Existing installations read it from the defaults directory without a migration.
+To customise it, copy the whole file into the user config directory; that copy replaces future shipped updates.
+All six keys are required. Unknown keys, invalid densities and values outside the ranges below are rejected with the field path.
+
+| Key | Shipped value | Allowed | Purpose |
+|---|---|---|---|
+| `density.default` | `compact` | `compact`, `comfortable` | Default card density |
+| `density.remember_days` | `365` | Integer 1–3650 | Days to remember the density choice |
+| `compact.title_lines` | `2` | Integer 1–4 | Maximum compact title lines |
+| `compact.next_action_lines` | `1` | Integer 1–3 | Maximum compact next-action lines |
+| `layout.column_min_width_rem` | `14` | 10–24 | Minimum desktop column width, in rem |
+| `layout.board_min_height_rem` | `24` | 12–60 | Minimum board height on short screens, in rem |
+
+All keys apply to the board. Compact cards clamp the title and next action to the configured line counts without reducing font sizes. The toolbar switches density and stores `jr_board_density` in this browser for `density.remember_days` days. Missing or invalid cookies use `density.default`; the server renders the chosen density on the first response.
 
 ## Commands
 

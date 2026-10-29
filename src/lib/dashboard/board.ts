@@ -123,3 +123,18 @@ export function nextActionDateToTimestamp(date: string): Date | null {
 export function timestampToNextActionDate(value: Date): string {
   return value.toISOString().slice(0, 10);
 }
+
+/** The first recorded entry into applied, including creation directly in that status. */
+export function firstAppliedAt(events: readonly { toStatus: ApplicationStatus; at: Date; id: number }[]): Date | null {
+  let first: (typeof events)[number] | undefined;
+  for (const event of events) {
+    if (event.toStatus !== "applied") continue;
+    if (!first || event.at.getTime() < first.at.getTime() || (event.at.getTime() === first.at.getTime() && event.id < first.id)) first = event;
+  }
+  return first?.at ?? null;
+}
+
+/** Earlier stages show an applied date only when an applied event actually exists. */
+export function showsAppliedDate(status: ApplicationStatus, appliedAt: Date | null): boolean {
+  return appliedAt !== null || !(["new", "interested", "preparing"] as readonly ApplicationStatus[]).includes(status);
+}

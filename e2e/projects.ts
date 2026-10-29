@@ -47,6 +47,8 @@ export const SERIAL_CHAIN: readonly ChainEntry[] = [
   // ui / notify / ai / sources / pipeline
   { name: "chromium-settings-advanced", spec: "settings-advanced.spec.ts" },
   { name: "chromium-settings-workflow", spec: "settings-workflow.spec.ts" },
+  // Many board applications and a temporary ui.yaml hidden status; counts must not race other specs.
+  { name: "chromium-pipeline-many", spec: "pipeline-many.spec.ts" },
   // preferences.yaml deal_breakers, and one job's filter result
   { name: "chromium-deal-breakers", spec: "deal-breakers.spec.ts" },
   // me.yaml needs_visa_sponsorship (the visa badge and filter show only for a user who needs sponsorship)

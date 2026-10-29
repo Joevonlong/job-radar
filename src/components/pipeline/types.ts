@@ -13,12 +13,17 @@ export interface BoardEvent {
   note: string | null;
 }
 
+export type CardDate = { iso: string; label: string; full: string } | { pending: true };
+
 /** A pipeline card as the client components render it: plain serializable data. */
 export interface BoardCard {
   jobId: number;
   /** The job as the lists show it (company, title, places, rank, signals). */
   job: JobListItem;
   status: ApplicationStatus;
+  /** null: hidden in an early stage; "none": shown, but no applied event was recorded. */
+  appliedDate: CardDate | null | "none";
+  statusDate: CardDate;
   /** The stated annual salary (numbers; the component formats them); null = not disclosed. */
   salary: BoardSalary | null;
   /** Set when the card sat in `interested` / `applied` longer than notify.yaml `reminders` allows. */

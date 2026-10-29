@@ -1403,6 +1403,10 @@
   "pipeline": {
     "summary": "{count, plural, one {# job} other {# jobs}} in the pipeline · flagged after {interested} days interested, {applied} days applied without a reply",
     "boardLabel": "Application board",
+    "nav": {
+      "prev": "Previous column",
+      "next": "Next column"
+    },
     "empty": "No jobs in the pipeline yet. Mark a job as interested on Today or Jobs and it shows up here.",
     "emptyLink": "Browse jobs",
     "moved": "{company} → {status}",
@@ -1420,6 +1424,7 @@
       "shown": "Showing {shown} of {count}"
     },
     "column": {
+      "scrollLabel": "{name} · cards",
       "empty": "No jobs",
       "ended": "Ended",
       "endedHint": "Expand to see rejected, withdrawn and ignored jobs",
@@ -1436,7 +1441,15 @@
       "moveFor": "Move to… · {company}",
       "moveTo": "Move to…",
       "dragFor": "Drag {company}",
-      "hiddenStatus": "{status} (hidden)"
+      "hiddenStatus": "{status} (hidden)",
+      "applied": "Applied {date}",
+      "appliedTerm": "First marked applied",
+      "appliedFull": "First marked applied: {date}",
+      "appliedNone": "Not recorded",
+      "since": "Since {date}",
+      "sinceTerm": "In this status since",
+      "sinceFull": "In this status since {date}",
+      "datePending": "Saving…"
     },
     "nextDefault": {
       "new": "Decide if interested",
@@ -1508,6 +1521,11 @@
     "hiddenColumn": {
       "label": "{status} · hidden · {count}",
       "summary": "hidden · {count}"
+    },
+    "density": {
+      "label": "Card density",
+      "compact": "Compact",
+      "comfortable": "Comfortable"
     }
   },
   "translation": {

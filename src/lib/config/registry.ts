@@ -11,6 +11,7 @@ import { meSchema } from "./schemas/me";
 import { modelsSchema } from "./schemas/models";
 import { notifySchema } from "./schemas/notify";
 import { pipelineSchema } from "./schemas/pipeline";
+import { pipelineBoardSchema } from "./schemas/pipeline-board";
 import { preferencesSchema } from "./schemas/preferences";
 import { resumeSchema } from "./schemas/resume";
 import { salarySchema } from "./schemas/salary";
@@ -40,6 +41,7 @@ export const configRegistry = {
   notify: { file: "notify.yaml", location: "config", kind: "user", schema: notifySchema },
   interests: { file: "interests.yaml", location: "config", kind: "user", schema: interestsSchema },
   pipeline: { file: "pipeline.yaml", location: "config", kind: "shipped", schema: pipelineSchema },
+  pipelineBoard: { file: "pipeline-board.yaml", location: "config", kind: "shipped", schema: pipelineBoardSchema },
   resume: { file: "resume.yaml", location: "config", kind: "user", schema: resumeSchema },
   insights: { file: "insights.yaml", location: "config", kind: "user", schema: insightsSchema },
   ui: { file: "ui.yaml", location: "config", kind: "user", schema: uiSchema },

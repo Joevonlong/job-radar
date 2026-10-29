@@ -50,13 +50,15 @@ export async function AppShell({ children, access }: { children: ReactNode; acce
   return (
     <ShellStatusProvider initial={initialStatus}>
       <SkipLink />
-      {access.banner ? <AccessBanner /> : null}
-      <div className="flex min-h-screen">
-        <ScrollProgress />
-        <UnsavedGuard />
-        <ShellChrome sidebar={<Sidebar signOut={signOut} />} topbar={<Topbar signOut={signOut} />} setupTopbar={<Topbar minimal />}>
-          {children}
-        </ShellChrome>
+      <div className="[&:has([data-fit-viewport])]:flex [&:has([data-fit-viewport])]:h-dvh [&:has([data-fit-viewport])]:flex-col">
+        {access.banner ? <AccessBanner /> : null}
+        <div className="flex min-h-screen [&:has([data-fit-viewport])]:min-h-0 [&:has([data-fit-viewport])]:flex-1">
+          <ScrollProgress />
+          <UnsavedGuard />
+          <ShellChrome sidebar={<Sidebar signOut={signOut} />} topbar={<Topbar signOut={signOut} />} setupTopbar={<Topbar minimal />}>
+            {children}
+          </ShellChrome>
+        </div>
       </div>
     </ShellStatusProvider>
   );
