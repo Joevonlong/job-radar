@@ -35,7 +35,7 @@ export async function jobReadColumns(db: Executor) {
     ...columns,
     lastListedAt: listing ? lastListedAt : sql<Date | null>`null`,
     relistedAt: listing ? relistedAt : sql<Date | null>`null`,
-    relistCount: listing ? sql<number>`coalesce(${relistCount}, 0)`.mapWith(Number) : sql<number | null>`null`,
+    relistCount: listing ? relistCount : sql<number | null>`null`,
     dormantAt: available ? dormantAt : sql<Date | null>`null`,
     possiblyClosedAt: available ? possiblyClosedAt : sql<Date | null>`null`,
   };
