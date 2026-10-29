@@ -215,7 +215,7 @@ test.describe("desktop", () => {
     await drag(page, card(page, FERNWEH), page.getByTestId("drop-withdrawn"));
     await expect(saved(page, FERNWEH, "我放弃")).toBeVisible();
     await expect(column(page, "preparing").getByTestId("pipeline-card").filter({ hasText: FERNWEH })).toHaveCount(0);
-    await page.getByTestId("ended-toggle").click();
+    await expect(page.getByTestId("ended-toggle")).toHaveAttribute("aria-expanded", "true");
     const moved = column(page, "ended").getByTestId("pipeline-card").filter({ hasText: FERNWEH });
     await expect(moved).toBeVisible();
     await expect(moved.locator("[data-slot=status-chip]")).toHaveText("我放弃");

@@ -10,7 +10,7 @@ import { SourceLink } from "./source-link";
 export function Sidebar({ signOut = null }: { signOut?: ReactNode }) {
   const t = useTranslations("shell");
   return (
-    <aside aria-label={t("sidebar")} className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col gap-sp-1 overflow-y-auto border-r-bw border-term-line bg-term-bg p-sp-3 font-mono text-body-sm text-term-dim md:flex">
+    <aside aria-label={t("sidebar")} className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col gap-sp-1 overflow-y-auto border-r-bw border-term-line bg-term-bg p-sp-3 font-mono text-body-sm text-term-dim md:flex [div:has([data-fit-viewport])>&]:h-full [div:has([data-fit-viewport])>&]:min-h-0">
       <div className="px-sp-2 pb-sp-3">
         <Brand />
       </div>

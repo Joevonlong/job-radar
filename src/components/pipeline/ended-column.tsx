@@ -10,6 +10,7 @@ import { formatInteger, ratioPercent } from "@/lib/format/numbers";
 
 import { ColumnHead, columnClass, DropZone } from "./board-column";
 import { DraggableCard } from "./card";
+import { ColumnScroll } from "./column-scroll";
 import type { BoardCard } from "./types";
 
 interface EndedColumnProps {
@@ -49,33 +50,37 @@ export function EndedColumn({ cards, dragging, open, pushLine, settleId, onToggl
 
   return (
     <section aria-label={t("ended")} data-testid="board-column" data-column="ended" className={columnClass}>
-      <button type="button" aria-expanded={open} onClick={onToggle} className="min-h-sp-6 rounded-tag text-left" data-testid="ended-toggle">
+      <button type="button" aria-expanded={open} onClick={onToggle} className="min-h-sp-6 shrink-0 rounded-tag text-left" data-testid="ended-toggle">
         <ColumnHead column="ended" label={t("ended")} count={cards.length}>
           <Chevron aria-hidden className="text-ink-3 size-4" />
         </ColumnHead>
       </button>
       {showZones ? (
-        listed.map((status) => {
-          const inStatus = cards.filter((card) => card.status === status);
-          const dropTarget = zones.includes(status);
-          return (
-            <div key={status} className="flex flex-col gap-1">
-              <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-sp-2 px-0.5">
-                <span className="text-body-sm">{dropTarget ? ts(status) : t("hiddenSuffix", { status: ts(status) })}</span>
-                <PercentBar value={share(inStatus.length)} size="sm" tone="ink" label={formatInteger(inStatus.length, locale)} ariaLabel={t("endedCount", { status: ts(status), count: inStatus.length })} className="w-full" />
-              </div>
-              {dropTarget ? (
-                <DropZone id={status} label={ts(status)} testId={`drop-${status}`}>
-                  {open ? inStatus.map((card) => <DraggableCard key={card.jobId} card={card} pushLine={pushLine} settling={settleId === card.jobId} onOpen={onOpen} onMove={onMove} />) : null}
-                </DropZone>
-              ) : open ? (
-                <div role="group" aria-label={ts(status)} data-testid={`hidden-cards-${status}`} className="gap-sp-2 flex flex-col">
-                  {inStatus.map((card) => <DraggableCard key={card.jobId} card={card} pushLine={pushLine} settling={settleId === card.jobId} onOpen={onOpen} onMove={onMove} />)}
+        <ColumnScroll label={t("ended")}>
+          <div className="flex flex-col gap-sp-2">
+            {listed.map((status) => {
+              const inStatus = cards.filter((card) => card.status === status);
+              const dropTarget = zones.includes(status);
+              return (
+                <div key={status} className="flex flex-col gap-1">
+                  <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-sp-2 px-0.5">
+                    <span className="text-body-sm">{dropTarget ? ts(status) : t("hiddenSuffix", { status: ts(status) })}</span>
+                    <PercentBar value={share(inStatus.length)} size="sm" tone="ink" label={formatInteger(inStatus.length, locale)} ariaLabel={t("endedCount", { status: ts(status), count: inStatus.length })} className="w-full" />
+                  </div>
+                  {dropTarget ? (
+                    <DropZone id={status} label={ts(status)} testId={`drop-${status}`}>
+                      {open ? inStatus.map((card) => <DraggableCard key={card.jobId} card={card} pushLine={pushLine} settling={settleId === card.jobId} onOpen={onOpen} onMove={onMove} />) : null}
+                    </DropZone>
+                  ) : open ? (
+                    <div role="group" aria-label={ts(status)} data-testid={`hidden-cards-${status}`} className="gap-sp-2 flex flex-col">
+                      {inStatus.map((card) => <DraggableCard key={card.jobId} card={card} pushLine={pushLine} settling={settleId === card.jobId} onOpen={onOpen} onMove={onMove} />)}
+                    </div>
+                  ) : null}
                 </div>
-              ) : null}
-            </div>
-          );
-        })
+              );
+            })}
+          </div>
+        </ColumnScroll>
       ) : (
         <>
           <ul aria-label={t("endedBars")} className="flex flex-col gap-1.5 px-0.5">

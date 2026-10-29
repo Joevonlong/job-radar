@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 
 import { columnClass } from "./board-column";
 import { DraggableCard } from "./card";
+import { ColumnScroll } from "./column-scroll";
 import { COLUMN_COLOR } from "./status-colors";
 import type { BoardCard } from "./types";
 
@@ -38,7 +39,7 @@ export function HiddenColumn({ status, cards, open, pushLine, settleId, onToggle
       data-hidden-column={open ? "open" : "collapsed"}
       className={cn(open ? columnClass : "bg-soft border-bw border-ink rounded-card gap-sp-2 p-sp-2 flex w-36 shrink-0 snap-start flex-col")}
     >
-      <button type="button" aria-expanded={open} onClick={onToggle} className="rounded-tag flex flex-col gap-1 text-left" data-testid={`hidden-toggle-${status}`}>
+      <button type="button" aria-expanded={open} onClick={onToggle} className="rounded-tag flex shrink-0 flex-col gap-1 text-left" data-testid={`hidden-toggle-${status}`}>
         <span className="text-label flex items-center gap-1.5 font-extrabold">
           <i aria-hidden className={cn("border-ink rounded-cell size-3 shrink-0 border-2", COLUMN_COLOR[status].dot)} />
           <Chevron aria-hidden className="text-ink-3 size-4 shrink-0" />
@@ -47,11 +48,13 @@ export function HiddenColumn({ status, cards, open, pushLine, settleId, onToggle
         <span className="text-ink-3 text-data-sm font-mono">{t("summary", { count: cards.length })}</span>
       </button>
       {open ? (
-        <div role="group" aria-label={ts(status)} data-testid={`hidden-cards-${status}`} className="gap-sp-2 flex flex-col">
-          {cards.map((card) => (
-            <DraggableCard key={card.jobId} card={card} pushLine={pushLine} settling={settleId === card.jobId} onOpen={onOpen} onMove={onMove} />
-          ))}
-        </div>
+        <ColumnScroll label={ts(status)}>
+          <div role="group" aria-label={ts(status)} data-testid={`hidden-cards-${status}`} className="gap-sp-2 flex flex-col">
+            {cards.map((card) => (
+              <DraggableCard key={card.jobId} card={card} pushLine={pushLine} settling={settleId === card.jobId} onOpen={onOpen} onMove={onMove} />
+            ))}
+          </div>
+        </ColumnScroll>
       ) : null}
     </section>
   );

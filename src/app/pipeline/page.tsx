@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { getTranslations } from "next-intl/server";
+import type { CSSProperties } from "react";
 
 import { Board } from "@/components/pipeline/board";
 import { toBoardCards } from "@/components/pipeline/to-board-cards";
@@ -26,6 +27,7 @@ export default async function PipelinePage() {
   const tPipeline = await getTranslations("pipeline");
   const timezone = getDisplayTimeZone();
   const notify = loadConfig("notify");
+  const { layout } = loadConfig("pipelineBoard");
   const thresholds = overdueThresholds(notify);
 
   const hidden = readHiddenSettings().statuses;
@@ -38,7 +40,7 @@ export default async function PipelinePage() {
 
   return (
     <HiddenStatusesProvider hidden={hidden}>
-    <div data-wide className="flex min-w-0 flex-col gap-4">
+    <div data-wide data-fit-viewport className="flex min-h-0 min-w-0 flex-1 flex-col gap-sp-4 [&>header]:shrink-0" style={{ "--board-min-h": `${layout.board_min_height_rem}rem`, "--board-col-min": `${layout.column_min_width_rem}rem` } as CSSProperties}>
       <PageHeader title={t("title")} description={t("description")}>
         <p className="text-muted-foreground text-sm" data-testid="pipeline-summary">
           {tPipeline("summary", { count: countInPipeline(cards), interested: thresholds.interestedDays, applied: thresholds.appliedDays })}

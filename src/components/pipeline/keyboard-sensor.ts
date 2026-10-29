@@ -17,7 +17,13 @@ export class EagerKeyboardSensor extends KeyboardSensor {
   static override activators = KeyboardSensor.activators;
 
   constructor(props: SensorProps<KeyboardSensorOptions>) {
-    super(props);
+    super({
+      ...props,
+      // The board getter reveals its target before returning coordinates. The generic sensor would then scroll the
+      // OLD zone's ancestors (even main) a second time. Project a live context without that loop's scroll candidates;
+      // leave the shared dnd-kit context and mouse auto-scroll untouched.
+      context: { get current() { return { ...props.context.current, scrollableAncestors: [] }; } },
+    });
     const self = this as unknown as SensorInternals;
     const activating = props.event;
     const doc = (props.event.target as Node | null)?.ownerDocument ?? document;

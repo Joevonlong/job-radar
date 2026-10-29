@@ -1403,6 +1403,10 @@
   "pipeline": {
     "summary": "{count, plural, other {# 个岗位}}在流程中 · 感兴趣超过 {interested} 天、已申请超过 {applied} 天会标记超时",
     "boardLabel": "申请看板",
+    "nav": {
+      "prev": "上一列",
+      "next": "下一列"
+    },
     "empty": "还没有岗位进入申请流程。在今日或岗位页把岗位标为感兴趣，它就会出现在这里。",
     "emptyLink": "去看岗位",
     "moved": "{company} → {status}",
@@ -1420,6 +1424,7 @@
       "shown": "显示 {shown} / {count}"
     },
     "column": {
+      "scrollLabel": "{name} · 卡片",
       "empty": "暂无岗位",
       "ended": "已结束",
       "endedHint": "展开查看被拒、我放弃和已忽略的岗位",

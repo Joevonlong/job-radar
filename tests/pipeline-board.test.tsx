@@ -1,4 +1,4 @@
-import { act, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { NextIntlClientProvider } from "next-intl";
 import { withNuqsTestingAdapter } from "nuqs/adapters/testing";
@@ -152,6 +152,46 @@ describe("Board with hidden statuses", () => {
 });
 
 describe("Board", () => {
+  it("contains absolutely positioned card content in each active, hidden and ended column scroller", async () => {
+    renderBoard(CARDS, "en", "", ["preparing"]);
+    await userEvent.click(within(columnOf("preparing")).getByTestId("hidden-toggle-preparing"));
+    await userEvent.click(within(columnOf("ended")).getByTestId("ended-toggle"));
+    for (const status of ["interested", "preparing", "ended"]) {
+      expect(within(columnOf(status)).getByTestId("column-scroll")).toHaveClass("relative", "overflow-y-auto");
+    }
+  });
+
+  it("disables previous and next at the scroll ends and moves one column plus the gap", async () => {
+    renderBoard();
+    const board = screen.getByTestId("board");
+    const prev = screen.getByTestId("board-prev");
+    const next = screen.getByTestId("board-next");
+    expect(prev).toBeDisabled();
+    expect(next).toBeDisabled(); // jsdom starts without layout or overflow
+    Object.defineProperties(board, { clientWidth: { value: 500 }, scrollWidth: { value: 1250 } });
+    board.style.columnGap = "12px";
+    const first = columnOf("new");
+    vi.spyOn(first, "getBoundingClientRect").mockReturnValue(new DOMRect(0, 0, 240, 400));
+    board.scrollTo = vi.fn((options?: ScrollToOptions | number) => {
+      if (typeof options === "object") board.scrollLeft = Math.max(0, Math.min(750, options.left ?? 0));
+      fireEvent.scroll(board);
+    });
+    fireEvent.scroll(board);
+    expect(prev).toBeDisabled();
+    expect(next).toBeEnabled();
+    await userEvent.click(next);
+    expect(board.scrollTo).toHaveBeenLastCalledWith({ left: 252, behavior: "instant" });
+    expect(prev).toBeEnabled();
+    await userEvent.click(next);
+    await userEvent.click(next);
+    expect(next).toBeDisabled();
+    await userEvent.click(prev);
+    expect(next).toBeEnabled();
+    await userEvent.click(prev);
+    await userEvent.click(prev);
+    expect(prev).toBeDisabled();
+  });
+
   it("puts cards in their columns; the three end states share a collapsed column", async () => {
     renderBoard();
     expect(within(columnOf("interested")).getByText("Alpha Labs")).toBeInTheDocument();
