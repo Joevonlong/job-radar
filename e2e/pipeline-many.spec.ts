@@ -447,6 +447,25 @@ test("phone layout starts at the first populated column, scrolls vertically, and
   await inside(card(page, id), scroll(page, "applied"));
 });
 
+test("phone opens a partly clipped card without moving its title during the click", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await open(page);
+  // Leave another card below this one so its title can sit near the bottom of the scroll region.
+  const entry = card(page, seedId("interested", 48));
+  const title = entry.getByTestId("card-open");
+  await title.evaluate((el) => {
+    const source = el.closest<HTMLElement>("[data-column-scroll]")!;
+    const viewport = source.getBoundingClientRect(), rect = el.getBoundingClientRect();
+    source.scrollTop += rect.bottom - (viewport.top + source.clientTop + source.clientHeight - 8);
+  });
+  await expect(title).toBeInViewport({ ratio: 1 });
+  const bounds = await box(entry), viewport = await box(scroll(page, "interested"));
+  expect(bounds.y + bounds.height).toBeGreaterThan(viewport.y + viewport.height);
+  await title.click();
+  await expect(page.getByTestId("card-drawer")).toBeVisible();
+  await expect(page.getByTestId("card-drawer").locator('[data-slot="sheet-description"]')).toHaveText(await title.innerText());
+});
+
 test("many-card accessibility: named scroll regions, axe, and Tab reaches the final card", async ({ page }) => {
   await open(page);
   await page.getByTestId("ended-toggle").click();
@@ -455,19 +474,25 @@ test("many-card accessibility: named scroll regions, axe, and Tab reaches the fi
   for (const region of await page.getByTestId("column-scroll").all()) await expect(region).toHaveAccessibleName(/\S/);
   await page.addScriptTag({ content: axe.source });
   const violations = await page.evaluate(async () => {
-    const result = await window.axe.run(document, { runOnly: { type: "tag", values: ["wcag2a", "wcag2aa", "wcag21aa"] } });
+    // Scope to the pipeline view, including its heading, filters, density control and every expanded board column.
+    const result = await window.axe.run('[data-fit-viewport]', { runOnly: { type: "tag", values: ["wcag2a", "wcag2aa", "wcag21aa"] } });
     return result.violations.map(({ id, nodes }) => ({ id, targets: nodes.map((node) => node.target) }));
   });
   expect(violations).toEqual([]);
   const source = scroll(page, "interested");
   await overflow(source);
-  // Position focus on the scroll region; reaching the last card uses only Tab, never focus() on that card.
-  await source.focus();
+  // Start at the preceding card instead of tabbing through all 50 copies of the same controls.
+  // Scroll it out of view again so Tab must reveal the card and continue into the final one.
+  const previous = source.getByTestId("pipeline-card").nth(-2);
+  await previous.getByTestId("card-open").focus();
   await source.evaluate((el) => { el.scrollTop = 0; });
   const last = source.getByTestId("pipeline-card").last();
   const target = last.getByTestId("card-open");
-  for (let i = 0; i < 200 && !(await target.evaluate((el) => el === document.activeElement)); i++) await page.keyboard.press("Tab");
-  await expect(target).toBeFocused();
+  await expect(target).not.toBeInViewport();
+  for (const next of [previous.getByTestId("card-handle"), previous.getByTestId("card-status"), target]) {
+    await page.keyboard.press("Tab");
+    await expect(next).toBeFocused();
+  }
   expect(await source.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
   await inside(last, source);
 });
@@ -550,12 +575,17 @@ test("phone density toggle retains multi-card scrolling, full text and dates", a
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
     const source = scroll(page, "interested");
     await overflow(source);
-    await source.evaluate((el) => { el.scrollTop = el.scrollHeight; });
     const last = card(page, seedId("interested", 49));
+    // Density reflows animate card positions. A transient in-viewport box is not a settled click target.
+    await expect.poll(() => last.evaluate((el) => getComputedStyle(el.parentElement!).transform)).toBe("none");
+    await source.evaluate((el) => { el.scrollTop = el.scrollHeight; });
     await inside(last, source);
     await expect(last.getByTestId("card-dates")).toBeVisible();
     await last.getByTestId("card-open").click();
     await expect(page.getByTestId("card-drawer")).toBeVisible();
+    await expect(page.getByTestId("card-drawer").locator('[data-slot="sheet-description"]')).toHaveText(await last.getByTestId("card-open").innerText());
     await page.keyboard.press("Escape");
+    await expect(page.getByTestId("card-drawer")).toBeHidden();
+    await expect(last.getByTestId("card-open")).toBeFocused();
   }
 });
