@@ -1,5 +1,6 @@
 import { BudgetTracker } from "@/lib/channels/budget";
 import { createChannelContext } from "@/lib/channels/context";
+import type { DeliveryRecorder } from "@/lib/channels/delivery";
 import type { FetchLike } from "@/lib/channels/http";
 import { createBrightDataChannel } from "@/lib/channels/linkedin/brightdata";
 import { settingsFromConfig } from "@/lib/channels/registry";
@@ -139,7 +140,7 @@ export interface Harness {
 export async function harness(
   channel: Channel,
   provider: FakeProvider,
-  options: { config?: ChannelsConfig; seed?: { records: number; usd: number }; cycleId?: number | null } = {},
+  options: { config?: ChannelsConfig; seed?: { records: number; usd: number }; cycleId?: number | null; deliveries?: DeliveryRecorder } = {},
 ): Promise<Harness> {
   const config = options.config ?? shippedChannels();
   const settings = brightSettings(config);
@@ -161,6 +162,7 @@ export async function harness(
     child: () => logger,
   };
   const ctx = createChannelContext({
+    deliveries: options.deliveries,
     channelId: channel.id,
     settings,
     http: { timeoutMs: 1000, maxRetries: 2, backoffBaseMs: 1, backoffMaxMs: 1 },

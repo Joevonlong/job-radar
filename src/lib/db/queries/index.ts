@@ -17,3 +17,4 @@ export * from "./profile-salaries";
 export * from "./view-trends";
 export * from "./ai-usage";
 export * from "./job-status";
+export * from "./deliveries";

@@ -1,0 +1,14 @@
+# In-scope channels retain every delivered record they do not store as a raw posting.
+config_version: 1
+scope:
+  channel_kinds: [paid] # Channel kinds covered by the ledger.
+  exclude_channels: [] # Channel ids excluded from this scope.
+checkpoint:
+  write_timeout_ms: 5000 # Maximum wait for checkpoint and failure-path writes.
+retention:
+  days: 45 # Retention applies only to ledger items, never raw postings or run summaries.
+  warn_bytes: 524288000 # Warn and prune expired items early; never skip new or delete unexpired items.
+prune:
+  every_minutes: 60 # Regular pruning interval.
+  batch_size: 2000 # Maximum expired items deleted per statement.
+  statement_timeout_ms: 5000 # Timeout for each pruning statement.

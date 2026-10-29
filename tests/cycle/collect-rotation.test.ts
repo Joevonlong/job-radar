@@ -13,6 +13,7 @@ import { createMemoryStateStore } from "@/lib/channels/store";
 import { collectStep, type CollectResult } from "@/lib/cycle/collect";
 import type { CycleStepContext } from "@/lib/cycle/steps";
 import type { Db } from "@/lib/db/client";
+import * as deliveries from "@/lib/db/repos/deliveries";
 import * as runs from "@/lib/db/repos/runs";
 
 import { config, pinnedSearch } from "./helpers";
@@ -27,6 +28,7 @@ const db = new Proxy({} as Db, {
 });
 
 beforeEach(() => {
+  vi.spyOn(deliveries, "deliveryTablesReady").mockResolvedValue(true);
   vi.spyOn(runs, "getQueryRunHistory").mockResolvedValue([]);
   vi.spyOn(runs, "createRun").mockImplementation(async (_db, input) => ({
     id: 1, cycleId: input.cycleId ?? null, channelId: input.channelId, queryHash: input.queryHash ?? null,

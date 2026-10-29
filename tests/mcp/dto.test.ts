@@ -173,6 +173,25 @@ describe("the output field sets (a change here is a change of the data egress re
 });
 
 describe("mapping", () => {
+  it("keeps both delivery ledger tables outside every MCP output allowlist", () => {
+    const ledger = {
+      delivery_items: [{ payload_json: { text: "private receipt" }, external_id: "private provider id" }],
+      run_deliveries: [{ delivered: 1, counts_json: { dispositions: { no_identity: 1 } } }],
+    };
+    const job = { ...card(), ...ledger };
+    const detailed = { ...detail(), ...ledger };
+    const app = { ...application(), ...ledger };
+    const outputs = [
+      { schema: jobCardDto, value: toJobCardDto(job, identity) },
+      { schema: jobDetailDto, value: toJobDetailDto(detailed, { traps: null, description: availableDescription(null, 500) }, identity) },
+      { schema: applicationItemDto, value: toApplicationItemDto({ job, application: app, events: [] }, NOW, identity) },
+    ];
+    for (const { schema, value } of outputs) {
+      expect(schema.safeParse(value).success).toBe(true);
+      expect(schema.safeParse({ ...value, ...ledger }).success).toBe(false);
+      expect(JSON.stringify(value)).not.toMatch(/delivery_items|run_deliveries|private receipt|private provider id/);
+    }
+  });
   it("a card carries the facts, never the summary, the favorite note, filter reasons or the signal bonus", () => {
     const dto = toJobCardDto(card(), identity);
     expect(dto).toMatchObject({ id: 7, title: "Data Engineer", company: "Acme", rank: { rank_value: 81, score: 78, stale: false }, application_status: "new", links: [{ source: "ats", url: "https://boards.example/acme/1", apply_url: null }] });

@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   bigint,
+  bigserial,
   boolean,
   check,
   customType,
@@ -180,6 +181,41 @@ export const rawPostings = pgTable(
     index("raw_postings_run_id_idx").on(t.runId),
   ],
 );
+
+/** Delivery reconciliation per run, retained indefinitely; never read by parsing or the job lifecycle. */
+export const runDeliveries = pgTable("run_deliveries", {
+  runId: bigint("run_id", { mode: "number" }).primaryKey().references(() => runs.id, { onDelete: "cascade" }),
+  channelId: text("channel_id").notNull(),
+  ledger: text("ledger").notNull(),
+  delivered: integer("delivered").notNull(),
+  billedUnits: integer("billed_units").notNull(),
+  distinctIds: integer("distinct_ids").notNull(),
+  countsJson: jsonb("counts_json").notNull(),
+  windowCutoffAt: timestamptz("window_cutoff_at"),
+  recordedAt: timestamptz("recorded_at").notNull().defaultNow(),
+});
+
+/** Provider receipts retained until audit pruning; never read by parsing or the job lifecycle. */
+export const deliveryItems = pgTable("delivery_items", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  runId: bigint("run_id", { mode: "number" }).notNull().references(() => runs.id, { onDelete: "cascade" }),
+  ordinal: integer("ordinal").notNull(),
+  batch: smallint("batch").notNull(),
+  channelId: text("channel_id").notNull(),
+  externalId: text("external_id"),
+  disposition: text("disposition").notNull(),
+  flags: text("flags").array().notNull().default(sql`'{}'::text[]`),
+  payloadHash: text("payload_hash").notNull(),
+  payloadBytes: integer("payload_bytes").notNull(),
+  payloadJson: jsonb("payload_json"),
+  payloadText: text("payload_text"),
+  rawPostingId: bigint("raw_posting_id", { mode: "number" }).references(() => rawPostings.id, { onDelete: "set null" }),
+  receivedAt: timestamptz("received_at").notNull(),
+}, (t) => [
+  unique("delivery_items_run_ordinal_uq").on(t.runId, t.ordinal),
+  index("delivery_items_received_id_idx").on(t.receivedAt, t.id),
+  index("delivery_items_channel_external_idx").on(t.channelId, t.externalId).where(sql`${t.externalId} is not null`),
+]);
 
 /**
  * Per-board state of the ATS channels. The board is identified by the `ats_boards` (sources.yaml)

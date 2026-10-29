@@ -25,6 +25,7 @@ const FILES: Record<ConfigName, string> = {
   traps: "traps.yaml",
   salary: "salary.yaml",
   signalPresets: "signal-presets.yaml",
+  deliveryAudit: "delivery-audit.yaml",
   mcp: "mcp.yaml",
   language: "language.yaml",
   me: "profile.example/me.yaml",

@@ -8,6 +8,7 @@ export * from "./channels";
 export * from "./companies";
 export * from "./control-requests";
 export * from "./cycles";
+export * from "./deliveries";
 export * from "./email-messages";
 export * from "./favorites";
 export * from "./filter-overrides";

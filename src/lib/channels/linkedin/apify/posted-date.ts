@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import type { DateEvidence, DateEvidenceFlag } from "../date-window";
+
 const MS_PER_HOUR = 3_600_000;
 const MS_PER_DAY = 24 * MS_PER_HOUR;
 const RELATIVE_UNITS_MS: Readonly<Record<string, number>> = {
@@ -44,14 +46,14 @@ function relativeAge(value: string | null | undefined): { count: number; unitMs:
  * is hour-precise. A present but unparseable or conflicting label also removes confidence in a non-midnight time. Relative text
  * supplies a rounded age interval, never a replacement postedAt; keep the source date and raw payload unchanged.
  */
-export function postedBefore(record: Record<string, unknown>, cutoff: number, observedAt: number): boolean {
+export function postedDateEvidence(record: Record<string, unknown>, observedAt: number): DateEvidence {
   const { postedDate, postedTimeAgo } = timeFieldsSchema.parse(record);
   const at = postedAtOf(postedDate);
-  if (at === null) return false;
+  if (at === null) return { end: null, flags: [record.postedDate == null ? "date_missing" : "date_unparsed"] };
   const timestamp = at.getTime();
-  if (dateSchema.safeParse(postedDate).success) return timestamp + MS_PER_DAY < cutoff;
+  if (dateSchema.safeParse(postedDate).success) return { end: timestamp + MS_PER_DAY, flags: ["date_day_precision"] };
   const time = ISO_TIME.exec(postedDate ?? "");
-  if (!time) return false;
+  if (!time) return { end: null, flags: ["date_unparsed"] };
   const timeOfDay = Number(time[1]) * MS_PER_HOUR + Number(time[2]) * 60_000 + Number(time[3] ?? 0) * 1000 + at.getUTCMilliseconds();
   const relative = relativeAge(postedTimeAgo);
   // "5 hours ago" covers ages from 5 to under 6 hours; no arbitrary clock-skew tolerance is added.
@@ -61,5 +63,14 @@ export function postedBefore(record: Record<string, unknown>, cutoff: number, ob
     : postedTimeAgo === undefined || agrees;
   // The source's offset is retained: subtract its stated time-of-day, not the converted UTC time-of-day.
   const end = exact ? timestamp : timestamp - timeOfDay + MS_PER_DAY;
-  return end < cutoff;
+  const flags: DateEvidenceFlag[] = [];
+  if (!exact && timeOfDay === 0) flags.push("date_day_precision");
+  if (!exact && timeOfDay !== 0 && relative === null) flags.push("date_unconfirmed");
+  if (relative !== null && !agrees) flags.push("date_conflict");
+  return { end, flags };
+}
+
+export function postedBefore(record: Record<string, unknown>, cutoff: number, observedAt: number): boolean {
+  const { end } = postedDateEvidence(record, observedAt);
+  return end !== null && end < cutoff;
 }

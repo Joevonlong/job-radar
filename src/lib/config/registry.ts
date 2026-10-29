@@ -4,6 +4,7 @@ import { activityLogSchema } from "./schemas/activity-log";
 import { aiSchema } from "./schemas/ai";
 import { breakdownSchema } from "./schemas/breakdown";
 import { channelsSchema } from "./schemas/channels";
+import { deliveryAuditSchema } from "./schemas/delivery-audit";
 import { insightsSchema } from "./schemas/insights";
 import { interestsSchema } from "./schemas/interests";
 import { languageSchema } from "./schemas/language";
@@ -56,6 +57,7 @@ export const configRegistry = {
   salary: { file: "salary.yaml", location: "config", kind: "user", schema: salarySchema },
   /** Starting points of the "add a category" dialog on /interests (shipped: a user copy replaces it as a whole). */
   signalPresets: { file: "signal-presets.yaml", location: "config", kind: "shipped", schema: signalPresetsSchema },
+  deliveryAudit: { file: "delivery-audit.yaml", location: "config", kind: "shipped", schema: deliveryAuditSchema },
   /** The optional read-only MCP server (`pnpm mcp:serve`); off by default, every key has a default. */
   mcp: { file: "mcp.yaml", location: "config", kind: "user", schema: mcpSchema },
   /** The operations log of the runner and ai-worker: retention, writer limits, page settings (shipped). */

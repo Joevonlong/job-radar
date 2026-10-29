@@ -38,7 +38,7 @@ describe("trigger -> progress -> snapshot", () => {
     const provider = fakeProvider({ records: [RECORD, { error: "x" }] });
     const { client, inputs, sleeps } = await setup(provider);
     const snapshot = await client.run(inputs, 10);
-    expect(snapshot).toEqual({ snapshotId: SNAPSHOT_ID, items: [RECORD, { error: "x" }] });
+    expect(snapshot).toEqual({ snapshotId: SNAPSHOT_ID, items: [RECORD, { error: "x" }], ordinals: [undefined, undefined] });
     expect(provider.requests.map((r) => `${r.method} ${r.path}`)).toEqual([
       "POST /datasets/v3/trigger",
       `GET /datasets/v3/progress/${SNAPSHOT_ID}`,

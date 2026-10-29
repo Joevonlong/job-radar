@@ -78,7 +78,8 @@
     "web:password": "tsx scripts/web-password.ts",
     "build:runner": "tsx scripts/i18n-catalog.ts && esbuild runner=src/runner/index.ts healthcheck=src/runner/healthcheck.ts --bundle --external:playwright-core --platform=node --format=esm --target=node22 --outdir=dist --out-extension:.js=.mjs --banner:js=\"import { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);\"",
     "stack:up": "docker compose up -d --build",
-    "stack:down": "docker compose down"
+    "stack:down": "docker compose down",
+    "deliveries:show": "node --env-file-if-exists=.env --import tsx scripts/deliveries-show.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.132.0",

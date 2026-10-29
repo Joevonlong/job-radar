@@ -12,9 +12,12 @@ import {
   type SearchQuery,
 } from "@/lib/channels/types";
 import type { Db } from "@/lib/db/client";
+import { loadConfig, type DeliveryAuditConfig } from "@/lib/config";
+import { deliveryTablesReady, type FinishRunFields } from "@/lib/db/repos/deliveries";
 import { createRun, finishRun, getQueryRunHistory, type QueryRunHistoryRow, type RunStatus } from "@/lib/db/repos/runs";
 import { upsertRawPostings } from "@/lib/db/repos/raw-postings";
 
+import { createCollectDeliveries } from "./collect-deliveries";
 import type { CycleStepContext, StepResult } from "./steps";
 
 /** How many parsed titles a dry run shows per channel. */
@@ -155,6 +158,8 @@ export async function collectStep(ctx: CycleStepContext): Promise<StepResult> {
   const unusable: Record<string, string> = {};
   const allQueries = new Map<string, SearchQuery>();
   let aborted = false;
+  let deliveryAudit: DeliveryAuditConfig | null = null;
+  let deliveriesReady = false;
 
   const keywordQueries = buildQueries(config.search, ctx.cycle.kind, { windowKind: ctx.windowKind });
   const sweepQuery = buildSweepQuery(config.search, ctx.cycle.kind, { windowKind: ctx.windowKind });
@@ -263,6 +268,10 @@ export async function collectStep(ctx: CycleStepContext): Promise<StepResult> {
         throw new InfrastructureError(`could not create run row for ${channelId}`, error);
       }
     }
+    const deliveries = runId !== null && deliveryAudit && deliveriesReady
+      && deliveryAudit.scope.channel_kinds.includes(channel.kind) && !deliveryAudit.scope.exclude_channels.includes(channelId)
+      ? createCollectDeliveries({ db: requireDb(), runId, channelId, config: deliveryAudit, logger: ctx.logger, now: ctx.now })
+      : null;
     summary.runs += 1;
 
     const budget = services.budget.forChannel(channel);
@@ -276,14 +285,20 @@ export async function collectStep(ctx: CycleStepContext): Promise<StepResult> {
       logger: ctx.logger,
       known: services.known(channelId),
       now: ctx.now,
+      ...(deliveries ? { deliveries: deliveries.ledger } : {}),
       ...ctx.channels.runtime,
     });
 
     const finish = async (
       status: Exclude<RunStatus, "running">,
       fields: { fetched?: number; newCount?: number; error?: string | null; errorCode?: string | null; interrupted?: boolean },
+      storeFailed = false,
     ): Promise<void> => {
       if (runId === null) return;
+      if (deliveries) {
+        await deliveries.fail({ status, cost: budget.attempt.usd, usageUnits: budget.attempt.records, ...fields }, storeFailed);
+        return;
+      }
       try {
         await finishRun(requireDb(), runId, { status, cost: budget.attempt.usd, usageUnits: budget.attempt.records, ...fields });
       } catch (error) {
@@ -313,11 +328,13 @@ export async function collectStep(ctx: CycleStepContext): Promise<StepResult> {
       } else {
         const failure = toChannelError(error);
         const skipped = failure.code === "budget_exceeded";
+        const finishFailure = () => finish(skipped ? "skipped" : "failed", { error: truncate(failure.message), errorCode: failure.code });
+        if (deliveries) await finishFailure();
         summary.costUsd += budget.attempt.usd;
         if (skipped) summary.skipped += 1;
         else summary.failed += 1;
         summary.errorCodes[failure.code] = (summary.errorCodes[failure.code] ?? 0) + 1;
-        await finish(skipped ? "skipped" : "failed", { error: truncate(failure.message), errorCode: failure.code });
+        if (!deliveries) await finishFailure();
         if (!skipped) await services.breaker.recordFailure(channelId, failure.code, { trips: failure.tripsCircuit });
         ctx.logger.warn("channel attempt failed", { channel: channelId, query: query.id, code: failure.code, retryable: failure.retryable });
         throw failure;
@@ -325,24 +342,38 @@ export async function collectStep(ctx: CycleStepContext): Promise<StepResult> {
     }
 
     // validate the boundary (C6); keep every valid record, flag the rest
-    const valid: RawPostingInput[] = [];
-    for (const record of collected) {
-      const parsed = rawPostingInputSchema.safeParse(record);
-      if (parsed.success) valid.push(parsed.data);
+    const valid: RawPostingInput[] = deliveries ? deliveries.validate(collected) : [];
+    if (!deliveries) {
+      for (const record of collected) {
+        const parsed = rawPostingInputSchema.safeParse(record);
+        if (parsed.success) valid.push(parsed.data);
+      }
     }
     const invalid = collected.length - valid.length;
+    const rejected = invalid > 0 ? `${invalid} of ${collected.length} records rejected (invalid shape)` : null;
+    const completed = (): FinishRunFields => interrupted ? {
+      status: plannedStop ? "skipped" : "partial",
+      fetched: collected.length,
+      error: truncate(`${plannedStop ? "budget reached" : "interrupted"} after ${collected.length} postings: ${interrupted.message}${rejected ? `; ${rejected}` : ""}`),
+      errorCode: interrupted.code,
+      ...(plannedStop ? {} : { interrupted: true }),
+    } : {
+      status: invalid > 0 ? "partial" : "succeeded",
+      fetched: collected.length,
+      ...(rejected ? { error: rejected, errorCode: "parse" } : {}),
+    };
 
     // dry runs cannot know what is new: they report no inserts
     let counts = { inserted: 0, changed: 0, unchanged: 0 };
     if (!ctx.dryRun) {
       try {
-        counts = await upsertRawPostings(requireDb(), {
+        counts = deliveries ? await deliveries.store({ ...completed(), cost: budget.attempt.usd, usageUnits: budget.attempt.records }) : await upsertRawPostings(requireDb(), {
           channelId,
           runId,
           items: valid.map((v) => ({ externalId: v.externalId, url: v.url, payload: v.payload })),
         });
       } catch (error) {
-        await finish("failed", { fetched: collected.length, error: "could not store postings", errorCode: "unknown" }).catch(() => {});
+        await finish("failed", { fetched: collected.length, error: "could not store postings", errorCode: "unknown" }, true).catch(() => {});
         throw new InfrastructureError(`could not store postings of ${channelId}`, error);
       }
     } else {
@@ -365,15 +396,16 @@ export async function collectStep(ctx: CycleStepContext): Promise<StepResult> {
     summary.unchanged += counts.unchanged;
     summary.costUsd += budget.attempt.usd;
     if (invalid > 0) summary.errorCodes.parse = (summary.errorCodes.parse ?? 0) + invalid;
-    const rejected = invalid > 0 ? `${invalid} of ${collected.length} records rejected (invalid shape)` : null;
 
     if (interrupted && plannedStop) {
       // the postings are kept and the query is recorded like any other budget skip: no failure or interruption is counted, the circuit
       // is left alone, and the run is not a success either, so an incomplete set of keywords never counts as a complete visit of the channel
       summary.skipped += 1;
       summary.errorCodes.budget_exceeded = (summary.errorCodes.budget_exceeded ?? 0) + 1;
-      const message = `budget reached after ${collected.length} postings: ${interrupted.message}${rejected ? `; ${rejected}` : ""}`;
-      await finish("skipped", { fetched: collected.length, newCount: counts.inserted, error: truncate(message), errorCode: "budget_exceeded" });
+      if (!deliveries) {
+        const message = `budget reached after ${collected.length} postings: ${interrupted.message}${rejected ? `; ${rejected}` : ""}`;
+        await finish("skipped", { fetched: collected.length, newCount: counts.inserted, error: truncate(message), errorCode: "budget_exceeded" });
+      }
       ctx.logger.info("channel attempt stopped by its budget", { channel: channelId, query: query.id, kept: collected.length });
       throw interrupted;
     }
@@ -383,8 +415,10 @@ export async function collectStep(ctx: CycleStepContext): Promise<StepResult> {
       // and the run is marked interrupted so readers never take it for a "some records invalid" partial
       summary.interrupted += 1;
       summary.errorCodes[interrupted.code] = (summary.errorCodes[interrupted.code] ?? 0) + 1;
-      const message = `interrupted after ${collected.length} postings: ${interrupted.message}${rejected ? `; ${rejected}` : ""}`;
-      await finish("partial", { fetched: collected.length, newCount: counts.inserted, error: truncate(message), errorCode: interrupted.code, interrupted: true });
+      if (!deliveries) {
+        const message = `interrupted after ${collected.length} postings: ${interrupted.message}${rejected ? `; ${rejected}` : ""}`;
+        await finish("partial", { fetched: collected.length, newCount: counts.inserted, error: truncate(message), errorCode: interrupted.code, interrupted: true });
+      }
       if (interrupted.code !== "budget_exceeded") await services.breaker.recordFailure(channelId, interrupted.code, { trips: interrupted.tripsCircuit });
       ctx.logger.warn("channel attempt interrupted", {
         channel: channelId,
@@ -397,11 +431,13 @@ export async function collectStep(ctx: CycleStepContext): Promise<StepResult> {
     }
 
     summary.succeeded += 1;
-    await finish(invalid > 0 ? "partial" : "succeeded", {
-      fetched: collected.length,
-      newCount: counts.inserted,
-      ...(rejected ? { error: rejected, errorCode: "parse" } : {}),
-    });
+    if (!deliveries) {
+      await finish(invalid > 0 ? "partial" : "succeeded", {
+        fetched: collected.length,
+        newCount: counts.inserted,
+        ...(rejected ? { error: rejected, errorCode: "parse" } : {}),
+      });
+    }
     // a channel that answered is healthy, even if some records were malformed
     await services.breaker.recordSuccess(channelId);
   };
@@ -470,6 +506,20 @@ export async function collectStep(ctx: CycleStepContext): Promise<StepResult> {
       throw new InfrastructureError(`could not record skipped run for ${unit.name}`, error);
     }
   };
+
+  try {
+    deliveryAudit = loadConfig("deliveryAudit");
+  } catch {
+    ctx.logger.warn("delivery audit configuration could not be loaded; collecting without audit");
+  }
+  if (!ctx.dryRun && ctx.db && deliveryAudit) {
+    try {
+      deliveriesReady = await deliveryTablesReady(ctx.db);
+    } catch {
+      // A readiness query failure has the same safe fallback as an installation awaiting migration.
+    }
+    if (!deliveriesReady) ctx.logger.warn("delivery audit tables are not ready; collecting without audit");
+  }
 
   await mapWithConcurrency(units, config.channels.collect.concurrency, async (unit) => {
     try {

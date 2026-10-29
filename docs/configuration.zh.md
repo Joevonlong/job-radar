@@ -92,6 +92,24 @@ web 和 runner 启动时会补缺，升级冻结期间跳过补缺。已有安�
 `data/config/.backup/` 恢复 `sources.yaml`，或删掉 Monid 块和级联条目并将 `config_version` 改回 `3`。
 钱包设置、记账、冒烟和停止行为见 [Monid](monid.zh.md)。
 
+### 付费交付账本（`delivery-audit.yaml`）
+
+这个随产品发布的文件控制[付费交付账本](sources.zh.md#付费交付账本)。要修改时，将整个文件复制到 `data/config/delivery-audit.yaml`；用户副本会整体替代出厂文件。
+
+| 键 | 出厂值 | 含义 |
+|---|---|---|
+| `config_version` | `1` | 配置版本。 |
+| `scope.channel_kinds` | `[paid]` | 覆盖的通道类型。 |
+| `scope.exclude_channels` | `[]` | 从范围中排除的通道 ID。 |
+| `checkpoint.write_timeout_ms` | `5000` | 账本写入的数据库语句和锁等待上限，单位毫秒。失败路径最终化先完成回滚，再单独收尾运行；备用写入也使用同一上限。 |
+| `retention.days` | `45` | 仅账本条目的保留期，绝不作用于原始岗位；运行摘要保留。 |
+| `retention.warn_bytes` | `524288000` | 留存原文的字节数超过此值时 doctor 告警，runner 可提前修剪过期条目。 |
+| `prune.every_minutes` | `60` | 定期修剪间隔，单位分钟。 |
+| `prune.batch_size` | `2000` | 每条语句最多删除的过期条目数。 |
+| `prune.statement_timeout_ms` | `5000` | 每条修剪语句的超时，单位毫秒。 |
+
+阈值不会跳过新条目，也不会删除未过期条目。数据库备份会随账本增大：每天 1500 条付费记录、保留 45 天约 135 MB，实际取决于留存原文的数量；一次格式异常的供应商响应就可能额外增加几十 MB。
+
 ### setup.yaml
 
 `setup.yaml` 记录首次设置的状态（`completed_at`、`completed_by`、`steps`），由设置向导和 `pnpm run setup` 写入。全新安装时它是

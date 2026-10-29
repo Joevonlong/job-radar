@@ -154,6 +154,35 @@ Prints all sources, their status and the reason (the table language follows `cli
 
 `sources.registry` in `pnpm run doctor`: warn when an enabled source is failing or the mirror is behind; fail when `sources.yaml` cannot be read.
 
+### Paid delivery ledger
+
+By default, paid channels keep a local delivery ledger for every record received from the provider, including billed records that never become postings. Each item has a disposition; flags add context. For stored postings the ledger keeps a hash and link to the raw posting instead of a second payload copy. If that posting changes later, the original payload may no longer be available. The ledger covers configured channels in real runs; if its configuration cannot be loaded or its tables are not ready, collection continues without the audit.
+
+| Disposition | Meaning |
+|---|---|
+| `received_uncommitted` | Received and checkpointed, but the attempt has not finished. |
+| `unparsed_response` | The provider response could not be read as records. |
+| `provider_error` | The provider returned an error item. |
+| `no_identity` | The record lacks an identity needed by the channel. |
+| `duplicate_in_run` | A duplicate within this run. |
+| `outside_window` | Outside the local time window. |
+| `invalid_shape` | The record could not be accepted as a posting. |
+| `stored` | Stored as a raw posting. |
+| `store_failed` | Saving the posting failed. |
+| `discarded_on_failure` | The attempt failed or was cancelled before the record could be stored. |
+
+| Flag | Meaning |
+|---|---|
+| `unidentified` | No provider identity; a derived identity was used. |
+| `date_missing` | Posting date missing. |
+| `date_unparsed` | Posting date could not be parsed. |
+| `date_day_precision` | Date is only reliable to the day. |
+| `date_unconfirmed` | Exact date precision could not be confirmed. |
+| `date_conflict` | Date and relative time disagree. |
+| `body_truncated` | The retained response body was truncated. |
+
+Run `pnpm deliveries:show --run <id> [--disposition <code>] [--payload] [--json] [--lang en|zh]` to inspect a run. Repeat `--disposition` to select several codes; payloads are shown only with `--payload`. The summary shows delivered records and billed units separately: billed units can differ from fetched postings, which have already passed local selection. On a crash, a response body still in transit or the batch whose checkpoint has not yet committed can be lost; committed batches remain `received_uncommitted`. See [configuration](configuration.md#paid-delivery-ledger-delivery-audityaml) for retention.
+
 ### Query rotation
 
 `collect.query_rotation` defaults to `true`. Each cycle starts with queries that have never had a turn on the unit's

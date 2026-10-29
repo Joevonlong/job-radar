@@ -18,7 +18,7 @@ import {
 } from "@/lib/db/repos/control-requests";
 
 import { getControlHandler } from "./handlers";
-import type { ControlOutcome } from "./types";
+import type { ControlHandlerContext, ControlOutcome } from "./types";
 
 const MAX_ERROR_CHARS = 300;
 
@@ -33,6 +33,7 @@ export interface ControlPollOptions {
   db: Db;
   signal: AbortSignal;
   logger: ChannelLogger;
+  onCycleFinished?: ControlHandlerContext["onCycleFinished"];
   /** Omitted: one queue for all kinds (runner and --once). */
   lane?: ControlLane;
   /**
@@ -89,7 +90,7 @@ export async function processNextControlRequest(options: ControlPollOptions): Pr
       // The request runs with the config files as they are now (the web may have changed them since the last one).
       // Inside the try: whatever goes wrong fails this request instead of leaving it `running`.
       freshenConfig(log);
-      outcome = await handler(request, { db, signal, logger: log });
+      outcome = await handler(request, { db, signal, logger: log, onCycleFinished: options.onCycleFinished });
     } catch (error) {
       thrown = error;
       log.error("control request failed", { error: describe(error) });

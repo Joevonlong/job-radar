@@ -12,6 +12,8 @@ import { resolveMigrationsFolder, runMigrations } from "@/lib/db/migrate";
 import { readJournal } from "@/lib/db/migration-journal";
 import { requeueInterruptedControlRequests } from "@/lib/db/repos/control-requests";
 import { failOrphanedCycles, getDbNow, type CycleKind } from "@/lib/db/repos/cycles";
+import { deliveryPayloadBytes, deliveryTablesReady, pruneDeliveryItems } from "@/lib/db/repos/deliveries";
+import { createDeliveryPruner } from "./delivery-prune";
 import { runControlPoller, runnerRequestKinds } from "@/lib/control";
 import { registerAiControlHandlers } from "@/lib/control/ai-handlers";
 import { registerBuiltinAiSubtasks, registerBuiltinCycleSteps } from "@/lib/cycle/builtin-steps";
@@ -221,10 +223,16 @@ async function main(): Promise<number> {
   }
 
   const inflight = new Set<Promise<unknown>>();
+  const deliveryPruner = createDeliveryPruner({
+    now: () => new Date(), loadConfig: () => loadConfig("deliveryAudit"),
+    tablesReady: () => deliveryTablesReady(db), payloadBytes: () => deliveryPayloadBytes(db),
+    prune: (input) => pruneDeliveryItems(db, input), log,
+  });
   const startCycle = (kind: CycleKind, options: RunCycleOptions = {}): void => {
     log(`starting ${kind} cycle`);
     const task = runCycle(kind, { signal: abort.signal, logger, ...options }).then(
       async (result) => {
+        deliveryPruner.afterCycle(result.summary);
         log(`${kind} cycle ${result.cycleId ?? "-"} ${result.status} in ${result.summary.durationMs} ms`);
         if (result.status === "failed" && !abort.signal.aborted) {
           await sendCycleIncompleteAlert({ db, logger, cycleId: result.cycleId, kind, reason: { code: "cycle_failed", detail: result.summary.reason ?? null } });
@@ -414,6 +422,7 @@ async function main(): Promise<number> {
     kinds: () => runnerRequestKinds(loadConfig("ai").execution),
     maxRequeues,
     pollSeconds: () => loadConfig("schedule").control_poll_seconds,
+    onCycleFinished: deliveryPruner.afterCycle,
   });
   log(`polling control requests every ${loadConfig("schedule").control_poll_seconds}s`);
 
@@ -451,6 +460,7 @@ async function main(): Promise<number> {
     maxFailureSeconds: env.RUNNER_HEALTH_MAX_AGE_SECONDS * 2,
     writeHeartbeat: () => writeHeartbeat(db, PROCESS_NAME),
     pruneHeartbeats: async () => {
+      void deliveryPruner.tick().catch(() => log("delivery prune failed"));
       if (Date.now() - lastPruneAt >= PRUNE_EVERY_MS) {
         const pruned = await pruneHeartbeats(db, new Date(Date.now() - retentionMs));
         lastPruneAt = Date.now();

@@ -222,6 +222,8 @@ filter results when an older writer changes a verdict or its reasons. Re-upgradi
 Before restoring config from `data/config/.backup/` or restoring a database backup, read the rollback notes in
 [CHANGELOG.md](../CHANGELOG.md) for the version you are leaving.
 
+**Paid delivery ledger:** its migration only adds two tables. Rolling back is safe: older code ignores those tables and the new `delivery-audit.yaml` file.
+
 Setting `collect.max_catch_up_hours: 0` stops new stretched runs, but historical ones do not expire on their own.
 For a safe rollback, use a build that retains `and not r.window_extended` in `markJobsPossiblyClosed`; otherwise,
 some jobs may be marked possibly closed and reopened on their next sighting. Before starting code that does not know

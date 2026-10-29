@@ -1,4 +1,5 @@
 import { BudgetTracker } from "@/lib/channels/budget";
+import { NO_DELIVERIES, type DeliveryRecorder } from "@/lib/channels/delivery";
 import { createHttpClient, type FetchLike, type SleepFn } from "@/lib/channels/http";
 import { createMonidChannel } from "@/lib/channels/linkedin/monid/channel";
 import { monidSettingsSchema, type MonidSettings } from "@/lib/channels/linkedin/monid/contract";
@@ -48,6 +49,7 @@ export interface RecordedRequest {
 export type Answer = HttpResponse | Error | ((request: RecordedRequest) => HttpResponse | Promise<HttpResponse>);
 
 export async function harness(answers: Answer[] = [response(200, completed())], options: {
+  deliveries?: DeliveryRecorder;
   settings?: MonidSettings;
   environment?: Record<string, string | undefined>;
   globalCapUsd?: number;
@@ -81,6 +83,7 @@ export async function harness(answers: Answer[] = [response(200, completed())], 
   const logger: ChannelLogger = { debug: log("debug"), info: log("info"), warn: log("warn"), error: log("error"), child: () => logger };
   const controller = new AbortController();
   const ctx: ChannelContext = {
+    deliveries: options.deliveries ?? NO_DELIVERIES,
     http: createHttpClient({ settings: { timeoutMs: 1000, maxRetries: 2, backoffBaseMs: 1, backoffMaxMs: 2 }, signal: controller.signal, fetch, logger, sleep, random: () => 0 }),
     budget: tracker.forChannel(channel), settings: runtime, signal: controller.signal, logger,
     cycle: { id: 1, kind: "manual" }, known: { payloads: async () => new Map() }, throttle: async () => {},

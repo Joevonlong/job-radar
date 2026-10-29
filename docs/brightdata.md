@@ -33,6 +33,8 @@ The `linkedin-brightdata` channel fetches LinkedIn jobs through the Bright Data 
 - The dataset has no "remote / hybrid / on-site" field; `workplace` is derived by the pipeline reading the JD text (see [Extraction](extraction.md)), and when it cannot be read it is `unknown` (nothing is guessed).
 - Description: `job_summary` is one block of plain text ending with "Show more Show less"; `job_description_formatted` is HTML with paragraphs and lists, already added to the requested fields, and parsing prefers it. Older collected records do not have this field; the pipeline tidies them (`pipeline.yaml: description`).
 
+Records not written as raw postings remain in the [delivery ledger](sources.md#paid-delivery-ledger).
+
 ## Live smoke test
 ```bash
 pnpm smoke:brightdata            # reads .env; one query, at most 10 results

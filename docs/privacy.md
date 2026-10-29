@@ -16,6 +16,7 @@ description, not legal advice.
 | Configuration, including your own scoring criteria (`ai.yaml`) | `data/config/`, editor backups in `data/config/.backup/` | editor backups are capped; migration backups are not cleaned up |
 | Applications, next steps, notes, favorites and their notes | database | until you delete the database (a favorite note goes when you remove the favorite) |
 | Raw postings as received from each channel, and unparsed job-alert emails (whole message) | database table `raw_postings` | until you delete the database |
+| Paid delivery ledger: provider payloads and unreadable response bodies; stored postings use a link and hash instead of a duplicate payload | Local Postgres, included in database backups | Ledger items: 45 days by default; run summaries remain until the database is deleted. Older backups can retain deleted items. |
 | Email metadata (message id, sender address, IMAP uid) | database table `email_messages` | until you delete the database |
 | AI results (scores with reasons, translations, breakdowns, signals, trap marks, weekly suggestions with quotes) and AI usage records (model, tokens, duration) | database | until you delete the database |
 | Telegram messages that were sent (payload and message id), control requests and their results | database | until you delete the database |
@@ -27,7 +28,9 @@ description, not legal advice.
 | LinkedIn login state (only if you use the logged-in session) | `.auth/` | until you delete it |
 | Temporary files of an AI CLI call | `$TMPDIR/jr-codex-*`, `jr-claude-*` | removed after each call (a killed process can leave one behind) |
 
-There is no automatic retention for the database tables above yet: raw postings, unparsed emails, notifications, control
+The delivery ledger stays on this machine and is not exposed through MCP or pages. Its retention is configurable in [delivery-audit.yaml](configuration.md#paid-delivery-ledger-delivery-audityaml).
+
+There is no automatic retention for the other database tables listed above: raw postings, unparsed emails, notifications, control
 requests and profile snapshots stay until you remove the database. Back up and keep `data/` out of cloud-synced or shared
 folders: it holds all of the above. Backup files and the exported JD files contain personal data.
 

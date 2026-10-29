@@ -3,6 +3,7 @@ import { z } from "zod";
 import { AI_PROVIDER_IDS } from "@/lib/ai/types";
 import type { ChannelLogger } from "@/lib/channels/types";
 import type { Db } from "@/lib/db/client";
+import type { CycleSummary } from "@/lib/cycle/run-cycle";
 import type { ControlRequest } from "@/lib/db/repos/control-requests";
 
 /** Payload of a `run_cycle` request: run only these channels (default: every enabled channel). */
@@ -79,6 +80,8 @@ export interface ControlHandlerContext {
   /** Aborted when the runner shuts down. */
   signal: AbortSignal;
   logger: ChannelLogger;
+  /** Non-blocking maintenance owned by the runner after a manual cycle. */
+  onCycleFinished?: (summary: CycleSummary) => void;
 }
 
 /** What a handler reports; stored in `control_requests.result` (JSON, shown on the settings page). */

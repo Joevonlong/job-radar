@@ -14,7 +14,7 @@ Job Radar 的所有用户可见文字都在 `messages/<id>.json` 里，一个文
 | `ai.summary_also` | `[]` | 一句话摘要另外再写哪些语言，切换界面语言时也有摘要可看。 |
 | `translation.target` | `en` | JD 翻译成什么语言。本来就是这种语言的岗位没有翻译标签页和翻译按钮，自动翻译也会跳过。 |
 | `notify.locale` | `null` | Telegram 消息、按钮和告警的语言；`null` = 用 `ui.default_locale`。 |
-| `cli.locale` | `null` | `pnpm run doctor` 和 `pnpm sources:list` 的语言；`null` = 用 `ui.default_locale`。这两个命令也接受 `--lang en|zh`。 |
+| `cli.locale` | `null` | `pnpm run doctor`、`pnpm sources:list` 和 `pnpm deliveries:show` 的语言；`null` = 用 `ui.default_locale`。这些命令也接受 `--lang en|zh`。 |
 
 语言代码按 BCP 47（`en`、`zh`、`de`、`pt-BR`、`zh-Hant`）；写错了保存时会被拒绝，`pnpm config:check` 也会报。
 

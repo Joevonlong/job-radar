@@ -143,6 +143,35 @@ pnpm sources:list [--type channel|ats_board] [--status failing ...] [--all] [--j
 
 `pnpm run doctor` 里的 `sources.registry`：有异常的启用来源或镜像落后时是 warn；`sources.yaml` 读不了时是 fail。
 
+### 付费交付账本
+
+默认情况下，付费通道将供应商送达的每条记录保存在本机交付账本中，包括已计费但没有成为岗位的记录。每条都有处置结果；标记补充说明。已存岗位的账本只保留哈希和原始岗位链接，不再复制原文；如果岗位后来变化，当次原文可能不再可用。账本覆盖配置范围内的真实运行；配置读不出来或表尚未就绪时，采集会继续，但没有账本记录。
+
+| 处置结果 | 含义 |
+|---|---|
+| `received_uncommitted` | 已收到并写入检查点，尝试尚未结束。 |
+| `unparsed_response` | 供应商响应无法读取为记录。 |
+| `provider_error` | 供应商返回的错误项。 |
+| `no_identity` | 记录缺少通道所需的身份标识。 |
+| `duplicate_in_run` | 本次运行内的重复记录。 |
+| `outside_window` | 在本地时间窗之外。 |
+| `invalid_shape` | 记录无法作为岗位接受。 |
+| `stored` | 已存为原始岗位。 |
+| `store_failed` | 保存岗位失败。 |
+| `discarded_on_failure` | 尝试失败或取消，记录未能保存为岗位。 |
+
+| 标记 | 含义 |
+|---|---|
+| `unidentified` | 没有供应商标识，使用了派生标识。 |
+| `date_missing` | 缺少发布日期。 |
+| `date_unparsed` | 发布日期无法解析。 |
+| `date_day_precision` | 日期只能精确到天。 |
+| `date_unconfirmed` | 无法确认日期的精确度。 |
+| `date_conflict` | 日期与相对时间不一致。 |
+| `body_truncated` | 留存的响应体被截断。 |
+
+用 `pnpm deliveries:show --run <id> [--disposition <code>] [--payload] [--json] [--lang en|zh]` 查看一次运行。可重复 `--disposition` 选择多个结果；只有加 `--payload` 才显示原文。摘要分别显示送达条数和计费单位：计费单位可能与经过本地筛选后的 fetched 岗位数不同。崩溃时，仍在传输中的响应体和检查点尚未提交的那一批可能丢失；已提交的批次保持 `received_uncommitted`。保留期见[配置](configuration.zh.md#付费交付账本delivery-audityaml)。
+
 ### 查询轮换
 
 `collect.query_rotation` 默认为 `true`。每轮先跑在单元起始通道上从未轮到的查询，再按上次轮到的时间从早到晚排；

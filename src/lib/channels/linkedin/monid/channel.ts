@@ -5,7 +5,7 @@ import type { Channel, ChannelContext, RawPostingInput, SearchQuery } from "../.
 import { buildActorInputs, dateRangeFor, isErrorItem } from "../apify/contract";
 import { postedAtOf } from "../brightdata/parse";
 import { affordableItems } from "../budget";
-import { postedDateEnd } from "../date-window";
+import { postedDateEvidence } from "../date-window";
 import { MonidClient } from "./client";
 import { MONID_API_KEY_ENV, monidSettingsSchema } from "./contract";
 import { monidDescriptionHtml, monidJobId, parseMonidJob, unidentifiedExternalId } from "./parse";
@@ -50,6 +50,7 @@ export function createMonidChannel(options: MonidChannelOptions): Channel {
       const seen = new Set<string>();
       const { rangeHours } = dateRangeFor(query.windowHours);
       const cutoff = query.windowHours < rangeHours ? now().getTime() - query.windowHours * MS_PER_HOUR : null;
+      ctx.deliveries.setWindowCutoff(cutoff);
       let remaining = maxResults;
       for (let index = 0; index < runs && remaining > 0; index += 1) {
         let localBudgetStop = false;
@@ -64,23 +65,40 @@ export function createMonidChannel(options: MonidChannelOptions): Channel {
           }
           const input = buildActorInputs(query, settings, limit, market)[index];
           if (!input) throw new ChannelError("unknown", "Monid query has no actor input", { retryable: false });
-          const items = await client.run(input, limit);
+          const { items, ordinals } = await client.run(input, limit);
           remaining -= limit;
           let errorItems = 0;
           let outsideWindow = 0;
-          for (const item of items) {
-            if (isErrorItem(item)) { errorItems += 1; continue; }
+          for (const [itemIndex, item] of items.entries()) {
+            const ordinal = ordinals[itemIndex];
+            if (isErrorItem(item)) {
+              errorItems += 1;
+              if (ordinal !== undefined) ctx.deliveries.drop(ordinal, "provider_error", { externalId: monidJobId(item) });
+              continue;
+            }
             const id = monidJobId(item);
             const externalId = id ?? unidentifiedExternalId(item);
-            if (seen.has(externalId)) continue;
-            seen.add(externalId);
             const record = typeof item === "object" && item !== null && !Array.isArray(item) ? item as Record<string, unknown> : null;
             const postedDate = typeof record?.postedDate === "string" ? record.postedDate : null;
             const postedAt = postedAtOf(postedDate);
-            const end = postedDateEnd(postedDate, postedAt);
+            const { end, flags } = postedDateEvidence(postedDate, postedAt);
+            if (ordinal !== undefined) {
+              ctx.deliveries.flag(ordinal, flags);
+              if (id === null) ctx.deliveries.flag(ordinal, ["unidentified"]);
+            }
+            if (seen.has(externalId)) {
+              if (ordinal !== undefined) ctx.deliveries.drop(ordinal, "duplicate_in_run", { externalId });
+              continue;
+            }
+            seen.add(externalId);
             // Unidentified records are always quarantined, even when their date is malformed or old.
-            if (id !== null && cutoff !== null && end !== null && end < cutoff) { outsideWindow += 1; continue; }
-            postings.push({ externalId, payload: item, url: typeof record?.linkedinUrl === "string" ? record.linkedinUrl : null, postedAt });
+            if (id !== null && cutoff !== null && end !== null && end < cutoff) {
+              outsideWindow += 1;
+              if (ordinal !== undefined) ctx.deliveries.drop(ordinal, "outside_window", { externalId });
+              continue;
+            }
+            postings.push({ externalId, payload: item, url: typeof record?.linkedinUrl === "string" ? record.linkedinUrl : null, postedAt,
+              ...(ordinal === undefined ? {} : { deliveryOrdinal: ordinal }) });
           }
           if (errorItems || outsideWindow) ctx.logger.info("monid items skipped", { errorItems, outsideWindow });
         } catch (error) {

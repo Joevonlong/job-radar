@@ -235,10 +235,11 @@ describe("processNextControlRequest", () => {
     expect(await processNextControlRequest(pollOptions())).toMatchObject({ status: "done", result: { scored: 0, failed: 0, placeholder: true } });
   });
 
-  it("run_cycle runs a manual cycle with the requested channels and reports its id", async () => {
+  it.each([false, true])("run_cycle reports its id and isolates maintenance failures (throws=%s)", async (throws) => {
     registerFixtureChannel(defaultRegistry, { postings: [] });
     const row = await insertControlRequest(getDb(), { kind: "run_cycle", payload: { channelIds: ["fixture"] } });
-    const finished = await processNextControlRequest(pollOptions());
+    const onCycleFinished = vi.fn(() => { if (throws) throw new Error("private maintenance error"); });
+    const finished = await processNextControlRequest({ ...pollOptions(), onCycleFinished });
     expect(finished?.id).toBe(row.id);
     expect(finished).toMatchObject({ status: "done", result: { cycleStatus: "succeeded" } });
     const cycleId = (finished?.result as { cycleId: number }).cycleId;
@@ -247,6 +248,9 @@ describe("processNextControlRequest", () => {
     const runs = await listRunsForCycle(getDb(), cycleId);
     expect(runs.length).toBeGreaterThan(0);
     expect(new Set(runs.map((r) => r.channelId))).toEqual(new Set(["fixture"]));
+    expect(onCycleFinished).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({
+      dryRun: false, steps: expect.arrayContaining([expect.objectContaining({ name: "collect", status: "ok" })]),
+    }));
   });
 
   /** Another process holds the cycle lock with a cycle limited to `channelIds` (null: every channel) while `fn` runs. */

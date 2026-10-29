@@ -2,6 +2,7 @@ export * from "./ai";
 export * from "./breakdown";
 export * from "./channels";
 export * from "./companies";
+export * from "./delivery-audit";
 export * from "./insights";
 export * from "./interests";
 export * from "./language";

@@ -4,6 +4,7 @@ import { UnrecognizedActionError } from "next/dist/client/components/unrecognize
 import { describe, expect, it, vi } from "vitest";
 
 import ErrorPage from "@/app/error";
+import { configErrorDigest, configFileFromDigest } from "@/lib/config/error-digest";
 import { ConfigError } from "@/lib/config/errors";
 
 import en from "../../messages/en.json";
@@ -30,4 +31,8 @@ describe.each([{ locale: "en", messages: en }, { locale: "zh", messages: zh }] a
 it("puts only a config identifier into the digest that survives production error redaction", () => {
   const error = new ConfigError({ configName: "channels", filePath: "/private/config/sources.yaml", kind: "schema", detail: "private form value" });
   expect(error).toHaveProperty("digest", "job-radar:config:channels");
+});
+
+it("maps the delivery audit config digest to its shipped filename", () => {
+  expect(configFileFromDigest(configErrorDigest("deliveryAudit"))).toBe("delivery-audit.yaml");
 });

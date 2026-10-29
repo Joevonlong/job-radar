@@ -14,7 +14,7 @@ ship with it). Which language is used where is set in `language.yaml` (Settings 
 | `ai.summary_also` | `[]` | The one-line summary is also written in these languages, so another interface language still shows one. |
 | `translation.target` | `en` | Job ads are translated into this language. Ads already written in it get no translation tab and no translate button, and the automatic translation skips them. |
 | `notify.locale` | `null` | Language of Telegram messages, buttons and alerts; `null` = `ui.default_locale`. |
-| `cli.locale` | `null` | Language of `pnpm run doctor` and `pnpm sources:list`; `null` = `ui.default_locale`. Both commands also take `--lang en|zh`. |
+| `cli.locale` | `null` | Language of `pnpm run doctor`, `pnpm sources:list` and `pnpm deliveries:show`; `null` = `ui.default_locale`. These commands also take `--lang en|zh`. |
 
 Language codes are BCP 47 tags (`en`, `zh`, `de`, `pt-BR`, `zh-Hant`); an invalid one is refused when saving and by
 `pnpm config:check`.

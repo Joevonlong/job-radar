@@ -3,6 +3,7 @@ import path from "node:path";
 
 import { BudgetTracker } from "@/lib/channels/budget";
 import { createChannelContext } from "@/lib/channels/context";
+import type { DeliveryRecorder } from "@/lib/channels/delivery";
 import type { FetchLike } from "@/lib/channels/http";
 import { createApifyChannel } from "@/lib/channels/linkedin/apify";
 import { settingsFromConfig } from "@/lib/channels/registry";
@@ -111,7 +112,7 @@ export interface Harness {
 export async function harness(
   channel: Channel,
   apify: FakeApify,
-  options: { config?: ChannelsConfig; seed?: { records: number; usd: number }; cycleId?: number | null } = {},
+  options: { config?: ChannelsConfig; seed?: { records: number; usd: number }; cycleId?: number | null; deliveries?: DeliveryRecorder; signal?: AbortSignal } = {},
 ): Promise<Harness> {
   const config = options.config ?? shippedChannels();
   const settings = apifySettings(config);
@@ -133,11 +134,12 @@ export async function harness(
     child: () => logger,
   };
   const ctx = createChannelContext({
+    deliveries: options.deliveries,
     channelId: channel.id,
     settings,
     http: { timeoutMs: 1000, maxRetries: 2, backoffBaseMs: 1, backoffMaxMs: 1 },
     budget: tracker.forChannel(channel),
-    signal: new AbortController().signal,
+    signal: options.signal ?? new AbortController().signal,
     cycle: { id: options.cycleId === undefined ? 1 : options.cycleId, kind: "manual" },
     logger,
     fetch: apify.fetch,
