@@ -37,6 +37,17 @@ afterEach(async () => {
 });
 
 describe("activity recorder", () => {
+  it("records a backfill window note on the cycle root", async () => {
+    const { recorder, batches } = setup();
+    const root = recorder.cycleRoot(1);
+    root.note("info", "backfill", { hours: 36 });
+    root.finish("ok");
+    await recorder.flush();
+    expect(batches[0].events).toHaveLength(1);
+    expect(batches[0].events[0]).toMatchObject({ rootId: root.id, spanId: root.id, level: "info", code: "backfill" });
+    expect(batches[0].events[0].params).toEqual({ hours: 36 });
+    expect(batches[0].spans[0]).toMatchObject({ status: "ok", eventsDropped: 0 });
+  });
   it.each(["connect_timeout_seconds", "statement_timeout_ms", "lock_timeout_ms"] as const)("rebuilds changed %s only after the current batch finishes", async (key) => {
     const { recorder, settings, writeBatch, openConnection, end } = setup();
     let complete!: () => void;

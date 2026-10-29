@@ -14,7 +14,7 @@ export const CONTROL_ERROR_CODES = [
   "rescore_ai_unavailable", "rescore_failed", "rescore_profile_incomplete", "rescore_stopped", "not_found", "no_description", "same_language", "failed",
   "no_web_provider", "quota", "not_ready", "ai_failed", "invalidPayload", "unknownChannel", "nothingStale", "nothingToScore", "databaseUnavailable", "tooSoon",
   "quota_guard", "ai_test_failed", "unknown_channel", "channel_excluded", "channel_disabled", "channel_test_failed",
-  "backfillOverLimit", "cycleBusy", "backfill_over_limit",
+  "backfillOverLimit", "cycleBusy",
 ] as const;
 export const SAFE_ERROR_CODES = [...new Set<string>([
   ...REASON_CODES, ...CHANNEL_ERROR_CODES, ...CONTROL_ERROR_CODES, ...BACKUP_ERROR_CODES, ...AI_ERROR_CODES,

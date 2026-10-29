@@ -1,9 +1,9 @@
 // @vitest-environment node
 import fs from "node:fs";
 import { describe, expect, it } from "vitest";
-import { activityErrorCode, AI_ERROR_CODES, BACKUP_ERROR_CODES, SAFE_ERROR_CODES, safeErrorCode } from "@/lib/activity/error-codes";
+import { activityErrorCode, AI_ERROR_CODES, BACKUP_ERROR_CODES, CONTROL_ERROR_CODES, SAFE_ERROR_CODES, safeErrorCode } from "@/lib/activity/error-codes";
 import { newId, rootIdForCycle } from "@/lib/activity/ids";
-import { SPAN_NAMES, REASON_CODES } from "@/lib/activity/names";
+import { SPAN_NAMES, REASON_CODES, reasonCodeSchema } from "@/lib/activity/names";
 import { activityParamsSchema } from "@/lib/activity/params";
 import { AiProviderError, AiUnavailableError, type AiProviderErrorKind } from "@/lib/ai/errors";
 import { ChannelError } from "@/lib/channels/errors";
@@ -22,6 +22,12 @@ import { TRANSLATE_SUBTASK_NAME } from "@/lib/translation/subtask";
 import { BREAKDOWN_SUBTASK_NAME } from "@/lib/breakdown/subtask";
 
 describe("activity contracts", () => {
+  it("accepts the backfill limit reason through the reason-code contract", () => {
+    expect(reasonCodeSchema.parse("backfill_over_limit")).toBe("backfill_over_limit");
+    expect(safeErrorCode("backfill_over_limit")).toBe("backfill_over_limit");
+    expect(CONTROL_ERROR_CODES).not.toContain("backfill_over_limit");
+    expect(CONTROL_ERROR_CODES).toEqual(expect.arrayContaining(["backfillOverLimit", "cycleBusy"]));
+  });
   it("keeps literal span names in sync with their owners", () => {
     expect(SPAN_NAMES.filter((name) => name.startsWith("step.") && name !== "step.ai_late")).toEqual(CYCLE_STEP_NAMES.map((name) => `step.${name}`));
     expect(SPAN_NAMES.filter((name) => name.startsWith("request."))).toEqual(controlRequestKindEnum.enumValues.map((name) => `request.${name}`));

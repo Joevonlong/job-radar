@@ -60,7 +60,10 @@ describe("manual backfill handler", () => {
     expect(await runCycleHandler(request({ backfillHours: 36, channelIds: ["indeed"] }), ctx)).toEqual({
       status: "done", result: { cycleId: 5, cycleStatus: "succeeded", durationMs: 10, backfillHours: 36 },
     });
-    expect(runCycle).toHaveBeenCalledExactlyOnceWith("manual", { ...ctx, backfillHours: 36, channelIds: ["indeed"] });
+    expect(runCycle).toHaveBeenCalledExactlyOnceWith("manual", {
+      ...ctx, activity: ctx.recorder, activityRequestId: 1, onCycleRootCreated: expect.any(Function),
+      backfillHours: 36, channelIds: ["indeed"],
+    });
   });
 
   it.each([undefined, 36])("handles a covering cycle with backfillHours=%s", async (backfillHours) => {

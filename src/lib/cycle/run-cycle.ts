@@ -170,6 +170,7 @@ export async function runCycle(kind: CycleKind, options: RunCycleOptions = {}): 
     // recorded at once: a cycle that finds the lock taken reads which channels this one covers, and whether it is the holder
     const cycleRow = !dryRun && writeDb ? await createCycle(writeDb, { kind, summary: { ...runSummary, ...(lockPid ? { lockPid } : {}) } }) : null;
     const root = cycleRow ? recorder.cycleRoot(cycleRow.id, { requestId: options.activityRequestId }) : noopRecorder.cycleRoot(0);
+    if (options.backfillHours !== undefined) root.note("info", "backfill", { hours: options.backfillHours });
     const rootScope = spanScope(root, "interrupted", "not_recorded");
     try {
       if (cycleRow) options.onCycleRootCreated?.();
@@ -307,6 +308,7 @@ export async function runCycle(kind: CycleKind, options: RunCycleOptions = {}): 
     const summary: CycleSummary = { ...baseSummary, durationMs: 0, aborted: false, steps: [], reason, coveredBy };
     const row = await createSkippedCycle(db, { kind, summary });
     const root = recorder.cycleRoot(row.id, { requestId: options.activityRequestId });
+    if (options.backfillHours !== undefined) root.note("info", "backfill", { hours: options.backfillHours });
     try {
       options.onCycleRootCreated?.();
       if (coveredBy !== null) root.note("info", "covered_by", { cycle_id: coveredBy });

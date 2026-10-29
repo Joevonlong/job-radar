@@ -1,8 +1,12 @@
+import fs from "node:fs";
+import path from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, inject, it, vi } from "vitest";
+import { parseDocument } from "yaml";
 import { rootIdForCycle, SAFE_ERROR_CODES } from "@/lib/activity";
 import type { ActivityRecorder } from "@/lib/activity/types";
 import { registerFixtureChannel } from "@/lib/channels/fixture";
 import { defaultRegistry } from "@/lib/channels/registry";
+import { loadConfig } from "@/lib/config";
 import { processNextControlRequest, registerControlHandler, resetControlHandlers } from "@/lib/control";
 import { withCycleLock } from "@/lib/cycle/lock";
 import { resetCycleSteps } from "@/lib/cycle/steps";
@@ -10,6 +14,7 @@ import { createConnection } from "@/lib/db/client";
 import { CONTROL_REQUEST_KINDS, insertControlRequest } from "@/lib/db/repos/control-requests";
 import * as cycleRepo from "@/lib/db/repos/cycles";
 import * as channelRepo from "@/lib/db/repos/channels";
+import { makeTempConfig } from "../config/helpers";
 import { quietLogger } from "../cycle/helpers";
 import { activityRows, activityText, hookRecorder, isolateHookSteps, resetHookTables } from "./activity-hook-helpers";
 
@@ -157,17 +162,47 @@ describe("control request activity persistence", () => {
     });
   });
 
-  it("records an uncovered run_cycle lock conflict as one plain skipped cycle", async () => {
+  it.each([undefined, 36])("records an uncovered run_cycle lock conflict with backfillHours=%s", async (backfillHours) => {
     await holdLock(["other-channel"], async () => {
-      const request = await insertControlRequest(connection.db, { kind: "run_cycle", payload: { channelIds: ["fixture"] } });
+      const request = await insertControlRequest(connection.db, { kind: "run_cycle", payload: {
+        channelIds: ["fixture"], ...(backfillHours === undefined ? {} : { backfillHours }),
+      } });
       expect(await poll()).toMatchObject({ id: request.id, status: "failed", result: { error: "another_cycle_running" } });
       await activity.flush();
       const { spans, events } = await activityRows(connection.db);
       expect(spans).toHaveLength(1);
       expect(spans[0]).toMatchObject({ name: "cycle", parentId: null, controlRequestId: request.id,
         status: "skipped", reasonCode: "another_cycle_running" });
-      expect(events).toEqual([]);
+      if (backfillHours === undefined) expect(events).toEqual([]);
+      else {
+        expect(events).toHaveLength(1);
+        expect(events[0]).toMatchObject({ rootId: spans[0]!.id, spanId: spans[0]!.id, level: "info", code: "backfill" });
+        expect(events[0]!.params).toEqual({ hours: backfillHours });
+      }
     });
+  });
+
+  it("keeps a failed request root without a cycle root when the queued backfill limit is lowered", async () => {
+    const temp = makeTempConfig();
+    try {
+      const file = path.join(temp.configDir, "sources.yaml");
+      const doc = parseDocument(fs.readFileSync(file, "utf8"));
+      doc.setIn(["collect", "max_backfill_hours"], 72);
+      fs.writeFileSync(file, doc.toString());
+      expect(loadConfig("channels").collect.max_backfill_hours).toBe(72);
+      const request = await insertControlRequest(connection.db, { kind: "run_cycle", payload: { backfillHours: 36 } });
+      doc.setIn(["collect", "max_backfill_hours"], 24);
+      fs.writeFileSync(file, doc.toString());
+      expect(await poll()).toMatchObject({ id: request.id, status: "failed", result: { error: "backfill_over_limit" } });
+      await activity.flush();
+      const { spans, events } = await activityRows(connection.db);
+      expect(spans).toHaveLength(1);
+      expect(spans[0]).toMatchObject({ name: "request.run_cycle", scope: "request", parentId: null,
+        controlRequestId: request.id, cycleId: null, status: "failed", reasonCode: "backfill_over_limit" });
+      expect(spans[0]!.finishedAt).toBeInstanceOf(Date);
+      expect(spans.some((span) => span.name === "cycle")).toBe(false);
+      expect(events).toEqual([]);
+    } finally { temp.cleanup(); }
   });
 
   it("records invalid run_cycle payloads as one failed request root without a cycle", async () => {

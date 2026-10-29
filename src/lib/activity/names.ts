@@ -11,9 +11,9 @@ export const SPAN_NAMES = [
   "request.score_jobs", "request.test_channel", "request.test_ai", "request.test_telegram", "request.salary_lookup",
   "system.startup", "system.orphan_recovery", "system.backup", "system.prune", "system.reconcile", "system.telegram_callback", "system.reminder",
 ] as const;
-export const EVENT_CODES = ["item.ok", "item.failed", "item.paused", "item.skipped", "parse_failed", "queries_not_reached", "cascade_reasons", "covered_by", "orphans_marked", "spans_reconciled", "pruned", "reminder_counts"] as const;
+export const EVENT_CODES = ["item.ok", "item.failed", "item.paused", "item.skipped", "parse_failed", "queries_not_reached", "cascade_reasons", "covered_by", "backfill", "orphans_marked", "spans_reconciled", "pruned", "reminder_counts"] as const;
 export const REASON_CODES = [
-  "not_recorded", "cycle_cancelled", "another_cycle_running", "covered_by_running_cycle", "mixed",
+  "not_recorded", "cycle_cancelled", "another_cycle_running", "covered_by_running_cycle", "backfill_over_limit", "mixed",
   "not_registered", "disabled", "not_configured", "budget_exceeded", "circuit_open",
   "delegated", "profile_incomplete", "dry_run", "no_database", "manual", "off", "no_tables",
   "quota_guard", "no_provider_available", "no_request", "other",
