@@ -1,3 +1,5 @@
+import { activityErrorCode, noopSpan, safeErrorCode, spanScope } from "@/lib/activity";
+import { shortIdSchema } from "@/lib/activity/params";
 import { remoteScopeKey } from "@/lib/market/remote-scope";
 import { CascadeController, type CascadeSpec, type UnavailableReason } from "@/lib/channels/cascade";
 import { createChannelContext, createThrottle, httpSettingsFromConfig } from "@/lib/channels/context";
@@ -118,6 +120,20 @@ function commonErrorCode(reasons: Record<string, string>): string | null {
   return codes.size === 1 && only ? only : null;
 }
 
+/** Safe activity reasons retain circuit and per-cycle failures independently of the run summary. */
+export function cascadeSkipReasons(reasons: Record<string, string>): { reasonCode: string; perChannel: Record<string, string> } {
+  const unavailable: readonly UnavailableReason[] = ["not_registered", "disabled", "not_configured", "budget_exceeded", "circuit_open"];
+  const perChannel: Record<string, string> = {};
+  const codes = Object.entries(reasons).map(([channel, reason]) => {
+    const code = unavailable.some((value) => value === reason) ? reason
+      : reason.startsWith("failed_this_cycle:") ? safeErrorCode(reason.slice("failed_this_cycle:".length)) : "other";
+    if (shortIdSchema.safeParse(channel).success) perChannel[channel] = code;
+    return code;
+  });
+  const unique = new Set(codes);
+  return { reasonCode: unique.size === 1 ? codes[0]! : unique.size === 0 ? "other" : "mixed", perChannel };
+}
+
 /** Run `fn` over `items` with at most `limit` in flight. `fn` must not throw. */
 export async function mapWithConcurrency<T>(items: readonly T[], limit: number, fn: (item: T) => Promise<void>): Promise<void> {
   let next = 0;
@@ -194,6 +210,11 @@ export async function collectStep(ctx: CycleStepContext): Promise<StepResult> {
   }
   for (const unit of units) for (const q of unit.queries) allQueries.set(q.id, q);
 
+  const step = ctx.activity ?? noopSpan;
+  const planned = units.reduce((sum, unit) => sum + unit.queries.length, 0);
+  let done = 0;
+  step.progress(0, planned);
+
   let history: QueryRunHistoryRow[] = [];
   let historyReason: "dry_run" | "read_failed" | null = ctx.db ? null : "dry_run";
   if (ctx.db) {
@@ -268,178 +289,196 @@ export async function collectStep(ctx: CycleStepContext): Promise<StepResult> {
         throw new InfrastructureError(`could not create run row for ${channelId}`, error);
       }
     }
-    const deliveries = runId !== null && deliveryAudit && deliveriesReady
-      && deliveryAudit.scope.channel_kinds.includes(channel.kind) && !deliveryAudit.scope.exclude_channels.includes(channelId)
-      ? createCollectDeliveries({ db: requireDb(), runId, channelId, config: deliveryAudit, logger: ctx.logger, now: ctx.now })
-      : null;
-    summary.runs += 1;
-
-    const budget = services.budget.forChannel(channel);
-    const channelContext = createChannelContext({
-      channelId,
-      settings,
-      http: httpSettingsFromConfig(config.channels),
-      budget,
-      signal: ctx.signal,
-      cycle: ctx.cycle,
-      logger: ctx.logger,
-      known: services.known(channelId),
-      now: ctx.now,
-      ...(deliveries ? { deliveries: deliveries.ledger } : {}),
-      ...ctx.channels.runtime,
-    });
-
-    const finish = async (
-      status: Exclude<RunStatus, "running">,
-      fields: { fetched?: number; newCount?: number; error?: string | null; errorCode?: string | null; interrupted?: boolean },
-      storeFailed = false,
-    ): Promise<void> => {
-      if (runId === null) return;
-      if (deliveries) {
-        await deliveries.fail({ status, cost: budget.attempt.usd, usageUnits: budget.attempt.records, ...fields }, storeFailed);
-        return;
-      }
-      try {
-        await finishRun(requireDb(), runId, { status, cost: budget.attempt.usd, usageUnits: budget.attempt.records, ...fields });
-      } catch (error) {
-        throw new InfrastructureError(`could not finish run row ${runId}`, error);
-      }
+    const querySpan = runId === null ? noopSpan : step.child("collect.query", { runId, channelId, queryId: query.id });
+    const scope = spanScope(querySpan);
+    let runWritten = false;
+    let cancelled = false;
+    const recorded = (status: Exclude<RunStatus, "running">, errorCode?: string | null): void => {
+      runWritten = true;
+      scope.set(status === "succeeded" ? "ok" : status, cancelled ? "aborted" : errorCode ? safeErrorCode(errorCode) : undefined);
     };
-
-    let collected: RawPostingInput[];
-    /** Set when the query failed after some pages (`PartialCollectError`): their postings are stored first, then this is the failure. */
-    let interrupted: ChannelError | null = null;
-    /** The stop was the channel's own plan (its next request was refused by the channel's budget before it was sent), not a failure. */
-    let plannedStop = false;
     try {
-      recordWindow(query, effective.windowHours, window.capped);
-      const output: unknown = await channel.collect(effective, channelContext);
-      if (!Array.isArray(output)) throw new ChannelError("parse", `${channelId}.collect did not return an array`);
-      collected = output as RawPostingInput[];
-    } catch (error) {
-      if (isAbortError(error) || ctx.signal.aborted) {
-        await finish("failed", { error: "cancelled" });
-        throw error;
-      }
-      if (error instanceof PartialCollectError && error.postings.length > 0) {
-        collected = [...error.postings];
-        interrupted = error.cause;
-        plannedStop = error.planned && error.cause.code === "budget_exceeded";
-      } else {
-        const failure = toChannelError(error);
-        const skipped = failure.code === "budget_exceeded";
-        const finishFailure = () => finish(skipped ? "skipped" : "failed", { error: truncate(failure.message), errorCode: failure.code });
-        if (deliveries) await finishFailure();
-        summary.costUsd += budget.attempt.usd;
-        if (skipped) summary.skipped += 1;
-        else summary.failed += 1;
-        summary.errorCodes[failure.code] = (summary.errorCodes[failure.code] ?? 0) + 1;
-        if (!deliveries) await finishFailure();
-        if (!skipped) await services.breaker.recordFailure(channelId, failure.code, { trips: failure.tripsCircuit });
-        ctx.logger.warn("channel attempt failed", { channel: channelId, query: query.id, code: failure.code, retryable: failure.retryable });
-        throw failure;
-      }
-    }
+      const deliveries = runId !== null && deliveryAudit && deliveriesReady
+        && deliveryAudit.scope.channel_kinds.includes(channel.kind) && !deliveryAudit.scope.exclude_channels.includes(channelId)
+        ? createCollectDeliveries({ db: requireDb(), runId, channelId, config: deliveryAudit, logger: ctx.logger, now: ctx.now })
+        : null;
+      summary.runs += 1;
 
-    // validate the boundary (C6); keep every valid record, flag the rest
-    const valid: RawPostingInput[] = deliveries ? deliveries.validate(collected) : [];
-    if (!deliveries) {
-      for (const record of collected) {
-        const parsed = rawPostingInputSchema.safeParse(record);
-        if (parsed.success) valid.push(parsed.data);
-      }
-    }
-    const invalid = collected.length - valid.length;
-    const rejected = invalid > 0 ? `${invalid} of ${collected.length} records rejected (invalid shape)` : null;
-    const completed = (): FinishRunFields => interrupted ? {
-      status: plannedStop ? "skipped" : "partial",
-      fetched: collected.length,
-      error: truncate(`${plannedStop ? "budget reached" : "interrupted"} after ${collected.length} postings: ${interrupted.message}${rejected ? `; ${rejected}` : ""}`),
-      errorCode: interrupted.code,
-      ...(plannedStop ? {} : { interrupted: true }),
-    } : {
-      status: invalid > 0 ? "partial" : "succeeded",
-      fetched: collected.length,
-      ...(rejected ? { error: rejected, errorCode: "parse" } : {}),
-    };
+      const budget = services.budget.forChannel(channel);
+      const channelContext = createChannelContext({
+        channelId,
+        settings,
+        http: httpSettingsFromConfig(config.channels),
+        budget,
+        signal: ctx.signal,
+        cycle: ctx.cycle,
+        logger: ctx.logger,
+        known: services.known(channelId),
+        now: ctx.now,
+        ...(deliveries ? { deliveries: deliveries.ledger } : {}),
+        ...ctx.channels.runtime,
+      });
 
-    // dry runs cannot know what is new: they report no inserts
-    let counts = { inserted: 0, changed: 0, unchanged: 0 };
-    if (!ctx.dryRun) {
-      try {
-        counts = deliveries ? await deliveries.store({ ...completed(), cost: budget.attempt.usd, usageUnits: budget.attempt.records }) : await upsertRawPostings(requireDb(), {
-          channelId,
-          runId,
-          items: valid.map((v) => ({ externalId: v.externalId, url: v.url, payload: v.payload })),
-        });
-      } catch (error) {
-        await finish("failed", { fetched: collected.length, error: "could not store postings", errorCode: "unknown" }, true).catch(() => {});
-        throw new InfrastructureError(`could not store postings of ${channelId}`, error);
-      }
-    } else {
-      const report = (dryRun[channelId] ??= { fetched: 0, parsed: 0, parseFailed: 0, sampleTitles: [] });
-      report.fetched += collected.length;
-      for (const record of valid) {
+      const finish = async (
+        status: Exclude<RunStatus, "running">,
+        fields: { fetched?: number; newCount?: number; error?: string | null; errorCode?: string | null; interrupted?: boolean },
+        storeFailed = false,
+      ): Promise<void> => {
+        if (runId === null) return;
+        if (deliveries) {
+          await deliveries.fail({ status, cost: budget.attempt.usd, usageUnits: budget.attempt.records, ...fields }, storeFailed);
+          recorded(status, fields.errorCode);
+          return;
+        }
         try {
-          const draft = normalizedPostingDraftSchema.parse(channel.parse(record.payload));
-          report.parsed += 1;
-          if (report.sampleTitles.length < DRY_RUN_SAMPLE_TITLES) report.sampleTitles.push(draft.title);
-        } catch {
-          report.parseFailed += 1;
+          await finishRun(requireDb(), runId, { status, cost: budget.attempt.usd, usageUnits: budget.attempt.records, ...fields });
+          recorded(status, fields.errorCode);
+        } catch (error) {
+          throw new InfrastructureError(`could not finish run row ${runId}`, error);
+        }
+      };
+
+      let collected: RawPostingInput[];
+      /** Set when the query failed after some pages (`PartialCollectError`): their postings are stored first, then this is the failure. */
+      let interrupted: ChannelError | null = null;
+      /** The stop was the channel's own plan (its next request was refused by the channel's budget before it was sent), not a failure. */
+      let plannedStop = false;
+      try {
+        recordWindow(query, effective.windowHours, window.capped);
+        const output: unknown = await channel.collect(effective, channelContext);
+        if (!Array.isArray(output)) throw new ChannelError("parse", `${channelId}.collect did not return an array`);
+        collected = output as RawPostingInput[];
+      } catch (error) {
+        if (isAbortError(error) || ctx.signal.aborted) {
+          cancelled = true;
+          await finish("failed", { error: "cancelled" });
+          throw error;
+        }
+        if (error instanceof PartialCollectError && error.postings.length > 0) {
+          collected = [...error.postings];
+          interrupted = error.cause;
+          plannedStop = error.planned && error.cause.code === "budget_exceeded";
+        } else {
+          const failure = toChannelError(error);
+          const skipped = failure.code === "budget_exceeded";
+          const finishFailure = () => finish(skipped ? "skipped" : "failed", { error: truncate(failure.message), errorCode: failure.code });
+          if (deliveries) await finishFailure();
+          summary.costUsd += budget.attempt.usd;
+          if (skipped) summary.skipped += 1;
+          else summary.failed += 1;
+          summary.errorCodes[failure.code] = (summary.errorCodes[failure.code] ?? 0) + 1;
+          if (!deliveries) await finishFailure();
+          if (!skipped) await services.breaker.recordFailure(channelId, failure.code, { trips: failure.tripsCircuit });
+          ctx.logger.warn("channel attempt failed", { channel: channelId, query: query.id, code: failure.code, retryable: failure.retryable });
+          throw failure;
         }
       }
-    }
 
-    summary.fetched += collected.length;
-    summary.inserted += counts.inserted;
-    summary.changed += counts.changed;
-    summary.unchanged += counts.unchanged;
-    summary.costUsd += budget.attempt.usd;
-    if (invalid > 0) summary.errorCodes.parse = (summary.errorCodes.parse ?? 0) + invalid;
-
-    if (interrupted && plannedStop) {
-      // the postings are kept and the query is recorded like any other budget skip: no failure or interruption is counted, the circuit
-      // is left alone, and the run is not a success either, so an incomplete set of keywords never counts as a complete visit of the channel
-      summary.skipped += 1;
-      summary.errorCodes.budget_exceeded = (summary.errorCodes.budget_exceeded ?? 0) + 1;
+      // validate the boundary (C6); keep every valid record, flag the rest
+      const valid: RawPostingInput[] = deliveries ? deliveries.validate(collected) : [];
       if (!deliveries) {
-        const message = `budget reached after ${collected.length} postings: ${interrupted.message}${rejected ? `; ${rejected}` : ""}`;
-        await finish("skipped", { fetched: collected.length, newCount: counts.inserted, error: truncate(message), errorCode: "budget_exceeded" });
+        for (const record of collected) {
+          const parsed = rawPostingInputSchema.safeParse(record);
+          if (parsed.success) valid.push(parsed.data);
+        }
       }
-      ctx.logger.info("channel attempt stopped by its budget", { channel: channelId, query: query.id, kept: collected.length });
-      throw interrupted;
-    }
-
-    if (interrupted) {
-      // the postings are kept; the failure itself is handled exactly as for a failed attempt (circuit, cascade, retry),
-      // and the run is marked interrupted so readers never take it for a "some records invalid" partial
-      summary.interrupted += 1;
-      summary.errorCodes[interrupted.code] = (summary.errorCodes[interrupted.code] ?? 0) + 1;
-      if (!deliveries) {
-        const message = `interrupted after ${collected.length} postings: ${interrupted.message}${rejected ? `; ${rejected}` : ""}`;
-        await finish("partial", { fetched: collected.length, newCount: counts.inserted, error: truncate(message), errorCode: interrupted.code, interrupted: true });
-      }
-      if (interrupted.code !== "budget_exceeded") await services.breaker.recordFailure(channelId, interrupted.code, { trips: interrupted.tripsCircuit });
-      ctx.logger.warn("channel attempt interrupted", {
-        channel: channelId,
-        query: query.id,
-        code: interrupted.code,
-        retryable: interrupted.retryable,
-        kept: collected.length,
-      });
-      throw interrupted;
-    }
-
-    summary.succeeded += 1;
-    if (!deliveries) {
-      await finish(invalid > 0 ? "partial" : "succeeded", {
+      const invalid = collected.length - valid.length;
+      const rejected = invalid > 0 ? `${invalid} of ${collected.length} records rejected (invalid shape)` : null;
+      const observed: { completed?: FinishRunFields } = {};
+      const completed = (): FinishRunFields => (observed.completed = interrupted ? {
+        status: plannedStop ? "skipped" : "partial",
         fetched: collected.length,
-        newCount: counts.inserted,
+        error: truncate(`${plannedStop ? "budget reached" : "interrupted"} after ${collected.length} postings: ${interrupted.message}${rejected ? `; ${rejected}` : ""}`),
+        errorCode: interrupted.code,
+        ...(plannedStop ? {} : { interrupted: true }),
+      } : {
+        status: invalid > 0 ? "partial" : "succeeded",
+        fetched: collected.length,
         ...(rejected ? { error: rejected, errorCode: "parse" } : {}),
       });
-    }
-    // a channel that answered is healthy, even if some records were malformed
-    await services.breaker.recordSuccess(channelId);
+
+      // dry runs cannot know what is new: they report no inserts
+      let counts = { inserted: 0, changed: 0, unchanged: 0 };
+      if (!ctx.dryRun) {
+        try {
+          counts = deliveries ? await deliveries.store({ ...completed(), cost: budget.attempt.usd, usageUnits: budget.attempt.records }) : await upsertRawPostings(requireDb(), {
+            channelId,
+            runId,
+            items: valid.map((v) => ({ externalId: v.externalId, url: v.url, payload: v.payload })),
+          });
+          if (deliveries && observed.completed) recorded(observed.completed.status, observed.completed.errorCode);
+        } catch (error) {
+          await finish("failed", { fetched: collected.length, error: "could not store postings", errorCode: "unknown" }, true).catch(() => {});
+          throw new InfrastructureError(`could not store postings of ${channelId}`, error);
+        }
+      } else {
+        const report = (dryRun[channelId] ??= { fetched: 0, parsed: 0, parseFailed: 0, sampleTitles: [] });
+        report.fetched += collected.length;
+        for (const record of valid) {
+          try {
+            const draft = normalizedPostingDraftSchema.parse(channel.parse(record.payload));
+            report.parsed += 1;
+            if (report.sampleTitles.length < DRY_RUN_SAMPLE_TITLES) report.sampleTitles.push(draft.title);
+          } catch {
+            report.parseFailed += 1;
+          }
+        }
+      }
+
+      summary.fetched += collected.length;
+      summary.inserted += counts.inserted;
+      summary.changed += counts.changed;
+      summary.unchanged += counts.unchanged;
+      summary.costUsd += budget.attempt.usd;
+      if (invalid > 0) summary.errorCodes.parse = (summary.errorCodes.parse ?? 0) + invalid;
+
+      if (interrupted && plannedStop) {
+        // the postings are kept and the query is recorded like any other budget skip: no failure or interruption is counted, the circuit
+        // is left alone, and the run is not a success either, so an incomplete set of keywords never counts as a complete visit of the channel
+        summary.skipped += 1;
+        summary.errorCodes.budget_exceeded = (summary.errorCodes.budget_exceeded ?? 0) + 1;
+        if (!deliveries) {
+          const message = `budget reached after ${collected.length} postings: ${interrupted.message}${rejected ? `; ${rejected}` : ""}`;
+          await finish("skipped", { fetched: collected.length, newCount: counts.inserted, error: truncate(message), errorCode: "budget_exceeded" });
+        }
+        ctx.logger.info("channel attempt stopped by its budget", { channel: channelId, query: query.id, kept: collected.length });
+        throw interrupted;
+      }
+
+      if (interrupted) {
+        // the postings are kept; the failure itself is handled exactly as for a failed attempt (circuit, cascade, retry),
+        // and the run is marked interrupted so readers never take it for a "some records invalid" partial
+        summary.interrupted += 1;
+        summary.errorCodes[interrupted.code] = (summary.errorCodes[interrupted.code] ?? 0) + 1;
+        if (!deliveries) {
+          const message = `interrupted after ${collected.length} postings: ${interrupted.message}${rejected ? `; ${rejected}` : ""}`;
+          await finish("partial", { fetched: collected.length, newCount: counts.inserted, error: truncate(message), errorCode: interrupted.code, interrupted: true });
+        }
+        if (interrupted.code !== "budget_exceeded") await services.breaker.recordFailure(channelId, interrupted.code, { trips: interrupted.tripsCircuit });
+        ctx.logger.warn("channel attempt interrupted", {
+          channel: channelId,
+          query: query.id,
+          code: interrupted.code,
+          retryable: interrupted.retryable,
+          kept: collected.length,
+        });
+        throw interrupted;
+      }
+
+      summary.succeeded += 1;
+      if (!deliveries) {
+        await finish(invalid > 0 ? "partial" : "succeeded", {
+          fetched: collected.length,
+          newCount: counts.inserted,
+          ...(rejected ? { error: rejected, errorCode: "parse" } : {}),
+        });
+      }
+      // a channel that answered is healthy, even if some records were malformed
+      await services.breaker.recordSuccess(channelId);
+    } catch (error) {
+      if (!runWritten) scope.set("failed", activityErrorCode(error));
+      throw error;
+    } finally { scope.close(); }
   };
 
   const runUnit = async (unit: Unit): Promise<void> => {
@@ -474,20 +513,34 @@ export async function collectStep(ctx: CycleStepContext): Promise<StepResult> {
           served.push({ unit: unit.name, queryId: query.id, channelId: outcome.channelId, status: "failed" });
         } else {
           served.push({ unit: unit.name, queryId: query.id, channelId: null, status: "skipped" });
-          await recordSkipped(unit, query, outcome.reasons, queries.length - index);
+          let runId: number | null = null;
+          try {
+            runId = await recordSkipped(unit, query, outcome.reasons, queries.length - index, (created) => { runId = created; });
+          } finally {
+            const { reasonCode, perChannel } = cascadeSkipReasons(outcome.reasons);
+            for (const [offset, skipped] of queries.slice(index).entries()) {
+              const span = step.child("collect.query", { queryId: skipped.id, ...(offset === 0 && runId !== null ? { runId } : {}) });
+              try { span.note("warn", "cascade_reasons", perChannel); }
+              finally { span.finish("skipped", { reasonCode }); }
+            }
+            done += queries.length - index;
+            step.progress(done, planned);
+          }
           break; // nothing can take the remaining queries this cycle
         }
+        step.progress(++done, planned);
       }
     } finally {
       for (const [id, code] of controller.unusableChannels()) unusable[id] = code;
     }
     const summary = rotationSummary({ queries: unit.queries, sortChannel, turns, reached, stretched: stretched.size, capped: capped.size, maxWindowHours, historyUnavailable: historyReason !== null, now });
     rotation[unit.name] = summary;
+    step.note("info", "queries_not_reached", { unit: shortIdSchema.safeParse(unit.name).success ? unit.name : "other", count: summary.queries - reached });
     ctx.logger.info("query rotation", { unit: unit.name, ...summary, notReached: summary.queries - reached, reason: historyReason ?? (sortChannel === null ? "no_start_channel" : null) });
   };
 
   /** All channels of a unit were unavailable: one skipped run row (on the first registered channel) says why. */
-  const recordSkipped = async (unit: Unit, query: SearchQuery, reasons: Record<string, string>, remaining: number): Promise<void> => {
+  const recordSkipped = async (unit: Unit, query: SearchQuery, reasons: Record<string, string>, remaining: number, onCreated: (id: number) => void): Promise<number | null> => {
     const holder = unit.spec.order.find((id) => registry.has(id));
     const reason = truncate(
       `no available channel for ${unit.name} (${Object.entries(reasons)
@@ -495,13 +548,15 @@ export async function collectStep(ctx: CycleStepContext): Promise<StepResult> {
         .join(", ")}); ${remaining} quer${remaining === 1 ? "y" : "ies"} skipped`,
     );
     ctx.logger.warn("cascade has no available channel", { unit: unit.name, reasons, skippedQueries: remaining });
-    if (holder === undefined) return;
+    if (holder === undefined) return null;
     summaryOf(holder).skipped += 1;
     summaryOf(holder).runs += 1;
-    if (ctx.dryRun) return;
+    if (ctx.dryRun) return null;
     try {
       const run = await createRun(requireDb(), { channelId: holder, cycleId: ctx.cycle.id, queryHash: query.id });
+      onCreated(run.id);
       await finishRun(requireDb(), run.id, { status: "skipped", error: reason, errorCode: commonErrorCode(reasons) });
+      return run.id;
     } catch (error) {
       throw new InfrastructureError(`could not record skipped run for ${unit.name}`, error);
     }

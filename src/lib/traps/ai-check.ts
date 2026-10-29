@@ -1,3 +1,4 @@
+import { activityErrorCode, noopSpan, type ItemEventCode } from "@/lib/activity";
 /**
  * The AI layer of the trap detection: the AI sub-task `traps`, registered before `score`, so the scoring of the same
  * cycle already gets the cleaned JD. It reports what the rules do not know and judges the rule findings. What the AI may change:
@@ -143,56 +144,78 @@ export async function runTrapAiCheck(ctx: AiSubtaskContext, deps: TrapCheckDeps 
 
   const jobs = await listJobsToTrapCheck(db, { mode: settings.ai_check.mode, promptVersion: TRAPS_PROMPT_VERSION, limit: settings.ai_check.per_cycle_limit });
   result.candidates = jobs.length;
+  const activity = ctx.activity ?? noopSpan;
+  let done = 0;
+  activity.progress(0, jobs.length);
   for (const { jobId } of jobs) {
     if (ctx.cycle.signal.aborted) {
       result.stopped = "cancelled";
       break;
     }
-    const input = await getTrapCheckInput(db, jobId);
-    if (!input) continue;
-    const prompt = buildTrapsPrompt({ title: input.title, company: input.company, description: input.description, candidates: trapCandidates(input.rules), jdMaxChars: settings.ai_check.jd_max_chars, outputLanguage: (deps.outputLanguage ?? defaultDeps.outputLanguage)?.() });
-    let answer;
+    let itemCode: ItemEventCode | undefined = "item.ok";
+    let errorCode: string | undefined;
     try {
-      answer = await ctx.router.run("traps", prompt, trapsOutputSchema, { jobId, signal: ctx.cycle.signal });
+      const input = await getTrapCheckInput(db, jobId);
+      if (!input) { itemCode = "item.skipped"; continue; }
+      const prompt = buildTrapsPrompt({ title: input.title, company: input.company, description: input.description, candidates: trapCandidates(input.rules), jdMaxChars: settings.ai_check.jd_max_chars, outputLanguage: (deps.outputLanguage ?? defaultDeps.outputLanguage)?.() });
+      let answer;
+      try {
+        answer = await ctx.router.run("traps", prompt, trapsOutputSchema, { jobId, signal: ctx.cycle.signal });
+      } catch (error) {
+        if ((error instanceof AiProviderError && error.kind === "aborted") || ctx.cycle.signal.aborted) {
+          itemCode = undefined;
+          result.stopped = "cancelled";
+          break;
+        }
+        // Job Radar's usage cap held the AI back: the remaining jobs wait for a later cycle, nothing failed
+        const capped = quotaGuardResume(error);
+        if (capped) {
+          itemCode = "item.paused";
+          errorCode = "quota_guard";
+          result.stopped = QUOTA_GUARD_CODE;
+          result.quotaResumeAt = capped.resumeAt;
+          break;
+        }
+        itemCode = "item.failed";
+        errorCode = activityErrorCode(error);
+        result.failed += 1;
+        ctx.cycle.logger.warn("ai trap check failed for a job", { jobId, error: error instanceof Error ? `${error.name}: ${error.message}`.slice(0, 200) : "unknown error" });
+        if (!isJobSpecific(error)) {
+          result.stopped = "ai_unavailable";
+          break;
+        }
+        continue;
+      }
+      const merged = mergeTrapAiCheck({ description: input.description, rules: input.rules, output: answer.value });
+      const stored = await saveTrapAiCheck(db, {
+        jobId,
+        descriptionHash: input.descriptionHash,
+        promptVersion: TRAPS_PROMPT_VERSION,
+        provider: answer.provider,
+        model: answer.model,
+        verdicts: merged.verdicts,
+        findings: merged.findings,
+      });
+      if (!stored) {
+        itemCode = "item.skipped";
+        result.skippedJobs += 1;
+        continue;
+      }
+      result.checked += 1;
+      result.added += merged.findings.length;
+      result.droppedQuotes += merged.dropped;
+      for (const v of merged.verdicts) result[v.verdict] += 1;
+      ctx.cycle.logger.info("ai trap check done", { jobId, provider: answer.provider, added: merged.findings.length, verdicts: merged.verdicts.length, dropped: merged.dropped });
     } catch (error) {
-      if ((error instanceof AiProviderError && error.kind === "aborted") || ctx.cycle.signal.aborted) {
-        result.stopped = "cancelled";
-        break;
+      itemCode = "item.failed";
+      errorCode = activityErrorCode(error);
+      throw error;
+    } finally {
+      if (itemCode) {
+        activity.item(itemCode, { jobId: jobId, ...(errorCode ? { errorCode } : {}) });
+        activity.progress(++done, jobs.length);
       }
-      // Job Radar's usage cap held the AI back: the remaining jobs wait for a later cycle, nothing failed
-      const capped = quotaGuardResume(error);
-      if (capped) {
-        result.stopped = QUOTA_GUARD_CODE;
-        result.quotaResumeAt = capped.resumeAt;
-        break;
-      }
-      result.failed += 1;
-      ctx.cycle.logger.warn("ai trap check failed for a job", { jobId, error: error instanceof Error ? `${error.name}: ${error.message}`.slice(0, 200) : "unknown error" });
-      if (!isJobSpecific(error)) {
-        result.stopped = "ai_unavailable";
-        break;
-      }
-      continue;
     }
-    const merged = mergeTrapAiCheck({ description: input.description, rules: input.rules, output: answer.value });
-    const stored = await saveTrapAiCheck(db, {
-      jobId,
-      descriptionHash: input.descriptionHash,
-      promptVersion: TRAPS_PROMPT_VERSION,
-      provider: answer.provider,
-      model: answer.model,
-      verdicts: merged.verdicts,
-      findings: merged.findings,
-    });
-    if (!stored) {
-      result.skippedJobs += 1;
-      continue;
-    }
-    result.checked += 1;
-    result.added += merged.findings.length;
-    result.droppedQuotes += merged.dropped;
-    for (const v of merged.verdicts) result[v.verdict] += 1;
-    ctx.cycle.logger.info("ai trap check done", { jobId, provider: answer.provider, added: merged.findings.length, verdicts: merged.verdicts.length, dropped: merged.dropped });
   }
   return result;
 }

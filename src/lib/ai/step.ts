@@ -1,8 +1,10 @@
+import { noopSpan, safeErrorCode, spanNameSchema, spanScope } from "@/lib/activity";
+import type { SpanHandle } from "@/lib/activity/types";
 import { loadConfig, type AiConfig } from "@/lib/config";
 import type { CycleStepContext, CycleStepFn, StepResult } from "@/lib/cycle/steps";
 import { getCycle } from "@/lib/db/repos/cycles";
 
-import { QUOTA_GUARD_CODE, quotaGuardAttempts, quotaGuardResume, quotaGuardResumeOf } from "./errors";
+import { AiProviderError, QUOTA_GUARD_CODE, quotaGuardAttempts, quotaGuardResume, quotaGuardResumeOf } from "./errors";
 import { createDefaultProviders } from "./providers";
 import { createAiRouter, type AiRouter } from "./router";
 import { createDbHealthStore } from "./health";
@@ -11,6 +13,7 @@ import { createDbUsageStore } from "./usage";
 
 /** What an AI sub-task (scoring, signals, translation, ...) gets to work with. */
 export interface AiSubtaskContext {
+  activity?: SpanHandle;
   cycle: CycleStepContext;
   router: AiRouter;
   config: AiConfig;
@@ -153,38 +156,53 @@ export function createAiStep(deps: AiStepDeps = {}): CycleStepFn {
     }
     const summaries: SubtaskSummary[] = [];
     for (const subtask of list) {
-      if (ctx.signal.aborted) {
-        summaries.push({ name: subtask.name, status: "skipped", durationMs: 0, error: "cycle cancelled" });
-        continue;
-      }
-      const started = ctx.now().getTime();
+      const name = spanNameSchema.safeParse(`ai.${subtask.name}`);
+      const span = name.success ? (ctx.activity ?? noopSpan).child(name.data) : noopSpan;
+      const scope = spanScope(span);
       try {
-        const result = await subtask.run({ cycle: ctx, router, config, perCycleLimit: config.per_cycle_limit });
-        const skipped = asSkipped(result);
-        if (skipped) {
-          ctx.logger.warn("ai sub-task skipped", { subtask: subtask.name, reason: skipped.skipReason });
-          const resumeAt = skipped.skipReason === QUOTA_GUARD_CODE ? quotaResumeOf(skipped.result) : undefined;
-          summaries.push({
-            name: subtask.name,
-            status: "skipped",
-            reason: skipped.skipReason,
-            ...(resumeAt !== undefined ? { resumeAt } : {}),
-            durationMs: ctx.now().getTime() - started,
-            result: skipped.result,
-          });
-        } else {
-          summaries.push({ name: subtask.name, status: "ok", durationMs: ctx.now().getTime() - started, ...(result === undefined ? {} : { result }) });
-        }
-      } catch (error) {
-        const capped = quotaGuardResume(error);
-        if (capped) {
-          ctx.logger.warn("ai sub-task skipped: Job Radar's AI usage cap reached", { subtask: subtask.name, resumeAt: capped.resumeAt });
-          summaries.push({ name: subtask.name, status: "skipped", reason: QUOTA_GUARD_CODE, resumeAt: capped.resumeAt, durationMs: ctx.now().getTime() - started });
+        if (ctx.signal.aborted) {
+          scope.set("skipped", "cycle_cancelled");
+          summaries.push({ name: subtask.name, status: "skipped", durationMs: 0, error: "cycle cancelled" });
           continue;
         }
-        const text = error instanceof Error ? `${error.name}: ${error.message}` : "unknown error";
-        ctx.logger.error("ai sub-task failed", { subtask: subtask.name, error: text.slice(0, 300) });
-        summaries.push({ name: subtask.name, status: "failed", durationMs: ctx.now().getTime() - started, error: text.slice(0, 500) });
+        const started = ctx.now().getTime();
+        try {
+          const result = await subtask.run({ cycle: ctx, router, config, perCycleLimit: config.per_cycle_limit, activity: span });
+          const skipped = asSkipped(result);
+          const ordinarySkip = typeof result === "object" && result !== null && "skipped" in result && typeof result.skipped === "string" ? result.skipped : undefined;
+          const skipCode = skipped?.skipReason ?? ordinarySkip;
+          scope.set(skipCode === undefined ? "ok" : "skipped", skipCode === undefined ? undefined : safeErrorCode(skipCode === "dry run" ? "dry_run" : skipCode === "no database" ? "no_database" : skipCode));
+          if (skipped) {
+            ctx.logger.warn("ai sub-task skipped", { subtask: subtask.name, reason: skipped.skipReason });
+            const resumeAt = skipped.skipReason === QUOTA_GUARD_CODE ? quotaResumeOf(skipped.result) : undefined;
+            summaries.push({
+              name: subtask.name,
+              status: "skipped",
+              reason: skipped.skipReason,
+              ...(resumeAt !== undefined ? { resumeAt } : {}),
+              durationMs: ctx.now().getTime() - started,
+              result: skipped.result,
+            });
+          } else {
+            summaries.push({ name: subtask.name, status: "ok", durationMs: ctx.now().getTime() - started, ...(result === undefined ? {} : { result }) });
+          }
+        } catch (error) {
+          scope.error(error);
+          if (ctx.signal.aborted || (error instanceof AiProviderError && error.kind === "aborted")) scope.set("skipped", "cycle_cancelled");
+          const capped = quotaGuardResume(error);
+          if (capped) {
+            scope.set("skipped", "quota_guard");
+            ctx.logger.warn("ai sub-task skipped: Job Radar's AI usage cap reached", { subtask: subtask.name, resumeAt: capped.resumeAt });
+            summaries.push({ name: subtask.name, status: "skipped", reason: QUOTA_GUARD_CODE, resumeAt: capped.resumeAt, durationMs: ctx.now().getTime() - started });
+            continue;
+          }
+          const text = error instanceof Error ? `${error.name}: ${error.message}` : "unknown error";
+          ctx.logger.error("ai sub-task failed", { subtask: subtask.name, error: text.slice(0, 300) });
+          summaries.push({ name: subtask.name, status: "failed", durationMs: ctx.now().getTime() - started, error: text.slice(0, 500) });
+        }
+      } finally {
+        if (ctx.signal.aborted) scope.set("skipped", "cycle_cancelled");
+        scope.close();
       }
     }
     const failed = summaries.filter((s) => s.status === "failed").length;

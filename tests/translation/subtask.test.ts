@@ -1,11 +1,13 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
 
-import { AiUnavailableError, createAiRouter, listAiSubtasks, resetAiSubtasks, type AiSubtaskContext } from "@/lib/ai";
+import { AiProviderError, AiUnavailableError, createAiRouter, listAiSubtasks, resetAiSubtasks, type AiSubtaskContext } from "@/lib/ai";
 import { createLogger } from "@/lib/channels/logger";
 import { registerBuiltinAiSubtasks } from "@/lib/cycle/builtin-steps";
 import type { Db } from "@/lib/db/client";
 import type { TranslationCandidate } from "@/lib/db/repos/translations";
+import { TranslationIncompleteError } from "@/lib/translation/errors";
+import { fakeRecorder } from "../activity/helpers";
 import { runTranslateSubtask, type TranslateSubtaskDeps } from "@/lib/translation/subtask";
 
 import { pinnedAi } from "../ai/helpers";
@@ -105,5 +107,36 @@ describe("registration", () => {
     registerBuiltinAiSubtasks();
     expect(listAiSubtasks().map((s) => s.name)).toEqual(["traps", "score", "signals", "translate", "breakdown"]);
     resetAiSubtasks();
+  });
+});
+
+
+describe("translation job activity", () => {
+  it("records wrapped quota errors as pauses while retaining the business failure result", async () => {
+    const fake = fakeRecorder();
+    const activity = fake.recorder.systemRoot("system.backup");
+    const error = new TranslationIncompleteError({ code: "quota_guard", message: "private", providerWide: true, resumeAt: null }, 1, 2);
+    const result = await runTranslateSubtask({ ...ctx(), activity }, deps([candidate(7, 90)], async () => { throw error; }));
+    expect(result).toMatchObject({ failed: 1, aiUnavailable: true });
+    expect(fake.spans[0]?.items).toEqual([["item.paused", { jobId: 7, errorCode: "quota_guard" }]]);
+    expect(fake.spans[0]?.progress).toEqual([[0, 1], [1, 1]]);
+  });
+
+  it("records a completed job even if shutdown arrives during its save", async () => {
+    const fake = fakeRecorder();
+    const controller = new AbortController();
+    const context = ctx();
+    context.cycle.signal = controller.signal;
+    const result = await runTranslateSubtask({ ...context, activity: fake.recorder.systemRoot("system.backup") }, deps([candidate(7, 90)], async () => { controller.abort(); return translated; }));
+    expect(result.translated).toBe(1);
+    expect(fake.spans[0]?.items).toEqual([["item.ok", { jobId: 7 }]]);
+    expect(fake.spans[0]?.progress).toEqual([[0, 1], [1, 1]]);
+  });
+
+  it("records no item for a job whose call aborts", async () => {
+    const fake = fakeRecorder();
+    await runTranslateSubtask({ ...ctx(), activity: fake.recorder.systemRoot("system.backup") }, deps([candidate(7, 90)], async () => { throw new AiProviderError("codex-cli", "aborted", "private"); }));
+    expect(fake.spans[0]?.items).toEqual([]);
+    expect(fake.spans[0]?.progress).toEqual([[0, 1]]);
   });
 });

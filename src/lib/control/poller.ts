@@ -1,3 +1,6 @@
+import { z } from "zod";
+import { noopRecorder, safeErrorCode, spanScope, type RequestSpanHandle } from "@/lib/activity";
+import type { ActivityRecorder } from "@/lib/activity/types";
 import { setTimeout as sleep } from "node:timers/promises";
 
 import { AiProviderError } from "@/lib/ai/errors";
@@ -30,6 +33,7 @@ function describe(error: unknown): string {
 }
 
 export interface ControlPollOptions {
+  activity?: ActivityRecorder;
   db: Db;
   signal: AbortSignal;
   logger: ChannelLogger;
@@ -78,35 +82,48 @@ export async function processNextControlRequest(options: ControlPollOptions): Pr
   const { db, signal, logger } = options;
   const request = await claimNextControlRequest(db, claimableKinds(options.kinds?.()), { lane: options.lane });
   if (!request) return null;
-  const log = logger.child({ controlRequest: request.id, kind: request.kind });
-  log.info("control request started");
-  let outcome: ControlOutcome;
-  let thrown: unknown;
-  const handler = getControlHandler(request.kind);
-  if (!handler) {
-    outcome = { status: "failed", result: { error: "no_handler" } };
-  } else {
-    try {
-      // The request runs with the config files as they are now (the web may have changed them since the last one).
-      // Inside the try: whatever goes wrong fails this request instead of leaving it `running`.
-      freshenConfig(log);
-      outcome = await handler(request, { db, signal, logger: log, onCycleFinished: options.onCycleFinished });
-    } catch (error) {
-      thrown = error;
-      log.error("control request failed", { error: describe(error) });
-      outcome = { status: "failed", result: { error: "handler_error", detail: describe(error) } };
+  const recorder = options.activity ?? noopRecorder;
+  const cycle = z.object({ cycleId: z.number().int().positive() }).safeParse(request.payload);
+  const job = z.object({ jobId: z.number().int().positive() }).safeParse(request.payload);
+  const handle: RequestSpanHandle = request.kind === "run_ai" && cycle.success
+    ? { ...recorder.attachCycle(cycle.data.cycleId).child("request.run_ai", { controlRequestId: request.id }), discard() {} }
+    : recorder.requestRoot(request, request.kind === "run_cycle" ? { deferred: true } : job.success ? { jobId: job.data.jobId } : {});
+  let discarded = false;
+  const span: RequestSpanHandle = { ...handle, discard() { if (!discarded) { discarded = true; handle.discard(); } } };
+  const scope = spanScope(span, "interrupted", "not_recorded");
+  try {
+    const log = logger.child({ controlRequest: request.id, kind: request.kind });
+    log.info("control request started");
+    let outcome: ControlOutcome;
+    let thrown: unknown;
+    const handler = getControlHandler(request.kind);
+    if (!handler) {
+      outcome = { status: "failed", result: { error: "no_handler" } };
+    } else {
+      try {
+        // The request runs with the config files as they are now (the web may have changed them since the last one).
+        // Inside the try: whatever goes wrong fails this request instead of leaving it `running`.
+        freshenConfig(log);
+        outcome = await handler(request, { db, signal, logger: log, onCycleFinished: options.onCycleFinished, activity: span, recorder });
+      } catch (error) {
+        thrown = error;
+        log.error("control request failed", { error: describe(error) });
+        outcome = { status: "failed", result: { error: "handler_error", detail: describe(error) } };
+      }
     }
-  }
-  if (failedBecauseAborted(outcome, thrown, signal) && options.maxRequeues) {
-    const { requeued } = await requeueInterruptedControlRequests(db, { id: request.id, reason: INTERRUPTED_BY_SHUTDOWN, maxRequeues: options.maxRequeues() });
-    if (requeued > 0) {
-      log.info("control request interrupted by the shutdown: queued again");
-      return getControlRequest(db, request.id);
+    if (failedBecauseAborted(outcome, thrown, signal) && options.maxRequeues) {
+      const { requeued } = await requeueInterruptedControlRequests(db, { id: request.id, reason: INTERRUPTED_BY_SHUTDOWN, maxRequeues: options.maxRequeues() });
+      if (requeued > 0) {
+        scope.set("interrupted");
+        log.info("control request interrupted by the shutdown: queued again");
+        return getControlRequest(db, request.id);
+      }
     }
-  }
-  const finished = await finishControlRequest(db, request.id, outcome);
-  log.info("control request finished", { status: outcome.status });
-  return finished;
+    const finished = await finishControlRequest(db, request.id, outcome);
+    scope.set(outcome.status === "done" ? "ok" : "failed", outcome.status === "failed" ? safeErrorCode(outcome.result.error) : undefined);
+    log.info("control request finished", { status: outcome.status });
+    return finished;
+  } finally { if (!discarded) scope.close(); }
 }
 
 /**

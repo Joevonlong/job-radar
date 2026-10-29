@@ -1,3 +1,4 @@
+import { noopRecorder, spanScope } from "@/lib/activity";
 import { listStaleApplications } from "@/lib/db/repos/applications";
 import { getLastNotificationAt, NOTIFICATION_KINDS, recordNotification } from "@/lib/db/repos/notifications";
 
@@ -31,29 +32,40 @@ export async function runReminders(deps: NotifyDeps): Promise<ReminderOutcome> {
     listStaleApplications(deps.db, { status: "interested", before: new Date(now.getTime() - interested_days * DAY_MS), limit: max_items }),
     listStaleApplications(deps.db, { status: "applied", before: new Date(now.getTime() - applied_days * DAY_MS), limit: max_items }),
   ]);
-  const text = deps.text ?? notifyText();
-  const sections: ReminderSection[] = [
-    { heading: text.t("reminders.interested", { days: interested_days }), total: interested.total, items: interested.items },
-    { heading: text.t("reminders.applied", { days: applied_days }), total: applied.total, items: applied.items },
-  ];
-
-  if (interested.total === 0 && applied.total === 0) {
-    await recordNotification(deps.db, { kind: NOTIFICATION_KINDS.reminder, payload: { empty: true }, sentAt: now });
-    return "empty";
-  }
+  const span = (deps.activity ?? noopRecorder).systemRoot("system.reminder");
+  const scope = spanScope(span);
   try {
-    const message = await deps.client.sendMessage({ chatId: deps.chatId, text: formatReminders({ sections, now, publicBaseUrl: config.public_base_url }, text) });
-    await recordNotification(deps.db, {
-      kind: NOTIFICATION_KINDS.reminder,
-      payload: { interested: interested.total, applied: applied.total },
-      sentAt: deps.now(),
-      telegramMessageId: message.messageId,
-    });
-    return "sent";
+    span.note("info", "reminder_counts", { interested: interested.total, applied: applied.total });
+    const text = deps.text ?? notifyText();
+    const sections: ReminderSection[] = [
+      { heading: text.t("reminders.interested", { days: interested_days }), total: interested.total, items: interested.items },
+      { heading: text.t("reminders.applied", { days: applied_days }), total: applied.total, items: applied.items },
+    ];
+
+    if (interested.total === 0 && applied.total === 0) {
+      await recordNotification(deps.db, { kind: NOTIFICATION_KINDS.reminder, payload: { empty: true }, sentAt: now });
+      scope.set("ok");
+      return "empty";
+    }
+    try {
+      const message = await deps.client.sendMessage({ chatId: deps.chatId, text: formatReminders({ sections, now, publicBaseUrl: config.public_base_url }, text) });
+      await recordNotification(deps.db, {
+        kind: NOTIFICATION_KINDS.reminder,
+        payload: { interested: interested.total, applied: applied.total },
+        sentAt: deps.now(),
+        telegramMessageId: message.messageId,
+      });
+      scope.set("ok");
+      return "sent";
+    } catch (error) {
+      scope.error(error);
+      deps.logger.warn("reminder could not be sent", { error: isTelegramError(error) ? error.message : "unexpected error" });
+      return "failed";
+    }
   } catch (error) {
-    deps.logger.warn("reminder could not be sent", { error: isTelegramError(error) ? error.message : "unexpected error" });
-    return "failed";
-  }
+    scope.error(error);
+    throw error;
+  } finally { scope.close(); }
 }
 
 /**

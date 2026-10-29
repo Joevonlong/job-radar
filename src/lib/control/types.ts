@@ -1,3 +1,4 @@
+import type { ActivityRecorder, RequestSpanHandle } from "@/lib/activity/types";
 import { z } from "zod";
 
 import { AI_PROVIDER_IDS } from "@/lib/ai/types";
@@ -76,6 +77,8 @@ export const testTelegramPayloadSchema = z.strictObject({});
 
 /** What the runner passes to a handler. */
 export interface ControlHandlerContext {
+  activity?: RequestSpanHandle;
+  recorder?: ActivityRecorder;
   db: Db;
   /** Aborted when the runner shuts down. */
   signal: AbortSignal;

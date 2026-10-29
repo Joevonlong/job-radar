@@ -1,3 +1,5 @@
+import { activityErrorCode, noopRecorder, spanScope } from "@/lib/activity";
+import type { ActivityRecorder } from "@/lib/activity/types";
 import { setTimeout as delay } from "node:timers/promises";
 
 import { loadHiddenSettings } from "@/lib/applications/hidden";
@@ -24,6 +26,7 @@ import { trapsEnabled } from "@/lib/traps/settings";
  */
 
 export interface UpdateHandlerDeps {
+  activity?: ActivityRecorder;
   db: Db;
   client: TelegramClient;
   /** `TELEGRAM_CHAT_ID`. */
@@ -51,6 +54,8 @@ export interface UpdateHandler {
   handle(update: TelegramUpdate): Promise<void>;
 }
 
+export type CallbackResult = "changed" | "unchanged" | "rejected" | "gone" | "export_failed" | "foreign_chat" | "not_allowed" | "invalid" | "failed";
+
 const NOT_MODIFIED = /message is not modified/i;
 
 export function createUpdateHandler(deps: UpdateHandlerDeps): UpdateHandler {
@@ -74,32 +79,32 @@ export function createUpdateHandler(deps: UpdateHandlerDeps): UpdateHandler {
     }
   }
 
-  async function handleCallback(update: TelegramUpdate, text: NotifyText): Promise<void> {
+  async function handleCallback(update: TelegramUpdate, text: NotifyText): Promise<CallbackResult> {
     const { t } = text;
     const query = update.callback_query;
-    if (!query) return;
+    if (!query) return "invalid";
     const message = query.message;
     // Only buttons of messages in the configured chat count; foreign chats get no reply at all.
     if (!message || String(message.chat.id) !== deps.chatId) {
       logger.debug("ignored a callback from a foreign chat", { updateId: update.update_id });
-      return;
+      return "foreign_chat";
     }
     if (deps.allowedUserIds && !deps.allowedUserIds.includes(query.from.id)) {
       logger.debug("ignored a callback from a user outside TELEGRAM_ALLOWED_USER_IDS", { updateId: update.update_id });
       await answer(query.id, t("callback.notAllowed"));
-      return;
+      return "not_allowed";
     }
     const decoded = query.data === undefined ? null : decodeCallback(query.data);
     if (!decoded) {
       logger.debug("ignored a callback with unknown data", { updateId: update.update_id });
       await answer(query.id, t("callback.unknown"));
-      return;
+      return "invalid";
     }
 
     const candidate = await getPushCandidate(deps.db, decoded.jobId);
     if (!candidate) {
       await answer(query.id, t("callback.gone"));
-      return;
+      return "gone";
     }
     const item: PushItem = {
       candidate,
@@ -129,7 +134,7 @@ export function createUpdateHandler(deps: UpdateHandlerDeps): UpdateHandler {
         }
       }
       logger.info("job favorite set from Telegram", { jobId: decoded.jobId, favorite, changed });
-      return;
+      return changed ? "changed" : "unchanged";
     }
 
     const rule = ACTION_RULES[decoded.action];
@@ -141,7 +146,7 @@ export function createUpdateHandler(deps: UpdateHandlerDeps): UpdateHandler {
       if (!result.ok) {
         logger.warn("could not export the JD for resume-kit", { jobId: decoded.jobId, reason: result.error });
         await answer(query.id, t(result.error === "not_found" ? "callback.gone" : "callback.exportFailed"));
-        return;
+        return result.error === "not_found" ? "gone" : "export_failed";
       }
       change = result.statusChange;
       exported = result;
@@ -151,7 +156,7 @@ export function createUpdateHandler(deps: UpdateHandlerDeps): UpdateHandler {
     }
     if (change.rejected) {
       await answer(query.id, t("callback.rejected", { status: text.status(change.previous ?? "new") }));
-      return;
+      return "rejected";
     }
 
     const marked = t(rule.marked);
@@ -174,24 +179,40 @@ export function createUpdateHandler(deps: UpdateHandlerDeps): UpdateHandler {
     }
     if (exported) await sendTailorCommand(exported, text);
     logger.info("job marked from Telegram", { jobId: decoded.jobId, action: decoded.action, to: change.status, changed: change.changed });
+    return change.changed ? "changed" : "unchanged";
   }
 
   return {
     async handle(update) {
+      const decoded = update.callback_query?.data === undefined ? null : decodeCallback(update.callback_query.data);
+      const span = update.callback_query ? (deps.activity ?? noopRecorder).systemRoot("system.telegram_callback", decoded ? { jobId: decoded.jobId } : {}) : null;
+      const scope = span ? spanScope(span) : null;
+      let result: CallbackResult = "failed";
+      let errorCode: string | undefined;
       let text: NotifyText | null = null;
       try {
         text = (deps.getText ?? notifyText)();
         if (update.callback_query) {
-          await handleCallback(update, text);
+          result = await handleCallback(update, text);
+          scope?.set(result === "changed" || result === "unchanged" ? "ok" : result === "export_failed" || result === "failed" ? "failed" : "skipped");
         } else if (update.message) {
           // No free-form conversation (spec: out of scope): foreign senders are logged without content, ours are dropped.
           const foreign = String(update.message.chat.id) !== deps.chatId;
           logger.debug(foreign ? "ignored a message from a foreign chat" : "ignored a text message (no conversation)", { updateId: update.update_id });
         }
       } catch (error) {
+        errorCode = activityErrorCode(error);
+        scope?.error(error);
         logger.error("could not handle a Telegram update", { updateId: update.update_id, error: error instanceof Error ? `${error.name}: ${error.message}`.slice(0, 300) : "unexpected error" });
         const id = update.callback_query?.id;
         if (id !== undefined && update.callback_query?.message && String(update.callback_query.message.chat.id) === deps.chatId) await answer(id, (text ?? notifyText()).t("callback.error"));
+      } finally {
+        if (span) {
+          span.item(result === "changed" || result === "unchanged" ? "item.ok" : result === "failed" || result === "export_failed" ? "item.failed" : "item.skipped", {
+            ...(decoded ? { jobId: decoded.jobId } : {}), ...(errorCode ? { errorCode } : {}), params: { ...(decoded ? { action: decoded.action } : {}), result },
+          });
+          scope?.close();
+        }
       }
     },
   };

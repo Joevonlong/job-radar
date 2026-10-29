@@ -1,3 +1,5 @@
+import { activityErrorCode, noopRecorder, spanScope } from "@/lib/activity";
+import type { ActivityRecorder } from "@/lib/activity/types";
 import { BudgetTracker, monthKey } from "@/lib/channels/budget";
 import type { CascadeSpec } from "@/lib/channels/cascade";
 import { CircuitBreaker } from "@/lib/channels/circuit";
@@ -19,6 +21,8 @@ import { startWaitingForLock } from "./lock-waiters";
 import { listCycleSteps, type CycleStepName, type CycleStepContext } from "./steps";
 
 export interface RunCycleOptions {
+  activity?: ActivityRecorder;
+  activityRequestId?: number;
   /** Only run these channels (the CLI's `--channel`). Disabled or unknown ids simply do nothing. */
   channelIds?: readonly string[];
   /** Collect and report in memory: no cycle, run, raw posting, usage or circuit writes; no lock; later steps skipped. */
@@ -114,6 +118,7 @@ function errorText(error: unknown): string {
  */
 export async function runCycle(kind: CycleKind, options: RunCycleOptions = {}): Promise<CycleRunResult> {
   const dryRun = options.dryRun ?? false;
+  const recorder = dryRun ? noopRecorder : options.activity ?? noopRecorder;
   const now = options.now ?? (() => new Date());
   const logger = options.logger ?? createLogger({ fields: {} });
   const db: Db | null = options.db !== undefined ? options.db : dryRun ? null : getDb();
@@ -156,112 +161,127 @@ export async function runCycle(kind: CycleKind, options: RunCycleOptions = {}): 
     const known = (channelId: string): KnownPostings => (readDb ? createDbKnownPostings(readDb, channelId) : NO_KNOWN_POSTINGS);
     // recorded at once: a cycle that finds the lock taken reads which channels this one covers, and whether it is the holder
     const cycleRow = !dryRun && writeDb ? await createCycle(writeDb, { kind, summary: { ...runSummary, ...(lockPid ? { lockPid } : {}) } }) : null;
-    const steps: StepSummary[] = [];
-    const results: Partial<Record<CycleStepName, unknown>> = {};
-    let finalStatus: Exclude<CycleStatus, "skipped"> = "failed";
-    let setupError: string | undefined;
-
+    const root = cycleRow ? recorder.cycleRoot(cycleRow.id, { requestId: options.activityRequestId }) : noopRecorder.cycleRoot(0);
+    const rootScope = spanScope(root, "interrupted", "not_recorded");
     try {
-      if (!dryRun) {
-        await store.upsertChannels(
-          registry.list().map((c) => ({
-            id: c.id,
-            family: c.family,
-            kind: c.kind,
-            enabled: registry.isEnabled(c.id, config.channels),
-          })),
-        );
-      }
-      const breaker = new CircuitBreaker(
-        store,
-        () => ({
-          failures: config.channels.circuit_breaker.failures,
-          cooldownMs: config.channels.circuit_breaker.cooldown_hours * 3_600_000,
-        }),
-        now,
-      );
-      const budget = await BudgetTracker.create({
-        store,
-        month: monthKey(now(), config.schedule.timezone),
-        globalCapUsd: config.channels.paid_total_monthly_budget_usd,
-        settingsFor: (id) => registry.settingsFor(id, config.channels),
-      });
-      const stepContext: CycleStepContext = {
-        cycle: { id: cycleRow?.id ?? null, kind },
-        windowKind: options.windowKind ?? null,
-        dryRun,
-        db: writeDb,
-        signal,
-        logger: logger.child({ cycle: cycleRow?.id ?? "dry-run", kind }),
-        now,
-        config,
-        channels: {
-          registry,
-          cascades: options.cascades ?? cascadesFromConfig(config.channels),
+      const steps: StepSummary[] = [];
+      const results: Partial<Record<CycleStepName, unknown>> = {};
+      let finalStatus: Exclude<CycleStatus, "skipped"> = "failed";
+      let setupError: string | undefined;
+      let setupErrorCode: string | undefined;
+
+      try {
+        if (!dryRun) {
+          await store.upsertChannels(
+            registry.list().map((c) => ({
+              id: c.id,
+              family: c.family,
+              kind: c.kind,
+              enabled: registry.isEnabled(c.id, config.channels),
+            })),
+          );
+        }
+        const breaker = new CircuitBreaker(
           store,
-          known,
-          breaker,
-          budget,
-          selected: options.channelIds ?? null,
-          runtime: {
-            ...(options.fetch ? { fetch: options.fetch } : {}),
-            ...(options.sleep ? { sleep: options.sleep } : {}),
-            ...(options.random ? { random: options.random } : {}),
-            ...(options.resolveHost ? { resolveHost: options.resolveHost } : {}),
+          () => ({
+            failures: config.channels.circuit_breaker.failures,
+            cooldownMs: config.channels.circuit_breaker.cooldown_hours * 3_600_000,
+          }),
+          now,
+        );
+        const budget = await BudgetTracker.create({
+          store,
+          month: monthKey(now(), config.schedule.timezone),
+          globalCapUsd: config.channels.paid_total_monthly_budget_usd,
+          settingsFor: (id) => registry.settingsFor(id, config.channels),
+        });
+        const stepContext: CycleStepContext = {
+          cycle: { id: cycleRow?.id ?? null, kind },
+          windowKind: options.windowKind ?? null,
+          dryRun,
+          db: writeDb,
+          signal,
+          logger: logger.child({ cycle: cycleRow?.id ?? "dry-run", kind }),
+          now,
+          config,
+          channels: {
+            registry,
+            cascades: options.cascades ?? cascadesFromConfig(config.channels),
+            store,
+            known,
+            breaker,
+            budget,
+            selected: options.channelIds ?? null,
+            runtime: {
+              ...(options.fetch ? { fetch: options.fetch } : {}),
+              ...(options.sleep ? { sleep: options.sleep } : {}),
+              ...(options.random ? { random: options.random } : {}),
+              ...(options.resolveHost ? { resolveHost: options.resolveHost } : {}),
+            },
           },
-        },
-        results,
-      };
+          results,
+        };
 
-      for (const [name, fn] of listCycleSteps()) {
-        const stepStart = now().getTime();
-        const elapsed = (): number => now().getTime() - stepStart;
-        if (signal.aborted) {
-          steps.push({ name, status: "skipped", durationMs: 0, reason: "cycle cancelled" });
-          continue;
+        for (const [name, fn] of listCycleSteps()) {
+          const stepStart = now().getTime();
+          const elapsed = (): number => now().getTime() - stepStart;
+          const step = root.child(`step.${name}`);
+          const scope = spanScope(step);
+          try {
+            if (signal.aborted) {
+              scope.set("skipped", "cycle_cancelled");
+              steps.push({ name, status: "skipped", durationMs: 0, reason: "cycle cancelled" });
+              continue;
+            }
+            if (dryRun && name !== "collect") {
+              steps.push({ name, status: "skipped", durationMs: 0, reason: "dry run" });
+              continue;
+            }
+            try {
+              const outcome = await fn({ ...stepContext, activity: step });
+              const delegated = typeof outcome?.result === "object" && outcome.result !== null && "delegated" in outcome.result && outcome.result.delegated === true;
+              scope.set(delegated && (outcome?.status ?? "ok") === "ok" ? "skipped" : outcome?.status ?? "ok", delegated && (outcome?.status ?? "ok") === "ok" ? "delegated" : undefined);
+              if (outcome?.result !== undefined) results[name] = outcome.result;
+              steps.push({
+                name,
+                status: outcome?.status ?? "ok",
+                durationMs: elapsed(),
+                ...(outcome?.result === undefined ? {} : { result: outcome.result }),
+              });
+            } catch (error) {
+              scope.error(error);
+              logger.error("cycle step failed", { step: name, error: errorText(error) });
+              steps.push({ name, status: "failed", durationMs: elapsed(), error: errorText(error) });
+            }
+          } finally { scope.close(); }
         }
-        if (dryRun && name !== "collect") {
-          steps.push({ name, status: "skipped", durationMs: 0, reason: "dry run" });
-          continue;
-        }
-        try {
-          const outcome = await fn(stepContext);
-          if (outcome?.result !== undefined) results[name] = outcome.result;
-          steps.push({
-            name,
-            status: outcome?.status ?? "ok",
-            durationMs: elapsed(),
-            ...(outcome?.result === undefined ? {} : { result: outcome.result }),
-          });
-        } catch (error) {
-          logger.error("cycle step failed", { step: name, error: errorText(error) });
-          steps.push({ name, status: "failed", durationMs: elapsed(), error: errorText(error) });
-        }
+
+        const collect = steps.find((s) => s.name === "collect");
+        if (signal.aborted) finalStatus = "failed";
+        else if (collect?.status === "failed") finalStatus = "failed";
+        else if (steps.some((s) => s.status === "failed" || s.status === "partial")) finalStatus = "partial";
+        else finalStatus = "succeeded";
+      } catch (error) {
+        setupError = errorText(error);
+        setupErrorCode = activityErrorCode(error);
+        logger.error("cycle aborted by an internal error", { error: setupError });
+        finalStatus = "failed";
       }
 
-      const collect = steps.find((s) => s.name === "collect");
-      if (signal.aborted) finalStatus = "failed";
-      else if (collect?.status === "failed") finalStatus = "failed";
-      else if (steps.some((s) => s.status === "failed" || s.status === "partial")) finalStatus = "partial";
-      else finalStatus = "succeeded";
-    } catch (error) {
-      setupError = errorText(error);
-      logger.error("cycle aborted by an internal error", { error: setupError });
-      finalStatus = "failed";
-    }
-
-    const summary: CycleSummary = {
-      ...runSummary,
-      durationMs: now().getTime() - startedMs,
-      aborted: signal.aborted,
-      steps,
-      ...(setupError === undefined ? {} : { reason: setupError }),
-    };
-    if (cycleRow && writeDb) {
-      await finishCycle(writeDb, cycleRow.id, { status: finalStatus, summary });
-    }
-    if (setupError !== undefined) throw new Error(`cycle failed: ${setupError}`);
-    return { cycleId: cycleRow?.id ?? null, kind, status: finalStatus, summary, results };
+      const summary: CycleSummary = {
+        ...runSummary,
+        durationMs: now().getTime() - startedMs,
+        aborted: signal.aborted,
+        steps,
+        ...(setupError === undefined ? {} : { reason: setupError }),
+      };
+      if (cycleRow && writeDb) {
+        await finishCycle(writeDb, cycleRow.id, { status: finalStatus, summary });
+      }
+      rootScope.set(signal.aborted ? "interrupted" : finalStatus === "succeeded" ? "ok" : finalStatus, signal.aborted ? "cycle_cancelled" : setupErrorCode);
+      if (setupError !== undefined) throw new Error(`cycle failed: ${setupError}`);
+      return { cycleId: cycleRow?.id ?? null, kind, status: finalStatus, summary, results };
+    } finally { rootScope.close(); }
   };
 
   // a dry run reads persisted state through `db` but gets no writable handle and takes no lock
@@ -273,11 +293,15 @@ export async function runCycle(kind: CycleKind, options: RunCycleOptions = {}): 
     if (locked.acquired) return locked.value;
   }
 
-  const skip = async (reason: string, coveredBy: number | null): Promise<CycleRunResult> => {
+  const skip = async (reason: string, coveredBy: number | null, reasonCode: "another_cycle_running" | "cycle_cancelled" | "covered_by_running_cycle"): Promise<CycleRunResult> => {
     logger.warn("cycle skipped: another cycle is running", { kind, coveredBy: coveredBy ?? "none" });
     const summary: CycleSummary = { ...baseSummary, durationMs: 0, aborted: false, steps: [], reason, coveredBy };
     const row = await createSkippedCycle(db, { kind, summary });
-    return { cycleId: row.id, kind, status: "skipped", summary, results: {} };
+    const root = recorder.cycleRoot(row.id, { requestId: options.activityRequestId });
+    try {
+      if (coveredBy !== null) root.note("info", "covered_by", { cycle_id: coveredBy });
+      return { cycleId: row.id, kind, status: "skipped", summary, results: {} };
+    } finally { root.finish("skipped", { reasonCode }); }
   };
   // A manual cycle never waits: the control poller is serial, so it would hold up every other request (its handler reports a covering cycle instead).
   const wait = kind === "manual" ? null : config.schedule.partial_cycle_wait;
@@ -289,7 +313,7 @@ export async function runCycle(kind: CycleKind, options: RunCycleOptions = {}): 
   let lockJustFreed = 0;
   try {
     for (;;) {
-      if (deadline !== null && signal?.aborted) return await skip("cancelled while waiting for another cycle", null);
+      if (deadline !== null && signal?.aborted) return await skip("cancelled while waiting for another cycle", null, "cycle_cancelled");
       const locked = await withCycleLock(db, "try", async (holder) => {
         stopWaiting?.();
         if (deadline !== null && options.config === undefined) {
@@ -310,8 +334,8 @@ export async function runCycle(kind: CycleKind, options: RunCycleOptions = {}): 
       }
       const holder = holderPid === null ? undefined : (await listRunningCycles(db)).find((cycle) => cycle.lockPid === holderPid);
       // A running cycle that does everything this one would (every channel, or a superset of its channels) makes it redundant.
-      if (holder !== undefined && cycleCovers(holder.channelIds, channelIds, cascades)) return await skip("another cycle is running (lock held)", holder.id);
-      if (wait === null || wait.max_minutes === 0) return await skip("another cycle is running (lock held)", null);
+      if (holder !== undefined && cycleCovers(holder.channelIds, channelIds, cascades)) return await skip("another cycle is running (lock held)", holder.id, "covered_by_running_cycle");
+      if (wait === null || wait.max_minutes === 0) return await skip("another cycle is running (lock held)", null, "another_cycle_running");
       // The holder is limited to other channels (or has not recorded its row yet): wait for it, re-checking every poll.
       if (deadline === null) {
         deadline = clock.now() + wait.max_minutes * 60_000;
@@ -319,8 +343,8 @@ export async function runCycle(kind: CycleKind, options: RunCycleOptions = {}): 
         logger.info("cycle waits: a cycle limited to some channels is running", { kind, holder: holder?.id ?? "unknown" });
       }
       const left = deadline - clock.now();
-      if (left <= 0) return await skip(`another cycle limited to some channels was still running after ${wait.max_minutes} min`, null);
-      if (!(await clock.sleep(Math.min(wait.poll_seconds * 1000, left), signal))) return await skip("cancelled while waiting for another cycle", null);
+      if (left <= 0) return await skip(`another cycle limited to some channels was still running after ${wait.max_minutes} min`, null, "another_cycle_running");
+      if (!(await clock.sleep(Math.min(wait.poll_seconds * 1000, left), signal))) return await skip("cancelled while waiting for another cycle", null, "cycle_cancelled");
     }
   } finally {
     stopWaiting?.();
