@@ -24,7 +24,7 @@ afterAll(closeDb);
 const maintenanceConfig = () => pipelineWith((raw) => {
   Object.assign(raw.lifecycle as object, { dormant_after_days: 30, max_link_checks_per_cycle: 0 });
 });
-const maintain = (db = getDb()) => runMaintenance(db, { config: maintenanceConfig(), now: () => NOW, http: { request: async () => { throw new Error("unexpected request"); }, json: async () => { throw new Error("unexpected request"); } }, logger: quietLogger });
+const maintain = (db = getDb()) => runMaintenance(db, { relist: { minGapDays: 9 }, config: maintenanceConfig(), now: () => NOW, http: { request: async () => { throw new Error("unexpected request"); }, json: async () => { throw new Error("unexpected request"); } }, logger: quietLogger });
 const rollback = new Error("deliberate rollback");
 
 it("marks only jobs past the later of the entry time and the sighting grace period", async () => {
@@ -111,7 +111,7 @@ it("reports marked and sweep-woken counts in maintenance", async () => {
 it.each([false, true])("a returning source clears dormancy, preserving phrase evidence = %s", async (phrase) => {
   const job = await addJob({ dormantAt: ago(1), ...(phrase ? { linkCheckJson: { outcome: "phrase" } } : {}) });
   await addSource(job.id, NOW);
-  expect(await touchJobsSeen(getDb())).toEqual({ seen: 1, reopened: phrase ? 0 : 1 });
+  expect(await touchJobsSeen(getDb(), { relistMinGapDays: 9 })).toEqual({ seen: 1, reopened: phrase ? 0 : 1, relisted: 0 });
   expect(await marker(job.id)).toBeNull();
   expect((await getJobDetail(getDb(), job.id))?.status).toBe(phrase ? "possibly_closed" : "active");
 });
@@ -123,7 +123,7 @@ it.each([false, true])("pipeline merges a returning posting into the dormant job
   const raw = await addSource(job.id, NOW);
   const [company] = await getDb().select().from(schema.companies).where(eq(schema.companies.id, job.companyId));
   await getDb().update(schema.rawPostings).set({ payloadJson: { id: String(job.id), title: job.title, company: company!.name, city: null, country: null, remote: false, description: "Build reliable systems with Python.", url: `https://jobs.example/${job.id}`, posted_at: null } }).where(eq(schema.rawPostings.id, raw.id));
-  expect(await runPipeline(getDb(), { registry, config: maintenanceConfig(), logger: quietLogger })).toMatchObject({ updated: 1, created: 0, deferred: 0 });
+  expect(await runPipeline(getDb(), { relist: { minGapDays: 9 }, registry, config: maintenanceConfig(), logger: quietLogger })).toMatchObject({ updated: 1, created: 0, deferred: 0 });
   expect(await marker(job.id)).toBeNull();
   expect((await getJobDetail(getDb(), job.id))?.status).toBe(phrase ? "possibly_closed" : "active");
 });
@@ -222,7 +222,7 @@ it("keeps reads, user writes and runner writes working before both columns exist
       await setClosureOverride(tx, jobs[3]!.id, "closed", null);
       await restoreClosureOverride(tx, jobs[3]!.id, { action: "closed", note: "restored", createdAt: NOW });
       await reopenJob(tx, jobs[4]!.id);
-      await touchJobsSeen(tx);
+      await touchJobsSeen(tx, { relistMinGapDays: 9 });
       await recordLinkCheck(tx, jobs[5]!.id, { outcome: "alive", at: NOW });
       await recordWatchedCheck(tx, jobs[5]!.id, { outcome: "phrase", httpStatus: 200, url: null, quote: null, phrase: null, at: NOW.toISOString() }, NOW);
       await markJobsPossiblyClosed(tx, { now: NOW, days: 7 });

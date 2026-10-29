@@ -324,13 +324,13 @@ describe("cross-source pipeline", () => {
     const withDistance = (max: number) => pipelineWith((raw) => ((raw.dedupe as { simhash_max_distance: number }).simhash_max_distance = max));
 
     let registry = await collect();
-    const apart = await runPipeline(getDb(), { config: withDistance(distance - 1), registry, logger: quietLogger });
+    const apart = await runPipeline(getDb(), { relist: { minGapDays: 9 }, config: withDistance(distance - 1), registry, logger: quietLogger });
     expect(apart).toMatchObject({ created: 2 });
     expect(await allJobs()).toHaveLength(2);
 
     await resetTables();
     registry = await collect();
-    const together = await runPipeline(getDb(), { config: withDistance(distance), registry, logger: quietLogger });
+    const together = await runPipeline(getDb(), { relist: { minGapDays: 9 }, config: withDistance(distance), registry, logger: quietLogger });
     expect(together).toMatchObject({ created: 1 });
     expect(together.merged.simhash).toBe(1);
     const [job] = await allJobs();
@@ -470,7 +470,7 @@ describe("a job seen again by the pipeline", () => {
       await changedPayload();
       const viaPipeline = await statusOf(id);
       await mark(id, c.status, c.evidence, older);
-      await touchJobsSeen(getDb());
+      await touchJobsSeen(getDb(), { relistMinGapDays: 9 });
       expect({ case: c.name, status: await statusOf(id) }).toEqual({ case: c.name, status: viaPipeline });
       if (c.name === "malformed phrase") expect(viaPipeline).toBe("possibly_closed");
     }
@@ -571,7 +571,7 @@ describe("failures stay isolated (C1, C2)", () => {
     const registry = threeChannels();
     resetCycleSteps(); // collect only
     await run(registry);
-    const result = await runPipeline(getDb(), { config: pipelineWith((raw) => (raw.batch_size = 2)), registry, logger: quietLogger });
+    const result = await runPipeline(getDb(), { relist: { minGapDays: 9 }, config: pipelineWith((raw) => (raw.batch_size = 2)), registry, logger: quietLogger });
     expect(result).toMatchObject({ processed: 6, parsed: 6, created: 3 });
   });
 
@@ -581,7 +581,7 @@ describe("failures stay isolated (C1, C2)", () => {
     await run(registry);
     const controller = new AbortController();
     controller.abort();
-    const result = await runPipeline(getDb(), { config: shippedPipeline(), registry, logger: quietLogger, signal: controller.signal });
+    const result = await runPipeline(getDb(), { relist: { minGapDays: 9 }, config: shippedPipeline(), registry, logger: quietLogger, signal: controller.signal });
     expect(result).toMatchObject({ processed: 0, aborted: true });
     const pending = await getDb().select().from(schema.rawPostings).where(eq(schema.rawPostings.parseStatus, "pending"));
     expect(pending).toHaveLength(6);
@@ -605,17 +605,17 @@ describe("reprocessing stored postings with improved rules", () => {
       (raw.description as { trailing_ui_patterns: string[] }).trailing_ui_patterns = ["zzz-never"];
       (raw.description as { restore: { min_chars: number } }).restore.min_chars = 1_000_000;
     });
-    await runPipeline(getDb(), { config: old, registry, logger: quietLogger });
+    await runPipeline(getDb(), { relist: { minGapDays: 9 }, config: old, registry, logger: quietLogger });
     const before = await jobTitled("job 1");
     expect(before.workplace).toBe("unknown");
     expect(before.description).toContain("Show more Show less");
     const [rawBefore] = await listRawPostingsForChannel(getDb(), "fx-a");
 
-    expect(await runPipeline(getDb(), { config: shippedPipeline(), registry, logger: quietLogger })).toMatchObject({ processed: 0 }); // nothing pending: the new rules do not apply by themselves
+    expect(await runPipeline(getDb(), { relist: { minGapDays: 9 }, config: shippedPipeline(), registry, logger: quietLogger })).toMatchObject({ processed: 0 }); // nothing pending: the new rules do not apply by themselves
 
     expect(await requeueRawPostings(getDb())).toBe(1);
     expect(await requeueRawPostings(getDb(), ["some-other-channel"])).toBe(0); // nothing parsed or failed is left to put back
-    const result = await runPipeline(getDb(), { config: shippedPipeline(), registry, logger: quietLogger });
+    const result = await runPipeline(getDb(), { relist: { minGapDays: 9 }, config: shippedPipeline(), registry, logger: quietLogger });
     expect(result).toMatchObject({ processed: 1, parsed: 1, created: 0, updated: 1, parseFailed: 0 });
 
     const after = await jobTitled("job 1");
@@ -635,21 +635,21 @@ describe("reprocessing stored postings with improved rules", () => {
     registry.register(fixture, { settings: { enabled: true, maxResults: 10, monthlyBudgetUsd: 0, freeRecordsPerMonth: 0, throttle: { minDelayMs: 0, maxDelayMs: 0 }, extra: {} } });
     resetCycleSteps();
     await run(registry);
-    await runPipeline(getDb(), { config: shippedPipeline(), registry, logger: quietLogger });
+    await runPipeline(getDb(), { relist: { minGapDays: 9 }, config: shippedPipeline(), registry, logger: quietLogger });
     const job = await jobTitled("job 1");
     // what an older rule set got wrong: an agency flag and a work mode the text does not support
     await getDb().update(schema.jobs).set({ isAgency: true, workplace: "remote", germanLevelRequired: "C1", contract: "temp_agency" }).where(eq(schema.jobs.id, job.id));
 
-    await runPipeline(getDb(), { config: shippedPipeline(), registry, logger: quietLogger });
+    await runPipeline(getDb(), { relist: { minGapDays: 9 }, config: shippedPipeline(), registry, logger: quietLogger });
     expect(await requeueRawPostings(getDb())).toBe(1);
-    await runPipeline(getDb(), { config: shippedPipeline(), registry, logger: quietLogger });
+    await runPipeline(getDb(), { relist: { minGapDays: 9 }, config: shippedPipeline(), registry, logger: quietLogger });
     // kept: the agency flag only accumulates and a known value is never replaced by `unknown`; only a new known value wins
     expect(await jobTitled("job 1")).toMatchObject({ isAgency: true, workplace: "hybrid", germanLevelRequired: "C1", contract: "temp_agency" });
 
     expect(await resetRuleDerivedFacts(getDb())).toBe(1);
     expect(await jobTitled("job 1")).toMatchObject({ isAgency: false, workplace: "unknown", germanLevelRequired: "unknown", contract: "unknown" });
     await requeueRawPostings(getDb());
-    await runPipeline(getDb(), { config: shippedPipeline(), registry, logger: quietLogger });
+    await runPipeline(getDb(), { relist: { minGapDays: 9 }, config: shippedPipeline(), registry, logger: quietLogger });
     expect(await jobTitled("job 1")).toMatchObject({ isAgency: false, workplace: "hybrid", germanLevelRequired: "unknown", contract: "unknown" }); // the text states no contract: the stale temp_agency is gone
   });
 
@@ -657,7 +657,7 @@ describe("reprocessing stored postings with improved rules", () => {
     const registry = threeChannels();
     resetCycleSteps();
     await run(registry);
-    await runPipeline(getDb(), { config: shippedPipeline(), registry, logger: quietLogger });
+    await runPipeline(getDb(), { relist: { minGapDays: 9 }, config: shippedPipeline(), registry, logger: quietLogger });
     expect(await requeueRawPostings(getDb(), ["fx-ats"])).toBeGreaterThan(0);
     const pending = await getDb().select().from(schema.rawPostings).where(eq(schema.rawPostings.parseStatus, "pending"));
     expect(new Set(pending.map((r) => r.channelId))).toEqual(new Set(["fx-ats"]));
@@ -674,7 +674,7 @@ describe("job lifecycle (fake clock)", () => {
   }
 
   const maintenance = (now: Date, fetch: FetchLike = fakeFetch(() => 200).fetch, overrides: (raw: Record<string, unknown>) => void = () => {}) =>
-    runMaintenance(getDb(), {
+    runMaintenance(getDb(), { relist: { minGapDays: 9 },
       config: pipelineWith(overrides),
       http: createHttpClient({ settings: { timeoutMs: 1000, maxRetries: 0, backoffBaseMs: 1, backoffMaxMs: 1 }, fetch }),
       logger: quietLogger,
@@ -750,7 +750,7 @@ describe("job lifecycle (fake clock)", () => {
     const lines: string[] = [];
     const logger = createLogger({ minLevel: "warn", sink: (record) => lines.push(record.message) });
     const fetchSpy = fakeFetch(() => 200);
-    await runMaintenance(getDb(), {
+    await runMaintenance(getDb(), { relist: { minGapDays: 9 },
       config: pipelineWith(() => {}),
       http: createHttpClient({ settings: { timeoutMs: 1000, maxRetries: 0, backoffBaseMs: 1, backoffMaxMs: 1 }, fetch: fetchSpy.fetch }),
       logger,
@@ -952,7 +952,7 @@ describe("job lifecycle (fake clock)", () => {
       await add("Possible", { status: "possibly_closed" });
       const records: Array<{ message: string; fields: Record<string, unknown> }> = [];
       const fetch = fakeFetch((url) => url.endsWith("Gone") || url.endsWith("Possible") ? 404 : url.endsWith("Alive") ? 200 : 503);
-      const runLogged = (limit: number) => runMaintenance(getDb(), {
+      const runLogged = (limit: number) => runMaintenance(getDb(), { relist: { minGapDays: 9 },
         config: pipelineWith((raw) => { overrides(raw); (raw.lifecycle as Record<string, unknown>).max_link_checks_per_cycle = limit; }),
         http: createHttpClient({ settings: { timeoutMs: 1000, maxRetries: 0, backoffBaseMs: 1, backoffMaxMs: 1 }, fetch: fetch.fetch }),
         logger: createLogger({ sink: (record) => records.push(record) }),

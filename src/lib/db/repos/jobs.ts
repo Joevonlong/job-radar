@@ -7,6 +7,7 @@ import type { LinkCheckEvidence } from "@/lib/jobs/link-check-evidence";
 import type { Executor } from "../executor";
 import { applications, channels, companies, jobClosureOverrides, jobFavorites, jobFilterOverrides, jobSources, jobs, rawPostings } from "../schema";
 import { dormancyReady, jobReadColumns } from "./dormancy";
+import { listingReady, listingSetSql } from "./listing";
 import { notDormantSql } from "../queries/job-status";
 
 export type Job = Omit<typeof jobs.$inferSelect, "searchTsv" | "descriptionMd5" | "descriptionHasText" | "salaryMd5">;
@@ -38,7 +39,8 @@ export async function insertJob(db: Executor, values: NewJob): Promise<Job> {
   // a web/worker request can insert before the runner has added the internal fingerprint columns.
   const columns: Record<string, PgColumn> = getTableColumns(jobs);
   const dormant = await dormancyReady(db);
-  const internal = new Set(["descriptionMd5", "descriptionHasText", "salaryMd5", "searchTsv", ...(!dormant ? ["dormantAt", "possiblyClosedAt"] : [])]);
+  const listing = await listingReady(db);
+  const internal = new Set(["descriptionMd5", "descriptionHasText", "salaryMd5", "searchTsv", ...(!dormant ? ["dormantAt", "possiblyClosedAt"] : []), ...(!listing ? ["lastListedAt", "relistedAt", "relistCount"] : [])]);
   const entries = Object.entries(values).filter(([key, value]) => value !== undefined && key in columns && !internal.has(key));
   return db.transaction(async (tx) => {
     const [inserted] = await tx.execute<{ id: string | number }>(sql`insert into ${jobs}
@@ -165,6 +167,8 @@ export interface SeenResult {
   seen: number;
   /** Of those, jobs that were `possibly_closed` / `closed` and are `active` again. */
   reopened: number;
+  /** Source observations that qualified as a relist. */
+  relisted: number;
 }
 
 /**
@@ -172,36 +176,43 @@ export interface SeenResult {
  * refreshed by every collect). A job a source returns again after it was possibly_closed / closed is
  * active again. Never moves `last_seen_at` backwards. Jobs are updated, never deleted.
  */
-export async function touchJobsSeen(db: Executor): Promise<SeenResult> {
+export async function touchJobsSeen(db: Executor, options: { relistMinGapDays: number }): Promise<SeenResult> {
   const dormant = await dormancyReady(db);
-  const rows = await db.execute<{ seen: number; reopened: number }>(sql`
+  const listing = await listingReady(db);
+  const advances = sql`(c.seen > jobs.last_seen_at)`;
+  const listingChanged = listing ? sql`(j.last_listed_at is null or l.seen > j.last_listed_at)` : sql`false`;
+  const rows = await db.execute<{ seen: number; reopened: number; relisted: number }>(sql`
     with latest as (
-      select js.job_id, max(r.fetched_at) as seen
-      from job_sources js
-      join raw_postings r on r.id = js.raw_posting_id
-      group by js.job_id
-    ),
-    changed as (
-      select j.id, j.status as old_status, l.seen
-      from jobs j
-      join latest l on l.job_id = j.id
-      where l.seen > j.last_seen_at
-    ),
-    upd as (
-      update jobs j
-      -- a job whose posting says it no longer takes applications stays possibly closed (the source may still list it)
-      set last_seen_at = c.seen,
-          status = case when j.status = 'possibly_closed' and j.link_check_json->>'outcome' = ${PHRASE_OUTCOME} then j.status else 'active' end
-          ${dormant ? sql`, dormant_at = null` : sql``}
+      select distinct on (js.job_id) js.job_id, r.fetched_at as seen, r.run_id
+      from job_sources js join raw_postings r on r.id = js.raw_posting_id
+      order by js.job_id, r.fetched_at desc, r.id desc
+    ), changed as (
+      select j.id, j.status as old_status, j.last_seen_at as old_seen, l.seen, l.run_id,
+        ${listing ? sql`coalesce(j.relist_count, 0)` : sql`0`} as old_relist_count
+      from jobs j join latest l on l.job_id = j.id
+      where l.seen > j.last_seen_at or ${listingChanged}
+      -- Keep the old counters/status locked too, so RETURNING counts only this statement's changes.
+      for update of j
+    ), upd as (
+      update jobs
+      set last_seen_at = greatest(jobs.last_seen_at, c.seen),
+          status = case when ${advances} then
+            case when jobs.status = 'possibly_closed' and jobs.link_check_json->>'outcome' = ${PHRASE_OUTCOME}
+              then jobs.status else 'active' end else jobs.status end
+          ${dormant ? sql`, dormant_at = case when ${advances} then null else jobs.dormant_at end` : sql``}
+          ${listing ? sql`, ${listingSetSql(sql`c.seen`, sql`(select cycle_id from runs where id = c.run_id)`, options.relistMinGapDays)}` : sql``}
       from changed c
-      where j.id = c.id
-      returning j.id, j.status
+      where jobs.id = c.id and (c.seen > jobs.last_seen_at
+        ${listing ? sql`or jobs.last_listed_at is null or c.seen > jobs.last_listed_at` : sql``})
+      returning jobs.id, jobs.status, c.old_status, c.seen > c.old_seen as seen,
+        ${listing ? sql`coalesce(jobs.relist_count, 0) > c.old_relist_count` : sql`false`} as relisted
     )
-    select (select count(*) from upd)::int as seen,
-           (select count(*) from changed c join upd u on u.id = c.id where c.old_status <> 'active' and u.status = 'active')::int as reopened
+    select count(*) filter (where seen)::int as seen,
+      count(*) filter (where seen and old_status <> 'active' and status = 'active')::int as reopened,
+      count(*) filter (where relisted)::int as relisted from upd
   `);
   const row = rows[0];
-  return { seen: row?.seen ?? 0, reopened: row?.reopened ?? 0 };
+  return { seen: row?.seen ?? 0, reopened: row?.reopened ?? 0, relisted: row?.relisted ?? 0 };
 }
 
 /**

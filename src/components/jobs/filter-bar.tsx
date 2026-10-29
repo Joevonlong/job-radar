@@ -60,6 +60,8 @@ export interface FilterBarOptions {
   visa?: boolean;
   /** Show the "Ghost jobs" control (ui.yaml `job_checks.ghost.enabled`); hidden, a `ghost=` in the URL is ignored but kept, like `visa`. */
   ghost?: boolean;
+  /** Migration readiness: an unavailable relisted filter is ignored and kept in the URL. */
+  relisted?: boolean;
   /** (ui.yaml `filters`) Values the lists do not offer (one that is selected in the URL still shows). */
   hiddenWorkplaces?: readonly string[];
   hiddenContracts?: readonly string[];
@@ -102,7 +104,7 @@ export function FilterBar({ options }: { options: FilterBarOptions }) {
   const highOn = (params.high ?? params.t12) === true;
   const hideLangOn = (params.hideLang ?? params.hideGerman) === true;
   const highValueNames = options.highValueNames ?? [];
-  const visibility: { ignore: readonly FilterKey[] } = { ignore: [...(options.visa === true ? [] : (["visa"] as const)), ...(options.ghost === true ? [] : (["ghost"] as const))] };
+  const visibility: { ignore: readonly FilterKey[] } = { ignore: [...(options.visa === true ? [] : (["visa"] as const)), ...(options.ghost === true ? [] : (["ghost"] as const)), ...(options.relisted === true ? [] : (["relisted"] as const))] };
   const activeCount = countActiveFilters(withLegacyKeys(params), visibility);
   const apps = params.app ?? [];
   const hiddenStatuses = useHiddenStatuses();

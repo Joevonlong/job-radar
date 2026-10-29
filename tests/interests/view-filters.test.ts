@@ -12,13 +12,14 @@ const loadJobsSearchParamsSync = (query: string) => loadJobsSearchParams(query);
 const view = (id: string, over: Partial<SavedView> = {}): SavedView => ({ id, name: id, default: false, filters: { city: "Berlin" }, ...over });
 
 describe("view filters <-> /jobs URL state", () => {
-  it("never reads or writes scope and archive reasons, preserving legacy status-only views", () => {
-    const params = loadJobsSearchParams("?scope=archive&reason=gone&reason=manual&status=closed&sort=last_listed");
+  it("never reads or writes scope, archive reasons and relists, preserving legacy status-only views", () => {
+    const params = loadJobsSearchParams("?scope=archive&reason=gone&reason=manual&status=closed&sort=last_listed&relisted=true");
     expect(viewFiltersFromParams(params)).toEqual({ status: "closed" });
-    const view = { status: "closed" as const, scope: "archive", reason: ["gone"] };
+    const view = { status: "closed" as const, scope: "archive", reason: ["gone"], relisted: true };
     const urlParams = viewFiltersToParams(view);
     expect(urlParams).not.toHaveProperty("scope");
     expect(urlParams).not.toHaveProperty("reason");
+    expect(urlParams).not.toHaveProperty("relisted");
     expect(serialize("/jobs", urlParams)).toBe("/jobs?status=closed");
     expect(viewFiltersSchema.safeParse(view).success).toBe(false);
   });

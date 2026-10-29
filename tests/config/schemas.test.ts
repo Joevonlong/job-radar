@@ -8,6 +8,7 @@ import { shippedYaml } from "./helpers";
 
 const FILES: Record<ConfigName, string> = {
   activityLog: "activity-log.yaml",
+  jobArchive: "job-archive.yaml",
   schedule: "schedule.yaml",
   search: "search.yaml",
   channels: "sources.yaml",

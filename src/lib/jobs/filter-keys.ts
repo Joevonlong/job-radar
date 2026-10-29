@@ -20,14 +20,14 @@ export const DATE_FILTER_KEYS = ["from", "to"] as const;
 /** `high`: only jobs with a high-value signal; old links say `t12` (see `LEGACY_HIGH_KEY`). */
 /** `unseen`: only jobs not looked at yet; URL-only like `fav`. */
 /** `filteredOnly`: only the jobs the hard filter removed (the "filtered out" links of /insights); URL-only like `fav`. */
-export const TOGGLE_FILTER_KEYS = ["salary", "filtered", "hideLang", "high", "fav", "unseen", "filteredOnly"] as const;
+export const TOGGLE_FILTER_KEYS = ["salary", "filtered", "hideLang", "high", "fav", "unseen", "filteredOnly", "relisted"] as const;
 /** three-way choices (absent = all): `trap=only|hide`, `visa=offered|not_denied`, `ghost=only|hide` (`ghost=all` = absent). */
 export const CHOICE_FILTER_KEYS = ["trap", "visa", "ghost"] as const;
 /** Filters that live in the /jobs URL but not in saved views (interests.yaml keeps its shape). */
-export const NON_VIEW_FILTER_KEYS = ["fav", "unseen", "filteredOnly", "reason"] as const;
+export const NON_VIEW_FILTER_KEYS = ["fav", "unseen", "filteredOnly", "reason", "relisted"] as const;
 
 /** Every filter key, in the order lists and chips show them. */
-export const FILTER_KEYS = ["q", "source", "city", "company", "workplace", "contract", "status", "reason", "app", "minScore", "minSalary", "from", "to", "salary", "filtered", "hideLang", "high", "trap", "visa", "ghost", "fav", "unseen", "filteredOnly"] as const;
+export const FILTER_KEYS = ["q", "source", "city", "company", "workplace", "contract", "status", "reason", "app", "minScore", "minSalary", "from", "to", "salary", "filtered", "hideLang", "high", "trap", "visa", "ghost", "fav", "unseen", "filteredOnly", "relisted"] as const;
 
 /**
  * The URL key the "high-value signals only" filter had before the signal categories ("T1/T2 only"). Still read, as `high`, so old links and

@@ -322,6 +322,7 @@ export default async function JobDetailPage({ params }: { params: Params }) {
             <span data-testid="first-seen" title={absolute(job.firstSeenAt)}>
               {t("firstSeenVia", { when: format.relativeTime(job.firstSeenAt, now) })}
               {sourceNames.length > 0 ? ` · ${sourceNames.join(" · ")}` : ""}
+              {job.relistedAt ? <span data-testid="relisted-detail">{` · ${tDash("relisted.detail", { date: absolute(job.relistedAt) })}`}</span> : null}
             </span>
           </div>
           <JobViewTransition id={job.id} part="title">

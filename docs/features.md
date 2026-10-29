@@ -127,6 +127,7 @@ Demo data throughout: the companies and jobs are invented. To click around the s
 | Isolated | One source failing never stops a cycle. Each has a circuit breaker and an optional monthly budget. |
 | One job, not five | Near-duplicates across sources merge into one entry, with every source link kept. |
 | Noise flagged | Agency posts are marked. A job that has not been seen for about a week is marked "possibly closed" (a time-based hint); the link check then decides: when every link is dead it marks the job "closed", and a live link reopens it. An active job no source has returned for about two weeks also gets its links checked, even without that mark. After 30 days possibly closed, unprotected jobs become dormant and leave default lists and automatic work; a source listing them again wakes them. |
+| Seen again | Source-observed relists have a dated tag, a scope-aware quick filter and a Today note; they do not refresh freshness or trigger AI work or pushes. |
 | Closed jobs and archive | Mark a job closed (undo any time); Current / Archive / All keeps closed and dormant jobs accessible, with reason filters and last-listed sorting. Jobs and their postings, scores, translations and analyses are never automatically deleted. |
 | Clean input for your AI | Some ads hide text meant to steer AI readers (white-on-white text, invisible characters, "if you are an AI…"). Job Radar strips it before any AI reads the ad and shows you what it found. [How](ai-traps.md) |
 

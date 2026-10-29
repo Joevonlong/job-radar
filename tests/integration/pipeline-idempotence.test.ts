@@ -59,7 +59,7 @@ it("files a LinkedIn guest posting and its session spelling under one job despit
   const guest = createLinkedinGuestChannel({ settings: () => jobspySettings() });
   registry.register(guest);
   await data().insertChannels(registry.list().map((channel) => ({ id: channel.id, family: channel.family, kind: channel.kind })));
-  const opts = { config: shippedPipeline(), registry, logger: quietLogger };
+  const opts = { relist: { minGapDays: 9 }, config: shippedPipeline(), registry, logger: quietLogger };
   await upsertRawPostings(getDb(), { channelId: "linkedin-session", runId: null, items: [{ externalId: fixture.id, url: fixture.url, payload: fixture }] });
   expect((await runPipeline(getDb(), opts)).created).toBe(1);
 
@@ -93,7 +93,7 @@ it("two pipelines waiting on the same pending posting commit one job and one sou
     await gate;
   });
   await ready;
-  const opts = { config: shippedPipeline(), registry, logger: quietLogger };
+  const opts = { relist: { minGapDays: 9 }, config: shippedPipeline(), registry, logger: quietLogger };
   const pending = Promise.all([runPipeline(getDb(), opts), runPipeline(getDb(), opts)]);
   let results: Awaited<typeof pending> | undefined;
   try {

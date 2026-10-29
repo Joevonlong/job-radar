@@ -139,7 +139,7 @@ export function hideGermanLevels(latest: LatestScore, levels: readonly string[])
  * Columns of `jobs` + company name + latest score the card needs; select them with these. `ux`: the seen / closure tables exist
  * (`uxTablesReady`); before the migration every job reads as seen.
  */
-export function cardColumns(latest: LatestScore, ux = true, dormant = false) {
+export function cardColumns(latest: LatestScore, ux = true, dormant = false, listing = false) {
   return {
     id: jobs.id,
     title: jobs.title,
@@ -156,7 +156,9 @@ export function cardColumns(latest: LatestScore, ux = true, dormant = false) {
     postedAt: jobs.postedAt,
     firstSeenAt: jobs.firstSeenAt,
     lastSeenAt: jobs.lastSeenAt,
-    lastListedAt: lastListedSql(),
+    lastListedAt: lastListedSql(listing),
+    relistedAt: listing ? jobs.relistedAt : sql<Date | null>`null`,
+    relistCount: listing ? sql<number>`coalesce(${jobs.relistCount}, 0)`.mapWith(Number) : sql<number>`0`,
     salaryJson: jobs.salaryJson,
     skills: jobs.skills,
     rankValue: latest.rankValue,
@@ -190,6 +192,8 @@ export type CardRow = {
   firstSeenAt: Date;
   lastSeenAt: Date;
   lastListedAt: Date | null;
+  relistedAt: Date | null;
+  relistCount: number;
   salaryJson: unknown;
   skills: string[];
   rankValue: number | null;
@@ -310,6 +314,8 @@ export async function hydrateCards(db: Db, rows: readonly CardRow[], options: Hy
     firstSeenAt: row.firstSeenAt,
     lastSeenAt: row.lastSeenAt,
     lastListedAt: row.lastListedAt,
+    relistedAt: row.relistedAt,
+    relistCount: row.relistCount,
     salaryDisclosed: row.salaryJson !== null && row.salaryJson !== undefined,
     salary: parseSalary(row.salaryJson),
     skills: row.skills ?? [],

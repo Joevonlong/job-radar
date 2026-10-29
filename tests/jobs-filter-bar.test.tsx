@@ -469,3 +469,20 @@ describe("FilterBar: scope and reasons", () => {
   });
 });
 
+
+
+describe("FilterBar: seen-again readiness", () => {
+  it("clears a ready seen-again filter while preserving scope", async () => {
+    const { lastQuery } = renderBar("?scope=current&relisted=true", "en", { relisted: true });
+    expect(screen.getByTestId("filter-toggle")).toHaveTextContent("Filters (1)");
+    await userEvent.click(screen.getByTestId("filter-clear"));
+    await waitFor(() => expect(lastQuery()).toBe("?scope=current"));
+  });
+
+  it("ignores an unavailable seen-again filter and keeps its URL value when clearing other filters", async () => {
+    const { lastQuery } = renderBar("?scope=current&relisted=true&q=rust", "en", { relisted: false });
+    expect(screen.getByTestId("filter-toggle")).toHaveTextContent(/^Filters$/);
+    await userEvent.click(screen.getByTestId("filter-clear"));
+    await waitFor(() => expect(lastQuery()).toBe("?scope=current&relisted=true"));
+  });
+});

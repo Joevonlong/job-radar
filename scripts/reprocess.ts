@@ -44,7 +44,7 @@ import { resetRuleDerivedFacts } from "../src/lib/db/repos/jobs";
 import { requeueRawPostings } from "../src/lib/db/repos/raw-postings";
 import { currentPreferences, runFilter } from "../src/lib/filter";
 import { getTranslator } from "../src/lib/i18n/node";
-import { refreshStoredIdentityKeys, refreshStoredSalaries, runPipeline, splitMergedJobsOf } from "../src/lib/pipeline";
+import { REPLAY_RELIST, refreshStoredIdentityKeys, refreshStoredSalaries, runPipeline, splitMergedJobsOf } from "../src/lib/pipeline";
 import { recheckGerman, readScoringProfile } from "../src/lib/scoring";
 import { reconcileBonuses, revalueSignals, runRuleScan, syncSalarySignals } from "../src/lib/signals";
 
@@ -88,7 +88,7 @@ async function main(): Promise<number> {
       const requeued = await requeueRawPostings(db, channels);
       console.log(`raw postings put back to pending: ${requeued}`);
 
-      const pipeline = await runPipeline(db, { config: pipelineConfig, registry: defaultRegistry, logger, signal });
+      const pipeline = await runPipeline(db, { relist: REPLAY_RELIST, config: pipelineConfig, registry: defaultRegistry, logger, signal });
       console.log(`pipeline: processed=${pipeline.processed} updated=${pipeline.updated} created=${pipeline.created} parse_failed=${pipeline.parseFailed} deferred=${pipeline.deferred}`);
       for (const f of pipeline.failures) console.log(`  raw #${f.rawPostingId} (${f.channelId}): ${f.reason}`);
 

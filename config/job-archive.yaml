@@ -1,0 +1,6 @@
+config_version: 1
+relist:
+  # Minimum days between source listings, with an observed absence in between. 0 disables relists but still maintains the baseline. Integer 0-3650.
+  min_gap_days: 14
+  # Window for the seen-again badge, /jobs relisted=true filter and Today note. Integer 1-365.
+  badge_days: 14

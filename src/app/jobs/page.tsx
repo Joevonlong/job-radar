@@ -27,7 +27,8 @@ import { countJobList, countJobListSeen, getDb, getFilterFloors, getJobFilterOpt
 import { loadPipeline } from "@/lib/market/effective";
 import { buildCompanyMatchIndex, canonicalCompanyNames } from "@/lib/pipeline/company";
 import { loadCityGroups } from "@/lib/jobs/cities";
-import { jobsListFilters } from "@/lib/jobs/list-filters";
+import { listingReady } from "@/lib/db/repos/listing";
+import { jobsListFilters, relistFilterVisibility } from "@/lib/jobs/list-filters";
 import { hasActiveFilters, type FilterVisibility, jobsListHref, jobsSearchQuery, loadJobsSearchParams, withLegacyKeys } from "@/lib/jobs/search-params";
 import { salaryFilteredIds } from "@/lib/jobs/filter-floors";
 import { effectiveDir, nextSortParams, resolveSort } from "@/lib/jobs/sort";
@@ -69,14 +70,17 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
     if (canonical.length !== params.company.length || canonical.some((name, index) => name !== params.company[index])) redirect(jobsListHref({ ...params, company: canonical }));
   }
   const ui = loadConfig("ui");
+  const relistBadgeDays = loadConfig("jobArchive").relist.badge_days;
+  const tRelisted = await getTranslations("dashboard.relisted");
   const cities = await loadCityGroups(db);
   // hidden, a `visa=` in the URL is ignored but kept (no control, no chip, not counted); read once for the filter, the list
   // query and the badges
   const visaFilter = await visaFilterAvailable(db);
   // the same for the ghost job check (ui.yaml job_checks.ghost): off, no control, no chip, no mark, and `ghost=` filters nothing
   const ghostFilter = await ghostFilterAvailable(db);
-  const filters = await jobsListFilters(db, params, { cities, visa: visaFilter, ghost: ghostFilter, companyIndex });
-  const visibility: FilterVisibility = { ignore: [...(visaFilter ? [] : (["visa"] as const)), ...(ghostFilter ? [] : (["ghost"] as const))] };
+  const listing = await listingReady(db);
+  const filters = await jobsListFilters(db, params, { cities, visa: visaFilter, ghost: ghostFilter, companyIndex, listing, now, badgeDays: relistBadgeDays });
+  const visibility: FilterVisibility = { ignore: [...(visaFilter ? [] : (["visa"] as const)), ...(ghostFilter ? [] : (["ghost"] as const)), ...(relistFilterVisibility(listing).ignore ?? [])] };
   const visit = await getVisitState(db);
   const seenUpTo = effectiveSeenUpTo(visit, now);
   // Shared priority: explicit sort, reserved relevance step, archive last-listed default, then rank.
@@ -99,7 +103,7 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
     listCompanyFilterOptions(db, { limit: ui.filters.company_options_max + 1, timezone }),
   ]);
   const filterFloors = await getFilterFloors(db, salaryFilteredIds(result.jobs));
-  const items = await toListItems(result.jobs, { now, timezone, filterFloors, seenUpTo, visa: visaFilter, ghost: ghostFilter, monthSalaries: { figures: salaryFigures, minSample: ui.salary_stats.min_sample } });
+  const items = await toListItems(result.jobs, { now, timezone, filterFloors, seenUpTo, relistBadgeDays, visa: visaFilter, ghost: ghostFilter, monthSalaries: { figures: salaryFigures, minSample: ui.salary_stats.min_sample } });
   // The "new since your last visit" divider when the list runs newest first (it sits on the page of the boundary only);
   // any other order says it next to the count, with a link to that order
   const newestFirst = sort === "first_seen" && effectiveDir(sort, params.dir) === "desc";
@@ -122,7 +126,7 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
       <VisitTracker />
       <PageHeader title={t("title")} description={t("description")} />
       <ScopeSwitch params={params} archiveCount={archiveCount} />
-      <FilterBar options={{ ...options, cities: cities.map(({ key, target }) => ({ key, target })), companies: companies.slice(0, ui.filters.company_options_max), companyOptionsCapped: companies.length > ui.filters.company_options_max, companyOptionsVisible: ui.filters.company_options_visible, traps: trapsEnabled(), visa: visaFilter, ghost: ghostFilter, hiddenWorkplaces: hidden.workplaces, hiddenContracts: hidden.contracts, highValueNames }} />
+      <FilterBar options={{ ...options, cities: cities.map(({ key, target }) => ({ key, target })), companies: companies.slice(0, ui.filters.company_options_max), companyOptionsCapped: companies.length > ui.filters.company_options_max, companyOptionsVisible: ui.filters.company_options_visible, traps: trapsEnabled(), relisted: listing, visa: visaFilter, ghost: ghostFilter, hiddenWorkplaces: hidden.workplaces, hiddenContracts: hidden.contracts, highValueNames }} />
       <div className="flex flex-wrap items-center gap-x-sp-3 gap-y-sp-2">
         {params.filteredOnly === true ? (
           <FilteredToggle active only href={jobsListHref({ ...params, filteredOnly: null, page: 1 })} />
@@ -145,6 +149,17 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
           removeLabel={tSeen("filterRemove")}
           testId="toggle-unseen"
         />
+        {listing ? (
+          <QuickFilter
+            active={params.relisted === true}
+            href={jobsListHref({ ...params, relisted: params.relisted === true ? null : true, page: 1 })}
+            offLabel={tRelisted("filterOff")}
+            onLabel={tRelisted("filterOn")}
+            removeLabel={tRelisted("filterRemove")}
+            title={tRelisted("hint")}
+            testId="toggle-relisted"
+          />
+        ) : null}
         <SaveViewButton />
         <span className="font-mono text-data text-ink-2" role="status" data-testid="result-count">
           {tJobs("count", { count: result.total })}

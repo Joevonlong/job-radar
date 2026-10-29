@@ -159,6 +159,8 @@ interface SeedJob {
   postedHoursBeforeSeen?: number | null;
   status?: "active" | "possibly_closed" | "closed";
   dormant?: boolean;
+  /** Seed a source-observed relist directly, without running the detection rule. */
+  relisted?: boolean;
   /** A source fetch followed by an alive check, then a 410; last-seen must differ from last-listed. */
   goneAfterAlive?: boolean;
   sources: string[];
@@ -562,6 +564,21 @@ const SEED_JOBS: readonly SeedJob[] = [
     postedHoursBeforeSeen: 12,
     sources: ["xing"],
     match: 49,
+  },
+  {
+    key: "maplewick-relisted",
+    company: "Maplewick Research",
+    title: "Software Engineer, Search Quality",
+    cities: ["Hamburg"],
+    workplace: "hybrid",
+    contract: "permanent",
+    offer: ["Build reliable search tools for research teams."],
+    day: 35,
+    at: 0.4,
+    status: "active",
+    relisted: true,
+    sources: ["greenhouse"],
+    match: 67,
   },
   {
     key: "maplewick-dormant",
@@ -1006,7 +1023,8 @@ async function insertSeed(db: Executor, input: { now: Date; tz: string; pipeline
           germanLevelRequired: job.german ?? "unknown",
           postedAt,
           firstSeenAt: seenAt,
-          lastSeenAt: lastSeen,
+          lastSeenAt: job.relisted ? now : lastSeen,
+          ...(job.relisted ? { lastListedAt: now, relistedAt: now, relistCount: 2 } : {}),
           status: job.status ?? "active",
           ...(job.dormant ? { possiblyClosedAt: new Date(lastSeen.getTime() + pipeline.lifecycle.possibly_closed_after_days * DAY_MS), dormantAt: new Date(now.getTime() - DAY_MS) } : {}),
         })
@@ -1051,7 +1069,7 @@ async function insertSeed(db: Executor, input: { now: Date; tz: string; pipeline
               channelId === "greenhouse" && job.greenhouseHtml
                 ? wrapPosting({ ats: "greenhouse", token: slugify(job.company), companyName: job.company }, { id: 4_200_101, title: job.title, absolute_url: url, location: { name: job.cities.map((c) => `${c}, Germany`).join("; ") }, content: escapeHtml(job.greenhouseHtml) })
                 : { seed: true, title: job.title, company: job.company },
-            fetchedAt: seenAt,
+            fetchedAt: job.relisted ? now : seenAt,
             parseStatus: "parsed",
           })
           .returning({ id: rawPostings.id });

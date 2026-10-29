@@ -31,6 +31,11 @@ export function JobTags({ job }: { job: JobListItem }) {
       {/* An AI trap comes first */}
       {job.trapCount && job.trapCount > 0 ? <TrapBadge count={job.trapCount} /> : null}
       {job.visa ? <VisaBadge visa={job.visa} /> : null}
+      {job.relisted ? (
+        <Badge variant="tag" data-testid="relisted-tag" title={`${t("relisted.title", { firstSeen: job.relisted.firstSeen, count: job.relisted.count })} · ${t("relisted.hint")}`}>
+          {t("relisted.tag", { relative: job.relisted.relative })}
+        </Badge>
+      ) : null}
       {[...tags].map(([id, category]) => (
         <SignalTag key={id} code={category.code} icon={category.icon} color={category.color} title={category.label} data-tier={id}>
           {category.label}

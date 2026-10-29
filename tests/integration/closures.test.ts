@@ -211,8 +211,8 @@ describe("the source returns the job again", () => {
       const [raw] = await db.execute<{ id: string }>(sql`insert into raw_postings (channel_id, external_id, payload_json, fetched_at) values ('fx-ats', ${`r${i}`}, '{}'::jsonb, ${NOW.toISOString()}::timestamptz) returning id`);
       await db.execute(sql`insert into job_sources (job_id, raw_posting_id, channel_id, url) values (${id}, ${Number(raw!.id)}, 'fx-ats', ${`https://jobs.example/${i}`})`);
     }
-    const touched = await touchJobsSeen(db);
-    expect(touched).toEqual({ seen: 2, reopened: 1 });
+    const touched = await touchJobsSeen(db, { relistMinGapDays: 9 });
+    expect(touched).toEqual({ seen: 2, reopened: 1, relisted: 0 });
     const detail = await getJobDetail(db, mine);
     expect(detail?.closure).toMatchObject({ autoStatus: "active", reason: "manual", override: { action: "closed", note: "gone on their site" } });
     expect(detail?.status).toBe("closed");

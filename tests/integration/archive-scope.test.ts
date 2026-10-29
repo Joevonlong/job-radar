@@ -131,16 +131,16 @@ it("reads max source fetched_at in cards and details, unchanged after alive then
   await addSource(job.id, ago(30));
   const [latest] = await getDb().insert(schema.rawPostings).values({ channelId: "fx", externalId: "another-source", payloadJson: {}, fetchedAt: ago(20) }).returning();
   await getDb().insert(schema.jobSources).values({ jobId: job.id, rawPostingId: latest!.id, channelId: "fx" });
-  const [before] = await getDb().select({ at: lastListedSql() }).from(schema.jobs).where(eq(schema.jobs.id, job.id));
+  const [before] = await getDb().select({ at: lastListedSql(false) }).from(schema.jobs).where(eq(schema.jobs.id, job.id));
   expect(before?.at).toEqual(ago(20));
   await recordLinkCheck(getDb(), job.id, { outcome: "alive", at: ago(1) });
   expect((await getJobDetail(getDb(), job.id))?.lastListedAt).toEqual(before?.at);
   await recordLinkCheck(getDb(), job.id, { outcome: "gone", at: NOW });
-  expect((await getJobDetail(getDb(), job.id))).toMatchObject({ lastListedAt: ago(20), lastSeenAt: ago(1), closure: { reason: "gone" } });
-  expect((await list({ scope: "archive" })).jobs[0]).toMatchObject({ id: job.id, lastListedAt: ago(20), lastSeenAt: ago(1), closedReason: "gone" });
+  expect((await getJobDetail(getDb(), job.id))).toMatchObject({ lastListedAt: ago(20), relistedAt: null, relistCount: 0, lastSeenAt: ago(1), closure: { reason: "gone" } });
+  expect((await list({ scope: "archive" })).jobs[0]).toMatchObject({ id: job.id, lastListedAt: ago(20), relistedAt: null, relistCount: 0, lastSeenAt: ago(1), closedReason: "gone" });
   const missing = await addJob({ status: "closed" });
   expect((await getJobDetail(getDb(), missing.id))?.lastListedAt).toBeNull();
-  const [aliased] = await getDb().execute<{ at: string | null }>(sql`select ${lastListedSql("j")} as at from ${schema.jobs} j where j.id = ${job.id}`);
+  const [aliased] = await getDb().execute<{ at: string | null }>(sql`select ${lastListedSql(false, "j")} as at from ${schema.jobs} j where j.id = ${job.id}`);
   expect(new Date(aliased!.at!)).toEqual(ago(20));
 });
 

@@ -100,8 +100,13 @@ describe("search_jobs", () => {
   it("search hides a dormant job while get_job preserves its status and explains the reason", async () => {
     const id = await jobId({ company: "Maplewick Research", title: "Research Engineer, Document Retrieval" });
     const client = await connect();
-    const searched = await call<SearchJobsOutput>(client, "search_jobs", { query: "Maplewick" });
+    const searched = await call<SearchJobsOutput>(client, "search_jobs", { query: "Document Retrieval" });
     expect(searched.structured.total).toBe(0);
+    const relistedId = await jobId({ company: "Maplewick Research", title: "Software Engineer, Search Quality" });
+    const companySearch = await call<SearchJobsOutput>(client, "search_jobs", { query: "Maplewick" });
+    const companyJobIds = companySearch.structured.jobs.map((job) => job.id);
+    expect(companyJobIds).not.toContain(id);
+    expect(companyJobIds).toContain(relistedId);
     const detail = await call<GetJobOutput>(client, "get_job", { job_id: id });
     expect(detail.isError).toBe(false);
     expect(detail.structured.job).toMatchObject({ status: "possibly_closed", closed_reason: "dormant" });

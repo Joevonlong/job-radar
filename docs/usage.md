@@ -1,5 +1,7 @@
 # Daily Usage Guide
 
+Job Radar never deletes any job, posting, score, translation or analysis automatically.
+
 For first-time use, go through the setup wizard (`/setup`, see [setup.md](setup.md)); to adjust what you get afterwards, use the tuning guide [`getting-started.html`](getting-started.html).
 
 Once deployed, this is how you use Job Radar day to day: how to start and open it, how to tell whether it is healthy, and where to read jobs and JDs. For first deployment, upgrades and rollbacks see [`deploy.md`](deploy.md); for the host machine's own setup see [`host-setup.md`](host-setup.md).
@@ -243,6 +245,19 @@ clears an explicit last-listed sort and its direction. Last listed is the newest
 check. Archived rows in any scope show it as a relative time, with the first-seen date on hover; their detail pages also
 show the source date. Without a source date they say **Last listed: not recorded**. Freshness and the date filters still
 use first seen.
+
+**Seen again · {relative time}** marks a job collected again within `job-archive.yaml: relist.badge_days`
+(14 days by default), regardless of its current status. Hover for its first-seen date, the seen-again count and the
+meaning: **Collected again by this tool, not necessarily re-posted by the employer**. A manually closed job stays
+closed; a closing-phrase mark also stays. The detail page keeps the seen-again date after the badge expires.
+
+The **Seen again** quick filter (`relisted=true`) selects that same badge window within the chosen scope; its count
+matches the list, reload keeps it, and **Clear filters** removes it. Like scope and reasons, it is not saved in views.
+Today shows a **N jobs seen again** link when there are active, non-ignored relists in today's or the latest cycle's
+window, intersected with the badge window. The link opens Current with the Seen again filter and carries Today's
+Include filtered, Hide language-required and High-value switches. Its list can contain more jobs than the note.
+Relists do not refresh first seen or posted dates, freshness, Today's new-job list or KPIs, new-since-visit counts,
+navigation badges or Insights; they add no AI work or Telegram push.
 
 **Not listed for weeks** is a yellow hint for dormant jobs, still `possibly_closed`. After 30 days possibly closed
 (`pipeline.yaml: lifecycle.dormant_after_days`), they leave the default jobs list, company overview, command-palette

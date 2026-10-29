@@ -3,6 +3,7 @@ import { listRows } from "./list-rows";
 import { EXCLUSIVE_TAG } from "./projects";
 
 const GONE = "Platform Engineer, Search Infrastructure";
+const RELISTED = "Software Engineer, Search Quality";
 const DORMANT = "Research Engineer, Document Retrieval";
 
 async function open(page: Page, path: string) {
@@ -85,6 +86,45 @@ for (const locale of ["en", "zh"] as const) {
       await expect(page).not.toHaveURL(/status=/);
       await expect(page).toHaveURL(/scope=current/);
       await expect.poll(() => listRows(page).count()).toBeGreaterThan(0);
+    });
+
+    test("seen-again tags and filtering agree with the count, survive reload and clear within the scope", async ({ page }) => {
+      await open(page, "/jobs?scope=current&q=Maplewick");
+      const row = listRows(page).filter({ hasText: RELISTED });
+      await expect(row.getByTestId("relisted-tag")).toContainText(locale === "en" ? "Seen again" : "再次出现");
+      await expect(row.getByTestId("relisted-tag")).toHaveAttribute("title", locale === "en" ? /First seen .*Seen again #2.*Collected again by this tool/ : /首次发现 .*第 2 次再次出现.*本工具再次采集到/);
+      await page.getByTestId("toggle-relisted").click();
+      await expect(page).toHaveURL(/relisted=true/);
+      await expect(page.getByTestId("toggle-relisted")).toHaveAttribute("data-active", "true");
+      await expect(listRows(page)).toHaveCount(1);
+      await expect(page.getByTestId("result-count")).toHaveText(locale === "en" ? "Results: 1" : "共 1 条");
+      await page.reload();
+      await expect(page.getByTestId("toggle-relisted")).toHaveAttribute("data-active", "true");
+      await expect(listRows(page)).toHaveCount(1);
+      await page.getByTestId("filter-clear").click();
+      await expect(page).not.toHaveURL(/relisted=|q=/);
+      await expect(page).toHaveURL(/scope=current/);
+      await expect(page.getByTestId("toggle-relisted")).toHaveAttribute("data-active", "false");
+    });
+
+    test("Today links its seen-again note to the seeded job, whose detail keeps the date", async ({ page }) => {
+      await open(page, "/?view=all&filtered=true&hideLang=false&high=false");
+      await expect(page.getByTestId("relisted-note")).toHaveAttribute("data-count", "1");
+      await expect(page.getByTestId("relisted-note")).toContainText(locale === "en" ? "1 job seen again" : "1 个岗位再次出现");
+      // The old first-seen date keeps the relist out of Today's new-job list.
+      await expect(listRows(page).filter({ hasText: RELISTED })).toHaveCount(0);
+      await page.getByTestId("relisted-note-link").click();
+      await expect(page).toHaveURL(/scope=current/);
+      await expect(page).toHaveURL(/relisted=true/);
+      const query = new URL(page.url()).searchParams;
+      expect(query.get("filtered")).toBe("true");
+      expect(query.get("hideLang")).toBe("false");
+      expect(query.get("high")).toBe("false");
+      const row = listRows(page).filter({ hasText: RELISTED });
+      await expect(row).toHaveCount(1);
+      await expect(listRows(page)).toHaveCount(1);
+      await row.getByRole("link", { name: RELISTED, exact: true }).click();
+      await expect(page.getByTestId("relisted-detail")).toContainText(locale === "en" ? "seen again" : "再次出现");
     });
 
     test("the switch fits 390px in both themes and can be operated with the keyboard", async ({ page }) => {

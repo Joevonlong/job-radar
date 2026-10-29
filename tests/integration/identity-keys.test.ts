@@ -11,12 +11,13 @@ import { runMigrations } from "@/lib/db/migrate";
 import { getRuntimeState } from "@/lib/db/repos/runtime-state";
 import { syncCompanyDisplayNames } from "@/lib/pipeline/company-names";
 import { storedLocations } from "@/lib/pipeline/dedupe";
-import { refreshIdentityKeysIfStale, refreshStoredIdentityKeys, runPipeline, splitMergedJobsOf } from "@/lib/pipeline";
+import { REPLAY_RELIST, refreshIdentityKeysIfStale, refreshStoredIdentityKeys, runPipeline, splitMergedJobsOf } from "@/lib/pipeline";
 import { IDENTITY_KEYS_STATE_KEY, IDENTITY_KEYS_VERSION, legacyCompanyKey, legacyTitleKey } from "@/lib/pipeline/identity-keys";
 
 import { makeTempConfig, type TempConfig } from "../config/helpers";
 import { config, quietLogger } from "../cycle/helpers";
 import { shippedPipeline } from "../pipeline/helpers";
+import { addRun } from "./relist-fixture";
 
 const url = inject("testDatabaseUrl");
 
@@ -63,8 +64,8 @@ async function insertLookup(jobId: number, companyId: number, lookupKey: string)
 const forgetKeyVersion = () => getDb().delete(schema.runtimeState).where(eq(schema.runtimeState.key, IDENTITY_KEYS_STATE_KEY));
 
 /** What `pnpm reprocess --split-merged` does before its pipeline run, then that run (only the pending postings). */
-async function reprocessSplitMerged(registry: ChannelRegistry) {
-  const options = { config: pipelineConfig, registry, logger: quietLogger };
+async function reprocessSplitMerged(registry: ChannelRegistry, relist = REPLAY_RELIST) {
+  const options = { relist, config: pipelineConfig, registry, logger: quietLogger };
   const keys = await refreshStoredIdentityKeys(getDb(), options);
   const split = await splitMergedJobsOf(getDb(), options);
   const pipeline = await runPipeline(getDb(), options);
@@ -301,6 +302,55 @@ describe("splitting what key version 1 merged (reprocess --split-merged)", () =>
       ["デザイナー", "株式会社メルカリ"],
     ]);
     expect(jobs[0]!.id).toBe(yandex);
+  });
+});
+
+describe("a reprocess replays stored observations: no relist", () => {
+  const DAY = 86_400_000;
+  /**
+   * Key version 1 merged a designer posting with an engineer role that two sources list. The split files the engineer
+   * postings again in raw id order: the older one creates the job, the newer one (another source, more than the gap
+   * later, after a run of the first source in an earlier cycle) merges into it, which a cycle would count as a relist.
+   */
+  async function splitScenario() {
+    const engineer = { company: "Mercari Inc.", title: "バックエンドエンジニア", description: "Go microservices payments backend platform team" };
+    const registry = new ChannelRegistry();
+    registerFixtureChannel(registry, { id: "fx-keys", family: "ats", kind: "ats", usesQueries: false, postings: [posting("e1", engineer), posting("d1", { company: "Mercari Inc.", title: "プロダクトデザイナー", description: "Figma user research mobile app design system" })] });
+    registerFixtureChannel(registry, { id: "fx-other", family: "ats", kind: "ats", usesQueries: false, postings: [posting("e2", { ...engineer, url: "https://other.example.test/e2" })] });
+    await run(registry);
+    const engineerJob = await jobTitled("バックエンドエンジニア");
+    const designerJob = await jobTitled("プロダクトデザイナー");
+    await mergeAsVersion1(designerJob.id, [engineerJob.id]);
+    await writeVersion1Keys();
+
+    const db = getDb();
+    const raws = await db.select().from(schema.rawPostings).where(inArray(schema.rawPostings.externalId, ["e1", "e2"])).orderBy(schema.rawPostings.id);
+    expect(raws.map((raw) => raw.channelId).sort()).toEqual(["fx-keys", "fx-other"]);
+    const [older, newer] = raws as [typeof raws[number], typeof raws[number]];
+    const now = Date.now();
+    await db.update(schema.rawPostings).set({ fetchedAt: new Date(now - 30 * DAY) }).where(eq(schema.rawPostings.id, older.id));
+    await db.update(schema.rawPostings).set({ fetchedAt: new Date(now - DAY) }).where(eq(schema.rawPostings.id, newer.id));
+    // the older posting's source ran in between, in a cycle of its own, without listing it: an observed absence
+    await addRun({ channelId: older.channelId, at: new Date(now - 15 * DAY) });
+    return { registry, newerFetched: new Date(now - DAY) };
+  }
+
+  it("--split-merged files the split postings again without recording a relist, and keeps last listed", async () => {
+    const { registry, newerFetched } = await splitScenario();
+    const { split, pipeline } = await reprocessSplitMerged(registry);
+    expect(split).toMatchObject({ jobsSplit: 1, rawRequeued: 2 });
+    expect(pipeline).toMatchObject({ processed: 2, created: 1, relisted: 0 });
+    const job = await jobTitled("バックエンドエンジニア");
+    expect(job.relistedAt).toBeNull();
+    expect(job.relistCount ?? 0).toBe(0);
+    expect(job.lastListedAt?.getTime()).toBe(newerFetched.getTime());
+  });
+
+  it("the same replay with the cycle's gap would have counted it (the scenario is a real relist candidate)", async () => {
+    const { registry, newerFetched } = await splitScenario();
+    const { pipeline } = await reprocessSplitMerged(registry, { minGapDays: 9 });
+    expect(pipeline).toMatchObject({ created: 1, relisted: 1 });
+    expect((await jobTitled("バックエンドエンジニア")).relistedAt?.getTime()).toBe(newerFetched.getTime());
   });
 });
 

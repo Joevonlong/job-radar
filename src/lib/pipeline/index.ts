@@ -24,6 +24,7 @@ import { runMaintenance, type MaintenanceResult } from "./lifecycle";
 import { refreshSalariesIfStale, type SalaryRefreshResult } from "./refresh-salary";
 import { normalizeDraft, type NormalizedJob } from "./normalize";
 import { dormancyReady } from "@/lib/db/repos/dormancy";
+import { recordJobListing } from "@/lib/db/repos/listing";
 import { backfillChangeFingerprints } from "@/lib/db/repos/change-fingerprints";
 
 export { normalizeCompanyKey, resolveCompanyName } from "./company";
@@ -39,11 +40,18 @@ const MAX_FAILURE_SAMPLES = 10;
 
 export interface PipelineOptions {
   activity?: SpanHandle;
+  relist: { minGapDays: number };
   config: PipelineConfig;
   registry: ChannelRegistry;
   logger: ChannelLogger;
   signal?: AbortSignal;
 }
+
+/**
+ * The relist rule for replaying stored postings (`pnpm reprocess`): they are observations already counted, not new ones,
+ * so the replay keeps last listed up to date but never records a relist.
+ */
+export const REPLAY_RELIST: PipelineOptions["relist"] = { minGapDays: 0 };
 
 export interface PipelineFailureSample {
   rawPostingId: number;
@@ -62,6 +70,7 @@ export interface PipelineResult {
   merged: Record<MatchKind, number>;
   /** Re-parsed postings (their payload changed) that updated the job they already belonged to. */
   updated: number;
+  relisted: number;
   /** Postings marked `parse_failed` (reason stored in `raw_postings.parse_error`). */
   parseFailed: number;
   /** Postings left `pending` because storing the result failed (retried next cycle). */
@@ -87,12 +96,12 @@ function describeDraftIssues(error: { issues: ReadonlyArray<{ path: ReadonlyArra
 type Outcome =
   | { kind: "skipped" }
   | { kind: "created" }
-  | { kind: "merged"; by: MatchKind }
-  | { kind: "updated" }
+  | { kind: "merged"; by: MatchKind; relisted?: boolean }
+  | { kind: "updated"; relisted?: boolean }
   | { kind: "parse_failed"; reason: string };
 
 /** Channel `parse` + draft validation + normalization; failures become a reason string. */
-function parseAndNormalize(raw: RawPosting, options: PipelineOptions): { ok: true; normalized: NormalizedJob; family: string } | { ok: false; reason: string } {
+function parseAndNormalize(raw: RawPosting, options: Omit<PipelineOptions, "relist">): { ok: true; normalized: NormalizedJob; family: string } | { ok: false; reason: string } {
   const channel = options.registry.get(raw.channelId);
   if (!channel) return { ok: false, reason: `unknown channel "${raw.channelId}" (not registered in this process)` };
   let draft;
@@ -156,6 +165,7 @@ async function persist(db: Db, raw: RawPosting, normalized: NormalizedJob, famil
         germanLevelRequired: incoming.germanLevelRequired,
         postedAt: incoming.postedAt,
         firstSeenAt: raw.fetchedAt,
+        lastListedAt: raw.fetchedAt,
         lastSeenAt: raw.fetchedAt,
         simhash: incoming.simhash,
         isAgency: incoming.isAgency,
@@ -173,6 +183,8 @@ async function persist(db: Db, raw: RawPosting, normalized: NormalizedJob, famil
         ...(wins ? { companyId: company.id } : {}),
         ...(seenAgain ? { lastSeenAt: raw.fetchedAt, status: statusWhenSeenAgain(job), ...(await dormancyReady(tx) ? { dormantAt: null } : {}) } : {}),
       });
+      const relisted = await recordJobListing(tx, { jobId: job.id, observedAt: raw.fetchedAt, observedRunId: raw.runId, minGapDays: options.relist.minGapDays });
+      if (outcome.kind === "merged" || outcome.kind === "updated") outcome = { ...outcome, relisted };
       jobId = job.id;
     }
 
@@ -205,6 +217,7 @@ export async function runPipeline(db: Db, options: PipelineOptions): Promise<Pip
     created: 0,
     merged: { same_source: 0, exact_key: 0, simhash: 0 },
     updated: 0,
+    relisted: 0,
     parseFailed: 0,
     deferred: 0,
     aborted: false,
@@ -247,6 +260,7 @@ export async function runPipeline(db: Db, options: PipelineOptions): Promise<Pip
         try {
           const outcome = await persist(db, raw, prepared.normalized, prepared.family, options);
           if (outcome.kind === "skipped") continue;
+          if ((outcome.kind === "merged" || outcome.kind === "updated") && outcome.relisted) result.relisted += 1;
           result.parsed += 1;
           if (outcome.kind === "created") result.created += 1;
           else if (outcome.kind === "merged") result.merged[outcome.by] += 1;
@@ -274,7 +288,7 @@ function requireDb(ctx: CycleStepContext): Db {
  * raw postings the pipeline already parsed are not parsed again unless their payload changes, so a
  * parsing fix would otherwise never reach the jobs it was made for.
  */
-export async function refreshStoredSalaries(db: Db, options: PipelineOptions & { force?: boolean }): Promise<SalaryRefreshResult | null> {
+export async function refreshStoredSalaries(db: Db, options: Omit<PipelineOptions, "relist"> & { force?: boolean }): Promise<SalaryRefreshResult | null> {
   return refreshSalariesIfStale(db, {
     config: options.config,
     logger: options.logger,
@@ -310,7 +324,7 @@ export async function refreshStoredIdentityKeys(db: Db, options: Pick<PipelineOp
 }
 
 /** `splitMergedJobs` with the pipeline's own reading of each raw posting (`pnpm reprocess --split-merged`). */
-export async function splitMergedJobsOf(db: Db, options: PipelineOptions): Promise<SplitMergedResult> {
+export async function splitMergedJobsOf(db: Db, options: Omit<PipelineOptions, "relist">): Promise<SplitMergedResult> {
   return splitMergedJobs(db, {
     config: options.config,
     logger: options.logger,
@@ -338,7 +352,7 @@ export async function pipelineStep(ctx: CycleStepContext): Promise<StepResult> {
   } catch (error) {
     ctx.logger.warn("company display names could not be updated", { error: describeError(error) });
   }
-  const options: PipelineOptions = { config: loadPipeline(), registry: ctx.channels.registry, logger: ctx.logger, signal: ctx.signal };
+  const options: PipelineOptions = { relist: { minGapDays: loadConfig("jobArchive").relist.min_gap_days }, config: loadPipeline(), registry: ctx.channels.registry, logger: ctx.logger, signal: ctx.signal };
   const result = await runPipeline(db, { ...options, activity: ctx.activity });
   const salaryRefresh = await refreshStoredSalaries(db, options);
   const salaryBenchmark = await rebuildSalaryBenchmark(db, ctx.logger);
@@ -387,6 +401,7 @@ export async function maintenanceStep(ctx: CycleStepContext): Promise<StepResult
   try {
     const result: MaintenanceResult = await runMaintenance(requireDb(ctx), {
       config,
+      relist: { minGapDays: loadConfig("jobArchive").relist.min_gap_days },
       http,
       logger: ctx.logger,
       signal: ctx.signal,
