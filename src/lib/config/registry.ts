@@ -1,5 +1,6 @@
 import type { z } from "zod";
 
+import { jobArchiveSchema } from "./schemas/job-archive";
 import { activityLogSchema } from "./schemas/activity-log";
 import { aiSchema } from "./schemas/ai";
 import { breakdownSchema } from "./schemas/breakdown";
@@ -62,6 +63,8 @@ export const configRegistry = {
   mcp: { file: "mcp.yaml", location: "config", kind: "user", schema: mcpSchema },
   /** The operations log of the runner and ai-worker: retention, writer limits, page settings (shipped). */
   activityLog: { file: "activity-log.yaml", location: "config", kind: "shipped", schema: activityLogSchema },
+  /** Source listing baselines and relist rules (shipped, independent of filtering fingerprints). */
+  jobArchive: { file: "job-archive.yaml", location: "config", kind: "shipped", schema: jobArchiveSchema },
   me: { file: "me.yaml", location: "profile", kind: "user", schema: meSchema },
   preferences: { file: "preferences.yaml", location: "profile", kind: "user", schema: preferencesSchema },
 } as const;

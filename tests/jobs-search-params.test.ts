@@ -268,3 +268,15 @@ describe("jobs sort direction", () => {
     expect(jobsListHref({ sort: "rank", dir: null, page: 1 })).toBe("/jobs?sort=rank");
   });
 });
+
+it("parses, serializes, clears and ignores the relisted toggle", () => {
+  const params = loadJobsSearchParams("?relisted=true");
+  expect(params.relisted).toBe(true);
+  expect(loadJobsSearchParams("?relisted=maybe").relisted).toBe(false);
+  expect(loadJobsSearchParams("?relisted=false").relisted).toBe(false);
+  expect(jobsListHref({ scope: "current", relisted: true })).toBe("/jobs?scope=current&relisted=true");
+  expect(jobsListHref({ ...params, relisted: null })).not.toContain("relisted");
+  expect(countActiveFilters(params)).toBe(1);
+  expect(countActiveFilters(params, { ignore: ["relisted"] })).toBe(0);
+  expect(hasActiveFilters(params, { ignore: ["relisted"] })).toBe(false);
+});

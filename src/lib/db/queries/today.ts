@@ -11,13 +11,14 @@ import type { CycleKind } from "../repos/cycles";
 import type { RunStatus } from "../repos/runs";
 import { uxTablesReady } from "../repos/ux-tables";
 import { FOLLOWING_STATUSES } from "@/lib/applications/following";
-import { effectiveStatusSql, manuallyClosedSql } from "./job-status";
+import { effectivelyActiveSql, effectiveStatusSql, manuallyClosedSql } from "./job-status";
 import { cardColumns, hideGermanLevels, hydrateCards, latestScoreLateral, type CardRow, type LatestScore } from "./job-cards";
 import { buildJobConditions, hasListableSalary, type JobFilters } from "./jobs";
 import { hasHighValueSignal, policyCurrency, type HighValuePolicy } from "./signal-filter";
 import { parseSalary } from "./parse";
 import type { JobCard } from "./types";
 import type { JobSalary } from "@/lib/domain/types";
+import { listingReady } from "../repos/listing";
 import { dormancyReady } from "../repos/dormancy";
 
 /** `hasHighValueSignal`, or false without a policy. */
@@ -272,7 +273,7 @@ export async function listTodayJobs(db: Db, options: TodayOptions): Promise<JobC
   if (options.quick) conditions.push(quickCondition(db, latest, options.quick, options.quickLines ?? { qualifiedMinRank: null, qualifiedMinRankWithSignals: null }, options.highValue));
 
   const rows: CardRow[] = await db
-    .select(cardColumns(latest, ux, await dormancyReady(db)))
+    .select(cardColumns(latest, ux, await dormancyReady(db), await listingReady(db)))
     .from(jobs)
     .innerJoin(companies, eq(companies.id, jobs.companyId))
     .leftJoinLateral(latest, sql`true`)
@@ -282,11 +283,11 @@ export async function listTodayJobs(db: Db, options: TodayOptions): Promise<JobC
 }
 
 /** The conditions that select the Today list (the window, ignored / filtered-out jobs, the toggles and the saved view's filters); the quick view is added by the caller. */
-function todayConditions(db: Db, options: TodayOptions, latest: LatestScore, ux: boolean): SQL[] {
+function todayConditions(db: Db, options: TodayOptions, latest: LatestScore, ux: boolean, timestamp: typeof jobs.firstSeenAt | typeof jobs.relistedAt = jobs.firstSeenAt): SQL[] {
   const { start: dayStart, end: dayEnd } = dayBounds(options.now, options.timezone);
 
-  const today = and(sql`${jobs.firstSeenAt} >= ${dayStart}`, sql`${jobs.firstSeenAt} < ${dayEnd}`);
-  const cycleWindow = options.cycle ? and(gte(jobs.firstSeenAt, options.cycle.startedAt), lte(jobs.firstSeenAt, options.cycle.finishedAt ?? sql`now()`)) : undefined;
+  const today = and(sql`${timestamp} >= ${dayStart}`, sql`${timestamp} < ${dayEnd}`);
+  const cycleWindow = options.cycle ? and(gte(timestamp, options.cycle.startedAt), lte(timestamp, options.cycle.finishedAt ?? sql`now()`)) : undefined;
   const conditions: SQL[] = [(cycleWindow ? or(today, cycleWindow) : today) ?? sql`true`];
   // ignored jobs stay out, unless a saved view asks for them by status
   if (!options.extra?.applicationStatuses?.includes("archived")) {
@@ -304,6 +305,19 @@ function todayConditions(db: Db, options: TodayOptions, latest: LatestScore, ux:
   const extra = options.extra ? buildJobConditions(db, options.extra, options.timezone, latest, ux) : undefined;
   if (extra) conditions.push(extra);
   return conditions;
+}
+
+/** Relists in the Today/cycle union and badge window, with the same visibility switches as Today. */
+export async function countTodayRelisted(db: Db, options: TodayOptions & { badgeSince: Date }): Promise<number> {
+  if (!(await listingReady(db))) return 0;
+  const latest = latestScoreLateral(db);
+  const ux = await uxTablesReady(db);
+  const conditions = todayConditions(db, options, latest, ux, jobs.relistedAt);
+  const [row] = await db.select({ n: count() }).from(jobs)
+    .innerJoin(companies, eq(companies.id, jobs.companyId))
+    .leftJoinLateral(latest, sql`true`)
+    .where(and(...conditions, gte(jobs.relistedAt, options.badgeSince), effectivelyActiveSql(ux)));
+  return row?.n ?? 0;
 }
 
 /** The built-in quick views of Today: all new jobs, high score (at or above the push line), salary stated, and the ones being followed up. */

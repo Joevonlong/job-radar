@@ -64,7 +64,7 @@ const forgetKeyVersion = () => getDb().delete(schema.runtimeState).where(eq(sche
 
 /** What `pnpm reprocess --split-merged` does before its pipeline run, then that run (only the pending postings). */
 async function reprocessSplitMerged(registry: ChannelRegistry) {
-  const options = { config: pipelineConfig, registry, logger: quietLogger };
+  const options = { relist: { minGapDays: 9 }, config: pipelineConfig, registry, logger: quietLogger };
   const keys = await refreshStoredIdentityKeys(getDb(), options);
   const split = await splitMergedJobsOf(getDb(), options);
   const pipeline = await runPipeline(getDb(), options);

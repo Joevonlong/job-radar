@@ -18,7 +18,7 @@ const options = { now, timezone: "UTC", visa: false, ghost: false };
 const card = (over: Partial<JobCard> = {}): JobCard => ({
   id: 1, title: "Engineer", companyId: 1, companyName: "Example", locations: [], workplace: "unknown",
   contract: "unknown", isAgency: false, germanLevelRequired: "unknown", status: "closed", closedReason: "gone",
-  linkCheck: null, postedAt: null, firstSeenAt, lastSeenAt: now, lastListedAt, salaryDisclosed: false,
+  linkCheck: null, postedAt: null, firstSeenAt, lastSeenAt: now, lastListedAt, relistedAt: null, relistCount: 0, salaryDisclosed: false,
   salary: null, skills: [], sources: [], applicationStatus: null, favorite: null, rank: null, summary: null,
   signals: [], seen: true, ...over,
 });

@@ -27,7 +27,8 @@ import { countJobList, countJobListSeen, getDb, getFilterFloors, getJobFilterOpt
 import { loadPipeline } from "@/lib/market/effective";
 import { buildCompanyMatchIndex, canonicalCompanyNames } from "@/lib/pipeline/company";
 import { loadCityGroups } from "@/lib/jobs/cities";
-import { jobsListFilters } from "@/lib/jobs/list-filters";
+import { listingReady } from "@/lib/db/repos/listing";
+import { jobsListFilters, relistFilterVisibility } from "@/lib/jobs/list-filters";
 import { hasActiveFilters, type FilterVisibility, jobsListHref, jobsSearchQuery, loadJobsSearchParams, withLegacyKeys } from "@/lib/jobs/search-params";
 import { salaryFilteredIds } from "@/lib/jobs/filter-floors";
 import { effectiveDir, nextSortParams, resolveSort } from "@/lib/jobs/sort";
@@ -75,8 +76,9 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
   const visaFilter = await visaFilterAvailable(db);
   // the same for the ghost job check (ui.yaml job_checks.ghost): off, no control, no chip, no mark, and `ghost=` filters nothing
   const ghostFilter = await ghostFilterAvailable(db);
-  const filters = await jobsListFilters(db, params, { cities, visa: visaFilter, ghost: ghostFilter, companyIndex });
-  const visibility: FilterVisibility = { ignore: [...(visaFilter ? [] : (["visa"] as const)), ...(ghostFilter ? [] : (["ghost"] as const))] };
+  const listing = await listingReady(db);
+  const filters = await jobsListFilters(db, params, { cities, visa: visaFilter, ghost: ghostFilter, companyIndex, listing, now, badgeDays: loadConfig("jobArchive").relist.badge_days });
+  const visibility: FilterVisibility = { ignore: [...(visaFilter ? [] : (["visa"] as const)), ...(ghostFilter ? [] : (["ghost"] as const)), ...(relistFilterVisibility(listing).ignore ?? [])] };
   const visit = await getVisitState(db);
   const seenUpTo = effectiveSeenUpTo(visit, now);
   // Shared priority: explicit sort, reserved relevance step, archive last-listed default, then rank.

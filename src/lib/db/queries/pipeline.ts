@@ -6,6 +6,7 @@ import { applications, companies, jobs } from "../schema";
 import { uxTablesReady } from "../repos/ux-tables";
 import { cardColumns, hydrateCards, latestScoreCte } from "./job-cards";
 import type { JobCard } from "./types";
+import { listingReady } from "../repos/listing";
 import { dormancyReady } from "../repos/dormancy";
 
 /** One card of the pipeline board: the job as the lists show it, its application, and the application's events. */
@@ -27,7 +28,7 @@ export async function listPipelineEntries(db: Db, options: { visa?: boolean } = 
   const ux = await uxTablesReady(db);
   const rows = await db
     .with(latest)
-    .select({ ...cardColumns(latest, ux, await dormancyReady(db)), application: applications })
+    .select({ ...cardColumns(latest, ux, await dormancyReady(db), await listingReady(db)), application: applications })
     .from(applications)
     .innerJoin(jobs, eq(jobs.id, applications.jobId))
     .innerJoin(companies, eq(companies.id, jobs.companyId))

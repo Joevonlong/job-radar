@@ -392,7 +392,7 @@ describe("runCycle with the greenhouse channel", () => {
     const pipeline = pipelineWith((value) => {
       Object.assign(value.lifecycle as object, { possibly_closed_after_days: 7, dormant_after_days: 30, max_link_checks_per_cycle: 0 });
     });
-    const maintain = (at: Date) => runMaintenance(db, {
+    const maintain = (at: Date) => runMaintenance(db, { relist: { minGapDays: 9 },
       config: pipeline, now: () => at, logger: quietLogger,
       http: { request: async () => { throw new Error("unexpected link check"); }, json: async () => { throw new Error("unexpected link check"); } },
     });
@@ -476,7 +476,7 @@ describe("runCycle with the greenhouse channel", () => {
     expect(rememberedOverCap).toHaveLength(expectedOverCap.length);
     expect(rememberedOverCap).toEqual(expect.arrayContaining(expectedOverCap));
 
-    expect(await touchJobsSeen(db)).toEqual({ seen: listed ? 1 : 0, reopened: 0 });
+    expect(await touchJobsSeen(db, { relistMinGapDays: 9 })).toEqual({ seen: listed ? 1 : 0, reopened: 0, relisted: 0 });
     const closed = await markJobsPossiblyClosed(db, { now, days: 7 });
     expect(closed).toEqual(listed ? [] : [job.id]);
     const [after] = await db.select().from(schema.jobs).where(eq(schema.jobs.id, job.id));
@@ -804,7 +804,7 @@ describe("runCycle with the smartrecruiters channel", () => {
       expect(rawPostings.find((p) => p.id === raw.id)).toMatchObject({ payloadJson: stalePayload, fetchedAt: old });
       if (stored) expect(rawPostings.find((p) => p.externalId === "a1")).toMatchObject({ payloadJson: payloadA, fetchedAt: at });
       else expect(rawPostings.find((p) => p.externalId === "a1")).toBeUndefined();
-      expect(await touchJobsSeen(db)).toEqual({ seen: 0, reopened: 0 });
+      expect(await touchJobsSeen(db, { relistMinGapDays: 9 })).toEqual({ seen: 0, reopened: 0, relisted: 0 });
       const closed = await markJobsPossiblyClosed(db, { now: at, days: 7 });
       expect(closed).not.toContain(job.id);
       expect(closed).toEqual([]);
@@ -894,7 +894,7 @@ describe("runCycle with the smartrecruiters channel", () => {
     expect(stored).toHaveLength(healthy ? 4 : goodDetail ? 2 : 1);
     expect(stored.find((p) => p.id === raw.id)).toMatchObject({ payloadJson: stalePayload, fetchedAt: old });
     if (goodDetail) expect(stored.find((p) => p.externalId === "a2")).toMatchObject({ runId: runs[0]?.id, payloadJson: { source: { token: boardA.token }, posting: postingsA[1] } });
-    expect(await touchJobsSeen(db)).toEqual({ seen: 0, reopened: 0 });
+    expect(await touchJobsSeen(db, { relistMinGapDays: 9 })).toEqual({ seen: 0, reopened: 0, relisted: 0 });
 
     const closed = await markJobsPossiblyClosed(db, { now, days: 7 });
     expect(closed).toEqual(healthy ? [job.id] : []);

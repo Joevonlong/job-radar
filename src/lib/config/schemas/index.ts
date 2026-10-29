@@ -6,6 +6,7 @@ export * from "./delivery-audit";
 export * from "./insights";
 export * from "./interests";
 export * from "./language";
+export * from "./job-archive";
 export * from "./mcp";
 export * from "./me";
 export * from "./models";

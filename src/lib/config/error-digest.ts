@@ -8,6 +8,7 @@ const FILE_STEMS: Readonly<Record<string, string>> = {
   signalPresets: "signal-presets",
   activityLog: "activity-log",
   deliveryAudit: "delivery-audit",
+  jobArchive: "job-archive",
 };
 
 export function configErrorDigest(name: string): string {

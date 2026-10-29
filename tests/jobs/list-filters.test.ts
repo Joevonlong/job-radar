@@ -8,8 +8,8 @@ vi.mock("@/lib/signals/floor", () => ({
 }));
 
 import type { Db } from "@/lib/db";
-import { jobsListFilters } from "@/lib/jobs/list-filters";
-import { loadJobsSearchParams } from "@/lib/jobs/search-params";
+import { jobsListFilters, relistFilterVisibility } from "@/lib/jobs/list-filters";
+import { countActiveFilters, loadJobsSearchParams } from "@/lib/jobs/search-params";
 import { buildCompanyMatchIndex } from "@/lib/pipeline/company";
 
 import { pipelineWith } from "../pipeline/helpers";
@@ -47,4 +47,18 @@ describe("jobsListFilters: base currency", () => {
     const filters = await jobsListFilters(db, params("company=Acme"), { cities: [], visa: false, ghost: false, companyIndex });
     expect(filters.companyIds).toEqual([7]);
   });
+});
+
+it("maps the URL-only relist window using the caller's clock and badge days", async () => {
+  const now = new Date("2026-10-20T12:00:00Z");
+  const params = loadJobsSearchParams(new URLSearchParams("relisted=true"));
+  const known = { cities: [], visa: false, ghost: false, now, badgeDays: 2 };
+  expect((await jobsListFilters({} as Db, params, { ...known, listing: true })).relistedSince).toEqual(new Date("2026-10-18T12:00:00Z"));
+  expect((await jobsListFilters({} as Db, params, { ...known, listing: false })).relistedSince).toBeNull();
+});
+
+it("offers the standard filter visibility ignore rule before migration", () => {
+  const params = loadJobsSearchParams(new URLSearchParams("relisted=true"));
+  expect(countActiveFilters(params, relistFilterVisibility(false))).toBe(0);
+  expect(countActiveFilters(params, relistFilterVisibility(true))).toBe(1);
 });

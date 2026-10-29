@@ -39,7 +39,7 @@ describe("Monid raw posting retention and accounting", () => {
     expect(before[2]?.externalId).toBe(unidentifiedExternalId(unidentified));
     expect(before[2]?.externalId).toMatch(/^unidentified:[a-f0-9]{64}$/);
 
-    const pipeline = await runPipeline(getDb(), { registry, config: shippedPipeline(), logger: quietLogger });
+    const pipeline = await runPipeline(getDb(), { relist: { minGapDays: 9 }, registry, config: shippedPipeline(), logger: quietLogger });
     expect(pipeline).toMatchObject({ processed: 3, parsed: 1, created: 1, parseFailed: 2, deferred: 0 });
     const after = await listRawPostingsForChannel(getDb(), MONID);
     expect(after.map((row) => [row.externalId, row.parseStatus])).toEqual([

@@ -372,6 +372,12 @@ export const jobs = pgTable(
     dormantAt: timestamptz("dormant_at"),
     /** When the automatic lifecycle last entered possibly_closed; older rows use last_seen_at plus the grace period. */
     possiblyClosedAt: timestamptz("possibly_closed_at"),
+    /** Latest source listing observation, independent of link checks; NULL until the first baseline. */
+    lastListedAt: timestamptz("last_listed_at"),
+    /** Source observation that most recently met the relist gap and absence rule. */
+    relistedAt: timestamptz("relisted_at"),
+    /** Number of qualifying relists; NULL on older rows reads as zero. */
+    relistCount: integer("relist_count"),
     /** 64-bit SimHash of the description as a 16-char hex string (NULL for descriptions too short to hash). */
     simhash: text("simhash"),
     /** The poster is a recruiter / staffing agency rather than the employer (rule-based, see pipeline.yaml). */
@@ -399,6 +405,7 @@ export const jobs = pgTable(
     index("jobs_search_tsv_idx").using("gin", t.searchTsv),
     /** The jobs a cycle created (first seen inside its window): the Today page and its cycle counts. */
     index("jobs_first_seen_at_idx").on(t.firstSeenAt),
+    index("jobs_relisted_at_idx").on(t.relistedAt).where(sql`${t.relistedAt} is not null`),
   ],
 );
 

@@ -392,7 +392,7 @@ describe("collect delivery persistence", () => {
     }));
     const { items } = await audit(await onlyRun(result));
     expect(items[0]).toMatchObject({ disposition: "outside_window", externalId: "old-job" });
-    expect(await touchJobsSeen(db)).toEqual({ seen: 0, reopened: 0 });
+    expect(await touchJobsSeen(db, { relistMinGapDays: 9 })).toEqual({ seen: 0, reopened: 0, relisted: 0 });
     expect(await getJobDetail(db, job.id)).toMatchObject({ status: "closed", lastSeenAt: before!.lastSeenAt });
     expect(await getClosureOverride(db, job.id)).toMatchObject({ action: "closed", note: "Manually confirmed" });
     expect(await listRawPostingsForChannel(db, CHANNEL)).toEqual([raw]);

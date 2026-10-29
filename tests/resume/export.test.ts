@@ -28,6 +28,8 @@ function jobDetail(over: Partial<JobDetail> = {}): JobDetail {
     postedAt: null,
     firstSeenAt: new Date("2026-10-01T08:00:00Z"),
     lastListedAt: null,
+    relistedAt: null,
+    relistCount: 0,
     lastSeenAt: new Date("2026-10-07T08:00:00Z"),
     description: "## About the role\n\nBuild LLM agents.\n\n---\nWe pay €90k–110k.\n",
     salary: null,

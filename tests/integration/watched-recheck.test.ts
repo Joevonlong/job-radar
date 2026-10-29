@@ -166,7 +166,7 @@ async function state(id: number) {
 const localGuard: UrlGuard = async (target) => (new URL(target).hostname === "127.0.0.1" ? null : publicUrlProblem(target, async () => ["93.184.216.34"]));
 
 const maintenance = (options: { enabled?: boolean; maxPerCycle?: number; maxLinkChecksPerCycle?: number; extraPhrases?: string[]; guard?: UrlGuard | null; now?: Date; unseenAfterDays?: number; unseenIntervalDays?: number } = {}) =>
-  runMaintenance(getDb(), {
+  runMaintenance(getDb(), { relist: { minGapDays: 9 },
     config: pipelineWith((raw) => {
       const lifecycle = raw.lifecycle as Record<string, unknown>;
       if (options.maxLinkChecksPerCycle !== undefined) lifecycle.max_link_checks_per_cycle = options.maxLinkChecksPerCycle;

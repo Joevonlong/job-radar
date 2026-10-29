@@ -101,6 +101,7 @@ export const jobsSearchParsers = {
   fav: parseAsBoolean,
   /** Only jobs not looked at yet. Not stored in saved views. */
   unseen: parseAsBoolean,
+  relisted: parseAsBoolean,
   /** Preserve explicit rank versus absent/invalid; every reader uses resolveSort with the resolved scope and q. */
   sort: parseAsStringLiteral(JOB_SORTS),
   /** The sort's direction; absent (or invalid) = the sort's default (`DEFAULT_SORT_DIR`). Not a filter: never counted, never in a saved view. */

@@ -74,7 +74,7 @@ describe("runCycle with the jsearch channel", () => {
     expect((await getMonthUsage(getDb(), MONTH)).get("jsearch")).toEqual({ records: 9, usd: 0 });
 
     const pipeline = shippedPipeline();
-    const piped = await runPipeline(getDb(), { config: pipeline, registry, logger: quietLogger });
+    const piped = await runPipeline(getDb(), { relist: { minGapDays: 9 }, config: pipeline, registry, logger: quietLogger });
     expect(piped).toMatchObject({ processed: 4, parsed: 3, parseFailed: 1 }); // the record without a title cannot be parsed
     const sources = await getDb().select().from(schema.jobSources);
     expect(sources).toHaveLength(3);

@@ -1,7 +1,7 @@
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, inject } from "vitest";
 
-import { closeDb, getDb, getLatestCycleSummary, listTodayJobs, schema } from "@/lib/db";
+import { closeDb, countTodayRelisted, getDb, listJobs, getLatestCycleSummary, listTodayJobs, schema } from "@/lib/db";
 import { runMigrations } from "@/lib/db/migrate";
 import { countTodayScope } from "@/lib/dashboard/today-scope";
 
@@ -100,4 +100,42 @@ describe("listTodayJobs with the latest cycle", () => {
     await addCycle(at("2026-10-06T20:00:00Z"), at("2026-10-06T20:30:00Z"));
     expect(await titles(await getLatestCycleSummary(getDb()))).toEqual(["Kept"]);
   });
+});
+
+const highPolicy = { amountId: null, amountHighValue: false, otherIds: ["benefit"], minAnnualEur: null, rates: {}, otherRegionPoints: 0 };
+
+it.each([false, true])("relist count is a subset of the current jobs link with Today toggles (includeFiltered=%s)", async (includeFiltered) => {
+  const db = getDb();
+  const ids = await addJobs(Object.fromEntries(["Visible", "Filtered", "Ignored", "Manual", "Phrase", "Language", "Low", "Old", "Cycle", "Outside"].map((title) => [title, at("2026-08-01T12:00:00Z")])));
+  const latestCycle = { startedAt: at("2026-10-06T20:00:00Z"), finishedAt: at("2026-10-06T20:30:00Z") };
+  await db.update(schema.jobs).set({ relistedAt: at("2026-10-07T04:00:00Z"), relistCount: 1 });
+  await db.update(schema.jobs).set({ relistedAt: at("2026-10-06T20:15:00Z") }).where(eq(schema.jobs.id, ids.Cycle!));
+  await db.update(schema.jobs).set({ relistedAt: at("2026-10-03T12:00:00Z") }).where(eq(schema.jobs.id, ids.Old!));
+  await db.update(schema.jobs).set({ relistedAt: at("2026-10-05T20:00:00Z") }).where(eq(schema.jobs.id, ids.Outside!));
+  await db.update(schema.jobs).set({ status: "possibly_closed", linkCheckJson: { outcome: "phrase" } }).where(eq(schema.jobs.id, ids.Phrase!));
+  await db.update(schema.jobs).set({ germanLevelRequired: "B2" }).where(eq(schema.jobs.id, ids.Language!));
+  await db.insert(schema.applications).values({ jobId: ids.Ignored!, status: "archived" });
+  await db.insert(schema.jobClosureOverrides).values({ jobId: ids.Manual!, action: "closed" });
+  await db.insert(schema.scores).values({ jobId: ids.Filtered!, filterResult: "filtered_out" });
+  for (const [name, id] of Object.entries(ids)) {
+    if (name !== "Low") await db.insert(schema.signals).values({ jobId: id, tier: "benefit", kind: "tag", quote: "Support for learning", valueJson: { tag: "learning" }, extractor: "rule" });
+  }
+  const badgeSince = new Date(NOW.getTime() - 2 * 86_400_000);
+  const count = await countTodayRelisted(db, { now: NOW, timezone: TZ, cycle: latestCycle, badgeSince, includeFiltered, hideGermanLevels: ["B2"], highValueOnly: true, highValue: highPolicy });
+  const expected = [ids.Visible!, ids.Cycle!, ...(includeFiltered ? [ids.Filtered!] : [])];
+  expect(count).toBe(expected.length);
+  const linked = await listJobs(db, { filters: { scope: "current", relistedSince: badgeSince, includeFiltered, hideGermanLevels: ["B2"], highValue: highPolicy }, sort: "rank", page: 1, pageSize: 100, timezone: TZ, visa: false });
+  const linkedIds = linked.jobs.map((job) => job.id);
+  for (const id of expected) expect(linkedIds).toContain(id);
+  expect(linkedIds).not.toContain(ids.Manual);
+  if (includeFiltered) expect(linkedIds).toContain(ids.Filtered);
+});
+
+it("a one-day badge window excludes relists in a latest cycle 37 hours ago", async () => {
+  const db = getDb();
+  const ids = await addJobs({ Old: at("2026-08-01T12:00:00Z"), Today: at("2026-08-01T12:00:00Z") });
+  const cycleAt = new Date(NOW.getTime() - 37 * 3_600_000);
+  await db.update(schema.jobs).set({ relistedAt: cycleAt }).where(eq(schema.jobs.id, ids.Old!));
+  await db.update(schema.jobs).set({ relistedAt: NOW }).where(eq(schema.jobs.id, ids.Today!));
+  expect(await countTodayRelisted(db, { now: NOW, timezone: TZ, cycle: { startedAt: cycleAt, finishedAt: new Date(cycleAt.getTime() + 1000) }, badgeSince: new Date(NOW.getTime() - 86_400_000) })).toBe(1);
 });

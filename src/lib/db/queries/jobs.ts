@@ -15,6 +15,7 @@ import { cardColumns, hideGermanLevels, hydrateCards, latestScoreCte, type CardR
 import { annualBaseFigureSql, baseBoundSql, comparableSalaryWhere } from "./salary-figure";
 import { hasHighValueSignal, policyCurrency, type HighValuePolicy } from "./signal-filter";
 import type { JobCard, JobStatus, Workplace } from "./types";
+import { listingReady } from "../repos/listing";
 import { dormancyReady } from "../repos/dormancy";
 
 
@@ -22,6 +23,8 @@ import { dormancyReady } from "../repos/dormancy";
 const MAX_SEARCH_CHARS = 200;
 
 export interface JobFilters {
+  /** Latest qualifying relist falls within this badge window; ignored before the listing migration. */
+  relistedSince?: Date | null;
   /** Null/absent keeps the legacy rule (current without statuses, all with statuses); explicit scope intersects statuses. */
   scope?: JobScope | null;
   /** Effective closure reasons, OR within this list and intersected with scope and every other filter; empty/null = no filter. */
@@ -263,7 +266,8 @@ export async function jobListWhere(db: Db, filters: JobFilters, timezone: string
   const dormant = await dormancyReady(db);
   const scope = jobScopeSql(resolveJobScope(filters.scope, filters.statuses), ux, dormant);
   const reasons = archiveReasonSql(filters.closedReasons ?? [], ux, dormant);
-  return and(buildJobConditions(db, filters, timezone, latest, ux), hideFiltered, scope, reasons);
+  const relisted = filters.relistedSince && await listingReady(db) ? sql`${jobs.relistedAt} >= ${filters.relistedSince.toISOString()}::timestamptz` : undefined;
+  return and(buildJobConditions(db, filters, timezone, latest, ux), hideFiltered, scope, reasons, relisted);
 }
 
 /** How many jobs /jobs holds under filters; the archive switch replaces only scope, retaining all other filters. */
@@ -298,11 +302,11 @@ export async function listJobs(db: Db, options: ListJobsOptions): Promise<JobPag
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
   const page = Math.min(Math.max(1, Math.floor(options.page)), pageCount);
 
-  const orderBy = jobOrderBy(options.sort, options.dir ?? DEFAULT_SORT_DIR[options.sort], latest, policyCurrency(options.filters), lastListedSql());
+  const orderBy = jobOrderBy(options.sort, options.dir ?? DEFAULT_SORT_DIR[options.sort], latest, policyCurrency(options.filters), lastListedSql(await listingReady(db)));
 
   const rows: CardRow[] = await db
     .with(latest)
-    .select(cardColumns(latest, ux, await dormancyReady(db)))
+    .select(cardColumns(latest, ux, await dormancyReady(db), await listingReady(db)))
     .from(jobs)
     .innerJoin(companies, eq(companies.id, jobs.companyId))
     .leftJoin(latest, eq(latest.jobId, jobs.id))

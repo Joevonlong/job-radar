@@ -29,6 +29,7 @@ export interface MaintenanceResult {
   seen: number;
   /** Of those, jobs that were possibly_closed / closed and are active again. */
   reopened: number;
+  relisted: number;
   /** Active jobs no source returned for `possibly_closed_after_days` days. */
   possiblyClosed: number;
   /** Woke counts the sweep only; sightings stay in seen / reopened. */
@@ -46,6 +47,7 @@ export interface MaintenanceResult {
 }
 
 export interface MaintenanceOptions {
+  relist: { minGapDays: number };
   config: PipelineConfig;
   http: HttpClient;
   logger: ChannelLogger;
@@ -78,11 +80,13 @@ export async function runMaintenance(db: Db, options: MaintenanceOptions): Promi
   const now = options.now();
   const watchedOn = options.watched?.enabled === true;
   const userAgent = config.lifecycle.watch_recheck.user_agent;
-  const result: MaintenanceResult = { seen: 0, reopened: 0, possiblyClosed: 0, dormant: { marked: 0, woke: 0 }, linkChecked: 0, closed: 0, alive: 0, unseen: { checked: 0, closed: 0, alive: 0 }, watched: null, aborted: false };
+  const result: MaintenanceResult = { seen: 0, reopened: 0, relisted: 0, possiblyClosed: 0, dormant: { marked: 0, woke: 0 }, linkChecked: 0, closed: 0, alive: 0, unseen: { checked: 0, closed: 0, alive: 0 }, watched: null, aborted: false };
 
-  const touched = await touchJobsSeen(db);
+  const touched = await touchJobsSeen(db, { relistMinGapDays: options.relist.minGapDays });
   result.seen = touched.seen;
   result.reopened = touched.reopened;
+  result.relisted = touched.relisted;
+  if (result.relisted > 0) logger.info("jobs relisted", { count: result.relisted });
 
   const overdue = await markJobsPossiblyClosed(db, { now, days: config.lifecycle.possibly_closed_after_days });
   result.possiblyClosed = overdue.length;

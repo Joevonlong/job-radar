@@ -4,6 +4,7 @@ import { PIPELINE_STATUSES } from "@/lib/dashboard/board";
 
 import type { Executor } from "../executor";
 import { jobs } from "../schema";
+import { listingReady } from "./listing";
 
 let ready = false;
 
@@ -25,11 +26,19 @@ export function resetDormancyCache(): void {
 
 /** Full job reads also work for CLI callers during the migration window. */
 export async function jobReadColumns(db: Executor) {
-  const { dormantAt, possiblyClosedAt, searchTsv, descriptionMd5, descriptionHasText, salaryMd5, ...columns } = getTableColumns(jobs);
+  const { dormantAt, possiblyClosedAt, lastListedAt, relistedAt, relistCount, searchTsv, descriptionMd5, descriptionHasText, salaryMd5, ...columns } = getTableColumns(jobs);
   // Derived storage columns are internal to queries, not part of the domain job transferred to callers.
   void [searchTsv, descriptionMd5, descriptionHasText, salaryMd5];
   const available = await dormancyReady(db);
-  return { ...columns, dormantAt: available ? dormantAt : sql<Date | null>`null`, possiblyClosedAt: available ? possiblyClosedAt : sql<Date | null>`null` };
+  const listing = await listingReady(db);
+  return {
+    ...columns,
+    lastListedAt: listing ? lastListedAt : sql<Date | null>`null`,
+    relistedAt: listing ? relistedAt : sql<Date | null>`null`,
+    relistCount: listing ? sql<number>`coalesce(${relistCount}, 0)`.mapWith(Number) : sql<number | null>`null`,
+    dormantAt: available ? dormantAt : sql<Date | null>`null`,
+    possiblyClosedAt: available ? possiblyClosedAt : sql<Date | null>`null`,
+  };
 }
 
 export interface DormancyOptions {

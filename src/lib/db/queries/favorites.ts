@@ -6,6 +6,7 @@ import { companies, jobFavorites, jobs } from "../schema";
 import { uxTablesReady } from "../repos/ux-tables";
 import { cardColumns, hydrateCards, latestScoreCte, type CardRow } from "./job-cards";
 import type { JobCard } from "./types";
+import { listingReady } from "../repos/listing";
 import { dormancyReady } from "../repos/dormancy";
 
 /**
@@ -21,7 +22,7 @@ export async function listFavoriteJobs(db: Db, options: { sort: FavoriteSort; vi
       : [desc(jobFavorites.createdAt), desc(jobs.id)];
   const rows: CardRow[] = await db
     .with(latest)
-    .select(cardColumns(latest, ux, await dormancyReady(db)))
+    .select(cardColumns(latest, ux, await dormancyReady(db), await listingReady(db)))
     .from(jobFavorites)
     .innerJoin(jobs, eq(jobs.id, jobFavorites.jobId))
     .innerJoin(companies, eq(companies.id, jobs.companyId))

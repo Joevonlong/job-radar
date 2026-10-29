@@ -1,4 +1,6 @@
 /** The /jobs URL state -> the list query's filters (server only): the page and its "mark all seen" action read the list the same way. */
+import { loadConfig } from "@/lib/config";
+import { listingReady } from "@/lib/db/repos/listing";
 import { germanLevelsToHide } from "@/lib/dashboard/german";
 import { hasHighValueCategories, type Db, type JobFilters } from "@/lib/db";
 import { viewFiltersFromParams } from "@/lib/interests/view-filters";
@@ -10,13 +12,13 @@ import { visaFilterAvailable } from "@/lib/visa/filter";
 import { loadCityGroups } from "./cities";
 import type { CityGroup } from "./city-groups";
 import { resolveViewCompanyIds, toJobFilters } from "./job-filters";
-import type { JobsSearchParams } from "./search-params";
+import type { FilterVisibility, JobsSearchParams } from "./search-params";
 
 /**
  * The filters of `/jobs?<params>`; `cities` = the city groups and `visa` = `visaFilterAvailable` / `ghost` =
  * `ghostFilterAvailable` when the caller already has them; `companyIndex` reuses its company lookup.
  */
-export async function jobsListFilters(db: Db, params: JobsSearchParams, known: { cities?: readonly CityGroup[]; visa?: boolean; ghost?: boolean; companyIndex?: CompanyMatchIndex } = {}): Promise<JobFilters> {
+export async function jobsListFilters(db: Db, params: JobsSearchParams, known: { cities?: readonly CityGroup[]; visa?: boolean; ghost?: boolean; companyIndex?: CompanyMatchIndex; listing?: boolean; now?: Date; badgeDays?: number } = {}): Promise<JobFilters> {
   const highValue = loadHighValuePolicy();
   const view = viewFiltersFromParams(params);
   const [companyIds] = await resolveViewCompanyIds(db, [view], { index: known.companyIndex });
@@ -26,6 +28,8 @@ export async function jobsListFilters(db: Db, params: JobsSearchParams, known: {
     to: params.to,
     // URL-only scope and reasons never pass through saved-view conversion. Mark-all-seen shares this mapping.
     scope: params.scope,
+    relistedSince: params.relisted === true && (known.listing ?? await listingReady(db))
+      ? new Date((known.now ?? new Date()).getTime() - (known.badgeDays ?? loadConfig("jobArchive").relist.badge_days) * 86_400_000) : null,
     closedReasons: params.reason,
     includeFiltered: params.filtered,
     filteredOnly: params.filteredOnly === true,
@@ -37,4 +41,9 @@ export async function jobsListFilters(db: Db, params: JobsSearchParams, known: {
     // the salary filter and the salary sort compare in the market's base currency (left out, they would assume EUR)
     baseCurrency: loadBaseCurrency(),
   };
+}
+
+/** The page can compose this with the visa/ghost ignore list during the migration window. */
+export function relistFilterVisibility(ready: boolean): FilterVisibility {
+  return { ignore: ready ? [] : ["relisted"] };
 }

@@ -1,4 +1,4 @@
-import { and, desc, eq, getTableColumns, inArray, isNotNull } from "drizzle-orm";
+import { and, desc, eq, getTableColumns, inArray, isNotNull, sql } from "drizzle-orm";
 import { parse as parseYaml } from "yaml";
 import { z } from "zod";
 
@@ -22,6 +22,7 @@ import { listMonthSalaryFigures } from "./jobs";
 import { asContract, asGermanLevel, asJobLanguage, parseLocations, parseSalary } from "./parse";
 import type { Contract, GermanLevel, JobLanguage, JobLocation, JobSalary, JobSignal, JobSourceRef, JobStatus, Workplace } from "./types";
 import { summariesOf } from "../summaries";
+import { listingReady } from "../repos/listing";
 import { dormancyReady } from "../repos/dormancy";
 import { dormantSql, lastListedSql } from "./job-status";
 
@@ -81,6 +82,8 @@ export interface JobDetail {
   firstSeenAt: Date;
   lastSeenAt: Date;
   lastListedAt: Date | null;
+  relistedAt: Date | null;
+  relistCount: number;
   /** Original JD text (null when the source gave none). */
   description: string | null;
   /** Normalized salary; null = none stated (C3) or not readable (see `salaryDisclosed`). */
@@ -180,10 +183,15 @@ export interface JobClosure {
 }
 
 /** The columns of `jobs` the page reads (all but the migration-gated closure and dormancy columns, read apart so the page works before the migration). */
-function detailColumns() {
-  const { linkCheckJson, dormantAt, possiblyClosedAt, searchTsv, descriptionMd5, descriptionHasText, salaryMd5, ...columns } = getTableColumns(jobs);
-  void [linkCheckJson, dormantAt, possiblyClosedAt, searchTsv, descriptionMd5, descriptionHasText, salaryMd5];
-  return { ...columns, lastListedAt: lastListedSql() };
+function detailColumns(listing: boolean) {
+  const { lastListedAt, relistedAt, relistCount, linkCheckJson, dormantAt, possiblyClosedAt, searchTsv, descriptionMd5, descriptionHasText, salaryMd5, ...columns } = getTableColumns(jobs);
+  void [lastListedAt, linkCheckJson, dormantAt, possiblyClosedAt, searchTsv, descriptionMd5, descriptionHasText, salaryMd5];
+  return {
+    ...columns,
+    lastListedAt: lastListedSql(listing),
+    relistedAt: listing ? relistedAt : sql<Date | null>`null`,
+    relistCount: listing ? sql<number>`coalesce(${relistCount}, 0)`.mapWith(Number) : sql<number>`0`,
+  };
 }
 
 /** The closed state of a job; before the migration the automatic status alone. */
@@ -201,7 +209,7 @@ async function loadClosure(db: Db, id: number, autoStatus: JobStatus): Promise<{
 
 export async function getJobDetail(db: Db, id: number): Promise<JobDetail | null> {
   const [row] = await db
-    .select({ job: detailColumns(), companyName: companies.name, companyNameNorm: companies.nameNorm, companyWatched: companies.watched })
+    .select({ job: detailColumns(await listingReady(db)), companyName: companies.name, companyNameNorm: companies.nameNorm, companyWatched: companies.watched })
     .from(jobs)
     .innerJoin(companies, eq(companies.id, jobs.companyId))
     .where(eq(jobs.id, id))
@@ -243,6 +251,8 @@ export async function getJobDetail(db: Db, id: number): Promise<JobDetail | null
     firstSeenAt: job.firstSeenAt,
     lastSeenAt: job.lastSeenAt,
     lastListedAt: job.lastListedAt,
+    relistedAt: job.relistedAt,
+    relistCount: job.relistCount,
     description: job.description,
     salary: parseSalary(job.salaryJson),
     salaryDisclosed: job.salaryJson !== null && job.salaryJson !== undefined,

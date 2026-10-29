@@ -92,13 +92,14 @@ export function archiveReasonSql(reasons: readonly ArchiveReason[], ux: boolean,
 
 /**
  * Newest fetch of a source posting, never the link-check-updated last_seen_at; no source means null.
- * A later migration can read a stored last_listed_at with this subquery as fallback when the column is unavailable or null.
+ * The source subquery remains the fallback before migration and until the stored baseline is established.
  * Qualify every column explicitly so a single-table selection and an aliased outer job remain safe.
  */
-export function lastListedSql(alias?: string): SQL<Date | null> {
-  return sql<Date | null>`(select max(${jobColumn(rawPostings.fetchedAt.name, "r")})
+export function lastListedSql(listing: boolean, alias?: string): SQL<Date | null> {
+  const fallback = sql<Date | null>`(select max(${jobColumn(rawPostings.fetchedAt.name, "r")})
     from ${jobSources} js join ${rawPostings} r on ${jobColumn(rawPostings.id.name, "r")} = ${jobColumn(jobSources.rawPostingId.name, "js")}
-    where ${jobColumn(jobSources.jobId.name, "js")} = ${jobColumn("id", alias)})`.mapWith(rawPostings.fetchedAt);
+    where ${jobColumn(jobSources.jobId.name, "js")} = ${jobColumn("id", alias)})`;
+  return (listing ? sql<Date | null>`coalesce(${jobColumn("last_listed_at", alias)}, ${fallback})` : fallback).mapWith(rawPostings.fetchedAt);
 }
 
 /** The same priority as closedReason: manual, gone, dormant, phrase, possibly. */

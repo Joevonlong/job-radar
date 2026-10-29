@@ -117,7 +117,7 @@ describe("absence evidence from search windows", () => {
       calls.push({ method: init.method ?? "GET", url: requestUrl });
       return { status, ok: status === 200, headers: { get: () => null }, text: async () => "", json: async () => ({}) };
     };
-    const result = await runMaintenance(getDb(), {
+    const result = await runMaintenance(getDb(), { relist: { minGapDays: 9 },
       config: pipelineWith((raw) => {
         Object.assign(raw.lifecycle as Record<string, unknown>, {
           possibly_closed_after_days: CLOSED_AFTER, unseen_link_check_after_days: UNSEEN_AFTER,
