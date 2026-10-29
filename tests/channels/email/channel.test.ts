@@ -21,6 +21,12 @@ const message = (uid: number, overrides: Partial<FakeMessage> = {}): FakeMessage
 });
 
 describe("gmail-alerts channel identity", () => {
+  it("declines automatic catch-up because mailbox collection ignores the search window", () => {
+    const channel = channelWith(fakeMailbox([]));
+    const { ctx } = emailContext();
+    expect(channel.supportsCatchUp?.(ctx.settings)).toBe(false);
+  });
+
   it("is an email-family, email-kind channel without keyword queries", () => {
     const channel = channelWith(fakeMailbox([]));
     expect(channel).toMatchObject({ id: "gmail-alerts", family: "email", kind: "email", usesQueries: false });

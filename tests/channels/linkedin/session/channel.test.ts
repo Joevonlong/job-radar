@@ -502,6 +502,12 @@ describe("linkedin-session: login wall, verification and denial stop the run", (
 });
 
 describe("linkedin-session:recommended", () => {
+  it("declines automatic catch-up because recommendations ignore the search window", async () => {
+    const s = setup();
+    const { ctx } = await harness(s.recommended, s.config, { id: "linkedin-session:recommended" });
+    expect(s.recommended.supportsCatchUp?.(ctx.settings)).toBe(false);
+  });
+
   it("reads the recommended list (one page, no query), tags the postings as recommended, and notes the run", async () => {
     const s = setup();
     const h = await harness(s.recommended, s.config, { id: "linkedin-session:recommended" });

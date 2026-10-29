@@ -61,6 +61,9 @@ export function createApifyChannel(options: ApifyChannelOptions): Channel {
     family: "linkedin",
     kind: "paid",
     usesQueries: true,
+    // Billed per record with coarse date ranges and no newest-first order: stretching would mostly buy old postings.
+    // Return true only after exact second-level requests and newest-first results under current settings have been measured.
+    supportsCatchUp: () => false,
     estimateCost: (paidRecords) => (paidRecords * options.pricePer1kUsd()) / 1000,
     isConfigured: () => tokenOf() !== undefined && (options.actorId === undefined || options.actorId().trim() !== ""),
 

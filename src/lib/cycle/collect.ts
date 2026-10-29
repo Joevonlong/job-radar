@@ -3,7 +3,7 @@ import { CascadeController, type CascadeSpec, type UnavailableReason } from "@/l
 import { createChannelContext, createThrottle, httpSettingsFromConfig } from "@/lib/channels/context";
 import { ChannelError, InfrastructureError, isAbortError, PartialCollectError, toChannelError } from "@/lib/channels/errors";
 import { buildQueries, buildSweepQuery, capQuery } from "@/lib/channels/query";
-import { orderQueries, rotationSummary, turnsOf, type RotationUnitSummary } from "@/lib/channels/rotation";
+import { catchUpWindow, familyHistory, orderQueries, rotationSummary, turnsOf, type QueryHistory, type RotationUnitSummary } from "@/lib/channels/rotation";
 import {
   normalizedPostingDraftSchema,
   rawPostingInputSchema,
@@ -219,7 +219,13 @@ export async function collectStep(ctx: CycleStepContext): Promise<StepResult> {
   };
 
   /** One collect call of `channel` for `query`, with its run row. Throws the (classified) failure. */
-  const attempt = async (channelId: string, query: SearchQuery, attempted: Set<string>, recordWindow: (hours: number) => void): Promise<void> => {
+  const attempt = async (
+    channelId: string,
+    query: SearchQuery,
+    queryHistory: QueryHistory | undefined,
+    attempted: Set<string>,
+    recordWindow: (query: SearchQuery, hours: number, capped: boolean) => void,
+  ): Promise<void> => {
     const channel = registry.get(channelId);
     const settings = registry.settingsFor(channelId, config.channels);
     if (!channel || !settings) throw new InfrastructureError(`collect: channel ${channelId} vanished from the registry`);
@@ -231,11 +237,28 @@ export async function collectStep(ctx: CycleStepContext): Promise<StepResult> {
     }
     attempted.add(channelId);
 
-    const effective = capQuery(query, settings.maxResults);
+    const base = query.windowHours;
+    const anchor = queryHistory?.lastCoveredAt ?? queryHistory?.firstSeenAt ?? null;
+    let autoCatchUp = true;
+    try {
+      autoCatchUp = channel.supportsCatchUp?.(settings) ?? true;
+    } catch (error) {
+      autoCatchUp = false;
+      ctx.logger.warn("channel catch-up capability check failed; using base window", { channel: channelId, query: query.id, error: error instanceof Error ? error.message : "unknown error" });
+    }
+    const window = catchUpWindow({
+      baseHours: base,
+      anchor,
+      now: ctx.now(),
+      maxCatchUpHours: config.channels.collect.max_catch_up_hours,
+      toleranceHours: config.channels.collect.catch_up_tolerance_hours,
+      autoCatchUp,
+    });
+    const effective = capQuery({ ...query, windowHours: window.hours }, settings.maxResults);
     let runId: number | null = null;
     if (!ctx.dryRun) {
       try {
-        runId = (await createRun(requireDb(), { channelId, cycleId: ctx.cycle.id, queryHash: query.id, windowHours: effective.windowHours, windowExtended: false })).id;
+        runId = (await createRun(requireDb(), { channelId, cycleId: ctx.cycle.id, queryHash: query.id, windowHours: effective.windowHours, windowExtended: effective.windowHours > base })).id;
       } catch (error) {
         throw new InfrastructureError(`could not create run row for ${channelId}`, error);
       }
@@ -274,7 +297,7 @@ export async function collectStep(ctx: CycleStepContext): Promise<StepResult> {
     /** The stop was the channel's own plan (its next request was refused by the channel's budget before it was sent), not a failure. */
     let plannedStop = false;
     try {
-      recordWindow(effective.windowHours);
+      recordWindow(query, effective.windowHours, window.capped);
       const output: unknown = await channel.collect(effective, channelContext);
       if (!Array.isArray(output)) throw new ChannelError("parse", `${channelId}.collect did not return an array`);
       collected = output as RawPostingInput[];
@@ -386,6 +409,7 @@ export async function collectStep(ctx: CycleStepContext): Promise<StepResult> {
   const runUnit = async (unit: Unit): Promise<void> => {
     const controller = new CascadeController(unit.spec, { availability });
     const attempted = new Set<string>();
+    const family = familyHistory(history, unit.familyChannels);
     const now = ctx.now();
     const start = await controller.pick();
     const sortChannel = "channelId" in start ? start.channelId : null;
@@ -394,12 +418,18 @@ export async function collectStep(ctx: CycleStepContext): Promise<StepResult> {
       ? orderQueries(unit.queries, turns, config.channels.collect.query_rotation)
       : unit.queries;
     let reached = 0;
+    const stretched = new Set<string>();
+    const capped = new Set<string>();
     let maxWindowHours: number | null = null;
-    const recordWindow = (hours: number): void => { maxWindowHours = Math.max(maxWindowHours ?? hours, hours); };
+    const recordWindow = (query: SearchQuery, hours: number, limited: boolean): void => {
+      if (hours > query.windowHours) stretched.add(query.id);
+      if (limited) capped.add(query.id);
+      maxWindowHours = Math.max(maxWindowHours ?? hours, hours);
+    };
     try {
       for (const [index, query] of queries.entries()) {
         ctx.signal.throwIfAborted();
-        const outcome = await controller.serve((id) => attempt(id, query, attempted, recordWindow));
+        const outcome = await controller.serve((id) => attempt(id, query, family.get(query.id), attempted, recordWindow));
         if (outcome.status === "served") {
           reached += 1;
           served.push({ unit: unit.name, queryId: query.id, channelId: outcome.channelId, status: "served" });
@@ -415,7 +445,7 @@ export async function collectStep(ctx: CycleStepContext): Promise<StepResult> {
     } finally {
       for (const [id, code] of controller.unusableChannels()) unusable[id] = code;
     }
-    const summary = rotationSummary({ queries: unit.queries, sortChannel, turns, reached, maxWindowHours, historyUnavailable: historyReason !== null, now });
+    const summary = rotationSummary({ queries: unit.queries, sortChannel, turns, reached, stretched: stretched.size, capped: capped.size, maxWindowHours, historyUnavailable: historyReason !== null, now });
     rotation[unit.name] = summary;
     ctx.logger.info("query rotation", { unit: unit.name, ...summary, notReached: summary.queries - reached, reason: historyReason ?? (sortChannel === null ? "no_start_channel" : null) });
   };

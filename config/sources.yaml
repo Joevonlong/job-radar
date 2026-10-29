@@ -31,6 +31,8 @@ collect:
   concurrency: 3
   # query_rotation defaults to true: start each cycle with the queries waiting longest; also orders the Tavily / Brave board-discovery searches.
   # Set query_rotation: false to run queries in search.yaml order every cycle.
+  # max_catch_up_hours defaults to 168 (0-720): automatic catch-up cap; 0 disables it, and the base window never shrinks.
+  # catch_up_tolerance_hours defaults to 6 (0-72): extend only when the coverage gap exceeds the base window by this many hours.
 
 # Defaults for a channel's ctx.http: per-request timeout, retry count (network errors / 5xx / 429, honoring Retry-After), start and cap of exponential backoff
 http:

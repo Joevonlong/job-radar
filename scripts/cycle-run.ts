@@ -130,9 +130,12 @@ async function main(): Promise<number> {
     }
     if (collect) {
       console.log(`  queries: ${collect.queries}`);
-      if (Object.values(collect.rotation).some((unit) => unit.historyUnavailable)) {
-        if (dryRun) console.log("  query order: config order (dry runs do not read run history; real runs rotate by history)");
-        else console.log("  query order: config order (run history unavailable for the starting channel)");
+      if (!channelsConfig.collect.query_rotation) {
+        console.log("  query order: config order (collect.query_rotation is false)");
+      } else if (dryRun) {
+        console.log("  query order: config order (dry runs do not read run history; real runs rotate by history)");
+      } else if (Object.values(collect.rotation).some((unit) => unit.historyUnavailable)) {
+        console.log("  query order: config order (run history could not be read)");
       }
       for (const q of collect.queryPlan ?? []) {
         const where = q.remoteScope === null ? `location=${q.location ?? "-"}` : `remoteScope=${q.remoteScope}`;

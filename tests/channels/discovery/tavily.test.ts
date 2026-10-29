@@ -187,6 +187,12 @@ describe("credits", () => {
 describe("tavily channel", () => {
   const search = (answer = response(200, fixture)) => routedFetch([["api.tavily.com/search", answer]]);
 
+  it("declines automatic catch-up because discovery ignores the search window", () => {
+    const { deps: d } = deps();
+    const { ctx } = atsContext("tavily", search().fetch);
+    expect(createTavilyChannel(d).supportsCatchUp?.(ctx.settings)).toBe(false);
+  });
+
   it("is 'not configured' without TAVILY_API_KEY: no request, no failure, nothing written", async () => {
     const { deps: d, store } = deps({ environment: {} });
     const { fetch, requests } = search();

@@ -1,10 +1,11 @@
 import { eq, sql } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, inject, it, vi } from "vitest";
 
+import { createDbAtsBoardStore, createGreenhouseChannel } from "@/lib/channels/ats";
 import { createFixtureChannel, FIXTURE_SETTINGS, registerFixtureChannel } from "@/lib/channels/fixture";
 import { createJsearchChannel } from "@/lib/channels/jsearch";
 import { createBrightDataChannel } from "@/lib/channels/linkedin/brightdata";
-import { buildQueries } from "@/lib/channels/query";
+import { buildQueries, buildSweepQuery } from "@/lib/channels/query";
 import { ChannelRegistry } from "@/lib/channels/registry";
 import type { RotationUnitSummary } from "@/lib/channels/rotation";
 import type { Channel, ChannelRuntimeSettings, SearchQuery } from "@/lib/channels/types";
@@ -15,6 +16,7 @@ import { runMigrations } from "@/lib/db/migrate";
 import { addMonthUsage, upsertChannelRows } from "@/lib/db/repos/channels";
 import * as runRepo from "@/lib/db/repos/runs";
 
+import { atsChannelsWith, company, depsWith, fixtureJson, inputs, routedFetch } from "../channels/ats/helpers";
 import { channelsWith } from "../channels/helpers";
 import { jsearchWith, KEY_ENV, MONTH, NOW, RECORDS, response, SEARCH_EMPTY } from "../channels/jsearch/helpers";
 import { ENV as BRIGHT_ENV, fakeProvider } from "../channels/linkedin/brightdata/helpers";
@@ -103,6 +105,38 @@ async function expectRotation(result: CycleRunResult, unit: string, expected: Pi
 }
 
 describe("catch-up attempt windows", () => {
+  it("keeps a real Greenhouse sweep at the base window after a 240-hour gap", async () => {
+    const cfg = catchUpConfig();
+    cfg.channels = {
+      ...atsChannelsWith("greenhouse", (block) => {
+        block.enabled = true;
+        block.max_results = 10;
+        block.title_prefilter = { enabled: false, include_terms: [], exclude_terms: [] };
+        block.throttle = { min_delay_ms: 0, max_delay_ms: 0 };
+      }),
+      collect: cfg.channels.collect,
+    };
+    const board = company({ name: "Example Labs", ats: "greenhouse", token: "examplelabs" });
+    const channel = createGreenhouseChannel(depsWith(inputs([board]), createDbAtsBoardStore(getDb())));
+    const registry = new ChannelRegistry();
+    registry.register(channel);
+    const query = buildSweepQuery(cfg.search, "weekday_evening");
+    await seedHistory(channel, query, 240);
+    const { fetch, requests } = routedFetch([
+      ["boards-api.greenhouse.io/v1/boards/examplelabs/jobs?content=true", response(200, fixtureJson("greenhouse-board.json"))],
+    ]);
+
+    const result = await run(registry, cfg, "weekday_evening", { fetch });
+
+    expect(requests).toHaveLength(1);
+    expect(await rowsOf(result)).toEqual([expect.objectContaining({
+      channelId: channel.id, queryHash: query.id, status: "succeeded", fetched: 6,
+      windowHours: query.windowHours, windowExtended: false,
+    })]);
+    expect(await listRawPostingsForChannel(getDb(), channel.id)).toHaveLength(6);
+    await expectRotation(result, channel.id, { stretched: 0, maxWindowHours: query.windowHours, capped: 0 });
+  });
+
   it("keeps a new query at base and persists that window without changing its id", async () => {
     const cfg = catchUpConfig();
     const registry = new ChannelRegistry();
