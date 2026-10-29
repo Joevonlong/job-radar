@@ -11,7 +11,7 @@ import { ghostFilterCondition } from "../repos/ghost";
 import { seenSql } from "../repos/seen";
 import { uxTablesReady } from "../repos/ux-tables";
 import { archiveReasonSql, effectiveStatusSql, jobScopeSql, lastListedSql } from "./job-status";
-import { cardColumns, hideGermanLevels, hydrateCards, latestScoreCte, type CardRow, type LatestScore } from "./job-cards";
+import { cardColumns, hideGermanLevels, hydrateCards, latestScoreCte, latestScoreLateral, type CardRow, type LatestScore } from "./job-cards";
 import { annualBaseFigureSql, baseBoundSql, comparableSalaryWhere } from "./salary-figure";
 import { hasHighValueSignal, policyCurrency, type HighValuePolicy } from "./signal-filter";
 import type { JobCard, JobStatus, Workplace } from "./types";
@@ -304,9 +304,11 @@ export async function listJobs(db: Db, options: ListJobsOptions): Promise<JobPag
 
   const orderBy = jobOrderBy(options.sort, options.dir ?? DEFAULT_SORT_DIR[options.sort], latest, policyCurrency(options.filters), lastListedSql(await listingReady(db)));
 
-  const rows: CardRow[] = await db
+  // Sort and paginate ids before evaluating card columns and their subqueries. PostgreSQL also
+  // inlines this single-use CTE and prunes its unused wide score columns (covered by EXPLAIN tests).
+  const ids = await db
     .with(latest)
-    .select(cardColumns(latest, ux, await dormancyReady(db), await listingReady(db)))
+    .select({ id: jobs.id })
     .from(jobs)
     .innerJoin(companies, eq(companies.id, jobs.companyId))
     .leftJoin(latest, eq(latest.jobId, jobs.id))
@@ -314,6 +316,19 @@ export async function listJobs(db: Db, options: ListJobsOptions): Promise<JobPag
     .orderBy(...orderBy)
     .limit(pageSize)
     .offset((page - 1) * pageSize);
+
+  const cardScore = latestScoreLateral(db);
+  const cards: CardRow[] = ids.length === 0 ? [] : await db
+    .select(cardColumns(cardScore, ux, await dormancyReady(db), await listingReady(db)))
+    .from(jobs)
+    .innerJoin(companies, eq(companies.id, jobs.companyId))
+    .leftJoinLateral(cardScore, sql`true`)
+    .where(inArray(jobs.id, ids.map(({ id }) => id)));
+  const cardsById = new Map(cards.map((card) => [card.id, card]));
+  const rows = ids.flatMap(({ id }) => {
+    const card = cardsById.get(id);
+    return card ? [card] : [];
+  });
 
   return { jobs: await hydrateCards(db, rows, { visa: options.visa ?? true, ghost: options.ghost === true }), total, page, pageCount, pageSize };
 }
