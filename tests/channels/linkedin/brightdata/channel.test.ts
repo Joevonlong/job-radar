@@ -5,7 +5,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { BudgetExceededError, ChannelError } from "@/lib/channels/errors";
-import { affordableRecords, keywordStrings, timeRangeFor } from "@/lib/channels/linkedin/brightdata";
+import { affordableRecords, createBrightDataChannel, keywordStrings, timeRangeFor } from "@/lib/channels/linkedin/brightdata";
 import { rawPostingInputSchema } from "@/lib/channels/types";
 
 import { ENV, berlinQuery, brightConfig, fakeProvider, harness, makeChannel } from "./helpers";
@@ -108,6 +108,27 @@ describe("collect", () => {
     expect(out.map((r) => r.externalId)).toEqual(["4385163817", "4385163819", "4385163821"]);
     expect(provider.requests[0]?.body).toMatchObject([{ time_range: "Past 24 hours" }]);
     expect(ctx.budget.snapshot().records).toBe(5); // filtered-out records were still billed
+  });
+
+  it("keeps overlapping bare dates in a short window while treating ISO instants as exact", async () => {
+    const observedAt = new Date("2026-10-26T12:00:00Z");
+    const records = [
+      { job_posting_id: "date-only", job_posted_date: "2026-10-26" },
+      { job_posting_id: "old-date-only", job_posted_date: "2026-10-24" },
+      { job_posting_id: "midnight-instant", job_posted_date: "2026-10-26T00:00:00Z" },
+      { job_posting_id: "cutoff-instant", job_posted_date: "2026-10-26T02:00:00Z" },
+    ];
+    const channel = createBrightDataChannel({
+      costPer1kUsd: () => 1.5,
+      environment: ENV,
+      now: () => observedAt,
+      sleep: async () => {},
+    });
+    const { ctx } = await harness(channel, fakeProvider({ records }));
+    const out = await channel.collect(berlinQuery({ windowHours: 10 }), ctx);
+    expect(out.map((r) => r.externalId)).toEqual(["date-only", "cutoff-instant"]);
+    expect(out[0]).toMatchObject({ payload: records[0], postedAt: new Date("2026-10-26T00:00:00Z") });
+    expect(ctx.budget.snapshot().records).toBe(records.length);
   });
 
   it("answers an empty snapshot with no postings and no usage", async () => {

@@ -2,6 +2,7 @@ import { BudgetExceededError, ChannelError } from "../../errors";
 import type { SleepFn } from "../../http";
 import { marketForChannel } from "../../market";
 import type { Channel, ChannelContext, RawPostingInput, SearchQuery } from "../../types";
+import { postedDateEnd } from "../date-window";
 import { BrightDataClient } from "./client";
 import {
   BRIGHTDATA_API_KEY_ENV,
@@ -131,8 +132,10 @@ export function createBrightDataChannel(options: BrightDataChannelOptions): Chan
         }
         if (seen.has(externalId)) continue;
         seen.add(externalId);
-        const postedAt = postedAtOf(typeof record.job_posted_date === "string" ? record.job_posted_date : null);
-        if (cutoff !== null && postedAt !== null && postedAt.getTime() < cutoff) {
+        const postedDate = typeof record.job_posted_date === "string" ? record.job_posted_date : null;
+        const postedAt = postedAtOf(postedDate);
+        const end = postedDateEnd(postedDate, postedAt);
+        if (cutoff !== null && end !== null && end < cutoff) {
           outsideWindow += 1;
           continue;
         }
