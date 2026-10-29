@@ -167,6 +167,7 @@ A failure in (a) does not block rollback: follow (c) and accept the display wind
 
 ### Added
 
+- **Activity log** (`/sources/logs`): inspect collection cycles and steps, source queries, AI results, request attempts and system tasks. Entries are retained for 30 days after their last activity by default, subject to an event cap; preview and delete an entry, a date range or all entries. Tune it in `config/activity-log.yaml`. **Rollback:** set `enabled: false` to stop new records without a restart; older versions ignore the two tables and the config file. The tables can stay; no down migration is needed.
 - **Monid LinkedIn fallback:** an optional prepaid channel after Apify in the default LinkedIn cascade, with
   per-run budget limits, polling, stop handling and billing recorded before parsing. See [docs/monid.md](docs/monid.md).
 - **Watched companies keep their on-site and hybrid jobs in any city of your home country.** Only the location check is

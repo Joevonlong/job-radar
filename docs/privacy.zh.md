@@ -26,6 +26,8 @@ Job Radar 是跑在你自己机器上的单用户工具：没有账号、没有�
 | LinkedIn 登录态（仅当你用登录会话时） | `.auth/` | 直到你删除 |
 | AI 命令行调用的临时文件 | `$TMPDIR/jr-codex-*`、`jr-claude-*` | 每次调用后删除（进程被强杀可能残留） |
 
+操作日志只存在本机 Postgres，保存 ID、代码、数字和时间，不保存消息正文、错误正文、URL、职位描述或 Telegram 消息，也不会增加对外连接。保留和删除方式见[操作日志](sources.zh.md#操作日志)。
+
 交付账本留在本机，不通过 MCP 或网页公开。保留期可在 [delivery-audit.yaml](configuration.zh.md#付费交付账本delivery-audityaml) 中配置。
 
 上面其他数据库表目前没有自动保留期：原始岗位、未解析邮件、通知、控制请求和画像快照会一直留到你删除数据库。`data/` 包含上面的全部内容，
