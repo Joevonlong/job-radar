@@ -17,6 +17,8 @@ import {
 } from "@/lib/db";
 
 const EXPECTED_TABLES = [
+  "activity_events",
+  "activity_spans",
   "ai_usage",
   "application_events",
   "applications",

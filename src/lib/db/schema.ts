@@ -16,6 +16,8 @@ import {
   timestamp,
   unique,
   uniqueIndex,
+  uuid,
+  type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 
 /**
@@ -1018,3 +1020,49 @@ export const runtimeState = pgTable("runtime_state", {
   value: jsonb("value").notNull(),
   updatedAt: timestamptz("updated_at").notNull().defaultNow(),
 });
+
+/** Activity codes are text, validated at the recorder boundary instead of extending PostgreSQL enums. */
+export const activitySpans = pgTable("activity_spans", {
+  id: uuid("id").primaryKey(),
+  rootId: uuid("root_id").notNull().references((): AnyPgColumn => activitySpans.id, { onDelete: "cascade" }),
+  parentId: uuid("parent_id"),
+  scope: text("scope").notNull(),
+  name: text("name").notNull(),
+  process: text("process").notNull(),
+  status: text("status").notNull(),
+  reasonCode: text("reason_code"),
+  startedAt: timestamptz("started_at").notNull(),
+  finishedAt: timestamptz("finished_at"),
+  lastActivityAt: timestamptz("last_activity_at").notNull(),
+  progressDone: integer("progress_done"),
+  progressTotal: integer("progress_total"),
+  eventsDropped: integer("events_dropped").notNull().default(0),
+  cycleId: bigint("cycle_id", { mode: "number" }),
+  controlRequestId: bigint("control_request_id", { mode: "number" }),
+  runId: bigint("run_id", { mode: "number" }),
+  jobId: bigint("job_id", { mode: "number" }),
+  channelId: text("channel_id"),
+  queryId: text("query_id"),
+}, (t) => [
+  index("activity_spans_root_idx").on(t.rootId),
+  index("activity_spans_roots_started_idx").on(t.startedAt.desc(), t.id.desc()).where(sql`${t.parentId} is null`),
+  index("activity_spans_cycle_idx").on(t.cycleId).where(sql`${t.cycleId} is not null`),
+  index("activity_spans_request_started_idx").on(t.controlRequestId, t.startedAt.desc(), t.id.desc()).where(sql`${t.controlRequestId} is not null`),
+  index("activity_spans_run_idx").on(t.runId).where(sql`${t.runId} is not null`),
+  index("activity_spans_running_process_idx").on(t.process).where(sql`${t.status} = 'running'`),
+]);
+
+export const activityEvents = pgTable("activity_events", {
+  id: uuid("id").primaryKey(),
+  rootId: uuid("root_id").notNull().references(() => activitySpans.id, { onDelete: "cascade" }),
+  spanId: uuid("span_id").notNull(),
+  at: timestamptz("at").notNull(),
+  level: text("level").notNull(),
+  code: text("code").notNull(),
+  jobId: bigint("job_id", { mode: "number" }),
+  rawPostingId: bigint("raw_posting_id", { mode: "number" }),
+  params: jsonb("params").notNull().default(sql`'{}'::jsonb`),
+}, (t) => [
+  index("activity_events_root_at_idx").on(t.rootId, t.at, t.id),
+  index("activity_events_span_at_idx").on(t.spanId, t.at, t.id),
+]);

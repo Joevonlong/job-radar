@@ -44,6 +44,7 @@ import { recordHostDisk } from "@/lib/ops/disk";
 import { createDiskChecker } from "@/lib/ops/disk-check";
 import { redirectOutputToFiles, rotateLogFile, type FileOutput } from "@/lib/ops/log-files";
 import { HEARTBEAT_PROCESS } from "@/lib/db/repos/heartbeats";
+import { closeStaleActivity, createActivityRecorder } from "@/lib/activity";
 
 const log = (message: string): void => console.log(`${new Date().toISOString()} [ai-worker] ${message}`);
 /** Exit code of an ai-worker that found another one running. */
@@ -155,6 +156,8 @@ async function main(): Promise<number> {
   });
 
   const db = getDb();
+  const activity = createActivityRecorder({ db, process: "ai-worker" });
+  void closeStaleActivity(activity);
   const logger = createProcessLogger();
   registerBuiltinChannels(defaultRegistry);
   registerBuiltinAiSubtasks();
@@ -203,6 +206,7 @@ async function main(): Promise<number> {
       log(`request #${request.id} (${request.kind}): ${request.status} ${JSON.stringify(request.result)}`);
     }
     log(`handled ${handled} request(s), ${failed} failed`);
+    await activity.close();
     await closeDb();
     await lock.release();
     shutdown.done();
@@ -273,6 +277,7 @@ async function main(): Promise<number> {
   await poller; // returns once SIGTERM / SIGINT aborted and the request in flight has finished (or was queued again)
   await heartbeats;
   stopWatching();
+  await activity.close();
   await closeDb();
   await lock.release();
   shutdown.done();

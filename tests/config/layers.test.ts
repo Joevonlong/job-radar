@@ -60,8 +60,8 @@ function snapshot(dir: string): Record<string, string> {
 }
 
 describe("the registry", () => {
-  it("marks models, pipeline, pipeline board, signal presets and traps as shipped, the rest of the config files as user files", () => {
-    expect([...SHIPPED_CONFIG_NAMES].sort()).toEqual(["models", "pipeline", "pipelineBoard", "signalPresets", "traps"]);
+  it("marks activity log, models, pipeline, pipeline board, signal presets and traps as shipped, the rest of the config files as user files", () => {
+    expect([...SHIPPED_CONFIG_NAMES].sort()).toEqual(["activityLog", "models", "pipeline", "pipelineBoard", "signalPresets", "traps"]);
     expect(USER_CONFIG_NAMES).toEqual(expect.arrayContaining(["schedule", "search", "channels", "ai", "notify", "interests", "ui", "breakdown", "resume", "insights", "language", "setup", "salary", "mcp"]));
     expect(USER_CONFIG_NAMES).toHaveLength(14);
   });

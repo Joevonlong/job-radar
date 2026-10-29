@@ -1,5 +1,6 @@
 import type { z } from "zod";
 
+import { activityLogSchema } from "./schemas/activity-log";
 import { aiSchema } from "./schemas/ai";
 import { breakdownSchema } from "./schemas/breakdown";
 import { channelsSchema } from "./schemas/channels";
@@ -57,6 +58,8 @@ export const configRegistry = {
   signalPresets: { file: "signal-presets.yaml", location: "config", kind: "shipped", schema: signalPresetsSchema },
   /** The optional read-only MCP server (`pnpm mcp:serve`); off by default, every key has a default. */
   mcp: { file: "mcp.yaml", location: "config", kind: "user", schema: mcpSchema },
+  /** The operations log of the runner and ai-worker: retention, writer limits, page settings (shipped). */
+  activityLog: { file: "activity-log.yaml", location: "config", kind: "shipped", schema: activityLogSchema },
   me: { file: "me.yaml", location: "profile", kind: "user", schema: meSchema },
   preferences: { file: "preferences.yaml", location: "profile", kind: "user", schema: preferencesSchema },
 } as const;

@@ -1,0 +1,55 @@
+# Configuration format version.
+config_version: 1
+# User setting: stop new spans/events when false; existing spans still finish.
+enabled: true
+retention:
+  # User setting: keep inactive roots for this many days after their last activity.
+  days: 30
+  # User setting: above this event count, remove the oldest inactive roots.
+  max_events: 200000
+# The remaining settings are tuning parameters.
+capture:
+  # Maximum accepted events during one span's lifetime; excess events are counted.
+  max_events_per_span: 1000
+writer:
+  # Pending events and span states; span states are never evicted.
+  queue_max: 5000
+  # Rows per insert; must not exceed queue_max.
+  batch_size: 200
+  # Background flush interval, milliseconds.
+  flush_ms: 1000
+  # Dedicated connection establishment timeout, seconds.
+  connect_timeout_seconds: 2
+  # Server query deadline, milliseconds; also bounds idle transactions.
+  statement_timeout_ms: 1500
+  # Server lock wait deadline, milliseconds.
+  lock_timeout_ms: 200
+  # Client deadline, milliseconds; must exceed statement_timeout_ms.
+  flush_deadline_ms: 3000
+  # Minimum wait before retrying a failed batch, milliseconds.
+  retry_backoff_ms: 10000
+  # Maximum time spent flushing and closing at shutdown, milliseconds.
+  shutdown_flush_ms: 2000
+  # Minimum interval between safe diagnostic lines, seconds.
+  warn_every_seconds: 60
+prune:
+  # Reconcile and prune interval, minutes.
+  every_minutes: 60
+  # Maximum event rows deleted in one transaction.
+  batch_size: 2000
+ui:
+  # Roots per list page.
+  page_size: 50
+  # Events per detail page.
+  events_page_size: 200
+  # Refresh interval while work is active, seconds.
+  refresh_seconds: 5
+  # Initial list time range, days.
+  default_range_days: 7
+  # Maximum time per manual delete action, milliseconds.
+  delete_budget_ms: 10000
+liveness:
+  # Heartbeat freshness, seconds; keep at least three heartbeat intervals.
+  stale_after_seconds: 180
+  # Grace for processes with no heartbeat rows, seconds after root start.
+  startup_grace_seconds: 120

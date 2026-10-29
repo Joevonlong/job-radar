@@ -288,6 +288,13 @@
       "when": 1793216590321,
       "tag": "0040_incremental_scan_inputs",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1793236348915,
+      "tag": "0041_activity_log",
+      "breakpoints": true
     }
   ]
 }

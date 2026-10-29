@@ -7,6 +7,7 @@ import { createDbStateStore } from "@/lib/channels/store";
 import { ensureConfigFiles, ensureProfileFiles, getConfigDir, getProfileDir, loadConfig, readConfigText, watchConfig } from "@/lib/config";
 import { syncSourceRegistry } from "@/lib/sources/registry/sync";
 import { closeDb, enqueueAlert, getDb, getLatestHeartbeat, pruneHeartbeats, readAppliedMigrations, writeHeartbeat, type Db } from "@/lib/db";
+import { createActivityRecorder, reconcileActivity, startActivityMaintenance } from "@/lib/activity";
 import { resolveMigrationsFolder, runMigrations } from "@/lib/db/migrate";
 import { readJournal } from "@/lib/db/migration-journal";
 import { requeueInterruptedControlRequests } from "@/lib/db/repos/control-requests";
@@ -179,6 +180,8 @@ async function main(): Promise<number> {
   }
 
   const db = getDb();
+  const activity = createActivityRecorder({ db, process: "runner", onReenable: () => { void reconcileActivity(activity); } });
+  const activityMaintenance = startActivityMaintenance({ recorder: activity });
   const logger = createProcessLogger();
   // Which shipped defaults this runner runs with (`pnpm run doctor`): written now, refreshed with every heartbeat.
   const shippedConfig = createShippedConfigReporter({ process: "runner", db: () => db, log, timeoutMs: () => env.RUNNER_HEARTBEAT_SECONDS * 1000 });
@@ -462,6 +465,7 @@ async function main(): Promise<number> {
   });
 
   scheduler.stop();
+  activityMaintenance.stop();
   backups.stop();
   suggestScheduler.stop();
   stopWatching();
@@ -474,6 +478,7 @@ async function main(): Promise<number> {
     log(`waiting for ${inflight.size} running cycle(s) to stop`);
     await Promise.allSettled([...inflight]);
   }
+  await activity.close();
   await closeDb();
   shutdown.done();
   log("stopped");
