@@ -6,6 +6,8 @@ import path from "node:path";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
+import { installConfigReader } from "./config-reader";
+
 /**
  * scripts/ops/backup.sh: run against a throw-away checkout with a stub `docker` that plays the db container.
  * Nothing here touches the real stack.
@@ -29,6 +31,7 @@ beforeAll(() => {
   out = path.join(tmp, "out");
   write(path.join(tmp, "checkout/scripts/ops/backup.sh"), fs.readFileSync(realScript, "utf8"), 0o755);
   write(path.join(tmp, "checkout/scripts/ops/lib/timezone.sh"), fs.readFileSync(path.resolve(import.meta.dirname, "../../scripts/ops/lib/timezone.sh"), "utf8"));
+  installConfigReader(app, stubs);
   // the shipped schedule says one zone, the user's another: the user's wins
   write(path.join(app, "config/schedule.yaml"), "timezone: Etc/GMT+12\n");
   write(path.join(app, "data/config/schedule.yaml"), "timezone: Pacific/Kiritimati\n");
