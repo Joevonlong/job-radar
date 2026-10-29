@@ -147,6 +147,24 @@ describe("global paid cap", () => {
 });
 
 describe("hasHeadroom", () => {
+  it.each([
+    { name: "below one record", cap: 0.001, unit: 0.0015, expected: false },
+    { name: "exactly one record", cap: 0.0015, unit: 0.0015, expected: true },
+    { name: "micro-dollar rounding up", cap: 0.0014996, unit: 0.0015, expected: true },
+    { name: "micro-dollar rounding down", cap: 0.0014994, unit: 0.0015, expected: false },
+    { name: "within money tolerance", cap: 0.0015, unit: 0.0015000005, expected: true },
+    { name: "outside money tolerance", cap: 0.0015, unit: 0.001500002, expected: false },
+  ])("preserves $name at either budget limit", async ({ cap, unit, expected }) => {
+    for (const scope of ["channel", "global"] as const) {
+      const { budget, store } = await tracker(
+        { bright: settings({ monthlyBudgetUsd: scope === "channel" ? cap : 1, freeRecordsPerMonth: 10 }) },
+        { globalCap: scope === "global" ? cap : 1, seed: { bright: { records: 10, usd: 0 } } },
+      );
+      expect(budget.hasHeadroom(channel("bright", unit))).toBe(expected);
+      expect((await store.loadUsage(MONTH)).get("bright")).toEqual({ records: 10, usd: 0 });
+    }
+  });
+
   it("is true while free records remain even with an empty budget", async () => {
     const bright = channel("bright", 0.0015);
     const { budget } = await tracker(

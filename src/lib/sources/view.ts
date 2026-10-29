@@ -452,7 +452,7 @@ export function buildSourcesView(input: SourcesViewInput): SourcesView {
         return card ? [card] : [];
       });
       const sortChannel = unit.name === "cascade"
-        ? cascadeStartChannel(unitCards, usedUsd, input.channelsConfig.paid_total_monthly_budget_usd)
+        ? cascadeStartChannel(unitCards, input.channelsConfig, input.usage, usedUsd)
         : unit.channelIds[0] ?? null;
       const rotation = rotationStatus({
         unit,

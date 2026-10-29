@@ -4,6 +4,8 @@ import { catchUpWindow, familyHistory, rotationSummary, turnsOf } from "@/lib/ch
 import type { SearchQuery } from "@/lib/channels/types";
 import type { ChannelsConfig } from "@/lib/config";
 import type { QueryRunHistoryRow } from "@/lib/db/repos/runs";
+import type { MonthUsage } from "@/lib/db/repos/channels";
+import { hasBudgetHeadroom } from "@/lib/channels/budget";
 
 import type { SourceCard } from "./view";
 
@@ -33,21 +35,29 @@ export function rotationUnits(config: ChannelsConfig): RotationUnit[] {
   ];
 }
 
-function hasHeadroom(card: SourceCard, paidUsedUsd: number, paidCapUsd: number): boolean {
-  // Approximates BudgetTracker.hasHeadroom for display only: channel prices are unknown to the web process.
-  const { records, freeRecords, usd, budgetUsd } = card.usage;
-  if (records < freeRecords) return true;
-  if (budgetUsd > 0) return usd < budgetUsd && paidUsedUsd < paidCapUsd;
-  return freeRecords === 0 && card.kind !== "paid";
+/** Matches the cascade channels' estimateCost(1); start/run fees are not part of that estimate. */
+function cascadeUnitCostUsd(id: string, config: ChannelsConfig): number {
+  if (id === "linkedin-brightdata") return config.linkedin.brightdata.cost_per_1k_usd / 1000;
+  if (id === "linkedin-apify") return config.linkedin.apify.price_per_1k_usd / 1000;
+  if (id === "linkedin-monid") return config.linkedin.monid.price_per_1k_usd / 1000;
+  return 0;
 }
 
 /** Cards already use effectiveState(snapshot, now): a cooled-down open circuit is available as half_open. */
-export function cascadeStartChannel(cards: readonly SourceCard[], paidUsedUsd: number, paidCapUsd: number): string | null {
+export function cascadeStartChannel(
+  cards: readonly SourceCard[], config: ChannelsConfig, usage: ReadonlyMap<string, MonthUsage>, paidUsedUsd: number,
+): string | null {
   return cards.find((card) => (
     card.registered && card.enabled && !card.notConfigured && card.missingEnv.length === 0
     // Session isConfigured checks cookie presence, not expiry; the circuit decides whether an expired login can probe.
     && card.login?.status !== "missing"
-    && card.circuit?.state !== "open" && hasHeadroom(card, paidUsedUsd, paidCapUsd)
+    && card.circuit?.state !== "open" && hasBudgetHeadroom({
+      settings: { freeRecordsPerMonth: card.usage.freeRecords, monthlyBudgetUsd: card.usage.budgetUsd },
+      usage: usage.get(card.id) ?? { records: 0, usd: 0 },
+      unitCostUsd: cascadeUnitCostUsd(card.id, config),
+      globalUsedUsd: paidUsedUsd,
+      globalCapUsd: config.paid_total_monthly_budget_usd,
+    })
   ))?.id ?? null;
 }
 

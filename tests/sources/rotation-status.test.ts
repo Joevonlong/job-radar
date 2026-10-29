@@ -140,7 +140,45 @@ describe("sources query rotation", () => {
     data.channelsConfig.linkedin.cascade = ["linkedin-brightdata", "linkedin-guest"];
     data.channelsConfig.linkedin.brightdata.enabled = true;
     data.channelsConfig.linkedin.brightdata.free_records_per_month = 10;
-    data.usage = new Map([["another", { records: 0, usd: 20 }]]);
+    data.channelsConfig.linkedin.brightdata.cost_per_1k_usd = 1.5;
+    data.usage = new Map([["another", { records: 0, usd: 20 }], ["linkedin-brightdata", { records: 9, usd: 0 }]]);
+    data.states = [state("linkedin-brightdata", { kind: "paid" }), ...data.states];
+    expect(buildSourcesView(data).cascade.rotation?.sortChannel).toBe("linkedin-brightdata");
+  });
+
+  it.each(["brightdata", "apify", "monid"] as const)("uses the configured %s unit price for channel and global headroom", (provider) => {
+    for (const scope of ["channel", "global"] as const) {
+      for (const [remaining, affordable] of [[0.001, false], [0.0015, true], [0.0014996, true], [0.0014994, false]] as const) {
+        const data = input();
+        const id = `linkedin-${provider}` as const;
+        data.channelsConfig.linkedin.cascade = [id, "linkedin-guest"];
+        const block = data.channelsConfig.linkedin[provider];
+        block.enabled = true;
+        block.monthly_budget_usd = scope === "channel" ? remaining : 5;
+        data.channelsConfig.linkedin.brightdata.free_records_per_month = 10;
+        if (provider === "brightdata") data.channelsConfig.linkedin.brightdata.cost_per_1k_usd = 1.5;
+        else data.channelsConfig.linkedin[provider].price_per_1k_usd = 1.5;
+        data.channelsConfig.paid_total_monthly_budget_usd = scope === "global" ? remaining : 20;
+        data.usage = new Map([[id, { records: 10, usd: 0 }]]);
+        data.states = [state(id, { kind: "paid" }), ...data.states];
+        data.rotation = { queries, history: new Map([["cascade", [row(id, "new", 10), row("linkedin-guest", "old", 31)]]]) };
+        expect(buildSourcesView(data).cascade.rotation).toMatchObject({
+          sortChannel: affordable ? id : "linkedin-guest",
+          oldestWaitHours: affordable ? 10 : 31,
+          oldestWaiting: { id: affordable ? "new" : "old" },
+        });
+      }
+    }
+  });
+
+  it("lets a zero-price paid channel start after its free allowance and both budgets are exhausted", () => {
+    const data = input();
+    data.channelsConfig.linkedin.cascade = ["linkedin-brightdata", "linkedin-guest"];
+    Object.assign(data.channelsConfig.linkedin.brightdata, {
+      enabled: true, free_records_per_month: 10, monthly_budget_usd: 0, cost_per_1k_usd: 0,
+    });
+    data.channelsConfig.paid_total_monthly_budget_usd = 0;
+    data.usage = new Map([["linkedin-brightdata", { records: 10, usd: 1 }]]);
     data.states = [state("linkedin-brightdata", { kind: "paid" }), ...data.states];
     expect(buildSourcesView(data).cascade.rotation?.sortChannel).toBe("linkedin-brightdata");
   });
