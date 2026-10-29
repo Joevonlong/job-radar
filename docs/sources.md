@@ -224,6 +224,17 @@ For the individual attempts, inspect the `runs` table in PostgreSQL (or `pnpm db
 - `window_hours`: the window actually requested from the channel; null for a "no available channel" summary row.
 - `window_extended`: true when the attempt's window was stretched beyond its base.
 
+#### Rotation status on the Sources page
+
+With rotation enabled, `/sources` shows each keyword unit's query count, longest wait (with keyword group and place
+or remote scope), and queries that have never run. Cascade members share one line on the cascade card, ordered by
+the first channel that can take queries now; if none is available, the line says so without estimating waits.
+A warning counts queries beyond the catch-up limit: postings from that gap may have been missed. Raising the budget
+or using fewer queries can reduce future gaps. Catch-up estimates use the manual base window and coverage across
+the whole cascade family. Availability uses current credentials, circuit cooldown and approximate budget headroom.
+This display is read-only: it does not probe channels, change circuit health or advance rotation. The line is hidden
+when `collect.query_rotation` is off, no keyword queries are configured, or history cannot be read.
+
 Board discovery (Tavily and Brave) uses the same `collect.query_rotation` switch, rotating searches inside each channel.
 Its per-query turns live in `runtime_state`, not `runs`, and all turns in one run share a timestamp. It guarantees a turn
 at least every `ceil(N / cap)` runs when the config and cap stay unchanged, rotation is on, turns are saved each time,

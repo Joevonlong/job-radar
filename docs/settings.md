@@ -2,6 +2,16 @@
 
 `/settings` edits ten config files with forms (`schedule.yaml`, `search.yaml`, `sources.yaml`, `ai.yaml`, `breakdown.yaml`, `salary.yaml`, `notify.yaml`, `ui.yaml`, `insights.yaml`, `resume.yaml`); every other file (`pipeline.yaml`, `models.yaml`, `interests.yaml`, anything added later) and the keys the forms do not cover can be edited as raw text in the "Advanced" tab. Before saving, it validates with the same zod schema the runner uses, and writes back to the user config directory (default `data/config/`; each tab's description shows the actual path; the first time you save a file that only exists in the shipped defaults, it is generated from the default file as a base, see [`configuration.md`](configuration.md)), preserving YAML comments. Once the runner hot-reloads, the save bar shows "runner loaded" (when the runner has no heartbeat this changes to "runner is not running", so it never contradicts the sidebar's OFFLINE). Keys that are not on the page (for example `test_channel`, `manual_triggers`) stay in the YAML for you to edit.
 
+## Sources tab: query rotation and catch-up
+
+Next to the collection concurrency setting, **Rotate queries** (`collect.query_rotation`, default `true`) starts with
+queries that have waited longest; switching it off also hides rotation status on `/sources`. **Catch-up limit (hours)**
+(`collect.max_catch_up_hours`, default `168`, range 0–720) limits automatic look-back after missed coverage. Set it to
+`0` to disable catch-up; the base window never shrinks. Disabling rotation alone does not disable catch-up.
+Missing keys show these schema defaults in the form; changed values are written to `sources.yaml` in the user config
+directory (default `data/config/`). Unchanged, absent defaults stay absent. The tolerance
+(`collect.catch_up_tolerance_hours`, default `6`) is available only in YAML or the advanced editor.
+
 ## The tab bar and the four sections of the AI tab
 
 Tab bar: Schedule · Search · Sources · AI · Breakdown · Salary · Notifications · Interface, and after a divider "Manual actions" (`/settings?tab=actions`). Manual actions (run a cycle now, re-score stale scores, score unscored jobs, Telegram test, recent requests) live only in that tab and not at the bottom of the others; old links such as `/settings#rescore` become `/settings?tab=actions#rescore`. Below the manual actions, the "First-run setup" card reopens the setup wizard (`/setup`) in review mode: no redirect, every save applies at once ([setup.md](setup.md)).

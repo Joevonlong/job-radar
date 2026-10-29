@@ -9,9 +9,10 @@ type SourceKey = keyof ChannelsConfig["sources"];
 /** Which view of its config block a channel uses; `recommended` = the "recommended for you" side channel of `linkedin.session`. */
 type ConfigView = "recommended";
 
-export type ChannelConfigRef =
+export type ChannelConfigRef = (
   | { readonly section: "linkedin"; readonly key: LinkedinKey; readonly view?: ConfigView }
-  | { readonly section: "sources"; readonly key: SourceKey };
+  | { readonly section: "sources"; readonly key: SourceKey }
+) & { readonly usesQueries?: false };
 
 /**
  * The single table linking a channel id to its block in sources.yaml. A channel can only be
@@ -22,26 +23,33 @@ export const CHANNEL_CONFIG_TABLE = {
   "linkedin-apify": { section: "linkedin", key: "apify" },
   "linkedin-monid": { section: "linkedin", key: "monid" },
   "linkedin-session": { section: "linkedin", key: "session" },
-  "linkedin-session:recommended": { section: "linkedin", key: "session", view: "recommended" },
+  "linkedin-session:recommended": { section: "linkedin", key: "session", view: "recommended", usesQueries: false },
   "linkedin-guest": { section: "linkedin", key: "guest" },
   arbeitsagentur: { section: "sources", key: "arbeitsagentur" },
   indeed: { section: "sources", key: "indeed" },
   stepstone: { section: "sources", key: "stepstone" },
   xing: { section: "sources", key: "xing" },
-  arbeitnow: { section: "sources", key: "arbeitnow" },
+  arbeitnow: { section: "sources", key: "arbeitnow", usesQueries: false },
   jsearch: { section: "sources", key: "jsearch" },
-  greenhouse: { section: "sources", key: "greenhouse" },
-  lever: { section: "sources", key: "lever" },
-  ashby: { section: "sources", key: "ashby" },
-  personio: { section: "sources", key: "personio" },
-  smartrecruiters: { section: "sources", key: "smartrecruiters" },
-  brave: { section: "sources", key: "brave" },
-  tavily: { section: "sources", key: "tavily" },
-  "gmail-alerts": { section: "sources", key: "gmail" },
+  greenhouse: { section: "sources", key: "greenhouse", usesQueries: false },
+  lever: { section: "sources", key: "lever", usesQueries: false },
+  ashby: { section: "sources", key: "ashby", usesQueries: false },
+  personio: { section: "sources", key: "personio", usesQueries: false },
+  smartrecruiters: { section: "sources", key: "smartrecruiters", usesQueries: false },
+  brave: { section: "sources", key: "brave", usesQueries: false },
+  tavily: { section: "sources", key: "tavily", usesQueries: false },
+  "gmail-alerts": { section: "sources", key: "gmail", usesQueries: false },
   "jobspy-google": { section: "sources", key: "jobspy_google" },
 } as const satisfies Record<string, ChannelConfigRef>;
 
 export type ConfiguredChannelId = keyof typeof CHANNEL_CONFIG_TABLE;
+
+/** Static keyword capability for the web process, which has no channel instances. */
+export function channelUsesQueries(id: string): boolean {
+  if (!isConfiguredChannelId(id)) return false;
+  const ref: ChannelConfigRef = CHANNEL_CONFIG_TABLE[id];
+  return ref.usesQueries !== false;
+}
 
 export function isConfiguredChannelId(id: string): id is ConfiguredChannelId {
   return Object.hasOwn(CHANNEL_CONFIG_TABLE, id);

@@ -5,7 +5,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { parse } from "yaml";
 
-import { hashConfigText, loadConfig, readConfigText, resetConfigCache } from "@/lib/config";
+import { hashConfigText, loadConfig, readConfigText, reloadConfig, resetConfigCache } from "@/lib/config";
 import { configToDraft } from "@/lib/settings/draft";
 import { saveSettings } from "@/lib/settings/service";
 import { SETTINGS_FILES, SETTINGS_FORMS } from "@/lib/settings/tabs";
@@ -42,4 +42,33 @@ describe("a settings save writes no factory defaults into the user config", () =
       });
     });
   }
+});
+
+describe("rotation settings with absent optional keys", () => {
+  beforeEach(() => {
+    tmp = makeTempConfig();
+    // Neither layer supplies these keys: the schema owns their defaults.
+    for (const dir of [tmp.defaultsDir, tmp.configDir]) {
+      const file = path.join(dir, "sources.yaml");
+      const value = parse(fs.readFileSync(file, "utf8"));
+      delete value.collect.query_rotation;
+      delete value.collect.max_catch_up_hours;
+      fs.writeFileSync(file, JSON.stringify(value));
+    }
+    resetConfigCache();
+  });
+
+  it("shows schema defaults, saves edits to the user file, and reloads both values", async () => {
+    const draft = configToDraft("channels", loadConfig("channels"));
+    expect(draft["collect.query_rotation"]).toBe(true);
+    expect(draft["collect.max_catch_up_hours"]).toBe("168");
+    draft["collect.query_rotation"] = false;
+    draft["collect.max_catch_up_hours"] = "240";
+    const result = await saveSettings({ tab: "channels", draft, baseHash: hashConfigText(readConfigText("channels")) });
+    expect(result.status).toBe("saved");
+    const user = parse(fs.readFileSync(path.join(tmp.configDir, "sources.yaml"), "utf8"));
+    expect(user.collect).toMatchObject({ query_rotation: false, max_catch_up_hours: 240 });
+    expect(parse(fs.readFileSync(path.join(tmp.defaultsDir, "sources.yaml"), "utf8")).collect.query_rotation).toBeUndefined();
+    expect(reloadConfig("channels").collect).toMatchObject({ query_rotation: false, max_catch_up_hours: 240 });
+  });
 });

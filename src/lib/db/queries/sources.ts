@@ -6,7 +6,7 @@ import type { Db } from "../client";
 import { calendarMonthSql } from "../month-window";
 import { aiUsage, channels, cycles, rawPostings, runs } from "../schema";
 import { getLatestFullCycleStartedAt, readCycleChannelIds, type CycleKind } from "../repos/cycles";
-import type { RunStatus } from "../repos/runs";
+import { getQueryRunHistory, type QueryRunHistoryRow, type RunStatus } from "../repos/runs";
 
 /** Data behind `/sources` and the progress line of `/settings`: plain reads, no interpretation. */
 
@@ -361,4 +361,16 @@ export async function listChannelCycleHistory(db: Db, count: number): Promise<Ma
     );
   }
   return out;
+}
+
+/** Separate parallel reads retain the covering-index access path for each rotation unit. Read only. */
+export async function getQueryRotationHistory(
+  db: Db,
+  args: { units: readonly { name: string; channelIds: readonly string[] }[]; queryHashes: readonly string[] },
+): Promise<Map<string, QueryRunHistoryRow[]>> {
+  const entries = await Promise.all(args.units.map(async (unit) => [
+    unit.name,
+    await getQueryRunHistory(db, { channelIds: unit.channelIds, queryHashes: args.queryHashes }),
+  ] as const));
+  return new Map(entries);
 }

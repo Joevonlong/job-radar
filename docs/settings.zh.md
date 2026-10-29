@@ -2,6 +2,11 @@
 
 `/settings` 用表单编辑十个配置文件（`schedule.yaml`、`search.yaml`、`sources.yaml`、`ai.yaml`、`breakdown.yaml`、`salary.yaml`、`notify.yaml`、`ui.yaml`、`insights.yaml`、`resume.yaml`），其余文件（`pipeline.yaml`、`models.yaml`、`interests.yaml` 以及以后新增的）和表单没覆盖的键可以在"高级"标签里按原文编辑，保存前用和 runner 相同的 zod schema 校验，写回用户配置目录（默认 `data/config/`，每个标签的说明里写出实际路径；第一次保存一个还只在默认配置里的文件时，以默认文件为底稿生成，见 [`configuration.zh.md`](configuration.zh.md)），写回时保留 YAML 注释；runner 热加载后，保存条上显示"runner 已加载"（runner 没有心跳时改写成"runner 没有运行"，不会和侧栏的 OFFLINE 互相矛盾）。表单里没有的键（`doctor`、`deploy`、`execution`、`host_worker`、`test_channel`、LinkedIn 登录态细节等运维参数，大多含机器路径）在"高级"标签里改。
 
+## 来源标签：查询轮换与补窗
+
+采集并发设置旁边的 **轮换查询**（`collect.query_rotation`，默认 `true`）会优先运行等待最久的查询；关闭后，`/sources` 也不再显示轮换状态。**补窗上限（小时）**（`collect.max_catch_up_hours`，默认 `168`，范围 0–720）限制漏掉覆盖后自动向前回看的时间。设为 `0` 可关闭补窗；基础窗口不会缩短。只关闭轮换不会关闭补窗。
+缺少的键在表单中显示这些 schema 默认值；修改后的值写入用户配置目录中的 `sources.yaml`（默认 `data/config/`）。未修改且原本不存在的默认值仍不会写入。容差（`collect.catch_up_tolerance_hours`，默认 `6`）只能在 YAML 或高级编辑器中设置。
+
 ## 标签栏与 AI 标签的四个区块
 
 标签栏：处理时间 · 搜索 · 来源 · AI · 拆解 · 薪资 · 推送 · 界面 · 申请流程，分隔线之后是"手动操作"（`/settings?tab=actions`）和"高级"（`/settings?tab=advanced`）。一个标签里可以放几张表单，每张对应一个文件、各自保存："界面"标签有 `ui.yaml` 和 `insights.yaml` 两张，"申请流程"有状态表和 `resume.yaml`。手动操作（立即跑一轮、重打过期分数、给未打分岗位打分、Telegram 测试、最近的请求）只在这个标签里，其他标签底部没有；旧链接 `/settings#rescore` 等改为 `/settings?tab=actions#rescore`。手动操作下面的"首次设置向导"卡片以回看模式重新打开设置向导（`/setup`）：不跳转，每次保存立即生效（[setup.zh.md](setup.zh.md)）。

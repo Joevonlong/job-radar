@@ -1,8 +1,13 @@
+import fs from "node:fs";
+import path from "node:path";
+import { parseDocument } from "yaml";
+
 import { sql } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, inject, it } from "vitest";
 
 import { monthKey } from "@/lib/channels/budget";
-import { loadConfig } from "@/lib/config";
+import { buildQueries } from "@/lib/channels/query";
+import { loadConfig, reloadConfig, resetConfigCache } from "@/lib/config";
 import { addMonthUsage, closeDb, getDb, insertAiUsage, listChannelCycleHistory, schema, upsertChannelRows } from "@/lib/db";
 import { runMigrations } from "@/lib/db/migrate";
 import { loadSourcesView } from "@/lib/sources/load";
@@ -178,6 +183,61 @@ describe("loadSourcesView against the database", () => {
     expect(view.runner).toMatchObject({ ageSeconds: 20, online: true, intervalSeconds: 30 });
     await getDb().execute(sql`truncate table runner_heartbeats`);
     expect((await loadSourcesView(NOW)).runner).toMatchObject({ ageSeconds: null, online: false });
+  });
+
+  it("reads per-unit rotation with search edits after the config cache refreshes and leaves cooled-down circuit rows untouched", async () => {
+    const sourceFile = path.join(temp.configDir, "sources.yaml");
+    const sources = parseDocument(fs.readFileSync(sourceFile, "utf8"));
+    sources.setIn(["linkedin", "cascade"], ["linkedin-guest"]);
+    sources.setIn(["linkedin", "guest", "enabled"], true);
+    sources.deleteIn(["linkedin", "guest", "markets"]);
+    sources.setIn(["sources", "indeed", "enabled"], true);
+    sources.deleteIn(["sources", "indeed", "markets"]);
+    sources.setIn(["collect", "query_rotation"], true);
+    sources.setIn(["collect", "max_catch_up_hours"], 168);
+    sources.setIn(["collect", "catch_up_tolerance_hours"], 6);
+    fs.writeFileSync(sourceFile, sources.toString());
+    const searchFile = path.join(temp.configDir, "search.yaml");
+    const search = parseDocument(fs.readFileSync(searchFile, "utf8"));
+    search.set("keyword_groups", { targets: ["engineer"] });
+    search.set("locations", ["Berlin", "Hamburg"]);
+    search.set("remote_scope", "none");
+    search.set("window_hours", { morning: 12, evening: 12, weekend: 24 });
+    fs.writeFileSync(searchFile, search.toString());
+    const queries = buildQueries(reloadConfig("search"), "manual");
+    const first = queries[0]!;
+    const second = queries[1]!;
+    const db = getDb();
+    await upsertChannelRows(db, [
+      { id: "linkedin-guest", family: "linkedin", kind: "guest", enabled: true },
+      { id: "indeed", family: "indeed", kind: "api", enabled: true },
+    ]);
+    await db.update(schema.channels).set({ circuitState: "open", circuitOpenUntil: minutesAgo(60), health: "down", consecutiveFailures: 3 }).where(sql`id = 'linkedin-guest'`);
+    await db.insert(schema.runs).values([
+      { channelId: "linkedin-guest", queryHash: first.id, startedAt: minutesAgo(31 * 60), status: "succeeded" },
+      { channelId: "indeed", queryHash: first.id, startedAt: minutesAgo(200 * 60), status: "failed" },
+      { channelId: "indeed", queryHash: second.id, startedAt: minutesAgo(10 * 60), status: "succeeded" },
+    ]);
+    const [before] = await db.select().from(schema.channels).where(sql`id = 'linkedin-guest'`);
+    const view = await loadSourcesView(NOW);
+    expect(view.cascade.rotation).toMatchObject({ sortChannel: "linkedin-guest", queries: 2, neverRun: 1, oldestWaitHours: 31,
+      oldestWaiting: { keywordGroup: "targets", location: "Berlin" }, overCap: 0 });
+    expect(view.cards.find((card) => card.id === "indeed")?.rotation).toMatchObject({ sortChannel: "indeed", queries: 2, neverRun: 0, oldestWaitHours: 200, overCap: 1 });
+    expect(view.cards.find((card) => card.id === "linkedin-guest")).toMatchObject({ circuit: { state: "half_open" } });
+    expect(view.cards.find((card) => card.id === "linkedin-guest")?.rotation).toBeUndefined();
+    const [after] = await db.select().from(schema.channels).where(sql`id = 'linkedin-guest'`);
+    expect(after).toEqual(before);
+    expect(after).toMatchObject({ circuitState: "open", health: "down" });
+
+    // Search and rotation settings edits appear after the config cache refreshes.
+    search.set("keyword_groups", { targets: ["designer"] });
+    fs.writeFileSync(searchFile, search.toString());
+    resetConfigCache();
+    expect((await loadSourcesView(NOW)).cascade.rotation).toMatchObject({ queries: 2, neverRun: 2, oldestWaitHours: null });
+    sources.setIn(["collect", "query_rotation"], false);
+    fs.writeFileSync(sourceFile, sources.toString());
+    resetConfigCache();
+    expect((await loadSourcesView(NOW)).cascade.rotation).toBeUndefined();
   });
 
   it("works on an empty database", async () => {

@@ -3010,6 +3010,14 @@
       "scoring_evidence_quote_min": {
         "label": "引用最短字符数",
         "hint": "不算空格少于这个字数的引用按“推断”显示：一两个词可能在 JD 里随便哪处都能匹配。"
+      },
+      "collect_query_rotation": {
+        "label": "轮换查询",
+        "hint": "优先运行等得最久的查询，默认开启。关闭后来源页不再显示轮换状态；自动补窗不受影响。"
+      },
+      "collect_max_catch_up_hours": {
+        "label": "补窗上限（小时）",
+        "hint": "漏掉覆盖后自动向前回看的最长时间，0–720 小时，默认 168。设为 0 关闭自动补窗；基础窗口不会缩短。"
       }
     },
     "control": {
@@ -3624,6 +3632,16 @@
       "overview": "概览",
       "registry": "来源清单",
       "aiUsage": "AI 用量"
+    },
+    "rotation": {
+      "queries": "查询 {count, plural, other {{number} 个}}",
+      "wait": "等得最久 {hours} 小时（{group} · {place}）",
+      "neverRun": "{count, plural, other {{number} 个从未运行}}",
+      "orderedBy": "按 {channel} 排序",
+      "unavailable": "当前没有通道能接查询",
+      "remote": "远程",
+      "remoteRegion": "远程 · {scope}",
+      "overCap": "{count, plural, other {{number} 个查询}}等待超过补窗上限（{hours} 小时）：这段时间的新岗位可能已错过。可以提高预算或减少查询。"
     }
   },
   "insights": {

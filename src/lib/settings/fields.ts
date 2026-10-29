@@ -355,6 +355,8 @@ const channelsSections: SectionDef[] = [
       int("circuit_breaker.failures", "breaker_failures"),
       num("circuit_breaker.cooldown_hours", "breaker_cooldown"),
       int("collect.concurrency", "collect_concurrency"),
+      bool("collect.query_rotation", "collect_query_rotation", { optional: true }),
+      int("collect.max_catch_up_hours", "collect_max_catch_up_hours", { optional: true }),
     ],
   },
   {

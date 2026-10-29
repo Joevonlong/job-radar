@@ -1,4 +1,6 @@
 /** View model of `/sources`: database rows + the config, folded into one card per channel. Pure; `load.ts` reads the data. */
+import type { SearchQuery } from "@/lib/channels/types";
+import type { QueryRunHistoryRow } from "@/lib/db/repos/runs";
 import { effectiveState } from "@/lib/channels/circuit";
 import { CHANNEL_CONFIG_TABLE, settingsFromConfig, type ConfiguredChannelId } from "@/lib/channels/registry";
 import { healthDay, isCoolingDown, requestsOn, type ProviderHealth } from "@/lib/ai/health";
@@ -12,6 +14,8 @@ import type { LoginState } from "@/lib/channels/linkedin/session/auth-state";
 import { computeHeartbeatAgeSeconds } from "@/lib/health";
 import { missingChannelEnv } from "./required-env";
 import type { AiWorkerStatus } from "@/lib/ops/ai-worker";
+
+import { cascadeStartChannel, rotationStatus, rotationUnits, type RotationStatus } from "./rotation-status";
 
 export type CircuitView = "closed" | "open" | "half_open";
 
@@ -61,6 +65,8 @@ export interface UsageView {
 }
 
 export interface SourceCard {
+  /** Independent keyword units only; cascade members share the cascade card's status. */
+  rotation?: RotationStatus;
   id: string;
   /** From the `channels` row; null while the runner never registered the channel. */
   family: string | null;
@@ -162,7 +168,7 @@ const POLICY_KEY = { "claude-cli": "claude_cli", "codex-cli": "codex_cli", anthr
 export interface SourcesView {
   month: string;
   cards: SourceCard[];
-  cascade: { entries: CascadeEntry[]; /** Channels that served at least one query in the latest cycle, in cascade order. */ servedBy: string[] };
+  cascade: { rotation?: RotationStatus; entries: CascadeEntry[]; /** Channels that served at least one query in the latest cycle, in cascade order. */ servedBy: string[] };
   paid: { usedUsd: number; capUsd: number };
   /** Where a budget battery draws its red line, percent (`notify.yaml: alerts.budget_thresholds`, the lowest). */
   budgetAlertPercent: number;
@@ -184,6 +190,7 @@ export interface SourcesView {
 }
 
 export interface SourcesViewInput {
+  rotation?: { queries: readonly SearchQuery[]; history: ReadonlyMap<string, readonly QueryRunHistoryRow[]> };
   now: Date;
   month: string;
   channelsConfig: ChannelsConfig;
@@ -437,11 +444,37 @@ export function buildSourcesView(input: SourcesViewInput): SourcesView {
   let usedUsd = 0;
   for (const usage of input.usage.values()) usedUsd += usage.usd;
 
+  let cascadeRotation: RotationStatus | undefined;
+  if (input.channelsConfig.collect.query_rotation && input.rotation && input.rotation.queries.length > 0) {
+    for (const unit of rotationUnits(input.channelsConfig)) {
+      const unitCards = unit.channelIds.flatMap((id) => {
+        const card = byId.get(id);
+        return card ? [card] : [];
+      });
+      const sortChannel = unit.name === "cascade"
+        ? cascadeStartChannel(unitCards, usedUsd, input.channelsConfig.paid_total_monthly_budget_usd)
+        : unit.channelIds[0] ?? null;
+      const rotation = rotationStatus({
+        unit,
+        queries: input.rotation.queries,
+        history: input.rotation.history.get(unit.name) ?? [],
+        sortChannel,
+        collect: input.channelsConfig.collect,
+        now: input.now,
+      });
+      if (unit.name === "cascade") cascadeRotation = rotation;
+      else {
+        const card = byId.get(unit.name);
+        if (card) card.rotation = rotation;
+      }
+    }
+  }
+
   const ageSeconds = computeHeartbeatAgeSeconds(input.lastHeartbeatAt, input.now);
   return {
     month: input.month,
     cards,
-    cascade: { entries, servedBy: entries.filter((e) => (e.latest?.succeeded ?? 0) > 0).map((e) => e.id) },
+    cascade: { ...(cascadeRotation ? { rotation: cascadeRotation } : {}), entries, servedBy: entries.filter((e) => (e.latest?.succeeded ?? 0) > 0).map((e) => e.id) },
     paid: { usedUsd: roundUsd(usedUsd), capUsd: input.channelsConfig.paid_total_monthly_budget_usd },
     budgetAlertPercent: input.budgetAlertPercent ?? 100,
     healthCycles: input.healthCycles ?? 0,

@@ -1,7 +1,8 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
 
-import { CHANNEL_CONFIG_TABLE, ChannelRegistry, settingsFromConfig, type ConfiguredChannelId } from "@/lib/channels/registry";
+import { CHANNEL_CONFIG_TABLE, channelUsesQueries, ChannelRegistry, settingsFromConfig, type ConfiguredChannelId } from "@/lib/channels/registry";
+import { registerBuiltinChannels } from "@/lib/channels/builtin";
 import { createFixtureChannel, FIXTURE_SETTINGS } from "@/lib/channels/fixture";
 
 import { channelsWith, shippedChannels } from "./helpers";
@@ -22,10 +23,18 @@ describe("CHANNEL_CONFIG_TABLE", () => {
     expect(CHANNEL_CONFIG_TABLE["linkedin-brightdata"]).toEqual({ section: "linkedin", key: "brightdata" });
     expect(CHANNEL_CONFIG_TABLE["linkedin-monid"]).toEqual({ section: "linkedin", key: "monid" });
     expect(CHANNEL_CONFIG_TABLE["linkedin-guest"]).toEqual({ section: "linkedin", key: "guest" });
-    expect(CHANNEL_CONFIG_TABLE["linkedin-session:recommended"]).toEqual({ section: "linkedin", key: "session", view: "recommended" });
+    expect(CHANNEL_CONFIG_TABLE["linkedin-session:recommended"]).toEqual({ section: "linkedin", key: "session", view: "recommended", usesQueries: false });
     expect(CHANNEL_CONFIG_TABLE.arbeitsagentur).toEqual({ section: "sources", key: "arbeitsagentur" });
-    expect(CHANNEL_CONFIG_TABLE.arbeitnow).toEqual({ section: "sources", key: "arbeitnow" });
-    expect(CHANNEL_CONFIG_TABLE.greenhouse).toEqual({ section: "sources", key: "greenhouse" });
+    expect(CHANNEL_CONFIG_TABLE.arbeitnow).toEqual({ section: "sources", key: "arbeitnow", usesQueries: false });
+    expect(CHANNEL_CONFIG_TABLE.greenhouse).toEqual({ section: "sources", key: "greenhouse", usesQueries: false });
+  });
+
+  it("keeps the static keyword marker in sync with every real channel", () => {
+    const registry = new ChannelRegistry();
+    registerBuiltinChannels(registry);
+    expect(registry.list().map((channel) => channel.id).sort()).toEqual(Object.keys(CHANNEL_CONFIG_TABLE).sort());
+    for (const channel of registry.list()) expect(channelUsesQueries(channel.id), channel.id).toBe(channel.usesQueries);
+    expect(channelUsesQueries("unknown")).toBe(false);
   });
 
   it("covers every id in the LinkedIn cascade", () => {
