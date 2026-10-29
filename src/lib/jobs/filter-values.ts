@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import type { MultiFilterKey } from "./filter-keys";
-import { APPLICATION_FILTER_STATUSES, JOB_STATUSES, JOB_WORKPLACES, MAX_FILTER_VALUE_CHARS, MAX_FILTER_VALUES } from "./constants";
+import { APPLICATION_FILTER_STATUSES, ARCHIVE_REASONS, JOB_STATUSES, JOB_WORKPLACES, MAX_FILTER_VALUE_CHARS, MAX_FILTER_VALUES } from "./constants";
 
 /**
  * One value of a multi-value filter, defined once: the /jobs URL parsers and the saved-view schema (interests.yaml)
@@ -16,6 +16,7 @@ export const MULTI_VALUE_SCHEMAS = {
   contract: filterText,
   workplace: z.enum(JOB_WORKPLACES),
   status: z.enum(JOB_STATUSES),
+  reason: z.enum(ARCHIVE_REASONS),
   app: z.enum(APPLICATION_FILTER_STATUSES),
 } as const;
 
@@ -29,6 +30,7 @@ export const MULTI_VALUE_ORDER: { readonly [K in MultiFilterKey]: readonly strin
   contract: null,
   workplace: JOB_WORKPLACES,
   status: JOB_STATUSES,
+  reason: ARCHIVE_REASONS,
   app: APPLICATION_FILTER_STATUSES,
 };
 

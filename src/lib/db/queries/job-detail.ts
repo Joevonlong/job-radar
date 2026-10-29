@@ -23,7 +23,7 @@ import { asContract, asGermanLevel, asJobLanguage, parseLocations, parseSalary }
 import type { Contract, GermanLevel, JobLanguage, JobLocation, JobSalary, JobSignal, JobSourceRef, JobStatus, Workplace } from "./types";
 import { summariesOf } from "../summaries";
 import { dormancyReady } from "../repos/dormancy";
-import { dormantSql } from "./job-status";
+import { dormantSql, lastListedSql } from "./job-status";
 
 /** The newest score of a job with everything the detail page shows. */
 export interface JobScoreDetail {
@@ -80,6 +80,7 @@ export interface JobDetail {
   postedAt: Date | null;
   firstSeenAt: Date;
   lastSeenAt: Date;
+  lastListedAt: Date | null;
   /** Original JD text (null when the source gave none). */
   description: string | null;
   /** Normalized salary; null = none stated (C3) or not readable (see `salaryDisclosed`). */
@@ -182,7 +183,7 @@ export interface JobClosure {
 function detailColumns() {
   const { linkCheckJson, dormantAt, possiblyClosedAt, searchTsv, descriptionMd5, descriptionHasText, salaryMd5, ...columns } = getTableColumns(jobs);
   void [linkCheckJson, dormantAt, possiblyClosedAt, searchTsv, descriptionMd5, descriptionHasText, salaryMd5];
-  return columns;
+  return { ...columns, lastListedAt: lastListedSql() };
 }
 
 /** The closed state of a job; before the migration the automatic status alone. */
@@ -241,6 +242,7 @@ export async function getJobDetail(db: Db, id: number): Promise<JobDetail | null
     postedAt: job.postedAt,
     firstSeenAt: job.firstSeenAt,
     lastSeenAt: job.lastSeenAt,
+    lastListedAt: job.lastListedAt,
     description: job.description,
     salary: parseSalary(job.salaryJson),
     salaryDisclosed: job.salaryJson !== null && job.salaryJson !== undefined,

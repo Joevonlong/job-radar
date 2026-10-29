@@ -6,8 +6,9 @@
 import { sql, type SQL } from "drizzle-orm";
 
 import type { ClosedReason } from "@/lib/jobs/closure";
+import type { ArchiveReason, JobScope } from "@/lib/jobs/constants";
 
-import { jobClosureOverrides, jobs } from "../schema";
+import { jobClosureOverrides, jobSources, jobs, rawPostings } from "../schema";
 import type { JobStatus } from "./types";
 
 // written with the table name: a column interpolated into a subquery can render without its table (see notifications.ts)
@@ -35,6 +36,18 @@ export function effectivelyNotClosedSql(ux: boolean, alias?: string): SQL<boolea
   return sql<boolean>`((${automatic} and not ${override("closed")}) or ${override("open")})`;
 }
 
+function overrideIdsSql(action?: "open" | "closed"): SQL {
+  return sql`(select ${jobClosureOverrides.jobId} from ${jobClosureOverrides}${action === undefined ? sql`` : sql` where ${jobClosureOverrides.action} = ${action}`})`;
+}
+
+/** Same predicate as effectivelyNotClosedSql; override job ids are non-null primary keys, so NOT IN is safe. */
+function effectivelyNotClosedInSql(ux: boolean, alias?: string): SQL<boolean> {
+  const automatic = sql<boolean>`${jobColumn("status", alias)} <> 'closed'`;
+  if (!ux) return automatic;
+  const id = jobColumn("id", alias);
+  return sql<boolean>`((${automatic} and ${id} not in ${overrideIdsSql("closed")}) or ${id} in ${overrideIdsSql("open")})`;
+}
+
 /** Stored dormancy remains meaningful only until another sighting or a change of automatic status. */
 export function dormantSql(ready: boolean, alias?: string): SQL<boolean> {
   if (!ready) return sql<boolean>`false`;
@@ -45,6 +58,47 @@ export function dormantSql(ready: boolean, alias?: string): SQL<boolean> {
 
 export function notDormantSql(ready: boolean, alias?: string): SQL<boolean> {
   return ready ? sql<boolean>`not ${dormantSql(ready, alias)}` : sql<boolean>`true`;
+}
+
+/**
+ * Current is exactly the legacy list's two hiding conditions; archive is its complement; all adds no condition.
+ * Uncorrelated IN uses hashed subplans with small cost estimates, keeping the list below JIT inline/optimize thresholds.
+ */
+export function jobScopeSql(scope: JobScope, ux: boolean, dormantReady: boolean, alias?: string): SQL<boolean> | undefined {
+  if (scope === "all") return undefined;
+  if (scope === "archive") return sql<boolean>`(not ${effectivelyNotClosedInSql(ux, alias)} or ${dormantSql(dormantReady, alias)})`;
+  return sql<boolean>`(${effectivelyNotClosedInSql(ux, alias)} and ${notDormantSql(dormantReady, alias)})`;
+}
+
+/**
+ * Same rows as closedReasonSql IN reasons. Uncorrelated IN / NOT IN uses hashed subplans with small cost estimates,
+ * keeping the list below JIT inline/optimize thresholds even when predicates are combined with OR.
+ */
+export function archiveReasonSql(reasons: readonly ArchiveReason[], ux: boolean, dormantReady: boolean, alias?: string): SQL<boolean> | undefined {
+  if (reasons.length === 0) return undefined;
+  const noOverride = ux ? sql`${jobColumn("id", alias)} not in ${overrideIdsSql()}` : sql`true`;
+  const predicates = reasons.map((reason) => {
+    switch (reason) {
+      case "manual":
+        return ux ? sql`${jobColumn("id", alias)} in ${overrideIdsSql("closed")}` : sql`false`;
+      case "gone":
+        return sql`(${jobColumn("status", alias)} = 'closed' and ${noOverride})`;
+      case "dormant":
+        return sql`(${dormantSql(dormantReady, alias)} and ${noOverride})`;
+    }
+  });
+  return sql<boolean>`(${sql.join(predicates, sql` or `)})`;
+}
+
+/**
+ * Newest fetch of a source posting, never the link-check-updated last_seen_at; no source means null.
+ * A later migration can read a stored last_listed_at with this subquery as fallback when the column is unavailable or null.
+ * Qualify every column explicitly so a single-table selection and an aliased outer job remain safe.
+ */
+export function lastListedSql(alias?: string): SQL<Date | null> {
+  return sql<Date | null>`(select max(${jobColumn(rawPostings.fetchedAt.name, "r")})
+    from ${jobSources} js join ${rawPostings} r on ${jobColumn(rawPostings.id.name, "r")} = ${jobColumn(jobSources.rawPostingId.name, "js")}
+    where ${jobColumn(jobSources.jobId.name, "js")} = ${jobColumn("id", alias)})`.mapWith(rawPostings.fetchedAt);
 }
 
 /** The same priority as closedReason: manual, gone, dormant, phrase, possibly. */

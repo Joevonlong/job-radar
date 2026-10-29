@@ -1072,7 +1072,8 @@
           "rank": "排序值",
           "posted": "发布时间",
           "first_seen": "首次发现时间",
-          "salary": "年薪"
+          "salary": "年薪",
+          "last_listed": "最后列出"
         },
         "from": "首次发现自",
         "to": "首次发现至",
@@ -1102,14 +1103,25 @@
         "chip": "{key} · {value}",
         "removeChip": "移除筛选 {key}：{value}",
         "dirAscLabel": "升序（低的在前），点击改为降序",
-        "dirDescLabel": "降序（高的在前），点击改为升序"
+        "dirDescLabel": "降序（高的在前），点击改为升序",
+        "reason": "原因"
       },
       "pagination": {
         "label": "分页",
         "previous": "上一页",
         "next": "下一页",
         "position": "第 {page} / {pageCount} 页"
-      }
+      },
+      "scope": {
+        "label": "岗位范围",
+        "current": "当前",
+        "archive": "历史库（{count, number}）",
+        "all": "全部",
+        "archiveHint": "你关闭的、来源已下架或数周未被列出的岗位。不会删除任何数据。",
+        "notSaved": "范围和历史库原因不会存进视图。"
+      },
+      "lastListed": "最后列出 {time}",
+      "lastListedUnknown": "最后列出：未记录"
     },
     "detail": {
       "back": "返回列表",
@@ -1388,16 +1400,13 @@
       "rowReopenLabel": "重新打开 {title}",
       "rowCloseTitle": "标记为已关闭",
       "rowReopenTitle": "重新打开",
-      "filter": "已关闭（{count}）",
-      "filterRemove": "显示在招岗位",
       "stillListed": "来源在 {date} 仍列出此岗位。",
       "checkedOn": "原帖最近检查于 {when}",
       "srHint": "：{hint}",
       "editNote": "编辑备注",
       "addNote": "添加备注",
       "saveNote": "保存备注",
-      "lastListed": "最后一次被来源列出：{date}。",
-      "filterHint": "已关闭、可能已关闭和数周未被列出的岗位"
+      "lastListed": "最后一次被来源列出：{date}。"
     }
   },
   "pipeline": {

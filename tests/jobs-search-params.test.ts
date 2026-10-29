@@ -8,6 +8,19 @@ import { viewFiltersFromParams, viewFiltersToParams } from "@/lib/interests/view
 import { countActiveFilters, hasActiveFilters, isCalendarDate, jobsListHref, jobsSearchParsers, jobsSearchQuery, loadFavoritesSearchParams, loadJobsSearchParams } from "@/lib/jobs/search-params";
 
 describe("jobs search params", () => {
+  it("parses scope, canonical archive reasons and last listed without introducing defaults", () => {
+    expect(loadJobsSearchParams("?scope=archive&reason=dormant&reason=gone&reason=manual&reason=gone&reason=bad&sort=last_listed")).toMatchObject({ scope: "archive", reason: ["manual", "gone", "dormant"], sort: "last_listed" });
+    expect(loadJobsSearchParams("?scope=bad&reason=phrase&reason=&sort=bad")).toMatchObject({ scope: null, reason: [], sort: null });
+    expect(loadJobsSearchParams("")).toMatchObject({ scope: null, reason: [], sort: null });
+    expect(jobsListHref({ scope: "archive", sort: null })).toBe("/jobs?scope=archive");
+    expect(jobsListHref({ scope: "archive", sort: "rank" })).toBe("/jobs?scope=archive&sort=rank");
+  });
+
+  it("counts reasons once, but never counts scope as a filter", () => {
+    expect(countActiveFilters(loadJobsSearchParams("?scope=all"))).toBe(0);
+    expect(hasActiveFilters(loadJobsSearchParams("?scope=archive"))).toBe(false);
+    expect(countActiveFilters(loadJobsSearchParams("?scope=current&reason=manual&reason=gone"))).toBe(1);
+  });
   it("parses valid URL state", () => {
     const params = loadJobsSearchParams("?q=llm&source=ats&workplace=remote&status=active&from=2026-10-01&to=2026-10-07&salary=true&sort=posted&page=3");
     expect(params).toMatchObject({ q: "llm", source: ["ats"], workplace: ["remote"], status: ["active"], from: "2026-10-01", to: "2026-10-07", salary: true, sort: "posted", page: 3 });
@@ -18,7 +31,7 @@ describe("jobs search params", () => {
     expect(params.workplace).toEqual([]);
     expect(params.status).toEqual([]);
     expect(params.from).toBeNull();
-    expect(params.sort).toBe("rank");
+    expect(params.sort).toBeNull();
     expect(params.page).toBe(1);
     expect(hasActiveFilters(params)).toBe(false);
   });
@@ -246,12 +259,12 @@ describe("jobs sort direction", () => {
   it("reads the sort direction: asc / desc, anything else is unset; it is not a filter", () => {
     expect(loadJobsSearchParams("?sort=salary&dir=asc")).toMatchObject({ sort: "salary", dir: "asc" });
     expect(loadJobsSearchParams("?sort=salary&dir=up").dir).toBeNull();
-    expect(loadJobsSearchParams("?dir=desc").sort).toBe("rank");
+    expect(loadJobsSearchParams("?dir=desc").sort).toBeNull();
     expect(hasActiveFilters(loadJobsSearchParams("?dir=asc"))).toBe(false);
     expect(countActiveFilters(loadJobsSearchParams("?sort=salary&dir=asc"))).toBe(0);
     // old links keep their meaning: no direction = the default
     for (const sort of ["rank", "posted", "first_seen"] as const) expect(loadJobsSearchParams(`?sort=${sort}`)).toMatchObject({ sort, dir: null });
     expect(jobsListHref({ sort: "salary", dir: "asc", page: 1 })).toBe("/jobs?sort=salary&dir=asc");
-    expect(jobsListHref({ sort: "rank", dir: null, page: 1 })).toBe("/jobs");
+    expect(jobsListHref({ sort: "rank", dir: null, page: 1 })).toBe("/jobs?sort=rank");
   });
 });

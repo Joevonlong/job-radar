@@ -1072,7 +1072,8 @@
           "rank": "Rank value",
           "posted": "Posted",
           "first_seen": "First seen",
-          "salary": "Annual salary"
+          "salary": "Annual salary",
+          "last_listed": "Last listed"
         },
         "from": "First seen from",
         "to": "First seen to",
@@ -1102,14 +1103,25 @@
         "chip": "{key} · {value}",
         "removeChip": "Remove filter {key}: {value}",
         "dirAscLabel": "Ascending (lowest first), click for descending",
-        "dirDescLabel": "Descending (highest first), click for ascending"
+        "dirDescLabel": "Descending (highest first), click for ascending",
+        "reason": "Reason"
       },
       "pagination": {
         "label": "Pagination",
         "previous": "Previous",
         "next": "Next",
         "position": "Page {page} of {pageCount}"
-      }
+      },
+      "scope": {
+        "label": "Job scope",
+        "current": "Current",
+        "archive": "Archive ({count, number})",
+        "all": "All",
+        "archiveHint": "Jobs closed by you, taken down at the source, or not listed for weeks. Nothing is deleted.",
+        "notSaved": "Scope and archive reasons are not saved in views."
+      },
+      "lastListed": "Last listed {time}",
+      "lastListedUnknown": "Last listed: not recorded"
     },
     "detail": {
       "back": "Back to the list",
@@ -1388,16 +1400,13 @@
       "rowReopenLabel": "Reopen {title}",
       "rowCloseTitle": "Mark as closed",
       "rowReopenTitle": "Reopen",
-      "filter": "Closed ({count})",
-      "filterRemove": "Show open jobs",
       "stillListed": "A source still listed this job on {date}.",
       "checkedOn": "Posting last checked {when}",
       "srHint": ": {hint}",
       "editNote": "Edit note",
       "addNote": "Add a note",
       "saveNote": "Save note",
-      "lastListed": "Last listed by a source on {date}.",
-      "filterHint": "Closed, possibly closed and not listed for weeks"
+      "lastListed": "Last listed by a source on {date}."
     }
   },
   "pipeline": {

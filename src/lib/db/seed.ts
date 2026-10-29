@@ -25,6 +25,7 @@ import type { Executor } from "./executor";
 import { seedSalary } from "./seed-salary";
 import { setApplicationNotes, setApplicationStatus, type ApplicationStatus } from "./repos/applications";
 import { addFavorite } from "./repos/favorites";
+import { recordLinkCheck } from "./repos/jobs";
 import { syncSourceRegistryRows } from "./repos/source-registry";
 import {
   aiUsage,
@@ -158,6 +159,8 @@ interface SeedJob {
   postedHoursBeforeSeen?: number | null;
   status?: "active" | "possibly_closed" | "closed";
   dormant?: boolean;
+  /** A source fetch followed by an alive check, then a 410; last-seen must differ from last-listed. */
+  goneAfterAlive?: boolean;
   sources: string[];
   /** Fake match score; the rank value adds the signal bonus. Omitted = unscored. */
   match?: number;
@@ -574,6 +577,20 @@ const SEED_JOBS: readonly SeedJob[] = [
     dormant: true,
     sources: ["greenhouse"],
     match: 64,
+  },
+  {
+    key: "maplewick-gone",
+    company: "Maplewick Research",
+    title: "Platform Engineer, Search Infrastructure",
+    cities: ["Hamburg"],
+    workplace: "hybrid",
+    contract: "permanent",
+    offer: ["Build search infrastructure for research teams."],
+    day: 40,
+    at: 0.5,
+    goneAfterAlive: true,
+    sources: ["greenhouse"],
+    match: 62,
   },
   {
     key: "aurelia-closed",
@@ -1041,6 +1058,14 @@ async function insertSeed(db: Executor, input: { now: Date; tz: string; pipeline
         if (!raw) throw new Error(`seed: raw posting for ${job.key} was not created`);
         await tx.insert(jobSources).values({ jobId: row.id, rawPostingId: raw.id, channelId, url, applyUrl: ATS_CHANNELS.has(channelId) ? `${url}/apply` : null, priority: SOURCE_PRIORITY[channelId] ?? 100, firstSeenAt: seenAt });
         sourceCount += 1;
+      }
+
+      if (job.goneAfterAlive) {
+        // Link checks change last_seen_at, but never the source's fetched_at used by the archive.
+        await recordLinkCheck(tx, row.id, { outcome: "alive", at: new Date(seenAt.getTime() + 2 * DAY_MS) });
+        const goneAt = new Date(seenAt.getTime() + 3 * DAY_MS);
+        await recordLinkCheck(tx, row.id, { outcome: "gone", at: goneAt });
+        await tx.update(jobs).set({ linkCheckJson: { outcome: "gone", httpStatus: 410, url: null, quote: null, phrase: null, at: goneAt.toISOString() } }).where(eq(jobs.id, row.id));
       }
 
       if (job.match !== undefined) {

@@ -72,8 +72,8 @@ describe("seed", () => {
     const result = await seedDatabase(getDb(), { now: NOW, timezone: TZ });
     expect(result.replacedJobs).toBe(Number(before?.jobs));
     expect(await count()).toEqual(before);
-    // 23 regular fixtures (including Maplewick's dormant role), plus the salary-origin job.
-    expect(Number(before?.jobs)).toBe(24);
+    // 24 regular fixtures (including Maplewick's dormant and gone roles), plus the salary-origin job.
+    expect(Number(before?.jobs)).toBe(25);
     const dormant = await getDb().select({ title: schema.jobs.title, status: schema.jobs.status })
       .from(schema.jobs).where(sql`${schema.jobs.dormantAt} is not null`);
     expect(dormant).toEqual([{ title: "Research Engineer, Document Retrieval", status: "possibly_closed" }]);

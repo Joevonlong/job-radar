@@ -13,11 +13,12 @@ import { Segmented, SegmentedItem } from "@/components/ui/segmented";
 import { SingleSelect } from "@/components/ui/single-select";
 import { filterOptions } from "@/lib/applications/visibility";
 import { knownContract, knownFamily } from "@/lib/dashboard/labels";
-import { APPLICATION_FILTER_STATUSES, JOB_SORTS, JOB_STATUSES, type JobSort, JOB_WORKPLACES, MIN_SALARY_MAX, MIN_SCORE_MAX, GHOST_FILTERS, TRAP_FILTERS, VISA_FILTERS, type ApplicationFilterStatus } from "@/lib/jobs/constants";
+import { APPLICATION_FILTER_STATUSES, ARCHIVE_REASONS, JOB_SORTS, JOB_STATUSES, type JobSort, JOB_WORKPLACES, MIN_SALARY_MAX, MIN_SCORE_MAX, GHOST_FILTERS, TRAP_FILTERS, VISA_FILTERS, type ApplicationFilterStatus } from "@/lib/jobs/constants";
 import { FILTER_KEYS, SELECT_FILTER_KEYS, type FilterKey, type SelectFilterKey } from "@/lib/jobs/filter-keys";
 import { cleanMultiValues } from "@/lib/jobs/filter-values";
 import { countActiveFilters, hasActiveFilters, jobsSearchParsers, withLegacyKeys } from "@/lib/jobs/search-params";
-import { dirParam, effectiveDir, flipDir } from "@/lib/jobs/sort";
+import { dirParam, effectiveDir, flipDir, resolveSort } from "@/lib/jobs/sort";
+import { resolveJobScope } from "@/lib/jobs/scope";
 import { cn } from "@/lib/utils";
 import { useLocalLanguageName } from "@/components/base-currency";
 
@@ -70,7 +71,7 @@ const labelClass = "text-muted-foreground flex min-w-0 flex-col gap-1 text-xs";
 const inputClass = "border-input bg-background h-8 w-full min-w-0 rounded-md border px-2 text-sm shadow-xs";
 const pillClass = "inline-flex h-8 items-center rounded-full border px-3 text-[13px] transition-colors";
 /** The order of the sort drop-down (`JOB_SORTS` appends `salary`; here it sits next to the score). */
-const SORT_MENU: readonly JobSort[] = ["rank", "salary", "first_seen", "posted"];
+const SORT_MENU: readonly JobSort[] = ["rank", "salary", "first_seen", "posted", "last_listed"];
 
 const pillState = (on: boolean) => (on ? "border-primary/50 bg-accent text-accent-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground");
 
@@ -105,7 +106,11 @@ export function FilterBar({ options }: { options: FilterBarOptions }) {
   const activeCount = countActiveFilters(withLegacyKeys(params), visibility);
   const apps = params.app ?? [];
   const hiddenStatuses = useHiddenStatuses();
-  const sortDir = effectiveDir(params.sort, params.dir);
+  const scope = resolveJobScope(params.scope, params.status);
+  // Share the server priority, including the reserved relevance step; choosing its default keeps canonical URLs.
+  const sort = resolveSort({ sort: params.sort, q: params.q, scope });
+  const defaultSort = resolveSort({ sort: null, q: params.q, scope });
+  const sortDir = effectiveDir(sort, params.dir);
 
   useLayoutEffect(() => {
     // (no matchMedia, e.g. in jsdom: the width at mount decides)
@@ -152,6 +157,7 @@ export function FilterBar({ options }: { options: FilterBarOptions }) {
     workplace: filterOptions(JOB_WORKPLACES, options.hiddenWorkplaces ?? [], params.workplace).map((w) => ({ value: w, label: tc(`workplace.${w}`) })),
     contract: filterOptions(options.contracts, options.hiddenContracts ?? [], params.contract).map((contract) => ({ value: contract, label: contractLabel(contract) })),
     status: JOB_STATUSES.map((s) => ({ value: s, label: tc(`jobStatus.${s}`) })),
+    reason: ARCHIVE_REASONS.map((reason) => ({ value: reason, label: tc(`closed.reason.${reason}`) })),
   };
   // a bookmarked value that no job has (any more) still shows as selected, and can be unticked
   const withStale = (key: SelectFilterKey): MultiSelectOption[] => {
@@ -195,7 +201,7 @@ export function FilterBar({ options }: { options: FilterBarOptions }) {
     void setParams({ [key]: value === null ? null : Math.min(value, max), page: null }, { limitUrlUpdates: debounce(NUMBER_DEBOUNCE_MS) });
   };
   const clear = () => {
-    // every filter, from the filter table (sort stays)
+    // Every filter from the table; scope and sort stay. Scope is never a filter key.
     void setParams({ ...Object.fromEntries(FILTER_KEYS.filter((key) => key !== "filtered" && !visibility.ignore.includes(key)).map((key) => [key, null])), t12: null, hideGerman: null, page: null });
   };
 
@@ -261,7 +267,7 @@ export function FilterBar({ options }: { options: FilterBarOptions }) {
 
         <div className="flex flex-col gap-3 max-md:flex-1 max-md:overflow-y-auto max-md:px-4 max-md:py-3">
           <div className="grid grid-cols-2 gap-x-3 gap-y-2 md:grid-cols-4 lg:grid-cols-6">
-            {SELECT_FILTER_KEYS.map((key) => (
+            {SELECT_FILTER_KEYS.filter((key) => key !== "reason" || scope !== "current").map((key) => (
               <MultiSelect
                 key={key}
                 layout={layout}
@@ -287,8 +293,11 @@ export function FilterBar({ options }: { options: FilterBarOptions }) {
                 layout={layout}
                 label={t("sort")}
                 options={SORT_MENU.map((s) => ({ value: s, label: t(`sorts.${s}`) }))}
-                value={params.sort}
-                onChange={(next) => setParams({ sort: JOB_SORTS.find((s) => s === next) ?? "rank", dir: null, page: null })}
+                value={sort}
+                onChange={(next) => {
+                  const picked = JOB_SORTS.find((s) => s === next) ?? defaultSort;
+                  void setParams({ sort: picked === defaultSort ? null : picked, dir: null, page: null });
+                }}
                 expanded={expandedKey === "sort"}
                 onExpandedChange={(next) => setExpandedKey(next ? "sort" : null)}
                 testId="filter-sort"
@@ -303,7 +312,7 @@ export function FilterBar({ options }: { options: FilterBarOptions }) {
                 title={t(sortDir === "asc" ? "dirAscLabel" : "dirDescLabel")}
                 data-testid="filter-sort-dir"
                 data-dir={sortDir}
-                onClick={() => setParams({ dir: dirParam(params.sort, flipDir(sortDir)), page: null })}
+                onClick={() => setParams({ dir: dirParam(sort, flipDir(sortDir)), page: null })}
               >
                 {sortDir === "asc" ? <ArrowUp aria-hidden /> : <ArrowDown aria-hidden />}
               </Button>

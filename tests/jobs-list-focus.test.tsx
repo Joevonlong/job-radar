@@ -75,6 +75,21 @@ const list = (jobs: JobListItem[], mode?: "favorites") => (
 
 const focusedJob = () => document.activeElement?.closest("[data-job-id]")?.getAttribute("data-job-id") ?? null;
 
+describe("archived row time", () => {
+  it.each(["manual", "gone", "dormant"] as const)("shows the last-listed label and first-seen title for %s", (reason) => {
+    render(list([job(1, { closedReason: reason, timeLabel: "Last listed 2 months ago", timeTitle: "First seen date" })]));
+    expect(screen.getByTestId("row-last-listed")).toHaveTextContent("Last listed 2 months ago");
+    expect(screen.getByTestId("row-last-listed")).toHaveAttribute("title", "First seen date");
+  });
+
+  it("shows unknown last-listed text, but no archive line for a phrase-only job", () => {
+    const { rerender } = render(list([job(1, { closedReason: "gone", timeLabel: en.dashboard.jobs.lastListedUnknown })]));
+    expect(screen.getByTestId("row-last-listed")).toHaveTextContent("Last listed: not recorded");
+    rerender(list([job(1, { closedReason: "phrase" })]));
+    expect(screen.queryByTestId("row-last-listed")).toBeNull();
+  });
+});
+
 beforeEach(() => {
   vi.clearAllMocks();
   window.scrollTo = vi.fn(); // jsdom does not implement it

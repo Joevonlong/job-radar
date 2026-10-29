@@ -9,6 +9,8 @@ import { FilteredToggle } from "@/components/jobs/filtered-toggle";
 import { JobList } from "@/components/jobs/job-list";
 import { KeyHints } from "@/components/jobs/key-hints";
 import { MarkSeenButton } from "@/components/jobs/mark-seen-button";
+import { ScopeSwitch } from "@/components/jobs/scope-switch";
+import { resolveJobScope } from "@/lib/jobs/scope";
 import { SaveViewButton } from "@/components/jobs/save-view-button";
 import { Pagination } from "@/components/jobs/pagination";
 import { toListItems } from "@/components/jobs/to-list-items";
@@ -28,15 +30,13 @@ import { loadCityGroups } from "@/lib/jobs/cities";
 import { jobsListFilters } from "@/lib/jobs/list-filters";
 import { hasActiveFilters, type FilterVisibility, jobsListHref, jobsSearchQuery, loadJobsSearchParams, withLegacyKeys } from "@/lib/jobs/search-params";
 import { salaryFilteredIds } from "@/lib/jobs/filter-floors";
-import { effectiveDir, nextSortParams } from "@/lib/jobs/sort";
+import { effectiveDir, nextSortParams, resolveSort } from "@/lib/jobs/sort";
 import { effectiveSeenUpTo } from "@/lib/jobs/visit";
 import { trapsEnabled } from "@/lib/traps/settings";
 import { ghostFilterAvailable } from "@/lib/ghost/filter";
 import { visaFilterAvailable } from "@/lib/visa/filter";
 import { VisibilityScope } from "@/components/applications/visibility-scope";
 import { loadBaseCurrency } from "@/lib/signals/floor";
-
-const CLOSED_VIEW = ["closed", "possibly_closed"] as const;
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations("pages.jobs");
@@ -46,14 +46,13 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function JobsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   // `?t12=true` (the old name of `high`) reads as `high=true`; links written from here only carry `high`
   const params = withLegacyKeys(await loadJobsSearchParams(searchParams));
-  const [t, tJobs, tFav, tFavPage, tSeen, locale, tClosed] = await Promise.all([
+  const [t, tJobs, tFav, tFavPage, tSeen, locale] = await Promise.all([
     getTranslations("pages.jobs"),
     getTranslations("dashboard.jobs"),
     getTranslations("favorites.filter"),
     getTranslations("favorites.page"),
     getTranslations("dashboard.seen"),
     getLocale(),
-    getTranslations("dashboard.closed"),
   ]);
   const highValue = loadHighValuePolicy();
   const catalog = loadSignalCatalog();
@@ -80,12 +79,12 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
   const visibility: FilterVisibility = { ignore: [...(visaFilter ? [] : (["visa"] as const)), ...(ghostFilter ? [] : (["ghost"] as const))] };
   const visit = await getVisitState(db);
   const seenUpTo = effectiveSeenUpTo(visit, now);
-  // "Closed (N)" is the status filter "closed + possibly closed" (no URL key of its own); N counts the list it opens
-  const closedView = params.status.length === CLOSED_VIEW.length && CLOSED_VIEW.every((status) => params.status.includes(status));
-  const [result, options, seenCounts, salaryFigures, closedCount, companies] = await Promise.all([
+  // Shared priority: explicit sort, reserved relevance step, archive last-listed default, then rank.
+  const sort = resolveSort({ sort: params.sort, q: params.q, scope: resolveJobScope(params.scope, params.status) });
+  const [result, options, seenCounts, salaryFigures, archiveCount, companies] = await Promise.all([
     listJobs(db, {
       filters,
-      sort: params.sort,
+      sort,
       dir: params.dir,
       page: params.page,
       pageSize: JOBS_PAGE_SIZE,
@@ -96,14 +95,14 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
     getJobFilterOptions(db),
     countJobListSeen(db, { filters, timezone, since: seenUpTo }),
     listMonthSalaryFigures(db, { now, timeZone: timezone, currency: loadBaseCurrency() ?? "" }),
-    countJobList(db, { filters: { ...filters, statuses: CLOSED_VIEW }, timezone }),
+    countJobList(db, { filters: { ...filters, scope: "archive" }, timezone }),
     listCompanyFilterOptions(db, { limit: ui.filters.company_options_max + 1, timezone }),
   ]);
   const filterFloors = await getFilterFloors(db, salaryFilteredIds(result.jobs));
   const items = await toListItems(result.jobs, { now, timezone, filterFloors, seenUpTo, visa: visaFilter, ghost: ghostFilter, monthSalaries: { figures: salaryFigures, minSample: ui.salary_stats.min_sample } });
   // The "new since your last visit" divider when the list runs newest first (it sits on the page of the boundary only);
   // any other order says it next to the count, with a link to that order
-  const newestFirst = params.sort === "first_seen" && effectiveDir(params.sort, params.dir) === "desc";
+  const newestFirst = sort === "first_seen" && effectiveDir(sort, params.dir) === "desc";
   const lastNewIndex = items.findLastIndex((item) => item.isNew === true);
   const lastNew = items[lastNewIndex];
   // only on the page where the new jobs end: its last new job is the newSince-th of the whole list (a page that is all new, with
@@ -114,14 +113,15 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
     (lastNewIndex < items.length - 1 || result.page < result.pageCount);
   const newDivider = newestFirst && boundaryOnPage ? { afterJobId: lastNew.id, count: seenCounts.newSince } : undefined;
   // The column heads sort; each head links to the list sorted by it (the current one flips its direction)
-  const sortHref = (column: "score" | "salary" | "fresh") => jobsListHref({ ...params, ...nextSortParams(column, params) });
-  const sortHead = { sort: params.sort, dir: effectiveDir(params.sort, params.dir), hrefs: { score: sortHref("score"), salary: sortHref("salary"), fresh: sortHref("fresh") } };
+  const sortHref = (column: "score" | "salary" | "fresh") => jobsListHref({ ...params, ...nextSortParams(column, { sort, dir: params.dir }) });
+  const sortHead = { sort, dir: effectiveDir(sort, params.dir), hrefs: { score: sortHref("score"), salary: sortHref("salary"), fresh: sortHref("fresh") } };
 
   return (
     <VisibilityScope>
     <div data-wide className="flex min-w-0 flex-col gap-sp-4">
       <VisitTracker />
       <PageHeader title={t("title")} description={t("description")} />
+      <ScopeSwitch params={params} archiveCount={archiveCount} />
       <FilterBar options={{ ...options, cities: cities.map(({ key, target }) => ({ key, target })), companies: companies.slice(0, ui.filters.company_options_max), companyOptionsCapped: companies.length > ui.filters.company_options_max, companyOptionsVisible: ui.filters.company_options_visible, traps: trapsEnabled(), visa: visaFilter, ghost: ghostFilter, hiddenWorkplaces: hidden.workplaces, hiddenContracts: hidden.contracts, highValueNames }} />
       <div className="flex flex-wrap items-center gap-x-sp-3 gap-y-sp-2">
         {params.filteredOnly === true ? (
@@ -144,15 +144,6 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
           onLabel={tSeen("filterOn")}
           removeLabel={tSeen("filterRemove")}
           testId="toggle-unseen"
-        />
-        <QuickFilter
-          active={closedView}
-          href={jobsListHref({ ...params, status: closedView ? null : [...CLOSED_VIEW], page: 1 })}
-          offLabel={tClosed("filter", { count: closedCount })}
-          onLabel={tClosed("filter", { count: closedCount })}
-          removeLabel={tClosed("filterRemove")}
-          title={tClosed("filterHint")}
-          testId="toggle-closed"
         />
         <SaveViewButton />
         <span className="font-mono text-data text-ink-2" role="status" data-testid="result-count">

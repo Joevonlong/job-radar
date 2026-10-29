@@ -20,6 +20,7 @@ describe("cleanMultiValues", () => {
     expect(cleanMultiValues("workplace", ["remote", "moon", "onsite", "remote"])).toEqual(["onsite", "remote"]);
     expect(cleanMultiValues("status", ["closed", "active"])).toEqual(["active", "closed"]);
     expect(cleanMultiValues("app", ["archived", "new", "nope"])).toEqual(["new", "archived"]);
+    expect(cleanMultiValues("reason", ["dormant", "manual", "unknown", "gone", "manual"])).toEqual(["manual", "gone", "dormant"]);
   });
 
   it("sortMultiValues leaves free text alone", () => {
@@ -32,7 +33,7 @@ describe("filter table", () => {
     expect(new Set(FILTER_KEYS).size).toBe(FILTER_KEYS.length);
     for (const key of MULTI_FILTER_KEYS) expect(FILTER_KEYS).toContain(key);
     expect([...SELECT_FILTER_KEYS, "app"].sort()).toEqual([...MULTI_FILTER_KEYS].sort());
-    // `company` came after the multi-value filters: never written as a scalar
-    expect([...SCALAR_COMPAT_KEYS]).toEqual(SELECT_FILTER_KEYS.filter((key) => key !== "company"));
+    // `company` was always a list; `reason` is URL-only and never written to a saved view.
+    expect([...SCALAR_COMPAT_KEYS]).toEqual(SELECT_FILTER_KEYS.filter((key) => key !== "company" && key !== "reason"));
   });
 });

@@ -1,4 +1,18 @@
-import { DEFAULT_SORT_DIR, type JobSort, type SortDir } from "./constants";
+import { DEFAULT_SORT_DIR, JOB_SORTS, type JobScope, type JobSort, type SortDir } from "./constants";
+
+/** One sort contract for URLs, list queries and controls; an explicit rank must remain distinct from no sort. */
+export function resolveSort(input: { sort: JobSort | null; q: string | null; scope: JobScope }): JobSort {
+  // 1. A valid explicit sort always wins.
+  if (input.sort !== null && JOB_SORTS.includes(input.sort)) return input.sort;
+
+  // 2. Reserved: a later full-text relevance sort inserts its usable-q check here, only here,
+  // without reordering the other steps. Empty for now: fall through without changing behaviour.
+
+  // 3. The archive defaults to the newest source listing.
+  if (input.scope === "archive") return "last_listed";
+  // 4. Every other scope defaults to rank.
+  return "rank";
+}
 
 /**
  * Sorting /jobs from the list's column heads. Pure (client and server): the page works out the links of the heads with
@@ -34,7 +48,7 @@ export function nextSortParams(column: SortableColumn, current: { sort: JobSort;
   return { sort, dir: null, page: 1 };
 }
 
-/** The column a sort belongs to; null for a sort without a column (`posted`). */
+/** The column a sort belongs to; null for a sort without a column (`posted`, `last_listed`). */
 export function columnOfSort(sort: JobSort): SortableColumn | null {
   for (const [column, columnSort] of Object.entries(SORTABLE_COLUMNS) as Array<[SortableColumn, JobSort]>) if (columnSort === sort) return column;
   return null;

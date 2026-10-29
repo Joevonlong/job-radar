@@ -19,6 +19,12 @@ describe("jobsListFilters: base currency", () => {
   const params = (query: string) => loadJobsSearchParams(new URLSearchParams(query));
   const db = {} as Db;
 
+  it("carries scope and reasons outside saved-view conversion, also for mark-all-seen", async () => {
+    const filters = await jobsListFilters(db, params("scope=current&status=closed&reason=gone&reason=manual"), { cities: [], visa: false, ghost: false });
+    expect(filters).toMatchObject({ scope: "current", statuses: ["closed"], closedReasons: ["manual", "gone"] });
+    expect(await jobsListFilters(db, params("status=closed"), { cities: [], visa: false, ghost: false })).toMatchObject({ scope: null, statuses: ["closed"], closedReasons: [] });
+  });
+
   it("carries the market's base currency for the salary sort and the minimum salary", async () => {
     const filters = await jobsListFilters(db, params("sort=salary&minSalary=90000"), { cities: [] });
     expect(filters.baseCurrency).toBe("CHF");

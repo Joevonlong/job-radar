@@ -24,6 +24,9 @@ export async function jobsListFilters(db: Db, params: JobsSearchParams, known: {
     ...toJobFilters(view, { cityGroups: known.cities ?? (await loadCityGroups(db)), visa: known.visa ?? (await visaFilterAvailable(db)), ghost: known.ghost ?? (await ghostFilterAvailable(db)), companyIds }),
     from: params.from,
     to: params.to,
+    // URL-only scope and reasons never pass through saved-view conversion. Mark-all-seen shares this mapping.
+    scope: params.scope,
+    closedReasons: params.reason,
     includeFiltered: params.filtered,
     filteredOnly: params.filteredOnly === true,
     hideGermanLevels: params.hideLang ? germanLevelsToHide() : null,

@@ -251,7 +251,7 @@ test.describe("job detail: closing a job", () => {
     }
   };
 
-  test("mark as closed with a note, undo, close again, find it in 'Closed (N)', reopen", async ({ page }) => {
+  test("mark as closed with a note, undo, close again, find it in 'Archive (N)', reopen", async ({ page }) => {
     const lock = postgres(E2E_URL, { max: 1, onnotice: () => {} });
     await lock`select pg_advisory_lock(117)`;
     try {
@@ -279,7 +279,7 @@ test.describe("job detail: closing a job", () => {
 
       await page.goto("/jobs?q=Developer+Experience&filtered=true");
       await expect(listRow(page, id)).toHaveCount(0);
-      await page.getByTestId("toggle-closed").click();
+      await page.getByRole("group", { name: /^(Job scope|岗位范围)$/ }).getByRole("link", { name: /^(Archive|历史库)/ }).click();
       await expect(listRow(page, id)).toBeVisible();
       await page.getByRole("link", { name: new RegExp(CLOSE_TITLE) }).first().click();
       await expect(page.getByTestId("job-title")).toContainText(CLOSE_TITLE);

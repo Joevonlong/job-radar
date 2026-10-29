@@ -98,7 +98,7 @@ afterAll(async () => {
 
 describe("search_jobs", () => {
   it("search hides a dormant job while get_job preserves its status and explains the reason", async () => {
-    const id = await jobId({ company: "Maplewick Research" });
+    const id = await jobId({ company: "Maplewick Research", title: "Research Engineer, Document Retrieval" });
     const client = await connect();
     const searched = await call<SearchJobsOutput>(client, "search_jobs", { query: "Maplewick" });
     expect(searched.structured.total).toBe(0);

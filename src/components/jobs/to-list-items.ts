@@ -10,6 +10,7 @@ import type { JobCard } from "@/lib/db/queries/types";
 import { distinctFamilies } from "@/lib/dashboard/apply";
 import { isHighPayAmount, otherRegionOfAmount } from "@/lib/signals/bonus";
 import { buildCatalog, toCategoryView } from "@/lib/signals/catalog";
+import { isArchivedReason } from "@/lib/jobs/scope";
 import { isNewSince } from "@/lib/jobs/visit";
 import { loadBonusPolicy } from "@/lib/signals/floor";
 import { loadTargetPlaces } from "@/lib/dashboard/target-places";
@@ -71,6 +72,7 @@ export async function toListItems(
     const rowLocations = pickRowLocations(card.locations, targetPlaces, MAX_ROW_LOCATIONS);
     const reference = card.postedAt ?? card.firstSeenAt;
     const relative = format.relativeTime(reference, options.now);
+    const archived = isArchivedReason(card.closedReason);
     return {
       id: card.id,
       title: card.title,
@@ -134,8 +136,10 @@ export async function toListItems(
       ...(showVisa && card.visa ? { visa: { status: card.visa.status, kind: card.visa.kind } } : {}),
       ...(showGhost && card.ghost ? { ghost: { level: card.ghost.level, score: card.ghost.score, reasons: ghostReasons(card.ghost.top) } } : {}),
       amountCurrency: baseCurrency,
-      timeLabel: card.postedAt ? relative : t("time.seen", { time: relative }),
-      timeTitle: format.dateTime(reference, { dateStyle: "medium", timeStyle: "short", timeZone: options.timezone }),
+      timeLabel: archived
+        ? card.lastListedAt ? t("jobs.lastListed", { time: format.relativeTime(card.lastListedAt, options.now) }) : t("jobs.lastListedUnknown")
+        : card.postedAt ? relative : t("time.seen", { time: relative }),
+      timeTitle: format.dateTime(archived ? card.firstSeenAt : reference, { dateStyle: "medium", timeStyle: "short", timeZone: options.timezone }),
     };
   });
 }
