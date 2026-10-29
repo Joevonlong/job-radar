@@ -1,16 +1,17 @@
 import { z } from "zod";
 
+import { SEARCH_QUERY_MAX_CHARS } from "@/lib/config/schemas/job-search";
 import { MCP_MAX_RESULTS_CAP } from "@/lib/config/schemas/mcp";
-import { listJobs, type JobFilters } from "@/lib/db/queries/jobs";
+import { listJobs, SearchTimeoutError, type JobFilters } from "@/lib/db/queries/jobs";
 import { APPLICATION_FILTER_STATUSES, JOB_WORKPLACES, MIN_SALARY_MAX } from "@/lib/jobs/constants";
 
-import type { McpContext } from "../context";
+import { ToolFailure, type McpContext } from "../context";
 import { searchJobsOutput, toJobCardDto, type SearchJobsOutput } from "../dto";
 import { shortFieldCleaner } from "../guard";
 import { readTraps, resultLimit, truncationNotice } from "./shared";
 
-/** Longest search text and city name a call accepts. */
-export const MAX_QUERY_CHARS = 200;
+/** Longest search text (the cap of job-search.yaml `query.max_chars`) and city name a call accepts. */
+export const MAX_QUERY_CHARS = SEARCH_QUERY_MAX_CHARS;
 export const MAX_CITY_CHARS = 120;
 export const SEARCH_SORTS = ["relevance", "rank", "posted", "first_seen"] as const;
 
@@ -72,7 +73,10 @@ export async function searchJobs(ctx: McpContext, args: SearchJobsArgs): Promise
   if (args.application_status) filters.applicationStatuses = args.application_status;
 
   const limit = resultLimit(ctx, args.limit);
-  const page = await listJobs(ctx.db, { filters, sort: args.sort ?? (args.query ? "relevance" : "rank"), page: 1, pageSize: limit, timezone: ctx.timezone() });
+  const page = await listJobs(ctx.db, { filters, sort: args.sort ?? (args.query ? "relevance" : "rank"), page: 1, pageSize: limit, timezone: ctx.timezone() }).catch((error: unknown) => {
+    if (error instanceof SearchTimeoutError) throw new ToolFailure(error.code, ctx.text("errors.searchTimeout"));
+    throw error;
+  });
   const clean = shortFieldCleaner(readTraps(ctx));
   const jobs = page.jobs.map((card) => toJobCardDto(card, clean));
   const truncated = page.total > jobs.length;

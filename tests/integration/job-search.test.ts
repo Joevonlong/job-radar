@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, inject, it } from "vitest";
 
-import { closeDb, countJobList, countJobListSeen, countTodayJobs, getDb, getViewDailyCounts, listCompanyFilterOptions, listJobCountryOptions, listJobs, listTodayJobs, listUnseenJobIds, schema, type JobFilters } from "@/lib/db";
+import { closeDb, countJobList, countJobListSeen, countTodayJobs, getDb, getViewDailyCounts, listCompanyFilterOptions, listJobCountryOptions, listJobs, listTodayJobs, listUnseenJobIds, schema, SearchTimeoutError, type JobFilters } from "@/lib/db";
 import { searchFieldMatches, searchPhrasePattern, searchTermPattern } from "@/lib/db/queries/job-search";
 import { descriptionHash } from "@/lib/translation/hash";
 
@@ -95,6 +95,9 @@ describe("precise job search acceptance", () => {
   it("recognizes country names and exact codes with the specified result sets", async () => {
     for (const q of ["Germany", "Deutschland", "德国", "DE", "de"]) await set(q, germany);
     await set('"de"', ["J8"]);
+    for (const q of ["Chef de projet", "chef de projet"]) await set(q, ["J8"]);
+    await set("engineer DE", ["J1", "J12"]);
+    await set("engineer de", []);
     await set("United States", ["J11"]);
     await set("IT", ["J10"]);
     await set("", ["J10"], { countries: ["IT"] });
@@ -211,6 +214,25 @@ describe("precise job search acceptance", () => {
     expect(await countTodayJobs(getDb(), { now, timezone, extra })).toBe(1);
     const trends = await getViewDailyCounts(getDb(), { views: [{ id: "company-search", filters: extra }], timezone, now, days: 1 });
     expect(trends.get("company-search")).toEqual([1]);
+  });
+});
+
+describe("full-text search time limit", () => {
+  it("cancels searchIn=all list and count queries past the limit and leaves summary search and the session untouched", async () => {
+    // A few megabytes of description keep the regex scan well above one millisecond
+    await getDb().execute(sql`update jobs set description = repeat('lorem ipsum dolor ', 200000) || 'AI tooling' where id = ${id("J2")}`);
+    const search = { ...searchPlan("tooling"), allScopeTimeoutMs: 1 };
+    const filters: JobFilters = { search, searchIn: "all" };
+    await expect(listJobs(getDb(), { filters, sort: "relevance", page: 1, pageSize: 50, timezone })).rejects.toBeInstanceOf(SearchTimeoutError);
+    await expect(countJobList(getDb(), { filters, timezone })).rejects.toBeInstanceOf(SearchTimeoutError);
+    await expect(countJobListSeen(getDb(), { filters, timezone, since: null })).rejects.toBeInstanceOf(SearchTimeoutError);
+    await expect(listUnseenJobIds(getDb(), { filters, timezone })).rejects.toBeInstanceOf(SearchTimeoutError);
+    expect(keys((await listJobs(getDb(), { filters: { search }, sort: "relevance", page: 1, pageSize: 50, timezone })).jobs)).toEqual([]);
+    // The limit is transaction-local: pooled sessions keep the server default afterwards
+    const sessions = await Promise.all(Array.from({ length: 4 }, () => getDb().execute<{ timeout: string }>(sql`select current_setting('statement_timeout') as timeout`)));
+    expect(sessions.map(([row]) => row?.timeout)).not.toContain("1ms");
+    const generous = { search: { ...search, allScopeTimeoutMs: 60_000 }, searchIn: "all" } as const;
+    expect(keys((await listJobs(getDb(), { filters: generous, sort: "relevance", page: 1, pageSize: 50, timezone })).jobs)).toEqual(["J2"]);
   });
 });
 

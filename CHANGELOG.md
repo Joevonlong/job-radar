@@ -11,6 +11,8 @@ and the project uses [Semantic Versioning](https://semver.org/).
   descriptions no longer participate by default. Use `/jobs?searchIn=all` or MCP `search_in: "all"` to include original descriptions
   and current translations. Short words match whole words, longer words allow prefixes, and quoted phrases stay within a field.
   Queries default to descending relevance unless an explicit sort is supplied; `country` codes filter locations exactly.
+  A two-letter country code typed alone is a country; inside a longer query only when typed in capitals (`engineer DE`,
+  while `chef de projet` stays text). Description searches stop after `job-search.yaml: query.all_scope_timeout_ms` and say so.
   `country` and `searchIn` are URL-only, never written to saved views. No migration or stored-data rewrite is needed.
   The web server and the read-only MCP server open their database sessions with `jit = off` (Postgres JIT compilation
   cost more than these queries); runner and AI worker keep the server default.

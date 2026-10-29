@@ -1,5 +1,5 @@
 # Independent config fixture; tests must not depend on product defaults.
-query: {max_chars: 160, max_terms: 9, cjk_min_chars: 3}
+query: {max_chars: 160, max_terms: 9, cjk_min_chars: 3, all_scope_timeout_ms: 6000}
 matching: {prefix_min_chars: 5}
 ranking:
   weights: {title: 7, company: 4, location: 2, country: 2, description: 0.5, translation: 0.5}

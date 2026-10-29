@@ -32,15 +32,18 @@ describe("Postgres search patterns", () => {
     expect(matches(pattern("C"), "embedded C")).toBe(true);
   });
 
-  it("requires only a left boundary for prefixes, and both for programming symbols", () => {
+  it("requires only a left boundary for prefixes, and both for programming symbols except before a leading dot", () => {
     expect(matches(pattern("quillfeath"), "Quillfeather Labs")).toBe(true);
     expect(matches(pattern("quillfeath"), "Prequillfeather")).toBe(false);
     expect(matches(pattern("eng"), "Engineer")).toBe(false);
     for (const q of ["C++", "C#", ".NET", "node.js"]) {
       expect(matches(pattern(q), `Senior ${q} Developer`)).toBe(true);
-      expect(matches(pattern(q), `Some${q}`)).toBe(false);
       expect(matches(pattern(q), `${q}suffix`)).toBe(false);
     }
+    for (const q of ["C++", "C#", "node.js"]) expect(matches(pattern(q), `Some${q}`)).toBe(false);
+    // The dot is the boundary: ASP.NET and VB.NET are .NET jobs
+    for (const value of ["ASP.NET Core", "VB.NET", "Some.NET"]) expect(matches(pattern(".NET"), value), value).toBe(true);
+    expect(matches(pattern(".NET"), "ASP.NETwork")).toBe(false);
   });
 
   it("limits phrase separators, without crossing Han or other scripts", () => {

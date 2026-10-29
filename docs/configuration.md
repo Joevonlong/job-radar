@@ -92,8 +92,11 @@ This shipped file configures the job search parser separately from collection cr
 It controls /jobs, Today saved-view searches, view trends, quick-open search and MCP search_jobs.
 All keys are required and unknown keys are rejected. Defaults live in the YAML only.
 
-- `query`: input length (`max_chars`, integer 10–1000), distinct term limit (`max_terms`, integer 1–50),
-  and minimum standalone CJK fragment length (`cjk_min_chars`, integer 1–10).
+- `query`: input length (`max_chars`, integer 10–200; 200 is also the limit of MCP `query` and a saved view's `q`),
+  distinct term limit (`max_terms`, integer 1–50), minimum standalone CJK fragment length (`cjk_min_chars`, integer 1–10),
+  and `all_scope_timeout_ms` (integer 1–120000): the time limit of each list or count query that also searches
+  descriptions (`searchIn=all`). Past it, /jobs shows "Full-text search timed out" instead of results and MCP
+  `search_jobs` returns a `search_timeout` error.
 - `matching.prefix_min_chars`: minimum word length for prefix matching, integer 1–20.
 - `ranking`: field `weights` (`title`, `company`, `location`, `country`, `description`, `translation`, each 0–100)
   and `prefix_factor` (0–1). Each term contributes only its highest matching field weight; prefix text matches are discounted.
@@ -106,10 +109,15 @@ Search defaults to title, company display name/aliases, each location's city/lab
 `/jobs?searchIn=all` also searches the original description and current translations with matching source hashes;
 stored translation markers are excluded. Fields are normalized with NFKC at query time without changing stored data.
 Short Latin words require whole-word matches, longer words allow prefixes, quoted phrases stay within one field,
-and programming terms such as `C++` are literal. Country names also match text; unambiguous bare codes match only
-country codes, while ambiguous codes remain text. `/jobs?country=DE&country=FR` applies an exact OR country filter.
+and programming terms such as `C++` are literal; a term with a leading dot such as `.NET` also matches `ASP.NET`.
+Country names also match text; unambiguous bare codes match only country codes, while ambiguous codes remain text.
+A code alone (`DE`, `de`) is a country; in a longer query only a code typed in capitals is (`engineer DE`), so
+`chef de projet` keeps `de` as a word. Quote a code (`"DE"`) to search it as text. `/jobs?country=DE&country=FR` applies an exact OR country filter.
 Country and search scope are URL-only and are never saved in views. A nonempty query defaults to descending relevance
 unless a sort was explicitly chosen; relevance ignores `dir`. The other sort defaults are unchanged.
+
+Case-insensitive matching of non-ASCII letters (`ü`/`Ü`, `é`/`É`) depends on the database locale. The Docker stack's
+database uses `en_US.utf8` and folds them; a database created with the `C` locale folds ASCII letters only.
 
 To override these settings, copy the complete file into the user config directory. The copy replaces future shipped updates.
 

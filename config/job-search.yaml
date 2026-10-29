@@ -3,6 +3,7 @@ query: # Limits applied before matching.
   max_chars: 200 # Maximum query length before normalization.
   max_terms: 12 # Maximum distinct terms kept.
   cjk_min_chars: 2 # Minimum length of a CJK fragment.
+  all_scope_timeout_ms: 8000 # Time limit for one query that also searches descriptions (searchIn=all).
 matching: # Text matching rules.
   prefix_min_chars: 4 # Shorter words require whole-word matches.
 ranking: # Relative relevance contributions.

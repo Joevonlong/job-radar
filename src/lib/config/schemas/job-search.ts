@@ -4,12 +4,16 @@ const countryCode = z.string().regex(/^[A-Z]{2}$/);
 const name = z.string().trim().min(1);
 const weight = z.number().min(0).max(100);
 
+/** Upper bound of `query.max_chars`, shared by every input that carries a search text (MCP, saved views). */
+export const SEARCH_QUERY_MAX_CHARS = 200;
+
 /** Every setting is required; the shipped YAML is the only source of defaults. */
 export const jobSearchSchema = z.strictObject({
   query: z.strictObject({
-    max_chars: z.number().int().min(10).max(1000),
+    max_chars: z.number().int().min(10).max(SEARCH_QUERY_MAX_CHARS),
     max_terms: z.number().int().min(1).max(50),
     cjk_min_chars: z.number().int().min(1).max(10),
+    all_scope_timeout_ms: z.number().int().min(1).max(120_000),
   }),
   matching: z.strictObject({
     prefix_min_chars: z.number().int().min(1).max(20),

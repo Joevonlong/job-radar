@@ -86,8 +86,10 @@ maintenance 连续 `relist.min_gap_days` 天或更久没有运行、而采集一
 它用于 /jobs、Today 已存视图搜索、视图趋势、快速打开接口和 MCP search_jobs。
 所有键均必填，未知键会被拒绝；默认值只写在 YAML 中。
 
-- `query`：输入长度（`max_chars`，整数 10–1000）、不同词项上限（`max_terms`，整数 1–50）、
-  独立 CJK 片段的最少字数（`cjk_min_chars`，整数 1–10）。
+- `query`：输入长度（`max_chars`，整数 10–200；200 也是 MCP `query` 和已存视图 `q` 的上限）、不同词项上限（`max_terms`，整数 1–50）、
+  独立 CJK 片段的最少字数（`cjk_min_chars`，整数 1–10），以及 `all_scope_timeout_ms`（整数 1–120000）：
+  同时搜索职位说明（`searchIn=all`）时每条列表或计数查询的时间上限。超时后 /jobs 显示“全文搜索超时”而不是结果，
+  MCP `search_jobs` 返回 `search_timeout` 错误。
 - `matching.prefix_min_chars`：允许前缀匹配的最少词长，整数 1–20。
 - `ranking`：字段权重 `weights`（`title`、`company`、`location`、`country`、`description`、`translation`，各 0–100）
   与前缀折扣 `prefix_factor`（0–1），用于相关度排序，每个词只取命中字段的最高权重，前缀文本匹配乘以折扣。
@@ -101,9 +103,14 @@ maintenance 连续 `relist.min_gap_days` 天或更久没有运行、而采集一
 搜索默认匹配标题、公司显示名与别名、每个地点的 city/label，以及识别出的国家。
 `/jobs?searchIn=all` 还搜索原始职位说明和来源哈希有效的译文，译文标记不参与匹配。
 查询时对字段做 NFKC 归一，不改存储。短拉丁词只整词匹配，长词允许词首前缀；引号短语限于同一字段；
-`C++` 等符号词按字面匹配。国家名同时匹配文本，非歧义裸代码只匹配国家代码，歧义代码仍是普通文本。
+`C++` 等符号词按字面匹配；以点开头的词（如 `.NET`）也匹配 `ASP.NET`。国家名同时匹配文本，非歧义裸代码只匹配国家代码，歧义代码仍是普通文本。
+只输入一个代码（`DE`、`de`）时当国家；多词查询里只有大写输入的代码才当国家（`engineer DE`），所以 `chef de projet`
+里的 `de` 仍是普通词。给代码加引号（`"DE"`）就按文本搜索。
 `/jobs?country=DE&country=FR` 按国家代码精确筛选（OR）。country 和 searchIn 只在 URL 中，不存进视图。
 有搜索词且未显式选排序时，固定按相关度降序，忽略 dir；其他排序默认值不变。
+
+非 ASCII 字母的大小写不敏感（`ü`/`Ü`、`é`/`É`）取决于数据库 locale。Docker 部署的数据库用 `en_US.utf8`，会折叠大小写；
+用 `C` locale 建的数据库只折叠 ASCII 字母。
 
 ## 命令
 

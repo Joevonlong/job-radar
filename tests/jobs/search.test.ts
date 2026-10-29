@@ -6,8 +6,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { stringify } from "yaml";
 
 import { loadConfig, reloadConfig } from "@/lib/config";
-import { buildSearchPlan, jobSearchSettings } from "@/lib/jobs/search";
+import { buildSearchPlan, buildSearchPlanLenient, jobSearchSettings } from "@/lib/jobs/search";
 import * as query from "@/lib/jobs/search-query";
+import * as market from "@/lib/market";
 
 import { makeTempConfig, type TempConfig } from "../config/helpers";
 
@@ -15,7 +16,7 @@ let tmp: TempConfig;
 beforeEach(() => {
   tmp = makeTempConfig();
   fs.writeFileSync(path.join(tmp.configDir, "job-search.yaml"), stringify({
-    query: { max_chars: 120, max_terms: 3, cjk_min_chars: 2 },
+    query: { max_chars: 120, max_terms: 3, cjk_min_chars: 2, all_scope_timeout_ms: 4000 },
     matching: { prefix_min_chars: 5 },
     ranking: { weights: { title: 9, company: 6, location: 4, country: 2, description: 1, translation: 1 }, prefix_factor: 0.5 },
     countries: { name_locales: ["en", "zh"], ambiguous_codes: ["IT", "IN"], extra_aliases: { DE: ["Example country alias"] } },
@@ -35,7 +36,14 @@ describe("server search entry", () => {
     expect(buildSearchPlan("four").terms[0]?.match).toBe("whole");
     expect(build).toHaveBeenCalledTimes(1);
     expect(buildSearchPlan("AI").ranking).toEqual({ weights: jobSearchSettings().ranking.weights, prefixFactor: 0.5 });
+    expect(buildSearchPlan("AI").allScopeTimeoutMs).toBe(4000);
     expect(jobSearchSettings()).toBe(loadConfig("jobSearch"));
+  });
+
+  it("keeps text search for the MCP server when pipeline.yaml does not load", () => {
+    vi.spyOn(market, "loadPipeline").mockImplementation(() => { throw new Error("pipeline.yaml is invalid"); });
+    expect(() => buildSearchPlan("Germany engineer")).toThrow();
+    expect(buildSearchPlanLenient("Germany engineer")).toMatchObject({ status: "ok", terms: [{ text: "germany", countryCodes: [] }, { text: "engineer" }] });
   });
 
   it("rebuilds after either config identity changes", () => {

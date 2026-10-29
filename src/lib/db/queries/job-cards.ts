@@ -1,7 +1,7 @@
 import { and, asc, desc, eq, inArray, isNotNull, notInArray, sql, type SQL } from "drizzle-orm";
 import type { SubqueryWithSelection } from "drizzle-orm/pg-core";
 
-import type { Db } from "../client";
+import type { Executor } from "../executor";
 import { getApplicationStatuses } from "../repos/applications";
 import { getFavoriteStates } from "../repos/favorites";
 import { seenSql } from "../repos/seen";
@@ -80,7 +80,7 @@ function latestColumns(newest: SubqueryWithSelection<ReturnType<typeof newestCol
  * The CTE works out the score of every job at once: the right shape for the /jobs list, which sorts all
  * its jobs by rank. A query over a few jobs (Today, a cycle) uses `latestScoreLateral` instead.
  */
-export function latestScoreCte(db: Db) {
+export function latestScoreCte(db: Executor) {
   const newest = db
     .selectDistinctOn([scores.jobId], newestColumns())
     .from(scores)
@@ -101,7 +101,7 @@ export function latestScoreCte(db: Db) {
  * `scores_job_latest_scored_idx`) instead of the score of every job. For queries that select few jobs; a
  * job without `scores` rows gets nulls, as with the CTE.
  */
-export function latestScoreLateral(db: Db) {
+export function latestScoreLateral(db: Executor) {
   const newest = db
     .select(newestColumns())
     .from(scores)
@@ -210,7 +210,7 @@ export type CardRow = {
 };
 
 /** Sources of the given jobs, best apply link (lowest priority number) first. */
-export async function loadSources(db: Db, jobIds: readonly number[]): Promise<Map<number, JobSourceRef[]>> {
+export async function loadSources(db: Executor, jobIds: readonly number[]): Promise<Map<number, JobSourceRef[]>> {
   const out = new Map<number, JobSourceRef[]>();
   if (jobIds.length === 0) return out;
   const rows = await db
@@ -235,7 +235,7 @@ export async function loadSources(db: Db, jobIds: readonly number[]): Promise<Ma
   return out;
 }
 
-export async function loadSignals(db: Db, jobIds: readonly number[]): Promise<Map<number, JobSignal[]>> {
+export async function loadSignals(db: Executor, jobIds: readonly number[]): Promise<Map<number, JobSignal[]>> {
   const out = new Map<number, JobSignal[]>();
   if (jobIds.length === 0) return out;
   const rows = await db
@@ -288,7 +288,7 @@ export interface HydrateOptions {
 }
 
 /** Turn card rows into cards by attaching sources, signals and the application status (3 queries for the whole page). */
-export async function hydrateCards(db: Db, rows: readonly CardRow[], options: HydrateOptions = {}): Promise<JobCard[]> {
+export async function hydrateCards(db: Executor, rows: readonly CardRow[], options: HydrateOptions = {}): Promise<JobCard[]> {
   const ids = rows.map((r) => r.id);
   const [sources, signalMap, statuses, favorites, traps, visa, ghost] = await Promise.all([
     loadSources(db, ids),

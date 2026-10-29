@@ -1062,6 +1062,7 @@
       "listLabel": "Job list",
       "empty": "No jobs yet. They show up here after a collection cycle.",
       "emptyFiltered": "No jobs match. Try relaxing the filters.",
+      "searchTimeout": "Full-text search timed out. Narrow the search or the filters.",
       "filters": {
         "label": "Search and filters",
         "search": "Search jobs",
@@ -6518,6 +6519,7 @@
     },
     "errors": {
       "notFound": "No job with id {id}.",
+      "searchTimeout": "Searching job descriptions took too long and was stopped (search_timeout). Narrow the query or the filters, or search without search_in: \"all\".",
       "failed": "The query failed ({category}). Your MCP client's log for this server has the line of this call."
     },
     "tools": {

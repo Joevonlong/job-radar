@@ -12,12 +12,13 @@ const countries = [
   { code: "IN", name: "India" },
   { code: "AT", name: "Austria" },
   { code: "FR", name: "France" },
+  { code: "ES", name: "Spain" },
   { code: "AI", name: "Anguilla" },
   { code: "JE", name: "Jersey", match: false },
 ];
 const options = { locales: ["en", "de", "zh"], ambiguousCodes: ["AI", "AT", "IN", "IS", "IT", "US"], extraAliases: { DE: ["Federal Republic of Germany"] } };
 const lexicon = buildCountryLexicon(countries, options);
-const settings = { ranking: searchSettings.ranking, maxTerms: 12, prefixMinChars: 4, cjkMinChars: 2, maxChars: 200 };
+const settings = { ranking: searchSettings.ranking, maxTerms: 12, prefixMinChars: 4, cjkMinChars: 2, maxChars: 200, allScopeTimeoutMs: 8000 };
 const context = {
   lexicon,
   cityAliases: { Munich: ["München", "Muenchen"], "New York": ["NYC"] },
@@ -71,11 +72,11 @@ describe("search query terms", () => {
   });
 
   it.each(["%", "+++", '""', '"  "', "德", ".", "#"])("returns no_terms for %s", (q) => {
-    expect(parse(q)).toEqual({ status: "no_terms", terms: [], droppedTerms: 0, hasCjk: false, phrase: null, ranking: settings.ranking });
+    expect(parse(q)).toEqual({ status: "no_terms", terms: [], droppedTerms: 0, hasCjk: false, phrase: null, ranking: settings.ranking, allScopeTimeoutMs: 8000 });
   });
 
   it.each([null, undefined, "", " \t\n "])("returns none for empty input %s", (q) => {
-    expect(parse(q)).toEqual({ status: "none", terms: [], droppedTerms: 0, hasCjk: false, phrase: null, ranking: settings.ranking });
+    expect(parse(q)).toEqual({ status: "none", terms: [], droppedTerms: 0, hasCjk: false, phrase: null, ranking: settings.ranking, allScopeTimeoutMs: 8000 });
   });
 
   it("deduplicates terms before applying the limit", () => {
@@ -121,6 +122,22 @@ describe("country recognition", () => {
 
   it.each(["DE", "de"])("recognizes %s only as a country code", (q) => {
     expect(parse(q).terms).toMatchObject([{ countryCodes: ["DE"], countryOnly: true }]);
+  });
+
+  it("keeps lowercase or mixed-case codes as text in longer queries and capitals as countries", () => {
+    expect(parse("Chef de projet").terms).toMatchObject([
+      { text: "chef", countryCodes: [] }, { text: "de", kind: "word", match: "whole", countryCodes: [], countryOnly: false }, { text: "projet", countryCodes: [] },
+    ]);
+    expect(parse("ingeniero de software ES").terms).toMatchObject([
+      { text: "ingeniero", countryCodes: [] }, { text: "de", countryCodes: [] }, { text: "software", countryCodes: [] },
+      { text: "es", countryCodes: ["ES"], countryOnly: true },
+    ]);
+    expect(parse("engineer DE").terms).toMatchObject([{ text: "engineer", countryCodes: [] }, { text: "de", countryCodes: ["DE"], countryOnly: true }]);
+    expect(parse("engineer De").terms[1]).toMatchObject({ text: "de", countryCodes: [] });
+    expect(parse("ＤＥ engineer").terms[0]).toMatchObject({ text: "de", countryCodes: ["DE"] });
+    expect(parse('"engineer" de').terms[1]).toMatchObject({ text: "de", countryCodes: [] });
+    expect(parse("engineer germany").terms[1]).toMatchObject({ countryCodes: ["DE"], countryOnly: false });
+    expect(parse("engineer IT").terms[1]?.countryCodes).toEqual([]);
   });
 
   it("never treats quoted words as countries, including single words and symbols", () => {

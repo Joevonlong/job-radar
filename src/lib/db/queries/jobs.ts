@@ -1,6 +1,8 @@
 import { and, asc, count, desc, eq, exists, inArray, isNull, lte, ne, not, or, sql, type SQL } from "drizzle-orm";
+import { z } from "zod";
 
 import type { Db } from "../client";
+import type { Executor } from "../executor";
 import { applications, channels, companies, jobFavorites, jobSources, jobs, jobVisa, trapScans } from "../schema";
 import type { MonthSalaryFigure } from "@/lib/domain/salary";
 import { DEFAULT_SORT_DIR, MAX_FILTER_VALUE_CHARS, type ApplicationFilterStatus, type ArchiveReason, type GhostFilter, type JobScope, type JobSort, type SortDir, type TrapFilter, type VisaFilter } from "@/lib/jobs/constants";
@@ -11,7 +13,7 @@ import { ghostTrustedKeys } from "@/lib/ghost/settings";
 import { ghostFilterCondition } from "../repos/ghost";
 import { seenSql } from "../repos/seen";
 import { uxTablesReady } from "../repos/ux-tables";
-import { jobHasCountryIn, jobSearchCondition, jobSearchOrderBy } from "./job-search";
+import { jobHasCountryIn, jobLocationRows, jobSearchCondition, jobSearchOrderBy } from "./job-search";
 import { archiveReasonSql, effectiveStatusSql, jobScopeSql, lastListedSql } from "./job-status";
 import { cardColumns, hideGermanLevels, hydrateCards, latestScoreCte, latestScoreLateral, type CardRow, type LatestScore } from "./job-cards";
 import { annualBaseFigureSql, baseBoundSql, comparableSalaryWhere } from "./salary-figure";
@@ -145,7 +147,7 @@ export function jobHasCityIn(members: readonly string[]): SQL {
  * WHERE conditions for the filters; undefined when none apply. `ux`: the seen / closure tables exist (`uxTablesReady`); before the
  * migration "unseen only" has nothing to go by and is ignored.
  */
-export function buildJobConditions(db: Db, filters: JobFilters, timezone: string, latest: LatestScore, ux = true): SQL | undefined {
+export function buildJobConditions(db: Executor, filters: JobFilters, timezone: string, latest: LatestScore, ux = true): SQL | undefined {
   const conditions: SQL[] = [];
 
   const search = jobSearchCondition(filters.search, filters.searchIn);
@@ -252,7 +254,7 @@ export function jobOrderBy(sort: JobSort, dir: SortDir, latest: LatestScore, cur
  * buildJobConditions, without changing this scope composition. One definition for the list, counts, "mark all seen" and
  * the job counts of the company drop-down (`listCompanyFilterOptions`, with no filters: the list as /jobs opens).
  */
-export async function jobListWhere(db: Db, filters: JobFilters, timezone: string, latest: LatestScore, ux: boolean): Promise<SQL | undefined> {
+export async function jobListWhere(db: Executor, filters: JobFilters, timezone: string, latest: LatestScore, ux: boolean): Promise<SQL | undefined> {
   const hideFiltered = filters.filteredOnly
     ? eq(latest.filterResult, "filtered_out")
     : filters.includeFiltered
@@ -265,8 +267,50 @@ export async function jobListWhere(db: Db, filters: JobFilters, timezone: string
   return and(buildJobConditions(db, filters, timezone, latest, ux), hideFiltered, scope, reasons, relisted);
 }
 
+/** A `searchIn=all` query ran past job-search.yaml `query.all_scope_timeout_ms` and Postgres cancelled it. */
+export class SearchTimeoutError extends Error {
+  readonly code = "search_timeout";
+  constructor() {
+    super("full-text search timed out");
+    this.name = "SearchTimeoutError";
+  }
+}
+
+const QUERY_CANCELED = "57014";
+
+function isStatementTimeout(error: unknown): boolean {
+  // drizzle wraps the driver error; postgres.js puts the SQLSTATE in `code`
+  for (let current = error, depth = 0; current instanceof Object && depth < 5; current = (current as { cause?: unknown }).cause, depth += 1) {
+    if ((current as { code?: unknown }).code === QUERY_CANCELED) return true;
+  }
+  return false;
+}
+
+/**
+ * Searching descriptions and translations scans every row with a regex, so those queries run in one transaction under a
+ * statement time limit (SET LOCAL: it ends with the transaction, also on pooled connections). Other queries run as they are.
+ */
+async function withSearchTimeout<T>(db: Db, filters: JobFilters, run: (q: Executor) => Promise<T>): Promise<T> {
+  const plan = filters.search;
+  if (filters.searchIn !== "all" || plan?.status !== "ok") return run(db);
+  const timeout = `${z.number().int().positive().parse(plan.allScopeTimeoutMs)}ms`;
+  try {
+    return await db.transaction(async (tx) => {
+      await tx.execute(sql`select set_config('statement_timeout', ${timeout}, true)`);
+      return run(tx);
+    });
+  } catch (error) {
+    if (isStatementTimeout(error)) throw new SearchTimeoutError();
+    throw error;
+  }
+}
+
 /** How many jobs /jobs holds under filters; the archive switch replaces only scope, retaining all other filters. */
 export async function countJobList(db: Db, options: { filters: JobFilters; timezone: string }): Promise<number> {
+  return withSearchTimeout(db, options.filters, (q) => countJobListIn(q, options));
+}
+
+async function countJobListIn(db: Executor, options: { filters: JobFilters; timezone: string }): Promise<number> {
   const latest = latestScoreCte(db);
   const ux = await uxTablesReady(db);
   const [row] = await db
@@ -281,6 +325,10 @@ export async function countJobList(db: Db, options: { filters: JobFilters; timez
 
 /** All jobs with filters, search, sort and server-side pagination. */
 export async function listJobs(db: Db, options: ListJobsOptions): Promise<JobPage> {
+  return withSearchTimeout(db, options.filters, (q) => listJobsIn(q, options));
+}
+
+async function listJobsIn(db: Executor, options: ListJobsOptions): Promise<JobPage> {
   const latest = latestScoreCte(db);
   const ux = await uxTablesReady(db);
   const where = await jobListWhere(db, options.filters, options.timezone, latest, ux);
@@ -344,6 +392,10 @@ export interface JobListSeenCounts {
 }
 
 export async function countJobListSeen(db: Db, options: { filters: JobFilters; timezone: string; since: Date | null }): Promise<JobListSeenCounts> {
+  return withSearchTimeout(db, options.filters, (q) => countJobListSeenIn(q, options));
+}
+
+async function countJobListSeenIn(db: Executor, options: { filters: JobFilters; timezone: string; since: Date | null }): Promise<JobListSeenCounts> {
   const latest = latestScoreCte(db);
   const ux = await uxTablesReady(db);
   const since = options.since ? sql`${jobs.firstSeenAt} > ${options.since.toISOString()}::timestamptz` : sql`false`;
@@ -362,6 +414,10 @@ export async function countJobListSeen(db: Db, options: { filters: JobFilters; t
 
 /** The ids of every unseen job of the filtered /jobs list (all pages): what "mark all seen" marks. */
 export async function listUnseenJobIds(db: Db, options: { filters: JobFilters; timezone: string; firstSeenUpTo?: Date }): Promise<number[]> {
+  return withSearchTimeout(db, options.filters, (q) => listUnseenJobIdsIn(q, options));
+}
+
+async function listUnseenJobIdsIn(db: Executor, options: { filters: JobFilters; timezone: string; firstSeenUpTo?: Date }): Promise<number[]> {
   const latest = latestScoreCte(db);
   if (!(await uxTablesReady(db))) return [];
   const rows = await db
@@ -379,6 +435,28 @@ export async function listUnseenJobIds(db: Db, options: { filters: JobFilters; t
       ),
     );
   return rows.map((row) => row.id);
+}
+
+export interface JobCountryOption {
+  code: string;
+  jobCount: number;
+}
+
+/** One group-by for the chosen scope, counting each job once per code. Retain absent selections with count zero. */
+export async function listJobCountryOptions(db: Db, options: { scope?: JobScope | null; selected?: readonly string[]; timezone: string }): Promise<JobCountryOption[]> {
+  const latest = latestScoreCte(db);
+  const ux = await uxTablesReady(db);
+  const code = sql<string>`upper(loc->>'countryCode')`;
+  const rows = await db.with(latest).select({ code, jobCount: sql<number>`count(distinct ${jobs.id})`.mapWith(Number) })
+    .from(jobs)
+    .leftJoin(latest, eq(latest.jobId, jobs.id))
+    .innerJoin(sql`lateral ${jobLocationRows()}`, sql`true`)
+    .where(and(await jobListWhere(db, { scope: options.scope }, options.timezone, latest, ux), sql`jsonb_typeof(loc) = 'object'`, sql`${code} ~ '^[A-Z]{2}$'`))
+    .groupBy(code)
+    .orderBy(code);
+  const counts = new Map(rows.map((row) => [row.code, row.jobCount]));
+  for (const selected of options.selected ?? []) if (!counts.has(selected.toUpperCase())) counts.set(selected.toUpperCase(), 0);
+  return [...counts].sort(([a], [b]) => a.localeCompare(b)).map(([code, jobCount]) => ({ code, jobCount }));
 }
 
 export interface JobFilterOptions {

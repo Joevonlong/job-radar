@@ -23,7 +23,7 @@ import { getSchedule } from "@/lib/dashboard/context";
 import { loadListViz } from "@/lib/dashboard/list-viz";
 import { NewSinceVisitNote } from "@/components/jobs/new-since-visit-note";
 import { loadHighValuePolicy, loadSignalCatalog } from "@/lib/signals/floor";
-import { countJobList, countJobListSeen, getDb, getFilterFloors, getJobFilterOptions, getVisitState, hasHighValueCategories, listCompanyFilterOptions, listCompanyMatchRows, listJobs, listMonthSalaryFigures } from "@/lib/db";
+import { countJobList, countJobListSeen, getDb, getFilterFloors, getJobFilterOptions, getVisitState, hasHighValueCategories, listCompanyFilterOptions, listCompanyMatchRows, listJobs, listMonthSalaryFigures, SearchTimeoutError } from "@/lib/db";
 import { loadPipeline } from "@/lib/market/effective";
 import { buildCompanyMatchIndex, canonicalCompanyNames } from "@/lib/pipeline/company";
 import { loadCityGroups } from "@/lib/jobs/cities";
@@ -38,6 +38,16 @@ import { ghostFilterAvailable } from "@/lib/ghost/filter";
 import { visaFilterAvailable } from "@/lib/visa/filter";
 import { VisibilityScope } from "@/components/applications/visibility-scope";
 import { loadBaseCurrency } from "@/lib/signals/floor";
+
+/** A query's value, or `fallback` when a full-text search ran past its time limit. */
+async function unlessTimedOut<T>(query: Promise<T>, fallback: T): Promise<{ value: T; timedOut: boolean }> {
+  try {
+    return { value: await query, timedOut: false };
+  } catch (error) {
+    if (!(error instanceof SearchTimeoutError)) throw error;
+    return { value: fallback, timedOut: true };
+  }
+}
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations("pages.jobs");
@@ -85,8 +95,9 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
   const seenUpTo = effectiveSeenUpTo(visit, now);
   // Shared priority: explicit sort, search relevance, archive last-listed default, then rank.
   const sort = resolveSort({ sort: params.sort, q: params.q, scope: resolveJobScope(params.scope, params.status) });
-  const [result, options, seenCounts, salaryFigures, archiveCount, companies] = await Promise.all([
-    listJobs(db, {
+  // Searching descriptions (searchIn=all) has a time limit: past it the page says so instead of failing
+  const [listed, options, seenCounted, salaryFigures, archiveCounted, companies] = await Promise.all([
+    unlessTimedOut(listJobs(db, {
       filters,
       sort,
       dir: sort === "relevance" ? null : params.dir,
@@ -95,13 +106,15 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
       timezone,
       visa: visaFilter,
       ghost: ghostFilter,
-    }),
+    }), { jobs: [], total: 0, page: 1, pageCount: 1, pageSize: JOBS_PAGE_SIZE }),
     getJobFilterOptions(db),
-    countJobListSeen(db, { filters, timezone, since: seenUpTo }),
+    unlessTimedOut(countJobListSeen(db, { filters, timezone, since: seenUpTo }), { unseen: 0, newSince: 0 }),
     listMonthSalaryFigures(db, { now, timeZone: timezone, currency: loadBaseCurrency() ?? "" }),
-    countJobList(db, { filters: { ...filters, scope: "archive" }, timezone }),
+    unlessTimedOut(countJobList(db, { filters: { ...filters, scope: "archive" }, timezone }), 0),
     listCompanyFilterOptions(db, { limit: ui.filters.company_options_max + 1, timezone }),
   ]);
+  const searchTimedOut = listed.timedOut || seenCounted.timedOut || archiveCounted.timedOut;
+  const [result, seenCounts, archiveCount] = [listed.value, seenCounted.value, archiveCounted.value];
   const filterFloors = await getFilterFloors(db, salaryFilteredIds(result.jobs));
   const items = await toListItems(result.jobs, { now, timezone, filterFloors, seenUpTo, relistBadgeDays, visa: visaFilter, ghost: ghostFilter, monthSalaries: { figures: salaryFigures, minSample: ui.salary_stats.min_sample } });
   // The "new since your last visit" divider when the list runs newest first (it sits on the page of the boundary only);
@@ -171,8 +184,11 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
         jobs={items}
         label={tJobs("listLabel")}
         empty={
-          // "only favorites" and nothing else narrowing the list: no star yet, so say how to star a job instead of "relax the filters"
-          params.fav === true && !hasActiveFilters({ ...params, fav: null }, visibility) ? (
+          // a full-text search past its time limit says so; "only favorites" and nothing else narrowing the list: no star yet, so
+          // say how to star a job instead of "relax the filters"
+          searchTimedOut ? (
+            <span role="status" data-testid="jobs-search-timeout">{tJobs("searchTimeout")}</span>
+          ) : params.fav === true && !hasActiveFilters({ ...params, fav: null }, visibility) ? (
             <span data-testid="jobs-fav-empty">
               {tFavPage("empty")}{" "}
               <Link href={jobsListHref({ ...params, fav: null, page: 1 })} className="text-foreground font-medium underline underline-offset-2">

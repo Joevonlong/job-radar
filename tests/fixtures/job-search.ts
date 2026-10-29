@@ -2,7 +2,7 @@ import { buildCountryLexicon, parseSearchQuery, type SearchQuerySettings } from 
 
 /** Search fixtures own their vocabulary and settings, independently of shipped YAML. */
 export const searchSettings: SearchQuerySettings = {
-  maxChars: 200, maxTerms: 12, prefixMinChars: 4, cjkMinChars: 2,
+  maxChars: 200, maxTerms: 12, prefixMinChars: 4, cjkMinChars: 2, allScopeTimeoutMs: 8000,
   ranking: { weights: { title: 8, company: 5, location: 3, country: 3, description: 1, translation: 1 }, prefixFactor: 0.6 },
 };
 const lexicon = buildCountryLexicon([

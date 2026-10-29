@@ -32,11 +32,16 @@ function settings(edit: Partial<McpConfig> = {}): McpConfig {
   return mcpSchema.parse({ enabled: true, ...edit });
 }
 
-async function connect(options: { mcp?: McpConfig; traps?: () => TrapsConfig } = {}): Promise<Client> {
+async function connect(options: { mcp?: McpConfig; traps?: () => TrapsConfig; searchTimeoutMs?: number } = {}): Promise<Client> {
   const ctx = defaultContext(readOnly.db, options.mcp ?? settings(), { text: mcpTranslator("en"), log: (line) => lines.push(line) });
   ctx.now = () => NOW;
   ctx.timezone = () => TZ;
   if (options.traps) ctx.traps = options.traps;
+  const { searchTimeoutMs } = options;
+  if (searchTimeoutMs !== undefined) {
+    const plan = ctx.searchPlan;
+    ctx.searchPlan = (query) => ({ ...plan(query), allScopeTimeoutMs: searchTimeoutMs });
+  }
   const server = buildServer(ctx);
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await server.connect(serverTransport);
@@ -116,6 +121,17 @@ describe("search_jobs", () => {
     const country = await call<SearchJobsOutput>(client, "search_jobs", { query: "Asterneedle", search_in: "all", country: ["de"] });
     expect(country.structured.jobs.map((job) => job.id)).toEqual([titleId]);
     expect(Object.keys(all.structured.jobs[0]!).sort()).toEqual(["id", "title", "company", "locations", "workplace", "contract", "is_agency", "german_level_required", "status", "posted_at", "first_seen_at", "salary", "skills", "rank", "application_status", "links"].sort());
+  });
+
+  it("reports a full-text search past its time limit as search_timeout; summary search has no limit", async () => {
+    // A few megabytes of description keep the regex scan well above one millisecond
+    await getDb().execute(sql`update jobs set description = repeat('lorem ipsum dolor ', 200000) where id = ${await redBanana()}`);
+    const client = await connect({ searchTimeoutMs: 1 });
+    const timedOut = await call<SearchJobsOutput>(client, "search_jobs", { query: "Asterneedle", search_in: "all" });
+    expect(timedOut.isError).toBe(true);
+    expect(timedOut.text).toContain("search_timeout");
+    expect(lines.at(-1)).toContain("search_timeout");
+    expect((await call<SearchJobsOutput>(client, "search_jobs", { query: "Asterneedle" })).isError).toBe(false);
   });
 
   it("search hides a dormant job while get_job preserves its status and explains the reason", async () => {

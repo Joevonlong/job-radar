@@ -143,4 +143,5 @@ config file; keep that file private.
 | "Every tool is switched off" | All three `tools` are `false`. |
 | `command not found` / `spawn pnpm ENOENT` | The client does not find `pnpm` or `node`: use absolute paths and set `PATH` in `env` (see Claude Desktop above). |
 | "The query failed (database)" | The stack is not running, or the database address in `.env` is not reachable from the host. `pnpm run doctor` checks both. |
+| `search_timeout` | A `search_in: "all"` search ran past `job-search.yaml: query.all_scope_timeout_ms`. Narrow the query or filters, or search without `search_in: "all"`. |
 | "JD not available" | See [AI traps and the JD](#ai-traps-and-the-jd). |

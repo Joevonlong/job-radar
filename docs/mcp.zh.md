@@ -120,4 +120,5 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO job_radar_ro
 | "所有工具都关了" | `tools` 下三项都是 `false`。 |
 | `command not found` / `spawn pnpm ENOENT` | 客户端找不到 `pnpm` 或 `node`：用绝对路径，并在 `env` 里设 `PATH`（见上面 Claude Desktop 一节）。 |
 | "查询失败（database）" | 整套服务没在运行，或 `.env` 里的数据库地址从宿主机连不上。`pnpm run doctor` 两项都会查。 |
+| `search_timeout` | `search_in: "all"` 的搜索超过了 `job-search.yaml: query.all_scope_timeout_ms`。缩小查询或筛选条件，或不带 `search_in: "all"` 再搜。 |
 | "JD 暂不可用" | 见 [AI 陷阱与 JD](#ai-陷阱与-jd)。 |

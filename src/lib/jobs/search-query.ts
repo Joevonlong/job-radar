@@ -20,6 +20,8 @@ export interface SearchTerm {
 export interface SearchPlan {
   /** Query-time ranking settings, supplied by the caller rather than loaded by SQL. */
   ranking: SearchRanking;
+  /** Statement time limit for queries that also search descriptions and translations (`searchIn=all`). */
+  allScopeTimeoutMs: number;
   /** Empty input, usable terms, or nonempty input without usable terms. */
   status: "none" | "ok" | "no_terms";
   /** Distinct terms retained in query order. */
@@ -47,6 +49,8 @@ export interface SearchQuerySettings {
   cjkMinChars: number;
   /** Minimum Latin word length for prefix matching, in Unicode code points. */
   prefixMinChars: number;
+  /** Statement time limit for `searchIn=all` queries, in milliseconds. */
+  allScopeTimeoutMs: number;
 }
 
 /** Structural subset of a market country entry; patterns are deliberately unused. */
@@ -169,14 +173,24 @@ function phraseTerm(words: string[]): SearchTerm {
   return { text: words.join(" "), kind: "phrase", match: "whole", words, countryCodes: [], countryOnly: false, locationVariants: [] };
 }
 
-/** Longest country name wins; at a given length, names take precedence over bare codes. */
-function countryAt(words: string[], start: number, lexicon: CountryLexicon): { words: string[]; countryCodes: string[]; countryOnly: boolean } | null {
+/** A token typed in capitals, such as `DE`; `De` and `de` are not. */
+function typedUppercase(raw: string): boolean {
+  return raw === raw.toUpperCase() && raw !== raw.toLowerCase();
+}
+
+/**
+ * Longest country name wins; at a given length, names take precedence over bare codes.
+ * A bare code is a country in a one-word query in any case; in a longer query only when typed
+ * in capitals, so `chef de projet` and `ingeniero de software` keep `de` as text.
+ */
+function countryAt(words: readonly string[], raw: readonly string[], start: number, lexicon: CountryLexicon, singleWord: boolean): { words: string[]; countryCodes: string[]; countryOnly: boolean } | null {
   for (let length = Math.min(lexicon.maxWords, words.length - start); length > 0; length -= 1) {
     const candidate = words.slice(start, start + length);
     if (candidate.some((word) => SYMBOL.test(word))) continue;
     const entries = lexicon.entries.get(candidate.join(" "));
     if (!entries) continue;
     const names = entries.filter((entry) => entry.source === "name");
+    if (names.length === 0 && !singleWord && !raw.slice(start, start + length).every(typedUppercase)) continue;
     const matches = names.length > 0 ? names : entries;
     return { words: candidate, countryCodes: [...new Set(matches.map((entry) => entry.code))], countryOnly: names.length === 0 };
   }
@@ -185,9 +199,15 @@ function countryAt(words: string[], start: number, lexicon: CountryLexicon): { w
 
 /** Parse supplied text and tables only; safe to use on both server and client. */
 export function parseSearchQuery(q: string | null | undefined, context: SearchQueryContext): SearchPlan {
-  const empty: SearchPlan = { status: "none", terms: [], droppedTerms: 0, hasCjk: false, phrase: null, ranking: context.settings.ranking };
+  const empty: SearchPlan = { status: "none", terms: [], droppedTerms: 0, hasCjk: false, phrase: null, ranking: context.settings.ranking, allScopeTimeoutMs: context.settings.allScopeTimeoutMs };
   if (q == null || q.trim() === "") return empty;
-  const text = normalizeSearchText(q.slice(0, context.settings.maxChars));
+  // Case folding happens per token so a code's typed case stays visible to country recognition.
+  const text = q.slice(0, context.settings.maxChars).normalize("NFKC");
+  const spans = text.split('"').map((content) => {
+    const raw = tokenize(content);
+    return { raw, words: raw.map(normalizeSearchText) };
+  });
+  const singleWord = spans.reduce((count, span) => count + span.words.length, 0) === 1;
   const all: SearchTerm[] = [];
   const seen = new Set<string>();
   const add = (term: SearchTerm | null): void => {
@@ -200,8 +220,7 @@ export function parseSearchQuery(q: string | null | undefined, context: SearchQu
   };
 
   // Alternating unquoted/quoted spans also handles an unclosed final quote.
-  for (const [span, content] of text.split('"').entries()) {
-    const words = tokenize(content);
+  for (const [span, { raw, words }] of spans.entries()) {
     if (span % 2 === 1) {
       if (words.length > 0) {
         const term = words.length === 1 ? wordTerm(words[0], context.settings) : phraseTerm(words);
@@ -211,7 +230,7 @@ export function parseSearchQuery(q: string | null | undefined, context: SearchQu
       continue;
     }
     for (let index = 0; index < words.length;) {
-      const country = countryAt(words, index, context.lexicon);
+      const country = countryAt(words, raw, index, context.lexicon, singleWord);
       const term = country && country.words.length > 1 ? phraseTerm(country.words) : wordTerm(words[index], context.settings);
       if (term && country) {
         term.countryCodes = country.countryCodes;
@@ -225,6 +244,7 @@ export function parseSearchQuery(q: string | null | undefined, context: SearchQu
   for (const term of terms) term.locationVariants = [...new Set(locationSearchTerms(term.text, context.cityAliases, context.transliterations).map(normalizeSearchText))];
   return {
     ranking: context.settings.ranking,
+    allScopeTimeoutMs: context.settings.allScopeTimeoutMs,
     status: terms.length > 0 ? "ok" : "no_terms",
     terms,
     droppedTerms: all.length - terms.length,

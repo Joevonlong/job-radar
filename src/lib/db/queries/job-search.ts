@@ -1,15 +1,10 @@
-import { and, desc, eq, or, sql, type SQL } from "drizzle-orm";
+import { and, desc, or, sql, type SQL } from "drizzle-orm";
 
-import type { JobScope } from "@/lib/jobs/constants";
 import type { SearchPlan, SearchRanking, SearchTerm } from "@/lib/jobs/search-query";
 import { STORED_MARKER_PATTERN } from "@/lib/translation/markers";
 
-import type { Db } from "../client";
 import { descriptionHashSql } from "../repos/translations";
-import { uxTablesReady } from "../repos/ux-tables";
 import { jobs } from "../schema";
-import { latestScoreCte } from "./job-cards";
-import { jobListWhere } from "./jobs";
 
 export type SearchIn = "summary" | "all";
 type SearchField = keyof SearchRanking["weights"];
@@ -38,7 +33,9 @@ export function searchTermPattern(term: Pick<SearchTerm, "text" | "kind" | "matc
   if (term.kind === "phrase") return searchPhrasePattern(term.words);
   const literal = escapeSearchRegex(term.text);
   if (term.kind === "cjk") return literal;
-  return LEFT + literal + (term.match === "prefix" ? "" : RIGHT);
+  // A leading dot is its own boundary: `.NET` also matches ASP.NET and VB.NET.
+  const left = term.text.startsWith(".") ? "" : LEFT;
+  return left + literal + (term.match === "prefix" ? "" : RIGHT);
 }
 
 function textArray(values: readonly string[]): SQL {
@@ -57,13 +54,14 @@ export function searchFieldMatches(field: SQL, pattern: string | readonly string
   return sql`(case when octet_length(${value}) = char_length(${value}) or ${value} is nfkc normalized then ${test(value)} else ${test(sql`normalize(${value}, NFKC)`)} end)`;
 }
 
-function locations(): SQL {
+/** The job's location objects as rows `loc`; malformed (non-array) locations yield none. */
+export function jobLocationRows(): SQL {
   return sql`jsonb_array_elements(case when jsonb_typeof(${jobs.locationsJson}) = 'array' then ${jobs.locationsJson} else '[]'::jsonb end) as loc`;
 }
 
 /** Exact codes only; no inferred country from a city or free-text label. */
 export function jobHasCountryIn(codes: readonly string[]): SQL {
-  return sql`exists (select 1 from ${locations()} where jsonb_typeof(loc) = 'object' and upper(loc->>'countryCode') = any(${textArray(codes.map((code) => code.toUpperCase()))}))`;
+  return sql`exists (select 1 from ${jobLocationRows()} where jsonb_typeof(loc) = 'object' and upper(loc->>'countryCode') = any(${textArray(codes.map((code) => code.toUpperCase()))}))`;
 }
 
 function locationPatterns(term: SearchTerm): string[] {
@@ -85,7 +83,7 @@ function termFields(term: SearchTerm, searchIn: SearchIn): Partial<Record<Search
     company: sql`exists (select 1 from companies c where c.id = ${jobs.companyId} and (
       ${searchFieldMatches(sql`c.name`, pattern)} or exists (select 1 from unnest(c.aliases) as a where ${searchFieldMatches(sql`a`, pattern)})
     ))`,
-    location: sql`exists (select 1 from ${locations()} where jsonb_typeof(loc) = 'object' and (
+    location: sql`exists (select 1 from ${jobLocationRows()} where jsonb_typeof(loc) = 'object' and (
       ${searchFieldMatches(sql`loc->>'city'`, variants)} or ${searchFieldMatches(sql`loc->>'label'`, variants)}
     ))`,
   };
@@ -123,26 +121,4 @@ export function jobSearchOrderBy(plan: SearchPlan, searchIn: SearchIn | null = n
   });
   const relevance = contributions.length ? sql`(${sql.join(contributions, sql` + `)})` : sql`0`;
   return [...titlePhrase, desc(summaryComplete), desc(relevance)];
-}
-
-export interface JobCountryOption {
-  code: string;
-  jobCount: number;
-}
-
-/** One group-by for the chosen scope, counting each job once per code. Retain absent selections with count zero. */
-export async function listJobCountryOptions(db: Db, options: { scope?: JobScope | null; selected?: readonly string[]; timezone: string }): Promise<JobCountryOption[]> {
-  const latest = latestScoreCte(db);
-  const ux = await uxTablesReady(db);
-  const code = sql<string>`upper(loc->>'countryCode')`;
-  const rows = await db.with(latest).select({ code, jobCount: sql<number>`count(distinct ${jobs.id})`.mapWith(Number) })
-    .from(jobs)
-    .leftJoin(latest, eq(latest.jobId, jobs.id))
-    .innerJoin(sql`lateral ${locations()}`, sql`true`)
-    .where(and(await jobListWhere(db, { scope: options.scope }, options.timezone, latest, ux), sql`jsonb_typeof(loc) = 'object'`, sql`${code} ~ '^[A-Z]{2}$'`))
-    .groupBy(code)
-    .orderBy(code);
-  const counts = new Map(rows.map((row) => [row.code, row.jobCount]));
-  for (const selected of options.selected ?? []) if (!counts.has(selected.toUpperCase())) counts.set(selected.toUpperCase(), 0);
-  return [...counts].sort(([a], [b]) => a.localeCompare(b)).map(([code, jobCount]) => ({ code, jobCount }));
 }

@@ -1062,6 +1062,7 @@
       "listLabel": "岗位列表",
       "empty": "还没有岗位。运行一轮采集后会出现在这里。",
       "emptyFiltered": "没有符合条件的岗位，试试放宽筛选。",
+      "searchTimeout": "全文搜索超时，请缩小条件。",
       "filters": {
         "label": "搜索和筛选",
         "search": "搜索岗位",
@@ -6518,6 +6519,7 @@
     },
     "errors": {
       "notFound": "没有 id 为 {id} 的岗位。",
+      "searchTimeout": "搜索职位描述耗时过长，已停止（search_timeout）。请缩小查询或筛选条件，或不带 search_in: \"all\" 再搜。",
       "failed": "查询失败（{category}）。MCP 客户端里这个服务的日志有这次调用的记录。"
     },
     "tools": {

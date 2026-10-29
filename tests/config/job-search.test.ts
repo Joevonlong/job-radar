@@ -7,12 +7,12 @@ import { parse } from "yaml";
 import { ZodError } from "zod";
 
 import { configErrorDigest, configFileFromDigest } from "@/lib/config/error-digest";
-import { jobSearchSchema } from "@/lib/config/schemas/job-search";
+import { jobSearchSchema, SEARCH_QUERY_MAX_CHARS } from "@/lib/config/schemas/job-search";
 
 import { REPO_DEFAULTS_DIR } from "./helpers";
 
 const fixture = () => ({
-  query: { max_chars: 150, max_terms: 8, cjk_min_chars: 2 },
+  query: { max_chars: 150, max_terms: 8, cjk_min_chars: 2, all_scope_timeout_ms: 5000 },
   matching: { prefix_min_chars: 5 },
   ranking: { weights: { title: 9, company: 6, location: 4, country: 2, description: 1, translation: 0 }, prefix_factor: 0.4 },
   countries: { name_locales: ["en", "zh-Hans"], ambiguous_codes: ["IT"], extra_aliases: { DE: ["Deutschland"] } },
@@ -29,6 +29,14 @@ describe("job search config", () => {
   it("accepts a complete input and requires every setting", () => {
     expect(jobSearchSchema.safeParse(fixture()).success).toBe(true);
     expect(jobSearchSchema.safeParse({ ...fixture(), query: { max_chars: 150 } }).success).toBe(false);
+  });
+
+  it("caps the query length at the shared limit and bounds the full-text time limit", () => {
+    const query = (overrides: object) => jobSearchSchema.safeParse({ ...fixture(), query: { ...fixture().query, ...overrides } }).success;
+    expect(query({ max_chars: SEARCH_QUERY_MAX_CHARS })).toBe(true);
+    expect(query({ max_chars: SEARCH_QUERY_MAX_CHARS + 1 })).toBe(false);
+    expect(query({ all_scope_timeout_ms: 0 })).toBe(false);
+    expect(query({ all_scope_timeout_ms: 1.5 })).toBe(false);
   });
 
   it("rejects an illegal prefix threshold with a zod error", () => {
