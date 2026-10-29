@@ -28,7 +28,7 @@ export function databaseUrlFor(db: Db): string {
 }
 
 /** Create an independent connection (used by the singleton, migrations and tests). */
-export function createConnection(url: string, options: { max?: number; connectTimeoutSeconds?: number; readOnly?: boolean } = {}): Connection {
+export function createConnection(url: string, options: { max?: number; connectTimeoutSeconds?: number; readOnly?: boolean; sessionSettings?: Record<string, string | number> } = {}): Connection {
   // Under Vitest only a disposable test database may be opened
   assertTestDatabase(url);
   const sql = postgres(url, {
@@ -38,7 +38,7 @@ export function createConnection(url: string, options: { max?: number; connectTi
     idle_timeout: 30,
     onnotice: () => {},
     // read-only tools: the server itself refuses every write in this session
-    ...(options.readOnly ? { connection: { default_transaction_read_only: true } } : {}),
+    connection: { ...options.sessionSettings, ...(options.readOnly ? { default_transaction_read_only: true } : {}) },
   });
   const db = drizzle(sql, { schema });
   connectionUrls.set(db, url);
