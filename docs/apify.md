@@ -31,6 +31,29 @@ The `linkedin-apify` channel takes over the main LinkedIn search after the Brigh
 - A run is sent only once, with no retry (a retry would bill twice); three consecutive failures open the breaker, and it tries again after 24 hours.
 - `external_id` is LinkedIn's numeric job id, the same as Bright Data, so the same job obtained through the two channels is merged into one.
 
+## Posting dates and local time windows
+
+When the requested window is narrower than the actor's day/week/month filter, the channel also filters locally.
+For example, a 10-hour query uses a local 10-hour cutoff after the actor's day filter; a 24-hour query relies on the
+actor's day filter without an additional local cutoff. The local comparison respects the precision of `postedDate`:
+
+| Source time fields | Local comparison |
+|---|---|
+| Bare date (`YYYY-MM-DD`) | Day precision; exclude only when the whole supplied day is before the cutoff |
+| ISO midnight with a consistent `postedTimeAgo` in seconds, minutes or hours | Exact timestamp |
+| ISO midnight with missing, invalid, unsupported, conflicting or day/week-only relative text | Day precision |
+| Non-midnight ISO timestamp with an absent or consistent relative label | Exact timestamp |
+| Non-midnight ISO timestamp with a present but invalid, unsupported or conflicting relative label | Day precision, using the supplied date |
+| Missing/invalid date or an unrecognized date format | Keep it; the time fields cannot establish that it is outside the window |
+
+Relative labels are checked at collection time using their stated unit: “5 hours ago” means an age of at least
+5 and less than 6 hours. They are never converted into a stored posting time. A placeholder such as
+`2026-10-26T00:00:00.000Z` paired with “1 minute ago” therefore stays eligible when its day overlaps the window.
+The raw payload remains unchanged. Only valid full calendar dates and ISO instants become `postedAt`: bare dates
+store as UTC midnight, and ISO timestamps keep their supplied instant. Unsupported or invalid dates such as
+`2026-10` and `2026-02-30` leave `postedAt` unknown (`null`). The day-end allowance is only for filtering. Relative-label
+precision handling is specific to Apify; date validation is shared with Bright Data and Monid.
+
 ## Live smoke test
 ```bash
 pnpm smoke:apify              # reads .env; one query, at most 10 results, about $0.005

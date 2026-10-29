@@ -5,13 +5,13 @@ import type { Channel, ChannelContext, RawPostingInput, SearchQuery } from "../.
 import { buildActorInputs, dateRangeFor, isErrorItem } from "../apify/contract";
 import { postedAtOf } from "../brightdata/parse";
 import { affordableItems } from "../budget";
+import { postedDateEnd } from "../date-window";
 import { MonidClient } from "./client";
 import { MONID_API_KEY_ENV, monidSettingsSchema } from "./contract";
 import { monidDescriptionHtml, monidJobId, parseMonidJob, unidentifiedExternalId } from "./parse";
 
 export const LINKEDIN_MONID_ID = "linkedin-monid";
 const MS_PER_HOUR = 3_600_000;
-const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
 
 export interface MonidChannelOptions {
   pricePer1kUsd: () => number;
@@ -74,7 +74,7 @@ export function createMonidChannel(options: MonidChannelOptions): Channel {
             const record = typeof item === "object" && item !== null && !Array.isArray(item) ? item as Record<string, unknown> : null;
             const postedDate = typeof record?.postedDate === "string" ? record.postedDate : null;
             const postedAt = postedAtOf(postedDate);
-            const end = postedAt ? postedAt.getTime() + (postedDate && DATE_ONLY.test(postedDate.trim()) ? 24 * MS_PER_HOUR : 0) : null;
+            const end = postedDateEnd(postedDate, postedAt);
             // Unidentified records are always quarantined, even when their date is malformed or old.
             if (id !== null && cutoff !== null && end !== null && end < cutoff) { outsideWindow += 1; continue; }
             postings.push({ externalId, payload: item, url: typeof record?.linkedinUrl === "string" ? record.linkedinUrl : null, postedAt });

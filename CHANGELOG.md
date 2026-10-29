@@ -218,6 +218,7 @@ A failure in (a) does not block rollback: follow (c) and accept the display wind
 ### Fixed
 
 - Anthropic API calls use compatible tool settings for current Claude models, and text-only replies reach the normal validation retry.
+- Apify LinkedIn searches keep day-precision postings in short time windows when ISO midnight is a placeholder, while preserving confirmed exact timestamps and the source's stored date; Bright Data treats bare dates as whole days, and paid LinkedIn channels no longer turn malformed dates into posting times.
 - Phrase and visa deal-breakers still report later timeouts for unchanged jobs, preserving stored vetoes until the rules can evaluate them again.
 - Recovering the AI worker sends one digest for queued cycles while keeping every cycle's AI work and alerts; company
   name corrections preserve paid salary caches, and ignored HTTP bodies release their cancellation listeners.
