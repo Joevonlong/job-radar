@@ -1,16 +1,27 @@
 /** Finished, fictional fixtures only. This helper never starts business work or publishes a heartbeat. */
-import { inArray, sql } from "drizzle-orm";
+import { eq, inArray, or, sql } from "drizzle-orm";
 import { rootIdForCycle } from "@/lib/activity/ids";
 import { buildQueries, buildSweepQuery } from "@/lib/channels/query";
 import { loadConfig } from "@/lib/config";
 import type { Executor } from "./executor";
 import { activityEvents, activitySpans, controlRequests, runDeliveries } from "./schema";
 
-const fixedId = (value: number) => `a1710000-0000-4000-8000-${String(value).padStart(12, "0")}`;
-const FIXED_ROOTS = [fixedId(1), fixedId(2), fixedId(3), fixedId(4), fixedId(5)];
+const FIXED_PREFIX = "a1710000-0000-4000-8000-";
+const fixedId = (value: number) => `${FIXED_PREFIX}${String(value).padStart(12, "0")}`;
 
+/**
+ * Remove every tree this seed wrote, found by its fixed ids rather than by the seeded cycles: the cycles may already be
+ * gone (a truncate, a manual cleanup), and the cycle root's id is derived from a cycle id that can be reused.
+ */
 export async function removeSeedActivity(db: Executor, cycleIds: number[]): Promise<void> {
-  await db.delete(activitySpans).where(inArray(activitySpans.id, [...FIXED_ROOTS, ...cycleIds.map(rootIdForCycle)]));
+  const fixed = `${FIXED_PREFIX}%`;
+  const cycleRoots = cycleIds.map(rootIdForCycle);
+  await db.delete(activitySpans).where(or(
+    sql`${activitySpans.id} in (select s.root_id from activity_spans s where s.id::text like ${fixed})`,
+    sql`${activitySpans.id}::text like ${fixed}`,
+    cycleRoots.length ? inArray(activitySpans.id, cycleRoots) : undefined,
+  ));
+  await db.delete(activityEvents).where(sql`${activityEvents.id}::text like ${fixed}`);
   await db.delete(controlRequests).where(sql`${controlRequests.payload} ->> 'activitySeed' = 'true'`);
 }
 
@@ -24,6 +35,9 @@ export async function seedActivity(db: Executor, input: {
     id, rootId: treeRoot, parentId, name, status, scope: treeRoot === rootId ? "cycle" : "system", process: "runner",
     startedAt, finishedAt, lastActivityAt: finishedAt, ...(treeRoot === rootId ? { cycleId } : {}),
   });
+  // A root left behind for an earlier cycle with this (reused) id would otherwise collide; it describes a cycle that no
+  // longer exists. Children and events go with it (root_id cascades).
+  await db.delete(activitySpans).where(eq(activitySpans.id, rootId));
   await db.insert(activitySpans).values({ ...span(rootId, "cycle", "partial"), progressDone: 7, progressTotal: 7 });
   const steps = ["collect", "pipeline", "filter", "signals", "ai", "notify", "maintenance"];
   await db.insert(activitySpans).values(steps.map((name, index) => ({ ...span(fixedId(10 + index), `step.${name}`, name === "collect" ? "partial" : "ok", rootId, rootId), progressDone: 3, progressTotal: 3 })));
