@@ -281,7 +281,11 @@ export async function collectStep(ctx: CycleStepContext): Promise<StepResult> {
       toleranceHours: config.channels.collect.catch_up_tolerance_hours,
       autoCatchUp,
     });
-    const hours = Math.max(window.hours, ctx.backfillHours ?? 0);
+    // A backfill widens only keyword queries: a channel that iterates its own boards has no look-back window to widen.
+    const hours = Math.max(window.hours, channel.usesQueries ? ctx.backfillHours ?? 0 : 0);
+    // The catch-up limit cut the gap short, unless the backfill reaches over the whole gap.
+    const gapHours = anchor === null ? 0 : Math.ceil(Math.max(0, (ctx.now().getTime() - anchor.getTime()) / 3_600_000));
+    const capped = window.capped && hours < gapHours;
     const effective = capQuery({ ...query, windowHours: hours }, settings.maxResults);
     let runId: number | null = null;
     if (!ctx.dryRun) {
@@ -346,7 +350,7 @@ export async function collectStep(ctx: CycleStepContext): Promise<StepResult> {
       /** The stop was the channel's own plan (its next request was refused by the channel's budget before it was sent), not a failure. */
       let plannedStop = false;
       try {
-        recordWindow(query, effective.windowHours, window.capped);
+        recordWindow(query, effective.windowHours, capped);
         const output: unknown = await channel.collect(effective, channelContext);
         if (!Array.isArray(output)) throw new ChannelError("parse", `${channelId}.collect did not return an array`);
         collected = output as RawPostingInput[];

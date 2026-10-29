@@ -346,6 +346,11 @@ Served queries move to the back of the rotation, as in normal runs; a backfill d
 A widened run is not evidence for marking jobs possibly closed. A backfill window at or below the base window counts
 like a normal run when no automatic catch-up widens it.
 
+Only keyword channels take the backfill window. Channels that read their own boards or inboxes instead of keyword
+queries (the ATS boards, the Arbeitnow feed, email alerts, the Brave / Tavily discovery sources, LinkedIn's session
+recommendations) run as usual within the same backfill run: their window is not widened and their runs are not marked
+as widened.
+
 ## 6. Handling common failures
 
 | You see | What to do |
