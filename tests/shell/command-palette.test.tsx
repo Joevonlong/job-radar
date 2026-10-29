@@ -61,10 +61,11 @@ describe("CommandPalette", () => {
     await user.click(trigger);
 
     const dialog = await screen.findByRole("dialog", { name: "命令面板" });
-    expect(within(dialog).getAllByRole("option")).toHaveLength(12);
+    expect(within(dialog).getAllByRole("option")).toHaveLength(13);
     expect(within(dialog).getByRole("option", { name: /公司/ })).toBeInTheDocument();
     expect(within(dialog).getByTestId("palette-page-registry")).toHaveTextContent("来源清单");
     expect(within(dialog).getByTestId("palette-page-aiUsage")).toHaveTextContent("AI 用量");
+    expect(within(dialog).getByTestId("activity-log-palette")).toHaveTextContent("操作日志");
     // the footer lists the real keys
     expect(within(dialog).getByRole("group", { name: "面板快捷键" })).toHaveTextContent("Esc关闭");
 
@@ -77,6 +78,20 @@ describe("CommandPalette", () => {
     await user.keyboard("{Escape}");
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(trigger).toHaveFocus();
+  });
+
+  it("finds activity logs by English and Chinese keywords", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ jobs: [] })));
+    const user = userEvent.setup();
+    render(wrap(<CommandPalette />));
+    await user.keyboard("{Control>}k{/Control}");
+    const dialog = await screen.findByRole("dialog");
+    const input = within(dialog).getByRole("combobox");
+    for (const keyword of ["logs", "日志"]) {
+      await user.clear(input);
+      await user.type(input, keyword);
+      expect(within(dialog).getByTestId("activity-log-palette")).toBeVisible();
+    }
   });
 
   it("opens with Ctrl+K and navigates on Enter", async () => {

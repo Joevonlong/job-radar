@@ -36,6 +36,28 @@ describe("activity read queries", () => {
     const emptyPage = await listActivityRoots(db, {}, { page: 9, pageSize: 1 }, liveness);
     expect(emptyPage).toEqual({ rows: [], total: 5, anyActive: true });
   });
+  it("selects the newest running subtask only under the current running step", async () => {
+    const db = connection.db;
+    const fixture = await seedActivityReadFixture(db);
+    await db.update(activitySpans).set({ status: "running", progressDone: 2, progressTotal: 5 }).where(eq(activitySpans.id, fixture.step.id));
+    expect((await getActivityRoot(db, fixture.root.id, liveness))?.root.currentSubtask).toBeNull();
+    const delegated = activityRow({ rootId: fixture.root.id, parentId: fixture.root.id, scope: "cycle", name: "request.run_ai", status: "running", startedAt: new Date(READ_AT.getTime() + 99) });
+    const scoreStep = activityRow({ rootId: fixture.root.id, parentId: delegated.id, scope: "cycle", name: "step.ai", status: "running", startedAt: new Date(READ_AT.getTime() + 100) });
+    const old = activityRow({ rootId: fixture.root.id, parentId: fixture.step.id, scope: "cycle", name: "collect.query", status: "running", startedAt: new Date(READ_AT.getTime() + 500) });
+    const subtask = activityRow({ rootId: fixture.root.id, parentId: scoreStep.id, scope: "cycle", name: "ai.score", status: "running", progressDone: 3, progressTotal: 9, startedAt: new Date(READ_AT.getTime() + 101) });
+    const previousSubtask = activityRow({ ...subtask, id: activityRow().id, name: "ai.signals", progressDone: 1, startedAt: new Date(READ_AT.getTime() + 100) });
+    const finished = activityRow({ ...subtask, id: activityRow().id, status: "ok", startedAt: new Date(READ_AT.getTime() + 200) });
+    await db.insert(activitySpans).values([delegated, scoreStep, old, previousSubtask, subtask, finished]);
+    const root = (await getActivityRoot(db, fixture.root.id, liveness))!.root;
+    expect(root.currentStep?.name).toBe("step.ai");
+    expect(root.currentSubtask).toEqual({ name: "ai.score", progressDone: 3, progressTotal: 9 });
+    const list = await listActivityRoots(db, { scope: "cycle", from: READ_AT, to: new Date(READ_AT.getTime() + 1) }, page, liveness);
+    expect(list.total).toBe(1);
+    expect(list.rows[0].currentSubtask).toEqual(root.currentSubtask);
+    expect((await listActivityRoots(db, { scope: "system", from: READ_AT, to: new Date(READ_AT.getTime() + 1) }, page, liveness)).total).toBe(0);
+    await db.update(activitySpans).set({ status: "ok" }).where(eq(activitySpans.id, scoreStep.id));
+    expect((await getActivityRoot(db, fixture.root.id, liveness))?.root).toMatchObject({ currentStep: { name: "step.collect", progressDone: 2, progressTotal: 5 }, currentSubtask: { name: "collect.query" } });
+  });
   it("marks the latest request root current without counting a child as a competing attempt", async () => {
     const db = connection.db;
     const fixture = await seedActivityReadFixture(db);
@@ -46,6 +68,18 @@ describe("activity read queries", () => {
     expect(rows[0].request).toEqual({ kind: "translate_job", status: "done", errorCode: "other" });
     const detail = await getActivityRoot(db, fixture.attempt1.id, liveness);
     expect(detail?.attempts.map((a) => [a.id, a.status, a.isCurrent])).toEqual([[fixture.attempt1.id, "interrupted", false], [fixture.attempt2.id, "ok", true]]);
+  });
+  it("keeps the current status attached to each distinct delegated request", async () => {
+    const db = connection.db;
+    const fixture = await seedActivityReadFixture(db);
+    await db.update(controlRequests).set({ status: "failed" }).where(eq(controlRequests.id, fixture.ai.id));
+    const [next] = await db.insert(controlRequests).values({ kind: "run_ai", payload: { cycleId: fixture.cycle.id }, status: "pending", requestedAt: new Date(READ_AT.getTime() + 100) }).returning();
+    const old = activityRow({ rootId: fixture.root.id, parentId: fixture.root.id, scope: "cycle", name: "request.run_ai", controlRequestId: fixture.ai.id, status: "failed", startedAt: READ_AT });
+    const recent = activityRow({ rootId: fixture.root.id, parentId: fixture.root.id, scope: "cycle", name: "request.run_ai", controlRequestId: next.id, status: "interrupted", startedAt: new Date(READ_AT.getTime() + 100) });
+    await db.insert(activitySpans).values([old, recent]);
+    const detail = await getActivityRoot(db, fixture.root.id, liveness);
+    expect(detail?.root.runAi).toEqual({ status: "pending" });
+    expect(detail?.attempts.map((a) => [a.id, a.status, a.isCurrent, a.requestCurrent])).toEqual([[old.id, "failed", true, "failed"], [recent.id, "interrupted", true, "pending"]]);
   });
   it("uses id descending to break equal-time attempt ties", async () => {
     const db = connection.db;
@@ -63,7 +97,7 @@ describe("activity read queries", () => {
     await db.insert(activitySpans).values([a, b]);
     const detail = await getActivityRoot(db, fixture.root.id, liveness);
     expect(detail?.spans).toHaveLength(7);
-    expect(detail?.root.currentStep).toEqual({ name: "request.run_ai", progressDone: null, progressTotal: null });
+    expect(detail?.root.currentStep).toBeNull();
     expect(detail?.stepDurations).toEqual([{ name: "step.collect", status: "ok", durationMs: 12 }]);
     expect(detail?.attempts.map((s) => [s.id, s.isCurrent])).toEqual([[a.id, false], [b.id, true]]);
     expect(detail?.spans.find((s) => s.id === fixture.queries[0].id)?.eventCounts).toEqual({ info: 1, warn: 1, error: 0 });
@@ -80,7 +114,7 @@ describe("activity read queries", () => {
     const fixture = await seedActivityReadFixture(db);
     const result = await listQueryRows(db, fixture.root.id);
     expect(result.queriesNotReached).toBe(5); expect(result.rows).toHaveLength(3);
-    expect(result.rows[0]).toMatchObject({ run: { status: "partial", fetched: 7, newCount: 3, costEur: 0.125, errorCode: "other" },
+    expect(result.rows[0]).toMatchObject({ run: { status: "partial", fetched: 7, newCount: 3, costUsd: 0.125, errorCode: "other" },
       delivery: { delivered: 7, billedUnits: 9, stored: 3, dispositions: { stored: 3, outside_window: 2, no_identity: 2 } }, cascadeReasons: { fixture: "budget_exceeded", second: "circuit_open" } });
     expect(result.rows.slice(1).map((r) => r.run)).toEqual([null, null]);
     await db.update(activitySpans).set({ runId: fixture.runWithoutDelivery.id }).where(eq(activitySpans.id, fixture.queries[1].id));

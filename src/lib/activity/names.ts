@@ -26,3 +26,5 @@ export const spanNameSchema = z.enum(SPAN_NAMES);
 export const eventLevelSchema = z.enum(EVENT_LEVELS);
 export const eventCodeSchema = z.enum(EVENT_CODES);
 export const reasonCodeSchema = z.enum(REASON_CODES);
+
+export const CALLBACK_RESULTS = ["changed", "unchanged", "rejected", "gone", "export_failed", "foreign_chat", "not_allowed", "invalid", "failed"] as const;

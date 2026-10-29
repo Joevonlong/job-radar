@@ -23,6 +23,7 @@ import { REASON_EVIDENCE_VERSION, type ReasonEvidence } from "@/lib/scoring/evid
 
 import type { Executor } from "./executor";
 import { seedSalary } from "./seed-salary";
+import { removeSeedActivity, seedActivity } from "./seed-activity";
 import { setApplicationNotes, setApplicationStatus, type ApplicationStatus } from "./repos/applications";
 import { addFavorite } from "./repos/favorites";
 import { recordLinkCheck } from "./repos/jobs";
@@ -813,6 +814,7 @@ async function removePreviousSeed(db: Executor, pipeline: PipelineConfig): Promi
   await db.delete(notifications).where(sql`${notifications.payloadJson} ->> 'seed' = 'true'`);
   const seededCycles = await db.select({ id: cycles.id }).from(cycles).where(sql`${cycles.summaryJson} ->> 'seed' = 'true'`);
   const cycleIds = seededCycles.map((c) => c.id);
+  await removeSeedActivity(db, cycleIds);
   if (cycleIds.length > 0) {
     await db.delete(runs).where(inArray(runs.cycleId, cycleIds));
     await db.delete(cycles).where(inArray(cycles.id, cycleIds));
@@ -980,7 +982,7 @@ async function insertSeed(db: Executor, input: { now: Date; tz: string; pipeline
       { cycleId: previousCycle.id, channelId: "greenhouse", status: "succeeded", fetched: 118, newCount: 2 },
       { cycleId: previousCycle.id, channelId: "indeed", status: "succeeded", fetched: 20, newCount: 3 },
     ];
-    await tx.insert(runs).values(
+    const seededRuns = await tx.insert(runs).values(
       runSpecs.map((r) => ({
         cycleId: r.cycleId,
         channelId: r.channelId,
@@ -992,7 +994,7 @@ async function insertSeed(db: Executor, input: { now: Date; tz: string; pipeline
         error: r.error ?? null,
         errorCode: r.errorCode ?? null,
       })),
-    );
+    ).returning({ id: runs.id, cycleId: runs.cycleId, channelId: runs.channelId, status: runs.status, fetched: runs.fetched, newCount: runs.newCount });
 
     // jobs
     let sourceCount = 0;
@@ -1186,6 +1188,9 @@ async function insertSeed(db: Executor, input: { now: Date; tz: string; pipeline
       // written before AI usage tracking: no model, time or result
       { provider: "claude-cli", model: null, modelSource: null, task: "score", outcome: null, tokensIn: 1500, tokensInCached: null, tokensInCacheWrite: null, tokensOut: 100, tokensOutReasoning: null, durationMs: null, costEstimate: 0, equivalentCostUsd: null, jobId: jobC, at: callOn(8) },
     ]);
+
+    await seedActivity(tx, { cycleId: latestCycle.id, startedAt: latestStart, finishedAt: new Date(latestStart.getTime() + latestWindowMs),
+      jobIds: [...jobIdByKey.values()], runs: seededRuns.filter((run) => run.cycleId === latestCycle.id) });
 
     // "New since my last visit": the user last looked before today's cycle, so the first open of Today shows the NEW dots (then they
     // move on, like on a real morning). A real visit state is replaced: this is development data.

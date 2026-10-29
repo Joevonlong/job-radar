@@ -36,6 +36,7 @@ export interface ActivityRootRow {
   request: { kind: ActivityRequestKind; status: ActivityRequestStatus; errorCode: string | null } | null;
   isCurrentAttempt: boolean; latestHeartbeatAgeSeconds: number | null; newerStartup: boolean;
   currentStep: ActivityCurrentStep | null;
+  currentSubtask: ActivityCurrentStep | null;
   /** DB-time observation and caller-provided thresholds allow pure display code to advance the clock. */
   observedAt: Date; liveness: ActivityLiveness;
 }
@@ -48,7 +49,7 @@ export interface ActivitySpanRow {
   eventCounts: { info: number; warn: number; error: number };
 }
 export interface ActivityAttempt {
-  id: string; rootId: string; startedAt: Date; status: ActivityStatus; isCurrent: boolean;
+  id: string; rootId: string; startedAt: Date; status: ActivityStatus; isCurrent: boolean; requestCurrent: ActivityRequestStatus | null;
 }
 export interface ActivityStepDuration { name: ActivityName; status: ActivityStatus; durationMs: number | null }
 export interface ActivityRootDetail {
@@ -57,7 +58,7 @@ export interface ActivityRootDetail {
 export interface ActivityQueryRow {
   spanId: string; status: ActivityStatus; reasonCode: string | null;
   channelId: string | null; queryId: string | null; runId: number | null;
-  run: { status: ActivityBusinessStatus; fetched: number; newCount: number; costEur: number; errorCode: string | null } | null;
+  run: { status: ActivityBusinessStatus; fetched: number; newCount: number; costUsd: number; errorCode: string | null } | null;
   delivery: { delivered: number; billedUnits: number; stored: number; dispositions: Partial<Record<DeliveryDisposition, number>> } | null;
   cascadeReasons: Record<string, string> | null;
 }
@@ -98,11 +99,12 @@ function safeParams(value: unknown): ActivityParams {
   return result;
 }
 
-type RawRoot = Omit<ActivityRootRow, "scope" | "name" | "process" | "status" | "startedAt" | "finishedAt" | "lastActivityAt" | "observedAt" | "liveness" | "request" | "runAi" | "currentStep" | "cycleStatus"> & {
+type RawRoot = Omit<ActivityRootRow, "scope" | "name" | "process" | "status" | "startedAt" | "finishedAt" | "lastActivityAt" | "observedAt" | "liveness" | "request" | "runAi" | "currentStep" | "currentSubtask" | "cycleStatus"> & {
   scope: string; name: string; process: string; status: string; cycleStatus: string | null;
   startedAt: Date | string; finishedAt: Date | string | null; lastActivityAt: Date | string; observedAt: Date | string;
   requestKind: string | null; requestStatus: string | null; requestErrorCode: string | null; runAiStatus: string | null;
   stepName: string | null; stepDone: number | null; stepTotal: number | null;
+  subtaskName: string | null; subtaskDone: number | null; subtaskTotal: number | null;
 };
 function rootRow(row: RawRoot, liveness: ActivityLiveness): ActivityRootRow {
   return {
@@ -117,12 +119,17 @@ function rootRow(row: RawRoot, liveness: ActivityLiveness): ActivityRootRow {
     request: row.requestKind === null ? null : { kind: compatible(requestKindSchema, row.requestKind), status: compatible(requestStatusSchema, row.requestStatus), errorCode: reason(row.requestErrorCode) },
     isCurrentAttempt: row.isCurrentAttempt, latestHeartbeatAgeSeconds: row.latestHeartbeatAgeSeconds, newerStartup: row.newerStartup,
     currentStep: row.stepName === null ? null : { name: compatible(spanNameSchema, row.stepName), progressDone: row.stepDone, progressTotal: row.stepTotal },
+    currentSubtask: row.subtaskName === null ? null : { name: compatible(spanNameSchema, row.subtaskName), progressDone: row.subtaskDone, progressTotal: row.subtaskTotal },
     observedAt: date(row.observedAt), liveness: { ...liveness },
   };
 }
 /** No business payload or error text enters this projection. All aggregates include the entire root tree. */
-function rootsCte(liveness: ActivityLiveness): SQL {
+function rootsCte(liveness: ActivityLiveness, filter: ActivityRootFilter = {}): SQL {
   const root = alias(activitySpans, "r");
+  const conditions: SQL[] = [sql`r.parent_id is null and r.id=r.root_id`];
+  if (filter.scope) conditions.push(sql`r.scope=${filter.scope}`);
+  if (filter.from) conditions.push(sql`r.started_at>=${filter.from.toISOString()}::timestamptz`);
+  if (filter.to) conditions.push(sql`r.started_at<${filter.to.toISOString()}::timestamptz`);
   return sql`with summaries as (
     select r.id, r.scope, r.name, r.process, r.status, r.reason_code as "reasonCode",
       r.started_at as "startedAt", r.finished_at as "finishedAt", r.last_activity_at as "lastActivityAt",
@@ -140,7 +147,8 @@ function rootsCte(liveness: ActivityLiveness): SQL {
       (select extract(epoch from (now()-max(hb.at)))::float8 from runner_heartbeats hb where hb.process=r.process) as "latestHeartbeatAgeSeconds",
       exists(select 1 from activity_spans startup where startup.parent_id is null and startup.name='system.startup'
         and startup.process=r.process and startup.started_at>r.started_at) as "newerStartup",
-      step.name as "stepName", step.progress_done as "stepDone", step.progress_total as "stepTotal", now() as "observedAt"
+      step.name as "stepName", step.progress_done as "stepDone", step.progress_total as "stepTotal",
+      subtask.name as "subtaskName", subtask.progress_done as "subtaskDone", subtask.progress_total as "subtaskTotal", now() as "observedAt"
     from activity_spans r
     left join cycles c on c.id=r.cycle_id
     left join control_requests cr on cr.id=r.control_request_id
@@ -148,25 +156,24 @@ function rootsCte(liveness: ActivityLiveness): SQL {
       from activity_spans where scope='request' and parent_id is null and id=root_id and control_request_id is not null) attempt on attempt.id=r.id
     left join lateral (select status from control_requests ai where ai.kind='run_ai' and ai.payload ->> 'cycleId'=r.cycle_id::text
       order by ai.requested_at desc,ai.id desc limit 1) ai on r.scope='cycle'
-    left join lateral (select name,progress_done,progress_total from activity_spans s where s.root_id=r.id and s.parent_id=r.id
+    left join lateral (select id,name,progress_done,progress_total from activity_spans s where s.root_id=r.id and s.name like 'step.%'
       and s.status='running' order by s.started_at desc,s.id desc limit 1) step on true
-    where r.parent_id is null and r.id=r.root_id
+    left join lateral (select name,progress_done,progress_total from activity_spans s where s.root_id=r.id and s.parent_id=step.id
+      and s.status='running' order by s.started_at desc,s.id desc limit 1) subtask on true
+    where ${sql.join(conditions, sql` and `)}
   )`;
 }
 export async function listActivityRoots(db: Db, filter: ActivityRootFilter, page: ActivityPage, liveness: ActivityLiveness): Promise<{ rows: ActivityRootRow[]; total: number; anyActive: boolean }> {
   const { limit, offset } = pagination(page);
   const conditions: SQL[] = [sql`true`];
-  if (filter.scope) conditions.push(sql`scope=${filter.scope}`);
-  if (filter.from) conditions.push(sql`"startedAt">=${filter.from.toISOString()}::timestamptz`);
-  if (filter.to) conditions.push(sql`"startedAt"<${filter.to.toISOString()}::timestamptz`);
   if (filter.status === "active") conditions.push(sql`active`);
   if (filter.status === "failed") conditions.push(sql`(status in ('failed','interrupted') or "failedChildren">0)`);
   if (filter.status === "partial") conditions.push(sql`status='partial'`);
   if (filter.issuesOnly) conditions.push(sql`("warnEvents"+"errorEvents"+"failedChildren">0 or "eventsDropped">0)`);
   // Count separately from pagination so an empty/out-of-range page still returns its total and refresh flag.
   const where = sql.join(conditions, sql` and `);
-  const rows = await db.execute<RawRoot>(sql`${rootsCte(liveness)} select * from summaries where ${where} order by active desc,"startedAt" desc,id desc limit ${limit} offset ${offset}`);
-  const [counts] = await db.execute<{ total: number; anyActive: boolean }>(sql`${rootsCte(liveness)} select count(*)::integer as total,coalesce(bool_or(active),false) as "anyActive" from summaries where ${where}`);
+  const rows = await db.execute<RawRoot>(sql`${rootsCte(liveness, filter)} select * from summaries where ${where} order by active desc,"startedAt" desc,id desc limit ${limit} offset ${offset}`);
+  const [counts] = await db.execute<{ total: number; anyActive: boolean }>(sql`${rootsCte(liveness, filter)} select count(*)::integer as total,coalesce(bool_or(active),false) as "anyActive" from summaries where ${where}`);
   return { rows: rows.map((row) => rootRow(row, liveness)), total: counts.total, anyActive: counts.anyActive };
 }
 
@@ -209,12 +216,14 @@ export async function getActivityRoot(db: Db, rootId: string, liveness: Activity
   const attempts: ActivityAttempt[] = [];
   for (const requestId of requests) {
     const requestRoot = root.scope === "request" && root.controlRequestId === requestId;
-    const attemptRows = await db.execute<{ id: string; rootId: string; startedAt: Date | string; status: string; isCurrent: boolean }>(sql`
-      select id,root_id as "rootId",started_at as "startedAt",status,
-        row_number() over (order by started_at desc,id desc)=1 as "isCurrent"
-      from activity_spans where control_request_id=${requestId} and ${requestRoot ? sql`scope='request' and parent_id is null and id=root_id` : sql`name='request.run_ai'`}
-      order by started_at,id`);
-    attempts.push(...attemptRows.map((a) => ({ ...a, startedAt: date(a.startedAt), status: compatible(spanStatusSchema, a.status) })));
+    const attemptRows = await db.execute<{ id: string; rootId: string; startedAt: Date | string; status: string; isCurrent: boolean; requestStatus: string | null }>(sql`
+      select a.id,a.root_id as "rootId",a.started_at as "startedAt",a.status,cr.status as "requestStatus",
+        row_number() over (order by a.started_at desc,a.id desc)=1 as "isCurrent"
+      from activity_spans a left join control_requests cr on cr.id=a.control_request_id
+      where a.control_request_id=${requestId} and ${requestRoot ? sql`a.scope='request' and a.parent_id is null and a.id=a.root_id` : sql`a.name='request.run_ai'`}
+      order by a.started_at,a.id`);
+    attempts.push(...attemptRows.map(({ requestStatus, ...a }) => ({ ...a, startedAt: date(a.startedAt), status: compatible(spanStatusSchema, a.status),
+      requestCurrent: a.isCurrent && requestStatus !== null ? compatible(requestStatusSchema, requestStatus) : null })));
   }
   attempts.sort((a, b) => a.startedAt.getTime() - b.startedAt.getTime() || a.id.localeCompare(b.id));
   return { root, spans, stepDurations, attempts };
@@ -223,7 +232,7 @@ export async function getActivityRoot(db: Db, rootId: string, liveness: Activity
 export async function listQueryRows(db: Db, rootId: string): Promise<{ rows: ActivityQueryRow[]; queriesNotReached: number | null }> {
   const t = activitySpans;
   const rows = await db.select({ spanId: t.id, status: t.status, reasonCode: t.reasonCode, channelId: t.channelId, queryId: t.queryId, runId: t.runId,
-    run: { id: runs.id, status: runs.status, fetched: runs.fetched, newCount: runs.newCount, costEur: runs.cost, errorCode: runs.errorCode },
+    run: { id: runs.id, status: runs.status, fetched: runs.fetched, newCount: runs.newCount, costUsd: runs.cost, errorCode: runs.errorCode },
     delivery: { runId: runDeliveries.runId, delivered: runDeliveries.delivered, billedUnits: runDeliveries.billedUnits, counts: runDeliveries.countsJson },
     cascade: sql<unknown>`(select e.params from activity_events e where e.root_id=${t.rootId} and e.span_id=${t.id} and e.code='cascade_reasons' order by e.at desc,e.id desc limit 1)`,
   }).from(t).leftJoin(runs, eq(runs.id, t.runId)).leftJoin(runDeliveries, eq(runDeliveries.runId, runs.id))
@@ -243,7 +252,7 @@ export async function listQueryRows(db: Db, rootId: string): Promise<{ rows: Act
     return {
       spanId: row.spanId, status: compatible(spanStatusSchema, row.status), reasonCode: reason(row.reasonCode),
       channelId: shortId(row.channelId), queryId: shortId(row.queryId), runId: row.runId,
-      run: row.run === null ? null : { status: compatible(businessStatusSchema, row.run.status), fetched: row.run.fetched, newCount: row.run.newCount, costEur: row.run.costEur, errorCode: reason(row.run.errorCode) },
+      run: row.run === null ? null : { status: compatible(businessStatusSchema, row.run.status), fetched: row.run.fetched, newCount: row.run.newCount, costUsd: row.run.costUsd, errorCode: reason(row.run.errorCode) },
       delivery: row.delivery && counts.success ? { delivered: row.delivery.delivered, billedUnits: row.delivery.billedUnits, stored: counts.data.dispositions.stored ?? 0, dispositions: counts.data.dispositions } : null,
       cascadeReasons,
     };
