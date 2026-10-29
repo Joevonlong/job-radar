@@ -13,7 +13,8 @@ export function ScopeSwitch({ params, archiveCount }: { params: JobsSearchParams
   const t = useTranslations("dashboard.jobs.scope");
   const active = resolveJobScope(params.scope, params.status);
   return (
-    <nav
+    <div
+      role="group"
       aria-label={t("label")}
       data-testid="scope-switch"
       className="grid w-full max-w-full grid-cols-3 rounded-btn border-bw border-border bg-card shadow-e2 sm:w-fit"
@@ -21,7 +22,7 @@ export function ScopeSwitch({ params, archiveCount }: { params: JobsSearchParams
       {JOB_SCOPES.map((scope) => (
         <Link
           key={scope}
-          aria-current={active === scope ? "page" : undefined}
+          aria-current={active === scope ? "true" : undefined}
           data-testid={`scope-${scope}`}
           title={scope === "archive" ? t("archiveHint") : undefined}
           href={jobsListHref({
@@ -37,6 +38,6 @@ export function ScopeSwitch({ params, archiveCount }: { params: JobsSearchParams
           {scope === "archive" ? t("archive", { count: archiveCount }) : t(scope)}
         </Link>
       ))}
-    </nav>
+    </div>
   );
 }

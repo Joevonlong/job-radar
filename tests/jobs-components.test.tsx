@@ -21,7 +21,7 @@ describe("scope switch", () => {
 
   it("writes explicit scope and removes page on every link, leaving archive sort implicit", () => {
     show("?q=engineer&status=closed&page=3");
-    expect(screen.getByRole("link", { name: "All" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: "All" })).toHaveAttribute("aria-current", "true");
     expect(screen.getByTestId("scope-archive")).toHaveTextContent("Archive (7)");
     for (const scope of ["current", "archive", "all"]) {
       expect(queryOf(scope).get("scope")).toBe(scope);
@@ -34,7 +34,7 @@ describe("scope switch", () => {
 
   it("clears reasons outside archive, and last-listed sort and direction only on Current", () => {
     show("?scope=archive&reason=gone&sort=last_listed&dir=asc&page=2");
-    expect(screen.getByTestId("scope-archive")).toHaveAttribute("aria-current", "page");
+    expect(screen.getByTestId("scope-archive")).toHaveAttribute("aria-current", "true");
     expect(queryOf("archive").get("reason")).toBe("gone");
     expect(queryOf("archive").get("sort")).toBe("last_listed");
     for (const scope of ["current", "all"]) expect(queryOf(scope).has("reason")).toBe(false);
@@ -54,17 +54,19 @@ describe("scope switch", () => {
 
   it("pins Current despite a closed status and puts every scope link in native Tab order", async () => {
     show("?scope=current&status=closed");
-    const navigation = screen.getByRole("navigation", { name: "Job scope" });
-    const links = within(navigation).getAllByRole("link");
+    const group = screen.getByRole("group", { name: "Job scope" });
+    expect(group.tagName).toBe("DIV");
+    expect(screen.queryByRole("navigation")).not.toBeInTheDocument();
+    const links = within(group).getAllByRole("link");
     expect(links).toHaveLength(3);
-    expect(within(navigation).getByRole("link", { current: "page" })).toHaveTextContent("Current");
+    expect(within(group).getByRole("link", { current: true })).toHaveTextContent("Current");
     const user = userEvent.setup();
     for (const link of links) {
       await user.tab();
       expect(link).toHaveFocus();
     }
     await user.tab({ shift: true });
-    expect(within(navigation).getByRole("link", { name: "Archive (7)" })).toHaveFocus();
+    expect(within(group).getByRole("link", { name: "Archive (7)" })).toHaveFocus();
     expect(links.filter((link) => link.hasAttribute("aria-current"))).toHaveLength(1);
   });
 });

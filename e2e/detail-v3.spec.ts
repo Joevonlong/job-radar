@@ -279,7 +279,7 @@ test.describe("job detail: closing a job", () => {
 
       await page.goto("/jobs?q=Developer+Experience&filtered=true");
       await expect(listRow(page, id)).toHaveCount(0);
-      await page.getByTestId("scope-switch").getByRole("link", { name: /^(Archive|历史库)/ }).click();
+      await page.getByRole("group", { name: /^(Job scope|岗位范围)$/ }).getByRole("link", { name: /^(Archive|历史库)/ }).click();
       await expect(listRow(page, id)).toBeVisible();
       await page.getByRole("link", { name: new RegExp(CLOSE_TITLE) }).first().click();
       await expect(page.getByTestId("job-title")).toContainText(CLOSE_TITLE);

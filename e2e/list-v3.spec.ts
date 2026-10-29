@@ -207,7 +207,7 @@ test.describe("closing jobs on /jobs", () => {
   // a seeded job no other spec opens; the detail page's test (detail-v3) uses it too, so both take the same advisory lock
   const TITLE = "Staff Engineer, Developer Experience";
   const LIST = "/jobs?q=Developer+Experience&filtered=true";
-  const count = async (page: Page) => Number(((await page.getByTestId("scope-switch").getByRole("link", { name: /^(Archive|历史库)/ }).textContent()) ?? "").replace(/\D/g, ""));
+  const count = async (page: Page) => Number(((await page.getByRole("group", { name: /^(Job scope|岗位范围)$/ }).getByRole("link", { name: /^(Archive|历史库)/ }).textContent()) ?? "").replace(/\D/g, ""));
   const override = (id: number) => withDb(async (sql) => (await sql<{ action: string }[]>`select action::text from job_closure_overrides where job_id = ${id}`)[0]?.action ?? null);
 
   test("the row button and c close a job (with undo), it leaves the list, 'Archive (N)' lists it, and reopening brings it back", async ({ page }) => {
@@ -247,9 +247,9 @@ test.describe("closing jobs on /jobs", () => {
       await expect(row).toHaveCount(0);
       await expect.poll(() => override(id)).toBe("closed");
 
-      await page.getByTestId("scope-switch").getByRole("link", { name: /^(Archive|历史库)/ }).click();
+      await page.getByRole("group", { name: /^(Job scope|岗位范围)$/ }).getByRole("link", { name: /^(Archive|历史库)/ }).click();
       await expect(page).toHaveURL(/scope=archive/);
-      await expect(page.getByTestId("scope-switch").getByRole("link", { name: /^(Archive|历史库)/ })).toHaveAttribute("aria-current", "page");
+      await expect(page.getByRole("group", { name: /^(Job scope|岗位范围)$/ }).getByRole("link", { name: /^(Archive|历史库)/ })).toHaveAttribute("aria-current", "true");
       const chip = row.locator('[data-slot="job-status-chip"]');
       await expect(chip).toHaveAttribute("data-reason", "manual");
       await expect(chip).toContainText("你标记的已关闭");
@@ -258,7 +258,7 @@ test.describe("closing jobs on /jobs", () => {
       await row.getByTestId("row-close").click();
       await expect(row).toHaveCount(0);
       await expect.poll(() => override(id)).toBeNull();
-      await page.getByTestId("scope-switch").getByRole("link", { name: /^(Current|当前)$/ }).click();
+      await page.getByRole("group", { name: /^(Job scope|岗位范围)$/ }).getByRole("link", { name: /^(Current|当前)$/ }).click();
       await expect(page).toHaveURL(/scope=current/);
       await expect(row).toBeVisible();
     } finally {
@@ -275,7 +275,7 @@ for (const locale of ["en", "zh"] as const) {
     await context.addCookies([{ name: "NEXT_LOCALE", value: locale, url: baseURL }]);
     await open(page, "/jobs?q=Document+Retrieval");
     await expect(listRows(page)).toHaveCount(0);
-    const toggle = page.getByTestId("scope-switch").getByRole("link", { name: /^(Archive|历史库)/ });
+    const toggle = page.getByRole("group", { name: /^(Job scope|岗位范围)$/ }).getByRole("link", { name: /^(Archive|历史库)/ });
     await expect(toggle).toHaveAttribute("title", locale === "en" ? "Jobs closed by you, taken down at the source, or not listed for weeks. Nothing is deleted." : "你关闭的、来源已下架或数周未被列出的岗位。不会删除任何数据。");
     await toggle.click();
     const row = listRows(page).filter({ hasText: "Research Engineer, Document Retrieval" });
