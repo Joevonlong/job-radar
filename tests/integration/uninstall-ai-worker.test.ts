@@ -52,7 +52,7 @@ describe.each(managers)("uninstall-ai-worker.sh (%s)", (manager) => {
     }
   };
 
-  it.each(manager === "launchd" ? [[L_CUSTOM], [L_DEFAULT]] : [[undefined]])("stops and removes the definition (label %s); nothing is left", (label) => {
+  it.each(manager === "launchd" ? [[L_CUSTOM], [L_DEFAULT], [L_LEGACY]] : [[undefined]])("stops and removes the definition (label %s); nothing is left", (label) => {
     const pid = installed(label);
     const r = uninstall();
     expect(r.status, r.stderr).toBe(0);

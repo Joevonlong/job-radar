@@ -7,6 +7,7 @@ import { cliCommandProblem } from "@/lib/ai/providers/cli-guards";
 import { isCodexOlderThan, parseCodexVersion } from "@/lib/ai/providers/codex-version";
 import type { WorkerEvidence } from "@/lib/db/repos/ai-worker-evidence";
 
+import { aiWorkerLaunchdLabel } from "../../ai-worker-label";
 import { withTimeout } from "../../timeout";
 import { configGuardFindings } from "../../config-guards";
 import { AI_WORKER_LAUNCHD_LOG, AI_WORKER_LOG_DIR, AI_WORKER_LOG_NAMES } from "../../log-files";
@@ -18,14 +19,8 @@ import { type CheckOutcome, type DoctorCheck, type DoctorContext } from "../type
 
 const launchdSpec = { id: "aiworker.launchd", group: "processes" } as const;
 
-/** The launchd label before the rename to `io.jobradar.*`; scripts/ops/install-ai-worker.sh removes an agent with it. */
+/** Compatibility probe when the configured label is absent and an older agent still uses this label. */
 const LEGACY_LAUNCHD_LABEL = "de.jobradar.ai-worker";
-const LAUNCHD_LABEL = "io.jobradar.ai-worker";
-
-/** The launchd label of the ai-worker from schedule.yaml `doctor.ai_worker_launchd_label` (a copied legacy label means the new one). */
-export function aiWorkerLaunchdLabel(configured: string): string {
-  return configured === LEGACY_LAUNCHD_LABEL ? LAUNCHD_LABEL : configured;
-}
 
 /** The fields of `launchctl print` that matter: `state = running`, `pid = 123`, `last exit code = 0`, `stdout path = …`. */
 export function parseLaunchctlPrint(stdout: string): { state: string | null; pid: number | null; lastExitCode: string | null; stdoutPath: string | null } {
@@ -53,7 +48,7 @@ export function aiWorkerServicePid(ctx: DoctorContext): Promise<{ pid: number } 
   return cached(ctx, "aiworker.servicePid", async () => {
     const { t } = ctx;
     if (ctx.platform === "darwin" && ctx.uid !== null) {
-      const label = aiWorkerLaunchdLabel(ctx.settings.ai_worker_launchd_label);
+      const label = aiWorkerLaunchdLabel(ctx.settings.ai_worker_launchd_label, ctx.settings.command_timeout_seconds * 1000);
       const out = await ctx.probes.run("launchctl", ["print", `gui/${ctx.uid}/${label}`]);
       if (out.kind !== "ran") return { pid: null, reason: t("checks.config.shipped.noAnswer", { command: "launchctl print" }) };
       if (out.exitCode !== 0) return { pid: null, reason: t("checks.config.shipped.notLoaded", { service: label }) };
@@ -127,8 +122,7 @@ export const aiWorkerLaunchdCheck: DoctorCheck = {
     if (ctx.config.ai.execution !== "host") return ok(launchdSpec, t("checks.aiworker.launchd.notHost"));
     if (ctx.platform === "linux") return systemdOutcome(ctx);
     if (ctx.platform !== "darwin" || ctx.uid === null) return warn(launchdSpec, t("checks.aiworker.launchd.notMacos"), t("checks.aiworker.launchd.notMacosHint"));
-    // A user config copied from the old shipped defaults still names the legacy label; the install script now always uses the new one.
-    const label = aiWorkerLaunchdLabel(ctx.settings.ai_worker_launchd_label);
+    const label = aiWorkerLaunchdLabel(ctx.settings.ai_worker_launchd_label, ctx.settings.command_timeout_seconds * 1000);
     const out = await ctx.probes.run("launchctl", ["print", `gui/${ctx.uid}/${label}`]);
     const heartbeatAge = async (): Promise<number | null> => {
       const sources = await tryLoadSources(ctx);
@@ -136,8 +130,10 @@ export const aiWorkerLaunchdCheck: DoctorCheck = {
     };
     if (out.kind === "timeout") return warn(launchdSpec, t("checks.aiworker.launchd.timeout"), t("checks.aiworker.launchd.timeoutHint"));
     if (out.kind === "missing" || out.exitCode !== 0) {
-      const legacy = await ctx.probes.run("launchctl", ["print", `gui/${ctx.uid}/${LEGACY_LAUNCHD_LABEL}`]);
-      if (legacy.kind === "ran" && legacy.exitCode === 0) return warn(launchdSpec, t("checks.aiworker.launchd.legacy", { legacy: LEGACY_LAUNCHD_LABEL, label }), t("checks.aiworker.launchd.legacyHint", { label }));
+      if (label !== LEGACY_LAUNCHD_LABEL) {
+        const legacy = await ctx.probes.run("launchctl", ["print", `gui/${ctx.uid}/${LEGACY_LAUNCHD_LABEL}`]);
+        if (legacy.kind === "ran" && legacy.exitCode === 0) return warn(launchdSpec, t("checks.aiworker.launchd.legacy", { legacy: LEGACY_LAUNCHD_LABEL, label }), t("checks.aiworker.launchd.legacyHint", { label }));
+      }
       const alive = await heartbeatAge();
       if (alive !== null) return warn(launchdSpec, t("checks.aiworker.launchd.manual", { label, age: alive }), t("checks.aiworker.launchd.manualHint"));
       return fail(launchdSpec, t("checks.aiworker.launchd.notInstalled", { label }), t("checks.aiworker.launchd.notInstalledHint"));
@@ -171,7 +167,8 @@ export const aiWorkerHeartbeatCheck: DoctorCheck = {
     const age = ageSeconds(aiWorker.lastHeartbeatAt, ctx.now);
     if (!aiWorker.online) {
       const logs = workerLogs(ctx);
-      return fail(heartbeatSpec, t("checks.aiworker.heartbeat.offline", { ago: formatAgo(ctx, age), limit }), t("checks.aiworker.heartbeat.offlineHint", { errLog: logs.err, launchdLog: logs.launchd }));
+      const label = aiWorkerLaunchdLabel(ctx.settings.ai_worker_launchd_label, ctx.settings.command_timeout_seconds * 1000);
+      return fail(heartbeatSpec, t("checks.aiworker.heartbeat.offline", { ago: formatAgo(ctx, age), limit }), t("checks.aiworker.heartbeat.offlineHint", { errLog: logs.err, launchdLog: logs.launchd, label }));
     }
     const r = await aiWorkerServiceReceipt(ctx);
     if (r?.receipt.status === "not_yet") {

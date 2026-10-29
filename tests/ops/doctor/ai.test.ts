@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from "vitest";
 
-import { aiBacklogCheck, aiQuotaCheck, aiWorkerHeartbeatCheck, aiWorkerLaunchdCheck, claudeLoginCheck, codexLoginCheck, configGuardsCheck, parseLaunchctlPrint, profileCheck } from "@/lib/ops/doctor/checks/ai";
+import { aiBacklogCheck, aiQuotaCheck, aiWorkerHeartbeatCheck, aiWorkerLaunchdCheck, aiWorkerServicePid, aiWorkerServiceReceipt, claudeLoginCheck, codexLoginCheck, configGuardsCheck, parseLaunchctlPrint, profileCheck } from "@/lib/ops/doctor/checks/ai";
 import { shippedConfigCheck } from "@/lib/ops/doctor/checks/shipped";
 
 import type { QuotaStatus } from "@/lib/ai/quota-guard";
@@ -54,9 +54,24 @@ describe("aiworker.launchd", () => {
     expect(r.detail).toContain("de.jobradar.ai-worker");
     expect(r.hint).toContain("scripts/ops/install-ai-worker.sh");
   });
-  it("treats a user config that still names the old label as the new label", async () => {
-    const ctx = makeContext({ settings: { ai_worker_launchd_label: "de.jobradar.ai-worker" } });
-    expect((await only(aiWorkerLaunchdCheck, ctx)).status).toBe("ok");
+  it.each(["de.jobradar.ai-worker", "io.jobradar.ai-worker"])("finds the job installed under the configured label %s", async (label) => {
+    const command = `launchctl print gui/501/${label}`;
+    const ctx = makeContext({ settings: { ai_worker_launchd_label: label }, commands: {
+      [LAUNCHCTL]: ran("", 113),
+      [command]: ran(LAUNCHCTL_RUNNING),
+    } });
+    expect(await only(aiWorkerLaunchdCheck, ctx)).toMatchObject({ status: "ok", detail: expect.stringContaining(label) });
+    expect(ctx.probes.run).toHaveBeenCalledExactlyOnceWith("launchctl", ["print", `gui/501/${label}`]);
+  });
+  it.each(["de.jobradar.ai-worker", "io.jobradar.ai-worker"])("uses %s's PID for the shipped-config check and receipt", async (label) => {
+    const ctx = makeContext({ locale: "en", settings: { ai_worker_launchd_label: label }, commands: {
+      [LAUNCHCTL]: ran("", 113),
+      [`launchctl print gui/501/${label}`]: ran(LAUNCHCTL_RUNNING),
+    } });
+    expect(await aiWorkerServicePid(ctx)).toEqual({ pid: 4242 });
+    expect(await aiWorkerServiceReceipt(ctx)).toMatchObject({ pid: 4242, receipt: { status: "found" } });
+    expect((await only(shippedConfigCheck, ctx)).status).toBe("ok");
+    expect(ctx.probes.aiWorkerReceipt).toHaveBeenCalledExactlyOnceWith(4242);
   });
   it("fails when not installed and no heartbeat", async () => {
     const r = await only(aiWorkerLaunchdCheck, makeContext({ commands: { [LAUNCHCTL]: ran("", 113, "Could not find service") }, probes: { sources: async () => sourcesView({ aiWorker: worker({ online: false, lastHeartbeatAt: null, ageSeconds: null }) }) } }));
@@ -88,6 +103,14 @@ describe("aiworker.heartbeat", () => {
     expect(r.detail).toContain("15 分钟");
     expect(r.hint).toContain("launchctl kickstart");
     expect(r.hint).toContain("/Volumes/SSD/work/job-radar/data/logs/ai-worker.err.log");
+  });
+  it.each(["de.jobradar.ai-worker", "io.jobradar.ai-worker"])("the offline restart hint targets the configured label %s", async (label) => {
+    for (const locale of ["en", "zh"] as const) {
+      const ctx = makeContext({ locale, settings: { ai_worker_launchd_label: label }, probes: {
+        sources: async () => sourcesView({ aiWorker: worker({ online: false, lastHeartbeatAt: ago(900), ageSeconds: 900 }) }),
+      } });
+      expect((await only(aiWorkerHeartbeatCheck, ctx)).hint).toContain(`launchctl kickstart -k gui/$(id -u)/${label}`);
+    }
   });
   it("fails when it never beat", async () => {
     const r = await only(aiWorkerHeartbeatCheck, makeContext({ probes: { sources: async () => sourcesView({ aiWorker: worker({ online: false, lastHeartbeatAt: null, ageSeconds: null }) }) } }));
