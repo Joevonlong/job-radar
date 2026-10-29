@@ -121,6 +121,12 @@ describe("boardsFromResults", () => {
 describe("brave channel", () => {
   const search = (answer = response(200, fixture)) => routedFetch([["api.search.brave.com/res/v1/web/search", answer]]);
 
+  it("declines automatic catch-up because discovery ignores the search window", () => {
+    const { deps: d } = deps();
+    const { ctx } = atsContext("brave", search().fetch);
+    expect(createBraveChannel(d).supportsCatchUp?.(ctx.settings)).toBe(false);
+  });
+
   it("is 'not configured' without BRAVE_SEARCH_API_KEY: no request, no failure, nothing written", async () => {
     const { deps: d, store } = deps({ environment: {} });
     const { fetch, requests } = search();

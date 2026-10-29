@@ -58,9 +58,12 @@ changing its status. A source listing it again or a user choosing **Still open**
 
 "Possibly closed" is a hint based on time, not proof, and it is judged per channel, not per search query:
 
-- A job becomes possibly closed when no source has returned it for `possibly_closed_after_days` days (7 by default) **and** each channel it came from has had at least one successful run that started after those days had passed. Runs that failed, were skipped or were interrupted do not count, so a channel that was down never closes its jobs.
+- A job becomes possibly closed when no source has returned it for `possibly_closed_after_days` days (7 by default) **and** each channel it came from has had at least one successful run that started after those days had passed. Runs that failed, were skipped, were interrupted or had their window stretched beyond its base do not count, so a channel that was down never closes its jobs.
+- A wider catch-up window under the same result cap can be filled with older postings. A channel whose runs are always
+  stretched therefore marks fewer of its own jobs, without adding false marks from catch-up; the unseen-job link check
+  picks them up after `unseen_link_check_after_days` (see below).
 - A job from a company ATS board additionally needs that board to have been read completely after the job fell overdue,
-  by a run that finished successfully with the normal search window, not a catch-up or backfill run (a run that was
+  by a run that finished successfully without stretching its search window (a run that was
   cancelled or failed after reading the board does not count, because its postings were not saved). A complete read
   means the whole list was read and, for SmartRecruiters with `fetch_details` on, every kept posting's detail was
   fetched; with `fetch_details: false` a complete list is a complete read. An "unchanged" response also counts if the
@@ -161,35 +164,32 @@ when it returned nothing, including an empty Apify or Monid sub-run that paid a 
 "no available channel" summary row do not advance the order. History has no age cutoff.
 
 The starting channel is the first currently available channel in the selected cascade, or the single channel of an
-independent unit. With an unchanged set of N queries and the same starting channel, at most N−1 other turns fall between
-two turns of one query. Only that starting channel has this fairness guarantee; later cascade channels serve the remaining
-queries. When paid channels run out, the guest can become the start and uses its own history. A unit that can run nothing
-keeps its order. Single-query scan units are unaffected. Manual runs and catch-up cycles also advance rotation; a catch-up
-uses the base window of the scheduled cycle it replaces (`windowKind`). The channel's "Test" button does not write runs
-and does not affect rotation.
+independent unit. With an unchanged set of N queries, the same starting channel and distinct turn start times, at most
+N−1 other turns fall between two turns of one query. Turns sharing a start time keep `search.yaml` order, so a tied query
+can wait longer. For example, if B, C and A share a start time and the config lists A first, A may run again before B,
+leaving three other turns (C, A, A) between B's turns. Only the starting channel has this fairness guarantee; later cascade
+channels serve the remaining queries. When paid channels run out, the guest can become the start and uses its own history.
+A unit that can run nothing keeps its order. Single-query scan units do not need rotation. Manual runs and catch-up cycles
+also advance rotation; a catch-up cycle uses the base window of the scheduled cycle it replaces. The channel's "Test"
+button does not write runs and does not affect rotation.
 
 Each completed unit emits a `query rotation` log and a `steps[collect].result.rotation` summary, stored in the cycle's
 `cycles.summary_json.steps` entry whose `name` is `collect`. They show the starting channel (`sortChannel`), query count,
 served/failed outcomes (`reached`), never-run count, oldest known wait and query, and largest requested window
-(`maxWindowHours`); the log also includes `notReached`. Unknown waits are null. Windows stay at their configured base
-values, and `stretched` and `capped` are both 0. Dry runs use config order and mark `historyUnavailable: true`; the CLI says
-so. A history read failure warns once and uses the same fallback. Having no available start channel does not itself make
-history unavailable: if the history read succeeded, `historyUnavailable` is false, `neverRun` is 0 and the oldest wait
-is null. Aborted or throwing units have no rotation summary.
+(`maxWindowHours`, including catch-up); the log also includes `notReached`. `stretched` counts queries with at least one
+stretched attempt; `capped` counts queries whose catch-up gap was limited by the cap. Unknown waits are null. Dry runs use
+config order and base windows and mark `historyUnavailable: true`. A history read failure warns once and uses the same
+fallback. With rotation off the CLI says `query order: config order (collect.query_rotation is false)`; a history read
+failure says `run history could not be read`. Having no available start channel does not itself make history unavailable:
+if the history read succeeded, `historyUnavailable` is false, `neverRun` is 0 and the oldest wait is null. Aborted or
+throwing units have no rotation summary.
 
 For the individual attempts, inspect the `runs` table in PostgreSQL (or `pnpm db:studio`):
 
 - `usage_units`: usage booked to the channel budget, such as JSearch requests or Bright Data / Apify / Monid records. Check `cost`
   too: an empty Apify or Monid run can have zero usage units but a positive start fee.
 - `window_hours`: the window actually requested from the channel; null for a "no available channel" summary row.
-- `window_extended`: false for all attempts in this version; rotation does not extend windows.
-
-Two limits of the recorded history remain:
-
-- LinkedIn session's daily page counter is separate from the channel budget and is not in `usage_units`. If the page limit
-  stops a query after loading pages but before retaining any postings, its empty, unspent skip does not count as a turn.
-- JSearch searches only the first `keywords_per_query` keywords in a group. Reordering keywords within that group keeps the
-  query id, so its history can describe a different prefix of keywords.
+- `window_extended`: true when the attempt's window was stretched beyond its base.
 
 Board discovery (Tavily and Brave) uses the same `collect.query_rotation` switch, rotating searches inside each channel.
 Its per-query turns live in `runtime_state`, not `runs`, and all turns in one run share a timestamp. It guarantees a turn
@@ -200,6 +200,67 @@ discovery starts writing leaves no turns, candidates or run marker; cancellation
 earlier writes. Dry runs and the "Test" button keep config order without reading or writing turns. See
 [Tavily discovery](tavily.md#how-it-works) for the details, including repeated cancellations.
 
+### Catch-up windows
+
+After a missed turn or an outage, catch-up looks back to the start of the query's last complete coverage on any channel
+of its family: all configured cascade channels, or the channel itself for an independent source. For catch-up, coverage
+means a successful run, a partial run without interruption, or a budget stop that kept postings or spent quota or money.
+Failed, cancelled, interrupted and unfinished runs do not count as coverage. With no coverage, the anchor is the query's
+first run in that family; a new query with no history uses the base window. The window is computed before each attempt,
+for the channel actually serving it.
+
+Both settings belong under `collect:` in your `data/config/sources.yaml`; these are the defaults:
+
+```yaml
+collect:
+  max_catch_up_hours: 168
+  catch_up_tolerance_hours: 6
+```
+
+- **Tolerance:** `collect.catch_up_tolerance_hours` (default 6, range 0–72) keeps the base window when the gap is no more
+  than the base plus tolerance. The part beyond the base is lost, up to the tolerance in hours. With a 24-hour base,
+  Saturday 09:00 → Sunday 09:30 is a normal 24.5-hour gap that loses about half an hour; long cycles or manual runs can
+  lose more. Beyond tolerance, the window covers the whole gap, rounded up to hours and limited by the cap.
+- **Cap:** `collect.max_catch_up_hours` (default 168, range 0–720) limits how far back catch-up reaches; older gaps are
+  lost. A cap below the base window keeps the base. Set `max_catch_up_hours: 0` to turn catch-up off and restore base
+  windows without a deploy; switching off query rotation alone does not turn off catch-up.
+
+LinkedIn session searches, guest, JSearch and other channels that use the window catch up, including the single-query
+Arbeitnow scan. **Bright Data, Apify and Monid do not automatically catch up yet:** they are billed per record, use coarse
+date ranges and do not return results newest first. They always keep the base window, losing the gap beyond it; a run
+that meets the coverage rules still counts for the family, so a later channel will not recover that gap. Catch-up will
+be enabled for each of these channels only after exact-window requests and newest-first results under its active
+settings have been measured.
+
+Channels that ignore the search window also keep the base: widening fetches nothing extra and would only stop their
+successful runs from counting as possibly-closed evidence:
+
+- Company ATS boards: Greenhouse, Lever, Ashby, Personio and SmartRecruiters.
+- Board discovery: Tavily and Brave.
+- Gmail job alerts.
+- LinkedIn recommendations.
+
+A wider window still cannot recover postings cut off by `max_per_group_per_location` or a channel's `max_results`.
+Channels without newest-first ordering, including JSearch and guest, return only part of the wider period; the newest
+jobs may be missing. Budget stops mid-query can still leave later keywords unsearched, and catch-up does not add budget.
+
+Three limits of the coverage history remain:
+
+- Apify keeps earlier results if a later sub-run fails and returns normally; that run is treated as complete coverage.
+- JSearch searches only the first `keywords_per_query` keywords in a group. Reordering the group keeps the query id,
+  so coverage can still refer to the previous selection of keywords.
+- LinkedIn session's daily page counter is separate from the channel budget and is not in `usage_units`. If the page
+  limit stops a query after loading pages but before retaining any postings, its empty, unspent skip does not count as
+  a turn or as coverage.
+
+Dry runs and history read failures use base windows. Inspect `runs.window_hours` and `runs.window_extended` for each
+attempt, and `rotation.stretched`, `rotation.maxWindowHours` and `rotation.capped` in the summary described above.
+Stretched runs do not count toward [possibly-closed evidence](#how-jobs-get-marked-possibly-closed).
+Turning catch-up off stops new stretched runs, but historical ones do not expire on their own. For a safe rollback,
+retain `and not r.window_extended` in `markJobsPossiblyClosed`; otherwise some jobs may be marked possibly closed and
+reopened on their next sighting. Remove both catch-up keys before starting code that does not know them; see
+[Roll back](upgrade.md#roll-back).
+
 ## 6. Handling common failures
 
 | You see | What to do |
@@ -209,7 +270,7 @@ earlier writes. Dry runs and the "Test" button keep config order without reading
 | Company "N consecutive failures: board does not exist (404)" | The token is wrong or the company changed ATS: click "Open board" to look at the careers page, fix the token under "Edit", or "Delete" |
 | Company "not checked for N hours" | Its ATS channel is off or the breaker is open, or the runner is not running; look at the channel row |
 | Channel "breaker open until ..." | Consecutive failures reached `circuit_breaker.failures`; it tries once automatically when the cooldown expires; expand "Details" for the latest error code; being blocked usually means waiting or switching channels |
-| A run "interrupted: <error>" (in amber) | A search that reads several pages stopped part way (network error, blocked, budget used up). The postings read before the stop are kept, but the run counts as a failure: it moves the channel's breaker (except when the budget stopped it: running out of budget never opens the breaker), it is listed under failed sources, and its postings are not used to mark jobs as possibly closed. Postings from an interrupted run may lack their detail page; it is fetched in a later cycle. A run is only "interrupted" if at least one posting could be handed over before the failure; with none it is an ordinary failure (for example LinkedIn's result list was read but every card still needs its posting page). The detail pages of Arbeitsagentur, StepStone and XING are covered too: when a detail request is throttled (HTTP 429), blocked or refused for a login, the query asks for no further detail, keeps every list result it read (those without their detail yet get it in a later cycle) and the run is interrupted with that error. A single detail that cannot be read only costs that posting its description. When none of at least 3 detail requests of the query could be read (or of all of them, when `max_details_per_query` is below 3), the list results are still kept and the run is interrupted with `parse` (a changed page layout); with fewer requests only a warning is logged. The LinkedIn session channel is covered too: if a result page or a posting page fails part way (network error, HTTP 429, or a login or verification page), it loads no more pages in that query and keeps only the postings already read or needing no page load (already stored ones, or the list cards when `fetch_details` is off); cards that still need their posting page are left out and listed again by the next run. Reaching the daily page limit part way is a budget stop, as with JSearch: no more pages are loaded, the postings read and those needing no page load are stored, and the run is "skipped", not "interrupted" (no failure, the breaker is left alone). That skipped run is not used to mark jobs as possibly closed; another complete run of the same channel still counts (even an earlier query in the same cycle), because the mark is judged per channel and by time, not per query (see [How jobs get marked possibly closed](#how-jobs-get-marked-possibly-closed)). The same query then goes to the next channel of the cascade. See [LinkedIn session](linkedin-session.md#when-the-daily-page-limit-is-reached) |
+| A run "interrupted: <error>" (in amber) | A search that reads several pages stopped part way (network error, blocked, budget used up). The postings read before the stop are kept, but the run counts as a failure: it moves the channel's breaker (except when the budget stopped it: running out of budget never opens the breaker), it is listed under failed sources, and its postings are not used to mark jobs as possibly closed. Postings from an interrupted run may lack their detail page; it is fetched in a later cycle. A run is only "interrupted" if at least one posting could be handed over before the failure; with none it is an ordinary failure (for example LinkedIn's result list was read but every card still needs its posting page). The detail pages of Arbeitsagentur, StepStone and XING are covered too: when a detail request is throttled (HTTP 429), blocked or refused for a login, the query asks for no further detail, keeps every list result it read (those without their detail yet get it in a later cycle) and the run is interrupted with that error. A single detail that cannot be read only costs that posting its description. When none of at least 3 detail requests of the query could be read (or of all of them, when `max_details_per_query` is below 3), the list results are still kept and the run is interrupted with `parse` (a changed page layout); with fewer requests only a warning is logged. The LinkedIn session channel is covered too: if a result page or a posting page fails part way (network error, HTTP 429, or a login or verification page), it loads no more pages in that query and keeps only the postings already read or needing no page load (already stored ones, or the list cards when `fetch_details` is off); cards that still need their posting page are left out and listed again by the next run. Reaching the daily page limit part way is a budget stop, as with JSearch: no more pages are loaded, the postings read and those needing no page load are stored, and the run is "skipped", not "interrupted" (no failure, the breaker is left alone). That skipped run is not used to mark jobs as possibly closed; another complete run of the same channel with an unstretched window still counts (even an earlier query in the same cycle), because the mark is judged per channel and by time, not per query (see [How jobs get marked possibly closed](#how-jobs-get-marked-possibly-closed)). The same query then goes to the next channel of the cascade. See [LinkedIn session](linkedin-session.md#when-the-daily-page-limit-is-reached) |
 | "Missing TAVILY_API_KEY" and similar | Put this variable in `.env` (the page only tells you the name), or turn the channel off |
 | "LinkedIn not logged in / login expired" | Log in again, see [LinkedIn session](linkedin-session.md) |
 | JSearch run "skipped" with postings, or "interrupted: <error>" | With `keywords_per_query` above 1 a JSearch query makes one request per keyword. If a later keyword's request fails after earlier keywords delivered postings, those postings are kept and the run is "interrupted" (a failure; with nothing to keep it is an ordinary failure). If a later keyword is refused before its request because the monthly limit or the even-spread share is used up, the postings read so far are stored and the run is "skipped": it counts as a budget skip, adds no failure and leaves the breaker alone, and it is not used to mark jobs as possibly closed. See [JSearch](jsearch.md) |

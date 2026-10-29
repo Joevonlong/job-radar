@@ -27,7 +27,7 @@ function writeCollect(value: unknown): void {
 describe("query rotation configuration compatibility", () => {
   it.each([undefined, { concurrency: 2 }])("loads a full old user file with collect=%j and defaults rotation on", (collect) => {
     writeCollect(collect);
-    expect(loadConfig("channels").collect).toEqual({ concurrency: collect?.concurrency ?? 3, query_rotation: true });
+    expect(loadConfig("channels").collect).toMatchObject({ concurrency: collect?.concurrency ?? 3, query_rotation: true });
   });
 
   it("can opt out, and rejects misspelled keys or a non-boolean", () => {
@@ -45,7 +45,7 @@ describe("query rotation configuration compatibility", () => {
     draft["collect.concurrency"] = "4";
     const result = await saveSettings({ tab: "channels", draft, baseHash: hashConfigText(readConfigText("channels")) });
     expect(result.status).toBe("saved");
-    expect(reloadConfig("channels").collect).toEqual({ concurrency: 4, query_rotation: rotation ?? true });
+    expect(reloadConfig("channels").collect).toMatchObject({ concurrency: 4, query_rotation: rotation ?? true });
     const saved = parse(readConfigText("channels")) as { collect: Record<string, unknown> };
     expect(saved.collect.query_rotation).toBe(rotation);
   });

@@ -7,6 +7,11 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ### Upgrade notes
 
+- **Rolling back past catch-up windows:** setting `collect.max_catch_up_hours: 0` stops new stretched runs, but history
+  does not expire on its own. For a safe rollback, use a build that retains `and not r.window_extended` in
+  `markJobsPossiblyClosed`; otherwise some jobs may be marked possibly closed and reopened on their next sighting.
+  Before starting code that does not know the catch-up keys, remove `collect.max_catch_up_hours` and
+  `collect.catch_up_tolerance_hours` from your user `data/config/sources.yaml`.
 - **Jobs not listed for weeks leave automatic processing.** After 30 days possibly closed (normally 7 + 30 days unseen), unprotected jobs become dormant: default job lists, company counts, search and navigation badges shrink; badges also stop counting closed jobs. Find dormant jobs in the Closed or Possibly closed view, and choose Still open to wake them. No data is deleted. **Rollback:** remove `lifecycle.dormant_after_days` from your user `pipeline.yaml` if you added it (older strict schemas reject it); keep the nullable database columns. Older code shows these jobs again, and re-upgrading sweeps stale markers and user protection.
 
 - **Rolling back past interactive AI lanes:** queued automatic translations can fail on the older worker; the next
@@ -167,6 +172,11 @@ A failure in (a) does not block rollback: follow (c) and accept the display wind
   scoring and push rules are unchanged. The job is noted "Watched company: Hamburg is not one of your cities but is in
   your home country, so the job is kept". `/interests` marks watched companies that have no ATS board.
 - **Query rotation:** collection starts with the queries waiting longest on its starting channel, so limited budgets reach the tail across cycles. Budget stops that already spent quota or money count as a turn, even with zero results; refusals before any request do not. `collect.query_rotation: false` restores config order; dry runs and history read failures use config order. Run records include usage and requested windows, and completed units report rotation summaries. Budgets and base windows stay unchanged.
+- **Catch-up windows:** queries waiting through missed turns or outages look back to their last coverage, with a
+  6-hour tolerance and a 168-hour cap by default. Bright Data, Apify and Monid keep the base window, as do channels
+  that ignore it: company ATS boards, board discovery (Tavily and Brave), Gmail job alerts and LinkedIn recommendations.
+  Stretched runs do not count as possibly-closed evidence; unseen-job link checks provide the fallback.
+  Set `collect.max_catch_up_hours: 0` to switch catch-up off without a deploy. See [catch-up windows](docs/sources.md#catch-up-windows).
 - **Fallback link checks for unseen jobs:** active jobs no source has returned for 14 days get a direct link check,
   regardless of channel runs. Only the links decide whether to close them; unanswered checks wait 7 days before trying
   again, including when watched rechecks keep running. Optional `lifecycle.unseen_link_check_after_days` (0 = off) and

@@ -394,6 +394,8 @@ export function createAtsChannel<S extends { title_prefilter: AtsTitlePrefilterS
     family: "ats",
     kind: "ats",
     usesQueries: false,
+    // ignores the search window: a stretched window fetches nothing more and would only mark its runs as extended
+    supportsCatchUp: () => false,
     // the ghost job check: a board keeps one id per posting, stores the full text and its own publish date
     stableExternalIds: true,
     fullDescription: true,

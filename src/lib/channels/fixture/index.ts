@@ -54,6 +54,7 @@ export interface FixtureChannelOptions {
   family?: ChannelFamily;
   kind?: ChannelKind;
   usesQueries?: boolean;
+  supportsCatchUp?(settings: ChannelRuntimeSettings): boolean;
   /** Directory of fixture files. Default `<app>/tests/fixtures/fixture-channel`. */
   dir?: string;
   /** Only these file names from `dir`. Default: every `*.json`. */
@@ -96,6 +97,7 @@ export function createFixtureChannel(options: FixtureChannelOptions = {}): Fixtu
     family: options.family ?? "manual",
     kind: options.kind ?? "manual",
     usesQueries: options.usesQueries ?? true,
+    supportsCatchUp: options.supportsCatchUp,
     seen,
     ...(cost > 0 ? { estimateCost: (paidRecords: number) => paidRecords * cost } : {}),
 

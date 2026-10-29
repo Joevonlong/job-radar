@@ -27,6 +27,9 @@ export function createMonidChannel(options: MonidChannelOptions): Channel {
   const key = (): string | undefined => environment()[MONID_API_KEY_ENV]?.trim() || undefined;
   return {
     id: LINKEDIN_MONID_ID, family: "linkedin", kind: "paid", usesQueries: true,
+    // Billed per record with coarse date ranges and no newest-first order: stretching would mostly buy old postings.
+    // Return true only after exact second-level requests and newest-first results under current settings have been measured.
+    supportsCatchUp: () => false,
     estimateCost: (records) => records * options.pricePer1kUsd() / 1000,
     isConfigured: () => key() !== undefined,
 

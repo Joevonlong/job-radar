@@ -62,6 +62,9 @@ export function createBrightDataChannel(options: BrightDataChannelOptions): Chan
     family: "linkedin",
     kind: "paid",
     usesQueries: true,
+    // Billed per record with coarse date ranges and no newest-first order: stretching would mostly buy old postings.
+    // Return true only after exact second-level requests and newest-first results under current settings have been measured.
+    supportsCatchUp: () => false,
     estimateCost: (paidRecords) => (paidRecords * options.costPer1kUsd()) / 1000,
     // no API key: "not configured", skipped by the cascade without a request, a failed run or a breaker strike
     isConfigured: () => ((options.environment ?? process.env)[BRIGHTDATA_API_KEY_ENV] ?? "").trim() !== "",

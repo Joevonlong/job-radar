@@ -89,7 +89,7 @@ describe("collect rotation wiring", () => {
     expect(test.first.seen).toEqual([]);
     expect(test.second.seen.map((q) => q.id)).toEqual([...test.queries.slice(1), firstQuery].map((q) => q.id));
     expect(test.other.seen.map((q) => q.id)).toEqual(test.queries.map((q) => q.id));
-    expect(result.rotation.linkedin).toMatchObject({ sortChannel: "second", reached: 3, neverRun: 2, oldestWaitHours: 48, maxWindowHours: 24, historyUnavailable: false });
+    expect(result.rotation.linkedin).toMatchObject({ sortChannel: "second", reached: 3, neverRun: 2, oldestWaitHours: 48, maxWindowHours: 48, historyUnavailable: false });
     expect(test.logs.filter((log) => log.message === "query rotation")).toHaveLength(2);
     expect(runs.createRun).toHaveBeenCalledWith(db, expect.objectContaining({ windowHours: 24, windowExtended: false }));
     expect(runs.finishRun).toHaveBeenCalledWith(db, 1, expect.objectContaining({ status: "succeeded", usageUnits: 0, cost: 0 }));

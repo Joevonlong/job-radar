@@ -1,11 +1,12 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { createGreenhouseChannel, createLeverChannel, createMemoryAtsBoardStore } from "@/lib/channels/ats";
+import { createAshbyChannel, createGreenhouseChannel, createLeverChannel, createMemoryAtsBoardStore, createPersonioChannel, createSmartrecruitersChannel } from "@/lib/channels/ats";
 import { ChannelError } from "@/lib/channels/errors";
+import { settingsFromConfig } from "@/lib/channels/registry";
 import { normalizedPostingDraftSchema, rawPostingInputSchema } from "@/lib/channels/types";
 
-import { atsChannelsWith, atsContext, company, depsWith, fixtureJson, inputs, response, routedFetch } from "./helpers";
+import { atsChannelsWith, atsContext, company, depsWith, fixtureJson, inputs, neutralChannels, response, routedFetch } from "./helpers";
 
 const GH_URL = "boards-api.greenhouse.io/v1/boards/examplelabs/jobs?content=true";
 const GH_KEPT = ["6186419001", "6186419002", "6186419003", "6186419006"];
@@ -26,6 +27,19 @@ function greenhouse(opts: { watched?: string[]; companies?: ReturnType<typeof co
 
 const lastLog = (logs: Array<{ message: string; fields: Record<string, unknown> }>, message: string) =>
   logs.filter((l) => l.message === message).map((l) => l.fields);
+
+describe("ATS catch-up capability", () => {
+  it.each([
+    ["greenhouse", createGreenhouseChannel],
+    ["lever", createLeverChannel],
+    ["ashby", createAshbyChannel],
+    ["personio", createPersonioChannel],
+    ["smartrecruiters", createSmartrecruitersChannel],
+  ] as const)("%s declines automatic catch-up because its board sweep ignores the search window", (id, create) => {
+    const channel = create(depsWith(inputs([])));
+    expect(channel.supportsCatchUp?.(settingsFromConfig(id, neutralChannels()))).toBe(false);
+  });
+});
 
 describe("greenhouse sweep", () => {
   it("fetches every board and keeps only titles matching a search.yaml keyword", async () => {

@@ -11,6 +11,12 @@ const splitQuery = () => query({ keywords: ["A".repeat(120), "B".repeat(120)] })
 const unsettled = (output: unknown[]) => completed({ output, billing: undefined, billedUnits: undefined });
 
 describe("Monid channel accounting", () => {
+  it.each([false, true])("declines automatic catch-up with extra settings = %s", async (extra) => {
+    const { channel, ctx } = await harness();
+    expect(channel.supportsCatchUp).toBeTypeOf("function");
+    expect(channel.supportsCatchUp?.(extra ? { ...ctx.settings, extra: { ...ctx.settings.extra, discover_by: "url" } } : ctx.settings)).toBe(false);
+  });
+
   it("identifies itself and is not configured without a key", async () => {
     const h = await harness([], { environment: {} });
     expect(h.channel).toMatchObject({ id: "linkedin-monid", family: "linkedin", kind: "paid", usesQueries: true });

@@ -131,6 +131,8 @@ export function createDiscoveryChannel<S extends DiscoverySettings>(provider: Di
     family: "ats",
     kind: "api",
     usesQueries: false,
+    // ignores the search window: a stretched window fetches nothing more and would only mark its runs as extended
+    supportsCatchUp: () => false,
     ...extra,
     async collect(_query: SearchQuery, ctx: ChannelContext): Promise<RawPostingInput[]> {
       const env = deps.environment ?? process.env;

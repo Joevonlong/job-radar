@@ -303,6 +303,12 @@ export interface Channel {
   /** The ghost job check: the posted date `parse` returns is the source's own (an ATS's publish date), not a guess or an aggregator's. */
   readonly trustedPostedAt?: boolean;
   /**
+   * Judges provider behaviour: under the current settings the channel requests an exact (second-level) window
+   * and the provider returns newest first. Must be pure: read only the given settings, with no requests or DB access.
+   * Evaluated once per attempt; omitted means automatic catch-up is supported.
+   */
+  supportsCatchUp?(settings: ChannelRuntimeSettings): boolean;
+  /**
    * The ghost job check: the source's own "reposted" label of a stored payload ("Reposted 2 weeks ago"), or null. Reads the payload
    * only (C1) and returns null when it does not match. Omit for channels without such a label.
    */

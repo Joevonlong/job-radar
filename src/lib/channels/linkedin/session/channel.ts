@@ -370,6 +370,8 @@ export function createSessionChannels(deps: SessionChannelDeps = defaultSessionD
     family: "linkedin",
     kind: "session",
     usesQueries: false,
+    // ignores the search window: a stretched window fetches nothing more and would only mark its runs as extended
+    supportsCatchUp: () => false,
     isConfigured: configured,
     async isDue({ kind, now, dryRun }) {
       if (!configured()) return false;

@@ -206,11 +206,13 @@ export async function touchJobsSeen(db: Executor): Promise<SeenResult> {
 
 /**
  * Active jobs no source has returned for `days` days become `possibly_closed` only when every source
- * channel completed a successful run after the job fell overdue. An ATS source whose board was checked
+ * channel completed a successful run after the job fell overdue. A run stretched beyond its base window by
+ * catch-up or backfill is not evidence: a wider window under the same result cap can be filled by older postings.
+ * Jobs it leaves unmarked are caught by the unseen-job link check. An ATS source whose board was checked
  * since then also needs a complete board read after that point, in a successful run with the normal search
  * window so its returned postings were persisted.
- * Non-ATS sources are unaffected; removed or disabled boards stop blocking once their last check falls
- * before the overdue point. Returns the ids that changed.
+ * Non-ATS sources are unaffected by the board rule; removed or disabled boards stop blocking once their last
+ * check falls before the overdue point. Returns the ids that changed.
  */
 export async function markJobsPossiblyClosed(db: Executor, input: { now: Date; days: number }): Promise<number[]> {
   const cutoff = new Date(input.now.getTime() - input.days * 86_400_000);
@@ -228,6 +230,7 @@ export async function markJobsPossiblyClosed(db: Executor, input: { now: Date; d
             select 1 from runs r
             where r.channel_id = js.channel_id
               and r.status = 'succeeded'
+              and not r.window_extended
               and r.started_at >= jobs.last_seen_at + make_interval(days => ${input.days})
           )
       )

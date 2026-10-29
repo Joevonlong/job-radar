@@ -137,6 +137,8 @@ export function createGmailAlertsChannel(options: GmailAlertsOptions): Channel {
     family: "email",
     kind: "email",
     usesQueries: false,
+    // ignores the search window: a stretched window fetches nothing more and would only mark its runs as extended
+    supportsCatchUp: () => false,
     // without the mailbox credentials the channel is "not configured": skipped, not a failed run
     isConfigured: () => {
       const env = options.environment ?? process.env;

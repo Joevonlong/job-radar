@@ -36,6 +36,24 @@ export function familyHistory(rows: readonly QueryRunHistoryRow[], channelIds: r
   return history;
 }
 
+/** Extend missed coverage only beyond tolerance, without shrinking the base window. */
+export function catchUpWindow(input: {
+  baseHours: number;
+  anchor: Date | null;
+  now: Date;
+  maxCatchUpHours: number;
+  toleranceHours: number;
+  autoCatchUp: boolean;
+}): { hours: number; capped: boolean } {
+  const { baseHours, anchor, now, maxCatchUpHours, toleranceHours, autoCatchUp } = input;
+  if (!autoCatchUp || anchor === null || maxCatchUpHours === 0) return { hours: baseHours, capped: false };
+  const gap = Math.max(0, (now.getTime() - anchor.getTime()) / 3_600_000);
+  if (gap <= baseHours + toleranceHours) return { hours: baseHours, capped: false };
+  const roundedGap = Math.ceil(gap);
+  const hours = Math.max(baseHours, Math.min(roundedGap, maxCatchUpHours));
+  return { hours, capped: roundedGap > hours };
+}
+
 export interface RotationUnitSummary {
   sortChannel: string | null;
   queries: number;
@@ -55,6 +73,8 @@ export function rotationSummary(input: {
   sortChannel: string | null;
   turns: ReadonlyMap<string, Date | null>;
   reached: number;
+  stretched: number;
+  capped: number;
   maxWindowHours: number | null;
   historyUnavailable: boolean;
   now: Date;
@@ -82,9 +102,9 @@ export function rotationSummary(input: {
       location: oldest.query.location,
       remoteScope: oldest.query.remoteScope === null ? null : remoteScopeKey(oldest.query.remoteScope),
     },
-    stretched: 0,
+    stretched: input.stretched,
     maxWindowHours: input.maxWindowHours,
-    capped: 0,
+    capped: input.capped,
     historyUnavailable,
   };
 }

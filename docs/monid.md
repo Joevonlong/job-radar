@@ -55,6 +55,13 @@ codes. The parsed location code takes precedence, while placeholders such as `oo
 Validation applies to the actor input inside `input.body`; GET run responses echo that wrapper. Monid also supports
 optional `input.queryParams` and `input.pathParams`, which this actor does not need.
 
+## How it works
+
+Monid always keeps the base window; automatic [catch-up](sources.md#catch-up-windows) is disabled because its date ranges
+are coarse and results are not newest first. It will be enabled only after exact-window requests and newest-first
+results under the channel's active settings have been measured. A stretched window in a future manual backfill could
+fetch more records per query and increase per-record charges.
+
 ## Accounting and stops
 
 Before **each** run, the channel recalculates headroom in its own and the global budget, including that run's flat fee.
@@ -68,8 +75,9 @@ money is never interpreted as USD. A normal successful run can settle with `cost
 `billedUnits` alone, without a `billing` object: two results at these prices settle at USD 0.003.
 
 Accounting happens before output validation or parsing, using `billedUnits` or the raw item count before deduplication
-and local filtering. The USD amount is the maximum of settled `cost.value`, `billing.reportedCost` and
-`billing.actualCost` across all responses for the run, including a 409 stop body and subsequent GETs
+and local filtering; postings discarded as outside the window are still billed. The USD amount is the maximum of
+settled `cost.value`, `billing.reportedCost` and `billing.actualCost` across all responses for the run, including a 409
+stop body and subsequent GETs
 (billing values are USD microdollars, divided by one million). Explicit zero settlements stay zero when no larger
 settlement was observed. The latest valid `billing.calculatedCost` is used only when no settled amount was observed,
 with a warning. Cost extraction also applies to responses with an unknown status. If amounts are absent or

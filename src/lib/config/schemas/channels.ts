@@ -6,6 +6,8 @@ import { monidSettingsSchema } from "@/lib/channels/linkedin/monid/contract";
 import { atsBoardsSchema } from "./companies";
 import { nonEmptyString, nonNegativeInt, nonNegativeNumber, positiveInt, stringList } from "./common";
 
+export const MAX_WINDOW_HOURS = 720;
+
 /** The remote query's location per remote scope kind (`home_country`, `region`, `worldwide`); a missing key follows the market. */
 const remoteLocations = z
   .strictObject({ home_country: z.string().trim().optional(), region: z.string().trim().optional(), worldwide: z.string().trim().optional() })
@@ -471,8 +473,12 @@ export const channelsSchema = z
         concurrency: positiveInt.default(3),
         /** Serve the queries waiting longest on the unit's starting channel first. Also orders the Tavily / Brave board-discovery searches. */
         query_rotation: z.boolean().default(true),
+        /** Maximum automatic catch-up window in hours; zero disables catch-up. Never shrinks the base window. */
+        max_catch_up_hours: nonNegativeInt.max(MAX_WINDOW_HOURS).default(168),
+        /** Extend only when the coverage gap exceeds the base window by this many hours. */
+        catch_up_tolerance_hours: nonNegativeInt.max(72).default(6),
       })
-      .default({ concurrency: 3, query_rotation: true }),
+      .default({ concurrency: 3, query_rotation: true, max_catch_up_hours: 168, catch_up_tolerance_hours: 6 }),
     http: httpSettings.default({ timeout_ms: 30000, max_retries: 3, backoff_base_ms: 1000, backoff_max_ms: 30000 }),
     /** The channel test; a file without the block gets the defaults of the shipped YAML. */
     test_channel: testChannel.default(TEST_CHANNEL_DEFAULTS),
