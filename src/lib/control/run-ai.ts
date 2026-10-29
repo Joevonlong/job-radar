@@ -61,6 +61,7 @@ export function createRunAiHandler(options: RunAiHandlerOptions = {}): ControlHa
     if (!payload.success) return { status: "failed", result: { error: "invalid_payload" } };
     const run = await runDelegatedSteps({
       db: context.db,
+      activity: context.activity,
       cycleId: payload.data.cycleId,
       requestId: request.id,
       signal: context.signal,

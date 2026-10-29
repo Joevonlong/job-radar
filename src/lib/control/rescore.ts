@@ -18,7 +18,7 @@ export function createRescoreStaleHandler(options: RescoreHandlerOptions = {}): 
   return async (_request, context) => {
     const deps = options.createDeps
       ? options.createDeps(context)
-      : createScoringDeps({ db: context.db, logger: context.logger, timeZone: loadConfig("schedule").timezone, signal: context.signal });
+      : createScoringDeps({ db: context.db, logger: context.logger, timeZone: loadConfig("schedule").timezone, signal: context.signal, activity: context.activity });
     const minutes = deps.config.cycle_budget_minutes;
     const deadline = minutes > 0 ? new Date(deps.now().getTime() + minutes * 60_000) : null;
     const result = await rescoreStale({ ...deps, deadline });

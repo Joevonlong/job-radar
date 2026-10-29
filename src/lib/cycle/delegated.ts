@@ -1,3 +1,5 @@
+import { noopSpan, spanScope } from "@/lib/activity";
+import type { SpanHandle } from "@/lib/activity/types";
 import { z } from "zod";
 
 import { BudgetTracker, monthKey } from "@/lib/channels/budget";
@@ -12,12 +14,14 @@ import { aiLateStep, aiMainStep } from "@/lib/ai/step";
 import { notificationRetryOf, notifyStep } from "@/lib/notify/step";
 
 import { cascadesFromConfig } from "./run-cycle";
+import { stepActivityOutcome } from "./step-activity";
 import type { CycleStepContext, CycleStepFn, CycleStepName } from "./steps";
 
 /** Steps of a cycle whose work moves to the ai-worker with `ai.yaml: execution: host`, in running order. */
 export const DELEGATED_STEP_NAMES = ["ai", "notify"] as const satisfies readonly CycleStepName[];
 
 export interface DelegatedRunOptions {
+  activity?: SpanHandle;
   db: Db;
   cycleId: number;
   /** The queued run whose notification may be covered by a newer run. */
@@ -127,19 +131,26 @@ export async function runDelegatedSteps(options: DelegatedRunOptions): Promise<D
     // Without a test override the `ai` step stops before the late sub-tasks (translation); they run after the push.
     const fn = options.steps?.[name] ?? (name === "ai" ? aiMainStep : notifyStep);
     const started = now().getTime();
-    if (options.signal.aborted) {
-      summaries.push({ name, status: "skipped", durationMs: 0, reason: "ai-worker stopped", ...(savedAi && name === "notify" ? { result: ctx.results.notify } : {}) });
-      continue;
-    }
+    const stepSpan = (options.activity ?? noopSpan).child(`step.${name}`);
+    const scope = spanScope(stepSpan);
     try {
-      const outcome = await fn(ctx);
-      const result = outcome?.result;
-      if (result !== undefined) (ctx.results as Partial<Record<CycleStepName, unknown>>)[name] = result;
-      summaries.push({ name, status: outcome?.status ?? "ok", durationMs: now().getTime() - started, ...(result === undefined ? {} : { result }), ...(name === "ai" && options.signal.aborted ? { reason: "ai-worker stopped" } : {}) });
-    } catch (error) {
-      options.logger.error("delegated step failed", { cycle: cycle.id, step: name, error: errorText(error) });
-      summaries.push({ name, status: "failed", durationMs: now().getTime() - started, error: errorText(error), ...(name === "ai" && options.signal.aborted ? { reason: "ai-worker stopped" } : {}) });
-    }
+      if (options.signal.aborted) {
+        scope.set("skipped", "cycle_cancelled");
+        summaries.push({ name, status: "skipped", durationMs: 0, reason: "ai-worker stopped", ...(savedAi && name === "notify" ? { result: ctx.results.notify } : {}) });
+        continue;
+      }
+      try {
+        const outcome = await fn({ ...ctx, activity: stepSpan });
+        scope.set(...stepActivityOutcome(outcome));
+        const result = outcome?.result;
+        if (result !== undefined) (ctx.results as Partial<Record<CycleStepName, unknown>>)[name] = result;
+        summaries.push({ name, status: outcome?.status ?? "ok", durationMs: now().getTime() - started, ...(result === undefined ? {} : { result }), ...(name === "ai" && options.signal.aborted ? { reason: "ai-worker stopped" } : {}) });
+      } catch (error) {
+        scope.error(error);
+        options.logger.error("delegated step failed", { cycle: cycle.id, step: name, error: errorText(error) });
+        summaries.push({ name, status: "failed", durationMs: now().getTime() - started, error: errorText(error), ...(name === "ai" && options.signal.aborted ? { reason: "ai-worker stopped" } : {}) });
+      }
+    } finally { scope.close(); }
     // Persist completed main AI before notify can be interrupted or take a long time.
     if (name === "ai") await applyDelegatedSteps(options.db, cycle.id, summaries);
   }
@@ -147,21 +158,31 @@ export async function runDelegatedSteps(options: DelegatedRunOptions): Promise<D
   await applyDelegatedSteps(options.db, cycle.id, summaries);
   const late = options.steps?.late ?? (options.steps?.ai ? undefined : aiLateStep);
   const aiSummary = summaries.find((s) => s.name === "ai");
-  if (late && aiSummary && !savedAi?.lateAiComplete && !retry?.lateAiComplete && aiSummary.status !== "skipped" && !options.signal.aborted) {
+  if (late && aiSummary && !savedAi?.lateAiComplete && !retry?.lateAiComplete && aiSummary.status !== "skipped") {
     const started = now().getTime();
+    const stepSpan = (options.activity ?? noopSpan).child("step.ai_late");
+    const scope = spanScope(stepSpan);
     try {
-      const outcome = await late(ctx);
-      aiSummary.durationMs += now().getTime() - started;
-      const result = aiSummary.result as { subtasks?: unknown[] } | undefined;
-      const lateResult = outcome?.result as { subtasks?: unknown[] } | undefined;
-      if (lateResult?.subtasks?.length) aiSummary.result = { ...result, subtasks: [...(result?.subtasks ?? []), ...lateResult.subtasks] };
-      if (outcome?.status === "failed" && aiSummary.status === "ok") aiSummary.status = "partial";
-      else if (outcome?.status === "partial" && aiSummary.status === "ok") aiSummary.status = "partial";
-    } catch (error) {
-      options.logger.error("delegated late ai step failed", { cycle: cycle.id, error: errorText(error) });
-      aiSummary.status = aiSummary.status === "ok" ? "partial" : aiSummary.status;
-    }
-    if (!options.signal.aborted) aiSummary.lateAiComplete = true;
+      if (options.signal.aborted) {
+        scope.set("skipped", "cycle_cancelled");
+      } else {
+        try {
+          const outcome = await late({ ...ctx, activity: stepSpan });
+          scope.set(...stepActivityOutcome(outcome));
+          aiSummary.durationMs += now().getTime() - started;
+          const result = aiSummary.result as { subtasks?: unknown[] } | undefined;
+          const lateResult = outcome?.result as { subtasks?: unknown[] } | undefined;
+          if (lateResult?.subtasks?.length) aiSummary.result = { ...result, subtasks: [...(result?.subtasks ?? []), ...lateResult.subtasks] };
+          if (outcome?.status === "failed" && aiSummary.status === "ok") aiSummary.status = "partial";
+          else if (outcome?.status === "partial" && aiSummary.status === "ok") aiSummary.status = "partial";
+        } catch (error) {
+          scope.error(error);
+          options.logger.error("delegated late ai step failed", { cycle: cycle.id, error: errorText(error) });
+          aiSummary.status = aiSummary.status === "ok" ? "partial" : aiSummary.status;
+        }
+        if (!options.signal.aborted) aiSummary.lateAiComplete = true;
+      }
+    } finally { scope.close(); }
   }
   const notifySummary = summaries.find((s) => s.name === "notify");
   const pendingRetry = notificationRetryOf(notifySummary?.result);

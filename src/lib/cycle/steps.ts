@@ -1,3 +1,4 @@
+import type { SpanHandle } from "@/lib/activity/types";
 import type { ChannelsConfig, ScheduleConfig, SearchConfig } from "@/lib/config";
 import type { CascadeSpec } from "@/lib/channels/cascade";
 import type { CircuitBreaker } from "@/lib/channels/circuit";
@@ -34,6 +35,7 @@ export interface ChannelServices {
 }
 
 export interface CycleStepContext {
+  activity?: SpanHandle;
   /** `id` is null in dry runs, which write nothing. */
   cycle: { id: number | null; kind: CycleKind };
   /** Set by the ai-worker when these steps belong to a queued run_ai request. */

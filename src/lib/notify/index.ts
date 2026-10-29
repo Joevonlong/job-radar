@@ -1,3 +1,4 @@
+import type { ActivityRecorder } from "@/lib/activity/types";
 import type { ChannelLogger } from "@/lib/channels/types";
 import { loadConfig } from "@/lib/config";
 import { loadPipeline } from "@/lib/market";
@@ -35,6 +36,7 @@ export interface PollerStartOptions extends Pick<RuntimeOptions, "env" | "fetch"
   /** Aborting stops the loop (an in-flight `getUpdates` is cancelled). */
   signal: AbortSignal;
   now?: () => Date;
+  activity?: ActivityRecorder;
 }
 
 /**
@@ -49,6 +51,7 @@ export function startNotifyPoller(options: PollerStartOptions): Promise<void> | 
   const tick = createReminderTicker(loadConfig("notify").telegram.poll_backoff_max_seconds * 1000);
   const deps = (): NotifyDeps => ({
     db: options.db,
+    activity: options.activity,
     client: runtime.client,
     chatId: runtime.chatId,
     config: loadConfig("notify"),
@@ -60,6 +63,7 @@ export function startNotifyPoller(options: PollerStartOptions): Promise<void> | 
   });
   const handler = createUpdateHandler({
     db: options.db,
+    activity: options.activity,
     client: runtime.client,
     chatId: runtime.chatId,
     allowedUserIds: runtime.allowedUserIds,

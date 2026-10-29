@@ -1,3 +1,4 @@
+import type { ActivityRecorder } from "@/lib/activity/types";
 import type { ChannelLogger } from "@/lib/channels/types";
 import type { NotifyConfig } from "@/lib/config";
 import type { Db } from "@/lib/db/client";
@@ -7,6 +8,7 @@ import type { NotifyText } from "./text";
 
 /** What every sender (cycle step, alerts, reminders, poller) needs. */
 export interface NotifyDeps {
+  activity?: ActivityRecorder;
   db: Db;
   client: TelegramClient;
   /** The one chat messages go to and button presses are accepted from (`TELEGRAM_CHAT_ID`). */

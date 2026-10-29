@@ -17,6 +17,9 @@ export const runCycleHandler: ControlHandler = async (request, context) => {
   const { channelIds } = payload.data;
   const outcome = await runCycle("manual", {
     db: context.db,
+    activity: context.recorder,
+    activityRequestId: request.id,
+    onCycleRootCreated: () => context.activity?.discard(),
     signal: context.signal,
     logger: context.logger,
     ...(channelIds ? { channelIds } : {}),

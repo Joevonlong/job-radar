@@ -15,6 +15,7 @@
  */
 import { parseArgs } from "node:util";
 
+import { createActivityRecorder, noopRecorder } from "../src/lib/activity";
 import { registerBuiltinChannels } from "../src/lib/channels/builtin";
 import { FIXTURE_CHANNEL_ID, registerFixtureChannel } from "../src/lib/channels/fixture";
 import { defaultRegistry } from "../src/lib/channels/registry";
@@ -102,6 +103,7 @@ async function main(): Promise<number> {
     }
   }
 
+  const activity = dryRun ? noopRecorder : createActivityRecorder({ db: db ?? getDb(), process: "cli" });
   const logger = createProcessLogger();
   const abort = new AbortController();
   const shutdown = installShutdown({
@@ -111,7 +113,7 @@ async function main(): Promise<number> {
     exit: (code) => process.exit(code),
   });
   try {
-    const result = await runCycle(kindArg, { dryRun, db, logger, signal: abort.signal, ...(channelIds.length > 0 ? { channelIds } : {}) });
+    const result = await runCycle(kindArg, { activity, dryRun, db, logger, signal: abort.signal, ...(channelIds.length > 0 ? { channelIds } : {}) });
     const collect = result.results.collect as CollectResult | undefined;
     const prefix = dryRun ? "[dry-run] " : "";
     console.log(`${prefix}cycle ${result.kind}${result.cycleId === null ? "" : ` #${result.cycleId}`}: ${result.status} in ${result.summary.durationMs} ms`);
@@ -156,6 +158,7 @@ async function main(): Promise<number> {
     return result.status === "failed" ? 1 : result.status === "skipped" ? 3 : 0;
   } finally {
     try {
+      await activity.close();
       await readOnly?.close();
       await closeDb();
     } finally {

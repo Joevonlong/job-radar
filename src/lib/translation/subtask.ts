@@ -1,3 +1,5 @@
+import { quotaGuardResume } from "@/lib/ai/errors";
+import { activityErrorCode, noopSpan, type ItemEventCode } from "@/lib/activity";
 import { AiProviderError, AiUnavailableError, registerAiSubtask, type AiSubtask, type AiSubtaskContext } from "@/lib/ai";
 import { listTranslationCandidates, type TranslationCandidate } from "@/lib/db/repos/translations";
 import type { Db } from "@/lib/db/client";
@@ -49,23 +51,42 @@ export async function runTranslateSubtask(ctx: AiSubtaskContext, deps: Translate
   const target = (deps.target ?? translationTarget)();
   const candidates = await deps.listCandidates(db, { lang: target, minRank, limit: ctx.perCycleLimit });
   result.candidates = candidates.length;
+  const activity = ctx.activity ?? noopSpan;
+  let done = 0;
+  activity.progress(0, candidates.length);
   for (const candidate of candidates) {
     if (ctx.cycle.signal.aborted) break;
+    let itemCode: ItemEventCode | undefined = "item.ok";
+    let errorCode: string | undefined;
     try {
-      const outcome = await deps.translate(ctx, db, candidate.jobId, target);
-      if (outcome.status === "translated") result.translated += 1;
+      try {
+        const outcome = await deps.translate(ctx, db, candidate.jobId, target);
+        if (outcome.status === "translated") result.translated += 1;
+        else itemCode = "item.skipped";
+      } catch (error) {
+        if (error instanceof AiProviderError && error.kind === "aborted") { itemCode = undefined; break; }
+        itemCode = (quotaGuardResume(error) || (error instanceof TranslationIncompleteError && error.failure.code === "quota_guard")) ? "item.paused" : "item.failed";
+        errorCode = itemCode === "item.paused" ? "quota_guard" : activityErrorCode(error);
+        result.failed += 1;
+        const reason = error instanceof Error ? `${error.name}: ${error.message}`.slice(0, 200) : "unknown error";
+        result.failures.push({ jobId: candidate.jobId, reason });
+        ctx.cycle.logger.warn("translation failed", { jobId: candidate.jobId, error: reason });
+        // Providers that were unreachable (or out of budget) will not answer the next job either; a job that
+        // only produced unusable output is just skipped over.
+        const providerDown = error instanceof TranslationIncompleteError ? error.failure.providerWide : error instanceof AiUnavailableError && !error.attempts.some((a) => a.kind === "invalid_output");
+        if (providerDown) {
+          result.aiUnavailable = true;
+          break;
+        }
+      }
     } catch (error) {
-      if (error instanceof AiProviderError && error.kind === "aborted") break;
-      result.failed += 1;
-      const reason = error instanceof Error ? `${error.name}: ${error.message}`.slice(0, 200) : "unknown error";
-      result.failures.push({ jobId: candidate.jobId, reason });
-      ctx.cycle.logger.warn("translation failed", { jobId: candidate.jobId, error: reason });
-      // Providers that were unreachable (or out of budget) will not answer the next job either; a job that
-      // only produced unusable output is just skipped over.
-      const providerDown = error instanceof TranslationIncompleteError ? error.failure.providerWide : error instanceof AiUnavailableError && !error.attempts.some((a) => a.kind === "invalid_output");
-      if (providerDown) {
-        result.aiUnavailable = true;
-        break;
+      itemCode = "item.failed";
+      errorCode = activityErrorCode(error);
+      throw error;
+    } finally {
+      if (itemCode) {
+        activity.item(itemCode, { jobId: candidate.jobId, ...(errorCode ? { errorCode } : {}) });
+        activity.progress(++done, candidates.length);
       }
     }
   }

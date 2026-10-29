@@ -1,6 +1,8 @@
+import { activityErrorCode, noopSpan, type ItemEventCode } from "@/lib/activity";
+import type { SpanHandle } from "@/lib/activity/types";
 import { createHash } from "node:crypto";
 
-import { AiUnavailableError, type AiRouter } from "@/lib/ai";
+import { AiProviderError, AiUnavailableError, type AiRouter } from "@/lib/ai";
 import { QUOTA_GUARD_CODE, quotaGuardResume } from "@/lib/ai/errors";
 import { buildSignalsPrompt } from "@/lib/ai/prompts/signals";
 import { registerAiSubtask, type AiSubtaskContext } from "@/lib/ai/step";
@@ -298,6 +300,7 @@ export async function reconcileBonuses(
 // ---------------------------------------------------------------- AI review
 
 export interface AiReviewOptions {
+  activity?: SpanHandle;
   router: AiRouter;
   interests: InterestsConfig;
   pipeline: PipelineConfig;
@@ -349,74 +352,97 @@ export async function runAiReview(db: Db, options: AiReviewOptions): Promise<AiR
   // The AI reads the JD without hidden text and instructions to an AI; its quotes are still checked against the real JD
   const trapSpans = await loadTrapSpans(db, jobs.map((j) => ({ jobId: j.id, description: j.description })), { logger });
   const forAi = await cleanDescriptionsForAi(db, jobs.map((j) => ({ jobId: j.id, description: j.description })), { logger });
+  const activity = options.activity ?? noopSpan;
+  let done = 0;
+  activity.progress(0, jobs.length);
   for (const job of jobs) {
     if (options.signal?.aborted) {
       result.stopped = "cancelled";
       break;
     }
-    let found: RuleCandidate[] = [];
-    if (!withinJobBudget(() => void (found = findCandidates(job.description, interests, pipeline, guard)), interests.limits)) {
-      result.skipped += 1;
-      logger.warn("signals AI review of a job skipped: the interest patterns took longer than limits.pattern_job_ms", { jobId: job.id, ms: interests.limits.pattern_job_ms });
-      continue;
-    }
-    const candidates = withoutTrapCandidates(found, trapSpans.get(job.id));
-    const numbered = numberCandidates(candidates);
-    const prompt = buildSignalsPrompt({
-      title: job.title,
-      description: forAi.get(job.id) ?? job.description,
-      candidates: toPromptCandidates(numbered),
-      quoteMaxChars: interests.limits.quote_max_chars,
-      maxJdChars: interests.limits.ai_max_jd_chars,
-      system: spec.system,
-    });
-    let answer;
+    let itemCode: ItemEventCode | undefined = "item.ok";
+    let errorCode: string | undefined;
     try {
-      answer = await options.router.run("signals", prompt, spec.schema, { jobId: job.id, ...(options.signal ? { signal: options.signal } : {}) });
+      let found: RuleCandidate[] = [];
+      if (!withinJobBudget(() => void (found = findCandidates(job.description, interests, pipeline, guard)), interests.limits)) {
+        itemCode = "item.skipped";
+        result.skipped += 1;
+        logger.warn("signals AI review of a job skipped: the interest patterns took longer than limits.pattern_job_ms", { jobId: job.id, ms: interests.limits.pattern_job_ms });
+        continue;
+      }
+      const candidates = withoutTrapCandidates(found, trapSpans.get(job.id));
+      const numbered = numberCandidates(candidates);
+      const prompt = buildSignalsPrompt({
+        title: job.title,
+        description: forAi.get(job.id) ?? job.description,
+        candidates: toPromptCandidates(numbered),
+        quoteMaxChars: interests.limits.quote_max_chars,
+        maxJdChars: interests.limits.ai_max_jd_chars,
+        system: spec.system,
+      });
+      let answer;
+      try {
+        answer = await options.router.run("signals", prompt, spec.schema, { jobId: job.id, ...(options.signal ? { signal: options.signal } : {}) });
+      } catch (error) {
+        if (options.signal?.aborted) {
+          itemCode = undefined;
+          result.stopped = "cancelled";
+          break;
+        }
+        if (!(error instanceof AiUnavailableError)) throw error;
+        // Job Radar's usage cap held the AI back: the remaining jobs wait for a later cycle, nothing failed
+        if (quotaGuardResume(error)) {
+          itemCode = "item.paused";
+          errorCode = "quota_guard";
+          result.stopped = QUOTA_GUARD_CODE;
+          break;
+        }
+        itemCode = "item.failed";
+        errorCode = activityErrorCode(error);
+        result.failed += 1;
+        failuresInRow += 1;
+        logger.warn("signals AI review failed for a job", { jobId: job.id, error: error.message });
+        if (failuresInRow >= interests.limits.ai_stop_after_failures) {
+          result.stopped = "failures";
+          break;
+        }
+        continue;
+      }
+      failuresInRow = 0;
+      const merged = mergeAiReview({ description: job.description, candidates: numbered, output: answer.value, interests, pipeline });
+      const salarySignal = salaryDraft(parseSalary(job.salaryJson), job.description, interests, pipeline);
+      const tags: SignalDraft[] = candidates
+        .filter((c) => c.isTag === true)
+        .map((c) => ({ tier: c.tier, kind: c.kind, value: null, quote: c.quote, quoteOffset: c.quoteOffset, extractor: "rule" as const }));
+      const stored = await saveAiReview(db, {
+        jobId: job.id,
+        descriptionHash: md5(job.description),
+        promptVersion: spec.version,
+        activeIds,
+        provider: answer.provider,
+        model: answer.model,
+        signals: [...withSalarySignal(salarySignal, merged.signals), ...tags],
+      });
+      if (!stored) {
+        itemCode = "item.skipped";
+        result.skipped += 1;
+        continue;
+      }
+      result.reviewed += 1;
+      result.providers[answer.provider] = (result.providers[answer.provider] ?? 0) + 1;
+      for (const key of Object.keys(result.stats) as Array<keyof ReviewStats>) result.stats[key] += merged.stats[key];
+      result.jobs.push({ jobId: job.id, provider: answer.provider, model: answer.model, stats: merged.stats });
+      logger.debug("signals reviewed", { jobId: job.id, provider: answer.provider, ...merged.stats });
     } catch (error) {
-      if (options.signal?.aborted) {
-        result.stopped = "cancelled";
-        break;
+      itemCode = error instanceof AiProviderError && error.kind === "aborted" ? undefined : "item.failed";
+      errorCode = activityErrorCode(error);
+      throw error;
+    } finally {
+      if (itemCode) {
+        activity.item(itemCode, { jobId: job.id, ...(errorCode ? { errorCode } : {}) });
+        activity.progress(++done, jobs.length);
       }
-      if (!(error instanceof AiUnavailableError)) throw error;
-      // Job Radar's usage cap held the AI back: the remaining jobs wait for a later cycle, nothing failed
-      if (quotaGuardResume(error)) {
-        result.stopped = QUOTA_GUARD_CODE;
-        break;
-      }
-      result.failed += 1;
-      failuresInRow += 1;
-      logger.warn("signals AI review failed for a job", { jobId: job.id, error: error.message });
-      if (failuresInRow >= interests.limits.ai_stop_after_failures) {
-        result.stopped = "failures";
-        break;
-      }
-      continue;
     }
-    failuresInRow = 0;
-    const merged = mergeAiReview({ description: job.description, candidates: numbered, output: answer.value, interests, pipeline });
-    const salarySignal = salaryDraft(parseSalary(job.salaryJson), job.description, interests, pipeline);
-    const tags: SignalDraft[] = candidates
-      .filter((c) => c.isTag === true)
-      .map((c) => ({ tier: c.tier, kind: c.kind, value: null, quote: c.quote, quoteOffset: c.quoteOffset, extractor: "rule" as const }));
-    const stored = await saveAiReview(db, {
-      jobId: job.id,
-      descriptionHash: md5(job.description),
-      promptVersion: spec.version,
-      activeIds,
-      provider: answer.provider,
-      model: answer.model,
-      signals: [...withSalarySignal(salarySignal, merged.signals), ...tags],
-    });
-    if (!stored) {
-      result.skipped += 1;
-      continue;
-    }
-    result.reviewed += 1;
-    result.providers[answer.provider] = (result.providers[answer.provider] ?? 0) + 1;
-    for (const key of Object.keys(result.stats) as Array<keyof ReviewStats>) result.stats[key] += merged.stats[key];
-    result.jobs.push({ jobId: job.id, provider: answer.provider, model: answer.model, stats: merged.stats });
-    logger.debug("signals reviewed", { jobId: job.id, provider: answer.provider, ...merged.stats });
   }
   return result;
 }
@@ -452,6 +478,7 @@ export async function signalsAiSubtask(ctx: AiSubtaskContext): Promise<unknown> 
   const interests = loadConfig("interests");
   const pipeline = loadPipeline();
   const review = await runAiReview(db, {
+    activity: ctx.activity,
     router: ctx.router,
     interests,
     pipeline,

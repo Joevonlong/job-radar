@@ -8,6 +8,8 @@ import { createAiStep, listAiSubtasks, registerAiSubtask, resetAiSubtasks, skipS
 import { listCycleSteps } from "@/lib/cycle/steps";
 import type { CycleStepContext } from "@/lib/cycle/steps";
 
+import { fakeRecorder } from "../activity/helpers";
+
 import { config as cycleConfig, quietLogger } from "../cycle/helpers";
 import { scriptedProvider, pinnedAi, usageEntry } from "./helpers";
 
@@ -136,5 +138,47 @@ describe("ai cycle step: Job Radar's usage cap", () => {
         ],
       },
     });
+  });
+});
+
+
+describe("ai sub-task activity", () => {
+  it("records outcomes and passes each sub-task its own child", async () => {
+    const fake = fakeRecorder();
+    const step = fake.recorder.systemRoot("system.backup");
+    registerAiSubtask({ name: "score", run: async (c) => { expect(c.activity?.id).not.toBe(step.id); c.activity?.item("item.ok", { jobId: 7 }); return { scored: 1 }; } });
+    registerAiSubtask({ name: "signals", run: async () => skipSubtask("profile_incomplete", {}) });
+    registerAiSubtask({ name: "translate", run: async () => { throw new Error("private https://private.test"); } });
+    registerAiSubtask({ name: "traps", run: async () => { throw null; } });
+    registerAiSubtask({ name: "breakdown", run: async () => ({ skipped: "disabled" }) });
+    const result = await createAiStep(deps)({ ...ctx(), activity: step });
+    expect(result?.status).toBe("partial");
+    expect(fake.spans.slice(1).map((s) => [s.name, s.parentId, s.finishes])).toEqual([
+      ["ai.score", step.id, [["ok", undefined]]],
+      ["ai.signals", step.id, [["skipped", { reasonCode: "profile_incomplete" }]]],
+      ["ai.translate", step.id, [["failed", { reasonCode: "error" }]]],
+      ["ai.traps", step.id, [["failed", { reasonCode: "error" }]]],
+      ["ai.breakdown", step.id, [["skipped", { reasonCode: "disabled" }]]],
+    ]);
+    expect(JSON.stringify(fake.spans.map(({ items, notes, finishes }) => ({ items, notes, finishes })))).not.toContain("private");
+  });
+
+  it("finishes cancelled tasks and ignores unknown span names", async () => {
+    const fake = fakeRecorder();
+    const controller = new AbortController();
+    controller.abort();
+    let ran = false;
+    registerAiSubtask({ name: "score", run: async () => { ran = true; } });
+    registerAiSubtask({ name: "unknown https://private.test", run: async () => { ran = true; } });
+    await createAiStep(deps)({ ...ctx(controller.signal), activity: fake.recorder.systemRoot("system.backup") });
+    expect(ran).toBe(false);
+    expect(fake.spans.slice(1).map((s) => s.finishes)).toEqual([[["skipped", { reasonCode: "cycle_cancelled" }]]]);
+  });
+
+  it("finishes a quota guard as skipped", async () => {
+    const fake = fakeRecorder();
+    registerAiSubtask({ name: "score", run: async () => { throw new AiUnavailableError("score", [{ provider: "codex-cli", outcome: "skipped", kind: "budget", message: "private", guard: { reason: "cycle_cap", resumeAt: null } }]); } });
+    await createAiStep(deps)({ ...ctx(), activity: fake.recorder.systemRoot("system.backup") });
+    expect(fake.spans[1]?.finishes).toEqual([["skipped", { reasonCode: "quota_guard" }]]);
   });
 });

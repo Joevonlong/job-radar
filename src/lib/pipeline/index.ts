@@ -1,3 +1,4 @@
+import { noopSpan, type SpanHandle } from "@/lib/activity";
 import { ChannelError } from "@/lib/channels/errors";
 import { createHttpClient } from "@/lib/channels/http";
 import { createPublicOnlyFetch, sharedPublicOnlyFetch } from "@/lib/net/public-fetch";
@@ -37,6 +38,7 @@ const MAX_REASON_CHARS = 300;
 const MAX_FAILURE_SAMPLES = 10;
 
 export interface PipelineOptions {
+  activity?: SpanHandle;
   config: PipelineConfig;
   registry: ChannelRegistry;
   logger: ChannelLogger;
@@ -209,6 +211,7 @@ export async function runPipeline(db: Db, options: PipelineOptions): Promise<Pip
     failures: [],
   };
   const { logger } = options;
+  const activity = options.activity ?? noopSpan;
   const note = (raw: RawPosting, reason: string): void => {
     if (result.failures.length < MAX_FAILURE_SAMPLES) result.failures.push({ rawPostingId: raw.id, channelId: raw.channelId, reason });
   };
@@ -225,32 +228,35 @@ export async function runPipeline(db: Db, options: PipelineOptions): Promise<Pip
       afterId = raw.id;
       result.processed += 1;
 
-      const prepared = parseAndNormalize(raw, options);
-      if (!prepared.ok) {
-        result.parseFailed += 1;
-        note(raw, prepared.reason);
-        logger.warn("raw posting could not be parsed", { rawPostingId: raw.id, channel: raw.channelId, reason: prepared.reason });
+      try {
+        const prepared = parseAndNormalize(raw, options);
+        if (!prepared.ok) {
+          result.parseFailed += 1;
+          activity.item("parse_failed", { rawPostingId: raw.id });
+          note(raw, prepared.reason);
+          logger.warn("raw posting could not be parsed", { rawPostingId: raw.id, channel: raw.channelId, reason: prepared.reason });
+          try {
+            await markRawParseFailed(db, raw.id, prepared.reason);
+          } catch (error) {
+            result.deferred += 1;
+            logger.error("could not record the parse failure", { rawPostingId: raw.id, error: describeError(error) });
+          }
+          continue;
+        }
+
         try {
-          await markRawParseFailed(db, raw.id, prepared.reason);
+          const outcome = await persist(db, raw, prepared.normalized, prepared.family, options);
+          if (outcome.kind === "skipped") continue;
+          result.parsed += 1;
+          if (outcome.kind === "created") result.created += 1;
+          else if (outcome.kind === "merged") result.merged[outcome.by] += 1;
+          else result.updated += 1;
         } catch (error) {
           result.deferred += 1;
-          logger.error("could not record the parse failure", { rawPostingId: raw.id, error: describeError(error) });
+          note(raw, `not stored: ${describeError(error)}`);
+          logger.error("raw posting could not be stored; it stays pending", { rawPostingId: raw.id, channel: raw.channelId, error: describeError(error) });
         }
-        continue;
-      }
-
-      try {
-        const outcome = await persist(db, raw, prepared.normalized, prepared.family, options);
-        if (outcome.kind === "skipped") continue;
-        result.parsed += 1;
-        if (outcome.kind === "created") result.created += 1;
-        else if (outcome.kind === "merged") result.merged[outcome.by] += 1;
-        else result.updated += 1;
-      } catch (error) {
-        result.deferred += 1;
-        note(raw, `not stored: ${describeError(error)}`);
-        logger.error("raw posting could not be stored; it stays pending", { rawPostingId: raw.id, channel: raw.channelId, error: describeError(error) });
-      }
+      } finally { activity.progress(result.processed); }
     }
   }
   return result;
@@ -333,7 +339,7 @@ export async function pipelineStep(ctx: CycleStepContext): Promise<StepResult> {
     ctx.logger.warn("company display names could not be updated", { error: describeError(error) });
   }
   const options: PipelineOptions = { config: loadPipeline(), registry: ctx.channels.registry, logger: ctx.logger, signal: ctx.signal };
-  const result = await runPipeline(db, options);
+  const result = await runPipeline(db, { ...options, activity: ctx.activity });
   const salaryRefresh = await refreshStoredSalaries(db, options);
   const salaryBenchmark = await rebuildSalaryBenchmark(db, ctx.logger);
   ctx.logger.info("pipeline done", { processed: result.processed, created: result.created, parseFailed: result.parseFailed, deferred: result.deferred, salariesChanged: salaryRefresh?.changed ?? 0 });

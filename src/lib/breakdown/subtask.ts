@@ -1,3 +1,6 @@
+import { safeErrorCode } from "@/lib/activity/error-codes";
+import { quotaGuardResume } from "@/lib/ai/errors";
+import { activityErrorCode, noopSpan, type ItemEventCode } from "@/lib/activity";
 import { AiProviderError, AiUnavailableError, registerAiSubtask, type AiSubtask, type AiSubtaskContext } from "@/lib/ai";
 import { ConfigError, loadConfig, type BreakdownConfig } from "@/lib/config";
 import type { Db } from "@/lib/db/client";
@@ -53,25 +56,45 @@ export async function runBreakdownSubtask(ctx: AiSubtaskContext, deps: Breakdown
   result.minRank = settings.auto.min_rank;
   const candidates = await deps.listCandidates(db, { minRank: settings.auto.min_rank, limit: settings.auto.per_cycle_limit });
   result.candidates = candidates.length;
+  const activity = ctx.activity ?? noopSpan;
+  let done = 0;
+  activity.progress(0, candidates.length);
   for (const candidate of candidates) {
     if (ctx.cycle.signal.aborted) break;
+    let itemCode: ItemEventCode | undefined = "item.ok";
+    let errorCode: string | undefined;
     try {
-      const outcome = await deps.run(ctx, db, candidate.jobId, settings);
-      if (outcome.status === "done") result.done += 1;
-      else {
+      try {
+        const outcome = await deps.run(ctx, db, candidate.jobId, settings);
+        if (outcome.status === "done") result.done += 1;
+        else {
+          itemCode = "item.failed";
+          errorCode = safeErrorCode(outcome.error);
+          result.failed += 1;
+          result.failures.push({ jobId: candidate.jobId, reason: outcome.error });
+        }
+      } catch (error) {
+        if (error instanceof AiProviderError && error.kind === "aborted") { itemCode = undefined; break; }
+        itemCode = quotaGuardResume(error) ? "item.paused" : "item.failed";
+        errorCode = itemCode === "item.paused" ? "quota_guard" : activityErrorCode(error);
         result.failed += 1;
-        result.failures.push({ jobId: candidate.jobId, reason: outcome.error });
+        const reason = error instanceof Error ? `${error.name}: ${error.message}`.slice(0, 200) : "unknown error";
+        result.failures.push({ jobId: candidate.jobId, reason });
+        ctx.cycle.logger.warn("breakdown failed", { jobId: candidate.jobId, error: reason });
+        // Providers that were unreachable will not answer the next job either; unusable output only skips this job.
+        if (error instanceof AiUnavailableError && !error.attempts.some((a) => a.kind === "invalid_output")) {
+          result.aiUnavailable = true;
+          break;
+        }
       }
     } catch (error) {
-      if (error instanceof AiProviderError && error.kind === "aborted") break;
-      result.failed += 1;
-      const reason = error instanceof Error ? `${error.name}: ${error.message}`.slice(0, 200) : "unknown error";
-      result.failures.push({ jobId: candidate.jobId, reason });
-      ctx.cycle.logger.warn("breakdown failed", { jobId: candidate.jobId, error: reason });
-      // Providers that were unreachable will not answer the next job either; unusable output only skips this job.
-      if (error instanceof AiUnavailableError && !error.attempts.some((a) => a.kind === "invalid_output")) {
-        result.aiUnavailable = true;
-        break;
+      itemCode = "item.failed";
+      errorCode = activityErrorCode(error);
+      throw error;
+    } finally {
+      if (itemCode) {
+        activity.item(itemCode, { jobId: candidate.jobId, ...(errorCode ? { errorCode } : {}) });
+        activity.progress(++done, candidates.length);
       }
     }
   }

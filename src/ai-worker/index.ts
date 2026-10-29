@@ -157,6 +157,7 @@ async function main(): Promise<number> {
 
   const db = getDb();
   const activity = createActivityRecorder({ db, process: "ai-worker" });
+  activity.systemRoot("system.startup").finish("ok");
   void closeStaleActivity(activity);
   const logger = createProcessLogger();
   registerBuiltinChannels(defaultRegistry);
@@ -194,12 +195,17 @@ async function main(): Promise<number> {
   const orphans = await requeueInterruptedControlRequests(db, { reason: "ai-worker restarted while the request was running", maxRequeues: maxRequeues(), kinds: kinds() });
   if (orphans.requeued > 0) log(`queued ${orphans.requeued} interrupted request(s) again`);
   if (orphans.failed > 0) log(`marked ${orphans.failed} request(s) interrupted too often as failed`);
+  if (orphans.requeued > 0 || orphans.failed > 0) {
+    const span = activity.systemRoot("system.orphan_recovery");
+    try { span.note("info", "orphans_marked", { requests_requeued: orphans.requeued, requests_failed: orphans.failed }); }
+    finally { span.finish("ok"); }
+  }
 
   if (once) {
     let handled = 0;
     let failed = 0;
     while (!abort.signal.aborted) {
-      const request = await processNextControlRequest({ db, signal: abort.signal, logger, kinds, maxRequeues });
+      const request = await processNextControlRequest({ db, activity, signal: abort.signal, logger, kinds, maxRequeues });
       if (request === null) break;
       handled += 1;
       if (request.status === "failed") failed += 1;
@@ -265,6 +271,7 @@ async function main(): Promise<number> {
 
   const poller = startControlLanes({
     db,
+    activity,
     signal: abort.signal,
     logger,
     kinds,

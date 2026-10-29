@@ -53,7 +53,7 @@ export function createScoreJobsHandler(options: ScoreJobsHandlerOptions = {}): C
     if (!payload.success) return { status: "failed", result: { error: "invalid_payload" } };
     const deps = options.createDeps
       ? options.createDeps(context)
-      : createScoringDeps({ db: context.db, logger: context.logger, timeZone: loadConfig("schedule").timezone, signal: context.signal });
+      : createScoringDeps({ db: context.db, logger: context.logger, timeZone: loadConfig("schedule").timezone, signal: context.signal, activity: context.activity });
     const minutes = deps.config.cycle_budget_minutes;
     const deadline = minutes > 0 ? new Date(deps.now().getTime() + minutes * 60_000) : null;
     const scoring = { ...deps, deadline };

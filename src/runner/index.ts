@@ -7,7 +7,7 @@ import { createDbStateStore } from "@/lib/channels/store";
 import { ensureConfigFiles, ensureProfileFiles, getConfigDir, getProfileDir, loadConfig, readConfigText, watchConfig } from "@/lib/config";
 import { syncSourceRegistry } from "@/lib/sources/registry/sync";
 import { closeDb, enqueueAlert, getDb, getLatestHeartbeat, pruneHeartbeats, readAppliedMigrations, writeHeartbeat, type Db } from "@/lib/db";
-import { createActivityRecorder, reconcileActivity, startActivityMaintenance } from "@/lib/activity";
+import { spanScope, createActivityRecorder, reconcileActivity, startActivityMaintenance } from "@/lib/activity";
 import { resolveMigrationsFolder, runMigrations } from "@/lib/db/migrate";
 import { readJournal } from "@/lib/db/migration-journal";
 import { requeueInterruptedControlRequests } from "@/lib/db/repos/control-requests";
@@ -183,6 +183,7 @@ async function main(): Promise<number> {
 
   const db = getDb();
   const activity = createActivityRecorder({ db, process: "runner", onReenable: () => { void reconcileActivity(activity); } });
+  activity.systemRoot("system.startup").finish("ok");
   const activityMaintenance = startActivityMaintenance({ recorder: activity });
   const logger = createProcessLogger();
   // Which shipped defaults this runner runs with (`pnpm run doctor`): written now, refreshed with every heartbeat.
@@ -220,6 +221,11 @@ async function main(): Promise<number> {
     });
     if (requests.requeued > 0) log(`queued ${requests.requeued} interrupted control request(s) again`);
     if (requests.failed > 0) log(`marked ${requests.failed} control request(s) interrupted too often as failed`);
+    if (orphans.value.cycles > 0 || orphans.value.runs > 0 || requests.requeued > 0 || requests.failed > 0) {
+      const span = activity.systemRoot("system.orphan_recovery");
+      try { span.note("info", "orphans_marked", { cycles: orphans.value.cycles, runs: orphans.value.runs, requests_requeued: requests.requeued, requests_failed: requests.failed }); }
+      finally { span.finish("ok"); }
+    }
   }
 
   const inflight = new Set<Promise<unknown>>();
@@ -230,7 +236,7 @@ async function main(): Promise<number> {
   });
   const startCycle = (kind: CycleKind, options: RunCycleOptions = {}): void => {
     log(`starting ${kind} cycle`);
-    const task = runCycle(kind, { signal: abort.signal, logger, ...options }).then(
+    const task = runCycle(kind, { activity, signal: abort.signal, logger, ...options }).then(
       async (result) => {
         deliveryPruner.afterCycle(result.summary);
         log(`${kind} cycle ${result.cycleId ?? "-"} ${result.status} in ${result.summary.durationMs} ms`);
@@ -303,10 +309,16 @@ async function main(): Promise<number> {
     timeZone: schedule.timezone,
     logger,
     run: async () => {
-      const result = await runBackup(backupOptions());
-      // The safety backups (pre-deploy, pre-restore, premigrate) are pruned here too: only the runner is long-running with the directory mounted.
-      await applySystemRetention(env.RUNNER_BACKUP_DIR, loadConfig("schedule").backup.keep_system).catch(() => undefined);
-      return result;
+      const span = activity.systemRoot("system.backup");
+      const scope = spanScope(span);
+      try {
+        const result = await runBackup(backupOptions());
+        scope.set(result.configWarning !== null ? "partial" : "ok");
+        // The safety backups (pre-deploy, pre-restore, premigrate) are pruned here too: only the runner is long-running with the directory mounted.
+        await applySystemRetention(env.RUNNER_BACKUP_DIR, loadConfig("schedule").backup.keep_system).catch(() => undefined);
+        return result;
+      } catch (error) { scope.error(error); throw error; }
+      finally { scope.close(); }
     },
     // The notifier sends unsent `alert.*` notifications; until then the queued row and the error log line are the alert.
     onFailure: async (error: BackupError) => {
@@ -403,7 +415,7 @@ async function main(): Promise<number> {
   );
 
   // Telegram long-polling (inline buttons + the daily reminder); idles while notify.yaml has it disabled.
-  const poller = startNotifyPoller({ db, logger, signal: abort.signal });
+  const poller = startNotifyPoller({ db, logger, activity, signal: abort.signal });
   log(poller ? "telegram poller started" : "telegram poller not started (TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID not set)");
 
   try {
@@ -417,6 +429,7 @@ async function main(): Promise<number> {
   registerAiControlHandlers();
   const controlPoller = runControlPoller({
     db,
+    activity,
     signal: abort.signal,
     logger,
     kinds: () => runnerRequestKinds(loadConfig("ai").execution),

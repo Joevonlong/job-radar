@@ -1,3 +1,5 @@
+import { activityErrorCode, noopSpan } from "@/lib/activity";
+import type { SpanHandle } from "@/lib/activity/types";
 import { AiProviderError, AiUnavailableError, QUOTA_GUARD_CODE as QUOTA_GUARD, quotaGuardResume, sanitize } from "@/lib/ai/errors";
 import { buildScorePrompt, scoreOutputSchemaFor, scorePromptFor, summariesOfAnswer, type ScoreLanguage, type ScoreOutput, type ScoreOutputLanguages, type ScorePromptJob } from "@/lib/ai/prompts/score";
 import { aiOutputLanguages } from "@/lib/i18n/config";
@@ -47,6 +49,7 @@ const MAX_FAILURE_SAMPLES = 10;
 const MAX_REASON_CHARS = 300;
 
 export interface ScoringDeps {
+  activity?: SpanHandle;
   db: Db;
   router: AiRouter;
   config: AiConfig;
@@ -349,6 +352,13 @@ export async function runScoring(deps: ScoringDeps, options: ScoringOptions): Pr
   const ctx: ScoreContext = { profile, snapshotId, bonusCap, forAi, pipeline, language, promptVersion, output, evidence, trapSpans };
   let evidenceWarned = false;
 
+  const activity = deps.activity ?? noopSpan;
+  let done = 0;
+  activity.progress(0, candidates.length);
+  const record = (code: "item.ok" | "item.failed" | "item.paused", jobId: number, errorCode?: string): void => {
+    activity.item(code, { jobId, ...(errorCode ? { errorCode } : {}) });
+    activity.progress(++done, candidates.length);
+  };
   let next = 0;
   // the candidates that got an answer or a failure of their own (the rest is what the usage cap held back, if it stopped the run)
   const tried = new Set<number>();
@@ -372,6 +382,7 @@ export async function runScoring(deps: ScoringDeps, options: ScoringOptions): Pr
         result.scored += 1;
         result.scoredJobs.push({ jobId: candidate.jobId, rankValue });
         result.providers[provider] = (result.providers[provider] ?? 0) + 1;
+        record("item.ok", candidate.jobId);
       } catch (error) {
         if (error instanceof AiProviderError && error.kind === "aborted") {
           result.stopped = "cancelled";
@@ -380,11 +391,13 @@ export async function runScoring(deps: ScoringDeps, options: ScoringOptions): Pr
         // Job Radar's usage cap held the AI back: not a failure of this posting; the rest waits for the next cycle
         const capped = quotaGuardResume(error);
         if (capped) {
+          record("item.paused", candidate.jobId, "quota_guard");
           result.stopped ??= QUOTA_GUARD;
           if (result.stopped === QUOTA_GUARD) result.quotaResumeAt = capped.resumeAt;
           deps.logger.warn("scoring paused: Job Radar's AI usage cap reached", { jobId: candidate.jobId, resumeAt: capped.resumeAt });
           return;
         }
+        record("item.failed", candidate.jobId, activityErrorCode(error));
         tried.add(candidate.jobId);
         result.failed += 1;
         const reason = describe(error);
@@ -426,11 +439,12 @@ export async function scoreJobs(deps: ScoringDeps, jobIds: readonly number[]): P
 }
 
 /** Router + logger wiring for callers outside a cycle (the runner's control handler). */
-export function createScoringDeps(input: { db: Db; logger: ChannelLogger; timeZone: string; signal?: AbortSignal; now?: () => Date; config?: AiConfig; deadline?: Date | null }): ScoringDeps {
+export function createScoringDeps(input: { activity?: SpanHandle; db: Db; logger: ChannelLogger; timeZone: string; signal?: AbortSignal; now?: () => Date; config?: AiConfig; deadline?: Date | null }): ScoringDeps {
   const config = input.config ?? loadConfig("ai");
   const now = input.now ?? (() => new Date());
   return {
     db: input.db,
+    activity: input.activity,
     config,
     logger: input.logger,
     now,
@@ -457,7 +471,7 @@ export async function scoreSubtask(ctx: AiSubtaskContext): Promise<ScoringResult
   const db = ctx.cycle.db;
   if (ctx.cycle.dryRun || db === null) return { skipped: "dry run" };
   const result = await runScoring(
-    { db, router: ctx.router, config: ctx.config, logger: ctx.cycle.logger, now: ctx.cycle.now, signal: ctx.cycle.signal },
+    { db, router: ctx.router, config: ctx.config, logger: ctx.cycle.logger, now: ctx.cycle.now, signal: ctx.cycle.signal, activity: ctx.activity },
     { limit: ctx.perCycleLimit },
   );
   // No market, nothing scored: the step fails visibly (fail-closed, the doctor says why)

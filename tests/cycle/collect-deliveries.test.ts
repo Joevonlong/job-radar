@@ -18,6 +18,8 @@ import * as deliveries from "@/lib/db/repos/deliveries";
 import * as rawPostings from "@/lib/db/repos/raw-postings";
 import * as runs from "@/lib/db/repos/runs";
 
+import { fakeRecorder } from "../activity/helpers";
+
 import { config, probeChannel, settings } from "./helpers";
 
 const now = new Date("2026-10-07T08:00:00Z");
@@ -56,10 +58,10 @@ beforeEach(() => {
 });
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
 
-async function setup(collect: Channel["collect"], kind: Channel["kind"] = "paid") {
+async function setup(collect: Channel["collect"], kind: Channel["kind"] = "paid", usesQueries = false) {
   const cfg = config();
   const registry = new ChannelRegistry();
-  registry.register({ ...probeChannel("receipts", { usesQueries: false }), kind, collect }, { settings: settings() });
+  registry.register({ ...probeChannel("receipts", { usesQueries }), kind, collect }, { settings: settings() });
   const store = createMemoryStateStore();
   const logs: LogRecord[] = [];
   const context: CycleStepContext = {
@@ -262,5 +264,48 @@ describe("delivery audit compatibility", () => {
     expect(configuration.loadConfig).toHaveBeenCalledExactlyOnceWith("deliveryAudit");
     expect(deliveries.deliveryTablesReady).toHaveBeenCalledExactlyOnceWith(db);
     expect(deliveries.finishRunWithDeliveries).toHaveBeenCalledTimes(2);
+  });
+});
+
+
+describe("collection activity", () => {
+  it.each(["ok", "partial", "failed", "skipped", "aborted", "store_failed"] as const)("observes the %s delivery outcome without changing finalization", async (mode) => {
+    const fake = fakeRecorder();
+    const controller = new AbortController();
+    const test = await setup(async () => {
+      if (mode === "failed") throw new ChannelError("network", "private");
+      if (mode === "aborted") { controller.abort(); throw new DOMException("private", "AbortError"); }
+      if (mode === "skipped") throw new PartialCollectError([posting("kept")], new ChannelError("budget_exceeded", "private"), { planned: true });
+      return [posting(mode === "partial" ? "" : "kept")];
+    });
+    if (mode === "store_failed") vi.mocked(deliveries.finishRunWithDeliveries).mockRejectedValueOnce(new Error("private"));
+    test.context.signal = controller.signal;
+    test.context.activity = fake.recorder.cycleRoot(1).child("step.collect");
+    await test.run();
+    const span = fake.spans.find((s) => s.name === "collect.query" && s.links.runId === 1);
+    expect(span?.links).toMatchObject({ runId: 1, channelId: "receipts", queryId: expect.any(String) });
+    expect(span?.finishes).toEqual([[mode === "ok" ? "ok" : mode === "partial" ? "partial" : mode === "skipped" ? "skipped" : "failed",
+      mode === "ok" ? undefined : { reasonCode: mode === "partial" ? "parse" : mode === "skipped" ? "budget_exceeded" : mode === "aborted" ? "aborted" : mode === "store_failed" ? "unknown" : "network" }]]);
+    expect(fake.spans.filter((s) => s.name === "collect.query").every((s) => s.finishes.length === 1)).toBe(true);
+  });
+
+  it.each(["none", "create", "finish"] as const)("records every cascade skip despite a %s write failure", async (writeFailure) => {
+    const fake = fakeRecorder();
+    const test = await setup(async () => { throw new Error("must not collect"); }, "paid", true);
+    vi.spyOn(test.context.channels.breaker, "check").mockResolvedValue({ allowed: false, state: "open", openUntil: new Date(now.getTime() + 60000) });
+    if (writeFailure === "create") vi.mocked(runs.createRun).mockRejectedValue(new Error("private"));
+    if (writeFailure === "finish") vi.mocked(runs.finishRun).mockRejectedValue(new Error("private"));
+    test.context.activity = fake.recorder.cycleRoot(1).child("step.collect");
+    const result = await test.run();
+    const spans = fake.spans.filter((s) => s.name === "collect.query");
+    expect(spans).toHaveLength(result.queries);
+    expect(spans.length).toBeGreaterThan(1);
+    expect(spans.map((s) => s.links.runId)).toEqual(spans.map((_, index) => writeFailure !== "create" && index === 0 ? 1 : undefined));
+    expect(spans.every((s) => s.notes[0]?.[1] === "cascade_reasons" && s.notes[0]?.[2]?.receipts === "circuit_open")).toBe(true);
+    expect(spans.every((s) => s.finishes.length === 1 && s.finishes[0]?.[0] === "skipped" && s.finishes[0]?.[1]?.reasonCode === "circuit_open")).toBe(true);
+    expect(runs.createRun).toHaveBeenCalledOnce();
+    const step = fake.spans.find((s) => s.name === "step.collect");
+    expect(step?.progress).toEqual([[0, spans.length], [spans.length, spans.length]]);
+    expect(result.errors.length).toBe(writeFailure !== "none" ? 1 : 0);
   });
 });
