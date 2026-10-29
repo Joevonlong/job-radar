@@ -24,7 +24,7 @@ It is **read-only**: it opens pages and reads them; it does not like, apply, mes
    # first set linkedin.session.enabled to true in data/config/sources.yaml, then:
    pnpm cycle:run --channel linkedin-session --dry-run
    ```
-   A dry run really opens LinkedIn pages (it makes requests) but writes nothing to the database and does not count toward the day's usage. With readable database state, stored jobs from the same channel id are no longer opened, as in a real run. Look at `fetched / parsed` in the output; if the channel is skipped, see [Live smoke test](#live-smoke-test).
+   A dry run really opens LinkedIn pages (it makes requests) but writes nothing to the database and does not count toward the day's usage. It respects the stored daily page count and re-login flag, and reuses jobs stored under either session channel id, as in a real run. Look at `fetched / parsed` in the output; if the channel is skipped, see [Live smoke test](#live-smoke-test).
 6. If it is fine, leave `enabled: true`. When the runner is in Docker, `./.auth` is mounted into the container read-only (already set in `compose.yaml`); run `docker compose up -d --build` once so the image includes playwright-core.
 
 `pnpm auth:linkedin --status` only shows the status without opening a browser: whether the file exists, the cookie expiry time, and the state the channel last knew.
@@ -87,4 +87,4 @@ After you have run `pnpm auth:linkedin`:
 3. `pnpm cycle:run --channel linkedin-session:recommended --dry-run`.
 4. Check against the real pages: redact the page HTML and replace the fixtures in `tests/fixtures/linkedin-session/`, then run `pnpm test` to see whether the parser still passes.
 
-Dry runs still do not read the persisted daily page count or login flag. Stored-job reuse only looks under the current channel id: `linkedin-session` and `linkedin-session:recommended` do not share stored postings during a dry run.
+Dry runs read the persisted daily page count and login flag through a read-only database connection. At the daily limit they open no browser; a flag requiring re-login stops them just as it stops a real run. Jobs stored under either `linkedin-session` or `linkedin-session:recommended` are reused without opening their detail pages. All queries and both session channels share the trial cycle's in-memory counter and login changes. Counter increments, login-state changes and recommended-list markers stay in memory, so the dry run does not count toward today's usage. If session state cannot be read, collection stops before opening the browser.

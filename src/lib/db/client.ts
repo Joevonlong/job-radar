@@ -79,6 +79,14 @@ function getConnection(): Connection {
   return globalForDb.__jobRadarDb;
 }
 
+/** Prefill a read-only CLI process's shared pool before any getDb/getSql call, including channel-owned session stores. */
+export function initializeReadOnlyDb(): Db {
+  if (globalForDb.__jobRadarDb) throw new Error("the read-only database must be initialized before opening the shared pool");
+  const env = loadDatabaseEnv();
+  globalForDb.__jobRadarDb = createConnection(env.DATABASE_URL, { max: env.DB_POOL_MAX, connectTimeoutSeconds: env.DB_CONNECT_TIMEOUT_SECONDS, readOnly: true });
+  return globalForDb.__jobRadarDb.db;
+}
+
 /** Typed Drizzle handle backed by the shared pool. */
 export function getDb(): Db {
   return getConnection().db;

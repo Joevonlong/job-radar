@@ -7,8 +7,9 @@
  * --backfill queues a manual request for the runner; it cannot be combined with --dry-run or a non-manual kind.
  * --dry-run collects and parses in memory only: no cycle, run, raw posting, usage or circuit writes. When the database
  * (DATABASE_URL, or the local compose default) is reachable and migrated it is opened read-only and the dry run starts
- * from the persisted month usage, circuit state and stored postings, admitting requests like a real run would. Its
- * requests are real (paid channels bill them) but its usage is not persisted. Otherwise it starts from empty state.
+ * from the persisted month usage, circuit state, session limits/login flag and stored postings, admitting requests like a real run would. Its
+ * requests are real (paid channels bill them) but its usage is not persisted. Otherwise it starts from empty cycle state;
+ * session channels stop before browsing if their persisted session state cannot be read.
  * `--channel fixture` serves tests/fixtures/fixture-channel and needs --dry-run.
  * `.env` is loaded by the pnpm script (node --env-file-if-exists=.env --import tsx).
  * With ai.yaml `execution: host` (default) the `ai` and `notify` steps are only delegated (a `run_ai` request is
@@ -24,8 +25,8 @@ import { loadConfig } from "../src/lib/config";
 import { parseBackfillArg, submitBackfill, validateBackfillCliArgs } from "../src/lib/control/backfill-arg";
 import { requestRunCycle } from "../src/lib/control/service";
 import { closeDb, getDb, type Db } from "../src/lib/db";
+import { initializeReadOnlyDb } from "../src/lib/db/client";
 import { probeCycleState } from "../src/lib/db/health";
-import { createReadOnlyDb, type ReadOnlyDb } from "../src/lib/db/read-only-client";
 import { cycleKindEnum } from "../src/lib/db/schema";
 import { registerBuiltinAiSubtasks, registerBuiltinCycleSteps } from "../src/lib/cycle/builtin-steps";
 import type { CollectResult } from "../src/lib/cycle/collect";
@@ -103,14 +104,13 @@ async function main(): Promise<number> {
   }
 
   let db: Db | null = null;
-  let readOnly: ReadOnlyDb | null = null;
   if (!dryRun) {
     db = getDb();
   } else {
-    readOnly = createReadOnlyDb();
-    const state = await probeCycleState(readOnly.db);
+    const readOnly = initializeReadOnlyDb();
+    const state = await probeCycleState(readOnly);
     if (state === "ok") {
-      db = readOnly.db;
+      db = readOnly;
       console.log("[dry-run] budget, circuit state and stored postings are read from the database (read-only); nothing is written");
     } else if (state === "not_migrated") {
       console.warn("cycle:run: database reachable but not migrated (or behind the code); dry run starts from empty budget and circuit state and knows no stored postings, so paid channels are not held to their monthly caps");
@@ -177,7 +177,6 @@ async function main(): Promise<number> {
   } finally {
     try {
       await activity.close();
-      await readOnly?.close();
       await closeDb();
     } finally {
       shutdown.dispose();

@@ -53,7 +53,7 @@ export function createDbSessionStore(db: Db): SessionStore {
   };
 }
 
-/** In-memory store: dry runs (nothing is written) and unit tests. */
+/** In-memory store for unit tests and empty session state. */
 export function createMemorySessionStore(seed: { requests?: Record<string, number>; payloads?: Record<string, unknown>; flag?: AuthFlag | null; recommendedAt?: Date | null } = {}): SessionStore & {
   requests: Map<string, number>;
   payloads: Map<string, unknown>;
@@ -87,6 +87,47 @@ export function createMemorySessionStore(seed: { requests?: Record<string, numbe
     },
     async markRecommended() {
       store.recommendedAt = new Date();
+    },
+  };
+  return store;
+}
+
+/** A dry run reads persisted session state, then keeps its own changes in memory. No base write method is called. */
+export function createOverlaySessionStore(base: SessionStore): SessionStore {
+  const requests = new Map<string, number>();
+  const payloads = new Map<string, unknown>();
+  let flag: AuthFlag | null | undefined;
+  let recommendedAt: Date | null | undefined;
+  const store: SessionStore = {
+    async requestsOn(day) {
+      if (!requests.has(day)) requests.set(day, await base.requestsOn(day));
+      return requests.get(day) ?? 0;
+    },
+    async addRequest(day) {
+      const next = (await store.requestsOn(day)) + 1;
+      requests.set(day, next);
+      return next;
+    },
+    async storedPayloads(jobIds) {
+      const missing = jobIds.filter((id) => !payloads.has(id));
+      if (missing.length > 0) {
+        for (const [id, payload] of await base.storedPayloads(missing)) payloads.set(id, payload);
+      }
+      return new Map(jobIds.flatMap((id) => payloads.has(id) ? [[id, payloads.get(id)] as const] : []));
+    },
+    async loadAuthFlag() {
+      if (flag === undefined) flag = await base.loadAuthFlag();
+      return flag;
+    },
+    async saveAuthFlag(value) {
+      flag = value;
+    },
+    async lastRecommendedAt() {
+      if (recommendedAt === undefined) recommendedAt = await base.lastRecommendedAt();
+      return recommendedAt;
+    },
+    async markRecommended() {
+      recommendedAt = new Date();
     },
   };
   return store;
