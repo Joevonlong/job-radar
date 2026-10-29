@@ -5,7 +5,7 @@ import { afterAll, beforeAll, beforeEach, expect, inject, it } from "vitest";
 import { closeDb, getDb, listJobs, schema } from "@/lib/db";
 import { getSql } from "@/lib/db/client";
 import { cardColumns, hydrateCards, latestScoreCte } from "@/lib/db/queries/job-cards";
-import { jobListWhere, jobOrderBy, type JobFilters, type ListJobsOptions } from "@/lib/db/queries/jobs";
+import { countJobList, jobListWhere, jobOrderBy, type JobFilters, type ListJobsOptions } from "@/lib/db/queries/jobs";
 import { lastListedSql } from "@/lib/db/queries/job-status";
 import { policyCurrency } from "@/lib/db/queries/signal-filter";
 import { dormancyReady } from "@/lib/db/repos/dormancy";
@@ -116,6 +116,47 @@ it("retains score-dependent filters, clamping and hydration options", async () =
   }
 });
 
+it("clamps a page beyond the last page to the same cards as requesting the last page directly", async () => {
+  const options: ListJobsOptions = { filters: { scope: "all", includeFiltered: true }, sort: "rank", page: 1, pageSize: 3, timezone: "UTC" };
+  const total = await countJobList(getDb(), options);
+  const lastPage = Math.ceil(total / options.pageSize);
+  expect(lastPage).toBeGreaterThan(1);
+  for (const sort of JOB_SORTS) for (const dir of SORT_DIRS) {
+    const direct = await listJobs(getDb(), { ...options, sort, dir, page: lastPage });
+    const clamped = await listJobs(getDb(), { ...options, sort, dir, page: lastPage + 10 });
+    expect(clamped).toEqual(direct);
+    expect(clamped.page).toBe(lastPage);
+    expect(clamped.total).toBe(total);
+    expect(clamped.jobs).toHaveLength(total % options.pageSize);
+  }
+});
+
+it.each([1, 3])("returns an empty first page when page %i has no matching jobs", async (page) => {
+  const actual = await listJobs(getDb(), { filters: { companyIds: [] }, sort: "rank", page, pageSize: 3, timezone: "UTC" });
+  expect(actual).toEqual({ jobs: [], total: 0, page: 1, pageCount: 1, pageSize: 3 });
+});
+
+it("returns totals matching countJobList across filter sets and requested pages", async () => {
+  const filters: JobFilters[] = [
+    {},
+    { scope: "all", includeFiltered: true },
+    { scope: "archive" },
+    { scope: "all", minRank: 75 },
+    { scope: "all", includeFiltered: true, hideGermanLevels: ["C1", "B2"] },
+    { scope: "all", filteredOnly: true },
+    { scope: "all", favoritesOnly: true },
+    { scope: "all", unseenOnly: true },
+    { companyIds: [] },
+  ];
+  for (const filter of filters) {
+    const total = await countJobList(getDb(), { filters: filter, timezone: "UTC" });
+    for (const page of [1, 2, 999]) {
+      const actual = await listJobs(getDb(), { filters: filter, sort: "rank", page, pageSize: 3, timezone: "UTC" });
+      expect(actual.total).toBe(total);
+    }
+  }
+});
+
 it("paginates ids without wide score values in the PostgreSQL plan and fetches only the page cards", async () => {
   const queries: { query: string; params: unknown[] }[] = [];
   const db = drizzle(getSql(), { schema, logger: { logQuery(query, params) { queries.push({ query, params }); } } });
@@ -123,7 +164,8 @@ it("paginates ids without wide score values in the PostgreSQL plan and fetches o
   for (const sort of JOB_SORTS) for (const dir of SORT_DIRS) {
     queries.length = 0;
     const actual = await listJobs(db, { ...options, sort, dir });
-    expect(queries.filter(({ query }) => query.includes('select "jobs"."id" from "jobs"'))).toHaveLength(1);
+    expect(queries.filter(({ query }) => query.includes('select "jobs"."id", count(*) over () from "jobs"'))).toHaveLength(1);
+    expect(queries.some(({ query }) => query.includes('select count(*) from "jobs"'))).toBe(false);
     const cardQueries = queries.filter(({ query }) => query.includes("left join lateral"));
     expect(cardQueries).toHaveLength(1);
     const cardQuery = cardQueries[0]!;
@@ -134,7 +176,7 @@ it("paginates ids without wide score values in the PostgreSQL plan and fetches o
     expect(idParams).toEqual(actual.jobs.map(({ id }) => id));
 
     const latest = latestScoreCte(db);
-    const idsQuery = db.with(latest).select({ id: schema.jobs.id }).from(schema.jobs)
+    const idsQuery = db.with(latest).select({ id: schema.jobs.id, total: sql<number>`count(*) over ()`.mapWith(Number) }).from(schema.jobs)
       .innerJoin(schema.companies, eq(schema.companies.id, schema.jobs.companyId))
       .leftJoin(latest, eq(latest.jobId, schema.jobs.id))
       .where(await jobListWhere(db, options.filters, options.timezone, latest, true))

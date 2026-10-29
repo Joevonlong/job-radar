@@ -290,25 +290,15 @@ export async function listJobs(db: Db, options: ListJobsOptions): Promise<JobPag
   const ux = await uxTablesReady(db);
   const where = await jobListWhere(db, options.filters, options.timezone, latest, ux);
   const pageSize = Math.max(1, options.pageSize);
-
-  const [countRow] = await db
-    .with(latest)
-    .select({ total: count() })
-    .from(jobs)
-    .innerJoin(companies, eq(companies.id, jobs.companyId))
-    .leftJoin(latest, eq(latest.jobId, jobs.id))
-    .where(where);
-  const total = countRow?.total ?? 0;
-  const pageCount = Math.max(1, Math.ceil(total / pageSize));
-  const page = Math.min(Math.max(1, Math.floor(options.page)), pageCount);
+  let page = Math.max(1, Math.floor(options.page));
 
   const orderBy = jobOrderBy(options.sort, options.dir ?? DEFAULT_SORT_DIR[options.sort], latest, policyCurrency(options.filters), lastListedSql(await listingReady(db)));
 
-  // Sort and paginate ids before evaluating card columns and their subqueries. PostgreSQL also
+  // Count, sort and paginate ids before evaluating card columns and their subqueries. PostgreSQL also
   // inlines this single-use CTE and prunes its unused wide score columns (covered by EXPLAIN tests).
-  const ids = await db
+  const selectIds = (page: number) => db
     .with(latest)
-    .select({ id: jobs.id })
+    .select({ id: jobs.id, total: sql<number>`count(*) over ()`.mapWith(Number) })
     .from(jobs)
     .innerJoin(companies, eq(companies.id, jobs.companyId))
     .leftJoin(latest, eq(latest.jobId, jobs.id))
@@ -316,6 +306,24 @@ export async function listJobs(db: Db, options: ListJobsOptions): Promise<JobPag
     .orderBy(...orderBy)
     .limit(pageSize)
     .offset((page - 1) * pageSize);
+
+  let ids = await selectIds(page);
+  let total = ids[0]?.total ?? 0;
+  let pageCount = Math.max(1, Math.ceil(total / pageSize));
+  // An empty page has no window count. Only stale page numbers need a separate count and retry.
+  if (ids.length === 0 && page > 1) {
+    const [countRow] = await db
+      .with(latest)
+      .select({ total: count() })
+      .from(jobs)
+      .innerJoin(companies, eq(companies.id, jobs.companyId))
+      .leftJoin(latest, eq(latest.jobId, jobs.id))
+      .where(where);
+    total = countRow?.total ?? 0;
+    pageCount = Math.max(1, Math.ceil(total / pageSize));
+    page = Math.min(page, pageCount);
+    ids = await selectIds(page);
+  }
 
   const cardScore = latestScoreLateral(db);
   const cards: CardRow[] = ids.length === 0 ? [] : await db
