@@ -234,7 +234,8 @@
       "noBoardLink": "Add a board",
       "remove": "Remove {name}",
       "addedToast": "Now watching “{name}”",
-      "removedToast": "Stopped watching “{name}”"
+      "removedToast": "Stopped watching “{name}”",
+      "companyQueries": "Will search by company name on {count} enabled channels."
     },
     "categories": {
       "title": "Signal categories ({count}/{max})",
@@ -3055,6 +3056,23 @@
       "collect_max_catch_up_hours": {
         "label": "Catch-up limit (hours)",
         "hint": "Maximum automatic look-back after missed coverage: 0–720 hours, default 168. Set 0 to disable catch-up; the base window never shrinks."
+      },
+      "company_queries_enabled": {
+        "label": "Search watched companies",
+        "hint": "Send watched company names to enabled collection providers. See Privacy; disable here to stop all company queries."
+      },
+      "company_queries_max_per_cycle": {
+        "label": "Company queries per unit per cycle"
+      },
+      "company_queries_interval": {
+        "label": "Minimum company query interval"
+      },
+      "company_queries_max_results": {
+        "label": "Results per company query"
+      },
+      "company_queries_channel": {
+        "label": "Company queries",
+        "hint": "Allow this channel to receive watched company names for nationwide searches."
       }
     },
     "control": {
@@ -4804,6 +4822,13 @@
       "responsibility": "Job Radar throttles its requests and never tries to get past a login wall or a CAPTCHA, but you are responsible for how you use it. Read <docs>\"Scraping\" in docs/sources.md</docs> and the site's terms first.",
       "cancel": "Keep it off",
       "confirm": "I understand the risk, switch it on"
+    },
+    "companyQueries": {
+      "label": "Company queries",
+      "hint": "Send watched company names to this provider for nationwide searches, without a remote-only filter.",
+      "switchLabel": "Company queries for {name}",
+      "enabled": "Company queries enabled for {name}.",
+      "disabled": "Company queries disabled for {name}."
     }
   },
   "aiTraps": {
@@ -5944,6 +5969,10 @@
       "empty": "No password given; nothing was printed.",
       "length": "The password needs {min} to {max} characters; nothing was printed.",
       "next": "Paste the line above into .env (replacing an older one), then recreate the web container: docker compose up -d web"
+    },
+    "companyQueries": {
+      "title": "Company queries",
+      "company": "Company: {name}"
     }
   },
   "setup": {
@@ -7009,7 +7038,8 @@
       "invalid_shape": "Invalid record format",
       "stored": "Stored",
       "store_failed": "Storage failed",
-      "discarded_on_failure": "Discarded after failure"
+      "discarded_on_failure": "Discarded after failure",
+      "company_mismatch": "Unrelated employer"
     },
     "requestStatus": {
       "pending": "Queued",
@@ -7138,7 +7168,8 @@
       "not_ready": "Activity log is not ready yet. Apply the database migrations and try again.",
       "error": "Activity log could not be loaded. Check the configuration and database, then try again."
     },
-    "viewJob": "View job"
+    "viewJob": "View job",
+    "company": "Company: {name}"
   },
   "currentScores": {
     "missing": "Current score projection is not migrated.",

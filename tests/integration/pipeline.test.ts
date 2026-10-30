@@ -523,7 +523,7 @@ describe("failures stay isolated (C1, C2)", () => {
 
   it("marks what cannot be parsed as parse_failed with the reason and parses the rest of the cycle", async () => {
     const registry = threeChannels();
-    registry.register(broken("fx-broken"), { settings: { enabled: true, maxResults: 10, monthlyBudgetUsd: 0, freeRecordsPerMonth: 0, throttle: { minDelayMs: 0, maxDelayMs: 0 }, extra: {} } });
+    registry.register(broken("fx-broken"), { settings: { enabled: true, maxResults: 10, monthlyBudgetUsd: 0, companyQueries: true, freeRecordsPerMonth: 0, throttle: { minDelayMs: 0, maxDelayMs: 0 }, extra: {} } });
     // a posting of a channel this process does not know
     await upsertChannelRows(getDb(), [{ id: "ghost", family: "manual", kind: "manual", enabled: false }]);
     await upsertRawPostings(getDb(), { channelId: "ghost", runId: null, items: [{ externalId: "g-1", url: null, payload: { some: "payload" } }] });
@@ -552,7 +552,7 @@ describe("failures stay isolated (C1, C2)", () => {
   it("sets a failed posting back to pending, and clears its error, when the channel delivers a changed payload", async () => {
     const registry = new ChannelRegistry();
     const fixture = createFixtureChannel({ id: "fx-a", family: "ats", usesQueries: false, postings: [posting("1")] });
-    registry.register(fixture, { settings: { enabled: true, maxResults: 10, monthlyBudgetUsd: 0, freeRecordsPerMonth: 0, throttle: { minDelayMs: 0, maxDelayMs: 0 }, extra: {} } });
+    registry.register(fixture, { settings: { enabled: true, maxResults: 10, monthlyBudgetUsd: 0, companyQueries: true, freeRecordsPerMonth: 0, throttle: { minDelayMs: 0, maxDelayMs: 0 }, extra: {} } });
     await run(registry);
     // corrupt the stored payload, then let the channel deliver the good one again
     await getDb().update(schema.rawPostings).set({ payloadJson: { id: 1 }, payloadHash: "stale", parseStatus: "pending" });
@@ -594,7 +594,7 @@ describe("reprocessing stored postings with improved rules", () => {
   it("puts parsed postings back to pending and updates the jobs in place with the current rules, keeping the payload (C1)", async () => {
     const registry = new ChannelRegistry();
     const fixture = createFixtureChannel({ id: "fx-a", family: "ats", usesQueries: false, postings: [posting("1", { description })] });
-    registry.register(fixture, { settings: { enabled: true, maxResults: 10, monthlyBudgetUsd: 0, freeRecordsPerMonth: 0, throttle: { minDelayMs: 0, maxDelayMs: 0 }, extra: {} } });
+    registry.register(fixture, { settings: { enabled: true, maxResults: 10, monthlyBudgetUsd: 0, companyQueries: true, freeRecordsPerMonth: 0, throttle: { minDelayMs: 0, maxDelayMs: 0 }, extra: {} } });
     resetCycleSteps(); // collect only
     await run(registry);
 
@@ -632,7 +632,7 @@ describe("reprocessing stored postings with improved rules", () => {
   it("clears the facts the rules read from the text first, so a flag the old rules got wrong does not survive (merging only accumulates)", async () => {
     const registry = new ChannelRegistry();
     const fixture = createFixtureChannel({ id: "fx-a", family: "ats", usesQueries: false, postings: [posting("1", { description: "Build things for our logistics platform. Hybrid work model: 3 days in the office." })] });
-    registry.register(fixture, { settings: { enabled: true, maxResults: 10, monthlyBudgetUsd: 0, freeRecordsPerMonth: 0, throttle: { minDelayMs: 0, maxDelayMs: 0 }, extra: {} } });
+    registry.register(fixture, { settings: { enabled: true, maxResults: 10, monthlyBudgetUsd: 0, companyQueries: true, freeRecordsPerMonth: 0, throttle: { minDelayMs: 0, maxDelayMs: 0 }, extra: {} } });
     resetCycleSteps();
     await run(registry);
     await runPipeline(getDb(), { relist: { minGapDays: 9 }, config: shippedPipeline(), registry, logger: quietLogger });

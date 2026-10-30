@@ -5,7 +5,7 @@ import { catchUpWindow, familyHistory, orderQueries, rotationSummary, turnsOf } 
 import type { SearchQuery } from "@/lib/channels/types";
 import type { QueryRunHistoryRow } from "@/lib/db/repos/runs";
 
-const query = (id: string): SearchQuery => ({ id, keywordGroup: id, keywords: [id], location: "Test City", remote: false, remoteScope: null, windowHours: 24, maxResults: 10 });
+const query = (id: string): SearchQuery => ({ id, keywordGroup: id, keywords: [id], location: "Test City", remote: false, remoteScope: null, company: null, windowHours: 24, maxResults: 10 });
 const queries = ["a", "b", "c", "d", "e"].map(query);
 const ids = (items: readonly SearchQuery[]) => items.map((q) => q.id);
 const earlier = new Date("2026-01-01T00:00:00Z");

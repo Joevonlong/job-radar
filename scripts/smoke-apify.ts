@@ -77,7 +77,7 @@ async function main(): Promise<number> {
     keywordGroup: groupId,
     location,
     remote: false,
-    remoteScope: null,
+    remoteScope: null, company: null,
     windowHours,
     maxResults: limit,
   };

@@ -46,7 +46,7 @@ export function cycleConfig() {
       locations: ["Example City"],
       remote_scope: "none" as const,
       window_hours: { morning: 6, evening: 6, weekend: 6 },
-      max_per_group_per_location: 10,
+      max_per_group_per_location: 10, watched_company_queries: { enabled: true, max_per_cycle: 3, min_interval_hours: 24, max_results: 25 },
     },
   };
 }

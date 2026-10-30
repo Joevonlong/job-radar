@@ -69,7 +69,7 @@ export function query(overrides: Partial<SearchQuery> = {}): SearchQuery {
     keywordGroup: "engineering",
     location: "Berlin",
     remote: false,
-    remoteScope: null,
+    remoteScope: null, company: null,
     windowHours: 24,
     maxResults: 10,
     ...overrides,

@@ -6,9 +6,9 @@ import { hashPayload } from "./payload-hash";
 
 export const DELIVERY_DISPOSITIONS = [
   "received_uncommitted", "unparsed_response", "provider_error", "no_identity", "duplicate_in_run",
-  "outside_window", "invalid_shape", "stored", "store_failed", "discarded_on_failure",
+  "outside_window", "company_mismatch", "invalid_shape", "stored", "store_failed", "discarded_on_failure",
 ] as const;
-export const DELIVERY_DROP_REASONS = ["unparsed_response", "provider_error", "no_identity", "duplicate_in_run", "outside_window"] as const;
+export const DELIVERY_DROP_REASONS = ["unparsed_response", "provider_error", "no_identity", "duplicate_in_run", "outside_window", "company_mismatch"] as const;
 export const DELIVERY_FLAGS = ["unidentified", "date_missing", "date_unparsed", "date_day_precision", "date_unconfirmed", "date_conflict", "body_truncated"] as const;
 
 export type DeliveryDisposition = (typeof DELIVERY_DISPOSITIONS)[number];

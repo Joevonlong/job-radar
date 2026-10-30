@@ -66,7 +66,7 @@ function makeContext(handler: Handler, overrides: Partial<ArbeitsagenturSettings
       enabled: true,
       maxResults: merged.max_results,
       monthlyBudgetUsd: 0,
-      freeRecordsPerMonth: 0,
+      companyQueries: true, freeRecordsPerMonth: 0,
       throttle: { minDelayMs: 1, maxDelayMs: 1 },
       extra: merged,
     },
@@ -103,7 +103,7 @@ function query(overrides: Partial<SearchQuery> = {}): SearchQuery {
     keywordGroup: "engineering",
     location: "Berlin",
     remote: false,
-    remoteScope: null,
+    remoteScope: null, company: null,
     windowHours: 24,
     maxResults: 25,
     ...overrides,
@@ -468,7 +468,7 @@ describe("collect: empty results and keywords", () => {
 
 describe("collect: remote queries", () => {
   const remoteQuery = (overrides: Partial<SearchQuery> = {}) =>
-    query({ location: null, remote: true, remoteScope: "home_country", ...overrides });
+    query({ location: null, remote: true, remoteScope: "home_country", company: null, ...overrides });
   const REMOTE_ITEMS = SEARCH_REMOTE.ergebnisliste as Array<Record<string, unknown>>;
   const flagged = REMOTE_ITEMS.filter((i) => i.homeofficemoeglich === true).map((i) => i.referenznummer);
 
@@ -881,4 +881,13 @@ describe("registration and configuration", () => {
     bad((b) => delete b.max_details_per_query);
     bad((b) => (b.unknown_key = 1));
   });
+});
+
+it("company searches are nationwide and keep onsite results even with home-office filtering enabled", async () => {
+  const { ctx, calls } = makeContext(api({ pages: [SEARCH_REMOTE] }), { fetch_details: false, remote_requires_home_office: true });
+  const result = await arbeitsagenturChannel.collect(query({ company: { name: "Acme", key: "acme" }, keywords: ["Acme"], location: null, remote: false }), ctx);
+  expect(result).toHaveLength((SEARCH_REMOTE.ergebnisliste as unknown[]).length);
+  expect(calls[0]!.url.searchParams.get("was")).toBe("Acme");
+  for (const key of ["wo", "umkreis", "homeoffice"]) expect(calls[0]!.url.searchParams.has(key)).toBe(false);
+  expect(arbeitsagenturChannel.supportsCompanyQueries).toBe(true);
 });

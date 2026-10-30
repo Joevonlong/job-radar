@@ -4,8 +4,9 @@ import { remoteScopeKey } from "@/lib/market/remote-scope";
 import { CascadeController, type CascadeSpec, type UnavailableReason } from "@/lib/channels/cascade";
 import { createChannelContext, createThrottle, httpSettingsFromConfig } from "@/lib/channels/context";
 import { ChannelError, InfrastructureError, isAbortError, PartialCollectError, toChannelError } from "@/lib/channels/errors";
-import { buildQueries, buildSweepQuery, capQuery } from "@/lib/channels/query";
-import { catchUpWindow, familyHistory, orderQueries, rotationSummary, turnsOf, type QueryHistory, type RotationUnitSummary } from "@/lib/channels/rotation";
+import { buildCompanyQueries, buildQueries, buildSweepQuery, capQuery } from "@/lib/channels/query";
+import { keepCompanyMatches } from "@/lib/channels/company-match";
+import { catchUpWindow, familyHistory, orderQueries, rotationSummary, selectCompanyQueries, turnsOf, type QueryHistory, type RotationUnitSummary } from "@/lib/channels/rotation";
 import {
   normalizedPostingDraftSchema,
   rawPostingInputSchema,
@@ -14,7 +15,11 @@ import {
   type SearchQuery,
 } from "@/lib/channels/types";
 import type { Db } from "@/lib/db/client";
-import { loadConfig, type DeliveryAuditConfig } from "@/lib/config";
+import { loadConfig, type DeliveryAuditConfig, type PipelineConfig } from "@/lib/config";
+import { watchedCompanyBoards } from "@/lib/companies/watched-boards";
+import { buildWatchedCompanyKeys } from "@/lib/companies/marks";
+import { currentWatchedCompanies } from "@/lib/filter";
+import { loadPipeline } from "@/lib/market";
 import { deliveryTablesReady, type FinishRunFields } from "@/lib/db/repos/deliveries";
 import { createRun, finishRun, getQueryRunHistory, type QueryRunHistoryRow, type RunStatus } from "@/lib/db/repos/runs";
 import { upsertRawPostings } from "@/lib/db/repos/raw-postings";
@@ -58,6 +63,7 @@ export interface QueryPlanEntry {
   remoteScope: string | null;
   windowHours: number;
   maxResults: number;
+  company: SearchQuery["company"];
 }
 
 export interface ServedQuery {
@@ -83,6 +89,8 @@ export interface CollectResult {
   dryRun?: Record<string, DryRunChannelReport>;
   /** Dry runs only: the distinct queries built for this cycle. */
   queryPlan?: QueryPlanEntry[];
+  /** Keys, never historical spellings: labels use the current watch list or fall back to this key. */
+  companyQueryKeys?: Record<string, string>;
 }
 
 interface Unit {
@@ -91,6 +99,8 @@ interface Unit {
   spec: CascadeSpec;
   familyChannels: readonly string[];
   queries: SearchQuery[];
+  companyCandidates: SearchQuery[];
+  eligible: string[];
 }
 
 const emptySummary = (): CollectChannelSummary => ({
@@ -180,6 +190,19 @@ export async function collectStep(ctx: CycleStepContext): Promise<StepResult> {
 
   const keywordQueries = buildQueries(config.search, ctx.cycle.kind, { windowKind: ctx.windowKind });
   const sweepQuery = buildSweepQuery(config.search, ctx.cycle.kind, { windowKind: ctx.windowKind });
+  const watched = config.search.watched_company_queries.enabled ? currentWatchedCompanies(ctx.logger) : [];
+  let pipeline: PipelineConfig | null = null;
+  let watchedKeys: ReadonlySet<string> = new Set();
+  let companyQueries: SearchQuery[] = [];
+  if (watched.length > 0) {
+    try {
+      pipeline = loadPipeline();
+      watchedKeys = buildWatchedCompanyKeys(watched, pipeline);
+      companyQueries = buildCompanyQueries(config.search, watchedCompanyBoards(watched, config.channels.ats_boards, pipeline), sweepQuery.windowHours);
+    } catch (error) {
+      ctx.logger.warn("company query configuration could not be read; continuing keyword collection", { error: error instanceof Error ? error.message : "unknown error" });
+    }
+  }
 
   /** A channel that is not due this cycle (a daily side channel that already ran) is left out; a failing check counts as due. */
   const isDue = async (channel: Channel): Promise<boolean> => {
@@ -201,18 +224,28 @@ export async function collectStep(ctx: CycleStepContext): Promise<StepResult> {
   for (const spec of services.cascades) {
     const order = spec.order.filter(isSelected);
     // a family none of whose channels exists in this process has nothing to run
-    if (order.some((id) => registry.has(id))) units.push({ name: spec.family, spec: { family: spec.family, order }, familyChannels: spec.order, queries: queriesFor(order) });
+    if (order.some((id) => registry.has(id))) units.push({ name: spec.family, spec: { family: spec.family, order }, familyChannels: spec.order, queries: queriesFor(order), companyCandidates: [], eligible: [] });
   }
   for (const channel of registry.list()) {
     if (cascadeMembers.has(channel.id) || !isSelected(channel.id) || !registry.isEnabled(channel.id, config.channels)) continue;
     if (channel.isDue && !(await isDue(channel))) continue;
     const spec = { family: channel.family, order: [channel.id] };
-    units.push({ name: channel.id, spec, familyChannels: [channel.id], queries: queriesFor(spec.order) });
+    units.push({ name: channel.id, spec, familyChannels: [channel.id], queries: queriesFor(spec.order), companyCandidates: [], eligible: [] });
   }
-  for (const unit of units) for (const q of unit.queries) allQueries.set(q.id, q);
+  for (const unit of units) {
+    unit.eligible = companyQueries.length === 0 ? [] : unit.spec.order.filter((id) => {
+      const channel = registry.get(id);
+      const settings = registry.settingsFor(id, config.channels);
+      return channel?.supportsCompanyQueries === true && settings?.enabled === true && settings.companyQueries
+        && (channel.isConfigured?.() ?? true);
+    });
+    const first = unit.spec.order.map((id) => registry.get(id)).find((channel) => channel !== undefined);
+    if (first?.usesQueries && unit.eligible.length > 0) unit.companyCandidates = companyQueries;
+    for (const q of [...unit.queries, ...unit.companyCandidates]) allQueries.set(q.id, q);
+  }
 
   const step = ctx.activity ?? noopSpan;
-  const planned = units.reduce((sum, unit) => sum + unit.queries.length, 0);
+  let planned = units.reduce((sum, unit) => sum + unit.queries.length, 0);
   let done = 0;
   step.progress(0, planned);
 
@@ -273,8 +306,11 @@ export async function collectStep(ctx: CycleStepContext): Promise<StepResult> {
       autoCatchUp = false;
       ctx.logger.warn("channel catch-up capability check failed; using base window", { channel: channelId, query: query.id, error: error instanceof Error ? error.message : "unknown error" });
     }
+    const intervalWindow = config.search.watched_company_queries.min_interval_hours + config.channels.collect.catch_up_tolerance_hours;
+    const companyBase = query.company && !autoCatchUp && config.channels.collect.max_catch_up_hours > 0
+      ? Math.max(base, Math.min(intervalWindow, config.channels.collect.max_catch_up_hours)) : base;
     const window = catchUpWindow({
-      baseHours: base,
+      baseHours: companyBase,
       anchor,
       now: ctx.now(),
       maxCatchUpHours: config.channels.collect.max_catch_up_hours,
@@ -389,6 +425,12 @@ export async function collectStep(ctx: CycleStepContext): Promise<StepResult> {
         }
       }
       const invalid = collected.length - valid.length;
+      if (query.company && pipeline !== null) {
+        const matches = keepCompanyMatches(valid, channel, new Set([...watchedKeys, query.company.key]), pipeline);
+        if (deliveries) deliveries.retain(matches.kept);
+        else valid.splice(0, valid.length, ...matches.kept);
+        ctx.logger.info("company query matched", { channel: channelId, query: query.id, kept: matches.kept.length, company_mismatch: matches.dropped, samples: matches.droppedNames });
+      }
       const rejected = invalid > 0 ? `${invalid} of ${collected.length} records rejected (invalid shape)` : null;
       const observed: { completed?: FinishRunFields } = {};
       const completed = (): FinishRunFields => (observed.completed = interrupted ? {
@@ -494,10 +536,16 @@ export async function collectStep(ctx: CycleStepContext): Promise<StepResult> {
     const now = ctx.now();
     const start = await controller.pick();
     const sortChannel = "channelId" in start ? start.channelId : null;
-    const turns = sortChannel === null ? new Map<string, Date | null>() : turnsOf(history, sortChannel);
-    const queries = sortChannel !== null && historyReason === null
-      ? orderQueries(unit.queries, turns, config.channels.collect.query_rotation)
-      : unit.queries;
+    const keywordTurns = sortChannel === null ? new Map<string, Date | null>() : turnsOf(history, sortChannel);
+    const company = selectCompanyQueries({ candidates: unit.companyCandidates, history: historyReason === null ? history : [], eligible: unit.eligible,
+      now, cfg: config.search.watched_company_queries, rotation: historyReason === null && config.channels.collect.query_rotation });
+    const turns = new Map([...keywordTurns, ...company.turns]);
+    const selectedQueries = [...unit.queries, ...company.selected];
+    const queries = historyReason === null
+      ? orderQueries(selectedQueries, turns, config.channels.collect.query_rotation)
+      : selectedQueries;
+    planned += company.selected.length;
+    step.progress(done, planned);
     let reached = 0;
     const stretched = new Set<string>();
     const capped = new Set<string>();
@@ -507,10 +555,13 @@ export async function collectStep(ctx: CycleStepContext): Promise<StepResult> {
       if (limited) capped.add(query.id);
       maxWindowHours = Math.max(maxWindowHours ?? hours, hours);
     };
+    let companiesUnavailable = false;
     try {
       for (const [index, query] of queries.entries()) {
+        if (query.company && companiesUnavailable) continue;
         ctx.signal.throwIfAborted();
-        const outcome = await controller.serve((id) => attempt(id, query, family.get(query.id), attempted, recordWindow));
+        const outcome = await controller.serve((id) => attempt(id, query, family.get(query.id), attempted, recordWindow),
+          query.company ? (id) => unit.eligible.includes(id) : undefined);
         if (outcome.status === "served") {
           reached += 1;
           served.push({ unit: unit.name, queryId: query.id, channelId: outcome.channelId, status: "served" });
@@ -518,36 +569,40 @@ export async function collectStep(ctx: CycleStepContext): Promise<StepResult> {
           reached += 1;
           served.push({ unit: unit.name, queryId: query.id, channelId: outcome.channelId, status: "failed" });
         } else {
+          const stopUnit = !query.company || unit.spec.order.filter((id) => registry.has(id)).every((id) => unit.eligible.includes(id));
+          const skippedQueries = queries.slice(index).filter((q) => stopUnit || q.company !== null);
           served.push({ unit: unit.name, queryId: query.id, channelId: null, status: "skipped" });
           let runId: number | null = null;
           try {
-            runId = await recordSkipped(unit, query, outcome.reasons, queries.length - index, (created) => { runId = created; });
+            runId = await recordSkipped(unit, query, outcome.reasons, skippedQueries.length, (created) => { runId = created; }, query.company ? unit.eligible : undefined);
           } finally {
             const { reasonCode, perChannel } = cascadeSkipReasons(outcome.reasons);
-            for (const [offset, skipped] of queries.slice(index).entries()) {
+            for (const [offset, skipped] of skippedQueries.entries()) {
               const span = step.child("collect.query", { queryId: skipped.id, ...(offset === 0 && runId !== null ? { runId } : {}) });
               try { span.note("warn", "cascade_reasons", perChannel); }
               finally { span.finish("skipped", { reasonCode }); }
             }
-            done += queries.length - index;
+            done += skippedQueries.length;
             step.progress(done, planned);
           }
-          break; // nothing can take the remaining queries this cycle
+          if (stopUnit) break;
+          companiesUnavailable = true;
+          continue;
         }
         step.progress(++done, planned);
       }
     } finally {
       for (const [id, code] of controller.unusableChannels()) unusable[id] = code;
     }
-    const summary = rotationSummary({ queries: unit.queries, sortChannel, turns, reached, stretched: stretched.size, capped: capped.size, maxWindowHours, historyUnavailable: historyReason !== null, now });
+    const summary = rotationSummary({ queries: selectedQueries, sortChannel, turns, reached, stretched: stretched.size, capped: capped.size, maxWindowHours, historyUnavailable: historyReason !== null, now });
     rotation[unit.name] = summary;
     step.note("info", "queries_not_reached", { unit: shortIdSchema.safeParse(unit.name).success ? unit.name : "other", count: summary.queries - reached });
-    ctx.logger.info("query rotation", { unit: unit.name, ...summary, notReached: summary.queries - reached, reason: historyReason ?? (sortChannel === null ? "no_start_channel" : null) });
+    ctx.logger.info("query rotation", { unit: unit.name, ...summary, companyQueries: { candidates: unit.companyCandidates.length, due: company.due, selected: company.selected.length }, notReached: summary.queries - reached, reason: historyReason ?? (sortChannel === null ? "no_start_channel" : null) });
   };
 
   /** All channels of a unit were unavailable: one skipped run row (on the first registered channel) says why. */
-  const recordSkipped = async (unit: Unit, query: SearchQuery, reasons: Record<string, string>, remaining: number, onCreated: (id: number) => void): Promise<number | null> => {
-    const holder = unit.spec.order.find((id) => registry.has(id));
+  const recordSkipped = async (unit: Unit, query: SearchQuery, reasons: Record<string, string>, remaining: number, onCreated: (id: number) => void, holderIds = unit.spec.order): Promise<number | null> => {
+    const holder = holderIds.find((id) => registry.has(id));
     const reason = truncate(
       `no available channel for ${unit.name} (${Object.entries(reasons)
         .map(([id, why]) => `${id}: ${why}`)
@@ -613,6 +668,7 @@ export async function collectStep(ctx: CycleStepContext): Promise<StepResult> {
     unusable,
     errors,
     aborted,
+    companyQueryKeys: Object.fromEntries([...allQueries.values()].flatMap((q) => q.company ? [[q.id, q.company.key]] : [])),
     ...(ctx.dryRun
       ? {
           dryRun,
@@ -623,6 +679,7 @@ export async function collectStep(ctx: CycleStepContext): Promise<StepResult> {
             remoteScope: q.remoteScope === null ? null : remoteScopeKey(q.remoteScope),
             windowHours: q.windowHours,
             maxResults: q.maxResults,
+            company: q.company,
           })),
         }
       : {}),

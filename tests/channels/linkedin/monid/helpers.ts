@@ -28,7 +28,7 @@ export function settings(overrides: Partial<MonidSettings> = {}): MonidSettings 
 
 export function query(overrides: Partial<SearchQuery> = {}): SearchQuery {
   return { id: "query-example", keywords: ["Platform Engineer", "Infrastructure Engineer"], keywordGroup: "engineering",
-    location: "Example City", remote: false, remoteScope: null, windowHours: 24, maxResults: 10, ...overrides };
+    location: "Example City", remote: false, remoteScope: null, company: null, windowHours: 24, maxResults: 10, ...overrides };
 }
 
 export function response(status: number, body: unknown): HttpResponse {
@@ -74,7 +74,7 @@ export async function harness(answers: Answer[] = [response(200, completed())], 
   const channel = createMonidChannel({ pricePer1kUsd: () => block.price_per_1k_usd, environment: options.environment ?? { MONID_API_KEY: FAKE_KEY },
     now: options.now ?? (() => new Date(time)), sleep, stopFetch: fetch });
   const runtime: ChannelRuntimeSettings = { enabled: block.enabled, maxResults: block.max_results, monthlyBudgetUsd: block.monthly_budget_usd,
-    freeRecordsPerMonth: 0, throttle: { minDelayMs: 0, maxDelayMs: 0 }, extra: block };
+    companyQueries: true, freeRecordsPerMonth: 0, throttle: { minDelayMs: 0, maxDelayMs: 0 }, extra: block };
   const store = createMemoryStateStore();
   if (options.seed) await store.addUsage(channel.id, "2026-10", options.seed);
   const tracker = await BudgetTracker.create({ store, month: "2026-10", globalCapUsd: options.globalCapUsd ?? 10, settingsFor: () => runtime });

@@ -11,6 +11,7 @@ const MONTH = "2026-10";
 function settings(overrides: Partial<ChannelRuntimeSettings> = {}): ChannelRuntimeSettings {
   return {
     enabled: true,
+    companyQueries: true,
     maxResults: 100,
     monthlyBudgetUsd: 0,
     freeRecordsPerMonth: 0,

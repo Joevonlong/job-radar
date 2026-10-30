@@ -2,6 +2,24 @@ import type { QueryRunHistoryRow } from "@/lib/db/repos/runs";
 import { remoteScopeKey } from "@/lib/market/remote-scope";
 
 import type { SearchQuery } from "./types";
+import type { SearchConfig } from "@/lib/config";
+
+/** Company turns belong to the eligible family, independent of which member starts this cycle. */
+export function selectCompanyQueries(input: {
+  candidates: readonly SearchQuery[];
+  history: readonly QueryRunHistoryRow[];
+  eligible: readonly string[];
+  now: Date;
+  cfg: SearchConfig["watched_company_queries"];
+  rotation: boolean;
+}): { selected: SearchQuery[]; turns: Map<string, Date | null>; due: number } {
+  const turns = new Map([...familyHistory(input.history, input.eligible)].map(([id, value]) => [id, value.lastTurnAt]));
+  const due = input.candidates.filter((q) => {
+    const at = turns.get(q.id);
+    return at == null || input.now.getTime() - at.getTime() >= input.cfg.min_interval_hours * 3_600_000;
+  });
+  return { selected: orderQueries(due, turns, input.rotation).slice(0, input.cfg.max_per_cycle), turns, due: due.length };
+}
 
 export interface QueryHistory {
   lastTurnAt: Date | null;

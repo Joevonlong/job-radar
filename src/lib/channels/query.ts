@@ -6,6 +6,7 @@ import type { CycleKind } from "@/lib/db/repos/cycles";
 import { remoteScopeKey } from "@/lib/market/remote-scope";
 
 import type { RemoteScope, SearchQuery } from "./types";
+import type { WatchedCompanyBoard } from "@/lib/companies/watched-boards";
 
 /** The cycle kinds that come from schedule.yaml (the others are `manual` and `catchup`). */
 export type ScheduledCycleKind = Exclude<CycleKind, "manual" | "catchup">;
@@ -31,8 +32,11 @@ export function queryId(parts: {
   location: string | null;
   remote: boolean;
   remoteScope: RemoteScope | null;
+  company?: SearchQuery["company"];
 }): string {
-  const canonical = JSON.stringify([parts.keywordGroup, [...parts.keywords].sort(), parts.location, parts.remote, parts.remoteScope === null ? null : remoteScopeKey(parts.remoteScope)]);
+  const canonical = parts.company
+    ? JSON.stringify(["company", parts.company.key])
+    : JSON.stringify([parts.keywordGroup, [...parts.keywords].sort(), parts.location, parts.remote, parts.remoteScope === null ? null : remoteScopeKey(parts.remoteScope)]);
   return createHash("sha256").update(canonical).digest("hex").slice(0, 16);
 }
 
@@ -65,6 +69,7 @@ export function buildQueries(search: SearchConfig, kind: CycleKind, options: { w
       remoteScope,
       windowHours,
       maxResults,
+      company: null,
     });
     for (const location of search.locations) queries.push(make(location, null));
     if (search.remote_scope !== "none") queries.push(make(null, search.remote_scope));
@@ -83,7 +88,34 @@ export function buildSweepQuery(search: SearchConfig, kind: CycleKind, options: 
     remoteScope: null,
     windowHours: windowHoursFor(kind, search, options.windowKind),
     maxResults: Number.MAX_SAFE_INTEGER,
+    company: null,
   };
+}
+
+export function isCompanyQuery(query: SearchQuery): boolean {
+  return query.company != null;
+}
+
+export function companyLabel(query: SearchQuery): string | null {
+  return query.company?.name ?? null;
+}
+
+export function searchKind(query: SearchQuery): "city" | "remote" | "company" {
+  return isCompanyQuery(query) ? "company" : query.remote ? "remote" : "city";
+}
+
+/** Nationwide company searches for watch-list entries without an enabled board. */
+export function buildCompanyQueries(search: SearchConfig, companies: readonly WatchedCompanyBoard[], baseWindowHours: number): SearchQuery[] {
+  if (!search.watched_company_queries.enabled) return [];
+  const seen = new Set<string>();
+  return companies.filter(({ key, hasBoard }) => {
+    if (hasBoard || key === "" || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).map(({ name, key }) => {
+    const parts = { keywords: [name], keywordGroup: `company:${key}`, location: null, remote: false, remoteScope: null, company: { name, key } };
+    return { ...parts, id: queryId(parts), windowHours: baseWindowHours, maxResults: search.watched_company_queries.max_results };
+  });
 }
 
 /** The query as a channel receives it: never asks for more than the channel's own `max_results`. */

@@ -16,6 +16,8 @@ export const DETAIL_PATH = "pc/v4/jobdetails";
 /** The API accepts 1..100 days for `veroeffentlichtseit`; 0 returns nothing. */
 export const MIN_PUBLISHED_DAYS = 1;
 export const MAX_PUBLISHED_DAYS = 100;
+/** The employer-name parameter returned no hits in a live comparison; use free text and post-filtering. */
+export const COMPANY_PARAM: "arbeitgeber" | "was" = "was";
 
 type ClientSettings = Pick<ArbeitsagenturSettings, "base_url" | "api_key" | "radius_km">;
 
@@ -29,6 +31,7 @@ export interface SearchParams {
   /** 1-based page number. */
   page: number;
   size: number;
+  kind?: "city" | "remote" | "company";
 }
 
 /** `veroeffentlichtseit` for a look-back window: whole days, rounded up, within what the API accepts. */
@@ -45,8 +48,8 @@ function headers(settings: ClientSettings): Record<string, string> {
 }
 
 export function searchUrl(settings: ClientSettings, params: SearchParams): string {
-  const query = new URLSearchParams({ was: params.term });
-  if (params.location !== null) {
+  const query = new URLSearchParams({ [params.kind === "company" ? COMPANY_PARAM : "was"]: params.term });
+  if (params.kind !== "company" && params.location !== null) {
     query.set("wo", params.location);
     query.set("umkreis", String(settings.radius_km));
   }
