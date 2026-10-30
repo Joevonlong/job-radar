@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
 import { listJobs } from "@/lib/db/queries/jobs";
@@ -32,9 +33,10 @@ it("backfills existing rows, restores timeouts, and changes fallback to projecti
     const journalPath = path.join(folder, "meta/_journal.json");
     const journal = JSON.parse(await fs.readFile(journalPath, "utf8")) as { entries: { idx: number; version: string; when: number; tag: string; breakpoints: boolean }[] };
     const last = journal.entries.at(-1)!;
-    journal.entries.push({ ...last, idx: last.idx + 1, when: last.when + 1, tag: "0045_timeout_probe" });
+    const probeTag = `${String(last.idx + 1).padStart(4, "0")}_timeout_probe`;
+    journal.entries.push({ ...last, idx: last.idx + 1, when: last.when + 1, tag: probeTag });
     await fs.writeFile(journalPath, JSON.stringify(journal));
-    await fs.writeFile(path.join(folder, "0045_timeout_probe.sql"), "create table migration_timeout_probe as select current_setting('lock_timeout') as lock_timeout, current_setting('statement_timeout') as statement_timeout;");
+    await fs.writeFile(path.join(folder, `${probeTag}.sql`), "create table migration_timeout_probe as select current_setting('lock_timeout') as lock_timeout, current_setting('statement_timeout') as statement_timeout;");
     await runMigrations({ url: c.url, migrationsFolder: folder, currentScoresBackfill: backfill });
     source = await currentScore(c.db, "set"); expect(withCurrentScore(c.db, source).select().from(source).toSQL().sql).not.toContain("distinct on");
     await expectNoDrift(c.db);
@@ -59,9 +61,28 @@ it("rolls back the complete migration on lock timeout, then succeeds on retry", 
 it("refuses a raw migration without timeout GUCs and rolls back DDL", async () => {
   const c = await beforeProjection();
   try {
-    const migration = await fs.readFile("drizzle/0044_job_current_scores.sql", "utf8");
+    const file = (await fs.readdir("drizzle")).find((name) => name.endsWith("_job_current_scores.sql"));
+    if (!file) throw new Error("Current score migration is missing");
+    const migration = await fs.readFile(path.join("drizzle", file), "utf8");
     await expect(c.db.transaction(async (tx) => { for (const statement of migration.split("--> statement-breakpoint")) await tx.execute(sql.raw(statement)); })).rejects.toThrow();
     expect(await currentScoresTableExists(c.db)).toBe(false);
     await repairCurrentScores(c.db, []);
+  } finally { await c.close(); }
+});
+
+it("the direct migration command applies configured limits to its explicit test database", async () => {
+  const c = await beforeProjection();
+  try {
+    const refused = spawnSync(process.execPath, ["--import", "tsx", "scripts/db-migrate.ts", "--config", "unexpected"], {
+      cwd: process.cwd(), env: { ...process.env, DATABASE_URL: c.url }, encoding: "utf8", timeout: 60000,
+    });
+    expect(refused.status).not.toBe(0);
+    expect(await currentScoresTableExists(c.db)).toBe(false);
+    const result = spawnSync(process.execPath, ["--import", "tsx", "scripts/db-migrate.ts"], {
+      cwd: process.cwd(), env: { ...process.env, DATABASE_URL: c.url }, encoding: "utf8", timeout: 60000,
+    });
+    expect(result.status, result.stderr).toBe(0);
+    expect(await currentScoresTableExists(c.db)).toBe(true);
+    await expectNoDrift(c.db);
   } finally { await c.close(); }
 });

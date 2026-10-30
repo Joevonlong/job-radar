@@ -7130,6 +7130,7 @@
   "currentScores": {
     "missing": "Current score projection is not migrated.",
     "rebuilt": "Rebuilt {count} job projections.",
-    "checked": "Jobs with projection differences: {count}."
+    "checked": "Jobs with projection differences: {count}.",
+    "migrated": "Database migrations complete."
   }
 }

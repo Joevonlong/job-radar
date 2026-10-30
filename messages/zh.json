@@ -7130,6 +7130,7 @@
   "currentScores": {
     "missing": "当前分数投影尚未迁移。",
     "rebuilt": "已重建 {count} 个岗位投影。",
-    "checked": "投影存在差异的岗位：{count}。"
+    "checked": "投影存在差异的岗位：{count}。",
+    "migrated": "数据库迁移已完成。"
   }
 }
