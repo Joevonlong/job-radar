@@ -1,3 +1,4 @@
+import { withRebuiltCurrentScores } from "../helpers/current-scores";
 import fs from "node:fs";
 
 import { eq, sql } from "drizzle-orm";
@@ -31,7 +32,7 @@ let temp: TempConfig;
 
 beforeAll(async () => {
   process.env.DATABASE_URL = url;
-  await runMigrations();
+  await runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 } });
   await api.start();
 });
 
@@ -82,7 +83,7 @@ async function seedJob(job: { title: string; company?: string; rank?: number; ma
     .returning();
   const id = row!.id;
   if (job.rank !== undefined) {
-    await db().insert(schema.scores).values({ jobId: id, filterResult: "passed", score: job.match ?? job.rank, signalBonus: job.bonus ?? 0, rankValue: job.rank, summaryZh: `${job.title} 的摘要` });
+    await withRebuiltCurrentScores(db(), db().insert(schema.scores).values({ jobId: id, filterResult: "passed", score: job.match ?? job.rank, signalBonus: job.bonus ?? 0, rankValue: job.rank, summaryZh: `${job.title} 的摘要` }));
   }
   for (const tier of job.tiers ?? []) await db().insert(schema.signals).values({ jobId: id, tier, kind: "test", quote: "quoted text", extractor: "rule" });
   return id;

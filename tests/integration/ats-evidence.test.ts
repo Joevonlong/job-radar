@@ -32,7 +32,7 @@ const middleOk = new Date("2026-09-20T12:00:00Z");
 
 beforeAll(async () => {
   process.env.DATABASE_URL = url;
-  await runMigrations();
+  await runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 } });
 });
 
 beforeEach(async () => {
@@ -404,7 +404,7 @@ describe("upgrading legacy ATS board evidence", () => {
       lastChangedAt: checked, externalIds: ["D"], detailRetryIds: ["unresolved"], lastTotal: 2, lastKept: 1,
     });
     // Re-upgrading does not rerun a migration recorded in the journal.
-    await runMigrations();
+    await runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 } });
     expect(await getAtsBoard(db, key)).toEqual(legacy);
 
     const other = company({ name: "Other Labs", ats: "smartrecruiters", token: "OtherLabs" });
@@ -458,7 +458,7 @@ describe("upgrading legacy ATS board evidence", () => {
       expect(added).toBeDefined();
       if (!added) return; // The assertion is the red result when the migration has not been authored yet.
       fs.writeFileSync(journalFile, JSON.stringify({ ...journal, entries: journal.entries.filter((entry) => entry.idx < added.idx) }));
-      await runMigrations({ url: target.toString(), migrationsFolder: folder });
+      await runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 }, url: target.toString(), migrationsFolder: folder });
 
       // runCycle holds one connection for its advisory lock while the collector uses the pool.
       const connection = createConnection(target.toString(), { max: 3 });
@@ -476,11 +476,11 @@ describe("upgrading legacy ATS board evidence", () => {
           lastChangedAt: checked, externalIds: [details[0]!.id], lastTotal: 2, lastKept: 1,
         });
         fs.writeFileSync(journalFile, JSON.stringify({ ...journal, entries: journal.entries.filter((entry) => entry.idx <= added.idx) }));
-        await runMigrations({ url: target.toString(), migrationsFolder: folder });
+        await runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 }, url: target.toString(), migrationsFolder: folder });
         expect.soft(await getAtsBoard(db, { ats: "smartrecruiters", token: srBoard.token })).toEqual({ ...before, lastOkAt: null, etag: null });
 
         // A current runner applies all pending migrations before collecting; keep the reset assertion above isolated.
-        await runMigrations({ url: target.toString() });
+        await runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 }, url: target.toString() });
 
         let complete = false;
         const { fetch, requests } = routedFetch([

@@ -1,3 +1,4 @@
+import { withRebuiltCurrentScores } from "../helpers/current-scores";
 import { count, eq, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { afterAll, beforeAll, beforeEach, expect, inject, it } from "vitest";
@@ -39,16 +40,16 @@ beforeEach(async () => {
     const pending = index === 2 || index === 5;
     if (index === 2 || index === 7 || index === 9) {
       // A timestamp tie must pick the higher score id; pending rows use this scored fallback.
-      await db.insert(schema.scores).values({ jobId: job.id, filterResult: "passed", score: 40, rankValue: 41, createdAt: ago(2) });
-      await db.insert(schema.scores).values({ jobId: job.id, filterResult: "passed", score: 80, rankValue: 82.5,
-        signalBonus: 2.5, germanLevel: "C1", summaryEn: "Fallback summary", summaryZh: "Fallback translation", outputLang: "en", createdAt: ago(2) });
+      await withRebuiltCurrentScores(db, db.insert(schema.scores).values({ jobId: job.id, filterResult: "passed", score: 40, rankValue: 41, createdAt: ago(2) }));
+      await withRebuiltCurrentScores(db, db.insert(schema.scores).values({ jobId: job.id, filterResult: "passed", score: 80, rankValue: 82.5,
+        signalBonus: 2.5, germanLevel: "C1", summaryEn: "Fallback summary", summaryZh: "Fallback translation", outputLang: "en", createdAt: ago(2) }));
     }
-    if (index !== 7) await db.insert(schema.scores).values({
+    if (index !== 7) await withRebuiltCurrentScores(db, db.insert(schema.scores).values({
       jobId: job.id, filterResult: filtered ? "filtered_out" : "passed", filterReasons: filtered ? ["contract"] : [],
       score: filtered || pending ? null : 70, rankValue: filtered || pending ? null : 72.5, signalBonus: 2.5,
       germanLevel: pending ? "B1" : "A2", stale: index === 8,
       summaries: { en: `Summary ${index}`, zh: `Translation ${index}` }, outputLang: "en", createdAt: ago(1),
-    });
+    }));
     await db.insert(schema.signals).values({ jobId: job.id, tier: "skills", kind: "kw", quote: "Python", extractor: "rule" });
     if (index === 0) {
       await db.insert(schema.jobFavorites).values({ jobId: job.id });

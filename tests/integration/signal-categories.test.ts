@@ -1,3 +1,4 @@
+import { withRebuiltCurrentScores } from "../helpers/current-scores";
 /**
  * Signal categories against Postgres: the `signal_tier` enum becomes text (migration on live data), deleted categories keep their
  * rows through rescans and AI reviews, the high-value rule in SQL, the per-category counts, and the AI review of a
@@ -45,7 +46,7 @@ async function newJob(title: string, description: string, score = 60): Promise<n
   const db = getDb();
   const [company] = await db.insert(schema.companies).values({ name: `Co ${title}`, nameNorm: `co ${title}`.toLowerCase() }).returning({ id: schema.companies.id });
   const [job] = await db.insert(schema.jobs).values({ companyId: company!.id, title, titleNorm: title.toLowerCase(), description }).returning({ id: schema.jobs.id });
-  await db.insert(schema.scores).values({ jobId: job!.id, filterResult: "passed", score, rankValue: score });
+  await withRebuiltCurrentScores(db, db.insert(schema.scores).values({ jobId: job!.id, filterResult: "passed", score, rankValue: score }));
   return job!.id;
 }
 
@@ -55,7 +56,7 @@ const resetTables = () => getDb().execute(sql`truncate table jobs, companies res
 
 beforeAll(async () => {
   process.env.DATABASE_URL = url;
-  await runMigrations();
+  await runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 } });
 });
 beforeEach(resetTables);
 afterAll(async () => {
@@ -80,7 +81,7 @@ describe("migration 0024: signals.tier enum -> text", () => {
       const last = journal.entries.find((entry) => entry.tag.endsWith("_signal_category_text"));
       if (!last) throw new Error("migration not found");
       fs.writeFileSync(journalFile, JSON.stringify({ ...journal, entries: journal.entries.filter((entry) => entry.idx < last.idx) }));
-      await runMigrations({ url: target.toString(), migrationsFolder: folder });
+      await runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 }, url: target.toString(), migrationsFolder: folder });
 
       const db = postgres(target.toString(), { max: 1, onnotice: () => {} });
       try {
@@ -89,7 +90,7 @@ describe("migration 0024: signals.tier enum -> text", () => {
         for (const tier of ["T1", "T2", "T3", "T4", "tag"]) await db`insert into signals (job_id, tier, kind, quote, extractor) values (1, ${tier}, 'k', ${`quote ${tier}`}, 'rule')`;
         const before = await db`select id, tier::text as tier, kind, quote from signals order by id`;
 
-        await runMigrations({ url: target.toString() });
+        await runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 }, url: target.toString() });
         const after = await db`select id, tier, kind, quote from signals order by id`;
         expect(after).toEqual(before);
         const [column] = await db`select data_type from information_schema.columns where table_name = 'signals' and column_name = 'tier'`;

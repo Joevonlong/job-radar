@@ -1,3 +1,5 @@
+import { withRebuiltCurrentScores } from "../helpers/current-scores";
+import { scoreTransaction } from "@/lib/db/repos/current-scores";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -65,7 +67,7 @@ async function addJob(title: string, description: string | null = JD, german = "
     .insert(schema.jobs)
     .values({ companyId: company!.id, title, titleNorm: title.toLowerCase(), description, germanLevelRequired: german, status: "active", firstSeenAt: new Date(NOW.getTime() - 3_600_000) })
     .returning();
-  await getDb().insert(schema.scores).values({ jobId: job!.id, profileSnapshotId: await currentSnapshot(), filterResult: "passed" });
+  await withRebuiltCurrentScores(getDb(), getDb().insert(schema.scores).values({ jobId: job!.id, profileSnapshotId: await currentSnapshot(), filterResult: "passed" }));
   return job!.id;
 }
 
@@ -90,7 +92,7 @@ const resetTables = () => getDb().execute(sql`truncate table jobs, companies, sc
 
 beforeAll(async () => {
   process.env.DATABASE_URL = url;
-  await runMigrations();
+  await runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 } });
 });
 
 beforeEach(async () => {
@@ -187,7 +189,7 @@ describe("storing the sources", () => {
     await runScoring(deps(fakeOn, on), { limit: 5 });
     expect((await latest(id)).reasonEvidence).not.toBeNull();
 
-    await markScoresStaleExcept(getDb(), 987654321);
+    await scoreTransaction(getDb(), (tx) => markScoresStaleExcept(tx, 987654321));
     const off = withEvidence(false);
     const fakeOff = fakeAi(off);
     const result = await rescoreStale(deps(fakeOff, off));
@@ -204,8 +206,8 @@ describe("storing the sources", () => {
     for (const title of ["Backlog", "Chosen", "Stale"]) fake.replies.set(title, sourced());
     const stale = await addJob("Stale");
     await runScoring(deps(fake, config), { limit: 5 });
-    await getDb().update(schema.scores).set({ reasonEvidence: null }).where(eq(schema.scores.jobId, stale));
-    await markScoresStaleExcept(getDb(), 987654321);
+    await withRebuiltCurrentScores(getDb(), getDb().update(schema.scores).set({ reasonEvidence: null }).where(eq(schema.scores.jobId, stale)));
+    await scoreTransaction(getDb(), (tx) => markScoresStaleExcept(tx, 987654321));
     await rescoreStale(deps(fake, config));
     const backlog = await addJob("Backlog");
     await scoreBacklog(deps(fake, config));
@@ -248,7 +250,7 @@ describe("the detail page", () => {
     const fake = fakeAi(config);
     fake.replies.set("Detail sourced", sourced());
     await runScoring(deps(fake, config), { limit: 5 });
-    await getDb().update(schema.scores).set({ reasonEvidence: null }).where(eq(schema.scores.jobId, legacyId));
+    await withRebuiltCurrentScores(getDb(), getDb().update(schema.scores).set({ reasonEvidence: null }).where(eq(schema.scores.jobId, legacyId)));
     expect((await getJobDetail(getDb(), sourcedId))?.score?.reasonEvidence).toMatchObject({ fit: [{ basis: "jd", quote: "5+ years of Python" }, { basis: "inferred" }], gaps: [{ basis: "unstated" }] });
     expect((await getJobDetail(getDb(), legacyId))?.score?.reasonEvidence).toBeNull();
   });
@@ -259,7 +261,7 @@ describe("the detail page", () => {
     const fake = fakeAi(config);
     fake.replies.set("Mismatch", sourced());
     await runScoring(deps(fake, config), { limit: 5 });
-    await getDb().update(schema.scores).set({ fitReasons: ["only one"] }).where(eq(schema.scores.jobId, id));
+    await withRebuiltCurrentScores(getDb(), getDb().update(schema.scores).set({ fitReasons: ["only one"] }).where(eq(schema.scores.jobId, id)));
     const detail = await getJobDetail(getDb(), id);
     expect(detail?.score?.fitReasons).toEqual(["only one"]);
     expect(detail?.score?.reasonEvidence).toBeNull();
@@ -308,7 +310,7 @@ describe("before and after the migration", () => {
       await getDb().execute(sql`alter table scores add column if not exists reason_evidence jsonb`);
     }
     // once migrated, the next score stores its sources (the probe does not cache a missing column)
-    await markScoresStaleExcept(getDb(), 987654321);
+    await scoreTransaction(getDb(), (tx) => markScoresStaleExcept(tx, 987654321));
     const config = withEvidence(true);
     const fake = fakeAi(config);
     fake.replies.set("Early worker", sourced());

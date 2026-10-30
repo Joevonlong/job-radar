@@ -1,3 +1,4 @@
+import type { ScoreTx } from "./current-scores";
 import { and, asc, eq, gt, inArray, isNotNull, ne, sql } from "drizzle-orm";
 
 import type { Executor } from "../executor";
@@ -106,26 +107,29 @@ export interface NewFilterResult {
  * Store the filter result of jobs that have none under this snapshot. One row per (job, snapshot):
  * the partial unique index makes a repeated insert a no-op. Returns the number of rows written.
  */
-export async function insertFilterResults(db: Executor, snapshotId: number, rows: readonly NewFilterResult[]): Promise<number> {
+export async function insertFilterResults(db: ScoreTx, snapshotId: number, rows: readonly NewFilterResult[]): Promise<number> {
   if (rows.length === 0) return 0;
   if (!(await changeFingerprintsReady(db))) {
     // A regular Drizzle INSERT lists all nullable columns as DEFAULT, including the not-yet-added hashes.
     const values = rows.map((row) => sql`(${row.jobId}, ${snapshotId}, ${row.filterResult}::filter_result, ${sql.param(row.filterReasons, scores.filterReasons)})`);
-    const written = await db.execute(sql`insert into scores (job_id, profile_snapshot_id, filter_result, filter_reasons)
+    const written = await db.execute<{ job_id: number }>(sql`insert into scores (job_id, profile_snapshot_id, filter_result, filter_reasons)
       values ${sql.join(values, sql`, `)} on conflict (job_id, profile_snapshot_id) where profile_snapshot_id is not null
-      do nothing returning id`);
+      do nothing returning job_id`);
+    db.touch(written.map((row) => Number(row.job_id)));
     return written.count;
   }
   const written = await db
     .insert(scores)
     .values(rows.map((r) => ({ ...r, profileSnapshotId: snapshotId })))
     .onConflictDoNothing({ target: [scores.jobId, scores.profileSnapshotId], where: isNotNull(scores.profileSnapshotId) })
-    .returning({ id: scores.id });
+    .returning({ jobId: scores.jobId });
+  db.touch(written.map((row) => row.jobId));
   return written.length;
 }
 
 /** Replace the filter result of an existing row (the job changed). The AI fields of the row are left alone. */
-export async function updateFilterResult(db: Executor, scoreId: number, result: Omit<NewFilterResult, "jobId">): Promise<void> {
+export async function updateFilterResult(db: ScoreTx, scoreId: number, result: Omit<NewFilterResult, "jobId">): Promise<void> {
   const values = await changeFingerprintsReady(db) ? result : { filterResult: result.filterResult, filterReasons: result.filterReasons };
-  await db.update(scores).set(values).where(eq(scores.id, scoreId));
+  const rows = await db.update(scores).set(values).where(eq(scores.id, scoreId)).returning({ jobId: scores.jobId });
+  db.touch(rows.map((row) => row.jobId));
 }

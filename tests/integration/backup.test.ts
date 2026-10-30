@@ -36,7 +36,7 @@ function urlOf(database: string): string {
 
 beforeAll(async () => {
   process.env.DATABASE_URL = url;
-  await runMigrations();
+  await runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 } });
   tools = await resolvePgTools(url);
   // CI provides the client tools and sets REQUIRE_PG_TOOLS, so the real dump/restore tests cannot pass by skipping.
   if (tools === null && process.env.REQUIRE_PG_TOOLS) throw new Error("REQUIRE_PG_TOOLS is set but no usable pg_dump / pg_restore was found");

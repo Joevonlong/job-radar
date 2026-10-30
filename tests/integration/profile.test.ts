@@ -1,3 +1,4 @@
+import { withRebuiltCurrentScores } from "../helpers/current-scores";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -20,7 +21,7 @@ let temp: TempConfig;
 
 beforeAll(async () => {
   process.env.DATABASE_URL = url;
-  await runMigrations();
+  await runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 } });
 });
 
 afterAll(async () => {
@@ -32,7 +33,7 @@ beforeEach(async () => {
   temp = makeTempConfig();
   await ensureProfileFiles();
   const db = getDb();
-  await db.delete(schema.scores);
+  await withRebuiltCurrentScores(db, db.delete(schema.scores));
   await db.delete(schema.jobs);
   await db.delete(schema.companies);
   await db.delete(schema.profileSnapshots);
@@ -58,7 +59,7 @@ async function seedScores(snapshotId: number | null, count = 2): Promise<void> {
     if (!company) throw new Error("company");
     const [job] = await db.insert(schema.jobs).values({ companyId: company.id, title: "AI Engineer", titleNorm: "ai engineer" }).returning();
     if (!job) throw new Error("job");
-    await db.insert(schema.scores).values({ jobId: job.id, profileSnapshotId: snapshotId, filterResult: "passed", score: 70 });
+    await withRebuiltCurrentScores(db, db.insert(schema.scores).values({ jobId: job.id, profileSnapshotId: snapshotId, filterResult: "passed", score: 70 }));
   }
 }
 

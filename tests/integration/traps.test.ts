@@ -1,3 +1,5 @@
+import { withRebuiltCurrentScores } from "../helpers/current-scores";
+import { scoreTransaction } from "@/lib/db/repos/current-scores";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -108,7 +110,7 @@ const TABLES = "job_traps, trap_scans, jobs, companies, raw_postings, job_source
 
 beforeAll(async () => {
   process.env.DATABASE_URL = url;
-  await runMigrations();
+  await runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 } });
 });
 
 beforeEach(async () => {
@@ -200,7 +202,7 @@ describe("the rule scan", () => {
     const red = await addJob({ html: RED_HTML });
     const plain = await addJob();
     for (const { jobId } of [red, plain]) {
-      await db().insert(schema.scores).values({ jobId, filterResult: "passed", score: 70, rankValue: 70, scoredAt: new Date("2026-01-01T00:00:00Z"), stale: false });
+      await withRebuiltCurrentScores(db(), db().insert(schema.scores).values({ jobId, filterResult: "passed", score: 70, rankValue: 70, scoredAt: new Date("2026-01-01T00:00:00Z"), stale: false }));
       const [job] = await db().select({ description: schema.jobs.description }).from(schema.jobs).where(eq(schema.jobs.id, jobId));
       await db().insert(schema.translations).values({ jobId, lang: "zh", content: "译文", sourceHash: descriptionHash(job!.description) });
       await db().insert(schema.jobBreakdowns).values({ jobId, sourceHash: descriptionHash(job!.description), promptVersion: "breakdown-v1", content: {}, outputLang: "zh" });
@@ -218,7 +220,7 @@ describe("the rule scan", () => {
     expect(await snapshot()).toEqual(before);
 
     expect(await countTrappedScores(db())).toBe(1);
-    expect(await markTrappedScoresStale(db())).toEqual([red.jobId]);
+    expect(await scoreTransaction(db(), (tx) => markTrappedScoresStale(tx))).toEqual([red.jobId]);
     const stale = await db().select({ jobId: schema.scores.jobId, stale: schema.scores.stale }).from(schema.scores).orderBy(schema.scores.jobId);
     expect(stale).toEqual([
       { jobId: red.jobId, stale: true },
@@ -278,7 +280,7 @@ describe("what the AI tasks read", () => {
     const ai = fakeAi();
     const profile: ScoringProfile = { me: fixedMe(), preferences: fixedPreferences(), meYaml: stringify(fixedMe()), preferencesYaml: stringify(fixedPreferences()) };
     const snapshotId = await currentPreferencesSnapshotId(db(), profile);
-    await db().insert(schema.scores).values({ jobId: red.jobId, profileSnapshotId: snapshotId, filterResult: "passed" });
+    await withRebuiltCurrentScores(db(), db().insert(schema.scores).values({ jobId: red.jobId, profileSnapshotId: snapshotId, filterResult: "passed" }));
     const scored = await runScoring({ db: db(), router: ai.router, config: aiConfig(), logger: quietLogger, now: () => NOW, loadProfile: async () => profile, loadBonusCap: () => 15, loadSearchTerms: () => [] }, { limit: 5 });
     expect(scored.scored).toBe(1);
 

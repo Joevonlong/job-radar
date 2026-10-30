@@ -1,3 +1,4 @@
+import { currentScoresBackfill } from "../src/lib/db/current-scores-config";
 /**
  * Run the signal extraction on real jobs and print what it found.
  *
@@ -29,7 +30,7 @@ async function main(): Promise<number> {
     console.error("smoke:signals: pass --jobs <id,id,...> (or --no-ai for the rule stage only)");
     return 2;
   }
-  await runMigrations();
+  await runMigrations({ currentScoresBackfill: currentScoresBackfill() });
   const db = getDb();
   const interests = loadConfig("interests");
   const pipeline = loadPipeline();

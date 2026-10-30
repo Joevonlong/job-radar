@@ -309,6 +309,13 @@
       "when": 1793248647393,
       "tag": "0043_job_listing_relist",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1793329831063,
+      "tag": "0044_job_current_scores",
+      "breakpoints": true
     }
   ]
 }

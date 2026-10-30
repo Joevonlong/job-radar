@@ -1,3 +1,4 @@
+import { withRebuiltCurrentScores } from "../helpers/current-scores";
 import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, inject } from "vitest";
 
@@ -43,7 +44,7 @@ async function jobIdByTitle(title: string): Promise<number> {
 
 beforeAll(async () => {
   process.env.DATABASE_URL = url;
-  await runMigrations();
+  await runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 } });
 });
 
 // Every test starts from the same freshly seeded database, so none depends on what an earlier test wrote
@@ -598,7 +599,7 @@ describe("today's cycles", () => {
       .returning({ id: schema.jobs.id, title: schema.jobs.title });
     const id = (title: string) => created.find((j) => j.title === title)!.id;
     const score = (title: string, filterResult: "passed" | "filtered_out", rankValue: number | null) => ({ jobId: id(title), filterResult, rankValue, score: rankValue, filterReasons: [] });
-    await db.insert(schema.scores).values([score("cyc-a", "passed", 82), score("cyc-b", "passed", 55), score("cyc-c", "filtered_out", null), score("cyc-d", "passed", 71), { ...score("cyc-e", "passed", 80), scoredAt: new Date("2031-03-05T10:28:00Z") }]);
+    await withRebuiltCurrentScores(db, db.insert(schema.scores).values([score("cyc-a", "passed", 82), score("cyc-b", "passed", 55), score("cyc-c", "filtered_out", null), score("cyc-d", "passed", 71), { ...score("cyc-e", "passed", 80), scoredAt: new Date("2031-03-05T10:28:00Z") }]));
     try {
       const list = await listTodayCycleSummaries(db, { now: DAY, timezone: TZ, qualifiedMinRank: 70 });
       // yesterday's cycle and the skipped one are not part of the day

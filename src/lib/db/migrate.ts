@@ -18,12 +18,16 @@ export function resolveMigrationsFolder(configured?: string): string {
  * Uses its own single-connection client so the migration never competes with the pool.
  * `MIGRATIONS_DIR` (default `drizzle`, relative to the working directory) locates the SQL files.
  */
-export async function runMigrations(options: { url?: string; migrationsFolder?: string } = {}): Promise<void> {
+export async function runMigrations(options: { url?: string; migrationsFolder?: string; currentScoresBackfill: { lockTimeoutMs: number; statementTimeoutMs: number } }): Promise<void> {
   const env = loadDatabaseEnv(options.url ? { ...process.env, DATABASE_URL: options.url } : process.env);
   const folder = resolveMigrationsFolder(options.migrationsFolder ?? env.MIGRATIONS_DIR);
 
   const connection = createConnection(env.DATABASE_URL, { max: 1 });
   try {
+    const { lockTimeoutMs, statementTimeoutMs } = options.currentScoresBackfill;
+    if (!Number.isSafeInteger(lockTimeoutMs) || lockTimeoutMs < 100 || !Number.isSafeInteger(statementTimeoutMs) || statementTimeoutMs < 1000) throw new Error("Invalid current score backfill timeouts");
+    await connection.sql`select set_config('job_radar.current_scores_backfill_lock_timeout_ms', ${String(lockTimeoutMs)}, false),
+      set_config('job_radar.current_scores_backfill_statement_timeout_ms', ${String(statementTimeoutMs)}, false)`;
     await migrate(connection.db, { migrationsFolder: folder });
   } finally {
     await connection.sql.end({ timeout: 5 });

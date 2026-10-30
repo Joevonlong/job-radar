@@ -1,3 +1,4 @@
+import type { ScoreTx } from "./current-scores";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 
 import type { Executor } from "../executor";
@@ -378,17 +379,18 @@ const BONUS_CHUNK = 500;
 const numberArray = (values: ReadonlyArray<number | null>): string => `{${values.map((v) => (v === null ? "NULL" : String(v))).join(",")}}`;
 
 /** Write the bonuses (and rank values) of many `scores` rows: one statement per `BONUS_CHUNK` rows, not one per row. */
-export async function setScoreBonuses(db: Executor, updates: readonly ScoreBonusUpdate[]): Promise<void> {
+export async function setScoreBonuses(db: ScoreTx, updates: readonly ScoreBonusUpdate[]): Promise<void> {
   for (let i = 0; i < updates.length; i += BONUS_CHUNK) {
     const part = updates.slice(i, i + BONUS_CHUNK);
-    await db.execute(sql`
+    const rows = await db.execute<{ job_id: number }>(sql`
       update ${scores} set signal_bonus = v.signal_bonus, rank_value = v.rank_value
       from (
         select unnest(${numberArray(part.map((u) => u.scoreId))}::bigint[]) as id,
           unnest(${numberArray(part.map((u) => u.signalBonus))}::numeric[]) as signal_bonus,
           unnest(${numberArray(part.map((u) => u.rankValue))}::numeric[]) as rank_value
       ) v
-      where ${scores.id} = v.id
+      where ${scores.id} = v.id returning scores.job_id
     `);
+    db.touch(rows.map((row) => Number(row.job_id)));
   }
 }

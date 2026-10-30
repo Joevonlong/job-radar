@@ -1,3 +1,4 @@
+import { withRebuiltCurrentScores } from "../helpers/current-scores";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -28,7 +29,7 @@ let exportDir: string;
 
 beforeAll(async () => {
   process.env.DATABASE_URL = url;
-  await runMigrations();
+  await runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 } });
   await api.start();
 });
 
@@ -65,7 +66,7 @@ async function seedJob(input: { title: string; company?: string; description?: s
     })
     .returning();
   const id = row!.id;
-  await db().insert(schema.scores).values({ jobId: id, filterResult: "passed", score: 80, signalBonus: 4, rankValue: 84, summaryZh: "摘要" });
+  await withRebuiltCurrentScores(db(), db().insert(schema.scores).values({ jobId: id, filterResult: "passed", score: 80, signalBonus: 4, rankValue: 84, summaryZh: "摘要" }));
   await db().insert(schema.signals).values({ jobId: id, tier: "T2", kind: "equity", quote: "We offer equity.", extractor: "rule" });
   return id;
 }

@@ -44,7 +44,7 @@ async function jobIdByTitle(title: string): Promise<number> {
 
 beforeAll(async () => {
   process.env.DATABASE_URL = url;
-  await runMigrations();
+  await runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 } });
 });
 
 // Every test starts from the same freshly seeded board: no test depends on the moves an earlier one made.

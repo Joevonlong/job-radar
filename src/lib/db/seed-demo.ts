@@ -1,3 +1,4 @@
+import { scoreTransaction, type ScoreTx } from "./repos/current-scores";
 import { and, eq, inArray, like, sql } from "drizzle-orm";
 
 import { greenhouseAdapter } from "@/lib/channels/ats/greenhouse";
@@ -166,13 +167,14 @@ async function healthyRun(db: Executor): Promise<void> {
 }
 
 /** Real provider and model ids on the AI rows, and a summary per scored job. */
-async function realisticAi(db: Executor, ids: ReadonlyMap<string, number>): Promise<void> {
+async function realisticAi(db: ScoreTx, ids: ReadonlyMap<string, number>): Promise<void> {
   await db.update(scores).set({ provider: DEMO_AI.provider, model: DEMO_AI.model }).where(eq(scores.provider, "seed"));
   await db.update(translations).set({ provider: DEMO_AI.provider }).where(eq(translations.provider, "seed"));
   await db.update(jobBreakdowns).set({ provider: DEMO_AI.provider, model: DEMO_AI.model }).where(eq(jobBreakdowns.provider, "seed"));
   for (const [key, summary] of Object.entries(DEMO_SUMMARIES)) {
     const jobId = ids.get(key);
     if (jobId === undefined) continue;
+    db.touch([jobId]);
     await db.update(scores).set({ summaryEn: summary.en, summaryZh: summary.zh, summaries: { en: summary.en, zh: summary.zh } }).where(eq(scores.jobId, jobId));
   }
 }
@@ -205,7 +207,7 @@ export async function seedDemoDatabase(db: Executor, options: SeedOptions): Prom
   const now = options.now ?? new Date();
   const result = await seedDatabase(db, { ...options, now });
   const ids = await jobIdsByKey(db, [...new Set([...DEMO_APPLICATIONS.map((a) => a.jobKey), DEMO_TRAP_JOB_KEY, ...Object.keys(DEMO_SUMMARIES)])]);
-  await db.transaction(async (tx) => {
+  await scoreTransaction(db, async (tx) => {
     const jobIds = DEMO_APPLICATIONS.flatMap((a) => (ids.has(a.jobKey) ? [ids.get(a.jobKey) as number] : []));
     // the seed run removed them already; this keeps a direct second call (without the seed) from stacking events
     if (jobIds.length > 0) await tx.delete(applications).where(inArray(applications.jobId, jobIds));
@@ -223,6 +225,6 @@ export async function seedDemoDatabase(db: Executor, options: SeedOptions): Prom
   if (trapJob === undefined) throw new Error(`seed-demo: seeded job ${DEMO_TRAP_JOB_KEY} is missing`);
   await addDemoTrap(db, trapJob);
   await healthyRun(db);
-  await realisticAi(db, ids);
+  await scoreTransaction(db, (tx) => realisticAi(tx, ids));
   return { ...result, applications: result.applications + DEMO_APPLICATIONS.length, demoApplications: DEMO_APPLICATIONS.length };
 }

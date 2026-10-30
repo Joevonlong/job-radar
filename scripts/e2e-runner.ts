@@ -1,3 +1,4 @@
+import { currentScoresBackfill } from "../src/lib/db/current-scores-config";
 /**
  * A stand-in for the runner process, started by e2e/global-setup.ts for the Playwright run.
  *
@@ -51,7 +52,7 @@ const BACKFILL_GATE_TIMEOUT = "30s";
 process.stdout.on("error", () => {});
 const log = (message: string) => console.log(`e2e-runner: ${message}`);
 
-await runMigrations();
+await runMigrations({ currentScoresBackfill: currentScoresBackfill() });
 const db = getDb();
 const abort = new AbortController();
 for (const signal of ["SIGTERM", "SIGINT"] as const) process.on(signal, () => abort.abort());

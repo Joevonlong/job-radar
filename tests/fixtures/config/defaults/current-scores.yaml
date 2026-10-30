@@ -1,0 +1,9 @@
+config_version: 1
+backfill:
+  # Maximum wait for the migration's SHARE lock, in milliseconds (100–60000).
+  lock_timeout_ms: 3000
+  # Maximum duration of the backfill statement, in milliseconds (1000–600000).
+  statement_timeout_ms: 60000
+refresh:
+  # Use indexed LATERAL lookups up to this many jobs; larger sets use a scoped CTE (1–100000).
+  lateral_max_jobs: 200

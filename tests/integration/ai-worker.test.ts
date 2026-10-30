@@ -1,3 +1,4 @@
+import { withRebuiltCurrentScores } from "../helpers/current-scores";
 import fs from "node:fs";
 import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -60,7 +61,7 @@ const resetTables = () => db().execute(sql.raw(`truncate table ${TABLES} restart
 
 beforeAll(async () => {
   process.env.DATABASE_URL = url;
-  await runMigrations();
+  await runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 } });
   await api.start();
 });
 
@@ -139,7 +140,7 @@ async function addJob(title: string, description = `We are hiring a ${title} to 
     .values({ companyId: company!.id, title, titleNorm: title.toLowerCase(), description, language: "en", firstSeenAt: new Date(Date.now() + 60_000) })
     .returning();
   const snapshotId = await currentPreferencesSnapshotId(db(), profile());
-  await db().insert(schema.scores).values({ jobId: job!.id, profileSnapshotId: snapshotId, filterResult: "passed" });
+  await withRebuiltCurrentScores(db(), db().insert(schema.scores).values({ jobId: job!.id, profileSnapshotId: snapshotId, filterResult: "passed" }));
   return job!.id;
 }
 

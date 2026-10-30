@@ -1,3 +1,4 @@
+import type { ScoreTx } from "./current-scores";
 import { and, count, desc, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 
 import type { ReasonEvidence } from "@/lib/scoring/evidence";
@@ -24,12 +25,13 @@ const hasAiScore = isNotNull(scores.score);
  * those). Scores without a snapshot reference are left alone, and so are rows without a score
  * (filter-step rows have nothing to be out of date). Returns the number of rows newly marked stale.
  */
-export async function markScoresStaleExcept(db: Db, currentSnapshotId: number): Promise<number> {
+export async function markScoresStaleExcept(db: ScoreTx, currentSnapshotId: number): Promise<number> {
   const rows = await db
     .update(scores)
     .set({ stale: true })
     .where(and(hasAiScore, ne(scores.profileSnapshotId, currentSnapshotId), eq(scores.stale, false)))
-    .returning({ id: scores.id });
+    .returning({ id: scores.id, jobId: scores.jobId });
+  db.touch(rows.map((row) => row.jobId));
   return rows.length;
 }
 
@@ -303,7 +305,7 @@ export function cleanSummaries(summaries: Readonly<Record<string, string>>): Rec
  * the row is updated in place and un-staled, never a second row for the same (job, snapshot).
  * `filter_result` and `filter_reasons` stay as the filter left them.
  */
-export async function saveScore(db: Executor, input: SaveScoreInput): Promise<{ evidence: SavedEvidence }> {
+export async function saveScore(db: ScoreTx, input: SaveScoreInput): Promise<{ evidence: SavedEvidence }> {
   // before the migration the text arrays are written alone (the evidence is lost for this score, the score itself is not)
   const evidenceReady = await reasonEvidenceColumnReady(db);
   const updated = await db
@@ -334,7 +336,8 @@ export async function saveScore(db: Executor, input: SaveScoreInput): Promise<{ 
       stale: false,
     })
     .where(and(eq(scores.id, input.rowId), eq(scores.jobId, input.jobId)))
-    .returning({ id: scores.id });
+    .returning({ id: scores.id, jobId: scores.jobId });
+  db.touch(updated.map((row) => row.jobId));
   if (updated.length === 0) throw new Error(`saveScore: score row ${input.rowId} of job ${input.jobId} does not exist`);
   return { evidence: evidenceReady ? "written" : "column_missing" };
 }
@@ -343,12 +346,13 @@ export async function saveScore(db: Executor, input: SaveScoreInput): Promise<{ 
  * The scoring prompt changed: every score made by another prompt version is out of date. Scores
  * without a version (hand-made or seed data) and rows without a score are left alone. Returns the rows newly marked stale.
  */
-export async function markScoresStaleByPromptVersion(db: Executor, currentVersion: string): Promise<number> {
+export async function markScoresStaleByPromptVersion(db: ScoreTx, currentVersion: string): Promise<number> {
   const rows = await db
     .update(scores)
     .set({ stale: true })
     .where(and(hasAiScore, isNotNull(scores.promptVersion), ne(scores.promptVersion, currentVersion), eq(scores.stale, false)))
-    .returning({ id: scores.id });
+    .returning({ id: scores.id, jobId: scores.jobId });
+  db.touch(rows.map((row) => row.jobId));
   return rows.length;
 }
 
@@ -404,8 +408,9 @@ export interface GermanOutcomeUpdate {
 }
 
 /** Store a re-settled German level with the deduction, match score and rank value that follow from it. */
-export async function updateGermanOutcome(db: Executor, id: number, update: GermanOutcomeUpdate): Promise<void> {
-  await db.update(scores).set(update).where(eq(scores.id, id));
+export async function updateGermanOutcome(db: ScoreTx, id: number, update: GermanOutcomeUpdate): Promise<void> {
+  const rows = await db.update(scores).set(update).where(eq(scores.id, id)).returning({ jobId: scores.jobId });
+  db.touch(rows.map((row) => row.jobId));
 }
 
 /**

@@ -1,3 +1,4 @@
+import { withRebuiltCurrentScores } from "../helpers/current-scores";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, inject, it } from "vitest";
 
@@ -17,7 +18,7 @@ const PUSH_LINE = 70;
 
 beforeAll(async () => {
   process.env.DATABASE_URL = url;
-  await runMigrations();
+  await runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 } });
 });
 
 beforeEach(async () => {
@@ -60,9 +61,9 @@ async function insertJobs(companyId: number, fixtures: readonly Fixture[]): Prom
     .values(fixtures.map((f) => ({ companyId, title: f.title, titleNorm: f.title, firstSeenAt: new Date(f.at), salaryJson: f.salary ?? null })))
     .returning({ id: schema.jobs.id, title: schema.jobs.title });
   const ids = new Map(rows.map((row) => [row.title, row.id]));
-  await db.insert(schema.scores).values(
+  await withRebuiltCurrentScores(db, db.insert(schema.scores).values(
     fixtures.map((f) => ({ jobId: ids.get(f.title)!, filterResult: f.result ?? "passed", rankValue: f.rank ?? null, score: f.rank ?? null, filterReasons: [] })),
-  );
+  ));
   return ids;
 }
 

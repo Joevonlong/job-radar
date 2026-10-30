@@ -1,4 +1,6 @@
-import { and, asc, desc, eq, inArray, isNotNull, notInArray, sql, type SQL } from "drizzle-orm";
+import { currentScoresTableExists, invalidateCurrentScores, missingCurrentScores } from "../repos/current-scores";
+import { and, asc, desc, eq, inArray, isNotNull, notInArray, sql, type SQL, WithSubquery, is } from "drizzle-orm";
+import { alias, PgTransaction } from "drizzle-orm/pg-core";
 import type { SubqueryWithSelection } from "drizzle-orm/pg-core";
 
 import type { Executor } from "../executor";
@@ -11,7 +13,7 @@ import { closedReasonSql, effectiveStatusSql, lastListedSql } from "./job-status
 import { loadGhostLevels } from "../repos/ghost";
 import { loadTrapCounts } from "../repos/traps";
 import { loadVisaStatuses } from "../repos/visa";
-import { channels, companies, jobSources, jobs, scores, signals } from "../schema";
+import { channels, companies, jobSources, jobs, scores, signals, jobCurrentScores } from "../schema";
 import { asContract, asGermanLevel, parseLocations, parseSalary } from "./parse";
 import type { JobCard, JobRank, JobSignal, JobSourceRef } from "./types";
 import { summariesOf } from "../summaries";
@@ -80,19 +82,20 @@ function latestColumns(newest: SubqueryWithSelection<ReturnType<typeof newestCol
  * The CTE works out the score of every job at once: the right shape for the /jobs list, which sorts all
  * its jobs by rank. A query over a few jobs (Today, a cycle) uses `latestScoreLateral` instead.
  */
-export function latestScoreCte(db: Executor) {
+export function latestScoreCte(db: Executor, jobIds?: readonly number[], sources = false) {
   const newest = db
-    .selectDistinctOn([scores.jobId], newestColumns())
+    .selectDistinctOn([scores.jobId], { ...newestColumns(), ...(sources ? { id: scores.id } : {}) })
     .from(scores)
+    .where(jobIds ? inArray(scores.jobId, [...jobIds]) : undefined)
     .orderBy(scores.jobId, ...newestFirst())
     .as("newest_score");
   const scored = db
-    .selectDistinctOn([scores.jobId], scoredColumns())
+    .selectDistinctOn([scores.jobId], { ...scoredColumns(), ...(sources ? { id: scores.id } : {}) })
     .from(scores)
-    .where(isNotNull(scores.score))
+    .where(and(isNotNull(scores.score), jobIds ? inArray(scores.jobId, [...jobIds]) : undefined))
     .orderBy(scores.jobId, ...newestFirst())
     .as("scored_score");
-  return db.$with("latest_score").as(db.select(latestColumns(newest, scored)).from(newest).leftJoin(scored, eq(scored.jobId, newest.jobId)));
+  return db.$with("latest_score").as(db.select({ ...latestColumns(newest, scored), ...(sources ? sourceColumns() : {}) }).from(newest).leftJoin(scored, eq(scored.jobId, newest.jobId)));
 }
 
 /**
@@ -101,26 +104,74 @@ export function latestScoreCte(db: Executor) {
  * `scores_job_latest_scored_idx`) instead of the score of every job. For queries that select few jobs; a
  * job without `scores` rows gets nulls, as with the CTE.
  */
-export function latestScoreLateral(db: Executor) {
+export function latestScoreLateral(db: Executor, jobIds?: readonly number[], sources = false) {
   const newest = db
-    .select(newestColumns())
+    .select({ ...newestColumns(), ...(sources ? { id: scores.id } : {}) })
     .from(scores)
-    .where(eq(scores.jobId, jobs.id))
+    .where(eq(scores.jobId, jobIds ? sql`selected_jobs.job_id` : jobs.id))
     .orderBy(...newestFirst())
     .limit(1)
     .as("newest_score");
   const scored = db
-    .select(scoredColumns())
+    .select({ ...scoredColumns(), ...(sources ? { id: scores.id } : {}) })
     .from(scores)
-    .where(and(eq(scores.jobId, jobs.id), isNotNull(scores.score)))
+    .where(and(eq(scores.jobId, jobIds ? sql`selected_jobs.job_id` : jobs.id), isNotNull(scores.score)))
     .orderBy(...newestFirst())
     .limit(1)
     .as("scored_score");
-  return db.select(latestColumns(newest, scored)).from(newest).leftJoin(scored, eq(scored.jobId, newest.jobId)).as("latest_score");
+  const query = db.select({ ...latestColumns(newest, scored), ...(sources ? sourceColumns() : {}) });
+  if (jobIds) return query.from(sql`unnest(${`{${jobIds.join(",")}}`}::bigint[]) as selected_jobs(job_id)`)
+    .innerJoinLateral(newest, sql`true`).leftJoinLateral(scored, sql`true`).as("latest_score");
+  return query.from(newest).leftJoin(scored, eq(scored.jobId, newest.jobId)).as("latest_score");
+}
+
+function sourceColumns() {
+  return {
+    newestScoreId: sql<number>`"newest_score"."id"`.as("newest_score_id"),
+    scoredScoreId: sql<number | null>`"scored_score"."id"`.as("scored_score_id"),
+  };
+}
+
+/** Temporary deployment compatibility: remove existence/fallback branches in the next minor release.
+ * The rule builders remain the authority for refresh and consistency checks.
+ */
+const projectedScore = () => alias(jobCurrentScores, "latest_score");
+export function currentScore(db: Executor, shape: "set"): Promise<ReturnType<typeof projectedScore> | ReturnType<typeof latestScoreCte>>;
+export function currentScore(db: Executor, shape: "few"): ReturnType<typeof currentScoreFew>;
+export async function currentScore(db: Executor, shape: "set" | "few") {
+  if (shape === "few") return currentScoreFew(db);
+  if (await currentScoresTableExists(db)) return projectedScore();
+  return latestScoreCte(db);
+}
+
+/** Attach CTEs only for the legacy source; a projected source is an ordinary table join. */
+export function withCurrentScore(db: Executor, latest: LatestScore, ...ctes: WithSubquery[]) {
+  return db.with(...(is(latest, WithSubquery) ? [latest] : []), ...ctes);
+}
+
+/** The few-job source retains its lateral join shape, with a direct indexed projection lookup. */
+export async function currentScoreFew(db: Executor) {
+  if (!(await currentScoresTableExists(db))) return latestScoreLateral(db);
+  return db.select({
+    jobId: jobCurrentScores.jobId, filterResult: jobCurrentScores.filterResult, filterReasons: jobCurrentScores.filterReasons,
+    score: jobCurrentScores.score, rankValue: jobCurrentScores.rankValue, signalBonus: jobCurrentScores.signalBonus,
+    stale: jobCurrentScores.stale, germanLevel: jobCurrentScores.germanLevel, summaries: jobCurrentScores.summaries,
+    summaryZh: jobCurrentScores.summaryZh, summaryEn: jobCurrentScores.summaryEn, outputLang: jobCurrentScores.outputLang,
+  }).from(jobCurrentScores).where(eq(jobCurrentScores.jobId, jobs.id)).as("latest_score");
+}
+
+/** Retry a deployment-window missing-table error once after invalidating the positive cache. */
+export async function currentScoreRead<T>(db: Executor, read: () => Promise<T>): Promise<T> {
+  const attempt = () => is(db, PgTransaction) ? db.transaction(() => read()) : read();
+  try { return await attempt(); } catch (error) {
+    if (!missingCurrentScores(error)) throw error;
+    invalidateCurrentScores(db);
+    return attempt();
+  }
 }
 
 /** Either form of the latest score: the helpers below read the same columns from both. */
-export type LatestScore = ReturnType<typeof latestScoreCte> | ReturnType<typeof latestScoreLateral>;
+export type LatestScore = ReturnType<typeof latestScoreCte> | ReturnType<typeof latestScoreLateral> | ReturnType<typeof projectedScore> | Awaited<ReturnType<typeof currentScoreFew>>;
 
 /**
  * The German level a job requires as the dashboard shows it: the one the scoring settled on (rule

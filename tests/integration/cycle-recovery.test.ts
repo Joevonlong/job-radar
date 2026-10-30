@@ -23,7 +23,7 @@ const data = () => databaseTestSupport(getDb());
 let temp: TempConfig;
 beforeAll(async () => {
   process.env.DATABASE_URL = url;
-  await runMigrations();
+  await runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 } });
 });
 beforeEach(() => { temp = makeTempConfig(); });
 afterEach(() => { resetCycleSteps(); temp.cleanup(); });

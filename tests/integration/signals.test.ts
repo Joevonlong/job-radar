@@ -1,3 +1,4 @@
+import { withRebuiltCurrentScores } from "../helpers/current-scores";
 import { eq, sql } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, inject, it } from "vitest";
 
@@ -91,7 +92,7 @@ async function newJob(title: string, description: string | null, opts: { status?
     .insert(schema.jobs)
     .values({ companyId: company!.id, title, titleNorm: title.toLowerCase(), description, status: opts.status ?? "active" })
     .returning({ id: schema.jobs.id });
-  if (opts.scoreRow !== false) await db.insert(schema.scores).values({ jobId: job!.id, filterResult: "passed" });
+  if (opts.scoreRow !== false) await withRebuiltCurrentScores(db, db.insert(schema.scores).values({ jobId: job!.id, filterResult: "passed" }));
   return job!.id;
 }
 
@@ -105,7 +106,7 @@ const tiersOf = async (jobId: number) => (await listSignalsOfJob(getDb(), jobId)
 
 beforeAll(async () => {
   process.env.DATABASE_URL = url;
-  await runMigrations();
+  await runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 } });
 });
 beforeEach(resetTables);
 afterEach(() => resetAiSubtasks());
@@ -217,8 +218,8 @@ describe("score bonus", () => {
     const other = await newJob("No signals", "Build things.", { scoreRow: false });
     // more rows than one statement takes (rows without a snapshot are not bound by the unique index), with and without a match score
     const many = Array.from({ length: 1234 }, (_, i) => ({ jobId: job, filterResult: "passed" as const, score: i % 3 === 0 ? null : i % 101, rankValue: i % 3 === 0 ? 33.5 : null }));
-    await getDb().insert(schema.scores).values(many);
-    await getDb().insert(schema.scores).values({ jobId: other, filterResult: "passed", score: 40, rankValue: 40 });
+    await withRebuiltCurrentScores(getDb(), getDb().insert(schema.scores).values(many));
+    await withRebuiltCurrentScores(getDb(), getDb().insert(schema.scores).values({ jobId: other, filterResult: "passed", score: 40, rankValue: 40 }));
     await runRuleScan(getDb(), scanOptions(interests));
 
     expect(await reconcileBonuses(getDb(), interests)).toEqual({ checked: 1234, updated: 1234 });
@@ -247,7 +248,7 @@ describe("score rows of the hard filter and the scorer", () => {
     await runRuleScan(getDb(), scanOptions(interests));
     expect(await reconcileBonuses(getDb(), interests)).toMatchObject({ checked: 0, updated: 0 });
     expect(await getDb().select().from(schema.scores).where(eq(schema.scores.jobId, job))).toEqual([]);
-    await getDb().insert(schema.scores).values({ jobId: job, filterResult: "passed" });
+    await withRebuiltCurrentScores(getDb(), getDb().insert(schema.scores).values({ jobId: job, filterResult: "passed" }));
     expect(await reconcileBonuses(getDb(), interests)).toMatchObject({ updated: 1 });
   });
 
@@ -261,10 +262,10 @@ describe("score rows of the hard filter and the scorer", () => {
         { kind: "preferences", contentYaml: "b: 1", hash: "hash-b" },
       ])
       .returning({ id: schema.profileSnapshots.id });
-    await getDb().insert(schema.scores).values([
+    await withRebuiltCurrentScores(getDb(), getDb().insert(schema.scores).values([
       { jobId: job, profileSnapshotId: a!.id, filterResult: "passed", score: 50, rankValue: 50, stale: true },
       { jobId: job, profileSnapshotId: b!.id, filterResult: "passed", score: 70, rankValue: 70 },
-    ]);
+    ]));
     await runRuleScan(getDb(), scanOptions(interests));
     expect(await reconcileBonuses(getDb(), interests)).toMatchObject({ checked: 2, updated: 2 });
     const rows = await getDb().select().from(schema.scores).where(eq(schema.scores.jobId, job)).orderBy(schema.scores.id);
@@ -366,7 +367,7 @@ describe("AI review with a fake provider", () => {
     const plain = await newJob("Plain", JD_PLAIN);
     const filtered = await newJob("Filtered", "Stock options and a competitive salary.");
     const closed = await newJob("Closed", "Stock options and a competitive salary.", { status: "closed" });
-    await getDb().update(schema.scores).set({ filterResult: "filtered_out", filterReasons: ["student"] }).where(eq(schema.scores.jobId, filtered));
+    await withRebuiltCurrentScores(getDb(), getDb().update(schema.scores).set({ filterResult: "filtered_out", filterReasons: ["student"] }).where(eq(schema.scores.jobId, filtered)));
     await runRuleScan(getDb(), scanOptions(interests));
     return { interests, rich, plain, filtered, closed };
   }

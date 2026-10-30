@@ -1,3 +1,4 @@
+import { withRebuiltCurrentScores } from "../helpers/current-scores";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, inject, it } from "vitest";
 
@@ -48,7 +49,7 @@ let temp: TempConfig;
 
 beforeAll(async () => {
   process.env.DATABASE_URL = url;
-  await runMigrations();
+  await runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 } });
 });
 
 // The week is seeded again before every test (the database is emptied before each one).
@@ -127,13 +128,13 @@ async function seedInsights(): Promise<void> {
       await db.insert(schema.jobSources).values({ jobId, rawPostingId: raw!.id, channelId });
     }
     if (def.score) {
-      await db.insert(schema.scores).values({
+      await withRebuiltCurrentScores(db, db.insert(schema.scores).values({
         jobId,
         filterResult: def.score.result,
         filterReasons: def.score.reasons ?? [],
         score: def.score.rank === null ? null : Math.round(def.score.rank),
         rankValue: def.score.rank,
-      });
+      }));
     }
     if (def.signal) {
       await db.insert(schema.signals).values({ jobId, tier: def.signal, kind: "test", quote: "quote", extractor: "rule", valueJson: def.signal === "T1" ? { eurPerYear: { min: 60_000, max: 80_000 } } : null });

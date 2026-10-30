@@ -578,6 +578,27 @@ export const scores = pgTable(
   ],
 );
 
+/** Derived only from scores. Writes use scoreTransaction; maintenance repairs out-of-band writes.
+ * No foreign keys: final refresh must never wait for a jobs row lock.
+ */
+export const jobCurrentScores = pgTable("job_current_scores", {
+  jobId: bigint("job_id", { mode: "number" }).primaryKey(),
+  newestScoreId: bigint("newest_score_id", { mode: "number" }).notNull(),
+  scoredScoreId: bigint("scored_score_id", { mode: "number" }),
+  filterResult: filterResultEnum("filter_result").notNull(),
+  filterReasons: text("filter_reasons").array().notNull(),
+  score: smallint("score"),
+  rankValue: numeric("rank_value", { precision: 6, scale: 2, mode: "number" }),
+  signalBonus: numeric("signal_bonus", { precision: 6, scale: 2, mode: "number" }).notNull(),
+  stale: boolean("stale").notNull(),
+  germanLevel: text("german_level"),
+  summaries: jsonb("summaries").$type<Record<string, string>>(),
+  summaryZh: text("summary_zh"),
+  summaryEn: text("summary_en"),
+  outputLang: text("output_lang"),
+  refreshedAt: timestamptz("refreshed_at").notNull().defaultNow(),
+});
+
 export const translations = pgTable(
   "translations",
   {

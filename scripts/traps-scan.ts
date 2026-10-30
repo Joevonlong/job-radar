@@ -1,3 +1,4 @@
+import { scoreTransaction } from "../src/lib/db/repos/current-scores";
 /**
  * Scan jobs for AI traps (docs/ai-traps.md).
  *
@@ -145,7 +146,7 @@ async function main(): Promise<void> {
   let staleCount = await countTrappedScores(db);
   let markedJobs: number[] = [];
   if (args.markStale && args.write) {
-    markedJobs = await markTrappedScoresStale(db);
+    markedJobs = await scoreTransaction(db, (tx) => markTrappedScoresStale(tx));
     staleCount = 0;
   }
 

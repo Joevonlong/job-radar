@@ -1,3 +1,4 @@
+import { withRebuiltCurrentScores } from "../helpers/current-scores";
 /**
  * Signal presets against Postgres: the /interests hit preview equals running `findCandidates` on the same jobs, reads only, and its
  * review estimate counts exactly what `listJobsToReview` would hand the AI.
@@ -36,7 +37,7 @@ async function newJob(title: string, description: string, options: { filterResul
     .insert(schema.jobs)
     .values({ companyId: company!.id, title, titleNorm: title.toLowerCase(), description, status: options.status ?? "active" })
     .returning({ id: schema.jobs.id });
-  await db.insert(schema.scores).values({ jobId: job!.id, filterResult: options.filterResult ?? "passed", score: 60, rankValue: 60 });
+  await withRebuiltCurrentScores(db, db.insert(schema.scores).values({ jobId: job!.id, filterResult: options.filterResult ?? "passed", score: 60, rankValue: 60 }));
   return job!.id;
 }
 
@@ -57,7 +58,7 @@ function draftWithPerk(fields: { keywords?: string[]; aiDefinition?: string } = 
 
 beforeAll(async () => {
   process.env.DATABASE_URL = url;
-  await runMigrations();
+  await runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 } });
 });
 beforeEach(resetTables);
 afterAll(async () => {

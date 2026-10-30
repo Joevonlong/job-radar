@@ -1,3 +1,4 @@
+import { currentScoresBackfill } from "../src/lib/db/current-scores-config";
 /**
  * Real smoke of the weekly interest suggestions: run `runSuggest` once through the normal AI router
  * (claude-cli → codex-cli → API, whatever is available) over the jobs a database has marked interested /
@@ -35,7 +36,7 @@ async function main(): Promise<number> {
     return 2;
   }
 
-  await runMigrations();
+  await runMigrations({ currentScoresBackfill: currentScoresBackfill() });
   await ensureProfileFiles();
   const db = getDb();
   const logger = createLogger({ minLevel: "warn" });

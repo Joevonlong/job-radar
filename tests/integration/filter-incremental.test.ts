@@ -1,3 +1,4 @@
+import { withRebuiltCurrentScores } from "../helpers/current-scores";
 import { eq, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
@@ -93,7 +94,7 @@ it("retries partial deal-breaker judgements and keeps AI fields when updating fi
   expect(await runFilter(db, complete)).toMatchObject({ evaluated: 2 });
   // Timed rules must judge unchanged jobs too: a later run can run out of budget without an input change.
   expect(await runFilter(db, complete)).toMatchObject({ evaluated: 2 });
-  await db.update(schema.scores).set({ score: 80, aiScore: 85, signalBonus: 2, rankValue: 82, model: "fixture" }).where(eq(schema.scores.jobId, rows[0]!.id));
+  await withRebuiltCurrentScores(db, db.update(schema.scores).set({ score: 80, aiScore: 85, signalBonus: 2, rankValue: 82, model: "fixture" }).where(eq(schema.scores.jobId, rows[0]!.id)));
   await db.update(schema.jobs).set({ title: "New title" }).where(eq(schema.jobs.id, rows[0]!.id));
   expect(await runFilter(db, complete)).toMatchObject({ evaluated: 2 });
   expect(await db.select().from(schema.scores).where(eq(schema.scores.jobId, rows[0]!.id))).toMatchObject([{ score: 80, aiScore: 85, signalBonus: 2, rankValue: 82, model: "fixture" }]);

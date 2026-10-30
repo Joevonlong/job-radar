@@ -22,7 +22,7 @@ let ro: ReadOnlyDb;
 
 beforeAll(async () => {
   process.env.DATABASE_URL = url;
-  await runMigrations();
+  await runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 } });
   ro = createReadOnlyDb({ url });
 });
 

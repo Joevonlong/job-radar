@@ -1,3 +1,4 @@
+import { withRebuiltCurrentScores } from "../helpers/current-scores";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -53,7 +54,7 @@ let temp: TempConfig;
 
 beforeAll(async () => {
   process.env.DATABASE_URL = url;
-  await runMigrations();
+  await runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 } });
 });
 
 beforeEach(async () => {
@@ -401,7 +402,7 @@ describe("web side: requestRunCycle / requestRescoreStale", () => {
     const db = getDb();
     const [company] = await db.insert(schema.companies).values({ name: "Acme", nameNorm: "acme" }).returning();
     const [job] = await db.insert(schema.jobs).values({ companyId: company?.id ?? 0, title: "AI Engineer", titleNorm: "ai engineer" }).returning();
-    await db.insert(schema.scores).values({ jobId: job?.id ?? 0, filterResult: "passed", score: 70, stale: true });
+    await withRebuiltCurrentScores(db, db.insert(schema.scores).values({ jobId: job?.id ?? 0, filterResult: "passed", score: 70, stale: true }));
     expect(await countStaleScores(db)).toBe(1);
     expect(await requestRescoreStale()).toMatchObject({ status: "queued", kind: "rescore_stale", existing: false });
     expect(await requestRescoreStale()).toMatchObject({ status: "queued", existing: true });

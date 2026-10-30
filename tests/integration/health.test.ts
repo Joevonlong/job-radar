@@ -13,7 +13,7 @@ interface HealthJson {
 
 beforeAll(async () => {
   process.env.DATABASE_URL = url;
-  await runMigrations();
+  await runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 } });
   // The database is shared by all integration files in a run: start from no heartbeats.
   await getDb().delete(schema.runnerHeartbeats);
 });

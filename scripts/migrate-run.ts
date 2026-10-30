@@ -1,3 +1,4 @@
+import { currentScoresBackfill } from "../src/lib/db/current-scores-config";
 /**
  * pnpm migrate:run — apply pending migrations to the compose database from the host (the same `runMigrations` the runner
  * calls at start-up; idempotent). scripts/ops/deploy.sh runs it after the stack is up. DATABASE_URL is used when set, otherwise
@@ -27,7 +28,7 @@ async function main(): Promise<number> {
     config: backup,
     readJournal: () => readJournal(resolveMigrationsFolder(process.env.MIGRATIONS_DIR)),
     readApplied: async () => before,
-    runMigrations: () => runMigrations({ url }),
+    runMigrations: () => runMigrations({ currentScoresBackfill: currentScoresBackfill(), url }),
     runBackup: (label) =>
       takePreMigrateBackup(label, {
         directory: path.join(root, "data", "backups"),

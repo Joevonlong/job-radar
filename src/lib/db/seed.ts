@@ -1,3 +1,4 @@
+import { scoreTransaction, type ScoreTx } from "./repos/current-scores";
 import { and, eq, inArray, like, notExists, or, sql } from "drizzle-orm";
 
 import { loadConfig, type PipelineConfig } from "@/lib/config";
@@ -797,7 +798,7 @@ export interface SeedResult {
   aiUsage: number;
 }
 
-async function removePreviousSeed(db: Executor, pipeline: PipelineConfig): Promise<number> {
+async function removePreviousSeed(db: ScoreTx, pipeline: PipelineConfig): Promise<number> {
   const seeded = await db
     .selectDistinct({ jobId: jobSources.jobId })
     .from(jobSources)
@@ -805,6 +806,7 @@ async function removePreviousSeed(db: Executor, pipeline: PipelineConfig): Promi
     .where(like(rawPostings.externalId, `${SEED_EXTERNAL_PREFIX}%`));
   const jobIds = seeded.map((r) => r.jobId);
   if (jobIds.length > 0) {
+    db.touch(jobIds);
     await db.delete(aiUsage).where(inArray(aiUsage.jobId, jobIds)); // the seeded AI calls go with their jobs
     await db.delete(applications).where(inArray(applications.jobId, jobIds)); // events cascade
     await db.delete(jobs).where(inArray(jobs.id, jobIds)); // sources, signals, scores cascade
@@ -861,7 +863,7 @@ export async function seedDatabase(db: Executor, options: SeedOptions): Promise<
 
 async function insertSeed(db: Executor, input: { now: Date; tz: string; pipeline: PipelineConfig }): Promise<{ result: SeedResult; jobIds: number[] }> {
   const { now, tz, pipeline } = input;
-  return db.transaction(async (tx) => {
+  return scoreTransaction(db, async (tx: ScoreTx) => {
     const replacedJobs = await removePreviousSeed(tx, pipeline);
 
     const [boundary] = await tx.execute<{ start: Date }>(
@@ -1090,6 +1092,7 @@ async function insertSeed(db: Executor, input: { now: Date; tz: string; pipeline
 
       if (job.match !== undefined) {
         const bonus = Math.min(SIGNAL_CAP, (job.signals ?? []).reduce((sum, s) => sum + (SIGNAL_POINTS[s.tier] ?? 0), 0));
+        tx.touch([row.id]);
         await tx.insert(scores).values({
           jobId: row.id,
           provider: "seed",

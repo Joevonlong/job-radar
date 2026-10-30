@@ -1,3 +1,4 @@
+import { currentScoresBackfill } from "../src/lib/db/current-scores-config";
 /**
  * Prepare the disposable database the Playwright web server runs against.
  *
@@ -94,7 +95,7 @@ try {
 } finally {
   await admin.end({ timeout: 5 });
 }
-await runMigrations({ url: targetUrl.toString() });
+await runMigrations({ currentScoresBackfill: currentScoresBackfill(), url: targetUrl.toString() });
 if (fresh) {
   console.log(`e2e-prepare: database "${dbName}" is empty and migrated (fresh install)`);
   process.exit(0);

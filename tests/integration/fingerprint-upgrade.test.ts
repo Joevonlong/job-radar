@@ -36,7 +36,7 @@ beforeAll(async () => {
   const journal = JSON.parse(fs.readFileSync(journalPath, "utf8")) as { entries: { idx: number }[] };
   journal.entries = journal.entries.filter((entry) => entry.idx <= 39);
   fs.writeFileSync(journalPath, JSON.stringify(journal));
-  await runMigrations({ url: url.toString(), migrationsFolder: directory });
+  await runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 }, url: url.toString(), migrationsFolder: directory });
 });
 
 afterAll(async () => {
@@ -76,7 +76,7 @@ it("reads details, scores and linked raw postings and creates jobs before finger
   const heaps = () => db.execute<{ relname: string; relfilenode: number }>(sql`select relname, relfilenode from pg_class
     where oid in ('jobs'::regclass, 'raw_postings'::regclass, 'scores'::regclass) order by relname`);
   const before = [...await heaps()];
-  await runMigrations({ url: url.toString() });
+  await runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 }, url: url.toString() });
   expect([...await heaps()]).toEqual(before);
   expect(await db.select({ hash: schema.jobs.descriptionMd5 }).from(schema.jobs).where(eq(schema.jobs.id, 1))).toEqual([{ hash: null }]);
   expect(await getJobDetail(db, 1)).toMatchObject({ title: "Engineer", score: { score: 75 } });

@@ -34,7 +34,7 @@ const savedConfigDir = process.env.JOB_RADAR_CONFIG_DIR;
 
 beforeAll(async () => {
   process.env.DATABASE_URL = url;
-  await runMigrations();
+  await runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 } });
 });
 
 beforeEach(async () => {

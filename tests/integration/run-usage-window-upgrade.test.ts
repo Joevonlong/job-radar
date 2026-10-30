@@ -30,7 +30,7 @@ beforeAll(async () => {
   const journal = JSON.parse(fs.readFileSync(journalPath, "utf8")) as { entries: { idx: number }[] };
   journal.entries = journal.entries.filter((entry) => entry.idx <= 33);
   fs.writeFileSync(journalPath, JSON.stringify(journal));
-  await runMigrations({ url: url.toString(), migrationsFolder: directory });
+  await runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 }, url: url.toString(), migrationsFolder: directory });
 });
 
 afterAll(async () => {
@@ -68,7 +68,7 @@ it("preserves old run rows and accepts old-column inserts after adding usage and
   `);
   const before = [...await oldRows()];
   expect(before).toHaveLength(2);
-  await runMigrations({ url: url.toString() });
+  await runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 }, url: url.toString() });
   expect([...await oldRows()]).toEqual(before);
   expect(await db.select({ usageUnits: schema.runs.usageUnits, windowHours: schema.runs.windowHours, windowExtended: schema.runs.windowExtended })
     .from(schema.runs).orderBy(schema.runs.id)).toEqual([

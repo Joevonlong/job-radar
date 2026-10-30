@@ -1,3 +1,4 @@
+import { withRebuiltCurrentScores } from "../helpers/current-scores";
 /**
  * Deal-breakers on a real database: the filter step vetoes in place (no new snapshot, no stale score), the preview counts
  * what the filter step then vetoes, and a vetoed job never reaches the score queue.
@@ -46,7 +47,7 @@ const setGermanLevel = (level: string) => editProfile("me", (raw) => void (raw.l
 
 beforeAll(async () => {
   process.env.DATABASE_URL = url;
-  await runMigrations();
+  await runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 } });
 });
 
 afterAll(async () => {
@@ -66,7 +67,7 @@ beforeEach(async () => {
   });
   setGermanLevel("B1");
   const db = getDb();
-  await db.delete(schema.scores);
+  await withRebuiltCurrentScores(db, db.delete(schema.scores));
   await db.delete(schema.jobs);
   await db.delete(schema.companies);
   await db.delete(schema.profileSnapshots);
@@ -140,8 +141,8 @@ describe("the filter step applies deal-breakers", () => {
     const ruleSaysB1 = await addJob({ germanLevelRequired: "B1" });
     const ruleSaysC1 = await addJob({ germanLevelRequired: "C1" });
     await runStep();
-    await getDb().update(schema.scores).set({ germanLevel: "C2", score: 70 }).where(eq(schema.scores.jobId, ruleSaysB1.id));
-    await getDb().update(schema.scores).set({ germanLevel: "none", score: 70 }).where(eq(schema.scores.jobId, ruleSaysC1.id));
+    await withRebuiltCurrentScores(getDb(), getDb().update(schema.scores).set({ germanLevel: "C2", score: 70 }).where(eq(schema.scores.jobId, ruleSaysB1.id)));
+    await withRebuiltCurrentScores(getDb(), getDb().update(schema.scores).set({ germanLevel: "none", score: 70 }).where(eq(schema.scores.jobId, ruleSaysC1.id)));
     setRules([GATE]);
     await runStep();
     expect(await rowsOf(ruleSaysB1.id)).toMatchObject([{ filterResult: "passed" }]);
@@ -191,7 +192,7 @@ describe("the filter step applies deal-breakers", () => {
     const scored = await addJob({ germanLevelRequired: "C2" });
     const unscored = await addJob({ germanLevelRequired: "C2" });
     const first = await runStep();
-    await getDb().update(schema.scores).set({ score: 82, summaryEn: "kept" }).where(eq(schema.scores.jobId, scored.id));
+    await withRebuiltCurrentScores(getDb(), getDb().update(schema.scores).set({ score: 82, summaryEn: "kept" }).where(eq(schema.scores.jobId, scored.id)));
     expect((await listScoreQueue(getDb(), { snapshotId: first.snapshotId })).map((item) => item.jobId)).toEqual([unscored.id]);
 
     setRules([GATE]);
@@ -265,7 +266,7 @@ describe("deal-breakers and profile snapshots", () => {
   async function scoredJob() {
     const job = await addJob();
     const first = await runStep();
-    await getDb().update(schema.scores).set({ score: 75 }).where(eq(schema.scores.jobId, job.id));
+    await withRebuiltCurrentScores(getDb(), getDb().update(schema.scores).set({ score: 75 }).where(eq(schema.scores.jobId, job.id)));
     return { job, snapshotId: first.snapshotId };
   }
 

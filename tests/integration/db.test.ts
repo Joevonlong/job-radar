@@ -63,7 +63,7 @@ const url = inject("testDatabaseUrl");
 
 beforeAll(async () => {
   process.env.DATABASE_URL = url;
-  await runMigrations();
+  await runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 } });
 });
 
 afterAll(async () => {
@@ -91,8 +91,8 @@ describe("migrations", () => {
 
   it("is idempotent: running the migrator again changes nothing and does not fail", async () => {
     const before = await getDb().execute<{ n: string }>(sql`select count(*)::text as n from drizzle.__drizzle_migrations`);
-    await expect(runMigrations()).resolves.toBeUndefined();
-    await expect(runMigrations()).resolves.toBeUndefined();
+    await expect(runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 } })).resolves.toBeUndefined();
+    await expect(runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 } })).resolves.toBeUndefined();
     const after = await getDb().execute<{ n: string }>(sql`select count(*)::text as n from drizzle.__drizzle_migrations`);
     expect(after[0]?.n).toBe(before[0]?.n);
   });

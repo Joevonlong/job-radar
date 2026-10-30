@@ -1,3 +1,4 @@
+import { scoreTransaction } from "@/lib/db/repos/current-scores";
 import { createHash } from "node:crypto";
 
 import type { CycleStepContext, StepResult } from "@/lib/cycle/steps";
@@ -169,6 +170,7 @@ export async function runFilter(db: Db, options: FilterOptions): Promise<FilterR
     const verdicts = evaluateBatch(batch, compiled, dealBreakers, overrides, stored);
     // A timed-out rule preserves previous vetoes; retry those inputs next cycle instead of caching a partial judgement.
     const complete = !dealBreakers.warnings.some((warning) => warning.code === "too_slow");
+    await scoreTransaction(db, async (tx) => {
     for (const [i, row] of batch.entries()) {
       const verdict = verdicts[i];
       if (!verdict) continue;
@@ -185,12 +187,13 @@ export async function runFilter(db: Db, options: FilterOptions): Promise<FilterR
       if (!existing) {
         fresh.push({ jobId: row.id, ...state });
       } else {
-        await updateFilterResult(db, existing.scoreId, state);
+        await updateFilterResult(tx, existing.scoreId, state);
         if (existing.filterResult !== verdict.result || !sameReasons(existing.filterReasons, verdict.reasons)) result.updated += 1;
         else result.unchanged += 1;
       }
     }
-    result.created += await insertFilterResults(db, options.snapshotId, fresh);
+    result.created += await insertFilterResults(tx, options.snapshotId, fresh);
+    });
   }
   result.dealBreakerWarnings = [...compiled.dealBreakers.warnings, ...dealBreakers.warnings];
   for (const warning of result.dealBreakerWarnings) options.logger?.warn("deal-breaker not applied", { id: warning.id, reason: warning.code });

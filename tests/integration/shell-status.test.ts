@@ -1,3 +1,4 @@
+import { withRebuiltCurrentScores } from "../helpers/current-scores";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, inject, it } from "vitest";
 
@@ -30,7 +31,7 @@ const NOW = new Date("2026-10-07T04:00:00Z");
 
 beforeAll(async () => {
   process.env.DATABASE_URL = url;
-  await runMigrations();
+  await runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 } });
 });
 
 beforeEach(async () => {
@@ -115,7 +116,7 @@ describe("the sidebar's cycle status", () => {
     const scoredB = await insertJob(db, { companyId: company.id, title: "B", titleNorm: "b" });
     await insertJob(db, { companyId: company.id, title: "C", titleNorm: "c" });
     const [snapshot] = await db.insert(schema.profileSnapshots).values({ kind: "preferences", hash: "h", contentYaml: "" }).returning();
-    await db.insert(schema.scores).values([scoredA, scoredB].map((job) => ({ jobId: job.id, profileSnapshotId: snapshot?.id ?? 0, score: 80, rankValue: 80, filterResult: "passed" as const, scoredAt: new Date() })));
+    await withRebuiltCurrentScores(db, db.insert(schema.scores).values([scoredA, scoredB].map((job) => ({ jobId: job.id, profileSnapshotId: snapshot?.id ?? 0, score: 80, rankValue: 80, filterResult: "passed" as const, scoredAt: new Date() }))));
     status = await loadShellStatus(db, NOW);
     expect(status.progress).toMatchObject({ phase: "ai", status: "running", kind: "weekday_evening", done: 2 });
     expect(status.progress?.total).toBeGreaterThanOrEqual(2);
@@ -159,9 +160,9 @@ describe("the sidebar badges and the runner heartbeat", () => {
     const jobs = await Promise.all(["a", "b", "c", "d"].map((title) => insertJob(db, { companyId: company.id, title, titleNorm: title })));
     const [snapshot] = await db.insert(schema.profileSnapshots).values({ kind: "preferences", hash: "h", contentYaml: "" }).returning();
     // job d was removed by the hard filter
-    await db.insert(schema.scores).values(
+    await withRebuiltCurrentScores(db, db.insert(schema.scores).values(
       jobs.map((job, index) => ({ jobId: job.id, profileSnapshotId: snapshot?.id ?? 0, score: null, rankValue: null, filterResult: index === 3 ? ("filtered_out" as const) : ("passed" as const), scoredAt: new Date() })),
-    );
+    ));
     await setApplicationStatus(db, jobs[0]?.id ?? 0, "applied");
     await setApplicationStatus(db, jobs[1]?.id ?? 0, "rejected");
     await setApplicationStatus(db, jobs[2]?.id ?? 0, "new");
