@@ -23,7 +23,7 @@ import { getSchedule } from "@/lib/dashboard/context";
 import { loadListViz } from "@/lib/dashboard/list-viz";
 import { NewSinceVisitNote } from "@/components/jobs/new-since-visit-note";
 import { loadHighValuePolicy, loadSignalCatalog } from "@/lib/signals/floor";
-import { countJobList, countJobListSeen, getDb, getFilterFloors, getJobFilterOptions, getVisitState, hasHighValueCategories, listCompanyFilterOptions, listCompanyMatchRows, listJobs, listMonthSalaryFigures, SearchTimeoutError } from "@/lib/db";
+import { countJobList, countJobListSeen, getDb, getFilterFloors, getJobFilterOptions, getVisitState, hasHighValueCategories, listCompanyFilterOptions, listJobCountryOptions, listCompanyMatchRows, listJobs, listMonthSalaryFigures, SearchTimeoutError } from "@/lib/db";
 import { loadPipeline } from "@/lib/market/effective";
 import { buildCompanyMatchIndex, canonicalCompanyNames } from "@/lib/pipeline/company";
 import { loadCityGroups } from "@/lib/jobs/cities";
@@ -57,13 +57,14 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function JobsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   // `?t12=true` (the old name of `high`) reads as `high=true`; links written from here only carry `high`
   const params = withLegacyKeys(await loadJobsSearchParams(searchParams));
-  const [t, tJobs, tFav, tFavPage, tSeen, locale] = await Promise.all([
+  const [t, tJobs, tFav, tFavPage, tSeen, locale, tSearch] = await Promise.all([
     getTranslations("pages.jobs"),
     getTranslations("dashboard.jobs"),
     getTranslations("favorites.filter"),
     getTranslations("favorites.page"),
     getTranslations("dashboard.seen"),
     getLocale(),
+    getTranslations("dashboard.jobs.filters"),
   ]);
   const highValue = loadHighValuePolicy();
   const catalog = loadSignalCatalog();
@@ -96,7 +97,7 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
   // Shared priority: explicit sort, search relevance, archive last-listed default, then rank.
   const sort = resolveSort({ sort: params.sort, q: params.q, scope: resolveJobScope(params.scope, params.status) });
   // Searching descriptions (searchIn=all) has a time limit: past it the page says so instead of failing
-  const [listed, options, seenCounted, salaryFigures, archiveCounted, companies] = await Promise.all([
+  const [listed, options, seenCounted, salaryFigures, archiveCounted, companies, countries] = await Promise.all([
     unlessTimedOut(listJobs(db, {
       filters,
       sort,
@@ -112,9 +113,12 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
     listMonthSalaryFigures(db, { now, timeZone: timezone, currency: loadBaseCurrency() ?? "" }),
     unlessTimedOut(countJobList(db, { filters: { ...filters, scope: "archive" }, timezone })),
     listCompanyFilterOptions(db, { limit: ui.filters.company_options_max + 1, timezone }),
+    listJobCountryOptions(db, { scope: resolveJobScope(params.scope, params.status), selected: params.country, timezone }),
   ]);
   const searchTimedOut = listed.timedOut || seenCounted.timedOut || archiveCounted.timedOut;
   const result = listed.value;
+  const search = filters.search;
+  const offerDescriptions = params.searchIn !== "all" && search?.status === "ok" && (result?.total === 0 || search.hasCjk);
   const seenCounts = seenCounted.value;
   const filterFloors = await getFilterFloors(db, salaryFilteredIds(result?.jobs ?? []));
   const items = await toListItems(result?.jobs ?? [], { now, timezone, filterFloors, seenUpTo, relistBadgeDays, visa: visaFilter, ghost: ghostFilter, monthSalaries: { figures: salaryFigures, minSample: ui.salary_stats.min_sample } });
@@ -141,7 +145,7 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
       <VisitTracker />
       <PageHeader title={t("title")} description={t("description")} />
       <ScopeSwitch params={params} archiveCount={archiveCounted.value} />
-      <FilterBar options={{ ...options, cities: cities.map(({ key, target }) => ({ key, target })), companies: companies.slice(0, ui.filters.company_options_max), companyOptionsCapped: companies.length > ui.filters.company_options_max, companyOptionsVisible: ui.filters.company_options_visible, traps: trapsEnabled(), relisted: listing, visa: visaFilter, ghost: ghostFilter, hiddenWorkplaces: hidden.workplaces, hiddenContracts: hidden.contracts, highValueNames }} />
+      <FilterBar options={{ ...options, countries, cities: cities.map(({ key, target }) => ({ key, target })), companies: companies.slice(0, ui.filters.company_options_max), companyOptionsCapped: companies.length > ui.filters.company_options_max, companyOptionsVisible: ui.filters.company_options_visible, traps: trapsEnabled(), relisted: listing, visa: visaFilter, ghost: ghostFilter, hiddenWorkplaces: hidden.workplaces, hiddenContracts: hidden.contracts, highValueNames }} />
       <div className="flex flex-wrap items-center gap-x-sp-3 gap-y-sp-2">
         {params.filteredOnly === true ? (
           <FilteredToggle active only href={jobsListHref({ ...params, filteredOnly: null, page: 1 })} />
@@ -179,6 +183,11 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
         <span className="font-mono text-data text-ink-2" role="status" data-testid="result-count">
           {result ? tJobs("count", { count: result.total }) : tJobs("countUnknown")}
         </span>
+        {sort === "relevance" && params.q?.trim() ? (
+          <span className="text-ink-2 text-body-sm" data-testid="search-relevance">
+            {tSearch("relevanceNote")} · <Link href={jobsListHref({ ...params, sort: "rank", dir: null, page: 1 })} className="underline underline-offset-2">{tSearch("useRank")}</Link>
+          </span>
+        ) : null}
         {seenCounts ? (
           <MarkSeenButton count={seenCounts.unseen} target={{ scope: "jobs", query: jobsSearchQuery(params), renderedAt: now.toISOString() }} />
         ) : (
@@ -186,6 +195,14 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
         )}
         {!newestFirst && seenCounts && seenCounts.newSince > 0 ? <NewSinceVisitNote count={seenCounts.newSince} href={jobsListHref({ ...params, sort: "first_seen", dir: null, page: 1 })} /> : null}
       </div>
+      {search?.status === "no_terms" ? <p role="status" data-testid="search-no-terms" className="text-ink-2 text-body-sm">{tSearch("noTerms")}</p> : null}
+      {search && search.droppedTerms > 0 ? <p role="status" data-testid="search-truncated" className="text-ink-2 text-body-sm">{tSearch("truncated", { count: search.terms.length })}</p> : null}
+      {offerDescriptions ? (
+        <p role="status" data-testid="search-description-hint" className="text-ink-2 text-body-sm">
+          {search.hasCjk ? <>{tSearch("chineseHint")} · </> : null}
+          <Link href={jobsListHref({ ...params, searchIn: "all", page: 1 })} className="underline underline-offset-2" data-testid="search-descriptions">{tSearch("alsoDescriptions")}</Link>
+        </p>
+      ) : null}
       {searchTimedOut ? (
         <div role="status" data-testid="jobs-search-timeout" className="border-border bg-card text-muted-foreground shadow-e3 rounded-card border-bw px-sp-4 py-sp-3">
           {tJobs("searchTimeout")}

@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
 
+import { jobSearchSettings } from "@/lib/jobs/search";
+
 import { Brand } from "./brand";
 import { CommandPalette } from "./command-palette";
 import { CycleStatusDot } from "./cycle-status";
@@ -26,7 +28,7 @@ export function Topbar({ minimal = false, locked = false, signOut = null }: { mi
       <Brand className={minimal ? "max-md:text-term-amber md:text-ink" : "md:hidden"} prefetch={locked ? false : undefined} />
       {minimal ? null : <CycleStatusDot className="md:hidden" />}
       <div className="ml-auto flex items-center gap-sp-1">
-        {minimal ? null : <CommandPalette />}
+        {minimal ? null : <CommandPalette minChars={jobSearchSettings().palette.min_chars} />}
         <ThemeToggle className={TERMINAL_BAR_BUTTON} />
         {/* the language switch is a Server Action: not available before the login (the page follows the browser's language) */}
         {locked ? null : <LanguageToggle className={TERMINAL_BAR_BUTTON} />}

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Briefcase, Search } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { z } from "zod";
+import { defaultFilter } from "cmdk";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -68,10 +69,10 @@ export function PaletteScore({ rank, label }: { rank: number | null; label: stri
 /** Wait this long after the last keystroke before asking the server for jobs. */
 const SEARCH_DEBOUNCE_MS = 200;
 
-export function CommandPalette() {
+export function CommandPalette({ minChars }: { minChars: number }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const [jobs, setJobs] = useState<SearchJob[]>([]);
+  const [result, setResult] = useState<{ query: string; jobs: SearchJob[] }>({ query: "", jobs: [] });
   const router = useRouter();
   // The dialog has no Trigger, so Radix cannot hand the focus back by itself: remember who had it when the palette opened.
   const returnFocusTo = useRef<HTMLElement | null>(null);
@@ -99,10 +100,10 @@ export function CommandPalette() {
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [open, openFrom]);
 
-  // jobs for the typed text (the pages are filtered by cmdk itself)
+  // Page filtering stays local; job results keep the exact order supplied by the server.
   useEffect(() => {
     const text = query.trim();
-    if (!open || text.length < 2) return;
+    if (!open || text.length < minChars) return;
     const controller = new AbortController();
     const timer = setTimeout(() => {
       fetch(`/api/search?q=${encodeURIComponent(text)}`, { signal: controller.signal })
@@ -110,17 +111,21 @@ export function CommandPalette() {
           const parsed = response.ok ? searchResponseSchema.safeParse(await response.json()) : null;
           return parsed?.success ? parsed.data.jobs : [];
         })
-        .then(setJobs)
+        .then((jobs) => { if (!controller.signal.aborted) setResult({ query: text, jobs }); })
         .catch(() => undefined);
     }, SEARCH_DEBOUNCE_MS);
     return () => {
       clearTimeout(timer);
       controller.abort();
     };
-  }, [open, query]);
+  }, [open, query, minChars]);
 
   // rows of an earlier, longer text must not linger under a short one
-  const shownJobs = query.trim().length >= 2 ? jobs : [];
+  const text = query.trim();
+  const canSearchJobs = text.length >= minChars;
+  const shownJobs = canSearchJobs && result.query === text ? result.jobs : [];
+  const pages = NAV_ITEMS.filter(({ key, href }) => !text || defaultFilter(`${tNav(key)} ${href}`, text) > 0);
+  const subpages = PALETTE_SUBPAGES.filter(({ key, href }) => !text || defaultFilter(`${tSub(key)} ${href} ${key === "logs" ? tSub("logsKeywords") : ""}`, text) > 0);
 
   const go = useCallback(
     (href: string) => {
@@ -138,11 +143,11 @@ export function CommandPalette() {
         variant="outline"
         size="sm"
         className="gap-sp-2 text-ink-2 max-md:border-term-line max-md:bg-transparent max-md:text-term-ink max-md:shadow-none max-md:hover:bg-term-line sm:min-w-44 sm:justify-start"
-        aria-label={`${tShell("search")} ${modifier}K`}
+        aria-label={`${tShell("jump")} ${modifier}K`}
         onClick={(event) => openFrom(event.currentTarget)}
       >
         <Search aria-hidden />
-        <span className="hidden sm:inline">{tShell("search")}</span>
+        <span className="hidden sm:inline">{tShell("jump")}</span>
         <Kbd aria-hidden className="ml-auto hidden max-md:border-term-ink md:inline">
           {modifier}K
         </Kbd>
@@ -153,6 +158,7 @@ export function CommandPalette() {
         title={t("title")}
         description={t("description")}
         showCloseButton={false}
+        shouldFilter={false}
         onCloseAutoFocus={(event) => {
           event.preventDefault();
           const origin = returnFocusTo.current;
@@ -164,27 +170,27 @@ export function CommandPalette() {
         <CommandInput placeholder={t("placeholder")} value={query} onValueChange={setQuery} />
         <CommandList>
           <CommandEmpty>{t("empty")}</CommandEmpty>
-          <CommandGroup heading={t("pagesGroup")}>
-            {NAV_ITEMS.map(({ key, href, icon: Icon }) => (
+          {pages.length + subpages.length > 0 ? <CommandGroup heading={t("pagesGroup")} data-testid="palette-pages">
+            {pages.map(({ key, href, icon: Icon }) => (
               <CommandItem key={key} value={`${tNav(key)} ${href}`} onSelect={() => go(href)} className="group/item">
                 <Icon aria-hidden />
                 <span>{tNav(key)}</span>
                 <span className="ml-auto font-mono text-data-sm opacity-75">{href}</span>
               </CommandItem>
             ))}
-            {PALETTE_SUBPAGES.map(({ key, href, icon: Icon }) => (
+            {subpages.map(({ key, href, icon: Icon }) => (
               <CommandItem key={key} value={`${tSub(key)} ${href} ${key === "logs" ? tSub("logsKeywords") : ""}`} onSelect={() => go(href)} className="group/item" data-testid={key === "logs" ? "activity-log-palette" : `palette-page-${key}`}>
                 <Icon aria-hidden />
                 <span>{tSub(key)}</span>
                 <span className="ml-auto font-mono text-data-sm opacity-75">{href}</span>
               </CommandItem>
             ))}
-          </CommandGroup>
-          {shownJobs.length > 0 ? (
-            <CommandGroup heading={t("jobsGroup")}>
+          </CommandGroup> : null}
+          {canSearchJobs ? (
+            <CommandGroup heading={t("jobsGroup")} data-testid="palette-jobs">
               {shownJobs.map((job) => (
-                // the value carries the typed text so cmdk keeps the rows the server already matched
-                <CommandItem key={job.id} value={`${query} job-${job.id}`} onSelect={() => go(`/jobs/${job.id}`)} className="group/item">
+                // Filtering and ranking belong to the server.
+                <CommandItem key={job.id} value={`job-${job.id}`} data-testid="palette-job" onSelect={() => go(`/jobs/${job.id}`)} className="group/item">
                   <Briefcase aria-hidden />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate font-bold">{job.title}</span>
@@ -193,6 +199,9 @@ export function CommandPalette() {
                   <PaletteScore rank={job.rank} label={job.rank === null ? t("scoreUnknown") : job.rank > 100 ? t("rankOver", { value: Math.round(job.rank), over: Math.round(job.rank) - 100 }) : t("rank", { value: Math.round(job.rank) })} />
                 </CommandItem>
               ))}
+              <CommandItem value="view-all-jobs" data-testid="palette-view-all" onSelect={() => go(`/jobs?q=${encodeURIComponent(text)}`)}>
+                <Search aria-hidden /> {t("viewAll")}
+              </CommandItem>
             </CommandGroup>
           ) : null}
         </CommandList>

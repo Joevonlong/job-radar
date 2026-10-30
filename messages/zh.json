@@ -432,12 +432,13 @@
       "expand": "展开 {label}"
     },
     "languageMenu": "语言",
-    "sourceLink": "源代码（AGPL-3.0）"
+    "sourceLink": "源代码（AGPL-3.0）",
+    "jump": "跳转"
   },
   "commandPalette": {
     "title": "命令面板",
     "description": "搜索页面或岗位并跳转",
-    "placeholder": "输入页面名称，或搜索岗位…",
+    "placeholder": "跳到页面，或按职位、公司、地点找岗位…",
     "empty": "没有匹配的页面或岗位",
     "pagesGroup": "页面",
     "jobsGroup": "岗位",
@@ -449,7 +450,8 @@
     "hintClose": "关闭",
     "hintToggle": "开关",
     "rank": "排序值 {value} / 100",
-    "rankOver": "排序值 {value}：满分 100，另有 {over} 分来自薪资 / 股权信号加分"
+    "rankOver": "排序值 {value}：满分 100，另有 {over} 分来自薪资 / 股权信号加分",
+    "viewAll": "在岗位列表中查看全部结果"
   },
   "pages": {
     "today": {
@@ -1067,7 +1069,7 @@
       "filters": {
         "label": "搜索和筛选",
         "search": "搜索岗位",
-        "searchPlaceholder": "搜索职位、公司、JD 全文…",
+        "searchPlaceholder": "职位、公司、城市或国家",
         "source": "来源",
         "city": "城市",
         "country": "国家",
@@ -1113,7 +1115,17 @@
         "removeChip": "移除筛选 {key}：{value}",
         "dirAscLabel": "升序（低的在前），点击改为降序",
         "dirDescLabel": "降序（高的在前），点击改为升序",
-        "reason": "原因"
+        "reason": "原因",
+        "includeDescriptions": "包含职位说明",
+        "includeDescriptionsHint": "同时搜索职位说明原文和已有译文",
+        "searchCountries": "搜索国家…",
+        "alsoDescriptions": "也搜索职位说明",
+        "chineseHint": "岗位原文多为外文，中文只匹配国家、城市和已有译文",
+        "noTerms": "没有可搜索的词",
+        "truncated": "只用了前 {count} 个词",
+        "relevanceNote": "按相关度排序",
+        "useRank": "改按排序值",
+        "notSaved": "国家与搜索范围不保存进视图"
       },
       "pagination": {
         "label": "分页",

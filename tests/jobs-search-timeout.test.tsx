@@ -31,11 +31,15 @@ vi.mock("@/lib/db", async (importOriginal) => ({
   getFilterFloors: async () => new Map(),
   listMonthSalaryFigures: async () => [],
   listCompanyFilterOptions: async () => [],
+  listJobCountryOptions: async () => [],
 }));
-vi.mock("@/lib/jobs/list-filters", () => ({
-  jobsListFilters: async () => ({ searchIn: "all" }),
-  relistFilterVisibility: () => ({}),
-}));
+vi.mock("@/lib/jobs/list-filters", async () => {
+  const { searchPlan } = await import("./fixtures/job-search");
+  return {
+    jobsListFilters: async (_db: unknown, params: { q: string | null; searchIn: "all" | null }) => ({ search: searchPlan(params.q), searchIn: params.searchIn }),
+    relistFilterVisibility: () => ({}),
+  };
+});
 vi.mock("@/lib/jobs/cities", () => ({ loadCityGroups: async () => [] }));
 vi.mock("@/lib/db/repos/listing", () => ({ listingReady: async () => false }));
 vi.mock("@/lib/ghost/filter", () => ({ ghostFilterAvailable: async () => false }));
@@ -56,10 +60,10 @@ vi.mock("@/components/jobs/job-list", () => ({
 import JobsPage from "@/app/jobs/page";
 import { SearchTimeoutError } from "@/lib/db";
 
-async function show() {
+async function show(params: Record<string, string> = { q: "engineer", searchIn: "all" }) {
   render(
     <NextIntlClientProvider locale={state.locale} messages={state.locale === "en" ? en : zh}>
-      {await JobsPage({ searchParams: Promise.resolve({ q: "engineer", searchIn: "all" }) })}
+      {await JobsPage({ searchParams: Promise.resolve(params) })}
     </NextIntlClientProvider>,
   );
 }
@@ -118,4 +122,28 @@ it("keeps real counts and omits the notice when every query succeeds", async () 
 it("propagates non-timeout failures", async () => {
   state.countJobList.mockRejectedValue(new Error("unavailable"));
   await expect(JobsPage({ searchParams: Promise.resolve({ q: "engineer", searchIn: "all" }) })).rejects.toThrow("unavailable");
+});
+
+it("offers description search on zero results without an extra all-scope count", async () => {
+  state.listJobs.mockResolvedValue({ jobs: [], total: 0, page: 1, pageCount: 1 });
+  await show({ q: "Deutschlandticket", country: "DE" });
+  expect(screen.getByTestId("search-descriptions")).toHaveAttribute("href", "/jobs?q=Deutschlandticket&searchIn=all&country=DE");
+  expect(state.countJobList).toHaveBeenCalledTimes(1);
+  expect(state.countJobList.mock.calls[0]?.[1].filters.searchIn).not.toBe("all");
+});
+
+it.each(["en", "zh"] as const)("explains Chinese text and invalid terms in %s", async (locale) => {
+  state.locale = locale;
+  const first = await JobsPage({ searchParams: Promise.resolve({ q: "产品经理" }) });
+  const shown = render(<NextIntlClientProvider locale={locale} messages={locale === "en" ? en : zh}>{first}</NextIntlClientProvider>);
+  expect(screen.getByTestId("search-description-hint")).toHaveTextContent((locale === "en" ? en : zh).dashboard.jobs.filters.chineseHint);
+  shown.unmount();
+  await show({ q: "+++" });
+  expect(screen.getByTestId("search-no-terms")).toHaveTextContent((locale === "en" ? en : zh).dashboard.jobs.filters.noTerms);
+  expect(screen.queryByTestId("search-description-hint")).toBeNull();
+});
+
+it("reports the actual retained term count", async () => {
+  await show({ q: "one two three four five six seven eight nine ten eleven twelve thirteen" });
+  expect(screen.getByTestId("search-truncated")).toHaveTextContent("Only the first 12 terms were used");
 });
