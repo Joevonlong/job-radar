@@ -83,7 +83,7 @@ function getConnection(): Connection {
 export function initializeReadOnlyDb(): Db {
   if (globalForDb.__jobRadarDb) throw new Error("the read-only database must be initialized before opening the shared pool");
   const env = loadDatabaseEnv();
-  globalForDb.__jobRadarDb = createConnection(env.DATABASE_URL, { max: env.DB_POOL_MAX, connectTimeoutSeconds: env.DB_CONNECT_TIMEOUT_SECONDS, readOnly: true });
+  globalForDb.__jobRadarDb = createConnection(env.DATABASE_URL, { max: env.DB_POOL_MAX, connectTimeoutSeconds: env.DB_CONNECT_TIMEOUT_SECONDS, readOnly: true, sessionSettings: sharedPoolSessionSettings() });
   return globalForDb.__jobRadarDb.db;
 }
 
