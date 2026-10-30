@@ -171,28 +171,28 @@ export async function runFilter(db: Db, options: FilterOptions): Promise<FilterR
     // A timed-out rule preserves previous vetoes; retry those inputs next cycle instead of caching a partial judgement.
     const complete = !dealBreakers.warnings.some((warning) => warning.code === "too_slow");
     await scoreTransaction(db, async (tx) => {
-    for (const [i, row] of batch.entries()) {
-      const verdict = verdicts[i];
-      if (!verdict) continue;
-      result.evaluated += 1;
-      if (verdict.result === "passed") result.passed += 1;
-      else result.filteredOut += 1;
-      for (const reason of verdict.reasons) {
-        const code = reason.split(":", 1)[0] ?? reason;
-        result.byReason[code] = (result.byReason[code] ?? 0) + 1;
-      }
+      for (const [i, row] of batch.entries()) {
+        const verdict = verdicts[i];
+        if (!verdict) continue;
+        result.evaluated += 1;
+        if (verdict.result === "passed") result.passed += 1;
+        else result.filteredOut += 1;
+        for (const reason of verdict.reasons) {
+          const code = reason.split(":", 1)[0] ?? reason;
+          result.byReason[code] = (result.byReason[code] ?? 0) + 1;
+        }
 
-      const existing = stored.get(row.id);
-      const state = { filterResult: verdict.result, filterReasons: verdict.reasons, filterInputHash: complete ? row.inputHash : null, filterConfigHash: complete ? configHash : null };
-      if (!existing) {
-        fresh.push({ jobId: row.id, ...state });
-      } else {
-        await updateFilterResult(tx, existing.scoreId, state);
-        if (existing.filterResult !== verdict.result || !sameReasons(existing.filterReasons, verdict.reasons)) result.updated += 1;
-        else result.unchanged += 1;
+        const existing = stored.get(row.id);
+        const state = { filterResult: verdict.result, filterReasons: verdict.reasons, filterInputHash: complete ? row.inputHash : null, filterConfigHash: complete ? configHash : null };
+        if (!existing) {
+          fresh.push({ jobId: row.id, ...state });
+        } else {
+          await updateFilterResult(tx, existing.scoreId, state);
+          if (existing.filterResult !== verdict.result || !sameReasons(existing.filterReasons, verdict.reasons)) result.updated += 1;
+          else result.unchanged += 1;
+        }
       }
-    }
-    result.created += await insertFilterResults(tx, options.snapshotId, fresh);
+      result.created += await insertFilterResults(tx, options.snapshotId, fresh);
     });
   }
   result.dealBreakerWarnings = [...compiled.dealBreakers.warnings, ...dealBreakers.warnings];

@@ -698,3 +698,11 @@ process ID and process start time; a reused PID or abandoned token is recovered 
 A foreign host/namespace can be taken over only after the stale threshold.
 The final commit checks lock ownership again.
 See [upgrade.md](upgrade.md#settings-during-an-upgrade) for recovery and host-process restarts.
+
+## Current display scores (`current-scores.yaml`)
+
+This shipped file controls the rebuildable display-score projection. A user override replaces the whole file.
+`backfill.lock_timeout_ms` limits the migration's wait for the SHARE lock (100–60000 ms), and
+`backfill.statement_timeout_ms` limits the backfill statement itself (1000–600000 ms). They are separate per-statement
+limits, not a total migration timeout. `refresh.lateral_max_jobs` chooses indexed LATERAL lookups for small refreshes;
+larger sets use the job-scoped CTE (1–100000 jobs). All keys are required. This file does not affect filter fingerprints.

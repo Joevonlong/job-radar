@@ -3,19 +3,23 @@ import { afterAll, beforeAll, expect, inject, it } from "vitest";
 import { closeDb, getDb } from "@/lib/db/client";
 import { repairCurrentScores, scoreTransaction } from "@/lib/db/repos/current-scores";
 import { maintainCurrentScores } from "@/lib/cycle/current-scores";
-import { jobCurrentScores } from "@/lib/db/schema";
+import { jobCurrentScores, profileSnapshots } from "@/lib/db/schema";
 import { barrier, expectNoDrift, fixture, scoreRow, scores } from "./current-scores-support";
 beforeAll(() => { process.env.DATABASE_URL = inject("testDatabaseUrl"); }); afterAll(closeDb);
-it.each([true, false])("handles concurrent first inserts when newer commits first = %s", async (newerFirst) => {
+it.each([true, false])("handles concurrent first inserts with the newer row in the held transaction = %s", async (newerFirst) => {
   const db = getDb(); const [job] = await fixture(db); const entered = barrier(), release = barrier();
+  const snapshots = await db.insert(profileSnapshots).values([
+    { kind: "preferences", hash: "concurrent-first-a", contentYaml: "fixture" },
+    { kind: "preferences", hash: "concurrent-first-b", contentYaml: "fixture" },
+  ]).returning();
   const firstScore = newerFirst ? 90 : 40, secondScore = newerFirst ? 40 : 90;
   const first = scoreTransaction(db, async (tx) => {
-    await tx.insert(scores).values({ ...scoreRow(job!.id, firstScore), createdAt: new Date(firstScore * 1000) }); tx.touch([job!.id]);
+    await tx.insert(scores).values({ ...scoreRow(job!.id, firstScore), profileSnapshotId: snapshots[0]!.id, createdAt: new Date(firstScore * 1000) }); tx.touch([job!.id]);
     entered.release(); await release.promise;
   });
   await entered.promise;
   try {
-    await scoreTransaction(db, async (tx) => { await tx.insert(scores).values({ ...scoreRow(job!.id, secondScore), createdAt: new Date(secondScore * 1000) }); tx.touch([job!.id]); });
+    await scoreTransaction(db, async (tx) => { await tx.insert(scores).values({ ...scoreRow(job!.id, secondScore), profileSnapshotId: snapshots[1]!.id, createdAt: new Date(secondScore * 1000) }); tx.touch([job!.id]); });
   } finally { release.release(); await first; }
   expect((await db.select().from(jobCurrentScores))[0]!.score).toBe(90); await expectNoDrift(db);
 });

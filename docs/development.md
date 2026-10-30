@@ -1,5 +1,7 @@
 # Development
 
+[中文](development.zh.md)
+
 Notes for contributors. See also [CONTRIBUTING.md](../CONTRIBUTING.md) and the root `AGENTS.md`.
 
 ## Layout
@@ -184,3 +186,22 @@ against `engines.node`, and a unit test ties the Playwright image to `@playwrigh
 `scripts/release-check.sh` scans the working tree and the whole commit history for secrets (gitleaks, through Docker), for
 personal information (names, machine paths, host names), for private planning ids anywhere in the repository, and checks that
 `.gitignore` covers `.env`, `data/` and `.auth/`.
+
+## Current display score projection
+
+`scores` is the authority for AI judgments. `job_current_scores` is a disposable projection of its display rule, defined
+in `src/lib/db/queries/job-cards.ts`. Every application score writer requires a `ScoreTx`, created by
+`scoreTransaction(db, async (tx) => ...)`. Register affected job ids with `tx.touch(ids)`; the helper refreshes them once,
+after the outer callback returns and before commit. Nested calls use savepoints and share the touched ids. Rolling back a
+savepoint can leave extra ids registered; refreshing those ids is harmless. Never refresh early and then keep writing. An unbranded outer transaction is rejected at runtime; convert that outer
+boundary to `scoreTransaction` too.
+
+The refresh supports READ COMMITTED only: it takes sorted advisory bucket locks in one statement, then computes in a
+second statement with a fresh snapshot. The SQL lock function rejects stronger isolation levels. The projection has no
+foreign keys, so its final refresh cannot wait for a job row lock. The score-write guard checks ORM and literal SQL writes.
+Direct SQL, COPY, cascades, migrations and older binaries bypass the helper; maintenance detects and repairs their drift.
+
+Changing the display rule requires a change to the TypeScript rule, a migration rebuilding the projection using a frozen
+copy of that rule, and independent expected-value tests. The temporary read fallback for an absent projection is removed
+in the next minor release; the rule builders remain for refresh and checks. A read inside a writing callback sees the
+previous projection: refresh happens only after that callback finishes.

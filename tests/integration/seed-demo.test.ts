@@ -1,3 +1,4 @@
+import { expectNoDrift } from "./current-scores-support";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";
 
@@ -32,6 +33,7 @@ describe("seedDemoDatabase", () => {
   it("adds the statuses the seed has no card for, a trap on a scored job, and gives the same rows when run again", async () => {
     const first = await seedDemoDatabase(getDb(), { now: NOW, timezone: TZ });
     expect(first.demoApplications).toBe(DEMO_APPLICATIONS.length);
+    await expectNoDrift(getDb());
     const before = await counts();
 
     const statuses = await getDb().execute<{ status: string }>(sql`select distinct status::text as status from applications`);
@@ -45,6 +47,7 @@ describe("seedDemoDatabase", () => {
 
     await seedDemoDatabase(getDb(), { now: NOW, timezone: TZ });
     expect(await counts()).toEqual(before);
+    await expectNoDrift(getDb());
   });
 
   it("uses only fictional links and e-mail addresses", async () => {

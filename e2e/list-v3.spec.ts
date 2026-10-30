@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import { expect, test, type Page } from "./fixtures";
 import postgres from "postgres";
 import { listRow, listRows } from "./list-rows";
@@ -284,5 +285,31 @@ for (const locale of ["en", "zh"] as const) {
     await expect(chip).toContainText(locale === "en" ? "Not listed for weeks" : "数周未被列出");
     await expect(chip).toHaveAttribute("title", locale === "en" ? /No source has listed/ : /已经数周/);
     await expect(chip.locator(".sr-only")).toContainText(locale === "en" ? "No source has listed" : "已经数周");
+  });
+}
+
+for (const locale of ["en", "zh"] as const) {
+  test(`display scores keep their values after reload on desktop and phone (${locale})`, async ({ page, context, baseURL }) => {
+    if (!baseURL) throw new Error("The e2e run must configure baseURL");
+    await context.addCookies([{ name: "NEXT_LOCALE", value: locale, url: baseURL }]);
+    fs.mkdirSync("/tmp/current-scores-shots", { recursive: true });
+    for (const width of [1280, 390]) for (const theme of ["light", "dark"]) {
+      await page.setViewportSize({ width, height: 900 });
+      await open(page, "/jobs?sort=rank");
+      await page.evaluate((value) => localStorage.setItem("theme", value), theme);
+      await page.reload();
+      await page.waitForLoadState("networkidle");
+      const first = listRows(page).first();
+      await expect(first).toBeVisible();
+      const rank = first.locator("[data-rank-value]");
+      await expect(rank).toHaveAttribute("data-rank-value", /^\d/);
+      const before = await rank.getAttribute("data-rank-value");
+      await page.reload();
+      await page.waitForLoadState("networkidle");
+      await expect(listRows(page).first().locator("[data-rank-value]")).toHaveAttribute("data-rank-value", before!);
+      await expect(page.locator("html")).toHaveAttribute("lang", locale === "en" ? "en-US" : "zh-CN");
+      await expect(page.locator("html")).toHaveClass(new RegExp(`\\b${theme}\\b`));
+      await page.screenshot({ path: `/tmp/current-scores-shots/${locale}-${width}-${theme}.png` });
+    }
   });
 }

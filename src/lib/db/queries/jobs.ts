@@ -15,7 +15,7 @@ import { seenSql } from "../repos/seen";
 import { uxTablesReady } from "../repos/ux-tables";
 import { jobHasCountryIn, jobLocationRows, jobSearchCondition, jobSearchOrderBy } from "./job-search";
 import { archiveReasonSql, effectiveStatusSql, jobScopeSql, lastListedSql } from "./job-status";
-import { cardColumns, hideGermanLevels, hydrateCards, latestScoreCte, latestScoreLateral, type CardRow, type LatestScore } from "./job-cards";
+import { withCurrentScore, currentScoreRead, cardColumns, hideGermanLevels, hydrateCards, currentScore, type CardRow, type LatestScore } from "./job-cards";
 import { annualBaseFigureSql, baseBoundSql, comparableSalaryWhere } from "./salary-figure";
 import { hasHighValueSignal, policyCurrency, type HighValuePolicy } from "./signal-filter";
 import type { JobCard, JobStatus, Workplace } from "./types";
@@ -311,16 +311,17 @@ export async function countJobList(db: Db, options: { filters: JobFilters; timez
 }
 
 async function countJobListIn(db: Executor, options: { filters: JobFilters; timezone: string }): Promise<number> {
-  const latest = latestScoreCte(db);
-  const ux = await uxTablesReady(db);
-  const [row] = await db
-    .with(latest)
-    .select({ count: sql<number>`count(*)`.mapWith(Number) })
-    .from(jobs)
-    .innerJoin(companies, eq(companies.id, jobs.companyId))
-    .leftJoin(latest, eq(latest.jobId, jobs.id))
-    .where(await jobListWhere(db, options.filters, options.timezone, latest, ux));
-  return row?.count ?? 0;
+  return currentScoreRead(db, async () => {
+    const latest = await currentScore(db, "set");
+    const ux = await uxTablesReady(db);
+    const [row] = await withCurrentScore(db, latest)
+      .select({ count: sql<number>`count(*)`.mapWith(Number) })
+      .from(jobs)
+      .innerJoin(companies, eq(companies.id, jobs.companyId))
+      .leftJoin(latest, eq(latest.jobId, jobs.id))
+      .where(await jobListWhere(db, options.filters, options.timezone, latest, ux));
+    return row?.count ?? 0;
+  });
 }
 
 /** All jobs with filters, search, sort and server-side pagination. */
@@ -329,59 +330,59 @@ export async function listJobs(db: Db, options: ListJobsOptions): Promise<JobPag
 }
 
 async function listJobsIn(db: Executor, options: ListJobsOptions): Promise<JobPage> {
-  const latest = latestScoreCte(db);
-  const ux = await uxTablesReady(db);
-  const where = await jobListWhere(db, options.filters, options.timezone, latest, ux);
-  const pageSize = Math.max(1, options.pageSize);
-  let page = Math.max(1, Math.floor(options.page));
+  return currentScoreRead(db, async () => {
+    const latest = await currentScore(db, "set");
+    const ux = await uxTablesReady(db);
+    const where = await jobListWhere(db, options.filters, options.timezone, latest, ux);
+    const pageSize = Math.max(1, options.pageSize);
+    let page = Math.max(1, Math.floor(options.page));
 
-  const orderBy = jobOrderBy(options.sort, options.dir ?? DEFAULT_SORT_DIR[options.sort], latest, policyCurrency(options.filters), lastListedSql(await listingReady(db)), options.filters);
+    const orderBy = jobOrderBy(options.sort, options.dir ?? DEFAULT_SORT_DIR[options.sort], latest, policyCurrency(options.filters), lastListedSql(await listingReady(db)), options.filters);
 
-  // Count, sort and paginate ids before evaluating card columns and their subqueries. PostgreSQL also
-  // inlines this single-use CTE and prunes its unused wide score columns (covered by EXPLAIN tests).
-  const selectIds = (page: number) => db
-    .with(latest)
-    .select({ id: jobs.id, total: sql<number>`count(*) over ()`.mapWith(Number) })
-    .from(jobs)
-    .innerJoin(companies, eq(companies.id, jobs.companyId))
-    .leftJoin(latest, eq(latest.jobId, jobs.id))
-    .where(where)
-    .orderBy(...orderBy)
-    .limit(pageSize)
-    .offset((page - 1) * pageSize);
-
-  let ids = await selectIds(page);
-  let total = ids[0]?.total ?? 0;
-  let pageCount = Math.max(1, Math.ceil(total / pageSize));
-  // An empty page has no window count. Only stale page numbers need a separate count and retry.
-  if (ids.length === 0 && page > 1) {
-    const [countRow] = await db
-      .with(latest)
-      .select({ total: count() })
+    // Count, sort and paginate ids before evaluating card columns and their subqueries. PostgreSQL also
+    // inlines this single-use CTE and prunes its unused wide score columns (covered by EXPLAIN tests).
+    const selectIds = (page: number) => withCurrentScore(db, latest)
+      .select({ id: jobs.id, total: sql<number>`count(*) over ()`.mapWith(Number) })
       .from(jobs)
       .innerJoin(companies, eq(companies.id, jobs.companyId))
       .leftJoin(latest, eq(latest.jobId, jobs.id))
-      .where(where);
-    total = countRow?.total ?? 0;
-    pageCount = Math.max(1, Math.ceil(total / pageSize));
-    page = Math.min(page, pageCount);
-    ids = await selectIds(page);
-  }
+      .where(where)
+      .orderBy(...orderBy)
+      .limit(pageSize)
+      .offset((page - 1) * pageSize);
 
-  const cardScore = latestScoreLateral(db);
-  const cards: CardRow[] = ids.length === 0 ? [] : await db
-    .select(cardColumns(cardScore, ux, await dormancyReady(db), await listingReady(db)))
-    .from(jobs)
-    .innerJoin(companies, eq(companies.id, jobs.companyId))
-    .leftJoinLateral(cardScore, sql`true`)
-    .where(inArray(jobs.id, ids.map(({ id }) => id)));
-  const cardsById = new Map(cards.map((card) => [card.id, card]));
-  const rows = ids.flatMap(({ id }) => {
-    const card = cardsById.get(id);
-    return card ? [card] : [];
+    let ids = await selectIds(page);
+    let total = ids[0]?.total ?? 0;
+    let pageCount = Math.max(1, Math.ceil(total / pageSize));
+    // An empty page has no window count. Only stale page numbers need a separate count and retry.
+    if (ids.length === 0 && page > 1) {
+      const [countRow] = await withCurrentScore(db, latest)
+        .select({ total: count() })
+        .from(jobs)
+        .innerJoin(companies, eq(companies.id, jobs.companyId))
+        .leftJoin(latest, eq(latest.jobId, jobs.id))
+        .where(where);
+      total = countRow?.total ?? 0;
+      pageCount = Math.max(1, Math.ceil(total / pageSize));
+      page = Math.min(page, pageCount);
+      ids = await selectIds(page);
+    }
+
+    const cardScore = await currentScore(db, "few");
+    const cards: CardRow[] = ids.length === 0 ? [] : await db
+      .select(cardColumns(cardScore, ux, await dormancyReady(db), await listingReady(db)))
+      .from(jobs)
+      .innerJoin(companies, eq(companies.id, jobs.companyId))
+      .leftJoinLateral(cardScore, sql`true`)
+      .where(inArray(jobs.id, ids.map(({ id }) => id)));
+    const cardsById = new Map(cards.map((card) => [card.id, card]));
+    const rows = ids.flatMap(({ id }) => {
+      const card = cardsById.get(id);
+      return card ? [card] : [];
+    });
+
+    return { jobs: await hydrateCards(db, rows, { visa: options.visa ?? true, ghost: options.ghost === true }), total, page, pageCount, pageSize };
   });
-
-  return { jobs: await hydrateCards(db, rows, { visa: options.visa ?? true, ghost: options.ghost === true }), total, page, pageCount, pageSize };
 }
 
 /** What the "seen" controls of /jobs need about the whole filtered list (every page): how many are unseen, and how many were first seen after `since`. */
@@ -396,20 +397,21 @@ export async function countJobListSeen(db: Db, options: { filters: JobFilters; t
 }
 
 async function countJobListSeenIn(db: Executor, options: { filters: JobFilters; timezone: string; since: Date | null }): Promise<JobListSeenCounts> {
-  const latest = latestScoreCte(db);
-  const ux = await uxTablesReady(db);
-  const since = options.since ? sql`${jobs.firstSeenAt} > ${options.since.toISOString()}::timestamptz` : sql`false`;
-  const [row] = await db
-    .with(latest)
-    .select({
-      unseen: (ux ? sql<number>`count(*) filter (where not ${seenSql()})` : sql<number>`0`).mapWith(Number),
-      newSince: sql<number>`count(*) filter (where ${since})`.mapWith(Number),
-    })
-    .from(jobs)
-    .innerJoin(companies, eq(companies.id, jobs.companyId))
-    .leftJoin(latest, eq(latest.jobId, jobs.id))
-    .where(await jobListWhere(db, options.filters, options.timezone, latest, ux));
-  return { unseen: row?.unseen ?? 0, newSince: row?.newSince ?? 0 };
+  return currentScoreRead(db, async () => {
+    const latest = await currentScore(db, "set");
+    const ux = await uxTablesReady(db);
+    const since = options.since ? sql`${jobs.firstSeenAt} > ${options.since.toISOString()}::timestamptz` : sql`false`;
+    const [row] = await withCurrentScore(db, latest)
+      .select({
+        unseen: (ux ? sql<number>`count(*) filter (where not ${seenSql()})` : sql<number>`0`).mapWith(Number),
+        newSince: sql<number>`count(*) filter (where ${since})`.mapWith(Number),
+      })
+      .from(jobs)
+      .innerJoin(companies, eq(companies.id, jobs.companyId))
+      .leftJoin(latest, eq(latest.jobId, jobs.id))
+      .where(await jobListWhere(db, options.filters, options.timezone, latest, ux));
+    return { unseen: row?.unseen ?? 0, newSince: row?.newSince ?? 0 };
+  });
 }
 
 /** The ids of every unseen job of the filtered /jobs list (all pages): what "mark all seen" marks. */
@@ -418,23 +420,24 @@ export async function listUnseenJobIds(db: Db, options: { filters: JobFilters; t
 }
 
 async function listUnseenJobIdsIn(db: Executor, options: { filters: JobFilters; timezone: string; firstSeenUpTo?: Date }): Promise<number[]> {
-  const latest = latestScoreCte(db);
-  if (!(await uxTablesReady(db))) return [];
-  const rows = await db
-    .with(latest)
-    .select({ id: jobs.id })
-    .from(jobs)
-    .innerJoin(companies, eq(companies.id, jobs.companyId))
-    .leftJoin(latest, eq(latest.jobId, jobs.id))
-    .where(
-      and(
-        await jobListWhere(db, options.filters, options.timezone, latest, true),
-        not(seenSql()),
-        // Only jobs that were already there when the page was drawn (one that arrived since was never on screen)
-        options.firstSeenUpTo ? lte(jobs.firstSeenAt, options.firstSeenUpTo) : undefined,
-      ),
-    );
-  return rows.map((row) => row.id);
+  return currentScoreRead(db, async () => {
+    const latest = await currentScore(db, "set");
+    if (!(await uxTablesReady(db))) return [];
+    const rows = await withCurrentScore(db, latest)
+      .select({ id: jobs.id })
+      .from(jobs)
+      .innerJoin(companies, eq(companies.id, jobs.companyId))
+      .leftJoin(latest, eq(latest.jobId, jobs.id))
+      .where(
+        and(
+          await jobListWhere(db, options.filters, options.timezone, latest, true),
+          not(seenSql()),
+          // Only jobs that were already there when the page was drawn (one that arrived since was never on screen)
+          options.firstSeenUpTo ? lte(jobs.firstSeenAt, options.firstSeenUpTo) : undefined,
+        ),
+      );
+    return rows.map((row) => row.id);
+  });
 }
 
 export interface JobCountryOption {
@@ -444,19 +447,21 @@ export interface JobCountryOption {
 
 /** One group-by for the chosen scope, counting each job once per code. Retain absent selections with count zero. */
 export async function listJobCountryOptions(db: Db, options: { scope?: JobScope | null; selected?: readonly string[]; timezone: string }): Promise<JobCountryOption[]> {
-  const latest = latestScoreCte(db);
-  const ux = await uxTablesReady(db);
-  const code = sql<string>`upper(loc->>'countryCode')`;
-  const rows = await db.with(latest).select({ code, jobCount: sql<number>`count(distinct ${jobs.id})`.mapWith(Number) })
-    .from(jobs)
-    .leftJoin(latest, eq(latest.jobId, jobs.id))
-    .innerJoin(sql`lateral ${jobLocationRows()}`, sql`true`)
-    .where(and(await jobListWhere(db, { scope: options.scope }, options.timezone, latest, ux), sql`jsonb_typeof(loc) = 'object'`, sql`${code} ~ '^[A-Z]{2}$'`))
-    .groupBy(code)
-    .orderBy(code);
-  const counts = new Map(rows.map((row) => [row.code, row.jobCount]));
-  for (const selected of options.selected ?? []) if (!counts.has(selected.toUpperCase())) counts.set(selected.toUpperCase(), 0);
-  return [...counts].sort(([a], [b]) => a.localeCompare(b)).map(([code, jobCount]) => ({ code, jobCount }));
+  return currentScoreRead(db, async () => {
+    const latest = await currentScore(db, "set");
+    const ux = await uxTablesReady(db);
+    const code = sql<string>`upper(loc->>'countryCode')`;
+    const rows = await withCurrentScore(db, latest).select({ code, jobCount: sql<number>`count(distinct ${jobs.id})`.mapWith(Number) })
+      .from(jobs)
+      .leftJoin(latest, eq(latest.jobId, jobs.id))
+      .innerJoin(sql`lateral ${jobLocationRows()}`, sql`true`)
+      .where(and(await jobListWhere(db, { scope: options.scope }, options.timezone, latest, ux), sql`jsonb_typeof(loc) = 'object'`, sql`${code} ~ '^[A-Z]{2}$'`))
+      .groupBy(code)
+      .orderBy(code);
+    const counts = new Map(rows.map((row) => [row.code, row.jobCount]));
+    for (const selected of options.selected ?? []) if (!counts.has(selected.toUpperCase())) counts.set(selected.toUpperCase(), 0);
+    return [...counts].sort(([a], [b]) => a.localeCompare(b)).map(([code, jobCount]) => ({ code, jobCount }));
+  });
 }
 
 export interface JobFilterOptions {
@@ -512,20 +517,21 @@ export interface CompanyFilterOption {
  * (the filter picks both). A name longer than a filter value may be is left out: the URL would drop it.
  */
 export async function listCompanyFilterOptions(db: Db, options: { limit: number; timezone: string }): Promise<CompanyFilterOption[]> {
-  const latest = latestScoreCte(db);
-  const ux = await uxTablesReady(db);
-  const jobCount = sql<number>`count(*)`.mapWith(Number);
-  const rows = await db
-    .with(latest)
-    .select({ name: companies.name, jobCount })
-    .from(jobs)
-    .innerJoin(companies, eq(companies.id, jobs.companyId))
-    .leftJoin(latest, eq(latest.jobId, jobs.id))
-    .where(and(await jobListWhere(db, {}, options.timezone, latest, ux), sql`char_length(${companies.name}) <= ${MAX_FILTER_VALUE_CHARS}`, sql`btrim(${companies.name}) <> ''`))
-    .groupBy(companies.name)
-    .orderBy(desc(jobCount), asc(companies.name))
-    .limit(Math.max(1, options.limit));
-  return rows;
+  return currentScoreRead(db, async () => {
+    const latest = await currentScore(db, "set");
+    const ux = await uxTablesReady(db);
+    const jobCount = sql<number>`count(*)`.mapWith(Number);
+    const rows = await withCurrentScore(db, latest)
+      .select({ name: companies.name, jobCount })
+      .from(jobs)
+      .innerJoin(companies, eq(companies.id, jobs.companyId))
+      .leftJoin(latest, eq(latest.jobId, jobs.id))
+      .where(and(await jobListWhere(db, {}, options.timezone, latest, ux), sql`char_length(${companies.name}) <= ${MAX_FILTER_VALUE_CHARS}`, sql`btrim(${companies.name}) <> ''`))
+      .groupBy(companies.name)
+      .orderBy(desc(jobCount), asc(companies.name))
+      .limit(Math.max(1, options.limit));
+    return rows;
+  });
 }
 
 /**

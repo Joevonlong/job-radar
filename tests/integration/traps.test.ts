@@ -1,3 +1,4 @@
+import { expectNoDrift } from "./current-scores-support";
 import { withRebuiltCurrentScores } from "../helpers/current-scores";
 import { scoreTransaction } from "@/lib/db/repos/current-scores";
 import fs from "node:fs";
@@ -221,6 +222,7 @@ describe("the rule scan", () => {
 
     expect(await countTrappedScores(db())).toBe(1);
     expect(await scoreTransaction(db(), (tx) => markTrappedScoresStale(tx))).toEqual([red.jobId]);
+    await expectNoDrift(db());
     const stale = await db().select({ jobId: schema.scores.jobId, stale: schema.scores.stale }).from(schema.scores).orderBy(schema.scores.jobId);
     expect(stale).toEqual([
       { jobId: red.jobId, stale: true },

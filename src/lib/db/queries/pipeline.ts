@@ -4,7 +4,7 @@ import type { Db } from "../client";
 import { listEventsByApplication, type Application, type ApplicationEvent } from "../repos/applications";
 import { applications, companies, jobs } from "../schema";
 import { uxTablesReady } from "../repos/ux-tables";
-import { cardColumns, hydrateCards, latestScoreCte } from "./job-cards";
+import { withCurrentScore, currentScoreRead, cardColumns, hydrateCards, currentScore } from "./job-cards";
 import type { JobCard } from "./types";
 import { listingReady } from "../repos/listing";
 import { dormancyReady } from "../repos/dormancy";
@@ -24,24 +24,25 @@ export interface PipelineEntry {
  * first column, not hidden; jobs without any application row are not on the board.
  */
 export async function listPipelineEntries(db: Db, options: { visa?: boolean } = {}): Promise<PipelineEntry[]> {
-  const latest = latestScoreCte(db);
-  const ux = await uxTablesReady(db);
-  const rows = await db
-    .with(latest)
-    .select({ ...cardColumns(latest, ux, await dormancyReady(db), await listingReady(db)), application: applications })
-    .from(applications)
-    .innerJoin(jobs, eq(jobs.id, applications.jobId))
-    .innerJoin(companies, eq(companies.id, jobs.companyId))
-    .leftJoin(latest, eq(latest.jobId, jobs.id))
-    .orderBy(sql`${latest.rankValue} desc nulls last`, desc(applications.statusChangedAt), asc(applications.id));
+  return currentScoreRead(db, async () => {
+    const latest = await currentScore(db, "set");
+    const ux = await uxTablesReady(db);
+    const rows = await withCurrentScore(db, latest)
+      .select({ ...cardColumns(latest, ux, await dormancyReady(db), await listingReady(db)), application: applications })
+      .from(applications)
+      .innerJoin(jobs, eq(jobs.id, applications.jobId))
+      .innerJoin(companies, eq(companies.id, jobs.companyId))
+      .leftJoin(latest, eq(latest.jobId, jobs.id))
+      .orderBy(sql`${latest.rankValue} desc nulls last`, desc(applications.statusChangedAt), asc(applications.id));
 
-  const cards = await hydrateCards(db, rows, { visa: options.visa ?? true });
-  const events = await listEventsByApplication(
-    db,
-    rows.map((r) => r.application.id),
-  );
-  return rows.flatMap((row, index) => {
-    const job = cards[index];
-    return job ? [{ job, application: row.application, events: events.get(row.application.id) ?? [] }] : [];
+    const cards = await hydrateCards(db, rows, { visa: options.visa ?? true });
+    const events = await listEventsByApplication(
+      db,
+      rows.map((r) => r.application.id),
+    );
+    return rows.flatMap((row, index) => {
+      const job = cards[index];
+      return job ? [{ job, application: row.application, events: events.get(row.application.id) ?? [] }] : [];
+    });
   });
 }
