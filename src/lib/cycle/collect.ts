@@ -190,19 +190,9 @@ export async function collectStep(ctx: CycleStepContext): Promise<StepResult> {
 
   const keywordQueries = buildQueries(config.search, ctx.cycle.kind, { windowKind: ctx.windowKind });
   const sweepQuery = buildSweepQuery(config.search, ctx.cycle.kind, { windowKind: ctx.windowKind });
-  const watched = config.search.watched_company_queries.enabled ? currentWatchedCompanies(ctx.logger) : [];
   let pipeline: PipelineConfig | null = null;
   let watchedKeys: ReadonlySet<string> = new Set();
   let companyQueries: SearchQuery[] = [];
-  if (watched.length > 0) {
-    try {
-      pipeline = loadPipeline();
-      watchedKeys = buildWatchedCompanyKeys(watched, pipeline);
-      companyQueries = buildCompanyQueries(config.search, watchedCompanyBoards(watched, config.channels.ats_boards, pipeline), sweepQuery.windowHours);
-    } catch (error) {
-      ctx.logger.warn("company query configuration could not be read; continuing keyword collection", { error: error instanceof Error ? error.message : "unknown error" });
-    }
-  }
 
   /** A channel that is not due this cycle (a daily side channel that already ran) is left out; a failing check counts as due. */
   const isDue = async (channel: Channel): Promise<boolean> => {
@@ -233,14 +223,28 @@ export async function collectStep(ctx: CycleStepContext): Promise<StepResult> {
     units.push({ name: channel.id, spec, familyChannels: [channel.id], queries: queriesFor(spec.order), companyCandidates: [], eligible: [] });
   }
   for (const unit of units) {
-    unit.eligible = companyQueries.length === 0 ? [] : unit.spec.order.filter((id) => {
+    const first = unit.spec.order.map((id) => registry.get(id)).find((channel) => channel !== undefined);
+    unit.eligible = !config.search.watched_company_queries.enabled || !first?.usesQueries ? [] : unit.spec.order.filter((id) => {
       const channel = registry.get(id);
       const settings = registry.settingsFor(id, config.channels);
       return channel?.supportsCompanyQueries === true && settings?.enabled === true && settings.companyQueries
         && (channel.isConfigured?.() ?? true);
     });
-    const first = unit.spec.order.map((id) => registry.get(id)).find((channel) => channel !== undefined);
-    if (first?.usesQueries && unit.eligible.length > 0) unit.companyCandidates = companyQueries;
+  }
+  if (units.some((unit) => unit.eligible.length > 0)) {
+    const watched = currentWatchedCompanies(ctx.logger);
+    if (watched.length > 0) {
+      try {
+        pipeline = loadPipeline();
+        watchedKeys = buildWatchedCompanyKeys(watched, pipeline);
+        companyQueries = buildCompanyQueries(config.search, watchedCompanyBoards(watched, config.channels.ats_boards, pipeline), sweepQuery.windowHours);
+      } catch (error) {
+        ctx.logger.warn("company query configuration could not be read; continuing keyword collection", { error: error instanceof Error ? error.message : "unknown error" });
+      }
+    }
+  }
+  for (const unit of units) {
+    if (unit.eligible.length > 0) unit.companyCandidates = companyQueries;
     for (const q of [...unit.queries, ...unit.companyCandidates]) allQueries.set(q.id, q);
   }
 
@@ -544,8 +548,10 @@ export async function collectStep(ctx: CycleStepContext): Promise<StepResult> {
     const queries = historyReason === null
       ? orderQueries(selectedQueries, turns, config.channels.collect.query_rotation)
       : selectedQueries;
-    planned += company.selected.length;
-    step.progress(done, planned);
+    if (company.selected.length > 0) {
+      planned += company.selected.length;
+      step.progress(done, planned);
+    }
     let reached = 0;
     const stretched = new Set<string>();
     const capped = new Set<string>();

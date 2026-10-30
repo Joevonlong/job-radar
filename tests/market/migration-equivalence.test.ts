@@ -13,7 +13,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
 
-import { migrateConfigDocument, parseConfigDocument, parseConfigTextWithVersion, type ConfigName, type PipelineConfig } from "@/lib/config";
+import { migrateConfigDocument, parseConfigDocument, parseConfigTextWithVersion, searchSchema, type ConfigName, type PipelineConfig } from "@/lib/config";
 import { LEGACY_REMOTE_SCOPES, remoteScopeKey } from "@/lib/market/remote-scope";
 import { buildEffectivePipeline } from "@/lib/market";
 
@@ -179,7 +179,9 @@ describe.each([["preferences"], ["search"]] as const)("%s.yaml", (name) => {
     const migrated = migrateText(name, legacyText(name) ?? "");
     expect(migrated.steps).toBe(1);
     // `deal_breakers` came later with an empty default: the parsed value has it, the migrated file does not
-    const { market, salary_floor_year: floor, deal_breakers: dealBreakers, ...rest } = migrated.value;
+    const { market, salary_floor_year: floor, deal_breakers: dealBreakers, watched_company_queries: companyQueries, ...rest } = migrated.value;
+    if (name === "search") expect({ value: companyQueries, inFile: /^watched_company_queries:/m.test(migrated.text) })
+      .toEqual({ value: searchSchema.shape.watched_company_queries.parse(undefined), inFile: false });
     if (name === "preferences") expect(market).toEqual({ pack: "de", country: "DE", currency: "EUR", home_language: "de" });
     if (name === "preferences") expect({ value: dealBreakers, inFile: /^deal_breakers:/m.test(migrated.text) }).toEqual({ value: [], inFile: false });
     const back = { ...rest, remote_scope: legacyScope(rest.remote_scope), ...(floor !== undefined ? { salary_floor_eur_year: floor } : {}) };
