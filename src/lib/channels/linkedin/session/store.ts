@@ -4,6 +4,7 @@ import { getRawPayloadsByExternalId } from "@/lib/db/repos/raw-postings";
 import { getRuntimeState, setRuntimeState } from "@/lib/db/repos/runtime-state";
 
 import { CLOSED_CIRCUIT, healthOf } from "../../circuit";
+import { ChannelError } from "../../errors";
 import { AUTH_FLAG_KEY, readAuthFlag, type AuthFlag } from "./auth-state";
 import { LINKEDIN_SESSION_ID, LINKEDIN_SESSION_RECOMMENDED_ID } from "./contract";
 
@@ -92,38 +93,55 @@ export function createMemorySessionStore(seed: { requests?: Record<string, numbe
   return store;
 }
 
-/** A dry run reads persisted session state, then keeps its own changes in memory. No base write method is called. */
+/** Why a dry run of the session channels stops when it cannot read the persisted session state. */
+export const SESSION_STATE_UNREADABLE = "LinkedIn session state could not be read from the database; a dry run of the session channels needs it";
+
+/**
+ * A dry run reads persisted session state, then keeps its own changes in memory. No base write method is called.
+ * Dry runs hold no cycle lock, so the page count is read from the base every time (a concurrent real run's pages count) and
+ * only this run's own page loads are kept as a delta. The first base read that fails stops every later read with the same
+ * ChannelError, so the channels report one clear reason instead of a raw database error per query.
+ */
 export function createOverlaySessionStore(base: SessionStore): SessionStore {
-  const requests = new Map<string, number>();
+  const delta = new Map<string, number>();
   const payloads = new Map<string, unknown>();
   let flag: AuthFlag | null | undefined;
   let recommendedAt: Date | null | undefined;
+  let failure: ChannelError | undefined;
+  const read = async <T>(load: () => Promise<T>): Promise<T> => {
+    if (failure) throw failure;
+    try {
+      return await load();
+    } catch (error) {
+      failure = error instanceof ChannelError ? error : new ChannelError("unknown", SESSION_STATE_UNREADABLE, { retryable: false, cause: error });
+      throw failure;
+    }
+  };
   const store: SessionStore = {
     async requestsOn(day) {
-      if (!requests.has(day)) requests.set(day, await base.requestsOn(day));
-      return requests.get(day) ?? 0;
+      return (await read(() => base.requestsOn(day))) + (delta.get(day) ?? 0);
     },
     async addRequest(day) {
-      const next = (await store.requestsOn(day)) + 1;
-      requests.set(day, next);
-      return next;
+      const current = await store.requestsOn(day);
+      delta.set(day, (delta.get(day) ?? 0) + 1);
+      return current + 1;
     },
     async storedPayloads(jobIds) {
       const missing = jobIds.filter((id) => !payloads.has(id));
       if (missing.length > 0) {
-        for (const [id, payload] of await base.storedPayloads(missing)) payloads.set(id, payload);
+        for (const [id, payload] of await read(() => base.storedPayloads(missing))) payloads.set(id, payload);
       }
       return new Map(jobIds.flatMap((id) => payloads.has(id) ? [[id, payloads.get(id)] as const] : []));
     },
     async loadAuthFlag() {
-      if (flag === undefined) flag = await base.loadAuthFlag();
+      if (flag === undefined) flag = await read(() => base.loadAuthFlag());
       return flag;
     },
     async saveAuthFlag(value) {
       flag = value;
     },
     async lastRecommendedAt() {
-      if (recommendedAt === undefined) recommendedAt = await base.lastRecommendedAt();
+      if (recommendedAt === undefined) recommendedAt = await read(() => base.lastRecommendedAt());
       return recommendedAt;
     },
     async markRecommended() {

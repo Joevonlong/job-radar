@@ -1,7 +1,8 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from "vitest";
 
-import { createMemorySessionStore, createOverlaySessionStore } from "@/lib/channels/linkedin/session/store";
+import { ChannelError } from "@/lib/channels/errors";
+import { SESSION_STATE_UNREADABLE, createMemorySessionStore, createOverlaySessionStore } from "@/lib/channels/linkedin/session/store";
 
 const DAY = "2026-10-07";
 
@@ -77,5 +78,30 @@ describe("session store overlay", () => {
     expect(read.mock.calls).toEqual([[["first"]], [["second", "missing"]]]);
     expect(await overlay.storedPayloads([])).toEqual(new Map());
     expect(read).toHaveBeenCalledTimes(2);
+  });
+  it("re-reads the base page count every time, so pages loaded by a concurrent real run count", async () => {
+    const base = createMemorySessionStore({ requests: { [DAY]: 2 } });
+    const overlay = createOverlaySessionStore(base);
+
+    expect(await overlay.addRequest(DAY)).toBe(3);
+    base.requests.set(DAY, 3);
+    expect(await overlay.requestsOn(DAY)).toBe(4);
+    expect(await overlay.addRequest(DAY)).toBe(5);
+    expect(await base.requestsOn(DAY)).toBe(3);
+  });
+
+  it("turns the first failing base read into one ChannelError that stops every later read", async () => {
+    const base = createMemorySessionStore();
+    const raw = new Error("relation \"runtime_state\" does not exist");
+    vi.spyOn(base, "loadAuthFlag").mockRejectedValue(raw);
+    const later = vi.spyOn(base, "requestsOn");
+    const overlay = createOverlaySessionStore(base);
+
+    const error = await overlay.loadAuthFlag().catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ChannelError);
+    expect(error).toMatchObject({ code: "unknown", retryable: false, message: SESSION_STATE_UNREADABLE, cause: raw });
+    await expect(overlay.requestsOn(DAY)).rejects.toBe(error);
+    await expect(overlay.storedPayloads(["x"])).rejects.toBe(error);
+    expect(later).not.toHaveBeenCalled();
   });
 });

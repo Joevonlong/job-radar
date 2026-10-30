@@ -108,16 +108,17 @@ async function main(): Promise<number> {
     db = getDb();
   } else {
     const readOnly = initializeReadOnlyDb();
+    const sessionStops = "; the LinkedIn session channels stop before browsing if their session state cannot be read";
     const state = await probeCycleState(readOnly);
     if (state === "ok") {
       db = readOnly;
-      console.log("[dry-run] budget, circuit state and stored postings are read from the database (read-only); nothing is written");
+      console.log("[dry-run] budget, circuit state, stored postings, and the LinkedIn session's page count and login flag are read from the database (read-only); nothing is written");
     } else if (state === "not_migrated") {
-      console.warn("cycle:run: database reachable but not migrated (or behind the code); dry run starts from empty budget and circuit state and knows no stored postings, so paid channels are not held to their monthly caps");
+      console.warn(`cycle:run: database reachable but not migrated (or behind the code); dry run starts from empty budget and circuit state and knows no stored postings, so paid channels are not held to their monthly caps${sessionStops}`);
     } else if (state === "unreadable") {
-      console.warn("cycle:run: database reachable but its budget and circuit state could not be read; dry run starts from empty budget and circuit state and knows no stored postings, so paid channels are not held to their monthly caps");
+      console.warn(`cycle:run: database reachable but its budget and circuit state could not be read; dry run starts from empty budget and circuit state and knows no stored postings, so paid channels are not held to their monthly caps${sessionStops}`);
     } else {
-      console.warn("cycle:run: database unreachable; dry run starts from empty budget and circuit state and knows no stored postings, so paid channels are not held to their monthly caps");
+      console.warn(`cycle:run: database unreachable; dry run starts from empty budget and circuit state and knows no stored postings, so paid channels are not held to their monthly caps${sessionStops}`);
     }
   }
 

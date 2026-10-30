@@ -212,6 +212,7 @@ describe("dry runs with persisted session state", () => {
     try {
       const readOnly = initializeReadOnlyDb();
       expect(getDb()).toBe(readOnly);
+      expect(() => initializeReadOnlyDb()).toThrow("the read-only database must be initialized before opening the shared pool");
       await expect(readOnly.execute(sql`select 1`)).resolves.toHaveLength(1);
       await expect(setRuntimeState(getDb(), "dry-run-write-probe", { changed: true })).rejects.toMatchObject({ cause: { code: "25006" } });
       expect(await getRuntimeState(getDb(), "dry-run-write-probe")).toBeNull();

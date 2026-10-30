@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 
 import { BudgetExceededError, ChannelError, PartialCollectError } from "@/lib/channels/errors";
 import { sessionPayloadSchema } from "@/lib/channels/linkedin/session/payload";
-import { createMemorySessionStore } from "@/lib/channels/linkedin/session/store";
+import { SESSION_STATE_UNREADABLE, createMemorySessionStore } from "@/lib/channels/linkedin/session/store";
 import { normalizedPostingDraftSchema } from "@/lib/channels/types";
 
 import { DETAIL_PAGES, NOW, berlinQuery, fixture, happySite, harness, remoteQuery, setup, sessionConfig } from "./helpers";
@@ -236,6 +236,17 @@ describe("linkedin-session: the daily page limit", () => {
 });
 
 describe("persisted login state in a dry run", () => {
+  it("stops before opening a browser when the persisted session state cannot be read", async () => {
+    const store = createMemorySessionStore();
+    store.loadAuthFlag = async () => { throw new Error("connect ECONNREFUSED 127.0.0.1:5432"); };
+    const s = setup({ store });
+    const h = await harness(s.session, s.config, { cycleId: null });
+
+    await expect(s.session.collect(berlinQuery(), h.ctx)).rejects.toMatchObject({ name: "ChannelError", code: "unknown", retryable: false, message: SESSION_STATE_UNREADABLE });
+
+    expect(s.browser.log.opened).toHaveLength(0);
+  });
+
   it.each(["session", "recommended"] as const)("a dry run of %s respects a re-login flag just like a real run", async (channel) => {
     const flag = { status: "expired", reason: "checkpoint", at: NOW.toISOString() } as const;
     const store = createMemorySessionStore({ flag });
