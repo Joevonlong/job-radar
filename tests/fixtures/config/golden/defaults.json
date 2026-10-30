@@ -1,5 +1,5 @@
 {
-  "sha": "97afee4c8253258c647fd8e7a746503dd53bcc2b",
+  "sha": "44b1681840b4d5047a6da967bc4cc2261cae4ff9",
   "set": "defaults",
   "files": {
     "schedule": {
@@ -10,6 +10,11 @@
     "search": {
       "layer": "default",
       "hash": "ace2d0988c055e88f554391ed9b5baf9cef208957676cfd9272828fd0456257a",
+      "valid": true
+    },
+    "jobSearch": {
+      "layer": "default",
+      "hash": "88180c831001d0a1016efeee56e6733888681730bcc9f05aa707b66f0c4dce36",
       "valid": true
     },
     "channels": {
@@ -104,7 +109,7 @@
     },
     "activityLog": {
       "layer": "default",
-      "hash": "ecee8d2467ba8b0c9cd07c7833c7517532c761d56efb3ddedb070df447e90516",
+      "hash": "bf59de8ed315423454667990085efe9680995a8f6125554a05a7a7d4c6bf4b04",
       "valid": true
     },
     "jobArchive": {

@@ -81,6 +81,10 @@ function matches(rule: string, path: string): boolean {
 describe("every record of the layered schemas is registered in overlay-rules.ts", () => {
   const cases = LAYERED_CONFIG_NAMES.map((name) => ({ name, paths: recordPaths(configRegistry[name].schema as unknown as SchemaNode) }));
 
+  it("covers the job search country aliases", () => {
+    expect(cases.find(({ name }) => name === "jobSearch")?.paths).toEqual(["countries.extra_aliases"]);
+  });
+
   it.each(cases)("$name", ({ name, paths }) => {
     const rules = OVERLAY_RECORD_RULES[name] ?? [];
     const unregistered = paths.filter((path) => !rules.some((rule) => matches(rule.path, path)));

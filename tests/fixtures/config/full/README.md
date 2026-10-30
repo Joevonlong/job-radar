@@ -4,7 +4,7 @@ Full copies of user config directories, the inputs of the golden effective-confi
 and of the overlay conversion invariant. Each directory is a user config directory over `../defaults`; a `profile/`
 subdirectory, when present, is its profile directory.
 
-- `edited`: the `user` files of `../defaults` plus copies of `pipeline.yaml` and `job-archive.yaml`, with a few values changed, an entry added
+- `edited`: the `user` files of `../defaults` plus copies of `pipeline.yaml`, `job-archive.yaml` and `job-search.yaml`, with a few values changed, an entry added
   to a record, a keyword group added and comments added.
 - `missing-keys`: the `user` files with keys removed: one whose schema default differs from the shipped value
   (`language.yaml` `ai.summary_also`), one whose default equals it (`schedule.yaml` `backup.max_age_hours`), record

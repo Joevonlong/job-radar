@@ -71,7 +71,7 @@ describe("golden files", () => {
     expect(new Set(goldens.map((golden) => golden.sha)).size).toBe(1);
     for (const golden of goldens) {
       expect(golden.sha).toMatch(/^[0-9a-f]{40}$/);
-      for (const name of Object.keys(golden.files)) expect(Object.keys(configRegistry), `${golden.set}: ${name}`).toContain(name);
+      expect(Object.keys(golden.files).sort(), golden.set).toEqual(Object.keys(configRegistry).sort());
     }
   });
 });
