@@ -24,7 +24,7 @@
    # data/config/sources.yaml 里先把 linkedin.session.enabled 改成 true，然后：
    pnpm cycle:run --channel linkedin-session --dry-run
    ```
-   试跑会真的打开 LinkedIn 页面（有请求），但不写数据库、不计入当天用量。数据库状态可读时，本通道 id 下已存的岗位不再打开页面，和真实运行一样。输出里看 `fetched / parsed`；如果通道被跳过，见[真实冒烟](#真实冒烟)。
+   试跑会真的打开 LinkedIn 页面（有请求），但不写数据库、不计入当天用量。它遵守已存的当天页面计数和重新登录标记，并复用任一 session 通道 id 下已存的岗位，和真实运行一样。输出里看 `fetched / parsed`；如果通道被跳过，见[真实冒烟](#真实冒烟)。
 6. 没问题就留着 `enabled: true`。runner 在 Docker 里时，`./.auth` 以只读方式挂进容器（`compose.yaml` 已写好），需要 `docker compose up -d --build` 一次让镜像带上 playwright-core。
 
 `pnpm auth:linkedin --status` 只看状态，不打开浏览器：文件在不在、cookie 到期时间、通道最近知道的状态。
@@ -87,4 +87,4 @@
 3. `pnpm cycle:run --channel linkedin-session:recommended --dry-run`。
 4. 对着真实页面对一遍：把页面 HTML 脱敏后替换 `tests/fixtures/linkedin-session/` 里的 fixture，再跑 `pnpm test` 看解析器是否仍然通过。
 
-试跑仍不读取已存的当天页面计数或登录标记。岗位复用只看当前通道 id：试跑时，`linkedin-session` 和 `linkedin-session:recommended` 不共用已存岗位。
+试跑通过只读数据库连接读取已存的当天页面计数和登录标记。当天页数用完就不打开浏览器；要求重新登录的标记会像真实运行一样阻止试跑。`linkedin-session` 或 `linkedin-session:recommended` 任一通道下已存的岗位都会复用，不再打开详情页。页面计数每次都从数据库重新读取，所以同时进行的真实运行打开的页面也算在内；同一轮试跑的全部查询和两个 session 通道共用这轮自己在内存中的页面增量和登录状态变化。页面计数增量、登录状态变化和推荐列表的已读标记都只留在内存里，因此试跑不计入当天用量。会话状态读不了时，采集会在打开浏览器前停止。

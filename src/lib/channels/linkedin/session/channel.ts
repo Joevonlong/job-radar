@@ -24,7 +24,7 @@ import {
 import { hasJobContent, parseJobDetail } from "./parse-detail";
 import { isEmptyResultsPage, parseListCards, type ListCard } from "./parse-search";
 import { buildPayload, parseSessionPayload, sessionDescriptionHtml, sessionPayloadSchema, sessionRepostLabel, type PayloadSource, type SessionPayload } from "./payload";
-import { createDbSessionStore, createMemorySessionStore, type SessionStore } from "./store";
+import { createDbSessionStore, createOverlaySessionStore, type SessionStore } from "./store";
 
 export interface SessionChannelDeps {
   /** `sources.yaml: linkedin.session`; a getter so a config reload takes effect without re-registering. */
@@ -33,7 +33,7 @@ export interface SessionChannelDeps {
   timeZone(): string;
   /** `schedule.yaml: linkedin_recommended`. */
   recommendedSchedule(): { enabled: boolean; cron: string; timezone: string };
-  /** The store of a real run. Dry runs never call it (they get a throwaway in-memory store). */
+  /** Persisted session state. A dry run reads through an overlay whose writes stay in memory. */
   store(): SessionStore;
   openBrowser: OpenBrowser;
   now(): Date;
@@ -93,14 +93,15 @@ function firstLine(message: string): string {
 }
 
 /** One browsing session: open the browser with the saved login, read the list pages, then the pages of the postings that are new. */
-async function browse(deps: SessionChannelDeps, ctx: ChannelContext, settings: SessionSettings, plan: Plan): Promise<RawPostingInput[]> {
+async function browse(deps: SessionChannelDeps, ctx: ChannelContext, settings: SessionSettings, plan: Plan, dryRunStores: WeakMap<ChannelContext["cycle"], SessionStore>): Promise<RawPostingInput[]> {
   const authFile = deps.authFile ? deps.authFile(settings) : resolveAuthFile(settings.site.auth_file);
   const file = readAuthFileInfo(authFile);
   if (!file.hasSessionCookie) {
     throw new ChannelError("auth_expired", "no LinkedIn login state: run `pnpm auth:linkedin` once on the host", { retryable: false });
   }
   const dryRun = ctx.cycle.id === null;
-  const store = dryRun ? createMemorySessionStore() : deps.store();
+  const store = dryRun ? (dryRunStores.get(ctx.cycle) ?? createOverlaySessionStore(deps.store())) : deps.store();
+  if (dryRun) dryRunStores.set(ctx.cycle, store);
   const login = loginStateOf(file, await store.loadAuthFlag(), deps.now());
   if (login.status === "expired") {
     throw new ChannelError("auth_expired", `the saved LinkedIn login is no longer valid (${login.reason ?? "expired"}): run \`pnpm auth:linkedin\` to log in again`, { retryable: false });
@@ -234,8 +235,8 @@ async function read(input: ReadInput): Promise<RawPostingInput[]> {
   // ---- postings
   const selected = [...cards.values()].slice(0, plan.limit);
   const ids = selected.map((c) => c.jobId);
-  // a dry run reads the stored postings through ctx.known (read-only), never through the session store
-  const stored = ctx.cycle.id === null ? await ctx.known.payloads(ids) : await store.storedPayloads(ids);
+  // Both session channel ids share stored jobs; the dry-run overlay only reads its base.
+  const stored = await store.storedPayloads(ids);
   const out: RawPostingInput[] = [];
   const counts = { reused: 0, fetched: 0, unavailable: 0, closed: 0, cardOnly: 0, unreadable: 0, skippedCards: 0 };
 
@@ -338,6 +339,8 @@ const SESSION_GHOST_DECLARATIONS = { stableExternalIds: true, fullDescription: t
  * "not configured": the cascade skips the first, the second is not due.
  */
 export function createSessionChannels(deps: SessionChannelDeps = defaultSessionDeps()): { session: Channel; recommended: Channel } {
+  // All queries and both channels in a dry-run cycle share its remaining pages and login changes.
+  const dryRunStores = new WeakMap<ChannelContext["cycle"], SessionStore>();
   const configured = (): boolean => {
     const settings = deps.settings();
     return hasLoginState(deps.authFile ? deps.authFile(settings) : resolveAuthFile(settings.site.auth_file));
@@ -358,7 +361,7 @@ export function createSessionChannels(deps: SessionChannelDeps = defaultSessionD
         pieces: pieces.length,
         listUrl: (piece, start) => searchUrl(query, settings, pieces[piece] ?? "", start, market),
         limit: query.maxResults,
-      });
+      }, dryRunStores);
     },
     parse: parseSessionPayload,
     descriptionHtml: sessionDescriptionHtml,
@@ -396,7 +399,7 @@ export function createSessionChannels(deps: SessionChannelDeps = defaultSessionD
           pieces: 1,
           listUrl: (_piece, start) => recommendedUrl(settings, start),
           limit: Math.min(query.maxResults, settings.recommended_max_results),
-        });
+        }, dryRunStores);
       } catch (error) {
         // the day's limit stopped it after some postings: those are kept, so the list counts as read for today
         if (error instanceof PartialCollectError && error.planned) await markRead();

@@ -1,3 +1,5 @@
+import fs from "node:fs";
+
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, inject, it } from "vitest";
 
@@ -10,12 +12,13 @@ import { createSessionChannels, type SessionChannelDeps } from "@/lib/channels/l
 import { AUTH_FLAG_KEY } from "@/lib/channels/linkedin/session/auth-state";
 import { createDbSessionStore, resetSessionAuth } from "@/lib/channels/linkedin/session/store";
 import { ChannelRegistry } from "@/lib/channels/registry";
-import { runCycle } from "@/lib/cycle/run-cycle";
+import { runCycle, type RunCycleOptions } from "@/lib/cycle/run-cycle";
 import type { CycleKind } from "@/lib/db/repos/cycles";
 import { closeDb, getDb, listChannelStates, listRawPostingsForChannel, listRunsForCycle } from "@/lib/db";
+import { initializeReadOnlyDb } from "@/lib/db/client";
 import { markJobsPossiblyClosed } from "@/lib/db/repos/jobs";
 import { runMigrations } from "@/lib/db/migrate";
-import { getRuntimeState } from "@/lib/db/repos/runtime-state";
+import { getRuntimeState, setRuntimeState } from "@/lib/db/repos/runtime-state";
 import { buildAlerts, collectErrorsOf } from "@/lib/notify/alerts";
 
 import { fixture, happySite, authFileIn, fakeBrowser, type FakeSite } from "../channels/linkedin/session/helpers";
@@ -95,12 +98,129 @@ function setup(
   registry.register(session.recommended);
   const guest = registerFixtureChannel(registry, { id: GUEST, family: "linkedin", ...(options.guest === false ? { settings: { enabled: false } } : {}) });
   const cycleConfig = { ...config(), channels: channelsConfig, ...(options.search ? { search: options.search } : {}) };
-  const run = (kind: CycleKind = "manual", extra: { channelIds?: readonly string[]; dryRun?: boolean } = {}) =>
+  const run = (kind: CycleKind = "manual", extra: Partial<RunCycleOptions> = {}) =>
     runCycle(kind, { registry, cascades: cascade, config: cycleConfig, logger: quietLogger, sleep: async () => {}, random: () => 0, now: () => clock.now, ...extra });
-  return { run, guest, browser, registry, channelsConfig, clock };
+  return { run, guest, browser, registry, channelsConfig, clock, authFile };
 }
 
 const flag = async () => (await getRuntimeState(getDb(), AUTH_FLAG_KEY))?.value;
+
+async function snapshot(): Promise<Record<string, string>> {
+  const tables = await getDb().execute<{ table_name: string }>(sql`
+    select table_name from information_schema.tables
+    where table_schema = 'public' and table_type = 'BASE TABLE'
+    order by table_name`);
+  const hashes: Record<string, string> = {};
+  for (const { table_name: table } of tables) {
+    const [row] = await getDb().execute<{ hash: string }>(sql`
+      select md5(coalesce(string_agg(t::text, ',' order by t::text), '')) as hash
+      from ${sql.identifier("public")}.${sql.identifier(table)} t`);
+    if (!row) throw new Error(`no snapshot for ${table}`);
+    hashes[table] = row.hash;
+  }
+  return hashes;
+}
+
+describe("dry runs with persisted session state", () => {
+  it("does not open a browser when the database's daily page count is at the limit", async () => {
+    const limit = 4;
+    await setRuntimeState(getDb(), "linkedin-session:requests:2026-10-07", { count: limit });
+    const { run, browser } = setup({ search: searchIn(["Berlin"]), edit: (session) => (session.daily_request_limit = limit) });
+    const before = await snapshot();
+
+    const result = await run("manual", { dryRun: true, db: getDb(), channelIds: [SESSION] });
+
+    expect(collectOf(result).channels[SESSION]?.fetched).toBe(0);
+    expect(collectOf(result).channels[SESSION]?.skipped).toBeGreaterThan(0);
+    expect(browser.log.opened).toHaveLength(0);
+    expect(await snapshot()).toEqual(before);
+  });
+
+  it.each([false, true])("shares the remaining page allowance across queries and session channels (include recommended: %s)", async (recommended) => {
+    await setRuntimeState(getDb(), "linkedin-session:requests:2026-10-07", { count: 1 });
+    const { run, browser } = setup({
+      search: searchIn(["Berlin", "München"]),
+      edit: (session) => {
+        session.daily_request_limit = 3;
+        session.fetch_details = false;
+        session.recommended_daily = recommended;
+      },
+    });
+    const before = await snapshot();
+    const channelIds = recommended ? [SESSION, RECOMMENDED] : [SESSION];
+
+    const result = await run("manual", { dryRun: true, db: getDb(), channelIds });
+
+    expect(browser.log.loads).toHaveLength(2);
+    expect(browser.log.opened).toHaveLength(1);
+    const summaries = channelIds.map((id) => collectOf(result).channels[id]);
+    expect(summaries.reduce((total, summary) => total + (summary?.succeeded ?? 0), 0)).toBe(1);
+    expect(summaries.reduce((total, summary) => total + (summary?.skipped ?? 0), 0)).toBeGreaterThan(0);
+    expect(await snapshot()).toEqual(before);
+  });
+
+  it.each([false, true])("respects the database's re-login flag before browsing (dry run: %s)", async (dryRun) => {
+    const { run, browser, authFile } = setup({ search: searchIn(["Berlin"]) });
+    const modified = new Date(NOW.getTime() - 1000);
+    fs.utimesSync(authFile, modified, modified);
+    const expired = { status: "expired", reason: "checkpoint", at: NOW.toISOString() } as const;
+    await createDbSessionStore(getDb()).saveAuthFlag(expired);
+    const before = await snapshot();
+
+    const result = await run("manual", { dryRun, db: getDb(), channelIds: [SESSION] });
+
+    expect(collectOf(result).channels[SESSION]?.errorCodes.auth_expired).toBeGreaterThan(0);
+    expect(browser.log.opened).toHaveLength(0);
+    expect(await flag()).toEqual(expired);
+    if (dryRun) expect(await snapshot()).toEqual(before);
+  });
+
+  it.each([[SESSION, RECOMMENDED], [RECOMMENDED, SESSION]])("reuses jobs stored under %s when dry-running %s", async (source, target) => {
+    const site = happySite({ recommended: (u) => ({ html: fixture(u.searchParams.has("start") ? "search-results-empty.html" : "search-results.html") }) });
+    const { run, browser } = setup({ site, search: searchIn(["Berlin"]), edit: (session) => (session.recommended_daily = true) });
+    await run("manual", { channelIds: [source] });
+    const held = await listRawPostingsForChannel(getDb(), source);
+    expect(held.map((row) => row.externalId).sort()).toEqual(["4385000101", "4385000102", "4385000104"]);
+    expect(await listRawPostingsForChannel(getDb(), target)).toEqual([]);
+    const loads = browser.log.loads.length;
+    const before = await snapshot();
+
+    const result = await run("manual", { dryRun: true, db: getDb(), channelIds: [target] });
+
+    const viewed = browser.log.loads.slice(loads).map((load) => new URL(load.url).pathname).filter((p) => p.startsWith("/jobs/view/"));
+    expect(viewed).toEqual(["/jobs/view/4385000103/", "/jobs/view/4385000106/"]);
+    expect(collectOf(result).dryRun?.[target]).toMatchObject({ fetched: held.length, parsed: held.length });
+    expect(await snapshot()).toEqual(before);
+  });
+
+  it.each([false, true])("browses with a writable base without changing any database row, including after verification (verification: %s)", async (verification) => {
+    const site = happySite({ detail: (u) => verification && u.pathname.includes("4385000202") ? { html: fixture("checkpoint.html") } : null });
+    const { run, browser } = setup({ site, edit: (session) => (session.recommended_daily = true) });
+    await setRuntimeState(getDb(), "linkedin-session:requests:2026-10-07", { count: 1 });
+    const before = await snapshot();
+
+    const result = await run("manual", { dryRun: true, db: getDb(), channelIds: [RECOMMENDED] });
+
+    expect(browser.log.loads.length).toBeGreaterThan(1);
+    expect(collectOf(result).dryRun?.[RECOMMENDED]?.fetched).toBeGreaterThan(0);
+    if (verification) expect(collectOf(result).channels[RECOMMENDED]?.errorCodes.blocked).toBe(1);
+    expect(await snapshot()).toEqual(before);
+  });
+
+  it("prefills the shared pool read-only so session stores using getDb reject writes", async () => {
+    await closeDb();
+    try {
+      const readOnly = initializeReadOnlyDb();
+      expect(getDb()).toBe(readOnly);
+      expect(() => initializeReadOnlyDb()).toThrow("the read-only database must be initialized before opening the shared pool");
+      await expect(readOnly.execute(sql`select 1`)).resolves.toHaveLength(1);
+      await expect(setRuntimeState(getDb(), "dry-run-write-probe", { changed: true })).rejects.toMatchObject({ cause: { code: "25006" } });
+      expect(await getRuntimeState(getDb(), "dry-run-write-probe")).toBeNull();
+    } finally {
+      await closeDb();
+    }
+  });
+});
 
 describe("LinkedIn cascade: the session channel is third", () => {
   it("with Bright Data off and Apify not configured, the session channel serves every query; the guest channel is never reached", async () => {

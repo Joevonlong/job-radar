@@ -22,8 +22,8 @@ export interface ReadOnlyDb {
  * `BEGIN READ WRITE` transaction); the boundary of a read-only process is that it has no code path that writes. A Postgres role
  * with SELECT rights only is the optional hardening (docs/mcp.md). The handle is the ordinary `Db`, so every query function works.
  * JIT is off as on the web pool (QUERY_SESSION_SETTINGS): MCP search_jobs runs the same search queries. Every user of this
- * pool gets those settings: the MCP server (`scripts/mcp-serve.ts`), the dry-run state probe of `scripts/cycle-run.ts` and
- * `scripts/deliveries-show.ts`; their short lookups gain nothing from JIT either.
+ * pool gets those settings: the MCP server (`scripts/mcp-serve.ts`) and `scripts/deliveries-show.ts`; their short lookups gain
+ * nothing from JIT either. The dry run of `scripts/cycle-run.ts` uses the read-only shared pool instead (`initializeReadOnlyDb`).
  */
 export function createReadOnlyDb(options: { url?: string; connectTimeoutSeconds?: number } = {}): ReadOnlyDb {
   const url = options.url ?? loadDatabaseEnv().DATABASE_URL;

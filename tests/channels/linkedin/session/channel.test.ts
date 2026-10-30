@@ -1,12 +1,14 @@
 // @vitest-environment node
+import fs from "node:fs";
+
 import { describe, expect, it } from "vitest";
 
 import { BudgetExceededError, ChannelError, PartialCollectError } from "@/lib/channels/errors";
 import { sessionPayloadSchema } from "@/lib/channels/linkedin/session/payload";
-import { createMemorySessionStore } from "@/lib/channels/linkedin/session/store";
-import { normalizedPostingDraftSchema, type KnownPostings } from "@/lib/channels/types";
+import { SESSION_STATE_UNREADABLE, createMemorySessionStore } from "@/lib/channels/linkedin/session/store";
+import { normalizedPostingDraftSchema } from "@/lib/channels/types";
 
-import { DETAIL_PAGES, berlinQuery, fixture, happySite, harness, remoteQuery, setup, sessionConfig } from "./helpers";
+import { DETAIL_PAGES, NOW, berlinQuery, fixture, happySite, harness, remoteQuery, setup, sessionConfig } from "./helpers";
 
 async function failure(promise: Promise<unknown>): Promise<ChannelError> {
   try {
@@ -203,6 +205,78 @@ describe("linkedin-session: the daily page limit", () => {
     await s.session.collect(berlinQuery(), h.ctx);
     expect(s.store.requests.size).toBe(0);
     expect(s.store.flag).toBeNull();
+  });
+
+  it.each(["session", "recommended"] as const)("a dry run of %s refuses an exhausted persisted daily page limit before opening a browser", async (channel) => {
+    const limit = 4;
+    const store = createMemorySessionStore({ requests: { [DAY]: limit } });
+    const s = setup({ config: limited(limit), store });
+    const h = await harness(s[channel], s.config, { cycleId: null });
+
+    await expect(s[channel].collect(berlinQuery(), h.ctx)).rejects.toBeInstanceOf(BudgetExceededError);
+
+    expect(s.browser.log.opened).toHaveLength(0);
+    expect(await store.requestsOn(DAY)).toBe(limit);
+  });
+
+  it("a dry run uses only the day's remaining pages and leaves the persisted counter unchanged", async () => {
+    const store = createMemorySessionStore({ requests: { [DAY]: 3 } });
+    const s = setup({ config: limited(6), store });
+    const h = await harness(s.session, s.config, { cycleId: null });
+
+    const error = await partial(s.session.collect(berlinQuery(), h.ctx));
+
+    expect(error.planned).toBe(true);
+    expect(error.cause).toBeInstanceOf(BudgetExceededError);
+    expect(error.postings.map((p) => p.externalId)).toEqual(["4385000101"]);
+    expect(s.browser.log.loads).toHaveLength(3);
+    expect(await store.requestsOn(DAY)).toBe(3);
+    expect(store.flag).toBeNull();
+  });
+});
+
+describe("persisted login state in a dry run", () => {
+  it("stops before opening a browser when the persisted session state cannot be read", async () => {
+    const store = createMemorySessionStore();
+    store.loadAuthFlag = async () => { throw new Error("connect ECONNREFUSED 127.0.0.1:5432"); };
+    const s = setup({ store });
+    const h = await harness(s.session, s.config, { cycleId: null });
+
+    await expect(s.session.collect(berlinQuery(), h.ctx)).rejects.toMatchObject({ name: "ChannelError", code: "unknown", retryable: false, message: SESSION_STATE_UNREADABLE });
+
+    expect(s.browser.log.opened).toHaveLength(0);
+  });
+
+  it.each(["session", "recommended"] as const)("a dry run of %s respects a re-login flag just like a real run", async (channel) => {
+    const flag = { status: "expired", reason: "checkpoint", at: NOW.toISOString() } as const;
+    const store = createMemorySessionStore({ flag });
+    const s = setup({ store });
+    // The saved complaint happened after this temporary login file was written.
+    fs.utimesSync(s.authFile, new Date(NOW.getTime() - 1000), new Date(NOW.getTime() - 1000));
+
+    for (const cycleId of [null, 1]) {
+      const h = await harness(s[channel], s.config, { cycleId });
+      await expect(s[channel].collect(berlinQuery(), h.ctx)).rejects.toMatchObject({ code: "auth_expired", retryable: false });
+    }
+
+    expect(s.browser.log.opened).toHaveLength(0);
+    expect(store.flag).toEqual(flag);
+    expect(store.requests.size).toBe(0);
+  });
+
+  it("shares a verification stop across both session channels within the same dry-run cycle", async () => {
+    const s = setup({ site: happySite({ detail: detailFails("4385000102", { html: fixture("checkpoint.html") }) }) });
+    const modified = new Date(NOW.getTime() - 1000);
+    fs.utimesSync(s.authFile, modified, modified);
+    const first = await harness(s.session, s.config, { cycleId: null });
+    await expect(s.session.collect(berlinQuery(), first.ctx)).rejects.toBeInstanceOf(PartialCollectError);
+    const next = await harness(s.recommended, s.config, { cycleId: null });
+
+    await expect(s.recommended.collect(berlinQuery(), { ...next.ctx, cycle: first.ctx.cycle })).rejects.toMatchObject({ code: "auth_expired" });
+
+    expect(s.browser.log.opened).toHaveLength(1);
+    expect(s.store.flag).toBeNull();
+    expect(s.store.requests.size).toBe(0);
   });
 });
 
@@ -764,9 +838,8 @@ it("a dry run reuses a stored session posting without opening its page or changi
   const stored = [...before][0];
   if (!stored) throw new Error("no valid stored session posting");
   const [id, payload] = stored;
-  const known: KnownPostings = { payloads: async (ids) => new Map([stored].filter(([jobId]) => ids.includes(jobId))) };
-  const s = setup();
-  const h = await harness(s.session, s.config, { cycleId: null, known });
+  const s = setup({ store: createMemorySessionStore({ payloads: { [id]: payload } }) });
+  const h = await harness(s.session, s.config, { cycleId: null });
 
   const out = await s.session.collect(berlinQuery(), h.ctx);
 
