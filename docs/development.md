@@ -196,6 +196,11 @@ after the outer callback returns and before commit. Nested calls use savepoints 
 savepoint can leave extra ids registered; refreshing those ids is harmless. Never refresh early and then keep writing. An unbranded outer transaction is rejected at runtime; convert that outer
 boundary to `scoreTransaction` too.
 
+A score transaction holds its `scores` row locks until the refresh at commit, so every write that changes more than one
+row takes them in ascending `scores.id` order (`src/lib/db/repos/score-lock-order.ts`): a bulk UPDATE selects its rows
+with `inScoreLockOrder(where)` (an ordered `FOR UPDATE` subquery), and row-by-row updates are applied in score id order
+(`inScoreIdOrder`). Two writers going by job id and by scan order would otherwise deadlock.
+
 The refresh supports READ COMMITTED only: it takes sorted advisory bucket locks in one statement, then computes in a
 second statement with a fresh snapshot. The SQL lock function rejects stronger isolation levels. The projection has no
 foreign keys, so its final refresh cannot wait for a job row lock. The score-write guard checks ORM and literal SQL writes.
