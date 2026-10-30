@@ -460,7 +460,7 @@
     },
     "jobs": {
       "title": "Jobs",
-      "description": "All jobs: full-text search and combined filters."
+      "description": "Search jobs by title, company, city or country."
     },
     "companies": {
       "title": "Companies",

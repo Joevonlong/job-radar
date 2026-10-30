@@ -460,7 +460,7 @@
     },
     "jobs": {
       "title": "岗位",
-      "description": "全部岗位：全文搜索与组合筛选。"
+      "description": "按职位、公司、城市或国家搜索岗位。"
     },
     "companies": {
       "title": "公司",

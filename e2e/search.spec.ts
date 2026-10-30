@@ -32,9 +32,9 @@ test.describe("precise job search", { tag: EXCLUSIVE_TAG }, () => {
         ["AI Analyst", "FR", "Fixture duties"],
         ["Archived Engineer", "PT", "Fixture duties"],
       ]) {
-        const locations = JSON.stringify([{ city: null, label: "", countryCode: code, isPrimary: true }]);
+        const locations = [{ city: null, label: "", countryCode: code ?? null, isPrimary: true }];
         const [job] = await sql<{ id: number }[]>`insert into jobs (company_id, title, title_norm, description, locations_json, first_seen_at, last_seen_at, status)
-          values (${companyId}, ${title!}, ${title!.toLowerCase()}, ${description!}, ${locations}::jsonb, now(), now(), 'active') returning id`;
+          values (${companyId}, ${title!}, ${title!.toLowerCase()}, ${description!}, ${sql.json(locations)}, now(), now(), 'active') returning id`;
         const id = Number(job!.id);
         ids.push(id);
         await sql`insert into scores (job_id, filter_result, score, rank_value) values (${id}, 'passed', 50, 50)`;
@@ -84,7 +84,9 @@ test.describe("precise job search", { tag: EXCLUSIVE_TAG }, () => {
       await expect(listRows(page)).toHaveCount(2);
 
       await page.getByTestId("filter-country").click();
+      await expect(option(page, "FR")).toBeVisible();
       await option(page, "DE").click();
+      await expect(page.getByTestId("filter-country")).toHaveAttribute("aria-expanded", "true");
       await option(page, "FR").click();
       await page.keyboard.press("Escape");
       await expect.poll(() => new URL(page.url()).searchParams.getAll("country")).toEqual(["DE", "FR"]);

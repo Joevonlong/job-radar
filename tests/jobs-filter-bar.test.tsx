@@ -534,6 +534,19 @@ describe("precise job search controls", () => {
     await waitFor(() => expect(lastQuery()).toBe(""));
   });
 
+  it("keeps the country picker open while selecting multiple countries", async () => {
+    const { lastQuery } = renderBar("", "en", { countries: [{ code: "DE", jobCount: 2 }, { code: "FR", jobCount: 1 }] });
+    await userEvent.click(screen.getByTestId("filter-country"));
+    for (const code of ["DE", "FR"]) {
+      const option = screen.getAllByTestId("filter-country-option").find((row) => row.dataset.value === code)!;
+      await userEvent.click(option);
+      await waitFor(() => expect(option).toHaveAttribute("aria-checked", "true"));
+      expect(screen.getByTestId("filter-country")).toHaveAttribute("aria-expanded", "true");
+    }
+    await userEvent.keyboard("{Escape}");
+    await waitFor(() => expect(new URLSearchParams(lastQuery()).getAll("country")).toEqual(["DE", "FR"]));
+  });
+
   it.each(["en", "zh"] as const)("labels country chips and counts in %s, including absent selected countries", async (locale) => {
     renderBar("?country=PT", locale, { countries: [{ code: "DE", jobCount: 2 }] });
     const names = new Intl.DisplayNames(locale, { type: "region" });
