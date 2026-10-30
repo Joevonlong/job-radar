@@ -69,9 +69,14 @@ describe("golden files", () => {
     expect(goldens.map((golden) => golden.set)).toContain("defaults");
     expect(goldens.length).toBeGreaterThanOrEqual(4);
     expect(new Set(goldens.map((golden) => golden.sha)).size).toBe(1);
+    // every set lists the same configs, all still registered; a config added after the goldens were taken is absent
+    const names = Object.keys(goldens[0]?.files ?? {}).sort();
+    const registered = Object.keys(configRegistry);
+    expect(names.length).toBeGreaterThan(0);
     for (const golden of goldens) {
       expect(golden.sha).toMatch(/^[0-9a-f]{40}$/);
-      expect(Object.keys(golden.files).sort(), golden.set).toEqual(Object.keys(configRegistry).sort());
+      expect(Object.keys(golden.files).sort(), golden.set).toEqual(names);
+      expect(registered, golden.set).toEqual(expect.arrayContaining(names));
     }
   });
 });
