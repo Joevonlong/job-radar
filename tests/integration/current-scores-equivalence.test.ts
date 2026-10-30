@@ -15,6 +15,11 @@ import { listPipelineEntries } from "@/lib/db/queries/pipeline";
 import { listPipelineEntries as oldPipeline } from "./current-scores-baseline/pipeline";
 import { getViewDailyCounts } from "@/lib/db/queries/view-trends";
 import { getViewDailyCounts as oldTrends } from "./current-scores-baseline/view-trends";
+import { getInsightsData } from "@/lib/db/repos/insights";
+import { getInsightsData as oldInsights } from "./current-scores-baseline/insights";
+import { loadConfig } from "@/lib/config/load";
+import { buildCatalog } from "@/lib/signals/catalog";
+import { highValuePolicy } from "@/lib/signals/bonus";
 import { JOB_SORTS } from "@/lib/jobs/constants";
 const now = new Date("2026-01-15T12:00:00Z"), timezone = "Europe/Berlin";
 beforeAll(() => { process.env.DATABASE_URL = inject("testDatabaseUrl"); }); afterAll(closeDb);
@@ -45,4 +50,35 @@ it("matches navigation, companies, favorites, pipeline, trends and Today", async
   expect(await today.listTodayJobs(db, options)).toEqual(await oldToday.listTodayJobs(db, options));
   expect(await today.countTodayJobs(db, options)).toEqual(await oldToday.countTodayJobs(db, options));
   expect(await today.listRecentCycleKpis(db, { limit: 14, qualifiedMinRank: 70 })).toEqual(await oldToday.listRecentCycleKpis(db, { limit: 14, qualifiedMinRank: 70 }));
+});
+it("matches /insights, the Today cycle strip, counts, ticker and the country options", async () => {
+  const db = getDb(); await seedDatabase(db, { now, timezone });
+  const interests = loadConfig("interests");
+  const highValue = highValuePolicy(interests, 50_000, "EUR");
+  const lines = { qualifiedMinRank: 70, qualifiedMinRankWithSignals: 60 };
+  const cycleOptions = { ...lines, highValue };
+  for (const [from, to] of [["2026-01-01", "2026-01-15"], ["2025-12-01", "2026-01-15"], ["2026-01-15", "2026-01-15"]] as const) {
+    const insights = {
+      window: { from, to, timezone }, previous: { from: "2025-11-01", to: "2025-11-30", timezone }, cities: ["Berlin", "Munich", "Hamburg"], cityMembers: { Munich: ["Munich", "München"] },
+      topFilterReasons: 8, pushMinScore: 70, scoreBucketWidth: 10, scoreBucketCap: 100, salaryBucketEur: 10_000, salaryBucketCapEur: 150_000, salaryMinSample: 3,
+      highValue, signalCategoryIds: buildCatalog(interests).categories.filter((c) => c.kind !== "tag").map((c) => c.id),
+    };
+    expect(await getInsightsData(db, insights)).toEqual(await oldInsights(db, insights));
+  }
+  const summary = await today.getLatestCycleSummary(db, cycleOptions);
+  expect(summary).toEqual(await oldToday.getLatestCycleSummary(db, cycleOptions));
+  expect(summary).not.toBeNull();
+  expect((await today.listCycleNewJobs(db, summary!, 50)).length).toBeGreaterThan(0);
+  expect(await today.listTodayCycleSummaries(db, { now, timezone, ...cycleOptions })).toEqual(await oldToday.listTodayCycleSummaries(db, { now, timezone, ...cycleOptions }));
+  expect(await today.listCycleNewJobs(db, summary!, 50)).toEqual(await oldToday.listCycleNewJobs(db, summary!, 50));
+  for (const extra of [{}, { includeFiltered: true }, { hideGermanLevels: ["c1", "c2", "native"] }, { highValueOnly: true }]) {
+    const base = { now, timezone, cycle: summary, highValue, ...extra };
+    expect(await today.countTodayQuickViews(db, { ...base, quickLines: lines })).toEqual(await oldToday.countTodayQuickViews(db, { ...base, quickLines: lines }));
+    if (Object.keys(extra).length === 0) expect((await today.countTodayQuickViews(db, { ...base, quickLines: lines })).all).toBeGreaterThan(0);
+    const relisted = { ...base, badgeSince: new Date(now.getTime() - 14 * 86_400_000) };
+    expect(await today.countTodayRelisted(db, relisted)).toBe(await oldToday.countTodayRelisted(db, relisted));
+  }
+  for (const scope of [null, "archive", "all"] as const) {
+    expect(await live.listJobCountryOptions(db, { scope, selected: ["DE"], timezone })).toEqual(await old.listJobCountryOptions(db, { scope, selected: ["DE"], timezone }));
+  }
 });

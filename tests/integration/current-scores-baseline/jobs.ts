@@ -5,7 +5,6 @@ import { z } from "zod";
 import type { Db } from "@/lib/db/client";
 import type { Executor } from "@/lib/db/executor";
 import { applications, channels, companies, jobFavorites, jobSources, jobs, jobVisa, trapScans } from "@/lib/db/schema";
-import type { MonthSalaryFigure } from "@/lib/domain/salary";
 import { DEFAULT_SORT_DIR, MAX_FILTER_VALUE_CHARS, type ApplicationFilterStatus, type ArchiveReason, type GhostFilter, type JobScope, type JobSort, type SortDir, type TrapFilter, type VisaFilter } from "@/lib/jobs/constants";
 import type { SearchPlan } from "@/lib/jobs/search-query";
 import { resolveJobScope } from "@/lib/jobs/scope";
@@ -460,47 +459,6 @@ export async function listJobCountryOptions(db: Db, options: { scope?: JobScope 
   return [...counts].sort(([a], [b]) => a.localeCompare(b)).map(([code, jobCount]) => ({ code, jobCount }));
 }
 
-export interface JobFilterOptions {
-  /** Source families that have at least one job. */
-  families: string[];
-  contracts: string[];
-}
-
-/** One location of one job as stored (`locations_json[]`), for grouping the city dropdown. */
-export interface JobCityRow {
-  jobId: number;
-  city: string;
-  label: string;
-  countryCode: string | null;
-}
-
-/** Every (job, location) pair that names a city: the raw material of the city dropdown (`src/lib/jobs/city-groups.ts`). */
-export async function listJobCityRows(db: Db): Promise<JobCityRow[]> {
-  const rows = await db.execute<{ job_id: string | number; city: string; label: string | null; country_code: string | null }>(sql`
-    select ${jobs.id} as job_id, btrim(loc->>'city') as city, coalesce(loc->>'label', '') as label, loc->>'countryCode' as country_code
-    from ${jobs},
-      jsonb_array_elements(case when jsonb_typeof(${jobs.locationsJson}) = 'array' then ${jobs.locationsJson} else '[]'::jsonb end) as loc
-    where jsonb_typeof(loc) = 'object' and nullif(btrim(loc->>'city'), '') is not null
-  `);
-  return Array.from(rows, (r) => ({ jobId: Number(r.job_id), city: r.city, label: r.label ?? "", countryCode: r.country_code }));
-}
-
-/** Values for the filter dropdowns, taken from the data so they never offer an empty result. */
-export async function getJobFilterOptions(db: Db): Promise<JobFilterOptions> {
-  const familyRows = await db
-    .selectDistinct({ family: channels.family })
-    .from(jobSources)
-    .innerJoin(channels, eq(channels.id, jobSources.channelId))
-    .orderBy(asc(channels.family));
-
-  const contractRows = await db.selectDistinct({ contract: jobs.contract }).from(jobs).orderBy(asc(jobs.contract));
-
-  return {
-    families: familyRows.map((r) => r.family),
-    contracts: contractRows.map((r) => r.contract),
-  };
-}
-
 /** A company of the company drop-down: its display name (the value of the filter) and how many jobs the unfiltered /jobs list holds of it. */
 export interface CompanyFilterOption {
   name: string;
@@ -529,23 +487,3 @@ export async function listCompanyFilterOptions(db: Db, options: { limit: number;
   return rows;
 }
 
-/**
- * The `annualBaseFigure` (lib/domain/salary.ts) of every job first seen in the month of `now` (the month starts at midnight of its
- * first day in `timeZone`): the middle of a complete range in the base currency `currency`, or the one stated bound; a salary under
- * review, possibly another region's pay, or without a figure in the base currency is left out. The single place that reads this month's salary distribution: the detail page
- * (`loadMonthSalaryStats`) and the job list both summarize it with `summarizeMonthSalaries`. One query per page.
- */
-export async function listMonthSalaryFigures(db: Db, options: { now: Date; timeZone: string; currency: string }): Promise<MonthSalaryFigure[]> {
-  const monthStart = sql`(date_trunc('month', ${options.now.toISOString()}::timestamptz at time zone ${options.timeZone}) at time zone ${options.timeZone})`;
-  const rows = await db.execute<{ id: string | number; fig: string }>(sql`
-    with month as (
-      select ${jobs.id} as id, ${annualBaseFigureSql(options.currency)} as fig
-      from ${jobs}
-      where ${jobs.firstSeenAt} >= ${monthStart}
-        and ${jobs.firstSeenAt} < ${monthStart} + interval '1 month'
-        and ${comparableSalaryWhere}
-    )
-    select id, fig from month where fig > 0
-  `);
-  return Array.from(rows, (row) => ({ id: Number(row.id), figure: Number(row.fig) }));
-}

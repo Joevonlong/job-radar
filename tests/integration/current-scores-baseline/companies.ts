@@ -6,16 +6,10 @@ import type { SortDir } from "@/lib/jobs/constants";
 import type { CompanyMatchRow } from "@/lib/pipeline/company";
 
 import type { Db } from "@/lib/db/client";
-import type { Executor } from "@/lib/db/executor";
 import { uxTablesReady } from "@/lib/db/repos/ux-tables";
 import { companies, jobs } from "@/lib/db/schema";
 import { latestScoreCte } from "./job-cards";
 import { escapeLike, jobListWhere } from "./jobs";
-
-/** Every stored company as the company filter compares it (the table is small: one row per employer). */
-export async function listCompanyMatchRows(db: Executor): Promise<CompanyMatchRow[]> {
-  return db.select({ id: companies.id, name: companies.name, nameNorm: companies.nameNorm, aliases: companies.aliases }).from(companies).orderBy(asc(companies.id));
-}
 
 export interface CompanyOverviewOptions {
   q: string;
