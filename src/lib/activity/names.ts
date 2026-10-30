@@ -9,7 +9,7 @@ export const SPAN_NAMES = [
   "collect.query", "ai.score", "ai.signals", "ai.traps", "ai.translate", "ai.breakdown",
   "request.run_cycle", "request.rescore_stale", "request.run_suggest", "request.run_ai", "request.translate_job", "request.breakdown_job",
   "request.score_jobs", "request.test_channel", "request.test_ai", "request.test_telegram", "request.salary_lookup",
-  "system.startup", "system.orphan_recovery", "system.backup", "system.prune", "system.reconcile", "system.telegram_callback", "system.reminder",
+  "system.startup", "system.orphan_recovery", "system.backup", "system.prune", "system.delivery_prune", "system.reconcile", "system.telegram_callback", "system.reminder",
 ] as const;
 export const EVENT_CODES = ["item.ok", "item.failed", "item.paused", "item.skipped", "parse_failed", "queries_not_reached", "cascade_reasons", "covered_by", "backfill", "orphans_marked", "spans_reconciled", "pruned", "reminder_counts"] as const;
 export const REASON_CODES = [
@@ -26,3 +26,5 @@ export const spanNameSchema = z.enum(SPAN_NAMES);
 export const eventLevelSchema = z.enum(EVENT_LEVELS);
 export const eventCodeSchema = z.enum(EVENT_CODES);
 export const reasonCodeSchema = z.enum(REASON_CODES);
+
+export const CALLBACK_RESULTS = ["changed", "unchanged", "rejected", "gone", "export_failed", "foreign_chat", "not_allowed", "invalid", "failed"] as const;

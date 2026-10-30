@@ -20,7 +20,7 @@ export const activityLogSchema = z.strictObject({
     shutdown_flush_ms: positive,
     warn_every_seconds: positive,
   }),
-  prune: z.strictObject({ every_minutes: positive, batch_size: positive }),
+  prune: z.strictObject({ every_minutes: positive, batch_size: positive, roots_per_batch: positive }),
   ui: z.strictObject({ page_size: positive, events_page_size: positive, refresh_seconds: positive, default_range_days: positive, delete_budget_ms: positive }),
   liveness: z.strictObject({ stale_after_seconds: positive, startup_grace_seconds: positive }),
 }).superRefine(({ writer }, ctx) => {

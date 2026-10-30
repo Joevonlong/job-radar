@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { NAV_ITEMS, groupNavItems, isNavActive } from "@/components/shell/nav";
+import { NAV_ITEMS, PALETTE_SUBPAGES, groupNavItems, isNavActive } from "@/components/shell/nav";
 import zh from "../messages/zh.json";
 
 describe("nav config", () => {
@@ -34,6 +34,16 @@ describe("nav config", () => {
       expect(zh.pages[item.key].title).toBeTruthy();
       expect(zh.pages[item.key].description).toBeTruthy();
     }
+  });
+});
+
+describe("palette subpages", () => {
+  it("lists thirteen destinations including activity logs without changing main navigation", () => {
+    expect(NAV_ITEMS.length + PALETTE_SUBPAGES.length).toBe(13);
+    expect(PALETTE_SUBPAGES.find((page) => page.key === "logs")?.href).toBe("/sources/logs");
+    expect(zh.sources.subnav.logs).toBe("操作日志");
+    expect(zh.sources.subnav.logsKeywords).toContain("logs");
+    expect(zh.sources.subnav.logsKeywords).toContain("日志");
   });
 });
 

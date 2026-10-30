@@ -135,7 +135,7 @@ test("command palette opens from the top bar button and Esc gives the focus back
   const trigger = page.getByRole("button", { name: "搜索" });
   await trigger.click();
   await expect(page.getByRole("dialog", { name: "命令面板" })).toBeVisible();
-  await expect(page.getByRole("option")).toHaveCount(12);
+  await expect(page.getByRole("option")).toHaveCount(13);
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog", { name: "命令面板" })).toBeHidden();
   await expect(trigger).toBeFocused();

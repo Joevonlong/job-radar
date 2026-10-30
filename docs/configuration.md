@@ -146,6 +146,23 @@ This shipped file controls the [paid delivery ledger](sources.md#paid-delivery-l
 
 The threshold never skips new items or deletes unexpired ones. Database backups grow with the ledger: roughly 135 MB for 1,500 paid records a day over 45 days, depending on how many payloads are retained; one malformed provider response can add tens of MB.
 
+### Activity log (`activity-log.yaml`)
+
+This shipped tuning file controls the [activity log](sources.md#activity-log). Copy the whole file to `data/config/activity-log.yaml` to change it; the user copy replaces the shipped file as a whole. See the shipped `config/activity-log.yaml` for defaults and individual keys.
+
+| Key | Meaning |
+|---|---|
+| `enabled` | Turns new recording on or off. Turning it off lets already started work finish recording. |
+| `retention.days` | Days after last activity to retain inactive entries (30 by default). |
+| `retention.max_events` | Event cap; the oldest inactive entries are removed when it is exceeded. |
+| `capture` | Per-span event capture limit. |
+| `writer` | Queue, batching, flush, timeout and retry tuning. |
+| `prune` | Reconciliation and pruning interval, rows per transaction and entries per transaction. |
+| `ui` | Pagination, refresh, initial range and deletion time budget. |
+| `liveness` | Heartbeat freshness and startup grace for detecting active processes. |
+
+Changes are picked up without a restart. Work actually in progress is not pruned.
+
 ### setup.yaml
 
 `setup.yaml` holds the state of the first-run setup (`completed_at`, `completed_by`, `steps`); the setup wizard and

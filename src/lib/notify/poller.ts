@@ -1,3 +1,4 @@
+import type { CALLBACK_RESULTS } from "@/lib/activity/names";
 import { activityErrorCode, noopRecorder, spanScope } from "@/lib/activity";
 import type { ActivityRecorder } from "@/lib/activity/types";
 import { setTimeout as delay } from "node:timers/promises";
@@ -54,7 +55,7 @@ export interface UpdateHandler {
   handle(update: TelegramUpdate): Promise<void>;
 }
 
-export type CallbackResult = "changed" | "unchanged" | "rejected" | "gone" | "export_failed" | "foreign_chat" | "not_allowed" | "invalid" | "failed";
+export type CallbackResult = (typeof CALLBACK_RESULTS)[number];
 
 const NOT_MODIFIED = /message is not modified/i;
 

@@ -14,7 +14,7 @@ import { activitySettings } from "./helpers";
 vi.mock("@/lib/db/repos/activity", async (original) => ({
   ...await original<typeof import("@/lib/db/repos/activity")>(), activityTablesReady: vi.fn(async () => true),
   closeStaleSpans: vi.fn(async () => 0), reconcileActivitySpans: vi.fn(async () => 0),
-  pruneActivityBatch: vi.fn(async () => ({ roots: 0, events: 0, found: false, nextRootId: null })),
+  pruneActivityBatch: vi.fn(async () => ({ roots: 0, events: 0, found: false, nextRootIds: null })),
 }));
 // Test the real config polling path, without relying on OS file-watch delivery in a sandbox.
 vi.mock("@/lib/config/watch", async (original) => {

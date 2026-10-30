@@ -8,6 +8,7 @@ import {
   ListChecks,
   Radar,
   Settings,
+  ScrollText,
   Sparkles,
   Star,
   UserRound,
@@ -55,6 +56,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
 export const PALETTE_SUBPAGES = [
   { key: "registry", href: "/sources/registry", icon: ListChecks },
   { key: "aiUsage", href: "/sources/ai-usage", icon: Coins },
+  { key: "logs", href: "/sources/logs", icon: ScrollText },
 ] as const;
 
 /** `/` only matches exactly; other items also match their sub-routes (e.g. /jobs/123). */

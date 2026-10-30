@@ -8,6 +8,7 @@ interface PruneDependencies {
   payloadBytes: () => Promise<number>;
   prune: (input: { olderThan: Date; batchSize: number; statementTimeoutMs: number }) => Promise<number>;
   log: (message: string) => void;
+  onPruned?: (deleted: number) => void;
 }
 
 /** Database operations are injected so maintenance can be exercised without a connection. */
@@ -29,7 +30,10 @@ export function createDeliveryPruner(deps: PruneDependencies) {
           batchSize: config.prune.batch_size,
           statementTimeoutMs: config.prune.statement_timeout_ms,
         });
-        if (deleted > 0) deps.log(`pruned ${deleted} delivery items`);
+        if (deleted > 0) {
+          deps.log(`pruned ${deleted} delivery items`);
+          try { deps.onPruned?.(deleted); } catch { /* Recording cannot fail maintenance. */ }
+        }
       } catch {
         // Database errors can contain receipt values; maintenance logs only the operation.
         deps.log("delivery prune failed");

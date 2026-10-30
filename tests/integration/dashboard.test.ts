@@ -105,6 +105,21 @@ describe("seed", () => {
     expect(rows).toEqual([{ nameNorm: "orbitrail" }]);
   });
 
+  it("rewrites its activity fixtures in place, also after the seeded cycles were removed behind its back", async () => {
+    const db = getDb();
+    const count = async () => (await db.execute<Record<string, number>>(sql`select
+      (select count(*)::int from activity_spans) as spans, (select count(*)::int from activity_events) as events,
+      (select count(*)::int from control_requests) as requests, (select count(*)::int from run_deliveries) as deliveries`))[0];
+    const before = await count();
+    expect(before?.spans).toBeGreaterThan(0);
+    await seedDatabase(db, { now: NOW, timezone: TZ });
+    expect(await count()).toEqual(before);
+    // Cycle ids restart, so the new cycle root reuses an id; the activity tables were not truncated.
+    await db.execute(sql`truncate table jobs, companies, raw_postings, runs, cycles, channels, applications restart identity cascade`);
+    await seedDatabase(db, { now: NOW, timezone: TZ });
+    expect(await count()).toEqual(before);
+  });
+
   it("leaves rows it did not create alone", async () => {
     const db = getDb();
     const [company] = await db.insert(schema.companies).values({ name: "Real Co", nameNorm: "real co" }).returning();

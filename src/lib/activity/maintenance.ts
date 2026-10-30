@@ -34,18 +34,18 @@ export async function pruneActivityLog(recorder: ActivityRecorder, shouldStop: (
     const settings = internal?.settings();
     if (!internal || !settings) return;
     const options = {
-      days: settings.retention.days, maxEvents: settings.retention.max_events, batchSize: settings.prune.batch_size,
+      days: settings.retention.days, maxEvents: settings.retention.max_events, batchSize: settings.prune.batch_size, rootsPerBatch: settings.prune.roots_per_batch,
       liveness: { staleAfterSeconds: settings.liveness.stale_after_seconds, startupGraceSeconds: settings.liveness.startup_grace_seconds },
     };
     for (const phase of ["days", "events"] as const) {
-      let rootId: string | undefined;
+      let rootIds: string[] | undefined;
       while (!shouldStop()) {
-        const batch = await internal.runMaintenance((db) => pruneActivityBatch(db, { ...options, phase, rootId }));
+        const batch = await internal.runMaintenance((db) => pruneActivityBatch(db, { ...options, phase, rootIds }));
         if (!batch) return;
         total.roots += batch.roots;
         total.events += batch.events;
         if (!batch.found) break;
-        rootId = batch.nextRootId ?? undefined;
+        rootIds = batch.nextRootIds ?? undefined;
       }
     }
   } catch { /* Each batch already has a deadline and safe warning. */ }

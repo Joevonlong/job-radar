@@ -155,6 +155,22 @@ even if details failed or it listed fewer postings than announced; "Last success
 - When "replace the whole file" removes a company, the group comments above the other companies stay where they are; the removed company's own group comment moves to the company after it.
 - When `sources.yaml` cannot be read: the table shows the database mirror (possibly stale; its status is coarser and follows only the last run: failed is Failing, partial or cut short is Degraded, anything else OK), switches and editing are disabled, but export YAML and import still work; use import to replace the whole file and repair it.
 
+### Activity log
+
+Open **Sources → Activity log** in the Sources sub-navigation or from the command palette (`/sources/logs`); it is not in the main navigation. The list can be filtered by type, status, time range, and only entries with warnings or errors. Work in progress is pinned at the top, and the page refreshes itself while work is running.
+
+The log records each collection cycle and its seven steps, including the ai / notify / late steps run by the ai-worker under the same cycle. It records per-job AI results for scoring, signal review, traps, translation and breakdown; every source query, including those skipped by budget, a circuit breaker or the cascade; and every control request attempt. Runner and ai-worker system tasks include startup, orphan recovery, backups, log pruning and reconciliation, delivery-item pruning, Telegram button presses and daily reminders. Heartbeats, empty polls, config reloads, reminder checks that send nothing, and web-process actions such as saving settings are not recorded.
+
+Open an entry for its detail page (`/sources/logs/<id>`): the step tree shows progress and results, and per-job results link to jobs. The **received / not received** table lists each query with fetched, new and cost; where the [paid delivery ledger](#paid-delivery-ledger) has a row, it also shows delivered, billed units, stored and counts by disposition. The detail page links to AI usage for the relevant day and task.
+
+Statuses include **running**, **ok**, **partial**, **failed**, and **skipped** with a reason. After collection finishes, **AI queued** or **AI running** means delegated AI work is still pending or running. **Interrupted** means work was cut off; **interrupted and re-queued** means the request is waiting for another attempt. **Possibly interrupted** means a record still appears to run although its underlying work or process is no longer active; **result not recorded** means its final result was not captured. Each request attempt keeps its own final status; the current request status appears only beside the latest attempt.
+
+**Not recorded at the time** means a detail was not captured; **unknown** means a value is unavailable. Neither is shown as zero. **Incomplete record (N dropped)** means N log events were dropped. Errors are shown only as codes and fixed descriptions, never error text; an unknown code appears as **other error**.
+
+Entries are retained by default for 30 days after their last activity, subject also to an event cap; work actually in progress is never pruned. Use **Delete this entry**, **Delete date range**, or **Clear all**. Each action shows a preview and asks for confirmation, skips work actually in progress, and deletes only entries that started before the preview. A large deletion may take several steps: the preview shows the counts deleted so far; choose **Continue** to finish. Deletion does not change cycles, runs, raw postings, the delivery ledger, AI usage or the monthly budget, and does not remove data from backups.
+
+Setting `enabled: false` in [activity-log.yaml](configuration.md#activity-log-activity-logyaml) stops new records and shows **activity log is off**; existing entries remain viewable and deletable.
+
 ## 5. Command line
 
 ```

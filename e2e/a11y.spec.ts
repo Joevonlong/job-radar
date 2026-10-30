@@ -24,6 +24,7 @@ test("every page has its own title in the form 'Page · Job Radar'", async ({ pa
     ["/settings", "设置 · Job Radar"],
     ["/me", "我的画像 · Job Radar"],
     ["/sources/ai-usage", "AI 用量 · Job Radar"],
+    ["/sources/logs", "操作日志 · Job Radar"],
   ];
   for (const [path, title] of titles) {
     await page.goto(path);

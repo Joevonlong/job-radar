@@ -28,6 +28,8 @@ description, not legal advice.
 | LinkedIn login state (only if you use the logged-in session) | `.auth/` | until you delete it |
 | Temporary files of an AI CLI call | `$TMPDIR/jr-codex-*`, `jr-claude-*` | removed after each call (a killed process can leave one behind) |
 
+The activity log lives only in local Postgres and stores IDs, codes, numbers and times, never message text, error text, URLs, job descriptions or Telegram messages. It adds no outbound connection. See [Activity log](sources.md#activity-log) for retention and deletion.
+
 The delivery ledger stays on this machine and is not exposed through MCP or pages. Its retention is configurable in [delivery-audit.yaml](configuration.md#paid-delivery-ledger-delivery-audityaml).
 
 There is no automatic retention for the other database tables listed above: raw postings, unparsed emails, notifications, control

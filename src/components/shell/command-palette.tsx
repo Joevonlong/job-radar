@@ -173,7 +173,7 @@ export function CommandPalette() {
               </CommandItem>
             ))}
             {PALETTE_SUBPAGES.map(({ key, href, icon: Icon }) => (
-              <CommandItem key={key} value={`${tSub(key)} ${href}`} onSelect={() => go(href)} className="group/item" data-testid={`palette-page-${key}`}>
+              <CommandItem key={key} value={`${tSub(key)} ${href} ${key === "logs" ? tSub("logsKeywords") : ""}`} onSelect={() => go(href)} className="group/item" data-testid={key === "logs" ? "activity-log-palette" : `palette-page-${key}`}>
                 <Icon aria-hidden />
                 <span>{tSub(key)}</span>
                 <span className="ml-auto font-mono text-data-sm opacity-75">{href}</span>

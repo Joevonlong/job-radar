@@ -37,6 +37,8 @@ prune:
   every_minutes: 60
   # Maximum event rows deleted in one transaction.
   batch_size: 2000
+  # Maximum entries locked and removed together in one prune or delete transaction.
+  roots_per_batch: 200
 ui:
   # Roots per list page.
   page_size: 50
