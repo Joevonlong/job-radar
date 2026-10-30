@@ -1,21 +1,15 @@
-import { execFileSync } from "node:child_process";
-import path from "node:path";
-
 import { z } from "zod";
 
-import { getAppRoot } from "@/lib/config/paths";
+export const AI_WORKER_DEFAULT_LAUNCHD_LABEL = "io.jobradar.ai-worker";
 
-const labelSchema = z.string().regex(/^[A-Za-z0-9._-]+$/);
+const labelSchema = z.string().min(1).refine((label) => !/[^A-Za-z0-9._-]/.test(label), {
+  message: "doctor.ai_worker_launchd_label must contain only letters, digits, . _ -",
+});
 
 /**
- * Resolve the configured scalar with the same function used by install, uninstall, deploy and restore. The resolver
- * stays in the shell library so file-only operations (including uninstall and --print-release) still need no Node.
- * Arguments are passed literally; resolving a label never queries or changes a service manager.
+ * Keep valid configured labels literally; only missing / empty values select the default. The shell equivalent is
+ * ai_worker_resolve_launchd_label in scripts/ops/lib/ai-worker.sh; tests/ops/ai-worker-label.test.ts enforces parity.
  */
-export function aiWorkerLaunchdLabel(configured: string, timeoutMs?: number): string {
-  const stdout = execFileSync("/bin/bash", [
-    "-c", 'source "$1" && ai_worker_resolve_launchd_label "$2"', "ai-worker-label",
-    path.join(getAppRoot(), "scripts/ops/lib/ai-worker.sh"), configured,
-  ], { encoding: "utf8", timeout: timeoutMs, stdio: ["ignore", "pipe", "pipe"] });
-  return labelSchema.parse(stdout);
+export function aiWorkerLaunchdLabel(configured?: string): string {
+  return labelSchema.parse(configured === undefined || configured === "" ? AI_WORKER_DEFAULT_LAUNCHD_LABEL : configured);
 }

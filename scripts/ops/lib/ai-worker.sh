@@ -36,8 +36,8 @@ AI_WORKER_STOPPED_BY=""
 AI_WORKER_LABEL_USED=""
 
 # ai_worker_resolve_launchd_label <configured scalar> [source file]: the label to install and query. Preserve every valid configured
-# label, including the legacy spelling; only a missing / empty value selects the default. Also called by TypeScript
-# through src/lib/ops/ai-worker-label.ts, so doctor, setup and shell operations cannot apply different rename rules.
+# label, including the legacy spelling; only a missing / empty value selects the default. The TypeScript equivalent is
+# src/lib/ops/ai-worker-label.ts; tests/ops/ai-worker-label.test.ts enforces parity without runtime shell calls.
 ai_worker_resolve_launchd_label() {
   local label="${1:-$AI_WORKER_DEFAULT_LABEL}"
   if [[ ! "$label" =~ ^[A-Za-z0-9._-]+$ ]]; then

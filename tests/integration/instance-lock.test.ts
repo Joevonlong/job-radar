@@ -163,7 +163,7 @@ describe("single-instance lock (ai-worker)", () => {
 });
 
 describe("ai-worker process", () => {
-  it.each(["de.jobradar.ai-worker", "io.jobradar.ai-worker"])("--once exits with code 3 and names %s while leaving the other worker's running request alone", async (label) => {
+  it.each(["de.jobradar.ai-worker", "io.jobradar.ai-worker", "invalid label"])("--once exits with code 3 for label %s while leaving the other worker's running request alone", async (label) => {
     const lock = await take();
     expect(lock.acquired).toBe(true);
     await insertControlRequest(getDb(), { kind: "translate_job", payload: { jobId: 1 } });
@@ -173,7 +173,8 @@ describe("ai-worker process", () => {
     const { status, output } = runWorkerOnce(label);
     expect(status).toBe(3);
     expect(output).toMatch(/another ai-worker is running against this database \(job-radar ai-worker pid=\d+ host=/);
-    expect(output).toContain(`launchctl bootout gui/$(id -u)/${label}`);
+    if (process.platform === "darwin") expect(output).toContain(`launchctl bootout gui/$(id -u)/${label === "invalid label" ? "<label>" : label}`);
+    else expect(output).not.toContain("launchctl");
     expect(output).not.toMatch(/queued .* interrupted request/);
     expect((await getControlRequest(getDb(), running!.id))?.status).toBe("running");
   }, 90_000);

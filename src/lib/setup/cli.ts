@@ -407,7 +407,7 @@ function hostServices(env: NodeJS.ProcessEnv, restartWaitSeconds: number, busyNo
         project: resolveComposeProject(env, doctor.compose_project),
         platform: process.platform,
         uid: typeof process.getuid === "function" ? process.getuid() : null,
-        launchdLabel: aiWorkerLaunchdLabel(doctor.ai_worker_launchd_label, doctor.command_timeout_seconds * 1000),
+        launchdLabel: process.platform === "darwin" ? aiWorkerLaunchdLabel(doctor.ai_worker_launchd_label) : doctor.ai_worker_launchd_label,
         systemdUnit: AI_WORKER_SYSTEMD_UNIT,
         commandTimeoutMs: doctor.command_timeout_seconds * 1000,
         restartWaitSeconds,

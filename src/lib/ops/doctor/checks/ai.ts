@@ -7,7 +7,7 @@ import { cliCommandProblem } from "@/lib/ai/providers/cli-guards";
 import { isCodexOlderThan, parseCodexVersion } from "@/lib/ai/providers/codex-version";
 import type { WorkerEvidence } from "@/lib/db/repos/ai-worker-evidence";
 
-import { aiWorkerLaunchdLabel } from "../../ai-worker-label";
+import { AI_WORKER_DEFAULT_LAUNCHD_LABEL, aiWorkerLaunchdLabel } from "../../ai-worker-label";
 import { withTimeout } from "../../timeout";
 import { configGuardFindings } from "../../config-guards";
 import { AI_WORKER_LAUNCHD_LOG, AI_WORKER_LOG_DIR, AI_WORKER_LOG_NAMES } from "../../log-files";
@@ -19,7 +19,7 @@ import { type CheckOutcome, type DoctorCheck, type DoctorContext } from "../type
 
 const launchdSpec = { id: "aiworker.launchd", group: "processes" } as const;
 
-/** Compatibility probe when the configured label is absent and an older agent still uses this label. */
+/** Compatibility probe when the configured label is absent and the agent still uses another known label. */
 const LEGACY_LAUNCHD_LABEL = "de.jobradar.ai-worker";
 
 /** The fields of `launchctl print` that matter: `state = running`, `pid = 123`, `last exit code = 0`, `stdout path = …`. */
@@ -48,7 +48,7 @@ export function aiWorkerServicePid(ctx: DoctorContext): Promise<{ pid: number } 
   return cached(ctx, "aiworker.servicePid", async () => {
     const { t } = ctx;
     if (ctx.platform === "darwin" && ctx.uid !== null) {
-      const label = aiWorkerLaunchdLabel(ctx.settings.ai_worker_launchd_label, ctx.settings.command_timeout_seconds * 1000);
+      const label = aiWorkerLaunchdLabel(ctx.settings.ai_worker_launchd_label);
       const out = await ctx.probes.run("launchctl", ["print", `gui/${ctx.uid}/${label}`]);
       if (out.kind !== "ran") return { pid: null, reason: t("checks.config.shipped.noAnswer", { command: "launchctl print" }) };
       if (out.exitCode !== 0) return { pid: null, reason: t("checks.config.shipped.notLoaded", { service: label }) };
@@ -122,7 +122,7 @@ export const aiWorkerLaunchdCheck: DoctorCheck = {
     if (ctx.config.ai.execution !== "host") return ok(launchdSpec, t("checks.aiworker.launchd.notHost"));
     if (ctx.platform === "linux") return systemdOutcome(ctx);
     if (ctx.platform !== "darwin" || ctx.uid === null) return warn(launchdSpec, t("checks.aiworker.launchd.notMacos"), t("checks.aiworker.launchd.notMacosHint"));
-    const label = aiWorkerLaunchdLabel(ctx.settings.ai_worker_launchd_label, ctx.settings.command_timeout_seconds * 1000);
+    const label = aiWorkerLaunchdLabel(ctx.settings.ai_worker_launchd_label);
     const out = await ctx.probes.run("launchctl", ["print", `gui/${ctx.uid}/${label}`]);
     const heartbeatAge = async (): Promise<number | null> => {
       const sources = await tryLoadSources(ctx);
@@ -130,10 +130,9 @@ export const aiWorkerLaunchdCheck: DoctorCheck = {
     };
     if (out.kind === "timeout") return warn(launchdSpec, t("checks.aiworker.launchd.timeout"), t("checks.aiworker.launchd.timeoutHint"));
     if (out.kind === "missing" || out.exitCode !== 0) {
-      if (label !== LEGACY_LAUNCHD_LABEL) {
-        const legacy = await ctx.probes.run("launchctl", ["print", `gui/${ctx.uid}/${LEGACY_LAUNCHD_LABEL}`]);
-        if (legacy.kind === "ran" && legacy.exitCode === 0) return warn(launchdSpec, t("checks.aiworker.launchd.legacy", { legacy: LEGACY_LAUNCHD_LABEL, label }), t("checks.aiworker.launchd.legacyHint", { label }));
-      }
+      const otherLabel = label === LEGACY_LAUNCHD_LABEL ? AI_WORKER_DEFAULT_LAUNCHD_LABEL : LEGACY_LAUNCHD_LABEL;
+      const legacy = await ctx.probes.run("launchctl", ["print", `gui/${ctx.uid}/${otherLabel}`]);
+      if (legacy.kind === "ran" && legacy.exitCode === 0) return warn(launchdSpec, t("checks.aiworker.launchd.legacy", { legacy: otherLabel, label }), t("checks.aiworker.launchd.legacyHint", { label }));
       const alive = await heartbeatAge();
       if (alive !== null) return warn(launchdSpec, t("checks.aiworker.launchd.manual", { label, age: alive }), t("checks.aiworker.launchd.manualHint"));
       return fail(launchdSpec, t("checks.aiworker.launchd.notInstalled", { label }), t("checks.aiworker.launchd.notInstalledHint"));
@@ -167,7 +166,15 @@ export const aiWorkerHeartbeatCheck: DoctorCheck = {
     const age = ageSeconds(aiWorker.lastHeartbeatAt, ctx.now);
     if (!aiWorker.online) {
       const logs = workerLogs(ctx);
-      const label = aiWorkerLaunchdLabel(ctx.settings.ai_worker_launchd_label, ctx.settings.command_timeout_seconds * 1000);
+      let label: string = AI_WORKER_DEFAULT_LAUNCHD_LABEL;
+      if (ctx.platform === "darwin") {
+        try {
+          label = aiWorkerLaunchdLabel(ctx.settings.ai_worker_launchd_label);
+        } catch {
+          // A diagnostic hint must not replace the offline result with a label-validation failure.
+          label = "<label>";
+        }
+      }
       return fail(heartbeatSpec, t("checks.aiworker.heartbeat.offline", { ago: formatAgo(ctx, age), limit }), t("checks.aiworker.heartbeat.offlineHint", { errLog: logs.err, launchdLog: logs.launchd, label }));
     }
     const r = await aiWorkerServiceReceipt(ctx);

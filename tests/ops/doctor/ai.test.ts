@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { aiBacklogCheck, aiQuotaCheck, aiWorkerHeartbeatCheck, aiWorkerLaunchdCheck, aiWorkerServicePid, aiWorkerServiceReceipt, claudeLoginCheck, codexLoginCheck, configGuardsCheck, parseLaunchctlPrint, profileCheck } from "@/lib/ops/doctor/checks/ai";
 import { shippedConfigCheck } from "@/lib/ops/doctor/checks/shipped";
+import * as workerLabel from "@/lib/ops/ai-worker-label";
 
 import type { QuotaStatus } from "@/lib/ai/quota-guard";
 import type { AiProviderId } from "@/lib/ai/types";
@@ -52,7 +53,19 @@ describe("aiworker.launchd", () => {
     const r = await only(aiWorkerLaunchdCheck, makeContext({ commands: { [LAUNCHCTL]: ran("", 113, "Could not find service"), "launchctl print gui/501/de.jobradar.ai-worker": ran(LAUNCHCTL_RUNNING) } }));
     expect(r.status).toBe("warn");
     expect(r.detail).toContain("de.jobradar.ai-worker");
+    expect(r.detail).toContain("io.jobradar.ai-worker");
     expect(r.hint).toContain("scripts/ops/install-ai-worker.sh");
+  });
+  it.each([true, false])("warns when configured de is absent but io is loaded, with heartbeat online=%s", async (online) => {
+    const ctx = makeContext({ locale: "en", settings: { ai_worker_launchd_label: "de.jobradar.ai-worker" }, commands: {
+      "launchctl print gui/501/de.jobradar.ai-worker": ran("", 113),
+    }, probes: { sources: vi.fn(async () => sourcesView({ aiWorker: worker({ online }) })) } });
+    const r = await only(aiWorkerLaunchdCheck, ctx);
+    expect(r).toMatchObject({ status: "warn", detail: ctx.t("checks.aiworker.launchd.legacy", { legacy: "io.jobradar.ai-worker", label: "de.jobradar.ai-worker" }) });
+    expect(r.hint).toContain("scripts/ops/install-ai-worker.sh");
+    expect(ctx.probes.run).toHaveBeenNthCalledWith(1, "launchctl", ["print", "gui/501/de.jobradar.ai-worker"]);
+    expect(ctx.probes.run).toHaveBeenNthCalledWith(2, "launchctl", ["print", "gui/501/io.jobradar.ai-worker"]);
+    expect(ctx.probes.sources).not.toHaveBeenCalled();
   });
   it.each(["de.jobradar.ai-worker", "io.jobradar.ai-worker"])("finds the job installed under the configured label %s", async (label) => {
     const command = `launchctl print gui/501/${label}`;
@@ -110,6 +123,29 @@ describe("aiworker.heartbeat", () => {
         sources: async () => sourcesView({ aiWorker: worker({ online: false, lastHeartbeatAt: ago(900), ageSeconds: 900 }) }),
       } });
       expect((await only(aiWorkerHeartbeatCheck, ctx)).hint).toContain(`launchctl kickstart -k gui/$(id -u)/${label}`);
+    }
+  });
+  it.each(["linux", "freebsd"] as const)("keeps the offline hint on %s without resolving a launchd label", async (platform) => {
+    const resolver = vi.spyOn(workerLabel, "aiWorkerLaunchdLabel").mockImplementation(() => { throw new Error("unavailable"); });
+    try {
+      const ctx = makeContext({ locale: "en", platform, settings: { ai_worker_launchd_label: "invalid label" }, probes: {
+        sources: async () => sourcesView({ aiWorker: worker({ online: false, lastHeartbeatAt: ago(900), ageSeconds: 900 }) }),
+      } });
+      const r = await only(aiWorkerHeartbeatCheck, ctx);
+      expect(r).toMatchObject({ status: "fail", detail: expect.stringContaining("15 min") });
+      expect(r.hint).toContain("data/logs/ai-worker.err.log");
+      expect(resolver).not.toHaveBeenCalled();
+    } finally { resolver.mockRestore(); }
+  });
+  it("keeps the offline result and a generic hint when the launchd label is invalid", async () => {
+    for (const locale of ["en", "zh"] as const) {
+      const ctx = makeContext({ locale, settings: { ai_worker_launchd_label: "invalid label" }, probes: {
+        sources: async () => sourcesView({ aiWorker: worker({ online: false, lastHeartbeatAt: ago(900), ageSeconds: 900 }) }),
+      } });
+      const r = await only(aiWorkerHeartbeatCheck, ctx);
+      expect(r).toMatchObject({ status: "fail", detail: expect.stringContaining(locale === "en" ? "15 min" : "15 分钟") });
+      expect(r.hint).toContain("launchctl kickstart -k gui/$(id -u)/<label>");
+      expect(r.hint).not.toContain("invalid label");
     }
   });
   it("fails when it never beat", async () => {
