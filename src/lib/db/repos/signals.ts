@@ -1,4 +1,5 @@
 import type { ScoreTx } from "./current-scores";
+import { inScoreIdOrder, inScoreLockOrder } from "./score-lock-order";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 
 import type { Executor } from "../executor";
@@ -380,8 +381,10 @@ const numberArray = (values: ReadonlyArray<number | null>): string => `{${values
 
 /** Write the bonuses (and rank values) of many `scores` rows: one statement per `BONUS_CHUNK` rows, not one per row. */
 export async function setScoreBonuses(db: ScoreTx, updates: readonly ScoreBonusUpdate[]): Promise<void> {
-  for (let i = 0; i < updates.length; i += BONUS_CHUNK) {
-    const part = updates.slice(i, i + BONUS_CHUNK);
+  // ascending score id across and within the chunks: the global lock order of multi-row scores writes (score-lock-order.ts)
+  const ordered = inScoreIdOrder(updates, (u) => u.scoreId);
+  for (let i = 0; i < ordered.length; i += BONUS_CHUNK) {
+    const part = ordered.slice(i, i + BONUS_CHUNK);
     const rows = await db.execute<{ job_id: number }>(sql`
       update ${scores} set signal_bonus = v.signal_bonus, rank_value = v.rank_value
       from (
@@ -389,7 +392,7 @@ export async function setScoreBonuses(db: ScoreTx, updates: readonly ScoreBonusU
           unnest(${numberArray(part.map((u) => u.signalBonus))}::numeric[]) as signal_bonus,
           unnest(${numberArray(part.map((u) => u.rankValue))}::numeric[]) as rank_value
       ) v
-      where ${scores.id} = v.id returning scores.job_id
+      where ${scores.id} = v.id and ${inScoreLockOrder(sql`${scores.id} = any(${numberArray(part.map((u) => u.scoreId))}::bigint[])`)} returning scores.job_id
     `);
     db.touch(rows.map((row) => Number(row.job_id)));
   }

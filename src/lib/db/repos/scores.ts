@@ -1,4 +1,5 @@
 import type { ScoreTx } from "./current-scores";
+import { inScoreLockOrder } from "./score-lock-order";
 import { and, count, desc, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 
 import type { ReasonEvidence } from "@/lib/scoring/evidence";
@@ -24,12 +25,13 @@ const hasAiScore = isNotNull(scores.score);
  * Profile changed: every score computed from another snapshot is out of date (the scorer re-scores
  * those). Scores without a snapshot reference are left alone, and so are rows without a score
  * (filter-step rows have nothing to be out of date). Returns the number of rows newly marked stale.
+ * Rows are locked in ascending id order, like every multi-row scores write (`score-lock-order.ts`).
  */
 export async function markScoresStaleExcept(db: ScoreTx, currentSnapshotId: number): Promise<number> {
   const rows = await db
     .update(scores)
     .set({ stale: true })
-    .where(and(hasAiScore, ne(scores.profileSnapshotId, currentSnapshotId), eq(scores.stale, false)))
+    .where(inScoreLockOrder(and(hasAiScore, ne(scores.profileSnapshotId, currentSnapshotId), eq(scores.stale, false))))
     .returning({ id: scores.id, jobId: scores.jobId });
   db.touch(rows.map((row) => row.jobId));
   return rows.length;
@@ -345,12 +347,13 @@ export async function saveScore(db: ScoreTx, input: SaveScoreInput): Promise<{ e
 /**
  * The scoring prompt changed: every score made by another prompt version is out of date. Scores
  * without a version (hand-made or seed data) and rows without a score are left alone. Returns the rows newly marked stale.
+ * Rows are locked in ascending id order (`score-lock-order.ts`).
  */
 export async function markScoresStaleByPromptVersion(db: ScoreTx, currentVersion: string): Promise<number> {
   const rows = await db
     .update(scores)
     .set({ stale: true })
-    .where(and(hasAiScore, isNotNull(scores.promptVersion), ne(scores.promptVersion, currentVersion), eq(scores.stale, false)))
+    .where(inScoreLockOrder(and(hasAiScore, isNotNull(scores.promptVersion), ne(scores.promptVersion, currentVersion), eq(scores.stale, false))))
     .returning({ id: scores.id, jobId: scores.jobId });
   db.touch(rows.map((row) => row.jobId));
   return rows.length;

@@ -1,4 +1,5 @@
 import { scoreTransaction, type ScoreTx } from "./repos/current-scores";
+import { inScoreLockOrder } from "./repos/score-lock-order";
 import { and, eq, inArray, like, sql } from "drizzle-orm";
 
 import { greenhouseAdapter } from "@/lib/channels/ats/greenhouse";
@@ -168,7 +169,7 @@ async function healthyRun(db: Executor): Promise<void> {
 
 /** Real provider and model ids on the AI rows, and a summary per scored job. */
 async function realisticAi(db: ScoreTx, ids: ReadonlyMap<string, number>): Promise<void> {
-  await db.update(scores).set({ provider: DEMO_AI.provider, model: DEMO_AI.model }).where(eq(scores.provider, "seed"));
+  await db.update(scores).set({ provider: DEMO_AI.provider, model: DEMO_AI.model }).where(inScoreLockOrder(eq(scores.provider, "seed")));
   await db.update(translations).set({ provider: DEMO_AI.provider }).where(eq(translations.provider, "seed"));
   await db.update(jobBreakdowns).set({ provider: DEMO_AI.provider, model: DEMO_AI.model }).where(eq(jobBreakdowns.provider, "seed"));
   for (const [key, summary] of Object.entries(DEMO_SUMMARIES)) {

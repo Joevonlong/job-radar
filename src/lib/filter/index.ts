@@ -1,4 +1,5 @@
 import { scoreTransaction } from "@/lib/db/repos/current-scores";
+import { inScoreIdOrder } from "@/lib/db/repos/score-lock-order";
 import { createHash } from "node:crypto";
 
 import type { CycleStepContext, StepResult } from "@/lib/cycle/steps";
@@ -171,6 +172,7 @@ export async function runFilter(db: Db, options: FilterOptions): Promise<FilterR
     // A timed-out rule preserves previous vetoes; retry those inputs next cycle instead of caching a partial judgement.
     const complete = !dealBreakers.warnings.some((warning) => warning.code === "too_slow");
     await scoreTransaction(db, async (tx) => {
+      const changes: { scoreId: number; state: Omit<NewFilterResult, "jobId"> }[] = [];
       for (const [i, row] of batch.entries()) {
         const verdict = verdicts[i];
         if (!verdict) continue;
@@ -187,11 +189,14 @@ export async function runFilter(db: Db, options: FilterOptions): Promise<FilterR
         if (!existing) {
           fresh.push({ jobId: row.id, ...state });
         } else {
-          await updateFilterResult(tx, existing.scoreId, state);
+          changes.push({ scoreId: existing.scoreId, state });
           if (existing.filterResult !== verdict.result || !sameReasons(existing.filterReasons, verdict.reasons)) result.updated += 1;
           else result.unchanged += 1;
         }
       }
+      // The batch is in job id order; the row locks are taken in score id order (score-lock-order.ts), or a concurrent
+      // stale-mark scanning the other way closes a lock cycle with this batch
+      for (const change of inScoreIdOrder(changes, (c) => c.scoreId)) await updateFilterResult(tx, change.scoreId, change.state);
       result.created += await insertFilterResults(tx, options.snapshotId, fresh);
     });
   }

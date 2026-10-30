@@ -1,4 +1,5 @@
 import { scoreTransaction, type ScoreTx } from "./repos/current-scores";
+import { lockScoreRowsOfJobs } from "./repos/score-lock-order";
 import { and, eq, inArray, like, notExists, or, sql } from "drizzle-orm";
 
 import { loadConfig, type PipelineConfig } from "@/lib/config";
@@ -809,6 +810,7 @@ async function removePreviousSeed(db: ScoreTx, pipeline: PipelineConfig): Promis
     db.touch(jobIds);
     await db.delete(aiUsage).where(inArray(aiUsage.jobId, jobIds)); // the seeded AI calls go with their jobs
     await db.delete(applications).where(inArray(applications.jobId, jobIds)); // events cascade
+    await lockScoreRowsOfJobs(db, jobIds); // the cascade below takes them in scan order; take them in id order first
     await db.delete(jobs).where(inArray(jobs.id, jobIds)); // sources, signals, scores cascade
   }
   await db.delete(rawPostings).where(like(rawPostings.externalId, `${SEED_EXTERNAL_PREFIX}%`));
