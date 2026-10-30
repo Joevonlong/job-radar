@@ -4,7 +4,7 @@
  * through the shared config writer (comments stay) and mirrors the result into `source_registry`.
  */
 import { logActionFailure } from "@/lib/logging/action-failure";
-import { parse, parseDocument } from "yaml";
+import { parseDocument } from "yaml";
 import { z } from "zod";
 
 import {
@@ -13,8 +13,14 @@ import {
   atsBoardEntrySchema,
   channelsSchema,
   configErrorKey,
+  configSourcePath,
+  CONFIG_VERSION_KEY,
+  currentConfigVersion,
   hashConfigText,
+  migrateConfigDocument,
   mutateConfig,
+  parseConfigDocument,
+  parseConfigText,
   readConfigText,
   reloadConfig,
   writeConfig,
@@ -39,6 +45,8 @@ import {
   type ImportSummary,
 } from "./import";
 import { syncSourceRegistry } from "./sync";
+import { toFull } from "@/lib/config/to-full";
+import { CONFIG_YAML_OPTIONS, stringifyConfigYaml } from "@/lib/config/yaml-options";
 
 export type RegistryErrorKey = "invalid" | "unknown_entry" | "config_invalid" | "write_failed" | "no_changes" | "database_unavailable" | "needs_parent" | "consent_required" | ConfigWriteErrorKey;
 
@@ -234,7 +242,10 @@ export type ImportPreviewState =
 /** `jobspy.proxies` of a file that does not pass validation, read leniently (a repair must not drop it). */
 function salvageProxies(text: string): string[] {
   try {
-    const doc: unknown = parse(text);
+    // lenient on purpose (a repair keeps what it can): the shared tags, but an unresolved one does not stop the salvage
+    const parsed = parseDocument(text, CONFIG_YAML_OPTIONS);
+    if (parsed.errors.length > 0) return [];
+    const doc: unknown = parsed.toJS();
     const jobspy = typeof doc === "object" && doc !== null ? (doc as Record<string, unknown>).jobspy : null;
     const proxies = typeof jobspy === "object" && jobspy !== null ? (jobspy as Record<string, unknown>).proxies : null;
     return Array.isArray(proxies) ? proxies.filter((p): p is string => typeof p === "string") : [];
@@ -334,7 +345,12 @@ function stamp(now: Date, timeZone: string): string {
   return `${get("year")}${get("month")}${get("day")}-${get("hour")}${get("minute")}`;
 }
 
-/** The file as YAML (original text, comments included) or the validated values as JSON; credentials in proxy URLs are masked. */
+/**
+ * The effective config, credentials in proxy URLs masked, both formats with `config_version`: as YAML the file that is
+ * read (the user's, else the shipped one) migrated to the current version and rendered in full with its comments
+ * (`toFull`), as JSON the validated values. An invalid file has no effective config: no JSON, and the YAML is the file's
+ * own text (masked), so it can still be saved and fixed elsewhere.
+ */
 export function exportSources(format: "yaml" | "json", options: { now: Date; timeZone: string }): { body: string; contentType: string; filename: string } | { error: "config_invalid" | "missing" } {
   const base = `sources-${stamp(options.now, options.timeZone)}`;
   let text: string;
@@ -344,16 +360,19 @@ export function exportSources(format: "yaml" | "json", options: { now: Date; tim
     logActionFailure("exportSources", error);
     return { error: "missing" };
   }
-  if (format === "yaml") {
-    return { body: maskCredentialsInText(text), contentType: "application/yaml; charset=utf-8", filename: `${base}.yaml` };
-  }
+  let effective: { config: ChannelsConfig; yaml: string };
   try {
-    const doc = parseDocument(text, { uniqueKeys: true });
-    if (doc.errors.length > 0) return { error: "config_invalid" };
-    const config = reloadConfig("channels");
-    return { body: `${JSON.stringify(maskProxyCredentials(config), null, 2)}\n`, contentType: "application/json; charset=utf-8", filename: `${base}.json` };
+    const file = configSourcePath("channels");
+    const config = parseConfigText("channels", text, file);
+    const doc = parseConfigDocument("channels", text, file);
+    migrateConfigDocument("channels", doc, file);
+    effective = { config, yaml: stringifyConfigYaml(toFull("channels", doc, null)) };
   } catch (error) {
     logActionFailure("exportSources", error);
+    if (format === "yaml") return { body: maskCredentialsInText(text), contentType: "application/yaml; charset=utf-8", filename: `${base}.yaml` };
     return { error: "config_invalid" };
   }
+  if (format === "yaml") return { body: maskCredentialsInText(effective.yaml), contentType: "application/yaml; charset=utf-8", filename: `${base}.yaml` };
+  const body = { [CONFIG_VERSION_KEY]: currentConfigVersion("channels"), ...maskProxyCredentials(effective.config) };
+  return { body: `${JSON.stringify(body, null, 2)}\n`, contentType: "application/json; charset=utf-8", filename: `${base}.json` };
 }

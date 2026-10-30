@@ -16,6 +16,10 @@
  *     symbolic link, an unsupported file name) is a failure.
  *
  * Usage: pnpm config:check   (honours JOB_RADAR_DEFAULTS_DIR / JOB_RADAR_CONFIG_DIR / JOB_RADAR_PROFILE_DIR)
+ *
+ * `pnpm config:check --effective [--json]` instead prints, per config file, where it is read from and the canonical hash
+ * of its effective value (what the loader makes of it; key order, comments and config_version do not change it). Compare
+ * the hashes before and after an upgrade: equal hashes mean the same effective config. Exits 1 when a file is invalid.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -42,6 +46,7 @@ import {
   type ConfigName,
   type ConfigValue,
 } from "../src/lib/config";
+import { effectiveConfigEntries } from "../src/lib/config/effective-report";
 import { shippedConfigId, shortShippedConfigId } from "../src/lib/config/shipped-id";
 import { dealBreakerLimitProblems, slowPatternProblems } from "../src/lib/filter/deal-breakers";
 import { vmTimeBox } from "../src/lib/filter/time-box";
@@ -50,6 +55,22 @@ import { compileGhostRules } from "../src/lib/ghost/rules";
 import { compileVisaRules } from "../src/lib/visa/rules";
 
 const rel = displayConfigPath;
+
+if (process.argv.includes("--effective")) {
+  const entries = effectiveConfigEntries();
+  if (process.argv.includes("--json")) {
+    const files = entries.map(({ name, file, layer, hash, error }) => ({ name, file: rel(file), layer, hash, error }));
+    console.log(JSON.stringify({ files }, null, 2));
+  } else {
+    for (const entry of entries) {
+      if (entry.layer === "missing") console.log(`- ${rel(entry.file)} (not present, skipped)`);
+      else if (entry.error !== null) console.log(`✗ ${rel(entry.file)} (${entry.layer})\n    ${entry.error}`);
+      else console.log(`✓ ${rel(entry.file)} (${entry.layer})  ${entry.hash ?? ""}`);
+    }
+  }
+  process.exit(entries.some((entry) => entry.error !== null) ? 1 : 0);
+}
+
 let failures = 0;
 const pendingMigrations: string[] = [];
 

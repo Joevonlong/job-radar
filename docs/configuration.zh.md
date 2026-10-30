@@ -121,6 +121,7 @@ pnpm config:init --from <目录>     # 从别的目录复制（旧安装迁移�
 pnpm config:migrate               # 列出要迁移的文件和 diff，不写
 pnpm config:migrate --write       # 迁移：先把要改的原文件备份到 data/config/.backup/<时间>/，再写
 pnpm config:check                 # 校验两层（默认目录的文件即使被覆盖也要合法），写出每个文件读的是哪层和出厂配置标识
+pnpm config:check --effective     # 逐个文件：读的是哪层，以及生效值的哈希（`--json` 输出机器可读的列表；见下）
 pnpm config:example               # 列出示例配置；`pnpm config:example <id> [--dry-run]` 套用其中一个（见下文）
 ```
 
@@ -313,6 +314,14 @@ web 和 runner 以 `0600`（仅属主）写配置文件：`data/config/*.yaml` �
 - 文件**比代码新**（代码回退了）：明确报错（`ConfigError`，doctor ❌），不会猜。升级代码，或从 `data/config/.backup/<时间>/` 拿回迁移前的文件。
 - 默认目录的文件随产品发布，永远是当前版本（`config:check` 检查）。
 
+### 比较生效配置（`config:check --effective`）
+
+`pnpm config:check --effective` 每个配置文件打印一行：读的是哪层（`user` / `default`），以及加载器得到的值（内存里迁移、校验、填上默认值之后）的规范哈希。键的顺序、注释、引号和 `config_version` 不影响哈希，值不同哈希就不同。升级或手改前后各跑一次：哈希相同，生效配置就相同。读不出来的文件标 `✗` 并给出错误（文件和字段，不含内容），命令退出 1。`--json` 输出 `{"files": [{name, file, layer, hash, error}]}`。
+
+### YAML 标签
+
+解析器不认识的标签（`!foo`、拼错的 `!unset`、`!!int x`）在所有读配置文件的地方都是错误，并指出行号：加载器、设置页和高级编辑器、迁移、示例配置、来源导入。以前的版本只警告，并把值当字符串读。`!unset` 标签留给以后的版本，现在会被拒绝，提示“not supported by this version”。
+
 写迁移（开发者）：在 `src/lib/config/migrations/<文件名>/NNN-slug.ts` 导出一个 `{ from, to, description?, migrate(doc) }`（`to = from + 1`，`migrate` 原地改 yaml 的 `Document`，保留注释，不做 I/O），在 `migrations/index.ts` 的 `CONFIG_MIGRATIONS` 里按顺序登记，同时把默认目录里那份文件改成新格式并写上新的 `config_version`。契约见 `src/lib/config/migrations/types.ts`。
 
 ## 出厂配置标识
@@ -489,6 +498,8 @@ CLI 轮次收到 Ctrl-C 或 SIGTERM 时会取消步骤，把这一轮结束为�
 ## 备份
 
 每一份备份，不管是 runner 每天做的（`backup.config_archive`，默认开）还是 `scripts/ops/backup.sh` 做的，都会在数据库 dump 旁边留一份 `….config.tgz`（`data/config` + `data/profile`，不含 `.backup/` 和登录密钥 `.web-session-secret`）。`schedule.yaml` 的 `backup` 段还有 `pre_migrate`（数据库迁移前先备份）、`keep_system`（每一类安全备份保留几份）和 `keep_old_databases`（恢复时被替换的旧库保留几个）。`.env` 和 `.auth/` 不在任何备份里。见 [`backup-restore.zh.md`](backup-restore.zh.md)，包括"恢复配置"。
+
+`scripts/ops/backup.sh` 和 `restore.sh` 通过应用的加载器读 `schedule.yaml`。加载器跑不起来（没有 node、没有 `node_modules`）或者文件不合法时，由一个严格的 shell 读取器读 `timezone`（`restore.sh` 还读 `backup.max_age_hours`）。`timezone` 请写成 `地区/城市`（`Europe/Berlin`、`America/Argentina/Buenos_Aires`）或 `UTC`。shell 读取器比加载器严格：加载器接受的一段名字，例如 `Japan`、`GMT`、`EST5EDT`，在它看来不明确，`backup.sh` 这时用 UTC 给这份备份命名（并警告）。只影响这条退路；runner 和加载器照旧读这些名字。
 
 ## 从单目录切换
 

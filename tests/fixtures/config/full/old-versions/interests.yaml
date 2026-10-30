@@ -1,0 +1,133 @@
+# 感兴趣清单（docs/plan.md §5.4、§7.1）。
+#
+# 信号词表由规则层（不花 AI）在 JD 里找候选，AI 层再确认或否定。
+# 所有正则按 "iu" 标志编译（不区分大小写，Unicode）；关键词按字面、整词匹配。
+# 每个信号都带 JD 原文引用（C7），没有引用就不入库。
+signals:
+  # T1：写明具体金额。命中后用 pipeline.yaml 的 salary 段（周期换算、汇率）算成年薪；
+  # 年薪低于 min_annual_eur 的丢弃（"€50"、"€2,000 yearly" 之类）。
+  T1:
+    min_annual_eur: 20000
+    # 金额没写币种（"up to 120k"、"Gehalt: 70.000 - 90.000"）且同一句里有薪资词时，按这个币种处理并标记；null 则丢弃这类金额
+    assume_currency: EUR
+    # 写明的金额什么时候算"高薪信号"（T1 加分、绿色徽章、"只看 T1/T2" 筛选）：
+    #   salary_floor = 年薪上限 ≥ preferences.yaml 的 salary_floor_eur_year（默认）；数字 = 至少这么多 EUR/年；none = 写明金额就算。
+    # 低于门槛的金额照样提取和显示，但徽章是灰色的、不加分。
+    bonus_requires_at_least: salary_floor
+    # 非欧元金额与门槛比较时用的粗略汇率（只用于这个比较；pipeline.yaml 的 salary.fx_to_eur 有汇率时优先）。
+    # 两张表里都没有的币种无法比较，按高薪处理。
+    rough_fx_to_eur: { USD: 0.9, GBP: 1.15, CHF: 1.05 }
+    # "可能是其他地区的薪资"（非 pipeline.yaml salary.local_currencies 的币种，或正文写明是别处的薪资区间）的 T1 加几分，
+    # 代替上面 weights.T1。0 = 不加分，也不算高薪信号（"只看 T1/T2" 和推送的 T1/T2 低门槛都不认它）
+    other_region_weight: 0
+    patterns:
+      # €85,000–105,000 / EUR 90k / €80,000 - €120,000 / $184,050 $262,928 / €7,200 monthly
+      - '(?<![\p{L}\p{N}.,])(?:€|EUR|USD|\$|£|GBP|CHF)\s?(?:\d{1,3}(?:[.,]\d{3})+|\d{2,6})(?:[.,]\d{1,2})?(?:\s?k\b)?(?![\d])(?!\s?(?:[mb]|bn|mn|mio|million|billion)(?![\p{L}]))(?:\s?(?:[-–—]|to|bis|und|and)\s?(?:€|EUR|USD|\$|£|GBP|CHF)?\s?(?:\d{1,3}(?:[.,]\d{3})+|\d{2,6})(?:[.,]\d{1,2})?(?:\s?k\b)?(?![\d])(?!\s?(?:[mb]|bn|mn|mio|million|billion)(?![\p{L}]))|\s?(?:€|EUR|USD|\$|£|GBP|CHF)\s?(?:\d{1,3}(?:[.,]\d{3})+|\d{2,6})(?:[.,]\d{1,2})?(?:\s?k\b)?(?![\d])(?!\s?(?:[mb]|bn|mn|mio|million|billion)(?![\p{L}])))?'
+      # 85.000 € / 90k EUR / 85.000 – 105.000 Euro
+      - '(?<![\p{L}\p{N}.,])(?:\d{1,3}(?:[.,]\d{3})+|\d{2,6})(?:\s?k\b)?(?:\s?(?:[-–—]|to|bis|und|and)\s?(?:\d{1,3}(?:[.,]\d{3})+|\d{2,6})(?:\s?k\b)?)?\s?(?:€|EUR|Euro|USD|£|GBP|CHF)(?![\p{L}\p{N}])'
+      # 85.000 € bis 95.000 € / 85k € - 95k €
+      - '(?<![\p{L}\p{N}.,])(?:\d{1,3}(?:[.,]\d{3})+|\d{2,6})(?:\s?k\b)?\s?(?:€|EUR|Euro|USD|£|GBP|CHF)\s?(?:[-–—]|to|bis)\s?(?:\d{1,3}(?:[.,]\d{3})+|\d{2,6})(?:\s?k\b)?\s?(?:€|EUR|Euro|USD|£|GBP|CHF)(?![\p{L}\p{N}])'
+      # Gehalt: 70.000 - 90.000 / Gehalt von 80k
+      - 'Gehalt[^.\n]{0,40}?\d{2,3}(?:[.,]\d{3})?\s?k?(?:\s?[-–—]\s?\d{2,3}(?:[.,]\d{3})?\s?k?)?'
+      # up to 120k / bis zu 90.000
+      - '(?:up to|bis zu)\s+(?:\d{2,3}\s?k\b|\d{2,3}[.,]\d{3}(?!\d))'
+    # 金额前面紧跟这些词时不是薪资（"bonus of €25,000"、"funding round of $30M"）。
+    # exclude 的匹配起点落在命中范围之前 limits.exclude_lookbehind_chars 个字符以内、或命中范围之内时丢弃该命中；
+    # 金额后面再出现的词不影响（"€90k + 10% bonus" 保留）。
+    exclude:
+      - '\b(?:bonus|prämie|prämien|zuschuss|gutschein|voucher|budget|allowance|stipend)\b[^.\n€$£\d]{0,12}'
+      - '\b(?:raised|funding|revenue|umsatz|valuation|arr|investment|invested|turnover)\b[^.\n€$£\d]{0,25}'
+  # T2：股权或期权
+  T2:
+    keywords: [equity, stock options, ESOP, VSOP, RSU, RSUs, virtuelle Anteile, Mitarbeiterbeteiligung, Aktienoptionen, Mitarbeiteraktien]
+    patterns:
+      # employee shares programme / company shares / virtual shares / shares in the company
+      - '\b(?:employee|company|virtual|phantom|restricted)\s+(?:shares?|stock)\b'
+      - '\bshares?\s+(?:in|of)\s+the\s+company\b'
+      - '\b(?:share|stock)\s+(?:option|ownership|participation|purchase|grant|award)s?\b'
+      - '\bshares?\s+(?:programme|program|plan|scheme)\b'
+      - '\brestricted\s+stock\s+units?\b'
+      - '\bvirtuelle[rn]?\s+(?:Geschäfts)?anteile?\b'
+    # "diversity, equity and inclusion" and "private equity" are not compensation
+    exclude:
+      - '\b(?:diversity|inclusion|belonging|DEI|DE&I)\W{1,4}(?:and\W+|&\W*)?equity\b'
+      - '\bequity\W{1,4}(?:and|&)\W+(?:equality|inclusion|belonging|diversity)\b'
+      - '\b(?:private|brand|home|vista)\s+equity\b'
+      - '\bequity\s+(?:partners|research|capital|markets?|investor|firm)\b'
+  # T3：薪资的定性描述
+  T3:
+    keywords: [competitive salary, competitive pay, competitive compensation, above-market, top-tier compensation, attraktive Vergütung, überdurchschnittliches Gehalt]
+    patterns:
+      - '\b(?:highly\s+)?competitive\s+(?:\w+\s+)?(?:salary|salaries|pay|compensation|remuneration|package|base)\b'
+      - '\b(?:attractive|generous|excellent|great|fair|strong)\s+(?:\w+\s+)?(?:salary|compensation|remuneration|pay|package)\b'
+      - '\b(?:above|over)[- ]market\b'
+      - '\bmarket[- ](?:rate|leading|competitive|conform)\s+(?:salary|pay|compensation|remuneration)\b'
+      - '\btop[- ](?:tier|of[- ]market)\s+(?:salary|pay|compensation)\b'
+      - '(?:attraktiv|marktgerecht|marktüblich|überdurchschnittlich|leistungsgerecht|wettbewerbsfähig|faire?)\w*[,\s]+(?:(?:attraktiv|marktgerecht|überdurchschnittlich|leistungsgerecht)\w*[,\s]+)?(?:Vergütung|Gehalt|Bezahlung|Entlohnung|Einkommen)\w*'
+      - '\bTop[- ]Gehalt\b'
+  # T4：其他钱相关的。词太宽（"bonus points if you know Rust"），只作候选：ai_confirm_only 时要 AI 确认才成为信号。
+  T4:
+    ai_confirm_only: true
+    keywords: [bonus, signing bonus, 13. Gehalt, Gewinnbeteiligung, Weihnachtsgeld, Urlaubsgeld, Tantieme, Jahressonderzahlung]
+    patterns:
+      - '\b13\.?\s?(?:Monats)?gehalt\b'
+      - '\bvariable[rns]?\s+(?:pay|compensation|Vergütung|Gehaltsbestandteil\w*)\b'
+      - '\bbonus(?:es)?\b'
+      - '\bprofit[- ]sharing\b'
+    exclude:
+      - '\bbonus\s+points?\b'
+      - '\b(?:is|are|would\s+be|will\s+be)\s+(?:a\s+)?(?:big\s+|nice\s+|real\s+|huge\s+|great\s+)?(?:plus|bonus)\b'
+      - '\breferral\s+bonus'
+  # 福利标签：只显示，不加分。tags 是字面词，patterns 里的 name 是标签名。
+  benefit_tags: [Deutschlandticket, JobRad, sabbatical]
+  benefit_patterns:
+    - { name: 28+ vacation days, pattern: '\b(?:2[89]|3\d)\s+(?:paid\s+)?(?:(?:working\s+)?days?\s+(?:of\s+)?(?:paid\s+)?)?(?:vacation|holiday|leave|PTO|annual\s+leave)|\b(?:2[89]|3\d)\s+(?:Tage\s+)?(?:Jahres)?Urlaub|\b(?:2[89]|3\d)\s+Urlaubstage' }
+    - { name: learning budget, pattern: '\b(?:learning|education|training|development)\s+(?:&\s+development\s+)?budget\b|Weiterbildungsbudget' }
+    - { name: 4-day week, pattern: '\b4[- ]day\s+(?:work\s+)?week\b|\bVier-Tage-Woche|\b4-Tage-Woche' }
+    - { name: relocation, pattern: '(?<!\b(?:without|no|not|kein\w*|ohne)\b[^.\n]{0,80})\brelocation\b|\bUmzugs(?:kosten|zuschuss|unterstützung)' }
+    - { name: bAV, pattern: 'betriebliche\s+Altersvorsorge|betriebliche\s+Altersversorgung|\bcompany\s+pension\b|\bpension\s+scheme\b' }
+    - { name: remote / office budget, pattern: '\b(?:home\s*office|remote|workspace|office)\s+(?:budget|allowance|stipend|equipment\s+budget)\b|\bHomeoffice-(?:Budget|Zuschuss)' }
+
+# 每档信号的加分（同一档在一个岗位上只算一次）
+weights:
+  T1: 10
+  T2: 8
+  T3: 3
+  T4: 2
+# 信号加分合计的上限：排序值 = 匹配分 + min(信号加分合计, bonus_cap)
+bonus_cap: 15
+
+# 提取的上限
+limits:
+  # 每条信号的引用最长多少字符（规则层的句子从命中处向两边裁剪，AI 给的更长的引用会被丢弃）
+  quote_max_chars: 280
+  # 每个岗位每档最多保留几条信号（加分同档只算一次，多了只是啰嗦）
+  per_tier_max: 3
+  # 福利标签每个岗位最多几个
+  tags_max: 12
+  # exclude 在命中范围向左多少个字符内起作用（"bonus of €25,000" 要看到前面的 "bonus of"）
+  exclude_lookbehind_chars: 30
+  # AI 最多读多少字符的 JD；更长的 JD 截掉中间
+  ai_max_jd_chars: 12000
+  # 规则没找到候选的 JD 也交给 AI（词表可能漏掉说法）；有候选的排在前面
+  ai_review_without_candidates: true
+  # AI 子任务在本轮连续这么多个岗位都没拿到回答时停下（provider 都挂了就别一个个试了）
+  ai_stop_after_failures: 3
+
+# 保存的筛选视图：在 /jobs 上"保存当前筛选为视图"，在 /interests 上改名、设默认、删除；今日页顶部是这些视图的 tab。
+# filters 用 /jobs 的 URL 参数（不含 sort、page）：q、source、city、workplace（onsite|hybrid|remote|unknown）、
+# contract、status（岗位状态：active|possibly_closed|closed）、app（申请状态，可多选：new|interested|preparing|applied|interviewing|
+# offer|rejected|withdrawn|archived；new = 还没有申请记录，archived = 已忽略）、minScore（排序值下限，0–100）、
+# minSalary（写明的年薪上限下限，欧元/年）、from、to（YYYY-MM-DD，今日页忽略）、salary、filtered、hideGerman、t12。
+# default: true 的视图（最多一个）在今日页没有显式参数时自动生效。示例：
+#   - id: high-pay-berlin
+#     name: 高薪信号 + Berlin
+#     default: false
+#     filters: { t12: true, city: Berlin }
+#   - id: shortlist
+#     name: 跟进中的岗位
+#     filters: { app: [interested, applied], minScore: 70 }
+views: []
+
+# 关注公司：有新岗位就单独推送，不受分数门槛限制（公司名）
+watched_companies: []

@@ -6,7 +6,8 @@
 #   scripts/ops/backup.sh [--label NAME] [--dir DIR]
 #
 # Needs only Docker (pg_dump runs inside the db container; no Postgres client on the Mac). The stamp in the name is the
-# wall clock of schedule.yaml `timezone`, like the runner's; without tzdata on this system the db container works it out. The runner's
+# wall clock of schedule.yaml `timezone`, like the runner's; without tzdata on this system the db container works it out;
+# when the config cannot be read it is UTC, with a loud warning (the backup is still written). The runner's
 # scheduled backups are named jobradar-YYYYMMDD-HHMMSS.dump and are pruned by the retention policy in
 # config/schedule.yaml; manual backups use the `manual` name and are never pruned automatically.
 set -euo pipefail
@@ -34,11 +35,27 @@ if [[ -n "$label" && ! "$label" =~ ^[A-Za-z0-9_-]+$ ]]; then
   exit 2
 fi
 
-# File names use the schedule's wall clock, like the runner's. The user's schedule.yaml wins over the shipped one.
-schedule="$app/data/config/schedule.yaml"
-[[ -f "$schedule" ]] || schedule="$app/config/schedule.yaml"
-tz="$(awk '/^timezone:/ { gsub(/["'"'"']/, "", $2); print $2; exit }' "$schedule" 2>/dev/null || true)"
-tz="${tz:-Europe/Berlin}"
+# File names use the schedule's wall clock, like the runner's: `timezone` as the app's loader reads it (cfg_get). A backup is
+# never refused because of the config: when the loader cannot run or the config is invalid, the shell reader takes over
+# (cfg_identity), and when that cannot read a valid zone either, the name carries UTC. This script prunes nothing.
+# shellcheck source=lib/config.sh
+source "$app/scripts/ops/lib/config.sh"
+config_note=""
+if ! tz="$(cfg_get schedule.yaml timezone)"; then
+  rc=0
+  tz="$(cfg_identity schedule.yaml timezone timezone)" || rc=$?
+  if (( rc != 0 )); then
+    tz="UTC"
+    config_note="schedule.yaml could not be read (see above), so this backup's name carries UTC, not the schedule's time zone"
+  else
+    config_note="the validated config could not be read (see above); the time zone '$tz' was read from schedule.yaml by the shell reader"
+  fi
+fi
+if [[ -n "$config_note" ]]; then
+  echo "" >&2
+  echo "!!! WARNING: $config_note. The backup is written as usual; fix the config (pnpm config:check)." >&2
+  echo "" >&2
+fi
 # shellcheck source=lib/timezone.sh
 source "$app/scripts/ops/lib/timezone.sh"
 

@@ -170,7 +170,7 @@ test("add a company (a duplicate is refused under its field), edit it, delete it
   expect(read()).toContain("# ATS 公司清单");
 });
 
-test("export YAML is the file; an import that switches indeed off previews, applies and shows in the table; the JSON export re-imports without a diff", async ({ page }) => {
+test("export YAML is the full effective file; an import that switches indeed off previews, applies and shows in the table; the JSON export re-imports without a diff", async ({ page }) => {
   await open(page);
   const yaml = await (await page.request.get("/sources/registry/export?format=yaml")).text();
   expect(yaml).toContain("# 来源清单：");

@@ -1,0 +1,112 @@
+# Salary benchmark and salary lookup (docs/salary.md).
+# 1. Benchmark: after each run the pipeline groups the salaries the collected postings state (per year, in the market's base currency)
+#    by role family x seniority x place and keeps percentiles; the job page shows where a job's salary stands in its group.
+# 2. Deep links: search pages of salary sites, filled in with the company / title / city of the job (the sites are never scraped).
+# 3. Lookup (off by default): a "Look up salary" button on the job page; the AI searches public web pages for the company's pay
+#    level and the role's band, with sources. Only the company name, the job title, city, country and seniority are sent,
+#    never your profile or the JD. Costs tokens (and, with the Anthropic API, a fee per search).
+# Takes effect about 5 seconds after saving (runner / ai-worker hot-reload; the web app rereads this file each time a job page opens).
+config_version: 2
+
+benchmark:
+  # false: the benchmark is no longer rebuilt after each run (the last one stays visible)
+  enabled: true
+  # Only postings first seen in the last this many days count
+  window_days: 365
+  # A group with fewer salaries than this is not kept; the job page then uses a wider group (city -> country -> any seniority -> family only)
+  min_sample: 5
+
+# Role families: the first family whose pattern matches the job title wins; a title that matches none is not part of the benchmark.
+# Patterns are regular expressions, case-insensitive. Add the words of your market's language to each family (German ones are included).
+role_families:
+  - id: engineering_manager
+    label: { en: Engineering manager, zh: 工程经理 }
+    patterns:
+      - '\b(?:engineering|software|development)\s+(?:manager|director|lead)\b'
+      - '\b(?:head|vp|vice president|director)\s+of\s+(?:engineering|software|development)\b'
+      - '\bteam\s?(?:lead|leiter(?:in)?)\s+(?:software|engineering|entwicklung|development)\b'
+      - '\bleiter(?:in)?\s+(?:der\s+)?(?:software)?entwicklung\b'
+  - id: ml_engineer
+    label: { en: ML / AI engineer, zh: 机器学习 / AI 工程师 }
+    patterns:
+      - '\b(?:machine learning|ml|ai|mlops|llm|genai|deep learning|nlp|computer vision|ml platform|prompt)\s+(?:engineer|developer|entwickler(?:in)?|ingenieur(?:in)?)\b'
+      - '\b(?:ki|ai)-?(?:engineer|entwickler(?:in)?|ingenieur(?:in)?)\b'
+      - '\b(?:applied|research)\s+scientist\b'
+  - id: data_scientist
+    label: { en: Data scientist, zh: 数据科学家 }
+    patterns:
+      - '\bdata\s+scien(?:tist|ce)\b'
+      - '\bdatenwissenschaftler(?:in)?\b'
+  - id: data_engineer
+    label: { en: Data engineer, zh: 数据工程师 }
+    patterns:
+      - '\b(?:data|analytics|big data|data platform)\s+(?:engineer|developer|architect)\b'
+      - '\bdaten-?\s?(?:ingenieur|engineer|architekt)(?:in)?\b'
+  - id: data_analyst
+    label: { en: Data / BI analyst, zh: 数据 / BI 分析师 }
+    patterns:
+      - '\b(?:data|bi|business intelligence|product|reporting)\s+analyst\b'
+      - '\bdatenanalyst(?:in)?\b'
+  - id: devops_sre
+    label: { en: DevOps / SRE / platform, zh: DevOps / SRE / 平台 }
+    patterns:
+      - '\b(?:devops|devsecops|site reliability|sre|platform|cloud|infrastructure|systems)\s+(?:engineer|developer|architect|entwickler(?:in)?|ingenieur(?:in)?)\b'
+      - '\bdevops\b'
+  - id: frontend_engineer
+    label: { en: Frontend engineer, zh: 前端工程师 }
+    patterns:
+      - '\b(?:frontend|front-end|front end|web|react|angular|vue)\s?-?\s?(?:engineer|developer|entwickler(?:in)?)\b'
+  - id: software_engineer
+    label: { en: Software engineer, zh: 软件工程师 }
+    patterns:
+      - '\b(?:software|backend|back-end|back end|full-?stack|full stack|java|python|golang|go|kotlin|c\+\+|\.net|ruby|php|node(?:\.js)?|scala|rust|ios|android|mobile|embedded)\s?-?\s?(?:engineer|developer|entwickler(?:in)?|ingenieur(?:in)?|programmer)\b'
+      - '\bsoftware-?\s?(?:entwickler|ingenieur|architekt)(?:in)?\b'
+      - '\b(?:backend|frontend|fullstack)-?entwickler(?:in)?\b'
+      - '\bforward[- ]deployed\s+(?:software\s+)?engineer\b'
+  - id: product_manager
+    label: { en: Product manager, zh: 产品经理 }
+    patterns:
+      - '\b(?:product|technical product)\s+(?:manager|owner|lead)\b'
+      - '\bprodukt-?\s?(?:manager|owner)(?:in)?\b'
+  - id: designer
+    label: { en: Product / UX designer, zh: 产品 / UX 设计师 }
+    patterns:
+      - '\b(?:product|ux|ui|ux/ui|ui/ux|interaction|visual)\s+designer\b'
+      - '\b(?:ux|user experience)\s+research(?:er)?\b'
+
+# Links to salary search pages on the job page. Placeholders (URL-encoded when filled in):
+#   {company}  {company_slug} (lower case, words joined by -)  {title}  {city}  {country} (ISO code)
+# The sites block automated clients, so the formats were checked by hand; if a site changes its URLs, fix the template here.
+deep_links:
+  - id: levels_fyi
+    label: Levels.fyi
+    url: https://www.levels.fyi/companies/{company_slug}/salaries
+  - id: glassdoor
+    label: Glassdoor
+    url: https://www.glassdoor.com/Search/results.htm?keyword={company}
+  - id: kununu
+    label: Kununu
+    url: https://www.kununu.com/de/search?q={company}
+
+lookup:
+  # Master switch of the "Look up salary" button (AI + web search). Which AI is used: tasks.salary_lookup in ai.yaml
+  # (default claude-cli, then the Anthropic API; codex-cli can be added there, but its web search cannot be limited to the domains below)
+  enabled: false
+  # A lookup for the same company, role, seniority and place is shown from the cache for this many days (it can still be refreshed)
+  ttl_days: 30
+  # Most lookups per 24 hours (a cached answer does not count)
+  max_per_day: 10
+  # One lookup, all providers and retries together, may take this many seconds
+  timeout_seconds: 300
+  # Most web searches per lookup (enforced for the Anthropic API; the CLIs are asked to keep to it)
+  max_searches: 8
+  # Hosts the Claude CLI may open pages from (anything else is denied; web search itself has no domain limit) and the
+  # Anthropic API may take search results from. Source links on other hosts are marked "other source".
+  allowed_fetch_domains: [levels.fyi, glassdoor.com, glassdoor.de, glassdoor.co.uk, kununu.com, stepstone.de, indeed.com]
+  # Figures outside this range (per year, in the market's base currency) are dropped as implausible
+  sanity_annual: { min: 5000, max: 2000000 }
+  # A figure in a currency without an exchange rate (shown only in its own currency) above this is dropped as implausible;
+  # loose on purpose, some currencies count in the tens of thousands per euro
+  unconvertible_max_annual: 100000000000
+  # USD per web search of the Anthropic API (counted in AI usage and the monthly API budget)
+  web_search_usd: 0.01

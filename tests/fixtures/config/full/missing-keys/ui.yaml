@@ -1,0 +1,56 @@
+# 界面（docs/settings.md）：图形组件用到的刻度和"取几轮"。只影响显示，不影响采集和打分。
+# 网页没有配置热加载：每次打开页面时重新读取本文件。
+
+config_version: 2
+
+# 薪资轴（千欧元/年）：左右端点和刻度间隔。写明的区间画不下时会被截在端点上，红线（底线）和虚线（中位数）同理
+salary_axis:
+  min_k: 40
+  max_k: 200
+  tick_step_k: 20
+
+# 详情页的中位线和"高于 X% 已披露岗位"：本月写明薪资的岗位至少有这么多个才画（太少的样本没有意义）
+salary_stats:
+  min_sample: 5
+
+# 新鲜度条：首次发现后多少小时衰减到最低；超过 warn_hours 变黄（带斜线纹理）
+freshness:
+  decay_hours: 72
+  warn_hours: 24
+
+# 汇总块的趋势线取最近几轮
+trend_cycles: 7
+# 来源页的健康方块取最近几轮
+health_cycles: 14
+# 顶部跑马灯最多滚动几条
+ticker_max_items: 8
+
+# AI 用量页（/sources/ai-usage）：只影响这个页面的显示
+ai_usage:
+  # 打开页面时默认的时间范围：today | 7d | 30d | month（本月）
+  default_range: 30d
+  # 自定义范围最多多少天
+  custom_max_days: 366
+  # 调用明细每页多少行
+  log_page_size: 50
+  # "导出 CSV" 最多导出多少行（超出时只导出最新的这么多行）
+  csv_max_rows: 20000
+
+# 申请流程（设置 → 申请流程）：隐藏不用的申请状态。只影响显示：看板列、菜单、筛选、快捷键、Telegram 按钮不再列出它们；
+# 数据和服务器照常。"新"和"已忽略"不能隐藏。可隐藏的：interested | preparing | applied | interviewing | offer | rejected | withdrawn
+# 隐藏的状态里还有卡片时，看板上显示成折叠的窄列，卡片仍可打开、改到别的状态。
+applications:
+  hidden_statuses: []
+
+# /jobs 筛选里不列出的工作方式 / 合同类型（onsite | hybrid | remote；permanent | fixed_term | freelance | temp_agency | student）。
+# 链接或保存的视图里已经选中的值照常生效。
+filters:
+  hidden_workplaces: []
+  hidden_contracts: []
+
+# 高级配置编辑器（设置 → 高级）
+config_editor:
+  # 编辑器接受的文本最大字节数
+  max_bytes: 262144
+  # 每个文件在 <用户目录>/.backup/editor/ 里最多保留几份备份
+  backups_keep: 20

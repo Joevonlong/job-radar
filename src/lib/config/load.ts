@@ -1,6 +1,6 @@
 import fs from "node:fs";
 
-import { parseDocument, type Document } from "yaml";
+import type { Document } from "yaml";
 
 import { ConfigError, zodIssues } from "./errors";
 import { isExistingInstall } from "./install";
@@ -8,6 +8,7 @@ import { EXISTING_INSTALL_LANGUAGE_YAML } from "./migrations/language/existing-i
 import { migrateConfigDocument, withoutConfigVersion, type DocumentMigrationResult } from "./migrations/version";
 import { getDefaultsDir, getPollIntervalMs, getUserConfigPath, resolveConfigPath, resolveConfigReadPath } from "./paths";
 import { CONFIG_NAMES, configRegistry, isProfileName, type ConfigName, type ConfigValue, type ProfileName } from "./registry";
+import { parseConfigYamlDocument } from "./yaml-options";
 
 interface CacheEntry {
   value: unknown;
@@ -91,9 +92,12 @@ function readForLoad(name: ConfigName): string {
   return isProfileName(name) ? readProfileText(name) : readConfigText(name);
 }
 
-/** Parse YAML text into a document; throws ConfigError(yaml) naming the line, never the contents. */
+/**
+ * Parse YAML text into a document with the shared options (`yaml-options.ts`: unresolved tags and `!unset` are errors);
+ * throws ConfigError(yaml) naming the line, never the contents.
+ */
 export function parseConfigDocument(name: ConfigName, text: string, filePath: string): Document {
-  const doc = parseDocument(text, { uniqueKeys: true });
+  const doc = parseConfigYamlDocument(text);
   if (doc.errors.length > 0) {
     const first = doc.errors[0];
     const where = first?.linePos?.[0];

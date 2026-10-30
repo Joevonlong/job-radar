@@ -14,8 +14,8 @@
 # (scripts/ops/lib/ai-worker.sh), every other connection to the main database is terminated, the main database is renamed to
 # <main>_before_restore_<timestamp> and the temporary one takes its name. Then web, runner and ai-worker start again
 # (--no-restart leaves them stopped; the runner rolls the schema forward, so an older backup restores onto newer code).
-# The newest backup.keep_old_databases (schedule.yaml, default 1) replaced databases are kept, older ones are dropped, and the
-# rollback commands are printed. Without --yes the script stops after the row counts and tells you what to run.
+# The newest backup.keep_old_databases (schedule.yaml, default 1) replaced databases are kept, older ones are dropped (none
+# in the degraded mode, see below), and the rollback commands are printed. Without --yes the script stops after the row counts and tells you what to run.
 #
 #   --latest        use the newest backup in data/backups, scheduled or manual, by the date and time in its file name
 #                   (not by name order). The chosen file and its age are printed; when it is older than the limit
@@ -37,6 +37,10 @@
 # Interrupted (Ctrl-C, kill, a lost terminal) or failing half-way, the script undoes what it started: it renames the main database back
 # when the swap was half done, drops the temporary database it created, removes its staging folder, and starts web, runner and the
 # ai-worker again if it had stopped them. When there is nothing to undo it prints nothing.
+#
+# Degraded mode: when the app's loader cannot read schedule.yaml (no node or node_modules, or an invalid config), a loud
+# warning is printed, backups are ordered and aged by their modification time (UTC), backup.max_age_hours is read by the
+# shell reader (else 30) and no replaced database is dropped.
 #
 # A backup has the user's config and profile next to it (<name>.config.tgz) when it was made by the runner (backup.config_archive)
 # or by scripts/ops/backup.sh. Without --with-config this script never touches them; it prints the command that puts them back
@@ -80,23 +84,38 @@ if [[ -n "$max_age_hours" && ! "$max_age_hours" =~ ^[0-9]+$ ]]; then
   exit 2
 fi
 
-# The schedule's wall clock names the files; the user's schedule.yaml wins over the shipped one.
-schedule="$app/data/config/schedule.yaml"
-[[ -f "$schedule" ]] || schedule="$app/config/schedule.yaml"
-tz="$(awk '/^timezone:/ { gsub(/["'"'"']/, "", $2); print $2; exit }' "$schedule" 2>/dev/null || true)"
-tz="${tz:-Europe/Berlin}"
+# The schedule's wall clock names the files. The values come from the app's loader (cfg_get: validated, zod defaults filled in).
+# When it cannot run (no node, no node_modules) or the config is invalid, this is the degraded mode: the shell reader gives
+# backup.max_age_hours (else 30), the backups are ordered and aged by their modification time (UTC; or name one with <file>),
+# and no replaced database is dropped.
+# shellcheck source=lib/config.sh
+source "$root/scripts/ops/lib/config.sh"
 # shellcheck source=lib/timezone.sh
 source "$root/scripts/ops/lib/timezone.sh"
+degraded=0
+tz="UTC"
 tz_known=1
-if ! zone_known "$tz"; then
+keep_old=1
+if values="$(cfg_get schedule.yaml timezone backup.max_age_hours backup.keep_old_databases)" && [[ "$(printf '%s\n' "$values" | wc -l | tr -d ' ')" == 3 ]]; then
+  { read -r tz; read -r config_max_age; read -r keep_old; } <<< "$values"
+  [[ -n "$max_age_hours" ]] || max_age_hours="$config_max_age"
+  if ! zone_known "$tz"; then
+    tz_known=0
+    echo "warning: this system has no time zone data for '$tz' (install tzdata), so the dates in the file names cannot be converted: backups are ordered and aged by their file modification time" >&2
+  fi
+else
+  degraded=1
   tz_known=0
-  echo "warning: this system has no time zone data for '$tz' (install tzdata), so the dates in the file names cannot be converted: backups are ordered and aged by their file modification time" >&2
+  if [[ -z "$max_age_hours" ]]; then
+    max_age_hours="$(cfg_identity schedule.yaml backup.max_age_hours positive_int "$CFG_DEFAULT_BACKUP_MAX_AGE_HOURS")" || max_age_hours="$CFG_DEFAULT_BACKUP_MAX_AGE_HOURS"
+  fi
+  echo "" >&2
+  echo "!!! WARNING: degraded mode: the validated config could not be read (see above)." >&2
+  echo "!!!   Backups are ordered and aged by their file modification time (UTC), not by the time in their names; name the file to restore to be sure." >&2
+  echo "!!!   No replaced database is dropped; the age limit is ${max_age_hours} hours." >&2
+  echo "" >&2
 fi
-if [[ -z "$max_age_hours" ]]; then
-  max_age_hours="$(awk '/^backup:/ { in_backup = 1; next } /^[^ #]/ { in_backup = 0 } in_backup && $1 == "max_age_hours:" { print $2; exit }' "$schedule" 2>/dev/null || true)"
-  [[ "$max_age_hours" =~ ^[0-9]+$ ]] || max_age_hours=30
-fi
-keep_old="$(awk '/^backup:/ { in_backup = 1; next } /^[^ #]/ { in_backup = 0 } in_backup && $1 == "keep_old_databases:" { print $2; exit }' "$schedule" 2>/dev/null || true)"
+[[ "$max_age_hours" =~ ^[0-9]+$ ]] || max_age_hours="$CFG_DEFAULT_BACKUP_MAX_AGE_HOURS"
 [[ "$keep_old" =~ ^[0-9]+$ && "$keep_old" -ge 1 ]] || keep_old=1
 # Base 10 explicitly: a value such as 08 would otherwise be read as (invalid) octal by bash arithmetic.
 max_age_hours=$((10#$max_age_hours))
@@ -512,8 +531,14 @@ if [[ "$switched" != 1 ]]; then
   exit 1
 fi
 
-# Replaced databases: keep the newest $keep_old, drop the rest. Never the main database.
-replaced="$(psql_admin -At -c "select datname from pg_database where datname ~ '^${main_db}_before_restore_[0-9]{14}\$' order by datname desc" || true)"
+# Replaced databases: keep the newest $keep_old, drop the rest. Never the main database, and nothing in the degraded mode
+# (backup.keep_old_databases could not be read from the validated config).
+replaced=""
+if [[ "$degraded" == 1 ]]; then
+  echo "degraded mode: no older replaced database was dropped (drop the ${main_db}_before_restore_* databases yourself when you no longer need them)" >&2
+else
+  replaced="$(psql_admin -At -c "select datname from pg_database where datname ~ '^${main_db}_before_restore_[0-9]{14}\$' order by datname desc" || true)"
+fi
 index=0
 while IFS= read -r name; do
   [[ -n "$name" ]] || continue

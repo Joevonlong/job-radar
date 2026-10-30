@@ -1,0 +1,131 @@
+{
+  "sha": "44b1681840b4d5047a6da967bc4cc2261cae4ff9",
+  "set": "missing-keys",
+  "files": {
+    "schedule": {
+      "layer": "user",
+      "hash": "dc280ac2981a898e1f019f692975206d52fdb40ef9cba97689cff1a1f0420d60",
+      "valid": true
+    },
+    "search": {
+      "layer": "user",
+      "hash": "ace2d0988c055e88f554391ed9b5baf9cef208957676cfd9272828fd0456257a",
+      "valid": true
+    },
+    "jobSearch": {
+      "layer": "default",
+      "hash": "88180c831001d0a1016efeee56e6733888681730bcc9f05aa707b66f0c4dce36",
+      "valid": true
+    },
+    "channels": {
+      "layer": "user",
+      "hash": "1fdda216c61e53e936dbaa92b016394a844776830638c06289269c606b6a4819",
+      "valid": true
+    },
+    "ai": {
+      "layer": "user",
+      "hash": "b3d1e758f6a60e1e6da2074135b999204a57a9e5ff0fbba6ad2f16e6a6cc14f8",
+      "valid": true
+    },
+    "breakdown": {
+      "layer": "user",
+      "hash": "8797c68fba4297cfabdf8c68576fff71ea7419b437cb99fc95f5d67e3b6837fb",
+      "valid": true
+    },
+    "models": {
+      "layer": "default",
+      "hash": "42afee269ce117e2bee603d4b6d535997b31534fe752a85ecad917a75a29998a",
+      "valid": true
+    },
+    "notify": {
+      "layer": "user",
+      "hash": "64f91539d4178430a0b535e557bf50a1fbb2b8d829477cc89db12949a73a28ac",
+      "valid": true
+    },
+    "interests": {
+      "layer": "user",
+      "hash": "a69d8246b876feccdcf1fcb3335789de938641dc01e2035c01aef3b3dd2e1fff",
+      "valid": true
+    },
+    "pipeline": {
+      "layer": "default",
+      "hash": "43c6918085d58f71a32b7d900f05c0457daaffeb8fa28d3b0a120fcefe678e5a",
+      "valid": true
+    },
+    "pipelineBoard": {
+      "layer": "default",
+      "hash": "64dfc65de639b389e8ddf11d5f5ada60d675761dc90c080390b589e93acc90ed",
+      "valid": true
+    },
+    "resume": {
+      "layer": "user",
+      "hash": "10e80e6cf22d1e3a1f594b4528b16f8eb156010259ac6fb8b405b044e32ffb27",
+      "valid": true
+    },
+    "insights": {
+      "layer": "user",
+      "hash": "9433f9dc29418f3f6f7a78f10f894c09f24870e65f172ce231967c15e9d0129b",
+      "valid": true
+    },
+    "ui": {
+      "layer": "user",
+      "hash": "1ffc530119737c54ef8448d141c714cd77164ddc0c878ac0fbdc9d90640a70df",
+      "valid": true
+    },
+    "language": {
+      "layer": "user",
+      "hash": "a7f6d93570c282d79aa600b109b4eb8a14ad5dc8dd0242a12cd36c22ae5b784c",
+      "valid": true
+    },
+    "setup": {
+      "layer": "user",
+      "hash": "f5943b6a04c298c3c4a3b6add67dc9946533df85a77005dc15185f893646c954",
+      "valid": true
+    },
+    "traps": {
+      "layer": "default",
+      "hash": "4ca97d2d96f109b65c2eb322c53931c3eb9ff490ac66edf3e58f9fb197caa515",
+      "valid": true
+    },
+    "salary": {
+      "layer": "user",
+      "hash": "3adb443f725dfd68bf0e4e88abd52e795d95c472173c040ba41ef36cf824b27a",
+      "valid": true
+    },
+    "signalPresets": {
+      "layer": "default",
+      "hash": "823dbb7602e146b018a2ec3689fa56718d998eb542282d0743560978e077ab2f",
+      "valid": true
+    },
+    "deliveryAudit": {
+      "layer": "default",
+      "hash": "6b03e4200e2e694b43b2ffaec4991c6d0d98df258d2bb886bc0a6ca17ebb7886",
+      "valid": true
+    },
+    "mcp": {
+      "layer": "user",
+      "hash": "8c677480ee42a1e90b63d0b817bfed77947c73cf5facf0be0d893c43d674262d",
+      "valid": true
+    },
+    "activityLog": {
+      "layer": "default",
+      "hash": "bf59de8ed315423454667990085efe9680995a8f6125554a05a7a7d4c6bf4b04",
+      "valid": true
+    },
+    "jobArchive": {
+      "layer": "default",
+      "hash": "929e5bd9dd74ef1db4799fcff19bd5578f84f2049b4aa6dc72bb37c63bb70cf5",
+      "valid": true
+    },
+    "me": {
+      "layer": "missing",
+      "hash": null,
+      "valid": true
+    },
+    "preferences": {
+      "layer": "missing",
+      "hash": null,
+      "valid": true
+    }
+  }
+}

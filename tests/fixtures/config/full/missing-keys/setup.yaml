@@ -1,0 +1,10 @@
+# First-run setup (docs/setup.md). Written by the setup wizard (/setup) and `pnpm run setup`; you rarely edit it by hand.
+# While completed_at is null, every page opens the wizard and the runner holds back its scheduled cycles.
+# An install that already had config files when this file arrived gets completed_by: existing_install on its first start.
+# The wizard adds `steps`: per step {status: done | skipped, at: <ISO time>}; a step that is not listed was not reached yet.
+config_version: 1
+
+# When the setup was finished or skipped (ISO time); null = not yet
+completed_at: null
+# wizard | cli | skipped | existing_install
+completed_by: null

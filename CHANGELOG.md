@@ -116,6 +116,14 @@ A failure in (a) does not block rollback: follow (c) and accept the display wind
 
 ### Changed
 
+- **Stricter YAML tags in config files:** a tag the parser does not know (`!foo`, `!!int x`) is now an error with its
+  line in every reader of config files, instead of a warning that read the value as a string; `!unset` is reserved and
+  refused. This is the only behaviour change for valid configs. New: `pnpm config:check --effective` prints a hash of
+  each file's effective value to compare before and after an upgrade; the sources export carries `config_version` and
+  the full effective file; `backup.sh` and `restore.sh` read `schedule.yaml` through the loader, and when it cannot run
+  fall back to a strict shell reader (backups named in UTC, a restore mode that drops no database), with a loud
+  warning. See [configuration](docs/configuration.md#yaml-tags) and [backup and restore](docs/backup-restore.md#6-notes).
+
 - `/jobs` now has Current / Archive / All scopes, archive reason filters and last-listed sorting from source fetches. Old `status=` links and saved views keep working. Jobs, postings, scores, translations and analyses are never automatically deleted. No database migration is required; rolling back restores the former list controls without data changes.
 
 - Repeated cycles skip unchanged hard-filter inputs and use stored change fingerprints; source history and monthly usage reads transfer less data and use matching indexes. **Upgrade:** nullable fingerprint columns need no table rewrite or migration-time backfill; maintenance fills bounded batches while reads compute missing values. Index creation still takes table locks. **Rollback:** keep the added columns and triggers; old-code source writes stay correct and changed filter verdicts invalidate the cache. See [upgrade notes](docs/upgrade.md#upgrading-with-change-fingerprints).

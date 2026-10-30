@@ -175,6 +175,11 @@ tar -xzf data/backups/<名字>.config.tgz -C .
 
 ## 6. 注意事项
 
+- **配置读不出来时**（主机上没有 node 或 `node_modules`，或者 `schedule.yaml` 不合法）：
+  - `backup.sh` 照样写出备份，退出 0。它改用严格的 shell 读取器读 `timezone`；这样也读不到合法的时区时（缺失、不明确，或者 `Japan` 这样的一段名字，见[配置说明](configuration.zh.md#备份)），文件名用 UTC。`!!! WARNING` 会说明是哪种情况。任何情况下它都不清理旧备份。
+  - `restore.sh` 进入降级模式，并给出 `!!! WARNING`：按文件修改时间（UTC）给备份排序、算年龄，不按文件名里的时间（要确保选对，就直接写出要恢复的文件）；`backup.max_age_hours` 由 shell 读取器读（读不到用 30，`--max-age-hours` 仍然优先）；不删除任何被替换的旧库，不管 `keep_old_databases` 写的是多少。不再需要时，自己删掉 `<主库>_before_restore_*`。
+  - 用 `pnpm config:check` 找出原因（缺 `node_modules` 时先 `pnpm install`）。
+
 - **版本**：dump 由 PostgreSQL 17 生成，只能恢复到 17 或更新的服务器。升级 Postgres 大版本前先手动备份，并同步升级 runner 镜像里的 `POSTGRES_CLIENT_VERSION`（`tests/dockerfile.test.ts` 会在两者不一致时报错）。
 - **永远不要 `docker compose down -v`**：`-v` 会删除数据库卷。
 - **`.env` 和 `.auth/` 不在任何备份里**：`.env` 存着你的密钥和数据库密码，`.auth/` 是 LinkedIn 登录。请自己留一份（值放进密码管理器）。配置和画像在每份 dump 旁边的 `.config.tgz` 里；`config/` 里的出厂默认值随仓库提供。

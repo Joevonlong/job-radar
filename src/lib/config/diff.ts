@@ -3,7 +3,9 @@
  * history render the same thing). Pure and free of server-only imports.
  */
 import { structuredPatch } from "diff";
-import { parse } from "yaml";
+
+import { isPlainMap, plainEqual } from "./merge";
+import { parseConfigYaml } from "./yaml-options";
 
 export interface DiffLine {
   type: "context" | "add" | "del" | "gap";
@@ -28,16 +30,12 @@ export function diffYaml(oldText: string, newText: string, context = DEFAULT_CON
   return out;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
 function leafPaths(a: unknown, b: unknown, prefix: string, out: string[]): void {
-  if (isRecord(a) && isRecord(b)) {
+  if (isPlainMap(a) && isPlainMap(b)) {
     for (const key of new Set([...Object.keys(a), ...Object.keys(b)])) leafPaths(a[key], b[key], prefix === "" ? key : `${prefix}.${key}`, out);
     return;
   }
-  if (JSON.stringify(a) !== JSON.stringify(b)) out.push(prefix === "" ? "(root)" : prefix);
+  if (!plainEqual(a, b)) out.push(prefix === "" ? "(root)" : prefix);
 }
 
 /**
@@ -47,7 +45,7 @@ function leafPaths(a: unknown, b: unknown, prefix: string, out: string[]): void 
 export function changedKeyPaths(oldText: string, newText: string): string[] | null {
   try {
     const out: string[] = [];
-    leafPaths(parse(oldText) as unknown, parse(newText) as unknown, "", out);
+    leafPaths(parseConfigYaml(oldText), parseConfigYaml(newText), "", out);
     return out;
   } catch {
     return null;

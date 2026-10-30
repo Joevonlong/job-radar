@@ -179,6 +179,17 @@ tar -xzf data/backups/<name>.config.tgz -C .
 
 ## 6. Notes
 
+- **When the config cannot be read** (no node or `node_modules` on the host, or an invalid `schedule.yaml`):
+  - `backup.sh` still writes the backup and exits 0. It reads `timezone` with a strict shell reader instead; when that
+    cannot read a valid zone either (missing, unclear, or a one-part name such as `Japan`, see
+    [configuration](configuration.md#backup)), the file name carries UTC. A `!!! WARNING` says which. It prunes nothing
+    in any case.
+  - `restore.sh` runs in a degraded mode, with a `!!! WARNING`: backups are ordered and aged by their file modification
+    time (UTC), not by the time in their names (name the file to restore to be sure); `backup.max_age_hours` comes from
+    the shell reader (else 30, `--max-age-hours` still wins); and no replaced database is dropped, whatever
+    `keep_old_databases` says. Drop the `<main>_before_restore_*` databases yourself when you no longer need them.
+  - Fix the cause with `pnpm config:check` (and `pnpm install` when `node_modules` is missing).
+
 - **Version**: dumps are produced by PostgreSQL 17 and can only be restored to a 17 or newer server. Before upgrading Postgres across a major version take a manual backup first, and upgrade `POSTGRES_CLIENT_VERSION` in the runner image to match (`tests/dockerfile.test.ts` fails if the two disagree).
 - **Never `docker compose down -v`**: `-v` deletes the database volume.
 - **`.env` and `.auth/` are in no backup**: `.env` holds your secrets and the database password, `.auth/` the LinkedIn login. Keep your own copy (a password manager for the values). Your configuration and profile are in the `.config.tgz` next to each dump; the shipped defaults in `config/` come with the repository.

@@ -10,6 +10,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { tarChunks } from "@/lib/ops/tar";
 
+import { installConfigReader } from "./config-reader";
+
 /**
  * scripts/ops/restore.sh backup selection (--latest, --list, the age gate), run against a throw-away checkout with a
  * stub `docker` that reports the db service as stopped: the script stops right after the selection, so nothing is
@@ -60,6 +62,7 @@ beforeAll(() => {
   write(path.join(app, "scripts/ops/restore.sh"), fs.readFileSync(realScript, "utf8"), 0o755);
   write(path.join(app, "scripts/ops/lib/ai-worker.sh"), fs.readFileSync(realLib, "utf8"));
   write(path.join(app, "scripts/ops/lib/timezone.sh"), fs.readFileSync(realTzLib, "utf8"));
+  installConfigReader(app, stubs);
   write(path.join(app, "config/schedule.yaml"), "timezone: UTC\nbackup:\n  enabled: true\n  max_age_hours: 30\n");
   write(path.join(stubs, "docker"), "#!/usr/bin/env bash\nexit 0\n", 0o755); // `ps` prints nothing: the db is "not running"
 });
@@ -289,6 +292,7 @@ exit 0
     write(path.join(checkout, "scripts/ops/restore.sh"), fs.readFileSync(realScript, "utf8"), 0o755);
     write(path.join(checkout, "scripts/ops/lib/ai-worker.sh"), fs.readFileSync(realLib, "utf8"));
     write(path.join(checkout, "scripts/ops/lib/timezone.sh"), fs.readFileSync(realTzLib, "utf8"));
+    installConfigReader(checkout, bin);
     write(path.join(checkout, "config/schedule.yaml"), "timezone: UTC\nbackup:\n  max_age_hours: 30\n  keep_old_databases: 1\n");
     write(path.join(checkout, "data/config/schedule.yaml"), "timezone: UTC\nbackup:\n  max_age_hours: 30\n  keep_old_databases: 1\n");
     write(path.join(checkout, "data/config/me.yaml"), "current config\n");
@@ -427,6 +431,26 @@ exit 0
     const drops = calls().filter((c) => /drop database "jobradar_before_restore_/.test(c));
     expect(drops.map((c) => /before_restore_(\d+)/.exec(c)?.[1])).toEqual(["20200102000000", "20200101000000"]);
     expect(r.stdout).toContain("dropped the older replaced database");
+  });
+
+  it.each([
+    { name: "config-get fails", env: { STUB_NODE_EXIT: "1" } },
+    { name: "keep_old_databases: 3 in the file, config-get fails", env: { STUB_NODE_EXIT: "1" }, keep: 3 },
+  ])("degraded mode ($name): restores, but drops no replaced database, with a loud warning", ({ env, keep }) => {
+    const schedule = path.join(checkout, "data/config/schedule.yaml");
+    const original = fs.readFileSync(schedule, "utf8");
+    try {
+      if (keep !== undefined) write(schedule, original.replace("keep_old_databases: 1", `keep_old_databases: ${keep}`));
+      const r = run(["--target", "jobradar", "--yes"], env);
+      expect(r.status, r.stderr).toBe(0);
+      expect(steps()).toContain("rename-new");
+      expect(steps()).not.toContain("drop-old");
+      expect(calls().some((c) => /before_restore_.*order/.test(c))).toBe(false);
+      expect(r.stderr).toContain("!!! WARNING: degraded mode");
+      expect(r.stderr).toContain("no older replaced database was dropped");
+    } finally {
+      write(schedule, original);
+    }
   });
 
   it("a failing pg_restore leaves the main database alone, stops nothing and drops the temporary copy", () => {

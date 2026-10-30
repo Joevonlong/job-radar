@@ -14,7 +14,6 @@ import fsp from "node:fs/promises";
 import path from "node:path";
 import { isDeepStrictEqual } from "node:util";
 
-import { parse } from "yaml";
 import { z } from "zod";
 
 import { ConfigError, zodIssues } from "./errors";
@@ -24,6 +23,7 @@ import { getDefaultConfigPath, getDefaultsDir, getUserConfigPath, resolveConfigP
 import { configRegistry, USER_CONFIG_NAMES, type ConfigName, type ConfigValue } from "./registry";
 import { writeConfig } from "./write";
 import { copyPrivateIfMissing } from "./private-file";
+import { parseConfigYaml } from "./yaml-options";
 
 export const EXAMPLES_DIR = "examples";
 export const EXAMPLE_FILE = "example.yaml";
@@ -73,7 +73,7 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 
 function readYaml(file: string): unknown {
   try {
-    return parse(fs.readFileSync(/*turbopackIgnore: true*/ file, "utf8"), { uniqueKeys: true }) as unknown;
+    return parseConfigYaml(fs.readFileSync(/*turbopackIgnore: true*/ file, "utf8"));
   } catch (error) {
     throw new ConfigExampleError(`${file}: ${error instanceof Error ? (error.message.split("\n")[0] ?? "invalid YAML") : "unreadable"}`);
   }

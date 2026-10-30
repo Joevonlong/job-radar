@@ -5,7 +5,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { parse, parseDocument } from "yaml";
 
-import { loadConfig, resetConfigCache } from "@/lib/config";
+import { currentConfigVersion, loadConfig, parseConfigText, resetConfigCache } from "@/lib/config";
 import { applySourcesImport, enableMarketChannels, exportSources, previewSourcesImport, removeAtsBoard, saveAtsBoard, setSourceEnabled } from "@/lib/sources/registry/service";
 
 import { makeTempConfig, type TempConfig } from "../config/helpers";
@@ -264,6 +264,40 @@ describe("export", () => {
     const json = exportSources("json", options);
     if ("error" in json) throw new Error(json.error);
     expect(await previewSourcesImport({ text: json.body, format: "json", mode: "replace" })).toMatchObject({ status: "preview", noChanges: true });
+  });
+
+  it("both formats are the effective config with the current config_version, and read back to the same values", () => {
+    const current = currentConfigVersion("channels");
+    const yaml = exportSources("yaml", options);
+    const json = exportSources("json", options);
+    if ("error" in yaml || "error" in json) throw new Error("export failed");
+    expect(parseDocument(yaml.body).get("config_version")).toBe(current);
+    expect(yaml.body).not.toContain("!unset");
+    expect(parseConfigText("channels", yaml.body, "export.yaml")).toEqual(loadConfig("channels"));
+    const values = JSON.parse(json.body) as Record<string, unknown>;
+    expect(values.config_version).toBe(current);
+    delete values.config_version;
+    expect(values).toEqual(JSON.parse(JSON.stringify(loadConfig("channels"))));
+  });
+
+  it("without a user file it exports the shipped file in full", () => {
+    fs.rmSync(file());
+    resetConfigCache();
+    const yaml = exportSources("yaml", options);
+    if ("error" in yaml) throw new Error(yaml.error);
+    expect(parseConfigText("channels", yaml.body, "export.yaml")).toEqual(loadConfig("channels"));
+    expect(parseDocument(yaml.body).get("config_version")).toBe(currentConfigVersion("channels"));
+  });
+
+  it.each([
+    { name: "the YAML export", text: () => exportSources("yaml", options), format: "yaml" as const },
+    { name: "the JSON export", text: () => exportSources("json", options), format: "json" as const },
+    { name: "an export of the previous version (the file's text)", text: () => ({ body: text() }), format: "yaml" as const },
+    { name: "an export of the previous version (the values without config_version)", text: () => ({ body: JSON.stringify(loadConfig("channels")) }), format: "json" as const },
+  ])("re-importing $name changes nothing", async ({ text: exported, format }) => {
+    const result = exported();
+    if ("error" in result) throw new Error(result.error);
+    expect(await previewSourcesImport({ text: result.body, format, mode: "replace" })).toMatchObject({ status: "preview", noChanges: true });
   });
 
   it("gives the YAML back even when the file is invalid, and no JSON", () => {

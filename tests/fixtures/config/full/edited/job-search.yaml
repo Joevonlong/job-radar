@@ -1,0 +1,11 @@
+# User copy: prefer title matches and add a country alias.
+query: {max_chars: 160, max_terms: 9, cjk_min_chars: 3, all_scope_timeout_ms: 6000}
+matching: {prefix_min_chars: 5}
+ranking:
+  weights: {title: 9, company: 4, location: 2, country: 2, description: 0.5, translation: 0.5}
+  prefix_factor: 0.5
+countries:
+  name_locales: [en, zh]
+  ambiguous_codes: [AI, IT, IN, ML] # the e2e seed searches "AI ..." and "... ML ..." titles
+  extra_aliases: {DE: [Deutschland], GB: [Britain]}
+palette: {min_chars: 3, limit: 6}
