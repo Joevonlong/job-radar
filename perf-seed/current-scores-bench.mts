@@ -1,7 +1,8 @@
 import path from "node:path";
 import fs from "node:fs/promises";
-import { checkedUrl, measure, moduleAt } from "./common.mts";
-const url = checkedUrl(process.argv[2]), root = path.resolve(process.argv[3]!), label = process.argv[4]!;
+import { outputArgs, checkedUrl, measure, moduleAt } from "./common.mts";
+const { out, args } = outputArgs(process.argv.slice(2));
+const url = checkedUrl(args[0]), root = path.resolve(args[1]!), label = args[2]!;
 const { createConnection } = await import(moduleAt(root, "src/lib/db/client.ts"));
 const job = await import(moduleAt(root, "src/lib/db/queries/jobs.ts"));
 const today = await import(moduleAt(root, "src/lib/db/queries/today.ts"));
@@ -58,10 +59,10 @@ try {
      const ids = Array.from({ length: size }, (_, i) => i + 1);
      const query = currentScoreRule(db, ids, lateral).toSQL();
      const plan = await sql.unsafe(`explain (analyze, buffers, format json) ${query.sql}`, query.params);
-     await fs.writeFile(`/tmp/current-scores-plan-${label}-${size}-${lateral}.json`, JSON.stringify(plan));
+     await fs.writeFile(path.join(out, `current-scores-plan-${label}-${size}-${lateral}.json`), JSON.stringify(plan));
    }
  }
  results.tempBytes = Number((await sql`select temp_bytes from pg_stat_database where datname = current_database()`)[0].temp_bytes) - Number(before[0].temp_bytes);
- await fs.writeFile(`/tmp/current-scores-read-plans-${label}.json`, JSON.stringify(plans));
- await fs.writeFile(`/tmp/current-scores-bench-${label}.json`, JSON.stringify(results, null, 2));
+ await fs.writeFile(path.join(out, `current-scores-read-plans-${label}.json`), JSON.stringify(plans));
+ await fs.writeFile(path.join(out, `current-scores-bench-${label}.json`), JSON.stringify(results, null, 2));
 } finally { await sql.end(); }

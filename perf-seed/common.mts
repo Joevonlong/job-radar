@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { z } from "zod";
@@ -23,4 +24,13 @@ export async function measure(work: () => Promise<unknown>, batches = 5, samples
     result.push(stats(times));
   }
   return { batches: result, p95: stats(result.map((batch) => batch.p95!)).p50 };
+}
+/** `--out <dir>` (required, anywhere in the arguments): where result files go. Returns the created directory and the other arguments. */
+export function outputArgs(argv: readonly string[]): { out: string; args: string[] } {
+  const at = argv.indexOf("--out");
+  const dir = at >= 0 ? argv[at + 1] : undefined;
+  if (!dir || dir.startsWith("--")) throw new Error("--out <dir> is required: the directory for result files");
+  const out = path.resolve(dir);
+  fs.mkdirSync(out, { recursive: true });
+  return { out, args: argv.filter((_, i) => i !== at && i !== at + 1) };
 }

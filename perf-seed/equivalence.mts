@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import path from "node:path";
 import fs from "node:fs/promises";
-import { checkedUrl, moduleAt } from "./common.mts";
-const url = checkedUrl(process.argv[2]), baseline = path.resolve(process.argv[3]!), root = path.resolve(process.argv[4]!), label = process.argv[5]!;
+import { outputArgs, checkedUrl, moduleAt } from "./common.mts";
+const { out, args } = outputArgs(process.argv.slice(2));
+const url = checkedUrl(args[0]), baseline = path.resolve(args[1]!), root = path.resolve(args[2]!), label = args[3]!;
 const { createConnection } = await import(moduleAt(root, "src/lib/db/client.ts"));
 const connection = createConnection(url.toString(), { sessionSettings: { jit: "off" } }); const { db } = connection;
 const now = new Date(), timezone = "Europe/Berlin", window = { from: new Date(now.getTime() - 30 * 86400000).toISOString().slice(0, 10), to: now.toISOString().slice(0, 10), timezone };
@@ -42,5 +43,5 @@ try {
  await compare("repos/insights", "getScoreStats", window, 10, 12, 70);
  await compare("repos/insights", "getFilterStats", window, 10);
  const result = { label, count: passed.length, passed };
- await fs.writeFile(`/tmp/current-scores-equivalence-${label}.json`, JSON.stringify(result, null, 2)); console.log(JSON.stringify(result));
+ await fs.writeFile(path.join(out, `current-scores-equivalence-${label}.json`), JSON.stringify(result, null, 2)); console.log(JSON.stringify(result));
 } finally { await connection.sql.end(); }

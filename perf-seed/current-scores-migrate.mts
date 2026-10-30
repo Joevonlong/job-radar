@@ -1,8 +1,9 @@
 import path from "node:path";
 import fs from "node:fs/promises";
 import postgres from "postgres";
-import { checkedDatabase, checkedUrl, moduleAt, stats } from "./common.mts";
-const adminUrl = checkedUrl(process.argv[2]), template = checkedDatabase(process.argv[3]!), root = path.resolve(process.argv[4]!), label = process.argv[5]!;
+import { outputArgs, checkedDatabase, checkedUrl, moduleAt, stats } from "./common.mts";
+const { out, args } = outputArgs(process.argv.slice(2));
+const adminUrl = checkedUrl(args[0]), template = checkedDatabase(args[1]!), root = path.resolve(args[2]!), label = args[3]!;
 const name = checkedDatabase(`${template}_migration`), admin = postgres(adminUrl.toString(), { max: 2, onnotice: () => {} });
 const { createConnection } = await import(moduleAt(root, "src/lib/db/client.ts"));
 const { saveScore } = await import(moduleAt(root, "src/lib/db/repos/scores.ts"));
@@ -30,6 +31,6 @@ try {
  finally { done = true; }
  const migrationMs = performance.now() - start; await writer; const batchWriteMs = await bulk; await sampler;
  const result = { migrationMs, batchWriteMs, writes: stats(writes), waitSamples: waits };
- await fs.writeFile(`/tmp/current-scores-migrate-${label}.json`, JSON.stringify(result, null, 2));
+ await fs.writeFile(path.join(out, `current-scores-migrate-${label}.json`), JSON.stringify(result, null, 2));
  console.log(JSON.stringify({ label, migrationMs, batchWriteMs, writes: stats(writes) }));
 } finally { await connection?.sql.end(); await admin.unsafe(`drop database if exists "${name}" with (force)`); await admin.end(); }

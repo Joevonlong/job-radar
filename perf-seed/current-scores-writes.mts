@@ -2,17 +2,18 @@ import { z } from "zod";
 import path from "node:path";
 import fs from "node:fs/promises";
 import postgres from "postgres";
-import { checkedDatabase, checkedUrl, moduleAt, stats } from "./common.mts";
-const url = checkedUrl(process.argv[2]), template = checkedDatabase(process.argv[3]!), root = path.resolve(process.argv[4]!), label = process.argv[5]!;
+import { outputArgs, checkedDatabase, checkedUrl, moduleAt, stats } from "./common.mts";
+const { out, args } = outputArgs(process.argv.slice(2));
+const url = checkedUrl(args[0]), template = checkedDatabase(args[1]!), root = path.resolve(args[2]!), label = args[3]!;
 const projection = label.includes("projection");
-const only = z.literal("save").optional().parse(process.argv[6]);
+const only = z.literal("save").optional().parse(args[4]);
 const { createConnection } = await import(moduleAt(root, "src/lib/db/client.ts"));
 const scores = await import(moduleAt(root, "src/lib/db/repos/scores.ts"));
 const filter = await import(moduleAt(root, "src/lib/db/repos/filter-results.ts"));
 const signals = await import(moduleAt(root, "src/lib/db/repos/signals.ts"));
 const current = projection ? await import(moduleAt(root, "src/lib/db/repos/current-scores.ts")) : null;
 const admin = postgres(url.toString(), { max: 1, onnotice: () => {} });
-const result: Record<string, unknown> = only ? JSON.parse(await fs.readFile(`/tmp/current-scores-writes-${label}.json`, "utf8")) : {};
+const result: Record<string, unknown> = only ? JSON.parse(await fs.readFile(path.join(out, `current-scores-writes-${label}.json`), "utf8")) : {};
 for (const scenario of (only ? [only] : ["save", "filter", "stale", "bonus", "ten_thousand", ...(projection ? ["all_buckets"] : [])])) {
  const name = checkedDatabase(`${template}_${label.replace(/[^a-z0-9]/g, "_")}_${scenario}`);
  let connection;
@@ -84,4 +85,4 @@ for (const scenario of (only ? [only] : ["save", "filter", "stale", "bonus", "te
   console.log(JSON.stringify({ label, scenario, result: result[scenario] }));
  } finally { await connection?.sql.end(); await admin.unsafe(`drop database if exists "${name}" with (force)`); }
 }
-await admin.end(); await fs.writeFile(`/tmp/current-scores-writes-${label}.json`, JSON.stringify(result, null, 2));
+await admin.end(); await fs.writeFile(path.join(out, `current-scores-writes-${label}.json`), JSON.stringify(result, null, 2));
