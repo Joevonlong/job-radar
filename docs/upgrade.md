@@ -6,6 +6,14 @@ Job Radar runs from a git checkout. Releases are signed git tags `vX.Y.Z` (see t
 only use Job Radar, **stay on a release tag** and upgrade from tag to tag; `main` is the development branch and can change
 between releases.
 
+## Job search behavior change
+
+Job search now checks basic information by default; words found only in a job description no longer match automatically. Turn on **Include job descriptions** on `/jobs` (or add `searchIn=all` to a search URL) to include original descriptions and current translations. Existing saved queries also use the new default. MCP clients can request `search_in: "all"`; see [mcp.md](mcp.md).
+
+The top-bar search is now **Jump to**. Queries default to relevance; an explicit sort still wins. Country selection and description scope stay in the URL and are not written into saved views. See [Searching jobs](usage.md#searching-jobs).
+
+This change adds no database migration or saved-view format change. To roll it back, revert the UI change first, then the precise-search backend change, and rebuild/restart with your normal deployment procedure. Older code ignores `job-search.yaml`, `country` and `searchIn`; an unsupported `sort=relevance` falls back to its default sort. No data restore is required for this search change.
+
 ## Upgrade to a release
 
 ```bash
