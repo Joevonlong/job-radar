@@ -20,12 +20,15 @@ import { isUnset } from "./yaml-options";
 export type PlainMap = Record<string, unknown>;
 
 export function isPlainMap(value: unknown): value is PlainMap {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+  if (typeof value !== "object" || value === null) return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
 }
 
 /** Structural equality of plain parsed values (mappings by key, lists by position). */
 export function plainEqual(a: unknown, b: unknown): boolean {
   if (a === b) return true;
+  if (a instanceof Date || b instanceof Date) return a instanceof Date && b instanceof Date && a.getTime() === b.getTime();
   if (Array.isArray(a)) return Array.isArray(b) && a.length === b.length && a.every((item, index) => plainEqual(item, b[index]));
   if (isPlainMap(a)) {
     if (!isPlainMap(b)) return false;
@@ -37,6 +40,7 @@ export function plainEqual(a: unknown, b: unknown): boolean {
 
 /** A deep copy of a plain value with every `UNSET` key dropped (a replacing value carries no markers). */
 export function withoutMarkers(value: unknown): unknown {
+  if (value instanceof Date) return new Date(value.getTime());
   if (Array.isArray(value)) return value.filter((item) => !isUnset(item)).map(withoutMarkers);
   if (isPlainMap(value)) {
     const out: PlainMap = {};

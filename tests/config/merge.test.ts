@@ -63,6 +63,22 @@ describe("mergeLayers rules", () => {
     expect(structuredClone(merged)).toEqual(merged);
     expect(merged).toMatchObject({ n: { y: 1 } });
   });
+
+  it("treats dates as scalar leaves and copies them in inherited, replaced and list values", () => {
+    const date = new Date("2026-10-30T00:00:00.000Z");
+    const shipped = { since: date, dates: [date] };
+    const inherited = mergeLayers(shipped, {}) as typeof shipped;
+    const replaced = mergeLayers({}, shipped) as typeof shipped;
+    for (const merged of [inherited, replaced]) {
+      expect(merged).toEqual(shipped);
+      expect(merged.since).not.toBe(date);
+      expect(merged.dates[0]).not.toBe(date);
+      merged.since.setUTCDate(1);
+      expect(date.toISOString()).toBe("2026-10-30T00:00:00.000Z");
+    }
+    expect(mergeLayers({ since: { old: 1 } }, { since: date })).toEqual({ since: date });
+    expect(mergeLayers({ since: date }, { since: { next: 1 } })).toEqual({ since: { next: 1 } });
+  });
 });
 
 describe("mergeLayers on the three kinds of record", () => {
@@ -103,6 +119,15 @@ describe("mergeLayers on the three kinds of record", () => {
 });
 
 describe("plainEqual", () => {
+  it("compares dates by instant, separately from strings and mappings", () => {
+    const date = new Date("2026-10-30T00:00:00.000Z");
+    expect(plainEqual(date, new Date(date))).toBe(true);
+    for (const other of [new Date("2026-10-31T00:00:00.000Z"), date.toISOString(), {}]) {
+      expect(plainEqual(date, other)).toBe(false);
+      expect(plainEqual(other, date)).toBe(false);
+    }
+  });
+
   it("compares mappings by key and lists by position", () => {
     expect(plainEqual({ a: 1, b: [1, { c: 2 }] }, { b: [1, { c: 2 }], a: 1 })).toBe(true);
     expect(plainEqual([1, 2], [2, 1])).toBe(false);

@@ -33,8 +33,7 @@ function holdsAlias(node: unknown): boolean {
 /** A copy of an overlay node for the target document: markers dropped, aliases resolved (their anchors stay behind). */
 function copyNode(node: unknown, from: Document, into: Document): Node | null {
   if (!isNode(node)) return null;
-  if (isAlias(node) || holdsAlias(node)) return into.createNode(node.toJS(from));
-  const copy = node.clone() as Node;
+  const copy = isAlias(node) || holdsAlias(node) ? into.createNode(node.toJS(from)) : node.clone() as Node;
   visit(copy, {
     Pair(_key, pair) {
       if (isScalar(pair.value) && isUnset(pair.value.value)) return visit.REMOVE;

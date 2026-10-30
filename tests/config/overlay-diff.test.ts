@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { mergeLayers } from "@/lib/config/merge";
-import { applyOverlayEdits, diffOverlay, repairOverlayEdits, type OverlayEdit } from "@/lib/config/overlay-diff";
+import { applyOverlayEdits, cloneOverlay, diffOverlay, repairOverlayEdits, type OverlayEdit } from "@/lib/config/overlay-diff";
 import { replaceRule, type ReplaceAt } from "@/lib/config/overlay-rules";
 import { UNSET } from "@/lib/config/yaml-options";
 
@@ -125,6 +125,23 @@ describe("repairOverlayEdits (a broken current file is not looked at)", () => {
 });
 
 describe("applyOverlayEdits", () => {
+  it("diffs dates as leaves, removes a restored pin and clones dates alongside markers", () => {
+    const before = new Date("2026-10-30T00:00:00.000Z");
+    const after = new Date("2026-10-31T00:00:00.000Z");
+    const edits = diffOverlay({ shipped: { since: before }, overlay: {}, value: { since: after } });
+    expect(edits).toEqual([{ op: "set", path: ["since"], value: after }]);
+    expect(diffOverlay({ shipped: { since: before }, overlay: { since: after }, value: { since: before } })).toEqual([{ op: "remove", path: ["since"] }]);
+    const current = { since: before, list: [before], gone: UNSET };
+    const cloned = cloneOverlay(current) as typeof current;
+    const next = applyOverlayEdits(current, edits);
+    expect(cloned).toEqual(current);
+    expect(cloned.since).not.toBe(before);
+    expect(cloned.list[0]).not.toBe(before);
+    expect(next.since).toEqual(after);
+    expect(next.since).not.toBe(after);
+    expect(next.list).toEqual([before]);
+  });
+
   it("does not change its input and keeps markers", () => {
     const current = overlay("glossary:\n  A: !unset\n");
     const next = applyOverlayEdits(current, [{ op: "set", path: ["x", "y"], value: 1 }]);

@@ -113,10 +113,13 @@ describe("convertLegacy keeps the effective value of every full copy (the golden
     const overlay = applyOverlayEdits({}, result.edits);
     const schema = configRegistry[name].schema;
     const effective = schema.parse(mergeLayers(shipped, overlay, { replaceAt: replaceRule(name) }));
+    expect(effective).toEqual(schema.parse(legacy));
     expect(canonicalConfigHash(effective)).toBe(hash);
     // the overlay written out and read back, then rendered as a full file: the current loader reads the same value
     const text = stringifyConfigYaml(new Document(overlay, CONFIG_YAML_OPTIONS));
     const full = toFullText(name, migratedDocument(name, fixtureText(name)), overlayDocument(text));
-    expect(canonicalConfigHash(parseConfigText(name, full))).toBe(hash);
+    const loaded = parseConfigText(name, full);
+    expect(loaded).toEqual(schema.parse(legacy));
+    expect(canonicalConfigHash(loaded)).toBe(hash);
   });
 });

@@ -8,6 +8,7 @@
 import { createHash } from "node:crypto";
 
 function canonical(value: unknown): unknown {
+  if (value instanceof Date) return { $type: "date", value: value.toISOString() };
   if (Array.isArray(value)) return value.map((item) => (item === undefined ? null : canonical(item)));
   if (typeof value === "object" && value !== null) {
     const out: Record<string, unknown> = {};
@@ -15,7 +16,8 @@ function canonical(value: unknown): unknown {
       const child = (value as Record<string, unknown>)[key];
       if (child !== undefined) out[key] = canonical(child);
     }
-    return out;
+    // Escape ordinary maps that use the type tag, so a Date cannot collide with user data shaped like its encoding.
+    return Object.hasOwn(out, "$type") ? { $type: "map", value: out } : out;
   }
   return value;
 }
@@ -23,7 +25,7 @@ function canonical(value: unknown): unknown {
 /** JSON with every mapping's keys sorted and the top-level `config_version` left out. */
 export function canonicalConfigJson(value: unknown): string {
   let root = value;
-  if (typeof root === "object" && root !== null && !Array.isArray(root) && "config_version" in root) {
+  if (typeof root === "object" && root !== null && !Array.isArray(root) && !(root instanceof Date) && "config_version" in root) {
     const copy: Record<string, unknown> = { ...(root as Record<string, unknown>) };
     delete copy.config_version;
     root = copy;

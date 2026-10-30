@@ -1,14 +1,16 @@
 import { describe, expect, it } from "vitest";
+import { Document } from "yaml";
 
-import { ConfigError } from "@/lib/config";
+import { ConfigError, parseConfigText } from "@/lib/config";
 import { mergeLayers } from "@/lib/config/merge";
 import { convertLegacy } from "@/lib/config/migrations/overlay-convert";
 import { applyOverlayEdits } from "@/lib/config/overlay-diff";
 import { replaceRule } from "@/lib/config/overlay-rules";
 import type { ConfigName } from "@/lib/config/registry";
-import { UNSET } from "@/lib/config/yaml-options";
+import { toFullText } from "@/lib/config/to-full";
+import { CONFIG_YAML_OPTIONS, stringifyConfigYaml, UNSET } from "@/lib/config/yaml-options";
 
-import { effective, shippedValue } from "./overlay-helpers";
+import { effective, fixtureText, migratedDocument, overlayDocument, plainValue, shippedValue } from "./overlay-helpers";
 
 type Plain = Record<string, Record<string, unknown>>;
 
@@ -22,6 +24,18 @@ function convert(name: ConfigName, legacy: unknown): ReturnType<typeof convertLe
 }
 
 describe("convertLegacy", () => {
+  it("keeps timestamp leaves through conversion, overlay serialization and full rendering", () => {
+    const shipped = migratedDocument("channels", fixtureText("channels"));
+    const legacy = shipped.clone();
+    legacy.setIn(["linkedin", "apify", "input_template"], overlayDocument("since: !!timestamp 2026-10-30\nnested: {dates: [!!timestamp 2026-10-31]}\n").contents);
+    const expected = parseConfigText("channels", legacy.toString());
+    const result = convert("channels", plainValue(legacy));
+    const text = stringifyConfigYaml(new Document(result.overlay, CONFIG_YAML_OPTIONS));
+    const full = toFullText("channels", shipped, overlayDocument(text));
+    expect(parseConfigText("channels", full)).toEqual(expected);
+    expect(expected.linkedin.apify.input_template.since).toEqual(new Date("2026-10-30T00:00:00.000Z"));
+  });
+
   it("turns a full copy of the shipped file into an empty overlay and lists the dropped keys", () => {
     const result = convert("schedule", shippedValue("schedule"));
     expect(result.overlay).toEqual({});

@@ -53,4 +53,18 @@ describe("toFull", () => {
     toFull("schedule", shipped, top);
     expect([shipped.toString(), top.toString()]).toEqual(before);
   });
+
+  it("cleans markers after resolving aliases and preserves timestamp types", () => {
+    const shipped = migratedDocument("channels", fixtureText("channels"));
+    const top = overlayDocument("linkedin:\n  apify:\n    input_template: &template {from: !unset, limit: 1, since: !!timestamp 2026-10-30}\n    remote_input: *template\n");
+    const before = top.toString();
+    const full = toFullText("channels", shipped, top);
+    expect(full).not.toContain("!unset");
+    const loaded = parseConfigText("channels", full);
+    const template = { limit: 1, since: new Date("2026-10-30T00:00:00.000Z") };
+    expect(loaded.linkedin.apify.input_template).toEqual(template);
+    expect(loaded.linkedin.apify.remote_input).toEqual(template);
+    expect(loaded).toEqual(effective("channels", mergeLayers(plainValue(shipped), plainValue(top), { replaceAt: replaceRule("channels") })));
+    expect(top.toString()).toBe(before);
+  });
 });

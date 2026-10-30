@@ -30,6 +30,20 @@ function errorsOf(text: string, unset: "reject" | "overlay" = "overlay"): { line
 }
 
 describe("tags", () => {
+  it("round-trips explicit dates without turning untagged dates into timestamps", () => {
+    const value = parseConfigYaml("date: !!timestamp 2026-10-30\ntext: 2026-10-30\n");
+    expect(value).toEqual({ date: new Date("2026-10-30T00:00:00.000Z"), text: "2026-10-30" });
+    expect(parseConfigYaml(stringifyConfigYaml(new Document(value, CONFIG_YAML_OPTIONS)))).toEqual(value);
+  });
+
+  it("reports timestamp changes, including a switch to the same-text string", () => {
+    const before = "since: !!timestamp 2026-10-30\n";
+    expect(changedKeyPaths(before, "since: !!timestamp 2026-10-31\n")).toEqual(["since"]);
+    expect(changedKeyPaths(before, 'since: "2026-10-30T00:00:00.000Z"\n')).toEqual(["since"]);
+    expect(changedKeyPaths(before, "since: !!timestamp 2026-10-30T02:00:00+02:00\n")).toEqual([]);
+    expect(changedKeyPaths(`dates: [!!timestamp 2026-10-30]\n`, 'dates: ["2026-10-30T00:00:00.000Z"]\n')).toEqual(["dates"]);
+  });
+
   it.each([
     ["an unregistered tag", "a: 1\nb: !foo 2\n", 2, /Unresolved tag: !foo/],
     ["a misspelt marker", "a:\n  b: !unsett\n", 2, /Unresolved tag: !unsett/],

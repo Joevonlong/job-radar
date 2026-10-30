@@ -103,6 +103,7 @@ export function repairOverlayEdits(shipped: unknown, value: unknown, replaceAt?:
 
 /** A deep copy that keeps `UNSET` markers (which `structuredClone` refuses). */
 export function cloneOverlay(value: unknown): unknown {
+  if (value instanceof Date) return new Date(value.getTime());
   if (Array.isArray(value)) return value.map(cloneOverlay);
   if (isPlainMap(value)) return Object.fromEntries(Object.entries(value).map(([key, child]) => [key, cloneOverlay(child)]));
   return value;

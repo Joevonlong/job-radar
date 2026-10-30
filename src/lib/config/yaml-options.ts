@@ -21,6 +21,7 @@ import {
   LineCounter,
   parseDocument,
   Scalar,
+  Schema,
   visit,
   YAMLParseError,
   type Document,
@@ -52,7 +53,14 @@ const unsetTag: ScalarTag = {
 };
 
 /** The parse / document options every config reader and writer uses. */
-export const CONFIG_YAML_OPTIONS: ParseOptions & DocumentOptions & SchemaOptions = { uniqueKeys: true, customTags: [unsetTag] };
+export const CONFIG_YAML_OPTIONS: ParseOptions & DocumentOptions & SchemaOptions = {
+  uniqueKeys: true,
+  customTags: [
+    unsetTag,
+    // Use yaml's timestamp implementation, but require an explicit tag: untagged dates remain strings in core YAML.
+    { ...new Schema({ schema: "core", resolveKnownTags: true }).knownTags["tag:yaml.org,2002:timestamp"]!, default: false },
+  ],
+};
 
 /**
  * What a valid `!unset` means to the caller. `reject`: the overlay semantics are not on (this version): every marker is an

@@ -4,6 +4,7 @@
  */
 import { structuredPatch } from "diff";
 
+import { isPlainMap, plainEqual } from "./merge";
 import { parseConfigYaml } from "./yaml-options";
 
 export interface DiffLine {
@@ -29,16 +30,12 @@ export function diffYaml(oldText: string, newText: string, context = DEFAULT_CON
   return out;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
 function leafPaths(a: unknown, b: unknown, prefix: string, out: string[]): void {
-  if (isRecord(a) && isRecord(b)) {
+  if (isPlainMap(a) && isPlainMap(b)) {
     for (const key of new Set([...Object.keys(a), ...Object.keys(b)])) leafPaths(a[key], b[key], prefix === "" ? key : `${prefix}.${key}`, out);
     return;
   }
-  if (JSON.stringify(a) !== JSON.stringify(b)) out.push(prefix === "" ? "(root)" : prefix);
+  if (!plainEqual(a, b)) out.push(prefix === "" ? "(root)" : prefix);
 }
 
 /**
