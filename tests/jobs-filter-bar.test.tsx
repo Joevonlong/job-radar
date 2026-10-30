@@ -499,7 +499,8 @@ describe("search relevance and URL-only country", () => {
     expect(screen.getAllByTestId("filter-sort-option").map((el) => el.getAttribute("data-value"))).toEqual(["relevance", "rank", "salary", "first_seen", "posted", "last_listed"]);
     await userEvent.click(screen.getAllByTestId("filter-sort-option").find((el) => el.getAttribute("data-value") === "rank")!);
     await waitFor(() => expect(lastQuery()).toBe("?q=AI&sort=rank"));
-    expect(screen.getByTestId("filter-sort-dir")).toHaveAttribute("data-dir", "desc");
+    await waitFor(() => expect(screen.getByTestId("filter-sort-dir")).toHaveAttribute("data-dir", "desc"));
+    expect(screen.getByTestId("filter-sort")).toHaveTextContent("Rank value");
   });
 
   it("shows a raw country chip, removes it and preserves searchIn on clear", async () => {

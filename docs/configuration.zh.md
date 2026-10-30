@@ -88,7 +88,8 @@ maintenance 连续 `relist.min_gap_days` 天或更久没有运行、而采集一
 
 - `query`：输入长度（`max_chars`，整数 10–200；200 也是 MCP `query` 和已存视图 `q` 的上限）、不同词项上限（`max_terms`，整数 1–50）、
   独立 CJK 片段的最少字数（`cjk_min_chars`，整数 1–10），以及 `all_scope_timeout_ms`（整数 1–120000）：
-  同时搜索职位说明（`searchIn=all`）时每条列表或计数查询的时间上限。超时后 /jobs 显示“全文搜索超时”而不是结果，
+  同时搜索职位说明（`searchIn=all`）时每条列表或计数查询的时间上限。任一查询超时后，/jobs 在列表上方显示“全文搜索超时”，
+  保留成功加载的结果，并将无法获取的计数显示为“—”。
   MCP `search_jobs` 返回 `search_timeout` 错误。
 - `matching.prefix_min_chars`：允许前缀匹配的最少词长，整数 1–20。
 - `ranking`：字段权重 `weights`（`title`、`company`、`location`、`country`、`description`、`translation`，各 0–100）

@@ -1059,6 +1059,7 @@
     },
     "jobs": {
       "count": "共 {count} 条",
+      "countUnknown": "共 — 条",
       "listLabel": "岗位列表",
       "empty": "还没有岗位。运行一轮采集后会出现在这里。",
       "emptyFiltered": "没有符合条件的岗位，试试放宽筛选。",
@@ -1124,6 +1125,7 @@
         "label": "岗位范围",
         "current": "当前",
         "archive": "历史库（{count, number}）",
+        "archiveUnknown": "历史库（—）",
         "all": "全部",
         "archiveHint": "你关闭的、来源已下架或数周未被列出的岗位。不会删除任何数据。",
         "notSaved": "范围和历史库原因不会存进视图。"
@@ -1376,6 +1378,7 @@
     "seen": {
       "dot": "未看",
       "unseenCount": "{count} 条未看",
+      "unseenCountUnknown": "— 条未看",
       "markAll": "全部标为已看",
       "markedToast": "已将 {count} 条标为已看",
       "markFailed": "保存失败，请重试",

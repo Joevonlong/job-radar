@@ -1059,6 +1059,7 @@
     },
     "jobs": {
       "count": "Results: {count}",
+      "countUnknown": "Results: —",
       "listLabel": "Job list",
       "empty": "No jobs yet. They show up here after a collection cycle.",
       "emptyFiltered": "No jobs match. Try relaxing the filters.",
@@ -1124,6 +1125,7 @@
         "label": "Job scope",
         "current": "Current",
         "archive": "Archive ({count, number})",
+        "archiveUnknown": "Archive (—)",
         "all": "All",
         "archiveHint": "Jobs closed by you, taken down at the source, or not listed for weeks. Nothing is deleted.",
         "notSaved": "Scope and archive reasons are not saved in views."
@@ -1376,6 +1378,7 @@
     "seen": {
       "dot": "Unseen",
       "unseenCount": "{count} unseen",
+      "unseenCountUnknown": "— unseen",
       "markAll": "Mark all as seen",
       "markedToast": "Marked {count, plural, one {# job} other {# jobs}} as seen",
       "markFailed": "Could not save, please retry",

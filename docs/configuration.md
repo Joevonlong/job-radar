@@ -95,8 +95,8 @@ All keys are required and unknown keys are rejected. Defaults live in the YAML o
 - `query`: input length (`max_chars`, integer 10–200; 200 is also the limit of MCP `query` and a saved view's `q`),
   distinct term limit (`max_terms`, integer 1–50), minimum standalone CJK fragment length (`cjk_min_chars`, integer 1–10),
   and `all_scope_timeout_ms` (integer 1–120000): the time limit of each list or count query that also searches
-  descriptions (`searchIn=all`). Past it, /jobs shows "Full-text search timed out" instead of results and MCP
-  `search_jobs` returns a `search_timeout` error.
+  descriptions (`searchIn=all`). If any query times out, /jobs shows "Full-text search timed out" above the list,
+  keeps any successful results, and displays unavailable counts as “—”. MCP `search_jobs` returns a `search_timeout` error.
 - `matching.prefix_min_chars`: minimum word length for prefix matching, integer 1–20.
 - `ranking`: field `weights` (`title`, `company`, `location`, `country`, `description`, `translation`, each 0–100)
   and `prefix_factor` (0–1). Each term contributes only its highest matching field weight; prefix text matches are discounted.
