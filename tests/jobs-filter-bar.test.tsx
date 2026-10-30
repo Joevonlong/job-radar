@@ -504,7 +504,7 @@ describe("search relevance and URL-only country", () => {
   });
 
   it("shows a localized country chip, removes it and preserves searchIn on clear", async () => {
-    const { lastQuery } = renderBar("?country=PT&searchIn=all");
+    const { lastQuery } = renderBar("?country=PT&searchIn=all", "en", { countries: [{ code: "PT", jobCount: 0, name: "Portugal" }] });
     expect(screen.getByTestId("filter-chip")).toHaveTextContent("Country · Portugal");
     expect(screen.getByTestId("filter-country")).toBeInTheDocument();
     expect(screen.getByTestId("filter-toggle")).toHaveTextContent("Filters (1)");
@@ -535,7 +535,7 @@ describe("precise job search controls", () => {
   });
 
   it("keeps the country picker open while selecting multiple countries", async () => {
-    const { lastQuery } = renderBar("", "en", { countries: [{ code: "DE", jobCount: 2 }, { code: "FR", jobCount: 1 }] });
+    const { lastQuery } = renderBar("", "en", { countries: [{ code: "DE", jobCount: 2, name: "Germany" }, { code: "FR", jobCount: 1, name: "France" }] });
     await userEvent.click(screen.getByTestId("filter-country"));
     for (const code of ["DE", "FR"]) {
       const option = screen.getAllByTestId("filter-country-option").find((row) => row.dataset.value === code)!;
@@ -547,13 +547,14 @@ describe("precise job search controls", () => {
     await waitFor(() => expect(new URLSearchParams(lastQuery()).getAll("country")).toEqual(["DE", "FR"]));
   });
 
-  it.each(["en", "zh"] as const)("labels country chips and counts in %s, including absent selected countries", async (locale) => {
-    renderBar("?country=PT", locale, { countries: [{ code: "DE", jobCount: 2 }] });
-    const names = new Intl.DisplayNames(locale, { type: "region" });
-    expect(screen.getByTestId("filter-chips")).toHaveTextContent(names.of("PT") ?? "PT");
+  it.each(["en", "zh"] as const)("labels country chips and counts in %s with the server's names, including absent selected countries", async (locale) => {
+    // the server adds selected countries without jobs (count 0) and names every option in the interface language
+    const portugalName = locale === "en" ? "Portugal" : "葡萄牙";
+    renderBar("?country=PT", locale, { countries: [{ code: "DE", jobCount: 2, name: locale === "en" ? "Germany" : "德国" }, { code: "PT", jobCount: 0, name: portugalName }] });
+    expect(screen.getByTestId("filter-chips")).toHaveTextContent(portugalName);
     await userEvent.click(screen.getByTestId("filter-country"));
     const portugal = screen.getAllByTestId("filter-country-option").find((o) => o.dataset.value === "PT");
-    expect(portugal).toHaveTextContent(names.of("PT") ?? "PT");
+    expect(portugal).toHaveTextContent(portugalName);
     expect(portugal?.querySelector('[data-slot="option-count"]')).toHaveTextContent("0");
     const germany = screen.getAllByTestId("filter-country-option").find((o) => o.dataset.value === "DE");
     expect(germany?.querySelector('[data-slot="option-count"]')).toHaveTextContent("2");

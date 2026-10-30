@@ -2,7 +2,7 @@
 
 import { debounce, useQueryStates } from "nuqs";
 import { ArrowDown, ArrowUp, Search, SlidersHorizontal, X } from "lucide-react";
-import { useLocale, useTranslations } from "next-intl";
+import { useTranslations } from "next-intl";
 import { useEffect, useId, useLayoutEffect, useState, useTransition } from "react";
 
 import { useHiddenStatuses } from "@/components/applications/visibility-context";
@@ -15,6 +15,7 @@ import { filterOptions } from "@/lib/applications/visibility";
 import { knownContract, knownFamily } from "@/lib/dashboard/labels";
 import { APPLICATION_FILTER_STATUSES, ARCHIVE_REASONS, JOB_SORTS, JOB_STATUSES, type JobSort, JOB_WORKPLACES, MIN_SALARY_MAX, MIN_SCORE_MAX, GHOST_FILTERS, TRAP_FILTERS, VISA_FILTERS, type ApplicationFilterStatus } from "@/lib/jobs/constants";
 import { FILTER_KEYS, SELECT_FILTER_KEYS, type FilterKey, type SelectFilterKey } from "@/lib/jobs/filter-keys";
+import type { NamedCountryOption } from "@/lib/jobs/country-names";
 import { cleanMultiValues } from "@/lib/jobs/filter-values";
 import { countActiveFilters, hasActiveFilters, jobsSearchParsers, withLegacyKeys } from "@/lib/jobs/search-params";
 import { dirParam, effectiveDir, flipDir, resolveSort } from "@/lib/jobs/sort";
@@ -50,7 +51,8 @@ export interface FilterBarOptions {
   companyOptionsCapped?: boolean;
   /** (ui.yaml `filters`) How many companies are listed before anything is typed. */
   companyOptionsVisible?: number;
-  countries?: { code: string; jobCount: number }[];
+  /** Named on the server (`withCountryNames`), so the server and the browser render the same names. */
+  countries?: NamedCountryOption[];
   contracts: string[];
   /** Show the "AI traps" control (traps.yaml `enabled`). */
   traps?: boolean;
@@ -88,8 +90,6 @@ const pillState = (on: boolean) => (on ? "border-primary/50 bg-accent text-accen
  */
 export function FilterBar({ options }: { options: FilterBarOptions }) {
   const t = useTranslations("dashboard.jobs.filters");
-  const locale = useLocale();
-  const countryNames = new Intl.DisplayNames(locale, { type: "region" });
   const ts = useTranslations("signals.filter");
   const languageName = useLocalLanguageName();
   const tc = useTranslations("dashboard");
@@ -158,7 +158,7 @@ export function FilterBar({ options }: { options: FilterBarOptions }) {
   const choices: Record<SelectFilterKey, MultiSelectOption[]> = {
     source: options.families.map((family) => ({ value: family, label: familyLabel(family) })),
     city: options.cities.map((city) => (grouped ? { value: city.key, label: city.key, group: city.target ? t("cityTargets") : t("cityOthers") } : { value: city.key, label: city.key })),
-    country: (options.countries ?? []).map(({ code, jobCount }) => ({ value: code, label: countryNames.of(code) ?? code, count: jobCount })),
+    country: (options.countries ?? []).map(({ code, jobCount, name }) => ({ value: code, label: name, count: jobCount })),
     company: (options.companies ?? []).map((company) => ({ value: company.name, label: company.name, count: company.jobCount })),
     workplace: filterOptions(JOB_WORKPLACES, options.hiddenWorkplaces ?? [], params.workplace).map((w) => ({ value: w, label: tc(`workplace.${w}`) })),
     contract: filterOptions(options.contracts, options.hiddenContracts ?? [], params.contract).map((contract) => ({ value: contract, label: contractLabel(contract) })),
@@ -168,7 +168,7 @@ export function FilterBar({ options }: { options: FilterBarOptions }) {
   // a bookmarked value that no job has (any more) still shows as selected, and can be unticked
   const withStale = (key: SelectFilterKey): MultiSelectOption[] => {
     const known = new Set(choices[key].map((o) => o.value));
-    const missing = params[key].filter((value) => !known.has(value)).map((value) => ({ value, label: key === "country" ? countryNames.of(value) ?? value : value, stale: key !== "country", ...(key === "country" ? { count: 0 } : {}) }));
+    const missing = params[key].filter((value) => !known.has(value)).map((value) => ({ value, label: value, stale: key !== "country", ...(key === "country" ? { count: 0 } : {}) }));
     return [...missing, ...choices[key]];
   };
   const layout = phone ? "inline" : "popover";

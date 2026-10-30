@@ -10,6 +10,7 @@ import { JobList } from "@/components/jobs/job-list";
 import { KeyHints } from "@/components/jobs/key-hints";
 import { MarkSeenButton } from "@/components/jobs/mark-seen-button";
 import { ScopeSwitch } from "@/components/jobs/scope-switch";
+import { withCountryNames } from "@/lib/jobs/country-names";
 import { resolveJobScope } from "@/lib/jobs/scope";
 import { SaveViewButton } from "@/components/jobs/save-view-button";
 import { Pagination } from "@/components/jobs/pagination";
@@ -145,7 +146,7 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
       <VisitTracker />
       <PageHeader title={t("title")} description={t("description")} />
       <ScopeSwitch params={params} archiveCount={archiveCounted.value} />
-      <FilterBar options={{ ...options, countries, cities: cities.map(({ key, target }) => ({ key, target })), companies: companies.slice(0, ui.filters.company_options_max), companyOptionsCapped: companies.length > ui.filters.company_options_max, companyOptionsVisible: ui.filters.company_options_visible, traps: trapsEnabled(), relisted: listing, visa: visaFilter, ghost: ghostFilter, hiddenWorkplaces: hidden.workplaces, hiddenContracts: hidden.contracts, highValueNames }} />
+      <FilterBar options={{ ...options, countries: withCountryNames(countries, locale), cities: cities.map(({ key, target }) => ({ key, target })), companies: companies.slice(0, ui.filters.company_options_max), companyOptionsCapped: companies.length > ui.filters.company_options_max, companyOptionsVisible: ui.filters.company_options_visible, traps: trapsEnabled(), relisted: listing, visa: visaFilter, ghost: ghostFilter, hiddenWorkplaces: hidden.workplaces, hiddenContracts: hidden.contracts, highValueNames }} />
       <div className="flex flex-wrap items-center gap-x-sp-3 gap-y-sp-2">
         {params.filteredOnly === true ? (
           <FilteredToggle active only href={jobsListHref({ ...params, filteredOnly: null, page: 1 })} />
