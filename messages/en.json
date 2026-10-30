@@ -235,7 +235,7 @@
       "remove": "Remove {name}",
       "addedToast": "Now watching “{name}”",
       "removedToast": "Stopped watching “{name}”",
-      "companyQueries": "Will search by company name on {count} enabled channels."
+      "companyQueries": "Will search by company name on {count, plural, one {# enabled channel} other {# enabled channels}}."
     },
     "categories": {
       "title": "Signal categories ({count}/{max})",

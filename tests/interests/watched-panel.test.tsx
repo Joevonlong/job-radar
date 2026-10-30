@@ -39,6 +39,25 @@ describe("WatchedPanel: companies without a job board", () => {
     expect(screen.getByRole("link", { name: "添加看板" })).toHaveAttribute("href", "/sources/registry");
   });
 
+  it("falls back to the board hint when no channel searches by company name (master switch off or none enabled)", () => {
+    const none: WatchedCompanyView[] = [{ name: "Google", match: null, hasBoard: false, companyQueryChannels: 0 }];
+    render(wrap(<WatchedPanel watched={none} />));
+    const hint = screen.getByTestId("watched-no-board");
+    expect(hint).toHaveTextContent("No job board configured: its jobs are only found through the queries for your target cities.");
+    expect(hint).not.toHaveTextContent("Will search by company name");
+    expect(within(hint).getByRole("link", { name: "Add a board" })).toHaveAttribute("href", "/sources/registry");
+  });
+
+  it("falls back to the board hint in Chinese too", () => {
+    render(wrap(<WatchedPanel watched={[{ name: "Google", match: null, hasBoard: false }]} />, "zh"));
+    expect(screen.getByTestId("watched-no-board")).toHaveTextContent("没有配置招聘看板：只能靠目标城市的查询采到。");
+  });
+
+  it("uses the singular for one enabled channel", () => {
+    render(wrap(<WatchedPanel watched={[{ name: "Google", match: null, hasBoard: false, companyQueryChannels: 1 }]} />));
+    expect(screen.getByTestId("watched-no-board")).toHaveTextContent("Will search by company name on 1 enabled channel.");
+  });
+
   it("shows nothing for an empty list", () => {
     render(wrap(<WatchedPanel watched={[]} />));
     expect(screen.queryByTestId("watched-no-board")).toBeNull();
