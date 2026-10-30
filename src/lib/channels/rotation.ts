@@ -39,7 +39,7 @@ export function turnsOf(rows: readonly QueryRunHistoryRow[], channelId: string):
   return new Map(rows.filter((row) => row.channelId === channelId).map((row) => [row.queryHash, row.lastTurnAt]));
 }
 
-/** Merge the full family's latest turn/coverage and earliest appearance. Sorting uses turnsOf, never this merge. */
+/** Merge family coverage and appearance; company turns use this merge, while keyword ordering uses turnsOf. */
 export function familyHistory(rows: readonly QueryRunHistoryRow[], channelIds: readonly string[]): Map<string, QueryHistory> {
   const channels = new Set(channelIds);
   const history = new Map<string, QueryHistory>();
