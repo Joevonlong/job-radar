@@ -143,10 +143,10 @@ linkedin:
 
   session:
     # Cascade position 4: searches jobs with your own LinkedIn login session (Playwright, read-only). Log in once first by running `pnpm auth:linkedin` on the host;
-    company_queries: true # sends watched company names; see docs/privacy.md
     # without a session (.auth/linkedin.json), /sources shows "not logged in" and the cascade skips it. On a login or verification page (checkpoint / CAPTCHA) it stops at once, trips the circuit breaker and sends a Telegram alert,
     # and never tries to get past it automatically. See docs/linkedin-session.md.
     enabled: false # turn on after logging in and confirming `pnpm cycle:run --channel linkedin-session --dry-run` works
+    company_queries: true # sends watched company names; see docs/privacy.md
     monthly_budget_usd: 0
     throttle: { min_delay_ms: 3000, max_delay_ms: 8000 } # random wait between two page loads
     max_results: 50 # max results read per query (further limited by max_per_group_per_location in search.yaml)
