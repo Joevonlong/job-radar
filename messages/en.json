@@ -1065,7 +1065,8 @@
       "listLabel": "Job list",
       "empty": "No jobs yet. They show up here after a collection cycle.",
       "emptyFiltered": "No jobs match. Try relaxing the filters.",
-      "searchTimeout": "Full-text search timed out. Narrow the search or the filters.",
+      "searchTimeout": "Searching job descriptions timed out. Narrow the search or the filters, or turn off Include job descriptions.",
+      "searchTimeoutBasic": "Search basic information only",
       "filters": {
         "label": "Search and filters",
         "search": "Search jobs",

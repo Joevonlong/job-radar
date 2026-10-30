@@ -1065,7 +1065,8 @@
       "listLabel": "岗位列表",
       "empty": "还没有岗位。运行一轮采集后会出现在这里。",
       "emptyFiltered": "没有符合条件的岗位，试试放宽筛选。",
-      "searchTimeout": "全文搜索超时，请缩小条件。",
+      "searchTimeout": "搜索职位说明超时。请缩小搜索或筛选条件，或关闭“包含职位说明”。",
+      "searchTimeoutBasic": "只搜索基本信息",
       "filters": {
         "label": "搜索和筛选",
         "search": "搜索岗位",

@@ -107,6 +107,8 @@ describe.each(["en", "zh"] as const)("jobs search timeout feedback (%s)", (local
     state.listJobs.mockRejectedValue(new SearchTimeoutError());
     await show();
     expect(screen.getAllByTestId("jobs-search-timeout")).toHaveLength(1);
+    expect(screen.getByTestId("jobs-search-timeout")).toHaveTextContent(locale === "en" ? "Include job descriptions" : "包含职位说明");
+    expect(screen.getByTestId("search-basic-only")).toHaveAttribute("href", "/jobs?q=engineer");
     expect(screen.getByTestId("result-count")).toHaveTextContent(locale === "en" ? "Results: —" : "共 — 条");
     expect(screen.queryByTestId("job-list")).not.toBeInTheDocument();
   });

@@ -206,6 +206,12 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
       {searchTimedOut ? (
         <div role="status" data-testid="jobs-search-timeout" className="border-border bg-card text-muted-foreground shadow-e3 rounded-card border-bw px-sp-4 py-sp-3">
           {tJobs("searchTimeout")}
+          {params.searchIn === "all" ? (
+            <>
+              {" "}
+              <Link href={jobsListHref({ ...params, searchIn: null, page: 1 })} className="underline underline-offset-2" data-testid="search-basic-only">{tJobs("searchTimeoutBasic")}</Link>
+            </>
+          ) : null}
         </div>
       ) : null}
       {result ? (
