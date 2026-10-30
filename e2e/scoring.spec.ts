@@ -1,5 +1,6 @@
 import { expect, test } from "./fixtures";
 import postgres from "postgres";
+import { refreshCurrentScores } from "./current-scores";
 import { listRows } from "./list-rows";
 
 /**
@@ -39,6 +40,7 @@ test.beforeAll(async () => {
   } finally {
     await sql.end({ timeout: 5 });
   }
+  await refreshCurrentScores([jobId]);
 });
 
 test.afterAll(async () => {
@@ -49,6 +51,7 @@ test.afterAll(async () => {
   } finally {
     await sql.end({ timeout: 5 });
   }
+  if (jobId) await refreshCurrentScores([jobId]);
 });
 
 test("the list shows the score and the German badge; the quick filter hides the job and survives a reload", async ({ page }) => {

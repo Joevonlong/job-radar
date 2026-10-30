@@ -4,6 +4,8 @@ import path from "node:path";
 import { expect, test, type Page } from "./fixtures";
 import postgres from "postgres";
 
+import { refreshCurrentScores } from "./current-scores";
+
 /**
  * Deal-breakers: the card on /me (add a language gate, its preview over the seeded jobs, save) and a vetoed job's page.
  * The seeded instance is German and "About me" says German B1. Fictional seed job: "Data Engineer" (Orbitrail AG), which
@@ -72,6 +74,7 @@ test("a vetoed job names the rule, quotes the posting and shows both levels; Kee
   const rows = await sql<{ id: number; filter_result: string; filter_reasons: string[] }[]>`select id::int as id, filter_result, filter_reasons from scores where job_id = ${job.id}`;
   try {
     await sql`update scores set filter_result = 'filtered_out', filter_reasons = ${sql.array(["deal_breaker:german-gate"])} where job_id = ${job.id}`;
+    await refreshCurrentScores([job.id]);
 
     // a hand edit of the file: the page reads it as it is now
     await page.goto(`/jobs/${job.id}`);
@@ -99,5 +102,6 @@ test("a vetoed job names the rule, quotes the posting and shows both levels; Kee
   } finally {
     for (const row of rows) await sql`update scores set filter_result = ${row.filter_result}, filter_reasons = ${sql.array(row.filter_reasons)} where id = ${row.id}`;
     await sql.end({ timeout: 5 });
+    await refreshCurrentScores([job.id]);
   }
 });
