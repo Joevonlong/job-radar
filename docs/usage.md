@@ -141,7 +141,7 @@ Country and search scope are **not saved in views**. The save dialog explains th
 
 On `/jobs`, source, city, country, company, workplace, contract and job status each accept several values (application status was already multi-select):
 
-- Open a filter and tick the items you want; city and source have a search box (typing `munc` finds München); the bottom shows "N selected · Clear · Done". Keyboard: Tab to the button, Enter / ↓ to open, ↑ ↓ to move, Enter to tick, Esc to close.
+- Open a filter and tick the items you want; city, source, company and country have a search box (typing `munc` finds München); the bottom shows "N selected · Clear · Done". Keyboard: Tab to the button, Enter / ↓ to open, ↑ ↓ to move, Enter to tick, Esc to close.
 - Rule: **within one filter any match is enough; across different filters all must match**. For example "city Berlin + München, workplace remote" = remote jobs in Berlin or in München. Choosing München also brings in its metro-area spellings (Garching etc.).
 - A row of tags below the search box lists every selected value, and clicking × removes just that value; on phones you can see and remove them without opening the filter panel. A multi-select filter counts as 1 in "Filters (n)".
 - The URL uses repeated parameters: `/jobs?city=Berlin&city=M%C3%BCnchen&workplace=remote`. Old single-value links (`?city=Berlin`) still work and read as "just one selected". Empty, unknown and duplicate values are ignored.
