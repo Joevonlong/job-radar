@@ -1,3 +1,4 @@
+import { currentScoresHealth } from "@/lib/db/repos/current-scores";
 /** The real probes of `pnpm run doctor`: child processes, HTTP, the filesystem and the database. Host-side only. */
 import { execFile, spawn } from "node:child_process";
 import { lstat, readdir, stat } from "node:fs/promises";
@@ -234,6 +235,7 @@ export function createRealProbes(options: RealProbeOptions): DoctorProbes {
     traps: (now) => probeTraps(now),
     mcp: async () => probeMcp(),
     deliveries: () => probeDeliveries(),
+    currentScores: () => currentScoresHealth(getDb()),
     profile: async () => readProfileReadiness(),
     async backups(directory) {
       try {

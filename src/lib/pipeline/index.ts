@@ -1,3 +1,4 @@
+import { maintainCurrentScores } from "@/lib/cycle/current-scores";
 import { noopSpan, type SpanHandle } from "@/lib/activity";
 import { ChannelError } from "@/lib/channels/errors";
 import { createHttpClient } from "@/lib/channels/http";
@@ -410,7 +411,8 @@ export async function maintenanceStep(ctx: CycleStepContext): Promise<StepResult
       ...(resolveHost ? { resolveHost } : {}),
     });
     const fingerprints = ctx.signal.aborted ? undefined : await backfillChangeFingerprints(requireDb(ctx), config.batch_size);
-    return { result: { ...result, fingerprints } };
+    const currentScores = ctx.signal.aborted ? undefined : await maintainCurrentScores(requireDb(ctx), ctx.activity);
+    return { result: { ...result, fingerprints, currentScores } };
   } finally {
     await ownFetch?.close();
   }

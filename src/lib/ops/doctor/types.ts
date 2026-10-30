@@ -74,6 +74,7 @@ export interface MigrationStatus {
  * (probes.ts); tests pass fakes, so no check ever needs Docker, a database or a network.
  */
 export interface DoctorProbes {
+  currentScores(): Promise<import("@/lib/db/repos/current-scores").CurrentScoresHealth>;
   /** Retained delivery payload bytes and the configured warning threshold; never prunes. */
   deliveries(): Promise<import("./deliveries").DeliveryProbe>;
   /** Run `command args` (time-out from `doctor.command_timeout_seconds`); never throws. */
