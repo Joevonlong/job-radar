@@ -31,7 +31,7 @@ const logs: LogRecord[] = [];
 const logger = createLogger({ sink: (record) => logs.push(record) });
 const names = ["Northstar Labs", "Moonbeam"];
 
-beforeAll(async () => { process.env.DATABASE_URL = databaseUrl; await runMigrations(); });
+beforeAll(async () => { process.env.DATABASE_URL = databaseUrl; await runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 } }); });
 beforeEach(async () => {
   await getDb().execute(sql`truncate table raw_postings, jobs, companies, runs, cycles, channels restart identity cascade`);
   temp = makeTempConfig();
