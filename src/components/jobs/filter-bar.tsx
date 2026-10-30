@@ -226,7 +226,7 @@ export function FilterBar({ options }: { options: FilterBarOptions }) {
       data-testid="jobs-filters"
     >
       <div className="flex flex-wrap items-center gap-sp-2">
-        <div className="relative min-w-0 flex-1">
+        <div className="relative min-w-0 flex-1 max-md:basis-full">
           <Search aria-hidden className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2" />
           <input
             type="search"
@@ -256,7 +256,7 @@ export function FilterBar({ options }: { options: FilterBarOptions }) {
         <Button
           type="button"
           variant="outline"
-          className="md:hidden"
+          className="ml-auto md:hidden"
           aria-expanded={open}
           aria-controls={panelId}
           onClick={() => setOpen(true)}
