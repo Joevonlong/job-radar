@@ -126,7 +126,7 @@ ai-worker 从不直接从检出目录运行：`git pull` 或切分支会在它�
 - `ROLLBACK FAILED: …`（退出码 1）：没能恢复到之前的状态。消息说明现在装的是什么；备份留在 `data/run/ai-worker-swap-backup/`，
   解决之前下一次安装会拒绝（见 [upgrade.zh.md](upgrade.zh.md#unresolved-switch-backup)）。
 
-`scripts/ops/install-ai-worker.sh --print-release` 打印已安装 worker 的发布目录（退出码 0）；没有安装 worker（或者只装在旧标签 `de.jobradar.ai-worker` 下）时退出码 3；装了但不是从发布目录运行
+`scripts/ops/install-ai-worker.sh --print-release` 打印已安装 worker 的发布目录（退出码 0）；没有安装 worker（或者只装在历史标签 `de.jobradar.ai-worker` 下，但配置要求另一个标签）时退出码 3；装了但不是从发布目录运行
 （以前版本的安装）时退出码 4；定义读不了或者有多个时退出码 1。切换过程中被 Ctrl-C、TERM 或 HUP 打断时，脚本先回滚，再以 130、143 或 129 退出。
 
 ### 中断部署
@@ -192,7 +192,7 @@ pnpm run doctor --lang zh    # 用另一种语言输出报告（默认：languag
 | `db.connect` | 宿主机能连上数据库（`DATABASE_URL`，没设就按 `.env` 里的 `POSTGRES_*` 和 `DB_HOST_PORT` 拼） | ❌ db 没起来，或 `.env` 里的口令不对 |
 | `db.migrations` | 数据库迁移是最新的（对照 `drizzle/meta/_journal.json`） | ❌ 缺迁移：`scripts/ops/deploy.sh` 或 `pnpm db:migrate`；⚠️ 数据库比代码新：是不是回滚了代码（见第 5 节） |
 | `runner.heartbeat` | runner 最新心跳在 `RUNNER_HEALTH_MAX_AGE_SECONDS`（默认 120 秒）内 | ❌ runner 卡住或停了：看日志后 `docker compose restart runner` |
-| `aiworker.launchd` | launchd 里装了 `io.jobradar.ai-worker` 且状态是 running（Linux 上：systemd 用户单元 `job-radar-ai-worker.service` 处于 active，用 `systemctl --user show` 读取） | ⚠️ 只有旧标签 `de.jobradar.ai-worker` 在运行：运行 `scripts/ops/install-ai-worker.sh` 迁移；❌ 没装或没在运行：先看 `~/Library/Logs/job-radar/ai-worker.launchd.log`（启动失败和崩溃），再 `scripts/ops/install-ai-worker.sh`；⚠️ 没装 launchd 但有心跳（手动启动的）；⚠️ 在运行但日志还写在内置盘的旧位置（旧版本装的）：重新运行 `scripts/ops/install-ai-worker.sh` |
+| `aiworker.launchd` | launchd 里装了配置的 `doctor.ai_worker_launchd_label` 且状态是 running，包括显式配置的 `de.jobradar.ai-worker`（默认 `io.jobradar.ai-worker`；Linux 上：systemd 用户单元 `job-radar-ai-worker.service` 处于 active，用 `systemctl --user show` 读取） | ⚠️ 配置的标签未加载，但另一个已知标签已加载（配置为 `de.jobradar.ai-worker` 时探测 `io.jobradar.ai-worker`，其他情况探测 `de.jobradar.ai-worker`）：doctor 会列出两个标签；运行 `scripts/ops/install-ai-worker.sh` 迁移；❌ 没装或没在运行：先看 `~/Library/Logs/job-radar/ai-worker.launchd.log`（启动失败和崩溃），再 `scripts/ops/install-ai-worker.sh`；⚠️ 没装 launchd 但有心跳（手动启动的）；⚠️ 在运行但日志还写在内置盘的旧位置（旧版本装的）：重新运行 `scripts/ops/install-ai-worker.sh` |
 | `aiworker.heartbeat` | ai-worker 心跳在 `ai.yaml: host_worker.offline_after_seconds` 内；能核对服务 PID 时，用回执确认持锁、心跳和自己的配置报告 | ❌ 离线或从未有心跳：`data/logs/ai-worker.err.log`，崩溃看 `~/Library/Logs/job-radar/ai-worker.launchd.log`。⚠ 当前进程还没确认在工作（刚启动或刚重连数据库后的一个心跳间隔内属正常；持续出现时，在 `ai-worker.out.log` 里找 "could not report the shipped config"）；⚠ 锁在另一个进程手里：按需要停掉另一个 worker 或服务。回执只把 ✅ 降成 ⚠；判断不了时保留原有结果 |
 | `ai.claude` `ai.codex` | 两个订阅 CLI 已登录 | ⚠️ 一个没登录（另一个还能用）；❌ 两个都没登录，AI 打分和翻译会停：`claude` 里 `/login`、`codex login` |
 | `telegram.credentials` `telegram.enabled` | `.env` 里 token 和 chat id 已配置；`notify.yaml: telegram.enabled` 是 true | Telegram 关着且没配：显示为可选（✅）；⚠️ 已填凭据但开关没开；❌ 开关开了但凭据没配，不会推送 |
@@ -239,7 +239,7 @@ doctor 的阈值和名字都在 `schedule.yaml`（用户配置 `data/config/` �
 | `ai.yaml: host_worker.log_max_mb` / `log_keep` | 10 / 3 | ai-worker 日志（`data/logs/ai-worker.{out,err}.log` 和 launchd 的 `ai-worker.launchd.log`）超过多少 MB 轮转、留几份旧的（`.1` 最新） |
 | `doctor.ai_backlog_warn` / `ai_oldest_pending_warn_minutes` / `ai_unscored_warn` | 40 / 30 / 200 | AI 积压阈值 |
 | `doctor.cycle_grace_minutes` | 90 | 排定的轮次晚多久算错过 |
-| `doctor.ai_worker_launchd_label` | `io.jobradar.ai-worker` | launchd 名称 |
+| `doctor.ai_worker_launchd_label` | `io.jobradar.ai-worker` | 安装、卸载、doctor、deploy 和 setup 原样使用的 launchd 名称；显式配置 `de.jobradar.ai-worker` 时保留该值 |
 | `doctor.shipped_report_skew_seconds` | 2 | `config.shipped`：报告（数据库时钟）最多可以比容器启动时间（Docker 时钟）早多少秒。出厂文件里没有这一项，要改就自己加上 |
 | `doctor.linkedin_auth_dir` | `.auth` | 登录态目录（相对项目目录） |
 

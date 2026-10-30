@@ -5407,7 +5407,7 @@
           "never": "The ai-worker never wrote a heartbeat",
           "neverHint": "scripts/ops/install-ai-worker.sh; one run for now: pnpm ai-worker --once",
           "offline": "The last heartbeat was {ago} (offline after {limit} s)",
-          "offlineHint": "tail -n 30 {errLog} (crashes: {launchdLog}); launchctl kickstart -k gui/$(id -u)/io.jobradar.ai-worker",
+          "offlineHint": "tail -n 30 {errLog} (crashes: {launchdLog}); launchctl kickstart -k gui/$(id -u)/{label}",
           "ok": "Last heartbeat {age} s ago (offline after {limit} s)",
           "notConfirmed": "Last heartbeat {age} s ago, but the service's current process (pid {pid}) has not confirmed it is working yet (worker lock, then a heartbeat and its config report)",
           "notConfirmedHint": "Normal for one heartbeat interval after a start or a database reconnect: run the doctor again shortly. If it stays, read {errLog}, and look for \"could not report the shipped config\" in {outLog}",

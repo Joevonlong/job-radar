@@ -20,8 +20,8 @@
 #   --dry-run           print the definition and the commands, change nothing
 #   --print-release     print the release directory the installed worker runs from, read from its definition file only
 #                       (no launchctl, systemctl or node): exit 0 and one absolute path; 3 = not installed, or only under
-#                       the old label de.jobradar.ai-worker; 4 = installed, but not from a release directory (the path goes
-#                       to stderr); 1 = it cannot be read, or the service identity is ambiguous
+#                       the old label de.jobradar.ai-worker when it is not the configured label; 4 = installed, but not
+#                       from a release directory (the path goes to stderr); 1 = it cannot be read, or the service identity is ambiguous
 #   -h, --help          print this help
 #
 # The switch (the old worker is replaced only when the new one is proven ready), under the release lock
@@ -373,8 +373,7 @@ render_definition() { if [[ "$MANAGER" == launchd ]]; then render_plist "$1" "$2
 
 # ---- dry run: read-only, no lock --------------------------------------------------------------------------------
 IDENT_DRY="$(ai_worker_identity "$MAIN_DIR" 2>/dev/null)" || IDENT_DRY=""
-LABEL="$(ident_value "$IDENT_DRY" label)"
-[[ -n "$LABEL" ]] || LABEL="$AI_WORKER_DEFAULT_LABEL"
+LABEL="$(ai_worker_resolve_launchd_label "$(ident_value "$IDENT_DRY" label)")"
 if [[ "$DRY_RUN" -eq 1 ]]; then
   set_release_paths
   echo "release:   $RELEASE_DIR"

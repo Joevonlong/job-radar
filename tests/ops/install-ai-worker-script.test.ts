@@ -6,6 +6,11 @@ import path from "node:path";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
+import { aiWorkerLaunchdLabel } from "@/lib/ops/ai-worker-label";
+import { aiWorkerServicePid } from "@/lib/ops/doctor/checks/ai";
+
+import { makeContext, ran } from "./doctor/helpers";
+
 /**
  * scripts/ops/install-ai-worker.sh without a database or a service manager: its arguments, the paths of the definition
  * it would write (--dry-run, with the manager forced through JOB_RADAR_SERVICE_MANAGER, so both run on any platform),
@@ -163,6 +168,27 @@ describe.each(["launchd", "systemd"])("--dry-run (%s)", (manager) => {
     expect(r.status, r.stderr).toBe(0);
     expect(r.stdout).toContain(`prepare-release.sh ${head} --root ${fs.realpathSync(main)}`);
     expect(r.stdout).toContain(`release:   ${fs.realpathSync(main)}/data/releases/ai-worker/${head}`);
+  });
+});
+
+describe("install and doctor launchd labels", () => {
+  it.each(["de.jobradar.ai-worker", "io.jobradar.ai-worker"])("agree on the label and PID for %s", async (label) => {
+    const main = path.join(tmp, label);
+    const schedule = path.join(main, "data/config/schedule.yaml");
+    fs.mkdirSync(path.dirname(schedule), { recursive: true });
+    fs.writeFileSync(path.join(main, "package.json"), "{}");
+    fs.writeFileSync(schedule, `doctor:\n  ai_worker_launchd_label: '${label}' # keep the configured prefix\n`);
+    const rel = makeRelease(main, SHA);
+    const r = dryRun("launchd", ["--release", rel], "postgres://test:example@127.0.0.1:1/disposable", main);
+    expect(r.status, r.stderr).toBe(0);
+    const installedLabel = /<key>Label<\/key>\s*<string>([^<]+)<\/string>/.exec(r.stdout)?.[1];
+    expect(installedLabel).toBe(label);
+    expect(aiWorkerLaunchdLabel(label)).toBe(installedLabel);
+    const ctx = makeContext({ settings: { ai_worker_launchd_label: label }, commands: {
+      "launchctl print gui/501/io.jobradar.ai-worker": ran("", 113),
+      [`launchctl print gui/501/${installedLabel}`]: ran("state = running\npid = 4242"),
+    } });
+    expect(await aiWorkerServicePid(ctx)).toEqual({ pid: 4242 });
   });
 });
 

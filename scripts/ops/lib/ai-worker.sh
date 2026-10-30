@@ -35,13 +35,24 @@ AI_WORKER_REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd -P)"
 AI_WORKER_STOPPED_BY=""
 AI_WORKER_LABEL_USED=""
 
+# ai_worker_resolve_launchd_label <configured scalar> [source file]: the label to install and query. Preserve every valid configured
+# label, including the legacy spelling; only a missing / empty value selects the default. The TypeScript equivalent is
+# src/lib/ops/ai-worker-label.ts; tests/ops/ai-worker-label.test.ts enforces parity without runtime shell calls.
+ai_worker_resolve_launchd_label() {
+  local label="${1:-$AI_WORKER_DEFAULT_LABEL}"
+  if [[ ! "$label" =~ ^[A-Za-z0-9._-]+$ ]]; then
+    echo "ai-worker: doctor.ai_worker_launchd_label${2:+ in $2} is not a valid label (letters, digits, . _ - only)" >&2
+    return 1
+  fi
+  printf '%s' "$label"
+}
+
 # ai_worker_label: L from ai_worker_identity "$app" (launchd rules; still known when more than one definition exists);
 # the default label when L cannot be read or is not valid, as before.
 ai_worker_label() {
   local label=""
   label="$(JOB_RADAR_SERVICE_MANAGER=launchd ai_worker_identity "$app" 2>/dev/null | sed -n 's/^label=//p' | head -n 1)" || true
-  [[ "$label" =~ ^[A-Za-z0-9._-]+$ ]] || label="$AI_WORKER_DEFAULT_LABEL"
-  printf '%s' "$label"
+  ai_worker_resolve_launchd_label "$label"
 }
 
 # ai_worker_yaml_scalar <rest of a `key:` line>: the value of a one-line YAML scalar, plain or in matching quotes, with a
@@ -102,11 +113,7 @@ ai_worker_identity() {
     label="$(ai_worker_yaml_scalar "$label")" \
       || { echo "ai-worker: doctor.ai_worker_launchd_label in $schedule is not a plain or quoted scalar" >&2; return 1; }
   fi
-  label="${label:-$AI_WORKER_DEFAULT_LABEL}"
-  if [[ ! "$label" =~ ^[A-Za-z0-9._-]+$ ]]; then
-    echo "ai-worker: doctor.ai_worker_launchd_label in $schedule is not a valid label (letters, digits, . _ - only)" >&2
-    return 1
-  fi
+  label="$(ai_worker_resolve_launchd_label "$label" "$schedule")" || return 1
   echo "label=$label"
   if [[ "$platform" == systemd ]]; then
     if [[ -z "${XDG_CONFIG_HOME:-}" && -z "${HOME:-}" ]]; then echo "ai-worker: neither XDG_CONFIG_HOME nor HOME is set" >&2; return 1; fi

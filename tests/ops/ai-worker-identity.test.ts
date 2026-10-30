@@ -113,12 +113,12 @@ describe("ai_worker_identity (launchd)", () => {
     for (const f of files) expect(r.stderr).toContain(f);
   });
 
-  it("the default label configured explicitly and its plist present: counted once (resolved)", () => {
-    schedule(DEFAULT);
-    plist(DEFAULT);
+  it.each([DEFAULT, LEGACY])("the label %s configured explicitly and its plist present: counted once (resolved)", (label) => {
+    schedule(label);
+    plist(label);
     const r = identity();
     expect(r.status).toBe(0);
-    expect(kv(r.stdout)).toMatchObject({ found_label: DEFAULT, origin: "resolved" });
+    expect(kv(r.stdout)).toMatchObject({ label, found_label: label, origin: "resolved" });
   });
 
   it.each([["bad/label"], ["$(touch pwned)"], ["a;b"]])("an invalid label %s: exit 1 after platform, nothing evaluated", (label) => {

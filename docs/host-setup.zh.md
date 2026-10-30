@@ -104,6 +104,8 @@ AI worker 是宿主机上的一个 Node 进程：轮询数据库里的 AI 请求
 
 前提：主 checkout 里 `pnpm install` 已完成，`claude` 和 `codex` 在 PATH 上（例如在 `~/.local/bin`），Docker 里的数据库在运行：先运行 `docker compose up -d`（第 4 节），至少 `docker compose -p job-radar up -d db`。安装会等新 worker 拿到数据库锁并写出心跳，没有数据库就会回滚。
 
+下面的命令使用默认 launchd 标签。如果 `schedule.yaml` 的 `doctor.ai_worker_launchd_label` 设成了其他标签，请把 plist 路径和 `launchctl` 命令中的标签换成配置值。
+
 ```bash
 scripts/ops/install-ai-worker.sh --dry-run    # 只打印 plist（密码已遮蔽），什么都不改
 scripts/ops/install-ai-worker.sh              # 构建 HEAD 的发布目录，写 ~/Library/LaunchAgents/io.jobradar.ai-worker.plist 并 bootstrap
@@ -115,7 +117,7 @@ tail -n 20 ~/Library/Logs/job-radar/ai-worker.launchd.log                       
 
 脚本会：让 worker 从主 checkout 的只读**发布目录** `data/releases/ai-worker/<提交>/` 运行（即使你在 worktree 里运行也一样；`--root <检出目录>` 可以指定别的）。不带 `--release <目录>` 时先用 `scripts/ops/prepare-release.sh` 构建 HEAD 的发布目录；`deploy.sh` 传入它构建好的那个。代码和出厂 `config/` 来自发布目录；`.env`、`data/config`、`data/profile`、`data/logs` 来自主 checkout。只有新 worker 证明已就绪才替换正在运行的那个，否则放回旧的（见 [deploy.zh.md](deploy.zh.md)《ai-worker 从发布目录运行》）。它写下 node / claude / codex / pnpm 的**绝对路径**和 PATH，`DATABASE_URL` 指向 `127.0.0.1:5433`（读 `.env` 的 POSTGRES_* 或 `DATABASE_URL`；密码只写进权限 600 的 plist，不会打印），`KeepAlive` 保证进程退出或被杀后自动拉起，登录时自动启动。重装/升级 node 或搬动 `claude` 后再运行一次脚本即可（它会替换已加载的那份）。之前的发布目录会保留（`schedule.yaml: deploy.ai_worker_releases_keep`，3 个）。
 
-**标签改名：** launchd 标签以前是 `de.jobradar.ai-worker`。`install-ai-worker.sh`（因此 `deploy.sh` 也是）会自动、可重复地迁移：如果旧标签的 agent 已加载，或 `~/Library/LaunchAgents/` 里还有它的 plist，会先 bootout 并删掉旧 plist，再 bootstrap 新的 `io.jobradar.ai-worker`。`uninstall-ai-worker.sh` 两个标签都会清除。如果用户配置 `data/config/schedule.yaml` 里的 `doctor.ai_worker_launchd_label` 还是 `de.jobradar.ai-worker`，doctor 把它当作新标签。
+**launchd 标签：** 安装、卸载、doctor、deploy 和 setup 都原样使用配置的 `doctor.ai_worker_launchd_label`，包括 `de.jobradar.ai-worker`，不会把它映射为 `io.jobradar.ai-worker`。Shell 操作优先读取 `data/config/schedule.yaml`，该文件不存在时读取 `config/schedule.yaml`；标签缺失或为空时使用 `io.jobradar.ai-worker`。已有定义使用默认的 `io.jobradar.ai-worker` 或历史的 `de.jobradar.ai-worker` 标签时仍能被识别：安装可将一个已有定义迁移到配置的标签，卸载也能移除它。如果同时存在多个候选定义，这些操作会拒绝执行，需先处理到只剩一个。Doctor 的 PID 和配置回执检查查询配置中的标签，因此已使用 `de` 标签的安装无需修改配置。
 
 日志：launchd **自己**打不开外接卷上的文件（plist 的 `StandardOutPath` 指向外接卷时，任务直接以 `EX_CONFIG` 退出，在 macOS 上实测），但它启动的 node 进程可以读写外接卷。所以 plist 给 worker 传 `--log-dir <主 checkout>/data/logs`，worker 自己把输出写进 `ai-worker.out.log` / `ai-worker.err.log`（`data/` 已 gitignore），超过 `ai.yaml: host_worker.log_max_mb`（10 MB）就轮转成 `.1`、`.2`……，留 `log_keep`（3）份。launchd 自己的输出文件 `~/Library/Logs/job-radar/ai-worker.launchd.log` 留在内置盘，只接住 worker 打开日志之前的输出和崩溃，同样受大小上限约束，轮转出来的旧副本放到 `data/logs/`。**不要**把 plist 的 `StandardOutPath` / `StandardErrorPath` 改到外接卷上，那样 ai-worker 根本起不来（详见 [deploy.zh.md](deploy.zh.md) 第 2 节）。worker 打不开 `data/logs`（卷没挂载、权限）时会在 launchd 的文件里写一行原因，退回写到那里。更早版本装的 ai-worker 把日志写在 `~/Library/Logs/job-radar/ai-worker.{out,err}.log`：下一次安装成功后，它们会被追加到 `data/logs/ai-worker.{out,err}.before-upgrade.log` 并删除（搬不动只打印警告）。
 

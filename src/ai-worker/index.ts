@@ -35,6 +35,7 @@ import { closeDb, getDb, writeHeartbeat } from "@/lib/db";
 import { acquireInstanceLock, type InstanceLock, type LockHolder } from "@/lib/db/instance-lock";
 import { loadDatabaseEnv } from "@/lib/env";
 import { createProcessLogger } from "@/lib/logging/process-logger";
+import { aiWorkerLaunchdLabel } from "@/lib/ops/ai-worker-label";
 import { configGuardFindings } from "@/lib/ops/config-guards";
 import { requeueInterruptedControlRequests } from "@/lib/db/repos/control-requests";
 import { withTimeout } from "@/lib/ops/timeout";
@@ -65,8 +66,18 @@ async function takeInstanceLock(once: boolean): Promise<InstanceLock | null> {
   const result = await acquireInstanceLock(env.DATABASE_URL, { name: "ai-worker", connectTimeoutSeconds: env.DB_CONNECT_TIMEOUT_SECONDS });
   if (result.acquired) return result.lock;
   const waitSeconds = once ? 0 : loadConfig("ai").host_worker.already_running_wait_seconds;
+  let serviceHint = "";
+  if (process.platform === "darwin") {
+    let label = "<label>";
+    try {
+      label = aiWorkerLaunchdLabel(loadConfig("schedule").doctor.ai_worker_launchd_label);
+    } catch {
+      // The optional hint must not bypass the lock-contention wait and exit path.
+    }
+    serviceHint = ` (launchd: launchctl bootout gui/$(id -u)/${label})`;
+  }
   log(
-    `${describeHolder(result.holder)}: exiting${waitSeconds > 0 ? ` in ${waitSeconds}s` : ""}. Stop that one first (launchd: launchctl bootout gui/$(id -u)/io.jobradar.ai-worker), or let it handle the queue`,
+    `${describeHolder(result.holder)}: exiting${waitSeconds > 0 ? ` in ${waitSeconds}s` : ""}. Stop that one first${serviceHint}, or let it handle the queue`,
   );
   if (waitSeconds > 0) await sleep(waitSeconds * 1000);
   return null;

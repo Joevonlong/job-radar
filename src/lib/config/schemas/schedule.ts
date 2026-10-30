@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { DEFAULT_LOG_LEVEL, LOG_LEVELS } from "@/lib/logging/levels";
+import { AI_WORKER_DEFAULT_LAUNCHD_LABEL } from "@/lib/ops/ai-worker-label";
 
 import { cronString, nonEmptyString, nonNegativeInt, positiveInt, timeZone } from "./common";
 
@@ -101,7 +102,7 @@ const DOCTOR_DEFAULTS: DoctorConfig = {
   ai_unscored_warn: 200,
   ai_oldest_pending_warn_minutes: 30,
   cycle_grace_minutes: 90,
-  ai_worker_launchd_label: "io.jobradar.ai-worker",
+  ai_worker_launchd_label: AI_WORKER_DEFAULT_LAUNCHD_LABEL,
   linkedin_auth_dir: ".auth",
   internal_min_free_disk_gb: 10,
   internal_warn_free_disk_gb: 30,

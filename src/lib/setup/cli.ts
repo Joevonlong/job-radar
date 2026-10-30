@@ -22,7 +22,8 @@ import { closeDb, getDb, pingDb } from "@/lib/db";
 import { underVitest } from "@/lib/db/test-guard";
 import { requestRunCycle } from "@/lib/control/service";
 import { resolveHostDatabaseUrl } from "@/lib/ops/doctor/database-url";
-import { aiWorkerLaunchdLabel, AI_WORKER_SYSTEMD_UNIT } from "@/lib/ops/doctor/checks/ai";
+import { aiWorkerLaunchdLabel } from "@/lib/ops/ai-worker-label";
+import { AI_WORKER_SYSTEMD_UNIT } from "@/lib/ops/doctor/checks/ai";
 import { resolveComposeProject, runCommand } from "@/lib/ops/doctor/probes";
 import { createServiceControl, type ServiceControl } from "@/lib/ops/services";
 import type { TelegramFetch } from "@/lib/notify/telegram-client";
@@ -406,7 +407,7 @@ function hostServices(env: NodeJS.ProcessEnv, restartWaitSeconds: number, busyNo
         project: resolveComposeProject(env, doctor.compose_project),
         platform: process.platform,
         uid: typeof process.getuid === "function" ? process.getuid() : null,
-        launchdLabel: aiWorkerLaunchdLabel(doctor.ai_worker_launchd_label),
+        launchdLabel: process.platform === "darwin" ? aiWorkerLaunchdLabel(doctor.ai_worker_launchd_label) : doctor.ai_worker_launchd_label,
         systemdUnit: AI_WORKER_SYSTEMD_UNIT,
         commandTimeoutMs: doctor.command_timeout_seconds * 1000,
         restartWaitSeconds,

@@ -5,6 +5,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 import postgres from "postgres";
+import { parseDocument } from "yaml";
 import { afterAll, afterEach, beforeAll, describe, expect, inject, it } from "vitest";
 
 import { acquireInstanceLock, AI_WORKER_LOCK_KEY, type InstanceLock } from "@/lib/db/instance-lock";
@@ -41,24 +42,32 @@ afterAll(async () => {
 const APP_ROOT = path.resolve(import.meta.dirname, "../..");
 
 /** Run the real ai-worker entry point (`pnpm ai-worker --once`) against the test database; no AI CLI is ever reached. */
-function runWorkerOnce(): { status: number | null; output: string } {
-  const result = spawnSync(path.join(APP_ROOT, "node_modules/.bin/tsx"), ["src/ai-worker/index.ts", "--once"], {
-    cwd: APP_ROOT,
-    env: {
-      // only node itself on PATH and an empty HOME: even a broken lock could never reach a real claude / codex login
-      PATH: [path.dirname(process.execPath), "/usr/bin", "/bin"].join(path.delimiter),
-      HOME: os.tmpdir(),
-      DATABASE_URL: url,
-      JOB_RADAR_DEFAULTS_DIR: FIXTURE_DEFAULTS_DIR,
-      JOB_RADAR_CONFIG_DIR: path.join(APP_ROOT, "tests/fixtures/config/no-such-user-dir"),
-      JOB_RADAR_PROFILE_DIR: path.join(APP_ROOT, "tests/fixtures/config/no-such-profile-dir"),
-      JOB_RADAR_CONFIG_POLL_MS: "0",
-      NODE_ENV: "test",
-    },
-    encoding: "utf8",
-    timeout: 60_000,
-  });
-  return { status: result.status, output: `${result.stdout}${result.stderr}` };
+function runWorkerOnce(label: string): { status: number | null; output: string } {
+  const configDir = fs.mkdtempSync(path.join(os.tmpdir(), "instance-lock-config-"));
+  const schedule = parseDocument(fs.readFileSync(path.join(FIXTURE_DEFAULTS_DIR, "schedule.yaml"), "utf8"));
+  schedule.setIn(["doctor", "ai_worker_launchd_label"], label);
+  fs.writeFileSync(path.join(configDir, "schedule.yaml"), schedule.toString());
+  try {
+    const result = spawnSync(path.join(APP_ROOT, "node_modules/.bin/tsx"), ["src/ai-worker/index.ts", "--once"], {
+      cwd: APP_ROOT,
+      env: {
+        // only node itself on PATH and an empty HOME: even a broken lock could never reach a real claude / codex login
+        PATH: [path.dirname(process.execPath), "/usr/bin", "/bin"].join(path.delimiter),
+        HOME: os.tmpdir(),
+        DATABASE_URL: url,
+        JOB_RADAR_DEFAULTS_DIR: FIXTURE_DEFAULTS_DIR,
+        JOB_RADAR_CONFIG_DIR: configDir,
+        JOB_RADAR_PROFILE_DIR: path.join(APP_ROOT, "tests/fixtures/config/no-such-profile-dir"),
+        JOB_RADAR_CONFIG_POLL_MS: "0",
+        NODE_ENV: "test",
+      },
+      encoding: "utf8",
+      timeout: 60_000,
+    });
+    return { status: result.status, output: `${result.stdout}${result.stderr}` };
+  } finally {
+    if (path.basename(configDir).startsWith("instance-lock-config-")) fs.rmSync(configDir, { recursive: true, force: true });
+  }
 }
 
 describe("single-instance lock (ai-worker)", () => {
@@ -154,16 +163,18 @@ describe("single-instance lock (ai-worker)", () => {
 });
 
 describe("ai-worker process", () => {
-  it("--once exits with code 3 while another worker holds the lock, and leaves that worker's running request alone", async () => {
+  it.each(["de.jobradar.ai-worker", "io.jobradar.ai-worker", "invalid label"])("--once exits with code 3 for label %s while leaving the other worker's running request alone", async (label) => {
     const lock = await take();
     expect(lock.acquired).toBe(true);
     await insertControlRequest(getDb(), { kind: "translate_job", payload: { jobId: 1 } });
     const running = await claimNextControlRequest(getDb(), aiWorkerRequestKinds("host"));
     expect(running?.status).toBe("running");
 
-    const { status, output } = runWorkerOnce();
+    const { status, output } = runWorkerOnce(label);
     expect(status).toBe(3);
     expect(output).toMatch(/another ai-worker is running against this database \(job-radar ai-worker pid=\d+ host=/);
+    if (process.platform === "darwin") expect(output).toContain(`launchctl bootout gui/$(id -u)/${label === "invalid label" ? "<label>" : label}`);
+    else expect(output).not.toContain("launchctl");
     expect(output).not.toMatch(/queued .* interrupted request/);
     expect((await getControlRequest(getDb(), running!.id))?.status).toBe("running");
   }, 90_000);

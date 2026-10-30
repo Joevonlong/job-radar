@@ -5407,7 +5407,7 @@
           "never": "ai-worker 从来没有写过心跳",
           "neverHint": "scripts/ops/install-ai-worker.sh；临时跑一次：pnpm ai-worker --once",
           "offline": "最近一次心跳是 {ago}（超过 {limit} 秒算离线）",
-          "offlineHint": "tail -n 30 {errLog}（崩溃看 {launchdLog}）；launchctl kickstart -k gui/$(id -u)/io.jobradar.ai-worker",
+          "offlineHint": "tail -n 30 {errLog}（崩溃看 {launchdLog}）；launchctl kickstart -k gui/$(id -u)/{label}",
           "ok": "最近一次心跳 {age} 秒前（超过 {limit} 秒算离线）",
           "notConfirmed": "最近一次心跳 {age} 秒前，但还没确认服务当前的进程（pid {pid}）已在工作（拿到 worker 锁后，写入心跳和自己的配置报告）",
           "notConfirmedHint": "刚启动或刚重连数据库后的一个心跳间隔内，这是正常的：稍后再运行 doctor。如果一直这样，查看 {errLog}，并在 {outLog} 里找 \"could not report the shipped config\"",
