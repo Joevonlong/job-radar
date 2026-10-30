@@ -182,7 +182,7 @@ pnpm sources:list [--type channel|ats_board] [--status failing ...] [--all] [--j
 | `invalid_shape` | 记录无法作为岗位接受。 |
 | `stored` | 已存为原始岗位。 |
 | `store_failed` | 保存岗位失败。 |
-| `discarded_on_failure` | 尝试失败或取消，记录未能保存为岗位。 |
+| `discarded_on_failure` | 尝试失败或取消，记录未能保存为岗位。成功的运行里，公司查询结果因雇主与关注公司不符而被丢弃的记录也记为此项（见[关注公司查询](#关注公司查询)）。 |
 
 | 标记 | 含义 |
 |---|---|

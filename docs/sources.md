@@ -196,7 +196,7 @@ By default, paid channels keep a local delivery ledger for every record received
 | `invalid_shape` | The record could not be accepted as a posting. |
 | `stored` | Stored as a raw posting. |
 | `store_failed` | Saving the posting failed. |
-| `discarded_on_failure` | The attempt failed or was cancelled before the record could be stored. |
+| `discarded_on_failure` | The attempt failed or was cancelled before the record could be stored. In a successful run, it also marks a company-query record dropped because its employer does not match the watched company (see [Watched company queries](#watched-company-queries)). |
 
 | Flag | Meaning |
 |---|---|

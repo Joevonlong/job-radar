@@ -91,4 +91,4 @@
 
 ## 关注公司
 
-搜索通道支持按公司名查询本国全境、不限远程的岗位；推荐通道不支持。公司查询和关键词查询共用登录账号、节流和 `daily_request_limit`，会占用关键词查询的每日容量。公司名默认随请求以你的账号外发。可在 `sources.yaml` 设 `linkedin.session.company_queries: false` 单独关闭，或在 `search.yaml` 设 `watched_company_queries.enabled: false` 全部关闭。来源清单详情及设置中也有对应开关。详见[隐私](privacy.zh.md)、[容量与雇主匹配](sources.zh.md#关注公司查询)。
+搜索通道支持按公司名查询本国全境、不限远程的岗位；推荐通道不支持。公司查询和关键词查询共用登录账号、节流和 `daily_request_limit`，会占用关键词查询的每日容量。公司查询结果里属于其他雇主的岗位，打开过的详情页也计入每日页面上限，即使这些结果随后被丢弃。公司名默认随请求以你的账号外发。可在 `sources.yaml` 设 `linkedin.session.company_queries: false` 单独关闭，或在 `search.yaml` 设 `watched_company_queries.enabled: false` 全部关闭。来源清单详情及设置中也有对应开关。详见[隐私](privacy.zh.md)、[容量与雇主匹配](sources.zh.md#关注公司查询)。
