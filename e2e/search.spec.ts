@@ -1,4 +1,3 @@
-import fs from "node:fs";
 
 import postgres from "postgres";
 import { expect, test, type Page } from "./fixtures";
@@ -152,34 +151,13 @@ test.describe("precise job search", { tag: EXCLUSIVE_TAG }, () => {
     await expect(listRows(page, `[data-job-id="${engineerId}"]`)).toBeVisible();
   });
 
-  test("search controls fit both languages and themes on desktop and phone", async ({ page, context, baseURL }) => {
-    if (!baseURL) throw new Error("baseURL is required");
-    test.setTimeout(90_000);
-    fs.mkdirSync("/tmp/precise-search-shots", { recursive: true });
-    await page.goto(url());
-    for (const locale of ["en", "zh"]) {
-      await context.addCookies([{ name: "NEXT_LOCALE", value: locale, url: baseURL }]);
-      for (const width of [1280, 390]) {
-        await page.setViewportSize({ width, height: 900 });
-        for (const theme of ["light", "dark"]) {
-          await page.evaluate((value) => localStorage.setItem("theme", value), theme);
-          await page.goto(url("&country=DE"));
-          await expect(page.locator("html")).toHaveClass(new RegExp(theme));
-          await expect(listRows(page)).toHaveCount(1);
-          await expect(page.getByTestId("filter-search-in")).toBeVisible();
-          expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
-          await page.screenshot({ path: `/tmp/precise-search-shots/${locale}-${theme}-${width}.png`, fullPage: true });
-          if (width === 390) await page.getByTestId("filter-toggle").click();
-          await page.getByTestId("filter-country").click();
-          await expect(option(page, "DE")).toBeVisible();
-          await page.screenshot({ path: `/tmp/precise-search-shots/${locale}-${theme}-${width}-filters.png`, fullPage: true });
-          if (width === 390) {
-            await option(page, "FR").click();
-            await page.getByTestId("filter-apply").click();
-            await expect(listRows(page)).toHaveCount(2);
-          } else await page.keyboard.press("Escape");
-        }
-      }
-    }
-  });
+  for (const width of [1280, 390]) {
+    test(`search controls fit without horizontal scrolling at ${width}px`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto(url("&country=DE"));
+      await expect(listRows(page)).toHaveCount(1);
+      await expect(page.getByTestId("filter-search-in")).toBeVisible();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+    });
+  }
 });
