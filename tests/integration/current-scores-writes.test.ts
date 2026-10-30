@@ -1,6 +1,9 @@
 import { eq, sql } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/postgres-js";
+import postgres from "postgres";
 import { afterAll, beforeAll, expect, inject, it } from "vitest";
 import { closeDb, getDb } from "@/lib/db/client";
+import * as schema from "@/lib/db/schema";
 import { jobCurrentScores, profileSnapshots } from "@/lib/db/schema";
 import { repairCurrentScores, scoreTransaction } from "@/lib/db/repos/current-scores";
 import { insertFilterResults, updateFilterResult } from "@/lib/db/repos/filter-results";
@@ -66,7 +69,22 @@ it("sends no refresh SQL for empty registration or an update matching zero rows"
     tx.touch([]);
   });
   expect(statements).toEqual([]);
-  await scoreTransaction(db, async (tx) => { expect(await markScoresStaleExcept(tx, 123)).toBe(0); });
+  // every statement of the transaction, through a client that logs them: the update itself and nothing after it
+  const client = postgres(inject("testDatabaseUrl"), { max: 1, onnotice: () => {} });
+  const logged: string[] = [];
+  const logging = drizzle(client, { schema, logger: { logQuery: (query) => { logged.push(query); } } });
+  try {
+    await scoreTransaction(logging, async (tx) => { expect(await markScoresStaleExcept(tx, 123)).toBe(0); });
+    await scoreTransaction(logging, async (tx) => {
+      const rows = await tx.update(scores).set({ stale: true }).where(eq(scores.id, -1)).returning({ jobId: scores.jobId });
+      tx.touch(rows.map((row) => row.jobId));
+    });
+  } finally { await client.end(); }
+  expect(logged).toHaveLength(2);
+  for (const query of logged) {
+    expect(query).toMatch(/^update "scores"/);
+    expect(query).not.toMatch(/job_current_scores|to_regclass/);
+  }
   await expectNoDrift(db);
 });
 
