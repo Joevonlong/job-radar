@@ -26,6 +26,7 @@ function createJobspyChannel(
     family: spec.family,
     kind: spec.kind,
     usesQueries: true,
+    supportsCompanyQueries: true,
     collect: (query, ctx) => collectFromJobspy(spec.site, query, ctx, settings()),
     parse: parseJobspyPosting,
   };
