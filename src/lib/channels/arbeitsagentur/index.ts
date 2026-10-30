@@ -3,6 +3,7 @@ import { arbeitsagenturSettingsSchema, type ArbeitsagenturSettings } from "@/lib
 import { detailLayoutError } from "../details";
 import { ChannelError, settlePostings } from "../errors";
 import { loadKnownDetails, storedDetailOf } from "../known";
+import { searchKind } from "../query";
 import type { Channel, ChannelContext, RawPostingInput, SearchQuery } from "../types";
 import { fetchDetail, fetchSearchPage } from "./client";
 import { JOB_PAGE_URL, parseArbeitsagenturPayload, toDate } from "./parse";
@@ -51,9 +52,10 @@ async function collect(query: SearchQuery, ctx: ChannelContext): Promise<RawPost
   const settings = settingsOf(ctx);
   // Remote queries have no city: the API has no remote filter, so search all of Germany (without
   // `wo`, which also keeps postings that name no location) and keep what offers home office.
-  const remote = query.remote || query.location === null;
+  const kind = searchKind(query);
+  const remote = kind === "remote";
   const filterRemote = remote && settings.remote_requires_home_office;
-  const location = remote ? null : query.location;
+  const location = kind === "city" ? query.location : null;
   // when filtering, most of a page is dropped: read full pages instead of only what is still missing
   const size = filterRemote ? settings.page_size : Math.min(settings.page_size, query.maxResults);
   const maxPages = filterRemote ? settings.remote_max_pages : Number.POSITIVE_INFINITY;
@@ -74,7 +76,7 @@ async function collect(query: SearchQuery, ctx: ChannelContext): Promise<RawPost
       await pace();
       let response;
       try {
-        response = await fetchSearchPage(ctx, settings, { term, location, windowHours: query.windowHours, page, size });
+        response = await fetchSearchPage(ctx, settings, { term, kind, location, windowHours: query.windowHours, page, size });
       } catch (error) {
         if (!(error instanceof ChannelError)) throw error;
         interrupted = error;
@@ -149,6 +151,7 @@ export const arbeitsagenturChannel: Channel = {
   family: "arbeitsagentur",
   kind: "api",
   usesQueries: true,
+  supportsCompanyQueries: true,
   // the ghost job check: the Referenznummer is stable and the detail's full text is stored
   stableExternalIds: true,
   fullDescription: true,

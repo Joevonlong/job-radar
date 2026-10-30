@@ -26,6 +26,7 @@ const throttle = z
 /** Settings every channel has. */
 const baseShape = {
   enabled: z.boolean(),
+  company_queries: z.boolean().default(true),
   /**
    * The markets (home countries, ISO 3166-1 alpha-2) the channel serves; missing = every market. Under another
    * market the channel is left out of the cycle (not a failure, C2) and shown as "other market".

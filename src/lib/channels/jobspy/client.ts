@@ -4,6 +4,7 @@ import type { ChannelsConfig } from "@/lib/config";
 import { remoteLocationFor } from "@/lib/market/remote-scope";
 
 import { ChannelError } from "../errors";
+import { searchKind } from "../query";
 import { indeedCountryOf, marketForChannel, type ChannelMarket } from "../market";
 import type { ChannelContext, RawPostingInput, SearchQuery } from "../types";
 
@@ -71,6 +72,7 @@ export function searchTermFor(keywords: readonly string[]): string {
 
 /** Where a query searches: the city, or for remote queries the location configured for its `remote_scope`. */
 export function locationFor(query: SearchQuery, settings: JobspySettings): string | null {
+  if (searchKind(query) === "company") return settings.market.countryName;
   if (!query.remote) return query.location;
   const configured = remoteLocationFor(query.remoteScope ?? "worldwide", settings.remote_location, settings.market, { worldwideText: "", emptyMeansNoLocation: true });
   return configured.trim() === "" ? null : configured.trim();
@@ -88,7 +90,7 @@ export function buildSearchRequest(site: JobspySite, query: SearchQuery, setting
     location: locationFor(query, settings),
     hours_old: Math.max(1, Math.ceil(query.windowHours)),
     results_wanted: Math.max(1, query.maxResults),
-    is_remote: query.remote,
+    is_remote: searchKind(query) === "remote",
     ...(settings.country_indeed === "" ? {} : { country_indeed: settings.country_indeed }),
     linkedin_fetch_description: site === "linkedin" && settings.linkedin_fetch_description,
     proxies: [...settings.proxies],

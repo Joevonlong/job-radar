@@ -3,7 +3,7 @@
 import { useTranslations } from "next-intl";
 import { useState, useTransition } from "react";
 
-import { setSourceEnabledAction as rawSetSourceEnabledAction } from "@/app/sources/registry/actions";
+import { setSourceEnabledAction as rawSetSourceEnabledAction, setSourceCompanyQueriesAction as rawSetSourceCompanyQueriesAction } from "@/app/sources/registry/actions";
 import { Button } from "@/components/ui/button";
 import { DocLink } from "@/components/ui/doc-link";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -13,13 +13,14 @@ import { toastTone } from "@/lib/toast";
 import { withActionFeedback } from "@/lib/actions/client";
 
 const setSourceEnabledAction = withActionFeedback(rawSetSourceEnabledAction)(() => ({ status: "error", error: "write_failed" }));
+const setSourceCompanyQueriesAction = withActionFeedback(rawSetSourceCompanyQueriesAction)(() => ({ status: "error", error: "write_failed" }));
 
 /**
  * The on/off switch of a channel or a board. It flips at once and writes `enabled` of the entry into sources.yaml;
  * when the write is refused it flips back and says why. Read-only (legacy or unreadable file) or locked (it depends on another
  * channel that is off): disabled with a hint, so it never claims a change it did not write.
  */
-export function EnabledSwitch({ id, name, enabled, readOnlyHint, lockedHint = null, consent = null }: { id: string; name: string; enabled: boolean; readOnlyHint: string | null; lockedHint?: string | null; consent?: ConsentKind | null }) {
+export function EnabledSwitch({ id, name, enabled, readOnlyHint, lockedHint = null, consent = null, companyQueries = false }: { id: string; name: string; enabled: boolean; readOnlyHint: string | null; lockedHint?: string | null; consent?: ConsentKind | null; companyQueries?: boolean }) {
   const t = useTranslations("sourcesRegistry");
   const [synced, setSynced] = useState(enabled);
   const [optimistic, setOptimistic] = useState<boolean | null>(null);
@@ -35,13 +36,14 @@ export function EnabledSwitch({ id, name, enabled, readOnlyHint, lockedHint = nu
   const apply = (next: boolean, acknowledged = false) => {
     setOptimistic(next);
     startTransition(async () => {
-      const result = await setSourceEnabledAction({ id, enabled: next, ...(acknowledged ? { acknowledged: true } : {}) });
+      const action = companyQueries ? setSourceCompanyQueriesAction : setSourceEnabledAction;
+      const result = await action({ id, enabled: next, ...(acknowledged ? { acknowledged: true } : {}) });
       if (result.status === "error") {
         setOptimistic(null);
         toastTone("error", t(`errors.${result.error}`));
         return;
       }
-      toastTone("success", t(next ? "toast.enabled" : "toast.disabled", { name }));
+      toastTone("success", companyQueries ? t(next ? "companyQueries.enabled" : "companyQueries.disabled", { name }) : t(next ? "toast.enabled" : "toast.disabled", { name }));
     });
   };
 
@@ -57,8 +59,8 @@ export function EnabledSwitch({ id, name, enabled, readOnlyHint, lockedHint = nu
         checked={checked}
         disabled={readOnlyHint !== null || lockedHint !== null || pending}
         onCheckedChange={change}
-        aria-label={t("row.switchLabel", { name })}
-        data-testid="enabled-switch"
+        aria-label={t(companyQueries ? "companyQueries.switchLabel" : "row.switchLabel", { name })}
+        data-testid={companyQueries ? "company-queries-switch" : "enabled-switch"}
         data-id={id}
       />
       {confirming && consent !== null ? (

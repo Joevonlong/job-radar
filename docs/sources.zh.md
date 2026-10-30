@@ -182,7 +182,7 @@ pnpm sources:list [--type channel|ats_board] [--status failing ...] [--all] [--j
 | `invalid_shape` | 记录无法作为岗位接受。 |
 | `stored` | 已存为原始岗位。 |
 | `store_failed` | 保存岗位失败。 |
-| `discarded_on_failure` | 尝试失败或取消，记录未能保存为岗位。 |
+| `discarded_on_failure` | 尝试失败或取消，记录未能保存为岗位。成功的运行里，公司查询结果因雇主与关注公司不符而被丢弃的记录也记为此项（见[关注公司查询](#关注公司查询)）。 |
 
 | 标记 | 含义 |
 |---|---|
@@ -394,3 +394,15 @@ Bright Data、Apify、Monid 这类服务替你抓取，但服务条款的风险�
 
 Job Radar 是独立项目，与它能读取或连接的任何招聘网站、雇主或服务均无关联，也未获其认可或赞助；所有商标归各自所有者（见
 [NOTICE](../NOTICE)）。测试夹具和演示数据都是合成的：雇主、编号、链接、联系人和岗位文本都是虚构的。
+
+## 关注公司查询
+
+`interests.yaml: watched_companies` 中没有启用 ATS 看板的公司，会按公司名在本国全境查询，不限远程岗位。支持 Arbeitsagentur、LinkedIn session，以及 jobspy 的 LinkedIn guest、Indeed、Google 通道。其他通道不接公司查询；有启用看板的公司不再生成查询，只有数据库关注标记也不生成。
+
+**升级注意：默认开启，已有关注名单里的公司名也会开始发给这些服务商。** 在 `search.yaml` 设 `watched_company_queries.enabled: false` 可全部关闭；在 `sources.yaml` 的单个通道块设 `company_queries: false` 可单独关闭。详见[隐私](privacy.zh.md)。普通关键词查询的请求和 ID 保持原样。
+
+每个单元每轮最多选 `max_per_cycle` 家到期公司，同一公司至少间隔 `min_interval_hours`；与关键词查询按上次轮到的时间合排。`collect.query_rotation: false` 时先按配置顺序跑关键词，再按名单顺序跑公司。预算、session 每日上限、熔断和本轮失败状态共用；不支持、未启用或未配置的成员不接公司查询。窗口沿用补窗历史和 `collect.max_catch_up_hours` 上限；不支持自动补窗的通道至少覆盖公司间隔加容差，受上限约束且不缩小本轮窗口。
+
+预算限制之前，每个单元每天最多轮到 `max_per_cycle × 每天轮数` 家公司。名单超过这一容量的七倍时，部分等待可能超过通常的 168 小时补窗上限而漏采。干跑计划和轮换日志列出查询及最长等待；`pnpm sources:list` 列出公司查询，活动日志显示“公司：名字”，移出名单后用归一 key 显示。
+
+入库前，仅保留雇主归一 key 命中本查询或其他关注公司的结果；解析失败的原始记录仍保留供流水线诊断。`runs.fetched` 是后过滤前的返回数，新增数只计实际保留的岗位。日志计 `company_mismatch` 并列出至多三个雇主名。法律实体、子公司和品牌不会自动合并：分别关注或在 `pipeline.yaml: company.aliases` 添加别名，见[提取](extraction.zh.md)。常见短名容易让别家的结果占满上限，能配 ATS 看板时优先用看板。Arbeitsagentur 采用 `was` 自由文本备用查询，再校验雇主。

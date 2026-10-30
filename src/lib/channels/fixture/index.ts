@@ -144,7 +144,7 @@ export const FIXTURE_SETTINGS: ChannelRuntimeSettings = {
   enabled: true,
   maxResults: 100,
   monthlyBudgetUsd: 0,
-  freeRecordsPerMonth: 0,
+  companyQueries: true, freeRecordsPerMonth: 0,
   throttle: { minDelayMs: 0, maxDelayMs: 0 },
   extra: {},
 };

@@ -75,7 +75,7 @@ describe("fixture channel parse output", () => {
   it("validates against the draft schema", async () => {
     const channel = createFixtureChannel();
     const records = await channel.collect(
-      { id: "q", keywords: [], keywordGroup: "g", location: null, remote: false, remoteScope: null, windowHours: 24, maxResults: 10 },
+      { id: "q", keywords: [], keywordGroup: "g", location: null, remote: false, remoteScope: null, company: null, windowHours: 24, maxResults: 10 },
       stubContext(),
     );
     expect(records.length).toBe(5);

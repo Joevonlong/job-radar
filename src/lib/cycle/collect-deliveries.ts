@@ -80,6 +80,11 @@ export function createCollectDeliveries(options: {
       await ledger.flush(timeoutMs);
       return write(run, true);
     },
+    /** Company post-filtering shares this exact raw-item list with the atomic audit write. */
+    retain(records: readonly RawPostingInput[]): void {
+      // Unstored receipts keep the existing discard disposition; the mismatch reason stays in logs.
+      valid.splice(0, valid.length, ...records);
+    },
     /** Audit failures must not replace the channel, cancellation or storage error being handled. */
     async fail(run: FinishRunFields, storeFailed = false): Promise<void> {
       await ledger.flush(timeoutMs);

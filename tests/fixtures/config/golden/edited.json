@@ -1,5 +1,5 @@
 {
-  "sha": "44b1681840b4d5047a6da967bc4cc2261cae4ff9",
+  "sha": "5164f944e5acc13c58723fc438a7f825a434fad4",
   "set": "edited",
   "files": {
     "schedule": {
@@ -9,7 +9,7 @@
     },
     "search": {
       "layer": "user",
-      "hash": "73d98969e0944f2552afcbc34beb519ffe5389a32d577da96007421f850af50a",
+      "hash": "665aa1a3720558a69dda14f49235d0e1a84848c6a10a03b74888a1c3d75472c0",
       "valid": true
     },
     "jobSearch": {
@@ -19,7 +19,7 @@
     },
     "channels": {
       "layer": "user",
-      "hash": "87e2f234767ba4b9df9ef3bcacfbe58ce36ff4daaebbeae8d6008d07d7a609d3",
+      "hash": "051a8152cf4a1965eae71cd532f4daa4204a39e5facd5351d398e758cf1ba032",
       "valid": true
     },
     "ai": {

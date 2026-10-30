@@ -177,7 +177,7 @@ export function berlinQuery(overrides: Partial<SearchQuery> = {}): SearchQuery {
     keywordGroup: "engineering",
     location: "Berlin",
     remote: false,
-    remoteScope: null,
+    remoteScope: null, company: null,
     windowHours: 24,
     maxResults: 25,
     ...overrides,

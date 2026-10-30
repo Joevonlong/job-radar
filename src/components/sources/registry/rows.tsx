@@ -121,6 +121,15 @@ export function ChannelRowView({ row, now, timeZone, readOnlyHint, windowDays, a
             <dd>{t("detail.runsValue", { runs: row.window.runs, failed: row.window.failed })}</dd>
           </dl>
           <div className="flex min-w-0 flex-col gap-2">
+            {row.companyQueries == null ? null : (
+              <div className="flex items-start justify-between gap-3" data-testid="company-queries-control">
+                <div className="min-w-0 text-body-sm">
+                  <p className="font-bold">{t("companyQueries.label")}</p>
+                  <p className="text-ink-2">{t("companyQueries.hint")}</p>
+                </div>
+                <EnabledSwitch id={row.id} name={row.name} enabled={row.companyQueries} readOnlyHint={readOnlyHint} companyQueries />
+              </div>
+            )}
             {detail.usage.budgetUsd > 0 ? (
               <div className="flex flex-col gap-1">
                 <span className="font-mono text-data">{t("detail.budget", { used: `$${detail.usage.usd.toFixed(2)}`, limit: `$${detail.usage.budgetUsd.toFixed(2)}` })}</span>

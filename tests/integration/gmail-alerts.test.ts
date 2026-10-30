@@ -141,7 +141,7 @@ describe("gmail-alerts through a full cycle", () => {
     const result = await cycle(
       emailRegistry(boom, (registry) =>
         registry.register(createFixtureChannel({ id: "fx-ats", family: "ats", kind: "ats", usesQueries: false, postings: [posting] }), {
-          settings: { enabled: true, maxResults: 50, monthlyBudgetUsd: 0, freeRecordsPerMonth: 0, throttle: { minDelayMs: 0, maxDelayMs: 0 }, extra: {} },
+          settings: { enabled: true, maxResults: 50, monthlyBudgetUsd: 0, companyQueries: true, freeRecordsPerMonth: 0, throttle: { minDelayMs: 0, maxDelayMs: 0 }, extra: {} },
         }),
       ),
     );
@@ -180,7 +180,7 @@ describe("cross-source merge", () => {
     const result = await cycle(
       emailRegistry(fakeMailbox(only), (registry) =>
         registry.register(createFixtureChannel({ id: "fx-ats", family: "ats", kind: "ats", usesQueries: false, postings: [posting] }), {
-          settings: { enabled: true, maxResults: 50, monthlyBudgetUsd: 0, freeRecordsPerMonth: 0, throttle: { minDelayMs: 0, maxDelayMs: 0 }, extra: {} },
+          settings: { enabled: true, maxResults: 50, monthlyBudgetUsd: 0, companyQueries: true, freeRecordsPerMonth: 0, throttle: { minDelayMs: 0, maxDelayMs: 0 }, extra: {} },
         }),
       ),
     );

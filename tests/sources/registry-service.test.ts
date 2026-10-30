@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { parse, parseDocument } from "yaml";
 
 import { currentConfigVersion, loadConfig, parseConfigText, resetConfigCache } from "@/lib/config";
-import { applySourcesImport, enableMarketChannels, exportSources, previewSourcesImport, removeAtsBoard, saveAtsBoard, setSourceEnabled } from "@/lib/sources/registry/service";
+import { applySourcesImport, enableMarketChannels, exportSources, previewSourcesImport, removeAtsBoard, saveAtsBoard, setSourceEnabled, setSourceCompanyQueries } from "@/lib/sources/registry/service";
 
 import { makeTempConfig, type TempConfig } from "../config/helpers";
 
@@ -306,4 +306,14 @@ describe("export", () => {
     expect(exportSources("yaml", options)).toMatchObject({ body: "ats_boards: nope\n" });
     expect(exportSources("json", options)).toEqual({ error: "config_invalid" });
   });
+});
+
+
+it("persists company-query opt-outs without enabling the channel and rejects unsupported targets", async () => {
+  const before = loadConfig("channels");
+  expect(await setSourceCompanyQueries({ id: "linkedin-guest", enabled: false })).toEqual({ status: "done", outcome: "disabled" });
+  expect(loadConfig("channels").linkedin.guest).toEqual({ ...before.linkedin.guest, company_queries: false });
+  expect(await setSourceCompanyQueries({ id: "linkedin-apify", enabled: false })).toMatchObject({ status: "error", error: "unknown_entry" });
+  expect(await setSourceCompanyQueries({ id: "linkedin-session:recommended", enabled: true })).toMatchObject({ status: "error", error: "unknown_entry" });
+  expect(await setSourceCompanyQueries({ id: "indeed", enabled: "false" })).toMatchObject({ status: "error", error: "invalid" });
 });

@@ -196,7 +196,7 @@ By default, paid channels keep a local delivery ledger for every record received
 | `invalid_shape` | The record could not be accepted as a posting. |
 | `stored` | Stored as a raw posting. |
 | `store_failed` | Saving the posting failed. |
-| `discarded_on_failure` | The attempt failed or was cancelled before the record could be stored. |
+| `discarded_on_failure` | The attempt failed or was cancelled before the record could be stored. In a successful run, it also marks a company-query record dropped because its employer does not match the watched company (see [Watched company queries](#watched-company-queries)). |
 
 | Flag | Meaning |
 |---|---|
@@ -456,3 +456,15 @@ risk.
 Job Radar is an independent project. It is not affiliated with, endorsed by or sponsored by any job board, employer or
 service it can talk to; all trademarks belong to their owners (see [NOTICE](../NOTICE)). The test fixtures and demo data
 are synthetic: employers, ids, links, contacts and ad texts are invented.
+
+## Watched company queries
+
+Companies in `interests.yaml: watched_companies` without an enabled ATS board are searched nationwide by name, without a remote-only filter. Arbeitsagentur, LinkedIn session and the jobspy LinkedIn guest, Indeed and Google channels support this. Other channels do not receive company queries. An enabled board suppresses its company's query; a database-only watch mark does not create one.
+
+Company names are sent to these providers by default, including for existing watch lists after upgrading. Stop all such searches with `search.yaml: watched_company_queries.enabled: false`, or disable `company_queries` in a channel's `sources.yaml` block. See [Privacy](privacy.md). Ordinary keyword searches keep their existing request construction and IDs.
+
+Each unit selects at most `max_per_cycle` due companies per cycle, at least `min_interval_hours` apart, and merges them with keyword queries by oldest turn. With `collect.query_rotation: false`, keyword config order comes first, then company list order. Company queries share budgets, session daily limits and circuit state with ordinary searches; unsupported, disabled or unconfigured members are left out. The look-back uses catch-up history and `collect.max_catch_up_hours`. Channels without automatic catch-up use at least the company interval plus tolerance, bounded by that cap, without shrinking the cycle window.
+
+Capacity is at most `max_per_cycle × cycles per day` company queries per unit per day before budgets. When the watch list exceeds seven times that capacity, some waits can exceed the usual 168-hour catch-up limit and postings can be missed. Dry-run plans and rotation logs show the queries and oldest wait; `pnpm sources:list` lists company labels, and query details appear in the [activity log](#activity-log) as **Company: name** (or the normalized key after removal).
+
+Before storing results, successfully parsed employers must match the query or another watched company. Parse failures keep their raw payload for diagnosis. `runs.fetched` counts the provider's answer before filtering; new counts include only retained postings. Logs report `company_mismatch` and up to three employer names. Legal entities, subsidiaries and brands are not automatically merged: watch each spelling or add `pipeline.yaml: company.aliases` ([extraction](extraction.md#company-and-title-keys)). Common short names can consume result slots with unrelated hits; prefer an ATS board when available. Arbeitsagentur uses its free-text `was` fallback plus this employer check.

@@ -12,8 +12,8 @@ import { shippedChannels } from "../channels/helpers";
 const NOW = new Date("2026-10-07T12:00:00Z");
 const ago = (hours: number) => new Date(NOW.getTime() - hours * 3_600_000);
 const queries: SearchQuery[] = [
-  { id: "old", keywordGroup: "targets", keywords: ["engineer"], location: "Berlin", remote: false, remoteScope: null, windowHours: 24, maxResults: 10 },
-  { id: "new", keywordGroup: "remote", keywords: ["developer"], location: null, remote: true, remoteScope: "worldwide", windowHours: 24, maxResults: 10 },
+  { id: "old", keywordGroup: "targets", keywords: ["engineer"], location: "Berlin", remote: false, remoteScope: null, company: null, windowHours: 24, maxResults: 10 },
+  { id: "new", keywordGroup: "remote", keywords: ["developer"], location: null, remote: true, remoteScope: "worldwide", company: null, windowHours: 24, maxResults: 10 },
 ];
 const state = (id: string, extra: Partial<ChannelStateRow> = {}): ChannelStateRow => ({
   id, family: "linkedin", kind: "guest", health: "healthy", circuitState: "closed", circuitOpenUntil: null,

@@ -551,3 +551,32 @@ for (const width of [390, 1280, 1920]) {
     await page.screenshot({ path: path.resolve(process.env.E2E_SHOTS_DIR ?? "test-results", `b067-priorities-${width}.png`) });
   });
 }
+
+for (const locale of ["zh", "en"] as const) {
+  test(`company-query settings save and reload all controls (${locale})`, async ({ page }) => {
+    await page.context().addCookies([{ name: "NEXT_LOCALE", value: locale, url: `http://127.0.0.1:${process.env.E2E_PORT ?? "3100"}` }]);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/settings?tab=search");
+    const card = page.getByTestId("settings-card-search");
+    const control = card.getByRole("switch", { name: locale === "en" ? "Search watched companies" : "查询关注公司", exact: true });
+    await expect(control).toBeChecked();
+    await control.click();
+    const fields = locale === "en"
+      ? ["Company queries per unit per cycle", "Minimum company query interval (hours)", "Results per company query"]
+      : ["每个单元每轮的公司查询上限", "同一公司查询的最短间隔（小时）", "每条公司查询的结果上限"];
+    for (const [index, label] of fields.entries()) await card.getByRole("textbox", { name: label, exact: true }).fill(String([2, 8, 13][index]));
+    await card.getByRole("button", { name: locale === "en" ? "Save" : "保存", exact: true }).click();
+    await expect.poll(() => parse(read("search")).watched_company_queries).toEqual({ enabled: false, max_per_cycle: 2, min_interval_hours: 8, max_results: 13 });
+    await page.reload();
+    await expect(control).not.toBeChecked();
+    for (const [index, label] of fields.entries()) await expect(card.getByRole("textbox", { name: label, exact: true })).toHaveValue(String([2, 8, 13][index]));
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    fs.mkdirSync("/tmp/company-query-shots", { recursive: true });
+    await page.screenshot({ path: `/tmp/company-query-shots/settings-${locale}-390.png`, fullPage: true });
+    await page.getByRole("button", { name: locale === "en" ? "Toggle theme" : "切换深浅主题" }).click();
+    await expect(page.locator("html")).toHaveClass(/dark/);
+    await expect(control).not.toBeChecked();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await page.screenshot({ path: `/tmp/company-query-shots/settings-${locale}-dark-390.png`, fullPage: true });
+  });
+}

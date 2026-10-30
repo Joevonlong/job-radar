@@ -132,3 +132,18 @@ describe("CascadeController", () => {
     await expect(controller().serve(async () => Promise.reject(new InfrastructureError("db down")))).rejects.toBeInstanceOf(InfrastructureError);
   });
 });
+
+it("skips ineligible members without availability checks or reasons, sharing failures across query kinds", async () => {
+  const checked: string[] = [];
+  const c = new CascadeController({ family: "linkedin", order: ORDER }, { availability: (id) => { checked.push(id); return null; } });
+  const first = await c.serve(async (id) => {
+    if (id === ORDER[0]) throw new ChannelError("blocked", "blocked");
+    return id;
+  });
+  expect(first.status).toBe("served");
+  checked.length = 0;
+  const company = await c.serve(async (id) => id, (id) => id === ORDER[0] || id === ORDER[3]);
+  expect(company).toMatchObject({ status: "served", channelId: ORDER[3] });
+  expect(checked).toEqual([ORDER[3]]);
+  expect(await c.pick(() => false)).toEqual({ reasons: {} });
+});

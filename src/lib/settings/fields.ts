@@ -11,6 +11,7 @@ import { LOCALES } from "../../i18n/catalog.generated";
 import { AI_API_PROVIDERS, type AiProviderIdChoice, AI_PROVIDER_KINDS, AI_TASK_NAMES, AI_TASK_PROVIDERS, CODEX_REASONING_EFFORTS } from "../config/ai-options";
 import { BREAKDOWN_MODES } from "../config/breakdown-options";
 import { consentKind } from "../channels/access";
+import { channelSupportsCompanyQueries } from "../channels/config-table";
 import { isProtectedPath } from "../config/protected-keys";
 import type { SettingsForm } from "./tabs";
 
@@ -304,6 +305,10 @@ const searchSections: SectionDef[] = [
       int("window_hours.evening", "window_evening"),
       int("window_hours.weekend", "window_weekend"),
       int("max_per_group_per_location", "max_per_group_per_location"),
+      bool("watched_company_queries.enabled", "company_queries_enabled"),
+      int("watched_company_queries.max_per_cycle", "company_queries_max_per_cycle"),
+      int("watched_company_queries.min_interval_hours", "company_queries_interval"),
+      int("watched_company_queries.max_results", "company_queries_max_results"),
     ],
   },
 ];
@@ -323,7 +328,7 @@ function baseFields(prefix: string, consent = false): FieldDef[] {
 }
 
 function channelSection(id: string, prefix: string, extra: FieldDef[] = []): SectionDef {
-  return { id, title: { text: id }, collapsible: true, enabledPath: `${prefix}.enabled`, fields: [...baseFields(prefix, consentKind(id) !== null), ...extra] };
+  return { id, title: { text: id }, collapsible: true, enabledPath: `${prefix}.enabled`, fields: [...baseFields(prefix, consentKind(id) !== null), ...(channelSupportsCompanyQueries(id) ? [bool(`${prefix}.company_queries`, "company_queries_channel")] : []), ...extra] };
 }
 
 const atsPrefilter = (prefix: string): FieldDef[] => [

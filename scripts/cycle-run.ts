@@ -16,6 +16,7 @@
  * queued for the ai-worker; `pnpm ai-worker --once` handles it). `execution: container` runs them here.
  */
 import { parseArgs } from "node:util";
+import { scopeLocale, translatorFor } from "../src/lib/i18n/node";
 
 import { createActivityRecorder, noopRecorder } from "../src/lib/activity";
 import { registerBuiltinChannels } from "../src/lib/channels/builtin";
@@ -161,6 +162,12 @@ async function main(): Promise<number> {
       for (const q of collect.queryPlan ?? []) {
         const where = q.remoteScope === null ? `location=${q.location ?? "-"}` : `remoteScope=${q.remoteScope}`;
         console.log(`    ${q.id} keywordGroup=${q.keywordGroup} ${where} windowHours=${q.windowHours} maxResults=${q.maxResults}`);
+      }
+      const companies = collect.queryPlan?.filter((query) => query.company) ?? [];
+      if (companies.length > 0) {
+        const tCompany = translatorFor(scopeLocale("cli"), "cli.companyQueries");
+        console.log(`  ${tCompany("title")}:`);
+        for (const query of companies) console.log(`    ${tCompany("company", { name: query.company!.name })} (${query.id})`);
       }
       for (const [id, s] of Object.entries(collect.channels)) {
         const codes = Object.keys(s.errorCodes).length > 0 ? ` errors=${JSON.stringify(s.errorCodes)}` : "";

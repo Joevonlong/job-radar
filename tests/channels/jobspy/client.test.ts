@@ -176,3 +176,10 @@ describe("rawPostingsFromJobs", () => {
     expect(out[0]?.postedAt?.toISOString()).toBe("2026-10-06T00:00:00.000Z");
   });
 });
+
+it.each(["linkedin", "indeed", "google"] as const)("%s company queries search the home country without remote filtering", (site) => {
+  const settings = jobspySettings();
+  const request = buildSearchRequest(site, query({ company: { name: "Acme", key: "acme" }, keywords: ["Acme"], location: null, remote: false, remoteScope: null }), settings);
+  expect(request).toMatchObject({ location: settings.market.countryName, search_term: '"Acme"', is_remote: false });
+  expect(request).not.toHaveProperty("radius");
+});

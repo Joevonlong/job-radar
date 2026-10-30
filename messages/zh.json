@@ -234,7 +234,8 @@
       "noBoardLink": "添加看板",
       "remove": "移除 {name}",
       "addedToast": "已关注「{name}」",
-      "removedToast": "已取消关注「{name}」"
+      "removedToast": "已取消关注「{name}」",
+      "companyQueries": "将按公司名在 {count} 个已启用通道上查询。"
     },
     "categories": {
       "title": "信号类别（{count}/{max}）",
@@ -3055,6 +3056,26 @@
       "collect_max_catch_up_hours": {
         "label": "补窗上限（小时）",
         "hint": "漏掉覆盖后自动向前回看的最长时间，0–720 小时，默认 168。设为 0 关闭自动补窗；基础窗口不会缩短。"
+      },
+      "company_queries_enabled": {
+        "label": "查询关注公司",
+        "hint": "把关注公司名发送给已启用的采集服务商。详见隐私说明；关闭此项可停止全部公司查询。"
+      },
+      "company_queries_max_per_cycle": {
+        "label": "每个单元每轮的公司查询上限",
+        "hint": "0–20，默认 3。设为 0 不发送公司查询。"
+      },
+      "company_queries_interval": {
+        "label": "同一公司查询的最短间隔（小时）",
+        "hint": "1–720 小时，默认 24。"
+      },
+      "company_queries_max_results": {
+        "label": "每条公司查询的结果上限",
+        "hint": "1–100，默认 25；各通道自身的结果上限仍然有效。"
+      },
+      "company_queries_channel": {
+        "label": "公司查询",
+        "hint": "允许此通道接收关注公司名，在本国全境查询。"
       }
     },
     "control": {
@@ -4804,6 +4825,13 @@
       "responsibility": "Job Radar 会限速，也从不尝试绕过登录墙或验证码，但如何使用由你自己负责。请先阅读 <docs>docs/sources.zh.md 的“抓取”一节</docs>和该网站的服务条款。",
       "cancel": "保持关闭",
       "confirm": "我了解风险，开启"
+    },
+    "companyQueries": {
+      "label": "公司查询",
+      "hint": "把关注公司名发送给此服务商，在本国全境查询，不限远程岗位。",
+      "switchLabel": "{name} 的公司查询",
+      "enabled": "已开启 {name} 的公司查询。",
+      "disabled": "已关闭 {name} 的公司查询。"
     }
   },
   "aiTraps": {
@@ -5944,6 +5972,10 @@
       "empty": "没有输入口令，没有输出任何内容。",
       "length": "口令需要 {min} 到 {max} 个字符，没有输出任何内容。",
       "next": "把上面这一行贴进 .env（替换旧的那一行），然后重建 web 容器：docker compose up -d web"
+    },
+    "companyQueries": {
+      "title": "公司查询",
+      "company": "公司：{name}"
     }
   },
   "setup": {
@@ -7009,7 +7041,7 @@
       "invalid_shape": "记录格式无效",
       "stored": "已存储",
       "store_failed": "存储失败",
-      "discarded_on_failure": "失败后未保留"
+      "discarded_on_failure": "过滤或失败后未入库"
     },
     "requestStatus": {
       "pending": "排队中",
@@ -7138,7 +7170,8 @@
       "not_ready": "操作日志尚未就绪，请完成数据库迁移后重试。",
       "error": "无法加载操作日志，请检查配置和数据库后重试。"
     },
-    "viewJob": "查看岗位"
+    "viewJob": "查看岗位",
+    "company": "公司：{name}"
   },
   "currentScores": {
     "missing": "当前分数投影尚未迁移。",

@@ -74,6 +74,7 @@ async function main(): Promise<number> {
     location,
     remote: values.remote,
     remoteScope,
+    company: null,
     windowHours,
     maxResults: 10,
   };

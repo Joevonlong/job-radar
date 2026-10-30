@@ -359,7 +359,7 @@ describe("watched companies", () => {
     expect(await suggestCompanyNames("100%_")).toEqual([]);
     expect(await suggestCompanyNames(42)).toEqual([]);
 
-    expect(await describeWatchedCompanies(["acme", "Unknown Inc"])).toEqual([
+    expect(await describeWatchedCompanies(["acme", "Unknown Inc"])).toMatchObject([
       { name: "acme", match: { name: "Acme GmbH", jobCount: 2 }, hasBoard: false },
       { name: "Unknown Inc", match: null, hasBoard: false },
     ]);
@@ -368,7 +368,7 @@ describe("watched companies", () => {
   it("says which watched companies have an enabled ATS board, by the push step's company key", async () => {
     const board = (name: string, token: string, enabled: boolean) => ({ name, ats: "greenhouse" as const, token, enabled });
     await writeConfig("channels", { ...loadConfig("channels"), ats_boards: [board("Anthropic", "anthropic", true), board("Acme", "acme", false), board("Globex Corp", "globex", true)] });
-    expect(await describeWatchedCompanies(["Anthropic Inc", "Acme GmbH", "globex", "Google"])).toEqual([
+    expect(await describeWatchedCompanies(["Anthropic Inc", "Acme GmbH", "globex", "Google"])).toMatchObject([
       { name: "Anthropic Inc", match: null, hasBoard: true },
       { name: "Acme GmbH", match: null, hasBoard: false }, // the board is disabled
       { name: "globex", match: null, hasBoard: true },
@@ -445,4 +445,14 @@ describe("push selection reads interests.yaml `watched_companies`", () => {
     await cycle();
     expect(texts().join("\n")).not.toContain("Third Watched Role");
   });
+});
+
+
+it("counts only enabled company-capable channels that opted in, respecting the global switch", async () => {
+  const current = loadConfig("channels");
+  await writeConfig("channels", { ...current, linkedin: { ...current.linkedin, session: { ...current.linkedin.session, enabled: true, company_queries: true }, guest: { ...current.linkedin.guest, enabled: true, company_queries: false } }, sources: { ...current.sources, arbeitsagentur: { ...current.sources.arbeitsagentur, enabled: false }, indeed: { ...current.sources.indeed, enabled: false }, jobspy_google: { ...current.sources.jobspy_google, enabled: false } } });
+  await writeConfig("search", { ...loadConfig("search"), watched_company_queries: { ...loadConfig("search").watched_company_queries, enabled: true } });
+  expect((await describeWatchedCompanies(["Acme"]))[0]?.companyQueryChannels).toBe(1);
+  await writeConfig("search", { ...loadConfig("search"), watched_company_queries: { ...loadConfig("search").watched_company_queries, enabled: false } });
+  expect((await describeWatchedCompanies(["Acme"]))[0]?.companyQueryChannels).toBe(0);
 });

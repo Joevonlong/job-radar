@@ -221,3 +221,7 @@ manual_triggers:
 - On save only the parts you changed are touched: `{ a: 1 }` / `[a, b]` styles already in the file stay as they are, and empty lists produced by schema defaults (`exclude: []`) are not written into the file.
 
 During deployment, web versions that know the freeze refuse settings, advanced editor, profile and wizard saves from step 4 with an upgrade message. On the first deploy of this version, the older web runs until step 8 and still writes harmless old-format files. Retry afterwards; for a leftover freeze see [upgrade.md](upgrade.md#settings-during-an-upgrade).
+
+### Company query controls
+
+Settings → Search → Look-back and limits includes Search watched companies, company queries per unit per cycle, minimum interval and results per company query. Saving preserves unrelated search settings. Sources → Registry → a supported channel's Details has an independent Company queries switch; Settings → Channels offers the same value. Disabling that switch does not disable keyword searches or enable the source itself. The Interests watch-list hint shows how many supported, enabled channels currently opt in (zero when the global switch is off). See [privacy and opt-outs](privacy.md) and [configuration and rollback](configuration.md#watched-company-searches).

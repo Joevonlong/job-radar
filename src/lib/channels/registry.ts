@@ -3,57 +3,8 @@ import { loadMarket } from "@/lib/market/resolve";
 
 import type { Channel, ChannelRuntimeSettings } from "./types";
 
-type LinkedinKey = "brightdata" | "apify" | "monid" | "session" | "guest";
-type SourceKey = keyof ChannelsConfig["sources"];
-
-/** Which view of its config block a channel uses; `recommended` = the "recommended for you" side channel of `linkedin.session`. */
-type ConfigView = "recommended";
-
-export type ChannelConfigRef = (
-  | { readonly section: "linkedin"; readonly key: LinkedinKey; readonly view?: ConfigView }
-  | { readonly section: "sources"; readonly key: SourceKey }
-) & { readonly usesQueries?: false };
-
-/**
- * The single table linking a channel id to its block in sources.yaml. A channel can only be
- * registered (and therefore enabled) if it has an entry here. Source channels use the config key as id.
- */
-export const CHANNEL_CONFIG_TABLE = {
-  "linkedin-brightdata": { section: "linkedin", key: "brightdata" },
-  "linkedin-apify": { section: "linkedin", key: "apify" },
-  "linkedin-monid": { section: "linkedin", key: "monid" },
-  "linkedin-session": { section: "linkedin", key: "session" },
-  "linkedin-session:recommended": { section: "linkedin", key: "session", view: "recommended", usesQueries: false },
-  "linkedin-guest": { section: "linkedin", key: "guest" },
-  arbeitsagentur: { section: "sources", key: "arbeitsagentur" },
-  indeed: { section: "sources", key: "indeed" },
-  stepstone: { section: "sources", key: "stepstone" },
-  xing: { section: "sources", key: "xing" },
-  arbeitnow: { section: "sources", key: "arbeitnow", usesQueries: false },
-  jsearch: { section: "sources", key: "jsearch" },
-  greenhouse: { section: "sources", key: "greenhouse", usesQueries: false },
-  lever: { section: "sources", key: "lever", usesQueries: false },
-  ashby: { section: "sources", key: "ashby", usesQueries: false },
-  personio: { section: "sources", key: "personio", usesQueries: false },
-  smartrecruiters: { section: "sources", key: "smartrecruiters", usesQueries: false },
-  brave: { section: "sources", key: "brave", usesQueries: false },
-  tavily: { section: "sources", key: "tavily", usesQueries: false },
-  "gmail-alerts": { section: "sources", key: "gmail", usesQueries: false },
-  "jobspy-google": { section: "sources", key: "jobspy_google" },
-} as const satisfies Record<string, ChannelConfigRef>;
-
-export type ConfiguredChannelId = keyof typeof CHANNEL_CONFIG_TABLE;
-
-/** Static keyword capability for the web process, which has no channel instances. */
-export function channelUsesQueries(id: string): boolean {
-  if (!isConfiguredChannelId(id)) return false;
-  const ref: ChannelConfigRef = CHANNEL_CONFIG_TABLE[id];
-  return ref.usesQueries !== false;
-}
-
-export function isConfiguredChannelId(id: string): id is ConfiguredChannelId {
-  return Object.hasOwn(CHANNEL_CONFIG_TABLE, id);
-}
+import { CHANNEL_CONFIG_TABLE, isConfiguredChannelId, type ChannelConfigRef, type ConfiguredChannelId } from "./config-table";
+export { CHANNEL_CONFIG_TABLE, channelUsesQueries, channelSupportsCompanyQueries, isConfiguredChannelId, type ChannelConfigRef, type ConfiguredChannelId } from "./config-table";
 
 /** Records a channel may use per month before they cost money: Bright Data's free allowance, JSearch's plan requests, Tavily's plan credits. */
 function includedRecords(ref: ChannelConfigRef, config: ChannelsConfig): number {
@@ -86,6 +37,7 @@ export function settingsFromConfig(id: ConfiguredChannelId, config: ChannelsConf
     const session = config.linkedin.session;
     return {
       enabled: session.enabled && session.recommended_daily && !otherMarket,
+      companyQueries: false,
       otherMarket,
       markets,
       maxResults: session.recommended_max_results,
@@ -97,6 +49,7 @@ export function settingsFromConfig(id: ConfiguredChannelId, config: ChannelsConf
   }
   return {
     enabled: block.enabled && !otherMarket,
+    companyQueries: "company_queries" in block ? block.company_queries : false,
     otherMarket,
     markets,
     maxResults: block.max_results,

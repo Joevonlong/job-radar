@@ -91,7 +91,7 @@ function makeContext(
       enabled: true,
       maxResults: options.maxResults ?? merged.max_results,
       monthlyBudgetUsd: 0,
-      freeRecordsPerMonth: 0,
+      companyQueries: true, freeRecordsPerMonth: 0,
       throttle: { minDelayMs: THROTTLE_MS, maxDelayMs: THROTTLE_MS },
       extra: merged,
     },

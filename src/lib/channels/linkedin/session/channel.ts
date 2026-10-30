@@ -351,6 +351,7 @@ export function createSessionChannels(deps: SessionChannelDeps = defaultSessionD
     family: "linkedin",
     kind: "session",
     usesQueries: true,
+    supportsCompanyQueries: true,
     isConfigured: configured,
     async collect(query: SearchQuery, ctx: ChannelContext): Promise<RawPostingInput[]> {
       const settings = readSessionSettings(ctx.settings.extra);

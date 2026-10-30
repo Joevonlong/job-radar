@@ -2,12 +2,16 @@ import "server-only";
 
 import { getTranslations } from "next-intl/server";
 import { loadConfig } from "@/lib/config";
+import { watchedCompanyBoards } from "@/lib/companies/watched-boards";
+import { logActionFailure } from "@/lib/logging/action-failure";
+import { loadPipeline } from "@/lib/market";
+import { currentWatchedCompanies } from "@/lib/filter";
 import { ConfigError } from "@/lib/config/errors";
-import { activityTablesReady, getDb, getDbNow, getActivityRoot, listActivityEvents, listActivityRoots, listQueryRows } from "@/lib/db";
+import { activityTablesReady, getCycle, getDb, getDbNow, getActivityRoot, listActivityEvents, listActivityRoots, listQueryRows } from "@/lib/db";
 import { dayInZone } from "@/lib/insights/range";
 import { z } from "zod";
 import { displayChildStatus, displayStatus } from "./display-status";
-import { resolveQueryLabels } from "./query-labels";
+import { liveCompanyBoards, resolveQueryLabels, storedCompanyQueryKeys } from "./query-labels";
 import { activitySearchSchema, resolveActivityRange, type ActivitySearchParams } from "./search";
 
 async function context(searchParams: Promise<ActivitySearchParams>) {
@@ -56,7 +60,9 @@ export async function loadActivityDetail(rootId: string, searchParams: Promise<A
     ]);
     const page = Math.min(url.page, Math.max(1, Math.ceil(initialEvents.total / config.ui.events_page_size)));
     const events = page === url.page ? initialEvents : await listActivityEvents(db, rootId, { page, pageSize: config.ui.events_page_size, ...(url.level !== "all" ? { level: url.level } : {}) });
-    const queryLabels = resolveQueryLabels(loadConfig("search"), t);
+    const cycle = detail.root.cycleId === null ? null : await getCycle(db, detail.root.cycleId);
+    const companies = liveCompanyBoards(() => watchedCompanyBoards(currentWatchedCompanies(), [], loadPipeline()), (error) => logActionFailure("activityQueryLabels", error));
+    const queryLabels = resolveQueryLabels(loadConfig("search"), t, companies, storedCompanyQueryKeys(cycle?.summaryJson));
     const day = dayInZone(detail.root.startedAt, timeZone);
     const aiParams = new URLSearchParams({ range: "custom", from: day, to: day });
     const task = ({ "request.translate_job": "translate", "request.breakdown_job": "breakdown", "request.score_jobs": "score", "request.rescore_stale": "score", "request.salary_lookup": "salary_lookup", "request.run_suggest": "suggest", "request.test_ai": "probe" } as Record<string, string>)[detail.root.name];

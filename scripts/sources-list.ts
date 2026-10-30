@@ -20,6 +20,13 @@ import { cliRows, hasFailingEnabled, registryText, removedRows, renderRegistryJs
 import { loadRegistryPage } from "../src/lib/sources/registry/load";
 import { isRegistryStatus, REGISTRY_STATUSES, type RegistryStatus } from "../src/lib/sources/registry/status";
 import { syncSourceRegistry } from "../src/lib/sources/registry/sync";
+import { buildCompanyQueries } from "../src/lib/channels/query";
+import type { SearchQuery } from "../src/lib/channels/types";
+import { CHANNEL_CONFIG_TABLE, channelSupportsCompanyQueries, isConfiguredChannelId, settingsFromConfig } from "../src/lib/channels/registry";
+import { watchedCompanyBoards } from "../src/lib/companies/watched-boards";
+import { currentWatchedCompanies } from "../src/lib/filter";
+import { loadPipeline } from "../src/lib/market";
+import { translatorFor } from "../src/lib/i18n/node";
 
 function usage(message: string): never {
   console.error(`sources:list: ${message}`);
@@ -84,8 +91,24 @@ async function main(): Promise<number> {
   }
 
   const sorted = sortCliRows(rows);
+  const enabledCompanyChannels = Object.keys(CHANNEL_CONFIG_TABLE).filter(isConfiguredChannelId).filter((id) => channelSupportsCompanyQueries(id) && settingsFromConfig(id, config).enabled && settingsFromConfig(id, config).companyQueries);
+  let companyQueries: Pick<SearchQuery, "id" | "company">[] = [];
+  try {
+    const search = loadConfig("search");
+    const watched = search.watched_company_queries.enabled ? currentWatchedCompanies() : [];
+    if (enabledCompanyChannels.length > 0 && watched.length > 0) {
+      companyQueries = buildCompanyQueries(search, watchedCompanyBoards(watched, config.ats_boards, loadPipeline()), 0).map((q) => ({ id: q.id, company: q.company }));
+    }
+  } catch { /* Optional query labels must not make the source registry unavailable. */ }
+  const companyText = translatorFor(scopeLocale("cli", args.lang), "cli.companyQueries");
   const report = { rows: sorted, windowDays, timeZone, fileLabel, total: entries.length, counts, mirror };
-  console.log(args.json ? renderRegistryJson({ ...report, generatedAt: new Date().toISOString() }) : renderRegistryText(report, words));
+  if (args.json) {
+    const rendered: unknown = JSON.parse(renderRegistryJson({ ...report, generatedAt: new Date().toISOString() }));
+    console.log(JSON.stringify({ ...(rendered as Record<string, unknown>), companyQueries }, null, 2));
+  } else {
+    console.log(renderRegistryText(report, words));
+    if (companyQueries.length > 0) console.log(`\n${companyText("title")}\n${companyQueries.map((q) => `  ${companyText("company", { name: q.company!.name })} (${q.id})`).join("\n")}`);
+  }
   await closeDb().catch(() => {});
   if (args.strict && (!dbOk || hasFailingEnabled(sorted))) return 1;
   return 0;

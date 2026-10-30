@@ -137,7 +137,7 @@ async function main(): Promise<number> {
   if (!group || !keywords?.length || !location) throw new Error("Unknown keyword group or no location configured");
   const query: SearchQuery = {
     id: queryId({ keywords, keywordGroup: group, location, remote: false, remoteScope: null }),
-    keywords: [...keywords], keywordGroup: group, location, remote: false, remoteScope: null, windowHours, maxResults: limit,
+    keywords: [...keywords], keywordGroup: group, location, remote: false, remoteScope: null, company: null, windowHours, maxResults: limit,
   };
   const inputs = buildActorInputs(query, block, limit, marketForChannel());
   if (inputs.length !== 1) throw new Error("Choose a shorter keyword group: smoke permits exactly one run");

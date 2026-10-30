@@ -14,7 +14,7 @@ export function hookConfig() {
   const result = config();
   result.search = {
     keyword_groups: { engineering: ["Engineer"] }, locations: ["Test City A", "Test City B", "Test City C"],
-    remote_scope: "none", window_hours: { morning: 24, evening: 12, weekend: 48 }, max_per_group_per_location: 2,
+    remote_scope: "none", window_hours: { morning: 24, evening: 12, weekend: 48 }, max_per_group_per_location: 2, watched_company_queries: { enabled: true, max_per_cycle: 3, min_interval_hours: 24, max_results: 25 },
   };
   result.schedule = { ...result.schedule, timezone: "UTC", skip_if_running: true };
   result.channels = { ...result.channels, paid_total_monthly_budget_usd: 100, collect: { ...result.channels.collect, concurrency: 1 } };

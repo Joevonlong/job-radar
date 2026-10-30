@@ -295,3 +295,34 @@ test("at 390px the import dialog fits the screen, with a long preview too", asyn
   expect(fit.right).toBeLessThanOrEqual(fit.viewport);
   expect(fit.overflow).toBeLessThanOrEqual(0);
 });
+
+for (const locale of ["en", "zh"] as const) {
+  for (const theme of ["light", "dark"] as const) {
+    for (const width of [390, 1280]) {
+      test(`company-query opt-out persists: ${locale}, ${theme}, ${width}px`, async ({ page }) => {
+        await page.setViewportSize({ width, height: 900 });
+        await page.context().addCookies([{ name: "NEXT_LOCALE", value: locale, url: `http://127.0.0.1:${process.env.E2E_PORT ?? "3100"}` }]);
+        await page.addInitScript((value) => localStorage.setItem("theme", value), theme);
+        setKeys({ "sources.arbeitsagentur.company_queries": true });
+        const enabledBefore = parse(read()).sources.arbeitsagentur.enabled;
+        await page.goto("/sources/registry?type=channel&q=arbeitsagentur");
+        const channel = row(page, "arbeitsagentur");
+        await channel.getByTestId("row-details-toggle").click();
+        const control = channel.getByTestId("company-queries-switch");
+        await expect(control).toBeChecked();
+        await control.click();
+        await expect.poll(() => parse(read()).sources.arbeitsagentur.company_queries).toBe(false);
+        await page.reload();
+        await channel.getByTestId("row-details-toggle").click();
+        await expect(control).not.toBeChecked();
+        expect(parse(read()).sources.arbeitsagentur.enabled).toBe(enabledBefore);
+        await control.click();
+        await expect.poll(() => parse(read()).sources.arbeitsagentur.company_queries).toBe(true);
+        await expect(control).toBeChecked();
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+        fs.mkdirSync("/tmp/company-query-shots", { recursive: true });
+        await page.screenshot({ path: `/tmp/company-query-shots/registry-${locale}-${theme}-${width}.png`, fullPage: true });
+      });
+    }
+  }
+}

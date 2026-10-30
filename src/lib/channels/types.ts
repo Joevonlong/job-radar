@@ -34,13 +34,14 @@ export type ChannelKind = (typeof CHANNEL_KINDS)[number];
 export type RemoteScope = Exclude<SearchConfig["remote_scope"], "none">;
 
 export interface SearchQuery {
-  /** Stable hash of what is searched (keywords, group, location, remote); see `queryId`. */
+  /** Stable hash of the keyword search, or of only the company key; see `queryId`. */
   id: string;
+  company: { name: string; key: string } | null;
   /** One OR-group: a posting matches if it matches any of these. */
   keywords: string[];
-  /** Id of the group in search.yaml (`*` for the board-sweep query of channels that ignore keywords). */
+  /** Group in search.yaml, `company:<key>` for a company, or `*` for a board sweep. */
   keywordGroup: string;
-  /** City, or null for the remote query. */
+  /** City, or null for a remote, company or board-sweep query. */
   location: string | null;
   remote: boolean;
   /** Region a remote posting must be open to (`search.yaml: remote_scope`); null for located queries. */
@@ -229,6 +230,7 @@ export interface ChannelBudget {
 export interface ChannelRuntimeSettings {
   /** `enabled` in sources.yaml and the channel serves the current market. */
   readonly enabled: boolean;
+  readonly companyQueries: boolean;
   /** The channel serves only other markets (`markets` without the home country): left out, not a failure. */
   readonly otherMarket?: boolean;
   /** `markets` of sources.yaml; empty = every market. */
@@ -285,6 +287,7 @@ export interface Channel {
   readonly kind: ChannelKind;
   /** false for channels that ignore keyword queries and iterate their own boards (ATS). */
   readonly usesQueries: boolean;
+  readonly supportsCompanyQueries?: boolean;
   /**
    * Fetch postings for one query. Must return every posting verbatim (C1). Throw `ChannelError`
    * (or let `ctx.http` throw) for failures; other thrown values are classified as `unknown`.

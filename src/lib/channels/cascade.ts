@@ -52,9 +52,10 @@ export class CascadeController {
   }
 
   /** The first usable channel id for the next query, or per-channel reasons when there is none. */
-  async pick(): Promise<{ channelId: string } | { reasons: Record<string, string> }> {
+  async pick(eligible?: (id: string) => boolean): Promise<{ channelId: string } | { reasons: Record<string, string> }> {
     const reasons: Record<string, string> = {};
     for (const id of this.spec.order) {
+      if (eligible && !eligible(id)) continue;
       const failed = this.unusable.get(id);
       if (failed !== undefined) {
         reasons[id] = `failed_this_cycle:${failed}`;
@@ -72,10 +73,10 @@ export class CascadeController {
    * errors. `attempt` should throw (a ChannelError, or anything: it is classified) when it fails.
    * Cancellation and infrastructure errors propagate.
    */
-  async serve<T>(attempt: (channelId: string) => Promise<T>): Promise<ServeOutcome<T>> {
+  async serve<T>(attempt: (channelId: string) => Promise<T>, eligible?: (id: string) => boolean): Promise<ServeOutcome<T>> {
     const attempts: FailedAttempt[] = [];
     for (;;) {
-      const picked = await this.pick();
+      const picked = await this.pick(eligible);
       if ("reasons" in picked) return { status: "skipped", reasons: picked.reasons, attempts };
       try {
         const value = await attempt(picked.channelId);
