@@ -107,6 +107,37 @@ describe("company-query collection", () => {
     } else expect(new Set(all).size).toBe(1);
   });
 
+  it("serves every keyword and company query over several cycles when the budget runs out after a few records", async () => {
+    const cap = 1;
+    const perCycle = 2;
+    const test = setup({ cap, interval: 1 });
+    const fixture = createFixtureChannel({ postings: [posting("northstar", "Northstar Labs"), posting("moonbeam", "Moonbeam"), posting("keyword", "Agency")] });
+    const records = await fixture.collect(buildQueries(test.cfg.search, "manual")[0]!, stubContext());
+    const recordFor = (query: SearchQuery) => records.find((record) => record.externalId === (query.company === null ? "keyword" : query.company.key === "moonbeam" ? "moonbeam" : "northstar"))!;
+    let served: SearchQuery[] = [];
+    let delivered = 0;
+    test.add("budgeted", true, async (query) => {
+      if (delivered >= perCycle) throw new ChannelError("budget_exceeded", "monthly budget used up for this cycle");
+      delivered++;
+      served.push(query);
+      return [{ ...recordFor(query), externalId: `${query.id}-${delivered}` }];
+    }, { parse: fixture.parse });
+    const seen = new Set<string>();
+    for (let cycle = 0; cycle < 4; cycle++) {
+      served = [];
+      delivered = 0;
+      const { rows } = await test.run(["budgeted"], new Date(NOW.getTime() + cycle * 3_600_000));
+      for (const query of served) seen.add(query.id);
+      expect(served).toHaveLength(perCycle);
+      expect(served.filter(isCompany).length).toBeLessThanOrEqual(cap);
+      const companyRuns = rows.filter((row) => row.status === "succeeded" && served.some((query) => query.id === row.queryHash && isCompany(query)));
+      expect(companyRuns.length).toBeLessThanOrEqual(cap);
+    }
+    const company = buildCompanyQueries(test.cfg.search, names.map((name, i) => ({ name, key: i ? "moonbeam" : "northstar-labs", hasBoard: false })), 24);
+    expect(company).toHaveLength(2);
+    for (const query of [...buildQueries(test.cfg.search, "manual"), ...company]) expect(seen, query.company?.name ?? query.keywords.join(" / ")).toContain(query.id);
+  });
+
   it("skips ineligible members without runs or circuit changes", async () => {
     const test = setup();
     test.add("keyword-only", false);
