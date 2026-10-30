@@ -706,3 +706,11 @@ This shipped file controls the rebuildable display-score projection. A user over
 `backfill.statement_timeout_ms` limits the backfill statement itself (1000–600000 ms). They are separate per-statement
 limits, not a total migration timeout. `refresh.lateral_max_jobs` chooses indexed LATERAL lookups for small refreshes;
 larger sets use the job-scoped CTE (1–100000 jobs). All keys are required. This file does not affect filter fingerprints.
+
+## Watched company searches
+
+`search.yaml` adds `watched_company_queries`: `enabled` (default `true`), `max_per_cycle` (3 per unit), `min_interval_hours` (24), and `max_results` (25 per query, further capped by the channel). Missing blocks or keys in existing user files receive these schema defaults; explicit `false` is respected. No database migration is needed.
+
+Supported channel blocks in `sources.yaml` have `company_queries: true` by default: `linkedin.session`, `linkedin.guest`, `sources.arbeitsagentur`, `sources.indeed` and `sources.jobspy_google`. Change them on Sources → Registry → Details, or Settings → Channels. These switches authorize sending watched company names to the provider; see [Privacy](privacy.md) and [query behavior and capacity](sources.md#watched-company-queries). Settings → Search edits the global switch, cap, interval and result limit.
+
+**Rollback:** to stop queries, set `watched_company_queries.enabled: false`. Before starting older code, remove the entire `watched_company_queries` block from `data/config/search.yaml` and every `company_queries` key from user `data/config/sources.yaml` (including any unsupported blocks written by a settings save). Run the older build's `pnpm config:check`; its strict schemas reject the new keys. Keep database history and raw postings.

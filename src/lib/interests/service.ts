@@ -7,10 +7,11 @@
  * Every change re-reads the file first and changes only its own part, so saving the vocabulary never
  * touches views or watched companies and the other way round. File and directory locks serialize all writers.
  */
+import { CHANNEL_CONFIG_TABLE, channelSupportsCompanyQueries, isConfiguredChannelId, settingsFromConfig } from "@/lib/channels/registry";
 import { logActionFailure } from "@/lib/logging/action-failure";
 import { z } from "zod";
 
-import { ConfigError, configErrorKey, interestsSchema, loadCompanies, mutateConfig, type InterestsConfig } from "@/lib/config";
+import { ConfigError, configErrorKey, interestsSchema, loadConfig, loadCompanies, mutateConfig, type InterestsConfig } from "@/lib/config";
 import { loadPipeline } from "@/lib/market";
 import { viewFiltersSchema, type SavedView } from "@/lib/config/schemas/interests";
 import { watchedCompanyBoards } from "@/lib/companies/watched-boards";
@@ -274,6 +275,13 @@ export async function suggestCompanyNames(rawQuery: unknown): Promise<string[]> 
 
 /** The watched names with the company each one matches in the database, and whether an ATS board carries it. */
 export async function describeWatchedCompanies(names: readonly string[]): Promise<WatchedCompanyView[]> {
+  let companyQueryChannels = 0;
+  try {
+    const config = loadConfig("channels");
+    if (loadConfig("search").watched_company_queries.enabled) {
+      companyQueryChannels = Object.keys(CHANNEL_CONFIG_TABLE).filter(isConfiguredChannelId).filter((id) => channelSupportsCompanyQueries(id) && settingsFromConfig(id, config).enabled && settingsFromConfig(id, config).companyQueries).length;
+    }
+  } catch (error) { logActionFailure("describeWatchedCompanies", error); }
   const keys = names.map(companyKey);
   let found: Awaited<ReturnType<typeof listCompaniesWithJobCount>> = [];
   try {
@@ -294,6 +302,6 @@ export async function describeWatchedCompanies(names: readonly string[]): Promis
   return names.map((name, index) => {
     const key = keys[index] ?? "";
     const company = byKey.get(key);
-    return { name, match: company ? { name: company.name, jobCount: company.jobCount } : null, hasBoard: boardKeys === null ? true : (boardKeys.get(key) ?? false) };
+    return { name, companyQueryChannels, match: company ? { name: company.name, jobCount: company.jobCount } : null, hasBoard: boardKeys === null ? true : (boardKeys.get(key) ?? false) };
   });
 }

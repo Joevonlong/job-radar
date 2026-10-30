@@ -58,4 +58,3 @@ export function channelSupportsCompanyQueries(id: string): boolean {
 export function isConfiguredChannelId(id: string): id is ConfiguredChannelId {
   return Object.hasOwn(CHANNEL_CONFIG_TABLE, id);
 }
-

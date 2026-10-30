@@ -2,6 +2,7 @@
 import { z } from "zod";
 
 import { consentKind, type ConsentKind } from "@/lib/channels/access";
+import { channelSupportsCompanyQueries, isConfiguredChannelId, settingsFromConfig } from "@/lib/channels/registry";
 import type { ChannelsConfig, RegistrySettings } from "@/lib/config";
 import { ATS_KINDS } from "@/lib/config/schemas/companies";
 import type { BoardHealthRow, ChannelWindowStat } from "@/lib/db/queries/source-health";
@@ -20,6 +21,7 @@ export interface ChannelRow {
   group: RegistryGroup;
   name: string;
   enabled: boolean;
+  companyQueries?: boolean | null;
   status: RegistryStatus;
   reasons: RegistryReason[];
   /** The channel serves only other markets: off, its switch locked, listed under "other markets". */
@@ -176,6 +178,7 @@ export function buildRegistryView(input: RegistryViewInput): RegistryView {
         group: entry.group,
         name: entry.name,
         enabled: entry.enabled,
+        companyQueries: channelSupportsCompanyQueries(entry.id) && isConfiguredChannelId(entry.id) ? settingsFromConfig(entry.id, input.config).companyQueries : null,
         status: verdict.status,
         reasons: verdict.reasons,
         otherMarket,

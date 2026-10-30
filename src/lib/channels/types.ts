@@ -34,14 +34,14 @@ export type ChannelKind = (typeof CHANNEL_KINDS)[number];
 export type RemoteScope = Exclude<SearchConfig["remote_scope"], "none">;
 
 export interface SearchQuery {
-  /** Stable hash of what is searched (keywords, group, location, remote); see `queryId`. */
+  /** Stable hash of the keyword search, or of only the company key; see `queryId`. */
   id: string;
   company: { name: string; key: string } | null;
   /** One OR-group: a posting matches if it matches any of these. */
   keywords: string[];
-  /** Id of the group in search.yaml (`*` for the board-sweep query of channels that ignore keywords). */
+  /** Group in search.yaml, `company:<key>` for a company, or `*` for a board sweep. */
   keywordGroup: string;
-  /** City, or null for the remote query. */
+  /** City, or null for a remote, company or board-sweep query. */
   location: string | null;
   remote: boolean;
   /** Region a remote posting must be open to (`search.yaml: remote_scope`); null for located queries. */

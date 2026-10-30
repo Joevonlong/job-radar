@@ -88,3 +88,7 @@
 4. 对着真实页面对一遍：把页面 HTML 脱敏后替换 `tests/fixtures/linkedin-session/` 里的 fixture，再跑 `pnpm test` 看解析器是否仍然通过。
 
 试跑通过只读数据库连接读取已存的当天页面计数和登录标记。当天页数用完就不打开浏览器；要求重新登录的标记会像真实运行一样阻止试跑。`linkedin-session` 或 `linkedin-session:recommended` 任一通道下已存的岗位都会复用，不再打开详情页。页面计数每次都从数据库重新读取，所以同时进行的真实运行打开的页面也算在内；同一轮试跑的全部查询和两个 session 通道共用这轮自己在内存中的页面增量和登录状态变化。页面计数增量、登录状态变化和推荐列表的已读标记都只留在内存里，因此试跑不计入当天用量。会话状态读不了时，采集会在打开浏览器前停止。
+
+## 关注公司
+
+搜索通道支持按公司名查询本国全境、不限远程的岗位；推荐通道不支持。公司查询和关键词查询共用登录账号、节流和 `daily_request_limit`，会占用关键词查询的每日容量。公司名默认随请求以你的账号外发。可在 `sources.yaml` 设 `linkedin.session.company_queries: false` 单独关闭，或在 `search.yaml` 设 `watched_company_queries.enabled: false` 全部关闭。来源清单详情及设置中也有对应开关。详见[隐私](privacy.zh.md)、[容量与雇主匹配](sources.zh.md#关注公司查询)。

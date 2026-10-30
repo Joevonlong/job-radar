@@ -8,6 +8,7 @@ import {
   removeAtsBoard,
   saveAtsBoard,
   setSourceEnabled,
+  setSourceCompanyQueries,
   type ImportPreviewState,
   type RegistryActionState,
 } from "@/lib/sources/registry/service";
@@ -26,6 +27,12 @@ function refresh(result: RegistryActionState): RegistryActionState {
 
 export async function setSourceEnabledAction(payload: unknown): Promise<RegistryActionState> {
   return refresh(await setSourceEnabled(payload));
+}
+
+export async function setSourceCompanyQueriesAction(payload: unknown): Promise<RegistryActionState> {
+  const result = refresh(await setSourceCompanyQueries(payload));
+  if (result.status === "done") revalidatePath("/interests");
+  return result;
 }
 
 export async function saveAtsBoardAction(payload: unknown): Promise<RegistryActionState> {

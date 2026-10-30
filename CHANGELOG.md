@@ -16,6 +16,7 @@ and the project uses [Semantic Versioning](https://semver.org/).
   `country` and `searchIn` are URL-only, never written to saved views. No migration or stored-data rewrite is needed.
   The web server and the read-only MCP server open their database sessions with `jit = off` (Postgres JIT compilation
   cost more than these queries); runner and AI worker keep the server default.
+- **Watched company names now leave your machine by default.** Existing watch lists without an enabled ATS board start nationwide searches on supported, enabled free channels. Set `search.yaml: watched_company_queries.enabled: false` to stop all company queries, or a channel block's `company_queries: false` in `sources.yaml` to opt it out. Company queries share existing budgets and session limits. Before rolling back, remove these keys from user configuration and run the older version's `pnpm config:check`; keep database history. See [Privacy](docs/privacy.md) and [rollback](docs/configuration.md#watched-company-searches).
 
 - **Rolling back past catch-up windows:** setting `collect.max_catch_up_hours: 0` stops new stretched runs, but history
   does not expire on its own. For a safe rollback, use a build that retains `and not r.window_extended` in

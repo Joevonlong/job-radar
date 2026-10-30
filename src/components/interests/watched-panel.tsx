@@ -191,7 +191,7 @@ export function WatchedPanel({ watched }: { watched: WatchedCompanyView[] }) {
                 </span>
                 {company.hasBoard ? null : (
                   <span className="text-ink-3 font-mono text-data-sm" data-testid="watched-no-board">
-                    {t("noBoard")}{" "}
+                    {t("companyQueries", { count: company.companyQueryChannels ?? 0 })}{" "}
                     <Link href="/sources/registry" className="underline underline-offset-4">
                       {t("noBoardLink")}
                     </Link>

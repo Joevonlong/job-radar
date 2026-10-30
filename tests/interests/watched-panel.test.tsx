@@ -20,22 +20,22 @@ const wrap = (node: ReactNode, locale: "en" | "zh" = "en") => (
 
 const watched: WatchedCompanyView[] = [
   { name: "Anthropic", match: null, hasBoard: true },
-  { name: "Google", match: { name: "Google", jobCount: 3 }, hasBoard: false },
+  { name: "Google", match: { name: "Google", jobCount: 3 }, hasBoard: false, companyQueryChannels: 3 },
 ];
 
 describe("WatchedPanel: companies without a job board", () => {
-  it("tells only the company without a board that its jobs come from the city queries, with a link to the registry", () => {
+  it("shows enabled company-query capacity only for companies without a board, with a link to the registry", () => {
     render(wrap(<WatchedPanel watched={watched} />));
     const [anthropic, google] = screen.getAllByTestId("watched-item");
     expect(within(anthropic as HTMLElement).queryByTestId("watched-no-board")).toBeNull();
     const hint = within(google as HTMLElement).getByTestId("watched-no-board");
-    expect(hint).toHaveTextContent("No job board configured: its jobs are only found through the queries for your target cities.");
+    expect(hint).toHaveTextContent("Will search by company name on 3 enabled channels.");
     expect(within(hint).getByRole("link", { name: "Add a board" })).toHaveAttribute("href", "/sources/registry");
   });
 
   it("says it in Chinese", () => {
     render(wrap(<WatchedPanel watched={watched} />, "zh"));
-    expect(screen.getByTestId("watched-no-board")).toHaveTextContent("没有配置招聘看板：只能靠目标城市的查询采到。");
+    expect(screen.getByTestId("watched-no-board")).toHaveTextContent("将按公司名在 3 个已启用通道上查询。");
     expect(screen.getByRole("link", { name: "添加看板" })).toHaveAttribute("href", "/sources/registry");
   });
 

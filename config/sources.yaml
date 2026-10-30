@@ -143,6 +143,7 @@ linkedin:
 
   session:
     # Cascade position 4: searches jobs with your own LinkedIn login session (Playwright, read-only). Log in once first by running `pnpm auth:linkedin` on the host;
+    company_queries: true # sends watched company names; see docs/privacy.md
     # without a session (.auth/linkedin.json), /sources shows "not logged in" and the cascade skips it. On a login or verification page (checkpoint / CAPTCHA) it stops at once, trips the circuit breaker and sends a Telegram alert,
     # and never tries to get past it automatically. See docs/linkedin-session.md.
     enabled: false # turn on after logging in and confirming `pnpm cycle:run --channel linkedin-session --dry-run` works
@@ -174,6 +175,7 @@ linkedin:
 
   guest:
     enabled: false # scraping channel, off by default: read "Scraping" in docs/sources.md before switching it on (setup wizard or /sources/registry). jobspy uses the logged-out endpoints: free, most prone to 429
+    company_queries: true # sends watched company names; see docs/privacy.md
     monthly_budget_usd: 0
     throttle: { min_delay_ms: 2000, max_delay_ms: 6000 }
     max_results: 100
@@ -195,6 +197,7 @@ jobspy:
 sources:
   arbeitsagentur:
     enabled: true
+    company_queries: true # sends watched company names; see docs/privacy.md
     # Runs only in these markets (home country ISO codes); skipped in other markets, not counted as a failure
     markets: [DE]
     monthly_budget_usd: 0
@@ -214,6 +217,7 @@ sources:
     remote_max_pages: 4 # max pages per keyword when filtering (most results are on-site jobs)
   indeed:
     enabled: false # scraping channel, off by default: read "Scraping" in docs/sources.md before switching it on (setup wizard or /sources/registry)
+    company_queries: true # sends watched company names; see docs/privacy.md
     monthly_budget_usd: 0
     throttle: { min_delay_ms: 2000, max_delay_ms: 5000 }
     max_results: 100
@@ -391,6 +395,7 @@ sources:
     max_queries_per_run: 40 # max searches per pass; when 5 ATS × groups × cities is more, each pass searches the ones that waited longest first
   jobspy_google:
     enabled: false # jobspy's Google Jobs scraping is unreliable, off by default
+    company_queries: true # sends watched company names; see docs/privacy.md
     monthly_budget_usd: 0
     throttle: { min_delay_ms: 3000, max_delay_ms: 8000 }
     max_results: 50

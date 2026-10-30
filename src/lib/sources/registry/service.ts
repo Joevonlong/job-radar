@@ -28,6 +28,7 @@ import {
   type ConfigWriteErrorKey,
 } from "@/lib/config";
 import { consentKind, type ConsentKind } from "@/lib/channels/access";
+import { channelSupportsCompanyQueries } from "@/lib/channels/registry";
 import { getDb } from "@/lib/db";
 
 import { buildRegistryEntries } from "./entries";
@@ -125,6 +126,19 @@ export async function setSourceEnabled(raw: unknown): Promise<RegistryActionStat
     if (!setAt(next as unknown as Record<string, unknown>, entry.enabledPath, request.data.enabled)) return fail("unknown_entry");
     // A switch whose effective value depends on another key must not claim to change nothing the user can see.
     if (buildRegistryEntries(next).find((e) => e.id === entry.id)?.enabled !== request.data.enabled) return fail("needs_parent");
+    return { next, state: { status: "done", outcome: request.data.enabled ? "enabled" : "disabled" } };
+  });
+}
+
+/** The company-query opt-out never enables the channel itself. */
+export async function setSourceCompanyQueries(raw: unknown): Promise<RegistryActionState> {
+  const request = enabledRequest.safeParse(raw);
+  if (!request.success) return fail("invalid");
+  return change("setSourceCompanyQueries", (current) => {
+    const entry = buildRegistryEntries(current).find((e) => e.id === request.data.id && e.type === "channel");
+    if (!entry || !channelSupportsCompanyQueries(entry.id)) return fail("unknown_entry");
+    const next = structuredClone(current);
+    if (!setAt(next as unknown as Record<string, unknown>, [...entry.enabledPath.slice(0, -1), "company_queries"], request.data.enabled)) return fail("unknown_entry");
     return { next, state: { status: "done", outcome: request.data.enabled ? "enabled" : "disabled" } };
   });
 }

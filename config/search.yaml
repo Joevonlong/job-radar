@@ -19,3 +19,10 @@ window_hours:
 
 # Max results per keyword group per city
 max_per_group_per_location: 40
+
+# Nationwide searches send watched company names to enabled providers; see docs/privacy.md.
+watched_company_queries:
+  enabled: true
+  max_per_cycle: 3
+  min_interval_hours: 24
+  max_results: 25
