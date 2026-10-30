@@ -116,6 +116,10 @@ A failure in (a) does not block rollback: follow (c) and accept the display wind
 
 ### Changed
 
+- **Job search controls on `/jobs`:** search covers basic information by default; turn on Include job descriptions to
+  search original descriptions and current translations. A country filter with localized names and counts sits next to
+  the search, and zero results offer a direct description search. The global shortcut is now labeled Jump to and links
+  to all matching jobs. See [usage](docs/usage.md).
 - **Stricter YAML tags in config files:** a tag the parser does not know (`!foo`, `!!int x`) is now an error with its
   line in every reader of config files, instead of a warning that read the value as a string; `!unset` is reserved and
   refused. This is the only behaviour change for valid configs. New: `pnpm config:check --effective` prints a hash of
