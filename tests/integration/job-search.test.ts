@@ -184,7 +184,7 @@ describe("precise job search acceptance", () => {
     const allCurrent = ["J1", "J2", "J3", "J4", "J5", "J6", "J7", "J8", "J9", "J10", "J11", "J12", "J13", "J15", "J16", "J17", "J18", "J19"];
     expect(await matching("")).toEqual(allCurrent);
     // Equal rank and times: id is the final tie-breaker.
-    await getDb().execute(sql`update scores set rank_value = 50 where job_id in (${id("J1")}, ${id("J9")}, ${id("J15")})`);
+    await withRebuiltCurrentScores(getDb(), getDb().execute(sql`update scores set rank_value = 50 where job_id in (${id("J1")}, ${id("J9")}, ${id("J15")})`));
     expect(await matching("AI")).toEqual(["J15", "J9", "J1", "J17"]);
   });
 

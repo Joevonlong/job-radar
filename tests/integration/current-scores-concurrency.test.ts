@@ -58,3 +58,28 @@ it("recomputes after an interleaved update to two score rows", async () => {
   finally { release.release(); await first; }
   expect((await db.select().from(jobCurrentScores))[0]!.score).toBe(95); await expectNoDrift(db);
 });
+it.each([true, false])("serializes saveScore against profile staleness, save first = %s", async (saveFirst) => {
+  const { sql } = await import("drizzle-orm");
+  const { profileSnapshots } = await import("@/lib/db/schema");
+  const { saveScore, markScoresStaleExcept } = await import("@/lib/db/repos/scores");
+  const db = getDb(); const [job] = await fixture(db);
+  const [snapshot] = await db.insert(profileSnapshots).values({ kind: "preferences", hash: "concurrent", contentYaml: "fixture" }).returning();
+  const [row] = await db.insert(scores).values({ ...scoreRow(job!.id, 40), profileSnapshotId: snapshot!.id }).returning(); await repairCurrentScores(db, [job!.id]);
+  const input = { rowId: row!.id, jobId: job!.id, profileSnapshotId: snapshot!.id, provider: "fixture", model: "fixture", score: 80, aiScore: 80, germanPenalty: 0, germanLevel: "unknown", germanLevelAi: "unknown", germanLevelSource: "agree", signalBonus: 0, rankValue: 80, fitReasons: [], gaps: [], summaries: { en: "Concurrent" }, outputLang: "en", promptVersion: "concurrent" };
+  const entered = barrier(), release = barrier();
+  const first = scoreTransaction(db, async (tx) => {
+    if(saveFirst) await saveScore(tx, input); else await markScoresStaleExcept(tx, snapshot!.id + 1);
+    entered.release(); await release.promise;
+  });
+  await entered.promise;
+  const second = scoreTransaction(db, async (tx) => { if(saveFirst) await markScoresStaleExcept(tx, snapshot!.id + 1); else await saveScore(tx, input); });
+  try {
+    const deadline = Date.now() + 5000; let waiting = false;
+    while(!waiting && Date.now() < deadline) {
+      const [state] = await db.execute<{ waiting: boolean }>(sql`select exists(select 1 from pg_stat_activity where datname = current_database() and wait_event_type = 'Lock') as waiting`);
+      waiting = state?.waiting === true; if(!waiting) await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+    expect(waiting).toBe(true);
+  } finally { release.release(); await Promise.all([first, second]); }
+  expect((await db.select().from(jobCurrentScores))[0]).toMatchObject({ score: 80, stale: saveFirst }); await expectNoDrift(db);
+});

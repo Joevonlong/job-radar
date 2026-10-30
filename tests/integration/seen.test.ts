@@ -1,3 +1,4 @@
+import { withRebuiltCurrentScores } from "../helpers/current-scores";
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 
@@ -37,7 +38,7 @@ async function addJob(title: string, firstSeen: string, over: { rank?: number; w
     values (${companyId}, ${title}, ${title.toLowerCase()}, ${over.workplace ?? "unknown"}, ${firstSeen}::timestamptz, ${firstSeen}::timestamptz)
     returning id`);
   const id = Number(job!.id);
-  if (over.rank !== undefined) await getDb().execute(sql`insert into scores (job_id, filter_result, score, rank_value) values (${id}, 'passed', ${over.rank}, ${over.rank})`);
+  if (over.rank !== undefined) await withRebuiltCurrentScores(getDb(), getDb().execute(sql`insert into scores (job_id, filter_result, score, rank_value) values (${id}, 'passed', ${over.rank}, ${over.rank})`));
   return id;
 }
 

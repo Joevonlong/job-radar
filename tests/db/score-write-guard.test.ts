@@ -14,7 +14,10 @@ function violations(text: string, fileName: string): number[] {
       let parent: ts.Node | undefined = node.parent;
       let allowed = false;
       while (parent) {
-        if (ts.isFunctionLike(parent) && parent.parameters.some((param) => param.type?.getText(file) === "ScoreTx")) { allowed = true; break; }
+        if (ts.isFunctionLike(parent)) {
+          allowed = parent.parameters.some((param) => param.type?.getText(file) === "ScoreTx");
+          break;
+        }
         parent = parent.parent;
       }
       if (!allowed) bad.push(file.getLineAndCharacterOfPosition(node.getStart(file)).line + 1);
@@ -33,6 +36,9 @@ describe("score write capability", () => {
       expect(violations(`function bad(db: Executor) { ${body}; }`, "fixture.ts")).toHaveLength(1);
       expect(violations(`function good(db: ScoreTx) { ${body}; }`, "fixture.ts")).toEqual([]);
     }
+  });
+  it("rejects a nested unbranded writer even inside a branded function", () => {
+    expect(violations("function outer(tx: ScoreTx) { return function bad(db: Executor) { db.update(scores).set({}); }; }", "fixture.ts")).toHaveLength(1);
   });
   it("requires every product score write to have the capability", () => {
     const errors = files("src").filter((file) => !file.endsWith("/repos/current-scores.ts"))

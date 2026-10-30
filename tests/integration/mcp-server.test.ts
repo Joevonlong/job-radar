@@ -108,7 +108,7 @@ describe("search_jobs", () => {
     const descriptionId = await redBanana();
     await getDb().execute(sql`update jobs set title = 'Asterneedle Engineer', locations_json = '[{"city":"Berlin","countryCode":"DE","label":"Berlin"}]'::jsonb where id = ${titleId}`);
     await getDb().execute(sql`update jobs set description = 'Asterneedle duties', locations_json = '[{"city":"Paris","countryCode":"FR","label":"Paris"}]'::jsonb where id = ${descriptionId}`);
-    await getDb().execute(sql`update scores set rank_value = 10 where job_id = ${titleId}`);
+    await withRebuiltCurrentScores(getDb(), getDb().execute(sql`update scores set rank_value = 10 where job_id = ${titleId}`));
     // Obstgarten is deliberately unscored in the seed: an UPDATE would affect no rows.
     await withRebuiltCurrentScores(getDb(), getDb().insert(schema.scores).values({ jobId: descriptionId, filterResult: "passed", score: 99, rankValue: 99 }));
     const client = await connect();

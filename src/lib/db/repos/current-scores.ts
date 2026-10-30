@@ -1,11 +1,12 @@
 import { z } from "zod";
-import { sql } from "drizzle-orm";
-import type { PgTransaction } from "drizzle-orm/pg-core";
+import { is, sql } from "drizzle-orm";
+import { PgTransaction } from "drizzle-orm/pg-core";
 import type { PostgresJsQueryResultHKT } from "drizzle-orm/postgres-js";
 import type { ExtractTablesWithRelations } from "drizzle-orm";
 
 import { loadConfig } from "@/lib/config/load";
 import type { Executor } from "../executor";
+import type { Db } from "../client";
 import type * as schema from "../schema";
 import { latestScoreCte, latestScoreLateral } from "../queries/job-cards";
 
@@ -30,8 +31,9 @@ export async function currentScoresTableExists(db: Executor): Promise<boolean> {
   return row?.present === true;
 }
 
-export async function scoreTransaction<T>(db: Executor | ScoreTx, work: (tx: ScoreTx) => Promise<T>): Promise<T> {
+export async function scoreTransaction<T>(db: Db | ScoreTx, work: (tx: ScoreTx) => Promise<T>): Promise<T> {
   const nested = scoreBrand in db;
+  if (!nested && is(db, PgTransaction)) throw new Error("The outer score writer must use scoreTransaction; an unbranded transaction cannot be refreshed early");
   const state: ScoreState = nested ? (db as ScoreTx)[scoreBrand] : { touched: new Set(), owner: db };
   return db.transaction(async (raw) => {
     const tx = Object.assign(raw, { [scoreBrand]: state, touch: (ids: Iterable<number>) => { for (const id of ids) state.touched.add(id); } });

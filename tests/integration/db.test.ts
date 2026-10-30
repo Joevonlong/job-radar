@@ -33,6 +33,7 @@ const EXPECTED_TABLES = [
   "interest_suggestions",
   "job_breakdowns",
   "job_closure_overrides",
+  "job_current_scores",
   "job_favorites",
   "job_filter_overrides",
   "job_ghost",

@@ -1,3 +1,6 @@
+import os from "node:os";
+import path from "node:path";
+import { listJobs } from "@/lib/db/queries/jobs";
 import fs from "node:fs/promises";
 import { sql } from "drizzle-orm";
 import { expect, inject, it } from "vitest";
@@ -18,16 +21,28 @@ async function beforeProjection() {
 }
 it("backfills existing rows, restores timeouts, and changes fallback to projection without restart", async () => {
   const c = await beforeProjection();
+  const folder = await fs.mkdtemp(path.join(os.tmpdir(), "projection-migration-"));
   try {
     const [job] = await fixture(c.db);
     await scoreTransaction(c.db, async (tx) => { await tx.insert(scores).values(scoreRow(job!.id)); tx.touch([job!.id]); });
     expect(await currentScoresTableExists(c.db)).toBe(false);
     let source = await currentScore(c.db, "set"); expect(withCurrentScore(c.db, source).select().from(source).toSQL().sql).toContain("distinct on");
-    await runMigrations({ url: c.url, currentScoresBackfill: backfill });
+    const before = await listJobs(c.db, { filters: {}, sort: "rank", page: 1, pageSize: 10, timezone: "UTC" });
+    await fs.cp("drizzle", folder, { recursive: true });
+    const journalPath = path.join(folder, "meta/_journal.json");
+    const journal = JSON.parse(await fs.readFile(journalPath, "utf8")) as { entries: { idx: number; version: string; when: number; tag: string; breakpoints: boolean }[] };
+    const last = journal.entries.at(-1)!;
+    journal.entries.push({ ...last, idx: last.idx + 1, when: last.when + 1, tag: "0045_timeout_probe" });
+    await fs.writeFile(journalPath, JSON.stringify(journal));
+    await fs.writeFile(path.join(folder, "0045_timeout_probe.sql"), "create table migration_timeout_probe as select current_setting('lock_timeout') as lock_timeout, current_setting('statement_timeout') as statement_timeout;");
+    await runMigrations({ url: c.url, migrationsFolder: folder, currentScoresBackfill: backfill });
     source = await currentScore(c.db, "set"); expect(withCurrentScore(c.db, source).select().from(source).toSQL().sql).not.toContain("distinct on");
     await expectNoDrift(c.db);
-    expect((await c.sql`show lock_timeout`)[0]!.lock_timeout).toBe("0");
-  } finally { await c.close(); }
+    expect((await c.sql`select * from migration_timeout_probe`)[0]).toMatchObject({ lock_timeout: "0", statement_timeout: "0" });
+    expect(await listJobs(c.db, { filters: {}, sort: "rank", page: 1, pageSize: 10, timezone: "UTC" })).toEqual(before);
+    await c.sql`drop table job_current_scores`;
+    expect(await listJobs(c.db, { filters: {}, sort: "rank", page: 1, pageSize: 10, timezone: "UTC" })).toEqual(before);
+  } finally { await c.close(); await fs.rm(folder, { recursive: true, force: true }); }
 });
 it("rolls back the complete migration on lock timeout, then succeeds on retry", async () => {
   const c = await beforeProjection(); const entered = barrier(), release = barrier(); let writer: Promise<unknown> | undefined;

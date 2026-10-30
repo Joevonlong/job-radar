@@ -1,3 +1,4 @@
+import { withRebuiltCurrentScores } from "../helpers/current-scores";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, inject, it } from "vitest";
 
@@ -55,8 +56,8 @@ beforeEach(async () => {
       returning id`);
     const id = Number(job!.id);
     ids.set(row.key, id);
-    if (row.filtered) await db.execute(sql`insert into scores (job_id, filter_result) values (${id}, 'filtered_out')`);
-    else if (row.rank !== undefined) await db.execute(sql`insert into scores (job_id, filter_result, score, rank_value) values (${id}, 'passed', ${row.rank}, ${row.rank})`);
+    if (row.filtered) await withRebuiltCurrentScores(db, db.execute(sql`insert into scores (job_id, filter_result) values (${id}, 'filtered_out')`));
+    else if (row.rank !== undefined) await withRebuiltCurrentScores(db, db.execute(sql`insert into scores (job_id, filter_result, score, rank_value) values (${id}, 'passed', ${row.rank}, ${row.rank})`));
   }
 });
 

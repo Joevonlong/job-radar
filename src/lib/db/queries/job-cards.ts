@@ -86,13 +86,13 @@ export function latestScoreCte(db: Executor, jobIds?: readonly number[], sources
   const newest = db
     .selectDistinctOn([scores.jobId], { ...newestColumns(), ...(sources ? { id: scores.id } : {}) })
     .from(scores)
-    .where(jobIds ? inArray(scores.jobId, [...jobIds]) : undefined)
+    .where(jobIds ? sql`${scores.jobId} = any(${`{${jobIds.join(",")}}`}::bigint[])` : undefined)
     .orderBy(scores.jobId, ...newestFirst())
     .as("newest_score");
   const scored = db
     .selectDistinctOn([scores.jobId], { ...scoredColumns(), ...(sources ? { id: scores.id } : {}) })
     .from(scores)
-    .where(and(isNotNull(scores.score), jobIds ? inArray(scores.jobId, [...jobIds]) : undefined))
+    .where(and(isNotNull(scores.score), jobIds ? sql`${scores.jobId} = any(${`{${jobIds.join(",")}}`}::bigint[])` : undefined))
     .orderBy(scores.jobId, ...newestFirst())
     .as("scored_score");
   return db.$with("latest_score").as(db.select({ ...latestColumns(newest, scored), ...(sources ? sourceColumns() : {}) }).from(newest).leftJoin(scored, eq(scored.jobId, newest.jobId)));

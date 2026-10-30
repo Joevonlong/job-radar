@@ -155,12 +155,12 @@ it("invalidates cached verdicts changed by old code during rollback, including r
   const id = rows[0]!.id;
   // Old code changes the input and writes the verdict without naming either new hash column.
   await db.update(schema.jobs).set({ contract: "student" }).where(eq(schema.jobs.id, id));
-  await db.execute(sql`update scores set filter_result = 'filtered_out', filter_reasons = array['old-rule'] where job_id = ${id}`);
+  await withRebuiltCurrentScores(db, db.execute(sql`update scores set filter_result = 'filtered_out', filter_reasons = array['old-rule'] where job_id = ${id}`));
   expect(await db.select().from(schema.scores).where(eq(schema.scores.jobId, id))).toMatchObject([{ filterInputHash: null, filterConfigHash: null }]);
   await db.update(schema.jobs).set({ contract: "permanent" }).where(eq(schema.jobs.id, id));
   expect(await run()).toMatchObject({ evaluated: 1 });
   expect(await db.select().from(schema.scores).where(eq(schema.scores.jobId, id))).toMatchObject([{ filterResult: "passed" }]);
-  await db.execute(sql`update scores set filter_reasons = array['old-reason-only'] where job_id = ${id}`);
+  await withRebuiltCurrentScores(db, db.execute(sql`update scores set filter_reasons = array['old-reason-only'] where job_id = ${id}`));
   expect(await db.select().from(schema.scores).where(eq(schema.scores.jobId, id))).toMatchObject([{ filterInputHash: null, filterConfigHash: null }]);
   expect(await run()).toMatchObject({ evaluated: 1 });
   expect(await run()).toMatchObject({ evaluated: 0 });

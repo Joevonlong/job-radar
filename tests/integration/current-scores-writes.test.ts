@@ -45,7 +45,7 @@ it("retains pre-savepoint writes, rolls back inner writes and refreshes only onc
 });
 it.each(["repeatable read", "serializable"] as const)("rejects %s isolation with an explanatory error", async (isolationLevel) => {
   const db = getDb(); const [job] = await fixture(db);
-  const error = await db.transaction((outer) => scoreTransaction(outer, async (tx) => { await tx.insert(scores).values(scoreRow(job!.id)); tx.touch([job!.id]); }), { isolationLevel }).catch((error: unknown) => error);
+  const error = await scoreTransaction(db, async (tx) => { await tx.execute(sql.raw(`set transaction isolation level ${isolationLevel}`)); await tx.insert(scores).values(scoreRow(job!.id)); tx.touch([job!.id]); }).catch((error: unknown) => error);
   const message = (value: unknown): string => value instanceof Error ? `${value.message} ${message(value.cause)}` : "";
   expect(message(error)).toContain("READ COMMITTED"); expect(await db.select().from(scores)).toEqual([]);
 });
@@ -68,4 +68,29 @@ it("sends no refresh SQL for empty registration or an update matching zero rows"
   expect(statements).toEqual([]);
   await scoreTransaction(db, async (tx) => { expect(await markScoresStaleExcept(tx, 123)).toBe(0); });
   await expectNoDrift(db);
+});
+
+it("rejects refreshing inside an unbranded outer transaction", async () => {
+  await expect(getDb().transaction((tx) => scoreTransaction(tx, async () => {}))).rejects.toThrow("outer score writer");
+});
+it("keeps a fixed-seed sequence of repository writes consistent", async () => {
+  const db = getDb(); const all = await fixture(db, 8);
+  const snapshots = await db.insert(profileSnapshots).values(Array.from({ length: 4 }, (_, i) => ({ kind: "preferences" as const, hash: `random-${i}`, contentYaml: "fixture" }))).returning();
+  let seed = 42;
+  const random = (limit: number) => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return (seed >>> 8) % limit; };
+  for(let step = 0; step < 64; step++) {
+    const job = all[random(all.length)]!, snapshot = snapshots[random(snapshots.length)]!;
+    const rows = await db.select().from(scores); const row = rows.length ? rows[random(rows.length)]! : null;
+    await scoreTransaction(db, async (tx) => {
+      switch(step < 6 ? step : random(6)) {
+        case 0: await insertFilterResults(tx, snapshot.id, [{ jobId: job.id, filterResult: "passed", filterReasons: [] }]); break;
+        case 1: if(row) await updateFilterResult(tx, row.id, { filterResult: step % 2 ? "passed" : "filtered_out", filterReasons: [`reason-${step}`] }); break;
+        case 2: if(row) await saveScore(tx, { rowId: row.id, jobId: row.jobId, profileSnapshotId: row.profileSnapshotId!, provider: "fixture", model: "fixture", score: step, aiScore: step, germanPenalty: 0, germanLevel: "unknown", germanLevelAi: "unknown", germanLevelSource: "agree", signalBonus: 0, rankValue: step, fitReasons: [], gaps: [], summaries: { en: `Step ${step}` }, outputLang: "en", promptVersion: "random" }); break;
+        case 3: await markScoresStaleExcept(tx, snapshot.id); break;
+        case 4: if(row) await setScoreBonuses(tx, [{ scoreId: row.id, signalBonus: 2.5, rankValue: row.score === null ? null : row.score + 2.5 }]); break;
+        case 5: if(row?.score !== null && row) await updateGermanOutcome(tx, row.id, { germanLevel: "b1", germanLevelSource: "rule", germanPenalty: 0, score: row.score, rankValue: row.score + row.signalBonus }); break;
+      }
+    });
+    await expectNoDrift(db);
+  }
 });

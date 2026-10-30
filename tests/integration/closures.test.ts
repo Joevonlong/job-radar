@@ -1,3 +1,4 @@
+import { withRebuiltCurrentScores } from "../helpers/current-scores";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, inject, it } from "vitest";
 
@@ -63,7 +64,7 @@ async function addJob(title: string, status: AutoStatus, over: { firstSeen?: str
     values (${companyId}, ${title}, ${title.toLowerCase()}, ${status}, ${firstSeen}::timestamptz, ${firstSeen}::timestamptz, ${over.linkCheck ? JSON.stringify(over.linkCheck) : null}::jsonb)
     returning id`);
   const id = Number(job!.id);
-  await getDb().execute(sql`insert into scores (job_id, profile_snapshot_id, filter_result, score, rank_value, scored_at) values (${id}, ${snapshotId}, 'passed', null, null, now())`);
+  await withRebuiltCurrentScores(getDb(), getDb().execute(sql`insert into scores (job_id, profile_snapshot_id, filter_result, score, rank_value, scored_at) values (${id}, ${snapshotId}, 'passed', null, null, now())`));
   return id;
 }
 
