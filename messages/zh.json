@@ -3062,13 +3062,16 @@
         "hint": "把关注公司名发送给已启用的采集服务商。详见隐私说明；关闭此项可停止全部公司查询。"
       },
       "company_queries_max_per_cycle": {
-        "label": "每个单元每轮的公司查询上限"
+        "label": "每个单元每轮的公司查询上限",
+        "hint": "0–20，默认 3。设为 0 不发送公司查询。"
       },
       "company_queries_interval": {
-        "label": "同一公司查询的最短间隔"
+        "label": "同一公司查询的最短间隔（小时）",
+        "hint": "1–720 小时，默认 24。"
       },
       "company_queries_max_results": {
-        "label": "每条公司查询的结果上限"
+        "label": "每条公司查询的结果上限",
+        "hint": "1–100，默认 25；各通道自身的结果上限仍然有效。"
       },
       "company_queries_channel": {
         "label": "公司查询",

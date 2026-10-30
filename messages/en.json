@@ -3062,13 +3062,16 @@
         "hint": "Send watched company names to enabled collection providers. See Privacy; disable here to stop all company queries."
       },
       "company_queries_max_per_cycle": {
-        "label": "Company queries per unit per cycle"
+        "label": "Company queries per unit per cycle",
+        "hint": "0–20, default 3. Set 0 to send no company queries."
       },
       "company_queries_interval": {
-        "label": "Minimum company query interval"
+        "label": "Minimum company query interval (hours)",
+        "hint": "1–720 hours, default 24."
       },
       "company_queries_max_results": {
-        "label": "Results per company query"
+        "label": "Results per company query",
+        "hint": "1–100, default 25; each channel's own result cap still applies."
       },
       "company_queries_channel": {
         "label": "Company queries",

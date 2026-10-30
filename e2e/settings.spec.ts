@@ -562,8 +562,8 @@ for (const locale of ["zh", "en"] as const) {
     await expect(control).toBeChecked();
     await control.click();
     const fields = locale === "en"
-      ? ["Company queries per unit per cycle", "Minimum company query interval", "Results per company query"]
-      : ["每个单元每轮的公司查询上限", "同一公司查询的最短间隔", "每条公司查询的结果上限"];
+      ? ["Company queries per unit per cycle", "Minimum company query interval (hours)", "Results per company query"]
+      : ["每个单元每轮的公司查询上限", "同一公司查询的最短间隔（小时）", "每条公司查询的结果上限"];
     for (const [index, label] of fields.entries()) await card.getByRole("textbox", { name: label, exact: true }).fill(String([2, 8, 13][index]));
     await card.getByRole("button", { name: locale === "en" ? "Save" : "保存", exact: true }).click();
     await expect.poll(() => parse(read("search")).watched_company_queries).toEqual({ enabled: false, max_per_cycle: 2, min_interval_hours: 8, max_results: 13 });
