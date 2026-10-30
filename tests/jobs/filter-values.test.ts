@@ -32,8 +32,8 @@ describe("filter table", () => {
   it("lists every kind of filter once, in the table order, and the kinds fit together", () => {
     expect(new Set(FILTER_KEYS).size).toBe(FILTER_KEYS.length);
     for (const key of MULTI_FILTER_KEYS) expect(FILTER_KEYS).toContain(key);
-    expect([...SELECT_FILTER_KEYS, "country", "app"].sort()).toEqual([...MULTI_FILTER_KEYS].sort());
-    // `company` was always a list; `reason` is URL-only and never written to a saved view.
-    expect([...SCALAR_COMPAT_KEYS]).toEqual(SELECT_FILTER_KEYS.filter((key) => key !== "company" && key !== "reason"));
+    expect([...SELECT_FILTER_KEYS, "app"].sort()).toEqual([...MULTI_FILTER_KEYS].sort());
+    // `company` was always a list; `reason` and `country` are URL-only and never written to a saved view.
+    expect([...SCALAR_COMPAT_KEYS]).toEqual(SELECT_FILTER_KEYS.filter((key) => key !== "company" && key !== "reason" && key !== "country"));
   });
 });

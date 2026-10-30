@@ -34,11 +34,11 @@ export function ActiveFilterChips({
   // same URL state as the filter bar (nuqs keeps all hooks of a page in sync)
   const [params, setParams] = useQueryStates(jobsSearchParsers, { shallow: false, history: "replace" });
 
-  const chipKeys = [...SELECT_FILTER_KEYS, "country"] as const;
+  const chipKeys = SELECT_FILTER_KEYS;
   const chips = chipKeys.flatMap((key) =>
-    params[key].map((value) => ({ key, value, label: (key === "country" ? [] : choices[key]).find((o) => o.value === value)?.label ?? value })),
+    params[key].map((value) => ({ key, value, label: choices[key].find((o) => o.value === value)?.label ?? value })),
   );
-  const remove = (key: SelectFilterKey | "country", value: string) => {
+  const remove = (key: SelectFilterKey, value: string) => {
     const next = params[key].filter((v) => v !== value);
     void setParams({ [key]: next.length > 0 ? next : null, page: null });
   };

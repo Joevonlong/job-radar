@@ -332,8 +332,12 @@ test.describe("mobile (390px)", () => {
     await open(page, "/jobs");
     await expect(page.getByTestId("filter-panel")).toBeHidden();
     await expect(page.getByTestId("filter-toggle")).toHaveText("筛选");
+    // On a phone the search field has its own row and "包含职位说明" + "筛选" share the next one; the list still
+    // starts within the top 480px of the 844px screen and its first row is fully visible.
     const firstRow = listRows(page).first();
-    expect((await firstRow.boundingBox())?.y ?? 9999).toBeLessThan(400);
+    const box = await firstRow.boundingBox();
+    expect(box?.y ?? 9999).toBeLessThan(480);
+    expect((box?.y ?? 9999) + (box?.height ?? 0)).toBeLessThanOrEqual(844);
 
     await page.getByTestId("filter-toggle").click();
     await expect(page.getByTestId("filter-panel")).toBeVisible();

@@ -503,12 +503,12 @@ describe("search relevance and URL-only country", () => {
     expect(screen.getByTestId("filter-sort")).toHaveTextContent("Rank value");
   });
 
-  it("shows a raw country chip, removes it and preserves searchIn on clear", async () => {
-    const { lastQuery } = renderBar("?country=PT&searchIn=all");
-    expect(screen.getByTestId("filter-chip")).toHaveTextContent("Country · PT");
-    expect(screen.queryByTestId("filter-country")).not.toBeInTheDocument();
+  it("shows a localized country chip, removes it and preserves searchIn on clear", async () => {
+    const { lastQuery } = renderBar("?country=PT&searchIn=all", "en", { countries: [{ code: "PT", jobCount: 0, name: "Portugal" }] });
+    expect(screen.getByTestId("filter-chip")).toHaveTextContent("Country · Portugal");
+    expect(screen.getByTestId("filter-country")).toBeInTheDocument();
     expect(screen.getByTestId("filter-toggle")).toHaveTextContent("Filters (1)");
-    await userEvent.click(screen.getByRole("button", { name: "Remove filter Country: PT" }));
+    await userEvent.click(screen.getByRole("button", { name: "Remove filter Country: Portugal" }));
     await waitFor(() => expect(lastQuery()).toBe("?searchIn=all"));
   });
 
@@ -516,5 +516,47 @@ describe("search relevance and URL-only country", () => {
     const { lastQuery } = renderBar("?country=PT&searchIn=all&q=AI");
     await userEvent.click(screen.getByTestId("filter-clear"));
     await waitFor(() => expect(lastQuery()).toBe("?searchIn=all"));
+  });
+});
+
+describe("precise job search controls", () => {
+  it("toggles description scope, resets pagination and keeps the scope on clear", async () => {
+    const { lastQuery } = renderBar("?q=AI&page=3");
+    const toggle = screen.getByTestId("filter-search-in");
+    expect(toggle).toHaveAttribute("aria-pressed", "false");
+    expect(toggle).toHaveAttribute("title", en.dashboard.jobs.filters.includeDescriptionsHint);
+    await userEvent.click(toggle);
+    await waitFor(() => expect(lastQuery()).toContain("searchIn=all"));
+    expect(lastQuery()).not.toContain("page=");
+    await userEvent.click(screen.getByTestId("filter-clear"));
+    await waitFor(() => expect(lastQuery()).toBe("?searchIn=all"));
+    await userEvent.click(toggle);
+    await waitFor(() => expect(lastQuery()).toBe(""));
+  });
+
+  it("keeps the country picker open while selecting multiple countries", async () => {
+    const { lastQuery } = renderBar("", "en", { countries: [{ code: "DE", jobCount: 2, name: "Germany" }, { code: "FR", jobCount: 1, name: "France" }] });
+    await userEvent.click(screen.getByTestId("filter-country"));
+    for (const code of ["DE", "FR"]) {
+      const option = screen.getAllByTestId("filter-country-option").find((row) => row.dataset.value === code)!;
+      await userEvent.click(option);
+      await waitFor(() => expect(option).toHaveAttribute("aria-checked", "true"));
+      expect(screen.getByTestId("filter-country")).toHaveAttribute("aria-expanded", "true");
+    }
+    await userEvent.keyboard("{Escape}");
+    await waitFor(() => expect(new URLSearchParams(lastQuery()).getAll("country")).toEqual(["DE", "FR"]));
+  });
+
+  it.each(["en", "zh"] as const)("labels country chips and counts in %s with the server's names, including absent selected countries", async (locale) => {
+    // the server adds selected countries without jobs (count 0) and names every option in the interface language
+    const portugalName = locale === "en" ? "Portugal" : "葡萄牙";
+    renderBar("?country=PT", locale, { countries: [{ code: "DE", jobCount: 2, name: locale === "en" ? "Germany" : "德国" }, { code: "PT", jobCount: 0, name: portugalName }] });
+    expect(screen.getByTestId("filter-chips")).toHaveTextContent(portugalName);
+    await userEvent.click(screen.getByTestId("filter-country"));
+    const portugal = screen.getAllByTestId("filter-country-option").find((o) => o.dataset.value === "PT");
+    expect(portugal).toHaveTextContent(portugalName);
+    expect(portugal?.querySelector('[data-slot="option-count"]')).toHaveTextContent("0");
+    const germany = screen.getAllByTestId("filter-country-option").find((o) => o.dataset.value === "DE");
+    expect(germany?.querySelector('[data-slot="option-count"]')).toHaveTextContent("2");
   });
 });

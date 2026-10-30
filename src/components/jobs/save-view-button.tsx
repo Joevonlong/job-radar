@@ -24,11 +24,14 @@ const MAX_NAME_CHARS = 60;
 /** "Save the current filters as a view" on /jobs: names the filters now in the URL and stores them in interests.yaml. */
 export function SaveViewButton() {
   const t = useTranslations("interests.saveView");
+  const tSearch = useTranslations("dashboard.jobs.filters");
   const tScope = useTranslations("dashboard.jobs.scope");
   const tErrors = useTranslations("interests.formErrors");
   const [params] = useQueryStates(jobsSearchParsers);
   const filters = viewFiltersFromParams(withLegacyKeys(params));
   const canSave = hasViewFilters(filters);
+  const excludedSearch = params.country.length > 0 || params.searchIn === "all";
+  const searchHintId = useId();
   const tFav = useTranslations("favorites");
 
   const nameId = useId();
@@ -62,10 +65,11 @@ export function SaveViewButton() {
       }}
     >
       <DialogTrigger asChild>
-        <Button type="button" variant="outline" size="sm" disabled={!canSave} title={canSave ? undefined : t("needFilters")} data-testid="save-view">
+        <Button type="button" variant="outline" size="sm" disabled={!canSave} title={canSave ? undefined : excludedSearch ? tSearch("notSaved") : t("needFilters")} aria-describedby={!canSave && excludedSearch ? searchHintId : undefined} data-testid="save-view">
           <Bookmark aria-hidden /> {t("button")}
         </Button>
       </DialogTrigger>
+      {!canSave && excludedSearch ? <span id={searchHintId} className="sr-only">{tSearch("notSaved")}</span> : null}
       <DialogContent>
         <form
           noValidate
@@ -82,6 +86,7 @@ export function SaveViewButton() {
           {resolveJobScope(params.scope, params.status) !== "current" ? (
             <p className="text-ink-2 text-body-sm" data-testid="save-view-scope-hint">{tScope("notSaved")}</p>
           ) : null}
+          {excludedSearch ? <p className="text-ink-2 text-body-sm" data-testid="save-view-search-hint">{tSearch("notSaved")}</p> : null}
           <div className="flex flex-col gap-1.5">
             <label htmlFor={nameId} className="text-sm font-medium">
               {t("name")}

@@ -432,12 +432,13 @@
       "expand": "Show {label}"
     },
     "languageMenu": "Language",
-    "sourceLink": "Source code (AGPL-3.0)"
+    "sourceLink": "Source code (AGPL-3.0)",
+    "jump": "Jump to"
   },
   "commandPalette": {
     "title": "Command palette",
     "description": "Search for a page or a job and jump to it",
-    "placeholder": "Type a page name or search jobs…",
+    "placeholder": "Jump to a page, or find jobs by title, company or location…",
     "empty": "No matching pages or jobs",
     "pagesGroup": "Pages",
     "jobsGroup": "Jobs",
@@ -449,7 +450,8 @@
     "hintClose": "close",
     "hintToggle": "toggle",
     "rank": "Rank value {value} / 100",
-    "rankOver": "Rank value {value}: 100 is full, plus {over} from pay and equity signal bonus"
+    "rankOver": "Rank value {value}: 100 is full, plus {over} from pay and equity signal bonus",
+    "viewAll": "View all results in the job list"
   },
   "pages": {
     "today": {
@@ -458,7 +460,7 @@
     },
     "jobs": {
       "title": "Jobs",
-      "description": "All jobs: full-text search and combined filters."
+      "description": "Search jobs by title, company, city or country."
     },
     "companies": {
       "title": "Companies",
@@ -1063,11 +1065,12 @@
       "listLabel": "Job list",
       "empty": "No jobs yet. They show up here after a collection cycle.",
       "emptyFiltered": "No jobs match. Try relaxing the filters.",
-      "searchTimeout": "Full-text search timed out. Narrow the search or the filters.",
+      "searchTimeout": "Searching job descriptions timed out. Narrow the search or the filters, or turn off Include job descriptions.",
+      "searchTimeoutBasic": "Search basic information only",
       "filters": {
         "label": "Search and filters",
         "search": "Search jobs",
-        "searchPlaceholder": "Search title, company, full JD text…",
+        "searchPlaceholder": "Title, company, city or country",
         "source": "Source",
         "city": "City",
         "country": "Country",
@@ -1113,7 +1116,17 @@
         "removeChip": "Remove filter {key}: {value}",
         "dirAscLabel": "Ascending (lowest first), click for descending",
         "dirDescLabel": "Descending (highest first), click for ascending",
-        "reason": "Reason"
+        "reason": "Reason",
+        "includeDescriptions": "Include job descriptions",
+        "includeDescriptionsHint": "Also search original job descriptions and existing translations",
+        "searchCountries": "Search countries…",
+        "alsoDescriptions": "Also search job descriptions",
+        "chineseHint": "Most job descriptions are in other languages. Chinese matches countries, cities and existing translations.",
+        "noTerms": "No searchable terms",
+        "truncated": "Only the first {count} terms were used",
+        "relevanceNote": "Sorted by relevance",
+        "useRank": "Sort by rank value",
+        "notSaved": "Country and search scope are not saved in views."
       },
       "pagination": {
         "label": "Pagination",

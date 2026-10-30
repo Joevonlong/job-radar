@@ -11,7 +11,7 @@ export const TEXT_FILTER_KEYS = ["q"] as const;
  */
 export const MULTI_FILTER_KEYS = ["source", "city", "country", "company", "workplace", "contract", "status", "reason", "app"] as const;
 /** The multi filters shown as drop-downs (the application statuses are a pill group). */
-export const SELECT_FILTER_KEYS = ["source", "city", "company", "workplace", "contract", "status", "reason"] as const;
+export const SELECT_FILTER_KEYS = ["source", "city", "country", "company", "workplace", "contract", "status", "reason"] as const;
 /** Multi filters that saved views write as a scalar when one value is picked (single-valued before multi-value filters); `company` came later and is always a list. */
 export const SCALAR_COMPAT_KEYS = ["source", "city", "workplace", "contract", "status"] as const;
 export const NUMBER_FILTER_KEYS = ["minScore", "minSalary"] as const;

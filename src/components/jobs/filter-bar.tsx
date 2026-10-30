@@ -15,6 +15,7 @@ import { filterOptions } from "@/lib/applications/visibility";
 import { knownContract, knownFamily } from "@/lib/dashboard/labels";
 import { APPLICATION_FILTER_STATUSES, ARCHIVE_REASONS, JOB_SORTS, JOB_STATUSES, type JobSort, JOB_WORKPLACES, MIN_SALARY_MAX, MIN_SCORE_MAX, GHOST_FILTERS, TRAP_FILTERS, VISA_FILTERS, type ApplicationFilterStatus } from "@/lib/jobs/constants";
 import { FILTER_KEYS, SELECT_FILTER_KEYS, type FilterKey, type SelectFilterKey } from "@/lib/jobs/filter-keys";
+import type { NamedCountryOption } from "@/lib/jobs/country-names";
 import { cleanMultiValues } from "@/lib/jobs/filter-values";
 import { countActiveFilters, hasActiveFilters, jobsSearchParsers, withLegacyKeys } from "@/lib/jobs/search-params";
 import { dirParam, effectiveDir, flipDir, resolveSort } from "@/lib/jobs/sort";
@@ -50,6 +51,8 @@ export interface FilterBarOptions {
   companyOptionsCapped?: boolean;
   /** (ui.yaml `filters`) How many companies are listed before anything is typed. */
   companyOptionsVisible?: number;
+  /** Named on the server (`withCountryNames`), so the server and the browser render the same names. */
+  countries?: NamedCountryOption[];
   contracts: string[];
   /** Show the "AI traps" control (traps.yaml `enabled`). */
   traps?: boolean;
@@ -155,6 +158,7 @@ export function FilterBar({ options }: { options: FilterBarOptions }) {
   const choices: Record<SelectFilterKey, MultiSelectOption[]> = {
     source: options.families.map((family) => ({ value: family, label: familyLabel(family) })),
     city: options.cities.map((city) => (grouped ? { value: city.key, label: city.key, group: city.target ? t("cityTargets") : t("cityOthers") } : { value: city.key, label: city.key })),
+    country: (options.countries ?? []).map(({ code, jobCount, name }) => ({ value: code, label: name, count: jobCount })),
     company: (options.companies ?? []).map((company) => ({ value: company.name, label: company.name, count: company.jobCount })),
     workplace: filterOptions(JOB_WORKPLACES, options.hiddenWorkplaces ?? [], params.workplace).map((w) => ({ value: w, label: tc(`workplace.${w}`) })),
     contract: filterOptions(options.contracts, options.hiddenContracts ?? [], params.contract).map((contract) => ({ value: contract, label: contractLabel(contract) })),
@@ -164,7 +168,7 @@ export function FilterBar({ options }: { options: FilterBarOptions }) {
   // a bookmarked value that no job has (any more) still shows as selected, and can be unticked
   const withStale = (key: SelectFilterKey): MultiSelectOption[] => {
     const known = new Set(choices[key].map((o) => o.value));
-    const missing = params[key].filter((value) => !known.has(value)).map((value) => ({ value, label: value, stale: true }));
+    const missing = params[key].filter((value) => !known.has(value)).map((value) => ({ value, label: value, stale: key !== "country", ...(key === "country" ? { count: 0 } : {}) }));
     return [...missing, ...choices[key]];
   };
   const layout = phone ? "inline" : "popover";
@@ -176,7 +180,7 @@ export function FilterBar({ options }: { options: FilterBarOptions }) {
     : companyVisible !== undefined && companyCount > companyVisible
       ? t("companyNoteSearch", { count: companyCount, shown: companyVisible })
       : undefined;
-  const searchPlaceholders: Partial<Record<SelectFilterKey, string>> = { city: t("searchCities"), source: t("searchSources"), company: t("searchCompanies") };
+  const searchPlaceholders: Partial<Record<SelectFilterKey, string>> = { city: t("searchCities"), source: t("searchSources"), company: t("searchCompanies"), country: t("searchCountries") };
 
   // a change rewrites an old `t12` as `high` and an old `hideGerman` as `hideLang`
   const legacy = {
@@ -221,8 +225,8 @@ export function FilterBar({ options }: { options: FilterBarOptions }) {
       }}
       data-testid="jobs-filters"
     >
-      <div className="flex items-center gap-2">
-        <div className="relative min-w-0 flex-1">
+      <div className="flex flex-wrap items-center gap-sp-2">
+        <div className="relative min-w-0 flex-1 max-md:basis-full">
           <Search aria-hidden className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2" />
           <input
             type="search"
@@ -240,8 +244,19 @@ export function FilterBar({ options }: { options: FilterBarOptions }) {
         </div>
         <Button
           type="button"
+          variant={params.searchIn === "all" ? "default" : "outline"}
+          size="sm"
+          aria-pressed={params.searchIn === "all"}
+          title={t("includeDescriptionsHint")}
+          onClick={() => set({ searchIn: params.searchIn === "all" ? null : "all" })}
+          data-testid="filter-search-in"
+        >
+          {t("includeDescriptions")}
+        </Button>
+        <Button
+          type="button"
           variant="outline"
-          className="md:hidden"
+          className="ml-auto md:hidden"
           aria-expanded={open}
           aria-controls={panelId}
           onClick={() => setOpen(true)}
@@ -252,7 +267,7 @@ export function FilterBar({ options }: { options: FilterBarOptions }) {
         </Button>
       </div>
 
-      <ActiveFilterChips choices={choices} traps={options.traps === true} visa={options.visa === true} ghost={options.ghost === true} />
+      <ActiveFilterChips choices={{ ...choices, country: withStale("country") }} traps={options.traps === true} visa={options.visa === true} ghost={options.ghost === true} />
 
       <div
         id={panelId}
@@ -278,7 +293,7 @@ export function FilterBar({ options }: { options: FilterBarOptions }) {
                 value={params[key]}
                 onChange={setMulti(key)}
                 onCommit={commitMulti(key)}
-                searchable={key === "city" || key === "source" || key === "company"}
+                searchable={key === "city" || key === "source" || key === "company" || key === "country"}
                 {...(searchPlaceholders[key] ? { searchPlaceholder: searchPlaceholders[key] } : {})}
                 {...(key === "company" ? { ...(companyVisible !== undefined ? { initialVisible: companyVisible } : {}), ...(companyNote ? { note: companyNote } : {}) } : {})}
                 anyLabel={t("any")}

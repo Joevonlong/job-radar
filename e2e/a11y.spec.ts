@@ -44,14 +44,15 @@ test("the settings tab list holds only tabs, and quick filters are links without
   await expect(toggle).not.toHaveAttribute("aria-pressed", /.*/);
 });
 
-test("the command palette title is not in the page while the palette is closed, and Ctrl+K from nowhere returns the focus to the search button", async ({ page }) => {
+test("the command palette title is not in the page while the palette is closed, and Ctrl+K from nowhere returns the focus to the Jump to button", async ({ page }) => {
   await open(page, "/jobs");
   await expect(page.getByRole("heading", { name: "命令面板" })).toHaveCount(0);
   await page.keyboard.press("Control+k");
   await expect(page.getByRole("dialog", { name: "命令面板" })).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog", { name: "命令面板" })).toBeHidden();
-  await expect(page.getByRole("button", { name: /^搜索/ })).toBeFocused();
+  // the top bar's palette button is "跳转 ⌘K" (Jump to); the /jobs search box is a separate field, not this button
+  await expect(page.getByRole("button", { name: /^跳转/ })).toBeFocused();
 });
 
 test("the ticker pauses on hover and on focus, and stands still with reduced motion", async ({ page }) => {

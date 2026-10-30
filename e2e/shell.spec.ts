@@ -1,3 +1,4 @@
+import { NAV_ITEMS, PALETTE_SUBPAGES } from "../src/components/shell/nav";
 import { expect, test, type Page } from "./fixtures";
 
 /** Load a page and wait until client JS is attached, so clicks are not lost to pre-hydration. */
@@ -132,10 +133,12 @@ test("command palette opens with Ctrl+K and navigates on Enter", async ({ page }
 
 test("command palette opens from the top bar button and Esc gives the focus back to it", async ({ page }) => {
   await open(page);
-  const trigger = page.getByRole("button", { name: "搜索" });
+  const trigger = page.getByRole("button", { name: /^跳转/ });
   await trigger.click();
   await expect(page.getByRole("dialog", { name: "命令面板" })).toBeVisible();
-  await expect(page.getByRole("option")).toHaveCount(13);
+  await expect(page.getByRole("option")).toHaveCount(NAV_ITEMS.length + PALETTE_SUBPAGES.length);
+  await expect(page.getByTestId("palette-jobs")).toHaveCount(0);
+  await expect(page.getByTestId("palette-view-all")).toHaveCount(0);
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog", { name: "命令面板" })).toBeHidden();
   await expect(trigger).toBeFocused();
