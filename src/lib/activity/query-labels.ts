@@ -20,6 +20,19 @@ export function resolveQueryLabels(search: SearchConfig, t: ActivityTranslator, 
   return labels;
 }
 
+/**
+ * The live watch list for labels. Reading it needs the pipeline config; when that (or the watch list) cannot be read,
+ * labels fall back to the company keys stored in the cycle summary instead of failing the activity page.
+ */
+export function liveCompanyBoards(read: () => readonly WatchedCompanyBoard[], onError: (error: unknown) => void = () => {}): readonly WatchedCompanyBoard[] {
+  try {
+    return read();
+  } catch (error) {
+    onError(error);
+    return [];
+  }
+}
+
 /** Cycle summaries are an external JSON boundary; malformed or older rows simply have no company keys. */
 export function storedCompanyQueryKeys(summary: unknown): Record<string, string> {
   const shape = z.object({ steps: z.array(z.object({ name: z.string(), result: z.unknown().optional() })) });

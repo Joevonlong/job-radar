@@ -1,7 +1,7 @@
 import { createTranslator } from "next-intl";
 import { describe, expect, it } from "vitest";
 import en from "../../messages/en.json";
-import { resolveQueryLabels, queryLabel, storedCompanyQueryKeys } from "@/lib/activity/query-labels";
+import { liveCompanyBoards, resolveQueryLabels, queryLabel, storedCompanyQueryKeys } from "@/lib/activity/query-labels";
 import { buildQueries, buildSweepQuery } from "@/lib/channels/query";
 import type { SearchConfig } from "@/lib/config";
 
@@ -32,4 +32,18 @@ it("uses current company spelling, or the stored key after removal, even when op
   expect(storedCompanyQueryKeys({ steps: [{ name: "collect", result: { companyQueryKeys: historical } }, { name: "filter", result: null }] })).toEqual(historical);
   expect(storedCompanyQueryKeys({ steps: [{ name: "collect", result: { companyQueryKeys: { invalid: true } } }] })).toEqual({});
   expect(storedCompanyQueryKeys(null)).toEqual({});
+});
+
+it("falls back to the stored company keys when the live watch list cannot be read", () => {
+  const historical = { "d5d4c4ac6877c331": "acme" };
+  const failure = new Error("pipeline unreadable");
+  const errors: unknown[] = [];
+  const companies = liveCompanyBoards(() => { throw failure; }, (error) => errors.push(error));
+  expect(companies).toEqual([]);
+  expect(errors).toEqual([failure]);
+  const labels = resolveQueryLabels(search, t, companies, historical);
+  expect(labels["d5d4c4ac6877c331"]).toBe("Company: acme");
+  expect(Object.values(labels).filter((label) => label.startsWith("Company:"))).toEqual(["Company: acme"]);
+  const live = [{ name: "Acme GmbH", key: "acme", hasBoard: false }];
+  expect(liveCompanyBoards(() => live)).toBe(live);
 });
