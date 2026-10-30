@@ -144,3 +144,27 @@ it("uses the server minimum, preserves response order and opens all results with
   await user.click(screen.getByTestId("palette-view-all"));
   expect(mocks.push).toHaveBeenLastCalledWith("/jobs?q=AI%20%26");
 });
+
+it("selects the first job once results arrive, so Enter opens it rather than all results", async () => {
+  let release: () => void = () => {};
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  vi.stubGlobal("fetch", vi.fn(async () => {
+    await gate;
+    return Response.json({ jobs: [
+      { id: 42, title: "Quantum Firmware Engineer", company: "Example", location: null, rank: 70 },
+      { id: 43, title: "Quantum Firmware Lead", company: "Example", location: null, rank: 60 },
+    ] });
+  }));
+  const user = userEvent.setup();
+  render(wrap(<CommandPalette minChars={2} />));
+  await user.click(screen.getByRole("button", { name: /^跳转/ }));
+  await user.type(screen.getByRole("combobox"), "quantum firmware");
+  // while the request is pending there is nothing to select yet, not even "view all"
+  expect(screen.queryByTestId("palette-view-all")).toBeNull();
+  release();
+  await waitFor(() => expect(screen.getAllByTestId("palette-job")).toHaveLength(2));
+  expect(screen.getByTestId("palette-view-all")).toBeInTheDocument();
+  await waitFor(() => expect(screen.getAllByTestId("palette-job")[0]).toHaveAttribute("aria-selected", "true"));
+  await user.keyboard("{Enter}");
+  expect(mocks.push).toHaveBeenLastCalledWith("/jobs/42");
+});

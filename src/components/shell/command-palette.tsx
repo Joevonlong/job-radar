@@ -123,7 +123,8 @@ export function CommandPalette({ minChars }: { minChars: number }) {
   // rows of an earlier, longer text must not linger under a short one
   const text = query.trim();
   const canSearchJobs = text.length >= minChars;
-  const shownJobs = canSearchJobs && result.query === text ? result.jobs : [];
+  const resultsArrived = canSearchJobs && result.query === text;
+  const shownJobs = resultsArrived ? result.jobs : [];
   const pages = NAV_ITEMS.filter(({ key, href }) => !text || defaultFilter(`${tNav(key)} ${href}`, text) > 0);
   const subpages = PALETTE_SUBPAGES.filter(({ key, href }) => !text || defaultFilter(`${tSub(key)} ${href} ${key === "logs" ? tSub("logsKeywords") : ""}`, text) > 0);
 
@@ -199,9 +200,12 @@ export function CommandPalette({ minChars }: { minChars: number }) {
                   <PaletteScore rank={job.rank} label={job.rank === null ? t("scoreUnknown") : job.rank > 100 ? t("rankOver", { value: Math.round(job.rank), over: Math.round(job.rank) - 100 }) : t("rank", { value: Math.round(job.rank) })} />
                 </CommandItem>
               ))}
-              <CommandItem value="view-all-jobs" data-testid="palette-view-all" onSelect={() => go(`/jobs?q=${encodeURIComponent(text)}`)}>
-                <Search aria-hidden /> {t("viewAll")}
-              </CommandItem>
+              {/* Mounts with the job rows, never before them: cmdk keeps the first item it selected, and Enter must open the first job. */}
+              {resultsArrived ? (
+                <CommandItem value="view-all-jobs" data-testid="palette-view-all" onSelect={() => go(`/jobs?q=${encodeURIComponent(text)}`)}>
+                  <Search aria-hidden /> {t("viewAll")}
+                </CommandItem>
+              ) : null}
             </CommandGroup>
           ) : null}
         </CommandList>
