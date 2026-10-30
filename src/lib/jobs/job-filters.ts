@@ -8,7 +8,7 @@ import { loadPipeline } from "@/lib/market/effective";
 import { buildCompanyMatchIndex, matchCompanyIdsFromIndex, type CompanyMatchIndex } from "@/lib/pipeline/company";
 import { trapsEnabled } from "@/lib/traps/settings";
 
-import { searchLocationTerms } from "./cities";
+import { buildSearchPlan } from "./search";
 import { cityMembers, type CityGroup } from "./city-groups";
 
 function orNull<T>(values: readonly T[]): readonly T[] | null {
@@ -47,8 +47,8 @@ export function toJobFilters(filters: ViewFilters, context: { cityGroups: readon
   const cities = filterValues(filters, "city");
   const members = context.cityGroups ? [...new Set(cities.flatMap((city) => cityMembers(context.cityGroups ?? [], city)))] : [];
   return {
-    q: filters.q ?? null,
-    qLocationTerms: searchLocationTerms(filters.q),
+    // No text, no plan: an unsearched view never reads job-search.yaml or pipeline.yaml
+    search: filters.q === undefined || filters.q.trim() === "" ? null : buildSearchPlan(filters.q),
     sources: orNull(filterValues(filters, "source")),
     companyIds: needsCompanyIds(filters) ? (context.companyIds ?? []) : null,
     cities: orNull(cities),

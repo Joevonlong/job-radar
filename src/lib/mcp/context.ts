@@ -1,5 +1,6 @@
 import type { McpConfig } from "@/lib/config/schemas/mcp";
 import type { TrapsConfig } from "@/lib/config/schemas/traps";
+import type { SearchPlan } from "@/lib/jobs/search-query";
 import type { Db } from "@/lib/db/client";
 
 import { formatCallLine, type LogLine } from "./call-log";
@@ -22,8 +23,8 @@ export interface McpContext {
   baseCurrency: () => string | null;
   /** The raw city values a city name stands for (its metro group's members). */
   cityMembers: (db: Db, city: string) => Promise<string[]>;
-  /** The spellings of a search text that also match the location field. */
-  locationTerms: (query: string) => string[];
+  /** Parsed query using the installation's current matching and ranking settings. */
+  searchPlan: (query: string) => SearchPlan;
   text: McpTranslator;
   log: LogLine;
 }

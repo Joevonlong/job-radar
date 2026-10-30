@@ -30,6 +30,8 @@ export async function jobsListFilters(db: Db, params: JobsSearchParams, known: {
     scope: params.scope,
     relistedSince: params.relisted === true && (known.listing ?? await listingReady(db))
       ? new Date((known.now ?? new Date()).getTime() - (known.badgeDays ?? loadConfig("jobArchive").relist.badge_days) * 86_400_000) : null,
+    searchIn: params.searchIn === "all" ? "all" : null,
+    countries: params.country,
     closedReasons: params.reason,
     includeFiltered: params.filtered,
     filteredOnly: params.filteredOnly === true,

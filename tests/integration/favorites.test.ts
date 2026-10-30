@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, inject, it } from "vitest";
 
+import { searchPlan } from "../fixtures/job-search";
 import { closeDb, getDb, getJobDetail, getNavCounts, listFavoriteJobs, listJobs, schema, type JobFilters } from "@/lib/db";
 import { runMigrations } from "@/lib/db/migrate";
 import { setApplicationStatus } from "@/lib/db/repos/applications";
@@ -163,7 +164,7 @@ describe("favorites in the queries", () => {
   it("the list cards and the detail carry the note and time of the star", async () => {
     const db = getDb();
     const id = await idOf("LLM Engineer");
-    const card = (await list({ q: "LLM Engineer" })).jobs.find((j) => j.id === id);
+    const card = (await list({ search: searchPlan("LLM Engineer") })).jobs.find((j) => j.id === id);
     expect(card?.favorite?.note).toBe("Ask about visa sponsorship before applying");
     expect((await getJobDetail(db, id))?.favorite?.note).toBe("Ask about visa sponsorship before applying");
   });

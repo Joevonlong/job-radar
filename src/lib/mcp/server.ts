@@ -8,7 +8,8 @@ import { loadConfig } from "@/lib/config";
 import type { McpConfig, McpToolName } from "@/lib/config/schemas/mcp";
 import type { Db } from "@/lib/db/client";
 import { cityMembers } from "@/lib/jobs/city-groups";
-import { loadCityGroups, searchLocationTerms } from "@/lib/jobs/cities";
+import { loadCityGroups } from "@/lib/jobs/cities";
+import { buildSearchPlanLenient } from "@/lib/jobs/search";
 import { loadBaseCurrency } from "@/lib/signals/floor";
 
 import { formatCallLine, stderrLine, type LogLine } from "./call-log";
@@ -40,13 +41,7 @@ export function defaultContext(db: Db, settings: McpConfig, options: { text?: Mc
     },
     baseCurrency: loadBaseCurrency,
     cityMembers: async (database, city) => cityMembers(await loadCityGroups(database), city),
-    locationTerms: (query) => {
-      try {
-        return searchLocationTerms(query);
-      } catch {
-        return [query];
-      }
-    },
+    searchPlan: buildSearchPlanLenient,
     text: options.text ?? mcpTranslator(),
     log: options.log ?? stderrLine,
   };

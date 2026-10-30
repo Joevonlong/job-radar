@@ -9,7 +9,7 @@ import { jobsListHref, type JobsSearchParams } from "@/lib/jobs/search-params";
 import { cn } from "@/lib/utils";
 
 /** Links always pin scope: later status changes and clear-filters must not invoke the legacy absent-scope rule. */
-export function ScopeSwitch({ params, archiveCount }: { params: JobsSearchParams; archiveCount: number }) {
+export function ScopeSwitch({ params, archiveCount }: { params: JobsSearchParams; archiveCount: number | null }) {
   const t = useTranslations("dashboard.jobs.scope");
   const active = resolveJobScope(params.scope, params.status);
   return (
@@ -35,7 +35,7 @@ export function ScopeSwitch({ params, archiveCount }: { params: JobsSearchParams
             active === scope ? "bg-ink text-paper" : "text-ink hover:bg-soft",
           )}
         >
-          {scope === "archive" ? t("archive", { count: archiveCount }) : t(scope)}
+          {scope === "archive" ? (archiveCount === null ? t("archiveUnknown") : t("archive", { count: archiveCount })) : t(scope)}
         </Link>
       ))}
     </div>

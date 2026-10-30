@@ -1,6 +1,7 @@
 import { and, desc, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import { afterAll, beforeAll, expect, inject, it } from "vitest";
 
+import { searchPlan } from "../fixtures/job-search";
 import { closeDb, countJobList, countJobListSeen, getDb, getJobDetail, listJobs, listUnseenJobIds, schema, type JobFilters } from "@/lib/db";
 import { latestScoreCte } from "@/lib/db/queries/job-cards";
 import { buildJobConditions } from "@/lib/db/queries/jobs";
@@ -20,7 +21,7 @@ beforeAll(() => { process.env.DATABASE_URL = inject("testDatabaseUrl"); resetDor
 afterAll(closeDb);
 
 const list = (filters: JobFilters = {}, sort: JobSort | null = null, dir: SortDir | null = null, page = 1, pageSize = 100) => listJobs(getDb(), {
-  filters, sort: resolveSort({ sort, q: filters.q ?? null, scope: resolveJobScope(filters.scope, filters.statuses) }),
+  filters, sort: resolveSort({ sort, q: filters.search?.status === "ok" ? filters.search.terms.map((term) => term.text).join(" ") : null, scope: resolveJobScope(filters.scope, filters.statuses) }),
   dir, page, pageSize, timezone, visa: false, ghost: false,
 });
 const ids = (rows: { jobs: { id: number }[] }) => rows.jobs.map((job) => job.id);
@@ -75,7 +76,7 @@ it("keeps the default and every legacy status-only result, ordering and count un
 
 it("partitions every filtered set, including search, with matching list, switch and seen counts", async () => {
   await fixture();
-  const selections: JobFilters[] = [{}, { q: "Python" }, { q: "no-match" }, { q: "Engineer", workplaces: ["remote"] }, { includeFiltered: true }, { statuses: ["possibly_closed"] }, { closedReasons: ["gone", "dormant"] }];
+  const selections: JobFilters[] = [{}, { search: searchPlan("Python"), searchIn: "all" }, { search: searchPlan("no-match") }, { search: searchPlan("Engineer"), workplaces: ["remote"] }, { includeFiltered: true }, { statuses: ["possibly_closed"] }, { closedReasons: ["gone", "dormant"] }];
   for (const filters of selections) {
     const current = await list({ ...filters, scope: "current" });
     const archive = await list({ ...filters, scope: "archive" });
@@ -115,10 +116,11 @@ it("direct archive URLs use last-listed descending with id ties, nulls last and 
   await addSource(tied.id, ago(10));
   const fromUrl = (query: string) => {
     const params = loadJobsSearchParams(query);
-    return list({ scope: params.scope, statuses: params.status, q: params.q }, params.sort, params.dir);
+    return list({ scope: params.scope, statuses: params.status, search: searchPlan(params.q) }, params.sort, params.dir);
   };
   const expected = [tied.id, newer.id, older.id, unknown.id];
-  for (const query of ["?scope=archive", "?scope=archive&q=Engineer", "?scope=archive&sort=bad"]) expect(ids(await fromUrl(query))).toEqual(expected);
+  for (const query of ["?scope=archive", "?scope=archive&sort=bad"]) expect(ids(await fromUrl(query))).toEqual(expected);
+  expect(ids(await fromUrl("?scope=archive&q=Engineer"))).toEqual([older.id, newer.id, tied.id, unknown.id]);
   expect(ids(await fromUrl("?scope=archive&dir=asc"))).toEqual([older.id, newer.id, tied.id, unknown.id]);
   expect(ids(await fromUrl("?scope=archive&sort=rank"))).toEqual([older.id, newer.id, tied.id, unknown.id]);
   expect(ids(await fromUrl("?scope=archive&sort=first_seen&dir=asc"))).toEqual([unknown.id, tied.id, newer.id, older.id]);

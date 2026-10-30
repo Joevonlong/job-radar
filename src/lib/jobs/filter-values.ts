@@ -12,6 +12,7 @@ export const filterText = z.string().trim().min(1).max(MAX_FILTER_VALUE_CHARS);
 export const MULTI_VALUE_SCHEMAS = {
   source: filterText,
   city: filterText,
+  country: z.string().regex(/^[A-Za-z]{2}$/).transform((code) => code.toUpperCase()),
   company: filterText,
   contract: filterText,
   workplace: z.enum(JOB_WORKPLACES),
@@ -26,6 +27,7 @@ export type MultiValue<K extends MultiFilterKey> = z.infer<(typeof MULTI_VALUE_S
 export const MULTI_VALUE_ORDER: { readonly [K in MultiFilterKey]: readonly string[] | null } = {
   source: null,
   city: null,
+  country: null,
   company: null,
   contract: null,
   workplace: JOB_WORKPLACES,

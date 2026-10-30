@@ -67,7 +67,7 @@ claude mcp add job-radar -- pnpm --silent --dir /absolute/path/to/job-radar mcp:
 
 | 工具 | 作用 |
 |---|---|
-| `search_jobs` | 按排名返回岗位卡片，过滤方式和岗位列表一样：`query`（职位名、公司、地点、JD）、`city`、`workplace`、`min_rank`、`min_annual_salary`（市场基准货币）、`since` / `until`（首次发现日期，`YYYY-MM-DD`）、`application_status`、`sort`（`rank`、`posted`、`first_seen`）、`limit`。被硬过滤去掉的、已关闭和数周未被列出的休眠岗位不返回。不含 JD 正文。 |
+| `search_jobs` | 按排名返回岗位卡片，过滤方式和岗位列表一样：`query`（标题、公司名与别名、城市/地点和国家）、`search_in`（默认 `summary`；`all` 加搜原始 JD 和有效译文）、`country`（1–20 个两字母国家代码，不区分大小写、精确匹配，OR）、`city`、`workplace`、`min_rank`、`min_annual_salary`（市场基准货币）、`since` / `until`（首次发现日期，`YYYY-MM-DD`）、`application_status`、`sort`（`relevance`、`rank`、`posted`、`first_seen`；有 query 默认 relevance，无 query 默认 rank）、`limit`。被硬过滤去掉的、已关闭和数周未被列出的休眠岗位不返回。不含 JD 正文。 |
 | `get_job` | 一个岗位（`job_id`）的详情：上面所有字段，加上资历、语言、带引用的信号、发现的 AI 陷阱数量、你的申请，以及清洗后的 JD。 |
 | `list_applications` | 你的申请，排名高的在前；`status` 过滤；`stale_only: true` 只列超过每日提醒阈值（`notify.yaml: reminders.interested_days` / `applied_days`）还没动静的，等得最久的在前。 |
 
@@ -120,4 +120,5 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO job_radar_ro
 | "所有工具都关了" | `tools` 下三项都是 `false`。 |
 | `command not found` / `spawn pnpm ENOENT` | 客户端找不到 `pnpm` 或 `node`：用绝对路径，并在 `env` 里设 `PATH`（见上面 Claude Desktop 一节）。 |
 | "查询失败（database）" | 整套服务没在运行，或 `.env` 里的数据库地址从宿主机连不上。`pnpm run doctor` 两项都会查。 |
+| `search_timeout` | `search_in: "all"` 的搜索超过了 `job-search.yaml: query.all_scope_timeout_ms`。缩小查询或筛选条件，或不带 `search_in: "all"` 再搜。 |
 | "JD 暂不可用" | 见 [AI 陷阱与 JD](#ai-陷阱与-jd)。 |

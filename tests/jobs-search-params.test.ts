@@ -280,3 +280,24 @@ it("parses, serializes, clears and ignores the relisted toggle", () => {
   expect(countActiveFilters(params, { ignore: ["relisted"] })).toBe(0);
   expect(hasActiveFilters(params, { ignore: ["relisted"] })).toBe(false);
 });
+
+describe("search scope and country URLs", () => {
+  it("normalizes, validates, deduplicates and caps repeated country codes", () => {
+    const params = loadJobsSearchParams("?searchIn=all&country=de&country=DE&country=fr&country=D&country=DEU&country=12&country=");
+    expect(params).toMatchObject({ searchIn: "all", country: ["DE", "FR"] });
+    const href = jobsListHref(params);
+    expect(loadJobsSearchParams(href.slice("/jobs".length))).toMatchObject({ searchIn: "all", country: ["DE", "FR"] });
+    const codes = Array.from({ length: MAX_FILTER_VALUES + 5 }, (_, i) => `A${String.fromCharCode(65 + i % 26)}`).concat(Array.from({ length: 30 }, (_, i) => `B${String.fromCharCode(65 + i % 26)}`));
+    expect(loadJobsSearchParams(new URLSearchParams(codes.map((code) => ["country", code]))).country).toHaveLength(MAX_FILTER_VALUES);
+    expect(loadJobsSearchParams("?q=engineer&city=Berlin")).toMatchObject({ searchIn: null, country: [] });
+    expect(loadJobsSearchParams("?searchIn=summary").searchIn).toBeNull();
+  });
+
+  it("counts only country and strips obsolete relevance directions when writing links", () => {
+    expect(countActiveFilters(loadJobsSearchParams("?searchIn=all"))).toBe(0);
+    expect(hasActiveFilters(loadJobsSearchParams("?searchIn=all"))).toBe(false);
+    expect(countActiveFilters(loadJobsSearchParams("?searchIn=all&country=DE&country=FR"))).toBe(1);
+    expect(jobsListHref({ q: "AI", dir: "asc" })).toBe("/jobs?q=AI");
+    expect(jobsListHref({ sort: "relevance", dir: "asc" })).toBe("/jobs?sort=relevance");
+  });
+});

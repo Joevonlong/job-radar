@@ -388,13 +388,18 @@ describe("FilterBar: high-value signals only", () => {
 });
 
 describe("FilterBar: sort direction", () => {
-  it("uses the archive default even for a direct link with search text and invalid sort", () => {
+  it("uses relevance for search text ahead of the archive default", () => {
     renderBar("?scope=archive&q=engineer&sort=invalid");
-    expect(screen.getByTestId("filter-sort")).toHaveTextContent("Last listed");
-    expect(screen.getByTestId("filter-sort-dir")).toHaveAttribute("data-dir", "desc");
+    expect(screen.getByTestId("filter-sort")).toHaveTextContent("Relevance");
+    expect(screen.queryByTestId("filter-sort-dir")).not.toBeInTheDocument();
   });
 
-  it.each(["", "?scope=archive"])("writes an explicit non-default sort and removes the resolved default (%s)", async (query) => {
+  it.each([
+    ["", "rank"],
+    ["?scope=archive", "last_listed"],
+    ["?q=AI", "relevance"],
+    ["?scope=archive&q=AI", "relevance"],
+  ])("omits the default sort for the current query and scope (%s)", async (query, defaultSort) => {
     const { lastQuery } = renderBar(query);
     const choose = async (value: string) => {
       await userEvent.click(screen.getByTestId("filter-sort"));
@@ -406,7 +411,7 @@ describe("FilterBar: sort direction", () => {
       await choose("rank");
       await waitFor(() => expect(new URLSearchParams(lastQuery()).get("sort")).toBe("rank"));
     }
-    await choose(query ? "last_listed" : "rank");
+    await choose(defaultSort);
     await waitFor(() => expect(lastQuery()).toBe(query));
   });
   it("offers the salary sort next to the score and a new sort drops the direction", async () => {
@@ -469,8 +474,6 @@ describe("FilterBar: scope and reasons", () => {
   });
 });
 
-
-
 describe("FilterBar: seen-again readiness", () => {
   it("clears a ready seen-again filter while preserving scope", async () => {
     const { lastQuery } = renderBar("?scope=current&relisted=true", "en", { relisted: true });
@@ -484,5 +487,34 @@ describe("FilterBar: seen-again readiness", () => {
     expect(screen.getByTestId("filter-toggle")).toHaveTextContent(/^Filters$/);
     await userEvent.click(screen.getByTestId("filter-clear"));
     await waitFor(() => expect(lastQuery()).toBe("?scope=current&relisted=true"));
+  });
+});
+
+describe("search relevance and URL-only country", () => {
+  it("offers relevance only with q, ignores asc, and restores direction controls on explicit rank", async () => {
+    const { lastQuery } = renderBar("?q=AI&dir=asc");
+    expect(screen.getByTestId("filter-sort")).toHaveTextContent("Relevance");
+    expect(screen.queryByTestId("filter-sort-dir")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByTestId("filter-sort"));
+    expect(screen.getAllByTestId("filter-sort-option").map((el) => el.getAttribute("data-value"))).toEqual(["relevance", "rank", "salary", "first_seen", "posted", "last_listed"]);
+    await userEvent.click(screen.getAllByTestId("filter-sort-option").find((el) => el.getAttribute("data-value") === "rank")!);
+    await waitFor(() => expect(lastQuery()).toBe("?q=AI&sort=rank"));
+    await waitFor(() => expect(screen.getByTestId("filter-sort-dir")).toHaveAttribute("data-dir", "desc"));
+    expect(screen.getByTestId("filter-sort")).toHaveTextContent("Rank value");
+  });
+
+  it("shows a raw country chip, removes it and preserves searchIn on clear", async () => {
+    const { lastQuery } = renderBar("?country=PT&searchIn=all");
+    expect(screen.getByTestId("filter-chip")).toHaveTextContent("Country · PT");
+    expect(screen.queryByTestId("filter-country")).not.toBeInTheDocument();
+    expect(screen.getByTestId("filter-toggle")).toHaveTextContent("Filters (1)");
+    await userEvent.click(screen.getByRole("button", { name: "Remove filter Country: PT" }));
+    await waitFor(() => expect(lastQuery()).toBe("?searchIn=all"));
+  });
+
+  it("clear filters preserves search scope while removing countries", async () => {
+    const { lastQuery } = renderBar("?country=PT&searchIn=all&q=AI");
+    await userEvent.click(screen.getByTestId("filter-clear"));
+    await waitFor(() => expect(lastQuery()).toBe("?searchIn=all"));
   });
 });

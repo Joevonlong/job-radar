@@ -30,7 +30,7 @@ Job Radar 的所有设置都是 YAML，分两层：
 | 类 | 文件 | 首次初始化 | 产品升级时 |
 |---|---|---|---|
 | `user` | schedule、search、sources、ai、notify、interests、ui、breakdown、resume、insights、language、setup、salary（[salary.zh.md](salary.zh.md)）、mcp（[mcp.zh.md](mcp.zh.md)） | 从默认目录复制到用户目录，之后归你 | 不会自动改你的文件；格式变化由迁移（`config_version`）带过去 |
-| `shipped` | models（模型目录和价格）、pipeline（解析规则、城市和技能表）、pipeline-board（看板布局和卡片显示）、job-archive（再次出现规则）、signal-presets（`/interests`“新增类别”对话框的预设，见 [signals.zh.md](signals.zh.md#添加你自己的兴趣点)） | 不复制，一直读默认目录的 | 跟着产品更新 |
+| `shipped` | models（模型目录和价格）、pipeline（解析规则、城市和技能表）、pipeline-board（看板布局和卡片显示）、job-search（岗位查询解析与匹配设置）、job-archive（再次出现规则）、signal-presets（`/interests`“新增类别”对话框的预设，见 [signals.zh.md](signals.zh.md#添加你自己的兴趣点)） | 不复制，一直读默认目录的 | 跟着产品更新 |
 
 产品升级新增的 `user` 文件会在下次启动时从默认目录复制过来；如果用户目录里本来就有配置（老安装），可以改为写入保持原有行为的版本
 （`language.yaml`：中文，见 [languages.zh.md](languages.zh.md)）。初始化向导用同一个"老安装"判断。
@@ -79,6 +79,39 @@ maintenance 连续 `relist.min_gap_days` 天或更久没有运行、而采集一
 | `layout.board_min_height_rem` | `24` | 12–60 | 矮屏看板最低高度，单位 rem |
 
 所有键均已生效。紧凑卡片按配置限制标题和下一步行数，不缩小字号。工具栏切换密度后，在当前浏览器的 `jr_board_density` cookie 中保存 `density.remember_days` 天。cookie 缺失或非法时使用 `density.default`；首个响应由服务端按所选密度渲染。
+
+## 岗位搜索设置（`job-search.yaml`）
+
+这是岗位查询解析器的 shipped 配置，与 `search.yaml` 中的采集条件分开。
+它用于 /jobs、Today 已存视图搜索、视图趋势、快速打开接口和 MCP search_jobs。
+所有键均必填，未知键会被拒绝；默认值只写在 YAML 中。
+
+- `query`：输入长度（`max_chars`，整数 10–200；200 也是 MCP `query` 和已存视图 `q` 的上限）、不同词项上限（`max_terms`，整数 1–50）、
+  独立 CJK 片段的最少字数（`cjk_min_chars`，整数 1–10），以及 `all_scope_timeout_ms`（整数 1–120000）：
+  同时搜索职位说明（`searchIn=all`）时每条列表或计数查询的时间上限。任一查询超时后，/jobs 在列表上方显示“全文搜索超时”，
+  保留成功加载的结果，并将无法获取的计数显示为“—”。
+  MCP `search_jobs` 返回 `search_timeout` 错误。
+- `matching.prefix_min_chars`：允许前缀匹配的最少词长，整数 1–20。
+- `ranking`：字段权重 `weights`（`title`、`company`、`location`、`country`、`description`、`translation`，各 0–100）
+  与前缀折扣 `prefix_factor`（0–1），用于相关度排序，每个词只取命中字段的最高权重，前缀文本匹配乘以折扣。
+- `countries`：非空语言标签列表 `name_locales`、仍按普通文本处理的大写两字母歧义代码 `ambiguous_codes`，
+  以及代码到非空名称列表的 `extra_aliases`。国家名称来自市场国家表、其别名和 `Intl.DisplayNames`；
+  `match: false` 的国家不参与自由文本识别。
+- `palette`：`min_chars`（整数 1–10）、`limit`（整数 1–50），用于快速打开搜索接口。
+
+需要自定义时，将整份文件复制到用户配置目录；该副本会覆盖以后随产品发布的更新。
+
+搜索默认匹配标题、公司显示名与别名、每个地点的 city/label，以及识别出的国家。
+`/jobs?searchIn=all` 还搜索原始职位说明和来源哈希有效的译文，译文标记不参与匹配。
+查询时对字段做 NFKC 归一，不改存储。短拉丁词只整词匹配，长词允许词首前缀；引号短语限于同一字段；
+`C++` 等符号词按字面匹配；以点开头的词（如 `.NET`）也匹配 `ASP.NET`。国家名同时匹配文本，非歧义裸代码只匹配国家代码，歧义代码仍是普通文本。
+只输入一个代码（`DE`、`de`）时当国家；多词查询里只有大写输入的代码才当国家（`engineer DE`），所以 `chef de projet`
+里的 `de` 仍是普通词。给代码加引号（`"DE"`）就按文本搜索。
+`/jobs?country=DE&country=FR` 按国家代码精确筛选（OR）。country 和 searchIn 只在 URL 中，不存进视图。
+有搜索词且未显式选排序时，固定按相关度降序，忽略 dir；其他排序默认值不变。
+
+非 ASCII 字母的大小写不敏感（`ü`/`Ü`、`é`/`É`）取决于数据库 locale。Docker 部署的数据库用 `en_US.utf8`，会折叠大小写；
+用 `C` locale 建的数据库只折叠 ASCII 字母。
 
 ## 命令
 

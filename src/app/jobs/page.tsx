@@ -23,7 +23,7 @@ import { getSchedule } from "@/lib/dashboard/context";
 import { loadListViz } from "@/lib/dashboard/list-viz";
 import { NewSinceVisitNote } from "@/components/jobs/new-since-visit-note";
 import { loadHighValuePolicy, loadSignalCatalog } from "@/lib/signals/floor";
-import { countJobList, countJobListSeen, getDb, getFilterFloors, getJobFilterOptions, getVisitState, hasHighValueCategories, listCompanyFilterOptions, listCompanyMatchRows, listJobs, listMonthSalaryFigures } from "@/lib/db";
+import { countJobList, countJobListSeen, getDb, getFilterFloors, getJobFilterOptions, getVisitState, hasHighValueCategories, listCompanyFilterOptions, listCompanyMatchRows, listJobs, listMonthSalaryFigures, SearchTimeoutError } from "@/lib/db";
 import { loadPipeline } from "@/lib/market/effective";
 import { buildCompanyMatchIndex, canonicalCompanyNames } from "@/lib/pipeline/company";
 import { loadCityGroups } from "@/lib/jobs/cities";
@@ -38,6 +38,16 @@ import { ghostFilterAvailable } from "@/lib/ghost/filter";
 import { visaFilterAvailable } from "@/lib/visa/filter";
 import { VisibilityScope } from "@/components/applications/visibility-scope";
 import { loadBaseCurrency } from "@/lib/signals/floor";
+
+/** A query's value, or unknown when a full-text search ran past its time limit. */
+async function unlessTimedOut<T>(query: Promise<T>): Promise<{ value: T; timedOut: false } | { value: null; timedOut: true }> {
+  try {
+    return { value: await query, timedOut: false };
+  } catch (error) {
+    if (!(error instanceof SearchTimeoutError)) throw error;
+    return { value: null, timedOut: true };
+  }
+}
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations("pages.jobs");
@@ -83,27 +93,31 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
   const visibility: FilterVisibility = { ignore: [...(visaFilter ? [] : (["visa"] as const)), ...(ghostFilter ? [] : (["ghost"] as const)), ...(relistFilterVisibility(listing).ignore ?? [])] };
   const visit = await getVisitState(db);
   const seenUpTo = effectiveSeenUpTo(visit, now);
-  // Shared priority: explicit sort, reserved relevance step, archive last-listed default, then rank.
+  // Shared priority: explicit sort, search relevance, archive last-listed default, then rank.
   const sort = resolveSort({ sort: params.sort, q: params.q, scope: resolveJobScope(params.scope, params.status) });
-  const [result, options, seenCounts, salaryFigures, archiveCount, companies] = await Promise.all([
-    listJobs(db, {
+  // Searching descriptions (searchIn=all) has a time limit: past it the page says so instead of failing
+  const [listed, options, seenCounted, salaryFigures, archiveCounted, companies] = await Promise.all([
+    unlessTimedOut(listJobs(db, {
       filters,
       sort,
-      dir: params.dir,
+      dir: sort === "relevance" ? null : params.dir,
       page: params.page,
       pageSize: JOBS_PAGE_SIZE,
       timezone,
       visa: visaFilter,
       ghost: ghostFilter,
-    }),
+    })),
     getJobFilterOptions(db),
-    countJobListSeen(db, { filters, timezone, since: seenUpTo }),
+    unlessTimedOut(countJobListSeen(db, { filters, timezone, since: seenUpTo })),
     listMonthSalaryFigures(db, { now, timeZone: timezone, currency: loadBaseCurrency() ?? "" }),
-    countJobList(db, { filters: { ...filters, scope: "archive" }, timezone }),
+    unlessTimedOut(countJobList(db, { filters: { ...filters, scope: "archive" }, timezone })),
     listCompanyFilterOptions(db, { limit: ui.filters.company_options_max + 1, timezone }),
   ]);
-  const filterFloors = await getFilterFloors(db, salaryFilteredIds(result.jobs));
-  const items = await toListItems(result.jobs, { now, timezone, filterFloors, seenUpTo, relistBadgeDays, visa: visaFilter, ghost: ghostFilter, monthSalaries: { figures: salaryFigures, minSample: ui.salary_stats.min_sample } });
+  const searchTimedOut = listed.timedOut || seenCounted.timedOut || archiveCounted.timedOut;
+  const result = listed.value;
+  const seenCounts = seenCounted.value;
+  const filterFloors = await getFilterFloors(db, salaryFilteredIds(result?.jobs ?? []));
+  const items = await toListItems(result?.jobs ?? [], { now, timezone, filterFloors, seenUpTo, relistBadgeDays, visa: visaFilter, ghost: ghostFilter, monthSalaries: { figures: salaryFigures, minSample: ui.salary_stats.min_sample } });
   // The "new since your last visit" divider when the list runs newest first (it sits on the page of the boundary only);
   // any other order says it next to the count, with a link to that order
   const newestFirst = sort === "first_seen" && effectiveDir(sort, params.dir) === "desc";
@@ -113,9 +127,10 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
   // more new jobs on the next page, draws none)
   const boundaryOnPage =
     lastNew !== undefined &&
+    result !== null && seenCounts !== null &&
     (result.page - 1) * JOBS_PAGE_SIZE + lastNewIndex + 1 === seenCounts.newSince &&
     (lastNewIndex < items.length - 1 || result.page < result.pageCount);
-  const newDivider = newestFirst && boundaryOnPage ? { afterJobId: lastNew.id, count: seenCounts.newSince } : undefined;
+  const newDivider = newestFirst && boundaryOnPage && seenCounts ? { afterJobId: lastNew.id, count: seenCounts.newSince } : undefined;
   // The column heads sort; each head links to the list sorted by it (the current one flips its direction)
   const sortHref = (column: "score" | "salary" | "fresh") => jobsListHref({ ...params, ...nextSortParams(column, { sort, dir: params.dir }) });
   const sortHead = { sort, dir: effectiveDir(sort, params.dir), hrefs: { score: sortHref("score"), salary: sortHref("salary"), fresh: sortHref("fresh") } };
@@ -125,7 +140,7 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
     <div data-wide className="flex min-w-0 flex-col gap-sp-4">
       <VisitTracker />
       <PageHeader title={t("title")} description={t("description")} />
-      <ScopeSwitch params={params} archiveCount={archiveCount} />
+      <ScopeSwitch params={params} archiveCount={archiveCounted.value} />
       <FilterBar options={{ ...options, cities: cities.map(({ key, target }) => ({ key, target })), companies: companies.slice(0, ui.filters.company_options_max), companyOptionsCapped: companies.length > ui.filters.company_options_max, companyOptionsVisible: ui.filters.company_options_visible, traps: trapsEnabled(), relisted: listing, visa: visaFilter, ghost: ghostFilter, hiddenWorkplaces: hidden.workplaces, hiddenContracts: hidden.contracts, highValueNames }} />
       <div className="flex flex-wrap items-center gap-x-sp-3 gap-y-sp-2">
         {params.filteredOnly === true ? (
@@ -162,34 +177,47 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
         ) : null}
         <SaveViewButton />
         <span className="font-mono text-data text-ink-2" role="status" data-testid="result-count">
-          {tJobs("count", { count: result.total })}
+          {result ? tJobs("count", { count: result.total }) : tJobs("countUnknown")}
         </span>
-        <MarkSeenButton count={seenCounts.unseen} target={{ scope: "jobs", query: jobsSearchQuery(params), renderedAt: now.toISOString() }} />
-        {!newestFirst && seenCounts.newSince > 0 ? <NewSinceVisitNote count={seenCounts.newSince} href={jobsListHref({ ...params, sort: "first_seen", dir: null, page: 1 })} /> : null}
+        {seenCounts ? (
+          <MarkSeenButton count={seenCounts.unseen} target={{ scope: "jobs", query: jobsSearchQuery(params), renderedAt: now.toISOString() }} />
+        ) : (
+          <span className="text-ink-2 text-body-sm" data-testid="unseen-count">{tSeen("unseenCountUnknown")}</span>
+        )}
+        {!newestFirst && seenCounts && seenCounts.newSince > 0 ? <NewSinceVisitNote count={seenCounts.newSince} href={jobsListHref({ ...params, sort: "first_seen", dir: null, page: 1 })} /> : null}
       </div>
-      <JobList
-        jobs={items}
-        label={tJobs("listLabel")}
-        empty={
-          // "only favorites" and nothing else narrowing the list: no star yet, so say how to star a job instead of "relax the filters"
-          params.fav === true && !hasActiveFilters({ ...params, fav: null }, visibility) ? (
-            <span data-testid="jobs-fav-empty">
-              {tFavPage("empty")}{" "}
-              <Link href={jobsListHref({ ...params, fav: null, page: 1 })} className="text-foreground font-medium underline underline-offset-2">
-                {tFav("remove")} →
-              </Link>
-            </span>
-          ) : hasActiveFilters(params, visibility) ? (
-            tJobs("emptyFiltered")
-          ) : (
-            tJobs("empty")
-          )
-        }
-        viz={loadListViz(now, timezone)}
-        sortHead={sortHead}
-        {...(newDivider ? { newDivider } : {})}
-      />
-      <Pagination page={result.page} pageCount={result.pageCount} hrefFor={(page) => jobsListHref({ ...params, page })} />
+      {searchTimedOut ? (
+        <div role="status" data-testid="jobs-search-timeout" className="border-border bg-card text-muted-foreground shadow-e3 rounded-card border-bw px-sp-4 py-sp-3">
+          {tJobs("searchTimeout")}
+        </div>
+      ) : null}
+      {result ? (
+        <>
+          <JobList
+            jobs={items}
+            label={tJobs("listLabel")}
+            empty={
+              // "Only favorites" with nothing else narrowing the list: say how to star a job.
+              params.fav === true && !hasActiveFilters({ ...params, fav: null }, visibility) ? (
+                <span data-testid="jobs-fav-empty">
+                  {tFavPage("empty")}{" "}
+                  <Link href={jobsListHref({ ...params, fav: null, page: 1 })} className="text-foreground font-medium underline underline-offset-2">
+                    {tFav("remove")} →
+                  </Link>
+                </span>
+              ) : hasActiveFilters(params, visibility) ? (
+                tJobs("emptyFiltered")
+              ) : (
+                tJobs("empty")
+              )
+            }
+            viz={loadListViz(now, timezone)}
+            sortHead={sortHead}
+            {...(newDivider ? { newDivider } : {})}
+          />
+          <Pagination page={result.page} pageCount={result.pageCount} hrefFor={(page) => jobsListHref({ ...params, page })} />
+        </>
+      ) : null}
       <KeyHints />
     </div>
     </VisibilityScope>

@@ -32,11 +32,16 @@ function settings(edit: Partial<McpConfig> = {}): McpConfig {
   return mcpSchema.parse({ enabled: true, ...edit });
 }
 
-async function connect(options: { mcp?: McpConfig; traps?: () => TrapsConfig } = {}): Promise<Client> {
+async function connect(options: { mcp?: McpConfig; traps?: () => TrapsConfig; searchTimeoutMs?: number } = {}): Promise<Client> {
   const ctx = defaultContext(readOnly.db, options.mcp ?? settings(), { text: mcpTranslator("en"), log: (line) => lines.push(line) });
   ctx.now = () => NOW;
   ctx.timezone = () => TZ;
   if (options.traps) ctx.traps = options.traps;
+  const { searchTimeoutMs } = options;
+  if (searchTimeoutMs !== undefined) {
+    const plan = ctx.searchPlan;
+    ctx.searchPlan = (query) => ({ ...plan(query), allScopeTimeoutMs: searchTimeoutMs });
+  }
   const server = buildServer(ctx);
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await server.connect(serverTransport);
@@ -61,12 +66,12 @@ async function call<T>(client: Client, name: string, args: Record<string, unknow
   return { structured: result.structuredContent as T, text, isError: result.isError === true };
 }
 
-async function jobId(where: { title?: string; company?: string }): Promise<number> {
+async function jobId(where: { title?: string; company?: string; status?: (typeof schema.jobs.$inferSelect)["status"] }): Promise<number> {
   const rows = await getDb()
-    .select({ id: schema.jobs.id, title: schema.jobs.title, company: schema.companies.name })
+    .select({ id: schema.jobs.id, title: schema.jobs.title, company: schema.companies.name, status: schema.jobs.status })
     .from(schema.jobs)
     .innerJoin(schema.companies, eq(schema.companies.id, schema.jobs.companyId));
-  const row = rows.find((r) => (where.title === undefined || r.title === where.title) && (where.company === undefined || r.company === where.company));
+  const row = rows.find((r) => (where.title === undefined || r.title === where.title) && (where.company === undefined || r.company === where.company) && (where.status === undefined || r.status === where.status));
   if (!row) throw new Error(`no seeded job ${JSON.stringify(where)}`);
   return row.id;
 }
@@ -97,6 +102,38 @@ afterAll(async () => {
 });
 
 describe("search_jobs", () => {
+  it("uses summary by default, all for descriptions, exact countries and query relevance without changing output fields", async () => {
+    const titleId = await jobId({ title: "Forward Deployed Engineer", company: "Quillfeather Labs", status: "active" });
+    const descriptionId = await redBanana();
+    await getDb().execute(sql`update jobs set title = 'Asterneedle Engineer', locations_json = '[{"city":"Berlin","countryCode":"DE","label":"Berlin"}]'::jsonb where id = ${titleId}`);
+    await getDb().execute(sql`update jobs set description = 'Asterneedle duties', locations_json = '[{"city":"Paris","countryCode":"FR","label":"Paris"}]'::jsonb where id = ${descriptionId}`);
+    await getDb().execute(sql`update scores set rank_value = 10 where job_id = ${titleId}`);
+    // Obstgarten is deliberately unscored in the seed: an UPDATE would affect no rows.
+    await getDb().insert(schema.scores).values({ jobId: descriptionId, filterResult: "passed", score: 99, rankValue: 99 });
+    const client = await connect();
+    const summary = await call<SearchJobsOutput>(client, "search_jobs", { query: "Asterneedle" });
+    expect(summary.isError).toBe(false);
+    expect(summary.structured.jobs.map((job) => job.id)).toEqual([titleId]);
+    const all = await call<SearchJobsOutput>(client, "search_jobs", { query: "Asterneedle", search_in: "all" });
+    expect(all.structured.jobs.map((job) => job.id)).toEqual([titleId, descriptionId]);
+    const rank = await call<SearchJobsOutput>(client, "search_jobs", { query: "Asterneedle", search_in: "all", sort: "rank" });
+    expect(rank.structured.jobs.map((job) => job.id)).toEqual([descriptionId, titleId]);
+    const country = await call<SearchJobsOutput>(client, "search_jobs", { query: "Asterneedle", search_in: "all", country: ["de"] });
+    expect(country.structured.jobs.map((job) => job.id)).toEqual([titleId]);
+    expect(Object.keys(all.structured.jobs[0]!).sort()).toEqual(["id", "title", "company", "locations", "workplace", "contract", "is_agency", "german_level_required", "status", "posted_at", "first_seen_at", "salary", "skills", "rank", "application_status", "links"].sort());
+  });
+
+  it("reports a full-text search past its time limit as search_timeout; summary search has no limit", async () => {
+    // A few megabytes of description keep the regex scan well above one millisecond
+    await getDb().execute(sql`update jobs set description = repeat('lorem ipsum dolor ', 200000) where id = ${await redBanana()}`);
+    const client = await connect({ searchTimeoutMs: 1 });
+    const timedOut = await call<SearchJobsOutput>(client, "search_jobs", { query: "Asterneedle", search_in: "all" });
+    expect(timedOut.isError).toBe(true);
+    expect(timedOut.text).toContain("search_timeout");
+    expect(lines.at(-1)).toContain("search_timeout");
+    expect((await call<SearchJobsOutput>(client, "search_jobs", { query: "Asterneedle" })).isError).toBe(false);
+  });
+
   it("search hides a dormant job while get_job preserves its status and explains the reason", async () => {
     const id = await jobId({ company: "Maplewick Research", title: "Research Engineer, Document Retrieval" });
     const client = await connect();

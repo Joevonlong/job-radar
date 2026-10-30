@@ -1059,21 +1059,25 @@
     },
     "jobs": {
       "count": "共 {count} 条",
+      "countUnknown": "共 — 条",
       "listLabel": "岗位列表",
       "empty": "还没有岗位。运行一轮采集后会出现在这里。",
       "emptyFiltered": "没有符合条件的岗位，试试放宽筛选。",
+      "searchTimeout": "全文搜索超时，请缩小条件。",
       "filters": {
         "label": "搜索和筛选",
         "search": "搜索岗位",
         "searchPlaceholder": "搜索职位、公司、JD 全文…",
         "source": "来源",
         "city": "城市",
+        "country": "国家",
         "company": "公司",
         "workplace": "办公方式",
         "contract": "合同",
         "status": "岗位状态",
         "sort": "排序",
         "sorts": {
+          "relevance": "相关度",
           "rank": "排序值",
           "posted": "发布时间",
           "first_seen": "首次发现时间",
@@ -1121,6 +1125,7 @@
         "label": "岗位范围",
         "current": "当前",
         "archive": "历史库（{count, number}）",
+        "archiveUnknown": "历史库（—）",
         "all": "全部",
         "archiveHint": "你关闭的、来源已下架或数周未被列出的岗位。不会删除任何数据。",
         "notSaved": "范围和历史库原因不会存进视图。"
@@ -1373,6 +1378,7 @@
     "seen": {
       "dot": "未看",
       "unseenCount": "{count} 条未看",
+      "unseenCountUnknown": "— 条未看",
       "markAll": "全部标为已看",
       "markedToast": "已将 {count} 条标为已看",
       "markFailed": "保存失败，请重试",
@@ -6516,6 +6522,7 @@
     },
     "errors": {
       "notFound": "没有 id 为 {id} 的岗位。",
+      "searchTimeout": "搜索职位描述耗时过长，已停止（search_timeout）。请缩小查询或筛选条件，或不带 search_in: \"all\" 再搜。",
       "failed": "查询失败（{category}）。MCP 客户端里这个服务的日志有这次调用的记录。"
     },
     "tools": {
@@ -6533,7 +6540,9 @@
       }
     },
     "params": {
-      "query": "关键词：匹配职位名、公司、地点和 JD",
+      "query": "自由文本：匹配标题、公司名及别名、城市/地点和国家。仅在 search_in: \"all\" 时搜索职位说明。",
+      "searchIn": "搜索范围：summary（默认）只搜基本信息；all 同时搜索原始职位说明和有效译文。",
+      "country": "精确匹配地点的两字母国家代码（1–20 个），列表内为 OR。",
       "city": "城市名，例如岗位列表城市筛选里的写法",
       "workplace": "要保留的办公方式",
       "minRank": "最低排名分（0-100）；没打分的岗位不返回",
@@ -6541,7 +6550,7 @@
       "since": "首次发现于这一天或之后（YYYY-MM-DD，按 Job Radar 的时区）",
       "until": "首次发现于这一天或之前（YYYY-MM-DD）",
       "applicationStatus": "要保留的申请状态（new 也匹配没有申请记录的岗位；archived = 已忽略）",
-      "sort": "排序：rank（排名高的在前，默认）、posted（发布时间新的在前）、first_seen（发现时间新的在前）",
+      "sort": "排序：relevance（有 query 时默认，相关度降序）、rank（无 query 时默认，排序值降序）、posted（发布时间最新优先）、first_seen（发现时间最新优先）。",
       "limit": "最多返回几条（不超过 mcp.yaml 的 limits.max_results）",
       "jobId": "岗位 id（来自 search_jobs 或 list_applications）",
       "status": "要保留的申请状态",

@@ -7,6 +7,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
+import { sql } from "drizzle-orm";
+
 import { afterAll, beforeAll, beforeEach, describe, expect, inject, it } from "vitest";
 
 import { closeDb, getDb } from "@/lib/db";
@@ -130,6 +132,39 @@ describe("mcp:serve over stdio", () => {
     // same config defaults as this process, so the same language
     expect(session.stderr).toContain(mcpTranslator()("serve.ready", { tools: "search_jobs, get_job, list_applications" }));
     expect(session.stderr).toMatch(/\[mcp\] search_jobs ok items=3 ms=\d+/);
+    expect(session.code).toBe(0);
+  }, 60_000);
+
+  it("supports description scope and exact country over stdio without adding output fields", async () => {
+    const db = getDb();
+    const seeded = await db.execute<{ id: number; title: string; status: string }>(sql`select id, title, status from jobs where title in ('Forward Deployed Engineer', 'Machine Learning Engineer, Perception')`);
+    const forward = seeded.find((job) => job.title === "Forward Deployed Engineer" && job.status === "active");
+    const perception = seeded.find((job) => job.title === "Machine Learning Engineer, Perception" && job.status === "active");
+    // The salary lookup seed adds a closed copy with the same title.
+    const excluded = seeded.find((job) => job.title === "Forward Deployed Engineer" && job.status === "closed");
+    if (!forward || !perception || !excluded) throw new Error("expected two active search fixtures and the closed salary lookup origin");
+    await db.execute(sql`update jobs set description = 'Deutschlandticket', locations_json = '[{"city":"Berlin","countryCode":"DE","label":"Berlin"}]'::jsonb where id in (${forward.id}, ${perception.id}, ${excluded.id})`);
+    const expectedIds = [Number(forward.id), Number(perception.id)].sort((a, b) => a - b);
+    const configDir = path.join(userDir, "search-scope");
+    fs.mkdirSync(configDir);
+    fs.writeFileSync(path.join(configDir, "mcp.yaml"), "enabled: true\n");
+    const session = await converse([
+      { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "search-test", version: "1" } } },
+      { jsonrpc: "2.0", method: "notifications/initialized" },
+      { jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "search_jobs", arguments: { query: "Deutschlandticket" } } },
+      { jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "search_jobs", arguments: { query: "Deutschlandticket", search_in: "all", country: ["de"] } } },
+    ], serverEnv(configDir));
+    const replies = session.stdout.map((line) => JSON.parse(line) as { id: number; result?: { isError?: boolean; structuredContent?: { jobs: { id: number }[]; total: number } } });
+    const summary = replies.find((reply) => reply.id === 2)?.result;
+    const all = replies.find((reply) => reply.id === 3)?.result;
+    expect(summary?.isError).not.toBe(true);
+    expect(summary?.structuredContent?.jobs).toEqual([]);
+    expect(all?.isError).not.toBe(true);
+    expect(all?.structuredContent?.total).toBe(2);
+    const actualIds = all?.structuredContent?.jobs.map((job) => job.id).sort((a, b) => a - b);
+    expect(actualIds).toEqual(expectedIds);
+    expect(actualIds).not.toContain(Number(excluded.id));
+    expect(all?.structuredContent?.jobs.every((job) => !("description" in job))).toBe(true);
     expect(session.code).toBe(0);
   }, 60_000);
 

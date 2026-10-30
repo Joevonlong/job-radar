@@ -55,9 +55,12 @@ export const jobsSearchParsers = {
   /** No default: absent scope preserves legacy status links; explicit scope intersects status. Not a filter or saved-view key. */
   scope: parseAsStringLiteral(JOB_SCOPES),
   q: parseAsString,
+  /** Not a filter or view key: clearing filters preserves the chosen search scope. */
+  searchIn: parseAsStringLiteral(["all"]),
   /** Source family (`channels.family`). */
   source: parseAsMultiValues("source"),
   city: parseAsMultiValues("city"),
+  country: parseAsMultiValues("country"),
   /** Company display names (any of them); see `resolveViewCompanyIds` for what one matches. */
   company: parseAsMultiValues("company"),
   workplace: parseAsMultiValues("workplace"),
@@ -120,7 +123,7 @@ const serializeJobsParams = createSerializer(jobsSearchParsers);
  * So the query is rewritten the way `URLSearchParams` writes it, which is what Next compares with.
  */
 export function jobsListHref(values: Partial<{ [K in keyof typeof jobsSearchParsers]: JobsSearchParams[K] | null }>): string {
-  const url = serializeJobsParams("/jobs", values);
+  const url = serializeJobsParams("/jobs", { ...values, ...(values.sort === "relevance" || (values.sort == null && values.q?.trim()) ? { dir: null } : {}) });
   const at = url.indexOf("?");
   if (at < 0) return url;
   const query = new URLSearchParams(url.slice(at + 1)).toString();

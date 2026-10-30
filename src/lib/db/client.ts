@@ -51,10 +51,30 @@ export function connectTimeoutFromEnv(): number {
   return Number.isInteger(value) && value >= 1 && value <= 120 ? value : 5;
 }
 
+/**
+ * Session settings for the query-serving processes (the web and the read-only MCP server). JIT off: the planner's cost
+ * estimate for the per-row normalize() / regex predicates of the job search crosses `jit_above_cost`, and compiling
+ * then costs more than the whole query (0.6-1 s per list query on 40k jobs). Runner and AI worker keep the server default.
+ */
+export const QUERY_SESSION_SETTINGS = { jit: "off" } as const;
+
+/**
+ * The shared pool's session settings: the web process gets QUERY_SESSION_SETTINGS. Next.js substitutes the literal
+ * `process.env.NEXT_RUNTIME` in its server bundles at build time (keep it literal); runner and AI worker run unbundled
+ * without it.
+ */
+export function sharedPoolSessionSettings(): Record<string, string> {
+  return process.env.NEXT_RUNTIME === "nodejs" ? { ...QUERY_SESSION_SETTINGS } : {};
+}
+
 function getConnection(): Connection {
   if (!globalForDb.__jobRadarDb) {
     const env = loadDatabaseEnv();
-    globalForDb.__jobRadarDb = createConnection(env.DATABASE_URL, { max: env.DB_POOL_MAX, connectTimeoutSeconds: env.DB_CONNECT_TIMEOUT_SECONDS });
+    globalForDb.__jobRadarDb = createConnection(env.DATABASE_URL, {
+      max: env.DB_POOL_MAX,
+      connectTimeoutSeconds: env.DB_CONNECT_TIMEOUT_SECONDS,
+      sessionSettings: sharedPoolSessionSettings(),
+    });
   }
   return globalForDb.__jobRadarDb;
 }

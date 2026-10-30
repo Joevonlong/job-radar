@@ -76,7 +76,7 @@ Other MCP clients work the same way: a stdio server, command `pnpm`, arguments `
 
 | Tool | What it does |
 |---|---|
-| `search_jobs` | Ranked job cards, filtered like the jobs list: `query` (title, company, location, JD), `city`, `workplace`, `min_rank`, `min_annual_salary` (in the market's base currency), `since` / `until` (first seen, `YYYY-MM-DD`), `application_status`, `sort` (`rank`, `posted`, `first_seen`), `limit`. Jobs the hard filter removed, closed jobs and dormant jobs not listed for weeks are left out. No JD text. |
+| `search_jobs` | Ranked job cards, filtered like the jobs list: `query` (title, company name/aliases, city/location and country), `search_in` (`summary` by default; `all` adds the original JD and current translations), `country` (1–20 two-letter exact codes, case-insensitive, OR), `city`, `workplace`, `min_rank`, `min_annual_salary` (in the market's base currency), `since` / `until` (first seen, `YYYY-MM-DD`), `application_status`, `sort` (`relevance`, `rank`, `posted`, `first_seen`; default `relevance` with a query, `rank` without one), `limit`. Jobs the hard filter removed, closed jobs and dormant jobs not listed for weeks are left out. No JD text. |
 | `get_job` | One job (`job_id`) in detail: everything above plus seniority, language, the signals with their quotes, the number of AI traps found, your application, and the cleaned JD. |
 | `list_applications` | Your applications, best rank first; `status` filters; `stale_only: true` lists only the ones waiting longer than the daily reminder's thresholds (`notify.yaml: reminders.interested_days` / `applied_days`), the longest waiting first. |
 
@@ -143,4 +143,5 @@ config file; keep that file private.
 | "Every tool is switched off" | All three `tools` are `false`. |
 | `command not found` / `spawn pnpm ENOENT` | The client does not find `pnpm` or `node`: use absolute paths and set `PATH` in `env` (see Claude Desktop above). |
 | "The query failed (database)" | The stack is not running, or the database address in `.env` is not reachable from the host. `pnpm run doctor` checks both. |
+| `search_timeout` | A `search_in: "all"` search ran past `job-search.yaml: query.all_scope_timeout_ms`. Narrow the query or filters, or search without `search_in: "all"`. |
 | "JD not available" | See [AI traps and the JD](#ai-traps-and-the-jd). |

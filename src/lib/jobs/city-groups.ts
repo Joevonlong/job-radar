@@ -158,19 +158,3 @@ export function cityMembers(groups: readonly CityGroup[], city: string): string[
   const group = groups.find((g) => foldText(g.key) === wanted);
   return group ? group.members : [city];
 }
-
-/**
- * The spellings to look for in the locations when the user searches `q`: `q` itself, and when it is a
- * city of `filter.city_aliases` ("München"), all its other spellings ("Munich", "Muenchen").
- */
-export function locationSearchTerms(q: string, cityAliases: Readonly<Record<string, readonly string[]>>, transliterations: Readonly<Record<string, string>> = {}): string[] {
-  const text = q.trim();
-  if (text === "") return [];
-  const wanted = foldTransliterated(text, transliterations);
-  const terms = new Set<string>([text]);
-  for (const [canonical, aliases] of Object.entries(cityAliases)) {
-    const names = [canonical, ...aliases];
-    if (names.some((name) => foldTransliterated(name, transliterations) === wanted)) for (const name of names) terms.add(name);
-  }
-  return [...terms];
-}

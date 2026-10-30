@@ -8,6 +8,7 @@ import { channelsSchema } from "./schemas/channels";
 import { deliveryAuditSchema } from "./schemas/delivery-audit";
 import { insightsSchema } from "./schemas/insights";
 import { interestsSchema } from "./schemas/interests";
+import { jobSearchSchema } from "./schemas/job-search";
 import { languageSchema } from "./schemas/language";
 import { mcpSchema } from "./schemas/mcp";
 import { meSchema } from "./schemas/me";
@@ -37,6 +38,8 @@ import { uiSchema } from "./schemas/ui";
 export const configRegistry = {
   schedule: { file: "schedule.yaml", location: "config", kind: "user", schema: scheduleSchema },
   search: { file: "search.yaml", location: "config", kind: "user", schema: searchSchema },
+  /** Job search matching, country recognition and relevance settings (shipped). */
+  jobSearch: { file: "job-search.yaml", location: "config", kind: "shipped", schema: jobSearchSchema },
   channels: { file: "sources.yaml", location: "config", kind: "user", schema: channelsSchema },
   ai: { file: "ai.yaml", location: "config", kind: "user", schema: aiSchema },
   breakdown: { file: "breakdown.yaml", location: "config", kind: "user", schema: breakdownSchema },

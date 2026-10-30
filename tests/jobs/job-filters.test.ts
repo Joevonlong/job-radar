@@ -6,13 +6,18 @@ import type { CityGroup } from "@/lib/jobs/city-groups";
 import { loadPipeline } from "@/lib/market/effective";
 import { buildCompanyMatchIndex } from "@/lib/pipeline/company";
 
+import { searchPlan } from "../fixtures/job-search";
 import { pipelineWith } from "../pipeline/helpers";
 
-vi.mock("@/lib/jobs/cities", () => ({ searchLocationTerms: (q: string | null | undefined) => (q ? [q, `${q}-alias`] : []) }));
+vi.mock("@/lib/jobs/search", async () => {
+  const { searchPlan: plan } = await import("../fixtures/job-search");
+  return { buildSearchPlan: vi.fn((q: string) => plan(q)) };
+});
 vi.mock("@/lib/db", async (importOriginal) => ({ ...await importOriginal<typeof import("@/lib/db")>(), listCompanyMatchRows: vi.fn() }));
 vi.mock("@/lib/market/effective", async (importOriginal) => ({ ...await importOriginal<typeof import("@/lib/market/effective")>(), loadPipeline: vi.fn() }));
 
 import { needsCityGroups, needsCompanyIds, resolveViewCompanyIds, toJobFilters } from "@/lib/jobs/job-filters";
+import { buildSearchPlan } from "@/lib/jobs/search";
 
 const group = (key: string, members: string[]): CityGroup => ({ key, members, jobCount: members.length, target: false });
 const groups = [group("München", ["München", "Garching", "Munich"]), group("Berlin", ["Berlin"])];
@@ -73,8 +78,7 @@ describe("toJobFilters", () => {
   it("maps the other keys and leaves unset filters out (null)", () => {
     const f = toJobFilters({ q: "ml", source: ["ats", "xing"], contract: "permanent", status: ["active", "closed"], app: ["new"], minScore: 70, minSalary: 80000, salary: true }, { cityGroups: null });
     expect(f).toEqual({
-      q: "ml",
-      qLocationTerms: ["ml", "ml-alias"],
+      search: searchPlan("ml"),
       sources: ["ats", "xing"],
       companyIds: null,
       cities: null,
@@ -90,6 +94,12 @@ describe("toJobFilters", () => {
       visa: null,
       ghost: null,
     });
+  });
+
+  it("builds no search plan (and reads no search configuration) for a view without text", () => {
+    vi.mocked(buildSearchPlan).mockClear();
+    expect(toJobFilters({}, { cityGroups: null }).search).toBeNull();
+    expect(buildSearchPlan).not.toHaveBeenCalled();
   });
 
   it("passes the ghost filter only while the check is available, and reads `all` as no filter", () => {

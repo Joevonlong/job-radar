@@ -27,7 +27,7 @@ export function filterValues<K extends Exclude<MultiFilterKey, NonViewFilterKey>
 
 const isScalarCompat = (key: MultiFilterKey): boolean => (SCALAR_COMPAT_KEYS as readonly string[]).includes(key);
 
-/** The filters currently set in the /jobs URL state; unset values and `false` toggles are left out. */
+/** Save only view keys: URL-only country and searchIn are ignored, as are unset values and false toggles. */
 export function viewFiltersFromParams(params: Partial<FilterParams>): ViewFilters {
   const filters: ViewFilters = {};
   const q = params.q?.trim();

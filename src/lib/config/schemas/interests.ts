@@ -4,6 +4,7 @@ import { MAX_FILTER_VALUES, MIN_SALARY_MAX, MIN_SCORE_MAX, GHOST_FILTERS, TRAP_F
 import { MULTI_VALUE_SCHEMAS } from "@/lib/jobs/filter-values";
 import { SIGNAL_COLORS } from "@/lib/signals/palette";
 
+import { SEARCH_QUERY_MAX_CHARS } from "./job-search";
 import { nonEmptyString, nonNegativeInt, nonNegativeNumber, positiveInt, stringList } from "./common";
 
 /** Flags used when pattern strings are compiled. */
@@ -199,8 +200,8 @@ const oneOrMany = <T extends z.ZodType>(item: T) =>
  * On the Today page the dates are ignored: Today is today.
  */
 export const viewFiltersSchema = z.strictObject({
-  /** Free text (title, company, full JD text). */
-  q: nonEmptyString.max(200).optional(),
+  /** Free text (title, company name/aliases, city/location and recognized countries; no JD). */
+  q: nonEmptyString.max(SEARCH_QUERY_MAX_CHARS).optional(),
   /** Source family (`channels.family`, e.g. linkedin). */
   source: oneOrMany(MULTI_VALUE_SCHEMAS.source).optional(),
   city: oneOrMany(MULTI_VALUE_SCHEMAS.city).optional(),

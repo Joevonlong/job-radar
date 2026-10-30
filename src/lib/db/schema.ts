@@ -389,9 +389,8 @@ export const jobs = pgTable(
     /** What the last recheck of a watched job's posting found (`LinkCheckEvidence`: outcome, HTTP status, phrase, quote, URL, time); an existing `unseenCheckedAt` ISO timestamp of the last fallback link check survives every recheck outcome. */
     linkCheckJson: jsonb("link_check_json"),
     /**
-     * Full-text vector over title + description ('simple' config: postings are de/en mixed).
-     * Postgres generated columns cannot reference another table, so the company name is not
-     * part of the vector; company search joins on `companies.name_norm`.
+     * Retained full-text vector over title + description ('simple' config). Job search does not use it:
+     * it matches normalized individual fields, including company display names and aliases via exists.
      */
     searchTsv: tsvector("search_tsv").generatedAlwaysAs(
       sql`to_tsvector('simple', coalesce(title, '') || ' ' || coalesce(description, ''))`,

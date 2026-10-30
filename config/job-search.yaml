@@ -1,0 +1,25 @@
+# Job search matching, country recognition and relevance settings.
+query: # Limits applied before matching.
+  max_chars: 200 # Maximum query length before normalization.
+  max_terms: 12 # Maximum distinct terms kept.
+  cjk_min_chars: 2 # Minimum length of a CJK fragment.
+  all_scope_timeout_ms: 8000 # Time limit for one query that also searches descriptions (searchIn=all).
+matching: # Text matching rules.
+  prefix_min_chars: 4 # Shorter words require whole-word matches.
+ranking: # Relative relevance contributions.
+  weights: # Maximum contribution per field.
+    title: 8 # Job title.
+    company: 5 # Company name or alias.
+    location: 3 # City or location label.
+    country: 3 # Recognized country code.
+    description: 1 # Original job description.
+    translation: 1 # Current description translation.
+  prefix_factor: 0.6 # Discount applied to prefix matches.
+countries: # Free-text country recognition.
+  name_locales: [en, de, zh] # Locales used for region display names.
+  # Codes treated only as text: English words plus common job and tech abbreviations (ML, QA, HR, PM, BI, CI/CD, ...).
+  ambiguous_codes: [AI, AM, AR, AS, AT, BA, BE, BI, BY, CD, CI, DO, HR, IN, IS, IT, ME, ML, MS, NO, PA, PM, PR, QA, SA, TO, US]
+  extra_aliases: {} # Additional names by uppercase country code.
+palette: # Quick-open search limits.
+  min_chars: 2 # Minimum query length to request jobs.
+  limit: 8 # Maximum job results.

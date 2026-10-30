@@ -8,6 +8,9 @@ import { visaRulesFor } from "@/lib/visa/rules";
 import { compileDealBreakers, type CompiledDealBreakers, type DealBreakerMe } from "./deal-breakers";
 import { encodeReason } from "./reasons";
 import { salaryBelowFloor } from "./salary";
+import { foldText, foldTransliterated } from "./text";
+
+export { foldText, foldTransliterated } from "./text";
 
 /**
  * The hard filter: pure rules over the fields the pipeline already normalized
@@ -43,27 +46,6 @@ export interface FilterVerdict {
   result: FilterResult;
   /** Reason codes (see reasons.ts). `filtered_out`: why; `passed`: notes about what the posting leaves open. */
   reasons: string[];
-}
-
-/** Lower case, accents folded, ß -> ss: "München" and "munchen" compare equal. */
-export function foldText(value: string): string {
-  return value
-    .replace(/ß/g, "ss")
-    .normalize("NFKD")
-    .replace(/[̀-ͯ]/g, "")
-    .toLocaleLowerCase("en")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-/**
- * "Unterföhring" -> "unterfoehring": the spelling local sources use when they avoid a letter (the market pack's
- * `transliterations`).
- */
-export function foldTransliterated(value: string, transliterations: Readonly<Record<string, string>>): string {
-  let out = value;
-  for (const [letter, spelling] of Object.entries(transliterations)) out = out.replace(new RegExp(letter.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "giu"), spelling);
-  return foldText(out);
 }
 
 const escapePattern = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

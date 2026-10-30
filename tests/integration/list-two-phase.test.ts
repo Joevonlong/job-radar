@@ -13,6 +13,7 @@ import { listingReady } from "@/lib/db/repos/listing";
 import { uxTablesReady } from "@/lib/db/repos/ux-tables";
 import { DEFAULT_SORT_DIR, JOB_SCOPES, JOB_SORTS, SORT_DIRS } from "@/lib/jobs/constants";
 
+import { searchPlan } from "../fixtures/job-search";
 import { addJob, addSource, ago, NOW } from "./dormant-fixture";
 
 beforeAll(() => { process.env.DATABASE_URL = inject("testDatabaseUrl"); });
@@ -77,7 +78,7 @@ async function singleQueryReference(options: ListJobsOptions) {
   const rows = await db.with(latest).select(cardColumns(latest, ux, await dormancyReady(db), listing))
     .from(schema.jobs).innerJoin(schema.companies, eq(schema.companies.id, schema.jobs.companyId))
     .leftJoin(latest, eq(latest.jobId, schema.jobs.id)).where(where)
-    .orderBy(...jobOrderBy(options.sort, options.dir ?? DEFAULT_SORT_DIR[options.sort], latest, policyCurrency(options.filters), lastListedSql(listing)))
+    .orderBy(...jobOrderBy(options.sort, options.dir ?? DEFAULT_SORT_DIR[options.sort], latest, policyCurrency(options.filters), lastListedSql(listing), options.filters))
     .limit(pageSize).offset((page - 1) * pageSize);
   return { jobs: await hydrateCards(db, rows, { visa: options.visa ?? true, ghost: options.ghost === true }), total, page, pageCount, pageSize };
 }
@@ -114,6 +115,38 @@ it("retains score-dependent filters, clamping and hydration options", async () =
     const options = { filters: filter, sort, dir, page, pageSize: 3, timezone: "UTC", visa: false, ghost: true };
     expect(await listJobs(getDb(), options)).toEqual(await singleQueryReference(options));
   }
+});
+
+it("matches the single-query cards for searches, with relevance and every other sort", async () => {
+  const db = getDb();
+  const rows = await db.select({ id: schema.jobs.id }).from(schema.jobs).orderBy(schema.jobs.id);
+  // Titles, descriptions and countries vary so relevance has distinct levels as well as ties.
+  for (const [index, { id }] of rows.entries()) {
+    await db.update(schema.jobs).set({
+      title: index % 3 === 0 ? "AI Platform Engineer" : index % 3 === 1 ? `Engineer ${index}` : "Data Analyst",
+      description: index % 2 === 0 ? "Build AI systems in Berlin." : "Build reliable systems with Python.",
+      locationsJson: [{ city: index % 4 === 0 ? "Berlin" : "Paris", label: "", countryCode: index % 4 === 0 ? "DE" : "FR", isPrimary: true }],
+    }).where(eq(schema.jobs.id, id));
+  }
+  const searches: JobFilters[] = [
+    { scope: "all", includeFiltered: true, search: searchPlan("AI engineer") },
+    { scope: "all", search: searchPlan("ai"), searchIn: "all" },
+    { scope: "current", search: searchPlan("Germany") },
+    { scope: "all", includeFiltered: true, search: searchPlan("engineer"), countries: ["FR"] },
+    { scope: "all", search: searchPlan("!!!") },
+  ];
+  for (const filters of searches) for (const sort of JOB_SORTS) for (const dir of SORT_DIRS) for (const page of [1, 2, 999]) {
+    const options = { filters, sort, dir, page, pageSize: 3, timezone: "UTC" };
+    const actual = await listJobs(getDb(), options);
+    expect(actual, `${JSON.stringify(filters.search?.terms?.map((t) => t.text))}/${sort}/${dir}/${page}`).toEqual(await singleQueryReference(options));
+    expect(actual.total).toBe(await countJobList(getDb(), options));
+  }
+  // Not vacuous: relevance puts the title hits for both words first, and differs from rank order.
+  const relevance = await listJobs(getDb(), { filters: searches[0]!, sort: "relevance", page: 1, pageSize: 20, timezone: "UTC" });
+  const rank = await listJobs(getDb(), { filters: searches[0]!, sort: "rank", page: 1, pageSize: 20, timezone: "UTC" });
+  expect(relevance.total).toBeGreaterThan(3);
+  expect(relevance.jobs[0]!.title).toBe("AI Platform Engineer");
+  expect(relevance.jobs.map(({ id }) => id)).not.toEqual(rank.jobs.map(({ id }) => id));
 });
 
 it("clamps a page beyond the last page to the same cards as requesting the last page directly", async () => {

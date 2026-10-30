@@ -31,7 +31,7 @@ source needs which key: [installation.md](installation.md#2-optional-create-env)
 | Kind | Files | First-time setup | On product upgrade |
 |---|---|---|---|
 | `user` | schedule, search, sources, ai, notify, interests, ui, breakdown, resume, insights, language, setup, salary ([salary.md](salary.md)), mcp ([mcp.md](mcp.md)) | Copied from the defaults directory to the user directory, yours from then on | Your files are never changed automatically; format changes are carried over by migrations (`config_version`) |
-| `shipped` | models (model catalog and prices), pipeline (parsing rules, city and skill tables), pipeline-board (board layout and card display), job-archive (seen-again rules), signal-presets (the presets of the "Add category" dialog on `/interests`, see [signals.md](signals.md#add-your-own-interest-point)) | Not copied; always read from the defaults directory | Follows product updates |
+| `shipped` | models (model catalog and prices), pipeline (parsing rules, city and skill tables), pipeline-board (board layout and card display), job-search (job query parsing and matching settings), job-archive (seen-again rules), signal-presets (the presets of the "Add category" dialog on `/interests`, see [signals.md](signals.md#add-your-own-interest-point)) | Not copied; always read from the defaults directory | Follows product updates |
 
 A `user` file that a product upgrade introduces is copied from the defaults on the next start; when the user directory
 already held configuration (an existing install), a file can be written with the behaviour the install had so far
@@ -85,6 +85,41 @@ All six keys are required. Unknown keys, invalid densities and values outside th
 | `layout.board_min_height_rem` | `24` | 12–60 | Minimum board height on short screens, in rem |
 
 All keys apply to the board. Compact cards clamp the title and next action to the configured line counts without reducing font sizes. The toolbar switches density and stores `jr_board_density` in this browser for `density.remember_days` days. Missing or invalid cookies use `density.default`; the server renders the chosen density on the first response.
+
+## Job search settings (`job-search.yaml`)
+
+This shipped file configures the job search parser separately from collection criteria in `search.yaml`.
+It controls /jobs, Today saved-view searches, view trends, quick-open search and MCP search_jobs.
+All keys are required and unknown keys are rejected. Defaults live in the YAML only.
+
+- `query`: input length (`max_chars`, integer 10–200; 200 is also the limit of MCP `query` and a saved view's `q`),
+  distinct term limit (`max_terms`, integer 1–50), minimum standalone CJK fragment length (`cjk_min_chars`, integer 1–10),
+  and `all_scope_timeout_ms` (integer 1–120000): the time limit of each list or count query that also searches
+  descriptions (`searchIn=all`). If any query times out, /jobs shows "Full-text search timed out" above the list,
+  keeps any successful results, and displays unavailable counts as “—”. MCP `search_jobs` returns a `search_timeout` error.
+- `matching.prefix_min_chars`: minimum word length for prefix matching, integer 1–20.
+- `ranking`: field `weights` (`title`, `company`, `location`, `country`, `description`, `translation`, each 0–100)
+  and `prefix_factor` (0–1). Each term contributes only its highest matching field weight; prefix text matches are discounted.
+- `countries`: nonempty `name_locales` (locale tags), uppercase two-letter `ambiguous_codes` that remain ordinary text,
+  and `extra_aliases` (uppercase country code to a nonempty list of names). Country names come from the market table,
+  its aliases and `Intl.DisplayNames`; `match: false` countries stay out of free-text recognition.
+- `palette`: `min_chars` (integer 1–10) and `limit` (integer 1–50), used by the quick-open search endpoint.
+
+Search defaults to title, company display name/aliases, each location's city/label and recognized countries.
+`/jobs?searchIn=all` also searches the original description and current translations with matching source hashes;
+stored translation markers are excluded. Fields are normalized with NFKC at query time without changing stored data.
+Short Latin words require whole-word matches, longer words allow prefixes, quoted phrases stay within one field,
+and programming terms such as `C++` are literal; a term with a leading dot such as `.NET` also matches `ASP.NET`.
+Country names also match text; unambiguous bare codes match only country codes, while ambiguous codes remain text.
+A code alone (`DE`, `de`) is a country; in a longer query only a code typed in capitals is (`engineer DE`), so
+`chef de projet` keeps `de` as a word. Quote a code (`"DE"`) to search it as text. `/jobs?country=DE&country=FR` applies an exact OR country filter.
+Country and search scope are URL-only and are never saved in views. A nonempty query defaults to descending relevance
+unless a sort was explicitly chosen; relevance ignores `dir`. The other sort defaults are unchanged.
+
+Case-insensitive matching of non-ASCII letters (`ü`/`Ü`, `é`/`É`) depends on the database locale. The Docker stack's
+database uses `en_US.utf8` and folds them; a database created with the `C` locale folds ASCII letters only.
+
+To override these settings, copy the complete file into the user config directory. The copy replaces future shipped updates.
 
 ## Commands
 
