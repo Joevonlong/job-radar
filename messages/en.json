@@ -7038,8 +7038,7 @@
       "invalid_shape": "Invalid record format",
       "stored": "Stored",
       "store_failed": "Storage failed",
-      "discarded_on_failure": "Discarded after failure",
-      "company_mismatch": "Unrelated employer"
+      "discarded_on_failure": "Not stored after filtering or failure"
     },
     "requestStatus": {
       "pending": "Queued",

@@ -172,7 +172,7 @@ describe("company-query collection", () => {
     expect(rows.at(-1)).toMatchObject({ fetched: 4, newCount: 3, status: partial ? "partial" : "succeeded", interrupted: partial });
     expect(logs.find((r) => r.message === "company query matched")?.fields.company_mismatch).toBe(1);
     const audit = await getDb().select().from(schema.deliveryItems);
-    expect(audit.filter((r) => r.disposition === "company_mismatch")).toHaveLength(1);
+    expect(audit.filter((r) => r.disposition === "discarded_on_failure")).toHaveLength(1);
   });
 
   it("uses family-wide eligible turns when a different member starts", async () => {

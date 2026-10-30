@@ -7038,8 +7038,7 @@
       "invalid_shape": "记录格式无效",
       "stored": "已存储",
       "store_failed": "存储失败",
-      "discarded_on_failure": "失败后未保留",
-      "company_mismatch": "雇主不匹配"
+      "discarded_on_failure": "过滤或失败后未入库"
     },
     "requestStatus": {
       "pending": "排队中",

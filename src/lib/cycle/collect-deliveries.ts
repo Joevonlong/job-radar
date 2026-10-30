@@ -82,10 +82,7 @@ export function createCollectDeliveries(options: {
     },
     /** Company post-filtering shares this exact raw-item list with the atomic audit write. */
     retain(records: readonly RawPostingInput[]): void {
-      const kept = new Set(records);
-      for (const record of valid) {
-        if (!kept.has(record) && record.deliveryOrdinal !== undefined) ledger.drop(record.deliveryOrdinal, "company_mismatch", { externalId: record.externalId });
-      }
+      // Unstored receipts keep the existing discard disposition; the mismatch reason stays in logs.
       valid.splice(0, valid.length, ...records);
     },
     /** Audit failures must not replace the channel, cancellation or storage error being handled. */
