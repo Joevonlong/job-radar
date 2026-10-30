@@ -1,3 +1,4 @@
+import { currentScoresCheck } from "./current-scores";
 import type { DoctorCheck } from "../types";
 
 import { AI_CHECKS, BACKLOG_CHECKS } from "./ai";
@@ -23,6 +24,7 @@ export const ALL_CHECKS: readonly DoctorCheck[] = [
   ...NETWORK_CHECKS,
   ...DATA_CHECKS,
   deliveryCheck,
+  currentScoresCheck,
   ...CONFIG_CHECKS,
   ...SHIPPED_CHECKS,
   ...SETUP_CHECKS,

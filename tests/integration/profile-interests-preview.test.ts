@@ -1,3 +1,4 @@
+import { withRebuiltCurrentScores } from "../helpers/current-scores";
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, inject, it, vi } from "vitest";
 
@@ -19,7 +20,7 @@ let temp: TempConfig;
 
 beforeAll(async () => {
   process.env.DATABASE_URL = url;
-  await runMigrations();
+  await runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 } });
 });
 
 afterAll(async () => {
@@ -31,7 +32,7 @@ beforeEach(async () => {
   temp = makeTempConfig();
   await ensureProfileFiles();
   const db = getDb();
-  await db.delete(schema.scores);
+  await withRebuiltCurrentScores(db, db.delete(schema.scores));
   await db.delete(schema.jobs);
   await db.delete(schema.companies);
   await db.delete(schema.profileSnapshots);
@@ -114,7 +115,7 @@ describe("floor preview", () => {
     const salaries = await listMonthStatedSalaries(db, { timezone: TZ, now: NOW, currency: "EUR" });
     const preferences = reloadConfig("preferences");
     for (const floor of [0, 55_000, 70_000, 95_000, 110_000, 200_000]) {
-      await db.delete(schema.scores);
+      await withRebuiltCurrentScores(db, db.delete(schema.scores));
       const [snapshot] = await db.insert(schema.profileSnapshots).values({ kind: "preferences", hash: `floor-${floor}`, contentYaml: `floor: ${floor}` }).returning();
       await runFilter(db, { preferences: { ...preferences, salary_floor_year: floor }, snapshotId: snapshot?.id ?? 0, pipeline: shippedPipeline(), me: null });
       const dropped = await db.select().from(schema.scores).where(eq(schema.scores.filterResult, "filtered_out"));
@@ -154,7 +155,7 @@ describe("view trends", () => {
     await addJob({ firstSeenAt: new Date("2026-10-08T08:00:00Z") });
     await getDb().insert(schema.profileSnapshots).values({ kind: "preferences", hash: "h", contentYaml: "x" });
     const [snapshot] = await getDb().select().from(schema.profileSnapshots);
-    await getDb().insert(schema.scores).values({ jobId: job.id, profileSnapshotId: snapshot?.id ?? 0, filterResult: "filtered_out", filterReasons: ["student_role"] });
+    await withRebuiltCurrentScores(getDb(), getDb().insert(schema.scores).values({ jobId: job.id, profileSnapshotId: snapshot?.id ?? 0, filterResult: "filtered_out", filterReasons: ["student_role"] }));
 
     const counts = await getViewDailyCounts(getDb(), {
       views: [

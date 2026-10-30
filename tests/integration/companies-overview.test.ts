@@ -1,3 +1,4 @@
+import { withRebuiltCurrentScores } from "../helpers/current-scores";
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";
 
@@ -27,7 +28,7 @@ const overview = (options: Partial<CompanyOverviewOptions> = {}) => listCompanyO
 
 beforeAll(async () => {
   process.env.DATABASE_URL = url;
-  await runMigrations();
+  await runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 } });
 });
 afterAll(closeDb);
 
@@ -53,7 +54,7 @@ async function addJob(companyId: number, input: JobInput = {}): Promise<number> 
   }).returning({ id: schema.jobs.id });
   const id = job!.id;
   for (const [index, score] of (input.scores ?? []).entries()) {
-    await getDb().insert(schema.scores).values({ jobId: id, filterResult: score.filterResult, rankValue: score.rankValue ?? null, score: score.score ?? null, createdAt: new Date(SEEN.getTime() + index * 60_000) });
+    await withRebuiltCurrentScores(getDb(), getDb().insert(schema.scores).values({ jobId: id, filterResult: score.filterResult, rankValue: score.rankValue ?? null, score: score.score ?? null, createdAt: new Date(SEEN.getTime() + index * 60_000) }));
   }
   if (input.override) {
     await getDb().insert(schema.jobClosureOverrides).values({ jobId: id, action: "closed" });

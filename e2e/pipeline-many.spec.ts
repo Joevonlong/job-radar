@@ -7,6 +7,7 @@ import axe from "axe-core";
 import postgres from "postgres";
 import { parseDocument } from "yaml";
 
+import { refreshCurrentScores } from "./current-scores";
 import { expect, test, type Locator, type Page } from "./fixtures";
 
 declare global {
@@ -67,6 +68,7 @@ test.beforeAll(async () => {
   } finally {
     await sql.end({ timeout: 5 });
   }
+  await refreshCurrentScores(seeds.map((seed) => seed.id));
 });
 
 test.beforeEach(async () => {
@@ -91,6 +93,7 @@ test.afterAll(async () => {
   if (originalUi !== undefined) fs.writeFileSync(uiFile, originalUi);
   const sql = database();
   try { await deleteSeed(sql); } finally { await sql.end({ timeout: 5 }); }
+  await refreshCurrentScores(seeds.map((seed) => seed.id));
 });
 
 const column = (page: Page, status: string) => page.locator(`[data-testid="board-column"][data-column="${status}"]`);

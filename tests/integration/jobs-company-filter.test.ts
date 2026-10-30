@@ -1,3 +1,4 @@
+import { withRebuiltCurrentScores } from "../helpers/current-scores";
 import { afterAll, beforeAll, beforeEach, describe, expect, inject, it } from "vitest";
 
 import type { PipelineConfig } from "@/lib/config";
@@ -68,7 +69,7 @@ async function addJob(companyId: number, input: JobInput): Promise<number> {
     .returning({ id: schema.jobs.id });
   const id = job!.id;
   for (const [index, score] of (input.scores ?? []).entries()) {
-    await db.insert(schema.scores).values({ jobId: id, filterResult: score.filterResult, rankValue: score.rankValue ?? null, createdAt: new Date(SEEN.getTime() + index * 60_000) });
+    await withRebuiltCurrentScores(db, db.insert(schema.scores).values({ jobId: id, filterResult: score.filterResult, rankValue: score.rankValue ?? null, createdAt: new Date(SEEN.getTime() + index * 60_000) }));
   }
   if (input.override) await db.insert(schema.jobClosureOverrides).values({ jobId: id, action: input.override });
   return id;
@@ -82,7 +83,7 @@ let ids: Record<string, number> = {};
 
 beforeAll(async () => {
   process.env.DATABASE_URL = url;
-  await runMigrations();
+  await runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 } });
 });
 
 beforeEach(async () => {

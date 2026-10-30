@@ -28,7 +28,7 @@ function io(): CliIo & { lines: string[]; errors: string[] } {
 
 beforeAll(async () => {
   process.env.DATABASE_URL = url;
-  await runMigrations();
+  await runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 } });
 });
 afterAll(async () => {
   setOnProfileSaved(null);

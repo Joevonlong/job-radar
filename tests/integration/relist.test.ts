@@ -1,3 +1,4 @@
+import { withRebuiltCurrentScores } from "../helpers/current-scores";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -151,7 +152,7 @@ it("listing-only changes create no downstream work and archive config never chan
   const current = await currentPreferences(getDb());
   const options = { preferences: { ...current.preferences, deal_breakers: [] }, snapshotId: current.snapshot.id, pipeline: pipelineOptions().config, me: null, watchedCompanies: [] };
   await runFilter(getDb(), options);
-  await getDb().update(schema.scores).set({ score: 80, rankValue: 80, scoredAt: ago(20) }).where(eq(schema.scores.jobId, job.id));
+  await withRebuiltCurrentScores(getDb(), getDb().update(schema.scores).set({ score: 80, rankValue: 80, scoredAt: ago(20) }).where(eq(schema.scores.jobId, job.id)));
   const hash = descriptionHash(job.description!);
   await getDb().insert(schema.translations).values({ jobId: job.id, lang: "zh", content: "translated", sourceHash: hash });
   await getDb().insert(schema.jobBreakdowns).values({ jobId: job.id, sourceHash: hash, promptVersion: "test", outputLang: "en", content: {}, droppedItems: 0 });

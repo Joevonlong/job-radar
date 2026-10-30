@@ -1,3 +1,4 @@
+import { currentScoresBackfill } from "../src/lib/db/current-scores-config";
 /**
  * Prepare (or remove) the throw-away instance behind the README screenshots (`pnpm demo:shots`).
  *
@@ -100,7 +101,7 @@ fs.writeFileSync(uiFile, uiText);
 
 const connection = createConnection(targetUrl, { max: 1 });
 try {
-  await runMigrations({ url: targetUrl });
+  await runMigrations({ currentScoresBackfill: currentScoresBackfill(), url: targetUrl });
   const result = await seedDemoDatabase(connection.db, { now: demoNow(), timezone: DEMO_TIMEZONE });
   console.log(`demo-prepare: database "${dbName}" ready (${result.jobs} jobs, ${result.applications} applications)`);
 } finally {

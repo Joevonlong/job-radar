@@ -1,3 +1,5 @@
+import { withRebuiltCurrentScores } from "../helpers/current-scores";
+import { scoreTransaction } from "@/lib/db/repos/current-scores";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -91,7 +93,7 @@ async function addJob(spec: JobSpec): Promise<number> {
     })
     .returning();
   if ((spec.filter ?? "passed") === "passed") {
-    await getDb().insert(schema.scores).values({ jobId: job!.id, profileSnapshotId: await currentSnapshot(), filterResult: "passed" });
+    await withRebuiltCurrentScores(getDb(), getDb().insert(schema.scores).values({ jobId: job!.id, profileSnapshotId: await currentSnapshot(), filterResult: "passed" }));
   }
   return job!.id;
 }
@@ -111,7 +113,7 @@ const currentSnapshot = () => currentPreferencesSnapshotId(getDb(), profile());
 
 beforeAll(async () => {
   process.env.DATABASE_URL = url;
-  await runMigrations();
+  await runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 } });
 });
 
 beforeEach(async () => {
@@ -138,8 +140,8 @@ describe("migration 0027", () => {
   it("backfills the summaries and the language of the AI texts from the old columns", async () => {
     const jobId = await addJob({ title: "Old score" });
     const unscored = await addJob({ title: "Filter only" });
-    const [old] = await getDb().insert(schema.scores).values({ jobId, filterResult: "passed", score: 70, aiScore: 70, rankValue: 70, fitReasons: ["理由"], summaryZh: " 旧摘要 ", summaryEn: "" }).returning({ id: schema.scores.id });
-    const [bare] = await getDb().insert(schema.scores).values({ jobId: unscored, filterResult: "passed" }).returning({ id: schema.scores.id });
+    const [old] = await withRebuiltCurrentScores(getDb(), getDb().insert(schema.scores).values({ jobId, filterResult: "passed", score: 70, aiScore: 70, rankValue: 70, fitReasons: ["理由"], summaryZh: " 旧摘要 ", summaryEn: "" }).returning({ id: schema.scores.id }));
+    const [bare] = await withRebuiltCurrentScores(getDb(), getDb().insert(schema.scores).values({ jobId: unscored, filterResult: "passed" }).returning({ id: schema.scores.id }));
     // the migration's backfill statement, run again on rows that look like they were written before it
     const file = fs.readFileSync(path.resolve(import.meta.dirname, "../../drizzle/0027_language_texts.sql"), "utf8");
     const backfill = file.split("--> statement-breakpoint").find((statement) => statement.includes('UPDATE "scores"'));
@@ -203,16 +205,16 @@ describe("one scoring run", () => {
   it("never scores filtered-out jobs, closed jobs or jobs that already have a fresh score", async () => {
     const snapshot = await currentSnapshot();
     const filtered = await addJob({ title: "Filtered", filter: "none" });
-    await getDb().insert(schema.scores).values({ jobId: filtered, profileSnapshotId: snapshot, filterResult: "filtered_out", filterReasons: ["Student position"] });
+    await withRebuiltCurrentScores(getDb(), getDb().insert(schema.scores).values({ jobId: filtered, profileSnapshotId: snapshot, filterResult: "filtered_out", filterReasons: ["Student position"] }));
     const filteredNow = await addJob({ title: "Filtered by the new preferences", filter: "none" });
     // it passed under an older snapshot and was scored then; under the current one it is filtered out
     const older = (await getDb().insert(schema.profileSnapshots).values({ kind: "preferences", contentYaml: "old", hash: "old" }).returning())[0]!;
-    await getDb().insert(schema.scores).values({ jobId: filteredNow, profileSnapshotId: older.id, filterResult: "passed", score: 80, rankValue: 80 });
-    await getDb().insert(schema.scores).values({ jobId: filteredNow, profileSnapshotId: snapshot, filterResult: "filtered_out", filterReasons: ["x"] });
+    await withRebuiltCurrentScores(getDb(), getDb().insert(schema.scores).values({ jobId: filteredNow, profileSnapshotId: older.id, filterResult: "passed", score: 80, rankValue: 80 }));
+    await withRebuiltCurrentScores(getDb(), getDb().insert(schema.scores).values({ jobId: filteredNow, profileSnapshotId: snapshot, filterResult: "filtered_out", filterReasons: ["x"] }));
     const closed = await addJob({ title: "Closed", status: "closed", filter: "none" });
     const possibly = await addJob({ title: "Possibly closed", status: "possibly_closed", filter: "none" });
     const done = await addJob({ title: "Done", filter: "none" });
-    await getDb().insert(schema.scores).values({ jobId: done, profileSnapshotId: snapshot, filterResult: "passed", score: 70, rankValue: 70 });
+    await withRebuiltCurrentScores(getDb(), getDb().insert(schema.scores).values({ jobId: done, profileSnapshotId: snapshot, filterResult: "passed", score: 70, rankValue: 70 }));
     const open = await addJob({ title: "Open" });
     const passedNoScore = await addJob({ title: "Passed, not scored yet" });
     const unfiltered = await addJob({ title: "Not filtered yet", filter: "none" });
@@ -237,9 +239,9 @@ describe("one scoring run", () => {
   it("fills in the new snapshot's row after a preferences change and leaves the old row as it was", async () => {
     const old = (await getDb().insert(schema.profileSnapshots).values({ kind: "preferences", contentYaml: "old", hash: "old2" }).returning())[0]!;
     const id = await addJob({ title: "Re-filtered", filter: "none" });
-    await getDb().insert(schema.scores).values({ jobId: id, profileSnapshotId: old.id, filterResult: "passed", score: 64, rankValue: 64, stale: true, provider: "old" });
+    await withRebuiltCurrentScores(getDb(), getDb().insert(schema.scores).values({ jobId: id, profileSnapshotId: old.id, filterResult: "passed", score: 64, rankValue: 64, stale: true, provider: "old" }));
     const snapshot = await currentSnapshot();
-    await getDb().insert(schema.scores).values({ jobId: id, profileSnapshotId: snapshot, filterResult: "passed" }); // the filter step's row
+    await withRebuiltCurrentScores(getDb(), getDb().insert(schema.scores).values({ jobId: id, profileSnapshotId: snapshot, filterResult: "passed" })); // the filter step's row
     await runScoring(deps(fakeAi()), { limit: 5 });
     const rows = await scoreRows(id);
     expect(rows).toHaveLength(2);
@@ -361,7 +363,7 @@ describe("German level re-check when the pipeline's rule level changed", () => {
     expect(await latest(id)).toMatchObject({ germanLevel: "C1", germanLevelSource: "rule", germanPenalty: 20, score: 25, rankValue: 25 });
 
     await setRule(id, "preferred"); // the pipeline was re-run with the improved rules
-    await getDb().update(schema.scores).set({ signalBonus: 3, rankValue: 28 }).where(eq(schema.scores.jobId, id));
+    await withRebuiltCurrentScores(getDb(), getDb().update(schema.scores).set({ signalBonus: 3, rankValue: 28 }).where(eq(schema.scores.jobId, id)));
     expect(await recheck()).toEqual({ checked: 1, updated: 1 });
     expect(await latest(id)).toMatchObject({ germanLevel: "preferred", germanLevelSource: "rule", germanPenalty: 0, aiScore: 45, score: 45, rankValue: 48, stale: false });
     expect(fake.calls).toEqual(["Quantexa-like"]); // scored once, re-checked without the AI
@@ -386,7 +388,7 @@ describe("German level re-check when the pipeline's rule level changed", () => {
     fake.replies.set("Stale", answer({ score: 70, german_level_required: "C1" }));
     await runScoring(deps(fake), { limit: 5 });
     const unscored = await addJob({ title: "Not scored yet", german: "C1" });
-    await getDb().update(schema.scores).set({ stale: true }).where(eq(schema.scores.jobId, stale));
+    await withRebuiltCurrentScores(getDb(), getDb().update(schema.scores).set({ stale: true }).where(eq(schema.scores.jobId, stale)));
     await setRule(stale, "preferred");
     await setRule(unscored, "preferred");
     expect(await recheck()).toEqual({ checked: 0, updated: 0 });
@@ -408,7 +410,7 @@ describe("German level re-check when the pipeline's rule level changed", () => {
 describe("rank value", () => {
   it("adds the signal bonus the signals step wrote on the row, capped by interests.yaml", async () => {
     const id = await addJob({ title: "With signals" });
-    await getDb().update(schema.scores).set({ signalBonus: 22 }).where(eq(schema.scores.jobId, id)); // what the signals step writes on the filter step's row
+    await withRebuiltCurrentScores(getDb(), getDb().update(schema.scores).set({ signalBonus: 22 }).where(eq(schema.scores.jobId, id))); // what the signals step writes on the filter step's row
     const fake = fakeAi();
     fake.replies.set("With signals", answer({ score: 70 }));
     await runScoring(deps(fake), { limit: 5 });
@@ -534,8 +536,8 @@ describe("stale scores", () => {
   it("marks scores of another prompt version stale, but not scores without a version", async () => {
     const [id] = await scoreOnce([["A", 1]]);
     const seedLike = await addJob({ title: "Seed like", filter: "none" });
-    await getDb().insert(schema.scores).values({ jobId: seedLike, filterResult: "passed", score: 60, rankValue: 60 });
-    await getDb().update(schema.scores).set({ promptVersion: "score-v0" }).where(eq(schema.scores.jobId, id!));
+    await withRebuiltCurrentScores(getDb(), getDb().insert(schema.scores).values({ jobId: seedLike, filterResult: "passed", score: 60, rankValue: 60 }));
+    await withRebuiltCurrentScores(getDb(), getDb().update(schema.scores).set({ promptVersion: "score-v0" }).where(eq(schema.scores.jobId, id!)));
 
     const fake = fakeAi();
     const result = await runScoring(deps(fake), { limit: 5 });
@@ -574,7 +576,7 @@ describe("stale scores", () => {
 
   it("rescoreStale handles stale scores only", async () => {
     const [stale] = await scoreOnce([["Stale one", 5]]);
-    await markScoresStaleExcept(getDb(), 987654321);
+    await scoreTransaction(getDb(), (tx) => markScoresStaleExcept(tx, 987654321));
     expect((await latest(stale!)).stale).toBe(true);
     await addJob({ title: "Unscored", age: 1 });
     const fake = fakeAi();
@@ -585,7 +587,7 @@ describe("stale scores", () => {
 
   it("counts the backlog the way the settings control needs it", async () => {
     await scoreOnce([["A", 1], ["B", 2]]);
-    await markScoresStaleExcept(getDb(), 987654321);
+    await scoreTransaction(getDb(), (tx) => markScoresStaleExcept(tx, 987654321));
     await addJob({ title: "C" });
     const snapshotId = await currentSnapshot();
     expect(await countScoreBacklog(getDb(), snapshotId)).toEqual({ unscored: 1, stale: 2 });
@@ -619,7 +621,7 @@ describe("the order the AI gets the waiting jobs in", () => {
   it("a stored signal bonus lifts a job over an equally titled one", async () => {
     const plain = await addJob({ title: "Data Engineer", age: 1 });
     const paid = await addJob({ title: "Data Engineer", age: 1 });
-    await getDb().update(schema.scores).set({ signalBonus: 15 }).where(eq(schema.scores.jobId, paid));
+    await withRebuiltCurrentScores(getDb(), getDb().update(schema.scores).set({ signalBonus: 15 }).where(eq(schema.scores.jobId, paid)));
     const fake = fakeAi();
     await runScoring(deps(fake), { limit: 1 });
     expect((await latest(paid)).score).toBe(80);
@@ -640,7 +642,7 @@ describe("the order the AI gets the waiting jobs in", () => {
 
   it("stale re-scores still come after jobs that never had a score, whatever their relevance", async () => {
     const [stale] = await scoredJobs([["Senior AI Engineer", 5]]);
-    await markScoresStaleExcept(getDb(), 987654321);
+    await scoreTransaction(getDb(), (tx) => markScoresStaleExcept(tx, 987654321));
     await addJob({ title: "Plain job", age: 1 });
     const fake = fakeAi();
     await runScoring(deps(fake), { limit: 1 });
@@ -652,7 +654,7 @@ describe("the order the AI gets the waiting jobs in", () => {
 describe("the backlog and the chosen jobs", () => {
   it("scoreBacklog works through `backlog_per_run` never-scored jobs, separate from the cycle limit, and leaves stale ones alone", async () => {
     const [stale] = await scoredJobs([["Old and stale", 5]]);
-    await markScoresStaleExcept(getDb(), 987654321);
+    await scoreTransaction(getDb(), (tx) => markScoresStaleExcept(tx, 987654321));
     for (const title of ["B1", "B2", "B3", "B4"]) await addJob({ title, age: 2 });
     const config = aiConfig((raw) => {
       (raw.scoring as Record<string, unknown>).backlog_per_run = 3;
@@ -686,7 +688,7 @@ describe("the backlog and the chosen jobs", () => {
 
   it("scoreJobs re-scores a stale score of a named job", async () => {
     const [id] = await scoredJobs([["Was scored", 5]]);
-    await markScoresStaleExcept(getDb(), 987654321);
+    await scoreTransaction(getDb(), (tx) => markScoresStaleExcept(tx, 987654321));
     const result = await scoreJobs(deps(fakeAi()), [id!]);
     expect(result).toMatchObject({ scored: 1, skipped: 0 });
     expect((await latest(id!)).stale).toBe(false);
@@ -705,7 +707,7 @@ describe("stale only ever means a score made under an outdated profile or prompt
     for (let i = 0; i < passed + filteredOut; i += 1) {
       const isPassed = i < passed;
       const id = await addJob({ title: `${isPassed ? "Passed" : "Filtered"} ${i}`, age: i + 1, filter: "none" });
-      await getDb().insert(schema.scores).values({ jobId: id, profileSnapshotId: snapshotId, filterResult: isPassed ? "passed" : "filtered_out", filterReasons: isPassed ? [] : ["title:x"] });
+      await withRebuiltCurrentScores(getDb(), getDb().insert(schema.scores).values({ jobId: id, profileSnapshotId: snapshotId, filterResult: isPassed ? "passed" : "filtered_out", filterReasons: isPassed ? [] : ["title:x"] }));
       (isPassed ? passedIds : filteredIds).push(id);
     }
     return { passedIds, filteredIds, snapshotId };
@@ -735,7 +737,7 @@ describe("stale only ever means a score made under an outdated profile or prompt
     await firstCycleFilterRows(3, 2);
     await runScoring(deps(fakeAi()), { limit: 2 });
     // old rows of every kind carry the old prompt version, as if an older build had written them
-    await getDb().update(schema.scores).set({ promptVersion: "score-v0" });
+    await withRebuiltCurrentScores(getDb(), getDb().update(schema.scores).set({ promptVersion: "score-v0" }));
     const marked = await runScoring(deps(fakeAi()), { limit: 0 });
     expect(marked.staleByPromptVersion).toBe(2);
     const stale = await stales();
@@ -754,7 +756,7 @@ describe("stale only ever means a score made under an outdated profile or prompt
     expect(changed.staleMarked).toBe(2);
     // the filter step of the next cycle files fresh rows under the new snapshot
     for (const id of [...passedIds, ...filteredIds]) {
-      await getDb().insert(schema.scores).values({ jobId: id, profileSnapshotId: changed.snapshot.id, filterResult: passedIds.includes(id) ? "passed" : "filtered_out" });
+      await withRebuiltCurrentScores(getDb(), getDb().insert(schema.scores).values({ jobId: id, profileSnapshotId: changed.snapshot.id, filterResult: passedIds.includes(id) ? "passed" : "filtered_out" }));
     }
     const rows = await getDb().select().from(schema.scores);
     expect(rows).toHaveLength(10);
@@ -782,7 +784,7 @@ describe("stale only ever means a score made under an outdated profile or prompt
 
   it("old data: a stale flag on a row without a score is not shown, and the migration resets it", async () => {
     const { passedIds, filteredIds } = await firstCycleFilterRows(1, 1);
-    await getDb().update(schema.scores).set({ stale: true }); // what the bug left behind
+    await withRebuiltCurrentScores(getDb(), getDb().update(schema.scores).set({ stale: true })); // what the bug left behind
     const detail = await getJobDetail(getDb(), passedIds[0]!);
     expect(detail?.score).toMatchObject({ filterResult: "passed", stale: false });
     const page = await listJobs(getDb(), { filters: { includeFiltered: true }, sort: "rank", page: 1, pageSize: 50, timezone: "UTC" });
@@ -790,7 +792,7 @@ describe("stale only ever means a score made under an outdated profile or prompt
     expect(await countStaleScores(getDb())).toBe(0);
 
     const migration = fs.readFileSync(path.resolve(import.meta.dirname, "../../drizzle/0008_scores_stale_fix.sql"), "utf8");
-    await getDb().insert(schema.scores).values({ jobId: filteredIds[0]!, profileSnapshotId: null, filterResult: "passed", score: 50, rankValue: 50, stale: true });
+    await withRebuiltCurrentScores(getDb(), getDb().insert(schema.scores).values({ jobId: filteredIds[0]!, profileSnapshotId: null, filterResult: "passed", score: 50, rankValue: 50, stale: true }));
     await getDb().execute(sql.raw(migration));
     const rows = await getDb().select().from(schema.scores);
     expect(rows.filter((r) => r.stale).map((r) => r.score)).toEqual([50]); // a real stale score stays
@@ -883,10 +885,10 @@ describe("dashboard queries", () => {
     const german = await addJob({ title: "Needs C1", german: "unknown", filter: "none" });
     const plain = await addJob({ title: "Plain", filter: "none" });
     const ruleOnly = await addJob({ title: "Rule says B2", german: "B2", filter: "none" });
-    await getDb().insert(schema.scores).values([
+    await withRebuiltCurrentScores(getDb(), getDb().insert(schema.scores).values([
       { jobId: german, filterResult: "passed", score: 60, rankValue: 60, germanLevel: "C1" },
       { jobId: plain, filterResult: "passed", score: 70, rankValue: 70, germanLevel: "none" },
-    ]);
+    ]));
 
     const all = await listJobs(getDb(), { filters: {}, sort: "rank", page: 1, pageSize: 50, timezone: "UTC" });
     const level = (title: string) => all.jobs.find((j) => j.title === title)?.germanLevelRequired;
@@ -931,8 +933,8 @@ describe("dashboard queries", () => {
     const old = (await getDb().insert(schema.profileSnapshots).values({ kind: "preferences", contentYaml: "o", hash: "o" }).returning())[0]!;
     const next = (await getDb().insert(schema.profileSnapshots).values({ kind: "preferences", contentYaml: "n", hash: "n" }).returning())[0]!;
     const id = await addJob({ title: "Waiting for re-score", german: "B2", filter: "none" });
-    await getDb().insert(schema.scores).values({ jobId: id, profileSnapshotId: old.id, filterResult: "passed", score: 72, rankValue: 77, signalBonus: 5, germanLevel: "B2", aiScore: 82, germanPenalty: 10, fitReasons: ["fit"], provider: "p" });
-    await getDb().insert(schema.scores).values({ jobId: id, profileSnapshotId: next.id, filterResult: "passed" });
+    await withRebuiltCurrentScores(getDb(), getDb().insert(schema.scores).values({ jobId: id, profileSnapshotId: old.id, filterResult: "passed", score: 72, rankValue: 77, signalBonus: 5, germanLevel: "B2", aiScore: 82, germanPenalty: 10, fitReasons: ["fit"], provider: "p" }));
+    await withRebuiltCurrentScores(getDb(), getDb().insert(schema.scores).values({ jobId: id, profileSnapshotId: next.id, filterResult: "passed" }));
 
     const page = await listJobs(getDb(), { filters: {}, sort: "rank", page: 1, pageSize: 50, timezone: "UTC" });
     expect(page.jobs[0]?.rank).toMatchObject({ score: 72, rankValue: 77, signalBonus: 5, filterResult: "passed", stale: true });
@@ -944,7 +946,7 @@ describe("dashboard queries", () => {
     expect(detail?.score).toMatchObject({ score: 72, rankValue: 77, aiScore: 82, germanPenalty: 10, fitReasons: ["fit"], stale: true, filterResult: "passed" });
 
     // once the new row is scored it takes over, and it is fresh
-    await getDb().update(schema.scores).set({ score: 60, rankValue: 60 }).where(eq(schema.scores.profileSnapshotId, next.id));
+    await withRebuiltCurrentScores(getDb(), getDb().update(schema.scores).set({ score: 60, rankValue: 60 }).where(eq(schema.scores.profileSnapshotId, next.id)));
     expect((await listJobs(getDb(), { filters: {}, sort: "rank", page: 1, pageSize: 50, timezone: "UTC" })).jobs[0]?.rank).toMatchObject({ score: 60, stale: false });
   });
 
@@ -952,8 +954,8 @@ describe("dashboard queries", () => {
     const old = (await getDb().insert(schema.profileSnapshots).values({ kind: "preferences", contentYaml: "o", hash: "o3" }).returning())[0]!;
     const next = (await getDb().insert(schema.profileSnapshots).values({ kind: "preferences", contentYaml: "n", hash: "n3" }).returning())[0]!;
     const id = await addJob({ title: "Now filtered out", filter: "none" });
-    await getDb().insert(schema.scores).values({ jobId: id, profileSnapshotId: old.id, filterResult: "passed", score: 90, rankValue: 90 });
-    await getDb().insert(schema.scores).values({ jobId: id, profileSnapshotId: next.id, filterResult: "filtered_out", filterReasons: ["blacklist"] });
+    await withRebuiltCurrentScores(getDb(), getDb().insert(schema.scores).values({ jobId: id, profileSnapshotId: old.id, filterResult: "passed", score: 90, rankValue: 90 }));
+    await withRebuiltCurrentScores(getDb(), getDb().insert(schema.scores).values({ jobId: id, profileSnapshotId: next.id, filterResult: "filtered_out", filterReasons: ["blacklist"] }));
     const page = await listJobs(getDb(), { filters: { includeFiltered: true }, sort: "rank", page: 1, pageSize: 50, timezone: "UTC" });
     expect(page.jobs[0]?.rank).toMatchObject({ filterResult: "filtered_out", filterReasons: ["blacklist"], rankValue: null });
     expect((await getJobDetail(getDb(), id))?.score).toMatchObject({ filterResult: "filtered_out", rankValue: null });
@@ -961,7 +963,7 @@ describe("dashboard queries", () => {
 
   it("marks a stale score on the card", async () => {
     const id = await addJob({ title: "Old score", filter: "none" });
-    await getDb().insert(schema.scores).values({ jobId: id, filterResult: "passed", score: 60, rankValue: 60, stale: true });
+    await withRebuiltCurrentScores(getDb(), getDb().insert(schema.scores).values({ jobId: id, filterResult: "passed", score: 60, rankValue: 60, stale: true }));
     const page = await listJobs(getDb(), { filters: {}, sort: "rank", page: 1, pageSize: 50, timezone: "UTC" });
     expect(page.jobs[0]?.rank).toMatchObject({ score: 60, stale: true });
   });

@@ -1,3 +1,4 @@
+import { withRebuiltCurrentScores } from "../helpers/current-scores";
 import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, inject, it } from "vitest";
 
@@ -30,7 +31,7 @@ async function newJob(title: string, description: string, salary: JobSalary | nu
     .insert(schema.jobs)
     .values({ companyId: company!.id, title, titleNorm: title.toLowerCase(), description, salaryJson: salary })
     .returning({ id: schema.jobs.id });
-  await db.insert(schema.scores).values({ jobId: job!.id, filterResult: "passed" });
+  await withRebuiltCurrentScores(db, db.insert(schema.scores).values({ jobId: job!.id, filterResult: "passed" }));
   return job!.id;
 }
 
@@ -40,7 +41,7 @@ const resetTables = () => getDb().execute(sql`truncate table jobs, companies, ra
 
 beforeAll(async () => {
   process.env.DATABASE_URL = url;
-  await runMigrations();
+  await runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 } });
 });
 beforeEach(resetTables);
 afterAll(async () => {

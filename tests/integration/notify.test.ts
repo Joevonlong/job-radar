@@ -1,3 +1,4 @@
+import { withRebuiltCurrentScores } from "../helpers/current-scores";
 import { eq, sql } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, inject, it } from "vitest";
 
@@ -30,7 +31,7 @@ const DAY = 24 * HOUR;
 
 beforeAll(async () => {
   process.env.DATABASE_URL = url;
-  await runMigrations();
+  await runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 } });
   await api.start();
 });
 
@@ -127,14 +128,14 @@ async function seedJob(job: SeedJob): Promise<number> {
     .returning();
   const id = row!.id;
   if (job.rank !== undefined || job.filter !== undefined) {
-    await db().insert(schema.scores).values({
+    await withRebuiltCurrentScores(db(), db().insert(schema.scores).values({
       jobId: id,
       filterResult: job.filter ?? "passed",
       score: job.match ?? job.rank ?? null,
       signalBonus: job.bonus ?? 0,
       rankValue: job.rank ?? null,
       summaryZh: `${job.title} 的摘要`,
-    });
+    }));
   }
   for (const tier of job.tiers ?? []) {
     await db().insert(schema.signals).values({ jobId: id, tier, kind: "test", quote: "quoted text", extractor: "rule" });
@@ -227,8 +228,8 @@ describe("notify step: summary and job messages", () => {
     const old = new Date(Date.now() - 5 * 86_400_000);
     const late = await seedJob({ title: "Scored Late Engineer", rank: 86, firstSeenAt: old });
     const stale = await seedJob({ title: "Scored Long Ago Engineer", rank: 90, firstSeenAt: old });
-    await db().update(schema.scores).set({ scoredAt: new Date() }).where(eq(schema.scores.jobId, late));
-    await db().update(schema.scores).set({ scoredAt: old }).where(eq(schema.scores.jobId, stale));
+    await withRebuiltCurrentScores(db(), db().update(schema.scores).set({ scoredAt: new Date() }).where(eq(schema.scores.jobId, late)));
+    await withRebuiltCurrentScores(db(), db().update(schema.scores).set({ scoredAt: old }).where(eq(schema.scores.jobId, stale)));
     useStep(config());
     await cycle();
     const sent = texts().join("\n");

@@ -1,3 +1,4 @@
+import { withRebuiltCurrentScores } from "../helpers/current-scores";
 import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, inject } from "vitest";
 
@@ -17,7 +18,7 @@ const at = (iso: string) => new Date(iso);
 
 beforeAll(async () => {
   process.env.DATABASE_URL = url;
-  await runMigrations();
+  await runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 } });
 });
 
 beforeEach(async () => {
@@ -116,7 +117,7 @@ it.each([false, true])("relist count is a subset of the current jobs link with T
   await db.update(schema.jobs).set({ germanLevelRequired: "B2" }).where(eq(schema.jobs.id, ids.Language!));
   await db.insert(schema.applications).values({ jobId: ids.Ignored!, status: "archived" });
   await db.insert(schema.jobClosureOverrides).values({ jobId: ids.Manual!, action: "closed" });
-  await db.insert(schema.scores).values({ jobId: ids.Filtered!, filterResult: "filtered_out" });
+  await withRebuiltCurrentScores(db, db.insert(schema.scores).values({ jobId: ids.Filtered!, filterResult: "filtered_out" }));
   for (const [name, id] of Object.entries(ids)) {
     if (name !== "Low") await db.insert(schema.signals).values({ jobId: id, tier: "benefit", kind: "tag", quote: "Support for learning", valueJson: { tag: "learning" }, extractor: "rule" });
   }

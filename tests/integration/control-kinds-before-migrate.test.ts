@@ -14,7 +14,7 @@ const notInTheEnumYet = "kind_added_by_a_later_migration" as ControlRequestKind;
 
 beforeAll(async () => {
   process.env.DATABASE_URL = url;
-  await runMigrations();
+  await runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 } });
 });
 
 beforeEach(async () => {

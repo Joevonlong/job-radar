@@ -1,5 +1,6 @@
 import type { z } from "zod";
 
+import { currentScoresSchema } from "./schemas/current-scores";
 import { jobArchiveSchema } from "./schemas/job-archive";
 import { activityLogSchema } from "./schemas/activity-log";
 import { aiSchema } from "./schemas/ai";
@@ -36,6 +37,7 @@ import { uiSchema } from "./schemas/ui";
  * Profile files are `user` too; their templates live in `<defaults>/profile.example`.
  */
 export const configRegistry = {
+  currentScores: { file: "current-scores.yaml", location: "config", kind: "shipped", schema: currentScoresSchema },
   schedule: { file: "schedule.yaml", location: "config", kind: "user", schema: scheduleSchema },
   search: { file: "search.yaml", location: "config", kind: "user", schema: searchSchema },
   /** Job search matching, country recognition and relevance settings (shipped). */

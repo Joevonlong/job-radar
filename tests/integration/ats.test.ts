@@ -31,7 +31,7 @@ const board = company({ name: "Example Labs", ats: "greenhouse", token: "example
 
 beforeAll(async () => {
   process.env.DATABASE_URL = url;
-  await runMigrations();
+  await runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 } });
 });
 
 beforeEach(async () => {
@@ -119,7 +119,7 @@ describe("ats board migrations", () => {
       const added = journal.entries.find((entry) => entry.tag === "0035_ats_detail_retry");
       if (!added) throw new Error("detail retry migration not found");
       fs.writeFileSync(journalFile, JSON.stringify({ ...journal, entries: journal.entries.filter((entry) => entry.idx < added.idx) }));
-      await runMigrations({ url: target.toString(), migrationsFolder: folder });
+      await runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 }, url: target.toString(), migrationsFolder: folder });
 
       const connection = createConnection(target.toString(), { max: 1 });
       try {
@@ -137,7 +137,7 @@ describe("ats board migrations", () => {
         expect(before).toHaveLength(1);
 
         fs.writeFileSync(journalFile, JSON.stringify({ ...journal, entries: journal.entries.filter((entry) => entry.idx <= added.idx) }));
-        await runMigrations({ url: target.toString(), migrationsFolder: folder });
+        await runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 }, url: target.toString(), migrationsFolder: folder });
 
         const after = await db`select ats, token, etag, last_ok_at, filter_fingerprint, external_ids, last_status,
           last_checked_at, last_changed_at, last_total, last_kept, last_error_code, consecutive_failures, detail_retry_ids from ats_boards`;

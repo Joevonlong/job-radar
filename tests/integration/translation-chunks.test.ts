@@ -26,7 +26,7 @@ const SETTINGS: TranslationSettings = { chunk_chars: 600, chunk_timeout_seconds:
 
 beforeAll(async () => {
   process.env.DATABASE_URL = url;
-  await runMigrations();
+  await runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 } });
 });
 beforeEach(() => db().execute(sql`truncate table control_requests, translation_progress, translations, jobs, companies restart identity cascade`));
 afterEach(() => resetControlHandlers());

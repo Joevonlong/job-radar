@@ -5840,6 +5840,14 @@
           "hint": "在用户配置 delivery-audit.yaml 中调低 retention.days，或检查大体积响应的来源。runner 只修剪过期记录；doctor 不删除任何内容。",
           "configError": "无法读取 delivery-audit.yaml：{problem}",
           "configHint": "使用 pnpm config:check 检查 delivery-audit.yaml。"
+        },
+        "current_scores": {
+          "missing": "当前分数投影尚未迁移。",
+          "migrate": "运行 pnpm migrate:run；若启动迁移失败，再重启 runner。",
+          "detail": "{rows} 行；最近自检：{at}；发现差异：{differences}。",
+          "never": "尚未自检",
+          "repair": "修复后仍有投影差异，请运行 pnpm current-scores:check 和 pnpm current-scores:rebuild。",
+          "title": "当前分数投影"
         }
       },
       "setup": {
@@ -6796,7 +6804,8 @@
       "spans_reconciled": "已核对操作记录",
       "pruned": "已修剪操作记录",
       "backfill": "手动补抓",
-      "reminder_counts": "提醒数量"
+      "reminder_counts": "提醒数量",
+      "current_scores_repaired": "已修复分数投影"
     },
     "reason": {
       "not_recorded": "结果未记录",
@@ -7065,7 +7074,9 @@
       "skipped": "已跳过",
       "removed": "已删除",
       "requeued": "已重新排队",
-      "hours": "小时数"
+      "hours": "小时数",
+      "differences": "差异数量",
+      "remaining": "剩余差异"
     },
     "delete": {
       "root": "删除本条",
@@ -7115,5 +7126,11 @@
       "error": "无法加载操作日志，请检查配置和数据库后重试。"
     },
     "viewJob": "查看岗位"
+  },
+  "currentScores": {
+    "missing": "当前分数投影尚未迁移。",
+    "rebuilt": "已重建 {count} 个岗位投影。",
+    "checked": "投影存在差异的岗位：{count}。",
+    "migrated": "数据库迁移已完成。"
   }
 }

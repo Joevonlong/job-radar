@@ -1,3 +1,5 @@
+import { withRebuiltCurrentScores } from "../helpers/current-scores";
+import { scoreTransaction } from "@/lib/db/repos/current-scores";
 import { eq, sql } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, inject, it } from "vitest";
 import { stringify } from "yaml";
@@ -50,7 +52,7 @@ async function addScoredJob(title: string): Promise<number> {
     .values({ companyId: company!.id, title, titleNorm: title.toLowerCase(), description: `About ${title}`, firstSeenAt: new Date(NOW.getTime() - 3_600_000) })
     .returning();
   const snapshotId = await currentPreferencesSnapshotId(db, profile());
-  await db.insert(schema.scores).values({ jobId: job!.id, profileSnapshotId: snapshotId, filterResult: "passed" });
+  await withRebuiltCurrentScores(db, db.insert(schema.scores).values({ jobId: job!.id, profileSnapshotId: snapshotId, filterResult: "passed" }));
   return job!.id;
 }
 
@@ -58,7 +60,7 @@ async function addScoredJob(title: string): Promise<number> {
 async function staleJobs(): Promise<number[]> {
   const ids = [await addScoredJob("Alpha"), await addScoredJob("Beta")];
   await runScoring(deps(fakeAi().router), { limit: 10 });
-  await markScoresStaleExcept(getDb(), 987654321);
+  await scoreTransaction(getDb(), (tx) => markScoresStaleExcept(tx, 987654321));
   expect(await countStaleScores(getDb())).toBe(2);
   return ids;
 }
@@ -67,7 +69,7 @@ const pollOptions = () => ({ db: getDb(), signal: new AbortController().signal, 
 
 beforeAll(async () => {
   process.env.DATABASE_URL = url;
-  await runMigrations();
+  await runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 } });
 });
 
 beforeEach(async () => {

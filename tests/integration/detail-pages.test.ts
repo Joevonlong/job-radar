@@ -1,3 +1,4 @@
+import { withRebuiltCurrentScores } from "../helpers/current-scores";
 import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, inject, it } from "vitest";
 
@@ -36,7 +37,7 @@ const TZ = "Europe/Berlin";
 
 beforeAll(async () => {
   process.env.DATABASE_URL = url;
-  await runMigrations();
+  await runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 } });
 });
 
 beforeEach(async () => {
@@ -87,10 +88,10 @@ describe("the AI part of a cycle (getOpenAiRun, control status)", () => {
     const [snapshot] = await db.insert(schema.profileSnapshots).values({ kind: "preferences", hash: "h", contentYaml: "x" }).returning();
     if (!snapshot) throw new Error("snapshot");
     const old = new Date(Date.now() - 3_600_000);
-    await db.insert(schema.scores).values([
+    await withRebuiltCurrentScores(db, db.insert(schema.scores).values([
       { jobId: job.id, profileSnapshotId: snapshot.id, filterResult: "passed", score: 70, scoredAt: new Date() },
       { jobId: other.id, profileSnapshotId: snapshot.id, filterResult: "passed", score: 50, scoredAt: old },
-    ]);
+    ]));
     await db.insert(schema.translations).values({ jobId: job.id, lang: "zh", content: "译文", sourceHash: "x" });
 
     const running = await getOpenAiRun(db);

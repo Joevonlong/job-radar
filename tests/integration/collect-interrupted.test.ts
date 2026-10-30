@@ -85,7 +85,7 @@ const channelRow = async (id: string) => (await getChannelRows(getDb(), [id]))[0
 
 beforeAll(async () => {
   process.env.DATABASE_URL = url;
-  await runMigrations();
+  await runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 } });
 });
 
 beforeEach(async () => {
@@ -502,7 +502,7 @@ describe("migration 0033: runs.interrupted", () => {
       const added = journal.entries.find((entry) => entry.tag.endsWith("_run_interrupted"));
       if (!added) throw new Error("migration not found");
       fs.writeFileSync(journalFile, JSON.stringify({ ...journal, entries: journal.entries.filter((entry) => entry.idx < added.idx) }));
-      await runMigrations({ url: target.toString(), migrationsFolder: folder });
+      await runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 }, url: target.toString(), migrationsFolder: folder });
 
       const db = postgres(target.toString(), { max: 1, onnotice: () => {} });
       try {
@@ -517,7 +517,7 @@ describe("migration 0033: runs.interrupted", () => {
         }
         const before = await db`select id, channel_id, status::text as status, fetched, error_code, started_at, finished_at from runs order by id`;
 
-        await runMigrations({ url: target.toString() });
+        await runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 }, url: target.toString() });
         const after = await db`select id, channel_id, status::text as status, fetched, error_code, started_at, finished_at from runs order by id`;
         expect(after).toEqual(before);
         expect((await db`select interrupted from runs order by id`).map((r) => r.interrupted)).toEqual([false, false, false, false]);

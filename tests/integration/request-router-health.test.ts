@@ -72,7 +72,7 @@ async function addJob(title: string): Promise<number> {
 
 beforeAll(async () => {
   process.env.DATABASE_URL = url;
-  await runMigrations();
+  await runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 } });
 });
 beforeEach(async () => {
   await db().execute(sql`delete from runtime_state where key like 'ai_provider:%'`);

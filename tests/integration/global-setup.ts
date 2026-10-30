@@ -30,7 +30,7 @@ export default async function setup(project: TestProject): Promise<() => Promise
   const testUrl = new URL(adminUrl.toString());
   testUrl.pathname = `/${dbName}`;
   // Migrations once for the whole run: the per-file reset (setup.ts) truncates tables that must already exist.
-  await runMigrations({ url: testUrl.toString() });
+  await runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 }, url: testUrl.toString() });
   project.provide("testDatabaseUrl", testUrl.toString());
 
   return async () => {

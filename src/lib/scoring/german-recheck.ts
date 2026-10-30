@@ -1,3 +1,4 @@
+import { scoreTransaction } from "@/lib/db/repos/current-scores";
 import type { AiConfig, MeConfig, PipelineConfig } from "@/lib/config";
 import type { Db } from "@/lib/db/client";
 import { asGermanLevel } from "@/lib/db/queries/parse";
@@ -30,13 +31,13 @@ export async function recheckGerman(
     const penalty = languagePenalty(resolved.level, input.me, input.penalties, language);
     if (resolved.level === row.germanLevel && resolved.source === row.germanLevelSource && penalty === row.germanPenalty) continue;
     const score = finalMatchScore(row.aiScore, penalty);
-    await updateGermanOutcome(db, row.id, {
+    await scoreTransaction(db, (tx) => updateGermanOutcome(tx, row.id, {
       germanLevel: resolved.level,
       germanLevelSource: resolved.source,
       germanPenalty: penalty,
       score,
       rankValue: computeRankValue(score, row.signalBonus, input.bonusCap),
-    });
+    }));
     result.updated += 1;
   }
   return result;

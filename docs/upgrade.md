@@ -402,3 +402,32 @@ If you changed the compose project name (`doctor.compose_project` in `schedule.y
 `job-radar`. Optional: `docker image prune` removes the built images. If you set up Docker at login, power settings or
 Tailscale for this project ([host-setup.md](host-setup.md)), undo those by hand; the CLI logins of `claude` / `codex` are
 yours and stay.
+
+## Display-score projection migration and recovery
+
+The projection migration creates `job_current_scores` and backfills it in the same transaction. A SHARE lock temporarily
+blocks score writes while reads continue. Migration timeouts come from `current-scores.yaml` through `runMigrations`;
+use `pnpm db:migrate` for direct application to the configured database URL. Deployment uses `pnpm migrate:run`, which
+retains its pre-migration backup workflow. The direct command accepts no CLI flags; set `DATABASE_URL` and optional
+`MIGRATIONS_DIR` in the environment. Both pass the configured limits; do not invoke the Drizzle migrator directly. On timeout the entire
+pending migration batch rolls back. Web reads fall back while the table is absent; writes skip projection refresh. Retry
+on the next deployment or runner restart. A runner whose startup migration fails exits and must be restarted after the
+cause is resolved. Backfill restores the connection's previous lock and statement timeouts.
+
+Use `pnpm current-scores:check` to report drift and `pnpm current-scores:rebuild --batch 200` to rebuild in short
+transactions. These commands use the configured database; check the target before running them. Every maintenance cycle
+checks the projection, repairs differing jobs (including orphans), rechecks, and records an activity event when it found
+differences. Doctor's `data.current_scores` reports row count, the last check time and its difference count. An absent table
+is a warning; remaining differences after repair are an error. A check that has not run yet is shown explicitly.
+
+Rolling back code requires no database action: older versions ignore the projection. Their writes can leave it stale until
+the first maintenance cycle after upgrading again. `scores` always wins. To remove the projection entirely, first revert
+to code that ignores it, then run:
+
+```sql
+DROP FUNCTION job_current_scores_lock(bigint[]);
+DROP TABLE job_current_scores;
+```
+
+Do not drop it while new writers are active. A later upgrade must recreate and backfill the table through a forward migration or restore a backup from before this
+removal. Do not edit the migration journal by hand. The projection stores no independent facts.

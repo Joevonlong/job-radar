@@ -1,3 +1,5 @@
+import { withRebuiltCurrentScores } from "../helpers/current-scores";
+import { scoreTransaction } from "@/lib/db/repos/current-scores";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -59,12 +61,12 @@ async function addJob(title: string, over: { filter?: "passed" | "filtered_out";
     .values({ companyId: company!.id, title, titleNorm: title.toLowerCase(), description: `About ${title}`, firstSeenAt: new Date(NOW.getTime() - 3_600_000) })
     .returning();
   const snapshotId = await currentPreferencesSnapshotId(db, profile());
-  await db.insert(schema.scores).values({
+  await withRebuiltCurrentScores(db, db.insert(schema.scores).values({
     jobId: job!.id,
     profileSnapshotId: snapshotId,
     filterResult: over.filter ?? "passed",
     ...(over.score === undefined ? {} : { score: over.score, rankValue: over.score }),
-  });
+  }));
   return job!.id;
 }
 
@@ -73,7 +75,7 @@ const pollOptions = () => ({ db: getDb(), signal: new AbortController().signal, 
 
 beforeAll(async () => {
   process.env.DATABASE_URL = url;
-  await runMigrations();
+  await runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 } });
 });
 
 let temp: TempConfig;
@@ -167,7 +169,7 @@ describe("the score_jobs control request", () => {
   it("counts selected stale scores left by the budget even when no job waits for a first score", async () => {
     const ids = [await addJob("First"), await addJob("Second")];
     await runScoring(deps(fakeAi().router), { limit: 2 });
-    await markScoresStaleExcept(getDb(), 987654321);
+    await scoreTransaction(getDb(), (tx) => markScoresStaleExcept(tx, 987654321));
     expect(await countUnscoredJobs(getDb())).toBe(0);
     let now = NOW.getTime();
     const config = aiConfig((raw) => { raw.cycle_budget_minutes = 1; (raw.scoring as Record<string, unknown>).concurrency = 1; });

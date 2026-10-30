@@ -28,7 +28,7 @@ const ago = (hours: number, now = NOW) => new Date(now.getTime() - hours * HOUR)
 
 beforeAll(async () => {
   process.env.DATABASE_URL = url;
-  await runMigrations();
+  await runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 } });
 });
 
 beforeEach(async () => {

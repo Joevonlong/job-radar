@@ -1,3 +1,5 @@
+import type { ScoreTx } from "./current-scores";
+import { inScoreLockOrder } from "./score-lock-order";
 /** Reads and writes of the AI trap tables (`job_traps`, `trap_scans`). C9: every query of the feature lives here. */
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 
@@ -424,7 +426,8 @@ export async function countTrappedScores(db: Executor): Promise<number> {
 }
 
 /** `traps:scan --mark-stale`: mark exactly those score rows stale (they are scored again with the cleaned JD). Returns the job ids. */
-export async function markTrappedScoresStale(db: Executor): Promise<number[]> {
-  const rows = await db.update(scores).set({ stale: true }).where(trappedScoresWhere()).returning({ jobId: scores.jobId });
+export async function markTrappedScoresStale(db: ScoreTx): Promise<number[]> {
+  const rows = await db.update(scores).set({ stale: true }).where(inScoreLockOrder(trappedScoresWhere())).returning({ jobId: scores.jobId });
+  db.touch(rows.map((row) => row.jobId));
   return [...new Set(rows.map((r) => r.jobId))];
 }

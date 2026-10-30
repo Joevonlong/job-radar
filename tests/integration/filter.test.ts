@@ -1,3 +1,4 @@
+import { withRebuiltCurrentScores } from "../helpers/current-scores";
 import { previewDealBreakers } from "@/lib/profile/deal-breaker-preview";
 import fs from "node:fs";
 
@@ -31,7 +32,7 @@ let temp: TempConfig;
 
 beforeAll(async () => {
   process.env.DATABASE_URL = url;
-  await runMigrations();
+  await runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 } });
 });
 
 afterAll(async () => {
@@ -43,7 +44,7 @@ beforeEach(async () => {
   temp = makeTempConfig();
   await ensureProfileFiles();
   const db = getDb();
-  await db.delete(schema.scores);
+  await withRebuiltCurrentScores(db, db.delete(schema.scores));
   await db.delete(schema.jobs);
   await db.delete(schema.companies);
   await db.delete(schema.profileSnapshots);
@@ -157,12 +158,12 @@ describe("filter step", () => {
     const job = await addJob();
     await runStep();
     const [row] = await rowsOf(job.id);
-    await expect(
+    await withRebuiltCurrentScores(getDb(), expect(
       getDb().insert(schema.scores).values({ jobId: job.id, profileSnapshotId: row?.profileSnapshotId ?? null, filterResult: "passed" }),
-    ).rejects.toThrow();
+    ).rejects.toThrow());
     // rows without a snapshot (seed data) are not constrained
-    await getDb().insert(schema.scores).values({ jobId: job.id, filterResult: "passed" });
-    await getDb().insert(schema.scores).values({ jobId: job.id, filterResult: "passed" });
+    await withRebuiltCurrentScores(getDb(), getDb().insert(schema.scores).values({ jobId: job.id, filterResult: "passed" }));
+    await withRebuiltCurrentScores(getDb(), getDb().insert(schema.scores).values({ jobId: job.id, filterResult: "passed" }));
   });
 
   it("re-filters when the profile changes: a new snapshot, a new row per job, the old rows stay as they are", async () => {
@@ -201,7 +202,7 @@ describe("filter step", () => {
     expect(first.filteredOut).toBe(1);
     await getDb().update(schema.jobs).set({ salaryJson: salaryJson(95_000) }).where(eq(schema.jobs.id, job.id));
     // an AI score the row may already carry survives
-    await getDb().update(schema.scores).set({ score: 77, summaryEn: "kept" }).where(eq(schema.scores.jobId, job.id));
+    await withRebuiltCurrentScores(getDb(), getDb().update(schema.scores).set({ score: 77, summaryEn: "kept" }).where(eq(schema.scores.jobId, job.id)));
     const second = await runStep();
     expect(second).toMatchObject({ created: 0, updated: 1, passed: 1 });
     expect(await rowsOf(job.id)).toMatchObject([{ filterResult: "passed", filterReasons: [], score: 77, summaryEn: "kept" }]);
@@ -286,7 +287,7 @@ describe("user override", () => {
   it("keeps the AI score of a row when the decision flips it", async () => {
     const job = await addJob();
     await runStep();
-    await getDb().update(schema.scores).set({ score: 71, summaryEn: "kept" }).where(eq(schema.scores.jobId, job.id));
+    await withRebuiltCurrentScores(getDb(), getDb().update(schema.scores).set({ score: 71, summaryEn: "kept" }).where(eq(schema.scores.jobId, job.id)));
     await setFilterOverride(getDb(), job.id, "exclude");
     await refilterJob(getDb(), job.id);
     expect(await rowsOf(job.id)).toMatchObject([{ filterResult: "filtered_out", score: 71, summaryEn: "kept" }]);

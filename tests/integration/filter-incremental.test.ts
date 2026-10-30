@@ -1,3 +1,4 @@
+import { withRebuiltCurrentScores } from "../helpers/current-scores";
 import { eq, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
@@ -93,7 +94,7 @@ it("retries partial deal-breaker judgements and keeps AI fields when updating fi
   expect(await runFilter(db, complete)).toMatchObject({ evaluated: 2 });
   // Timed rules must judge unchanged jobs too: a later run can run out of budget without an input change.
   expect(await runFilter(db, complete)).toMatchObject({ evaluated: 2 });
-  await db.update(schema.scores).set({ score: 80, aiScore: 85, signalBonus: 2, rankValue: 82, model: "fixture" }).where(eq(schema.scores.jobId, rows[0]!.id));
+  await withRebuiltCurrentScores(db, db.update(schema.scores).set({ score: 80, aiScore: 85, signalBonus: 2, rankValue: 82, model: "fixture" }).where(eq(schema.scores.jobId, rows[0]!.id)));
   await db.update(schema.jobs).set({ title: "New title" }).where(eq(schema.jobs.id, rows[0]!.id));
   expect(await runFilter(db, complete)).toMatchObject({ evaluated: 2 });
   expect(await db.select().from(schema.scores).where(eq(schema.scores.jobId, rows[0]!.id))).toMatchObject([{ score: 80, aiScore: 85, signalBonus: 2, rankValue: 82, model: "fixture" }]);
@@ -154,12 +155,12 @@ it("invalidates cached verdicts changed by old code during rollback, including r
   const id = rows[0]!.id;
   // Old code changes the input and writes the verdict without naming either new hash column.
   await db.update(schema.jobs).set({ contract: "student" }).where(eq(schema.jobs.id, id));
-  await db.execute(sql`update scores set filter_result = 'filtered_out', filter_reasons = array['old-rule'] where job_id = ${id}`);
+  await withRebuiltCurrentScores(db, db.execute(sql`update scores set filter_result = 'filtered_out', filter_reasons = array['old-rule'] where job_id = ${id}`));
   expect(await db.select().from(schema.scores).where(eq(schema.scores.jobId, id))).toMatchObject([{ filterInputHash: null, filterConfigHash: null }]);
   await db.update(schema.jobs).set({ contract: "permanent" }).where(eq(schema.jobs.id, id));
   expect(await run()).toMatchObject({ evaluated: 1 });
   expect(await db.select().from(schema.scores).where(eq(schema.scores.jobId, id))).toMatchObject([{ filterResult: "passed" }]);
-  await db.execute(sql`update scores set filter_reasons = array['old-reason-only'] where job_id = ${id}`);
+  await withRebuiltCurrentScores(db, db.execute(sql`update scores set filter_reasons = array['old-reason-only'] where job_id = ${id}`));
   expect(await db.select().from(schema.scores).where(eq(schema.scores.jobId, id))).toMatchObject([{ filterInputHash: null, filterConfigHash: null }]);
   expect(await run()).toMatchObject({ evaluated: 1 });
   expect(await run()).toMatchObject({ evaluated: 0 });

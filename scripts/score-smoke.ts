@@ -1,3 +1,4 @@
+import { currentScoresBackfill } from "../src/lib/db/current-scores-config";
 /**
  * Real scoring smoke: score a few real postings of a database through the normal AI router
  * (claude-cli → codex-cli → API, whatever is available) and print what came back.
@@ -44,7 +45,7 @@ async function main(): Promise<number> {
     return 2;
   }
 
-  await runMigrations();
+  await runMigrations({ currentScoresBackfill: currentScoresBackfill() });
   const db = getDb();
   const logger = createLogger({ minLevel: "warn" });
   const schedule = loadConfig("schedule");

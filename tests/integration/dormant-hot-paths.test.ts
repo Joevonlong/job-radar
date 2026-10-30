@@ -1,3 +1,4 @@
+import { withRebuiltCurrentScores } from "../helpers/current-scores";
 import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, expect, inject, it } from "vitest";
 
@@ -28,7 +29,7 @@ it("excludes dormancy from each automatic scan, review, preview, bonus and AI qu
   const db = getDb();
   const [snapshot] = await db.insert(schema.profileSnapshots).values({ kind: "preferences", contentYaml: "", hash: "queue" }).returning();
   for (const job of [active, possibly, dormant, closed]) {
-    await db.insert(schema.scores).values({ jobId: job.id, filterResult: "passed", profileSnapshotId: snapshot!.id, score: null, rankValue: 60 });
+    await withRebuiltCurrentScores(db, db.insert(schema.scores).values({ jobId: job.id, filterResult: "passed", profileSnapshotId: snapshot!.id, score: null, rankValue: 60 }));
     await db.insert(schema.signals).values({ jobId: job.id, tier: "T2", kind: "kw", quote: "Python", extractor: "rule" });
     await db.execute(sql`insert into signal_scans (job_id, description_hash, rules_hash, salary_hash, candidate_count)
       values (${job.id}, md5(${job.description}), 'old', 'outdated', 1)`);
@@ -78,7 +79,7 @@ it("default lists, company counts, navigation and palette agree while explicit s
   const kept = await addJob({ status: "closed" });
   const filtered = await addJob({ status: "active" });
   await db.insert(schema.jobClosureOverrides).values([{ jobId: manual.id, action: "closed" }, { jobId: kept.id, action: "open" }]);
-  await db.insert(schema.scores).values({ jobId: filtered.id, filterResult: "filtered_out" });
+  await withRebuiltCurrentScores(db, db.insert(schema.scores).values({ jobId: filtered.id, filterResult: "filtered_out" }));
   const list = (statuses?: Array<"closed" | "possibly_closed">) => listJobs(db, { filters: statuses ? { statuses } : {}, sort: "first_seen", dir: "asc", page: 1, pageSize: 50, timezone: "UTC" });
   expect(ids((await list()).jobs)).toEqual([active.id, possibly.id, kept.id].sort((a, b) => a - b));
   const explicit = await list(["closed", "possibly_closed"]);

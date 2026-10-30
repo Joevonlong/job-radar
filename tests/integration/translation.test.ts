@@ -1,3 +1,4 @@
+import { withRebuiltCurrentScores } from "../helpers/current-scores";
 import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, inject, it, vi } from "vitest";
 
@@ -48,12 +49,12 @@ async function addJob(title: string, over: Partial<typeof schema.jobs.$inferInse
 }
 
 async function addScore(jobId: number, rankValue: number | null, at: Date, filterResult: "passed" | "filtered_out" = "passed"): Promise<void> {
-  await getDb().insert(schema.scores).values({ jobId, filterResult, score: rankValue === null ? null : Math.round(rankValue), rankValue, createdAt: at });
+  await withRebuiltCurrentScores(getDb(), getDb().insert(schema.scores).values({ jobId, filterResult, score: rankValue === null ? null : Math.round(rankValue), rankValue, createdAt: at }));
 }
 
 beforeAll(async () => {
   process.env.DATABASE_URL = url;
-  await runMigrations();
+  await runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 } });
 });
 
 // Every test gets the same freshly seeded jobs, so none depends on what an earlier test translated or changed.

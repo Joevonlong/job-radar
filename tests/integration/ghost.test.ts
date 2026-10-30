@@ -1,3 +1,4 @@
+import { withRebuiltCurrentScores } from "../helpers/current-scores";
 /**
  * The ghost job check against a real database: the stored check (idempotent, checks again on changed inputs / rules / the next
  * "open for long" tier), the /jobs filter, the list mark, the dismissal, the step inside `signals`, the degrade before the
@@ -121,7 +122,7 @@ const TABLES = "job_ghost, job_sources, raw_postings, jobs, companies, scores, s
 
 beforeAll(async () => {
   process.env.DATABASE_URL = url;
-  await runMigrations();
+  await runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 } });
 });
 
 beforeEach(async () => {
@@ -192,7 +193,7 @@ describe("the stored ghost job check", () => {
 
   it("touches no score, signal or JD", async () => {
     const id = await likelyJob();
-    await db().insert(schema.scores).values({ jobId: id, filterResult: "passed", score: 71, rankValue: 71.5 });
+    await withRebuiltCurrentScores(db(), db().insert(schema.scores).values({ jobId: id, filterResult: "passed", score: 71, rankValue: 71.5 }));
     await db().insert(schema.signals).values({ jobId: id, tier: "T1", kind: "salary", quote: "EUR 70,000 per year", extractor: "rule" });
     const before = { jobs: await db().select().from(schema.jobs).where(eq(schema.jobs.id, id)), scores: await db().select().from(schema.scores), signals: await db().select().from(schema.signals) };
     expect(before.scores).toHaveLength(1);

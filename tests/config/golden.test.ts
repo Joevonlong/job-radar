@@ -31,6 +31,12 @@ interface Golden {
   files: Record<string, { layer: string; hash: string | null; valid: boolean }>;
 }
 
+/**
+ * Registered configs the golden files cannot list: added after the commit the goldens were taken with, so that older loader
+ * does not know them. Empty this list when the goldens are regenerated (`scripts/dev/gen-config-golden.ts`).
+ */
+const ADDED_AFTER_GOLDEN: readonly string[] = ["currentScores"];
+
 const FIXTURES = path.resolve(FIXTURE_DEFAULTS_DIR, "..");
 const GOLDEN_DIR = path.join(FIXTURES, "golden");
 const goldens = fs
@@ -71,7 +77,9 @@ describe("golden files", () => {
     expect(new Set(goldens.map((golden) => golden.sha)).size).toBe(1);
     for (const golden of goldens) {
       expect(golden.sha).toMatch(/^[0-9a-f]{40}$/);
-      expect(Object.keys(golden.files).sort(), golden.set).toEqual(Object.keys(configRegistry).sort());
+      const listed = Object.keys(golden.files);
+      expect(Object.keys(configRegistry), golden.set).toEqual(expect.arrayContaining(listed));
+      expect(Object.keys(configRegistry).filter((name) => !listed.includes(name)).sort(), golden.set).toEqual([...ADDED_AFTER_GOLDEN].sort());
     }
   });
 });

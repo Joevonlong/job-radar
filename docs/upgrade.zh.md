@@ -261,3 +261,27 @@ cd .. && rm -rf job-radar
 ```
 
 如果你改过 compose 项目名（`schedule.yaml` 的 `doctor.compose_project`），请用那个名字代替 `job-radar`。可选：`docker image prune` 删除构建出的镜像。为本项目设置过的登录自启 Docker、电源设置或 Tailscale（[host-setup.zh.md](host-setup.zh.md)）需要你手动撤销；`claude` / `codex` 的命令行登录属于你自己，会保留。
+
+## 展示分数投影的迁移与恢复
+
+迁移在同一事务中创建 `job_current_scores` 并回填。SHARE 锁会暂时阻塞分数写入，读取继续运行。
+超时通过 `runMigrations` 从 `current-scores.yaml` 传入；使用 `pnpm db:migrate` 直接向配置的数据库 URL 应用迁移。部署使用保留迁移前备份流程的
+`pnpm migrate:run`。直接迁移命令不接受命令行参数，使用环境变量 `DATABASE_URL` 和可选的 `MIGRATIONS_DIR` 指定目标。
+两者都会传入配置的超时，不要直接调用 Drizzle 迁移器。超时会回滚整个待执行迁移批次。表不存在时网页回落到原查询，写入跳过投影刷新；
+下次部署或 runner 重启时重试。runner 启动迁移失败会退出，解决原因后需要重启。回填结束恢复连接原有的两种超时。
+
+`pnpm current-scores:check` 检查差异，`pnpm current-scores:rebuild --batch 200` 用短事务分批重建。
+命令使用配置中的数据库，执行前先核对目标。每轮 maintenance 自检、修复不同岗位（包括孤儿行）、复查，发现差异时
+记录 activity 事件。doctor 的 `data.current_scores` 显示行数、最近自检时间和当次差异数；表不存在给警告，
+修复后仍有差异报错，尚未自检会明确显示。
+
+回退代码不需要操作数据库，旧版本忽略投影。回退期间写入可能使投影过期，再升级后的第一轮 maintenance 会修复。
+`scores` 始终为准。完全移除时先回退到忽略投影的代码，再执行：
+
+```sql
+DROP FUNCTION job_current_scores_lock(bigint[]);
+DROP TABLE job_current_scores;
+```
+
+新写入进程仍运行时不要删除。之后再升级需要新增前向迁移重新建表并回填，或恢复删除前的备份；不要手动修改迁移日志。
+此投影不存独立事实。

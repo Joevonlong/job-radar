@@ -62,7 +62,7 @@ export async function createIsolatedDb(serverUrl: string, label: string): Promis
     const owner = await createRole(`${name}_o`);
     await admin.unsafe(`create database "${name}" owner "${owner.name}"`);
     const url = withDatabase(serverUrl, name, owner);
-    await runMigrations({ url });
+    await runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 }, url });
     return {
       name,
       url,

@@ -1,3 +1,4 @@
+import { withRebuiltCurrentScores } from "../helpers/current-scores";
 import { sql, type SQL } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, inject, it } from "vitest";
 
@@ -60,7 +61,7 @@ let cycleIds: { morning: number; overlap: number; running: number; skipped: numb
 
 beforeAll(async () => {
   process.env.DATABASE_URL = url;
-  await runMigrations();
+  await runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 } });
 });
 
 // every test starts on empty tables (setup.ts): arrange the dataset for each
@@ -144,7 +145,7 @@ beforeEach(async () => {
     { title: "yesterday", snapshot: 3, score: 89, created: "2026-01-14T21:01:00Z", scored: "2026-01-15T14:20:00Z" },
     { title: "high, no score row today", snapshot: 3, score: 97, created: "2026-01-15T10:01:00Z", scored: "2026-01-15T10:02:00Z" },
   ];
-  await db.insert(schema.scores).values(
+  await withRebuiltCurrentScores(db, db.insert(schema.scores).values(
     fixtures.map((f): typeof schema.scores.$inferInsert => ({
       jobId: job(f.title),
       profileSnapshotId: f.snapshot === null ? null : snap(f.snapshot),
@@ -159,7 +160,7 @@ beforeEach(async () => {
       scoredAt: f.scored ? at(f.scored) : null,
       createdAt: at(f.created),
     })),
-  );
+  ));
   await db.insert(schema.applications).values([
     { jobId: job("ignored"), status: "archived" },
     { jobId: job("stale"), status: "applied" },

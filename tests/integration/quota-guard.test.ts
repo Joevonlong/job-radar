@@ -1,3 +1,4 @@
+import { withRebuiltCurrentScores } from "../helpers/current-scores";
 import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, inject, it } from "vitest";
 import { z } from "zod";
@@ -33,7 +34,7 @@ const reset = () => db().execute(sql`truncate table ai_usage, runtime_state, not
 
 beforeAll(async () => {
   process.env.DATABASE_URL = url;
-  await runMigrations();
+  await runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 } });
   await api.start();
 });
 
@@ -243,7 +244,7 @@ describe("push footer", () => {
           firstSeenAt: new Date(Date.now() + 60_000),
         })
         .returning();
-      await db().insert(schema.scores).values({ jobId: job!.id, filterResult: "passed", score: null, signalBonus: 0, rankValue: null });
+      await withRebuiltCurrentScores(db(), db().insert(schema.scores).values({ jobId: job!.id, filterResult: "passed", score: null, signalBonus: 0, rankValue: null }));
     }
   }
 

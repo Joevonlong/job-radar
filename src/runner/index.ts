@@ -1,3 +1,4 @@
+import { currentScoresBackfill } from "@/lib/db/current-scores-config";
 import { setTimeout as sleep } from "node:timers/promises";
 
 import { registerBuiltinChannels } from "@/lib/channels/builtin";
@@ -136,7 +137,7 @@ async function main(): Promise<number> {
       config: backup,
       readJournal: () => readJournal(resolveMigrationsFolder(databaseEnv.MIGRATIONS_DIR)),
       readApplied: () => readAppliedMigrations(getDb()),
-      runMigrations: () => runMigrations(),
+      runMigrations: () => runMigrations({ currentScoresBackfill: currentScoresBackfill() }),
       runBackup: (label) =>
         withHeartbeats(() =>
           takePreMigrateBackup(label, {

@@ -28,7 +28,7 @@ async function take(name = "ai-worker", key?: readonly [number, number]) {
 
 beforeAll(async () => {
   process.env.DATABASE_URL = url;
-  await runMigrations();
+  await runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 } });
 });
 
 afterEach(async () => {

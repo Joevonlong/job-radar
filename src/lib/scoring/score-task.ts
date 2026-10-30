@@ -1,3 +1,4 @@
+import { scoreTransaction } from "@/lib/db/repos/current-scores";
 import { activityErrorCode, noopSpan } from "@/lib/activity";
 import type { SpanHandle } from "@/lib/activity/types";
 import { AiProviderError, AiUnavailableError, QUOTA_GUARD_CODE as QUOTA_GUARD, quotaGuardResume, sanitize } from "@/lib/ai/errors";
@@ -188,7 +189,7 @@ async function scoreCandidate(deps: ScoringDeps, ctx: ScoreContext, candidate: S
   const signalBonus = candidate.existing.signalBonus;
   const rankValue = computeRankValue(score, signalBonus, ctx.bonusCap);
 
-  const saved = await saveScore(deps.db, {
+  const saved = await scoreTransaction(deps.db, (tx) => saveScore(tx, {
     jobId: candidate.jobId,
     rowId: candidate.existing.id,
     profileSnapshotId: ctx.snapshotId,
@@ -208,7 +209,7 @@ async function scoreCandidate(deps: ScoringDeps, ctx: ScoreContext, candidate: S
     germanLevelAi: output.german_level_required,
     germanLevelSource: german.source,
     promptVersion: ctx.promptVersion,
-  });
+  }));
   if (german.source !== "agree" && german.source !== "rule" && german.source !== "ai") {
     deps.logger.info("german level differs between rule and AI", {
       jobId: candidate.jobId,
@@ -323,7 +324,7 @@ export async function runScoring(deps: ScoringDeps, options: ScoringOptions): Pr
   // The output language is not part of the version (no re-scoring on a language change); the criteria are
   const output = (deps.loadOutputLanguages ?? aiOutputLanguages)();
   const promptVersion = scorePromptFor(language, { output, criteria: deps.config.scoring.criteria }).version;
-  result.staleByPromptVersion = await markScoresStaleByPromptVersion(deps.db, promptVersion);
+  result.staleByPromptVersion = await scoreTransaction(deps.db, (tx) => markScoresStaleByPromptVersion(tx, promptVersion));
 
   const profile = await (deps.loadProfile ?? readScoringProfile)();
   const missing = missingProfileFields(profile.me);

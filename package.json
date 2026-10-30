@@ -40,7 +40,7 @@
     "market:regress": "node --env-file-if-exists=.env --import tsx scripts/market-regress.ts",
     "sources:list": "node --env-file-if-exists=.env --import tsx scripts/sources-list.ts",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate",
+    "db:migrate": "node --env-file-if-exists=.env --import tsx scripts/db-migrate.ts",
     "db:studio": "drizzle-kit studio",
     "db:seed": "node --env-file-if-exists=.env --import tsx scripts/db-seed.ts",
     "runner": "node --env-file-if-exists=.env --import tsx src/runner/index.ts",
@@ -79,7 +79,9 @@
     "build:runner": "tsx scripts/i18n-catalog.ts && esbuild runner=src/runner/index.ts healthcheck=src/runner/healthcheck.ts --bundle --external:playwright-core --platform=node --format=esm --target=node22 --outdir=dist --out-extension:.js=.mjs --banner:js=\"import { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);\"",
     "stack:up": "docker compose up -d --build",
     "stack:down": "docker compose down",
-    "deliveries:show": "node --env-file-if-exists=.env --import tsx scripts/deliveries-show.ts"
+    "deliveries:show": "node --env-file-if-exists=.env --import tsx scripts/deliveries-show.ts",
+    "current-scores:check": "node --env-file-if-exists=.env --import tsx scripts/current-scores.ts",
+    "current-scores:rebuild": "node --env-file-if-exists=.env --import tsx scripts/current-scores.ts --rebuild"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.132.0",

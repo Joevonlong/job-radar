@@ -21,7 +21,7 @@ const MIGRATION = fs.readdirSync(DRIZZLE).find((name) => /^\d{4}_market_base_sal
 
 beforeAll(async () => {
   process.env.DATABASE_URL = url;
-  await runMigrations();
+  await runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 } });
 });
 beforeEach(async () => {
   await getDb().execute(sql`truncate table jobs, companies restart identity cascade`);

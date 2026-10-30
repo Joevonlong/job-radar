@@ -92,7 +92,7 @@ describe("migrateWithBackup (real pg_dump)", () => {
     const journal = JSON.parse(fs.readFileSync(journalFile, "utf8")) as { entries: unknown[] };
     journal.entries = journal.entries.slice(0, -1);
     fs.writeFileSync(journalFile, JSON.stringify(journal));
-    await runMigrations({ url: urlOf(scratch), migrationsFolder: partial });
+    await runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 }, url: urlOf(scratch), migrationsFolder: partial });
     expect(await appliedCount(scratch)).toBe(shipped - 1);
 
     const backups = path.join(dir, "backups");
@@ -102,7 +102,7 @@ describe("migrateWithBackup (real pg_dump)", () => {
       config: { pre_migrate: true },
       readJournal: () => readJournal(path.resolve("drizzle")),
       readApplied: async () => ({ count: await appliedCount(scratch) }),
-      runMigrations: () => runMigrations({ url: urlOf(scratch) }),
+      runMigrations: () => runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 }, url: urlOf(scratch) }),
       runBackup: (label) =>
         takePreMigrateBackup(label, {
           directory: s.directory,
@@ -131,7 +131,7 @@ describe("migrateWithBackup (real pg_dump)", () => {
       config: { pre_migrate: true },
       readJournal: () => readJournal(path.resolve("drizzle")),
       readApplied: async () => ({ count: await appliedCount(scratch) }),
-      runMigrations: () => runMigrations({ url: urlOf(scratch) }),
+      runMigrations: () => runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 }, url: urlOf(scratch) }),
       runBackup: () => {
         throw new Error("no backup expected");
       },
@@ -146,7 +146,7 @@ describe("migrateWithBackup (real pg_dump)", () => {
       config: { pre_migrate: true },
       readJournal: () => readJournal(path.resolve("drizzle")),
       readApplied: async () => ({ count: await appliedCount(fresh) }),
-      runMigrations: () => runMigrations({ url: urlOf(fresh) }),
+      runMigrations: () => runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 }, url: urlOf(fresh) }),
       runBackup: () => {
         throw new Error("no backup expected");
       },

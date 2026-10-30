@@ -21,7 +21,7 @@ let dir = "";
 beforeAll(async () => {
   process.env.DATABASE_URL = url;
   resetConfigCache();
-  await runMigrations();
+  await runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 } });
   dir = fs.mkdtempSync(path.join(os.tmpdir(), "shipped-config-it-"));
   fs.writeFileSync(path.join(dir, "schedule.yaml"), "timezone: Europe/Berlin\n");
 });

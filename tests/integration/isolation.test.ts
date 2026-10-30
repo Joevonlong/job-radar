@@ -9,7 +9,7 @@ const url = inject("testDatabaseUrl");
 describe("integration database isolation", () => {
   it("starts every file with all application tables empty", async () => {
     process.env.DATABASE_URL = url;
-    await runMigrations();
+    await runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 } });
     const sql = postgres(url, { max: 1, onnotice: () => {} });
     try {
       const tables = await sql<{ table_name: string }[]>`select table_name from information_schema.tables where table_schema = 'public' and table_type = 'BASE TABLE'`;

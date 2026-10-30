@@ -1,3 +1,4 @@
+import { withRebuiltCurrentScores } from "../helpers/current-scores";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -36,7 +37,7 @@ beforeAll(async () => {
   const journal = JSON.parse(fs.readFileSync(journalPath, "utf8")) as { entries: { idx: number }[] };
   journal.entries = journal.entries.filter((entry) => entry.idx <= 39);
   fs.writeFileSync(journalPath, JSON.stringify(journal));
-  await runMigrations({ url: url.toString(), migrationsFolder: directory });
+  await runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 }, url: url.toString(), migrationsFolder: directory });
 });
 
 afterAll(async () => {
@@ -56,7 +57,7 @@ it("reads details, scores and linked raw postings and creates jobs before finger
   await db.execute(sql`insert into jobs (company_id, title, title_norm, description) values (1, 'Engineer', 'engineer', 'Build software')`);
   await db.execute(sql`insert into raw_postings (channel_id, external_id, payload_json) values ('fixture', 'one', '{"text":"raw"}')`);
   await db.execute(sql`insert into job_sources (job_id, raw_posting_id, channel_id) values (1, 1, 'fixture')`);
-  await db.execute(sql`insert into scores (job_id, filter_result, score, reason_evidence) values (1, 'passed', 75, null)`);
+  await withRebuiltCurrentScores(db, db.execute(sql`insert into scores (job_id, filter_result, score, reason_evidence) values (1, 'passed', 75, null)`));
   expect(await getJobDetail(db, 1)).toMatchObject({ id: 1, title: "Engineer", description: "Build software", score: { score: 75, filterResult: "passed" } });
   expect(await getJob(db, 1)).toMatchObject({ id: 1, title: "Engineer" });
   expect(await listPendingRawPostings(db, { afterId: 0, limit: 10 })).toMatchObject([{ id: 1, payloadJson: { text: "raw" } }]);
@@ -76,7 +77,7 @@ it("reads details, scores and linked raw postings and creates jobs before finger
   const heaps = () => db.execute<{ relname: string; relfilenode: number }>(sql`select relname, relfilenode from pg_class
     where oid in ('jobs'::regclass, 'raw_postings'::regclass, 'scores'::regclass) order by relname`);
   const before = [...await heaps()];
-  await runMigrations({ url: url.toString() });
+  await runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 }, url: url.toString() });
   expect([...await heaps()]).toEqual(before);
   expect(await db.select({ hash: schema.jobs.descriptionMd5 }).from(schema.jobs).where(eq(schema.jobs.id, 1))).toEqual([{ hash: null }]);
   expect(await getJobDetail(db, 1)).toMatchObject({ title: "Engineer", score: { score: 75 } });

@@ -92,7 +92,7 @@ function converse(messages: Array<Record<string, unknown>>, env: NodeJS.ProcessE
 
 beforeAll(async () => {
   process.env.DATABASE_URL = url;
-  await runMigrations();
+  await runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 } });
   userDir = fs.mkdtempSync(path.join(os.tmpdir(), "job-radar-mcp-stdio-"));
 });
 

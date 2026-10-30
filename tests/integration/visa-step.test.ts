@@ -89,7 +89,7 @@ const resetTables = () => getDb().execute(sql`truncate table job_visa, jobs, com
 
 beforeAll(async () => {
   process.env.DATABASE_URL = url;
-  await runMigrations();
+  await runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 } });
 });
 
 beforeEach(async () => {

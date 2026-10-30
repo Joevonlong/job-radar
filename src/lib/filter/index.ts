@@ -1,3 +1,5 @@
+import { scoreTransaction } from "@/lib/db/repos/current-scores";
+import { inScoreIdOrder } from "@/lib/db/repos/score-lock-order";
 import { createHash } from "node:crypto";
 
 import type { CycleStepContext, StepResult } from "@/lib/cycle/steps";
@@ -169,28 +171,34 @@ export async function runFilter(db: Db, options: FilterOptions): Promise<FilterR
     const verdicts = evaluateBatch(batch, compiled, dealBreakers, overrides, stored);
     // A timed-out rule preserves previous vetoes; retry those inputs next cycle instead of caching a partial judgement.
     const complete = !dealBreakers.warnings.some((warning) => warning.code === "too_slow");
-    for (const [i, row] of batch.entries()) {
-      const verdict = verdicts[i];
-      if (!verdict) continue;
-      result.evaluated += 1;
-      if (verdict.result === "passed") result.passed += 1;
-      else result.filteredOut += 1;
-      for (const reason of verdict.reasons) {
-        const code = reason.split(":", 1)[0] ?? reason;
-        result.byReason[code] = (result.byReason[code] ?? 0) + 1;
-      }
+    await scoreTransaction(db, async (tx) => {
+      const changes: { scoreId: number; state: Omit<NewFilterResult, "jobId"> }[] = [];
+      for (const [i, row] of batch.entries()) {
+        const verdict = verdicts[i];
+        if (!verdict) continue;
+        result.evaluated += 1;
+        if (verdict.result === "passed") result.passed += 1;
+        else result.filteredOut += 1;
+        for (const reason of verdict.reasons) {
+          const code = reason.split(":", 1)[0] ?? reason;
+          result.byReason[code] = (result.byReason[code] ?? 0) + 1;
+        }
 
-      const existing = stored.get(row.id);
-      const state = { filterResult: verdict.result, filterReasons: verdict.reasons, filterInputHash: complete ? row.inputHash : null, filterConfigHash: complete ? configHash : null };
-      if (!existing) {
-        fresh.push({ jobId: row.id, ...state });
-      } else {
-        await updateFilterResult(db, existing.scoreId, state);
-        if (existing.filterResult !== verdict.result || !sameReasons(existing.filterReasons, verdict.reasons)) result.updated += 1;
-        else result.unchanged += 1;
+        const existing = stored.get(row.id);
+        const state = { filterResult: verdict.result, filterReasons: verdict.reasons, filterInputHash: complete ? row.inputHash : null, filterConfigHash: complete ? configHash : null };
+        if (!existing) {
+          fresh.push({ jobId: row.id, ...state });
+        } else {
+          changes.push({ scoreId: existing.scoreId, state });
+          if (existing.filterResult !== verdict.result || !sameReasons(existing.filterReasons, verdict.reasons)) result.updated += 1;
+          else result.unchanged += 1;
+        }
       }
-    }
-    result.created += await insertFilterResults(db, options.snapshotId, fresh);
+      // The batch is in job id order; the row locks are taken in score id order (score-lock-order.ts), or a concurrent
+      // stale-mark scanning the other way closes a lock cycle with this batch
+      for (const change of inScoreIdOrder(changes, (c) => c.scoreId)) await updateFilterResult(tx, change.scoreId, change.state);
+      result.created += await insertFilterResults(tx, options.snapshotId, fresh);
+    });
   }
   result.dealBreakerWarnings = [...compiled.dealBreakers.warnings, ...dealBreakers.warnings];
   for (const warning of result.dealBreakerWarnings) options.logger?.warn("deal-breaker not applied", { id: warning.id, reason: warning.code });

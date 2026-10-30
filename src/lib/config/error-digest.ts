@@ -10,6 +10,7 @@ const FILE_STEMS: Readonly<Record<string, string>> = {
   activityLog: "activity-log",
   deliveryAudit: "delivery-audit",
   jobArchive: "job-archive",
+  currentScores: "current-scores",
 };
 
 export function configErrorDigest(name: string): string {

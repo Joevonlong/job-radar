@@ -1,3 +1,4 @@
+import { withRebuiltCurrentScores } from "../helpers/current-scores";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, inject, it } from "vitest";
 
@@ -11,7 +12,7 @@ const url = inject("testDatabaseUrl");
 
 beforeAll(async () => {
   process.env.DATABASE_URL = url;
-  await runMigrations();
+  await runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 } });
 });
 beforeEach(async () => {
   await getDb().execute(sql`truncate table jobs, companies, profile_snapshots restart identity cascade`);
@@ -26,7 +27,7 @@ async function filteredJob(reasons: string[], snapshotYaml: string | null): Prom
   const company = await getOrCreateCompany(db, { name: "Acme", nameNorm: "acme" });
   const job = await insertJob(db, { companyId: company.id, title: "SRE", titleNorm: "sre" });
   const snapshot = snapshotYaml === null ? null : await saveProfileSnapshot(db, "preferences", snapshotYaml);
-  await db.insert(schema.scores).values({ jobId: job.id, profileSnapshotId: snapshot?.id ?? null, filterResult: "filtered_out", filterReasons: reasons });
+  await withRebuiltCurrentScores(db, db.insert(schema.scores).values({ jobId: job.id, profileSnapshotId: snapshot?.id ?? null, filterResult: "filtered_out", filterReasons: reasons }));
   return job.id;
 }
 

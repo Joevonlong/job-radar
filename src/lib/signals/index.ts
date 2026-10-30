@@ -1,3 +1,4 @@
+import { scoreTransaction } from "@/lib/db/repos/current-scores";
 import { activityErrorCode, noopSpan, type ItemEventCode } from "@/lib/activity";
 import type { SpanHandle } from "@/lib/activity/types";
 import { createHash } from "node:crypto";
@@ -293,7 +294,7 @@ export async function reconcileBonuses(
     if (row.score.signalBonus === bonus && row.score.rankValue === rank) continue;
     updates.push({ scoreId: row.score.id, signalBonus: bonus, rankValue: rank });
   }
-  await setScoreBonuses(db, updates);
+  await scoreTransaction(db, (tx) => setScoreBonuses(tx, updates));
   return { checked: rows.length, updated: updates.length };
 }
 

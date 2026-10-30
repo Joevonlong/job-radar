@@ -1,3 +1,4 @@
+import { withRebuiltCurrentScores } from "../helpers/current-scores";
 /**
  * The MCP server against a seeded database, through a real MCP client (in-memory transport): the three tools, the AI-trap cleaning
  * and its fail-closed cases, the privacy sentinels, and the read-only connection.
@@ -80,7 +81,7 @@ const redBanana = () => jobId({ company: "Obstgarten Analytics" });
 
 beforeAll(async () => {
   process.env.DATABASE_URL = url;
-  await runMigrations();
+  await runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 } });
   readOnly = createReadOnlyDb({ url, connectTimeoutSeconds: 30 });
 });
 
@@ -107,9 +108,9 @@ describe("search_jobs", () => {
     const descriptionId = await redBanana();
     await getDb().execute(sql`update jobs set title = 'Asterneedle Engineer', locations_json = '[{"city":"Berlin","countryCode":"DE","label":"Berlin"}]'::jsonb where id = ${titleId}`);
     await getDb().execute(sql`update jobs set description = 'Asterneedle duties', locations_json = '[{"city":"Paris","countryCode":"FR","label":"Paris"}]'::jsonb where id = ${descriptionId}`);
-    await getDb().execute(sql`update scores set rank_value = 10 where job_id = ${titleId}`);
+    await withRebuiltCurrentScores(getDb(), getDb().execute(sql`update scores set rank_value = 10 where job_id = ${titleId}`));
     // Obstgarten is deliberately unscored in the seed: an UPDATE would affect no rows.
-    await getDb().insert(schema.scores).values({ jobId: descriptionId, filterResult: "passed", score: 99, rankValue: 99 });
+    await withRebuiltCurrentScores(getDb(), getDb().insert(schema.scores).values({ jobId: descriptionId, filterResult: "passed", score: 99, rankValue: 99 }));
     const client = await connect();
     const summary = await call<SearchJobsOutput>(client, "search_jobs", { query: "Asterneedle" });
     expect(summary.isError).toBe(false);
@@ -418,8 +419,8 @@ describe("privacy: what must never come out", () => {
     const others = (await db.select({ id: schema.jobs.id }).from(schema.jobs)).map((r) => r.id).filter((id) => id !== banana);
     const [filtered, scored, starred] = others;
     // a job the hard filter removed for its salary, under the sentinel floor
-    await db.insert(schema.scores).values({ jobId: filtered!, profileSnapshotId: snapshot!.id, filterResult: "filtered_out", filterReasons: [S.filterReason, "salary_below_floor"] });
-    await db.insert(schema.scores).values({ jobId: scored!, filterResult: "passed", score: 90, aiScore: 92, rankValue: 95, fitReasons: [S.fit], gaps: [S.gap], summaries: { en: S.summary }, germanPenalty: 2 });
+    await withRebuiltCurrentScores(db, db.insert(schema.scores).values({ jobId: filtered!, profileSnapshotId: snapshot!.id, filterResult: "filtered_out", filterReasons: [S.filterReason, "salary_below_floor"] }));
+    await withRebuiltCurrentScores(db, db.insert(schema.scores).values({ jobId: scored!, filterResult: "passed", score: 90, aiScore: 92, rankValue: 95, fitReasons: [S.fit], gaps: [S.gap], summaries: { en: S.summary }, germanPenalty: 2 }));
     await db.insert(schema.emailMessages).values({ messageId: "<sentinel@example.invalid>", sender: S.email, receivedAt: NOW, rawRef: S.resume });
     const [app] = await db.insert(schema.applications).values({ jobId: starred!, status: "interviewing", notesMd: S.notes, resumeVariantPath: S.resume, nextAction: "Prepare the case study" }).onConflictDoUpdate({ target: schema.applications.jobId, set: { status: "interviewing", notesMd: S.notes, resumeVariantPath: S.resume, nextAction: "Prepare the case study" } }).returning();
     await db.insert(schema.applicationEvents).values({ applicationId: app!.id, fromStatus: "applied", toStatus: "interviewing", note: S.eventNote });

@@ -12,7 +12,7 @@ import type { RunStatus } from "../repos/runs";
 import { uxTablesReady } from "../repos/ux-tables";
 import { FOLLOWING_STATUSES } from "@/lib/applications/following";
 import { effectivelyActiveSql, effectiveStatusSql, manuallyClosedSql } from "./job-status";
-import { cardColumns, hideGermanLevels, hydrateCards, latestScoreLateral, type CardRow, type LatestScore } from "./job-cards";
+import { currentScoreRead, cardColumns, hideGermanLevels, hydrateCards, currentScore, type CardRow, type LatestScore } from "./job-cards";
 import { buildJobConditions, hasListableSalary, type JobFilters } from "./jobs";
 import { hasHighValueSignal, policyCurrency, type HighValuePolicy } from "./signal-filter";
 import { parseSalary } from "./parse";
@@ -129,95 +129,97 @@ export async function listTodayCycleSummaries(db: Db, options: { now: Date; time
 }
 
 async function summarizeCycle(db: Db, cycle: typeof cycles.$inferSelect, options: CycleSummaryOptions): Promise<CycleSummary> {
-  const rows = await db
-    .select({
-      run: runs,
-      family: channels.family,
-      circuitState: channels.circuitState,
-      circuitOpenUntil: channels.circuitOpenUntil,
-    })
-    .from(runs)
-    .innerJoin(channels, eq(channels.id, runs.channelId))
-    .where(eq(runs.cycleId, cycle.id))
-    .orderBy(asc(runs.id));
+  return currentScoreRead(db, async () => {
+    const rows = await db
+      .select({
+        run: runs,
+        family: channels.family,
+        circuitState: channels.circuitState,
+        circuitOpenUntil: channels.circuitOpenUntil,
+      })
+      .from(runs)
+      .innerJoin(channels, eq(channels.id, runs.channelId))
+      .where(eq(runs.cycleId, cycle.id))
+      .orderBy(asc(runs.id));
 
-  const byChannel = new Map<string, CycleChannelSummary>();
-  for (const { run, family, circuitState, circuitOpenUntil } of rows) {
-    const current =
-      byChannel.get(run.channelId) ??
-      ({
-        channelId: run.channelId,
-        family,
-        runs: 0,
-        fetched: 0,
-        newCount: 0,
-        outcome: "ok",
-        errorCode: null,
-        circuitOpenUntil: circuitState === "open" ? circuitOpenUntil : null,
-      } satisfies CycleChannelSummary);
-    current.runs += 1;
-    current.fetched += run.fetched;
-    current.newCount += run.newCount;
-    // circuit_open > failed > interrupted > skipped > ok; a partial without the marker (some records invalid) is ok
-    if (run.status === "failed" && current.outcome !== "circuit_open") current.outcome = "failed";
-    if (run.interrupted && (current.outcome === "ok" || current.outcome === "skipped")) current.outcome = "interrupted";
-    if (run.status === "skipped" && current.outcome === "ok") current.outcome = "skipped";
-    if ((run.status === "failed" || run.status === "skipped" || run.interrupted) && current.errorCode === null) current.errorCode = run.errorCode;
-    if (circuitState === "open") current.outcome = "circuit_open";
-    byChannel.set(run.channelId, current);
-  }
-  const summaries = [...byChannel.values()];
+    const byChannel = new Map<string, CycleChannelSummary>();
+    for (const { run, family, circuitState, circuitOpenUntil } of rows) {
+      const current =
+        byChannel.get(run.channelId) ??
+        ({
+          channelId: run.channelId,
+          family,
+          runs: 0,
+          fetched: 0,
+          newCount: 0,
+          outcome: "ok",
+          errorCode: null,
+          circuitOpenUntil: circuitState === "open" ? circuitOpenUntil : null,
+        } satisfies CycleChannelSummary);
+      current.runs += 1;
+      current.fetched += run.fetched;
+      current.newCount += run.newCount;
+      // circuit_open > failed > interrupted > skipped > ok; a partial without the marker (some records invalid) is ok
+      if (run.status === "failed" && current.outcome !== "circuit_open") current.outcome = "failed";
+      if (run.interrupted && (current.outcome === "ok" || current.outcome === "skipped")) current.outcome = "interrupted";
+      if (run.status === "skipped" && current.outcome === "ok") current.outcome = "skipped";
+      if ((run.status === "failed" || run.status === "skipped" || run.interrupted) && current.errorCode === null) current.errorCode = run.errorCode;
+      if (circuitState === "open") current.outcome = "circuit_open";
+      byChannel.set(run.channelId, current);
+    }
+    const summaries = [...byChannel.values()];
 
-  // jobs whose first sighting falls inside this cycle's window: the ones the cycle created
-  const windowEnd = cycle.finishedAt ?? sql`now()`;
-  const inWindow = and(gte(jobs.firstSeenAt, cycle.startedAt), lte(jobs.firstSeenAt, windowEnd));
-  const pipeline = readPipelineCounts(cycle.summaryJson);
-  let newCount: number;
-  if (pipeline) {
-    newCount = pipeline.created;
-  } else {
-    const [row] = await db.select({ n: count() }).from(jobs).where(inWindow);
-    newCount = row?.n ?? 0;
-  }
+    // jobs whose first sighting falls inside this cycle's window: the ones the cycle created
+    const windowEnd = cycle.finishedAt ?? sql`now()`;
+    const inWindow = and(gte(jobs.firstSeenAt, cycle.startedAt), lte(jobs.firstSeenAt, windowEnd));
+    const pipeline = readPipelineCounts(cycle.summaryJson);
+    let newCount: number;
+    if (pipeline) {
+      newCount = pipeline.created;
+    } else {
+      const [row] = await db.select({ n: count() }).from(jobs).where(inWindow);
+      newCount = row?.n ?? 0;
+    }
 
-  const latest = latestScoreLateral(db);
-  const qualifiedMinRank = options.qualifiedMinRank ?? null;
-  const qualifiedMinRankWithSignals = options.qualifiedMinRankWithSignals ?? qualifiedMinRank;
-  const qualifies =
-    qualifiedMinRank === null
-      ? sql`false`
-      : sql`(${latest.rankValue} >= ${qualifiedMinRank} or (${latest.rankValue} >= ${qualifiedMinRankWithSignals} and ${highValueSql(db, options.highValue)}))`;
-  // the cycle's own new jobs, and backlog jobs the AI scored during it ("0 qualified · 2 pushed" for a backlog cycle)
-  const handled = db
-    .select({ id: jobs.id })
-    .from(jobs)
-    .where(inWindow)
-    .unionAll(db.select({ id: scores.jobId }).from(scores).where(and(gte(scores.scoredAt, cycle.startedAt), lte(scores.scoredAt, windowEnd))));
-  const [outcome] = await db
-    .select({
-      passed: sql<number>`count(*) filter (where ${latest.filterResult} = 'passed')`.mapWith(Number),
-      qualified: sql<number>`count(*) filter (where ${latest.filterResult} = 'passed' and ${qualifies})`.mapWith(Number),
-    })
-    .from(jobs)
-    .leftJoinLateral(latest, sql`true`)
-    .where(inArray(jobs.id, handled));
+    const latest = await currentScore(db, "few");
+    const qualifiedMinRank = options.qualifiedMinRank ?? null;
+    const qualifiedMinRankWithSignals = options.qualifiedMinRankWithSignals ?? qualifiedMinRank;
+    const qualifies =
+      qualifiedMinRank === null
+        ? sql`false`
+        : sql`(${latest.rankValue} >= ${qualifiedMinRank} or (${latest.rankValue} >= ${qualifiedMinRankWithSignals} and ${highValueSql(db, options.highValue)}))`;
+    // the cycle's own new jobs, and backlog jobs the AI scored during it ("0 qualified · 2 pushed" for a backlog cycle)
+    const handled = db
+      .select({ id: jobs.id })
+      .from(jobs)
+      .where(inWindow)
+      .unionAll(db.select({ id: scores.jobId }).from(scores).where(and(gte(scores.scoredAt, cycle.startedAt), lte(scores.scoredAt, windowEnd))));
+    const [outcome] = await db
+      .select({
+        passed: sql<number>`count(*) filter (where ${latest.filterResult} = 'passed')`.mapWith(Number),
+        qualified: sql<number>`count(*) filter (where ${latest.filterResult} = 'passed' and ${qualifies})`.mapWith(Number),
+      })
+      .from(jobs)
+      .leftJoinLateral(latest, sql`true`)
+      .where(inArray(jobs.id, handled));
 
-  return {
-    id: cycle.id,
-    kind: cycle.kind,
-    status: cycle.status,
-    startedAt: cycle.startedAt,
-    finishedAt: cycle.finishedAt,
-    channels: summaries,
-    newCount,
-    mergedCount: pipeline?.merged ?? null,
-    fetched: summaries.reduce((sum, c) => sum + c.fetched, 0),
-    failedChannels: summaries.filter((c) => c.outcome === "failed" || c.outcome === "interrupted" || c.outcome === "circuit_open").length,
-    passedCount: outcome?.passed ?? 0,
-    qualifiedCount: qualifiedMinRank === null ? null : (outcome?.qualified ?? 0),
-    steps: readCycleSteps(cycle.summaryJson),
-    unprocessed: await countCyclePending(db, cycle.id),
-  };
+    return {
+      id: cycle.id,
+      kind: cycle.kind,
+      status: cycle.status,
+      startedAt: cycle.startedAt,
+      finishedAt: cycle.finishedAt,
+      channels: summaries,
+      newCount,
+      mergedCount: pipeline?.merged ?? null,
+      fetched: summaries.reduce((sum, c) => sum + c.fetched, 0),
+      failedChannels: summaries.filter((c) => c.outcome === "failed" || c.outcome === "interrupted" || c.outcome === "circuit_open").length,
+      passedCount: outcome?.passed ?? 0,
+      qualifiedCount: qualifiedMinRank === null ? null : (outcome?.qualified ?? 0),
+      steps: readCycleSteps(cycle.summaryJson),
+      unprocessed: await countCyclePending(db, cycle.id),
+    };
+  });
 }
 
 /** Raw postings first stored by the cycle's runs that the pipeline has not handled (`pending`): the next cycle's pipeline step picks every pending posting up. */
@@ -267,19 +269,21 @@ export interface TodayOptions {
  * status `archived`) are hidden, and so are filtered-out ones unless asked for.
  */
 export async function listTodayJobs(db: Db, options: TodayOptions): Promise<JobCard[]> {
-  const latest = latestScoreLateral(db);
-  const ux = await uxTablesReady(db);
-  const conditions = todayConditions(db, options, latest, ux);
-  if (options.quick) conditions.push(quickCondition(db, latest, options.quick, options.quickLines ?? { qualifiedMinRank: null, qualifiedMinRankWithSignals: null }, options.highValue));
+  return currentScoreRead(db, async () => {
+    const latest = await currentScore(db, "few");
+    const ux = await uxTablesReady(db);
+    const conditions = todayConditions(db, options, latest, ux);
+    if (options.quick) conditions.push(quickCondition(db, latest, options.quick, options.quickLines ?? { qualifiedMinRank: null, qualifiedMinRankWithSignals: null }, options.highValue));
 
-  const rows: CardRow[] = await db
-    .select(cardColumns(latest, ux, await dormancyReady(db), await listingReady(db)))
-    .from(jobs)
-    .innerJoin(companies, eq(companies.id, jobs.companyId))
-    .leftJoinLateral(latest, sql`true`)
-    .where(and(...conditions))
-    .orderBy(sql`coalesce(${latest.filterResult} = 'filtered_out', false) asc`, sql`${latest.rankValue} desc nulls last`, sql`${jobs.postedAt} desc nulls last`, desc(jobs.firstSeenAt), desc(jobs.id));
-  return hydrateCards(db, rows, { visa: options.visa ?? true, ghost: options.ghost === true });
+    const rows: CardRow[] = await db
+      .select(cardColumns(latest, ux, await dormancyReady(db), await listingReady(db)))
+      .from(jobs)
+      .innerJoin(companies, eq(companies.id, jobs.companyId))
+      .leftJoinLateral(latest, sql`true`)
+      .where(and(...conditions))
+      .orderBy(sql`coalesce(${latest.filterResult} = 'filtered_out', false) asc`, sql`${latest.rankValue} desc nulls last`, sql`${jobs.postedAt} desc nulls last`, desc(jobs.firstSeenAt), desc(jobs.id));
+    return hydrateCards(db, rows, { visa: options.visa ?? true, ghost: options.ghost === true });
+  });
 }
 
 /** The conditions that select the Today list (the window, ignored / filtered-out jobs, the toggles and the saved view's filters); the quick view is added by the caller. */
@@ -309,15 +313,17 @@ function todayConditions(db: Db, options: TodayOptions, latest: LatestScore, ux:
 
 /** Relists in the Today/cycle union and badge window, with the same visibility switches as Today. */
 export async function countTodayRelisted(db: Db, options: TodayOptions & { badgeSince: Date }): Promise<number> {
-  if (!(await listingReady(db))) return 0;
-  const latest = latestScoreLateral(db);
-  const ux = await uxTablesReady(db);
-  const conditions = todayConditions(db, options, latest, ux, jobs.relistedAt);
-  const [row] = await db.select({ n: count() }).from(jobs)
-    .innerJoin(companies, eq(companies.id, jobs.companyId))
-    .leftJoinLateral(latest, sql`true`)
-    .where(and(...conditions, gte(jobs.relistedAt, options.badgeSince), effectivelyActiveSql(ux)));
-  return row?.n ?? 0;
+  return currentScoreRead(db, async () => {
+    if (!(await listingReady(db))) return 0;
+    const latest = await currentScore(db, "few");
+    const ux = await uxTablesReady(db);
+    const conditions = todayConditions(db, options, latest, ux, jobs.relistedAt);
+    const [row] = await db.select({ n: count() }).from(jobs)
+      .innerJoin(companies, eq(companies.id, jobs.companyId))
+      .leftJoinLateral(latest, sql`true`)
+      .where(and(...conditions, gte(jobs.relistedAt, options.badgeSince), effectivelyActiveSql(ux)));
+    return row?.n ?? 0;
+  });
 }
 
 /** The built-in quick views of Today: all new jobs, high score (at or above the push line), salary stated, and the ones being followed up. */
@@ -350,30 +356,34 @@ export interface QuickLines {
  * quick views. A saved view has its own count (`countTodayJobs`).
  */
 export async function countTodayQuickViews(db: Db, options: Omit<TodayOptions, "extra" | "quick"> & { quickLines: QuickLines }): Promise<Record<QuickView, number>> {
-  const latest = latestScoreLateral(db);
-  const conditions = todayConditions(db, options, latest, await uxTablesReady(db));
-  const [row] = await db
-    .select({
-      all: sql<number>`count(*)`.mapWith(Number),
-      high: sql<number>`count(*) filter (where ${quickCondition(db, latest, "high", options.quickLines, options.highValue)})`.mapWith(Number),
-      salary: sql<number>`count(*) filter (where ${quickCondition(db, latest, "salary", options.quickLines, options.highValue)})`.mapWith(Number),
-      following: sql<number>`count(*) filter (where ${quickCondition(db, latest, "following", options.quickLines, options.highValue)})`.mapWith(Number),
-    })
-    .from(jobs)
-    .leftJoinLateral(latest, sql`true`)
-    .where(and(...conditions));
-  return { all: row?.all ?? 0, high: row?.high ?? 0, salary: row?.salary ?? 0, following: row?.following ?? 0 };
+  return currentScoreRead(db, async () => {
+    const latest = await currentScore(db, "few");
+    const conditions = todayConditions(db, options, latest, await uxTablesReady(db));
+    const [row] = await db
+      .select({
+        all: sql<number>`count(*)`.mapWith(Number),
+        high: sql<number>`count(*) filter (where ${quickCondition(db, latest, "high", options.quickLines, options.highValue)})`.mapWith(Number),
+        salary: sql<number>`count(*) filter (where ${quickCondition(db, latest, "salary", options.quickLines, options.highValue)})`.mapWith(Number),
+        following: sql<number>`count(*) filter (where ${quickCondition(db, latest, "following", options.quickLines, options.highValue)})`.mapWith(Number),
+      })
+      .from(jobs)
+      .leftJoinLateral(latest, sql`true`)
+      .where(and(...conditions));
+    return { all: row?.all ?? 0, high: row?.high ?? 0, salary: row?.salary ?? 0, following: row?.following ?? 0 };
+  });
 }
 
 /** The number of jobs `listTodayJobs` would list for these options (a saved view's tab). */
 export async function countTodayJobs(db: Db, options: TodayOptions): Promise<number> {
-  const latest = latestScoreLateral(db);
-  const [row] = await db
-    .select({ n: sql<number>`count(*)`.mapWith(Number) })
-    .from(jobs)
-    .leftJoinLateral(latest, sql`true`)
-    .where(and(...todayConditions(db, options, latest, await uxTablesReady(db))));
-  return row?.n ?? 0;
+  return currentScoreRead(db, async () => {
+    const latest = await currentScore(db, "few");
+    const [row] = await db
+      .select({ n: sql<number>`count(*)`.mapWith(Number) })
+      .from(jobs)
+      .leftJoinLateral(latest, sql`true`)
+      .where(and(...todayConditions(db, options, latest, await uxTablesReady(db))));
+    return row?.n ?? 0;
+  });
 }
 
 /**
@@ -389,67 +399,69 @@ export async function countTodayJobs(db: Db, options: TodayOptions): Promise<num
  * - `pushed`: job messages sent to Telegram for the cycle (`notifications` of kind `job` with a send time)
  */
 export async function listRecentCycleKpis(db: Db, options: CycleSummaryOptions & { limit: number }): Promise<Array<CycleKpiCounts & { startedAt: Date }>> {
-  const recent = await db
-    .select({ id: cycles.id })
-    .from(cycles)
-    .where(ne(cycles.status, "skipped"))
-    .orderBy(desc(cycles.startedAt), desc(cycles.id))
-    .limit(Math.max(1, options.limit));
-  if (recent.length === 0) return [];
+  return currentScoreRead(db, async () => {
+    const recent = await db
+      .select({ id: cycles.id })
+      .from(cycles)
+      .where(ne(cycles.status, "skipped"))
+      .orderBy(desc(cycles.startedAt), desc(cycles.id))
+      .limit(Math.max(1, options.limit));
+    if (recent.length === 0) return [];
 
-  const latest = latestScoreLateral(db);
-  const qualifiedMinRank = options.qualifiedMinRank ?? null;
-  const qualifiedMinRankWithSignals = options.qualifiedMinRankWithSignals ?? qualifiedMinRank;
-  const windowEnd = sql`coalesce(${cycles.finishedAt}, now())`;
-  // Per cycle, the jobs first seen in its window or scored during it, each once (`in` dedupes). Collected from the two
-  // indexes (`jobs_first_seen_at_idx`, `scores_scored_at_idx`) per cycle: an `or exists` join condition can only be checked
-  // for every (cycle, job) pair. `union all`, not `union`: with `union` the planner scans all jobs for every cycle.
-  const firstSeen = alias(jobs, "first_seen");
-  const handledIds = db
-    .select({ id: firstSeen.id })
-    .from(firstSeen)
-    .where(and(gte(firstSeen.firstSeenAt, cycles.startedAt), sql`${firstSeen.firstSeenAt} <= ${windowEnd}`))
-    .unionAll(db.select({ id: scores.jobId }).from(scores).where(and(gte(scores.scoredAt, cycles.startedAt), sql`${scores.scoredAt} <= ${windowEnd}`)));
-  // named like the table, so the columns the counts read (`jobs.salary_json`, the signal checks, the latest score) are the handled jobs'
-  const handled = db.select({ id: jobs.id, salaryJson: jobs.salaryJson }).from(jobs).where(inArray(jobs.id, handledIds)).as("jobs");
-  const qualifies =
-    qualifiedMinRank === null
-      ? sql`false`
-      : sql`(${latest.rankValue} >= ${qualifiedMinRank} or (${latest.rankValue} >= ${qualifiedMinRankWithSignals} and ${highValueSql(db, options.highValue)}))`;
-  const rows = await db
-    .select({
-      id: cycles.id,
-      startedAt: cycles.startedAt,
-      fetched: sql<number>`(select coalesce(sum(${runs.fetched}), 0) from ${runs} where ${runs.cycleId} = ${cycles.id})`.mapWith(Number),
-      pushed: sql<number>`(select count(*) from ${notifications} where ${notifications.cycleId} = ${cycles.id} and ${notifications.kind} = 'job' and ${notifications.sentAt} is not null)`.mapWith(Number),
-      passed: sql<number>`count(${jobs.id}) filter (where ${latest.filterResult} = 'passed')`.mapWith(Number),
-      qualified: sql<number>`count(${jobs.id}) filter (where ${latest.filterResult} = 'passed' and ${qualifies})`.mapWith(Number),
-      salaryStated: sql<number>`count(${jobs.id}) filter (where ${latest.filterResult} = 'passed' and ${hasListableSalary(policyCurrency(options.highValue ?? undefined))})`.mapWith(Number),
-      unprocessed: sql<number>`(select count(*) from ${rawPostings} where ${rawPostings.parseStatus} = 'pending' and ${rawPostings.runId} in (select ${runs.id} from ${runs} where ${runs.cycleId} = ${cycles.id}))`.mapWith(Number),
-      summaryJson: cycles.summaryJson,
-    })
-    .from(cycles)
-    .leftJoinLateral(handled, sql`true`)
-    .leftJoinLateral(latest, sql`true`)
-    .where(inArray(
-      cycles.id,
-      recent.map((row) => row.id),
-    ))
-    .groupBy(cycles.id, cycles.startedAt)
-    .orderBy(asc(cycles.startedAt), asc(cycles.id));
-  return rows.map((row) => {
-    const steps = readCycleSteps(row.summaryJson);
-    return {
-      cycleId: row.id,
-      startedAt: row.startedAt,
-      fetched: row.fetched,
-      passed: row.passed,
-      qualified: qualifiedMinRank === null ? null : row.qualified,
-      salaryStated: row.salaryStated,
-      pushed: row.pushed,
-      unprocessed: row.unprocessed,
-      unprocessedBlocks: unprocessedBlocks(steps),
-    };
+    const latest = await currentScore(db, "few");
+    const qualifiedMinRank = options.qualifiedMinRank ?? null;
+    const qualifiedMinRankWithSignals = options.qualifiedMinRankWithSignals ?? qualifiedMinRank;
+    const windowEnd = sql`coalesce(${cycles.finishedAt}, now())`;
+    // Per cycle, the jobs first seen in its window or scored during it, each once (`in` dedupes). Collected from the two
+    // indexes (`jobs_first_seen_at_idx`, `scores_scored_at_idx`) per cycle: an `or exists` join condition can only be checked
+    // for every (cycle, job) pair. `union all`, not `union`: with `union` the planner scans all jobs for every cycle.
+    const firstSeen = alias(jobs, "first_seen");
+    const handledIds = db
+      .select({ id: firstSeen.id })
+      .from(firstSeen)
+      .where(and(gte(firstSeen.firstSeenAt, cycles.startedAt), sql`${firstSeen.firstSeenAt} <= ${windowEnd}`))
+      .unionAll(db.select({ id: scores.jobId }).from(scores).where(and(gte(scores.scoredAt, cycles.startedAt), sql`${scores.scoredAt} <= ${windowEnd}`)));
+    // named like the table, so the columns the counts read (`jobs.salary_json`, the signal checks, the latest score) are the handled jobs'
+    const handled = db.select({ id: jobs.id, salaryJson: jobs.salaryJson }).from(jobs).where(inArray(jobs.id, handledIds)).as("jobs");
+    const qualifies =
+      qualifiedMinRank === null
+        ? sql`false`
+        : sql`(${latest.rankValue} >= ${qualifiedMinRank} or (${latest.rankValue} >= ${qualifiedMinRankWithSignals} and ${highValueSql(db, options.highValue)}))`;
+    const rows = await db
+      .select({
+        id: cycles.id,
+        startedAt: cycles.startedAt,
+        fetched: sql<number>`(select coalesce(sum(${runs.fetched}), 0) from ${runs} where ${runs.cycleId} = ${cycles.id})`.mapWith(Number),
+        pushed: sql<number>`(select count(*) from ${notifications} where ${notifications.cycleId} = ${cycles.id} and ${notifications.kind} = 'job' and ${notifications.sentAt} is not null)`.mapWith(Number),
+        passed: sql<number>`count(${jobs.id}) filter (where ${latest.filterResult} = 'passed')`.mapWith(Number),
+        qualified: sql<number>`count(${jobs.id}) filter (where ${latest.filterResult} = 'passed' and ${qualifies})`.mapWith(Number),
+        salaryStated: sql<number>`count(${jobs.id}) filter (where ${latest.filterResult} = 'passed' and ${hasListableSalary(policyCurrency(options.highValue ?? undefined))})`.mapWith(Number),
+        unprocessed: sql<number>`(select count(*) from ${rawPostings} where ${rawPostings.parseStatus} = 'pending' and ${rawPostings.runId} in (select ${runs.id} from ${runs} where ${runs.cycleId} = ${cycles.id}))`.mapWith(Number),
+        summaryJson: cycles.summaryJson,
+      })
+      .from(cycles)
+      .leftJoinLateral(handled, sql`true`)
+      .leftJoinLateral(latest, sql`true`)
+      .where(inArray(
+        cycles.id,
+        recent.map((row) => row.id),
+      ))
+      .groupBy(cycles.id, cycles.startedAt)
+      .orderBy(asc(cycles.startedAt), asc(cycles.id));
+    return rows.map((row) => {
+      const steps = readCycleSteps(row.summaryJson);
+      return {
+        cycleId: row.id,
+        startedAt: row.startedAt,
+        fetched: row.fetched,
+        passed: row.passed,
+        qualified: qualifiedMinRank === null ? null : row.qualified,
+        salaryStated: row.salaryStated,
+        pushed: row.pushed,
+        unprocessed: row.unprocessed,
+        unprocessedBlocks: unprocessedBlocks(steps),
+      };
+    });
   });
 }
 
@@ -468,25 +480,27 @@ export interface CycleNewJob {
  * scrolls them. At most `limit`.
  */
 export async function listCycleNewJobs(db: Db, cycle: { startedAt: Date; finishedAt: Date | null }, limit: number): Promise<CycleNewJob[]> {
-  const latest = latestScoreLateral(db);
-  const ux = await uxTablesReady(db);
-  const windowEnd = cycle.finishedAt ?? sql`now()`;
-  const rows = await db
-    .select({ id: jobs.id, title: jobs.title, companyName: companies.name, salaryJson: jobs.salaryJson, rankValue: latest.rankValue })
-    .from(jobs)
-    .innerJoin(companies, eq(companies.id, jobs.companyId))
-    .leftJoinLateral(latest, sql`true`)
-    .where(
-      and(
-        gte(jobs.firstSeenAt, cycle.startedAt),
-        lte(jobs.firstSeenAt, windowEnd),
-        or(isNull(latest.filterResult), ne(latest.filterResult, "filtered_out")),
-        notExists(db.select({ one: sql`1` }).from(applications).where(and(eq(applications.jobId, jobs.id), eq(applications.status, "archived")))),
-        // A job the user closed is not news
-        ux ? not(manuallyClosedSql()) : undefined,
-      ),
-    )
-    .orderBy(sql`${latest.rankValue} desc nulls last`, desc(jobs.firstSeenAt), desc(jobs.id))
-    .limit(Math.max(0, limit));
-  return rows.map((row) => ({ id: row.id, title: row.title, companyName: row.companyName, salary: parseSalary(row.salaryJson), rankValue: row.rankValue }));
+  return currentScoreRead(db, async () => {
+    const latest = await currentScore(db, "few");
+    const ux = await uxTablesReady(db);
+    const windowEnd = cycle.finishedAt ?? sql`now()`;
+    const rows = await db
+      .select({ id: jobs.id, title: jobs.title, companyName: companies.name, salaryJson: jobs.salaryJson, rankValue: latest.rankValue })
+      .from(jobs)
+      .innerJoin(companies, eq(companies.id, jobs.companyId))
+      .leftJoinLateral(latest, sql`true`)
+      .where(
+        and(
+          gte(jobs.firstSeenAt, cycle.startedAt),
+          lte(jobs.firstSeenAt, windowEnd),
+          or(isNull(latest.filterResult), ne(latest.filterResult, "filtered_out")),
+          notExists(db.select({ one: sql`1` }).from(applications).where(and(eq(applications.jobId, jobs.id), eq(applications.status, "archived")))),
+          // A job the user closed is not news
+          ux ? not(manuallyClosedSql()) : undefined,
+        ),
+      )
+      .orderBy(sql`${latest.rankValue} desc nulls last`, desc(jobs.firstSeenAt), desc(jobs.id))
+      .limit(Math.max(0, limit));
+    return rows.map((row) => ({ id: row.id, title: row.title, companyName: row.companyName, salary: parseSalary(row.salaryJson), rankValue: row.rankValue }));
+  });
 }

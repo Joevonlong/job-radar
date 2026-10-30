@@ -9,6 +9,7 @@ import { shippedYaml } from "./helpers";
 const FILES: Record<ConfigName, string> = {
   activityLog: "activity-log.yaml",
   jobArchive: "job-archive.yaml",
+  currentScores: "current-scores.yaml",
   schedule: "schedule.yaml",
   search: "search.yaml",
   jobSearch: "job-search.yaml",

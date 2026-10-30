@@ -5840,6 +5840,14 @@
           "hint": "Lower retention.days in your user copy of delivery-audit.yaml, or inspect the source of large responses. The runner only prunes expired receipts; doctor does not delete anything.",
           "configError": "Cannot read delivery-audit.yaml: {problem}",
           "configHint": "Check delivery-audit.yaml with pnpm config:check."
+        },
+        "current_scores": {
+          "missing": "Current score projection is not migrated.",
+          "migrate": "Run pnpm migrate:run, then restart the runner if startup migration failed.",
+          "detail": "{rows} rows; last check: {at}; differences found: {differences}.",
+          "never": "not checked yet",
+          "repair": "Projection differences remain after repair. Run pnpm current-scores:check and pnpm current-scores:rebuild.",
+          "title": "Current score projection"
         }
       },
       "setup": {
@@ -6796,7 +6804,8 @@
       "spans_reconciled": "Activity records reconciled",
       "pruned": "Activity records pruned",
       "backfill": "Manual backfill",
-      "reminder_counts": "Reminder counts"
+      "reminder_counts": "Reminder counts",
+      "current_scores_repaired": "Score projection repaired"
     },
     "reason": {
       "not_recorded": "Result not recorded",
@@ -7065,7 +7074,9 @@
       "skipped": "Skipped",
       "removed": "Removed",
       "requeued": "Re-queued",
-      "hours": "Hours"
+      "hours": "Hours",
+      "differences": "Differences",
+      "remaining": "Remaining differences"
     },
     "delete": {
       "root": "Delete this entry",
@@ -7115,5 +7126,11 @@
       "error": "Activity log could not be loaded. Check the configuration and database, then try again."
     },
     "viewJob": "View job"
+  },
+  "currentScores": {
+    "missing": "Current score projection is not migrated.",
+    "rebuilt": "Rebuilt {count} job projections.",
+    "checked": "Jobs with projection differences: {count}.",
+    "migrated": "Database migrations complete."
   }
 }

@@ -1,3 +1,4 @@
+import { withRebuiltCurrentScores } from "../helpers/current-scores";
 import { and, desc, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import { afterAll, beforeAll, expect, inject, it } from "vitest";
 
@@ -39,7 +40,7 @@ async function fixture() {
     { jobId: manual.id, action: "closed" }, { jobId: reopened.id, action: "open" },
   ]);
   const filtered = await addJob({ status: "closed" });
-  await getDb().insert(schema.scores).values({ jobId: filtered.id, filterResult: "filtered_out" });
+  await withRebuiltCurrentScores(getDb(), getDb().insert(schema.scores).values({ jobId: filtered.id, filterResult: "filtered_out" }));
   return { active, possible, phrase, dormant, dormantPhrase, gone, manual, reopened, filtered };
 }
 

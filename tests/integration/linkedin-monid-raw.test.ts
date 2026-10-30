@@ -14,7 +14,7 @@ import { ENV, MONID, MONTH, NOW, monidChannels, monidJob, monidProvider } from "
 
 beforeAll(async () => {
   process.env.DATABASE_URL = inject("testDatabaseUrl");
-  await runMigrations();
+  await runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 } });
 });
 afterAll(async () => { await closeDb(); });
 

@@ -5,7 +5,7 @@ import { summarizeMonthSalaries } from "@/lib/domain/salary";
 import type { Db } from "../client";
 import { jobHasCityIn } from "../queries/jobs";
 import { annualBaseFigureSql, comparableSalaryWhere } from "../queries/salary-figure";
-import { latestScoreCte, type LatestScore } from "../queries/job-cards";
+import { withCurrentScore, currentScoreRead, currentScore, type LatestScore } from "../queries/job-cards";
 import { hasHighValueSignal, policyCurrency, type HighValuePolicy } from "../queries/signal-filter";
 import { channels, jobSources, jobs, signals } from "../schema";
 
@@ -16,7 +16,7 @@ import { channels, jobSources, jobs, signals } from "../schema";
  * into memory beyond the grouped result.
  *
  * "Passed" = the job's newest score row does not say `filtered_out` (a job without a score row is not
- * hidden by /jobs either). The score comes from `latestScoreCte`, the same one the job lists use.
+ * hidden by /jobs either). The score comes from `currentScore`, the same one the job lists use.
  */
 
 export interface InsightsWindow {
@@ -187,21 +187,22 @@ export function capIndex(cap: number, width: number): number {
 
 /** Jobs first seen per day, passed and filtered out apart. Days without a job are absent. */
 export async function getDailyCounts(db: Db, window: InsightsWindow): Promise<DailyCount[]> {
-  const latest = latestScoreCte(db);
-  const rows = await db
-    .with(latest)
-    .select({
-      day: sql<string>`to_char((${jobs.firstSeenAt} at time zone ${window.timezone})::date, 'YYYY-MM-DD')`,
-      passed: sql<number>`count(*) filter (where ${passedOf(latest)})::int`,
-      filtered: sql<number>`count(*) filter (where ${filteredOf(latest)})::int`,
-      avgRank: sql<number | null>`(avg(${latest.rankValue}) filter (where ${passedOf(latest)}))::float8`,
-    })
-    .from(jobs)
-    .leftJoin(latest, eq(latest.jobId, jobs.id))
-    .where(firstSeenIn(window))
-    .groupBy(sql`1`)
-    .orderBy(sql`1`);
-  return rows.map((row) => ({ ...row, avgRank: numOrNull(row.avgRank) }));
+  return currentScoreRead(db, async () => {
+    const latest = await currentScore(db, "set");
+    const rows = await withCurrentScore(db, latest)
+      .select({
+        day: sql<string>`to_char((${jobs.firstSeenAt} at time zone ${window.timezone})::date, 'YYYY-MM-DD')`,
+        passed: sql<number>`count(*) filter (where ${passedOf(latest)})::int`,
+        filtered: sql<number>`count(*) filter (where ${filteredOf(latest)})::int`,
+        avgRank: sql<number | null>`(avg(${latest.rankValue}) filter (where ${passedOf(latest)}))::float8`,
+      })
+      .from(jobs)
+      .leftJoin(latest, eq(latest.jobId, jobs.id))
+      .where(firstSeenIn(window))
+      .groupBy(sql`1`)
+      .orderBy(sql`1`);
+    return rows.map((row) => ({ ...row, avgRank: numOrNull(row.avgRank) }));
+  });
 }
 
 /** Jobs first seen in the window (any filter result). */
@@ -212,67 +213,69 @@ export async function countJobsFirstSeen(db: Db, window: InsightsWindow): Promis
 
 /** Jobs first seen in the window that passed the filter (same reading of "passed" as everywhere in this file). */
 export async function countPassedFirstSeen(db: Db, window: InsightsWindow): Promise<number> {
-  const latest = latestScoreCte(db);
-  const [row] = await db
-    .with(latest)
-    .select({ n: sql<number>`count(*)::int` })
-    .from(jobs)
-    .leftJoin(latest, eq(latest.jobId, jobs.id))
-    .where(and(firstSeenIn(window), passedOf(latest)));
-  return row?.n ?? 0;
+  return currentScoreRead(db, async () => {
+    const latest = await currentScore(db, "set");
+    const [row] = await withCurrentScore(db, latest)
+      .select({ n: sql<number>`count(*)::int` })
+      .from(jobs)
+      .leftJoin(latest, eq(latest.jobId, jobs.id))
+      .where(and(firstSeenIn(window), passedOf(latest)));
+    return row?.n ?? 0;
+  });
 }
 
 /** Jobs per source family, with how many passed the filter. A job counts once per family it was seen in. */
 export async function getSourceCounts(db: Db, window: InsightsWindow): Promise<SourceCount[]> {
-  const latest = latestScoreCte(db);
-  const distinctJobs = sql`count(distinct ${jobs.id})`;
-  return db
-    .with(latest)
-    .select({
-      family: channels.family,
-      total: sql<number>`${distinctJobs}::int`,
-      passed: sql<number>`${distinctJobs} filter (where ${passedOf(latest)})::int`,
-    })
-    .from(jobs)
-    .innerJoin(jobSources, eq(jobSources.jobId, jobs.id))
-    .innerJoin(channels, eq(channels.id, jobSources.channelId))
-    .leftJoin(latest, eq(latest.jobId, jobs.id))
-    .where(firstSeenIn(window))
-    .groupBy(channels.family)
-    .orderBy(desc(distinctJobs), asc(channels.family));
+  return currentScoreRead(db, async () => {
+    const latest = await currentScore(db, "set");
+    const distinctJobs = sql`count(distinct ${jobs.id})`;
+    return withCurrentScore(db, latest)
+      .select({
+        family: channels.family,
+        total: sql<number>`${distinctJobs}::int`,
+        passed: sql<number>`${distinctJobs} filter (where ${passedOf(latest)})::int`,
+      })
+      .from(jobs)
+      .innerJoin(jobSources, eq(jobSources.jobId, jobs.id))
+      .innerJoin(channels, eq(channels.id, jobSources.channelId))
+      .leftJoin(latest, eq(latest.jobId, jobs.id))
+      .where(firstSeenIn(window))
+      .groupBy(channels.family)
+      .orderBy(desc(distinctJobs), asc(channels.family));
+  });
 }
 
 /** Passed jobs per city bucket: the listed cities, remote and the rest. */
 export async function getCityCounts(db: Db, window: InsightsWindow, cities: readonly string[], cityMembers: Readonly<Record<string, readonly string[]>> = {}): Promise<CityCounts> {
-  const latest = latestScoreCte(db);
-  const inCity = (city: string): SQL => jobHasCityIn(cityMembers[city] ?? [city]);
-  const inAnyCity = cities.length > 0 ? sql`(${sql.join(cities.map(inCity), sql` or `)})` : sql`false`;
-  const where = and(firstSeenIn(window), passedOf(latest));
+  return currentScoreRead(db, async () => {
+    const latest = await currentScore(db, "set");
+    const inCity = (city: string): SQL => jobHasCityIn(cityMembers[city] ?? [city]);
+    const inAnyCity = cities.length > 0 ? sql`(${sql.join(cities.map(inCity), sql` or `)})` : sql`false`;
+    const where = and(firstSeenIn(window), passedOf(latest));
 
-  const [summary, perCity] = await Promise.all([
-    db
-      .with(latest)
-      .select({
-        total: sql<number>`count(*)::int`,
-        remote: sql<number>`count(*) filter (where ${jobs.workplace} = 'remote')::int`,
-        other: sql<number>`count(*) filter (where ${jobs.workplace} <> 'remote' and not ${inAnyCity})::int`,
-      })
-      .from(jobs)
-      .leftJoin(latest, eq(latest.jobId, jobs.id))
-      .where(where),
-    Promise.all(
-      cities.map(async (city) => {
-        const [row] = await db
-          .with(latest)
-          .select({ n: sql<number>`count(*)::int` })
-          .from(jobs)
-          .leftJoin(latest, eq(latest.jobId, jobs.id))
-          .where(and(where, inCity(city)));
-        return { city, count: row?.n ?? 0 };
-      }),
-    ),
-  ]);
-  return { total: summary[0]?.total ?? 0, remote: summary[0]?.remote ?? 0, other: summary[0]?.other ?? 0, cities: perCity };
+    const [summary, perCity] = await Promise.all([
+      withCurrentScore(db, latest)
+        .select({
+          total: sql<number>`count(*)::int`,
+          remote: sql<number>`count(*) filter (where ${jobs.workplace} = 'remote')::int`,
+          other: sql<number>`count(*) filter (where ${jobs.workplace} <> 'remote' and not ${inAnyCity})::int`,
+        })
+        .from(jobs)
+        .leftJoin(latest, eq(latest.jobId, jobs.id))
+        .where(where),
+      Promise.all(
+        cities.map(async (city) => {
+          const [row] = await withCurrentScore(db, latest)
+            .select({ n: sql<number>`count(*)::int` })
+            .from(jobs)
+            .leftJoin(latest, eq(latest.jobId, jobs.id))
+            .where(and(where, inCity(city)));
+          return { city, count: row?.n ?? 0 };
+        }),
+      ),
+    ]);
+    return { total: summary[0]?.total ?? 0, remote: summary[0]?.remote ?? 0, other: summary[0]?.other ?? 0, cities: perCity };
+  });
 }
 
 /**
@@ -281,123 +284,123 @@ export async function getCityCounts(db: Db, window: InsightsWindow, cities: read
  * `summarizeMonthSalaries`, the function of the detail page and the /me floor preview, over this window's figures.
  */
 export async function getSalaryStats(db: Db, window: InsightsWindow, width: number, capIdx: number, minSample: number, currency: string): Promise<SalaryStats> {
-  const latest = latestScoreCte(db);
-  const where = and(firstSeenIn(window), passedOf(latest));
-  const [summary, figureRows] = await Promise.all([
-    db
-      .with(latest)
-      .select({
-        total: sql<number>`count(*)::int`,
-        disclosed: sql<number>`count(*) filter (where ${jobs.salaryJson} is not null and ${jobs.salaryJson} <> 'null'::jsonb)::int`,
-      })
-      .from(jobs)
-      .leftJoin(latest, eq(latest.jobId, jobs.id))
-      .where(where),
-    db
-      .with(latest)
-      .select({ id: jobs.id, figure: sql<number>`(${annualBaseFigureSql(currency)})::float8` })
-      .from(jobs)
-      .leftJoin(latest, eq(latest.jobId, jobs.id))
-      .where(and(where, comparableSalaryWhere, sql`${annualBaseFigureSql(currency)} > 0`)),
-  ]);
-  const figures = figureRows.map((row) => ({ id: row.id, figure: Number(row.figure) }));
-  const counts = new Map<number, number>();
-  for (const { figure } of figures) {
-    const index = Math.min(Math.floor(figure / width), capIdx);
-    counts.set(index, (counts.get(index) ?? 0) + 1);
-  }
-  const row = summary[0];
-  return {
-    total: row?.total ?? 0,
-    disclosed: row?.disclosed ?? 0,
-    comparable: figures.length,
-    medianEurPerYear: summarizeMonthSalaries(figures, { jobId: 0, figure: null, minSample }).median,
-    minSample,
-    buckets: [...counts].map(([index, count]) => ({ index, count })).sort((x, y) => x.index - y.index),
-  };
+  return currentScoreRead(db, async () => {
+    const latest = await currentScore(db, "set");
+    const where = and(firstSeenIn(window), passedOf(latest));
+    const [summary, figureRows] = await Promise.all([
+      withCurrentScore(db, latest)
+        .select({
+          total: sql<number>`count(*)::int`,
+          disclosed: sql<number>`count(*) filter (where ${jobs.salaryJson} is not null and ${jobs.salaryJson} <> 'null'::jsonb)::int`,
+        })
+        .from(jobs)
+        .leftJoin(latest, eq(latest.jobId, jobs.id))
+        .where(where),
+      withCurrentScore(db, latest)
+        .select({ id: jobs.id, figure: sql<number>`(${annualBaseFigureSql(currency)})::float8` })
+        .from(jobs)
+        .leftJoin(latest, eq(latest.jobId, jobs.id))
+        .where(and(where, comparableSalaryWhere, sql`${annualBaseFigureSql(currency)} > 0`)),
+    ]);
+    const figures = figureRows.map((row) => ({ id: row.id, figure: Number(row.figure) }));
+    const counts = new Map<number, number>();
+    for (const { figure } of figures) {
+      const index = Math.min(Math.floor(figure / width), capIdx);
+      counts.set(index, (counts.get(index) ?? 0) + 1);
+    }
+    const row = summary[0];
+    return {
+      total: row?.total ?? 0,
+      disclosed: row?.disclosed ?? 0,
+      comparable: figures.length,
+      medianEurPerYear: summarizeMonthSalaries(figures, { jobId: 0, figure: null, minSample }).median,
+      minSample,
+      buckets: [...counts].map(([index, count]) => ({ index, count })).sort((x, y) => x.index - y.index),
+    };
+  });
 }
 
 /** Passed jobs per signal category (`categoryIds`), their mean rank value, and how many carry no signal of them at all. */
 export async function getSignalStats(db: Db, window: InsightsWindow, highValue: HighValuePolicy, categoryIds: readonly string[]): Promise<SignalStats> {
-  const latest = latestScoreCte(db);
-  const where = and(firstSeenIn(window), passedOf(latest));
-  const ids = categoryIds.length > 0 ? [...categoryIds] : null;
-  const hasTierSignal = ids
-    ? exists(
-        db
-          .select({ one: sql`1` })
-          .from(signals)
-          .where(and(eq(signals.jobId, jobs.id), inArray(signals.tier, ids))),
-      )
-    : sql`false`;
-  const [summary, tierRows] = await Promise.all([
-    db
-      .with(latest)
-      .select({
-        total: sql<number>`count(*)::int`,
-        withoutSignal: sql<number>`count(*) filter (where not ${hasTierSignal})::int`,
-        highPay: sql<number>`count(*) filter (where ${hasHighValueSignal(db, highValue)})::int`,
-        scored: sql<number>`count(${latest.rankValue})::int`,
-        avgRank: sql<number | null>`avg(${latest.rankValue})::float8`,
-      })
-      .from(jobs)
-      .leftJoin(latest, eq(latest.jobId, jobs.id))
-      .where(where),
-    db
-      .with(latest)
-      .select({
-        tier: signals.tier,
-        jobs: sql<number>`count(distinct ${jobs.id})::int`,
-        avgRank: sql<number | null>`avg(${latest.rankValue})::float8`,
-      })
-      .from(jobs)
-      .innerJoin(signals, eq(signals.jobId, jobs.id))
-      .leftJoin(latest, eq(latest.jobId, jobs.id))
-      .where(and(where, ids ? inArray(signals.tier, ids) : sql`false`))
-      .groupBy(signals.tier),
-  ]);
-  const byTier = new Map(tierRows.map((r) => [r.tier, r]));
-  const row = summary[0];
-  return {
-    total: row?.total ?? 0,
-    tiers: categoryIds.map((tier) => ({ tier, jobs: byTier.get(tier)?.jobs ?? 0, avgRank: numOrNull(byTier.get(tier)?.avgRank) })),
-    withoutSignal: row?.withoutSignal ?? 0,
-    highPay: row?.highPay ?? 0,
-    scored: row?.scored ?? 0,
-    avgRank: numOrNull(row?.avgRank),
-  };
+  return currentScoreRead(db, async () => {
+    const latest = await currentScore(db, "set");
+    const where = and(firstSeenIn(window), passedOf(latest));
+    const ids = categoryIds.length > 0 ? [...categoryIds] : null;
+    const hasTierSignal = ids
+      ? exists(
+          db
+            .select({ one: sql`1` })
+            .from(signals)
+            .where(and(eq(signals.jobId, jobs.id), inArray(signals.tier, ids))),
+        )
+      : sql`false`;
+    const [summary, tierRows] = await Promise.all([
+      withCurrentScore(db, latest)
+        .select({
+          total: sql<number>`count(*)::int`,
+          withoutSignal: sql<number>`count(*) filter (where not ${hasTierSignal})::int`,
+          highPay: sql<number>`count(*) filter (where ${hasHighValueSignal(db, highValue)})::int`,
+          scored: sql<number>`count(${latest.rankValue})::int`,
+          avgRank: sql<number | null>`avg(${latest.rankValue})::float8`,
+        })
+        .from(jobs)
+        .leftJoin(latest, eq(latest.jobId, jobs.id))
+        .where(where),
+      withCurrentScore(db, latest)
+        .select({
+          tier: signals.tier,
+          jobs: sql<number>`count(distinct ${jobs.id})::int`,
+          avgRank: sql<number | null>`avg(${latest.rankValue})::float8`,
+        })
+        .from(jobs)
+        .innerJoin(signals, eq(signals.jobId, jobs.id))
+        .leftJoin(latest, eq(latest.jobId, jobs.id))
+        .where(and(where, ids ? inArray(signals.tier, ids) : sql`false`))
+        .groupBy(signals.tier),
+    ]);
+    const byTier = new Map(tierRows.map((r) => [r.tier, r]));
+    const row = summary[0];
+    return {
+      total: row?.total ?? 0,
+      tiers: categoryIds.map((tier) => ({ tier, jobs: byTier.get(tier)?.jobs ?? 0, avgRank: numOrNull(byTier.get(tier)?.avgRank) })),
+      withoutSignal: row?.withoutSignal ?? 0,
+      highPay: row?.highPay ?? 0,
+      scored: row?.scored ?? 0,
+      avgRank: numOrNull(row?.avgRank),
+    };
+  });
 }
 
 /** Rank values of the passed jobs in buckets of `width` points. */
 export async function getScoreStats(db: Db, window: InsightsWindow, width: number, capIdx: number, pushMinScore: number): Promise<ScoreStats> {
-  const latest = latestScoreCte(db);
-  const where = and(firstSeenIn(window), passedOf(latest));
-  const [summary, buckets] = await Promise.all([
-    db
-      .with(latest)
-      .select({
-        scored: sql<number>`count(${latest.rankValue})::int`,
-        atPushLine: sql<number>`count(*) filter (where ${latest.rankValue} >= ${pushMinScore})::int`,
-        pending: sql<number>`count(*) filter (where ${latest.rankValue} is null)::int`,
-        avgRank: sql<number | null>`avg(${latest.rankValue})::float8`,
-      })
-      .from(jobs)
-      .leftJoin(latest, eq(latest.jobId, jobs.id))
-      .where(where),
-    db
-      .with(latest)
-      .select({
-        index: sql<number>`least(floor(${latest.rankValue} / ${width}::numeric), ${capIdx}::numeric)::int`,
-        count: sql<number>`count(*)::int`,
-      })
-      .from(jobs)
-      .leftJoin(latest, eq(latest.jobId, jobs.id))
-      .where(and(where, sql`${latest.rankValue} is not null`))
-      .groupBy(sql`1`)
-      .orderBy(sql`1`),
-  ]);
-  const row = summary[0];
-  return { atPushLine: row?.atPushLine ?? 0, scored: row?.scored ?? 0, pending: row?.pending ?? 0, avgRank: numOrNull(row?.avgRank), buckets };
+  return currentScoreRead(db, async () => {
+    const latest = await currentScore(db, "set");
+    const where = and(firstSeenIn(window), passedOf(latest));
+    const [summary, buckets] = await Promise.all([
+      withCurrentScore(db, latest)
+        .select({
+          scored: sql<number>`count(${latest.rankValue})::int`,
+          atPushLine: sql<number>`count(*) filter (where ${latest.rankValue} >= ${pushMinScore})::int`,
+          pending: sql<number>`count(*) filter (where ${latest.rankValue} is null)::int`,
+          avgRank: sql<number | null>`avg(${latest.rankValue})::float8`,
+        })
+        .from(jobs)
+        .leftJoin(latest, eq(latest.jobId, jobs.id))
+        .where(where),
+      withCurrentScore(db, latest)
+        .select({
+          index: sql<number>`least(floor(${latest.rankValue} / ${width}::numeric), ${capIdx}::numeric)::int`,
+          count: sql<number>`count(*)::int`,
+        })
+        .from(jobs)
+        .leftJoin(latest, eq(latest.jobId, jobs.id))
+        .where(and(where, sql`${latest.rankValue} is not null`))
+        .groupBy(sql`1`)
+        .orderBy(sql`1`),
+    ]);
+    const row = summary[0];
+    return { atPushLine: row?.atPushLine ?? 0, scored: row?.scored ?? 0, pending: row?.pending ?? 0, avgRank: numOrNull(row?.avgRank), buckets };
+  });
 }
 
 /**
@@ -407,61 +410,61 @@ export async function getScoreStats(db: Db, window: InsightsWindow, width: numbe
  * monotone when a stage was skipped (interested -> applied).
  */
 export async function getFunnelStats(db: Db, window: InsightsWindow): Promise<FunnelStats> {
-  const latest = latestScoreCte(db);
-  const [newRow] = await db
-    .with(latest)
-    .select({ n: sql<number>`count(*)::int` })
-    .from(jobs)
-    .leftJoin(latest, eq(latest.jobId, jobs.id))
-    .where(and(firstSeenIn(window), passedOf(latest)));
+  return currentScoreRead(db, async () => {
+    const latest = await currentScore(db, "set");
+    const [newRow] = await withCurrentScore(db, latest)
+      .select({ n: sql<number>`count(*)::int` })
+      .from(jobs)
+      .leftJoin(latest, eq(latest.jobId, jobs.id))
+      .where(and(firstSeenIn(window), passedOf(latest)));
 
-  const list = (statuses: readonly string[]): SQL => sql.join(statuses.map((s) => sql`${s}`), sql`, `);
-  const stageColumns = FUNNEL_STAGES.map((_, i) => sql`count(distinct application_id) filter (where status in (${list(FUNNEL_STAGES.slice(i))}))::int`);
-  const exitColumns = FUNNEL_EXITS.map((status) => sql`count(distinct application_id) filter (where status = ${status})::int`);
-  const changes = sql`(
-    select application_id, to_status::text as status from application_events where at >= ${startOf(window)} and at < ${endOf(window)}
-    union
-    select id as application_id, status::text as status from applications where status_changed_at >= ${startOf(window)} and status_changed_at < ${endOf(window)}
-  ) as changes`;
-  const rows = await db.execute<Record<string, number>>(
-    sql`select ${sql.join([...stageColumns, ...exitColumns].map((column, i) => sql`${column} as ${sql.identifier(`c${i}`)}`), sql`, `)} from ${changes}`,
-  );
-  const row = rows[0] ?? {};
-  const at = (i: number): number => num(row[`c${i}`]);
-  return {
-    newJobs: newRow?.n ?? 0,
-    reached: Object.fromEntries(FUNNEL_STAGES.map((stage, i) => [stage, at(i)])) as Record<FunnelStage, number>,
-    exits: Object.fromEntries(FUNNEL_EXITS.map((status, i) => [status, at(FUNNEL_STAGES.length + i)])) as Record<FunnelExit, number>,
-  };
+    const list = (statuses: readonly string[]): SQL => sql.join(statuses.map((s) => sql`${s}`), sql`, `);
+    const stageColumns = FUNNEL_STAGES.map((_, i) => sql`count(distinct application_id) filter (where status in (${list(FUNNEL_STAGES.slice(i))}))::int`);
+    const exitColumns = FUNNEL_EXITS.map((status) => sql`count(distinct application_id) filter (where status = ${status})::int`);
+    const changes = sql`(
+      select application_id, to_status::text as status from application_events where at >= ${startOf(window)} and at < ${endOf(window)}
+      union
+      select id as application_id, status::text as status from applications where status_changed_at >= ${startOf(window)} and status_changed_at < ${endOf(window)}
+    ) as changes`;
+    const rows = await db.execute<Record<string, number>>(
+      sql`select ${sql.join([...stageColumns, ...exitColumns].map((column, i) => sql`${column} as ${sql.identifier(`c${i}`)}`), sql`, `)} from ${changes}`,
+    );
+    const row = rows[0] ?? {};
+    const at = (i: number): number => num(row[`c${i}`]);
+    return {
+      newJobs: newRow?.n ?? 0,
+      reached: Object.fromEntries(FUNNEL_STAGES.map((stage, i) => [stage, at(i)])) as Record<FunnelStage, number>,
+      exits: Object.fromEntries(FUNNEL_EXITS.map((status, i) => [status, at(FUNNEL_STAGES.length + i)])) as Record<FunnelExit, number>,
+    };
+  });
 }
 
 /** Why jobs were filtered out: how many filtered-out jobs each reason code applies to, biggest first. */
 export async function getFilterStats(db: Db, window: InsightsWindow, limit: number): Promise<FilterStats> {
-  const latest = latestScoreCte(db);
-  const filteredJobs = and(firstSeenIn(window), filteredOf(latest));
-  const exploded = db
-    .with(latest)
-    .select({ jobId: jobs.id, reason: sql<string>`unnest(${latest.filterReasons})`.as("reason") })
-    .from(jobs)
-    .innerJoin(latest, eq(latest.jobId, jobs.id))
-    .where(filteredJobs)
-    .as("exploded");
-  const [totalRow, reasons] = await Promise.all([
-    db
-      .with(latest)
-      .select({ n: sql<number>`count(*)::int` })
+  return currentScoreRead(db, async () => {
+    const latest = await currentScore(db, "set");
+    const filteredJobs = and(firstSeenIn(window), filteredOf(latest));
+    const exploded = withCurrentScore(db, latest)
+      .select({ jobId: jobs.id, reason: sql<string>`unnest(${latest.filterReasons})`.as("reason") })
       .from(jobs)
       .innerJoin(latest, eq(latest.jobId, jobs.id))
-      .where(filteredJobs),
-    db
-      .with(latest)
-      .select({ code: sql<string>`split_part(${exploded.reason}, ':', 1)`, jobs: sql<number>`count(distinct ${exploded.jobId})::int` })
-      .from(exploded)
-      .groupBy(sql`1`)
-      .orderBy(sql`2 desc`, sql`1 asc`)
-      .limit(Math.max(1, limit)),
-  ]);
-  return { total: totalRow[0]?.n ?? 0, reasons };
+      .where(filteredJobs)
+      .as("exploded");
+    const [totalRow, reasons] = await Promise.all([
+      withCurrentScore(db, latest)
+        .select({ n: sql<number>`count(*)::int` })
+        .from(jobs)
+        .innerJoin(latest, eq(latest.jobId, jobs.id))
+        .where(filteredJobs),
+      withCurrentScore(db, latest)
+        .select({ code: sql<string>`split_part(${exploded.reason}, ':', 1)`, jobs: sql<number>`count(distinct ${exploded.jobId})::int` })
+        .from(exploded)
+        .groupBy(sql`1`)
+        .orderBy(sql`2 desc`, sql`1 asc`)
+        .limit(Math.max(1, limit)),
+    ]);
+    return { total: totalRow[0]?.n ?? 0, reasons };
+  });
 }
 
 /** Everything /insights shows, from one window of days. The queries are independent and run side by side. */

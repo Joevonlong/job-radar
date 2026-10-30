@@ -1,3 +1,4 @@
+import { withRebuiltCurrentScores } from "../helpers/current-scores";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, inject, it } from "vitest";
 
@@ -48,9 +49,9 @@ beforeEach(async () => {
       firstSeenAt: now, lastSeenAt: now, postedAt: now, status: "active",
     }).returning();
     ids.set(`J${index + 1}`, job!.id);
-    await db.insert(schema.scores).values(index === 19
+    await withRebuiltCurrentScores(db, db.insert(schema.scores).values(index === 19
       ? { jobId: job!.id, filterResult: "filtered_out" }
-      : { jobId: job!.id, filterResult: "passed", rankValue: 100 - index, score: 100 - index });
+      : { jobId: job!.id, filterResult: "passed", rankValue: 100 - index, score: 100 - index }));
     if ([11, 12, 18].includes(index)) await db.insert(schema.translations).values({
       jobId: job!.id, lang: "zh", sourceHash: index === 12 ? "stale" : descriptionHash(row.description ?? "Fixture duties"),
       content: index === 18 ? "Product产品Manager" : index === 12 ? "产品经理" : "[[T1]]产品经理[[/T1]]，负责[[T1]]AI[[/T1]]平台",
@@ -183,7 +184,7 @@ describe("precise job search acceptance", () => {
     const allCurrent = ["J1", "J2", "J3", "J4", "J5", "J6", "J7", "J8", "J9", "J10", "J11", "J12", "J13", "J15", "J16", "J17", "J18", "J19"];
     expect(await matching("")).toEqual(allCurrent);
     // Equal rank and times: id is the final tie-breaker.
-    await getDb().execute(sql`update scores set rank_value = 50 where job_id in (${id("J1")}, ${id("J9")}, ${id("J15")})`);
+    await withRebuiltCurrentScores(getDb(), getDb().execute(sql`update scores set rank_value = 50 where job_id in (${id("J1")}, ${id("J9")}, ${id("J15")})`));
     expect(await matching("AI")).toEqual(["J15", "J9", "J1", "J17"]);
   });
 

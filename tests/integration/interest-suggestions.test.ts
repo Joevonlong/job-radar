@@ -1,3 +1,4 @@
+import { withRebuiltCurrentScores } from "../helpers/current-scores";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -37,7 +38,7 @@ const api = new FakeBotApi();
 
 beforeAll(async () => {
   process.env.DATABASE_URL = url;
-  await runMigrations();
+  await runMigrations({ currentScoresBackfill: { lockTimeoutMs: 3000, statementTimeoutMs: 60000 } });
   await api.start();
 });
 
@@ -263,7 +264,7 @@ describe("approving and rejecting", () => {
     const before = fs.readFileSync(interestsFile(), "utf8");
     // a scored job, so the recompute has something to check
     const [snapshot] = await db().insert(schema.profileSnapshots).values({ kind: "preferences", contentYaml: "x", hash: "h" }).returning();
-    await db().insert(schema.scores).values({ jobId: ids.liked1, profileSnapshotId: snapshot!.id, filterResult: "passed", score: 80, rankValue: 80 });
+    await withRebuiltCurrentScores(db(), db().insert(schema.scores).values({ jobId: ids.liked1, profileSnapshotId: snapshot!.id, filterResult: "passed", score: 80, rankValue: 80 }));
     await db().insert(schema.signals).values({ jobId: ids.liked1, tier: "T3", kind: "competitive_pay", quote: "competitive salary", extractor: "rule" });
 
     const result = await approveSuggestion(word.id);

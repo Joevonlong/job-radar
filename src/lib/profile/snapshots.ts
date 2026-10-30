@@ -1,3 +1,4 @@
+import { scoreTransaction } from "@/lib/db/repos/current-scores";
 import { isDeepStrictEqual } from "node:util";
 
 import { parseConfigText, setOnProfileSaved, type ProfileName } from "@/lib/config";
@@ -28,7 +29,7 @@ export interface RecordedSnapshot {
  * preferences `deal_breakers`, which the hard filter applies in place) keeps the newest snapshot, given the new text.
  */
 export async function recordProfileSnapshot(db: Db, kind: ProfileName, yamlText: string): Promise<RecordedSnapshot> {
-  return db.transaction(async (tx) => {
+  return scoreTransaction(db, async (tx) => {
     const previous = await getLatestProfileSnapshot(tx, kind);
     if (previous && previous.hash !== hashProfileYaml(yamlText) && !(await findProfileSnapshotByHash(tx, kind, hashProfileYaml(yamlText))) && sameProfileValues(kind, previous.contentYaml, yamlText)) {
       return { snapshot: await rebaseProfileSnapshot(tx, previous.id, yamlText), staleMarked: 0 };
