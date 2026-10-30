@@ -61,7 +61,9 @@ describe("activity deletion dialog", () => {
     expect(screen.getByRole("dialog")).toBeVisible();
     expect(screen.queryByRole("button", { name: "Confirm deletion" })).not.toBeInTheDocument();
     expect(replace).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    const cancel = screen.getByRole("button", { name: "Cancel" });
+    await waitFor(() => expect(cancel).toBeEnabled());
+    fireEvent.click(cancel);
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     expect(refresh).toHaveBeenCalledOnce();
   });

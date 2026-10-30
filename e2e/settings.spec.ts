@@ -573,5 +573,10 @@ for (const locale of ["zh", "en"] as const) {
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     fs.mkdirSync("/tmp/company-query-shots", { recursive: true });
     await page.screenshot({ path: `/tmp/company-query-shots/settings-${locale}-390.png`, fullPage: true });
+    await page.getByRole("button", { name: locale === "en" ? "Toggle theme" : "切换深浅主题" }).click();
+    await expect(page.locator("html")).toHaveClass(/dark/);
+    await expect(control).not.toBeChecked();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await page.screenshot({ path: `/tmp/company-query-shots/settings-${locale}-dark-390.png`, fullPage: true });
   });
 }

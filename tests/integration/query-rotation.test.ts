@@ -446,7 +446,7 @@ describe("collect rotation edge cases", () => {
     ]) });
     expect(logs.filter((record) => record.message === "query rotation")).toEqual([{
       at: atCycle(1), level: "info", message: "query rotation",
-      fields: { cycle: result.cycleId, kind: "manual", unit: test.fixture.id, ...expected, notReached: 2, reason: null },
+      fields: { cycle: result.cycleId, kind: "manual", unit: test.fixture.id, ...expected, companyQueries: { candidates: 0, due: 0, selected: 0 }, notReached: 2, reason: null },
     }]);
   });
 
