@@ -29,7 +29,7 @@ export interface EnsureProfileResult {
 }
 
 /**
- * Copy `<defaults dir>/profile.example/{me,preferences}.yaml` into the profile directory for every file
+ * Copy `<defaults dir>/profile.example/{me,preferences,stories}.yaml` into the profile directory for every file
  * that does not exist yet. Existing files are never overwritten.
  */
 export async function ensureProfileFiles(): Promise<EnsureProfileResult[]> {

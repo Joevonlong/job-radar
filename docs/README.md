@@ -43,6 +43,7 @@ mock-ups.
 | [insights.md](insights.md) | The /insights page: how every card is computed, `insights.yaml` |
 | [interest-suggestions.md](interest-suggestions.md) | Weekly AI suggestions: evidence rules, approve / reject, `suggest` settings |
 | [resume-kit.md](resume-kit.md) | Resume tailoring hand-off: `resume.yaml`, exporting a JD, the `/tailor` command |
+| [application-writer.md](application-writer.md) | Your experience library on `/me` (`stories.yaml`): what a story holds, ids, history and rollback, limits in `writer.yaml`, what is sent where |
 | [mcp.md](mcp.md) | Asking Claude Desktop, Claude Code or another MCP client about your jobs and applications: the optional read-only MCP server (`pnpm mcp:serve`, `mcp.yaml`), its tools, what it gives and never gives |
 | [telegram.md](telegram.md) | Creating a bot, finding your chat id |
 | [gmail-alerts.md](gmail-alerts.md) | Two-step verification, app password, the label, subscribing to job alerts |

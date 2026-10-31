@@ -68,7 +68,7 @@ export const signalExtractorEnum = pgEnum("signal_extractor", ["rule", "ai"]);
 export const signalQuoteSourceEnum = pgEnum("signal_quote_source", ["description", "structured"]);
 export const filterResultEnum = pgEnum("filter_result", ["passed", "filtered_out"]);
 export const filterOverrideEnum = pgEnum("filter_override", ["keep", "exclude"]);
-export const profileKindEnum = pgEnum("profile_kind", ["me", "preferences", "interests"]);
+export const profileKindEnum = pgEnum("profile_kind", ["me", "preferences", "interests", "stories"]);
 export const suggestionStatusEnum = pgEnum("suggestion_status", ["pending", "approved", "rejected"]);
 
 // ---------------------------------------------------------------- collection

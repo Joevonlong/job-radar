@@ -283,7 +283,7 @@ describe("history and rollback", () => {
 
   it("only touches files inside the profile directory", async () => {
     await saveProfile("me", meDraft());
-    expect(fs.readdirSync(temp.profileDir).sort()).toEqual(["me.yaml", "preferences.yaml"]);
+    expect(fs.readdirSync(temp.profileDir).sort()).toEqual(["me.yaml", "preferences.yaml", "stories.yaml"]);
     expect(path.dirname(getConfigPath("me"))).toBe(temp.profileDir);
   });
 });

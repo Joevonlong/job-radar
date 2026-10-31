@@ -1,0 +1,20 @@
+# My experience library (template). Copied to data/profile/stories.yaml on first run; after that, edit it on /me or only the
+# copy in data/profile/.
+# Stories you select are sent to the AI provider when the application writer drafts an answer; don't include your name,
+# email, phone or ID numbers.
+
+# Version of this file's structure; don't edit by hand (a migration script upgrades it when the structure changes)
+config_version: 1
+
+# One entry per project or achievement, e.g.:
+#   - id: billing-migration          # stable id (lowercase letters, digits, hyphens); /me makes it from the title
+#     title: Moved billing to the new platform
+#     what: Planned and led the migration of the billing service, with a team of three.
+#     result: No downtime; monthly close two days faster.
+#     metrics: ["close from 5 to 3 days"]
+#     skills: [PostgreSQL, Kotlin]
+#     period: 2022–2023
+#     language: en
+#     tags: [leadership]
+#     source: manual                 # manual | profile | self_description | resume
+stories: []

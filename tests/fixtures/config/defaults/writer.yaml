@@ -1,0 +1,20 @@
+# Application writer (docs/application-writer.md): your experience library on /me (data/profile/stories.yaml), the material
+# application answers and cover letters are written from.
+# Privacy: the experience library stays on this machine; nothing of it is sent to an AI provider while `enabled` is false.
+
+# Version of this file's structure; don't edit by hand (a migration script upgrades it when the structure changes)
+config_version: 1
+
+# Master switch of the AI writing features. false (the default): nothing of the writer is sent to an AI provider
+enabled: false
+
+# Limits of the experience library, checked when you save it on /me
+stories:
+  # Most stories in the library
+  max_items: 60
+  # Longest title; also the longest single entry of a story's metrics, skills and tags
+  title_max_chars: 120
+  # Longest "what you did" and "result" text of one story
+  text_max_chars: 1500
+  # How many stories a new application question starts with selected (best skill overlap with the job first)
+  preselect_count: 4

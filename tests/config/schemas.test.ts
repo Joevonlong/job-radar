@@ -31,8 +31,10 @@ const FILES: Record<ConfigName, string> = {
   deliveryAudit: "delivery-audit.yaml",
   mcp: "mcp.yaml",
   language: "language.yaml",
+  writer: "writer.yaml",
   me: "profile.example/me.yaml",
   preferences: "profile.example/preferences.yaml",
+  stories: "profile.example/stories.yaml",
 };
 
 type Json = Record<string, unknown>;

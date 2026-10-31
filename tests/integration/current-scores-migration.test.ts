@@ -17,7 +17,11 @@ async function beforeProjection() {
   const connection = createConnection(isolated.url, { max: 3 });
   await connection.sql`drop function job_current_scores_lock(bigint[])`;
   await connection.sql`drop table job_current_scores`;
-  await connection.sql`delete from drizzle.__drizzle_migrations where id = (select max(id) from drizzle.__drizzle_migrations)`;
+  // Forget the projection migration and every later one (they are re-applied after it).
+  const journal = JSON.parse(await fs.readFile("drizzle/meta/_journal.json", "utf8")) as { entries: { tag: string; when: number }[] };
+  const projection = journal.entries.find((entry) => entry.tag.endsWith("_job_current_scores"));
+  if (!projection) throw new Error("Current score migration is missing");
+  await connection.sql`delete from drizzle.__drizzle_migrations where created_at >= ${projection.when}`;
   return { ...connection, url: isolated.url, async close() { await connection.sql.end(); await isolated.drop(); } };
 }
 it("backfills existing rows, restores timeouts, and changes fallback to projection without restart", async () => {

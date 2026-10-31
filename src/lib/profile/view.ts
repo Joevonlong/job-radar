@@ -1,5 +1,7 @@
-/** Data for the /me page (server only): both profile files, their history and the stale-score count. */
+/** Data for the /me page (server only): the profile files, their history and the stale-score count. */
 import { diffYaml, reloadConfig, readProfileText, type ProfileName } from "@/lib/config";
+import { WRITER_STORIES_DEFAULTS, type WriterStoriesLimits } from "@/lib/config/schemas/writer";
+import { storiesConfigToDraft, type StoriesDraft } from "@/lib/stories/draft";
 import { countStaleScores, getDb, hashProfileYaml, listProfileSnapshots, type ProfileSnapshot } from "@/lib/db";
 
 import {
@@ -17,6 +19,9 @@ export { diffYaml };
 export interface ProfilePageData {
   me: ProfileSection<MeDraft>;
   preferences: ProfileSection<PreferencesDraft>;
+  stories: ProfileSection<StoriesDraft>;
+  /** writer.yaml `stories` (the form's length hints), or its defaults when writer.yaml cannot be read. */
+  storyLimits: WriterStoriesLimits;
   staleScores: number;
   /** False when the database could not be reached: history and stale count are unavailable. */
   dbAvailable: boolean;
@@ -65,21 +70,30 @@ export async function loadProfilePage(): Promise<ProfilePageData> {
   let staleScores = 0;
   let meSnapshots: ProfileSnapshot[] = [];
   let preferenceSnapshots: ProfileSnapshot[] = [];
+  let storySnapshots: ProfileSnapshot[] = [];
   try {
     const db = getDb();
     // One extra row so the last visible entry still has an older neighbour to diff against.
-    [meSnapshots, preferenceSnapshots, staleScores] = await Promise.all([
+    [meSnapshots, preferenceSnapshots, storySnapshots, staleScores] = await Promise.all([
       listProfileSnapshots(db, "me", HISTORY_LIMIT + 1),
       listProfileSnapshots(db, "preferences", HISTORY_LIMIT + 1),
+      listProfileSnapshots(db, "stories", HISTORY_LIMIT + 1),
       countStaleScores(db),
     ]);
   } catch {
     dbAvailable = false;
   }
 
-  const [me, preferences] = await Promise.all([
+  const [me, preferences, stories] = await Promise.all([
     loadSection("me", () => meConfigToDraft(reloadConfig("me")), meSnapshots),
     loadSection("preferences", () => preferencesConfigToDraft(reloadConfig("preferences")), preferenceSnapshots),
+    loadSection("stories", () => storiesConfigToDraft(reloadConfig("stories")), storySnapshots),
   ]);
-  return { me, preferences, staleScores, dbAvailable };
+  let storyLimits: WriterStoriesLimits = WRITER_STORIES_DEFAULTS;
+  try {
+    storyLimits = reloadConfig("writer").stories;
+  } catch {
+    // an unreadable writer.yaml is reported by its settings tab; the save uses the same defaults
+  }
+  return { me, preferences, stories, storyLimits, staleScores, dbAvailable };
 }

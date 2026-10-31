@@ -282,6 +282,8 @@ function draftPath(path: ReadonlyArray<PropertyKey>): string {
   // Rows of `languages` carry one error line; the record key/level distinction is in the message key.
   if (head === "languages") return typeof index === "number" ? `languages.${index}` : "languages";
   if (head === "skills" && typeof index === "number" && typeof field === "string") return `skills.${index}.${field}`;
+  // a story's fields; its lists (metrics, skills, tags) are one control each
+  if (head === "stories") return typeof index === "number" ? (typeof field === "string" ? `stories.${index}.${field}` : `stories.${index}`) : "stories";
   // a deal-breaker's lists (terms, patterns, unless) are one control each, like the lists above
   if (head === "deal_breakers") return typeof index === "number" ? (typeof field === "string" ? `deal_breakers.${index}.${field}` : `deal_breakers.${index}`) : "deal_breakers";
   return path.map(String).join(".");

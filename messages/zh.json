@@ -564,6 +564,10 @@
       "preferences": {
         "title": "我要什么",
         "description": "目标职位、地点、薪资底线和排除项，用于硬过滤和打分。"
+      },
+      "stories": {
+        "title": "经历素材",
+        "description": "项目和成果，一条一个：写申请回答时用的素材。打分不读它们。不要写姓名、联系方式或证件号。"
       }
     },
     "fields": {
@@ -779,6 +783,47 @@
     "units": {
       "perYear": "/年",
       "years": "年"
+    },
+    "stories": {
+      "empty": "还没有素材。添加一个项目或成果：你做了什么、结果如何、有哪些数字。",
+      "add": "添加素材",
+      "count": "{count} / {max}",
+      "untitled": "未命名素材",
+      "edit": "编辑",
+      "done": "收起",
+      "moveUp": "上移“{title}”",
+      "moveDown": "下移“{title}”",
+      "remove": "删除“{title}”",
+      "piiBadge": "含联系方式？",
+      "piiWarning": "这条素材里好像有{kinds}。素材是要发给 AI 服务商的，建议删掉。仍然可以保存。",
+      "pii": {
+        "email": "邮箱地址",
+        "phone": "电话号码"
+      },
+      "source": {
+        "manual": "手写",
+        "profile": "来自画像",
+        "self_description": "来自自述",
+        "resume": "来自简历"
+      },
+      "fields": {
+        "title": "标题",
+        "what": "做了什么",
+        "result": "结果",
+        "metrics": "数字",
+        "skills": "相关技能",
+        "period": "时间",
+        "language": "语言",
+        "tags": "标签"
+      },
+      "hints": {
+        "max": "最多 {max} 个字符。",
+        "what": "你负责的部分，用你自己的话写。最多 {max} 个字符。",
+        "metrics": "每条一个数字，按你会怎么说来写（“构建时间从 40 分钟降到 12 分钟”）；按回车添加。",
+        "list": "按回车或输入逗号添加。",
+        "period": "自由填写，例如 2021–2023。",
+        "language": "语言代码，如 en、de、zh。"
+      }
     }
   },
   "filter": {

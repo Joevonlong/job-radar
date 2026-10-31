@@ -21,11 +21,13 @@ import { preferencesSchema } from "./schemas/preferences";
 import { resumeSchema } from "./schemas/resume";
 import { salarySchema } from "./schemas/salary";
 import { signalPresetsSchema } from "./schemas/signal-presets";
+import { storiesSchema } from "./schemas/stories";
 import { scheduleSchema } from "./schemas/schedule";
 import { searchSchema } from "./schemas/search";
 import { setupSchema } from "./schemas/setup";
 import { trapsSchema } from "./schemas/traps";
 import { uiSchema } from "./schemas/ui";
+import { writerSchema } from "./schemas/writer";
 
 /**
  * Every config file. `location`: `config` = the layered config directories, `profile` = the profile directory.
@@ -70,15 +72,19 @@ export const configRegistry = {
   activityLog: { file: "activity-log.yaml", location: "config", kind: "shipped", schema: activityLogSchema },
   /** Source listing baselines and relist rules (shipped, independent of filtering fingerprints). */
   jobArchive: { file: "job-archive.yaml", location: "config", kind: "shipped", schema: jobArchiveSchema },
+  /** The application writer and the limits of the experience library; off by default, every key has a default. */
+  writer: { file: "writer.yaml", location: "config", kind: "user", schema: writerSchema },
   me: { file: "me.yaml", location: "profile", kind: "user", schema: meSchema },
   preferences: { file: "preferences.yaml", location: "profile", kind: "user", schema: preferencesSchema },
+  /** The experience library (projects and achievements); not read by scoring. */
+  stories: { file: "stories.yaml", location: "profile", kind: "user", schema: storiesSchema },
 } as const;
 
 export type ConfigName = keyof typeof configRegistry;
 export type ConfigValue<N extends ConfigName> = z.infer<(typeof configRegistry)[N]["schema"]>;
 
 export const CONFIG_NAMES = Object.keys(configRegistry) as ConfigName[];
-export const PROFILE_NAMES = ["me", "preferences"] as const satisfies readonly ConfigName[];
+export const PROFILE_NAMES = ["me", "preferences", "stories"] as const satisfies readonly ConfigName[];
 export type ProfileName = (typeof PROFILE_NAMES)[number];
 
 export function isProfileName(name: ConfigName): name is ProfileName {

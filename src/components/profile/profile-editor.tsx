@@ -6,25 +6,37 @@ import Link from "next/link";
 import { useActionState, useEffect } from "react";
 import { toastTone } from "@/lib/toast";
 
-import { rollbackAction as rawRollbackAction, saveMeAction as rawSaveMeAction, savePreferencesAction as rawSavePreferencesAction } from "@/app/me/actions";
+import {
+  rollbackAction as rawRollbackAction,
+  saveMeAction as rawSaveMeAction,
+  savePreferencesAction as rawSavePreferencesAction,
+  saveStoriesAction as rawSaveStoriesAction,
+} from "@/app/me/actions";
 import type { SalaryAxisScale } from "@/components/viz";
+import type { WriterStoriesLimits } from "@/lib/config/schemas/writer";
 import type { MarketView } from "@/lib/market/view";
 import type { MeDraft, PreferencesDraft } from "@/lib/profile/draft";
 import type { SalaryMedian, StatedSalary } from "@/lib/profile/floor-preview";
 import { IDLE_ACTION_STATE, type ProfileSection } from "@/lib/profile/types";
+import type { StoriesDraft } from "@/lib/stories/draft";
 
 import { HistoryPanel } from "./history-panel";
 import { MeForm } from "./me-form";
 import { PreferencesForm } from "./preferences-form";
+import { StoriesCard } from "./stories-card";
 import { withActionFeedback } from "@/lib/actions/client";
 
 const rollbackAction = withActionFeedback(rawRollbackAction)((previous) => previous);
 const saveMeAction = withActionFeedback(rawSaveMeAction)((previous) => previous);
 const savePreferencesAction = withActionFeedback(rawSavePreferencesAction)((previous) => previous);
+const saveStoriesAction = withActionFeedback(rawSaveStoriesAction)((previous) => previous);
 
 interface ProfileEditorProps {
   me: ProfileSection<MeDraft>;
   preferences: ProfileSection<PreferencesDraft>;
+  stories: ProfileSection<StoriesDraft>;
+  /** writer.yaml `stories`: the experience library's limits. */
+  storyLimits: WriterStoriesLimits;
   staleScores: number;
   dbAvailable: boolean;
   /** This month's stated salaries (the floor preview) and the salary axis scale. */
@@ -77,10 +89,11 @@ function StaleBanner({ count }: { count: number }) {
  * The /me page body. The three Server Actions live here (not in the forms) so their state survives
  * the remount that follows every save or rollback: a form is keyed by the hash of its file.
  */
-export function ProfileEditor({ me, preferences, staleScores, dbAvailable, salaries, axis, salaryMedian, market, searchLocations, userLanguageLevel }: ProfileEditorProps) {
+export function ProfileEditor({ me, preferences, stories, storyLimits, staleScores, dbAvailable, salaries, axis, salaryMedian, market, searchLocations, userLanguageLevel }: ProfileEditorProps) {
   const t = useTranslations("profile");
   const [meState, saveMe, mePending] = useActionState(saveMeAction, IDLE_ACTION_STATE);
   const [prefState, savePrefs, prefPending] = useActionState(savePreferencesAction, IDLE_ACTION_STATE);
+  const [storiesState, saveStories, storiesPending] = useActionState(saveStoriesAction, IDLE_ACTION_STATE);
   const [rollbackState, rollback, rollbackPending] = useActionState(rollbackAction, IDLE_ACTION_STATE);
 
   useEffect(() => {
@@ -90,14 +103,17 @@ export function ProfileEditor({ me, preferences, staleScores, dbAvailable, salar
     if (prefState.status === "saved") toastTone("success", t("actions.savedToast"), { id: `prefs-${prefState.nonce}` });
   }, [prefState, t]);
   useEffect(() => {
+    if (storiesState.status === "saved") toastTone("success", t("actions.savedToast"), { id: `stories-${storiesState.nonce}` });
+  }, [storiesState, t]);
+  useEffect(() => {
     if (rollbackState.status === "saved") toastTone("success", t("actions.rolledBackToast"), { id: `rollback-${rollbackState.nonce}` });
     if (rollbackState.status === "error" && rollbackState.formError) {
       toastTone("error", t(`formErrors.${rollbackState.formError}`));
     }
   }, [rollbackState, t]);
 
-  const busy = mePending || prefPending || rollbackPending;
-  const lastSaved = [meState, prefState, rollbackState]
+  const busy = mePending || prefPending || storiesPending || rollbackPending;
+  const lastSaved = [meState, prefState, storiesState, rollbackState]
     .flatMap((state) => (state.status === "saved" ? [{ kind: state.kind, nonce: state.nonce }] : []))
     .sort((a, b) => b.nonce - a.nonce)[0];
 
@@ -137,6 +153,19 @@ export function ProfileEditor({ me, preferences, staleScores, dbAvailable, salar
           ) : (
             <LoadError file="preferences.yaml" message={preferences.loadError ?? ""} />
           )}
+          {stories.draft ? (
+            <StoriesCard
+              key={stories.hash}
+              initial={stories.draft}
+              hash={stories.hash}
+              state={storiesState}
+              pending={storiesPending || rollbackPending}
+              limits={storyLimits}
+              onSave={(draft) => saveStories({ draft, baseHash: stories.hash })}
+            />
+          ) : (
+            <LoadError file="stories.yaml" message={stories.loadError ?? ""} />
+          )}
         </div>
         <div className="min-w-0 lg:sticky lg:top-20">
           <HistoryPanel
@@ -146,6 +175,7 @@ export function ProfileEditor({ me, preferences, staleScores, dbAvailable, salar
             sections={[
               { kind: "me", title: t("sections.me.title"), history: me.history },
               { kind: "preferences", title: t("sections.preferences.title"), history: preferences.history },
+              { kind: "stories", title: t("sections.stories.title"), history: stories.history },
             ]}
             onRollback={(kind, snapshotId) => rollback({ kind, snapshotId })}
           />
