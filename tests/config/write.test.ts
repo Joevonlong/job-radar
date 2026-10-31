@@ -398,6 +398,7 @@ describe("profile files", () => {
     expect(first.map((r) => [r.name, r.created])).toEqual([
       ["me", true],
       ["preferences", true],
+      ["stories", true],
     ]);
     expect(read(tmp.profileDir, "me.yaml")).toBe(read(path.join(tmp.defaultsDir, "profile.example"), "me.yaml"));
 

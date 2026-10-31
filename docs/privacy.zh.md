@@ -9,7 +9,7 @@ Job Radar 是跑在你自己机器上的单用户工具：没有账号、没有�
 
 | 数据 | 位置 | 保留 |
 |---|---|---|
-| 你的画像（`me.yaml`：技能、年限、语言、简介；`preferences.yaml`：目标职位、城市、薪资底线、排除的公司和关键词） | 宿主机 `data/profile/` | 直到你删除 |
+| 你的画像（`me.yaml`：技能、年限、语言、简介；`preferences.yaml`：目标职位、城市、薪资底线、排除的公司和关键词；`stories.yaml`：经历素材库，`writer.yaml: enabled` 为 false 时不发到任何地方） | 宿主机 `data/profile/` | 直到你删除 |
 | 画像的每个历史版本（完整 YAML 文本） | 数据库表 `profile_snapshots` | 直到你删除数据库；没有清理任务 |
 | 配置，包括你自己的评分标准（`ai.yaml`） | `data/config/`，编辑器备份在 `data/config/.backup/` | 编辑器备份有上限；迁移备份不会自动清理 |
 | 申请、下一步、备注、收藏及收藏备注 | 数据库 | 直到你删除数据库（取消收藏时收藏备注一起删除） |

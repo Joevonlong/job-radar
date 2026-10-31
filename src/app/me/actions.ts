@@ -8,10 +8,9 @@ import { getDb } from "@/lib/db";
 import { currentMe } from "@/lib/filter";
 import { loadMarket, loadPipeline } from "@/lib/market";
 import { previewDealBreakerDrafts, previewRequestSchema, type DraftPreviewRule } from "@/lib/profile/deal-breaker-preview";
-import { invalidProfileRequest, rollbackProfile, saveProfile } from "@/lib/profile/service";
+import { invalidProfileRequest, rollbackProfile, saveProfile, saveStories } from "@/lib/profile/service";
 import { syncSearchLocations, type SyncSearchLocationsResult } from "@/lib/profile/search-locations";
 import { enableMarketChannels, type RegistryActionState } from "@/lib/sources/registry/service";
-import type { ProfileName } from "@/lib/config";
 import type { ProfileActionState } from "@/lib/profile/types";
 
 // Server Actions are public POST endpoints: everything arriving here is validated again in the
@@ -30,7 +29,7 @@ async function refreshed(result: ProfileActionState): Promise<ProfileActionState
  */
 const saveRequestSchema = z.object({ draft: z.unknown(), baseHash: z.string().max(200) });
 
-async function saveFromForm(kind: ProfileName, request: unknown): Promise<ProfileActionState> {
+async function saveFromForm(kind: "me" | "preferences", request: unknown): Promise<ProfileActionState> {
   const parsed = saveRequestSchema.safeParse(request);
   if (!parsed.success) return invalidProfileRequest(kind);
   return refreshed(await saveProfile(kind, parsed.data.draft, parsed.data.baseHash));
@@ -42,6 +41,13 @@ export async function saveMeAction(_prev: ProfileActionState, request: unknown):
 
 export async function savePreferencesAction(_prev: ProfileActionState, request: unknown): Promise<ProfileActionState> {
   return saveFromForm("preferences", request);
+}
+
+/** The experience library: `{ draft, baseHash }` like the other forms. */
+export async function saveStoriesAction(_prev: ProfileActionState, request: unknown): Promise<ProfileActionState> {
+  const parsed = saveRequestSchema.safeParse(request);
+  if (!parsed.success) return invalidProfileRequest("stories");
+  return refreshed(await saveStories(parsed.data.draft, parsed.data.baseHash));
 }
 
 export async function rollbackAction(_prev: ProfileActionState, request: unknown): Promise<ProfileActionState> {

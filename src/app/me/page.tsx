@@ -63,7 +63,7 @@ export default async function Page() {
     <div className="flex flex-col gap-6">
       <PageHeader title={t("title")} description={t("description")} />
       <ProfileIncompleteBanner missing={profileMissing} waiting={waiting} showLink={false} />
-      <ProfileEditor me={data.me} preferences={data.preferences} staleScores={data.staleScores} dbAvailable={data.dbAvailable} salaries={salaries} axis={axis} salaryMedian={salaryMedian} market={market} searchLocations={searchLocations} userLanguageLevel={userGermanLabelOrNull()} />
+      <ProfileEditor me={data.me} preferences={data.preferences} stories={data.stories} storyLimits={data.storyLimits} staleScores={data.staleScores} dbAvailable={data.dbAvailable} salaries={salaries} axis={axis} salaryMedian={salaryMedian} market={market} searchLocations={searchLocations} userLanguageLevel={userGermanLabelOrNull()} />
     </div>
   );
 }

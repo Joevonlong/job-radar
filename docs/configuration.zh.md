@@ -29,7 +29,7 @@ Job Radar 的所有设置都是 YAML，分两层：
 
 | 类 | 文件 | 首次初始化 | 产品升级时 |
 |---|---|---|---|
-| `user` | schedule、search、sources、ai、notify、interests、ui、breakdown、resume、insights、language、setup、salary（[salary.zh.md](salary.zh.md)）、mcp（[mcp.zh.md](mcp.zh.md)） | 从默认目录复制到用户目录，之后归你 | 不会自动改你的文件；格式变化由迁移（`config_version`）带过去 |
+| `user` | schedule、search、sources、ai、notify、interests、ui、breakdown、resume、insights、language、setup、salary（[salary.zh.md](salary.zh.md)）、mcp（[mcp.zh.md](mcp.zh.md)）、writer（[application-writer.zh.md](application-writer.zh.md)） | 从默认目录复制到用户目录，之后归你 | 不会自动改你的文件；格式变化由迁移（`config_version`）带过去 |
 | `shipped` | models（模型目录和价格）、pipeline（解析规则、城市和技能表）、pipeline-board（看板布局和卡片显示）、job-search（岗位查询解析与匹配设置）、job-archive（再次出现规则）、signal-presets（`/interests`“新增类别”对话框的预设，见 [signals.zh.md](signals.zh.md#添加你自己的兴趣点)） | 不复制，一直读默认目录的 | 跟着产品更新 |
 
 产品升级新增的 `user` 文件会在下次启动时从默认目录复制过来；如果用户目录里本来就有配置（老安装），可以改为写入保持原有行为的版本
@@ -39,7 +39,7 @@ Job Radar 的所有设置都是 YAML，分两层：
 
 市场包（`config/packs/<id>/`：国家、城市、本地语言规则）也按 `shipped` 处理：`data/config/packs/<id>/` 里的副本整包替换发布的那份。见 [market-packs.zh.md](market-packs.zh.md)。
 
-画像文件 `me.yaml` 和 `preferences.yaml` 在 `data/profile/` 里，在 `/me` 页编辑。`preferences.yaml` 里可选的 `deal_breakers` 列表
+画像文件 `me.yaml`、`preferences.yaml` 和 `stories.yaml`（经历素材库，见 [application-writer.zh.md](application-writer.zh.md)）在 `data/profile/` 里，在 `/me` 页编辑。`preferences.yaml` 里可选的 `deal_breakers` 列表
 （在任何 AI 调用之前否决岗位的规则）见 [deal-breakers.zh.md](deal-breakers.zh.md)；它的上限在 `pipeline.yaml: filter.deal_breakers`。
 
 运行时的 profile 读取可在内存里使用 `config/profile.example/`，不创建用户文件。原文检查、doctor 和 watcher 仍区分缺失文件与已保存文件；模板不属于默认配置层。

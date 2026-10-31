@@ -7,6 +7,7 @@ import { expect, test, type Page } from "./fixtures";
 const PROFILE_DIR = process.env.E2E_PROFILE_DIR ?? "";
 const ME_FILE = path.join(PROFILE_DIR, "me.yaml");
 const PREFS_FILE = path.join(PROFILE_DIR, "preferences.yaml");
+const STORIES_FILE = path.join(PROFILE_DIR, "stories.yaml");
 
 function read(file: string): string {
   try {
@@ -30,6 +31,7 @@ test.beforeEach(() => {
   // Start every test from the shipped template in memory; the first save creates the file from it.
   fs.rmSync(ME_FILE, { force: true });
   fs.rmSync(PREFS_FILE, { force: true });
+  fs.rmSync(STORIES_FILE, { force: true });
 });
 
 test("edit, save and roll back the preferences; the YAML keeps its comments", async ({ page }) => {
@@ -222,6 +224,45 @@ test("an incomplete profile is announced on Today and /me until a summary is sav
   await page.goto("/");
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
   await expect(page.getByTestId("profile-incomplete-banner")).toHaveCount(0);
+});
+
+test("experience library: add a story, save, reload, reorder and see it in the history", async ({ page }) => {
+  await open(page);
+  const card = page.getByTestId("stories-card");
+  await expect(card.getByText(/^还没有素材/)).toBeVisible();
+
+  await card.getByRole("button", { name: "添加素材" }).click();
+  await card.getByLabel("标题").fill("Moved billing");
+  await card.getByLabel("做了什么").fill("Led the migration with a team of three. Reach me at someone@example.com");
+  await expect(card.getByText("这条素材里好像有邮箱地址")).toBeVisible();
+  await card.getByLabel("做了什么").fill("Led the migration with a team of three.");
+  await expect(card.getByText("这条素材里好像有邮箱地址")).toHaveCount(0);
+  await card.getByLabel("数字").fill("close from 5 to 3 days");
+  await card.getByLabel("数字").press("Enter");
+  await card.getByRole("button", { name: "添加素材" }).click();
+  await card.getByLabel("标题").nth(1).fill("Cut build time");
+  await card.getByLabel("做了什么").nth(1).fill("Cached the builds.");
+  await card.getByRole("button", { name: "保存", exact: true }).click();
+  await expect.poll(() => read(STORIES_FILE)).toContain("id: moved-billing");
+  expect(read(STORIES_FILE)).toContain("# My experience library");
+
+  await page.reload();
+  const rows = page.getByTestId("story-row");
+  await expect(rows).toHaveCount(2);
+  await expect(rows.first()).toContainText("Moved billing");
+
+  await rows.nth(1).getByRole("button", { name: "上移“Cut build time”" }).click();
+  await card.getByRole("button", { name: "保存", exact: true }).click();
+  await expect.poll(() => [...read(STORIES_FILE).matchAll(/^ {2}- id: (\S+)$/gm)].map((match) => match[1])).toEqual(["cut-build-time", "moved-billing"]);
+
+  // Each save left a snapshot; reload until the second one is listed (it is recorded right after the file is written).
+  const history = page.getByTestId("history-card");
+  await expect(async () => {
+    await page.reload();
+    await page.waitForLoadState("networkidle");
+    await history.getByRole("button", { name: "经历素材" }).click();
+    await expect(history.getByTestId("history-item")).toHaveCount(2, { timeout: 1000 });
+  }).toPass({ timeout: 15_000 });
 });
 
 test.describe("mobile (390px)", () => {

@@ -564,6 +564,10 @@
       "preferences": {
         "title": "What I want",
         "description": "Target titles, locations, salary floor and exclusions, used for hard filtering and scoring."
+      },
+      "stories": {
+        "title": "My experience",
+        "description": "Projects and achievements, one per story: the material application answers are written from. Scoring does not read them. Leave out names, contact details and ID numbers."
       }
     },
     "fields": {
@@ -779,6 +783,47 @@
     "units": {
       "perYear": "/yr",
       "years": "yrs"
+    },
+    "stories": {
+      "empty": "No stories yet. Add a project or an achievement: what you did, what came of it, the figures.",
+      "add": "Add story",
+      "count": "{count} / {max}",
+      "untitled": "Untitled story",
+      "edit": "Edit",
+      "done": "Close",
+      "moveUp": "Move “{title}” up",
+      "moveDown": "Move “{title}” down",
+      "remove": "Remove “{title}”",
+      "piiBadge": "Contact details?",
+      "piiWarning": "This story seems to contain {kinds}. Stories are written to be sent to the AI provider; consider removing it. Saving is still possible.",
+      "pii": {
+        "email": "an email address",
+        "phone": "a phone number"
+      },
+      "source": {
+        "manual": "Written by you",
+        "profile": "From your profile",
+        "self_description": "From your description",
+        "resume": "From your resume"
+      },
+      "fields": {
+        "title": "Title",
+        "what": "What you did",
+        "result": "Result",
+        "metrics": "Figures",
+        "skills": "Skills",
+        "period": "When",
+        "language": "Language",
+        "tags": "Tags"
+      },
+      "hints": {
+        "max": "At most {max} characters.",
+        "what": "Your part, in your own words. At most {max} characters.",
+        "metrics": "One figure per entry, as you would state it (“build time from 40 to 12 minutes”); press Enter to add.",
+        "list": "Press Enter or type a comma to add.",
+        "period": "Free text, e.g. 2021–2023.",
+        "language": "Code such as en, de, zh."
+      }
     }
   },
   "filter": {

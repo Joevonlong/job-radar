@@ -11,7 +11,7 @@ description, not legal advice.
 
 | Data | Where | Kept |
 |---|---|---|
-| Your profile (`me.yaml`: skills, years, languages, summary; `preferences.yaml`: target titles, cities, salary floor, excluded companies and keywords) | `data/profile/` on the host | until you delete it |
+| Your profile (`me.yaml`: skills, years, languages, summary; `preferences.yaml`: target titles, cities, salary floor, excluded companies and keywords; `stories.yaml`: your experience library, never sent anywhere while `writer.yaml: enabled` is false) | `data/profile/` on the host | until you delete it |
 | Every saved version of your profile (the full YAML text) | database table `profile_snapshots` | until you delete the database; there is no clean-up job |
 | Configuration, including your own scoring criteria (`ai.yaml`) | `data/config/`, editor backups in `data/config/.backup/` | editor backups are capped; migration backups are not cleaned up |
 | Applications, next steps, notes, favorites and their notes | database | until you delete the database (a favorite note goes when you remove the favorite) |

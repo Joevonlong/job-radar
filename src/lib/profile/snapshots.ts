@@ -14,6 +14,9 @@ import {
   type ProfileSnapshot,
 } from "@/lib/db";
 
+/** The profile files scoring reads; only their snapshots make scores stale. */
+export type ScoredProfileName = Exclude<ProfileName, "stories">;
+
 export interface RecordedSnapshot {
   snapshot: ProfileSnapshot;
   /** Scores newly marked stale because they were computed from another snapshot. */
@@ -28,7 +31,7 @@ export interface RecordedSnapshot {
  * point at the snapshot of the other profile file. A save that changes nothing the scoring reads (only
  * preferences `deal_breakers`, which the hard filter applies in place) keeps the newest snapshot, given the new text.
  */
-export async function recordProfileSnapshot(db: Db, kind: ProfileName, yamlText: string): Promise<RecordedSnapshot> {
+export async function recordProfileSnapshot(db: Db, kind: ScoredProfileName, yamlText: string): Promise<RecordedSnapshot> {
   return scoreTransaction(db, async (tx) => {
     const previous = await getLatestProfileSnapshot(tx, kind);
     if (previous && previous.hash !== hashProfileYaml(yamlText) && !(await findProfileSnapshotByHash(tx, kind, hashProfileYaml(yamlText))) && sameProfileValues(kind, previous.contentYaml, yamlText)) {
@@ -45,7 +48,7 @@ export async function recordProfileSnapshot(db: Db, kind: ProfileName, yamlText:
  * of the hard filter: not in any prompt, applied to the existing results in place, so a change of them alone must
  * not make scores stale).
  */
-function profileValues(kind: ProfileName, text: string): unknown {
+function profileValues(kind: ScoredProfileName, text: string): unknown {
   const value = parseConfigText(kind, text, kind);
   if (kind !== "preferences") return value;
   const { deal_breakers: _ignored, ...rest } = value as Record<string, unknown>;
@@ -54,7 +57,7 @@ function profileValues(kind: ProfileName, text: string): unknown {
 }
 
 /** Both texts are valid and mean the same profile values (after the in-memory config migration, ignoring `deal_breakers`). */
-function sameProfileValues(kind: ProfileName, a: string, b: string): boolean {
+function sameProfileValues(kind: ScoredProfileName, a: string, b: string): boolean {
   try {
     return isDeepStrictEqual(profileValues(kind, a), profileValues(kind, b));
   } catch {
@@ -69,7 +72,7 @@ function sameProfileValues(kind: ProfileName, a: string, b: string): boolean {
  * preferences `deal_breakers` (the filter step updates the results in place). Anything else is a real change: a new snapshot,
  * and older scores become stale (`recordProfileSnapshot`).
  */
-export async function snapshotForProfileText(db: Db, kind: ProfileName, yamlText: string): Promise<ProfileSnapshot> {
+export async function snapshotForProfileText(db: Db, kind: ScoredProfileName, yamlText: string): Promise<ProfileSnapshot> {
   const found = await findProfileSnapshotByHash(db, kind, hashProfileYaml(yamlText));
   if (found) return found;
   const latest = await getLatestProfileSnapshot(db, kind);
@@ -80,13 +83,18 @@ export async function snapshotForProfileText(db: Db, kind: ProfileName, yamlText
 let registered = false;
 
 /**
- * Make `writeConfig` of me.yaml / preferences.yaml record a snapshot. Idempotent; only the web
- * process calls it (it is the only writer of the profile files).
+ * Make `writeConfig` of a profile file record a snapshot. Idempotent; only the web process calls it (it is the only writer
+ * of the profile files). stories.yaml is not read by scoring: its snapshot is only stored (history and rollback on /me),
+ * never rebased and never marks a score stale.
  */
 export function registerProfileSnapshotHook(): void {
   if (registered) return;
   registered = true;
   setOnProfileSaved(async (kind, yamlText) => {
+    if (kind === "stories") {
+      await saveProfileSnapshot(getDb(), kind, yamlText);
+      return;
+    }
     await recordProfileSnapshot(getDb(), kind, yamlText);
   });
 }

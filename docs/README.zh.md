@@ -39,6 +39,7 @@
 | [insights.zh.md](insights.zh.md) | 统计页 /insights：每张卡片怎么算、`insights.yaml` |
 | [interest-suggestions.zh.md](interest-suggestions.zh.md) | 每周 AI 建议：证据规则、批准 / 拒绝、`suggest` 配置 |
 | [resume-kit.zh.md](resume-kit.zh.md) | 定制简历联动：`resume.yaml`、导出 JD、`/tailor` 命令 |
+| [application-writer.zh.md](application-writer.zh.md) | `/me` 上的经历素材库（`stories.yaml`）：一条素材有什么、id、历史和回滚、`writer.yaml` 里的上限、什么会发到哪里 |
 | [mcp.zh.md](mcp.zh.md) | 在 Claude Desktop、Claude Code 等 MCP 客户端里问你的岗位和申请：可选的只读 MCP 服务（`pnpm mcp:serve`、`mcp.yaml`）、工具、给什么和永远不给什么 |
 | [telegram.zh.md](telegram.zh.md) | 建 bot、拿 chat id |
 | [gmail-alerts.zh.md](gmail-alerts.zh.md) | 两步验证、应用专用密码、标签、订阅职位提醒 |

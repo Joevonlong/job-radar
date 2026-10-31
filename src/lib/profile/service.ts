@@ -5,14 +5,17 @@
  */
 import { z } from "zod";
 
-import { ConfigError, mutateConfig, parseConfigText, readProfileText, writeConfig, type ProfileName } from "@/lib/config";
+import { ConfigError, mutateConfig, parseConfigText, readProfileText, reloadConfig, writeConfig, type ProfileName } from "@/lib/config";
 import { meSchema } from "@/lib/config/schemas/me";
+import { storiesSchema } from "@/lib/config/schemas/stories";
+import { WRITER_STORIES_DEFAULTS, type WriterStoriesLimits } from "@/lib/config/schemas/writer";
 import { preferencesSchema, type PreferencesConfig } from "@/lib/config/schemas/preferences";
 import { getDb, getProfileSnapshot, hashProfileYaml } from "@/lib/db";
 import { dealBreakerLimitProblems, slowPatternProblems } from "@/lib/filter/deal-breakers";
 import { vmTimeBox } from "@/lib/filter/time-box";
 import { logActionFailure } from "@/lib/logging/action-failure";
 import { loadPipeline, marketSettingsProblems } from "@/lib/market";
+import { storiesDraftSchema, storiesDraftToCandidate, storiesLimitProblems } from "@/lib/stories/draft";
 
 import {
   meDraftSchema,
@@ -48,6 +51,15 @@ async function failed(kind: ProfileName, formError: FormErrorKey | null, fieldEr
   return { status: "error", kind, baseHash: await currentHash(kind), fieldErrors, formError };
 }
 
+/** writer.yaml `stories` (the limits a library save must meet), or its defaults when writer.yaml cannot be read. */
+function storiesLimits(): WriterStoriesLimits {
+  try {
+    return reloadConfig("writer").stories;
+  } catch {
+    return WRITER_STORIES_DEFAULTS;
+  }
+}
+
 function preferencesProblems(value: PreferencesConfig): FieldError[] {
   const problems = marketSettingsProblems(value.market);
   if (problems.length > 0) return problems.map((p): FieldError => ({ path: `market.${p.field}`, ...(p.problem === "missing" ? { key: "required" } : p.problem === "unknown" ? { key: "invalidChoice" } : { key: "invalid", params: { message: p.detail ?? "" } }) }));
@@ -72,6 +84,12 @@ async function write(kind: ProfileName, candidate: unknown, baseHash: string | u
       const result = meSchema.safeParse(candidate);
       if (!result.success) return failed(kind, null, toFieldErrors(result.error));
       await writeConfig("me", result.data, options);
+    } else if (kind === "stories") {
+      const result = storiesSchema.safeParse(candidate);
+      if (!result.success) return failed(kind, null, toFieldErrors(result.error));
+      const problems = storiesLimitProblems(result.data, storiesLimits());
+      if (problems.length > 0) return failed(kind, null, problems);
+      await writeConfig("stories", result.data, options);
     } else {
       let errors: FieldError[] = [];
       const validate = (value: unknown): PreferencesConfig | null => {
@@ -110,7 +128,7 @@ export function savePreferencesPatch(patch: Partial<PreferencesDraft>): Promise<
  * again right before the rename. The `/me` actions always pass it (a request without one is refused there); only the
  * setup wizard saves without it.
  */
-export async function saveProfile(kind: ProfileName, rawDraft: unknown, baseHash?: string): Promise<ProfileActionState> {
+export async function saveProfile(kind: "me" | "preferences", rawDraft: unknown, baseHash?: string): Promise<ProfileActionState> {
   if (baseHash !== undefined && baseHash !== (await currentHash(kind))) return failed(kind, "stale");
   if (kind === "me") {
     const draft = meDraftSchema.safeParse(rawDraft);
@@ -122,13 +140,25 @@ export async function saveProfile(kind: ProfileName, rawDraft: unknown, baseHash
   return write(kind, preferencesDraftToCandidate(draft.data), baseHash);
 }
 
+/**
+ * Validate an untrusted draft of the experience library and save it as stories.yaml (ids of new stories are made from their
+ * titles). Checked against the file format and the writer.yaml `stories` limits; a save over a file that changed since
+ * `baseHash` is refused with `stale`. Never throws for bad input. The snapshot it leaves never makes a score stale.
+ */
+export async function saveStories(rawDraft: unknown, baseHash: string): Promise<ProfileActionState> {
+  if (baseHash !== (await currentHash("stories"))) return failed("stories", "stale");
+  const draft = storiesDraftSchema.safeParse(rawDraft);
+  if (!draft.success) return failed("stories", "invalidPayload");
+  return write("stories", storiesDraftToCandidate(draft.data), baseHash);
+}
+
 /** The answer to a malformed save request (a `/me` action without `{ draft, baseHash }`). */
 export function invalidProfileRequest(kind: ProfileName): Promise<ProfileActionState> {
   return failed(kind, "invalidPayload");
 }
 
 const rollbackRequestSchema = z.strictObject({
-  kind: z.enum(["me", "preferences"]),
+  kind: z.enum(["me", "preferences", "stories"]),
   snapshotId: z.number().int().positive(),
 });
 
@@ -154,5 +184,8 @@ export async function rollbackProfile(request: unknown): Promise<ProfileActionSt
   } catch {
     return failed(kind, "snapshotInvalid");
   }
-  return write(kind, value, undefined);
+  const result = await write(kind, value, undefined);
+  // a library over today's writer.yaml limits: the old version cannot be restored as it is
+  if (kind === "stories" && result.status === "error" && result.formError === null) return { ...result, formError: "snapshotInvalid" };
+  return result;
 }

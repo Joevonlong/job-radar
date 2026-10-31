@@ -13,6 +13,7 @@ import { configRegistry, LAYERED_CONFIG_NAMES, resetConfigCache, USER_CONFIG_NAM
  * migrations (their v1 originals are `tests/fixtures/config/interests.v1.yaml` / `notify.v1.yaml`, the migration tests' input). The Arbeitnow channel brought sources.yaml and pipeline.yaml to config_version 3 the same way (their migrations ran over the v2 files). The Monid migration brought sources.yaml to config_version 4 by running over the frozen v3 file. The visa check added the `visa` sections of the generic and de packs' rules.yaml (as they shipped with it). Tests build their config from it and may assert its values; they never read the repository's `config/` for values (that directory becomes generic defaults,
  * see `REPO_DEFAULTS_DIR`). vitest points `JOB_RADAR_DEFAULTS_DIR` here for every test (vitest*.config.ts).
  * The delivery-audit.yaml fixture freezes the initial ledger configuration independently of the shipped file.
+ * writer.yaml and profile.example/stories.yaml freeze the experience library's first shipped versions.
  */
 export const FIXTURE_DEFAULTS_DIR = path.resolve(import.meta.dirname, "../fixtures/config/defaults");
 /** The repository's real defaults directory: a test may only check that it is valid, never what it contains. */

@@ -30,7 +30,7 @@ source needs which key: [installation.md](installation.md#2-optional-create-env)
 
 | Kind | Files | First-time setup | On product upgrade |
 |---|---|---|---|
-| `user` | schedule, search, sources, ai, notify, interests, ui, breakdown, resume, insights, language, setup, salary ([salary.md](salary.md)), mcp ([mcp.md](mcp.md)) | Copied from the defaults directory to the user directory, yours from then on | Your files are never changed automatically; format changes are carried over by migrations (`config_version`) |
+| `user` | schedule, search, sources, ai, notify, interests, ui, breakdown, resume, insights, language, setup, salary ([salary.md](salary.md)), mcp ([mcp.md](mcp.md)), writer ([application-writer.md](application-writer.md)) | Copied from the defaults directory to the user directory, yours from then on | Your files are never changed automatically; format changes are carried over by migrations (`config_version`) |
 | `shipped` | models (model catalog and prices), pipeline (parsing rules, city and skill tables), pipeline-board (board layout and card display), job-search (job query parsing and matching settings), job-archive (seen-again rules), signal-presets (the presets of the "Add category" dialog on `/interests`, see [signals.md](signals.md#add-your-own-interest-point)) | Not copied; always read from the defaults directory | Follows product updates |
 
 A `user` file that a product upgrade introduces is copied from the defaults on the next start; when the user directory
@@ -42,7 +42,8 @@ To change a `shipped` file, copy it into the user directory and edit it there (t
 
 Market packs (`config/packs/<id>/`: countries, cities, local-language rules) are `shipped` the same way: a copy in `data/config/packs/<id>/` replaces the shipped pack as a whole. See [market-packs.md](market-packs.md).
 
-The profile files `me.yaml` and `preferences.yaml` live in `data/profile/` and are edited on `/me`. The optional
+The profile files `me.yaml`, `preferences.yaml` and `stories.yaml` (your experience library, see
+[application-writer.md](application-writer.md)) live in `data/profile/` and are edited on `/me`. The optional
 `deal_breakers` list of `preferences.yaml` (rules that veto a job before any AI call) is described in
 [deal-breakers.md](deal-breakers.md); its limits are in `pipeline.yaml: filter.deal_breakers`.
 Runtime profile readers can use `config/profile.example/` without creating a file. Raw-file checks, the doctor and
