@@ -80,7 +80,7 @@ export async function executeDelete(db: Db, input: unknown): Promise<ExecuteDele
     });
     total.roots += batch.roots;
     total.events += batch.events;
-    if (!batch.found) return { status: "done", ...total };
+    if (!batch.found) return { status: batch.blocked ? "partial" : "done", ...total };
   } while (performance.now() - started < config.ui.delete_budget_ms);
   return { status: "partial", ...total };
 }

@@ -75,6 +75,12 @@ describe("activity delete service", () => {
     expect(deleteActivityBatch).toHaveBeenCalledTimes(3);
     expect(deleteActivityBatch).toHaveBeenCalledWith(db, expect.objectContaining({ batchSize: settings.prune.batch_size, rootsPerBatch: settings.prune.roots_per_batch, asOf: new Date("2026-10-20T12:00:00Z") }));
   });
+  it("reports partial, not done, when the remaining roots are held by another transaction", async () => {
+    ready();
+    vi.mocked(deleteActivityBatch).mockResolvedValueOnce({ roots: 1, events: 0, found: true }).mockResolvedValueOnce({ roots: 0, events: 0, found: false, blocked: true });
+    expect(await executeDelete(db, { scope: "all", asOf: "2026-10-20T12:00:00Z" })).toEqual({ status: "partial", roots: 1, events: 0 });
+    expect(deleteActivityBatch).toHaveBeenCalledTimes(2);
+  });
   it("never deletes past the server's now, whatever asOf the client sends", async () => {
     ready();
     vi.mocked(deleteActivityBatch).mockResolvedValue({ roots: 0, events: 0, found: false });

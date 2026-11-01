@@ -8,7 +8,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, expect, inject, it } from "
 import { closeDb, countTodayRelisted, createConnection, getDb, getJobDetail, listJobs, listTodayJobs, schema, type Db } from "@/lib/db";
 import { listingReady, recordJobListing, resetListingCache } from "@/lib/db/repos/listing";
 import { resetDormancyCache } from "@/lib/db/repos/dormancy";
-import { getJob, insertJob, recordLinkCheck, recordWatchedCheck, touchJobsSeen } from "@/lib/db/repos/jobs";
+import { getJob, insertJob, recordLinkCheck, recordWatchedCheck, touchJobsSeen, updateJob } from "@/lib/db/repos/jobs";
 import { listTranslationCandidates } from "@/lib/db/repos/translations";
 import { listBreakdownCandidates } from "@/lib/db/repos/breakdowns";
 import { listFilterCandidates } from "@/lib/db/repos/filter-results";
@@ -42,6 +42,49 @@ it.each(relistCases)("SQL and TypeScript agree: $name", async (input) => {
   const stored = await getJob(getDb(), job.id);
   expect(stored?.lastListedAt).toEqual(input.lastListedAt && input.lastListedAt > input.observedAt ? input.lastListedAt : input.observedAt);
   expect(stored?.relistCount ?? 0).toBe(input.expected ? 1 : 0);
+});
+
+/** UPDATE statements on `jobs` so far in this transaction (each one writes a row version and recomputes search_tsv). */
+async function jobUpdatesIn(tx: Db): Promise<number> {
+  const [row] = await tx.execute<{ n: number }>(sql`select coalesce(max(n_tup_upd), 0)::int as n from pg_stat_xact_user_tables where relname = 'jobs'`);
+  return row?.n ?? 0;
+}
+
+it.each(relistCases)("a merge update records the listing in its own single UPDATE: $name", async (input) => {
+  const job = await addJob({ status: "active", lastListedAt: input.lastListedAt });
+  await addSource(job.id);
+  if (input.absenceObserved) await addRun({ at: new Date("2026-09-05T12:00:00Z") });
+  const actual = await getDb().transaction(async (tx) => {
+    const before = await jobUpdatesIn(tx);
+    const relisted = await updateJob(tx, job.id, { title: "Merged title" }, { observedAt: input.observedAt, observedRunId: null, minGapDays: input.minGapDays });
+    expect(await jobUpdatesIn(tx) - before).toBe(1);
+    return relisted;
+  });
+  expect(actual).toBe(relistDecision(input));
+  expect(actual).toBe(input.expected);
+  const stored = await getJob(getDb(), job.id);
+  expect(stored?.title).toBe("Merged title");
+  expect(stored?.lastListedAt).toEqual(input.lastListedAt && input.lastListedAt > input.observedAt ? input.lastListedAt : input.observedAt);
+  expect(stored?.relistCount ?? 0).toBe(input.expected ? 1 : 0);
+});
+
+it("a merge update that repeats an observation does not count a relisting again", async () => {
+  const job = await addJob({ lastListedAt: ago(20) });
+  await addSource(job.id);
+  await addRun();
+  const observation = { observedAt: NOW, observedRunId: null, minGapDays: relist.minGapDays };
+  expect(await updateJob(getDb(), job.id, { title: "First" }, observation)).toBe(true);
+  expect(await updateJob(getDb(), job.id, { title: "Second" }, observation)).toBe(false);
+  expect(await updateJob(getDb(), job.id, { title: "Third" }, { ...observation, observedAt: ago(1) })).toBe(false);
+  expect(await getJob(getDb(), job.id)).toMatchObject({ title: "Third", lastListedAt: NOW, relistedAt: NOW, relistCount: 1 });
+});
+
+it("without a listing, a merge update only applies the patch", async () => {
+  const job = await addJob({ lastListedAt: ago(20) });
+  await addSource(job.id);
+  await addRun();
+  expect(await updateJob(getDb(), job.id, { title: "Plain" })).toBe(false);
+  expect(await getJob(getDb(), job.id)).toMatchObject({ title: "Plain", lastListedAt: ago(20), relistedAt: null });
 });
 
 it.each([
