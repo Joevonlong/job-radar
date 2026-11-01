@@ -6,7 +6,6 @@ import { CircuitBreaker } from "@/lib/channels/circuit";
 import { NO_KNOWN_POSTINGS } from "@/lib/channels/context";
 import type { FetchLike, SleepFn } from "@/lib/channels/http";
 import type { HostResolver } from "@/lib/net/public-url";
-import { createLogger } from "@/lib/channels/logger";
 import type { ScheduledCycleKind } from "@/lib/channels/query";
 import { defaultRegistry, type ChannelRegistry } from "@/lib/channels/registry";
 import { createDbKnownPostings, createDbStateStore, createMemoryStateStore, type ChannelStateStore } from "@/lib/channels/store";
@@ -15,6 +14,7 @@ import { freshenConfig, loadConfig, type ChannelsConfig, type ScheduleConfig, ty
 import { cycleCovers } from "@/lib/control/cycle-coverage";
 import { getDb, type Db } from "@/lib/db/client";
 import { createCycle, createSkippedCycle, failOrphanedCycles, finishCycle, listRunningCycles, type CycleKind } from "@/lib/db/repos/cycles";
+import { createProcessLogger } from "@/lib/logging/process-logger";
 
 import { findCycleLockHolder, withCycleLock, type CycleLockHolder } from "./lock";
 import { startWaitingForLock } from "./lock-waiters";
@@ -127,7 +127,7 @@ export async function runCycle(kind: CycleKind, options: RunCycleOptions = {}): 
   const dryRun = options.dryRun ?? false;
   const recorder = dryRun ? noopRecorder : options.activity ?? noopRecorder;
   const now = options.now ?? (() => new Date());
-  const logger = options.logger ?? createLogger({ fields: {} });
+  const logger = options.logger ?? createProcessLogger();
   const db: Db | null = options.db !== undefined ? options.db : dryRun ? null : getDb();
   if (db === null && !dryRun) throw new Error("runCycle: a database is required unless dryRun is set");
 

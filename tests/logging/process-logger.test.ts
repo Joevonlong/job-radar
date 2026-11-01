@@ -136,6 +136,56 @@ describe("resolveLogLevel: config cases (on-demand refresh, no watcher)", () => 
     expect(resolveLogLevel()).toBe("debug");
   });
 
+  it("warns with the first line of the config error only (the loader already reported the whole message)", () => {
+    writeLevel("loud");
+    expect(resolveLogLevel()).toBe("info");
+    const [line] = resolverWarnings();
+    expect(line).toContain("could not read logging.level from schedule.yaml");
+    expect(line).toContain("failed validation");
+    expect(line).not.toContain("\n");
+    // the field-level lines of the message stay out of the resolver's warning
+    expect(line).not.toContain("logging.level:");
+  });
+
+  it("follows valid -> broken -> fixed without a restart, as seen through a logger", () => {
+    const out = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const logger = createProcessLogger();
+    const written = () => out.mock.calls.length + warn.mock.calls.filter(([line]) => String(line).includes("WARN")).length;
+    /** Writes one debug and one warn record; returns [debug written, warn written]. */
+    const probe = (): [boolean, boolean] => {
+      const before = written();
+      logger.debug("probe debug");
+      const afterDebug = written();
+      logger.warn("probe warn");
+      return [afterDebug > before, written() > afterDebug];
+    };
+
+    writeLevel("warn");
+    expect(resolveLogLevel()).toBe("warn");
+    expect(probe()).toEqual([false, true]);
+
+    // broken: the loader keeps the last valid file after the poll, the level stays
+    writeLevel("loud");
+    refreshConfigCache();
+    vi.advanceTimersByTime(INTERVAL_MS * 2);
+    expect(resolveLogLevel()).toBe("warn");
+    expect(probe()).toEqual([false, true]);
+
+    // fixed to another level: taken within one interval
+    writeLevel("debug");
+    refreshConfigCache();
+    vi.advanceTimersByTime(INTERVAL_MS);
+    expect(resolveLogLevel()).toBe("debug");
+    expect(probe()).toEqual([true, true]);
+
+    // and a later change is still followed
+    writeLevel("error");
+    refreshConfigCache();
+    vi.advanceTimersByTime(INTERVAL_MS);
+    expect(probe()).toEqual([false, false]);
+    expect(resolverWarnings()).toEqual([]);
+  });
+
   it("broken later: keeps the last valid level (as the loader keeps the last valid file), without a resolver warning", () => {
     writeLevel("warn");
     expect(resolveLogLevel()).toBe("warn");
