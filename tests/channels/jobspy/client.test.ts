@@ -157,6 +157,21 @@ describe("channelErrorFromSidecar", () => {
     const error = channelErrorFromSidecar(502, { code: "upstream_error", message: "x".repeat(5000) });
     expect(error.message.length).toBeLessThan(300);
   });
+
+  it("keeps the query string of a quoted search URL (the user's keywords) out of the message", () => {
+    const error = channelErrorFromSidecar(502, { code: "upstream_error", message: "500 for url: https://de.indeed.com/jobs?q=Secret+Keyword&l=Hidden+City retry" });
+    expect(error.message).toContain("https://de.indeed.com/jobs?<query> retry");
+    expect(error.message).not.toMatch(/Secret|Hidden/);
+  });
+});
+
+describe("warnings returned with results", () => {
+  it("are logged without the query string of a quoted URL", async () => {
+    const { ctx } = jobspyContext(() => httpResponse(200, JSON.stringify({ site: "indeed", count: 0, jobs: [], warnings: ["page 2 failed: https://de.indeed.com/jobs?q=Secret&l=Hidden"] })));
+    const warn = vi.spyOn(ctx.logger, "warn");
+    await searchJobspy(ctx, jobspySettings(), buildSearchRequest("indeed", query(), jobspySettings()));
+    expect(warn).toHaveBeenCalledWith("jobspy reported an error alongside results", { site: "indeed", warning: "page 2 failed: https://de.indeed.com/jobs?<query>" });
+  });
 });
 
 describe("rawPostingsFromJobs", () => {
