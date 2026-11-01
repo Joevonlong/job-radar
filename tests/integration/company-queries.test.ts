@@ -292,4 +292,18 @@ describe("company-query collection", () => {
     });
     expect(selected.selected.map((item) => item.candidate.jobId)).toEqual([jobs[0]!.id]);
   });
+
+  it("hands the watch list's employer check to company queries only, so channels can skip other employers' pages", async () => {
+    const test = setup({ cap: 2 });
+    const seen: Array<{ company: boolean; verdicts: boolean[] | null }> = [];
+    test.add("company", true, async (q, ctx) => {
+      seen.push({ company: isCompany(q), verdicts: ctx.employerMatches ? ["Northstar Labs GmbH", "Moonbeam", "Agency", null].map((name) => ctx.employerMatches!(name)) : null });
+      return [];
+    });
+    await test.run(["company"]);
+    expect(seen.filter((s) => s.company)).toHaveLength(2);
+    // the keys are the post-filter's: every watched company, not only the one this query searches
+    for (const entry of seen.filter((s) => s.company)) expect(entry.verdicts).toEqual([true, true, false, true]);
+    for (const entry of seen.filter((s) => !s.company)) expect(entry.verdicts).toBeNull();
+  });
 });

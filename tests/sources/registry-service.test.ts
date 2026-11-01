@@ -313,7 +313,7 @@ it("persists company-query opt-outs without enabling the channel and rejects uns
   const before = loadConfig("channels");
   expect(await setSourceCompanyQueries({ id: "linkedin-guest", enabled: false })).toEqual({ status: "done", outcome: "disabled" });
   expect(loadConfig("channels").linkedin.guest).toEqual({ ...before.linkedin.guest, company_queries: false });
-  expect(await setSourceCompanyQueries({ id: "linkedin-apify", enabled: false })).toMatchObject({ status: "error", error: "unknown_entry" });
+  expect(await setSourceCompanyQueries({ id: "linkedin-monid", enabled: false })).toMatchObject({ status: "error", error: "unknown_entry" });
   expect(await setSourceCompanyQueries({ id: "linkedin-session:recommended", enabled: true })).toMatchObject({ status: "error", error: "unknown_entry" });
   expect(await setSourceCompanyQueries({ id: "indeed", enabled: "false" })).toMatchObject({ status: "error", error: "invalid" });
 });

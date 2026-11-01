@@ -30,6 +30,7 @@
 - [补窗](sources.zh.md#补窗)可能把 `date_posted` 扩到 `3days`、`week` 或 `month`。结果更多时，详情请求也可能增加，
   但每个查询仍不超过 `max_details_per_query`。请求节奏、按月均摊和配额规则不变。
 - 每个查询 = `search.yaml` 的一个关键词组 × 一个城市（或远程）。请求：`GET /search?query=<关键词> in <城市>&page=1&num_pages=N&country=de&date_posted=today|3days|week|month`；远程查询不带城市，加 `work_from_home=true`。`date_posted` 取能覆盖回看窗口的最小档（≤24h today，≤72h 3days，≤168h week，其余 month）。
+- **关注公司：**[公司查询](sources.zh.md#关注公司查询)是一次请求 `GET /search?query=<公司> in <本国>`，不带 `work_from_home`，与其他查询一样计入 `monthly_request_limit`。开启 `fetch_details` 时，只为被搜公司或其他关注公司的岗位请求 `/job-details`（每个详情 id 都是一次计费请求）。在本块设 `company_queries: false` 可关闭。公司查询与关键词查询共用 `monthly_request_limit`，可能把后者挤掉：免费档（每月 200 次请求）下，7 家公司按 24 小时间隔就要约 210 次；见[共用预算](sources.zh.md#关注公司查询)。
 - 默认一轮 = 3 个关键词组 × (2 个城市 + 远程) = 9 次请求。免费档每月 200 次，所以默认只查每组第一个关键词，并按月均摊；想多查就升级套餐，再调大 `keywords_per_query` 和 `monthly_request_limit`。
 - 响应兼容两种信封：RapidAPI `/search` 的 `data: [...]` 和 OpenAPI 文件里 `/search-v2` 的 `data: { jobs: [...] }`。没有 `job_id` 的记录丢弃，缺标题 / 公司的记录原样入库、由流水线标 `parse_failed`。
 - 原帖链接（“查看原帖”打开的链接）：直链优先——API 标 `is_direct`、域名是雇主官网（含子域名）、或官方 ATS 看板地址（Greenhouse / Lever / Ashby / Personio / SmartRecruiters）；其余按 `apply_publisher_preference` 排序，再按 API 顺序。链接里的 `utm_*`、`gclid` 等追踪参数会去掉（原始记录不动）。`sourceUrl` 是第一发布者的岗位页（它 404 表示岗位已下线），不是 Google 的面板链接。详情页的“查看原帖”对 JSearch 来源优先用上面挑出的链接（`apply_url`），不用第一发布者的岗位页；这和公司 ATS 来源相反（ATS 优先岗位页，避免打开申请表单）。

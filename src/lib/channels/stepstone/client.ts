@@ -40,6 +40,8 @@ export interface SearchParams {
   keyword: string;
   /** City, or null for the nationwide home-office search. */
   location: string | null;
+  /** `company`: the keyword is an employer name searched nationwide, with no city, radius or home-office filter. */
+  kind?: "city" | "remote" | "company";
   windowHours: number;
   /** 1-based. */
   page: number;
@@ -54,12 +56,15 @@ export function ageFacet(windowHours: number): string | null {
 export function searchUrl(settings: ClientSettings, params: SearchParams): string | null {
   const slug = slugify(params.keyword);
   if (slug === "" || slug.length > MAX_SLUG_LENGTH) return null;
-  const where = params.location === null ? "" : `/in-${encodeURIComponent(slugify(params.location))}`;
+  const nationwide = params.kind === "company";
+  const where = params.location === null || nationwide ? "" : `/in-${encodeURIComponent(slugify(params.location))}`;
   const query = new URLSearchParams({ sort: SORT_NEWEST });
   const age = ageFacet(params.windowHours);
   if (age !== null) query.set("ag", age);
-  if (params.location === null) query.set("wfh", WFH_ONLY);
-  else query.set("radius", String(settings.radius_km));
+  if (!nationwide) {
+    if (params.location === null) query.set("wfh", WFH_ONLY);
+    else query.set("radius", String(settings.radius_km));
+  }
   if (params.page > 1) query.set("page", String(params.page));
   return `${settings.base_url.replace(/\/+$/, "")}/jobs/${encodeURIComponent(slug)}${where}?${query.toString()}`;
 }

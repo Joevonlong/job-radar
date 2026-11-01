@@ -47,6 +47,7 @@ export interface ChannelContextOptions {
   /** Stored postings of the channel; defaults to none. */
   known?: KnownPostings;
   deliveries?: DeliveryRecorder;
+  employerMatches?: ChannelContext["employerMatches"];
   fetch?: FetchLike;
   sleep?: SleepFn;
   random?: () => number;
@@ -77,5 +78,6 @@ export function createChannelContext(options: ChannelContextOptions): ChannelCon
     settings: options.settings,
     known: options.known ?? NO_KNOWN_POSTINGS,
     deliveries: options.deliveries ?? NO_DELIVERIES,
+    ...(options.employerMatches ? { employerMatches: options.employerMatches } : {}),
   };
 }

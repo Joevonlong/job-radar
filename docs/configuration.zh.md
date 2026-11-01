@@ -534,6 +534,6 @@ CLI 轮次收到 Ctrl-C 或 SIGTERM 时会取消步骤，把这一轮结束为�
 
 `search.yaml` 新增 `watched_company_queries`：`enabled` 默认 `true`、`max_per_cycle` 默认每单元 3 条、`min_interval_hours` 默认 24、`max_results` 默认每条 25（仍受通道上限约束）。旧用户文件缺整个块或内部键时由 schema 补默认值，显式 `false` 生效。没有数据库迁移。
 
-`sources.yaml` 中支持的通道默认 `company_queries: true`：`linkedin.session`、`linkedin.guest`、`sources.arbeitsagentur`、`sources.indeed`、`sources.jobspy_google`。可在“来源 → 来源清单 → 详情”或“设置 → 通道”编辑。它允许把关注公司名外发，见[隐私](privacy.zh.md)及[查询规则与容量](sources.zh.md#关注公司查询)。“设置 → 搜索”可编辑总开关、每轮上限、间隔和结果上限。
+`sources.yaml` 中支持的通道默认 `company_queries: true`：`linkedin.session`、`linkedin.guest`、`linkedin.brightdata`、`linkedin.apify`、`sources.arbeitsagentur`、`sources.indeed`、`sources.jobspy_google`、`sources.jsearch`、`sources.stepstone`、`sources.xing`。可在“来源 → 来源清单 → 详情”或“设置 → 通道”编辑。它允许把关注公司名外发，见[隐私](privacy.zh.md)及[查询规则与容量](sources.zh.md#关注公司查询)。“设置 → 搜索”可编辑总开关、每轮上限、间隔和结果上限。
 
 **回退：**只需停用时设 `watched_company_queries.enabled: false`。启动旧代码前，从用户 `data/config/search.yaml` 删除整个 `watched_company_queries` 块，从 `data/config/sources.yaml` 删除所有 `company_queries` 键（包括设置保存时写入的不支持通道块）；再用旧版 `pnpm config:check` 验证。旧版严格 schema 会拒绝新键。保留数据库历史和原始岗位。

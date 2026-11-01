@@ -2,6 +2,14 @@ import type { PipelineConfig } from "@/lib/config";
 import { resolveCompanyName } from "@/lib/pipeline/company";
 import type { Channel, RawPostingInput } from "./types";
 
+/** For the list stage: can the employer a list entry names be one of `keys`? An entry that names none cannot be ruled out. */
+export function employerMatcher(keys: ReadonlySet<string>, pipeline: PipelineConfig): (employerName: string | null | undefined) => boolean {
+  return (employerName) => {
+    if (typeof employerName !== "string" || employerName.trim() === "") return true;
+    return keys.has(resolveCompanyName(employerName, pipeline).nameNorm);
+  };
+}
+
 /** Keep parse failures for the pipeline, and discard only successfully parsed, unrelated employers. */
 export function keepCompanyMatches(records: readonly RawPostingInput[], channel: Channel, keys: ReadonlySet<string>, pipeline: PipelineConfig): {
   kept: RawPostingInput[]; dropped: number; droppedNames: string[];
