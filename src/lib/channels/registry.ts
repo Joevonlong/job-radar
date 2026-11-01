@@ -4,7 +4,7 @@ import { loadMarket } from "@/lib/market/resolve";
 import type { Channel, ChannelRuntimeSettings } from "./types";
 
 import { CHANNEL_CONFIG_TABLE, isConfiguredChannelId, type ChannelConfigRef, type ConfiguredChannelId } from "./config-table";
-export { CHANNEL_CONFIG_TABLE, channelUsesQueries, channelSupportsCompanyQueries, isConfiguredChannelId, type ChannelConfigRef, type ConfiguredChannelId } from "./config-table";
+export { CHANNEL_CONFIG_TABLE, channelUsesQueries, channelSupportsCompanyQueries, channelStatesPostedAt, isConfiguredChannelId, type ChannelConfigRef, type ConfiguredChannelId } from "./config-table";
 
 /** Records a channel may use per month before they cost money: Bright Data's free allowance, JSearch's plan requests, Tavily's plan credits. */
 function includedRecords(ref: ChannelConfigRef, config: ChannelsConfig): number {

@@ -10,7 +10,9 @@
       "now": "just now",
       "minutes": "{n} min ago",
       "hours": "{n} h ago",
-      "yesterday": "yesterday"
+      "yesterday": "yesterday",
+      "today": "today",
+      "days": "{n} days ago"
     },
     "duration": {
       "d": "d",
@@ -1093,6 +1095,11 @@
     "time": {
       "seen": "seen {time}"
     },
+    "rowPosted": {
+      "unknown": "seen {date}",
+      "titleKnown": "Posted {time} ({ago})",
+      "titleUnknown": "Posted date unknown, first seen {time}"
+    },
     "toast": {
       "ignored": "Ignored: {title}",
       "ignoreBlocked": "{title} is already in your applications ({status}); change it on the board",
@@ -1219,7 +1226,6 @@
       "meta": {
         "location": "Location",
         "contract": "Contract",
-        "posted": "Posted",
         "firstSeen": "First seen",
         "lastSeen": "Last seen",
         "status": "Job status"
@@ -1335,7 +1341,26 @@
       "reasonsLanguageHint": "The AI wrote the fit reasons and gaps in {language}; they are not translated.",
       "summaryLanguage": {},
       "summaryFallbackHint": "There is no summary in the interface language; this is the other one.",
-      "firstSeenVia": "First seen {when}",
+      "dateStrip": {
+        "label": "Dates",
+        "posted": "Posted {date} ({ago})",
+        "postedUnknown": "Posted date unknown",
+        "repost": "Reposted · new link {date} (first seen by us, {ago})",
+        "repostNoDate": "Reposted (source label)",
+        "firstSeen": "First seen {time}",
+        "tip": {
+          "full": "{time} ({zone})",
+          "dateOnly": "{date} (the source gave only a date)",
+          "trusted": "Earliest date over all sources; {channels} states the posting date itself (reliable)",
+          "aggregator": "From job aggregators; may be a refresh or crawl date, for reference only",
+          "unknown": "The source gave no posted date. The date filter counts the first-seen date instead; sorting by posted date puts this job last",
+          "repost": "We first saw the new posting link on {date} (not a date the source gave); the old link was first seen {oldest}, {gap, plural, one {# day} other {# days}} earlier",
+          "repostMany": "We first saw the newest posting link on {date} (not a date the source gave); the link changed {count} times, the oldest old link was first seen {oldest}",
+          "repostManyCapped": "We first saw the newest posting link on {date} (not a date the source gave); {count} link changes recorded, the oldest old link among them was first seen {oldest}",
+          "repostLabel": "Source label: {label}",
+          "repostLabelOnly": "The source labels it as reposted but gives no date. Source label: {label}"
+        }
+      },
       "seniority": {
         "entry": "Entry",
         "mid": "Mid",

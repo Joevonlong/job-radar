@@ -85,6 +85,23 @@ function usePlace(job: JobListItem): string {
   return [...job.locations, ...(job.moreLocations ? [`+${job.moreLocations}`] : []), t(`workplace.${job.workplace}`)].join(" · ");
 }
 
+/**
+ * The posted date over the freshness bar: `10/27 · 4 d`, or `seen 10/27` when no source gave one. The full sentence is the tooltip and
+ * the screen reader text; on a phone only the day shows (the relative part is hidden by `jobs.css`).
+ */
+function PostedDate({ posted }: { posted: JobListItem["posted"] }) {
+  const t = useTranslations("dashboard.rowPosted");
+  return (
+    <span className="jb-posted" data-slot="row-posted" data-known={posted.known ? "true" : "false"} title={posted.title}>
+      <span aria-hidden>
+        {posted.known ? posted.day : t("unknown", { date: posted.day })}
+        {posted.known ? <span className="jb-posted-ago"> · {posted.ago}</span> : null}
+      </span>
+      <span className="sr-only">{posted.title}</span>
+    </span>
+  );
+}
+
 function ScoreCell({ job, pushLine }: { job: JobListItem; pushLine: number }) {
   const t = useTranslations("dashboard.rank");
   const rank = job.rank;
@@ -276,6 +293,7 @@ function JobRowImpl({ job, favorite, seen, mode = "default", index, active, stag
           <SkillsCell job={job} />
         </div>
         <div className="jb-cell jb-cell--fresh">
+          {isArchivedReason(job.closedReason) ? null : <PostedDate posted={job.posted} />}
           <Freshness firstSeenAt={firstSeenAt} now={now} decayHours={viz.freshness.decayHours} warnHours={viz.freshness.warnHours} timeZone={viz.timezone} />
         </div>
       </div>

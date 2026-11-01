@@ -14,8 +14,8 @@ export const LOCALE_META: Readonly<Record<Locale, LocaleMeta>> = {
 
 /** The words of the format functions (`format` of each messages file, missing ones from English). */
 export const FORMAT_LABELS: Readonly<Record<Locale, FormatLabels>> = {
-  "en": {"relative":{"now":"just now","minutes":"{n} min ago","hours":"{n} h ago","yesterday":"yesterday"},"duration":{"d":"d","h":"h","m":"min","s":"s","lessThanMinute":"<1 min"},"salaryPeriod":{"year":"/yr","month":"/mo","week":"/wk","day":"/day","hour":"/h"},"salary":{"upTo":"up to","from":"and up"},"listSeparator":", ","shortDateMonth":"short"},
-  "zh": {"relative":{"now":"刚刚","minutes":"{n} 分钟前","hours":"{n} 小时前","yesterday":"昨天"},"duration":{"d":"天","h":"小时","m":"分钟","s":"秒","lessThanMinute":"<1 分钟"},"salaryPeriod":{"year":"/年","month":"/月","week":"/周","day":"/天","hour":"/小时"},"salary":{"upTo":"最高","from":"起"},"listSeparator":"、","shortDateMonth":"2-digit"},
+  "en": {"relative":{"now":"just now","minutes":"{n} min ago","hours":"{n} h ago","yesterday":"yesterday","today":"today","days":"{n} days ago"},"duration":{"d":"d","h":"h","m":"min","s":"s","lessThanMinute":"<1 min"},"salaryPeriod":{"year":"/yr","month":"/mo","week":"/wk","day":"/day","hour":"/h"},"salary":{"upTo":"up to","from":"and up"},"listSeparator":", ","shortDateMonth":"short"},
+  "zh": {"relative":{"now":"刚刚","minutes":"{n} 分钟前","hours":"{n} 小时前","yesterday":"昨天","today":"今天","days":"{n} 天前"},"duration":{"d":"天","h":"小时","m":"分钟","s":"秒","lessThanMinute":"<1 分钟"},"salaryPeriod":{"year":"/年","month":"/月","week":"/周","day":"/天","hour":"/小时"},"salary":{"upTo":"最高","from":"起"},"listSeparator":"、","shortDateMonth":"2-digit"},
 };
 
 /** Each language's messages, loaded on demand (one chunk per language). `loadMessages` merges a non-core language over English. */
