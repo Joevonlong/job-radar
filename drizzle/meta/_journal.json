@@ -330,6 +330,13 @@
       "when": 1793492151757,
       "tag": "0046_posted_or_first_seen_idx",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1793539372463,
+      "tag": "0047_application_writer",
+      "breakpoints": true
     }
   ]
 }

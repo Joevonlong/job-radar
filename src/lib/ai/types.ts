@@ -6,7 +6,7 @@ import type { AiAttempt, AiProviderErrorKind } from "./errors";
 import type { WebAccessLimits } from "./web-tasks";
 
 /** The task kinds; each may override the provider order in ai.yaml. */
-export const AI_TASKS = ["score", "signals", "translate", "summarize", "suggest", "breakdown", "traps", "salary_lookup"] as const;
+export const AI_TASKS = ["score", "signals", "translate", "summarize", "suggest", "breakdown", "traps", "salary_lookup", "write"] as const;
 export type AiTask = (typeof AI_TASKS)[number];
 
 export { AI_PROVIDER_IDS, AI_PROVIDER_KIND } from "@/lib/config/ai-options";
@@ -60,6 +60,8 @@ export interface AiTransportRequest {
   signal?: AbortSignal;
   /** Overrides the provider's own timeout for this call (milliseconds). */
   timeoutMs?: number;
+  /** Overrides the API provider's `max_output_tokens` for this call (`ai.yaml: tasks.<task>.max_output_tokens`). */
+  maxOutputTokens?: number;
   /**
    * Limits for a web task (`web-tasks.ts`). Never a permission: a transport switches its web tools on only when
    * `webAccessAllowed(task, provider)` says so, and ignores this for every other task.
@@ -97,6 +99,8 @@ export interface AiRunOptions {
   onCall?: (call: AiCallRecord) => void;
   /** Overrides each provider's configured timeout for this run (milliseconds). */
   timeoutMs?: number;
+  /** Overrides the API providers' `max_output_tokens` (the router sets it from `ai.yaml: tasks.<task>.max_output_tokens`). */
+  maxOutputTokens?: number;
   /** The job this call is about (stored in `ai_usage.job_id`). */
   jobId?: number;
   /** Providers the router must not try for this run (they timed out or were rate limited a moment ago). */

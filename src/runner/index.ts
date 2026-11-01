@@ -17,6 +17,7 @@ import { deliveryPayloadBytes, deliveryTablesReady, pruneDeliveryItems } from "@
 import { createDeliveryPruner } from "./delivery-prune";
 import { runControlPoller, runnerRequestKinds } from "@/lib/control";
 import { registerAiControlHandlers } from "@/lib/control/ai-handlers";
+import { expireScrubbedRequests } from "@/lib/control/expire";
 import { registerBuiltinAiSubtasks, registerBuiltinCycleSteps } from "@/lib/cycle/builtin-steps";
 import { decideCatchUp } from "@/lib/cycle/catch-up";
 import { withCycleLock } from "@/lib/cycle/lock";
@@ -242,6 +243,11 @@ async function main(): Promise<number> {
   });
   const startCycle = (kind: CycleKind, options: RunCycleOptions = {}): void => {
     log(`starting ${kind} cycle`);
+    // requests holding the user's text never outlive their timeout, even while no ai-worker runs
+    void expireScrubbedRequests(db).then(
+      (expired) => { if (expired > 0) log(`failed ${expired} expired request(s)`); },
+      (error: unknown) => log(`expiring requests failed: ${describe(error)}`),
+    );
     const task = runCycle(kind, { activity, signal: abort.signal, logger, ...options }).then(
       async (result) => {
         deliveryPruner.afterCycle(result.summary);

@@ -139,7 +139,7 @@ export function createOpenAiCompatibleTransport(options: OpenAiCompatibleOptions
       const model = request.model ?? options.model;
       const body = {
         model,
-        [options.maxTokensField ?? "max_tokens"]: options.maxOutputTokens,
+        [options.maxTokensField ?? "max_tokens"]: request.maxOutputTokens ?? options.maxOutputTokens,
         messages: [
           { role: "system", content: options.jsonModeOnly ? embedSchema(request.system, request.jsonSchema) : request.system },
           { role: "user", content: request.user },

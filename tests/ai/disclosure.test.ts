@@ -9,7 +9,7 @@ const rowOf = (rows: ReturnType<typeof aiDisclosure>, task: string) => rows.find
 describe("aiDisclosure (which providers may receive job text, per task)", () => {
   it("lists every AI task once, in the effective order, with the api layer expanded", () => {
     const rows = aiDisclosure(pinnedAi());
-    expect(rows.map((r) => r.task)).toEqual(["score", "signals", "translate", "summarize", "suggest", "breakdown", "traps", "salary_lookup"]);
+    expect(rows.map((r) => r.task)).toEqual(["score", "signals", "translate", "summarize", "suggest", "breakdown", "traps", "salary_lookup", "write"]);
     expect(rowOf(rows, "score")?.providers).toEqual(["codex-cli", "claude-cli", "anthropic", "deepseek", "mimo"]);
   });
 

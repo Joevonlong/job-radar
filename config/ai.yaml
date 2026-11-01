@@ -153,6 +153,13 @@ tasks:
       claude-cli: claude-sonnet-5-5
   summarize: {}
   suggest: {}
+  # The application writer (writer.yaml) has a task of its own; unset = global order and limits. Cover letters with several
+  # versions need more output than the global cap, and API providers take longer to write them, e.g.:
+  #   write:
+  #     order: [claude-cli, api]
+  #     max_output_tokens: 8192
+  #     api_timeout_seconds: 150
+  # max_output_tokens / api_timeout_seconds can be set on any task; they only apply to the API providers.
 
 # API provider request timeout (seconds) and max output tokens per call
 api_timeout_seconds: 60

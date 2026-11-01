@@ -156,6 +156,7 @@ Demo data throughout: the companies and jobs are invented. To click around the s
 | Ranking | Rank value = match score + a capped bonus for signals like a stated salary or equity. |
 | Facts from the ad | Remote / hybrid / on-site, contract type, local-language requirement (such as German B2). |
 | Job breakdown | Optional, off until you switch it on. Tasks, stack, experience, soft skills and languages, each marked required or nice-to-have with a quote from the ad. Your skills are matched locally; your profile isn't sent for this. [Breakdown](breakdown.md) |
+| Application writer | Optional, off until you switch it on. Drafts answers to application questions and cover letters from the material you tick, marks the evidence behind each sentence, and sends nothing until you press Write. [Application writer](application-writer.md) |
 | Translation | Long ads in your language, original one tap away. High scorers are translated automatically. |
 | Weekly suggestions | From the jobs you marked, the AI suggests new signal words, companies to watch and filters, each with evidence. Nothing changes until you approve. |
 | Insights | New jobs per day, sources, cities, how often pay is disclosed, signals, filter reasons. |

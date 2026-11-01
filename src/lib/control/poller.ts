@@ -120,6 +120,13 @@ export async function processNextControlRequest(options: ControlPollOptions): Pr
       }
     }
     const finished = await finishControlRequest(db, request.id, outcome);
+    if (finished === null) {
+      // it already ended while the handler ran (a writer request expired): it keeps that end
+      const ended = await getControlRequest(db, request.id);
+      scope.set("failed", ended?.status === "failed" ? safeErrorCode((ended.result as { error?: unknown } | null)?.error) : undefined);
+      log.info("control request had already ended", { status: ended?.status ?? "missing" });
+      return ended;
+    }
     scope.set(outcome.status === "done" ? "ok" : "failed", outcome.status === "failed" ? safeErrorCode(outcome.result.error) : undefined);
     log.info("control request finished", { status: outcome.status });
     return finished;
@@ -129,11 +136,17 @@ export async function processNextControlRequest(options: ControlPollOptions): Pr
 /**
  * Poll `control_requests` until `signal` aborts: drain the pending requests one at a time (at most
  * `maxPerRound()` per round, default all), then wait `pollSeconds()` (both read again every round, so a
- * hot-reloaded config takes effect at once). A database error is logged and retried on the next round.
+ * hot-reloaded config takes effect at once). A database error is logged and retried on the next round. `beforeRound`
+ * runs first in every round (the ai-worker fails expired requests there); its errors are logged, never fatal.
  */
-export async function runControlPoller(options: ControlPollOptions & { pollSeconds: () => number; maxPerRound?: () => number }): Promise<void> {
+export async function runControlPoller(options: ControlPollOptions & { pollSeconds: () => number; maxPerRound?: () => number; beforeRound?: () => Promise<void> }): Promise<void> {
   const { signal, logger } = options;
   while (!signal.aborted) {
+    try {
+      await options.beforeRound?.();
+    } catch (error) {
+      logger.warn("control poll housekeeping failed", { error: describe(error) });
+    }
     try {
       const limit = options.maxPerRound ? Math.max(1, options.maxPerRound()) : Number.POSITIVE_INFINITY;
       let handled = 0;

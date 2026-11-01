@@ -33,7 +33,7 @@ describe("DisclosureSection", () => {
       "deepseek",
       "mimo",
     ]);
-    expect(screen.getAllByTestId(/^disclosure-row-/)).toHaveLength(8);
+    expect(screen.getAllByTestId(/^disclosure-row-/)).toHaveLength(9);
   });
 
   it("says so when a task has no provider switched on", () => {

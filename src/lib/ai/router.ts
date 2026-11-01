@@ -384,10 +384,17 @@ export function createAiRouter(options: AiRouterOptions): AiRouter {
           return cost;
         };
         try {
-          const taskModel = opts.model ?? config.tasks[task].models?.[id];
+          const taskConfig = config.tasks[task];
+          const taskModel = opts.model ?? taskConfig.models?.[id];
+          // A task's own output cap and API timeout (ai.yaml tasks.<task>); a timeout the caller passes wins
+          const maxOutputTokens = opts.maxOutputTokens ?? taskConfig.max_output_tokens;
+          const apiTimeoutMs = provider.kind === "api" && taskConfig.api_timeout_seconds !== undefined ? taskConfig.api_timeout_seconds * 1000 : undefined;
+          const timeoutMs = opts.timeoutMs ?? apiTimeoutMs;
           const result = await provider.run(task, prompt, schema, {
             ...opts,
             ...(taskModel !== undefined ? { model: taskModel } : {}),
+            ...(maxOutputTokens !== undefined ? { maxOutputTokens } : {}),
+            ...(timeoutMs !== undefined ? { timeoutMs } : {}),
             onCall: (call) => {
               calls.push(call);
               opts.onCall?.(call);

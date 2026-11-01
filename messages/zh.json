@@ -1389,7 +1389,9 @@
         "resume": "定制简历",
         "status": "状态与备注",
         "translate": "翻译成{language}",
-        "more": "更多操作"
+        "more": "更多操作",
+        "write": "写申请回答",
+        "writeCount": "{final}/{total}"
       },
       "salary": {
         "title": "年薪",
@@ -1882,7 +1884,8 @@
       "insights": "统计页",
       "resume": "简历工具",
       "language": "语言",
-      "salary": "薪资基准与查询"
+      "salary": "薪资基准与查询",
+      "writer": "申请写作"
     },
     "tabDescription": {
       "schedule": "每天几点跑哪几轮，错过了怎么办。",
@@ -1895,7 +1898,8 @@
       "insights": "统计页的时间范围、单列的城市和直方图分段。只影响显示。",
       "resume": "详情页“定制简历”用到的路径和命令（resume-kit 联动）。路径指向你自己的文件，主简历不会被读取。",
       "language": "新浏览器默认的界面语言、AI 写作用的语言、JD 翻译成什么语言，以及 Telegram 和命令行的语言。",
-      "salary": "岗位页的“薪资”面板把岗位写明的薪资和库里同类岗位、这家公司的其他岗位放在一把尺子上比较，查过的话再加上 AI 的估计。可选的“查薪资”让 AI provider 去薪资网站搜这家公司和这个岗位。岗位族和外部搜索链接在 salary.yaml 里改。"
+      "salary": "岗位页的“薪资”面板把岗位写明的薪资和库里同类岗位、这家公司的其他岗位放在一把尺子上比较，查过的话再加上 AI 的估计。可选的“查薪资”让 AI provider 去薪资网站搜这家公司和这个岗位。岗位族和外部搜索链接在 salary.yaml 里改。",
+      "writer": "详情页“写申请回答”背后的工作台：用你选的素材让 AI 起草申请问题的回答和动机信，每句话都对照素材核对。默认关闭。用哪个 AI 在“AI”标签页的任务覆盖里设置（任务“申请写作”）。素材库和问题的上限、版本风格、语气和依据核对在 writer.yaml 里改。"
     },
     "actions": {
       "save": "保存",
@@ -2018,7 +2022,8 @@
       "salary_lookup": "查薪资（AI 网页搜索）",
       "salary_benchmark": "薪资基准",
       "ai_limits_quota": "用量上限（订阅 CLI）",
-      "ai_scoring_evidence": "理由来源"
+      "ai_scoring_evidence": "理由来源",
+      "writer_general": "开关和等待"
     },
     "sectionHints": {
       "search_keywords": "每个关键词组用 OR 合并成一次查询，再按城市各查一次。",
@@ -2043,7 +2048,8 @@
       "salary_lookup": "默认关闭。每次查询把公司名、岗位标题、级别、城市和国家（不含你的画像和 JD）发给 AI provider，由它搜索网页。会消耗 token；用 Anthropic API 时每次搜索另外计费。用哪个 AI 在「AI」标签的任务覆盖里设（任务“查薪资”）。",
       "salary_benchmark": "每轮运行后重算，只用时间窗内写明可比薪资（基准货币、年薪）的岗位。",
       "ai_limits_quota": "Job Radar 自己限制调用 Claude Code 和 Codex 的频率。只统计 Job Radar 自己的调用，看不到账户的真实用量，所以只会限得晚、不会限得早。你主动发起的请求（给岗位打分、翻译）不受每轮上限约束。填 0 表示关闭该项。",
-      "ai_scoring_evidence": "默认关闭：开启后每次打分还要为每条理由写一段 JD 引用，score 任务的输出 token 会变多（在 /ai-usage 对比中位数）。开关都不会让已有分数重打。"
+      "ai_scoring_evidence": "默认关闭：开启后每次打分还要为每条理由写一段 JD 引用，score 任务的输出 token 会变多（在 /ai-usage 对比中位数）。开关都不会让已有分数重打。",
+      "writer_general": "开启后，只有你为某个问题勾选的素材、在你按“生成”时才会发送：问题、长度、语气和语言，职位名称和公司，勾选的 JD 要点或一段 JD 原文，画像简介、技能和语言，勾选的经历素材和你的强调说明。不联网搜索。"
     },
     "options": {
       "remoteScope": {
@@ -3182,6 +3188,21 @@
       "company_queries_channel": {
         "label": "公司查询",
         "hint": "允许此通道接收关注公司名，在本国全境查询。"
+      },
+      "task_write": {
+        "label": "申请写作",
+        "hint": "根据你勾选的素材起草申请回答；不搜索网页。"
+      },
+      "reasoning_effort_write": {
+        "label": "推理强度：申请写作"
+      },
+      "writer_enabled": {
+        "label": "启用申请写作",
+        "hint": "关闭时，画像和经历素材不会发给任何 AI 服务商，工作台只提示怎么开启。之前写好的回答仍会显示。"
+      },
+      "writer_timeout_seconds": {
+        "label": "单个请求最长运行时间",
+        "hint": "从 ai-worker 领取时算起。超过时 AI 调用停止，请求以超时失败，素材从数据库清除。"
       }
     },
     "control": {
@@ -3238,7 +3259,8 @@
           "test_channel": "测试通道",
           "test_ai": "测试 AI",
           "test_telegram": "测试 Telegram",
-          "salary_lookup": "查薪资"
+          "salary_lookup": "查薪资",
+          "writer_job": "申请回答"
         },
         "status": {
           "pending": "排队中",
@@ -3715,7 +3737,8 @@
         "probe": "测试",
         "breakdown": "拆解",
         "traps": "AI 陷阱",
-        "salary_lookup": "查薪资"
+        "salary_lookup": "查薪资",
+        "write": "申请写作"
       },
       "details": "详细统计 →"
     },
@@ -7021,7 +7044,8 @@
       "system__delivery_prune": "修剪交付条目",
       "system__reconcile": "核对操作日志",
       "system__telegram_callback": "Telegram 按钮操作",
-      "system__reminder": "每日提醒"
+      "system__reminder": "每日提醒",
+      "request__writer_job": "写申请回答"
     },
     "event": {
       "item__ok": "单项处理成功",
@@ -7123,6 +7147,9 @@
       "backfillOverLimit": "补抓范围超过配置上限",
       "cycleBusy": "已有采集任务排队或运行中",
       "configUnavailable": "配置读取失败",
+      "no_material": "没有选择素材",
+      "output_truncated": "回答在输出上限处被截断",
+      "expired": "请求已过期",
       "not_recorded": "结果未记录",
       "cycle_cancelled": "采集轮次已取消",
       "another_cycle_running": "另一轮采集正在进行",
@@ -7343,7 +7370,8 @@
       "test_channel": "测试通道",
       "test_ai": "测试 AI",
       "test_telegram": "测试 Telegram",
-      "salary_lookup": "查询薪资"
+      "salary_lookup": "查询薪资",
+      "writer_job": "写申请回答"
     },
     "level": {
       "all": "全部级别",
@@ -7365,5 +7393,217 @@
     "rebuilt": "已重建 {count} 个岗位投影。",
     "checked": "投影存在差异的岗位：{count}。",
     "migrated": "数据库迁移已完成。"
+  },
+  "writer": {
+    "pageTitle": "申请回答 · {title} · {company}",
+    "back": "返回职位",
+    "heading": "申请回答",
+    "disabled": "申请写作没有开启。开启前，你的画像和经历素材不会发给任何 AI 服务商。",
+    "settingsLink": "去 设置 → 工作流 开启",
+    "configError": "writer.yaml 读不出来，现在没法写。请在设置里修好文件。",
+    "panes": {
+      "label": "工作台视图",
+      "materials": "素材",
+      "questions": "问题",
+      "answer": "回答"
+    },
+    "actionError": {
+      "invalid": "输入无效。",
+      "disabled": "申请写作没有开启。",
+      "config_error": "writer.yaml 读不出来。",
+      "not_found": "这个问题或版本已经不在了，请刷新页面。",
+      "limit": "这个职位的问题已到上限。",
+      "too_long": "文字超过长度上限。",
+      "failed": "没有成功，请重试。"
+    },
+    "variant": {
+      "safe": "稳妥",
+      "distinctive": "有个性",
+      "short": "精简"
+    },
+    "questions": {
+      "title": "问题",
+      "count": "{count} / {max}",
+      "empty": "粘贴申请表里的第一个问题，或者加一封动机信。",
+      "kind": {
+        "question": "问题",
+        "letter": "动机信"
+      },
+      "versions": "{count, plural, =0 {还没有版本} other {# 个版本}}",
+      "final": "定稿",
+      "addLabel": "添加问题",
+      "addPlaceholder": "粘贴申请表里的问题",
+      "kindLabel": "类型",
+      "add": "添加",
+      "full": "每个职位最多 {max} 个问题。",
+      "letterText": "动机信",
+      "settingsTitle": "这个问题",
+      "textLabel": "问题原文",
+      "toneLabel": "语气",
+      "tone": {
+        "neutral": "中性",
+        "warm": "亲切",
+        "confident": "自信",
+        "formal": "正式"
+      },
+      "lengthLabel": "目标长度",
+      "unitLabel": "单位",
+      "unit": {
+        "words": "词",
+        "chars": "字"
+      },
+      "languageLabel": "回答语言",
+      "save": "保存",
+      "saved": "问题已保存",
+      "deleted": "问题已删除",
+      "delete": "删除",
+      "deleteConfirm": "连同版本一起删除"
+    },
+    "materials": {
+      "title": "素材",
+      "noQuestion": "先添加一个问题，再选它的素材。",
+      "stale": "{count} 项已选素材已失效（拆解或素材改了），不会发送。",
+      "dropStale": "移除",
+      "breakdownOutdated": "这份拆解基于旧版 JD。",
+      "group": {
+        "must": "必须",
+        "nice": "加分",
+        "other": "职责及其他"
+      },
+      "useJdText": "同时发送一段 JD 原文",
+      "profileGroup": "画像",
+      "useProfile": "我的简介、技能和语言（me.yaml）",
+      "noProfile": "me.yaml 读不出来，没法发送画像。",
+      "storiesGroup": "经历素材",
+      "noStories": "经历素材库是空的，请在 /me 页面添加。",
+      "emphasisLabel": "这次想强调的",
+      "emphasisPlaceholder": "可选：希望这条回答讲到的一点",
+      "emphasisCount": "{count} / {max}",
+      "breakdownFirst": "先拆解 JD，就能逐条选要求；也可以改为发送 JD 原文。",
+      "breakdownOff": "岗位拆解已关闭，可以发送 JD 原文。",
+      "noDescription": "这个职位没有 JD 原文。",
+      "breakdownButton": "拆解 JD",
+      "storiesUnreadable": "stories.yaml 读不出来，现在没法发送经历素材。/me 上的卡片会显示错误，并可回滚。"
+    },
+    "answer": {
+      "title": "回答",
+      "done": "新版本已生成",
+      "noQuestion": "选一个问题，或添加一个。",
+      "variants": "每次生成 {count} 个版本",
+      "sends": "发送：",
+      "sendsTo": "发给：",
+      "noProvider": "这个任务没有可用的 AI 服务商（设置 → AI）",
+      "noWeb": "不联网搜索。画像和素材库的其他内容不会发送。",
+      "field": {
+        "question": "问题",
+        "settings": "长度、语气和语言",
+        "job": "职位名称和公司",
+        "jd_points": "勾选的 JD 要点",
+        "jd_excerpt": "JD 原文节选",
+        "profile": "画像简介、技能、语言",
+        "stories": "勾选的经历素材",
+        "emphasis": "你的强调说明"
+      },
+      "running": "正在写…",
+      "requesting": "排队中…",
+      "write": "生成",
+      "writeAgain": "再生成一批",
+      "error": {
+        "invalid": "请求无效。",
+        "disabled": "申请写作没有开启。",
+        "config_error": "writer.yaml 读不出来。",
+        "not_found": "职位或问题已经不在了。",
+        "no_material": "请先选素材：JD 要点、JD 原文、画像、经历素材或强调说明。",
+        "expired": "请求等待或运行太久，已取消，素材已清空。请重试。",
+        "output_truncated": "回答在 AI 服务商的输出上限处被截断。请要求短一点，或调高 ai.yaml 里 write 任务的 max_output_tokens。",
+        "aborted": "写作途中 AI worker 被停止了，请重试。",
+        "auth": "AI 服务商的登录已过期或被拒绝。请在 Mac 上重新登录后再试。",
+        "timeout": "AI 没有按时写完，请重试。",
+        "rate_limited": "AI 服务商暂时限流，请稍后再试。",
+        "invalid_output": "AI 返回的格式没法核对，请重试。",
+        "provider_error": "AI 服务商报错，请重试。",
+        "network": "连不上 AI 服务商，请重试。",
+        "budget": "AI API 本月预算已用完。",
+        "quota_guard": "已达到 Job Radar 自己的 AI 用量上限。{time, select, none {稍后会自动继续。} other {{time} 后可再用。}}",
+        "unavailable": "现在没有可用的 AI 服务商。请检查 CLI 登录或 API key 后重试。",
+        "failed": "生成失败，请重试。",
+        "invalid_payload": "请求无效。",
+        "handler_error": "处理请求时出错，请重试。",
+        "no_handler": "还没有 AI worker 处理这类请求，请确认 ai-worker 在运行。"
+      },
+      "versionsLabel": "版本",
+      "manual": "你改过的",
+      "final": "定稿",
+      "length": "{count} / {target} {unit}",
+      "evidenceNote": "每句话都对照你选的素材核对过：“有依据”只表示引用在素材里找到了，不等于内容属实。发送前请逐句读一遍。",
+      "finalised": "已设为定稿",
+      "unfinalised": "已取消定稿",
+      "editSaved": "已另存为新版本",
+      "copied": "已复制",
+      "copyFailed": "复制失败，请手动选中文字复制。",
+      "editLabel": "修改回答",
+      "editHint": "另存为新版本：你改动的句子会标为“你写的”。",
+      "copy": "复制",
+      "finalise": "设为定稿",
+      "unfinalise": "取消定稿",
+      "edit": "修改",
+      "editSave": "另存为新版本",
+      "editCancel": "取消"
+    },
+    "status": {
+      "count": {
+        "supported": "{count} 句有依据",
+        "partial": "{count} 句部分有依据",
+        "unsupported": "{count} 句无依据",
+        "framing": "{count} 句衔接",
+        "user_written": "{count} 句你写的",
+        "web_unverified": "{count} 句网页未核实"
+      },
+      "label": {
+        "supported": "有依据",
+        "partial": "部分有依据",
+        "unsupported": "无依据",
+        "framing": "衔接句",
+        "web_unverified": "网页搜索，未核实",
+        "user_written": "你写的",
+        "ai_suggestion_unverified": "AI 建议，未核实",
+        "external_unverified": "外部写入，未核实"
+      },
+      "explain": {
+        "supported": "它说到的数字和名称都在素材里找到的引用中。这不等于它属实。",
+        "partial": "找到了依据，但它说的某些内容不在依据里（见下）。",
+        "unsupported": "在它可依据的素材里找不到引用。请改写或删除。",
+        "framing": "不含事实的衔接句。",
+        "web_unverified": "只依据 AI 对公司的网页搜索。",
+        "user_written": "这句是你写的或改过的，没有核对。",
+        "ai_suggestion_unverified": "AI 的建议，没有核对。",
+        "external_unverified": "在 Job Radar 外写入，没有核对。"
+      },
+      "detailLabel": "句子依据",
+      "about": "按“关于{about}”的句子核对",
+      "aboutKind": {
+        "user": "你",
+        "company": "公司",
+        "role": "岗位",
+        "framing": "衔接"
+      },
+      "source": {
+        "jd": "JD",
+        "profile": "画像",
+        "story": "经历素材",
+        "emphasis": "强调说明",
+        "draft": "你的草稿",
+        "company": "公司（网页）"
+      },
+      "problem": {
+        "not_found": "在该素材里找不到",
+        "not_allowed": "这种来源不能支撑这类句子",
+        "no_ref": "没有指明是哪条素材",
+        "unknown_ref": "没有发送这条素材",
+        "too_short": "引文太短，不算证据"
+      },
+      "missing": "依据里没有：{items}",
+      "needsCheck": "需核对：{items}（依据和 JD 里都找不到的名称）"
+    }
   }
 }

@@ -17,7 +17,8 @@ Job Radar 是跑在你自己机器上的单用户工具：没有账号、没有�
 | 付费交付账本：供应商记录原文和无法读取的响应体；已存岗位使用链接和哈希，不重复保存原文 | 本机 Postgres，包含在数据库备份中 | 账本条目默认 45 天；运行摘要保留到删除数据库。旧备份可能仍保留已删除条目。 |
 | 邮件元数据（Message-ID、发件人地址、IMAP UID） | 数据库表 `email_messages` | 直到你删除数据库 |
 | AI 结果（评分及理由、翻译、拆解、信号、陷阱标记、带引文的每周建议）和 AI 用量记录（模型、token、耗时） | 数据库 | 直到你删除数据库 |
-| 已发出的 Telegram 消息（内容和消息 id）、控制请求及结果 | 数据库 | 直到你删除数据库 |
+| 已发出的 Telegram 消息（内容和消息 id）、控制请求及结果 | 数据库 | 直到你删除数据库；写作请求（`writer_job`）的素材在请求完成、失败或过期（排队时看 `writer.yaml: queue_timeout_seconds`，运行时看 `timeout_seconds` + `expiry_grace_seconds`）后即从请求里清除。请求未结束时做的备份会留下这些素材，包括部署时的迁移前备份：日备和周备约保留 8 周，系统备份和手动备份更久。Postgres 的堆和 WAL 也可能留着，直到 vacuum 和 checkpoint。 |
+| 申请问题和回答版本，以及每句话的依据核对结果 | 数据库表 `application_questions`、`application_answer_versions` | 直到你删除问题（或数据库）；超过 `questions.max_versions_per_question` 时删除最旧的版本 |
 | runner 心跳 | 数据库 | 24 小时 |
 | 数据库备份 | `data/backups/` | 自动：14 份日备、8 份周备；手动备份不会被清理。已删除的记录在旧备份里还会留着，直到这些备份被删掉 |
 | 给 resume-kit 的 JD 导出 | `data/exports/jd/` | 直到你删除 |
@@ -39,7 +40,7 @@ Job Radar 是跑在你自己机器上的单用户工具：没有账号、没有�
 
 | 谁 | 发什么 | 何时 | 怎么停止 |
 |---|---|---|---|
-| 你使用的 AI 提供方：OpenAI（`codex` 命令行或 API）、Anthropic（`claude` 命令行或 API）、OpenRouter 及它转发到的上游提供方（API）、DeepSeek 或小米 MiMo（API，**默认关闭**）。API 提供方在 `.env` 里填了 key 之前什么都不发 | **评分：** 画像摘要、技能和年限、语言等级、**目标职位、目标城市、工作方式、远程范围、级别、薪资底线、合同偏好、排除的公司、排除的关键词、你自己的评分标准**，加上岗位描述。**每周建议：** 你标记过的岗位（感兴趣、准备中、已申请、面试中、offer、忽略）**及其状态**，加上你的偏好。**翻译、拆解、信号、陷阱检查：** 只有岗位文本。你的居住城市和签证状态（`me.yaml`）、备注和申请备注不会发送。 | 每一轮 | 关掉该提供方（`ai.yaml` 里 `enabled: false`，或"设置 → AI"），不安装它的命令行、不填它的 key；每周建议用 `schedule.yaml` 的 `suggest.enabled` 关掉 |
+| 你使用的 AI 提供方：OpenAI（`codex` 命令行或 API）、Anthropic（`claude` 命令行或 API）、OpenRouter 及它转发到的上游提供方（API）、DeepSeek 或小米 MiMo（API，**默认关闭**）。API 提供方在 `.env` 里填了 key 之前什么都不发 | **评分：** 画像摘要、技能和年限、语言等级、**目标职位、目标城市、工作方式、远程范围、级别、薪资底线、合同偏好、排除的公司、排除的关键词、你自己的评分标准**，加上岗位描述。**每周建议：** 你标记过的岗位（感兴趣、准备中、已申请、面试中、offer、忽略）**及其状态**，加上你的偏好。**翻译、拆解、信号、陷阱检查：** 只有岗位文本。**申请写作**（默认关闭）：只发送“生成”上方披露框列出的素材：问题及其设置、职位名称和公司、勾选的 JD 要点或一段 JD 原文、画像简介、技能和语言、勾选的经历素材和你的强调说明，在你按**生成**时发送。你的居住城市和签证状态（`me.yaml`）、备注和申请备注不会发送。 | 每一轮；申请写作只在你点击时 | 关掉该提供方（`ai.yaml` 里 `enabled: false`，或"设置 → AI"），不安装它的命令行、不填它的 key；每周建议用 `schedule.yaml` 的 `suggest.enabled` 关掉；`writer.yaml: enabled` 保持 `false` |
 | 招聘网站与 API：Arbeitsagentur、Indeed、LinkedIn、StepStone、XING、JSearch 的 Google Jobs、公司招聘看板、Bright Data、Apify、Monid | 搜索关键词、搜索城市或本国名、关注名单里的公司名，以及来自你的 IP 的请求（LinkedIn session 以你自己登录的账号发出） | 每轮采集；公司查询仅发给支持且已启用的通道 | 在来源页关闭通道；公司查询可在 `search.yaml` 设 `watched_company_queries.enabled: false` 全部关闭，或在 `sources.yaml` 的通道块设 `company_queries: false` 单独关闭 |
 | Arbeitnow（免费招聘板接口） | 只有来自你 IP 地址的请求（它不收关键词和地点） | 每一轮 | 在"来源"页关掉该通道 |
 | Tavily 或 Brave（招聘页发现） | 形如"关键词 jobs 城市"的搜索词 | 每天，且仅在有 key 时 | 不设置 key |

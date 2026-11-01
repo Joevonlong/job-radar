@@ -77,6 +77,11 @@ if (fresh) {
   const breakdownText = fs.readFileSync(breakdownFile, "utf8").replace(/^enabled: (false|true)$/m, "enabled: true");
   parseConfigText("breakdown", breakdownText);
   fs.writeFileSync(breakdownFile, breakdownText);
+  // The shipped application writer is off; the e2e copy turns it on (the e2e runner stands in for its AI)
+  const writerFile = path.join(configDir, "writer.yaml");
+  const writerText = fs.readFileSync(writerFile, "utf8").replace(/^enabled: (false|true)$/m, "enabled: true");
+  parseConfigText("writer", writerText);
+  fs.writeFileSync(writerFile, writerText);
   // The shipped salary lookup is off; the e2e copy turns it on (the e2e runner answers the requests, no AI is called)
   const salaryFile = path.join(configDir, "salary.yaml");
   const salaryText = fs.readFileSync(salaryFile, "utf8")

@@ -11,7 +11,7 @@ export const AI_API_PROVIDERS = ["anthropic", "openai", "openrouter", "deepseek"
 /** `tasks.<task>.order`: a task may name individual providers or the "api" layer as a whole. */
 export const AI_TASK_PROVIDERS = [...AI_PROVIDER_KINDS, ...AI_API_PROVIDERS] as const;
 /** The task kinds that may override the order (`tasks.<task>`) and the codex effort (`reasoning_effort_by_task.<task>`). */
-export const AI_TASK_NAMES = ["score", "signals", "translate", "summarize", "suggest", "breakdown", "traps", "salary_lookup"] as const;
+export const AI_TASK_NAMES = ["score", "signals", "translate", "summarize", "suggest", "breakdown", "traps", "salary_lookup", "write"] as const;
 /** Codex reasoning effort levels (`-c model_reasoning_effort=`). */
 export const CODEX_REASONING_EFFORTS = ["minimal", "low", "medium", "high", "xhigh", "max", "ultra"] as const;
 

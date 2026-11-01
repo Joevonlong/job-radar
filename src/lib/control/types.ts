@@ -7,6 +7,7 @@ import { MAX_WINDOW_HOURS } from "@/lib/config/schemas/channels";
 import type { Db } from "@/lib/db/client";
 import type { CycleSummary } from "@/lib/cycle/run-cycle";
 import type { ControlRequest } from "@/lib/db/repos/control-requests";
+import { writerMaterialsSchema } from "@/lib/writer/materials";
 
 /** Payload of a `run_cycle` request: run only these channels (default: every enabled channel). */
 export const runCyclePayloadSchema = z.strictObject({
@@ -42,6 +43,26 @@ export const breakdownJobPayloadSchema = z.strictObject({
   force: z.boolean().default(false),
 });
 export type BreakdownJobPayload = z.infer<typeof breakdownJobPayloadSchema>;
+
+/**
+ * Payload of a `writer_job` request (the application writer's "write" button). `materials` is the snapshot of what the
+ * user chose, written from and checked against; it is removed from the row (`scrubbed: true`) as soon as the request
+ * ends in any way. `refs` and `materialsHash` stay: which stories and how many JD points were used, never their text.
+ */
+export const writerJobPayloadSchema = z.strictObject({
+  jobId: z.number().int().positive(),
+  questionId: z.number().int().positive(),
+  mode: z.literal("draft"),
+  materialsHash: z.string().regex(/^[0-9a-f]{64}$/),
+  refs: z.strictObject({
+    storyIds: z.array(z.string().max(80)).max(1000),
+    jdPoints: z.number().int().min(0),
+    profile: z.boolean(),
+    emphasis: z.boolean(),
+  }),
+  materials: writerMaterialsSchema,
+});
+export type WriterJobPayload = z.infer<typeof writerJobPayloadSchema>;
 
 /** Payload of a `salary_lookup` request (the "look up salary" button on the job page). */
 export const salaryLookupPayloadSchema = z.strictObject({

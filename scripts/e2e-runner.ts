@@ -14,6 +14,7 @@ import { currentScoresBackfill } from "../src/lib/db/current-scores-config";
 import { setTimeout as sleep } from "node:timers/promises";
 
 import { sql } from "drizzle-orm";
+import { z } from "zod";
 
 import { createLogger } from "../src/lib/channels/logger";
 import { loadConfig, readConfigText, watchConfig } from "../src/lib/config";
@@ -33,6 +34,9 @@ import { compileFamilies } from "../src/lib/salary/families";
 import { salaryLookupKey } from "../src/lib/salary/lookup";
 import { loadBaseCurrency } from "../src/lib/signals/floor";
 import { ACK_NAMES, isAckName } from "../src/lib/settings/tabs";
+import { createAiRouter, createProvider } from "../src/lib/ai";
+import type { AiTransport } from "../src/lib/ai/types";
+import { createWriterJobHandler } from "../src/lib/control/writer-job";
 
 /** How long the stub cycle "runs": long enough for a test to see the running state. */
 const STUB_CYCLE_MS = 1500;
@@ -156,6 +160,38 @@ registerControlHandler("salary_lookup", async (request) => {
   return { status: "done", result: { jobId: job.id, lookupId: id, cached: false, provider: "e2e", model: "e2e-model" } };
 });
 
+// The application writer belongs to the host ai-worker too: the real handler runs (trap cleaning, the evidence check, the
+// stored versions), only the AI is a stand-in. Each version gets a sentence quoting the JD excerpt (backed), a claim
+// about you with no evidence (not backed) and a framing sentence.
+const writerAi: AiTransport = {
+  id: "codex-cli",
+  availability: () => ({ available: true }),
+  plannedModel: () => "e2e-model",
+  async call(request) {
+    await sleep(STUB_TEST_MS);
+    const input = z
+      .object({ settings: z.object({ versions: z.array(z.object({ id: z.string() })) }), jd_excerpt: z.string().optional() })
+      .parse(JSON.parse(request.user.replace(/^<application_input>\n|\n<\/application_input>$/g, "")));
+    const line = input.jd_excerpt?.split("\n").map((entry) => entry.trim()).find((entry) => entry.length > 0) ?? "";
+    const quote = line.slice(0, 80).trim();
+    const variants = input.settings.versions.map((version) => ({
+      variant_id: version.id,
+      sentences: [
+        ...(quote ? [{ text: `The posting asks for this: "${quote}".`, about: "role", evidence: [{ source: "jd", quote }] }] : []),
+        { text: "I scaled the team to 20 people.", about: "user", evidence: [] },
+        { text: "That is why this role interests me.", about: "framing", evidence: [] },
+      ],
+    }));
+    return { text: JSON.stringify({ variants }), model: "e2e-model", usage: { tokensIn: 100, tokensOut: 50 } };
+  },
+};
+registerControlHandler(
+  "writer_job",
+  createWriterJobHandler({
+    createRouter: () => createAiRouter({ config: loadConfig("ai"), providers: [createProvider(writerAi)], usage: null, health: null, quota: null, catalog: null, origin: "control" }),
+  }),
+);
+
 await recordAllConfigLoaded(db);
 await syncSourceRegistry(db, { config: loadConfig("channels"), text: readConfigText("channels") }).catch(() => {});
 const stopWatching = watchConfig(
@@ -169,9 +205,9 @@ const stopWatching = watchConfig(
   { pollMs: 300, debounceMs: 50 },
 );
 
-// What the settings, sources and interests pages offer, plus the ai-worker's AI test, breakdown and salary lookup (answered
+// What the settings, sources and interests pages offer, plus the ai-worker's AI test, breakdown, salary lookup and writer (answered
 // here with stand-ins). The other AI requests (scoring, translation, ...) belong to the host ai-worker, which e2e does not run.
-const poller = runControlPoller({ db, signal: abort.signal, logger: createLogger({ sink: () => {} }), kinds: () => ["run_cycle", "rescore_stale", "run_suggest", "test_channel", "test_telegram", "test_ai", "breakdown_job", "salary_lookup"], pollSeconds: () => POLL_SECONDS });
+const poller = runControlPoller({ db, signal: abort.signal, logger: createLogger({ sink: () => {} }), kinds: () => ["run_cycle", "rescore_stale", "run_suggest", "test_channel", "test_telegram", "test_ai", "breakdown_job", "salary_lookup", "writer_job"], pollSeconds: () => POLL_SECONDS });
 
 log("ready");
 while (!abort.signal.aborted) {

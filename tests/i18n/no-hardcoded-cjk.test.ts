@@ -23,6 +23,7 @@ const ALLOWED: ReadonlyArray<{ path: string; reason: string }> = [
   { path: "src/lib/config/migrations/", reason: "comment templates written into the user's own older config files; data for existing installs, not product copy" },
   { path: "src/lib/signals/defaults.ts", reason: "the bilingual labels { zh, en } of the default signal categories, written into the user's interests.yaml (user data)" },
   { path: "src/lib/docs-link.ts", reason: "GitHub heading slugs of docs/*.zh.md (URL fragments, not copy)" },
+  { path: "src/lib/config/schemas/writer.ts", reason: "the default Chinese first-person words the answer check matches (matching data, not copy)" },
 ];
 
 function isAllowed(relative: string): boolean {
