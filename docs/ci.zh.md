@@ -236,7 +236,7 @@ Vitest 单元测试：`tests/**`（除 `tests/integration/`）下的所有测试
 
 #### Integration tests (default order)
 
-`pnpm test:integration --reporter=verbose`，只在 `full` 为 true 时运行（推送到 `main`、手动运行、依赖或工具链 PR）。verbose reporter 会在每个文件开始时打印它，卡住的文件因此能被点名。两个 worker 替换测试文件不在这里跑（`--exclude`），它们有下面独立的任务。上限 15 分钟。本地怎么跑见 [本地跑完整流水线](#本地跑完整流水线)。
+`pnpm test:integration --reporter=verbose`，只在 `full` 为 true 时运行（推送到 `main`、手动运行、依赖或工具链 PR）。verbose reporter 会在每个文件开始时打印它，卡住的文件因此能被点名。两个 worker 替换测试文件不在这里跑（`--exclude`），它们有下面独立的任务。上限 30 分钟（原因见 `integration-shuffled` 下的“为什么是 30 分钟”）。本地怎么跑见 [本地跑完整流水线](#本地跑完整流水线)。
 
 #### Set up the lowest Node.js of engines.node
 
@@ -272,7 +272,9 @@ Vitest 单元测试：`tests/**`（除 `tests/integration/`）下的所有测试
 
 #### Integration tests (shuffled file order)
 
-用 `--sequence.shuffle.files --sequence.seed=<seed>` 跑同一套测试；seed 以 `::notice::` 注解打印（`integration file order seed: N`）。其他 PR 只跑这种顺序：它能发现依赖其他文件遗留状态的文件，固定顺序会掩盖这类问题。复现失败：用注解里的 seed 运行 `pnpm test:integration --sequence.shuffle.files --sequence.seed=<seed>`。这里同样不跑两个 worker 替换测试文件。上限 15 分钟。
+用 `--sequence.shuffle.files --sequence.seed=<seed>` 跑同一套测试；seed 以 `::notice::` 注解打印（`integration file order seed: N`）。其他 PR 只跑这种顺序：它能发现依赖其他文件遗留状态的文件，固定顺序会掩盖这类问题。复现失败：用注解里的 seed 运行 `pnpm test:integration --sequence.shuffle.files --sequence.seed=<seed>`。这里同样不跑两个 worker 替换测试文件。上限 30 分钟，和默认顺序一样。
+
+**为什么是 30 分钟。**同一套测试（约 140 个文件、1700 个用例，共用一个数据库，文件一个接一个跑）在一天内 GitHub runner 上的 PR 和 `main` 运行里用了 465 到 906 秒，大约 8 到 15 分钟，波动来自 runner，不是测试（同样 139 个文件，一次 517 秒，一次 807 秒，慢的那次各用例耗时之和高出 1.5 倍）。没有哪个文件特别慢，时间分散在许多短用例上，每个用例都从清空的数据库开始。原来 15 分钟的上限正好压在这个范围的边上，健康的运行有时会在所有测试都通过时被取消。30 分钟是目前最慢健康运行的两倍。测试卡住不靠这个上限：每个用例和钩子本来就会在 20 秒 / 30 秒后自己失败（`vitest.integration.config.ts` 的 `testTimeout`、`hookTimeout`），verbose reporter 会点名文件。步骤上限只管 vitest 中断不了的情况（子进程不退出、全局 setup 或 teardown 卡住），这时 30 分钟仍然比它要防的一小时以上的挂起早得多。如果健康运行逼近 20 分钟，应当把测试拆成分片，而不是再抬高上限。
 
 ### Job `worker-switch`
 
