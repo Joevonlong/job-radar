@@ -199,7 +199,8 @@ const oneOrMany = <T extends z.ZodType>(item: T) =>
  * by the web app (a view with `filtered: false` is the same as one without the key).
  * On the Today page the dates are ignored: Today is today.
  */
-export const viewFiltersSchema = z.strictObject({
+/** The strict shape: what the web app may save. Reading a file goes through the lenient `viewFiltersSchema`. */
+export const strictViewFiltersSchema = z.strictObject({
   /** Free text (title, company name/aliases, city/location and recognized countries; no JD). */
   q: nonEmptyString.max(SEARCH_QUERY_MAX_CHARS).optional(),
   /** Source family (`channels.family`, e.g. linkedin). */
@@ -245,7 +246,28 @@ export const viewFiltersSchema = z.strictObject({
    */
   ghost: z.enum(GHOST_FILTERS).optional(),
 });
-export type ViewFilters = z.infer<typeof viewFiltersSchema>;
+export type ViewFilters = z.infer<typeof strictViewFiltersSchema>;
+
+/** The keys of a view's filters this version knows. */
+const KNOWN_VIEW_FILTER_KEYS: ReadonlySet<string> = new Set(Object.keys(strictViewFiltersSchema.shape));
+
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
+
+/** The keys of `filters` this version does not know (a view written by a newer version); not a list when `filters` is no object. */
+export function unknownViewFilterKeys(filters: unknown): string[] {
+  return isRecord(filters) ? Object.keys(filters).filter((key) => !KNOWN_VIEW_FILTER_KEYS.has(key)) : [];
+}
+
+/**
+ * Lenient about keys, strict about everything else: a key this version does not know (a newer version stored it; this one may be the
+ * rollback target) is dropped before the strict schema runs, so one such key never fails the whole file. Known keys keep their strict
+ * validation. The dropped keys are reported separately (`unknownViewFilterKeys`, a `config:check` warning), not silently lost.
+ * Not `.passthrough()`: that would give `ViewFilters` an index signature and loosen every type derived from it.
+ */
+export const viewFiltersSchema = z.preprocess(
+  (value) => (isRecord(value) ? Object.fromEntries(Object.entries(value).filter(([key]) => KNOWN_VIEW_FILTER_KEYS.has(key))) : value),
+  strictViewFiltersSchema,
+);
 
 const savedView = z.strictObject({
   id: z.string().regex(/^[a-z0-9][a-z0-9-]*$/, "id must be lowercase letters, digits or dashes"),

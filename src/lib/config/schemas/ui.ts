@@ -2,6 +2,8 @@ import { z } from "zod";
 
 import { HIDEABLE_CONTRACTS, HIDEABLE_STATUSES, HIDEABLE_WORKPLACES } from "../../applications/visibility";
 
+import { DATE_FIELDS, DEFAULT_DATE_FIELD, DEFAULT_DATE_QUICK_RANGES, parseWithin } from "../../jobs/date-range";
+
 import { phraseRegexString, positiveInt } from "./common";
 
 const noDuplicates = (items: readonly string[]): boolean => new Set(items).size === items.length;
@@ -11,6 +13,9 @@ export const CONFIG_EDITOR_DEFAULTS = { max_bytes: 262_144, backups_keep: 20 } a
 
 /** The company drop-down of /jobs when ui.yaml does not say (a user file written before these keys existed). */
 const COMPANY_OPTIONS_DEFAULTS = { company_options_max: 500, company_options_visible: 50 } as const;
+
+/** The date filter of /jobs when ui.yaml does not say: the quick ranges it offers and the date it compares by default. */
+export const DATE_FILTER_DEFAULTS = { date_quick_ranges: DEFAULT_DATE_QUICK_RANGES, date_default_field: DEFAULT_DATE_FIELD } as const;
 
 /** Rows per page of /companies when a user ui.yaml predates the company overview. */
 export const COMPANIES_PAGE_DEFAULTS = { page_size: 50 } as const;
@@ -99,8 +104,17 @@ export const uiSchema = z
         company_options_max: z.number().int().min(1).max(5000).default(COMPANY_OPTIONS_DEFAULTS.company_options_max),
         /** Of those, how many it lists before anything is typed into its search box. */
         company_options_visible: z.number().int().min(1).max(5000).default(COMPANY_OPTIONS_DEFAULTS.company_options_visible),
+        /** Quick ranges of the date filter: `Nd` = the last N×24 hours (N 1-366), `month` = this calendar month so far; in the order shown. */
+        date_quick_ranges: z
+          .array(z.string().refine((value) => parseWithin(value) !== null, "must be Nd (N from 1 to 366, e.g. 7d) or month"))
+          .min(1)
+          .max(8)
+          .refine(noDuplicates, "must not contain duplicates")
+          .default([...DATE_FILTER_DEFAULTS.date_quick_ranges]),
+        /** The date the filter compares until a link says otherwise: `posted` (the first-seen date where a posting has none) or `seen`. */
+        date_default_field: z.enum(DATE_FIELDS).default(DATE_FILTER_DEFAULTS.date_default_field),
       })
-      .default({ hidden_workplaces: [], hidden_contracts: [], ...COMPANY_OPTIONS_DEFAULTS }),
+      .default({ hidden_workplaces: [], hidden_contracts: [], ...COMPANY_OPTIONS_DEFAULTS, date_quick_ranges: [...DATE_FILTER_DEFAULTS.date_quick_ranges], date_default_field: DATE_FILTER_DEFAULTS.date_default_field }),
     /** Rows per page of the company overview (/companies). */
     companies: z
       .strictObject({ page_size: positiveInt.max(500).default(COMPANIES_PAGE_DEFAULTS.page_size) })

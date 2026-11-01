@@ -13,7 +13,7 @@ import { z } from "zod";
 
 import { ConfigError, configErrorKey, interestsSchema, loadConfig, loadCompanies, mutateConfig, type InterestsConfig } from "@/lib/config";
 import { loadPipeline } from "@/lib/market";
-import { viewFiltersSchema, type SavedView } from "@/lib/config/schemas/interests";
+import { strictViewFiltersSchema, type SavedView } from "@/lib/config/schemas/interests";
 import { watchedCompanyBoards } from "@/lib/companies/watched-boards";
 import { getDb, listCompaniesWithJobCount, suggestCompanies } from "@/lib/db";
 import { resolveCompanyName } from "@/lib/pipeline/company";
@@ -145,7 +145,8 @@ const idSchema = z.string().regex(/^[a-z0-9][a-z0-9-]*$/).max(80);
 
 const saveViewSchema = z.strictObject({
   name: z.string(),
-  filters: viewFiltersSchema,
+  // new input is strict: a key the schema does not know is refused, not dropped
+  filters: strictViewFiltersSchema,
   /** Replace the filters of the view that already has this name. */
   overwrite: z.boolean().optional(),
   makeDefault: z.boolean().optional(),

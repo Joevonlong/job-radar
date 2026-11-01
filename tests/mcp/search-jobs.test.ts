@@ -36,6 +36,14 @@ describe("MCP search parameters", () => {
     expect(Object.keys(output).sort()).toEqual(["jobs", "notices", "returned", "total", "truncated"]);
   });
 
+  it("keeps since / until as first-seen dates: it names no date, so the list query compares first seen", async () => {
+    await searchJobs(ctx, input.parse({ since: "2026-10-01", until: "2026-10-15" }));
+    const filters = vi.mocked(listJobs).mock.calls.at(-1)?.[1].filters;
+    expect(filters).toMatchObject({ from: "2026-10-01", to: "2026-10-15" });
+    expect(filters).not.toHaveProperty("dateField");
+    expect(filters).not.toHaveProperty("within");
+  });
+
   it("propagates search configuration errors instead of silently changing the matcher", async () => {
     const fail = () => { throw new Error("invalid config"); };
     await expect(searchJobs({ ...ctx, searchPlan: fail }, input.parse({ query: "AI" }))).rejects.toThrow("invalid config");

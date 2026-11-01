@@ -511,6 +511,23 @@ Rolling back only the company overview (to a version that has the company filter
 
 The shipped `ui.yaml` is part of the image, so it goes back with it.
 
+## Date filter (`ui.yaml`)
+
+| Key | Default | Meaning |
+|---|---|---|
+| `filters.date_quick_ranges` | `[1d, 7d, 14d, month]` | The quick ranges of the date filter on `/jobs`, in this order: `Nd` = the last N×24 hours (N from 1 to 366), `month` = this calendar month so far in the `schedule.yaml` timezone. 1 to 8 entries, no repeats |
+| `filters.date_default_field` | `posted` | The date the filter compares until a link says otherwise: `posted` (the first-seen date where a posting has no posted date) or `seen` (first seen) |
+
+Both keys may be missing (the defaults apply); an older file needs no migration. `pnpm config:check` names the key of a
+range that is not `Nd` or `month`. Links keep working when you change the list: a range in the URL that is not offered
+any more still filters, and the filter shows no button for it. How the filter behaves: [usage.md](usage.md#filtering-by-date).
+
+Rolling back to a version before the date filter: `ui.yaml` is strict, so the older version refuses a file that holds
+these keys. If you added them (or a copy of the shipped file carries them), remove `filters.date_quick_ranges` and
+`filters.date_default_field` before switching, and check the file with the older version. Saved views never hold a quick
+range yet, so no change is needed in `interests.yaml`. A version that stores quick ranges in views will come later; once you
+run it, a view with a quick range ignores that range when read by this version (`pnpm config:check` warns about the key).
+
 ## Recheck of watched jobs (`pipeline.yaml` + `ui.yaml`)
 
 The maintenance step rechecks the posting pages of starred and followed jobs (see usage.md "Closed jobs"). Its keys

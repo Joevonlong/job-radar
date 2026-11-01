@@ -24,6 +24,8 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import { parse as parseYaml } from "yaml";
+
 import {
   ConfigError,
   CONFIG_NAMES,
@@ -38,6 +40,7 @@ import {
   getProfileDir,
   getProfileExampleDir,
   getUserConfigPath,
+  interestsRawWarnings,
   interestsWarnings,
   LAYERED_CONFIG_NAMES,
   parseConfigText,
@@ -152,7 +155,8 @@ for (const name of LAYERED_CONFIG_NAMES.filter((n) => configRegistry[n].kind ===
 
 // interests.yaml can be valid and still unable to match a category
 try {
-  for (const warning of interestsWarnings(parseConfigText("interests", readConfigText("interests")))) console.log(`! interests.yaml ${warning.path.join(".")}: ${warning.message}`);
+  const text = readConfigText("interests");
+  for (const warning of [...interestsWarnings(parseConfigText("interests", text)), ...interestsRawWarnings(parseYaml(text))]) console.log(`! interests.yaml ${warning.path.join(".")}: ${warning.message}`);
 } catch {
   // reported by the per-file lines above
 }

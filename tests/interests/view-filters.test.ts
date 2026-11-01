@@ -4,7 +4,7 @@ import { createSerializer } from "nuqs/server";
 
 import { viewFiltersSchema, type SavedView } from "@/lib/config/schemas/interests";
 import { jobsSearchParsers, loadJobsSearchParams } from "@/lib/jobs/search-params";
-import { activeFilterKeys, filterValues, hasViewFilters, resolveTodayView, sameFilters, slugifyViewId, todayHref, viewFiltersFromParams, viewFiltersToParams } from "@/lib/interests/view-filters";
+import { activeFilterKeys, dropsDateFromView, filterValues, hasViewFilters, resolveTodayView, sameFilters, slugifyViewId, todayHref, viewFiltersFromParams, viewFiltersToParams } from "@/lib/interests/view-filters";
 
 const serialize = createSerializer(jobsSearchParsers);
 const loadJobsSearchParamsSync = (query: string) => loadJobsSearchParams(query);
@@ -21,7 +21,8 @@ describe("view filters <-> /jobs URL state", () => {
     expect(urlParams).not.toHaveProperty("reason");
     expect(urlParams).not.toHaveProperty("relisted");
     expect(serialize("/jobs", urlParams)).toBe("/jobs?status=closed");
-    expect(viewFiltersSchema.safeParse(view).success).toBe(false);
+    // keys a view does not store are dropped on read, never kept
+    expect(viewFiltersSchema.parse(view)).toEqual({ status: "closed" });
   });
   it("keeps only the filters that are set", async () => {
     const params = await loadJobsSearchParams("?q=%20rust%20&city=Berlin&workplace=remote&salary=true&hideLang=false&sort=posted&page=3");
@@ -185,3 +186,29 @@ it("never saves country or search scope and never adds either to view URLs", () 
   expect(restored).not.toHaveProperty("country");
   expect(restored).not.toHaveProperty("searchIn");
 });
+
+describe("dates in saved views", () => {
+  it("saves custom dates read as first seen (old links, first-seen picks), as before", () => {
+    expect(viewFiltersFromParams(loadJobsSearchParams("?from=2026-10-01&to=2026-10-15"))).toEqual({ from: "2026-10-01", to: "2026-10-15" });
+    expect(viewFiltersFromParams(loadJobsSearchParams("?from=2026-10-01&dateBy=seen"))).toEqual({ from: "2026-10-01" });
+  });
+
+  it("leaves out dates that compare the posted date, and quick ranges, so a stored from / to never changes meaning", () => {
+    expect(viewFiltersFromParams(loadJobsSearchParams("?city=Berlin&from=2026-10-01&to=2026-10-15&dateBy=posted"))).toEqual({ city: "Berlin" });
+    expect(viewFiltersFromParams(loadJobsSearchParams("?city=Berlin&within=7d&dateBy=posted"))).toEqual({ city: "Berlin" });
+    expect(viewFiltersFromParams(loadJobsSearchParams("?within=7d&from=2026-10-01"))).toEqual({});
+    expect(dropsDateFromView(loadJobsSearchParams("?within=month"))).toBe(true);
+    expect(dropsDateFromView(loadJobsSearchParams("?dateBy=posted"))).toBe(false);
+    expect(dropsDateFromView(loadJobsSearchParams("?from=2026-10-01&dateBy=seen"))).toBe(false);
+  });
+
+  it("never writes the quick range or the date they compare back to a /jobs link", () => {
+    expect(viewFiltersToParams({ from: "2026-10-01" })).not.toHaveProperty("within");
+    expect(viewFiltersToParams({ from: "2026-10-01" })).not.toHaveProperty("dateBy");
+  });
+
+  it("keeps the dates of a view out of Today", () => {
+    expect(resolveTodayView([view("a", { filters: { city: "Berlin", from: "2026-10-01" } })], "a", { filtered: null, hideLang: null, high: null }).filters).toEqual({ city: "Berlin" });
+  });
+});
+

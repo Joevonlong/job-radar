@@ -24,7 +24,7 @@ interface SchemaDef {
 }
 
 const WRAPPERS = new Set(["optional", "nullable", "default", "prefault", "readonly", "catch", "nonoptional", "success"]);
-const LEAVES = new Set(["string", "number", "int", "boolean", "bigint", "enum", "literal", "unknown", "any", "null", "undefined", "date", "nan", "never", "void", "symbol", "custom", "template_literal", "file"]);
+const LEAVES = new Set(["string", "number", "int", "boolean", "bigint", "enum", "literal", "unknown", "any", "null", "undefined", "date", "nan", "never", "void", "symbol", "custom", "template_literal", "file", "transform"]);
 
 /** Every record path of a schema: dotted keys, `*` = a record's values, `[]` = a list's items. */
 function recordPaths(schema: SchemaNode): string[] {
@@ -49,7 +49,9 @@ function recordPaths(schema: SchemaNode): string[] {
         for (const item of [...(def.items ?? []), ...(def.rest ? [def.rest] : [])]) walk(item, [...path, "[]"]);
         return;
       case "pipe":
+        // `z.preprocess(fn, schema)` is a pipe whose input is a transform and whose output is the schema
         if (def.in) walk(def.in, path);
+        if (def.out) walk(def.out, path);
         return;
       case "union":
         for (const option of def.options ?? []) walk(option, path);

@@ -1,7 +1,8 @@
 import { createLoader, createMultiParser, createParser, createSerializer, parseAsBoolean, parseAsInteger, parseAsString, parseAsStringLiteral, type inferParserType } from "nuqs/server";
 
 import { FAVORITE_SORTS, JOB_SCOPES, JOB_SORTS, MIN_SALARY_MAX, MIN_SCORE_MAX, GHOST_FILTERS, SORT_DIRS, TRAP_FILTERS, VISA_FILTERS } from "./constants";
-import { FILTER_KEYS, NUMBER_FILTER_KEYS, type FilterKey, type MultiFilterKey } from "./filter-keys";
+import { DATE_FIELDS, formatWithin, parseWithin, type WithinRange } from "./date-range";
+import { DATE_CONDITION_KEYS, FILTER_KEYS, NUMBER_FILTER_KEYS, type FilterKey, type MultiFilterKey } from "./filter-keys";
 import { cleanMultiValues, type MultiValue } from "./filter-values";
 
 /**
@@ -21,6 +22,13 @@ export function isCalendarDate(value: string): boolean {
 const parseAsDay = createParser<string>({
   parse: (value) => (isCalendarDate(value) ? value : null),
   serialize: (value) => value,
+});
+
+/** `7d` / `month`; an invalid value (`0d`, `367d`, `7`, `foo`) reads as "not set", like an invalid day. */
+const parseAsWithin = createParser<WithinRange>({
+  parse: parseWithin,
+  serialize: formatWithin,
+  eq: (a, b) => formatWithin(a) === formatWithin(b),
 });
 
 /** A whole number within `0..max`; anything else reads as "not set". */
@@ -75,6 +83,10 @@ export const jobsSearchParsers = {
   minSalary: boundedInt(MIN_SALARY_MAX),
   from: parseAsDay,
   to: parseAsDay,
+  /** Quick date range (`Nd` = the last N×24 hours, `month` = this month so far). Wins over `from` / `to`; see `effectiveDateRange`. */
+  within: parseAsWithin,
+  /** Which date `within` and `from` / `to` compare: `posted` (the first-seen date where a posting has none) or `seen`. Absent = `seen` (old links). Not a filter key: it only qualifies the date condition. */
+  dateBy: parseAsStringLiteral(DATE_FIELDS),
   salary: parseAsBoolean,
   /** Show the jobs the hard filter removed (they are hidden by default). */
   filtered: parseAsBoolean,
@@ -167,9 +179,14 @@ export function hasActiveFilters(params: Partial<FilterParams>, visibility: Filt
   return FILTER_KEYS.some((key) => key !== "filtered" && !visibility.ignore?.includes(key) && isSet(key, params));
 }
 
-/** How many filters are set (search text, sort, page and the "show filtered" switch excluded): the number on the mobile "Filters (n)" button. A multi filter counts once, however many values it has. */
+/**
+ * How many filters are set (search text, sort, page and the "show filtered" switch excluded): the number on the mobile "Filters (n)" button.
+ * A multi filter counts once, however many values it has, and so does the date condition (`within`, or `from` and `to` together).
+ */
 export function countActiveFilters(params: Partial<FilterParams>, visibility: FilterVisibility = {}): number {
-  return FILTER_KEYS.filter((key) => key !== "q" && key !== "filtered" && !visibility.ignore?.includes(key) && isSet(key, params)).length;
+  const counted = FILTER_KEYS.filter((key) => key !== "q" && key !== "filtered" && !visibility.ignore?.includes(key) && isSet(key, params));
+  const isDateKey = (key: FilterKey) => (DATE_CONDITION_KEYS as readonly string[]).includes(key);
+  return counted.filter((key) => !isDateKey(key)).length + (counted.some(isDateKey) ? 1 : 0);
 }
 
 /** URL state of /favorites: how the list is ordered; an invalid value reads as the default. */

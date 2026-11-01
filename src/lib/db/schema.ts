@@ -343,6 +343,13 @@ export const companies = pgTable(
   (t) => [unique("companies_name_norm_uq").on(t.nameNorm)],
 );
 
+/**
+ * The date a job is filtered by when "posted" is chosen: the posted date, the first-seen date where the posting has none. Only a
+ * comparison value, never stored back (an unknown posted date stays unknown). The `jobs` table index and the /jobs date filter both
+ * build it here, so the query can use the index.
+ */
+export const postedOrFirstSeen = (t: { postedAt: AnyPgColumn; firstSeenAt: AnyPgColumn }) => sql`coalesce(${t.postedAt}, ${t.firstSeenAt})`;
+
 export const jobs = pgTable(
   "jobs",
   {
@@ -404,6 +411,8 @@ export const jobs = pgTable(
     index("jobs_search_tsv_idx").using("gin", t.searchTsv),
     /** The jobs a cycle created (first seen inside its window): the Today page and its cycle counts. */
     index("jobs_first_seen_at_idx").on(t.firstSeenAt),
+    /** The date filter of /jobs compares this expression by default: it must be written exactly as in the query (`postedOrFirstSeen`). */
+    index("jobs_posted_or_first_seen_idx").on(postedOrFirstSeen(t)),
     index("jobs_relisted_at_idx").on(t.relistedAt).where(sql`${t.relistedAt} is not null`),
   ],
 );

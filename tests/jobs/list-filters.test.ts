@@ -67,3 +67,27 @@ it("carries URL-only search scope and countries around view conversion", async (
   const params = loadJobsSearchParams("?q=AI&searchIn=all&country=de&country=FR");
   expect(await jobsListFilters({} as Db, params, { cities: [], visa: false, ghost: false })).toMatchObject({ search: { status: "ok", terms: [{ text: "ai" }] }, searchIn: "all", countries: ["DE", "FR"] });
 });
+
+describe("jobsListFilters: date condition", () => {
+  const known = { cities: [], visa: false, ghost: false };
+  const now = new Date("2026-10-20T12:00:00Z");
+  const filters = (query: string) => jobsListFilters({} as Db, loadJobsSearchParams(new URLSearchParams(query)), { ...known, now });
+
+  it("reads old from / to links as first seen", async () => {
+    expect(await filters("from=2026-10-01&to=2026-10-15")).toMatchObject({ from: "2026-10-01", to: "2026-10-15", within: null, dateField: "seen" });
+  });
+
+  it("carries the date a range compares, and the time it counts back from", async () => {
+    expect(await filters("within=7d&dateBy=posted")).toMatchObject({ within: { kind: "days", days: 7 }, dateField: "posted", now, from: null, to: null });
+    expect(await filters("within=month&dateBy=seen")).toMatchObject({ within: { kind: "month" }, dateField: "seen" });
+  });
+
+  it("lets within win over hand-written dates", async () => {
+    expect(await filters("within=14d&from=2026-10-01&to=2026-10-15&dateBy=posted")).toMatchObject({ within: { kind: "days", days: 14 }, from: null, to: null, dateField: "posted" });
+  });
+
+  it("sets no date field for a bare dateBy", async () => {
+    expect(await filters("dateBy=posted")).toMatchObject({ within: null, from: null, to: null, dateField: null });
+  });
+});
+

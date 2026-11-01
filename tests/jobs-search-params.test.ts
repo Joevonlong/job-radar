@@ -5,6 +5,7 @@ import { createSerializer } from "nuqs/server";
 import { APPLICATION_FILTER_STATUSES, MAX_FILTER_VALUE_CHARS, MAX_FILTER_VALUES } from "@/lib/jobs/constants";
 import { APPLICATION_STATUSES } from "@/lib/db/repos/applications";
 import { viewFiltersFromParams, viewFiltersToParams } from "@/lib/interests/view-filters";
+import { FILTER_KEYS, NON_VIEW_FILTER_KEYS } from "@/lib/jobs/filter-keys";
 import { countActiveFilters, hasActiveFilters, isCalendarDate, jobsListHref, jobsSearchParsers, jobsSearchQuery, loadFavoritesSearchParams, loadJobsSearchParams } from "@/lib/jobs/search-params";
 
 describe("jobs search params", () => {
@@ -301,3 +302,49 @@ describe("search scope and country URLs", () => {
     expect(jobsListHref({ sort: "relevance", dir: "asc" })).toBe("/jobs?sort=relevance");
   });
 });
+
+describe("date quick range params", () => {
+  it("reads within as Nd (1 to 366 days) or month, anything else as not set", () => {
+    expect(loadJobsSearchParams("?within=7d").within).toEqual({ kind: "days", days: 7 });
+    expect(loadJobsSearchParams("?within=366d").within).toEqual({ kind: "days", days: 366 });
+    expect(loadJobsSearchParams("?within=month").within).toEqual({ kind: "month" });
+    for (const bad of ["0d", "367d", "7", "7D", "foo", ""]) expect(loadJobsSearchParams(`?within=${bad}`).within).toBeNull();
+    expect(hasActiveFilters(loadJobsSearchParams("?within=0d&dateBy=foo"))).toBe(false);
+  });
+
+  it("reads dateBy as posted or seen, anything else as not set", () => {
+    expect(loadJobsSearchParams("?dateBy=posted").dateBy).toBe("posted");
+    expect(loadJobsSearchParams("?dateBy=seen").dateBy).toBe("seen");
+    expect(loadJobsSearchParams("?dateBy=foo").dateBy).toBeNull();
+  });
+
+  it("counts the date condition once, and a bare dateBy not at all", () => {
+    expect(countActiveFilters(loadJobsSearchParams("?from=2026-10-01&to=2026-10-15"))).toBe(1);
+    expect(countActiveFilters(loadJobsSearchParams("?within=7d&dateBy=posted"))).toBe(1);
+    expect(countActiveFilters(loadJobsSearchParams("?within=7d&from=2026-10-01&to=2026-10-15&minScore=70"))).toBe(2);
+    expect(countActiveFilters(loadJobsSearchParams("?dateBy=posted"))).toBe(0);
+    expect(hasActiveFilters(loadJobsSearchParams("?dateBy=posted"))).toBe(false);
+    expect(hasActiveFilters(loadJobsSearchParams("?within=month"))).toBe(true);
+  });
+
+  it("puts within among the filters but not the saved-view ones, and dateBy among neither", () => {
+    expect(FILTER_KEYS).toContain("within");
+    expect(NON_VIEW_FILTER_KEYS).toContain("within");
+    expect(FILTER_KEYS).not.toContain("dateBy");
+  });
+
+  it("keeps within and dateBy in the list href, and reads them back", () => {
+    const href = jobsListHref({ within: { kind: "days", days: 7 }, dateBy: "posted", page: 2 });
+    expect(href).toBe("/jobs?within=7d&dateBy=posted&page=2");
+    expect(loadJobsSearchParams(href.slice("/jobs".length))).toMatchObject({ within: { kind: "days", days: 7 }, dateBy: "posted" });
+    expect(jobsSearchQuery({ within: { kind: "month" }, dateBy: "seen", page: 3 })).toBe("within=month&dateBy=seen");
+  });
+
+  it("keeps the old dates out of saved views when they compare the posted date or come with a quick range", () => {
+    expect(viewFiltersFromParams(loadJobsSearchParams("?from=2026-10-01&to=2026-10-15"))).toEqual({ from: "2026-10-01", to: "2026-10-15" });
+    expect(viewFiltersFromParams(loadJobsSearchParams("?from=2026-10-01&dateBy=seen"))).toEqual({ from: "2026-10-01" });
+    expect(viewFiltersFromParams(loadJobsSearchParams("?from=2026-10-01&to=2026-10-15&dateBy=posted"))).toEqual({});
+    expect(viewFiltersFromParams(loadJobsSearchParams("?within=7d&dateBy=seen&from=2026-10-01"))).toEqual({});
+  });
+});
+
