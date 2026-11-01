@@ -188,6 +188,38 @@ describe("precise job search acceptance", () => {
     expect(await matching("AI")).toEqual(["J15", "J9", "J1", "J17"]);
   });
 
+  it("ignores searchIn when there is no search term (cleared or empty), in the list, the count and the unseen ids", async () => {
+    const plain = { timezone, visa: false, ghost: false } as const;
+    const baseline = await listJobs(getDb(), { filters: {}, sort: "relevance", page: 1, pageSize: 100, ...plain });
+    expect(baseline.jobs.length).toBeGreaterThan(0);
+    for (const search of [null, undefined, searchPlan(""), searchPlan("   ")]) {
+      for (const searchIn of [null, "summary", "all"] as const) {
+        const filters: JobFilters = { search, searchIn };
+        const result = await listJobs(getDb(), { filters, sort: "relevance", page: 1, pageSize: 100, ...plain });
+        expect(keys(result.jobs), `${search?.status ?? search}/${searchIn}`).toEqual(keys(baseline.jobs));
+        expect(result.total).toBe(baseline.total);
+        expect(await countJobList(getDb(), { filters, timezone })).toBe(baseline.total);
+        expect((await listUnseenJobIds(getDb(), { filters, timezone })).sort((a, b) => a - b)).toEqual((await listUnseenJobIds(getDb(), { filters: {}, timezone })).sort((a, b) => a - b));
+      }
+    }
+  });
+
+  it("keeps the company filter an exact company match: the search text neither widens nor narrows it", async () => {
+    const [quillfeather] = await getDb().select({ id: schema.companies.id }).from(schema.companies).where(sql`name = 'Quillfeather Labs'`);
+    const [airbus] = await getDb().select({ id: schema.companies.id }).from(schema.companies).where(sql`name = 'Airbus'`);
+    const companyIds = [quillfeather!.id];
+    expect(keys((await listJobs(getDb(), { filters: { companyIds }, sort: "relevance", page: 1, pageSize: 100, timezone, visa: false, ghost: false })).jobs)).toEqual(["J1"]);
+    // a search term that matches another company's name does not add that company's jobs
+    expect(await matching("airbus", { companyIds, searchIn: "all" })).toEqual([]);
+    expect(await matching("AI", { companyIds })).toEqual(["J1"]);
+    expect(await matching("AI", { companyIds: [quillfeather!.id, airbus!.id] })).toEqual(["J1"]);
+    expect(await matching("AI", { companyIds: [quillfeather!.id, airbus!.id], searchIn: "all" })).toEqual(["J1", "J2"]);
+    // a company that resolves to nothing selects nothing; no company filter leaves the search alone
+    expect(await matching("AI", { companyIds: [] })).toEqual([]);
+    expect(await matching("AI", { companyIds: null })).toEqual(await matching("AI"));
+    expect(await countJobList(getDb(), { filters: { companyIds, search: searchPlan("AI") }, timezone })).toBe(1);
+  });
+
   it("mixes hard-filtered title hits by relevance, while rank still places them after every unfiltered hit", async () => {
     const filters = { searchIn: "all", includeFiltered: true } as const;
     expect(await matching("AI", filters)).toEqual(["J1", "J9", "J15", "J20", "J17", "J2", "J12"]);
