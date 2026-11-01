@@ -294,8 +294,10 @@ jobs:
       # Main, manual and toolchain runs use the default order too; other pull requests use the shuffled order only.
       - name: Integration tests (default order)
         if: needs.changes.outputs.full == 'true'
-        # A stalled run once sat here silently for over an hour; fail early and name the file that hangs.
-        timeout-minutes: 15
+        # A stalled run once sat here silently for over an hour; fail early and name the file that hangs. A hung test
+        # fails by itself after 20 s (testTimeout), so this limit only has to cover what vitest cannot interrupt, and
+        # the same suite takes 8 to 15 minutes depending on the runner (see docs/ci.md): 30 is twice the slowest run.
+        timeout-minutes: 30
         run: pnpm test:integration --reporter=verbose --exclude "tests/integration/ai-worker-swap.test.ts" --exclude "tests/integration/uninstall-ai-worker.test.ts"
       # engines.node allows Node 22.23.4 and later 22.x: the host ai-worker's release guard needs the synchronous module
       # hooks, which tsx only takes from 22.22.3 on; 22.23.4 is the floor with the security fixes of the 2026-10-21 Node
@@ -380,7 +382,8 @@ jobs:
           "$PG_RESTORE_PATH" --version
       # Re-run a failure locally with the printed seed.
       - name: Integration tests (shuffled file order)
-        timeout-minutes: 15
+        # Same suite, same limit as the default order step above.
+        timeout-minutes: 30
         run: |
           seed=$((RANDOM * 32768 + RANDOM))
           echo "::notice::integration file order seed: $seed"

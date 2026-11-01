@@ -351,7 +351,7 @@ hung this step for an hour. It prints both versions as a smoke test. Locally, on
 
 `pnpm test:integration --reporter=verbose`, only when `full` is true (pushes to `main`, manual runs, dependency/toolchain pull requests). The verbose
 reporter prints each file as it starts, so a hung file is named. The two worker switch files are left out (`--exclude`):
-they have their own job below. Limit 15 minutes. Run locally with a database as
+they have their own job below. Limit 30 minutes (reason under `integration-shuffled`, "Why 30 minutes"). Run locally with a database as
 described in [Running the whole pipeline locally](#running-the-whole-pipeline-locally).
 
 #### Set up the lowest Node.js of engines.node
@@ -403,7 +403,19 @@ Runs the same suite with `--sequence.shuffle.files --sequence.seed=<seed>`; the 
 annotation (`integration file order seed: N`). Other pull requests run only this order: it finds files that depend on
 another file's leftovers, which a fixed order hides. To reproduce a failure, run
 `pnpm test:integration --sequence.shuffle.files --sequence.seed=<seed>` with the seed from the annotation. The two worker
-switch files are left out here too. Limit 15 minutes.
+switch files are left out here too. Limit 30 minutes, like the default order.
+
+**Why 30 minutes.** The suite (about 140 files, 1,700 tests, one shared database, run file after file) took 465 to 906 seconds on
+GitHub's runners across the pull-request and `main` runs of one day: roughly 8 to 15 minutes, and the spread comes
+from the runner, not the tests (two runs with the same 139 files took 517 s and 807 s, and the summed test time was
+1.5 times higher in the slower one). There is no single slow file to fix; the time is spread over many short tests,
+each starting from an emptied database. A 15-minute limit sat on the edge of that range, so a healthy run was
+sometimes cancelled with every test green. 30 minutes is twice the slowest healthy run so far. A hung test does not
+need this limit: each test and hook already fails on its own after 20 s / 30 s (`testTimeout`, `hookTimeout` in
+`vitest.integration.config.ts`), and the verbose reporter names the file. The step limit only covers what vitest cannot
+interrupt (a child process that never exits, a stuck global setup or teardown), where 30 minutes still fails far
+sooner than the hour-long stall it exists for. If healthy runs approach 20 minutes, split the suite into shards rather
+than raising the limit again.
 
 ### Job `worker-switch`
 
