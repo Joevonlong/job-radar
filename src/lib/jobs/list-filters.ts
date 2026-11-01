@@ -9,6 +9,7 @@ import { ghostFilterAvailable } from "@/lib/ghost/filter";
 import type { CompanyMatchIndex } from "@/lib/pipeline/company";
 import { visaFilterAvailable } from "@/lib/visa/filter";
 
+import { effectiveDateRange } from "./date-range";
 import { loadCityGroups } from "./cities";
 import type { CityGroup } from "./city-groups";
 import { resolveViewCompanyIds, toJobFilters } from "./job-filters";
@@ -24,8 +25,7 @@ export async function jobsListFilters(db: Db, params: JobsSearchParams, known: {
   const [companyIds] = await resolveViewCompanyIds(db, [view], { index: known.companyIndex });
   return {
     ...toJobFilters(view, { cityGroups: known.cities ?? (await loadCityGroups(db)), visa: known.visa ?? (await visaFilterAvailable(db)), ghost: known.ghost ?? (await ghostFilterAvailable(db)), companyIds }),
-    from: params.from,
-    to: params.to,
+    ...dateFilters(params, known.now),
     // URL-only scope and reasons never pass through saved-view conversion. Mark-all-seen shares this mapping.
     scope: params.scope,
     relistedSince: params.relisted === true && (known.listing ?? await listingReady(db))
@@ -43,6 +43,12 @@ export async function jobsListFilters(db: Db, params: JobsSearchParams, known: {
     // the salary filter and the salary sort compare in the market's base currency (left out, they would assume EUR)
     baseCurrency: loadBaseCurrency(),
   };
+}
+
+/** The date condition of the URL (`within` wins over `from` / `to`; no `dateBy` = first seen) with the time a quick range counts back from. */
+function dateFilters(params: Pick<JobsSearchParams, "within" | "dateBy" | "from" | "to">, now: Date | undefined): Pick<JobFilters, "within" | "from" | "to" | "dateField" | "now"> {
+  const { within, from, to, dateField } = effectiveDateRange(params);
+  return { within, from, to, dateField, now: now ?? null };
 }
 
 /** The page can compose this with the visa/ghost ignore list during the migration window. */

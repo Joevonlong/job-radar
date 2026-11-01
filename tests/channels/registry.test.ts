@@ -20,7 +20,7 @@ describe("CHANNEL_CONFIG_TABLE", () => {
   });
 
   it("uses the documented ids for LinkedIn and the config key for sources", () => {
-    expect(CHANNEL_CONFIG_TABLE["linkedin-brightdata"]).toEqual({ section: "linkedin", key: "brightdata" });
+    expect(CHANNEL_CONFIG_TABLE["linkedin-brightdata"]).toEqual({ section: "linkedin", key: "brightdata", supportsCompanyQueries: true });
     expect(CHANNEL_CONFIG_TABLE["linkedin-monid"]).toEqual({ section: "linkedin", key: "monid" });
     expect(CHANNEL_CONFIG_TABLE["linkedin-guest"]).toEqual({ section: "linkedin", key: "guest", supportsCompanyQueries: true });
     expect(CHANNEL_CONFIG_TABLE["linkedin-session:recommended"]).toEqual({ section: "linkedin", key: "session", view: "recommended", usesQueries: false, statesPostedAt: true });

@@ -459,7 +459,7 @@ are synthetic: employers, ids, links, contacts and ad texts are invented.
 
 ## Watched company queries
 
-Companies in `interests.yaml: watched_companies` without an enabled ATS board are searched nationwide by name, without a remote-only filter. Arbeitsagentur, LinkedIn session and the jobspy LinkedIn guest, Indeed and Google channels support this. Other channels do not receive company queries. An enabled board suppresses its company's query; a database-only watch mark does not create one.
+Companies in `interests.yaml: watched_companies` without an enabled ATS board are searched nationwide by name, without a remote-only filter. Arbeitsagentur, LinkedIn session, Bright Data, Apify, JSearch, StepStone, XING and the jobspy LinkedIn guest, Indeed and Google channels support this. Other channels do not receive company queries. An enabled board suppresses its company's query; a database-only watch mark does not create one.
 
 Company names are sent to these providers by default, including for existing watch lists after upgrading. Stop all such searches with `search.yaml: watched_company_queries.enabled: false`, or disable `company_queries` in a channel's `sources.yaml` block. See [Privacy](privacy.md). Ordinary keyword searches keep their existing request construction and IDs.
 
@@ -468,3 +468,20 @@ Each unit selects at most `max_per_cycle` due companies per cycle, at least `min
 Capacity is at most `max_per_cycle × cycles per day` company queries per unit per day before budgets. When the watch list exceeds seven times that capacity, some waits can exceed the usual 168-hour catch-up limit and postings can be missed. Dry-run plans and rotation logs show the queries and oldest wait; `pnpm sources:list` lists company labels, and query details appear in the [activity log](#activity-log) as **Company: name** (or the normalized key after removal).
 
 Before storing results, successfully parsed employers must match the query or another watched company. Parse failures keep their raw payload for diagnosis. `runs.fetched` counts the provider's answer before filtering; new counts include only retained postings. Logs report `company_mismatch` and up to three employer names. Legal entities, subsidiaries and brands are not automatically merged: watch each spelling or add `pipeline.yaml: company.aliases` ([extraction](extraction.md#company-and-title-keys)). Common short names can consume result slots with unrelated hits; prefer an ATS board when available. Arbeitsagentur uses its free-text `was` fallback plus this employer check.
+
+How each channel asks: LinkedIn through Bright Data, Apify and the session searches the company name in your home country with no remote filter; JSearch sends one request, `<company> in <home country>`, without `work_from_home`; StepStone and XING search the name nationwide, without a city, radius, home-office or remote filter, and without the title prefilter, because a job title does not contain the company name.
+
+**Pages of other employers are not opened.** When a channel's result list names the employer (Arbeitsagentur, LinkedIn session, JSearch, StepStone, XING), a company query opens the detail page of an entry only if its employer is the searched company or another watched company. The rest stay list data and are dropped by the check above, so they use up no page, detail request, daily page limit or `max_details_per_query`. An entry that names no employer is opened, as before. The check does not cover the jobspy channels, whose sidecar fetches descriptions itself.
+
+**Cost.** A watched company without a board costs at most one query per `min_interval_hours` per unit, and a query returns at most the smaller of `watched_company_queries.max_results` and the channel's `max_results`. A month therefore costs at most companies × (720 ÷ `min_interval_hours`) × results, priced per channel:
+
+- Bright Data: `cost_per_1k_usd` per 1000 records, after the free allowance.
+- Apify: `price_per_1k_usd` per 1000 records plus `run_start_usd` per query.
+- JSearch: `pages_per_query` requests per query against `monthly_request_limit`, then `overage_cost_per_request_usd` each.
+- StepStone and XING: free, but each query is one search request series and the matching employer's pages are opened like any other.
+
+`monthly_budget_usd` of the channel and `paid_total_monthly_budget_usd` still cap the total: when a budget runs out, the query goes to the next channel of the cascade or is skipped, as for keyword queries. With the defaults (3 companies per cycle, 24 hours apart, 25 results) ten watched companies use at most 7,500 results a month on one paid channel.
+
+**Company queries share the budget with keyword queries and can starve them.** They draw from the same monthly allowance, request limit and `monthly_budget_usd` as the channel's keyword queries, and the cascade serves queries by oldest turn, so a long watch list can use up a small allowance before the keyword queries get their turn. On the JSearch free plan (200 requests a month, one request per query), seven companies at the default 24-hour interval already need about 210 requests a month. Keep the watch list short on a small plan, raise `min_interval_hours`, lower `max_per_cycle`, or set `company_queries: false` on the channels you want to keep for keywords.
+
+**Brand name or legal name.** StepStone and XING judge the employer by the name their result list shows. When that brand name differs from the legal name on the detail page, the posting can be dropped before its page is opened, because the list's name does not match the watched company. Add the other spelling to `watched_companies` if a posting you expect is missing.

@@ -48,11 +48,12 @@ describe("interests views", () => {
     expect(paths(withViews([view("a", { filters: { company: tooMany } })]))).toEqual(["views.0.filters.company"]);
   });
 
-  it("rejects filters /jobs does not have, bad values and bad dates", () => {
-    expect(paths(withViews([view("a", { filters: { signal_tier: ["T1"] } })]))).toEqual(["views.0.filters.signal_tier"]);
+  it("ignores filters it does not have (a newer version may have written them), and rejects bad values and bad dates", () => {
+    const ignored = withViews([view("a", { filters: { signal_tier: ["T1"], sort: "rank", city: "Berlin" } })]);
+    expect(ignored.success).toBe(true);
+    expect(ignored.success && ignored.data.views[0]?.filters).toEqual({ city: "Berlin" });
     expect(paths(withViews([view("a", { filters: { workplace: "moon" } })]))).toEqual(["views.0.filters.workplace"]);
     expect(paths(withViews([view("a", { filters: { from: "01.02.2026" } })]))).toEqual(["views.0.filters.from"]);
-    expect(paths(withViews([view("a", { filters: { sort: "rank" } })]))).toEqual(["views.0.filters.sort"]);
   });
 
   it("allows at most one default view and no duplicate ids or names", () => {

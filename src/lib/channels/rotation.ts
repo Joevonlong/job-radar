@@ -13,7 +13,9 @@ export function selectCompanyQueries(input: {
   cfg: SearchConfig["watched_company_queries"];
   rotation: boolean;
 }): { selected: SearchQuery[]; turns: Map<string, Date | null>; due: number } {
-  const turns = new Map([...familyHistory(input.history, input.eligible)].map(([id, value]) => [id, value.lastTurnAt]));
+  // only the company queries' turns: merged over several channels, they must not override the keyword queries' own history
+  const candidateIds = new Set(input.candidates.map((q) => q.id));
+  const turns = new Map([...familyHistory(input.history, input.eligible)].filter(([id]) => candidateIds.has(id)).map(([id, value]) => [id, value.lastTurnAt]));
   const due = input.candidates.filter((q) => {
     const at = turns.get(q.id);
     return at == null || input.now.getTime() - at.getTime() >= input.cfg.min_interval_hours * 3_600_000;

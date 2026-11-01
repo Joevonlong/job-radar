@@ -1,5 +1,5 @@
 {
-  "id": "8a5fc9ca-1364-468d-982b-efc14454657d",
+  "id": "60e76361-2f4f-4b10-8fce-926786ae7261",
   "prevId": "5171869d-e0d5-46fc-bc0e-51cd1d190a78",
   "version": "7",
   "dialect": "postgresql",
@@ -576,215 +576,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.application_answer_versions": {
-      "name": "application_answer_versions",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "bigint",
-          "primaryKey": true,
-          "notNull": true,
-          "identity": {
-            "type": "always",
-            "name": "application_answer_versions_id_seq",
-            "schema": "public",
-            "increment": "1",
-            "startWith": "1",
-            "minValue": "1",
-            "maxValue": "9223372036854775807",
-            "cache": "1",
-            "cycle": false
-          }
-        },
-        "question_id": {
-          "name": "question_id",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "mode": {
-          "name": "mode",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "variant_id": {
-          "name": "variant_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "text": {
-          "name": "text",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "sentences": {
-          "name": "sentences",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "supported_count": {
-          "name": "supported_count",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "partial_count": {
-          "name": "partial_count",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "unsupported_count": {
-          "name": "unsupported_count",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "framing_count": {
-          "name": "framing_count",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "user_written_count": {
-          "name": "user_written_count",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "web_unverified_count": {
-          "name": "web_unverified_count",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "coach": {
-          "name": "coach",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "parent_version_id": {
-          "name": "parent_version_id",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "provider": {
-          "name": "provider",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "model": {
-          "name": "model",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "prompt_version": {
-          "name": "prompt_version",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "materials_hash": {
-          "name": "materials_hash",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "control_request_id": {
-          "name": "control_request_id",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "application_answer_versions_question_idx": {
-          "name": "application_answer_versions_question_idx",
-          "columns": [
-            {
-              "expression": "question_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "created_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "application_answer_versions_request_variant_idx": {
-          "name": "application_answer_versions_request_variant_idx",
-          "columns": [
-            {
-              "expression": "control_request_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "variant_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"application_answer_versions\".\"control_request_id\" is not null",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "application_answer_versions_question_id_application_questions_id_fk": {
-          "name": "application_answer_versions_question_id_application_questions_id_fk",
-          "tableFrom": "application_answer_versions",
-          "tableTo": "application_questions",
-          "columnsFrom": [
-            "question_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.application_events": {
       "name": "application_events",
       "schema": "",
@@ -870,147 +661,6 @@
           "tableTo": "applications",
           "columnsFrom": [
             "application_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.application_questions": {
-      "name": "application_questions",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "bigint",
-          "primaryKey": true,
-          "notNull": true,
-          "identity": {
-            "type": "always",
-            "name": "application_questions_id_seq",
-            "schema": "public",
-            "increment": "1",
-            "startWith": "1",
-            "minValue": "1",
-            "maxValue": "9223372036854775807",
-            "cache": "1",
-            "cycle": false
-          }
-        },
-        "job_id": {
-          "name": "job_id",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "position": {
-          "name": "position",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "text": {
-          "name": "text",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "kind": {
-          "name": "kind",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "length_unit": {
-          "name": "length_unit",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "length_value": {
-          "name": "length_value",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "output_language": {
-          "name": "output_language",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "tone": {
-          "name": "tone",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "selected_materials": {
-          "name": "selected_materials",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'{}'::jsonb"
-        },
-        "final_version_id": {
-          "name": "final_version_id",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "application_questions_job_idx": {
-          "name": "application_questions_job_idx",
-          "columns": [
-            {
-              "expression": "job_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "position",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "application_questions_job_id_jobs_id_fk": {
-          "name": "application_questions_job_id_jobs_id_fk",
-          "tableFrom": "application_questions",
-          "tableTo": "jobs",
-          "columnsFrom": [
-            "job_id"
           ],
           "columnsTo": [
             "id"
@@ -3317,6 +2967,21 @@
           "method": "btree",
           "with": {}
         },
+        "jobs_posted_or_first_seen_idx": {
+          "name": "jobs_posted_or_first_seen_idx",
+          "columns": [
+            {
+              "expression": "coalesce(\"posted_at\", \"first_seen_at\")",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
         "jobs_relisted_at_idx": {
           "name": "jobs_relisted_at_idx",
           "columns": [
@@ -5564,8 +5229,7 @@
         "test_channel",
         "test_ai",
         "test_telegram",
-        "salary_lookup",
-        "writer_job"
+        "salary_lookup"
       ]
     },
     "public.control_request_status": {

@@ -33,16 +33,21 @@ export interface SearchParams {
   keyword: string;
   /** City, or null for the nationwide fully-remote search. */
   location: string | null;
+  /** `company`: the keyword is an employer name searched nationwide, with no city, radius or remote filter. */
+  kind?: "city" | "remote" | "company";
   /** 1-based. */
   page: number;
 }
 
 export function searchUrl(settings: ClientSettings, params: SearchParams): string {
   const query = new URLSearchParams({ keywords: params.keyword });
-  if (params.location === null) query.set("remoteOption", settings.remote_option_id);
-  else {
-    query.set("location", params.location);
-    query.set("radius", String(settings.radius_km));
+  // a company search is nationwide: neither a city nor the remote filter
+  if (params.kind !== "company") {
+    if (params.location === null) query.set("remoteOption", settings.remote_option_id);
+    else {
+      query.set("location", params.location);
+      query.set("radius", String(settings.radius_km));
+    }
   }
   if (params.page > 1) query.set("page", String(params.page));
   return `${settings.base_url.replace(/\/+$/, "")}${SEARCH_PATH}?${query.toString()}`;

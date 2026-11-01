@@ -8,6 +8,7 @@ import { arbeitsagenturChannel, interleave } from "@/lib/channels/arbeitsagentur
 import { detailUrl, publishedDays, searchUrl } from "@/lib/channels/arbeitsagentur/client";
 import { redactContacts } from "@/lib/channels/arbeitsagentur/redact";
 import { parseArbeitsagenturPayload } from "@/lib/channels/arbeitsagentur/parse";
+import { employerMatcher } from "@/lib/channels/company-match";
 import { createChannelContext } from "@/lib/channels/context";
 import { ChannelError, PartialCollectError } from "@/lib/channels/errors";
 import { MIN_DETAILS_FOR_LAYOUT_CHECK } from "@/lib/channels/details";
@@ -17,6 +18,7 @@ import { ChannelRegistry, settingsFromConfig } from "@/lib/channels/registry";
 import { registerBuiltinChannels } from "@/lib/channels/builtin";
 import { normalizedPostingDraftSchema, type ChannelContext, type HttpResponse, type KnownPostings, type SearchQuery } from "@/lib/channels/types";
 import { arbeitsagenturSettingsSchema, type ArbeitsagenturSettings } from "@/lib/config";
+import { loadPipeline } from "@/lib/market";
 
 import { channelsWith, failingHttp, interruption, INTERRUPTIONS, shippedChannels } from "./helpers";
 
@@ -890,4 +892,40 @@ it("company searches are nationwide and keep onsite results even with home-offic
   expect(calls[0]!.url.searchParams.get("was")).toBe("Acme");
   for (const key of ["wo", "umkreis", "homeoffice"]) expect(calls[0]!.url.searchParams.has(key)).toBe(false);
   expect(arbeitsagenturChannel.supportsCompanyQueries).toBe(true);
+});
+
+describe("company queries: employer check before the detail requests", () => {
+  /** The refnr each detail request asked for. */
+  const detailPaths = (calls: Call[]): string[] =>
+    calls.filter((c) => c.url.pathname.includes("/pc/v4/jobdetails/")).map((c) => Buffer.from(c.url.pathname.split("/").pop() ?? "", "base64").toString("utf8"));
+  const companyQuery = () => query({ company: { name: "Praxissoft Nord", key: "praxissoft-nord" }, keywords: ["Praxissoft Nord"], location: null, remote: false });
+
+  it("requests details only for the employer the watch list names; other postings stay list data", async () => {
+    const made = makeContext(api(), { fetch_details: true });
+    const ctx: ChannelContext = { ...made.ctx, employerMatches: employerMatcher(new Set(["praxissoft-nord"]), loadPipeline()) };
+    const result = await arbeitsagenturChannel.collect(companyQuery(), ctx);
+    expect(detailPaths(made.calls)).toEqual([REF_MULTI]);
+    expect(result).toHaveLength((SEARCH_PAGE.ergebnisliste as unknown[]).length);
+    expect((result.find((p) => p.externalId === REF_SALARY)?.payload as { detail: unknown }).detail).toBeNull();
+  });
+
+  it("other employers do not use up max_details_per_query", async () => {
+    const made = makeContext(api(), { fetch_details: true, max_details_per_query: 1 });
+    const ctx: ChannelContext = { ...made.ctx, employerMatches: (name) => name?.trim() === "Sehwerk GmbH" };
+    const result = await arbeitsagenturChannel.collect(companyQuery(), ctx);
+    expect(detailPaths(made.calls)).toEqual([REF_SALARY]);
+    expect((result.find((p) => p.externalId === REF_SALARY)?.payload as { detail: unknown }).detail).not.toBeNull();
+  });
+
+  it("logs how many pages the check saved, and nothing when it saved none", async () => {
+    const records: LogRecord[] = [];
+    const made = makeContext(api(), { fetch_details: true }, { records });
+    await arbeitsagenturChannel.collect(companyQuery(), { ...made.ctx, employerMatches: () => false });
+    expect(detailPaths(made.calls)).toEqual([]);
+    expect(records.find((r) => r.message === "arbeitsagentur query done")?.fields).toMatchObject({ otherEmployerDetailsSkipped: 5 });
+    const plain: LogRecord[] = [];
+    const again = makeContext(api(), { fetch_details: true }, { records: plain });
+    await arbeitsagenturChannel.collect(query(), again.ctx);
+    expect(plain.find((r) => r.message === "arbeitsagentur query done")?.fields).not.toHaveProperty("otherEmployerDetailsSkipped");
+  });
 });

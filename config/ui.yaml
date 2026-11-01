@@ -51,6 +51,11 @@ filters:
   # into its search box. Other companies are reached by clicking a company name in the list or on a job page.
   company_options_max: 500
   company_options_visible: 50
+  # Date filter on /jobs: the quick ranges it offers, in this order (Nd = the last N x 24 hours, N 1-366; month = this calendar month so far,
+  # in the schedule.yaml time zone; 1-8 entries), and the date it compares until a link says otherwise: posted (the first-seen date where
+  # a posting has no posted date) | seen (first seen).
+  date_quick_ranges: [1d, 7d, 14d, month]
+  date_default_field: posted
 
 # Company overview (/companies): rows per page (1-500). Missing block or key uses this default.
 companies:

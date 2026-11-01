@@ -3,9 +3,10 @@ import { z } from "zod";
 
 import type { Db } from "../client";
 import type { Executor } from "../executor";
-import { applications, channels, companies, jobFavorites, jobSources, jobs, jobVisa, trapScans } from "../schema";
+import { applications, channels, companies, jobFavorites, jobSources, jobs, jobVisa, postedOrFirstSeen, trapScans } from "../schema";
 import type { MonthSalaryFigure } from "@/lib/domain/salary";
 import { DEFAULT_SORT_DIR, MAX_FILTER_VALUE_CHARS, type ApplicationFilterStatus, type ArchiveReason, type GhostFilter, type JobScope, type JobSort, type SortDir, type TrapFilter, type VisaFilter } from "@/lib/jobs/constants";
+import type { DateField, WithinRange } from "@/lib/jobs/date-range";
 import type { SearchPlan } from "@/lib/jobs/search-query";
 import { resolveJobScope } from "@/lib/jobs/scope";
 import { ghostTrustedKeys } from "@/lib/ghost/settings";
@@ -58,9 +59,15 @@ export interface JobFilters {
   minAnnualSalary?: number | null;
   /** The market's base currency the salary filters compare in; null = none (nothing compares), missing = EUR. */
   baseCurrency?: string | null;
-  /** First-seen date range, inclusive, `YYYY-MM-DD` in `timezone`. */
+  /** Date range, inclusive, `YYYY-MM-DD` in `timezone`; which date it compares is `dateField` (absent = first seen). */
   from?: string | null;
   to?: string | null;
+  /** The date `from` / `to` / `within` compare: `posted` = posted date, the first-seen date where a posting has none; absent / `seen` = first seen. */
+  dateField?: DateField | null;
+  /** Quick range: the last N×24 hours, or this calendar month in `timezone`, counted back from `now`. */
+  within?: WithinRange | null;
+  /** The time a quick range counts back from; absent = the current time (tests pin it). */
+  now?: Date | null;
   /** Only jobs whose posting states a salary. */
   salaryDisclosed?: boolean | null;
   /** Include jobs the hard filter removed. Off by default: they are hidden. */
@@ -183,11 +190,20 @@ export function buildJobConditions(db: Executor, filters: JobFilters, timezone: 
   if (filters.minRank !== null && filters.minRank !== undefined) conditions.push(sql`${latest.rankValue} >= ${filters.minRank}`);
   if (filters.minAnnualSalary !== null && filters.minAnnualSalary !== undefined) conditions.push(annualSalaryAtLeast(filters.minAnnualSalary, policyCurrency(filters)));
 
+  const dateColumn = filters.dateField === "posted" ? postedOrFirstSeen(jobs) : sql`${jobs.firstSeenAt}`;
+  if (filters.within) {
+    const now = sql`${(filters.now ?? new Date()).toISOString()}::timestamptz`;
+    conditions.push(
+      filters.within.kind === "days"
+        ? sql`${dateColumn} >= ${now} - make_interval(hours => ${filters.within.days * 24})`
+        : sql`${dateColumn} >= date_trunc('month', ${now} at time zone ${timezone}) at time zone ${timezone}`,
+    );
+  }
   if (filters.from) {
-    conditions.push(sql`${jobs.firstSeenAt} >= (${filters.from}::date)::timestamp at time zone ${timezone}`);
+    conditions.push(sql`${dateColumn} >= (${filters.from}::date)::timestamp at time zone ${timezone}`);
   }
   if (filters.to) {
-    conditions.push(sql`${jobs.firstSeenAt} < ((${filters.to}::date + 1)::timestamp at time zone ${timezone})`);
+    conditions.push(sql`${dateColumn} < ((${filters.to}::date + 1)::timestamp at time zone ${timezone})`);
   }
   if (filters.highValue) conditions.push(hasHighValueSignal(db, filters.highValue));
   if (filters.salaryDisclosed) conditions.push(sql`${jobs.salaryJson} is not null and ${jobs.salaryJson} <> 'null'::jsonb`);

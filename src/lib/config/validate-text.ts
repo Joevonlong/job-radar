@@ -10,7 +10,7 @@ import { isMap, isNode, isScalar, LineCounter, type Document } from "yaml";
 import type { ZodError } from "zod";
 
 import { configDocumentValue, parseConfigText, readConfigText } from "./load";
-import { interestsWarnings, SLOW_PATTERN_MESSAGE, slowInterestPatterns } from "./interests-lint";
+import { interestsRawWarnings, interestsWarnings, SLOW_PATTERN_MESSAGE, slowInterestPatterns } from "./interests-lint";
 import { checkAiAgainstCatalog } from "./model-catalog";
 import { documentConfigVersion, currentConfigVersion, CONFIG_VERSION_KEY, withoutConfigVersion } from "./migrations/version";
 import { PROTECTED_KEY_MESSAGE, protectedChanges } from "./protected-check";
@@ -192,7 +192,7 @@ export function validateConfigText<N extends ConfigName>(name: N, text: string, 
     }
   }
   if (name === "interests") {
-    for (const warning of interestsWarnings(value as ConfigValue<"interests">)) crossIssues.push({ path: joinPath(warning.path), message: warning.message, severity: "warning", file: null, where: warning.path });
+    for (const warning of [...interestsWarnings(value as ConfigValue<"interests">), ...interestsRawWarnings(withoutConfigVersion(configDocumentValue(name, doc)))]) crossIssues.push({ path: joinPath(warning.path), message: warning.message, severity: "warning", file: null, where: warning.path });
   }
   for (const cross of crossIssues) {
     const located: TextIssue =

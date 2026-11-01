@@ -23,7 +23,7 @@ and the project uses [Semantic Versioning](https://semver.org/).
   `country` and `searchIn` are URL-only, never written to saved views. No migration or stored-data rewrite is needed.
   The web server and the read-only MCP server open their database sessions with `jit = off` (Postgres JIT compilation
   cost more than these queries); runner and AI worker keep the server default.
-- **Watched company names now leave your machine by default.** Existing watch lists without an enabled ATS board start nationwide searches on supported, enabled free channels. Set `search.yaml: watched_company_queries.enabled: false` to stop all company queries, or a channel block's `company_queries: false` in `sources.yaml` to opt it out. Company queries share existing budgets and session limits. Before rolling back, remove these keys from user configuration and run the older version's `pnpm config:check`; keep database history. See [Privacy](docs/privacy.md) and [rollback](docs/configuration.md#watched-company-searches).
+- **Watched company names now leave your machine by default.** Existing watch lists without an enabled ATS board start nationwide searches on supported, enabled channels, including the paid LinkedIn providers Bright Data and Apify and JSearch, as well as StepStone and XING when enabled. The paid channels spend their own monthly allowance, request limit and `monthly_budget_usd` (and `paid_total_monthly_budget_usd`) on these queries, so a long watch list can use a small allowance before keyword queries get their turn. Set `search.yaml: watched_company_queries.enabled: false` to stop all company queries, or `company_queries: false` in a channel's block of `sources.yaml` (also a switch in the source registry) to opt that channel out. Company queries share existing budgets and session limits. Before rolling back, remove these keys from user configuration and run the older version's `pnpm config:check`; keep database history. See [Privacy](docs/privacy.md) and [rollback](docs/configuration.md#watched-company-searches).
 
 - **Rolling back past catch-up windows:** setting `collect.max_catch_up_hours: 0` stops new stretched runs, but history
   does not expire on its own. For a safe rollback, use a build that retains `and not r.window_extended` in
@@ -205,6 +205,10 @@ A failure in (a) does not block rollback: follow (c) and accept the display wind
 - **Activity log** (`/sources/logs`): inspect collection cycles and steps, source queries, AI results, request attempts and system tasks. Entries are retained for 30 days after their last activity by default, subject to an event cap; preview and delete an entry, a date range or all entries. Tune it in `config/activity-log.yaml`. **Rollback:** set `enabled: false` to stop new records without a restart; older versions ignore the two tables and the config file. The tables can stay; no down migration is needed.
 - **Monid LinkedIn fallback:** an optional prepaid channel after Apify in the default LinkedIn cascade, with
   per-run budget limits, polling, stop handling and billing recorded before parsing. See [docs/monid.md](docs/monid.md).
+- **Watched companies are also searched on LinkedIn through Bright Data and Apify, on JSearch, StepStone and XING.** A
+  company query searches the name nationwide, with no city, radius or remote filter. Where a result list names the
+  employer (Arbeitsagentur, LinkedIn session, JSearch, StepStone, XING), the detail page or billed detail request of
+  another employer's posting is skipped, so it uses no page limit or budget. See [Sources](docs/sources.md#watched-company-queries).
 - **Watched companies keep their on-site and hybrid jobs in any city of your home country.** Only the location check is
   relaxed (a place without a country, such as "San Francisco", still does not count); remote jobs, other filters,
   scoring and push rules are unchanged. The job is noted "Watched company: Hamburg is not one of your cities but is in

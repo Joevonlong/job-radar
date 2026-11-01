@@ -2,10 +2,10 @@
  * Checks of interests.yaml that the schema cannot make errors of: a valid file that cannot do what its author
  * wants. They are warnings: `pnpm config:check` prints them and the file editor shows them, a save still goes through.
  */
-import type { InterestsConfig } from "./schemas/interests";
+import { unknownViewFilterKeys, type InterestsConfig } from "./schemas/interests";
 
 export interface InterestsWarning {
-  code: "interests.semantic_only_unreachable";
+  code: "interests.semantic_only_unreachable" | "interests.unknown_view_filter";
   path: Array<string | number>;
   message: string;
 }
@@ -26,6 +26,22 @@ export function interestsWarnings(config: Pick<InterestsConfig, "signals" | "lim
     });
   });
   return warnings;
+}
+
+/**
+ * A saved view whose filters carry a key this version does not know (a newer version wrote it): the loader ignores the key, so the view
+ * filters less than it did there. `raw` is the parsed YAML before validation, which is the only place the ignored keys still exist.
+ */
+export function interestsRawWarnings(raw: unknown): InterestsWarning[] {
+  const views = typeof raw === "object" && raw !== null ? (raw as { views?: unknown }).views : undefined;
+  if (!Array.isArray(views)) return [];
+  return views.flatMap((view: unknown, index) =>
+    unknownViewFilterKeys(typeof view === "object" && view !== null ? (view as { filters?: unknown }).filters : undefined).map((key) => ({
+      code: "interests.unknown_view_filter" as const,
+      path: ["views", index, "filters", key],
+      message: `view filter "${key}" is not known to this version of Job Radar and is ignored (it was written by a newer version; the rest of the view still applies)`,
+    })),
+  );
 }
 
 /** The message of an interests.yaml pattern that is too slow on the probe's test texts (the file editor shows its own text for it). */

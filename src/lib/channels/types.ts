@@ -269,6 +269,11 @@ export interface ChannelContext {
   known: KnownPostings;
   /** Provider receipts for the attempt's audit ledger. */
   deliveries: DeliveryRecorder;
+  /**
+   * Company queries only: whether the employer a list entry names can be a watched company. True when the entry names none.
+   * Channels call it before they pay for or load a detail page, so pages of other employers use up no quota.
+   */
+  employerMatches?: (employerName: string | null | undefined) => boolean;
 }
 
 // ---------------------------------------------------------------- the channel

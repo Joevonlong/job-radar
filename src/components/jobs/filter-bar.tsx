@@ -8,12 +8,14 @@ import { useEffect, useId, useLayoutEffect, useState, useTransition } from "reac
 import { useHiddenStatuses } from "@/components/applications/visibility-context";
 import { Button } from "@/components/ui/button";
 import { ActiveFilterChips } from "@/components/jobs/active-filter-chips";
+import { DateFilter } from "@/components/jobs/date-filter";
 import { MultiSelect, type MultiSelectOption } from "@/components/ui/multi-select";
 import { Segmented, SegmentedItem } from "@/components/ui/segmented";
 import { SingleSelect } from "@/components/ui/single-select";
 import { filterOptions } from "@/lib/applications/visibility";
 import { knownContract, knownFamily } from "@/lib/dashboard/labels";
 import { APPLICATION_FILTER_STATUSES, ARCHIVE_REASONS, JOB_SORTS, JOB_STATUSES, type JobSort, JOB_WORKPLACES, MIN_SALARY_MAX, MIN_SCORE_MAX, GHOST_FILTERS, TRAP_FILTERS, VISA_FILTERS, type ApplicationFilterStatus } from "@/lib/jobs/constants";
+import { DEFAULT_DATE_FIELD, DEFAULT_DATE_QUICK_RANGES, type DateField } from "@/lib/jobs/date-range";
 import { FILTER_KEYS, SELECT_FILTER_KEYS, type FilterKey, type SelectFilterKey } from "@/lib/jobs/filter-keys";
 import type { NamedCountryOption } from "@/lib/jobs/country-names";
 import { cleanMultiValues } from "@/lib/jobs/filter-values";
@@ -70,6 +72,9 @@ export interface FilterBarOptions {
   hiddenContracts?: readonly string[];
   /** Names of the high-value signal categories; empty = none, then the "high-value only" button is hidden. */
   highValueNames?: string[];
+  /** (ui.yaml `filters`) The quick ranges of the date filter and the date it compares until a link says otherwise. */
+  dateQuickRanges?: readonly string[];
+  dateDefaultField?: DateField;
 }
 
 const labelClass = "text-muted-foreground flex min-w-0 flex-col gap-1 text-xs";
@@ -101,6 +106,8 @@ export function FilterBar({ options }: { options: FilterBarOptions }) {
   const [open, setOpen] = useState(false);
   // the phone sheet unfolds the pick lists in place (one at a time); a desktop gets a popover
   const [phone, setPhone] = useState(false);
+  // "Custom…" of the date filter chosen but no dates typed yet (the URL has nothing to show for it)
+  const [customDatesOpen, setCustomDatesOpen] = useState(false);
   const [expandedKey, setExpandedKey] = useState<SelectFilterKey | "sort" | null>(null);
   const panelId = useId();
   // `t12` is the old name of `high`: read as it, cleared whenever the URL is written
@@ -187,7 +194,9 @@ export function FilterBar({ options }: { options: FilterBarOptions }) {
     ...(params.t12 !== null ? { high: params.high ?? params.t12, t12: null } : {}),
     ...(params.hideGerman !== null ? { hideLang: params.hideLang ?? params.hideGerman, hideGerman: null } : {}),
   };
-  const set = (values: Parameters<typeof setParams>[0]) => setParams({ ...legacy, ...values, page: null });
+  // a hand-written link with both a quick range and dates: the range wins, and the first write drops the dates it hides
+  const hiddenDates = params.within !== null && (params.from !== null || params.to !== null) ? { from: null, to: null } : {};
+  const set = (values: Parameters<typeof setParams>[0]) => setParams({ ...legacy, ...hiddenDates, ...values, page: null });
   const setMulti = (key: SelectFilterKey) => (next: string[]) => {
     const values = cleanMultiValues(key, next);
     void setParams({ [key]: values.length > 0 ? values : null, page: null }, { limitUrlUpdates: debounce(MULTI_DEBOUNCE_MS) });
@@ -207,8 +216,9 @@ export function FilterBar({ options }: { options: FilterBarOptions }) {
     void setParams({ [key]: value === null ? null : Math.min(value, max), page: null }, { limitUrlUpdates: debounce(NUMBER_DEBOUNCE_MS) });
   };
   const clear = () => {
+    setCustomDatesOpen(false);
     // Every filter from the table; scope and sort stay. Scope is never a filter key.
-    void setParams({ ...Object.fromEntries(FILTER_KEYS.filter((key) => key !== "filtered" && !visibility.ignore.includes(key)).map((key) => [key, null])), t12: null, hideGerman: null, page: null });
+    void setParams({ ...Object.fromEntries(FILTER_KEYS.filter((key) => key !== "filtered" && !visibility.ignore.includes(key)).map((key) => [key, null])), dateBy: null, t12: null, hideGerman: null, page: null });
   };
 
   return (
@@ -267,7 +277,7 @@ export function FilterBar({ options }: { options: FilterBarOptions }) {
         </Button>
       </div>
 
-      <ActiveFilterChips choices={{ ...choices, country: withStale("country") }} traps={options.traps === true} visa={options.visa === true} ghost={options.ghost === true} />
+      <ActiveFilterChips choices={{ ...choices, country: withStale("country") }} traps={options.traps === true} visa={options.visa === true} ghost={options.ghost === true} onDateCleared={() => setCustomDatesOpen(false)} />
 
       <div
         id={panelId}
@@ -368,15 +378,9 @@ export function FilterBar({ options }: { options: FilterBarOptions }) {
                 className={inputClass}
               />
             </label>
-            <label className={cn(labelClass, "flex-1 basis-36 md:max-w-44 md:flex-none")}>
-              {t("from")}
-              <input type="date" value={params.from ?? ""} max={params.to ?? undefined} onChange={(e) => set({ from: e.target.value === "" ? null : e.target.value })} data-testid="filter-from" className={`${inputClass} jb-filter-date`} />
-            </label>
-            <label className={cn(labelClass, "flex-1 basis-36 md:max-w-44 md:flex-none")}>
-              {t("to")}
-              <input type="date" value={params.to ?? ""} min={params.from ?? undefined} onChange={(e) => set({ to: e.target.value === "" ? null : e.target.value })} data-testid="filter-to" className={`${inputClass} jb-filter-date`} />
-            </label>
           </div>
+
+          <DateFilter params={params} quickRanges={options.dateQuickRanges ?? DEFAULT_DATE_QUICK_RANGES} defaultField={options.dateDefaultField ?? DEFAULT_DATE_FIELD} onChange={(change) => set(change)} customOpen={customDatesOpen} onCustomOpenChange={setCustomDatesOpen} />
 
           <fieldset className="flex min-w-0 flex-col gap-1.5" data-testid="filter-app">
             <legend className="text-muted-foreground mb-1.5 text-xs">{t("appStatus")}</legend>

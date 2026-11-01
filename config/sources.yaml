@@ -65,6 +65,7 @@ linkedin:
 
   brightdata:
     enabled: true
+    company_queries: true # sends watched company names; see docs/privacy.md
     monthly_budget_usd: 5 # counts only spend beyond the free allowance
     throttle: { min_delay_ms: 500, max_delay_ms: 1500 }
     max_results: 300
@@ -84,6 +85,7 @@ linkedin:
     # Cascade position 2. Without APIFY_TOKEN in .env (or with an empty actor_id) the channel shows "not configured" and the cascade skips it, with no failure recorded.
     # Another LinkedIn jobs actor can be used instead: switching actors only needs actor_id, prices and input_template changed.
     enabled: true
+    company_queries: true # sends watched company names; see docs/privacy.md
     monthly_budget_usd: 10
     throttle: { min_delay_ms: 1000, max_delay_ms: 3000 }
     max_results: 300
@@ -225,6 +227,7 @@ sources:
   # Search results match loosely: only jobs whose title matches this query's keywords or include_terms are kept (see title_prefilter); the rest get no detail fetch.
   stepstone:
     enabled: false # scraping channel, off by default: read "Scraping" in docs/sources.md before switching it on (setup wizard or /sources/registry)
+    company_queries: true # sends watched company names; see docs/privacy.md
     # Runs only in these markets (home country ISO codes); skipped in other markets, not counted as a failure
     markets: [DE]
     monthly_budget_usd: 0
@@ -245,6 +248,7 @@ sources:
       exclude_terms: [Werkstudent, Working Student, Intern, Internship, Praktikum, Praktikant]
   xing:
     enabled: false # off by default: XING's robots.txt disallows crawling /jobs/search/; turn it on only if you accept that
+    company_queries: true # sends watched company names; see docs/privacy.md
     # Runs only in these markets (home country ISO codes); skipped in other markets, not counted as a failure
     markets: [DE]
     monthly_budget_usd: 0
@@ -287,6 +291,7 @@ sources:
       exclude_terms: [Werkstudent, Working Student, Intern, Internship, Praktikum, Praktikant]
   jsearch:
     enabled: false # JSearch (Google for Jobs, RapidAPI). Needs JSEARCH_API_KEY in .env (see docs/jsearch.md); without a key the channel shows "not configured" and sends no requests
+    company_queries: true # sends watched company names; see docs/privacy.md
     monthly_budget_usd: 0 # counts only spend beyond monthly_request_limit (overage_cost_per_request_usd × requests)
     throttle: { min_delay_ms: 500, max_delay_ms: 1500 }
     max_results: 50
