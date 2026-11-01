@@ -10,7 +10,8 @@ import type { GhostRulesInput } from "./rules";
 // as the role's duties; evergreen patterns may require recruiting context
 // 5: a statement with an invitation tagged on is no question (question_tag); exclude_clause takes out hits only to the end of
 // its clause; only_before_duties hits count only above the first duties heading
-export const GHOST_RULES_VERSION = 5;
+// 6: a `reposted` reason keeps the latest ten relistings, not the first ten
+export const GHOST_RULES_VERSION = 6;
 
 /**
  * Hash of the packs' ghost section, the check's version and every limit that shapes a result (not `per_cycle_limit`): a change

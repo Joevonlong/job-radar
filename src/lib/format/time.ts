@@ -35,14 +35,14 @@ interface DayParts {
   day: number;
 }
 
-function dayParts(date: Date, timeZone: string | undefined): DayParts {
+export function dayParts(date: Date, timeZone: string | undefined): DayParts {
   const parts = new Intl.DateTimeFormat("en-US", { timeZone, year: "numeric", month: "numeric", day: "numeric" }).formatToParts(date);
   const pick = (type: string): number => Number(parts.find((part) => part.type === type)?.value ?? "0");
   return { year: pick("year"), month: pick("month"), day: pick("day") };
 }
 
 /** Calendar days between two dates in `timeZone` (1 = `date` is yesterday relative to `now`). */
-function calendarDaysBetween(now: Date, date: Date, timeZone: string | undefined): number {
+export function calendarDaysBetween(now: Date, date: Date, timeZone: string | undefined): number {
   const a = dayParts(now, timeZone);
   const b = dayParts(date, timeZone);
   return Math.round((Date.UTC(a.year, a.month - 1, a.day) - Date.UTC(b.year, b.month - 1, b.day)) / DAY_MS);

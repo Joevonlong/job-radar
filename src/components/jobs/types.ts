@@ -94,4 +94,9 @@ export interface JobListItem {
   timeLabel: string;
   /** Absolute time for the tooltip. */
   timeTitle: string;
+  /**
+   * The posted date column (`jobs.posted_at`, the same date as the detail page): `day` is `10/27`, `ago` a short `4 d`, `title` the
+   * full sentence for the tooltip and screen readers. Without a posted date `known` is false and `day` is the first-seen day.
+   */
+  posted: { day: string; ago: string; title: string; known: boolean };
 }

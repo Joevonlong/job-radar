@@ -160,6 +160,10 @@ interface SeedJob {
   /** Position within that day (0..1). */
   at: number;
   postedHoursBeforeSeen?: number | null;
+  /** The posted date is a calendar day without a time (UTC midnight), as some sources give it. */
+  postedDateOnly?: boolean;
+  /** Posted this many days before today, instead of `postedHoursBeforeSeen` hours before the first sighting. */
+  postedDaysAgo?: number;
   status?: "active" | "possibly_closed" | "closed";
   dormant?: boolean;
   /** Seed a source-observed relist directly, without running the detection rule. */
@@ -438,6 +442,7 @@ const SEED_JOBS: readonly SeedJob[] = [
     day: 0,
     at: 0.2,
     postedHoursBeforeSeen: 6,
+    postedDateOnly: true,
     sources: ["indeed"],
     match: 66,
     filtered: ["salary_below_floor:58000"],
@@ -712,6 +717,8 @@ const SEED_JOBS: readonly SeedJob[] = [
       { id: 4_200_201, seenDaysAgo: 45, publishedDaysAgo: 200 },
       { id: 4_200_202, seenDaysAgo: 5, publishedDaysAgo: 5 },
     ],
+    // the earliest posted date of its sources: the first board posting
+    postedDaysAgo: 200,
     day: 45,
     at: 0.5,
     sources: ["greenhouse"],
@@ -1009,7 +1016,8 @@ async function insertSeed(db: Executor, input: { now: Date; tz: string; pipeline
     const jobIdByKey = new Map<string, number>();
     for (const job of SEED_JOBS) {
       const seenAt = firstSeen(job);
-      const postedAt = job.postedHoursBeforeSeen === null || job.postedHoursBeforeSeen === undefined ? null : new Date(seenAt.getTime() - job.postedHoursBeforeSeen * 60 * 60 * 1000);
+      const postedTime = job.postedDaysAgo !== undefined ? now.getTime() - job.postedDaysAgo * DAY_MS : job.postedHoursBeforeSeen === null || job.postedHoursBeforeSeen === undefined ? null : seenAt.getTime() - job.postedHoursBeforeSeen * 60 * 60 * 1000;
+      const postedAt = postedTime === null ? null : new Date(job.postedDateOnly ? Math.floor(postedTime / DAY_MS) * DAY_MS : postedTime);
       const lastSeen = job.status === "closed" ? new Date(seenAt.getTime() + 2 * DAY_MS) : job.status === "possibly_closed" ? new Date(seenAt.getTime() + 1 * DAY_MS) : new Date(Math.min(now.getTime(), seenAt.getTime() + 3 * 60 * 60 * 1000));
       const [row] = await tx
         .insert(jobs)
