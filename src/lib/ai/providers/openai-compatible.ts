@@ -101,7 +101,7 @@ export function createOpenAiCompatibleTransport(options: OpenAiCompatibleOptions
       const signal = request.signal ? AbortSignal.any([request.signal, timeout]) : timeout;
       const body = {
         model: request.model ?? options.model,
-        max_tokens: options.maxOutputTokens,
+        max_tokens: request.maxOutputTokens ?? options.maxOutputTokens,
         messages: [
           { role: "system", content: options.jsonModeOnly ? embedSchema(request.system, request.jsonSchema) : request.system },
           { role: "user", content: request.user },

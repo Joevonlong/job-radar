@@ -8,7 +8,7 @@ export type ControlRequest = typeof controlRequests.$inferSelect;
 export type ControlRequestKind = ControlRequest["kind"];
 export type ControlRequestStatus = ControlRequest["status"];
 
-export const CONTROL_REQUEST_KINDS = ["run_cycle", "rescore_stale", "run_suggest", "run_ai", "translate_job", "breakdown_job", "score_jobs", "test_channel", "test_ai", "test_telegram", "salary_lookup"] as const satisfies readonly ControlRequestKind[];
+export const CONTROL_REQUEST_KINDS = ["run_cycle", "rescore_stale", "run_suggest", "run_ai", "translate_job", "breakdown_job", "score_jobs", "test_channel", "test_ai", "test_telegram", "salary_lookup", "writer_job"] as const satisfies readonly ControlRequestKind[];
 /** The requests the settings page offers and lists; the AI ones belong to the ai-worker and show on /sources. */
 export const SETTINGS_REQUEST_KINDS = ["run_cycle", "rescore_stale", "score_jobs"] as const satisfies readonly ControlRequestKind[];
 /**
@@ -18,9 +18,9 @@ export const SETTINGS_REQUEST_KINDS = ["run_cycle", "rescore_stale", "score_jobs
  * processes (`src/lib/control/kinds.ts`) and the `/sources` queue count derive from it.
  * `tests/ai-worker/units.test.ts` fails while a kind of the database enum is in neither list.
  */
-export const AI_CONTROL_REQUEST_KINDS = ["run_ai", "translate_job", "breakdown_job", "rescore_stale", "run_suggest", "score_jobs", "test_ai", "salary_lookup"] as const satisfies readonly ControlRequestKind[];
+export const AI_CONTROL_REQUEST_KINDS = ["run_ai", "translate_job", "breakdown_job", "rescore_stale", "run_suggest", "score_jobs", "test_ai", "salary_lookup", "writer_job"] as const satisfies readonly ControlRequestKind[];
 /** User requests served independently of batch AI work. Automatic requests stay in the batch lane. */
-export const INTERACTIVE_CONTROL_REQUEST_KINDS = ["translate_job", "breakdown_job", "salary_lookup", "test_ai"] as const satisfies readonly (typeof AI_CONTROL_REQUEST_KINDS)[number][];
+export const INTERACTIVE_CONTROL_REQUEST_KINDS = ["translate_job", "breakdown_job", "salary_lookup", "test_ai", "writer_job"] as const satisfies readonly (typeof AI_CONTROL_REQUEST_KINDS)[number][];
 /** The kinds that call no AI: the container runner's own work (the channel test and the Telegram test message). */
 export const NON_AI_CONTROL_REQUEST_KINDS = ["run_cycle", "test_channel", "test_telegram"] as const satisfies readonly ControlRequestKind[];
 /** The test buttons of /sources and /settings; their result is shown next to the button, not in the request list. */
@@ -32,6 +32,42 @@ export const TEST_CONTROL_REQUEST_KINDS = ["test_channel", "test_ai", "test_tele
  * `salary_lookup`: a paid web search the user clicked; a restart must not run it (and bill it) again unasked, the card offers "try again".
  */
 export const NOT_REQUEUED_CONTROL_REQUEST_KINDS = [...TEST_CONTROL_REQUEST_KINDS, "run_cycle", "salary_lookup"] as const satisfies readonly ControlRequestKind[];
+/**
+ * Kinds whose payload carries the user's own text (the material of an application answer). Every path that ends such a
+ * request (done, failed, failed by a restart, expired) removes these keys from the payload in the same statement, so the
+ * text lives in the table only while the request is open. What is left is what the request was about (job, question) and
+ * the hash and reference ids the web put next to the text at queue time.
+ */
+export const SCRUBBED_PAYLOAD_KEYS = {
+  writer_job: ["materials"],
+} as const satisfies Partial<Record<ControlRequestKind, readonly string[]>>;
+export type ScrubbedPayloadKind = keyof typeof SCRUBBED_PAYLOAD_KEYS;
+export const SCRUBBED_PAYLOAD_KINDS = Object.keys(SCRUBBED_PAYLOAD_KEYS) as ScrubbedPayloadKind[];
+
+export function isScrubbedPayloadKind(kind: ControlRequestKind): kind is ScrubbedPayloadKind {
+  return Object.hasOwn(SCRUBBED_PAYLOAD_KEYS, kind);
+}
+
+/** The payload of a finished request of `kind`: the personal keys removed and `scrubbed: true` added; other kinds unchanged. */
+export function scrubPayload(kind: ControlRequestKind, payload: unknown): unknown {
+  if (!isScrubbedPayloadKind(kind)) return payload;
+  const base = typeof payload === "object" && payload !== null && !Array.isArray(payload) ? { ...(payload as Record<string, unknown>) } : {};
+  for (const key of SCRUBBED_PAYLOAD_KEYS[kind]) delete base[key];
+  return { ...base, scrubbed: true };
+}
+
+/**
+ * The SQL twin of `scrubPayload` for an UPDATE of `control_requests`: `payload` with the personal keys of its row's kind
+ * removed. The kind is compared as text, so the statement also runs before a migration has added a kind to the enum.
+ */
+function scrubbedPayloadSql(): SQL {
+  const cases = SCRUBBED_PAYLOAD_KINDS.map((kind) => {
+    const keys = sql.join(SCRUBBED_PAYLOAD_KEYS[kind].map((key) => sql`${key}::text`), sql`, `);
+    return sql`when kind::text = ${kind}::text then (payload - array[${keys}]::text[]) || '{"scrubbed": true}'::jsonb`;
+  });
+  return sql`(case ${sql.join(cases, sql` `)} else payload end)`;
+}
+
 /** Statuses in which a request still waits for, or is held by, the runner. */
 export const OPEN_CONTROL_STATUSES = ["pending", "running"] as const satisfies readonly ControlRequestStatus[];
 
@@ -249,6 +285,7 @@ export async function finishControlRequest(
       status: input.status,
       result: input.result ?? null,
       finishedAt: sql`now()`,
+      payload: scrubbedPayloadSql(),
     })
     .where(eq(controlRequests.id, id))
     .returning();
@@ -286,12 +323,43 @@ export async function requeueInterruptedControlRequests(
         result = case
           when ${again} then jsonb_build_object('interruptions', ${count} + 1, 'interrupted', ${input.reason}::text)
           else jsonb_build_object('error', ${input.reason}::text, 'interruptions', ${count})
-        end
+        end,
+        payload = case when ${again} then payload else ${scrubbedPayloadSql()} end
     where status = 'running' ${kindFilter} ${idFilter}
     returning status
   `);
   const requeued = rows.filter((row) => row.status === "pending").length;
   return { requeued, failed: rows.length - requeued };
+}
+
+/** The error code of a request that waited, or ran, longer than its kind allows (`failExpiredControlRequests`). */
+export const EXPIRED_ERROR = "expired";
+
+/**
+ * Fail the requests of `kinds` that are pending longer than `olderThanSeconds` since they were queued, or running longer
+ * than that since they were claimed: status `failed`, `result.error = "expired"`, and the payload scrubbed (for the
+ * `SCRUBBED_PAYLOAD_KEYS` kinds), all in one UPDATE. Idempotent: the ai-worker before each poll, the runner at each cycle
+ * and the web when it reads a request's state all call it, so an open request's text is cleared even while no worker
+ * runs. Kinds are compared as text (a kind the enum does not have yet matches nothing). Returns the number of rows failed.
+ */
+export async function failExpiredControlRequests(db: Executor, input: { kinds: readonly ControlRequestKind[]; olderThanSeconds: number }): Promise<number> {
+  if (input.kinds.length === 0) return 0;
+  const kinds = sql.join(input.kinds.map((kind) => sql`${kind}::text`), sql`, `);
+  const seconds = Math.max(1, Math.floor(input.olderThanSeconds));
+  const rows = await db.execute<{ id: number }>(sql`
+    update control_requests
+    set status = 'failed'::control_request_status,
+        finished_at = now(),
+        result = jsonb_build_object('error', ${EXPIRED_ERROR}::text, 'stage', status::text),
+        payload = ${scrubbedPayloadSql()}
+    where kind::text in (${kinds})
+      and (
+        (status = 'pending' and requested_at < now() - make_interval(secs => ${seconds}))
+        or (status = 'running' and coalesce(started_at, requested_at) < now() - make_interval(secs => ${seconds}))
+      )
+    returning id
+  `);
+  return rows.length;
 }
 
 export async function getControlRequest(db: Db, id: number): Promise<ControlRequest | null> {
@@ -347,6 +415,37 @@ export async function findLatestJobControlRequest(db: Db, kind: "translate_job" 
   if (open) return open;
   const [latest] = await db.select().from(controlRequests).where(same).orderBy(desc(controlRequests.id)).limit(1);
   return latest ?? null;
+}
+
+/** The newest `writer_job` request of each question of the job (what the workbench resumes after a reload), by question id. */
+export async function findLatestWriterRequests(db: Db, jobId: number): Promise<Map<number, ControlRequest>> {
+  const rows = await db
+    .selectDistinctOn([sql`${controlRequests.payload} ->> 'questionId'`])
+    .from(controlRequests)
+    .where(and(sql`${controlRequests.kind}::text = 'writer_job'`, sql`${controlRequests.payload} ->> 'jobId' = ${String(jobId)}`))
+    .orderBy(sql`${controlRequests.payload} ->> 'questionId'`, desc(controlRequests.id));
+  const out = new Map<number, ControlRequest>();
+  for (const row of rows) {
+    const questionId = Number((row.payload as { questionId?: unknown } | null)?.questionId);
+    if (Number.isInteger(questionId)) out.set(questionId, row);
+  }
+  return out;
+}
+
+/** The open `writer_job` request of a question, or null. */
+export async function findOpenWriterRequest(db: Db, input: { jobId: number; questionId: number }): Promise<ControlRequest | null> {
+  const [row] = await db
+    .select()
+    .from(controlRequests)
+    .where(and(
+      sql`${controlRequests.kind}::text = 'writer_job'`,
+      inArray(controlRequests.status, [...OPEN_CONTROL_STATUSES]),
+      sql`${controlRequests.payload} ->> 'jobId' = ${String(input.jobId)}`,
+      sql`${controlRequests.payload} ->> 'questionId' = ${String(input.questionId)}`,
+    ))
+    .orderBy(controlRequests.id)
+    .limit(1);
+  return row ?? null;
 }
 
 export interface OpenRequestStats {

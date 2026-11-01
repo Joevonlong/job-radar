@@ -72,6 +72,8 @@ import { buildVisaCheckView, visaMarkText } from "@/lib/visa/view";
 import { ghostEnabled } from "@/lib/ghost/settings";
 import { buildGhostCheckView, GHOST_TOOLTIP_REASONS, ghostMarkText, ghostShortMessage } from "@/lib/ghost/view";
 import { readInitialBreakdownRequest } from "@/lib/control/breakdown-request";
+import { countApplicationAnswers } from "@/lib/db/repos/application-writer";
+import { readWriterEnabled } from "@/lib/writer/settings";
 import { readInitialTranslateRequest, readPartialTranslation } from "@/lib/control/translate-request";
 import { toJobTranslation } from "@/lib/translation/service";
 import { loadConfig, reloadConfig, type AiConfig, type MeConfig } from "@/lib/config";
@@ -221,6 +223,8 @@ export default async function JobDetailPage({ params }: { params: Params }) {
   const breakdownRow = await getJobBreakdown(getDb(), job.id);
   // An unfinished or failed request of this job is the card's starting state (a reload must not forget it)
   const breakdownRequest = await readInitialBreakdownRequest(getDb(), job.id, breakdownRow?.analyzedAt ?? null);
+  const answers = await countApplicationAnswers(getDb(), job.id);
+  const writerEnabled = readWriterEnabled();
   const { view: breakdownView, extraQuotes } = buildBreakdownView({
     row: breakdownRow,
     description: job.description,
@@ -402,6 +406,16 @@ export default async function JobDetailPage({ params }: { params: Params }) {
               {t("actions.translate", { language: targetView.name })}
             </a>
           ) : null}
+          {/* the application writer: its workbench, or (off and nothing written yet) the setting that turns it on */}
+          <Link
+            href={writerEnabled || answers.questions > 0 ? `/jobs/${job.id}/apply` : "/settings?tab=workflow"}
+            className={cn(buttonVariants({ variant: "outline" }), actionLink)}
+            data-testid="action-write"
+            data-enabled={writerEnabled}
+          >
+            {t("actions.write")}
+            {answers.questions > 0 ? <span className="text-ink-3 font-mono text-data" data-testid="action-write-count">{t("actions.writeCount", { final: answers.final, total: answers.questions })}</span> : null}
+          </Link>
           {/* "exclude this job" is the optional one: it lives in the "more" menu so the row stays one line; "keep anyway" / "let the rules decide again" rescue a job the filter removed (or undo a decision), so they stay buttons */}
           {overrideAction === "exclude" ? null : <FilterOverrideAction rank={job.score} jobId={job.id} />}
           {/* the "more" menu: "exclude this job" when that is the decision on offer, and "mark as unseen" */}

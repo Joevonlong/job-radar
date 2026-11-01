@@ -640,6 +640,79 @@ export const jobBreakdowns = pgTable("job_breakdowns", {
 });
 
 /**
+ * The application writer: questions pasted on `/jobs/<id>/apply` (a form question or a cover letter), with their settings and
+ * the material selected for them (`selected_materials`: JD points as `{ quote, offset }`, story ids, whether the profile
+ * goes along, the "emphasise this" note). `final_version_id` is the version the user marked final (no FK: the version
+ * table points back here; a version deleted elsewhere just leaves no final).
+ */
+export const applicationQuestions = pgTable(
+  "application_questions",
+  {
+    id: id(),
+    jobId: bigint("job_id", { mode: "number" })
+      .notNull()
+      .references(() => jobs.id, { onDelete: "cascade" }),
+    position: integer("position").notNull(),
+    text: text("text").notNull(),
+    /** `question` | `letter` (writer.yaml `questions.kinds`). */
+    kind: text("kind").notNull(),
+    /** `words` | `chars`. */
+    lengthUnit: text("length_unit").notNull(),
+    lengthValue: integer("length_value").notNull(),
+    /** The language the answer is written in (a BCP 47 / ISO 639 code). */
+    outputLanguage: text("output_language").notNull(),
+    tone: text("tone").notNull(),
+    selectedMaterials: jsonb("selected_materials").notNull().default(sql`'{}'::jsonb`),
+    finalVersionId: bigint("final_version_id", { mode: "number" }),
+    createdAt: createdAt(),
+    updatedAt: timestamptz("updated_at").notNull().defaultNow(),
+  },
+  (t) => [index("application_questions_job_idx").on(t.jobId, t.position)],
+);
+
+/**
+ * The versions of an answer: drafted by the AI (`draft`, one row per variant), edited by hand (`manual`), and later the
+ * other writing modes. `sentences` holds each sentence with its kind, its checked evidence and its status; the counts
+ * are the version's summary. `control_request_id` is unique when set: a request run again never writes its versions
+ * twice (with `variant_id`). Only sentences, check results and evidence quotes are kept, never the material sent.
+ */
+export const applicationAnswerVersions = pgTable(
+  "application_answer_versions",
+  {
+    id: id(),
+    questionId: bigint("question_id", { mode: "number" })
+      .notNull()
+      .references(() => applicationQuestions.id, { onDelete: "cascade" }),
+    /** `draft` | `polish` | `coach_rewrite` | `manual` | `mcp`. */
+    mode: text("mode").notNull(),
+    variantId: text("variant_id"),
+    text: text("text").notNull(),
+    sentences: jsonb("sentences").notNull(),
+    supportedCount: integer("supported_count").notNull().default(0),
+    partialCount: integer("partial_count").notNull().default(0),
+    unsupportedCount: integer("unsupported_count").notNull().default(0),
+    framingCount: integer("framing_count").notNull().default(0),
+    userWrittenCount: integer("user_written_count").notNull().default(0),
+    webUnverifiedCount: integer("web_unverified_count").notNull().default(0),
+    /** The coach's review of this version (a later writing mode). */
+    coach: jsonb("coach"),
+    /** The version a hand edit (or an adopted suggestion) started from. */
+    parentVersionId: bigint("parent_version_id", { mode: "number" }),
+    provider: text("provider"),
+    model: text("model"),
+    promptVersion: text("prompt_version"),
+    /** SHA-256 of the material the version was written from (the material itself is not kept). */
+    materialsHash: text("materials_hash"),
+    controlRequestId: bigint("control_request_id", { mode: "number" }),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("application_answer_versions_question_idx").on(t.questionId, t.createdAt),
+    uniqueIndex("application_answer_versions_request_variant_idx").on(t.controlRequestId, t.variantId).where(sql`${t.controlRequestId} is not null`),
+  ],
+);
+
+/**
  * The salary benchmark, rebuilt after each pipeline step from the stated salaries of the window (and, optionally,
  * checked AI lookup bands): one row per group that reached `salary.yaml: benchmark.min_sample`. `seniority` `*` = any
  * seniority; `geo_level` city / country / all (`geo_key` the lower-case city, the ISO country code, or `*`). Figures are
@@ -1043,7 +1116,7 @@ export const runnerHeartbeats = pgTable(
 
 // ---------------------------------------------------------------- web -> runner control
 
-export const controlRequestKindEnum = pgEnum("control_request_kind", ["run_cycle", "rescore_stale", "run_suggest", "run_ai", "translate_job", "breakdown_job", "score_jobs", "test_channel", "test_ai", "test_telegram", "salary_lookup"]);
+export const controlRequestKindEnum = pgEnum("control_request_kind", ["run_cycle", "rescore_stale", "run_suggest", "run_ai", "translate_job", "breakdown_job", "score_jobs", "test_channel", "test_ai", "test_telegram", "salary_lookup", "writer_job"]);
 export const controlRequestStatusEnum = pgEnum("control_request_status", ["pending", "running", "done", "failed"]);
 
 /**

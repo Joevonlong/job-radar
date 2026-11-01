@@ -210,6 +210,8 @@ export const HIDDEN_PATHS: Record<SettingsForm, readonly string[]> = {
   ui: ["applications", "filters", "companies", "config_editor", "web_access", "job_checks"],
   insights: [],
   resume: [],
+  // The library limits, question limits, variants, tones and the evidence check are lists / tables: the advanced editor
+  writer: ["stories", "questions", "variants", "tones", "emphasis_max_chars", "jd_max_chars", "evidence"],
   language: [],
 };
 
@@ -953,6 +955,16 @@ const resumeSections: SectionDef[] = [
   },
 ];
 
+// ---------------------------------------------------------------- writer
+
+const writerSections: SectionDef[] = [
+  {
+    id: "writer_general",
+    title: { section: "writer_general" },
+    fields: [bool("enabled", "writer_enabled"), int("timeout_seconds", "writer_timeout_seconds")],
+  },
+];
+
 /** Marks the fields of protected keys as `locked` (the forms show them read-only). */
 function withLocks(form: SettingsForm, sections: SectionDef[]): SectionDef[] {
   return sections.map((section) => ({ ...section, fields: section.fields.map((field) => (isProtectedPath(form, field.path) ? { ...field, locked: true } : field)) }));
@@ -970,6 +982,7 @@ export const SETTINGS_SECTIONS: Record<SettingsForm, SectionDef[]> = {
   ui: withLocks("ui", uiSections),
   insights: withLocks("insights", insightsSections),
   resume: withLocks("resume", resumeSections),
+  writer: withLocks("writer", writerSections),
 };
 
 export function fieldsOf(tab: SettingsForm): FieldDef[] {

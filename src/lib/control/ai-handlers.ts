@@ -7,6 +7,7 @@ import { registerSuggestHandler } from "./suggest";
 import { createRunAiHandler } from "./run-ai";
 import { testAiHandler } from "./test-ai";
 import { translateJobHandler } from "./translate-job";
+import { writerJobHandler } from "./writer-job";
 
 /**
  * The ONE place that plugs the real handlers of the AI-backed request kinds (`AI_CONTROL_REQUEST_KINDS`) in. The
@@ -23,5 +24,6 @@ export function registerAiControlHandlers(): void {
   registerControlHandler("score_jobs", scoreJobsHandler);
   registerControlHandler("test_ai", testAiHandler);
   registerControlHandler("salary_lookup", salaryLookupHandler);
+  registerControlHandler("writer_job", writerJobHandler);
   registerSuggestHandler();
 }

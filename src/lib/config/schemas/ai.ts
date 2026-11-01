@@ -49,6 +49,10 @@ const task = z.strictObject({
    * (the `api` layer expands to providers that use their default models). Checked against models.yaml elsewhere.
    */
   models: z.partialRecord(z.enum(AI_PROVIDER_IDS), nonEmptyString).optional(),
+  /** This task's cap on the tokens an API provider may generate per call (default: the global `max_output_tokens`). */
+  max_output_tokens: positiveInt.optional(),
+  /** This task's request timeout for the API providers (default: the global `api_timeout_seconds`). */
+  api_timeout_seconds: positiveInt.optional(),
 });
 
 /** Local-language levels a posting can require (CEFR); `none` / `unknown` never cost points. */
@@ -378,6 +382,8 @@ export const aiSchema = z.strictObject({
      * default leaves codex-cli out (its web search cannot be limited to domains): only providers that can search the web are tried.
      */
     salary_lookup: task.default({ order: ["claude-cli", "anthropic"] }),
+    /** The application writer (never searches the web); optional like `breakdown`. */
+    write: task.default({}),
   }),
   /** Request timeout for the API providers. */
   api_timeout_seconds: positiveInt,

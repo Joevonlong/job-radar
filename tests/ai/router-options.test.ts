@@ -54,3 +54,36 @@ describe("router run options", () => {
     await expect(router.run("translate", prompt, schema, { skipProviders: ["claude-cli", "codex-cli"] })).rejects.toBeInstanceOf(AiUnavailableError);
   });
 });
+
+describe("task-level output cap and API timeout", () => {
+  const writeAi = (order: string[]) =>
+    pinnedAi((raw) => {
+      (raw.tasks as Record<string, unknown>).write = { order, max_output_tokens: 8192, api_timeout_seconds: 150 };
+    });
+
+  it("an API provider gets the task's own cap and timeout", async () => {
+    const anthropic = scriptedProvider("anthropic", [ok]);
+    const router = createAiRouter({ config: writeAi(["anthropic"]), providers: [anthropic.provider], usage: null });
+    await router.run("write", prompt, schema);
+    expect(anthropic.transport.calls[0]).toMatchObject({ maxOutputTokens: 8192, timeoutMs: 150_000 });
+  });
+
+  it("a CLI provider gets no API timeout, and a caller's timeout wins", async () => {
+    const claude = scriptedProvider("claude-cli", [ok, ok]);
+    const router = createAiRouter({ config: writeAi(["claude-cli"]), providers: [claude.provider], usage: null });
+    await router.run("write", prompt, schema);
+    expect(claude.transport.calls[0]).not.toHaveProperty("timeoutMs");
+    await router.run("write", prompt, schema, { timeoutMs: 1234 });
+    expect(claude.transport.calls[1]?.timeoutMs).toBe(1234);
+  });
+
+  it("other tasks keep the global cap", async () => {
+    const anthropic = scriptedProvider("anthropic", [ok]);
+    const config = pinnedAi((raw) => {
+      (raw.tasks as Record<string, unknown>).translate = { order: ["anthropic"] };
+    });
+    const router = createAiRouter({ config, providers: [anthropic.provider], usage: null });
+    await router.run("translate", prompt, schema);
+    expect(anthropic.transport.calls[0]).not.toHaveProperty("maxOutputTokens");
+  });
+});

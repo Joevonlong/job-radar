@@ -5,8 +5,14 @@
 # Version of this file's structure; don't edit by hand (a migration script upgrades it when the structure changes)
 config_version: 1
 
-# Master switch of the AI writing features. false (the default): nothing of the writer is sent to an AI provider
+# Master switch of the AI writing features. false (the default): nothing of the writer is sent to an AI provider, and the
+# "Write answers" page only says how to switch it on. When true, the material you select for a question (JD points,
+# your profile summary and skills, stories, what to emphasise) is sent to the providers of ai.yaml's `write` task.
 enabled: false
+
+# Longest wait of one writing request in seconds, queued or running. Older requests fail as "expired" and their material is
+# cleared from the request; the worker stops the AI call at this point too
+timeout_seconds: 180
 
 # Limits of the experience library, checked when you save it on /me
 stories:
@@ -18,3 +24,51 @@ stories:
   text_max_chars: 1500
   # How many stories a new application question starts with selected (best skill overlap with the job first)
   preselect_count: 4
+
+questions:
+  # Most questions per job
+  max_per_job: 12
+  # Longest question text
+  text_max_chars: 1000
+  # Most versions of one question besides the final one; the oldest goes beyond it
+  max_versions_per_question: 20
+  # Default length (unit: words or chars) and how many versions one draft asks for
+  kinds:
+    question: { default_length: { unit: words, value: 150 }, variants: 3 }
+    letter: { default_length: { unit: words, value: 350 }, variants: 2 }
+
+# The styles of the versions of one draft, in order: a draft with 2 versions asks for the first two
+variants:
+  - { id: safe, hint: "clear and conservative" }
+  - { id: distinctive, hint: "more personal voice" }
+  - { id: short, hint: "tighter, about 70% of the target length" }
+
+# Tones a question can ask for (the first is the default)
+tones: [neutral, warm, confident, formal]
+
+# Longest "what to emphasise this time" note
+emphasis_max_chars: 800
+# Longest JD excerpt sent when no breakdown points are selected
+jd_max_chars: 6000
+
+# The evidence check of every sentence (in code, no AI call). It flags names and figures to check; it does not prove the
+# AI made nothing up.
+evidence:
+  # Longest quote the AI may give as the evidence of a sentence
+  quote_max_chars: 160
+  # Words that make a sentence one about you, whatever the AI labelled it (whole words; zh: substrings minus `exclude`)
+  first_person:
+    en: [i, "i'm", "i've", "i'd", my, me, myself]
+    de: [ich, mein, meine, meinen, meinem, meiner, mich, mir]
+    zh: { words: [我, 我的], exclude: [我们, 我们的] }
+  # Words treated as names: one not found in the sentence's evidence, the JD or the company background is marked "check"
+  names:
+    # Names in quotation marks
+    quoted: true
+    # Words with digits, inner capitals or all capitals (S3, GitLab, AWS)
+    mixed_tokens: true
+    # Capitalised words not at the start of a sentence: single = each one, multi = only two or more in a row
+    # (languages that capitalise every noun), off = none
+    capitalized_non_initial: { default: single, de: multi }
+    # Capitalised words that are never names
+    stopwords: [I, OK]

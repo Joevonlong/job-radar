@@ -1346,7 +1346,9 @@
         "resume": "Tailor resume",
         "status": "Status & notes",
         "translate": "Translate to {language}",
-        "more": "More actions"
+        "more": "More actions",
+        "write": "Write answers",
+        "writeCount": "{final}/{total}"
       },
       "salary": {
         "title": "Annual salary",
@@ -1837,7 +1839,8 @@
       "insights": "Statistics page",
       "resume": "Resume tool",
       "language": "Languages",
-      "salary": "Salary benchmark and lookup"
+      "salary": "Salary benchmark and lookup",
+      "writer": "Application writer"
     },
     "tabDescription": {
       "schedule": "Which cycles run when, and what happens when one is missed.",
@@ -1850,7 +1853,8 @@
       "insights": "Time ranges, cities and histogram buckets of the statistics page. Display only.",
       "resume": "Paths and commands behind \"Tailor resume\" on the detail page (resume-kit hand-off). The paths point at your own files; the master resume is never read.",
       "language": "The interface language of new browsers, the language the AI writes in, what job ads are translated into, and the language of Telegram and the command line.",
-      "salary": "The salary level card on the job page compares a job's stated salary with the other postings of its kind in your database. The optional lookup asks an AI provider to search salary sites for the company and role. Role families and the search links are edited in salary.yaml."
+      "salary": "The salary level card on the job page compares a job's stated salary with the other postings of its kind in your database. The optional lookup asks an AI provider to search salary sites for the company and role. Role families and the search links are edited in salary.yaml.",
+      "writer": "The workbench behind \"Write answers\" on the job page: AI drafts of application answers and cover letters from material you choose, each sentence checked against it. Off by default. Which AI it uses is set under task overrides on the \"AI\" tab (task \"Application writer\"). The library and question limits, variants, tones and the evidence check are edited in writer.yaml."
     },
     "actions": {
       "save": "Save",
@@ -1973,7 +1977,8 @@
       "salary_lookup": "Salary lookup (AI web search)",
       "salary_benchmark": "Salary benchmark",
       "ai_limits_quota": "Usage cap (subscription CLIs)",
-      "ai_scoring_evidence": "Reason sources"
+      "ai_scoring_evidence": "Reason sources",
+      "writer_general": "Switch and wait"
     },
     "sectionHints": {
       "search_keywords": "Each group is OR-merged into one query, then run once per city.",
@@ -1998,7 +2003,8 @@
       "salary_lookup": "Off by default. Each lookup sends the company name, job title, seniority, city and country (never your profile or the JD) to the AI provider, which searches the web. It costs tokens and, with the Anthropic API, a fee per search. Which AI it uses is set under task overrides on the \"AI\" tab (task \"Salary lookup\").",
       "salary_benchmark": "Rebuilt after every cycle from the postings of the window that state a salary you can compare (base currency, per year).",
       "ai_limits_quota": "Job Radar's own cap on how often it calls Claude Code and Codex. It counts only Job Radar's own calls and cannot see your account's real usage, so it can only step in late, never early. Your own requests (scoring a job, translating) are not held by the per-cycle cap. 0 turns a cap off.",
-      "ai_scoring_evidence": "Off by default: each score then also writes a short JD quote per reason, so the output tokens of the \"score\" task grow (compare its median on /ai-usage). Turning it on or off re-scores nothing."
+      "ai_scoring_evidence": "Off by default: each score then also writes a short JD quote per reason, so the output tokens of the \"score\" task grow (compare its median on /ai-usage). Turning it on or off re-scores nothing.",
+      "writer_general": "When on, only the material you tick for a question is sent, and only when you press \"Write\": the question, length, tone and language, job title and company, chosen JD points or a JD excerpt, your profile summary, skills and languages, chosen stories and your emphasis note. No web search."
     },
     "options": {
       "remoteScope": {
@@ -3121,6 +3127,21 @@
       "company_queries_channel": {
         "label": "Company queries",
         "hint": "Allow this channel to receive watched company names for nationwide searches."
+      },
+      "task_write": {
+        "label": "Application writer",
+        "hint": "Drafts application answers from the material you select; never searches the web."
+      },
+      "reasoning_effort_write": {
+        "label": "Reasoning effort: Application writer"
+      },
+      "writer_enabled": {
+        "label": "Enable the application writer",
+        "hint": "When off, nothing of your profile or stories is sent to an AI provider, and the workbench only says how to turn it on. Answers you already wrote are still shown."
+      },
+      "writer_timeout_seconds": {
+        "label": "Longest wait of one request",
+        "hint": "Queued or running. An older request fails as \"expired\" and its material is cleared from the database; the AI call stops then too."
       }
     },
     "control": {
@@ -3177,7 +3198,8 @@
           "test_channel": "Channel test",
           "test_ai": "AI test",
           "test_telegram": "Telegram test",
-          "salary_lookup": "Salary lookup"
+          "salary_lookup": "Salary lookup",
+          "writer_job": "Application answer"
         },
         "status": {
           "pending": "Queued",
@@ -3654,7 +3676,8 @@
         "probe": "test",
         "breakdown": "Breakdown",
         "traps": "AI traps",
-        "salary_lookup": "Salary lookup"
+        "salary_lookup": "Salary lookup",
+        "write": "Application writer"
       },
       "details": "Details →"
     },
@@ -6879,7 +6902,8 @@
       "system__delivery_prune": "Prune delivery items",
       "system__reconcile": "Reconcile activity log",
       "system__telegram_callback": "Telegram button action",
-      "system__reminder": "Daily reminder"
+      "system__reminder": "Daily reminder",
+      "request__writer_job": "Write application answer"
     },
     "event": {
       "item__ok": "Item completed",
@@ -7201,7 +7225,8 @@
       "test_channel": "Test a channel",
       "test_ai": "Test AI",
       "test_telegram": "Test Telegram",
-      "salary_lookup": "Look up salary"
+      "salary_lookup": "Look up salary",
+      "writer_job": "Write application answer"
     },
     "level": {
       "all": "All levels",
@@ -7223,5 +7248,215 @@
     "rebuilt": "Rebuilt {count} job projections.",
     "checked": "Jobs with projection differences: {count}.",
     "migrated": "Database migrations complete."
+  },
+  "writer": {
+    "pageTitle": "Application answers · {title} · {company}",
+    "back": "Back to the job",
+    "heading": "Application answers",
+    "disabled": "The application writer is off. Nothing of your profile or stories is sent to an AI provider until you turn it on.",
+    "settingsLink": "Turn it on in Settings → Workflow",
+    "configError": "writer.yaml cannot be read, so nothing can be written. Fix the file in Settings.",
+    "panes": {
+      "label": "Workbench view",
+      "materials": "Material",
+      "questions": "Questions",
+      "answer": "Answer"
+    },
+    "actionError": {
+      "invalid": "The input is not valid.",
+      "disabled": "The application writer is off.",
+      "config_error": "writer.yaml cannot be read.",
+      "not_found": "This question or version no longer exists. Reload the page.",
+      "limit": "This job already has the most questions allowed.",
+      "too_long": "The text is longer than allowed.",
+      "failed": "That did not work. Please try again."
+    },
+    "variant": {
+      "safe": "Safe",
+      "distinctive": "Distinctive",
+      "short": "Short"
+    },
+    "questions": {
+      "title": "Questions",
+      "count": "{count} / {max}",
+      "empty": "Paste the first question of the application form, or add a cover letter.",
+      "kind": {
+        "question": "Question",
+        "letter": "Cover letter"
+      },
+      "versions": "{count, plural, =0 {no versions} one {# version} other {# versions}}",
+      "final": "Final",
+      "addLabel": "Add a question",
+      "addPlaceholder": "Paste the question from the application form",
+      "kindLabel": "Kind",
+      "add": "Add",
+      "full": "At most {max} questions per job.",
+      "letterText": "Cover letter",
+      "settingsTitle": "This question",
+      "textLabel": "Question text",
+      "toneLabel": "Tone",
+      "tone": {
+        "neutral": "Neutral",
+        "warm": "Warm",
+        "confident": "Confident",
+        "formal": "Formal"
+      },
+      "lengthLabel": "Target length",
+      "unitLabel": "Unit",
+      "unit": {
+        "words": "words",
+        "chars": "characters"
+      },
+      "languageLabel": "Answer language",
+      "save": "Save",
+      "saved": "Question saved",
+      "deleted": "Question deleted",
+      "delete": "Delete",
+      "deleteConfirm": "Delete with its versions"
+    },
+    "materials": {
+      "title": "Material",
+      "noQuestion": "Add a question to choose its material.",
+      "stale": "{count, plural, one {# chosen item no longer exists} other {# chosen items no longer exist}} (the breakdown or the story changed); it is not sent.",
+      "dropStale": "Remove",
+      "breakdownOutdated": "The breakdown was made from an older version of the JD.",
+      "group": {
+        "must": "Must have",
+        "nice": "Nice to have",
+        "other": "Responsibilities and more"
+      },
+      "useJdText": "Also send an excerpt of the JD text",
+      "profileGroup": "Profile",
+      "useProfile": "My summary, skills and languages (me.yaml)",
+      "noProfile": "me.yaml cannot be read, so the profile cannot be sent.",
+      "storiesGroup": "Stories",
+      "noStories": "Your story library is empty. Add stories on the Me page.",
+      "emphasisLabel": "What to stress this time",
+      "emphasisPlaceholder": "Optional: a point you want this answer to make",
+      "emphasisCount": "{count} / {max}",
+      "breakdownFirst": "Break the JD down first to choose its requirements one by one, or send the JD text instead.",
+      "noDescription": "This job has no JD text.",
+      "breakdownButton": "Break down the JD",
+      "storiesUnreadable": "stories.yaml cannot be read, so no story can be sent. The card on /me shows the error and lets you roll back."
+    },
+    "answer": {
+      "title": "Answer",
+      "done": "New versions are ready",
+      "noQuestion": "Pick or add a question.",
+      "variants": "{count, plural, one {# version per draft} other {# versions per draft}}",
+      "sends": "Sends:",
+      "sendsTo": "To:",
+      "noProvider": "no AI provider is set up for this task (Settings → AI)",
+      "noWeb": "No web search. Nothing else of your profile or library is sent.",
+      "field": {
+        "question": "the question",
+        "settings": "length, tone and language",
+        "job": "job title and company",
+        "jd_points": "chosen JD points",
+        "jd_excerpt": "JD excerpt",
+        "profile": "profile summary, skills, languages",
+        "stories": "chosen stories",
+        "emphasis": "your emphasis note"
+      },
+      "running": "Writing…",
+      "requesting": "Queued…",
+      "write": "Write",
+      "writeAgain": "Write new versions",
+      "error": {
+        "invalid": "Invalid request.",
+        "disabled": "The application writer is off.",
+        "config_error": "writer.yaml cannot be read.",
+        "not_found": "The job or question no longer exists.",
+        "no_material": "Choose some material first: JD points, the JD text, your profile, a story or an emphasis note.",
+        "expired": "The request waited or ran too long and was cancelled; its material was cleared. Try again.",
+        "output_truncated": "The answer was cut off at the AI provider's output limit. Ask for a shorter answer or raise max_output_tokens of the write task in ai.yaml.",
+        "aborted": "The AI worker was stopped while writing. Try again.",
+        "auth": "The AI provider's login has expired or was rejected. Log in again on the Mac, then try again.",
+        "timeout": "The AI did not finish in time. Try again.",
+        "rate_limited": "The AI provider is rate limited right now. Try again later.",
+        "invalid_output": "The AI answered in a format that cannot be checked. Try again.",
+        "provider_error": "The AI provider reported an error. Try again.",
+        "network": "The AI provider could not be reached. Try again.",
+        "budget": "The monthly budget for the AI API is used up.",
+        "quota_guard": "Job Radar's own AI usage cap is reached. {time, select, none {It continues by itself later.} other {Available again after {time}.}}",
+        "unavailable": "No AI provider is available right now. Check the CLI logins or API keys and try again.",
+        "failed": "Writing failed. Please try again.",
+        "invalid_payload": "The request was not valid.",
+        "handler_error": "Something went wrong handling the request. Try again.",
+        "no_handler": "No AI worker handles this request yet. Check that the ai-worker runs."
+      },
+      "versionsLabel": "Versions",
+      "manual": "Edited by you",
+      "final": "Final",
+      "length": "{count} / {target} {unit}",
+      "evidenceNote": "Each sentence is checked against the material you chose: \"has evidence\" means its quote was found there, not that the claim is true. Read every sentence before you send it.",
+      "finalised": "Marked as final",
+      "unfinalised": "No longer final",
+      "editSaved": "Saved as a new version",
+      "copied": "Copied",
+      "copyFailed": "Copying failed; select the text and copy it yourself.",
+      "editLabel": "Edit the answer",
+      "editHint": "Saved as a new version: sentences you change are marked as written by you.",
+      "copy": "Copy",
+      "finalise": "Mark as final",
+      "unfinalise": "Unmark final",
+      "edit": "Edit",
+      "editSave": "Save as new version",
+      "editCancel": "Cancel"
+    },
+    "status": {
+      "count": {
+        "supported": "{count} with evidence",
+        "partial": "{count} partly",
+        "unsupported": "{count} without",
+        "framing": "{count} framing",
+        "user_written": "{count} yours",
+        "web_unverified": "{count} web, unverified"
+      },
+      "label": {
+        "supported": "Has evidence",
+        "partial": "Partly backed",
+        "unsupported": "No evidence",
+        "framing": "Framing",
+        "web_unverified": "Web search, unverified",
+        "user_written": "Written by you",
+        "ai_suggestion_unverified": "AI suggestion, unverified",
+        "external_unverified": "External, unverified"
+      },
+      "explain": {
+        "supported": "every figure and name it states is in the quotes found in your material. That is not proof it is true.",
+        "partial": "evidence was found, but something it states is not in it (see below).",
+        "unsupported": "no quote was found in the material it may rest on. Rewrite it or delete it.",
+        "framing": "a linking sentence without facts.",
+        "web_unverified": "it rests only on the AI's web search of the company.",
+        "user_written": "you wrote or changed this sentence; it is not checked.",
+        "ai_suggestion_unverified": "an AI suggestion that was not checked.",
+        "external_unverified": "written outside Job Radar and not checked."
+      },
+      "detailLabel": "Sentence evidence",
+      "about": "checked as a sentence about: {about}",
+      "aboutKind": {
+        "user": "you",
+        "company": "the company",
+        "role": "the role",
+        "framing": "framing"
+      },
+      "source": {
+        "jd": "JD",
+        "profile": "profile",
+        "story": "story",
+        "emphasis": "emphasis note",
+        "draft": "your draft",
+        "company": "company (web)"
+      },
+      "problem": {
+        "not_found": "not found in that material",
+        "not_allowed": "this source cannot back a sentence like this",
+        "no_ref": "the story is not named",
+        "unknown_ref": "no such story was sent"
+      },
+      "missing": "Not in the evidence: {items}",
+      "needsCheck": "Check: {items} (names found neither in the evidence nor in the JD)"
+    }
   }
 }

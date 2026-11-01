@@ -29,6 +29,7 @@ import { defaultRegistry } from "@/lib/channels/registry";
 import { loadConfig, watchConfig } from "@/lib/config";
 import { startControlLanes, processNextControlRequest, aiWorkerRequestKinds } from "@/lib/control";
 import { registerAiControlHandlers } from "@/lib/control/ai-handlers";
+import { expireScrubbedRequests } from "@/lib/control/expire";
 import { codexVersionWarning, readCodexVersion } from "@/lib/ai/providers/codex-version";
 import { registerBuiltinAiSubtasks } from "@/lib/cycle/builtin-steps";
 import { closeDb, getDb, writeHeartbeat } from "@/lib/db";
@@ -212,7 +213,14 @@ async function main(): Promise<number> {
     finally { span.finish("ok"); }
   }
 
+  // Requests holding the user's text (the application writer) are failed and scrubbed once they outlive their timeout.
+  const expireOpenRequests = async (): Promise<void> => {
+    const expired = await expireScrubbedRequests(db);
+    if (expired > 0) log(`failed ${expired} expired request(s)`);
+  };
+
   if (once) {
+    await expireOpenRequests().catch((error: unknown) => log(`expiring requests failed: ${describe(error)}`));
     let handled = 0;
     let failed = 0;
     while (!abort.signal.aborted) {
@@ -289,6 +297,7 @@ async function main(): Promise<number> {
     maxRequeues,
     pollSeconds: () => loadConfig("ai").host_worker.poll_seconds,
     maxPerRound: () => loadConfig("ai").host_worker.max_requests_per_poll,
+    beforeRound: expireOpenRequests,
   });
   log(`polling interactive and batch lanes for ${kinds().join(", ")} every ${ai.host_worker.poll_seconds}s, heartbeat every ${ai.host_worker.heartbeat_seconds}s`);
 

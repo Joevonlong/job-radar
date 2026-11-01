@@ -24,6 +24,7 @@ import {
   searchSchema,
   uiSchema,
   writeConfig,
+  writerSchema,
 } from "@/lib/config";
 
 import { catalogIssuesToSettingsErrors, draftToCandidate, settingsDraftSchema, toSettingsErrors, type SettingsFieldError } from "./draft";
@@ -128,6 +129,10 @@ function validate(tab: SettingsForm, candidate: unknown): Validated {
     case "resume": {
       const result = resumeSchema.safeParse(candidate);
       return result.success ? { ok: true, write: (baseHash) => writeConfig("resume", result.data, { baseHash }) } : { ok: false, error: result.error };
+    }
+    case "writer": {
+      const result = writerSchema.safeParse(candidate);
+      return result.success ? { ok: true, write: (baseHash) => writeConfig("writer", result.data, { baseHash }) } : { ok: false, error: result.error };
     }
   }
 }

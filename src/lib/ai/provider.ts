@@ -94,6 +94,7 @@ export function createProvider(transport: AiTransport, kind: AiProviderKind = AI
           ...(opts.model ? { model: opts.model } : {}),
           ...(opts.signal ? { signal: opts.signal } : {}),
           ...(opts.timeoutMs !== undefined ? { timeoutMs: opts.timeoutMs } : {}),
+          ...(opts.maxOutputTokens !== undefined ? { maxOutputTokens: opts.maxOutputTokens } : {}),
           ...(opts.web ? { web: opts.web } : {}),
         };
         const started = performance.now();

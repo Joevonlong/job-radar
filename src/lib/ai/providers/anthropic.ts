@@ -69,12 +69,12 @@ export function createAnthropicTransport(options: AnthropicOptions): AiTransport
       if (!options.apiKey) throw new AiProviderError("anthropic", "not_configured", "ANTHROPIC_API_KEY not set");
       const model = request.model ?? (request.strong ? config.strong_model : config.model);
       // The server-side web search, for a web task only (the policy decides, `request.web` only sets the limits)
-      if (webAccessAllowed(request.task, "anthropic")) return callWithWebSearch(getClient(options.apiKey), request, model, options.maxOutputTokens);
+      if (webAccessAllowed(request.task, "anthropic")) return callWithWebSearch(getClient(options.apiKey), request, model, request.maxOutputTokens ?? options.maxOutputTokens);
       try {
         const message = await getClient(options.apiKey).messages.create(
           {
             model,
-            max_tokens: options.maxOutputTokens,
+            max_tokens: request.maxOutputTokens ?? options.maxOutputTokens,
             system: `${request.system}\n\n${RESPOND_INSTRUCTION}`,
             messages: [{ role: "user", content: request.user }],
             tools: [respondTool(request)],
