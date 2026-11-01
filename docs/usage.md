@@ -228,7 +228,7 @@ Good to know:
 - A job that a source re-posted under a new link is merged into the original; it keeps the earliest posted date, so it does not show up in "Last 7 days". "Relisted" means "disappeared and came back", which is not the same thing.
 - Some sources may refresh their posted dates, which makes old jobs look new in the posted-date filter. Switch **By** to **First seen** to compare when this tool first saw the job.
 - The URL: `/jobs?within=7d&dateBy=posted`. `within` is `Nd` (N from 1 to 366 days) or `month`; `dateBy` is `posted` or `seen`; `from` / `to` (`YYYY-MM-DD`) are the custom dates. A link without `dateBy` means first seen, so old links, the dates of saved views and the MCP `since` / `until` arguments keep their meaning. If `within` and `from` / `to` are both present, `within` wins. Invalid values are ignored.
-- Saved views: a quick range is not saved in a view, and neither are custom dates compared by posted date (the dialog says so). To save dates in a view, switch **By** to **First seen** and type the custom dates; views will keep quick ranges in a later version.
+- Saved views keep the date condition. A view saved with **Last 7 days** stores the range, not the dates (`within: 7d` in `interests.yaml`), so opening it next week shows the last 7 days of next week. A view with custom dates keeps those exact dates. A view that compares the posted date also stores `dateBy: posted`; a view without `dateBy` compares first seen, which is what every view saved before the quick ranges did. The Today page and the view trend charts ignore the dates of a view: Today is today. Rolling back to an earlier version: see [Upgrading with the date filter](upgrade.md#upgrading-with-the-date-filter).
 
 ### Sorting the list
 

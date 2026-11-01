@@ -7,6 +7,13 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ### Upgrade notes
 
+- **Saved views keep the date filter.** A view saved with a quick range (`within: 7d` or `month`) stores the range and
+  recomputes it on the day it is opened; `dateBy: posted` records that it compares the posted date (a view without `dateBy`
+  compares first seen, as before). Existing views load unchanged. **Rollback:** 2.0.1 checks `interests.yaml` strictly and
+  refuses the whole file while any view holds `within` or `dateBy`, so no view loads: delete both keys from every view before
+  switching. Nothing writes a migration backup for this; the app's own copies in `data/config/.backup/editor/<timestamp>/`
+  keep only the newest 20 and help only if one is older than the first view holding the keys. See
+  [Upgrading with the date filter](docs/upgrade.md#upgrading-with-the-date-filter).
 - **Two new AI providers, OpenAI API and OpenRouter, are appended to your `api_order`.** Loading or migrating `ai.yaml`
   (now `config_version: 3`) adds `openai` and `openrouter` at the end of the list, after your own order. Nothing is sent
   to them until `OPENAI_API_KEY` or `OPENROUTER_API_KEY` is in `.env`. **Rollback:** older code refuses the version 3

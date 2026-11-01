@@ -61,6 +61,34 @@ describe("ViewsPanel filter tags", () => {
     panel({ city: ["Berlin", "München"] });
     expect(screen.getByRole("link", { name: /V/ }).getAttribute("href")).toBe("/jobs?city=Berlin&city=M%C3%BCnchen");
   });
+
+  it("shows a quick range as words, with the date it compares", () => {
+    panel({ within: "7d", dateBy: "posted" });
+    const tags = screen.getByRole("list", { name: "Filters" });
+    expect(tags).toHaveTextContent("Date range: Last 7 days");
+    expect(tags).toHaveTextContent("Date compared: Posted date");
+    expect(screen.getByRole("link", { name: /V/ }).getAttribute("href")).toBe("/jobs?within=7d&dateBy=posted");
+  });
+
+  it("names the range and the compared date in Chinese, and reads a view without dateBy as first seen", () => {
+    panel({ within: "month" }, "zh");
+    const tags = screen.getByRole("list", { name: "筛选条件" });
+    expect(tags).toHaveTextContent("日期范围：本月");
+    expect(tags).toHaveTextContent("比较的日期：首次发现");
+  });
+
+  it("calls custom dates neutral dates, not first-seen dates, and says first seen for an old view", () => {
+    panel({ from: "2026-10-01", to: "2026-10-15" });
+    const tags = screen.getByRole("list", { name: "Filters" });
+    expect(tags).toHaveTextContent("Date from: 2026-10-01");
+    expect(tags).toHaveTextContent("Date to: 2026-10-15");
+    expect(tags).toHaveTextContent("Date compared: First seen");
+  });
+
+  it("shows no compared date for a view without a date condition", () => {
+    panel({ city: "Berlin" });
+    expect(screen.getByRole("list", { name: "Filters" })).not.toHaveTextContent("Date compared");
+  });
 });
 
 describe("PatternList", () => {

@@ -524,9 +524,9 @@ any more still filters, and the filter shows no button for it. How the filter be
 
 Rolling back to a version before the date filter: `ui.yaml` is strict, so the older version refuses a file that holds
 these keys. If you added them (or a copy of the shipped file carries them), remove `filters.date_quick_ranges` and
-`filters.date_default_field` before switching, and check the file with the older version. Saved views never hold a quick
-range yet, so no change is needed in `interests.yaml`. A version that stores quick ranges in views will come later; once you
-run it, a view with a quick range ignores that range when read by this version (`pnpm config:check` warns about the key).
+`filters.date_default_field` before switching, and check the file with the older version. Saved views in `interests.yaml`
+can hold `within` and `dateBy`: see [Upgrading with the date filter](upgrade.md#upgrading-with-the-date-filter) for what an
+older version does with them.
 
 ## Recheck of watched jobs (`pipeline.yaml` + `ui.yaml`)
 

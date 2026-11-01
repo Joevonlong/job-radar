@@ -8,6 +8,7 @@ import { toastTone } from "@/lib/toast";
 
 import { deleteViewAction as rawDeleteViewAction, renameViewAction as rawRenameViewAction, setDefaultViewAction as rawSetDefaultViewAction } from "@/app/interests/actions";
 import { useBaseCurrency, useLocalLanguageName } from "@/components/base-currency";
+import { useWithinLabel } from "@/components/jobs/date-filter";
 import { Badge } from "@/components/ui/badge";
 import { Sparkline } from "@/components/viz";
 import { Button } from "@/components/ui/button";
@@ -16,8 +17,9 @@ import { Input } from "@/components/ui/input";
 import type { SavedView } from "@/lib/config/schemas/interests";
 import type { InterestsActionState, InterestsFormError } from "@/lib/interests/types";
 import { knownContract, knownFamily } from "@/lib/dashboard/labels";
-import { activeFilterKeys, filterValues, viewFiltersToParams, type ViewFilterKey } from "@/lib/interests/view-filters";
+import { activeFilterKeys, filterValues, viewDateField, viewFiltersToParams, type ViewFilterKey } from "@/lib/interests/view-filters";
 import { APPLICATION_FILTER_STATUSES, JOB_STATUSES, JOB_WORKPLACES } from "@/lib/jobs/constants";
+import { parseWithin } from "@/lib/jobs/date-range";
 import { MULTI_FILTER_KEYS, type MultiFilterKey } from "@/lib/jobs/filter-keys";
 import { currencyPrefix } from "@/lib/format/numbers";
 import { jobsListHref } from "@/lib/jobs/search-params";
@@ -41,10 +43,14 @@ function FilterChips({ view }: { view: SavedView }) {
   const currency = useBaseCurrency();
   const languageName = useLocalLanguageName();
   // The local-language filter names the market's language
-  const keyLabel = (key: ViewFilterKey): string => (key === "hideLang" ? t("keys.hideLang", { language: languageName ?? t("localLanguage") }) : t(`keys.${key}`));
+  const withinLabel = useWithinLabel();
+  const keyLabel = (key: ViewFilterKey | "dateBy"): string => (key === "hideLang" ? t("keys.hideLang", { language: languageName ?? t("localLanguage") }) : t(`keys.${key}`));
   const format = useFormatter();
-  const keys = activeFilterKeys(view.filters);
-  if (keys.length === 0) return <span className="text-ink-3 text-body-sm">{t("none")}</span>;
+  const filterKeys = activeFilterKeys(view.filters);
+  // `dateBy` only qualifies the date condition: its own chip says which date the range compares (a view without it means first seen)
+  const dateField = viewDateField(view.filters);
+  const keys: Array<ViewFilterKey | "dateBy"> = dateField === null ? filterKeys : [...filterKeys, "dateBy"];
+  if (filterKeys.length === 0) return <span className="text-ink-3 text-body-sm">{t("none")}</span>;
   /** One picked value as the /jobs filter bar names it. */
   const valueLabel = (key: Extract<MultiFilterKey, ViewFilterKey>, raw: string): string => {
     switch (key) {
@@ -74,8 +80,13 @@ function FilterChips({ view }: { view: SavedView }) {
         return raw;
     }
   };
-  const value = (key: ViewFilterKey): string | null => {
+  const value = (key: ViewFilterKey | "dateBy"): string | null => {
+    if (key === "dateBy") return dateField === "posted" ? tj("dateByPosted") : tj("dateBySeen");
     const raw = view.filters[key];
+    if (key === "within") {
+      const range = typeof raw === "string" ? parseWithin(raw) : null;
+      return range ? withinLabel(range) : String(raw);
+    }
     if (typeof raw === "boolean" || raw === undefined) return null;
     if (typeof raw === "number") return key === "minSalary" ? `≥ ${currencyPrefix(currency)}${raw / 1000}k` : `≥ ${raw}`;
     if (key === "trap") return raw === "only" || raw === "hide" ? tTrap(raw) : String(raw);

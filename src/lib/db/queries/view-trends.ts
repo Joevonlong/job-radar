@@ -38,7 +38,7 @@ export async function getViewDailyCounts(db: Db, options: { views: readonly View
 
     const counts: Record<string, SQL<number>> = {};
     options.views.forEach((view, index) => {
-      const filters: JobFilters = { ...view.filters, from: null, to: null };
+      const filters: JobFilters = { ...view.filters, from: null, to: null, within: null, dateField: null };
       const conditions: SQL[] = [];
       if (!filters.applicationStatuses?.includes("archived")) {
         conditions.push(notExists(db.select({ one: sql`1` }).from(applications).where(and(eq(applications.jobId, jobs.id), eq(applications.status, "archived")))));

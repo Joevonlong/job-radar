@@ -151,6 +151,44 @@ test("save a two-city view: the file holds a list, Today has a tab with the same
   await expectNoLeavingRows(page);
 });
 
+test("save a view with a quick date range: the file keeps the range, /interests names it, opening the view restores the range and the compared date", async ({ page }) => {
+  await open(page, "/jobs?city=Berlin&within=7d&dateBy=posted");
+  const expected = await resultCount(page);
+  expect(expected).toBeGreaterThanOrEqual(1);
+  await page.getByTestId("save-view").click();
+  // the range is saved now: no hint that it is left out
+  await expect(page.getByTestId("save-view-date-hint")).toHaveCount(0);
+  await page.getByTestId("save-view-name").fill("柏林近一周");
+  await page.getByTestId("save-view-submit").click();
+  await expect(page.getByText("已保存视图「柏林近一周」")).toBeVisible();
+  await expect.poll(read).toContain("柏林近一周");
+  expect(read()).toMatch(/within: 7d\n/);
+  expect(read()).toMatch(/dateBy: posted\n/);
+  expect(read()).not.toMatch(/\bfrom:/);
+
+  await open(page, "/interests");
+  const row = page.getByTestId("view-row").filter({ hasText: "柏林近一周" });
+  const tags = row.getByRole("list", { name: "筛选条件" });
+  await expect(tags).toContainText("日期范围：7 天内");
+  await expect(tags).toContainText("比较的日期：发布日期");
+  const link = row.getByRole("link", { name: /在岗位页打开/ }).first();
+  await expect(link).toHaveAttribute("href", /within=7d&dateBy=posted/);
+  await link.click();
+  await page.waitForLoadState("networkidle");
+  await expect(page).toHaveURL(/within=7d/);
+  await expect(page).toHaveURL(/dateBy=posted/);
+  await expect(page.getByTestId("date-filter-range").locator('[role="radio"][aria-checked="true"]')).toHaveText("7 天内");
+  await expect(page.getByTestId("date-filter-field").locator('[role="radio"][aria-checked="true"]')).toHaveText("发布日期");
+  expect(await resultCount(page)).toBe(expected);
+
+  // Today ignores the dates of a view: its tab counts the Berlin jobs of today whatever the range says
+  await open(page, "/");
+  await page.getByTestId("view-tabs").getByRole("radio", { name: /柏林近一周/ }).click();
+  await expect(page).toHaveURL(/view=/);
+  await expect(listRows(page).first()).toBeVisible();
+  fs.copyFileSync(SHIPPED_FILE, INTERESTS_FILE);
+});
+
 test("a hand-written scalar view (city: München) still applies on Today", async ({ page }) => {
   const text = fs.readFileSync(SHIPPED_FILE, "utf8").replace("views: []", "views:\n  - id: muc\n    name: 慕尼黑手写\n    default: false\n    filters:\n      city: München\n");
   fs.writeFileSync(INTERESTS_FILE, text);

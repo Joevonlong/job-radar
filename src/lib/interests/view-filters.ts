@@ -5,6 +5,7 @@
  */
 import type { SavedView, ViewFilters } from "@/lib/config/schemas/interests";
 import { FILTER_KEYS, MULTI_FILTER_KEYS, NON_VIEW_FILTER_KEYS, SCALAR_COMPAT_KEYS, TOGGLE_FILTER_KEYS, type FilterKey, type MultiFilterKey, type NonViewFilterKey } from "@/lib/jobs/filter-keys";
+import { formatWithin, parseWithin, type DateField } from "@/lib/jobs/date-range";
 import { sortMultiValues, type MultiValue } from "@/lib/jobs/filter-values";
 import type { JobsSearchParams } from "@/lib/jobs/search-params";
 
@@ -18,16 +19,12 @@ export const VIEW_TOGGLE_KEYS = TOGGLE_FILTER_KEYS.filter(isViewKey);
 
 type FilterParams = Pick<JobsSearchParams, ViewFilterKey>;
 
-/** The date inputs `viewFiltersFromParams` looks at. */
-type ViewDateParams = Partial<FilterParams> & { within?: JobsSearchParams["within"]; dateBy?: JobsSearchParams["dateBy"] };
+/** The URL params `viewFiltersFromParams` reads: the view filters plus `dateBy`, which qualifies the date condition and is no filter of its own. */
+type ViewParams = Partial<FilterParams> & { dateBy?: JobsSearchParams["dateBy"] };
 
-/**
- * Whether the date condition of these params stays out of a saved view. A view stores custom dates as `from` / `to`, which it reads as
- * first-seen dates, so dates that compare the posted date would come back meaning something else; quick ranges have no stored form yet.
- * Both are dropped (the save dialog says so). Old links without `dateBy` mean first seen and are saved as before.
- */
-export function dropsDateFromView(params: ViewDateParams): boolean {
-  return Boolean(params.within) || (Boolean(params.from || params.to) && params.dateBy === "posted");
+/** What a view's date condition compares: its `dateBy`, else first seen (what a view without the key always meant). Null without a date condition. */
+export function viewDateField(filters: ViewFilters): DateField | null {
+  return filters.within !== undefined || filters.from !== undefined || filters.to !== undefined ? (filters.dateBy ?? "seen") : null;
 }
 
 /** The values of a multi filter of a view, in the order they were written: a scalar is a one-element list, absent is empty. */
@@ -40,7 +37,7 @@ export function filterValues<K extends Exclude<MultiFilterKey, NonViewFilterKey>
 const isScalarCompat = (key: MultiFilterKey): boolean => (SCALAR_COMPAT_KEYS as readonly string[]).includes(key);
 
 /** Save only view keys: URL-only country and searchIn are ignored, as are unset values and false toggles. */
-export function viewFiltersFromParams(params: ViewDateParams): ViewFilters {
+export function viewFiltersFromParams(params: ViewParams): ViewFilters {
   const filters: ViewFilters = {};
   const q = params.q?.trim();
   if (q) filters.q = q;
@@ -57,10 +54,14 @@ export function viewFiltersFromParams(params: ViewDateParams): ViewFilters {
   Object.assign(filters, multi);
   if (params.minScore !== null && params.minScore !== undefined) filters.minScore = params.minScore;
   if (params.minSalary !== null && params.minSalary !== undefined) filters.minSalary = params.minSalary;
-  if (!dropsDateFromView(params)) {
+  // A quick range wins over custom dates, as it does in the URL. `dateBy` is written only for the posted date and only with a date condition
+  // (alone it filters nothing): first seen is what a view without it means, so views of first-seen dates keep the shape older versions read.
+  if (params.within) filters.within = formatWithin(params.within);
+  else {
     if (params.from) filters.from = params.from;
     if (params.to) filters.to = params.to;
   }
+  if (params.dateBy === "posted" && viewDateField(filters) !== null) filters.dateBy = "posted";
   if (params.salary === true) filters.salary = true;
   if (params.filtered === true) filters.filtered = true;
   if (params.hideLang === true) filters.hideLang = true;
@@ -72,8 +73,11 @@ export function viewFiltersFromParams(params: ViewDateParams): ViewFilters {
   return filters;
 }
 
-/** `/jobs` URL state of a view (every filter key present, `null` / `[]` = not set); feed it to the nuqs serializer. */
-export function viewFiltersToParams(filters: ViewFilters): FilterParams {
+/**
+ * `/jobs` URL state of a view (every filter key present, `null` / `[]` = not set); feed it to the nuqs serializer. A quick range is
+ * counted from the moment the link is opened, and a date condition always carries `dateBy` (a view without one compares first seen).
+ */
+export function viewFiltersToParams(filters: ViewFilters): FilterParams & Pick<JobsSearchParams, "dateBy"> {
   return {
     q: filters.q ?? null,
     source: filterValues(filters, "source"),
@@ -87,6 +91,8 @@ export function viewFiltersToParams(filters: ViewFilters): FilterParams {
     minSalary: filters.minSalary ?? null,
     from: filters.from ?? null,
     to: filters.to ?? null,
+    within: filters.within === undefined ? null : parseWithin(filters.within),
+    dateBy: viewDateField(filters),
     salary: filters.salary === true ? true : null,
     filtered: filters.filtered === true ? true : null,
     hideLang: filters.hideLang === true ? true : null,
@@ -115,10 +121,10 @@ function comparable(filters: ViewFilters, key: ViewFilterKey): unknown {
   return filters[key];
 }
 
-/** Same filters, whatever the key order (and `"Berlin"` = `["Berlin"]`). */
+/** Same filters, whatever the key order (and `"Berlin"` = `["Berlin"]`; an absent `dateBy` = `seen`). */
 export function sameFilters(a: ViewFilters, b: ViewFilters): boolean {
   const keys = activeFilterKeys(a);
-  return keys.length === activeFilterKeys(b).length && keys.every((key) => JSON.stringify(comparable(a, key)) === JSON.stringify(comparable(b, key)));
+  return keys.length === activeFilterKeys(b).length && viewDateField(a) === viewDateField(b) && keys.every((key) => JSON.stringify(comparable(a, key)) === JSON.stringify(comparable(b, key)));
 }
 
 const MAX_ID_CHARS = 40;
@@ -187,6 +193,8 @@ export function resolveTodayView(views: readonly SavedView[], view: string | nul
   const filters: ViewFilters = { ...(active?.filters ?? {}) };
   delete filters.from;
   delete filters.to;
+  delete filters.within;
+  delete filters.dateBy;
   for (const key of ["filtered", "hideLang", "high"] as const) {
     const value = toggles[key];
     if (value === null) continue;

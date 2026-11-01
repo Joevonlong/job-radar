@@ -4,7 +4,7 @@ import { createSerializer } from "nuqs/server";
 
 import { viewFiltersSchema, type SavedView } from "@/lib/config/schemas/interests";
 import { jobsSearchParsers, loadJobsSearchParams } from "@/lib/jobs/search-params";
-import { activeFilterKeys, dropsDateFromView, filterValues, hasViewFilters, resolveTodayView, sameFilters, slugifyViewId, todayHref, viewFiltersFromParams, viewFiltersToParams } from "@/lib/interests/view-filters";
+import { activeFilterKeys, filterValues, hasViewFilters, resolveTodayView, sameFilters, slugifyViewId, todayHref, viewDateField, viewFiltersFromParams, viewFiltersToParams, VIEW_FILTER_KEYS } from "@/lib/interests/view-filters";
 
 const serialize = createSerializer(jobsSearchParsers);
 const loadJobsSearchParamsSync = (query: string) => loadJobsSearchParams(query);
@@ -188,27 +188,75 @@ it("never saves country or search scope and never adds either to view URLs", () 
 });
 
 describe("dates in saved views", () => {
-  it("saves custom dates read as first seen (old links, first-seen picks), as before", () => {
-    expect(viewFiltersFromParams(loadJobsSearchParams("?from=2026-10-01&to=2026-10-15"))).toEqual({ from: "2026-10-01", to: "2026-10-15" });
-    expect(viewFiltersFromParams(loadJobsSearchParams("?from=2026-10-01&dateBy=seen"))).toEqual({ from: "2026-10-01" });
+  const fromUrl = (query: string) => viewFiltersFromParams(loadJobsSearchParams(query));
+
+  it("saves custom dates read as first seen (old links, first-seen picks) as before, without dateBy: first seen is what a view means by default", () => {
+    expect(fromUrl("?from=2026-10-01&to=2026-10-15")).toEqual({ from: "2026-10-01", to: "2026-10-15" });
+    expect(fromUrl("?from=2026-10-01&dateBy=seen")).toEqual({ from: "2026-10-01" });
   });
 
-  it("leaves out dates that compare the posted date, and quick ranges, so a stored from / to never changes meaning", () => {
-    expect(viewFiltersFromParams(loadJobsSearchParams("?city=Berlin&from=2026-10-01&to=2026-10-15&dateBy=posted"))).toEqual({ city: "Berlin" });
-    expect(viewFiltersFromParams(loadJobsSearchParams("?city=Berlin&within=7d&dateBy=posted"))).toEqual({ city: "Berlin" });
-    expect(viewFiltersFromParams(loadJobsSearchParams("?within=7d&from=2026-10-01"))).toEqual({});
-    expect(dropsDateFromView(loadJobsSearchParams("?within=month"))).toBe(true);
-    expect(dropsDateFromView(loadJobsSearchParams("?dateBy=posted"))).toBe(false);
-    expect(dropsDateFromView(loadJobsSearchParams("?from=2026-10-01&dateBy=seen"))).toBe(false);
+  it("saves a quick range as its token, with dateBy only for the posted date", () => {
+    expect(fromUrl("?city=Berlin&within=7d&dateBy=posted")).toEqual({ city: "Berlin", within: "7d", dateBy: "posted" });
+    expect(fromUrl("?within=month&dateBy=seen")).toEqual({ within: "month" });
+    expect(fromUrl("?within=30d")).toEqual({ within: "30d" });
   });
 
-  it("never writes the quick range or the date they compare back to a /jobs link", () => {
-    expect(viewFiltersToParams({ from: "2026-10-01" })).not.toHaveProperty("within");
-    expect(viewFiltersToParams({ from: "2026-10-01" })).not.toHaveProperty("dateBy");
+  it("saves custom dates compared by the posted date with their dateBy", () => {
+    expect(fromUrl("?from=2026-10-01&to=2026-10-15&dateBy=posted")).toEqual({ from: "2026-10-01", to: "2026-10-15", dateBy: "posted" });
+  });
+
+  it("lets a quick range win over custom dates in a hand-written link, as the list does", () => {
+    expect(fromUrl("?within=7d&from=2026-10-01&dateBy=seen")).toEqual({ within: "7d" });
+  });
+
+  it("never saves dateBy alone: without a date condition it filters nothing", () => {
+    expect(fromUrl("?dateBy=posted")).toEqual({});
+    expect(fromUrl("?city=Berlin&dateBy=posted")).toEqual({ city: "Berlin" });
+    expect(hasViewFilters(fromUrl("?dateBy=posted"))).toBe(false);
+  });
+
+  it("holds within among the view filters, and dateBy in none of the lists", () => {
+    expect(VIEW_FILTER_KEYS).toContain("within");
+    expect(VIEW_FILTER_KEYS).not.toContain("dateBy");
+    expect(activeFilterKeys({ within: "7d", dateBy: "posted" })).toEqual(["within"]);
+    expect(hasViewFilters({ within: "7d" })).toBe(true);
+  });
+
+  it("opens a view with its quick range in the /jobs link, counted from then, and says what it compares", () => {
+    expect(serialize("/jobs", viewFiltersToParams({ within: "7d", dateBy: "posted" }))).toBe("/jobs?within=7d&dateBy=posted");
+    expect(serialize("/jobs", viewFiltersToParams({ within: "month" }))).toBe("/jobs?within=month&dateBy=seen");
+    expect(viewFiltersToParams({ within: "7d" }).within).toEqual({ kind: "days", days: 7 });
+  });
+
+  it("opens an old view (custom dates, no dateBy) as first seen, and a view without dates without dateBy", () => {
+    expect(serialize("/jobs", viewFiltersToParams({ from: "2026-10-01" }))).toBe("/jobs?from=2026-10-01&dateBy=seen");
+    expect(serialize("/jobs", viewFiltersToParams({ from: "2026-10-01", dateBy: "posted" }))).toBe("/jobs?from=2026-10-01&dateBy=posted");
+    expect(serialize("/jobs", viewFiltersToParams({ city: "Berlin" }))).toBe("/jobs?city=Berlin");
+    expect(viewFiltersToParams({ city: "Berlin" })).toMatchObject({ within: null, dateBy: null });
+  });
+
+  it("round-trips: a link saved as a view opens as the same link", () => {
+    for (const query of ["?within=7d&dateBy=posted&city=Berlin", "?within=month&dateBy=seen", "?from=2026-10-01&to=2026-10-15&dateBy=posted", "?from=2026-10-01&dateBy=seen"]) {
+      const params = loadJobsSearchParams(query);
+      const reopened = viewFiltersToParams(viewFiltersFromParams(params));
+      expect(serialize("/jobs", reopened), query).toBe(serialize("/jobs", params));
+    }
+  });
+
+  it("tells views that differ only by what the date compares apart", () => {
+    expect(sameFilters({ within: "7d", dateBy: "posted" }, { within: "7d", dateBy: "seen" })).toBe(false);
+    expect(sameFilters({ within: "7d" }, { within: "7d", dateBy: "seen" })).toBe(true);
+    expect(sameFilters({ within: "7d" }, { within: "14d" })).toBe(false);
+    expect(sameFilters({ city: "Berlin", dateBy: "posted" }, { city: "Berlin" })).toBe(true);
+    expect(viewDateField({ from: "2026-10-01" })).toBe("seen");
+    expect(viewDateField({ city: "Berlin", dateBy: "posted" })).toBeNull();
   });
 
   it("keeps the dates of a view out of Today", () => {
-    expect(resolveTodayView([view("a", { filters: { city: "Berlin", from: "2026-10-01" } })], "a", { filtered: null, hideLang: null, high: null }).filters).toEqual({ city: "Berlin" });
+    const today = (filters: SavedView["filters"]) => resolveTodayView([view("a", { filters })], "a", { filtered: null, hideLang: null, high: null }).filters;
+    expect(today({ city: "Berlin", from: "2026-10-01" })).toEqual({ city: "Berlin" });
+    expect(today({ city: "Berlin", within: "7d", dateBy: "posted" })).toEqual({ city: "Berlin" });
+    expect(today({ city: "Berlin", from: "2026-10-01", to: "2026-10-15", dateBy: "seen" })).toEqual({ city: "Berlin" });
   });
 });
 

@@ -217,6 +217,24 @@ leaves the index in place and needs no database change. The two new `ui.yaml` ke
 `filters.date_default_field`) only matter to a rollback if your file holds them: see
 [configuration.md](configuration.md#date-filter-uiyaml).
 
+Saved views can store the date condition as two optional keys in a view's `filters` in `interests.yaml`: `within` (`7d`,
+`month`, ... the quick range, counted from the day the view is opened) and `dateBy` (`posted` or `seen`; written only for
+`posted`, a view without it compares first seen). Views you already have load unchanged. Rolling back:
+
+- **To a release before the date filter (2.0.1 or earlier)**: its `interests.yaml` check is strict and refuses the whole
+  file when a view holds `within` or `dateBy`, so no view loads. Delete those two keys from every view (and, if you added them,
+  the two `ui.yaml` keys above) before switching. There is no migration, so `pnpm config:migrate` writes no backup for this.
+  The app keeps copies of `interests.yaml` in `data/config/.backup/editor/<timestamp>/` (the newest 20 per file,
+  `ui.yaml: config_editor.backups_keep`); restoring one only helps if it is older than the first view holding the keys, and it
+  also undoes every change made to the file since.
+- **To a build from the main branch that has the date filter but not this change**: it ignores `within` and `dateBy` in a view
+  and `pnpm config:check` warns about each. A view that held a quick range then shows every date; a view with `from` / `to` and
+  `dateBy: posted` reads those dates as first-seen dates. Every save that goes through the app's own `interests.yaml` writer
+  rewrites the whole file from what that build understands, so it drops both keys from **all** views, not only the one you
+  changed: saving, renaming, deleting or defaulting a view, saving the signal categories, applying a suggestion, and adding or
+  removing a watched company. (The advanced editor saves the text as you typed it and keeps them.) The text before such a save is
+  copied to `.backup/editor/`.
+
 ### Upgrading with change fingerprints
 
 The change-fingerprint migration adds nullable storage columns and indexes. Adding the columns does not rewrite job or
