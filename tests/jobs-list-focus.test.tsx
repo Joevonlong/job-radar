@@ -54,6 +54,7 @@ const job = (id: number, over: Partial<JobListItem> = {}): JobListItem => ({
   signals: [],
   timeLabel: "",
   timeTitle: "",
+  posted: { day: "10/27", ago: "4 d", title: "", known: true },
   ...over,
 });
 
@@ -87,6 +88,29 @@ describe("archived row time", () => {
     expect(screen.getByTestId("row-last-listed")).toHaveTextContent("Last listed: not recorded");
     rerender(list([job(1, { closedReason: "phrase" })]));
     expect(screen.queryByTestId("row-last-listed")).toBeNull();
+  });
+});
+
+describe("posted date column", () => {
+  const posted = { day: "Oct 27", ago: "4 d", title: "Posted 2026-10-27 09:30 (4 days ago)", known: true };
+
+  it.each(["manual", "gone", "dormant"] as const)("an archived row (%s) does not show it: it keeps its last-listed line", (reason) => {
+    render(list([job(1, { closedReason: reason, posted })]));
+    expect(document.querySelector('[data-slot="row-posted"]')).toBeNull();
+    expect(screen.getByTestId("row-last-listed")).toBeInTheDocument();
+  });
+
+  it.each([null, "phrase"] as const)("a current row (%s) shows the day, the days and the full sentence for screen readers", (reason) => {
+    render(list([job(1, { closedReason: reason, posted })]));
+    const cell = document.querySelector('[data-slot="row-posted"]');
+    expect(cell).toHaveTextContent("Oct 27 · 4 d");
+    expect(cell).toHaveAttribute("title", posted.title);
+    expect(cell?.querySelector(".sr-only")).toHaveTextContent(posted.title);
+  });
+
+  it("without a posted date it says seen and keeps the first-seen day", () => {
+    render(list([job(1, { posted: { day: "Aug 1", ago: "", title: "Posted date unknown, first seen 2026-08-01 12:00", known: false } })]));
+    expect(document.querySelector('[data-slot="row-posted"]')).toHaveTextContent("seen Aug 1");
   });
 });
 

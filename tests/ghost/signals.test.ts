@@ -117,6 +117,13 @@ describe("reposted", () => {
     expect(reason?.events.every((e) => e.gapDays === 40)).toBe(true);
   });
 
+  it("more than ten relistings keep the latest ten, oldest first", () => {
+    const many = Array.from({ length: 13 }, (_, i) => posting({ externalId: `g${i}`, firstSeenAt: daysAgo(600 - i * 40) }));
+    const events = reposted(many, rules)?.events ?? [];
+    expect(events.map((e) => e.newId)).toEqual(["g3", "g4", "g5", "g6", "g7", "g8", "g9", "g10", "g11", "g12"]);
+    expect(events.at(-1)?.newSeen).toBe(daysAgo(600 - 12 * 40).toISOString().slice(0, 10));
+  });
+
   it("the same id seen twice is not a relisting", () => {
     expect(reposted([posting({ externalId: "a", firstSeenAt: daysAgo(100) }), posting({ externalId: "a", firstSeenAt: daysAgo(10) })], rules)).toBeNull();
   });

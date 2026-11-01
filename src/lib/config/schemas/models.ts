@@ -53,6 +53,8 @@ export const modelsSchema = z
       "claude-cli": catalogProvider,
       "codex-cli": catalogProvider,
       anthropic: catalogProvider,
+      openai: catalogProvider,
+      openrouter: catalogProvider,
       deepseek: catalogProvider,
       mimo: catalogProvider,
     }),

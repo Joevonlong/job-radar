@@ -5,6 +5,7 @@
 import type { ConfigName } from "../registry";
 
 import { ai002 } from "./ai/002-market";
+import { ai003 } from "./ai/003-api-providers";
 import { insights002 } from "./insights/002-market";
 import { interests002 } from "./interests/002-signal-categories";
 import { interests003 } from "./interests/003-market";
@@ -30,7 +31,7 @@ export const CONFIG_MIGRATIONS: Readonly<Partial<Record<ConfigName, readonly Con
   search: [search002],
   channels: [sources002, sources003, sources004],
   pipeline: [pipeline002, pipeline003],
-  ai: [ai002],
+  ai: [ai002, ai003],
   insights: [insights002],
   salary: [salary002],
 };

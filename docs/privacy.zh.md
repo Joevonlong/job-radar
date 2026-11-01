@@ -40,7 +40,7 @@ Job Radar 是跑在你自己机器上的单用户工具：没有账号、没有�
 
 | 谁 | 发什么 | 何时 | 怎么停止 |
 |---|---|---|---|
-| 你使用的 AI 提供方：OpenAI（`codex` 命令行）、Anthropic（`claude` 命令行或 API）、DeepSeek 或小米 MiMo（API，**默认关闭**） | **评分：** 画像摘要、技能和年限、语言等级、**目标职位、目标城市、工作方式、远程范围、级别、薪资底线、合同偏好、排除的公司、排除的关键词、你自己的评分标准**，加上岗位描述。**每周建议：** 你标记过的岗位（感兴趣、准备中、已申请、面试中、offer、忽略）**及其状态**，加上你的偏好。**翻译、拆解、信号、陷阱检查：** 只有岗位文本。**申请写作**（默认关闭）：只发送“生成”上方披露框列出的素材：问题及其设置、职位名称和公司、勾选的 JD 要点或一段 JD 原文、画像简介、技能和语言、勾选的经历素材和你的强调说明，在你按**生成**时发送。你的居住城市和签证状态（`me.yaml`）、备注和申请备注不会发送。 | 每一轮；申请写作只在你点击时 | 关掉该提供方（`ai.yaml` 里 `enabled: false`，或"设置 → AI"），不安装它的命令行、不填它的 key；每周建议用 `schedule.yaml` 的 `suggest.enabled` 关掉；`writer.yaml: enabled` 保持 `false` |
+| 你使用的 AI 提供方：OpenAI（`codex` 命令行或 API）、Anthropic（`claude` 命令行或 API）、OpenRouter 及它转发到的上游提供方（API）、DeepSeek 或小米 MiMo（API，**默认关闭**）。API 提供方在 `.env` 里填了 key 之前什么都不发 | **评分：** 画像摘要、技能和年限、语言等级、**目标职位、目标城市、工作方式、远程范围、级别、薪资底线、合同偏好、排除的公司、排除的关键词、你自己的评分标准**，加上岗位描述。**每周建议：** 你标记过的岗位（感兴趣、准备中、已申请、面试中、offer、忽略）**及其状态**，加上你的偏好。**翻译、拆解、信号、陷阱检查：** 只有岗位文本。**申请写作**（默认关闭）：只发送“生成”上方披露框列出的素材：问题及其设置、职位名称和公司、勾选的 JD 要点或一段 JD 原文、画像简介、技能和语言、勾选的经历素材和你的强调说明，在你按**生成**时发送。你的居住城市和签证状态（`me.yaml`）、备注和申请备注不会发送。 | 每一轮；申请写作只在你点击时 | 关掉该提供方（`ai.yaml` 里 `enabled: false`，或"设置 → AI"），不安装它的命令行、不填它的 key；每周建议用 `schedule.yaml` 的 `suggest.enabled` 关掉；`writer.yaml: enabled` 保持 `false` |
 | 招聘网站与 API：Arbeitsagentur、Indeed、LinkedIn、StepStone、XING、JSearch 的 Google Jobs、公司招聘看板、Bright Data、Apify、Monid | 搜索关键词、搜索城市或本国名、关注名单里的公司名，以及来自你的 IP 的请求（LinkedIn session 以你自己登录的账号发出） | 每轮采集；公司查询仅发给支持且已启用的通道 | 在来源页关闭通道；公司查询可在 `search.yaml` 设 `watched_company_queries.enabled: false` 全部关闭，或在 `sources.yaml` 的通道块设 `company_queries: false` 单独关闭 |
 | Arbeitnow（免费招聘板接口） | 只有来自你 IP 地址的请求（它不收关键词和地点） | 每一轮 | 在"来源"页关掉该通道 |
 | Tavily 或 Brave（招聘页发现） | 形如"关键词 jobs 城市"的搜索词 | 每天，且仅在有 key 时 | 不设置 key |
@@ -56,7 +56,12 @@ Job Radar 是跑在你自己机器上的单用户工具：没有账号、没有�
 - **订阅命令行**（`codex`、`claude`）适用你的 ChatGPT 或 Claude 订阅的消费者条款。Job Radar 启动它们时不保存会话，但提供方怎么使用内容（例如用来改进模型）
   取决于**你账号里的设置**：在 ChatGPT（设置 → 数据控制）里查看"为所有人改进模型"，在 Claude（设置 → 隐私）里查看"帮助改进 Claude"，不想被用就关掉。
 - **API key** 适用提供方的商业或 API 条款，通常默认不会拿你的数据训练；请阅读你所用提供方的条款。
+- **OpenRouter** 是转发服务：它把每个请求转给所选模型的某个上游提供方，可能是另一家公司、在另一个国家（默认模型的上游可能是 DeepSeek，见下条）。Job Radar 要求它只用不存储、不拿 prompt 训练的上游（`providers.openrouter.routing.data_collection: deny`）。这**不是**零数据保留：上游仍可能把请求保留一段时间。在 `ai.yaml` 里设 `routing.zdr: true` 只允许零数据保留的上游（能用的模型会变少）。你 OpenRouter 账号里的设置同样生效。
 - **DeepSeek 和小米 MiMo** 由中国境内运营，发给它们的数据受中国法律管辖。它们默认关闭，只有接受这一点时才打开。
+- **经 OpenRouter 到 DeepSeek：** 填了 OpenRouter 的 key 并使用它的默认模型（`deepseek/deepseek-v4.1-flash`）时，即使
+  `deepseek` 服务商是关着的，你的数据也可能到达 DeepSeek 自己在中国境内运营的上游。不想这样，可以给 OpenRouter 选一个
+  不是 DeepSeek 的模型（设置 → AI → OpenRouter，或 `providers.openrouter.model`），在你 OpenRouter 账号设置里把
+  DeepSeek 加进忽略的提供方，或者不填 `OPENROUTER_API_KEY`。
 - **Telegram** 把 bot 消息存在它的服务器上，不是端到端加密。能访问该聊天、你的账号或 bot token 的人都能读到。
 - **Gmail 应用密码**能访问整个邮箱，不只是 Job Radar 读的那个标签。建议用一个只接收职位提醒的专用邮箱，不用时撤销密码。
 
@@ -72,7 +77,7 @@ Job Radar 是跑在你自己机器上的单用户工具：没有账号、没有�
 3. **备份和别处的副本：** 删除 `data/backups/`（随 `data/` 一起），以及你复制到其他磁盘或云盘的备份，还有导出的 JD 文件和定制好的简历（`data/exports/`、resume-kit 的输出目录）。
 4. **日志和临时文件：** macOS 上的 `~/Library/Logs/job-radar/`，以及被强杀的 AI 调用可能留下的 `$TMPDIR/jr-*`。
 5. **账号：** 撤销 Gmail 应用密码（Google 账号 → 安全 → 应用专用密码）；在 BotFather 里删除 Telegram bot（`/deletebot`）并清空聊天；退出 LinkedIn 会话；
-   删除只为它创建的 API key（Anthropic、DeepSeek、MiMo、JSearch、Tavily、Bright Data、Apify、Monid）。
+   删除只为它创建的 API key（Anthropic、OpenAI、OpenRouter、DeepSeek、MiMo、JSearch、Tavily、Bright Data、Apify、Monid）。
 6. **AI 提供方那边：** `codex` 和 `claude` 命令行不会保存来自 Job Radar 的本地会话，但你的提供方账号可能按你的套餐保留对话历史或用量记录：需要的话请在那边删除。
 
 当前版本的网页界面没有"删除单个岗位或申请"的功能。删除数据库卷（第 2 步）是清除已存岗位和备注的受支持方式；想继续使用的话，之后用一个空库重新开始。

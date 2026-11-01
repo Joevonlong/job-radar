@@ -192,7 +192,7 @@ pnpm run doctor --lang zh    # 用另一种语言输出报告（默认：languag
 | `db.connect` | 宿主机能连上数据库（`DATABASE_URL`，没设就按 `.env` 里的 `POSTGRES_*` 和 `DB_HOST_PORT` 拼） | ❌ db 没起来，或 `.env` 里的口令不对 |
 | `db.migrations` | 数据库迁移是最新的（对照 `drizzle/meta/_journal.json`） | ❌ 缺迁移：`scripts/ops/deploy.sh` 或 `pnpm db:migrate`；⚠️ 数据库比代码新：是不是回滚了代码（见第 5 节） |
 | `runner.heartbeat` | runner 最新心跳在 `RUNNER_HEALTH_MAX_AGE_SECONDS`（默认 120 秒）内 | ❌ runner 卡住或停了：看日志后 `docker compose restart runner` |
-| `aiworker.launchd` | launchd 里装了配置的 `doctor.ai_worker_launchd_label` 且状态是 running，包括显式配置的 `de.jobradar.ai-worker`（默认 `io.jobradar.ai-worker`；Linux 上：systemd 用户单元 `job-radar-ai-worker.service` 处于 active，用 `systemctl --user show` 读取） | ⚠️ 配置的标签未加载，但另一个已知标签已加载（配置为 `de.jobradar.ai-worker` 时探测 `io.jobradar.ai-worker`，其他情况探测 `de.jobradar.ai-worker`）：doctor 会列出两个标签；运行 `scripts/ops/install-ai-worker.sh` 迁移；❌ 没装或没在运行：先看 `~/Library/Logs/job-radar/ai-worker.launchd.log`（启动失败和崩溃），再 `scripts/ops/install-ai-worker.sh`；⚠️ 没装 launchd 但有心跳（手动启动的）；⚠️ 在运行但日志还写在内置盘的旧位置（旧版本装的）：重新运行 `scripts/ops/install-ai-worker.sh` |
+| `aiworker.launchd` | launchd 里装了配置的 `doctor.ai_worker_launchd_label` 且状态是 running，包括显式配置的 `de.jobradar.ai-worker`（默认 `io.jobradar.ai-worker`；Linux 上：systemd 用户单元 `job-radar-ai-worker.service` 处于 active，用 `systemctl --user show` 读取） | ⚠️ 配置的标签未加载，但另一个已知标签已加载（doctor 依次探测配置的标签、`io.jobradar.ai-worker`、`de.jobradar.ai-worker`，重复的跳过）：提示会说明 launchd 加载的是哪个标签、配置写的是哪个；运行 `scripts/ops/install-ai-worker.sh` 安装配置的标签，或把 `doctor.ai_worker_launchd_label` 改成已加载的那个；❌ 没装或没在运行：先看 `~/Library/Logs/job-radar/ai-worker.launchd.log`（启动失败和崩溃），再 `scripts/ops/install-ai-worker.sh`；⚠️ 没装 launchd 但有心跳（手动启动的）；⚠️ 在运行但日志还写在内置盘的旧位置（旧版本装的）：重新运行 `scripts/ops/install-ai-worker.sh` |
 | `aiworker.heartbeat` | ai-worker 心跳在 `ai.yaml: host_worker.offline_after_seconds` 内；能核对服务 PID 时，用回执确认持锁、心跳和自己的配置报告 | ❌ 离线或从未有心跳：`data/logs/ai-worker.err.log`，崩溃看 `~/Library/Logs/job-radar/ai-worker.launchd.log`。⚠ 当前进程还没确认在工作（刚启动或刚重连数据库后的一个心跳间隔内属正常；持续出现时，在 `ai-worker.out.log` 里找 "could not report the shipped config"）；⚠ 锁在另一个进程手里：按需要停掉另一个 worker 或服务。回执只把 ✅ 降成 ⚠；判断不了时保留原有结果 |
 | `ai.claude` `ai.codex` | 两个订阅 CLI 已登录 | ⚠️ 一个没登录（另一个还能用）；❌ 两个都没登录，AI 打分和翻译会停：`claude` 里 `/login`、`codex login` |
 | `telegram.credentials` `telegram.enabled` | `.env` 里 token 和 chat id 已配置；`notify.yaml: telegram.enabled` 是 true | Telegram 关着且没配：显示为可选（✅）；⚠️ 已填凭据但开关没开；❌ 开关开了但凭据没配，不会推送 |
@@ -299,6 +299,16 @@ ai-worker 切换或配置写入。doctor 只有在当前市场实际启用了依
   （基准关闭时同样临时打开、重算，再恢复原值）。在这次重算之前，旧代码可能显示含 AI 数字的旧对比。
 
 (a) 失败不阻止回滚；按 (c) 处理，并接受这次重算之前的显示窗口。
+
+**回滚到新增 OpenAI API 和 OpenRouter 服务商（`ai.yaml` 的 `config_version: 3`）之前的版本。** 部署的 `config-write`
+步骤（或任何一次设置页保存）之后，`data/config/ai.yaml` 已是第 3 版，旧代码会拒绝它。不涉及数据库。旧代码启动前，二选一：
+
+- 从 `data/config/.backup/<时间戳>/` 恢复 `ai.yaml`（升级时写下的原文件）；或
+- 手动改：`config_version` 改为 `2`；从 `api_order` 以及各任务的 `order`、`models` 里删掉 `openai` 和 `openrouter`；
+  删掉 `providers.openai` 和 `providers.openrouter`；删掉每个服务商块里的 `max_tokens_field`。
+
+如果你在 `data/config/` 里有自己的 `models.yaml` 副本，也删掉其中的 `openai` 和 `openrouter` 两节。
+然后用旧版本的 `pnpm config:check` 确认。
 
 先判断问题出在哪：
 

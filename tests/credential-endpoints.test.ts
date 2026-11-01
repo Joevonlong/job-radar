@@ -9,6 +9,9 @@ describe("credential endpoints", () => {
   it("the vendor's own host over https is the default, whatever the path", () => {
     expect(checkCredentialEndpoint("deepseek", "https://api.deepseek.com", {})).toEqual({ status: "default" });
     expect(checkCredentialEndpoint("mimo", "https://api.xiaomimimo.com/v1", {})).toEqual({ status: "default" });
+    expect(checkCredentialEndpoint("openai", "https://api.openai.com/v1", {})).toEqual({ status: "default" });
+    expect(checkCredentialEndpoint("openrouter", "https://openrouter.ai/api/v1", {})).toEqual({ status: "default" });
+    expect(checkCredentialEndpoint("openrouter", "https://api.openrouter.ai.evil.example/v1", {}).status).toBe("refused");
     expect(checkCredentialEndpoint("telegram", "https://API.telegram.org/", {})).toEqual({ status: "default" });
     expect(checkCredentialEndpoint("jsearch", "https://jsearch.p.rapidapi.com", {})).toEqual({ status: "default" });
     expect(checkCredentialEndpoint("monid", "https://api.monid.ai", {})).toEqual({ status: "default" });
@@ -37,7 +40,7 @@ describe("credential endpoints", () => {
   });
 
   it("covers every service that sends a credential", () => {
-    expect(Object.keys(CREDENTIAL_ENDPOINTS).sort()).toEqual(["apify", "brave", "deepseek", "gmail", "jsearch", "mimo", "monid", "tavily", "telegram"]);
+    expect(Object.keys(CREDENTIAL_ENDPOINTS).sort()).toEqual(["apify", "brave", "deepseek", "gmail", "jsearch", "mimo", "monid", "openai", "openrouter", "tavily", "telegram"]);
   });
 });
 

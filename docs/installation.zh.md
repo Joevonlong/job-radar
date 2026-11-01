@@ -32,7 +32,7 @@ git --version
 
 以后再准备也可以的：
 
-- **AI**：在这台机器上登录好的 `claude`（Claude Code）或 `codex`（Codex CLI）订阅，或者 Anthropic、DeepSeek、MiMo 的
+- **AI**：在这台机器上登录好的 `claude`（Claude Code）或 `codex`（Codex CLI）订阅，或者 Anthropic、OpenAI、OpenRouter、DeepSeek、MiMo 的
   API key。没有 AI，Job Radar 照样采集、去重、过滤、展示岗位。
 - **Telegram**：推送到手机。
 - **Tailscale**：在手机上打开看板。
@@ -85,7 +85,7 @@ Gmail）、换一个数据库密码、给看板加额外的主机名。每个变
 | Gmail 职位提醒邮件 | `GMAIL_USER`、`GMAIL_APP_PASSWORD` | [gmail-alerts.zh.md](gmail-alerts.zh.md) |
 | 发现新的公司招聘页 | `TAVILY_API_KEY` | [tavily.zh.md](tavily.zh.md) |
 | Telegram 推送 | `TELEGRAM_BOT_TOKEN`、`TELEGRAM_CHAT_ID` | 下面第 7 步 |
-| 通过 API 用 AI | `ANTHROPIC_API_KEY`、`DEEPSEEK_API_KEY`、`MIMO_API_KEY` | 下面第 4 步 |
+| 通过 API 用 AI | `ANTHROPIC_API_KEY`、`OPENAI_API_KEY`、`OPENROUTER_API_KEY`、`DEEPSEEK_API_KEY`、`MIMO_API_KEY` | 下面第 4 步 |
 | 看板口令 | `JOB_RADAR_WEB_PASSWORD_HASH`（由 `pnpm web:password` 生成） | 下面第 8 步 |
 | Linux：容器以哪个用户运行 | `PUID`、`PGID` | 下面第 3 步 |
 
@@ -134,7 +134,7 @@ docker compose logs --tail 100 web       # 或 runner、db、jobspy
 |---|---|---|
 | Claude（订阅） | 运行 `claude`，输入 `/login`，按提示完成后退出 | `claude auth status` 显示 `loggedIn: true` |
 | Codex（订阅） | `codex login` | `codex login status` 显示 Logged in |
-| API key | 在 `.env` 里填 `ANTHROPIC_API_KEY`、`DEEPSEEK_API_KEY` 或 `MIMO_API_KEY`（DeepSeek 和 MiMo 还要在 `ai.yaml` 里设 `enabled: true`） | 第 5 步之后运行 `pnpm ai:probe` |
+| API key | 在 `.env` 里填 `ANTHROPIC_API_KEY`、`OPENAI_API_KEY`、`OPENROUTER_API_KEY`、`DEEPSEEK_API_KEY` 或 `MIMO_API_KEY`（DeepSeek 和 MiMo 还要在 `ai.yaml` 里设 `enabled: true`） | 第 5 步之后运行 `pnpm ai:probe` |
 
 订阅命令行不按 token 计费；每天的调用上限（默认 codex 200 次、claude 100 次）保护你的额度。API 只有在命令行都用不了时才会用到，
 到 `ai.yaml` 里 `monthly_api_budget_usd` 的月预算就停。不要把订阅 token 放进 `.env` 或容器：AI worker 直接用你的命令行登录。

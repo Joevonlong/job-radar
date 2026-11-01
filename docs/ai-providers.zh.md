@@ -7,7 +7,7 @@ AI 可以走订阅命令行（`claude`、`codex`）、按量计费的 API key，
 | | 怎么用 | 花费 |
 |---|---|---|
 | **订阅命令行**（默认） | ai-worker 用你已有的登录运行 `codex` 和 `claude`（`codex login`；运行 `claude` 后 `/login`）。 | 不按 token 计费。每天的调用上限（codex 200 次、claude 100 次）保护你的订阅额度。 |
-| **API key**（可选） | 在 `.env` 里填 `ANTHROPIC_API_KEY`、`DEEPSEEK_API_KEY` 或 `MIMO_API_KEY`；DeepSeek 和 MiMo 还要在 `ai.yaml` 里打开。 | 按 token 计费，到 `ai.yaml` 里 `monthly_api_budget_usd` 的月预算就停。 |
+| **API key**（可选） | 在 `.env` 里填 `ANTHROPIC_API_KEY`、`OPENAI_API_KEY`、`OPENROUTER_API_KEY`、`DEEPSEEK_API_KEY` 或 `MIMO_API_KEY`；DeepSeek 和 MiMo 还要在 `ai.yaml` 里打开。 | 按 token 计费，到 `ai.yaml` 里 `monthly_api_budget_usd` 的月预算就停。 |
 
 用一种或两种都行；API 排在命令行之后才会用到。`pnpm ai:probe` 显示现在哪些可用。消费者订阅是个人许可：要给你自己以外的人用之前，
 先看 [commercial-use.zh.md](commercial-use.zh.md)。用量和费用见 [ai-usage.zh.md](ai-usage.zh.md)。
@@ -50,12 +50,41 @@ router、强制刷新和其他选项以先到者为准。合并进轮次 late �
 `tasks.<task>.order`，没有就用全局 `order`（`api` 表示 `api_order`）。某个 provider 不可用时（没安装、已登出、触顶后冷却中、超过每日上限、
 没有 key），下一个接手，所以**该任务列表里的每一个 provider 都可能收到这个任务的文本**：岗位描述，评分时还有提示词需要的画像字段。
 设置 → AI → 路由按任务列出这份清单，数据来自已保存的 `ai.yaml`；首次设置向导的 AI 步骤在你开启 provider 之前也会说明。订阅 CLI（`claude`、`codex`）
-通过你自己的账号把文本发给 Anthropic / OpenAI；API provider（Anthropic、DeepSeek、小米 MiMo）发给厂商的 API。联网搜索任务（`salary_lookup`）只使用能联网搜索的 provider。
+通过你自己的账号把文本发给 Anthropic / OpenAI；API provider（Anthropic、OpenAI、DeepSeek、小米 MiMo）发给厂商的 API；OpenRouter 再转给该模型的某个上游 provider。联网搜索任务（`salary_lookup`）只使用能联网搜索的 provider。
 具体哪些内容会离开你的电脑、厂商如何处理，见 [privacy.zh.md](privacy.zh.md)。不想让某个厂商收到文本，就关掉对应的 provider。
+
+## OpenAI API 和 OpenRouter
+
+两者都是 OpenAI 兼容的 API provider，用 JSON mode（`json_mode_only: true`）：答案的 JSON Schema 写进 prompt，回复在本地校验，
+不合格重试一次。它们在 `ai.yaml` 里是开着的，但你在 `.env` 里填 `OPENAI_API_KEY` / `OPENROUTER_API_KEY` 之前什么都不发；
+填了之后按 `api_order` 尝试（默认排在 `anthropic` 后面），计入 `monthly_api_budget_usd`。已有的 `ai.yaml` 载入时会把两者追加到
+`api_order` 末尾（config_version 3），你自己的顺序不变。
+
+| | OpenAI API（`openai`） | OpenRouter（`openrouter`） |
+| --- | --- | --- |
+| key | `OPENAI_API_KEY` | `OPENROUTER_API_KEY` |
+| key 只发往 | `api.openai.com` | `openrouter.ai` |
+| 长度上限的字段 | `max_completion_tokens`（那边的 `max_tokens` 已废弃） | `max_tokens` |
+| 记账 | 目录里的 `price` × token | OpenRouter 为这次调用报告的 `usage.cost`（精确值）；回复里没有 cost 时才按目录单价 |
+| 模型名 | 照 OpenAI 文档 | `厂商/模型`，即 OpenRouter 背后某个上游的模型 |
+
+`max_tokens_field`（高级，每个 OpenAI 兼容 provider 都有）决定长度上限用哪个请求字段；DeepSeek 和 MiMo 仍是 `max_tokens`。
+
+**OpenRouter 路由**（`providers.openrouter.routing`，作为请求的 `provider` 字段发送）：
+
+- `data_collection: deny`（默认）只让 OpenRouter 选不存储、不拿 prompt 训练的上游。这**不是**零数据保留：上游仍可能把请求保留一段时间
+  （例如用于滥用检查）。
+- `zdr: true` 只路由到有零数据保留政策的上游。符合的上游更少，某个模型可能因此不可用；这次调用失败，换顺序里的下一个 provider。
+- `require_parameters: true`（默认）只用支持请求里所有参数（包括 JSON mode）的上游。
+
+OpenRouter 把每个请求转给所选模型的某个上游 provider，它可能和 OpenRouter 不是同一家公司（例如默认模型的上游可能是 DeepSeek）。
+见 [privacy.zh.md](privacy.zh.md)。
+
+两者都不能联网搜索：`salary_lookup` 会跳过它们。
 
 ## 登录
 
-见 [host-setup.zh.md](host-setup.zh.md) 第 6 节：`claude` → `/login`，`codex login`。provider 顺序、选哪个模型、超时在 `data/config/ai.yaml`，有哪些模型和单价在 `data/config/models.yaml`（模型目录）；`pnpm ai:probe` 看哪些 provider 此刻可用，也可以在 `/sources` 的"AI provider 健康度"里点某个 provider 的"测试"（由 ai-worker 发同样的极小请求，见 [settings.zh.md](settings.zh.md)）。pay-per-token 的 API provider（Anthropic / DeepSeek / MiMo）保留实现，但只有你在 `.env` 里填了 key 才会被路由选中，并受 `monthly_api_budget_usd` 限制。DeepSeek 和 MiMo 出厂是关的（`enabled: false`），要用哪个就把它改成 `enabled: true`；它们的 key 只发往厂商自己的主机（见 [ai-worker 不从 ai.yaml 接受的东西](#ai-worker-不从-aiyaml-接受的东西)）。key 由宿主机的 ai-worker 读取，runner 容器里这几个变量被显式置空。
+见 [host-setup.zh.md](host-setup.zh.md) 第 6 节：`claude` → `/login`，`codex login`。provider 顺序、选哪个模型、超时在 `data/config/ai.yaml`，有哪些模型和单价在 `data/config/models.yaml`（模型目录）；`pnpm ai:probe` 看哪些 provider 此刻可用，也可以在 `/sources` 的"AI provider 健康度"里点某个 provider 的"测试"（由 ai-worker 发同样的极小请求，见 [settings.zh.md](settings.zh.md)）。pay-per-token 的 API provider（Anthropic / OpenAI / OpenRouter / DeepSeek / MiMo）保留实现，但只有你在 `.env` 里填了 key 才会被路由选中，并受 `monthly_api_budget_usd` 限制。DeepSeek 和 MiMo 出厂是关的（`enabled: false`），要用哪个就把它改成 `enabled: true`；它们的 key 只发往厂商自己的主机（见 [ai-worker 不从 ai.yaml 接受的东西](#ai-worker-不从-aiyaml-接受的东西)）。key 由宿主机的 ai-worker 读取，runner 容器里这几个变量被显式置空。
 
 ## 配置
 
@@ -82,13 +111,13 @@ translation:
 像桌面客户端（选 provider、排 fallback 顺序、设用量上限）那样，用哪个订阅、先用谁、用多少都在 `data/config/ai.yaml` 里配置，也可以在设置页的 AI 标签里改：
 
 - **顺序**：`order`，默认 `[codex-cli, claude-cli, api]`，codex 优先；claude 订阅和你自己交互使用共用，所以排在后面。每种任务可以用 `tasks.<任务>.order` 单独覆盖。
-- **开关和每日上限**：每个 `providers.<名字>` 都有 `enabled`（false = 路由不会试它）和 `daily_request_cap`（每天最多多少次模型调用，失败的也算；0 = 不限）。默认 claude-cli 100 次/天、codex-cli 200 次/天，API provider 不限（仍受 `monthly_api_budget_usd` 约束）。API 层按 `api_order` 依次尝试，默认 `[anthropic, deepseek, mimo]`。"一天"按 `schedule.yaml` 的时区。
+- **开关和每日上限**：每个 `providers.<名字>` 都有 `enabled`（false = 路由不会试它）和 `daily_request_cap`（每天最多多少次模型调用，失败的也算；0 = 不限）。默认 claude-cli 100 次/天、codex-cli 200 次/天，API provider 不限（仍受 `monthly_api_budget_usd` 约束）。API 层按 `api_order` 依次尝试，默认 `[anthropic, openai, openrouter, deepseek, mimo]`。"一天"按 `schedule.yaml` 的时区。
 - **冷却**：provider 报额度 / 会话上限 / 限流（"hit your session limit"、"usage limit"、429 等）时，所有进程（runner、ai-worker）都会跳过它，直到错误信息里写的恢复时间；解析不出来就冷却 `cooldown.default_minutes`（默认 60 分钟），最长 `cooldown.max_minutes`。状态存在 `runtime_state`（键 `ai_provider:<名字>`），不需要迁移。恢复时间按 ai-worker 所在机器的本地时区理解。
 - **用量上限（订阅 CLI）**：`quota_guard` 是 Job Radar 自己对 claude-cli、codex-cli 调用频率的限制。它**只统计 Job Radar 自己的调用**（`ai_usage`，失败的也算）；订阅和你自己在终端、网页里的使用共用，这部分它看不到，所以它只会比真实上限晚触发，不会提前（真实上限先到了，仍由上面的冷却接住）。每个 CLI（`quota_guard.providers.codex_cli` / `claude_cli`）有两项：`hard_requests` 是滚动窗口 `window_hours`（默认 5）内的调用数，达到后该 CLI 对所有任务暂停（包括你自己点的），等足够多的调用滑出窗口再继续（降到 `resume_ratio` × `hard_requests` 以下，默认 0.8）；`cycle_request_cap` 限制一轮处理的调用数，这一轮剩下的留到下一轮。**你主动发起的请求（立即打分、翻译、拆解、查薪资、测试）不受每轮上限约束**，只在窗口满时受限。被上限跳过时，任务**不会改走付费 API**（`fallthrough_to_api: false`，默认）；上面的错误冷却照旧可以落到 API。填 0 关闭该项；`enabled: false` 关闭整个上限（行为回到没有它之前）。窗口满或 provider 报告限制时 Telegram 发一条告警，恢复可用时再发一条（`notify_recovery`）；状态持续不会重发（`alert_dedupe_hours` 只防状态来回抖动）。每轮上限不发告警，推送摘要最后一行写明有几个新岗位等打分、预计什么时候处理。状态存在 `runtime_state`（键 `ai_quota:<名字>`），不需要迁移。默认值 = 维护者自己用量中见过的最大值 × 1.5（codex-cli 窗口 861 / 每轮 554，claude-cli 399 / 399）。各人的订阅档位不同，请在设置页（AI 标签的“限额”块）调整；`pnpm ai:usage-stats` 只读地打印你自己的最大值和建议上限。
 - **时间预算**：`cycle_budget_minutes`（默认 30）限制一轮里打分、信号占用的时间，超过就留到下一轮；这一轮没有新岗位时用 `idle_cycle_budget_minutes`（默认 10）。`cycle_budget_minutes` 也限制每次重打过期分数、打分积压或指定岗位的控制请求：开始下一条前检查预算，已经开始的岗位会走完 provider 回退链，因此可能多用这一条的耗时。设置页和“立即打分”会显示预算用尽及剩余岗位数。修改预算后，下一个请求使用新值。0 = 不限。所有 provider 都在冷却 / 关闭 / 到上限时，AI 步骤直接跳过（cycle 摘要里写明原因）。
 - **任务 `breakdown`**：岗位拆解，默认沿用全局顺序（codex 优先，理由同翻译：输出长，订阅 CLI 没有 4096 输出上限）；可用 `tasks.breakdown.order` 单独排，codex 推理强度用 `reasoning_effort_by_task.breakdown`。默认关闭，见 [breakdown.zh.md](breakdown.zh.md)。
 - **任务 `write`**：申请问题的回答和动机信（[application-writer.zh.md](application-writer.zh.md)），只在 `writer.yaml: enabled` 为 true 且你按**生成**时调用。不联网搜索。默认跟全局顺序；动机信要多个版本，需要的输出超过全局 `max_output_tokens`，所以 `tasks.write` 可以单独设 `max_output_tokens` 和 `api_timeout_seconds`（两者都只对 API 服务商生效，任何任务都能设）。回答在上限处被截断时请求以 `output_truncated` 失败。
-- **任务 `salary_lookup`**：按需查薪资（[salary.zh.md](salary.zh.md)），是**唯一**可以用工具（网页搜索）的 AI 调用。默认顺序 `[claude-cli, anthropic]`；只尝试能搜网页的 provider（DeepSeek、MiMo 跳过）；允许搜网页的任务清单写死在代码里（`src/lib/ai/web-tasks.ts`），任何设置都不能让别的任务上网。可以把 codex-cli 加进 `tasks.salary_lookup.order`，但它的网页搜索不能限定域名（设置页会提示）。
+- **任务 `salary_lookup`**：按需查薪资（[salary.zh.md](salary.zh.md)），是**唯一**可以用工具（网页搜索）的 AI 调用。默认顺序 `[claude-cli, anthropic]`；只尝试能搜网页的 provider（OpenAI API、OpenRouter、DeepSeek、MiMo 跳过）；允许搜网页的任务清单写死在代码里（`src/lib/ai/web-tasks.ts`），任何设置都不能让别的任务上网。可以把 codex-cli 加进 `tasks.salary_lookup.order`，但它的网页搜索不能限定域名（设置页会提示）。
 - **推送先于翻译**：ai-worker 先做打分和信号，然后立刻推送，最后才翻译（翻译标了 `late`，不影响推送内容）。
 - **看状态**：`/sources` 的"AI provider 健康度"显示每个 provider 的状态（可用 / 未配置 / 已关闭 / 未登录 / 已达每日上限 / 已达 Job Radar 用量上限到几点 / 冷却到几点）、用量上限窗口内 Job Radar 自己的调用数对比 `hard_requests`、今日请求数对比上限、最近一次成功和失败；每行有"测试"按钮。设置页 AI 标签的顺序列表和下拉用同一份状态标出不可用的 provider。
 - **模型目录**：两个文件分工——`config/models.yaml` 是**目录**（每个 provider 有哪些模型：`id`、显示名 `label`、`aliases`、API 的 `price`、codex 的 `reasoning_efforts` / `cli_default`、`deprecated`、`notes`），`data/config/ai.yaml` 是**选择**（`providers.<名字>.model` / `strong_model`、`tasks.<任务>.models`）。`ai.yaml` 照常单独加载，不依赖 `models.yaml`；选中的模型必须在对应 provider 的目录里，`pnpm config:check`（多一行 `ai.yaml ↔ models.yaml`）和设置页保存时检查：不在目录 / codex 推理强度不被模型支持 = 错误，选中已停用的模型 = 警告。
@@ -106,7 +135,7 @@ translation:
 厂商出了新模型（不需要重启，保存后约 5 秒热加载；步骤也写在发布的 `config/models.yaml` 文件开头；`models.yaml` 是随产品发布的文件，先把它复制到 `data/config/models.yaml`，再改你的副本）：
 
 1. 在 `data/config/models.yaml` 对应 provider 的 `models` 下加一条：`id` 写厂商文档里的模型名，`label` 写显示名。
-2. API provider（anthropic / deepseek / mimo）必须写 `price`（美元 / 100 万 token 的输入价和输出价，以官网为准）；订阅 CLI 不写 `price`。
+2. API provider（anthropic / openai / openrouter / deepseek / mimo）必须写 `price`（美元 / 100 万 token 的输入价和输出价，以官网为准）；订阅 CLI 不写 `price`。
 3. `pnpm config:check` 确认没有报错。
 4. 先试一次：`pnpm ai:probe --provider <服务商> --model <id>`（`--model` 必须配一个且只配一个 `--provider`；输出里 `catalog=exact|alias|unknown` 说明回复里的模型名在目录里是否找到）。
 5. 刷新 `/settings`，在 AI 标签对应服务商一节的"模型"下拉里选中它，保存。
@@ -140,7 +169,7 @@ translation:
 - **CLI 命令**：`providers.claude_cli.command` 必须是 `claude`（在 `PATH` 上查找）或以 `/claude` 结尾的绝对路径，`providers.codex_cli.command` 必须是 `codex` 或以 `/codex` 结尾的绝对路径（Windows 上也可以是 `.exe` / `.cmd`）。相对路径和别的程序一律不启动；这个 provider 算作不可用并给出原因（`/sources`、`pnpm ai:probe`），doctor 的 `config.guards` 报 ❌。所以包装脚本也得叫 `claude` / `codex`（例如放在 `PATH` 上它自己的目录里）。
 - **模型名**：claude-cli 和 codex-cli 的模型名只能含字母、数字和 `._:/[]-`，且不能以 `-` 开头，所以模型名永远不会被当成命令行选项。
 - **codex 的 `config_overrides`**：只认上面的白名单键，且值必须是 `false`。
-- **接收凭据的主机**：DeepSeek 和 MiMo 的 key（`providers.*.base_url`）、Telegram bot token（`notify.yaml telegram.api_base_url`），以及 JSearch、Tavily、Brave、Apify、Monid 的 key（`sources.yaml` 的 `api_base_url`）只通过 https 发往厂商自己的主机（`api.deepseek.com`、`api.xiaomimimo.com`、`api.telegram.org`、`jsearch.p.rapidapi.com`、`api.tavily.com`、`api.search.brave.com`、`api.apify.com`、`api.monid.ai`）；Gmail 登录（`sources.yaml sources.gmail`）只发往 `imap.gmail.com` 的 993 端口且 `secure: true`。这些请求不跟随重定向。别的地址会被拒绝：该 provider 不可用、不发 Telegram、该渠道这一轮失败，什么都不会发出去。确实在用代理或网关时，在 `.env` 里设 `JOB_RADAR_ALLOW_CUSTOM_ENDPOINTS=1`（ai-worker 和容器都读得到）；之后每个自定义主机都会被使用并在日志里警告，变量设着的时候 doctor 也一直给警告。
+- **接收凭据的主机**：OpenAI、OpenRouter、DeepSeek 和 MiMo 的 key（`providers.*.base_url`）、Telegram bot token（`notify.yaml telegram.api_base_url`），以及 JSearch、Tavily、Brave、Apify、Monid 的 key（`sources.yaml` 的 `api_base_url`）只通过 https 发往厂商自己的主机（`api.openai.com`、`openrouter.ai`、`api.deepseek.com`、`api.xiaomimimo.com`、`api.telegram.org`、`jsearch.p.rapidapi.com`、`api.tavily.com`、`api.search.brave.com`、`api.apify.com`、`api.monid.ai`）；Gmail 登录（`sources.yaml sources.gmail`）只发往 `imap.gmail.com` 的 993 端口且 `secure: true`。这些请求不跟随重定向。别的地址会被拒绝：该 provider 不可用、不发 Telegram、该渠道这一轮失败，什么都不会发出去。确实在用代理或网关时，在 `.env` 里设 `JOB_RADAR_ALLOW_CUSTOM_ENDPOINTS=1`（ai-worker 和容器都读得到）；之后每个自定义主机都会被使用并在日志里警告，变量设着的时候 doctor 也一直给警告。
 
 ## 只能有一个 ai-worker
 

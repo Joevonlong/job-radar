@@ -400,6 +400,23 @@ describe.each(managers)("install-ai-worker.sh switch (%s)", (manager) => {
       expect(fx.servicePid(L_CUSTOM)).toBeGreaterThan(0);
     }, SLOW);
 
+    it.runIf(manager === "launchd")("configured legacy label, installed under the default one: failure keeps the default; success moves it to the configured label", () => {
+      installed();
+      fx.setDeploy({ label: L_LEGACY });
+      fx.inject({ failStarts: 1 });
+      const r = install(fx.release());
+      expect(r.status).toBe(1);
+      expect(r.stderr).toContain("rolled back:");
+      expect(fx.identity()).toMatchObject({ status: "0", found_label: L_DEFAULT });
+      expect(fs.existsSync(fx.plist(L_LEGACY))).toBe(false);
+      expect(fx.servicePid(L_DEFAULT)).toBeGreaterThan(0);
+      const ok = install(fx.release());
+      expect(ok.status, ok.stderr).toBe(0);
+      expect(fs.existsSync(fx.plist(L_DEFAULT))).toBe(false);
+      expect(fx.servicePid(L_LEGACY)).toBeGreaterThan(0);
+      expect(fx.state().launchd?.loaded[L_DEFAULT]).toBeUndefined();
+    }, SLOW * 2);
+
     it.runIf(manager === "launchd")("case 15: both labels' overrides are restored (enabled / disabled / none)", () => {
       installed({ label: L_LEGACY });
       fx.setDeploy({ label: L_DEFAULT });

@@ -14,6 +14,9 @@ import { isArchivedReason } from "@/lib/jobs/scope";
 import { isNewSince } from "@/lib/jobs/visit";
 import { loadBonusPolicy } from "@/lib/signals/floor";
 import { loadTargetPlaces } from "@/lib/dashboard/target-places";
+import { formatPostedAgo, formatPostedAgoShort, formatPostedDate, formatPostedFull } from "@/lib/format/posted-date";
+import { formatFullTime, formatShortDate } from "@/lib/format/time";
+import { resolveLocale } from "@/i18n/locale";
 import { pickRowLocations } from "@/lib/dashboard/row-locations";
 import { ghostEnabled } from "@/lib/ghost/settings";
 import { GHOST_TOOLTIP_REASONS, ghostShortMessage } from "@/lib/ghost/view";
@@ -54,6 +57,7 @@ export async function toListItems(
   const baseCurrency = policy.baseCurrency ?? "";
   const targetPlaces = loadTargetPlaces();
   const [format, locale, t, tGhost] = await Promise.all([getFormatter(), getLocale(), getTranslations("dashboard"), getTranslations("ghostJobs")]);
+  const timeOptions = { locale: resolveLocale(locale), timeZone: options.timezone };
   const aliases = buildSkillAliasMap(loadPipeline().skills);
   const mySkills = profileSkillKeys(readProfileSkillNames(), aliases);
   const showTraps = trapsEnabled();
@@ -76,6 +80,19 @@ export async function toListItems(
     const reference = card.postedAt ?? card.firstSeenAt;
     const relative = format.relativeTime(reference, options.now);
     const archived = isArchivedReason(card.closedReason);
+    const posted = card.postedAt
+      ? {
+          day: formatPostedDate(card.postedAt, options.now, timeOptions),
+          ago: formatPostedAgoShort(card.postedAt, options.now, timeOptions),
+          title: t("rowPosted.titleKnown", { time: formatPostedFull(card.postedAt, timeOptions).text, ago: formatPostedAgo(card.postedAt, options.now, timeOptions) }),
+          known: true,
+        }
+      : {
+          day: formatShortDate(card.firstSeenAt, options.now, timeOptions),
+          ago: "",
+          title: t("rowPosted.titleUnknown", { time: formatFullTime(card.firstSeenAt, timeOptions) }),
+          known: false,
+        };
     return {
       id: card.id,
       title: card.title,
@@ -150,6 +167,7 @@ export async function toListItems(
         ? card.lastListedAt ? t("jobs.lastListed", { time: format.relativeTime(card.lastListedAt, options.now) }) : t("jobs.lastListedUnknown")
         : card.postedAt ? relative : t("time.seen", { time: relative }),
       timeTitle: format.dateTime(archived ? card.firstSeenAt : reference, { dateStyle: "medium", timeStyle: "short", timeZone: options.timezone }),
+      posted,
     };
   });
 }

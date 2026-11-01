@@ -97,6 +97,8 @@ export function createProvider(transport: AiTransport, kind: AiProviderKind = AI
           ...(opts.maxOutputTokens !== undefined ? { maxOutputTokens: opts.maxOutputTokens } : {}),
           ...(opts.web ? { web: opts.web } : {}),
         };
+        const planned = transport.plannedModel?.(request);
+        const requested = planned ? { requested: planned } : {};
         const started = performance.now();
         let response;
         try {
@@ -104,9 +106,11 @@ export function createProvider(transport: AiTransport, kind: AiProviderKind = AI
         } catch (error) {
           // A call that failed is still a call; a cancelled one is not.
           if (error instanceof AiProviderError && error.kind !== "aborted") {
+            // a reply that arrived but was unusable (empty) still carries its usage: it is billed, so it is counted
             opts.onCall?.({
-              model: transport.plannedModel?.(request) ?? null,
-              usage: { tokensIn: 0, tokensOut: 0, reported: false },
+              model: error.model ?? planned ?? null,
+              ...requested,
+              usage: error.usage ?? { tokensIn: 0, tokensOut: 0, reported: false },
               durationMs: Math.max(0, Math.round(performance.now() - started)),
               outcome: "failed",
               errorKind: error.kind,
@@ -118,7 +122,7 @@ export function createProvider(transport: AiTransport, kind: AiProviderKind = AI
         model = response.model;
         addUsage(total, response.usage);
         const checked = validate(schema, response.text);
-        opts.onCall?.({ model: response.model, usage: response.usage, durationMs, outcome: checked.ok ? "ok" : "invalid_output" });
+        opts.onCall?.({ model: response.model, ...requested, usage: response.usage, durationMs, outcome: checked.ok ? "ok" : "invalid_output" });
         if (checked.ok) return { value: checked.value, provider: transport.id, model, usage: total };
         lastProblem = checked.problem;
         current = retryPrompt(prompt, response.text, checked.problem);

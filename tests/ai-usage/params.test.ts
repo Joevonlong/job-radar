@@ -25,7 +25,7 @@ describe("aiUsageHref", () => {
 
 describe("loadAiUsageSearchParams", () => {
   it("drops invalid values", async () => {
-    const state = await loadAiUsageSearchParams({ range: "forever", from: "2026-13-01", provider: "openai", model: "has space", task: "Bad-Task", metric: "x", page: "abc" });
+    const state = await loadAiUsageSearchParams({ range: "forever", from: "2026-13-01", provider: "acme", model: "has space", task: "Bad-Task", metric: "x", page: "abc" });
     expect(state).toEqual(empty);
   });
   it("keeps valid values", async () => {

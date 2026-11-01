@@ -12,6 +12,8 @@ export type EnvSource = Readonly<Record<string, string | undefined>>;
 /** The key variable of each pay-per-token provider (the subscription CLIs log in on the host instead). */
 export const AI_KEY_ENV: Readonly<Partial<Record<AiProviderIdChoice, string>>> = {
   anthropic: "ANTHROPIC_API_KEY",
+  openai: "OPENAI_API_KEY",
+  openrouter: "OPENROUTER_API_KEY",
   deepseek: "DEEPSEEK_API_KEY",
   mimo: "MIMO_API_KEY",
 };

@@ -78,6 +78,7 @@ describe("German badge on rows", () => {
     signals: [],
     timeLabel: "",
     timeTitle: "",
+    posted: { day: "10/27", ago: "4 d", title: "", known: true },
   });
 
   it("flags a required level and stays quiet for none / unknown", () => {

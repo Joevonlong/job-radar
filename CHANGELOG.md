@@ -7,6 +7,13 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ### Upgrade notes
 
+- **Two new AI providers, OpenAI API and OpenRouter, are appended to your `api_order`.** Loading or migrating `ai.yaml`
+  (now `config_version: 3`) adds `openai` and `openrouter` at the end of the list, after your own order. Nothing is sent
+  to them until `OPENAI_API_KEY` or `OPENROUTER_API_KEY` is in `.env`. **Rollback:** older code refuses the version 3
+  file: restore `ai.yaml` from `data/config/.backup/<timestamp>/`, or set `config_version: 2`, remove both ids from
+  `api_order` (and any task `order` or `models`), delete `providers.openai`, `providers.openrouter` and every
+  `max_tokens_field`, and delete the `openai` and `openrouter` sections of your own `models.yaml` copy if you keep one.
+  See [Rollback](docs/deploy.md#5-rollback).
 - **Job search defaults to basic fields.** Queries match title, company names/aliases, city/location and recognized countries;
   descriptions no longer participate by default. Use `/jobs?searchIn=all` or MCP `search_in: "all"` to include original descriptions
   and current translations. Short words match whole words, longer words allow prefixes, and quoted phrases stay within a field.
@@ -190,6 +197,11 @@ A failure in (a) does not block rollback: follow (c) and accept the display wind
 
 ### Added
 
+- **OpenAI API and OpenRouter providers:** pay-per-token API providers with their own key (`OPENAI_API_KEY`,
+  `OPENROUTER_API_KEY`), JSON mode, and the reply-length field each needs (`max_tokens_field`). OpenRouter's reported
+  cost is recorded as the exact cost of each call; its routing preferences (`data_collection: deny`,
+  `require_parameters`, optional `zdr`) are sent with every request. See [AI providers](docs/ai-providers.md#openai-api-and-openrouter)
+  and [Privacy](docs/privacy.md).
 - **Activity log** (`/sources/logs`): inspect collection cycles and steps, source queries, AI results, request attempts and system tasks. Entries are retained for 30 days after their last activity by default, subject to an event cap; preview and delete an entry, a date range or all entries. Tune it in `config/activity-log.yaml`. **Rollback:** set `enabled: false` to stop new records without a restart; older versions ignore the two tables and the config file. The tables can stay; no down migration is needed.
 - **Monid LinkedIn fallback:** an optional prepaid channel after Apify in the default LinkedIn cascade, with
   per-run budget limits, polling, stop handling and billing recorded before parsing. See [docs/monid.md](docs/monid.md).

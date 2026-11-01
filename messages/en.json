@@ -10,7 +10,9 @@
       "now": "just now",
       "minutes": "{n} min ago",
       "hours": "{n} h ago",
-      "yesterday": "yesterday"
+      "yesterday": "yesterday",
+      "today": "today",
+      "days": "{n} days ago"
     },
     "duration": {
       "d": "d",
@@ -1093,6 +1095,11 @@
     "time": {
       "seen": "seen {time}"
     },
+    "rowPosted": {
+      "unknown": "seen {date}",
+      "titleKnown": "Posted {time} ({ago})",
+      "titleUnknown": "Posted date unknown, first seen {time}"
+    },
     "toast": {
       "ignored": "Ignored: {title}",
       "ignoreBlocked": "{title} is already in your applications ({status}); change it on the board",
@@ -1219,7 +1226,6 @@
       "meta": {
         "location": "Location",
         "contract": "Contract",
-        "posted": "Posted",
         "firstSeen": "First seen",
         "lastSeen": "Last seen",
         "status": "Job status"
@@ -1335,7 +1341,26 @@
       "reasonsLanguageHint": "The AI wrote the fit reasons and gaps in {language}; they are not translated.",
       "summaryLanguage": {},
       "summaryFallbackHint": "There is no summary in the interface language; this is the other one.",
-      "firstSeenVia": "First seen {when}",
+      "dateStrip": {
+        "label": "Dates",
+        "posted": "Posted {date} ({ago})",
+        "postedUnknown": "Posted date unknown",
+        "repost": "Reposted · new link {date} (first seen by us, {ago})",
+        "repostNoDate": "Reposted (source label)",
+        "firstSeen": "First seen {time}",
+        "tip": {
+          "full": "{time} ({zone})",
+          "dateOnly": "{date} (the source gave only a date)",
+          "trusted": "Earliest date over all sources; {channels} states the posting date itself (reliable)",
+          "aggregator": "From job aggregators; may be a refresh or crawl date, for reference only",
+          "unknown": "The source gave no posted date. The date filter counts the first-seen date instead; sorting by posted date puts this job last",
+          "repost": "We first saw the new posting link on {date} (not a date the source gave); the old link was first seen {oldest}, {gap, plural, one {# day} other {# days}} earlier",
+          "repostMany": "We first saw the newest posting link on {date} (not a date the source gave); the link changed {count} times, the oldest old link was first seen {oldest}",
+          "repostManyCapped": "We first saw the newest posting link on {date} (not a date the source gave); {count} link changes recorded, the oldest old link among them was first seen {oldest}",
+          "repostLabel": "Source label: {label}",
+          "repostLabelOnly": "The source labels it as reposted but gives no date. Source label: {label}"
+        }
+      },
       "seniority": {
         "entry": "Entry",
         "mid": "Mid",
@@ -1778,6 +1803,7 @@
       "vendor": {
         "anthropic": "Anthropic",
         "openai": "OpenAI",
+        "openrouter": "OpenRouter",
         "deepseek": "DeepSeek",
         "mimo": "Xiaomi MiMo"
       },
@@ -2394,6 +2420,22 @@
       "json_mode_only": {
         "label": "JSON mode only",
         "hint": "No json_schema: the schema goes into the prompt."
+      },
+      "max_tokens_field": {
+        "label": "Reply length field",
+        "hint": "Request field that caps the reply length: max_tokens, or max_completion_tokens (OpenAI's newer models accept only this one)."
+      },
+      "openrouter_data_collection": {
+        "label": "Upstream data collection",
+        "hint": "deny: only upstream providers that do not store requests to train on them. This is not zero retention."
+      },
+      "openrouter_zdr": {
+        "label": "Zero data retention only",
+        "hint": "Route only to endpoints with a zero-data-retention policy (fewer models and upstream providers)."
+      },
+      "openrouter_require_parameters": {
+        "label": "Require JSON support",
+        "hint": "Route only to upstream providers that support every parameter of the request, including the JSON output format."
       },
       "per_cycle_limit": {
         "label": "Most jobs per cycle",
@@ -5489,8 +5531,8 @@
           "timeoutHint": "Try again later",
           "manual": "launchd has no {label}, but the ai-worker runs (heartbeat {age} s ago, probably started by hand)",
           "manualHint": "A process started by hand does not come back after a restart: scripts/ops/install-ai-worker.sh",
-          "legacy": "The launchd agent {legacy} still has the old name; {label} is not installed",
-          "legacyHint": "Run scripts/ops/install-ai-worker.sh (or scripts/ops/deploy.sh): it replaces the old agent with {label}",
+          "otherLabel": "launchd has {found} loaded, the config says {label}",
+          "otherLabelHint": "Run scripts/ops/install-ai-worker.sh (or scripts/ops/deploy.sh) to install {label}, or change doctor.ai_worker_launchd_label to {found}",
           "notInstalled": "launchd has no {label}: the ai-worker is not installed",
           "notInstalledHint": "scripts/ops/install-ai-worker.sh (docs/host-setup.md section 6b)",
           "running": "{label} is running",
@@ -5779,6 +5821,7 @@
           "noAnswer": "{command} did not answer",
           "notLoaded": "{service} is not loaded",
           "notRunning": "{service} has no running process",
+          "invalidLabel": "doctor.ai_worker_launchd_label is not a valid launchd label (letters, digits, . _ - only)",
           "noServiceManager": "no launchd or systemd on this system",
           "configMounted": "{service}: {source} is mounted over {dir}, which hides the shipped config built into the image (a compose file from before the shipped config moved into the image?)",
           "configMountedHint": "Remove that mount (compose.yaml or compose.override.yaml) and run scripts/ops/deploy.sh: the shipped defaults come from the image now (docs/upgrade.md)",

@@ -1,6 +1,15 @@
 import { z } from "zod";
 
-import { AI_API_PROVIDERS, AI_PROVIDER_IDS, AI_PROVIDER_KINDS, AI_TASK_NAMES, AI_TASK_PROVIDERS, CODEX_REASONING_EFFORTS } from "../ai-options";
+import {
+  AI_API_PROVIDERS,
+  AI_MAX_TOKENS_FIELDS,
+  AI_PROVIDER_IDS,
+  AI_PROVIDER_KINDS,
+  AI_TASK_NAMES,
+  AI_TASK_PROVIDERS,
+  CODEX_REASONING_EFFORTS,
+  OPENROUTER_DATA_COLLECTION,
+} from "../ai-options";
 
 import { nonNegativeInt, nonNegativeNumber, nonEmptyString, positiveInt, score0to100 } from "./common";
 
@@ -287,6 +296,61 @@ const quotaGuard = z.strictObject({
     .prefault({}),
 });
 
+/** The request field that caps the reply length: `max_tokens`, or `max_completion_tokens` (OpenAI's reasoning models accept only this one). */
+const maxTokensField = z.enum(AI_MAX_TOKENS_FIELDS);
+
+/**
+ * The shipped values of the API providers added after the first release, also the defaults of a file written before they
+ * existed: an older user ai.yaml keeps parsing and gets the same blocks as a new install. Without its key in .env a provider
+ * is skipped and sends nothing, so `enabled: true` only takes effect once the key is set.
+ */
+export const OPENAI_COMPATIBLE_DEFAULTS = {
+  openai: {
+    enabled: true,
+    daily_request_cap: 0,
+    base_url: "https://api.openai.com/v1",
+    model: "gpt-6-luna",
+    json_mode_only: true,
+    max_tokens_field: "max_completion_tokens",
+  },
+  openrouter: {
+    enabled: true,
+    daily_request_cap: 0,
+    base_url: "https://openrouter.ai/api/v1",
+    model: "deepseek/deepseek-v4.1-flash",
+    json_mode_only: true,
+    max_tokens_field: "max_tokens",
+    routing: { require_parameters: true, data_collection: "deny", zdr: false },
+  },
+} as const;
+
+/** An OpenAI-compatible API provider added later: every key has the shipped default. */
+const laterApiProvider = (defaults: (typeof OPENAI_COMPATIBLE_DEFAULTS)[keyof typeof OPENAI_COMPATIBLE_DEFAULTS]) => ({
+  enabled: z.boolean().default(defaults.enabled),
+  daily_request_cap: nonNegativeInt.default(defaults.daily_request_cap),
+  base_url: z.url().default(defaults.base_url),
+  model: nonEmptyString.default(defaults.model),
+  /**
+   * true: `response_format: json_object` with the JSON Schema in the prompt, validated here (the schemas have optional fields,
+   * which strict `json_schema` mode does not allow). false: strict `json_schema`.
+   */
+  json_mode_only: z.boolean().default(defaults.json_mode_only),
+  max_tokens_field: maxTokensField.default(defaults.max_tokens_field),
+});
+
+const openRouterDefaults = OPENAI_COMPATIBLE_DEFAULTS.openrouter.routing;
+/**
+ * OpenRouter's `provider` request field: which upstream providers a request may be routed to.
+ * `data_collection: deny` = only upstreams that do not store requests to train on them; it does not mean zero retention
+ * (`zdr: true` restricts routing to zero-data-retention endpoints, which leaves fewer models and upstreams).
+ */
+const openRouterRouting = z.strictObject({
+  /** Only upstreams that support every parameter of the request (here: `response_format`). */
+  require_parameters: z.boolean().default(openRouterDefaults.require_parameters),
+  data_collection: z.enum(OPENROUTER_DATA_COLLECTION).default(openRouterDefaults.data_collection),
+  zdr: z.boolean().default(openRouterDefaults.zdr),
+});
+
 /** config/ai.yaml — provider order, models, limits. */
 export const aiSchema = z.strictObject({
   /**
@@ -352,12 +416,19 @@ export const aiSchema = z.strictObject({
       /** Stronger model for harder tasks. */
       strong_model: nonEmptyString,
     }),
+    /** OpenAI's own API (pay per token; the subscription is codex-cli). Absent in an older file = the shipped block. */
+    openai: z.strictObject(laterApiProvider(OPENAI_COMPATIBLE_DEFAULTS.openai)).prefault({}),
+    /** OpenRouter: one key, many vendors' models; requests are forwarded to an upstream provider. */
+    openrouter: z
+      .strictObject({ ...laterApiProvider(OPENAI_COMPATIBLE_DEFAULTS.openrouter), routing: openRouterRouting.prefault({}) })
+      .prefault({}),
     deepseek: z.strictObject({
       ...providerPolicy,
       base_url: z.url(),
       model: nonEmptyString,
       /** DeepSeek has JSON mode only, no json_schema: the schema goes into the prompt. */
       json_mode_only: z.boolean(),
+      max_tokens_field: maxTokensField.default("max_tokens"),
     }),
     mimo: z.strictObject({
       ...providerPolicy,
@@ -365,6 +436,7 @@ export const aiSchema = z.strictObject({
       model: nonEmptyString,
       /** MiMo has JSON mode only, no json_schema. */
       json_mode_only: z.boolean(),
+      max_tokens_field: maxTokensField.default("max_tokens"),
     }),
   }),
   tasks: z.strictObject({

@@ -1,5 +1,5 @@
 /**
- * AI provider layer. Providers: claude-cli → codex-cli → API (anthropic, deepseek, mimo);
+ * AI provider layer. Providers: claude-cli → codex-cli → API (anthropic, openai, openrouter, deepseek, mimo);
  * every answer is zod-validated, retried once with the errors, then handed to the next provider.
  */
 export { AiProviderError, AiSchemaError, AiUnavailableError, sanitize, type AiAttempt, type AiProviderErrorKind } from "./errors";

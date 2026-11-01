@@ -39,6 +39,13 @@
 .jb-cell--label { display: none; }
 .jb-mid { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--space-4); align-items: end; }
 .jb-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2) var(--space-4); }
+/* the posted date sits over the freshness bar; a phone keeps only the day (the relative part would not fit beside the skills) */
+.jb-cell--fresh { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
+.jb-posted { max-width: 100%; font-family: var(--font-mono); font-size: var(--text-data-sm); line-height: var(--text-data-sm-lh); color: var(--ink); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.jb-posted[data-known="false"] { color: var(--ink-2); }
+@media (max-width: 47.99rem) {
+  .jb-posted-ago { display: none; }
+}
 .jb-cell--status { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
 
 /* the unseen dot sits in front of the first line of the title, however long the title is: a flex row, the link wraps inside its own box */

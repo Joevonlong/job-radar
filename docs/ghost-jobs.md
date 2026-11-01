@@ -35,6 +35,8 @@ The sum gives the level:
 Time and length alone never make a job `likely`: an old job with a short description stays `watch`. A company on your
 `trusted_companies` list is never marked.
 
+A `reposted` result keeps the latest ten relistings. The job's detail page also shows the newest one as a **Reposted** chip next to the posted date (the day Job Radar first saw the new link, never a date the source gave; see [usage.md](usage.md)). The chip is read from the stored result, so it needs the check turned on, and it is absent for trusted companies, whose result has no reasons.
+
 ## How the wording is read
 
 The description is cut into pieces (sentences, list items, a short heading with the line after it), as for the

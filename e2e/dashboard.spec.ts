@@ -281,6 +281,29 @@ test.describe("/jobs filters", () => {
     await expect(row.locator('[data-salary-state="stated"]')).toContainText("€90–110k");
   });
 
+  test("a row writes the posted date (day and days) over the freshness bar; without one it says seen", async ({ page }) => {
+    await open(page, "/jobs?q=Applied+Scientist");
+    const posted = listRows(page).filter({ hasText: "Applied Scientist, Clinical NLP" }).locator('[data-slot="row-posted"]');
+    await expect(posted).toHaveAttribute("data-known", "true");
+    await expect(posted).toContainText(/^\d{2}\/\d{2} · /);
+    await expect(posted).toHaveAttribute("title", /^发布于 \d{4}-\d{2}-\d{2} \d{2}:\d{2}（.+）$/);
+    await expect(posted.locator(".sr-only")).toHaveText(/^发布于 /);
+    // no source gave a posted date: the first-seen day, one step weaker
+    await open(page, "/jobs?q=Data+Engineer");
+    const unknown = listRows(page).filter({ hasText: "Orbitrail" }).locator('[data-slot="row-posted"]');
+    await expect(unknown).toHaveAttribute("data-known", "false");
+    await expect(unknown).toContainText(/^发现 \d{2}\/\d{2}/);
+    await expect(unknown).toHaveAttribute("title", /^发布日期未知，首次发现于 /);
+  });
+
+  test("the sort order does not change with the date column: posted, newest first", async ({ page }) => {
+    await open(page, "/jobs?sort=posted&dir=desc");
+    const days = await listRows(page).locator('[data-slot="row-posted"][data-known="true"]').evaluateAll((nodes) => nodes.map((node) => node.getAttribute("title") ?? ""));
+    const stamps = days.map((title) => /(\d{4}-\d{2}-\d{2})/.exec(title)?.[1] ?? "");
+    expect(stamps.length).toBeGreaterThan(3);
+    expect([...stamps].sort().reverse()).toEqual(stamps);
+  });
+
   test("an impossible combination shows the empty state", async ({ page }) => {
     await open(page, "/jobs?q=zzzznothing");
     await expect(page.getByTestId("job-list-empty")).toContainText("没有符合条件的岗位");
@@ -348,6 +371,15 @@ test.describe("mobile (390px)", () => {
     await expect(page.getByTestId("filter-toggle")).toHaveText("筛选 (1)");
     await expect(listRows(page).filter({ hasText: "ML Platform Engineer" })).toBeVisible();
 
+    const widths = await page.evaluate(() => [document.documentElement.scrollWidth, window.innerWidth]);
+    expect(widths[0]).toBeLessThanOrEqual(widths[1] ?? 390);
+  });
+
+  test("/jobs: the posted date shows only the day on a phone, and the row does not scroll sideways", async ({ page }) => {
+    await open(page, "/jobs?q=Applied+Scientist");
+    const posted = listRows(page).filter({ hasText: "Applied Scientist, Clinical NLP" }).locator('[data-slot="row-posted"]');
+    await expect(posted).toBeVisible();
+    await expect(posted.locator(".jb-posted-ago")).toBeHidden();
     const widths = await page.evaluate(() => [document.documentElement.scrollWidth, window.innerWidth]);
     expect(widths[0]).toBeLessThanOrEqual(widths[1] ?? 390);
   });

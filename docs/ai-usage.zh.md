@@ -13,7 +13,7 @@
 | `tokens_in_cached` / `tokens_in_cache_write` / `tokens_out_reasoning` | 上面两个数的子集；空 = 没细分 |
 | `duration_ms` | 一次模型调用的耗时 |
 | `outcome` / `error_kind` | `ok` / `invalid_output` / `failed`；失败行有错误种类（超时、限流、登录失效、网络、服务商报错…）。不存错误原文 |
-| `cost_estimate` | **实际开支**：API 按 `price`，订阅 = 0；月预算只加这一列 |
+| `cost_estimate` | **实际开支**：API 按 `price`（OpenRouter：回复里带了这次调用的费用时用它报告的值），订阅 = 0；月预算只加这一列 |
 | `equivalent_cost_usd` | **折合 API 费用**：同样的 token 按 API 价目表要付多少。API 调用 = 实际开支；订阅 CLI = 按 `equivalent_price`；没有单价或 token 未知 = 空 |
 | `job_id` | 打分、信号、翻译调用对应的岗位（岗位删除后置空） |
 

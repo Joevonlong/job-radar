@@ -8,7 +8,7 @@ import { clipQuote } from "@/lib/signals/quote";
 import { endsInQuestion, questionEndAsColon, stripTrailingDecoration, trailingDotsAsColon, trailingPauseAsColon } from "./heading-ends";
 import { lowerBound, negatedInClause, negationIndex, WORD, wordsOf, type NegationIndex } from "./negation";
 import type { CompiledGhostPattern, CompiledGhostRules } from "./rules";
-import type { GhostInput, GhostPosting, GhostReasonOf, RepostEvent } from "./types";
+import { REPOST_EVENTS_KEPT, type GhostInput, type GhostPosting, type GhostReasonOf, type RepostEvent } from "./types";
 
 const DAY_MS = 86_400_000;
 
@@ -73,7 +73,7 @@ const placeKey = (label: string | null): string => (label ?? "").normalize("NFC"
 /**
  * Relisted under a new id: postings of one channel that keeps its ids stable, at the same place (or both without one), whose first
  * sightings are at least `min_gap_days` apart. Never across channels (one id space per channel), never for channels without stable
- * ids. The channel with the most relistings is reported (its first ten events).
+ * ids. The channel with the most relistings is reported (its latest ten events, oldest first).
  */
 export function reposted(postings: readonly GhostPosting[], rules: CompiledGhostRules): GhostReasonOf<"reposted"> | null {
   const settings = rules.settings.reposted;
@@ -105,7 +105,7 @@ export function reposted(postings: readonly GhostPosting[], rules: CompiledGhost
     if (best === null || entry[1].length > best[1].length) best = entry;
   }
   if (best === null) return null;
-  const events = [...best[1]].sort((a, b) => a.newSeen.localeCompare(b.newSeen) || a.newId.localeCompare(b.newId)).slice(0, 10);
+  const events = [...best[1]].sort((a, b) => a.newSeen.localeCompare(b.newSeen) || a.newId.localeCompare(b.newId)).slice(-REPOST_EVENTS_KEPT);
   return { code: "reposted", points: settings.points, channelId: best[0], events };
 }
 

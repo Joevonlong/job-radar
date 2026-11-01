@@ -145,6 +145,7 @@ const item = (over: Partial<JobListItem> = {}): JobListItem => ({
   signals: [],
   timeLabel: "",
   timeTitle: "",
+  posted: { day: "10/27", ago: "4 d", title: "", known: true },
   ...over,
 });
 
