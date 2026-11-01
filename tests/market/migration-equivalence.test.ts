@@ -236,6 +236,8 @@ describe("ai.yaml", () => {
     const migrated = migrateText("ai", legacyText("ai") ?? "");
     const back = renameBack(renameBack(parse(migrated.text) as Json, ["scoring"], [["language_penalty", "german_penalty"]]), ["scoring.priority.weights"], [["language_gap", "german_gap"]]);
     delete back.config_version;
+    // a later step appends the newer API providers to api_order
+    if (Array.isArray(back.api_order)) back.api_order = back.api_order.filter((id: unknown) => id !== "openai" && id !== "openrouter");
     expect(back).toEqual(original);
     expect(migrateText("ai", migrated.text).steps).toBe(0);
   });
