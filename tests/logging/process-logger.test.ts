@@ -136,15 +136,15 @@ describe("resolveLogLevel: config cases (on-demand refresh, no watcher)", () => 
     expect(resolveLogLevel()).toBe("debug");
   });
 
-  it("warns with the first line of the config error only (the loader already reported the whole message)", () => {
+  it("warns with the whole config error on one line (with an empty cache it is the only report)", () => {
     writeLevel("loud");
     expect(resolveLogLevel()).toBe("info");
     const [line] = resolverWarnings();
     expect(line).toContain("could not read logging.level from schedule.yaml");
     expect(line).toContain("failed validation");
     expect(line).not.toContain("\n");
-    // the field-level lines of the message stay out of the resolver's warning
-    expect(line).not.toContain("logging.level:");
+    // the field-level lines of the message are kept, joined onto the same line
+    expect(line).toContain("logging.level:");
   });
 
   it("follows valid -> broken -> fixed without a restart, as seen through a logger", () => {

@@ -59,8 +59,8 @@ function warnEnvOnce(): void {
 function warnConfigOnce(error: unknown): void {
   if (state.warnedConfig) return;
   state.warnedConfig = true;
-  // the loader already reported the whole (multi-line) message; the first line says which file and why
-  const reason = error instanceof ConfigError ? (error.message.split("\n")[0] ?? error.name) : error instanceof Error ? error.name : "unexpected error";
+  // with an empty cache the loader throws without reporting, so this line is the only report: the whole message, on one line
+  const reason = error instanceof ConfigError ? error.message.split("\n").map((line) => line.trim()).filter(Boolean).join("; ") : error instanceof Error ? error.name : "unexpected error";
   console.warn(`[logging] could not read logging.level from schedule.yaml, logging at ${DEFAULT_LOG_LEVEL} until it can be read: ${reason}`);
 }
 

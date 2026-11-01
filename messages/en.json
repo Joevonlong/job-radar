@@ -5466,7 +5466,7 @@
           "timeoutHint": "Try again later",
           "manual": "launchd has no {label}, but the ai-worker runs (heartbeat {age} s ago, probably started by hand)",
           "manualHint": "A process started by hand does not come back after a restart: scripts/ops/install-ai-worker.sh",
-          "otherLabel": "launchd runs {found}, the config says {label}",
+          "otherLabel": "launchd has {found} loaded, the config says {label}",
           "otherLabelHint": "Run scripts/ops/install-ai-worker.sh (or scripts/ops/deploy.sh) to install {label}, or change doctor.ai_worker_launchd_label to {found}",
           "notInstalled": "launchd has no {label}: the ai-worker is not installed",
           "notInstalledHint": "scripts/ops/install-ai-worker.sh (docs/host-setup.md section 6b)",

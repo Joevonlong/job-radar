@@ -5466,7 +5466,7 @@
           "timeoutHint": "稍后重试",
           "manual": "launchd 里没有 {label}，但 ai-worker 在跑（心跳 {age} 秒前，应该是手动启动的）",
           "manualHint": "手动启动的进程重启后不会回来：scripts/ops/install-ai-worker.sh",
-          "otherLabel": "launchd 跑的是 {found}，配置写的是 {label}",
+          "otherLabel": "launchd 加载的是 {found}，配置写的是 {label}",
           "otherLabelHint": "运行 scripts/ops/install-ai-worker.sh（或 scripts/ops/deploy.sh）安装 {label}，或把 doctor.ai_worker_launchd_label 改成 {found}",
           "notInstalled": "launchd 里没有 {label}：ai-worker 没有安装",
           "notInstalledHint": "scripts/ops/install-ai-worker.sh（docs/host-setup.md 第 6b 节）",

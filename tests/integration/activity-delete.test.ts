@@ -128,12 +128,13 @@ describe("activity deletion", () => {
     const holder = createConnection(inject("testDatabaseUrl"), { max: 1 });
     let release = (): void => undefined;
     const gate = new Promise<void>((resolve) => { release = resolve; });
+    let holderDone: Promise<void> = Promise.resolve();
     const held = new Promise<void>((resolve, reject) => {
-      holder.db.transaction(async (tx) => {
+      holderDone = holder.db.transaction(async (tx) => {
         await tx.execute(sql`select 1 from activity_spans where id = ${root.id} for update`);
         resolve();
         await gate;
-      }).catch(reject);
+      }).then(() => undefined, reject);
     });
     try {
       await held;
@@ -143,7 +144,8 @@ describe("activity deletion", () => {
       expect(await executeDelete(db, input)).toEqual({ status: "partial", roots: 0, events: 0 });
       expect(await activityCount()).toBe(1);
       release();
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await held;
+      await holderDone;
       expect(await executeDelete(db, input)).toEqual({ status: "done", roots: 1, events: 0 });
     } finally {
       release();

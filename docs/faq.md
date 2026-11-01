@@ -181,10 +181,10 @@ countries; StepStone, XING, Arbeitsagentur and Arbeitnow are the Germany pack's 
 
 Salary reading knows the euro, dollar and pound plus many more currencies (among them CAD, AUD, SGD, JPY, CNY, INR,
 BRL and ZAR), with rough exchange rates you can adjust; the market form tells you when your currency has no rate. In a
-country Indeed doesn't cover, only Indeed is skipped and the other sources keep working. Indeed no longer covers
+country Indeed doesn't cover, only Indeed is affected and the other sources keep working. Indeed no longer covers
 Slovakia, Slovenia, Croatia, Bulgaria, Estonia, Latvia, Lithuania, Malta, Cyprus and Bangladesh (SK, SI, HR, BG, EE, LV,
-LT, MT, CY, BD): with Indeed switched on in one of those markets, every cycle reports it as `unknown` ("Indeed does not
-serve …") until the circuit breaker opens, so leave Indeed off there. Check the salary figures on a
+LT, MT, CY, BD): with Indeed switched on in one of those markets, Indeed fails with `unknown` ("Indeed does not
+serve …", not skipped) every cycle until the circuit breaker opens, so leave Indeed off there. Check the salary figures on a
 few jobs if you're outside Europe.
 
 ## Can several people share one installation?
