@@ -624,7 +624,7 @@ describe("FilterBar: date filter", () => {
     await expectQuery(lastQuery, "?from=2026-10-01&to=2026-10-15&dateBy=posted");
     await userEvent.click(screen.getByTestId("date-filter-range-any"));
     await expectQuery(lastQuery, "");
-    expect(screen.queryByTestId("filter-from")).toBeNull();
+    await waitFor(() => expect(screen.queryByTestId("filter-from")).toBeNull());
   });
 
   it("a range that is not on the list still filters, highlights nothing and says so in its chip", () => {
