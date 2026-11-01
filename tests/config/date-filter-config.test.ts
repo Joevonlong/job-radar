@@ -46,17 +46,43 @@ describe("ui date filter keys", () => {
   });
 });
 
+/** A filter key no version knows: stands for what a later version may add to a view. */
+const FUTURE_KEY = "futureFilter";
+
+describe("saved views hold the date condition", () => {
+  const interests = (views: unknown): Json => ({ ...structuredClone(shippedYaml("interests.yaml")), views }) as Json;
+  const parseViews = (filters: Json) => configRegistry.interests.schema.safeParse(interests([{ id: "v", name: "V", default: false, filters }]));
+
+  it("accepts a quick range, a custom range and what they compare, and keeps them as written", () => {
+    for (const filters of [{ within: "7d", dateBy: "posted" }, { within: "month" }, { within: "366d", dateBy: "seen" }, { from: "2026-10-01", to: "2026-10-15", dateBy: "posted" }]) {
+      const parsed = parseViews(filters);
+      expect(parsed.success, JSON.stringify(filters)).toBe(true);
+      if (parsed.success) expect((parsed.data as { views: { filters: Json }[] }).views[0]?.filters).toEqual(filters);
+    }
+  });
+
+  it("rejects a range or a date field the URL would not take", () => {
+    for (const within of ["0d", "367d", "7", "7D", "week", 7]) expect(parseViews({ within }).success, String(within)).toBe(false);
+    expect(parseViews({ dateBy: "updated" }).success).toBe(false);
+  });
+
+  it("loads a view file from before the date filter exactly as it did", () => {
+    const parsed = parseViews({ city: "Berlin", from: "2026-10-01", to: "2026-10-15" });
+    expect(parsed.success && (parsed.data as { views: { filters: Json }[] }).views[0]?.filters).toEqual({ city: "Berlin", from: "2026-10-01", to: "2026-10-15" });
+  });
+});
+
 describe("saved views read by an older or newer version", () => {
   const interests = (views: unknown): Json => ({ ...structuredClone(shippedYaml("interests.yaml")), views }) as Json;
   const view = (filters: Json) => [{ id: "v", name: "V", default: false, filters }];
 
   it("ignores a filter key it does not know and keeps the others", () => {
-    const parsed = configRegistry.interests.schema.parse(interests(view({ city: "Berlin", within: "7d", dateBy: "posted" }))) as { views: { filters: Json }[] };
+    const parsed = configRegistry.interests.schema.parse(interests(view({ city: "Berlin", [FUTURE_KEY]: "7d", other: "x" }))) as { views: { filters: Json }[] };
     expect(parsed.views[0]?.filters).toEqual({ city: "Berlin" });
   });
 
   it("still validates the keys it knows", () => {
-    expect(configRegistry.interests.schema.safeParse(interests(view({ within: "7d", minScore: 101 }))).success).toBe(false);
+    expect(configRegistry.interests.schema.safeParse(interests(view({ [FUTURE_KEY]: "7d", minScore: 101 }))).success).toBe(false);
   });
 
   it("stays strict about everything else in interests.yaml", () => {
@@ -65,18 +91,18 @@ describe("saved views read by an older or newer version", () => {
   });
 
   it("warns, with the path, for each key it ignored", () => {
-    const warnings = interestsRawWarnings(interests([...view({ within: "7d" }), { ...view({ city: "Berlin", dateBy: "seen", foo: 1 })[0], id: "w", name: "W" }]));
-    expect(warnings.map((w) => w.path.join("."))).toEqual(["views.0.filters.within", "views.1.filters.dateBy", "views.1.filters.foo"]);
-    expect(warnings[0]?.message).toContain('"within"');
+    const warnings = interestsRawWarnings(interests([...view({ [FUTURE_KEY]: "7d" }), { ...view({ city: "Berlin", within: "7d", foo: 1 })[0], id: "w", name: "W" }]));
+    expect(warnings.map((w) => w.path.join("."))).toEqual([`views.0.filters.${FUTURE_KEY}`, "views.1.filters.foo"]);
+    expect(warnings[0]?.message).toContain(`"${FUTURE_KEY}"`);
     expect(interestsRawWarnings(interests(view({ city: "Berlin" })))).toEqual([]);
     expect(interestsRawWarnings(undefined)).toEqual([]);
   });
 
   it("the config editor accepts such a file and warns", () => {
-    const text = JSON.stringify({ ...interests(view({ city: "Berlin", within: "7d" })), config_version: currentConfigVersion("interests") });
+    const text = JSON.stringify({ ...interests(view({ city: "Berlin", [FUTURE_KEY]: "7d" })), config_version: currentConfigVersion("interests") });
     const result = validateConfigText("interests", text);
     expect(result.ok, JSON.stringify(result)).toBe(true);
-    if (result.ok) expect(result.warnings.map((w) => w.path)).toContain("views[0].filters.within");
+    if (result.ok) expect(result.warnings.map((w) => w.path)).toContain(`views[0].filters.${FUTURE_KEY}`);
   });
 });
 
@@ -90,10 +116,10 @@ describe("pnpm config:check with a view from a newer version", () => {
   it("passes and prints a warning for the unknown filter key", () => {
     const file = path.join(tmp.configDir, "interests.yaml");
     const config = parseYaml(fs.readFileSync(file, "utf8")) as Json;
-    config.views = [{ id: "week", name: "Week", default: false, filters: { city: "Berlin", within: "7d" } }];
+    config.views = [{ id: "week", name: "Week", default: false, filters: { city: "Berlin", [FUTURE_KEY]: "7d" } }];
     fs.writeFileSync(file, stringifyYaml(config));
     const run = runConfigScript(tmp, "config-check.ts");
     expect(run.status, run.out).toBe(0);
-    expect(run.out).toContain("! interests.yaml views.0.filters.within");
+    expect(run.out).toContain(`! interests.yaml views.0.filters.${FUTURE_KEY}`);
   });
 });

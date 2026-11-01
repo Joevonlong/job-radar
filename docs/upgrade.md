@@ -217,6 +217,18 @@ leaves the index in place and needs no database change. The two new `ui.yaml` ke
 `filters.date_default_field`) only matter to a rollback if your file holds them: see
 [configuration.md](configuration.md#date-filter-uiyaml).
 
+Saved views can store the date condition as two optional keys in a view's `filters` in `interests.yaml`: `within` (`7d`,
+`month`, ... the quick range, counted from the day the view is opened) and `dateBy` (`posted` or `seen`; written only for
+`posted`, a view without it compares first seen). Views you already have load unchanged. Rolling back:
+
+- **To the first version with the date filter** (it has the quick ranges but does not save them in views): it ignores `within` and
+  `dateBy` in a view and `pnpm config:check` warns about each. A view that held a quick range then shows every date; a view
+  with `from` / `to` and `dateBy: posted` reads those dates as first-seen dates. Any change to your views there (save, rename,
+  delete) rewrites the file without the two keys.
+- **To a version before the date filter**: its `interests.yaml` check is strict and refuses the whole file when a view holds
+  `within` or `dateBy`, so no view loads. Delete those two keys from every view (and, if you added them, the two `ui.yaml` keys
+  above) before switching, or restore `interests.yaml` from `data/config/.backup/<timestamp>/`.
+
 ### Upgrading with change fingerprints
 
 The change-fingerprint migration adds nullable storage columns and indexes. Adding the columns does not rewrite job or

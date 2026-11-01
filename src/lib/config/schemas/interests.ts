@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { MAX_FILTER_VALUES, MIN_SALARY_MAX, MIN_SCORE_MAX, GHOST_FILTERS, TRAP_FILTERS, VISA_FILTERS } from "@/lib/jobs/constants";
+import { DATE_FIELDS, parseWithin } from "@/lib/jobs/date-range";
 import { MULTI_VALUE_SCHEMAS } from "@/lib/jobs/filter-values";
 import { SIGNAL_COLORS } from "@/lib/signals/palette";
 
@@ -179,6 +180,9 @@ const signalsSchema = z
 
 const viewDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "must be YYYY-MM-DD");
 
+/** The same token the /jobs URL takes (`Nd` with N from 1 to 366, or `month`), so a view and a link agree on what is valid. */
+const viewWithin = z.string().refine((value) => parseWithin(value) !== null, "must be Nd (N from 1 to 366) or month");
+
 /**
  * One value (the shape before multi-value filters) or several (any of them). No transform: the file round-trips exactly as written, so
  * saving a view never rewrites the scalar views next to it, and the old code still reads a file with only scalars.
@@ -226,8 +230,13 @@ export const strictViewFiltersSchema = z.strictObject({
   minScore: z.number().int().min(0).max(MIN_SCORE_MAX).optional(),
   /** Stated annual salary (upper bound, EUR) at least this. */
   minSalary: z.number().int().min(0).max(MIN_SALARY_MAX).optional(),
+  /** Custom date range, compared by `dateBy` (absent = first seen, what a view meant before the posted date was offered). */
   from: viewDate.optional(),
   to: viewDate.optional(),
+  /** Quick date range (`7d`, `month`), counted back from the day the view is opened; wins over `from` / `to`. */
+  within: viewWithin.optional(),
+  /** Which date `within` / `from` / `to` compare; meaningless without one of them. */
+  dateBy: z.enum(DATE_FIELDS).optional(),
   /** Only jobs that state a salary. */
   salary: z.boolean().optional(),
   /** Show the jobs the hard filter removed. */

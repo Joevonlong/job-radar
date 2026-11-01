@@ -395,7 +395,7 @@ ai-worker 的发布目录和切换由 `schedule.yaml` 里的四个键控制。�
 
 两个键都可以不写（用默认值），旧文件不用迁移。某一项不是 `Nd` 或 `month` 时，`pnpm config:check` 会指出是哪个键。改了清单，已有链接照样能用：链接里的范围不在清单里时仍然生效，只是筛选面板上没有对应的按钮。筛选的行为见 [usage.zh.md](usage.zh.md#按日期筛选)。
 
-回退到没有日期筛选的版本：`ui.yaml` 是严格模式，旧版本读到这两个键会拒绝整个文件。如果你自己加过这两个键（或者你的文件是从出厂文件复制来的、带着它们），切换前删掉 `filters.date_quick_ranges` 和 `filters.date_default_field`，并用旧版本校验这份文件。视图目前不保存快捷范围，所以 `interests.yaml` 不用改。以后会有版本把快捷范围存进视图；跑过那个版本之后，再回到这个版本，带快捷范围的视图会忽略这个范围（`pnpm config:check` 会对这个键给出警告）。
+回退到没有日期筛选的版本：`ui.yaml` 是严格模式，旧版本读到这两个键会拒绝整个文件。如果你自己加过这两个键（或者你的文件是从出厂文件复制来的、带着它们），切换前删掉 `filters.date_quick_ranges` 和 `filters.date_default_field`，并用旧版本校验这份文件。`interests.yaml` 里的视图可以带 `within` 和 `dateBy`：旧版本怎么处理它们，见 [带日期筛选的升级](upgrade.zh.md#带日期筛选的升级)。
 
 ## 关注岗位复查（`pipeline.yaml` + `ui.yaml`）
 

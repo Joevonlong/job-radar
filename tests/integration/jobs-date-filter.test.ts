@@ -3,7 +3,9 @@ import { afterAll, beforeAll, beforeEach, describe, expect, inject, it } from "v
 
 import { closeDb, countJobList, getDb, listJobs, listUnseenJobIds, type JobFilters } from "@/lib/db";
 import { runMigrations } from "@/lib/db/migrate";
-import { parseWithin } from "@/lib/jobs/date-range";
+import { effectiveDateRange, parseWithin } from "@/lib/jobs/date-range";
+import { viewFiltersFromParams, viewFiltersToParams } from "@/lib/interests/view-filters";
+import { jobsListHref, loadJobsSearchParams } from "@/lib/jobs/search-params";
 
 /**
  * The date filter of /jobs: quick ranges and custom dates, compared by the posted date (the first-seen date where a posting has none)
@@ -189,5 +191,46 @@ describe("no date condition", () => {
       { key: "b", posted: null, seen: ago(5000) },
     ]);
     expect(await keys({ dateField: "posted", now: NOW })).toEqual(["a", "b"]);
+  });
+});
+
+describe("a saved view recomputes its quick range for the day it is opened", () => {
+  /** Save the filters of `query` as a view, open that view as a /jobs link, and read the date condition the list would query with. */
+  function openedView(query: string, now: Date): JobFilters {
+    const saved = viewFiltersFromParams(loadJobsSearchParams(query));
+    const href = jobsListHref(viewFiltersToParams(saved));
+    const { within, from, to, dateField } = effectiveDateRange(loadJobsSearchParams(href.slice(href.indexOf("?"))));
+    return { within, from, to, dateField, now };
+  }
+
+  it("keeps the range, not the dates: the same view lists other jobs a few days later", async () => {
+    await addJobs([
+      { key: "old", posted: ago(10 * 24), seen: ago(10 * 24) },
+      { key: "mid", posted: ago(5 * 24), seen: ago(5 * 24) },
+      { key: "new", posted: ago(2 * 24), seen: ago(2 * 24) },
+    ]);
+    const view = "?within=7d&dateBy=posted";
+    expect(await keys(openedView(view, NOW))).toEqual(["mid", "new"]);
+    const later = new Date(NOW.getTime() + 4 * 24 * HOUR);
+    expect(await keys(openedView(view, later))).toEqual(["new"]);
+    const muchLater = new Date(NOW.getTime() + 30 * 24 * HOUR);
+    expect(await keys(openedView(view, muchLater))).toEqual([]);
+  });
+
+  it("recomputes this month in the display time zone on each opening", async () => {
+    await addJobs([
+      { key: "september", posted: "2026-09-28T10:00:00Z", seen: "2026-09-28T10:00:00Z" },
+      { key: "october", posted: "2026-10-15T10:00:00Z", seen: "2026-10-15T10:00:00Z" },
+    ]);
+    expect(await keys(openedView("?within=month&dateBy=posted", new Date("2026-10-20T12:00:00Z")))).toEqual(["october"]);
+    expect(await keys(openedView("?within=month&dateBy=posted", new Date("2026-11-05T12:00:00Z")))).toEqual([]);
+    expect(await keys(openedView("?within=month&dateBy=posted", new Date("2026-10-05T12:00:00Z")))).toEqual(["october"]);
+  });
+
+  it("compares the date the view names: first seen when it says so or says nothing", async () => {
+    await addJobs([{ key: "reposted", posted: ago(40 * 24), seen: ago(24) }]);
+    expect(await keys(openedView("?within=7d&dateBy=posted", NOW))).toEqual([]);
+    expect(await keys(openedView("?within=7d&dateBy=seen", NOW))).toEqual(["reposted"]);
+    expect(await keys(openedView("?within=7d", NOW))).toEqual(["reposted"]);
   });
 });

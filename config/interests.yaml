@@ -167,7 +167,9 @@ limits:
 # filters use the /jobs URL params (without sort, page): q, source, city, workplace (onsite|hybrid|remote|unknown),
 # contract, status (job status: active|possibly_closed|closed), app (application status, multi-select: new|interested|preparing|applied|interviewing|
 # offer|rejected|withdrawn|archived; new = no application record yet, archived = dismissed), minScore (min rank value, 0–100),
-# minSalary (min of the stated annual salary maximum, market base currency/year), from, to (YYYY-MM-DD, ignored on the Today page), salary, filtered, hideLang (hide jobs requiring a local language above yours), high (high-value signals only).
+# minSalary (min of the stated annual salary maximum, market base currency/year), salary, filtered, hideLang (hide jobs requiring a local language above yours), high (high-value signals only).
+# Dates (ignored on the Today page): within (quick range: Nd = the last N x 24 hours, N 1-366, or month = this month so far; counted from the day the view is
+# opened) or from / to (YYYY-MM-DD, fixed days); dateBy (posted | seen) says which date they compare - without it, first seen.
 # The view with default: true (at most one) applies automatically on the Today page when there are no explicit params. Example:
 #   - id: high-pay-local
 #     name: High-pay signals in my city

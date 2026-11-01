@@ -327,9 +327,9 @@ describe("date quick range params", () => {
     expect(hasActiveFilters(loadJobsSearchParams("?within=month"))).toBe(true);
   });
 
-  it("puts within among the filters but not the saved-view ones, and dateBy among neither", () => {
+  it("puts within among the filters and the saved-view ones, and dateBy among neither", () => {
     expect(FILTER_KEYS).toContain("within");
-    expect(NON_VIEW_FILTER_KEYS).toContain("within");
+    expect(NON_VIEW_FILTER_KEYS).not.toContain("within");
     expect(FILTER_KEYS).not.toContain("dateBy");
   });
 
@@ -338,13 +338,6 @@ describe("date quick range params", () => {
     expect(href).toBe("/jobs?within=7d&dateBy=posted&page=2");
     expect(loadJobsSearchParams(href.slice("/jobs".length))).toMatchObject({ within: { kind: "days", days: 7 }, dateBy: "posted" });
     expect(jobsSearchQuery({ within: { kind: "month" }, dateBy: "seen", page: 3 })).toBe("within=month&dateBy=seen");
-  });
-
-  it("keeps the old dates out of saved views when they compare the posted date or come with a quick range", () => {
-    expect(viewFiltersFromParams(loadJobsSearchParams("?from=2026-10-01&to=2026-10-15"))).toEqual({ from: "2026-10-01", to: "2026-10-15" });
-    expect(viewFiltersFromParams(loadJobsSearchParams("?from=2026-10-01&dateBy=seen"))).toEqual({ from: "2026-10-01" });
-    expect(viewFiltersFromParams(loadJobsSearchParams("?from=2026-10-01&to=2026-10-15&dateBy=posted"))).toEqual({});
-    expect(viewFiltersFromParams(loadJobsSearchParams("?within=7d&dateBy=seen&from=2026-10-01"))).toEqual({});
   });
 });
 

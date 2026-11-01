@@ -126,6 +126,11 @@ scripts/ops/deploy.sh --skip-pull
 
 迁移会给 `jobs` 加一个索引（发布日期；岗位没有发布日期时用首次发现日期）。它不是并发创建的，建索引期间对 `jobs` 的写入会等待；几万条岗位只要几秒。代码回退时索引留着，不需要改数据库。新加的两个 `ui.yaml` 键（`filters.date_quick_ranges`、`filters.date_default_field`）只有在你的文件里有它们时才影响回退：见 [configuration.zh.md](configuration.zh.md#日期筛选uiyaml)。
 
+保存的视图可以把日期条件存成 `interests.yaml` 里视图 `filters` 下两个可选的键：`within`（`7d`、`month` 等快捷范围，从打开视图的那天算起）和 `dateBy`（`posted` 或 `seen`；只在 `posted` 时写入，没有它的视图按首次发现比较）。已有的视图照常读取，含义不变。回退时：
+
+- **回退到第一个带日期筛选的版本**（有快捷范围，但视图不保存它）：该版本会忽略视图里的 `within` 和 `dateBy`，`pnpm config:check` 对每个键给出警告。原本存着快捷范围的视图会不限日期；带 `from` / `to` 和 `dateBy: posted` 的视图，这两个日期会被当成首次发现日期。在那个版本里对视图做任何修改（保存、重命名、删除）都会把文件重写成不带这两个键的样子。
+- **回退到没有日期筛选的版本**：它对 `interests.yaml` 的检查是严格的，只要有视图带 `within` 或 `dateBy`，整份文件都会被拒绝，所有视图都读不出来。切换前先把每个视图里的这两个键删掉（如果你加过上面说的两个 `ui.yaml` 键，也一并删掉），或者从 `data/config/.backup/<时间戳>/` 恢复 `interests.yaml`。
+
 ### 带变更指纹的升级
 
 变更指纹迁移新增可空存储列和索引。添加列不会重写岗位或原始招聘表，迁移内也不回填历史行。创建索引仍会持有表锁：
