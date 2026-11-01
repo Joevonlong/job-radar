@@ -450,7 +450,12 @@ describe("push selection reads interests.yaml `watched_companies`", () => {
 
 it("counts only enabled company-capable channels that opted in, respecting the global switch", async () => {
   const current = loadConfig("channels");
-  await writeConfig("channels", { ...current, linkedin: { ...current.linkedin, session: { ...current.linkedin.session, enabled: true, company_queries: true }, guest: { ...current.linkedin.guest, enabled: true, company_queries: false } }, sources: { ...current.sources, arbeitsagentur: { ...current.sources.arbeitsagentur, enabled: false }, indeed: { ...current.sources.indeed, enabled: false }, jobspy_google: { ...current.sources.jobspy_google, enabled: false } } });
+  // every other company-capable channel is off, whatever the shipped defaults enable
+  await writeConfig("channels", {
+    ...current,
+    linkedin: { ...current.linkedin, brightdata: { ...current.linkedin.brightdata, enabled: false }, apify: { ...current.linkedin.apify, enabled: false }, session: { ...current.linkedin.session, enabled: true, company_queries: true }, guest: { ...current.linkedin.guest, enabled: true, company_queries: false } },
+    sources: { ...current.sources, arbeitsagentur: { ...current.sources.arbeitsagentur, enabled: false }, indeed: { ...current.sources.indeed, enabled: false }, jobspy_google: { ...current.sources.jobspy_google, enabled: false }, jsearch: { ...current.sources.jsearch, enabled: false }, stepstone: { ...current.sources.stepstone, enabled: false }, xing: { ...current.sources.xing, enabled: false } },
+  });
   await writeConfig("search", { ...loadConfig("search"), watched_company_queries: { ...loadConfig("search").watched_company_queries, enabled: true } });
   expect((await describeWatchedCompanies(["Acme"]))[0]?.companyQueryChannels).toBe(1);
   await writeConfig("search", { ...loadConfig("search"), watched_company_queries: { ...loadConfig("search").watched_company_queries, enabled: false } });
