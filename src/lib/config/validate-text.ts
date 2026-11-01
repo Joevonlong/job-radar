@@ -192,7 +192,7 @@ export function validateConfigText<N extends ConfigName>(name: N, text: string, 
     }
   }
   if (name === "interests") {
-    for (const warning of [...interestsWarnings(value as ConfigValue<"interests">), ...interestsRawWarnings(withoutConfigVersion(raw))]) crossIssues.push({ path: joinPath(warning.path), message: warning.message, severity: "warning", file: null, where: warning.path });
+    for (const warning of [...interestsWarnings(value as ConfigValue<"interests">), ...interestsRawWarnings(withoutConfigVersion(configDocumentValue(name, doc)))]) crossIssues.push({ path: joinPath(warning.path), message: warning.message, severity: "warning", file: null, where: warning.path });
   }
   for (const cross of crossIssues) {
     const located: TextIssue =
