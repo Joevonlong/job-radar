@@ -172,7 +172,7 @@ describe("stepstone", () => {
   it("builds the same URLs as before for city and remote searches", () => {
     const located = new URL(stepstoneSearchUrl(settings(), { keyword: "KI", location: "Berlin", kind: "city", windowHours: 24, page: 1 }) ?? "");
     expect(located.pathname).toBe("/jobs/ki/in-berlin");
-    expect(located.searchParams.get("radius")).toBe("30");
+    expect(located.searchParams.get("radius")).toBe(String(settings().radius_km));
     const remote = new URL(stepstoneSearchUrl(settings(), { keyword: "KI", location: null, kind: "remote", windowHours: 24, page: 1 }) ?? "");
     expect(remote.searchParams.get("wfh")).toBe("1");
     expect(stepstoneSearchUrl(settings(), { keyword: "KI", location: "Berlin", windowHours: 24, page: 1 })).toBe(stepstoneSearchUrl(settings(), { keyword: "KI", location: "Berlin", kind: "city", windowHours: 24, page: 1 }));
@@ -252,7 +252,7 @@ describe("xing", () => {
 
   it("builds the same URLs as before for city and remote searches", () => {
     const located = new URL(xingSearchUrl(settings(), { keyword: "KI", location: "Berlin", page: 1 }));
-    expect(Object.fromEntries(located.searchParams)).toEqual({ keywords: "KI", location: "Berlin", radius: "30" });
+    expect(Object.fromEntries(located.searchParams)).toEqual({ keywords: "KI", location: "Berlin", radius: String(settings().radius_km) });
     const remote = new URL(xingSearchUrl(settings(), { keyword: "KI", location: null, kind: "remote", page: 1 }));
     expect(remote.searchParams.get("remoteOption")).toBe(settings().remote_option_id);
     expect(xingSearchUrl(settings(), { keyword: "KI", location: "Berlin", page: 1 })).toBe(xingSearchUrl(settings(), { keyword: "KI", location: "Berlin", kind: "city", page: 1 }));
