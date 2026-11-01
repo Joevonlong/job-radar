@@ -1,6 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import { parse, stringify } from "yaml";
+
 import { expect, test, type Page } from "./fixtures";
 import { listRows } from "./list-rows";
 
@@ -16,6 +18,8 @@ const CONFIG_DIR = process.env.E2E_CONFIG_DIR ?? "";
 const INTERESTS_FILE = path.join(CONFIG_DIR, "interests.yaml");
 const SHIPPED_FILE = path.join(process.env.E2E_DEFAULTS_DIR ?? path.resolve(import.meta.dirname, "../tests/fixtures/config/defaults"), "interests.yaml");
 const read = (): string => fs.readFileSync(INTERESTS_FILE, "utf8");
+const SEARCH_FILE = path.join(CONFIG_DIR, "search.yaml");
+const SHIPPED_SEARCH_FILE = path.join(path.dirname(SHIPPED_FILE), "search.yaml");
 
 const MUNICH_JOB = "Machine Learning Engineer, Perception";
 
@@ -30,7 +34,10 @@ const rowCount = (page: Page) => listRows(page).count();
 test.describe.configure({ mode: "serial" });
 
 test.beforeAll(() => fs.copyFileSync(SHIPPED_FILE, INTERESTS_FILE));
-test.afterAll(() => fs.copyFileSync(SHIPPED_FILE, INTERESTS_FILE));
+test.afterAll(() => {
+  fs.copyFileSync(SHIPPED_FILE, INTERESTS_FILE);
+  fs.copyFileSync(SHIPPED_SEARCH_FILE, SEARCH_FILE);
+});
 
 test("save the /jobs filters as a view: a tab appears on Today and clicking it applies the filter", async ({ page }) => {
   await open(page, "/jobs?city=M%C3%BCnchen");
@@ -307,6 +314,10 @@ test("the category editor fits a phone and speaks English", async ({ page }) => 
 });
 
 test("watched companies: autocomplete from the companies table, add and remove", async ({ page }) => {
+  // Company queries off: the panel explains that no board or channel covers a watched company. Set here, not left by another spec.
+  const search = parse(fs.readFileSync(SHIPPED_SEARCH_FILE, "utf8")) as Record<string, unknown>;
+  search.watched_company_queries = { enabled: false };
+  fs.writeFileSync(SEARCH_FILE, stringify(search));
   await open(page, "/interests");
   const card = page.getByTestId("watched-card");
   await expect(card.getByTestId("watched-empty")).toBeVisible();
