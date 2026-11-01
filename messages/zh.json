@@ -3200,8 +3200,8 @@
         "hint": "关闭时，画像和经历素材不会发给任何 AI 服务商，工作台只提示怎么开启。之前写好的回答仍会显示。"
       },
       "writer_timeout_seconds": {
-        "label": "单个请求最长等待",
-        "hint": "包括排队和运行。超过的请求标为“已过期”，素材从数据库清除，AI 调用也随之停止。"
+        "label": "单个请求最长运行时间",
+        "hint": "从 ai-worker 领取时算起。超过时 AI 调用停止，请求以超时失败，素材从数据库清除。"
       }
     },
     "control": {
@@ -7399,6 +7399,7 @@
       "emphasisPlaceholder": "可选：希望这条回答讲到的一点",
       "emphasisCount": "{count} / {max}",
       "breakdownFirst": "先拆解 JD，就能逐条选要求；也可以改为发送 JD 原文。",
+      "breakdownOff": "岗位拆解已关闭，可以发送 JD 原文。",
       "noDescription": "这个职位没有 JD 原文。",
       "breakdownButton": "拆解 JD",
       "storiesUnreadable": "stories.yaml 读不出来，现在没法发送经历素材。/me 上的卡片会显示错误，并可回滚。"
@@ -7517,7 +7518,8 @@
         "not_found": "在该素材里找不到",
         "not_allowed": "这种来源不能支撑这类句子",
         "no_ref": "没有指明是哪条素材",
-        "unknown_ref": "没有发送这条素材"
+        "unknown_ref": "没有发送这条素材",
+        "too_short": "引文太短，不算证据"
       },
       "missing": "依据里没有：{items}",
       "needsCheck": "需核对：{items}（依据和 JD 里都找不到的名称）"

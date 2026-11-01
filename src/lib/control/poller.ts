@@ -120,6 +120,13 @@ export async function processNextControlRequest(options: ControlPollOptions): Pr
       }
     }
     const finished = await finishControlRequest(db, request.id, outcome);
+    if (finished === null) {
+      // it already ended while the handler ran (a writer request expired): it keeps that end
+      const ended = await getControlRequest(db, request.id);
+      scope.set("failed", ended?.status === "failed" ? safeErrorCode((ended.result as { error?: unknown } | null)?.error) : undefined);
+      log.info("control request had already ended", { status: ended?.status ?? "missing" });
+      return ended;
+    }
     scope.set(outcome.status === "done" ? "ok" : "failed", outcome.status === "failed" ? safeErrorCode(outcome.result.error) : undefined);
     log.info("control request finished", { status: outcome.status });
     return finished;

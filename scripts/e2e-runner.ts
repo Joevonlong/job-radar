@@ -189,7 +189,6 @@ registerControlHandler(
   "writer_job",
   createWriterJobHandler({
     createRouter: () => createAiRouter({ config: loadConfig("ai"), providers: [createProvider(writerAi)], usage: null, health: null, quota: null, catalog: null, origin: "control" }),
-    outputTokenCap: () => undefined,
   }),
 );
 

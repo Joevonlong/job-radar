@@ -16,7 +16,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { callAction } from "@/lib/actions/client";
 import { controlQueueViewSchema } from "@/lib/control/request-view-schema";
 import { toastTone } from "@/lib/toast";
-import { jdPointKey, type JdPoint } from "@/lib/writer/jd-points";
+import { jdMaterialMode, jdPointKey, type JdPoint } from "@/lib/writer/jd-points";
 import type { QuestionSelection } from "@/lib/writer/types";
 import type { WorkbenchQuestion, WorkbenchView } from "@/lib/writer/view";
 
@@ -214,10 +214,13 @@ function BreakdownFirst({ view, enabled, timeZone }: { view: WorkbenchView; enab
     });
   };
   const busy = pending || requestId !== null;
+  const mode = jdMaterialMode({ points: view.jdPoints.length, hasDescription: view.job.hasDescription, breakdownEnabled: view.breakdownEnabled });
   return (
     <div className="border-border rounded-card flex flex-col items-start gap-2 border-dashed border-[1.5px] px-3 py-3" data-testid="writer-breakdown-first">
-      <p className="text-ink-2 text-body-sm">{view.job.hasDescription ? t("breakdownFirst") : t("noDescription")}</p>
-      {view.job.hasDescription ? (
+      <p className="text-ink-2 text-body-sm" data-testid="writer-jd-mode" data-mode={mode}>
+        {mode === "no_jd" ? t("noDescription") : mode === "jd_text" ? t("breakdownOff") : t("breakdownFirst")}
+      </p>
+      {mode === "offer_breakdown" ? (
         <Button type="button" size="sm" onClick={run} disabled={!enabled || busy} aria-busy={busy} data-testid="writer-breakdown-button">
           {busy ? <Loader2 className="animate-spin motion-reduce:animate-none" aria-hidden /> : <Sparkles aria-hidden />}
           {busy ? tb("requesting") : t("breakdownButton")}

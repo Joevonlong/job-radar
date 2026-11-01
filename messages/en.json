@@ -3200,8 +3200,8 @@
         "hint": "When off, nothing of your profile or stories is sent to an AI provider, and the workbench only says how to turn it on. Answers you already wrote are still shown."
       },
       "writer_timeout_seconds": {
-        "label": "Longest wait of one request",
-        "hint": "Queued or running. An older request fails as \"expired\" and its material is cleared from the database; the AI call stops then too."
+        "label": "Longest run of one request",
+        "hint": "Counted from the moment the ai-worker takes it. A longer AI call stops and the request fails as a timeout; its material is cleared from the database."
       }
     },
     "control": {
@@ -7399,6 +7399,7 @@
       "emphasisPlaceholder": "Optional: a point you want this answer to make",
       "emphasisCount": "{count} / {max}",
       "breakdownFirst": "Break the JD down first to choose its requirements one by one, or send the JD text instead.",
+      "breakdownOff": "The JD breakdown is off, so you can send the JD text.",
       "noDescription": "This job has no JD text.",
       "breakdownButton": "Break down the JD",
       "storiesUnreadable": "stories.yaml cannot be read, so no story can be sent. The card on /me shows the error and lets you roll back."
@@ -7517,7 +7518,8 @@
         "not_found": "not found in that material",
         "not_allowed": "this source cannot back a sentence like this",
         "no_ref": "the story is not named",
-        "unknown_ref": "no such story was sent"
+        "unknown_ref": "no such story was sent",
+        "too_short": "the quote is too short to count"
       },
       "missing": "Not in the evidence: {items}",
       "needsCheck": "Check: {items} (names found neither in the evidence nor in the JD)"

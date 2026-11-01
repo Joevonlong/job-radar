@@ -22,7 +22,7 @@ import { isLanguageCode } from "@/lib/i18n/languages";
 import { logActionFailure } from "@/lib/logging/action-failure";
 import { diffSentences } from "@/lib/writer/diff";
 import { jdPointsOf } from "@/lib/writer/jd-points";
-import { preselectStories } from "@/lib/writer/selection";
+import { initialSelection } from "@/lib/writer/selection";
 import { readWriterInputs } from "@/lib/writer/settings";
 import { parseStoredSentences } from "@/lib/writer/stored";
 import type { QuestionSelection } from "@/lib/writer/types";
@@ -79,14 +79,13 @@ export async function addQuestionAction(input: { jobId: number; settings: z.inpu
     const breakdown = await getJobBreakdown(db, jobId);
     const content = breakdown ? parseStoredBreakdown(breakdown.promptVersion, breakdown.content) : null;
     const points = content ? jdPointsOf(content) : [];
-    const selection: QuestionSelection = {
-      // a new question starts with the JD's requirements and the stories that share its skills
-      jdPoints: points.filter((point) => point.requirement === "must").map((point) => ({ quote: point.quote, offset: point.offset })),
-      useJdText: points.length === 0 && job.description !== null && job.description.trim() !== "",
-      storyIds: preselectStories(stories, content?.tech_stack.map((item) => item.name) ?? [], writer.stories.preselect_count),
-      profile: true,
-      emphasis: "",
-    };
+    const selection = initialSelection({
+      points,
+      hasDescription: job.description !== null && job.description.trim() !== "",
+      stories,
+      jobSkills: content?.tech_stack.map((item) => item.name) ?? [],
+      preselectCount: writer.stories.preselect_count,
+    });
     const created = await createApplicationQuestion(db, { maxPerJob: writer.questions.max_per_job, fields: { jobId, ...settings, selectedMaterials: selection } });
     if (!created) return { ok: false, error: "limit" };
     revalidate(jobId);

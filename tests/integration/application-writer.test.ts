@@ -2,11 +2,11 @@ import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, inject, it } from "vitest";
 
 import { AiProviderError, createAiRouter } from "@/lib/ai";
-import { meSchema, storySchema, writerSchema, type WriterConfig } from "@/lib/config";
+import { loadConfig, meSchema, storySchema, writerSchema, type WriterConfig } from "@/lib/config";
 import { processNextControlRequest, registerControlHandler, resetControlHandlers } from "@/lib/control";
 import { expireScrubbedRequests } from "@/lib/control/expire";
 import { createWriterJobHandler } from "@/lib/control/writer-job";
-import { readWriterRequest, requestWriterDraft } from "@/lib/control/writer-request";
+import { readInitialWriterRequests, readWriterRequest, requestWriterDraft } from "@/lib/control/writer-request";
 import { closeDb, getDb, schema } from "@/lib/db";
 import { runMigrations } from "@/lib/db/migrate";
 import {
@@ -69,12 +69,16 @@ async function markTrap(jobId: number): Promise<void> {
   resetTrapTablesCache();
 }
 
-function handlerWith(steps: Step[], over: { settings?: WriterConfig; cap?: number } = {}) {
+function handlerWith(steps: Step[], over: { settings?: WriterConfig; beforeCall?: () => Promise<void> } = {}) {
   const { provider, transport } = scriptedProvider("codex-cli", steps);
   const handler = createWriterJobHandler({
-    createRouter: () => createAiRouter({ config: pinnedAi(), providers: [provider], usage: null }),
+    createRouter: () => {
+      const router = createAiRouter({ config: pinnedAi(), providers: [provider], usage: null });
+      const { beforeCall } = over;
+      if (!beforeCall) return router;
+      return { ...router, run: async (...args: Parameters<typeof router.run>) => { await beforeCall(); return router.run(...args); } } as typeof router;
+    },
     loadSettings: () => over.settings ?? writerOn(),
-    outputTokenCap: () => over.cap,
   });
   registerControlHandler("writer_job", handler);
   return transport;
@@ -136,6 +140,17 @@ describe("repo", () => {
     expect(await insertAnswerVersions(db(), { questionId: question.id, versions: twice, maxVersions: 20 })).toHaveLength(1);
     expect(await insertAnswerVersions(db(), { questionId: question.id, versions: twice, maxVersions: 20 })).toEqual([]);
     expect(await countApplicationAnswers(db(), jobId)).toEqual({ questions: 1, final: 1 });
+  });
+
+  it("the final version is not counted in the cap", async () => {
+    const jobId = await addJob();
+    const question = (await addQuestion(jobId))!;
+    const drafts = ["a", "b", "c"].map((text) => version({ text }));
+    const stored = await insertAnswerVersions(db(), { questionId: question.id, versions: drafts, maxVersions: 2 });
+    expect(stored).toHaveLength(2);
+    await setFinalAnswerVersion(db(), { jobId, questionId: question.id, versionId: stored[1]! });
+    await insertAnswerVersions(db(), { questionId: question.id, versions: [version({ text: "d" })], maxVersions: 2 });
+    expect((await listAnswerVersions(db(), [question.id])).map((row) => row.text)).toEqual(["d", "c", "b"]);
   });
 
   it("a version of another question cannot become final, and deletes cascade", async () => {
@@ -207,17 +222,117 @@ describe("request and handler", () => {
   it("an answer cut off at the output cap is told apart from a malformed one", async () => {
     const jobId = await addJob();
     const question = (await addQuestion(jobId))!;
-    handlerWith([{ text: '{"variants": [{"variant_id": "safe", "sentences": [', tokensOut: 4000 }], { cap: 4096 });
+    // no tasks.write cap of its own: the global max_output_tokens is the limit
+    const { max_output_tokens: cap, tasks } = loadConfig("ai");
+    expect(tasks.write.max_output_tokens).toBeUndefined();
+    handlerWith([{ text: '{"variants": [{"variant_id": "safe", "sentences": [', tokensOut: cap }]);
     const requestId = await queue(jobId, question.id);
     await poll();
     expect((await requestRow(requestId)).result).toMatchObject({ error: "output_truncated" });
+
+    const other = (await addQuestion(jobId))!;
+    handlerWith([{ text: "not json", tokensOut: 10 }, { text: "not json", tokensOut: 10 }, { text: "not json", tokensOut: 10 }]);
+    const malformed = await queue(jobId, other.id);
+    await poll();
+    expect((await requestRow(malformed)).result).not.toMatchObject({ error: "output_truncated" });
+  });
+
+  it("a queued request that outlives a switch-off fails as disabled and sends nothing", async () => {
+    const jobId = await addJob();
+    const question = (await addQuestion(jobId))!;
+    const requestId = await queue(jobId, question.id);
+    const transport = handlerWith([reply(["safe"])], { settings: writerSchema.parse({ enabled: false }) });
+    await poll();
+    const row = await requestRow(requestId);
+    expect(row.status).toBe("failed");
+    expect(row.result).toMatchObject({ error: "disabled" });
+    expectScrubbed(row.payload);
+    expect(transport.calls).toEqual([]);
+  });
+
+  it("a job without a JD still drafts from the other material, and a jd quote backs nothing", async () => {
+    const jobId = await addJob();
+    await db().update(schema.jobs).set({ description: null }).where(eq(schema.jobs.id, jobId));
+    const question = (await addQuestion(jobId))!;
+    const transport = handlerWith([reply(["safe", "distinctive", "short"])]);
+    const requestId = await queue(jobId, question.id);
+    await poll();
+    expect((await requestRow(requestId)).status).toBe("done");
+    expect(transport.calls[0]!.user).not.toContain("own our billing platform");
+    const safe = (await listAnswerVersions(db(), [question.id])).find((entry) => entry.variantId === "safe")!;
+    expect(safe.unsupportedCount).toBe(1);
+  });
+
+  it("a request that expires while its handler runs stays expired, and the versions it stored are kept and shown", async () => {
+    const jobId = await addJob();
+    const question = (await addQuestion(jobId))!;
+    let requestId = 0;
+    handlerWith([reply(["safe", "distinctive", "short"])], {
+      beforeCall: async () => {
+        await db().update(schema.controlRequests).set({ startedAt: new Date(Date.now() - 600_000) }).where(eq(schema.controlRequests.id, requestId));
+        expect(await expireScrubbedRequests(db())).toBe(1);
+      },
+    });
+    requestId = await queue(jobId, question.id);
+    const ended = await poll();
+    expect(ended).toMatchObject({ id: requestId, status: "failed" });
+    const row = await requestRow(requestId);
+    expect(row.status).toBe("failed");
+    expect(row.result).toMatchObject({ error: "expired" });
+    expectScrubbed(row.payload);
+    const versions = await listAnswerVersions(db(), [question.id]);
+    expect(versions).toHaveLength(3);
+    // the page shows the versions, not the old failure
+    expect(await readInitialWriterRequests(db(), jobId, new Map([[question.id, versions[0]!.createdAt]]))).toEqual(new Map());
+  });
+
+  it("the handler's timeout counts from the claim, so it ends a live request before the expiry", async () => {
+    const jobId = await addJob();
+    const question = (await addQuestion(jobId))!;
+    const settings = writerOn({ timeout_seconds: 30 });
+    const { provider } = scriptedProvider("codex-cli", [reply(["safe"])]);
+    const handler = createWriterJobHandler({
+      loadSettings: () => settings,
+      createRouter: () => {
+        const router = createAiRouter({ config: pinnedAi(), providers: [provider], usage: null });
+        return { ...router, run: async () => { await new Promise((resolve) => setTimeout(resolve, 20)); throw new AiProviderError("codex-cli", "aborted", "aborted"); } } as typeof router;
+      },
+    });
+    await queue(jobId, question.id, settings);
+    const claimed = (await claimNextControlRequest(db(), ["writer_job"]))!;
+    const context = { db: db(), signal: new AbortController().signal, logger: quietLogger } as Parameters<typeof handler>[1];
+    // claimed 40 seconds ago: its 30 seconds are over before the AI call starts
+    await expect(handler({ ...claimed, startedAt: new Date(Date.now() - 40_000) }, context)).resolves.toMatchObject({ status: "failed", result: { error: "timeout" } });
+    // claimed just now: the same failure is not a timeout
+    await expect(handler({ ...claimed, startedAt: new Date() }, context)).resolves.toMatchObject({ status: "failed", result: { error: "aborted" } });
+  });
+
+  it("a finished request of another kind can still be finished again; a writer request cannot", async () => {
+    const [other] = await db().insert(schema.controlRequests).values({ kind: "translate_job", payload: {}, status: "failed" }).returning();
+    expect(await finishControlRequest(db(), other!.id, { status: "done" })).toMatchObject({ status: "done" });
+    const [writer] = await db().insert(schema.controlRequests).values({ kind: "writer_job", payload: {}, status: "failed", result: { error: "expired" } }).returning();
+    expect(await finishControlRequest(db(), writer!.id, { status: "done" })).toBeNull();
+    expect((await requestRow(writer!.id)).status).toBe("failed");
+  });
+
+  it("three presses in a row wait behind one another: a queued request only expires after queue_timeout_seconds", async () => {
+    const jobId = await addJob();
+    const question = (await addQuestion(jobId))!;
+    const requestId = await queue(jobId, question.id);
+    const settings = writerOn();
+    const queuedFor = async (seconds: number) => db().update(schema.controlRequests).set({ requestedAt: new Date(Date.now() - seconds * 1000) }).where(eq(schema.controlRequests.id, requestId));
+    await queuedFor(settings.timeout_seconds + settings.expiry_grace_seconds + 5);
+    expect(await expireScrubbedRequests(db(), { settings })).toBe(0);
+    await queuedFor(settings.queue_timeout_seconds + 5);
+    expect(await expireScrubbedRequests(db(), { settings })).toBe(1);
+    expect((await requestRow(requestId)).result).toMatchObject({ error: "expired" });
   });
 
   it("a request no worker claims expires on the next read and its material is cleared", async () => {
     const jobId = await addJob();
     const question = (await addQuestion(jobId))!;
     const requestId = await queue(jobId, question.id);
-    await db().update(schema.controlRequests).set({ requestedAt: new Date(Date.now() - 600_000) }).where(eq(schema.controlRequests.id, requestId));
+    await db().update(schema.controlRequests).set({ requestedAt: new Date(Date.now() - (writerOn().queue_timeout_seconds + 60) * 1000) }).where(eq(schema.controlRequests.id, requestId));
     expect(await readWriterRequest(db(), { requestId, jobId })).toMatchObject({ state: "failed", error: "expired" });
     const row = await requestRow(requestId);
     expect(row.status).toBe("failed");
@@ -231,8 +346,13 @@ describe("request and handler", () => {
     await claimNextControlRequest(db(), ["writer_job"]);
     const other = (await addQuestion(jobId))!;
     const fresh = await queue(jobId, other.id);
-    await db().update(schema.controlRequests).set({ startedAt: new Date(Date.now() - 600_000) }).where(eq(schema.controlRequests.id, old));
-    expect(await expireScrubbedRequests(db(), { timeoutSeconds: 180 })).toBe(1);
+    const settings = writerOn();
+    const ranFor = async (seconds: number) => db().update(schema.controlRequests).set({ startedAt: new Date(Date.now() - seconds * 1000) }).where(eq(schema.controlRequests.id, old));
+    // past its own timeout but within the margin: the worker's timeout still decides
+    await ranFor(settings.timeout_seconds + 1);
+    expect(await expireScrubbedRequests(db(), { settings })).toBe(0);
+    await ranFor(settings.timeout_seconds + settings.expiry_grace_seconds + 5);
+    expect(await expireScrubbedRequests(db(), { settings })).toBe(1);
     expectScrubbed((await requestRow(old)).payload);
     expect((await requestRow(fresh)).payload).toHaveProperty("materials");
   });

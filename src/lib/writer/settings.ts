@@ -10,6 +10,8 @@ export interface WriterInputs {
   stories: Story[];
   /** stories.yaml exists but cannot be read (a syntax or format error); fix it on /me. */
   storiesUnreadable: boolean;
+  /** breakdown.yaml's switch (false while the file cannot be read): whether the page offers a breakdown first. */
+  breakdownEnabled: boolean;
 }
 
 function read<T>(load: () => T, fallback: T): T {
@@ -28,6 +30,7 @@ export function readWriterInputs(): WriterInputs {
     me: read<MeConfig | null>(() => reloadConfig("me"), null),
     stories: stories ?? [],
     storiesUnreadable: stories === null,
+    breakdownEnabled: read(() => reloadConfig("breakdown").enabled, false),
   };
 }
 

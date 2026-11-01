@@ -291,7 +291,8 @@ export async function finishControlRequest(
       finishedAt: sql`now()`,
       payload: scrubbedPayloadSql(),
     })
-    .where(eq(controlRequests.id, id))
+    // a request of a scrubbed kind that already ended (expired while its handler ran) stays as it ended
+    .where(and(eq(controlRequests.id, id), sql`(${controlRequests.status} = 'running' or ${controlRequests.kind}::text not in (${kindList(SCRUBBED_PAYLOAD_KINDS)}))`))
     .returning();
   return row ?? null;
 }
@@ -340,16 +341,20 @@ export async function requeueInterruptedControlRequests(
 export const EXPIRED_ERROR = "expired";
 
 /**
- * Fail the requests of `kinds` that are pending longer than `olderThanSeconds` since they were queued, or running longer
- * than that since they were claimed: status `failed`, `result.error = "expired"`, and the payload scrubbed (for the
+ * Fail the requests of `kinds` that are pending longer than `pendingSeconds` since they were queued, or running longer
+ * than `runningSeconds` since they were claimed: status `failed`, `result.error = "expired"`, and the payload scrubbed (for the
  * `SCRUBBED_PAYLOAD_KEYS` kinds), all in one UPDATE. Idempotent: the ai-worker before each poll, the runner at each cycle
  * and the web when it reads a request's state all call it, so an open request's text is cleared even while no worker
  * runs. Kinds are compared as text (a kind the enum does not have yet matches nothing). Returns the number of rows failed.
  */
-export async function failExpiredControlRequests(db: Executor, input: { kinds: readonly ControlRequestKind[]; olderThanSeconds: number }): Promise<number> {
+export async function failExpiredControlRequests(
+  db: Executor,
+  input: { kinds: readonly ControlRequestKind[]; pendingSeconds: number; runningSeconds: number },
+): Promise<number> {
   if (input.kinds.length === 0) return 0;
   const kinds = sql.join(input.kinds.map((kind) => sql`${kind}::text`), sql`, `);
-  const seconds = Math.max(1, Math.floor(input.olderThanSeconds));
+  const pending = Math.max(1, Math.floor(input.pendingSeconds));
+  const running = Math.max(1, Math.floor(input.runningSeconds));
   const rows = await db.execute<{ id: number }>(sql`
     update control_requests
     set status = 'failed'::control_request_status,
@@ -358,8 +363,8 @@ export async function failExpiredControlRequests(db: Executor, input: { kinds: r
         payload = ${scrubbedPayloadSql()}
     where kind::text in (${kinds})
       and (
-        (status = 'pending' and requested_at < now() - make_interval(secs => ${seconds}))
-        or (status = 'running' and coalesce(started_at, requested_at) < now() - make_interval(secs => ${seconds}))
+        (status = 'pending' and requested_at < now() - make_interval(secs => ${pending}))
+        or (status = 'running' and coalesce(started_at, requested_at) < now() - make_interval(secs => ${running}))
       )
     returning id
   `);

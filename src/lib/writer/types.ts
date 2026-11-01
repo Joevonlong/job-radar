@@ -22,7 +22,7 @@ export const SENTENCE_STATUSES = ["supported", "partial", "unsupported", "framin
 export type SentenceStatus = (typeof SENTENCE_STATUSES)[number];
 
 /** Why an evidence entry does not count. */
-export type EvidenceProblem = "not_found" | "not_allowed" | "no_ref" | "unknown_ref";
+export type EvidenceProblem = "not_found" | "not_allowed" | "no_ref" | "unknown_ref" | "too_short";
 
 export interface CheckedEvidence {
   source: EvidenceSource;

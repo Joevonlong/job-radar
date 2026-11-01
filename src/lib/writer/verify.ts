@@ -234,6 +234,9 @@ function sourceText(context: VerifyContext, source: EvidenceSource): string | nu
 
 /** Why one evidence entry does not count for a sentence about `about`, or null when it does. */
 function evidenceProblem(context: VerifyContext, about: SentenceAbout, entry: { source: EvidenceSource; ref?: string | undefined; quote: string }): EvidenceProblem | null {
+  // A quote of a letter or two matches almost anything; a known name (Go, R) still counts as written.
+  const quote = entry.quote.trim();
+  if ([...quote].length < context.config.min_quote_chars && !context.entities.some((entity) => entity.trim() === quote)) return "too_short";
   let found: boolean;
   if (entry.source === "story") {
     if (entry.ref === undefined || entry.ref.trim() === "") return "no_ref";
@@ -277,8 +280,9 @@ export function verifySentence(raw: RawSentence, context: VerifyContext): Checke
     if (entity === context.companyName && backsCompany) continue;
     if (!mentions(quotes, entity)) missing.push(entity);
   }
-  // name-like words found in neither the quotes, the JD nor the company background
-  const lookIn = [quotes, context.jd, context.company ?? ""].join("\n");
+  // name-like words not found where the sentence may rest: for a claim about you only the valid quotes (a tool named in
+  // the JD is not one you used), otherwise also the JD and the company background
+  const lookIn = about === "user" ? quotes : [quotes, context.jd, context.company ?? ""].join("\n");
   const needsCheck = candidates.filter((name) => !containsWords(lookIn, name) && !missing.some((entry) => normalize(entry) === normalize(name)));
 
   let status: SentenceStatus;

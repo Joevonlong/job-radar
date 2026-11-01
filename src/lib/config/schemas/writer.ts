@@ -3,8 +3,10 @@ import { z } from "zod";
 import { nonEmptyString } from "./common";
 import { STORY_FILE_BOUNDS } from "./stories";
 
-/** How long one writing request may wait and run (also what an unreadable writer.yaml falls back to for the expiry). */
+/** How long one writing request may run, wait queued, and the expiry margin (also what an unreadable writer.yaml falls back to for the expiry). */
 export const WRITER_DEFAULT_TIMEOUT_SECONDS = 180;
+export const WRITER_DEFAULT_EXPIRY_GRACE_SECONDS = 60;
+export const WRITER_DEFAULT_QUEUE_TIMEOUT_SECONDS = 900;
 
 export const WRITER_STORIES_DEFAULTS = { max_items: 60, title_max_chars: 120, text_max_chars: 1500, preselect_count: 4 } as const;
 
@@ -47,10 +49,20 @@ export const writerSchema = z.strictObject({
   /** Off by default: nothing of the writer is sent to an AI provider until this is true. */
   enabled: z.boolean().default(false),
   /**
-   * Longest wait of one writing request, queued or running. A request older than this fails as `expired` and its material is
-   * cleared from the request; the worker also stops the AI call at this point.
+   * Longest run of one writing request, from the moment the ai-worker took it: the worker stops the AI call then and the
+   * request fails as `timeout`.
    */
   timeout_seconds: z.number().int().min(30).max(1800).default(WRITER_DEFAULT_TIMEOUT_SECONDS),
+  /**
+   * A running request still open `timeout_seconds` plus this long (its worker died or hangs) fails as `expired` and its
+   * material is cleared. The margin lets the worker's own timeout decide first.
+   */
+  expiry_grace_seconds: z.number().int().min(10).max(600).default(WRITER_DEFAULT_EXPIRY_GRACE_SECONDS),
+  /**
+   * Longest wait of a queued request (one interactive request runs at a time, so a few pressed in a row wait for each
+   * other); an older one fails as `expired` and its material is cleared.
+   */
+  queue_timeout_seconds: z.number().int().min(60).max(7200).default(WRITER_DEFAULT_QUEUE_TIMEOUT_SECONDS),
   /** Limits a save of the experience library must meet (the file format itself allows more). */
   stories: z
     .strictObject({
@@ -95,14 +107,20 @@ export const writerSchema = z.strictObject({
   emphasis_max_chars: z.number().int().min(50).max(5000).default(800),
   /** Longest JD excerpt sent when no breakdown points are selected (like breakdown.yaml's `jd_max_chars`). */
   jd_max_chars: z.number().int().min(500).max(50_000).default(6000),
+  /** Share of `jd_max_chars` taken from the beginning when the JD is cut (the rest from its end, like breakdown.yaml's `jd_head_share`). */
+  jd_head_share: z.number().min(0.1).max(0.9).default(0.7),
+  /** A call whose output reached this share of the output token cap and did not parse was cut off (`output_truncated`), not malformed. */
+  output_truncated_share: z.number().min(0.5).max(1).default(0.95),
   /** The sentence-by-sentence evidence check (deterministic, no AI call). */
   evidence: z
     .strictObject({
       /** Longest quote the AI may give as evidence (keeps the output short). */
       quote_max_chars: z.number().int().min(20).max(1000).default(160),
+      /** Shortest quote that counts as evidence (characters); a shorter one counts only when it is a known name such as a skill ("Go"). */
+      min_quote_chars: z.number().int().min(1).max(50).default(4),
       /** Per language: words that make a sentence one about you, whatever the AI labelled it. */
       first_person: z.record(z.string().regex(/^[a-z]{2,3}$/), z.union([wordList, substringList])).default(defaultFirstPerson),
-      /** Which words count as names to check (language-independent; a name not found in the evidence, the JD or the company background is flagged). */
+      /** Which words count as names to check (language-independent; a name not found in the sentence's valid quotes is flagged; a sentence about the job or company may also find it in the JD or company background). */
       names: z
         .strictObject({
           /** Names in quotation marks ("…", “…”, „…“, «…», 「…」). */

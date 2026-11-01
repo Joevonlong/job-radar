@@ -60,3 +60,13 @@ export function resolveJdPoints(points: readonly JdPoint[], chosen: readonly JdP
   }
   return { points: out, stale, refs };
 }
+
+/**
+ * What the workbench offers for the JD: its points when a breakdown has some; without any, a breakdown first (and the JD
+ * text meanwhile); only the JD text when the breakdown feature is off; nothing when the job has no JD text.
+ */
+export function jdMaterialMode(input: { points: number; hasDescription: boolean; breakdownEnabled: boolean }): "points" | "offer_breakdown" | "jd_text" | "no_jd" {
+  if (input.points > 0) return "points";
+  if (!input.hasDescription) return "no_jd";
+  return input.breakdownEnabled ? "offer_breakdown" : "jd_text";
+}

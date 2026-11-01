@@ -31,7 +31,7 @@ export interface Snapshot {
 export function profileSnapshot(me: MeConfig): ProfileSnapshot {
   return {
     summary: me.summary,
-    skills: me.skills.map((skill) => (skill.years === null ? skill.name : `${skill.name} (${skill.years}y)`)),
+    skills: me.skills.map((skill) => (skill.years === null ? skill.name : `${skill.name} (${skill.years} years)`)),
     languages: me.languages.flatMap((entry) => Object.entries(entry).map(([code, level]) => `${code} ${level}`)),
   };
 }

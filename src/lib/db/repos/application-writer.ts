@@ -3,7 +3,7 @@
  * `application_answer_versions` lives here). Every write names the job (or question) it is for, so an id alone never
  * reaches another job's rows.
  */
-import { and, asc, count, desc, eq, inArray, notInArray, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, ne, notInArray, sql } from "drizzle-orm";
 
 import type { Executor } from "../executor";
 import { applicationAnswerVersions, applicationQuestions } from "../schema";
@@ -98,9 +98,9 @@ export async function getAnswerVersion(db: Executor, input: { questionId: number
 export type AnswerVersionInput = Omit<typeof applicationAnswerVersions.$inferInsert, "id" | "questionId" | "createdAt">;
 
 /**
- * Store new versions of a question and drop its oldest versions beyond `maxVersions` (the final one is always kept), in
- * one transaction. A version of a request that was already stored (`control_request_id` + `variant_id`) is skipped, so a
- * request run again never doubles its versions. Returns the ids stored now; nothing when the question is gone.
+ * Store new versions of a question and drop its oldest versions beyond `maxVersions` (the final one is kept on top and not
+ * counted), in one transaction. A version of a request that was already stored (`control_request_id` + `variant_id`) is
+ * skipped, so a request run again never doubles its versions. Returns the ids stored now; nothing when the question is gone.
  */
 export async function insertAnswerVersions(db: Executor, input: { questionId: number; versions: readonly AnswerVersionInput[]; maxVersions: number }): Promise<number[]> {
   if (input.versions.length === 0) return [];
@@ -119,7 +119,12 @@ export async function insertAnswerVersions(db: Executor, input: { questionId: nu
     const keep = await tx
       .select({ id: applicationAnswerVersions.id })
       .from(applicationAnswerVersions)
-      .where(eq(applicationAnswerVersions.questionId, input.questionId))
+      .where(
+        and(
+          eq(applicationAnswerVersions.questionId, input.questionId),
+          question.finalVersionId === null ? undefined : ne(applicationAnswerVersions.id, question.finalVersionId),
+        ),
+      )
       .orderBy(desc(applicationAnswerVersions.createdAt), desc(applicationAnswerVersions.id))
       .limit(Math.max(1, input.maxVersions));
     const kept = keep.map((row) => row.id);

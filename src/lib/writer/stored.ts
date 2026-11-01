@@ -14,7 +14,7 @@ const checkedSentenceSchema = z.object({
         source: z.enum(EVIDENCE_SOURCES),
         ref: z.string().optional(),
         quote: z.string(),
-        problem: z.enum(["not_found", "not_allowed", "no_ref", "unknown_ref"]).nullable(),
+        problem: z.enum(["not_found", "not_allowed", "no_ref", "unknown_ref", "too_short"]).nullable(),
       }),
     )
     .catch([]),

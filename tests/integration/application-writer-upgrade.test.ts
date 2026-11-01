@@ -72,7 +72,7 @@ it("runs the ai-worker's startup and poll queries before the migration adds writ
 
   const orphans = await requeueInterruptedControlRequests(db, { reason: "ai-worker restarted", maxRequeues: 3, kinds });
   expect(orphans).toEqual({ requeued: 1, failed: 0 });
-  expect(await expireScrubbedRequests(db, { timeoutSeconds: 1 })).toBe(0);
+  expect(await expireScrubbedRequests(db, { settings: { timeout_seconds: 30, expiry_grace_seconds: 10, queue_timeout_seconds: 60 } })).toBe(0);
   const claimed = (await claimNextControlRequest(db, kinds, { lane: "interactive" })) ?? (await claimNextControlRequest(db, kinds, { lane: "batch" }));
   expect(claimed?.kind).toBe("translate_job");
   const finished = await finishControlRequest(db, claimed?.id ?? 0, { status: "done", result: {} });

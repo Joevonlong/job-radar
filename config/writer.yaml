@@ -10,9 +10,15 @@ config_version: 1
 # your profile summary and skills, stories, what to emphasise) is sent to the providers of ai.yaml's `write` task.
 enabled: false
 
-# Longest wait of one writing request in seconds, queued or running. Older requests fail as "expired" and their material is
-# cleared from the request; the worker stops the AI call at this point too
+# Longest run of one writing request in seconds, from when the ai-worker takes it; the worker then stops the AI call and
+# the request fails as "timeout"
 timeout_seconds: 180
+# A running request still open timeout_seconds + this many seconds (its worker died or hangs) fails as "expired" and its
+# material is cleared from the request
+expiry_grace_seconds: 60
+# Longest wait of a queued request in seconds (one interactive request runs at a time, so several pressed in a row wait
+# for each other); an older one fails as "expired" and its material is cleared
+queue_timeout_seconds: 900
 
 # Limits of the experience library, checked when you save it on /me
 stories:
@@ -50,18 +56,25 @@ tones: [neutral, warm, confident, formal]
 emphasis_max_chars: 800
 # Longest JD excerpt sent when no breakdown points are selected
 jd_max_chars: 6000
+# Share of jd_max_chars taken from the beginning of a longer JD (the rest from its end)
+jd_head_share: 0.7
+# An answer that did not parse and reached this share of the output token cap counts as cut off ("output_truncated")
+output_truncated_share: 0.95
 
 # The evidence check of every sentence (in code, no AI call). It flags names and figures to check; it does not prove the
 # AI made nothing up.
 evidence:
   # Longest quote the AI may give as the evidence of a sentence
   quote_max_chars: 160
+  # Shortest quote that counts as evidence, in characters; a shorter one counts only when it is a known name (a skill such as "Go")
+  min_quote_chars: 4
   # Words that make a sentence one about you, whatever the AI labelled it (whole words; zh: substrings minus `exclude`)
   first_person:
     en: [i, "i'm", "i've", "i'd", my, me, myself]
     de: [ich, mein, meine, meinen, meinem, meiner, mich, mir]
     zh: { words: [我, 我的], exclude: [我们, 我们的] }
-  # Words treated as names: one not found in the sentence's evidence, the JD or the company background is marked "check"
+  # Words treated as names: one not found in the sentence's valid quotes (for a sentence about the job or company, also the
+  # JD and the company background) is marked "check"
   names:
     # Names in quotation marks
     quoted: true

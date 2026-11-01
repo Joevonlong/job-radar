@@ -112,6 +112,8 @@ export function AnswerPanel({ view, question, enabled, timeZone }: { view: Workb
     onFailed: (failed) => {
       setWaiting(null);
       fail(failed ?? { error: "not_found", detail: null, resumeAt: null });
+      // a request that expired while its handler ran may still have stored versions
+      router.refresh();
     },
   });
 

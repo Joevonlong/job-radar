@@ -10,11 +10,10 @@ import { listAnswerVersions, listApplicationQuestions } from "@/lib/db/repos/app
 import { getJobBreakdown, getJobForBreakdown } from "@/lib/db/repos/breakdowns";
 import { getJob } from "@/lib/db/repos/jobs";
 import { aiOutputLanguage } from "@/lib/i18n/config";
-import { isLanguageCode } from "@/lib/i18n/languages";
 import { descriptionHash } from "@/lib/translation/hash";
 
 import { jdPointsOf, resolveJdPoints, type JdPoint } from "./jd-points";
-import { parseSelection } from "./selection";
+import { defaultOutputLanguage, parseSelection } from "./selection";
 import { readWriterInputs } from "./settings";
 import { parseStoredSentences } from "./stored";
 import type { AnswerMode, CheckedSentence, QuestionSelection, StatusCounts } from "./types";
@@ -56,6 +55,8 @@ export interface WorkbenchView {
   availability: WriterAvailability;
   /** `outdated`: the breakdown was made from an older JD (or an older prompt); its points are still offered. */
   breakdown: "none" | "outdated" | "current";
+  /** breakdown.yaml's switch: off, the page offers the JD text and no breakdown. */
+  breakdownEnabled: boolean;
   jdPoints: JdPoint[];
   stories: { id: string; title: string; skills: string[]; period: string | null }[];
   /** stories.yaml cannot be read: the stories group says so (and no chosen story counts as stale). */
@@ -141,12 +142,12 @@ export async function loadWorkbench(db: Db, jobId: number): Promise<WorkbenchVie
   });
 
   const aiLanguage = aiOutputLanguage();
-  const jobLanguage = job.language !== null && job.language !== "unknown" && isLanguageCode(job.language) ? job.language : null;
-  const defaultLanguage = jobLanguage ?? aiLanguage;
+  const defaultLanguage = defaultOutputLanguage(job.language, aiLanguage);
   return {
     job: { id: job.id, title: job.title, company: named.company, hasDescription: job.description !== null && job.description.trim() !== "" },
     availability,
     breakdown,
+    breakdownEnabled: inputs.breakdownEnabled,
     jdPoints,
     stories: inputs.stories.map((story) => ({ id: story.id, title: story.title, skills: story.skills, period: story.period ?? null })),
     storiesUnreadable: inputs.storiesUnreadable,

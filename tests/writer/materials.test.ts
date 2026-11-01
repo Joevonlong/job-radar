@@ -6,9 +6,9 @@ import { WEB_ACCESS_TASKS } from "@/lib/ai/web-tasks";
 import { AI_TASK_NAMES } from "@/lib/config/ai-options";
 import { meSchema, storySchema, writerSchema, type Story } from "@/lib/config";
 import { diffSentences, splitSentences, textLength } from "@/lib/writer/diff";
-import { resolveJdPoints, type JdPoint } from "@/lib/writer/jd-points";
+import { jdMaterialMode, resolveJdPoints, type JdPoint } from "@/lib/writer/jd-points";
 import { buildWriteInput, writeInputFields, type WriterMaterials } from "@/lib/writer/materials";
-import { parseSelection, preselectStories } from "@/lib/writer/selection";
+import { defaultOutputLanguage, initialSelection, parseSelection, preselectStories } from "@/lib/writer/selection";
 import { buildSnapshot } from "@/lib/writer/snapshot";
 import { parseStoredSentences } from "@/lib/writer/stored";
 import { EMPTY_SELECTION, WRITE_INPUT_FIELDS } from "@/lib/writer/types";
@@ -95,6 +95,46 @@ describe("JD points", () => {
   });
 });
 
+describe("what a new question starts with", () => {
+  const base = { stories: [], jobSkills: [], preselectCount: 4 };
+
+  it("with a breakdown: its required points, not the nice-to-haves, and no JD text", () => {
+    const selection = initialSelection({ ...base, points: [point("Kotlin", 40), point("Kafka", 90, "nice")], hasDescription: true });
+    expect(selection.jdPoints).toEqual([{ quote: "Kotlin", offset: 40 }]);
+    expect(selection.useJdText).toBe(false);
+  });
+
+  it("no breakdown yet: offers one and starts with the JD text", () => {
+    expect(jdMaterialMode({ points: 0, hasDescription: true, breakdownEnabled: true })).toBe("offer_breakdown");
+    expect(initialSelection({ ...base, points: [], hasDescription: true })).toMatchObject({ jdPoints: [], useJdText: true });
+  });
+
+  it("breakdown off: no breakdown is offered, the JD text is the material", () => {
+    expect(jdMaterialMode({ points: 0, hasDescription: true, breakdownEnabled: false })).toBe("jd_text");
+    expect(initialSelection({ ...base, points: [], hasDescription: true })).toMatchObject({ jdPoints: [], useJdText: true });
+  });
+
+  it("no JD: neither points nor JD text; a breakdown made earlier still offers its points", () => {
+    expect(jdMaterialMode({ points: 0, hasDescription: false, breakdownEnabled: true })).toBe("no_jd");
+    expect(initialSelection({ ...base, points: [], hasDescription: false })).toMatchObject({ jdPoints: [], useJdText: false });
+    expect(jdMaterialMode({ points: 2, hasDescription: true, breakdownEnabled: false })).toBe("points");
+  });
+
+  it("a choice a new breakdown no longer has is stale", () => {
+    const before = initialSelection({ ...base, points: [point("Kotlin", 40), point("Rust", 70)], hasDescription: true });
+    const resolved = resolveJdPoints([point("Kotlin", 55)], before.jdPoints);
+    expect(resolved.stale).toBe(1);
+    expect(resolved.points.map((entry) => entry.text)).toEqual(["Kotlin"]);
+  });
+
+  it("the output language is the JD's, or the AI output language when it is unknown", () => {
+    expect(defaultOutputLanguage("de", "zh")).toBe("de");
+    expect(defaultOutputLanguage("unknown", "zh")).toBe("zh");
+    expect(defaultOutputLanguage(null, "zh")).toBe("zh");
+    expect(defaultOutputLanguage("not-a-language", "zh")).toBe("zh");
+  });
+});
+
 describe("selection and preselect", () => {
   it("a broken stored selection falls back field by field", () => {
     expect(parseSelection({ jdPoints: "nope", useJdText: true, storyIds: ["a"], profile: 3, emphasis: 1 })).toEqual({ ...EMPTY_SELECTION, useJdText: true, storyIds: ["a"] });
@@ -121,7 +161,7 @@ describe("snapshot", () => {
     });
     expect(snapshot.materials.jdPoints.map((entry) => entry.text)).toEqual(["Kotlin"]);
     expect(snapshot.materials.stories.map((entry) => entry.id)).toEqual(["a"]);
-    expect(snapshot.materials.profile?.skills).toEqual(["Kotlin (6y)"]);
+    expect(snapshot.materials.profile?.skills).toEqual(["Kotlin (6 years)"]);
     // the home city and visa status of me.yaml are never part of it
     expect(JSON.stringify(snapshot.materials)).not.toMatch(/Berlin|visa/i);
     expect(snapshot.materials.emphasis).toBeNull();

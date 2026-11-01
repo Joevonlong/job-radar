@@ -61,7 +61,7 @@ export async function requestWriterDraft(db: Db, input: WriterRequestInput): Pro
   if (!writer.enabled) return { state: "error", error: "disabled" };
   const [job, question] = await Promise.all([getJobForBreakdown(db, input.jobId), getApplicationQuestion(db, { jobId: input.jobId, questionId: input.questionId })]);
   if (!job || !question) return { state: "error", error: "not_found" };
-  await expireScrubbedRequests(db, { timeoutSeconds: writer.timeout_seconds });
+  await expireScrubbedRequests(db, { settings: writer });
   const open = await findOpenWriterRequest(db, { jobId: input.jobId, questionId: input.questionId });
   if (open) return { state: "queued", requestId: open.id, existing: true };
 

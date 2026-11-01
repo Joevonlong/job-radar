@@ -21,15 +21,16 @@ export interface WriterJobHandlerOptions {
   createRouter?: (context: ControlHandlerContext) => AiRouter;
   /** Default: `loadConfig("writer")` (the worker hot-reloads it). */
   loadSettings?: () => WriterConfig;
-  /** The output token cap of the `write` task (`ai.yaml: tasks.write.max_output_tokens`), to tell a cut-off answer from a malformed one. */
-  outputTokenCap?: () => number | undefined;
 }
 
-/** A call that stopped this close to the output cap was cut off, not malformed. */
-const TRUNCATED_SHARE = 0.95;
+/** The output token cap of the `write` task (else the global one), to tell a cut-off answer from a malformed one. */
+function writeOutputTokenCap(): number {
+  const ai = loadConfig("ai");
+  return ai.tasks.write.max_output_tokens ?? ai.max_output_tokens;
+}
 
-/** The skill names of the profile snapshot ("Python (5y)" -> "Python"). */
-const skillName = (entry: string): string => entry.replace(/\s*\(\d+(?:\.\d+)?y\)$/u, "");
+/** The skill names of the profile snapshot ("Python (5 years)" -> "Python"). */
+const skillName = (entry: string): string => entry.replace(/\s*\(\d+(?:\.\d+)?(?: years|y)\)$/u, "");
 
 /** Pair the variants the request asked for with the ones the AI returned: by id, else in order. */
 function pairVariants(materials: WriterMaterials, output: WriteOutput): { id: string; sentences: WriteOutput["variants"][number]["sentences"] }[] {
@@ -50,7 +51,6 @@ function pairVariants(materials: WriterMaterials, output: WriteOutput): { id: st
  */
 export function createWriterJobHandler(options: WriterJobHandlerOptions = {}): ControlHandler {
   const loadSettings = options.loadSettings ?? ((): WriterConfig => loadConfig("writer"));
-  const outputTokenCap = options.outputTokenCap ?? ((): number | undefined => loadConfig("ai").tasks.write.max_output_tokens);
   return async (request, context) => {
     const payload = writerJobPayloadSchema.safeParse(request.payload);
     if (!payload.success) return { status: "failed", result: { error: "invalid_payload" } };
@@ -72,11 +72,14 @@ export function createWriterJobHandler(options: WriterJobHandlerOptions = {}): C
     const cleaned = raw.trim() === "" ? null : await cleanDescriptionForAi(db, { jobId, description: raw }, { logger: context.logger });
     const jdPoints = cleaned === null ? [] : materials.jdPoints.filter((point) => locateQuote(cleaned, point.quote) !== null);
     const sent: WriterMaterials = { ...materials, jdPoints };
-    const excerpt = sent.useJdText && cleaned !== null ? truncateJd(cleaned, settings.jd_max_chars, 0.7).text : null;
+    const excerpt = sent.useJdText && cleaned !== null ? truncateJd(cleaned, settings.jd_max_chars, settings.jd_head_share).text : null;
     const { input } = buildWriteInput(sent, excerpt);
     const prompt = buildWritePrompt({ input, outputLanguage: materials.question.outputLanguage, quoteMaxChars: settings.evidence.quote_max_chars });
 
-    const timeout = AbortSignal.timeout(settings.timeout_seconds * 1000);
+    // `timeout_seconds` counts from the claim (the JD cleaning above included), so this timeout ends a live request
+    // before the expiry (`timeout_seconds + expiry_grace_seconds` from the claim) would
+    const startedAt = request.startedAt?.getTime() ?? Date.now();
+    const timeout = AbortSignal.timeout(Math.max(1, startedAt + settings.timeout_seconds * 1000 - Date.now()));
     let lastCall: AiCallRecord | null = null;
     let result;
     try {
@@ -92,9 +95,8 @@ export function createWriterJobHandler(options: WriterJobHandlerOptions = {}): C
       if (timeout.aborted && !context.signal.aborted) return { status: "failed", result: { ...base, error: "timeout" } };
       if (error instanceof AiProviderError && error.kind === "aborted") return { status: "failed", result: { ...base, error: "aborted" } };
       const failure = classifyTranslationFailure(error);
-      const cap = outputTokenCap();
       const call = lastCall as AiCallRecord | null;
-      if (failure.code === "invalid_output" && cap !== undefined && call !== null && call.usage.tokensOut >= cap * TRUNCATED_SHARE) {
+      if (failure.code === "invalid_output" && call !== null && call.usage.tokensOut >= writeOutputTokenCap() * settings.output_truncated_share) {
         return { status: "failed", result: { ...base, error: "output_truncated" } };
       }
       return { status: "failed", result: { ...base, error: failure.code, detail: failure.message, ...resumeOf(failure) } };

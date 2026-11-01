@@ -7,7 +7,7 @@ import { countStatuses, figures, isFirstPerson, nameCandidates, normalize, verif
 const config = writerSchema.parse({}).evidence;
 
 const JD = "Acme GmbH is hiring. You will own our billing platform built on Kotlin and PostgreSQL. Experience with Kafka is a plus.";
-const PROFILE = "Summary: Backend engineer. Skills: Kotlin (6y), PostgreSQL (5y). Languages: de C1, en C2.";
+const PROFILE = "Summary: Backend engineer. Skills: Kotlin (6 years), PostgreSQL (5 years). Languages: de C1, en C2.";
 const STORY = "Moved billing to the new platform. I led the migration of the billing service; monthly close went from 5 to 3 days and errors fell by 40%.";
 
 function context(overrides: Partial<VerifyContext> = {}): VerifyContext {
@@ -36,7 +36,7 @@ describe("verifySentence: one case per source", () => {
   });
 
   it("a sentence about you backed by the profile is supported", () => {
-    const checked = verifySentence(sentence("Kotlin has been my main language.", "user", [{ source: "profile", quote: "Kotlin (6y)" }]), context());
+    const checked = verifySentence(sentence("Kotlin has been my main language.", "user", [{ source: "profile", quote: "Kotlin (6 years)" }]), context());
     expect(checked.status).toBe("supported");
   });
 
@@ -159,6 +159,33 @@ describe("verifySentence: framing, figures and names", () => {
 
   it("a run of capitalised German words still counts as a name", () => {
     expect(nameCandidates("Ich war bei Deutsche Bahn tätig.", "de", config)).toEqual(["Deutsche Bahn"]);
+  });
+});
+
+describe("verifySentence: review cases", () => {
+  it("years from the profile back a sentence that states them", () => {
+    const checked = verifySentence(sentence("I have 6 years of Kotlin.", "user", [{ source: "profile", quote: "Kotlin (6 years)" }]), context());
+    expect(checked).toMatchObject({ status: "supported", missing: [], needsCheck: [] });
+  });
+
+  it("a tool only the JD names does not back a claim about you", () => {
+    const checked = verifySentence(sentence("I have used Kafka extensively.", "user", [{ source: "story", ref: "billing", quote: "led the migration" }]), context({ entities: [] }));
+    expect(checked.status).toBe("partial");
+    expect(checked.needsCheck).toEqual(["Kafka"]);
+  });
+
+  it("the same tool in a sentence about the role may rest on the JD", () => {
+    const checked = verifySentence(sentence("The role also values Kafka.", "role", [{ source: "jd", quote: "own our billing platform" }]), context({ entities: [] }));
+    expect(checked).toMatchObject({ status: "supported", needsCheck: [] });
+  });
+
+  it("a quote of a letter or two is no evidence, unless it is a known name", () => {
+    const short = verifySentence(sentence("I know the subject well.", "user", [{ source: "profile", quote: "Ko" }]), context());
+    expect(short.status).toBe("unsupported");
+    expect(short.evidence[0]?.problem).toBe("too_short");
+    const name = verifySentence(sentence("I write Go.", "user", [{ source: "profile", quote: "Go" }]), context({ profile: "Skills: Go (3 years)", entities: ["Go"] }));
+    expect(name.evidence[0]?.problem).toBeNull();
+    expect(name.status).toBe("supported");
   });
 });
 
