@@ -80,10 +80,10 @@ describe("DateStrip", () => {
     expect(repost.getAttribute("title")).toContain("Reposted 2 weeks ago");
   });
 
-  it("many relistings at the cap say 'of the latest'", () => {
+  it("ten relistings say how many are recorded, without claiming some were dropped", () => {
     const events = Array.from({ length: 10 }, (_, i) => ({ oldId: `o${i}`, newId: `n${i}`, oldSeen: "2026-01-02", newSeen: `2026-10-${String(10 + i).padStart(2, "0")}`, gapDays: 30 }));
     show(view({ ghost: { reasons: [{ code: "reposted", points: 2, channelId: "greenhouse", events }] } }));
-    expect(screen.getByTestId("repost-date").getAttribute("title")).toContain("of the latest 10 link changes, the oldest old link was first seen Jan 2");
+    expect(screen.getByTestId("repost-date").getAttribute("title")).toContain("10 link changes recorded, the oldest old link among them was first seen Jan 2");
   });
 
   it("keeps the seen-again text where it was, inside first-seen", () => {

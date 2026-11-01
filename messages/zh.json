@@ -1356,7 +1356,7 @@
           "unknown": "来源没有给出发布日期；日期筛选按首次发现日期算，按发布日期排序时排在最后",
           "repost": "我们在 {date} 首次看到新的招聘链接（不是来源给的日期）；旧链接最早见于 {oldest}，间隔 {gap} 天",
           "repostMany": "我们在 {date} 首次看到最新的招聘链接（不是来源给的日期）；链接共换了 {count} 次，最早的旧链接见于 {oldest}",
-          "repostManyCapped": "我们在 {date} 首次看到最新的招聘链接（不是来源给的日期）；最近 {count} 次换链接里，最早的旧链接见于 {oldest}",
+          "repostManyCapped": "我们在 {date} 首次看到最新的招聘链接（不是来源给的日期）；已记录 {count} 次换链接，其中最早的旧链接见于 {oldest}",
           "repostLabel": "来源标注：{label}",
           "repostLabelOnly": "来源标注为重发，没有给出日期。来源标注：{label}"
         }

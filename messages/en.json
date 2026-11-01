@@ -1356,7 +1356,7 @@
           "unknown": "The source gave no posted date. The date filter counts the first-seen date instead; sorting by posted date puts this job last",
           "repost": "We first saw the new posting link on {date} (not a date the source gave); the old link was first seen {oldest}, {gap, plural, one {# day} other {# days}} earlier",
           "repostMany": "We first saw the newest posting link on {date} (not a date the source gave); the link changed {count} times, the oldest old link was first seen {oldest}",
-          "repostManyCapped": "We first saw the newest posting link on {date} (not a date the source gave); of the latest {count} link changes, the oldest old link was first seen {oldest}",
+          "repostManyCapped": "We first saw the newest posting link on {date} (not a date the source gave); {count} link changes recorded, the oldest old link among them was first seen {oldest}",
           "repostLabel": "Source label: {label}",
           "repostLabelOnly": "The source labels it as reposted but gives no date. Source label: {label}"
         }

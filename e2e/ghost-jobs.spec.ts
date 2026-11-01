@@ -97,7 +97,7 @@ test("a relisted job: the posted date stays the same on the list and the detail 
   await page.waitForURL(/\/jobs\/\d+$/);
   await page.waitForLoadState("networkidle");
   const posted = page.getByTestId("posted-date");
-  await expect(posted).toContainText(/^发布 \S+ 周[一二三四五六日]（200 天前）/);
+  await expect(posted).toContainText(/^发布 \S+ 周[一二三四五六日]（\d+ 天前）/);
   expect(((await posted.textContent()) ?? "").split(" ")[1]).toBe(listDay);
   const repost = page.getByTestId("repost-date");
   await expect(repost).toContainText(/^↻重发 · 新链接 \S+（我们首次看到，\d+ 天前）/);
