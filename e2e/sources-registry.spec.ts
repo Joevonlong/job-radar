@@ -326,3 +326,22 @@ for (const locale of ["en", "zh"] as const) {
     }
   }
 }
+
+for (const [id, keys] of [["linkedin-brightdata", "linkedin.brightdata"], ["linkedin-apify", "linkedin.apify"], ["jsearch", "sources.jsearch"], ["stepstone", "sources.stepstone"], ["xing", "sources.xing"]] as const) {
+  test(`company-query switch is offered for ${id} and its opt-out keeps the channel switch`, async ({ page }) => {
+    const block = (): { enabled: boolean; company_queries: boolean } => keys.split(".").reduce<unknown>((value, part) => (value as Record<string, unknown>)[part], parse(read())) as { enabled: boolean; company_queries: boolean };
+    setKeys({ [`${keys}.company_queries`]: true });
+    const enabledBefore = block().enabled;
+    await page.goto(`/sources/registry?type=channel&q=${id}`);
+    const channel = row(page, id);
+    await channel.getByTestId("row-details-toggle").click();
+    const control = channel.getByTestId("company-queries-switch");
+    await expect(control).toBeChecked();
+    await control.click();
+    await expect.poll(() => block().company_queries).toBe(false);
+    expect(block().enabled).toBe(enabledBefore);
+    await page.reload();
+    await channel.getByTestId("row-details-toggle").click();
+    await expect(control).not.toBeChecked();
+  });
+}
