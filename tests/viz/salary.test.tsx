@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { SalaryAxis } from "@/components/viz/salary-axis";
 import { SalaryMini } from "@/components/viz/salary-mini";
-import { axisPosition, axisTicks, freeGap, LABEL_CLASH_PCT, markerEdgeSide, markerLabelPlan, markerLabelRows, markerLabelSides, salaryAxisScale, salarySpan, salaryState } from "@/components/viz/salary-shared";
+import { axisPosition, axisTicks, fitSalaryAxis, freeGap, LABEL_CLASH_PCT, markerEdgeSide, markerLabelPlan, markerLabelRows, markerLabelSides, salaryAxisScale, salarySpan, salaryState } from "@/components/viz/salary-shared";
 import { Percentile } from "@/components/viz/percentile";
 
 import { AXIS, renderViz } from "./helpers";
@@ -285,5 +285,46 @@ describe("Percentile", () => {
   it("out of range is clamped", () => {
     renderViz(<Percentile value={140} />);
     expect(screen.getByRole("meter")).toHaveAttribute("aria-valuenow", "100");
+  });
+});
+
+describe("fitSalaryAxis", () => {
+  it("narrows the axis to the figures, with one step of margin on each side", () => {
+    expect(fitSalaryAxis([85_000, 105_000, 130_000], AXIS)).toEqual({ ...AXIS, minK: 60, maxK: 160 });
+  });
+
+  it("adds a margin even when a figure sits exactly on a tick", () => {
+    expect(fitSalaryAxis([80_000, 120_000], AXIS)).toEqual({ ...AXIS, minK: 60, maxK: 140 });
+  });
+
+  it("falls back to the configured axis for fewer than two different figures", () => {
+    expect(fitSalaryAxis([], AXIS)).toBe(AXIS);
+    expect(fitSalaryAxis([90_000], AXIS)).toBe(AXIS);
+    expect(fitSalaryAxis([90_000, 90_000, null], AXIS)).toBe(AXIS);
+  });
+
+  it("ignores null, undefined and non-finite values", () => {
+    expect(fitSalaryAxis([null, undefined, Number.NaN, Number.POSITIVE_INFINITY, 100_000, 110_000], AXIS)).toEqual({ ...AXIS, minK: 80, maxK: 140 });
+  });
+
+  it("stays inside the configured axis; figures beyond it keep the axis ends", () => {
+    expect(fitSalaryAxis([10_000, 400_000], AXIS)).toEqual({ ...AXIS, minK: 40, maxK: 200 });
+    expect(fitSalaryAxis([45_000, 120_000], AXIS)).toEqual({ ...AXIS, minK: 40, maxK: 140 });
+  });
+
+  it("falls back when the figures are all beyond one end and the fitted axis is under two steps wide", () => {
+    // 300k and 500k lie above a 40-200k axis: the result would be 200-200
+    expect(fitSalaryAxis([300_000, 500_000], AXIS)).toBe(AXIS);
+    // 180k and 190k fit to 160-200, exactly two steps: kept
+    expect(fitSalaryAxis([180_000, 190_000], AXIS)).toEqual({ ...AXIS, minK: 160, maxK: 200 });
+    // 41k and 42k on a 40-200 axis: 40 - 80 is wide enough, kept
+    expect(fitSalaryAxis([41_000, 42_000], AXIS)).toEqual({ ...AXIS, minK: 40, maxK: 80 });
+    // a tiny configured axis cannot hold two steps around the figures
+    const tiny = { minK: 40, maxK: 60, tickStepK: 20, currency: "EUR" };
+    expect(fitSalaryAxis([45_000, 55_000], tiny)).toBe(tiny);
+  });
+
+  it("keeps the tick step and the currency", () => {
+    expect(fitSalaryAxis([85_000, 105_000], AXIS)).toMatchObject({ tickStepK: AXIS.tickStepK, currency: AXIS.currency });
   });
 });

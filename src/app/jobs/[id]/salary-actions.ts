@@ -14,7 +14,7 @@ import { salaryLookupKey, type SalaryErrorCode } from "@/lib/salary/lookup";
 import { readSalarySettings } from "@/lib/salary/settings";
 
 /**
- * Server Actions of the salary lookup card. Like the breakdown button: the web app calls no AI provider;
+ * Server Actions of the salary lookup in the salary panel. Like the breakdown button: the web app calls no AI provider;
  * it leaves a `salary_lookup` request for the ai-worker and the card polls `salaryLookupStatusAction`. Input is validated (C6).
  */
 
@@ -49,7 +49,7 @@ function readAi(): AiConfig | null {
   }
 }
 
-/** Look up a job's salary (the button on the lookup card): queue the request, or report that a current lookup exists. */
+/** Look up a job's salary (the button in the salary panel): queue the request, or report that a current lookup exists. */
 export async function lookupSalaryAction(input: { jobId: number; force?: boolean }): Promise<SalaryLookupActionResult> {
   const parsed = lookupInputSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "invalid" };

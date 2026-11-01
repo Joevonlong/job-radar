@@ -17,8 +17,7 @@ import { JdPanel } from "@/components/jobs/detail/jd-panel";
 import { HeaderTags } from "@/components/jobs/detail/header-tags";
 import { PlaceholderBox, Panel, PanelAside } from "@/components/jobs/detail/panel";
 import { SalaryCard } from "@/components/jobs/detail/salary-card";
-import { SalaryLevelCard } from "@/components/jobs/detail/salary-level-card";
-import { SalaryLookupCard } from "@/components/jobs/detail/salary-lookup-card";
+import { SalaryPanel } from "@/components/jobs/detail/salary-panel";
 import { ScoreCard } from "@/components/jobs/detail/score-card";
 import { LanguageTag } from "@/components/jobs/detail/language-tag";
 import { MarkAppliedButton } from "@/components/jobs/detail/mark-applied";
@@ -204,8 +203,7 @@ export default async function JobDetailPage({ params }: { params: Params }) {
   const skillMatches = matchSkills(job.skills, profileSkillKeys(mySkills, aliases), aliases);
   const german = germanCheck(job.germanLevelRequired, userGermanLabelOrNull());
   const floor = floorCheck(job.salary, salaryFloor, baseCurrency);
-  // The salary level within the benchmark and the on-demand salary lookup (salary.yaml; the lookup is off by default)
-  const tSalary = await getTranslations("salary");
+  // The salary panel: the level within the benchmark and the on-demand salary lookup (salary.yaml; the lookup is off by default)
   const tGhost = await getTranslations("ghostJobs");
   const tEvidence = await getTranslations("scoreEvidence");
   const salarySettings = readSalarySettings();
@@ -213,7 +211,7 @@ export default async function JobDetailPage({ params }: { params: Params }) {
   try {
     salaryAi = reloadConfig("ai");
   } catch {
-    salaryAi = null; // ai.yaml cannot be read: the lookup card says so
+    salaryAi = null; // ai.yaml cannot be read: the salary panel says so
   }
   const salaryContext = await getSalaryContext(getDb(), { jobId: job.id, figure, currency: baseCurrency, salary: salarySettings.state === "ok" ? salarySettings.config : null, ai: salaryAi, locale: uiLocale, now });
 
@@ -440,6 +438,7 @@ export default async function JobDetailPage({ params }: { params: Params }) {
           median={salaryStats.median}
           percentile={salaryStats.percentile}
           sample={{ count: salaryStats.count, min: ui.salary_stats.min_sample }}
+          panelHref={salaryContext ? "#h-pay" : null}
         />
       </header>
 
@@ -475,28 +474,17 @@ export default async function JobDetailPage({ params }: { params: Params }) {
             />
           </Panel>
           {salaryContext ? (
-            <>
-              <Panel id="h-salary-level" title={tSalary("level.title")} aside={<PanelAside>{tSalary("level.aside")}</PanelAside>}>
-                <SalaryLevelCard context={salaryContext} />
-              </Panel>
-              <Panel id="h-salary-lookup" title={tSalary("lookup.title")} aside={<PanelAside>{tSalary("lookup.aside")}</PanelAside>}>
-                <SalaryLookupCard
-                  jobId={job.id}
-                  company={job.company.name}
-                  availability={salaryContext.lookup.availability}
-                  unrestricted={salaryContext.lookup.unrestricted}
-                  providers={salaryContext.lookup.providers}
-                  latest={salaryContext.lookup.latest}
-                  initialRequest={salaryContext.lookup.initialRequest}
-                  usedToday={salaryContext.lookup.usedToday}
-                  maxPerDay={salaryContext.lookup.maxPerDay}
-                  ttlDays={salaryContext.lookup.ttlDays}
-                  currency={salaryContext.currency}
-                  groupQuantiles={salaryContext.group?.quantiles ?? null}
-                  timeZone={timezone}
-                />
-              </Panel>
-            </>
+            <SalaryPanel
+              context={salaryContext}
+              salary={job.salary}
+              salaryDisclosed={job.salaryDisclosed}
+              normalizedText={salary?.normalized ?? null}
+              floor={salaryFloor}
+              axis={axis}
+              jobId={job.id}
+              company={job.company.name}
+              timeZone={timezone}
+            />
           ) : null}
 
           <Panel id="h-fit" title={`${t("fit.title")} / ${t("gaps.title")}`} aside={reasonsTag}>

@@ -1,6 +1,7 @@
 import { useTranslations } from "next-intl";
 import { useAppLocale } from "@/components/viz/intl";
 
+import { INK_LINK } from "@/components/ui/ink-link";
 import { Percentile } from "@/components/viz/percentile";
 import { SalaryAxis } from "@/components/viz/salary-axis";
 import { salaryState, type SalaryAxisScale } from "@/components/viz/salary-shared";
@@ -27,13 +28,15 @@ export interface SalaryCardProps {
   percentile: number | null;
   /** How many stated salaries this month, and how many are needed (for the "not enough" note). */
   sample: { count: number; min: number };
+  /** Where the salary panel with every source stands on the page; null when the page has no such panel. */
+  panelHref?: string | null;
 }
 
 /**
  * "Salary" card of the detail page: the stated annual figure big, on the salary axis with your floor (red line) and the
  * month's median (dashed line), and where it stands among this month's stated salaries. No salary: "未披露", never 0.
  */
-export function SalaryCard({ salary, salaryDisclosed, normalizedText, axis, floor, median, percentile, sample }: SalaryCardProps) {
+export function SalaryCard({ salary, salaryDisclosed, normalizedText, axis, floor, median, percentile, sample, panelHref = null }: SalaryCardProps) {
   const t = useTranslations("dashboard.detail.salary");
   const locale = useAppLocale();
   const currency = axis.currency ?? "";
@@ -88,6 +91,11 @@ export function SalaryCard({ salary, salaryDisclosed, normalizedText, axis, floo
             {t("noSample", { count: sample.count, min: sample.min })}
           </p>
         )
+      ) : null}
+      {panelHref ? (
+        <a href={panelHref} className={cn(INK_LINK, "text-body-sm w-fit")} data-testid="salary-card-panel-link">
+          {t("panelLink")} <span aria-hidden>↓</span>
+        </a>
       ) : null}
     </Panel>
   );

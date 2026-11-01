@@ -22,7 +22,7 @@ import type { SalaryLookupQuery } from "./lookup-types";
 
 export { LOOKUP_KEY_MAX, salaryLookupKey } from "./lookup-key";
 
-/** Error codes the lookup card has labels for: the AI failure classes (as for translations) plus the request-level ones. */
+/** Error codes the salary panel has labels for: the AI failure classes (as for translations) plus the request-level ones. */
 export const SALARY_ERROR_CODES = [...TRANSLATION_FAILURE_CODES, "disabled", "config_error", "not_found", "no_web_provider", "quota", "aborted", "invalid_payload", "handler_error", "no_handler"] as const;
 export type SalaryErrorCode = (typeof SALARY_ERROR_CODES)[number];
 

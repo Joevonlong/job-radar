@@ -93,7 +93,7 @@ export type InitialSalaryRequest =
   | { state: "waiting"; requestId: number; stage: "pending" | "running"; queue: ControlQueueView | null }
   | { state: "failed"; error: SalaryErrorCode; detail: string | null; resumeAt?: string | null };
 
-/** What the lookup card starts with after a reload: an open request waits again; a failure newer than the shown result is shown. */
+/** What the salary panel starts with after a reload: an open request waits again; a failure newer than the shown result is shown. */
 export async function readInitialSalaryRequest(db: Db, input: { jobId: number; lookupKey: string; fetchedAt: Date | null }): Promise<InitialSalaryRequest | null> {
   const request = await findLatestSalaryLookupRequest(db, input);
   if (!request) return null;

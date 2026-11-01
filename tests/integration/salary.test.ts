@@ -174,10 +174,13 @@ describe("benchmark", () => {
     expect(context?.position).toMatchObject({ clamp: "above" });
     expect(context?.familyLabel).toBe("ML engineer");
     expect(context?.links).toEqual([{ id: "levels_fyi", label: "Levels.fyi", url: "https://www.levels.fyi/companies/core/salaries" }]);
-    expect(context?.company).toEqual({ count: 0, median: null, minSample: 3 });
+    expect(context?.company).toEqual({ count: 0, median: null, minSample: 3, figures: [] });
     const acme = await add("Acme", "AI Engineer", null);
     const acmeContext = await getSalaryContext(db(), { jobId: acme, figure: null, currency: "EUR", salary: config(), ai: pinnedAi(), locale: "en", now: NOW });
     expect(acmeContext?.company?.count).toBe(2);
+    // every other stated salary of the company, ascending, without the job itself (the ruler draws one dot for each)
+    expect(acmeContext?.company?.figures).toEqual([75000, 90000]);
+    expect(acmeContext?.company?.figures).toHaveLength(acmeContext?.company?.count ?? -1);
     expect(acmeContext?.position).toBeNull();
     // the shipped plan of salary_lookup: claude-cli, then anthropic (both can search)
     expect(acmeContext?.lookup).toMatchObject({ availability: "enabled", unrestricted: false, latest: null, usedToday: 0, maxPerDay: 3 });
@@ -213,7 +216,7 @@ describe("old benchmark read guard", () => {
     expect(await salaryBenchmarkHasAiRows(db())).toBe(true);
     const on = await contextFor(self);
     expect(on).toMatchObject({ state: "ok", group: null, position: null, benchmarkComputed: false, benchmarkEnabled: true, staleAi: true });
-    expect(on?.company).toEqual({ count: 2, median: null, minSample: 3 });
+    expect(on?.company).toEqual({ count: 2, median: null, minSample: 3, figures: [100000, 110000] });
     const off = await contextFor(self, config((raw) => (raw.benchmark!.enabled = false)));
     expect(off).toMatchObject({ group: null, position: null, benchmarkComputed: false, benchmarkEnabled: false, staleAi: true });
     expect(await contextFor(self, null)).toMatchObject({ state: "config_error", staleAi: false });

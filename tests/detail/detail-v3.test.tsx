@@ -247,4 +247,16 @@ describe("SalaryCard", () => {
     expect(screen.getByRole("img", { name: /not disclosed/i })).toBeInTheDocument();
     expect(screen.queryByTestId("salary-no-sample")).toBeNull();
   });
+
+  it("links to the salary panel with every source, only when the page has one", () => {
+    render(wrap(<SalaryCard {...props} salary={stated} median={96000} percentile={72} panelHref="#h-pay" />));
+    expect(screen.getByTestId("salary-card-panel-link")).toHaveAttribute("href", "#h-pay");
+    expect(screen.getByTestId("salary-card-panel-link")).toHaveTextContent("See all sources");
+    expect(screen.getByTestId("salary-median")).toHaveTextContent("Median · this month");
+  });
+
+  it("has no link without a panel", () => {
+    render(wrap(<SalaryCard {...props} salary={stated} median={96000} percentile={72} />));
+    expect(screen.queryByTestId("salary-card-panel-link")).toBeNull();
+  });
 });
