@@ -4,7 +4,7 @@
 #   host      容器里的 runner 只写一个 run_ai 请求，由宿主机上的 ai-worker（launchd）用本机 claude / codex 订阅执行
 #             AI 步骤和 notify 步骤；容器里不需要任何 AI 凭证（默认）
 #   container runner 自己在容器里执行（需要把订阅令牌或 API key 放进容器，不推荐）
-config_version: 2
+config_version: 3
 execution: host
 
 # 宿主机 ai-worker（pnpm ai-worker）

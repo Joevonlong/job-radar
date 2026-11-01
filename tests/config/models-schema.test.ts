@@ -44,7 +44,7 @@ describe("models.yaml schema", () => {
   });
 
   it("rejects an unknown or missing provider, an empty list, a bad id and an unknown key", () => {
-    expect(paths((p) => { p.openai = structuredClone(p.mimo!); })).toContain("providers");
+    expect(paths((p) => { p.acme = structuredClone(p.mimo!); })).toContain("providers");
     expect(paths((p) => { delete p.mimo; })).toEqual(["providers.mimo"]);
     expect(paths((p) => { p.mimo!.models = []; })).toEqual(["providers.mimo.models"]);
     expect(paths((p) => { p.mimo!.models[0]!.id = "has space"; })).toEqual(["providers.mimo.models.0.id"]);

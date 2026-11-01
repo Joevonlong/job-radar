@@ -52,6 +52,8 @@ export const PROVIDER_MODEL_PATH: Record<AiProviderIdChoice, string> = {
   "claude-cli": "providers.claude_cli.model",
   "codex-cli": "providers.codex_cli.model",
   anthropic: "providers.anthropic.model",
+  openai: "providers.openai.model",
+  openrouter: "providers.openrouter.model",
   deepseek: "providers.deepseek.model",
   mimo: "providers.mimo.model",
 };

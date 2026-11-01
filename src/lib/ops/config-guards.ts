@@ -56,6 +56,8 @@ export function configGuardFindings(configs: GuardConfigs, env: Readonly<Record<
     if (problem !== null) findings.push({ kind: "model_refused", subject, message: problem });
   }
   const endpoints: { service: Exclude<CredentialService, "gmail">; url: string; subject: string; used: boolean }[] = [
+    { service: "openai", url: ai.providers.openai.base_url, subject: "ai.yaml providers.openai.base_url", used: ai.providers.openai.enabled },
+    { service: "openrouter", url: ai.providers.openrouter.base_url, subject: "ai.yaml providers.openrouter.base_url", used: ai.providers.openrouter.enabled },
     { service: "deepseek", url: ai.providers.deepseek.base_url, subject: "ai.yaml providers.deepseek.base_url", used: ai.providers.deepseek.enabled },
     { service: "mimo", url: ai.providers.mimo.base_url, subject: "ai.yaml providers.mimo.base_url", used: ai.providers.mimo.enabled },
   ];

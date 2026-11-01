@@ -4,7 +4,7 @@
 #
 # Adding a new model released by a vendor (no restart needed; takes effect about 5 seconds after saving):
 #   1. Add an entry under the provider's models: id = the model name from the vendor docs (what gets passed to the CLI / API), label = a recognizable display name.
-#   2. API providers (anthropic / deepseek / mimo) must have price: input and output price in USD / 1M tokens, as on the official site.
+#   2. API providers (anthropic / openai / openrouter / deepseek / mimo) must have price: input and output price in USD / 1M tokens, as on the official site.
 #      Subscription CLIs (claude-cli / codex-cli) have no price (subscription cost counts as 0).
 #   3. Run pnpm config:check in the project directory and make sure there are no errors.
 #   4. Try it once: pnpm ai:probe --provider <provider> --model <id>
@@ -26,6 +26,8 @@
 #   deprecated         true = retired
 #   notes              remarks, shown as-is on the settings page
 # The provider level may have: label (required), docs_url (official models / pricing page, shown as a link on the settings page), notes. Providers can't be added or removed (each provider's call method lives in code).
+# Your own copy of this file (data/config/models.yaml) replaces it as a whole, except for a provider your copy has no section for:
+# that section is taken from this file, so a copy made before a provider existed keeps loading.
 
 providers:
   claude-cli:
@@ -94,6 +96,52 @@ providers:
         label: Claude Haiku 4.5
         notes: "Retires 2026-10-15 at the earliest"
         price: { input_per_mtok: 1, output_per_mtok: 5 }
+  # Price source: developers.openai.com/api/docs/pricing (standard tier, prompts up to 272K), checked 2026-11-01
+  openai:
+    label: OpenAI API
+    docs_url: https://developers.openai.com/api/docs/pricing
+    models:
+      - id: gpt-6-luna
+        label: GPT-6 Luna
+        price: { input_per_mtok: 0.1, output_per_mtok: 0.5, cached_input_per_mtok: 0.01 }
+      - id: gpt-6.1-terra
+        label: GPT-6.1 Terra
+        price: { input_per_mtok: 1, output_per_mtok: 5, cached_input_per_mtok: 0.05 }
+      - id: gpt-6.1-sol
+        label: GPT-6.1 Sol
+        price: { input_per_mtok: 2, output_per_mtok: 10, cached_input_per_mtok: 0.1 }
+      - id: gpt-6-astra
+        label: GPT-6 Astra
+        price: { input_per_mtok: 10, output_per_mtok: 50, cached_input_per_mtok: 1 }
+  # Prices from OpenRouter's public model list (GET openrouter.ai/api/v1/models, USD per token x 1M), checked 2026-11-01.
+  # A reply carries the actual charge (usage.cost), which is what ai_usage and the monthly budget count; these prices are the fallback.
+  # Every model here lists response_format in its supported_parameters (JSON mode).
+  openrouter:
+    label: OpenRouter
+    docs_url: https://openrouter.ai/models
+    notes: "Requests go on to an upstream provider of the model (see docs/privacy.md)"
+    models:
+      - id: deepseek/deepseek-v4.1-flash
+        label: DeepSeek V4.1 Flash
+        price: { input_per_mtok: 0.045, output_per_mtok: 0.5, cached_input_per_mtok: 0.006 }
+      - id: qwen/qwen3.8-flash
+        label: Qwen3.8 Flash
+        price: { input_per_mtok: 0.15, output_per_mtok: 0.47, cached_input_per_mtok: 0.016 }
+      - id: openai/gpt-6-luna
+        label: GPT-6 Luna
+        price: { input_per_mtok: 0.1, output_per_mtok: 0.5, cached_input_per_mtok: 0.01, cache_write_per_mtok: 0.125 }
+      - id: anthropic/claude-haiku-5.5
+        label: Claude Haiku 5.5
+        price: { input_per_mtok: 0.1, output_per_mtok: 0.5, cached_input_per_mtok: 0.01, cache_write_per_mtok: 0.125 }
+      - id: google/gemini-3.8-flash
+        label: Gemini 3.8 Flash
+        price: { input_per_mtok: 0.825, output_per_mtok: 4.125, cached_input_per_mtok: 0.0825, cache_write_per_mtok: 0.0417 }
+      - id: openai/gpt-6.1-sol
+        label: GPT-6.1 Sol
+        price: { input_per_mtok: 2, output_per_mtok: 10, cached_input_per_mtok: 0.1, cache_write_per_mtok: 2.5 }
+      - id: anthropic/claude-sonnet-5.5
+        label: Claude Sonnet 5.5
+        price: { input_per_mtok: 2, output_per_mtok: 10, cached_input_per_mtok: 0.1, cache_write_per_mtok: 2.5 }
   # Conservative prices: DeepSeek at peak-hour rates (api-docs.deepseek.com/quick_start/pricing, checked 2026-10-09)
   deepseek:
     label: DeepSeek API

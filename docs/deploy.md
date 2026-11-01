@@ -367,6 +367,18 @@ Before restoring config from `data/config/.backup/` or restoring a database back
 
 A failure in (a) does not block rollback: follow (c) and accept the display window before that recomputation.
 
+**Rolling back past the release that added the OpenAI API and OpenRouter providers (`ai.yaml` `config_version: 3`).**
+After the deploy's `config-write` step (or any settings save), your `data/config/ai.yaml` is version 3, and older code
+refuses it. No database change is involved. Before the old code starts, either:
+
+- restore `ai.yaml` from `data/config/.backup/<timestamp>/` (written by the upgrade), or
+- edit it by hand: set `config_version: 2`; remove `openai` and `openrouter` from `api_order` and from any task's
+  `order` or `models`; delete `providers.openai` and `providers.openrouter`; delete `max_tokens_field` from every
+  provider block.
+
+If you keep your own copy of `models.yaml` in `data/config/`, also delete its `openai` and `openrouter` sections.
+Run the older version's `pnpm config:check` to confirm.
+
 First decide where the problem is:
 
 - **Code problem, database untouched** (this release has no new migration): just go back to the last good commit.

@@ -300,6 +300,16 @@ ai-worker 切换或配置写入。doctor 只有在当前市场实际启用了依
 
 (a) 失败不阻止回滚；按 (c) 处理，并接受这次重算之前的显示窗口。
 
+**回滚到新增 OpenAI API 和 OpenRouter 服务商（`ai.yaml` 的 `config_version: 3`）之前的版本。** 部署的 `config-write`
+步骤（或任何一次设置页保存）之后，`data/config/ai.yaml` 已是第 3 版，旧代码会拒绝它。不涉及数据库。旧代码启动前，二选一：
+
+- 从 `data/config/.backup/<时间戳>/` 恢复 `ai.yaml`（升级时写下的原文件）；或
+- 手动改：`config_version` 改为 `2`；从 `api_order` 以及各任务的 `order`、`models` 里删掉 `openai` 和 `openrouter`；
+  删掉 `providers.openai` 和 `providers.openrouter`；删掉每个服务商块里的 `max_tokens_field`。
+
+如果你在 `data/config/` 里有自己的 `models.yaml` 副本，也删掉其中的 `openai` 和 `openrouter` 两节。
+然后用旧版本的 `pnpm config:check` 确认。
+
 先判断问题出在哪：
 
 - **代码有问题，数据库没动**（这次没有新迁移）：回到上一个好的提交即可。

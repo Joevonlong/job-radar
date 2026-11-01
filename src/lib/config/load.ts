@@ -5,6 +5,7 @@ import type { Document } from "yaml";
 import { ConfigError, zodIssues } from "./errors";
 import { isExistingInstall } from "./install";
 import { EXISTING_INSTALL_LANGUAGE_YAML } from "./migrations/language/existing-install";
+import { withShippedModelProviders } from "./models-backfill";
 import { migrateConfigDocument, withoutConfigVersion, type DocumentMigrationResult } from "./migrations/version";
 import { getDefaultsDir, getPollIntervalMs, getUserConfigPath, resolveConfigPath, resolveConfigReadPath } from "./paths";
 import { CONFIG_NAMES, configRegistry, isProfileName, type ConfigName, type ConfigValue, type ProfileName } from "./registry";
@@ -123,18 +124,28 @@ export function validateConfigValue<N extends ConfigName>(name: N, raw: unknown,
 }
 
 /**
- * Parse, migrate (in memory) and validate YAML text for the given config. Pure: no cache, no disk access.
+ * Parse, migrate (in memory) and validate YAML text for the given config. No cache; no disk access except the shipped
+ * models.yaml when a models.yaml lacks a provider section (`configDocumentValue`).
  * Errors name the file and the field paths, never the file contents.
  */
 export function parseConfigText<N extends ConfigName>(name: N, text: string, filePath = configSourcePath(name)): ConfigValue<N> {
   return parseConfigTextWithVersion(name, text, filePath).value;
 }
 
+/**
+ * The plain value of a parsed (and migrated) document as the schema takes it. models.yaml: a provider section the file
+ * lacks is filled in from the shipped file (`models-backfill.ts`), the one read this does.
+ */
+export function configDocumentValue(name: ConfigName, doc: Document): unknown {
+  const raw: unknown = doc.toJS();
+  return name === "models" ? withShippedModelProviders(raw) : raw;
+}
+
 /** `parseConfigText` plus what the in-memory migration did (from / to version and the steps that ran). */
 export function parseConfigTextWithVersion<N extends ConfigName>(name: N, text: string, filePath = configSourcePath(name)): { value: ConfigValue<N>; migration: DocumentMigrationResult } {
   const doc = parseConfigDocument(name, text, filePath);
   const migration = migrateConfigDocument(name, doc, filePath);
-  return { value: validateConfigValue(name, doc.toJS(), filePath), migration };
+  return { value: validateConfigValue(name, configDocumentValue(name, doc), filePath), migration };
 }
 
 /** Re-read the file, validate and replace the cache entry. On failure the previous cache entry is kept. */

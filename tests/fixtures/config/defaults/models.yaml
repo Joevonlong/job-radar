@@ -57,6 +57,18 @@ providers:
       - id: claude-sonnet-5-5
         label: Claude Sonnet 5.5
         price: { input_per_mtok: 2, output_per_mtok: 10 }
+  openai:
+    label: OpenAI API
+    models:
+      - id: gpt-6-luna
+        label: GPT-6 Luna
+        price: { input_per_mtok: 0.1, output_per_mtok: 0.5, cached_input_per_mtok: 0.01 }
+  openrouter:
+    label: OpenRouter
+    models:
+      - id: deepseek/deepseek-v4.1-flash
+        label: DeepSeek V4.1 Flash (OpenRouter)
+        price: { input_per_mtok: 0.05, output_per_mtok: 0.5 }
   # 单价偏保守：DeepSeek 取高峰价
   deepseek:
     label: DeepSeek API

@@ -1801,6 +1801,7 @@
       "vendor": {
         "anthropic": "Anthropic",
         "openai": "OpenAI",
+        "openrouter": "OpenRouter",
         "deepseek": "DeepSeek",
         "mimo": "Xiaomi MiMo"
       },
@@ -2413,6 +2414,22 @@
       "json_mode_only": {
         "label": "JSON mode only",
         "hint": "No json_schema: the schema goes into the prompt."
+      },
+      "max_tokens_field": {
+        "label": "Reply length field",
+        "hint": "Request field that caps the reply length: max_tokens, or max_completion_tokens (OpenAI's newer models accept only this one)."
+      },
+      "openrouter_data_collection": {
+        "label": "Upstream data collection",
+        "hint": "deny: only upstream providers that do not store requests to train on them. This is not zero retention."
+      },
+      "openrouter_zdr": {
+        "label": "Zero data retention only",
+        "hint": "Route only to endpoints with a zero-data-retention policy (fewer models and upstream providers)."
+      },
+      "openrouter_require_parameters": {
+        "label": "Require JSON support",
+        "hint": "Route only to upstream providers that support every parameter of the request, including the JSON output format."
       },
       "per_cycle_limit": {
         "label": "Most jobs per cycle",

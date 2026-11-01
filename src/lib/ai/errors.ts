@@ -1,7 +1,14 @@
-import type { AiProviderId, AiTask } from "./types";
+import type { AiProviderId, AiTask, AiTokenUsage } from "./types";
 
 /** Environment variables that hold provider credentials. Their values are masked in every message (C4). */
-export const SECRET_ENV_NAMES = ["CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY", "DEEPSEEK_API_KEY", "MIMO_API_KEY"] as const;
+export const SECRET_ENV_NAMES = [
+  "CLAUDE_CODE_OAUTH_TOKEN",
+  "ANTHROPIC_API_KEY",
+  "OPENAI_API_KEY",
+  "OPENROUTER_API_KEY",
+  "DEEPSEEK_API_KEY",
+  "MIMO_API_KEY",
+] as const;
 
 /** Credentials handed to providers at runtime (they may not come from process.env, e.g. in tests or probes). */
 const registeredSecrets = new Set<string>();
@@ -51,12 +58,18 @@ export type AiProviderErrorKind =
 export class AiProviderError extends Error {
   readonly kind: AiProviderErrorKind;
   readonly provider: AiProviderId;
+  /** The usage of a reply that arrived but could not be used (an empty answer): those tokens are still billed. */
+  readonly usage?: AiTokenUsage;
+  /** The model that sent that reply. */
+  readonly model?: string;
 
-  constructor(provider: AiProviderId, kind: AiProviderErrorKind, message: string, options: { cause?: unknown } = {}) {
+  constructor(provider: AiProviderId, kind: AiProviderErrorKind, message: string, options: { cause?: unknown; usage?: AiTokenUsage; model?: string } = {}) {
     super(sanitize(message), options.cause === undefined ? undefined : { cause: options.cause });
     this.name = "AiProviderError";
     this.provider = provider;
     this.kind = kind;
+    if (options.usage !== undefined) this.usage = options.usage;
+    if (options.model !== undefined) this.model = options.model;
   }
 }
 

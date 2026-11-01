@@ -74,6 +74,8 @@ const AUTH_FIX: Record<AiProviderId, string> = {
   "claude-cli": "claude → /login",
   "codex-cli": "codex login",
   anthropic: "ANTHROPIC_API_KEY (.env)",
+  openai: "OPENAI_API_KEY (.env)",
+  openrouter: "OPENROUTER_API_KEY (.env)",
   deepseek: "DEEPSEEK_API_KEY (.env)",
   mimo: "MIMO_API_KEY (.env)",
 };
