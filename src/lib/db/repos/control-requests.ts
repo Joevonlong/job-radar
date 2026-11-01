@@ -91,10 +91,14 @@ export async function findOpenControlRequest(db: Db, kind: ControlRequestKind): 
   return row ?? null;
 }
 
-/** `('a'::control_request_kind, 'b'::control_request_kind)` for a `kind in (...)` test. */
+/**
+ * `('a'::text, 'b'::text)` for a `kind::text in (...)` test. Compared as text, not cast to the enum: a worker of a newer
+ * release starts against a database the web has not migrated yet, and a cast of a kind the enum lacks fails the whole
+ * statement (the ai-worker's startup requeue, and so the worker, with it). A kind the enum lacks matches no row.
+ */
 function kindList(kinds: readonly ControlRequestKind[]): SQL {
   return sql.join(
-    kinds.map((kind) => sql`${kind}::control_request_kind`),
+    kinds.map((kind) => sql`${kind}::text`),
     sql`, `,
   );
 }
@@ -175,8 +179,8 @@ export function controlLaneOf(kind: ControlRequestKind, payload: unknown): Exclu
 
 /** `and kind in (...)` for `kinds` (nothing: every kind) and `lane`. Shared by the claim and the queue position. */
 function laneFilter(kinds: readonly ControlRequestKind[] | undefined, lane: ControlLane): SQL {
-  const kindFilter = kinds === undefined ? sql`` : sql`and kind in (${kindList(kinds)})`;
-  const interactive = sql`(kind in (${kindList(INTERACTIVE_CONTROL_REQUEST_KINDS)}) and coalesce(payload ->> 'origin', '') <> 'auto')`;
+  const kindFilter = kinds === undefined ? sql`` : sql`and kind::text in (${kindList(kinds)})`;
+  const interactive = sql`(kind::text in (${kindList(INTERACTIVE_CONTROL_REQUEST_KINDS)}) and coalesce(payload ->> 'origin', '') <> 'auto')`;
   switch (lane) {
     case "interactive":
       return sql`${kindFilter} and ${interactive}`;
@@ -311,10 +315,10 @@ export async function requeueInterruptedControlRequests(
   input: { reason: string; maxRequeues: number; kinds?: readonly ControlRequestKind[]; id?: number },
 ): Promise<RequeueOutcome> {
   if (input.kinds !== undefined && input.kinds.length === 0) return { requeued: 0, failed: 0 };
-  const kindFilter = input.kinds === undefined ? sql`` : sql`and kind in (${kindList(input.kinds)})`;
+  const kindFilter = input.kinds === undefined ? sql`` : sql`and kind::text in (${kindList(input.kinds)})`;
   const idFilter = input.id === undefined ? sql`` : sql`and id = ${input.id}`;
   const count = sql`(case when jsonb_typeof(result -> 'interruptions') = 'number' then (result ->> 'interruptions')::int else 0 end)`;
-  const again = sql`(${count} < ${Math.max(0, input.maxRequeues)} and kind not in (${kindList(NOT_REQUEUED_CONTROL_REQUEST_KINDS)}))`;
+  const again = sql`(${count} < ${Math.max(0, input.maxRequeues)} and kind::text not in (${kindList(NOT_REQUEUED_CONTROL_REQUEST_KINDS)}))`;
   const rows = await db.execute<{ status: string }>(sql`
     update control_requests
     set status = case when ${again} then 'pending'::control_request_status else 'failed'::control_request_status end,

@@ -6,8 +6,11 @@ import { sql } from "drizzle-orm";
 import postgres from "postgres";
 import { afterAll, beforeAll, expect, inject, it } from "vitest";
 
+import { expireScrubbedRequests } from "@/lib/control/expire";
+import { aiWorkerRequestKinds } from "@/lib/control/kinds";
 import { createConnection } from "@/lib/db/client";
 import { runMigrations } from "@/lib/db/migrate";
+import { claimNextControlRequest, finishControlRequest, requeueInterruptedControlRequests } from "@/lib/db/repos/control-requests";
 
 const url = new URL(inject("testDatabaseUrl"));
 const name = `${url.pathname.slice(1)}_writer_upgrade`;
@@ -56,6 +59,26 @@ afterAll(async () => {
     await admin.end();
     fs.rmSync(directory, { recursive: true, force: true });
   }
+});
+
+// A worker of the new release starts while the web has not migrated yet (install-ai-worker before the deploy): the
+// queries it runs at startup and on every poll pass its kinds, `writer_job` among them, and must not fail on an enum
+// that lacks the kind.
+it("runs the ai-worker's startup and poll queries before the migration adds writer_job to the enum", async () => {
+  expect(await requestKinds()).not.toContain("writer_job");
+  const kinds = aiWorkerRequestKinds("host");
+  expect(kinds).toContain("writer_job");
+  await db.execute(sql`insert into control_requests (kind, payload, status, started_at) values ('translate_job', '{"jobId": 2}'::jsonb, 'running', now())`);
+
+  const orphans = await requeueInterruptedControlRequests(db, { reason: "ai-worker restarted", maxRequeues: 3, kinds });
+  expect(orphans).toEqual({ requeued: 1, failed: 0 });
+  expect(await expireScrubbedRequests(db, { timeoutSeconds: 1 })).toBe(0);
+  const claimed = (await claimNextControlRequest(db, kinds, { lane: "interactive" })) ?? (await claimNextControlRequest(db, kinds, { lane: "batch" }));
+  expect(claimed?.kind).toBe("translate_job");
+  const finished = await finishControlRequest(db, claimed?.id ?? 0, { status: "done", result: {} });
+  expect(finished?.status).toBe("done");
+
+  await db.execute(sql`delete from control_requests`);
 });
 
 it("adds the writer tables and request kind next to open requests of other kinds, and runs again as a no-op", async () => {
