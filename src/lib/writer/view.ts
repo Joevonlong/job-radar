@@ -6,7 +6,7 @@ import { ConfigError, reloadConfig, writerSchema } from "@/lib/config";
 import type { LengthUnit, QuestionKind } from "@/lib/config/schemas/writer";
 import { readInitialWriterRequests, type InitialWriterRequest } from "@/lib/control/writer-request";
 import type { Db } from "@/lib/db/client";
-import { listAnswerVersions, listApplicationQuestions } from "@/lib/db/repos/application-writer";
+import { listAnswerVersions, listApplicationQuestions, listVersionOrigins } from "@/lib/db/repos/application-writer";
 import { getJobBreakdown, getJobForBreakdown } from "@/lib/db/repos/breakdowns";
 import { getJob } from "@/lib/db/repos/jobs";
 import { aiOutputLanguage } from "@/lib/i18n/config";
@@ -44,6 +44,8 @@ export interface WorkbenchQuestion {
   /** Newest first. */
   versions: WorkbenchVersion[];
   initialRequest: InitialWriterRequest | null;
+  /** The other jobs whose final answer this question was started from (one entry per job), for the old-company warning. */
+  startedFrom: { company: string; jobTitle: string }[];
   /** Chosen JD points / stories that no longer exist. */
   stale: { jdPoints: number; stories: number };
 }
@@ -83,6 +85,19 @@ function writeProviders(): AiProviderId[] {
   }
 }
 
+/** The other jobs a question's versions were started from, once each, oldest first. */
+function startedFrom(versions: readonly { parentVersionId: number | null }[], origins: ReadonlyMap<number, { jobId: number; jobTitle: string; company: string }>, jobId: number): { company: string; jobTitle: string }[] {
+  const seen = new Set<number>();
+  const out: { company: string; jobTitle: string }[] = [];
+  for (const version of [...versions].reverse()) {
+    const origin = version.parentVersionId === null ? undefined : origins.get(version.parentVersionId);
+    if (!origin || origin.jobId === jobId || seen.has(origin.jobId)) continue;
+    seen.add(origin.jobId);
+    out.push({ company: origin.company, jobTitle: origin.jobTitle });
+  }
+  return out;
+}
+
 export async function loadWorkbench(db: Db, jobId: number): Promise<WorkbenchView | null> {
   const [job, named, breakdownRow, questionRows] = await Promise.all([getJob(db, jobId), getJobForBreakdown(db, jobId), getJobBreakdown(db, jobId), listApplicationQuestions(db, jobId)]);
   if (!job || !named) return null;
@@ -101,6 +116,9 @@ export async function loadWorkbench(db: Db, jobId: number): Promise<WorkbenchVie
   for (const row of versionRows) if (!newestVersionAt.has(row.questionId)) newestVersionAt.set(row.questionId, row.createdAt);
   const requests = await readInitialWriterRequests(db, jobId, newestVersionAt);
   const storyIds = new Set(inputs.stories.map((story) => story.id));
+  // a version saved from another job's final answer points at it (parent_version_id); a pointer into this job's own versions is an edit
+  const ownVersionIds = new Set(versionRows.map((version) => version.id));
+  const origins = await listVersionOrigins(db, [...new Set(versionRows.flatMap((version) => (version.parentVersionId !== null && !ownVersionIds.has(version.parentVersionId) ? [version.parentVersionId] : [])))]);
 
   const questions: WorkbenchQuestion[] = questionRows.map((row) => {
     const stored = parseSelection(row.selectedMaterials);
@@ -137,6 +155,7 @@ export async function loadWorkbench(db: Db, jobId: number): Promise<WorkbenchVie
           model: version.model,
         })),
       initialRequest: requests.get(row.id) ?? null,
+      startedFrom: startedFrom(versionRows.filter((version) => version.questionId === row.id), origins, jobId),
       stale: { jdPoints: resolved.stale, stories: inputs.storiesUnreadable ? 0 : selection.storyIds.filter((id) => !storyIds.has(id)).length },
     };
   });

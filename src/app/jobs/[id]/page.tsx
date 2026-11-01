@@ -226,6 +226,8 @@ export default async function JobDetailPage({ params }: { params: Params }) {
   const breakdownRequest = await readInitialBreakdownRequest(getDb(), job.id, breakdownRow?.analyzedAt ?? null);
   const answers = await countApplicationAnswers(getDb(), job.id);
   const writerEnabled = readWriterEnabled();
+  // the workbench, or (off and nothing written yet) the setting that turns it on
+  const writeHref = writerEnabled || answers.questions > 0 ? `/jobs/${job.id}/apply` : "/settings?tab=workflow";
   const { view: breakdownView, extraQuotes } = buildBreakdownView({
     row: breakdownRow,
     description: job.description,
@@ -418,7 +420,7 @@ export default async function JobDetailPage({ params }: { params: Params }) {
           ) : null}
           {/* the application writer: its workbench, or (off and nothing written yet) the setting that turns it on */}
           <Link
-            href={writerEnabled || answers.questions > 0 ? `/jobs/${job.id}/apply` : "/settings?tab=workflow"}
+            href={writeHref}
             className={cn(buttonVariants({ variant: "outline" }), actionLink)}
             data-testid="action-write"
             data-enabled={writerEnabled}
@@ -673,7 +675,7 @@ export default async function JobDetailPage({ params }: { params: Params }) {
         </aside>
       </div>
 
-      <MobileActionBar jobId={job.id} status={status} notes={job.application?.notesMd ?? ""} postingUrl={applyUrl} title={job.title} appliedOn={appliedOn} favorite={job.favorite !== null} />
+      <MobileActionBar jobId={job.id} status={status} notes={job.application?.notesMd ?? ""} postingUrl={applyUrl} title={job.title} appliedOn={appliedOn} favorite={job.favorite !== null} write={{ href: writeHref, questions: answers.questions, final: answers.final }} />
     </div>
     </VisibilityScope>
   );

@@ -84,7 +84,7 @@ function tokens(text: string): Token[] {
 }
 
 /** `needle` occurs in `haystack` as whole words (both normalised). */
-function containsWords(haystack: string, needle: string): boolean {
+export function containsWords(haystack: string, needle: string): boolean {
   const n = normalize(needle);
   if (n === "") return false;
   const h = normalize(haystack);

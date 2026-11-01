@@ -43,7 +43,7 @@ configuration archive with the rest of `data/profile/` ([backup-restore.md](back
 ## Writing answers (`/jobs/<id>/apply`)
 
 **Write answers** on a job's page opens the workbench for that job (the button shows how many questions have a final
-version, e.g. `1/3`). While `writer.yaml: enabled` is `false` the button leads to Settings → Workflow, and the workbench
+version, e.g. `1/3`). On a phone the same entry is the pen button in the bar at the bottom of the job page. While `writer.yaml: enabled` is `false` the button leads to Settings → Workflow, and the workbench
 only says how to switch the writer on; answers saved earlier are still shown.
 
 The workbench has three columns (below 1024 px one at a time, switched at the top):
@@ -96,6 +96,32 @@ true.** Read every sentence before you send it.
 changed ones become "written by you". **Mark as final** marks the version you sent; the job page counts final
 versions.
 
+### Exporting the final answers
+
+**Export as Markdown** under the questions downloads one file with each question that has a final version and its final
+answer (`<company>-<title>-answers.md`). The file is built in your browser from what the page already shows: nothing is
+sent to the server or an AI provider and nothing is written on the server, so it works while the writer is switched off
+too. Questions without a final version are left out; the button is disabled until one exists. Text of yours that starts
+like Markdown (`#`, `-`, `>`, `1.`) is escaped so it stays text. The evidence marks are not part of the file.
+
+### Starting from an earlier answer
+
+When you type a question, Job Radar looks at the questions of **other jobs** that have a final answer. If one reads like the
+new question, the form offers it ("You answered something like this before"), with its job and how many words the two
+questions share. **Start from this answer** adds the new question and puts the earlier answer into an editor on the
+right; nothing is stored until you press **Save as first version** (or **Discard**).
+
+- Similarity is the share of words the two questions have in common (accents, case and punctuation ignored), at least
+  `reuse.min_similarity`; at most `reuse.max_candidates` answers are offered, the most similar first. Words are compared
+  as written, so **the same question in another language is not matched**. Chinese is compared character by character.
+- It is a starting text, not a checked answer: the earlier checks were made against another job's material, so every
+  sentence is saved as written by you, and **Write** still drafts from your selected material.
+- If the text still names the company of the answer you started from, a warning appears in the editor and under the
+  saved version (and stays after a reload). The check looks for the company's name as a whole word. It does not know
+  other names tied to that job (a product, a team, a person), so read the text through.
+- The lookup reads your own database only and calls no AI provider; it needs the writer to be switched on only because
+  the add form is part of the writer.
+
 ### What is sent, and what stays
 
 Only what the disclosure box lists is sent, only when you press **Write**, and only to the providers of the `write`
@@ -133,6 +159,8 @@ The removal only reaches the request row:
 | `jd_max_chars` | `6000` | Longest JD excerpt |
 | `jd_head_share` | `0.7` | Share of a cut JD excerpt taken from the start; the rest comes from the end |
 | `output_truncated_share` | `0.95` | An answer that did not parse and reached this share of the output cap counts as cut off |
+| `reuse.min_similarity` | `0.55` | Lowest share of words a new question must have in common with an earlier one for that answer to be offered |
+| `reuse.max_candidates` | `3` | Most earlier answers offered for one new question |
 | `evidence.quote_max_chars` | `160` | Longest quote the AI may give |
 | `evidence.min_quote_chars` | `4` | Shortest quote that counts as evidence, unless it is exactly a known name |
 | `evidence.first_person` | en / de / zh words | Words that make a sentence one about you |

@@ -1354,7 +1354,9 @@
         "label": "Job actions",
         "notes": "Notes",
         "viewPosting": "View post",
-        "notesHint": "Write down contacts, questions to ask or interview notes."
+        "notesHint": "Write down contacts, questions to ask or interview notes.",
+        "write": "Write answers",
+        "writeCount": "Write answers ({final} of {total} final)"
       },
       "reasonsLanguageHint": "The AI wrote the fit reasons and gaps in {language}; they are not translated.",
       "summaryLanguage": {},
@@ -7604,6 +7606,31 @@
       },
       "missing": "Not in the evidence: {items}",
       "needsCheck": "Check: {items} (names found neither in the evidence nor in the JD)"
+    },
+    "export": {
+      "heading": "Application answers",
+      "question": "Question",
+      "answer": "Answer",
+      "button": "Export as Markdown",
+      "count": "{final} of {total} with a final answer",
+      "none": "Mark an answer as final to include it in the file.",
+      "hint": "One file with each question and its final answer, built in your browser; nothing is sent anywhere.",
+      "done": "Exported {count, plural, one {# answer} other {# answers}}",
+      "failed": "The file could not be created."
+    },
+    "reuse": {
+      "label": "Earlier answers",
+      "title": "You answered something like this before",
+      "from": "{company} · {title} · {percent}% of the words in common",
+      "use": "Start from this answer",
+      "note": "The earlier answer is only a starting text: its checks do not carry over, and nothing is sent to an AI provider. Questions in another language are not matched.",
+      "editorTitle": "Starting text",
+      "editorHint": "Taken from your final answer for {company} · {title}. Change what is specific to that job, then save it as the first version.",
+      "editorLabel": "Starting text of the answer",
+      "save": "Save as first version",
+      "discard": "Discard",
+      "saved": "Saved as a version",
+      "oldCompany": "This text still names {companies}, the company of the answer you started from. Check it before you use it."
     }
   }
 }
