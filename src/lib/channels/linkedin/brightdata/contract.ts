@@ -108,6 +108,11 @@ export function keywordStrings(keywords: readonly string[]): string[] {
   return out;
 }
 
+/** Whether the query has anything to search for: a company name made only of quote characters has not. */
+export function hasSearchableKeywords(query: SearchQuery): boolean {
+  return keywordStrings(query.keywords).length > 0;
+}
+
 /** The provider inputs for one query: one per keyword string (usually exactly one). A company query searches the home country, without a remote filter. */
 export function buildDiscoveryInputs(query: SearchQuery, settings: BrightDataSettings, market: ChannelMarket): DiscoveryInput[] {
   const kind = searchKind(query);

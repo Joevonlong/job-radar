@@ -3,6 +3,7 @@ import { marketForChannel } from "../../market";
 import type { Channel, ChannelContext, RawPostingInput, SearchQuery } from "../../types";
 import { assertCredentialEndpoint } from "../../credential-endpoint";
 import { affordableItems } from "../budget";
+import { hasSearchableKeywords } from "../brightdata/contract";
 import { runActorSync } from "./client";
 import {
   APIFY_TOKEN_ENV,
@@ -70,6 +71,11 @@ export function createApifyChannel(options: ApifyChannelOptions): Channel {
 
     async collect(query: SearchQuery, ctx: ChannelContext): Promise<RawPostingInput[]> {
       const settings = readSettings(ctx);
+      // a company name of only quote characters has nothing to search for: skipped, with no request and no failure
+      if (query.company && !hasSearchableKeywords(query)) {
+        ctx.logger.warn("company name has no searchable text, skipping", { query: query.id });
+        return [];
+      }
       const token = tokenOf();
       if (!token) throw new ChannelError("auth_expired", `${APIFY_TOKEN_ENV} is not set`);
       // the test origin override is not configuration; the configured base URL must be Apify's own host

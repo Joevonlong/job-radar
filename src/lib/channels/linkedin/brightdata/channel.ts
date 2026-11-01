@@ -9,6 +9,7 @@ import {
   MAX_LIMIT_PER_INPUT,
   brightDataSettingsSchema,
   buildDiscoveryInputs,
+  hasSearchableKeywords,
   isProviderErrorRecord,
   timeRangeFor,
   type BrightDataSettings,
@@ -72,6 +73,11 @@ export function createBrightDataChannel(options: BrightDataChannelOptions): Chan
 
     async collect(query: SearchQuery, ctx: ChannelContext): Promise<RawPostingInput[]> {
       const settings = readSettings(ctx);
+      // a company name of only quote characters has nothing to search for: skipped, with no request and no failure
+      if (query.company && !hasSearchableKeywords(query)) {
+        ctx.logger.warn("company name has no searchable text, skipping", { query: query.id });
+        return [];
+      }
       const env = options.environment ?? process.env;
       const apiKey = env[BRIGHTDATA_API_KEY_ENV]?.trim();
       if (!apiKey) throw new ChannelError("auth_expired", `${BRIGHTDATA_API_KEY_ENV} is not set`);
