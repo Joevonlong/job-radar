@@ -209,6 +209,14 @@ transaction. The index is not built concurrently: the transaction holds an `ACCE
 blocking both reads and writes to `runs` while the index is built. On a large `runs` table, let the deploy finish before
 starting manual cycles or opening `/sources`.
 
+### Upgrading with the date filter
+
+The migration adds one index on `jobs` (the posted date, or the first-seen date where a posting has none). It is not built
+concurrently, so writes to `jobs` wait while it is built; with tens of thousands of jobs that takes seconds. A code rollback
+leaves the index in place and needs no database change. The two new `ui.yaml` keys (`filters.date_quick_ranges`,
+`filters.date_default_field`) only matter to a rollback if your file holds them: see
+[configuration.md](configuration.md#date-filter-uiyaml).
+
 ### Upgrading with change fingerprints
 
 The change-fingerprint migration adds nullable storage columns and indexes. Adding the columns does not rewrite job or

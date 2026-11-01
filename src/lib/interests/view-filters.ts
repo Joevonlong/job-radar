@@ -18,6 +18,18 @@ export const VIEW_TOGGLE_KEYS = TOGGLE_FILTER_KEYS.filter(isViewKey);
 
 type FilterParams = Pick<JobsSearchParams, ViewFilterKey>;
 
+/** The date inputs `viewFiltersFromParams` looks at. */
+type ViewDateParams = Partial<FilterParams> & { within?: JobsSearchParams["within"]; dateBy?: JobsSearchParams["dateBy"] };
+
+/**
+ * Whether the date condition of these params stays out of a saved view. A view stores custom dates as `from` / `to`, which it reads as
+ * first-seen dates, so dates that compare the posted date would come back meaning something else; quick ranges have no stored form yet.
+ * Both are dropped (the save dialog says so). Old links without `dateBy` mean first seen and are saved as before.
+ */
+export function dropsDateFromView(params: ViewDateParams): boolean {
+  return Boolean(params.within) || (Boolean(params.from || params.to) && params.dateBy === "posted");
+}
+
 /** The values of a multi filter of a view, in the order they were written: a scalar is a one-element list, absent is empty. */
 export function filterValues<K extends Exclude<MultiFilterKey, NonViewFilterKey>>(filters: ViewFilters, key: K): MultiValue<K>[] {
   const value = filters[key] as MultiValue<K> | MultiValue<K>[] | undefined;
@@ -28,7 +40,7 @@ export function filterValues<K extends Exclude<MultiFilterKey, NonViewFilterKey>
 const isScalarCompat = (key: MultiFilterKey): boolean => (SCALAR_COMPAT_KEYS as readonly string[]).includes(key);
 
 /** Save only view keys: URL-only country and searchIn are ignored, as are unset values and false toggles. */
-export function viewFiltersFromParams(params: Partial<FilterParams>): ViewFilters {
+export function viewFiltersFromParams(params: ViewDateParams): ViewFilters {
   const filters: ViewFilters = {};
   const q = params.q?.trim();
   if (q) filters.q = q;
@@ -45,8 +57,10 @@ export function viewFiltersFromParams(params: Partial<FilterParams>): ViewFilter
   Object.assign(filters, multi);
   if (params.minScore !== null && params.minScore !== undefined) filters.minScore = params.minScore;
   if (params.minSalary !== null && params.minSalary !== undefined) filters.minSalary = params.minSalary;
-  if (params.from) filters.from = params.from;
-  if (params.to) filters.to = params.to;
+  if (!dropsDateFromView(params)) {
+    if (params.from) filters.from = params.from;
+    if (params.to) filters.to = params.to;
+  }
   if (params.salary === true) filters.salary = true;
   if (params.filtered === true) filters.filtered = true;
   if (params.hideLang === true) filters.hideLang = true;

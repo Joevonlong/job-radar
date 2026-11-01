@@ -33,3 +33,18 @@ it("shows the search exclusions alongside the scope exclusion when filters can b
   expect(screen.getByTestId("save-view-search-hint")).toHaveTextContent(en.dashboard.jobs.filters.notSaved);
   expect(screen.getByTestId("save-view-scope-hint")).toBeInTheDocument();
 });
+
+it.each([
+  ["?within=7d&dateBy=posted&city=Berlin", true],
+  ["?within=month&dateBy=seen&city=Berlin", true],
+  ["?from=2026-10-01&to=2026-10-15&dateBy=posted&city=Berlin", true],
+  ["?from=2026-10-01&to=2026-10-15&dateBy=seen&city=Berlin", false],
+  ["?from=2026-10-01&to=2026-10-15&city=Berlin", false],
+  ["?dateBy=posted&city=Berlin", false],
+])("says which date conditions the view leaves out: %s", async (query, hint) => {
+  const Adapter = withNuqsTestingAdapter({ searchParams: query });
+  render(<Adapter><NextIntlClientProvider locale="en" messages={en}><SaveViewButton /></NextIntlClientProvider></Adapter>);
+  await userEvent.click(screen.getByTestId("save-view"));
+  if (hint) expect(screen.getByTestId("save-view-date-hint")).toHaveTextContent(en.interests.saveView.dateNotSaved);
+  else expect(screen.queryByTestId("save-view-date-hint")).toBeNull();
+});

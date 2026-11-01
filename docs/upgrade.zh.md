@@ -122,6 +122,10 @@ scripts/ops/deploy.sh --skip-pull
 索引不是并发创建的：事务持有 `ACCESS EXCLUSIVE` 锁直到提交，建索引期间 `runs` 的读取和写入都会被阻塞。
 如果 `runs` 表很大，请等部署完成后再手动运行采集或打开 `/sources`。
 
+### 带日期筛选的升级
+
+迁移会给 `jobs` 加一个索引（发布日期；岗位没有发布日期时用首次发现日期）。它不是并发创建的，建索引期间对 `jobs` 的写入会等待；几万条岗位只要几秒。代码回退时索引留着，不需要改数据库。新加的两个 `ui.yaml` 键（`filters.date_quick_ranges`、`filters.date_default_field`）只有在你的文件里有它们时才影响回退：见 [configuration.zh.md](configuration.zh.md#日期筛选uiyaml)。
+
 ### 带变更指纹的升级
 
 变更指纹迁移新增可空存储列和索引。添加列不会重写岗位或原始招聘表，迁移内也不回填历史行。创建索引仍会持有表锁：

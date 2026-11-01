@@ -146,7 +146,7 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
       <VisitTracker />
       <PageHeader title={t("title")} description={t("description")} />
       <ScopeSwitch params={params} archiveCount={archiveCounted.value} />
-      <FilterBar options={{ ...options, countries: withCountryNames(countries, locale), cities: cities.map(({ key, target }) => ({ key, target })), companies: companies.slice(0, ui.filters.company_options_max), companyOptionsCapped: companies.length > ui.filters.company_options_max, companyOptionsVisible: ui.filters.company_options_visible, traps: trapsEnabled(), relisted: listing, visa: visaFilter, ghost: ghostFilter, hiddenWorkplaces: hidden.workplaces, hiddenContracts: hidden.contracts, highValueNames }} />
+      <FilterBar options={{ ...options, countries: withCountryNames(countries, locale), cities: cities.map(({ key, target }) => ({ key, target })), companies: companies.slice(0, ui.filters.company_options_max), companyOptionsCapped: companies.length > ui.filters.company_options_max, companyOptionsVisible: ui.filters.company_options_visible, traps: trapsEnabled(), relisted: listing, visa: visaFilter, ghost: ghostFilter, hiddenWorkplaces: hidden.workplaces, hiddenContracts: hidden.contracts, highValueNames, dateQuickRanges: ui.filters.date_quick_ranges, dateDefaultField: ui.filters.date_default_field }} />
       <div className="flex flex-wrap items-center gap-x-sp-3 gap-y-sp-2">
         {params.filteredOnly === true ? (
           <FilteredToggle active only href={jobsListHref({ ...params, filteredOnly: null, page: 1 })} />

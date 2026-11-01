@@ -16,6 +16,8 @@ export const SELECT_FILTER_KEYS = ["source", "city", "country", "company", "work
 export const SCALAR_COMPAT_KEYS = ["source", "city", "workplace", "contract", "status"] as const;
 export const NUMBER_FILTER_KEYS = ["minScore", "minSalary"] as const;
 export const DATE_FILTER_KEYS = ["from", "to"] as const;
+/** The keys of the one date condition (a quick range or a custom `from` / `to`): counted once. `dateBy` only qualifies it and is not a filter key. */
+export const DATE_CONDITION_KEYS = ["within", "from", "to"] as const;
 /** `fav` (starred jobs only) is a URL-only filter: saved views never store it (see `NON_VIEW_FILTER_KEYS`). */
 /** `high`: only jobs with a high-value signal; old links say `t12` (see `LEGACY_HIGH_KEY`). */
 /** `unseen`: only jobs not looked at yet; URL-only like `fav`. */
@@ -23,11 +25,11 @@ export const DATE_FILTER_KEYS = ["from", "to"] as const;
 export const TOGGLE_FILTER_KEYS = ["salary", "filtered", "hideLang", "high", "fav", "unseen", "filteredOnly", "relisted"] as const;
 /** three-way choices (absent = all): `trap=only|hide`, `visa=offered|not_denied`, `ghost=only|hide` (`ghost=all` = absent). */
 export const CHOICE_FILTER_KEYS = ["trap", "visa", "ghost"] as const;
-/** Filters that live in the /jobs URL but not in saved views (interests.yaml keeps its shape). */
-export const NON_VIEW_FILTER_KEYS = ["fav", "unseen", "filteredOnly", "reason", "relisted", "country"] as const;
+/** Filters that live in the /jobs URL but not in saved views (interests.yaml keeps its shape). `within`: quick date ranges are not stored yet. */
+export const NON_VIEW_FILTER_KEYS = ["fav", "unseen", "filteredOnly", "reason", "relisted", "country", "within"] as const;
 
 /** Every filter key, in the order lists and chips show them. */
-export const FILTER_KEYS = ["q", "source", "city", "country", "company", "workplace", "contract", "status", "reason", "app", "minScore", "minSalary", "from", "to", "salary", "filtered", "hideLang", "high", "trap", "visa", "ghost", "fav", "unseen", "filteredOnly", "relisted"] as const;
+export const FILTER_KEYS = ["q", "source", "city", "country", "company", "workplace", "contract", "status", "reason", "app", "minScore", "minSalary", "from", "to", "within", "salary", "filtered", "hideLang", "high", "trap", "visa", "ghost", "fav", "unseen", "filteredOnly", "relisted"] as const;
 
 /**
  * The URL key the "high-value signals only" filter had before the signal categories ("T1/T2 only"). Still read, as `high`, so old links and

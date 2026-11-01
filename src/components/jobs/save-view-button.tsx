@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import type { InterestsFormError } from "@/lib/interests/types";
-import { hasViewFilters, viewFiltersFromParams } from "@/lib/interests/view-filters";
+import { dropsDateFromView, hasViewFilters, viewFiltersFromParams } from "@/lib/interests/view-filters";
 import { withLegacyKeys } from "@/lib/jobs/search-params";
 import { resolveJobScope } from "@/lib/jobs/scope";
 import { jobsSearchParsers } from "@/lib/jobs/search-params";
@@ -29,6 +29,8 @@ export function SaveViewButton() {
   const tErrors = useTranslations("interests.formErrors");
   const [params] = useQueryStates(jobsSearchParsers);
   const filters = viewFiltersFromParams(withLegacyKeys(params));
+  // quick ranges and posted-date ranges have no stored form yet: the dialog says the date is left out
+  const dateDropped = dropsDateFromView(params);
   const canSave = hasViewFilters(filters);
   const excludedSearch = params.country.length > 0 || params.searchIn === "all";
   const searchHintId = useId();
@@ -86,6 +88,7 @@ export function SaveViewButton() {
           {resolveJobScope(params.scope, params.status) !== "current" ? (
             <p className="text-ink-2 text-body-sm" data-testid="save-view-scope-hint">{tScope("notSaved")}</p>
           ) : null}
+          {dateDropped ? <p className="text-ink-2 text-body-sm" data-testid="save-view-date-hint">{t("dateNotSaved")}</p> : null}
           {excludedSearch ? <p className="text-ink-2 text-body-sm" data-testid="save-view-search-hint">{tSearch("notSaved")}</p> : null}
           <div className="flex flex-col gap-1.5">
             <label htmlFor={nameId} className="text-sm font-medium">

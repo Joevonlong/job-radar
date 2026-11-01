@@ -5,6 +5,8 @@ import { useTranslations } from "next-intl";
 
 import { FilterChip } from "@/components/ui/badge";
 import type { MultiSelectOption } from "@/components/ui/multi-select";
+import { useWithinLabel } from "@/components/jobs/date-filter";
+import { displayedDateField, effectiveDateRange } from "@/lib/jobs/date-range";
 import { SELECT_FILTER_KEYS, type SelectFilterKey } from "@/lib/jobs/filter-keys";
 import { jobsSearchParsers } from "@/lib/jobs/search-params";
 
@@ -18,6 +20,7 @@ export function ActiveFilterChips({
   traps = false,
   visa = false,
   ghost = false,
+  onDateCleared,
 }: {
   choices: Record<SelectFilterKey, readonly MultiSelectOption[]>;
   /** show the "AI traps" chip. */
@@ -26,6 +29,8 @@ export function ActiveFilterChips({
   visa?: boolean;
   /** show the "Ghost jobs" chip (hidden: a `ghost=` in the URL is ignored and kept; `ghost=all` is no filter, so no chip). */
   ghost?: boolean;
+  /** The date chip's × cleared the date condition (the filter bar folds the empty "Custom…" boxes). */
+  onDateCleared?: () => void;
 }) {
   const t = useTranslations("dashboard.jobs.filters");
   const tTrap = useTranslations("aiTraps.filter");
@@ -43,12 +48,26 @@ export function ActiveFilterChips({
     void setParams({ [key]: next.length > 0 ? next : null, page: null });
   };
 
+  // the date condition is one chip: what it compares and the range; its × clears the range, the dates and what they compare
+  const withinLabel = useWithinLabel();
+  const date = effectiveDateRange(params);
+  const dateText = date.within
+    ? withinLabel(date.within)
+    : date.from && date.to
+      ? t("chipSpan", { from: dateEnd(date.from, date.to), to: dateEnd(date.to, date.from) })
+      : date.from
+        ? t("chipSince", { from: date.from })
+        : date.to
+          ? t("chipUntil", { to: date.to })
+          : null;
+  const dateChip = dateText === null ? null : t(displayedDateField(params, "seen") === "posted" ? "chipPosted" : "chipSeen", { range: dateText });
+
   const trap = traps ? params.trap : null;
   const visaValue = visa ? params.visa : null;
   const ghostValue = ghost && params.ghost !== "all" ? params.ghost : null;
 
   // the slot keeps the height of one chip row whether or not there are chips, so ticking a filter never moves the list
-  if (chips.length === 0 && !trap && !visaValue && !ghostValue) return <div className="min-h-[24.5px]" aria-hidden data-testid="filter-chips-slot" />;
+  if (chips.length === 0 && !dateChip && !trap && !visaValue && !ghostValue) return <div className="min-h-[24.5px]" aria-hidden data-testid="filter-chips-slot" />;
 
   return (
     <ul className="flex min-h-[24.5px] flex-wrap gap-1.5" aria-label={t("chipsLabel")} data-testid="filter-chips">
@@ -59,6 +78,16 @@ export function ActiveFilterChips({
           </FilterChip>
         </li>
       ))}
+      {dateChip ? (
+        <li>
+          <FilterChip removeLabel={t("removeDateChip", { value: dateChip })} onRemove={() => {
+              onDateCleared?.();
+              void setParams({ within: null, from: null, to: null, dateBy: null, page: null });
+            }} data-testid="filter-chip" data-key="date" data-value={dateChip} className="max-w-full">
+            <span className="min-w-0 truncate">{dateChip}</span>
+          </FilterChip>
+        </li>
+      ) : null}
       {trap ? (
         <li>
           <FilterChip removeLabel={tTrap("remove", { value: tTrap(trap) })} onRemove={() => void setParams({ trap: null, page: null })} data-testid="filter-chip" data-key="trap" data-value={trap} className="max-w-full">
@@ -82,4 +111,9 @@ export function ActiveFilterChips({
       ) : null}
     </ul>
   );
+}
+
+/** A date of a custom span as the chip shows it: month-day when both ends are in one year, else the whole date. */
+function dateEnd(date: string, other: string): string {
+  return date.slice(0, 4) === other.slice(0, 4) ? date.slice(5) : date;
 }

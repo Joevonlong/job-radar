@@ -97,9 +97,10 @@ export async function markAllSeenAction(input: { scope: "jobs"; query: string; r
       ids = parsed.data.jobIds;
     } else {
       const params = withLegacyKeys(loadJobsSearchParams(new URLSearchParams(parsed.data.query)));
-      const filters = await jobsListFilters(db, params);
       // jobs that arrived after the page was drawn were never on screen: they stay unseen
       const renderedAt = new Date(Math.min(Date.parse(parsed.data.renderedAt), at.getTime()));
+      // a rolling date range counts back from the moment the page was drawn, so "all" is what was on screen
+      const filters = await jobsListFilters(db, params, { now: renderedAt });
       ids = await listUnseenJobIds(db, { filters, timezone: getSchedule().timezone, firstSeenUpTo: renderedAt });
     }
     const count = await markSeenIds(db, ids, at);
