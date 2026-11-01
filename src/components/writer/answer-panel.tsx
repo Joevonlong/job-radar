@@ -280,7 +280,7 @@ function VersionView({ view, question, version, enabled, onSaved }: { view: Work
       <p className="text-ink-2 text-body-sm" data-testid="writer-evidence-note">
         {t("evidenceNote")}
       </p>
-      <OldCompanyNotice text={version.text} from={question.startedFrom} currentCompany={view.job.company} />
+      <OldCompanyNotice text={version.text} from={question.startedFrom.map((entry) => ({ company: entry.company, names: entry.names }))} currentNames={view.job.companyNames} />
 
       {editing === null ? (
         <div className="text-body flex flex-col gap-3 leading-relaxed [overflow-wrap:anywhere]" data-testid="writer-version-text">

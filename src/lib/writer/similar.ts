@@ -40,21 +40,32 @@ export function rankSimilar<T extends SimilarCandidate>(text: string, candidates
     .map((entry) => ({ ...entry.candidate, similarity: entry.similarity }));
 }
 
-/** The shortest company name (in characters, after folding) that is looked for in a text: a one-letter name would match anywhere. */
+/** The shortest company spelling (in characters, after folding) that is looked for in a text: a one-letter name would match anywhere. */
 const MIN_COMPANY_CHARS = 2;
 
+/** A company as the warning knows it: the name to show (as stored) and the spellings to look for (`companyMatchNames`). */
+export interface CompanyNames {
+  company: string;
+  names: readonly string[];
+}
+
+/** ß as ss, then the comparison form of `normalize` (the pipeline's company key spells ß that way too). */
+const spelled = (text: string): string => text.replace(/[ßẞ]/gu, "ss");
+
 /**
- * The names of `companies` that the text mentions as whole words (case and accents ignored), each once, in the order given.
- * Used to warn that an answer started from the one for another company still names that company.
+ * The companies of `companies` that the text names as whole words under any of their spellings (case and accents
+ * ignored), each once, in the order given, shown by the name as stored. Used to warn that an answer started from the one
+ * for another company still names that company.
  */
-export function mentionedCompanies(text: string, companies: readonly string[]): string[] {
+export function mentionedCompanies(text: string, companies: readonly CompanyNames[]): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
-  for (const company of companies) {
-    const key = normalize(company);
-    if (key.length < MIN_COMPANY_CHARS || seen.has(key)) continue;
+  const haystack = spelled(text);
+  for (const entry of companies) {
+    const key = normalize(spelled(entry.company));
+    if (seen.has(key)) continue;
     seen.add(key);
-    if (containsWords(text, company)) out.push(company);
+    if (entry.names.some((name) => normalize(spelled(name)).length >= MIN_COMPANY_CHARS && containsWords(haystack, spelled(name)))) out.push(entry.company);
   }
   return out;
 }
@@ -67,17 +78,20 @@ export interface ReuseBase {
   sourceVersionId: number;
   text: string;
   company: string;
+  /** The spellings of the company to look for in the text. */
+  companyNames: readonly string[];
   jobTitle: string;
 }
 
 /**
  * The companies of `from` that `text` still names, leaving out this job's own company (an earlier answer for the same
- * company is not out of place). Empty when the text names none of them.
+ * company is not out of place; the two are the same company when they share a spelling, so "Acme GmbH" and "Acme Inc."
+ * count as one). Empty when the text names none of them.
  */
-export function staleCompanies(text: string, from: readonly { company: string }[], currentCompany: string): string[] {
-  const current = normalize(currentCompany);
+export function staleCompanies(text: string, from: readonly CompanyNames[], currentNames: readonly string[]): string[] {
+  const own = new Set(currentNames.map((name) => normalize(spelled(name))));
   return mentionedCompanies(
     text,
-    from.map((entry) => entry.company).filter((company) => normalize(company) !== current),
+    from.filter((entry) => !entry.names.some((name) => own.has(normalize(spelled(name))))),
   );
 }

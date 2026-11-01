@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { parseConfigText, writerSchema } from "@/lib/config";
 import { mentionedCompanies, questionTokens, rankSimilar, similarity, staleCompanies } from "@/lib/writer/similar";
 
 describe("similarity", () => {
@@ -54,26 +55,55 @@ describe("rankSimilar", () => {
 });
 
 describe("old company names", () => {
+  const co = (company: string, ...extra: string[]) => ({ company, names: [company, ...extra] });
+
   it("finds the companies a text names as whole words, ignoring case and accents", () => {
-    expect(mentionedCompanies("I would love to join Acme and its team.", ["Acme", "Initech"])).toEqual(["Acme"]);
-    expect(mentionedCompanies("Bei MÜLLER arbeiten", ["Muller"])).toEqual(["Muller"]);
-    expect(mentionedCompanies("Acme GmbH is where I learned it", ["Acme GmbH"])).toEqual(["Acme GmbH"]);
+    expect(mentionedCompanies("I would love to join Acme and its team.", [co("Acme"), co("Initech")])).toEqual(["Acme"]);
+    expect(mentionedCompanies("Bei MÜLLER arbeiten", [co("Muller")])).toEqual(["Muller"]);
+    expect(mentionedCompanies("Acme GmbH is where I learned it", [co("Acme GmbH")])).toEqual(["Acme GmbH"]);
+    expect(mentionedCompanies("Wir sind die Strasse", [co("Straße")])).toEqual(["Straße"]);
   });
 
-  it("does not find a name inside another word, or a name too short to mean anything", () => {
-    expect(mentionedCompanies("Acmeville is far away", ["Acme"])).toEqual([]);
-    expect(mentionedCompanies("I use a daily", ["A"])).toEqual([]);
-    expect(mentionedCompanies("I use X daily", [""])).toEqual([]);
+  it("also finds a company by its name without the legal form, and shows the name as stored", () => {
+    const acme = co("Acme Inc.", "acme");
+    expect(mentionedCompanies("I love Acme", [acme])).toEqual(["Acme Inc."]);
+    expect(mentionedCompanies("I love Acme Inc.", [acme])).toEqual(["Acme Inc."]);
+    expect(mentionedCompanies("I love Acmeville", [acme])).toEqual([]);
+  });
+
+  it("does not find a name inside another word, or a spelling too short to mean anything", () => {
+    expect(mentionedCompanies("Acmeville is far away", [co("Acme")])).toEqual([]);
+    expect(mentionedCompanies("I use a daily", [co("A")])).toEqual([]);
+    expect(mentionedCompanies("I use X daily", [co("")])).toEqual([]);
+    // the stored name is too short, its stripped spelling is not
+    expect(mentionedCompanies("I love Acme", [co("A", "acme")])).toEqual(["A"]);
   });
 
   it("lists each company once", () => {
-    expect(mentionedCompanies("Acme, then ACME again", ["Acme", "acme"])).toEqual(["Acme"]);
+    expect(mentionedCompanies("Acme, then ACME again", [co("Acme"), co("acme")])).toEqual(["Acme"]);
   });
 
-  it("leaves out this job's own company: reusing an answer for the same company is not out of place", () => {
-    const from = [{ company: "Acme" }, { company: "Initech" }];
-    expect(staleCompanies("Acme and Initech were great", from, "Acme")).toEqual(["Initech"]);
-    expect(staleCompanies("Acme and Initech were great", from, "Globex")).toEqual(["Acme", "Initech"]);
-    expect(staleCompanies("A text without names", from, "Globex")).toEqual([]);
+  it("leaves out this job's own company, also when it is spelled with another legal form", () => {
+    const from = [co("Acme GmbH", "acme"), co("Initech")];
+    expect(staleCompanies("Acme and Initech were great", from, ["Acme GmbH", "acme"])).toEqual(["Initech"]);
+    expect(staleCompanies("Acme and Initech were great", from, ["Acme Inc.", "acme"])).toEqual(["Initech"]);
+    expect(staleCompanies("Acme and Initech were great", from, ["Globex"])).toEqual(["Acme GmbH", "Initech"]);
+    expect(staleCompanies("A text without names", from, ["Globex"])).toEqual([]);
+  });
+});
+
+describe("the reuse section of writer.yaml", () => {
+  it("a file without it loads with the defaults, and a partial one keeps the rest", () => {
+    expect(parseConfigText("writer", "config_version: 1\nenabled: true\n").reuse).toEqual({ min_similarity: expect.any(Number), max_candidates: expect.any(Number), min_question_words: expect.any(Number) });
+    const partial = parseConfigText("writer", "config_version: 1\nreuse:\n  max_candidates: 5\n").reuse;
+    expect(partial.max_candidates).toBe(5);
+    expect(partial.min_similarity).toBe(writerSchema.parse({}).reuse.min_similarity);
+    expect(partial.min_question_words).toBe(writerSchema.parse({}).reuse.min_question_words);
+  });
+
+  it("rejects values out of range and unknown keys", () => {
+    expect(() => parseConfigText("writer", "config_version: 1\nreuse:\n  min_similarity: 1.5\n")).toThrow();
+    expect(() => parseConfigText("writer", "config_version: 1\nreuse:\n  min_question_words: 0\n")).toThrow();
+    expect(() => parseConfigText("writer", "config_version: 1\nreuse:\n  nope: 1\n")).toThrow();
   });
 });

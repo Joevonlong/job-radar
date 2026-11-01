@@ -50,7 +50,7 @@ export function BaseEditor({ view, question, base, enabled, onDone }: { view: Wo
       </label>
       <Textarea id={id} value={text} onChange={(event) => setText(event.target.value)} rows={10} disabled={!enabled} data-testid="writer-base-text" />
       <p className="text-ink-3 text-data font-mono">{tw("answer.length", { count: textLength(text, question.lengthUnit), target: question.lengthValue, unit: tw(`questions.unit.${question.lengthUnit}`) })}</p>
-      <OldCompanyNotice text={text} from={[{ company: base.company }]} currentCompany={view.job.company} />
+      <OldCompanyNotice text={text} from={[{ company: base.company, names: base.companyNames }]} currentNames={view.job.companyNames} />
       <div className="flex flex-wrap items-center gap-2">
         <Button type="button" size="sm" variant="primary" onClick={save} disabled={!enabled || pending || text.trim() === ""} data-testid="writer-base-save">
           {t("save")}

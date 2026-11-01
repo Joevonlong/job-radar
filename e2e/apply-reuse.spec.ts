@@ -45,12 +45,12 @@ async function reset(ids: number[]): Promise<void> {
 }
 
 /** A question of the job whose only version is its final answer. */
-async function seedFinalAnswer(id: number, question: string, answer: string): Promise<void> {
+async function seedFinalAnswer(id: number, question: string, answer: string, position = 0): Promise<void> {
   await withSql(async (sql) => {
     const sentences = answer.split(/(?<=\.)\s+/u).map((text) => ({ text, newParagraph: false, about: "user", status: "user_written", evidence: [], missing: [], needsCheck: [] }));
     const [q] = await sql<{ id: number }[]>`
       insert into application_questions (job_id, position, text, kind, length_unit, length_value, output_language, tone, selected_materials)
-      values (${id}, 0, ${question}, 'question', 'words', 150, 'en', 'neutral', '{}'::jsonb) returning id`;
+      values (${id}, ${position}, ${question}, 'question', 'words', 150, 'en', 'neutral', '{}'::jsonb) returning id`;
     const [v] = await sql<{ id: number }[]>`
       insert into application_answer_versions (question_id, mode, text, sentences, user_written_count)
       values (${q!.id}, 'manual', ${answer}, ${sql.json(sentences)}, ${sentences.length}) returning id`;
@@ -203,6 +203,48 @@ test("reuse: the editor warns while typing, and discarding stores nothing", asyn
   await expect(page.getByTestId("writer-base-editor")).toHaveCount(0);
   await page.reload();
   await expect(page.getByTestId("writer-version")).toHaveCount(0);
+});
+
+test("reuse: a short Chinese question is looked up too (each character counts as a word)", async ({ page }) => {
+  await reset([targetId]);
+  await seedFinalAnswer(sourceId, "你为什么想加入我们公司？", "我喜欢出行软件，也想把计费服务做得更稳。", 1);
+  try {
+    await page.goto(`/jobs/${targetId}/apply`);
+    await page.getByTestId("writer-add-text").fill("你为什么想加入我们？");
+    const offer = page.getByTestId("writer-reuse-match");
+    await expect(offer).toHaveCount(1, { timeout: 10_000 });
+    await expect(offer).toContainText("你为什么想加入我们公司？");
+    await expect(offer).toContainText("Windrose Mobility · MLOps Engineer");
+    // a text under the minimum offers nothing
+    await page.getByTestId("writer-add-text").fill("你好");
+    await page.waitForTimeout(1200);
+    await expect(page.getByTestId("writer-reuse")).toHaveCount(0);
+  } finally {
+    await withSql(async (sql) => {
+      await sql`delete from application_questions where job_id = ${sourceId} and position = 1`;
+    });
+  }
+});
+
+test("reuse: the old company is found in a text that leaves out its legal form", async ({ page }) => {
+  await reset([targetId]);
+  const company = await withSql(async (sql) => {
+    const [row] = await sql<{ id: number; name: string }[]>`select c.id, c.name from companies c join jobs j on j.company_id = c.id where j.id = ${sourceId}`;
+    await sql`update companies set name = ${`${row!.name} GmbH`} where id = ${row!.id}`;
+    return row!;
+  });
+  try {
+    await page.goto(`/jobs/${targetId}/apply`);
+    await page.getByTestId("writer-add-text").fill("Why do you want to join Aurelia Dynamics?");
+    await page.getByTestId("writer-reuse-use").click({ timeout: 10_000 });
+    // the answer says "Windrose Mobility", the company is stored as "Windrose Mobility GmbH": the warning names it as stored
+    await expect(page.getByTestId("writer-old-company")).toContainText("Windrose Mobility GmbH");
+    await page.getByTestId("writer-base-discard").click();
+  } finally {
+    await withSql(async (sql) => {
+      await sql`update companies set name = ${company.name} where id = ${company.id}`;
+    });
+  }
 });
 
 test("accessibility: axe finds no WCAG A/AA violations with the reuse offer, the starting-text editor and the export button, in light and dark", async ({ page }) => {

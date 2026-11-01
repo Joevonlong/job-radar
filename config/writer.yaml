@@ -69,6 +69,8 @@ reuse:
   min_similarity: 0.55
   # Most earlier answers offered for one new question
   max_candidates: 3
+  # Fewest words a new question needs before earlier answers are looked up (each Chinese, Japanese or Korean character is a word)
+  min_question_words: 3
 
 # The evidence check of every sentence (in code, no AI call). It flags names and figures to check; it does not prove the
 # AI made nothing up.

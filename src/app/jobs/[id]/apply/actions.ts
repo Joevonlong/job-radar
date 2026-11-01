@@ -24,7 +24,8 @@ import { isLanguageCode } from "@/lib/i18n/languages";
 import { logActionFailure } from "@/lib/logging/action-failure";
 import { diffSentences } from "@/lib/writer/diff";
 import { jdPointsOf } from "@/lib/writer/jd-points";
-import { rankSimilar } from "@/lib/writer/similar";
+import { companyMatchNames, legalSuffixes } from "@/lib/writer/company-names";
+import { questionTokens, rankSimilar } from "@/lib/writer/similar";
 import { initialSelection } from "@/lib/writer/selection";
 import { readWriterInputs } from "@/lib/writer/settings";
 import { parseStoredSentences } from "@/lib/writer/stored";
@@ -242,6 +243,8 @@ export interface SimilarAnswer {
   /** Its final answer. */
   answer: string;
   company: string;
+  /** The spellings of the company to look for in the new text. */
+  companyNames: string[];
   jobTitle: string;
   /** Share of words in common with the new question, whole percent. */
   percent: number;
@@ -262,11 +265,14 @@ export async function findSimilarAnswersAction(input: { jobId: number; text: str
     if (!writer.enabled) return { ok: false, error: "disabled" };
     const db = getDb();
     const { jobId, text } = parsed.data;
+    // too short a question says too little to compare
+    if (questionTokens(text).size < writer.reuse.min_question_words) return { ok: true, matches: [] };
+    const suffixes = legalSuffixes();
     const ranked = rankSimilar(text, await listReusableAnswers(db, { excludeJobId: jobId }), { minSimilarity: writer.reuse.min_similarity, maxCandidates: writer.reuse.max_candidates });
     const matches: SimilarAnswer[] = [];
     for (const entry of ranked) {
       const answer = await getReusableAnswerText(db, { versionId: entry.versionId, excludeJobId: jobId });
-      if (answer) matches.push({ versionId: entry.versionId, question: entry.text, answer: answer.text, company: answer.company, jobTitle: answer.jobTitle, percent: Math.round(entry.similarity * 100) });
+      if (answer) matches.push({ versionId: entry.versionId, question: entry.text, answer: answer.text, company: answer.company, companyNames: companyMatchNames(answer.company, suffixes), jobTitle: answer.jobTitle, percent: Math.round(entry.similarity * 100) });
     }
     return { ok: true, matches };
   } catch (error) {

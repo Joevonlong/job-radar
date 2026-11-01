@@ -12,6 +12,8 @@ import { getJob } from "@/lib/db/repos/jobs";
 import { aiOutputLanguage } from "@/lib/i18n/config";
 import { descriptionHash } from "@/lib/translation/hash";
 
+import { companyMatchNames, legalSuffixes } from "./company-names";
+
 import { jdPointsOf, resolveJdPoints, type JdPoint } from "./jd-points";
 import { defaultOutputLanguage, parseSelection } from "./selection";
 import { readWriterInputs } from "./settings";
@@ -45,7 +47,7 @@ export interface WorkbenchQuestion {
   versions: WorkbenchVersion[];
   initialRequest: InitialWriterRequest | null;
   /** The other jobs whose final answer this question was started from (one entry per job), for the old-company warning. */
-  startedFrom: { company: string; jobTitle: string }[];
+  startedFrom: { company: string; jobTitle: string; names: string[] }[];
   /** Chosen JD points / stories that no longer exist. */
   stale: { jdPoints: number; stories: number };
 }
@@ -53,7 +55,8 @@ export interface WorkbenchQuestion {
 export type WriterAvailability = "enabled" | "disabled" | "config_error";
 
 export interface WorkbenchView {
-  job: { id: number; title: string; company: string; hasDescription: boolean };
+  /** `companyNames`: the spellings of the company to look for in an answer (the name, and the name without its legal form). */
+  job: { id: number; title: string; company: string; companyNames: string[]; hasDescription: boolean };
   availability: WriterAvailability;
   /** `outdated`: the breakdown was made from an older JD (or an older prompt); its points are still offered. */
   breakdown: "none" | "outdated" | "current";
@@ -66,7 +69,7 @@ export interface WorkbenchView {
   /** me.yaml could be read (the profile can be sent). */
   profile: { available: boolean; summary: string; skills: string[] };
   questions: WorkbenchQuestion[];
-  limits: { maxQuestions: number; textMaxChars: number; emphasisMaxChars: number };
+  limits: { maxQuestions: number; textMaxChars: number; emphasisMaxChars: number; reuseMinWords: number };
   tones: string[];
   kinds: Record<QuestionKind, { unit: LengthUnit; value: number; variants: number }>;
   /** A new question's answer language: the JD's language when known, else language.yaml's AI output language. */
@@ -85,15 +88,23 @@ function writeProviders(): AiProviderId[] {
   }
 }
 
-/** The other jobs a question's versions were started from, once each, oldest first. */
-function startedFrom(versions: readonly { parentVersionId: number | null }[], origins: ReadonlyMap<number, { jobId: number; jobTitle: string; company: string }>, jobId: number): { company: string; jobTitle: string }[] {
+/**
+ * The other jobs a question's versions were started from, once each, oldest first. A version whose parent is in this job
+ * (an edit), has no parent, or whose parent no longer exists adds nothing.
+ */
+export function startedFrom(
+  versions: readonly { parentVersionId: number | null }[],
+  origins: ReadonlyMap<number, { jobId: number; jobTitle: string; company: string }>,
+  jobId: number,
+  suffixes: readonly string[],
+): { company: string; jobTitle: string; names: string[] }[] {
   const seen = new Set<number>();
-  const out: { company: string; jobTitle: string }[] = [];
+  const out: { company: string; jobTitle: string; names: string[] }[] = [];
   for (const version of [...versions].reverse()) {
     const origin = version.parentVersionId === null ? undefined : origins.get(version.parentVersionId);
     if (!origin || origin.jobId === jobId || seen.has(origin.jobId)) continue;
     seen.add(origin.jobId);
-    out.push({ company: origin.company, jobTitle: origin.jobTitle });
+    out.push({ company: origin.company, jobTitle: origin.jobTitle, names: companyMatchNames(origin.company, suffixes) });
   }
   return out;
 }
@@ -117,6 +128,7 @@ export async function loadWorkbench(db: Db, jobId: number): Promise<WorkbenchVie
   const requests = await readInitialWriterRequests(db, jobId, newestVersionAt);
   const storyIds = new Set(inputs.stories.map((story) => story.id));
   // a version saved from another job's final answer points at it (parent_version_id); a pointer into this job's own versions is an edit
+  const suffixes = legalSuffixes();
   const ownVersionIds = new Set(versionRows.map((version) => version.id));
   const origins = await listVersionOrigins(db, [...new Set(versionRows.flatMap((version) => (version.parentVersionId !== null && !ownVersionIds.has(version.parentVersionId) ? [version.parentVersionId] : [])))]);
 
@@ -155,7 +167,7 @@ export async function loadWorkbench(db: Db, jobId: number): Promise<WorkbenchVie
           model: version.model,
         })),
       initialRequest: requests.get(row.id) ?? null,
-      startedFrom: startedFrom(versionRows.filter((version) => version.questionId === row.id), origins, jobId),
+      startedFrom: startedFrom(versionRows.filter((version) => version.questionId === row.id), origins, jobId, suffixes),
       stale: { jdPoints: resolved.stale, stories: inputs.storiesUnreadable ? 0 : selection.storyIds.filter((id) => !storyIds.has(id)).length },
     };
   });
@@ -163,7 +175,7 @@ export async function loadWorkbench(db: Db, jobId: number): Promise<WorkbenchVie
   const aiLanguage = aiOutputLanguage();
   const defaultLanguage = defaultOutputLanguage(job.language, aiLanguage);
   return {
-    job: { id: job.id, title: job.title, company: named.company, hasDescription: job.description !== null && job.description.trim() !== "" },
+    job: { id: job.id, title: job.title, company: named.company, companyNames: companyMatchNames(named.company, suffixes), hasDescription: job.description !== null && job.description.trim() !== "" },
     availability,
     breakdown,
     breakdownEnabled: inputs.breakdownEnabled,
@@ -172,7 +184,7 @@ export async function loadWorkbench(db: Db, jobId: number): Promise<WorkbenchVie
     storiesUnreadable: inputs.storiesUnreadable,
     profile: { available: inputs.me !== null, summary: inputs.me?.summary ?? "", skills: inputs.me?.skills.map((skill) => skill.name) ?? [] },
     questions,
-    limits: { maxQuestions: writer.questions.max_per_job, textMaxChars: writer.questions.text_max_chars, emphasisMaxChars: writer.emphasis_max_chars },
+    limits: { maxQuestions: writer.questions.max_per_job, textMaxChars: writer.questions.text_max_chars, emphasisMaxChars: writer.emphasis_max_chars, reuseMinWords: writer.reuse.min_question_words },
     tones: writer.tones,
     kinds: {
       question: { unit: writer.questions.kinds.question.default_length.unit, value: writer.questions.kinds.question.default_length.value, variants: writer.questions.kinds.question.variants },

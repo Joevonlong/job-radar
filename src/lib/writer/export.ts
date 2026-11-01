@@ -6,6 +6,8 @@
 
 export interface ExportQuestion {
   text: string;
+  /** A cover letter has no question text of its own to show. */
+  kind: "question" | "letter";
   /** The text of the final version; null when the question has none yet. */
   finalText: string | null;
 }
@@ -18,18 +20,31 @@ export interface ExportLabels {
   job: string;
   /** Label before each question, e.g. "Question". */
   question: string;
+  /** What stands in the quote of a cover letter whose question text is empty, e.g. "Cover letter". */
+  letter: string;
   /** Label before each answer, e.g. "Answer". */
   answer: string;
 }
 
-/** A text of yours must not turn into Markdown structure: a line that starts like a heading, list, quote, rule or fence gets its first mark escaped. */
+/**
+ * A text of yours must not change the structure of the file. Per line: a first mark that would make a heading, list item,
+ * quote, rule, setext underline or code fence is escaped; indentation of 4 columns or more (an indented code block) is
+ * written as no-break spaces; and every `<` is escaped so no raw HTML gets through.
+ */
 function escapeLines(text: string): string {
   return text
     .replace(/\r\n?/gu, "\n")
     .split("\n")
-    .map((line) => line.replace(/^(\s*)(?:([#>*+\-=]|`{3,}|~{3,})|(\d+)([.)]))/u, (_, space: string, mark: string | undefined, digits: string | undefined, stop: string | undefined) => (mark === undefined ? `${space}${digits}\\${stop}` : `${space}\\${mark}`)))
+    .map((line) => {
+      const indented = line.replace(/^[ \t]+/u, (space) => (space.replace(/\t/gu, "    ").length >= 4 ? "\u00a0".repeat(space.replace(/\t/gu, "    ").length) : space));
+      return indented
+        .replace(/^(\s*)(?:([#>*+\-=_]|`{3,}|~{3,})|(\d+)([.)]))/u, (_, space: string, mark: string | undefined, digits: string | undefined, stop: string | undefined) => (mark === undefined ? `${space}${digits}\\${stop}` : `${space}\\${mark}`))
+        .replace(/</gu, "\\<");
+    })
     .join("\n")
-    .trim();
+    // leading blank lines and trailing space go; a first line's own indentation stays
+    .replace(/^(?:[ \t]*\n)+/u, "")
+    .trimEnd();
 }
 
 /** The questions that have a final answer, in order. */
@@ -43,9 +58,15 @@ export function buildAnswersMarkdown(questions: readonly ExportQuestion[], label
   if (answered.length === 0) return "";
   const lines = [`# ${labels.heading.replace(/\s+/gu, " ").trim()}`, "", escapeLines(labels.job), ""];
   answered.forEach((question, index) => {
-    lines.push(`## ${index + 1}`, "", `**${labels.question}**`, "");
-    for (const line of escapeLines(question.text).split("\n")) lines.push(line === "" ? ">" : `> ${line}`);
-    lines.push("", `**${labels.answer}**`, "", escapeLines(question.finalText), "");
+    lines.push(`## ${index + 1}`, "");
+    const asked = question.text.trim() === "" && question.kind === "letter" ? labels.letter : question.text;
+    // a question without any text (and not a letter) has no quote to show
+    if (asked.trim() !== "") {
+      lines.push(`**${labels.question}**`, "");
+      for (const line of escapeLines(asked).split("\n")) lines.push(line === "" ? ">" : `> ${line}`);
+      lines.push("");
+    }
+    lines.push(`**${labels.answer}**`, "", escapeLines(question.finalText), "");
   });
   return `${lines.join("\n").trimEnd()}\n`;
 }

@@ -41,7 +41,7 @@ const question = (id: number, text: string, finalText: string | null): Workbench
 });
 
 const view = (questions: WorkbenchQuestion[]): WorkbenchView =>
-  ({ job: { id: 5, title: "Backend Engineer", company: "Acme GmbH", hasDescription: true }, availability: "enabled", questions }) as unknown as WorkbenchView;
+  ({ job: { id: 5, title: "Backend Engineer", company: "Acme GmbH", companyNames: ["Acme GmbH", "acme"], hasDescription: true }, availability: "enabled", questions }) as unknown as WorkbenchView;
 
 beforeEach(() => {
   actions.find.mockReset();
@@ -91,13 +91,13 @@ describe("ExportAnswers", () => {
 });
 
 describe("ReuseSuggestions", () => {
-  const match = { versionId: 31, question: "Why do you want to join Initech?", answer: "Initech answer", company: "Initech", jobTitle: "SRE", percent: 72 };
+  const match = { versionId: 31, question: "Why do you want to join Initech?", answer: "Initech answer", company: "Initech", companyNames: ["Initech"], jobTitle: "SRE", percent: 72 };
 
   it("looks up the earlier answers after a pause and offers them, and starts from the one you pick", async () => {
     const user = userEvent.setup();
     actions.find.mockResolvedValue({ ok: true, matches: [match] });
     const onUse = vi.fn();
-    render(wrap(<ReuseSuggestions jobId={5} text="Why do you want to join us?" enabled disabled={false} onUse={onUse} />));
+    render(wrap(<ReuseSuggestions jobId={5} minWords={3} text="Why do you want to join us?" enabled disabled={false} onUse={onUse} />));
     expect(actions.find).not.toHaveBeenCalled();
     const list = await screen.findByTestId("writer-reuse", {}, { timeout: 3000 });
     expect(actions.find).toHaveBeenCalledTimes(1);
@@ -109,37 +109,58 @@ describe("ReuseSuggestions", () => {
 
   it("shows nothing for a short text or when nothing is similar, and does not look up while off", async () => {
     actions.find.mockResolvedValue({ ok: true, matches: [] });
-    const { rerender } = render(wrap(<ReuseSuggestions jobId={5} text="Why us" enabled disabled={false} onUse={vi.fn()} />));
-    rerender(wrap(<ReuseSuggestions jobId={5} text="Why do you want to join us?" enabled disabled={false} onUse={vi.fn()} />));
+    const { rerender } = render(wrap(<ReuseSuggestions jobId={5} minWords={3} text="Why us" enabled disabled={false} onUse={vi.fn()} />));
+    rerender(wrap(<ReuseSuggestions jobId={5} minWords={3} text="Why do you want to join us?" enabled disabled={false} onUse={vi.fn()} />));
     await waitFor(() => expect(actions.find).toHaveBeenCalledTimes(1), { timeout: 3000 });
     expect(screen.queryByTestId("writer-reuse")).toBeNull();
 
     actions.find.mockClear();
-    rerender(wrap(<ReuseSuggestions jobId={5} text="Another long enough question text" enabled={false} disabled={false} onUse={vi.fn()} />));
+    rerender(wrap(<ReuseSuggestions jobId={5} minWords={3} text="Another long enough question text" enabled={false} disabled={false} onUse={vi.fn()} />));
+    await new Promise((resolve) => setTimeout(resolve, 800));
+    expect(actions.find).not.toHaveBeenCalled();
+  });
+
+  it("counts words, not characters: a short Chinese question is looked up, a two-word one is not", async () => {
+    actions.find.mockResolvedValue({ ok: true, matches: [match] });
+    // "请介绍一下你自己" is 8 characters (under any character minimum) but 8 words
+    render(wrap(<ReuseSuggestions jobId={5} minWords={3} text="请介绍一下你自己" enabled disabled={false} onUse={vi.fn()} />));
+    await screen.findByTestId("writer-reuse", {}, { timeout: 3000 });
+    expect(actions.find).toHaveBeenCalledWith({ jobId: 5, text: "请介绍一下你自己" });
+  });
+
+  it("the minimum comes from the page: two words are enough when it says so, three are not enough when it asks for four", async () => {
+    actions.find.mockResolvedValue({ ok: true, matches: [] });
+    const { rerender } = render(wrap(<ReuseSuggestions jobId={5} minWords={2} text="Why us?" enabled disabled={false} onUse={vi.fn()} />));
+    await waitFor(() => expect(actions.find).toHaveBeenCalledTimes(1), { timeout: 3000 });
+    actions.find.mockClear();
+    rerender(wrap(<ReuseSuggestions jobId={5} minWords={4} text="Why us here" enabled disabled={false} onUse={vi.fn()} />));
     await new Promise((resolve) => setTimeout(resolve, 800));
     expect(actions.find).not.toHaveBeenCalled();
   });
 
   it("hides the offers of an older text as soon as the text changes", async () => {
     actions.find.mockResolvedValue({ ok: true, matches: [match] });
-    const { rerender } = render(wrap(<ReuseSuggestions jobId={5} text="Why do you want to join us?" enabled disabled={false} onUse={vi.fn()} />));
+    const { rerender } = render(wrap(<ReuseSuggestions jobId={5} minWords={3} text="Why do you want to join us?" enabled disabled={false} onUse={vi.fn()} />));
     await screen.findByTestId("writer-reuse", {}, { timeout: 3000 });
-    rerender(wrap(<ReuseSuggestions jobId={5} text="Why do you want to join us? Be honest" enabled disabled={false} onUse={vi.fn()} />));
+    rerender(wrap(<ReuseSuggestions jobId={5} minWords={3} text="Why do you want to join us? Be honest" enabled disabled={false} onUse={vi.fn()} />));
     expect(screen.queryByTestId("writer-reuse")).toBeNull();
   });
 });
 
 describe("OldCompanyNotice and BaseEditor", () => {
   it("warns while the text still names the company of the answer it came from, not the job's own", () => {
-    const { rerender } = render(wrap(<OldCompanyNotice text="I would love to join Initech." from={[{ company: "Initech" }]} currentCompany="Acme GmbH" />));
+    const { rerender } = render(wrap(<OldCompanyNotice text="I would love to join Initech." from={[{ company: "Initech", names: ["Initech"] }]} currentNames={["Acme GmbH", "acme"]} />));
     expect(screen.getByTestId("writer-old-company")).toHaveTextContent("still names Initech");
-    rerender(wrap(<OldCompanyNotice text="I would love to join the team." from={[{ company: "Initech" }]} currentCompany="Acme GmbH" />));
+    rerender(wrap(<OldCompanyNotice text="I would love to join the team." from={[{ company: "Initech", names: ["Initech"] }]} currentNames={["Acme GmbH", "acme"]} />));
     expect(screen.queryByTestId("writer-old-company")).toBeNull();
-    rerender(wrap(<OldCompanyNotice text="I would love to join Initech." from={[{ company: "Initech" }]} currentCompany="Initech" />));
+    rerender(wrap(<OldCompanyNotice text="I would love to join Initech." from={[{ company: "Initech", names: ["Initech"] }]} currentNames={["Initech"]} />));
     expect(screen.queryByTestId("writer-old-company")).toBeNull();
+    // the earlier company under its short name, with the legal form only in the stored name
+    rerender(wrap(<OldCompanyNotice text="I love Acme" from={[{ company: "Acme Inc.", names: ["Acme Inc.", "acme"] }]} currentNames={["Globex"]} />));
+    expect(screen.getByTestId("writer-old-company")).toHaveTextContent("still names Acme Inc.");
   });
 
-  const base = { questionId: 7, sourceVersionId: 31, text: "I would love to join Initech.", company: "Initech", jobTitle: "SRE" };
+  const base = { questionId: 7, sourceVersionId: 31, text: "I would love to join Initech.", company: "Initech", companyNames: ["Initech"], jobTitle: "SRE" };
 
   it("fills the editor with the earlier answer, warns about its company, and saves it as the first version only on request", async () => {
     const user = userEvent.setup();

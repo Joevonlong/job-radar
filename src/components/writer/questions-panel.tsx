@@ -70,7 +70,7 @@ export function QuestionsPanel({ view, activeId, onSelect, onReuse, enabled }: {
         setText("");
         if ("questionId" in result && result.questionId !== undefined) {
           onSelect(result.questionId);
-          if (from) onReuse({ questionId: result.questionId, sourceVersionId: from.versionId, text: from.answer, company: from.company, jobTitle: from.jobTitle });
+          if (from) onReuse({ questionId: result.questionId, sourceVersionId: from.versionId, text: from.answer, company: from.company, companyNames: from.companyNames, jobTitle: from.jobTitle });
         }
       }
     });
@@ -125,7 +125,7 @@ export function QuestionsPanel({ view, activeId, onSelect, onReuse, enabled }: {
             </Button>
           </div>
           {full ? <p className="text-ink-3 text-body-sm">{t("full", { max: view.limits.maxQuestions })}</p> : null}
-          <ReuseSuggestions jobId={view.job.id} text={text} enabled={enabled && !full} disabled={pending} onUse={add} />
+          <ReuseSuggestions jobId={view.job.id} text={text} minWords={view.limits.reuseMinWords} enabled={enabled && !full} disabled={pending} onUse={add} />
         </div>
 
         <ExportAnswers view={view} />

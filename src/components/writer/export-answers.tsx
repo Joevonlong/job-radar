@@ -31,12 +31,12 @@ function download(fileName: string, text: string): void {
  */
 export function ExportAnswers({ view }: { view: WorkbenchView }) {
   const t = useTranslations("writer.export");
-  const questions = view.questions.map((question) => ({ text: question.text, finalText: question.versions.find((version) => version.id === question.finalVersionId)?.text ?? null }));
+  const questions = view.questions.map((question) => ({ text: question.text, kind: question.kind, finalText: question.versions.find((version) => version.id === question.finalVersionId)?.text ?? null }));
   const ready = answeredQuestions(questions).length;
 
   const run = (): void => {
     try {
-      const markdown = buildAnswersMarkdown(questions, { heading: t("heading"), job: `${view.job.title} · ${view.job.company}`, question: t("question"), answer: t("answer") });
+      const markdown = buildAnswersMarkdown(questions, { heading: t("heading"), job: t("job", { title: view.job.title, company: view.job.company }), question: t("question"), letter: t("letter"), answer: t("answer") });
       if (markdown === "") return;
       download(exportFileName({ company: view.job.company, title: view.job.title }), markdown);
       toastTone("success", t("done", { count: ready }));

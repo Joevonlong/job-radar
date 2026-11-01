@@ -102,7 +102,7 @@ versions.
 answer (`<company>-<title>-answers.md`). The file is built in your browser from what the page already shows: nothing is
 sent to the server or an AI provider and nothing is written on the server, so it works while the writer is switched off
 too. Questions without a final version are left out; the button is disabled until one exists. Text of yours that starts
-like Markdown (`#`, `-`, `>`, `1.`) is escaped so it stays text. The evidence marks are not part of the file.
+like Markdown (`#`, `-`, `>`, `1.`, `___`, a code fence), is indented by four spaces or more, or contains `<` is escaped so it stays text. A cover letter without question text is quoted as "Cover letter" instead of an empty quote. The evidence marks are not part of the file.
 
 ### Starting from an earlier answer
 
@@ -113,12 +113,18 @@ right; nothing is stored until you press **Save as first version** (or **Discard
 
 - Similarity is the share of words the two questions have in common (accents, case and punctuation ignored), at least
   `reuse.min_similarity`; at most `reuse.max_candidates` answers are offered, the most similar first. Words are compared
-  as written, so **the same question in another language is not matched**. Chinese is compared character by character.
+  as written, so **the same question in another language is not matched**. Chinese is compared character by character,
+  so a short Chinese question counts as several words. Nothing is looked up for a question with fewer than
+  `reuse.min_question_words` words.
 - It is a starting text, not a checked answer: the earlier checks were made against another job's material, so every
   sentence is saved as written by you, and **Write** still drafts from your selected material.
 - If the text still names the company of the answer you started from, a warning appears in the editor and under the
-  saved version (and stays after a reload). The check looks for the company's name as a whole word. It does not know
+  saved version (and stays after a reload). The check looks for the company's name as a whole word, and also for the name
+  without its legal form ("Acme" for "Acme GmbH"), using the same legal forms as the company matching of the pipeline
+  (`company.legal_suffixes` and the market packs). The warning names the company as it is stored. It does not know
   other names tied to that job (a product, a team, a person), so read the text through.
+- The warning is worked out from the earlier answer a version was started from. Once that version is removed (older
+  versions are pruned past `max_versions_per_question`), the warning for the text started from it can disappear.
 - The lookup reads your own database only and calls no AI provider; it needs the writer to be switched on only because
   the add form is part of the writer.
 
@@ -161,6 +167,7 @@ The removal only reaches the request row:
 | `output_truncated_share` | `0.95` | An answer that did not parse and reached this share of the output cap counts as cut off |
 | `reuse.min_similarity` | `0.55` | Lowest share of words a new question must have in common with an earlier one for that answer to be offered |
 | `reuse.max_candidates` | `3` | Most earlier answers offered for one new question |
+| `reuse.min_question_words` | `3` | Fewest words a new question needs before earlier answers are looked up (each Chinese character is a word) |
 | `evidence.quote_max_chars` | `160` | Longest quote the AI may give |
 | `evidence.min_quote_chars` | `4` | Shortest quote that counts as evidence, unless it is exactly a known name |
 | `evidence.first_person` | en / de / zh words | Words that make a sentence one about you |

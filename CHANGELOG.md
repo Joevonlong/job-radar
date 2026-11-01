@@ -201,7 +201,7 @@ A failure in (a) does not block rollback: follow (c) and accept the display wind
 - **Application writer: export and reuse.** The workbench exports every final answer as one Markdown file built in the browser,
   offers an earlier final answer of another job as the starting text when you add a similar question (a local word-overlap
   check, no AI call; `reuse` in `writer.yaml`, defaults added when missing, `config_version` unchanged) and warns while that
-  answer still names the other company. The job page's bottom bar on a phone has a button to the workbench. See
+  answer still names the other company (also when the text leaves out its legal form, such as "Acme" for "Acme GmbH"). The job page's bottom bar on a phone has a button to the workbench. See
   [Application writer](docs/application-writer.md).
 - **OpenAI API and OpenRouter providers:** pay-per-token API providers with their own key (`OPENAI_API_KEY`,
   `OPENROUTER_API_KEY`), JSON mode, and the reply-length field each needs (`max_tokens_field`). OpenRouter's reported

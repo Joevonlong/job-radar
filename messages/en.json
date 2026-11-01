@@ -7616,7 +7616,9 @@
       "none": "Mark an answer as final to include it in the file.",
       "hint": "One file with each question and its final answer, built in your browser; nothing is sent anywhere.",
       "done": "Exported {count, plural, one {# answer} other {# answers}}",
-      "failed": "The file could not be created."
+      "failed": "The file could not be created.",
+      "job": "{title} · {company}",
+      "letter": "Cover letter"
     },
     "reuse": {
       "label": "Earlier answers",

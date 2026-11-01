@@ -118,6 +118,8 @@ export const writerSchema = z.strictObject({
       min_similarity: z.number().min(0.05).max(1).default(0.55),
       /** Most earlier answers offered for one new question (the most similar first). */
       max_candidates: z.number().int().min(1).max(10).default(3),
+      /** Fewest words a new question needs before earlier answers are looked up (every Chinese, Japanese or Korean character counts as a word). */
+      min_question_words: z.number().int().min(1).max(50).default(3),
     })
     .prefault({}),
   /** The sentence-by-sentence evidence check (deterministic, no AI call). */
