@@ -43,3 +43,25 @@ describe("archive row times", () => {
     }
   });
 });
+
+describe("posted date column", () => {
+  it("is posted_at: the day, a short relative time and the full sentence", async () => {
+    const [item] = await toListItems([card({ closedReason: null, postedAt: new Date("2026-09-27T09:30:00Z") })], options);
+    expect(item?.posted).toEqual({ day: "Sep 27", ago: "4 d", title: "Posted 2026-09-27 09:30 (4 days ago)", known: true });
+  });
+
+  it("a day without a time keeps its UTC day", async () => {
+    const [item] = await toListItems([card({ closedReason: null, postedAt: new Date("2026-09-27T00:00:00Z") })], { ...options, timezone: "America/New_York" });
+    expect(item?.posted).toMatchObject({ day: "Sep 27", ago: "4 d", title: "Posted 2026-09-27 (4 days ago)", known: true });
+  });
+
+  it("without a posted date it falls back to the first-seen day, marked unknown", async () => {
+    const [item] = await toListItems([card({ closedReason: null, postedAt: null })], options);
+    expect(item?.posted).toEqual({ day: "Aug 1", ago: "", title: "Posted date unknown, first seen 2026-08-01 12:00", known: false });
+  });
+
+  it("does not change the sort-relevant time label", async () => {
+    const [item] = await toListItems([card({ closedReason: null, postedAt: new Date("2026-09-27T09:30:00Z") })], options);
+    expect(item?.timeLabel).toBe(createFormatter({ locale: "en", timeZone: "UTC" }).relativeTime(new Date("2026-09-27T09:30:00Z"), now));
+  });
+});

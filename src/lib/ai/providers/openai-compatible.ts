@@ -1,13 +1,21 @@
 import { z } from "zod";
 
+import type { AiMaxTokensField, AiOpenAiCompatibleProvider } from "@/lib/config/ai-options";
 import { checkCredentialEndpoint } from "@/lib/credential-endpoints";
 
 import { AiProviderError, registerSecret } from "../errors";
 import { createProvider } from "../provider";
 import type { AiAvailability, AiProvider, AiProviderId, AiTokenUsage, AiTransport, AiTransportRequest, AiTransportResponse } from "../types";
 
+/** OpenRouter's `provider` request field (ai.yaml `providers.openrouter.routing`). */
+export interface OpenRouterRouting {
+  require_parameters: boolean;
+  data_collection: "allow" | "deny";
+  zdr: boolean;
+}
+
 export interface OpenAiCompatibleOptions {
-  id: Extract<AiProviderId, "deepseek" | "mimo">;
+  id: AiOpenAiCompatibleProvider;
   baseUrl: string;
   model: string;
   apiKey: string | undefined;
@@ -18,6 +26,10 @@ export interface OpenAiCompatibleOptions {
    * false: `response_format: {type: "json_schema", ...}` (strict).
    */
   jsonModeOnly: boolean;
+  /** The request field that caps the reply length (default `max_tokens`). */
+  maxTokensField?: AiMaxTokensField;
+  /** OpenRouter only: sent as the request's `provider` field. */
+  routing?: OpenRouterRouting;
   timeoutMs: number;
   maxOutputTokens: number;
   fetch?: typeof fetch;
@@ -38,10 +50,17 @@ const completionSchema = z.looseObject({
       /** DeepSeek's name for the cached part of the prompt. */
       prompt_cache_hit_tokens: z.number().nullable().optional(),
       completion_tokens_details: z.looseObject({ reasoning_tokens: z.number().nullable().optional() }).nullable().optional(),
+      /** OpenRouter: what this request was charged, in credits (1 credit = 1 USD); checked by `reportedCost`. */
+      cost: z.unknown().optional(),
     })
     .optional(),
 });
+type CompletionUsage = z.infer<typeof completionSchema>["usage"];
+/** What is left of a reply whose choices do not fit the schema: its usage still counts. */
+const usageOnlySchema = z.looseObject({ model: z.string().optional(), usage: completionSchema.shape.usage });
 const errorBodySchema = z.looseObject({ error: z.looseObject({ message: z.string().optional() }).optional() });
+/** OpenRouter can answer HTTP 200 with an error in place of the choices; its `code` is an HTTP status. */
+const errorReplySchema = z.looseObject({ error: z.looseObject({ code: z.union([z.number(), z.string()]).optional(), message: z.string().optional() }) });
 
 function completionsUrl(baseUrl: string): string {
   return `${baseUrl.replace(/\/+$/, "")}/chat/completions`;
@@ -59,15 +78,26 @@ function statusError(id: AiProviderId, status: number, bodyText: string): AiProv
   } catch {
     // not JSON: leave the body out entirely
   }
-  const detail = `HTTP ${status}${message ? `: ${message}` : ""}`;
-  // 402 = insufficient balance on DeepSeek: as unusable as a bad key.
-  if (status === 401 || status === 402 || status === 403) return new AiProviderError(id, "auth", detail);
-  if (status === 429) return new AiProviderError(id, "rate_limited", detail);
-  return new AiProviderError(id, "provider_error", detail);
+  return errorFor(id, status, `HTTP ${status}${message ? `: ${message}` : ""}`);
 }
 
-function openAiUsage(usage: z.infer<typeof completionSchema>["usage"]): AiTokenUsage {
-  if (usage?.prompt_tokens === undefined || usage.completion_tokens === undefined) return { tokensIn: 0, tokensOut: 0, reported: false };
+/** The error kind of an HTTP status, or of the status OpenRouter puts in an error reply's `code`. */
+function errorFor(id: AiProviderId, status: number, detail: string, extra: { usage?: AiTokenUsage; model?: string } = {}): AiProviderError {
+  // 402 = insufficient balance on DeepSeek and OpenRouter: as unusable as a bad key.
+  if (status === 401 || status === 402 || status === 403) return new AiProviderError(id, "auth", detail, extra);
+  if (status === 429) return new AiProviderError(id, "rate_limited", detail, extra);
+  return new AiProviderError(id, "provider_error", detail, extra);
+}
+
+/** A charge the reply reported: a finite, non-negative number (0 included); anything else is no charge, and the catalog prices the call. */
+function reportedCost(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined;
+}
+
+function openAiUsage(usage: CompletionUsage): AiTokenUsage {
+  const cost = reportedCost(usage?.cost);
+  const charged = cost !== undefined ? { reportedCostUsd: cost } : {};
+  if (usage?.prompt_tokens === undefined || usage.completion_tokens === undefined) return { tokensIn: 0, tokensOut: 0, reported: false, ...charged };
   const cached = usage.prompt_tokens_details?.cached_tokens ?? usage.prompt_cache_hit_tokens;
   const reasoning = usage.completion_tokens_details?.reasoning_tokens;
   return {
@@ -75,10 +105,17 @@ function openAiUsage(usage: z.infer<typeof completionSchema>["usage"]): AiTokenU
     tokensOut: usage.completion_tokens,
     ...(cached !== null && cached !== undefined ? { cachedIn: cached } : {}),
     ...(reasoning !== null && reasoning !== undefined ? { reasoningOut: reasoning } : {}),
+    ...charged,
   };
 }
 
-/** DeepSeek and MiMo: one OpenAI-compatible chat-completions client over plain `fetch`. */
+/** The usage a reply carried, for a call that fails after the reply arrived; undefined when there was none. */
+function usageOf(usage: CompletionUsage): AiTokenUsage | undefined {
+  const counted = openAiUsage(usage);
+  return counted.reported === false && counted.reportedCostUsd === undefined ? undefined : counted;
+}
+
+/** OpenAI, OpenRouter, DeepSeek and MiMo: one OpenAI-compatible chat-completions client over plain `fetch`. */
 export function createOpenAiCompatibleTransport(options: OpenAiCompatibleOptions): AiTransport {
   const { id } = options;
   registerSecret(options.apiKey);
@@ -99,9 +136,10 @@ export function createOpenAiCompatibleTransport(options: OpenAiCompatibleOptions
       const timeoutMs = request.timeoutMs ?? options.timeoutMs;
       const timeout = AbortSignal.timeout(timeoutMs);
       const signal = request.signal ? AbortSignal.any([request.signal, timeout]) : timeout;
+      const model = request.model ?? options.model;
       const body = {
-        model: request.model ?? options.model,
-        max_tokens: options.maxOutputTokens,
+        model,
+        [options.maxTokensField ?? "max_tokens"]: options.maxOutputTokens,
         messages: [
           { role: "system", content: options.jsonModeOnly ? embedSchema(request.system, request.jsonSchema) : request.system },
           { role: "user", content: request.user },
@@ -109,6 +147,16 @@ export function createOpenAiCompatibleTransport(options: OpenAiCompatibleOptions
         response_format: options.jsonModeOnly
           ? { type: "json_object" }
           : { type: "json_schema", json_schema: { name: "answer", strict: true, schema: request.jsonSchema } },
+        ...(options.routing
+          ? {
+              provider: {
+                require_parameters: options.routing.require_parameters,
+                data_collection: options.routing.data_collection,
+                // only sent when asked for: false is OpenRouter's default
+                ...(options.routing.zdr ? { zdr: true } : {}),
+              },
+            }
+          : {}),
       };
       let response: Response;
       try {
@@ -127,19 +175,33 @@ export function createOpenAiCompatibleTransport(options: OpenAiCompatibleOptions
       }
       const text = await response.text().catch(() => "");
       if (!response.ok) throw statusError(id, response.status, text);
-      let parsed;
+      let json: unknown;
       try {
-        parsed = completionSchema.parse(JSON.parse(text));
+        json = JSON.parse(text);
       } catch {
         throw new AiProviderError(id, "provider_error", "unexpected response shape");
       }
-      const content = parsed.choices[0]?.message.content;
-      if (content === null || content === undefined || content.trim() === "") throw new AiProviderError(id, "invalid_output", "empty reply");
-      return {
-        text: content,
-        model: parsed.model ?? request.model ?? options.model,
-        usage: openAiUsage(parsed.usage),
-      };
+      const parsed = completionSchema.safeParse(json);
+      if (!parsed.success) {
+        // the tokens of a reply are paid for even when its choices are unusable
+        const partial = usageOnlySchema.safeParse(json);
+        const usage = partial.success ? usageOf(partial.data.usage) : undefined;
+        const extra = { ...(usage ? { usage } : {}), ...(partial.success && partial.data.model ? { model: partial.data.model } : {}) };
+        const failure = errorReplySchema.safeParse(json);
+        if (failure.success) {
+          const { code, message } = failure.data.error;
+          const status = Number(code);
+          throw errorFor(id, Number.isInteger(status) ? status : 0, `error ${code ?? "without a code"}${message ? `: ${message}` : ""}`, extra);
+        }
+        throw new AiProviderError(id, "provider_error", "unexpected response shape", extra);
+      }
+      const answered = parsed.data.model ?? model;
+      const content = parsed.data.choices[0]?.message.content;
+      if (content === null || content === undefined || content.trim() === "") {
+        const usage = usageOf(parsed.data.usage);
+        throw new AiProviderError(id, "invalid_output", "empty reply", { ...(usage ? { usage } : {}), model: answered });
+      }
+      return { text: content, model: answered, usage: openAiUsage(parsed.data.usage) };
     },
   };
 }

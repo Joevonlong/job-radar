@@ -87,6 +87,25 @@ test("the detail page: reasons, the quote with its JD mark, dismiss and undo", a
   await expect(page.getByTestId("ghost-mark")).toBeVisible();
 });
 
+test("a relisted job: the posted date stays the same on the list and the detail page, the repost has a chip of its own", async ({ page }) => {
+  await openJobs(page, "?filtered=true");
+  const listed = row(page, GHOST).locator('[data-slot="row-posted"]');
+  await expect(listed).toHaveAttribute("data-known", "true");
+  const listDay = /^(\S+) · /.exec((await listed.locator("span[aria-hidden]").first().textContent()) ?? "")?.[1];
+  expect(listDay).toBeTruthy();
+  await page.getByRole("link", { name: GHOST }).first().click();
+  await page.waitForURL(/\/jobs\/\d+$/);
+  await page.waitForLoadState("networkidle");
+  const posted = page.getByTestId("posted-date");
+  await expect(posted).toContainText(/^发布 \S+ 周[一二三四五六日]（\d+ 天前）/);
+  expect(((await posted.textContent()) ?? "").split(" ")[1]).toBe(listDay);
+  const repost = page.getByTestId("repost-date");
+  await expect(repost).toContainText(/^↻重发 · 新链接 \S+（我们首次看到，\d+ 天前）/);
+  await expect(repost).toHaveAttribute("title", /不是来源给的日期/);
+  await expect(repost).not.toContainText("发布");
+  await expect(repost.locator(".sr-only")).toContainText("旧链接最早见于");
+});
+
 test("off: no mark, no filter, no checks row; a ghost= in the URL is ignored but kept", async ({ page }) => {
   ghostCheck(false);
   await openJobs(page, "?filtered=true&ghost=hide");
@@ -98,6 +117,9 @@ test("off: no mark, no filter, no checks row; a ghost= in the URL is ignored but
   await page.waitForURL(/\/jobs\/\d+$/);
   await page.waitForLoadState("networkidle");
   await expect(page.getByTestId("ghost-check")).toHaveCount(0);
+  // the repost chip reads the stored result, so it is off with the check; the posted date stays
+  await expect(page.getByTestId("repost-date")).toHaveCount(0);
+  await expect(page.getByTestId("posted-date")).toContainText(/^发布 /);
 });
 
 test("390px and the dark theme: the list and the detail row fit without a horizontal scroll", async ({ page }) => {

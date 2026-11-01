@@ -61,9 +61,59 @@ test.describe("job detail v3", () => {
     }
   });
 
+  test("the date strip: the day first, the relative time in brackets, an explanation on hover and for screen readers", async ({ page }) => {
+    await openDetail(page);
+    const strip = page.getByTestId("date-strip");
+    const posted = strip.getByTestId("posted-date");
+    await expect(posted).toContainText(/^发布 \d{2}\/\d{2} 周[一二三四五六日]（.+）/);
+    await expect(posted.locator("time")).toHaveAttribute("datetime", /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+    const title = (await posted.getAttribute("title")) ?? "";
+    expect(title).toMatch(/\d{4}-\d{2}-\d{2} \d{2}:\d{2}（.+）/);
+    expect(title).toContain("Greenhouse");
+    expect(title).toContain("可信");
+    await expect(posted.locator(".sr-only")).toContainText(title);
+    // first seen: to the minute, with its sources
+    await expect(strip.getByTestId("first-seen")).toContainText(/^首次发现 \d{2}\/\d{2} \d{2}:\d{2} · /);
+    // the date strip is above the title and the old "posted" line of the meta list is gone
+    const box = async (id: string) => (await page.getByTestId(id).boundingBox())?.y ?? 0;
+    expect(await box("date-strip")).toBeLessThan(await box("job-title"));
+    await expect(page.getByTestId("detail-header").locator("dl", { hasText: "最后看到" })).not.toContainText("发布");
+    await expect(strip.getByTestId("repost-date")).toHaveCount(0);
+  });
+
+  test("a date without a time shows no hours and says so", async ({ page }) => {
+    await page.goto("/jobs?filtered=true&q=Site+Reliability");
+    await page.getByRole("link", { name: /Site Reliability Engineer/ }).first().click();
+    await expect(page.getByTestId("job-title")).toHaveText("Site Reliability Engineer");
+    const posted = page.getByTestId("posted-date");
+    await expect(posted).toContainText(/^发布 \d{2}\/\d{2} 周[一二三四五六日]（(今天|昨天|\d+ 天前)）/);
+    const title = (await posted.getAttribute("title")) ?? "";
+    expect(title).toMatch(/^\d{4}-\d{2}-\d{2}（来源只给了日期）/);
+    expect(title).toContain("仅供参考");
+    await expect(posted.locator("time")).toHaveAttribute("datetime", /T00:00:00\.000Z$/);
+  });
+
+  test("no posted date: says unknown, first seen still shows", async ({ page }) => {
+    await page.goto("/jobs?q=Orbitrail");
+    await page.getByRole("link", { name: /^Data Engineer$/ }).first().click();
+    await expect(page.getByTestId("job-title")).toHaveText("Data Engineer");
+    await expect(page.getByTestId("posted-date")).toHaveText(/^发布日期未知/);
+    await expect(page.getByTestId("posted-date")).toHaveAttribute("title", /来源没有给出发布日期/);
+    await expect(page.getByTestId("posted-date").locator("time")).toHaveCount(0);
+    await expect(page.getByTestId("first-seen")).toContainText(/^首次发现 /);
+  });
+
   test("has no horizontal scroll at 390px", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await openDetail(page);
+    await expect(page.getByTestId("date-strip")).toBeVisible();
+    // the strip wraps above the title and does not cover it
+    const gap = await page.evaluate(() => {
+      const strip = document.querySelector('[data-testid="date-strip"]')?.getBoundingClientRect();
+      const title = document.querySelector('[data-testid="job-title"]')?.getBoundingClientRect();
+      return strip && title ? title.top - strip.bottom : -1;
+    });
+    expect(gap).toBeGreaterThanOrEqual(0);
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     expect(overflow).toBeLessThanOrEqual(0);
   });

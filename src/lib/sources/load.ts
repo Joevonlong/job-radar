@@ -20,6 +20,7 @@ import {
 import { listProviderHealth, type ProviderHealth } from "@/lib/ai/health";
 import { createDbQuotaStore, readQuotaStatuses, type QuotaStatus } from "@/lib/ai/quota-guard";
 import type { AiProviderId } from "@/lib/ai/types";
+import { AI_KEY_ENV, isSet } from "@/lib/setup/env";
 import { API_PROVIDER_IDS } from "@/lib/ai/usage";
 import { sumAiCostForMonth } from "@/lib/db/repos/ai-usage";
 import { BRAVE_API_KEY_ENV } from "@/lib/channels/discovery/brave";
@@ -40,12 +41,8 @@ import { rotationUnits } from "./rotation-status";
 import { buildProviderViews, buildSourcesView, type AiProviderView, type SourcesView } from "./view";
 
 /** Which API providers have their key in this process's environment (the CLIs are on the host: they count as configured). */
-function aiKeysPresent(): Partial<Record<"anthropic" | "deepseek" | "mimo", boolean>> {
-  return {
-    anthropic: (process.env.ANTHROPIC_API_KEY ?? "").trim() !== "",
-    deepseek: (process.env.DEEPSEEK_API_KEY ?? "").trim() !== "",
-    mimo: (process.env.MIMO_API_KEY ?? "").trim() !== "",
-  };
+function aiKeysPresent(): Partial<Record<AiProviderId, boolean>> {
+  return Object.fromEntries(Object.entries(AI_KEY_ENV).map(([id, name]) => [id, isSet(process.env, name)]));
 }
 
 /** models.yaml read fresh (the web process has no config watcher); an unreadable file means "no labels, no marks". */

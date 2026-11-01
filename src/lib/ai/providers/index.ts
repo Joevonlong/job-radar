@@ -1,5 +1,6 @@
 import type { ChannelLogger } from "@/lib/channels/types";
 import type { AiConfig } from "@/lib/config";
+import { AI_OPENAI_COMPATIBLE_PROVIDERS, type AiOpenAiCompatibleProvider } from "@/lib/config/ai-options";
 
 import type { AiProvider } from "../types";
 import { createAnthropicProvider } from "./anthropic";
@@ -17,9 +18,17 @@ export interface DefaultProviderDeps {
   logger?: Pick<ChannelLogger, "debug">;
 }
 
+/** The `.env` variable holding each OpenAI-compatible provider's key. */
+export const OPENAI_COMPATIBLE_KEY_ENV = {
+  openai: "OPENAI_API_KEY",
+  openrouter: "OPENROUTER_API_KEY",
+  deepseek: "DEEPSEEK_API_KEY",
+  mimo: "MIMO_API_KEY",
+} as const satisfies Record<AiOpenAiCompatibleProvider, string>;
+
 const nonEmpty = (value: string | undefined): string | undefined => (value !== undefined && value.trim() !== "" ? value.trim() : undefined);
 
-/** The five real providers, wired from ai.yaml and the environment. */
+/** The real providers, wired from ai.yaml and the environment. */
 export function createDefaultProviders(config: AiConfig, deps: DefaultProviderDeps = {}): AiProvider[] {
   const env = deps.env ?? process.env;
   const timeoutMs = config.api_timeout_seconds * 1000;
@@ -33,29 +42,22 @@ export function createDefaultProviders(config: AiConfig, deps: DefaultProviderDe
       maxOutputTokens: config.max_output_tokens,
       ...(deps.fetch ? { fetch: deps.fetch } : {}),
     }),
-    createOpenAiCompatibleProvider({
-      id: "deepseek",
-      baseUrl: config.providers.deepseek.base_url,
-      model: config.providers.deepseek.model,
-      apiKey: nonEmpty(env.DEEPSEEK_API_KEY),
-      keyName: "DEEPSEEK_API_KEY",
-      jsonModeOnly: config.providers.deepseek.json_mode_only,
-      env,
-      timeoutMs,
-      maxOutputTokens: config.max_output_tokens,
-      ...(deps.fetch ? { fetch: deps.fetch } : {}),
-    }),
-    createOpenAiCompatibleProvider({
-      id: "mimo",
-      baseUrl: config.providers.mimo.base_url,
-      model: config.providers.mimo.model,
-      apiKey: nonEmpty(env.MIMO_API_KEY),
-      keyName: "MIMO_API_KEY",
-      jsonModeOnly: config.providers.mimo.json_mode_only,
-      env,
-      timeoutMs,
-      maxOutputTokens: config.max_output_tokens,
-      ...(deps.fetch ? { fetch: deps.fetch } : {}),
+    ...AI_OPENAI_COMPATIBLE_PROVIDERS.map((id) => {
+      const block = config.providers[id];
+      return createOpenAiCompatibleProvider({
+        id,
+        baseUrl: block.base_url,
+        model: block.model,
+        apiKey: nonEmpty(env[OPENAI_COMPATIBLE_KEY_ENV[id]]),
+        keyName: OPENAI_COMPATIBLE_KEY_ENV[id],
+        jsonModeOnly: block.json_mode_only,
+        maxTokensField: block.max_tokens_field,
+        ...(id === "openrouter" ? { routing: config.providers.openrouter.routing } : {}),
+        env,
+        timeoutMs,
+        maxOutputTokens: config.max_output_tokens,
+        ...(deps.fetch ? { fetch: deps.fetch } : {}),
+      });
     }),
   ];
 }

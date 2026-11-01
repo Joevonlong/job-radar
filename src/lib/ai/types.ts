@@ -37,6 +37,11 @@ export interface AiTokenUsage {
   reported?: boolean;
   /** server-side web searches the call made (anthropic `server_tool_use.web_search_requests`); priced apart from the tokens. */
   webSearches?: number;
+  /**
+   * What the provider says this call was charged, USD (OpenRouter `usage.cost`; always finite and >= 0). Present: it is the
+   * call's cost in `ai_usage` and the monthly budget; absent: the cost is estimated from the catalog. Per call, never summed.
+   */
+  reportedCostUsd?: number;
 }
 
 /** A JSON Schema document with an object at its root (what every provider requires). */
@@ -73,6 +78,8 @@ export interface AiTransportResponse {
 export interface AiCallRecord {
   /** The model that answered; for a failed call the model that was planned (null when unknown). */
   model: string | null;
+  /** The model the call asked for, when the provider knows it (a reply may name a dated snapshot of it). */
+  requested?: string;
   usage: AiTokenUsage;
   durationMs: number;
   outcome: "ok" | "invalid_output" | "failed";

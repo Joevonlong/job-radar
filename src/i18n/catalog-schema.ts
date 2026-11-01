@@ -30,7 +30,7 @@ const text = z.string().min(1);
 
 export const formatLabelsSchema = z.strictObject({
   /** Relative time of lists; `{n}` is the formatted number. */
-  relative: z.strictObject({ now: text, minutes: text, hours: text, yesterday: text }),
+  relative: z.strictObject({ now: text, minutes: text, hours: text, yesterday: text, today: text, days: text }),
   /** Unit words of a duration (`3 h 20 min`). */
   duration: z.strictObject({ d: text, h: text, m: text, s: text, lessThanMinute: text }),
   /** Appended after a salary figure when the period is shown (`/yr`). */

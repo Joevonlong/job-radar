@@ -87,6 +87,7 @@ const item = (signals: JobListItem["signals"]): JobListItem => ({
   signals,
   timeLabel: "",
   timeTitle: "",
+  posted: { day: "10/27", ago: "4 d", title: "", known: true },
 });
 
 describe("signal badges on a row", () => {

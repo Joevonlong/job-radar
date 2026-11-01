@@ -99,8 +99,8 @@ describe("the settings form covers the config files", () => {
   it("every model field is a dropdown over its own provider's catalog; no tag box or price table is left", () => {
     const aiFields = SETTINGS_SECTIONS.ai.flatMap((s) => s.fields);
     const modelFields = aiFields.filter((f) => f.path.endsWith(".model") || f.path.endsWith(".strong_model"));
-    expect(modelFields.length).toBe(7);
-    const providerOf: Record<string, string> = { claude_cli: "claude-cli", codex_cli: "codex-cli", anthropic: "anthropic", deepseek: "deepseek", mimo: "mimo" };
+    expect(modelFields.length).toBe(9);
+    const providerOf: Record<string, string> = { claude_cli: "claude-cli", codex_cli: "codex-cli", anthropic: "anthropic", openai: "openai", openrouter: "openrouter", deepseek: "deepseek", mimo: "mimo" };
     for (const field of modelFields) {
       expect(field.kind, field.path).toBe("model");
       expect(field.provider, field.path).toBe(providerOf[field.path.split(".")[1] ?? ""]);

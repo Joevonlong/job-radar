@@ -25,7 +25,6 @@ import { runMaintenance, type MaintenanceResult } from "./lifecycle";
 import { refreshSalariesIfStale, type SalaryRefreshResult } from "./refresh-salary";
 import { normalizeDraft, type NormalizedJob } from "./normalize";
 import { dormancyReady } from "@/lib/db/repos/dormancy";
-import { recordJobListing } from "@/lib/db/repos/listing";
 import { backfillChangeFingerprints } from "@/lib/db/repos/change-fingerprints";
 
 export { normalizeCompanyKey, resolveCompanyName } from "./company";
@@ -179,12 +178,16 @@ async function persist(db: Db, raw: RawPosting, normalized: NormalizedJob, famil
       const wins = otherBest === null || priority <= otherBest;
       const merged = mergeJobFields(fieldsOfJob(job), incoming, wins);
       const seenAgain = raw.fetchedAt.getTime() > job.lastSeenAt.getTime();
-      await updateJob(tx, job.id, {
-        ...merged,
-        ...(wins ? { companyId: company.id } : {}),
-        ...(seenAgain ? { lastSeenAt: raw.fetchedAt, status: statusWhenSeenAgain(job), ...(await dormancyReady(tx) ? { dormantAt: null } : {}) } : {}),
-      });
-      const relisted = await recordJobListing(tx, { jobId: job.id, observedAt: raw.fetchedAt, observedRunId: raw.runId, minGapDays: options.relist.minGapDays });
+      const relisted = await updateJob(
+        tx,
+        job.id,
+        {
+          ...merged,
+          ...(wins ? { companyId: company.id } : {}),
+          ...(seenAgain ? { lastSeenAt: raw.fetchedAt, status: statusWhenSeenAgain(job), ...(await dormancyReady(tx) ? { dormantAt: null } : {}) } : {}),
+        },
+        { observedAt: raw.fetchedAt, observedRunId: raw.runId, minGapDays: options.relist.minGapDays },
+      );
       if (outcome.kind === "merged" || outcome.kind === "updated") outcome = { ...outcome, relisted };
       jobId = job.id;
     }

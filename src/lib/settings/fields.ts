@@ -8,7 +8,16 @@
  */
 import type messages from "../../../messages/en.json";
 import { LOCALES } from "../../i18n/catalog.generated";
-import { AI_API_PROVIDERS, type AiProviderIdChoice, AI_PROVIDER_KINDS, AI_TASK_NAMES, AI_TASK_PROVIDERS, CODEX_REASONING_EFFORTS } from "../config/ai-options";
+import {
+  AI_API_PROVIDERS,
+  AI_MAX_TOKENS_FIELDS,
+  type AiProviderIdChoice,
+  AI_PROVIDER_KINDS,
+  AI_TASK_NAMES,
+  AI_TASK_PROVIDERS,
+  CODEX_REASONING_EFFORTS,
+  OPENROUTER_DATA_COLLECTION,
+} from "../config/ai-options";
 import { BREAKDOWN_MODES } from "../config/breakdown-options";
 import { consentKind } from "../channels/access";
 import { channelSupportsCompanyQueries } from "../channels/config-table";
@@ -224,6 +233,8 @@ const bool = (path: string, label: FieldLabelId, extra: Partial<FieldDef> = {}):
 const int = (path: string, label: FieldLabelId, extra: Partial<FieldDef> = {}): FieldDef => ({ path, kind: "int", label, ...extra });
 const num = (path: string, label: FieldLabelId, extra: Partial<FieldDef> = {}): FieldDef => ({ path, kind: "number", label, ...extra });
 const text = (path: string, label: FieldLabelId, extra: Partial<FieldDef> = {}): FieldDef => ({ path, kind: "text", label, ...extra });
+/** `max_tokens_field` of an OpenAI-compatible provider block (`providers.openai`). */
+const maxTokensField = (block: string): FieldDef => ({ path: `${block}.max_tokens_field`, kind: "select", label: "max_tokens_field", options: AI_MAX_TOKENS_FIELDS, mono: true, advanced: true });
 /** A scoring criterion is a whole sentence that may contain commas: only Enter (or leaving the box) ends it. */
 const NO_COMMA: Partial<FieldDef> = { commitOnComma: false };
 const tags = (path: string, label: FieldLabelId, extra: Partial<FieldDef> = {}): FieldDef => ({ path, kind: "tags", label, ...extra });
@@ -616,6 +627,41 @@ const aiSections: SectionDef[] = [
     ],
   },
   {
+    id: "openai",
+    block: "providers",
+    title: { text: "openai" },
+    collapsible: true,
+    catalogProvider: "openai",
+    modelPath: "providers.openai.model",
+    fields: [
+      bool("providers.openai.enabled", "provider_enabled"),
+      model("openai", "providers.openai", "model", "model"),
+      int("providers.openai.daily_request_cap", "daily_request_cap"),
+      text("providers.openai.base_url", "base_url", { mono: true, advanced: true }),
+      bool("providers.openai.json_mode_only", "json_mode_only", { advanced: true }),
+      maxTokensField("providers.openai"),
+    ],
+  },
+  {
+    id: "openrouter",
+    block: "providers",
+    title: { text: "openrouter" },
+    collapsible: true,
+    catalogProvider: "openrouter",
+    modelPath: "providers.openrouter.model",
+    fields: [
+      bool("providers.openrouter.enabled", "provider_enabled"),
+      model("openrouter", "providers.openrouter", "model", "model"),
+      int("providers.openrouter.daily_request_cap", "daily_request_cap"),
+      { path: "providers.openrouter.routing.data_collection", kind: "select", label: "openrouter_data_collection", options: OPENROUTER_DATA_COLLECTION, mono: true },
+      bool("providers.openrouter.routing.zdr", "openrouter_zdr", { advanced: true }),
+      bool("providers.openrouter.routing.require_parameters", "openrouter_require_parameters", { advanced: true }),
+      text("providers.openrouter.base_url", "base_url", { mono: true, advanced: true }),
+      bool("providers.openrouter.json_mode_only", "json_mode_only", { advanced: true }),
+      maxTokensField("providers.openrouter"),
+    ],
+  },
+  {
     id: "deepseek",
     block: "providers",
     title: { text: "deepseek" },
@@ -628,6 +674,7 @@ const aiSections: SectionDef[] = [
       int("providers.deepseek.daily_request_cap", "daily_request_cap"),
       text("providers.deepseek.base_url", "base_url", { mono: true, advanced: true }),
       bool("providers.deepseek.json_mode_only", "json_mode_only", { advanced: true }),
+      maxTokensField("providers.deepseek"),
     ],
   },
   {
@@ -643,6 +690,7 @@ const aiSections: SectionDef[] = [
       int("providers.mimo.daily_request_cap", "daily_request_cap"),
       text("providers.mimo.base_url", "base_url", { mono: true, advanced: true }),
       bool("providers.mimo.json_mode_only", "json_mode_only", { advanced: true }),
+      maxTokensField("providers.mimo"),
     ],
   },
   {

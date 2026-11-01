@@ -10,7 +10,9 @@
       "now": "刚刚",
       "minutes": "{n} 分钟前",
       "hours": "{n} 小时前",
-      "yesterday": "昨天"
+      "yesterday": "昨天",
+      "today": "今天",
+      "days": "{n} 天前"
     },
     "duration": {
       "d": "天",
@@ -1094,6 +1096,11 @@
     "time": {
       "seen": "发现于 {time}"
     },
+    "rowPosted": {
+      "unknown": "发现 {date}",
+      "titleKnown": "发布于 {time}（{ago}）",
+      "titleUnknown": "发布日期未知，首次发现于 {time}"
+    },
     "toast": {
       "ignored": "已忽略：{title}",
       "ignoreBlocked": "{title} 已在申请流程中（{status}），请在看板上调整",
@@ -1237,7 +1244,6 @@
       "meta": {
         "location": "地点",
         "contract": "合同",
-        "posted": "发布",
         "firstSeen": "首次看到",
         "lastSeen": "最后看到",
         "status": "岗位状态"
@@ -1353,7 +1359,26 @@
       "reasonsLanguageHint": "AI 的匹配理由和差距是用{language}写的，不做翻译。",
       "summaryLanguage": {},
       "summaryFallbackHint": "这条摘要没有当前界面语言的版本，显示的是另一种语言。",
-      "firstSeenVia": "首次发现 {when}",
+      "dateStrip": {
+        "label": "日期",
+        "posted": "发布 {date}（{ago}）",
+        "postedUnknown": "发布日期未知",
+        "repost": "重发 · 新链接 {date}（我们首次看到，{ago}）",
+        "repostNoDate": "重发（来源标注）",
+        "firstSeen": "首次发现 {time}",
+        "tip": {
+          "full": "{time}（{zone}）",
+          "dateOnly": "{date}（来源只给了日期）",
+          "trusted": "日期取自所有来源里最早的一个；其中 {channels} 的接口直接给发布日期（可信）",
+          "aggregator": "日期来自招聘聚合站，可能是刷新或抓取日期，仅供参考",
+          "unknown": "来源没有给出发布日期；日期筛选按首次发现日期算，按发布日期排序时排在最后",
+          "repost": "我们在 {date} 首次看到新的招聘链接（不是来源给的日期）；旧链接最早见于 {oldest}，间隔 {gap} 天",
+          "repostMany": "我们在 {date} 首次看到最新的招聘链接（不是来源给的日期）；链接共换了 {count} 次，最早的旧链接见于 {oldest}",
+          "repostManyCapped": "我们在 {date} 首次看到最新的招聘链接（不是来源给的日期）；已记录 {count} 次换链接，其中最早的旧链接见于 {oldest}",
+          "repostLabel": "来源标注：{label}",
+          "repostLabelOnly": "来源标注为重发，没有给出日期。来源标注：{label}"
+        }
+      },
       "seniority": {
         "entry": "初级",
         "mid": "中级",
@@ -1794,6 +1819,7 @@
       "vendor": {
         "anthropic": "Anthropic",
         "openai": "OpenAI",
+        "openrouter": "OpenRouter",
         "deepseek": "DeepSeek",
         "mimo": "Xiaomi MiMo"
       },
@@ -2406,6 +2432,22 @@
       "json_mode_only": {
         "label": "只有 JSON mode",
         "hint": "没有 json_schema，schema 写进 prompt。"
+      },
+      "max_tokens_field": {
+        "label": "回复长度字段",
+        "hint": "请求里限制回复长度的字段：max_tokens，或 max_completion_tokens（OpenAI 的新模型只接受后者）。"
+      },
+      "openrouter_data_collection": {
+        "label": "上游数据收集",
+        "hint": "deny：只路由到不拿请求数据训练的上游服务商。这不等于零保留。"
+      },
+      "openrouter_zdr": {
+        "label": "只用零保留端点",
+        "hint": "只路由到有零数据保留（ZDR）政策的端点（可用的模型和上游更少）。"
+      },
+      "openrouter_require_parameters": {
+        "label": "要求支持 JSON",
+        "hint": "只路由到支持请求里全部参数（包括 JSON 输出格式）的上游服务商。"
       },
       "per_cycle_limit": {
         "label": "每轮最多处理条数",
@@ -5484,8 +5526,8 @@
           "timeoutHint": "稍后重试",
           "manual": "launchd 里没有 {label}，但 ai-worker 在跑（心跳 {age} 秒前，应该是手动启动的）",
           "manualHint": "手动启动的进程重启后不会回来：scripts/ops/install-ai-worker.sh",
-          "legacy": "launchd 里还是旧名称的 {legacy}，没有 {label}（需要迁移）",
-          "legacyHint": "运行 scripts/ops/install-ai-worker.sh（或 scripts/ops/deploy.sh）：它会用 {label} 替换旧的 agent",
+          "otherLabel": "launchd 加载的是 {found}，配置写的是 {label}",
+          "otherLabelHint": "运行 scripts/ops/install-ai-worker.sh（或 scripts/ops/deploy.sh）安装 {label}，或把 doctor.ai_worker_launchd_label 改成 {found}",
           "notInstalled": "launchd 里没有 {label}：ai-worker 没有安装",
           "notInstalledHint": "scripts/ops/install-ai-worker.sh（docs/host-setup.md 第 6b 节）",
           "running": "{label} 在运行",
@@ -5774,6 +5816,7 @@
           "noAnswer": "{command} 没有回答",
           "notLoaded": "{service} 没有加载",
           "notRunning": "{service} 没有运行中的进程",
+          "invalidLabel": "doctor.ai_worker_launchd_label 不是合法的 launchd 标签（只能用字母、数字和 . _ -）",
           "noServiceManager": "这台机器上没有 launchd 或 systemd",
           "configMounted": "{service}：{source} 挂载在 {dir} 上，挡住了镜像里自带的出厂配置（compose 文件还是出厂配置进镜像之前的版本？）",
           "configMountedHint": "去掉这个挂载（compose.yaml 或 compose.override.yaml），然后运行 scripts/ops/deploy.sh：出厂配置现在来自镜像（docs/upgrade.zh.md）",

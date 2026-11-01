@@ -317,6 +317,21 @@ describe("ConfigForm", () => {
     expect(onSave.mock.calls[0]?.[0]).toMatchObject({ "providers.anthropic.enabled": false, "providers.claude_cli.enabled": true, "tasks.translate": [] });
   });
 
+  it("an OpenRouter row keeps its routing toggles under More settings; only the enabled switch sits in the header", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+    render(wrap(aiForm({ onSave })));
+    const row = screen.getByTestId("section-openrouter");
+    const more = within(row).getByTestId("more-openrouter");
+    expect(within(row).getAllByRole("switch", { name: "Enable OpenRouter API" })).toHaveLength(1);
+    expect(within(more).getByRole("switch", { name: "Zero data retention only" })).not.toBeChecked();
+    expect(within(more).getByRole("switch", { name: "Require JSON support" })).toBeChecked();
+    expect(within(more).getByRole("switch", { name: "JSON mode only" })).toBeInTheDocument();
+    await user.click(within(more).getByRole("switch", { name: "Zero data retention only" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(onSave.mock.calls[0]?.[0]).toMatchObject({ "providers.openrouter.routing.zdr": true });
+  });
+
   it("the order lists show the model each provider uses", async () => {
     const user = userEvent.setup();
     render(wrap(aiForm({ draft: { "providers.codex_cli.model": "gpt-6.1-sol" } })));

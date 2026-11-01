@@ -10,6 +10,9 @@ describe("vendor grouping", () => {
     expect(AI_VENDORS.flatMap((v) => v.providers).toSorted()).toEqual([...AI_PROVIDER_IDS].toSorted());
     expect(AI_VENDORS.find((v) => v.id === "anthropic")?.providers).toEqual(["claude-cli", "anthropic"]);
     expect(vendorOf("codex-cli")).toBe("openai");
+    expect(AI_VENDORS.find((v) => v.id === "openai")?.providers).toEqual(["codex-cli", "openai"]);
+    expect(vendorOf("openrouter")).toBe("openrouter");
+    expect(accessOf("openrouter")).toBe("api");
     expect(accessOf("claude-cli")).toBe("cli");
     expect(accessOf("anthropic")).toBe("api");
   });

@@ -9,7 +9,7 @@
 import { isMap, isNode, isScalar, LineCounter, type Document } from "yaml";
 import type { ZodError } from "zod";
 
-import { parseConfigText, readConfigText } from "./load";
+import { configDocumentValue, parseConfigText, readConfigText } from "./load";
 import { interestsRawWarnings, interestsWarnings, SLOW_PATTERN_MESSAGE, slowInterestPatterns } from "./interests-lint";
 import { checkAiAgainstCatalog } from "./model-catalog";
 import { documentConfigVersion, currentConfigVersion, CONFIG_VERSION_KEY, withoutConfigVersion } from "./migrations/version";
@@ -158,8 +158,7 @@ export function validateConfigText<N extends ConfigName>(name: N, text: string, 
   }
   if (version === null || (version !== current && version > current)) return { ok: false, issues };
 
-  const raw = doc.toJS() as unknown;
-  const parsed = configRegistry[name].schema.safeParse(withoutConfigVersion(raw));
+  const parsed = configRegistry[name].schema.safeParse(withoutConfigVersion(configDocumentValue(name, doc)));
   if (!parsed.success) {
     for (const issue of parsed.error.issues) {
       for (const where of zodPaths(issue)) {

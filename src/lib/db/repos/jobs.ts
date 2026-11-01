@@ -7,7 +7,7 @@ import type { LinkCheckEvidence } from "@/lib/jobs/link-check-evidence";
 import type { Executor } from "../executor";
 import { applications, channels, companies, jobClosureOverrides, jobFavorites, jobFilterOverrides, jobSources, jobs, rawPostings } from "../schema";
 import { dormancyReady, jobReadColumns } from "./dormancy";
-import { listingReady, listingSetSql } from "./listing";
+import { listingColumnsSql, listingReady, listingSetSql } from "./listing";
 import { notDormantSql } from "../queries/job-status";
 
 export type Job = Omit<typeof jobs.$inferSelect, "searchTsv" | "descriptionMd5" | "descriptionHasText" | "salaryMd5">;
@@ -52,8 +52,35 @@ export async function insertJob(db: Executor, values: NewJob): Promise<Job> {
   });
 }
 
-export async function updateJob(db: Executor, id: number, patch: JobPatch): Promise<void> {
-  await db.update(jobs).set(patch).where(eq(jobs.id, id));
+/** A posting of the job seen at `observedAt` (see `recordJobListing`). */
+export interface JobListingObservation {
+  observedAt: Date;
+  observedRunId: number | null;
+  minGapDays: number;
+}
+
+/**
+ * Apply the patch. With `listing`, the same single UPDATE records the listing (one row version, one `search_tsv`
+ * computation); the result says whether it counted a relisting. Repeated and out-of-order observations leave the
+ * listing columns as they are and are not counted: the gap test needs `observedAt >= last_listed_at + gap` and
+ * `last_listed_at` only moves forward. Without `listing`, or while the listing columns do not exist yet, the result is false.
+ */
+export async function updateJob(db: Executor, id: number, patch: JobPatch, listing?: JobListingObservation): Promise<boolean> {
+  if (listing === undefined || !(await listingReady(db))) {
+    await db.update(jobs).set(patch).where(eq(jobs.id, id));
+    return false;
+  }
+  const observed = sql`${listing.observedAt.toISOString()}::timestamptz`;
+  const cycle = sql`(select cycle_id from runs where id = ${listing.observedRunId})`;
+  // the row version before this statement (locked), to tell a counted relisting from a repeat of the same observation
+  const prior = db.select({ lastListedAt: jobs.lastListedAt }).from(jobs).where(eq(jobs.id, id)).for("update").as("prior");
+  const [row] = await db
+    .update(jobs)
+    .set({ ...patch, ...listingColumnsSql(observed, cycle, listing.minGapDays) })
+    .from(prior)
+    .where(eq(jobs.id, id))
+    .returning({ relisted: sql<boolean>`coalesce(${jobs.relistedAt} = ${observed} and ${prior.lastListedAt} < ${observed}, false)` });
+  return row?.relisted === true;
 }
 
 /** The next `limit` jobs above `afterId` with their title and title key (for recomputing the keys when the key function changes). */

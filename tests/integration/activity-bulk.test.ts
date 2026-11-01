@@ -12,16 +12,16 @@ const MIN_ROOTS = 1000;
 let connection: ReturnType<typeof createConnection>;
 beforeAll(() => {
   connection = createConnection(inject("testDatabaseUrl"), {
-    max: 1, sessionSettings: { jit_above_cost: 0, jit_inline_above_cost: 0, jit_optimize_above_cost: 0 },
+    max: 1, sessionSettings: { jit: "on", jit_above_cost: 0, jit_inline_above_cost: 0, jit_optimize_above_cost: 0 },
   });
 });
 beforeEach(() => resetActivityTablesCache());
 afterAll(async () => { await connection.sql.end(); });
 
-async function seedRoots(): Promise<void> {
+async function seedRoots(count = ROOTS): Promise<void> {
   await connection.db.execute(sql`insert into activity_spans(id,root_id,scope,name,process,status,started_at,finished_at,last_activity_at)
     select id, id, 'system', 'system.backup', 'runner', 'ok', at, at, at
-    from (select gen_random_uuid() as id, now() - interval '40 days' - g * interval '1 minute' as at from generate_series(1, ${ROOTS}) g) roots`);
+    from (select gen_random_uuid() as id, now() - interval '40 days' - g * interval '1 minute' as at from generate_series(1, ${count}) g) roots`);
   await connection.db.execute(sql`insert into activity_spans(id,root_id,parent_id,scope,name,process,status,started_at,finished_at,last_activity_at)
     select gen_random_uuid(), id, id, 'system', 'step.collect', 'runner', 'ok', started_at, finished_at, last_activity_at
     from activity_spans where parent_id is null`);
@@ -70,5 +70,39 @@ describe("bulk activity removal", () => {
     });
     expect(deleted).toBeGreaterThanOrEqual(MIN_ROOTS);
     expect(await remainingRoots()).toBe(ROOTS - deleted);
+  });
+  it("runs the deleting and pruning transactions with JIT off, whatever the session says", async () => {
+    // A statement trigger sees the setting of the transaction that deletes; the session itself keeps jit on.
+    const db = connection.db;
+    await db.execute(sql`create table jit_probe (relname text not null, jit text not null)`);
+    try {
+      await db.execute(sql`create function jit_probe_fn() returns trigger language plpgsql as $$
+        begin insert into jit_probe values (tg_table_name, current_setting('jit')); return null; end $$`);
+      for (const table of ["activity_events", "activity_spans"]) {
+        await db.execute(sql.raw(`create trigger jit_probe_${table} after delete on ${table} for each statement execute function jit_probe_fn()`));
+      }
+      const probed = async () => (await db.execute<{ relname: string; jit: string }>(sql`select relname, jit from jit_probe`)).map((row) => `${row.relname}:${row.jit}`);
+
+      await seedRoots(5);
+      await deleteActivityBatch(db, { scope: { kind: "all" }, asOf: new Date(), liveness, batchSize: 1000, rootsPerBatch: 5 });
+      const afterDelete = await probed();
+      expect(afterDelete.length).toBeGreaterThan(0);
+      expect(afterDelete.every((entry) => entry.endsWith(":off"))).toBe(true);
+
+      await db.execute(sql`truncate jit_probe`);
+      await seedRoots(5);
+      await pruneActivityBatch(db, { days: 30, maxEvents: 1_000_000, batchSize: 1000, rootsPerBatch: 5, liveness, phase: "days" });
+      const afterPrune = await probed();
+      expect(afterPrune.length).toBeGreaterThan(0);
+      expect(afterPrune.every((entry) => entry.endsWith(":off"))).toBe(true);
+
+      // and the session setting really is on, so the probe cannot pass for the wrong reason
+      const [session] = await db.execute<{ jit: string }>(sql`select current_setting('jit') as jit`);
+      expect(session?.jit).toBe("on");
+    } finally {
+      await db.execute(sql`drop table if exists jit_probe`);
+      await db.execute(sql`drop function if exists jit_probe_fn() cascade`);
+      for (const table of ["activity_events", "activity_spans"]) await db.execute(sql.raw(`drop trigger if exists jit_probe_${table} on ${table}`));
+    }
   });
 });
