@@ -41,11 +41,14 @@ export const repostLabelReasonSchema = z.strictObject({
 export const repostEventSchema = z.strictObject({ oldId: z.string().min(1).max(300), newId: z.string().min(1).max(300), oldSeen: day, newSeen: day, gapDays: z.number().int().nonnegative() });
 export type RepostEvent = z.infer<typeof repostEventSchema>;
 
+/** Most relistings a `reposted` reason keeps: the latest ones. */
+export const REPOST_EVENTS_KEPT = 10;
+
 export const repostedReasonSchema = z.strictObject({
   code: z.literal("reposted"),
   points,
   channelId,
-  events: z.array(repostEventSchema).min(1).max(10),
+  events: z.array(repostEventSchema).min(1).max(REPOST_EVENTS_KEPT),
 });
 
 /** The JD says it is a talent pool or always open: a verbatim quote of `jobs.description` at `offset` (C7). */

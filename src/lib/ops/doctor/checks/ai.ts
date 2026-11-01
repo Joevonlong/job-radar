@@ -48,7 +48,13 @@ export function aiWorkerServicePid(ctx: DoctorContext): Promise<{ pid: number } 
   return cached(ctx, "aiworker.servicePid", async () => {
     const { t } = ctx;
     if (ctx.platform === "darwin" && ctx.uid !== null) {
-      const label = aiWorkerLaunchdLabel(ctx.settings.ai_worker_launchd_label);
+      let label: string;
+      try {
+        label = aiWorkerLaunchdLabel(ctx.settings.ai_worker_launchd_label);
+      } catch {
+        // an invalid label is reported by aiworker.launchd; here it only means no PID, not a failed check group
+        return { pid: null, reason: t("checks.config.shipped.invalidLabel") };
+      }
       const out = await ctx.probes.run("launchctl", ["print", `gui/${ctx.uid}/${label}`]);
       if (out.kind !== "ran") return { pid: null, reason: t("checks.config.shipped.noAnswer", { command: "launchctl print" }) };
       if (out.exitCode !== 0) return { pid: null, reason: t("checks.config.shipped.notLoaded", { service: label }) };
@@ -130,9 +136,12 @@ export const aiWorkerLaunchdCheck: DoctorCheck = {
     };
     if (out.kind === "timeout") return warn(launchdSpec, t("checks.aiworker.launchd.timeout"), t("checks.aiworker.launchd.timeoutHint"));
     if (out.kind === "missing" || out.exitCode !== 0) {
-      const otherLabel = label === LEGACY_LAUNCHD_LABEL ? AI_WORKER_DEFAULT_LAUNCHD_LABEL : LEGACY_LAUNCHD_LABEL;
-      const legacy = await ctx.probes.run("launchctl", ["print", `gui/${ctx.uid}/${otherLabel}`]);
-      if (legacy.kind === "ran" && legacy.exitCode === 0) return warn(launchdSpec, t("checks.aiworker.launchd.legacy", { legacy: otherLabel, label }), t("checks.aiworker.launchd.legacyHint", { label }));
+      // the same candidates, in the same order, as the shell scripts: the configured label, the default, the legacy one
+      for (const found of [AI_WORKER_DEFAULT_LAUNCHD_LABEL, LEGACY_LAUNCHD_LABEL]) {
+        if (found === label) continue;
+        const other = await ctx.probes.run("launchctl", ["print", `gui/${ctx.uid}/${found}`]);
+        if (other.kind === "ran" && other.exitCode === 0) return warn(launchdSpec, t("checks.aiworker.launchd.otherLabel", { found, label }), t("checks.aiworker.launchd.otherLabelHint", { found, label }));
+      }
       const alive = await heartbeatAge();
       if (alive !== null) return warn(launchdSpec, t("checks.aiworker.launchd.manual", { label, age: alive }), t("checks.aiworker.launchd.manualHint"));
       return fail(launchdSpec, t("checks.aiworker.launchd.notInstalled", { label }), t("checks.aiworker.launchd.notInstalledHint"));

@@ -43,7 +43,7 @@ Any future retention period would be off by default.
 
 | Who | What | When | How to stop it |
 |---|---|---|---|
-| The AI provider you use: OpenAI (`codex` CLI), Anthropic (`claude` CLI or API), DeepSeek or Xiaomi MiMo (API, **off by default**) | **Scoring:** your profile summary, skills and years, language levels, **target titles, target cities, work modes, remote scope, seniority, salary floor, contract preferences, excluded companies, excluded keywords, your own scoring criteria** and the job description. **Weekly suggestions:** the jobs you marked (interested, preparing, applied, interviewing, offer, ignored) **with their status**, plus your preferences. **Translation, breakdown, signals, trap check:** only the job text. Your home city and visa status (`me.yaml`), your notes and your application notes are not sent. | every cycle | switch a provider off (`enabled: false` in `ai.yaml`, or Settings → AI), do not install its CLI or fill its key; switch the weekly suggestions off in `schedule.yaml` (`suggest.enabled`) |
+| The AI provider you use: OpenAI (`codex` CLI or API), Anthropic (`claude` CLI or API), OpenRouter and the upstream provider it routes to (API), DeepSeek or Xiaomi MiMo (API, **off by default**). An API provider sends nothing until its key is in `.env` | **Scoring:** your profile summary, skills and years, language levels, **target titles, target cities, work modes, remote scope, seniority, salary floor, contract preferences, excluded companies, excluded keywords, your own scoring criteria** and the job description. **Weekly suggestions:** the jobs you marked (interested, preparing, applied, interviewing, offer, ignored) **with their status**, plus your preferences. **Translation, breakdown, signals, trap check:** only the job text. Your home city and visa status (`me.yaml`), your notes and your application notes are not sent. | every cycle | switch a provider off (`enabled: false` in `ai.yaml`, or Settings → AI), do not install its CLI or fill its key; switch the weekly suggestions off in `schedule.yaml` (`suggest.enabled`) |
 | Job sites and APIs: Arbeitsagentur, Indeed, LinkedIn, StepStone, XING, Google Jobs via JSearch, company career boards, Bright Data, Apify, Monid | your search keywords, search cities or home-country name, watched company names, and requests from your IP address (LinkedIn session: requests as your logged-in account) | every cycle; company queries only use supported, enabled channels | switch the channel off on Sources; stop all company queries with `search.yaml: watched_company_queries.enabled: false`, or opt a channel out with `sources.yaml: company_queries: false` in its block |
 | Arbeitnow (free board API) | requests from your IP address, nothing else (it takes no keywords or places) | every cycle | switch the channel off on the Sources page |
 | Tavily or Brave (board discovery) | a search query such as "keyword jobs city" | daily, only with a key | do not set the key |
@@ -62,8 +62,17 @@ Nothing is sent to the project's maintainers or to any analytics service.
   Claude (Settings → Privacy), and switch them off if you do not want that.
 - **API keys** are covered by the provider's commercial or API terms, which usually do not train on your data by default;
   read the terms of the one you use.
+- **OpenRouter** is a router: it forwards each request to an upstream provider of the chosen model, which can be another
+  company in another country (the default model's upstream may be DeepSeek, see below). Job Radar asks it to use only upstreams
+  that do not store or train on prompts (`providers.openrouter.routing.data_collection: deny`). That is **not** zero data
+  retention: an upstream may still keep requests for a while. Set `routing.zdr: true` in `ai.yaml` to allow only
+  zero-data-retention upstreams (fewer models then work). Your OpenRouter account settings also apply.
 - **DeepSeek and Xiaomi MiMo** are operated from China; data sent to them is subject to Chinese law. They are off by default;
   switch one on only if you accept that.
+- **DeepSeek through OpenRouter:** with an OpenRouter key and OpenRouter's default model (`deepseek/deepseek-v4.1-flash`),
+  your data can reach DeepSeek's own China-operated upstream even though the `deepseek` provider is off. To avoid that,
+  pick an OpenRouter model that is not DeepSeek's (Settings → AI → OpenRouter, or `providers.openrouter.model`), add
+  DeepSeek to the ignored providers in your OpenRouter account settings, or leave `OPENROUTER_API_KEY` empty.
 - **Telegram** stores bot messages on its servers. They are not end-to-end encrypted. Anyone with access to the chat, your
   account or the bot token can read them.
 - A **Gmail app password** gives access to the whole mailbox, not only the label Job Radar reads. Prefer a dedicated mailbox
@@ -84,8 +93,8 @@ Do this when you stop using Job Radar or want to erase your job-search traces. I
    drive, and exported JD files and tailored résumés (`data/exports/`, your resume-kit output folder).
 4. **Logs and temporary files:** `~/Library/Logs/job-radar/` on macOS, and `$TMPDIR/jr-*` if a killed AI call left something behind.
 5. **Accounts:** revoke the Gmail app password (Google Account → Security → App passwords); delete the Telegram bot in BotFather
-   (`/deletebot`) and clear the chat; log the LinkedIn session out; delete API keys you created only for this (Anthropic, DeepSeek,
-   MiMo, JSearch, Tavily, Bright Data, Apify, Monid).
+   (`/deletebot`) and clear the chat; log the LinkedIn session out; delete API keys you created only for this (Anthropic, OpenAI,
+   OpenRouter, DeepSeek, MiMo, JSearch, Tavily, Bright Data, Apify, Monid).
 6. **At the AI providers:** the `codex` and `claude` CLIs keep no local session from Job Radar, but your provider account may keep a
    conversation history or usage log according to your plan: delete it there if you wish.
 

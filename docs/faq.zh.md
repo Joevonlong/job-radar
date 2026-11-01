@@ -98,7 +98,7 @@ Job Radar 本身免费、开源（AGPL-3.0），跑在你自己的机器上。�
 |---|---|
 | Codex CLI（订阅） | 在跑 AI worker 的机器上 `codex login` |
 | Claude Code（订阅） | 运行 `claude`，然后 `/login` |
-| Anthropic、DeepSeek 或 MiMo（API） | 把 key 填进 `.env`；DeepSeek 和 MiMo 还要在 `ai.yaml` 里打开 |
+| Anthropic、OpenAI、OpenRouter、DeepSeek 或 MiMo（API） | 把 key 填进 `.env`；DeepSeek 和 MiMo 还要在 `ai.yaml` 里打开 |
 
 默认先试 codex，再试 claude，最后才是 API。顺序、模型和每类任务的推理强度都能在设置页的 AI 标签里改。`pnpm ai:probe`
 显示现在哪些可用。详见 [ai-providers.zh.md](ai-providers.zh.md)。
@@ -155,7 +155,7 @@ Job Radar 做的：所有抓取类来源一开始都是关的，打开前先让�
 Arbeitsagentur 和 Arbeitnow 是德国包自带的招聘网站。
 
 薪资识别认得欧元、美元、英镑，还有很多别的货币（包括 CAD、AUD、SGD、JPY、CNY、INR、BRL、ZAR），汇率是可以调整的粗略值；
-你的货币没有汇率时，市场表单会提示。Indeed 不覆盖的国家里只跳过 Indeed，其他来源照常工作。在欧洲以外的话，先拿几个岗位核对一下薪资结果。
+你的货币没有汇率时，市场表单会提示。Indeed 不覆盖的国家里只有 Indeed 受影响，其他来源照常工作。Indeed 已不再覆盖斯洛伐克、斯洛文尼亚、克罗地亚、保加利亚、爱沙尼亚、拉脱维亚、立陶宛、马耳他、塞浦路斯和孟加拉国（SK、SI、HR、BG、EE、LV、LT、MT、CY、BD）：这些市场里开着 Indeed，它每轮都会以 `unknown` 失败（“Indeed does not serve …”，不是被跳过），直到熔断器打开，所以在那里请关掉 Indeed。在欧洲以外的话，先拿几个岗位核对一下薪资结果。
 
 ## 几个人能共用一套吗？
 

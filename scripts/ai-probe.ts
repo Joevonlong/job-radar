@@ -1,7 +1,7 @@
 /**
  * Send one tiny structured request to each AI provider and report whether it works.
  *
- *   pnpm ai:probe [--provider claude-cli|codex-cli|anthropic|deepseek|mimo]... [--strong]
+ *   pnpm ai:probe [--provider claude-cli|codex-cli|anthropic|openai|openrouter|deepseek|mimo]... [--strong]
  *   pnpm ai:probe --provider <id> --model <model-id>     (try a model before selecting it)
  *
  * Prints per provider: availability ("not configured" when there is no key / CLI), latency, model and

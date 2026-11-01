@@ -61,11 +61,37 @@ describe("aiworker.launchd", () => {
       "launchctl print gui/501/de.jobradar.ai-worker": ran("", 113),
     }, probes: { sources: vi.fn(async () => sourcesView({ aiWorker: worker({ online }) })) } });
     const r = await only(aiWorkerLaunchdCheck, ctx);
-    expect(r).toMatchObject({ status: "warn", detail: ctx.t("checks.aiworker.launchd.legacy", { legacy: "io.jobradar.ai-worker", label: "de.jobradar.ai-worker" }) });
+    expect(r).toMatchObject({ status: "warn", detail: ctx.t("checks.aiworker.launchd.otherLabel", { found: "io.jobradar.ai-worker", label: "de.jobradar.ai-worker" }) });
     expect(r.hint).toContain("scripts/ops/install-ai-worker.sh");
+    expect(r.hint).toContain("doctor.ai_worker_launchd_label to io.jobradar.ai-worker");
     expect(ctx.probes.run).toHaveBeenNthCalledWith(1, "launchctl", ["print", "gui/501/de.jobradar.ai-worker"]);
     expect(ctx.probes.run).toHaveBeenNthCalledWith(2, "launchctl", ["print", "gui/501/io.jobradar.ai-worker"]);
     expect(ctx.probes.sources).not.toHaveBeenCalled();
+  });
+  it.each([
+    ["io.jobradar.ai-worker", ["de.jobradar.ai-worker"]],
+    ["de.jobradar.ai-worker", ["io.jobradar.ai-worker"]],
+    ["com.example.ai-worker", ["io.jobradar.ai-worker", "de.jobradar.ai-worker"]],
+  ])("with %s configured and nothing loaded, probes %j in the shell's order and says neutrally what launchd runs when it finds one", async (configured, others) => {
+    for (const found of others) {
+      const ctx = makeContext({ locale: "en", settings: { ai_worker_launchd_label: configured }, commands: {
+        [`launchctl print gui/501/${configured}`]: ran("", 113),
+        ...Object.fromEntries(others.map((label) => [`launchctl print gui/501/${label}`, label === found ? ran(LAUNCHCTL_RUNNING) : ran("", 113)])),
+      } });
+      const r = await only(aiWorkerLaunchdCheck, ctx);
+      expect(r).toMatchObject({ status: "warn", detail: ctx.t("checks.aiworker.launchd.otherLabel", { found, label: configured }) });
+      expect(r.detail).not.toMatch(/old name|legacy/i);
+      expect(r.hint).toContain(`doctor.ai_worker_launchd_label to ${found}`);
+      const probed = vi.mocked(ctx.probes.run).mock.calls.map(([, args]) => args[1]);
+      expect(probed).toEqual([configured, ...others.slice(0, others.indexOf(found) + 1)].map((label) => `gui/501/${label}`));
+    }
+  });
+  it("finds the job under the default label when a custom one is configured and only the legacy one is not loaded", async () => {
+    const ctx = makeContext({ locale: "en", settings: { ai_worker_launchd_label: "com.example.ai-worker" }, commands: {
+      "launchctl print gui/501/com.example.ai-worker": ran("", 113),
+      "launchctl print gui/501/io.jobradar.ai-worker": ran(LAUNCHCTL_RUNNING),
+    } });
+    expect(await only(aiWorkerLaunchdCheck, ctx)).toMatchObject({ status: "warn", detail: ctx.t("checks.aiworker.launchd.otherLabel", { found: "io.jobradar.ai-worker", label: "com.example.ai-worker" }) });
   });
   it.each(["de.jobradar.ai-worker", "io.jobradar.ai-worker"])("finds the job installed under the configured label %s", async (label) => {
     const command = `launchctl print gui/501/${label}`;
@@ -85,6 +111,15 @@ describe("aiworker.launchd", () => {
     expect(await aiWorkerServiceReceipt(ctx)).toMatchObject({ pid: 4242, receipt: { status: "found" } });
     expect((await only(shippedConfigCheck, ctx)).status).toBe("ok");
     expect(ctx.probes.aiWorkerReceipt).toHaveBeenCalledExactlyOnceWith(4242);
+  });
+  it("an invalid label leaves the shipped-config check running with a reason, and only aiworker.launchd throws", async () => {
+    const ctx = makeContext({ locale: "en", settings: { ai_worker_launchd_label: "invalid label" } });
+    expect(await aiWorkerServicePid(ctx)).toEqual({ pid: null, reason: ctx.t("checks.config.shipped.invalidLabel") });
+    const shipped = await only(shippedConfigCheck, ctx);
+    expect(shipped.status).not.toBe("error");
+    expect(shipped.detail ?? "").toContain(ctx.t("checks.config.shipped.invalidLabel"));
+    expect(ctx.probes.run.mock.calls.filter(([cmd]) => cmd === "launchctl")).toEqual([]);
+    await expect(only(aiWorkerLaunchdCheck, ctx)).rejects.toThrow("doctor.ai_worker_launchd_label");
   });
   it("fails when not installed and no heartbeat", async () => {
     const r = await only(aiWorkerLaunchdCheck, makeContext({ commands: { [LAUNCHCTL]: ran("", 113, "Could not find service") }, probes: { sources: async () => sourcesView({ aiWorker: worker({ online: false, lastHeartbeatAt: null, ageSeconds: null }) }) } }));

@@ -97,6 +97,7 @@ describe("row filter notes", () => {
     signals: [],
     timeLabel: "",
     timeTitle: "",
+    posted: { day: "10/27", ago: "4 d", title: "", known: true },
   });
 
   it("says on the row that a kept job has only a country as its place", () => {

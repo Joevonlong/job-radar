@@ -5,7 +5,7 @@
 import type { AiProviderConfigKey, AiProviderIdChoice } from "../config/ai-options";
 import { AI_PROVIDER_CONFIG_KEYS, AI_PROVIDER_KIND, type AiProviderKindName } from "../config/ai-options";
 
-export const AI_VENDOR_IDS = ["anthropic", "openai", "deepseek", "mimo"] as const;
+export const AI_VENDOR_IDS = ["anthropic", "openai", "openrouter", "deepseek", "mimo"] as const;
 export type AiVendorId = (typeof AI_VENDOR_IDS)[number];
 
 export interface AiVendor {
@@ -16,7 +16,8 @@ export interface AiVendor {
 
 export const AI_VENDORS: readonly AiVendor[] = [
   { id: "anthropic", providers: ["claude-cli", "anthropic"] },
-  { id: "openai", providers: ["codex-cli"] },
+  { id: "openai", providers: ["codex-cli", "openai"] },
+  { id: "openrouter", providers: ["openrouter"] },
   { id: "deepseek", providers: ["deepseek"] },
   { id: "mimo", providers: ["mimo"] },
 ];

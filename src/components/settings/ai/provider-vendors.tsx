@@ -43,8 +43,9 @@ function ModeRow({ ctx, provider, section }: { ctx: AiTabContext; provider: AiPr
   const enabledPath = providerPath(provider, "enabled");
   const enabled = draft[enabledPath] === true;
   const enabledChanged = dirty.has(enabledPath);
-  const primary = section.fields.filter((def) => def.kind !== "bool" && def.advanced !== true);
-  const advanced = section.fields.filter((def) => def.kind !== "bool" && def.advanced === true);
+  // the enabled switch sits in the header; every other field, toggles included, goes in the grid
+  const primary = section.fields.filter((def) => def.path !== enabledPath && def.advanced !== true);
+  const advanced = section.fields.filter((def) => def.path !== enabledPath && def.advanced === true);
   const hasError = section.fields.some((def) => ctx.errors.has(def.path));
   const changedCount = section.fields.filter((def) => dirty.has(def.path)).length;
   const modelId = textOf(draft, providerPath(provider, "model"));

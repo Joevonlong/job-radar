@@ -9,7 +9,7 @@ type ConfigView = "recommended";
 export type ChannelConfigRef = (
   | { readonly section: "linkedin"; readonly key: LinkedinKey; readonly view?: ConfigView }
   | { readonly section: "sources"; readonly key: SourceKey }
-) & { readonly usesQueries?: false; readonly supportsCompanyQueries?: true };
+) & { readonly usesQueries?: false; readonly supportsCompanyQueries?: true; readonly statesPostedAt?: true };
 
 /**
  * The single table linking a channel id to its block in sources.yaml. A channel can only be
@@ -19,8 +19,8 @@ export const CHANNEL_CONFIG_TABLE = {
   "linkedin-brightdata": { section: "linkedin", key: "brightdata", supportsCompanyQueries: true },
   "linkedin-apify": { section: "linkedin", key: "apify", supportsCompanyQueries: true },
   "linkedin-monid": { section: "linkedin", key: "monid" },
-  "linkedin-session": { section: "linkedin", key: "session", supportsCompanyQueries: true },
-  "linkedin-session:recommended": { section: "linkedin", key: "session", view: "recommended", usesQueries: false },
+  "linkedin-session": { section: "linkedin", key: "session", supportsCompanyQueries: true, statesPostedAt: true },
+  "linkedin-session:recommended": { section: "linkedin", key: "session", view: "recommended", usesQueries: false, statesPostedAt: true },
   "linkedin-guest": { section: "linkedin", key: "guest", supportsCompanyQueries: true },
   arbeitsagentur: { section: "sources", key: "arbeitsagentur", supportsCompanyQueries: true },
   indeed: { section: "sources", key: "indeed", supportsCompanyQueries: true },
@@ -28,11 +28,11 @@ export const CHANNEL_CONFIG_TABLE = {
   xing: { section: "sources", key: "xing", supportsCompanyQueries: true },
   arbeitnow: { section: "sources", key: "arbeitnow", usesQueries: false },
   jsearch: { section: "sources", key: "jsearch", supportsCompanyQueries: true },
-  greenhouse: { section: "sources", key: "greenhouse", usesQueries: false },
-  lever: { section: "sources", key: "lever", usesQueries: false },
-  ashby: { section: "sources", key: "ashby", usesQueries: false },
-  personio: { section: "sources", key: "personio", usesQueries: false },
-  smartrecruiters: { section: "sources", key: "smartrecruiters", usesQueries: false },
+  greenhouse: { section: "sources", key: "greenhouse", usesQueries: false, statesPostedAt: true },
+  lever: { section: "sources", key: "lever", usesQueries: false, statesPostedAt: true },
+  ashby: { section: "sources", key: "ashby", usesQueries: false, statesPostedAt: true },
+  personio: { section: "sources", key: "personio", usesQueries: false, statesPostedAt: true },
+  smartrecruiters: { section: "sources", key: "smartrecruiters", usesQueries: false, statesPostedAt: true },
   brave: { section: "sources", key: "brave", usesQueries: false },
   tavily: { section: "sources", key: "tavily", usesQueries: false },
   "gmail-alerts": { section: "sources", key: "gmail", usesQueries: false },
@@ -53,6 +53,13 @@ export function channelSupportsCompanyQueries(id: string): boolean {
   if (!isConfiguredChannelId(id)) return false;
   const ref: ChannelConfigRef = CHANNEL_CONFIG_TABLE[id];
   return ref.supportsCompanyQueries === true;
+}
+
+/** Static `trustedPostedAt` for the web process: the channel's posted date is the source's own (an ATS's publish date), not an aggregator's. */
+export function channelStatesPostedAt(id: string): boolean {
+  if (!isConfiguredChannelId(id)) return false;
+  const ref: ChannelConfigRef = CHANNEL_CONFIG_TABLE[id];
+  return ref.statesPostedAt === true;
 }
 
 export function isConfiguredChannelId(id: string): id is ConfiguredChannelId {

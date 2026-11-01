@@ -28,6 +28,9 @@ import { StatusJumpLink, StatusPanel, type HistoryEntry } from "@/components/job
 import { MoreActions } from "@/components/jobs/detail/more-actions";
 import { CloseJobButton } from "@/components/jobs/detail/close-job-button";
 import { ClosureNotice } from "@/components/jobs/detail/closure-notice";
+import { DateStrip } from "@/components/jobs/detail/date-strip";
+import { channelStatesPostedAt } from "@/lib/channels/registry";
+import { buildPostedView } from "@/lib/jobs/posted-view";
 import { PostingLink } from "@/components/jobs/detail/posting-link";
 import { SeenTracker } from "@/components/jobs/detail/seen-tracker";
 import { FilterNotice, FilterOverrideAction, overrideActionFor } from "@/components/jobs/filter-notice";
@@ -242,7 +245,8 @@ export default async function JobDetailPage({ params }: { params: Params }) {
   const visaView = visaEnabled() ? buildVisaCheckView(job.visa, readNeedsVisaSponsorship()) : null;
   const visaMarks = visaView ? visaView.evidence.map((e) => visaMarkText(e.quote)).filter((text) => text !== "") : [];
   // The ghost job check (nothing when ui.yaml job_checks.ghost is off); its evergreen quote is marked after the visa marks
-  const ghostView = ghostEnabled() ? buildGhostCheckView(job.ghost) : null;
+  const ghostOn = ghostEnabled();
+  const ghostView = ghostOn ? buildGhostCheckView(job.ghost) : null;
   // marked only while the result shows (watch / likely): not once it is dismissed
   const ghostMark = ghostView?.quote && (ghostView.state === "watch" || ghostView.state === "likely") ? ghostMarkText(ghostView.quote) : "";
   const ghostChannelNames = Object.fromEntries(job.sources.map((source) => [source.channelId, channelDisplayName(source.channelId, source.family, (family) => tDash(`source.${family}`))]));
@@ -300,6 +304,9 @@ export default async function JobDetailPage({ params }: { params: Params }) {
     return known ? tDash(`source.${known}`) : family;
   });
 
+  // The date strip: "posted" is always posted_at; a relisting comes from the stored ghost check, so only while that check is on
+  const postedView = buildPostedView({ postedAt: job.postedAt, sources: job.sources, ghost: job.ghost, ghostOn, trustedChannels: new Set(job.sources.map((source) => source.channelId).filter(channelStatesPostedAt)) });
+
   const scoreNowButton =
     job.score?.filterResult === "passed" && job.score.rankValue === null && job.status === "active" ? <ScoreNowButton jobId={job.id} profileMissing={readProfileReadiness()?.missing ?? []} timeZone={timezone} /> : null;
   const actionLink = "h-ctl-md";
@@ -315,16 +322,22 @@ export default async function JobDetailPage({ params }: { params: Params }) {
 
       <header className="grid gap-4 md:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_300px_300px]" data-testid="detail-header">
         <div className="flex min-w-0 flex-col gap-2.5 md:col-span-2 xl:col-span-1">
-          <div className="text-ink-2 text-data flex flex-wrap items-center gap-2 font-mono">
-            {status !== "new" ? <StatusChip status={status} /> : null}
-            {job.application?.resumeVariantPath ? <ResumeChip path={job.application.resumeVariantPath} /> : null}
-            {job.status !== "active" ? <JobStatusChip status={job.status} reason={job.closure.reason} evidence={job.closure.linkCheck} /> : null}
-            <span data-testid="first-seen" title={absolute(job.firstSeenAt)}>
-              {t("firstSeenVia", { when: format.relativeTime(job.firstSeenAt, now) })}
-              {sourceNames.length > 0 ? ` · ${sourceNames.join(" · ")}` : ""}
-              {job.relistedAt ? <span data-testid="relisted-detail">{` · ${tDash("relisted.detail", { date: absolute(job.relistedAt) })}`}</span> : null}
-            </span>
-          </div>
+          {status !== "new" || job.application?.resumeVariantPath || job.status !== "active" ? (
+            <div className="text-ink-2 text-data flex flex-wrap items-center gap-2 font-mono">
+              {status !== "new" ? <StatusChip status={status} /> : null}
+              {job.application?.resumeVariantPath ? <ResumeChip path={job.application.resumeVariantPath} /> : null}
+              {job.status !== "active" ? <JobStatusChip status={job.status} reason={job.closure.reason} evidence={job.closure.linkCheck} /> : null}
+            </div>
+          ) : null}
+          <DateStrip
+            view={postedView}
+            firstSeenAt={job.firstSeenAt}
+            now={now}
+            timezone={timezone}
+            sourceNames={sourceNames}
+            channelNames={ghostChannelNames}
+            relistedText={job.relistedAt ? tDash("relisted.detail", { date: absolute(job.relistedAt) }) : null}
+          />
           <JobViewTransition id={job.id} part="title">
             <h1 className="font-display text-h1-detail [overflow-wrap:anywhere]" data-testid="job-title">
               {job.title}
@@ -362,7 +375,6 @@ export default async function JobDetailPage({ params }: { params: Params }) {
             </p>
           ) : null}
           <dl className="text-ink-2 text-data flex flex-wrap gap-x-4 gap-y-1 font-mono">
-            <Meta label={t("meta.posted")}>{job.postedAt ? <time dateTime={job.postedAt.toISOString()} title={absolute(job.postedAt)}>{format.relativeTime(job.postedAt, now)}</time> : <Unknown label={t("unknown")} />}</Meta>
             <Meta label={t("meta.lastSeen")}>
               <time dateTime={job.lastSeenAt.toISOString()} title={absolute(job.lastSeenAt)}>{absolute(job.lastSeenAt)}</time>
             </Meta>

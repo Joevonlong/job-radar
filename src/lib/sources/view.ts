@@ -7,6 +7,7 @@ import { healthDay, isCoolingDown, requestsOn, type ProviderHealth } from "@/lib
 import { aiProviderState, type AiProviderState } from "@/lib/ai/provider-state";
 import type { QuotaStatus } from "@/lib/ai/quota-guard";
 import { AI_PROVIDER_IDS, type AiProviderId } from "@/lib/ai/types";
+import { AI_PROVIDER_CONFIG_KEYS } from "@/lib/config/ai-options";
 import { cliDefaultModel, findCatalogModel, type AiConfig, type ChannelsConfig, type ModelsConfig } from "@/lib/config";
 import type { AiUsageRow, ChannelCycleStat, ChannelStateRow, CycleChannelRuns, LatestCycleRuns, MonthRunTotals, RecentRun } from "@/lib/db/queries/sources";
 import type { MonthUsage } from "@/lib/db/repos/channels";
@@ -163,7 +164,6 @@ export interface AiProviderModel {
   status: "ok" | "deprecated" | "missing" | "cliDefault";
 }
 
-const POLICY_KEY = { "claude-cli": "claude_cli", "codex-cli": "codex_cli", anthropic: "anthropic", deepseek: "deepseek", mimo: "mimo" } as const;
 
 export interface SourcesView {
   maxBackfillHours: number;
@@ -291,7 +291,7 @@ export function buildProviderViews(input: Pick<SourcesViewInput, "now" | "aiConf
   if (!providers) return [];
   const today = healthDay(input.now, input.timeZone ?? "UTC");
   return AI_PROVIDER_IDS.map((id) => {
-    const policy = providers[POLICY_KEY[id]];
+    const policy = providers[AI_PROVIDER_CONFIG_KEYS[id]];
     const health = input.aiHealth?.get(id);
     const view = {
       id,
