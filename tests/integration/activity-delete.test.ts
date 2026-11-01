@@ -121,6 +121,35 @@ describe("activity deletion", () => {
     expect(await deleteActivityBatch(db, options)).toEqual({ roots: 1, events: 0, found: true });
     expect(await deleteActivityBatch(db, options)).toEqual({ roots: 0, events: 0, found: false });
   });
+  it("does not report done while another transaction (a concurrent prune) holds the roots it would delete", async () => {
+    const db = connection.db;
+    const root = activityRow({ status: "ok", startedAt: READ_AT });
+    await writeActivityBatch(db, { roots: [root], spans: [root], events: [], batchSize: 1 });
+    const holder = createConnection(inject("testDatabaseUrl"), { max: 1 });
+    let release = (): void => undefined;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const held = new Promise<void>((resolve, reject) => {
+      holder.db.transaction(async (tx) => {
+        await tx.execute(sql`select 1 from activity_spans where id = ${root.id} for update`);
+        resolve();
+        await gate;
+      }).catch(reject);
+    });
+    try {
+      await held;
+      const input = { scope: "all", asOf: new Date().toISOString() } as const;
+      expect(await deleteActivityBatch(db, { scope: { kind: "all" }, asOf: new Date(), liveness, batchSize: 10, rootsPerBatch: 10 }))
+        .toEqual({ roots: 0, events: 0, found: false, blocked: true });
+      expect(await executeDelete(db, input)).toEqual({ status: "partial", roots: 0, events: 0 });
+      expect(await activityCount()).toBe(1);
+      release();
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(await executeDelete(db, input)).toEqual({ status: "done", roots: 1, events: 0 });
+    } finally {
+      release();
+      await holder.sql.end();
+    }
+  });
   it("reports partial when a tiny time budget expires and resumes with the same cutoff", async () => {
     const db = connection.db;
     const f = await seedActivityReadFixture(db);

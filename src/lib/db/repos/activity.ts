@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, isNull, sql, type SQL, type SQLWrapper } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, sql, type SQL, type SQLWrapper } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
 import type { ActivityBatch, ActivityProcess } from "@/lib/activity/types";
@@ -245,11 +245,14 @@ export type ActivityDeleteScope =
   | { kind: "root"; rootId: string }
   | { kind: "range"; from: Date | null; to: Date }
   | { kind: "all" };
-export interface ActivityDeleteBatch { roots: number; events: number; found: boolean }
+/** `blocked`: nothing was left to take, but eligible roots exist that another transaction (a prune, another delete) holds. */
+export interface ActivityDeleteBatch { roots: number; events: number; found: boolean; blocked?: true }
 
 /**
  * Lock up to rootsPerBatch eligible roots, newest first along activity_spans_roots_started_idx, skipping roots another
  * transaction holds, and spend the row budget on their events, children, then the roots. Only activity tables mutate.
+ * When no root could be locked but eligible ones exist, the batch says `blocked`: they are not gone yet, so the caller
+ * must not report the deletion as complete.
  */
 export async function deleteActivityBatch(db: Db, options: {
   scope: ActivityDeleteScope; asOf: Date; liveness: ActivityLiveness; batchSize: number; rootsPerBatch: number;
@@ -262,11 +265,17 @@ export async function deleteActivityBatch(db: Db, options: {
     const candidate = scope.kind === "root" ? eq(t.id, scope.rootId) : scope.kind === "range"
       ? and(scope.from === null ? undefined : sql`${t.startedAt}>=${scope.from.toISOString()}::timestamptz`, sql`${t.startedAt}<${scope.to.toISOString()}::timestamptz`)
       : sql`true`;
-    const roots = await tx.select({ id: t.id }).from(t).where(and(
+    const eligible = and(
       isNull(t.parentId), eq(t.id, t.rootId), sql`${t.startedAt}<=${options.asOf.toISOString()}::timestamptz`,
       sql`not ${activeRootCondition(t, options.liveness)}`, candidate,
-    )).orderBy(desc(t.startedAt), desc(t.id)).limit(options.rootsPerBatch).for("update", { skipLocked: true });
-    if (!roots.length) return { roots: 0, events: 0, found: false };
+    );
+    // nulls last: the order of activity_spans_roots_started_idx, which a plain desc (nulls first) cannot use
+    const roots = await tx.select({ id: t.id }).from(t).where(eligible)
+      .orderBy(sql`${t.startedAt} desc nulls last`, sql`${t.id} desc nulls last`).limit(options.rootsPerBatch).for("update", { skipLocked: true });
+    if (!roots.length) {
+      const [held] = await tx.select({ id: t.id }).from(t).where(eligible).limit(1);
+      return held ? { roots: 0, events: 0, found: false, blocked: true } : { roots: 0, events: 0, found: false };
+    }
     const result = await removeRootTrees(tx, roots.map((row) => row.id), options.batchSize);
     return { roots: result.roots, events: result.events, found: true };
   });
