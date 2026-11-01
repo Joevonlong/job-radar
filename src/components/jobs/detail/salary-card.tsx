@@ -94,7 +94,7 @@ export function SalaryCard({ salary, salaryDisclosed, normalizedText, axis, floo
       ) : null}
       {panelHref ? (
         <a href={panelHref} className={cn(INK_LINK, "text-body-sm w-fit")} data-testid="salary-card-panel-link">
-          {t("panelLink")} ↓
+          {t("panelLink")} <span aria-hidden>↓</span>
         </a>
       ) : null}
     </Panel>

@@ -211,7 +211,7 @@ export default async function JobDetailPage({ params }: { params: Params }) {
   try {
     salaryAi = reloadConfig("ai");
   } catch {
-    salaryAi = null; // ai.yaml cannot be read: the lookup card says so
+    salaryAi = null; // ai.yaml cannot be read: the salary panel says so
   }
   const salaryContext = await getSalaryContext(getDb(), { jobId: job.id, figure, currency: baseCurrency, salary: salarySettings.state === "ok" ? salarySettings.config : null, ai: salaryAi, locale: uiLocale, now });
 

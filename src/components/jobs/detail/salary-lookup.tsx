@@ -216,7 +216,7 @@ export function LookupActions({ lookup, availability, hasResult, company, unrest
   );
 
   const errorBlock =
-    enabled && error && !busy && error.key !== "quota" ? (
+    error && !busy && error.key !== "quota" ? (
       <div role="alert" className="text-bad text-body-sm [overflow-wrap:anywhere]" data-testid="salary-lookup-error" data-error={error.key}>
         <p className="font-semibold">{lookup.errorText(error.key, error.resumeAt ?? null)}</p>
         {error.detail ? <p className="text-ink-3 text-data mt-0.5 font-mono">{error.detail}</p> : null}
@@ -281,6 +281,8 @@ export function LookupActions({ lookup, availability, hasResult, company, unrest
   return (
     <div className="flex min-w-0 flex-col gap-2.5" data-testid="salary-lookup-actions">
       {body}
+      {/* a failed request newer than the stored result is reported even when the lookup is off (the enabled case shows it above its button) */}
+      {enabled ? null : errorBlock}
       {/* the one live region of the panel: the waiting line and the queue lines are read as one */}
       <div role="status" className="flex flex-col gap-1" data-testid="salary-lookup-status">
         {busy ? (

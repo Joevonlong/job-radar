@@ -1,7 +1,8 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { NextIntlClientProvider } from "next-intl";
 import type { ReactNode } from "react";
+import { toast } from "sonner";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SalaryPanel } from "@/components/jobs/detail/salary-panel";
@@ -233,6 +234,40 @@ describe("one live region and one alert in the panel", () => {
     expect(screen.getByTestId("salary-lane-ai")).toHaveAttribute("data-state", "drawn");
   });
 
+  it("shows the unrestricted line when the provider searches without a domain limit", () => {
+    render(wrap(panel({ unrestricted: true })));
+    expect(screen.getByTestId("salary-lookup-unrestricted")).toHaveTextContent("codex-cli searches the web without a domain limit.");
+    cleanup();
+    render(wrap(panel({ unrestricted: false })));
+    expect(screen.queryByTestId("salary-lookup-unrestricted")).toBeNull();
+  });
+
+  it("the usage cap failure says when the AI works again, or that it continues by itself", () => {
+    render(wrap(panel({ usedToday: 1, initialRequest: { state: "failed", error: "quota_guard", detail: null, resumeAt: "2026-10-28T13:30:00.000Z" } })));
+    expect(screen.getByTestId("salary-lookup-error")).toHaveAttribute("data-error", "quota_guard");
+    expect(screen.getByTestId("salary-lookup-error")).toHaveTextContent("Job Radar's own AI usage cap is reached");
+    expect(screen.getByTestId("salary-lookup-error")).toHaveTextContent("Available again after 14:30.");
+    cleanup();
+    render(wrap(panel({ usedToday: 1, initialRequest: { state: "failed", error: "quota_guard", detail: null, resumeAt: null } })));
+    expect(screen.getByTestId("salary-lookup-error")).toHaveTextContent("It continues by itself later.");
+  });
+
+  it("a finished request shows the done toast and refreshes the page once", async () => {
+    salaryLookupStatusAction.mockResolvedValue({ ok: true, state: "done" });
+    render(wrap(panel({ initialRequest: { state: "waiting", requestId: 12, stage: "pending", queue: null } })));
+    await waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
+    expect(toast.success).toHaveBeenCalledWith("Salary lookup finished", expect.anything());
+  });
+
+  it("a failed request newer than the stored result is still reported when the lookup is off", () => {
+    render(wrap(panel({ availability: "disabled", latest: lookup(), initialRequest: { state: "failed", error: "no_handler", detail: null, resumeAt: null } })));
+    expect(screen.getByTestId("salary-lookup-error")).toHaveAttribute("data-error", "no_handler");
+    expect(screen.getByTestId("salary-lookup-disabled")).toBeVisible();
+    expect(screen.queryByTestId("salary-lookup-refresh")).toBeNull();
+    expect(screen.queryAllByRole("alert")).toHaveLength(1);
+    expect(screen.getByTestId("salary-lookup-result")).toBeVisible();
+  });
+
   it("a failure is the only alert", () => {
     render(wrap(panel({ usedToday: 1, initialRequest: { state: "failed", error: "auth", detail: null } })));
     expect(liveRegions()).toEqual({ status: 1, alert: 1 });
@@ -292,6 +327,32 @@ describe("the AI row only draws this role's band", () => {
     expect(row).toHaveTextContent("€80–100k, median €90k");
     // no percentile against the group's base salaries in the row; the details do not compute one either
     expect(screen.queryByTestId("salary-lookup-role-percentile")).toBeNull();
+  });
+
+  it.each([
+    ["total", "total pay (with bonus or equity)"],
+    ["unknown", "basis not stated"],
+  ] as const)("a %s band is tagged under the figure in the top cell, so it is not read as base salary", (basis, text) => {
+    const latest = lookup();
+    latest.result = { ...latest.result, roleBand: { ...latest.result.roleBand!, basis } };
+    render(wrap(panel({ latest })));
+    const tag = screen.getByTestId("salary-head-ai-basis");
+    expect(tag).toHaveTextContent(text);
+    expect(tag).toHaveAttribute("data-basis", basis);
+    expect(screen.getByTestId("salary-head-ai")).toHaveTextContent("€80–100k");
+  });
+
+  it("a base-salary band has no basis tag in the top cell", () => {
+    render(wrap(panel({ latest: lookup() })));
+    expect(screen.getByTestId("salary-head-ai-figure")).toBeVisible();
+    expect(screen.queryByTestId("salary-head-ai-basis")).toBeNull();
+  });
+
+  it("the source sentence says when the result is expired, comes from another posting or has no stated basis", () => {
+    const latest = lookup({ expired: true, origin: { jobId: 99, title: "Other role" } });
+    latest.result = { ...latest.result, roleBand: { ...latest.result.roleBand!, basis: "unknown" } };
+    render(wrap(panel({ latest })));
+    expect(screen.getByTestId("salary-lane-ai-source")).toHaveTextContent("AI web search · unverified · basis not stated · expired · looked up on another posting");
   });
 
   it("a base-salary band is hatched, marked unverified and positioned in the group in the details", () => {

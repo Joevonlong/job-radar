@@ -1895,7 +1895,7 @@
       "insights": "统计页的时间范围、单列的城市和直方图分段。只影响显示。",
       "resume": "详情页“定制简历”用到的路径和命令（resume-kit 联动）。路径指向你自己的文件，主简历不会被读取。",
       "language": "新浏览器默认的界面语言、AI 写作用的语言、JD 翻译成什么语言，以及 Telegram 和命令行的语言。",
-      "salary": "岗位页的“薪资水平”卡片把岗位写明的薪资和库里同类岗位比较。可选的“查薪资”让 AI provider 去薪资网站搜这家公司和这个岗位。岗位族和外部搜索链接在 salary.yaml 里改。"
+      "salary": "岗位页的“薪资”面板把岗位写明的薪资和库里同类岗位、这家公司的其他岗位放在一把尺子上比较，查过的话再加上 AI 的估计。可选的“查薪资”让 AI provider 去薪资网站搜这家公司和这个岗位。岗位族和外部搜索链接在 salary.yaml 里改。"
     },
     "actions": {
       "save": "保存",
@@ -6539,6 +6539,10 @@
       "title": "薪资 · 这个岗位给多少钱",
       "aside": "{count, plural, =0 {没有数字} other {# 个来源}}",
       "unverified": "未核对",
+      "sep": {
+        "list": "、",
+        "clause": "，"
+      },
       "head": {
         "jd": "JD 写明",
         "group": "同类岗位",
@@ -6587,7 +6591,7 @@
         },
         "company": {
           "label": "同一公司其他岗位",
-          "source": "{count, plural, =0 {库里没有写明薪资的} other {库里 # 条写明薪资}}",
+          "source": "{count, plural, =0 {库里没有} other {库里 # 条写明薪资}}",
           "none": "库里没有这家公司写明薪资的其他岗位。",
           "values": "{count} 条：{list}",
           "median": "中位 {amount}",

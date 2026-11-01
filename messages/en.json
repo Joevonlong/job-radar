@@ -1895,7 +1895,7 @@
       "insights": "Time ranges, cities and histogram buckets of the statistics page. Display only.",
       "resume": "Paths and commands behind \"Tailor resume\" on the detail page (resume-kit hand-off). The paths point at your own files; the master resume is never read.",
       "language": "The interface language of new browsers, the language the AI writes in, what job ads are translated into, and the language of Telegram and the command line.",
-      "salary": "The salary level card on the job page compares a job's stated salary with the other postings of its kind in your database. The optional lookup asks an AI provider to search salary sites for the company and role. Role families and the search links are edited in salary.yaml."
+      "salary": "The salary panel on the job page puts a job's stated salary next to the other postings of its kind in your database, the company's other postings and, if you run it, an AI estimate. The optional lookup asks an AI provider to search salary sites for the company and role. Role families and the search links are edited in salary.yaml."
     },
     "actions": {
       "save": "Save",
@@ -6539,6 +6539,10 @@
       "title": "Salary · what this job pays",
       "aside": "{count, plural, =0 {no figures} one {# source} other {# sources}}",
       "unverified": "unverified",
+      "sep": {
+        "list": ", ",
+        "clause": ", "
+      },
       "head": {
         "jd": "Stated in the JD",
         "group": "Similar postings",

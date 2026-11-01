@@ -139,6 +139,14 @@ describe("the ruler is accessible by its text", () => {
 describe("the company's other postings", () => {
   const company = (figures: number[], median: number | null) => ({ company: { count: figures.length, median, minSample: 3, figures } });
 
+  it.each([
+    ["en", "3 postings: €82k, €92k, €95k, median €92k"],
+    ["zh", "3 条：€82k、€92k、€95k，中位 €92k"],
+  ] as const)("%s: the list and the clauses use that language's separators", (locale, text) => {
+    show({ context: company([82000, 92000, 95000], 92000) }, locale);
+    expect(screen.getByTestId("salary-lane-company")).toHaveTextContent(text);
+  });
+
   it("none: says so and draws nothing", () => {
     show({ context: company([], null) });
     const row = screen.getByTestId("salary-lane-company");

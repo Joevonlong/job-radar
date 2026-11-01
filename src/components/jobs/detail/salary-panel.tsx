@@ -225,6 +225,11 @@ export function SalaryPanel({ context, salary, salaryDisclosed, normalizedText, 
         {ai.kind === "band" ? (
           <>
             <Big testId="salary-head-ai-figure">{formatSalary({ min: ai.min, max: ai.max, currency }, { locale }) ?? money(ai.median ?? 0)}</Big>
+            {ai.band.basis !== "base" ? (
+              <p className="text-ink-2 text-body-sm font-semibold" data-testid="salary-head-ai-basis" data-basis={ai.band.basis}>
+                {tLookup(`basis.${ai.band.basis}`)}
+              </p>
+            ) : null}
             <Sub>{companyLine(result)}</Sub>
           </>
         ) : ai.kind === "text_only" ? (
@@ -284,7 +289,7 @@ export function SalaryPanel({ context, salary, salaryDisclosed, normalizedText, 
       lanes.push({ kind: "group", state: status, label: t("lane.group.label"), source: "", values: null, reason: reason.text, reasonTestId: reason.testId, marks: [] });
     }
     const count = company_?.count ?? 0;
-    const list = companyPoints.map((point) => `${money(point.value)}${point.count > 1 ? ` ×${point.count}` : ""}`).join(", ");
+    const list = companyPoints.map((point) => `${money(point.value)}${point.count > 1 ? ` ×${point.count}` : ""}`).join(t("sep.list"));
     lanes.push({
       kind: "company",
       state: count === 0 ? "none" : company_?.median != null ? "drawn" : "few",
@@ -293,7 +298,7 @@ export function SalaryPanel({ context, salary, salaryDisclosed, normalizedText, 
       values:
         count === 0
           ? null
-          : `${t("lane.company.values", { count, list })}, ${company_?.median != null ? t("lane.company.median", { amount: money(company_.median) }) : t("lane.company.few", { min: company_?.minSample ?? 0 })}`,
+          : `${t("lane.company.values", { count, list })}${t("sep.clause")}${company_?.median != null ? t("lane.company.median", { amount: money(company_.median) }) : t("lane.company.few", { min: company_?.minSample ?? 0 })}`,
       reason: count === 0 ? t("lane.company.none") : null,
       reasonTestId: "salary-level-company",
       marks: count === 0 ? [] : [...(company_?.median != null ? ([{ type: "median", value: company_.median }] as LaneMark[]) : []), { type: "points", points: companyPoints }],
@@ -309,7 +314,7 @@ export function SalaryPanel({ context, salary, salaryDisclosed, normalizedText, 
   const benchmarkNote = context.state === "ok" && !context.benchmarkEnabled && status !== "stale" ? (context.staleAi ? "salary-level-stale-ai" : "salary-level-benchmark-off") : null;
 
   // ---------------------------------------------------------------- footer
-  const sites = latest ? [...new Set(latest.result.sources.map((source) => source.host))].slice(0, 3).join(", ") : "";
+  const sites = latest ? [...new Set(latest.result.sources.map((source) => source.host))].slice(0, 3).join(t("sep.list")) : "";
   const meta = latest
     ? [latest.provider, latest.model, format.dateTime(new Date(latest.fetchedAt), { dateStyle: "medium", timeStyle: "short", timeZone })].filter((part): part is string => part !== null && part !== "").join(" · ")
     : "";
@@ -423,7 +428,7 @@ function aiLane(
     if (ai.min !== null || ai.max !== null) marks.push({ type: "span", min: ai.min, max: ai.max, tone, testId: "salary-lane-ai-block" });
     if (ai.median !== null) marks.push({ type: "median", value: ai.median });
     const rangeText = formatSalary({ min: ai.min, max: ai.max, currency: ctx.currency }, { locale: ctx.locale });
-    const values = [rangeText, ai.median !== null ? t("lane.ai.median", { amount: ctx.money(ai.median) }) : null].filter((part): part is string => part !== null).join(", ");
+    const values = [rangeText, ai.median !== null ? t("lane.ai.median", { amount: ctx.money(ai.median) }) : null].filter((part): part is string => part !== null).join(t("sep.clause"));
     return { ...base, state: "drawn", values, reason: null, marks, data: { basis: ai.band.basis } };
   }
   if (ai.kind === "text_only") {
