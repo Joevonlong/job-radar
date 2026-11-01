@@ -33,6 +33,7 @@
 - 触发前按本月剩余预算算出这次最多能要几条（先扣启动费），并作为 `maxItems`/`maxTotalChargeUsd` 硬上限发给 Apify；预算不够一次运行 + 一条结果时直接 `budget_exceeded`，同一个查询交给级联里的下一个通道。
 - 记账 = 启动费 + 实际送达条数 × 单价；已被计费的条数（含重复、被本地时间窗丢掉的）都计入通道月用量和全局付费上限。
 - 运行只发一次，不重试（重试会重复计费）；连续失败 3 次熔断，24 小时后再试。
+- **关注公司：**[公司查询](sources.zh.md#关注公司查询)是一次 run，公司名作关键词、本国名作地点，不叠加 `remote_input`。计费与其他 run 相同（启动费加实际送达条数，至多 `watched_company_queries.max_results` 条）；其他雇主的结果也计费，随后被丢弃。在本块设 `company_queries: false` 可关闭。
 - `external_id` 是 LinkedIn 的数字 job id，和 Bright Data 一致，两个通道拿到同一个岗位会合并成一个。
 
 本地过滤掉的记录仍保存在[交付账本](sources.zh.md#付费交付账本)中。

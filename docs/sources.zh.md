@@ -397,7 +397,7 @@ Job Radar 是独立项目，与它能读取或连接的任何招聘网站、雇�
 
 ## 关注公司查询
 
-`interests.yaml: watched_companies` 中没有启用 ATS 看板的公司，会按公司名在本国全境查询，不限远程岗位。支持 Arbeitsagentur、LinkedIn session，以及 jobspy 的 LinkedIn guest、Indeed、Google 通道。其他通道不接公司查询；有启用看板的公司不再生成查询，只有数据库关注标记也不生成。
+`interests.yaml: watched_companies` 中没有启用 ATS 看板的公司，会按公司名在本国全境查询，不限远程岗位。支持 Arbeitsagentur、LinkedIn session、Bright Data、Apify、JSearch、StepStone、XING，以及 jobspy 的 LinkedIn guest、Indeed、Google 通道。其他通道不接公司查询；有启用看板的公司不再生成查询，只有数据库关注标记也不生成。
 
 **升级注意：默认开启，已有关注名单里的公司名也会开始发给这些服务商。** 在 `search.yaml` 设 `watched_company_queries.enabled: false` 可全部关闭；在 `sources.yaml` 的单个通道块设 `company_queries: false` 可单独关闭。详见[隐私](privacy.zh.md)。普通关键词查询的请求和 ID 保持原样。
 
@@ -406,3 +406,16 @@ Job Radar 是独立项目，与它能读取或连接的任何招聘网站、雇�
 预算限制之前，每个单元每天最多轮到 `max_per_cycle × 每天轮数` 家公司。名单超过这一容量的七倍时，部分等待可能超过通常的 168 小时补窗上限而漏采。干跑计划和轮换日志列出查询及最长等待；`pnpm sources:list` 列出公司查询，活动日志显示“公司：名字”，移出名单后用归一 key 显示。
 
 入库前，仅保留雇主归一 key 命中本查询或其他关注公司的结果；解析失败的原始记录仍保留供流水线诊断。`runs.fetched` 是后过滤前的返回数，新增数只计实际保留的岗位。日志计 `company_mismatch` 并列出至多三个雇主名。法律实体、子公司和品牌不会自动合并：分别关注或在 `pipeline.yaml: company.aliases` 添加别名，见[提取](extraction.zh.md)。常见短名容易让别家的结果占满上限，能配 ATS 看板时优先用看板。Arbeitsagentur 采用 `was` 自由文本备用查询，再校验雇主。
+
+各通道的查询方式：LinkedIn 的 Bright Data、Apify 和 session 通道用公司名加本国名搜索，不加远程过滤；JSearch 发一次请求 `<公司> in <本国>`，不带 `work_from_home`；StepStone 和 XING 按名字全国搜索，不带城市、半径、居家办公或远程过滤，也不做标题预筛（岗位标题里不会有公司名）。
+
+**其他雇主的详情页不打开。**结果列表里已有雇主名的通道（Arbeitsagentur、LinkedIn session、JSearch、StepStone、XING），公司查询只在雇主是被搜的公司或另一家关注公司时才打开该条的详情页。其余的只保留列表数据，随后被上面的雇主校验丢弃，因此不占页面、详情请求、每日页面上限，也不占 `max_details_per_query`。没写雇主名的条目照旧打开。这条规则不覆盖 jobspy 通道，它的描述由 sidecar 自己抓取。
+
+**费用。**没有看板的关注公司，每个单元每 `min_interval_hours` 至多一条查询，每条至多返回 `watched_company_queries.max_results` 与通道 `max_results` 中较小的条数。所以一个月至多：公司数 ×（720 ÷ `min_interval_hours`）× 每条结果数。按通道计价：
+
+- Bright Data：免费额度之后每 1000 条 `cost_per_1k_usd`。
+- Apify：每 1000 条 `price_per_1k_usd`，每条查询另加 `run_start_usd`。
+- JSearch：每条查询 `pages_per_query` 次请求，先计入 `monthly_request_limit`，超出后每次 `overage_cost_per_request_usd`。
+- StepStone、XING：免费；每条查询是一组搜索请求，匹配雇主的详情页与其他查询一样打开。
+
+通道的 `monthly_budget_usd` 和 `paid_total_monthly_budget_usd` 仍然封顶：预算用完时，查询转给级联的下一个通道或被跳过，与关键词查询一致。默认值下（每轮 3 家、间隔 24 小时、25 条结果），10 家关注公司在一个付费通道上每月至多 7,500 条结果。
