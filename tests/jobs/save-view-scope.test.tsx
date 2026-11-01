@@ -48,3 +48,18 @@ it.each([
   if (hint) expect(screen.getByTestId("save-view-date-hint")).toHaveTextContent(en.interests.saveView.dateNotSaved);
   else expect(screen.queryByTestId("save-view-date-hint")).toBeNull();
 });
+
+it.each(["?within=7d&dateBy=posted", "?within=month", "?from=2026-10-01&dateBy=posted"])("explains why a date a view cannot hold is the only filter: %s", (query) => {
+  const Adapter = withNuqsTestingAdapter({ searchParams: query });
+  render(<Adapter><NextIntlClientProvider locale="en" messages={en}><SaveViewButton /></NextIntlClientProvider></Adapter>);
+  const button = screen.getByTestId("save-view");
+  expect(button).toBeDisabled();
+  expect(button).toHaveAttribute("title", en.interests.saveView.dateNotSaved);
+  expect(document.getElementById(button.getAttribute("aria-describedby") ?? "")).toHaveTextContent(en.interests.saveView.dateNotSaved);
+});
+
+it("keeps the plain 'set a filter first' tip when no date is involved", () => {
+  const Adapter = withNuqsTestingAdapter({ searchParams: "?from=2026-10-01&dateBy=seen&sort=posted" });
+  render(<Adapter><NextIntlClientProvider locale="en" messages={en}><SaveViewButton /></NextIntlClientProvider></Adapter>);
+  expect(screen.getByTestId("save-view")).toBeEnabled();
+});

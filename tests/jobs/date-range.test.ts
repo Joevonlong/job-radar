@@ -22,6 +22,12 @@ describe("parseWithin", () => {
 describe("effectiveDateRange", () => {
   const within = parseWithin("7d");
 
+  it("reads a hand-written from after to as the span between the two dates", () => {
+    expect(effectiveDateRange({ from: "2026-10-15", to: "2026-10-01", dateBy: "posted" })).toEqual({ within: null, from: "2026-10-01", to: "2026-10-15", dateField: "posted" });
+    expect(effectiveDateRange({ from: "2026-10-01", to: "2026-10-01" })).toMatchObject({ from: "2026-10-01", to: "2026-10-01" });
+    expect(effectiveDateRange({ from: "2026-10-01", to: "2026-10-15" })).toMatchObject({ from: "2026-10-01", to: "2026-10-15" });
+  });
+
   it("says nothing without a date condition, even with a bare dateBy", () => {
     expect(effectiveDateRange({})).toEqual({ within: null, from: null, to: null, dateField: null });
     expect(effectiveDateRange({ dateBy: "posted" })).toEqual({ within: null, from: null, to: null, dateField: null });

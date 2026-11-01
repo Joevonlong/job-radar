@@ -33,6 +33,8 @@ export function SaveViewButton() {
   const dateDropped = dropsDateFromView(params);
   const canSave = hasViewFilters(filters);
   const excludedSearch = params.country.length > 0 || params.searchIn === "all";
+  // why nothing can be saved when the only filters are ones a view cannot hold
+  const disabledHint = excludedSearch ? tSearch("notSaved") : dateDropped ? t("dateNotSaved") : null;
   const searchHintId = useId();
   const tFav = useTranslations("favorites");
 
@@ -67,11 +69,11 @@ export function SaveViewButton() {
       }}
     >
       <DialogTrigger asChild>
-        <Button type="button" variant="outline" size="sm" disabled={!canSave} title={canSave ? undefined : excludedSearch ? tSearch("notSaved") : t("needFilters")} aria-describedby={!canSave && excludedSearch ? searchHintId : undefined} data-testid="save-view">
+        <Button type="button" variant="outline" size="sm" disabled={!canSave} title={canSave ? undefined : (disabledHint ?? t("needFilters"))} aria-describedby={!canSave && disabledHint ? searchHintId : undefined} data-testid="save-view">
           <Bookmark aria-hidden /> {t("button")}
         </Button>
       </DialogTrigger>
-      {!canSave && excludedSearch ? <span id={searchHintId} className="sr-only">{tSearch("notSaved")}</span> : null}
+      {!canSave && disabledHint ? <span id={searchHintId} className="sr-only">{disabledHint}</span> : null}
       <DialogContent>
         <form
           noValidate

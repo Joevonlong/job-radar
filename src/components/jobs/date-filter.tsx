@@ -48,7 +48,6 @@ export function DateFilter({ params, quickRanges, defaultField, onChange, custom
   const rangeValue = customOpen && choice.kind !== "within" ? "custom" : choice.kind === "within" ? (ranges.some((r) => r.token === formatWithin(choice.within)) ? formatWithin(choice.within) : "") : choice.kind === "custom" ? "custom" : "any";
   const showCustom = rangeValue === "custom";
 
-
   const pickRange = (value: string) => {
     if (value === "any") {
       onCustomOpenChange(false);

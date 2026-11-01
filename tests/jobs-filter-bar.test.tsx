@@ -14,7 +14,7 @@ beforeAll(() => {
   Element.prototype.scrollIntoView = vi.fn();
 });
 
-const options = { families: ["ats", "linkedin"], cities: [{ key: "Berlin", target: false }, { key: "München", target: false }], contracts: ["permanent"] };
+const options = { dateQuickRanges: ["1d", "7d", "14d", "month"], families: ["ats", "linkedin"], cities: [{ key: "Berlin", target: false }, { key: "München", target: false }], contracts: ["permanent"] };
 
 function renderBar(searchParams = "", locale: "en" | "zh" = "en", extra: Partial<FilterBarOptions> = {}) {
   const onUrlUpdate = vi.fn<(event: UrlUpdateEvent) => void>();

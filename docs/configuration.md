@@ -511,7 +511,6 @@ Rolling back only the company overview (to a version that has the company filter
 
 The shipped `ui.yaml` is part of the image, so it goes back with it.
 
-
 ## Date filter (`ui.yaml`)
 
 | Key | Default | Meaning |

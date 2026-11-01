@@ -64,12 +64,17 @@ export interface EffectiveDateRange {
 /**
  * What the list query gets from the URL's date inputs. One definition for the list, its counts, "mark all seen" and the filter bar:
  * - `within` wins over `from` / `to` when a hand-written URL has both;
+ * - an inverted `from` / `to` pair (from after to) is swapped;
  * - without `dateBy` the dates are first-seen dates (what links, saved views and MCP calls meant before the posted date existed).
  */
 export function effectiveDateRange(params: DateParams): EffectiveDateRange {
   const within = params.within ?? null;
-  const from = within ? null : (params.from ?? null);
-  const to = within ? null : (params.to ?? null);
+  const first = within ? null : (params.from ?? null);
+  const last = within ? null : (params.to ?? null);
+  // a hand-written `from` after `to` would match nothing: read it as the span between the two dates
+  const inverted = first !== null && last !== null && first > last;
+  const from = inverted ? last : first;
+  const to = inverted ? first : last;
   const hasCondition = within !== null || from !== null || to !== null;
   return { within, from, to, dateField: hasCondition ? (params.dateBy ?? "seen") : null };
 }
