@@ -1,6 +1,6 @@
 # 设置页与手动操作
 
-`/settings` 用表单编辑十个配置文件（`schedule.yaml`、`search.yaml`、`sources.yaml`、`ai.yaml`、`breakdown.yaml`、`salary.yaml`、`notify.yaml`、`ui.yaml`、`insights.yaml`、`resume.yaml`），其余文件（`pipeline.yaml`、`models.yaml`、`interests.yaml` 以及以后新增的）和表单没覆盖的键可以在"高级"标签里按原文编辑，保存前用和 runner 相同的 zod schema 校验，写回用户配置目录（默认 `data/config/`，每个标签的说明里写出实际路径；第一次保存一个还只在默认配置里的文件时，以默认文件为底稿生成，见 [`configuration.zh.md`](configuration.zh.md)），写回时保留 YAML 注释；runner 热加载后，保存条上显示"runner 已加载"（runner 没有心跳时改写成"runner 没有运行"，不会和侧栏的 OFFLINE 互相矛盾）。表单里没有的键（`doctor`、`deploy`、`execution`、`host_worker`、`test_channel`、LinkedIn 登录态细节等运维参数，大多含机器路径）在"高级"标签里改。
+`/settings` 用表单编辑十一个配置文件（`schedule.yaml`、`search.yaml`、`sources.yaml`、`ai.yaml`、`breakdown.yaml`、`salary.yaml`、`notify.yaml`、`ui.yaml`、`insights.yaml`、`resume.yaml`、`writer.yaml`），其余文件（`pipeline.yaml`、`models.yaml`、`interests.yaml` 以及以后新增的）和表单没覆盖的键可以在"高级"标签里按原文编辑，保存前用和 runner 相同的 zod schema 校验，写回用户配置目录（默认 `data/config/`，每个标签的说明里写出实际路径；第一次保存一个还只在默认配置里的文件时，以默认文件为底稿生成，见 [`configuration.zh.md`](configuration.zh.md)），写回时保留 YAML 注释；runner 热加载后，保存条上显示"runner 已加载"（runner 没有心跳时改写成"runner 没有运行"，不会和侧栏的 OFFLINE 互相矛盾）。表单里没有的键（`doctor`、`deploy`、`execution`、`host_worker`、`test_channel`、LinkedIn 登录态细节等运维参数，大多含机器路径）在"高级"标签里改。
 
 ## 来源标签：查询轮换与补窗
 
@@ -14,7 +14,7 @@
 AI 标签分四个带编号、各有边框的区块（只是界面分组，`ai.yaml` 的格式没变）：
 
 1. **服务商**：按厂商一张卡片（Anthropic、OpenAI、OpenRouter、DeepSeek、Xiaomi MiMo）。每种接入方式一行：Anthropic 有"订阅 CLI"（`claude-cli`）和"API"（`anthropic`）两行，OpenAI 有"订阅 CLI"（`codex-cli`）和"API"（`openai`）两行，OpenRouter / DeepSeek / MiMo 是"API"。OpenRouter 那一行在模型旁边直接显示"上游数据收集"，其余路由偏好（只用零保留端点、要求支持 JSON）在"更多设置"里（见 [ai-providers.zh.md](ai-providers.zh.md#openai-api-和-openrouter)）。每行有自己的启用开关（可以同时开两行，路由按顺序当后备）、可用状态（可用 / 登录失败 / key 已配置 / 未配置 key / 冷却中……；网页进程看不到宿主机上的 CLI，所以在某次调用报登录错误之前，CLI 都显示"可用"）、模型、强模型、每日请求上限；超时、命令、接口地址等收在"更多设置"。已启用的行左边有绿条，卡片右上角的黄色标签写"当前用哪种方式、哪个模型"。卡片底部可折叠"模型目录"。
-2. **路由与任务分配**：全局顺序（节点显示为"厂商 · 方式"，API 层内部顺序在旁边）；下面每个任务一行（打分、信号提取、翻译、摘要、建议、拆解、查薪资）：不改 = "沿用全局"，要自定义就给它排顺序并给每个节点选模型，"改为沿用全局"一键清空。
+2. **路由与任务分配**：全局顺序（节点显示为"厂商 · 方式"，API 层内部顺序在旁边）；下面每个任务一行（打分、信号提取、翻译、摘要、建议、拆解、查薪资、申请写作：`write`）：不改 = "沿用全局"，要自定义就给它排顺序并给每个节点选模型，"改为沿用全局"一键清空。
 3. **限额与预算**：每轮条数 / 时间、冷却、订阅 CLI 的用量上限（每轮和滚动窗口内的调用数，只统计 Job Radar 自己的调用，见 [ai-providers.zh.md](ai-providers.zh.md)）、月 API 预算、超时、最大输出 token、自动翻译分数门槛。
 4. **打分参数**：JD 截断、并发、批量、德语等级扣分，以及折叠的"预排序"。
 
@@ -142,6 +142,10 @@ ticker_max_items: 8
 - **隐藏的效果**：看板上没有卡片的隐藏状态不显示列；还有卡片的显示成折叠的窄列"面试中 · 已隐藏 · 2"（点开查看，不能把卡片拖进去，页头提示"N 张卡片在隐藏的状态里"）；"已结束"列里隐藏状态的投放区去掉；看板卡片菜单、抽屉、详情页的状态菜单不列隐藏的状态（卡片自己当前的状态照常列出，带"（已隐藏）"）；/jobs 筛选不列隐藏的状态和分类值，但链接或保存的视图里已经选中的照常生效；快捷键 `s` 的目标（感兴趣）被隐藏时不生效；Telegram 里目标状态被隐藏的按钮不显示；统计页漏斗不画隐藏且计数为 0 的阶段。服务器仍然接受改到隐藏状态的请求（旧页面、旧 Telegram 消息里的按钮）。
 - **分类**：工作方式（现场 / 混合 / 远程）、合同类型（全职 / 固定期限 / Freelance / 劳务派遣 / 学生岗）可以勾选隐藏；"未知"不能隐藏。
 - 键在 `ui.yaml`：`applications.hidden_statuses`、`filters.hidden_workplaces`、`filters.hidden_contracts`（都默认 `[]`）。`ui.yaml` 的 `config_version` 因此从 1 升到 2：`pnpm config:migrate --write` 插入 `applications` / `filters` / `config_editor` 三块并带注释；还没迁移的文件在内存里迁移后照常运行。
+
+### 申请写作
+
+标签末尾的表单设置 `writer.yaml` 的两个键：`enabled`（总开关，默认关闭）和 `timeout_seconds`（单个写作请求的最长运行时间）。开关关闭时，画像和经历素材不会发给任何 AI 服务商。这个文件的其他键在高级标签里改，见 [application-writer.zh.md](application-writer.zh.md)。
 
 ## 高级编辑器
 

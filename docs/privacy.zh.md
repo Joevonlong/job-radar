@@ -17,7 +17,7 @@ Job Radar 是跑在你自己机器上的单用户工具：没有账号、没有�
 | 付费交付账本：供应商记录原文和无法读取的响应体；已存岗位使用链接和哈希，不重复保存原文 | 本机 Postgres，包含在数据库备份中 | 账本条目默认 45 天；运行摘要保留到删除数据库。旧备份可能仍保留已删除条目。 |
 | 邮件元数据（Message-ID、发件人地址、IMAP UID） | 数据库表 `email_messages` | 直到你删除数据库 |
 | AI 结果（评分及理由、翻译、拆解、信号、陷阱标记、带引文的每周建议）和 AI 用量记录（模型、token、耗时） | 数据库 | 直到你删除数据库 |
-| 已发出的 Telegram 消息（内容和消息 id）、控制请求及结果 | 数据库 | 直到你删除数据库；写作请求（`writer_job`）的素材在请求完成、失败或过期（`writer.yaml: timeout_seconds`）后即从中清除 |
+| 已发出的 Telegram 消息（内容和消息 id）、控制请求及结果 | 数据库 | 直到你删除数据库；写作请求（`writer_job`）的素材在请求完成、失败或过期（排队时看 `writer.yaml: queue_timeout_seconds`，运行时看 `timeout_seconds` + `expiry_grace_seconds`）后即从请求里清除。请求未结束时做的备份会留下这些素材，包括部署时的迁移前备份：日备和周备约保留 8 周，系统备份和手动备份更久。Postgres 的堆和 WAL 也可能留着，直到 vacuum 和 checkpoint。 |
 | 申请问题和回答版本，以及每句话的依据核对结果 | 数据库表 `application_questions`、`application_answer_versions` | 直到你删除问题（或数据库）；超过 `questions.max_versions_per_question` 时删除最旧的版本 |
 | runner 心跳 | 数据库 | 24 小时 |
 | 数据库备份 | `data/backups/` | 自动：14 份日备、8 份周备；手动备份不会被清理。已删除的记录在旧备份里还会留着，直到这些备份被删掉 |

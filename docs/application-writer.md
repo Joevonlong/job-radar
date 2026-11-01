@@ -51,9 +51,9 @@ The workbench has three columns (below 1024 px one at a time, switched at the to
 1. **Material** of the selected question. Every tick is saved on the question at once; nothing is sent before you press
    **Write**.
    - **JD points** from the job's breakdown ([breakdown.md](breakdown.md)), grouped into must have, nice to have and
-     the rest; a new question starts with the must-haves ticked. Without a breakdown the column offers to make one,
-     or tick **Also send an excerpt of the JD text** instead (the JD after the AI-trap cleaning, cut at
-     `jd_max_chars`). When the breakdown or a story changed and a ticked item no longer exists, the column says so
+     the rest; a new question starts with the must-haves ticked. Without a breakdown the column offers to make one
+     (with the breakdown switched off it only says so), or tick **Also send an excerpt of the JD text** instead (the
+     JD after the AI-trap cleaning, cut at `jd_max_chars`). A job without a JD says that too. When the breakdown or a story changed and a ticked item no longer exists, the column says so
      and **Remove** drops it; it is never sent.
    - **Profile**: your `me.yaml` summary, skills with years and languages. Not your name, contact details, home city
      or visa status.
@@ -83,8 +83,10 @@ emphasis note or your draft. Job Radar then checks each sentence in code, withou
 | Written by you (grey) | A sentence you wrote or changed; not checked. |
 
 Click a sentence for its quotes, where each was found and what is missing. A sentence that says "I" or "my" is always
-checked as one about you, whatever the AI called it. Names the check cannot find in the evidence, the JD or the
-company are marked **Check:** — that is a hint for you to look, not a guarantee: the check only knows what looks like
+checked as one about you, whatever the AI called it. In a sentence about you, figures and names must be in its valid
+quotes: a name that is only in the JD or the company background does not back a claim about you. A sentence about the
+job or the company may also rest on those two texts. A quote shorter than `evidence.min_quote_chars` counts only when
+it is exactly a known name such as "Go". Names the check cannot find are marked **Check:** — that is a hint for you to look, not a guarantee: the check only knows what looks like
 a name (quoted words, words with digits or inner capitals, capitalised words inside a sentence; `evidence.names`), so
 it can miss one and can mark a harmless word. Figures are compared as digits ("40 %", "40 Prozent" and "40%" are
 one figure; "€85k" and "85,000 €" one amount); a figure written as words ("forty percent") is not recognised. **"Has evidence" means a quote was found, not that the sentence is
@@ -98,15 +100,25 @@ versions.
 
 Only what the disclosure box lists is sent, only when you press **Write**, and only to the providers of the `write`
 task. There is no web search. The request carries the material from the database to the ai-worker; once it is done,
-fails or expires (`timeout_seconds`, queued or running), the material is removed from the request and only the
-question id and a hash of the material remain. The versions are stored in your database with their checks.
+fails or expires, the material is removed from the request and only the question id and a hash of the material remain.
+A request expires when it stays queued longer than `queue_timeout_seconds`, or stays running longer than
+`timeout_seconds` + `expiry_grace_seconds`. The versions are stored in your database with their checks.
+
+The removal only reaches the request row:
+
+- A backup taken while a request is open keeps the material, and this includes the pre-migration backup at deploy.
+  Daily and weekly backups are kept about 8 weeks, system and manual backups longer
+  ([backup-restore.md](backup-restore.md)).
+- Postgres heap and WAL can also keep it until vacuum and checkpoint.
 
 ## Settings (`writer.yaml`)
 
 | Key | Default | Meaning |
 |---|---|---|
 | `enabled` | `false` | Master switch of the AI writing features. While it is `false`, nothing of your library is sent to an AI provider. Also in Settings → Workflow. |
-| `timeout_seconds` | `180` | Longest wait of one writing request, queued or running; an older one fails as expired and its material is cleared. Also in Settings → Workflow. |
+| `timeout_seconds` | `180` | Longest run of one writing request, from the moment the ai-worker claims it; a longer AI call stops and the request fails as a timeout. Also in Settings → Workflow. |
+| `expiry_grace_seconds` | `60` | A running request still open after `timeout_seconds` plus this margin (its worker died or hangs) fails as expired and its material is cleared |
+| `queue_timeout_seconds` | `900` | Longest wait in the queue; an older queued request fails as expired and its material is cleared |
 | `stories.max_items` | `60` | Most stories in the library |
 | `stories.title_max_chars` | `120` | Longest title; also the longest single figure, skill or tag |
 | `stories.text_max_chars` | `1500` | Longest "what you did" and "result" |
@@ -119,7 +131,10 @@ question id and a hash of the material remain. The versions are stored in your d
 | `tones` | neutral, warm, confident, formal | Tones a question can ask for (the first is the default) |
 | `emphasis_max_chars` | `800` | Longest "what to stress this time" note |
 | `jd_max_chars` | `6000` | Longest JD excerpt |
+| `jd_head_share` | `0.7` | Share of a cut JD excerpt taken from the start; the rest comes from the end |
+| `output_truncated_share` | `0.95` | An answer that did not parse and reached this share of the output cap counts as cut off |
 | `evidence.quote_max_chars` | `160` | Longest quote the AI may give |
+| `evidence.min_quote_chars` | `4` | Shortest quote that counts as evidence, unless it is exactly a known name |
 | `evidence.first_person` | en / de / zh words | Words that make a sentence one about you |
 | `evidence.names` | quoted, mixed tokens, capitalised words (German: only two or more in a row) | What the check treats as a name |
 
