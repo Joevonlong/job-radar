@@ -59,6 +59,8 @@ type CompletionUsage = z.infer<typeof completionSchema>["usage"];
 /** What is left of a reply whose choices do not fit the schema: its usage still counts. */
 const usageOnlySchema = z.looseObject({ model: z.string().optional(), usage: completionSchema.shape.usage });
 const errorBodySchema = z.looseObject({ error: z.looseObject({ message: z.string().optional() }).optional() });
+/** OpenRouter can answer HTTP 200 with an error in place of the choices; its `code` is an HTTP status. */
+const errorReplySchema = z.looseObject({ error: z.looseObject({ code: z.union([z.number(), z.string()]).optional(), message: z.string().optional() }) });
 
 function completionsUrl(baseUrl: string): string {
   return `${baseUrl.replace(/\/+$/, "")}/chat/completions`;
@@ -76,11 +78,15 @@ function statusError(id: AiProviderId, status: number, bodyText: string): AiProv
   } catch {
     // not JSON: leave the body out entirely
   }
-  const detail = `HTTP ${status}${message ? `: ${message}` : ""}`;
-  // 402 = insufficient balance on DeepSeek: as unusable as a bad key.
-  if (status === 401 || status === 402 || status === 403) return new AiProviderError(id, "auth", detail);
-  if (status === 429) return new AiProviderError(id, "rate_limited", detail);
-  return new AiProviderError(id, "provider_error", detail);
+  return errorFor(id, status, `HTTP ${status}${message ? `: ${message}` : ""}`);
+}
+
+/** The error kind of an HTTP status, or of the status OpenRouter puts in an error reply's `code`. */
+function errorFor(id: AiProviderId, status: number, detail: string, extra: { usage?: AiTokenUsage; model?: string } = {}): AiProviderError {
+  // 402 = insufficient balance on DeepSeek and OpenRouter: as unusable as a bad key.
+  if (status === 401 || status === 402 || status === 403) return new AiProviderError(id, "auth", detail, extra);
+  if (status === 429) return new AiProviderError(id, "rate_limited", detail, extra);
+  return new AiProviderError(id, "provider_error", detail, extra);
 }
 
 /** A charge the reply reported: a finite, non-negative number (0 included); anything else is no charge, and the catalog prices the call. */
@@ -180,10 +186,14 @@ export function createOpenAiCompatibleTransport(options: OpenAiCompatibleOptions
         // the tokens of a reply are paid for even when its choices are unusable
         const partial = usageOnlySchema.safeParse(json);
         const usage = partial.success ? usageOf(partial.data.usage) : undefined;
-        throw new AiProviderError(id, "provider_error", "unexpected response shape", {
-          ...(usage ? { usage } : {}),
-          ...(partial.success && partial.data.model ? { model: partial.data.model } : {}),
-        });
+        const extra = { ...(usage ? { usage } : {}), ...(partial.success && partial.data.model ? { model: partial.data.model } : {}) };
+        const failure = errorReplySchema.safeParse(json);
+        if (failure.success) {
+          const { code, message } = failure.data.error;
+          const status = Number(code);
+          throw errorFor(id, Number.isInteger(status) ? status : 0, `error ${code ?? "without a code"}${message ? `: ${message}` : ""}`, extra);
+        }
+        throw new AiProviderError(id, "provider_error", "unexpected response shape", extra);
       }
       const answered = parsed.data.model ?? model;
       const content = parsed.data.choices[0]?.message.content;

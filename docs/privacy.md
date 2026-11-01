@@ -69,6 +69,10 @@ Nothing is sent to the project's maintainers or to any analytics service.
   zero-data-retention upstreams (fewer models then work). Your OpenRouter account settings also apply.
 - **DeepSeek and Xiaomi MiMo** are operated from China; data sent to them is subject to Chinese law. They are off by default;
   switch one on only if you accept that.
+- **DeepSeek through OpenRouter:** with an OpenRouter key and OpenRouter's default model (`deepseek/deepseek-v4.1-flash`),
+  your data can reach DeepSeek's own China-operated upstream even though the `deepseek` provider is off. To avoid that,
+  pick an OpenRouter model that is not DeepSeek's (Settings → AI → OpenRouter, or `providers.openrouter.model`), add
+  DeepSeek to the ignored providers in your OpenRouter account settings, or leave `OPENROUTER_API_KEY` empty.
 - **Telegram** stores bot messages on its servers. They are not end-to-end encrypted. Anyone with access to the chat, your
   account or the bot token can read them.
 - A **Gmail app password** gives access to the whole mailbox, not only the label Job Radar reads. Prefer a dedicated mailbox

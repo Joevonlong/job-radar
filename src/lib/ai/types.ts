@@ -78,6 +78,8 @@ export interface AiTransportResponse {
 export interface AiCallRecord {
   /** The model that answered; for a failed call the model that was planned (null when unknown). */
   model: string | null;
+  /** The model the call asked for, when the provider knows it (a reply may name a dated snapshot of it). */
+  requested?: string;
   usage: AiTokenUsage;
   durationMs: number;
   outcome: "ok" | "invalid_output" | "failed";

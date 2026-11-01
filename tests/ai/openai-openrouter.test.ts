@@ -7,6 +7,7 @@ import { createOpenAiCompatibleProvider, createOpenAiCompatibleTransport, embedS
 import { toJsonSchema } from "@/lib/ai/schema-to-json";
 import { createMemoryUsageStore } from "@/lib/ai/usage";
 import type { AiCallRecord } from "@/lib/ai/types";
+import type { ChannelLogger } from "@/lib/channels/types";
 
 import { pinnedAi, shippedCatalog } from "./helpers";
 
@@ -139,6 +140,15 @@ describe("failed replies keep their usage", () => {
     expect(error.usage).toBeUndefined();
   });
 
+  it("an error OpenRouter returns with HTTP 200 is mapped by its code, keeping the message", async () => {
+    const answer = (error: Record<string, unknown>) => fakeFetch(() => new Response(JSON.stringify({ error }), { status: 200 })).fetch;
+    await expect(transport(answer({ code: 429, message: "Rate limit exceeded" })).call(request)).rejects.toMatchObject({ kind: "rate_limited", message: expect.stringContaining("Rate limit exceeded") });
+    await expect(transport(answer({ code: 402, message: "Insufficient credits" })).call(request)).rejects.toMatchObject({ kind: "auth" });
+    await expect(transport(answer({ code: "401" })).call(request)).rejects.toMatchObject({ kind: "auth" });
+    await expect(transport(answer({ code: 502, message: "upstream down" })).call(request)).rejects.toMatchObject({ kind: "provider_error" });
+    await expect(transport(answer({ message: "no code" })).call(request)).rejects.toMatchObject({ kind: "provider_error" });
+  });
+
   it("an invalid first reply and the retry are both reported to onCall, each with its own cost", async () => {
     const { fetch: f } = fakeFetch((n) => (n === 0 ? reply('{"wrong":1}', { prompt_tokens: 10, completion_tokens: 2, cost: 0.001 }) : reply('{"answer":"ok"}', { prompt_tokens: 10, completion_tokens: 2, cost: 0.002 })));
     const calls: AiCallRecord[] = [];
@@ -198,5 +208,46 @@ describe("the router charges what the provider reported", () => {
     await router.run("score", prompt, schema);
     const input = shippedCatalog().providers.openrouter.models.find((m) => m.id === model)?.price?.input_per_mtok;
     expect(usage.entries[0]?.costUsd).toBeCloseTo(input ?? Number.NaN, 9);
+  });
+});
+
+describe("a dated snapshot of the requested model", () => {
+  // the requested model and a pricier one, so the provider's fallback price (its highest) differs from the exact one
+  function route(fetchImpl: typeof fetch) {
+    const config = pinnedAi((raw) => {
+      raw.order = ["api"];
+      raw.api_order = ["openai"];
+    });
+    const catalog = shippedCatalog();
+    catalog.providers.openai.models.push({ id: "acme-large", label: "Large", price: { input_per_mtok: 100, output_per_mtok: 500 } });
+    const warned: string[] = [];
+    const logger = { debug: () => {}, info: () => {}, warn: (message: string) => void warned.push(message), error: () => {} } as unknown as ChannelLogger;
+    const usage = createMemoryUsageStore();
+    const router = createAiRouter({ config, providers: [provider("openai", fetchImpl)], usage, now: () => NOW, timeZone: "Europe/Berlin", catalog, logger });
+    return { router, usage, catalog, warned };
+  }
+
+  it("is recorded and priced as the requested model, with no catalog warning", async () => {
+    const model = pinnedAi().providers.openai.model;
+    const { fetch: f } = fakeFetch(() => reply('{"answer":"ok"}', { prompt_tokens: 1_000_000, completion_tokens: 0 }, `${model}-2026-08-15`));
+    const { router, usage, catalog, warned } = route(f);
+    const result = await router.run("score", prompt, schema);
+    const input = catalog.providers.openai.models.find((m) => m.id === model)?.price?.input_per_mtok;
+    expect(usage.entries.map((e) => [e.model, e.modelSource])).toEqual([[model, "call"]]);
+    expect(usage.entries[0]?.costUsd).toBeCloseTo(input ?? Number.NaN, 9);
+    expect(result.model).toBe(model);
+    expect(warned.filter((w) => w.includes("not in catalog"))).toEqual([]);
+  });
+
+  it("another name stays as reported and gets the fallback price", async () => {
+    const model = pinnedAi().providers.openai.model;
+    for (const answered of [`${model}-preview`, `${model}-2026-08`, "other-2026-08-15"]) {
+      const { fetch: f } = fakeFetch(() => reply('{"answer":"ok"}', { prompt_tokens: 1_000_000, completion_tokens: 0 }, answered));
+      const { router, usage, warned } = route(f);
+      await router.run("score", prompt, schema);
+      expect(usage.entries[0]?.model).toBe(answered);
+      expect(usage.entries[0]?.costUsd).toBeCloseTo(100, 9);
+      expect(warned.some((w) => w.includes("not in catalog"))).toBe(true);
+    }
   });
 });
