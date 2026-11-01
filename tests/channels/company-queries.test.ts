@@ -58,4 +58,12 @@ describe("company query selection", () => {
     expect(orderQueries([keyword, ...result.selected], new Map([...result.turns, [keyword.id, now]]), true)[0]?.company?.name).toBe("Other");
     expect(selectCompanyQueries({ candidates: candidates(), history: [row("guest", 0, 24)], eligible: ["guest"], now, cfg, rotation: true }).due).toBe(2);
   });
+
+  it("returns turns for the company queries only, so keyword ordering keeps the start channel's own history", () => {
+    const keyword = buildQueries(search, "manual")[0]!;
+    const history = [row("guest", 0, 2), { channelId: "session", queryHash: keyword.id, firstSeenAt: new Date(0), lastCoveredAt: null, lastTurnAt: now }];
+    const { turns } = select(true, history);
+    expect([...turns.keys()]).toEqual([candidates()[0]!.id]);
+    expect(turns.has(keyword.id)).toBe(false);
+  });
 });
