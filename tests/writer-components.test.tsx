@@ -5,15 +5,25 @@ import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { BaseEditor } from "@/components/writer/base-editor";
+import { CoachReview } from "@/components/writer/coach-review";
+import { PolishBox } from "@/components/writer/polish-box";
 import { ExportAnswers } from "@/components/writer/export-answers";
 import { OldCompanyNotice } from "@/components/writer/old-company-notice";
 import { ReuseSuggestions } from "@/components/writer/reuse-suggestions";
-import type { WorkbenchQuestion, WorkbenchView } from "@/lib/writer/view";
+import { parseStoredCoach } from "@/lib/writer/coach";
+import type { WorkbenchQuestion, WorkbenchVersion, WorkbenchView } from "@/lib/writer/view";
 
 import en from "../messages/en.json";
 
-const actions = vi.hoisted(() => ({ find: vi.fn(), saveBase: vi.fn(), refresh: vi.fn() }));
-vi.mock("@/app/jobs/[id]/apply/actions", () => ({ findSimilarAnswersAction: actions.find, saveBaseVersionAction: actions.saveBase }));
+const actions = vi.hoisted(() => ({ find: vi.fn(), saveBase: vi.fn(), refresh: vi.fn(), polish: vi.fn(), coach: vi.fn(), rewrite: vi.fn(), adopt: vi.fn() }));
+vi.mock("@/app/jobs/[id]/apply/actions", () => ({
+  findSimilarAnswersAction: actions.find,
+  saveBaseVersionAction: actions.saveBase,
+  polishAnswerAction: actions.polish,
+  coachAnswerAction: actions.coach,
+  coachRewriteAction: actions.rewrite,
+  adoptSuggestionAction: actions.adopt,
+}));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: actions.refresh }), unstable_isUnrecognizedActionError: () => false }));
 const toasts = vi.hoisted(() => ({ tone: vi.fn() }));
 vi.mock("@/lib/toast", () => ({ toastTone: toasts.tone }));
@@ -34,7 +44,7 @@ const question = (id: number, text: string, finalText: string | null): Workbench
   tone: "neutral",
   selection: { jdPoints: [], useJdText: false, storyIds: [], profile: true, emphasis: "" },
   finalVersionId: finalText === null ? null : id * 10,
-  versions: finalText === null ? [] : [{ id: id * 10, mode: "manual", variantId: null, text: finalText, sentences: [], counts: { supported: 0, partial: 0, unsupported: 0, framing: 0, user_written: 0, web_unverified: 0 }, createdAt: "2026-01-01T00:00:00.000Z", provider: null, model: null }],
+  versions: finalText === null ? [] : [{ id: id * 10, mode: "manual", variantId: null, text: finalText, sentences: [], counts: { supported: 0, partial: 0, unsupported: 0, framing: 0, user_written: 0, web_unverified: 0 }, parentVersionId: null, coach: null, createdAt: "2026-01-01T00:00:00.000Z", provider: null, model: null }],
   initialRequest: null,
   startedFrom: [],
   stale: { jdPoints: 0, stories: 0 },
@@ -47,6 +57,8 @@ beforeEach(() => {
   actions.find.mockReset();
   actions.saveBase.mockReset().mockResolvedValue({ ok: true, versionId: 9 });
   actions.refresh.mockReset();
+  for (const action of [actions.polish, actions.coach, actions.rewrite]) action.mockReset().mockResolvedValue({ ok: true, requestId: 7 });
+  actions.adopt.mockReset().mockResolvedValue({ ok: true, versionId: 12 });
   toasts.tone.mockReset();
 });
 afterEach(() => vi.restoreAllMocks());
@@ -195,5 +207,125 @@ describe("OldCompanyNotice and BaseEditor", () => {
     await user.click(screen.getByTestId("writer-base-save"));
     await waitFor(() => expect(toasts.tone).toHaveBeenCalledWith("error", expect.stringContaining("no longer exists")));
     expect(onDone).not.toHaveBeenCalled();
+  });
+});
+
+describe("PolishBox", () => {
+  const polishView = { ...view([]), limits: { draftMaxChars: 50 } } as unknown as WorkbenchView;
+  const sends = vi.fn(() => ["question", "settings", "job", "draft"] as never);
+
+  it("polishes the text with the chosen option, and lists what is sent for that option", async () => {
+    const run = vi.fn((call: () => Promise<unknown>) => void call());
+    render(wrap(<PolishBox view={polishView} question={question(1, "Why us?", null)} enabled busy={false} sends={sends} run={run} />));
+    const button = screen.getByTestId("writer-polish-button");
+    expect(button).toBeDisabled();
+    await userEvent.click(screen.getByText("Improve my own draft"));
+    await userEvent.type(screen.getByTestId("writer-polish-text"), "I built it.");
+    await userEvent.selectOptions(screen.getByTestId("writer-polish-option"), "language_only");
+    expect(sends).toHaveBeenLastCalledWith("language_only");
+    expect(screen.getByTestId("writer-polish-sends")).toHaveTextContent("your text or the answer under review");
+    await userEvent.click(button);
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(actions.polish).toHaveBeenCalledWith({ jobId: 5, questionId: 1, text: "I built it.", option: "language_only" });
+  });
+
+  it("refuses a text over the limit and is off while a request runs or the writer is off", async () => {
+    const { rerender } = render(wrap(<PolishBox view={polishView} question={question(1, "Why us?", null)} enabled busy={false} sends={sends} run={vi.fn()} />));
+    await userEvent.click(screen.getByText("Improve my own draft"));
+    await userEvent.type(screen.getByTestId("writer-polish-text"), "x".repeat(51));
+    expect(screen.getByTestId("writer-polish-length")).toHaveTextContent("at most 50 characters");
+    expect(screen.getByTestId("writer-polish-button")).toBeDisabled();
+    rerender(wrap(<PolishBox view={polishView} question={question(1, "Why us?", null)} enabled={false} busy sends={sends} run={vi.fn()} />));
+    expect(screen.getByTestId("writer-polish-text")).toBeDisabled();
+  });
+});
+
+describe("CoachReview", () => {
+  const sentence = (text: string, status = "user_written") => ({ text, newParagraph: false, about: "user" as const, status: status as never, evidence: [], missing: [], needsCheck: [] });
+  const reviewed = (coach: unknown): WorkbenchVersion => ({
+    id: 3,
+    mode: "manual",
+    variantId: null,
+    text: "I moved the billing service. Errors fell by 40%.",
+    sentences: [sentence("I moved the billing service."), sentence("Errors fell by 40%.")],
+    counts: { supported: 0, partial: 0, unsupported: 0, framing: 0, user_written: 2, web_unverified: 0 },
+    parentVersionId: null,
+    coach: parseStoredCoach(coach),
+    createdAt: "2026-01-01T00:00:00.000Z",
+    provider: null,
+    model: null,
+  });
+  const coach = {
+    score: 72,
+    dimensions: [
+      { id: "answers_question", status: "improve", note: "Half of it." },
+      { id: "vibes_check", status: "good", note: "Custom dimension." },
+    ],
+    suggestions: [
+      { sentenceIndex: 1, issue: "Name the project.", sentence: { ...sentence("Errors fell by 40% after the move.", "supported"), evidence: [{ source: "draft", quote: "Errors fell by 40%", problem: null }] } },
+      { sentenceIndex: 0, issue: "Say how long.", sentence: { ...sentence("I moved it in two months.", "ai_suggestion_unverified"), needsCheck: ["Kotlin"] } },
+    ],
+    dropped: { dimensions: 2, suggestions: 1 },
+    provider: null,
+    model: null,
+    promptVersion: null,
+    createdAt: "2026-01-01T00:00:00.000Z",
+  };
+  const props = (version: WorkbenchVersion, over: object = {}) => ({ view: view([]), question: question(1, "Why us?", null), version, enabled: true, busy: false, sends: ["question", "draft"] as never, run: vi.fn((call: () => Promise<unknown>) => void call()), onAdopted: vi.fn(), ...over });
+
+  it("an unreviewed version offers the review, says what is sent, and queues it", async () => {
+    const p = props(reviewed(null));
+    render(wrap(<CoachReview {...p} />));
+    expect(screen.getByTestId("writer-coach")).toHaveAttribute("data-reviewed", "false");
+    expect(screen.getByTestId("writer-coach-sends")).toHaveTextContent("the question · your text or the answer under review");
+    await userEvent.click(screen.getByTestId("writer-coach-button"));
+    expect(actions.coach).toHaveBeenCalledWith({ jobId: 5, questionId: 1, versionId: 3 });
+  });
+
+  it("shows the score as the AI's judgement, a verdict per dimension and each suggestion with how it was checked", () => {
+    render(wrap(<CoachReview {...props(reviewed(coach))} />));
+    expect(screen.getByTestId("writer-coach-score")).toHaveTextContent("72 / 100");
+    expect(screen.getByTestId("writer-coach-result")).toHaveTextContent("AI judgement");
+    const dimensions = within(screen.getByTestId("writer-coach-dimensions")).getAllByRole("listitem");
+    expect(dimensions).toHaveLength(2);
+    expect(dimensions[0]).toHaveTextContent("Answers the question");
+    expect(dimensions[1]).toHaveTextContent("vibes_check");
+    const suggestions = screen.getAllByTestId("writer-coach-suggestion");
+    expect(suggestions.map((item) => item.getAttribute("data-status"))).toEqual(["supported", "ai_suggestion_unverified"]);
+    expect(suggestions[0]).toHaveTextContent("Sentence 2:");
+    expect(suggestions[0]).toHaveTextContent("Has evidence");
+    expect(suggestions[1]).toHaveTextContent("AI suggestion, unverified");
+    expect(suggestions[1]).toHaveTextContent("Check that it is true");
+    expect(suggestions[1]).toHaveTextContent("Kotlin");
+    expect(screen.getByTestId("writer-coach-dropped")).toHaveTextContent("2 ratings of dimensions that are not configured. Left out: 1 suggestion for a sentence that does not exist.");
+  });
+
+  it("adopting a suggestion saves it and opens the new version; the rewrite button queues the whole-answer request", async () => {
+    const p = props(reviewed(coach));
+    render(wrap(<CoachReview {...p} />));
+    await userEvent.click(screen.getAllByTestId("writer-coach-adopt")[1]!);
+    await waitFor(() => expect(actions.adopt).toHaveBeenCalledWith({ jobId: 5, questionId: 1, versionId: 3, suggestionIndex: 1 }));
+    await waitFor(() => expect(p.onAdopted).toHaveBeenCalledWith(12));
+    expect(actions.refresh).toHaveBeenCalled();
+    await userEvent.click(screen.getByTestId("writer-coach-rewrite"));
+    expect(actions.rewrite).toHaveBeenCalledWith({ jobId: 5, questionId: 1, versionId: 3 });
+  });
+
+  it("a failed adoption says so and opens nothing", async () => {
+    actions.adopt.mockResolvedValue({ ok: false, error: "not_found" });
+    const p = props(reviewed(coach));
+    render(wrap(<CoachReview {...p} />));
+    await userEvent.click(screen.getAllByTestId("writer-coach-adopt")[0]!);
+    await waitFor(() => expect(toasts.tone).toHaveBeenCalledWith("error", expect.stringContaining("no longer exists")));
+    expect(p.onAdopted).not.toHaveBeenCalled();
+  });
+
+  it("is off while a request runs or the writer is off, and a review without suggestions has no rewrite", () => {
+    const { rerender } = render(wrap(<CoachReview {...props(reviewed(coach), { busy: true })} />));
+    expect(screen.getByTestId("writer-coach-button")).toBeDisabled();
+    expect(screen.getByTestId("writer-coach-rewrite")).toBeDisabled();
+    rerender(wrap(<CoachReview {...props(reviewed({ ...coach, suggestions: [] }))} />));
+    expect(screen.queryByTestId("writer-coach-rewrite")).toBeNull();
+    expect(screen.getByTestId("writer-coach-no-suggestions")).toBeVisible();
   });
 });

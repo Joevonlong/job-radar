@@ -1,11 +1,11 @@
 import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, inject, it, vi } from "vitest";
 
-import { findSimilarAnswersAction, saveBaseVersionAction } from "@/app/jobs/[id]/apply/actions";
+import { adoptSuggestionAction, findSimilarAnswersAction, saveBaseVersionAction } from "@/app/jobs/[id]/apply/actions";
 import { writerSchema, type WriterConfig } from "@/lib/config";
 import { closeDb, getDb, schema } from "@/lib/db";
 import { runMigrations } from "@/lib/db/migrate";
-import { createApplicationQuestion, insertAnswerVersions, listAnswerVersions, setFinalAnswerVersion } from "@/lib/db/repos/application-writer";
+import { createApplicationQuestion, insertAnswerVersions, listAnswerVersions, setAnswerVersionCoach, setFinalAnswerVersion } from "@/lib/db/repos/application-writer";
 import { startedFrom } from "@/lib/writer/view";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
@@ -203,5 +203,83 @@ describe("startedFrom", () => {
     expect(startedFrom([{ parentVersionId: null }], origins, 1, [])).toEqual([]);
     expect(startedFrom([], origins, 1, [])).toEqual([]);
     expect(startedFrom([{ parentVersionId: 13 }, { parentVersionId: 99 }, { parentVersionId: 12 }], origins, 1, [])).toEqual([{ company: "Initech", jobTitle: "SRE", names: ["Initech"] }]);
+  });
+});
+
+describe("adoptSuggestionAction", () => {
+  const sentence = (text: string, status: string, over: Record<string, unknown> = {}) => ({ text, newParagraph: false, about: "user", status, evidence: [], missing: [], needsCheck: [], ...over });
+  const suggestion = (sentenceIndex: number, text: string, status: string, over: Record<string, unknown> = {}) => ({ sentenceIndex, issue: "Be direct.", sentence: sentence(text, status, over) });
+
+  async function reviewed() {
+    const jobId = await addJob("Acme", "Backend Engineer");
+    const question = await addQuestion(jobId, "Why us?");
+    const sentences = [sentence("I moved the billing service.", "supported"), sentence("Errors fell a lot.", "unsupported")];
+    const [versionId] = await insertAnswerVersions(db(), {
+      questionId: question.id,
+      maxVersions: 20,
+      versions: [{ mode: "draft", variantId: "safe", text: "I moved the billing service. Errors fell a lot.", sentences, supportedCount: 1, unsupportedCount: 1, materialsHash: "h" }],
+    });
+    await setAnswerVersionCoach(db(), {
+      questionId: question.id,
+      versionId: versionId!,
+      coach: {
+        score: 60,
+        dimensions: [],
+        suggestions: [
+          suggestion(1, "Errors fell by 40%.", "supported", { evidence: [{ source: "draft", quote: "Errors fell by 40%", problem: null }] }),
+          suggestion(0, "I moved it in two months.", "ai_suggestion_unverified"),
+        ],
+        dropped: { dimensions: 0, suggestions: 0 },
+        provider: null,
+        model: null,
+        promptVersion: null,
+        createdAt: new Date().toISOString(),
+      },
+    });
+    return { jobId, question, versionId: versionId! };
+  }
+
+  it("rejects input that is not valid", async () => {
+    for (const input of [{ jobId: 0, questionId: 1, versionId: 1, suggestionIndex: 0 }, { jobId: 1, questionId: 1, versionId: 1, suggestionIndex: -1 }, { jobId: 1, questionId: 1, versionId: 1, suggestionIndex: 0.5 }, { jobId: 1, questionId: 1, versionId: 1, suggestionIndex: 0, extra: 1 }]) {
+      expect(await adoptSuggestionAction(input as never)).toEqual({ ok: false, error: "invalid" });
+    }
+  });
+
+  it("saves a manual version with the suggested sentence in place and the suggestion's own check result; the reviewed version stays as it was", async () => {
+    const { jobId, question, versionId } = await reviewed();
+    const result = await adoptSuggestionAction({ jobId, questionId: question.id, versionId, suggestionIndex: 0 });
+    expect(result).toMatchObject({ ok: true, versionId: expect.any(Number) });
+    const versions = await listAnswerVersions(db(), [question.id]);
+    const adopted = versions.find((row) => row.mode === "manual")!;
+    expect(adopted).toMatchObject({ text: "I moved the billing service. Errors fell by 40%.", parentVersionId: versionId, variantId: "safe", supportedCount: 2, unsupportedCount: 0 });
+    expect((adopted.sentences as { status: string }[]).map((entry) => entry.status)).toEqual(["supported", "supported"]);
+    const original = versions.find((row) => row.id === versionId)!;
+    expect(original.text).toBe("I moved the billing service. Errors fell a lot.");
+    expect(original.coach).not.toBeNull();
+  });
+
+  it("an unverified suggestion keeps that status, counted among the sentences without evidence", async () => {
+    const { jobId, question, versionId } = await reviewed();
+    await adoptSuggestionAction({ jobId, questionId: question.id, versionId, suggestionIndex: 1 });
+    const adopted = (await listAnswerVersions(db(), [question.id])).find((row) => row.mode === "manual")!;
+    expect((adopted.sentences as { status: string }[]).map((entry) => entry.status)).toEqual(["ai_suggestion_unverified", "unsupported"]);
+    expect(adopted.text).toBe("I moved it in two months. Errors fell a lot.");
+    expect(adopted.unsupportedCount).toBe(2);
+  });
+
+  it("finds nothing for another job's question, a suggestion that is not there, or a version with no review", async () => {
+    const { jobId, question, versionId } = await reviewed();
+    const otherJob = await addJob("Globex", "Platform Engineer");
+    expect(await adoptSuggestionAction({ jobId: otherJob, questionId: question.id, versionId, suggestionIndex: 0 })).toEqual({ ok: false, error: "not_found" });
+    expect(await adoptSuggestionAction({ jobId, questionId: question.id, versionId, suggestionIndex: 5 })).toEqual({ ok: false, error: "not_found" });
+    const plain = await addVersion(question.id, "plain", null);
+    expect(await adoptSuggestionAction({ jobId, questionId: question.id, versionId: plain, suggestionIndex: 0 })).toEqual({ ok: false, error: "not_found" });
+    expect((await listAnswerVersions(db(), [question.id])).filter((row) => row.mode === "manual" && row.parentVersionId === versionId)).toEqual([]);
+  });
+
+  it("says why when writer.yaml cannot be read", async () => {
+    const { jobId, question, versionId } = await reviewed();
+    settings.writer = null;
+    expect(await adoptSuggestionAction({ jobId, questionId: question.id, versionId, suggestionIndex: 0 })).toEqual({ ok: false, error: "config_error" });
   });
 });

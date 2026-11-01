@@ -40,6 +40,18 @@ export const jdPointSnapshotSchema = z.strictObject({
 });
 export type JdPointSnapshot = z.infer<typeof jdPointSnapshotSchema>;
 
+/**
+ * The text a polish or review request works on: your own draft (`sentences` empty), or the version under review with its
+ * sentences numbered by position and, to rewrite it, the review's suggestions. `notesLanguage`: the language of a review's notes.
+ */
+export const draftSnapshotSchema = z.strictObject({
+  text: text(60_000),
+  sentences: z.array(text(5000)).max(300).default([]),
+  suggestions: z.array(z.strictObject({ index: z.number().int().min(0).max(300), issue: text(1000), rewrite: text(5000) })).max(50).default([]),
+  notesLanguage: z.string().min(2).max(35).default("en"),
+});
+export type DraftSnapshot = z.infer<typeof draftSnapshotSchema>;
+
 export const writerMaterialsSchema = z.strictObject({
   question: z.strictObject({
     text: text(10_000).min(1),
@@ -48,7 +60,7 @@ export const writerMaterialsSchema = z.strictObject({
     lengthValue: z.number().int().min(1).max(10_000),
     outputLanguage: z.string().min(2).max(35),
     tone: z.string().min(1).max(40),
-    variants: z.array(z.strictObject({ id: z.string().min(1).max(40), hint: text(200) })).min(1).max(5),
+    variants: z.array(z.strictObject({ id: z.string().min(1).max(40), hint: text(200) })).max(5),
   }),
   job: z.strictObject({ title: text(1000), company: text(1000) }),
   jdPoints: z.array(jdPointSnapshotSchema).max(200),
@@ -56,17 +68,20 @@ export const writerMaterialsSchema = z.strictObject({
   profile: profileSnapshotSchema.nullable(),
   stories: z.array(storySnapshotSchema).max(1000),
   emphasis: text(5000).nullable(),
+  /** Your own text to polish, or the version to review (absent when the material is drafted from). */
+  draft: draftSnapshotSchema.nullable().default(null),
 });
 export type WriterMaterials = z.infer<typeof writerMaterialsSchema>;
 
 /** What of `materials` goes to the AI, in disclosure order. The question, its settings and the job's title and company always do. */
-export function writeInputFields(materials: { jdPoints: readonly unknown[]; useJdText: boolean; profile: unknown; stories: readonly unknown[]; emphasis: string | null }): WriteInputField[] {
+export function writeInputFields(materials: { jdPoints: readonly unknown[]; useJdText: boolean; profile: unknown; stories: readonly unknown[]; emphasis: string | null; draft?: unknown }): WriteInputField[] {
   const fields: WriteInputField[] = ["question", "settings", "job"];
   if (materials.jdPoints.length > 0) fields.push("jd_points");
   if (materials.useJdText) fields.push("jd_excerpt");
   if (materials.profile !== null) fields.push("profile");
   if (materials.stories.length > 0) fields.push("stories");
   if (materials.emphasis !== null && materials.emphasis.trim() !== "") fields.push("emphasis");
+  if (materials.draft !== null && materials.draft !== undefined) fields.push("draft");
   return fields;
 }
 
@@ -99,7 +114,7 @@ export function buildWriteInput(materials: WriterMaterials, jdExcerpt: string | 
       length: { unit: question.lengthUnit, value: question.lengthValue },
       output_language: question.outputLanguage,
       tone: question.tone,
-      versions: question.variants.map((variant) => ({ id: variant.id, style: variant.hint })),
+      ...(question.variants.length > 0 ? { versions: question.variants.map((variant) => ({ id: variant.id, style: variant.hint })) } : {}),
     },
     job: { title: materials.job.title, company: materials.job.company },
   };
@@ -108,6 +123,13 @@ export function buildWriteInput(materials: WriterMaterials, jdExcerpt: string | 
   if (materials.profile !== null) parts.profile = materials.profile;
   if (materials.stories.length > 0) parts.stories = materials.stories.map((story) => ({ id: story.id, title: story.title, what: story.what, result: story.result, metrics: story.metrics, skills: story.skills, period: story.period }));
   if (materials.emphasis !== null && materials.emphasis.trim() !== "") parts.emphasis = materials.emphasis;
+  const { draft } = materials;
+  if (draft !== null) {
+    parts.draft =
+      draft.sentences.length === 0
+        ? { text: draft.text }
+        : { sentences: draft.sentences.map((sentence, index) => ({ index, text: sentence })), ...(draft.suggestions.length > 0 ? { suggestions: draft.suggestions } : {}) };
+  }
   const fields = writeInputFields(materials).filter((field) => field in parts);
   const input: Record<string, unknown> = {};
   for (const field of fields) input[field] = parts[field];

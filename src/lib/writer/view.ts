@@ -13,7 +13,7 @@ import { aiOutputLanguage } from "@/lib/i18n/config";
 import { descriptionHash } from "@/lib/translation/hash";
 
 import { companyMatchNames, legalSuffixes } from "./company-names";
-
+import { parseStoredCoach, type StoredCoach } from "./coach";
 import { jdPointsOf, resolveJdPoints, type JdPoint } from "./jd-points";
 import { defaultOutputLanguage, parseSelection } from "./selection";
 import { readWriterInputs } from "./settings";
@@ -27,6 +27,10 @@ export interface WorkbenchVersion {
   text: string;
   sentences: CheckedSentence[];
   counts: StatusCounts;
+  /** The version a hand edit, an adopted suggestion or a coach rewrite started from. */
+  parentVersionId: number | null;
+  /** The coach's review of this version, if it was reviewed. */
+  coach: StoredCoach | null;
   /** ISO time. */
   createdAt: string;
   provider: string | null;
@@ -69,7 +73,7 @@ export interface WorkbenchView {
   /** me.yaml could be read (the profile can be sent). */
   profile: { available: boolean; summary: string; skills: string[] };
   questions: WorkbenchQuestion[];
-  limits: { maxQuestions: number; textMaxChars: number; emphasisMaxChars: number; reuseMinWords: number };
+  limits: { maxQuestions: number; textMaxChars: number; emphasisMaxChars: number; draftMaxChars: number; reuseMinWords: number };
   tones: string[];
   kinds: Record<QuestionKind, { unit: LengthUnit; value: number; variants: number }>;
   /** A new question's answer language: the JD's language when known, else language.yaml's AI output language. */
@@ -162,6 +166,8 @@ export async function loadWorkbench(db: Db, jobId: number): Promise<WorkbenchVie
             user_written: version.userWrittenCount,
             web_unverified: version.webUnverifiedCount,
           },
+          parentVersionId: version.parentVersionId,
+          coach: parseStoredCoach(version.coach),
           createdAt: version.createdAt.toISOString(),
           provider: version.provider,
           model: version.model,
@@ -184,7 +190,7 @@ export async function loadWorkbench(db: Db, jobId: number): Promise<WorkbenchVie
     storiesUnreadable: inputs.storiesUnreadable,
     profile: { available: inputs.me !== null, summary: inputs.me?.summary ?? "", skills: inputs.me?.skills.map((skill) => skill.name) ?? [] },
     questions,
-    limits: { maxQuestions: writer.questions.max_per_job, textMaxChars: writer.questions.text_max_chars, emphasisMaxChars: writer.emphasis_max_chars, reuseMinWords: writer.reuse.min_question_words },
+    limits: { maxQuestions: writer.questions.max_per_job, textMaxChars: writer.questions.text_max_chars, emphasisMaxChars: writer.emphasis_max_chars, draftMaxChars: writer.draft_max_chars, reuseMinWords: writer.reuse.min_question_words },
     tones: writer.tones,
     kinds: {
       question: { unit: writer.questions.kinds.question.default_length.unit, value: writer.questions.kinds.question.default_length.value, variants: writer.questions.kinds.question.variants },

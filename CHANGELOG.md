@@ -205,6 +205,14 @@ A failure in (a) does not block rollback: follow (c) and accept the display wind
 
 ### Added
 
+- **Application writer: improve your own draft and a coach review.** Paste text you wrote in any language and get a new
+  version in the answer's language, either fitted to the job or with only the language and wording changed (that option
+  sends none of your ticked material). A version can also be reviewed: the AI rates it from 0 to 100 (marked as its
+  judgement), gives a verdict per dimension and suggests better sentences, which go through the same evidence check
+  (a suggestion without a findable quote shows as an unverified AI suggestion). Adopt one suggestion at a time or have the
+  whole answer rewritten by them. Both use the `write` task and the same request clearing as drafts; `writer.yaml` gains
+  `draft_max_chars` and `coach` (defaults added when missing, `config_version` unchanged, no migration). A figure next to
+  Chinese characters ("下降了40%") is now recognised by the evidence check. See [Application writer](docs/application-writer.md).
 - **Application writer: export and reuse.** The workbench exports every final answer as one Markdown file built in the browser,
   offers an earlier final answer of another job as the starting text when you add a similar question (a local word-overlap
   check, no AI call; `reuse` in `writer.yaml`, defaults added when missing, `config_version` unchanged) and warns while that

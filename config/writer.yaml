@@ -54,6 +54,18 @@ tones: [neutral, warm, confident, formal]
 
 # Longest "what to emphasise this time" note
 emphasis_max_chars: 800
+# Longest text of your own that can be polished, and the longest answer that can be reviewed (characters)
+draft_max_chars: 6000
+
+# The coach review: an AI reading of an answer with a score (0-100), a verdict per dimension and sentence suggestions. The
+# score is the AI's judgement, not a measurement. Each suggested sentence goes through the same evidence check.
+coach:
+  # What the review rates (ids). Shipped ones: answers_question, concrete_evidence, company_specific, covers_must_haves,
+  # length, language_tone, no_overclaim. The id of one you add is passed to the AI as it is, so choose a self-explaining one.
+  dimensions: [answers_question, concrete_evidence, company_specific, covers_must_haves, length, language_tone, no_overclaim]
+  # Most sentence suggestions one review returns
+  max_suggestions: 8
+
 # Longest JD excerpt sent when no breakdown points are selected
 jd_max_chars: 6000
 # Share of jd_max_chars taken from the beginning of a longer JD (the rest from its end)

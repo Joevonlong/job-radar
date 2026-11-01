@@ -64,7 +64,9 @@ function primaryLanguage(code: string): string {
   return code.toLowerCase().split(/[-_]/)[0] ?? code.toLowerCase();
 }
 
-const FIGURE = String.raw`(?<![\p{L}\p{N}])(\d{1,3}(?:[.,\u00a0\u202f ]\d{3})+|\d+)(?:[.,](\d+))?\s*(k)?(?![\p{L}\p{N}])(\s*(?:%|percent|per cent|prozent|pct)(?!\p{L}))?`;
+// CJK text has no spaces: a figure may sit directly against Han, kana or Hangul characters ("下降了40%的"), unlike one against Latin letters (S3, K8s).
+const CJK_CLASS = String.raw`\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}`;
+const FIGURE = String.raw`(?<=^|[^\p{L}\p{N}]|[${CJK_CLASS}])(\d{1,3}(?:[.,\u00a0\u202f ]\d{3})+|\d+)(?:[.,](\d+))?\s*(k)?(?=$|[^\p{L}\p{N}]|[${CJK_CLASS}])(\s*(?:%|percent|per cent|prozent|pct)(?!(?![${CJK_CLASS}])\p{L}))?`;
 const figurePattern = (): RegExp => new RegExp(FIGURE, "giu");
 const CJK_CHAR = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u;
 
@@ -334,6 +336,15 @@ export function countStatuses(sentences: readonly Pick<CheckedSentence, "status"
 /** The text of a version from its sentences: spaces between sentences, a blank line before a new paragraph. */
 export function joinSentences(sentences: readonly Pick<CheckedSentence, "text" | "newParagraph">[]): string {
   return sentences.reduce((out, sentence, index) => (index === 0 ? sentence.text : `${out}${sentence.newParagraph ? "\n\n" : " "}${sentence.text}`), "");
+}
+
+/**
+ * The coach's suggested rewrite of a sentence, checked like any sentence. One without a valid quote is an AI suggestion
+ * that has no evidence yet (`ai_suggestion_unverified`) instead of "no evidence": it is advice, not a claim of the answer.
+ */
+export function verifySuggestion(raw: RawSentence, context: VerifyContext): CheckedSentence {
+  const checked = verifySentence(raw, context);
+  return checked.status === "unsupported" ? { ...checked, status: "ai_suggestion_unverified" } : checked;
 }
 
 export function verifySentences(raw: readonly RawSentence[], context: VerifyContext): CheckedSentence[] {

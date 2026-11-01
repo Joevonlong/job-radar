@@ -7505,7 +7505,8 @@
         "jd_excerpt": "JD 原文节选",
         "profile": "画像简介、技能、语言",
         "stories": "勾选的经历素材",
-        "emphasis": "你的强调说明"
+        "emphasis": "你的强调说明",
+        "draft": "你的稿子或被审阅的回答"
       },
       "running": "正在写…",
       "requesting": "排队中…",
@@ -7532,7 +7533,8 @@
         "failed": "生成失败，请重试。",
         "invalid_payload": "请求无效。",
         "handler_error": "处理请求时出错，请重试。",
-        "no_handler": "还没有 AI worker 处理这类请求，请确认 ai-worker 在运行。"
+        "no_handler": "还没有 AI worker 处理这类请求，请确认 ai-worker 在运行。",
+        "too_long": "文字超过 writer.yaml 里的长度上限（draft_max_chars）。"
       },
       "versionsLabel": "版本",
       "manual": "你改过的",
@@ -7634,6 +7636,61 @@
       "discard": "丢弃",
       "saved": "已存为版本",
       "oldCompany": "这段文字里还有 {companies}，也就是你拿来做底稿的那份回答的公司。使用前请检查。"
+    },
+    "polish": {
+      "title": "优化我自己的稿",
+      "hint": "贴上你写的稿子，任何语言都行。结果是一个新版本，用这道题的回答语言写；每句话都对照你的稿（选“贴合岗位”时还有你勾选的素材）核对。",
+      "textLabel": "你的稿",
+      "placeholder": "把你写的回答贴在这里……",
+      "tooLong": "太长了：最多 {max} 个字符。",
+      "optionLabel": "怎么优化",
+      "option": {
+        "align_to_job": "贴合岗位",
+        "language_only": "只改语言"
+      },
+      "explain": {
+        "align_to_job": "保留稿里的事实，按问题和岗位调整。如果你勾选的画像、经历素材或强调说明里有能支撑你观点的事实，可以补进来。",
+        "language_only": "只翻译和润色措辞，不增、不删、不改任何事实，也不会发送你勾选的素材。"
+      },
+      "run": "优化",
+      "versionLabel": {
+        "align_to_job": "优化稿",
+        "language_only": "只改语言"
+      }
+    },
+    "coach": {
+      "title": "教练审阅",
+      "hint": "AI 对照这道题和岗位读这一版，打分并建议更好的句子。分数是它的判断，不是测量值。",
+      "run": "审阅",
+      "again": "重新审阅",
+      "score": "{score} / 100",
+      "aiJudgement": "AI 判断",
+      "dimensionsLabel": "各维度结论",
+      "status": {
+        "good": "不错",
+        "improve": "可改进",
+        "missing": "缺失"
+      },
+      "dimension": {
+        "answers_question": "回答了问题",
+        "concrete_evidence": "有具体依据",
+        "company_specific": "针对这家公司",
+        "covers_must_haves": "覆盖必备要求",
+        "length": "长度",
+        "language_tone": "语言和语气",
+        "no_overclaim": "没有夸大"
+      },
+      "suggestionsLabel": "建议",
+      "sentenceN": "第 {number} 句：",
+      "adopt": "采用这句",
+      "adopted": "已另存为新版本",
+      "unverifiedNote": "这条建议没有引用你素材里的原文，所以没有核对。用之前请自己确认属实。",
+      "noSuggestions": "没有逐句建议。",
+      "rewrite": "按这些建议改一版",
+      "rewriteHint": "请 AI 套用建议写出一个新版本，像初稿一样核对。当前版本保留。",
+      "rewriteLabel": "教练改写",
+      "droppedDimensions": "已略去：{count} 条未配置维度的评分。",
+      "droppedSuggestions": "已略去：{count} 条指向不存在句子的建议。"
     }
   }
 }

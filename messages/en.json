@@ -7505,7 +7505,8 @@
         "jd_excerpt": "JD excerpt",
         "profile": "profile summary, skills, languages",
         "stories": "chosen stories",
-        "emphasis": "your emphasis note"
+        "emphasis": "your emphasis note",
+        "draft": "your text or the answer under review"
       },
       "running": "Writing…",
       "requesting": "Queued…",
@@ -7532,7 +7533,8 @@
         "failed": "Writing failed. Please try again.",
         "invalid_payload": "The request was not valid.",
         "handler_error": "Something went wrong handling the request. Try again.",
-        "no_handler": "No AI worker handles this request yet. Check that the ai-worker runs."
+        "no_handler": "No AI worker handles this request yet. Check that the ai-worker runs.",
+        "too_long": "The text is longer than the limit in writer.yaml (draft_max_chars)."
       },
       "versionsLabel": "Versions",
       "manual": "Edited by you",
@@ -7634,6 +7636,61 @@
       "discard": "Discard",
       "saved": "Saved as a version",
       "oldCompany": "This text still names {companies}, the company of the answer you started from. Check it before you use it."
+    },
+    "polish": {
+      "title": "Improve my own draft",
+      "hint": "Paste what you wrote, in any language. The result is a new version in the answer language of this question; every sentence is checked against your text (and, for \"fit to the job\", the material you chose).",
+      "textLabel": "Your draft",
+      "placeholder": "Paste or write your answer here…",
+      "tooLong": "Too long: at most {max} characters.",
+      "optionLabel": "How to improve it",
+      "option": {
+        "align_to_job": "Fit it to the job",
+        "language_only": "Language only"
+      },
+      "explain": {
+        "align_to_job": "Keeps the facts of your draft and shapes it to the question and the job. It may add a fact from the profile, stories or emphasis note you chose when that backs a point you make.",
+        "language_only": "Only translates and polishes the wording. No fact is added, removed or changed, and none of your chosen material is sent."
+      },
+      "run": "Improve",
+      "versionLabel": {
+        "align_to_job": "Improved draft",
+        "language_only": "Language only"
+      }
+    },
+    "coach": {
+      "title": "Coach review",
+      "hint": "The AI reads this version against the question and the job, rates it and suggests better sentences. The score is its judgement, not a measurement.",
+      "run": "Review",
+      "again": "Review again",
+      "score": "{score} / 100",
+      "aiJudgement": "AI judgement",
+      "dimensionsLabel": "Verdict per dimension",
+      "status": {
+        "good": "Good",
+        "improve": "Improve",
+        "missing": "Missing"
+      },
+      "dimension": {
+        "answers_question": "Answers the question",
+        "concrete_evidence": "Concrete evidence",
+        "company_specific": "Specific to this company",
+        "covers_must_haves": "Covers the must-haves",
+        "length": "Length",
+        "language_tone": "Language and tone",
+        "no_overclaim": "No overclaiming"
+      },
+      "suggestionsLabel": "Suggestions",
+      "sentenceN": "Sentence {number}:",
+      "adopt": "Use this sentence",
+      "adopted": "Saved as a new version",
+      "unverifiedNote": "This suggestion names no quote from your material, so it is not checked. Check that it is true before you use it.",
+      "noSuggestions": "No sentence suggestions.",
+      "rewrite": "Rewrite by these suggestions",
+      "rewriteHint": "Asks the AI for one new version that applies the suggestions; it is checked like a draft. Your current version stays.",
+      "rewriteLabel": "Coach rewrite",
+      "droppedDimensions": "Left out: {count, plural, one {# rating of a dimension that is not configured.} other {# ratings of dimensions that are not configured.}}",
+      "droppedSuggestions": "Left out: {count, plural, one {# suggestion for a sentence that does not exist.} other {# suggestions for sentences that do not exist.}}"
     }
   }
 }

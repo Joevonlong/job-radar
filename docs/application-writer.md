@@ -81,6 +81,7 @@ emphasis note or your draft. Job Radar then checks each sentence in code, withou
 | No evidence (red) | No quote was found in the material the sentence may rest on (a sentence about you cannot rest on the JD alone). |
 | Framing (dotted) | A linking sentence without facts. |
 | Written by you (grey) | A sentence you wrote or changed; not checked. |
+| AI suggestion, unverified (amber, dotted) | A coach suggestion that names no quote that can be found. |
 
 Click a sentence for its quotes, where each was found and what is missing. A sentence that says "I" or "my" is always
 checked as one about you, whatever the AI called it. In a sentence about you, figures and names must be in its valid
@@ -89,12 +90,50 @@ job or the company may also rest on those two texts. A quote shorter than `evide
 it is exactly a known name such as "Go". Names the check cannot find are marked **Check:** — that is a hint for you to look, not a guarantee: the check only knows what looks like
 a name (quoted words, words with digits or inner capitals, capitalised words inside a sentence; `evidence.names`), so
 it can miss one and can mark a harmless word. Figures are compared as digits ("40 %", "40 Prozent" and "40%" are
-one figure; "€85k" and "85,000 €" one amount); a figure written as words ("forty percent") is not recognised. **"Has evidence" means a quote was found, not that the sentence is
+one figure; "€85k" and "85,000 €" one amount; a figure next to Chinese characters, as in "下降了40%", counts); a figure written as words ("forty percent") is not recognised. **"Has evidence" means a quote was found, not that the sentence is
 true.** Read every sentence before you send it.
 
 **Copy** copies the plain text. **Edit** saves your changes as a new version: unchanged sentences keep their check,
 changed ones become "written by you". **Mark as final** marks the version you sent; the job page counts final
 versions.
+
+### Improving your own draft
+
+Under the buttons, **Improve my own draft** takes text you wrote, in any language, and writes a new version of it in the
+question's answer language, length and tone. Two options:
+
+- **Fit it to the job** keeps the facts of your draft and shapes it to the question and the job. It may add a fact from
+  the profile, stories or emphasis note you ticked when that backs a point you make, never one from nowhere.
+- **Language only** translates and polishes the wording. No fact is added, removed or changed, and none of your ticked
+  material is sent: only the question, its settings, the job title and company, and your text.
+
+The box lists what the chosen option sends. Your text is the evidence of what it says: each sentence of the result is
+checked like a draft's, with "your draft" as one of the sources, so a fact that came from your text shows as having
+evidence, also when you wrote in another language (a quote is copied from your text as it is; figures are compared as
+digits). A name or figure the AI added that is in neither your text nor the material is marked as usual. The result is a
+new version in the list ("Improved draft" or "Language only"); your text is kept nowhere but in that request, which is
+cleared like any other when it ends. The text can be up to `draft_max_chars` long.
+
+### Coach review
+
+**Review** under a version asks the AI to read it as a coach would, against the question and the job. The result is
+stored on that version and shown under it:
+
+- a **score** from 0 to 100, marked as the AI's judgement: it is an opinion, not a measurement, and two reviews of the
+  same text can differ;
+- a **verdict per dimension** (good, improve, missing) with a one-line note, for the dimensions in `coach.dimensions`
+  (by default: answers the question, concrete evidence, specific to this company, covers the must-haves, length,
+  language and tone, no overclaiming). A rating of a dimension that is not configured is left out and counted;
+- **suggestions for single sentences**: which sentence, what is wrong, and a better sentence. A suggested sentence goes
+  through the same evidence check as any sentence, against your text and the ticked material. When it names no quote
+  that can be found, it is shown as **AI suggestion, unverified**: it may be right, but nothing backs it yet, so check that
+  it is true before you use it. A suggestion for a sentence the version does not have is left out and counted.
+
+**Use this sentence** saves a new version in which that sentence replaces the one it was about (the reviewed version is
+unchanged and keeps its review); the adopted sentence keeps the check result of the suggestion. **Rewrite by these
+suggestions** asks the AI for one new version that applies them, checked like a draft ("Coach rewrite"). **Review again**
+replaces the stored review. The review sends the version's text and the ticked material; the box lists it. Reviewing and
+rewriting use the `write` task, like everything else on this page.
 
 ### Exporting the final answers
 
@@ -130,7 +169,7 @@ right; nothing is stored until you press **Save as first version** (or **Discard
 
 ### What is sent, and what stays
 
-Only what the disclosure box lists is sent, only when you press **Write**, and only to the providers of the `write`
+Only what the disclosure box lists is sent, only when you press **Write**, **Improve** or **Review**, and only to the providers of the `write`
 task. There is no web search. The request carries the material from the database to the ai-worker; once it is done,
 fails or expires, the material is removed from the request and only the question id and a hash of the material remain.
 A request expires when it stays queued longer than `queue_timeout_seconds`, or stays running longer than
@@ -165,6 +204,9 @@ The removal only reaches the request row:
 | `jd_max_chars` | `6000` | Longest JD excerpt |
 | `jd_head_share` | `0.7` | Share of a cut JD excerpt taken from the start; the rest comes from the end |
 | `output_truncated_share` | `0.95` | An answer that did not parse and reached this share of the output cap counts as cut off |
+| `draft_max_chars` | `6000` | Longest text of yours that can be polished, and the longest answer that can be reviewed |
+| `coach.dimensions` | answers_question, concrete_evidence, company_specific, covers_must_haves, length, language_tone, no_overclaim | What a coach review rates (ids; the label of one you add is its id) |
+| `coach.max_suggestions` | `8` | Most sentence suggestions one review returns |
 | `reuse.min_similarity` | `0.55` | Lowest share of words a new question must have in common with an earlier one for that answer to be offered |
 | `reuse.max_candidates` | `3` | Most earlier answers offered for one new question |
 | `reuse.min_question_words` | `3` | Fewest words a new question needs before earlier answers are looked up (each Chinese character is a word) |

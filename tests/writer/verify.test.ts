@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { writerSchema } from "@/lib/config/schemas/writer";
 import { diffSentences } from "@/lib/writer/diff";
-import { countStatuses, figures, isFirstPerson, nameCandidates, normalize, verifySentence, type RawSentence, type VerifyContext } from "@/lib/writer/verify";
+import { countStatuses, figures, isFirstPerson, nameCandidates, normalize, verifySentence, verifySuggestion, type RawSentence, type VerifyContext } from "@/lib/writer/verify";
 
 const config = writerSchema.parse({}).evidence;
 
@@ -204,6 +204,18 @@ describe("figures", () => {
     expect(figures("2,5").keys.has("2.5")).toBe(true);
   });
 
+  it("a figure written against Chinese characters is a figure, one against Latin letters is a name", () => {
+    expect(figures("错误下降了40%的").keys.has("40%")).toBe(true);
+    expect(figures("迁移用了3个月").keys.has("3")).toBe(true);
+    expect(figures("我用S3和K8s").shown).toEqual([]);
+  });
+
+  it("a Chinese draft backs the English sentence with the same figure", () => {
+    const checked = verifySentence(sentence("After the migration, errors fell by 40%.", "user", [{ source: "draft", quote: "错误下降了40%" }]), context({ draft: "我把账单服务迁移之后，错误下降了40%。" }));
+    expect(checked.missing).toEqual([]);
+    expect(checked.status).toBe("supported");
+  });
+
   it("figures written as words and digits inside names are not figures", () => {
     expect(figures("forty percent").shown).toEqual([]);
     expect(figures("S3 and K8s").shown).toEqual([]);
@@ -275,5 +287,32 @@ describe("after a manual edit", () => {
   it("a new paragraph stays marked", () => {
     const kept = verifySentence(sentence("That is why I am applying.", "framing", []), context());
     expect(diffSentences([kept], "New start.\n\nThat is why I am applying.").map((entry) => entry.newParagraph)).toEqual([false, true]);
+  });
+});
+
+describe("verifySuggestion", () => {
+  it("a rewrite with a valid quote keeps its own status", () => {
+    const checked = verifySuggestion(sentence("I led the migration of the billing service.", "user", [{ source: "story", ref: "billing", quote: "led the migration of the billing service" }]), context());
+    expect(checked.status).toBe("supported");
+  });
+
+  it("a rewrite that rests on the user's own draft is backed by it", () => {
+    const checked = verifySuggestion(sentence("Ich habe die Abrechnung migriert.", "user", [{ source: "draft", quote: "habe die Abrechnung migriert" }]), context({ language: "de" }));
+    expect(checked.status).toBe("supported");
+  });
+
+  it("a rewrite without a valid quote is an unverified AI suggestion, not 'no evidence'", () => {
+    expect(verifySuggestion(sentence("I ran the platform for two years.", "user", []), context()).status).toBe("ai_suggestion_unverified");
+    expect(verifySuggestion(sentence("I ran the platform.", "user", [{ source: "profile", quote: "Rust (9 years)" }]), context()).status).toBe("ai_suggestion_unverified");
+  });
+
+  it("a partly backed rewrite is flagged for what it adds", () => {
+    const checked = verifySuggestion(sentence("Errors fell by 60%.", "user", [{ source: "story", ref: "billing", quote: "errors fell by 40%" }]), context());
+    expect(checked.status).toBe("partial");
+    expect(checked.missing).toEqual(["60%"]);
+  });
+
+  it("a linking sentence stays framing", () => {
+    expect(verifySuggestion(sentence("That is why this matters to me.", "framing", []), context()).status).toBe("framing");
   });
 });

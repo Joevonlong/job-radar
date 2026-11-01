@@ -32,6 +32,11 @@ const substringList = z.strictObject({ words: wordList, exclude: wordList.defaul
 
 const NAME_RULES = ["single", "multi", "off"] as const;
 
+/** The dimensions a coach review rates (a fresh array each time: zod defaults must not share one). */
+function defaultCoachDimensions(): string[] {
+  return ["answers_question", "concrete_evidence", "company_specific", "covers_must_haves", "length", "language_tone", "no_overclaim"];
+}
+
 /** The shipped first-person words (a fresh object each time: zod defaults must not share one). */
 function defaultFirstPerson(): Record<string, string[] | { words: string[]; exclude: string[] }> {
   return {
@@ -105,6 +110,22 @@ export const writerSchema = z.strictObject({
     .default(["neutral", "warm", "confident", "formal"]),
   /** Longest "what to emphasise this time" note. */
   emphasis_max_chars: z.number().int().min(50).max(5000).default(800),
+  /** Longest text of your own that can be polished (and the longest answer that can be reviewed). */
+  draft_max_chars: z.number().int().min(200).max(50_000).default(6000),
+  /** The coach review (an AI reading of an answer; its score is a judgement, not a measurement). */
+  coach: z
+    .strictObject({
+      /** What the review rates, one entry each (ids; the shipped ones have an explanation in the prompt). */
+      dimensions: z
+        .array(id)
+        .min(1)
+        .max(15)
+        .refine((items) => new Set(items).size === items.length, "must not contain duplicates")
+        .default(defaultCoachDimensions),
+      /** Most sentence suggestions one review returns. */
+      max_suggestions: z.number().int().min(1).max(20).default(8),
+    })
+    .prefault({}),
   /** Longest JD excerpt sent when no breakdown points are selected (like breakdown.yaml's `jd_max_chars`). */
   jd_max_chars: z.number().int().min(500).max(50_000).default(6000),
   /** Share of `jd_max_chars` taken from the beginning when the JD is cut (the rest from its end, like breakdown.yaml's `jd_head_share`). */
