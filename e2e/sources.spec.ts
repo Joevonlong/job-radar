@@ -1,6 +1,7 @@
 import postgres from "postgres";
 
 import { expect, test, waitForServerActions } from "./fixtures";
+import { AI_PROVIDER_IDS } from "../src/lib/config/ai-options";
 
 /** /sources on the seeded e2e database (see src/lib/db/seed.ts): the dashboard's fictional cycles and runs. The UI is Chinese by default. */
 test("sources shows a card per channel with its circuit state, runs and budget", async ({ page }) => {
@@ -99,14 +100,16 @@ test("the AI provider card names each provider's default model", async ({ page }
   await page.goto("/sources");
   await page.waitForLoadState("networkidle");
   const rows = page.getByTestId("ai-health-row");
-  await expect(rows).toHaveCount(5);
+  // one row per provider the app knows, whether or not it is enabled
+  await expect(rows).toHaveCount(AI_PROVIDER_IDS.length);
+  expect(await rows.evaluateAll((els) => els.map((el) => el.getAttribute("data-provider")))).toEqual([...AI_PROVIDER_IDS]);
   for (const row of await rows.all()) {
     const model = row.getByTestId("ai-model");
     await expect(model).not.toBeEmpty();
     await expect(model).toHaveAttribute("data-status", /^(ok|deprecated|missing|cliDefault)$/);
   }
   // the label of the catalog comes with the id
-  await expect(rows.filter({ hasText: "deepseek" }).first().getByTestId("ai-model")).toContainText(/\S+ · deepseek-/);
+  await expect(page.locator('[data-testid="ai-health-row"][data-provider="deepseek"]').getByTestId("ai-model")).toContainText(/\S+ · deepseek-/);
   // 390px: the second line does not widen the page
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
