@@ -18,15 +18,20 @@ interface QueueHintProps {
   timeZone?: string | undefined;
   /** Text colour and size of the lines (default: the job page's secondary text). */
   className?: string;
+  /**
+   * Whether the lines are their own live region (default). `false` when a parent already announces them (a status
+   * container that also holds the "waiting" line), so a screen reader hears one region and not two.
+   */
+  live?: boolean;
 }
 
 /**
  * The lines under a waiting button: how many requests go first and what the process is doing meanwhile (queued), since when
  * this request runs (running), and a warning with a link to /sources while the process has no fresh heartbeat. It only adds
- * lines: the component's own state (`data-state`, `data-stage`) does not change. A live region whose text only changes when
+ * lines: the component's own state (`data-state`, `data-stage`) does not change. A live region (unless `live` is false) whose text only changes when
  * its content does (the elapsed minutes at most once a minute), so a screen reader is not read the same line every poll.
  */
-export function QueueHint({ queue, stage, timeZone, className }: QueueHintProps) {
+export function QueueHint({ queue, stage, timeZone, className, live = true }: QueueHintProps) {
   const t = useTranslations("controlQueue");
   const tKind = useTranslations("settings.control.requests.kind");
   const tAge = useTranslations("settings.control.age");
@@ -44,7 +49,7 @@ export function QueueHint({ queue, stage, timeZone, className }: QueueHintProps)
   const minutes = queue.startedAt ? Math.max(0, Math.floor((new Date(queue.now).getTime() - new Date(queue.startedAt).getTime()) / 60_000)) : 0;
 
   return (
-    <div role="status" className={cn("flex flex-col gap-0.5", className ?? "text-ink-2 text-body-sm")} data-testid="queue-hint" data-offline={!queue.worker.online} data-ahead={stage === "pending" ? queue.ahead : undefined}>
+    <div role={live ? "status" : undefined} className={cn("flex flex-col gap-0.5", className ?? "text-ink-2 text-body-sm")} data-testid="queue-hint" data-offline={!queue.worker.online} data-ahead={stage === "pending" ? queue.ahead : undefined}>
       {!queue.worker.online ? (
         <p className="text-warning-text" data-testid="queue-hint-offline" data-process={process}>
           {queue.worker.process === null ? t("noProcess") : t("offline", { process, age })}{" "}

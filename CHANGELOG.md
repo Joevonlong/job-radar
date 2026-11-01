@@ -124,6 +124,7 @@ A failure in (a) does not block rollback: follow (c) and accept the display wind
 
 ### Changed
 
+- **One salary panel on the job page:** the "Salary level" and "Salary lookup" boxes are now one panel, "Salary · what this job pays": three figures on top (stated in the JD, median of similar postings, the AI's estimate for this company) and every source on one scale (this posting, similar postings, the company's other postings, the AI's band for this role, your floor). The AI's numbers stay labelled unverified and never enter a comparison. A stored lookup stays visible when the lookup is turned off, with the reason. The panel anchor is `#h-pay` (the old `#h-salary-level` and `#h-salary-lookup` are gone); no configuration or data changes.
 - **Job search controls on `/jobs`:** search covers basic information by default; turn on Include job descriptions to
   search original descriptions and current translations. A country filter with localized names and counts sits next to
   the search, and zero results offer a direct description search. The global shortcut is now labeled Jump to and links

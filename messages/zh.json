@@ -1402,7 +1402,8 @@
         "belowFloor": "写明的上限低于你的薪资底线。",
         "otherRegion": "可能是其他地区的薪资，不和本月的岗位比较。",
         "median": "中位 · 本月 {count} 个：{amount}（虚线）",
-        "noSample": "本月只有 {count} 个岗位写明薪资，至少 {min} 个才比较中位数和百分位。"
+        "noSample": "本月只有 {count} 个岗位写明薪资，至少 {min} 个才比较中位数和百分位。",
+        "panelLink": "看全部来源"
       },
       "checks": {
         "title": "条件核对",
@@ -1897,7 +1898,7 @@
       "insights": "统计页的时间范围、单列的城市和直方图分段。只影响显示。",
       "resume": "详情页“定制简历”用到的路径和命令（resume-kit 联动）。路径指向你自己的文件，主简历不会被读取。",
       "language": "新浏览器默认的界面语言、AI 写作用的语言、JD 翻译成什么语言，以及 Telegram 和命令行的语言。",
-      "salary": "岗位页的“薪资水平”卡片把岗位写明的薪资和库里同类岗位比较。可选的“查薪资”让 AI provider 去薪资网站搜这家公司和这个岗位。岗位族和外部搜索链接在 salary.yaml 里改。",
+      "salary": "岗位页的“薪资”面板把岗位写明的薪资和库里同类岗位、这家公司的其他岗位放在一把尺子上比较，查过的话再加上 AI 的估计。可选的“查薪资”让 AI provider 去薪资网站搜这家公司和这个岗位。岗位族和外部搜索链接在 salary.yaml 里改。",
       "writer": "详情页“写申请回答”背后的工作台：用你选的素材让 AI 起草申请问题的回答和动机信，每句话都对照素材核对。默认关闭。用哪个 AI 在“AI”标签页的任务覆盖里设置（任务“申请写作”）。素材库和问题的上限、版本风格、语气和依据核对在 writer.yaml 里改。"
     },
     "actions": {
@@ -6557,9 +6558,99 @@
       "lead": "负责人",
       "unknown": "不限级别"
     },
+    "panel": {
+      "title": "薪资 · 这个岗位给多少钱",
+      "aside": "{count, plural, =0 {没有数字} other {# 个来源}}",
+      "unverified": "未核对",
+      "sep": {
+        "list": "、",
+        "clause": "，"
+      },
+      "head": {
+        "jd": "JD 写明",
+        "group": "同类岗位",
+        "ai": "这家公司 · AI 估计",
+        "perYear": "/年",
+        "jdNone": "未披露",
+        "jdReview": "薪资待核对",
+        "jdUnreadable": "已披露，但无法读取",
+        "jdOther": "不同币种或地区，不参与比较",
+        "vsAbove": "比同类中位高 {percent}%",
+        "vsBelow": "比同类中位低 {percent}%",
+        "vsEqual": "与同类中位持平",
+        "groupMedian": "中位 {amount}",
+        "groupConfigError": "配置有误",
+        "groupNotReady": "数据表缺失",
+        "groupNoCurrency": "没有基准货币",
+        "groupNoFamily": "没有同类",
+        "groupStale": "基准待重建",
+        "groupNotComputed": "还没算出来",
+        "groupNoGroup": "样本太少",
+        "aiLooking": "查询中…",
+        "aiNotLooked": "还没查",
+        "aiOff": "查薪资已关闭",
+        "aiNoProvider": "没有能联网的 AI",
+        "aiUnavailable": "查薪资不可用",
+        "aiNoBand": "没查到本岗位区间",
+        "aiEmpty": "查到了，但没有可用的数字",
+        "aiCompany": "公司整体：{level}",
+        "aiCompanyMedian": "公司整体中位 {amount}"
+      },
+      "lane": {
+        "jd": {
+          "label": "本岗位",
+          "source": "JD 原文 · 事实",
+          "none": "这条岗位没有写明薪资。",
+          "review": "写明的薪资待核对，所以不画。",
+          "other": "不同币种或地区：只写岗位原文，不画也不比较。",
+          "unreadable": "写了薪资但读不出来，所以不画。"
+        },
+        "group": {
+          "label": "同类岗位",
+          "values": "中位 {median}，P10–P90 {low}–{high}"
+        },
+        "groupCompany": {
+          "label": "同类岗位和同一公司"
+        },
+        "company": {
+          "label": "同一公司其他岗位",
+          "source": "{count, plural, =0 {库里没有} other {库里 # 条写明薪资}}",
+          "none": "库里没有这家公司写明薪资的其他岗位。",
+          "values": "{count} 条：{list}",
+          "median": "中位 {amount}",
+          "few": "样本太少，不算中位（至少 {min} 条）"
+        },
+        "ai": {
+          "label": "这家公司 · 本岗位（AI）",
+          "source": "AI 网页搜索 · 未核对",
+          "total": "总包，不能和基本工资直接比较",
+          "unknownBasis": "口径不明",
+          "expired": "已过期",
+          "otherPosting": "在另一条岗位上查的",
+          "median": "中位 {amount}",
+          "noBand": "没查到本岗位区间。公司整体的数字在下面的详情里。",
+          "empty": "查到了，但没有可用的数字。",
+          "notLooked": "还没查。",
+          "looking": "查询中…",
+          "off": "查薪资已关闭。",
+          "noProvider": "没有设置能联网搜索的 AI provider。",
+          "unavailable": "查薪资现在不可用。"
+        }
+      },
+      "ruler": {
+        "label": "各来源薪资对照",
+        "floor": "你的底线 {amount}"
+      },
+      "foot": {
+        "sourcesHeading": "AI 数字的出处",
+        "actionsHeading": "AI 查询",
+        "linksHeading": "自己去看",
+        "noSources": "还没有 AI 查询。其余几行来自这条岗位和你的库。",
+        "sources": "{count, plural, other {# 个来源}}{sites, select, none {} other {（{sites}）}} · {meta}",
+        "sent": "发给 AI 的内容：公司名、标题、级别和地点。"
+      }
+    },
     "level": {
-      "title": "薪资水平",
-      "aside": "对比库里的岗位",
       "configError": "salary.yaml 无法读取，所以没法比较。运行 pnpm config:check 查看原因。",
       "notReady": "薪资相关的数据表还不存在，请先运行数据库迁移。",
       "noCurrency": "你的市场没有设置基准货币，没法比较薪资。",
@@ -6575,24 +6666,14 @@
         "family": "{family} · 所有级别 · 所有地点"
       },
       "sample": "样本 {n}",
-      "median": "中位数 {amount}",
-      "range": "多数岗位（P10 至 P90）：{low} 至 {high}",
-      "rangeLabel": "P10 到 P90 的薪资分布，标出中位数和本岗位",
-      "position": "P{p}",
       "positionText": "本岗位（{amount}）高于同组 {p}%。",
       "positionBelow": "本岗位（{amount}）低于同组最低的 10%。",
       "positionAbove": "本岗位（{amount}）高于同组最高的 10%。",
       "noFigure": "本岗位没有可比较的薪资，下面的组只作参考。",
-      "companyHeading": "同一公司",
-      "company": "这家公司另有 {count} 个岗位写明薪资，中位数 {amount}。",
-      "companyFew": "{count, plural, =0 {这家公司没有其他写明薪资的岗位。} other {这家公司另有 # 个岗位写明薪资（至少 {min} 个才算中位数）。}}",
-      "linksHeading": "去别处搜",
       "linkTitle": "在新标签页打开 {site}",
       "noLinks": "salary.yaml 里没有设置搜索链接。"
     },
     "lookup": {
-      "title": "查薪资",
-      "aside": "AI 网页搜索",
       "disabled": "查薪资已关闭。可以在设置里打开：它让 AI provider 去薪资网站搜这家公司和这个岗位。",
       "settingsLink": "薪资设置",
       "noProvider": "这个查询设置的 AI provider 都不能搜索网页。请在「AI」标签里给任务“查薪资”使用 claude-cli 或 Anthropic API。",
