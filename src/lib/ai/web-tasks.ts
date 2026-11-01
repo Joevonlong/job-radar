@@ -12,7 +12,7 @@ export const WEB_ACCESS_TASKS: ReadonlySet<AiTask> = new Set<AiTask>(["salary_lo
 /**
  * Providers whose transport can search the web for a web task: claude-cli (WebSearch + WebFetch on pre-approved domains),
  * codex-cli (its built-in web search, no domain limit), anthropic (the server-side web_search tool). The OpenAI-compatible
- * providers (deepseek, mimo) cannot and are skipped for a web task.
+ * providers (openai, openrouter, deepseek, mimo) cannot and are skipped for a web task.
  */
 export const WEB_CAPABLE_PROVIDERS: ReadonlySet<AiProviderId> = new Set<AiProviderId>(["claude-cli", "codex-cli", "anthropic"]);
 

@@ -66,6 +66,11 @@ describe("compose.yaml: restart, logging and healthchecks", () => {
     expect(env.RUNNER_HEARTBEAT_SECONDS).toContain("30");
   });
 
+  it("the runner's AI keys stay empty: API calls run in the host ai-worker, which reads them from .env", () => {
+    const env = compose.services.runner?.environment ?? {};
+    for (const name of ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY", "DEEPSEEK_API_KEY", "MIMO_API_KEY"]) expect(env[name], name).toBe("");
+  });
+
   it("the runner writes backups into a bind mount the host can see", () => {
     const volumes = compose.services.runner?.volumes ?? [];
     expect(volumes).toContain("./data/backups:/app/data/backups");

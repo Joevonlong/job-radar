@@ -37,6 +37,11 @@ export interface AiTokenUsage {
   reported?: boolean;
   /** server-side web searches the call made (anthropic `server_tool_use.web_search_requests`); priced apart from the tokens. */
   webSearches?: number;
+  /**
+   * What the provider says this call was charged, USD (OpenRouter `usage.cost`; always finite and >= 0). Present: it is the
+   * call's cost in `ai_usage` and the monthly budget; absent: the cost is estimated from the catalog. Per call, never summed.
+   */
+  reportedCostUsd?: number;
 }
 
 /** A JSON Schema document with an object at its root (what every provider requires). */

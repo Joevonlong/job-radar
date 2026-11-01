@@ -12,7 +12,7 @@ export { AI_MODEL_SOURCES, AI_USAGE_OUTCOMES, type AiModelSource, type AiUsageOu
 export const API_PROVIDER_IDS: readonly AiProviderId[] = AI_PROVIDER_IDS.filter((id) => AI_PROVIDER_KIND[id] === "api");
 
 /** USD, rounded to micro-dollars (ai_usage.cost_estimate has 6 decimals). */
-const roundUsd = (usd: number): number => Math.round(usd * 1e6) / 1e6;
+export const roundUsd = (usd: number): number => Math.round(usd * 1e6) / 1e6;
 
 /**
  * Cost of `usage` at `price` (USD, micro-dollar precision). Uncached input is priced at `input_per_mtok`, cache reads at

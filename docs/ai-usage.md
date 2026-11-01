@@ -13,7 +13,7 @@ One row per model request (including retries after unacceptable output, timeouts
 | `tokens_in_cached` / `tokens_in_cache_write` / `tokens_out_reasoning` | Subsets of the two numbers above; empty = not broken down |
 | `duration_ms` | Duration of one model call |
 | `outcome` / `error_kind` | `ok` / `invalid_output` / `failed`; failed rows carry an error kind (timeout, rate limit, login invalid, network, provider error, ...). The original error text is not stored |
-| `cost_estimate` | **Actual spend**: API at `price`, subscription = 0; the monthly budget only adds up this column |
+| `cost_estimate` | **Actual spend**: API at `price` (OpenRouter: the cost it reported for the call, when the reply carries one), subscription = 0; the monthly budget only adds up this column |
 | `equivalent_cost_usd` | **Equivalent API cost**: what the same tokens would cost at API list prices. API call = actual spend; subscription CLI = computed from `equivalent_price`; empty if there is no price or the tokens are unknown |
 | `job_id` | The job a scoring, signal or translation call belongs to (set to empty after the job is deleted) |
 

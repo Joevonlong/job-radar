@@ -4,6 +4,7 @@ import { monthKey } from "@/lib/channels/budget";
 import type { ChannelLogger } from "@/lib/channels/types";
 import { type AiModelSource } from "@/lib/ai-usage/constants";
 import { cliDefaultModel, findCatalogModel, type AiConfig, type ModelsConfig } from "@/lib/config";
+import { AI_PROVIDER_CONFIG_KEYS } from "@/lib/config/ai-options";
 
 import { loadModelCatalog } from "./catalog";
 import { AiProviderError, AiUnavailableError, sanitize, type AiAttempt, type AiQuotaGuardMark } from "./errors";
@@ -20,7 +21,7 @@ import {
 import { toJsonSchema } from "./schema-to-json";
 import type { AiCallRecord, AiPrompt, AiProvider, AiProviderId, AiResult, AiRunOptions, AiTask } from "./types";
 import { CODEX_DEFAULT_MODEL } from "./providers/codex-cli";
-import { estimateCostUsd, estimateEquivalentUsd, type AiUsageStore } from "./usage";
+import { estimateCostUsd, estimateEquivalentUsd, roundUsd, type AiUsageStore } from "./usage";
 import { webCapable } from "./web-tasks";
 
 /**
@@ -69,7 +70,6 @@ export interface AiRouterOptions {
   cycleStartedAt?: Date | null;
 }
 
-const POLICY_KEY = { "claude-cli": "claude_cli", "codex-cli": "codex_cli", anthropic: "anthropic", deepseek: "deepseek", mimo: "mimo" } as const;
 
 interface GateBlock {
   kind: AiProviderError["kind"];
@@ -131,8 +131,12 @@ export function createAiRouter(options: AiRouterOptions): AiRouter {
     const { model, source } = attribute(provider.id, call.model, catalog);
     const { usage: tokens } = call;
     const reported = tokens.reported !== false;
-    // an unreported reply has only placeholder counts: it costs 0 as far as the budget can tell
-    const priced = estimateCostUsd(catalog, provider.id, model ?? "", reported ? tokens : { tokensIn: 0, tokensOut: 0 });
+    // the charge the provider reported wins over the estimate; an unreported reply has only placeholder counts: it costs 0 as far as the budget can tell
+    const charged = provider.kind === "api" ? tokens.reportedCostUsd : undefined;
+    const priced =
+      charged !== undefined
+        ? { costUsd: roundUsd(charged), priced: "exact" as const }
+        : estimateCostUsd(catalog, provider.id, model ?? "", reported ? tokens : { tokensIn: 0, tokensOut: 0 });
     // server-side web searches are billed per search, apart from the tokens (API providers only; a subscription costs 0)
     const searchCost = provider.kind === "api" ? (tokens.webSearches ?? 0) * webSearchCostUsd : 0;
     const actual = searchCost > 0 ? { ...priced, costUsd: priced.costUsd + searchCost } : priced;
@@ -140,7 +144,7 @@ export function createAiRouter(options: AiRouterOptions): AiRouter {
     if (actual.priced === "fallback" && !failed) {
       logger?.warn("ai model not in catalog, priced at the provider's highest price", { provider: provider.id, model });
     }
-    if (provider.kind === "api" && !reported && !failed) {
+    if (provider.kind === "api" && !reported && !failed && charged === undefined) {
       logger?.warn("ai usage not reported by the provider, cost counted as 0", { provider: provider.id, model });
     }
     const equivalentUsd = failed ? null : estimateEquivalentUsd(catalog, provider.id, model ?? "", tokens, actual);
@@ -194,6 +198,8 @@ export function createAiRouter(options: AiRouterOptions): AiRouter {
       case "claude-cli": return config.providers.claude_cli.model;
       case "codex-cli": return config.providers.codex_cli.model;
       case "anthropic": return config.providers.anthropic.model;
+      case "openai": return config.providers.openai.model;
+      case "openrouter": return config.providers.openrouter.model;
       case "deepseek": return config.providers.deepseek.model;
       case "mimo": return config.providers.mimo.model;
     }
@@ -254,7 +260,7 @@ export function createAiRouter(options: AiRouterOptions): AiRouter {
     if (!provider) return { kind: "not_configured", message: "provider not available" };
     const disabledReason = disabled.get(id);
     if (disabledReason !== undefined) return { kind: "auth", message: disabledReason };
-    const policy = config.providers[POLICY_KEY[id]];
+    const policy = config.providers[AI_PROVIDER_CONFIG_KEYS[id]];
     if (!policy.enabled) return { kind: "not_configured", message: "turned off in ai.yaml (enabled: false)" };
     const state = await safely("read", (store) => store.get(id));
     if (state && isCoolingDown(state, now())) {

@@ -242,7 +242,7 @@ these keys; you edit them by hand in the file in your config directory:
 
 | File | Protected keys |
 |---|---|
-| `ai.yaml` | `providers.*.command` (the `claude` / `codex` executables), `providers.*.base_url` (DeepSeek, MiMo), `providers.codex_cli.config_overrides`, `providers.codex_cli.disable_features`, `providers.codex_cli.trim_context` |
+| `ai.yaml` | `providers.*.command` (the `claude` / `codex` executables), `providers.*.base_url` (OpenAI, OpenRouter, DeepSeek, MiMo), `providers.codex_cli.config_overrides`, `providers.codex_cli.disable_features`, `providers.codex_cli.trim_context` |
 | `notify.yaml` | `telegram.api_base_url` |
 | `sources.yaml` | every `base_url`, `api_base_url` and `eu_api_base_url`, `jobspy.url`, `jobspy.proxies`, `sources.gmail.host` / `port` / `secure`, `linkedin.session.site.auth_file`, `linkedin.apify.actor_id`, `linkedin.monid.provider`, `linkedin.monid.endpoint` |
 | `resume.yaml` | `claude_command`, `claude_args`, `resume_kit_path`, `master_resume_path`, `pdf_dir`, `jd_export_dir`, `jd_export_host_dir` |
@@ -267,7 +267,7 @@ file says (shipped values always pass):
 - `ai.yaml providers.claude_cli.command` / `providers.codex_cli.command` must name the `claude` / `codex` executable (bare
   name or absolute path); `providers.codex_cli.config_overrides` keeps only the context switches set to `false`; the codex
   tool restrictions are always applied, whatever `disable_features` and `trim_context` say.
-- `base_url` / `api_base_url` of the services that receive a credential (DeepSeek, MiMo, Telegram, JSearch, Tavily, Brave,
+- `base_url` / `api_base_url` of the services that receive a credential (OpenAI, OpenRouter, DeepSeek, MiMo, Telegram, JSearch, Tavily, Brave,
   Apify, Monid) must point to the vendor's own host, and `sources.gmail` to `imap.gmail.com:993` with TLS, unless
   `JOB_RADAR_ALLOW_CUSTOM_ENDPOINTS=1` is set in `.env`. Credentialed requests never follow a redirect.
 - The claude / codex model names must be plain names (no spaces, not starting with `-`).

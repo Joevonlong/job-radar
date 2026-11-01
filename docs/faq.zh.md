@@ -98,7 +98,7 @@ Job Radar 本身免费、开源（AGPL-3.0），跑在你自己的机器上。�
 |---|---|
 | Codex CLI（订阅） | 在跑 AI worker 的机器上 `codex login` |
 | Claude Code（订阅） | 运行 `claude`，然后 `/login` |
-| Anthropic、DeepSeek 或 MiMo（API） | 把 key 填进 `.env`；DeepSeek 和 MiMo 还要在 `ai.yaml` 里打开 |
+| Anthropic、OpenAI、OpenRouter、DeepSeek 或 MiMo（API） | 把 key 填进 `.env`；DeepSeek 和 MiMo 还要在 `ai.yaml` 里打开 |
 
 默认先试 codex，再试 claude，最后才是 API。顺序、模型和每类任务的推理强度都能在设置页的 AI 标签里改。`pnpm ai:probe`
 显示现在哪些可用。详见 [ai-providers.zh.md](ai-providers.zh.md)。

@@ -15,7 +15,15 @@ import { MetricSwitch } from "./metric-switch";
 import { useUsdText } from "./usage-cells";
 
 /** Interface colours of the providers (not a setting): a provider keeps its colour on every chart. */
-export const PROVIDER_TONE: Record<AiProviderIdChoice, VizTone> = { "codex-cli": "t4", "claude-cli": "t3", deepseek: "t2", anthropic: "t1", mimo: "ink" };
+export const PROVIDER_TONE: Record<AiProviderIdChoice, VizTone> = {
+  "codex-cli": "t4",
+  "claude-cli": "t3",
+  deepseek: "t2",
+  anthropic: "t1",
+  mimo: "ink",
+  openai: "violet",
+  openrouter: "olive",
+};
 
 const PHONE_TICKS = 5;
 const DESKTOP_TICKS = 10;

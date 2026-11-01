@@ -103,9 +103,10 @@ export function createProvider(transport: AiTransport, kind: AiProviderKind = AI
         } catch (error) {
           // A call that failed is still a call; a cancelled one is not.
           if (error instanceof AiProviderError && error.kind !== "aborted") {
+            // a reply that arrived but was unusable (empty) still carries its usage: it is billed, so it is counted
             opts.onCall?.({
-              model: transport.plannedModel?.(request) ?? null,
-              usage: { tokensIn: 0, tokensOut: 0, reported: false },
+              model: error.model ?? transport.plannedModel?.(request) ?? null,
+              usage: error.usage ?? { tokensIn: 0, tokensOut: 0, reported: false },
               durationMs: Math.max(0, Math.round(performance.now() - started)),
               outcome: "failed",
               errorKind: error.kind,

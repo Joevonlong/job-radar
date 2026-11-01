@@ -1776,6 +1776,7 @@
       "vendor": {
         "anthropic": "Anthropic",
         "openai": "OpenAI",
+        "openrouter": "OpenRouter",
         "deepseek": "DeepSeek",
         "mimo": "Xiaomi MiMo"
       },
@@ -2388,6 +2389,22 @@
       "json_mode_only": {
         "label": "只有 JSON mode",
         "hint": "没有 json_schema，schema 写进 prompt。"
+      },
+      "max_tokens_field": {
+        "label": "回复长度字段",
+        "hint": "请求里限制回复长度的字段：max_tokens，或 max_completion_tokens（OpenAI 的新模型只接受后者）。"
+      },
+      "openrouter_data_collection": {
+        "label": "上游数据收集",
+        "hint": "deny：只路由到不拿请求数据训练的上游服务商。这不等于零保留。"
+      },
+      "openrouter_zdr": {
+        "label": "只用零保留端点",
+        "hint": "只路由到有零数据保留（ZDR）政策的端点（可用的模型和上游更少）。"
+      },
+      "openrouter_require_parameters": {
+        "label": "要求支持 JSON",
+        "hint": "只路由到支持请求里全部参数（包括 JSON 输出格式）的上游服务商。"
       },
       "per_cycle_limit": {
         "label": "每轮最多处理条数",

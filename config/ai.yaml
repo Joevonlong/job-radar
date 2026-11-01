@@ -4,7 +4,7 @@
 #   host      the runner in the container only writes a run_ai request; ai-worker on the host (launchd) runs it with the local claude / codex subscription
 #             for the AI and notify steps; the container needs no AI credentials (default)
 #   container the runner runs them inside the container itself (needs a subscription token or API key in the container; not recommended)
-config_version: 2
+config_version: 3
 execution: host
 
 # Host ai-worker (pnpm ai-worker)
@@ -39,8 +39,9 @@ host_worker:
 # Global order: try codex-cli first, then claude-cli, then the API tier (order in api_order).
 # The claude subscription quota is shared with your own interactive Claude use, so by default it comes after codex and has a daily request cap (providers.*.daily_request_cap).
 order: [codex-cli, claude-cli, api]
-# Pay-per-token APIs, tried in this order once both CLIs are unavailable; each needs its key in .env. DeepSeek and MiMo are off by default (providers.*.enabled).
-api_order: [anthropic, deepseek, mimo]
+# Pay-per-token APIs, tried in this order once both CLIs are unavailable; each needs its key in .env (a provider without its key is skipped
+# and sends nothing). DeepSeek and MiMo are off by default (providers.*.enabled).
+api_order: [anthropic, openai, openrouter, deepseek, mimo]
 
 providers:
   # Subscription CLIs: run non-interactively in a temporary empty directory, no tools, no file writes; cost counts as 0 (subscription).
@@ -93,8 +94,34 @@ providers:
     daily_request_cap: 0
     model: claude-sonnet-5-5
     strong_model: claude-sonnet-5-5
-  # DeepSeek and MiMo are off by default: switch one on (enabled: true) and put its key in .env to use it.
+  # OpenAI, OpenRouter, DeepSeek and MiMo speak the same chat-completions API. Without OPENAI_API_KEY / OPENROUTER_API_KEY in .env
+  # the provider is skipped and nothing is sent; putting the key in .env is what switches it on.
   # base_url: the key is only sent to the vendor's own host; another host needs JOB_RADAR_ALLOW_CUSTOM_ENDPOINTS=1 in .env.
+  # json_mode_only: true = response_format json_object with the JSON Schema in the prompt, checked by Job Radar (retried once when invalid).
+  # max_tokens_field: the request field that caps the reply length, max_tokens or max_completion_tokens (OpenAI's newer models take only the latter).
+  openai:
+    enabled: true
+    daily_request_cap: 0
+    base_url: https://api.openai.com/v1
+    model: gpt-6-luna
+    json_mode_only: true
+    max_tokens_field: max_completion_tokens
+  # OpenRouter forwards each request to an upstream provider (the model's vendor or a host of it, in various countries); see docs/privacy.md.
+  openrouter:
+    enabled: true
+    daily_request_cap: 0
+    base_url: https://openrouter.ai/api/v1
+    model: deepseek/deepseek-v4.1-flash
+    json_mode_only: true
+    max_tokens_field: max_tokens
+    # Sent as the request's provider field. require_parameters: only upstreams that support response_format.
+    # data_collection: deny = only upstreams that do not store requests to train on them; this is not zero retention.
+    # zdr: true = only zero-data-retention endpoints (fewer models and upstreams).
+    routing:
+      require_parameters: true
+      data_collection: deny
+      zdr: false
+  # DeepSeek and MiMo are off by default: switch one on (enabled: true) and put its key in .env to use it.
   deepseek:
     enabled: false
     daily_request_cap: 0

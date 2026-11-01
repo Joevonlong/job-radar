@@ -108,6 +108,8 @@ function chosenModels(ai: AiConfig): [(string | number)[], AiProviderIdChoice, s
     [["providers", "claude_cli", "strong_model"], "claude-cli", providers.claude_cli.strong_model],
     [["providers", "anthropic", "model"], "anthropic", providers.anthropic.model],
     [["providers", "anthropic", "strong_model"], "anthropic", providers.anthropic.strong_model],
+    [["providers", "openai", "model"], "openai", providers.openai.model],
+    [["providers", "openrouter", "model"], "openrouter", providers.openrouter.model],
     [["providers", "deepseek", "model"], "deepseek", providers.deepseek.model],
     [["providers", "mimo", "model"], "mimo", providers.mimo.model],
   ];

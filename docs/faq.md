@@ -108,7 +108,7 @@ job breakdowns and the AI signal check start once you connect one of these:
 |---|---|
 | Codex CLI (subscription) | `codex login` on the machine that runs the AI worker |
 | Claude Code (subscription) | run `claude`, then `/login` |
-| Anthropic, DeepSeek or MiMo (API) | the key in `.env`; DeepSeek and MiMo also need switching on in `ai.yaml` |
+| Anthropic, OpenAI, OpenRouter, DeepSeek or MiMo (API) | the key in `.env`; DeepSeek and MiMo also need switching on in `ai.yaml` |
 
 By default the worker tries codex, then claude, then the API providers. You can change the order, the model and the
 effort per task on the AI tab of the Settings page. `pnpm ai:probe` shows what works right now.

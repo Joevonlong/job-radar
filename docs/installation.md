@@ -35,7 +35,7 @@ No pnpm yet, or another version? With Node 22, `corepack enable` gives you the v
 Optional, for later:
 
 - **An AI.** A `claude` (Claude Code) or `codex` (Codex CLI) subscription you are signed in to on this machine, or an API
-  key for Anthropic, DeepSeek or MiMo. Without one, Job Radar still collects, de-duplicates, filters and shows jobs.
+  key for Anthropic, OpenAI, OpenRouter, DeepSeek or MiMo. Without one, Job Radar still collects, de-duplicates, filters and shows jobs.
 - **Telegram**, for pushes to your phone.
 - **Tailscale**, to open the dashboard on your phone.
 
@@ -91,7 +91,7 @@ explains every variable. `.env` is ignored by git: never commit it, and never pa
 | Job-alert emails from Gmail | `GMAIL_USER`, `GMAIL_APP_PASSWORD` | [gmail-alerts.md](gmail-alerts.md) |
 | Finding new company boards | `TAVILY_API_KEY` | [tavily.md](tavily.md) |
 | Telegram pushes | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` (written for you by `pnpm run setup --step telegram`) | step 7 below |
-| AI via API | `ANTHROPIC_API_KEY`, `DEEPSEEK_API_KEY`, `MIMO_API_KEY` | step 4 below |
+| AI via API | `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, `DEEPSEEK_API_KEY`, `MIMO_API_KEY` | step 4 below |
 | A password for the dashboard | `JOB_RADAR_WEB_PASSWORD_HASH` (from `pnpm web:password`) | step 8 below |
 | Linux: the user the containers run as | `PUID`, `PGID` | step 3 below |
 
@@ -145,7 +145,7 @@ Do this in your own terminal on this machine. Installing the CLIs themselves is 
 |---|---|---|
 | Claude (subscription) | run `claude`, type `/login`, follow the prompts, then exit | `claude auth status` shows `loggedIn: true` |
 | Codex (subscription) | `codex login` | `codex login status` shows Logged in |
-| API key | add `ANTHROPIC_API_KEY`, `DEEPSEEK_API_KEY` or `MIMO_API_KEY` to `.env` (DeepSeek and MiMo also need `enabled: true` in `ai.yaml`) | `pnpm ai:probe` after step 5 |
+| API key | add `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, `DEEPSEEK_API_KEY` or `MIMO_API_KEY` to `.env` (DeepSeek and MiMo also need `enabled: true` in `ai.yaml`) | `pnpm ai:probe` after step 5 |
 
 Subscription CLIs cost nothing per token; daily caps (codex 200, claude 100 calls by default) protect your quota. API
 providers are only tried after the CLIs and stop at `monthly_api_budget_usd` in `ai.yaml`. Don't put a subscription

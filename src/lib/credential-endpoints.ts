@@ -15,6 +15,8 @@ export const ALLOW_CUSTOM_ENDPOINTS_ENV = "JOB_RADAR_ALLOW_CUSTOM_ENDPOINTS";
 
 /** Each service that sends a credential: the config key holding its URL and the hosts it may reach without the opt-in. */
 export const CREDENTIAL_ENDPOINTS = {
+  openai: { setting: "ai.yaml providers.openai.base_url", hosts: ["api.openai.com"] },
+  openrouter: { setting: "ai.yaml providers.openrouter.base_url", hosts: ["openrouter.ai"] },
   deepseek: { setting: "ai.yaml providers.deepseek.base_url", hosts: ["api.deepseek.com"] },
   mimo: { setting: "ai.yaml providers.mimo.base_url", hosts: ["api.xiaomimimo.com"] },
   telegram: { setting: "notify.yaml telegram.api_base_url", hosts: ["api.telegram.org"] },
