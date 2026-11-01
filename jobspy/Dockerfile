@@ -1,6 +1,6 @@
 # The base image is pinned by digest (the multi-platform index of the tag), so every build starts from the same Python;
 # Dependabot (docker ecosystem) proposes the next digest.
-FROM python:3.12-slim@sha256:6b25cbe6577518889d553cdd5a5da97d259348d8f6e45b527dd731caaba27a07
+FROM python:3.15-slim@sha256:94d3426f1def7db4a106a232ac121bfd975393e5dfd40a619b955fae45fe7913
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
