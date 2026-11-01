@@ -30,23 +30,16 @@ import { callAction, withActionFeedback } from "@/lib/actions/client";
 const lookupSalaryAction = withActionFeedback(rawLookupSalaryAction)(() => ({ ok: false, error: "failed" }));
 const salaryLookupStatusAction = (input: Parameters<typeof rawSalaryLookupStatusAction>[0]) => callAction(() => rawSalaryLookupStatusAction(input), () => null);
 
-export interface SalaryLookupCardProps {
+/** What the lookup state machine reads from the page. */
+export interface SalaryLookupInput {
   jobId: number;
-  company: string;
   availability: LookupAvailability;
-  /** A provider of the plan searches without a domain limit (codex-cli). */
-  unrestricted: boolean;
   /** The providers the lookup may use, in order: an auth failure names only their logins. */
   providers: readonly AiProviderId[];
   latest: SalaryLookupView | null;
   initialRequest: InitialSalaryRequest | null;
   usedToday: number;
   maxPerDay: number;
-  ttlDays: number;
-  /** The base currency the figures are in. */
-  currency: string;
-  /** The benchmark group the level card shows (its p10..p90), for "about P80 of the group". */
-  groupQuantiles: number[] | null;
   timeZone: string;
 }
 
@@ -64,7 +57,6 @@ async function readLookup(jobId: number, requestId: number): Promise<ControlRequ
   }
   return { state: "done", done: null };
 }
-type CardState = "disabled" | "no_web_provider" | "config_error" | "not_ready" | "ready" | "waiting" | "failed" | "done";
 
 const KNOWN_SENIORITIES = ["entry", "mid", "senior", "lead"] as const;
 const isKnownSeniority = (value: string | null): value is (typeof KNOWN_SENIORITIES)[number] => KNOWN_SENIORITIES.some((s) => s === value);
@@ -97,14 +89,29 @@ function Cap({ children, id }: { children: ReactNode; id?: string }) {
   );
 }
 
+export type LookupState = "disabled" | "no_web_provider" | "config_error" | "not_ready" | "ready" | "waiting" | "failed" | "done";
+
+export interface SalaryLookupState {
+  state: LookupState;
+  busy: boolean;
+  stage: "pending" | "running" | null;
+  queue: ControlQueueView | null;
+  error: { key: ErrorKey; detail: string | null; resumeAt?: string | null } | null;
+  /** The text of an error, with the logins to fix or the time the AI usage cap lifts. */
+  errorText: (key: ErrorKey, resumeAt?: string | null) => string;
+  used: number;
+  maxPerDay: number;
+  usedUp: boolean;
+  run: (force: boolean) => void;
+}
+
 /**
- * The "Salary lookup" card: a button that asks the ai-worker to search the web for this company's salaries (off by
- * default, the one task allowed to reach the web), and the unverified estimate: the company's level, this role's band and
- * related roles with their place in the benchmark group, the sources, the confidence and who answered. Every state has its
- * own `data-state`.
+ * The salary lookup's state machine: a button asks the ai-worker to search the web for this company's salaries (off by default,
+ * the one task allowed to reach the web); the request is followed until the worker has finished it, then the page refreshes and
+ * shows the stored result. Every state is one of `LookupState` (the panel's `data-lookup-state`).
  */
-export function SalaryLookupCard(props: SalaryLookupCardProps) {
-  const { jobId, company, availability, latest, initialRequest } = props;
+export function useSalaryLookup(props: SalaryLookupInput): SalaryLookupState {
+  const { jobId, availability, latest, initialRequest } = props;
   const t = useTranslations("salary.lookup");
   const tError = useTranslations("salary.error");
   const router = useRouter();
@@ -186,139 +193,130 @@ export function SalaryLookupCard(props: SalaryLookupCardProps) {
     });
   };
 
-  const enabled = availability === "enabled";
-  const state: CardState = busy ? "waiting" : error ? "failed" : latest ? "done" : availability === "enabled" ? "ready" : availability;
+  const state: LookupState = busy ? "waiting" : error ? "failed" : latest ? "done" : availability === "enabled" ? "ready" : availability;
+  return { state, busy, stage, queue: wait.queue, error, errorText, used, maxPerDay: props.maxPerDay, usedUp, run };
+}
 
+/**
+ * The right column under the ruler: the lookup button (or why there is none), the daily quota, the one live region
+ * (the "waiting" line and the queue lines together) and the one alert. A stored result stays shown when the lookup has
+ * been turned off since; the column then says why it cannot be run again.
+ */
+export function LookupActions({ lookup, availability, hasResult, company, unrestricted, timeZone }: { lookup: SalaryLookupState; availability: LookupAvailability; hasResult: boolean; company: string; unrestricted: boolean; timeZone: string }) {
+  const t = useTranslations("salary.lookup");
+  const { busy, stage, error, usedUp } = lookup;
+  const enabled = availability === "enabled";
   // the daily limit is used up: no button to press until earlier lookups age out (the quota line says why)
   const blocked = usedUp && !busy;
   const button = (label: string, force: boolean, testId: string, primary: boolean) => (
-    <Button type="button" variant={primary ? "primary" : "outline"} size={primary ? "md" : "sm"} onClick={() => run(force)} disabled={busy || blocked} aria-busy={busy} aria-describedby={blocked ? "salary-lookup-quota" : undefined} data-testid={testId} data-blocked={blocked ? "quota" : undefined}>
+    <Button type="button" variant={primary ? "primary" : "outline"} size={primary ? "md" : "sm"} onClick={() => lookup.run(force)} disabled={busy || blocked} aria-busy={busy} aria-describedby={blocked ? "salary-lookup-quota" : undefined} data-testid={testId} data-blocked={blocked ? "quota" : undefined}>
       {busy ? <Loader2 className="animate-spin" aria-hidden /> : force ? <RefreshCw aria-hidden /> : <Search aria-hidden />}
       {busy ? (stage === "running" ? t("running") : t("requesting")) : label}
     </Button>
   );
 
   const errorBlock =
-    error && !busy && error.key !== "quota" ? (
+    enabled && error && !busy && error.key !== "quota" ? (
       <div role="alert" className="text-bad text-body-sm [overflow-wrap:anywhere]" data-testid="salary-lookup-error" data-error={error.key}>
-        <p className="font-semibold">
-          {errorText(error.key, error.resumeAt ?? null)}
-        </p>
+        <p className="font-semibold">{lookup.errorText(error.key, error.resumeAt ?? null)}</p>
         {error.detail ? <p className="text-ink-3 text-data mt-0.5 font-mono">{error.detail}</p> : null}
       </div>
     ) : null;
 
   const quota = enabled ? (
-    <p id="salary-lookup-quota" className={cn("text-data font-mono", usedUp ? "text-bad" : "text-ink-3")} data-testid="salary-lookup-quota" data-used={used} data-max={props.maxPerDay} data-used-up={usedUp}>
-      {usedUp ? t("quotaUsedUp", { used, max: props.maxPerDay }) : t("quota", { used, max: props.maxPerDay })}
-    </p>
-  ) : null;
-  const unrestricted = enabled && props.unrestricted ? (
-    <p className="text-ink-2 text-body-sm" data-testid="salary-lookup-unrestricted">
-      {t("unrestricted")}
+    <p id="salary-lookup-quota" className={cn("text-data font-mono", usedUp ? "text-bad" : "text-ink-3")} data-testid="salary-lookup-quota" data-used={lookup.used} data-max={lookup.maxPerDay} data-used-up={usedUp}>
+      {usedUp ? t("quotaUsedUp", { used: lookup.used, max: lookup.maxPerDay }) : t("quota", { used: lookup.used, max: lookup.maxPerDay })}
     </p>
   ) : null;
 
-  let intro: ReactNode = null;
-  if (!latest) {
-    switch (availability) {
-      case "disabled":
-        intro = (
-          <PlaceholderBox testId="salary-lookup-disabled">
-            <p className="max-w-[64ch]">{t("disabled")}</p>
-            <p className="mt-1.5">
-              <Link href="/settings?tab=salary" className={INK_LINK} data-testid="salary-lookup-settings-link">
-                {t("settingsLink")}
-              </Link>
+  let body: ReactNode = null;
+  switch (availability) {
+    case "disabled":
+      body = (
+        <PlaceholderBox testId="salary-lookup-disabled">
+          <p className="max-w-[64ch]">{t("disabled")}</p>
+          <p className="mt-1.5">
+            <Link href="/settings?tab=salary" className={INK_LINK} data-testid="salary-lookup-settings-link">
+              {t("settingsLink")}
+            </Link>
+          </p>
+        </PlaceholderBox>
+      );
+      break;
+    case "no_web_provider":
+      body = (
+        <PlaceholderBox testId="salary-lookup-no-provider">
+          <p className="max-w-[64ch]">{t("noProvider")}</p>
+          <p className="mt-1.5">
+            <Link href="/settings?tab=ai" className={INK_LINK}>
+              {t("aiSettingsLink")}
+            </Link>
+          </p>
+        </PlaceholderBox>
+      );
+      break;
+    case "config_error":
+      body = <PlaceholderBox testId="salary-lookup-config-error">{t("configError")}</PlaceholderBox>;
+      break;
+    case "not_ready":
+      body = <PlaceholderBox testId="salary-lookup-not-ready">{t("notReady")}</PlaceholderBox>;
+      break;
+    case "enabled":
+      body = (
+        <div className={cn("flex flex-col items-start gap-3", !hasResult && "border-border rounded-card border-dashed border-[1.5px] px-4 py-3.5")} data-testid={hasResult ? "salary-lookup-rerun" : "salary-lookup-ready"}>
+          {!hasResult ? <p className="text-muted-foreground max-w-[64ch]">{t("readyHint", { company })}</p> : null}
+          {unrestricted ? (
+            <p className="text-ink-2 text-body-sm" data-testid="salary-lookup-unrestricted">
+              {t("unrestricted")}
             </p>
-          </PlaceholderBox>
-        );
-        break;
-      case "no_web_provider":
-        intro = (
-          <PlaceholderBox testId="salary-lookup-no-provider">
-            <p className="max-w-[64ch]">{t("noProvider")}</p>
-            <p className="mt-1.5">
-              <Link href="/settings?tab=ai" className={INK_LINK}>
-                {t("aiSettingsLink")}
-              </Link>
-            </p>
-          </PlaceholderBox>
-        );
-        break;
-      case "config_error":
-        intro = <PlaceholderBox testId="salary-lookup-config-error">{t("configError")}</PlaceholderBox>;
-        break;
-      case "not_ready":
-        intro = <PlaceholderBox testId="salary-lookup-not-ready">{t("notReady")}</PlaceholderBox>;
-        break;
-      case "enabled":
-        intro = (
-          <div className="border-border rounded-card flex flex-col items-start gap-3 border-dashed border-[1.5px] px-4 py-3.5" data-testid="salary-lookup-ready">
-            <p className="text-muted-foreground max-w-[64ch]">{t("readyHint", { company })}</p>
-            {unrestricted}
-            {errorBlock}
-            {button(error && error.key !== "quota" && !usedUp ? t("retry") : t("button"), false, "salary-lookup-button", true)}
-            {quota}
-          </div>
-        );
-        break;
-    }
+          ) : null}
+          {errorBlock}
+          {hasResult ? button(t("refresh"), true, "salary-lookup-refresh", false) : button(error && error.key !== "quota" && !usedUp ? t("retry") : t("button"), false, "salary-lookup-button", true)}
+          {quota}
+        </div>
+      );
+      break;
   }
 
   return (
-    <div className="flex flex-col gap-3.5" data-testid="salary-lookup-card" data-state={state} data-job-id={jobId}>
-      {busy && !latest ? (
-        <p role="status" className="text-ink-2 text-body-sm flex items-center gap-2" data-testid="salary-lookup-loading" data-stage={stage ?? "requesting"}>
-          <Loader2 className="size-4 animate-spin" aria-hidden /> {stage === "running" ? t("running") : t("requesting")} · {t("waitingHint")}
-        </p>
-      ) : null}
-      {busy && !latest ? <QueueHint queue={wait.queue} stage={stage} timeZone={props.timeZone} /> : null}
-      {intro}
-      {latest ? (
-        <LookupResult
-          {...props}
-          latest={latest}
-          rerun={
-            enabled ? (
-              <div className="flex flex-col items-start gap-1.5 sm:items-end">
-                {button(t("refresh"), true, "salary-lookup-refresh", false)}
-                {quota}
-              </div>
-            ) : null
-          }
-          busy={busy}
-          waitingLine={
-            busy ? (
-              <>
-                <p role="status" className="text-ink-2 text-body-sm flex items-center gap-2" data-testid="salary-lookup-loading" data-stage={stage ?? "requesting"}>
-                  <Loader2 className="size-4 animate-spin" aria-hidden /> {stage === "running" ? t("running") : t("requesting")} · {t("waitingHint")}
-                </p>
-                <QueueHint queue={wait.queue} stage={stage} timeZone={props.timeZone} />
-              </>
-            ) : null
-          }
-          errorBlock={errorBlock}
-          unrestrictedLine={unrestricted}
-        />
-      ) : null}
+    <div className="flex min-w-0 flex-col gap-2.5" data-testid="salary-lookup-actions">
+      {body}
+      {/* the one live region of the panel: the waiting line and the queue lines are read as one */}
+      <div role="status" className="flex flex-col gap-1" data-testid="salary-lookup-status">
+        {busy ? (
+          <>
+            <p className="text-ink-2 text-body-sm flex items-center gap-2" data-testid="salary-lookup-loading" data-stage={stage ?? "requesting"}>
+              <Loader2 className="size-4 animate-spin" aria-hidden /> {stage === "running" ? t("running") : t("requesting")} · {t("waitingHint")}
+            </p>
+            <QueueHint queue={lookup.queue} stage={stage} timeZone={timeZone} live={false} />
+          </>
+        ) : null}
+      </div>
     </div>
   );
 }
 
-function LookupResult({
+/** The stored result in full: who answered, the disclaimer and scope, the company's level, the role's band, related roles, sources and notes. */
+export function LookupDetails({
   jobId,
   latest,
   currency,
   groupQuantiles,
   timeZone,
   ttlDays,
-  rerun,
   busy,
-  waitingLine,
-  errorBlock,
-  unrestrictedLine,
-}: SalaryLookupCardProps & { latest: SalaryLookupView; rerun: ReactNode; busy: boolean; waitingLine: ReactNode; errorBlock: ReactNode; unrestrictedLine: ReactNode }) {
+}: {
+  jobId: number;
+  latest: SalaryLookupView;
+  /** The base currency the figures are in. */
+  currency: string;
+  /** The benchmark group the ruler shows (its p10..p90), for "about P80 of the group". */
+  groupQuantiles: number[] | null;
+  timeZone: string;
+  ttlDays: number;
+  /** A refresh is running: the shown result is dimmed. */
+  busy: boolean;
+}) {
   const t = useTranslations("salary.lookup");
   const tSeniority = useTranslations("salary.seniority");
   const format = useFormatter();
@@ -378,7 +376,7 @@ function LookupResult({
 
   return (
     <div className={cn("flex min-w-0 flex-col gap-4 [overflow-wrap:anywhere]", busy && "opacity-60")} data-testid="salary-lookup-result" aria-busy={busy} data-confidence={result.confidence}>
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+      <div className="flex flex-col gap-2">
         <div className="flex min-w-0 flex-col gap-1.5">
           <p className="text-data text-ink-3 font-mono [overflow-wrap:anywhere]" data-testid="salary-lookup-meta">
             {meta}
@@ -395,11 +393,7 @@ function LookupResult({
             ) : null}
           </div>
         </div>
-        <div className="shrink-0">{rerun}</div>
       </div>
-      {waitingLine}
-      {errorBlock}
-      {unrestrictedLine}
       <p className="border-border bg-soft rounded-card text-body-sm border-[1.5px] px-3 py-2" data-testid="salary-lookup-disclaimer">
         {t("disclaimer")}
       </p>

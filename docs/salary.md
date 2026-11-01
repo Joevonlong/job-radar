@@ -1,22 +1,52 @@
-# Salary level and salary lookup
+# The salary panel: level and lookup
 
 [English](salary.md) | [中文](salary.zh.md)
 
-A job page has two salary cards under "Pay and benefits":
+A job page has one salary panel, "Salary · what this job pays", under "Pay and benefits". It answers "what does this job
+pay?" from every source it has, and says how far each can be trusted:
 
-- **Salary level** (always on, no AI): where the job's stated salary stands among the salaries of comparable postings you
-  collected, plus links to salary sites.
-- **Salary lookup** (off by default, uses AI and web search): on request, the AI searches public web pages for the
-  company's pay level and the band of this role, and shows its sources.
+- **Level** (always on, no AI): where the job's stated salary stands among the salaries of comparable postings you
+  collected, and what the company's other postings state.
+- **Lookup** (off by default, uses AI and web search): on request, the AI searches public web pages for the company's pay
+  level and the band of this role, and shows its sources.
 
 Both are configured in `salary.yaml` (Settings → Salary, or the Advanced tab).
+
+## Reading the panel
+
+**Three figures on top**
+
+| Cell | What it shows |
+|---|---|
+| Stated in the JD | The salary range the posting states (a fact), highlighted. Under it, how far it is above or below the median of similar postings. Only the posting's own figure is compared; AI figures never are. A salary that needs review, or one in another currency or region, is not compared or drawn: the cell says so, or shows the posting's wording. |
+| Similar postings | The median of the benchmark group (see below) and where this job stands in it. |
+| This company · AI estimate | The role's band from the salary lookup, marked "unverified", with the company's overall level under it. Without a lookup (or when it cannot run) the cell says why. A lookup that found company-wide figures but no band for this role shows "No range found for this role"; the company's overall median is then labelled "Company-wide median" and is never shown as this role's number. |
+
+**One scale for every source.** Below the cells, four rows sit on one shared salary scale (it narrows to the figures drawn,
+within `ui.yaml` `salary_axis`; a value outside it is cut at the end and marked `«` or `»`):
+
+1. **This posting**: the range the JD states (yellow block; grey when its upper end is below your salary floor).
+2. **Similar postings**: the group's P10 to P90 as a block, its median as a dashed line.
+3. **Same company, other postings**: one dot for each other posting of the company that states a salary (equal figures
+   are one dot with a count, like `×2`). The median is marked only with at least `benchmark.min_sample` postings.
+4. **This company · this role (AI)**: only the role's band from the lookup, as a dashed, hatched block with the AI's
+   median. A band in total pay (bonus or equity included) is dotted instead of hatched and says it cannot be compared
+   with a base salary. A band in a currency without an exchange rate is written in its own currency and not drawn.
+
+Each row says where its figures come from and how far to trust them ("JD text · fact", "AI web search · unverified"). A
+row without figures stays and says what is missing. The red line is your salary floor, also written out in words.
+
+**Footer.** On the left, where the AI figures come from (sites, provider, time, and what was sent); on the right the lookup
+button, the daily count, and "Look it up yourself" links to salary sites. The annual salary card at the top of the page
+links here ("See all sources"). Its median is the median of this month's stated salaries; the panel's median is that of
+similar postings. They are different groups and may differ.
 
 ## Salary level: the benchmark
 
 After every cycle, the `pipeline` step rebuilds the benchmark from the postings in your database:
 
 1. Each posting with a stated salary is converted to a year in the market's base currency (the same normalized figure the
-   salary card shows). Only postings first seen in the last `benchmark.window_days` days count.
+   annual salary card shows). Only postings first seen in the last `benchmark.window_days` days count.
 2. Its **role family** comes from the title: the first family in `role_families` whose pattern matches wins (`LLM
    Engineer` → ML / AI engineer). A title that matches no family is not part of the benchmark.
 3. Postings are grouped by family × seniority × place, and each group with at least `benchmark.min_sample` salaries keeps
@@ -28,14 +58,14 @@ salary gets its position ("P72: above the median"), a job without one still sees
 from a handful of postings is a rough hint: the sample size is always shown.
 
 The benchmark uses only salaries the postings state. AI lookups never count in it or in any filter, including the
-salary floor. The card shows only "sample n", with no JD / lookup split.
+salary floor. The panel shows only "sample n", with no JD / lookup split.
 
 With `benchmark.enabled: true`, `pnpm salary:benchmark` rebuilds the benchmark right away and prints it (`--json` for
 the raw groups). It does not recompute while the benchmark is off.
 
 ### Links to salary sites
 
-`deep_links` lists search pages the card links to, filled in with the job's company, title or city: Levels.fyi,
+`deep_links` lists search pages the panel links to ("Look it up yourself"), filled in with the job's company, title or city: Levels.fyi,
 Glassdoor and Kununu by default. They open in your browser; Job Radar never fetches these sites. The sites block
 automated clients, so the URL formats were checked by hand; if a site changes its URLs, fix the template in `salary.yaml`.
 
@@ -49,7 +79,7 @@ automated clients, so the URL formats were checked by hand; if a site changes it
 
 ## Salary lookup (AI with web search)
 
-Turn it on with `lookup.enabled: true` (Settings → Salary → "Enable salary lookup"). The job page then shows a
+Turn it on with `lookup.enabled: true` (Settings → Salary → "Enable salary lookup"). The panel then shows a
 "Look up salary" button. Nothing is looked up unless you click it.
 
 What happens on a click:
@@ -62,7 +92,7 @@ What happens on a click:
    from the answer; figures outside `lookup.sanity_annual` are dropped; amounts are converted to the base currency (a currency without an
    exchange rate is shown in its own currency, and figures above `lookup.unconvertible_max_annual` are dropped); sources
    on hosts outside `lookup.allowed_fetch_domains` are marked "not on your salary-site list". This does not verify the
-   sources or figures, including those on listed hosts. The card says how many items were dropped.
+   sources or figures, including those on listed hosts. The panel says how many items were dropped.
 4. The result is stored and shown for `lookup.ttl_days` days to every job of the same company, role family, seniority
    and place without asking again. "Look up again" asks anyway.
 
@@ -89,7 +119,7 @@ search the web are tried:
 | `codex-cli` (only if you add it) | Codex's built-in web search | None: the settings page warns about it |
 
 DeepSeek and MiMo cannot search the web and are skipped for this task. If no web-capable provider is available, the
-card says so and links to the AI settings.
+panel says so and links to the AI settings.
 
 Every other AI task still runs without any tools; see [ai-providers.md](ai-providers.md) and [SECURITY.md](../SECURITY.md).
 
@@ -108,12 +138,15 @@ Every other AI task still runs without any tools; see [ai-providers.md](ai-provi
   the page was opened or its figures checked.
 
 The estimate uses the company, role type, seniority and place; similar postings share this lookup. It is not based on
-this job description. When it was made on another posting, the card says "This lookup was made on another posting:"
+this job description. When it was made on another posting, the panel says "This lookup was made on another posting:"
 with that posting's title and a link. If that posting was deleted, it says "The posting this lookup was made on has
 been deleted."
 
 These estimates are only displayed: they are not facts of the job and never enter the salary benchmark or any filter.
 Check the sources before you rely on them.
+
+A stored result stays on the page after the lookup is turned off or its AI becomes unavailable; the panel then says why it
+cannot be run again, with a link to the setting.
 
 ## salary.yaml at a glance
 
@@ -149,7 +182,7 @@ them. They must be `https://` or `http://` URLs.
 
 ## Troubleshooting
 
-| The card says | What to do |
+| The panel says | What to do |
 |---|---|
 | "This title matches no role family" | Add a pattern for it to `role_families` |
 | "Too few postings of this kind state a salary" | Fewer than `min_sample` salaries in every group: wait for more postings, or lower `min_sample` |

@@ -4,10 +4,10 @@ import { NextIntlClientProvider } from "next-intl";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { SalaryLookupCard, type SalaryLookupCardProps } from "@/components/jobs/detail/salary-lookup-card";
+import { SalaryPanel } from "@/components/jobs/detail/salary-panel";
 import type { ControlQueueView } from "@/lib/control/request-view-schema";
 import { salaryLookupResultSchema } from "@/lib/salary/lookup-types";
-import type { SalaryLookupView } from "@/lib/salary/view";
+import type { SalaryContext, SalaryLookupView } from "@/lib/salary/view";
 import en from "../../messages/en.json";
 import zh from "../../messages/zh.json";
 
@@ -32,22 +32,22 @@ const wrap = (node: ReactNode, locale: "en" | "zh" = "en") => (
   </NextIntlClientProvider>
 );
 
-const props = (over: Partial<SalaryLookupCardProps> = {}): SalaryLookupCardProps => ({
-  jobId: 7,
-  company: "Acme",
-  availability: "enabled",
-  unrestricted: false,
-  providers: ["claude-cli", "anthropic"],
-  latest: null,
-  initialRequest: null,
-  usedToday: 0,
-  maxPerDay: 3,
-  ttlDays: 30,
-  currency: "EUR",
-  groupQuantiles: null,
-  timeZone: "Europe/Berlin",
-  ...over,
-});
+type LookupOver = Partial<SalaryContext["lookup"]> & { groupQuantiles?: number[] | null };
+
+/** The panel around a lookup state: the posting states no salary, no group, no company salaries. */
+function Panel({ over = {}, base = {} }: { over?: LookupOver; base?: Partial<SalaryContext> }) {
+  const { groupQuantiles, ...lookupOver } = over;
+  const context: SalaryContext = {
+    state: "ok", currency: "EUR", familyId: "software", familyLabel: "Software", figure: null,
+    group: groupQuantiles ? { level: "family", seniority: null, place: null, n: 5, median: groupQuantiles[Math.floor(groupQuantiles.length / 2)] ?? 0, quantiles: groupQuantiles } : null,
+    position: null, company: { count: 0, median: null, minSample: 3, figures: [] }, links: [],
+    staleAi: false, benchmarkEnabled: true, benchmarkComputed: true,
+    lookup: { availability: "enabled", unrestricted: false, providers: ["claude-cli", "anthropic"], latest: null, initialRequest: null, usedToday: 0, maxPerDay: 3, ttlDays: 30, ...lookupOver },
+    ...base,
+  };
+  return <SalaryPanel context={context} salary={null} salaryDisclosed={false} normalizedText={null} floor={null} axis={{ minK: 40, maxK: 200, tickStepK: 20, currency: "EUR" }} jobId={7} company="Acme" timeZone="Europe/Berlin" />;
+}
+const panel = (over: LookupOver = {}, base: Partial<SalaryContext> = {}) => <Panel over={over} base={base} />;
 
 function lookup(over: Partial<SalaryLookupView> = {}): SalaryLookupView {
   const band = {
@@ -79,7 +79,7 @@ beforeEach(() => {
   refresh.mockReset();
 });
 
-describe("SalaryLookupCard", () => {
+describe("salary lookup in the panel", () => {
   it.each(["unreadable", "invalid queue"])("retries an %s status and keeps the last queue until completion", async (reason) => {
     let release: () => void = () => {};
     const released = new Promise<void>((resolve) => (release = resolve));
@@ -89,10 +89,10 @@ describe("SalaryLookupCard", () => {
         await released;
         return { ok: true, state: "done" };
       });
-    render(wrap(<SalaryLookupCard {...props({ initialRequest: { state: "waiting", requestId: 12, stage: "pending", queue: queue({ ahead: 2 }) } })} />));
+    render(wrap(panel({ initialRequest: { state: "waiting", requestId: 12, stage: "pending", queue: queue({ ahead: 2 }) } })));
     await waitFor(() => expect(salaryLookupStatusAction).toHaveBeenCalledTimes(2));
     expect(screen.getByTestId("queue-hint-ahead")).toHaveTextContent("2 requests ahead of it.");
-    expect(screen.getByTestId("salary-lookup-card")).toHaveAttribute("data-state", "waiting");
+    expect(screen.getByTestId("salary-panel")).toHaveAttribute("data-lookup-state", "waiting");
     expect(screen.queryByTestId("salary-lookup-error")).toBeNull();
     release();
     await waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
@@ -102,7 +102,7 @@ describe("SalaryLookupCard", () => {
   it("counts a queued lookup at once, without a reload", async () => {
     lookupSalaryAction.mockResolvedValue({ ok: true, queued: true, requestId: 11, usedToday: 1 });
     salaryLookupStatusAction.mockResolvedValue({ ok: true, state: "waiting", stage: "pending", queue: queue() });
-    render(wrap(<SalaryLookupCard {...props()} />));
+    render(wrap(panel()));
     expect(screen.getByTestId("salary-lookup-quota")).toHaveAttribute("data-used", "0");
     await userEvent.click(screen.getByTestId("salary-lookup-button"));
     await waitFor(() => expect(screen.getByTestId("salary-lookup-quota")).toHaveAttribute("data-used", "1"));
@@ -111,31 +111,31 @@ describe("SalaryLookupCard", () => {
   it("waiting: how many requests are ahead and what the ai-worker is doing, with the start time", async () => {
     lookupSalaryAction.mockResolvedValue({ ok: true, queued: true, requestId: 11, usedToday: 1 });
     salaryLookupStatusAction.mockResolvedValue({ ok: true, state: "waiting", stage: "pending", queue: queue({ ahead: 1, running: { kind: "translate_job", since: "2026-10-28T11:58:00.000Z" } }) });
-    render(wrap(<SalaryLookupCard {...props()} />));
+    render(wrap(panel()));
     await userEvent.click(screen.getByTestId("salary-lookup-button"));
     await waitFor(() => expect(screen.getByTestId("queue-hint-ahead")).toHaveTextContent("1 request ahead of it."));
     expect(screen.getByTestId("queue-hint-running")).toHaveTextContent("The ai-worker is working on “Translation”, started 12:58.");
-    expect(screen.getByTestId("salary-lookup-card")).toHaveAttribute("data-state", "waiting");
+    expect(screen.getByTestId("salary-panel")).toHaveAttribute("data-lookup-state", "waiting");
   });
 
   it("a refresh over a shown result: the queue lines show under the result while it runs", async () => {
     salaryLookupStatusAction.mockResolvedValue({ ok: true, state: "waiting", stage: "running", queue: queue({ startedAt: "2026-10-28T11:57:00.000Z" }) });
-    render(wrap(<SalaryLookupCard {...props({ latest: lookup(), initialRequest: { state: "waiting", requestId: 12, stage: "running", queue: null } })} />));
+    render(wrap(panel({ latest: lookup(), initialRequest: { state: "waiting", requestId: 12, stage: "running", queue: null } })));
     await waitFor(() => expect(screen.getByTestId("queue-hint-self")).toHaveTextContent("Running since 12:57, for 3 minutes."));
   });
 
   it("offline: a line with the last heartbeat and a link to /sources; the card stays waiting and keeps polling", async () => {
     salaryLookupStatusAction.mockResolvedValue({ ok: true, state: "waiting", stage: "pending", queue: queue({}, { online: false, heartbeatAgeSeconds: 600 }) });
-    render(wrap(<SalaryLookupCard {...props({ initialRequest: { state: "waiting", requestId: 12, stage: "pending", queue: queue({}, { online: false, heartbeatAgeSeconds: 600 }) } })} />, "zh"));
+    render(wrap(panel({ initialRequest: { state: "waiting", requestId: 12, stage: "pending", queue: queue({}, { online: false, heartbeatAgeSeconds: 600 }) } }), "zh"));
     expect(screen.getByTestId("queue-hint-offline")).toHaveTextContent("ai-worker 离线（最后心跳在 10 分钟前）");
     expect(within(screen.getByTestId("queue-hint-offline")).getByRole("link")).toHaveAttribute("href", "/sources");
     await waitFor(() => expect(salaryLookupStatusAction.mock.calls.length).toBeGreaterThan(2));
-    expect(screen.getByTestId("salary-lookup-card")).toHaveAttribute("data-state", "waiting");
+    expect(screen.getByTestId("salary-panel")).toHaveAttribute("data-lookup-state", "waiting");
     expect(screen.queryByTestId("salary-lookup-error")).toBeNull();
   });
 
   it("with the daily limit used up the button is disabled, says why and offers no retry", () => {
-    render(wrap(<SalaryLookupCard {...props({ usedToday: 3, initialRequest: { state: "failed", error: "auth", detail: null } })} />));
+    render(wrap(panel({ usedToday: 3, initialRequest: { state: "failed", error: "auth", detail: null } })));
     const button = screen.getByTestId("salary-lookup-button");
     expect(button).toBeDisabled();
     expect(button).toHaveAttribute("data-blocked", "quota");
@@ -145,7 +145,7 @@ describe("SalaryLookupCard", () => {
   });
 
   it("a login failure names the logins of the providers the lookup can use, and only those", () => {
-    render(wrap(<SalaryLookupCard {...props({ usedToday: 1, initialRequest: { state: "failed", error: "auth", detail: null } })} />));
+    render(wrap(panel({ usedToday: 1, initialRequest: { state: "failed", error: "auth", detail: null } })));
     const error = screen.getByTestId("salary-lookup-error");
     expect(error).toHaveTextContent("claude-cli, anthropic");
     expect(error).toHaveTextContent("claude → /login");
@@ -159,8 +159,8 @@ describe.each(["en", "zh"] as const)("salary lookup trust labels (%s)", (locale)
   const text = locale === "en" ? en.salary.lookup : zh.salary.lookup;
 
   it("labels the AI's confidence, every estimate and its sources, and explains the shared scope", () => {
-    render(wrap(<SalaryLookupCard {...props({ latest: lookup() })} />, locale));
-    const card = screen.getByTestId("salary-lookup-card");
+    render(wrap(panel({ latest: lookup() }), locale));
+    const card = screen.getByTestId("salary-panel");
     expect(screen.getByTestId("salary-lookup-ai-badge")).toHaveTextContent(locale === "en" ? "AI lookup" : "AI 查询");
     const mark = locale === "en" ? "AI estimate (unverified)" : "AI 估计（未核对）";
     for (const id of ["salary-lookup-role", "salary-lookup-related-0", "salary-lookup-related-1", "salary-lookup-company"]) {
@@ -175,21 +175,21 @@ describe.each(["en", "zh"] as const)("salary lookup trust labels (%s)", (locale)
   });
 
   it("does not show an origin note for a lookup made on this posting", () => {
-    render(wrap(<SalaryLookupCard {...props({ latest: lookup() })} />, locale));
+    render(wrap(panel({ latest: lookup() }), locale));
     expect(screen.queryByTestId("salary-lookup-origin")).not.toBeInTheDocument();
     expect(screen.getByTestId("salary-lookup-scope")).toBeVisible();
   });
 
   it("links to the title of the other posting that started the lookup", () => {
     const origin = { jobId: 9, title: "Senior Software Engineer" };
-    render(wrap(<SalaryLookupCard {...props({ latest: lookup({ origin }) })} />, locale));
+    render(wrap(panel({ latest: lookup({ origin }) }), locale));
     const note = screen.getByTestId("salary-lookup-origin");
     expect(note).toHaveTextContent(text.origin.replace("<link>{title}</link>", origin.title));
     expect(within(note).getByRole("link", { name: origin.title })).toHaveAttribute("href", "/jobs/9");
   });
 
   it("explains when the posting that started the lookup has been deleted", () => {
-    render(wrap(<SalaryLookupCard {...props({ latest: lookup({ origin: null }) })} />, locale));
+    render(wrap(panel({ latest: lookup({ origin: null }) }), locale));
     const note = screen.getByTestId("salary-lookup-origin");
     expect(note).toHaveTextContent(locale === "en" ? "The posting this lookup was made on has been deleted." : "发起这次查询的岗位已删除。");
     expect(within(note).queryByRole("link")).not.toBeInTheDocument();
@@ -202,9 +202,114 @@ describe.each(["en", "zh"] as const)("salary lookup trust labels (%s)", (locale)
       observations: [{ family: "software", seniority: "senior", city: "Example City", country: "DE", figure: 90000 }],
     });
     expect(latest.result.observations).toHaveLength(1);
-    render(wrap(<SalaryLookupCard {...props({ latest })} />, locale));
+    render(wrap(panel({ latest }), locale));
     expect(screen.getByTestId("salary-lookup-role")).toHaveTextContent("Software Engineer");
     expect(screen.getByTestId("salary-lookup-role-unverified")).toBeVisible();
-    expect(screen.getByTestId("salary-lookup-card")).not.toHaveTextContent(/已核对|已验证|\bverified\b/i);
+    expect(screen.getByTestId("salary-panel")).not.toHaveTextContent(/已核对|已验证|\bverified\b/i);
+  });
+});
+
+describe("one live region and one alert in the panel", () => {
+  const liveRegions = () => ({ status: screen.queryAllByRole("status").length, alert: screen.queryAllByRole("alert").length });
+
+  it("a lookup without a result: the waiting line and the queue lines share the one status region", async () => {
+    salaryLookupStatusAction.mockResolvedValue({ ok: true, state: "waiting", stage: "pending", queue: queue({ ahead: 1 }) });
+    render(wrap(panel({ initialRequest: { state: "waiting", requestId: 12, stage: "pending", queue: queue({ ahead: 1 }) } })));
+    const region = screen.getByRole("status");
+    expect(within(region).getByTestId("salary-lookup-loading")).toBeVisible();
+    expect(within(region).getByTestId("queue-hint-ahead")).toHaveTextContent("1 request ahead of it.");
+    expect(liveRegions()).toEqual({ status: 1, alert: 0 });
+    // the head cell only says it in plain words
+    expect(within(screen.getByTestId("salary-head-ai")).queryByRole("status")).toBeNull();
+    expect(screen.getByTestId("salary-head-ai")).toHaveTextContent("Looking up…");
+  });
+
+  it("a refresh over a result: still one status region", async () => {
+    salaryLookupStatusAction.mockResolvedValue({ ok: true, state: "waiting", stage: "running", queue: queue({ startedAt: "2026-10-28T11:57:00.000Z" }) });
+    render(wrap(panel({ latest: lookup(), initialRequest: { state: "waiting", requestId: 12, stage: "running", queue: null } })));
+    await waitFor(() => expect(screen.getByTestId("queue-hint-self")).toBeVisible());
+    expect(liveRegions()).toEqual({ status: 1, alert: 0 });
+    expect(screen.getByTestId("salary-lookup-result")).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByTestId("salary-lane-ai")).toHaveAttribute("data-state", "drawn");
+  });
+
+  it("a failure is the only alert", () => {
+    render(wrap(panel({ usedToday: 1, initialRequest: { state: "failed", error: "auth", detail: null } })));
+    expect(liveRegions()).toEqual({ status: 1, alert: 1 });
+    expect(within(screen.getByRole("status")).queryByTestId("queue-hint")).toBeNull();
+  });
+});
+
+describe("a stored result when the lookup cannot run any more", () => {
+  it.each([
+    ["disabled", "salary-lookup-disabled", "The salary lookup is off"],
+    ["no_web_provider", "salary-lookup-no-provider", "None of the AI providers"],
+    ["config_error", "salary-lookup-config-error", "cannot be read"],
+    ["not_ready", "salary-lookup-not-ready", "do not exist yet"],
+  ] as const)("%s: the result stays, the button and quota go, the reason and its link show", (availability, testId, text) => {
+    render(wrap(panel({ availability, latest: lookup() })));
+    expect(screen.getByTestId("salary-lookup-result")).toBeVisible();
+    expect(screen.getByTestId("salary-lane-ai")).toHaveAttribute("data-state", "drawn");
+    expect(screen.queryByTestId("salary-lookup-refresh")).toBeNull();
+    expect(screen.queryByTestId("salary-lookup-button")).toBeNull();
+    expect(screen.queryByTestId("salary-lookup-quota")).toBeNull();
+    expect(screen.getByTestId(testId)).toHaveTextContent(text);
+    expect(screen.getByTestId("salary-panel")).toHaveAttribute("data-lookup-state", "done");
+  });
+
+  it("without a stored result the same reason shows and the cell says why", () => {
+    render(wrap(panel({ availability: "disabled" })));
+    expect(screen.getByTestId("salary-lookup-settings-link")).toHaveAttribute("href", "/settings?tab=salary");
+    expect(screen.getByTestId("salary-head-ai")).toHaveTextContent("Lookup is off");
+    expect(screen.getByTestId("salary-lane-ai")).toHaveAttribute("data-state", "disabled");
+  });
+});
+
+describe("the AI row only draws this role's band", () => {
+  const noBand = () => lookup({ result: { ...lookup().result, roleBand: null, companyLevel: { level: "above", median: 150000, summary: "", sources: [0] } } });
+
+  it("without a role band the company-wide median is neither on the ruler nor in the role's cell", () => {
+    render(wrap(panel({ latest: noBand() })));
+    const row = screen.getByTestId("salary-lane-ai");
+    expect(row).toHaveAttribute("data-state", "no_band");
+    expect(row).toHaveTextContent("No range found for this role");
+    expect(row.querySelector("[data-mark]")).toBeNull();
+    expect(row.querySelector('[data-testid="salary-lane-ai-block"]')).toBeNull();
+    expect(row).not.toHaveTextContent("150k");
+    const head = screen.getByTestId("salary-head-ai");
+    expect(head).toHaveTextContent("No range found for this role");
+    expect(head).toHaveTextContent("Company overall: Above the market · Company-wide median €150k");
+    expect(screen.queryByTestId("salary-head-ai-figure")).toBeNull();
+  });
+
+  it("a band in total pay is drawn with another fill and says it cannot be compared with base salary", () => {
+    const latest = lookup();
+    latest.result = { ...latest.result, roleBand: { ...latest.result.roleBand!, basis: "total" } };
+    render(wrap(panel({ latest, groupQuantiles: [60000, 70000, 80000, 85000, 90000, 95000, 100000, 110000, 120000] })));
+    const row = screen.getByTestId("salary-lane-ai");
+    expect(screen.getByTestId("salary-lane-ai-block")).toHaveAttribute("data-tone", "ai-total");
+    expect(screen.getByTestId("salary-lane-ai-source")).toHaveTextContent("total pay, not comparable with base salary");
+    expect(row).toHaveTextContent("€80–100k, median €90k");
+    // no percentile against the group's base salaries in the row; the details do not compute one either
+    expect(screen.queryByTestId("salary-lookup-role-percentile")).toBeNull();
+  });
+
+  it("a base-salary band is hatched, marked unverified and positioned in the group in the details", () => {
+    render(wrap(panel({ latest: lookup(), groupQuantiles: [60000, 70000, 80000, 85000, 90000, 95000, 100000, 110000, 120000] })));
+    expect(screen.getByTestId("salary-lane-ai-block")).toHaveAttribute("data-tone", "ai");
+    expect(screen.getByTestId("salary-lane-ai-source")).toHaveTextContent("AI web search · unverified");
+    expect(screen.getByTestId("salary-head-ai")).toHaveTextContent("unverified");
+    expect(screen.getByTestId("salary-lookup-role-percentile")).toBeVisible();
+  });
+
+  it("a band in another currency is written as text and not drawn", () => {
+    const latest = lookup();
+    latest.result = { ...latest.result, roleBand: { ...latest.result.roleBand!, convertible: false, min: null, max: null, median: null, original: { min: 90000, max: 110000, median: null, currency: "USD" } } };
+    render(wrap(panel({ latest })));
+    const row = screen.getByTestId("salary-lane-ai");
+    expect(row).toHaveAttribute("data-state", "not_convertible");
+    expect(row).toHaveTextContent("$90–110k");
+    expect(row).toHaveTextContent("Stated in USD");
+    expect(row.querySelector('[data-testid="salary-lane-ai-block"]')).toBeNull();
   });
 });

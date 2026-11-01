@@ -16,6 +16,20 @@ export function salaryAxisScale(ui: Pick<UiConfig, "salary_axis">, currency = ""
   return { minK: ui.salary_axis.min_k, maxK: ui.salary_axis.max_k, tickStepK: ui.salary_axis.tick_step_k, currency };
 }
 
+/**
+ * The axis that fits the figures actually drawn together (annual amounts in the axis currency; null / NaN are skipped): the
+ * smallest to the largest, rounded out to `tickStepK`, one more step on each side, kept inside the configured `axis`. Fewer than
+ * two different figures, or a result narrower than two steps, give back `axis` (a lone figure on a tiny axis says nothing).
+ */
+export function fitSalaryAxis(values: readonly (number | null | undefined)[], axis: SalaryAxisScale): SalaryAxisScale {
+  const figures = values.filter(known).map((value) => value / 1000);
+  if (new Set(figures).size < 2) return axis;
+  const step = axis.tickStepK;
+  const minK = Math.max(axis.minK, Math.floor(Math.min(...figures) / step) * step - step);
+  const maxK = Math.min(axis.maxK, Math.ceil(Math.max(...figures) / step) * step + step);
+  return maxK - minK < 2 * step ? axis : { ...axis, minK, maxK };
+}
+
 export type SalaryState = "stated" | "below_floor" | "other_region" | "none";
 
 export interface SalaryStateInput {

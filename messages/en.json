@@ -1400,7 +1400,8 @@
         "belowFloor": "The stated upper end is below your salary floor.",
         "otherRegion": "Possibly another region's pay: not compared with this month's jobs.",
         "median": "Median · this month · {count} jobs: {amount} (dashed line)",
-        "noSample": "Only {count} jobs stated a salary this month; at least {min} are needed to compare the median and percentile."
+        "noSample": "Only {count} jobs stated a salary this month; at least {min} are needed to compare the median and percentile.",
+        "panelLink": "See all sources"
       },
       "checks": {
         "title": "Checks",
@@ -6534,9 +6535,95 @@
       "lead": "Lead",
       "unknown": "Any level"
     },
+    "panel": {
+      "title": "Salary · what this job pays",
+      "aside": "{count, plural, =0 {no figures} one {# source} other {# sources}}",
+      "unverified": "unverified",
+      "head": {
+        "jd": "Stated in the JD",
+        "group": "Similar postings",
+        "ai": "This company · AI estimate",
+        "perYear": "/yr",
+        "jdNone": "Not disclosed",
+        "jdReview": "Salary needs review",
+        "jdUnreadable": "Stated, but cannot be read",
+        "jdOther": "Another currency or region: not compared",
+        "vsAbove": "{percent}% above the similar-postings median",
+        "vsBelow": "{percent}% below the similar-postings median",
+        "vsEqual": "On the similar-postings median",
+        "groupMedian": "Median {amount}",
+        "groupConfigError": "Settings unreadable",
+        "groupNotReady": "Tables missing",
+        "groupNoCurrency": "No base currency",
+        "groupNoFamily": "No role family",
+        "groupStale": "Comparison being rebuilt",
+        "groupNotComputed": "Not computed yet",
+        "groupNoGroup": "Too few postings",
+        "aiLooking": "Looking up…",
+        "aiNotLooked": "Not looked up yet",
+        "aiOff": "Lookup is off",
+        "aiNoProvider": "No AI that can search the web",
+        "aiUnavailable": "Lookup unavailable",
+        "aiNoBand": "No range found for this role",
+        "aiEmpty": "Found, but no usable figure",
+        "aiCompany": "Company overall: {level}",
+        "aiCompanyMedian": "Company-wide median {amount}"
+      },
+      "lane": {
+        "jd": {
+          "label": "This posting",
+          "source": "JD text · fact",
+          "none": "The posting states no salary.",
+          "review": "The stated salary needs review, so it is not drawn.",
+          "other": "Another currency or region: only the posting's wording is shown, it is not drawn or compared.",
+          "unreadable": "A salary is stated but cannot be read, so it is not drawn."
+        },
+        "group": {
+          "label": "Similar postings",
+          "values": "Median {median}, P10–P90 {low}–{high}"
+        },
+        "groupCompany": {
+          "label": "Similar postings and same company"
+        },
+        "company": {
+          "label": "Same company, other postings",
+          "source": "{count, plural, =0 {None stated in the database} other {# stated in the database}}",
+          "none": "No other posting at this company states a salary.",
+          "values": "{count, plural, one {# posting} other {# postings}}: {list}",
+          "median": "median {amount}",
+          "few": "too few for a median (at least {min})"
+        },
+        "ai": {
+          "label": "This company · this role (AI)",
+          "source": "AI web search · unverified",
+          "total": "total pay, not comparable with base salary",
+          "unknownBasis": "basis not stated",
+          "expired": "expired",
+          "otherPosting": "looked up on another posting",
+          "median": "median {amount}",
+          "noBand": "No range found for this role. The company-wide figures are in the details below.",
+          "empty": "The lookup found no usable figure.",
+          "notLooked": "Not looked up yet.",
+          "looking": "Looking up…",
+          "off": "The lookup is off.",
+          "noProvider": "No AI provider that can search the web is set.",
+          "unavailable": "The lookup is unavailable."
+        }
+      },
+      "ruler": {
+        "label": "Salary by source, on one scale",
+        "floor": "Your floor {amount}"
+      },
+      "foot": {
+        "sourcesHeading": "Where the AI figures come from",
+        "actionsHeading": "AI lookup",
+        "linksHeading": "Look it up yourself",
+        "noSources": "No AI lookup yet. The other rows come from the posting and your database.",
+        "sources": "{count, plural, one {# source} other {# sources}}{sites, select, none {} other { ({sites})}} · {meta}",
+        "sent": "Sent to the AI: company name, title, seniority and place."
+      }
+    },
     "level": {
-      "title": "Salary level",
-      "aside": "vs. your database",
       "configError": "salary.yaml cannot be read, so there is no comparison. Run pnpm config:check to see why.",
       "notReady": "The salary tables do not exist yet. Run the database migrations.",
       "noCurrency": "No base currency is set for your market, so salaries cannot be compared.",
@@ -6552,24 +6639,14 @@
         "family": "{family} · all levels · all places"
       },
       "sample": "{n} postings",
-      "median": "Median {amount}",
-      "range": "Most postings (P10 to P90): {low} to {high}",
-      "rangeLabel": "Salary spread from P10 to P90, with the median and this job",
-      "position": "P{p}",
       "positionText": "This job ({amount}) is above {p}% of the group.",
       "positionBelow": "This job ({amount}) is below the lowest tenth of the group.",
       "positionAbove": "This job ({amount}) is above the highest tenth of the group.",
       "noFigure": "This job states no salary that can be compared; the group is shown for reference.",
-      "companyHeading": "Same company",
-      "company": "{count, plural, one {# other posting} other {# other postings}} at this company state a salary; median {amount}.",
-      "companyFew": "{count, plural, =0 {No other posting at this company states a salary.} one {# other posting at this company states a salary (at least {min} are needed for a median).} other {# other postings at this company state a salary (at least {min} are needed for a median).}}",
-      "linksHeading": "Search elsewhere",
       "linkTitle": "Opens {site} in a new tab",
       "noLinks": "No search links are set in salary.yaml."
     },
     "lookup": {
-      "title": "Salary lookup",
-      "aside": "AI web search",
       "disabled": "The salary lookup is off. Turn it on in the settings: it asks an AI provider to search salary sites for this company and role.",
       "settingsLink": "Salary settings",
       "noProvider": "None of the AI providers set for this lookup can search the web. Use claude-cli or the Anthropic API for the task \"Salary lookup\" on the AI tab.",

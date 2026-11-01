@@ -30,7 +30,7 @@
 | [deal-breakers.zh.md](deal-breakers.zh.md) | 自己写的一票否决规则（`preferences.yaml: deal_breakers`）：语言门槛、短语、签证规则、被否决的岗位会怎样、`pnpm deal-breakers:check`、回滚前要做的事 |
 | [extraction.zh.md](extraction.zh.md) | 办公方式、德语等级、中介识别、描述整理的规则；`pnpm reprocess` |
 | [signals.zh.md](signals.zh.md) | 薪酬与福利信号：档位、词表、两步提取、看板 |
-| [salary.zh.md](salary.zh.md) | 岗位页的薪资水平（按你采集的岗位做的基准、薪资网站链接）和可选的 AI 查薪资（网页搜索），`salary.yaml` |
+| [salary.zh.md](salary.zh.md) | 岗位页的薪资面板（按你采集的岗位做的基准、这家公司其他岗位的薪资、薪资网站链接）和可选的 AI 查薪资（网页搜索），`salary.yaml` |
 | [breakdown.zh.md](breakdown.zh.md) | 岗位拆解：手动 / 自动、卡片状态和错误码、引用核对、`breakdown.yaml` |
 | [ai-traps.zh.md](ai-traps.zh.md) | AI 陷阱检测：能认出哪些手段、哪些来源只有文字、发给 AI 的文字怎么清洗、页面和推送上的标记、`traps.yaml`、`pnpm traps:scan` |
 | [score-evidence.zh.md](score-evidence.zh.md) | 详情页的理由来源：原文引用、推断、未提及，引用怎么核对，成本，旧分数，`ai.yaml: scoring.evidence`，回滚前要做的事 |

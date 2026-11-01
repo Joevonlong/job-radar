@@ -1,5 +1,5 @@
 /**
- * What the job page's "salary level" and "salary lookup" cards show, read in one place (server only): the job's
+ * What the job page's salary panel shows, read in one place (server only): the job's
  * group in the benchmark (the narrowest one that exists), its percentile there, the company's other stated salaries,
  * the deep links, and the lookup state (switch, providers, cache, quota, an unfinished request).
  */
@@ -17,7 +17,7 @@ import { salaryLookupKey } from "./lookup";
 import type { SalaryLookupResult } from "./lookup-types";
 import { percentileIn, quantile, type PercentilePosition } from "./percentile";
 
-/** Which group the card compares with, narrowest first. */
+/** Which group the panel compares with, narrowest first. */
 export const GROUP_LEVELS = ["city", "country", "family_country", "family"] as const;
 export type GroupLevel = (typeof GROUP_LEVELS)[number];
 
@@ -53,7 +53,8 @@ export interface SalaryContext {
   figure: number | null;
   group: BenchmarkGroupView | null;
   position: PercentilePosition | null;
-  company: { count: number; median: number | null; minSample: number } | null;
+  /** The company's other stated salaries: how many, their median (null below `minSample`) and every figure, ascending (base currency per year). */
+  company: { count: number; median: number | null; minSample: number; figures: number[] } | null;
   links: DeepLink[];
   /** The stored benchmark contains AI figures and is hidden until it is rebuilt. */
   staleAi: boolean;
@@ -146,7 +147,7 @@ export async function getSalaryContext(
   const since = new Date(now.getTime() - salary.benchmark.window_days * 86_400_000);
   const companyFigures = input.currency === "" ? [] : await listCompanySalaryFigures(db, { companyId: job.companyId, excludeJobId: job.id, currency: input.currency, since });
   const sortedCompany = [...companyFigures].sort((a, b) => a - b);
-  const company = { count: sortedCompany.length, median: sortedCompany.length >= salary.benchmark.min_sample ? quantile(sortedCompany, 0.5) : null, minSample: salary.benchmark.min_sample };
+  const company = { count: sortedCompany.length, median: sortedCompany.length >= salary.benchmark.min_sample ? quantile(sortedCompany, 0.5) : null, minSample: salary.benchmark.min_sample, figures: sortedCompany };
 
   const providers = input.ai ? salaryLookupProviders(input.ai) : [];
   const availability: LookupAvailability = !input.ai ? "config_error" : !salary.lookup.enabled ? "disabled" : providers.length === 0 ? "no_web_provider" : "enabled";
