@@ -8,6 +8,7 @@ import { PlaceholderBox } from "@/components/jobs/detail/panel";
 import { INK_LINK } from "@/components/ui/ink-link";
 import { Segmented, SegmentedItem } from "@/components/ui/segmented";
 import { cn } from "@/lib/utils";
+import type { ReuseBase } from "@/lib/writer/similar";
 import type { WorkbenchView } from "@/lib/writer/view";
 
 import { AnswerPanel } from "./answer-panel";
@@ -26,6 +27,8 @@ export function Workbench({ view, timeZone }: { view: WorkbenchView; timeZone: s
   const t = useTranslations("writer");
   const [activeId, setActiveId] = useState<number | null>(view.questions[0]?.id ?? null);
   const active = view.questions.find((question) => question.id === activeId) ?? view.questions[0] ?? null;
+  // the text of an earlier final answer a new question is being started from, until it is saved or dropped
+  const [base, setBase] = useState<ReuseBase | null>(null);
   const [pane, setPane] = useState<Pane>(view.questions.length === 0 ? "questions" : "answer");
   const enabled = view.availability === "enabled";
 
@@ -61,10 +64,10 @@ export function Workbench({ view, timeZone }: { view: WorkbenchView; timeZone: s
           <MaterialsPanel key={active?.id ?? "none"} view={view} question={active} enabled={enabled} timeZone={timeZone} />
         </div>
         <div className={cn("min-w-0", pane !== "questions" && "max-lg:hidden")} data-testid="writer-column-questions">
-          <QuestionsPanel view={view} activeId={active?.id ?? null} onSelect={select} enabled={enabled} />
+          <QuestionsPanel view={view} activeId={active?.id ?? null} onSelect={select} onReuse={setBase} enabled={enabled} />
         </div>
         <div className={cn("min-w-0", pane !== "answer" && "max-lg:hidden")} data-testid="writer-column-answer">
-          <AnswerPanel key={active?.id ?? "none"} view={view} question={active} enabled={enabled} timeZone={timeZone} />
+          <AnswerPanel key={active?.id ?? "none"} view={view} question={active} base={base !== null && base.questionId === active?.id ? base : null} onBaseDone={() => setBase(null)} enabled={enabled} timeZone={timeZone} />
         </div>
       </div>
     </div>

@@ -61,6 +61,17 @@ jd_head_share: 0.7
 # An answer that did not parse and reached this share of the output token cap counts as cut off ("output_truncated")
 output_truncated_share: 0.95
 
+# Starting from an answer you finalised for another job: when you add a question, finalised answers to similar questions
+# are offered as the starting text. Local only (no AI call, nothing is sent); similarity counts shared words, so the same
+# question in another language is not matched.
+reuse:
+  # Lowest share of words a new question must have in common with an earlier one (0.05-1)
+  min_similarity: 0.55
+  # Most earlier answers offered for one new question
+  max_candidates: 3
+  # Fewest words a new question needs before earlier answers are looked up (each Chinese, Japanese or Korean character is a word)
+  min_question_words: 3
+
 # The evidence check of every sentence (in code, no AI call). It flags names and figures to check; it does not prove the
 # AI made nothing up.
 evidence:

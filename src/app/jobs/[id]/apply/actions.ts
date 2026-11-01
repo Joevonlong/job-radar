@@ -13,7 +13,9 @@ import {
   deleteApplicationQuestion,
   getAnswerVersion,
   getApplicationQuestion,
+  getReusableAnswerText,
   insertAnswerVersions,
+  listReusableAnswers,
   setFinalAnswerVersion,
   updateApplicationQuestion,
 } from "@/lib/db/repos/application-writer";
@@ -22,6 +24,8 @@ import { isLanguageCode } from "@/lib/i18n/languages";
 import { logActionFailure } from "@/lib/logging/action-failure";
 import { diffSentences } from "@/lib/writer/diff";
 import { jdPointsOf } from "@/lib/writer/jd-points";
+import { companyMatchNames, legalSuffixes } from "@/lib/writer/company-names";
+import { questionTokens, rankSimilar } from "@/lib/writer/similar";
 import { initialSelection } from "@/lib/writer/selection";
 import { readWriterInputs } from "@/lib/writer/settings";
 import { parseStoredSentences } from "@/lib/writer/stored";
@@ -227,6 +231,97 @@ export async function saveManualVersionAction(input: { jobId: number; questionId
     return id === undefined ? { ok: true } : { ok: true, versionId: id };
   } catch (error) {
     logActionFailure("saveManualVersionAction", error);
+    return { ok: false, error: "failed" };
+  }
+}
+
+/** An earlier final answer offered as the starting text of a new question. */
+export interface SimilarAnswer {
+  versionId: number;
+  /** The earlier question. */
+  question: string;
+  /** Its final answer. */
+  answer: string;
+  company: string;
+  /** The spellings of the company to look for in the new text. */
+  companyNames: string[];
+  jobTitle: string;
+  /** Share of words in common with the new question, whole percent. */
+  percent: number;
+}
+
+export type SimilarAnswersResult = { ok: true; matches: SimilarAnswer[] } | { ok: false; error: WriterActionError };
+
+/**
+ * Final answers to similar questions of other jobs, for a question about to be added. Reads this database only and calls
+ * no AI provider, so it works (and sends nothing) whatever the AI setup is.
+ */
+export async function findSimilarAnswersAction(input: { jobId: number; text: string }): Promise<SimilarAnswersResult> {
+  const parsed = z.strictObject({ jobId: positive, text: z.string().trim().min(1).max(10_000) }).safeParse(input);
+  if (!parsed.success) return { ok: false, error: "invalid" };
+  try {
+    const { writer } = readWriterInputs();
+    if (writer === null) return { ok: false, error: "config_error" };
+    if (!writer.enabled) return { ok: false, error: "disabled" };
+    const db = getDb();
+    const { jobId, text } = parsed.data;
+    // too short a question says too little to compare
+    if (questionTokens(text).size < writer.reuse.min_question_words) return { ok: true, matches: [] };
+    const suffixes = legalSuffixes();
+    const ranked = rankSimilar(text, await listReusableAnswers(db, { excludeJobId: jobId }), { minSimilarity: writer.reuse.min_similarity, maxCandidates: writer.reuse.max_candidates });
+    const matches: SimilarAnswer[] = [];
+    for (const entry of ranked) {
+      const answer = await getReusableAnswerText(db, { versionId: entry.versionId, excludeJobId: jobId });
+      if (answer) matches.push({ versionId: entry.versionId, question: entry.text, answer: answer.text, company: answer.company, companyNames: companyMatchNames(answer.company, suffixes), jobTitle: answer.jobTitle, percent: Math.round(entry.similarity * 100) });
+    }
+    return { ok: true, matches };
+  } catch (error) {
+    logActionFailure("findSimilarAnswersAction", error);
+    return { ok: false, error: "failed" };
+  }
+}
+
+/**
+ * Save the text you started from an earlier final answer (and edited) as the first version of a question: every sentence is
+ * yours (`user_written`), since the earlier checks were made against another job's material, and the version points at the
+ * answer it came from, which is how the page knows to warn when the earlier company's name is still in it.
+ */
+export async function saveBaseVersionAction(input: { jobId: number; questionId: number; sourceVersionId: number; text: string }): Promise<WriterActionResult & { versionId?: number }> {
+  const parsed = z.strictObject({ jobId: positive, questionId: positive, sourceVersionId: positive, text: z.string().trim().min(1).max(50_000) }).safeParse(input);
+  if (!parsed.success) return { ok: false, error: "invalid" };
+  try {
+    const { writer } = readWriterInputs();
+    if (writer === null) return { ok: false, error: "config_error" };
+    const db = getDb();
+    const { jobId, questionId, sourceVersionId, text } = parsed.data;
+    const question = await getApplicationQuestion(db, { jobId, questionId });
+    // only a final answer of another job can be a starting text
+    const source = question ? await getReusableAnswerText(db, { versionId: sourceVersionId, excludeJobId: jobId }) : null;
+    if (!question || !source) return { ok: false, error: "not_found" };
+    const sentences = diffSentences([], text);
+    const counts = countStatuses(sentences);
+    const [id] = await insertAnswerVersions(db, {
+      questionId,
+      maxVersions: writer.questions.max_versions_per_question,
+      versions: [
+        {
+          mode: "manual",
+          text,
+          sentences,
+          supportedCount: counts.supported,
+          partialCount: counts.partial,
+          unsupportedCount: counts.unsupported,
+          framingCount: counts.framing,
+          userWrittenCount: counts.user_written,
+          webUnverifiedCount: counts.web_unverified,
+          parentVersionId: sourceVersionId,
+        },
+      ],
+    });
+    revalidate(jobId);
+    return id === undefined ? { ok: true } : { ok: true, versionId: id };
+  } catch (error) {
+    logActionFailure("saveBaseVersionAction", error);
     return { ok: false, error: "failed" };
   }
 }

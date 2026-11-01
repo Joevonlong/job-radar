@@ -172,6 +172,22 @@ describe("MobileActionBar", () => {
     expect(within(bar).getByTestId("bar-view-posting-button")).toHaveAttribute("href", "https://jobs.example.test/7");
   });
 
+  it("has an entry to the application writer only when the page gives one, with the answers counted in its name", () => {
+    const { unmount } = render(wrap(<MobileActionBar jobId={7} status="new" notes="" title="LLM Engineer" appliedOn={null} postingUrl={null} favorite={false} />));
+    expect(screen.queryByTestId("bar-write-button")).toBeNull();
+    unmount();
+
+    const first = render(wrap(<MobileActionBar jobId={7} status="new" notes="" title="LLM Engineer" appliedOn={null} postingUrl={null} favorite={false} write={{ href: "/jobs/7/apply", questions: 0, final: 0 }} />));
+    const link = screen.getByTestId("bar-write-button");
+    expect(link).toHaveAttribute("href", "/jobs/7/apply");
+    expect(link).toHaveAccessibleName("Write answers");
+    first.unmount();
+
+    render(wrap(<MobileActionBar jobId={7} status="new" notes="" title="LLM Engineer" appliedOn={null} postingUrl={null} favorite={false} write={{ href: "/settings?tab=workflow", questions: 3, final: 1 }} />));
+    expect(screen.getByTestId("bar-write-button")).toHaveAttribute("href", "/settings?tab=workflow");
+    expect(screen.getByTestId("bar-write-button")).toHaveAccessibleName("Write answers (1 of 3 final)");
+  });
+
   it("saves a status change from the bar", async () => {
     const user = userEvent.setup();
     render(wrap(<MobileActionBar jobId={7} status="new" notes="" title="LLM Engineer" appliedOn={null} postingUrl={null} favorite={false} />));

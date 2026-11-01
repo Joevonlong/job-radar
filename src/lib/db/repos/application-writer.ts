@@ -6,7 +6,7 @@
 import { and, asc, count, desc, eq, inArray, ne, notInArray, sql } from "drizzle-orm";
 
 import type { Executor } from "../executor";
-import { applicationAnswerVersions, applicationQuestions } from "../schema";
+import { applicationAnswerVersions, applicationQuestions, companies, jobs } from "../schema";
 
 export type ApplicationQuestionRow = typeof applicationQuestions.$inferSelect;
 export type AnswerVersionRow = typeof applicationAnswerVersions.$inferSelect;
@@ -149,4 +149,63 @@ export async function countApplicationAnswers(db: Executor, jobId: number): Prom
     .from(applicationQuestions)
     .where(eq(applicationQuestions.jobId, jobId));
   return { questions: row?.questions ?? 0, final: row?.final ?? 0 };
+}
+
+/** A finalised answer of another job, as far as ranking needs it: the question's text and where the answer stands. */
+export interface ReusableAnswer {
+  versionId: number;
+  questionId: number;
+  jobId: number;
+  jobTitle: string;
+  company: string;
+  /** The question's text. */
+  text: string;
+}
+
+/**
+ * The questions of every job but `excludeJobId` that have a final answer, newest answer first. Only the question text and
+ * names are read (the answer itself comes with `getReusableAnswerText`), so ranking many of them stays cheap.
+ */
+export async function listReusableAnswers(db: Executor, input: { excludeJobId: number }): Promise<ReusableAnswer[]> {
+  return db
+    .select({
+      versionId: applicationAnswerVersions.id,
+      questionId: applicationQuestions.id,
+      jobId: applicationQuestions.jobId,
+      jobTitle: jobs.title,
+      company: companies.name,
+      text: applicationQuestions.text,
+    })
+    .from(applicationQuestions)
+    .innerJoin(applicationAnswerVersions, and(eq(applicationAnswerVersions.id, applicationQuestions.finalVersionId), eq(applicationAnswerVersions.questionId, applicationQuestions.id)))
+    .innerJoin(jobs, eq(jobs.id, applicationQuestions.jobId))
+    .innerJoin(companies, eq(companies.id, jobs.companyId))
+    .where(ne(applicationQuestions.jobId, input.excludeJobId))
+    .orderBy(desc(applicationAnswerVersions.createdAt), desc(applicationAnswerVersions.id));
+}
+
+/** The text of a version that is the final answer of a question of another job than `excludeJobId`; null for any other version. */
+export async function getReusableAnswerText(db: Executor, input: { versionId: number; excludeJobId: number }): Promise<{ text: string; company: string; jobTitle: string } | null> {
+  const [row] = await db
+    .select({ text: applicationAnswerVersions.text, company: companies.name, jobTitle: jobs.title })
+    .from(applicationAnswerVersions)
+    .innerJoin(applicationQuestions, and(eq(applicationQuestions.id, applicationAnswerVersions.questionId), eq(applicationQuestions.finalVersionId, applicationAnswerVersions.id)))
+    .innerJoin(jobs, eq(jobs.id, applicationQuestions.jobId))
+    .innerJoin(companies, eq(companies.id, jobs.companyId))
+    .where(and(eq(applicationAnswerVersions.id, input.versionId), ne(applicationQuestions.jobId, input.excludeJobId)))
+    .limit(1);
+  return row ?? null;
+}
+
+/** Which job and company each of these versions belongs to (a version that no longer exists is missing from the result). */
+export async function listVersionOrigins(db: Executor, versionIds: readonly number[]): Promise<Map<number, { jobId: number; jobTitle: string; company: string }>> {
+  if (versionIds.length === 0) return new Map();
+  const rows = await db
+    .select({ versionId: applicationAnswerVersions.id, jobId: applicationQuestions.jobId, jobTitle: jobs.title, company: companies.name })
+    .from(applicationAnswerVersions)
+    .innerJoin(applicationQuestions, eq(applicationQuestions.id, applicationAnswerVersions.questionId))
+    .innerJoin(jobs, eq(jobs.id, applicationQuestions.jobId))
+    .innerJoin(companies, eq(companies.id, jobs.companyId))
+    .where(inArray(applicationAnswerVersions.id, [...versionIds]));
+  return new Map(rows.map((row) => [row.versionId, { jobId: row.jobId, jobTitle: row.jobTitle, company: row.company }]));
 }

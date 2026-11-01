@@ -1355,7 +1355,9 @@
         "label": "岗位操作",
         "notes": "备注",
         "viewPosting": "查看原帖",
-        "notesHint": "写下联系人、要问的问题或面试记录。"
+        "notesHint": "写下联系人、要问的问题或面试记录。",
+        "write": "写申请",
+        "writeCount": "写申请（{total} 个问题，{final} 个定稿）"
       },
       "reasonsLanguageHint": "AI 的匹配理由和差距是用{language}写的，不做翻译。",
       "summaryLanguage": {},
@@ -7605,6 +7607,33 @@
       },
       "missing": "依据里没有：{items}",
       "needsCheck": "需核对：{items}（依据和 JD 里都找不到的名称）"
+    },
+    "export": {
+      "heading": "申请回答",
+      "question": "问题",
+      "answer": "回答",
+      "button": "导出为 Markdown",
+      "count": "{total} 个问题中 {final} 个有定稿",
+      "none": "把回答设为定稿后才会进入导出文件。",
+      "hint": "一个文件，含每个问题和它的定稿回答，在浏览器里生成；不会发送到任何地方。",
+      "done": "已导出 {count} 个回答",
+      "failed": "无法生成文件。",
+      "job": "{title} · {company}",
+      "letter": "动机信"
+    },
+    "reuse": {
+      "label": "以前的回答",
+      "title": "你以前回答过类似的问题",
+      "from": "{company} · {title} · 共有 {percent}% 的词相同",
+      "use": "以它为底稿",
+      "note": "以前的回答只是起始文字：它的核对结果不会带过来，也不会发给 AI 服务商。其他语言的问题匹配不上。",
+      "editorTitle": "起始文字",
+      "editorHint": "取自你为 {company} · {title} 写的定稿。改掉只属于那个职位的内容，再存为第一个版本。",
+      "editorLabel": "回答的起始文字",
+      "save": "存为第一个版本",
+      "discard": "丢弃",
+      "saved": "已存为版本",
+      "oldCompany": "这段文字里还有 {companies}，也就是你拿来做底稿的那份回答的公司。使用前请检查。"
     }
   }
 }

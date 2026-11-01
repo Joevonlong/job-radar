@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useId, useState, useTransition } from "react";
 
-import { addQuestionAction, deleteQuestionAction, updateQuestionAction, type WriterActionResult } from "@/app/jobs/[id]/apply/actions";
+import { addQuestionAction, deleteQuestionAction, updateQuestionAction, type SimilarAnswer, type WriterActionResult } from "@/app/jobs/[id]/apply/actions";
 import { Panel, PanelAside } from "@/components/jobs/detail/panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -17,7 +17,11 @@ import { LENGTH_UNITS, QUESTION_KINDS, type LengthUnit, type QuestionKind } from
 import { languageAutonym } from "@/lib/i18n/languages";
 import { toastTone } from "@/lib/toast";
 import { cn } from "@/lib/utils";
+import type { ReuseBase } from "@/lib/writer/similar";
 import type { WorkbenchQuestion, WorkbenchView } from "@/lib/writer/view";
+
+import { ExportAnswers } from "./export-answers";
+import { ReuseSuggestions } from "./reuse-suggestions";
 
 interface Settings {
   text: string;
@@ -34,7 +38,7 @@ const SHIPPED_TONES = ["neutral", "warm", "confident", "formal"] as const;
 const failed = (): WriterActionResult => ({ ok: false, error: "failed" });
 
 /** The job's questions (pick one to work on), a form to add one, and the settings of the picked one. */
-export function QuestionsPanel({ view, activeId, onSelect, enabled }: { view: WorkbenchView; activeId: number | null; onSelect: (id: number) => void; enabled: boolean }) {
+export function QuestionsPanel({ view, activeId, onSelect, onReuse, enabled }: { view: WorkbenchView; activeId: number | null; onSelect: (id: number) => void; onReuse: (base: ReuseBase) => void; enabled: boolean }) {
   const t = useTranslations("writer.questions");
   const tw = useTranslations("writer");
   const router = useRouter();
@@ -55,7 +59,7 @@ export function QuestionsPanel({ view, activeId, onSelect, enabled }: { view: Wo
     return true;
   };
 
-  const add = (): void => {
+  const add = (from?: SimilarAnswer): void => {
     const defaults = view.kinds[kind];
     startTransition(async () => {
       const result = await callAction(
@@ -64,7 +68,10 @@ export function QuestionsPanel({ view, activeId, onSelect, enabled }: { view: Wo
       );
       if (report(result)) {
         setText("");
-        if ("questionId" in result && result.questionId !== undefined) onSelect(result.questionId);
+        if ("questionId" in result && result.questionId !== undefined) {
+          onSelect(result.questionId);
+          if (from) onReuse({ questionId: result.questionId, sourceVersionId: from.versionId, text: from.answer, company: from.company, companyNames: from.companyNames, jobTitle: from.jobTitle });
+        }
       }
     });
   };
@@ -113,12 +120,15 @@ export function QuestionsPanel({ view, activeId, onSelect, enabled }: { view: Wo
                 </option>
               ))}
             </NativeSelect>
-            <Button type="button" size="sm" onClick={add} disabled={!enabled || full || pending || (text.trim() === "" && kind === "question")} data-testid="writer-add-button">
+            <Button type="button" size="sm" onClick={() => add()} disabled={!enabled || full || pending || (text.trim() === "" && kind === "question")} data-testid="writer-add-button">
               <Plus aria-hidden /> {t("add")}
             </Button>
           </div>
           {full ? <p className="text-ink-3 text-body-sm">{t("full", { max: view.limits.maxQuestions })}</p> : null}
+          <ReuseSuggestions jobId={view.job.id} text={text} minWords={view.limits.reuseMinWords} enabled={enabled && !full} disabled={pending} onUse={add} />
         </div>
+
+        <ExportAnswers view={view} />
 
         {active ? <QuestionSettings key={active.id} view={view} question={active} enabled={enabled} report={report} /> : null}
       </div>

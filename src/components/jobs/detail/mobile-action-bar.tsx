@@ -1,6 +1,7 @@
 "use client";
 
-import { ExternalLink, NotebookPen } from "lucide-react";
+import { ExternalLink, NotebookPen, PenLine } from "lucide-react";
+import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 
@@ -25,15 +26,17 @@ interface MobileActionBarProps {
   appliedOn: string | null;
   /** The job is starred. */
   favorite: boolean;
+  /** The application writer entry (the workbench, or the setting that turns it on); left out, the bar has no such button. */
+  write?: { href: string; /** Questions the job already has there. */ questions: number; /** Of them, with a final answer. */ final: number };
 }
 
 /**
- * The actions of the detail page for a phone: status, notes, "View posting" and "Mark applied" in a bar fixed to the bottom, so a job
+ * The actions of the detail page for a phone: status, notes, the application writer, "View posting" and "Mark applied" in a bar fixed to the bottom, so a job
  * opened from a Telegram link can be marked without scrolling through the whole description. The status select saves
  * on change like the one in the side panel; the notes open in a bottom sheet. Hidden from `lg` up, where the side
  * panel is next to the text.
  */
-export function MobileActionBar({ jobId, status, notes, title, postingUrl, appliedOn, favorite }: MobileActionBarProps) {
+export function MobileActionBar({ jobId, status, notes, title, postingUrl, appliedOn, favorite, write }: MobileActionBarProps) {
   const t = useTranslations("dashboard.detail");
   const [open, setOpen] = useState(false);
   const hasNotes = notes.trim() !== "";
@@ -55,6 +58,17 @@ export function MobileActionBar({ jobId, status, notes, title, postingUrl, appli
             <NotebookPen aria-hidden />
             {hasNotes ? <span aria-hidden className="bg-primary absolute top-1 right-1 size-2 rounded-full" /> : null}
           </Button>
+          {write ? (
+            <Link
+              href={write.href}
+              className={cn(buttonVariants({ variant: "outline", size: "icon" }), "relative size-[44px] shrink-0")}
+              aria-label={write.questions > 0 ? t("actionBar.writeCount", { final: write.final, total: write.questions }) : t("actionBar.write")}
+              data-testid="bar-write-button"
+            >
+              <PenLine aria-hidden />
+              {write.questions > 0 ? <span aria-hidden className="bg-primary absolute top-1 right-1 size-2 rounded-full" /> : null}
+            </Link>
+          ) : null}
           <FavoriteButton jobId={jobId} title={title} favorite={favorite} variant="icon" />
         </div>
         <div className="flex items-center gap-2">

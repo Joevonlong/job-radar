@@ -111,6 +111,17 @@ export const writerSchema = z.strictObject({
   jd_head_share: z.number().min(0.1).max(0.9).default(0.7),
   /** A call whose output reached this share of the output token cap and did not parse was cut off (`output_truncated`), not malformed. */
   output_truncated_share: z.number().min(0.5).max(1).default(0.95),
+  /** Offering a finalised answer to a similar question of another job as the starting text (local, no AI call). */
+  reuse: z
+    .strictObject({
+      /** Lowest word overlap (0..1, Jaccard) between a new question and an earlier one for the earlier answer to be offered. */
+      min_similarity: z.number().min(0.05).max(1).default(0.55),
+      /** Most earlier answers offered for one new question (the most similar first). */
+      max_candidates: z.number().int().min(1).max(10).default(3),
+      /** Fewest words a new question needs before earlier answers are looked up (every Chinese, Japanese or Korean character counts as a word). */
+      min_question_words: z.number().int().min(1).max(50).default(3),
+    })
+    .prefault({}),
   /** The sentence-by-sentence evidence check (deterministic, no AI call). */
   evidence: z
     .strictObject({

@@ -21,8 +21,12 @@ import { cn } from "@/lib/utils";
 import { textLength } from "@/lib/writer/diff";
 import { jdPointKey } from "@/lib/writer/jd-points";
 import { writeInputFields } from "@/lib/writer/materials";
+import type { ReuseBase } from "@/lib/writer/similar";
 import type { CheckedSentence, SentenceStatus, StatusCounts } from "@/lib/writer/types";
 import type { WorkbenchQuestion, WorkbenchVersion, WorkbenchView } from "@/lib/writer/view";
+
+import { BaseEditor } from "./base-editor";
+import { OldCompanyNotice } from "./old-company-notice";
 
 type Failure = { error: WriteErrorKey; detail: string | null; resumeAt: string | null };
 
@@ -68,7 +72,7 @@ function Counts({ counts, testId }: { counts: StatusCounts; testId?: string }) {
  * The answer of the selected question: what is sent and to whom, the "write" button (a `writer_job` request polled
  * until the ai-worker is done), the versions, and the selected version sentence by sentence with its evidence.
  */
-export function AnswerPanel({ view, question, enabled, timeZone }: { view: WorkbenchView; question: WorkbenchQuestion | null; enabled: boolean; timeZone: string }) {
+export function AnswerPanel({ view, question, base, onBaseDone, enabled, timeZone }: { view: WorkbenchView; question: WorkbenchQuestion | null; base: ReuseBase | null; onBaseDone: () => void; enabled: boolean; timeZone: string }) {
   const t = useTranslations("writer.answer");
   const tw = useTranslations("writer");
   const variantName = (id: string | null): string => {
@@ -176,6 +180,8 @@ export function AnswerPanel({ view, question, enabled, timeZone }: { view: Workb
           ) : null}
         </div>
 
+        {base ? <BaseEditor view={view} question={question} base={base} enabled={enabled} onDone={onBaseDone} /> : null}
+
         {question.versions.length > 0 ? (
           <ul className="flex flex-col gap-1.5" aria-label={t("versionsLabel")} data-testid="writer-versions">
             {question.versions.map((version) => (
@@ -274,6 +280,7 @@ function VersionView({ view, question, version, enabled, onSaved }: { view: Work
       <p className="text-ink-2 text-body-sm" data-testid="writer-evidence-note">
         {t("evidenceNote")}
       </p>
+      <OldCompanyNotice text={version.text} from={question.startedFrom.map((entry) => ({ company: entry.company, names: entry.names }))} currentNames={view.job.companyNames} />
 
       {editing === null ? (
         <div className="text-body flex flex-col gap-3 leading-relaxed [overflow-wrap:anywhere]" data-testid="writer-version-text">
