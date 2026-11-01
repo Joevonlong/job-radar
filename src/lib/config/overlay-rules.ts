@@ -56,6 +56,11 @@ export const OVERLAY_RECORD_RULES: Readonly<Partial<Record<ConfigName, readonly 
     { path: "presets.[].patterns", kind: "in-array" },
     { path: "presets.[].exclude", kind: "in-array" },
   ],
+  // per language: a user list for one language leaves the shipped lists of the others in place
+  writer: [
+    { path: "evidence.first_person", kind: "entries" },
+    { path: "evidence.names.capitalized_non_initial", kind: "entries" },
+  ],
 };
 
 /** A key path (the merge never descends into lists, so it has no `[]`). */

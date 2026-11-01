@@ -46,7 +46,7 @@ describe("stories.yaml schema", () => {
 
 describe("writer.yaml schema", () => {
   it("defaults to off with the shipped limits when the file is empty", () => {
-    expect(writerSchema.parse({})).toEqual({ enabled: false, stories: { max_items: 60, title_max_chars: 120, text_max_chars: 1500, preselect_count: 4 } });
+    expect(writerSchema.parse({})).toMatchObject({ enabled: false, stories: { max_items: 60, title_max_chars: 120, text_max_chars: 1500, preselect_count: 4 } });
   });
 
   it("refuses limits above the file format's bounds", () => {

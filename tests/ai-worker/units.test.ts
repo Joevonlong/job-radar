@@ -67,10 +67,10 @@ describe("ai.yaml: execution and host_worker", () => {
 describe("which process takes which request", () => {
   it("host: the runner keeps run_cycle, the worker takes all AI work", () => {
     expect(runnerRequestKinds("host")).toEqual(["run_cycle", "test_channel", "test_telegram"]);
-    expect(aiWorkerRequestKinds("host")).toEqual(["run_ai", "translate_job", "breakdown_job", "rescore_stale", "run_suggest", "score_jobs", "test_ai", "salary_lookup"]);
+    expect(aiWorkerRequestKinds("host")).toEqual(["run_ai", "translate_job", "breakdown_job", "rescore_stale", "run_suggest", "score_jobs", "test_ai", "salary_lookup", "writer_job"]);
   });
   it("container: the runner takes the web's AI work, run_ai stays with the worker", () => {
-    expect(runnerRequestKinds("container")).toEqual(["run_cycle", "test_channel", "test_telegram", "translate_job", "breakdown_job", "rescore_stale", "run_suggest", "score_jobs", "test_ai", "salary_lookup"]);
+    expect(runnerRequestKinds("container")).toEqual(["run_cycle", "test_channel", "test_telegram", "translate_job", "breakdown_job", "rescore_stale", "run_suggest", "score_jobs", "test_ai", "salary_lookup", "writer_job"]);
     expect(aiWorkerRequestKinds("container")).toEqual(["run_ai"]);
   });
   it("validates the payloads", () => {
