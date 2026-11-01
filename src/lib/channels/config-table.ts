@@ -16,18 +16,18 @@ export type ChannelConfigRef = (
  * registered (and therefore enabled) if it has an entry here. Source channels use the config key as id.
  */
 export const CHANNEL_CONFIG_TABLE = {
-  "linkedin-brightdata": { section: "linkedin", key: "brightdata" },
-  "linkedin-apify": { section: "linkedin", key: "apify" },
+  "linkedin-brightdata": { section: "linkedin", key: "brightdata", supportsCompanyQueries: true },
+  "linkedin-apify": { section: "linkedin", key: "apify", supportsCompanyQueries: true },
   "linkedin-monid": { section: "linkedin", key: "monid" },
   "linkedin-session": { section: "linkedin", key: "session", supportsCompanyQueries: true },
   "linkedin-session:recommended": { section: "linkedin", key: "session", view: "recommended", usesQueries: false },
   "linkedin-guest": { section: "linkedin", key: "guest", supportsCompanyQueries: true },
   arbeitsagentur: { section: "sources", key: "arbeitsagentur", supportsCompanyQueries: true },
   indeed: { section: "sources", key: "indeed", supportsCompanyQueries: true },
-  stepstone: { section: "sources", key: "stepstone" },
-  xing: { section: "sources", key: "xing" },
+  stepstone: { section: "sources", key: "stepstone", supportsCompanyQueries: true },
+  xing: { section: "sources", key: "xing", supportsCompanyQueries: true },
   arbeitnow: { section: "sources", key: "arbeitnow", usesQueries: false },
-  jsearch: { section: "sources", key: "jsearch" },
+  jsearch: { section: "sources", key: "jsearch", supportsCompanyQueries: true },
   greenhouse: { section: "sources", key: "greenhouse", usesQueries: false },
   lever: { section: "sources", key: "lever", usesQueries: false },
   ashby: { section: "sources", key: "ashby", usesQueries: false },

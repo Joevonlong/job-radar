@@ -87,6 +87,7 @@ export function createJsearchChannel(deps: JsearchDeps = {}): Channel {
     family: "google",
     kind: "api",
     usesQueries: true,
+    supportsCompanyQueries: true,
     estimateCost: (paidRecords) => paidRecords * configured().overage_cost_per_request_usd,
 
     async collect(query: SearchQuery, ctx: ChannelContext): Promise<RawPostingInput[]> {
@@ -106,7 +107,7 @@ export function createJsearchChannel(deps: JsearchDeps = {}): Channel {
       let interrupted: ChannelError | null = null;
       /** A later keyword was refused by the plan's own limits before its request: a planned stop, not a failure. */
       let stoppedBy: BudgetExceededError | null = null;
-      for (const [index, request] of buildRequests(query, settings).entries()) {
+      for (const [index, request] of buildRequests(query, settings, marketForChannel().countryName).entries()) {
         ctx.signal.throwIfAborted();
         if (index > 0) await ctx.throttle();
         try {
@@ -140,8 +141,10 @@ export function createJsearchChannel(deps: JsearchDeps = {}): Channel {
       // ---- details: only for postings the search left without a description (none after a failed request: it would fail too)
       const details = new Map<string, unknown>();
       if (settings.fetch_details && interrupted === null) {
+        // company queries: another employer's posting would be dropped afterwards, so its detail request (a billed one) is saved
         const wanted = selected
           .filter(({ record }) => lacksDescription(record))
+          .filter(({ record }) => ctx.employerMatches?.(stringField(record, "employer_name")) ?? true)
           .slice(0, settings.max_details_per_query)
           .map(({ id }) => id);
         try {

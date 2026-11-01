@@ -238,7 +238,7 @@ async function read(input: ReadInput): Promise<RawPostingInput[]> {
   // Both session channel ids share stored jobs; the dry-run overlay only reads its base.
   const stored = await store.storedPayloads(ids);
   const out: RawPostingInput[] = [];
-  const counts = { reused: 0, fetched: 0, unavailable: 0, closed: 0, cardOnly: 0, unreadable: 0, skippedCards: 0 };
+  const counts = { reused: 0, fetched: 0, unavailable: 0, closed: 0, cardOnly: 0, unreadable: 0, skippedCards: 0, otherEmployer: 0 };
 
   const emit = (jobId: string, payload: unknown, postedAt: string | null | undefined): void => {
     out.push({ externalId: jobId, url: jobUrl(settings.site.base_url, jobId), payload, postedAt: postedAt ? new Date(postedAt) : null });
@@ -258,6 +258,10 @@ async function read(input: ReadInput): Promise<RawPostingInput[]> {
     if (!settings.fetch_details) {
       payload = buildPayload({ jobId: card.jobId, url, source: plan.source, card, detail: null });
       if (payload === null) counts.unreadable += 1;
+    } else if (ctx.employerMatches?.(card.companyName) === false) {
+      // company queries: a card of another employer would be dropped after its page was read, so it costs no page (card data only)
+      counts.otherEmployer += 1;
+      payload = buildPayload({ jobId: card.jobId, url, source: plan.source, card, detail: null });
     } else {
       // after a failure or the day's limit the postings that need a page are left for the next run (they are listed again then)
       if (stop.error !== null || capped !== null) {

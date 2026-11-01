@@ -3,6 +3,7 @@ import { z } from "zod";
 import { remoteLocationFor } from "@/lib/market/remote-scope";
 
 import type { ChannelMarket } from "../../market";
+import { searchKind } from "../../query";
 import type { SearchQuery } from "../../types";
 
 /**
@@ -107,9 +108,10 @@ export function keywordStrings(keywords: readonly string[]): string[] {
   return out;
 }
 
-/** The provider inputs for one query: one per keyword string (usually exactly one). */
+/** The provider inputs for one query: one per keyword string (usually exactly one). A company query searches the home country, without a remote filter. */
 export function buildDiscoveryInputs(query: SearchQuery, settings: BrightDataSettings, market: ChannelMarket): DiscoveryInput[] {
-  const location = query.remote ? remoteLocationFor(query.remoteScope ?? "worldwide", settings.remote_locations, market) : query.location;
+  const kind = searchKind(query);
+  const location = kind === "company" ? market.countryName : kind === "remote" ? remoteLocationFor(query.remoteScope ?? "worldwide", settings.remote_locations, market) : query.location;
   if (location === null) throw new Error("brightdata: a located query needs a location");
   const timeRange = timeRangeFor(query.windowHours).label;
   const inputs = keywordStrings(query.keywords).map((keyword) =>
@@ -118,7 +120,7 @@ export function buildDiscoveryInputs(query: SearchQuery, settings: BrightDataSet
       keyword,
       country: settings.country || market.country,
       ...(timeRange === undefined ? {} : { time_range: timeRange }),
-      ...(query.remote ? { remote: "Remote" } : {}),
+      ...(kind === "remote" ? { remote: "Remote" } : {}),
     }),
   );
   if (inputs.length === 0) throw new Error("brightdata: the query has no keywords");

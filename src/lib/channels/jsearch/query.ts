@@ -1,5 +1,6 @@
 import type { JsearchSettings } from "@/lib/config";
 
+import { searchKind } from "../query";
 import type { SearchQuery } from "../types";
 
 /** `date_posted` values the API accepts, with the look-back they stand for. The API fixes both; they are not tunables. */
@@ -24,10 +25,15 @@ export interface JsearchRequest {
 
 /**
  * The searches of one cycle query: the first `keywords_per_query` keywords of its group, each on its
- * own (Google for Jobs has no reliable OR), in the city, or as a remote search without one.
+ * own (Google for Jobs has no reliable OR), in the city, or as a remote search without one. A company query is one
+ * request, `<company> in <home country>`, without the home-office filter; `homeCountryName` is the market's country name.
  */
-export function buildRequests(query: SearchQuery, settings: Pick<JsearchSettings, "keywords_per_query">): JsearchRequest[] {
+export function buildRequests(query: SearchQuery, settings: Pick<JsearchSettings, "keywords_per_query">, homeCountryName?: string): JsearchRequest[] {
   const datePosted = datePostedFor(query.windowHours);
+  if (searchKind(query) === "company") {
+    if (!homeCountryName) throw new Error("jsearch: a company query needs the home country name");
+    return query.keywords.slice(0, 1).map((name) => ({ query: `${name} in ${homeCountryName}`, datePosted, remote: false }));
+  }
   const remote = query.remote || query.location === null;
   return query.keywords.slice(0, settings.keywords_per_query).map((keyword) => ({
     query: remote ? keyword : `${keyword} in ${query.location}`,

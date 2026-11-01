@@ -62,6 +62,7 @@ export function createBrightDataChannel(options: BrightDataChannelOptions): Chan
     family: "linkedin",
     kind: "paid",
     usesQueries: true,
+    supportsCompanyQueries: true,
     // Billed per record with coarse date ranges and no newest-first order: stretching would mostly buy old postings.
     // Return true only after exact second-level requests and newest-first results under current settings have been measured.
     supportsCatchUp: () => false,

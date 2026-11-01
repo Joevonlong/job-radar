@@ -6,6 +6,7 @@ import type { Channel, ChannelContext, RawPostingInput, SearchQuery } from "../t
 import { createCycleCache } from "../web/cache";
 import { createTitleFilter, interleave, isWithinWindow, parseDate, windowCutoff } from "../web/select";
 import { loadKnownDetails, storedDetailOf } from "../known";
+import { searchKind } from "../query";
 import { fetchDetail, fetchSearchPage, PAGE_SIZE, postingId, postingUrl, searchUrl } from "./client";
 import { parseXingPayload } from "./parse";
 import { payloadSchema, type XingDetail, type XingListItem, type XingPayload } from "./schema";
@@ -33,9 +34,11 @@ export function createXingChannel(deps: XingDeps = {}): Channel {
 
   async function collect(query: SearchQuery, ctx: ChannelContext): Promise<RawPostingInput[]> {
     const settings = settingsOf(ctx);
-    const location = query.remote ? null : query.location;
+    const kind = searchKind(query);
+    const location = kind === "city" ? query.location : null;
     const cutoff = windowCutoff(now(), query.windowHours);
-    const keepTitle = createTitleFilter(settings.title_prefilter, query.keywords);
+    // a company query searches an employer name: its title never contains it, and the later filters judge the jobs
+    const keepTitle = kind === "company" ? () => true : createTitleFilter(settings.title_prefilter, query.keywords);
     let first = true;
     const pace = async (): Promise<void> => {
       if (!first) await ctx.throttle();
@@ -55,7 +58,7 @@ export function createXingChannel(deps: XingDeps = {}): Channel {
         await pace();
         let result;
         try {
-          result = await fetchSearchPage(ctx, settings, searchUrl(settings, { keyword, location, page }));
+          result = await fetchSearchPage(ctx, settings, searchUrl(settings, { keyword, location, kind, page }));
         } catch (error) {
           if (!(error instanceof ChannelError)) throw error;
           interrupted = error;
@@ -87,6 +90,7 @@ export function createXingChannel(deps: XingDeps = {}): Channel {
     let attempted = 0;
     let parseFailures = 0;
     let reused = 0;
+    let employerSkipped = 0;
     if (settings.fetch_details) {
       // postings already stored keep their stored detail; only the others open their page
       // an interrupted query never overwrites a stored detail with none, whatever reuse_known_details says
@@ -95,7 +99,11 @@ export function createXingChannel(deps: XingDeps = {}): Channel {
       const known = await loadKnownDetails(ctx, { enabled: reuse, externalIds: selected.map(postingId), detailOf });
       for (const [id, detail] of known) details.set(id, detail);
       reused = known.size;
-      const toFetch = selected.filter((i) => !known.has(postingId(i))).slice(0, settings.max_details_per_query);
+      // company queries: another employer's page would be dropped afterwards, so it costs no request (it stays list data)
+      const unknown = selected.filter((i) => !known.has(postingId(i)));
+      const ofEmployer = unknown.filter((i) => ctx.employerMatches?.(i.companyInfo?.companyNameOverride) ?? true);
+      employerSkipped = unknown.length - ofEmployer.length;
+      const toFetch = ofEmployer.slice(0, settings.max_details_per_query);
       for (const item of toFetch) {
         const url = postingUrl(settings, item);
         if (url === null) continue;
@@ -153,6 +161,7 @@ export function createXingChannel(deps: XingDeps = {}): Channel {
       postings: postings.length,
       details: details.size,
       reusedDetails: reused,
+      ...(employerSkipped > 0 ? { otherEmployerDetailsSkipped: employerSkipped } : {}),
       interrupted: interrupted?.code,
     });
     return settlePostings(ctx.budget, postings, interrupted);
@@ -163,6 +172,7 @@ export function createXingChannel(deps: XingDeps = {}): Channel {
     family: "xing",
     kind: "guest",
     usesQueries: true,
+    supportsCompanyQueries: true,
     // the ghost job check: XING ids are stable and the full text is stored
     stableExternalIds: true,
     fullDescription: true,

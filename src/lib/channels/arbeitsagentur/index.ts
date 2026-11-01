@@ -94,6 +94,7 @@ async function collect(query: SearchQuery, ctx: ChannelContext): Promise<RawPost
   let attempted = 0;
   let parseFailures = 0;
   let reused = 0;
+  let employerSkipped = 0;
   if (settings.fetch_details) {
     // postings already stored keep their stored detail; only the others cost a request
     // an interrupted query never overwrites a stored detail with none, whatever reuse_known_details says
@@ -103,7 +104,11 @@ async function collect(query: SearchQuery, ctx: ChannelContext): Promise<RawPost
     for (const [id, detail] of known) details.set(id, detail);
     reused = known.size;
     // after a failure no further request goes out: the stored details are kept, the rest stays list data
-    const toFetch = interrupted ? [] : selected.filter((i) => !known.has(i.referenznummer)).slice(0, settings.max_details_per_query);
+    // company queries: another employer's detail would be dropped afterwards, so it costs no request (it stays list data)
+    const unknown = selected.filter((i) => !known.has(i.referenznummer));
+    const ofEmployer = unknown.filter((i) => ctx.employerMatches?.(i.firma) ?? true);
+    employerSkipped = unknown.length - ofEmployer.length;
+    const toFetch = interrupted ? [] : ofEmployer.slice(0, settings.max_details_per_query);
     for (const item of toFetch) {
       await pace();
       attempted += 1;
@@ -142,7 +147,7 @@ async function collect(query: SearchQuery, ctx: ChannelContext): Promise<RawPost
       postedAt: toDate(item.datumErsteVeroeffentlichung) ?? toDate(item.veroeffentlichungszeitraum?.von),
     };
   });
-  ctx.logger.info("arbeitsagentur query done", { query: query.id, postings: postings.length, details: details.size, reusedDetails: reused, interrupted: interrupted?.code });
+  ctx.logger.info("arbeitsagentur query done", { query: query.id, postings: postings.length, details: details.size, reusedDetails: reused, ...(employerSkipped > 0 ? { otherEmployerDetailsSkipped: employerSkipped } : {}), interrupted: interrupted?.code });
   return settlePostings(ctx.budget, postings, interrupted);
 }
 

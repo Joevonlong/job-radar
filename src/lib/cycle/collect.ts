@@ -5,7 +5,7 @@ import { CascadeController, type CascadeSpec, type UnavailableReason } from "@/l
 import { createChannelContext, createThrottle, httpSettingsFromConfig } from "@/lib/channels/context";
 import { ChannelError, InfrastructureError, isAbortError, PartialCollectError, toChannelError } from "@/lib/channels/errors";
 import { buildCompanyQueries, buildQueries, buildSweepQuery, capQuery } from "@/lib/channels/query";
-import { keepCompanyMatches } from "@/lib/channels/company-match";
+import { employerMatcher, keepCompanyMatches } from "@/lib/channels/company-match";
 import { catchUpWindow, familyHistory, orderQueries, rotationSummary, selectCompanyQueries, turnsOf, type QueryHistory, type RotationUnitSummary } from "@/lib/channels/rotation";
 import {
   normalizedPostingDraftSchema,
@@ -351,6 +351,8 @@ export async function collectStep(ctx: CycleStepContext): Promise<StepResult> {
       summary.runs += 1;
 
       const budget = services.budget.forChannel(channel);
+      // the same keys the post-filter below keeps: channels use them to skip detail pages of other employers
+      const companyKeys = query.company && pipeline !== null ? new Set([...watchedKeys, query.company.key]) : null;
       const channelContext = createChannelContext({
         channelId,
         settings,
@@ -362,6 +364,7 @@ export async function collectStep(ctx: CycleStepContext): Promise<StepResult> {
         known: services.known(channelId),
         now: ctx.now,
         ...(deliveries ? { deliveries: deliveries.ledger } : {}),
+        ...(companyKeys !== null && pipeline !== null ? { employerMatches: employerMatcher(companyKeys, pipeline) } : {}),
         ...ctx.channels.runtime,
       });
 
@@ -429,8 +432,8 @@ export async function collectStep(ctx: CycleStepContext): Promise<StepResult> {
         }
       }
       const invalid = collected.length - valid.length;
-      if (query.company && pipeline !== null) {
-        const matches = keepCompanyMatches(valid, channel, new Set([...watchedKeys, query.company.key]), pipeline);
+      if (companyKeys !== null && pipeline !== null) {
+        const matches = keepCompanyMatches(valid, channel, companyKeys, pipeline);
         if (deliveries) deliveries.retain(matches.kept);
         else valid.splice(0, valid.length, ...matches.kept);
         ctx.logger.info("company query matched", { channel: channelId, query: query.id, kept: matches.kept.length, company_mismatch: matches.dropped, samples: matches.droppedNames });
