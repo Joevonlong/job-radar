@@ -220,7 +220,8 @@ A failure in (a) does not block rollback: follow (c) and accept the display wind
   can add with prices, context length and JSON-mode support, and "Add to my list" writes the ticked models to your
   `models.yaml`. The same from the terminal: `pnpm models:sync --provider openrouter [--filter <word>] [--add <id>...]
   [--update-prices] [--dry-run]`; `pnpm models:export --full` writes the complete catalog (for a downgrade). See
-  [AI providers](docs/ai-providers.md#checklist-for-a-new-model-release).
+  [AI providers](docs/ai-providers.md#checklist-for-a-new-model-release). The refresh has limits in `ai.yaml` `model_list`
+  (`timeout_seconds`, `max_response_bytes`, `max_name_chars`; defaults added when missing, `config_version` unchanged).
 - **Application writer: export and reuse.** The workbench exports every final answer as one Markdown file built in the browser,
   offers an earlier final answer of another job as the starting text when you add a similar question (a local word-overlap
   check, no AI call; `reuse` in `writer.yaml`, defaults added when missing, `config_version` unchanged) and warns while that
