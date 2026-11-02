@@ -63,7 +63,7 @@ function jsonSupport(model: z.infer<typeof modelSchema>, maxTokensField: AiMaxTo
 }
 
 /** The model as the catalog sees it; a model with no usable shape gives null. */
-export function listedFrom(raw: unknown, maxTokensField: AiMaxTokensField): ListedModel | null {
+export function listedFrom(raw: unknown, maxTokensField: AiMaxTokensField, maxNameChars = Number.POSITIVE_INFINITY): ListedModel | null {
   const parsed = modelSchema.safeParse(raw);
   if (!parsed.success) return null;
   const model = parsed.data;
@@ -72,7 +72,7 @@ export function listedFrom(raw: unknown, maxTokensField: AiMaxTokensField): List
   const date = model.expiration_date && /^\d{4}-\d{2}-\d{2}/.test(model.expiration_date) ? model.expiration_date.slice(0, 10) : null;
   return {
     id: model.id,
-    name: model.name ?? model.id,
+    name: (model.name ?? model.id).trim().slice(0, maxNameChars) || model.id,
     textChat: inputs?.includes("text") === true && outputs !== undefined && outputs.length === 1 && outputs[0] === "text",
     price: priceOf(model.pricing),
     contextLength: typeof model.context_length === "number" && model.context_length >= 0 ? Math.round(model.context_length) : null,
@@ -85,9 +85,37 @@ export interface OpenRouterListOptions {
   baseUrl: string;
   maxTokensField: AiMaxTokensField;
   timeoutMs: number;
+  /** A reply longer than this is refused unread. */
+  maxResponseBytes: number;
+  /** A display name is cut to this many characters. */
+  maxNameChars: number;
   signal?: AbortSignal;
   fetch?: typeof fetch;
   env?: Readonly<Record<string, string | undefined>>;
+}
+
+/** The reply body as text, or null when it is longer than `limit` bytes (read as a stream, stopped at the limit). */
+async function readLimited(response: Response, limit: number): Promise<string | null> {
+  const declared = Number(response.headers.get("content-length"));
+  if (Number.isFinite(declared) && declared > limit) {
+    await response.body?.cancel().catch(() => undefined);
+    return null;
+  }
+  if (!response.body) return "";
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > limit) {
+      await reader.cancel().catch(() => undefined);
+      return null;
+    }
+    chunks.push(value);
+  }
+  return Buffer.concat(chunks).toString("utf8");
 }
 
 /**
@@ -111,8 +139,14 @@ export async function listOpenRouterModels(options: OpenRouterListOptions): Prom
   if (!response.ok) throw new AiProviderError(id, response.status === 429 ? "rate_limited" : "provider_error", `HTTP ${response.status}`);
   let json: unknown;
   try {
-    json = await response.json();
-  } catch {
+    const body = await readLimited(response, options.maxResponseBytes);
+    if (body === null) throw new AiProviderError(id, "provider_error", "response too large");
+    json = JSON.parse(body);
+  } catch (error) {
+    if (error instanceof AiProviderError) throw error;
+    // a read cut off by the deadline or a shutdown is not a malformed reply
+    if (options.signal?.aborted) throw new AiProviderError(id, "aborted", "cancelled");
+    if (timeout.aborted) throw new AiProviderError(id, "timeout", `timed out after ${Math.round(options.timeoutMs / 1000)}s`);
     throw new AiProviderError(id, "provider_error", "unexpected response shape");
   }
   const list = listSchema.safeParse(json);
@@ -120,7 +154,7 @@ export async function listOpenRouterModels(options: OpenRouterListOptions): Prom
   const seen = new Set<string>();
   const models: ListedModel[] = [];
   for (const raw of list.data.data) {
-    const listed = listedFrom(raw, options.maxTokensField);
+    const listed = listedFrom(raw, options.maxTokensField, options.maxNameChars);
     if (listed === null || seen.has(listed.id)) continue;
     seen.add(listed.id);
     models.push(listed);

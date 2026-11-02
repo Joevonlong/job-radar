@@ -22,17 +22,17 @@ export interface ListDeps {
   env?: Readonly<Record<string, string | undefined>>;
 }
 
-const DEFAULT_LIST_TIMEOUT_MS = 30_000;
-
 /** The service's model list, with the `base_url` and length-cap field taken from ai.yaml. */
-export async function listProviderModels(provider: ModelSyncProvider, ai: Pick<AiConfig, "providers">, deps: ListDeps = {}): Promise<ListedModel[]> {
+export async function listProviderModels(provider: ModelSyncProvider, ai: Pick<AiConfig, "providers" | "model_list">, deps: ListDeps = {}): Promise<ListedModel[]> {
   switch (provider) {
     case "openrouter": {
       const config = ai.providers.openrouter;
       return listOpenRouterModels({
         baseUrl: config.base_url,
         maxTokensField: config.max_tokens_field,
-        timeoutMs: deps.timeoutMs ?? DEFAULT_LIST_TIMEOUT_MS,
+        timeoutMs: deps.timeoutMs ?? ai.model_list.timeout_seconds * 1000,
+        maxResponseBytes: ai.model_list.max_response_bytes,
+        maxNameChars: ai.model_list.max_name_chars,
         ...(deps.signal ? { signal: deps.signal } : {}),
         ...(deps.fetch ? { fetch: deps.fetch } : {}),
         ...(deps.env ? { env: deps.env } : {}),

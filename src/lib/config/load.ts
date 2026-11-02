@@ -5,7 +5,7 @@ import type { Document } from "yaml";
 import { ConfigError, zodIssues } from "./errors";
 import { isExistingInstall } from "./install";
 import { EXISTING_INSTALL_LANGUAGE_YAML } from "./migrations/language/existing-install";
-import { mergeModelsWithShipped, type ModelsMerge, type OverlayIssue } from "./models-overlay";
+import { issuesInUserFile, mergeModelsWithShipped, type ModelsMerge, type OverlayIssue } from "./models-overlay";
 import { migrateConfigDocument, withoutConfigVersion, type DocumentMigrationResult } from "./migrations/version";
 import { getDefaultConfigPath, getDefaultsDir, getPollIntervalMs, getUserConfigPath, resolveConfigPath, resolveConfigReadPath } from "./paths";
 import { CONFIG_NAMES, configRegistry, isProfileName, type ConfigName, type ConfigValue, type ProfileName } from "./registry";
@@ -131,10 +131,12 @@ export function parseConfigDocument(name: ConfigName, text: string, filePath: st
 }
 
 /** Validate an already parsed (and migrated) value against the config's schema; `config_version` is not part of it. */
-export function validateConfigValue<N extends ConfigName>(name: N, raw: unknown, filePath: string): ConfigValue<N> {
+export function validateConfigValue<N extends ConfigName>(name: N, raw: unknown, filePath: string, userRaw?: unknown): ConfigValue<N> {
   const result = configRegistry[name].schema.safeParse(withoutConfigVersion(raw));
   if (!result.success) {
-    throw new ConfigError({ configName: name, filePath, kind: "schema", issues: zodIssues(result.error) });
+    // an overlay's value is the merged one: its problems are shown at the positions of the user's file
+    const issues = name === "models" && userRaw !== undefined ? issuesInUserFile(zodIssues(result.error), raw, withoutConfigVersion(userRaw)) : zodIssues(result.error);
+    throw new ConfigError({ configName: name, filePath, kind: "schema", issues });
   }
   return result.data as ConfigValue<N>;
 }
@@ -174,7 +176,7 @@ export function parseConfigTextWithVersion<N extends ConfigName>(name: N, text: 
   if (resolved.errors.length > 0) {
     throw new ConfigError({ configName: name, filePath, kind: "schema", issues: resolved.errors.map((issue) => ({ path: overlayPath(issue.path), message: issue.message })) });
   }
-  return { value: validateConfigValue(name, resolved.value, filePath), migration };
+  return { value: validateConfigValue(name, resolved.value, filePath, doc.toJS()), migration };
 }
 
 /** Re-read the file, validate and replace the cache entry. On failure the previous cache entry is kept. */

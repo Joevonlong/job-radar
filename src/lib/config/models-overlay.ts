@@ -15,6 +15,7 @@
 import fs from "node:fs";
 
 import { AI_PROVIDER_IDS, type AiProviderIdChoice } from "./ai-options";
+import type { ConfigIssue } from "./errors";
 import { getDefaultConfigPath, getUserConfigPath } from "./paths";
 import { modelsOverlaySchema } from "./schemas/models";
 import { parseConfigYamlDocument } from "./yaml-options";
@@ -36,6 +37,24 @@ export interface ModelsMerge {
   errors: OverlayIssue[];
   /** Worth knowing, not wrong: a dropped alias. */
   warnings: OverlayIssue[];
+}
+
+/**
+ * Problems found in the merged catalog name its positions (`providers.openrouter.models[7].price`), which are not the ones in
+ * the user's file. Each one is moved to the model's position in the user's file (matched by id); a model only the shipped file
+ * has is named by its id, with a note that it is not in the user's file.
+ */
+export function issuesInUserFile(issues: readonly ConfigIssue[], merged: unknown, user: unknown): ConfigIssue[] {
+  return issues.map((issue) => {
+    const hit = /^providers\.([^.[\]]+)\.models\[(\d+)\](.*)$/.exec(issue.path);
+    if (!hit || !isPlainObject(merged) || !isPlainObject(merged.providers)) return issue;
+    const [, provider = "", mergedIndex = "", rest = ""] = hit;
+    const id = idOf(modelsOf(merged.providers[provider])[Number(mergedIndex)] ?? {});
+    if (id === "") return issue;
+    const userIndex = isPlainObject(user) && isPlainObject(user.providers) ? modelsOf(user.providers[provider]).findIndex((model) => idOf(model) === id) : -1;
+    if (userIndex >= 0) return { path: `providers.${provider}.models[${userIndex}]${rest}`, message: issue.message };
+    return { path: `providers.${provider}.models[id=${id}]${rest}`, message: `${issue.message} (shipped model, not listed in your file)` };
+  });
 }
 
 /** The plain value of the shipped models.yaml, or null when it cannot be read (the schema then reports what is missing). */
@@ -106,6 +125,14 @@ function mergeProvider(provider: AiProviderIdChoice, shippedSection: unknown, us
       const hides = user.deprecated === true && user.price === undefined && user.equivalent_price === undefined;
       const entry: PlainMap = hides ? { ...shipped, ...user } : { ...user };
       if (hides && userHasCliDefault && user.cli_default !== true) delete entry.cli_default;
+      if (hides) {
+        // the shipped aliases it keeps give way to the user's other ids and aliases, as an untouched shipped model's do
+        const kept = aliasesOf(entry).filter((alias) => !userNames.has(alias) || aliasesOf(user).includes(alias));
+        if (kept.length !== aliasesOf(entry).length) {
+          if (kept.length > 0) entry.aliases = kept;
+          else delete entry.aliases;
+        }
+      }
       return entry;
     }
     // a shipped model the user did not touch: it gives way to the user's ids and aliases (aliases), and to a user cli_default

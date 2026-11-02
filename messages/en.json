@@ -3533,7 +3533,9 @@
       },
       "override": {
         "text": "This is a product default file: saving writes a whole-file override into the user directory, and later product updates of this file will not apply. \"Restore default\" goes back to the product default at any time.",
-        "confirm": "I understand, create the override"
+        "confirm": "I understand, create the override",
+        "textOverlay": "models.yaml is laid over the product's model catalog, model by model. This editor starts from the whole catalog: saving writes a full copy, and every model in it replaces the product's by id, so later product updates to their prices and limits no longer apply. To keep following updates, delete the models you did not change and keep only your own additions (or add models with the refresh button on the AI tab). \"Restore default\" goes back to the product catalog at any time.",
+        "confirmOverlay": "I understand, save a full copy"
       },
       "preview": {
         "title": "Preview and save",

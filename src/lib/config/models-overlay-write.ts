@@ -16,11 +16,12 @@ import { backupConfigText } from "./editor-backup";
 import { ConfigError, zodIssues } from "./errors";
 import { loadConfig, parseConfigDocument, primeConfigCache, reloadConfig, resolveConfigDocument } from "./load";
 import { CONFIG_VERSION_KEY, currentConfigVersion, documentConfigVersion, migrateConfigDocument, stampConfigVersion, withoutConfigVersion } from "./migrations/version";
+import { issuesInUserFile } from "./models-overlay";
 import { getUserConfigPath } from "./paths";
 import { type CatalogModel, modelsSchema } from "./schemas/models";
 import { CONFIG_EDITOR_DEFAULTS } from "./schemas/ui";
 import { CONFIG_YAML_OPTIONS } from "./yaml-options";
-import { atomicWrite, withFileLock } from "./write";
+import { atomicWrite, restoreFlowPadding, withFileLock } from "./write";
 import { withConfigWriteLock } from "./write-lock";
 
 const NEW_FILE_HEADER = [
@@ -126,9 +127,13 @@ export async function writeModelsOverlay(provider: AiProviderIdChoice, entries: 
         throw new ConfigError({ configName: "models", filePath, kind: "schema", issues: resolved.errors.map((issue) => ({ path: issue.path.join("."), message: issue.message })) });
       }
       const checked = modelsSchema.safeParse(withoutConfigVersion(resolved.value));
-      if (!checked.success) throw new ConfigError({ configName: "models", filePath, kind: "schema", issues: zodIssues(checked.error) });
+      if (!checked.success) {
+        const issues = issuesInUserFile(zodIssues(checked.error), withoutConfigVersion(resolved.value), withoutConfigVersion(doc.toJS()));
+        throw new ConfigError({ configName: "models", filePath, kind: "schema", issues });
+      }
 
-      const text = doc.toString({ lineWidth: 0, flowCollectionPadding: false });
+      // flow collections of the user's own text keep their padding; only what changed is written in the serializer's style
+      const text = restoreFlowPadding(userText, doc.toString({ lineWidth: 0, flowCollectionPadding: false }));
       if (userText !== null && userText !== text) await backupConfigText("models", userText, backupsKeep());
       await atomicWrite(filePath, text);
       primeConfigCache("models", checked.data, text);

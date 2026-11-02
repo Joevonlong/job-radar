@@ -57,6 +57,16 @@ describe("overlay merge", () => {
     expect(models.find((m) => m.id === "x/two")).toEqual({ id: "x/two", price: price(3, 4), deprecated: true });
   });
 
+  it("hiding a shipped model drops the shipped aliases that clash with a user id, so the file stays valid", () => {
+    // the user hides x/one and, in the same file, adds a model whose id is x/one's shipped alias
+    const { models, errors, value } = mergedOpenRouter(base, { providers: { openrouter: { models: [{ id: "x/one", deprecated: true }, { id: "x/one-dated", price: price(1, 1) }] } } });
+    expect(errors).toEqual([]);
+    expect(models.find((m) => m.id === "x/one")).toEqual({ id: "x/one", label: "One", price: price(1, 2), deprecated: true });
+    expect(modelsSchema.safeParse(value).success).toBe(true);
+    // a shipped alias nobody else claims stays on the hidden model
+    expect(mergedOpenRouter(base, { providers: { openrouter: { models: [{ id: "x/one", deprecated: true }] } } }).models.find((m) => m.id === "x/one")?.aliases).toEqual(["x/one-dated"]);
+  });
+
   it("cli_default in the user layer disables the shipped one", () => {
     const user = { providers: { "codex-cli": { models: [{ id: "cx-b", cli_default: true }] } } };
     const result = mergeModelsOverlay(base, user).value as { providers: Record<string, Section> };
@@ -149,6 +159,13 @@ describe("overlay in the loader", () => {
     expect(() => parseConfigText("models", readConfigText("models"))).toThrow(/price/);
     const checked = validateConfigText("models", fs.readFileSync(userFile(), "utf8"));
     expect(checked.ok).toBe(false);
+  });
+
+  it("a problem of the merged catalog is named at the model's place in the user's file, not in the merged list", () => {
+    // the shipped fixture has one openrouter model: the user's broken entry is merged at index 1 but sits at index 0 of the file
+    const text = "providers:\n  openrouter:\n    models:\n      - id: vendor/model-x\n";
+    expect(() => parseConfigText("models", text)).toThrow(/providers\.openrouter\.models\[0\]\.price/);
+    expect(() => parseConfigText("models", text)).not.toThrow(/models\[1\]/);
   });
 
   it("clashes in the user layer are reported by the editor's validation at the user's own line", () => {

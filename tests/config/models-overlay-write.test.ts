@@ -42,6 +42,20 @@ describe("writeModelsOverlay", () => {
     expect(loadConfig("models").providers.openrouter.models.find((m) => m.id === "vendor/a")).toMatchObject({ label: "VENDOR/A", price: { input_per_mtok: 0.1 } });
   });
 
+  it("keeps the padding of flow collections the file already uses, in the lines it does not change", async () => {
+    fs.writeFileSync(userFile(), "providers:\n  openrouter:\n    models:\n      - { id: vendor/keep, aliases: [ k1, k2 ], price: { input_per_mtok: 1, output_per_mtok: 1 } }\n");
+    await writeModelsOverlay("openrouter", [entry("vendor/new")]);
+    const text = fs.readFileSync(userFile(), "utf8");
+    expect(text).toContain("- { id: vendor/keep, aliases: [ k1, k2 ], price: { input_per_mtok: 1, output_per_mtok: 1 } }");
+  });
+
+  it("a catalog that does not validate is named at the user's file positions", async () => {
+    fs.writeFileSync(userFile(), "providers:\n  openrouter:\n    models:\n      - id: vendor/keep\n");
+    const failure = await writeModelsOverlay("openrouter", [entry("vendor/new")]).catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(ConfigError);
+    expect((failure as ConfigError).issues.map((issue) => issue.path)).toEqual(["providers.openrouter.models[0].price"]);
+  });
+
   it("updating a shipped model puts a full replacement in the user's file and leaves the shipped file alone", async () => {
     const shippedBefore = fs.readFileSync(path.join(tmp.defaultsDir, "models.yaml"), "utf8");
     const current = loadConfig("models").providers.openrouter.models[0]!;

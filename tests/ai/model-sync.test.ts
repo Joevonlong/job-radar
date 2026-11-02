@@ -21,7 +21,7 @@ beforeEach(() => {
 afterEach(() => tmp.cleanup());
 
 const reply = (body: unknown, init: ResponseInit = {}): typeof fetch => async () => new Response(typeof body === "string" ? body : JSON.stringify(body), { status: 200, ...init });
-const base = { baseUrl: "https://openrouter.ai/api/v1", maxTokensField: "max_tokens" as const, timeoutMs: 5000 };
+const base = { baseUrl: "https://openrouter.ai/api/v1", maxTokensField: "max_tokens" as const, timeoutMs: 5000, maxResponseBytes: 4_194_304, maxNameChars: 120 };
 const listed = (): ListedModel[] => fixture.data.flatMap((raw) => listedFrom(raw, "max_tokens") ?? []);
 const byId = (id: string): ListedModel => {
   const found = listed().find((m) => m.id === id);
@@ -58,6 +58,14 @@ describe("the model list of OpenRouter", () => {
     expect(listedFrom(openai, "max_tokens")?.json).toBe("unverified");
     expect(listedFrom(openai, "max_completion_tokens")?.json).toBe("yes");
     expect(listedFrom({ ...openai, id: "other/x" }, "max_tokens")?.json).toBe("yes");
+  });
+
+  it("refuses a reply over the size limit, declared or streamed, and cuts a long name", async () => {
+    const big = JSON.stringify({ data: [{ id: "v/a", name: "x".repeat(5000) }] });
+    await expect(listOpenRouterModels({ ...base, maxResponseBytes: 1000, fetch: reply(big) })).rejects.toMatchObject({ kind: "provider_error", message: expect.stringContaining("too large") });
+    await expect(listOpenRouterModels({ ...base, maxResponseBytes: 1000, fetch: reply("{}", { headers: { "content-length": "99999" } }) })).rejects.toMatchObject({ kind: "provider_error" });
+    const [model] = await listOpenRouterModels({ ...base, maxNameChars: 40, fetch: reply(big) });
+    expect(model?.name).toHaveLength(40);
   });
 
   it("skips entries that do not fit and duplicate ids, and fails on a body that is not a list", async () => {
