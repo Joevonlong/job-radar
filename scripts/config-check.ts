@@ -42,7 +42,9 @@ import {
   getUserConfigPath,
   interestsRawWarnings,
   interestsWarnings,
+  inspectModelsOverlay,
   LAYERED_CONFIG_NAMES,
+  OVERLAID_CONFIG_NAMES,
   parseConfigText,
   parseConfigTextWithVersion,
   readConfigText,
@@ -113,7 +115,7 @@ for (const name of CONFIG_NAMES) {
     console.log(`- ${rel(file)} (not present, skipped)`);
     continue;
   }
-  const where = layer === "default" ? "(default)" : entry.location === "profile" ? "(profile)" : entry.kind === "shipped" ? "(user override of a shipped file)" : "(user)";
+  const where = layer === "default" ? "(default)" : entry.location === "profile" ? "(profile)" : (OVERLAID_CONFIG_NAMES as readonly ConfigName[]).includes(name) ? "(user additions on the shipped file)" : entry.kind === "shipped" ? "(user override of a shipped file)" : "(user)";
   report(`${rel(file)} ${where}`, () => {
     const { migration } = parseConfigTextWithVersion(name, readConfigText(name), file);
     if (migration.applied.length === 0) return;
@@ -131,7 +133,8 @@ for (const name of LAYERED_CONFIG_NAMES) {
     console.log(`- ${rel(file)} (no shipped default)`);
     continue;
   }
-  report(`${rel(file)} (default, not in use)`, () => {
+  const overlaid = (OVERLAID_CONFIG_NAMES as readonly ConfigName[]).includes(name);
+  report(`${rel(file)} ${overlaid ? "(shipped base)" : "(default, not in use)"}`, () => {
     checkShippedVersion(name, file);
   });
 }
@@ -149,8 +152,19 @@ for (const name of CONFIG_NAMES.filter((n) => configRegistry[n].location === "pr
 }
 
 // Overrides of shipped files: the product's updates of them no longer apply.
-for (const name of LAYERED_CONFIG_NAMES.filter((n) => configRegistry[n].kind === "shipped" && configLayer(n) === "user")) {
+for (const name of LAYERED_CONFIG_NAMES.filter((n) => configRegistry[n].kind === "shipped" && !(OVERLAID_CONFIG_NAMES as readonly ConfigName[]).includes(n) && configLayer(n) === "user")) {
   console.log(`! ${rel(getUserConfigPath(name))} replaces the shipped ${configRegistry[name].file}: product updates of that file no longer apply (delete it to follow them)`);
+}
+
+// models.yaml is an overlay: the user's file lists only what it adds or changes
+{
+  const overlay = inspectModelsOverlay();
+  if (overlay !== null) {
+    for (const warning of overlay.warnings) console.log(`! models.yaml ${warning.path.join(".")}: ${warning.message}`);
+    if (overlay.redundant > 0) {
+      console.log(`! ${rel(getUserConfigPath("models"))} lists ${overlay.redundant} of ${overlay.total} models exactly as the shipped models.yaml does: remove them to follow product updates (pnpm models:export --full writes the full catalog)`);
+    }
+  }
 }
 
 // interests.yaml can be valid and still unable to match a category

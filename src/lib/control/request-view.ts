@@ -4,8 +4,8 @@ import { findManualCycleSince, getControlRequest, getCycleProgress, TEST_CONTROL
 import { loadQueueView } from "./queue-view";
 import { controlRequestViewSchema, requestResultViewSchema, type ControlRequestView } from "./request-view-schema";
 
-/** The kinds a button may poll: a (channel) cycle, the tests, and "score now" on a job page. */
-const POLLABLE: readonly ControlRequestKind[] = ["run_cycle", ...TEST_CONTROL_REQUEST_KINDS, "score_jobs"];
+/** The kinds a button may poll: a (channel) cycle, the tests, "score now" on a job page, and the model list refresh of /settings. */
+const POLLABLE: readonly ControlRequestKind[] = ["run_cycle", ...TEST_CONTROL_REQUEST_KINDS, "score_jobs", "models_sync"];
 
 const iso = (date: Date | null): string | null => (date ? date.toISOString() : null);
 

@@ -2,16 +2,20 @@
 # This file only lists what exists; which one to use is chosen in ai.yaml (providers.<name>.model / strong_model, tasks.<task>.models) or in the AI tab of /settings.
 # Never put API keys or any other secrets here (secrets go only in .env).
 #
-# Adding a new model released by a vendor (no restart needed; takes effect about 5 seconds after saving):
-#   1. Add an entry under the provider's models: id = the model name from the vendor docs (what gets passed to the CLI / API), label = a recognizable display name.
+# Adding a model (no restart needed; takes effect about 5 seconds after saving). Your own data/config/models.yaml is an overlay on this file:
+# list only the models you add or change there; everything else follows product updates.
+#   1. OpenRouter: click "Refresh available models" in the AI tab of /settings (or run pnpm models:sync --provider openrouter), tick the models and add them.
+#      Other providers: add an entry under the provider's models in data/config/models.yaml: id = the model name from the vendor docs (what gets passed to the CLI / API), label = a recognizable display name.
 #   2. API providers (anthropic / openai / openrouter / deepseek / mimo) must have price: input and output price in USD / 1M tokens, as on the official site.
 #      Subscription CLIs (claude-cli / codex-cli) have no price (subscription cost counts as 0).
 #   3. Run pnpm config:check in the project directory and make sure there are no errors.
 #   4. Try it once: pnpm ai:probe --provider <provider> --model <id>
 #   5. Refresh /settings, select it in the "Model" dropdown of that provider's section in the AI tab, and save.
 #
+# Maintainers: before each release run pnpm models:sync --provider openrouter --dry-run, compare the list with the entries below and update them (prices change, models retire).
+#
 # Retiring an old model: first switch to another model in /settings, then add deprecated: true (dropped from the dropdown; a model still in use is marked "deprecated").
-# Delete the entry once nothing uses it; deleting a model still selected in ai.yaml makes config:check report "not in the model catalog".
+# To hide a shipped model in your own file, list just its id with deprecated: true. Delete the entry once nothing uses it; deleting a model still selected in ai.yaml makes config:check report "not in the model catalog".
 #
 # Keys per model:
 #   id                 required; unique within a provider
@@ -26,8 +30,9 @@
 #   deprecated         true = retired
 #   notes              remarks, shown as-is on the settings page
 # The provider level may have: label (required), docs_url (official models / pricing page, shown as a link on the settings page), notes. Providers can't be added or removed (each provider's call method lives in code).
-# Your own copy of this file (data/config/models.yaml) replaces it as a whole, except for a provider your copy has no section for:
-# that section is taken from this file, so a copy made before a provider existed keeps loading.
+# Your data/config/models.yaml is laid over this file model by model: an entry with the same id (within a provider) replaces the shipped entry as a whole, a new id is added after the shipped ones,
+# a cli_default in your file takes over from the shipped one, and a provider your file has no section for is taken from this file. An older copy that lists every model keeps working.
+# Before downgrading to a version without this overlay, run pnpm models:export --full: it writes the complete catalog to your file (the old one is backed up), which is what the older version reads as the whole catalog.
 
 providers:
   claude-cli:

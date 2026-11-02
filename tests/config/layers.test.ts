@@ -238,7 +238,7 @@ describe("ensureConfigFiles (pnpm config:init)", () => {
     // pipeline.yaml is the same as the default: not copied (it keeps following product updates)
     expect(fs.existsSync(user("pipeline.yaml"))).toBe(false);
     expect(read(user("insights.yaml"))).toBe(read(shipped("insights.yaml")));
-    expect((await inspectConfigLayers()).overrides).toEqual(["models.yaml"]);
+    expect((await inspectConfigLayers()).overrides).toEqual([]); // models.yaml is an overlay, not a replacement
   });
 
   it("--from the defaults directory itself is the same as no --from", async () => {

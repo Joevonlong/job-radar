@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { syncResultSchema } from "@/lib/ai/model-sync/types";
+
 /**
  * One control request as the trigger buttons poll it from `/api/control/requests/<id>`: a boundary, so the
  * browser parses it with zod too (C6). Dates are ISO strings. `result` keeps only the machine-readable parts the page
@@ -65,6 +67,8 @@ export const requestResultViewSchema = z.object({
   failed: count.optional().catch(undefined),
   remaining: count.optional().catch(undefined),
   stopped: scoringStoppedSchema,
+  /** `models_sync`: the provider's models next to the catalog (an invalid one reads as none). */
+  sync: syncResultSchema.optional().catch(undefined),
 });
 
 export const controlRequestViewSchema = z.object({

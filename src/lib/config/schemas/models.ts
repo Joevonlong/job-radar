@@ -19,7 +19,7 @@ const equivalentPrice = price.extend({ source: nonEmptyString });
 
 const modelId = z.string().regex(/^\S+$/, "must be one word (no spaces)");
 
-const catalogModel = z.strictObject({
+export const catalogModel = z.strictObject({
   /** Passed to the CLI / API as the model name; unique within the provider. */
   id: modelId,
   /** Display name; the id is shown when absent. */
@@ -46,7 +46,34 @@ const catalogProvider = z.strictObject({
   models: z.array(catalogModel).min(1),
 });
 
-/** config/models.yaml: the model catalog. What is available lives here; what is chosen lives in ai.yaml. */
+/**
+ * The user's models.yaml (data/config/models.yaml) is an overlay on the shipped catalog: every provider section may be left
+ * out, and a section lists only the models the user adds or replaces. The rules that make price / efforts / cli_default
+ * mandatory belong to the merged catalog (`modelsSchema`), not to the overlay. The merge is `models-overlay.ts`.
+ */
+const overlayProvider = z.strictObject({
+  label: nonEmptyString.optional(),
+  docs_url: z.url().optional(),
+  notes: nonEmptyString.optional(),
+  models: z.array(catalogModel).optional(),
+});
+
+export const modelsOverlaySchema = z.strictObject({
+  providers: z
+    .strictObject({
+      "claude-cli": overlayProvider.optional(),
+      "codex-cli": overlayProvider.optional(),
+      anthropic: overlayProvider.optional(),
+      openai: overlayProvider.optional(),
+      openrouter: overlayProvider.optional(),
+      deepseek: overlayProvider.optional(),
+      mimo: overlayProvider.optional(),
+    })
+    .optional(),
+});
+export type ModelsOverlay = z.infer<typeof modelsOverlaySchema>;
+
+/** config/models.yaml: the model catalog (the effective one: the shipped file with the user's overlay merged in). What is available lives here; what is chosen lives in ai.yaml. */
 export const modelsSchema = z
   .strictObject({
     providers: z.strictObject({

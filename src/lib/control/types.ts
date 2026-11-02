@@ -1,6 +1,7 @@
 import type { ActivityRecorder, RequestSpanHandle } from "@/lib/activity/types";
 import { z } from "zod";
 
+import { MODEL_SYNC_PROVIDERS } from "@/lib/ai/model-sync/types";
 import { AI_PROVIDER_IDS } from "@/lib/ai/types";
 import type { ChannelLogger } from "@/lib/channels/types";
 import { MAX_WINDOW_HOURS } from "@/lib/config/schemas/channels";
@@ -95,6 +96,14 @@ export const testAiPayloadSchema = z.strictObject({
   provider: z.enum(AI_PROVIDER_IDS),
 });
 export type TestAiPayload = z.infer<typeof testAiPayloadSchema>;
+
+/** Payload of a `models_sync` request: refresh this provider's model list; nothing else is accepted (no URL, no path). */
+export const modelsSyncPayloadSchema = z.strictObject({
+  provider: z.enum(MODEL_SYNC_PROVIDERS),
+  /** Shows only the models whose id or name contains this (case-insensitive). */
+  filter: z.string().trim().min(1).max(80).optional(),
+});
+export type ModelsSyncPayload = z.infer<typeof modelsSyncPayloadSchema>;
 
 /** Payload of a `test_telegram` request: nothing. */
 export const testTelegramPayloadSchema = z.strictObject({});

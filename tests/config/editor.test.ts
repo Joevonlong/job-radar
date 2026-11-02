@@ -94,15 +94,14 @@ describe("validateConfigText", () => {
     expect(issues.some((i) => i.source === "catalog")).toBe(true);
   });
 
-  it("checks models.yaml against the models ai.yaml uses (the other direction)", () => {
+  it("a model id renamed in models.yaml adds a model: the shipped one that ai.yaml uses stays in the catalog", () => {
     const models = readConfigText("models");
     const ai = loadConfig("ai");
     const used = ai.providers.deepseek.model;
-    // remove that model's entry id from the catalog text
-    const broken = models.split(`id: ${used}`).join("id: renamed-model");
-    const result = validateConfigText("models", broken);
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.issues.some((i) => i.file === "ai")).toBe(true);
+    // models.yaml is an overlay: the renamed entry is a new model next to the shipped one, nothing is removed
+    const renamed = models.split(`id: ${used}`).join("id: renamed-model");
+    const result = validateConfigText("models", renamed);
+    expect(result.ok).toBe(true);
   });
 });
 
