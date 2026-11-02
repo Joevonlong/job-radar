@@ -67,7 +67,9 @@ Nothing is sent to the project's maintainers or to any analytics service.
   company in another country (the default model's upstream may be DeepSeek, see below). Job Radar asks it to use only upstreams
   that do not store or train on prompts (`providers.openrouter.routing.data_collection: deny`). That is **not** zero data
   retention: an upstream may still keep requests for a while. Set `routing.zdr: true` in `ai.yaml` to allow only
-  zero-data-retention upstreams (fewer models then work). Your OpenRouter account settings also apply.
+  zero-data-retention upstreams (fewer models then work). Your OpenRouter account settings also apply. The "Refresh available
+  models" button (and `pnpm models:sync`) reads OpenRouter's public model list with a plain `GET`: no key, no profile and no job
+  text are sent, and it only happens when you click or run the command.
 - **DeepSeek and Xiaomi MiMo** are operated from China; data sent to them is subject to Chinese law. They are off by default;
   switch one on only if you accept that.
 - **DeepSeek through OpenRouter:** with an OpenRouter key and OpenRouter's default model (`deepseek/deepseek-v4.1-flash`),

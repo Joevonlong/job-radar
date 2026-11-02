@@ -38,7 +38,7 @@ already held configuration (an existing install), a file can be written with the
 instead (`language.yaml`: Chinese, see [languages.md](languages.md)). The setup wizard uses the same "existing
 install" check.
 
-To change a `shipped` file, copy it into the user directory and edit it there (the whole file overrides). The cost is that later product updates to that file no longer take effect: `pnpm config:check` and the doctor's `config.layers` will keep saying "you override models.yaml". To follow the product again, delete your copy in the user directory.
+To change a `shipped` file, copy it into the user directory and edit it there (the whole file overrides). The cost is that later product updates to that file no longer take effect: `pnpm config:check` and the doctor's `config.layers` will keep saying "you override pipeline.yaml" (or whichever file). To follow the product again, delete your copy in the user directory. `models.yaml` is the exception: your `data/config/models.yaml` is laid over the shipped one model by model (see [AI providers](ai-providers.md#checklist-for-a-new-model-release)), so it never hides product updates of the models you do not list.
 
 Market packs (`config/packs/<id>/`: countries, cities, local-language rules) are `shipped` the same way: a copy in `data/config/packs/<id>/` replaces the shipped pack as a whole. See [market-packs.md](market-packs.md).
 

@@ -113,7 +113,7 @@ function PreviewBody({ stem, text, firstOverride, hasDefault, saving, blocked, o
           <DiffView lines={preview.lines} />
         </div>
       )}
-      {firstOverride ? <OverrideWarning confirm={{ checked: understood, onChange: setUnderstood }} /> : null}
+      {firstOverride ? <OverrideWarning overlay={stem === "models"} confirm={{ checked: understood, onChange: setUnderstood }} /> : null}
       <DialogFooter>
         <Button type="button" variant="default" onClick={onCancel}>
           {t("cancel")}

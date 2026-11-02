@@ -24,7 +24,7 @@ import {
 import { createProcessLogger } from "@/lib/logging/process-logger";
 
 import { cycleCovers, type CoverageCascade } from "./cycle-coverage";
-import { runCyclePayloadSchema, scoreJobsPayloadSchema, testAiPayloadSchema, testChannelPayloadSchema, type ScoreJobsPayload } from "./types";
+import { modelsSyncPayloadSchema, runCyclePayloadSchema, scoreJobsPayloadSchema, testAiPayloadSchema, testChannelPayloadSchema, type ScoreJobsPayload } from "./types";
 import type { ControlActionState } from "./service-types";
 
 export type { ControlActionState } from "./service-types";
@@ -192,6 +192,25 @@ export async function requestTestAi(rawPayload: unknown): Promise<ControlActionS
     return await requestTest(getDb(), "test_ai", { provider }, (stored) => testAiPayloadSchema.safeParse(stored).data?.provider === provider);
   } catch (error) {
     logActionFailure("requestTestAi", error);
+    return fail("databaseUnavailable");
+  }
+}
+
+/**
+ * "Refresh models" of a provider on /settings: the ai-worker reads the provider's model list. `rawPayload` is untrusted: only a
+ * provider id and a filter word pass, no address. An open request for the same provider and filter is reused.
+ */
+export async function requestModelsSync(rawPayload: unknown): Promise<ControlActionState> {
+  const payload = modelsSyncPayloadSchema.safeParse(rawPayload);
+  if (!payload.success) return fail("invalidPayload");
+  const { provider, filter } = payload.data;
+  try {
+    return await requestTest(getDb(), "models_sync", payload.data, (stored) => {
+      const parsed = modelsSyncPayloadSchema.safeParse(stored);
+      return parsed.success && parsed.data.provider === provider && parsed.data.filter === filter;
+    });
+  } catch (error) {
+    logActionFailure("requestModelsSync", error);
     return fail("databaseUnavailable");
   }
 }

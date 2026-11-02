@@ -2,7 +2,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Document } from "yaml";
 
 import { parseConfigText } from "@/lib/config";
@@ -20,6 +20,16 @@ import { migratedDocument, overlayDocument, plainValue } from "./overlay-helpers
 const files = fs.readdirSync(REPO_DEFAULTS_DIR, { recursive: true, encoding: "utf8" }).filter((file) => file.endsWith(".yaml")).sort();
 
 describe("shipped config round trips", () => {
+  // models.yaml is merged with the shipped file when parsed: the shipped file here is the repo's own, not the fixture snapshot vitest uses
+  const defaultsDir = process.env.JOB_RADAR_DEFAULTS_DIR;
+  beforeAll(() => {
+    process.env.JOB_RADAR_DEFAULTS_DIR = REPO_DEFAULTS_DIR;
+  });
+  afterAll(() => {
+    if (defaultsDir === undefined) delete process.env.JOB_RADAR_DEFAULTS_DIR;
+    else process.env.JOB_RADAR_DEFAULTS_DIR = defaultsDir;
+  });
+
   it.each(files)("preserves every YAML value in %s", (file) => {
     const value = parseConfigYaml(fs.readFileSync(path.join(REPO_DEFAULTS_DIR, file), "utf8"));
     expect(parseConfigYaml(stringifyConfigYaml(new Document(value, CONFIG_YAML_OPTIONS)))).toEqual(value);

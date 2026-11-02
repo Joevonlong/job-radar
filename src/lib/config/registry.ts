@@ -96,3 +96,5 @@ export const LAYERED_CONFIG_NAMES = CONFIG_NAMES.filter((name) => configRegistry
 /** `user` files are copied into the user directory by `pnpm config:init`; `shipped` ones stay in the defaults directory. */
 export const USER_CONFIG_NAMES = LAYERED_CONFIG_NAMES.filter((name) => configRegistry[name].kind === "user");
 export const SHIPPED_CONFIG_NAMES = LAYERED_CONFIG_NAMES.filter((name) => configRegistry[name].kind === "shipped");
+/** `shipped` files whose user file is an overlay merged over the shipped one, not a replacement of it (models.yaml). */
+export const OVERLAID_CONFIG_NAMES = ["models"] as const satisfies readonly ConfigName[];

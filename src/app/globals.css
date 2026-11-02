@@ -430,11 +430,12 @@
 /* Fallback faces: Arial scaled to each web font's metrics, used until the web font has loaded (display: swap), so the
  * text does not reflow when it arrives. The values are the ones Next.js computed from its table of Google font
  * metrics before the fonts were self-hosted (layout.tsx turns next/font/local's own off and names these as the
- * fallbacks; tests/fonts.test.ts compares them with that table). Where Arial is not installed (most Linux systems) a
+ * fallbacks; tests/fonts.test.ts compares them with that table). Liberation Sans, the metric-compatible stand-in most
+ * Linux systems ship instead of Arial, is the second source: the same overrides fit it. Where neither is installed a
  * face fails to load and the browser skips it, as before. */
 @font-face {
   font-family: "Archivo Fallback";
-  src: local("Arial");
+  src: local("Arial"), local("Liberation Sans");
   ascent-override: 88.96%;
   descent-override: 21.28%;
   line-gap-override: 0%;
@@ -443,7 +444,7 @@
 
 @font-face {
   font-family: "Archivo Black Fallback";
-  src: local("Arial");
+  src: local("Arial"), local("Liberation Sans");
   ascent-override: 70.78%;
   descent-override: 16.93%;
   line-gap-override: 0%;
@@ -452,7 +453,7 @@
 
 @font-face {
   font-family: "IBM Plex Mono Fallback";
-  src: local("Arial");
+  src: local("Arial"), local("Liberation Sans");
   ascent-override: 76.16%;
   descent-override: 20.43%;
   line-gap-override: 0%;
@@ -463,7 +464,7 @@
  * unicode-range files, fetched on demand. */
 @font-face {
   font-family: "Noto Sans SC Fallback";
-  src: local("Arial");
+  src: local("Arial"), local("Liberation Sans");
   ascent-override: 110.73%;
   descent-override: 27.49%;
   line-gap-override: 0%;

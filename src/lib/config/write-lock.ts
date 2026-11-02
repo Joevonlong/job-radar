@@ -135,7 +135,11 @@ async function arbitrate<T>(dir: string, policy: ReturnType<typeof settings>, de
       const names = fs.readdirSync(guard);
       const generation = names.length === 1 ? names[0] : undefined;
       if (generation && /^[0-9a-f]{32}$/.test(generation)) {
-        if (canTakeOver(path.join(guard, generation), policy)) removeGuardOwner(guard, generation);
+        if (canTakeOver(path.join(guard, generation), policy)) {
+          removeGuardOwner(guard, generation);
+          // Removing a dead owner is progress, not a lost wait: try to publish again even if a slow disk used the budget.
+          continue;
+        }
       }
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;

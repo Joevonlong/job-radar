@@ -13,6 +13,10 @@ import en from "../../messages/en.json";
 import zh from "../../messages/zh.json";
 import { bareCatalogView, shippedCatalogView, shippedConfig } from "./helpers";
 
+// the model list refresh panel in the OpenRouter card refreshes the page after an add, and its actions are server actions
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }) }));
+vi.mock("@/app/control-actions", () => ({ modelsSyncAction: vi.fn(), addSyncedModelsAction: vi.fn() }));
+
 const wrap = (node: ReactNode, locale: "en" | "zh" = "en") => (
   <NextIntlClientProvider locale={locale} messages={locale === "en" ? en : zh}>
     {node}

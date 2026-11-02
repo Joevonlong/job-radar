@@ -89,6 +89,18 @@ registerControlHandler("test_channel", async (request) => {
   return { status: "done", result: { channelId, fetched: 3, parsed: 3, parseFailed: 0, sampleTitles: ["AI Engineer (e2e)", "Forward Deployed Engineer (e2e)"], durationMs: STUB_TEST_MS } };
 });
 registerControlHandler("test_telegram", async () => ({ status: "done", result: { messageId: 4242, bot: "e2e_bot" } }));
+// "Refresh available models" belongs to the host ai-worker (no network in e2e): answer like it with a fixed three-row list.
+registerControlHandler("models_sync", async (request) => {
+  await sleep(STUB_TEST_MS);
+  const filter = typeof request.payload === "object" && request.payload !== null && "filter" in request.payload ? String(request.payload.filter).toLowerCase() : "";
+  const row = (id: string, name: string, extra: Record<string, unknown> = {}) => ({ id, name, textChat: true, price: { input_per_mtok: 0.25, output_per_mtok: 1.25 }, contextLength: 200000, json: "yes", expiresOn: null, inCatalog: false, priceWas: null, addable: true, addableUnverified: false, ...extra });
+  const rows = [
+    row("e2e/fresh-model", "E2E: Fresh Model"),
+    row("e2e/no-json", "E2E: No JSON", { json: "no", addable: false }),
+    row("e2e/maybe-json", "E2E: Maybe JSON", { json: "unverified", addable: false, addableUnverified: true }),
+  ].filter((r) => r.id.includes(filter));
+  return { status: "done", result: { provider: "openrouter", sync: { provider: "openrouter", fetchedAt: new Date().toISOString(), listed: 3, matched: rows.length, truncated: false, rows, gone: [] } } };
+});
 registerControlHandler("test_ai", async () => ({ status: "done", result: { provider: "codex-cli", model: "e2e-model", latencyMs: 1200, tokensIn: 20, tokensOut: 5 } }));
 
 // The breakdown belongs to the host ai-worker (not run in e2e): answer like it, with a one-item breakdown quoting the JD's first line.
@@ -260,7 +272,7 @@ const stopWatching = watchConfig(
 
 // What the settings, sources and interests pages offer, plus the ai-worker's AI test, breakdown, salary lookup and writer (answered
 // here with stand-ins). The other AI requests (scoring, translation, ...) belong to the host ai-worker, which e2e does not run.
-const poller = runControlPoller({ db, signal: abort.signal, logger: createLogger({ sink: () => {} }), kinds: () => ["run_cycle", "rescore_stale", "run_suggest", "test_channel", "test_telegram", "test_ai", "breakdown_job", "salary_lookup", "writer_job"], pollSeconds: () => POLL_SECONDS });
+const poller = runControlPoller({ db, signal: abort.signal, logger: createLogger({ sink: () => {} }), kinds: () => ["run_cycle", "rescore_stale", "run_suggest", "test_channel", "test_telegram", "test_ai", "models_sync", "breakdown_job", "salary_lookup", "writer_job"], pollSeconds: () => POLL_SECONDS });
 
 log("ready");
 while (!abort.signal.aborted) {

@@ -3263,7 +3263,8 @@
           "test_ai": "AI test",
           "test_telegram": "Telegram test",
           "salary_lookup": "Salary lookup",
-          "writer_job": "Application answer"
+          "writer_job": "Application answer",
+          "models_sync": "Model list refresh"
         },
         "status": {
           "pending": "Queued",
@@ -3385,6 +3386,62 @@
       "tableLabel": "Model catalog of {provider}",
       "subscriptionEquivalent": "Subscription · equiv. ${input} / ${output}"
     },
+    "modelSync": {
+      "title": "Models offered by {provider}",
+      "hint": "Ask {provider} which models it offers, with their prices, and add the ones you want to your own list ({file}). The shipped catalog stays as it is and keeps following product updates. The list is only read when you click.",
+      "filterLabel": "Filter by name",
+      "filterPlaceholder": "e.g. claude, flash",
+      "refresh": "Refresh available models",
+      "pending": "Waiting for the AI worker to ask {provider}…",
+      "running": "Asking {provider} for its model list…",
+      "failed": "Could not read the model list ({kind}). Nothing was changed.",
+      "summary": "{listed} models listed, {matched} match.",
+      "truncated": "Only the first {max} are shown; narrow the filter to see the others.",
+      "gone": "No longer listed by {provider} (still in your catalog, not removed): {ids}",
+      "tableLabel": "Models offered by {provider}",
+      "col": {
+        "pick": "Select",
+        "model": "Model",
+        "price": "Price ($/1M tokens, in / out)",
+        "context": "Context",
+        "json": "JSON mode",
+        "status": "Status"
+      },
+      "json": {
+        "yes": "Supported",
+        "no": "Not supported",
+        "unverified": "Not stated"
+      },
+      "status": {
+        "inCatalog": "In your catalog",
+        "added": "Added",
+        "canAdd": "Can be added",
+        "unverified": "Unverified",
+        "notChat": "Not a text chat model",
+        "noPrice": "No usable price",
+        "noJson": "No JSON mode",
+        "retired": "Retired"
+      },
+      "priceWas": "catalog has ${input} / ${output}",
+      "retires": "Retires {date}",
+      "pickModel": "Select {model}",
+      "showMore": "Show {count} more",
+      "add": "Add to my list ({count})",
+      "addHint": "Models whose JSON mode the provider does not state are only added with pnpm models:sync --allow-unverified.",
+      "added": "Added {count, plural, one {# model} other {# models}} to {file}. They are in the model dropdown now.",
+      "addError": {
+        "invalidPayload": "That selection is not valid. Refresh the list and try again.",
+        "requestUnavailable": "The refreshed list is gone. Refresh it and try again.",
+        "notAddable": "One of the selected models cannot be added (already in the catalog, or no JSON mode). Refresh the list and try again.",
+        "catalogInvalid": "The catalog would not be valid with these models, so nothing was written. Check your models.yaml under Settings → Advanced.",
+        "frozen": "Configuration is frozen during an upgrade. Try again in a moment.",
+        "busy": "Another process is writing the configuration. Try again in a moment.",
+        "stale": "The file changed while saving. Refresh the list and try again.",
+        "protected": "That change touches a protected setting.",
+        "databaseUnavailable": "The database is not available, so nothing was written.",
+        "transportFailed": "Could not reach the server. Check your connection and try again."
+      }
+    },
     "registryLink": "Company boards and source health are in the Source registry →",
     "workflow": {
       "title": "Application workflow",
@@ -3476,7 +3533,9 @@
       },
       "override": {
         "text": "This is a product default file: saving writes a whole-file override into the user directory, and later product updates of this file will not apply. \"Restore default\" goes back to the product default at any time.",
-        "confirm": "I understand, create the override"
+        "confirm": "I understand, create the override",
+        "textOverlay": "models.yaml is laid over the product's model catalog, model by model. This editor starts from the whole catalog: saving writes a full copy, and every model in it replaces the product's by id, so later product updates to their prices and limits no longer apply. To keep following updates, delete the models you did not change and keep only your own additions (or add models with the refresh button on the AI tab). \"Restore default\" goes back to the product catalog at any time.",
+        "confirmOverlay": "I understand, save a full copy"
       },
       "preview": {
         "title": "Preview and save",
@@ -7048,7 +7107,8 @@
       "system__reconcile": "Reconcile activity log",
       "system__telegram_callback": "Telegram button action",
       "system__reminder": "Daily reminder",
-      "request__writer_job": "Write application answer"
+      "request__writer_job": "Write application answer",
+      "request__models_sync": "Refresh model list"
     },
     "event": {
       "item__ok": "Item completed",
@@ -7376,7 +7436,8 @@
       "test_ai": "Test AI",
       "test_telegram": "Test Telegram",
       "salary_lookup": "Look up salary",
-      "writer_job": "Write application answer"
+      "writer_job": "Write application answer",
+      "models_sync": "Refresh model list"
     },
     "level": {
       "all": "All levels",

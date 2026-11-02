@@ -81,6 +81,7 @@ const DEFAULT_HANDLERS: Record<ControlRequestKind, ControlHandler> = {
   test_ai: noHandler,
   salary_lookup: noHandler,
   writer_job: noHandler,
+  models_sync: noHandler,
 };
 
 const handlers = new Map<ControlRequestKind, ControlHandler>(Object.entries(DEFAULT_HANDLERS) as Array<[ControlRequestKind, ControlHandler]>);

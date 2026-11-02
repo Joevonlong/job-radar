@@ -133,6 +133,61 @@ test.describe("server action guard", () => {
     }
   });
 
+  test("goBack and goForward wait for an action that is still on its way", async ({ page }) => {
+    const server = await startServer(600);
+    try {
+      await page.goto(server.url);
+      await page.goto(`${server.url}?second`);
+      await post(page, "/save", "b1");
+      await page.goBack();
+      expect(server.counts).toMatchObject({ received: 1, stored: 1, cutOff: 0 });
+      await post(page, "/save", "b2");
+      await page.goForward();
+      expect(server.counts).toMatchObject({ received: 2, stored: 2, cutOff: 0 });
+    } finally {
+      await server.stop();
+    }
+  });
+
+  test("closing a page waits for its action, and so does closing the context", async ({ context }) => {
+    const server = await startServer(600);
+    try {
+      const closing = await context.newPage();
+      await closing.goto(server.url);
+      await post(closing, "/save", "c1");
+      await closing.close();
+      expect(server.counts).toMatchObject({ received: 1, stored: 1, cutOff: 0 });
+
+      const last = await context.newPage();
+      await last.goto(server.url);
+      await post(last, "/save", "c2");
+      await context.close();
+      expect(server.counts).toMatchObject({ received: 2, stored: 2, cutOff: 0 });
+    } finally {
+      await server.stop();
+    }
+  });
+
+  test("actions one after another: each one is waited for, also the one started right as the first settles", async ({ page }) => {
+    const server = await startServer(300);
+    try {
+      await page.goto(server.url);
+      // started together: two outstanding at once
+      await post(page, "/save", "d1");
+      await post(page, "/save", "d2");
+      await page.reload();
+      expect(server.counts).toMatchObject({ received: 2, stored: 2, cutOff: 0 });
+      // started from the first one's own completion (a chained write): the second must not slip past the wait
+      await post(page, "/save", "d3");
+      await expect.poll(() => server.counts.stored).toBe(3);
+      await post(page, "/save", "d4");
+      await page.reload();
+      expect(server.counts).toMatchObject({ received: 4, stored: 4, cutOff: 0 });
+    } finally {
+      await server.stop();
+    }
+  });
+
   test("a POST without the Next-Action header is not waited for", async ({ page }) => {
     const server = await startServer(800);
     try {

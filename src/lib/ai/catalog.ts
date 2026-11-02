@@ -1,7 +1,7 @@
 import fs from "node:fs";
 
 import type { ChannelLogger } from "@/lib/channels/types";
-import { ConfigError, firstConfigProblem, reloadConfig, resolveConfigPath, type ModelsConfig } from "@/lib/config";
+import { ConfigError, firstConfigProblem, getDefaultConfigPath, reloadConfig, resolveConfigPath, type ModelsConfig } from "@/lib/config";
 
 import { sanitize } from "./errors";
 
@@ -20,14 +20,17 @@ const memo = new Map<string, Memo>();
  * the next call, with no restart.
  */
 export function loadModelCatalog(logger?: ChannelLogger): ModelsConfig | null {
-  const file = resolveConfigPath("models"); // the user override, else the shipped default
-  let stamp: string;
-  try {
-    const stat = fs.statSync(file);
-    stamp = `${stat.mtimeMs}:${stat.size}`;
-  } catch {
-    stamp = "missing";
-  }
+  const file = resolveConfigPath("models"); // the user's overlay, else the shipped default
+  // the catalog is the shipped file with the user's overlay merged in: a change of either one makes a new stamp
+  const stampOf = (path: string | null): string => {
+    try {
+      const stat = fs.statSync(/*turbopackIgnore: true*/ path ?? file);
+      return `${stat.mtimeMs}:${stat.size}`;
+    } catch {
+      return "missing";
+    }
+  };
+  const stamp = `${stampOf(file)}|${stampOf(getDefaultConfigPath("models"))}`;
   const hit = memo.get(file);
   if (hit && hit.stamp === stamp) return hit.value;
   let value: ModelsConfig | null = null;

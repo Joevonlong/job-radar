@@ -168,7 +168,7 @@ export function FileEditor({ data, ack, onChanged }: FileEditorProps) {
         </span>
         <span className="ml-auto">{ack}</span>
       </div>
-      {kind === "shipped" ? <OverrideWarning /> : null}
+      {kind === "shipped" ? <OverrideWarning overlay={stem === "models"} /> : null}
       <p className="text-ink-2 text-body-sm" data-testid="secrets-note">
         {t("secretsNote")}
       </p>
