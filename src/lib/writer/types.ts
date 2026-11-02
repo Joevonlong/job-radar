@@ -48,6 +48,21 @@ export interface CheckedSentence {
 
 export type StatusCounts = Record<"supported" | "partial" | "unsupported" | "framing" | "user_written" | "web_unverified", number>;
 
+/** What a `writer_job` request does: draft versions from the material, polish your own text, review a version, rewrite it by the review. */
+export const WRITE_MODES = ["draft", "polish", "coach", "coach_rewrite"] as const;
+export type WriteMode = (typeof WRITE_MODES)[number];
+
+/** The `variant_id` of the version a coach rewrite writes (a polish uses the name of its option); the page labels them. */
+export const COACH_REWRITE_VARIANT = "coach_rewrite";
+
+/** What a coach review rates a dimension as. */
+export const COACH_STATUSES = ["good", "improve", "missing"] as const;
+export type CoachStatus = (typeof COACH_STATUSES)[number];
+
+/** The two ways to polish your own text: fit it to the job, or change only the language and wording. */
+export const POLISH_OPTIONS = ["align_to_job", "language_only"] as const;
+export type PolishOption = (typeof POLISH_OPTIONS)[number];
+
 /** The writing modes of a stored version. */
 export const ANSWER_MODES = ["draft", "polish", "coach_rewrite", "manual", "mcp"] as const;
 export type AnswerMode = (typeof ANSWER_MODES)[number];
@@ -80,6 +95,6 @@ export interface QuestionSettings {
   tone: string;
 }
 
-/** The parts of the AI input, in the order the disclosure lists them. */
-export const WRITE_INPUT_FIELDS = ["question", "settings", "job", "jd_points", "jd_excerpt", "profile", "stories", "emphasis"] as const;
+/** The parts of the AI input, in the order the disclosure lists them (`draft`: your own text, or the answer under review). */
+export const WRITE_INPUT_FIELDS = ["question", "settings", "job", "jd_points", "jd_excerpt", "profile", "stories", "emphasis", "draft"] as const;
 export type WriteInputField = (typeof WRITE_INPUT_FIELDS)[number];

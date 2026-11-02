@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useFormatter, useTranslations } from "next-intl";
 import { useId, useState, useTransition } from "react";
 
-import { saveManualVersionAction, setFinalVersionAction, writeAnswerAction, writerStatusAction, type WriteErrorKey, type WriterActionError } from "@/app/jobs/[id]/apply/actions";
+import { saveManualVersionAction, setFinalVersionAction, writeAnswerAction, writerStatusAction, type WriteActionResult, type WriteErrorKey, type WriterActionError } from "@/app/jobs/[id]/apply/actions";
 import { QueueHint } from "@/components/control/queue-hint";
 import { nodeLabels } from "@/components/settings/field-control";
 import { useControlRequest } from "@/components/control/use-control-request";
@@ -22,11 +22,13 @@ import { textLength } from "@/lib/writer/diff";
 import { jdPointKey } from "@/lib/writer/jd-points";
 import { writeInputFields } from "@/lib/writer/materials";
 import type { ReuseBase } from "@/lib/writer/similar";
-import type { CheckedSentence, SentenceStatus, StatusCounts } from "@/lib/writer/types";
+import { POLISH_OPTIONS, type CheckedSentence, type PolishOption, type SentenceStatus, type StatusCounts, type WriteInputField } from "@/lib/writer/types";
 import type { WorkbenchQuestion, WorkbenchVersion, WorkbenchView } from "@/lib/writer/view";
 
 import { BaseEditor } from "./base-editor";
+import { CoachReview } from "./coach-review";
 import { OldCompanyNotice } from "./old-company-notice";
+import { PolishBox } from "./polish-box";
 
 type Failure = { error: WriteErrorKey; detail: string | null; resumeAt: string | null };
 
@@ -34,6 +36,19 @@ type Failure = { error: WriteErrorKey; detail: string | null; resumeAt: string |
 /** The shipped variant ids that have a label; a variant added in writer.yaml shows its id. */
 const VARIANT_LABELS = ["safe", "distinctive", "short"] as const;
 const variantLabel = (id: string | null): (typeof VARIANT_LABELS)[number] | null => VARIANT_LABELS.find((entry) => entry === id) ?? null;
+
+/** The label of a version in the list: how it was made. */
+function useVersionLabel(): (version: Pick<WorkbenchVersion, "mode" | "variantId">) => string {
+  const t = useTranslations("writer.answer");
+  const tw = useTranslations("writer");
+  return (version) => {
+    if (version.mode === "manual") return t("manual");
+    if (version.mode === "polish") return POLISH_OPTIONS.find((option) => option === version.variantId) ? tw(`polish.versionLabel.${version.variantId as PolishOption}`) : tw("polish.title");
+    if (version.mode === "coach_rewrite") return tw("coach.rewriteLabel");
+    const known = variantLabel(version.variantId);
+    return known ? tw(`variant.${known}`) : (version.variantId ?? "");
+  };
+}
 
 const MARK: Record<SentenceStatus, string> = {
   supported: "decoration-good",
@@ -69,16 +84,13 @@ function Counts({ counts, testId }: { counts: StatusCounts; testId?: string }) {
 }
 
 /**
- * The answer of the selected question: what is sent and to whom, the "write" button (a `writer_job` request polled
- * until the ai-worker is done), the versions, and the selected version sentence by sentence with its evidence.
+ * The answer of the selected question: what is sent and to whom, the "write" button, the box to improve your own draft (all
+ * `writer_job` requests, polled until the ai-worker is done), the versions, and the selected version sentence by sentence with
+ * its evidence and the coach's review of it.
  */
 export function AnswerPanel({ view, question, base, onBaseDone, enabled, timeZone }: { view: WorkbenchView; question: WorkbenchQuestion | null; base: ReuseBase | null; onBaseDone: () => void; enabled: boolean; timeZone: string }) {
   const t = useTranslations("writer.answer");
-  const tw = useTranslations("writer");
-  const variantName = (id: string | null): string => {
-    const known = variantLabel(id);
-    return known ? tw(`variant.${known}`) : (id ?? "");
-  };
+  const versionLabel = useVersionLabel();
   const tSettings = useTranslations("settings");
   const format = useFormatter();
   const router = useRouter();
@@ -132,25 +144,32 @@ export function AnswerPanel({ view, question, base, onBaseDone, enabled, timeZon
   }
 
   const busy = pending || waiting !== null;
-  const write = (): void => {
+  // every kind of request (write, improve my draft, coach review, rewrite) is queued and awaited the same way
+  const run = (call: () => Promise<WriteActionResult>): void => {
     setFailure(null);
     startTransition(async () => {
-      const result = await callAction(() => writeAnswerAction({ jobId: view.job.id, questionId: question.id }), () => ({ ok: false as const, error: "failed" as const }));
+      const result = await call();
       if (!result.ok) fail({ error: result.error, detail: null, resumeAt: null });
       else setWaiting({ requestId: result.requestId, stage: "pending", queue: null });
     });
   };
+  const write = (): void => run(() => callAction(() => writeAnswerAction({ jobId: view.job.id, questionId: question.id }), () => ({ ok: false as const, error: "failed" as const })));
 
-  // what "write" sends, from the saved selection (the same list the request builds its input from)
+  // what a request sends, from the saved selection (the same list the request builds its input from); a request on a text adds that text
   const points = new Set(view.jdPoints.map(jdPointKey));
   const stories = new Set(view.stories.map((story) => story.id));
-  const fields = writeInputFields({
+  const material = {
     jdPoints: question.selection.jdPoints.filter((ref) => points.has(jdPointKey(ref))),
     useJdText: question.selection.useJdText && view.job.hasDescription,
     profile: question.selection.profile && view.profile.available ? true : null,
     stories: question.selection.storyIds.filter((id) => stories.has(id)),
     emphasis: question.selection.emphasis.trim() === "" ? null : question.selection.emphasis,
-  });
+  };
+  const fields = writeInputFields(material);
+  const fieldsWithText: WriteInputField[] = writeInputFields({ ...material, draft: true });
+  // "language only" sends none of the chosen material, only the text
+  const polishFields = (option: PolishOption): WriteInputField[] =>
+    option === "language_only" ? writeInputFields({ jdPoints: [], useJdText: false, profile: null, stories: [], emphasis: null, draft: true }) : fieldsWithText;
   const selected = question.versions.find((version) => version.id === selectedId) ?? question.versions.find((version) => version.id === question.finalVersionId) ?? question.versions[0] ?? null;
 
   return (
@@ -182,6 +201,8 @@ export function AnswerPanel({ view, question, base, onBaseDone, enabled, timeZon
 
         {base ? <BaseEditor view={view} question={question} base={base} enabled={enabled} onDone={onBaseDone} /> : null}
 
+        <PolishBox view={view} question={question} enabled={enabled} busy={busy} sends={polishFields} run={run} />
+
         {question.versions.length > 0 ? (
           <ul className="flex flex-col gap-1.5" aria-label={t("versionsLabel")} data-testid="writer-versions">
             {question.versions.map((version) => (
@@ -198,7 +219,7 @@ export function AnswerPanel({ view, question, base, onBaseDone, enabled, timeZon
                   data-version-id={version.id}
                   data-mode={version.mode}
                 >
-                  <span className="text-body-sm font-semibold">{version.mode === "manual" ? t("manual") : variantName(version.variantId)}</span>
+                  <span className="text-body-sm font-semibold">{versionLabel(version)}</span>
                   <span className="text-ink-3 text-data font-mono">{format.dateTime(new Date(version.createdAt), { dateStyle: "short", timeStyle: "short", timeZone })}</span>
                   {version.id === question.finalVersionId ? (
                     <Badge variant="status-good">
@@ -212,13 +233,33 @@ export function AnswerPanel({ view, question, base, onBaseDone, enabled, timeZon
           </ul>
         ) : null}
 
-        {selected ? <VersionView key={selected.id} view={view} question={question} version={selected} enabled={enabled} onSaved={(id) => setSelectedId(id ?? null)} /> : null}
+        {selected ? (
+          <VersionView key={selected.id} view={view} question={question} version={selected} enabled={enabled} busy={busy} coachSends={fieldsWithText} run={run} onSaved={(id) => setSelectedId(id ?? null)} />
+        ) : null}
       </div>
     </Panel>
   );
 }
 
-function VersionView({ view, question, version, enabled, onSaved }: { view: WorkbenchView; question: WorkbenchQuestion; version: WorkbenchVersion; enabled: boolean; onSaved: (id: number | undefined) => void }) {
+function VersionView({
+  view,
+  question,
+  version,
+  enabled,
+  busy,
+  coachSends,
+  run,
+  onSaved,
+}: {
+  view: WorkbenchView;
+  question: WorkbenchQuestion;
+  version: WorkbenchVersion;
+  enabled: boolean;
+  busy: boolean;
+  coachSends: WriteInputField[];
+  run: (call: () => Promise<WriteActionResult>) => void;
+  onSaved: (id: number | undefined) => void;
+}) {
   const t = useTranslations("writer.answer");
   const tw = useTranslations("writer");
   const router = useRouter();
@@ -341,6 +382,8 @@ function VersionView({ view, question, version, enabled, onSaved }: { view: Work
           </>
         )}
       </div>
+
+      {editing === null ? <CoachReview view={view} question={question} version={version} enabled={enabled} busy={busy} sends={coachSends} run={run} onAdopted={onSaved} /> : null}
     </div>
   );
 }

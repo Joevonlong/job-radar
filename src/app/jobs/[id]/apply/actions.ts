@@ -5,7 +5,7 @@ import { z } from "zod";
 
 import { parseStoredBreakdown } from "@/lib/breakdown/content";
 import { LENGTH_UNITS, QUESTION_KINDS } from "@/lib/config/schemas/writer";
-import { readWriterRequest, requestWriterDraft, type WriterErrorCode } from "@/lib/control/writer-request";
+import { readWriterRequest, requestWriter, type WriterErrorCode, type WriterRequestSpec } from "@/lib/control/writer-request";
 import type { ControlQueueView } from "@/lib/control/request-view-schema";
 import { getDb } from "@/lib/db";
 import {
@@ -22,6 +22,7 @@ import {
 import { getJobBreakdown, getJobForBreakdown } from "@/lib/db/repos/breakdowns";
 import { isLanguageCode } from "@/lib/i18n/languages";
 import { logActionFailure } from "@/lib/logging/action-failure";
+import { applySuggestion, parseStoredCoach } from "@/lib/writer/coach";
 import { diffSentences } from "@/lib/writer/diff";
 import { jdPointsOf } from "@/lib/writer/jd-points";
 import { companyMatchNames, legalSuffixes } from "@/lib/writer/company-names";
@@ -29,8 +30,8 @@ import { questionTokens, rankSimilar } from "@/lib/writer/similar";
 import { initialSelection } from "@/lib/writer/selection";
 import { readWriterInputs } from "@/lib/writer/settings";
 import { parseStoredSentences } from "@/lib/writer/stored";
-import type { QuestionSelection } from "@/lib/writer/types";
-import { countStatuses } from "@/lib/writer/verify";
+import { POLISH_OPTIONS, type QuestionSelection } from "@/lib/writer/types";
+import { countStatuses, joinSentences } from "@/lib/writer/verify";
 
 /**
  * Server Actions of the application writer's workbench. The web app calls no AI provider: "write" leaves a `writer_job`
@@ -138,16 +139,92 @@ export async function deleteQuestionAction(input: { jobId: number; questionId: n
 export type WriteErrorKey = "invalid" | WriterErrorCode;
 export type WriteActionResult = { ok: true; requestId: number } | { ok: false; error: WriteErrorKey };
 
+/** Snapshot the question's material (and the text to work on) and queue a `writer_job` request of the given kind. */
+async function queueWriter(name: string, input: { jobId: number; questionId: number }, spec: WriterRequestSpec): Promise<WriteActionResult> {
+  try {
+    const outcome = await requestWriter(getDb(), { ...input, ...readWriterInputs() }, spec);
+    if (outcome.state === "error") return { ok: false, error: outcome.error };
+    return { ok: true, requestId: outcome.requestId };
+  } catch (error) {
+    logActionFailure(name, error);
+    return { ok: false, error: "failed" };
+  }
+}
+
 /** "Write": snapshot the question's material and queue a `writer_job` request. */
 export async function writeAnswerAction(input: { jobId: number; questionId: number }): Promise<WriteActionResult> {
   const parsed = z.strictObject({ jobId: positive, questionId: positive }).safeParse(input);
   if (!parsed.success) return { ok: false, error: "invalid" };
+  return queueWriter("writeAnswerAction", parsed.data, { mode: "draft" });
+}
+
+/** "Improve my draft": your own text (any language), fitted to the job or with only its language changed. */
+export async function polishAnswerAction(input: { jobId: number; questionId: number; text: string; option: (typeof POLISH_OPTIONS)[number] }): Promise<WriteActionResult> {
+  const parsed = z.strictObject({ jobId: positive, questionId: positive, text: z.string().trim().min(1).max(60_000), option: z.enum(POLISH_OPTIONS) }).safeParse(input);
+  if (!parsed.success) return { ok: false, error: "invalid" };
+  const { text, option, ...ids } = parsed.data;
+  return queueWriter("polishAnswerAction", ids, { mode: "polish", option, text });
+}
+
+/** "Coach review": the AI's score, verdicts and sentence suggestions for one version, stored on it. */
+export async function coachAnswerAction(input: { jobId: number; questionId: number; versionId: number }): Promise<WriteActionResult> {
+  const parsed = z.strictObject({ jobId: positive, questionId: positive, versionId: positive }).safeParse(input);
+  if (!parsed.success) return { ok: false, error: "invalid" };
+  const { versionId, ...ids } = parsed.data;
+  return queueWriter("coachAnswerAction", ids, { mode: "coach", versionId });
+}
+
+/** "Rewrite by the review": one new version from a reviewed version and its suggestions. */
+export async function coachRewriteAction(input: { jobId: number; questionId: number; versionId: number }): Promise<WriteActionResult> {
+  const parsed = z.strictObject({ jobId: positive, questionId: positive, versionId: positive }).safeParse(input);
+  if (!parsed.success) return { ok: false, error: "invalid" };
+  const { versionId, ...ids } = parsed.data;
+  return queueWriter("coachRewriteAction", ids, { mode: "coach_rewrite", versionId });
+}
+
+/**
+ * Adopt one suggestion of a version's review: a new `manual` version (it points at the reviewed one) in which that sentence
+ * is the suggested one. Its check result is the suggestion's: with a valid quote the sentence's own status, else "AI
+ * suggestion, unverified". Nothing is sent to an AI provider.
+ */
+export async function adoptSuggestionAction(input: { jobId: number; questionId: number; versionId: number; suggestionIndex: number }): Promise<WriterActionResult & { versionId?: number }> {
+  const parsed = z.strictObject({ jobId: positive, questionId: positive, versionId: positive, suggestionIndex: z.number().int().min(0).max(1000) }).safeParse(input);
+  if (!parsed.success) return { ok: false, error: "invalid" };
   try {
-    const outcome = await requestWriterDraft(getDb(), { ...parsed.data, ...readWriterInputs() });
-    if (outcome.state === "error") return { ok: false, error: outcome.error };
-    return { ok: true, requestId: outcome.requestId };
+    const { writer } = readWriterInputs();
+    if (writer === null) return { ok: false, error: "config_error" };
+    const db = getDb();
+    const { jobId, questionId, versionId, suggestionIndex } = parsed.data;
+    const question = await getApplicationQuestion(db, { jobId, questionId });
+    const version = question ? await getAnswerVersion(db, { questionId, versionId }) : null;
+    const suggestion = version ? parseStoredCoach(version.coach)?.suggestions[suggestionIndex] : undefined;
+    const sentences = version && suggestion ? applySuggestion(parseStoredSentences(version.sentences, version.text), suggestion) : null;
+    if (!version || !sentences) return { ok: false, error: "not_found" };
+    const counts = countStatuses(sentences);
+    const [id] = await insertAnswerVersions(db, {
+      questionId,
+      maxVersions: writer.questions.max_versions_per_question,
+      versions: [
+        {
+          mode: "manual",
+          variantId: version.variantId,
+          text: joinSentences(sentences),
+          sentences,
+          supportedCount: counts.supported,
+          partialCount: counts.partial,
+          unsupportedCount: counts.unsupported,
+          framingCount: counts.framing,
+          userWrittenCount: counts.user_written,
+          webUnverifiedCount: counts.web_unverified,
+          parentVersionId: versionId,
+          materialsHash: version.materialsHash,
+        },
+      ],
+    });
+    revalidate(jobId);
+    return id === undefined ? { ok: true } : { ok: true, versionId: id };
   } catch (error) {
-    logActionFailure("writeAnswerAction", error);
+    logActionFailure("adoptSuggestionAction", error);
     return { ok: false, error: "failed" };
   }
 }

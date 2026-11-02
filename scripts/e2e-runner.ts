@@ -182,8 +182,61 @@ const writerAi: AiTransport = {
   async call(request) {
     await sleep(STUB_TEST_MS);
     const input = z
-      .object({ settings: z.object({ versions: z.array(z.object({ id: z.string() })) }), jd_excerpt: z.string().optional() })
+      .object({
+        settings: z.object({ versions: z.array(z.object({ id: z.string() })).default([]) }),
+        jd_excerpt: z.string().optional(),
+        // polish: { text }; coach: { sentences }; coach rewrite: { sentences, suggestions }
+        draft: z
+          .object({
+            text: z.string().optional(),
+            sentences: z.array(z.object({ index: z.number(), text: z.string() })).optional(),
+            suggestions: z.array(z.object({ index: z.number(), rewrite: z.string() })).optional(),
+          })
+          .optional(),
+      })
       .parse(JSON.parse(request.user.replace(/^<application_input>\n|\n<\/application_input>$/g, "")));
+    const draft = input.draft;
+    if (draft?.text !== undefined) {
+      // polish: every sentence of the draft, each backed by itself, and a framing sentence
+      const sentences = draft.text.split(/(?<=[.!?])\s+/).filter((entry) => entry.trim() !== "");
+      const variants = input.settings.versions.map((version) => ({
+        variant_id: version.id,
+        sentences: [
+          ...sentences.map((text) => ({ text, about: "user", evidence: [{ source: "draft", quote: text }] })),
+          { text: "That is why this role interests me.", about: "framing", evidence: [] },
+        ],
+      }));
+      return { text: JSON.stringify({ variants }), model: "e2e-model", usage: { tokensIn: 100, tokensOut: 50 } };
+    }
+    if (draft?.sentences !== undefined && draft.suggestions === undefined) {
+      // coach: a rating of one configured and one unknown dimension, one backed suggestion and one without evidence
+      const first = draft.sentences[0]?.text ?? "";
+      const quote = first.replace(/[.!?]$/, "");
+      const suggestions = [
+        ...(first ? [{ sentence_index: 0, issue: "Say it more directly.", rewrite: `${quote} every single day.`, about: "user", evidence: [{ source: "draft", quote }] }] : []),
+        ...(draft.sentences.length > 1 ? [{ sentence_index: 1, issue: "Add a number.", rewrite: "I ran the platform on call for two years.", about: "user", evidence: [] }] : []),
+        { sentence_index: 99, issue: "No such sentence.", rewrite: "Nothing.", about: "framing", evidence: [] },
+      ];
+      const coach = {
+        score: 72,
+        dimensions: [
+          { id: "answers_question", status: "improve", note: "It only half answers the question." },
+          { id: "concrete_evidence", status: "good", note: "There are concrete examples." },
+          { id: "made_up_dimension", status: "good", note: "Not a configured dimension." },
+        ],
+        suggestions,
+      };
+      return { text: JSON.stringify(coach), model: "e2e-model", usage: { tokensIn: 100, tokensOut: 50 } };
+    }
+    if (draft?.suggestions !== undefined) {
+      // coach rewrite: the draft's sentences with the suggested ones in place
+      const rewrites = new Map(draft.suggestions.map((entry) => [entry.index, entry.rewrite]));
+      const variants = input.settings.versions.map((version) => ({
+        variant_id: version.id,
+        sentences: (draft.sentences ?? []).map((sentence) => ({ text: rewrites.get(sentence.index) ?? sentence.text, about: "framing", evidence: [] })),
+      }));
+      return { text: JSON.stringify({ variants }), model: "e2e-model", usage: { tokensIn: 100, tokensOut: 50 } };
+    }
     const line = input.jd_excerpt?.split("\n").map((entry) => entry.trim()).find((entry) => entry.length > 0) ?? "";
     const quote = line.slice(0, 80).trim();
     const variants = input.settings.versions.map((version) => ({

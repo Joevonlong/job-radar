@@ -136,6 +136,16 @@ export async function insertAnswerVersions(db: Executor, input: { questionId: nu
   });
 }
 
+/** Store the coach's review on a version of the question (a newer review replaces the older one); false when it is not the question's. */
+export async function setAnswerVersionCoach(db: Executor, input: { questionId: number; versionId: number; coach: unknown }): Promise<boolean> {
+  const rows = await db
+    .update(applicationAnswerVersions)
+    .set({ coach: input.coach })
+    .where(and(eq(applicationAnswerVersions.id, input.versionId), eq(applicationAnswerVersions.questionId, input.questionId)))
+    .returning({ id: applicationAnswerVersions.id });
+  return rows.length > 0;
+}
+
 /** Mark a version as the question's final answer (null: none); false when the question or version is not this job's. */
 export async function setFinalAnswerVersion(db: Executor, input: { jobId: number; questionId: number; versionId: number | null }): Promise<boolean> {
   if (input.versionId !== null && !(await getAnswerVersion(db, { questionId: input.questionId, versionId: input.versionId }))) return false;
