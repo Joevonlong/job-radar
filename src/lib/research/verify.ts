@@ -36,10 +36,18 @@ const decoded = (url: string): string => {
   }
 };
 
-/** Written at an AI, however it is spelled: compatibility forms folded, line breaks closed. */
-const hasInstruction = (text: string, traps: TrapsConfig): boolean => firstInstruction(text.normalize("NFKC").replace(/\s+/g, " "), traps) !== null;
+/** What is stored: control characters and angle brackets become spaces, so they can hide words from a check that runs on the raw text. */
+const singleLine = (text: string): string => text.replace(/[\u0000-\u001f\u007f-\u009f<>]/g, " ").replace(/\s+/g, " ").trim();
 
-const singleLine = (text: string): string => text.replace(/[\u0000-\u001f\u007f<>]/g, " ").replace(/\s+/g, " ").trim();
+/**
+ * Written at an AI, however it is spelled: compatibility forms folded, line breaks closed. Both forms count: the raw one
+ * for patterns that need the brackets (`<system>`), the cleaned one for words that only meet once the separators are gone.
+ */
+function hasInstruction(text: string, traps: TrapsConfig): boolean {
+  const folded = text.normalize("NFKC");
+  return firstInstruction(folded.replace(/\s+/g, " "), traps) !== null || firstInstruction(singleLine(folded), traps) !== null;
+}
+
 const clip = (text: string, max: number): string => (text.length > max ? `${text.slice(0, max - 1)}…` : text);
 
 /** The stored text: plain, on one line, except that the items of a list field stay on lines of their own. */
@@ -83,11 +91,14 @@ export function verifyCompanyResearch(input: CompanyResearchVerifyInput): Compan
     if (raw.text.trim() === "") continue;
     const source = raw.source_url === null ? null : publicHttpsUrl(raw.source_url);
     const sourceText = source === null ? "" : decoded(source.href);
-    if (source === null || hasInvisible(raw.text) || hasInvisible(sourceText) || hasInstruction(raw.text, input.traps) || hasInstruction(sourceText, input.traps) || !plausible(field, input.output, input)) {
+    // the check reads what would be stored, and the text before it was cleaned and cut
+    const cleaned = cleanText(raw.text, field);
+    const text = clip(cleaned, input.limits.max_field_chars);
+    const instruction = [raw.text, cleaned, text, sourceText].some((value) => hasInstruction(value, input.traps));
+    if (source === null || hasInvisible(raw.text) || hasInvisible(sourceText) || instruction || !plausible(field, input.output, input)) {
       dropped += 1;
       continue;
     }
-    const text = clip(cleanText(raw.text, field), input.limits.max_field_chars);
     if (text === "") continue;
     fields[field] = { text, sourceUrl: source.href };
   }

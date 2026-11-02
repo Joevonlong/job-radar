@@ -54,7 +54,7 @@ describe("web access policy", () => {
   });
 
   it("keeps only public website domains: never a private, internal, reserved or numeric host, never a public suffix", () => {
-    for (const bad of ["192.168.1.1", "10.0.0.1", "127.0.0.1", "169.254.169.254", "fritz.box", "printer.local", "host.internal", "nas.lan", "localhost", "intranet", "co.uk", "github.io", "1.2.3.4.5", "router.home.arpa", "--tools", "*.example.com", "example.com/path"]) expect(isPublicWebsiteDomain(bad), bad).toBe(false);
+    for (const bad of ["192.168.1.1", "10.0.0.1", "127.0.0.1", "169.254.169.254", "fritz.box", "printer.local", "host.internal", "nas.lan", "localhost", "intranet", "co.uk", "github.io", "1.2.3.4.5", "router.home.arpa", "hidden.onion", "acme.alt", "acme.mail", "acme.priv", "acme.private", "--tools", "*.example.com", "example.com/path"]) expect(isPublicWebsiteDomain(bad), bad).toBe(false);
     for (const good of ["linkedin.com", "example-company.de", "company.co.uk"]) expect(isPublicWebsiteDomain(good), good).toBe(true);
     expect(publicWebsiteDomains(["LinkedIn.com", "linkedin.com", "fritz.box", "192.168.1.1"])).toEqual(["linkedin.com"]);
   });

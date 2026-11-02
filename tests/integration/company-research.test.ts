@@ -12,7 +12,7 @@ import { closeDb, getDb, schema } from "@/lib/db";
 import { runMigrations } from "@/lib/db/migrate";
 import { getOrCreateCompany, mergeCompanyInto } from "@/lib/db/repos/companies";
 import { controlLaneOf, getControlRequest } from "@/lib/db/repos/control-requests";
-import { countCompanyResearchRequests, findLatestCompanyResearch, getCompanyResearchForJob, reserveCompanyResearchRequest } from "@/lib/db/repos/company-research";
+import { countCompanyResearchRequests, findLatestCompanyResearch, getCompanyResearchForJob, insertCompanyResearchOfJob, reserveCompanyResearchRequest } from "@/lib/db/repos/company-research";
 import { insertJob } from "@/lib/db/repos/jobs";
 import { getCompanyResearchContext } from "@/lib/research/view";
 
@@ -304,6 +304,120 @@ describe("the panel's state", () => {
     const later = new Date(NOW.getTime() + 31 * 86_400_000);
     expect((await getCompanyResearchContext(db(), { jobId, research: config(), ai: r.ai, now: later }))?.latest?.expired).toBe(true);
     expect(await getCompanyResearchContext(db(), { jobId, research: null, ai: r.ai, now: NOW })).toMatchObject({ availability: "config_error" });
+  });
+});
+
+describe("what changes while a lookup runs", () => {
+  /** The router, with `during` run after the prompt is built and before the answer comes back. */
+  function routerWith(during: () => Promise<unknown>, steps: Parameters<typeof scriptedProvider>[1] = [answer()]) {
+    const r = router(steps);
+    const call = r.transport.call.bind(r.transport);
+    r.transport.call = async (request) => {
+      await during();
+      return call(request);
+    };
+    return r;
+  }
+  const rows = () => db().select().from(schema.companyResearch);
+
+  it("a merge keeps the paid result, under the kept company and still linked to its job", async () => {
+    const kept = await addJob("Kept");
+    const other = await addJob("Other");
+    const r = routerWith(() => mergeCompanyInto(db(), other.companyId, kept.companyId));
+    registerControlHandler("company_research", handler(r));
+    const requestId = await queue(other.jobId, r.ai);
+    await work();
+
+    expect(await readCompanyResearchRequest(db(), { requestId, jobId: other.jobId })).toEqual({ state: "done" });
+    expect(await rows()).toMatchObject([{ companyId: kept.companyId, jobId: other.jobId, status: "ok" }]);
+    expect((await getCompanyResearchForJob(db(), kept.jobId, NOW))?.fields.summary?.text).toBe("Builds warehouse robots.");
+  });
+
+  it("a merge keeps the record of an empty answer too", async () => {
+    const kept = await addJob("Kept");
+    const other = await addJob("Other");
+    const r = routerWith(() => mergeCompanyInto(db(), other.companyId, kept.companyId), [answer({ summary: null })]);
+    registerControlHandler("company_research", handler(r));
+    const requestId = await queue(other.jobId, r.ai);
+    await work();
+
+    expect(await getControlRequest(db(), requestId)).toMatchObject({ status: "failed", result: { error: "empty_result" } });
+    expect(await rows()).toMatchObject([{ companyId: kept.companyId, jobId: other.jobId, status: "failed", errorCode: "empty_result" }]);
+  });
+
+  it("without its job the result stays with the company", async () => {
+    const { jobId, companyId } = await addJob("Acme");
+    const r = routerWith(() => db().delete(schema.jobs).where(eq(schema.jobs.id, jobId)));
+    registerControlHandler("company_research", handler(r));
+    await queue(jobId, r.ai);
+    await work();
+
+    expect(await rows()).toMatchObject([{ companyId, jobId: null, status: "ok" }]);
+  });
+
+  it("with its job and company gone the request fails as not found", async () => {
+    const { jobId, companyId } = await addJob("Acme");
+    const r = routerWith(async () => {
+      await db().delete(schema.jobs).where(eq(schema.jobs.id, jobId));
+      await db().delete(schema.companies).where(eq(schema.companies.id, companyId));
+    });
+    registerControlHandler("company_research", handler(r));
+    const requestId = await queue(jobId, r.ai);
+    await work();
+
+    expect(await getControlRequest(db(), requestId)).toMatchObject({ status: "failed", result: { error: "not_found" } });
+    expect(await rows()).toEqual([]);
+  });
+
+  const insertInput = (job: { jobId: number; companyId: number }) => ({ ...job, status: "failed" as const, errorCode: "empty_result", domainUsed: null, provider: null, model: null, promptVersion: COMPANY_RESEARCH_PROMPT_VERSION, fetchedAt: NOW });
+
+  it("an insert that meets a merge in flight waits for it, then goes to the kept company", async () => {
+    const kept = await addJob("Kept");
+    const other = await addJob("Other");
+    let merged = () => {};
+    const inMerge = new Promise<void>((resolve) => { merged = resolve; });
+    let release = () => {};
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    const merge = db().transaction(async (tx) => {
+      await mergeCompanyInto(tx, other.companyId, kept.companyId);
+      merged();
+      await held;
+    });
+    await inMerge;
+    const insert = insertCompanyResearchOfJob(db(), insertInput(other));
+    await expect.poll(async () => {
+      const [row] = await db().execute<{ waiting: number }>(sql`select count(*)::int as waiting from pg_stat_activity where datname = current_database() and wait_event_type = 'Lock'`);
+      return row?.waiting;
+    }).toBeGreaterThan(0);
+    release();
+    await merge;
+    expect(await insert).not.toBeNull();
+    expect(await rows()).toMatchObject([{ companyId: kept.companyId, jobId: other.jobId }]);
+  });
+
+  it("a merge that starts during the insert waits for it, then moves the row", async () => {
+    const kept = await addJob("Kept");
+    const other = await addJob("Other");
+    let inserted = () => {};
+    const inInsert = new Promise<void>((resolve) => { inserted = resolve; });
+    let release = () => {};
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    const insert = db().transaction(async (tx) => {
+      const id = await insertCompanyResearchOfJob(tx, insertInput(other));
+      inserted();
+      await held;
+      return id;
+    });
+    await inInsert;
+    const merge = mergeCompanyInto(db(), other.companyId, kept.companyId);
+    await expect.poll(async () => {
+      const [row] = await db().execute<{ waiting: number }>(sql`select count(*)::int as waiting from pg_stat_activity where datname = current_database() and wait_event_type = 'Lock'`);
+      return row?.waiting;
+    }).toBeGreaterThan(0);
+    release();
+    await insert;
+    await merge;
+    expect(await rows()).toMatchObject([{ companyId: kept.companyId, jobId: other.jobId }]);
   });
 });
 

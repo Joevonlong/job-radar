@@ -64,8 +64,12 @@ export function safeDomains(values: readonly string[]): string[] {
   return [...new Set(values.map((value) => value.trim().toLowerCase()).filter(isSafeDomain))];
 }
 
-/** Host names that never mean a public site: local and reserved suffixes (`fritz.box`, `printer.local`, `host.internal`). */
-export const BLOCKED_HOST = /(^|\.)(localhost|local|internal|lan|home|corp|box|intranet|localdomain|arpa|example|invalid|test)$/i;
+/**
+ * Host names that never mean a public site: local and reserved suffixes (`fritz.box`, `printer.local`, `host.internal`), the
+ * special-use names of RFC 6761 and its successors (`.onion`, `.alt`), and the names ICANN will not delegate or that are
+ * used privately (`.mail`, `.priv`, `.private`).
+ */
+export const BLOCKED_HOST = /(^|\.)(localhost|local|internal|lan|home|corp|box|intranet|localdomain|arpa|example|invalid|test|onion|alt|mail|priv|private)$/i;
 
 /**
  * URL parsers read a host whose last label is a number (`1.1`, `foo.0x7f`, `192.168.1.1`) as an IPv4 address, so such a

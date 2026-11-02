@@ -96,8 +96,8 @@ export async function getCompanyResearchForJob(db: Executor, jobId: number, now:
 }
 
 export type CompanyResearchInsert =
-  | { status: "ok"; companyId: number; jobId: number; result: CompanyResearchResult; domainUsed: string | null; provider: string | null; model: string | null; promptVersion: number; fetchedAt: Date; expiresAt: Date }
-  | { status: "failed"; companyId: number; jobId: number; errorCode: string; domainUsed: string | null; provider: string | null; model: string | null; promptVersion: number; fetchedAt: Date };
+  | { status: "ok"; companyId: number; jobId: number | null; result: CompanyResearchResult; domainUsed: string | null; provider: string | null; model: string | null; promptVersion: number; fetchedAt: Date; expiresAt: Date }
+  | { status: "failed"; companyId: number; jobId: number | null; errorCode: string; domainUsed: string | null; provider: string | null; model: string | null; promptVersion: number; fetchedAt: Date };
 
 export async function insertCompanyResearch(db: Executor, input: CompanyResearchInsert): Promise<number> {
   const [row] = await db
@@ -118,6 +118,29 @@ export async function insertCompanyResearch(db: Executor, input: CompanyResearch
     .returning({ id: companyResearch.id });
   if (!row) throw new Error("insertCompanyResearch: insert returned no row");
   return row.id;
+}
+
+/** How often a job's company is read again when a merge removed it at that moment; a merge leaves the job under the kept company. */
+const COMPANY_MERGE_READS = 3;
+
+/**
+ * Store a finished lookup under the company its job belongs to now: a lookup takes minutes, and a merge in that time removes
+ * the company it began with. The company row stays locked until the insert is done, so a merge that starts later waits and
+ * then moves this row with the others. Without the job the row stays with `companyId` if that company still exists. Null:
+ * neither is left to store it under.
+ */
+export async function insertCompanyResearchOfJob(db: Executor, input: CompanyResearchInsert & { jobId: number }): Promise<number | null> {
+  const { jobId } = input;
+  return db.transaction(async (tx) => {
+    for (let read = 0; read < COMPANY_MERGE_READS; read += 1) {
+      const [company] = await tx.select({ id: companies.id }).from(jobs).innerJoin(companies, eq(jobs.companyId, companies.id)).where(eq(jobs.id, jobId)).for("key share", { of: companies });
+      if (company) return insertCompanyResearch(tx, { ...input, companyId: company.id });
+      const [job] = await tx.select({ id: jobs.id }).from(jobs).where(eq(jobs.id, jobId));
+      if (!job) break;
+    }
+    const [company] = await tx.select({ id: companies.id }).from(companies).where(eq(companies.id, input.companyId)).for("key share");
+    return company ? insertCompanyResearch(tx, { ...input, jobId: null }) : null;
+  });
 }
 
 // ---------------------------------------------------------------- requests

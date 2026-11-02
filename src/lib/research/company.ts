@@ -12,7 +12,7 @@ import type { ChannelLogger } from "@/lib/channels/types";
 import type { ResearchConfig } from "@/lib/config";
 import type { TrapsConfig } from "@/lib/config/schemas/traps";
 import type { Db } from "@/lib/db/client";
-import { companyResearchCurrent, confirmedWebsiteDomain, findLatestCompanyResearch, getJobForCompanyResearch, insertCompanyResearch } from "@/lib/db/repos/company-research";
+import { companyResearchCurrent, confirmedWebsiteDomain, findLatestCompanyResearch, getJobForCompanyResearch, insertCompanyResearchOfJob } from "@/lib/db/repos/company-research";
 import { TRANSLATION_FAILURE_CODES } from "@/lib/translation/errors";
 
 import { verifyCompanyResearch } from "./verify";
@@ -82,11 +82,15 @@ export async function runCompanyResearch(db: Db, router: AiRouter, jobId: number
   const base = { companyId: job.companyId, jobId, domainUsed: confirmedDomain, provider: result.provider, model: result.model, promptVersion: COMPANY_RESEARCH_PROMPT_VERSION, fetchedAt };
   if (kept === 0) {
     // nothing usable, and never half a result: the failed row is no cache, the next lookup searches again
-    await insertCompanyResearch(db, { ...base, status: "failed", errorCode: "empty_result" });
+    await insertCompanyResearchOfJob(db, { ...base, status: "failed", errorCode: "empty_result" });
     opts.logger?.info("company research came back empty", { jobId, provider: result.provider, model: result.model, dropped: verified.dropped });
     return { status: "failed", error: "empty_result" };
   }
-  const researchId = await insertCompanyResearch(db, { ...base, status: "ok", result: verified, expiresAt: new Date(fetchedAt.getTime() + company.ttl_days * 86_400_000) });
+  const researchId = await insertCompanyResearchOfJob(db, { ...base, status: "ok", result: verified, expiresAt: new Date(fetchedAt.getTime() + company.ttl_days * 86_400_000) });
+  if (researchId === null) {
+    opts.logger?.warn("company research has nowhere to go: its job and company are gone", { jobId, provider: result.provider, model: result.model });
+    return { status: "failed", error: "not_found" };
+  }
   opts.logger?.info("company researched", { jobId, provider: result.provider, model: result.model, fields: kept, dropped: verified.dropped });
   return { status: "done", cached: false, researchId, provider: result.provider, model: result.model, fields: kept, dropped: verified.dropped };
 }
