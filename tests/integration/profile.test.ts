@@ -137,14 +137,15 @@ describe("saving the profile", () => {
     expect(await listProfileSnapshots(getDb(), "preferences", 10)).toHaveLength(1);
   });
 
-  it("reports a failed snapshot after the file was written", async () => {
+  it("refuses the save and leaves the file alone when the database is down", async () => {
     await closeDb();
     const saved = process.env.DATABASE_URL;
     process.env.DATABASE_URL = "postgres://nobody:nope@127.0.0.1:1/none";
     try {
+      const before = reloadConfig("preferences").salary_floor_year;
       const result = await saveProfile("preferences", { ...prefsDraft(), salary_floor_year: "91000" });
-      expect(result).toMatchObject({ status: "error", formError: "snapshotFailed" });
-      expect(reloadConfig("preferences").salary_floor_year).toBe(91000);
+      expect(result).toMatchObject({ status: "error", formError: "writeFailed" });
+      expect(reloadConfig("preferences").salary_floor_year).toBe(before);
     } finally {
       await closeDb();
       process.env.DATABASE_URL = saved;
