@@ -64,6 +64,8 @@ docker compose ps
 
 `docker compose ps` 里 db、web、runner、jobspy 都应该是 `healthy`。runner 的状态来自它的 healthcheck（见第 8 节）。
 
+第一次启动不写任何配置文件：服务读出厂默认值，直到 `pnpm config:init`（部署会运行它）或设置向导里的保存把文件建出来。宿主机上会写配置的命令需要一个从宿主机能连上的数据库，地址来自 `.env`（`DATABASE_URL`，或 `POSTGRES_*` 加 `DB_HOST_PORT`）。
+
 `.env` 里第一次可以什么都不填：所有变量都有默认值（Linux 上要设 `PUID` / `PGID`，见第 10 节）。runner 和 jobspy sidecar 的内存上限分别是 2 GB 和 1 GB（`.env` 里的 `RUNNER_MEM_LIMIT`、`JOBSPY_MEM_LIMIT`）；碰到上限的服务会被杀掉并重启。容器不需要任何 AI 登录或密钥（不再挂载 `~/.codex/auth.json`）；AI 在宿主机上跑，见第 6 节。
 
 ## 5. 重启后自己恢复（验证一次）
@@ -127,6 +129,7 @@ tail -n 20 ~/Library/Logs/job-radar/ai-worker.launchd.log                       
 - ai-worker 在外接卷上的发布目录里运行；开机时如果卷还没挂载，launchd 会每 10 秒重试直到成功。第一次访问外接卷时 macOS 可能弹出"允许 node 访问可移除宗卷"，点允许。
 - Telegram 的 token / chat id 从 `.env` 读取（和 runner 一样）；推送由 worker 发，所以 worker 离线时没有岗位推送。
 - 临时跑一次队列（不装服务）：`pnpm ai-worker --once`。
+- 某个配置文件的 `config_version` 比 worker 的代码认识的新（升级期间仍在运行的旧 worker）时，它记录是哪个文件并退出，不再领取请求；升级后的 worker 接手。
 
 卸载：
 

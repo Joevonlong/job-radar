@@ -3,36 +3,60 @@
  *
  *   pnpm config:migrate            list the pending migrations with a diff preview, change nothing
  *   pnpm config:migrate --write    back up the files that change to <user config dir>/.backup/<timestamp>/, then write
+ *   pnpm config:migrate --prune-backups  remove the oldest backups beyond schedule.yaml: config_writes.backups_keep
  *
  * Only the user directory and the profile directory are migrated (the shipped defaults are released at the current
  * version). Comments are kept. Files older than the code are migrated in memory on load anyway; this makes it permanent.
  * Honours JOB_RADAR_CONFIG_DIR / JOB_RADAR_PROFILE_DIR.
+ * `--write` goes through the config write lock, so it needs the database; the preview does not.
  * Exit codes: 0 done / nothing to do / preview shown, 1 a file cannot be migrated (newer than the code, invalid; nothing
- * is written then), 2 bad arguments.
+ * With --write, 2 = another writer held the config write lock for longer than config_writes.lock_wait_seconds.
+ * is written then) or the database is needed, 2 bad arguments.
  */
 import { parseArgs } from "node:util";
 
 import { createTwoFilesPatch } from "diff";
 
-import { applyConfigMigrations, displayConfigPath, planConfigMigrations } from "../src/lib/config";
+import { applyConfigMigrations, ConfigError, displayConfigPath, planConfigMigrations, pruneConfigBackups } from "../src/lib/config";
+import { getTranslator } from "../src/lib/i18n/node";
+
+/** A refused write as the command's message; anything else stays an error. */
+function reportLockProblem(error: unknown): boolean {
+  if (!(error instanceof ConfigError) || (error.kind !== "db_unavailable" && error.kind !== "busy")) return false;
+  const t = getTranslator("configOps", "cli");
+  console.error(error.kind === "busy" ? t("busy", { holder: error.detail ?? "" }) : t("dbRequired"));
+  return true;
+}
 
 async function main(): Promise<number> {
   let write = false;
   let json = false;
+  let prune = false;
   try {
-    const { values } = parseArgs({ options: { write: { type: "boolean" }, json: { type: "boolean" }, help: { type: "boolean", short: "h" } }, strict: true });
+    const { values } = parseArgs({ options: { write: { type: "boolean" }, json: { type: "boolean" }, "prune-backups": { type: "boolean" }, help: { type: "boolean", short: "h" } }, strict: true });
     if (values.help) {
-      console.log("Usage: pnpm config:migrate [--write | --json]");
+      console.log("Usage: pnpm config:migrate [--write | --json | --prune-backups]");
       return 0;
     }
     write = values.write ?? false;
     json = values.json ?? false;
-    if (write && json) return 2;
+    prune = values["prune-backups"] ?? false;
+    if ([write, json, prune].filter(Boolean).length > 1) return 2;
   } catch (error) {
     console.error(`config:migrate: ${error instanceof Error ? error.message : "bad arguments"}`);
     return 2;
   }
 
+  if (prune) {
+    try {
+      const removed = await pruneConfigBackups();
+      console.log(removed.length === 0 ? "no backups to remove" : `removed ${removed.length} old backup(s)`);
+      return 0;
+    } catch (error) {
+      if (!reportLockProblem(error)) throw error;
+      return 1;
+    }
+  }
   const plan = planConfigMigrations();
   if (json) {
     console.log(JSON.stringify({ pending: plan.pending.length, problems: plan.problems.length }));
@@ -57,7 +81,13 @@ async function main(): Promise<number> {
     console.log(`\n${plan.pending.length} file(s) to migrate. Nothing written: run pnpm config:migrate --write`);
     return 0;
   }
-  const applied = await applyConfigMigrations(plan);
+  let applied: Awaited<ReturnType<typeof applyConfigMigrations>>;
+  try {
+    applied = await applyConfigMigrations(plan);
+  } catch (error) {
+    if (!reportLockProblem(error)) throw error;
+    return error instanceof ConfigError && error.kind === "busy" ? 2 : 1;
+  }
   for (const file of applied.written) console.log(`✓ ${displayConfigPath(file)}`);
   if (applied.backupDir !== null) console.log(`originals backed up in ${displayConfigPath(applied.backupDir)}`);
   const skipped = plan.pending.length - applied.written.length;

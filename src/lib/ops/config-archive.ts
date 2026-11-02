@@ -1,5 +1,5 @@
 import { chmod, lstat, open, readFile, readdir, rename, rm } from "node:fs/promises";
-import { createWriteStream } from "node:fs";
+import { createWriteStream, readFileSync } from "node:fs";
 import path from "node:path";
 import { type Writable } from "node:stream";
 
@@ -20,8 +20,37 @@ export const PROFILE_MEMBER_ROOT = "data/profile";
 
 /** Directory names never archived: the config migrator's originals. */
 const EXCLUDED_DIRECTORIES: ReadonlySet<string> = new Set([".backup"]);
-/** File names never archived: secrets that can be re-created and transient coordination state (upgrade freeze and writer locks). */
-const EXCLUDED_FILES: ReadonlySet<string> = new Set([".web-session-secret", ".upgrade-freeze", ".write.lock"]);
+/**
+ * The marker every archive carries: what a missing setup.yaml means in it. An archive without one predates the wizard's
+ * semantics, and restoring it keeps that install out of the wizard. `scripts/ops/lib/existing-install.sh` holds the same
+ * name, value and text (a test compares them).
+ */
+export const ARCHIVE_META_NAME = ".archive-meta.yaml";
+export const ARCHIVE_SETUP_SEMANTICS = 2;
+export const ARCHIVE_META_YAML = `# Written by the backup into the config archive (docs/backup-restore.md). Not a config file.
+# setup_semantics 2: a missing setup.yaml means the setup wizard is pending.
+archive_meta_version: 1
+setup_semantics: ${ARCHIVE_SETUP_SEMANTICS}
+`;
+const ARCHIVE_META_MEMBER = `${CONFIG_MEMBER_ROOT}/${ARCHIVE_META_NAME}`;
+
+/**
+ * File names never archived: secrets that can be re-created, the generated marker (only the generated one goes in), and
+ * coordination files that earlier versions may have left behind.
+ */
+const EXCLUDED_FILES: ReadonlySet<string> = new Set([".web-session-secret", ARCHIVE_META_NAME, ".upgrade-freeze", ".write.lock"]);
+
+/** `setup_semantics` of an unpacked archive's config directory: its value, "none" without a marker, "unreadable" otherwise. */
+export function readArchiveSetupSemantics(dir: string): number | "none" | "unreadable" {
+  let text: string;
+  try {
+    text = readFileSync(/*turbopackIgnore: true*/ path.join(dir, ARCHIVE_META_NAME), "utf8");
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === "ENOENT" ? "none" : "unreadable";
+  }
+  const match = /^setup_semantics: ([0-9]+)$/m.exec(text);
+  return match?.[1] === undefined ? "unreadable" : Number(match[1]);
+}
 
 export class ConfigArchiveError extends Error {
   constructor(message: string) {
@@ -64,7 +93,7 @@ export async function listArchiveMembers(dirs: ConfigArchiveDirs): Promise<strin
   const candidates: Candidate[] = [];
   await walk(dirs.config, CONFIG_MEMBER_ROOT, candidates);
   await walk(dirs.profile, PROFILE_MEMBER_ROOT, candidates);
-  return candidates.map((c) => c.member);
+  return [...candidates.map((c) => c.member), ARCHIVE_META_MEMBER];
 }
 
 async function* readFiles(candidates: readonly Candidate[]): AsyncGenerator<TarFile> {
@@ -90,7 +119,7 @@ export interface ConfigArchiveResult {
 }
 
 /**
- * Write `data/config` and `data/profile` (without `.backup/`, `.web-session-secret`, `.upgrade-freeze`, `.write.lock` and symlinks) as a gzip tar, using the
+ * Write `data/config` and `data/profile` (without `.backup/`, `.web-session-secret` and symlinks) plus the generated marker as a gzip tar, using the
  * same `.partial` -> fsync -> 0600 -> rename steps as the dump, then read it back (gunzip, count the members) so a bad
  * archive is reported now, not at restore time. Throws ConfigArchiveError; nothing is left behind on failure.
  */
@@ -106,6 +135,7 @@ export async function writeConfigArchive(options: WriteConfigArchiveOptions): Pr
     await rm(partial, { force: true });
     const files: TarFile[] = [];
     for await (const file of readFiles(candidates)) files.push(file);
+    files.push({ name: ARCHIVE_META_MEMBER, data: Buffer.from(ARCHIVE_META_YAML), mode: ARCHIVE_FILE_MODE, mtime: Math.floor(Date.now() / 1000) });
     await writeTarGz(files, openDestination(partial));
 
     await chmod(partial, ARCHIVE_FILE_MODE);
@@ -118,6 +148,8 @@ export async function writeConfigArchive(options: WriteConfigArchiveOptions): Pr
     const stored = await readFile(partial);
     const members = await readTarGz(stored);
     if (members.length !== files.length) throw new ConfigArchiveError("the written archive does not hold every file");
+    const markers = members.filter((member) => member.name === ARCHIVE_META_MEMBER);
+    if (markers.length !== 1 || !/^setup_semantics: [0-9]+$/m.test(markers[0]?.data.toString("utf8") ?? "")) throw new ConfigArchiveError("the written archive has no readable marker");
     await rename(partial, options.destination);
     return { path: options.destination, bytes: stored.length, members: members.length };
   } catch (error) {

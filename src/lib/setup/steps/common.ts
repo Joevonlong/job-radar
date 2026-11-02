@@ -1,12 +1,11 @@
 /** Helpers every step service shares (server only). */
 import type { z } from "zod";
 
-import { ConfigError, getConfigDir, reloadConfig, type ConfigName, type ConfigValue } from "@/lib/config";
-import { assertConfigWritable } from "@/lib/config/write-lock";
+import { ConfigError, reloadConfig, type ConfigName, type ConfigValue } from "@/lib/config";
 import type { FieldError } from "@/lib/profile/draft";
 import type { ProfileActionState } from "@/lib/profile/types";
 
-import { markStep } from "../state";
+import { ensurePendingSetupFile, markStep, type SetupWriteResult } from "../state";
 import type { SetupStepId } from "../steps";
 import { stepError, type SetupFieldError, type SetupFormError, type SetupStepResult } from "../types";
 
@@ -21,7 +20,7 @@ export function profileFieldErrors(errors: readonly FieldError[]): SetupFieldErr
 export function profileSaveProblem(step: SetupStepId, state: ProfileActionState): SetupStepResult | null {
   if (state.status !== "error") return null;
   if (state.formError === "snapshotFailed") return null;
-  const formError: SetupFormError | null = state.formError === null ? null : state.formError === "frozen" ? "frozen" : state.formError === "invalidPayload" ? "invalidPayload" : "writeFailed";
+  const formError: SetupFormError | null = state.formError === null ? null : state.formError === "dbUnavailable" || state.formError === "busy" ? state.formError : state.formError === "invalidPayload" ? "invalidPayload" : "writeFailed";
   return stepError(step, formError, profileFieldErrors(state.fieldErrors));
 }
 
@@ -53,24 +52,35 @@ export function zodSetupErrors(error: z.ZodError, pathOf: (issuePath: ReadonlyAr
   return out;
 }
 
+/** Why a setup.yaml write failed, as the step's form error. */
+export function markFailure(reason: Extract<SetupWriteResult, { ok: false }>["reason"]): SetupFormError {
+  return reason === "busy" ? "busy" : reason === "db_unavailable" ? "dbUnavailable" : "setupUnreadable";
+}
+
 /** Record the step as done; a setup.yaml that cannot be written is reported (the config itself is saved). */
 export async function finishStep(step: SetupStepId): Promise<SetupStepResult> {
   const marked = await markStep(step, "done");
-  return marked.ok ? { status: "saved", step } : stepError(step, marked.reason === "frozen" ? "frozen" : "setupUnreadable");
+  return marked.ok ? { status: "saved", step } : stepError(step, markFailure(marked.reason));
 }
 
-/** Preserve the upgrade refusal in both the CLI and browser wizard. */
+/** A refused config write as the step's form error (the CLI and the browser wizard both show it). */
 export function setupWriteError(error: unknown): SetupFormError {
-  return error instanceof ConfigError && error.kind === "frozen" ? "frozen" : "writeFailed";
+  if (error instanceof ConfigError && error.kind === "busy") return "busy";
+  if (error instanceof ConfigError && error.kind === "db_unavailable") return "dbUnavailable";
+  return "writeFailed";
 }
 
-/** Early feedback for the wizard; the lowest-level writer still checks inside its lock. */
-export function setupFrozen(step: SetupStepId): SetupStepResult | null {
-  try {
-    assertConfigWritable(getConfigDir());
-    return null;
-  } catch (error) {
-    if (!(error instanceof ConfigError) || error.kind !== "frozen") throw error;
-    return stepError(step, "frozen");
-  }
+/**
+ * The shape of every step's save: the pending setup.yaml exists first, then the step's files, then the step's mark. Three
+ * separate commits and no lock held around them: each file takes the file lock and then the config write lock on its own,
+ * in the same order as a form save, and network work stays outside every lock. `write` returns null when everything was
+ * written; a problem means the step is not marked. `onSaved` adds step-specific result fields.
+ */
+export async function withStepWrite(step: SetupStepId, write: () => Promise<SetupStepResult | null>, onSaved?: (result: SetupStepResult) => SetupStepResult): Promise<SetupStepResult> {
+  const ensured = await ensurePendingSetupFile();
+  if (!ensured.ok) return stepError(step, ensured.formError);
+  const problem = await write();
+  if (problem !== null) return problem;
+  const result = await finishStep(step);
+  return result.status === "saved" && onSaved ? onSaved(result) : result;
 }

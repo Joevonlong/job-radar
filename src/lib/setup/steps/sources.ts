@@ -11,7 +11,7 @@ import { saveAtsBoard, setSourceEnabled, type RegistryActionState } from "@/lib/
 import { sourcesInputSchema } from "../inputs";
 import { readSetupState } from "../state";
 import { stepError, type SetupFieldError, type SetupFormError, type SetupStepResult } from "../types";
-import { finishStep, readFresh, setupFrozen } from "./common";
+import { readFresh, withStepWrite } from "./common";
 
 /** The "recommended for you" read is a sub-switch of the LinkedIn session, not a source of its own. */
 const SUB_SWITCHES: readonly ConfiguredChannelId[] = ["linkedin-session:recommended"];
@@ -52,8 +52,6 @@ function registryProblem(state: RegistryActionState): SetupFormError | "needsPar
 const sameBoard = (a: { ats: string; token: string }, b: { ats: string; token: string }): boolean => a.ats === b.ats && a.token.toLowerCase() === b.token.toLowerCase();
 
 export async function saveSourcesStep(raw: unknown): Promise<SetupStepResult> {
-  const frozen = setupFrozen("sources");
-  if (frozen) return frozen;
   const parsed = sourcesInputSchema.safeParse(raw);
   if (!parsed.success) return stepError("sources", "invalidPayload");
   const config = readFresh("channels");
@@ -89,18 +87,20 @@ export async function saveSourcesStep(raw: unknown): Promise<SetupStepResult> {
   if (needsAcknowledge && !parsed.data.acknowledge) errors.push({ path: "acknowledge", ns: "setup", key: "consentRequired" });
   if (errors.length > 0) return stepError("sources", null, errors);
 
-  for (const [id, enabled] of Object.entries(parsed.data.channels)) {
-    if (!isConfiguredChannelId(id) || channelSwitch(config, id) === enabled) continue;
-    const problem = registryProblem(await setSourceEnabled({ id, enabled, ...(enabled && consentKind(id) !== null ? { acknowledged: true } : {}) }));
-    if (problem === "needsParent") return stepError("sources", null, [{ path: `channels.${id}`, ns: "setup", key: "needsParent" }]);
-    if (problem !== null) return stepError("sources", problem);
-  }
-  for (const [index, board] of boards.entries()) {
-    const ats = ATS_KINDS.find((kind) => kind === board.ats);
-    if (ats === undefined) return stepError("sources", null, [{ path: `boards.${index}.ats`, ns: "setup", key: "invalidChoice" }]);
-    const problem = registryProblem(await saveAtsBoard({ original: null, board: { name: board.name, ats, token: board.token, enabled: true } }));
-    if (problem === "needsParent") return stepError("sources", "writeFailed");
-    if (problem !== null) return stepError("sources", problem);
-  }
-  return finishStep("sources");
+  return withStepWrite("sources", async () => {
+    for (const [id, enabled] of Object.entries(parsed.data.channels)) {
+      if (!isConfiguredChannelId(id) || channelSwitch(config, id) === enabled) continue;
+      const problem = registryProblem(await setSourceEnabled({ id, enabled, ...(enabled && consentKind(id) !== null ? { acknowledged: true } : {}) }));
+      if (problem === "needsParent") return stepError("sources", null, [{ path: `channels.${id}`, ns: "setup", key: "needsParent" }]);
+      if (problem !== null) return stepError("sources", problem);
+    }
+    for (const [index, board] of boards.entries()) {
+      const ats = ATS_KINDS.find((kind) => kind === board.ats);
+      if (ats === undefined) return stepError("sources", null, [{ path: `boards.${index}.ats`, ns: "setup", key: "invalidChoice" }]);
+      const problem = registryProblem(await saveAtsBoard({ original: null, board: { name: board.name, ats, token: board.token, enabled: true } }));
+      if (problem === "needsParent") return stepError("sources", "writeFailed");
+      if (problem !== null) return stepError("sources", problem);
+    }
+    return null;
+  });
 }

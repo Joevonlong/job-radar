@@ -150,9 +150,11 @@ Without `--with-config` the script never touches configuration; when a `.config.
 ```bash
 cp -R data/config data/config.before-restore          # first keep a copy of what is there now
 tar -xzf data/backups/<name>.config.tgz -C .          # overwrites data/config and data/profile
-pnpm config:migrate --write && pnpm config:check      # if the backup is from an older version, migrate first
+pnpm config:migrate --write && pnpm config:check      # if the backup is from an older version, migrate first (needs the database)
 docker compose restart web runner                     # the runner also hot-reloads within 5 seconds
 ```
+
+Every config archive carries a marker, `data/config/.archive-meta.yaml` (not a config file; unpacking by hand leaves it there, harmless). It tells a restore that a missing `setup.yaml` means the setup wizard is pending. `--with-config` applies the rule to an older archive without the marker that holds config files but no `setup.yaml`: it adds a completed `setup.yaml` (and a `language.yaml` if missing) so the wizard does not open. A hand-unpacked archive of that kind opens the wizard: finish or skip it, or run `pnpm run setup --complete`.
 
 If you want just one file: `tar -xzf <file>.config.tgz -C /tmp/cfg data/config/ai.yaml`, then compare and copy by hand. Before changing any file, `config:migrate --write` also puts the original into `data/config/.backup/<timestamp>/`; if a migration was a mistake, take it back from there.
 
@@ -196,5 +198,3 @@ tar -xzf data/backups/<name>.config.tgz -C .
 - **Same disk**: the backups and the database are on the same disk, so they protect against mistakes, not against a failing disk. Copy `data/backups/` somewhere else on a schedule.
 - **Permissions**: backup files and config archives are created readable by their owner only (`0600`), because they hold your whole database and your settings.
 - **Disk space**: see `ls -lh` for the size of each backup; 14 + 8 backups (plus up to 5 safety backups of each kind) is about 22 times that size or more, so keep an eye on `df -h` as the data grows.
-
-Config archives from both scheduled backups and `scripts/ops/backup.sh` exclude `.upgrade-freeze` and `.write.lock`, so restoring them cannot restore an upgrade freeze or writer lock.

@@ -56,8 +56,7 @@ function replaceRequired(source: string, search: string, replacement: string): s
   return source.replaceAll(search, () => replacement);
 }
 
-const NO_FREEZE_TOKEN = `if [[ -n "\${JOB_RADAR_UPGRADE_FREEZE_TOKEN+x}" ]]; then echo 'unexpected upgrade token' >&2; exit 97; fi\n`;
-const LOGGING_STUB = (name: string): string => `#!/usr/bin/env bash\n${NO_FREEZE_TOKEN}echo "${name} $*" >> "$DEPLOY_TEST_LOG"\n`;
+const LOGGING_STUB = (name: string): string => `#!/usr/bin/env bash\necho "${name} $*" >> "$DEPLOY_TEST_LOG"\n`;
 // prepare-release.sh / install-ai-worker.sh stubs: log, run <VAR>_HOOK, exit with <VAR>_EXIT (VAR = PREPARE or INSTALL).
 // <VAR>_EXEC=1 execs the hook instead, so that the hook is the process deploy.sh started (same PID, group leader).
 const STEP_STUB = (name: string, v: string): string =>
@@ -68,6 +67,27 @@ fi
 export DEPLOY_PID=$PPID
 if [[ -n "\${${v}_HOOK:-}" && "\${${v}_EXEC:-}" == 1 ]]; then exec bash -c "$${v}_HOOK"; fi\n` +
   `if [[ -n "\${${v}_HOOK:-}" ]]; then bash -c "$${v}_HOOK"; fi\nexit "\${${v}_EXIT:-0}"\n`;
+
+// Appended to the copied config.sh: the throw-away checkout has no tsx. Reads like the app's loader: the user file, else the
+// shipped file, then the schema defaults of the deploy block. STUB_CFG_PROJECT makes it disagree with the shell's reader.
+const CFG_GET_STUB = `
+# test only: cfg_get without the app's loader
+cfg_get() {
+  NODE_PATH="${repoRoot}/node_modules" "${process.execPath}" -e '
+    const fs = require("node:fs");
+    const [user, shipped, file, ...paths] = process.argv.slice(1);
+    const defaults = { deploy: { prune_build_cache: true, build_cache_keep_gb: 5, prune_dangling_images: true } };
+    const read = (dir) => { try { return require("yaml").parse(fs.readFileSync(dir + "/" + file, "utf8")); } catch { return undefined; } };
+    const doc = read(user) ?? read(shipped) ?? {};
+    const at = (root, key) => key.split(".").reduce((value, part) => value?.[part], root);
+    for (const key of paths) {
+      const value = key === "doctor.compose_project" && process.env.STUB_CFG_PROJECT ? process.env.STUB_CFG_PROJECT : at(doc, key) ?? at(defaults, key);
+      if (value === undefined) process.exit(1);
+      console.log(typeof value === "string" ? value : JSON.stringify(value));
+    }
+  ' "$CFG_USER_DIR" "$CFG_SHIPPED_DIR" "$@"
+}
+`;
 
 // Appended to the copied releases.sh: logs every release call, then runs the real one.
 const RELEASE_LOGGER = `
@@ -119,6 +139,7 @@ beforeAll(() => {
     "PROC_PGID=$!;", 'PROC_PGID=$!; printf \'%s\\n\' "$PROC_PGID" >> "$DEPLOY_TEST_GROUPS";'));
   write(path.join(work, "scripts/ops/lib/releases.sh"), fs.readFileSync(path.join(realLib, "releases.sh"), "utf8") + RELEASE_LOGGER);
   write(path.join(work, "scripts/ops/lib/deploy-result.sh"), fs.readFileSync(path.join(realLib, "deploy-result.sh"), "utf8"));
+  write(path.join(work, "scripts/ops/lib/config.sh"), fs.readFileSync(path.join(realLib, "config.sh"), "utf8") + CFG_GET_STUB);
   write(path.join(work, "scripts/ops/lib/ai-worker.sh"), replaceRequired(fs.readFileSync(path.join(realLib, "ai-worker.sh"), "utf8"), "ai_worker_interrupted && return 1", INTERRUPTED_WAIT_RETURN));
   write(path.join(work, "scripts/ops/backup.sh"), `${LOGGING_STUB("backup.sh")}exit \${BACKUP_EXIT:-0}\n`, 0o755);
   // the install stub carries the capability line deploy.sh --ref looks for in the target commit
@@ -143,12 +164,12 @@ if [[ "$*" == '-A -o pid=,args=' ]]; then
 fi
 exec "${realPs}" "$@"
 `, 0o755);
-  write(path.join(stubs, "uname"), `#!/usr/bin/env bash\n${NO_FREEZE_TOKEN}printf '%s\\n' "\${STUB_UNAME:-Darwin}"\n`, 0o755);
+  write(path.join(stubs, "uname"), `#!/usr/bin/env bash\nprintf '%s\\n' "\${STUB_UNAME:-Darwin}"\n`, 0o755);
   write(path.join(stubs, "lsof"), `${LOGGING_STUB("lsof")}
 if [[ -n "\${STUB_PROCESS_CWD:-}" ]]; then printf 'p%s\\nn%s\\n' "$5" "$STUB_PROCESS_CWD"; else exit 1; fi
 `, 0o755);
   const realReadlink = spawnSync("bash", ["-c", "command -v readlink"], { encoding: "utf8" }).stdout.trim();
-  write(path.join(stubs, "readlink"), `#!/usr/bin/env bash\n${NO_FREEZE_TOKEN}
+  write(path.join(stubs, "readlink"), `#!/usr/bin/env bash
 if [[ "$1" == /proc/*/cwd ]]; then
   echo "readlink $*" >> "$DEPLOY_TEST_LOG"
   [[ -n "\${STUB_PROCESS_CWD:-}" ]] || exit 1
@@ -160,7 +181,6 @@ exec "${realReadlink}" "$@"
   write(
     path.join(stubs, "git"),
     `#!/usr/bin/env bash
-${NO_FREEZE_TOKEN}
 echo "git $*" >> "$DEPLOY_TEST_LOG.git"
 if [[ "\${GIT_FAIL_ARCHIVE:-}" == 1 && " $* " == *" archive "* ]]; then echo "fatal: archive failed (test)" >&2; exit 1; fi
 # GIT_TARGET_HOOK runs once, right after the first plain \`rev-parse HEAD\` (the one that fixes TARGET).
@@ -172,15 +192,36 @@ exec "${realGit}" "$@"
     0o755,
   );
   // stub docker: `info` ok, `compose ... ps --status running --services` lists db when DB_RUNNING=1, everything else is logged.
+  // What the gate of step 11 reads: `compose config --images <svc>` names radar-test-<svc>:latest, `image inspect` gives it the
+  // ID sha256:built-<svc>; `compose ps -a -q <svc>` lists STUB_CONTAINERS_<svc> (default cid-<svc>); `inspect` of a container
+  // gives STUB_INSPECT_<id> (default: running the built image of its service).
   // `compose ... build` records JOB_RADAR_BUILD_CONTEXT in $DEPLOY_TEST_LOG.ctx, runs BUILD_HOOK, then copies the context to
   // DEPLOY_TEST_CTX_COPY (modes and links kept).
   write(
     path.join(stubs, "docker"),
     `#!/usr/bin/env bash
-${NO_FREEZE_TOKEN}
 echo "docker $*" >> "$DEPLOY_TEST_LOG"
 export DEPLOY_PID=$PPID
 [[ "$1" == "info" ]] && exit \${DOCKER_INFO_EXIT:-0}
+if [[ "$1" == compose && "$*" == *" config --images "* ]]; then
+  echo "radar-test-\${*: -1}:latest"; exit \${STUB_CONFIG_IMAGES_EXIT:-0}
+fi
+if [[ "$1 \${2:-}" == "image inspect" ]]; then
+  [[ "\${STUB_IMAGE_INSPECT_EXIT:-0}" == 0 ]] || exit "$STUB_IMAGE_INSPECT_EXIT"
+  name="\${*: -1}"; name="\${name%:latest}"; echo "sha256:built-\${name#radar-test-}"; exit 0
+fi
+if [[ "$1" == compose && "$*" == *" ps -a -q "* ]]; then
+  [[ "\${STUB_COMPOSE_PS_EXIT:-0}" == 0 ]] || exit "$STUB_COMPOSE_PS_EXIT"
+  var="STUB_CONTAINERS_\${*: -1}"
+  if [[ -n "\${!var+x}" ]]; then [[ -z "\${!var}" ]] || printf '%s\\n' "\${!var}"; else echo "cid-\${*: -1}"; fi
+  exit 0
+fi
+if [[ "$1" == inspect ]]; then
+  [[ "\${STUB_INSPECT_EXIT:-0}" == 0 ]] || exit "$STUB_INSPECT_EXIT"
+  id="\${*: -1}"; var="STUB_INSPECT_\${id//-/_}"
+  if [[ -n "\${!var+x}" ]]; then echo "\${!var}"; else echo "true sha256:built-\${id#cid-}"; fi
+  exit 0
+fi
 if [[ "$*" == *" config -q" ]]; then
   if [[ -n "\${COMPOSE_CONFIG_HOOK:-}" ]]; then bash -c "$COMPOSE_CONFIG_HOOK"; fi
   exit \${COMPOSE_CONFIG_EXIT:-0}
@@ -230,10 +271,12 @@ exit 0
   );
   write(path.join(stubs, "launchctl"), `${LOGGING_STUB("launchctl")}if [[ -n "\${SERVICE_PROBE_HOOK:-}" ]] && grep -q -- ' --holder' "$DEPLOY_TEST_LOG"; then bash -c "$SERVICE_PROBE_HOOK"; fi\n[[ "$1" == print && -e "$HOME/loaded" ]] && { echo "pid = 4242"; exit 0; }\nexit 113\n`, 0o755);
   write(path.join(stubs, "node"), `#!/usr/bin/env bash
-${NO_FREEZE_TOKEN}
 if [[ "\${1:-}" == -e ]]; then NODE_PATH="${repoRoot}/node_modules" exec "${process.execPath}" "$@"; fi
 echo "node $*" >> "$DEPLOY_TEST_LOG"
 case " $* " in
+  *" --lock-holder "*)
+    if [[ -n "\${LOCK_HOLDER_HOOK:-}" ]]; then bash -c "$LOCK_HOLDER_HOOK"; fi
+    exit "\${STUB_LOCK_HOLDER_EXIT:-0}" ;;
   *" --holder "*)
     if [[ -n "\${HOLDER_HOOK:-}" ]]; then bash -c "$HOLDER_HOOK"; fi
     case "\${STUB_HOLDER:-none}" in
@@ -251,38 +294,17 @@ case " $* " in
 esac
 exit "\${STUB_NODE_EXIT:-0}"
 `, 0o755);
-  // stub pnpm: logs, runs PNPM_<script>_HOOK, exits with PNPM_<script>_EXIT (e.g. PNPM_doctor_EXIT=2)
+  // stub pnpm: logs, runs PNPM_<script>_HOOK, exits with PNPM_<script>_EXIT (e.g. PNPM_doctor_EXIT=2); MUTATE_CONFIG=1 makes
+  // `config:migrate --write` change data/config/sample.yaml.
   write(
     path.join(stubs, "pnpm"),
     `#!/usr/bin/env bash
 echo "pnpm $*" >> "$DEPLOY_TEST_LOG"
 export DEPLOY_PID=$PPID
-if [[ "\${1:-}" == --silent ]]; then shift; fi
-# Validate the deploy's token scope against the actual marker, without logging token values.
-marker="$WORK/data/config/.upgrade-freeze"
-case "$*" in
-  'ops:freeze --target '*)
-    [[ "\${JOB_RADAR_UPGRADE_FREEZE_TOKEN:-}" =~ ^[0-9a-f]{32}$ ]] || exit 97 ;;
-  'config:init'|'config:migrate --write'|'ops:unfreeze --owned')
-    if [[ -e "$marker" ]] && grep -qx '# capability: config-freeze' "$WORK/scripts/ops/deploy.sh"; then
-      marker_token=$(sed -n 's/.*"token":"\\([0-9a-f]*\\)".*/\\1/p' "$marker")
-      [[ -n "$marker_token" && "\${JOB_RADAR_UPGRADE_FREEZE_TOKEN:-}" == "$marker_token" ]] || { echo 'missing or mismatched upgrade token' >&2; exit 97; }
-    else
-      ${NO_FREEZE_TOKEN}
-    fi ;;
-  *) ${NO_FREEZE_TOKEN} ;;
-esac
-case "$*" in
-  'ops:freeze --target '*)
-    printf '{"token":"%s","target":"%s"}' "$JOB_RADAR_UPGRADE_FREEZE_TOKEN" "$3" > "$WORK/data/config/.upgrade-freeze"
-    if [[ -n "\${FREEZE_HOOK:-}" ]]; then bash -c "$FREEZE_HOOK"; fi
-    exit "\${FREEZE_EXIT:-0}" ;;
-  'ops:unfreeze --owned') rm -f "$WORK/data/config/.upgrade-freeze" ;;
-  'config:migrate --json') if [[ -n "\${STUB_MIGRATION_STATUS:-}" ]]; then echo "$STUB_MIGRATION_STATUS"; else echo '{"pending":0,"problems":0}'; fi; exit 0 ;;
-  'config:migrate --write')
-    if [[ "\${MUTATE_CONFIG:-0}" == 1 ]]; then printf 'config_version: 2\\nnew: true\\n' > "$WORK/data/config/sample.yaml"; fi ;;
-esac
+if [[ "$*" == 'config:migrate --write' && "\${MUTATE_CONFIG:-0}" == 1 ]]; then printf 'config_version: 2\\nnew: true\\n' > "$WORK/data/config/sample.yaml"; fi
 name="\${*: -1}"; name="\${name//:/_}"; name="\${name//-/_}"
+# config commands by their whole line (PNPM_config_plan___deploy___check_EXIT), since their last argument repeats
+if [[ "\${1:-}" == config:* ]]; then name="$*"; name="\${name//[^A-Za-z0-9]/_}"; fi
 hook="PNPM_\${name}_HOOK"
 if [[ -n "\${!hook:-}" ]]; then bash -c "\${!hook}" || exit $?; fi
 var="PNPM_\${name}_EXIT"
@@ -301,7 +323,6 @@ afterEach(async () => {
   for (const dir of ["config", "profile"]) fs.rmSync(path.join(work, "data", dir), { recursive: true, force: true });
   fs.rmSync(path.join(tmp, "home/Library/LaunchAgents/io.jobradar.ai-worker.plist"), { force: true });
   fs.rmSync(path.join(tmp, "home/loaded"), { force: true });
-  fs.rmSync(path.join(work, "taken-freeze"), { force: true });
 }, HANG_GUARD_MS);
 const installWorker = (): void => {
   write(path.join(tmp, "home/Library/LaunchAgents/io.jobradar.ai-worker.plist"), "<plist/>\n");
@@ -333,7 +354,6 @@ function deployEnv(env: Record<string, string | undefined>): NodeJS.ProcessEnv {
   const base = { ...process.env };
   delete base.JOB_RADAR_RELEASES_LOCK_TOKEN;
   delete base.JOB_RADAR_DEPLOY_EXPECT_SHA;
-  delete base.JOB_RADAR_UPGRADE_FREEZE_TOKEN;
   delete base.XDG_CONFIG_HOME;
   return {
     ...base,
@@ -483,6 +503,7 @@ async function waitForDeploy(run: RunningDeploy): Promise<Run> {
     if (timedOut) await stopDeploy(run);
   }
 }
+const dockerPrune = (call: string): boolean => call.startsWith("docker ") && call.includes(" prune ");
 const logHas = (text: string): boolean => readLines(log).some((l) => l.includes(text));
 const release = (): void => fs.writeFileSync(path.join(tmp, "continue"), "");
 
@@ -584,10 +605,10 @@ describe("scripts/ops/deploy.sh", { timeout: TEST_TIMEOUT_MS }, () => {
       "$ git merge --ff-only origin/main",
       "$ pnpm install --frozen-lockfile",
       "$ mkdir -p data/config data/profile data/backups data/exports",
-      "$ pnpm config:init",
-      "$ pnpm config:migrate --write",
+      "$ pnpm config:init --env-only",
       "$ pnpm config:check",
       "$ docker compose -p radar-test config -q",
+      "$ pnpm config:plan --deploy",
       "$ scripts/ops/backup.sh --label pre-deploy",
       "$ git archive ",
       "$ docker compose -p radar-test build",
@@ -597,6 +618,10 @@ describe("scripts/ops/deploy.sh", { timeout: TEST_TIMEOUT_MS }, () => {
       "$ docker compose -p radar-test up -d --no-deps --wait --wait-timeout 300 jobspy",
       "$ pnpm migrate:run",
       "$ scripts/ops/install-ai-worker.sh --release ",
+      "$ pnpm config:migrate --write",
+      "$ pnpm config:init\n",
+      "$ pnpm config:plan --deploy --check",
+      "$ pnpm config:migrate --prune-backups",
       "the deploy lock is released here, and the build context removed",
       "$ docker builder prune -f --max-used-space 5gb",
       "$ docker image prune -f",
@@ -679,12 +704,20 @@ describe("scripts/ops/deploy.sh", { timeout: TEST_TIMEOUT_MS }, () => {
     expect(r.out).toContain("Deploy complete, but the ai-worker service could not be confirmed working");
   });
 
-  it.each([["--no-ai-worker"], ["--settle", "0"]])("%j skips receipt waits but still checks the holder", (...args) => {
+  it("--settle 0 skips receipt waits but still checks the holder", () => {
     installWorker();
-    const r = deploy(args, { STUB_HOLDER: "service" });
+    const r = deploy(["--settle", "0"], { STUB_HOLDER: "service" });
     expect(r.status, r.out).toBe(0);
     expect(r.calls.some((c) => c.startsWith("node ") && c.includes("--receipt"))).toBe(false);
     expect(r.calls.some((c) => c.startsWith("node ") && c.includes("--holder"))).toBe(true);
+    expect(r.calls).toContain("pnpm run doctor");
+  });
+
+  it("--no-ai-worker skips receipt waits and asks whether anyone holds the lock instead", () => {
+    const r = deploy(["--no-ai-worker"]);
+    expect(r.status, r.out).toBe(0);
+    expect(r.calls.some((c) => c.startsWith("node ") && c.includes("--receipt"))).toBe(false);
+    expect(r.calls.some((c) => c.startsWith("node ") && c.includes("--lock-holder"))).toBe(true);
     expect(r.calls).toContain("pnpm run doctor");
   });
 
@@ -726,36 +759,45 @@ describe("scripts/ops/deploy.sh", { timeout: TEST_TIMEOUT_MS }, () => {
     expect(r.out).toContain("Deploy complete, doctor passed everything");
     expect(git(work, "rev-parse", "HEAD")).not.toBe(before);
     expect(fs.existsSync(path.join(work, "NEWFILE"))).toBe(true);
-    expect(r.calls.filter((c) => !c.startsWith("docker compose -p radar-test ps"))).toEqual([
+    const notProbe = (c: string): boolean => c !== "docker compose -p radar-test ps" && !c.includes(" ps --status running ");
+    expect(r.calls.filter(notProbe)).toEqual([
       "docker info",
       "pnpm install --frozen-lockfile",
-      "pnpm config:migrate",
+      "pnpm config:init --env-only",
       "pnpm config:check",
       "docker compose -p radar-test config -q",
       "docker compose -p radar-test config --format json",
-      `pnpm ops:freeze --target ${head()}`,
+      "pnpm config:plan --deploy",
       "backup.sh --label pre-deploy",
       "docker compose -p radar-test build",
+      "docker compose -p radar-test config --images web",
+      "docker image inspect -f {{.Id}} radar-test-web:latest",
+      "docker compose -p radar-test config --images runner",
+      "docker image inspect -f {{.Id}} radar-test-runner:latest",
       `prepare-release.sh ${head()} --root ${realWork}`,
       "pnpm ops:drain",
       "docker compose -p radar-test up -d --wait --wait-timeout 300 db web runner",
       "docker compose -p radar-test up -d --no-deps --wait --wait-timeout 300 jobspy",
       "pnpm migrate:run",
       `install-ai-worker.sh --release ${realWork}/data/releases/ai-worker/${head()} --root ${realWork}`,
+      "docker compose -p radar-test ps -a -q web",
+      "docker inspect -f {{.State.Running}} {{.Image}} cid-web",
+      "docker compose -p radar-test ps -a -q runner",
+      "docker inspect -f {{.State.Running}} {{.Image}} cid-runner",
       "ps -A -o pid=,args=",
       expect.stringMatching(/^node --import .* scripts\/ops\/worker-heartbeat\.ts --holder --pid [1-9][0-9]* --host \S+$/),
-      "pnpm config:init",
       "pnpm config:migrate --write",
-      "pnpm --silent config:migrate --json",
-      "pnpm ops:unfreeze --owned",
+      "pnpm config:init",
+      "pnpm config:plan --deploy --check",
+      "pnpm config:migrate --prune-backups",
       "docker builder prune -f --max-used-space 5gb",
       "docker image prune -f",
       "pnpm run doctor",
     ]);
     // the lock is released once, after the ai-worker and before the clean-up (which runs outside it); the context is gone
-    const events = r.events.filter((c) => !c.startsWith("docker compose -p radar-test ps"));
+    const events = r.events.filter(notProbe);
     expect(events.filter((e) => e.startsWith("# release"))).toEqual(["# release mine=1"]);
-    expect(events.indexOf("# release mine=1")).toBe(events.indexOf("pnpm ops:unfreeze --owned") + 1);
+    expect(events.indexOf("# release mine=1")).toBe(events.indexOf("pnpm config:migrate --prune-backups") + 1);
     expect(r.out).toContain("deploy lock released, build context removed");
     expect(fs.existsSync(lockDir)).toBe(false);
     expect(buildContexts()).toEqual([]);
@@ -764,7 +806,7 @@ describe("scripts/ops/deploy.sh", { timeout: TEST_TIMEOUT_MS }, () => {
     expect(fs.existsSync(path.join(work, "data/profile"))).toBe(true);
     expect(fs.existsSync(path.join(work, "data/config"))).toBe(true);
     // never destructive: no `down -v`, no volume prune, no `image prune -a` / `system prune`
-    expect(r.calls.join("\n")).not.toMatch(/\bdown\b|-v\b|volume|--volumes|\s-a\b|--all|system prune/);
+    expect(r.calls.filter((c) => !c.includes(" ps -a -q ")).join("\n")).not.toMatch(/\bdown\b|-v\b|volume|--volumes|\s-a\b|--all|system prune/);
   });
 
   it("is idempotent: running it again with nothing new does the same steps and succeeds", () => {
@@ -777,10 +819,10 @@ describe("scripts/ops/deploy.sh", { timeout: TEST_TIMEOUT_MS }, () => {
     const skipped = deploy(["--settle", "0", "--no-prune"], { DB_RUNNING: "1" });
     expect(skipped.status).toBe(0);
     expect(skipped.out).toContain("--no-prune: skipped");
-    expect(skipped.calls.some((c) => c.includes("prune"))).toBe(false);
+    expect(skipped.calls.some(dockerPrune)).toBe(false);
     const dry = deploy(["--dry-run"], { DB_RUNNING: "1" });
     expect(dry.out).toContain("$ docker builder prune -f --max-used-space 5gb");
-    expect(dry.calls.some((c) => c.includes("prune"))).toBe(false);
+    expect(dry.calls.some(dockerPrune)).toBe(false);
   });
 
   it("a failing clean-up only warns: the deploy carries on to the doctor", () => {
@@ -799,12 +841,12 @@ describe("scripts/ops/deploy.sh", { timeout: TEST_TIMEOUT_MS }, () => {
     try {
       fs.writeFileSync(schedule, `${original}deploy:\n  prune_build_cache: true\n  build_cache_keep_gb: 0  # all\n  prune_dangling_images: false\n`);
       const all = deploy(["--settle", "0", "--skip-pull"], { DB_RUNNING: "1" });
-      expect(all.calls.filter((c) => c.includes("prune"))).toEqual(["docker builder prune -f"]);
+      expect(all.calls.filter(dockerPrune)).toEqual(["docker builder prune -f"]);
       expect(all.out).toContain("deploy.prune_dangling_images is not true: dangling images are not removed");
 
       fs.writeFileSync(schedule, `${original}deploy:\n  prune_build_cache: false\n  build_cache_keep_gb: 12\n  prune_dangling_images: true\n`);
       const imagesOnly = deploy(["--settle", "0", "--skip-pull"], { DB_RUNNING: "1" });
-      expect(imagesOnly.calls.filter((c) => c.includes("prune"))).toEqual(["docker image prune -f"]);
+      expect(imagesOnly.calls.filter(dockerPrune)).toEqual(["docker image prune -f"]);
 
       fs.writeFileSync(schedule, `${original}deploy:\n  build_cache_keep_gb: 12\n`);
       expect(deploy(["--settle", "0", "--skip-pull"], { DB_RUNNING: "1" }).calls).toContain("docker builder prune -f --max-used-space 12gb");
@@ -877,16 +919,15 @@ describe("scripts/ops/deploy.sh", { timeout: TEST_TIMEOUT_MS }, () => {
       "docker compose -p radar-test up -d --no-deps --wait --wait-timeout 300 jobspy",
       "pnpm migrate:run",
       `install-ai-worker.sh --release ${realWork}/data/releases/ai-worker/${head()} --root ${realWork}`,
-      "pnpm config:init",
       "pnpm config:migrate --write",
-      "pnpm ops:unfreeze --owned",
+      "pnpm config:init",
+      "pnpm config:plan --deploy --check",
       "docker image prune -f",
       "pnpm run doctor",
     ];
     const at = order.map((call) => r.calls.indexOf(call));
     expect(at.every((i) => i >= 0), JSON.stringify(r.calls)).toBe(true);
     expect([...at].sort((a, b) => a - b)).toEqual(at);
-    expect(fs.existsSync(path.join(work, "data/config/.upgrade-freeze"))).toBe(false);
   });
 
   it("db, web or runner not turning healthy still stops the deploy before the sidecar is started", () => {
@@ -903,28 +944,26 @@ describe("scripts/ops/deploy.sh", { timeout: TEST_TIMEOUT_MS }, () => {
     expect(r.calls.some((c) => c.includes(" build"))).toBe(false);
   });
 
-  it("stops when the config migration fails, before the check and the build", () => {
-    const r = deploy(["--settle", "0"], { PNPM_config_migrate_EXIT: "1" });
+  it("stops when the plan of the config writes fails, before the build", () => {
+    const r = deploy(["--settle", "0"], { PNPM_config_plan___deploy_EXIT: "1" });
     expect(r.status).toBe(1);
-    expect(r.out).toContain("command failed: pnpm config:migrate");
-    expect(r.calls).not.toContain("pnpm config:check");
+    expect(r.out).toContain("command failed: pnpm config:plan --deploy");
+    expect(r.calls).toContain("pnpm config:check");
     expect(r.calls.some((c) => c.includes(" build"))).toBe(false);
   });
 
-  it("says when the user config directory is filled for the first time, and reads schedule.yaml from it first", () => {
+  it("leaves the user files alone in step 4, and reads schedule.yaml from the user directory first", () => {
     const userDir = path.join(work, "data/config");
     fs.rmSync(userDir, { recursive: true, force: true });
     const first = deploy(["--dry-run", "--skip-pull"]);
-    expect(first.out).toContain("first install: initialise missing config and profile files");
+    expect(first.out).toContain("user files stay unchanged here: step 11 writes them");
     expect(first.out).toContain("$ docker compose -p radar-test config -q");
     try {
       // the user's schedule.yaml wins over the shipped one (the compose project name, the prune settings)
-      write(path.join(userDir, "schedule.yaml"), "timezone: Europe/Berlin\ndoctor:\n  compose_project: radar-user\ndeploy:\n  build_cache_keep_gb: 7\n");
+      write(path.join(userDir, "schedule.yaml"), "timezone: Europe/Berlin\ndoctor:\n  compose_project: radar-user\n");
       const later = deploy(["--dry-run", "--skip-pull"], { DB_RUNNING: "1" });
-      expect(later.out).toContain("existing install: preview migrations and validate before freezing; user files stay unchanged");
       expect(later.out).toContain("project: radar-user");
       expect(later.out).toContain("$ docker compose -p radar-user build");
-      expect(later.out).toContain("$ docker builder prune -f --max-used-space 7gb");
       // data/ is not tracked: the checkout stays clean for the next pull
       expect(git(work, "status", "--porcelain", "--untracked-files=no")).toBe("");
     } finally {
@@ -1037,7 +1076,7 @@ describe("scripts/ops/deploy.sh", { timeout: TEST_TIMEOUT_MS }, () => {
         if (override) {
           expect(r.out).toContain("web.depends_on.jobspy");
           expect(r.out).toContain("Remove");
-          expect(r.calls.some((c) => /^pnpm ops:freeze/.test(c) || c.includes(" build") || c.includes(" up "))).toBe(false);
+          expect(r.calls.some((c) => c.includes(" build") || c.includes(" up "))).toBe(false);
         } else {
           expect(r.out).toContain("target compose.yaml depends on jobspy");
           expect(r.out).not.toContain("Remove");
@@ -1051,21 +1090,21 @@ describe("scripts/ops/deploy.sh", { timeout: TEST_TIMEOUT_MS }, () => {
       }
     });
 
-    it.each([false, true])("detects freeze capability before checkout and uses the target's config protocol: supported=%s", (supported) => {
+    it.each([false, true])("detects the config-write step before checkout and uses the target's config protocol: supported=%s", (supported) => {
       const base = head();
-      const other = path.join(tmp, `freeze-capability-${supported}`);
+      const other = path.join(tmp, `write-step-${supported}`);
       git(tmp, "clone", origin, other);
       const deployFile = path.join(other, "scripts/ops/deploy.sh");
       const source = fs.readFileSync(realScript, "utf8");
-      write(deployFile, supported ? source : source.replace(/^# capability: config-freeze\n/m, ""), 0o755);
+      write(deployFile, supported ? source : source.replace(/^# capability: config-write-step\n/m, ""), 0o755);
       git(other, "add", ".");
-      git(other, "commit", "--allow-empty", "-m", `freeze protocol ${supported}`);
-      const ref = `freeze-${supported}`;
+      git(other, "commit", "--allow-empty", "-m", `write step ${supported}`);
+      const ref = `write-step-${supported}`;
       git(other, "tag", ref);
       git(other, "push", "origin", ref);
       const marker = path.join(work, "data/config/.upgrade-freeze");
       write(path.join(work, "data/config/sample.yaml"), "config_version: 1\n");
-      write(marker, "leftover freeze");
+      write(marker, "leftover marker");
       try {
         const r = deploy(["--ref", ref, "--settle", "0"], { MUTATE_CONFIG: "1" });
         expect(r.status, r.out).toBe(0);
@@ -1073,19 +1112,20 @@ describe("scripts/ops/deploy.sh", { timeout: TEST_TIMEOUT_MS }, () => {
         const checkout = r.gitCalls.findIndex((c) => c.includes("checkout --detach"));
         expect(capability).toBeGreaterThanOrEqual(0);
         expect(capability).toBeLessThan(checkout);
-        expect(r.calls.some((c) => c.startsWith("pnpm ops:freeze"))).toBe(supported);
         const firstWrite = r.calls.indexOf("pnpm config:migrate --write");
         const build = r.calls.findIndex((c) => c.startsWith("docker compose") && c.endsWith(" build"));
         expect(firstWrite).toBeGreaterThanOrEqual(0);
+        expect(fs.existsSync(marker)).toBe(false);
+        expect(r.calls.filter((c) => c === "pnpm config:init")).toHaveLength(1);
         if (supported) {
-          expect(firstWrite).toBeGreaterThan(build);
-          expect(fs.existsSync(marker)).toBe(false);
+          expect(firstWrite).toBeGreaterThan(r.calls.findIndex((c) => c.startsWith("install-ai-worker.sh")));
+          expect(r.calls).toContain("pnpm config:init --env-only");
+          expect(r.calls).toContain("pnpm config:plan --deploy --check");
         } else {
+          expect(r.calls.indexOf("pnpm config:init")).toBeLessThan(firstWrite);
           expect(firstWrite).toBeLessThan(build);
-          expect(r.calls.filter((c) => c === "pnpm config:init")).toHaveLength(1);
-          expect(r.calls.some((c) => c.includes(" --holder") || /^pnpm ops:(?:un)?freeze/.test(c) || c === "pnpm --silent config:migrate --json")).toBe(false);
-          expect(fs.readFileSync(marker, "utf8")).toBe("leftover freeze");
-          expect(r.out).toContain("leftover upgrade freeze");
+          expect(r.calls.some((c) => c.startsWith("pnpm config:plan") || c.includes(" --holder") || c.includes(" ps -a -q ") || c.includes("--prune-backups") || c.includes("--env-only"))).toBe(false);
+          expect(r.out).toContain("target has no config-write step: skipped; step 4 already handled its config");
         }
       } finally {
         restore(base);
@@ -1312,8 +1352,6 @@ describe("scripts/ops/deploy.sh: the target commit is fixed", { timeout: TEST_TI
       expect(r.calls).toContain("docker compose -p radar-test up -d --wait --wait-timeout 300 db web runner");
       expect(r.calls.some((c) => c.endsWith(" jobspy"))).toBe(false);
       expect(r.calls).not.toContain("pnpm migrate:run");
-      expect(r.calls).not.toContain("pnpm ops:unfreeze --owned");
-      expect(fs.existsSync(path.join(work, "data/config/.upgrade-freeze"))).toBe(true);
     } finally {
       restore(base);
     }
@@ -1493,11 +1531,11 @@ describe("scripts/ops/deploy.sh: signals", { timeout: TEST_TIMEOUT_MS }, () => {
     }
   });
 
-  it("SIGHUP during the config step (it writes the user config): it finishes, then exit 129, no build", async () => {
+  it("SIGHUP during the config step: it finishes, then exit 129, no check, no build", async () => {
     const base = head();
-    const run = startDeploy(deployCmd(), { PNPM_config_init_HOOK: BLOCK("config") });
+    const run = startDeploy(deployCmd(), { PNPM_config_init___env_only_HOOK: BLOCK("config") });
     try {
-      await waitFor(run, "config:init to start", () => logHas("# config started"));
+      await waitFor(run, "config:init --env-only to start", () => logHas("# config started"));
       process.kill(-run.pid, "SIGHUP");
       await waitForSignal(run);
       release();
@@ -1506,7 +1544,7 @@ describe("scripts/ops/deploy.sh: signals", { timeout: TEST_TIMEOUT_MS }, () => {
       expect(r.events.some((e) => e.startsWith("# config signal"))).toBe(false);
       expect(r.events).toContain("# config exit ctx=0 lock=1");
       expect(r.events.indexOf("# config exit ctx=0 lock=1")).toBeLessThan(r.events.indexOf("# release mine=1"));
-      expect(r.calls).not.toContain("pnpm config:migrate --write");
+      expect(r.calls).not.toContain("pnpm config:check");
       expect(r.calls.some((c) => c.endsWith(" build"))).toBe(false);
       expect(r.events.at(-1)).toBe("# release mine=1");
     } finally {
@@ -1761,7 +1799,7 @@ describe("scripts/ops/deploy.sh: the deploy lock and in-flight records", { timeo
       expect(r.out.split("descendant exit not confirmed").length - 1).toBe(2); // the library's line and the failed step
       expect(r.out.split("release lock:").length - 1).toBe(1);
       expect(r.out).toContain('step 12/13 "prune: release the deploy lock, clean the Docker build cache and dangling images" failed');
-      expect(r.calls.some((c) => c.includes("prune") || c === "pnpm run doctor")).toBe(false);
+      expect(r.calls.some((c) => dockerPrune(c) || c === "pnpm run doctor")).toBe(false);
       expect(fs.existsSync(path.join(lockDir, "owner"))).toBe(true);
       expect(buildContexts()).toHaveLength(1);
     } finally {
@@ -1865,12 +1903,12 @@ describe("scripts/ops/deploy.sh: the deploy lock and in-flight records", { timeo
   it("the explicit release finds another run's token in the owner file: it says so, offers no clear command, exit 1, no prune", () => {
     const base = head();
     try {
-      const r = deploy(["--skip-pull", "--settle", "0"], { PNPM_migrate_run_HOOK: `printf '${ownerFixture.replaceAll("\n", "\\n")}' > "$LOCK/owner"` });
+      const r = deploy(["--skip-pull", "--settle", "0"], { PNPM_config_migrate___prune_backups_HOOK: `printf '${ownerFixture.replaceAll("\n", "\\n")}' > "$LOCK/owner"` });
       expect(r.status).toBe(1);
       expect(r.out).toContain('step 12/13 "prune: release the deploy lock, clean the Docker build cache and dangling images" failed: the deploy lock now belongs to another run');
       expect(r.out).not.toContain("descendant exit not confirmed");
       expect(r.out).not.toContain("rm -rf");
-      expect(r.calls.some((c) => c.includes("prune") || c === "pnpm run doctor")).toBe(false);
+      expect(r.calls.some((c) => dockerPrune(c) || c === "pnpm run doctor")).toBe(false);
       expect(fs.readFileSync(path.join(lockDir, "owner"), "utf8")).toBe(ownerFixture);
       expect(buildContexts()).toHaveLength(1);
     } finally {
@@ -1881,7 +1919,7 @@ describe("scripts/ops/deploy.sh: the deploy lock and in-flight records", { timeo
   it("the explicit release finds the lock gone: it says so (no clear command), exit 1", () => {
     const base = head();
     try {
-      const r = deploy(["--skip-pull", "--settle", "0"], { PNPM_migrate_run_HOOK: 'rm -rf "$LOCK"' });
+      const r = deploy(["--skip-pull", "--settle", "0"], { PNPM_config_migrate___prune_backups_HOOK: 'rm -rf "$LOCK"' });
       expect(r.status).toBe(1);
       expect(r.out).toContain("failed: the deploy lock disappeared while this deploy held it");
       expect(r.out).not.toContain("rm -rf");
@@ -1943,43 +1981,109 @@ describe("scripts/ops/deploy.sh: the deploy lock and in-flight records", { timeo
 });
 
 
-describe("deploy configuration freeze and delayed writes", { timeout: TEST_TIMEOUT_MS }, () => {
+describe("scripts/ops/deploy.sh: the config-write step", { timeout: TEST_TIMEOUT_MS }, () => {
   const args = ["--skip-pull", "--settle", "0"];
+  const WRITES = ["pnpm config:migrate --write", "pnpm config:init", "pnpm config:plan --deploy --check", "pnpm config:migrate --prune-backups"];
+  const DOCTOR_REASON = 'echo "# doctor reason=${CONFIG_PENDING_REASON:-}" >> "$DEPLOY_TEST_LOG"';
   const sample = () => path.join(work, "data/config/sample.yaml");
-  const marker = () => path.join(work, "data/config/.upgrade-freeze");
+  const legacyMarker = () => path.join(work, "data/config/.upgrade-freeze");
+  const legacyLease = () => path.join(work, "data/profile/.write.lock");
   const original = "# saved settings\nconfig_version: 1\nvalue: keep\n";
   const profileSample = () => path.join(work, "data/profile/me.yaml");
   const originalProfile = "# saved profile\nconfig_version: 1\nsummary: keep\n";
   const existing = () => { write(sample(), original); write(profileSample(), originalProfile); };
-  const assertUntouched = (r: Run, frozen = true) => {
+  const assertUntouched = (r: Run) => {
     expect(fs.readFileSync(sample(), "utf8")).toBe(original);
     expect(fs.readFileSync(profileSample(), "utf8")).toBe(originalProfile);
-    expect(fs.readFileSync(sample(), "utf8")).toContain("config_version: 1");
-    expect(fs.existsSync(marker())).toBe(frozen);
-    expect(r.calls).not.toContain("pnpm config:init");
-    expect(r.calls).not.toContain("pnpm config:migrate --write");
+    for (const command of WRITES) expect(r.calls).not.toContain(command);
   };
-
-  it.each([
-    { title: "manual worker with a dropped database connection", holder: "none", service: false, processes: "  9191 node --env-file-if-exists=.env --import tsx src/ai-worker/index.ts" },
-    { title: "old release worker beside the confirmed service", holder: "service", service: true, processes: () => `4242 /usr/bin/node ${realWork}/data/releases/ai-worker/new/src/ai-worker/index.ts\n9192 /usr/bin/node ${realWork}/data/releases/ai-worker/old/src/ai-worker/index.ts --log-dir /srv/logs` },
-    { title: "worker in a release path containing spaces", holder: "none", service: false, processes: () => `9193 /usr/bin/node "${realWork}/data/releases/ai-worker/old release/src/ai-worker/index.ts" --log-dir /srv/logs` },
-  ])("keeps the freeze for $title even when the holder rule permits writing", ({ holder, service, processes }) => {
-    existing(); if (service) installWorker();
-    const lines = typeof processes === "function" ? processes() : processes;
-    const r = deploy(["--skip-pull", "--settle", "5"], { STUB_HOLDER: holder, STUB_PROCESSES: lines, MUTATE_CONFIG: "1", STUB_PROCESS_CWD: realWork });
+  // Skipped writes: nothing changes, the doctor gets the reason, the closing message says it, exit 2.
+  const assertSkipped = (r: Run, reason: string) => {
     expect(r.status, r.out).toBe(2);
     assertUntouched(r);
+    expect(r.out).toContain(`config writes pending: ${reason}`);
+    expect(r.out).toContain(`Deployed, but the config writes are pending: ${reason}. The next deploy retries them.`);
+    expect(r.events).toContain(`# doctor reason=${reason}`);
+    expect(fs.existsSync(lockDir)).toBe(false);
+  };
+
+  it("the order: only after the worker switch, then the four commands, the release, the prune and the doctor", () => {
+    existing();
+    const r = deploy(args, { MUTATE_CONFIG: "1", PNPM_doctor_HOOK: DOCTOR_REASON });
+    expect(r.status, r.out).toBe(0);
+    const order = [
+      "pnpm install --frozen-lockfile",
+      "pnpm config:init --env-only",
+      "pnpm config:check",
+      "pnpm config:plan --deploy",
+      "docker compose -p radar-test build",
+      "pnpm migrate:run",
+      `install-ai-worker.sh --release ${realWork}/data/releases/ai-worker/${head()} --root ${realWork}`,
+      "docker compose -p radar-test ps -a -q web",
+      "docker compose -p radar-test ps -a -q runner",
+      ...WRITES,
+      "# release mine=1",
+      "docker image prune -f",
+      "pnpm run doctor",
+    ];
+    const at = order.map((call) => r.events.indexOf(call));
+    expect(at.every((i) => i >= 0), r.events.join("\n")).toBe(true);
+    expect([...at].sort((a, b) => a - b)).toEqual(at);
+    expect(r.calls.filter((c) => c === "pnpm config:init")).toHaveLength(1);
+    expect(r.events).toContain("# doctor reason=");
+    expect(r.out).not.toContain("config writes pending");
+    expect(fs.readFileSync(sample(), "utf8")).toContain("config_version: 2");
+  });
+
+  it("step 4 only reads: a build failure leaves every user file and writes nothing", () => {
+    existing();
+    const r = deploy(args, { BUILD_EXIT: "1" });
+    expect(r.status, r.out).toBe(1);
+    assertUntouched(r);
+    expect(r.calls.indexOf("pnpm config:init --env-only")).toBeLessThan(r.calls.indexOf("pnpm config:check"));
+    expect(r.calls.indexOf("pnpm config:check")).toBeLessThan(r.calls.indexOf("pnpm config:plan --deploy"));
+    expect(r.out).toContain("user files stay unchanged here");
+  });
+
+  it("the built image IDs are read after the build, under the deploy's own names", () => {
+    const r = deploy(args);
+    expect(r.status, r.out).toBe(0);
+    const build = r.calls.indexOf("docker compose -p radar-test build");
+    expect(r.calls.indexOf("docker compose -p radar-test config --images web")).toBeGreaterThan(build);
+    expect(r.calls).toContain("docker image inspect -f {{.Id}} radar-test-web:latest");
+    expect(r.calls).toContain("docker image inspect -f {{.Id}} radar-test-runner:latest");
+  });
+
+  it.each([
+    { title: "web has no container", env: { STUB_CONTAINERS_web: "" }, reason: "web has no container" },
+    { title: "runner has no container", env: { STUB_CONTAINERS_runner: "" }, reason: "runner has no container" },
+    { title: "the runner runs another image", env: { STUB_INSPECT_cid_runner: "true sha256:old" }, reason: "a runner container is not running the image this deploy built" },
+    { title: "a web container is stopped", env: { STUB_INSPECT_cid_web: "false sha256:built-web" }, reason: "a web container is not running the image this deploy built" },
+    { title: "an extra web container of an old image", env: { STUB_CONTAINERS_web: "cid-web\ncid-old", STUB_INSPECT_cid_old: "true sha256:old" }, reason: "a web container is not running the image this deploy built" },
+    { title: "docker inspect fails", env: { STUB_INSPECT_EXIT: "1" }, reason: "a web container is not running the image this deploy built" },
+    { title: "compose ps fails", env: { STUB_COMPOSE_PS_EXIT: "1" }, reason: "web has no container" },
+    { title: "the built image cannot be read", env: { STUB_IMAGE_INSPECT_EXIT: "1" }, reason: "the image this deploy built for web could not be read" },
+    { title: "the image names cannot be read", env: { STUB_CONFIG_IMAGES_EXIT: "1" }, reason: "the image this deploy built for web could not be read" },
+  ])("the gate stops the writes when $title", ({ env, reason }) => {
+    existing();
+    assertSkipped(deploy(args, { MUTATE_CONFIG: "1", PNPM_doctor_HOOK: DOCTOR_REASON, ...env }), reason);
+  });
+
+  it.each([
+    { title: "manual worker with a dropped database connection", holder: "none", service: false, processes: "  9191 node --env-file-if-exists=.env --import tsx src/ai-worker/index.ts", pid: "9191" },
+    { title: "old release worker beside the confirmed service", holder: "service", service: true, processes: () => `4242 /usr/bin/node ${realWork}/data/releases/ai-worker/new/src/ai-worker/index.ts\n9192 /usr/bin/node ${realWork}/data/releases/ai-worker/old/src/ai-worker/index.ts --log-dir /srv/logs`, pid: "9192" },
+    { title: "worker in a release path containing spaces", holder: "none", service: false, processes: () => `9193 /usr/bin/node "${realWork}/data/releases/ai-worker/old release/src/ai-worker/index.ts" --log-dir /srv/logs`, pid: "9193" },
+  ])("skips the writes for $title even when the holder rule permits writing", ({ holder, service, processes, pid }) => {
+    existing(); if (service) installWorker();
+    const lines = typeof processes === "function" ? processes() : processes;
+    const r = deploy(["--skip-pull", "--settle", "5"], { STUB_HOLDER: holder, STUB_PROCESSES: lines, MUTATE_CONFIG: "1", STUB_PROCESS_CWD: realWork, PNPM_doctor_HOOK: DOCTOR_REASON });
+    assertSkipped(r, `other ai-worker processes still run (PIDs: ${pid})`);
     expect(r.calls).toContain("ps -A -o pid=,args=");
-    expect(r.out).toContain(service ? "9192" : lines.includes("9193") ? "9193" : "9191");
   });
 
   it("fails closed when the host process scan fails", () => {
     existing();
-    const r = deploy(args, { STUB_HOLDER: "none", STUB_PS_EXIT: "1", MUTATE_CONFIG: "1" });
-    expect(r.status, r.out).toBe(2);
-    assertUntouched(r);
-    expect(r.out).toContain("process scan");
+    assertSkipped(deploy(args, { STUB_HOLDER: "none", STUB_PS_EXIT: "1", MUTATE_CONFIG: "1", PNPM_doctor_HOOK: DOCTOR_REASON }), "the host ai-worker process scan failed");
   });
 
   it.each([
@@ -2022,35 +2126,8 @@ describe("deploy configuration freeze and delayed writes", { timeout: TEST_TIMEO
     const processes = `${service ? "4242 /usr/bin/node /srv/radar/data/releases/ai-worker/new/src/ai-worker/index.ts\n" : ""}6262 node src/ai-worker/index.ts.bak\n6263 node src/not-ai-worker/index.ts\n6264 node src/ai-worker/index.tsx`;
     const r = deploy(["--skip-pull", "--settle", "5"], { STUB_HOLDER: service ? "service" : "none", STUB_PROCESSES: processes, MUTATE_CONFIG: "1" });
     expect(r.status, r.out).toBe(0);
-    expect(fs.existsSync(marker())).toBe(false);
-    expect(r.calls.indexOf("pnpm config:init")).toBeGreaterThan(r.calls.indexOf("ps -A -o pid=,args="));
+    expect(r.calls.indexOf("pnpm config:migrate --write")).toBeGreaterThan(r.calls.indexOf("ps -A -o pid=,args="));
     if (service) expect(r.calls.find((c) => c.includes(" --holder"))).toContain("--pid 4242 --host ");
-  });
-
-  it.each(["config", "profile", "service", "compose", "marker"])("recognizes an existing install from %s and freezes after read-only checks", (kind) => {
-    if (kind === "config") existing();
-    if (kind === "profile") write(path.join(work, "data/profile/me.yaml"), "config_version: 1\n");
-    if (kind === "service") installWorker();
-    if (kind === "marker") write(marker(), JSON.stringify({ token: FIXTURE_TOKEN, target: "b".repeat(40) }));
-    const r = deploy(args, { ...(kind === "compose" ? { DB_RUNNING: "1" } : {}), BUILD_EXIT: "1", BUILD_HOOK: 'cp "$WORK/data/config/.upgrade-freeze" "$WORK/taken-freeze"' });
-    expect(r.status, r.out).toBe(1);
-    expect(r.calls.some((c) => c.startsWith("pnpm ops:freeze --target"))).toBe(true);
-    expect(r.calls).toContain("pnpm config:migrate");
-    expect(r.calls).toContain("pnpm config:check");
-    expect(r.calls).not.toContain("pnpm config:init");
-    expect(r.calls).not.toContain("pnpm config:migrate --write");
-    const freeze = r.calls.findIndex((c) => c.startsWith("pnpm ops:freeze --target"));
-    expect(r.calls.indexOf("pnpm config:migrate")).toBeLessThan(freeze);
-    expect(r.calls.indexOf("pnpm config:check")).toBeLessThan(freeze);
-    expect(r.calls.indexOf("docker compose -p radar-test config -q")).toBeLessThan(freeze);
-    expect(r.calls.indexOf("docker compose -p radar-test config --format json")).toBeLessThan(freeze);
-    if (kind === "marker") expect(r.calls).not.toContain("pnpm ops:unfreeze --owned");
-    else expect(r.calls).toContain("pnpm ops:unfreeze --owned");
-    expect(fs.existsSync(marker())).toBe(kind === "marker");
-    const taken = JSON.parse(fs.readFileSync(path.join(work, "taken-freeze"), "utf8")) as { token: string };
-    expect(taken.token).toMatch(/^[0-9a-f]{32}$/);
-    expect(taken.token).not.toBe(FIXTURE_TOKEN);
-    fs.rmSync(path.join(work, "taken-freeze"));
   });
 
   it.each([
@@ -2058,7 +2135,7 @@ describe("deploy configuration freeze and delayed writes", { timeout: TEST_TIMEO
     ["runner", "service_started", false],
     ["web", "service_healthy", true],
     ["db", "service_healthy", true],
-  ])("refuses a legacy %s dependency on jobspy (%s, required=%s) from a Compose override before freezing", (service, condition, required) => {
+  ])("refuses a legacy %s dependency on jobspy (%s, required=%s) from a Compose override before building", (service, condition, required) => {
     existing();
     const override = path.join(work, "compose.override.yaml");
     const saved = `services:\n  ${service}:\n    depends_on:\n      jobspy:\n        condition: ${condition}\n        required: ${required}\n`;
@@ -2071,8 +2148,8 @@ describe("deploy configuration freeze and delayed writes", { timeout: TEST_TIMEO
       expect(r.out).toContain("Remove");
       expect(r.out).toContain("compose.override.yaml");
       expect(r.calls).toContain("docker compose -p radar-test config --format json");
-      expect(r.calls.some((c) => /^pnpm ops:(?:un)?freeze/.test(c) || c.includes(" build") || c.includes(" up "))).toBe(false);
-      assertUntouched(r, false);
+      expect(r.calls.some((c) => c.includes(" build") || c.includes(" up "))).toBe(false);
+      assertUntouched(r);
       expect(fs.readFileSync(override, "utf8")).toBe(saved);
     } finally {
       fs.rmSync(override);
@@ -2099,7 +2176,7 @@ describe("deploy configuration freeze and delayed writes", { timeout: TEST_TIMEO
         expect(r.out).not.toContain("cannot inspect the resolved Compose dependencies");
         if (dependency) {
           expect(r.out).toContain("runner.depends_on.jobspy");
-          expect(r.calls.some((c) => /^pnpm ops:freeze/.test(c) || c.includes(" build") || c.includes(" up "))).toBe(false);
+          expect(r.calls.some((c) => c.includes(" build") || c.includes(" up "))).toBe(false);
         } else {
           expect(r.calls).toContain("pnpm migrate:run");
         }
@@ -2113,88 +2190,57 @@ describe("deploy configuration freeze and delayed writes", { timeout: TEST_TIMEO
     { title: "failed Compose model command", env: { COMPOSE_MODEL_EXIT: "1" } },
     { title: "malformed Compose JSON", env: { COMPOSE_MODEL_OUTPUT: "not json" } },
     { title: "unexpected Compose model shape", env: { COMPOSE_MODEL_OUTPUT: '{"services":{"runner":{"depends_on":["jobspy"]}}}' } },
-  ])("$title refuses the deploy before freezing without printing model values", ({ env }) => {
+  ])("$title refuses the deploy before building without printing model values", ({ env }) => {
     existing();
     const r = deploy(args, env);
     expect(r.status, r.out).toBe(1);
     expect(r.out).toContain('step 4/13 "config:');
     expect(r.out).toContain("cannot inspect the resolved Compose dependencies");
     expect(r.out).not.toContain(env.COMPOSE_MODEL_OUTPUT ?? '"services"');
-    expect(r.calls.some((c) => /^pnpm ops:(?:un)?freeze/.test(c) || c.includes(" build") || c.includes(" up "))).toBe(false);
-    assertUntouched(r, false);
+    expect(r.calls.some((c) => c.includes(" build") || c.includes(" up "))).toBe(false);
+    assertUntouched(r);
   });
 
   it.each([
-    { title: "migration preview", env: { PNPM_config_migrate_EXIT: "1" } },
+    { title: "the .env step", env: { PNPM_config_init___env_only_EXIT: "1" } },
+    { title: "the plan preview", env: { PNPM_config_plan___deploy_EXIT: "1" } },
     { title: "config check", env: { PNPM_config_check_EXIT: "1" } },
     { title: "compose config", env: { COMPOSE_CONFIG_EXIT: "1" } },
-  ])("$title failure never creates a freeze or writes user files", ({ env }) => {
+  ])("$title failing stops before the build and never writes user files", ({ env }) => {
     existing();
     const r = deploy(args, env);
     expect(r.status, r.out).toBe(1);
-    assertUntouched(r, false);
-    expect(r.calls.some((c) => /^pnpm ops:(?:un)?freeze/.test(c))).toBe(false);
+    expect(r.out).toContain('step 4/13 "config:');
+    assertUntouched(r);
+    expect(r.calls.some((c) => c.endsWith(" build"))).toBe(false);
   });
 
-  it("a failed preview leaves a previous deploy's marker untouched and names manual recovery", () => {
-    const previous = JSON.stringify({ token: FIXTURE_TOKEN, target: "b".repeat(40) });
-    write(marker(), previous);
-    const r = deploy(args, { PNPM_config_migrate_EXIT: "1" });
-    expect(r.status, r.out).toBe(1);
-    expect(fs.readFileSync(marker(), "utf8")).toBe(previous);
-    expect(r.calls.some((c) => /^pnpm ops:(?:un)?freeze/.test(c))).toBe(false);
-    expect(r.out).toContain("upgrade freeze is kept");
-    expect(r.out).toContain("pnpm ops:unfreeze");
+  it("the gate runs on a first install too: a holder that cannot be determined leaves the writes pending", () => {
+    const r = deploy(args, { STUB_HOLDER: "unknown", PNPM_doctor_HOOK: DOCTOR_REASON });
+    expect(r.status, r.out).toBe(2);
+    for (const command of WRITES) expect(r.calls).not.toContain(command);
+    expect(r.out).toContain("the instance lock holder could not be determined");
   });
 
-  it("a first install skips the config-write gate even when a holder cannot be determined", () => {
-    const r = deploy(args, { STUB_HOLDER: "unknown", STUB_PS_EXIT: "1" });
-    expect(r.status, r.out).toBe(0);
-    expect(r.calls.filter((c) => c === "pnpm config:init")).toHaveLength(1);
-    expect(r.calls.some((c) => c.includes(" --holder") || c === "ps -A -o pid=,args=")).toBe(false);
-    expect(r.calls).not.toContain("pnpm config:migrate --write");
-    expect(fs.existsSync(marker())).toBe(false);
-  });
-
-  it("discards an inherited freeze token before starting any command", () => {
-    existing();
-    const r = deploy(args, { JOB_RADAR_UPGRADE_FREEZE_TOKEN: "f".repeat(32) });
-    expect(r.status, r.out).toBe(0);
-    expect(r.out).not.toContain("unexpected upgrade token");
-  });
-
-  it("a first install fills without creating a freeze in step 4", () => {
-    const r = deploy(args, { BUILD_EXIT: "1" });
-    expect(r.status).toBe(1);
-    expect(r.calls).toContain("pnpm config:init");
-    expect(r.calls.some((c) => c.startsWith("pnpm ops:freeze"))).toBe(false);
-    expect(fs.existsSync(marker())).toBe(false);
-  });
-
-  it("confirms the target service PID before writing, then removes the marker without leaking its token", () => {
+  it("confirms the target service PID before writing", () => {
     existing(); installWorker();
     const r = deploy(["--skip-pull", "--settle", "5"], { STUB_HOLDER: "service", MUTATE_CONFIG: "1" });
     expect(r.status, r.out).toBe(0);
     const holder = r.calls.findIndex((c) => c.includes(" --holder"));
     const receipt = r.calls.findIndex((c) => c.includes(" --receipt"));
     expect(holder).toBeGreaterThan(receipt);
-    expect(r.calls.indexOf("pnpm config:init")).toBeGreaterThan(holder);
-    expect(r.calls.indexOf("pnpm ops:unfreeze --owned")).toBeGreaterThan(r.calls.indexOf("pnpm --silent config:migrate --json"));
+    expect(r.calls.indexOf("pnpm config:migrate --write")).toBeGreaterThan(holder);
     expect(fs.readFileSync(sample(), "utf8")).toContain("config_version: 2");
-    expect(fs.existsSync(marker())).toBe(false);
-    expect(r.out).not.toMatch(/token[=:][0-9a-f]{32}/);
   });
 
   it.each([
-    { title: "manual old holder", env: { STUB_HOLDER: "other" } },
-    { title: "no manager, installer returns success", env: { STUB_HOLDER: "other", JOB_RADAR_SERVICE_MANAGER: "none" } },
-    { title: "hidden holder", env: { STUB_HOLDER: "unknown" } },
-    { title: "probe failure", env: { STUB_HOLDER_EXIT: "1" } },
-  ])("defers for $title, keeps byte-identical files and the marker, and exits pending", ({ env }) => {
+    { title: "manual old holder", env: { STUB_HOLDER: "other" }, reason: "another worker holds the instance lock, or the holder is not visible" },
+    { title: "no manager, installer returns success", env: { STUB_HOLDER: "other", JOB_RADAR_SERVICE_MANAGER: "none" }, reason: "another worker holds the instance lock, or the holder is not visible" },
+    { title: "hidden holder", env: { STUB_HOLDER: "unknown" }, reason: "the instance lock holder could not be determined" },
+    { title: "probe failure", env: { STUB_HOLDER_EXIT: "1" }, reason: "the instance lock holder could not be determined" },
+  ])("defers for $title: byte-identical files, exit pending", ({ env, reason }) => {
     existing();
-    const r = deploy(args, env);
-    expect(r.status, r.out).toBe(2);
-    assertUntouched(r);
+    assertSkipped(deploy(args, { PNPM_doctor_HOOK: DOCTOR_REASON, ...env }), reason);
   });
 
   it.each(["none", "other", "unknown"])("an installed service does not authorize writes for a different or absent holder: %s", (holder) => {
@@ -2208,139 +2254,263 @@ describe("deploy configuration freeze and delayed writes", { timeout: TEST_TIMEO
     existing();
     const r = deploy(args, { STUB_HOLDER: "none", MUTATE_CONFIG: "1" });
     expect(r.status, r.out).toBe(0);
-    expect(fs.existsSync(marker())).toBe(false);
+    expect(fs.readFileSync(sample(), "utf8")).toContain("config_version: 2");
+  });
+
+  it("--settle 0 accepts a service from the target release", () => {
+    existing(); installWorker();
+    const r = deploy(args, { STUB_HOLDER: "service", MUTATE_CONFIG: "1" });
+    expect(r.status, r.out).toBe(0);
+    expect(r.calls.some((c) => c.includes(" --receipt"))).toBe(false);
     expect(fs.readFileSync(sample(), "utf8")).toContain("config_version: 2");
   });
 
   it.each([
-    { option: "--no-ai-worker", target: true }, { option: "--no-ai-worker", target: false },
-    { option: "--settle 0", target: true }, { option: "--settle 0", target: false },
-  ])("$option only accepts a service from the target release: target=$target", ({ option, target }) => {
+    { title: "points at another release", env: () => ({ STUB_RELEASE: `${realWork}/data/releases/ai-worker/${"b".repeat(40)}` }), reason: "the ai-worker service does not point at the target release" },
+    { title: "has an unreadable release", env: () => ({ STUB_RELEASE_EXIT: "1" }), reason: "the ai-worker service's release could not be read" },
+  ])("the service $title: no writes", ({ env, reason }) => {
     existing(); installWorker();
-    const r = deploy(option === "--no-ai-worker" ? [...args, option] : args, { STUB_HOLDER: "service", ...(target ? {} : { STUB_RELEASE: `${realWork}/data/releases/ai-worker/${"b".repeat(40)}` }), MUTATE_CONFIG: "1" });
-    expect(r.status, r.out).toBe(target ? 0 : 2);
-    if (target) expect(fs.existsSync(marker())).toBe(false); else assertUntouched(r);
+    assertSkipped(deploy(args, { STUB_HOLDER: "service", MUTATE_CONFIG: "1", PNPM_doctor_HOOK: DOCTOR_REASON, ...env() }), reason);
   });
 
-  it.each(["--no-ai-worker", "--settle 0"])("%s refuses writes when the service PID changes during the holder probe", (option) => {
+  it("the service has no running process: no writes", () => {
     existing(); installWorker();
-    const r = deploy(option === "--no-ai-worker" ? [...args, option] : args, { STUB_HOLDER: "service", SERVICE_PROBE_HOOK: 'rm -f "$HOME/loaded"' });
-    expect(r.status, r.out).toBe(2);
-    assertUntouched(r);
+    fs.rmSync(path.join(tmp, "home/loaded"));
+    assertSkipped(deploy(args, { STUB_HOLDER: "service", MUTATE_CONFIG: "1", PNPM_doctor_HOOK: DOCTOR_REASON }), "the ai-worker service has no running process");
+  });
+
+  it("refuses writes when the service PID changes during the holder probe", () => {
+    existing(); installWorker();
+    assertSkipped(deploy(args, { STUB_HOLDER: "service", SERVICE_PROBE_HOOK: 'rm -f "$HOME/loaded"', PNPM_doctor_HOOK: DOCTOR_REASON }), "the ai-worker service PID changed during the checks");
+  });
+
+  describe("--no-ai-worker", () => {
+    const noWorker = [...args, "--no-ai-worker"];
+
+    it("nothing installed and nobody holds the lock: the writes run, exit 0", () => {
+      existing();
+      const r = deploy(noWorker, { MUTATE_CONFIG: "1" });
+      expect(r.status, r.out).toBe(0);
+      expect(r.calls.some((c) => c.startsWith("prepare-release.sh") || c.startsWith("install-ai-worker.sh"))).toBe(false);
+      expect(r.calls.indexOf("pnpm config:migrate --write")).toBeGreaterThan(r.calls.findIndex((c) => c.includes(" --lock-holder")));
+      expect(fs.readFileSync(sample(), "utf8")).toContain("config_version: 2");
+    });
+
+    it("an installed service is not this deploy's: no writes", () => {
+      existing(); installWorker();
+      assertSkipped(deploy(noWorker, { PNPM_doctor_HOOK: DOCTOR_REASON }), "--no-ai-worker, and an ai-worker service is installed that this deploy did not switch");
+    });
+
+    it("an ambiguous service: no writes", () => {
+      existing(); installWorker();
+      write(path.join(tmp, "home/Library/LaunchAgents/de.jobradar.ai-worker.plist"), "<plist/>\n");
+      try {
+        assertSkipped(deploy(noWorker, { PNPM_doctor_HOOK: DOCTOR_REASON }), "--no-ai-worker, and the installed ai-worker service is ambiguous");
+      } finally {
+        fs.rmSync(path.join(tmp, "home/Library/LaunchAgents/de.jobradar.ai-worker.plist"));
+      }
+    });
+
+    it.each([
+      ["2", "--no-ai-worker, and a worker holds the instance lock"],
+      ["1", "--no-ai-worker, and the instance lock holder could not be determined"],
+    ])("--lock-holder exits %s: no writes", (code, reason) => {
+      existing();
+      assertSkipped(deploy(noWorker, { STUB_LOCK_HOLDER_EXIT: code, PNPM_doctor_HOOK: DOCTOR_REASON }), reason);
+    });
+
+    it("another worker process: no writes, whatever the lock says", () => {
+      existing();
+      assertSkipped(deploy(noWorker, { STUB_PROCESSES: `9194 node --import tsx ${realWork}/src/ai-worker/index.ts`, PNPM_doctor_HOOK: DOCTOR_REASON }), "other ai-worker processes still run (PIDs: 9194)");
+    });
   });
 
   it.each([
-    { title: "freeze command failure", env: { FREEZE_EXIT: "1" } },
     { title: "backup failure", env: { DB_RUNNING: "1", BACKUP_EXIT: "1" } },
     { title: "build failure", env: { BUILD_EXIT: "1" } },
     { title: "release failure", env: { PREPARE_EXIT: "1" } },
     { title: "checkout changed during drain", env: { PNPM_ops_drain_HOOK: MOVE_HEAD } },
-  ])("$title before up automatically releases only this deploy's freeze", ({ env }) => {
+    { title: "partly successful up failure", env: { UP_EXIT: "1" } },
+    { title: "database migration failure", env: { PNPM_migrate_run_EXIT: "1" } },
+    { title: "worker switch not changed", env: { INSTALL_EXIT: "1", INSTALL_HOOK: "echo 'not changed: the old worker runs'" } },
+    { title: "worker switch rollback", env: { INSTALL_EXIT: "1", INSTALL_HOOK: "echo 'rolled back: old worker runs again'" } },
+    { title: "worker switch rollback failure", env: { INSTALL_EXIT: "1", INSTALL_HOOK: "echo 'ROLLBACK FAILED: follow the commands'" } },
+  ])("$title stops with exit 1: the files stay and no write runs", ({ env }) => {
     existing();
     const base = head();
     try {
       const r = deploy(args, env);
       expect(r.status, r.out).toBe(1);
-      assertUntouched(r, false);
-      expect(r.calls).toContain("pnpm ops:unfreeze --owned");
+      assertUntouched(r);
+      expect(r.calls).not.toContain("pnpm run doctor");
+      expect(r.out).not.toContain("config writes pending");
     } finally { restore(base); }
   });
 
-  it("keeps a successor's marker when automatic owned unfreeze fails, and names manual recovery", () => {
-    existing();
-    const r = deploy(args, { BUILD_EXIT: "1", BUILD_HOOK: `printf '{"token":"${FIXTURE_TOKEN}","target":"${"b".repeat(40)}"}' > "$WORK/data/config/.upgrade-freeze"` });
-    expect(r.status, r.out).toBe(1);
-    assertUntouched(r);
-    expect(r.calls).toContain("pnpm ops:unfreeze --owned");
-    expect(JSON.parse(fs.readFileSync(marker(), "utf8"))).toMatchObject({ token: FIXTURE_TOKEN });
-    expect(r.out).toContain("upgrade freeze is kept");
-    expect(r.out).toContain("pnpm ops:unfreeze");
-    expect(r.out).not.toContain(FIXTURE_TOKEN);
-  });
-
-  it.each([
-    { title: "build failure", env: { BUILD_EXIT: "1" }, status: 1 },
-    { title: "SIGINT before up", env: { BUILD_HOOK: "kill -INT $DEPLOY_PID" }, status: 130 },
-  ])("a leftover marker stays frozen after takeover and $title", ({ env, status }) => {
-    existing();
-    write(marker(), JSON.stringify({ token: FIXTURE_TOKEN, target: "b".repeat(40) }));
-    const r = deploy(args, env);
-    expect(r.status, r.out).toBe(status);
-    assertUntouched(r);
-    expect(r.calls.some((c) => c.startsWith("pnpm ops:freeze --target"))).toBe(true);
-    expect(r.calls).not.toContain("pnpm ops:unfreeze --owned");
-    expect(r.out).not.toContain("[11/13]");
-    expect(JSON.parse(fs.readFileSync(marker(), "utf8")).token).not.toBe(FIXTURE_TOKEN);
-    expect(r.out).toContain("upgrade freeze is kept");
-    expect(r.out).toContain("pnpm ops:unfreeze");
-    expect(r.out).not.toContain(FIXTURE_TOKEN);
-  });
-
-  it.each([
-    { title: "partly successful up failure", env: { UP_EXIT: "1" } },
-    { title: "database migration failure", env: { PNPM_migrate_run_EXIT: "1" } },
-    { title: "worker switch rollback", env: { INSTALL_EXIT: "1", INSTALL_HOOK: "echo 'rolled back: old worker runs again'" } },
-  ])("$title leaves the files and their version unchanged, keeps the marker and never writes configs", ({ env }) => {
-    existing();
-    const r = deploy(args, env);
-    expect(r.status, r.out).toBe(1);
-    assertUntouched(r);
-    expect(r.calls).not.toContain("pnpm ops:unfreeze --owned");
-    expect(r.out).toContain("upgrade freeze is kept");
-    expect(r.out).toContain("pnpm ops:unfreeze");
-  });
-
-  for (const signal of ["INT", "TERM", "HUP"]) {
-    it.each(["freeze", "build", "release", "drain"])(`SIG${signal} during %s before up removes the owned freeze`, (step) => {
+  describe("the checks at the start of the step", () => {
+    it.each([
+      ["HEAD moves", MOVE_HEAD],
+      ["a tracked file changes", TOUCH_TRACKED],
+    ])("%s during the worker switch: exit 1, no gate, no writes", (_label, hook) => {
       existing();
-      const hook = `kill -${signal} $DEPLOY_PID`;
-      const env = step === "freeze" ? { FREEZE_HOOK: hook } : step === "build" ? { BUILD_HOOK: hook } : step === "release" ? { PREPARE_HOOK: hook } : { PNPM_ops_drain_HOOK: hook };
-      const r = deploy(args, env);
-      expect(r.status, r.out).toBe(signal === "INT" ? 130 : signal === "TERM" ? 143 : 129);
-      assertUntouched(r, false);
-      expect(r.calls).toContain("pnpm ops:unfreeze --owned");
+      const base = head();
+      try {
+        const r = deploy(args, { INSTALL_HOOK: hook });
+        expect(r.status, r.out).toBe(1);
+        expect(r.out).toContain('step 11/13 "config-write: confirm the services and the worker, then migrate and fill user files" failed: checkout moved during deploy');
+        assertUntouched(r);
+        expect(r.calls.some((c) => c.includes(" ps -a -q "))).toBe(false);
+      } finally { restore(base); }
     });
-    it.each(["up", "migrate", "worker"])(`SIG${signal} after %s leaves configs unchanged and frozen`, (step) => {
+
+    it.each([
+      ["the lock is removed", 'rm -rf "$LOCK"'],
+      ["the owner file holds another token", `printf '${ownerFixture.replaceAll("\n", "\\n")}' > "$LOCK/owner"`],
+    ])("%s during the worker switch: exit 1, no new lock, no gate, no writes", (_label, hook) => {
+      existing();
+      const base = head();
+      try {
+        const r = deploy(args, { INSTALL_HOOK: hook });
+        expect(r.status, r.out).toBe(1);
+        expect(r.out).toContain("this deploy no longer holds the deploy lock");
+        assertUntouched(r);
+        expect(r.calls.some((c) => c.includes(" ps -a -q "))).toBe(false);
+      } finally { restore(base); }
+    });
+  });
+
+  describe("markers of earlier versions", () => {
+    const place = () => {
+      write(legacyMarker(), "old marker");
+      fs.mkdirSync(legacyLease(), { recursive: true });
+    };
+
+    it("a gate that does not pass leaves them; a later pass removes them before the writes", () => {
+      existing(); place();
+      const skipped = deploy(args, { STUB_CONTAINERS_web: "" });
+      expect(skipped.status, skipped.out).toBe(2);
+      expect(fs.readFileSync(legacyMarker(), "utf8")).toBe("old marker");
+      expect(fs.existsSync(legacyLease())).toBe(true);
+      const hook = 'echo "# at the first write: marker=$([[ -e "$WORK/data/config/.upgrade-freeze" ]] && echo 1 || echo 0)" >> "$DEPLOY_TEST_LOG"';
+      const passed = deploy(args, { PNPM_config_migrate___write_HOOK: hook });
+      expect(passed.status, passed.out).toBe(0);
+      expect(passed.events).toContain("# at the first write: marker=0");
+      expect(fs.existsSync(legacyLease())).toBe(false);
+    });
+
+    it("a step failing before the gate leaves them", () => {
+      existing(); place();
+      const r = deploy(args, { BUILD_EXIT: "1" });
+      expect(r.status, r.out).toBe(1);
+      expect(fs.readFileSync(legacyMarker(), "utf8")).toBe("old marker");
+    });
+  });
+
+  for (const [signal, code] of [["INT", 130], ["TERM", 143], ["HUP", 129]] as const) {
+    it.each(["install", "plan", "build", "release", "drain", "up", "migrate", "worker"] as const)(`SIG${signal} during %s: exit ${code}, the files stay and no write runs`, (step) => {
       existing();
       const hook = `kill -${signal} $DEPLOY_PID`;
-      const env = step === "up" ? { UP_HOOK: hook } : step === "migrate" ? { PNPM_migrate_run_HOOK: hook } : { INSTALL_HOOK: hook };
+      const env = {
+        install: { PNPM___frozen_lockfile_HOOK: hook },
+        plan: { PNPM_config_plan___deploy_HOOK: hook },
+        build: { BUILD_HOOK: hook },
+        release: { PREPARE_HOOK: hook },
+        drain: { PNPM_ops_drain_HOOK: hook },
+        up: { UP_HOOK: hook },
+        migrate: { PNPM_migrate_run_HOOK: hook },
+        worker: { INSTALL_HOOK: hook },
+      }[step];
       const r = deploy(args, env);
-      expect(r.status, r.out).toBe(signal === "INT" ? 130 : signal === "TERM" ? 143 : 129);
+      expect(r.status, r.out).toBe(code);
       assertUntouched(r);
-      expect(r.calls).not.toContain("pnpm ops:unfreeze --owned");
-      expect(r.out).toContain("upgrade freeze is kept");
-      expect(r.out).toContain("pnpm ops:unfreeze");
+      expect(r.calls).not.toContain("pnpm run doctor");
+      expect(fs.existsSync(lockDir)).toBe(false);
+    });
+
+    it(`SIG${signal} during the final service probe cannot start a write, and is not reported as pending`, () => {
+      existing(); installWorker();
+      const r = deploy(["--skip-pull", "--settle", "5"], { STUB_HOLDER: "service", SERVICE_PROBE_HOOK: `kill -${signal} $DEPLOY_FIXTURE_PID`, MUTATE_CONFIG: "1" });
+      expect(r.status, r.out).toBe(code);
+      assertUntouched(r);
+      expect(r.calls).not.toContain("pnpm run doctor");
+      expect(r.out).not.toContain("config writes pending");
+    });
+
+    it(`SIG${signal} during --lock-holder cannot start a write`, () => {
+      existing();
+      const r = deploy([...args, "--no-ai-worker"], { LOCK_HOLDER_HOOK: `kill -${signal} $DEPLOY_FIXTURE_PID`, STUB_LOCK_HOLDER_EXIT: "1" });
+      expect(r.status, r.out).toBe(code);
+      assertUntouched(r);
+      expect(r.out).not.toContain("config writes pending");
+    });
+
+    it(`SIG${signal} during the first write: that command finishes, nothing further runs`, () => {
+      existing();
+      const r = deploy(args, { PNPM_config_migrate___write_HOOK: `kill -${signal} $DEPLOY_PID`, MUTATE_CONFIG: "1" });
+      expect(r.status, r.out).toBe(code);
+      expect(r.calls).toContain("pnpm config:migrate --write");
+      for (const command of WRITES.slice(1)) expect(r.calls).not.toContain(command);
+      expect(r.calls).not.toContain("pnpm run doctor");
+      expect(r.calls.some((c) => c.includes(" prune "))).toBe(false);
+      expect(fs.existsSync(lockDir)).toBe(false);
     });
   }
 
-  it.each(["INT", "TERM", "HUP"])("SIG%s during the final service probe cannot start config-write", (signal) => {
-    existing(); installWorker();
-    const r = deploy(["--skip-pull", "--settle", "5"], { STUB_HOLDER: "service", SERVICE_PROBE_HOOK: `kill -${signal} $DEPLOY_FIXTURE_PID`, MUTATE_CONFIG: "1" });
-    expect(r.status, r.out).toBe(signal === "INT" ? 130 : signal === "TERM" ? 143 : 129);
-    assertUntouched(r);
-  });
-
-  it.each([false, true])("a new migration plan decides pending even if the write command succeeded: pending=%s", (pending) => {
+  it.each([
+    { title: "config:migrate --write fails", env: { PNPM_config_migrate___write_EXIT: "1" }, ran: 1, reason: "pnpm config:migrate --write failed (see above)" },
+    { title: "config:init fails", env: { PNPM_config_init_EXIT: "1" }, ran: 2, reason: "pnpm config:init failed (see above)" },
+    { title: "writes are still planned", env: { PNPM_config_plan___deploy___check_EXIT: "2" }, ran: 3, reason: "writes are still planned after the write step (see the list above)" },
+    { title: "the check itself fails", env: { PNPM_config_plan___deploy___check_EXIT: "1" }, ran: 3, reason: "pnpm config:plan --deploy --check failed (see above)" },
+  ])("$title: the rest does not run, the backups stay, the deploy goes on and exits 2", ({ env, ran, reason }) => {
     existing();
-    const r = deploy(args, { STUB_MIGRATION_STATUS: JSON.stringify({ pending: pending ? 1 : 0, problems: 0 }) });
-    expect(r.status, r.out).toBe(pending ? 2 : 0);
-    expect(fs.existsSync(marker())).toBe(false);
-  });
-
-  it("a write failure after safe consumers are established removes the freeze and returns pending", () => {
-    existing();
-    const r = deploy(args, { PNPM___write_EXIT: "1" });
+    const r = deploy(args, { PNPM_doctor_HOOK: DOCTOR_REASON, ...env });
     expect(r.status, r.out).toBe(2);
-    expect(fs.existsSync(marker())).toBe(false);
+    expect(r.calls.filter((c) => WRITES.includes(c))).toEqual(WRITES.slice(0, ran));
+    expect(r.events).toContain(`# doctor reason=${reason}`);
+    expect(r.out).toContain(`Deployed, but the config writes are pending: ${reason}. The next deploy retries them.`);
+    expect(r.calls).toContain("docker image prune -f");
+    expect(r.events.indexOf("# release mine=1")).toBeGreaterThan(r.events.indexOf(WRITES[ran - 1] ?? ""));
+    expect(fs.existsSync(lockDir)).toBe(false);
   });
 
-  it("dry-run preserves files, versions, and an existing marker with zero write commands", () => {
-    existing(); write(marker(), "old marker");
+  it("the backup clean-up failing only warns: exit 0, no pending reason", () => {
+    existing();
+    const r = deploy(args, { PNPM_config_migrate___prune_backups_EXIT: "1", PNPM_doctor_HOOK: DOCTOR_REASON });
+    expect(r.status, r.out).toBe(0);
+    expect(r.out).toContain("warning: old config backups could not be removed; the deploy continues");
+    expect(r.out).not.toContain("config writes pending");
+    expect(r.events).toContain("# doctor reason=");
+  });
+
+  it.each([
+    ["0", "doctor passed everything"],
+    ["1", "The doctor reported warnings"],
+    ["2", "the doctor reported problems"],
+    ["3", "the doctor itself could not run"],
+  ])("pending wins over doctor exit %s: exit 2, and both are said", (doctor, message) => {
+    existing();
+    const r = deploy(args, { STUB_CONTAINERS_web: "", PNPM_doctor_EXIT: doctor });
+    expect(r.status, r.out).toBe(2);
+    expect(r.out).toContain(message);
+    expect(r.out).toContain("the config writes are pending");
+    if (doctor === "3") expect(r.out).toContain("The doctor did not run either.");
+  });
+
+  it("dry-run prints the commands and runs none, with no probe of the gate", () => {
+    existing(); write(legacyMarker(), "old marker");
     const r = deploy(["--dry-run", "--skip-pull"]);
     expect(r.status, r.out).toBe(0);
     expect(fs.readFileSync(sample(), "utf8")).toBe(original);
-    expect(fs.readFileSync(marker(), "utf8")).toBe("old marker");
+    expect(fs.readFileSync(legacyMarker(), "utf8")).toBe("old marker");
+    for (const command of WRITES) expect(r.out).toContain(`$ ${command}`);
     expect(r.calls.some((c) => c.startsWith("pnpm "))).toBe(false);
-    expect(r.calls.some((c) => c.includes(" --holder"))).toBe(false);
+    expect(r.calls.some((c) => c.includes(" --holder") || c.includes(" ps -a -q "))).toBe(false);
+  });
+
+  it("the project name read by the app's loader must agree with what the shell read", () => {
+    const r = deploy(args, { STUB_CFG_PROJECT: "other-project" });
+    expect(r.status, r.out).toBe(1);
+    expect(r.out).toContain("schedule.yaml doctor.compose_project is 'other-project', but the shell read 'radar-test'");
+    expect(r.calls.some((c) => c.endsWith(" build"))).toBe(false);
   });
 });

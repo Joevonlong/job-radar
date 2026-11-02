@@ -10,7 +10,8 @@ import { currentScoresBackfill } from "../src/lib/db/current-scores-config";
  * caller are ignored: they are set from the checked values.
  *
  * Prepare: drops and recreates the demo database, applies the migrations and writes the demo data (the fictional seed plus
- * the extra application statuses, `src/lib/db/seed-demo.ts`). The config directory is refilled from the shipped defaults
+ * the extra application statuses, `src/lib/db/seed-demo.ts`). The database comes first because config files are written
+ * under the config write lock, which lives in it. The config directory is refilled from the shipped defaults
  * with the setup marked complete and the "AI engineering in Europe" example applied; the profile directory gets the
  * fictional demo profile of `scripts/demo/profile/`.
  * `--drop`: drops the demo database and removes both directories.
@@ -60,48 +61,39 @@ if (drop) {
 }
 
 // Loaded after the checks: these modules read the directories from the environment.
-const { applyExamplePlan, ensureConfigFiles, getConfigDir, parseConfigText, planExample, readExample } = await import("../src/lib/config");
+const { applyExamplePlan, commitConfigFile, ensureConfigFiles, mutateConfig, parseConfigText, planExample, readExample, resetConfigCache, withConfigWriteLock } = await import("../src/lib/config");
 const { completeSetup } = await import("../src/lib/setup/state");
 const { createConnection } = await import("../src/lib/db/client");
 const { runMigrations } = await import("../src/lib/db/migrate");
 const { seedDemoDatabase } = await import("../src/lib/db/seed-demo");
 
+await runMigrations({ currentScoresBackfill: currentScoresBackfill(), url: targetUrl });
+
 // the profile first: the config layer reads the market from preferences.yaml
 fs.mkdirSync(profileDir, { recursive: true });
 for (const file of ["me.yaml", "preferences.yaml"]) {
+  const target = path.join(profileDir, file);
   const text = fs.readFileSync(path.join(PROFILE_SOURCE, file), "utf8");
   parseConfigText(file === "me.yaml" ? "me" : "preferences", text);
-  fs.writeFileSync(path.join(profileDir, file), text);
+  await withConfigWriteLock(() => commitConfigFile(target, text), target);
 }
 
 await ensureConfigFiles();
 if (!(await completeSetup("cli")).ok) fail("could not mark the setup complete");
 await applyExamplePlan(planExample(readExample(EXAMPLE_ID)));
+resetConfigCache();
 
-/** Rewrite one config file of the demo directory, checked against its schema. */
-function patch(name: Parameters<typeof parseConfigText>[0], file: string, edit: (text: string) => string): void {
-  const filePath = path.join(getConfigDir(), file);
-  const before = fs.readFileSync(filePath, "utf8");
-  const after = edit(before);
-  if (after === before) fail(`${file}: the demo setting could not be applied`);
-  parseConfigText(name, after);
-  fs.writeFileSync(filePath, after);
-}
 // the demo person's city (the example leaves the cities to the user)
-patch("search", "search.yaml", (text) => text.replace(/^locations:\n(?:  - .*\n)+/m, "locations:\n  - Berlin\n"));
+await mutateConfig("search", (current) => ({ ...current, locations: ["Berlin"] }));
 // the paid LinkedIn source needs an API key the demo does not have (src/lib/db/seed-demo.ts DEMO_DISABLED_CHANNELS)
-patch("channels", "sources.yaml", (text) => text.replace(/^(  brightdata:\n    enabled: )true$/m, "$1false"));
-patch("schedule", "schedule.yaml", (text) => text.replace(/^timezone: .*$/m, `timezone: ${DEMO_TIMEZONE}`));
-patch("notify", "notify.yaml", (text) => text.replace(/^public_base_url: .*$/m, `public_base_url: ${DEMO_BASE_URL}`));
+await mutateConfig("channels", (current) => ({ ...current, linkedin: { ...current.linkedin, brightdata: { ...current.linkedin.brightdata, enabled: false } } }));
+await mutateConfig("schedule", (current) => ({ ...current, timezone: DEMO_TIMEZONE }));
+await mutateConfig("notify", (current) => ({ ...current, public_base_url: DEMO_BASE_URL }));
 // every application status visible on the board (the shipped default already hides none; the demo does not depend on it)
-const uiFile = path.join(getConfigDir(), "ui.yaml");
-const uiText = fs.readFileSync(uiFile, "utf8").replace(/^(applications:\n(?:[ \t]*#.*\n)*  hidden_statuses: ).*$/m, "$1[]");
-parseConfigText("ui", uiText);
-fs.writeFileSync(uiFile, uiText);
+await mutateConfig("ui", (current) => ({ ...current, applications: { ...current.applications, hidden_statuses: [] } }));
 
 const connection = createConnection(targetUrl, { max: 1 });
 try {
-  await runMigrations({ currentScoresBackfill: currentScoresBackfill(), url: targetUrl });
   const result = await seedDemoDatabase(connection.db, { now: demoNow(), timezone: DEMO_TIMEZONE });
   console.log(`demo-prepare: database "${dbName}" ready (${result.jobs} jobs, ${result.applications} applications)`);
 } finally {

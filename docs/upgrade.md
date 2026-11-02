@@ -41,13 +41,13 @@ In order, and it stops at the first failing step:
 
 1. **Preflight**: takes the deploy lock (one deploy at a time), checks that git, docker, node and pnpm are installed and
    Docker is running, and refuses a checkout with uncommitted changes to tracked files (with `--skip-pull` too).
-2. **Checkout**: fetches tags and branches, detects the target's config-freeze capability before checkout, and switches to `--ref` (a version from before release directories is refused
+2. **Checkout**: fetches tags and branches, detects before the checkout whether the target has the config-write step, and switches to `--ref` (a version from before release directories is refused
    before the checkout moves, see [below](#downgrade-pre-release-dir)). From here on the deploy uses exactly that commit.
 3. **Install** the dependencies from the lockfile.
-4. **Config**: creates `data/` folders. On an existing install, previews config migrations, validates the new schema in
-   memory and checks compose config, then freezes settings writes without filling or migrating user files. A first
-   install runs `config:init` without a freeze.
-   A target without the freeze protocol uses its original `config:init` and `config:migrate --write` flow here.
+4. **Config**: creates the `data/` folders and, on a new install, `.env` with the database password. Everything else only
+   reads: it validates the config in memory, checks compose config and previews (`pnpm config:plan --deploy`) what step 11
+   will write. No user config file changes here. A target without the config-write step runs its own `config:init`
+   and `config:migrate --write` here instead.
 5. **Backup**: if the database is running, takes a `pre-deploy` dump into `data/backups/` first. A failing backup stops the
    upgrade.
 6. **Build** the images from a `git archive` of that commit: they contain exactly the committed files, the shipped
@@ -60,11 +60,12 @@ In order, and it stops at the first failing step:
 10. **ai-worker**: switches the host AI worker service (the launchd agent on macOS, the systemd user unit
     `job-radar-ai-worker.service` on Linux) to the release of step 7, and puts the previous one back if the new worker
     does not come up (without a systemd user manager nothing is installed and the script says so).
-11. **Config-write**: confirms the target worker service PID with its lock, heartbeat and config report, then scans host
-    processes and compares the instance-lock holder with that PID and host. Only that target service PID, or no holder
-    and no installed service, plus a successful scan with no other worker process, allows `config:init` and
-    `config:migrate --write`. Re-plans to detect skipped writes; removes the freeze once old consumers are excluded.
-    Skipped when no freeze token was taken (first install), or for targets without the freeze protocol.
+11. **Config-write**: the only step that writes user config files. It confirms the target worker service PID with its
+    lock, heartbeat and config report, then checks the gate: web and runner containers run the images this deploy built,
+    the worker service points at the target release and its process holds the instance lock (or, with `--no-ai-worker`,
+    no worker service is installed and nobody holds it), and no other worker process runs on the host. Then it runs
+    `config:migrate --write`, `config:init`, a re-check with `config:plan --deploy --check` and
+    `config:migrate --prune-backups`. Skipped for targets without this step.
 12. **Prune**: releases the deploy lock, then cleans the Docker build cache and dangling images (never volumes).
 13. **Doctor**: `pnpm run doctor` reports what needs attention.
 
@@ -75,62 +76,58 @@ Details and options: [deploy.md](deploy.md).
 
 ### Settings during an upgrade
 
-Step 4 finishes the read-only checks before creating or taking over the freeze. From then through `config-write`
-(step 11), freeze-aware web versions refuse settings, advanced editor, profile and wizard saves. On the first deploy
-of this version, the older web keeps running until step 8; its saves still use the old format and are harmless.
-Existing means YAML in `data/config/` or `data/profile/`, an existing freeze marker, an installed ai-worker service,
-or running compose services. A true first install is not frozen and skips the config-write gate. Startup fills skip missing files while frozen;
-missing profiles read `config/profile.example/` in memory, without creating files.
-Existing-install defaults, such as the language, are selected at read time until `config-write` creates their files.
-
-The marker `data/config/.upgrade-freeze` holds a random token, target commit and start time. Only deployment commands
-explicitly given the matching `JOB_RADAR_UPGRADE_FREEZE_TOKEN` can write through it; the token is never printed or given
-to the web, runner or worker. All config/profile writers use short cross-process `.write.lock` files, config before
-profile for multi-file writes. Freshness and freeze checks run inside the lock. Same-host owners carry a process generation
-(random process ID and start time) as well as host/PID. A reused PID or a token no longer held by this process is recovered
-immediately; a live owner stays busy. Foreign hosts/namespaces require an age over 300 seconds. Writers wait at most
-10 seconds before a busy error (settings: `schedule.yaml` `deploy.config_write_lock_*`), and the final commit is fenced
-against a replaced lease.
+A deploy changes no user config file (`data/config/`, `data/profile/`) before step 11, so the old web, runner and
+ai-worker keep reading files they understand, and the settings pages keep working throughout. Until step 11 writes them,
+a missing file is read from the shipped defaults (`config/` in the image) and a file in an older format is migrated in
+memory. Saves take a lock in the database; see [configuration.md](configuration.md#config-write-lock).
 
 Stop manually started old `pnpm ai-worker` processes before deploying. An old or unknown instance-lock holder, an
-unreachable database, or a service outside the target release defers config writes, keeps the freeze and returns exit 2.
-An absent lock holder alone is insufficient: a manual worker whose database connection dropped can still run and later
-reacquire it. On macOS and Linux, deploy runs `ps -A -o pid=,args=` and matches node/tsx executing the `src/ai-worker/index.ts` entry point
-under this install, including its release directories. Relative entries use the process cwd (`lsof -a -d cwd -p PID -Fn`
-on macOS, `/proc/PID/cwd` on Linux). Editors and other checkouts are ignored; unknown ownership blocks writes.
-Any such worker PID other than the confirmed target service PID blocks writes; the message lists those PIDs.
-A failed scan also blocks writes. `--holder --pid <expected> --host <host>` compares the
-worker's published application name, including its 63-byte truncation, without trying to recover a truncated host.
+unreachable database, or a service outside the target release fails the gate: no config is written, the rest of the
+deploy runs, and it ends with exit 2 and `Deployed, but the config writes are pending: <reason>. The next deploy retries
+them.` An absent lock holder alone is insufficient: a manual worker whose database connection dropped can still run and
+later reacquire it. On macOS and Linux, deploy runs `ps -A -o pid=,args=` and matches node/tsx executing the
+`src/ai-worker/index.ts` entry point under this install, including its release directories. Relative entries use the
+process cwd (`lsof -a -d cwd -p PID -Fn` on macOS, `/proc/PID/cwd` on Linux). Editors and other checkouts are ignored;
+unknown ownership blocks writes. Any such worker PID other than the confirmed target service PID blocks writes; the
+message lists those PIDs. A failed scan also blocks writes. `--holder --pid <expected> --host <host>` compares the
+worker's published application name, including its 63-byte truncation, without trying to recover a truncated host; a host
+name with characters outside printable ASCII is written with `_` in that name, and both sides compare it that way.
 `--no-ai-worker` still checks the holder, host processes and the installed service's release; it only permits that target
 service PID, or no holder and no installed service, with no other worker process. `--settle 0` uses the same checks,
 without a receipt wait: the service must point at the target release, its PID must hold the instance lock and stay
-unchanged before/after the probe, and the process scan must exclude other workers. A write failure or a fresh migration plan with pending files also returns 2; once old consumers are
-excluded the marker is removed even if writes need a manual retry.
+unchanged before and after the probe, and the process scan must exclude other workers. A failed write also returns 2.
 
-Before step 8 attempts `up`, a failure or INT/TERM/HUP removes only a freeze this run created fresh, using
-`ops:unfreeze --owned` and its token. A taken-over marker is kept even before `up`: only `config-write` after the consumer
-checks pass, or the user's `pnpm ops:unfreeze`, removes it. From `up` on, failures and interrupts keep every marker. Deployment does not fill or
-migrate user files before `config-write`; their format remains compatible with the old code, including saves by an older web.
-Deploy again to resume. `pnpm run doctor` warns with `config.freeze` when a marker is left without an active deploy,
-or a write lease/guard owner in `data/config/` or `data/profile/` exceeds the stale threshold. Abandoned locks are taken
-over automatically on the next write; if saves keep failing, confirm the owner is no longer writing, then remove the
-reported lock file or guard owner.
-For manual recovery, first confirm no old consumers remain, then run:
+Deploy again to resume; nothing needs cleaning up. `pnpm config:plan --deploy` lists what is pending (`--check` exits 2
+while something is) and `pnpm run doctor` reports it as `config.pending`. To write by hand, first confirm that nothing
+older than this version still runs, then:
 
 ```bash
-pnpm ops:unfreeze
-pnpm config:init
 pnpm config:migrate --write
+pnpm config:init
 ```
 
-`pnpm ops:freeze --target <commit>` creates or replaces the marker under the same write locks; `pnpm ops:unfreeze`
-removes it under those locks and prints `pnpm config:init`, then `pnpm config:migrate --write`. Backups exclude both the marker and `.write.lock`.
-`pnpm config:migrate --json` gives read-only pending/problem counts for automation.
+`pnpm config:migrate --json` gives read-only pending/problem counts for automation. `config:migrate --write` keeps the
+originals it replaces in `data/config/.backup/<timestamp>/`; only the deploy's prune step (`config:migrate
+--prune-backups`) deletes older ones, down to `schedule.yaml: config_writes.backups_keep` (5).
+
+An ai-worker that finds a config file with a newer `config_version` than it knows (an old worker still running during
+an upgrade) logs which file, exits with code 1 and takes no more requests; the upgraded worker takes over.
+
+Leftovers of builds from before this version are harmless: `.upgrade-freeze`, `.write.lock` and `.write.lock.guard` are
+ignored, and step 11 removes them once the gate has passed. The `deploy.config_write_lock_*` keys in `schedule.yaml` are
+ignored too.
+
+**An existing install without `setup.yaml`.** A deploy does not create `setup.yaml`, and nothing infers an existing
+install from the files around it: no `setup.yaml` means the setup is pending, whatever else is in `data/config/`.
+Every page then opens the setup wizard and the runner holds back its scheduled cycles. Installs that have started 2.0.0 or
+later already have the file. An install coming straight from before the wizard (1.x) opens the wizard once: finish it or
+choose "Skip the wizard" (or run `pnpm run setup --complete`) and the cycles resume. Such an install also reads the
+shipped `language.yaml` (English) until you set the languages in Settings → Display. Restoring a backup from that time
+(`restore.sh --with-config`), or `pnpm config:init --from <old config dir>`, instead writes a completed `setup.yaml` and
+the Chinese `language.yaml` those installs had.
 
 Restart host processes that deploy cannot manage, such as `pnpm mcp:serve`, after upgrading. Rolling code back after
-successful config writes still requires compatible originals from `data/config/.backup/`. When `--skip-pull` runs an
-older deploy script that does not understand the freeze, the marker may remain: old code ignores it and the next
-upgrade with the new script takes it over. This does not make newer config files readable by old code.
+successful config writes still requires compatible originals from `data/config/.backup/`.
 
 ### Linux: upgrading from a version whose containers ran as root
 
@@ -319,23 +316,23 @@ The restore keeps the database it replaces as `jobradar_before_restore_<timestam
 
 If the release you are leaving migrated a config file, the older code finds it "too new" (`pnpm run doctor` shows
 `config.layers`): copy the original back from `data/config/.backup/<timestamp>/` into `data/config/`.
-This also covers the `deploy.config_write_lock_*` keys in `schedule.yaml` written by `config:init`: older versions
-reject these unknown keys even without a config-version change. Restore the compatible `schedule.yaml` backup before
-starting the old code.
+Older versions also reject unknown keys without a config-version change: delete the `config_writes` block from
+`schedule.yaml` if you added one, and the `deploy.config_write_lock_*` keys that a build from before this version wrote
+there, before starting the old code.
 
 More in [deploy.md](deploy.md) (section 5) and [backup-restore.md](backup-restore.md). To follow `main` again:
 `git switch main && scripts/ops/deploy.sh`.
 
-<a id="downgrade-pre-config-freeze"></a>
+<a id="downgrade-pre-config-write-step"></a>
 
-### Downgrade to a release without configuration freezing
+### Downgrade to a release without the config-write step
 
-Before `--ref` moves the checkout, the running script checks the target's `# capability: config-freeze` marker in
-`scripts/ops/deploy.sh`. A target without it uses the older step-4 behavior: `config:init`, `config:migrate --write`,
-then `config:check`. It skips freeze creation and the later `config-write` gate, so it does not call commands the old
-release lacks. Any leftover `.upgrade-freeze` marker is kept unchanged and reported: old code ignores it, and the next
-upgrade with the protocol takes it over. Running the old script with `--skip-pull` likewise leaves the marker alone.
-Restore compatible config originals before starting old code; the marker cannot make a newer format readable.
+Before `--ref` moves the checkout, the running script looks for the line `# capability: config-write-step` in the
+target's `scripts/ops/deploy.sh`. A target without it (every release before this one) runs its own step 4: its
+`config:init`, `config:migrate --write` and `config:check`, with its own code and without a database lock. Step 11 is
+skipped, so no command the old release lacks is called. The files stay as
+this version wrote them, so an older release that finds a file newer than it knows needs the compatible original from
+`data/config/.backup/<timestamp>/` first (see above). Running the old script with `--skip-pull` does the same.
 
 **Rolling back only the ai-worker** (an emergency, for example when a new worker misbehaves and the rest is fine): the
 previous release directories are kept (`deploy.ai_worker_releases_keep`), so

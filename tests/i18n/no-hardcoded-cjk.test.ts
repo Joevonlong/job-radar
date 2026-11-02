@@ -21,6 +21,7 @@ const ALLOWED: ReadonlyArray<{ path: string; reason: string }> = [
   { path: "scripts/e2e-runner.ts", reason: "demo data the e2e tests look for" },
   { path: "src/i18n/catalog.generated.ts", reason: "generated from messages/*.json (language names and format words)" },
   { path: "src/lib/config/migrations/", reason: "comment templates written into the user's own older config files; data for existing installs, not product copy" },
+  { path: "src/lib/setup/existing-install.ts", reason: "comment templates of the language.yaml written for an install from before the language settings; data for existing installs, not product copy" },
   { path: "src/lib/signals/defaults.ts", reason: "the bilingual labels { zh, en } of the default signal categories, written into the user's interests.yaml (user data)" },
   { path: "src/lib/docs-link.ts", reason: "GitHub heading slugs of docs/*.zh.md (URL fragments, not copy)" },
   { path: "src/lib/config/schemas/writer.ts", reason: "the default Chinese first-person words the answer check matches (matching data, not copy)" },

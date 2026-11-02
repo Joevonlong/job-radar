@@ -10,8 +10,9 @@ import { ConfigError } from "../errors";
 import { parseConfigDocument, resetConfigCache, validateConfigValue } from "../load";
 import { getConfigDir, getUserConfigPath } from "../paths";
 import { CONFIG_NAMES, isProfileName, type ConfigName } from "../registry";
-import { assertConfigWritable, withUserDirectoryLocks } from "../write-lock";
-import { atomicWrite, restoreFlowPadding } from "../write";
+import { commitConfigFile, sha256 } from "../atomic";
+import { withConfigWriteLock } from "../write-lock";
+import { restoreFlowPadding, withFileLock } from "../write";
 
 import { migrateConfigDocument } from "./version";
 
@@ -101,40 +102,36 @@ export interface AppliedConfigMigrations {
 }
 
 /**
- * Write the pending migrations of a plan: first copy every file that will change to `<user dir>/.backup/<timestamp>/`
- * (profile files under `profile/`), then replace each file atomically. Files changed since the plan are skipped
- * (reported as not written) rather than overwritten.
+ * Write the pending migrations of a plan, one file at a time and each under the config write lock: plan the file again in
+ * the lock (a save may have got in first), copy the original to `<user dir>/.backup/<timestamp>/` (profile files under
+ * `profile/`), write a temp file, read it back, compare the base and replace. A file with nothing left to migrate, or that
+ * changed between that plan and the rename, is skipped (reported as not written) rather than overwritten. Backups are
+ * not pruned here (`pruneConfigBackups`).
  */
 export async function applyConfigMigrations(plan: ConfigMigrationPlan, now: Date = new Date()): Promise<AppliedConfigMigrations> {
-  return withUserDirectoryLocks(async () => {
-    assertConfigWritable(getConfigDir());
-    if (plan.pending.length === 0) return { backupDir: null, written: [] };
-    const backupDir = configBackupDir(now);
-    const fresh = plan.pending.filter(matchesOriginal);
-    for (const item of fresh) {
-      const target = path.join(backupDir, isProfileName(item.name) ? "profile" : "", path.basename(item.path));
-      await fsp.mkdir(/*turbopackIgnore: true*/ path.dirname(target), { recursive: true });
-      await fsp.writeFile(/*turbopackIgnore: true*/ target, item.before, { encoding: "utf8", mode: 0o600 });
-    }
-    const written: string[] = [];
-    for (const item of fresh) {
+  if (plan.pending.length === 0) return { backupDir: null, written: [] };
+  const backupDir = configBackupDir(now);
+  const written: string[] = [];
+  for (const { name, path: file } of plan.pending) {
+    const done = await withFileLock(file, () => withConfigWriteLock(async () => {
+      const item = planConfigMigrations([name]).pending[0];
+      if (item === undefined) return false;
+      const copy = path.join(backupDir, isProfileName(name) ? "profile" : "", path.basename(file));
+      await fsp.mkdir(/*turbopackIgnore: true*/ path.dirname(copy), { recursive: true });
+      await fsp.writeFile(/*turbopackIgnore: true*/ copy, item.before, { encoding: "utf8", mode: 0o600 });
       try {
-        await atomicWrite(item.path, item.after, undefined, () => {
-          if (!matchesOriginal(item)) {
-            throw new ConfigError({ configName: item.name, filePath: item.path, kind: "stale" });
-          }
+        await commitConfigFile(file, item.after, {
+          baseSha256: sha256(item.before),
+          verify: (content) => void validateConfigValue(name, parseConfigDocument(name, content.toString("utf8"), file).toJS(), file),
         });
-        written.push(item.path);
       } catch (error) {
-        if (!(error instanceof ConfigError) || error.kind !== "stale") throw error;
+        if (error instanceof ConfigError && error.kind === "stale") return false;
+        throw error;
       }
-    }
-    resetConfigCache();
-    return { backupDir: fresh.length > 0 ? backupDir : null, written };
-  });
-}
-
-/** A removed or unreadable file is stale too; never recreate it from the preview. */
-function matchesOriginal(item: FileMigration): boolean {
-  try { return fs.readFileSync(/*turbopackIgnore: true*/ item.path, "utf8") === item.before; } catch { return false; }
+      return true;
+    }, file));
+    if (done) written.push(file);
+  }
+  resetConfigCache();
+  return { backupDir: written.length > 0 ? backupDir : null, written };
 }

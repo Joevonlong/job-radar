@@ -30,13 +30,12 @@ source needs which key: [installation.md](installation.md#2-optional-create-env)
 
 | Kind | Files | First-time setup | On product upgrade |
 |---|---|---|---|
-| `user` | schedule, search, sources, ai, notify, interests, ui, breakdown, resume, insights, language, setup, salary ([salary.md](salary.md)), mcp ([mcp.md](mcp.md)), writer ([application-writer.md](application-writer.md)) | Copied from the defaults directory to the user directory, yours from then on | Your files are never changed automatically; format changes are carried over by migrations (`config_version`) |
+| `user` | schedule, search, sources, ai, notify, interests, ui, breakdown, resume, insights, language, setup, salary ([salary.md](salary.md)), mcp ([mcp.md](mcp.md)), writer ([application-writer.md](application-writer.md)) | Read from the defaults directory until `pnpm config:init` (the deploy runs it) or a save copies it to the user directory, yours from then on | Your files are never changed automatically; format changes are carried over by migrations (`config_version`) |
 | `shipped` | models (model catalog and prices), pipeline (parsing rules, city and skill tables), pipeline-board (board layout and card display), job-search (job query parsing and matching settings), job-archive (seen-again rules), signal-presets (the presets of the "Add category" dialog on `/interests`, see [signals.md](signals.md#add-your-own-interest-point)) | Not copied; always read from the defaults directory | Follows product updates |
 
-A `user` file that a product upgrade introduces is copied from the defaults on the next start; when the user directory
-already held configuration (an existing install), a file can be written with the behaviour the install had so far
-instead (`language.yaml`: Chinese, see [languages.md](languages.md)). The setup wizard uses the same "existing
-install" check.
+Nothing writes these files at start-up: web and runner only log how many user files are missing and read the
+defaults instead. A `user` file that a product upgrade introduces is copied by the next deploy (step 11) or by
+`pnpm config:init`. `setup.yaml` and `language.yaml` belong to the setup wizard and are not created that way (see below).
 
 To change a `shipped` file, copy it into the user directory and edit it there (the whole file overrides). The cost is that later product updates to that file no longer take effect: `pnpm config:check` and the doctor's `config.layers` will keep saying "you override pipeline.yaml" (or whichever file). To follow the product again, delete your copy in the user directory. `models.yaml` is the exception: your `data/config/models.yaml` is laid over the shipped one model by model (see [AI providers](ai-providers.md#checklist-for-a-new-model-release)), so it never hides product updates of the models you do not list.
 
@@ -129,22 +128,24 @@ Run these in the project directory.
 ```bash
 pnpm config:init                  # create the user directory, copy missing user files and profile templates; existing ones are untouched (safe to repeat)
 pnpm config:init --from <dir>     # copy from another directory (for migrating an old install), and also copy shipped files that differ from the defaults
+pnpm config:init --env-only       # only create .env (a new install's database password), touch no config file
 pnpm config:migrate               # list the files to migrate and their diffs, write nothing
 pnpm config:migrate --write       # migrate: first back up the original files to data/config/.backup/<timestamp>/, then write
+pnpm config:migrate --prune-backups  # delete all but the newest schedule.yaml: config_writes.backups_keep (5) of those backup folders
+pnpm config:plan [--deploy] [--check]  # list the writes that are waiting, write nothing; --deploy adds the files config:init would create; --check exits 2 while any is pending (0 none, 1 a file cannot be migrated)
 pnpm config:check                 # validate both layers (default-directory files must be valid even when overridden), print which layer each file is read from and the shipped config identity
 pnpm config:check --effective     # per file: the layer it is read from and a hash of its effective value (`--json` for a machine-readable list; see below)
 pnpm config:example               # list the example setups; `pnpm config:example <id> [--dry-run]` applies one (see below)
 ```
 
-The web and runner fill missing files at startup, skipping fills during an upgrade freeze. For existing installs,
-step 4 of `scripts/ops/deploy.sh` previews migrations, runs `config:check` in memory and checks compose config before
-freezing writes. Step 11,
-`config-write`, fills and migrates user files only after checking the worker holder and host processes. A first install
-runs `config:init` at step 4 without a freeze. Targets without the freeze capability use their older step-4 write flow
-(see [downgrades](upgrade.md#downgrade-pre-config-freeze)).
-Only freeze-aware web versions refuse saves from step 4. On the first deployment of this version, the older web keeps
-running until step 8; any saves it makes still use the old format and are harmless. Install-specific defaults, such as
-the language of an existing install, are selected at read time while their files await `config-write`.
+Nothing writes at start-up, and `--write` does not delete old backups: the files are written by these commands, by saves
+in the web, and by step 11 `config-write` of `scripts/ops/deploy.sh`, which runs `config:migrate --write`, `config:init`,
+`config:plan --deploy --check` and `config:migrate --prune-backups` once the new worker is confirmed and no older worker
+runs. If that gate or a write fails the deploy ends with exit 2 and the next deploy retries; the doctor shows what is
+left as `config.pending`. Until a file is written it is read from the shipped defaults (a missing file) or migrated in
+memory (an older format). Step 4 of the deploy only previews. A host command that writes needs the database (see
+[Config write lock](#config-write-lock)). A target version without the config-write step uses its own older step 4
+(see [downgrades](upgrade.md#downgrade-pre-config-write-step)).
 
 ### Salary (`salary.yaml`)
 
@@ -209,10 +210,12 @@ Changes are picked up without a restart. Work actually in progress is not pruned
 ### setup.yaml
 
 `setup.yaml` holds the state of the first-run setup (`completed_at`, `completed_by`, `steps`); the setup wizard and
-`pnpm run setup` write it. On a fresh install it starts pending (every page opens `/setup`, the runner holds back its
-scheduled cycles). When `config:init` (or the web / runner start-up) finds a user directory that already holds config files
-but no `setup.yaml`, it writes one marked complete (`completed_by: existing_install`), so an existing install never sees
-the wizard. An unreadable file counts as complete. See [setup.md](setup.md).
+`pnpm run setup` write it. No `setup.yaml` means the setup is pending (every page opens `/setup`, the runner holds back
+its scheduled cycles), whether or not other config files exist: nothing infers an existing install, and a deploy does not
+add the file. Only a restore (or `pnpm config:init --from <dir>`) of a backup from before the wizard writes one marked
+complete (`completed_by: existing_install`). An install from before the wizard that is upgraded in place therefore opens
+the wizard once; finish or skip it, or run `pnpm run setup --complete`. An unreadable file counts as complete.
+See [setup.md](setup.md) and [upgrade.md](upgrade.md#settings-during-an-upgrade).
 
 ## Example setups
 
@@ -694,34 +697,27 @@ affected; the runner and the loader read those names as before.
 
 Older versions kept the live configuration in git as `config/`. Preserve a separate copy of that live directory before
 switching code. With old consumers stopped, import it using `pnpm config:init --from <saved-old-config-dir>` before
-deploy fills missing user files. Existing installs preview and validate before freezing at step 4; step 11 (`config-write`) fills
-missing files and writes migrations after excluding old workers. From then on the web app writes `data/config/`, and
-`config/` holds product defaults. See sections 4 and 5 of [`deploy.md`](deploy.md) and [upgrade.md](upgrade.md).
+deploy fills missing user files; a directory from before the setup wizard also gets a completed `setup.yaml` that way.
+Step 4 of the deploy only previews; step 11 (`config-write`) fills missing files and writes migrations after excluding
+old workers. From then on the web app writes `data/config/`, and `config/` holds product defaults. See sections 4 and 5 of [`deploy.md`](deploy.md) and [upgrade.md](upgrade.md).
 
-### Upgrade write protection
+### Config write lock
 
-Source switches and boards, discovered board candidates, search-city synchronization, workflow settings and interest
-edits, including setup wizard settings and progress, read their current values inside both the file lock and the cross-process directory lock. Concurrent changes to
-different fields are kept; a freeze is checked before that read. A frozen or busy save is reported explicitly. The
-salary settings form, like the other settings forms and source imports, refuses a file changed since its preview.
-Wizard market and target saves merge only their own preference fields; profile history is recorded after releasing the directory lock.
+Every write to a config or profile file takes a lock in the database, per file: saves on the settings pages, the setup
+wizard, the advanced editor, `/me`, `/interests` and the source registry, and the commands `config:init`,
+`config:migrate --write` and `pnpm run setup`. Source switches and boards, discovered board candidates, search-city
+synchronization, workflow settings and interest edits read their current value inside the lock, so concurrent changes to
+different fields are kept. The salary form, like the other settings forms and source imports, refuses a file changed
+since its preview. Wizard market and target saves merge only their own preference fields.
 
-`pnpm ops:freeze --target <commit>` freezes config/profile writes for an upgrade; `pnpm ops:unfreeze` removes the marker
-under the same cross-process write locks and prints `pnpm config:init`, then `pnpm config:migrate --write`. Use it only
-after confirming no old consumers remain. Before step 8 starts containers, a failure or interrupt automatically removes
-only a freeze this run created fresh. A taken-over marker stays until `config-write` passes the consumer checks or the
-user runs `ops:unfreeze`; once `up` has been attempted, failures and interrupts keep every marker. Freeze-aware web versions show
-an upgrade message on saves while frozen; the older web on the first upgrade continues writing harmless old-format files
-until step 8. The doctor
-checks leftover markers and write leases/guard owners older than the stale threshold with `config.freeze`. Abandoned
-locks are taken over automatically on the next write; if saves keep failing, confirm the owner is no longer writing,
-then remove the lock file or guard owner. `pnpm config:migrate --json` reports pending/problem counts without writing.
-Lock timing is configured by `schedule.yaml` `deploy.config_write_lock_stale_seconds`, `config_write_lock_wait_seconds`
-and `config_write_lock_retry_ms` (defaults: 300 seconds, 10 seconds, 50 milliseconds). Same-host owners carry a random
-process ID and process start time; a reused PID or abandoned token is recovered immediately, while live owners stay busy.
-A foreign host/namespace can be taken over only after the stale threshold.
-The final commit checks lock ownership again.
-See [upgrade.md](upgrade.md#settings-during-an-upgrade) for recovery and host-process restarts.
+Saves therefore need the database. With it unreachable they are refused ("Saving settings needs the database, and it
+cannot be reached right now") and nothing is written; reading is unaffected. A host command needs a database it can
+reach from the host (`DATABASE_URL`, or `POSTGRES_*` in `.env`) and says so when it has none. When another writer holds
+the lock, a write waits up to `schedule.yaml: config_writes.lock_wait_seconds` (default 10) and then reports busy; a
+command names the holder. The same block has `backups_keep` (default 5), the number of `.backup/<timestamp>/` folders the
+deploy keeps. Neither key is in the shipped file; add the block to `data/config/schedule.yaml` only to change them.
+`pnpm config:migrate --json` reports pending/problem counts without writing. An older version rejects the block as
+unknown: remove it before rolling back. See [upgrade.md](upgrade.md#settings-during-an-upgrade).
 
 ## Current display scores (`current-scores.yaml`)
 

@@ -138,10 +138,10 @@ const deploy = z.strictObject({
    * Also the longest wait of deploy.sh step 11 (`--settle` overrides it).
    */
   ai_worker_swap_timeout_seconds: positiveInt.default(120),
-  /** Same-host write locks check PID and process generation; foreign hosts/namespaces use the stale threshold. */
-  config_write_lock_stale_seconds: positiveInt.default(300),
-  config_write_lock_wait_seconds: z.number().positive().default(10),
-  config_write_lock_retry_ms: positiveInt.default(50),
+  /** No longer read (the write lock moved to the database, `config_writes`). Files written by earlier versions may hold them. */
+  config_write_lock_stale_seconds: positiveInt.optional(),
+  config_write_lock_wait_seconds: z.number().positive().optional(),
+  config_write_lock_retry_ms: positiveInt.optional(),
 }).superRefine((value, ctx) => {
   if (value.ai_worker_swap_timeout_seconds < value.ai_worker_stop_timeout_seconds + 10) {
     ctx.addIssue({
@@ -163,10 +163,17 @@ const DEPLOY_DEFAULTS: DeployConfig = {
   ai_worker_releases_keep: 3,
   ai_worker_stop_timeout_seconds: 60,
   ai_worker_swap_timeout_seconds: 120,
-  config_write_lock_stale_seconds: 300,
-  config_write_lock_wait_seconds: 10,
-  config_write_lock_retry_ms: 50,
 };
+
+/** Config writes of every process and of deploys. Only schema defaults: there is no need to list them in schedule.yaml. */
+const configWrites = z.strictObject({
+  /** Newest `config:migrate` backups in `.backup/` that survive `--prune-backups`. */
+  backups_keep: z.number().int().min(1).default(5),
+  /** Longest wait for the config write lock before a write reports "busy". */
+  lock_wait_seconds: z.number().min(1).default(10),
+}).default({ backups_keep: 5, lock_wait_seconds: 10 });
+
+export type ConfigWritesConfig = z.infer<typeof configWrites>;
 
 /** The manual buttons of /sources and /settings (run a channel now, test a channel / AI provider / Telegram). */
 const manualTriggers = z.strictObject({
@@ -297,6 +304,7 @@ export const scheduleSchema = z.strictObject({
   doctor: doctor.default(DOCTOR_DEFAULTS),
   /** Docker housekeeping of `scripts/ops/deploy.sh`; a file without the block gets the defaults of the shipped YAML. */
   deploy: deploy.default(DEPLOY_DEFAULTS),
+  config_writes: configWrites,
   /** Rate limit of the manual buttons; a file without the block gets the defaults of the shipped YAML. */
   manual_triggers: manualTriggers.default(MANUAL_TRIGGERS_DEFAULTS),
   /** Log level of the processes; a file without the block logs at `info`. */

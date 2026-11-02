@@ -8,7 +8,7 @@ import { aiSchema, checkAiAgainstCatalog, mutateConfig, type AiConfig, type Cata
 
 import { aiInputSchema, type AiInput } from "../inputs";
 import { stepError, type SetupFieldError, type SetupStepResult } from "../types";
-import { editable, finishStep, readFresh, zodSetupErrors, setupFrozen, setupWriteError } from "./common";
+import { editable, readFresh, zodSetupErrors, setupWriteError, withStepWrite } from "./common";
 
 /** Providers that have a strong model next to the default one. */
 export const STRONG_MODEL_PROVIDERS: readonly AiProviderIdChoice[] = ["claude-cli", "anthropic"];
@@ -52,8 +52,6 @@ export function applyAiInput(current: AiConfig, input: AiInput): AiConfig {
 }
 
 export async function saveAiStep(raw: unknown): Promise<SetupStepResult> {
-  const frozen = setupFrozen("ai");
-  if (frozen) return frozen;
   const parsed = aiInputSchema.safeParse(raw);
   if (!parsed.success) return stepError("ai", "invalidPayload");
   if (parsed.data.order !== undefined && parsed.data.order.length === 0) return stepError("ai", null, [{ path: "order", ns: "setup", key: "orderEmpty" }]);
@@ -62,25 +60,27 @@ export async function saveAiStep(raw: unknown): Promise<SetupStepResult> {
   const catalog = readFresh("models");
   if (catalog === null) return stepError("ai", "catalogUnreadable");
 
-  let problem: SetupStepResult | null = null;
-  try {
-    await mutateConfig("ai", (latest) => {
-      const next = aiSchema.safeParse(applyAiInput(latest, parsed.data));
-      if (!next.success) {
-        problem = stepError("ai", null, zodSetupErrors(next.error, fieldOf));
-        return null;
-      }
-      const before = new Set(checkAiAgainstCatalog(latest, catalog).map(issueKey));
-      const introduced = checkAiAgainstCatalog(next.data, catalog).filter((issue) => issue.severity === "error" && !before.has(issueKey(issue)));
-      if (introduced.length > 0) {
-        const errors: SetupFieldError[] = introduced.map((issue) => ({ path: fieldOf(issue.path), ns: "setup", key: issue.code === "not_in_catalog" ? "notInCatalog" : "invalid", params: { model: issue.model, message: issue.message } }));
-        problem = stepError("ai", null, errors);
-        return null;
-      }
-      return next.data;
-    });
-  } catch (error) {
-    return stepError("ai", setupWriteError(error));
-  }
-  return problem ?? finishStep("ai");
+  return withStepWrite("ai", async () => {
+    let problem: SetupStepResult | null = null;
+    try {
+      await mutateConfig("ai", (latest) => {
+        const next = aiSchema.safeParse(applyAiInput(latest, parsed.data));
+        if (!next.success) {
+          problem = stepError("ai", null, zodSetupErrors(next.error, fieldOf));
+          return null;
+        }
+        const before = new Set(checkAiAgainstCatalog(latest, catalog).map(issueKey));
+        const introduced = checkAiAgainstCatalog(next.data, catalog).filter((issue) => issue.severity === "error" && !before.has(issueKey(issue)));
+        if (introduced.length > 0) {
+          const errors: SetupFieldError[] = introduced.map((issue) => ({ path: fieldOf(issue.path), ns: "setup", key: issue.code === "not_in_catalog" ? "notInCatalog" : "invalid", params: { model: issue.model, message: issue.message } }));
+          problem = stepError("ai", null, errors);
+          return null;
+        }
+        return next.data;
+      });
+    } catch (error) {
+      return stepError("ai", setupWriteError(error));
+    }
+    return problem;
+  });
 }

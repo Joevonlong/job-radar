@@ -83,7 +83,7 @@ services:
       JOB_RADAR_PROFILE_DIR: /app/data/profile
     # The settings pages write the user config (data/config) and the profile files back, so both are read-write.
     # The shipped defaults are in the image (/app/config), never mounted: a deploy changes them only by rebuilding.
-    # At start-up the web copies the user files data/config lacks from them.
+    # The deploy's config step (after the ai-worker) writes the user files data/config lacks; nothing writes at start-up.
     volumes:
       - ./data/config:/app/data/config
       - ./data/profile:/app/data/profile
@@ -160,9 +160,8 @@ services:
       JOB_RADAR_WEB_PASSWORD_HASH: ""
       JOB_RADAR_SESSION_SECRET: ""
     # The user config is read-only for the runner (it hot-reloads what the web writes into data/config); the shipped
-    # defaults are in the image (/app/config). The profile directory is mounted read-write for one reason: at start-up
-    # the runner seeds missing me.yaml / preferences.yaml from config/profile.example (ensureProfileFiles). It never
-    # overwrites an existing file.
+    # defaults are in the image (/app/config). The profile directory stays mounted read-write, but starting writes nothing
+    # to it: a missing file reads the shipped default, and the deploy's config step creates the user files.
     volumes:
       - ./data/config:/app/data/config:ro
       - ./data/profile:/app/data/profile

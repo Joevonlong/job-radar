@@ -1,14 +1,14 @@
 /**
  * The setup state (config/setup.yaml in the user config directory). Server / Node only.
  *
- * "Setup pending" = the file is readable and `completed_at` is null. Everything else counts as completed, so a problem
- * never locks anyone into the wizard: an unreadable or invalid file (the doctor reports it), and an install whose user
- * directory holds config files but no setup.yaml (an install from before the wizard; its first start writes the file,
- * and a runner that cannot write the directory reads it the same way meanwhile).
+ * "Setup pending" = the file is readable and `completed_at` is null, or there is no user file and the shipped default says
+ * so: a missing setup.yaml always opens the wizard, whatever else the directory holds. An unreadable or invalid file counts
+ * as completed, so a problem never locks anyone into the wizard (the doctor reports it).
  */
 import fs from "node:fs";
+import path from "node:path";
 
-import { ConfigError, getConfigDir, getDefaultConfigPath, getUserConfigPath, isExistingInstall, mutateConfig, parseConfigText, type SetupConfig } from "@/lib/config";
+import { commitConfigFile, ConfigError, getDefaultConfigPath, getUserConfigPath, mutateConfig, parseConfigText, withConfigWriteLock, withFileLock, type SetupConfig } from "@/lib/config";
 
 import { type SetupCompletedBy, type SetupStepId, type SetupStepStatus } from "./steps";
 
@@ -17,8 +17,6 @@ export type SetupSource =
   | "user"
   /** No user file: the shipped default (a fresh install). */
   | "default"
-  /** No user file, but other config files: an install from before the wizard (treated as completed). */
-  | "existing_install"
   /** No file anywhere. */
   | "missing";
 
@@ -30,7 +28,7 @@ export interface SetupStatus {
   /** Why the file cannot be read (first line); null when it can (or there is none). */
   error: string | null;
   source: SetupSource;
-  /** The file read (user or default); null for `existing_install` / `missing`. */
+  /** The file read (user or default); null for `missing`. */
   path: string | null;
 }
 
@@ -86,7 +84,6 @@ export function readSetupState(): SetupStatus {
       cache = { key, status };
       return status;
     }
-    if (isExistingInstall(getConfigDir())) return { pending: false, state: null, error: null, source: "existing_install", path: null };
     const defaultFile = getDefaultConfigPath("setup");
     const defaultStamp = defaultFile === null ? null : fileStamp(defaultFile);
     if (defaultFile === null || defaultStamp === null) return { pending: false, state: null, error: null, source: "missing", path: null };
@@ -106,26 +103,24 @@ export function resetSetupStateCache(): void {
 }
 
 /**
- * The state a write starts from. A readable file: its content. No file on an existing install: "completed", so marking
- * a step there can never turn the install into a pending one. An unreadable or invalid file: null (nothing is written;
+ * The state a write starts from. A readable file: its content. An unreadable or invalid file: null (nothing is written;
  * the doctor reports the file).
  */
-function baseForWrite(now: Date): SetupConfig | null {
+function baseForWrite(): SetupConfig | null {
   const status = readSetupState();
   if (status.state !== null) return status.state;
   if (status.error !== null) return null;
-  if (status.source === "existing_install") return { completed_at: now.toISOString(), completed_by: "existing_install", steps: {} };
   return { completed_at: null, completed_by: null, steps: {} };
 }
 
-export type SetupWriteResult = { ok: true; state: SetupConfig } | { ok: false; reason: "unreadable" | "write_failed" | "frozen" };
+export type SetupWriteResult = { ok: true; state: SetupConfig } | { ok: false; reason: "unreadable" | "write_failed" | "busy" | "db_unavailable" };
 
-async function write(now: Date, update: (base: SetupConfig) => SetupConfig | null): Promise<SetupWriteResult> {
+async function write(update: (base: SetupConfig) => SetupConfig | null): Promise<SetupWriteResult> {
   try {
     let state: SetupConfig | null = null;
     await mutateConfig("setup", () => {
       resetSetupStateCache();
-      const base = baseForWrite(now);
+      const base = baseForWrite();
       if (base === null) return null;
       const next = update(base);
       state = next ?? base;
@@ -134,13 +129,13 @@ async function write(now: Date, update: (base: SetupConfig) => SetupConfig | nul
     resetSetupStateCache();
     return state === null ? { ok: false, reason: "unreadable" } : { ok: true, state };
   } catch (error) {
-    return { ok: false, reason: error instanceof ConfigError ? error.kind === "frozen" ? "frozen" : ["missing", "yaml", "schema", "version"].includes(error.kind) ? "unreadable" : "write_failed" : "write_failed" };
+    return { ok: false, reason: !(error instanceof ConfigError) ? "write_failed" : error.kind === "busy" || error.kind === "db_unavailable" ? error.kind : ["missing", "yaml", "schema", "version"].includes(error.kind) ? "unreadable" : "write_failed" };
   }
 }
 
 /** Record what happened to one step (`done` after a save, `skipped` when passed over). */
 export async function markStep(id: SetupStepId, status: SetupStepStatus, now: Date = new Date()): Promise<SetupWriteResult> {
-  return write(now, (base) => ({ ...base, steps: { ...base.steps, [id]: { status, at: now.toISOString() } } }));
+  return write((base) => ({ ...base, steps: { ...base.steps, [id]: { status, at: now.toISOString() } } }));
 }
 
 /**
@@ -148,5 +143,53 @@ export async function markStep(id: SetupStepId, status: SetupStepStatus, now: Da
  * from the settings page and pressing "finish" changes nothing).
  */
 export async function completeSetup(by: SetupCompletedBy, now: Date = new Date()): Promise<SetupWriteResult> {
-  return write(now, (base) => base.completed_at !== null && readSetupState().source === "user" ? null : { ...base, completed_at: base.completed_at ?? now.toISOString(), completed_by: base.completed_by ?? by });
+  return write((base) => base.completed_at !== null && readSetupState().source === "user" ? null : { ...base, completed_at: base.completed_at ?? now.toISOString(), completed_by: base.completed_by ?? by });
+}
+
+export type EnsurePendingSetupResult = { ok: true; existed: boolean } | { ok: false; formError: "busy" | "dbUnavailable" | "setupUnreadable" };
+
+/** How long a `.setup.yaml.*.tmp` may lie around before it counts as left behind by an interrupted write. */
+const ABANDONED_TEMP_MS = 60 * 60 * 1000;
+
+function removeAbandonedSetupTemps(dir: string, now: number): void {
+  let names: string[];
+  try {
+    names = fs.readdirSync(/*turbopackIgnore: true*/ dir);
+  } catch {
+    return;
+  }
+  for (const name of names) {
+    if (!name.startsWith(".setup.yaml.") || !name.endsWith(".tmp")) continue;
+    const file = path.join(dir, name);
+    try {
+      if (now - fs.statSync(/*turbopackIgnore: true*/ file).mtimeMs > ABANDONED_TEMP_MS) fs.rmSync(/*turbopackIgnore: true*/ file, { force: true });
+    } catch {
+      // gone already
+    }
+  }
+}
+
+/**
+ * Create the pending setup.yaml before a step's first write, so a backup taken after any wizard save holds it. Its own
+ * commit (file lock, then the config write lock), publishing without ever replacing: a file that appeared meanwhile stays.
+ * Failures come back as the step's form error, nothing throws.
+ */
+export async function ensurePendingSetupFile(now: Date = new Date()): Promise<EnsurePendingSetupResult> {
+  const target = getUserConfigPath("setup");
+  try {
+    return await withFileLock(target, () => withConfigWriteLock(async (): Promise<EnsurePendingSetupResult> => {
+      removeAbandonedSetupTemps(path.dirname(target), now.getTime());
+      if (fs.existsSync(/*turbopackIgnore: true*/ target)) return { ok: true, existed: true };
+      const shipped = getDefaultConfigPath("setup");
+      if (shipped === null) return { ok: false, formError: "setupUnreadable" };
+      const text = fs.readFileSync(/*turbopackIgnore: true*/ shipped, "utf8");
+      const outcome = await commitConfigFile(target, text, { mode: "create", verify: (content) => void parseConfigText("setup", content.toString("utf8"), target) });
+      resetSetupStateCache();
+      return { ok: true, existed: outcome === "existed" };
+    }, target));
+  } catch (error) {
+    if (error instanceof ConfigError && error.kind === "busy") return { ok: false, formError: "busy" };
+    if (error instanceof ConfigError && error.kind === "db_unavailable") return { ok: false, formError: "dbUnavailable" };
+    return { ok: false, formError: "setupUnreadable" };
+  }
 }

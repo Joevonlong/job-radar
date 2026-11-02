@@ -14,7 +14,6 @@ export const setupCompletedCheck: DoctorCheck = {
     const status = await ctx.probes.setup();
     if (status.error !== null) return fail(spec, t("checks.setup.completed.invalid", { error: status.error }), t("checks.setup.completed.invalidHint"));
     if (status.pending) return warn(spec, t("checks.setup.completed.pending"), t("checks.setup.completed.pendingHint"));
-    if (status.source === "existing_install") return ok(spec, t("checks.setup.completed.existing"));
     if (status.source === "missing" || status.state === null) return warn(spec, t("checks.setup.completed.missing"), t("checks.setup.completed.missingHint"));
     const by = status.state.completed_by;
     return ok(spec, t("checks.setup.completed.ok", { at: status.state.completed_at ?? "", by: by === null ? "" : t(`checks.setup.completed.by.${by}`) }));

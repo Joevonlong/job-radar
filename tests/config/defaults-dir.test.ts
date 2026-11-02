@@ -78,7 +78,8 @@ describe("the config scripts (pnpm config:init / config:migrate / config:check)"
     expect(first.status, first.out).toBe(0);
     expect(first.out).toContain(`+ ${path.join(tmp.configDir, "ai.yaml")}`);
     expect(first.out).toContain(`+ ${path.join(tmp.profileDir, "me.yaml")}  (from the template)`);
-    expect(fs.readdirSync(tmp.configDir).sort()).toEqual(LAYERED_CONFIG_NAMES.filter((n) => configRegistry[n].kind === "user").map((n) => configRegistry[n].file).sort());
+    // the wizard's setup.yaml and language.yaml are not created: a missing setup.yaml means the wizard is pending
+    expect(fs.readdirSync(tmp.configDir).sort()).toEqual(LAYERED_CONFIG_NAMES.filter((n) => configRegistry[n].kind === "user" && n !== "setup" && n !== "language").map((n) => configRegistry[n].file).sort());
 
     const second = run("config-init.ts");
     expect(second.status).toBe(0);

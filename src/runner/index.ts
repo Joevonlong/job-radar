@@ -6,7 +6,7 @@ import { registerBuiltinChannels } from "@/lib/channels/builtin";
 import type { ScheduledCycleKind } from "@/lib/channels/query";
 import { defaultRegistry } from "@/lib/channels/registry";
 import { createDbStateStore } from "@/lib/channels/store";
-import { ensureConfigFiles, ensureProfileFiles, getConfigDir, getProfileDir, loadConfig, readConfigText, watchConfig } from "@/lib/config";
+import { ensureProfileFilesPlan, plannedConfigFiles, getConfigDir, getProfileDir, loadConfig, readConfigText, watchConfig } from "@/lib/config";
 import { syncSourceRegistry } from "@/lib/sources/registry/sync";
 import { closeDb, enqueueAlert, getDb, getLatestHeartbeat, pruneHeartbeats, readAppliedMigrations, writeHeartbeat, type Db } from "@/lib/db";
 import { spanScope, createActivityRecorder, reconcileActivity, startActivityMaintenance } from "@/lib/activity";
@@ -176,22 +176,12 @@ async function main(): Promise<number> {
     log(`could not sweep dormant jobs at startup: ${describe(error)}`);
   }
 
-  // Copy the user config files the user directory lacks from the defaults (never overwrites). In the container the
-  // user directory is read-only for the runner (the web fills it); a full directory needs no write. Must not take the runner down.
+  // Starting writes nothing to the config or profile directories: a missing file reads the shipped default.
   try {
-    const created = (await ensureConfigFiles()).filter((r) => r.created).map((r) => r.name);
-    log(created.length > 0 ? `created user config files: ${created.join(", ")}` : "user config files present");
+    const missing = plannedConfigFiles().length + ensureProfileFilesPlan().length;
+    log(missing > 0 ? `${missing} user file(s) missing: reading the shipped defaults` : "user files present");
   } catch (error) {
-    log(`could not fill the user config directory (read from the defaults meanwhile): ${describe(error)}`);
-  }
-
-  // Seeds missing profile files from <defaults>/profile.example (never overwrites). Needs a writable
-  // profile mount, see compose.yaml. Failing here must not take the runner down.
-  try {
-    const created = (await ensureProfileFiles()).filter((r) => r.created).map((r) => r.name);
-    log(created.length > 0 ? `created profile files: ${created.join(", ")}` : "profile files present");
-  } catch (error) {
-    log(`could not ensure profile files (is the profile directory writable?): ${describe(error)}`);
+    log(`could not list the user config files: ${describe(error)}`);
   }
 
   const db = getDb();

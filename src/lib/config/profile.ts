@@ -2,9 +2,6 @@ import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
 
-import { getTranslator } from "../i18n/node";
-import { ConfigError } from "./errors";
-import { assertConfigWritable } from "./write-lock";
 import { copyPrivateIfMissing } from "./private-file";
 import { getConfigPath, getProfileDir, getProfileExampleDir } from "./paths";
 import { configRegistry, PROFILE_NAMES, type ProfileName } from "./registry";
@@ -28,22 +25,16 @@ export interface EnsureProfileResult {
   created: boolean;
 }
 
+/** The profile files `ensureProfileFiles` would create now. Reads only. */
+export function ensureProfileFilesPlan(): ProfileName[] {
+  return PROFILE_NAMES.filter((name) => !fs.existsSync(/*turbopackIgnore: true*/ getConfigPath(name)) && fs.existsSync(/*turbopackIgnore: true*/ path.join(getProfileExampleDir(), configRegistry[name].file)));
+}
+
 /**
  * Copy `<defaults dir>/profile.example/{me,preferences,stories}.yaml` into the profile directory for every file
  * that does not exist yet. Existing files are never overwritten.
  */
 export async function ensureProfileFiles(): Promise<EnsureProfileResult[]> {
-  try {
-    assertConfigWritable(getProfileDir());
-    return await fillProfileFiles();
-  } catch (error) {
-    if (!(error instanceof ConfigError) || error.kind !== "frozen") throw error;
-    console.info(getTranslator("configOps", "cli")("fillsSkipped"));
-    return [];
-  }
-}
-
-async function fillProfileFiles(): Promise<EnsureProfileResult[]> {
   const results: EnsureProfileResult[] = [];
   for (const name of PROFILE_NAMES) {
     const target = getConfigPath(name);

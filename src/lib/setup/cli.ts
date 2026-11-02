@@ -13,7 +13,7 @@ import { parseArgs } from "node:util";
 import { parse as parseYaml } from "yaml";
 import { z } from "zod";
 
-import { ensureConfigFiles, ensureProfileFiles, loadConfig } from "@/lib/config";
+import { loadConfig } from "@/lib/config";
 import { listPackIds } from "@/lib/market";
 import { CONTRACT_OPTIONS, SENIORITY_OPTIONS, WORKPLACE_OPTIONS } from "@/lib/profile/draft";
 import { AI_PROVIDER_IDS, AI_PROVIDER_KINDS } from "@/lib/config/ai-options";
@@ -135,11 +135,9 @@ async function statusReport(ctx: Context): Promise<{ text: string[]; json: unkno
       ? t("cli.state.invalid", { error: status.error })
       : status.pending
         ? t("cli.state.pending")
-        : status.source === "existing_install"
-          ? t("cli.state.existing")
-          : status.state === null
-            ? t("cli.state.missing")
-            : t("cli.state.completed", { at: status.state.completed_at ?? "", by: status.state.completed_by === null ? "" : t(`cli.by.${status.state.completed_by}`) });
+        : status.state === null
+          ? t("cli.state.missing")
+          : t("cli.state.completed", { at: status.state.completed_at ?? "", by: status.state.completed_by === null ? "" : t(`cli.by.${status.state.completed_by}`) });
   const text = [
     t("cli.title"),
     stateLine,
@@ -515,16 +513,6 @@ export async function runSetupCli(argv: readonly string[], io: CliIo, env: NodeJ
     return 2;
   }
 
-  // the same first-start filling as the web and the runner (an existing install gets setup.yaml marked complete here);
-  // `--status` only reports, so it reads the shipped defaults and writes nothing
-  if (!values.status) {
-    await ensureConfigFiles();
-    try {
-      await ensureProfileFiles();
-    } catch {
-      // reported by the steps that read the profile
-    }
-  }
   const ctx: Context = { io, t, tProfile: profileErrorsTranslator(locale), tFields: profileFieldsTranslator(locale), db: await databaseAvailable(env), locale, env, restart: values["no-restart"] !== true, deps };
   try {
     if (values.status) {

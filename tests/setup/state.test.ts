@@ -4,8 +4,9 @@ import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { ensureConfigFiles, existingInstallSetupYaml, parseConfigText, setupSchema } from "@/lib/config";
-import { completeSetup, markStep, readSetupState, resetSetupStateCache } from "@/lib/setup/state";
+import { ensureConfigFiles, parseConfigText, setupSchema } from "@/lib/config";
+import { existingInstallSetupYaml } from "@/lib/setup/existing-install";
+import { completeSetup, ensurePendingSetupFile, markStep, readSetupState, resetSetupStateCache } from "@/lib/setup/state";
 
 import { makeTempConfig, type TempConfig } from "../config/helpers";
 
@@ -38,21 +39,19 @@ describe("setup.yaml schema", () => {
   });
 });
 
-describe("first start: fresh vs existing install", () => {
-  it("an empty user directory gets the shipped (pending) setup.yaml", async () => {
+describe("first start: a missing setup.yaml opens the wizard", () => {
+  it("an empty user directory stays empty on init and reads the shipped (pending) setup.yaml", async () => {
     const results = await ensureConfigFiles({ now: NOW });
-    expect(results.find((r) => r.name === "setup")).toMatchObject({ created: true, reason: "user" });
-    expect(parseConfigText("setup", fs.readFileSync(user("setup.yaml"), "utf8")).completed_at).toBeNull();
-    expect(readSetupState()).toMatchObject({ pending: true, source: "user" });
+    expect(results.find((r) => r.name === "setup")).toMatchObject({ created: false, reason: null });
+    expect(fs.existsSync(user("setup.yaml"))).toBe(false);
+    expect(readSetupState()).toMatchObject({ pending: true, source: "default" });
   });
 
-  it("a directory that already holds config files (no setup.yaml) is marked complete as an existing install", async () => {
+  it("a directory that already holds config files (no setup.yaml) is still pending: nothing infers an existing install", async () => {
     fs.copyFileSync(path.join(tmp.defaultsDir, "ui.yaml"), user("ui.yaml"));
-    const results = await ensureConfigFiles({ now: NOW });
-    expect(results.find((r) => r.name === "setup")).toMatchObject({ created: true, reason: "existing_install" });
-    const state = parseConfigText("setup", fs.readFileSync(user("setup.yaml"), "utf8"));
-    expect(state).toMatchObject({ completed_at: NOW.toISOString(), completed_by: "existing_install" });
-    expect(readSetupState().pending).toBe(false);
+    await ensureConfigFiles({ now: NOW });
+    expect(fs.existsSync(user("setup.yaml"))).toBe(false);
+    expect(readSetupState()).toMatchObject({ pending: true, source: "default" });
   });
 
   it("never touches an existing setup.yaml, pending or not", async () => {
@@ -64,23 +63,23 @@ describe("first start: fresh vs existing install", () => {
     expect(readSetupState().pending).toBe(true);
   });
 
-  it("two starts at the same time write setup.yaml once", async () => {
-    fs.copyFileSync(path.join(tmp.defaultsDir, "ui.yaml"), user("ui.yaml"));
-    const [a, b] = await Promise.all([ensureConfigFiles({ now: NOW }), ensureConfigFiles({ now: new Date("2026-10-09T09:00:00.000Z") })]);
-    const created = [a, b].map((r) => r.find((x) => x.name === "setup")?.created);
-    expect(created.filter(Boolean)).toHaveLength(1);
+  it("ensurePendingSetupFile writes the shipped pending file once; two at the same time create it once", async () => {
+    const [a, b] = await Promise.all([ensurePendingSetupFile(NOW), ensurePendingSetupFile(NOW)]);
+    expect([a, b].map((r) => r.ok && r.existed).sort()).toEqual([false, true]);
     expect(setupSchema.safeParse(parseConfigText("setup", fs.readFileSync(user("setup.yaml"), "utf8"))).success).toBe(true);
+    expect(readSetupState()).toMatchObject({ pending: true, source: "user" });
+    expect(await ensurePendingSetupFile(NOW)).toEqual({ ok: true, existed: true });
   });
 
-  it("the existing-install text is a valid setup.yaml", () => {
+  it("the existing-install text (for a restored archive from before the wizard) is a valid setup.yaml", () => {
     expect(parseConfigText("setup", existingInstallSetupYaml(NOW))).toMatchObject({ completed_at: NOW.toISOString(), completed_by: "existing_install", steps: {} });
   });
 });
 
 describe("readSetupState: never locks an install into the wizard", () => {
-  it("no user file but other config files: completed (existing install, the runner reads it like this before the web writes it)", () => {
+  it("no user file but other config files: pending, the same as an empty directory", () => {
     fs.copyFileSync(path.join(tmp.defaultsDir, "search.yaml"), user("search.yaml"));
-    expect(readSetupState()).toMatchObject({ pending: false, source: "existing_install", error: null });
+    expect(readSetupState()).toMatchObject({ pending: true, source: "default", error: null });
   });
 
   it("an empty user directory reads the shipped default: pending", () => {
@@ -130,10 +129,10 @@ describe("markStep / completeSetup", () => {
     expect(readSetupState().state).toMatchObject({ completed_at: NOW.toISOString(), completed_by: "skipped" });
   });
 
-  it("marking a step on an existing install without setup.yaml writes it as completed, never pending", async () => {
+  it("marking a step in a directory with config files but no setup.yaml records it and keeps the wizard pending", async () => {
     fs.copyFileSync(path.join(tmp.defaultsDir, "ui.yaml"), user("ui.yaml"));
     await markStep("profile", "done", NOW);
-    expect(readSetupState()).toMatchObject({ pending: false, state: { completed_by: "existing_install", steps: { profile: { status: "done" } } } });
+    expect(readSetupState()).toMatchObject({ pending: true, state: { completed_at: null, steps: { profile: { status: "done" } } } });
   });
 
   it("refuses to overwrite an invalid setup.yaml", async () => {

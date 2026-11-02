@@ -53,26 +53,23 @@ Run it in the **main checkout** (not in a worktree or feature branch; without `-
 | 1 preflight | The terminal does not stop background output (`tostop` unset); takes the deploy lock (one deploy at a time, see "One deploy at a time" below) and removes build contexts that earlier, interrupted deploys left in `data/build/`; git / docker / node / pnpm are present, Docker is running; no uncommitted changes to tracked files (in every mode, `--skip-pull` too, see "Build context and a clean checkout"); the external volume is not mounted twice | Docker Desktop is not up; uncommitted changes; another deploy holds the lock; `stty tostop` is set (run `stty -tostop`) |
 | 2 pull | Without `--ref`: you are on main and, after `git fetch`, it fast-forwards to `origin/main`. With `--ref <tag>`: it fetches the tag (or branch), refuses a version whose ai-worker cannot run from a release directory (before the checkout moves; see [upgrade.md](upgrade.md#downgrade-pre-release-dir)) and checks it out. Then the commit to deploy is fixed: every later step uses it, and the steps from install to the ai-worker stop if HEAD moved or tracked files changed meanwhile | You are on another branch (without `--ref`); unpushed local commits (diverged); `checkout moved during deploy` (another git command ran in the checkout during the deploy); `--ref` names a version from before release directories |
 | 3 install | `pnpm install --frozen-lockfile` | Network |
-| 4 config | Creates data folders. Existing install: `pnpm config:migrate` (preview only), `pnpm config:check` in memory, compose config, then `pnpm ops:freeze --target <commit>`. First install: `config:init`, without a freeze. Also checks `.env` | Invalid YAML, a newer config version, or unavailable write locks |
+| 4 config | Creates the data folders and, on a new install, `.env` with the database password (`pnpm config:init --env-only`). Everything else only reads: `pnpm config:check` in memory, the compose config, and a `pnpm config:plan --deploy` preview of what step 11 will write. No user config file is changed here | Invalid YAML or a config version newer than the code |
 | 5 backup | If db is already running, take a `pre-deploy` backup first (skipped on the first deployment) | If the backup fails the upgrade does not continue |
 | 6 build | Unpacks `git archive` of the commit fixed in step 2 into `data/build/<commit>-<pid>/` and runs `docker compose -p job-radar build` with that directory as the build context (`JOB_RADAR_BUILD_CONTEXT`). The images contain exactly the committed files, the shipped defaults of `config/` included | Disk full |
 | 7 release | `scripts/ops/prepare-release.sh <commit> --root <checkout>`: builds the ai-worker's release directory `data/releases/ai-worker/<commit>/` (a `git archive` of the commit plus its production dependencies, read-only) unless it already exists and is complete | Network or disk (the dependency install) |
 | 8 up | First `pnpm ops:drain`: if a cycle is running, wait for it to finish (up to `schedule.yaml: deploy.drain_timeout_seconds`, 900 seconds), because recreating the runner would cut it off. Then `docker compose up -d --wait db web runner`: these three must become healthy (up to 300 seconds). Then the jobspy sidecar on its own (`up -d --no-deps --wait jobspy`) | db, web or runner does not start: the script lists `docker compose ps` and the command to view logs. The jobspy sidecar not becoming healthy does not stop the deployment: it prints a warning and the command to view its logs, and steps 9 to 13 still run (nothing depends on the sidecar, and the channels that use it, `linkedin-guest`, `indeed` and `jobspy-google`, are off by default). The doctor in step 13 then reports it as a problem (exit code 2) while one of those channels is on, otherwise as a warning. A cycle still running after the wait only prints a warning (`pnpm ops:drain` exit code 1), and so does a check that could not be made (exit code 3: config or database error, or a query that hung): the deployment carries on and the runner re-runs that scheduled slot when it starts (catch-up) |
 | 9 migrate | `pnpm migrate:run` (the runner also migrates automatically on start; this is a confirmation, and does nothing if already up to date). When a migration is pending, a `premigrate` backup (database and config archive) is taken first, and the migration does not run if that backup fails (`backup.pre_migrate` in `schedule.yaml`) | Bad migration SQL; the pre-migration backup failed |
 | 10 ai-worker | `scripts/ops/install-ai-worker.sh --release data/releases/ai-worker/<commit>`: switches the ai-worker (a launchd agent on macOS, the systemd user unit `job-radar-ai-worker.service` on Linux) to the release of step 7, and rolls back to the previous one when the new worker shows no evidence (see "The ai-worker runs from a release directory" below). An AI request it is working on (for example a `run_ai` scoring a whole cycle) is not lost: it goes back to the queue and runs again after the restart (see "Work interrupted by a restart" below) | The output starts with `not changed:` (nothing was touched), `rolled back:` (the previous worker runs again) or `ROLLBACK FAILED:` (follow the message); `claude` / `codex` not on PATH |
-| 11 config-write | Confirms the target worker service PID with a fresh lock/heartbeat/report receipt, scans host worker processes and probes `worker-heartbeat.ts --holder --pid <expected> --host <host>`. A matching target service PID, or no holder and no installed service, plus a successful process scan with no other worker, permits token-authorized `config:init` and `config:migrate --write`. Re-plans before unfreezing. A first install has no token and skips the gate; `--settle 0` checks the service release/PID/holder and process scan like `--no-ai-worker`, without a receipt wait. | Old/unknown holder, other worker PIDs or failed process scan: no writes, freeze kept, pending (2). Safe consumers but failed/skipped writes: unfreeze, pending (2) |
+| 11 config-write | The only step that writes user config files. It first waits for the target worker service (instance lock, heartbeat and config report), then checks the gate: web and runner each have containers running the images this deploy just built; the ai-worker service points at the target release and its process holds the instance lock (with `--no-ai-worker`: no worker service is installed and nobody holds the lock); no other worker process runs on the host. With the gate passed it runs `config:migrate --write`, `config:init`, `config:plan --deploy --check` and `config:migrate --prune-backups`; the first failure stops the writes. `--settle 0` runs the same checks without waiting for a fresh receipt. | Gate not passed or a write failed: nothing more is written, the deploy goes on and ends with exit 2 (see "Config writes during deployment"). Failing to prune old backups only warns |
 | 12 prune | First releases the deploy lock and removes the build context of step 6. Then cleans up Docker: keeps the build cache by most recent use down to `schedule.yaml: deploy.build_cache_keep_gb` (`docker builder prune -f --max-used-space 5gb`), removes dangling images (`docker image prune -f`, without `-a`). Never touches data volumes and never removes images in use | Never fails the deployment: a command error just prints ⚠ and continues (for example an old Docker that does not know `--max-used-space`) |
-| 13 doctor | `pnpm run doctor`, including `config.freeze` for a leftover upgrade freeze | Doctor problems return exit 2; warnings alone return 0 |
+| 13 doctor | `pnpm run doctor`, including `config.pending` for writes that step 11 left undone | Doctor problems return exit 2; warnings alone return 0 |
 
 Options: `--skip-pull` (leave git alone and deploy the current code; used for rollback), `--no-backup`, `--no-prune` (skip the Docker cleanup in step 12), `--no-ai-worker` (skip steps 7 and 10 and the step 11 worker wait), `--no-drain` (do not wait for a running cycle in step 8), `--drain-timeout SECONDS` (instead of `deploy.drain_timeout_seconds`), `--ref <tag|branch>` (deploy a release tag such as `v2.0.0` instead of `main`, see [upgrade.md](upgrade.md)), `--branch`, `--remote`, `--wait-timeout SECONDS`, `--settle SECONDS` (maximum worker wait from the start of step 11, before config writes and prune; 0 skips it); see `--help` for all of them.
 
-The settings for deployment and config write locks are in the `deploy` block of `schedule.yaml`; deployment options take effect on the next deploy, lock options on subsequent writes. The deploy and backup scripts read `schedule.yaml` the same way the code does: first the user config `data/config/schedule.yaml`, and only if it is absent the shipped default `config/schedule.yaml`:
+The settings for deployment are in the `deploy` and `config_writes` blocks of `schedule.yaml` and take effect on the next deploy. The deploy and backup scripts read `schedule.yaml` the same way the code does: first the user config `data/config/schedule.yaml`, and only if it is absent the shipped default `config/schedule.yaml`:
 
 | Key | Default | Meaning |
 |---|---|---|
-| `deploy.config_write_lock_stale_seconds` | 300 | Same-host locks check PID, process generation and held tokens; foreign hosts/namespaces can be taken over only after this age |
-| `deploy.config_write_lock_wait_seconds` | 10 | Maximum wait for a writer lock before a busy error |
-| `deploy.config_write_lock_retry_ms` | 50 | Initial retry delay, increased with backoff |
 | `deploy.prune_build_cache` | true | Clean up the Docker build cache after deployment |
 | `deploy.build_cache_keep_gb` | 5 | Keep this many GB of build cache by most recent use so the next build is still fast; 0 = remove all unused build cache |
 | `deploy.prune_dangling_images` | true | Remove dangling images (untagged images left over from old builds) |
@@ -81,6 +78,8 @@ The settings for deployment and config write locks are in the `deploy` block of 
 | `deploy.ai_worker_releases_keep` | 3 | Release directories of the ai-worker kept after a switch, the installed and the previous one included (at least 2). Not in the shipped file; add it to change it |
 | `deploy.ai_worker_stop_timeout_seconds` | 60 | How long launchd / systemd waits after SIGTERM before it kills the ai-worker (`ExitTimeOut`, `TimeoutStopSec`); at least 10, keep it above `ai.yaml: host_worker.shutdown_grace_seconds`. Not in the shipped file |
 | `deploy.ai_worker_swap_timeout_seconds` | 120 | The longest each wait of a worker switch may take (the old worker gone, the new one with evidence, the same on rollback); at least `ai_worker_stop_timeout_seconds` + 10. Also the step 11 wait cap (`--settle` overrides it). Not in the shipped file |
+| `config_writes.backups_keep` | 5 | `config:migrate --write` saves the originals it replaces in `data/config/.backup/<timestamp>/`. Only the deploy's prune step (`config:migrate --prune-backups`, step 11) deletes the older ones, keeping this many of the newest. Not in the shipped file |
+| `config_writes.lock_wait_seconds` | 10 | How long a config write (web save, wizard, command) waits for another writer before it reports who holds the lock. Not in the shipped file |
 
 Step 11 returns as soon as it confirms the current service PID. No installed definition or
 `JOB_RADAR_SERVICE_MANAGER=none` means there is nothing to wait for; an installed service with no reachable user manager
@@ -108,32 +107,32 @@ if git fails at one of those checks.
 The build context directory is removed when the deploy ends. If a deploy is killed outright (for example `kill -9`), the
 directory stays; the next deploy removes it once it holds the lock.
 
-### Settings freeze during deployment
+### Config writes during deployment
 
-Step 4 runs all read-only checks before creating or taking over the freeze. From then until `config-write` (step 11),
-freeze-aware web versions refuse settings, advanced editor, profile and wizard saves with an upgrade message. On the
-first deployment of this version, the older web runs until step 8; it still writes the old format, which is harmless.
-Existing means YAML in either user directory, an existing freeze marker, an installed worker service, or running
-compose services. A true first install is not frozen and skips the later config-write gate. Downgrading to a target without the freeze protocol uses its original step-4 `config:init` and `config:migrate --write`, skipping freeze and `config-write`; any leftover marker is kept and reported (see [upgrade.md](upgrade.md#downgrade-pre-config-freeze)). Startup fills skip missing files without throwing; missing profiles
-read `config/profile.example/` in memory. Each user directory has a short cross-process `.write.lock`; all writers check
-freshness and the marker inside it. Same-host locks check the PID, process generation (a random process ID and start time), and held tokens. A reused PID or abandoned token is recovered immediately; live owners remain busy. Foreign hosts/namespaces require an age over 300 seconds and wait up to 10 seconds (`deploy.config_write_lock_*`
-in `schedule.yaml`). The `.upgrade-freeze` marker and `.write.lock` are excluded from backups.
+A deploy writes no user config file (`data/config/`, `data/profile/`) before step 11. Steps 1 to 10 only read them, so the
+running web, runner and ai-worker keep working with the files as they are. Step 11 writes only after its gate passes: the
+new containers and the new ai-worker run, and no other worker could still read the old format. Stop manually started
+`pnpm ai-worker` processes before deploying. `--no-ai-worker` and `--settle 0` check the instance-lock holder, host
+processes and the installed service's release path as well. The process scan matches node/tsx worker entries that belong
+to this install; relative entries use the process cwd (`lsof` on macOS, `/proc/<pid>/cwd` on Linux). Editors and workers
+of other checkouts are ignored; an entry whose owner cannot be told blocks the writes.
 
-Stop manually started old `pnpm ai-worker` processes before deploying. Both `--no-ai-worker` and `--settle 0` still check
-the instance-lock holder, host processes and the installed service's release path, with the same service PID before and
-after the checks. An old/unknown holder, another worker PID or a failed
-`ps -A -o pid=,args=` scan keeps the freeze and returns 2; the message lists other worker PIDs. The scan matches node/tsx worker entries belonging to this install; relative entries use the process cwd (`lsof` on macOS, `/proc/<pid>/cwd` on Linux). Editors and workers of other checkouts are ignored; unknown ownership blocks writes. A failure or
-interrupt before `up` starts new code automatically removes only a freeze this run created fresh, using `ops:unfreeze --owned`.
-A freeze taken over from an earlier run stays until `config-write` excludes old consumers, or the user runs `ops:unfreeze`.
-Once step 8 attempts `up`, a failure or interrupt keeps every marker. Deployment does not fill or migrate user files
-before `config-write`, so their format stays readable by the old code; any saves from an older web still use that format.
-Run deploy again; `pnpm run doctor` warns with `config.freeze` if a marker remains without an active deploy lock.
-After confirming no old consumers remain, `pnpm ops:unfreeze` removes it under the write locks and prints
-`pnpm config:init`, then `pnpm config:migrate --write`. `pnpm ops:freeze --target <commit>` creates/replaces it. Only explicitly authorized config
-commands receive `JOB_RADAR_UPGRADE_FREEZE_TOKEN`; it is never printed or passed to services.
+If the gate fails or a write fails, the rest of the deploy still runs, and it ends with exit 2 and this message:
 
-Restart unmanaged host processes (for example `pnpm mcp:serve`) after the upgrade. Recovery, rollback and older
-`--skip-pull` scripts: [upgrade.md](upgrade.md#settings-during-an-upgrade).
+```text
+Deployed, but the config writes are pending: <reason>. The next deploy retries them.
+```
+
+Nothing is rolled back and nothing needs cleaning up: fix the reason and deploy again. `pnpm config:plan --deploy` lists
+what is waiting (`--check` exits 2 while something is) and the doctor shows it as `config.pending`. Meanwhile the running
+code reads a missing file from the shipped defaults and a file in an older format as it is.
+
+Web saves go on while step 11 writes: every writer, the deploy's commands included, takes a lock in the database for each
+file ([Config write lock](configuration.md#config-write-lock)). Deploying an older version with `--ref` runs that
+version's own step 4 instead ([upgrade.md](upgrade.md#downgrade-pre-config-write-step)).
+
+Restart unmanaged host processes (for example `pnpm mcp:serve`) after the upgrade. Rollback and older `--skip-pull`
+scripts: [upgrade.md](upgrade.md#settings-during-an-upgrade).
 
 ### One deploy at a time: the deploy lock
 
@@ -276,7 +275,7 @@ The exit code reflects the worst item: `0` all ✅, `1` some ⚠️, `2` some �
 | `config.guards` | The CLI commands in `ai.yaml` are `claude` / `codex`, `codex_cli.config_overrides` has only allowed keys, the services that receive a key point to the vendor's own host, `JOB_RADAR_ALLOW_CUSTOM_ENDPOINTS` is not set | ❌ a `command` is refused (that CLI never runs); ⚠️ overrides ignored, a changed `base_url` / `api_base_url` refused or (with the opt-in) used, or the opt-in variable set. See [ai-providers.md](ai-providers.md#what-the-ai-worker-does-not-take-from-aiyaml) |
 | `ai.backlog` | AI request queue, jobs waiting to be scored, result of the latest `run_ai` (if nothing was scored because the profile is incomplete, the reason is stated and it does not count as success) | ⚠️ backlog: is the ai-worker up? |
 | `ai.quota` | Job Radar's own usage cap of the subscription CLIs (`ai.yaml: quota_guard`): each CLI's calls in the rolling window against `hard_requests`. Only Job Radar's own calls are counted, so this says nothing about what is left of your account's quota | ⚠️ a CLI's window is full, or the CLI reported a limit and is cooling down: it resumes by itself at the time shown; raise the cap in Settings → AI → Limits if it gets in your way (`pnpm ai:usage-stats` shows your own numbers) |
-| `config.freeze` | No leftover upgrade freeze, or a freeze held by an active deploy; write leases and guard owners in `data/config/` and `data/profile/` are younger than the stale threshold | ⚠️ marker remains without an active deploy: deploy again, or confirm no old consumers and run `pnpm ops:unfreeze`, `pnpm config:init`, then `pnpm config:migrate --write`. Old write-lock owners: abandoned locks are taken over automatically on the next write; if saves keep failing, confirm the owner is no longer writing, then remove the lock file or guard owner |
+| `config.pending` | No config write is waiting: no file needs migrating and no user file is missing. In the deploy's own doctor run it also states why step 11 left writes undone | ⚠️ writes are pending: deploy again, or see them with `pnpm config:plan --deploy` and write them with `pnpm config:migrate --write` then `pnpm config:init` once nothing older than this version still runs. ⚠️ also when a file cannot be migrated: `pnpm config:migrate` names it |
 | `config.layers` | The user config directory `data/config` exists and is writable; lists overridden `shipped` files, files whose version is behind (need migrating), and `user` files still read from the defaults | ❌ directory missing or not writable (`pnpm config:init`; check the mount); ❌ a file's `config_version` is newer than the code (the code was rolled back: upgrade the code or restore from `data/config/.backup/`); ⚠️ you overrode `pipeline.yaml` (or another whole `shipped` file; `models.yaml` is merged, not replaced): product updates to those files will not take effect, delete your copy in `data/config` if you want to follow them; ⚠️ version behind: `pnpm config:migrate` shows the changes, `--write` writes them back |
 | `config.shipped` | The shipped config identity each running process reports (web, runner, and the ai-worker with `execution: host`), and that each report comes from the process running now: the running container (host name and start time) or the ai-worker service's PID; the ai-worker's config comes from a release directory of this checkout whose commit is HEAD. See [configuration.md](configuration.md#shipped-config-identity) | ⚠️ the ai-worker runs from outside `data/releases/ai-worker/` (installed by a version from before release directories): deploy or run `scripts/ops/install-ai-worker.sh`; ⚠️ its release is not HEAD: expected after a worker-only rollback, otherwise a deploy stopped before step 10: deploy again; ⚠️ no report, a report from an earlier container or process, or no PID from launchd / systemd to match it: for containers just deployed or restarted, wait a minute and run again; for the ai-worker, check whether `aiworker.heartbeat` says its current process is not confirmed yet, and look for "could not report the shipped config" in `data/logs/ai-worker.out.log` if its report stays missing. ⚠️ something mounted on `/app/config` in a container (it hides the shipped config in the image; usually an old `compose.override.yaml`): remove the mount and deploy. Without the database the reports are skipped, the mount check still runs (it needs only Docker) |
 | `host.power` | In `pmset`, autorestart is 1 and sleep is 0 | ⚠️ not set: host-setup section 3 |
@@ -330,7 +329,7 @@ you added one. Compose merges dependency maps, so removing the entry from the sh
 your override. Even `required: false` can pull the sidecar into the core services' `up --wait`.
 
 Step 4 checks `docker compose -p <project> config --format json` against the target commit's own `compose.yaml` and
-refuses dependencies added by overrides **before freezing settings or restarting services**. It names the entries to
+refuses dependencies added by overrides **before any step changes the installation**. It names the entries to
 remove; it does not edit your overrides. Remove those entries
 and run the deploy again, so an unhealthy sidecar cannot block migrations, the ai-worker switch or config writes.
 The doctor treats a failed sidecar as a problem only when a channel that uses it is effectively enabled for the current
@@ -342,8 +341,8 @@ short note. It keeps that target's dependency behaviour: an unhealthy sidecar ma
 ### With layered config
 
 - The live configuration is `data/config/` (not in git) and the web UI only writes there. `config/` holds the defaults shipped with the code; they are built into the web and runner images, so a change reaches the containers with the deploy that builds and restarts them (steps 6 and 8), not with a `git pull` alone. A changed default only affects files that are **not** in the user directory (`shipped` files such as `models.yaml` and `pipeline.yaml`, unless you overrode them). So the main checkout no longer becomes dirty because of a save in the web UI, and a deployment no longer refuses to pull for that reason.
-- **Upgrading from a version before layered config**: preserve the old live config directory before switching code (see [upgrade.md](upgrade.md)). An existing install now defers missing-file fills from step 4 to `config-write`, after old consumers are excluded. Avoid settings saves during the upgrade.
-- An upgrade that changes a config format previews it in step 4 and writes it in step 11 `config-write`, with originals in `data/config/.backup/<timestamp>/`. `pnpm config:migrate` shows the diff; writes stay frozen until old consumers are excluded.
+- **Upgrading from a version before layered config**: preserve the old live config directory before switching code (see [upgrade.md](upgrade.md)). A deploy creates missing user files in step 11 `config-write`, after old consumers are excluded; until then they are read from the shipped defaults.
+- An upgrade that changes a config format previews it in step 4 and writes it in step 11 `config-write`, with originals in `data/config/.backup/<timestamp>/` (the newest `config_writes.backups_keep` are kept). `pnpm config:migrate` shows the diff; nothing is written before old consumers are excluded.
 
 ## 5. Rollback
 

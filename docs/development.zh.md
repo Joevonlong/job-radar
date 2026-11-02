@@ -2,6 +2,10 @@
 
 完整开发流程、命令与项目布局见[英文开发指南](development.md)。本页说明当前展示分数投影的开发约定。
 
+## 配置写锁与测试
+
+每次写配置或 profile 文件都要在数据库里取锁（见 [configuration.zh.md](configuration.zh.md#配置写锁)），所以 `pnpm dev` 和会写文件的 `config:*` 命令也需要能连上的数据库。单元测试用进程内的替身代替这把锁（`tests/setup.ts` 装入 `tests/config/in-process-lock.ts`）；会启动写配置脚本的单元测试要预加载 `tests/fixtures/config/lock-stand-in.mjs`（见 `tests/config/run-script.ts`）。要证明锁本身的测试写成集成测试，用真正的锁。
+
 ## 当前展示分数投影
 
 `scores` 是 AI 判断的权威来源。`job_current_scores` 是可重建的派生投影，展示规则位于

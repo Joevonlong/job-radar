@@ -8,7 +8,7 @@ import { parse, stringify } from "yaml";
 import { configLayer, getDefaultConfigPath, getUserConfigPath, inspectConfigLayers, loadConfig, parseConfigText, readConfigText, readProfileText, resolveConfigPath, USER_CONFIG_NAMES, watchConfig, type ConfigChangeEvent } from "@/lib/config";
 import { ConfigExampleError, readExample } from "@/lib/config/examples";
 import { protectedChanges } from "@/lib/config/protected-check";
-import { withConfigWriteLock, WRITE_LOCK_FILE } from "@/lib/config/write-lock";
+import { withConfigWriteLock } from "@/lib/config/write-lock";
 import { profileCheck } from "@/lib/ops/doctor/checks/ai";
 import { invalidProfileRequest } from "@/lib/profile/service";
 import { loadProfilePage } from "@/lib/profile/view";
@@ -40,13 +40,13 @@ describe("profile templates are reader fallbacks, never a default config layer",
     let release = () => {};
     const ready = new Promise<void>((resolve) => { entered = resolve; });
     const gate = new Promise<void>((resolve) => { release = resolve; });
-    const holding = withConfigWriteLock(getUserConfigPath("me"), async () => { entered(); await gate; });
+    const holding = withConfigWriteLock(async () => { entered(); await gate; }, getUserConfigPath("me"));
     await ready;
     try {
       expect(await readScoringProfile()).toMatchObject({ meYaml: fs.readFileSync(template("me"), "utf8") });
       expect(await loadProfilePage()).toMatchObject({ me: { loadError: null }, preferences: { loadError: null }, dbAvailable: false });
       expect(await invalidProfileRequest("me")).toMatchObject({ status: "error", formError: "invalidPayload" });
-      expect(fs.readdirSync(tmp.profileDir).sort()).toEqual(saved ? [WRITE_LOCK_FILE, "me.yaml", "preferences.yaml"] : [WRITE_LOCK_FILE]);
+      expect(fs.readdirSync(tmp.profileDir).sort()).toEqual(saved ? ["me.yaml", "preferences.yaml"] : []);
     } finally { release(); await holding; }
   });
 

@@ -64,6 +64,8 @@ docker compose ps
 
 In `docker compose ps`, db, web, runner and jobspy should all be `healthy`. The runner's status comes from its healthcheck (see section 8).
 
+The first start writes no config file: the services read the shipped defaults until `pnpm config:init` (the deploy runs it) or a save in the setup wizard creates them. A command on the host that writes config needs a database it can reach from the host, which comes from `.env` (`DATABASE_URL`, or `POSTGRES_*` and `DB_HOST_PORT`).
+
 On the first run you can leave `.env` empty: every variable has a default (on Linux set `PUID` / `PGID`, see section 10). The runner and the jobspy sidecar are capped at 2 GB and 1 GB of memory
 (`RUNNER_MEM_LIMIT`, `JOBSPY_MEM_LIMIT` in `.env`); a service that hits its cap is killed and restarted. The containers need no AI login or keys (`~/.codex/auth.json` is no longer mounted); AI runs on the host, see section 6.
 
@@ -130,6 +132,7 @@ Notes:
 - The ai-worker runs from a release directory on the external volume; if the volume is not yet mounted at boot, launchd retries every 10 seconds until it succeeds. The first time it accesses the external volume macOS may show "allow node to access removable volumes"; click Allow.
 - The Telegram token / chat id are read from `.env` (like the runner); pushes are sent by the worker, so while the worker is offline there are no job pushes.
 - To run the queue once without installing the service: `pnpm ai-worker --once`.
+- When a config file has a newer `config_version` than the worker's code knows (an old worker still running during an upgrade), it logs which file and exits instead of claiming work; the upgraded worker takes over.
 
 Uninstall:
 

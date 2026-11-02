@@ -3,9 +3,9 @@
  */
 import { requestRunCycle, type ControlActionState } from "@/lib/control/service";
 
-import { completeSetup, markStep, readSetupState } from "../state";
+import { completeSetup, ensurePendingSetupFile, markStep, readSetupState } from "../state";
 import { isSetupStepId, type SetupCompletedBy } from "../steps";
-import { setupFrozen } from "./common";
+import { markFailure } from "./common";
 import { stepError, type SetupStepResult } from "../types";
 import { disableTelegramIfUnconfigured } from "./telegram";
 
@@ -14,27 +14,27 @@ import { disableTelegramIfUnconfigured } from "./telegram";
  * push does not complain on every cycle). `raw` is untrusted.
  */
 export async function skipSetupStep(raw: unknown): Promise<SetupStepResult> {
-  const frozen = setupFrozen("review");
-  if (frozen) return frozen;
   if (!isSetupStepId(raw)) return stepError("review", "invalidPayload");
+  const ensured = await ensurePendingSetupFile();
+  if (!ensured.ok) return stepError(raw, ensured.formError);
   if (raw === "telegram") await disableTelegramIfUnconfigured();
   const marked = await markStep(raw, "skipped");
-  return marked.ok ? { status: "skipped", step: raw } : stepError(raw, marked.reason === "frozen" ? "frozen" : "setupUnreadable");
+  return marked.ok ? { status: "skipped", step: raw } : stepError(raw, markFailure(marked.reason));
 }
 
 /** Mark the whole setup complete (`wizard` after the review step, `skipped` for "skip the wizard", `cli` from the command line). */
 export async function finishSetup(by: SetupCompletedBy): Promise<SetupStepResult> {
-  const frozen = setupFrozen("review");
-  if (frozen) return frozen;
+  const ensured = await ensurePendingSetupFile();
+  if (!ensured.ok) return stepError("review", ensured.formError);
   // never on an install from before the wizard: its notify.yaml is the user's own
   const current = readSetupState();
-  if (by === "skipped" && current.source !== "existing_install" && current.state?.completed_by !== "existing_install" && current.state?.steps.telegram?.status !== "done") await disableTelegramIfUnconfigured();
+  if (by === "skipped" && current.state?.completed_by !== "existing_install" && current.state?.steps.telegram?.status !== "done") await disableTelegramIfUnconfigured();
   if (by === "wizard" || by === "cli") {
     const marked = await markStep("review", "done");
-    if (!marked.ok) return stepError("review", marked.reason === "frozen" ? "frozen" : "setupUnreadable");
+    if (!marked.ok) return stepError("review", markFailure(marked.reason));
   }
   const done = await completeSetup(by);
-  return done.ok ? { status: "saved", step: "review" } : stepError("review", done.reason === "frozen" ? "frozen" : "setupUnreadable");
+  return done.ok ? { status: "saved", step: "review" } : stepError("review", markFailure(done.reason));
 }
 
 /** "Run the first cycle now": a manual cycle request (it runs while the setup is pending; an open request is reused). */

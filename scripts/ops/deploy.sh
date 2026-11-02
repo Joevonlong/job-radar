@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# capability: config-freeze
+# capability: config-write-step
 # Deploy / upgrade Job Radar on this machine. Safe to run again: every step is idempotent.
 #
 #   scripts/ops/deploy.sh [--dry-run] [--skip-pull] [--branch main | --ref v2.0.0 [--verify]] [--remote origin]
@@ -17,12 +17,12 @@
 #                  every later step uses that commit, and a step stops when HEAD moved or tracked files changed meanwhile.
 #                  With --ref, the resolved commit must ship an install script that runs the worker from a release
 #                  directory (else see docs/upgrade.md, "Downgrade to a version before release directories")
-#                  and its config-freeze capability is detected before checkout
+#                  and whether it has the config-write step is detected before checkout
 #   3  install     pnpm install --frozen-lockfile
-#   4  config      data/ folders exist; existing installs: pnpm config:migrate (preview only), pnpm config:check in memory,
-#                  compose config (refuse jobspy dependencies added by overrides), then pnpm ops:freeze; first install: config:init
-#                  without a freeze; .env present
-#                  targets without config-freeze use config:init + config:migrate --write here, leaving old markers alone
+#   4  config      reads only, apart from data/ folders and .env: pnpm config:init --env-only (a new install's database
+#                  password), pnpm config:check, compose config (refuse jobspy dependencies added by overrides), and
+#                  pnpm config:plan --deploy shows what step 11 will write. No user file changes here.
+#                  Targets without the config-write step run their own config:init + config:migrate --write here instead
 #   5  backup      scripts/ops/backup.sh --label pre-deploy (only when the db is already running)
 #   6  build       git archive of the target commit into data/build/<commit>-<pid>, then docker compose -p job-radar build
 #                  from it (JOB_RADAR_BUILD_CONTEXT): the images hold exactly the committed files, shipped config/ included;
@@ -38,17 +38,19 @@
 #                  launchd agent on macOS, a systemd user unit on Linux) to that release; the new worker must show evidence
 #                  in the database (instance lock and a heartbeat), else the old one is put back. An AI request the old
 #                  worker was running goes back to the queue (ai.yaml host_worker.requeue_interrupted_max)
-#   11 config-write  confirms the target ai-worker service PID (instance lock, heartbeat and config report), then probes
-#                  worker-heartbeat.ts --holder --pid <expected> --host <host>, plus ps -A -o pid=,args=. Only that
-#                  target service PID, or no holder and no service, plus no other worker process, permits config:init
-#                  and config:migrate --write under the freeze token. Re-plans, then removes the freeze; an unknown/old
-#                  holder, other worker PIDs or a failed process scan defers writes, keeps the freeze and exits pending
-#                  (2). Targets without config-freeze skip these writes (their step 4 handled them)
-#                  A first install has no freeze token and skips this gate; --settle 0 checks the target service PID,
-#                  release, holder and process scan like --no-ai-worker, without requiring a fresh receipt
+#   11 config-write  waits for the target ai-worker service PID (instance lock, heartbeat and config report), then the gate:
+#                  web and runner each have containers, all running the image this deploy built; the worker service points
+#                  at the target release, its PID holds the instance lock, no other worker process runs. With
+#                  --no-ai-worker: no worker service is installed and nobody holds the instance lock.
+#                  Gate passed: config:migrate --write, config:init, config:plan --deploy --check, then
+#                  config:migrate --prune-backups (only warns). Each command takes the config write lock per file, so web
+#                  saves go on meanwhile. The first failure stops the writes. Gate not passed or a write failed: the deploy
+#                  goes on, the reason is printed and passed to the doctor, the exit code is 2 and the next deploy retries.
+#                  Targets without the config-write step skip this (their step 4 handled it)
+#                  --settle 0 checks the same without requiring a fresh receipt
 #   12 prune       releases the deploy lock and removes the build context, then cleans the Docker build cache and
 #                  dangling images (never volumes or images in use); cleanup failures only warn
-#   13 doctor      pnpm run doctor (including config.freeze for a leftover freeze without an active deploy)
+#   13 doctor      pnpm run doctor (including config.pending: what step 11 left, and why)
 #
 #   --dry-run          print the steps and the commands, change nothing (read-only probes still run, and a problem
 #                      that would stop a real run, a deploy lock held by another run included, is shown as a warning)
@@ -76,15 +78,11 @@
 # Interrupting (Ctrl-C, closing the terminal, kill): the step that is running finishes first (it runs in its own process
 # group, which the terminal's signals do not reach), no further step starts, the lock is released, and the exit code is
 # 130 (INT), 143 (TERM) or 129 (HUP). To stop the running step at once, use the `kill -TERM -<group>` the script prints.
-# Before compose up starts, failure/interrupt removes only a freeze created fresh by this run. A taken-over freeze,
-# or any freeze from up on, stays with a pnpm ops:unfreeze hint for recovery after excluding old consumers.
 # Env: JOB_RADAR_DEPLOY_VOLUME=<mount point, e.g. /Volumes/Data>  refuse to deploy when the path contains '<mount point> 1' or
 #      that directory exists (an external volume that was not unmounted cleanly and got mounted twice). Unset: no volume check.
 #      JOB_RADAR_DEPLOY_EXPECT_SHA=<commit>  stop unless the commit to deploy is exactly this one (set by a calling script).
 # Not covered (only you can do them): Docker login item, power settings, claude / codex login, Telegram (docs/deploy.md).
 set -euo pipefail
-# An invoking shell's token must never reach services or unrelated commands. This run takes its own freeze below.
-unset JOB_RADAR_UPGRADE_FREEZE_TOKEN
 
 APP="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
 ROOT="$APP"
@@ -99,6 +97,8 @@ source "$APP/$OPS/lib/releases.sh"
 source "$APP/$OPS/lib/deploy-result.sh"
 # shellcheck source=lib/ai-worker.sh
 source "$APP/$OPS/lib/ai-worker.sh"
+# shellcheck source=lib/config.sh
+source "$APP/$OPS/lib/config.sh"
 
 DRY_RUN=0
 SKIP_PULL=0
@@ -144,22 +144,7 @@ done
 # Every command below runs in the checkout (no subshells: proc_run must run in this shell).
 cd "$APP"
 
-# Two config layers, the same directories compose.yaml mounts. A file in the user directory wins.
 USER_CONFIG="$APP/data/config"
-DEFAULTS_CONFIG="$APP/config"
-config_file() { # config_file <name.yaml>: the file a config is read from (user directory first, then the shipped default)
-  if [[ -f "$USER_CONFIG/$1" ]]; then echo "$USER_CONFIG/$1"; else echo "$DEFAULTS_CONFIG/$1"; fi
-}
-
-# schedule_value <block> <key>: a plain scalar under a top-level block of schedule.yaml (quotes stripped), empty when
-# missing. Like backup.sh reads the time zone; `pnpm config:check` (step 4) validates the file against its schema.
-schedule_value() {
-  awk -v block="$1:" -v key="$2:" '
-    $0 ~ "^" block { inside = 1; next }
-    inside && /^[^ #]/ { inside = 0 }
-    inside && $1 == key { value = $2; gsub(/["'"'"']/, "", value); print value; exit }
-  ' "$(config_file schedule.yaml)" 2>/dev/null || true
-}
 
 # env_value KEY: the value of KEY in .env (first match, quotes stripped), empty when missing. Names only, never printed.
 env_value() {
@@ -171,8 +156,13 @@ env_value() {
 # instance, docs/multiple-instances.md), else doctor.compose_project, else job-radar.
 PROJECT="${COMPOSE_PROJECT_NAME:-}"
 [[ -n "$PROJECT" ]] || PROJECT="$(env_value COMPOSE_PROJECT_NAME)"
-[[ -n "$PROJECT" ]] || PROJECT="$(schedule_value doctor compose_project)"
-PROJECT="${PROJECT:-job-radar}"
+PROJECT_FROM_CONFIG=0
+if [[ -z "$PROJECT" ]]; then
+  # Read by this shell alone: nothing is installed yet. A wrong name would start a second stack, so an unclear file stops here.
+  PROJECT="$(cfg_identity schedule.yaml doctor.compose_project compose_project "$CFG_DEFAULT_COMPOSE_PROJECT")" \
+    || die "cannot read doctor.compose_project from schedule.yaml (see above): fix the file, or set COMPOSE_PROJECT_NAME"
+  PROJECT_FROM_CONFIG=1
+fi
 
 STEP=0
 STEP_NAME=""
@@ -181,13 +171,11 @@ TARGET=""        # the commit this deploy builds and runs (fixed after the pull 
 ctx=""           # the build context directory, data/build/<TARGET>-<pid>
 CLEANED=""       # on_exit ran
 RELEASE_DONE=0   # the explicit release before the prune step ran (whatever it returned)
-FREEZE_TOKEN=""
-FREEZE_TAKEN_OVER=0
-UP_STARTED=0     # once compose up is attempted, new consumers may have started: keep the freeze on failure/interrupt
-FREEZE_HINT_SHOWN=0
-CONFIG_FREEZE_SUPPORTED=""
-EXISTING_INSTALL=0
-CONFIG_WRITES_PENDING=0   # 1 when user config writes were skipped, failed or are still due (set by a config write step)
+CONFIG_WRITE_STEP=""     # 1 when the target commit has the config-write step (step 11); else its step 4 does the writes
+BUILT_WEB_IMAGE=""       # image IDs this deploy built (the gate of step 11 compares the containers with them)
+BUILT_RUNNER_IMAGE=""
+CONFIG_WRITES_PENDING=0  # 1 when user config writes were skipped or failed (the exit code policy: lib/deploy-result.sh)
+CONFIG_PENDING_REASON="" # why; printed at the end and passed to the doctor
 WORKER_WAIT_RC=0  # 1 when step 11 could not confirm the ai-worker service (the exit code policy: lib/deploy-result.sh)
 WAIT_OUT=""     # PID file of the step 11 wait
 DOCTOR_RC=0      # the doctor's exit code (127 and the like: it could not run)
@@ -206,14 +194,6 @@ on_exit() {
   [[ -n "$WAIT_OUT" ]] && rm -f "$WAIT_OUT"
   [[ -n "$CLEANED" ]] && return; CLEANED=1
   [[ -z "$PROC_PGID" ]] || proc_group_wait "$PROC_PGID"
-  if [[ "$UP_STARTED" == 0 && "$FREEZE_TAKEN_OVER" == 0 && -n "$FREEZE_TOKEN" && -e "$USER_CONFIG/.upgrade-freeze" ]]; then
-    # Nothing new has started. Remove only a fresh freeze; an earlier deploy may already have started new consumers.
-    echo "  \$ pnpm ops:unfreeze --owned"
-    if JOB_RADAR_UPGRADE_FREEZE_TOKEN="$FREEZE_TOKEN" proc_run pnpm ops:unfreeze --owned; then
-      FREEZE_TOKEN=""
-    fi
-  fi
-  report_kept_freeze
   if [[ "$RELEASE_DONE" != 1 ]]; then
     mine="$RELEASES_LOCK_MINE"; lrc=0; releases_lock_release "$APP" || lrc=$?
     (( lrc == 3 )) && rc=1
@@ -233,19 +213,11 @@ step() {
 
 say() { echo "  $*"; }
 
-report_kept_freeze() {
-  if [[ "$FREEZE_HINT_SHOWN" == 0 && -e "$USER_CONFIG/.upgrade-freeze" ]]; then
-    echo "  The upgrade freeze is kept. Run deploy again, or after confirming no old consumers remain run pnpm ops:unfreeze, then pnpm config:init and pnpm config:migrate --write." >&2
-    FREEZE_HINT_SHOWN=1
-  fi
-}
-
 # A step failed: say which, why, and what to do; the steps already done are not undone.
 fail_step() {
   echo >&2
   echo "deploy: step $STEP/$TOTAL \"${STEP_NAME}\" failed: $1" >&2
   [[ -z "${2:-}" ]] || echo "  What to do: $2" >&2
-  if [[ "$UP_STARTED" == 1 || "$FREEZE_TAKEN_OVER" == 1 || -z "$FREEZE_TOKEN" ]]; then report_kept_freeze; fi
   echo "  Steps already done are not rolled back. After fixing the cause, run scripts/ops/deploy.sh again (it is safe to repeat)." >&2
   exit 1
 }
@@ -421,9 +393,9 @@ else
       if ! git -C "$ROOT" show "$commit:scripts/ops/install-ai-worker.sh" 2>/dev/null | grep -qx '# capability: ai-worker-release-dir'; then
         fail_step "$REF ($commit) is a version from before the ai-worker ran from release directories; deploy.sh cannot switch to it (the checkout was not changed)" "Follow docs/upgrade.md#downgrade-pre-release-dir (uninstall the worker first, then check out and deploy the old version by hand)"
       fi
-      # This running script survives checkout. Decide which config protocol the target understands before moving HEAD.
-      CONFIG_FREEZE_SUPPORTED=0
-      if git -C "$ROOT" show "$commit:scripts/ops/deploy.sh" 2>/dev/null | grep -x '# capability: config-freeze' >/dev/null; then CONFIG_FREEZE_SUPPORTED=1; fi
+      # This running script survives checkout. Decide before moving HEAD whether the target has the config-write step.
+      CONFIG_WRITE_STEP=0
+      if git -C "$ROOT" show "$commit:scripts/ops/deploy.sh" 2>/dev/null | grep -x '# capability: config-write-step' >/dev/null; then CONFIG_WRITE_STEP=1; fi
       proc_step "could not check out $REF" "Resolve the git error above, then run this script again" git -C "$ROOT" checkout --detach "$ref_target"
       say "$before -> $(git -C "$ROOT" rev-parse --short HEAD) ($REF)"
     fi
@@ -439,9 +411,9 @@ else
 fi
 # From here on "the commit to deploy" is TARGET, never whatever HEAD is at the moment.
 TARGET="$(git -C "$APP" rev-parse HEAD)"
-if [[ -z "$CONFIG_FREEZE_SUPPORTED" ]]; then
-  CONFIG_FREEZE_SUPPORTED=0
-  if git -C "$ROOT" show "$TARGET:scripts/ops/deploy.sh" 2>/dev/null | grep -x '# capability: config-freeze' >/dev/null; then CONFIG_FREEZE_SUPPORTED=1; fi
+if [[ -z "$CONFIG_WRITE_STEP" ]]; then
+  CONFIG_WRITE_STEP=0
+  if git -C "$ROOT" show "$TARGET:scripts/ops/deploy.sh" 2>/dev/null | grep -x '# capability: config-write-step' >/dev/null; then CONFIG_WRITE_STEP=1; fi
 fi
 say "target commit: $TARGET$([[ "$DRY_RUN" -eq 1 && "$SKIP_PULL" -eq 0 ]] && echo ' (now; a real run uses the commit it pulls)')"
 if [[ -n "${JOB_RADAR_DEPLOY_EXPECT_SHA:-}" && "$JOB_RADAR_DEPLOY_EXPECT_SHA" != "$TARGET" ]]; then
@@ -451,38 +423,32 @@ fi
 step "install: dependencies"
 assert_target
 run "Read the pnpm error; for network problems just retry" pnpm install --frozen-lockfile
+# Now the app's own loader can read the file: it must agree with what this shell read before the install.
+if [[ "$DRY_RUN" -eq 0 && "$PROJECT_FROM_CONFIG" == 1 ]]; then
+  loaded_project=""
+  if loaded_project="$(cfg_get schedule.yaml doctor.compose_project 2>/dev/null)" && [[ "$loaded_project" != "$PROJECT" ]]; then
+    fail_step "schedule.yaml doctor.compose_project is '$loaded_project', but the shell read '$PROJECT'" "Write the value as a plain scalar in schedule.yaml, then run this script again"
+  fi
+fi
 
 step "config: configuration, .env, data directories"
 assert_target
 run "Check write permission on the product directory (is the external volume writable?)" mkdir -p data/config data/profile data/backups data/exports
-# YAML in either user directory, a leftover marker, a worker definition, or a running service means old consumers may exist.
-worker_identity="$(ai_worker_identity "$APP")" || require "cannot determine the installed ai-worker identity" "Resolve ambiguous service definitions, then deploy again"
-worker_definition="$(printf '%s\n' "$worker_identity" | sed -n 's/^found_definition=//p')"
-for user_file in "$USER_CONFIG"/*.yaml "$USER_CONFIG"/*.yml "$APP/data/profile"/*.yaml "$APP/data/profile"/*.yml; do
-  [[ ! -f "$user_file" ]] || EXISTING_INSTALL=1
-done
-[[ -z "$worker_definition" ]] || EXISTING_INSTALL=1
-running_services="$(compose ps --status running --services)" || require "cannot determine whether compose services are running" "Check docker compose ps, then deploy again"
-[[ -z "$running_services" ]] || EXISTING_INSTALL=1
-if [[ -e "$USER_CONFIG/.upgrade-freeze" ]]; then EXISTING_INSTALL=1; FREEZE_TAKEN_OVER=1; fi
-if [[ "$CONFIG_FREEZE_SUPPORTED" == 0 ]]; then
-  say "target has no config-freeze capability: use its original step-4 config:init and config:migrate --write"
-  if [[ -e "$USER_CONFIG/.upgrade-freeze" ]]; then say "leftover upgrade freeze kept: the old target ignores it; the next upgrade takes it over"; fi
+if [[ "$CONFIG_WRITE_STEP" == 0 ]]; then
+  say "target has no config-write step: use its original step-4 config:init and config:migrate --write"
+  # A marker of an earlier version would make that version refuse its own writes; no service of this deploy needs it.
+  [[ "$DRY_RUN" -eq 1 ]] || rm -f "$USER_CONFIG/.upgrade-freeze"
   run "Read the pnpm config:init error; it only copies missing files" pnpm config:init
   run "Restore a compatible config backup if the target cannot read these versions" pnpm config:migrate --write
-elif [[ "$EXISTING_INSTALL" == 1 ]]; then
-  say "existing install: preview migrations and validate before freezing; user files stay unchanged"
-  run "Fix the file named in the migration preview; a newer config version requires restoring a compatible backup" pnpm config:migrate
 else
-  say "first install: initialise missing config and profile files; no freeze is needed"
-  run "Read the pnpm config:init error; it only copies missing files and never overwrites" pnpm config:init
-  run "Fix the file named in the migration preview" pnpm config:migrate
+  say "user files stay unchanged here: step 11 writes them after the services and the ai-worker run the target"
+  run "Check write permission on .env in the product directory" pnpm config:init --env-only
 fi
 run "Fix data/config/*.yaml as the error says (pnpm config:check names the file, the field and which layer it was read from)" pnpm config:check
 if [[ -f "$APP/.env" ]]; then say ".env exists"; else say "warning: .env does not exist: compose uses defaults, but Telegram and channel keys need it (cp .env.example .env and fill it in; see docs/deploy.md)"; fi
 run "The docker compose config has a syntax error: docker compose config shows where" docker compose -p "$PROJECT" config -q
 # Removing a dependency in compose.yaml does not remove an entry merged from a user's override. Even required:false
-# pulls the sidecar into the core up --wait. Refuse entries added by overrides before a freeze or service replacement,
+# pulls the sidecar into the core up --wait. Refuse entries added by overrides before any service replacement,
 # but allow a supported old target whose own compose.yaml still has the dependency.
 # Consume the resolved model privately: it may contain secrets from env_file; only fixed dependency paths leave Node.
 echo "  \$ docker compose -p $PROJECT config --format json (check core dependencies on jobspy)"
@@ -513,20 +479,15 @@ if [[ "$DRY_RUN" -eq 0 ]]; then
       process.exitCode = 1;
     }
   ' "$APP")"; then
-    fail_step "cannot inspect the resolved Compose dependencies" "Check docker compose -p $PROJECT config -q and the Node dependency installation, then retry; no settings were frozen by this run"
+    fail_step "cannot inspect the resolved Compose dependencies" "Check docker compose -p $PROJECT config -q and the Node dependency installation, then retry"
   elif [[ "$jobspy_dependencies" == target ]]; then
     say "target compose.yaml depends on jobspy: keeping its original dependency behaviour; sidecar health may block this target's deployment"
   elif [[ -n "$jobspy_dependencies" ]]; then
     fail_step "the resolved Compose config still contains $jobspy_dependencies" "Remove those jobspy dependency entries from compose.override.yaml (or the active Compose override), keeping the db dependencies, then run deploy again; required: false still pulls jobspy into the core up --wait"
   fi
 fi
-if [[ "$CONFIG_FREEZE_SUPPORTED" == 1 && "$EXISTING_INSTALL" == 1 ]]; then
-  echo "  \$ pnpm ops:freeze --target $TARGET"
-  if [[ "$DRY_RUN" == 0 ]]; then
-    FREEZE_TOKEN="$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
-    # Never echo the token or export it to the web/runner/worker. Only explicit config commands receive it.
-    JOB_RADAR_UPGRADE_FREEZE_TOKEN="$FREEZE_TOKEN" proc_step "could not freeze settings" "Check config/profile directory permissions, then retry" pnpm ops:freeze --target "$TARGET"
-  fi
+if [[ "$CONFIG_WRITE_STEP" == 1 ]]; then
+  run "Fix the file named above: it cannot be migrated (a newer config version means restoring a compatible backup)" pnpm config:plan --deploy
 fi
 
 step "backup: back up the database before upgrading"
@@ -552,6 +513,16 @@ if [[ "$DRY_RUN" -eq 0 ]]; then
 fi
 export JOB_RADAR_BUILD_CONTEXT="$ctx"   # every compose call from here on builds from it
 run "Read the build log above; if the disk is full, clean up first (docker system df shows usage, docker builder prune clears the build cache)" docker compose -p "$PROJECT" build
+# What the containers must run from here on (the gate of step 11). A failure here only means the gate will not pass.
+built_image_id() { # built_image_id <service>
+  local image
+  image="$(compose config --images "$1" 2>/dev/null | head -n 1)" || return 0
+  [[ -z "$image" ]] || docker image inspect -f '{{.Id}}' "$image" 2>/dev/null || true
+}
+if [[ "$DRY_RUN" -eq 0 ]]; then
+  BUILT_WEB_IMAGE="$(built_image_id web)"
+  BUILT_RUNNER_IMAGE="$(built_image_id runner)"
+fi
 
 step "release: the ai-worker's release directory for the target commit"
 if [[ "$NO_AI_WORKER" -eq 1 ]]; then
@@ -596,7 +567,7 @@ fi
 echo "  \$ docker compose -p $PROJECT up -d --wait --wait-timeout $WAIT_TIMEOUT db web runner"
 if [[ "$DRY_RUN" -eq 0 ]]; then
   assert_target
-  proc_check_stop; up_code=0; UP_STARTED=1
+  proc_check_stop; up_code=0
   proc_run docker compose -p "$PROJECT" up -d --wait --wait-timeout "$WAIT_TIMEOUT" db web runner || up_code=$?; proc_check_stop
   if (( up_code != 0 )); then
     compose ps >&2 || true
@@ -636,7 +607,7 @@ else
   fi
 fi
 
-step "config-write: confirm the worker, then fill and migrate user files"
+step "config-write: confirm the services and the worker, then migrate and fill user files"
 if [[ "$NO_AI_WORKER" -eq 0 ]]; then
   ai_worker_deploy_settings "$APP"   # after config:check; warns and falls back on a bad value
   [[ -n "$SETTLE" ]] || SETTLE="$AI_WORKER_SWAP_TIMEOUT"
@@ -660,16 +631,6 @@ if [[ "$DRY_RUN" == 0 && "$NO_AI_WORKER" -eq 0 && "$SETTLE" -gt 0 ]]; then
        WORKER_WAIT_RC=1 ;;
   esac
 fi
-
-# Explicit token scope; proc_run supervises these writes just like every earlier deployment mutation.
-config_write_command() {
-  proc_check_stop
-  echo "  \$ $*"
-  local rc=0
-  JOB_RADAR_UPGRADE_FREEZE_TOKEN="$FREEZE_TOKEN" proc_run "$@" || rc=$?
-  proc_check_stop
-  return "$rc"
-}
 
 # Emit only node/tsx main entries, not editors or unrelated scripts with the worker file among their arguments.
 worker_process_entries() {
@@ -713,25 +674,13 @@ worker_process_cwd() {
   esac
 }
 
-# A successful install or an absent database holder is not enough: a disconnected manual worker can reacquire the lock.
-config_write_safe() {
-  local ident platform label definition release pid="" holder url host processes entries worker_pid entry cwd other_pids="" probe_rc=0
-  ident="$(ai_worker_identity "$APP")" || return 1
-  platform="$(printf '%s\n' "$ident" | sed -n 's/^platform=//p')"
-  label="$(printf '%s\n' "$ident" | sed -n 's/^found_label=//p')"
-  definition="$(printf '%s\n' "$ident" | sed -n 's/^found_definition=//p')"
-  if [[ -n "$definition" ]]; then
-    [[ -n "$label" ]] || return 1
-    release="$("$OPS/install-ai-worker.sh" --print-release --root "$APP" 2>/dev/null)" || return 1
-    [[ "$release" == "$APP/data/releases/ai-worker/$TARGET" ]] || { say "the worker service does not point at the target release"; return 1; }
-    pid="$(ai_worker_service_pid "$platform" "$label" "$AI_WORKER_SWAP_TIMEOUT")"
-    [[ "$pid" =~ ^[1-9][0-9]*$ ]] || return 1
-  fi
-
-  # POSIX ps on macOS/Linux. Absolute entries identify the install; relative entries need the process cwd.
-  # An unknown cwd is a blocker. Only PIDs are printed; command lines may contain private arguments.
-  processes="$(ps -A -o pid=,args=)" || { say "host ai-worker process scan failed; PIDs could not be determined"; return 1; }
-  entries="$(printf '%s\n' "$processes" | worker_process_entries)" || { say "host ai-worker process scan could not be parsed"; return 1; }
+# Other worker processes of this install than <service pid> (may be empty). POSIX ps on macOS/Linux. Absolute entries identify
+# the install; relative entries need the process cwd. An unknown cwd is a blocker. Only PIDs are printed; command lines may
+# contain private arguments.
+config_write_no_other_worker() { # config_write_no_other_worker <service pid>
+  local pid="$1" processes entries worker_pid entry cwd other_pids=""
+  processes="$(ps -A -o pid=,args=)" || { GATE_REASON="the host ai-worker process scan failed"; return 1; }
+  entries="$(printf '%s\n' "$processes" | worker_process_entries)" || { GATE_REASON="the host ai-worker process scan could not be parsed"; return 1; }
   while read -r worker_pid entry; do
     [[ -n "$worker_pid" && "$worker_pid" != "$pid" ]] || continue
     if [[ "$entry" == /* ]]; then
@@ -744,58 +693,129 @@ config_write_safe() {
     other_pids="${other_pids}${worker_pid} "
   done <<< "$entries"
   proc_check_stop
-  if [[ -n "$other_pids" ]]; then say "other ai-worker processes still run; PIDs: $(printf '%s\n' "$other_pids" | tr '\n' ' ')"; return 1; fi
-
-  url="$(ai_worker_db_url "$APP")"
-  host="$(hostname)" || return 1
-  # Without a service there is no approved worker identity: this deploy PID is only a probe argument; only 'none' passes.
-  holder="$(DATABASE_URL="$url" node --import "$APP/node_modules/tsx/dist/loader.mjs" scripts/ops/worker-heartbeat.ts --holder --pid "${pid:-$$}" --host "$host")" || probe_rc=$?
-  proc_check_stop
-  [[ "$probe_rc" == 0 ]] || { say "worker instance-lock holder could not be determined"; return 1; }
-  if [[ "$holder" == '{"status":"none"}' && -z "$definition" ]]; then return 0; fi
-  [[ -n "$definition" && "$holder" == '{"status":"expected"}' ]] || {
-    say "another worker holds the instance lock, or the holder is not visible"; return 1;
-  }
-  if [[ "$NO_AI_WORKER" == 0 && "$SETTLE" -gt 0 && "$fresh_pid" != "$pid" ]]; then
-    say "the current service PID has not been confirmed with a fresh receipt"; return 1
-  fi
-  # Confirm that the service PID did not change while the release and holder were inspected.
-  [[ "$(ai_worker_service_pid "$platform" "$label" "$AI_WORKER_SWAP_TIMEOUT")" == "$pid" ]]
+  [[ -z "$other_pids" ]] || { GATE_REASON="other ai-worker processes still run (PIDs: ${other_pids% })"; return 1; }
 }
 
-if [[ "$CONFIG_FREEZE_SUPPORTED" == 0 ]]; then
-  say "target has no config-freeze capability: config-write skipped; step 4 already handled its config"
-elif [[ "$EXISTING_INSTALL" == 0 || ( "$DRY_RUN" == 0 && -z "$FREEZE_TOKEN" ) ]]; then
-  say "no upgrade freeze was taken: config-write gate skipped; step 4 already initialised the files"
+# web and runner each have containers, and all of them run the image this deploy built.
+config_write_services_ready() {
+  local service expected ids id state
+  for service in web runner; do
+    if [[ "$service" == web ]]; then expected="$BUILT_WEB_IMAGE"; else expected="$BUILT_RUNNER_IMAGE"; fi
+    [[ -n "$expected" ]] || { GATE_REASON="the image this deploy built for $service could not be read"; return 1; }
+    ids="$(compose ps -a -q "$service" 2>/dev/null)" || ids=""
+    [[ -n "$ids" ]] || { GATE_REASON="$service has no container"; return 1; }
+    while read -r id; do
+      state="$(docker inspect -f '{{.State.Running}} {{.Image}}' "$id" 2>/dev/null)" || state=""
+      [[ "$state" == "true $expected" ]] || { GATE_REASON="a $service container is not running the image this deploy built"; return 1; }
+    done <<< "$ids"
+  done
+}
+
+heartbeat_probe() { # heartbeat_probe <url> <worker-heartbeat.ts arguments...>
+  local url="$1"; shift
+  DATABASE_URL="$url" node --import "$APP/node_modules/tsx/dist/loader.mjs" scripts/ops/worker-heartbeat.ts "$@"
+}
+
+# --no-ai-worker: this deploy did not switch a worker, so none may be installed or running.
+config_write_no_worker_at_all() {
+  local ident origin probe_rc=0
+  ident="$(ai_worker_identity "$APP")" || { GATE_REASON="--no-ai-worker, and the installed ai-worker service is ambiguous"; return 1; }
+  origin="$(printf '%s\n' "$ident" | sed -n 's/^origin=//p')"
+  [[ "$origin" == none ]] || { GATE_REASON="--no-ai-worker, and an ai-worker service is installed that this deploy did not switch"; return 1; }
+  heartbeat_probe "$(ai_worker_db_url "$APP")" --lock-holder >/dev/null || probe_rc=$?
+  proc_check_stop
+  case "$probe_rc" in
+    0) ;;
+    2) GATE_REASON="--no-ai-worker, and a worker holds the instance lock"; return 1 ;;
+    *) GATE_REASON="--no-ai-worker, and the instance lock holder could not be determined"; return 1 ;;
+  esac
+  config_write_no_other_worker ""
+}
+
+# A successful install or an absent database holder is not enough: a disconnected manual worker can reacquire the lock.
+config_write_worker_ready() {
+  local ident platform label definition release pid="" holder probe_rc=0
+  ident="$(ai_worker_identity "$APP")" || { GATE_REASON="the installed ai-worker service is ambiguous"; return 1; }
+  platform="$(printf '%s\n' "$ident" | sed -n 's/^platform=//p')"
+  label="$(printf '%s\n' "$ident" | sed -n 's/^found_label=//p')"
+  definition="$(printf '%s\n' "$ident" | sed -n 's/^found_definition=//p')"
+  if [[ -n "$definition" ]]; then
+    [[ -n "$label" ]] || { GATE_REASON="the installed ai-worker service has no label"; return 1; }
+    release="$("$OPS/install-ai-worker.sh" --print-release --root "$APP" 2>/dev/null)" || { GATE_REASON="the ai-worker service's release could not be read"; return 1; }
+    [[ "$release" == "$APP/data/releases/ai-worker/$TARGET" ]] || { GATE_REASON="the ai-worker service does not point at the target release"; return 1; }
+    pid="$(ai_worker_service_pid "$platform" "$label" "$AI_WORKER_SWAP_TIMEOUT")"
+    [[ "$pid" =~ ^[1-9][0-9]*$ ]] || { GATE_REASON="the ai-worker service has no running process"; return 1; }
+  fi
+  config_write_no_other_worker "$pid" || return 1
+  # Without a service there is no approved worker identity: this deploy PID is only a probe argument; only 'none' passes.
+  holder="$(heartbeat_probe "$(ai_worker_db_url "$APP")" --holder --pid "${pid:-$$}" --host "$(hostname)")" || probe_rc=$?
+  proc_check_stop
+  [[ "$probe_rc" == 0 ]] || { GATE_REASON="the instance lock holder could not be determined"; return 1; }
+  if [[ "$holder" == '{"status":"none"}' && -z "$definition" ]]; then return 0; fi
+  [[ -n "$definition" && "$holder" == '{"status":"expected"}' ]] || { GATE_REASON="another worker holds the instance lock, or the holder is not visible"; return 1; }
+  if [[ "$SETTLE" -gt 0 && "$fresh_pid" != "$pid" ]]; then
+    GATE_REASON="the current ai-worker service PID has not been confirmed with a fresh receipt"; return 1
+  fi
+  # Confirm that the service PID did not change while the release and holder were inspected.
+  [[ "$(ai_worker_service_pid "$platform" "$label" "$AI_WORKER_SWAP_TIMEOUT")" == "$pid" ]] || { GATE_REASON="the ai-worker service PID changed during the checks"; return 1; }
+}
+
+config_write_gate() {
+  GATE_REASON=""
+  config_write_services_ready || return 1
+  if [[ "$NO_AI_WORKER" -eq 1 ]]; then config_write_no_worker_at_all; else config_write_worker_ready; fi
+}
+
+# The DATABASE_URL the ai-worker uses is the database this host's commands reach. Prefix assignment, not env: proc_run must
+# run in this shell. The URL is never printed.
+config_write_run() {
+  proc_check_stop
+  echo "  \$ $*"
+  local rc=0
+  DATABASE_URL="$CONFIG_WRITE_DB_URL" proc_run "$@" || rc=$?
+  proc_check_stop
+  return "$rc"
+}
+
+config_writes_pending() { CONFIG_WRITES_PENDING=1; CONFIG_PENDING_REASON="$1"; say "config writes pending: $1"; }
+
+# The first failure stops the writes; what is left stays for the next deploy.
+config_writes() {
+  local plan_rc=0
+  CONFIG_WRITE_DB_URL="$(ai_worker_db_url "$APP")"
+  config_write_run pnpm config:migrate --write || { config_writes_pending "pnpm config:migrate --write failed (see above)"; return 0; }
+  config_write_run pnpm config:init || { config_writes_pending "pnpm config:init failed (see above)"; return 0; }
+  config_write_run pnpm config:plan --deploy --check || plan_rc=$?
+  case "$plan_rc" in
+    0) ;;
+    2) config_writes_pending "writes are still planned after the write step (see the list above)"; return 0 ;;
+    *) config_writes_pending "pnpm config:plan --deploy --check failed (see above)"; return 0 ;;
+  esac
+  config_write_run pnpm config:migrate --prune-backups || say "warning: old config backups could not be removed; the deploy continues"
+}
+
+if [[ "$CONFIG_WRITE_STEP" == 0 ]]; then
+  say "target has no config-write step: skipped; step 4 already handled its config"
 elif [[ "$DRY_RUN" == 1 ]]; then
-  say "scan host ai-worker PIDs and probe worker-heartbeat.ts --holder --pid <expected> --host <host>: only a confirmed target service PID, or no holder and no service, permits writes"
-  echo "  \$ pnpm config:init"
+  say "gate: web and runner containers run the built image; the ai-worker service is at the target release and holds the lock (--no-ai-worker: none is installed, nobody holds the lock); no other worker process"
   echo "  \$ pnpm config:migrate --write"
-  echo "  \$ pnpm --silent config:migrate --json (re-plan)"
-  echo "  \$ pnpm ops:unfreeze --owned (only after old consumers are excluded)"
+  echo "  \$ pnpm config:init"
+  echo "  \$ pnpm config:plan --deploy --check"
+  echo "  \$ pnpm config:migrate --prune-backups"
 else
   assert_target
+  releases_lock_verify "$APP" || fail_step "this deploy no longer holds the deploy lock $LOCK_DIR" "Find out what changed the lock (releases_lock_report above, or ls -la $LOCK_DIR) before deploying again"
   ai_worker_deploy_settings "$APP"
-  if config_write_safe; then
-    proc_check_stop
-    write_failed=0
-    config_write_command pnpm config:init || write_failed=1
-    if [[ "$write_failed" == 0 ]]; then config_write_command pnpm config:migrate --write || write_failed=1; fi
-    migration_status="$(pnpm --silent config:migrate --json)" || migration_status=""
-    proc_check_stop
-    if [[ "$migration_status" != '{"pending":0,"problems":0}' || "$write_failed" == 1 ]]; then
-      CONFIG_WRITES_PENDING=1
-      say "config writes failed or the fresh migration plan still needs attention; run pnpm config:init and pnpm config:migrate --write"
-    fi
-    # Safe consumers were established even when the write failed or a concurrent edit was skipped.
-    if [[ -n "$FREEZE_TOKEN" ]]; then
-      if config_write_command pnpm ops:unfreeze --owned; then FREEZE_TOKEN=""
-      else CONFIG_WRITES_PENDING=1; say "could not remove the upgrade freeze; run pnpm ops:unfreeze after checking the deployment"; fi
-    fi
+  gate_rc=0; config_write_gate || gate_rc=$?
+  # A forwarded signal can make a read-only probe fail: the signal wins over "gate not passed".
+  proc_check_stop
+  if (( gate_rc == 0 )); then
+    # Markers of earlier versions: the code of this target no longer reads them, and every old process is gone now.
+    rm -f "$USER_CONFIG/.upgrade-freeze"
+    rm -rf "$USER_CONFIG/.write.lock" "$USER_CONFIG/.write.lock.guard" "$APP/data/profile/.write.lock" "$APP/data/profile/.write.lock.guard"
+    config_writes
   else
-    CONFIG_WRITES_PENDING=1
-    say "user config writes deferred; the upgrade freeze is kept"
-    say "Stop the old ai-worker and deploy again, or after confirming there are no old consumers run pnpm ops:unfreeze, then pnpm config:init and pnpm config:migrate --write"
+    config_writes_pending "$GATE_REASON"
   fi
 fi
 
@@ -826,10 +846,11 @@ fi
 if [[ "$NO_PRUNE" -eq 1 ]]; then
   say "--no-prune: skipped"
 else
-  # Defaults mirror the shipped schedule.yaml (deploy block) for an older file without it. Read from data/config first.
-  prune_cache="$(schedule_value deploy prune_build_cache)"; prune_cache="${prune_cache:-true}"
-  keep_gb="$(schedule_value deploy build_cache_keep_gb)"; keep_gb="${keep_gb:-5}"
-  prune_images="$(schedule_value deploy prune_dangling_images)"; prune_images="${prune_images:-true}"
+  # The app's own loader; a value it cannot give falls back to the shipped defaults of the deploy block.
+  prune_cache=true; keep_gb=5; prune_images=true
+  if [[ "$DRY_RUN" -eq 0 ]] && prune_settings="$(cfg_get schedule.yaml deploy.prune_build_cache deploy.build_cache_keep_gb deploy.prune_dangling_images 2>/dev/null)"; then
+    { read -r prune_cache; read -r keep_gb; read -r prune_images; } <<< "$prune_settings" || true
+  fi
   say "only the build cache and dangling images are cleaned; data volumes and images in use are never touched (settings: deploy block of schedule.yaml; --no-prune skips)"
   if [[ "$prune_cache" != "true" ]]; then
     say "deploy.prune_build_cache is not true: the build cache is not cleaned"
@@ -862,7 +883,7 @@ if [[ "$DRY_RUN" == 1 ]]; then
 fi
 proc_check_stop
 # The doctor's verdict is only recorded here; the exit code is decided once, below (deploy_final_rc).
-DOCTOR_RC=0; proc_run pnpm run doctor || DOCTOR_RC=$?
+DOCTOR_RC=0; CONFIG_PENDING_REASON="$CONFIG_PENDING_REASON" proc_run pnpm run doctor || DOCTOR_RC=$?
 proc_check_stop
 echo
 if [[ "$WORKER_WAIT_RC" == 1 && "$DOCTOR_RC" =~ ^[01]$ ]]; then
@@ -876,6 +897,6 @@ else
   esac
 fi
 if [[ "$CONFIG_WRITES_PENDING" == 1 ]]; then
-  echo "deploy: user config writes are pending (see above)$([[ "$DOCTOR_RC" =~ ^[012]$ ]] || echo '; the doctor did not run either')." >&2
+  echo "Deployed, but the config writes are pending: $CONFIG_PENDING_REASON. The next deploy retries them.$([[ "$DOCTOR_RC" =~ ^[012]$ ]] || echo ' The doctor did not run either.')" >&2
 fi
 exit "$(deploy_final_rc "$CONFIG_WRITES_PENDING" "$DOCTOR_RC" "$WORKER_WAIT_RC")"

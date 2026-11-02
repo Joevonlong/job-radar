@@ -8,26 +8,26 @@ import { mutateConfig } from "@/lib/config";
 import { isSet, TELEGRAM_ENV, type EnvSource } from "../env";
 import { telegramInputSchema } from "../inputs";
 import { stepError, type SetupStepResult } from "../types";
-import { finishStep, readFresh, setupFrozen, setupWriteError } from "./common";
+import { readFresh, setupWriteError, withStepWrite } from "./common";
 import { writeNotifyLocale } from "./language";
 
 export async function saveTelegramStep(raw: unknown): Promise<SetupStepResult> {
-  const frozen = setupFrozen("telegram");
-  if (frozen) return frozen;
   const parsed = telegramInputSchema.safeParse(raw);
   if (!parsed.success) return stepError("telegram", "invalidPayload");
   const notify = readFresh("notify");
   if (notify === null) return stepError("telegram", "configUnreadable");
-  if (parsed.data.notify_locale !== undefined) {
-    const problem = await writeNotifyLocale(parsed.data.notify_locale);
-    if (problem !== null) return problem;
-  }
-  try {
-    await mutateConfig("notify", (current) => current.telegram.enabled === parsed.data.enabled ? null : { ...current, telegram: { ...current.telegram, enabled: parsed.data.enabled } });
-  } catch (error) {
-    return stepError("telegram", setupWriteError(error));
-  }
-  return finishStep("telegram");
+  return withStepWrite("telegram", async () => {
+    if (parsed.data.notify_locale !== undefined) {
+      const problem = await writeNotifyLocale(parsed.data.notify_locale);
+      if (problem !== null) return problem;
+    }
+    try {
+      await mutateConfig("notify", (current) => current.telegram.enabled === parsed.data.enabled ? null : { ...current, telegram: { ...current.telegram, enabled: parsed.data.enabled } });
+    } catch (error) {
+      return stepError("telegram", setupWriteError(error));
+    }
+    return null;
+  });
 }
 
 /**

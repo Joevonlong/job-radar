@@ -81,8 +81,10 @@ describe("validateConfigText", () => {
     const bare = userText("ui.yaml").replace("config_version: 2\n", "");
     const issues = failure("ui", bare);
     expect(issues[0]).toMatchObject({ source: "version" });
-    expect(issues[0]?.message).toContain("needs 2");
+    expect(issues[0]?.message).toContain("config_version is missing");
     expect(validateConfigText("ui", userText("ui.yaml")).ok).toBe(true);
+    // an older file stays valid (its writes can be pending after a deploy): it is checked on its migrated value
+    expect(validateConfigText("ui", `config_version: 1\n${bare}`).ok).toBe(true);
     const newer = failure("ui", `config_version: 3\n${bare}`);
     expect(newer[0]?.message).toContain("newer");
     expect(failure("ui", `config_version: x\n${bare}`)[0]?.source).toBe("version");

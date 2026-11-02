@@ -40,6 +40,8 @@ fi
 # (cfg_identity), and when that cannot read a valid zone either, the name carries UTC. This script prunes nothing.
 # shellcheck source=lib/config.sh
 source "$app/scripts/ops/lib/config.sh"
+# shellcheck source=lib/existing-install.sh
+source "$app/scripts/ops/lib/existing-install.sh"
 config_note=""
 if ! tz="$(cfg_get schedule.yaml timezone)"; then
   rc=0
@@ -115,12 +117,25 @@ config_dirs=()
 for sub in data/config data/profile; do [[ -d "$app/$sub" ]] && config_dirs+=("$sub"); done
 if [[ ${#config_dirs[@]} -gt 0 ]]; then
   config_archive="${final%.dump}.config.tgz"
+  # The generated marker says this archive knows the setup wizard (restore.sh --with-config): a second tar step, because an
+  # --exclude also applies to a second -C. -r only works on an uncompressed tar, so gzip comes last.
   # COPYFILE_DISABLE: macOS tar would write AppleDouble `._*` members for files with extended attributes (com.apple.provenance);
   # `--no-xattrs` alone does not stop them, and GNU tar on Linux then refuses the archive when it is restored there
-  if COPYFILE_DISABLE=1 tar -czf "$config_archive.partial" --exclude 'data/config/.backup' --exclude '.web-session-secret' --exclude '.upgrade-freeze' --exclude '.write.lock' --exclude '.write.lock.guard*' -C "$app" "${config_dirs[@]}" && chmod 600 "$config_archive.partial" && mv "$config_archive.partial" "$config_archive"; then
+  meta_dir="$(mktemp -d)"
+  tar_partial="$config_archive.tar.partial"
+  mkdir -p "$meta_dir/data/config"
+  archive_meta_yaml >"$meta_dir/data/config/.archive-meta.yaml"
+  if ( umask 077
+       COPYFILE_DISABLE=1 tar -cf "$tar_partial" --exclude 'data/config/.backup' --exclude '.web-session-secret' --exclude '.archive-meta.yaml' --exclude '.upgrade-freeze' --exclude '.write.lock' --exclude '.write.lock.guard*' -C "$app" "${config_dirs[@]}" &&
+       COPYFILE_DISABLE=1 tar -rf "$tar_partial" -C "$meta_dir" data/config/.archive-meta.yaml &&
+       gzip -n -c "$tar_partial" >"$config_archive.partial" ) &&
+     chmod 600 "$config_archive.partial" &&
+     archive_marker_check "$config_archive.partial" &&
+     mv "$config_archive.partial" "$config_archive"; then
     echo "config written: $config_archive (${config_dirs[*]})"
   else
     rm -f "$config_archive.partial"
     echo "warning: could not archive ${config_dirs[*]}; the database backup is fine" >&2
   fi
+  rm -rf "$tar_partial" "$meta_dir"
 fi

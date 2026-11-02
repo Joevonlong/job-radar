@@ -326,7 +326,7 @@ export async function loadSetupView(options: { locale: Locale; acceptLanguage: L
   const market = marketPart();
   return {
     pending: status.pending,
-    existingInstall: status.source === "existing_install" || status.state?.completed_by === "existing_install",
+    existingInstall: status.state?.completed_by === "existing_install",
     stateError: status.error,
     steps,
     language: {

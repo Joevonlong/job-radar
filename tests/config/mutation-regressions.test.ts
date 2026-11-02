@@ -1,12 +1,12 @@
 // @vitest-environment node
 import fs from "node:fs";
-import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { parseDocument } from "yaml";
 
 import { ensureProfileFiles, getUserConfigPath, hashConfigText, readConfigText, reloadConfig } from "@/lib/config";
 import { withFileLock } from "@/lib/config/write";
+import { setConfigWriteLockProviderForTests } from "@/lib/config/write-lock";
 import { addWatchedCompany } from "@/lib/interests/service";
 import { approveSuggestion } from "@/lib/interests/suggestion-apply";
 import { syncSearchLocations } from "@/lib/profile/search-locations";
@@ -16,6 +16,7 @@ import { saveWorkflow } from "@/lib/settings/workflow/service";
 import { addBoardCandidate } from "@/lib/sources/candidates";
 import { applySourcesImport, previewSourcesImport, saveAtsBoard, setSourceEnabled } from "@/lib/sources/registry/service";
 
+import { inProcessConfigWriteLock } from "./in-process-lock";
 import { makeTempConfig, type TempConfig } from "./helpers";
 
 vi.mock("@/lib/db", () => ({
@@ -147,20 +148,23 @@ describe("config mutations keep another writer's changes", () => {
   });
 });
 
-describe("upgrade freezes reach the caller", () => {
-  it("reports frozen before trying to read invalid sources", async () => {
+describe("an unreachable database reaches the caller", () => {
+  beforeEach(() => {
+    setConfigWriteLockProviderForTests(async () => { throw Object.assign(new Error("the database cannot be reached"), { name: "DbUnavailable" }); });
+  });
+  afterEach(() => setConfigWriteLockProviderForTests(inProcessConfigWriteLock));
+
+  it("reports dbUnavailable before trying to read invalid sources", async () => {
     fs.writeFileSync(getUserConfigPath("channels"), "not: [yaml\n");
-    fs.writeFileSync(path.join(tmp.configDir, ".upgrade-freeze"), "frozen");
-    expect(await setSourceEnabled({ id: "linkedin-guest", enabled: true, acknowledged: true })).toEqual({ status: "error", error: "frozen" });
+    expect(await setSourceEnabled({ id: "linkedin-guest", enabled: true, acknowledged: true })).toEqual({ status: "error", error: "dbUnavailable" });
   });
 
   it.each([
-    { name: "candidate", run: () => addBoardCandidate({ ats: "ashby", token: "candidate-board" }), expected: { status: "error", error: "frozen" } },
-    { name: "locations", run: () => syncSearchLocations(["Austin"]), expected: { status: "error", error: "frozen" } },
-    { name: "interests", run: () => addWatchedCompany({ name: "Manual Labs" }), expected: { status: "error", formError: "frozen" } },
-    { name: "suggestion", run: () => approveSuggestion(1), expected: { status: "error", error: "frozen" } },
-  ])("returns frozen for $name edits", async ({ run, expected }) => {
-    fs.writeFileSync(path.join(tmp.configDir, ".upgrade-freeze"), "frozen");
+    { name: "candidate", run: () => addBoardCandidate({ ats: "ashby", token: "candidate-board" }), expected: { status: "error", error: "dbUnavailable" } },
+    { name: "locations", run: () => syncSearchLocations(["Austin"]), expected: { status: "error", error: "dbUnavailable" } },
+    { name: "interests", run: () => addWatchedCompany({ name: "Manual Labs" }), expected: { status: "error", formError: "dbUnavailable" } },
+    { name: "suggestion", run: () => approveSuggestion(1), expected: { status: "error", error: "dbUnavailable" } },
+  ])("returns dbUnavailable for $name edits", async ({ run, expected }) => {
     expect(await run()).toMatchObject(expected);
   });
 });

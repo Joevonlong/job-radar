@@ -36,6 +36,18 @@ CFG_SHIPPED_DIR="${CFG_SHIPPED_DIR:-$_cfg_app/config}"
 CFG_DEFAULT_COMPOSE_PROJECT="job-radar"
 CFG_DEFAULT_BACKUP_MAX_AGE_HOURS="30"
 
+# The layered config files, as the app lists them (tests/ops/restore-backfill.test.ts compares this with the registry).
+CFG_LAYERED_FILES="current-scores.yaml schedule.yaml search.yaml job-search.yaml sources.yaml ai.yaml breakdown.yaml models.yaml notify.yaml interests.yaml pipeline.yaml pipeline-board.yaml resume.yaml insights.yaml ui.yaml language.yaml setup.yaml traps.yaml salary.yaml signal-presets.yaml delivery-audit.yaml mcp.yaml activity-log.yaml job-archive.yaml writer.yaml"
+
+# stage_has_layered_config <dir>: does the directory hold at least one of them? File names only: no node and no database.
+stage_has_layered_config() {
+  local file
+  for file in $CFG_LAYERED_FILES; do
+    [[ ! -e "$1/$file" ]] || return 0
+  done
+  return 1
+}
+
 # The overlay format version of each file (the config_version from which a user file is an overlay rather than a whole
 # file). Empty in this version: every user file is read with whole-file semantics.
 cfg_overlay_format_version() {

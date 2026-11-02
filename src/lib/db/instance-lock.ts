@@ -11,7 +11,10 @@ import { assertTestDatabase } from "./test-guard";
  * Locks are per database, so a test or e2e database never collides with the real one.
  */
 
-/** Two int4s, like the cycle lock (`src/lib/cycle/lock.ts`, key [0x4a52, 0x0001]); must differ from it. */
+/**
+ * Two int4s, like the cycle lock (`src/lib/cycle/lock.ts`, key [0x4a52, 0x0001]) and the config write lock
+ * (`config-write-lock.ts`, key [0x4a52, 0x0003]); each must differ from the others.
+ */
 export const AI_WORKER_LOCK_KEY = [0x4a52, 0x0002] as const;
 
 /** What a refused process can say about the holder (from `pg_stat_activity`); fields are null when unknown. */
@@ -49,15 +52,24 @@ export interface AcquireOptions {
 /** Queries `check` tries before it answers "unknown". */
 const CHECK_ATTEMPTS = 3;
 
+/** Bytes of `application_name` that `pg_stat_activity` shows. */
+const APPLICATION_NAME_MAX_BYTES = 63;
+
 /**
- * The `application_name` of a process holding an instance lock: `job-radar <name> pid=<pid> host=<host>`, cut to 63
- * characters. Postgres keeps at most 63 bytes and rewrites what is not ASCII (`\xHH` since 16, `?` before), so the characters of a
- * host name outside printable ASCII are written as `%` and their UTF-8 bytes first: what it stores is then exactly this string. The
- * release tooling's evidence check compares the holder's name with this, so the format is an interface (tests pin it).
+ * An `application_name` that reads back exactly as written: Postgres keeps at most 63 bytes and rewrites what is not ASCII (`\\xHH`
+ * since 16, `?` before), so the characters of a host name outside printable ASCII are written as `%` and their UTF-8 bytes first.
+ */
+export function applicationName(name: string, pid: number = process.pid, host: string = os.hostname()): string {
+  const asciiHost = host.replace(/[^\x20-\x7e]/gu, (char) => Buffer.from(char).toString("hex").replace(/../g, "%$&"));
+  return `job-radar ${name} pid=${pid} host=${asciiHost}`.slice(0, APPLICATION_NAME_MAX_BYTES);
+}
+
+/**
+ * The `application_name` of a process holding an instance lock: `job-radar <name> pid=<pid> host=<host>`. The release
+ * tooling's evidence check compares the holder's name with this, so the format is an interface (tests pin it).
  */
 export function instanceApplicationName(name: string, pid: number = process.pid, host: string = os.hostname()): string {
-  const asciiHost = host.replace(/[^\x20-\x7e]/gu, (char) => Buffer.from(char).toString("hex").replace(/../g, "%$&"));
-  return `job-radar ${name} pid=${pid} host=${asciiHost}`.slice(0, 63);
+  return applicationName(name, pid, host);
 }
 
 async function tryLock(sql: Sql, k1: number, k2: number): Promise<boolean> {
@@ -91,7 +103,8 @@ export async function findInstanceLockHolder(sql: Sql, key: readonly [number, nu
   return row ? { application: row.application_name, since: row.backend_start, sinceExact: row.backend_start_exact } : null;
 }
 
-async function holderOf(sql: Sql, k1: number, k2: number): Promise<LockHolder | null> {
+/** The holder of `[k1, k2]` as a refused process reports it; null when nobody holds it or the query fails. */
+export async function holderOf(sql: Sql, k1: number, k2: number): Promise<LockHolder | null> {
   try {
     const row = await findInstanceLockHolder(sql, [k1, k2]);
     return row ? { application: row.application || null, since: row.since } : null;

@@ -3,8 +3,6 @@ import fs from "node:fs";
 import type { Document } from "yaml";
 
 import { ConfigError, zodIssues } from "./errors";
-import { isExistingInstall } from "./install";
-import { EXISTING_INSTALL_LANGUAGE_YAML } from "./migrations/language/existing-install";
 import { issuesInUserFile, mergeModelsWithShipped, type ModelsMerge, type OverlayIssue } from "./models-overlay";
 import { migrateConfigDocument, withoutConfigVersion, type DocumentMigrationResult } from "./migrations/version";
 import { getDefaultConfigPath, getDefaultsDir, getPollIntervalMs, getUserConfigPath, resolveConfigPath, resolveConfigReadPath } from "./paths";
@@ -65,8 +63,6 @@ export function configSourcePath(name: ConfigName): string {
  * Read the raw YAML text of a config file (user file first, then the shipped default). Throws ConfigError(missing | read).
  */
 export function readConfigText(name: ConfigName): string {
-  // Startup fills can be deferred by an upgrade freeze. Keep the same install-specific default until it is written.
-  if (name === "language" && !fs.existsSync(/*turbopackIgnore: true*/ getUserConfigPath(name)) && isExistingInstall()) return EXISTING_INSTALL_LANGUAGE_YAML;
   return readTextAt(name, resolveConfigPath(name));
 }
 

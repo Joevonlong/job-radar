@@ -1,11 +1,11 @@
 import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
-import { randomBytes } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 
 import { Document, isMap, isNode, isScalar, isSeq, type YAMLMap, type YAMLSeq } from "yaml";
 
+import { commitConfigFile, CONFIG_FILE_MODE } from "./atomic";
 import { ConfigError, zodIssues } from "./errors";
 import { backupConfigText } from "./editor-backup";
 import { hashConfigText } from "./hash";
@@ -19,7 +19,7 @@ import { configRegistry, isProfileName, type ConfigName, type ConfigValue } from
 import { CONFIG_YAML_OPTIONS, parseConfigYaml, parseConfigYamlDocument } from "./yaml-options";
 import { CONFIG_EDITOR_DEFAULTS } from "./schemas/ui";
 import { validateConfigText } from "./validate-text";
-import { commitConfigWrite, withConfigWriteLock } from "./write-lock";
+import { currentConfigWriteLock, lockLostError, withConfigWriteLock } from "./write-lock";
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -229,21 +229,19 @@ function readsBackAs<N extends ConfigName>(name: N, text: string, expected: Conf
   }
 }
 
-/**
- * Mode of every config / profile file the app writes: owner read / write only. The config files can name
- * credential files, proxies with passwords and the profile holds personal data. On Linux the web and the runner run as
- * the same uid (compose `PUID` / `PGID`), and the host processes run as the owner of `data/`.
- */
-export const CONFIG_FILE_MODE = 0o600;
+export { CONFIG_FILE_MODE };
 
 /** The tail of the promise chain of each file being written: one in-process writer per file at a time. */
 const fileLocks = new Map<string, Promise<unknown>>();
 
 /**
  * Run `task` while holding the in-process lock of `file` (the web serves Server Actions concurrently: two saves of the
- * same file must not interleave their stale check, backup and rename). The directory lock inside it also covers other processes.
+ * same file must not interleave their stale check, backup and rename). The config write lock inside it also covers other
+ * processes. The order is always this lock first, then the config write lock: taking them the other way round would make
+ * two saves wait for each other until they time out, so it is refused here.
  */
 export async function withFileLock<T>(file: string, task: () => Promise<T>): Promise<T> {
+  if (currentConfigWriteLock() !== null) throw new Error(`file lock taken inside the config write lock: ${path.basename(file)}`);
   const key = path.resolve(file);
   const previous = fileLocks.get(key) ?? Promise.resolve();
   const run = previous.then(task, task);
@@ -258,35 +256,11 @@ export async function withFileLock<T>(file: string, task: () => Promise<T>): Pro
 
 /**
  * Write via a temp file in the same directory + rename, so readers never see a partial file (creates the directory).
- * The temp file is created with mode 0600 (never readable by others, not even for a moment) and the result keeps it.
- * `beforeRename` runs after the temp file is complete and right before the rename; a throw there leaves the file as it
- * was (the temp file is removed). `checkFresh` is synchronous and runs inside the fenced commit, immediately before rename.
+ * Under the user config or profile directory it must run inside `withConfigWriteLock`. `checkFresh` runs on the completed
+ * temp file, right before the ownership check and the rename; a throw leaves the file as it was.
  */
-export async function atomicWrite(file: string, text: string, beforeRename?: () => void | Promise<void>, checkFresh?: () => void): Promise<void> {
-  return withConfigWriteLock(file, async () => {
-    const dir = path.dirname(file);
-    await fsp.mkdir(dir, { recursive: true });
-    const tmp = path.join(dir, `.${path.basename(file)}.${process.pid}.${randomBytes(4).toString("hex")}.tmp`);
-    try {
-      const handle = await fsp.open(tmp, "wx", CONFIG_FILE_MODE);
-      try {
-        // the umask can only take bits away; chmod makes 0600 exact even under an unusual umask
-        await handle.chmod(CONFIG_FILE_MODE);
-        await handle.writeFile(text, "utf8");
-        await handle.sync();
-      } finally {
-        await handle.close();
-      }
-      if (beforeRename !== undefined) await beforeRename();
-      await commitConfigWrite(file, () => {
-        checkFresh?.();
-        fs.renameSync(tmp, file);
-      });
-    } catch (err) {
-      await fsp.rm(tmp, { force: true });
-      throw err;
-    }
-  });
+export async function atomicWrite(file: string, text: string, checkFresh?: () => void): Promise<void> {
+  await commitConfigFile(file, text, checkFresh === undefined ? {} : { checkFresh });
 }
 
 /** ui.yaml `config_editor.backups_keep`, or its default when ui.yaml cannot be read. */
@@ -322,25 +296,25 @@ export async function writeConfig<N extends ConfigName>(name: N, value: ConfigVa
   }
   const parsed = result.data as ConfigValue<N>;
   return withFileLock(filePath, async () => {
-    const text = await withConfigWriteLock(filePath, () => {
+    const text = await withConfigWriteLock(() => {
       assertProtectedUnchanged(name, parsed);
       return writeValidated(name, filePath, parsed, options.baseHash);
-    });
-    // Keep same-file notifications ordered in this process, but never hold a directory lease over DB/network work.
+    }, filePath);
+    // Keep same-file notifications ordered in this process, but never hold the write lock over DB/network work.
     if (isProfileName(name)) await notifyProfileSaved(name, text);
     return parsed;
   });
 }
 
 /**
- * Read, transform and write under both write locks, including the upgrade-freeze check before the read.
+ * Read, transform and write under both write locks.
  * Return null from the synchronous transform to leave the file unchanged. Profile notifications run after
- * releasing the directory lease, in the same order as the writes of this process.
+ * releasing the config write lock, in the same order as the writes of this process.
  */
 export async function mutateConfig<N extends ConfigName>(name: N, update: (current: ConfigValue<N>) => ConfigValue<N> | null): Promise<ConfigValue<N> | null> {
   const filePath = getUserConfigPath(name);
   return withFileLock(filePath, async () => {
-    const result = await withConfigWriteLock(filePath, async () => {
+    const result = await withConfigWriteLock(async () => {
       const next = update(reloadConfig(name));
       if (next === null) return null;
       const checked = configRegistry[name].schema.safeParse(next);
@@ -349,7 +323,7 @@ export async function mutateConfig<N extends ConfigName>(name: N, update: (curre
       assertProtectedUnchanged(name, value);
       const text = await writeValidated(name, filePath, value, undefined);
       return { value, text };
-    });
+    }, filePath);
     if (result !== null && isProfileName(name)) await notifyProfileSaved(name, result.text);
     return result?.value ?? null;
   });
@@ -396,7 +370,14 @@ async function writeValidated<N extends ConfigName>(name: N, filePath: string, p
     if (readsBackAs(name, text, parsed)) break;
   }
   if (userText !== null && userText !== text && !isProfileName(name)) await backupConfigText(name, userText, backupsKeep());
-  await atomicWrite(filePath, text, undefined, assertUnchanged);
+  if (userText === null) {
+    // A file this process cannot see may still be there: a bind mount can answer ENOENT for a moment after the host renamed
+    // over it, and replacing it would lose what it holds. Only a file nobody has may be created.
+    const created = await commitConfigFile(filePath, text, { checkFresh: assertUnchanged, mode: "create" });
+    if (created === "existed") throw new ConfigError({ configName: name, filePath, kind: "stale" });
+  } else {
+    await atomicWrite(filePath, text, assertUnchanged);
+  }
   primeConfigCache(name, parsed, text);
   return text;
 }
@@ -445,8 +426,8 @@ function assertFresh(name: ConfigName, base: TextBase): string {
 }
 
 /**
- * Write `text` to the user's config file exactly as given (comments and layout are the user's own). Order: size, full
- * validation (syntax, `config_version`, schema, cross-file: what `loadConfig` would accept), then the stale check
+ * Write `text` to the user's config file exactly as given, an older format included (comments and layout are the user's own). Order: size, full
+ * validation of the migrated value (syntax, `config_version`, schema, cross-file: what `loadConfig` would accept), then the stale check
  * (the file must still be what the editor opened), then a backup of the old text, then an atomic write and a refreshed cache.
  * A text that changes a protected key (`protected-keys.ts`) is refused before the stale check.
  * Throws `ConfigError` (`too_large`, `yaml` / `schema` / `version` with the first issue, `protected`, `stale`).
@@ -459,15 +440,15 @@ export async function writeConfigText(name: ConfigName, text: string, options: T
   if (!checked.ok) {
     throw new ConfigError({ configName: name, filePath, kind: checked.issues[0]?.source === "yaml" ? "yaml" : "schema", issues: checked.issues.map((issue) => ({ path: issue.path, message: issue.message })) });
   }
-  return withFileLock(filePath, () => withConfigWriteLock(filePath, async () => {
+  return withFileLock(filePath, () => withConfigWriteLock(async () => {
     assertProtectedUnchanged(name, checked.value);
     const currentText = assertFresh(name, options);
     const hadUserFile = fs.existsSync(/*turbopackIgnore: true*/ filePath);
     const backup = hadUserFile ? await backupConfigText(name, currentText, options.backupsKeep, options.now) : null;
-    await atomicWrite(filePath, text, undefined, () => void assertFresh(name, options));
+    await atomicWrite(filePath, text, () => void assertFresh(name, options));
     primeConfigCache(name, checked.value, text);
     return { backup, layer: "user" as const };
-  }));
+  }, filePath));
 }
 
 /**
@@ -482,20 +463,19 @@ export async function resetConfigToDefault(name: ConfigName, options: TextBase &
   if (shippedPath === null) throw new ConfigError({ configName: name, filePath, kind: "missing" });
   const shippedText = await readIfExists(shippedPath);
   if (shippedText === null) throw new ConfigError({ configName: name, filePath: shippedPath, kind: "missing" });
-  return withFileLock(filePath, () => withConfigWriteLock(filePath, async (): Promise<TextWriteResult> => {
+  return withFileLock(filePath, () => withConfigWriteLock(async (session): Promise<TextWriteResult> => {
     const currentText = assertFresh(name, options);
     const hadUserFile = fs.existsSync(/*turbopackIgnore: true*/ filePath);
     const backup = hadUserFile ? await backupConfigText(name, currentText, options.backupsKeep, options.now) : null;
     if (configRegistry[name].kind === "shipped") {
-      await commitConfigWrite(filePath, () => {
-        assertFresh(name, options);
-        fs.rmSync(filePath, { force: true });
-      });
+      assertFresh(name, options);
+      if (!(await session.fence())) throw lockLostError(filePath);
+      fs.rmSync(/*turbopackIgnore: true*/ filePath, { force: true });
       reloadConfig(name);
       return { backup, layer: "default" };
     }
-    await atomicWrite(filePath, shippedText, undefined, () => void assertFresh(name, options));
+    await atomicWrite(filePath, shippedText, () => void assertFresh(name, options));
     reloadConfig(name);
     return { backup, layer: "user" };
-  }));
+  }, filePath));
 }

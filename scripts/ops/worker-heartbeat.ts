@@ -6,6 +6,7 @@
  *   DATABASE_URL=<url> node --import <tsx loader> scripts/ops/worker-heartbeat.ts --evidence --pid P --host H --since T
  *   DATABASE_URL=<url> node --import <tsx loader> scripts/ops/worker-heartbeat.ts --receipt --pid P --host H --since T
  *   DATABASE_URL=<url> node --import <tsx loader> scripts/ops/worker-heartbeat.ts --holder --pid P --host H
+ *   DATABASE_URL=<url> node --import <tsx loader> scripts/ops/worker-heartbeat.ts --lock-holder
  *
  * The database is only the one named by DATABASE_URL in the environment, which the caller sets explicitly (the URL it
  * writes into the service definition): no .env is read here, and an empty DATABASE_URL exits 1. Prints one JSON line
@@ -14,6 +15,7 @@
  *   --holder     compare the current holder with --pid P --host H using the worker's truncated application_name:
  *                {status:"expected"}, {status:"none"} or {status:"other"}; exit 0.
  *                Hidden holder or query failure: {status:"unknown",...}; exit 1. Never takes the lock.
+ *   --lock-holder  does anyone hold the instance lock? exit 0 = nobody, 2 = held ({status:"held",application}), 1 = cannot tell
  *   --now        the database clock, UTC with microseconds: {"now":"…"}; exit 0, or 1 when it cannot be read
  *   --evidence   does worker P on host H hold the instance lock, with an ai-worker heartbeat at or after max(T, the lock
  *                connection's start)? exit 0 = found, 2 = not yet, 1 = cannot tell (database unreachable, the holder's
@@ -24,6 +26,7 @@ import { parseArgs } from "node:util";
 
 import { createConnection } from "../../src/lib/db/client";
 import { dbNow, workerEvidence, workerReceipt, workerEvidenceSchema, type EvidenceConnection } from "../../src/lib/db/repos/ai-worker-evidence";
+import { findInstanceLockHolder } from "../../src/lib/db/instance-lock";
 import { redact } from "../../src/lib/ops/doctor/helpers";
 import { withTimeout } from "../../src/lib/ops/timeout";
 import { workerHolder, workerHolderSchema } from "../../src/lib/db/repos/ai-worker-holder";
@@ -42,12 +45,20 @@ interface Mode {
 }
 
 // One row per mode: a later mode (e.g. a lock-holder probe) is one more row here.
-const MODES: Record<"now" | "evidence" | "receipt" | "holder", Mode> = {
+const MODES: Record<"now" | "evidence" | "receipt" | "holder" | "lock-holder", Mode> = {
+  "lock-holder": {
+    needs: [],
+    check: () => null,
+    run: async (conn) => {
+      const holder = await findInstanceLockHolder(conn.sql);
+      return holder === null ? { json: { status: "none" }, exit: 0 } : { json: { status: "held", application: holder.application }, exit: 2 };
+    },
+  },
   holder: {
     needs: ["pid", "host"],
     check: (v) => {
       if (!/^[1-9][0-9]*$/.test(v.pid ?? "") || !Number.isSafeInteger(Number(v.pid))) return "--pid needs a positive whole number";
-      if (!/^\S+$/.test(v.host ?? "")) return "--host needs a host name";
+      if ((v.host ?? "") === "") return "--host needs a host name";
       return null;
     },
     run: async (conn, v) => {
@@ -64,7 +75,7 @@ const MODES: Record<"now" | "evidence" | "receipt" | "holder", Mode> = {
     needs: ["pid", "host", "since"],
     check: (v) => {
       if (!/^[1-9][0-9]*$/.test(v.pid ?? "")) return `--pid needs a positive whole number, got '${v.pid ?? ""}'`;
-      if (!/^\S+$/.test(v.host ?? "")) return "--host needs a host name";
+      if ((v.host ?? "") === "") return "--host needs a host name";
       if (!v.since || Number.isNaN(Date.parse(v.since))) return `--since needs a timestamp (the output of --now), got '${v.since ?? ""}'`;
       return null;
     },
@@ -90,7 +101,7 @@ const fail = (detail: string): number => {
 };
 
 async function main(): Promise<number> {
-  let parsed: { values: Values & { now?: boolean; evidence?: boolean; receipt?: boolean; holder?: boolean } };
+  let parsed: { values: Values & { now?: boolean; evidence?: boolean; receipt?: boolean; holder?: boolean; "lock-holder"?: boolean } };
   try {
     parsed = parseArgs({
       options: {
@@ -98,6 +109,7 @@ async function main(): Promise<number> {
         evidence: { type: "boolean" },
         receipt: { type: "boolean" },
         holder: { type: "boolean" },
+        "lock-holder": { type: "boolean" },
         pid: { type: "string" },
         host: { type: "string" },
         since: { type: "string" },

@@ -30,6 +30,8 @@ const config = (name: string) => yaml(configFile(`${name}.yaml`));
 const profile = (name: string) => yaml(path.join(PROFILE_DIR, `${name}.yaml`));
 const shipped = (file: string): Record<string, unknown> => yaml(path.join(DEFAULTS_DIR, file));
 const examplePreferences = () => shipped("profile.example/preferences.yaml") as { market: { pack: string; country: string; currency: string }; locations: string[] };
+// What a file says now, for one no step has written yet: the user's file, else the shipped one.
+const effective = (name: string) => (fs.existsSync(configFile(`${name}.yaml`)) ? config(name) : shipped(`${name}.yaml`));
 const setup = () => config("setup") as { completed_at: string | null; completed_by: string | null; steps?: Record<string, { status: string }> };
 
 async function query<T extends Record<string, unknown>>(text: string): Promise<T[]> {
@@ -70,8 +72,9 @@ test("a fresh install opens the wizard; the API and the database stay untouched"
   const health = await page.request.get("/api/health", { maxRedirects: 0 });
   expect(health.status()).toBe(200);
   expect(await query("select id from cycles")).toEqual([]);
-  // the web filled the empty directories on its first start: setup pending
-  expect(setup().completed_at).toBeNull();
+  // nothing writes at start-up: no setup file and no other user file until a step saves one (a missing file reads the shipped default)
+  expect(fs.existsSync(configFile("setup.yaml"))).toBe(false);
+  expect(fs.readdirSync(CONFIG_DIR).filter((file) => file.endsWith(".yaml"))).toEqual([]);
 });
 
 test("language: the browser's language is preselected, Chinese switches the page", async () => {
@@ -79,6 +82,8 @@ test("language: the browser's language is preselected, Chinese switches the page
   await page.locator("label", { has: page.getByTestId("setup-locale-zh") }).click();
   await save("market");
   await expect(page.locator("h1")).toHaveText("设置 Job Radar");
+  // the first saved step creates the setup file: still pending
+  expect(setup().completed_at).toBeNull();
   expect(setup().steps?.language?.status).toBe("done");
   expect((config("language") as { ui: { default_locale: string } }).ui.default_locale).toBe("zh");
 });
@@ -221,7 +226,7 @@ test("telegram: variables by name only, the switch lands in notify.yaml", async 
   await expect(page.getByTestId("env-presence").first()).toContainText("TELEGRAM_BOT_TOKEN");
   await expect(page.getByTestId("telegram-status")).toBeVisible();
   await expect(page.getByTestId("telegram-setup-command").first()).toHaveText("pnpm run setup --step telegram");
-  const enabledBefore = ((config("notify") as { telegram: { enabled: boolean } }).telegram.enabled);
+  const enabledBefore = ((effective("notify") as { telegram: { enabled: boolean } }).telegram.enabled);
   await page.getByTestId("setup-telegram-enabled").click();
   await page.getByTestId("setup-telegram-locale").selectOption("en");
   await save("review");

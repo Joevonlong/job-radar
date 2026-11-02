@@ -108,7 +108,7 @@ Only a pull request is classified; it writes three outputs that the other jobs r
 - `transition`: `true` when a changed path starts with `scripts/ops/`, `src/lib/ops/`, `src/lib/config/migrations/`,
   `src/ai-worker/`, `tests/transition/` or `tests/ops/sim/`, is a TypeScript script directly under `scripts/`,
   is `compose.yaml` or `Dockerfile`, or touches the toolchain inputs above; it selects `upgrade-transition`.
-  This includes the deploy's drain/freeze entry points and config migrations of existing installations. Changes only to
+  This includes the deploy's drain entry point and config migrations of existing installations. Changes only to
   `src/runner/`, `jobspy/` or `drizzle/` still use `linux-smoke` for startup coverage without selecting the transition suite.
 
 A push to `main` and a manual run are not classified at all: they write `code=true`, `full=true` and `transition=true`. The commits on `main`

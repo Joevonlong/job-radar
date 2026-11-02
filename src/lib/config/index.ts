@@ -57,8 +57,10 @@ export {
   resolveConfigPath,
   type ConfigLayer,
 } from "./paths";
-export { ensureConfigFiles, existingInstallSetupYaml, type EnsureConfigOptions, type EnsureConfigResult } from "./init";
-export { installedConfigFiles, isExistingInstall } from "./install";
+export { ensureConfigFiles, plannedConfigFiles, type EnsureConfigOptions, type EnsureConfigResult } from "./init";
+export { installedConfigFiles } from "./install";
+export { commitConfigFile, publishNoReplace, sha256 } from "./atomic";
+export { configWriteSettings, withConfigWriteLock } from "./write-lock";
 export { inspectModelsOverlay, mergeModelsOverlay, type OverlayInspection } from "./models-overlay";
 export { inspectConfigLayers, type ConfigLayersState } from "./layers";
 export { CONFIG_MIGRATIONS, type ConfigMigration } from "./migrations/index";
@@ -82,7 +84,9 @@ export {
   type FileMigration,
   type FileMigrationProblem,
 } from "./migrations/files";
-export { ensureProfileFiles, setOnProfileSaved, type EnsureProfileResult, type ProfileSavedHook } from "./profile";
+export { pruneConfigBackups } from "./migrations/backups";
+export { DEPLOY_WRITE_PLAN, planConfigWrites, type ConfigWritesPlan, type PlannedConfigWrite } from "./migrations/plan-writes";
+export { ensureProfileFiles, ensureProfileFilesPlan, setOnProfileSaved, type EnsureProfileResult, type ProfileSavedHook } from "./profile";
 export {
   CONFIG_NAMES,
   configRegistry,
@@ -98,7 +102,7 @@ export {
 } from "./registry";
 export * from "./schemas";
 export { watchConfig, type ConfigChangeEvent, type ConfigTarget, type WatchDirectory, type WatchOptions } from "./watch";
-export { mutateConfig, writeConfig, writeConfigText, resetConfigToDefault, type TextBase, type TextWriteOptions, type TextWriteResult } from "./write";
+export { mutateConfig, withFileLock, writeConfig, writeConfigText, resetConfigToDefault, type TextBase, type TextWriteOptions, type TextWriteResult } from "./write";
 export { backupConfigText, editorBackupRoot } from "./editor-backup";
 export { maskConfigText, restoreMaskedText, type RestoreResult } from "./secrets-mask";
 export { interestsRawWarnings, interestsWarnings, SLOW_PATTERN_MESSAGE, slowInterestPatterns, type InterestsWarning, type SlowInterestPattern } from "./interests-lint";

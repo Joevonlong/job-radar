@@ -1,6 +1,6 @@
 /** `pnpm run doctor`: result and probe types. Pure types: no I/O. */
 import type { Locale } from "@/i18n/locale";
-import type { AiConfig, ChannelsConfig, ConfigLayersState, DoctorConfig, LanguageConfig, NotifyConfig, ScheduleConfig } from "@/lib/config";
+import type { AiConfig, ChannelsConfig, ConfigLayersState, ConfigWritesPlan, DoctorConfig, LanguageConfig, NotifyConfig, ScheduleConfig } from "@/lib/config";
 import type { translatorFor } from "@/lib/i18n/node";
 import type { AppliedMigrations } from "@/lib/db/migration-status";
 import type { ShippedConfigProcess } from "@/lib/config/shipped-id";
@@ -105,10 +105,8 @@ export interface DoctorProbes {
   listDir(directory: string): Promise<string[] | null>;
   /** The defaults and user config directories (overrides, pending migrations). Never throws. */
   configLayers(): Promise<ConfigLayersState>;
-  /** Upgrade freeze marker present (including an unreadable marker). Never returns its token. */
-  configFrozen(): Promise<boolean>;
-  /** Write leases or guard directories with an owner older than the configured threshold. Returns paths, never tokens. */
-  staleConfigWriteLocks(staleSeconds: number): Promise<string[]>;
+  /** What a deploy's write step would do to the user's files. Reads only; never throws. */
+  configWrites(): Promise<ConfigWritesPlan>;
   /** traps.yaml and the trap counts (`stats` null when the tables are not migrated). Throws when the database cannot be read. */
   traps(now: Date): Promise<TrapsProbe>;
   /** mcp.yaml: whether the MCP server is switched on and which tools (or why the file cannot be read). Never throws. */
