@@ -2,6 +2,7 @@ import { ChevronRight } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
+import { isModelSyncProvider } from "@/lib/ai/model-sync/types";
 import type { AiProviderIdChoice } from "@/lib/config/ai-options";
 import { AI_VENDORS, accessOf, configKeyOf, providerPath, vendorOf, type AiVendor } from "@/lib/settings/ai-vendors";
 import { findModelView, modelName, type CatalogView } from "@/lib/settings/catalog-view";
@@ -12,6 +13,10 @@ import { DIRTY_BAR, FieldCell, textOf } from "../field-control";
 import { ModelCatalogTable } from "../model-catalog-table";
 import { modelStatus } from "../model-options";
 import { aiSection, type AiTabContext } from "./context";
+import { ModelSyncPanel } from "./model-sync-panel";
+
+/** The file the "add to my list" button writes, as the docs name it. */
+const USER_MODELS_FILE = "data/config/models.yaml";
 
 /** Short text of the model a provider is set to: the catalog's display name, else the id; codex without one says "CLI default". */
 function modelLabel(ctx: AiTabContext, provider: AiProviderIdChoice): string {
@@ -147,6 +152,9 @@ function VendorCard({ ctx, vendor }: { ctx: AiTabContext; vendor: AiVendor }) {
           </div>
         </details>
       ) : null}
+      {vendor.providers.filter(isModelSyncProvider).map((provider) => (
+        <ModelSyncPanel key={provider} provider={provider} file={USER_MODELS_FILE} />
+      ))}
     </article>
   );
 }

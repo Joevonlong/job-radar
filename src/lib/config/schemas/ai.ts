@@ -273,6 +273,17 @@ const quotaGuardProvider = (defaults: { window_hours: number; hard_requests: num
     cycle_request_cap: nonNegativeInt.default(defaults.cycle_request_cap),
   });
 
+/** `model_list`: limits of the "refresh models" call to a provider's public model list (`pnpm models:sync`, the /settings button). */
+const MODEL_LIST_DEFAULTS = { timeout_seconds: 30, max_response_bytes: 4_194_304, max_name_chars: 120 };
+const modelList = z.strictObject({
+  /** Time limit for the whole request. */
+  timeout_seconds: positiveInt.max(300).default(MODEL_LIST_DEFAULTS.timeout_seconds),
+  /** A longer reply is refused unread; the list of a large router is a few MB. */
+  max_response_bytes: positiveInt.min(65_536).max(67_108_864).default(MODEL_LIST_DEFAULTS.max_response_bytes),
+  /** A model's display name is cut to this many characters (it is shown on the page and written to the catalog). */
+  max_name_chars: positiveInt.min(20).max(500).default(MODEL_LIST_DEFAULTS.max_name_chars),
+});
+
 /**
  * `quota_guard`: Job Radar's own cap on its use of the subscription CLIs (claude-cli, codex-cli). It counts only the calls
  * Job Radar made (`ai_usage`); it knows nothing of the account's real remaining quota, so it can only trigger late, never early.
@@ -466,6 +477,8 @@ export const aiSchema = z.strictObject({
    * it is skipped until the reset time the message names, else for `default_minutes`; never longer than `max_minutes`.
    */
   cooldown: z.strictObject({ default_minutes: positiveInt, max_minutes: positiveInt }),
+  /** Limits of the model list refresh; absent in an older file = the shipped defaults. */
+  model_list: modelList.prefault({}),
   /** Job Radar's own usage cap for the subscription CLIs; absent in a file written before it existed = the shipped defaults. */
   quota_guard: quotaGuard.prefault({}),
   /** Wall-clock minutes of AI work (score, signals) one cycle may use before the rest waits for the next cycle; 0 = unlimited. */

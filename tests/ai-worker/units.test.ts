@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { registerAiControlHandlers } from "@/lib/control/ai-handlers";
 import { getControlHandler, noHandler, resetControlHandlers } from "@/lib/control/handlers";
 import { aiWorkerRequestKinds, runnerRequestKinds } from "@/lib/control/kinds";
-import { AI_CONTROL_REQUEST_KINDS, CONTROL_REQUEST_KINDS, NON_AI_CONTROL_REQUEST_KINDS } from "@/lib/db/repos/control-requests";
+import { AI_CONTROL_REQUEST_KINDS, CONTROL_REQUEST_KINDS, HOST_ONLY_CONTROL_REQUEST_KINDS, NON_AI_CONTROL_REQUEST_KINDS } from "@/lib/db/repos/control-requests";
 import { controlRequestKindEnum } from "@/lib/db/schema";
 import { summarizeDelegatedSteps } from "@/lib/control/run-ai";
 import { runAiPayloadSchema, translateJobPayloadSchema } from "@/lib/control/types";
@@ -67,11 +67,19 @@ describe("ai.yaml: execution and host_worker", () => {
 describe("which process takes which request", () => {
   it("host: the runner keeps run_cycle, the worker takes all AI work", () => {
     expect(runnerRequestKinds("host")).toEqual(["run_cycle", "test_channel", "test_telegram"]);
-    expect(aiWorkerRequestKinds("host")).toEqual(["run_ai", "translate_job", "breakdown_job", "rescore_stale", "run_suggest", "score_jobs", "test_ai", "salary_lookup", "writer_job"]);
+    expect(aiWorkerRequestKinds("host")).toEqual(["run_ai", "translate_job", "breakdown_job", "rescore_stale", "run_suggest", "score_jobs", "test_ai", "salary_lookup", "writer_job", "models_sync"]);
   });
   it("container: the runner takes the web's AI work, run_ai stays with the worker", () => {
     expect(runnerRequestKinds("container")).toEqual(["run_cycle", "test_channel", "test_telegram", "translate_job", "breakdown_job", "rescore_stale", "run_suggest", "score_jobs", "test_ai", "salary_lookup", "writer_job"]);
-    expect(aiWorkerRequestKinds("container")).toEqual(["run_ai"]);
+    expect(aiWorkerRequestKinds("container")).toEqual(["run_ai", ...HOST_ONLY_CONTROL_REQUEST_KINDS]);
+  });
+
+  it("the host-only kinds (the model list refresh) are the worker's under both settings and the runner's under neither", () => {
+    expect(HOST_ONLY_CONTROL_REQUEST_KINDS).toEqual(["models_sync"]);
+    for (const execution of ["host", "container"] as const) {
+      expect(aiWorkerRequestKinds(execution)).toContain("models_sync");
+      expect(runnerRequestKinds(execution)).not.toContain("models_sync");
+    }
   });
   it("validates the payloads", () => {
     expect(runAiPayloadSchema.safeParse({ cycleId: 3 }).success).toBe(true);
@@ -89,7 +97,7 @@ afterEach(() => resetControlHandlers());
 
 describe("the rule: a request kind that calls AI is claimed only by the ai-worker", () => {
   it("every kind of the database enum is classified as AI or non-AI, exactly once (a new kind must be added to one list)", () => {
-    const classified = [...AI_CONTROL_REQUEST_KINDS, ...NON_AI_CONTROL_REQUEST_KINDS];
+    const classified = [...AI_CONTROL_REQUEST_KINDS, ...NON_AI_CONTROL_REQUEST_KINDS, ...HOST_ONLY_CONTROL_REQUEST_KINDS];
     expect(new Set(classified).size).toBe(classified.length);
     expect([...classified].sort()).toEqual([...controlRequestKindEnum.enumValues].sort());
     expect([...CONTROL_REQUEST_KINDS].sort()).toEqual([...controlRequestKindEnum.enumValues].sort());
@@ -97,18 +105,18 @@ describe("the rule: a request kind that calls AI is claimed only by the ai-worke
 
   it("with execution: host the runner claims no AI kind and the worker claims all of them", () => {
     expect(runnerRequestKinds("host").filter((k) => (AI_CONTROL_REQUEST_KINDS as readonly string[]).includes(k))).toEqual([]);
-    expect(aiWorkerRequestKinds("host")).toEqual([...AI_CONTROL_REQUEST_KINDS]);
+    expect(aiWorkerRequestKinds("host")).toEqual([...AI_CONTROL_REQUEST_KINDS, ...HOST_ONLY_CONTROL_REQUEST_KINDS]);
   });
 
   it("with execution: container the runner takes the AI kinds except run_ai, which stays with the worker", () => {
     expect(runnerRequestKinds("container")).toEqual([...NON_AI_CONTROL_REQUEST_KINDS, ...AI_CONTROL_REQUEST_KINDS.filter((k) => k !== "run_ai")]);
-    expect(aiWorkerRequestKinds("container")).toEqual(["run_ai"]);
+    expect(aiWorkerRequestKinds("container")).toEqual(["run_ai", ...HOST_ONLY_CONTROL_REQUEST_KINDS]);
   });
 
   it("registerAiControlHandlers plugs a real handler in for every AI kind; none is reachable before", () => {
-    for (const kind of AI_CONTROL_REQUEST_KINDS.filter((k) => k !== "rescore_stale")) expect(getControlHandler(kind)).toBe(noHandler);
+    for (const kind of [...AI_CONTROL_REQUEST_KINDS.filter((k) => k !== "rescore_stale"), ...HOST_ONLY_CONTROL_REQUEST_KINDS]) expect(getControlHandler(kind)).toBe(noHandler);
     registerAiControlHandlers();
-    for (const kind of AI_CONTROL_REQUEST_KINDS) expect(getControlHandler(kind)).not.toBe(noHandler);
+    for (const kind of [...AI_CONTROL_REQUEST_KINDS, ...HOST_ONLY_CONTROL_REQUEST_KINDS]) expect(getControlHandler(kind)).not.toBe(noHandler);
   });
 });
 

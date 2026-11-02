@@ -35,7 +35,7 @@ Job Radar 的所有设置都是 YAML，分两层：
 产品升级新增的 `user` 文件会在下次启动时从默认目录复制过来；如果用户目录里本来就有配置（老安装），可以改为写入保持原有行为的版本
 （`language.yaml`：中文，见 [languages.zh.md](languages.zh.md)）。初始化向导用同一个"老安装"判断。
 
-想改 `shipped` 文件：把它复制到用户目录再改（整份覆盖）。代价是产品以后对这个文件的更新不再生效：`pnpm config:check` 和 doctor 的 `config.layers` 会一直提示"你覆盖了 models.yaml"。想重新跟随产品：删掉用户目录里那份。
+想改 `shipped` 文件：把它复制到用户目录再改（整份覆盖）。代价是产品以后对这个文件的更新不再生效：`pnpm config:check` 和 doctor 的 `config.layers` 会一直提示"你覆盖了 pipeline.yaml"（或别的文件）。想重新跟随产品：删掉用户目录里那份。`models.yaml` 是例外：你的 `data/config/models.yaml` 是按模型叠加在发布的那份之上的（见 [AI providers](ai-providers.zh.md#新模型上线清单)），不会挡住你没列出的模型的产品更新。
 
 市场包（`config/packs/<id>/`：国家、城市、本地语言规则）也按 `shipped` 处理：`data/config/packs/<id>/` 里的副本整包替换发布的那份。见 [market-packs.zh.md](market-packs.zh.md)。
 

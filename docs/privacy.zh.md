@@ -57,6 +57,7 @@ Job Radar 是跑在你自己机器上的单用户工具：没有账号、没有�
   取决于**你账号里的设置**：在 ChatGPT（设置 → 数据控制）里查看"为所有人改进模型"，在 Claude（设置 → 隐私）里查看"帮助改进 Claude"，不想被用就关掉。
 - **API key** 适用提供方的商业或 API 条款，通常默认不会拿你的数据训练；请阅读你所用提供方的条款。
 - **OpenRouter** 是转发服务：它把每个请求转给所选模型的某个上游提供方，可能是另一家公司、在另一个国家（默认模型的上游可能是 DeepSeek，见下条）。Job Radar 要求它只用不存储、不拿 prompt 训练的上游（`providers.openrouter.routing.data_collection: deny`）。这**不是**零数据保留：上游仍可能把请求保留一段时间。在 `ai.yaml` 里设 `routing.zdr: true` 只允许零数据保留的上游（能用的模型会变少）。你 OpenRouter 账号里的设置同样生效。
+  设置页的“刷新可用模型”按钮（以及 `pnpm models:sync`）只对 OpenRouter 公开的模型列表发一个普通的 `GET`：不带 key，不发你的资料和职位文本，只在你点击或运行命令时才读。
 - **DeepSeek 和小米 MiMo** 由中国境内运营，发给它们的数据受中国法律管辖。它们默认关闭，只有接受这一点时才打开。
 - **经 OpenRouter 到 DeepSeek：** 填了 OpenRouter 的 key 并使用它的默认模型（`deepseek/deepseek-v4.1-flash`）时，即使
   `deepseek` 服务商是关着的，你的数据也可能到达 DeepSeek 自己在中国境内运营的上游。不想这样，可以给 OpenRouter 选一个

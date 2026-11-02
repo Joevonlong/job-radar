@@ -1125,7 +1125,7 @@ export const runnerHeartbeats = pgTable(
 
 // ---------------------------------------------------------------- web -> runner control
 
-export const controlRequestKindEnum = pgEnum("control_request_kind", ["run_cycle", "rescore_stale", "run_suggest", "run_ai", "translate_job", "breakdown_job", "score_jobs", "test_channel", "test_ai", "test_telegram", "salary_lookup", "writer_job"]);
+export const controlRequestKindEnum = pgEnum("control_request_kind", ["run_cycle", "rescore_stale", "run_suggest", "run_ai", "translate_job", "breakdown_job", "score_jobs", "test_channel", "test_ai", "test_telegram", "salary_lookup", "writer_job", "models_sync"]);
 export const controlRequestStatusEnum = pgEnum("control_request_status", ["pending", "running", "done", "failed"]);
 
 /**

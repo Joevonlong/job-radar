@@ -59,6 +59,7 @@ export {
 } from "./paths";
 export { ensureConfigFiles, existingInstallSetupYaml, type EnsureConfigOptions, type EnsureConfigResult } from "./init";
 export { installedConfigFiles, isExistingInstall } from "./install";
+export { inspectModelsOverlay, mergeModelsOverlay, type OverlayInspection } from "./models-overlay";
 export { inspectConfigLayers, type ConfigLayersState } from "./layers";
 export { CONFIG_MIGRATIONS, type ConfigMigration } from "./migrations/index";
 export {
@@ -87,6 +88,7 @@ export {
   configRegistry,
   isProfileName,
   LAYERED_CONFIG_NAMES,
+  OVERLAID_CONFIG_NAMES,
   PROFILE_NAMES,
   SHIPPED_CONFIG_NAMES,
   USER_CONFIG_NAMES,

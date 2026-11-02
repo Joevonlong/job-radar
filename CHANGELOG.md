@@ -7,6 +7,16 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ### Upgrade notes
 
+- **Your `models.yaml` is now an overlay on the shipped model catalog.** `data/config/models.yaml` used to replace the
+  shipped `config/models.yaml` as a whole; it is now laid over it model by model: an entry with the same `id` (within a
+  provider) replaces the shipped entry, a new `id` is added, `deprecated: true` with just an `id` hides a shipped model,
+  and everything you do not list follows product updates. A file that lists every model keeps working unchanged (so do
+  files from before a provider existed); `pnpm config:check` says when yours only repeats shipped models and could be
+  slimmed down. Migration `0048_models_sync_control` adds the `models_sync` control request kind; it runs on its own.
+  **Rollback:** an older version reads your `models.yaml` as the whole catalog, so a file holding only your additions
+  would leave it without the shipped models. Run `pnpm models:export --full` before downgrading: it writes the complete
+  catalog to your file (the old one is backed up in `data/config/.backup/editor/`). The `models_sync` enum value stays in the
+  database; older code ignores it. See [Before downgrading](docs/ai-providers.md#before-downgrading).
 - **Saved views keep the date filter.** A view saved with a quick range (`within: 7d` or `month`) stores the range and
   recomputes it on the day it is opened; `dateBy: posted` records that it compares the posted date (a view without `dateBy`
   compares first seen, as before). Existing views load unchanged. **Rollback:** 2.0.1 checks `interests.yaml` strictly and
@@ -205,6 +215,13 @@ A failure in (a) does not block rollback: follow (c) and accept the display wind
 
 ### Added
 
+- **Refresh the OpenRouter model list from the settings page.** The OpenRouter card on the AI tab has a "Refresh available
+  models" button: the ai-worker reads OpenRouter's public model list (no key is sent, only when you click), shows what you
+  can add with prices, context length and JSON-mode support, and "Add to my list" writes the ticked models to your
+  `models.yaml`. The same from the terminal: `pnpm models:sync --provider openrouter [--filter <word>] [--add <id>...]
+  [--update-prices] [--dry-run]`; `pnpm models:export --full` writes the complete catalog (for a downgrade). See
+  [AI providers](docs/ai-providers.md#checklist-for-a-new-model-release). The refresh has limits in `ai.yaml` `model_list`
+  (`timeout_seconds`, `max_response_bytes`, `max_name_chars`; defaults added when missing, `config_version` unchanged).
 - **Application writer: export and reuse.** The workbench exports every final answer as one Markdown file built in the browser,
   offers an earlier final answer of another job as the starting text when you add a similar question (a local word-overlap
   check, no AI call; `reuse` in `writer.yaml`, defaults added when missing, `config_version` unchanged) and warns while that

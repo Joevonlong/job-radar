@@ -3263,7 +3263,8 @@
           "test_ai": "测试 AI",
           "test_telegram": "测试 Telegram",
           "salary_lookup": "查薪资",
-          "writer_job": "申请回答"
+          "writer_job": "申请回答",
+          "models_sync": "刷新模型列表"
         },
         "status": {
           "pending": "排队中",
@@ -3385,6 +3386,62 @@
       "tableLabel": "{provider} 的模型目录",
       "subscriptionEquivalent": "订阅 · 折合 ${input} / ${output}"
     },
+    "modelSync": {
+      "title": "{provider} 提供的模型",
+      "hint": "向 {provider} 查询它提供哪些模型和价格，把你要的加进自己的清单（{file}）。出厂清单不变，继续随产品更新。只在你点击时才会读取这份列表。",
+      "filterLabel": "按名称筛选",
+      "filterPlaceholder": "例如 claude、flash",
+      "refresh": "刷新可选模型",
+      "pending": "等待 AI 工作进程向 {provider} 查询…",
+      "running": "正在向 {provider} 查询模型列表…",
+      "failed": "读不到模型列表（{kind}），没有改动任何东西。",
+      "summary": "共 {listed} 个模型，{matched} 个符合筛选。",
+      "truncated": "只显示前 {max} 个；缩小筛选范围可以看到其余的。",
+      "gone": "{provider} 已不再列出（仍在你的清单里，没有删除）：{ids}",
+      "tableLabel": "{provider} 提供的模型",
+      "col": {
+        "pick": "选择",
+        "model": "模型",
+        "price": "价格（美元/百万 token，输入 / 输出）",
+        "context": "上下文",
+        "json": "JSON 模式",
+        "status": "状态"
+      },
+      "json": {
+        "yes": "支持",
+        "no": "不支持",
+        "unverified": "未说明"
+      },
+      "status": {
+        "inCatalog": "已在你的清单里",
+        "added": "已加入",
+        "canAdd": "可加入",
+        "unverified": "未验证",
+        "notChat": "不是文本对话模型",
+        "noPrice": "没有可用价格",
+        "noJson": "不支持 JSON 模式",
+        "retired": "已下架"
+      },
+      "priceWas": "清单里是 ${input} / ${output}",
+      "retires": "{date} 下架",
+      "pickModel": "选择 {model}",
+      "showMore": "再显示 {count} 个",
+      "add": "加入我的清单（{count}）",
+      "addHint": "服务商没有说明是否支持 JSON 模式的模型，只能用 pnpm models:sync --allow-unverified 加入。",
+      "added": "已把 {count} 个模型加入 {file}，现在可以在模型下拉里选用。",
+      "addError": {
+        "invalidPayload": "选择不合法，请刷新列表后重试。",
+        "requestUnavailable": "这次刷新的结果已经没有了，请重新刷新后再试。",
+        "notAddable": "选中的模型里有不能加入的（已在清单里，或不支持 JSON 模式），请刷新列表后重试。",
+        "catalogInvalid": "加入后清单不合法，所以没有写入。请到“设置 → 高级”检查 models.yaml。",
+        "frozen": "升级期间配置被冻结，请稍后再试。",
+        "busy": "有别的进程正在写配置，请稍后再试。",
+        "stale": "保存时文件有了变化，请刷新列表后重试。",
+        "protected": "这个改动涉及受保护的设置。",
+        "databaseUnavailable": "数据库不可用，没有写入。",
+        "transportFailed": "连不上服务器，请检查网络后重试。"
+      }
+    },
     "registryLink": "公司清单和健康状态在「来源清单」 →",
     "workflow": {
       "title": "申请流程",
@@ -3476,7 +3533,9 @@
       },
       "override": {
         "text": "这是产品默认文件：保存会在用户目录生成整份覆盖文件，之后产品更新这个文件不会生效。「恢复默认」可以随时回到产品默认。",
-        "confirm": "我明白，生成覆盖文件"
+        "confirm": "我明白，生成覆盖文件",
+        "textOverlay": "models.yaml 是叠加在产品模型清单上的，按模型逐个叠加。这里的编辑器从整份清单开始：保存会写出一份完整副本，里面的每个模型都按 id 替换产品的那一条，之后产品对这些模型价格和限制的更新就不再生效。想继续跟随更新，请删掉没改过的模型，只留你自己的新增（或用「AI」页的刷新按钮添加模型）。「恢复默认」可以随时回到产品清单。",
+        "confirmOverlay": "我明白，保存完整副本"
       },
       "preview": {
         "title": "预览并保存",
@@ -7048,7 +7107,8 @@
       "system__reconcile": "核对操作日志",
       "system__telegram_callback": "Telegram 按钮操作",
       "system__reminder": "每日提醒",
-      "request__writer_job": "写申请回答"
+      "request__writer_job": "写申请回答",
+      "request__models_sync": "刷新模型列表"
     },
     "event": {
       "item__ok": "单项处理成功",
@@ -7374,7 +7434,8 @@
       "test_ai": "测试 AI",
       "test_telegram": "测试 Telegram",
       "salary_lookup": "查询薪资",
-      "writer_job": "写申请回答"
+      "writer_job": "写申请回答",
+      "models_sync": "刷新模型列表"
     },
     "level": {
       "all": "全部级别",

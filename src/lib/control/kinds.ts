@@ -1,5 +1,5 @@
 import type { AiConfig } from "@/lib/config";
-import { AI_CONTROL_REQUEST_KINDS, NON_AI_CONTROL_REQUEST_KINDS, type ControlRequestKind } from "@/lib/db/repos/control-requests";
+import { AI_CONTROL_REQUEST_KINDS, HOST_ONLY_CONTROL_REQUEST_KINDS, NON_AI_CONTROL_REQUEST_KINDS, type ControlRequestKind } from "@/lib/db/repos/control-requests";
 
 type Execution = AiConfig["execution"];
 
@@ -15,8 +15,8 @@ export function runnerRequestKinds(execution: Execution): ControlRequestKind[] {
 
 /**
  * The request kinds the host ai-worker claims: every AI kind while `execution: host`; with `container` only
- * `run_ai` (requests left over from a cycle that delegated before the switch).
+ * `run_ai` (requests left over from a cycle that delegated before the switch). The host-only kinds (`models_sync`) in both cases.
  */
 export function aiWorkerRequestKinds(execution: Execution): ControlRequestKind[] {
-  return execution === "host" ? [...AI_CONTROL_REQUEST_KINDS] : ["run_ai"];
+  return [...(execution === "host" ? AI_CONTROL_REQUEST_KINDS : (["run_ai"] as const)), ...HOST_ONLY_CONTROL_REQUEST_KINDS];
 }
