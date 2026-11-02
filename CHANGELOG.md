@@ -282,6 +282,9 @@ A failure in (a) does not block rollback: follow (c) and accept the display wind
 
 ### Fixed
 
+- The jobspy sidecar no longer returns or logs the query string of a search URL quoted in an upstream error (it holds your keywords and location), and a keyword such as "blocked", "captcha" or "429" no longer changes how a failure is classified.
+- A write lock whose guard was left by a dead process is taken over even when a slow disk has used up the wait budget.
+- Fallback faces for the web fonts also use Liberation Sans, the usual Arial stand-in on Linux, so text does not reflow when the fonts arrive.
 - Paid channels no longer lose delivered records silently: everything Apify, Bright Data and Monid deliver is kept in a local delivery ledger with the reason it was or was not stored (error item, no id, duplicate, outside the window, unreadable response, failed or cancelled attempt), and `pnpm deliveries:show` reconciles it with the run's billed usage.
 - Anthropic API calls use compatible tool settings for current Claude models, and text-only replies reach the normal validation retry.
 - Apify LinkedIn searches keep day-precision postings in short time windows when ISO midnight is a placeholder, while preserving confirmed exact timestamps and the source's stored date; Bright Data treats bare dates as whole days, and paid LinkedIn channels no longer turn malformed dates into posting times.

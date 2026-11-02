@@ -222,7 +222,21 @@ describe("score bonus", () => {
     await withRebuiltCurrentScores(getDb(), getDb().insert(schema.scores).values({ jobId: other, filterResult: "passed", score: 40, rankValue: 40 }));
     await runRuleScan(getDb(), scanOptions(interests));
 
-    expect(await reconcileBonuses(getDb(), interests)).toEqual({ checked: 1234, updated: 1234 });
+    // a statement-level trigger counts the UPDATE statements on scores: one per 500 rows, not one per row
+    await getDb().execute(sql`create table bonus_statement_count (n int not null)`);
+    await getDb().execute(sql`insert into bonus_statement_count values (0)`);
+    await getDb().execute(sql`create function bonus_statement_tick() returns trigger language plpgsql as $$ begin update bonus_statement_count set n = n + 1; return null; end $$`);
+    await getDb().execute(sql`create trigger bonus_statement_tick after update on scores for each statement execute function bonus_statement_tick()`);
+    let statements: number;
+    try {
+      expect(await reconcileBonuses(getDb(), interests)).toEqual({ checked: 1234, updated: 1234 });
+      statements = Number((await getDb().execute<{ n: number }>(sql`select n from bonus_statement_count`))[0]?.n);
+    } finally {
+      await getDb().execute(sql`drop trigger bonus_statement_tick on scores`);
+      await getDb().execute(sql`drop function bonus_statement_tick()`);
+      await getDb().execute(sql`drop table bonus_statement_count`);
+    }
+    expect(statements).toBe(Math.ceil(1234 / 500));
     const rows = await getDb().select().from(schema.scores).where(eq(schema.scores.jobId, job)).orderBy(schema.scores.id);
     expect(rows.map((r) => [r.signalBonus, r.rankValue])).toEqual(many.map((m) => [11, m.score === null ? 33.5 : m.score + 11])); // T2 8 + T3 3
     expect((await getDb().select().from(schema.scores).where(eq(schema.scores.jobId, other)))[0]).toMatchObject({ signalBonus: 0, rankValue: 40 });

@@ -153,6 +153,22 @@ describe("cross-process config write lock", () => {
     expect(fs.existsSync(owner)).toBe(false);
   });
 
+  it("still publishes after removing a dead guard owner when the wait budget is already spent", async () => {
+    lockPolicy();
+    const file = path.join(tmp.configDir, "schedule.yaml");
+    const value = parse(fs.readFileSync(file, "utf8")) as { deploy: Record<string, unknown> };
+    value.deploy.config_write_lock_wait_seconds = 0.001;
+    fs.writeFileSync(file, stringify(value)); resetConfigCache();
+    const exited = spawnSync(process.execPath, ["-e", "process.stdout.write(String(process.pid))"], { encoding: "utf8" });
+    putOwner("guard", Number(exited.stdout), os.hostname(), false);
+    // Make the first arbitration round outlast the budget, as a loaded disk does.
+    const realNow = Date.now;
+    let calls = 0;
+    vi.spyOn(Date, "now").mockImplementation(() => realNow() + (calls++ > 2 ? 1000 : 0));
+    await atomicWrite(path.join(tmp.configDir, "sample.yaml"), "new");
+    expect(fs.readFileSync(path.join(tmp.configDir, "sample.yaml"), "utf8")).toBe("new");
+  });
+
   it("keeps a token held by this process generation live in another async context", async () => {
     lockPolicy();
     const ready = Promise.withResolvers<void>();
