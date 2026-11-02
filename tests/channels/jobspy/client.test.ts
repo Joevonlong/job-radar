@@ -163,6 +163,17 @@ describe("channelErrorFromSidecar", () => {
     expect(error.message).toContain("https://de.indeed.com/jobs?<query> retry");
     expect(error.message).not.toMatch(/Secret|Hidden/);
   });
+
+  it("also removes the query string of a request path without a scheme, as urllib3 quotes it (keywords are '+'-encoded)", () => {
+    const error = channelErrorFromSidecar(502, { code: "upstream_error", message: "Max retries exceeded with url: /jobs-guest/search?keywords=captcha+engineer&location=Berlin (Caused by X)" });
+    expect(error.message).toContain("url: /jobs-guest/search?<query> (Caused by X)");
+    expect(error.message).not.toMatch(/captcha|engineer|Berlin/);
+  });
+
+  it("leaves a question mark in plain text alone", () => {
+    const error = channelErrorFromSidecar(502, { code: "upstream_error", message: "Why? because" });
+    expect(error.message).toContain("Why? because");
+  });
 });
 
 describe("warnings returned with results", () => {

@@ -121,7 +121,8 @@ const MAX_MESSAGE_CHARS = 200;
  * removes them already; this keeps a sidecar that does not (an older image) from putting them into the logs.
  */
 export function withoutUrlQueries(text: string): string {
-  return text.replace(/(\b[a-z][a-z0-9+.-]*:\/\/[^\s?#'"<>]*)\?[^\s'"<>]*/gi, "$1?<query>");
+  // an absolute URL (any query), then a bare query string with key=value pairs (requests quotes a request path: "url: /jobs/search?keywords=...")
+  return text.replace(/(\b[a-z][a-z0-9+.-]*:\/\/[^\s?#'"<>]*)\?[^\s'"<>]*/gi, "$1?<query>").replace(/\?[^\s'"<>]*=[^\s'"<>]*/g, "?<query>");
 }
 
 const loggable = (text: string): string => withoutUrlQueries(text).slice(0, MAX_MESSAGE_CHARS);

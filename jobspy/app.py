@@ -46,7 +46,10 @@ _RATE_LIMITED = re.compile(r"\b429\b|too many requests|rate.?limit", re.IGNORECA
 _BLOCKED = re.compile(r"\b(?:401|403|999)\b|forbidden|captcha|blocked|access denied|unauthori[sz]ed|authwall", re.IGNORECASE)
 
 # A URL's query string carries the user's keywords and location (and may carry anything else): it is never returned or classified.
+# Two shapes: an absolute URL (any query), and a bare query string with key=value pairs, as requests/urllib3 quote a
+# request path ("url: /jobs-guest/search?keywords=captcha+engineer&location=Berlin"). A lone "?" in prose has no "=".
 _URL_QUERY = re.compile(r"(\b[a-z][a-z0-9+.-]*://[^\s?#'\"<>]*)\?[^\s'\"<>]*", re.IGNORECASE)
+_BARE_QUERY = re.compile(r"\?[^\s'\"<>]*=[^\s'\"<>]*")
 
 # jobspy keeps global state per scraper module: one scrape at a time keeps concurrent requests from interfering.
 _scrape_lock = threading.Lock()
@@ -125,8 +128,8 @@ def health() -> dict[str, str]:
 
 
 def strip_queries(text: str) -> str:
-    """Replace the query string of every URL in `text` with a marker (the path and host stay)."""
-    return _URL_QUERY.sub(r"\1?<query>", text)
+    """Replace the query string of every URL or request path in `text` with a marker (the path and host stay)."""
+    return _BARE_QUERY.sub("?<query>", _URL_QUERY.sub(r"\1?<query>", text))
 
 
 def scrub(text: str, proxies: list[str]) -> str:

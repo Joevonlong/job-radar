@@ -366,14 +366,25 @@ def test_a_url_without_a_query_string_and_plain_questions_are_left_alone() -> No
 
 
 @pytest.mark.parametrize("word", ["blocked", "captcha", "429", "forbidden"])
-def test_a_keyword_in_the_request_does_not_change_the_error_class(monkeypatch: pytest.MonkeyPatch, word: str) -> None:
-    # the upstream error carries the search URL, so the user's own words are inside the text that gets classified
-    url = f"https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords={word}+engineer&location={word}"
-    patch_scrape(monkeypatch, raises=RuntimeError(f"HTTPSConnectionPool: Max retries exceeded with url: {url}"))
+@pytest.mark.parametrize("shape", ["absolute", "relative"])
+def test_a_keyword_in_the_request_does_not_change_the_error_class(monkeypatch: pytest.MonkeyPatch, word: str, shape: str) -> None:
+    # the upstream error carries the search URL, so the user's own words are inside the text that gets classified;
+    # urllib3 quotes the request path without a scheme, and a multi-word search term is "+"-encoded there
+    path = f"/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords={word}+engineer&location={word}"
+    url = f"https://www.linkedin.com{path}" if shape == "absolute" else path
+    patch_scrape(monkeypatch, raises=RuntimeError(f"HTTPSConnectionPool(host='www.linkedin.com', port=443): Max retries exceeded with url: {url} (Caused by ReadTimeoutError)"))
     response = client.post("/search", json={**BASE, "site": "linkedin", "search_term": f"{word} engineer", "location": word})
     assert response.status_code == 502
     assert response.json()["code"] == "upstream_error"
-    assert word not in response.json()["message"].split("?", 1)[1]
+    message = response.json()["message"]
+    assert "?<query>" in message and word not in message.split("?", 1)[1] and "engineer" not in message.split("?", 1)[1]
+
+
+def test_bare_query_strings_are_removed_and_plain_questions_are_left_alone() -> None:
+    text = "Max retries exceeded with url: /jobs-guest/x/search?keywords=Secret+Word&location=Hidden%20City (Caused by Y)"
+    assert sidecar.scrub(text, []) == "Max retries exceeded with url: /jobs-guest/x/search?<query> (Caused by Y)"
+    assert sidecar.strip_queries("see /a?b=1&c=2.") == "see /a?<query>"
+    assert sidecar.scrub("Why? because. Done?! no=yes", []) == "Why? because. Done?! no=yes"
 
 
 def test_a_keyword_quoted_without_a_url_does_not_change_the_error_class(monkeypatch: pytest.MonkeyPatch) -> None:
