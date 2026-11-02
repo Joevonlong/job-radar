@@ -1801,7 +1801,8 @@
       "actions": "Manual actions",
       "workflow": "Workflow",
       "advanced": "Advanced",
-      "salary": "Salary"
+      "salary": "Salary",
+      "research": "Research"
     },
     "ai": {
       "block": {
@@ -1888,6 +1889,7 @@
       "resume": "Resume tool",
       "language": "Languages",
       "salary": "Salary benchmark and lookup",
+      "research": "Research: company background",
       "writer": "Application writer"
     },
     "tabDescription": {
@@ -1902,6 +1904,7 @@
       "resume": "Paths and commands behind \"Tailor resume\" on the detail page (resume-kit hand-off). The paths point at your own files; the master resume is never read.",
       "language": "The interface language of new browsers, the language the AI writes in, what job ads are translated into, and the language of Telegram and the command line.",
       "salary": "The salary panel on the job page puts a job's stated salary next to the other postings of its kind in your database, the company's other postings and, if you run it, an AI estimate. The optional lookup asks an AI provider to search salary sites for the company and role. Role families and the search links are edited in salary.yaml.",
+      "research": "The company background panel on the job page: what a company does, its size, funding, reviews and recent news, found by an AI provider with web search, each field with its source and marked as unverified. Off by default. When on, the company name (and a website domain you confirmed) is sent to the providers of the task \"Company background\" on the \"AI\" tab. The Claude CLI's search is not limited to the sites in research.yaml, only the pages it opens are. Which sites it may open and which hosts are never taken as a company's website are edited in research.yaml.",
       "writer": "The workbench behind \"Write answers\" on the job page: AI drafts of application answers and cover letters from material you choose, each sentence checked against it. Off by default. Which AI it uses is set under task overrides on the \"AI\" tab (task \"Application writer\"). The library and question limits, variants, tones and the evidence check are edited in writer.yaml."
     },
     "actions": {
@@ -2023,6 +2026,8 @@
       "language_channels": "Telegram and command line",
       "ai_scoring_criteria": "Scoring criteria",
       "salary_lookup": "Salary lookup (AI web search)",
+      "research_general": "Switch",
+      "research_company": "Company background (AI web search)",
       "salary_benchmark": "Salary benchmark",
       "ai_limits_quota": "Usage cap (subscription CLIs)",
       "ai_scoring_evidence": "Reason sources",
@@ -3080,9 +3085,36 @@
       "reasoning_effort_salary_lookup": {
         "label": "Reasoning effort: Salary lookup"
       },
+      "task_company_research": {
+        "label": "Company background",
+        "hint": "Only claude-cli, codex-cli and the Anthropic API can search the web; others are skipped for this task. codex-cli searches without a domain limit."
+      },
+      "reasoning_effort_company_research": {
+        "label": "Reasoning effort: Company background"
+      },
       "salary_lookup_enabled": {
         "label": "Enable salary lookup",
         "hint": "Shows the \"Look up salary\" button on the job page. Nothing is looked up unless you press it."
+      },
+      "research_enabled": {
+        "label": "Enable company background",
+        "hint": "Shows the \"Look up company\" button on the job page. Nothing is looked up unless you press it. A lookup sends the company name, and a website domain you confirmed, to an AI provider with web search; never the title, the location, the JD or your profile."
+      },
+      "research_ttl_days": {
+        "label": "Keep a result for (days)",
+        "hint": "Within this time every job of the same company shows the stored result instead of searching again."
+      },
+      "research_max_per_day": {
+        "label": "Lookups per 24 hours",
+        "hint": "Every request counts, also failed ones. A cached answer does not."
+      },
+      "research_max_searches": {
+        "label": "Web searches per lookup",
+        "hint": "Enforced for the Anthropic API; the CLIs are asked to keep to it."
+      },
+      "research_timeout": {
+        "label": "Timeout (seconds)",
+        "hint": "The whole lookup, all providers and retries together."
       },
       "salary_ttl_days": {
         "label": "Keep a result for (days)",
@@ -3263,6 +3295,7 @@
           "test_ai": "AI test",
           "test_telegram": "Telegram test",
           "salary_lookup": "Salary lookup",
+          "company_research": "Company background",
           "writer_job": "Application answer",
           "models_sync": "Model list refresh"
         },
@@ -3800,6 +3833,7 @@
         "breakdown": "Breakdown",
         "traps": "AI traps",
         "salary_lookup": "Salary lookup",
+        "company_research": "Company background",
         "write": "Application writer"
       },
       "details": "Details →"
@@ -6827,6 +6861,70 @@
       "summary": "Salary benchmark ({currency}): {groups} groups from {postings} postings."
     }
   },
+  "research": {
+    "field": {
+      "summary": "What it does",
+      "industry": "Industry",
+      "size": "Size",
+      "founded": "Founded",
+      "headquarters": "Headquarters",
+      "funding": "Funding",
+      "products": "Products",
+      "workingLanguage": "Working language",
+      "reviews": "Reviews",
+      "recentNews": "Recent news"
+    },
+    "company": {
+      "title": "Company background",
+      "badge": "AI web search · unverified",
+      "noProvider": "None of the AI providers set for this lookup can search the web. Use claude-cli or the Anthropic API for the task \"Company background\" on the AI tab.",
+      "aiSettingsLink": "AI settings",
+      "configError": "research.yaml or ai.yaml cannot be read, so the lookup is unavailable. Run pnpm config:check to see why.",
+      "notReady": "The company background table does not exist yet. Run the database migrations.",
+      "readyHint": "Asks the AI to search the web for {company}. Only the company name is sent (and a website domain, if you confirmed one); the title, the location, the JD and your profile are not. It uses tokens and web searches.",
+      "unrestricted": "codex-cli searches the web without a domain limit.",
+      "quota": "{used} of {max} lookups used in the last 24 hours.",
+      "quotaUsedUp": "All {max} lookups of the last 24 hours are used ({used} of {max}). The button comes back as earlier lookups pass 24 hours; the limit is in the research settings.",
+      "button": "Look up company",
+      "refresh": "Look up again",
+      "retry": "Try again",
+      "requesting": "Queued…",
+      "running": "Searching…",
+      "waitingHint": "This can take a few minutes.",
+      "expired": "Older than {days} days: it may be out of date.",
+      "domainChanged": "The confirmed website changed after this lookup. Look up again to use it.",
+      "sourceOf": "Source of {field}: {host}",
+      "dropped": "{n, plural, one {# field was} other {# fields were}} dropped (no valid source, text written at an AI, or an implausible value).",
+      "sentNameOnly": "Only the company name was sent to the AI provider.",
+      "sentWithDomain": "Only the company name and the website you confirmed ({domain}) were sent to the AI provider.",
+      "done": "Company lookup finished"
+    },
+    "error": {
+      "invalid": "Invalid request",
+      "not_ready": "The company background table does not exist yet. Run the database migrations.",
+      "disabled": "The company background is turned off.",
+      "research_disabled": "The company background was turned off before this lookup started.",
+      "config_error": "research.yaml, traps.yaml or ai.yaml cannot be read.",
+      "not_found": "Job not found",
+      "no_web_provider": "None of the AI providers set for this lookup can search the web.",
+      "quota": "The daily limit of company lookups is reached. Try again later or raise it in the settings.",
+      "empty_result": "The AI found nothing that passed the checks (every field needs a valid source). Nothing was saved.",
+      "aborted": "The AI worker was stopped during the lookup. Try again.",
+      "auth": "The login or key of {providers} has expired or was rejected. Fix it, then try again.",
+      "timeout": "The lookup did not finish in time. Try again, or raise the timeout in the settings.",
+      "rate_limited": "The AI provider is rate limited right now. Try again later.",
+      "invalid_output": "The AI answered in a format that is not a company background. Try again.",
+      "provider_error": "The AI provider reported an error. Try again; check the AI worker log if it keeps failing.",
+      "network": "The AI provider could not be reached. Try again.",
+      "budget": "The monthly budget for the AI API is used up.",
+      "quota_guard": "Job Radar's own AI usage cap is reached (only its own calls count). {time, select, none {It continues by itself later.} other {Available again after {time}.}}",
+      "unavailable": "No AI provider that can search the web is available right now. Check the CLI logins or API keys.",
+      "failed": "The lookup failed. Please try again.",
+      "invalid_payload": "The request was not valid.",
+      "handler_error": "Something went wrong handling the request. Try again.",
+      "no_handler": "No process handles company lookups (is the ai-worker running?)."
+    }
+  },
   "mcp": {
     "serve": {
       "disabled": "The Job Radar MCP server is switched off. Set enabled: true in mcp.yaml (in data/config/, or on Settings → Advanced), then restart your MCP client. See docs/mcp.md.",
@@ -7099,6 +7197,7 @@
       "request__test_ai": "Test AI",
       "request__test_telegram": "Test Telegram",
       "request__salary_lookup": "Look up salary",
+      "request__company_research": "Look up company",
       "system__startup": "Process startup",
       "system__orphan_recovery": "Recover interrupted work",
       "system__backup": "Backup",
@@ -7436,6 +7535,7 @@
       "test_ai": "Test AI",
       "test_telegram": "Test Telegram",
       "salary_lookup": "Look up salary",
+      "company_research": "Look up company",
       "writer_job": "Write application answer",
       "models_sync": "Refresh model list"
     },

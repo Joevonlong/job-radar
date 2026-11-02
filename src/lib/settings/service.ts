@@ -10,6 +10,7 @@ import {
   ConfigError,
   aiSchema,
   breakdownSchema,
+  researchSchema,
   salarySchema,
   channelsSchema,
   checkAiAgainstCatalog,
@@ -129,6 +130,10 @@ function validate(tab: SettingsForm, candidate: unknown): Validated {
     case "resume": {
       const result = resumeSchema.safeParse(candidate);
       return result.success ? { ok: true, write: (baseHash) => writeConfig("resume", result.data, { baseHash }) } : { ok: false, error: result.error };
+    }
+    case "research": {
+      const result = researchSchema.safeParse(candidate);
+      return result.success ? { ok: true, write: (baseHash) => writeConfig("research", result.data, { baseHash }) } : { ok: false, error: result.error };
     }
     case "writer": {
       const result = writerSchema.safeParse(candidate);

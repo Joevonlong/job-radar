@@ -7,6 +7,7 @@
 import { isIP } from "node:net";
 
 import type { SalaryLookupBandOutput, SalaryLookupOutput } from "@/lib/ai/prompts/salary";
+import { BLOCKED_HOST } from "@/lib/ai/web-tasks";
 import { fxFactor, type FxTable } from "@/lib/market/currency";
 
 import type { SalaryBand, SalaryLookupQuery, SalaryLookupResult, SalarySource } from "./lookup-types";
@@ -30,8 +31,6 @@ interface Sanity {
   max: number;
   unconvertibleMax: number;
 }
-
-const BLOCKED_HOST = /(^|\.)(localhost|local|internal|lan|home|corp|intranet|localdomain|example|invalid|test)$/i;
 
 /** A public https URL (no credentials, no IP address, no local or reserved host name), or null. */
 export function publicHttpsUrl(raw: string): URL | null {

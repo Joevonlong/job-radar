@@ -2,7 +2,7 @@
  * The editable config files that have a form on /settings (one form per file, saved on its own), in display order.
  * Insights, resume and writer were added later; a page tab can hold several forms (`TAB_LAYOUT`).
  */
-export const SETTINGS_FORMS = ["schedule", "search", "channels", "ai", "breakdown", "salary", "notify", "language", "ui", "insights", "resume", "writer"] as const;
+export const SETTINGS_FORMS = ["schedule", "search", "channels", "ai", "breakdown", "salary", "research", "notify", "language", "ui", "insights", "resume", "writer"] as const;
 export type SettingsForm = (typeof SETTINGS_FORMS)[number];
 
 export function isSettingsForm(value: string): value is SettingsForm {
@@ -17,6 +17,7 @@ export const SETTINGS_FILES: Record<SettingsForm, string> = {
   ai: "ai.yaml",
   breakdown: "breakdown.yaml",
   salary: "salary.yaml",
+  research: "research.yaml",
   notify: "notify.yaml",
   language: "language.yaml",
   ui: "ui.yaml",
@@ -26,7 +27,7 @@ export const SETTINGS_FILES: Record<SettingsForm, string> = {
 };
 
 /** The tabs that edit config: form tabs and the application workflow tab (a status table plus the resume and writer forms). */
-export const CONFIG_PAGE_TABS = ["schedule", "search", "channels", "ai", "breakdown", "salary", "notify", "ui", "workflow"] as const;
+export const CONFIG_PAGE_TABS = ["schedule", "search", "channels", "ai", "breakdown", "salary", "research", "notify", "ui", "workflow"] as const;
 export type ConfigPageTab = (typeof CONFIG_PAGE_TABS)[number];
 
 /** The manual operations tab. It edits no file. */
@@ -45,6 +46,7 @@ export const TAB_LAYOUT: Record<ConfigPageTab, readonly SettingsForm[]> = {
   ai: ["ai"],
   breakdown: ["breakdown"],
   salary: ["salary"],
+  research: ["research"],
   notify: ["notify"],
   // The languages head the interface tab
   ui: ["language", "ui", "insights"],
@@ -69,6 +71,6 @@ export function isAckName(value: string): value is AckName {
 
 /**
  * Configs the runner does not watch: saving them takes effect on the next page load, so there is nothing for the runner to
- * acknowledge. writer.yaml is also read by the ai-worker, afresh for every writing request.
+ * acknowledge. writer.yaml and research.yaml are also read by the ai-worker, afresh for every request.
  */
-export const WEB_ONLY_CONFIGS = ["ui", "insights", "resume", "writer"] as const;
+export const WEB_ONLY_CONFIGS = ["ui", "insights", "resume", "writer", "research"] as const;

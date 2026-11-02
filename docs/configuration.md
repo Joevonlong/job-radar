@@ -156,6 +156,12 @@ see what the step removes, then `pnpm config:migrate --write` to save it (origin
 Older files are migrated in memory when loaded; adding this key to a v2 file fails validation as an unknown key.
 See [salary.md](salary.md) for the cards and [the changelog](../CHANGELOG.md) for upgrade and rollback notes.
 
+### Company background (`research.yaml`)
+
+A new file, off by default (`enabled: false`). An install that has none uses the shipped defaults, so nothing changes until you turn it
+on. It is read afresh for every request. The site list refuses private addresses, local names and public suffixes when the file is
+loaded. See [research.md](research.md).
+
 ### LinkedIn Monid (`sources.yaml`)
 
 The default cascade is Bright Data → Apify → Monid → session → guest. Monid needs `MONID_API_KEY` in `.env`;

@@ -1,13 +1,13 @@
 import type { AiProviderId, AiTask } from "./types";
 
 /**
- * The ONE exception to "AI calls never get tools". Every provider call runs without tools (no shell, no files, no
- * web), except the tasks named here, which may search the public web. The list is written in code on purpose: ai.yaml
+ * The only exceptions to "AI calls never get tools". Every provider call runs without tools (no shell, no files, no
+ * web), except the tasks named here (the salary lookup and the company background), which may search the public web. The list is written in code on purpose: ai.yaml
  * (editable from the web UI) can neither add a task nor switch a tool on. Each transport asks `webAccessAllowed(task,
  * provider)` itself before it builds a call with web tools, and the ai-worker's handler asks again before it runs one; an
  * option a caller passes (`AiRunOptions.web`, `requireWeb`) only chooses providers and limits, it never grants the tools.
  */
-export const WEB_ACCESS_TASKS: ReadonlySet<AiTask> = new Set<AiTask>(["salary_lookup"]);
+export const WEB_ACCESS_TASKS: ReadonlySet<AiTask> = new Set<AiTask>(["salary_lookup", "company_research"]);
 
 /**
  * Providers whose transport can search the web for a web task: claude-cli (WebSearch + WebFetch on pre-approved domains),
@@ -62,6 +62,41 @@ export function isSafeDomain(value: string): boolean {
 /** The usable domains of a list (lower-cased, deduplicated, invalid ones dropped). */
 export function safeDomains(values: readonly string[]): string[] {
   return [...new Set(values.map((value) => value.trim().toLowerCase()).filter(isSafeDomain))];
+}
+
+/** Host names that never mean a public site: local and reserved suffixes (`fritz.box`, `printer.local`, `host.internal`). */
+export const BLOCKED_HOST = /(^|\.)(localhost|local|internal|lan|home|corp|box|intranet|localdomain|arpa|example|invalid|test)$/i;
+
+/**
+ * URL parsers read a host whose last label is a number (`1.1`, `foo.0x7f`, `192.168.1.1`) as an IPv4 address, so such a
+ * name is an address whatever else it looks like.
+ */
+const NUMERIC_LAST_LABEL = /(^|\.)(?:\d+|0x[0-9a-f]*)$/i;
+
+/**
+ * May this name go on a list of hosts whose pages are fetched on this machine? `isSafeDomain` only checks the format and
+ * public suffixes; this also refuses IP literals and local or reserved names, because a claude-cli page fetch leaves from
+ * this machine. Strict on purpose: the value is not normalized, so anything but the plain lower-case form is refused.
+ */
+export function isPublicWebsiteDomain(value: string): boolean {
+  return isSafeDomain(value) && !NUMERIC_LAST_LABEL.test(value) && !BLOCKED_HOST.test(value);
+}
+
+/** The usable names of a fetch allow-list (lower-cased, deduplicated, anything `isPublicWebsiteDomain` refuses dropped). */
+export function publicWebsiteDomains(values: readonly string[]): string[] {
+  return [...new Set(values.map((value) => value.trim().toLowerCase()).filter(isPublicWebsiteDomain))];
+}
+
+/**
+ * May this name be taken as a company's own website? A public name that is not a job board or applicant tracking host
+ * (or under one): `linkedin.com` may stay on the fetch allow-list without ever being some company's website.
+ */
+export function isCompanyWebsiteCandidate(value: string, nonCompanyHosts: readonly string[]): boolean {
+  if (!isPublicWebsiteDomain(value)) return false;
+  return !nonCompanyHosts.some((host) => {
+    const name = host.trim().toLowerCase();
+    return value === name || value.endsWith(`.${name}`);
+  });
 }
 
 /**

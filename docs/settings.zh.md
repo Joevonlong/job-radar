@@ -1,6 +1,6 @@
 # 设置页与手动操作
 
-`/settings` 用表单编辑十一个配置文件（`schedule.yaml`、`search.yaml`、`sources.yaml`、`ai.yaml`、`breakdown.yaml`、`salary.yaml`、`notify.yaml`、`ui.yaml`、`insights.yaml`、`resume.yaml`、`writer.yaml`），其余文件（`pipeline.yaml`、`models.yaml`、`interests.yaml` 以及以后新增的）和表单没覆盖的键可以在"高级"标签里按原文编辑，保存前用和 runner 相同的 zod schema 校验，写回用户配置目录（默认 `data/config/`，每个标签的说明里写出实际路径；第一次保存一个还只在默认配置里的文件时，以默认文件为底稿生成，见 [`configuration.zh.md`](configuration.zh.md)），写回时保留 YAML 注释；runner 热加载后，保存条上显示"runner 已加载"（runner 没有心跳时改写成"runner 没有运行"，不会和侧栏的 OFFLINE 互相矛盾）。表单里没有的键（`doctor`、`deploy`、`execution`、`host_worker`、`test_channel`、LinkedIn 登录态细节等运维参数，大多含机器路径）在"高级"标签里改。
+`/settings` 用表单编辑十二个配置文件（`schedule.yaml`、`search.yaml`、`sources.yaml`、`ai.yaml`、`breakdown.yaml`、`salary.yaml`、`research.yaml`、`notify.yaml`、`ui.yaml`、`insights.yaml`、`resume.yaml`、`writer.yaml`），其余文件（`pipeline.yaml`、`models.yaml`、`interests.yaml` 以及以后新增的）和表单没覆盖的键可以在"高级"标签里按原文编辑，保存前用和 runner 相同的 zod schema 校验，写回用户配置目录（默认 `data/config/`，每个标签的说明里写出实际路径；第一次保存一个还只在默认配置里的文件时，以默认文件为底稿生成，见 [`configuration.zh.md`](configuration.zh.md)），写回时保留 YAML 注释；runner 热加载后，保存条上显示"runner 已加载"（runner 没有心跳时改写成"runner 没有运行"，不会和侧栏的 OFFLINE 互相矛盾）。表单里没有的键（`doctor`、`deploy`、`execution`、`host_worker`、`test_channel`、LinkedIn 登录态细节等运维参数，大多含机器路径）在"高级"标签里改。
 
 ## 来源标签：查询轮换与补窗
 
@@ -176,6 +176,10 @@ AI 陷阱检测没有自己的标签：开关、模式和阈值直接改 `traps.
 查询的域名清单和合理范围在 YAML 里改（"高级"标签）。查薪资默认关闭；由哪个 AI 来查，是 AI 标签里的任务"查薪资"（默认
 claude-cli，然后 Anthropic API；只用能搜索网页的 provider，codex-cli 如果你加上，它搜索时没有域名限制）。见
 [salary.zh.md](salary.zh.md)。
+
+## 调研标签：公司背景
+
+"调研"标签（在"薪资"之后）编辑 `data/config/research.yaml`：开关（`enabled`）和公司背景的上限（`company.ttl_days`、`max_per_day`、`max_searches`、`timeout_seconds`）。允许的站点、绝不当作公司官网的主机和合理范围在 YAML 里改（高级标签）。默认关闭；用哪个 AI 由 AI 页的任务"公司背景"决定（默认 claude-cli，然后是 Anthropic API；只使用能搜索网页的 provider，codex-cli 如果被你加入，其搜索不限域名）。ai-worker 每次请求都重新读这个文件，所以关闭后，还在排队的请求也不会执行。见 [research.zh.md](research.zh.md)。
 
 ## 手动触发和测试
 

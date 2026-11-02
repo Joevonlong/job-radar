@@ -1,0 +1,30 @@
+# Company background (docs/research.md): what a company does, how big it is, funding, reviews and recent news, found by an AI
+# provider with web search and shown on the job page with a source for every field. Marked as unverified: nothing of it
+# goes into filtering, scoring, notifications or the salary benchmark.
+# Takes effect on the next job page load; the ai-worker reads this file again for every request.
+
+# Master switch. Off by default: when on, the "Look up company" button appears on the job page, and pressing it sends the
+# company name (never the title, the location, the JD or your profile) to an AI provider with web search.
+enabled: false
+
+company:
+  # Cached per company; every job of the same company shows the same result
+  ttl_days: 30
+  # Most company lookups you can start per 24 hours (failed lookups count; a cached answer does not)
+  max_per_day: 10
+  # Most web searches per lookup (enforced for the Anthropic API; the CLIs are asked to keep to it)
+  max_searches: 8
+  # One lookup (every provider and retry together) may take this many seconds
+  timeout_seconds: 240
+  # Longest text kept per field; longer answers are cut
+  max_field_chars: 400
+  # Sites whose pages the AI may open (claude-cli page fetches, Anthropic search results). The Claude CLI's search itself
+  # is not limited to them. Edit in this file only: it decides which hosts this machine may fetch.
+  allowed_domains: [linkedin.com, kununu.com, glassdoor.com, glassdoor.de, crunchbase.com, wikipedia.org, northdata.com, github.com]
+  # Job boards and applicant tracking systems: never taken as a company's own website. Edit in this file only.
+  non_company_hosts: [greenhouse.io, lever.co, ashbyhq.com, workable.com, personio.de, smartrecruiters.com, recruitee.com, join.com, myworkdayjobs.com, successfactors.com, successfactors.eu, teamtailor.com, softgarden.io, bamboohr.com, icims.com, taleo.net, jobvite.com, linkedin.com, stepstone.de, indeed.com, xing.com, arbeitsagentur.de, arbeitnow.com]
+  # A stated company size or review rating outside these ranges is dropped as implausible
+  employees: {min: 1, max: 3000000}
+  rating: {min: 0, max: 5}
+  # USD per web search of the Anthropic API (counted in ai_usage and the monthly API budget)
+  web_search_usd: 0.01

@@ -1801,7 +1801,8 @@
       "actions": "手动操作",
       "workflow": "申请流程",
       "advanced": "高级",
-      "salary": "薪资"
+      "salary": "薪资",
+      "research": "调研"
     },
     "ai": {
       "block": {
@@ -1888,6 +1889,7 @@
       "resume": "简历工具",
       "language": "语言",
       "salary": "薪资基准与查询",
+      "research": "调研：公司背景",
       "writer": "申请写作"
     },
     "tabDescription": {
@@ -1902,6 +1904,7 @@
       "resume": "详情页“定制简历”用到的路径和命令（resume-kit 联动）。路径指向你自己的文件，主简历不会被读取。",
       "language": "新浏览器默认的界面语言、AI 写作用的语言、JD 翻译成什么语言，以及 Telegram 和命令行的语言。",
       "salary": "岗位页的“薪资”面板把岗位写明的薪资和库里同类岗位、这家公司的其他岗位放在一把尺子上比较，查过的话再加上 AI 的估计。可选的“查薪资”让 AI provider 去薪资网站搜这家公司和这个岗位。岗位族和外部搜索链接在 salary.yaml 里改。",
+      "research": "岗位详情页的公司背景面板：这家公司做什么、规模、融资、评价和近期动态，由能上网的 AI provider 搜索得到，每个字段带来源，并标为未核对。默认关闭。打开后，公司名（以及你确认过的官网域名）会发给“AI”页任务“公司背景”的 provider。Claude CLI 的搜索不受 research.yaml 里的站点限制，受限的只是它打开的网页。可以打开哪些站点、哪些主机绝不当作公司官网，在 research.yaml 里改。",
       "writer": "详情页“写申请回答”背后的工作台：用你选的素材让 AI 起草申请问题的回答和动机信，每句话都对照素材核对。默认关闭。用哪个 AI 在“AI”标签页的任务覆盖里设置（任务“申请写作”）。素材库和问题的上限、版本风格、语气和依据核对在 writer.yaml 里改。"
     },
     "actions": {
@@ -2023,6 +2026,8 @@
       "language_channels": "Telegram 与命令行",
       "ai_scoring_criteria": "打分标准",
       "salary_lookup": "查薪资（AI 网页搜索）",
+      "research_general": "开关",
+      "research_company": "公司背景（AI 网页搜索）",
       "salary_benchmark": "薪资基准",
       "ai_limits_quota": "用量上限（订阅 CLI）",
       "ai_scoring_evidence": "理由来源",
@@ -3080,9 +3085,36 @@
       "reasoning_effort_salary_lookup": {
         "label": "推理强度：查薪资"
       },
+      "task_company_research": {
+        "label": "公司背景",
+        "hint": "只有 claude-cli、codex-cli 和 Anthropic API 能搜索网页，其他 provider 在这个任务里被跳过。codex-cli 的搜索不限域名。"
+      },
+      "reasoning_effort_company_research": {
+        "label": "推理强度：公司背景"
+      },
       "salary_lookup_enabled": {
         "label": "开启查薪资",
         "hint": "岗位页显示“查薪资”按钮。不点就不会查。"
+      },
+      "research_enabled": {
+        "label": "启用公司背景",
+        "hint": "在岗位详情页显示“查公司背景”按钮。不按就不会查。查询时把公司名和你确认过的官网域名发给能上网的 AI provider；绝不发岗位标题、地点、JD 或你的画像。"
+      },
+      "research_ttl_days": {
+        "label": "结果保留（天）",
+        "hint": "在此期间，同一公司的所有岗位都显示已存结果，不重新搜索。"
+      },
+      "research_max_per_day": {
+        "label": "每 24 小时查询次数",
+        "hint": "每次请求都算，失败的也算；命中缓存的不算。"
+      },
+      "research_max_searches": {
+        "label": "每次查询的网页搜索次数",
+        "hint": "Anthropic API 严格执行；CLI 只是被要求遵守。"
+      },
+      "research_timeout": {
+        "label": "超时（秒）",
+        "hint": "整个查询的时间，包括所有 provider 和重试。"
       },
       "salary_ttl_days": {
         "label": "结果保留（天）",
@@ -3263,6 +3295,7 @@
           "test_ai": "测试 AI",
           "test_telegram": "测试 Telegram",
           "salary_lookup": "查薪资",
+          "company_research": "公司背景",
           "writer_job": "申请回答",
           "models_sync": "刷新模型列表"
         },
@@ -3800,6 +3833,7 @@
         "breakdown": "拆解",
         "traps": "AI 陷阱",
         "salary_lookup": "查薪资",
+        "company_research": "公司背景",
         "write": "申请写作"
       },
       "details": "详细统计 →"
@@ -6827,6 +6861,70 @@
       "summary": "薪资基准（{currency}）：{groups} 个组，来自 {postings} 个岗位。"
     }
   },
+  "research": {
+    "field": {
+      "summary": "公司简介",
+      "industry": "行业",
+      "size": "规模",
+      "founded": "成立",
+      "headquarters": "总部",
+      "funding": "融资",
+      "products": "产品",
+      "workingLanguage": "工作语言",
+      "reviews": "评价",
+      "recentNews": "近期动态"
+    },
+    "company": {
+      "title": "公司背景",
+      "badge": "AI 网页搜索 · 未核对",
+      "noProvider": "这项查询设置的 AI provider 都不能搜索网页。请在 AI 页给任务“公司背景”选 claude-cli 或 Anthropic API。",
+      "aiSettingsLink": "AI 设置",
+      "configError": "research.yaml 或 ai.yaml 读不出来，暂时不能查询。运行 pnpm config:check 查看原因。",
+      "notReady": "公司背景的数据表还不存在。请运行数据库迁移。",
+      "readyHint": "让 AI 在网上搜索 {company}。只发送公司名（如果你确认过官网域名，也发送它）；不发送岗位标题、地点、JD 和你的画像。会消耗 token 和网页搜索次数。",
+      "unrestricted": "codex-cli 的网页搜索不限域名。",
+      "quota": "过去 24 小时已用 {used} / {max} 次。",
+      "quotaUsedUp": "过去 24 小时的 {max} 次已用完（{used} / {max}）。早先的查询满 24 小时后按钮会回来；上限在调研设置里改。",
+      "button": "查公司背景",
+      "refresh": "重新查询",
+      "retry": "重试",
+      "requesting": "排队中…",
+      "running": "搜索中…",
+      "waitingHint": "可能需要几分钟。",
+      "expired": "已超过 {days} 天，内容可能过时。",
+      "domainChanged": "这次查询之后，确认的官网域名改过了。重新查询才会用到新域名。",
+      "sourceOf": "{field}的来源：{host}",
+      "dropped": "丢弃了 {n} 个字段（来源无效、文字是写给 AI 的，或数值不合理）。",
+      "sentNameOnly": "发给 AI provider 的只有公司名。",
+      "sentWithDomain": "发给 AI provider 的只有公司名和你确认过的官网（{domain}）。",
+      "done": "公司背景查询完成"
+    },
+    "error": {
+      "invalid": "请求无效",
+      "not_ready": "公司背景的数据表还不存在。请运行数据库迁移。",
+      "disabled": "公司背景已关闭。",
+      "research_disabled": "这次查询开始前，公司背景已被关闭。",
+      "config_error": "research.yaml、traps.yaml 或 ai.yaml 读不出来。",
+      "not_found": "找不到岗位",
+      "no_web_provider": "这项查询设置的 AI provider 都不能搜索网页。",
+      "quota": "今天的公司背景查询次数已用完。请稍后再试，或在设置里调高上限。",
+      "empty_result": "AI 找到的内容都没通过检查（每个字段都要有效来源）。没有保存任何内容。",
+      "aborted": "查询途中 AI worker 被停止。请重试。",
+      "auth": "{providers} 的登录或密钥已过期或被拒绝。修复后再试。",
+      "timeout": "查询没能按时完成。请重试，或在设置里调高超时。",
+      "rate_limited": "AI provider 现在限流。请稍后再试。",
+      "invalid_output": "AI 的回答不是公司背景的格式。请重试。",
+      "provider_error": "AI provider 报错。请重试；一直失败就看 AI worker 的日志。",
+      "network": "连不上 AI provider。请重试。",
+      "budget": "AI API 的月度预算已用完。",
+      "quota_guard": "已达到 Job Radar 自己的 AI 用量上限（只算它自己的调用）。{time, select, none {之后会自动恢复。} other {{time} 之后可再次使用。}}",
+      "unavailable": "现在没有能搜索网页的 AI provider 可用。请检查 CLI 登录或 API 密钥。",
+      "failed": "查询失败，请重试。",
+      "invalid_payload": "请求无效。",
+      "handler_error": "处理请求时出错。请重试。",
+      "no_handler": "没有进程处理公司背景查询（ai-worker 在运行吗？）。"
+    }
+  },
   "mcp": {
     "serve": {
       "disabled": "Job Radar 的 MCP 服务没有打开。在 mcp.yaml（data/config/ 下，或设置 → 高级）里设 enabled: true，再重启你的 MCP 客户端。见 docs/mcp.zh.md。",
@@ -7099,6 +7197,7 @@
       "request__test_ai": "测试 AI",
       "request__test_telegram": "测试 Telegram",
       "request__salary_lookup": "查询薪资",
+      "request__company_research": "查公司背景",
       "system__startup": "进程启动",
       "system__orphan_recovery": "恢复中断任务",
       "system__backup": "备份",
@@ -7436,6 +7535,7 @@
       "test_ai": "测试 AI",
       "test_telegram": "测试 Telegram",
       "salary_lookup": "查询薪资",
+      "company_research": "查公司背景",
       "writer_job": "写申请回答",
       "models_sync": "刷新模型列表"
     },

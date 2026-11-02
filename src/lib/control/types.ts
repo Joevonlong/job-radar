@@ -82,6 +82,18 @@ export const salaryLookupPayloadSchema = z.strictObject({
 });
 export type SalaryLookupPayload = z.infer<typeof salaryLookupPayloadSchema>;
 
+/** Payload of a `company_research` request (the "look up company" button on the job page). */
+export const companyResearchPayloadSchema = z.strictObject({
+  jobId: z.number().int().positive(),
+  /** The company at queue time: joins a double click and other postings of the same company. The worker reads the job's company again. */
+  companyId: z.number().int().positive(),
+  /** Look up again although a current cached result exists. */
+  force: z.boolean().default(false),
+  /** Only automatic research writes this marker: it keeps the request in the batch lane and out of the manual quota. */
+  origin: z.literal("auto").optional(),
+});
+export type CompanyResearchPayload = z.infer<typeof companyResearchPayloadSchema>;
+
 /** The most jobs one `score_jobs` request may name (the buttons send one; this only bounds a hand-made request). */
 export const SCORE_JOBS_MAX_IDS = 50;
 

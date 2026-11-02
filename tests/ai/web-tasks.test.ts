@@ -9,12 +9,12 @@ import { codexArgs, codexEnforcedConfig, createCodexCliProvider } from "@/lib/ai
 import type { ProcessRunner, ProcessSpec } from "@/lib/ai/providers/process";
 import { createAiRouter } from "@/lib/ai/router";
 import { AI_TASKS, type AiProviderId } from "@/lib/ai/types";
-import { WEB_ACCESS_TASKS, isPublicSuffixLike, isSafeDomain, safeDomains, webAccessAllowed, webLimits } from "@/lib/ai/web-tasks";
+import { WEB_ACCESS_TASKS, isCompanyWebsiteCandidate, isPublicSuffixLike, isPublicWebsiteDomain, isSafeDomain, publicWebsiteDomains, safeDomains, webAccessAllowed, webLimits } from "@/lib/ai/web-tasks";
 
 import { fixtureText, pinnedAi, scriptedProvider } from "./helpers";
 
 /**
- * The one exception to "AI calls never get tools". Only `salary_lookup` may reach the web, the policy is in code
+ * The one exception to "AI calls never get tools". Only `salary_lookup` and `company_research` may reach the web, the policy is in code
  * (not ai.yaml), each transport checks it itself, and every other task's command line / request is unchanged.
  */
 
@@ -35,11 +35,11 @@ function runnerReturning(stdout: string): { run: ProcessRunner; specs: ProcessSp
 }
 
 describe("web access policy", () => {
-  it("allows the web for salary_lookup on claude-cli, codex-cli and anthropic only", () => {
-    expect([...WEB_ACCESS_TASKS]).toEqual(["salary_lookup"]);
+  it("allows the web for exactly two tasks, on claude-cli, codex-cli and anthropic only", () => {
+    expect([...WEB_ACCESS_TASKS]).toEqual(["salary_lookup", "company_research"]);
     for (const task of AI_TASKS) {
       for (const provider of PROVIDERS) {
-        const expected = task === "salary_lookup" && (provider === "claude-cli" || provider === "codex-cli" || provider === "anthropic");
+        const expected = (task === "salary_lookup" || task === "company_research") && (provider === "claude-cli" || provider === "codex-cli" || provider === "anthropic");
         expect(webAccessAllowed(task, provider), `${task} on ${provider}`).toBe(expected);
       }
     }
@@ -51,6 +51,18 @@ describe("web access policy", () => {
     for (const bad of ["--tools", "*.levels.fyi", "levels.fyi/path", "localhost", "levels.fyi:443", "lev els.fyi", ".levels.fyi", "-x.com", "a)b.com", ""]) expect(isSafeDomain(bad), bad).toBe(false);
     expect(safeDomains(["Levels.FYI", "levels.fyi", "bad domain", "kununu.com"])).toEqual(["levels.fyi", "kununu.com"]);
     expect(webLimits(["x y", "levels.fyi"], 3)).toEqual({ allowedDomains: ["levels.fyi"], maxSearches: 3, budget: { remaining: 3 } });
+  });
+
+  it("keeps only public website domains: never a private, internal, reserved or numeric host, never a public suffix", () => {
+    for (const bad of ["192.168.1.1", "10.0.0.1", "127.0.0.1", "169.254.169.254", "fritz.box", "printer.local", "host.internal", "nas.lan", "localhost", "intranet", "co.uk", "github.io", "1.2.3.4.5", "router.home.arpa", "--tools", "*.example.com", "example.com/path"]) expect(isPublicWebsiteDomain(bad), bad).toBe(false);
+    for (const good of ["linkedin.com", "example-company.de", "company.co.uk"]) expect(isPublicWebsiteDomain(good), good).toBe(true);
+    expect(publicWebsiteDomains(["LinkedIn.com", "linkedin.com", "fritz.box", "192.168.1.1"])).toEqual(["linkedin.com"]);
+  });
+
+  it("does not take a platform for a company's own website", () => {
+    const platforms = ["linkedin.com", "greenhouse.io", "boards.greenhouse.io", "indeed.com"];
+    expect(isCompanyWebsiteCandidate("example-company.de", platforms)).toBe(true);
+    for (const host of ["linkedin.com", "de.linkedin.com", "boards.greenhouse.io", "jobs.greenhouse.io", "fritz.box"]) expect(isCompanyWebsiteCandidate(host, platforms), host).toBe(false);
   });
 
   it("drops public suffixes: a single label, a country registry, a shared hosting suffix", () => {

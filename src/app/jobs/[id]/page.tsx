@@ -9,6 +9,7 @@ import { companyJobsHref } from "@/lib/jobs/company-link";
 import { BackLink } from "@/components/jobs/detail/back-link";
 import { BreakdownPanel } from "@/components/jobs/detail/breakdown-panel";
 import { ChecksPanel } from "@/components/jobs/detail/checks-panel";
+import { CompanyBackgroundPanel } from "@/components/jobs/detail/company-background-panel";
 import { EVIDENCE_QUOTE, GHOST_QUOTE, TRAP_QUOTE, VISA_QUOTE } from "@/components/jobs/detail/marks";
 import { ReasonSource } from "@/components/jobs/detail/reason-source";
 import { CompPanel } from "@/components/jobs/detail/comp-panel";
@@ -67,6 +68,8 @@ import { bcp47, displayLanguageName, languageAutonym, sameLanguage } from "@/lib
 import { describeSalary } from "@/lib/dashboard/salary";
 import { effectiveStatus } from "@/lib/dashboard/status";
 import { getDb, getJobDetail, getTranslation, listTrapsOfJob, loadMonthSalaryStats, strongestFirst } from "@/lib/db";
+import { getCompanyResearchContext } from "@/lib/research/view";
+import { readResearchSettings } from "@/lib/research/settings";
 import { trapsEnabled } from "@/lib/traps/settings";
 import { buildTrapCheckView, buildTrapPanelView } from "@/lib/traps/view";
 import { readNeedsVisaSponsorship, visaEnabled } from "@/lib/visa/settings";
@@ -216,6 +219,9 @@ export default async function JobDetailPage({ params }: { params: Params }) {
     salaryAi = null; // ai.yaml cannot be read: the salary panel says so
   }
   const salaryContext = await getSalaryContext(getDb(), { jobId: job.id, figure, currency: baseCurrency, salary: salarySettings.state === "ok" ? salarySettings.config : null, ai: salaryAi, locale: uiLocale, now });
+  // The company background (research.yaml; off by default): not shown at all while it is off and nothing is stored
+  const researchSettings = readResearchSettings();
+  const companyResearch = await getCompanyResearchContext(getDb(), { jobId: job.id, research: researchSettings.state === "ok" ? researchSettings.config : null, ai: salaryAi, now });
 
   // every signal quote, in order: the position is the id of its `mark` in the JD, the tag of a quote the JD shows jumps there
   const quoteList = activeSignals.map((s) => ({ text: s.quote, tier: s.tier }));
@@ -502,6 +508,7 @@ export default async function JobDetailPage({ params }: { params: Params }) {
               timeZone={timezone}
             />
           ) : null}
+          {companyResearch ? <CompanyBackgroundPanel jobId={job.id} company={job.company.name} context={companyResearch} timeZone={timezone} /> : null}
 
           <Panel id="h-fit" title={`${t("fit.title")} / ${t("gaps.title")}`} aside={reasonsTag}>
             <div className="grid gap-x-4 gap-y-3.5 md:grid-cols-2">

@@ -2,6 +2,7 @@ import { and, asc, eq, ilike, inArray, sql } from "drizzle-orm";
 
 import type { Executor } from "../executor";
 import { companies, jobs } from "../schema";
+import { moveCompanyResearch } from "./company-research";
 import { moveSalaryLookups } from "./salary-lookups";
 
 export type Company = typeof companies.$inferSelect;
@@ -60,17 +61,39 @@ export async function renameCompany(db: Executor, id: number, input: { name: str
   });
 }
 
+type WebsiteDomain = Pick<Company, "websiteDomain" | "websiteDomainSource" | "websiteDomainConfirmedAt">;
+
+/** Which website domain survives a merge: the one the user confirmed, of two the later confirmed; else the kept company's own, else the other's. */
+export function mergedWebsiteDomain(kept: WebsiteDomain, other: WebsiteDomain): WebsiteDomain {
+  const keptIsUser = kept.websiteDomainSource === "user";
+  const otherIsUser = other.websiteDomainSource === "user";
+  if (keptIsUser && otherIsUser) return (other.websiteDomainConfirmedAt?.getTime() ?? 0) > (kept.websiteDomainConfirmedAt?.getTime() ?? 0) ? other : kept;
+  if (keptIsUser) return kept;
+  if (otherIsUser) return other;
+  return kept.websiteDomain !== null ? kept : other;
+}
+
 /**
- * Move every job and salary lookup of company `fromId` to `toId` and delete `fromId` (two rows that turned out to be one
- * company). `jobs` and `salary_lookups` are the only tables that reference a company; the lookups would otherwise go with
- * the deleted row (cascade).
+ * Move every job, salary lookup and company background of company `fromId` to `toId` and delete `fromId` (two rows that
+ * turned out to be one company). `jobs`, `salary_lookups` and `company_research` are the tables that reference a company;
+ * the two result tables would otherwise go with the deleted row (cascade). The website domain follows `mergedWebsiteDomain`.
  */
 export async function mergeCompanyInto(db: Executor, fromId: number, toId: number): Promise<number> {
   return db.transaction(async (tx) => {
-    const rows = await tx.select({ id: companies.id, nameNorm: companies.nameNorm }).from(companies).where(inArray(companies.id, [fromId, toId])).orderBy(asc(companies.id)).for("update");
-    const fromNorm = rows.find((row) => row.id === fromId)?.nameNorm;
-    const toNorm = rows.find((row) => row.id === toId)?.nameNorm;
-    if (fromNorm !== undefined && toNorm !== undefined) await moveSalaryLookups(tx, { fromCompanyId: fromId, toCompanyId: toId, fromNorm, toNorm });
+    const rows = await tx
+      .select({ id: companies.id, nameNorm: companies.nameNorm, websiteDomain: companies.websiteDomain, websiteDomainSource: companies.websiteDomainSource, websiteDomainConfirmedAt: companies.websiteDomainConfirmedAt })
+      .from(companies)
+      .where(inArray(companies.id, [fromId, toId]))
+      .orderBy(asc(companies.id))
+      .for("update");
+    const from = rows.find((row) => row.id === fromId);
+    const to = rows.find((row) => row.id === toId);
+    if (from && to) {
+      await moveSalaryLookups(tx, { fromCompanyId: fromId, toCompanyId: toId, fromNorm: from.nameNorm, toNorm: to.nameNorm });
+      await moveCompanyResearch(tx, { fromCompanyId: fromId, toCompanyId: toId });
+      const domain = mergedWebsiteDomain(to, from);
+      await tx.update(companies).set({ websiteDomain: domain.websiteDomain, websiteDomainSource: domain.websiteDomainSource, websiteDomainConfirmedAt: domain.websiteDomainConfirmedAt }).where(eq(companies.id, toId));
+    }
     const moved = await tx.update(jobs).set({ companyId: toId }).where(eq(jobs.companyId, fromId)).returning({ id: jobs.id });
     await tx.delete(companies).where(eq(companies.id, fromId));
     return moved.length;

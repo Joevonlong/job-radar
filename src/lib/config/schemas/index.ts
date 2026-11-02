@@ -16,6 +16,7 @@ export * from "./pipeline";
 export * from "./pipeline-board";
 export * from "./preferences";
 export * from "./resume";
+export * from "./research";
 export * from "./salary";
 export * from "./signal-presets";
 export * from "./stories";

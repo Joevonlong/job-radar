@@ -210,6 +210,8 @@ export const HIDDEN_PATHS: Record<SettingsForm, readonly string[]> = {
   breakdown: [],
   // The role families, deep link templates, trusted domains and the sanity range are lists / tables: the advanced editor
   salary: ["role_families", "deep_links", "lookup.allowed_fetch_domains", "lookup.sanity_annual", "lookup.unconvertible_max_annual", "lookup.web_search_usd", "lookup.max_searches"],
+  // Both host lists decide what this machine may fetch or treat as a company's website: file only, not a form. The field length, plausible ranges and search price are technical.
+  research: ["company.allowed_domains", "company.non_company_hosts", "company.max_field_chars", "company.employees", "company.rating", "company.web_search_usd"],
   // The two reminder thresholds are edited in the "application workflow" tab, next to the statuses they belong to.
   // telegram.setup: waits of the host command `pnpm run setup --step telegram`, edited in the YAML or the advanced editor.
   notify: ["reminders.interested_days", "reminders.applied_days", "telegram.setup"],
@@ -821,6 +823,21 @@ const breakdownSections: SectionDef[] = [
   },
 ];
 
+// ---------------------------------------------------------------- research
+
+const researchSections: SectionDef[] = [
+  {
+    id: "research_general",
+    title: { section: "research_general" },
+    fields: [bool("enabled", "research_enabled")],
+  },
+  {
+    id: "research_company",
+    title: { section: "research_company" },
+    fields: [int("company.ttl_days", "research_ttl_days"), int("company.max_per_day", "research_max_per_day"), int("company.max_searches", "research_max_searches"), int("company.timeout_seconds", "research_timeout")],
+  },
+];
+
 // ---------------------------------------------------------------- salary
 
 const salarySections: SectionDef[] = [
@@ -1024,6 +1041,7 @@ export const SETTINGS_SECTIONS: Record<SettingsForm, SectionDef[]> = {
   channels: withLocks("channels", channelsSections),
   ai: withLocks("ai", aiSections),
   breakdown: withLocks("breakdown", breakdownSections),
+  research: withLocks("research", researchSections),
   salary: withLocks("salary", salarySections),
   notify: withLocks("notify", notifySections),
   language: withLocks("language", languageSections),

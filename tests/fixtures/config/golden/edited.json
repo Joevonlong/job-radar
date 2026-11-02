@@ -24,7 +24,7 @@
     },
     "ai": {
       "layer": "user",
-      "hash": "2770eb14305cadc8a7211b40278a0652357288f86ae35361ee77f3c2faa6ba95",
+      "hash": "4e1d80bad793cc6816de1800d9fb1079200164af40f195d6299ffbf5e89fadab",
       "valid": true
     },
     "breakdown": {
@@ -90,6 +90,11 @@
     "salary": {
       "layer": "user",
       "hash": "3adb443f725dfd68bf0e4e88abd52e795d95c472173c040ba41ef36cf824b27a",
+      "valid": true
+    },
+    "research": {
+      "layer": "default",
+      "hash": "dc0772e3030c47b7e8e59b42b55fb7163e78a812f5f3712fecad6a69f76fa371",
       "valid": true
     },
     "signalPresets": {
