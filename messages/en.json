@@ -7151,6 +7151,8 @@
       "cycleBusy": "A run was already queued or running",
       "configUnavailable": "Configuration could not be read",
       "no_material": "No material chosen",
+      "too_long": "Text longer than allowed",
+      "busy": "Another request for this question is running",
       "output_truncated": "Answer cut off at the output limit",
       "expired": "Request expired",
       "not_recorded": "Result not recorded",

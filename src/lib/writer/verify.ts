@@ -4,7 +4,7 @@
  * technology / company name and name-like word of the sentence must be in its valid quotes. It marks what to check; it
  * cannot tell whether a sentence is true (a quote found is not a fact verified).
  */
-import type { WriterEvidenceConfig } from "@/lib/config/schemas/writer";
+import { defaultFigureUnits, type WriterEvidenceConfig } from "@/lib/config/schemas/writer";
 import { locateQuote } from "@/lib/signals/quote";
 
 import type { CheckedEvidence, CheckedSentence, EvidenceProblem, EvidenceSource, SentenceAbout, SentenceStatus, StatusCounts } from "./types";
@@ -66,10 +66,16 @@ function primaryLanguage(code: string): string {
 
 // CJK text has no spaces: a figure may sit directly against Han, kana or Hangul characters ("下降了40%的"), unlike one against Latin letters (S3, K8s).
 const CJK_CLASS = String.raw`\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}`;
-const FIGURE = String.raw`(?<=^|[^\p{L}\p{N}]|[${CJK_CLASS}])(\d{1,3}(?:[.,\u00a0\u202f ]\d{3})+|\d+)(?:[.,](\d+))?\s*(k)?([万萬亿億千倍])?(?=$|[^\p{L}\p{N}]|[${CJK_CLASS}])(\s*(?:%|percent|per cent|prozent|pct)(?!(?![${CJK_CLASS}])\p{L}))?`;
-/** East Asian magnitude units written right after a figure: 5万 is 50,000, so it matches 50,000 and not 5. */
-const SCALE: Record<string, number> = { 万: 1e4, 萬: 1e4, 亿: 1e8, 億: 1e8, 千: 1e3 };
-const figurePattern = (): RegExp => new RegExp(FIGURE, "giu");
+type FigureUnits = WriterEvidenceConfig["figure_units"];
+/** The figure pattern; its fourth group is a unit of `evidence.figure_units` right after the digits (none when none are configured). */
+const figurePattern = (units: FigureUnits): RegExp => {
+  const words = [...Object.keys(units.scale), ...units.multiple].sort((a, b) => b.length - a.length).map((word) => word.replace(/[.*+?^${}()|[\]\\]/gu, String.raw`\$&`));
+  const unit = words.length > 0 ? `(${words.join("|")})?` : "()";
+  return new RegExp(
+    String.raw`(?<=^|[^\p{L}\p{N}]|[${CJK_CLASS}])(\d{1,3}(?:[.,\u00a0\u202f ]\d{3})+|\d+)(?:[.,](\d+))?\s*(k)?${unit}(?=$|[^\p{L}\p{N}]|[${CJK_CLASS}])(\s*(?:%|percent|per cent|prozent|pct)(?!(?![${CJK_CLASS}])\p{L}))?`,
+    "giu",
+  );
+};
 const CJK_CHAR = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u;
 
 const WORD = /[\p{L}\p{N}](?:[\p{L}\p{N}+#]|['’.\-&](?=[\p{L}\p{N}]))*/gu;
@@ -114,19 +120,19 @@ export function containsWords(haystack: string, needle: string): boolean {
  * 3千 is 3000) and 倍 makes it a multiple that matches only a multiple (40倍 is not 40%). Figures written as words
  * ("forty", "四十") are not recognised. Digits inside a word (S3, K8s) are names, not figures.
  */
-export function figures(text: string): { keys: Set<string>; shown: string[] } {
+export function figures(text: string, units: FigureUnits = defaultFigureUnits()): { keys: Set<string>; shown: string[] } {
   const keys = new Set<string>();
   const shown: string[] = [];
-  for (const match of text.normalize("NFKC").matchAll(figurePattern())) {
+  for (const match of text.normalize("NFKC").matchAll(figurePattern(units))) {
     const [whole, intPart = "", decimals, thousand, unit, percentMark] = match;
     const digits = intPart.replace(/[.,\u00a0\u202f ]/g, "");
     let value = Number(decimals === undefined ? digits : `${digits}.${decimals}`);
     if (!Number.isFinite(value)) continue;
     if (thousand) value *= 1000;
-    if (unit !== undefined && unit !== "倍") value *= SCALE[unit] ?? 1;
+    if (unit !== undefined && unit !== "") value *= units.scale[unit] ?? 1;
     const key = `${Number(value.toFixed(6))}`;
     // "3倍" is a multiple, not an amount: it matches only a multiple
-    if (unit === "倍") {
+    if (unit !== undefined && units.multiple.includes(unit)) {
       keys.add(`${key}x`);
       shown.push(whole.trim());
       continue;
@@ -140,11 +146,11 @@ export function figures(text: string): { keys: Set<string>; shown: string[] } {
 }
 
 /** The figures of a sentence that its evidence text does not contain (shown as written in the sentence). */
-function missingFigures(sentence: string, evidence: string): string[] {
-  const have = figures(evidence).keys;
+function missingFigures(sentence: string, evidence: string, units: FigureUnits): string[] {
+  const have = figures(evidence, units).keys;
   const out: string[] = [];
-  for (const match of sentence.normalize("NFKC").matchAll(figurePattern())) {
-    const { keys } = figures(match[0]);
+  for (const match of sentence.normalize("NFKC").matchAll(figurePattern(units))) {
+    const { keys } = figures(match[0], units);
     const percentKey = [...keys].find((key) => key.endsWith("%"));
     const wanted = percentKey ?? [...keys][0];
     if (wanted !== undefined && !have.has(wanted)) out.push(match[0].trim());
@@ -272,7 +278,7 @@ function evidenceProblem(context: VerifyContext, about: SentenceAbout, entry: { 
 export function verifySentence(raw: RawSentence, context: VerifyContext): CheckedSentence {
   const named = [...new Set(context.entities)].filter((entity) => entity.trim().length >= 2 && mentions(raw.text, entity));
   const candidates = nameCandidates(raw.text, context.language, context.config);
-  const hasFacts = figures(raw.text).shown.length > 0 || named.length > 0 || candidates.length > 0;
+  const hasFacts = figures(raw.text, context.config.figure_units).shown.length > 0 || named.length > 0 || candidates.length > 0;
   // A first-person sentence is one about you whatever its label; a linking sentence without facts ("that is why this
   // role appeals to me") states nothing to check and stays framing.
   const firstPerson = isFirstPerson(raw.text, context.language, context.config);
@@ -287,7 +293,7 @@ export function verifySentence(raw: RawSentence, context: VerifyContext): Checke
   const quotes = valid.map((entry) => entry.quote).join("\n");
 
   // figures and known names of the sentence that its valid quotes do not contain
-  const missing: string[] = [...missingFigures(raw.text, quotes)];
+  const missing: string[] = [...missingFigures(raw.text, quotes, context.config.figure_units)];
   const backsCompany = valid.some((entry) => entry.source === "jd" || entry.source === "company");
   for (const entity of named) {
     if (entity === context.companyName && backsCompany) continue;

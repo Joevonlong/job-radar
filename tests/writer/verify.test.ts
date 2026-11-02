@@ -238,6 +238,14 @@ describe("figures", () => {
     expect(same.missing).toEqual([]);
   });
 
+  it("the units come from evidence.figure_units: none configured means the word is just a word", () => {
+    const none = writerSchema.parse({ evidence: { figure_units: { scale: {}, multiple: [] } } }).evidence.figure_units;
+    expect(figures("5万", none).keys.has("5")).toBe(true);
+    const own = writerSchema.parse({ evidence: { figure_units: { scale: { 百: 100 }, multiple: [] } } }).evidence.figure_units;
+    expect(figures("5百", own).keys.has("500")).toBe(true);
+    expect(writerSchema.parse({}).evidence.figure_units.multiple).toEqual(["倍"]);
+  });
+
   it("full-width digits and marks are read like ASCII ones", () => {
     expect(figures("下降了４０％").keys.has("40%")).toBe(true);
     expect(figures("共５００人").keys.has("500")).toBe(true);

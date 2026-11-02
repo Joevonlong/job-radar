@@ -46,6 +46,11 @@ function defaultFirstPerson(): Record<string, string[] | { words: string[]; excl
   };
 }
 
+/** The shipped figure units (a fresh object each time): East Asian magnitude words that follow a digit, and the one that makes it a multiple. */
+export function defaultFigureUnits(): { scale: Record<string, number>; multiple: string[] } {
+  return { scale: { 万: 10_000, 萬: 10_000, 亿: 100_000_000, 億: 100_000_000, 千: 1000 }, multiple: ["倍"] };
+}
+
 /**
  * config/writer.yaml: the application writer and its experience library (`data/profile/stories.yaml`). Every key has a
  * default, so a missing file or section means "off" and the defaults below (a file written before a section existed keeps working).
@@ -152,6 +157,16 @@ export const writerSchema = z.strictObject({
       min_quote_chars: z.number().int().min(1).max(50).default(4),
       /** Per language: words that make a sentence one about you, whatever the AI labelled it. */
       first_person: z.record(z.string().regex(/^[a-z]{2,3}$/), z.union([wordList, substringList])).default(defaultFirstPerson),
+      /**
+       * Words written right after a digit that change what the figure means: `scale` multiplies it (5万 is 50,000, so it
+       * matches 50,000 and not 5), `multiple` makes it a multiple (40倍), which matches only a multiple, never 40 or 40%.
+       */
+      figure_units: z
+        .strictObject({
+          scale: z.record(nonEmptyString.max(4), z.number().positive().max(1e12)).default(() => defaultFigureUnits().scale),
+          multiple: z.array(nonEmptyString.max(4)).max(20).default(() => defaultFigureUnits().multiple),
+        })
+        .prefault({}),
       /** Which words count as names to check (language-independent; a name not found in the sentence's valid quotes is flagged; a sentence about the job or company may also find it in the JD or company background). */
       names: z
         .strictObject({
