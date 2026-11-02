@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { coachOutputSchema } from "@/lib/ai/prompts/write";
-import { applySuggestion, parseStoredCoach } from "@/lib/writer/coach";
+import { applySuggestion, parseStoredCoach, trustedDraftText } from "@/lib/writer/coach";
 import type { CheckedSentence } from "@/lib/writer/types";
 
 const sentence = (text: string, over: Partial<CheckedSentence> = {}): CheckedSentence => ({ text, newParagraph: false, about: "user", status: "user_written", evidence: [], missing: [], needsCheck: [], ...over });
@@ -79,5 +79,23 @@ describe("applySuggestion", () => {
   it("is null for a sentence the version does not have", () => {
     const suggestion = parseStoredCoach(stored({ suggestions: [{ sentenceIndex: 7, issue: "x", sentence: sentence("y") }] }))!.suggestions[0]!;
     expect(applySuggestion(sentences, suggestion)).toBeNull();
+  });
+});
+
+describe("trustedDraftText", () => {
+  it("keeps what you wrote and what had evidence, one sentence per line, and leaves out the rest", () => {
+    const text = trustedDraftText([
+      sentence("I wrote this."),
+      sentence("It had a story behind it.", { status: "supported" }),
+      sentence("No evidence at all.", { status: "unsupported" }),
+      sentence("Partly backed.", { status: "partial" }),
+      sentence("An unchecked suggestion.", { status: "ai_suggestion_unverified" }),
+      sentence("From the web.", { status: "web_unverified" }),
+      sentence("Thank you for reading.", { status: "framing" }),
+    ]);
+    expect(text).toBe("I wrote this.\nIt had a story behind it.");
+  });
+  it("is empty when nothing qualifies", () => {
+    expect(trustedDraftText([sentence("Made up.", { status: "unsupported" })])).toBe("");
   });
 });

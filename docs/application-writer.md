@@ -90,7 +90,7 @@ job or the company may also rest on those two texts. A quote shorter than `evide
 it is exactly a known name such as "Go". Names the check cannot find are marked **Check:** — that is a hint for you to look, not a guarantee: the check only knows what looks like
 a name (quoted words, words with digits or inner capitals, capitalised words inside a sentence; `evidence.names`), so
 it can miss one and can mark a harmless word. Figures are compared as digits ("40 %", "40 Prozent" and "40%" are
-one figure; "€85k" and "85,000 €" one amount; a figure next to Chinese characters, as in "下降了40%", counts); a figure written as words ("forty percent") is not recognised. **"Has evidence" means a quote was found, not that the sentence is
+one figure; "€85k" and "85,000 €" one amount; a figure next to Chinese characters, as in "下降了40%", counts; full-width digits are read as ASCII; "5万" is 50,000 and "3千" 3000, but "500万" is not 500 and "40倍" is not 40%); a figure written as words ("forty percent") is not recognised. **"Has evidence" means a quote was found, not that the sentence is
 true.** Read every sentence before you send it.
 
 **Copy** copies the plain text. **Edit** saves your changes as a new version: unchanged sentences keep their check,
@@ -133,7 +133,12 @@ stored on that version and shown under it:
 unchanged and keeps its review); the adopted sentence keeps the check result of the suggestion. **Rewrite by these
 suggestions** asks the AI for one new version that applies them, checked like a draft ("Coach rewrite"). **Review again**
 replaces the stored review. The review sends the version's text and the ticked material; the box lists it. Reviewing and
-rewriting use the `write` task, like everything else on this page.
+rewriting use the `write` task, like everything else on this page. A question runs one request at a time: while a write,
+a polish or a review of it is running (also one started in another tab or device), a second one is refused with "another
+request is still running" instead of being dropped.
+
+In a review or a rewrite, "your draft" as a source of quotes is only the sentences of that version that you wrote or that
+had evidence of their own. A sentence the AI wrote without evidence cannot back itself, or a suggestion, by being quoted.
 
 ### Exporting the final answers
 

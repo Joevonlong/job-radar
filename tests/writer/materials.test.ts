@@ -41,8 +41,8 @@ describe("disclosure = prompt input", () => {
     ["everything", materials({ jdPoints: [{ text: "Kotlin", quote: "Kotlin", offset: 3, requirement: "must" }], useJdText: true, profile: { summary: "s", skills: ["Kotlin (6y)"], languages: ["en C2"] }, stories: [{ id: "a", title: "t", what: "w", result: null, metrics: [], skills: [], period: null }], emphasis: "ownership" }), "the JD"],
     ["JD text asked for but the job has none", materials({ useJdText: true }), null],
     ["a blank emphasis note", materials({ emphasis: "   " }), null],
-    ["your own text", materials({ draft: { text: "My draft.", sentences: [], suggestions: [], notesLanguage: "en" }, question: { ...materials().question, variants: [{ id: "language_only", hint: "language_only" }] } }), null],
-    ["a version under review", materials({ draft: { text: "One. Two.", sentences: ["One.", "Two."], suggestions: [], notesLanguage: "de" }, question: { ...materials().question, variants: [] } }), null],
+    ["your own text", materials({ draft: { text: "My draft.", sentences: [], suggestions: [], notesLanguage: "en", evidenceText: null }, question: { ...materials().question, variants: [{ id: "language_only", hint: "language_only" }] } }), null],
+    ["a version under review", materials({ draft: { text: "One. Two.", sentences: ["One.", "Two."], suggestions: [], notesLanguage: "de", evidenceText: null }, question: { ...materials().question, variants: [] } }), null],
   ];
   it.each(cases)("%s: the fields listed are exactly the keys sent", (_name, input, excerpt) => {
     const built = buildWriteInput(input, excerpt);
@@ -207,8 +207,8 @@ describe("sentences and length", () => {
 });
 
 describe("the input of polish and review", () => {
-  const polishing = materials({ draft: { text: "My draft.", sentences: [], suggestions: [], notesLanguage: "en" } });
-  const reviewing = materials({ draft: { text: "One. Two.", sentences: ["One.", "Two."], suggestions: [{ index: 1, issue: "Vague.", rewrite: "Better." }], notesLanguage: "de" }, question: { ...materials().question, variants: [] } });
+  const polishing = materials({ draft: { text: "My draft.", sentences: [], suggestions: [], notesLanguage: "en", evidenceText: null } });
+  const reviewing = materials({ draft: { text: "One. Two.", sentences: ["One.", "Two."], suggestions: [{ index: 1, issue: "Vague.", rewrite: "Better." }], notesLanguage: "de", evidenceText: null }, question: { ...materials().question, variants: [] } });
 
   it("your text goes in as one text, a version under review as numbered sentences with the suggestions to apply", () => {
     expect(buildWriteInput(polishing, null).input.draft).toEqual({ text: "My draft." });

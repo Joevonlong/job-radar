@@ -7534,7 +7534,8 @@
         "invalid_payload": "请求无效。",
         "handler_error": "处理请求时出错，请重试。",
         "no_handler": "还没有 AI worker 处理这类请求，请确认 ai-worker 在运行。",
-        "too_long": "文字超过 writer.yaml 里的长度上限（draft_max_chars）。"
+        "too_long": "文字超过 writer.yaml 里的长度上限（draft_max_chars）。",
+        "busy": "这道题已有别的请求在进行（可能来自另一个标签页或设备）。等它结束后再试。"
       },
       "versionsLabel": "版本",
       "manual": "你改过的",

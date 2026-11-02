@@ -7534,7 +7534,8 @@
         "invalid_payload": "The request was not valid.",
         "handler_error": "Something went wrong handling the request. Try again.",
         "no_handler": "No AI worker handles this request yet. Check that the ai-worker runs.",
-        "too_long": "The text is longer than the limit in writer.yaml (draft_max_chars)."
+        "too_long": "The text is longer than the limit in writer.yaml (draft_max_chars).",
+        "busy": "Another request for this question is still running (maybe from another tab or device). Wait for it to finish, then try again."
       },
       "versionsLabel": "Versions",
       "manual": "Edited by you",

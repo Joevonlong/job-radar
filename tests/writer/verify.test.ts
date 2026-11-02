@@ -216,6 +216,35 @@ describe("figures", () => {
     expect(checked.status).toBe("supported");
   });
 
+  it("a magnitude unit scales the figure, so 5万 is 50,000 and not 5", () => {
+    expect(figures("5万").keys.has("50000")).toBe(true);
+    expect(figures("5万").keys.has("5")).toBe(false);
+    expect(figures("500万").keys.has("5000000")).toBe(true);
+    expect(figures("1.5万").keys.has("15000")).toBe(true);
+    expect(figures("3千").keys.has("3000")).toBe(true);
+    expect(figures("2亿").keys.has("200000000")).toBe(true);
+    const backed = verifySentence(sentence("成本降低了5万欧元。", "user", [{ source: "draft", quote: "50,000" }]), context({ draft: "成本降低了50,000欧元。" }));
+    expect(backed.missing).toEqual([]);
+  });
+
+  it("a different unit is a different figure: 500万 is not 500, 40倍 is not 40%", () => {
+    const unit = verifySentence(sentence("用户增长了500万。", "user", [{ source: "draft", quote: "增长了500" }]), context({ draft: "用户增长了500。" }));
+    expect(unit.missing).toEqual(["500万"]);
+    const multiple = verifySentence(sentence("速度提升了40倍。", "user", [{ source: "draft", quote: "提升了40%" }]), context({ draft: "速度提升了40%。" }));
+    expect(multiple.missing).toEqual(["40倍"]);
+    const reverse = verifySentence(sentence("速度提升了40%。", "user", [{ source: "draft", quote: "提升了40倍" }]), context({ draft: "速度提升了40倍。" }));
+    expect(reverse.missing).toEqual(["40%"]);
+    const same = verifySentence(sentence("速度提升了40倍。", "user", [{ source: "draft", quote: "提升了40倍" }]), context({ draft: "速度提升了40倍。" }));
+    expect(same.missing).toEqual([]);
+  });
+
+  it("full-width digits and marks are read like ASCII ones", () => {
+    expect(figures("下降了４０％").keys.has("40%")).toBe(true);
+    expect(figures("共５００人").keys.has("500")).toBe(true);
+    const checked = verifySentence(sentence("Errors fell by 40%.", "user", [{ source: "draft", quote: "下降了４０％" }]), context({ draft: "错误下降了４０％。" }));
+    expect(checked.missing).toEqual([]);
+  });
+
   it("figures written as words and digits inside names are not figures", () => {
     expect(figures("forty percent").shown).toEqual([]);
     expect(figures("S3 and K8s").shown).toEqual([]);

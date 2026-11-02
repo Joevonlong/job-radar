@@ -56,6 +56,20 @@ async function addVersion(questionId: number, text = MY_TEXT): Promise<number> {
   return id!;
 }
 
+/** A version with a sentence the AI wrote without evidence (and one you wrote): the first must not back itself. */
+async function addVersionWithUnbackedSentence(questionId: number): Promise<number> {
+  const sentences = [
+    { text: "I moved our billing service to Kotlin.", newParagraph: false, about: "user", status: "user_written", evidence: [], missing: [], needsCheck: [] },
+    { text: "I cut latency by 60% at Siemens.", newParagraph: false, about: "user", status: "unsupported", evidence: [], missing: [], needsCheck: [] },
+  ];
+  const [id] = await insertAnswerVersions(db(), {
+    questionId,
+    maxVersions: 20,
+    versions: [{ mode: "draft", text: "I moved our billing service to Kotlin. I cut latency by 60% at Siemens.", sentences, userWrittenCount: 1, unsupportedCount: 1 }],
+  });
+  return id!;
+}
+
 function handlerWith(steps: Step[], settings: WriterConfig = writerOn()) {
   const { provider, transport } = scriptedProvider("codex-cli", steps);
   registerControlHandler("writer_job", createWriterJobHandler({ createRouter: () => createAiRouter({ config: pinnedAi(), providers: [provider], usage: null }), loadSettings: () => settings }));
@@ -225,6 +239,29 @@ describe("coach review", () => {
     expect(coach.suggestions[1]!.sentence.evidence).toEqual([]);
   });
 
+  it("an AI-written sentence without evidence in the reviewed version cannot back a suggestion by being quoted", async () => {
+    const jobId = await addJob();
+    const question = await addQuestion(jobId);
+    const versionId = await addVersionWithUnbackedSentence(question.id);
+    handlerWith([
+      review({
+        suggestions: [
+          { sentence_index: 1, issue: "Say it plainly.", rewrite: "I cut latency by 60% at Siemens.", about: "user", evidence: [{ source: "draft", quote: "I cut latency by 60% at Siemens" }] },
+          { sentence_index: 0, issue: "Shorter.", rewrite: "I moved billing to Kotlin.", about: "user", evidence: [{ source: "draft", quote: "moved our billing service to Kotlin" }] },
+        ],
+      }),
+    ]);
+    const requestId = await queue(jobId, question.id, { mode: "coach", versionId });
+    await poll();
+    expect((await requestRow(requestId)).status).toBe("done");
+    const coach = parseStoredCoach((await listAnswerVersions(db(), [question.id]))[0]!.coach)!;
+    // the unbacked claim stays unverified; the sentence you wrote can still be quoted
+    expect(coach.suggestions.map((entry) => [entry.sentenceIndex, entry.sentence.status])).toEqual([
+      [1, "ai_suggestion_unverified"],
+      [0, "supported"],
+    ]);
+  });
+
   it("a score outside 0-100 is a malformed answer, not a review", async () => {
     const jobId = await addJob();
     const question = await addQuestion(jobId);
@@ -256,6 +293,29 @@ describe("coach review", () => {
     await db().delete(schema.applicationAnswerVersions).where(eq(schema.applicationAnswerVersions.id, versionId));
     await poll();
     expect((await requestRow(requestId)).result).toMatchObject({ error: "not_found" });
+  });
+});
+
+describe("one open request per question", () => {
+  it("writing again joins the open write; a polish or a review while any request is open is refused as busy", async () => {
+    const jobId = await addJob();
+    const question = await addQuestion(jobId);
+    const versionId = await addVersion(question.id);
+    const input = { jobId, questionId: question.id, writer: writerOn(), me, stories };
+    const first = await requestWriter(db(), input, { mode: "draft" });
+    expect(first).toMatchObject({ state: "queued", existing: false });
+    expect(await requestWriter(db(), input, { mode: "draft" })).toEqual({ state: "queued", requestId: (first as { requestId: number }).requestId, existing: true });
+    expect(await requestWriter(db(), input, { mode: "polish", option: "align_to_job", text: MY_TEXT })).toEqual({ state: "error", error: "busy" });
+    expect(await requestWriter(db(), input, { mode: "coach", versionId })).toEqual({ state: "error", error: "busy" });
+    expect(await db().select().from(schema.controlRequests)).toHaveLength(1);
+  });
+
+  it("a write is not joined to another device's open polish or review", async () => {
+    const jobId = await addJob();
+    const question = await addQuestion(jobId);
+    const input = { jobId, questionId: question.id, writer: writerOn(), me, stories };
+    await queue(jobId, question.id, { mode: "polish", option: "align_to_job", text: MY_TEXT });
+    expect(await requestWriter(db(), input, { mode: "draft" })).toEqual({ state: "error", error: "busy" });
   });
 });
 
@@ -297,5 +357,31 @@ describe("rewrite by the review", () => {
     const written = versions.find((entry) => entry.mode === "coach_rewrite")!;
     expect(written).toMatchObject({ variantId: "coach_rewrite", parentVersionId: versionId, promptVersion: "write-coach-rewrite-v1", supportedCount: 2 });
     expect(written.text).toBe("I moved our billing service to Kotlin. Errors fell by 40% after the move.");
+  });
+
+  it("a sentence of the reviewed version without evidence cannot back itself in the rewrite", async () => {
+    const jobId = await addJob();
+    const question = await addQuestion(jobId);
+    const versionId = await addVersionWithUnbackedSentence(question.id);
+    const suggestion = { sentenceIndex: 0, issue: "Shorter.", sentence: { text: "I moved billing to Kotlin.", newParagraph: false, about: "user", status: "supported", evidence: [], missing: [], needsCheck: [] } };
+    await setAnswerVersionCoach(db(), { questionId: question.id, versionId, coach: { score: 60, dimensions: [], suggestions: [suggestion], dropped: { dimensions: 0, suggestions: 0 }, provider: null, model: null, promptVersion: null, createdAt: new Date().toISOString() } });
+    handlerWith([
+      JSON.stringify({
+        variants: [
+          {
+            variant_id: "coach_rewrite",
+            sentences: [
+              { text: "I moved billing to Kotlin.", about: "user", evidence: [{ source: "draft", quote: "moved our billing service to Kotlin" }] },
+              { text: "I cut latency by 60% at Siemens.", about: "user", evidence: [{ source: "draft", quote: "I cut latency by 60% at Siemens" }] },
+            ],
+          },
+        ],
+      }),
+    ]);
+    const requestId = await queue(jobId, question.id, { mode: "coach_rewrite", versionId });
+    await poll();
+    expect((await requestRow(requestId)).status).toBe("done");
+    const written = (await listAnswerVersions(db(), [question.id])).find((entry) => entry.mode === "coach_rewrite")!;
+    expect({ supported: written.supportedCount, unsupported: written.unsupportedCount }).toEqual({ supported: 1, unsupported: 1 });
   });
 });

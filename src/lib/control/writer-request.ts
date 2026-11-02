@@ -14,7 +14,7 @@ import { findLatestWriterRequests, findOpenWriterRequest, getControlRequest, ins
 import { createProcessLogger } from "@/lib/logging/process-logger";
 import { TRANSLATION_FAILURE_CODES } from "@/lib/translation/errors";
 import { aiOutputLanguage } from "@/lib/i18n/config";
-import { parseStoredCoach } from "@/lib/writer/coach";
+import { parseStoredCoach, trustedDraftText } from "@/lib/writer/coach";
 import { materialsHash } from "@/lib/writer/hash";
 import { jdPointsOf } from "@/lib/writer/jd-points";
 import { writeInputFields } from "@/lib/writer/materials";
@@ -37,6 +37,7 @@ export const WRITER_ERROR_CODES = [
   "not_found",
   "no_material",
   "too_long",
+  "busy",
   "expired",
   "output_truncated",
   "aborted",
@@ -48,7 +49,7 @@ export type WriterErrorCode = (typeof WRITER_ERROR_CODES)[number];
 
 export type WriterRequestOutcome =
   | { state: "queued"; requestId: number; existing: boolean }
-  | { state: "error"; error: "disabled" | "config_error" | "not_found" | "no_material" | "too_long" };
+  | { state: "error"; error: "disabled" | "config_error" | "not_found" | "no_material" | "too_long" | "busy" };
 
 /** What a request asks for: drafts from the material, a polish of your text, a review of a version, or a rewrite after a review. */
 export type WriterRequestSpec =
@@ -89,7 +90,12 @@ export async function requestWriter(db: Db, input: WriterRequestInput, spec: Wri
   if (!job || !question) return { state: "error", error: "not_found" };
   await expireScrubbedRequests(db, { settings: writer });
   const open = await findOpenWriterRequest(db, { jobId: input.jobId, questionId: input.questionId });
-  if (open) return { state: "queued", requestId: open.id, existing: true };
+  if (open) {
+    // asking to write again joins the running write; anything else (your text, a review) would be dropped silently, so say so
+    const openMode = typeof open.payload === "object" && open.payload !== null ? (open.payload as { mode?: unknown }).mode : undefined;
+    if (spec.mode === "draft" && (openMode === undefined || openMode === "draft")) return { state: "queued", requestId: open.id, existing: true };
+    return { state: "error", error: "busy" };
+  }
 
   const breakdown = await getJobBreakdown(db, input.jobId);
   const content = breakdown ? parseStoredBreakdown(breakdown.promptVersion, breakdown.content) : null;
@@ -100,11 +106,12 @@ export async function requestWriter(db: Db, input: WriterRequestInput, spec: Wri
     const text = spec.text.trim();
     if (text === "") return { state: "error", error: "no_material" };
     if (text.length > writer.draft_max_chars) return { state: "error", error: "too_long" };
-    draft = { snapshot: { text, sentences: [], suggestions: [], notesLanguage: "en" }, variants: [{ id: spec.option, hint: spec.option }] };
+    draft = { snapshot: { text, sentences: [], suggestions: [], notesLanguage: "en", evidenceText: null }, variants: [{ id: spec.option, hint: spec.option }] };
   } else if (spec.mode !== "draft") {
     const version = await getAnswerVersion(db, { questionId: input.questionId, versionId: spec.versionId });
     if (!version) return { state: "error", error: "not_found" };
-    const sentences = parseStoredSentences(version.sentences, version.text).map((sentence) => sentence.text);
+    const checked = parseStoredSentences(version.sentences, version.text);
+    const sentences = checked.map((sentence) => sentence.text);
     const suggestions = spec.mode === "coach_rewrite" ? (parseStoredCoach(version.coach)?.suggestions ?? []) : [];
     if (spec.mode === "coach_rewrite" && suggestions.length === 0) return { state: "error", error: "no_material" };
     if (version.text.length > writer.draft_max_chars) return { state: "error", error: "too_long" };
@@ -114,6 +121,7 @@ export async function requestWriter(db: Db, input: WriterRequestInput, spec: Wri
         sentences,
         suggestions: suggestions.map((suggestion) => ({ index: suggestion.sentenceIndex, issue: suggestion.issue, rewrite: suggestion.sentence.text })),
         notesLanguage: aiOutputLanguage(),
+        evidenceText: trustedDraftText(checked),
       },
       variants: spec.mode === "coach_rewrite" ? [{ id: COACH_REWRITE_VARIANT, hint: "rewrite after the review" }] : [],
     };

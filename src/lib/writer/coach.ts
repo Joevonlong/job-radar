@@ -62,3 +62,15 @@ export function applySuggestion(sentences: readonly CheckedSentence[], suggestio
   if (!target) return null;
   return sentences.map((sentence, index) => (index === suggestion.sentenceIndex ? { ...suggestion.sentence, newParagraph: target.newParagraph } : sentence));
 }
+
+/**
+ * What a review or rewrite may quote from the version under review as "your draft": its sentences you wrote or that had
+ * evidence of their own. Sentences without evidence, partly backed ones and unchecked AI suggestions are left out, or a
+ * sentence the AI made up would back itself by quoting itself. One sentence per line, so no quote spans two.
+ */
+export function trustedDraftText(sentences: readonly CheckedSentence[]): string {
+  return sentences
+    .filter((sentence) => sentence.status === "supported" || sentence.status === "user_written")
+    .map((sentence) => sentence.text)
+    .join("\n");
+}

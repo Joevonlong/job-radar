@@ -85,10 +85,10 @@ describe("the snapshot of polish and review requests", () => {
   });
 
   it("a polish or review carries the text and the versions it asks for instead", () => {
-    const polish = buildSnapshot({ ...input, draft: { snapshot: { text: "Mine.", sentences: [], suggestions: [], notesLanguage: "en" }, variants: [{ id: "align_to_job", hint: "align_to_job" }] } }).materials;
+    const polish = buildSnapshot({ ...input, draft: { snapshot: { text: "Mine.", sentences: [], suggestions: [], notesLanguage: "en", evidenceText: null }, variants: [{ id: "align_to_job", hint: "align_to_job" }] } }).materials;
     expect(polish.draft?.text).toBe("Mine.");
     expect(polish.question.variants).toEqual([{ id: "align_to_job", hint: "align_to_job" }]);
-    const review = buildSnapshot({ ...input, draft: { snapshot: { text: "A. B.", sentences: ["A.", "B."], suggestions: [], notesLanguage: "de" }, variants: [] } }).materials;
+    const review = buildSnapshot({ ...input, draft: { snapshot: { text: "A. B.", sentences: ["A.", "B."], suggestions: [], notesLanguage: "de", evidenceText: null }, variants: [] } }).materials;
     expect(review.question.variants).toEqual([]);
     expect(review.draft?.notesLanguage).toBe("de");
   });

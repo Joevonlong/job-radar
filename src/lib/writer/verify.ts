@@ -66,7 +66,9 @@ function primaryLanguage(code: string): string {
 
 // CJK text has no spaces: a figure may sit directly against Han, kana or Hangul characters ("下降了40%的"), unlike one against Latin letters (S3, K8s).
 const CJK_CLASS = String.raw`\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}`;
-const FIGURE = String.raw`(?<=^|[^\p{L}\p{N}]|[${CJK_CLASS}])(\d{1,3}(?:[.,\u00a0\u202f ]\d{3})+|\d+)(?:[.,](\d+))?\s*(k)?(?=$|[^\p{L}\p{N}]|[${CJK_CLASS}])(\s*(?:%|percent|per cent|prozent|pct)(?!(?![${CJK_CLASS}])\p{L}))?`;
+const FIGURE = String.raw`(?<=^|[^\p{L}\p{N}]|[${CJK_CLASS}])(\d{1,3}(?:[.,\u00a0\u202f ]\d{3})+|\d+)(?:[.,](\d+))?\s*(k)?([万萬亿億千倍])?(?=$|[^\p{L}\p{N}]|[${CJK_CLASS}])(\s*(?:%|percent|per cent|prozent|pct)(?!(?![${CJK_CLASS}])\p{L}))?`;
+/** East Asian magnitude units written right after a figure: 5万 is 50,000, so it matches 50,000 and not 5. */
+const SCALE: Record<string, number> = { 万: 1e4, 萬: 1e4, 亿: 1e8, 億: 1e8, 千: 1e3 };
 const figurePattern = (): RegExp => new RegExp(FIGURE, "giu");
 const CJK_CHAR = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u;
 
@@ -108,18 +110,27 @@ export function containsWords(haystack: string, needle: string): boolean {
  * The figures of a text, normalised so that the same amount matches across languages and notations: `40 %`, `40%`,
  * `40 percent` and `40 Prozent` all give `40%`; `€85k`, `85,000 €` and `85.000 €` give `85000`. A separator followed by
  * exactly three digits is a thousands separator, otherwise a decimal mark. A percentage also matches its bare number.
- * Figures written as words ("forty") are not recognised. Digits inside a word (S3, K8s) are names, not figures.
+ * Full-width digits and marks (５００％) are read as ASCII. A magnitude unit right after a figure scales it (5万 is 50,000,
+ * 3千 is 3000) and 倍 makes it a multiple that matches only a multiple (40倍 is not 40%). Figures written as words
+ * ("forty", "四十") are not recognised. Digits inside a word (S3, K8s) are names, not figures.
  */
 export function figures(text: string): { keys: Set<string>; shown: string[] } {
   const keys = new Set<string>();
   const shown: string[] = [];
-  for (const match of text.matchAll(figurePattern())) {
-    const [whole, intPart = "", decimals, thousand, percentMark] = match;
+  for (const match of text.normalize("NFKC").matchAll(figurePattern())) {
+    const [whole, intPart = "", decimals, thousand, unit, percentMark] = match;
     const digits = intPart.replace(/[.,\u00a0\u202f ]/g, "");
     let value = Number(decimals === undefined ? digits : `${digits}.${decimals}`);
     if (!Number.isFinite(value)) continue;
     if (thousand) value *= 1000;
+    if (unit !== undefined && unit !== "倍") value *= SCALE[unit] ?? 1;
     const key = `${Number(value.toFixed(6))}`;
+    // "3倍" is a multiple, not an amount: it matches only a multiple
+    if (unit === "倍") {
+      keys.add(`${key}x`);
+      shown.push(whole.trim());
+      continue;
+    }
     const percent = percentMark !== undefined && percentMark.trim() !== "";
     keys.add(percent ? `${key}%` : key);
     if (percent) keys.add(key);
@@ -132,7 +143,7 @@ export function figures(text: string): { keys: Set<string>; shown: string[] } {
 function missingFigures(sentence: string, evidence: string): string[] {
   const have = figures(evidence).keys;
   const out: string[] = [];
-  for (const match of sentence.matchAll(figurePattern())) {
+  for (const match of sentence.normalize("NFKC").matchAll(figurePattern())) {
     const { keys } = figures(match[0]);
     const percentKey = [...keys].find((key) => key.endsWith("%"));
     const wanted = percentKey ?? [...keys][0];

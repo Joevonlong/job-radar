@@ -49,6 +49,11 @@ export const draftSnapshotSchema = z.strictObject({
   sentences: z.array(text(5000)).max(300).default([]),
   suggestions: z.array(z.strictObject({ index: z.number().int().min(0).max(300), issue: text(1000), rewrite: text(5000) })).max(50).default([]),
   notesLanguage: z.string().min(2).max(35).default("en"),
+  /**
+   * The part of `text` a sentence may quote as evidence: your own words and sentences that already had evidence. Null: all of
+   * `text` (your own draft). The AI's unbacked sentences of a reviewed version are not evidence for themselves.
+   */
+  evidenceText: z.string().max(60_000).nullable().default(null),
 });
 export type DraftSnapshot = z.infer<typeof draftSnapshotSchema>;
 

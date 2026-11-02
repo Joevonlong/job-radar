@@ -135,7 +135,7 @@ export function createWriterJobHandler(options: WriterJobHandlerOptions = {}): C
       profile: materials.profile ? profileEvidenceText(materials.profile) : null,
       stories: new Map(materials.stories.map((story) => [story.id, storyEvidenceText(story)])),
       emphasis: materials.emphasis,
-      draft: materials.draft?.text ?? null,
+      draft: materials.draft ? (materials.draft.evidenceText ?? materials.draft.text) : null,
       company: null,
       entities: [
         ...(content?.tech_stack.map((item) => item.name) ?? []),
