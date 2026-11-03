@@ -130,7 +130,7 @@ export function PreferencesForm({ initial, hash, state, pending, onSave, salarie
                     startSync(async () => {
                       const result = await syncSearchLocationsAction(draft.locations);
                       if (result.status === "done") setSearchCities(result.locations);
-                      setSyncResult(result.status === "done" ? "done" : ["frozen", "busy", "stale", "protected"].includes(result.error) ? result.error as ConfigWriteErrorKey : "error");
+                      setSyncResult(result.status === "done" ? "done" : ["dbUnavailable", "busy", "stale", "protected"].includes(result.error) ? result.error as ConfigWriteErrorKey : "error");
                     })
                   }
                 >

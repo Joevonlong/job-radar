@@ -5,6 +5,12 @@ import { cleanup, configure } from "@testing-library/react";
 import { afterEach } from "vitest";
 
 import { UNREACHABLE_DATABASE_URL } from "@/lib/db/test-guard";
+import { inProcessConfigWriteLock } from "./config/in-process-lock";
+
+// Unit tests have no database: the config write lock is an in-process queue. The integration suite uses the real one.
+// Set through the slot `src/lib/config/write-lock.ts` reads, not through its export: importing that module here would load the
+// config modules before a test file's vi.mock of them is registered.
+(globalThis as Record<symbol, unknown>)[Symbol.for("job-radar.config-write-lock-provider")] = inProcessConfigWriteLock;
 
 // Unit tests have no database. Without this a test that reaches getDb() would use the compose default and write to the real
 // database; the guard in createConnection refuses it as well, this keeps the URL unreachable even outside that path.

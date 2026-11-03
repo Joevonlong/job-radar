@@ -90,6 +90,8 @@ fi
 # and no replaced database is dropped.
 # shellcheck source=lib/config.sh
 source "$root/scripts/ops/lib/config.sh"
+# shellcheck source=lib/existing-install.sh
+source "$root/scripts/ops/lib/existing-install.sh"
 # shellcheck source=lib/timezone.sh
 source "$root/scripts/ops/lib/timezone.sh"
 degraded=0
@@ -493,6 +495,19 @@ fi
 
 config_failed=0
 if [[ "$switched" == 1 && "$with_config" == 1 ]]; then
+  # An archive without the marker comes from before the setup wizard: a missing setup.yaml there does not mean "pending".
+  sem_rc=0; archive_setup_semantics "$config_stage/data/config" >/dev/null || sem_rc=$?
+  rm -f "$config_stage/data/config/$ARCHIVE_META_NAME"
+  if (( sem_rc == 2 )); then echo "warning: the archive marker is unreadable: setup.yaml is restored as it is (the setup wizard may open)" >&2; fi
+  if (( sem_rc == 3 )) && [[ ! -e "$config_stage/data/config/setup.yaml" ]] && stage_has_layered_config "$config_stage/data/config"; then
+    existing_install_setup_yaml "$(date -u +%Y-%m-%dT%H:%M:%S.000Z)" >"$config_stage/data/config/setup.yaml"
+    chmod 600 "$config_stage/data/config/setup.yaml"
+    if [[ ! -e "$config_stage/data/config/language.yaml" ]]; then
+      existing_install_language_yaml >"$config_stage/data/config/language.yaml"
+      chmod 600 "$config_stage/data/config/language.yaml"
+    fi
+    echo "warning: this backup predates the setup wizard: setup.yaml is written as completed, so the wizard does not open" >&2
+  fi
   undo_stage=""   # from here on the staged folders are the only copy of the unpacked configuration: keep them if anything breaks
   echo "== putting back data/config and data/profile from $(basename "$config_archive")"
   for sub in config profile; do

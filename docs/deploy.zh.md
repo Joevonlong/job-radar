@@ -51,26 +51,23 @@ scripts/ops/deploy.sh
 | 1 preflight | 终端没有设 `tostop`（否则后台输出会被暂停）；取部署锁（同一时间只有一次部署，见下面“同一时间只有一次部署”），并删除以前被中断的部署留在 `data/build/` 里的构建上下文；git / docker / node / pnpm 都在，Docker 在运行；已跟踪的文件没有未提交的改动（所有模式都查，`--skip-pull` 也一样，见“构建上下文和干净的工作树”）；外接卷没有重复挂载 | Docker Desktop 没起来；有未提交的改动；另一次部署持有锁；设了 `stty tostop`（运行 `stty -tostop`） |
 | 2 pull | 不带 `--ref`：当前在 main，`git fetch` 后快进到 `origin/main`。带 `--ref <tag>`：fetch 该 tag（或分支），在检出目录移动之前拒绝 ai-worker 不能从发布目录运行的版本（见 [upgrade.zh.md](upgrade.zh.md#downgrade-pre-release-dir)），然后检出。然后固定要部署的提交：后面每一步都用它；从 install 到 ai-worker，HEAD 移动了或已跟踪的文件变了，那一步就停下 | 在别的分支（不带 `--ref` 时）；本地有没推送的提交（分叉）；`checkout moved during deploy`（部署期间有别的 git 命令动了检出目录）；`--ref` 指向发布目录之前的版本 |
 | 3 install | `pnpm install --frozen-lockfile` | 网络 |
-| 4 config | 创建 data 目录。已有安装先运行 `pnpm config:migrate` 预览、`pnpm config:check` 内存校验并检查 compose config，通过后才执行 `pnpm ops:freeze --target <commit>`；首装执行 `config:init`，不冻结。也检查 `.env` | YAML 无效、配置版本比代码新或无法获取写锁 |
+| 4 config | 创建 data 目录；新安装还会创建带数据库密码的 `.env`（`pnpm config:init --env-only`）。其余只读：`pnpm config:check` 内存校验、检查 compose config，以及用 `pnpm config:plan --deploy` 预览第 11 步将写什么。这一步不改任何用户配置文件 | YAML 无效，或配置版本比代码新 |
 | 5 backup | db 已经在运行就先做一份 `pre-deploy` 备份（第一次部署跳过） | 备份失败时不继续升级 |
 | 6 build | 把第 2 步固定的提交用 `git archive` 解到 `data/build/<提交>-<pid>/`，以这个目录为构建上下文（`JOB_RADAR_BUILD_CONTEXT`）运行 `docker compose -p job-radar build`。镜像里正好是已提交的文件，包括 `config/` 里的出厂默认配置 | 磁盘满 |
 | 7 release | `scripts/ops/prepare-release.sh <提交> --root <检出目录>`：构建 ai-worker 的发布目录 `data/releases/ai-worker/<提交>/`（该提交的 `git archive` 加生产依赖，只读）；已经存在且完整就跳过 | 网络或磁盘（安装依赖） |
 | 8 up | 先 `pnpm ops:drain`：有轮次正在运行就等它结束（最长 `schedule.yaml: deploy.drain_timeout_seconds`，900 秒），因为重建 runner 会打断它。然后 `docker compose up -d --wait db web runner`：这三个要变成 healthy（最长 300 秒）。再单独启动 jobspy sidecar（`up -d --no-deps --wait jobspy`） | db、web 或 runner 起不来：脚本会列出 `docker compose ps` 和看日志的命令。jobspy sidecar 没变成 healthy 不会让部署停下：脚本打印警告和看它日志的命令，第 9 到 13 步照常执行（没有服务依赖 sidecar，用到它的通道 `linkedin-guest`、`indeed`、`jobspy-google` 默认都关闭）。之后第 13 步的 doctor 在这些通道有一个开着时把它算作问题（退出码 2），否则只算警告。等完了轮次还在跑只打印警告（`pnpm ops:drain` 退出码 1），没能检查（退出码 3：配置或数据库出错，或某个查询卡住）也只打印警告：部署继续，runner 启动时的补跑会重跑那个定时时段 |
 | 9 migrate | `pnpm migrate:run`（runner 启动时也会自动迁移，这里是确认；已是最新则什么都不做）。有待执行的迁移时先做一份 `premigrate` 备份（数据库加配置压缩包），备份失败就不迁移（`schedule.yaml` 的 `backup.pre_migrate`） | 迁移 SQL 有问题；迁移前备份失败 |
 | 10 ai-worker | `scripts/ops/install-ai-worker.sh --release data/releases/ai-worker/<提交>`：把 ai-worker（macOS 上是 launchd agent，Linux 上是 systemd 用户单元 `job-radar-ai-worker.service`）切换到第 7 步的发布目录；新 worker 拿不出证据时回滚到上一个（见下面“ai-worker 从发布目录运行”）。它正在处理的 AI 请求（比如给一整轮打分的 `run_ai`）不会丢：回到队列，重启后接着跑（见下面“被重启打断的工作”） | 输出以 `not changed:`（什么都没动）、`rolled back:`（上一个 worker 又在运行）或 `ROLLBACK FAILED:`（按消息处理）开头；`claude` / `codex` 不在 PATH 里 |
-| 11 config-write | 用实例锁、心跳和配置报告确认目标服务 PID，扫描宿主机 worker 进程，并通过 `worker-heartbeat.ts --holder --pid <预期 PID> --host <主机>` 比较持有者。持有者匹配目标服务 PID，或没有持有者且未安装服务，并且进程扫描成功、没有其他 worker，才带 token 执行 `config:init` 和 `config:migrate --write`，重新规划后解除冻结。首装无 token，跳过门禁；`--settle 0` 与 `--no-ai-worker` 一样核对服务发布路径、PID、持有者及进程扫描，不等待 receipt。 | 旧的或未知持有者、其他 worker PID、进程扫描失败：不写、保留冻结、退出 2；已排除旧消费者但写入失败或跳过：解除冻结、退出 2 |
+| 11 config-write | 唯一写用户配置文件的步骤。先等目标 worker 服务（实例锁、心跳和配置报告），再检查门禁：web 和 runner 各有容器，且运行的是本次部署刚构建的镜像；ai-worker 服务指向目标发布目录，其进程持有实例锁（`--no-ai-worker` 时：没有安装 worker 服务，也没人持有实例锁）；宿主机上没有其他 worker 进程。门禁通过后依次执行 `config:migrate --write`、`config:init`、`config:plan --deploy --check` 和 `config:migrate --prune-backups`；第一个失败就停止写入。`--settle 0` 做同样的检查，但不等新的 receipt。 | 门禁未通过或写入失败：不再写入，部署继续，最后退出 2（见“部署期间的配置写入”）。清理旧备份失败只警告 |
 | 12 prune | 先释放部署锁、删除第 6 步的构建上下文。然后清理 Docker：构建缓存按最近使用只留 `schedule.yaml: deploy.build_cache_keep_gb`（`docker builder prune -f --max-used-space 5gb`），删悬空镜像（`docker image prune -f`，不带 `-a`）。从不碰数据卷，不删正在使用的镜像 | 不会让部署失败：命令出错只打印 ⚠ 继续（比如 Docker 太旧不认 `--max-used-space`） |
-| 13 doctor | `pnpm run doctor`，包括检查遗留冻结的 `config.freeze` | doctor 报错退出 2；仅告警退出 0 |
+| 13 doctor | `pnpm run doctor`，包括检查第 11 步未完成写入的 `config.pending` | doctor 报错退出 2；仅告警退出 0 |
 
 选项：`--skip-pull`（不动 git，按当前代码部署，回滚用）、`--ref <标签|分支>`（部署 `v2.0.0` 这样的发布标签而不是 `main`，见 [upgrade.zh.md](upgrade.zh.md)）、`--no-backup`、`--no-prune`（跳过第 12 步的 Docker 清理）、`--no-ai-worker`（跳过第 7、10 步和第 11 步的 worker 等待）、`--no-drain`（第 8 步不等正在运行的轮次）、`--drain-timeout 秒`（代替 `deploy.drain_timeout_seconds`）、`--branch`、`--remote`、`--wait-timeout 秒`、`--settle 秒`（从 prune 前第 11 步开始计时的 worker 等待上限；0 不等）；`--help` 看全部。
 
-部署与配置写锁的设置在 `schedule.yaml` 的 `deploy` 块；部署选项在下次部署生效，写锁选项用于之后的写入。部署脚本和备份脚本读 `schedule.yaml` 时和代码一样：先读用户配置 `data/config/schedule.yaml`，没有才读默认的 `config/schedule.yaml`：
+部署的设置在 `schedule.yaml` 的 `deploy` 和 `config_writes` 块，下次部署生效。部署脚本和备份脚本读 `schedule.yaml` 时和代码一样：先读用户配置 `data/config/schedule.yaml`，没有才读默认的 `config/schedule.yaml`：
 
 | 键 | 默认 | 含义 |
 |---|---|---|
-| `deploy.config_write_lock_stale_seconds` | 300 | 同主机通过 PID、进程代际及仍持有的 token 判断；其他主机或命名空间仅在超过此时长后接管 |
-| `deploy.config_write_lock_wait_seconds` | 10 | 等待写锁的上限，超时报告 busy |
-| `deploy.config_write_lock_retry_ms` | 50 | 初始重试间隔，随后退避增加 |
 | `deploy.prune_build_cache` | true | 部署后清理 Docker 构建缓存 |
 | `deploy.build_cache_keep_gb` | 5 | 按最近使用保留这么多 GB 的构建缓存，下次构建仍然快；0 = 清掉全部未使用的构建缓存 |
 | `deploy.prune_dangling_images` | true | 删除悬空镜像（旧构建留下的、没有标签的镜像） |
@@ -79,6 +76,8 @@ scripts/ops/deploy.sh
 | `deploy.ai_worker_releases_keep` | 3 | 切换后保留的 ai-worker 发布目录个数，含当前安装的和上一个（至少 2）。出厂文件里没有，要改就自己加 |
 | `deploy.ai_worker_stop_timeout_seconds` | 60 | launchd / systemd 发 SIGTERM 后最多等多久再强杀 ai-worker（`ExitTimeOut`、`TimeoutStopSec`）；至少 10，要大于 `ai.yaml: host_worker.shutdown_grace_seconds`。出厂文件里没有 |
 | `deploy.ai_worker_swap_timeout_seconds` | 120 | worker 切换中每一段等待的上限（旧 worker 退出、新 worker 拿出证据，回滚时同样）；至少 `ai_worker_stop_timeout_seconds` + 10。也是第 11 步等待的上限（`--settle` 可覆盖）。出厂文件里没有 |
+| `config_writes.backups_keep` | 5 | `config:migrate --write` 把被替换的原件存进 `data/config/.backup/<时间>/`。只有部署的清理步骤（第 11 步的 `config:migrate --prune-backups`）才删旧的，保留最新的这么多份。出厂文件里没有 |
+| `config_writes.lock_wait_seconds` | 10 | 一次配置写入（网页保存、向导、命令）最多等其他写入者多久，超时会说明谁持有锁。出厂文件里没有 |
 
 第 11 步一确认当前服务 PID 就结束等待。没有安装定义，或 `JOB_RADAR_SERVICE_MANAGER=none` 时没有需要等待的服务；
 已经安装但连不上用户服务管理器时，仍会超时。同一个数据库的锁被另一个 worker 持有，也会导致无法确认。
@@ -94,13 +93,21 @@ scripts/ops/deploy.sh
 
 部署结束时删除构建上下文目录。部署被直接杀掉（比如 `kill -9`）时目录会留下，下一次部署拿到锁之后删除它。
 
-### 部署期间冻结设置
+### 部署期间的配置写入
 
-第 4 步先完成所有只读检查，再创建或接管冻结。之后直到第 11 步 `config-write`，只有认识冻结协议的 web 版本会拒绝设置、高级编辑器、个人资料与向导保存，并显示正在升级。首次部署本版本时，旧 web 会运行到第 8 步，仍写旧格式文件，没有危害。两个用户目录任一有 YAML、已有冻结标记、worker 服务已安装或 compose 有运行中的服务，就是已有安装；真正首装不冻结，并跳过后面的 config-write 门禁。回退到没有冻结协议的目标时，沿用第 4 步 `config:init` 与 `config:migrate --write`，跳过冻结和 `config-write`；遗留标记保留并报告，见 [upgrade.zh.md](upgrade.zh.md#downgrade-pre-config-freeze)。启动补文件会跳过且不抛错；缺失的 profile 在内存里读取 `config/profile.example/`。每个用户目录都有跨进程 `.write.lock` 短锁；写入者在锁内检查新鲜度和冻结。同主机持有者通过 PID、进程代际（随机进程 ID 与启动时间）及本进程仍持有的 token 判断；PID 重用或 token 已遗弃可立即接管，活跃持有者不接管。其他主机或命名空间超过 300 秒才可接管，最多等 10 秒（`schedule.yaml` 的 `deploy.config_write_lock_*`）。备份排除 `.upgrade-freeze` 和 `.write.lock`。
+第 11 步之前，部署不写任何用户配置文件（`data/config/`、`data/profile/`）。第 1 到 10 步只读它们，所以运行中的 web、runner 和 ai-worker 照常使用现有文件。第 11 步的门禁通过后才写：新容器和新 ai-worker 已在运行，也没有其他 worker 可能还在读旧格式。部署前停掉手工启动的旧 `pnpm ai-worker`。`--no-ai-worker` 和 `--settle 0` 同样检查实例锁持有者、宿主进程与服务定义的发布路径。`ps -A -o pid=,args=` 只匹配 node/tsx 执行本安装内的 worker 入口；相对路径通过进程 cwd 判断归属（macOS 用 `lsof`，Linux 用 `/proc/<pid>/cwd`）。编辑器与其他检出目录的 worker 不计入，归属不明则阻止写入。
 
-部署前停掉手工启动的旧 `pnpm ai-worker`。`--no-ai-worker` 和 `--settle 0` 仍检查实例锁持有者、宿主进程与服务定义的发布路径，并核对检查前后服务 PID 相同；旧或未知持有者会保留冻结并退出 2。`ps -A -o pid=,args=` 只匹配 node/tsx 执行本安装内的 worker 入口；相对路径通过进程 cwd 判断归属（macOS 用 `lsof`，Linux 用 `/proc/<pid>/cwd`）。编辑器与其他检出目录的 worker 不计入，归属不明则阻止写入。第 8 步 `up` 启动新代码之前失败或中断，部署用 `ops:unfreeze --owned` 自动解除本次全新创建的冻结；从前次接管的冻结必须保留，只有 `config-write` 通过消费者检查或用户运行 `ops:unfreeze` 才会解除。尝试 `up` 后失败或中断则保留所有标记。部署在 `config-write` 前不补文件、不写迁移，文件格式仍兼容旧代码；旧 web 的保存也仍写旧格式。再次部署即可继续。没有活跃部署锁却遗留标记时，doctor 的 `config.freeze` 会告警。
+门禁未通过或某次写入失败时，部署的其余步骤照常执行，最后退出 2，并打印：
 
-确认没有旧消费者后可运行 `pnpm ops:unfreeze`，它在写锁中删除标记，并提示先运行 `pnpm config:init`，再运行 `pnpm config:migrate --write`。`pnpm ops:freeze --target <commit>` 在锁中创建或接管标记。只有显式授权的配置命令接收 `JOB_RADAR_UPGRADE_FREEZE_TOKEN`；不打印，也不传给服务。部署后重启宿主长驻进程，例如 `pnpm mcp:serve`。恢复、回退与旧版 `--skip-pull` 的说明见 [upgrade.zh.md](upgrade.zh.md#升级期间的设置)。
+```text
+Deployed, but the config writes are pending: <原因>. The next deploy retries them.
+```
+
+不需要回滚或清理：排除原因后再部署一次即可。`pnpm config:plan --deploy` 列出待写的内容（带 `--check` 时有待写就退出 2），doctor 里是 `config.pending`。在此期间，运行中的代码对缺失的文件读出厂默认值，旧格式的文件照原样读。
+
+第 11 步写入时网页保存照常可用：每个写入者（包括部署的命令）逐文件在数据库里取锁，见[配置写锁](configuration.zh.md#配置写锁)。用 `--ref` 部署旧版本时，改走那个版本自己的第 4 步，见 [upgrade.zh.md](upgrade.zh.md#downgrade-pre-config-write-step)。
+
+部署后重启宿主长驻进程，例如 `pnpm mcp:serve`。回退与旧版 `--skip-pull` 的说明见 [upgrade.zh.md](upgrade.zh.md#升级期间的设置)。
 
 ### 同一时间只有一次部署：部署锁
 
@@ -216,7 +223,7 @@ pnpm run doctor --lang zh    # 用另一种语言输出报告（默认：languag
 | `config.guards` | `ai.yaml` 里的 CLI 命令是 `claude` / `codex`，`codex_cli.config_overrides` 只有允许的键，接收 key 的服务都指向厂商自己的主机，没有设 `JOB_RADAR_ALLOW_CUSTOM_ENDPOINTS` | ❌ 某个 `command` 被拒绝（那个 CLI 不会运行）；⚠️ 有覆盖项被忽略、改过的 `base_url` / `api_base_url` 被拒绝或（放行后）被使用，或设了放行变量。见 [ai-providers.zh.md](ai-providers.zh.md#ai-worker-不从-aiyaml-接受的东西) |
 | `ai.backlog` | AI 请求队列、等打分的岗位数、最近一次 `run_ai` 的结果（因画像不完整没有打分时写明原因，不算成功） | ⚠️ 积压：ai-worker 在不在 |
 | `ai.quota` | Job Radar 自己对订阅 CLI 的用量上限（`ai.yaml: quota_guard`）：每个 CLI 在滚动窗口内的调用数对比 `hard_requests`。只统计 Job Radar 自己的调用，看不到账户的真实用量 | ⚠️ 某个 CLI 的窗口满了，或它报告了限制正在冷却：到显示的时间会自动恢复；如果碍事，在设置 → AI → 限额里调高（`pnpm ai:usage-stats` 打印你自己的数据） |
-| `config.freeze` | 没有遗留升级冻结，或冻结由活跃部署持有；`data/config/`、`data/profile/` 的写锁及 guard 持有者未超过过期阈值 | ⚠️ 没有活跃部署却有标记：再次部署；或确认没有旧消费者，依次运行 `pnpm ops:unfreeze`、`pnpm config:init`、`pnpm config:migrate --write`。写锁持有者过期：遗留锁下次写入时自动接管；若保存持续失败，确认持有者不再写入后删除锁文件或 guard 内的持有者文件 |
+| `config.pending` | 没有待写的配置：没有文件需要迁移，也没有缺失的用户文件。部署自己运行的 doctor 还会说明第 11 步为什么没写完 | ⚠️ 有待写：再次部署；或用 `pnpm config:plan --deploy` 查看，确认没有比本版本更旧的进程后依次运行 `pnpm config:migrate --write`、`pnpm config:init`。⚠️ 文件无法迁移时也一样：`pnpm config:migrate` 会指出是哪个 |
 | `config.layers` | 用户配置目录 `data/config` 存在且可写；列出覆盖了的 `shipped` 文件、版本落后（要迁移）的文件、还在读默认配置的 `user` 文件 | ❌ 目录不存在或不可写（`pnpm config:init`；查挂载）；❌ 某个文件的 `config_version` 比代码新（代码回退了：升级代码或从 `data/config/.backup/` 恢复）；⚠️ 覆盖了 `pipeline.yaml`（或别的整份 `shipped` 文件；`models.yaml` 是叠加合并、不是替换）：产品更新这些文件的内容不会生效，想跟随就删掉 `data/config` 里那份；⚠️ 版本落后：`pnpm config:migrate` 看改动，`--write` 写回 |
 | `config.shipped` | 每个运行中的进程（web、runner，以及 `execution: host` 时的 ai-worker）报告的出厂配置标识，并核对每份报告是否来自现在运行的进程：运行中的容器（主机名和启动时间），或 ai-worker 服务的 PID；ai-worker 的配置来自本检出目录下一个提交等于 HEAD 的发布目录。见 [configuration.zh.md](configuration.zh.md#出厂配置标识) | ⚠️ ai-worker 不是从 `data/releases/ai-worker/` 运行（由发布目录之前的版本安装）：部署，或运行 `scripts/ops/install-ai-worker.sh`；⚠️ 它的发布不是 HEAD：只回滚 worker 后是预期的，否则是部署在第 10 步之前停下了：重新部署；⚠️ 没有报告、报告来自之前的容器或进程、或 launchd / systemd 给不出 PID 无法核对：容器刚部署或重启后，等一分钟再运行；ai-worker 看 `aiworker.heartbeat` 是否说当前进程还没确认在工作，持续缺报告时到 `data/logs/ai-worker.out.log` 里找 "could not report the shipped config"。⚠️ 容器的 `/app/config` 上有挂载（会挡住镜像里的出厂配置，通常是旧的 `compose.override.yaml`）：去掉挂载再部署。连不上数据库时跳过报告的核对，挂载检查照样运行（它只需要 Docker） |
 | `host.power` | `pmset` 里 autorestart 是 1、sleep 是 0 | ⚠️ 没设置：host-setup 第 3 节 |
@@ -268,7 +275,7 @@ scripts/ops/deploy.sh               # 或跟随 main：拉最新 main、备份�
 同样删除。Compose 会合并依赖映射，因此出厂 `compose.yaml` 删除了这项，也不会消除覆盖文件中的旧依赖。
 即使设为 `required: false`，仍可能把 sidecar 带进核心服务的 `up --wait`。
 
-第 4 步会将 `docker compose -p <project> config --format json` 与目标提交自身的 `compose.yaml` 对比，发现覆盖文件新增的依赖时，**在冻结设置或重启服务前拒绝部署**。
+第 4 步会将 `docker compose -p <project> config --format json` 与目标提交自身的 `compose.yaml` 对比，发现覆盖文件新增的依赖时，**在任何步骤改动安装之前拒绝部署**。
 报错会列出需要删除的条目，脚本不会修改你的覆盖文件。删除相应条目后重新部署，这样 sidecar 不健康就不会阻断数据库迁移、
 ai-worker 切换或配置写入。doctor 只有在当前市场实际启用了依赖 sidecar 的通道时，才把 sidecar 故障视为问题；
 被 `markets` 限制排除的通道不需要 sidecar。
@@ -279,8 +286,8 @@ ai-worker 切换或配置写入。doctor 只有在当前市场实际启用了依
 ### 配置分层之后
 
 - 线上配置是 `data/config/`（不进 git），网页只写这里；`config/` 是随代码发布的默认配置，打进 web、runner 镜像，所以它的改动随构建并重启容器的那次部署（第 6、8 步）生效，单独 `git pull` 不会生效。默认配置变了也只影响用户目录里**没有**的文件（`models.yaml`、`pipeline.yaml` 这类 `shipped` 文件，除非你覆盖了它们）。所以主 checkout 不会再因为网页保存而变脏，部署也不会再因此拒绝 pull。
-- **从配置分层之前的版本升级**：切换代码前保留原有线上配置目录，参见 [upgrade.zh.md](upgrade.zh.md)。已有安装现在把补缺从第 4 步延后到排除旧消费者后的 `config-write`，升级期间不要保存设置。
-- 升级带了配置格式变化时，第 4 步只预览，第 11 步 `config-write` 才写盘，原件在 `data/config/.backup/<时间>/`。`pnpm config:migrate` 可以查看 diff，排除旧消费者之前保持冻结。
+- **从配置分层之前的版本升级**：切换代码前保留原有线上配置目录，参见 [upgrade.zh.md](upgrade.zh.md)。部署在第 11 步 `config-write` 排除旧消费者后才创建缺失的用户文件，在此之前读出厂默认值。
+- 升级带了配置格式变化时，第 4 步只预览，第 11 步 `config-write` 才写盘，原件在 `data/config/.backup/<时间>/`。保留最新的 `config_writes.backups_keep` 份。`pnpm config:migrate` 可以查看 diff，排除旧消费者之前不会写盘。
 
 ## 5. 回滚
 

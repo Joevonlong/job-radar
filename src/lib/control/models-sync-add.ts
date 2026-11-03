@@ -23,7 +23,7 @@ export const addSyncedModelsSchema = z.strictObject({
 
 export type AddSyncedModelsState =
   | { status: "added"; added: string[]; nonce: number }
-  | { status: "error"; error: "invalidPayload" | "requestUnavailable" | "notAddable" | "catalogInvalid" | "frozen" | "busy" | "stale" | "protected" | "databaseUnavailable"; nonce: number };
+  | { status: "error"; error: "invalidPayload" | "requestUnavailable" | "notAddable" | "catalogInvalid" | "dbUnavailable" | "busy" | "stale" | "protected" | "databaseUnavailable"; nonce: number };
 
 const error = (key: Extract<AddSyncedModelsState, { status: "error" }>["error"]): AddSyncedModelsState => ({ status: "error", error: key, nonce: Date.now() });
 

@@ -69,8 +69,8 @@ pnpm run setup --complete              # 不改任何配置，直接标记完成
 pnpm run setup --lang zh               # 提问的语言（默认 language.yaml 的 cli.locale）
 ```
 
-AI 步骤在这台电脑上读取 `claude` 和 `codex` 是否安装、是否登录（`claude auth status`、`codex login status`，不调用 AI）。没有数据库
-（stack 没在运行）时画像文件照常写入，历史快照在下次读取画像时补记；"跑第一轮"只会告诉你之后怎样启动。
+AI 步骤在这台电脑上读取 `claude` 和 `codex` 是否安装、是否登录（`claude auth status`、`codex login status`，不调用 AI）。每一步都在数据库的锁下写配置文件，
+所以 stack 没在运行时这一步会被拒绝：先启动 stack（`docker compose up -d`）。网页向导里的保存同样需要数据库，连不上时会明说。
 
 Telegram 这一步不显示地读取 bot token，从你发给 bot 的消息里找到 chat id，发一条测试消息，写入 `.env` 里的三行 `TELEGRAM_*`
 （先做备份），再重建读取 `.env` 的服务；详见 [telegram.zh.md](telegram.zh.md#1-用一条命令配置)。答案文件里从不放 token：它的
@@ -147,5 +147,7 @@ steps:
 只有这个文件读得出来、并且 `completed_at` 是 null 时，才算"设置未完成"。读不了或内容不合法时按"已完成"处理（不会把人锁在
 向导里），由 `pnpm run doctor` 在 `setup.completed` 报出来。
 
-**老安装**不会看到向导：用户配置目录里已经有配置文件、但没有 `setup.yaml` 时，第一次启动（web、runner 或 `pnpm config:init`）会写入
-`completed_by: existing_install`。在已经配置好的安装上删掉 `setup.yaml`，下次启动也会这样处理。仍想走一遍，直接打开 `/setup`。
+**不会推断这是已有安装。** 没有 `setup.yaml` 就是设置未完成，不管是否还有其他配置文件，升级也不会补这个文件。所以原地升级的向导之前的安装会
+打开一次向导：走一遍，选“跳过向导”，或运行 `pnpm run setup --complete`。在已经配置好的安装上删掉 `setup.yaml`，向导同样会再次打开。
+恢复向导之前的备份（`restore.sh --with-config`，见 [backup-restore.zh.md](backup-restore.zh.md)）或运行 `pnpm config:init --from <旧配置目录>`
+会写入 `completed_by: existing_install` 的 `setup.yaml`，这两种情况不会看到向导。

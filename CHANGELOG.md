@@ -71,7 +71,7 @@ and the project uses [Semantic Versioning](https://semver.org/).
   as described in [Roll back](docs/upgrade.md#roll-back). User requests retain their existing format.
 - **Remove legacy jobspy dependencies from Compose overrides.** Delete `services.runner.depends_on.jobspy` from your
   `compose.override.yaml` (and any jobspy dependency you added to `db` or `web`), keeping the database dependencies.
-  Deploy now refuses dependencies added by overrides before freezing settings, so an unhealthy optional sidecar cannot
+  Deploy now refuses dependencies added by overrides before it changes anything, so an unhealthy optional sidecar cannot
   block the core deployment. Supported older targets whose own `compose.yaml` depends on jobspy remain deployable,
   with a note that sidecar health may still block them. See [the upgrade note](docs/deploy.md#compose-overrides-and-the-jobspy-sidecar).
 - **Company and title keys are recomputed once.** The first cycle after upgrading (or `pnpm reprocess`) gives stored
@@ -132,12 +132,24 @@ and the project uses [Semantic Versioning](https://semver.org/).
   comparisons contained no AI figures are unaffected. Users who had AI lookups enabled in the benchmark lose the AI
   part of the sample count.
 - **Upgrades no longer rewrite your configuration while an older AI worker may still read it.** `scripts/ops/deploy.sh`
-  freezes settings writes after its read-only checks and writes migrated config only after the new ai-worker is
-  confirmed (step `config-write`); settings saves are refused meanwhile. A deploy that stops after the new containers
-  start keeps the freeze on purpose: `pnpm run doctor` reports `config.freeze`, and deploying again resumes it (manual
-  recovery: [docs/upgrade.md](docs/upgrade.md#settings-during-an-upgrade)). Stop manually started `pnpm ai-worker`
-  processes before deploying. **Rollback:** `config:init` adds `deploy.config_write_lock_*` keys to `schedule.yaml`,
-  which older versions reject; restore the `schedule.yaml` backup from `data/config/.backup/` before starting older code.
+  now only reads your config files in steps 1 to 10 (step 4 previews what will change) and writes them in step 11
+  `config-write`, after the new containers and the new ai-worker run and no other worker is left. Web saves keep working
+  the whole time. If that gate or a write fails, the deploy still finishes, prints `Deployed, but the config writes are
+  pending: <reason>. The next deploy retries them.` and exits 2; deploy again after fixing the reason
+  (`pnpm config:plan --deploy` lists what is waiting, the doctor shows `config.pending`). Stop manually started
+  `pnpm ai-worker` processes before deploying. **Rollback:** nothing new is written to `schedule.yaml`, so only remove a
+  `config_writes` block you added yourself before starting older code. Deploying an older release with `--ref` runs that
+  release's own step 4, which needs no database lock; a file in a newer format than that release reads still needs its
+  original from `data/config/.backup/`. See [docs/upgrade.md](docs/upgrade.md#settings-during-an-upgrade).
+- **An install without `setup.yaml` opens the setup wizard.** Nothing infers an existing install from the other files
+  any more, and a deploy does not add `setup.yaml`. An install coming from before the wizard (1.x) opens it once and the
+  runner holds back scheduled cycles until you finish or skip it (or run `pnpm run setup --complete`); it also reads the
+  English `language.yaml` default until you set the languages in Settings → Display. Restoring a backup from that time
+  (`restore.sh --with-config`) or `pnpm config:init --from <old config dir>` still writes a completed `setup.yaml` and the
+  Chinese `language.yaml`. Installs that already started 2.0.0 or later are not affected.
+- **Saving settings needs the database.** Settings pages, the setup wizard, the advanced editor, `/me` and the `config:*`
+  commands take a lock in the database; with it unreachable a save is refused and reading still works. A command on
+  the host needs a database it can reach from there (`.env`).
 
 **Rolling back past the release that made AI salary lookups reference-only (`salary.yaml` `config_version: 2`).** Older code does not hide comparisons containing AI figures.
 
@@ -158,6 +170,17 @@ A failure in (a) does not block rollback: follow (c) and accept the display wind
 
 ### Changed
 
+- **Starting writes no config files.** The web app and the runner only log how many user files are missing and read the
+  shipped defaults instead; `pnpm config:init` or the deploy creates them. `config:init` no longer creates `setup.yaml`
+  or `language.yaml`.
+- **Config commands:** `pnpm config:plan [--deploy] [--check]` lists the writes that are waiting (exit 0 none, 2 pending
+  with `--check`, 1 a file cannot be migrated), `pnpm config:init --env-only` creates only `.env`, and
+  `pnpm config:migrate --prune-backups` deletes all but the newest `.backup/<timestamp>/` folders (they used to pile up;
+  only the deploy's prune step runs it, `--write` never deletes). New doctor check `config.pending`.
+- **`schedule.yaml: config_writes`** (`backups_keep` 5, `lock_wait_seconds` 10) sets how many migration backups a deploy
+  keeps and how long a write waits for another writer before it reports busy. Both are schema defaults, not in the
+  shipped file. Config archives from backups carry a small marker, `data/config/.archive-meta.yaml`, that tells a restore
+  what a missing `setup.yaml` meant when the backup was made.
 - **One salary panel on the job page:** the "Salary level" and "Salary lookup" boxes are now one panel, "Salary · what this job pays": three figures on top (stated in the JD, median of similar postings, the AI's estimate for this company) and every source on one scale (this posting, similar postings, the company's other postings, the AI's band for this role, your floor). The AI's numbers stay labelled unverified and never enter a comparison. A stored lookup stays visible when the lookup is turned off, with the reason. The panel anchor is `#h-pay` (the old `#h-salary-level` and `#h-salary-lookup` are gone); no configuration or data changes.
 - **Job search controls on `/jobs`:** search covers basic information by default; turn on Include job descriptions to
   search original descriptions and current translations. A country filter with localized names and counts sits next to
@@ -369,6 +392,8 @@ A failure in (a) does not block rollback: follow (c) and accept the display wind
 - A hand-written invalid `within` or `dateBy` in a saved view is ignored with a `config:check` warning instead of rejecting all of `interests.yaml`.
 - Upgrades: the worker lock holder is recognised on hosts whose name is not ASCII, so config writes no longer stay pending.
 - Sources: an unrecognised HTTP 4xx from a provider shows a short, scrubbed excerpt of its answer, and a 400 saying the balance, credits or quota have run out counts as a budget failure.
+- A container reading a config file right after a command on the Mac replaced it no longer takes it for missing: Docker
+  Desktop can answer "no such file" for about a second, and a save could then have started over from the defaults.
 - The jobspy sidecar no longer returns or logs the query string of a search URL quoted in an upstream error (it holds your keywords and location), and a keyword such as "blocked", "captcha" or "429" no longer changes how a failure is classified.
 - A write lock whose guard was left by a dead process is taken over even when a slow disk has used up the wait budget.
 - Fallback faces for the web fonts also use Liberation Sans, the usual Arial stand-in on Linux, so text does not reflow when the fonts arrive.
@@ -381,7 +406,7 @@ A failure in (a) does not block rollback: follow (c) and accept the display wind
 - Phrase and visa deal-breakers still report later timeouts for unchanged jobs, preserving stored vetoes until the rules can evaluate them again.
 - Recovering the AI worker sends one digest for queued cycles while keeping every cycle's AI work and alerts; company
   name corrections preserve paid salary caches, and ignored HTTP bodies release their cancellation listeners.
-- Web actions recover from outdated tabs, invalid config pages name the file and link to its editor, concurrent settings and setup-wizard edits keep unrelated changes, upgrade freezes show the right message, trigger buttons say when the server cannot be reached, and caught action failures leave safe diagnostics in the web log.
+- Web actions recover from outdated tabs, invalid config pages name the file and link to its editor, concurrent settings and setup-wizard edits keep unrelated changes, trigger buttons say when the server cannot be reached, and caught action failures leave safe diagnostics in the web log.
 - Runner heartbeat writes that finish after their timeout still count as healthy; sustained failures allow active work its configured cleanup grace period before restarting.
 - Jobspy scrape requests are sent only once after a timeout or server error; stalled runner heartbeat work is bounded, manual backups are verified before publication, deploy preflight explains why root is unsupported, and CLI checks recognize unavailable commands on a restricted PATH.
 - Keep the closing-phrase quote visible in job details when the job becomes dormant or another closure reason takes precedence.
@@ -484,8 +509,22 @@ A failure in (a) does not block rollback: follow (c) and accept the display wind
   and no longer fail when the font download does. The pages look the same (same families, weights, character coverage
   and loading). The Dockerfile compiles with `RUN --network=none`, so every image build proves it. The font licences
   (SIL OFL 1.1) are in `licenses/fonts/` and in the web image.
-- Upgrades could migrate user configuration while the old AI worker was still running and reading it. Config and profile
-  writes now take a cross-process lock, and deploys gate config writes on the new worker being confirmed.
+- Upgrades could migrate user configuration while the old AI worker was still running and reading it. Deploys now write
+  config only after the new worker is confirmed and no other worker runs, and every config and profile write takes a lock
+  in the database.
+- The deploy's worker check never matched a host name with non-ASCII characters (Postgres rewrites them in the name the
+  worker publishes), so it could not confirm that worker. Such characters are now written as `_` in that name and both
+  sides compare it that way.
+- The ai-worker no longer claims requests while a config file has a newer `config_version` than it knows (an old worker
+  still running during an upgrade): it logs the file and exits, and the upgraded worker takes over.
+
+### Removed
+
+- **The upgrade freeze and the config file locks:** `.upgrade-freeze`, `pnpm ops:freeze` and `pnpm ops:unfreeze`, the
+  `.write.lock` files in `data/config/` and `data/profile/`, the doctor check `config.freeze`, and the
+  `deploy.config_write_lock_*` keys of `schedule.yaml` (still accepted in a file, no longer read). They existed only in
+  builds between 2.0.1 and this release. The database lock replaces the file locks; step 11 deletes leftover marker and
+  lock files once its gate has passed.
 
 ### Security
 

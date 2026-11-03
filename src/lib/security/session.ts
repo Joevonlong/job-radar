@@ -25,6 +25,8 @@ import path from "node:path";
 
 import { z } from "zod";
 
+import { readUserText } from "../config/read-user-file";
+
 /** The cookie that carries the session over plain http. */
 export const SESSION_COOKIE = "jr_session";
 /** The cookie that carries the session over https. */
@@ -65,7 +67,7 @@ export function resetSessionSecretCache(): void {
 
 function readSecretFile(file: string): Buffer | null {
   try {
-    const text = fs.readFileSync(/*turbopackIgnore: true*/ file, "utf8").trim();
+    const text = readUserText(file).trim();
     return text.length >= MIN_SECRET_CHARS ? Buffer.from(text, "utf8") : null;
   } catch {
     return null;
@@ -202,7 +204,7 @@ function nextGeneration(configDir: string, now: number = Date.now()): number {
     if (!(error instanceof Error) || !error.message.startsWith(SESSION_GENERATION_FILE)) throw error;
   }
   // the file is there but holds no number: jump well past whatever it held
-  const text = fs.readFileSync(/*turbopackIgnore: true*/ path.join(configDir, SESSION_GENERATION_FILE), "utf8");
+  const text = readUserText(path.join(configDir, SESSION_GENERATION_FILE));
   const seen = Math.max(0, ...(text.match(/\d{1,15}/g) ?? []).map(Number));
   const next = Math.max(seen + 1, now);
   if (!Number.isSafeInteger(next) || String(next).length > 15) throw new Error(`${SESSION_GENERATION_FILE} cannot be raised any further`);
@@ -227,7 +229,7 @@ export function readSessionGeneration(configDir: string): number {
   }
   const cached = generationCache;
   if (cached !== null && cached.file === file && cached.mtimeMs === stat.mtimeMs && cached.size === stat.size && cached.ino === stat.ino) return cached.value;
-  const text = fs.readFileSync(/*turbopackIgnore: true*/ file, "utf8").trim();
+  const text = readUserText(file).trim();
   if (!/^\d{1,15}$/.test(text)) throw new Error(`${SESSION_GENERATION_FILE} does not hold a number`);
   const value = Number(text);
   generationCache = { file, mtimeMs: stat.mtimeMs, size: stat.size, ino: stat.ino, value };

@@ -11,7 +11,9 @@ export type FormErrorKey =
   | "invalidPayload"
   /** Nothing was written. */
   | "writeFailed"
-  | "frozen"
+  | "dbUnavailable"
+  /** Another process held the config write lock too long: nothing was written. */
+  | "busy"
   /** The file was written but the history/snapshot step failed (database down?). */
   | "snapshotFailed"
   | "snapshotNotFound"

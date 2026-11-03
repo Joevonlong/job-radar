@@ -7,7 +7,7 @@ import { Writable } from "node:stream";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { listArchiveMembers, writeConfigArchive, ConfigArchiveError } from "@/lib/ops/config-archive";
+import { ARCHIVE_META_NAME, ARCHIVE_META_YAML, ARCHIVE_SETUP_SEMANTICS, listArchiveMembers, readArchiveSetupSemantics, writeConfigArchive, ConfigArchiveError } from "@/lib/ops/config-archive";
 
 let dir = "";
 let dirs: { config: string; profile: string };
@@ -29,6 +29,7 @@ beforeEach(() => {
   put(path.join(dirs.config, ".write.lock"), "lock");
   put(path.join(dirs.profile, ".write.lock"), "lock");
   put(path.join(dirs.config, ".web-session-secret"), "do-not-archive\n", 0o600);
+  put(path.join(dirs.config, ".archive-meta.yaml"), "setup_semantics: 1\n"); // a planted marker is never archived: only the generated one is
   put(path.join(dirs.config, "ai.yaml.partial"), "half written\n");
   put(path.join(dirs.profile, "me.yaml"), "name: Test\n");
   fs.symlinkSync("/etc/hosts", path.join(dirs.config, "hosts-link"));
@@ -42,17 +43,18 @@ describe("writeConfigArchive", () => {
       "data/config/schedule.yaml",
       "data/config/sources.yaml",
       "data/profile/me.yaml",
+      "data/config/.archive-meta.yaml",
     ]);
     const destination = path.join(dir, "jobradar-20261007-033000.config.tgz");
     const result = await writeConfigArchive({ dirs, destination });
-    expect(result.members).toBe(4);
+    expect(result.members).toBe(5);
     expect(fs.readdirSync(dir).filter((n) => n.endsWith(".partial"))).toEqual([]);
     expect(fs.statSync(destination).mode & 0o777).toBe(0o600);
 
     const listed = spawnSync("tar", ["-tzf", destination], { encoding: "utf8" });
     expect(listed.status, listed.stderr).toBe(0);
     const names = listed.stdout.trim().split("\n").sort();
-    expect(names).toEqual(["data/config/editor/nested.yaml", "data/config/schedule.yaml", "data/config/sources.yaml", "data/profile/me.yaml"]);
+    expect(names).toEqual(["data/config/.archive-meta.yaml", "data/config/editor/nested.yaml", "data/config/schedule.yaml", "data/config/sources.yaml", "data/profile/me.yaml"]);
     expect(names.join("\n")).not.toMatch(/\.backup|web-session-secret|hosts-link|partial/);
 
     // `tar -xzf -C <app>` puts it back where it came from (the layout of scripts/ops/backup.sh)
@@ -61,12 +63,14 @@ describe("writeConfigArchive", () => {
     expect(spawnSync("tar", ["-xzf", destination, "-C", target]).status).toBe(0);
     expect(fs.readFileSync(path.join(target, "data/config/schedule.yaml"), "utf8")).toBe("timezone: UTC\n");
     expect(fs.readFileSync(path.join(target, "data/profile/me.yaml"), "utf8")).toBe("name: Test\n");
+    expect(fs.readFileSync(path.join(target, "data/config", ARCHIVE_META_NAME), "utf8")).toBe(ARCHIVE_META_YAML);
+    expect(readArchiveSetupSemantics(path.join(target, "data/config"))).toBe(ARCHIVE_SETUP_SEMANTICS);
   });
 
   it("works when the profile directory does not exist yet", async () => {
     fs.rmSync(dirs.profile, { recursive: true, force: true });
     const result = await writeConfigArchive({ dirs, destination: path.join(dir, "x.config.tgz") });
-    expect(result.members).toBe(3);
+    expect(result.members).toBe(4);
   });
 
   it("fails when there is nothing to archive", async () => {

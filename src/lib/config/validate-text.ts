@@ -3,8 +3,10 @@
  * Pure: no cache, no disk access except the other file of a cross-file check (injectable, see `ValidateOptions`).
  * Messages hold paths and reasons only, never the file's contents (C4).
  *
- * Order: YAML syntax -> `config_version` (must equal the code's version) -> zod schema -> cross-file checks
- * (ai.yaml against the models.yaml catalog, both directions). A text that passes can be read by `loadConfig`.
+ * Order: YAML syntax -> `config_version` (written down, not newer than the code) -> migrated in memory -> zod schema ->
+ * cross-file checks (ai.yaml against the models.yaml catalog, both directions), all on the migrated value. A text that
+ * passes can be read by `loadConfig`. An older file stays valid: writes can be pending after a deploy, and it must stay
+ * editable meanwhile. A problem on a path only the migration creates is reported on line 1 with the path.
  */
 import { isMap, isNode, isScalar, LineCounter, type Document } from "yaml";
 import type { ZodError } from "zod";
@@ -12,7 +14,8 @@ import type { ZodError } from "zod";
 import { configDocumentValue, parseConfigText, readConfigText, resolveConfigDocument } from "./load";
 import { interestsRawWarnings, interestsWarnings, SLOW_PATTERN_MESSAGE, slowInterestPatterns } from "./interests-lint";
 import { checkAiAgainstCatalog } from "./model-catalog";
-import { documentConfigVersion, currentConfigVersion, CONFIG_VERSION_KEY, withoutConfigVersion } from "./migrations/version";
+import { ConfigError } from "./errors";
+import { documentConfigVersion, currentConfigVersion, CONFIG_VERSION_KEY, migrateConfigDocument, withoutConfigVersion } from "./migrations/version";
 import { PROTECTED_KEY_MESSAGE, protectedChanges } from "./protected-check";
 import { configRegistry, type ConfigName, type ConfigValue } from "./registry";
 import { parseConfigYamlDocument } from "./yaml-options";
@@ -144,24 +147,37 @@ export function validateConfigText<N extends ConfigName>(name: N, text: string, 
     return { ok: false, issues };
   }
 
-  // config_version must be the version this code reads and writes: the editor writes the text as it is, so it cannot migrate
+  // The text is saved as written (the loader migrates it when it reads), so the version must be there and not newer than the code.
   const current = currentConfigVersion(name);
   const version = documentConfigVersion(doc);
+  const versionWritten = isMap(doc.contents) && doc.contents.has(CONFIG_VERSION_KEY);
   if (version === null) {
     issues.push(issueAt(doc, lineCounter, "version", [CONFIG_VERSION_KEY], "must be a whole number ≥ 1"));
-  } else if (version !== current) {
-    const message =
-      version > current
-        ? `config_version ${version} is newer than this version of Job Radar supports (${current})`
-        : `config_version is ${version}; this version of Job Radar needs ${current} (run pnpm config:migrate --write, or add the new keys and set config_version: ${current})`;
-    issues.push(issueAt(doc, lineCounter, "version", isMap(doc.contents) && doc.contents.has(CONFIG_VERSION_KEY) ? [CONFIG_VERSION_KEY] : [], message));
+  } else if (version > current) {
+    issues.push(issueAt(doc, lineCounter, "version", [CONFIG_VERSION_KEY], `config_version ${version} is newer than this version of Job Radar supports (${current})`));
+  } else if (!versionWritten && current > 1) {
+    issues.push(issueAt(doc, lineCounter, "version", [], `config_version is missing; write the file's version (this version of Job Radar reads up to ${current})`));
   }
-  if (version === null || (version !== current && version > current)) return { ok: false, issues };
+  if (issues.length > 0) return { ok: false, issues };
+
+  // Validate a migrated copy; `doc` keeps pointing at the lines the user wrote.
+  const migrated = parseConfigYamlDocument(text);
+  try {
+    migrateConfigDocument(name, migrated, "");
+  } catch (error) {
+    const reason = error instanceof ConfigError ? (error.issues[0]?.message ?? error.kind) : "the migration failed";
+    return { ok: false, issues: [{ path: "", message: reason, line: 1, col: 1, exact: false, source: "schema" }] };
+  }
+  const place = (source: IssueSource, path: ReadonlyArray<string | number>, message: string, unknownKey = false): TextIssue => {
+    const issue = issueAt(doc, lineCounter, source, path, message, unknownKey);
+    if (issue.exact || version === current) return issue;
+    return { ...issue, line: 1, col: 1, message: `${issue.path}: ${message}` };
+  };
 
   // models.yaml is an overlay: clashes inside it are reported at the user's own paths, before the merged catalog is judged
-  const resolved = resolveConfigDocument(name, doc);
+  const resolved = resolveConfigDocument(name, migrated);
   if (resolved.errors.length > 0) {
-    for (const error of resolved.errors.slice(0, MAX_TEXT_ISSUES)) issues.push(issueAt(doc, lineCounter, "schema", error.path, error.message, error.message === "unknown key"));
+    for (const error of resolved.errors.slice(0, MAX_TEXT_ISSUES)) issues.push(place("schema", error.path, error.message, error.message === "unknown key"));
     return { ok: false, issues };
   }
   const parsed = configRegistry[name].schema.safeParse(withoutConfigVersion(resolved.value));
@@ -169,12 +185,11 @@ export function validateConfigText<N extends ConfigName>(name: N, text: string, 
     for (const issue of parsed.error.issues) {
       for (const where of zodPaths(issue)) {
         if (issues.length >= MAX_TEXT_ISSUES) break;
-        issues.push(issueAt(doc, lineCounter, "schema", where.path, where.message, where.unknownKey));
+        issues.push(place("schema", where.path, where.message, where.unknownKey));
       }
     }
     return { ok: false, issues };
   }
-  if (issues.length > 0) return { ok: false, issues };
 
   const value = parsed.data as ConfigValue<N>;
   const warnings: TextIssue[] = resolved.warnings.map((warning) => issueAt(doc, lineCounter, "catalog", warning.path, warning.message));
@@ -198,21 +213,21 @@ export function validateConfigText<N extends ConfigName>(name: N, text: string, 
     }
   }
   if (name === "interests") {
-    for (const warning of [...interestsWarnings(value as ConfigValue<"interests">), ...interestsRawWarnings(withoutConfigVersion(configDocumentValue(name, doc)))]) crossIssues.push({ path: joinPath(warning.path), message: warning.message, severity: "warning", file: null, where: warning.path });
+    for (const warning of [...interestsWarnings(value as ConfigValue<"interests">), ...interestsRawWarnings(withoutConfigVersion(configDocumentValue(name, migrated)))]) crossIssues.push({ path: joinPath(warning.path), message: warning.message, severity: "warning", file: null, where: warning.path });
   }
   for (const cross of crossIssues) {
     const located: TextIssue =
       cross.file === null
-        ? issueAt(doc, lineCounter, "catalog", cross.where, cross.message)
+        ? place("catalog", cross.where, cross.message)
         : { path: cross.path, message: cross.message, line: 1, col: 1, exact: false, source: "catalog", file: cross.file };
     (cross.severity === "error" ? issues : warnings).push(located);
   }
   if (name === "interests" && options.interestsProbe) {
     const interests = value as ConfigValue<"interests">;
-    for (const slow of slowInterestPatterns(interests, options.interestsProbe(interests.limits))) issues.push(issueAt(doc, lineCounter, "schema", slow.path, SLOW_PATTERN_MESSAGE));
+    for (const slow of slowInterestPatterns(interests, options.interestsProbe(interests.limits))) issues.push(place("schema", slow.path, SLOW_PATTERN_MESSAGE));
   }
   if (options.checkProtected === true) {
-    for (const segments of protectedChanges(name, value)) issues.push(issueAt(doc, lineCounter, "protected", segments, PROTECTED_KEY_MESSAGE));
+    for (const segments of protectedChanges(name, value)) issues.push(place("protected", segments, PROTECTED_KEY_MESSAGE));
   }
   if (issues.length > 0) return { ok: false, issues: issues.slice(0, MAX_TEXT_ISSUES) };
   return { ok: true, value, warnings };

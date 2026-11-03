@@ -9,16 +9,17 @@ import { currentScoresBackfill } from "../src/lib/db/current-scores-config";
  * the same rows). Never touches any other database. Called from playwright.config.ts before the
  * web server starts. The run's config directory gets the setup marked complete, so no page opens the wizard.
  *
- * `--fresh` (playwright.setup.config.ts): a brand-new install for the setup wizard: the run's config and profile
- * directories are emptied (the web fills them on start, as on a first `docker compose up`), the database is dropped,
- * recreated and only migrated (no seed).
+ * The database comes first in every mode: config files are written under the config write lock, which lives in it.
+ *
+ * `--fresh` (playwright.setup.config.ts): a brand-new install for the setup wizard: the database is dropped, recreated and
+ * only migrated (no seed), and the run's config and profile directories stay empty: the wizard writes them.
  */
 import fs from "node:fs";
 import path from "node:path";
 
 import postgres from "postgres";
 
-import { ensureConfigFiles, getAppRoot, getConfigDir, getDefaultsDir, getProfileDir, loadConfig, parseConfigText } from "../src/lib/config";
+import { ensureConfigFiles, getAppRoot, getConfigDir, getDefaultsDir, getProfileDir, loadConfig, mutateConfig } from "../src/lib/config";
 import { completeSetup } from "../src/lib/setup/state";
 import { createConnection } from "../src/lib/db/client";
 import { runMigrations } from "../src/lib/db/migrate";
@@ -57,47 +58,10 @@ if (!dbName.startsWith("jobradar_e2e")) {
 const configDir = getConfigDir();
 const realUserDirs = [path.join(getAppRoot(), "data", "config"), path.join(getAppRoot(), "config"), getDefaultsDir()];
 const realProfileDirs = [path.join(getAppRoot(), "data", "profile")];
-if (fresh) {
-  if (!process.env.JOB_RADAR_CONFIG_DIR || realUserDirs.includes(configDir) || !process.env.JOB_RADAR_PROFILE_DIR || realProfileDirs.includes(getProfileDir())) {
-    console.error("e2e-prepare --fresh: JOB_RADAR_CONFIG_DIR and JOB_RADAR_PROFILE_DIR must point at throw-away directories");
-    process.exit(2);
-  }
-  fs.rmSync(configDir, { recursive: true, force: true });
-  fs.rmSync(getProfileDir(), { recursive: true, force: true });
-} else if (process.env.JOB_RADAR_CONFIG_DIR && !realUserDirs.includes(configDir)) {
-  fs.rmSync(configDir, { recursive: true, force: true });
-  await ensureConfigFiles();
-  // The main suite runs on a configured install: the setup is complete, so no page redirects to the wizard
-  if (!(await completeSetup("cli")).ok) {
-    console.error("e2e-prepare: could not mark the setup complete");
-    process.exit(2);
-  }
-  // The shipped breakdown.yaml is off; the e2e copy (never the shipped file) turns it on so the card can be driven
-  const breakdownFile = path.join(configDir, "breakdown.yaml");
-  const breakdownText = fs.readFileSync(breakdownFile, "utf8").replace(/^enabled: (false|true)$/m, "enabled: true");
-  parseConfigText("breakdown", breakdownText);
-  fs.writeFileSync(breakdownFile, breakdownText);
-  // The shipped application writer is off; the e2e copy turns it on (the e2e runner stands in for its AI)
-  const writerFile = path.join(configDir, "writer.yaml");
-  const writerText = fs.readFileSync(writerFile, "utf8").replace(/^enabled: (false|true)$/m, "enabled: true");
-  parseConfigText("writer", writerText);
-  fs.writeFileSync(writerFile, writerText);
-  // The shipped company background is off; the e2e copy turns it on (the e2e runner stands in for its AI)
-  const researchFile = path.join(configDir, "research.yaml");
-  const researchText = fs.readFileSync(researchFile, "utf8")
-    .replace(/^enabled: (false|true)$/m, "enabled: true")
-    // a star in another spec must not start research there; the research spec turns this on for itself
-    .replace(/^  trigger: \w+$/m, "  trigger: manual");
-  parseConfigText("research", researchText);
-  fs.writeFileSync(researchFile, researchText);
-  // The shipped salary lookup is off; the e2e copy turns it on (the e2e runner answers the requests, no AI is called)
-  const salaryFile = path.join(configDir, "salary.yaml");
-  const salaryText = fs.readFileSync(salaryFile, "utf8")
-    .replace(/^(lookup:\n(?:[ \t]*#.*\n)*  enabled: )false$/m, "$1true")
-    // the seeded jobs are few: groups of two already compare, so the job page shows a benchmark
-    .replace(/^  min_sample: \d+$/m, "  min_sample: 2");
-  parseConfigText("salary", salaryText);
-  fs.writeFileSync(salaryFile, salaryText);
+const disposableDirectory = process.env.JOB_RADAR_CONFIG_DIR !== undefined && process.env.JOB_RADAR_CONFIG_DIR !== "" && !realUserDirs.includes(configDir);
+if (fresh && (!disposableDirectory || !process.env.JOB_RADAR_PROFILE_DIR || realProfileDirs.includes(getProfileDir()))) {
+  console.error("e2e-prepare --fresh: JOB_RADAR_CONFIG_DIR and JOB_RADAR_PROFILE_DIR must point at throw-away directories");
+  process.exit(2);
 }
 
 const admin = postgres(adminUrl, { max: 1, onnotice: () => {} });
@@ -110,8 +74,32 @@ try {
 }
 await runMigrations({ currentScoresBackfill: currentScoresBackfill(), url: targetUrl.toString() });
 if (fresh) {
-  console.log(`e2e-prepare: database "${dbName}" is empty and migrated (fresh install)`);
+  fs.rmSync(configDir, { recursive: true, force: true });
+  fs.rmSync(getProfileDir(), { recursive: true, force: true });
+  fs.mkdirSync(configDir, { recursive: true });
+  fs.mkdirSync(getProfileDir(), { recursive: true });
+  console.log(`e2e-prepare: database "${dbName}" is empty and migrated, directories empty (fresh install)`);
   process.exit(0);
+}
+
+if (disposableDirectory) {
+  fs.rmSync(configDir, { recursive: true, force: true });
+  await ensureConfigFiles();
+  // The main suite runs on a configured install: the setup is complete, so no page redirects to the wizard
+  if (!(await completeSetup("cli")).ok) {
+    console.error("e2e-prepare: could not mark the setup complete");
+    process.exit(2);
+  }
+  // The shipped breakdown is off; the e2e copy (never the shipped file) turns it on so the card can be driven
+  await mutateConfig("breakdown", (current) => ({ ...current, enabled: true }));
+  // The shipped application writer is off; the e2e copy turns it on (the e2e runner stands in for its AI)
+  await mutateConfig("writer", (current) => ({ ...current, enabled: true }));
+  // The shipped company background is off; the e2e copy turns it on (the e2e runner stands in for its AI)
+  // A star in another spec must not start research there; the research spec turns this on for itself
+  await mutateConfig("research", (current) => ({ ...current, enabled: true, auto: { ...current.auto, trigger: "manual" } }));
+  // The shipped salary lookup is off; the e2e copy turns it on (the e2e runner answers the requests, no AI is called).
+  // The seeded jobs are few: groups of two already compare, so the job page shows a benchmark
+  await mutateConfig("salary", (current) => ({ ...current, lookup: { ...current.lookup, enabled: true }, benchmark: { ...current.benchmark, min_sample: 2 } }));
 }
 
 const connection = createConnection(targetUrl.toString(), { max: 1 });

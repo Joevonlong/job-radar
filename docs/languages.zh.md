@@ -18,8 +18,9 @@ Job Radar 的所有用户可见文字都在 `messages/<id>.json` 里，一个文
 
 语言代码按 BCP 47（`en`、`zh`、`de`、`pt-BR`、`zh-Hant`）；写错了保存时会被拒绝，`pnpm config:check` 也会报。
 
-语言可配置之前就装好的实例，第一次启动时会写入一份保持原来行为的 `language.yaml`：界面、AI 文字、Telegram、
-命令行都是中文，一句话摘要另附英文，JD 翻译成中文。全新安装用上面的英文默认值。
+语言可配置之前就装好的实例，在你到 设置 → 显示 里设好语言之前，读的是上面的英文默认值。如果改为恢复那个时期的备份
+（`restore.sh --with-config`）或运行 `pnpm config:init --from <旧配置目录>`，则会写入一份保持原来行为的 `language.yaml`：界面、AI 文字、
+Telegram、命令行都是中文，一句话摘要另附英文，JD 翻译成中文。
 
 ### 改了语言会怎样
 

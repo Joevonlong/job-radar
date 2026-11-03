@@ -19,9 +19,10 @@ ship with it). Which language is used where is set in `language.yaml` (Settings 
 Language codes are BCP 47 tags (`en`, `zh`, `de`, `pt-BR`, `zh-Hant`); an invalid one is refused when saving and by
 `pnpm config:check`.
 
-An install from before languages were configurable gets a `language.yaml` written on its first start with what it did
-until then: Chinese interface, AI texts, Telegram and command line, English one-line summaries next to the Chinese
-ones, translations into Chinese. A new install gets the English defaults above.
+An install from before languages were configurable reads the English defaults above until you set the languages in
+Settings → Display. Restoring a backup from that time (`restore.sh --with-config`) or `pnpm config:init --from <old config
+dir>` instead writes a `language.yaml` with what it did until then: Chinese interface, AI texts, Telegram and command line,
+English one-line summaries next to the Chinese ones, translations into Chinese.
 
 ### What changes when you change a language
 

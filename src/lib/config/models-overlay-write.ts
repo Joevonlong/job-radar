@@ -8,6 +8,7 @@
  * outside the lock and written afterwards.
  */
 import fsp from "node:fs/promises";
+import path from "node:path";
 
 import { Document, isMap, isSeq, YAMLMap, YAMLSeq } from "yaml";
 
@@ -18,11 +19,12 @@ import { loadConfig, parseConfigDocument, primeConfigCache, reloadConfig, resolv
 import { CONFIG_VERSION_KEY, currentConfigVersion, documentConfigVersion, migrateConfigDocument, stampConfigVersion, withoutConfigVersion } from "./migrations/version";
 import { issuesInUserFile } from "./models-overlay";
 import { getUserConfigPath } from "./paths";
+import { readUserText } from "./read-user-file";
 import { type CatalogModel, modelsSchema } from "./schemas/models";
 import { CONFIG_EDITOR_DEFAULTS } from "./schemas/ui";
 import { CONFIG_YAML_OPTIONS } from "./yaml-options";
 import { atomicWrite, restoreFlowPadding, withFileLock } from "./write";
-import { withConfigWriteLock } from "./write-lock";
+import { isLockedConfigPath, withConfigWriteLock } from "./write-lock";
 
 const NEW_FILE_HEADER = [
   " Your additions to the model catalog. The shipped catalog (config/models.yaml) is the base: list here only the models you",
@@ -45,7 +47,7 @@ function backupsKeep(): number {
 
 async function readIfExists(file: string): Promise<string | null> {
   try {
-    return await fsp.readFile(/*turbopackIgnore: true*/ file, "utf8");
+    return readUserText(file);
   } catch (err) {
     if (err instanceof Error && "code" in err && err.code === "ENOENT") return null;
     throw err;
@@ -102,12 +104,12 @@ function putEntries(doc: Document, provider: AiProviderIdChoice, entries: readon
 
 /**
  * Add or replace `entries` (full catalog entries) of `provider` in the user's models.yaml. Throws `ConfigError` when the file
- * cannot be parsed, the result would not be a valid catalog (`schema`, naming the user's file), or the file is frozen / busy.
+ * cannot be parsed, the result would not be a valid catalog (`schema`, naming the user's file), or the file is busy.
  */
 export async function writeModelsOverlay(provider: AiProviderIdChoice, entries: readonly CatalogModel[]): Promise<ModelsOverlayWrite> {
   const filePath = getUserConfigPath("models");
   return withFileLock(filePath, () =>
-    withConfigWriteLock(filePath, async () => {
+    withConfigWriteLock(async () => {
       const userText = await readIfExists(filePath);
       let doc: Document;
       if (userText === null) {
@@ -171,19 +173,30 @@ function visitPrices(node: unknown): void {
 }
 
 /**
- * `pnpm models:export --full`: write the effective catalog to `file` (default: the user's models.yaml, under the write lock, the old
- * text backed up). Returns where it went and the backup, if any.
+ * `pnpm models:export --full`: write the effective catalog to the user's models.yaml, under the write lock, the old text backed up;
+ * or, given another path, to that file. Returns where it went and the backup, if any.
  */
 export async function writeFullModels(file: string = getUserConfigPath("models")): Promise<{ file: string; backup: string | null }> {
   const userFile = getUserConfigPath("models");
-  const write = async (): Promise<{ file: string; backup: string | null }> => {
-    const effective = reloadConfig("models");
-    const text = renderFullModelsText(effective);
-    const old = await readIfExists(file);
-    const backup = file === userFile && old !== null && old !== text ? await backupConfigText("models", old, backupsKeep()) : null;
-    await atomicWrite(file, text);
-    if (file === userFile) primeConfigCache("models", effective, text);
-    return { file, backup };
-  };
-  return file === userFile ? withFileLock(file, () => withConfigWriteLock(file, write)) : write();
+  if (path.resolve(file) !== path.resolve(userFile)) {
+    if (isLockedConfigPath(file)) throw new Error(`--out cannot name another file in the config or profile directory: ${path.basename(file)}`);
+    return exportFullModels(file);
+  }
+  return withFileLock(userFile, () =>
+    withConfigWriteLock(async () => {
+      const effective = reloadConfig("models");
+      const text = renderFullModelsText(effective);
+      const old = await readIfExists(userFile);
+      const backup = old !== null && old !== text ? await backupConfigText("models", old, backupsKeep()) : null;
+      await atomicWrite(userFile, text);
+      primeConfigCache("models", effective, text);
+      return { file, backup };
+    }, userFile),
+  );
+}
+
+/** A copy for the user, outside the configuration: nothing reads it (outside the locked directories, see writeFullModels), so it needs neither the lock nor the database. */
+async function exportFullModels(file: string): Promise<{ file: string; backup: null }> {
+  await fsp.writeFile(file, renderFullModelsText(reloadConfig("models")), { mode: 0o600 });
+  return { file, backup: null };
 }

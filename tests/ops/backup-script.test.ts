@@ -31,6 +31,7 @@ beforeAll(() => {
   out = path.join(tmp, "out");
   write(path.join(tmp, "checkout/scripts/ops/backup.sh"), fs.readFileSync(realScript, "utf8"), 0o755);
   write(path.join(tmp, "checkout/scripts/ops/lib/timezone.sh"), fs.readFileSync(path.resolve(import.meta.dirname, "../../scripts/ops/lib/timezone.sh"), "utf8"));
+  write(path.join(tmp, "checkout/scripts/ops/lib/existing-install.sh"), fs.readFileSync(path.resolve(import.meta.dirname, "../../scripts/ops/lib/existing-install.sh"), "utf8"));
   installConfigReader(app, stubs);
   // the shipped schedule says one zone, the user's another: the user's wins
   write(path.join(app, "config/schedule.yaml"), "timezone: Etc/GMT+12\n");
@@ -135,6 +136,7 @@ describe("scripts/ops/backup.sh", () => {
     expect(listing).not.toContain(".upgrade-freeze");
     expect(listing).not.toContain(".write.lock");
     expect(listing).not.toContain("web-session-secret"); // the signing secret of the login cookie is re-created, never archived
+    expect(listing.split("\n").filter((name) => name.endsWith(".archive-meta.yaml"))).toEqual(["data/config/.archive-meta.yaml"]); // exactly one marker
   });
 
   it("runs tar with COPYFILE_DISABLE=1 so a macOS tar writes no AppleDouble ._* members", () => {
@@ -202,6 +204,6 @@ describe("scripts/ops/backup.sh", () => {
     expect(archive).toMatch(new RegExp(`^jobradar-manual-${day}-`));
     const listing = spawnSync("tar", ["-tzf", path.join(out, archive)], { encoding: "utf8" }).stdout;
     expect(listing).toContain("data/profile/me.yaml");
-    expect(listing).not.toContain("data/config");
+    expect(listing.split("\n").filter((name) => name.startsWith("data/config") && !name.endsWith("/"))).toEqual(["data/config/.archive-meta.yaml"]); // only the marker
   });
 });

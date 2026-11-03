@@ -101,26 +101,26 @@ export const configMarketCheck: DoctorCheck = {
   },
 };
 
-const freezeSpec = { id: "config.freeze", group: "data" } as const;
+const pendingSpec = { id: "config.pending", group: "data" } as const;
 
-export const configFreezeCheck: DoctorCheck = {
-  ...freezeSpec,
+/** What a deploy's write step would still do, and why the last deploy left it (`CONFIG_PENDING_REASON`, set by deploy.sh). */
+export const configPendingCheck: DoctorCheck = {
+  ...pendingSpec,
   async run(ctx) {
     const { t } = ctx;
+    const plan = await ctx.probes.configWrites();
+    if (plan.writes.length === 0 && plan.problems.length === 0) return ok(pendingSpec, t("checks.config.pending.none"));
+    const reason = ctx.env.CONFIG_PENDING_REASON?.trim() ?? "";
     const pieces: Piece[] = [];
-    if (!await ctx.probes.configFrozen()) pieces.push({ status: "ok", detail: t("checks.config.freeze.none") });
-    else {
-      const lock = await ctx.probes.releasesLock(ctx.appRoot);
-      const active = lock.present && (lock.records.some((entry) => entry.kind === "record" && entry.alive) ||
-        (lock.owner !== null && lock.owner.token === ctx.env.JOB_RADAR_RELEASES_LOCK_TOKEN));
-      pieces.push(active ? { status: "ok", detail: t("checks.config.freeze.active") } :
-        { status: "warn", detail: t("checks.config.freeze.leftover"), hint: t("checks.config.freeze.hint") });
+    if (plan.writes.length > 0) {
+      const files = plan.writes.map((write) => t(`checks.config.pending.kind.${write.kind}`, { file: write.name }));
+      pieces.push({ status: "warn", detail: t("checks.config.pending.pending", { count: plan.writes.length, files: joinList(ctx, files) }), hint: t("checks.config.pending.hint") });
     }
-    const locks = await ctx.probes.staleConfigWriteLocks(ctx.config.schedule.deploy.config_write_lock_stale_seconds);
-    if (locks.length > 0) pieces.push({ status: "warn", detail: t("checks.config.freeze.staleLocks", { files: joinList(ctx, locks) }), hint: t("checks.config.freeze.staleLocksHint") });
-    return merge(ctx, freezeSpec, pieces);
+    if (plan.problems.length > 0) pieces.push({ status: "warn", detail: t("checks.config.pending.problems", { count: plan.problems.length, files: joinList(ctx, plan.problems.map((problem) => problem.name)) }), hint: t("checks.config.pending.hint") });
+    if (reason !== "") pieces.push({ status: "warn", detail: t("checks.config.pending.skipped", { reason }) });
+    return merge(ctx, pendingSpec, pieces);
   },
 };
 
-export const CONFIG_CHECKS: readonly DoctorCheck[] = [configLayersCheck, configMarketCheck, configFreezeCheck];
+export const CONFIG_CHECKS: readonly DoctorCheck[] = [configLayersCheck, configMarketCheck, configPendingCheck];
 export const LANGUAGE_CHECKS: readonly DoctorCheck[] = [languageConfigCheck];

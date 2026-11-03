@@ -78,7 +78,7 @@
       "watchedNotFound": "This company is not on the watch list; it may have been removed.",
       "categoryMissing": "The categories on the page do not match the file (it may have just changed). Reload the page and try again.",
       "unknownRetired": "A category to delete is not in the file. Reload the page and try again.",
-      "frozen": "An upgrade is in progress. Try saving again later.",
+      "dbUnavailable": "Saving settings needs the database, and it cannot be reached right now. Try again shortly.",
       "busy": "Another process is saving settings. Try again shortly.",
       "stale": "This file changed elsewhere. Reload and try again.",
       "protected": "This change touches a locked key. Edit the config file by hand to change it."
@@ -617,7 +617,7 @@
         "link": "Edit search cities",
         "done": "Search cities updated: the next cycles search these places.",
         "failed": "Could not update the search cities.",
-        "frozen": "An upgrade is in progress. Try saving again later.",
+        "dbUnavailable": "Saving settings needs the database, and it cannot be reached right now. Try again shortly.",
         "busy": "Another process is saving settings. Try again shortly.",
         "stale": "This file changed elsewhere. Reload and try again.",
         "protected": "This change touches a locked key. Edit the config file by hand to change it."
@@ -727,7 +727,8 @@
       "snapshotNotFound": "That snapshot no longer exists.",
       "snapshotInvalid": "This old version no longer matches the current format and cannot be restored.",
       "stale": "This file was changed elsewhere (another tab or by hand) after you opened it. The form now shows the saved values; your changes were not saved.",
-      "frozen": "An upgrade is in progress. Try saving again later. If no deploy is running, deploy again or run `pnpm ops:unfreeze`."
+      "dbUnavailable": "Saving settings needs the database, and it cannot be reached right now. Try again shortly.",
+      "busy": "Another process is saving settings. Try again shortly."
     },
     "loadError": {
       "title": "Cannot read {file}",
@@ -2006,7 +2007,8 @@
       "catalogUnreadable": "The model catalog cannot be read: fix models.yaml first",
       "protectedKeys": "This change touches a locked key (a command, an API host or a credential path). Locked keys can only be changed by editing the config file by hand.",
       "stale": "This file was changed elsewhere (another tab, the advanced editor or by hand) after you opened it. The form now shows the saved values; your changes were not saved.",
-      "frozen": "An upgrade is in progress. Try saving again later. If no deploy is running, deploy again or run `pnpm ops:unfreeze`."
+      "dbUnavailable": "Saving settings needs the database, and it cannot be reached right now. Try again shortly.",
+      "busy": "Another process is saving settings. Try again shortly."
     },
     "loadError": {
       "title": "Cannot read {file}",
@@ -3630,7 +3632,7 @@
         "requestUnavailable": "The refreshed list is gone. Refresh it and try again.",
         "notAddable": "One of the selected models cannot be added (already in the catalog, or no JSON mode). Refresh the list and try again.",
         "catalogInvalid": "The catalog would not be valid with these models, so nothing was written. Check your models.yaml under Settings → Advanced.",
-        "frozen": "Configuration is frozen during an upgrade. Try again in a moment.",
+        "dbUnavailable": "Saving settings needs the database, and it cannot be reached right now. Try again shortly.",
         "busy": "Another process is writing the configuration. Try again in a moment.",
         "stale": "The file changed while saving. Refresh the list and try again.",
         "protected": "That change touches a protected setting.",
@@ -3669,7 +3671,7 @@
         "unreadable": "ui.yaml or notify.yaml cannot be read right now: fix it in the advanced editor first.",
         "writeFailed": "Could not save: {file} is unchanged and no other file was written.",
         "partial": "{saved} was saved, but {file} could not be written: it is still the old one. Save again.",
-        "frozen": "An upgrade is in progress. Try saving again later. If no deploy is running, deploy again or run `pnpm ops:unfreeze`.",
+        "dbUnavailable": "Saving settings needs the database, and it cannot be reached right now. Try again shortly.",
         "busy": "Another process is saving settings. Try again shortly.",
         "stale": "This file changed elsewhere. Reload and try again.",
         "protected": "This change touches a locked key. Edit the config file by hand to change it."
@@ -3713,7 +3715,8 @@
         "needs_confirm": "This is a product default file: the first save must be confirmed, it creates a whole-file override.",
         "failed": "Could not save; the file is unchanged.",
         "protected": "This text changes a locked key (a command, an API host or a credential path). Edit the file by hand to change it.",
-        "frozen": "An upgrade is in progress. Try saving again later. If no deploy is running, deploy again or run `pnpm ops:unfreeze`."
+        "dbUnavailable": "Saving settings needs the database, and it cannot be reached right now. Try again shortly.",
+        "busy": "Another process is saving settings. Try again shortly."
       },
       "files": {
         "label": "Config files",
@@ -4035,7 +4038,7 @@
         "config_invalid": "sources.yaml has errors; fix it before adding boards.",
         "write_failed": "sources.yaml could not be written.",
         "database_unavailable": "The database is not responding.",
-        "frozen": "An upgrade is in progress. Try saving again later.",
+        "dbUnavailable": "Saving settings needs the database, and it cannot be reached right now. Try again shortly.",
         "busy": "Another process is saving settings. Try again shortly.",
         "stale": "This file changed elsewhere. Reload and try again.",
         "protected": "This change touches a locked key. Edit the config file by hand to change it."
@@ -4378,7 +4381,7 @@
       "writeFailed": "The config file could not be written, so nothing was changed. The suggestion is still pending.",
       "databaseUnavailable": "The database is unavailable.",
       "categoryMissing": "The signal category this word goes into was deleted, so nothing was changed. Restore the category first, or reject the suggestion.",
-      "frozen": "An upgrade is in progress. Try saving again later.",
+      "dbUnavailable": "Saving settings needs the database, and it cannot be reached right now. Try again shortly.",
       "busy": "Another process is saving settings. Try again shortly.",
       "stale": "This file changed elsewhere. Reload and try again.",
       "protected": "This change touches a locked key. Edit the config file by hand to change it."
@@ -5055,7 +5058,7 @@
       "database_unavailable": "The database is not responding.",
       "needs_parent": "Turn on linkedin-session first, or this switch has no effect.",
       "consent_required": "This channel needs you to confirm the terms-of-service notice first. Use the switch on the sources page.",
-      "frozen": "An upgrade is in progress. Try saving again later.",
+      "dbUnavailable": "Saving settings needs the database, and it cannot be reached right now. Try again shortly.",
       "busy": "Another process is saving settings. Try again shortly.",
       "protected": "This change touches a locked key. Edit the config file by hand to change it."
     },
@@ -5103,7 +5106,7 @@
         "database_unavailable": "The database is not responding.",
         "needs_parent": "Turn on linkedin-session first, or this switch has no effect.",
         "consent_required": "This channel needs you to confirm the terms-of-service notice first. Use the switch on the sources page.",
-        "frozen": "An upgrade is in progress. Try saving again later.",
+        "dbUnavailable": "Saving settings needs the database, and it cannot be reached right now. Try again shortly.",
         "busy": "Another process is saving settings. Try again shortly.",
         "protected": "This change touches a locked key. Edit the config file by hand to change it."
       }
@@ -5200,7 +5203,7 @@
         "database_unavailable": "The database is not responding.",
         "needs_parent": "Turn on linkedin-session first, or this switch has no effect.",
         "consent_required": "This channel needs you to confirm the terms-of-service notice first. Use the switch on the sources page.",
-        "frozen": "An upgrade is in progress. Try saving again later.",
+        "dbUnavailable": "Saving settings needs the database, and it cannot be reached right now. Try again shortly.",
         "busy": "Another process is saving settings. Try again shortly.",
         "protected": "This change touches a locked key. Edit the config file by hand to change it."
       },
@@ -6127,14 +6130,17 @@
           "starting": "{process}: the service (pid {pid}) has not taken the worker lock or written a heartbeat since it did; its report follows its first heartbeat",
           "startingHint": "Run the doctor again in a minute"
         },
-        "freeze": {
-          "none": "Settings are not frozen",
-          "active": "Settings are frozen while a deploy is running",
-          "leftover": "Settings are still frozen, but no deploy holds the deployment lock",
-          "hint": "Deploy again, or first confirm that no old processes remain, then run pnpm ops:unfreeze and pnpm config:migrate --write.",
-          "staleLocks": "Config write-lock owners older than the stale threshold: {files}",
-          "staleLocksHint": "Abandoned locks are taken over automatically on the next write. If saves keep failing, confirm the owner is no longer writing, then remove the reported lock file or the owner file inside the guard directory.",
-          "title": "Upgrade settings freeze"
+        "pending": {
+          "title": "Config writes pending",
+          "none": "no config writes are pending",
+          "pending": "{count} config file(s) wait for the next deploy: {files}",
+          "skipped": "The last deploy skipped them: {reason}",
+          "hint": "The next deploy retries them. To write them now, once every process runs this version: pnpm config:migrate --write, then pnpm config:init.",
+          "problems": "{count} config file(s) cannot be migrated: {files}",
+          "kind": {
+            "migrate": "{file} (format update)",
+            "create": "{file} (new file)"
+          }
         }
       },
       "i18n": {
@@ -6295,7 +6301,6 @@
         "completed": {
           "title": "First-run setup completed",
           "ok": "Completed {at} ({by})",
-          "existing": "Install from before the setup wizard: counts as completed (setup.yaml is written on the next start)",
           "pending": "The first-run setup is not finished: scheduled cycles wait for it",
           "pendingHint": "Open /setup in the browser or run pnpm run setup (pnpm run setup --complete marks it done without changing anything)",
           "invalid": "setup.yaml cannot be read: {error}. The install counts as set up (no wizard, cycles run), but the file needs fixing",
@@ -6483,7 +6488,8 @@
       "catalogUnreadable": "models.yaml cannot be read, so no model can be checked.",
       "setupUnreadable": "Saved, but setup.yaml could not be updated, so this step is not marked. Run pnpm run doctor.",
       "databaseUnavailable": "The database is not reachable; nothing was requested.",
-      "frozen": "An upgrade is in progress. Try saving again later. If no deploy is running, deploy again or run `pnpm ops:unfreeze`."
+      "dbUnavailable": "Saving settings needs the database, and it cannot be reached right now. Try again shortly.",
+      "busy": "Another process is saving settings. Try again shortly."
     },
     "env": {
       "set": "set",
@@ -6626,7 +6632,6 @@
       "state": {
         "pending": "Setup is not finished: scheduled cycles are waiting.",
         "completed": "Setup completed {at} ({by}).",
-        "existing": "Install from before the setup wizard: counts as completed.",
         "invalid": "setup.yaml cannot be read: {error}",
         "missing": "No setup.yaml: counts as completed."
       },
@@ -7346,10 +7351,8 @@
     }
   },
   "configOps": {
-    "fillsSkipped": "Upgrade in progress: missing config/profile files were not created.",
-    "frozen": "Settings are frozen for the upgrade.",
-    "unfrozen": "Settings are unfrozen. Next run: pnpm config:init, then pnpm config:migrate --write",
-    "failed": "Could not change the upgrade freeze. Check the target commit, write permissions and write lock; retry."
+    "dbRequired": "Config writes need the database (DATABASE_URL, or POSTGRES_* in .env). While the database is down, missing config files read the shipped defaults: run this command again once the services are up, or let the next deploy fill them in.",
+    "busy": "Another process holds the config write lock ({holder}). Try again shortly."
   },
   "deliveries": {
     "notReady": "Delivery ledger is not set up yet",

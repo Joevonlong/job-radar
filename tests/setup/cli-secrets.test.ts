@@ -5,7 +5,7 @@ import path from "node:path";
 import { parse } from "yaml";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { getConfigPath, reloadConfig, setOnProfileSaved } from "@/lib/config";
+import { reloadConfig, setOnProfileSaved } from "@/lib/config";
 import { parseAnswers } from "@/lib/setup/answers";
 import { runSetupCli, type CliIo } from "@/lib/setup/cli";
 import { readSetupState, resetSetupStateCache } from "@/lib/setup/state";
@@ -164,12 +164,13 @@ describe("pnpm run setup", () => {
   });
 
   it("--complete marks the setup done without changing any configuration", async () => {
-    const before = fs.readFileSync(path.join(tmp.defaultsDir, "ai.yaml"), "utf8");
+    const files = () => (fs.existsSync(tmp.configDir) ? fs.readdirSync(tmp.configDir).sort() : []);
+    const before = files();
     const out = io();
     expect(await runSetupCli(["--complete", "--lang", "en"], out)).toBe(0);
     expect(out.lines).toContain("Setup marked complete.");
     expect(readSetupState()).toMatchObject({ pending: false, state: { completed_by: "cli" } });
-    expect(fs.readFileSync(getConfigPath("ai"), "utf8")).toBe(before);
+    expect(files()).toEqual([...before, "setup.yaml"].sort()); // only the setup state is written
   });
 
   it("interactive: Enter keeps the shown value, the answers are saved, Chinese with --lang zh", async () => {

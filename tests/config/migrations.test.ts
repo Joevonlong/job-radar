@@ -233,7 +233,8 @@ describe("migration freshness inside the write lock", () => {
       await original(...args);
       if (!inserted && String(args[0]).includes(`${path.sep}.backup${path.sep}`)) {
         inserted = true;
-        await writeConfig("ui", { ...loadConfig("ui"), ticker_max_items: 17 });
+        // a save by something that does not take the lock (a hand edit): the base hash no longer matches at the commit
+        fs.writeFileSync(file("ui.yaml"), `config_version: 2\n${read("ui.yaml").replace("old_ticker_max: 5", "ticker_max_items: 17")}`);
       }
     });
     try {

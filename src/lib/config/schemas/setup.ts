@@ -10,8 +10,8 @@ const stepRecord = z.strictObject({
 });
 
 /**
- * config/setup.yaml: the state of the first-run setup. Written only by the wizard, `pnpm run setup` and the
- * start-up that recognises an install from before the setup wizard (`completed_by: existing_install`).
+ * config/setup.yaml: the state of the first-run setup. Written only by the wizard, `pnpm run setup` and a restore that
+ * backfills an archive from before the wizard (`completed_by: existing_install`).
  * "Setup pending" = this file is readable and `completed_at` is null; an unreadable or invalid file counts as completed.
  */
 export const setupSchema = z

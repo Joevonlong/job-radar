@@ -20,6 +20,7 @@ import { installConfigReader } from "./config-reader";
 const realScript = path.resolve(import.meta.dirname, "../../scripts/ops/restore.sh");
 const realLib = path.resolve(import.meta.dirname, "../../scripts/ops/lib/ai-worker.sh");
 const realTzLib = path.resolve(import.meta.dirname, "../../scripts/ops/lib/timezone.sh");
+const realExistingLib = path.resolve(import.meta.dirname, "../../scripts/ops/lib/existing-install.sh");
 
 let tmp = "";
 let app = "";
@@ -62,6 +63,7 @@ beforeAll(() => {
   write(path.join(app, "scripts/ops/restore.sh"), fs.readFileSync(realScript, "utf8"), 0o755);
   write(path.join(app, "scripts/ops/lib/ai-worker.sh"), fs.readFileSync(realLib, "utf8"));
   write(path.join(app, "scripts/ops/lib/timezone.sh"), fs.readFileSync(realTzLib, "utf8"));
+  write(path.join(app, "scripts/ops/lib/existing-install.sh"), fs.readFileSync(realExistingLib, "utf8"));
   installConfigReader(app, stubs);
   write(path.join(app, "config/schedule.yaml"), "timezone: UTC\nbackup:\n  enabled: true\n  max_age_hours: 30\n");
   write(path.join(stubs, "docker"), "#!/usr/bin/env bash\nexit 0\n", 0o755); // `ps` prints nothing: the db is "not running"
@@ -292,6 +294,7 @@ exit 0
     write(path.join(checkout, "scripts/ops/restore.sh"), fs.readFileSync(realScript, "utf8"), 0o755);
     write(path.join(checkout, "scripts/ops/lib/ai-worker.sh"), fs.readFileSync(realLib, "utf8"));
     write(path.join(checkout, "scripts/ops/lib/timezone.sh"), fs.readFileSync(realTzLib, "utf8"));
+    write(path.join(checkout, "scripts/ops/lib/existing-install.sh"), fs.readFileSync(realExistingLib, "utf8"));
     installConfigReader(checkout, bin);
     write(path.join(checkout, "config/schedule.yaml"), "timezone: UTC\nbackup:\n  max_age_hours: 30\n  keep_old_databases: 1\n");
     write(path.join(checkout, "data/config/schedule.yaml"), "timezone: UTC\nbackup:\n  max_age_hours: 30\n  keep_old_databases: 1\n");

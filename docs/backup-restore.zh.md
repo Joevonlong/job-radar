@@ -146,9 +146,11 @@ docker compose start web runner
 ```bash
 cp -R data/config data/config.before-restore          # 先留一份现在的
 tar -xzf data/backups/<名字>.config.tgz -C .          # 覆盖 data/config 和 data/profile
-pnpm config:migrate --write && pnpm config:check      # 备份来自旧版本时先迁移
+pnpm config:migrate --write && pnpm config:check      # 备份来自旧版本时先迁移（需要数据库）
 docker compose restart web runner                     # runner 也会在 5 秒内热加载
 ```
+
+每份配置归档都带一个标记 `data/config/.archive-meta.yaml`（不是配置文件；手动解包会把它留在原处，无害）。它告诉恢复流程：缺少 `setup.yaml` 表示设置向导待完成。`--with-config` 对没有标记的旧归档应用这条规则：归档里有配置文件却没有 `setup.yaml` 时，补一份已完成的 `setup.yaml`（缺 `language.yaml` 时也补），向导就不会打开。手动解包这种旧归档会打开向导：完成或跳过它，或运行 `pnpm run setup --complete`。
 
 只想要某一个文件：`tar -xzf <文件>.config.tgz -C /tmp/cfg data/config/ai.yaml`，再自己比对着拷。`config:migrate --write` 每次改文件前也会把原文件放进 `data/config/.backup/<时间>/`，误迁移时从那里拿回。
 
@@ -186,5 +188,3 @@ tar -xzf data/backups/<名字>.config.tgz -C .
 - **同一块盘**：备份和数据库在同一块盘上，只能防误操作，防不了坏盘。请定期把 `data/backups/` 拷到别处。
 - **权限**：备份文件和配置压缩包只有所有者可读写（`0600`），因为它们包含你的整个数据库和设置。
 - **磁盘空间**：每份备份的大小见 `ls -lh`；14 + 8 份（再加每类最多 5 份安全备份）约等于 22 份或更多的大小，数据量大了之后看一下 `df -h`。
-
-定时备份与 `scripts/ops/backup.sh` 生成的配置归档均排除 `.upgrade-freeze` 和 `.write.lock`，恢复备份不会带回升级冻结或写锁。

@@ -30,6 +30,7 @@ beforeAll(() => {
   stubs = path.join(tmp, "bin");
   write(path.join(app, "scripts/ops/backup.sh"), fs.readFileSync(path.join(REPO, "scripts/ops/backup.sh"), "utf8"), 0o755);
   write(path.join(app, "scripts/ops/lib/timezone.sh"), fs.readFileSync(path.join(REPO, "scripts/ops/lib/timezone.sh"), "utf8"));
+  write(path.join(app, "scripts/ops/lib/existing-install.sh"), fs.readFileSync(path.join(REPO, "scripts/ops/lib/existing-install.sh"), "utf8"));
   write(path.join(app, "config/schedule.yaml"), "timezone: Etc/GMT+12\n");
   write(
     path.join(stubs, "docker"),

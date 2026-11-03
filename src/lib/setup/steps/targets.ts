@@ -4,14 +4,14 @@
  */
 import fs from "node:fs";
 
-import { ensureProfileFiles, getDefaultConfigPath, mutateConfig, parseConfigText, preferencesSchema, searchSchema } from "@/lib/config";
+import { getDefaultConfigPath, mutateConfig, parseConfigText, preferencesSchema, searchSchema } from "@/lib/config";
 import { preferencesConfigToDraft, preferencesDraftToCandidate, toFieldErrors, type PreferencesDraft } from "@/lib/profile/draft";
 import { savePreferencesPatch } from "@/lib/profile/service";
 
 import { planKeywordGroups, type KeywordGroups } from "../keywords";
 import { targetsInputSchema } from "../inputs";
 import { stepError, type SetupFieldError, type SetupStepResult } from "../types";
-import { editable, finishStep, profileFieldErrors, profileSaveProblem, readFresh, zodSetupErrors, setupFrozen, setupWriteError } from "./common";
+import { editable, profileFieldErrors, profileSaveProblem, readFresh, zodSetupErrors, setupWriteError, withStepWrite } from "./common";
 
 /** The market step owns these preferences fields; their errors are not this step's. */
 const NOT_MINE = /^(market(\.|$)|locations$|remote_scope$)/;
@@ -28,15 +28,8 @@ export function shippedKeywordGroups(): KeywordGroups | null {
 }
 
 export async function saveTargetsStep(raw: unknown): Promise<SetupStepResult> {
-  const frozen = setupFrozen("targets");
-  if (frozen) return frozen;
   const parsed = targetsInputSchema.safeParse(raw);
   if (!parsed.success) return stepError("targets", "invalidPayload");
-  try {
-    await ensureProfileFiles();
-  } catch {
-    // reported by the read below
-  }
   const preferences = readFresh("preferences");
   if (preferences === null) return stepError("targets", "profileUnreadable");
   const search = readFresh("search");
@@ -52,15 +45,17 @@ export async function saveTargetsStep(raw: unknown): Promise<SetupStepResult> {
   if (!nextSearch.success && !errors.some((e) => e.path === "target_titles")) errors.push(...zodSetupErrors(nextSearch.error, () => "target_titles"));
   if (errors.length > 0 || !nextSearch.success) return stepError("targets", null, errors);
 
-  const problem = profileSaveProblem("targets", await savePreferencesPatch(parsed.data));
-  if (problem !== null) return problem;
-  try {
-    await mutateConfig("search", (current) => {
-      const latest = planKeywordGroups(current.keyword_groups, shippedKeywordGroups(), draft.target_titles);
-      return latest.mode === "none" ? null : { ...current, keyword_groups: latest.groups };
-    });
-  } catch (error) {
-    return stepError("targets", setupWriteError(error));
-  }
-  return finishStep("targets");
+  return withStepWrite("targets", async () => {
+    const problem = profileSaveProblem("targets", await savePreferencesPatch(parsed.data));
+    if (problem !== null) return problem;
+    try {
+      await mutateConfig("search", (current) => {
+        const latest = planKeywordGroups(current.keyword_groups, shippedKeywordGroups(), draft.target_titles);
+        return latest.mode === "none" ? null : { ...current, keyword_groups: latest.groups };
+      });
+    } catch (error) {
+      return stepError("targets", setupWriteError(error));
+    }
+    return null;
+  });
 }

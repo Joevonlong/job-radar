@@ -7,16 +7,19 @@ import { configErrorDigest } from "./error-digest";
  * `stale`: the file changed on disk (or moved to another layer) since the editor read it.
  * `too_large`: the text is longer than `ui.yaml: config_editor.max_bytes`.
  * `protected`: the write would change a protected key (`protected-keys.ts`); those are edited by hand in the file.
+ * `busy`: the config write lock could not be taken in time, or its session was lost before the commit.
+ * `db_unavailable`: the config write lock lives in the database, and the database cannot be reached.
  */
-export type ConfigErrorKind = "missing" | "read" | "yaml" | "schema" | "version" | "stale" | "too_large" | "protected" | "busy" | "frozen";
+export type ConfigErrorKind = "missing" | "read" | "yaml" | "schema" | "version" | "stale" | "too_large" | "protected" | "busy" | "db_unavailable";
 
-export type ConfigWriteErrorKey = "frozen" | "busy" | "stale" | "protected";
+export type ConfigWriteErrorKey = "dbUnavailable" | "busy" | "stale" | "protected";
 
 /** Write refusals that callers can explain without exposing a path or an error message. */
 export function configErrorKey(error: unknown): ConfigWriteErrorKey | null {
   if (!(error instanceof ConfigError)) return null;
   switch (error.kind) {
-    case "frozen": case "busy": case "stale": case "protected": return error.kind;
+    case "db_unavailable": return "dbUnavailable";
+    case "busy": case "stale": case "protected": return error.kind;
     default: return null;
   }
 }
@@ -39,6 +42,8 @@ export class ConfigError extends Error {
   readonly filePath: string;
   readonly kind: ConfigErrorKind;
   readonly issues: readonly ConfigIssue[];
+  /** Free text the message carries: for `busy`, the lock holder or `lock_lost`. */
+  readonly detail: string | undefined;
 
   constructor(params: {
     configName: string;
@@ -55,6 +60,7 @@ export class ConfigError extends Error {
     this.filePath = params.filePath;
     this.kind = params.kind;
     this.issues = issues;
+    this.detail = params.detail;
   }
 }
 
@@ -75,7 +81,7 @@ function formatMessage(
     too_large: `Config "${configName}" text is too large`,
     protected: `Config "${configName}" has protected keys that can only be changed by editing the file by hand (or with JOB_RADAR_ALLOW_WEB_EDIT_PROTECTED=1)`,
     busy: `Config "${configName}" is being written by another process`,
-    frozen: `Config "${configName}" is frozen during an upgrade`,
+    db_unavailable: `Config "${configName}" cannot be saved: saving config needs the database (DATABASE_URL, or POSTGRES_* in .env)`,
   }[kind];
   const lines = [`${head} (${filePath})${detail ? `: ${detail}` : ""}`];
   for (const issue of issues.slice(0, MAX_ISSUES_IN_MESSAGE)) {

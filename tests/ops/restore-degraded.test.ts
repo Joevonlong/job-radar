@@ -36,6 +36,7 @@ beforeAll(() => {
   write(path.join(app, "scripts/ops/restore.sh"), fs.readFileSync(path.join(REPO, "scripts/ops/restore.sh"), "utf8"), 0o755);
   write(path.join(app, "scripts/ops/lib/ai-worker.sh"), fs.readFileSync(path.join(REPO, "scripts/ops/lib/ai-worker.sh"), "utf8"));
   write(path.join(app, "scripts/ops/lib/timezone.sh"), fs.readFileSync(path.join(REPO, "scripts/ops/lib/timezone.sh"), "utf8"));
+  write(path.join(app, "scripts/ops/lib/existing-install.sh"), fs.readFileSync(path.join(REPO, "scripts/ops/lib/existing-install.sh"), "utf8"));
   write(path.join(app, "config/schedule.yaml"), "timezone: UTC\nbackup:\n  max_age_hours: 30\n");
   write(path.join(stubs, "docker"), "#!/usr/bin/env bash\nexit 0\n", 0o755); // `ps` prints nothing: the db is "not running"
 });

@@ -8,7 +8,7 @@ import { isLanguageCode } from "@/lib/i18n/languages";
 
 import { languageInputSchema } from "../inputs";
 import { stepError, type SetupFieldError, type SetupStepResult } from "../types";
-import { editable, finishStep, readFresh, setupFrozen, setupWriteError } from "./common";
+import { editable, readFresh, setupWriteError, withStepWrite } from "./common";
 
 export interface LanguageDefaults {
   uiDefault: Locale | null;
@@ -77,8 +77,6 @@ export function localeFromAcceptLanguage(header: string | null): Locale | null {
 
 /** Validate and save the languages (the caller sets the interface language cookie on success). */
 export async function saveLanguageStep(raw: unknown): Promise<SetupStepResult & { locale?: Locale }> {
-  const frozen = setupFrozen("language");
-  if (frozen) return frozen;
   const parsed = languageInputSchema.safeParse(raw);
   if (!parsed.success) return stepError("language", "invalidPayload");
   const input = parsed.data;
@@ -91,7 +89,7 @@ export async function saveLanguageStep(raw: unknown): Promise<SetupStepResult & 
 
   const current = readFresh("language");
   if (current === null) return stepError("language", "configUnreadable");
-  const problem = await writeLanguage((next) => {
+  return withStepWrite("language", () => writeLanguage((next) => {
     next.ui.default_locale = input.ui_locale;
     if (aiOutput !== undefined) {
       next.ai.output = aiOutput;
@@ -100,8 +98,5 @@ export async function saveLanguageStep(raw: unknown): Promise<SetupStepResult & 
     }
     if (target !== undefined) next.translation.target = target;
     return next;
-  }, (path) => (path[0] === "translation" ? "translation_target" : path[0] === "ai" ? "ai_output" : "ui_locale"), "language");
-  if (problem !== null) return problem;
-  const result = await finishStep("language");
-  return result.status === "saved" ? { ...result, locale: input.ui_locale } : result;
+  }, (path) => (path[0] === "translation" ? "translation_target" : path[0] === "ai" ? "ai_output" : "ui_locale"), "language"), (result) => ({ ...result, locale: input.ui_locale }));
 }

@@ -111,7 +111,7 @@ async function write(kind: ProfileName, candidate: unknown, baseHash: string | u
     return saved(kind);
   } catch (error) {
     logActionFailure("saveProfile", error);
-    if (error instanceof ConfigError) return failed(kind, error.kind === "frozen" ? "frozen" : error.kind === "stale" ? "stale" : "writeFailed");
+    if (error instanceof ConfigError) return failed(kind, error.kind === "db_unavailable" ? "dbUnavailable" : error.kind === "busy" ? "busy" : error.kind === "stale" ? "stale" : "writeFailed");
     const after = await currentHash(kind).catch(() => before);
     return failed(kind, after !== before ? "snapshotFailed" : "writeFailed");
   }

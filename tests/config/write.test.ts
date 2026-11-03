@@ -19,8 +19,9 @@ import {
 } from "@/lib/config";
 
 import { atomicWrite, withFileLock } from "@/lib/config/write";
-import { freezeConfig, withConfigWriteLock, WRITE_LOCK_FILE } from "@/lib/config/write-lock";
+import { setConfigWriteLockProviderForTests, withConfigWriteLock, type ConfigWriteLockProvider } from "@/lib/config/write-lock";
 
+import { inProcessConfigWriteLock } from "./in-process-lock";
 import { makeTempConfig, type TempConfig } from "./helpers";
 
 let tmp: TempConfig;
@@ -29,6 +30,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   setOnProfileSaved(null);
+  setConfigWriteLockProviderForTests(inProcessConfigWriteLock);
   vi.unstubAllEnvs();
   tmp.cleanup();
 });
@@ -333,17 +335,7 @@ describe("lists keep their comments with their entries", () => {
 });
 
 describe("profile files", () => {
-  it.each([
-    { name: "me", frozen: false },
-    { name: "preferences", frozen: false },
-    { name: "me", frozen: true },
-    { name: "preferences", frozen: true },
-  ] as const)("first saves edit the $name template document and keep its comments: token-authorized=$frozen", async ({ name, frozen }) => {
-    if (frozen) {
-      const token = "1".repeat(32);
-      await freezeConfig("a".repeat(40), token);
-      vi.stubEnv("JOB_RADAR_UPGRADE_FREEZE_TOKEN", token);
-    }
+  it.each(["me", "preferences"] as const)("first saves edit the %s template document and keep its comments", async (name) => {
     const source = path.join(tmp.defaultsDir, "profile.example", `${name}.yaml`);
     const template = `# Keep this template header\n${fs.readFileSync(source, "utf8")}`;
     fs.writeFileSync(source, template);
@@ -360,35 +352,45 @@ describe("profile files", () => {
     expect(fs.statSync(path.join(tmp.profileDir, `${name}.yaml`)).mode & 0o777).toBe(0o600);
   });
 
-  it("does not acquire a directory lock when every profile file already exists", async () => {
+  /** The in-process lock, counting what is taken and whether a session is open right now. */
+  function countingLock() {
+    const state = { acquired: 0, open: 0 };
+    const provider: ConfigWriteLockProvider = async (options) => {
+      const attempt = await inProcessConfigWriteLock(options);
+      if (!attempt.acquired) return attempt;
+      state.acquired += 1;
+      state.open += 1;
+      return { acquired: true, lock: { fence: attempt.lock.fence, release: async () => { state.open -= 1; await attempt.lock.release(); } } };
+    };
+    setConfigWriteLockProviderForTests(provider);
+    return state;
+  }
+
+  it("does not take the write lock when every profile file already exists", async () => {
     await ensureProfileFiles();
-    let entered = () => {};
-    let release = () => {};
-    const ready = new Promise<void>((resolve) => { entered = resolve; });
-    const gate = new Promise<void>((resolve) => { release = resolve; });
-    const holding = withConfigWriteLock(path.join(tmp.profileDir, "me.yaml"), async () => { entered(); await gate; });
-    await ready;
-    try {
-      expect((await ensureProfileFiles()).every((r) => !r.created)).toBe(true);
-    } finally { release(); await holding; }
+    const state = countingLock();
+    expect((await ensureProfileFiles()).every((r) => !r.created)).toBe(true);
+    expect(state.acquired).toBe(0);
   });
 
-  it("releases the directory lock before waiting for the profile snapshot hook", async () => {
+  it("releases the write lock before waiting for the profile snapshot hook", async () => {
     await ensureProfileFiles();
+    const state = countingLock();
     let entered = () => {};
     let release = () => {};
     const ready = new Promise<void>((resolve) => { entered = resolve; });
     const gate = new Promise<void>((resolve) => { release = resolve; });
-    let lockedDuringHook = true;
+    let openDuringHook = -1;
     setOnProfileSaved(async () => {
-      lockedDuringHook = fs.existsSync(path.join(tmp.profileDir, WRITE_LOCK_FILE));
+      openDuringHook = state.open;
       entered(); await gate;
     });
     const writing = writeConfig("me", { ...loadConfig("me"), summary: "Updated profile." });
     await ready;
     try {
-      expect(lockedDuringHook).toBe(false);
-      await atomicWrite(path.join(tmp.profileDir, "other.yaml"), "saved: true\n");
+      expect(openDuringHook).toBe(0);
+      // the lock is free: another writer is not kept waiting by the hook
+      await withConfigWriteLock(() => atomicWrite(path.join(tmp.profileDir, "other.yaml"), "saved: true\n"));
       expect(read(tmp.profileDir, "me.yaml")).toContain("Updated profile.");
     } finally { release(); await writing; }
   });

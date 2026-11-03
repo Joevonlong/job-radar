@@ -15,7 +15,6 @@ import {
   getConfigPath,
   inspectConfigLayers,
   installedConfigFiles,
-  isExistingInstall,
   loadConfig,
   readConfigText,
   readProfileText,
@@ -27,6 +26,8 @@ import {
   writeConfig,
   type ConfigChangeEvent,
 } from "@/lib/config";
+
+import { ARCHIVE_META_YAML } from "@/lib/ops/config-archive";
 
 import { makeTempConfig, type TempConfig } from "./helpers";
 
@@ -47,6 +48,8 @@ const dirs = (): TempConfig => {
 const user = (file: string) => path.join(dirs().configDir, file);
 const shipped = (file: string) => path.join(dirs().defaultsDir, file);
 const read = (file: string) => fs.readFileSync(file, "utf8");
+/** What a fill creates without `--from`: the wizard's setup.yaml and language.yaml are not among them. */
+const FILLED_NAMES = USER_CONFIG_NAMES.filter((name) => name !== "setup" && name !== "language");
 /** Every file of a directory (recursively) with its text: the "nothing changed here" check. */
 function snapshot(dir: string): Record<string, string> {
   const out: Record<string, string> = {};
@@ -204,8 +207,11 @@ describe("ensureConfigFiles (pnpm config:init)", () => {
 
   it("creates the directory and copies the user files, not the shipped ones; a second run changes nothing", async () => {
     const first = await ensureConfigFiles();
-    expect(first.filter((r) => r.created).map((r) => r.name).sort()).toEqual([...USER_CONFIG_NAMES].sort());
-    for (const name of USER_CONFIG_NAMES) expect(configLayer(name)).toBe("user");
+    expect(first.filter((r) => r.created).map((r) => r.name).sort()).toEqual([...FILLED_NAMES].sort());
+    for (const name of FILLED_NAMES) expect(configLayer(name)).toBe("user");
+    // a missing setup.yaml means the wizard is pending, so init leaves it (and the language file) alone
+    expect(fs.existsSync(user("setup.yaml"))).toBe(false);
+    expect(fs.existsSync(user("language.yaml"))).toBe(false);
     expect(fs.existsSync(user("models.yaml"))).toBe(false);
     expect(fs.existsSync(user("pipeline.yaml"))).toBe(false);
     expect(read(user("sources.yaml"))).toBe(read(shipped("sources.yaml")));
@@ -243,44 +249,65 @@ describe("ensureConfigFiles (pnpm config:init)", () => {
 
   it("--from the defaults directory itself is the same as no --from", async () => {
     const results = await ensureConfigFiles({ from: dirs().defaultsDir });
-    expect(results.filter((r) => r.created).map((r) => r.name).sort()).toEqual([...USER_CONFIG_NAMES].sort());
+    expect(results.filter((r) => r.created).map((r) => r.name).sort()).toEqual([...FILLED_NAMES].sort());
   });
 
-  it("a fresh install gets the shipped language.yaml; an existing install gets its earlier languages written", async () => {
-    // the shipped default of this fixture is zh; make it the public English default to tell the two apart
-    fs.writeFileSync(shipped("language.yaml"), read(shipped("language.yaml")).replace("default_locale: zh", "default_locale: en"));
-    expect(isExistingInstall()).toBe(false);
-    const fresh = await ensureConfigFiles();
-    expect(fresh.find((r) => r.name === "language")).toMatchObject({ created: true, reason: "user" });
-    expect(read(user("language.yaml"))).toBe(read(shipped("language.yaml")));
-
-    // an install from before the language settings: config files, no language.yaml
-    fs.rmSync(user("language.yaml"));
-    expect(isExistingInstall()).toBe(true);
-    expect(installedConfigFiles()).toContain("ai.yaml");
-    const upgraded = await ensureConfigFiles();
-    expect(upgraded.filter((r) => r.created).map((r) => r.name)).toEqual(["language"]);
-    expect(upgraded.find((r) => r.name === "language")).toMatchObject({ created: true, reason: "upgrade", source: null });
-    expect(loadConfig("language")).toEqual({
-      ui: { default_locale: "zh" },
-      ai: { output: "zh", summary_also: ["en"] },
-      translation: { target: "zh" },
-      notify: { locale: null },
-      cli: { locale: null },
-    });
-    // never overwritten
-    const again = await ensureConfigFiles();
-    expect(again.some((r) => r.created)).toBe(false);
-  });
-
-  it("--from an old directory without language.yaml writes the earlier languages, not the default", async () => {
+  it("setup.yaml and language.yaml come from --from only when that directory has them", async () => {
     const from = path.join(dirs().root, "old-config");
     fs.cpSync(dirs().defaultsDir, from, { recursive: true });
-    fs.rmSync(path.join(from, "language.yaml"));
-    fs.writeFileSync(shipped("language.yaml"), read(shipped("language.yaml")).replace("default_locale: zh", "default_locale: en"));
+    fs.writeFileSync(path.join(from, "language.yaml"), read(path.join(from, "language.yaml")).replace("default_locale: zh", "default_locale: en"));
     const results = await ensureConfigFiles({ from });
-    expect(results.find((r) => r.name === "language")).toMatchObject({ created: true, reason: "upgrade" });
-    expect(read(user("language.yaml"))).toContain("default_locale: zh");
+    expect(results.find((r) => r.name === "setup")).toMatchObject({ created: true, reason: "user", source: path.join(from, "setup.yaml") });
+    expect(results.find((r) => r.name === "language")).toMatchObject({ created: true, reason: "user" });
+    expect(read(user("setup.yaml"))).toBe(read(path.join(from, "setup.yaml")));
+    expect(read(user("language.yaml"))).toContain("default_locale: en");
+    // never overwritten
+    expect((await ensureConfigFiles({ from })).some((r) => r.created)).toBe(false);
+  });
+
+  describe("--from a directory from before the setup wizard", () => {
+    let from = "";
+    const now = new Date("2026-11-01T10:00:00.000Z");
+    beforeEach(() => {
+      from = path.join(dirs().root, "old-config");
+      fs.cpSync(dirs().defaultsDir, from, { recursive: true });
+      fs.rmSync(path.join(from, "setup.yaml"));
+      fs.rmSync(path.join(from, "language.yaml"));
+    });
+
+    it("gets a completed setup.yaml and the earlier languages, so the wizard does not open", async () => {
+      expect(installedConfigFiles(from)).toContain("ai.yaml");
+      const results = await ensureConfigFiles({ from, now });
+      expect(results.find((r) => r.name === "setup")).toMatchObject({ created: true, reason: "backfill", source: null });
+      expect(results.find((r) => r.name === "language")).toMatchObject({ created: true, reason: "backfill", source: null });
+      expect(read(user("setup.yaml"))).toContain('completed_at: "2026-11-01T10:00:00.000Z"');
+      expect(read(user("setup.yaml"))).toContain("completed_by: existing_install");
+      expect(loadConfig("language")).toEqual({
+        ui: { default_locale: "zh" },
+        ai: { output: "zh", summary_also: ["en"] },
+        translation: { target: "zh" },
+        notify: { locale: null },
+        cli: { locale: null },
+      });
+      // never overwritten
+      expect((await ensureConfigFiles({ from, now })).some((r) => r.created)).toBe(false);
+    });
+
+    it("is restored as it is when the directory carries the archive marker", async () => {
+      fs.writeFileSync(path.join(from, ".archive-meta.yaml"), ARCHIVE_META_YAML);
+      const results = await ensureConfigFiles({ from, now });
+      expect(results.find((r) => r.name === "setup")).toMatchObject({ created: false, reason: null });
+      expect(results.find((r) => r.name === "language")).toMatchObject({ created: false, reason: null });
+      expect(fs.existsSync(user("setup.yaml"))).toBe(false);
+    });
+
+    it("is not backfilled when the target already has a setup.yaml", async () => {
+      fs.mkdirSync(dirs().configDir, { recursive: true });
+      fs.writeFileSync(user("setup.yaml"), "config_version: 1\ncompleted_at: null\ncompleted_by: null\nsteps: {}\n");
+      const results = await ensureConfigFiles({ from, now });
+      expect(results.find((r) => r.name === "language")).toMatchObject({ created: false, reason: null });
+      expect(read(user("setup.yaml"))).toContain("completed_at: null");
+    });
   });
 
   it("needs no write access once everything is there (the runner's read-only mount)", async () => {

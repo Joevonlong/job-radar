@@ -236,7 +236,7 @@ manual_triggers:
 - With unsaved changes, clicking a sidebar link or a page in the command palette pops up "Stay / Discard changes"; refreshing or closing the tab uses the browser's own prompt. The browser's back button is not intercepted.
 - On save only the parts you changed are touched: `{ a: 1 }` / `[a, b]` styles already in the file stay as they are, and empty lists produced by schema defaults (`exclude: []`) are not written into the file.
 
-During deployment, web versions that know the freeze refuse settings, advanced editor, profile and wizard saves from step 4 with an upgrade message. On the first deploy of this version, the older web runs until step 8 and still writes harmless old-format files. Retry afterwards; for a leftover freeze see [upgrade.md](upgrade.md#settings-during-an-upgrade).
+Saving on the settings pages, the advanced editor, `/me` and the wizard needs the database: with it unreachable the save is refused with "Saving settings needs the database" and nothing is written, while reading still works. If another process is writing the same file, the save waits briefly and then says it is busy; try again. A deploy writes no config before its step 11, so saves work throughout; see [Config write lock](configuration.md#config-write-lock) and [upgrade.md](upgrade.md#settings-during-an-upgrade).
 
 ### Company query controls
 

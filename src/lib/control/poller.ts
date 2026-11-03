@@ -40,6 +40,8 @@ export interface ControlPollOptions {
   onCycleFinished?: ControlHandlerContext["onCycleFinished"];
   /** Omitted: one queue for all kinds (runner and --once). */
   lane?: ControlLane;
+  /** Runs before every claim; the ai-worker stops here when config files are newer than its code. */
+  beforeClaim?: () => Promise<void>;
   /**
    * The kinds this process may claim, asked again for every claim (a hot-reloaded `ai.yaml: execution` takes effect
    * at once). Omitted: every kind. The runner and the ai-worker each pass their own.
@@ -80,6 +82,7 @@ function claimableKinds(kinds: readonly ControlRequestKind[] | undefined): reado
  */
 export async function processNextControlRequest(options: ControlPollOptions): Promise<ControlRequest | null> {
   const { db, signal, logger } = options;
+  await options.beforeClaim?.();
   const request = await claimNextControlRequest(db, claimableKinds(options.kinds?.()), { lane: options.lane });
   if (!request) return null;
   const recorder = options.activity ?? noopRecorder;

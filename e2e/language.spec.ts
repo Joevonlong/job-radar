@@ -10,7 +10,8 @@ import { expect, test, type Page } from "./fixtures";
 const CONFIG_DIR = process.env.E2E_CONFIG_DIR ?? "";
 const DEFAULTS_DIR = process.env.E2E_DEFAULTS_DIR ?? path.resolve("tests/fixtures/config/defaults");
 const languageFile = () => path.join(CONFIG_DIR, "language.yaml");
-const readLanguage = () => fs.readFileSync(languageFile(), "utf8");
+// Starting writes nothing, so the file may not exist before the first save.
+const readLanguage = () => (fs.existsSync(languageFile()) ? fs.readFileSync(languageFile(), "utf8") : "");
 const writeLanguage = (edit: (text: string) => string) => fs.writeFileSync(languageFile(), edit(fs.readFileSync(path.join(DEFAULTS_DIR, "language.yaml"), "utf8")));
 
 test.describe.configure({ mode: "serial" });

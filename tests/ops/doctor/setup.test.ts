@@ -17,10 +17,6 @@ describe("setup.completed", () => {
     expect(r.detail).toContain("2026-10-01T08:00:00.000Z");
   });
 
-  it("ok for an install from before the wizard", async () => {
-    expect((await only(setupCompletedCheck, withSetup(status({ source: "existing_install", path: null })))).status).toBe("ok");
-  });
-
   it("warns while pending, pointing at /setup and pnpm run setup", async () => {
     const r = await only(setupCompletedCheck, withSetup(status({ pending: true, state: { completed_at: null, completed_by: null, steps: {} } })));
     expect(r.status).toBe("warn");

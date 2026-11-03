@@ -29,11 +29,11 @@ Job Radar 的所有设置都是 YAML，分两层：
 
 | 类 | 文件 | 首次初始化 | 产品升级时 |
 |---|---|---|---|
-| `user` | schedule、search、sources、ai、notify、interests、ui、breakdown、resume、insights、language、setup、salary（[salary.zh.md](salary.zh.md)）、mcp（[mcp.zh.md](mcp.zh.md)）、writer（[application-writer.zh.md](application-writer.zh.md)） | 从默认目录复制到用户目录，之后归你 | 不会自动改你的文件；格式变化由迁移（`config_version`）带过去 |
+| `user` | schedule、search、sources、ai、notify、interests、ui、breakdown、resume、insights、language、setup、salary（[salary.zh.md](salary.zh.md)）、mcp（[mcp.zh.md](mcp.zh.md)）、writer（[application-writer.zh.md](application-writer.zh.md)） | 在 `pnpm config:init`（部署会运行它）或一次保存把它复制到用户目录之前，一直读默认目录的；之后归你 | 不会自动改你的文件；格式变化由迁移（`config_version`）带过去 |
 | `shipped` | models（模型目录和价格）、pipeline（解析规则、城市和技能表）、pipeline-board（看板布局和卡片显示）、job-search（岗位查询解析与匹配设置）、job-archive（再次出现规则）、signal-presets（`/interests`“新增类别”对话框的预设，见 [signals.zh.md](signals.zh.md#添加你自己的兴趣点)） | 不复制，一直读默认目录的 | 跟着产品更新 |
 
-产品升级新增的 `user` 文件会在下次启动时从默认目录复制过来；如果用户目录里本来就有配置（老安装），可以改为写入保持原有行为的版本
-（`language.yaml`：中文，见 [languages.zh.md](languages.zh.md)）。初始化向导用同一个"老安装"判断。
+启动时不会写任何文件：web 和 runner 只记一条日志，说有多少个用户文件缺失、改读默认值。产品升级新增的 `user` 文件由下一次部署（第 11 步）或
+`pnpm config:init` 复制。`setup.yaml` 和 `language.yaml` 归设置向导，不这样创建（见下文）。
 
 想改 `shipped` 文件：把它复制到用户目录再改（整份覆盖）。代价是产品以后对这个文件的更新不再生效：`pnpm config:check` 和 doctor 的 `config.layers` 会一直提示"你覆盖了 pipeline.yaml"（或别的文件）。想重新跟随产品：删掉用户目录里那份。`models.yaml` 是例外：你的 `data/config/models.yaml` 是按模型叠加在发布的那份之上的（见 [AI providers](ai-providers.zh.md#新模型上线清单)），不会挡住你没列出的模型的产品更新。
 
@@ -118,16 +118,17 @@ maintenance 连续 `relist.min_gap_days` 天或更久没有运行、而采集一
 ```bash
 pnpm config:init                  # 建用户目录，复制缺的 user 文件和画像模板；已有的不动（可重复运行）
 pnpm config:init --from <目录>     # 从别的目录复制（旧安装迁移用），并复制与默认内容不同的 shipped 文件
+pnpm config:init --env-only       # 只创建 .env（新安装的数据库密码），不碰任何配置文件
 pnpm config:migrate               # 列出要迁移的文件和 diff，不写
 pnpm config:migrate --write       # 迁移：先把要改的原文件备份到 data/config/.backup/<时间>/，再写
+pnpm config:migrate --prune-backups  # 只保留最新的 schedule.yaml: config_writes.backups_keep（5）个备份文件夹，删掉更旧的
+pnpm config:plan [--deploy] [--check]  # 列出待写的内容，不写；--deploy 加上 config:init 会创建的文件；--check 有待写就退出 2（0 没有，1 有文件无法迁移）
 pnpm config:check                 # 校验两层（默认目录的文件即使被覆盖也要合法），写出每个文件读的是哪层和出厂配置标识
 pnpm config:check --effective     # 逐个文件：读的是哪层，以及生效值的哈希（`--json` 输出机器可读的列表；见下）
 pnpm config:example               # 列出示例配置；`pnpm config:example <id> [--dry-run]` 套用其中一个（见下文）
 ```
 
-web 和 runner 启动时会补缺，升级冻结期间跳过补缺。已有安装在 `scripts/ops/deploy.sh` 第 4 步先预览迁移、在内存里运行 `config:check` 并检查 compose config，通过后才冻结写入；第 11 步 `config-write` 核对 worker 持有者及宿主进程后才补缺、写迁移。首装在第 4 步运行 `config:init`，不冻结。不支持冻结协议的旧目标沿用第 4 步写盘的旧流程，见[回退说明](upgrade.zh.md#downgrade-pre-config-freeze)。
-
-只有认识冻结协议的 web 版本从第 4 步起拒绝保存。首次部署本版本时，旧 web 会一直运行到第 8 步；它仍写旧格式文件，没有危害。等待 `config-write` 补文件期间，读取方会按当前安装状态选择默认值，例如已有安装的语言默认值。
+启动时不写任何文件，`--write` 也不删旧备份：文件由这些命令、网页里的保存，以及 `scripts/ops/deploy.sh` 的第 11 步 `config-write` 写入——新 worker 确认、没有更旧的 worker 在运行之后，它依次运行 `config:migrate --write`、`config:init`、`config:plan --deploy --check` 和 `config:migrate --prune-backups`。门禁或某次写入失败时部署退出 2，下一次部署重试；doctor 用 `config.pending` 显示还剩什么。文件写入之前，缺失的文件读出厂默认值，旧格式的文件在内存中迁移。部署第 4 步只预览。宿主机上要写文件的命令需要数据库（见[配置写锁](#配置写锁)）。没有 config-write 步骤的旧目标沿用它自己的第 4 步，见[回退说明](upgrade.zh.md#downgrade-pre-config-write-step)。
 
 ### 薪资（`salary.yaml`）
 
@@ -186,10 +187,11 @@ web 和 runner 启动时会补缺，升级冻结期间跳过补缺。已有安�
 
 ### setup.yaml
 
-`setup.yaml` 记录首次设置的状态（`completed_at`、`completed_by`、`steps`），由设置向导和 `pnpm run setup` 写入。全新安装时它是
-"未完成"（打开任何页面都进入 `/setup`，runner 不跑定时轮次）。`config:init`（以及 web / runner 启动时）发现用户目录里已经有配置
-文件、却没有 `setup.yaml` 时，会写入一份已完成的（`completed_by: existing_install`），所以老安装永远不会看到向导。读不了的文件按
-已完成处理。见 [setup.zh.md](setup.zh.md)。
+`setup.yaml` 记录首次设置的状态（`completed_at`、`completed_by`、`steps`），由设置向导和 `pnpm run setup` 写入。没有 `setup.yaml` 就是
+“未完成”（打开任何页面都进入 `/setup`，runner 不跑定时轮次），不管是否还有其他配置文件：不会推断这是已有安装，部署也不会补这个文件。
+只有恢复（或 `pnpm config:init --from <目录>`）向导之前的备份时才会写入一份已完成的（`completed_by: existing_install`）。所以原地升级的
+向导之前的安装会打开一次向导：完成或跳过它，或运行 `pnpm run setup --complete`。读不了的文件按已完成处理。见 [setup.zh.md](setup.zh.md) 和
+[upgrade.zh.md](upgrade.zh.md#升级期间的设置)。
 
 ## 示例配置
 
@@ -519,13 +521,13 @@ CLI 轮次收到 Ctrl-C 或 SIGTERM 时会取消步骤，把这一轮结束为�
 
 ## 从单目录切换
 
-旧版本的线上配置就是 git 里的 `config/`。切换代码前先单独保留这份线上目录；停掉旧消费者后，用 `pnpm config:init --from <保留的旧配置目录>` 导入，再让部署补缺。已有安装现在在第 4 步先预览和校验再冻结，第 11 步 `config-write` 排除旧 worker 后才补缺和写迁移。之后网页只写 `data/config/`，`config/` 存放产品默认值。详见 [`deploy.zh.md`](deploy.zh.md) 第 4、5 节与 [upgrade.zh.md](upgrade.zh.md)。
+旧版本的线上配置就是 git 里的 `config/`。切换代码前先单独保留这份线上目录；停掉旧消费者后，用 `pnpm config:init --from <保留的旧配置目录>` 导入（向导之前的目录还会因此得到一份已完成的 `setup.yaml`），再让部署补缺。部署第 4 步只预览和校验，第 11 步 `config-write` 排除旧 worker 后才补缺和写迁移。之后网页只写 `data/config/`，`config/` 存放产品默认值。详见 [`deploy.zh.md`](deploy.zh.md) 第 4、5 节与 [upgrade.zh.md](upgrade.zh.md)。
 
-### 升级写入保护
+### 配置写锁
 
-来源开关与看板、发现的看板候选、搜索城市同步、工作流设置、兴趣编辑，以及设置向导的配置和进度，都在文件锁与跨进程目录锁内读取当前值，同时修改不同字段会保留彼此的更新。读取前先检查升级冻结；冻结或锁忙会显示对应提示。薪资设置表单与其他设置表单、来源导入一样，会拒绝覆盖预览后已被改动的文件。向导的市场与目标步骤只合并各自负责的偏好字段，画像历史在释放目录锁后记录。
+对配置或 profile 文件的每次写入，都按文件在数据库里取一把锁：设置页、设置向导、高级编辑器、`/me`、`/interests`、来源注册表里的保存，以及命令 `config:init`、`config:migrate --write` 和 `pnpm run setup`。来源开关与看板、发现的看板候选、搜索城市同步、工作流设置、兴趣编辑，都在锁内读取当前值，所以同时修改不同字段会保留彼此的更新。薪资表单与其他设置表单、来源导入一样，会拒绝覆盖预览后已被改动的文件。向导的市场与目标步骤只合并各自负责的偏好字段。
 
-`pnpm ops:freeze --target <commit>` 冻结配置与 profile 写入；`pnpm ops:unfreeze` 在同一套跨进程写锁内删除标记，并提示先运行 `pnpm config:init`，再运行 `pnpm config:migrate --write`。先确认没有旧消费者再手工解除。第 8 步启动容器之前失败或中断，部署只自动解除本次全新创建的冻结；接管的标记必须等 `config-write` 通过消费者检查或用户运行 `ops:unfreeze` 才会解除。尝试 `up` 后失败或中断则保留所有标记。认识冻结协议的 web 在冻结期间拒绝保存；首次升级的旧 web 到第 8 步之前仍写无害的旧格式文件。doctor 用 `config.freeze` 检查遗留标记和超过过期阈值的写锁及 guard 持有者。遗留锁在下次写入时自动接管；若保存持续失败，确认持有者不再写入后删除锁文件或 guard 内的持有者文件。`pnpm config:migrate --json` 只读返回待迁移和问题数量。锁的时限由 `schedule.yaml` 的 `deploy.config_write_lock_stale_seconds`、`config_write_lock_wait_seconds`、`config_write_lock_retry_ms` 配置（默认 300 秒、10 秒、50 毫秒）。同主机持有者记录随机进程 ID 与进程启动时间；PID 重用或 token 已遗弃时立即接管，活跃持有者不接管。其他主机或命名空间仅在超过过期阈值后接管，最终提交再次核对锁的所有权。恢复与长驻进程重启见 [upgrade.zh.md](upgrade.zh.md#升级期间的设置)。
+所以保存需要数据库。数据库连不上时保存会被拒绝（“保存配置需要数据库，数据库暂时连不上”），什么都不写；读取不受影响。宿主机上的命令需要一个从宿主机能连上的数据库（`DATABASE_URL`，或 `.env` 里的 `POSTGRES_*`），没有时会明说。别的写入者持有锁时，写入最多等 `schedule.yaml: config_writes.lock_wait_seconds`（默认 10 秒）再报告忙；命令会说出持有者。同一个块里的 `backups_keep`（默认 5）是部署保留的 `.backup/<时间>/` 文件夹个数。两个键都不在出厂文件里，要改才把这个块加进 `data/config/schedule.yaml`。`pnpm config:migrate --json` 只读返回待迁移和问题数量。旧版本会把这个块当作未知键拒绝：回退前先删掉它。见 [upgrade.zh.md](upgrade.zh.md#升级期间的设置)。
 
 ## 当前展示分数（`current-scores.yaml`）
 

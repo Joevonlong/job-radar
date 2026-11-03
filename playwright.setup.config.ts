@@ -8,8 +8,8 @@ import { requireTestAdminDatabaseUrl } from "./scripts/test-database";
 /**
  * The first-run setup wizard on a brand-new install (`pnpm test:e2e:setup`). Its own port, database and
  * directories, so it never shares state with the main suite (playwright.config.ts): `scripts/e2e-prepare.ts --fresh`
- * empties the config and profile directories (the web fills them on start, as on a first `docker compose up`) and drops,
- * recreates and migrates the database without the seed. No stand-in runner: requested cycles stay queued.
+ * drops, recreates and migrates the database without the seed and leaves the config and profile directories empty: the
+ * wizard writes them. No stand-in runner: requested cycles stay queued.
  * The run uses the shipped `config/` as its defaults (and so its example profile), not the frozen fixture of the main suite.
  * `E2E_SETUP_PORT` picks the port; with `E2E_PORT` set (one port per worktree) the default is that port + 5.
  */

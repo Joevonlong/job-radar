@@ -78,7 +78,7 @@
       "watchedNotFound": "关注列表里没有这家公司，可能已被移除。",
       "categoryMissing": "页面上的类别和文件不一致（文件可能刚被改过）。请刷新页面后再改。",
       "unknownRetired": "要删除的类别在文件里不存在。请刷新页面后再改。",
-      "frozen": "正在升级，配置暂时不能保存，请稍后再试。",
+      "dbUnavailable": "保存配置需要数据库，数据库暂时连不上，请稍后重试。",
       "busy": "另一个进程正在保存配置，请稍后再试。",
       "stale": "配置已在别处更改，请刷新后重试。",
       "protected": "此更改涉及受保护的配置项，请直接编辑配置文件。"
@@ -617,7 +617,7 @@
         "link": "修改搜索城市",
         "done": "搜索城市已更新：之后的轮次会搜索这些地点。",
         "failed": "没能更新搜索城市。",
-        "frozen": "正在升级，配置暂时不能保存，请稍后再试。",
+        "dbUnavailable": "保存配置需要数据库，数据库暂时连不上，请稍后重试。",
         "busy": "另一个进程正在保存配置，请稍后再试。",
         "stale": "配置已在别处更改，请刷新后重试。",
         "protected": "此更改涉及受保护的配置项，请直接编辑配置文件。"
@@ -727,7 +727,8 @@
       "snapshotNotFound": "找不到这个快照。",
       "snapshotInvalid": "这个旧版本不符合当前的格式，无法回滚。",
       "stale": "打开表单后，这个文件在别处被改过（另一个标签页或手工编辑）。表单已显示保存的值，你的修改没有保存。",
-      "frozen": "正在升级，稍后再保存。如果没有部署在进行，再部署一次，或运行 `pnpm ops:unfreeze`。"
+      "dbUnavailable": "保存配置需要数据库，数据库暂时连不上，请稍后重试。",
+      "busy": "另一个进程正在保存配置，请稍后再试。"
     },
     "loadError": {
       "title": "无法读取 {file}",
@@ -2006,7 +2007,8 @@
       "catalogUnreadable": "模型目录读不了，先修好 models.yaml",
       "protectedKeys": "这次修改涉及受保护的键（命令、API 地址或凭据路径）。受保护的键只能手动编辑配置文件来改。",
       "stale": "打开表单后，这个文件在别处被改过（另一个标签页、高级编辑器或手工编辑）。表单已显示保存的值，你的修改没有保存。",
-      "frozen": "正在升级，稍后再保存。如果没有部署在进行，再部署一次，或运行 `pnpm ops:unfreeze`。"
+      "dbUnavailable": "保存配置需要数据库，数据库暂时连不上，请稍后重试。",
+      "busy": "另一个进程正在保存配置，请稍后再试。"
     },
     "loadError": {
       "title": "无法读取 {file}",
@@ -3630,7 +3632,7 @@
         "requestUnavailable": "这次刷新的结果已经没有了，请重新刷新后再试。",
         "notAddable": "选中的模型里有不能加入的（已在清单里，或不支持 JSON 模式），请刷新列表后重试。",
         "catalogInvalid": "加入后清单不合法，所以没有写入。请到“设置 → 高级”检查 models.yaml。",
-        "frozen": "升级期间配置被冻结，请稍后再试。",
+        "dbUnavailable": "保存配置需要数据库，数据库暂时连不上，请稍后重试。",
         "busy": "有别的进程正在写配置，请稍后再试。",
         "stale": "保存时文件有了变化，请刷新列表后重试。",
         "protected": "这个改动涉及受保护的设置。",
@@ -3669,7 +3671,7 @@
         "unreadable": "ui.yaml 或 notify.yaml 现在无法读取：请先在高级编辑器里修好它。",
         "writeFailed": "保存失败：{file} 没有改动，其他文件也没有写。",
         "partial": "{saved} 已保存，但 {file} 没有写成功：它还是旧的。请再保存一次。",
-        "frozen": "正在升级，稍后再保存。如果没有部署在进行，再部署一次，或运行 `pnpm ops:unfreeze`。",
+        "dbUnavailable": "保存配置需要数据库，数据库暂时连不上，请稍后重试。",
         "busy": "另一个进程正在保存配置，请稍后再试。",
         "stale": "配置已在别处更改，请刷新后重试。",
         "protected": "此更改涉及受保护的配置项，请直接编辑配置文件。"
@@ -3713,7 +3715,8 @@
         "needs_confirm": "这是产品默认文件：第一次保存要先确认会生成整份覆盖文件。",
         "failed": "保存失败，文件没有改动。",
         "protected": "这段文本修改了受保护的键（命令、API 地址或凭据路径）。请手动编辑文件来改。",
-        "frozen": "正在升级，稍后再保存。如果没有部署在进行，再部署一次，或运行 `pnpm ops:unfreeze`。"
+        "dbUnavailable": "保存配置需要数据库，数据库暂时连不上，请稍后重试。",
+        "busy": "另一个进程正在保存配置，请稍后再试。"
       },
       "files": {
         "label": "配置文件",
@@ -4035,7 +4038,7 @@
         "config_invalid": "sources.yaml 有错误，先修好再加入。",
         "write_failed": "无法写入 sources.yaml。",
         "database_unavailable": "数据库没有响应。",
-        "frozen": "正在升级，配置暂时不能保存，请稍后再试。",
+        "dbUnavailable": "保存配置需要数据库，数据库暂时连不上，请稍后重试。",
         "busy": "另一个进程正在保存配置，请稍后再试。",
         "stale": "配置已在别处更改，请刷新后重试。",
         "protected": "此更改涉及受保护的配置项，请直接编辑配置文件。"
@@ -4378,7 +4381,7 @@
       "writeFailed": "配置文件写入失败，没有改动，建议仍在待审批。",
       "databaseUnavailable": "数据库不可用。",
       "categoryMissing": "这条建议要加入的信号类别已经删除，没有改动。可以先恢复这个类别，或者直接拒绝。",
-      "frozen": "正在升级，配置暂时不能保存，请稍后再试。",
+      "dbUnavailable": "保存配置需要数据库，数据库暂时连不上，请稍后重试。",
       "busy": "另一个进程正在保存配置，请稍后再试。",
       "stale": "配置已在别处更改，请刷新后重试。",
       "protected": "此更改涉及受保护的配置项，请直接编辑配置文件。"
@@ -5055,7 +5058,7 @@
       "database_unavailable": "数据库没有响应。",
       "needs_parent": "先启用 linkedin-session，这个开关才会生效。",
       "consent_required": "这个渠道需要你先确认服务条款风险说明。请在来源页用开关开启。",
-      "frozen": "正在升级，配置暂时不能保存，请稍后再试。",
+      "dbUnavailable": "保存配置需要数据库，数据库暂时连不上，请稍后重试。",
       "busy": "另一个进程正在保存配置，请稍后再试。",
       "protected": "此更改涉及受保护的配置项，请直接编辑配置文件。"
     },
@@ -5103,7 +5106,7 @@
         "database_unavailable": "数据库没有响应。",
         "needs_parent": "先启用 linkedin-session，这个开关才会生效。",
         "consent_required": "这个渠道需要你先确认服务条款风险说明。请在来源页用开关开启。",
-        "frozen": "正在升级，配置暂时不能保存，请稍后再试。",
+        "dbUnavailable": "保存配置需要数据库，数据库暂时连不上，请稍后重试。",
         "busy": "另一个进程正在保存配置，请稍后再试。",
         "protected": "此更改涉及受保护的配置项，请直接编辑配置文件。"
       }
@@ -5200,7 +5203,7 @@
         "database_unavailable": "数据库没有响应。",
         "needs_parent": "先启用 linkedin-session，这个开关才会生效。",
         "consent_required": "这个渠道需要你先确认服务条款风险说明。请在来源页用开关开启。",
-        "frozen": "正在升级，配置暂时不能保存，请稍后再试。",
+        "dbUnavailable": "保存配置需要数据库，数据库暂时连不上，请稍后重试。",
         "busy": "另一个进程正在保存配置，请稍后再试。",
         "protected": "此更改涉及受保护的配置项，请直接编辑配置文件。"
       },
@@ -6127,14 +6130,17 @@
           "starting": "{process}：服务（pid {pid}）还没拿到 worker 锁，或拿到锁后还没写入心跳；配置报告会在第一次心跳之后写入",
           "startingHint": "过一分钟再运行 doctor"
         },
-        "freeze": {
-          "none": "设置未冻结",
-          "active": "部署正在运行，设置写入已冻结",
-          "leftover": "没有部署持有部署锁，但设置写入仍然冻结",
-          "hint": "再部署一次，或先确认没有旧进程，再运行 pnpm ops:unfreeze 和 pnpm config:migrate --write。",
-          "staleLocks": "配置写锁持有者已超过过期阈值：{files}",
-          "staleLocksHint": "遗留锁会在下次写入时自动接管。如果保存持续失败，先确认持有者不再写入，再删除提示的锁文件或 guard 目录内的持有者文件。",
-          "title": "升级设置冻结"
+        "pending": {
+          "title": "待写入的配置",
+          "none": "没有待写入的配置",
+          "pending": "{count} 个配置文件等下一次部署写入：{files}",
+          "skipped": "上一次部署跳过了它们：{reason}",
+          "hint": "下一次部署会重试。要现在写入，先确认所有进程都已是这个版本，再运行 pnpm config:migrate --write 和 pnpm config:init。",
+          "problems": "{count} 个配置文件无法迁移：{files}",
+          "kind": {
+            "migrate": "{file}（格式更新）",
+            "create": "{file}（新建）"
+          }
         }
       },
       "i18n": {
@@ -6295,7 +6301,6 @@
         "completed": {
           "title": "首次设置已完成",
           "ok": "{at} 完成（{by}）",
-          "existing": "向导出现之前的安装：按已完成处理（下次启动时写入 setup.yaml）",
           "pending": "首次设置还没完成：定时轮次在等它",
           "pendingHint": "在浏览器打开 /setup，或运行 pnpm run setup（pnpm run setup --complete 不改任何配置，直接标记完成）",
           "invalid": "setup.yaml 读不了：{error}。按已设置处理（不弹向导，轮次照常），但这个文件要修好",
@@ -6483,7 +6488,8 @@
       "catalogUnreadable": "models.yaml 读不了，没法核对模型。",
       "setupUnreadable": "已保存，但 setup.yaml 没能更新，这一步没有标记。运行 pnpm run doctor 查看。",
       "databaseUnavailable": "连不上数据库，没有提交请求。",
-      "frozen": "正在升级，稍后再保存。如果没有部署在进行，再部署一次，或运行 `pnpm ops:unfreeze`。"
+      "dbUnavailable": "保存配置需要数据库，数据库暂时连不上，请稍后重试。",
+      "busy": "另一个进程正在保存配置，请稍后再试。"
     },
     "env": {
       "set": "已设置",
@@ -6626,7 +6632,6 @@
       "state": {
         "pending": "设置还没完成：定时轮次在等待。",
         "completed": "设置已于 {at} 完成（{by}）。",
-        "existing": "向导出现之前的安装：按已完成处理。",
         "invalid": "setup.yaml 读不了：{error}",
         "missing": "没有 setup.yaml：按已完成处理。"
       },
@@ -7346,10 +7351,8 @@
     }
   },
   "configOps": {
-    "fillsSkipped": "正在升级：跳过补齐配置和个人资料文件。",
-    "frozen": "升级期间已冻结设置写入。",
-    "unfrozen": "已解除冻结。下一步先运行 pnpm config:init，再运行 pnpm config:migrate --write",
-    "failed": "无法更改升级冻结。检查目标提交、写入权限和写锁后重试。"
+    "dbRequired": "配置写入需要数据库（DATABASE_URL，或者 .env 里的 POSTGRES_*）；数据库没起来时，缺少的配置文件会读出厂默认值，等服务起来之后再运行这条命令，或者由下一次部署补齐。",
+    "busy": "另一个进程持有配置写锁（{holder}），请稍后重试。"
   },
   "deliveries": {
     "notReady": "交付账本尚未就绪",

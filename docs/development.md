@@ -119,6 +119,12 @@ Without `DATABASE_URL` the run stops at once and prints these commands. Each int
 its own (`jobradar_test_*`); the e2e runs use `jobradar_e2e*` databases, and `scripts/e2e-prepare.ts` refuses to truncate or
 seed any other name. Unit tests (`pnpm test`) need no database.
 
+Every config or profile write takes a lock in the database ([configuration.md](configuration.md#config-write-lock)), so
+`pnpm dev` and the `config:*` commands that write need a reachable database too. Unit tests get an in-process stand-in
+for that lock (`tests/setup.ts` installs `tests/config/in-process-lock.ts`); a unit test that spawns a script which writes
+config preloads `tests/fixtures/config/lock-stand-in.mjs` (see `tests/config/run-script.ts`). Tests that must prove the
+lock itself are integration tests and use the real one.
+
 `E2E_PORT=<port>` gives the e2e run its own database, config and profile directories, so several checkouts can run in
 parallel.
 

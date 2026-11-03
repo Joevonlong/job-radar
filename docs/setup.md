@@ -82,9 +82,9 @@ pnpm run setup --lang en               # language of the questions (default: lan
 ```
 
 The AI step reads on this computer whether `claude` and `codex` are installed and signed in (`claude auth status`,
-`codex login status`: no AI call is made). Without a database (stack not running) the profile files are still written;
-their history snapshot is recorded the next time the profile is read, and "run the first cycle" only tells you how to
-start one later.
+`codex login status`: no AI call is made). Every step writes config files under a lock in the database, so with the stack
+not running a step is refused: start the stack first (`docker compose up -d`). A save in the web wizard needs the database
+the same way and says so when it cannot reach it.
 
 The Telegram step asks for the bot token without showing it, finds the chat id from a message you send to the bot,
 sends a test message, writes the three `TELEGRAM_*` lines of `.env` (keeping a backup) and recreates the services that
@@ -160,6 +160,9 @@ steps:
 The setup counts as pending only when this file can be read and `completed_at` is null. An unreadable or invalid file
 counts as complete (nobody is locked into the wizard) and `pnpm run doctor` reports it at `setup.completed`.
 
-**Existing installs** never see the wizard: when the user config directory already holds config files but no
-`setup.yaml`, the first start (web, runner or `pnpm config:init`) writes it with `completed_by: existing_install`. If you
-delete `setup.yaml` from a configured install, the same happens again. To walk through the steps anyway, open `/setup`.
+**Nothing infers an existing install.** No `setup.yaml` means the setup is pending, whether or not other config files
+exist, and an upgrade does not add the file. An install from before the wizard that is upgraded in place therefore opens
+the wizard once: walk through it, choose "Skip the wizard", or run `pnpm run setup --complete`. If you delete
+`setup.yaml` from a configured install, the wizard opens again the same way. Restoring a backup from before the wizard
+(`restore.sh --with-config`, see [backup-restore.md](backup-restore.md)) or `pnpm config:init --from <old config dir>`
+writes a `setup.yaml` with `completed_by: existing_install`, so those never see the wizard.

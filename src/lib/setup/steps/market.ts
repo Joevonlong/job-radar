@@ -4,7 +4,7 @@
  * validated before the first write, so a bad time zone never leaves half a market behind. Switching the pack's local
  * channels on is the sources step's job (it pre-selects the pack's `default_channels`).
  */
-import { ensureProfileFiles, isValidTimeZone, mutateConfig, preferencesSchema, scheduleSchema, searchSchema } from "@/lib/config";
+import { isValidTimeZone, mutateConfig, preferencesSchema, scheduleSchema, searchSchema } from "@/lib/config";
 import { marketSettingsProblems } from "@/lib/market";
 import { parseRemoteScopeKey } from "@/lib/market/remote-scope";
 import { preferencesConfigToDraft, preferencesDraftToCandidate, toFieldErrors, type FieldError, type PreferencesDraft } from "@/lib/profile/draft";
@@ -13,7 +13,7 @@ import { savePreferencesPatch } from "@/lib/profile/service";
 import { cleanTitles } from "../keywords";
 import { marketInputSchema } from "../inputs";
 import { stepError, type SetupFieldError, type SetupStepResult } from "../types";
-import { editable, finishStep, profileFieldErrors, profileSaveProblem, readFresh, zodSetupErrors, setupFrozen, setupWriteError } from "./common";
+import { editable, profileFieldErrors, profileSaveProblem, readFresh, zodSetupErrors, setupWriteError, withStepWrite } from "./common";
 
 /** The fields of the market step (the other preferences fields are reported by the targets step). */
 const MARKET_PATHS = /^(market(\.|$)|locations$|remote_scope$)/;
@@ -28,18 +28,11 @@ function marketProblems(draftMarket: unknown): FieldError[] {
 }
 
 export async function saveMarketStep(raw: unknown): Promise<SetupStepResult> {
-  const frozen = setupFrozen("market");
-  if (frozen) return frozen;
   const parsed = marketInputSchema.safeParse(raw);
   if (!parsed.success) return stepError("market", "invalidPayload");
   const input = parsed.data;
   const locations = cleanTitles(input.locations);
 
-  try {
-    await ensureProfileFiles();
-  } catch {
-    // the profile directory is not writable: reading below reports it
-  }
   const preferences = readFresh("preferences");
   if (preferences === null) return stepError("market", "profileUnreadable");
   const search = readFresh("search");
@@ -68,14 +61,16 @@ export async function saveMarketStep(raw: unknown): Promise<SetupStepResult> {
 
   if (errors.length > 0 || !nextSearch.success || !nextSchedule.success) return stepError("market", null, errors);
 
-  const saved = await savePreferencesPatch({ market: input.market, locations, remote_scope: input.remote_scope });
-  const problem = profileSaveProblem("market", saved);
-  if (problem !== null) return problem;
-  try {
-    await mutateConfig("search", (current) => ({ ...current, locations, remote_scope: nextSearch.data.remote_scope }));
-    await mutateConfig("schedule", (current) => ({ ...current, timezone: nextSchedule.data.timezone }));
-  } catch (error) {
-    return stepError("market", setupWriteError(error));
-  }
-  return finishStep("market");
+  return withStepWrite("market", async () => {
+    const saved = await savePreferencesPatch({ market: input.market, locations, remote_scope: input.remote_scope });
+    const problem = profileSaveProblem("market", saved);
+    if (problem !== null) return problem;
+    try {
+      await mutateConfig("search", (current) => ({ ...current, locations, remote_scope: nextSearch.data.remote_scope }));
+      await mutateConfig("schedule", (current) => ({ ...current, timezone: nextSchedule.data.timezone }));
+    } catch (error) {
+      return stepError("market", setupWriteError(error));
+    }
+    return null;
+  });
 }
