@@ -17,22 +17,22 @@ import {
   type StepstoneListItem,
 } from "./schema";
 
-type ClientSettings = Pick<StepstoneSettings, "base_url" | "user_agent" | "radius_km">;
+type ClientSettings = Pick<StepstoneSettings, "base_url" | "user_agent">;
 
-/** `ag` values of StepStone's "published within" filter: the only windows it offers. */
-export const AGE_FACETS = [
-  { maxHours: 24, value: "age_1" },
-  { maxHours: 24 * 7, value: "age_7" },
-] as const;
-
-/** Sort order "newest first" (`sort=2`; 1 is relevance). */
-const SORT_NEWEST = "2";
-/** `wfh` value of the "home office only" filter. */
-const WFH_ONLY = "1";
+/**
+ * StepStone's robots.txt (`User-agent: *`) disallows `/jobs/*?*` and re-allows `/jobs/*?q=*`, but disallows `/jobs/*?q*&*` again:
+ * the only query form a search URL may carry is a single `q=` parameter. Everything else (`sort`, `ag`, `radius`, `wfh`, `page`) is
+ * out, so the channel has no time sort, no look-back or radius filter and no paging: one request per keyword and place, answered
+ * in StepStone's own order, and the look-back window is applied afterwards from each result's posting date.
+ */
+const PATH_DISALLOWED_SLUGS: ReadonlySet<string> = new Set(["vollzeit", "home-office"]);
+const PERMITTED_SEARCH_URL = /^[^?#]*\?q=[A-Za-z0-9%-]+$/;
 /** A longer slug (for example seven keywords joined by "-or-") is answered with 403 "Access denied". */
 export const MAX_SLUG_LENGTH = 100;
 /** Sections of a result list that answer the search; `recommended` and `regional` are filler. */
 export const ANSWER_SECTIONS: ReadonlySet<string> = new Set(["main", "semantic"]);
+/** `workFromHome` values of a posting that allows home office ("1" home office only, "2" home office possible; "0" not stated). */
+export const HOME_OFFICE_VALUES: ReadonlySet<string> = new Set(["1", "2"]);
 const STATE_ANCHOR = 'window.__PRELOADED_STATE__["app-unifiedResultlist"]';
 const JOB_AD_ANCHOR = /window\.__PRELOADED_STATE__\.JobAdContent\s*=\s*\{\s*props:/;
 
@@ -40,33 +40,31 @@ export interface SearchParams {
   keyword: string;
   /** City, or null for the nationwide home-office search. */
   location: string | null;
-  /** `company`: the keyword is an employer name searched nationwide, with no city, radius or home-office filter. */
+  /** `company`: the keyword is an employer name searched nationwide, with no city. */
   kind?: "city" | "remote" | "company";
-  windowHours: number;
-  /** 1-based. */
-  page: number;
 }
 
-/** `ag` filter value for a look-back window; null when the window is longer than the widest filter. */
-export function ageFacet(windowHours: number): string | null {
-  return AGE_FACETS.find((facet) => windowHours <= facet.maxHours)?.value ?? null;
-}
-
-/** Search URL of one keyword (one request series per keyword: OR-ed keywords drift into loose matches). Null when the keyword has no usable slug. */
+/**
+ * Search URL of one keyword (one request per keyword: OR-ed keywords drift into loose matches): `/jobs/<keyword>[/in-<city>]?q=<keyword>`.
+ * Null when the keyword has no usable slug, or when the URL would not be one robots.txt permits.
+ */
 export function searchUrl(settings: ClientSettings, params: SearchParams): string | null {
   const slug = slugify(params.keyword);
   if (slug === "" || slug.length > MAX_SLUG_LENGTH) return null;
   const nationwide = params.kind === "company";
   const where = params.location === null || nationwide ? "" : `/in-${encodeURIComponent(slugify(params.location))}`;
-  const query = new URLSearchParams({ sort: SORT_NEWEST });
-  const age = ageFacet(params.windowHours);
-  if (age !== null) query.set("ag", age);
-  if (!nationwide) {
-    if (params.location === null) query.set("wfh", WFH_ONLY);
-    else query.set("radius", String(settings.radius_km));
-  }
-  if (params.page > 1) query.set("page", String(params.page));
-  return `${settings.base_url.replace(/\/+$/, "")}/jobs/${encodeURIComponent(slug)}${where}?${query.toString()}`;
+  // robots.txt disallows /jobs/vollzeit/ and /jobs/home-office/ (every path below them); /jobs/teilzeit/in-* is re-allowed, and a slug
+  // with no city has no "/" after it
+  if (where !== "" && PATH_DISALLOWED_SLUGS.has(slug)) return null;
+  const url = `${settings.base_url.replace(/\/+$/, "")}/jobs/${encodeURIComponent(slug)}${where}?q=${encodeURIComponent(slug)}`;
+  return PERMITTED_SEARCH_URL.test(url) ? url : null;
+}
+
+/** Whether a redirect target of a search request is itself a URL the search may request: the same shape, on a /jobs/ path. */
+export function isPermittedSearchTarget(target: URL): boolean {
+  const segments = target.pathname.split("/"); // ["", "jobs", slug, "in-city"?]
+  if (segments[1] !== "jobs" || !PERMITTED_SEARCH_URL.test(target.pathname + target.search)) return false;
+  return !(segments.length > 3 && PATH_DISALLOWED_SLUGS.has(segments[2] ?? ""));
 }
 
 export interface SearchPage {
@@ -81,7 +79,7 @@ export interface SearchPage {
 /** One page of search results. A page without search state is a block page or a layout change. */
 export async function fetchSearchPage(ctx: ChannelContext, settings: ClientSettings, url: string): Promise<SearchPage> {
   const host = new URL(url).host;
-  const html = await fetchHtml(ctx, { url, userAgent: settings.user_agent });
+  const html = await fetchHtml(ctx, { url, userAgent: settings.user_agent, allowRedirectTo: (target) => target.origin === new URL(url).origin && isPermittedSearchTarget(target) });
   if (html === null) throw new ChannelError("unknown", `${host}: search page not found`, { retryable: false, status: 404 });
   const raw = extractJsonAfter(html, STATE_ANCHOR, "StepStone search state");
   if (raw === null) throw missingDataError(html, host, "the search state");

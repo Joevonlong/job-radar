@@ -29,6 +29,7 @@ import {
   type ScoreBonusUpdate,
   setSignalValue,
 } from "@/lib/db/repos/signals";
+import { getLatestProfileSnapshot } from "@/lib/db/repos/profile-snapshots";
 import { listRuntimeState, setRuntimeState } from "@/lib/db/repos/runtime-state";
 
 import { computeRankValue } from "@/lib/scoring/rank";
@@ -276,6 +277,8 @@ export interface BonusReconcileResult {
  * defaults to preferences.yaml, null = no floor known). Changing the weights therefore only needs the
  * next cycle, no AI. The rows are the hard filter's (one per job and profile snapshot);
  * this never creates one: a job without a row gets its bonus in the cycle after the filter made it.
+ * Rows of older snapshots are left alone unless they are a job's newest or newest scored row (`listBonusRows`);
+ * `checked` counts the rows looked at.
  */
 export async function reconcileBonuses(
   db: Db,
@@ -286,7 +289,7 @@ export async function reconcileBonuses(
   // Without a market no amount can be compared; the stored bonuses stay as they are (fail-closed)
   if (baseCurrency === null) return { checked: 0, updated: 0 };
   const policy = bonusPolicy(interests, salaryFloorEur, baseCurrency);
-  const rows = await listBonusRows(db);
+  const rows = await listBonusRows(db, (await getLatestProfileSnapshot(db, "preferences"))?.id ?? null);
   const updates: ScoreBonusUpdate[] = [];
   for (const row of rows) {
     const bonus = signalBonus(row.signals, interests, policy).bonus;

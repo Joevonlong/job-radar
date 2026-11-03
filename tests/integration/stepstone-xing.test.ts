@@ -63,7 +63,7 @@ function boards(calls: string[]): FetchLike {
     calls.push(`${target.host}${target.pathname}`);
     if (target.host === "www.stepstone.de") {
       if (target.pathname.startsWith("/jobs/")) {
-        return htmlResponse(200, fixtureHtml("stepstone", Number(target.searchParams.get("page") ?? "1") > 1 ? "search-empty.html" : "search-berlin.html"));
+        return htmlResponse(200, fixtureHtml("stepstone", "search-berlin.html"));
       }
       const file = STEPSTONE_DETAILS[/-(\d+)-inline\.html$/.exec(target.pathname)?.[1] ?? ""];
       return file ? htmlResponse(200, fixtureHtml("stepstone", file)) : htmlResponse(404, "gone");
@@ -82,7 +82,7 @@ function cycle(fetch: FetchLike, channelIds: string[], extra: Partial<RunCycleOp
     const sources = raw.sources as Record<string, Record<string, unknown>>;
     for (const id of ["stepstone", "xing"]) {
       sources[id]!.enabled = true;
-      sources[id]!.max_pages = 1;
+      if (id === "xing") sources[id]!.max_pages = 1;
     }
   });
   const search = { ...shippedSearch(), keyword_groups: { engineering: ["AI Engineer"] }, locations: ["Berlin"], remote_scope: "none" as const };
