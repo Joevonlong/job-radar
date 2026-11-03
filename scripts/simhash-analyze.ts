@@ -168,12 +168,29 @@ async function main(): Promise<number> {
     },
     strict: true,
   });
+  // numbers are checked before anything runs: Number("abc") is NaN, and a NaN limit would quietly report nothing
+  const count = (name: "max" | "seed" | "same-title-max"): number | undefined => {
+    const text = values[name];
+    if (text === undefined) return undefined;
+    if (!/^\d+$/.test(text.trim()) || !Number.isSafeInteger(Number(text))) throw new Error(`--${name} needs a whole number, got "${text}"`);
+    return Number(text);
+  };
+  let max: number;
+  let seed: number;
+  let sameTitleMax: number | undefined;
+  try {
+    max = count("max") ?? 10;
+    seed = count("seed") ?? 20261012;
+    sameTitleMax = count("same-title-max");
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    return 2;
+  }
   const target: PsqlTarget = values["compose-dir"] ? { composeDir: values["compose-dir"] } : { container: values.container as string };
   if (values.export) {
     exportSnapshot(values.export, target);
     return 0;
   }
-  const max = Number(values.max);
   const config = loadPipeline();
   registerBuiltinChannels(defaultRegistry);
   if (values.guard) {
@@ -181,8 +198,7 @@ async function main(): Promise<number> {
       console.error("--guard needs --input <snapshot>: export one first with --export <file>");
       return 2;
     }
-    const sameTitleMax = values["same-title-max"];
-    await guardReport(values.input, { seed: Number(values.seed), ...(sameTitleMax === undefined ? {} : { sameTitleMax: Number(sameTitleMax) }) });
+    await guardReport(values.input, { seed, ...(sameTitleMax === undefined ? {} : { sameTitleMax }) });
     return 0;
   }
 
