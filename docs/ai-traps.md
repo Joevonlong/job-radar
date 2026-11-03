@@ -51,7 +51,7 @@ Score, ranking, the hard filter and the push threshold are **never changed by a 
 
 ## `traps.yaml`
 
-`traps.yaml` ships with the product (the defaults directory `config/`) and is upgraded with it; it is not copied into your config directory. To use your own rules, copy the whole file to `data/config/traps.yaml` and edit it there: from then on it replaces the shipped file as a whole and new patterns of product updates no longer apply (`pnpm run doctor` reminds you). See [configuration.md](configuration.md).
+`traps.yaml` ships with the product (the defaults directory `config/`) and is upgraded with it; it is not copied into your config directory. To use your own rules, write the keys you change into `data/config/traps.yaml` ([overlay](configuration.md#your-file-is-an-overlay)). A list you write there replaces the shipped list, so its new patterns no longer apply to that list; the other keys keep following the product. See [configuration.md](configuration.md).
 
 | Key | Meaning |
 |---|---|

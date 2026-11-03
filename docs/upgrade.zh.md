@@ -42,7 +42,7 @@ scripts/ops/deploy.sh --ref v2.0.0           # 正式升级
 8. **排空并重启**：有限时间内等待正在运行的周期结束，然后重建容器并等待它们健康。
 9. **迁移**数据库（runner 启动时也会做）。有待执行的迁移时会先做一份 `premigrate` 备份，备份失败就不迁移。
 10. **ai-worker**：把主机 AI worker 服务（macOS 上是 launchd 代理，Linux 上是 systemd 用户单元 `job-radar-ai-worker.service`）切换到第 7 步的发布目录，新 worker 起不来时放回上一个（没有 systemd 用户管理器时不安装任何东西，脚本会说明）。
-11. **config-write**：唯一写用户配置文件的步骤。先用实例锁、心跳和配置报告确认目标服务 PID，再检查门禁：web 和 runner 容器运行的是本次部署构建的镜像；worker 服务指向目标发布目录，其进程持有实例锁（`--no-ai-worker` 时没有安装 worker 服务、也没人持有实例锁）；宿主机上没有其他 worker 进程。然后依次执行 `config:migrate --write`、`config:init`、用 `config:plan --deploy --check` 复查，以及 `config:migrate --prune-backups`。不支持该步骤的目标跳过它。
+11. **config-write**：唯一写用户配置文件的步骤。先用实例锁、心跳和配置报告确认目标服务 PID，再检查门禁：web 和 runner 容器运行的是本次部署构建的镜像；worker 服务指向目标发布目录，其进程持有实例锁（`--no-ai-worker` 时没有安装 worker 服务、也没人持有实例锁）；宿主机上没有其他 worker 进程。然后依次执行 `config:migrate --write --convert-overlays`、`config:init`、用 `config:plan --deploy --check` 复查，以及 `config:migrate --prune-backups`。不支持该步骤的目标跳过它。
 12. **清理**：释放部署锁，然后清理 Docker 构建缓存和悬空镜像（不动数据卷）。
 13. **doctor**：`pnpm run doctor` 报告需要关注的事项。
 
@@ -147,6 +147,8 @@ scripts/ops/deploy.sh --skip-pull
 指纹，并在旧版本改变过滤结论或理由时清除相应缓存。再次升级会安全地重新评估这些结果。
 
 ## 回滚
+
+**回滚到用户配置文件变成叠加层之前的版本：** 旧代码不接受它们。回去之前运行 `pnpm config:migrate --to-full --write`，顺序见 [deploy.zh.md](deploy.zh.md#5-回滚)。
 
 从 `data/config/.backup/` 恢复配置或恢复数据库备份之前，先读 [CHANGELOG.md](../CHANGELOG.md) 里要离开的那个版本的回滚说明。
 

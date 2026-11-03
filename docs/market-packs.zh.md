@@ -44,7 +44,7 @@ pnpm run doctor --only config.market
 ## 包的结构
 
 一个包就是一个目录 `config/packs/<id>/`（随产品发布）。`data/config/packs/<id>/` 里的副本整包替换发布的那份（之后产品对这个包的更新
-不会生效，`pnpm run doctor` 会提醒）。只有 `pack.yaml` 是必需的。
+不会生效，`pnpm run doctor` 会提醒）。包不是[叠加层](configuration.zh.md#你的文件是一个叠加层)：这是唯一仍然整体替换的地方。只有 `pack.yaml` 是必需的。你的 `data/config/pipeline.yaml` 里的列表替换出厂 `pipeline.yaml` 的列表，结果再和包取并集。
 
 | 文件 | 内容 |
 |---|---|

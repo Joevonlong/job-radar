@@ -95,6 +95,8 @@ scripts/ops/deploy.sh
 
 ### 部署期间的配置写入
 
+第 11 步也是整份文件变成叠加层的唯一位置（`config:migrate --write --convert-overlays`；见[你的文件是一个叠加层](configuration.zh.md#你的文件是一个叠加层)）。
+
 第 11 步之前，部署不写任何用户配置文件（`data/config/`、`data/profile/`）。第 1 到 10 步只读它们，所以运行中的 web、runner 和 ai-worker 照常使用现有文件。第 11 步的门禁通过后才写：新容器和新 ai-worker 已在运行，也没有其他 worker 可能还在读旧格式。部署前停掉手工启动的旧 `pnpm ai-worker`。`--no-ai-worker` 和 `--settle 0` 同样检查实例锁持有者、宿主进程与服务定义的发布路径。`ps -A -o pid=,args=` 只匹配 node/tsx 执行本安装内的 worker 入口；相对路径通过进程 cwd 判断归属（macOS 用 `lsof`，Linux 用 `/proc/<pid>/cwd`）。编辑器与其他检出目录的 worker 不计入，归属不明则阻止写入。
 
 门禁未通过或某次写入失败时，部署的其余步骤照常执行，最后退出 2，并打印：
@@ -290,6 +292,15 @@ ai-worker 切换或配置写入。doctor 只有在当前市场实际启用了依
 - 升级带了配置格式变化时，第 4 步只预览，第 11 步 `config-write` 才写盘，原件在 `data/config/.backup/<时间>/`。保留最新的 `config_writes.backups_keep` 份。`pnpm config:migrate` 可以查看 diff，排除旧消费者之前不会写盘。
 
 ## 5. 回滚
+
+**回滚到用户文件变成叠加层之前的版本。** 旧代码只读整份文件，叠加层在它看来是“比这个版本新”，会被拒绝。顺序很重要，因为旧代码读不了新代码写的文件：
+
+1. 生产上用 `deploy-prod.sh`：在 `main` 上 revert 这个 PR，等 CI 全绿。
+2. 停 `web` 和 `runner`。数据库保持运行：`--to-full --write` 要在那里取配置写锁。
+3. 用新代码运行 `pnpm config:migrate --to-full --write`。它把每个叠加层写成整份文件（叠加层格式之前的最后一个版本），值不变；原文件进 `data/config/.backup/<时间>/`。只带 `--to-full` 是预览。
+4. `deploy-prod.sh`。重启 `mcp:serve` 和其他手动启动的进程。
+
+拉取模式（没有 `deploy-prod.sh`）：先做第 2、3 步，再 `git switch --detach <commit>`，然后 `scripts/ops/deploy.sh --skip-pull`。用旧版本的 `pnpm config:check` 确认。以后再升级会重新转换：见[你的文件是一个叠加层](configuration.zh.md#你的文件是一个叠加层)。
 
 从 `data/config/.backup/` 恢复配置或恢复数据库备份之前，先读 [CHANGELOG.md](../CHANGELOG.md) 里要离开的那个版本的回滚说明。
 

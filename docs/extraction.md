@@ -1,6 +1,6 @@
 # Job information extraction rules
 
-The processing pipeline (the `pipeline` step) reads a few facts out of the JD text. The word lists and thresholds are all in `pipeline.yaml` (a shipped file: copy `config/pipeline.yaml` to `data/config/pipeline.yaml` and edit your copy); after changing them, use `pnpm reprocess` to make jobs already in the database be re-read under the new rules (the collected original text is not touched). The principle stays the same: whatever the JD does not say is `unknown`; nothing is guessed.
+The processing pipeline (the `pipeline` step) reads a few facts out of the JD text. The word lists and thresholds are all in `pipeline.yaml` (a shipped file: write the keys you change into `data/config/pipeline.yaml`, see [overlay](configuration.md#your-file-is-an-overlay)); after changing them, use `pnpm reprocess` to make jobs already in the database be re-read under the new rules (the collected original text is not touched). The principle stays the same: whatever the JD does not say is `unknown`; nothing is guessed.
 
 ## Work arrangement (`workplace`)
 
