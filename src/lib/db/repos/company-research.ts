@@ -1,12 +1,12 @@
 /** Reads and writes of `company_research` and the `company_research` requests around it. */
-import { and, desc, eq, gte, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import { isPublicWebsiteDomain } from "@/lib/ai/web-tasks";
 import { COMPANY_RESEARCH_FIELDS, type CompanyResearchView } from "@/lib/research/fields";
 
 import type { Executor } from "../executor";
-import { companies, companyResearch, controlRequests, jobs } from "../schema";
+import { companies, companyResearch, controlRequests, jobs, jobSources } from "../schema";
 import { OPEN_CONTROL_STATUSES, type ControlRequest } from "./control-requests";
 
 export { COMPANY_RESEARCH_FIELDS, type CompanyResearchField, type CompanyResearchView } from "@/lib/research/fields";
@@ -45,6 +45,44 @@ export async function getJobForCompanyResearch(db: Executor, jobId: number): Pro
 export function confirmedWebsiteDomain(company: Pick<JobForCompanyResearch, "websiteDomain" | "websiteDomainSource">): string | null {
   if (company.websiteDomainSource !== "user" || company.websiteDomain === null) return null;
   return isPublicWebsiteDomain(company.websiteDomain) ? company.websiteDomain : null;
+}
+
+export async function getCompanyRowForDomain(db: Executor, companyId: number): Promise<{ websiteDomain: string | null; websiteDomainSource: string | null } | null> {
+  const [row] = await db.select({ websiteDomain: companies.websiteDomain, websiteDomainSource: companies.websiteDomainSource }).from(companies).where(eq(companies.id, companyId)).limit(1);
+  return row ?? null;
+}
+
+/** The newest posting links of a company's jobs, the apply links first (the employer's own site more often than the source's page). */
+export async function listCompanyPostingUrls(db: Executor, companyId: number, limit: number): Promise<string[]> {
+  const rows = await db
+    .select({ url: jobSources.url, applyUrl: jobSources.applyUrl })
+    .from(jobSources)
+    .innerJoin(jobs, eq(jobs.id, jobSources.jobId))
+    .where(eq(jobs.companyId, companyId))
+    .orderBy(desc(jobSources.id))
+    .limit(limit);
+  return rows.flatMap((row) => [row.applyUrl, row.url]).filter((url): url is string => url !== null);
+}
+
+/** Store an inferred website domain, unless the company has one by now. It stays out of every prompt and fetch list until confirmed. */
+export async function storeInferredCompanyDomain(db: Executor, input: { companyId: number; domain: string }): Promise<void> {
+  await db.update(companies).set({ websiteDomain: input.domain, websiteDomainSource: "inferred" }).where(and(eq(companies.id, input.companyId), isNull(companies.websiteDomain)));
+}
+
+/** The user confirms the inferred domain they were shown; false when the stored one is no longer that one. */
+export async function confirmInferredCompanyDomain(db: Executor, input: { companyId: number; domain: string; now: Date }): Promise<boolean> {
+  const rows = await db
+    .update(companies)
+    .set({ websiteDomainSource: "user", websiteDomainConfirmedAt: input.now })
+    .where(and(eq(companies.id, input.companyId), eq(companies.websiteDomain, input.domain), eq(companies.websiteDomainSource, "inferred")))
+    .returning({ id: companies.id });
+  return rows.length > 0;
+}
+
+/** The user names the website themselves; false when the company no longer exists. */
+export async function saveUserCompanyDomain(db: Executor, input: { companyId: number; domain: string; now: Date }): Promise<boolean> {
+  const rows = await db.update(companies).set({ websiteDomain: input.domain, websiteDomainSource: "user", websiteDomainConfirmedAt: input.now }).where(eq(companies.id, input.companyId)).returning({ id: companies.id });
+  return rows.length > 0;
 }
 
 function toView(row: typeof companyResearch.$inferSelect, now: Date): CompanyResearchView | null {

@@ -31,6 +31,18 @@ write any link into a posting, so such a domain never goes into the request or i
 These go to the provider of the task, which then searches the web. The sites it reads see requests from that provider, not from
 you.
 
+## The company's website
+
+The panel asks you about the company's website, because a confirmed domain helps the search find the right company:
+
+- **A suggestion to confirm.** Job Radar takes the domain most of the company's job links point at (`careers.example.de` becomes
+  `example.de`), skipping job boards and applicant tracking hosts (`company.non_company_hosts`). The suggestion is stored and shown,
+  and nothing else happens: until you press "Confirm" it is not sent and its pages are not opened.
+- **Your own.** "Change" or "Add website" takes a domain or a pasted address. The server reduces it to its domain and refuses
+  addresses, local names, public suffixes and job boards.
+
+A domain you gave is never replaced by a suggestion.
+
 ## How far the limits go
 
 - **`claude-cli`:** page fetches are pre-approved only for the sites in `company.allowed_domains` and your confirmed domain, and
@@ -75,8 +87,9 @@ a button. Deleting the database removes it.
 
 ## `research.yaml`
 
-The form covers the switch, `ttl_days`, `max_per_day`, `max_searches` and `timeout_seconds`. These are edited in the file (Settings →
-Advanced):
+The form covers the switch, `ttl_days`, `max_per_day`, `max_searches` and `timeout_seconds`. The other keys are edited in the file;
+`company.allowed_domains` and `company.non_company_hosts` decide which hosts this machine may fetch, so the web app (Advanced editor
+included) refuses to change them and they only change by hand:
 
 | Key | What it does |
 |---|---|

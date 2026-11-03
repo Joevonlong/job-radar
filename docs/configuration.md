@@ -252,6 +252,7 @@ these keys; you edit them by hand in the file in your config directory:
 | `notify.yaml` | `telegram.api_base_url` |
 | `sources.yaml` | every `base_url`, `api_base_url` and `eu_api_base_url`, `jobspy.url`, `jobspy.proxies`, `sources.gmail.host` / `port` / `secure`, `linkedin.session.site.auth_file`, `linkedin.apify.actor_id`, `linkedin.monid.provider`, `linkedin.monid.endpoint` |
 | `resume.yaml` | `claude_command`, `claude_args`, `resume_kit_path`, `master_resume_path`, `pdf_dir`, `jd_export_dir`, `jd_export_host_dir` |
+| `salary.yaml`, `research.yaml` | `lookup.allowed_fetch_domains`; `company.allowed_domains`, `company.non_company_hosts` (the hosts whose pages an AI CLI may open on this machine) |
 | `ui.yaml` | everything under `web_access` (the login limits, see [Web access](#web-access-optional-password-bind-address-and-port)) |
 
 - A save from the web is refused when the value of a protected key differs from the one in the file **and** from the

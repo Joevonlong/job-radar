@@ -6991,6 +6991,25 @@
     }
   },
   "research": {
+    "domain": {
+      "inferred": "确认官网域名可提高准确度：{domain}？",
+      "inferredHint": "从这家公司的岗位链接推断。确认之前不会发给 AI，也不会被打开。",
+      "confirmed": "你确认的官网：{domain}",
+      "none": "还不知道这家公司的官网。填写后可提高准确度。",
+      "confirm": "确认",
+      "change": "修改",
+      "add": "填写官网",
+      "label": "公司官网",
+      "placeholder": "example.com",
+      "save": "保存",
+      "cancel": "取消",
+      "saved": "官网已保存",
+      "invalid": "请求无效。",
+      "invalid_domain": "这不是公司的公开官网（招聘平台、IP 地址和内网名称都不接受）。",
+      "changed": "这个官网刚被改过，请刷新页面。",
+      "config_error": "无法读取 research.yaml。",
+      "failed": "官网保存失败。"
+    },
     "field": {
       "summary": "公司简介",
       "industry": "行业",

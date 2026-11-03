@@ -6991,6 +6991,25 @@
     }
   },
   "research": {
+    "domain": {
+      "inferred": "Confirming the website improves accuracy: {domain}?",
+      "inferredHint": "Taken from this company's job links. It is not sent to the AI or opened until you confirm it.",
+      "confirmed": "Website you confirmed: {domain}",
+      "none": "No website known for this company. Adding it improves accuracy.",
+      "confirm": "Confirm",
+      "change": "Change",
+      "add": "Add website",
+      "label": "Company website",
+      "placeholder": "example.com",
+      "save": "Save",
+      "cancel": "Cancel",
+      "saved": "Website saved",
+      "invalid": "The request was not valid.",
+      "invalid_domain": "That is not a company's public website (job boards, addresses and local names are refused).",
+      "changed": "This website changed in the meantime. Reload the page.",
+      "config_error": "research.yaml cannot be read.",
+      "failed": "The website could not be saved."
+    },
     "field": {
       "summary": "What it does",
       "industry": "Industry",

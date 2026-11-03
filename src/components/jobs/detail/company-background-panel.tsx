@@ -20,6 +20,7 @@ import type { CompanyResearchContext } from "@/lib/research/view";
 import { toastTone } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 
+import { CompanyDomainRow } from "./company-domain-row";
 import { Panel, PlaceholderBox } from "./panel";
 
 const requestAction = withActionFeedback(rawRequestAction)(() => ({ ok: false, error: "failed" }));
@@ -255,6 +256,7 @@ export function CompanyBackgroundPanel({ jobId, company, context, timeZone }: { 
             </div>
           </div>
         ) : null}
+        {enabled && context.companyId !== null ? <CompanyDomainRow companyId={context.companyId} website={context.website} /> : null}
         {actions}
         {/* a failed request newer than the stored result is reported even when the lookup is off (the enabled case shows it above its button) */}
         {enabled ? null : errorBlock}

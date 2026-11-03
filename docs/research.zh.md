@@ -23,6 +23,15 @@
 
 这些内容发给该任务的 provider，由它去搜索网页。被读取的网站看到的是来自 provider 的请求，不是来自你的。
 
+## 公司官网
+
+面板会问你这家公司的官网，因为确认过的域名能帮搜索找对公司：
+
+- **待确认的建议。** Job Radar 取这家公司岗位链接里最常见的域名（`careers.example.de` 变成 `example.de`），跳过招聘平台和 ATS 主机（`company.non_company_hosts`）。建议只是存下来并显示：按“确认”之前，它不会被发送，它的网页也不会被打开。
+- **你自己填的。** “修改”或“填写官网”接受域名或粘贴的网址。服务端把它缩减成域名，并拒绝 IP 地址、本地名称、公共后缀和招聘平台。
+
+你填写的域名不会被建议覆盖。
+
 ## 限制能管到哪里
 
 - **`claude-cli`**：只对 `company.allowed_domains` 里的站点和你确认的域名预先放行打开网页，其他工具调用一律拒绝。这是 CLI 自己的权限检查，不是网络边界。它的网页搜索**不受**这些站点限制。
@@ -56,7 +65,7 @@
 
 ## `research.yaml`
 
-表单包含开关、`ttl_days`、`max_per_day`、`max_searches` 和 `timeout_seconds`。下面这些在文件里改（设置 → 高级）：
+表单包含开关、`ttl_days`、`max_per_day`、`max_searches` 和 `timeout_seconds`。其余的键在文件里改；`company.allowed_domains` 和 `company.non_company_hosts` 决定本机可以抓哪些主机，所以网页端（包括高级编辑器）不能修改，只能手动改文件：
 
 | 键 | 作用 |
 |---|---|
