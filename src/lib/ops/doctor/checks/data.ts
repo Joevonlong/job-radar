@@ -192,6 +192,23 @@ export const mcpCheck: DoctorCheck = {
   },
 };
 
+const repliesSpec = { id: "data.replies", group: "data" } as const;
+
+/** The Gmail reply reading (off by default and fine): on without credentials, never read, or replies left waiting for too long. */
+export const repliesCheck: DoctorCheck = {
+  ...repliesSpec,
+  async run(ctx) {
+    const { t } = ctx;
+    const probe = await ctx.probes.replies(ctx.now);
+    if (probe.state === "config_error") return warn(repliesSpec, t("checks.data.replies.configError", { problem: probe.problem }), t("checks.data.replies.configHint"));
+    if (!probe.enabled) return ok(repliesSpec, t("checks.data.replies.off"));
+    if (!probe.credentials) return warn(repliesSpec, t("checks.data.replies.noCredentials"), t("checks.data.replies.noCredentialsHint"));
+    if (probe.lastReadAt === null) return warn(repliesSpec, t("checks.data.replies.neverRead", { label: probe.label }), t("checks.data.replies.neverReadHint"));
+    if (probe.stalePending > 0) return warn(repliesSpec, t("checks.data.replies.stale", { count: probe.stalePending, days: probe.warnDays }), t("checks.data.replies.staleHint"));
+    return ok(repliesSpec, t("checks.data.replies.on", { label: probe.label, ago: formatAgo(ctx, ageSeconds(probe.lastReadAt, ctx.now)), pending: probe.pending }));
+  },
+};
+
 // ---------------------------------------------------------------- file ownership on Linux
 
 const ownershipSpec = { id: "data.ownership", group: "data" } as const;
@@ -230,5 +247,5 @@ export const ownershipCheck: DoctorCheck = {
   },
 };
 
-export const DATA_CHECKS: readonly DoctorCheck[] = [backupCheck, diskCheck, dockerLocationCheck, internalDiskCheck, trapsCheck, mcpCheck, ownershipCheck];
+export const DATA_CHECKS: readonly DoctorCheck[] = [backupCheck, diskCheck, dockerLocationCheck, internalDiskCheck, trapsCheck, mcpCheck, repliesCheck, ownershipCheck];
 export const HOST_CHECKS: readonly DoctorCheck[] = [powerCheck];

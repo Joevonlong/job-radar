@@ -2,6 +2,8 @@
 
 通道 `gmail-alerts` 读取 LinkedIn、StepStone、Indeed、XING 发到你 Gmail 的岗位提醒邮件，把每封邮件里的岗位卡片变成岗位数据。这些平台已经按你订阅的关键词和城市筛过一轮，而且这条路径**不碰任何平台的反爬**，只需要对一个标签的只读访问，从不发送或删除邮件。
 
+公司发来的回信是另一个可选功能，用单独的标签：见 [gmail-replies.zh.md](gmail-replies.zh.md)。
+
 ## 它做什么、不做什么
 - IMAP（imapflow）+ 应用专用密码，**只读**一个标签（默认 `JobAlerts`）：用 `EXAMINE` 只读方式打开，邮件正文用 `BODY.PEEK` 读取。**不标已读、不移动、不删除、不加标签**；代码里没有任何写邮箱的调用。
 - 按发件人域名选解析器（`sources.yaml` 的 `sources.gmail.senders`）。一封邮件里的每个岗位卡片 → 一条原始岗位（职位、公司、地点、链接；有就带薪资和摘要）。

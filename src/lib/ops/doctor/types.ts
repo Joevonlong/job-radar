@@ -113,6 +113,8 @@ export interface DoctorProbes {
   traps(now: Date): Promise<TrapsProbe>;
   /** mcp.yaml: whether the MCP server is switched on and which tools (or why the file cannot be read). Never throws. */
   mcp(): Promise<McpProbe>;
+  /** replies.yaml, the mailbox credentials (only whether they are set) and the replies waiting. Never throws on a bad file. */
+  replies(now: Date): Promise<RepliesProbe>;
   /** The market of preferences.yaml and the packs (or why it cannot be resolved). Never throws. */
   market(): Promise<MarketSummaryResult>;
   /** The first-run setup state (setup.yaml). Never throws. */
@@ -150,6 +152,11 @@ export type TrapsProbe =
 
 /** What `data.mcp` reads: the switch and the switched-on tools of mcp.yaml, or why it cannot be read. */
 export type McpProbe = { state: "ok"; enabled: boolean; tools: string[] } | { state: "config_error"; problem: string };
+
+/** What `data.replies` reads: the switch, the label, when it was last read and the replies older than `doctor.pending_warn_days`. */
+export type RepliesProbe =
+  | { state: "ok"; enabled: boolean; label: string; credentials: boolean; lastReadAt: Date | null; pending: number; stalePending: number; warnDays: number }
+  | { state: "config_error"; problem: string };
 
 export interface DoctorContext {
   now: Date;

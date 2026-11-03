@@ -2,7 +2,14 @@
 
 import { logActionFailure } from "@/lib/logging/action-failure";
 import { revalidatePath } from "next/cache";
+import { getFormatter, getTranslations } from "next-intl/server";
 import { z } from "zod";
+
+import { loadConfig } from "@/lib/config";
+import type { RepliesConfig } from "@/lib/config/schemas/replies";
+import { getDisplayTimeZone } from "@/lib/dashboard/context";
+import { confirmReply, dismissReply, reassignReply, recategorizeReply, undoReply, type ReplyDecision } from "@/lib/db/repos/replies";
+import { PICKABLE_CATEGORIES } from "@/lib/replies/types";
 
 import { nextActionDateToTimestamp } from "@/lib/dashboard/board";
 import { INTERVIEW_ROUNDS_MAX, NEXT_ACTION_MAX_CHARS } from "@/lib/dashboard/limits";
@@ -84,4 +91,59 @@ export async function undoApplicationStatusAction(input: { jobId: number; movedT
     logActionFailure("undoApplicationStatusAction", error);
     return { ok: false, error: "failed" };
   }
+}
+
+const replyIdSchema = z.number().int().positive();
+const replyCategorySchema = z.enum(PICKABLE_CATEGORIES);
+
+export type ReplyActionResult = { ok: true; outcome: "done" | "superseded" | "stale" } | { ok: false; error: "invalid" | "failed" };
+
+/** Run a decision on a reply. The words on the application come from the messages, in the viewer's language. */
+async function decideReply(name: string, parsed: boolean, run: (config: RepliesConfig, now: Date) => Promise<ReplyDecision>): Promise<ReplyActionResult> {
+  if (!parsed) return { ok: false, error: "invalid" };
+  try {
+    const decision = await run(loadConfig("replies"), new Date());
+    revalidatePath("/pipeline");
+    return { ok: true, outcome: decision.outcome };
+  } catch (error) {
+    logActionFailure(name, error);
+    return { ok: false, error: "failed" };
+  }
+}
+
+/** Carry out what a reply suggests (the only way a reply changes an application). */
+export async function confirmReplyAction(input: { id: number }): Promise<ReplyActionResult> {
+  const id = replyIdSchema.safeParse(input.id);
+  return decideReply("confirmReplyAction", id.success, async (config, now) => {
+    const [t, format] = await Promise.all([getTranslations("replies"), getFormatter()]);
+    const timeZone = getDisplayTimeZone();
+    return confirmReply(getDb(), input.id, {
+      transitions: config.transitions,
+      now,
+      describe: {
+        note: (category, receivedAt) => t("eventNote", { category: t(`category.${category}`), date: format.dateTime(receivedAt, { dateStyle: "medium", timeZone }) }),
+        nextAction: (action) => t(`nextAction.${action}`),
+      },
+    });
+  });
+}
+
+export async function undoReplyAction(input: { id: number }): Promise<ReplyActionResult> {
+  const id = replyIdSchema.safeParse(input.id);
+  return decideReply("undoReplyAction", id.success, (config, now) => undoReply(getDb(), input.id, { transitions: config.transitions, now }));
+}
+
+export async function dismissReplyAction(input: { id: number }): Promise<ReplyActionResult> {
+  const id = replyIdSchema.safeParse(input.id);
+  return decideReply("dismissReplyAction", id.success, (_config, now) => dismissReply(getDb(), input.id, now));
+}
+
+export async function reassignReplyAction(input: { id: number; jobId: number }): Promise<ReplyActionResult> {
+  const parsed = z.object({ id: replyIdSchema, jobId: jobIdSchema }).safeParse(input);
+  return decideReply("reassignReplyAction", parsed.success, (config, now) => reassignReply(getDb(), input.id, { jobId: input.jobId, transitions: config.transitions, now }));
+}
+
+export async function recategorizeReplyAction(input: { id: number; category: string }): Promise<ReplyActionResult> {
+  const parsed = z.object({ id: replyIdSchema, category: replyCategorySchema }).safeParse(input);
+  return decideReply("recategorizeReplyAction", parsed.success, (config, now) => recategorizeReply(getDb(), input.id, { category: parsed.data?.category ?? "other", transitions: config.transitions, now }));
 }

@@ -156,6 +156,10 @@ see what the step removes, then `pnpm config:migrate --write` to save it (origin
 Older files are migrated in memory when loaded; adding this key to a v2 file fails validation as an unknown key.
 See [salary.md](salary.md) for the cards and [the changelog](../CHANGELOG.md) for upgrade and rollback notes.
 
+### Gmail replies (`replies.yaml`)
+
+Off by default (`enabled: false`). Reads one Gmail label read-only with local rules and suggests status changes on `/pipeline`; you confirm each one. `label`, `lookback_days`, `max_messages_per_cycle`, `body_scan_chars`; `categories` (patterns per language, `categories.*` merge language by language); `match` (statuses, weights, `min_score`, `min_margin`, sender lists); `transitions` (what each category suggests from which status); `storage` (subject and quote lengths, `decided_retention_days`); `panel.undo_days`; `doctor.pending_warn_days`. See [gmail-replies.md](gmail-replies.md).
+
 ### Company background (`research.yaml`)
 
 A new file, off by default (`enabled: false`). An install that has none uses the shipped defaults, so nothing changes until you turn it

@@ -276,7 +276,7 @@ const DAY_MS = 86_400_000;
 /** Markup of a message: `<b>` stays bold, the arguments are inserted as given (escape them first). */
 const MARKUP_TAGS = { b: (chunks: string) => `<b>${chunks}</b>` };
 
-export function formatReminders(input: { sections: ReminderSection[]; now: Date; publicBaseUrl: string | null }, text: NotifyText): string {
+export function formatReminders(input: { sections: ReminderSection[]; pendingReplies?: number; now: Date; publicBaseUrl: string | null }, text: NotifyText): string {
   const { t } = text;
   const lines = [`<b>${escapeHtml(t("reminders.title"))}</b>`];
   for (const section of input.sections) {
@@ -289,6 +289,11 @@ export function formatReminders(input: { sections: ReminderSection[]; now: Date;
       lines.push(t.markup("reminders.item", { ...MARKUP_TAGS, title: label, company: escapeHtml(truncate(oneLine(item.companyName), 50)), days }));
     }
     if (section.total > section.items.length) lines.push(escapeHtml(t("reminders.more", { count: section.total - section.items.length })));
+  }
+  const pendingReplies = input.pendingReplies ?? 0;
+  if (pendingReplies > 0) {
+    const line = t("reminders.pendingReplies", { count: pendingReplies });
+    lines.push("", input.publicBaseUrl ? link(line, `${input.publicBaseUrl.replace(/\/+$/, "")}/pipeline`) : escapeHtml(line));
   }
   return fitLines(lines, t("omitted"));
 }

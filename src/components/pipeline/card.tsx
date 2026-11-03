@@ -36,6 +36,8 @@ interface CardViewProps {
 /** What a pipeline card shows (design "申请看板"): mark, title, company, score, salary, overdue bar, next step, rounds. The controls (drag handle, move menu) are small icon buttons in the corner, so the card keeps the design's height. */
 export function CardView({ card, pushLine, density, onOpen, controls, overlay = false, className }: CardViewProps) {
   const t = useTranslations("pipeline");
+  const tReplies = useTranslations("replies.card");
+  const pendingReplies = card.pendingReplies ?? 0;
   const { job } = card;
   const ended = isEndedStatus(card.status);
   const rank = job.rank?.rankValue ?? null;
@@ -43,9 +45,10 @@ export function CardView({ card, pushLine, density, onOpen, controls, overlay = 
   const nextText = card.nextAction ?? (ended ? null : t(`nextDefault.${card.status as Exclude<ApplicationStatus, "rejected" | "withdrawn" | "archived">}`));
 
   const compact = density === "compact";
-  const chips = card.interviewRounds > 0 || job.jobStatus !== "active" ? (
+  const chips = card.interviewRounds > 0 || pendingReplies > 0 || job.jobStatus !== "active" ? (
     <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
       {card.interviewRounds > 0 ? <span className="bg-soft text-ink border-ink text-data-sm rounded-cell inline-flex h-5 items-center border px-1.5 font-mono leading-none font-bold whitespace-nowrap" data-testid="card-rounds">{t("card.rounds", { count: card.interviewRounds })}</span> : null}
+      {pendingReplies > 0 ? <span title={tReplies("chipLabel", { count: pendingReplies })} aria-label={tReplies("chipLabel", { count: pendingReplies })} className="bg-soft text-ink border-ink text-data-sm rounded-cell inline-flex h-5 items-center border px-1.5 font-mono leading-none font-bold whitespace-nowrap" data-testid="card-replies">{tReplies("chip", { count: pendingReplies })}</span> : null}
       {job.jobStatus !== "active" ? <JobStatusChip status={job.jobStatus} /> : null}
     </div>
   ) : null;

@@ -37,6 +37,8 @@ export interface BoardCard {
   nextActionDateLabel: string | null;
   notes: string;
   interviewRounds: number;
+  /** Replies from Gmail waiting for a decision (the mark on the card); missing or 0: no mark. */
+  pendingReplies?: number;
   /** Newest first. */
   events: BoardEvent[];
 }

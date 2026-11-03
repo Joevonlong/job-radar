@@ -1,0 +1,126 @@
+# Gmail replies (docs/gmail-replies.md): reads the job-reply emails of ONE Gmail label with the rules below, matches each to an
+# application and suggests a status change on /pipeline. You confirm every suggestion: nothing is applied on its own.
+# No AI reads these emails and no mail content leaves this machine; Telegram only gets a number in the daily reminder.
+# Takes effect on the next cycle.
+config_version: 1
+
+# Master switch. Off by default: while off the mailbox is not opened. Needs GMAIL_USER / GMAIL_APP_PASSWORD in .env
+# (the server settings come from sources.yaml sources.gmail). Try `pnpm replies:check` first: it only prints counts.
+enabled: false
+
+# The only Gmail label that is read, read-only (nothing is marked read, moved, labelled or deleted). Never the whole inbox.
+label: JobReplies
+# How far back each cycle looks. A longer window finds older mail after a pause; handled mail is never read twice.
+lookback_days: 30
+max_messages_per_cycle: 50
+# How much of the visible text the rules read (the start of a mail is what counts; quoted history is ignored)
+body_scan_chars: 4000
+
+# Exactly one category with a strong hit that is not excluded decides. No hit, or several: "unclassified", and you pick one in
+# one click. Patterns are case-insensitive regular expressions, grouped by language; add a language by adding a group.
+categories:
+  interview_invite:
+    en:
+      subject: ["\\binterview (?:invitation|invite|request)\\b", "\\binvitation to (?:an? )?interview\\b", "\\bschedule (?:an? |your )?(?:interview|call)\\b"]
+      body: ["\\b(?:invite|inviting) you (?:to|for) (?:an? |the |your )?(?:\\w+ ){0,3}(?:interview|call|conversation)\\b", "\\boffer you an interview\\b", "\\b(?:like|love) to (?:schedule|arrange|set up) (?:an? |your )?(?:\\w+ ){0,2}(?:interview|call)\\b", "\\bbook (?:a|your) (?:\\w+ ){0,2}(?:interview|call)\\b"]
+      exclude: ["\\breschedul", "\\bif (?:we|your)\\b[^.!?]{0,80}\\b(?:invite|interview|contact)\\b", "\\bunfortunately\\b"]
+    de:
+      subject: ["\\bEinladung zum (?:\\w+ ){0,2}(?:Vorstellungsgespräch|Gespräch|Interview)\\b", "\\bTerminvorschlag\\b"]
+      body: ["\\bladen (?:wir )?(?:Sie|dich) (?:gerne |herzlich )?(?:\\w+ ){0,3}(?:zu einem|zum) (?:\\w+ ){0,2}(?:Vorstellungsgespräch|Gespräch|Interview|Kennenlernen)", "\\bmöchten (?:wir )?(?:Sie|dich) (?:gerne )?(?:\\w+ ){0,3}kennenlernen\\b"]
+      exclude: ["\\bverschieben\\b", "\\bleider\\b", "\\bfalls wir\\b"]
+  rejection:
+    en:
+      subject: ["\\b(?:your application|application update).{0,40}\\b(?:unsuccessful|not successful|declined)\\b"]
+      body: ["\\bunfortunately\\b", "\\bregret to inform\\b", "\\bnot (?:be )?(?:moving|move) forward\\b", "\\b(?:decided|chosen) to (?:move forward|proceed|pursue|continue) with other\\b", "\\bnot (?:been )?(?:selected|successful)\\b", "\\bposition has been filled\\b"]
+      exclude: ["\\breschedul", "\\bunfortunately[^.!?]{0,60}\\b(?:the|your) (?:link|attachment|file|upload|interviewer)\\b", "\\bunfortunately[^.!?]{0,40}\\bneed to (?:move|change)\\b"]
+    de:
+      subject: ["\\bAbsage\\b"]
+      body: ["\\bleider\\b", "\\bbedauerlicherweise\\b", "\\bnicht (?:weiter )?berücksichtig", "\\bfür einen anderen (?:Kandidaten|Bewerber)", "\\bandere[nr]? (?:Kandidat|Bewerber)"]
+      exclude: ["\\bTermin\\b", "\\bverschieben\\b", "\\bleider[^.!?]{0,40}\\b(?:Anhang|Datei|Link|Unterlagen fehlen)\\b"]
+  offer:
+    en:
+      subject: ["\\b(?:job|employment) offer\\b", "\\boffer letter\\b", "\\boffer of employment\\b"]
+      body: ["\\bpleased to (?:offer|extend)\\b", "\\bextend (?:you )?an offer\\b", "\\bemployment (?:contract|offer)\\b[^.!?]{0,40}\\b(?:attached|enclosed)\\b"]
+      exclude: ["\\boffer you an interview\\b", "\\bwe offer\\b", "\\boffers? (?:a|an|flexible|competitive)\\b", "\\bjob offers? (?:for|near|in)\\b"]
+    de:
+      subject: ["\\bVertragsangebot\\b", "\\bStellenangebot für Sie\\b", "\\bArbeitsvertrag\\b"]
+      body: ["\\bfreuen uns,? Ihnen (?:\\w+ ){0,3}(?:ein )?(?:Angebot|Vertragsangebot)\\b", "\\bbieten (?:wir )?Ihnen (?:hiermit )?(?:die|eine) Stelle\\b"]
+      exclude: ["\\bwir bieten\\b", "\\bAngebot für ein (?:Gespräch|Interview)\\b"]
+  info_request:
+    en:
+      subject: ["\\b(?:additional|missing) (?:information|documents?)\\b"]
+      body: ["\\b(?:please|kindly|could you|can you) (?:\\w+ ){0,2}(?:send|provide|upload|share|complete) (?:us )?(?:\\w+ ){0,3}(?:documents?|certificates?|references?|portfolio|cv|resume|transcripts?|salary expectations?|assessment)\\b", "\\bwe (?:still )?need (?:\\w+ ){0,3}(?:documents?|certificates?|references?)\\b"]
+      exclude: []
+    de:
+      subject: ["\\bfehlende Unterlagen\\b", "\\bUnterlagen nachreichen\\b"]
+      body: ["\\b(?:bitte|können Sie|könnten Sie) (?:\\w+ ){0,4}(?:Unterlagen|Zeugnisse?|Gehaltsvorstellung|Lebenslauf) (?:\\w+ ){0,3}(?:nachreichen|zusenden|senden|hochladen|mitteilen)\\b", "\\bbitte (?:senden|schicken|reichen|laden) (?:\\w+ ){0,4}(?:Unterlagen|Zeugnisse?|Gehaltsvorstellung|Lebenslauf)\\b", "\\bfehlen (?:uns )?noch\\b"]
+      exclude: []
+  acknowledgement:
+    en:
+      subject: ["\\bthank(?:s| you) for (?:your )?(?:application|applying)\\b", "\\bapplication (?:received|confirmation)\\b", "\\bwe(?:'ve| have)? received your application\\b"]
+      body: ["\\bwe(?:'ve| have)? (?:successfully )?received your application\\b", "\\bthank(?:s| you) for (?:your )?(?:application|applying)\\b", "\\byour application has been (?:received|submitted)\\b"]
+      # a rejection or an invitation often opens with "thank you for your application"
+      exclude: ["\\bunfortunately\\b", "\\bregret\\b", "\\b(?:like|pleased|happy) to (?:invite|schedule|offer)\\b", "\\binviting you\\b", "\\bnot (?:be )?(?:moving|move) forward\\b", "\\bwith other candidates\\b", "\\bnot (?:been )?(?:selected|successful)\\b"]
+    de:
+      subject: ["\\bEingangsbestätigung\\b", "\\bDanke für (?:Ihre|deine) Bewerbung\\b", "\\bIhre Bewerbung ist eingegangen\\b"]
+      body: ["\\b(?:Ihre|deine) Bewerbung ist (?:bei uns )?(?:gut )?eingegangen\\b", "\\bbedanken uns für (?:Ihre|deine) Bewerbung\\b", "\\bvielen Dank für (?:Ihre|deine) Bewerbung\\b"]
+      exclude: ["\\bleider\\b", "\\bbedauerlicherweise\\b", "\\bladen (?:wir )?(?:Sie|dich) (?:gerne |herzlich )", "\\bAbsage\\b"]
+  other:
+    en:
+      subject: ["\\bout of office\\b", "\\bautomatic reply\\b", "\\bnewsletter\\b", "\\bjobs? (?:you may like|for you)\\b", "\\bnew jobs?\\b"]
+      body: ["\\bI am (?:currently )?out of (?:the )?office\\b"]
+      exclude: []
+    de:
+      subject: ["\\bAbwesenheit", "\\bautomatische Antwort\\b"]
+      body: ["\\bbin (?:derzeit |zurzeit )?nicht im Büro\\b"]
+      exclude: []
+
+match:
+  # Statuses a reply can match. "interested" is only ever matched by an acknowledgement ("you applied but did not mark it").
+  candidate_statuses: [interested, preparing, applied, interviewing, offer]
+  # What each evidence adds. A company domain is weak on purpose: job_sources links are mostly job boards and ATS pages.
+  weights: { thread: 2, ats: 4, company: 4, domain: 1, title: 2 }
+  # A match needs this score and this lead over the second candidate; otherwise you pick (nothing is created for you)
+  min_score: 3
+  min_margin: 1
+  max_candidates: 5
+  min_company_chars: 3
+  min_title_word_chars: 4
+  # Applicant-tracking systems that send for many companies: the company must be confirmed by name or token
+  ats_sender_domains: [greenhouse-mail.io, greenhouse.io, hire.lever.co, lever.co, ashbyhq.com, myworkday.com, workablemail.com, workable.com, smartrecruiters.com, recruitee.com, personio.com, personio.de, join.com, teamtailor-mail.com, teamtailor.com, bamboohr.com, icims.com, successfactors.com, jobvite.com]
+  # Never taken as a company's own domain
+  generic_domains: [gmail.com, googlemail.com, outlook.com, hotmail.com, yahoo.com, gmx.de, gmx.net, web.de, linkedin.com, indeed.com, stepstone.de, xing.com, glassdoor.com, arbeitnow.com]
+  # Subjects many companies share: a Gmail thread with one of them does not prove it is the same application
+  generic_subjects: ["^(?:re: *)?thank(?:s| you) for (?:your )?(?:application|applying)\\.?$", "^(?:re: *)?your application\\.?$", "^(?:re: *)?application (?:received|update|confirmation)\\.?$", "^(?:re: *)?ihre bewerbung\\.?$", "^(?:re: *)?danke für ihre bewerbung\\.?$"]
+
+# What each category suggests, by the application's current status. A status not listed gets no suggestion (only a record), and
+# rejected / withdrawn / archived are never moved. kind: status = move it; next_action = set the next step; mismatch = change
+# nothing and say the match looks wrong.
+transitions:
+  interview_invite:
+    - { kind: status, from: [preparing, applied], to: interviewing }
+    - { kind: next_action, from: [interviewing], action: interview }
+  offer:
+    - { kind: status, from: [applied, interviewing], to: offer }
+  rejection:
+    - { kind: status, from: [applied, interviewing, offer], to: rejected }
+    - { kind: mismatch, from: [preparing] }
+  info_request:
+    - { kind: next_action, from: [interested, preparing, applied, interviewing, offer], action: send_materials, due_days: 3 }
+  acknowledgement:
+    - { kind: status, from: [interested, preparing], to: applied }
+
+# What stays in the database. Never the full text or attachments; the sender is kept as a domain only.
+storage:
+  subject_max_chars: 120
+  quote_max_chars: 240
+  # Decided replies lose their subject and quote after this many days; waiting ones are never cleared
+  decided_retention_days: 90
+
+panel:
+  # A confirmed reply keeps its Undo in the /pipeline panel for this many days
+  undo_days: 7
+
+doctor:
+  # pnpm run doctor warns when a reply waits longer than this
+  pending_warn_days: 7

@@ -175,7 +175,7 @@ describe("dry runs with persisted cycle state", () => {
     const paid = registerFixtureChannel(registry, { id: "fx-paid", family: "linkedin", costPerRecordUsd: 1, settings: { monthlyBudgetUsd: 100 } });
     registerFixtureChannel(registry, { id: "indeed", failure: { code: "network", times: 4 } });
     registerKnownProbe(registry);
-    const laterSteps = ["pipeline", "filter", "signals", "ai", "notify", "maintenance"] as const;
+    const laterSteps = ["pipeline", "filter", "signals", "replies", "ai", "notify", "maintenance"] as const;
     const spies = laterSteps.map((name) => {
       const spy = vi.fn(async () => {});
       registerCycleStep(name, spy);

@@ -99,7 +99,7 @@ describe("runCycle with fixture channels", () => {
     expect(cycle).toMatchObject({ kind: "manual", status: "succeeded" });
     expect(cycle?.finishedAt).toBeInstanceOf(Date);
     const summary = cycle?.summaryJson as { steps: Array<{ name: string; status: string; durationMs: number }>; windowKind: null };
-    expect(summary.steps.map((s) => s.name)).toEqual(["collect", "pipeline", "filter", "signals", "ai", "notify", "maintenance"]);
+    expect(summary.steps.map((s) => s.name)).toEqual(["collect", "pipeline", "filter", "signals", "replies", "ai", "notify", "maintenance"]);
     expect(summary.steps.every((s) => s.status === "ok" && typeof s.durationMs === "number")).toBe(true);
 
     const runs = await listRunsForCycle(getDb(), result.cycleId as number);

@@ -3,6 +3,7 @@ import { registerFilterStep } from "@/lib/filter";
 import { registerNotifySteps } from "@/lib/notify";
 import { notifyStep } from "@/lib/notify/step";
 import { registerPipelineSteps } from "@/lib/pipeline";
+import { registerRepliesStep } from "@/lib/replies/step";
 import { registerScoringSubtask } from "@/lib/scoring";
 import { registerSignalsAiSubtask, registerSignalsSteps } from "@/lib/signals";
 import { registerBreakdownSubtask } from "@/lib/breakdown/subtask";
@@ -26,6 +27,7 @@ export function registerBuiltinCycleSteps(): void {
   registerPipelineSteps();
   registerFilterStep();
   registerSignalsSteps();
+  registerRepliesStep();
   registerNotifySteps();
   registerCycleStep("ai", createDelegatingAiStep(aiStep));
   registerCycleStep("notify", createDelegatingNotifyStep(notifyStep));

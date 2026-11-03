@@ -4,6 +4,8 @@ import { getTranslations } from "next-intl/server";
 import type { CSSProperties } from "react";
 
 import { Board } from "@/components/pipeline/board";
+import { RepliesPanel } from "@/components/pipeline/replies-panel";
+import { loadRepliesPanel } from "@/components/pipeline/to-reply-views";
 import { toBoardCards } from "@/components/pipeline/to-board-cards";
 import { PageHeader } from "@/components/shell/page-header";
 import { HiddenStatusesProvider } from "@/components/applications/visibility-context";
@@ -13,7 +15,7 @@ import { loadConfig } from "@/lib/config";
 import { countInPipeline, overdueThresholds } from "@/lib/dashboard/board";
 import { BOARD_DENSITY_COOKIE, resolveBoardDensity } from "@/lib/dashboard/density";
 import { getDisplayTimeZone } from "@/lib/dashboard/context";
-import { getDb, listPipelineEntries } from "@/lib/db";
+import { countPendingRepliesByJob, getDb, listPipelineEntries } from "@/lib/db";
 import { visaVisible } from "@/lib/visa/settings";
 
 // The board reads the database and notify.yaml on every request.
@@ -36,7 +38,9 @@ export default async function PipelinePage() {
   const hidden = readHiddenSettings().statuses;
   const visa = visaVisible();
   const entries = await listPipelineEntries(getDb(), { visa });
-  const cards = await toBoardCards(entries, { now: new Date(), timezone, thresholds, visa });
+  const now = new Date();
+  const [pendingReplies, repliesPanel] = await Promise.all([countPendingRepliesByJob(getDb()), loadRepliesPanel({ now, timezone })]);
+  const cards = await toBoardCards(entries, { now, timezone, thresholds, visa, pendingReplies });
   const counts: Record<string, number> = {};
   for (const card of cards) counts[card.status] = (counts[card.status] ?? 0) + 1;
   const hiddenCards = boardLayout(hidden, counts).hiddenCards;
@@ -54,6 +58,7 @@ export default async function PipelinePage() {
           </p>
         ) : null}
       </PageHeader>
+      {repliesPanel ? <RepliesPanel {...repliesPanel} /> : null}
       <Board density={initialDensity} compact={compact} rememberDays={density.remember_days} cards={cards} pushLine={notify.push_min_score} thresholds={thresholds} />
     </div>
     </HiddenStatusesProvider>

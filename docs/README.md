@@ -48,6 +48,7 @@ mock-ups.
 | [mcp.md](mcp.md) | Asking Claude Desktop, Claude Code or another MCP client about your jobs and applications: the optional MCP server (`pnpm mcp:serve`, `mcp.yaml`), its tools, what it gives and never gives, and the two application writer tools that are off by default |
 | [telegram.md](telegram.md) | Creating a bot, finding your chat id |
 | [gmail-alerts.md](gmail-alerts.md) | Two-step verification, app password, the label, subscribing to job alerts |
+| [gmail-replies.md](gmail-replies.md) | Read company replies from one label, suggest status changes, confirm or undo them |
 | [linkedin-session.md](linkedin-session.md) | `pnpm auth:linkedin`, daily page limits, what to do on a verification page |
 | [jsearch.md](jsearch.md), [tavily.md](tavily.md), [apify.md](apify.md), [brightdata.md](brightdata.md), [monid.md](monid.md) | Keys, quotas and budgets of the paid or keyed channels |
 | [development.md](development.md) | For contributors: code layout, tests, e2e, conventions |

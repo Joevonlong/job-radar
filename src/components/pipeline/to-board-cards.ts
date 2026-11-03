@@ -14,7 +14,7 @@ import type { BoardCard, CardDate } from "./types";
  */
 export async function toBoardCards(
   entries: readonly PipelineEntry[],
-  options: { now: Date; timezone: string; thresholds: OverdueThresholds; visa?: boolean },
+  options: { now: Date; timezone: string; thresholds: OverdueThresholds; visa?: boolean; pendingReplies?: ReadonlyMap<number, number> },
 ): Promise<BoardCard[]> {
   const { now, timezone, thresholds } = options;
   const [items, format] = await Promise.all([toListItems(entries.map((e) => e.job), { now, timezone, ...(options.visa === undefined ? {} : { visa: options.visa }) }), getFormatter()]);
@@ -44,6 +44,7 @@ export async function toBoardCards(
       nextActionDateLabel: application.nextActionAt ? format.dateTime(application.nextActionAt, { month: "short", day: "numeric", timeZone: "UTC" }) : null,
       notes: application.notesMd ?? "",
       interviewRounds: application.interviewRounds,
+      pendingReplies: options.pendingReplies?.get(application.jobId) ?? 0,
       events: entry.events.map((event) => ({
         id: event.id,
         when: format.dateTime(event.at, { dateStyle: "medium", timeStyle: "short", timeZone: timezone }),

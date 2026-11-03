@@ -1036,6 +1036,7 @@
         "pipeline": "Process",
         "filter": "Filter",
         "signals": "Pay signals",
+        "replies": "Gmail replies",
         "ai": "Scoring",
         "notify": "Push",
         "maintenance": "Maintenance"
@@ -1046,6 +1047,7 @@
         "pipeline": "The fetched postings were not turned into jobs yet, so the numbers here are incomplete. Nothing is lost: the next cycle processes them.",
         "filter": "Jobs were not checked against your floors yet, so there is no count for “passed filter”. The next cycle filters them again.",
         "signals": "Signals were not detected yet, so rank values may be too low. The next cycle catches up.",
+        "replies": "Replies were not read this time. Nothing else depends on them; the next cycle catches up.",
         "ai": "Jobs are not AI-scored yet. Check that the AI worker is running (the Sources page shows its state); it scores the backlog once it is back.",
         "notify": "The Telegram push was not sent. Check the push settings and the network in Settings.",
         "maintenance": "Clean-up and the closed-job check did not finish. Today's jobs are not affected."
@@ -1055,6 +1057,7 @@
         "pipeline": "Only some of the fetched postings were turned into jobs; the next cycle processes the rest.",
         "filter": "Only some jobs were checked against your floors; the next cycle checks the rest.",
         "signals": "Signals were detected for only some jobs; the next cycle catches up.",
+        "replies": "Only some replies were read; the next cycle catches up.",
         "ai": "Only some jobs were AI-scored; the rest wait for the AI worker.",
         "notify": "The Telegram push went out only in part: jobs that were not sent are tried again next cycle while they are still inside the push window. If Telegram is not set up yet, do that in Settings.",
         "maintenance": "Clean-up and the closed-job check ran only in part. Today's jobs are not affected."
@@ -5587,7 +5590,8 @@
       "applied": "📨 Applied more than {days, plural, one {# day} other {# days}} ago, no answer yet",
       "section": "<b>{heading}</b> ({count})",
       "item": "• {title} — {company} ({days, plural, one {# day} other {# days}})",
-      "more": "… {count} more"
+      "more": "… {count} more",
+      "pendingReplies": "✉ {count, plural, one {# job reply waits} other {# job replies wait}} for your decision"
     },
     "alert": {
       "circuitOpenTitle": "Channel {channel} is paused (circuit breaker)",
@@ -6272,6 +6276,19 @@
           "on": "On: an MCP client you configured can read jobs and applications (tools: {tools}). Its model provider receives what the tools return, see docs/mcp.md",
           "off": "Off (mcp.yaml enabled: false, the default)",
           "configError": "mcp.yaml cannot be read: {problem}",
+          "configHint": "pnpm config:check shows which setting"
+        },
+        "replies": {
+          "title": "Gmail replies",
+          "off": "Off (replies.yaml enabled: false, the default)",
+          "noCredentials": "On, but GMAIL_USER and GMAIL_APP_PASSWORD are not set, so the label is not read",
+          "noCredentialsHint": "Add them to .env, see docs/gmail-replies.md",
+          "neverRead": "On, but label {label} has not been read yet",
+          "neverReadHint": "The next cycle reads it. If this stays, see the step replies on /sources",
+          "on": "On: label {label}, last read {ago}, {pending} waiting",
+          "stale": "{count, plural, one {# reply has} other {# replies have}} waited for more than {days, plural, one {# day} other {# days}}",
+          "staleHint": "Decide them on /pipeline",
+          "configError": "replies.yaml cannot be read: {problem}",
           "configHint": "pnpm config:check shows which setting"
         },
         "deliveries": {
@@ -8155,6 +8172,76 @@
       "rewriteLabel": "Coach rewrite",
       "droppedDimensions": "Left out: {count, plural, one {# rating of a dimension that is not configured.} other {# ratings of dimensions that are not configured.}}",
       "droppedSuggestions": "Left out: {count, plural, one {# suggestion for a sentence that does not exist.} other {# suggestions for sentences that do not exist.}}"
+    }
+  },
+  "replies": {
+    "category": {
+      "interview_invite": "Interview invite",
+      "rejection": "Rejection",
+      "offer": "Offer",
+      "info_request": "Asks for more",
+      "acknowledgement": "Application received",
+      "other": "Other",
+      "unclassified": "Not classified"
+    },
+    "suggestion": {
+      "status": "Suggests moving {from} → {to}",
+      "interview": "Suggests setting the next step: {action}",
+      "send_materials": "Suggests setting the next step: {action}, by {due}",
+      "mismatch": "This application is in {from}, which does not fit this mail. Check the link",
+      "none": "Nothing to change"
+    },
+    "nextAction": {
+      "interview": "Schedule the interview",
+      "send_materials": "Send the requested materials"
+    },
+    "eventNote": "Gmail reply: {category}, {date}",
+    "panel": {
+      "title": "Replies from Gmail",
+      "open": "{count, plural, one {# reply waits} other {# replies wait}} for your decision",
+      "none": "No reply waits for your decision",
+      "note": "Suggestions from local rules. Nothing changes until you confirm, and your mailbox is only read.",
+      "recent": "Recently confirmed",
+      "noApplication": "No application linked",
+      "ambiguous": "Could be one of several applications",
+      "unmatched": "No application found",
+      "from": "from {domain}",
+      "received": "received {date}",
+      "noSubject": "(no subject)",
+      "suspicious": "This mail holds text that looks like an instruction to an AI. Read the original in Gmail.",
+      "confirm": "Confirm",
+      "dismiss": "Dismiss",
+      "undo": "Undo",
+      "category": "Category",
+      "link": "Application",
+      "candidate": "{company} · {title}"
+    },
+    "card": {
+      "chip": "✉ {count}",
+      "chipLabel": "{count, plural, one {# reply} other {# replies}} from Gmail waiting for your decision"
+    },
+    "toast": {
+      "confirmed": "Confirmed",
+      "undone": "Taken back",
+      "dismissed": "Dismissed",
+      "linked": "Linked",
+      "categorized": "Category changed",
+      "superseded": "The application's status changed in the meantime, so nothing was changed",
+      "stale": "This reply was already handled",
+      "failed": "That did not work, please try again"
+    },
+    "cli": {
+      "summary": "{fresh} new in the label, {read} read, {stored} stored",
+      "categories": "Categories: {list}",
+      "matches": "Matches: {list}",
+      "preview": "Preview: nothing was stored. --write stores the result.",
+      "writeOff": "replies.yaml has enabled: false. Set it to true before using --write.",
+      "noCredentials": "GMAIL_USER and GMAIL_APP_PASSWORD are not set (see docs/gmail-replies.md).",
+      "failed": "Could not read the label: {message}",
+      "emlCategory": "Category: {category}",
+      "emlSuspicious": "Holds text that looks like an instruction: {value}",
+      "filterIntro": "Paste this into a Gmail search, then create a filter from it that applies the label \"{label}\" (tick \"also apply to matching conversations\"):",
+      "filterEmpty": "No application in a candidate status yet, so only the ATS sender domains are listed."
     }
   }
 }
