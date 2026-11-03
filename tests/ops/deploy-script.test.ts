@@ -192,7 +192,7 @@ exec "${realGit}" "$@"
     0o755,
   );
   // stub docker: `info` ok, `compose ... ps --status running --services` lists db when DB_RUNNING=1, everything else is logged.
-  // What the gate of step 11 reads: `compose config --images <svc>` names radar-test-<svc>:latest, `image inspect` gives it the
+  // What the gate of step 11 reads: `compose config --format json <svc>` names radar-test-web:latest and radar-test-runner, `image inspect` gives it the
   // ID sha256:built-<svc>; `compose ps -a -q <svc>` lists STUB_CONTAINERS_<svc> (default cid-<svc>); `inspect` of a container
   // gives STUB_INSPECT_<id> (default: running the built image of its service).
   // `compose ... build` records JOB_RADAR_BUILD_CONTEXT in $DEPLOY_TEST_LOG.ctx, runs BUILD_HOOK, then copies the context to
@@ -203,8 +203,13 @@ exec "${realGit}" "$@"
 echo "docker $*" >> "$DEPLOY_TEST_LOG"
 export DEPLOY_PID=$PPID
 [[ "$1" == "info" ]] && exit \${DOCKER_INFO_EXIT:-0}
+# What real compose does: --images lists the dependencies too, in no fixed order; the model has no \`image\` for a build-only service.
 if [[ "$1" == compose && "$*" == *" config --images "* ]]; then
-  echo "radar-test-\${*: -1}:latest"; exit \${STUB_CONFIG_IMAGES_EXIT:-0}
+  printf 'postgres:17\\nradar-test-%s:latest\\n' "\${*: -1}"; exit 0
+fi
+if [[ "$1" == compose && "$*" == *" config --format json "* ]]; then
+  [[ "\${STUB_CONFIG_IMAGES_EXIT:-0}" == 0 ]] || exit "$STUB_CONFIG_IMAGES_EXIT"
+  echo '{"name":"radar-test","services":{"db":{"image":"postgres:17"},"web":{"image":"radar-test-web:latest"},"runner":{}}}'; exit 0
 fi
 if [[ "$1 \${2:-}" == "image inspect" ]]; then
   [[ "\${STUB_IMAGE_INSPECT_EXIT:-0}" == 0 ]] || exit "$STUB_IMAGE_INSPECT_EXIT"
@@ -770,10 +775,10 @@ describe("scripts/ops/deploy.sh", { timeout: TEST_TIMEOUT_MS }, () => {
       "pnpm config:plan --deploy",
       "backup.sh --label pre-deploy",
       "docker compose -p radar-test build",
-      "docker compose -p radar-test config --images web",
+      "docker compose -p radar-test config --format json web",
       "docker image inspect -f {{.Id}} radar-test-web:latest",
-      "docker compose -p radar-test config --images runner",
-      "docker image inspect -f {{.Id}} radar-test-runner:latest",
+      "docker compose -p radar-test config --format json runner",
+      "docker image inspect -f {{.Id}} radar-test-runner",
       `prepare-release.sh ${head()} --root ${realWork}`,
       "pnpm ops:drain",
       "docker compose -p radar-test up -d --wait --wait-timeout 300 db web runner",
@@ -2049,9 +2054,9 @@ describe("scripts/ops/deploy.sh: the config-write step", { timeout: TEST_TIMEOUT
     const r = deploy(args);
     expect(r.status, r.out).toBe(0);
     const build = r.calls.indexOf("docker compose -p radar-test build");
-    expect(r.calls.indexOf("docker compose -p radar-test config --images web")).toBeGreaterThan(build);
+    expect(r.calls.indexOf("docker compose -p radar-test config --format json web")).toBeGreaterThan(build);
     expect(r.calls).toContain("docker image inspect -f {{.Id}} radar-test-web:latest");
-    expect(r.calls).toContain("docker image inspect -f {{.Id}} radar-test-runner:latest");
+    expect(r.calls).toContain("docker image inspect -f {{.Id}} radar-test-runner");
   });
 
   it.each([

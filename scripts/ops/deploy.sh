@@ -516,7 +516,14 @@ run "Read the build log above; if the disk is full, clean up first (docker syste
 # What the containers must run from here on (the gate of step 11). A failure here only means the gate will not pass.
 built_image_id() { # built_image_id <service>
   local image
-  image="$(compose config --images "$1" 2>/dev/null | head -n 1)" || return 0
+  # Only this service's entry: `config --images <service>` also lists its dependencies, in no fixed order. A service with
+  # only `build:` has no `image` in the model; compose names its image <project>-<service>. The model may contain secrets
+  # from env_file: only the name leaves Node.
+  image="$(compose config --format json "$1" 2>/dev/null | node -e '
+    const model = JSON.parse(require("node:fs").readFileSync(0, "utf8"));
+    const service = model.services[process.argv[1]];
+    if (service) process.stdout.write(service.image ?? model.name + "-" + process.argv[1]);
+  ' "$1" 2>/dev/null)" || return 0
   [[ -z "$image" ]] || docker image inspect -f '{{.Id}}' "$image" 2>/dev/null || true
 }
 if [[ "$DRY_RUN" -eq 0 ]]; then

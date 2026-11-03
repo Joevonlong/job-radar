@@ -84,7 +84,8 @@ case "$*" in
   "builder prune"*|"image prune"*) echo "Total:	0B"; exit 0 ;;
 esac
 case "$*" in
-  *" config --images "*) echo "img-\${*: -1}"; exit 0 ;;
+  *" config --images "*) printf 'postgres:17\\nimg-%s\\n' "\${*: -1}"; exit 0 ;;
+  *" config --format json "*) echo '{"name":"radar-test","services":{"db":{"image":"postgres:17"},"web":{"image":"img-web"},"runner":{"image":"img-runner"}}}'; exit 0 ;;
   *" config -q") hook_and_exit config; exit 0 ;;
   *" config --format json") echo '{"services":{"db":{},"web":{"depends_on":{"db":{}}},"runner":{"depends_on":{"db":{}}},"jobspy":{}}}'; exit 0 ;;
   *" ps -a -q "*)
