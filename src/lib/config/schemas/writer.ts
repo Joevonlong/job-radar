@@ -124,11 +124,11 @@ export const writerSchema = z.strictObject({
         .default(["pdf", "md", "txt"]),
       /** Most drafts one extraction may return. */
       max_drafts: z.number().int().min(1).max(50).default(12),
-      /** Days a draft waits for review; older ones are deleted, reviewed or not. */
       /** Longest a PDF may take to read; a crafted file can keep the parser busy with few bytes. */
       pdf_timeout_seconds: z.number().positive().max(120).default(15),
-      /** Most memory reading one PDF may use, in MB. */
+      /** Heap limit of the PDF reading thread, in MB. Memory outside the JavaScript heap (buffers) is not counted, so this does not cap the process; the time limit is what stops a crafted file. */
       pdf_max_memory_mb: z.number().int().min(32).max(2048).default(256),
+      /** Days a draft waits for review; older ones are deleted, reviewed or not. */
       draft_ttl_days: z.number().int().min(1).max(365).default(14),
     })
     .prefault({}),
